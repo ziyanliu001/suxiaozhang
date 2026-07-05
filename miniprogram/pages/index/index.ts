@@ -30,6 +30,19 @@ Page({
     });
   },
 
+  onShow() {
+    try {
+      const cachedBalance = wx.getStorageSync('last_shop_balance');
+      if (cachedBalance !== '' && cachedBalance !== null && cachedBalance !== undefined) {
+        this.setData({
+          prevBalance: String(cachedBalance)
+        });
+      }
+    } catch (error) {
+      console.error('读取昨日余额缓存失败:', error);
+    }
+  },
+
   toggleSettings() {
     this.setData({
       showSettings: !this.data.showSettings
@@ -116,6 +129,12 @@ Page({
     wx.setStorageSync('yuhua_last_balance', newBalanceSum);
     wx.setStorageSync('yuhua_shop_name', shopName);
     wx.setStorageSync('yuhua_mp_account', mpAccount);
+    
+    try {
+      wx.setStorageSync('last_shop_balance', newBalanceSum);
+    } catch (error) {
+      console.error('保存昨日余额缓存失败:', error);
+    }
 
     const report = `亲爱的家人们大家好[玫瑰]
 
@@ -145,7 +164,9 @@ ${balanceFormula}=${newBalanceSum}
 吃 素 一 日   健 康 一 天
 吃 素 一 日   环 保 一 天
 
-公众号：${mpAccount}`;
+公众号：${mpAccount}
+
+—— 本报告由【素食餐报助手】智能生成。微信小程序搜索“素食餐报助手”，10秒轻松搞定日常餐报汇总！`;
 
     this.setData({
       reportResult: report,
@@ -160,5 +181,20 @@ ${balanceFormula}=${newBalanceSum}
         wx.showToast({ title: '复制成功', icon: 'success' });
       }
     });
+  },
+
+  onShareAppMessage() {
+    return {
+      title: '✨ 账目清晰，信任传递！推荐使用【素食餐报助手】，10秒生成群汇报。',
+      path: '/pages/index/index',
+      imageUrl: ''
+    };
+  },
+
+  onShareTimeline() {
+    return {
+      title: '用“餐报君”让爱心账目更透明！素食小店日常记账汇报的高效利器。',
+      query: 'from=share'
+    };
   }
 });
