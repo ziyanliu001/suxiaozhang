@@ -58,16 +58,39 @@
 }
 
 .weui-navigation-bar__center {
-  font-size: 17px;
+  font-size: 15px;
   text-align: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  font-weight: bold;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  line-height: 1.4;
+  padding-bottom: 4px;
+  padding-right: 120rpx;
+  padding-top: 70px;
+}
+
+.weui-navigation-bar__center text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: 100%;
+}
+
+.weui-navigation-bar__right {
   position: relative;
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  flex: 1;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .weui-navigation-bar__loading {

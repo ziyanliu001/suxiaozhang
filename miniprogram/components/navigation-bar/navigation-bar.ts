@@ -64,10 +64,12 @@ Component({
         success: (res) => {
           const isAndroid = res.platform === 'android'
           const isDevtools = res.platform === 'devtools'
+          const rightWidth = res.windowWidth - rect.left
           this.setData({
             ios: !isAndroid,
-            innerPaddingRight: `padding-right: ${res.windowWidth - rect.left}px`,
-            leftWidth: `width: ${res.windowWidth - rect.left }px`,
+            innerPaddingRight: `padding-right: ${rightWidth}px`,
+            leftWidth: `width: 80px`,
+            rightWidth: `width: ${rightWidth}px`,
             safeAreaTop: isDevtools || isAndroid ? `height: calc(var(--height) + ${res.safeArea.top}px); padding-top: ${res.safeArea.top}px` : ``
           })
         }
