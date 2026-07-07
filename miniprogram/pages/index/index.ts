@@ -1,9 +1,11 @@
+import { DataService } from '../../utils/dataService';
+
 Page({
   data: {
     reportDate: '',
-    prevBalance: '1263.64', 
-    allDonations: '',       
-    batch4: '5',           
+    prevBalance: '1263.64',
+    allDonations: '',
+    batch4: '5',
     expenses: '',
     reportResult: '',
     showResult: false,
@@ -22,41 +24,27 @@ Page({
       reportDate: `${yy}年${mm}月${dd}日`
     });
     
-    this.loadFromCloud();
+    this.loadLastBalance();
+    DataService.syncLocalDataToCloud();
   },
 
   onShow() {
-    this.loadFromCloud();
+    this.loadLastBalance();
+    DataService.syncLocalDataToCloud();
   },
 
-  loadFromCloud() {
-    const db = wx.cloud.database();
+  async loadLastBalance() {
+    const result = await DataService.getLatestReport(this.data.shopName);
     
-    db.collection('meal_reports')
-      .orderBy('createTime', 'desc')
-      .limit(1)
-      .get({
-        success: (res) => {
-          if (res.data && res.data.length > 0) {
-            const lastReport = res.data[0];
-            this.setData({
-              prevBalance: String(lastReport.newBalance),
-              shopName: lastReport.shopName || this.data.shopName,
-              mpAccount: lastReport.mpAccount || this.data.mpAccount
-            });
-          } else {
-            this.loadFromLocal();
-          }
-        },
-        fail: (error) => {
-          if (error.errCode === -502005) {
-            console.log('云数据库集合尚未创建，使用本地缓存');
-          } else {
-            console.error('云数据库读取失败:', error);
-          }
-          this.loadFromLocal();
-        }
+    if (result.success && result.data) {
+      this.setData({
+        prevBalance: String(result.data.todayBalance),
+        shopName: result.data.shopName || this.data.shopName,
+        mpAccount: result.data.mpAccount || this.data.mpAccount
       });
+    } else {
+      this.loadFromLocal();
+    }
   },
 
   loadFromLocal() {
@@ -101,8 +89,8 @@ Page({
         continue;
       }
       
-      line = line.replace(/元$/, ''); 
-      let match = line.match(/(.*?)\s*([\d.]+)\s*$/); 
+      line = line.replace(/元$/, '');
+      let match = line.match(/(.*?)\s*([\d.]+)\s*$/);
       if (match) {
         let name = match[1].trim();
         let amount = parseFloat(match[2]);
@@ -117,12 +105,11 @@ Page({
     return allList;
   },
 
-  generateReport() {
+  async generateReport() {
     const { reportDate, prevBalance, allDonations, batch4, expenses, shopName, mpAccount } = this.data;
     const prevBalanceNum = parseFloat(prevBalance) || 0;
     const b4_total = parseFloat(batch4) || 0;
     
-    // 1. 解析所有名单
     const allList = this.parseAllDonations(allDonations);
     
     let listTexts = [];
@@ -135,38 +122,35 @@ Page({
     
     donationsTotal = Math.round(donationsTotal * 100) / 100;
     
-    // 2. 智能解析店铺支出
     let expenseTotal = 0;
     let expenseInput = expenses.trim();
     if (expenseInput) {
-      expenseInput = expenseInput.replace(/元$/, ''); 
-      let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/); 
+      expenseInput = expenseInput.replace(/元$/, '');
+      let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
       if (expMatch) {
         expenseTotal = parseFloat(expMatch[2]) || 0;
       }
     }
     
-    // 3. 动态组装今日收入合计公式 - 使用 toFixed 确保显示与计算一致
     const donationsStr = donationsTotal.toFixed(2);
     const b4Str = b4_total.toFixed(2);
     let todayTotalStr = donationsStr;
     if (b4_total > 0) todayTotalStr += `+${b4Str}`;
     const todayTotalSum = Math.round((donationsTotal + b4_total) * 100) / 100;
 
-    // 4. 组装结余公式 - 确保公式基数与输入框显示一致
     const displayPrevBalance = prevBalanceNum.toFixed(2);
     let balanceFormula = `${displayPrevBalance}+${todayTotalStr}`;
     if (expenseTotal > 0) {
-      balanceFormula += `-${expenseTotal.toFixed(2)}`; 
+      balanceFormula += `-${expenseTotal.toFixed(2)}`;
     }
 
     const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
 
-    // 6. 本地缓存作为降级方案
-    wx.setStorageSync('yuhua_last_balance', newBalanceSum);
-    wx.setStorageSync('yuhua_shop_name', shopName);
-    wx.setStorageSync('yuhua_mp_account', mpAccount);
-    wx.setStorageSync('last_shop_balance', newBalanceSum);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
 
     const report = `亲爱的家人们大家好[玫瑰]
 
@@ -200,37 +184,23 @@ ${balanceFormula}=${newBalanceSum.toFixed(2)}
 
 —— 本报告由【素食小账本助手】智能生成。微信小程序搜索“素食小账本助手”，10秒轻松搞定日常餐报汇总！`;
 
-    // 5. 保存数据到云数据库
-    const db = wx.cloud.database();
-    db.collection('meal_reports').add({
-      data: {
-        reportDate,
-        prevBalance: prevBalanceNum,
-        allDonations,
-        batch4: b4_total,
-        expenses,
-        expensesAmount: expenseTotal,
-        shopName,
-        mpAccount,
-        donationsTotal,
-        todayTotalSum,
-        newBalance: newBalanceSum,
-        reportText: report,
-        createTime: db.serverDate()
-      },
-      success: (res) => {
-        console.log('云数据库保存成功:', res);
-        wx.showToast({ title: '保存成功', icon: 'success' });
-      },
-      fail: (error) => {
-        if (error.errCode === -502005) {
-          console.log('云数据库集合尚未创建，请在云开发控制台手动创建 meal_reports 集合');
-          wx.showToast({ title: '餐报生成成功', icon: 'success' });
-        } else {
-          console.error('云数据库保存失败:', error);
-          wx.showToast({ title: '云保存失败，已保存到本地', icon: 'none' });
-        }
-      }
+    const saveResult = await DataService.saveReport({
+      dateString: dateString,
+      reportDate: reportDate,
+      shopName: shopName,
+      mpAccount: mpAccount,
+      yesterdayBalance: prevBalanceNum,
+      otherDonation: b4_total,
+      listDonationTotal: donationsTotal,
+      expenseAmount: expenseTotal,
+      todayBalance: newBalanceSum,
+      reportText: report
+    });
+
+    wx.showToast({ 
+      title: saveResult.message, 
+      icon: 'success',
+      duration: 2000
     });
 
     this.setData({

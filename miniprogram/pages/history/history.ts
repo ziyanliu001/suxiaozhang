@@ -1,3 +1,5 @@
+import { DataService } from '../../utils/dataService';
+
 Page({
   data: {
     reports: [],
@@ -13,6 +15,7 @@ Page({
 
   onShow() {
     this.loadReports();
+    DataService.syncLocalDataToCloud();
   },
 
   calculateNavBarHeight() {
@@ -34,76 +37,32 @@ Page({
     });
   },
 
-  loadReports() {
+  async loadReports() {
     this.setData({ loading: true });
-    const db = wx.cloud.database();
+
+    const result = await DataService.getReports();
     
-    db.collection('report_logs')
-      .orderBy('dateString', 'desc')
-      .get({
-        success: (res) => {
-          const formattedReports = (res.data || []).map((item: any) => {
-            const yesterdayBalance = parseFloat(item.yesterdayBalance || 0);
-            const otherDonation = parseFloat(item.otherDonation || 0);
-            const listDonationTotal = parseFloat(item.listDonationTotal || 0);
-            const expenseAmount = parseFloat(item.expenseAmount || 0);
-            const todayBalance = parseFloat(item.todayBalance || 0);
-            const totalIncome = otherDonation + listDonationTotal;
-            
-            return {
-              ...item,
-              yesterdayBalanceStr: yesterdayBalance.toFixed(2),
-              totalIncomeStr: totalIncome.toFixed(2),
-              expenseAmountStr: expenseAmount.toFixed(2),
-              todayBalanceStr: todayBalance.toFixed(2)
-            };
-          });
-          
-          this.setData({
-            reports: formattedReports,
-            loading: false
-          });
-        },
-        fail: (error) => {
-          if (error.errCode === -502005) {
-            this.setData({
-              reports: [],
-              loading: false
-            });
-          } else {
-            console.error('云数据库读取历史记录失败:', error);
-            this.setData({ loading: false });
-            wx.showToast({ title: '加载失败', icon: 'error' });
-          }
-        }
-      });
-  },
+    const formattedReports = result.data.map((item: any) => {
+      const yesterdayBalance = parseFloat(item.yesterdayBalance || 0);
+      const otherDonation = parseFloat(item.otherDonation || 0);
+      const listDonationTotal = parseFloat(item.listDonationTotal || 0);
+      const expenseAmount = parseFloat(item.expenseAmount || 0);
+      const todayBalance = parseFloat(item.todayBalance || 0);
+      const totalIncome = otherDonation + listDonationTotal;
+      
+      return {
+        ...item,
+        yesterdayBalanceStr: yesterdayBalance.toFixed(2),
+        totalIncomeStr: totalIncome.toFixed(2),
+        expenseAmountStr: expenseAmount.toFixed(2),
+        todayBalanceStr: todayBalance.toFixed(2)
+      };
+    });
 
-  buildReportText(item: any) {
-    const dateStr = item.dateString || '';
-    const shopName = item.shopName || '店铺';
-    const yesterdayBalance = (item.yesterdayBalance || 0).toFixed(2);
-    const otherDonation = (item.otherDonation || 0).toFixed(2);
-    const listDonationTotal = (item.listDonationTotal || 0).toFixed(2);
-    const expenseAmount = (item.expenseAmount || 0).toFixed(2);
-    const todayBalance = (item.todayBalance || 0).toFixed(2);
-
-    let reportText = `📅 ${dateStr} ${shopName}餐报\n\n`;
-    reportText += `一、爱心人士供养\n`;
-    reportText += `随喜供养：${otherDonation}\n`;
-    reportText += `名单供养：${listDonationTotal}\n`;
-    reportText += `今日合计：${(parseFloat(otherDonation) + parseFloat(listDonationTotal)).toFixed(2)}\n\n`;
-    reportText += `二、店铺支出：${expenseAmount > 0 ? expenseAmount : '无'}\n\n`;
-    reportText += `三、《店铺余额》\n`;
-    reportText += `${yesterdayBalance}+${(parseFloat(otherDonation) + parseFloat(listDonationTotal)).toFixed(2)}`;
-    if (parseFloat(expenseAmount) > 0) {
-      reportText += `-${expenseAmount}`;
-    }
-    reportText += `=${todayBalance}\n\n`;
-    reportText += `如有遗漏、错误请指正！\n\n`;
-    reportText += `四、没有杀戮，没有交易，只有感恩~`;
-
-    return reportText;
+    this.setData({
+      reports: formattedReports,
+      loading: false
+    });
   },
 
   copyReport(e: any) {
@@ -115,7 +74,7 @@ Page({
       return;
     }
 
-    const reportText = this.buildReportText(report);
+    const reportText = DataService.buildReportText(report);
 
     wx.setClipboardData({
       data: reportText,
