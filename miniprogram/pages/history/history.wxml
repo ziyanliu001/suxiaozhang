@@ -20,19 +20,19 @@
         <view class="card-body">
           <view class="stat-item">
             <text class="stat-label">昨日余额</text>
-            <text class="stat-value">¥{{(item.yesterdayBalance || 0).toFixed(2)}}</text>
+            <text class="stat-value">¥{{item.yesterdayBalanceStr}}</text>
           </view>
           <view class="stat-item">
             <text class="stat-label">随喜收入</text>
-            <text class="stat-value income">¥{{((item.otherDonation || 0) + (item.listDonationTotal || 0)).toFixed(2)}}</text>
+            <text class="stat-value income">¥{{item.totalIncomeStr}}</text>
           </view>
           <view class="stat-item">
             <text class="stat-label">今日支出</text>
-            <text class="stat-value expense">-¥{{(item.expenseAmount || 0).toFixed(2)}}</text>
+            <text class="stat-value expense">-¥{{item.expenseAmountStr}}</text>
           </view>
           <view class="stat-item">
             <text class="stat-label">今日结余</text>
-            <text class="stat-value balance">¥{{(item.todayBalance || 0).toFixed(2)}}</text>
+            <text class="stat-value balance">¥{{item.todayBalanceStr}}</text>
           </view>
         </view>
 

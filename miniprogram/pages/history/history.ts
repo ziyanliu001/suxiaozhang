@@ -42,8 +42,25 @@ Page({
       .orderBy('dateString', 'desc')
       .get({
         success: (res) => {
+          const formattedReports = (res.data || []).map((item: any) => {
+            const yesterdayBalance = parseFloat(item.yesterdayBalance || 0);
+            const otherDonation = parseFloat(item.otherDonation || 0);
+            const listDonationTotal = parseFloat(item.listDonationTotal || 0);
+            const expenseAmount = parseFloat(item.expenseAmount || 0);
+            const todayBalance = parseFloat(item.todayBalance || 0);
+            const totalIncome = otherDonation + listDonationTotal;
+            
+            return {
+              ...item,
+              yesterdayBalanceStr: yesterdayBalance.toFixed(2),
+              totalIncomeStr: totalIncome.toFixed(2),
+              expenseAmountStr: expenseAmount.toFixed(2),
+              todayBalanceStr: todayBalance.toFixed(2)
+            };
+          });
+          
           this.setData({
-            reports: res.data || [],
+            reports: formattedReports,
             loading: false
           });
         },
