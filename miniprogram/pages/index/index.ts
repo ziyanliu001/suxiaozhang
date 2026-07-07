@@ -5,7 +5,6 @@ Page({
     reportDate: '',
     prevBalance: '1263.64',
     allDonations: '',
-    batch4: '',
     otherDonation: '',
     expenses: '',
     reportResult: '',
@@ -104,7 +103,7 @@ Page({
           
           this.setData({
             allDonations: '',
-            batch4: '',
+            otherDonation: '',
             expenses: '',
             reportResult: '',
             showResult: false,
@@ -152,9 +151,9 @@ Page({
   },
 
   async generateReport() {
-    const { reportDate, prevBalance, allDonations, batch4, expenses, shopName, mpAccount } = this.data;
+    const { reportDate, prevBalance, allDonations, otherDonation, expenses, shopName, mpAccount } = this.data;
     const prevBalanceNum = parseFloat(prevBalance) || 0;
-    const b4_total = parseFloat(batch4) || 0;
+    const b4_total = parseFloat(otherDonation) || 0;
     
     const allList = this.parseAllDonations(allDonations);
     

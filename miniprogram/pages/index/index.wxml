@@ -50,9 +50,9 @@
         </view>
       </view>
 
-      <view class="section">
+      <view class="form-group">
         <text class="label">其他随喜/现场供养金额 (对应示例末尾固定加项)</text>
-        <input class="input" type="digit" placeholder="如：5" value="{{batch4}}" bindinput="onInput" data-field="batch4" />
+        <input class="input-box" type="digit" placeholder="如：5" model:value="{{otherDonation}}" />
       </view>
 
       <view class="section">
