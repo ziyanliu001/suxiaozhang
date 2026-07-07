@@ -53,6 +53,7 @@
 
   <button class="btn-generate" bindtap="generateReport">⚡ 一键生成汇报文本</button>
   <button class="btn-history" bindtap="goToHistory">📜 查看历史餐报记录</button>
+  <button class="btn-statistics" bindtap="goToStatistics">📊 统计分析</button>
 
   <block wx:if="{{showResult}}">
     <view class="output-box">

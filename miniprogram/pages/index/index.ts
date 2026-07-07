@@ -146,15 +146,18 @@ Page({
       }
     }
     
-    // 3. 动态组装今日收入合计公式
-    let todayTotalStr = `${donationsTotal}`;
-    if (b4_total > 0) todayTotalStr += `+${b4_total}`;
+    // 3. 动态组装今日收入合计公式 - 使用 toFixed 确保显示与计算一致
+    const donationsStr = donationsTotal.toFixed(2);
+    const b4Str = b4_total.toFixed(2);
+    let todayTotalStr = donationsStr;
+    if (b4_total > 0) todayTotalStr += `+${b4Str}`;
     const todayTotalSum = Math.round((donationsTotal + b4_total) * 100) / 100;
 
-    // 4. 组装结余公式
-    let balanceFormula = `${prevBalanceNum}+${todayTotalStr}`;
+    // 4. 组装结余公式 - 确保公式基数与输入框显示一致
+    const displayPrevBalance = prevBalanceNum.toFixed(2);
+    let balanceFormula = `${displayPrevBalance}+${todayTotalStr}`;
     if (expenseTotal > 0) {
-      balanceFormula += `-${expenseTotal}`; 
+      balanceFormula += `-${expenseTotal.toFixed(2)}`; 
     }
 
     const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
@@ -173,12 +176,12 @@ ${reportDate}
 一、爱心人士供养
 ${listTexts.length ? listTexts.join('\n') : '暂无'}
 
-今日合计：${todayTotalStr}=${todayTotalSum}
+今日合计：${todayTotalStr}=${todayTotalSum.toFixed(2)}
 
 二、店铺支出：${expenses || '无'}
 
 三、《店铺余额》
-${balanceFormula}=${newBalanceSum}
+${balanceFormula}=${newBalanceSum.toFixed(2)}
 
 如有遗漏、错误请指正！
 
@@ -195,7 +198,7 @@ ${balanceFormula}=${newBalanceSum}
 
 公众号：${mpAccount}
 
-—— 本报告由【素食餐报助手】智能生成。微信小程序搜索“素食餐报助手”，10秒轻松搞定日常餐报汇总！`;
+—— 本报告由【素食小账本助手】智能生成。微信小程序搜索“素食小账本助手”，10秒轻松搞定日常餐报汇总！`;
 
     // 5. 保存数据到云数据库
     const db = wx.cloud.database();
@@ -251,9 +254,15 @@ ${balanceFormula}=${newBalanceSum}
     });
   },
 
+  goToStatistics() {
+    wx.navigateTo({
+      url: '/pages/statistics/statistics'
+    });
+  },
+
   onShareAppMessage() {
     return {
-      title: '✨ 账目清晰，信任传递！推荐使用【素食餐报助手】，10秒生成群汇报。',
+      title: '✨ 账目清晰，信任传递！推荐使用【素食小账本助手】，10秒生成群汇报。',
       path: '/pages/index/index',
       imageUrl: ''
     };

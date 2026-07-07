@@ -1,0 +1,276 @@
+.container {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  padding: 20rpx;
+  padding-bottom: 100rpx;
+}
+
+.tab-bar {
+  display: flex;
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 8rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx;
+  font-size: 28rpx;
+  color: #666;
+  border-radius: 12rpx;
+  transition: all 0.3s;
+}
+
+.tab-item.active {
+  background-color: #d32f2f;
+  color: #fff;
+}
+
+.month-picker {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.picker-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 32rpx;
+  color: #333;
+}
+
+.arrow {
+  font-size: 20rpx;
+  color: #999;
+}
+
+.stats-card {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.stats-header {
+  margin-bottom: 32rpx;
+}
+
+.stats-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.stats-date {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.stats-grid {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 32rpx;
+}
+
+.stat-item {
+  flex: 1;
+  text-align: center;
+  padding: 20rpx 0;
+}
+
+.stat-item:not(:last-child) {
+  border-right: 2rpx solid #f0f0f0;
+}
+
+.stat-value {
+  font-size: 36rpx;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.stat-item.income .stat-value {
+  color: #d32f2f;
+}
+
+.stat-item.expense .stat-value {
+  color: #10b981;
+}
+
+.stat-item.net.positive .stat-value {
+  color: #d32f2f;
+}
+
+.stat-item.net.negative .stat-value {
+  color: #f59e0b;
+}
+
+.stat-label {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.progress-section {
+  margin-bottom: 32rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+  display: block;
+}
+
+.progress-item {
+  margin-bottom: 20rpx;
+}
+
+.progress-label {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.progress-bar {
+  height: 24rpx;
+  background-color: #f0f0f0;
+  border-radius: 12rpx;
+  overflow: hidden;
+  margin-bottom: 8rpx;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 12rpx;
+  transition: width 0.5s ease;
+}
+
+.progress-fill.donation {
+  background-color: #d32f2f;
+}
+
+.progress-fill.batch4 {
+  background-color: #f59e0b;
+}
+
+.progress-value {
+  font-size: 24rpx;
+  color: #999;
+  float: right;
+}
+
+.summary-section {
+  background-color: #f9f9f9;
+  border-radius: 12rpx;
+  padding: 20rpx;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+}
+
+.summary-row:not(:last-child) {
+  border-bottom: 2rpx solid #eee;
+}
+
+.summary-label {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.summary-value {
+  font-size: 26rpx;
+  color: #333;
+  font-weight: bold;
+}
+
+.daily-list {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.daily-item {
+  display: flex;
+  padding: 24rpx 0;
+}
+
+.daily-item:not(:last-child) {
+  border-bottom: 2rpx solid #f0f0f0;
+}
+
+.daily-date {
+  width: 160rpx;
+  font-size: 26rpx;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.daily-details {
+  flex: 1;
+}
+
+.daily-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8rpx 0;
+}
+
+.detail-label {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.detail-value {
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+.detail-value.income {
+  color: #d32f2f;
+}
+
+.detail-value.expense {
+  color: #10b981;
+}
+
+.detail-value.balance {
+  color: #333;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 100rpx 0;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  display: block;
+  margin-bottom: 24rpx;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: #666;
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.empty-hint {
+  font-size: 26rpx;
+  color: #999;
+}

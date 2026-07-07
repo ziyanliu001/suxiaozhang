@@ -2,7 +2,8 @@
   "pages": [
     "pages/index/index",
     "pages/logs/logs",
-    "pages/history/history"
+    "pages/history/history",
+    "pages/statistics/statistics"
   ],
   "window": {
     "navigationBarTextStyle": "black",

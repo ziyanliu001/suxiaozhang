@@ -1,0 +1,9 @@
+{
+  "name": "getStatistics",
+  "version": "1.0.0",
+  "description": "Get weekly/monthly statistics for meal reports",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
