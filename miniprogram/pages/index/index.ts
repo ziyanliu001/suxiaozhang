@@ -5,7 +5,7 @@ Page({
     reportDate: '',
     prevBalance: '1263.64',
     allDonations: '',
-    batch4: '5',
+    batch4: '',
     expenses: '',
     reportResult: '',
     showResult: false,
@@ -103,7 +103,7 @@ Page({
           
           this.setData({
             allDonations: '',
-            batch4: '5',
+            batch4: '',
             expenses: '',
             reportResult: '',
             showResult: false,
