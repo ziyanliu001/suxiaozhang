@@ -95,17 +95,11 @@ Page({
   },
 
   toggleBalanceLock() {
-    const newLocked = !this.data.isBalanceLocked;
     this.setData({
-      isBalanceLocked: newLocked
+      isBalanceLocked: !this.data.isBalanceLocked
     });
-    if (!newLocked) {
-      wx.showToast({ title: '已解锁，可手动修改余额', icon: 'none' });
-    } else {
-      this.setData({
-        yesterdayBalance: this.data.prevBalance
-      });
-      wx.showToast({ title: '已锁定，自动获取昨日余额', icon: 'none' });
+    if (!this.data.isBalanceLocked) {
+      wx.showToast({ title: '已解锁，可手动修正余额', icon: 'none' });
     }
   },
 
