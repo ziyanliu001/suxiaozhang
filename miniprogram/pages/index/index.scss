@@ -3,23 +3,26 @@ page {
   height: 100vh;
 }
 
-.page-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background-color: #f8f8f8;
-}
+.page-container { 
+  display: flex; 
+  flex-direction: column; 
+  height: 100vh; 
+  background-color: #f7f8fa; 
+  box-sizing: border-box; 
+} 
 
-.header-container {
-  background-color: #ffffff;
-}
+.header-container { 
+  background-color: #ffffff; 
+  width: 100%; 
+  box-sizing: border-box; 
+} 
 
 .header-title { 
   text-align: center; 
   font-size: 34rpx; 
   font-weight: bold; 
   color: #e53935; 
-  padding-bottom: 30rpx; 
+  padding-bottom: 20rpx; 
 }
 
 .content-scroll {
