@@ -12,10 +12,23 @@ Page({
     showSettings: false,
     shopName: '海沧区雨花斋',
     mpAccount: '厦门海沧雨花斋！',
-    donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2'
+    donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2',
+    headerSafeTop: 85
   },
 
   onLoad() {
+    try {
+      const rect = wx.getMenuButtonBoundingClientRect();
+      const capsuleBottom = rect.bottom;
+      this.setData({
+        headerSafeTop: capsuleBottom + 15
+      });
+    } catch (error) {
+      this.setData({
+        headerSafeTop: 85
+      });
+    }
+
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
