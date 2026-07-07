@@ -1,39 +1,59 @@
-<view class="container">
-  <view class="header">
-    <view class="back-btn" bindtap="goBack">
+<view class="page-container">
+  <view class="custom-nav" style="padding-top: {{navTop}}px;">
+    <view class="nav-left" bindtap="goBack">
       <text class="back-icon">←</text>
     </view>
-    <text class="title">历史餐报记录</text>
-    <view class="placeholder"></view>
+    <text class="nav-title">历史餐报记录</text>
+    <view class="nav-right"></view>
   </view>
 
-  <view class="content">
-    <view wx:if="{{loading}}" class="loading">
-      <text>加载中...</text>
-    </view>
-
-    <view wx:elif="{{reports.length === 0}}" class="empty">
-      <text>暂无历史餐报记录</text>
-    </view>
-
-    <view wx:else class="report-list">
-      <view wx:for="{{reports}}" wx:key="_id" class="report-item">
-        <view class="report-header">
-          <text class="report-date">{{item.reportDate}}</text>
-          <text class="report-shop">{{item.shopName}}</text>
+  <scroll-view class="content-section" style="margin-top: {{contentTop}}px;" scroll-y>
+    <view class="report-list" wx:if="{{!loading && reports.length > 0}}">
+      <view wx:for="{{reports}}" wx:key="_id" class="report-card" data-index="{{index}}">
+        <view class="card-header">
+          <text class="card-date">{{item.dateString}}</text>
+          <text class="card-shop">{{item.shopName || '店铺'}}</text>
         </view>
-        <view class="report-info">
-          <text class="info-item">昨日余额：{{item.prevBalance}}元</text>
-          <text class="info-item">今日收入：{{item.todayTotalSum}}元</text>
-          <text class="info-item">店铺支出：{{item.expenses || '无'}}</text>
-          <text class="info-item">最新余额：{{item.newBalance}}元</text>
+
+        <view class="card-divider"></view>
+
+        <view class="card-body">
+          <view class="stat-item">
+            <text class="stat-label">昨日余额</text>
+            <text class="stat-value">¥{{(item.yesterdayBalance || 0).toFixed(2)}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">随喜收入</text>
+            <text class="stat-value income">¥{{((item.otherDonation || 0) + (item.listDonationTotal || 0)).toFixed(2)}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">今日支出</text>
+            <text class="stat-value expense">-¥{{(item.expenseAmount || 0).toFixed(2)}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">今日结余</text>
+            <text class="stat-value balance">¥{{(item.todayBalance || 0).toFixed(2)}}</text>
+          </view>
         </view>
-        <view class="report-actions">
-          <button class="copy-btn" bindtap="copyReport" data-report-text="{{item.reportText}}">
-            复制餐报文本
+
+        <view class="card-footer">
+          <button class="copy-btn" hover-class="btn-hover" bindtap="copyReport" data-index="{{index}}">
+            <text class="copy-icon">📋</text>
+            <text>复制此日报文本</text>
           </button>
         </view>
       </view>
     </view>
-  </view>
+
+    <view class="empty-state" wx:if="{{!loading && reports.length === 0}}">
+      <text class="empty-icon">📋</text>
+      <text class="empty-text">暂无历史餐报记录</text>
+      <text class="empty-hint">今天还没有提交过餐报，快去记录一笔吧</text>
+      <button class="btn-go-home" hover-class="btn-hover" bindtap="goToHome">去录入今日餐报</button>
+    </view>
+
+    <view class="loading-state" wx:if="{{loading}}">
+      <text class="loading-text">加载中...</text>
+    </view>
+  </scroll-view>
 </view>
