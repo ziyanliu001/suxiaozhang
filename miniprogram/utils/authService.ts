@@ -1,6 +1,7 @@
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
 const LOGIN_TIMEOUT_MS = 5000;
+const TEMP_OPENID_PREFIX = 'local_';
 
 function withTimeout(promise, timeoutMs, timeoutMsg) {
   let timer;
@@ -10,11 +11,15 @@ function withTimeout(promise, timeoutMs, timeoutMsg) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function generateTempOpenid(): string {
+  return TEMP_OPENID_PREFIX + Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
 export const AuthService = {
-  async ensureLogin(): Promise<{ success: boolean; openid?: string; error?: string }> {
+  async ensureLogin(): Promise<{ success: boolean; openid?: string; error?: string; isTemp?: boolean }> {
     const cached = this.getOpenid();
     if (cached) {
-      return { success: true, openid: cached };
+      return { success: true, openid: cached, isTemp: cached.startsWith(TEMP_OPENID_PREFIX) };
     }
 
     try {
@@ -31,15 +36,18 @@ export const AuthService = {
           wx.setStorageSync(USER_CACHE_KEY, JSON.stringify(r.user));
         }
         console.log('[AuthService] 静默登录成功:', r.openid);
-        return { success: true, openid: r.openid };
+        return { success: true, openid: r.openid, isTemp: false };
       }
 
-      console.warn('[AuthService] 登录失败:', r?.error);
-      return { success: false, error: r?.error || '登录失败' };
+      console.warn('[AuthService] 登录失败，使用临时 openid:', r?.error);
+      const tempOpenid = generateTempOpenid();
+      wx.setStorageSync(OPENID_CACHE_KEY, tempOpenid);
+      return { success: true, openid: tempOpenid, isTemp: true };
     } catch (err: any) {
-      console.error('[AuthService] 登录异常:', err);
-      const msg = err.errMsg || err.message || '网络异常，请重试';
-      return { success: false, error: msg };
+      console.error('[AuthService] 登录异常，使用临时 openid:', err);
+      const tempOpenid = generateTempOpenid();
+      wx.setStorageSync(OPENID_CACHE_KEY, tempOpenid);
+      return { success: true, openid: tempOpenid, isTemp: true };
     }
   },
 
@@ -62,6 +70,11 @@ export const AuthService = {
 
   isLoggedIn(): boolean {
     return !!this.getOpenid();
+  },
+
+  isTempOpenid(): boolean {
+    const openid = this.getOpenid();
+    return !!openid && openid.startsWith(TEMP_OPENID_PREFIX);
   },
 
   clearAuth(): void {

@@ -20,16 +20,9 @@ Page({
   },
 
   async onLoad() {
-    // 严格等待静默登录完成后再加载数据
     const loginRes = await AuthService.ensureLogin();
-    if (!loginRes.success) {
-      wx.showModal({
-        title: '登录失败',
-        content: loginRes.error || '请检查网络后重启小程序',
-        showCancel: false,
-        confirmText: '我知道了'
-      });
-      return;
+    if (loginRes.isTemp) {
+      console.warn('[Index] 使用临时 openid，数据将暂存本地');
     }
 
     try {

@@ -1,6 +1,6 @@
-const STORAGE_KEY = 'local_report_logs';
-
 import { AuthService } from './authService';
+
+const STORAGE_KEY = 'local_report_logs';
 
 function getLocalReports(): any[] {
   try {
@@ -38,6 +38,7 @@ export const DataService = {
   async saveReport(reportData: any): Promise<{ success: boolean; message: string; data?: any }> {
     const db = wx.cloud.database();
     
+    const openid = AuthService.getOpenid();
     const formattedData = {
       dateString: reportData.dateString || '',
       shopName: reportData.shopName || '',
@@ -49,7 +50,8 @@ export const DataService = {
       todayBalance: parseNumber(reportData.todayBalance),
       reportText: reportData.reportText || '',
       createTime: db.serverDate(),
-      isSynced: false
+      isSynced: false,
+      _openid: openid || ''
     };
 
     try {
@@ -197,8 +199,13 @@ export const DataService = {
   },
 
   async syncLocalDataToCloud(): Promise<{ success: boolean; syncedCount: number; failedCount: number }> {
+    const openid = AuthService.getOpenid();
     const localReports = getLocalReports();
-    const unsyncedReports = localReports.filter(r => !r.isSynced);
+    let unsyncedReports = localReports.filter(r => !r.isSynced);
+    
+    if (openid) {
+      unsyncedReports = unsyncedReports.filter(r => r._openid === openid);
+    }
 
     if (unsyncedReports.length === 0) {
       return { success: true, syncedCount: 0, failedCount: 0 };
