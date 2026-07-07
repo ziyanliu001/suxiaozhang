@@ -11,7 +11,8 @@ Page({
     showResult: false,
     showSettings: false,
     shopName: '海沧区雨花斋',
-    mpAccount: '厦门海沧雨花斋！'
+    mpAccount: '厦门海沧雨花斋！',
+    donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2'
   },
 
   onLoad() {
@@ -37,8 +38,9 @@ Page({
     const result = await DataService.getLatestReport(this.data.shopName);
     
     if (result.success && result.data) {
+      const balance = this.validateBalance(result.data.todayBalance);
       this.setData({
-        prevBalance: String(result.data.todayBalance),
+        prevBalance: balance,
         shopName: result.data.shopName || this.data.shopName,
         mpAccount: result.data.mpAccount || this.data.mpAccount
       });
@@ -52,17 +54,31 @@ Page({
     const cachedShopName = wx.getStorageSync('yuhua_shop_name');
     const cachedMpAccount = wx.getStorageSync('yuhua_mp_account');
     
-    if (cachedBalance !== '' && cachedBalance !== null && cachedBalance !== undefined) {
-      this.setData({
-        prevBalance: String(cachedBalance)
-      });
-    }
+    const balance = this.validateBalance(cachedBalance);
+    this.setData({
+      prevBalance: balance
+    });
+    
     if (cachedShopName) {
       this.setData({ shopName: cachedShopName });
     }
     if (cachedMpAccount) {
       this.setData({ mpAccount: cachedMpAccount });
     }
+  },
+
+  validateBalance(value: any): string {
+    if (value === null || value === undefined || value === '') {
+      return '0.00';
+    }
+    
+    const numValue = parseFloat(String(value));
+    if (isNaN(numValue) || !isFinite(numValue)) {
+      return '0.00';
+    }
+    
+    const fixedValue = Math.abs(numValue).toFixed(2);
+    return fixedValue;
   },
 
   toggleSettings() {
