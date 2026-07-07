@@ -29,14 +29,14 @@
       </view>
       
       <view class="section">
-        <view class="row">
-          <view class="col">
+        <view class="form-row">
+          <view class="form-item">
             <text class="label">汇报日期</text>
-            <input class="input" value="{{reportDate}}" bindinput="onInput" data-field="reportDate" />
+            <input class="input-box gray-bg" value="{{reportDate}}" disabled />
           </view>
-          <view class="col">
+          <view class="form-item">
             <text class="label">昨日店铺余额</text>
-            <input class="input" type="digit" value="{{prevBalance}}" bindinput="onInput" data-field="prevBalance" />
+            <input class="input-box gray-bg" value="{{prevBalance}}" disabled />
           </view>
         </view>
       </view>

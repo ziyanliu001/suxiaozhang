@@ -62,9 +62,30 @@ page {
   text-align: left; 
 }
 
+.form-row { display: flex; justify-content: space-between; }
+.form-item { width: 48%; }
 .row { display: flex; justify-content: space-between; }
 .col { width: 48%; }
 .label { font-size: 26rpx; font-weight: bold; color: #444; margin-bottom: 12rpx; display: block; text-align: left; }
+
+.input-box { 
+  background-color: #ffffff;
+  border: 2rpx solid #e1e4e8; 
+  height: 80rpx;       
+  line-height: 80rpx;  
+  padding: 0 20rpx;    
+  border-radius: 8rpx; 
+  font-size: 28rpx; 
+  width: 100%; 
+  box-sizing: border-box; 
+  display: block;
+}
+
+.input-box.gray-bg { 
+  background-color: #f5f7fa !important; 
+  color: #7f8c8d !important; 
+  border-color: #e1e4e8; 
+}
 
 .toggle-header {
   display: flex;
