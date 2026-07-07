@@ -88,21 +88,29 @@ Page({
   },
 
   resetForm() {
-    const now = new Date();
-    const yy = String(now.getFullYear()).slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    
-    this.setData({
-      allDonations: '',
-      batch4: '5',
-      expenses: '',
-      reportResult: '',
-      showResult: false,
-      reportDate: `${yy}年${mm}月${dd}日`
+    wx.showModal({
+      title: '提示',
+      content: '确定要清空当前输入的名单、随喜金额和支出说明吗？',
+      success: (res) => {
+        if (res.confirm) {
+          const now = new Date();
+          const yy = String(now.getFullYear()).slice(-2);
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          
+          this.setData({
+            allDonations: '',
+            batch4: '5',
+            expenses: '',
+            reportResult: '',
+            showResult: false,
+            reportDate: `${yy}年${mm}月${dd}日`
+          });
+          
+          wx.showToast({ title: '已清空', icon: 'success' });
+        }
+      }
     });
-    
-    wx.showToast({ title: '已清空输入', icon: 'success' });
   },
 
   onInput(e: any) {
