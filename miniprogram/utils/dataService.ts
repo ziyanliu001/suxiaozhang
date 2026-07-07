@@ -28,7 +28,8 @@ function parseNumber(value: any): number {
 
 export function formatMoney(value: any): string {
   const num = parseFloat(value) || 0;
-  return num === 0 ? "0.00" : num.toFixed(2);
+  const positiveNum = Math.max(0, num);
+  return positiveNum === 0 ? "0.00" : positiveNum.toFixed(2);
 }
 
 export const DataService = {
