@@ -37,8 +37,17 @@
             <input class="input-box gray-bg" value="{{reportDate}}" disabled />
           </view>
           <view class="form-item">
-            <text class="label">昨日店铺余额</text>
-            <input class="input-box gray-bg" value="{{prevBalance}}" disabled />
+            <view class="label-bar">
+              <text class="label">昨日店铺余额</text>
+              <view class="edit-toggle" bindtap="toggleBalanceLock">
+                {{isBalanceLocked ? '🔓 手动修改' : '🔒 锁定自动'}}
+              </view>
+            </view>
+            <input class="input-box {{isBalanceLocked ? 'gray-bg' : ''}}"
+                   type="digit"
+                   value="{{yesterdayBalance}}"
+                   disabled="{{isBalanceLocked}}"
+                   bindinput="onYesterdayBalanceInput" />
           </view>
         </view>
       </view>

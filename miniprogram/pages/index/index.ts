@@ -4,6 +4,8 @@ Page({
   data: {
     reportDate: '',
     prevBalance: '1263.64',
+    yesterdayBalance: '1263.64',
+    isBalanceLocked: true,
     allDonations: '',
     otherDonation: '',
     expenses: '',
@@ -54,6 +56,7 @@ Page({
       const balance = this.validateBalance(result.data.todayBalance);
       this.setData({
         prevBalance: balance,
+        yesterdayBalance: balance,
         shopName: result.data.shopName || this.data.shopName,
         mpAccount: result.data.mpAccount || this.data.mpAccount
       });
@@ -69,7 +72,8 @@ Page({
     
     const balance = this.validateBalance(cachedBalance);
     this.setData({
-      prevBalance: balance
+      prevBalance: balance,
+      yesterdayBalance: balance
     });
     
     if (cachedShopName) {
@@ -87,6 +91,28 @@ Page({
   toggleSettings() {
     this.setData({
       showSettings: !this.data.showSettings
+    });
+  },
+
+  toggleBalanceLock() {
+    const newLocked = !this.data.isBalanceLocked;
+    this.setData({
+      isBalanceLocked: newLocked
+    });
+    if (!newLocked) {
+      wx.showToast({ title: '已解锁，可手动修改余额', icon: 'none' });
+    } else {
+      this.setData({
+        yesterdayBalance: this.data.prevBalance
+      });
+      wx.showToast({ title: '已锁定，自动获取昨日余额', icon: 'none' });
+    }
+  },
+
+  onYesterdayBalanceInput(e: any) {
+    const value = e.detail.value;
+    this.setData({
+      yesterdayBalance: value
     });
   },
 
@@ -151,8 +177,8 @@ Page({
   },
 
   async generateReport() {
-    const { reportDate, prevBalance, allDonations, otherDonation, expenses, shopName, mpAccount } = this.data;
-    const prevBalanceNum = parseFloat(prevBalance) || 0;
+    const { reportDate, yesterdayBalance, allDonations, otherDonation, expenses, shopName, mpAccount } = this.data;
+    const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
     const b4_total = parseFloat(otherDonation) || 0;
     
     const allList = this.parseAllDonations(allDonations);
