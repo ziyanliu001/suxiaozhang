@@ -3,8 +3,8 @@ import { DataService, formatMoney } from '../../utils/dataService';
 Page({
   data: {
     reportDate: '',
-    prevBalance: '1263.64',
-    yesterdayBalance: '1263.64',
+    prevBalance: '0.00',
+    yesterdayBalance: '0.00',
     isBalanceLocked: true,
     allDonations: '',
     otherDonation: '',

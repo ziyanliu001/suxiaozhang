@@ -102,38 +102,40 @@ Page({
       title: '⚠️ 严谨确认',
       content: `确定要删除 ${date} 的餐报记录吗？此操作不可逆！`,
       confirmColor: '#e53935',
-      success: (res) => {
+      success: async (res) => {
         if (res.confirm) {
-          this.executeDelete(id);
+          wx.showLoading({ title: '正在提交删除...' });
+          try {
+            const db = wx.cloud.database();
+            const resDb = await db.collection('report_logs').doc(id).remove();
+            console.log('[Debug] 云端删除成功反馈:', resDb);
+          } catch (cloudErr: any) {
+            console.warn('[删除] 云端删除失败（可能是本地缓存数据）:', cloudErr);
+          }
+
+          try {
+            let localLogs = wx.getStorageSync('local_report_logs') || [];
+            localLogs = localLogs.filter((item: any) => item._id !== id && item._localId !== id);
+            wx.setStorageSync('local_report_logs', localLogs);
+            console.log('[Debug] 本地缓存同步删除完成');
+          } catch (storageErr) {
+            console.error('[删除] 本地缓存同步失败:', storageErr);
+          }
+
+          const currentList = this.data.reports || [];
+          const updatedList = currentList.filter((item: any) => item._id !== id && item._localId !== id);
+          
+          this.setData({
+            reports: updatedList
+          });
+
+          wx.showToast({ title: '已安全删除', icon: 'success' });
         }
+      },
+      complete: () => {
+        wx.hideLoading();
       }
     });
-  },
-
-  async executeDelete(id: string) {
-    wx.showLoading({ title: '正在删除...' });
-    try {
-      const db = wx.cloud.database();
-      try {
-        await db.collection('report_logs').doc(id).remove();
-      } catch (cloudErr) {
-        console.warn('[删除] 云端删除失败（可能是本地缓存数据）:', cloudErr);
-      }
-
-      let localLogs = wx.getStorageSync('local_report_logs') || [];
-      localLogs = localLogs.filter((item: any) => item._id !== id && item._localId !== id);
-      wx.setStorageSync('local_report_logs', localLogs);
-
-      const updatedList = this.data.reports.filter((item: any) => item._id !== id && item._localId !== id);
-      this.setData({ reports: updatedList });
-
-      wx.showToast({ title: '已安全删除', icon: 'success' });
-    } catch (err) {
-      console.error("删除失败", err);
-      wx.showToast({ title: '删除失败，请重试', icon: 'none' });
-    } finally {
-      wx.hideLoading();
-    }
   },
 
   goBack() {
