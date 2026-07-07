@@ -1,4 +1,4 @@
-import { DataService } from '../../utils/dataService';
+import { DataService, formatMoney } from '../../utils/dataService';
 
 Page({
   data: {
@@ -52,10 +52,10 @@ Page({
       
       return {
         ...item,
-        yesterdayBalanceStr: yesterdayBalance.toFixed(2),
-        totalIncomeStr: totalIncome.toFixed(2),
-        expenseAmountStr: expenseAmount.toFixed(2),
-        todayBalanceStr: todayBalance.toFixed(2)
+        yesterdayBalanceStr: formatMoney(yesterdayBalance),
+        totalIncomeStr: formatMoney(totalIncome),
+        expenseAmountStr: formatMoney(expenseAmount),
+        todayBalanceStr: formatMoney(todayBalance)
       };
     });
 

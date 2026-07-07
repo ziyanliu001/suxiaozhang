@@ -1,4 +1,4 @@
-import { DataService } from '../../utils/dataService';
+import { DataService, formatMoney } from '../../utils/dataService';
 
 Page({
   data: {
@@ -176,8 +176,23 @@ Page({
     wx.hideLoading();
     
     if (result.success && result.data) {
+      const stats = result.data;
+      const formattedStats = {
+        ...stats,
+        netBalanceStr: formatMoney(stats.netBalance),
+        totalIncomeStr: formatMoney(stats.totalIncome),
+        totalExpenseStr: formatMoney(stats.totalExpense),
+        totalListDonationStr: formatMoney(stats.totalListDonation),
+        totalOtherDonationStr: formatMoney(stats.totalOtherDonation),
+        dailyRecords: stats.dailyRecords.map((item: any) => ({
+          ...item,
+          incomeStr: formatMoney(item.income),
+          expenseStr: formatMoney(item.expense),
+          balanceStr: formatMoney(item.balance)
+        }))
+      };
       this.setData({
-        statistics: result.data
+        statistics: formattedStats
       });
     } else {
       wx.showToast({ title: '暂无统计数据', icon: 'none' });

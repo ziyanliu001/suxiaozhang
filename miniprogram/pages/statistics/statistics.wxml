@@ -71,17 +71,17 @@
       </view>
 
       <view class="net-balance-card">
-        <text class="net-balance-value">¥{{statistics.netBalance.toFixed(2)}}</text>
+        <text class="net-balance-value">¥{{statistics.netBalanceStr}}</text>
         <text class="net-balance-label">净结余</text>
       </view>
 
       <view class="stats-grid">
         <view class="stat-item income">
-          <text class="stat-value">¥{{statistics.totalIncome.toFixed(2)}}</text>
+          <text class="stat-value">¥{{statistics.totalIncomeStr}}</text>
           <text class="stat-label">总收入</text>
         </view>
         <view class="stat-item expense">
-          <text class="stat-value">¥{{statistics.totalExpense.toFixed(2)}}</text>
+          <text class="stat-value">¥{{statistics.totalExpenseStr}}</text>
           <text class="stat-label">总支出</text>
         </view>
       </view>
@@ -111,11 +111,11 @@
         <text class="section-title">收入构成</text>
         <view class="breakdown-row">
           <text class="breakdown-label">爱心人士供养</text>
-          <text class="breakdown-value">¥{{statistics.totalListDonation.toFixed(2)}}</text>
+          <text class="breakdown-value">¥{{statistics.totalListDonationStr}}</text>
         </view>
         <view class="breakdown-row">
           <text class="breakdown-label">随喜/现场供养</text>
-          <text class="breakdown-value">¥{{statistics.totalOtherDonation.toFixed(2)}}</text>
+          <text class="breakdown-value">¥{{statistics.totalOtherDonationStr}}</text>
         </view>
       </view>
     </view>
@@ -127,15 +127,15 @@
         <view class="daily-details">
           <view class="daily-row">
             <text class="detail-label">收入</text>
-            <text class="detail-value income">+¥{{item.income.toFixed(2)}}</text>
+            <text class="detail-value income">+¥{{item.incomeStr}}</text>
           </view>
           <view class="daily-row">
             <text class="detail-label">支出</text>
-            <text class="detail-value expense">-¥{{item.expense.toFixed(2)}}</text>
+            <text class="detail-value expense">-¥{{item.expenseStr}}</text>
           </view>
           <view class="daily-row">
             <text class="detail-label">结余</text>
-            <text class="detail-value balance">¥{{item.balance.toFixed(2)}}</text>
+            <text class="detail-value balance">¥{{item.balanceStr}}</text>
           </view>
         </view>
       </view>

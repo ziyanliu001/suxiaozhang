@@ -18,11 +18,17 @@ function saveLocalReports(reports: any[]): void {
 }
 
 function formatNumber(value: number): string {
-  return Number(value).toFixed(2);
+  const num = parseFloat(value) || 0;
+  return num === 0 ? "0.00" : num.toFixed(2);
 }
 
 function parseNumber(value: any): number {
   return parseFloat(value) || 0;
+}
+
+export function formatMoney(value: any): string {
+  const num = parseFloat(value) || 0;
+  return num === 0 ? "0.00" : num.toFixed(2);
 }
 
 export const DataService = {
@@ -343,10 +349,10 @@ export const DataService = {
     reportText += `一、爱心人士供养\n`;
     reportText += `随喜供养：${otherDonation}\n`;
     reportText += `名单供养：${listDonationTotal}\n`;
-    reportText += `今日合计：${(parseFloat(otherDonation) + parseFloat(listDonationTotal)).toFixed(2)}\n\n`;
+    reportText += `今日合计：${formatNumber(parseFloat(otherDonation) + parseFloat(listDonationTotal))}\n\n`;
     reportText += `二、店铺支出：${parseFloat(expenseAmount) > 0 ? expenseAmount : '无'}\n\n`;
     reportText += `三、《店铺余额》\n`;
-    reportText += `${yesterdayBalance}+${(parseFloat(otherDonation) + parseFloat(listDonationTotal)).toFixed(2)}`;
+    reportText += `${yesterdayBalance}+${formatNumber(parseFloat(otherDonation) + parseFloat(listDonationTotal))}`;
     if (parseFloat(expenseAmount) > 0) {
       reportText += `-${expenseAmount}`;
     }

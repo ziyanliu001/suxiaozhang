@@ -1,4 +1,4 @@
-import { DataService } from '../../utils/dataService';
+import { DataService, formatMoney } from '../../utils/dataService';
 
 Page({
   data: {
@@ -81,17 +81,7 @@ Page({
   },
 
   validateBalance(value: any): string {
-    if (value === null || value === undefined || value === '') {
-      return '0.00';
-    }
-    
-    const numValue = parseFloat(String(value));
-    if (isNaN(numValue) || !isFinite(numValue)) {
-      return '0.00';
-    }
-    
-    const fixedValue = Math.abs(numValue).toFixed(2);
-    return fixedValue;
+    return formatMoney(value);
   },
 
   toggleSettings() {
@@ -187,16 +177,16 @@ Page({
       }
     }
     
-    const donationsStr = donationsTotal.toFixed(2);
-    const b4Str = b4_total.toFixed(2);
+    const donationsStr = formatMoney(donationsTotal);
+    const b4Str = formatMoney(b4_total);
     let todayTotalStr = donationsStr;
     if (b4_total > 0) todayTotalStr += `+${b4Str}`;
     const todayTotalSum = Math.round((donationsTotal + b4_total) * 100) / 100;
 
-    const displayPrevBalance = prevBalanceNum.toFixed(2);
+    const displayPrevBalance = formatMoney(prevBalanceNum);
     let balanceFormula = `${displayPrevBalance}+${todayTotalStr}`;
     if (expenseTotal > 0) {
-      balanceFormula += `-${expenseTotal.toFixed(2)}`;
+      balanceFormula += `-${formatMoney(expenseTotal)}`;
     }
 
     const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
@@ -215,12 +205,12 @@ ${reportDate}
 一、爱心人士供养
 ${listTexts.length ? listTexts.join('\n') : '暂无'}
 
-今日合计：${todayTotalStr}=${todayTotalSum.toFixed(2)}
+今日合计：${todayTotalStr}=${formatMoney(todayTotalSum)}
 
 二、店铺支出：${expenses || '无'}
 
 三、《店铺余额》
-${balanceFormula}=${newBalanceSum.toFixed(2)}
+${balanceFormula}=${formatMoney(newBalanceSum)}
 
 如有遗漏、错误请指正！
 
