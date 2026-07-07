@@ -121,10 +121,13 @@ export const DataService = {
       const unsyncedReports = localReports.filter(r => !r.isSynced);
 
       const mergedData = [...cloudData];
+      const existingKeys = new Set(cloudData.map(c => `${c.dateString}_${c.shopName}`));
+      
       unsyncedReports.forEach(localReport => {
-        const exists = mergedData.some(c => c.dateString === localReport.dateString && c.shopName === localReport.shopName);
-        if (!exists) {
+        const key = `${localReport.dateString}_${localReport.shopName}`;
+        if (!existingKeys.has(key)) {
           mergedData.unshift(localReport);
+          existingKeys.add(key);
         }
       });
 

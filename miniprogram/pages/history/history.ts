@@ -91,7 +91,8 @@ Page({
     const { id, date } = e.currentTarget.dataset;
 
     if (!id) {
-      wx.showToast({ title: '数据异常', icon: 'none' });
+      console.error("[删除失败] 无法获取当前卡片的唯一 _id，请检查 currentTarget 传参");
+      wx.showToast({ title: '参数传递失效', icon: 'none' });
       return;
     }
 
@@ -106,13 +107,17 @@ Page({
           wx.showLoading({ title: '正在删除...' });
           try {
             const db = wx.cloud.database();
-            await db.collection('report_logs').doc(id).remove();
+            try {
+              await db.collection('report_logs').doc(id).remove();
+            } catch (cloudErr) {
+              console.warn('[删除] 云端删除失败（可能是本地缓存数据）:', cloudErr);
+            }
 
             let localLogs = wx.getStorageSync('local_report_logs') || [];
-            localLogs = localLogs.filter((item: any) => item._id !== id);
+            localLogs = localLogs.filter((item: any) => item._id !== id && item._localId !== id);
             wx.setStorageSync('local_report_logs', localLogs);
 
-            const updatedList = this.data.reports.filter((item: any) => item._id !== id);
+            const updatedList = this.data.reports.filter((item: any) => item._id !== id && item._localId !== id);
             this.setData({ reports: updatedList });
 
             wx.showToast({ title: '已安全删除', icon: 'success' });
