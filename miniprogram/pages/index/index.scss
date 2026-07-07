@@ -69,22 +69,18 @@ page {
 .label { font-size: 26rpx; font-weight: bold; color: #444; margin-bottom: 12rpx; display: block; text-align: left; }
 
 .input-box { 
-  background-color: #ffffff;
+  background-color: #ffffff; 
   border: 2rpx solid #e1e4e8; 
-  height: 80rpx;       
-  line-height: 80rpx;  
-  padding: 0 20rpx;    
-  border-radius: 8rpx; 
+  border-radius: 12rpx; 
+  padding: 16rpx; 
   font-size: 28rpx; 
-  width: 100%; 
-  box-sizing: border-box; 
-  display: block;
-}
+  color: #333333; 
+} 
 
-.input-box.gray-bg { 
+.gray-bg { 
   background-color: #f5f7fa !important; 
-  color: #7f8c8d !important; 
-  border-color: #e1e4e8; 
+  color: #888888 !important;            
+  border-color: #e4e7ed !important; 
 }
 
 .toggle-header {
