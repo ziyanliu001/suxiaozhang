@@ -103,37 +103,33 @@ Page({
       content: `确定要删除 ${date} 的餐报记录吗？此操作不可逆！`,
       confirmColor: '#e53935',
       success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '正在提交删除...' });
-          try {
-            const db = wx.cloud.database();
-            const resDb = await db.collection('report_logs').doc(id).remove();
-            console.log('[Debug] 云端删除成功反馈:', resDb);
-          } catch (cloudErr: any) {
-            console.warn('[删除] 云端删除失败（可能是本地缓存数据）:', cloudErr);
-          }
+        if (!res.confirm) return;
 
-          try {
-            let localLogs = wx.getStorageSync('local_report_logs') || [];
-            localLogs = localLogs.filter((item: any) => item._id !== id && item._localId !== id);
-            wx.setStorageSync('local_report_logs', localLogs);
-            console.log('[Debug] 本地缓存同步删除完成');
-          } catch (storageErr) {
-            console.error('[删除] 本地缓存同步失败:', storageErr);
-          }
+        wx.showLoading({ title: '正在提交删除...' });
+        try {
+          const result = await DataService.deleteReport(id);
+          console.log('[Debug] 删除结果:', result);
 
-          const currentList = this.data.reports || [];
-          const updatedList = currentList.filter((item: any) => item._id !== id && item._localId !== id);
-          
-          this.setData({
-            reports: updatedList
+          if (result.success) {
+            const currentList = this.data.reports || [];
+            const updatedList = currentList.filter(
+              (item: any) => item._id !== id && item._localId !== id
+            );
+            this.setData({ reports: updatedList });
+            wx.showToast({ title: '已安全删除', icon: 'success' });
+          } else {
+            wx.showToast({ title: result.message || '删除失败', icon: 'none' });
+          }
+        } catch (err: any) {
+          console.error('[Bug] 删除执行异常:', err);
+          wx.showModal({
+            title: '删除失败提示',
+            content: `错误信息: ${err.errMsg || err.message || '未知错误'}`,
+            showCancel: false
           });
-
-          wx.showToast({ title: '已安全删除', icon: 'success' });
+        } finally {
+          wx.hideLoading();
         }
-      },
-      complete: () => {
-        wx.hideLoading();
       }
     });
   },

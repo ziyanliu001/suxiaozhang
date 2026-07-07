@@ -234,6 +234,53 @@ export const DataService = {
     };
   },
 
+  async deleteReport(id: string): Promise<{ success: boolean; message: string }> {
+    if (!id) {
+      return { success: false, message: '缺少记录 ID' };
+    }
+
+    let cloudDeleted = false;
+    const db = wx.cloud.database();
+
+    try {
+      await db.collection('report_logs').doc(id).remove();
+      cloudDeleted = true;
+      console.log('[DataService] 云端删除成功:', id);
+    } catch (cloudErr: any) {
+      console.warn('[DataService] 云端删除失败（可能是本地缓存数据或集合不存在）:', cloudErr);
+    }
+
+    try {
+      const localReports = getLocalReports();
+      const beforeLen = localReports.length;
+      const filteredReports = localReports.filter(
+        (item: any) => item._id !== id && item._localId !== id
+      );
+      const afterLen = filteredReports.length;
+
+      if (afterLen < beforeLen) {
+        saveLocalReports(filteredReports);
+        console.log(`[DataService] 本地缓存删除成功，${beforeLen} -> ${afterLen}`);
+        return {
+          success: true,
+          message: cloudDeleted ? '云端与本地均已删除' : '本地缓存已删除'
+        };
+      } else {
+        console.warn('[DataService] 本地缓存中未找到对应记录:', id);
+        return {
+          success: cloudDeleted,
+          message: cloudDeleted ? '云端已删除，本地未找到对应记录' : '未找到对应记录'
+        };
+      }
+    } catch (storageErr: any) {
+      console.error('[DataService] 本地缓存删除失败:', storageErr);
+      return {
+        success: cloudDeleted,
+        message: cloudDeleted ? '云端已删除，本地删除失败' : '删除失败'
+      };
+    }
+  },
+
   async getLatestReport(shopName?: string): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
     const result = await this.getReports({ 
       shopName, 
