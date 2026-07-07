@@ -1,138 +1,150 @@
-<view class="container">
-  <view class="header">
-    <text class="header-title">统计分析</text>
-  </view>
-
-  <view class="tab-bar">
-    <view 
-      class="tab-item {{currentTab === 'week' ? 'active' : ''}}" 
-      bindtap="switchTab" 
-      data-tab="week"
-    >
-      📅 周报
-    </view>
-    <view 
-      class="tab-item {{currentTab === 'month' ? 'active' : ''}}" 
-      bindtap="switchTab" 
-      data-tab="month"
-    >
-      📆 月报
-    </view>
-    <view 
-      class="tab-item {{currentTab === 'year' ? 'active' : ''}}" 
-      bindtap="switchTab" 
-      data-tab="year"
-    >
-      📊 年报
-    </view>
-    <view 
-      class="tab-item {{currentTab === 'custom' ? 'active' : ''}}" 
-      bindtap="switchTab" 
-      data-tab="custom"
-    >
-      🔍 自定义
-    </view>
-  </view>
-
-  <view class="custom-date-picker" wx:if="{{currentTab === 'custom'}}">
-    <view class="date-row">
-      <picker mode="date" value="{{customStartDate}}" bindchange="onCustomStartDateChange">
-        <view class="date-btn">
-          <text>{{customStartDate || '选择开始日期'}}</text>
-          <text class="arrow">▼</text>
-        </view>
-      </picker>
-      <text class="date-separator">至</text>
-      <picker mode="date" value="{{customEndDate}}" bindchange="onCustomEndDateChange">
-        <view class="date-btn">
-          <text>{{customEndDate || '选择结束日期'}}</text>
-          <text class="arrow">▼</text>
-        </view>
-      </picker>
-    </view>
-    <button class="btn-query" bindtap="loadCustomStatistics">查询统计</button>
-  </view>
-
-  <view class="stats-card" wx:if="{{statistics}}">
-    <view class="stats-header">
-      <text class="stats-title">{{getTabTitle()}}</text>
-      <text class="stats-date">{{statistics.startDate}} ~ {{statistics.endDate}}</text>
+<view class="page-container">
+  <view class="top-section">
+    <view class="header">
+      <text class="header-title">统计分析</text>
     </view>
 
-    <view class="net-balance-card">
-      <text class="net-balance-value">¥{{statistics.netBalance.toFixed(2)}}</text>
-      <text class="net-balance-label">净结余</text>
-    </view>
-
-    <view class="stats-grid">
-      <view class="stat-item income">
-        <text class="stat-value">¥{{statistics.totalIncome.toFixed(2)}}</text>
-        <text class="stat-label">总收入</text>
+    <view class="tab-bar">
+      <view 
+        class="tab-item {{currentTab === 'week' ? 'active' : ''}}" 
+        bindtap="switchTab" 
+        data-tab="week"
+      >
+        <text class="tab-icon">📅</text>
+        <text class="tab-text">周报</text>
+        <view class="tab-indicator" wx:if="{{currentTab === 'week'}}"></view>
       </view>
-      <view class="stat-item expense">
-        <text class="stat-value">¥{{statistics.totalExpense.toFixed(2)}}</text>
-        <text class="stat-label">总支出</text>
+      <view 
+        class="tab-item {{currentTab === 'month' ? 'active' : ''}}" 
+        bindtap="switchTab" 
+        data-tab="month"
+      >
+        <text class="tab-icon">📆</text>
+        <text class="tab-text">月报</text>
+        <view class="tab-indicator" wx:if="{{currentTab === 'month'}}"></view>
+      </view>
+      <view 
+        class="tab-item {{currentTab === 'year' ? 'active' : ''}}" 
+        bindtap="switchTab" 
+        data-tab="year"
+      >
+        <text class="tab-icon">📊</text>
+        <text class="tab-text">年报</text>
+        <view class="tab-indicator" wx:if="{{currentTab === 'year'}}"></view>
+      </view>
+      <view 
+        class="tab-item {{currentTab === 'custom' ? 'active' : ''}}" 
+        bindtap="switchTab" 
+        data-tab="custom"
+      >
+        <text class="tab-icon">🔍</text>
+        <text class="tab-text">自定义</text>
+        <view class="tab-indicator" wx:if="{{currentTab === 'custom'}}"></view>
       </view>
     </view>
 
-    <view class="summary-section">
-      <view class="summary-row">
-        <text class="summary-label">累计开餐天数</text>
-        <text class="summary-value">{{statistics.recordCount}} 天</text>
+    <view class="custom-date-picker" wx:if="{{currentTab === 'custom'}}">
+      <view class="date-row">
+        <picker mode="date" value="{{customStartDate}}" bindchange="onCustomStartDateChange">
+          <view class="date-btn">
+            <text>{{customStartDate || '开始日期'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+        <text class="date-separator">至</text>
+        <picker mode="date" value="{{customEndDate}}" bindchange="onCustomEndDateChange">
+          <view class="date-btn">
+            <text>{{customEndDate || '结束日期'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
       </view>
-    </view>
-
-    <view class="progress-section">
-      <text class="section-title">收支比</text>
-      <view class="progress-bar">
-        <view 
-          class="progress-fill {{isExpenseOverIncome() ? 'warning' : 'normal'}}" 
-          style="width: {{getExpensePercent()}}%"
-        ></view>
-      </view>
-      <view class="progress-info">
-        <text class="progress-text">支出占比 {{getExpensePercent()}}%</text>
-        <text class="progress-alert" wx:if="{{isExpenseOverIncome()}}">⚠️ 本期支出超出随喜供给，请注意合理规划采购</text>
-      </view>
-    </view>
-
-    <view class="income-breakdown">
-      <text class="section-title">收入构成</text>
-      <view class="breakdown-row">
-        <text class="breakdown-label">爱心人士供养</text>
-        <text class="breakdown-value">¥{{statistics.totalListDonation.toFixed(2)}}</text>
-      </view>
-      <view class="breakdown-row">
-        <text class="breakdown-label">随喜/现场供养</text>
-        <text class="breakdown-value">¥{{statistics.totalOtherDonation.toFixed(2)}}</text>
-      </view>
+      <button class="btn-query" bindtap="loadCustomStatistics">查询统计</button>
     </view>
   </view>
 
-  <view class="daily-list" wx:if="{{statistics && statistics.dailyRecords && statistics.dailyRecords.length > 0}}">
-    <text class="section-title">每日明细</text>
-    <view class="daily-item" wx:for="{{statistics.dailyRecords}}" wx:key="index">
-      <view class="daily-date">{{item.date}}</view>
-      <view class="daily-details">
-        <view class="daily-row">
-          <text class="detail-label">收入</text>
-          <text class="detail-value income">+¥{{item.income.toFixed(2)}}</text>
+  <scroll-view class="content-section" scroll-y>
+    <view class="stats-card" wx:if="{{statistics && statistics.recordCount > 0}}">
+      <view class="stats-header">
+        <text class="stats-title">{{getTabTitle()}}</text>
+        <text class="stats-date">{{statistics.startDate}} ~ {{statistics.endDate}}</text>
+      </view>
+
+      <view class="net-balance-card">
+        <text class="net-balance-value">¥{{statistics.netBalance.toFixed(2)}}</text>
+        <text class="net-balance-label">净结余</text>
+      </view>
+
+      <view class="stats-grid">
+        <view class="stat-item income">
+          <text class="stat-value">¥{{statistics.totalIncome.toFixed(2)}}</text>
+          <text class="stat-label">总收入</text>
         </view>
-        <view class="daily-row">
-          <text class="detail-label">支出</text>
-          <text class="detail-value expense">-¥{{item.expense.toFixed(2)}}</text>
+        <view class="stat-item expense">
+          <text class="stat-value">¥{{statistics.totalExpense.toFixed(2)}}</text>
+          <text class="stat-label">总支出</text>
         </view>
-        <view class="daily-row">
-          <text class="detail-label">结余</text>
-          <text class="detail-value balance">¥{{item.balance.toFixed(2)}}</text>
+      </view>
+
+      <view class="summary-section">
+        <view class="summary-row">
+          <text class="summary-label">累计开餐天数</text>
+          <text class="summary-value">{{statistics.recordCount}} 天</text>
+        </view>
+      </view>
+
+      <view class="progress-section">
+        <text class="section-title">收支比</text>
+        <view class="progress-bar">
+          <view 
+            class="progress-fill {{isExpenseOverIncome() ? 'warning' : 'normal'}}" 
+            style="width: {{getExpensePercent()}}%"
+          ></view>
+        </view>
+        <view class="progress-info">
+          <text class="progress-text">支出占比 {{getExpensePercent()}}%</text>
+          <text class="progress-alert" wx:if="{{isExpenseOverIncome()}}">⚠️ 本期支出超出随喜供给，请注意合理规划采购</text>
+        </view>
+      </view>
+
+      <view class="income-breakdown">
+        <text class="section-title">收入构成</text>
+        <view class="breakdown-row">
+          <text class="breakdown-label">爱心人士供养</text>
+          <text class="breakdown-value">¥{{statistics.totalListDonation.toFixed(2)}}</text>
+        </view>
+        <view class="breakdown-row">
+          <text class="breakdown-label">随喜/现场供养</text>
+          <text class="breakdown-value">¥{{statistics.totalOtherDonation.toFixed(2)}}</text>
         </view>
       </view>
     </view>
-  </view>
 
-  <view class="empty-state" wx:if="{{!statistics || (statistics.recordCount === 0)}}">
-    <text class="empty-icon">📊</text>
-    <text class="empty-text">暂无统计数据</text>
-    <text class="empty-hint">请先在首页生成餐报记录</text>
-  </view>
+    <view class="daily-list" wx:if="{{statistics && statistics.dailyRecords && statistics.dailyRecords.length > 0}}">
+      <text class="section-title">每日明细</text>
+      <view class="daily-item" wx:for="{{statistics.dailyRecords}}" wx:key="index">
+        <view class="daily-date">{{item.date}}</view>
+        <view class="daily-details">
+          <view class="daily-row">
+            <text class="detail-label">收入</text>
+            <text class="detail-value income">+¥{{item.income.toFixed(2)}}</text>
+          </view>
+          <view class="daily-row">
+            <text class="detail-label">支出</text>
+            <text class="detail-value expense">-¥{{item.expense.toFixed(2)}}</text>
+          </view>
+          <view class="daily-row">
+            <text class="detail-label">结余</text>
+            <text class="detail-value balance">¥{{item.balance.toFixed(2)}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="empty-state" wx:if="{{!statistics || statistics.recordCount === 0}}">
+      <text class="empty-icon">📊</text>
+      <text class="empty-text">暂无统计数据</text>
+      <text class="empty-hint">请先在首页生成餐报记录</text>
+    </view>
+  </scroll-view>
 </view>
