@@ -1,6 +1,6 @@
 <view class="page-container">
   <scroll-view class="main-scroll" scroll-y>
-    <view class="header">{{shopName}}用餐汇报助手</view>
+    <view class="header-title">{{shopName}}用餐汇报助手</view>
     
     <view class="section">
       <view class="toggle-header" bindtap="toggleSettings">
