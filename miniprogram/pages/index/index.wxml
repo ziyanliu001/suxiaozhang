@@ -22,34 +22,41 @@
       </view>
     </view>
 
-    <view class="section">
-      <view class="row">
-        <view class="col">
-          <text class="label">汇报日期</text>
-          <input class="input" value="{{reportDate}}" bindinput="onInput" data-field="reportDate" />
-        </view>
-        <view class="col">
-          <text class="label">昨日店铺余额</text>
-          <input class="input" type="digit" value="{{prevBalance}}" bindinput="onInput" data-field="prevBalance" />
+    <view class="form-card">
+      <view class="card-action-bar">
+        <text class="card-tip">✨ 请填写当日明细：</text>
+        <view class="reset-link" bindtap="resetForm">🧹 清空输入</view>
+      </view>
+      
+      <view class="section">
+        <view class="row">
+          <view class="col">
+            <text class="label">汇报日期</text>
+            <input class="input" value="{{reportDate}}" bindinput="onInput" data-field="reportDate" />
+          </view>
+          <view class="col">
+            <text class="label">昨日店铺余额</text>
+            <input class="input" type="digit" value="{{prevBalance}}" bindinput="onInput" data-field="prevBalance" />
+          </view>
         </view>
       </view>
-    </view>
 
-    <view class="section">
-      <text class="label">爱心人士供养总输入框 (支持一次性粘贴所有名单，每行一个)</text>
-      <view class="textarea-wrap">
-        <textarea class="textarea" auto-height placeholder="{{donationPlaceholder}}" value="{{allDonations}}" bindinput="onInput" data-field="allDonations" />
+      <view class="section">
+        <text class="label">爱心人士供养总输入框 (支持一次性粘贴所有名单，每行一个)</text>
+        <view class="textarea-wrap">
+          <textarea class="textarea" auto-height placeholder="{{donationPlaceholder}}" value="{{allDonations}}" bindinput="onInput" data-field="allDonations" />
+        </view>
       </view>
-    </view>
 
-    <view class="section">
-      <text class="label">其他随喜/现场供养金额 (对应示例末尾固定加项)</text>
-      <input class="input" type="digit" placeholder="如：5" value="{{batch4}}" bindinput="onInput" data-field="batch4" />
-    </view>
+      <view class="section">
+        <text class="label">其他随喜/现场供养金额 (对应示例末尾固定加项)</text>
+        <input class="input" type="digit" placeholder="如：5" value="{{batch4}}" bindinput="onInput" data-field="batch4" />
+      </view>
 
-    <view class="section">
-      <text class="label">店铺支出说明 (请在末尾带上数字，如：装修地板2000)</text>
-      <input class="input" placeholder="例如：装修地板2000" value="{{expenses}}" bindinput="onInput" data-field="expenses" />
+      <view class="section">
+        <text class="label">店铺支出说明 (请在末尾带上数字，如：装修地板2000)</text>
+        <input class="input" placeholder="例如：装修地板2000" value="{{expenses}}" bindinput="onInput" data-field="expenses" />
+      </view>
     </view>
 
     <block wx:if="{{showResult}}">

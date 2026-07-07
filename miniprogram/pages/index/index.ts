@@ -87,6 +87,24 @@ Page({
     });
   },
 
+  resetForm() {
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    
+    this.setData({
+      allDonations: '',
+      batch4: '5',
+      expenses: '',
+      reportResult: '',
+      showResult: false,
+      reportDate: `${yy}年${mm}月${dd}日`
+    });
+    
+    wx.showToast({ title: '已清空输入', icon: 'success' });
+  },
+
   onInput(e: any) {
     const { field } = e.currentTarget.dataset;
     this.setData({ [field]: e.detail.value });
