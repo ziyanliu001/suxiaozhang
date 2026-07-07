@@ -87,6 +87,55 @@ Page({
     });
   },
 
+  onDeleteRecord(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const date = e.currentTarget.dataset.date;
+
+    if (!id) {
+      wx.showToast({ title: '数据异常', icon: 'none' });
+      return;
+    }
+
+    wx.showModal({
+      title: '⚠️ 安全警告',
+      content: `确定要删除 ${date} 的餐报记录吗？删除后数据将无法恢复，且可能会导致后续日期的"昨日余额"链条断开！`,
+      confirmColor: '#e53935',
+      success: (res) => {
+        if (res.confirm) {
+          this.performDelete(id);
+        }
+      }
+    });
+  },
+
+  async performDelete(id: string) {
+    try {
+      const db = wx.cloud.database();
+      
+      await db.collection('report_logs').doc(id).remove();
+      
+      const localLogs = wx.getStorageSync('local_report_logs') || [];
+      const filteredLogs = localLogs.filter((item: any) => item._id !== id);
+      wx.setStorageSync('local_report_logs', filteredLogs);
+      
+      const reports = this.data.reports.filter((item: any) => item._id !== id);
+      this.setData({ reports });
+      
+      wx.showToast({ title: '删除成功', icon: 'success' });
+    } catch (error) {
+      console.error('[History] 删除失败:', error);
+      
+      const localLogs = wx.getStorageSync('local_report_logs') || [];
+      const filteredLogs = localLogs.filter((item: any) => item._id !== id);
+      wx.setStorageSync('local_report_logs', filteredLogs);
+      
+      const reports = this.data.reports.filter((item: any) => item._id !== id);
+      this.setData({ reports });
+      
+      wx.showToast({ title: '本地删除成功', icon: 'success' });
+    }
+  },
+
   goBack() {
     wx.navigateBack();
   },

@@ -12,7 +12,13 @@
       <view wx:for="{{reports}}" wx:key="_id" class="report-card" data-index="{{index}}">
         <view class="card-header">
           <text class="card-date">{{item.dateString}}</text>
-          <text class="card-shop">{{item.shopName || '店铺'}}</text>
+          <view class="card-header-right">
+            <view class="delete-btn" bindtap="onDeleteRecord" data-id="{{item._id}}" data-date="{{item.dateString}}">
+              <text class="delete-icon">🗑️</text>
+              <text class="delete-text">[删除]</text>
+            </view>
+            <text class="card-shop">{{item.shopName || '店铺'}}</text>
+          </view>
         </view>
 
         <view class="card-divider"></view>

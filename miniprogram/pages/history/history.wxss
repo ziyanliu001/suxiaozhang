@@ -75,6 +75,32 @@ page {
   color: #333;
 }
 
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 10rpx;
+}
+
+.delete-icon {
+  font-size: 24rpx;
+}
+
+.delete-text {
+  font-size: 24rpx;
+  color: #ff4d4f;
+}
+
+.delete-btn:active {
+  opacity: 0.6;
+}
+
 .card-shop {
   font-size: 26rpx;
   color: #999;
