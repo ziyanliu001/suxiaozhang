@@ -10,11 +10,8 @@ page {
   background-color: #f8f8f8;
 }
 
-.main-scroll {
-  flex: 1;
-  padding: 30rpx;
-  padding-bottom: 260rpx;
-  box-sizing: border-box;
+.header-container {
+  background-color: #ffffff;
 }
 
 .header-title { 
@@ -23,7 +20,13 @@ page {
   font-weight: bold; 
   color: #e53935; 
   padding-bottom: 30rpx; 
-  background-color: #ffffff; 
+}
+
+.content-scroll {
+  flex: 1;
+  padding: 30rpx;
+  padding-bottom: 260rpx;
+  box-sizing: border-box;
 }
 
 .form-card {

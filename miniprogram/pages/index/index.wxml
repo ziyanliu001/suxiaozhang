@@ -1,7 +1,9 @@
 <view class="page-container">
-  <scroll-view class="main-scroll" scroll-y>
-    <view class="header-title" style="padding-top: {{headerSafeTop}}px;">{{shopName}}用餐汇报助手</view>
-    
+  <view class="header-container" style="padding-top: {{headerSafeTop}}px;">
+    <view class="header-title">{{shopName}}用餐汇报助手</view>
+  </view>
+
+  <scroll-view scroll-y="true" class="content-scroll">
     <view class="section">
       <view class="toggle-header" bindtap="toggleSettings">
         <text class="toggle-icon">⚙️</text>
