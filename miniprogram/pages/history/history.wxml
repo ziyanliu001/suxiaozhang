@@ -1,0 +1,39 @@
+<view class="container">
+  <view class="header">
+    <view class="back-btn" bindtap="goBack">
+      <text class="back-icon">←</text>
+    </view>
+    <text class="title">历史餐报记录</text>
+    <view class="placeholder"></view>
+  </view>
+
+  <view class="content">
+    <view wx:if="{{loading}}" class="loading">
+      <text>加载中...</text>
+    </view>
+
+    <view wx:elif="{{reports.length === 0}}" class="empty">
+      <text>暂无历史餐报记录</text>
+    </view>
+
+    <view wx:else class="report-list">
+      <view wx:for="{{reports}}" wx:key="_id" class="report-item">
+        <view class="report-header">
+          <text class="report-date">{{item.reportDate}}</text>
+          <text class="report-shop">{{item.shopName}}</text>
+        </view>
+        <view class="report-info">
+          <text class="info-item">昨日余额：{{item.prevBalance}}元</text>
+          <text class="info-item">今日收入：{{item.todayTotalSum}}元</text>
+          <text class="info-item">店铺支出：{{item.expenses || '无'}}</text>
+          <text class="info-item">最新余额：{{item.newBalance}}元</text>
+        </view>
+        <view class="report-actions">
+          <button class="copy-btn" bindtap="copyReport" data-report-text="{{item.reportText}}">
+            复制餐报文本
+          </button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

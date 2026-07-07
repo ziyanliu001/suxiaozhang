@@ -18,28 +18,58 @@ Page({
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
     
-    const cachedBalance = wx.getStorageSync('yuhua_last_balance');
-    const cachedShopName = wx.getStorageSync('yuhua_shop_name');
-    const cachedMpAccount = wx.getStorageSync('yuhua_mp_account');
-    
     this.setData({
-      reportDate: `${yy}年${mm}月${dd}日`,
-      prevBalance: cachedBalance ? String(cachedBalance) : this.data.prevBalance,
-      shopName: cachedShopName || this.data.shopName,
-      mpAccount: cachedMpAccount || this.data.mpAccount
+      reportDate: `${yy}年${mm}月${dd}日`
     });
+    
+    this.loadFromCloud();
   },
 
   onShow() {
-    try {
-      const cachedBalance = wx.getStorageSync('last_shop_balance');
-      if (cachedBalance !== '' && cachedBalance !== null && cachedBalance !== undefined) {
-        this.setData({
-          prevBalance: String(cachedBalance)
-        });
-      }
-    } catch (error) {
-      console.error('读取昨日余额缓存失败:', error);
+    this.loadFromCloud();
+  },
+
+  loadFromCloud() {
+    const db = wx.cloud.database();
+    
+    db.collection('meal_reports')
+      .orderBy('createTime', 'desc')
+      .limit(1)
+      .get({
+        success: (res) => {
+          if (res.data && res.data.length > 0) {
+            const lastReport = res.data[0];
+            this.setData({
+              prevBalance: String(lastReport.newBalance),
+              shopName: lastReport.shopName || this.data.shopName,
+              mpAccount: lastReport.mpAccount || this.data.mpAccount
+            });
+          } else {
+            this.loadFromLocal();
+          }
+        },
+        fail: (error) => {
+          console.error('云数据库读取失败:', error);
+          this.loadFromLocal();
+        }
+      });
+  },
+
+  loadFromLocal() {
+    const cachedBalance = wx.getStorageSync('yuhua_last_balance') || wx.getStorageSync('last_shop_balance');
+    const cachedShopName = wx.getStorageSync('yuhua_shop_name');
+    const cachedMpAccount = wx.getStorageSync('yuhua_mp_account');
+    
+    if (cachedBalance !== '' && cachedBalance !== null && cachedBalance !== undefined) {
+      this.setData({
+        prevBalance: String(cachedBalance)
+      });
+    }
+    if (cachedShopName) {
+      this.setData({ shopName: cachedShopName });
+    }
+    if (cachedMpAccount) {
+      this.setData({ mpAccount: cachedMpAccount });
     }
   },
 
@@ -125,16 +155,39 @@ Page({
 
     const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
 
-    // 5. 缓存最新数据
+    // 5. 保存数据到云数据库
+    const db = wx.cloud.database();
+    db.collection('meal_reports').add({
+      data: {
+        reportDate,
+        prevBalance: prevBalanceNum,
+        allDonations,
+        batch4: b4_total,
+        expenses,
+        expensesAmount: expenseTotal,
+        shopName,
+        mpAccount,
+        donationsTotal,
+        todayTotalSum,
+        newBalance: newBalanceSum,
+        reportText: report,
+        createTime: db.serverDate()
+      },
+      success: (res) => {
+        console.log('云数据库保存成功:', res);
+        wx.showToast({ title: '保存成功', icon: 'success' });
+      },
+      fail: (error) => {
+        console.error('云数据库保存失败:', error);
+        wx.showToast({ title: '保存失败', icon: 'error' });
+      }
+    });
+
+    // 6. 本地缓存作为降级方案
     wx.setStorageSync('yuhua_last_balance', newBalanceSum);
     wx.setStorageSync('yuhua_shop_name', shopName);
     wx.setStorageSync('yuhua_mp_account', mpAccount);
-    
-    try {
-      wx.setStorageSync('last_shop_balance', newBalanceSum);
-    } catch (error) {
-      console.error('保存昨日余额缓存失败:', error);
-    }
+    wx.setStorageSync('last_shop_balance', newBalanceSum);
 
     const report = `亲爱的家人们大家好[玫瑰]
 
@@ -180,6 +233,12 @@ ${balanceFormula}=${newBalanceSum}
       success() {
         wx.showToast({ title: '复制成功', icon: 'success' });
       }
+    });
+  },
+
+  goToHistory() {
+    wx.navigateTo({
+      url: '/pages/history/history'
     });
   },
 

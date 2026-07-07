@@ -1,0 +1,108 @@
+.container {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #fff;
+  padding: 60rpx 30rpx 30rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.back-btn {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-icon {
+  font-size: 36rpx;
+  color: #333;
+}
+
+.title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.placeholder {
+  width: 60rpx;
+}
+
+.content {
+  padding: 30rpx;
+}
+
+.loading, .empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400rpx;
+  color: #999;
+  font-size: 28rpx;
+}
+
+.report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.report-item {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 30rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.report-date {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.report-shop {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.report-info {
+  display: flex;
+  flex-direction: column;
+  gap: 15rpx;
+  margin-bottom: 25rpx;
+}
+
+.info-item {
+  font-size: 28rpx;
+  color: #555;
+}
+
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.copy-btn {
+  background-color: #d32f2f;
+  color: #fff;
+  font-size: 26rpx;
+  padding: 15rpx 30rpx;
+  border-radius: 30rpx;
+  border: none;
+}
