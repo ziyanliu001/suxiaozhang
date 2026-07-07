@@ -256,7 +256,7 @@ ${balanceFormula}=${newBalanceSum.toFixed(2)}
 
   goToStatistics() {
     wx.navigateTo({
-      url: '/pages/statistics/statistics'
+      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.shopName)}`
     });
   },
 

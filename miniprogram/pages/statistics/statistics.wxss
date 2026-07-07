@@ -6,6 +6,17 @@
   padding-bottom: 100rpx;
 }
 
+.header {
+  text-align: center;
+  padding: 30rpx 0;
+}
+
+.header-title {
+  font-size: 44rpx;
+  font-weight: bold;
+  color: #333;
+}
+
 .tab-bar {
   display: flex;
   background-color: #fff;
@@ -18,19 +29,19 @@
 .tab-item {
   flex: 1;
   text-align: center;
-  padding: 24rpx;
-  font-size: 28rpx;
+  padding: 24rpx 0;
+  font-size: 26rpx;
   color: #666;
   border-radius: 12rpx;
   transition: all 0.3s;
 }
 
 .tab-item.active {
-  background-color: #d32f2f;
+  background-color: #f59e0b;
   color: #fff;
 }
 
-.month-picker {
+.custom-date-picker {
   background-color: #fff;
   border-radius: 16rpx;
   padding: 24rpx;
@@ -38,17 +49,39 @@
   box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
 }
 
-.picker-btn {
+.date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.date-btn {
+  flex: 1;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 32rpx;
+  padding: 20rpx;
+  background-color: #f9f9f9;
+  border-radius: 12rpx;
+  font-size: 28rpx;
   color: #333;
 }
 
-.arrow {
-  font-size: 20rpx;
+.date-separator {
+  padding: 0 20rpx;
+  font-size: 28rpx;
   color: #999;
+}
+
+.btn-query {
+  width: 100%;
+  background-color: #f59e0b;
+  color: #fff;
+  font-size: 30rpx;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  border: none;
 }
 
 .stats-card {
@@ -76,6 +109,27 @@
   color: #999;
 }
 
+.net-balance-card {
+  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+  border-radius: 16rpx;
+  padding: 40rpx;
+  text-align: center;
+  margin-bottom: 32rpx;
+}
+
+.net-balance-value {
+  font-size: 56rpx;
+  font-weight: bold;
+  color: #fff;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.net-balance-label {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
 .stats-grid {
   display: flex;
   justify-content: space-between;
@@ -85,39 +139,57 @@
 .stat-item {
   flex: 1;
   text-align: center;
-  padding: 20rpx 0;
+  padding: 24rpx 0;
+  background-color: #f9f9f9;
+  border-radius: 12rpx;
 }
 
 .stat-item:not(:last-child) {
-  border-right: 2rpx solid #f0f0f0;
+  margin-right: 20rpx;
 }
 
 .stat-value {
-  font-size: 36rpx;
+  font-size: 40rpx;
   font-weight: bold;
   display: block;
   margin-bottom: 8rpx;
 }
 
 .stat-item.income .stat-value {
-  color: #d32f2f;
+  color: #4CAF50;
 }
 
 .stat-item.expense .stat-value {
-  color: #10b981;
-}
-
-.stat-item.net.positive .stat-value {
-  color: #d32f2f;
-}
-
-.stat-item.net.negative .stat-value {
-  color: #f59e0b;
+  color: #E53935;
 }
 
 .stat-label {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #999;
+}
+
+.summary-section {
+  background-color: #f9f9f9;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 32rpx;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+}
+
+.summary-label {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.summary-value {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: bold;
 }
 
 .progress-section {
@@ -132,68 +204,68 @@
   display: block;
 }
 
-.progress-item {
-  margin-bottom: 20rpx;
-}
-
-.progress-label {
-  font-size: 26rpx;
-  color: #666;
-  margin-bottom: 12rpx;
-  display: block;
-}
-
 .progress-bar {
-  height: 24rpx;
+  height: 28rpx;
   background-color: #f0f0f0;
-  border-radius: 12rpx;
+  border-radius: 14rpx;
   overflow: hidden;
-  margin-bottom: 8rpx;
+  margin-bottom: 12rpx;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 12rpx;
+  border-radius: 14rpx;
   transition: width 0.5s ease;
 }
 
-.progress-fill.donation {
-  background-color: #d32f2f;
+.progress-fill.normal {
+  background-color: #4CAF50;
 }
 
-.progress-fill.batch4 {
-  background-color: #f59e0b;
+.progress-fill.warning {
+  background-color: #E53935;
 }
 
-.progress-value {
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-text {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.progress-alert {
   font-size: 24rpx;
-  color: #999;
-  float: right;
+  color: #E53935;
+  flex-shrink: 0;
 }
 
-.summary-section {
+.income-breakdown {
   background-color: #f9f9f9;
   border-radius: 12rpx;
   padding: 20rpx;
 }
 
-.summary-row {
+.breakdown-row {
   display: flex;
   justify-content: space-between;
   padding: 16rpx 0;
 }
 
-.summary-row:not(:last-child) {
+.breakdown-row:not(:last-child) {
   border-bottom: 2rpx solid #eee;
 }
 
-.summary-label {
-  font-size: 26rpx;
+.breakdown-label {
+  font-size: 28rpx;
   color: #666;
 }
 
-.summary-value {
-  font-size: 26rpx;
+.breakdown-value {
+  font-size: 28rpx;
   color: #333;
   font-weight: bold;
 }
@@ -242,11 +314,11 @@
 }
 
 .detail-value.income {
-  color: #d32f2f;
+  color: #4CAF50;
 }
 
 .detail-value.expense {
-  color: #10b981;
+  color: #E53935;
 }
 
 .detail-value.balance {

@@ -7,89 +7,71 @@ cloud.init({
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  const { period, year, month } = event;
+  const { startDate, endDate, shopName } = event;
   const { OPENID } = cloud.getWXContext();
 
   try {
-    let startDate, endDate;
-
-    if (period === 'week') {
-      const now = new Date();
-      const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-      startDate = new Date(now.setDate(diff));
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 7);
-      endDate.setHours(0, 0, 0, 0);
-    } else if (period === 'month') {
-      startDate = new Date(year, month - 1, 1);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(year, month, 1);
-      endDate.setHours(0, 0, 0, 0);
-    } else {
+    if (!startDate || !endDate) {
       return {
         success: false,
-        error: 'Invalid period parameter'
+        error: 'Missing startDate or endDate parameter'
       };
     }
 
-    const startTimestamp = startDate.getTime();
-    const endTimestamp = endDate.getTime();
-
-    const result = await db.collection('meal_reports')
+    const result = await db.collection('report_logs')
       .aggregate()
       .match({
-        createTime: db.command.gte(startTimestamp).and(db.command.lt(endTimestamp)),
-        _openid: OPENID
+        dateString: db.command.gte(startDate).and(db.command.lte(endDate)),
+        _openid: OPENID,
+        ...(shopName && { shopName: shopName })
       })
       .group({
         _id: null,
-        totalDonations: db.command.aggregate.sum('donationsTotal'),
-        totalBatch4: db.command.aggregate.sum('batch4'),
-        totalExpenses: db.command.aggregate.sum('expensesAmount'),
-        totalIncome: db.command.aggregate.sum('todayTotalSum'),
+        totalOtherDonation: db.command.aggregate.sum('otherDonation'),
+        totalListDonation: db.command.aggregate.sum('listDonationTotal'),
+        totalExpense: db.command.aggregate.sum('expenseAmount'),
         recordCount: db.command.aggregate.sum(1)
       })
       .end();
 
     let statistics = {
-      totalDonations: 0,
-      totalBatch4: 0,
-      totalExpenses: 0,
       totalIncome: 0,
+      totalOtherDonation: 0,
+      totalListDonation: 0,
+      totalExpense: 0,
       recordCount: 0,
-      period: period,
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0]
+      netBalance: 0,
+      startDate: startDate,
+      endDate: endDate
     };
 
     if (result.list && result.list.length > 0) {
       const data = result.list[0];
-      statistics.totalDonations = Math.round((data.totalDonations || 0) * 100) / 100;
-      statistics.totalBatch4 = Math.round((data.totalBatch4 || 0) * 100) / 100;
-      statistics.totalExpenses = Math.round((data.totalExpenses || 0) * 100) / 100;
-      statistics.totalIncome = Math.round((data.totalIncome || 0) * 100) / 100;
+      statistics.totalOtherDonation = Math.round((data.totalOtherDonation || 0) * 100) / 100;
+      statistics.totalListDonation = Math.round((data.totalListDonation || 0) * 100) / 100;
+      statistics.totalExpense = Math.round((data.totalExpense || 0) * 100) / 100;
       statistics.recordCount = data.recordCount || 0;
     }
 
-    statistics.netBalance = Math.round((statistics.totalIncome - statistics.totalExpenses) * 100) / 100;
+    statistics.totalIncome = Math.round((statistics.totalOtherDonation + statistics.totalListDonation) * 100) / 100;
+    statistics.netBalance = Math.round((statistics.totalIncome - statistics.totalExpense) * 100) / 100;
 
-    const dailyResult = await db.collection('meal_reports')
+    const dailyResult = await db.collection('report_logs')
       .where({
-        createTime: db.command.gte(startTimestamp).and(db.command.lt(endTimestamp)),
-        _openid: OPENID
+        dateString: db.command.gte(startDate).and(db.command.lte(endDate)),
+        _openid: OPENID,
+        ...(shopName && { shopName: shopName })
       })
-      .orderBy('createTime', 'asc')
+      .orderBy('dateString', 'asc')
       .get();
 
     statistics.dailyRecords = dailyResult.data.map(item => ({
-      date: item.reportDate,
-      donations: item.donationsTotal || 0,
-      batch4: item.batch4 || 0,
-      expenses: item.expensesAmount || 0,
-      income: item.todayTotalSum || 0,
-      balance: item.newBalance || 0
+      date: item.dateString,
+      otherDonation: item.otherDonation || 0,
+      listDonation: item.listDonationTotal || 0,
+      expense: item.expenseAmount || 0,
+      income: (item.otherDonation || 0) + (item.listDonationTotal || 0),
+      balance: item.todayBalance || 0
     }));
 
     return {
