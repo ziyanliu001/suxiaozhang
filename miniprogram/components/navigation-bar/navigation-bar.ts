@@ -60,20 +60,39 @@ Component({
   lifetimes: {
     attached() {
       const rect = wx.getMenuButtonBoundingClientRect()
-      wx.getSystemInfo({
-        success: (res) => {
-          const isAndroid = res.platform === 'android'
-          const isDevtools = res.platform === 'devtools'
-          const rightWidth = res.windowWidth - rect.left
-          this.setData({
-            ios: !isAndroid,
-            innerPaddingRight: `padding-right: ${rightWidth}px`,
-            leftWidth: `width: 80px`,
-            rightWidth: `width: ${rightWidth}px`,
-            safeAreaTop: isDevtools || isAndroid ? `height: calc(var(--height) + ${res.safeArea.top}px); padding-top: ${res.safeArea.top}px` : ``
-          })
-        }
-      })
+      // 使用新的 API 替代已废弃的 wx.getSystemInfo
+      // getDeviceInfo 获取设备信息（platform、brand、model）
+      // getWindowInfo 获取窗口信息（windowWidth、safeArea）
+      try {
+        const deviceInfo = wx.getDeviceInfo()
+        const windowInfo = wx.getWindowInfo()
+        const isAndroid = deviceInfo.platform === 'android'
+        const isDevtools = deviceInfo.platform === 'devtools'
+        const rightWidth = windowInfo.windowWidth - rect.left
+        this.setData({
+          ios: !isAndroid,
+          innerPaddingRight: `padding-right: ${rightWidth}px`,
+          leftWidth: `width: 80px`,
+          rightWidth: `width: ${rightWidth}px`,
+          safeAreaTop: isDevtools || isAndroid ? `height: calc(var(--height) + ${windowInfo.safeArea.top}px); padding-top: ${windowInfo.safeArea.top}px` : ``
+        })
+      } catch (err) {
+        // 兼容旧版本基础库
+        wx.getSystemInfo({
+          success: (res) => {
+            const isAndroid = res.platform === 'android'
+            const isDevtools = res.platform === 'devtools'
+            const rightWidth = res.windowWidth - rect.left
+            this.setData({
+              ios: !isAndroid,
+              innerPaddingRight: `padding-right: ${rightWidth}px`,
+              leftWidth: `width: 80px`,
+              rightWidth: `width: ${rightWidth}px`,
+              safeAreaTop: isDevtools || isAndroid ? `height: calc(var(--height) + ${res.safeArea.top}px); padding-top: ${res.safeArea.top}px` : ``
+            })
+          }
+        })
+      }
     },
   },
   /**
