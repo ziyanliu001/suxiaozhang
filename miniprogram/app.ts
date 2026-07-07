@@ -1,4 +1,6 @@
 // app.ts
+import { AuthService } from './utils/authService';
+
 App<IAppOption>({
   globalData: {},
   onLaunch() {
@@ -11,12 +13,13 @@ App<IAppOption>({
     logs.unshift(Date.now())
     wx.setStorageSync('logs', logs)
 
-    // 登录
-    wx.login({
-      success: res => {
-        console.log(res.code)
-        // 发送 res.code 到后台换取 openId, sessionKey, unionId
-      },
-    })
+    // 预热静默登录（不 await，真正的严格等待在首页 onLoad 中完成）
+    AuthService.ensureLogin().then(res => {
+      if (res.success) {
+        console.log('[App] 静默登录预热成功:', res.openid);
+      } else {
+        console.warn('[App] 静默登录预热失败:', res.error);
+      }
+    });
   },
 })

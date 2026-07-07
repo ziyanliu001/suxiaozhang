@@ -1,4 +1,5 @@
 import { DataService, formatMoney } from '../../utils/dataService';
+import { AuthService } from '../../utils/authService';
 
 Page({
   data: {
@@ -14,11 +15,23 @@ Page({
     showSettings: false,
     shopName: '海沧区雨花斋',
     mpAccount: '厦门海沧雨花斋！',
-    donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2',
+    donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
     headerSafeTop: 85
   },
 
-  onLoad() {
+  async onLoad() {
+    // 严格等待静默登录完成后再加载数据
+    const loginRes = await AuthService.ensureLogin();
+    if (!loginRes.success) {
+      wx.showModal({
+        title: '登录失败',
+        content: loginRes.error || '请检查网络后重启小程序',
+        showCancel: false,
+        confirmText: '我知道了'
+      });
+      return;
+    }
+
     try {
       const rect = wx.getMenuButtonBoundingClientRect();
       const capsuleBottom = rect.bottom;

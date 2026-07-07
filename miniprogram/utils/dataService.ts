@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'local_report_logs';
 
+import { AuthService } from './authService';
+
 function getLocalReports(): any[] {
   try {
     const data = wx.getStorageSync(STORAGE_KEY);
@@ -104,28 +106,35 @@ export const DataService = {
     const db = wx.cloud.database();
 
     try {
-      let query = db.collection('report_logs').orderBy('dateString', 'desc');
+      const openid = AuthService.getOpenid();
+      let whereClause: any = {};
+      if (openid) {
+        whereClause._openid = openid;
+      }
 
       if (startDate && endDate) {
-        query = query.where({
-          dateString: db.command.gte(startDate).and(db.command.lte(endDate))
-        });
+        whereClause.dateString = db.command.gte(startDate).and(db.command.lte(endDate));
       } else if (startDate) {
-        query = query.where({ dateString: db.command.gte(startDate) });
+        whereClause.dateString = db.command.gte(startDate);
       } else if (endDate) {
-        query = query.where({ dateString: db.command.lte(endDate) });
+        whereClause.dateString = db.command.lte(endDate);
       }
 
       if (shopName) {
-        const currentQuery = query as any;
-        query = currentQuery.where({ shopName: shopName });
+        whereClause.shopName = shopName;
       }
 
-      const cloudResult = await query.limit(limit).get();
+      let query = db.collection('report_logs');
+      if (Object.keys(whereClause).length > 0) {
+        query = query.where(whereClause) as any;
+      }
+      const cloudResult = await query.orderBy('dateString', 'desc').limit(limit).get();
       const cloudData = cloudResult.data || [];
 
       const localReports = getLocalReports();
-      const unsyncedReports = localReports.filter(r => !r.isSynced);
+      const unsyncedReports = openid
+        ? localReports.filter(r => !r.isSynced && r._openid === openid)
+        : localReports.filter(r => !r.isSynced);
 
       const mergedData = [...cloudData];
       const existingKeys = new Set(cloudData.map(c => `${c.dateString}_${c.shopName}`));
@@ -152,7 +161,12 @@ export const DataService = {
     } catch (error: any) {
       console.warn('[DataService] 云端查询失败，使用本地缓存:', error);
 
+      const openid = AuthService.getOpenid();
       let localReports = getLocalReports();
+
+      if (openid) {
+        localReports = localReports.filter(r => r._openid === openid);
+      }
 
       if (startDate && endDate) {
         localReports = localReports.filter(r => 
@@ -305,16 +319,21 @@ export const DataService = {
     const db = wx.cloud.database();
 
     try {
-      let query = db.collection('report_logs')
-        .where({
-          dateString: db.command.gte(startDate).and(db.command.lte(endDate))
-        });
-
+      const openid = AuthService.getOpenid();
+      const whereClause: any = {
+        dateString: db.command.gte(startDate).and(db.command.lte(endDate))
+      };
+      if (openid) {
+        whereClause._openid = openid;
+      }
       if (shopName) {
-        query = query.where({ shopName: shopName });
+        whereClause.shopName = shopName;
       }
 
-      const cloudResult = await query.orderBy('dateString', 'asc').get();
+      const cloudResult = await db.collection('report_logs')
+        .where(whereClause)
+        .orderBy('dateString', 'asc')
+        .get();
       const records = cloudResult.data || [];
 
       const statistics = this.calculateStatistics(records, startDate, endDate);
