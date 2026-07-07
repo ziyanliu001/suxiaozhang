@@ -69,7 +69,7 @@
   </scroll-view>
 
   <view class="footer-bar">
-    <button class="btn-generate" bindtap="generateReport">⚡ 一键生成汇报文本</button>
+    <button class="action-btn btn-red" hover-class="btn-hover" bindtap="generateReport">⚡ 一键生成汇报文本</button>
     <view class="btn-group">
       <button class="btn-history" bindtap="goToHistory">📜 历史</button>
       <button class="btn-statistics" bindtap="goToStatistics">📊 统计</button>
