@@ -27,6 +27,8 @@ page {
   white-space: nowrap; 
   text-overflow: ellipsis; 
   max-width: 100%; 
+  padding-top: calc(env(safe-area-inset-top) + 20rpx); 
+  padding-bottom: 20rpx; 
 }
 
 .section { 
@@ -69,16 +71,22 @@ page {
 }
 
 .input { 
-  border: 2rpx solid #e0e0e0; 
+  background-color: #ffffff;
+  border: 2rpx solid #e1e4e8; 
   height: 80rpx;       
   line-height: 80rpx;  
   padding: 0 20rpx;    
   border-radius: 8rpx; 
   font-size: 28rpx; 
-  background-color: #fafafa; 
   width: 100%; 
   box-sizing: border-box; 
   display: block;
+}
+
+.input[disabled] { 
+  background-color: #f5f7fa !important; 
+  color: #7f8c8d !important; 
+  border-color: #e1e4e8; 
 }
 
 .textarea-wrap {
