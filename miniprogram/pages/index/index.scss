@@ -177,7 +177,9 @@ textarea, .textarea {
 }
 
 .btn-hover { 
-  opacity: 0.8; 
+  opacity: 0.85; 
+  transform: scale(0.99); 
+  transition: all 0.1s ease; 
 }
 
 .btn-group {
