@@ -6,14 +6,37 @@ Page({
     selectedMonth: new Date().getMonth() + 1,
     customStartDate: '',
     customEndDate: '',
-    statistics: null
+    statistics: null,
+    navTop: 0,
+    contentTop: 0
   },
 
   onLoad(options: any) {
     if (options && options.shopName) {
       this.setData({ shopName: options.shopName });
     }
+    
+    this.calculateNavBarHeight();
     this.loadWeekStatistics();
+  },
+
+  calculateNavBarHeight() {
+    const menuButton = wx.getMenuButtonBoundingClientRect();
+    if (!menuButton) {
+      this.setData({
+        navTop: 44,
+        contentTop: 88
+      });
+      return;
+    }
+
+    const navTop = menuButton.top;
+    const contentTop = menuButton.top + menuButton.height + 20;
+
+    this.setData({
+      navTop: navTop,
+      contentTop: contentTop
+    });
   },
 
   switchTab(e: any) {
@@ -199,5 +222,16 @@ Page({
 
   goBack() {
     wx.navigateBack();
+  },
+
+  goBackHome() {
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      wx.navigateBack();
+    } else {
+      wx.reLaunch({
+        url: '/pages/index/index'
+      });
+    }
   }
 });

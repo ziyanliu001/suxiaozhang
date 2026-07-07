@@ -8,21 +8,28 @@ page {
   height: 100vh;
 }
 
-.top-section {
-  padding: 24rpx;
-  padding-top: calc(24rpx + env(safe-area-inset-top));
+.custom-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
   background-color: #f7f8fa;
 }
 
-.header {
+.nav-title {
+  display: block;
   text-align: center;
-  padding: 20rpx 0 32rpx;
-}
-
-.header-title {
-  font-size: 44rpx;
+  font-size: 34rpx;
   font-weight: bold;
   color: #323233;
+  padding: 16rpx 0;
+  line-height: 48rpx;
+}
+
+.top-section {
+  padding: 0 24rpx;
+  background-color: #f7f8fa;
 }
 
 .tab-bar {
@@ -117,7 +124,8 @@ page {
 .content-section {
   flex: 1;
   overflow: hidden;
-  padding: 0 24rpx 24rpx;
+  padding: 24rpx;
+  padding-top: 16rpx;
 }
 
 .stats-card {
@@ -387,4 +395,20 @@ page {
   font-size: 26rpx;
   color: #969799;
   margin-top: 12rpx;
+}
+
+.btn-back-home {
+  width: 320rpx;
+  font-size: 28rpx;
+  line-height: 72rpx;
+  border-radius: 36rpx;
+  margin-top: 40rpx;
+  background-color: #fff;
+  border: 2rpx solid #f59e0b;
+  color: #f59e0b;
+  padding: 0;
+}
+
+.btn-hover {
+  opacity: 0.8;
 }

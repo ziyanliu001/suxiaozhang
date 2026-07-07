@@ -1,9 +1,9 @@
 <view class="page-container">
-  <view class="top-section">
-    <view class="header">
-      <text class="header-title">统计分析</text>
-    </view>
+  <view class="custom-nav" style="padding-top: {{navTop}}px;">
+    <text class="nav-title">统计分析</text>
+  </view>
 
+  <view class="top-section" style="margin-top: {{contentTop}}px;">
     <view class="tab-bar">
       <view 
         class="tab-item {{currentTab === 'week' ? 'active' : ''}}" 
@@ -145,6 +145,7 @@
       <text class="empty-icon">📊</text>
       <text class="empty-text">暂无统计数据</text>
       <text class="empty-hint">请先在首页生成餐报记录</text>
+      <button class="btn-back-home" hover-class="btn-hover" bindtap="goBackHome">返回首页录入</button>
     </view>
   </scroll-view>
 </view>
