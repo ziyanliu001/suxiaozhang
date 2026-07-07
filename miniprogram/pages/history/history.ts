@@ -90,46 +90,50 @@ Page({
   onDeleteRecord(e: any) {
     const { id, date } = e.currentTarget.dataset;
 
+    console.log("[Debug] 尝试删除记录，抓取到的参数:", { id, date });
+
     if (!id) {
-      console.error("[删除失败] 无法获取当前卡片的唯一 _id，请检查 currentTarget 传参");
+      console.error("[Bug] 参数传递依然失效，请检查 WXML 是否存在 data-id 属性");
       wx.showToast({ title: '参数传递失效', icon: 'none' });
       return;
     }
 
     wx.showModal({
       title: '⚠️ 严谨确认',
-      content: `确定要删除 ${date} 的用餐汇报记录吗？此操作不可逆，且会破坏连续账目的对账链条！`,
-      confirmText: '确定删除',
+      content: `确定要删除 ${date} 的餐报记录吗？此操作不可逆！`,
       confirmColor: '#e53935',
-      cancelText: '取消',
-      success: async (res) => {
+      success: (res) => {
         if (res.confirm) {
-          wx.showLoading({ title: '正在删除...' });
-          try {
-            const db = wx.cloud.database();
-            try {
-              await db.collection('report_logs').doc(id).remove();
-            } catch (cloudErr) {
-              console.warn('[删除] 云端删除失败（可能是本地缓存数据）:', cloudErr);
-            }
-
-            let localLogs = wx.getStorageSync('local_report_logs') || [];
-            localLogs = localLogs.filter((item: any) => item._id !== id && item._localId !== id);
-            wx.setStorageSync('local_report_logs', localLogs);
-
-            const updatedList = this.data.reports.filter((item: any) => item._id !== id && item._localId !== id);
-            this.setData({ reports: updatedList });
-
-            wx.showToast({ title: '已安全删除', icon: 'success' });
-          } catch (err) {
-            console.error("删除失败", err);
-            wx.showToast({ title: '删除失败，请重试', icon: 'none' });
-          } finally {
-            wx.hideLoading();
-          }
+          this.executeDelete(id);
         }
       }
     });
+  },
+
+  async executeDelete(id: string) {
+    wx.showLoading({ title: '正在删除...' });
+    try {
+      const db = wx.cloud.database();
+      try {
+        await db.collection('report_logs').doc(id).remove();
+      } catch (cloudErr) {
+        console.warn('[删除] 云端删除失败（可能是本地缓存数据）:', cloudErr);
+      }
+
+      let localLogs = wx.getStorageSync('local_report_logs') || [];
+      localLogs = localLogs.filter((item: any) => item._id !== id && item._localId !== id);
+      wx.setStorageSync('local_report_logs', localLogs);
+
+      const updatedList = this.data.reports.filter((item: any) => item._id !== id && item._localId !== id);
+      this.setData({ reports: updatedList });
+
+      wx.showToast({ title: '已安全删除', icon: 'success' });
+    } catch (err) {
+      console.error("删除失败", err);
+      wx.showToast({ title: '删除失败，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   goBack() {
