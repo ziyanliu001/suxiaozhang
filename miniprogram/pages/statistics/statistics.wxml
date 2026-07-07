@@ -27,7 +27,7 @@
 
   <view class="stats-card" wx:if="{{statistics}}">
     <view class="stats-header">
-      <text class="stats-title">{{currentTab === 'week' ? '本周财务汇总' : `${selectedYear}年${selectedMonth}月财务汇总`}}</text>
+      <text class="stats-title">{{currentTab === 'week' ? '本周财务汇总' : selectedYear + '年' + selectedMonth + '月财务汇总'}}</text>
       <text class="stats-date">{{statistics.startDate}} ~ {{statistics.endDate}}</text>
     </view>
 
