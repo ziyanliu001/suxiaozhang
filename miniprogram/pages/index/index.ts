@@ -49,7 +49,11 @@ Page({
           }
         },
         fail: (error) => {
-          console.error('云数据库读取失败:', error);
+          if (error.errCode === -502005) {
+            console.log('云数据库集合尚未创建，使用本地缓存');
+          } else {
+            console.error('云数据库读取失败:', error);
+          }
           this.loadFromLocal();
         }
       });
@@ -155,34 +159,6 @@ Page({
 
     const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
 
-    // 5. 保存数据到云数据库
-    const db = wx.cloud.database();
-    db.collection('meal_reports').add({
-      data: {
-        reportDate,
-        prevBalance: prevBalanceNum,
-        allDonations,
-        batch4: b4_total,
-        expenses,
-        expensesAmount: expenseTotal,
-        shopName,
-        mpAccount,
-        donationsTotal,
-        todayTotalSum,
-        newBalance: newBalanceSum,
-        reportText: report,
-        createTime: db.serverDate()
-      },
-      success: (res) => {
-        console.log('云数据库保存成功:', res);
-        wx.showToast({ title: '保存成功', icon: 'success' });
-      },
-      fail: (error) => {
-        console.error('云数据库保存失败:', error);
-        wx.showToast({ title: '保存失败', icon: 'error' });
-      }
-    });
-
     // 6. 本地缓存作为降级方案
     wx.setStorageSync('yuhua_last_balance', newBalanceSum);
     wx.setStorageSync('yuhua_shop_name', shopName);
@@ -220,6 +196,39 @@ ${balanceFormula}=${newBalanceSum}
 公众号：${mpAccount}
 
 —— 本报告由【素食餐报助手】智能生成。微信小程序搜索“素食餐报助手”，10秒轻松搞定日常餐报汇总！`;
+
+    // 5. 保存数据到云数据库
+    const db = wx.cloud.database();
+    db.collection('meal_reports').add({
+      data: {
+        reportDate,
+        prevBalance: prevBalanceNum,
+        allDonations,
+        batch4: b4_total,
+        expenses,
+        expensesAmount: expenseTotal,
+        shopName,
+        mpAccount,
+        donationsTotal,
+        todayTotalSum,
+        newBalance: newBalanceSum,
+        reportText: report,
+        createTime: db.serverDate()
+      },
+      success: (res) => {
+        console.log('云数据库保存成功:', res);
+        wx.showToast({ title: '保存成功', icon: 'success' });
+      },
+      fail: (error) => {
+        if (error.errCode === -502005) {
+          console.log('云数据库集合尚未创建，请在云开发控制台手动创建 meal_reports 集合');
+          wx.showToast({ title: '餐报生成成功', icon: 'success' });
+        } else {
+          console.error('云数据库保存失败:', error);
+          wx.showToast({ title: '云保存失败，已保存到本地', icon: 'none' });
+        }
+      }
+    });
 
     this.setData({
       reportResult: report,

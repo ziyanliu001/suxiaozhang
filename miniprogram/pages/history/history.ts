@@ -30,9 +30,18 @@ Page({
           }
         },
         fail: (error) => {
-          console.error('云数据库读取历史记录失败:', error);
-          this.setData({ loading: false });
-          wx.showToast({ title: '加载失败', icon: 'error' });
+          if (error.errCode === -502005) {
+            console.log('云数据库集合尚未创建，暂无历史记录');
+            this.setData({
+              reports: [],
+              loading: false
+            });
+            wx.showToast({ title: '暂无历史记录', icon: 'none' });
+          } else {
+            console.error('云数据库读取历史记录失败:', error);
+            this.setData({ loading: false });
+            wx.showToast({ title: '加载失败', icon: 'error' });
+          }
         }
       });
   },
