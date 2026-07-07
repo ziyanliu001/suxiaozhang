@@ -179,15 +179,84 @@ Page({
             statistics: res.result.data
           });
         } else {
-          wx.showToast({ title: '加载失败', icon: 'none' });
+          this.loadStatisticsLocal(startDate, endDate);
         }
       },
       fail: (error: any) => {
-        wx.hideLoading();
-        console.error('云函数调用失败:', error);
-        wx.showToast({ title: '加载失败', icon: 'none' });
+        console.warn('云函数调用失败，尝试本地数据库查询:', error);
+        this.loadStatisticsLocal(startDate, endDate);
       }
     });
+  },
+
+  loadStatisticsLocal(startDate: string, endDate: string) {
+    const db = wx.cloud.database();
+    const { shopName } = this.data;
+    
+    db.collection('report_logs')
+      .where({
+        dateString: db.command.gte(startDate).and(db.command.lte(endDate)),
+        ...(shopName && { shopName: shopName })
+      })
+      .orderBy('dateString', 'asc')
+      .get({
+        success: (res: any) => {
+          wx.hideLoading();
+          const records = res.data || [];
+          
+          let statistics = {
+            totalIncome: 0,
+            totalOtherDonation: 0,
+            totalListDonation: 0,
+            totalExpense: 0,
+            recordCount: records.length,
+            netBalance: 0,
+            startDate: startDate,
+            endDate: endDate,
+            dailyRecords: []
+          };
+          
+          records.forEach((item: any) => {
+            const otherDonation = parseFloat(item.otherDonation || 0);
+            const listDonationTotal = parseFloat(item.listDonationTotal || 0);
+            const expenseAmount = parseFloat(item.expenseAmount || 0);
+            
+            statistics.totalOtherDonation += otherDonation;
+            statistics.totalListDonation += listDonationTotal;
+            statistics.totalExpense += expenseAmount;
+            
+            statistics.dailyRecords.push({
+              date: item.dateString,
+              otherDonation: otherDonation,
+              listDonation: listDonationTotal,
+              expense: expenseAmount,
+              income: otherDonation + listDonationTotal,
+              balance: parseFloat(item.todayBalance || 0)
+            });
+          });
+          
+          statistics.totalIncome = statistics.totalOtherDonation + statistics.totalListDonation;
+          statistics.netBalance = statistics.totalIncome - statistics.totalExpense;
+          
+          statistics.totalOtherDonation = Math.round(statistics.totalOtherDonation * 100) / 100;
+          statistics.totalListDonation = Math.round(statistics.totalListDonation * 100) / 100;
+          statistics.totalExpense = Math.round(statistics.totalExpense * 100) / 100;
+          statistics.totalIncome = Math.round(statistics.totalIncome * 100) / 100;
+          statistics.netBalance = Math.round(statistics.netBalance * 100) / 100;
+          
+          this.setData({
+            statistics: statistics
+          });
+        },
+        fail: (error: any) => {
+          wx.hideLoading();
+          console.error('本地数据库查询失败:', error);
+          wx.showToast({ title: '暂无统计数据', icon: 'none' });
+          this.setData({
+            statistics: null
+          });
+        }
+      });
   },
 
   getTabTitle() {
