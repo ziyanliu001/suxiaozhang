@@ -6,6 +6,7 @@ Page({
     prevBalance: '1263.64',
     allDonations: '',
     batch4: '',
+    otherDonation: '',
     expenses: '',
     reportResult: '',
     showResult: false,
