@@ -42,6 +42,22 @@
           </view>
         </view>
 
+        <view class="card-receipts" wx:if="{{item.receiptImages && item.receiptImages.length > 0}}">
+          <text class="receipts-label">📸 支出凭证</text>
+          <view class="receipts-list">
+            <image 
+              wx:for="{{item.receiptImages}}" 
+              wx:key="index" 
+              class="receipt-thumb" 
+              src="{{item}}" 
+              mode="aspectFill"
+              bindtap="previewReceipt"
+              data-images="{{item.receiptImages}}"
+              data-index="{{index}}"
+            />
+          </view>
+        </view>
+
         <view class="card-footer">
           <button class="copy-btn" hover-class="btn-hover" bindtap="copyReport" data-index="{{index}}">
             <text class="copy-icon">📋</text>

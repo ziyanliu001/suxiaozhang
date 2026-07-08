@@ -222,6 +222,32 @@ page {
   color: #999;
 }
 
+.card-receipts {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx dashed #eee;
+}
+
+.receipts-label {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 12rpx;
+}
+
+.receipts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.receipt-thumb {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid #eee;
+}
+
 .btn-hover {
   opacity: 0.8;
 }

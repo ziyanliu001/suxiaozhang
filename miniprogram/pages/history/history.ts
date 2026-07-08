@@ -138,6 +138,21 @@ Page({
     wx.navigateBack();
   },
 
+  previewReceipt(e: any) {
+    const images = e.currentTarget.dataset.images;
+    const index = e.currentTarget.dataset.index;
+
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      wx.showToast({ title: '图片数据异常', icon: 'none' });
+      return;
+    }
+
+    wx.previewImage({
+      current: images[index],
+      urls: images
+    });
+  },
+
   goToHome() {
     const pages = getCurrentPages();
     if (pages.length > 1) {

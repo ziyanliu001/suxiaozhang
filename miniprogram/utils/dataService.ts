@@ -49,6 +49,7 @@ export const DataService = {
       expenseAmount: parseNumber(reportData.expenseAmount),
       todayBalance: parseNumber(reportData.todayBalance),
       reportText: reportData.reportText || '',
+      receiptImages: reportData.receiptImages || [],
       createTime: db.serverDate(),
       isSynced: false,
       _openid: openid || ''

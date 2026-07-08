@@ -24,7 +24,8 @@ Page({
       unrecognizedLines: [],
       totalAmount: 0,
       totalCount: 0
-    }
+    },
+    receiptImages: [] as string[]
   },
 
   async onLoad() {
@@ -165,6 +166,76 @@ Page({
     this.setData({ parseResult: result });
   },
 
+  chooseReceiptImages() {
+    const remainingCount = 3 - this.data.receiptImages.length;
+    if (remainingCount <= 0) {
+      wx.showToast({ title: '最多上传3张图片', icon: 'none' });
+      return;
+    }
+
+    wx.chooseMedia({
+      count: remainingCount,
+      mediaType: ['image'],
+      sourceType: ['album', 'camera'],
+      success: (res) => {
+        const newImages = res.tempFiles.map(file => file.tempFilePath);
+        const updatedImages = [...this.data.receiptImages, ...newImages];
+        this.setData({ receiptImages: updatedImages });
+      },
+      fail: () => {
+        wx.showToast({ title: '选择图片失败', icon: 'none' });
+      }
+    });
+  },
+
+  previewReceipt(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const images = this.data.receiptImages;
+    if (images.length === 0 || index >= images.length) return;
+
+    wx.previewImage({
+      current: images[index],
+      urls: images
+    });
+  },
+
+  deleteReceipt(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const images = [...this.data.receiptImages];
+    images.splice(index, 1);
+    this.setData({ receiptImages: images });
+  },
+
+  async uploadReceiptImages(): Promise<string[]> {
+    const { receiptImages } = this.data;
+    if (receiptImages.length === 0) {
+      return [];
+    }
+
+    const now = new Date();
+    const dateFolder = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const fileIDs: string[] = [];
+
+    for (let i = 0; i < receiptImages.length; i++) {
+      const tempFilePath = receiptImages[i];
+      const fileName = `${Date.now()}_${i}.jpg`;
+      const cloudPath = `expenses/${dateFolder}/${fileName}`;
+
+      try {
+        const uploadResult = await wx.cloud.uploadFile({
+          cloudPath: cloudPath,
+          filePath: tempFilePath
+        });
+        fileIDs.push(uploadResult.fileID);
+      } catch (error) {
+        console.error('[uploadReceiptImages] 上传图片失败:', error);
+        wx.showToast({ title: `图片${i + 1}上传失败`, icon: 'none' });
+      }
+    }
+
+    return fileIDs;
+  },
+
   async generateReport() {
     if (this.data.isSubmitting) {
       return;
@@ -243,6 +314,8 @@ ${balanceFormula}=${formatMoney(newBalanceSum)}
 
 —— 本报告由【素食小账本助手】智能生成。微信小程序搜索“素食小账本助手”，10秒轻松搞定日常餐报汇总！`;
 
+      const receiptImages = await this.uploadReceiptImages();
+
       const saveResult = await DataService.saveReport({
         dateString: dateString,
         reportDate: reportDate,
@@ -254,7 +327,8 @@ ${balanceFormula}=${formatMoney(newBalanceSum)}
         expenseAmount: expenseTotal,
         todayBalance: newBalanceSum,
         reportText: report,
-        donationItems: items
+        donationItems: items,
+        receiptImages: receiptImages
       });
 
       wx.showToast({ 

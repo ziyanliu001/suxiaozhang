@@ -91,6 +91,22 @@
       <view class="section">
         <text class="label">店铺支出说明 (请在末尾带上数字，如：装修地板2000)</text>
         <input class="input" placeholder="例如：装修地板2000" value="{{expenses}}" bindinput="onInput" data-field="expenses" />
+        
+        <view class="receipt-upload-area">
+          <text class="receipt-label">📸 支出凭证/收据（选填）</text>
+          <view class="receipt-images">
+            <view class="receipt-image-item" wx:for="{{receiptImages}}" wx:key="index" bindtap="previewReceipt" data-index="{{index}}">
+              <image class="receipt-image" src="{{item}}" mode="aspectFill" />
+              <view class="receipt-delete" bindtap="deleteReceipt" data-index="{{index}}">
+                <text class="delete-icon">×</text>
+              </view>
+            </view>
+            <view class="receipt-add-btn" wx:if="{{receiptImages.length < 3}}" bindtap="chooseReceiptImages">
+              <text class="add-icon">+</text>
+              <text class="add-text">上传小票/收据</text>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
