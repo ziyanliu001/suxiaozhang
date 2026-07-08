@@ -191,14 +191,14 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.lineTo(width - 20, footerY - 30);
           ctx.stroke();
 
-          ctx.fillStyle = SECONDARY_COLOR;
-          ctx.font = '14px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('🙏 随喜诸位大德功德', width / 2, footerY - 12);
-
           ctx.fillStyle = LIGHT_TEXT;
           ctx.font = '12px sans-serif';
-          ctx.fillText('雨花斋用餐汇报助手', width / 2, footerY + 12);
+          ctx.textAlign = 'center';
+          ctx.fillText('🙏 随喜诸位大德功德', width / 2, footerY - 8);
+
+          ctx.fillStyle = '#999999';
+          ctx.font = '12px sans-serif';
+          ctx.fillText('素食小账本助手', width / 2, footerY + 14);
 
           wx.canvasToTempFilePath({
             canvas: canvas,
