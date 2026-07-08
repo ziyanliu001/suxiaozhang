@@ -3,6 +3,12 @@
     <view class="header-title">{{shopName}}用餐汇报助手</view>
   </view>
 
+  <view class="offline-banner" wx:if="{{offlineQueueCount > 0}}" bindtap="syncOfflineQueueManually">
+    <text class="offline-icon">📦</text>
+    <text class="offline-text">有 {{offlineQueueCount}} 条离线账目待同步</text>
+    <text class="offline-action">[点击立即重传]</text>
+  </view>
+
   <scroll-view scroll-y="true" class="content-scroll">
     <view class="section">
       <view class="toggle-header" bindtap="toggleSettings">

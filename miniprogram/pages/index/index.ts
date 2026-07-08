@@ -3,6 +3,7 @@ import { AuthService } from '../../utils/authService';
 import { parseDonorText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
 import { drawMeritPoster } from '../../utils/posterGenerator';
+import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
 
 Page({
   data: {
@@ -34,7 +35,8 @@ Page({
     adjustReason: '',
     isGeneratingPoster: false,
     showPoster: false,
-    posterImage: ''
+    posterImage: '',
+    offlineQueueCount: 0
   },
 
   async onLoad() {
@@ -369,7 +371,7 @@ Page({
 
       const receiptImages = await this.uploadReceiptImages();
 
-      const saveResult = await DataService.saveReport({
+      const submitData = {
         dateString: dateString,
         reportDate: reportDate,
         shopName: shopName,
@@ -387,7 +389,9 @@ Page({
         adjustedBalance: prevBalanceNum,
         balanceDiff: balanceDiff,
         adjustReason: adjustReason
-      });
+      };
+
+      const saveResult = await DataService.saveReport(submitData);
 
       wx.showToast({ 
         title: saveResult.message, 
@@ -401,7 +405,83 @@ Page({
       });
     } catch (error) {
       console.error('[generateReport] 异常:', error);
-      wx.showToast({ title: '生成失败，请重试', icon: 'none' });
+      
+      const errMsg = error instanceof Error ? error.message : (error as any)?.errMsg || '';
+      const isNetworkError = errMsg.includes('timeout') || errMsg.includes('Network') || 
+                           errMsg.includes('网络') || errMsg.includes('fail') || 
+                           errMsg.includes('connect') || errMsg.includes('abort');
+
+      if (isNetworkError) {
+        const { reportDate, otherDonation, expenses, shopName, mpAccount, parseResult, yesterdayBalance, adjustReason } = this.data;
+        const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
+        const b4_total = parseFloat(otherDonation) || 0;
+        const { items, totalAmount: donationsTotal } = parseResult;
+        
+        let expenseTotal = 0;
+        let expenseInput = expenses.trim();
+        if (expenseInput) {
+          expenseInput = expenseInput.replace(/元$/, '');
+          let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
+          if (expMatch) {
+            expenseTotal = parseFloat(expMatch[2]) || 0;
+          }
+        }
+        
+        const todayTotalSum = donationsTotal + b4_total;
+        const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+
+        const report = generateReportText({
+          shopName: shopName,
+          dateString: dateString,
+          reportDate: reportDate,
+          items: items,
+          totalAmount: donationsTotal,
+          otherDonation: b4_total,
+          yesterdayBalance: prevBalanceNum,
+          expenseAmount: expenseTotal,
+          todayBalance: newBalanceSum,
+          expenses: expenses,
+          mpAccount: mpAccount
+        });
+
+        saveToQueue({
+          dateString: dateString,
+          reportDate: reportDate,
+          shopName: shopName,
+          mpAccount: mpAccount,
+          yesterdayBalance: prevBalanceNum,
+          otherDonation: b4_total,
+          listDonationTotal: donationsTotal,
+          expenseAmount: expenseTotal,
+          todayBalance: newBalanceSum,
+          reportText: report,
+          donationItems: items,
+          receiptImages: this.data.receiptImages,
+          isManualAdjust: this.data.isManualAdjust,
+          systemBalance: this.data.systemBalance,
+          adjustedBalance: prevBalanceNum,
+          balanceDiff: this.data.balanceDiff,
+          adjustReason: adjustReason
+        });
+
+        wx.showModal({
+          title: '📶 网络信号较弱',
+          content: '账目已为您安全暂存至手机本地！等网络恢复或换到信号好处时，小程序将自动同步上传。',
+          showCancel: false,
+          confirmText: '知道了',
+          confirmColor: '#B8860B'
+        });
+        
+        this.updateOfflineQueueCount();
+      } else {
+        wx.showToast({ title: '生成失败，请重试', icon: 'none' });
+      }
     } finally {
       this.setData({ isSubmitting: false });
     }
@@ -414,6 +494,134 @@ Page({
         wx.showToast({ title: '复制成功', icon: 'success' });
       }
     });
+  },
+
+  updateOfflineQueueCount() {
+    const count = getQueueCount();
+    this.setData({ offlineQueueCount: count });
+  },
+
+  onShow() {
+    this.updateOfflineQueueCount();
+    this.autoSyncOfflineQueue();
+    
+    const app = getApp();
+    app.globalData.onNetworkReconnected = () => {
+      this.autoSyncOfflineQueue();
+    };
+  },
+
+  onHide() {
+    const app = getApp();
+    app.globalData.onNetworkReconnected = null;
+  },
+
+  async autoSyncOfflineQueue() {
+    const queue = getQueue();
+    if (queue.length === 0) {
+      return;
+    }
+
+    const networkInfo = wx.getNetworkTypeSync();
+    if (networkInfo.networkType === 'none') {
+      return;
+    }
+
+    let successCount = 0;
+    for (const item of queue) {
+      try {
+        const uploadResults: string[] = [];
+        
+        for (let i = 0; i < item.receiptImages.length; i++) {
+          const tempFilePath = item.receiptImages[i];
+          const now = new Date();
+          const dateFolder = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+          const fileName = `${Date.now()}_${i}.jpg`;
+          const cloudPath = `expenses/${dateFolder}/${fileName}`;
+          
+          const uploadResult = await wx.cloud.uploadFile({
+            cloudPath: cloudPath,
+            filePath: tempFilePath
+          });
+          uploadResults.push(uploadResult.fileID);
+        }
+
+        await DataService.saveReport({
+          ...item,
+          receiptImages: uploadResults
+        });
+
+        removeFromQueue(item.id);
+        successCount++;
+      } catch (error) {
+        console.error('[autoSyncOfflineQueue] 同步失败:', error);
+        break;
+      }
+    }
+
+    if (successCount > 0) {
+      this.updateOfflineQueueCount();
+      wx.showToast({ 
+        title: `已为您自动同步 ${successCount} 条离线保存的账目汇报！🎉`, 
+        icon: 'success',
+        duration: 3000
+      });
+    }
+  },
+
+  async syncOfflineQueueManually() {
+    const queue = getQueue();
+    if (queue.length === 0) {
+      wx.showToast({ title: '暂无待同步数据', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '正在同步...' });
+    
+    let successCount = 0;
+    for (const item of queue) {
+      try {
+        const uploadResults: string[] = [];
+        
+        for (let i = 0; i < item.receiptImages.length; i++) {
+          const tempFilePath = item.receiptImages[i];
+          const now = new Date();
+          const dateFolder = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+          const fileName = `${Date.now()}_${i}.jpg`;
+          const cloudPath = `expenses/${dateFolder}/${fileName}`;
+          
+          const uploadResult = await wx.cloud.uploadFile({
+            cloudPath: cloudPath,
+            filePath: tempFilePath
+          });
+          uploadResults.push(uploadResult.fileID);
+        }
+
+        await DataService.saveReport({
+          ...item,
+          receiptImages: uploadResults
+        });
+
+        removeFromQueue(item.id);
+        successCount++;
+      } catch (error) {
+        console.error('[syncOfflineQueueManually] 同步失败:', error);
+        break;
+      }
+    }
+
+    wx.hideLoading();
+    this.updateOfflineQueueCount();
+    
+    if (successCount > 0) {
+      wx.showToast({ 
+        title: `已成功同步 ${successCount} 条账目汇报！🎉`, 
+        icon: 'success',
+        duration: 3000
+      });
+    } else {
+      wx.showToast({ title: '同步失败，请检查网络', icon: 'none' });
+    }
   },
 
   async generatePoster() {

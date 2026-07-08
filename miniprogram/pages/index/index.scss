@@ -458,6 +458,31 @@ textarea, .textarea {
   border: none;
 }
 
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 20rpx 30rpx;
+  background: linear-gradient(135deg, #FFF7E6 0%, #FFEBC8 100%);
+  border-bottom: 2rpx solid #FFD666;
+}
+
+.offline-icon {
+  font-size: 32rpx;
+}
+
+.offline-text {
+  font-size: 26rpx;
+  color: #D46B08;
+}
+
+.offline-action {
+  font-size: 24rpx;
+  color: #E53935;
+  font-weight: bold;
+}
+
 .footer-bar {
   position: fixed;
   bottom: 0;
