@@ -1,4 +1,5 @@
 import { DataService, formatMoney } from '../../utils/dataService';
+import { AuthService } from '../../utils/authService';
 
 Page({
   data: {
@@ -10,7 +11,9 @@ Page({
     customEndDate: '',
     statistics: null,
     navTop: 0,
-    contentTop: 0
+    contentTop: 0,
+    isAdmin: false,
+    viewMode: 'all' as 'all' | 'personal'
   },
 
   onLoad(options: any) {
@@ -19,11 +22,23 @@ Page({
     }
     
     this.calculateNavBarHeight();
+    this.checkAdminStatus();
     this.loadWeekStatistics();
   },
 
   onShow() {
     DataService.syncLocalDataToCloud();
+  },
+
+  checkAdminStatus() {
+    const isAdmin = AuthService.isAdmin();
+    this.setData({ isAdmin });
+  },
+
+  switchViewMode(e: any) {
+    const mode = e.currentTarget.dataset.mode as 'all' | 'personal';
+    this.setData({ viewMode: mode });
+    this.switchTab({ currentTarget: { dataset: { tab: this.data.currentTab } } });
   },
 
   calculateNavBarHeight() {
@@ -171,7 +186,8 @@ Page({
   async loadStatistics(startDate: string, endDate: string) {
     wx.showLoading({ title: '加载中...' });
 
-    const result = await DataService.getStatistics(startDate, endDate, this.data.shopName);
+    const { shopName, viewMode } = this.data;
+    const result = await DataService.getStatistics(startDate, endDate, shopName, viewMode);
     
     wx.hideLoading();
     

@@ -3,6 +3,12 @@
     <text class="nav-title">统计分析</text>
   </view>
 
+  <view class="admin-switch" wx:if="{{isAdmin}}">
+    <view class="switch-label">查看模式</view>
+    <view class="switch-btn {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">全店汇总</view>
+    <view class="switch-btn {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">个人统计</view>
+  </view>
+
   <view class="top-section" style="margin-top: {{contentTop}}px;">
     <view class="tab-bar">
       <view 

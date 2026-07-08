@@ -38,7 +38,8 @@ exports.main = async (event, context) => {
           createTime: now,
           lastLoginTime: now,
           nickName: '',
-          avatarUrl: ''
+          avatarUrl: '',
+          role: 'user'
         }
       });
       user = {
@@ -47,7 +48,8 @@ exports.main = async (event, context) => {
         createTime: now,
         lastLoginTime: now,
         nickName: '',
-        avatarUrl: ''
+        avatarUrl: '',
+        role: 'user'
       };
       console.log('[login] 新用户注册:', OPENID);
     }
@@ -61,7 +63,8 @@ exports.main = async (event, context) => {
         createTime: user.createTime,
         lastLoginTime: user.lastLoginTime,
         nickName: user.nickName || '',
-        avatarUrl: user.avatarUrl || ''
+        avatarUrl: user.avatarUrl || '',
+        role: user.role || 'user'
       }
     };
   } catch (err) {

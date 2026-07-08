@@ -1,21 +1,36 @@
 import { DataService, formatMoney } from '../../utils/dataService';
+import { AuthService } from '../../utils/authService';
 
 Page({
   data: {
     reports: [],
     loading: true,
     navTop: 0,
-    contentTop: 0
+    contentTop: 0,
+    isAdmin: false,
+    viewMode: 'all' as 'all' | 'personal'
   },
 
   onLoad() {
     this.calculateNavBarHeight();
+    this.checkAdminStatus();
     this.loadReports();
   },
 
   onShow() {
     this.loadReports();
     DataService.syncLocalDataToCloud();
+  },
+
+  checkAdminStatus() {
+    const isAdmin = AuthService.isAdmin();
+    this.setData({ isAdmin });
+  },
+
+  switchViewMode(e: any) {
+    const mode = e.currentTarget.dataset.mode as 'all' | 'personal';
+    this.setData({ viewMode: mode });
+    this.loadReports();
   },
 
   calculateNavBarHeight() {
@@ -40,7 +55,8 @@ Page({
   async loadReports() {
     this.setData({ loading: true });
 
-    const result = await DataService.getReports();
+    const { viewMode } = this.data;
+    const result = await DataService.getReports({ viewMode });
     
     const formattedReports = result.data.map((item: any) => {
       const yesterdayBalance = parseFloat(item.yesterdayBalance || 0);

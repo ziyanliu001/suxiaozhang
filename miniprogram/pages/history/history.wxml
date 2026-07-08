@@ -7,7 +7,13 @@
     <view class="nav-right"></view>
   </view>
 
-  <scroll-view class="content-section" style="margin-top: {{contentTop}}px;" scroll-y>
+  <view class="admin-switch" wx:if="{{isAdmin}}">
+    <view class="switch-label">查看模式</view>
+    <view class="switch-btn {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">全店汇总</view>
+    <view class="switch-btn {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">个人历史</view>
+  </view>
+
+  <scroll-view class="content-section" style="margin-top: {{isAdmin ? contentTop + 80 : contentTop}}px;" scroll-y>
     <view class="report-list" wx:if="{{!loading && reports.length > 0}}">
       <view wx:for="{{reports}}" wx:key="{{item._id || item._localId}}" class="report-card" data-index="{{index}}">
         <view class="card-header">

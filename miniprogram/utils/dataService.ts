@@ -109,63 +109,51 @@ export const DataService = {
     endDate?: string;
     shopName?: string;
     limit?: number;
+    viewMode?: 'all' | 'personal';
   } = {}): Promise<{ success: boolean; data: any[]; source: 'cloud' | 'local' }> {
-    const { startDate, endDate, shopName, limit = 100 } = options;
-    const db = wx.cloud.database();
+    const { startDate, endDate, shopName, limit = 100, viewMode } = options;
 
     try {
-      const openid = AuthService.getOpenid();
-      let whereClause: any = {};
-      if (openid) {
-        whereClause._openid = openid;
-      }
-
-      if (startDate && endDate) {
-        whereClause.dateString = db.command.gte(startDate).and(db.command.lte(endDate));
-      } else if (startDate) {
-        whereClause.dateString = db.command.gte(startDate);
-      } else if (endDate) {
-        whereClause.dateString = db.command.lte(endDate);
-      }
-
-      if (shopName) {
-        whereClause.shopName = shopName;
-      }
-
-      let query = db.collection('report_logs');
-      if (Object.keys(whereClause).length > 0) {
-        query = query.where(whereClause) as any;
-      }
-      const cloudResult = await query.orderBy('dateString', 'desc').limit(limit).get();
-      const cloudData = cloudResult.data || [];
-
-      const localReports = getLocalReports();
-      const unsyncedReports = openid
-        ? localReports.filter(r => !r.isSynced && r._openid === openid)
-        : localReports.filter(r => !r.isSynced);
-
-      const mergedData = [...cloudData];
-      const existingKeys = new Set(cloudData.map(c => `${c.dateString}_${c.shopName}`));
-      
-      unsyncedReports.forEach(localReport => {
-        const key = `${localReport.dateString}_${localReport.shopName}`;
-        if (!existingKeys.has(key)) {
-          mergedData.unshift(localReport);
-          existingKeys.add(key);
-        }
+      const result = await wx.cloud.callFunction({
+        name: 'getReports',
+        data: { startDate, endDate, shopName, limit, viewMode }
       });
 
-      mergedData.sort((a, b) => {
-        const dateA = new Date(a.dateString || '');
-        const dateB = new Date(b.dateString || '');
-        return dateB.getTime() - dateA.getTime();
-      });
+      const r = result.result as any;
+      if (r && r.success) {
+        const cloudData = r.data || [];
 
-      return {
-        success: true,
-        data: mergedData.slice(0, limit),
-        source: 'cloud'
-      };
+        const localReports = getLocalReports();
+        const openid = AuthService.getOpenid();
+        const unsyncedReports = openid
+          ? localReports.filter(r => !r.isSynced && r._openid === openid)
+          : localReports.filter(r => !r.isSynced);
+
+        const mergedData = [...cloudData];
+        const existingKeys = new Set(cloudData.map(c => `${c.dateString}_${c.shopName}`));
+        
+        unsyncedReports.forEach(localReport => {
+          const key = `${localReport.dateString}_${localReport.shopName}`;
+          if (!existingKeys.has(key)) {
+            mergedData.unshift(localReport);
+            existingKeys.add(key);
+          }
+        });
+
+        mergedData.sort((a, b) => {
+          const dateA = new Date(a.dateString || '');
+          const dateB = new Date(b.dateString || '');
+          return dateB.getTime() - dateA.getTime();
+        });
+
+        return {
+          success: true,
+          data: mergedData.slice(0, limit),
+          source: 'cloud'
+        };
+      }
+
+      throw new Error(r?.error || '云函数调用失败');
     } catch (error: any) {
       console.warn('[DataService] 云端查询失败，使用本地缓存:', error);
 
@@ -328,34 +316,23 @@ export const DataService = {
     };
   },
 
-  async getStatistics(startDate: string, endDate: string, shopName?: string): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
-    const db = wx.cloud.database();
-
+  async getStatistics(startDate: string, endDate: string, shopName?: string, viewMode?: 'all' | 'personal'): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
     try {
-      const openid = AuthService.getOpenid();
-      const whereClause: any = {
-        dateString: db.command.gte(startDate).and(db.command.lte(endDate))
-      };
-      if (openid) {
-        whereClause._openid = openid;
+      const result = await wx.cloud.callFunction({
+        name: 'getStatistics',
+        data: { startDate, endDate, shopName, viewMode }
+      });
+
+      const r = result.result as any;
+      if (r && r.success) {
+        return {
+          success: true,
+          data: r.data,
+          source: 'cloud'
+        };
       }
-      if (shopName) {
-        whereClause.shopName = shopName;
-      }
 
-      const cloudResult = await db.collection('report_logs')
-        .where(whereClause)
-        .orderBy('dateString', 'asc')
-        .get();
-      const records = cloudResult.data || [];
-
-      const statistics = this.calculateStatistics(records, startDate, endDate);
-
-      return {
-        success: true,
-        data: statistics,
-        source: 'cloud'
-      };
+      throw new Error(r?.error || '云函数调用失败');
     } catch (error) {
       console.warn('[DataService] 云端统计查询失败，使用本地缓存:', error);
 

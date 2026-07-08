@@ -251,3 +251,37 @@ page {
 .btn-hover {
   opacity: 0.8;
 }
+
+.admin-switch {
+  position: fixed;
+  top: calc(var(--status-bar-height) + 88rpx);
+  left: 0;
+  right: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  padding: 16rpx 32rpx;
+  background: linear-gradient(90deg, #f7f8fa 0%, #fff 20%, #fff 80%, #f7f8fa 100%);
+  border-bottom: 1rpx solid #eee;
+}
+
+.switch-label {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.switch-btn {
+  padding: 12rpx 32rpx;
+  font-size: 26rpx;
+  color: #666;
+  background-color: #f5f5f5;
+  border-radius: 32rpx;
+  transition: all 0.3s;
+}
+
+.switch-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+}

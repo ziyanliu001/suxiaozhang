@@ -7,24 +7,39 @@ cloud.init({
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  const { startDate, endDate, shopName } = event;
+  const { startDate, endDate, shopName, viewMode } = event;
   const { OPENID } = cloud.getWXContext();
 
+  if (!startDate || !endDate) {
+    return {
+      success: false,
+      error: '缺少必要参数'
+    };
+  }
+
   try {
-    if (!startDate || !endDate) {
-      return {
-        success: false,
-        error: 'Missing startDate or endDate parameter'
-      };
+    const userRes = await db.collection('users')
+      .where({ _openid: OPENID })
+      .limit(1)
+      .get();
+    const userRole = userRes.data && userRes.data.length > 0 ? userRes.data[0].role : 'user';
+
+    let matchConditions = {
+      dateString: db.command.gte(startDate).and(db.command.lte(endDate))
+    };
+
+    if (shopName) {
+      matchConditions.shopName = shopName;
+    }
+
+    const shouldFilterByOpenid = (viewMode === 'personal') || (userRole !== 'admin' && viewMode !== 'all');
+    if (shouldFilterByOpenid) {
+      matchConditions._openid = OPENID;
     }
 
     const result = await db.collection('report_logs')
       .aggregate()
-      .match({
-        dateString: db.command.gte(startDate).and(db.command.lte(endDate)),
-        _openid: OPENID,
-        ...(shopName && { shopName: shopName })
-      })
+      .match(matchConditions)
       .group({
         _id: null,
         totalOtherDonation: db.command.aggregate.sum('otherDonation'),
@@ -42,7 +57,8 @@ exports.main = async (event, context) => {
       recordCount: 0,
       netBalance: 0,
       startDate: startDate,
-      endDate: endDate
+      endDate: endDate,
+      role: userRole
     };
 
     if (result.list && result.list.length > 0) {
@@ -57,11 +73,7 @@ exports.main = async (event, context) => {
     statistics.netBalance = Math.round((statistics.totalIncome - statistics.totalExpense) * 100) / 100;
 
     const dailyResult = await db.collection('report_logs')
-      .where({
-        dateString: db.command.gte(startDate).and(db.command.lte(endDate)),
-        _openid: OPENID,
-        ...(shopName && { shopName: shopName })
-      })
+      .where(matchConditions)
       .orderBy('dateString', 'asc')
       .get();
 

@@ -77,6 +77,15 @@ export const AuthService = {
     return !!openid && openid.startsWith(TEMP_OPENID_PREFIX);
   },
 
+  getRole(): string {
+    const user = this.getUser();
+    return user?.role || 'user';
+  },
+
+  isAdmin(): boolean {
+    return this.getRole() === 'admin';
+  },
+
   clearAuth(): void {
     try {
       wx.removeStorageSync(OPENID_CACHE_KEY);
