@@ -144,7 +144,7 @@
     </view>
   </view>
 
-  <canvas canvas-id="meritPoster" class="poster-canvas" style="width: 680rpx; height: 960rpx;"></canvas>
+  <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: 667px;"></canvas>
 
   <view class="poster-modal" wx:if="{{showPoster}}" bindtap="closePoster">
     <view class="modal-mask"></view>

@@ -16,7 +16,7 @@ const debounce = <T extends (...args: any[]) => any>(fn: T, delay: number): T =>
 const DRAFT_KEY = 'REPORT_FORM_DRAFT';
 
 Page({
-  isSubmitting = false,
+  isSubmitting: false,
   debouncedSaveDraft: null as any,
 
   data: {
@@ -751,7 +751,7 @@ Page({
       return;
     }
 
-    wx.showLoading({ title: '正在生成海报...' });
+    wx.showLoading({ title: '正在绘制海报...', mask: true });
     this.setData({ isGeneratingPoster: true });
 
     try {
@@ -779,7 +779,7 @@ Page({
       const day = String(now.getDate()).padStart(2, '0');
       const dateString = `${year}-${month}-${day}`;
 
-      const posterImage = await drawMeritPoster('meritPoster', {
+      const posterImage = await drawMeritPoster({
         shopName: shopName,
         dateString: dateString,
         reportDate: reportDate,
@@ -799,7 +799,8 @@ Page({
       });
     } catch (error) {
       console.error('[generatePoster] 异常:', error);
-      wx.showToast({ title: '生成海报失败，请重试', icon: 'none' });
+      const errMsg = error instanceof Error ? error.message : (error as any)?.errMsg || '未知错误';
+      wx.showToast({ title: '生成失败: ' + errMsg, icon: 'none', duration: 3000 });
     } finally {
       wx.hideLoading();
       this.setData({ isGeneratingPoster: false });
