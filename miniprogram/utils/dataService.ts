@@ -50,6 +50,11 @@ export const DataService = {
       todayBalance: parseNumber(reportData.todayBalance),
       reportText: reportData.reportText || '',
       receiptImages: reportData.receiptImages || [],
+      isManualAdjust: reportData.isManualAdjust || false,
+      systemBalance: parseNumber(reportData.systemBalance),
+      adjustedBalance: parseNumber(reportData.adjustedBalance),
+      balanceDiff: parseNumber(reportData.balanceDiff),
+      adjustReason: reportData.adjustReason || '',
       createTime: db.serverDate(),
       isSynced: false,
       _openid: openid || ''

@@ -48,6 +48,10 @@
                    value="{{yesterdayBalance}}"
                    disabled="{{isBalanceLocked}}"
                    bindinput="onYesterdayBalanceInput" />
+            <view class="adjust-tag" wx:if="{{isManualAdjust}}">
+              <text class="adjust-icon">⚠️</text>
+              <text class="adjust-text">已手动调账（差额：{{balanceDiff >= 0 ? '+' : ''}}¥{{balanceDiff.toFixed(2)}}）</text>
+            </view>
           </view>
         </view>
       </view>
