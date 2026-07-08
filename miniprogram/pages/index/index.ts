@@ -779,7 +779,7 @@ Page({
       const day = String(now.getDate()).padStart(2, '0');
       const dateString = `${year}-${month}-${day}`;
 
-      const posterImage = await drawMeritPoster({
+      const posterImage = await drawMeritPoster(this, {
         shopName: shopName,
         dateString: dateString,
         reportDate: reportDate,
