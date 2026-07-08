@@ -57,6 +57,30 @@
         <view class="textarea-wrap">
           <textarea class="textarea" auto-height placeholder="{{donationPlaceholder}}" value="{{allDonations}}" bindinput="onInput" data-field="allDonations" />
         </view>
+
+        <view class="parse-preview" wx:if="{{parseResult.items.length > 0 || parseResult.errors.length > 0}}">
+          <view class="preview-header">
+            <text class="preview-title">📋 解析结果预览</text>
+            <view class="preview-summary">
+              <text class="summary-item">人数：{{parseResult.totalCount}}</text>
+              <text class="summary-item">金额：¥{{parseResult.totalAmount.toFixed(2)}}</text>
+            </view>
+          </view>
+          
+          <view class="preview-list">
+            <view class="preview-item" wx:for="{{parseResult.items}}" wx:key="lineNumber">
+              <text class="item-name">{{item.name}}</text>
+              <text class="item-amount">¥{{item.amount}}</text>
+            </view>
+          </view>
+
+          <view class="preview-errors" wx:if="{{parseResult.errors.length > 0}}">
+            <view class="error-item" wx:for="{{parseResult.errors}}" wx:key="lineNumber">
+              <text class="error-icon">⚠️</text>
+              <text class="error-text">第 {{item.lineNumber}} 行：{{item.message}}</text>
+            </view>
+          </view>
+        </view>
       </view>
 
       <view class="form-group">
@@ -80,7 +104,7 @@
   </scroll-view>
 
   <view class="footer-bar">
-    <button class="action-btn btn-red" hover-class="btn-hover" bindtap="generateReport">⚡ 一键生成汇报文本</button>
+    <button class="action-btn btn-red" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">⚡ 一键生成汇报文本</button>
     <view class="btn-group">
       <button class="btn-history" bindtap="goToHistory">📜 历史</button>
       <button class="btn-statistics" bindtap="goToStatistics">📊 统计</button>

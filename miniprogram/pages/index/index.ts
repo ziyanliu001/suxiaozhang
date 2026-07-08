@@ -1,5 +1,6 @@
 import { DataService, formatMoney } from '../../utils/dataService';
 import { AuthService } from '../../utils/authService';
+import { parseDonations } from '../../utils/parser';
 
 Page({
   data: {
@@ -16,7 +17,14 @@ Page({
     shopName: '海沧区雨花斋',
     mpAccount: '厦门海沧雨花斋！',
     donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
-    headerSafeTop: 85
+    headerSafeTop: 85,
+    isSubmitting: false,
+    parseResult: {
+      items: [],
+      errors: [],
+      totalAmount: 0,
+      totalCount: 0
+    }
   },
 
   async onLoad() {
@@ -144,7 +152,17 @@ Page({
 
   onInput(e: any) {
     const { field } = e.currentTarget.dataset;
-    this.setData({ [field]: e.detail.value });
+    const value = e.detail.value;
+    this.setData({ [field]: value });
+    
+    if (field === 'allDonations') {
+      this.updateParseResult(value);
+    }
+  },
+
+  updateParseResult(text: string) {
+    const result = parseDonations(text);
+    this.setData({ parseResult: result });
   },
 
   parseAllDonations(text: string) {
@@ -177,53 +195,52 @@ Page({
   },
 
   async generateReport() {
-    const { reportDate, yesterdayBalance, allDonations, otherDonation, expenses, shopName, mpAccount } = this.data;
-    const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
-    const b4_total = parseFloat(otherDonation) || 0;
+    if (this.data.isSubmitting) {
+      return;
+    }
+
+    this.setData({ isSubmitting: true });
     
-    const allList = this.parseAllDonations(allDonations);
-    
-    let listTexts = [];
-    let donationsTotal = 0;
-    
-    allList.forEach(item => {
-      listTexts.push(item.text);
-      donationsTotal += item.amount;
-    });
-    
-    donationsTotal = Math.round(donationsTotal * 100) / 100;
-    
-    let expenseTotal = 0;
-    let expenseInput = expenses.trim();
-    if (expenseInput) {
-      expenseInput = expenseInput.replace(/元$/, '');
-      let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
-      if (expMatch) {
-        expenseTotal = parseFloat(expMatch[2]) || 0;
+    try {
+      const { reportDate, yesterdayBalance, otherDonation, expenses, shopName, mpAccount, parseResult } = this.data;
+      const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
+      const b4_total = parseFloat(otherDonation) || 0;
+      
+      const { items, totalAmount: donationsTotal } = parseResult;
+      
+      const listTexts = items.map(item => `${item.name} ${item.amount}`);
+      
+      let expenseTotal = 0;
+      let expenseInput = expenses.trim();
+      if (expenseInput) {
+        expenseInput = expenseInput.replace(/元$/, '');
+        let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
+        if (expMatch) {
+          expenseTotal = parseFloat(expMatch[2]) || 0;
+        }
       }
-    }
-    
-    const donationsStr = formatMoney(donationsTotal);
-    const b4Str = formatMoney(b4_total);
-    let todayTotalStr = donationsStr;
-    if (b4_total > 0) todayTotalStr += `+${b4Str}`;
-    const todayTotalSum = Math.round((donationsTotal + b4_total) * 100) / 100;
+      
+      const donationsStr = formatMoney(donationsTotal);
+      const b4Str = formatMoney(b4_total);
+      let todayTotalStr = donationsStr;
+      if (b4_total > 0) todayTotalStr += `+${b4Str}`;
+      const todayTotalSum = Math.round((donationsTotal + b4_total) * 100) / 100;
 
-    const displayPrevBalance = formatMoney(prevBalanceNum);
-    let balanceFormula = `${displayPrevBalance}+${todayTotalStr}`;
-    if (expenseTotal > 0) {
-      balanceFormula += `-${formatMoney(expenseTotal)}`;
-    }
+      const displayPrevBalance = formatMoney(prevBalanceNum);
+      let balanceFormula = `${displayPrevBalance}+${todayTotalStr}`;
+      if (expenseTotal > 0) {
+        balanceFormula += `-${formatMoney(expenseTotal)}`;
+      }
 
-    const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
+      const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
 
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const dateString = `${year}-${month}-${day}`;
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
 
-    const report = `亲爱的家人们大家好[玫瑰]
+      const report = `亲爱的家人们大家好[玫瑰]
 
 【${shopName}】用餐汇报
 ${reportDate}
@@ -255,29 +272,36 @@ ${balanceFormula}=${formatMoney(newBalanceSum)}
 
 —— 本报告由【素食小账本助手】智能生成。微信小程序搜索“素食小账本助手”，10秒轻松搞定日常餐报汇总！`;
 
-    const saveResult = await DataService.saveReport({
-      dateString: dateString,
-      reportDate: reportDate,
-      shopName: shopName,
-      mpAccount: mpAccount,
-      yesterdayBalance: prevBalanceNum,
-      otherDonation: b4_total,
-      listDonationTotal: donationsTotal,
-      expenseAmount: expenseTotal,
-      todayBalance: newBalanceSum,
-      reportText: report
-    });
+      const saveResult = await DataService.saveReport({
+        dateString: dateString,
+        reportDate: reportDate,
+        shopName: shopName,
+        mpAccount: mpAccount,
+        yesterdayBalance: prevBalanceNum,
+        otherDonation: b4_total,
+        listDonationTotal: donationsTotal,
+        expenseAmount: expenseTotal,
+        todayBalance: newBalanceSum,
+        reportText: report,
+        donationItems: items
+      });
 
-    wx.showToast({ 
-      title: saveResult.message, 
-      icon: 'success',
-      duration: 2000
-    });
+      wx.showToast({ 
+        title: saveResult.message, 
+        icon: 'success',
+        duration: 2000
+      });
 
-    this.setData({
-      reportResult: report,
-      showResult: true
-    });
+      this.setData({
+        reportResult: report,
+        showResult: true
+      });
+    } catch (error) {
+      console.error('[generateReport] 异常:', error);
+      wx.showToast({ title: '生成失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ isSubmitting: false });
+    }
   },
 
   copyText() {
