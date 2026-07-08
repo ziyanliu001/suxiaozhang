@@ -746,12 +746,12 @@ Page({
     }
   },
 
-  async generatePoster() {
+  async onGeneratePoster() {
     if (this.data.isGeneratingPoster) {
       return;
     }
 
-    wx.showLoading({ title: '正在绘制海报...', mask: true });
+    wx.showLoading({ title: '正在生成海报...', mask: true });
     this.setData({ isGeneratingPoster: true });
 
     try {
@@ -779,7 +779,7 @@ Page({
       const day = String(now.getDate()).padStart(2, '0');
       const dateString = `${year}-${month}-${day}`;
 
-      const posterImage = await drawMeritPoster(this, {
+      const posterImagePath = await drawMeritPoster(this, {
         shopName: shopName,
         dateString: dateString,
         reportDate: reportDate,
@@ -794,13 +794,16 @@ Page({
       });
 
       this.setData({
-        posterImage: posterImage,
+        posterImage: posterImagePath,
         showPoster: true
       });
-    } catch (error) {
-      console.error('[generatePoster] 异常:', error);
-      const errMsg = error instanceof Error ? error.message : (error as any)?.errMsg || '未知错误';
-      wx.showToast({ title: '生成失败: ' + errMsg, icon: 'none', duration: 3000 });
+    } catch (err: any) {
+      console.error('海报生成失败原因:', err);
+      wx.showToast({
+        title: err.message || '海报生成失败',
+        icon: 'none',
+        duration: 3000
+      });
     } finally {
       wx.hideLoading();
       this.setData({ isGeneratingPoster: false });
