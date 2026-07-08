@@ -130,7 +130,7 @@
   </scroll-view>
 
   <view class="footer-bar">
-    <button class="action-btn btn-red" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">⚡ 一键生成汇报文本</button>
+    <button class="action-btn btn-red {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">⚡ 一键生成汇报文本</button>
     <button class="action-btn btn-gold" hover-class="btn-hover" bindtap="generatePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">🎨 生成功德海报</button>
     <view class="btn-group">
       <button class="btn-history" bindtap="goToHistory">📜 历史</button>

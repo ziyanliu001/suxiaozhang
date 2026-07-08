@@ -6,6 +6,8 @@ import { drawMeritPoster } from '../../utils/posterGenerator';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
 
 Page({
+  isSubmitting = false,
+
   data: {
     reportDate: '',
     prevBalance: '0.00',
@@ -299,7 +301,8 @@ Page({
   },
 
   async generateReport() {
-    if (this.data.isSubmitting) {
+    if (this.isSubmitting) {
+      console.log('[防重刷] 正在提交中，拦截重复点击');
       return;
     }
 
@@ -314,7 +317,9 @@ Page({
       }
     }
 
+    this.isSubmitting = true;
     this.setData({ isSubmitting: true });
+    wx.showLoading({ title: '正在安全提交...', mask: true });
     
     try {
       const { reportDate, otherDonation, expenses, shopName, mpAccount, parseResult, adjustReason } = this.data;
@@ -480,9 +485,11 @@ Page({
         
         this.updateOfflineQueueCount();
       } else {
-        wx.showToast({ title: '生成失败，请重试', icon: 'none' });
+        wx.showToast({ title: '提交失败，请重试', icon: 'none' });
       }
     } finally {
+      wx.hideLoading();
+      this.isSubmitting = false;
       this.setData({ isSubmitting: false });
     }
   },
