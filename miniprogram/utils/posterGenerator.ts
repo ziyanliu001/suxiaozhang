@@ -63,7 +63,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.fillStyle = PRIMARY_COLOR;
           ctx.font = 'bold 24px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('感恩捐赠 温暖同行', width / 2, 60);
+          ctx.fillText('清晰记账 透明运行', width / 2, 60);
 
           ctx.fillStyle = SECONDARY_COLOR;
           ctx.font = '18px sans-serif';
@@ -88,14 +88,14 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.fillStyle = PRIMARY_COLOR;
           ctx.font = 'bold 18px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(`【${data.shopName}】今日爱心榜`, width / 2, cardY + 22);
+          ctx.fillText(`【${data.shopName}】今日支持明细`, width / 2, cardY + 22);
 
           const statSpacing = (width - 40) / 4;
           const statY = cardY + 60;
 
           const stats = [
-            { label: '捐赠人数', value: `${data.totalCount}人`, color: PRIMARY_COLOR },
-            { label: '捐赠金额', value: `¥${data.totalAmount.toFixed(2)}`, color: '#E53935' },
+            { label: '赞助人数', value: `${data.totalCount}人`, color: PRIMARY_COLOR },
+            { label: '赞助金额', value: `¥${data.totalAmount.toFixed(2)}`, color: '#E53935' },
             { label: '昨日余额', value: `¥${data.yesterdayBalance.toFixed(2)}`, color: '#52C41A' },
             { label: '今日结余', value: `¥${data.todayBalance.toFixed(2)}`, color: '#1890FF' }
           ];
@@ -133,7 +133,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           if (data.otherDonation > 0) {
             ctx.fillStyle = LIGHT_TEXT;
             ctx.font = '14px sans-serif';
-            ctx.fillText('其他爱心捐款：', 35, expenseY + 25);
+            ctx.fillText('其他支持：', 35, expenseY + 25);
 
             ctx.fillStyle = '#52C41A';
             ctx.font = '14px sans-serif';
@@ -144,7 +144,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.fillStyle = PRIMARY_COLOR;
           ctx.font = 'bold 18px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('爱心捐赠名单', width / 2, listY);
+          ctx.fillText('自愿赞助名单', width / 2, listY);
 
           ctx.lineWidth = 1;
           ctx.strokeStyle = '#E8E4DC';
@@ -194,7 +194,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.fillStyle = LIGHT_TEXT;
           ctx.font = '12px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('🙏 感恩每一位爱心人士', width / 2, footerY - 8);
+          ctx.fillText('🙏 感谢大家对社区助餐的支持', width / 2, footerY - 8);
 
           ctx.fillStyle = '#999999';
           ctx.font = '12px sans-serif';

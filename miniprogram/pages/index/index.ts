@@ -32,7 +32,7 @@ Page({
     showSettings: false,
     shopName: '海沧区雨花斋',
     mpAccount: '厦门海沧雨花斋！',
-    donationPlaceholder: '可以直接把所有捐赠名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
+    donationPlaceholder: '可以直接把所有支持名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
     headerSafeTop: 85,
     isSubmitting: false,
     hasDraft: false,
@@ -267,7 +267,7 @@ Page({
   resetForm() {
     wx.showModal({
       title: '提示',
-      content: '确定要清空当前输入的名单、爱心捐款和支出说明吗？',
+      content: '确定要清空当前输入的名单、赞助金额和支出说明吗？',
       success: (res) => {
         if (res.confirm) {
           const now = new Date();

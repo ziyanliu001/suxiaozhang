@@ -403,9 +403,9 @@ export const DataService = {
     const todayBalance = formatNumber(item.todayBalance || 0);
 
     let reportText = `📅 ${dateStr} ${shopName}餐报\n\n`;
-    reportText += `一、爱心人士捐赠\n`;
-    reportText += `其他捐款：${otherDonation}\n`;
-    reportText += `名单捐赠：${listDonationTotal}\n`;
+    reportText += `一、自愿赞助\n`;
+    reportText += `其他支持：${otherDonation}\n`;
+    reportText += `名单赞助：${listDonationTotal}\n`;
     reportText += `今日合计：${formatNumber(parseFloat(otherDonation) + parseFloat(listDonationTotal))}\n\n`;
     reportText += `二、店铺支出：${parseFloat(expenseAmount) > 0 ? expenseAmount : '无'}\n\n`;
     reportText += `三、《店铺余额》\n`;
