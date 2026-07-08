@@ -58,7 +58,7 @@
           <textarea class="textarea" auto-height placeholder="{{donationPlaceholder}}" value="{{allDonations}}" bindinput="onInput" data-field="allDonations" />
         </view>
 
-        <view class="parse-preview" wx:if="{{parseResult.items.length > 0 || parseResult.errors.length > 0}}">
+        <view class="parse-preview" wx:if="{{parseResult.items.length > 0 || parseResult.unrecognizedLines.length > 0}}">
           <view class="preview-header">
             <text class="preview-title">📋 解析结果预览</text>
             <view class="preview-summary">
@@ -68,16 +68,16 @@
           </view>
           
           <view class="preview-list">
-            <view class="preview-item" wx:for="{{parseResult.items}}" wx:key="lineNumber">
+            <view class="preview-item" wx:for="{{parseResult.items}}" wx:key="name">
               <text class="item-name">{{item.name}}</text>
               <text class="item-amount">¥{{item.amount}}</text>
             </view>
           </view>
 
-          <view class="preview-errors" wx:if="{{parseResult.errors.length > 0}}">
-            <view class="error-item" wx:for="{{parseResult.errors}}" wx:key="lineNumber">
+          <view class="preview-errors" wx:if="{{parseResult.unrecognizedLines.length > 0}}">
+            <view class="error-item" wx:for="{{parseResult.unrecognizedLines}}" wx:key="index">
               <text class="error-icon">⚠️</text>
-              <text class="error-text">第 {{item.lineNumber}} 行：{{item.message}}</text>
+              <text class="error-text">{{item}}</text>
             </view>
           </view>
         </view>

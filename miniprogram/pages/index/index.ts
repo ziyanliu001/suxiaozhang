@@ -1,6 +1,6 @@
 import { DataService, formatMoney } from '../../utils/dataService';
 import { AuthService } from '../../utils/authService';
-import { parseDonations } from '../../utils/parser';
+import { parseDonorText } from '../../utils/parser';
 
 Page({
   data: {
@@ -21,7 +21,7 @@ Page({
     isSubmitting: false,
     parseResult: {
       items: [],
-      errors: [],
+      unrecognizedLines: [],
       totalAmount: 0,
       totalCount: 0
     }
@@ -161,7 +161,7 @@ Page({
   },
 
   updateParseResult(text: string) {
-    const result = parseDonations(text);
+    const result = parseDonorText(text);
     this.setData({ parseResult: result });
   },
 
