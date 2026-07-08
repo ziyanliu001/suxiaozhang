@@ -109,18 +109,18 @@
         </view>
         <view class="progress-info">
           <text class="progress-text">支出占比 {{getExpensePercent()}}%</text>
-          <text class="progress-alert" wx:if="{{isExpenseOverIncome()}}">⚠️ 本期支出超出随喜供给，请注意合理规划采购</text>
+          <text class="progress-alert" wx:if="{{isExpenseOverIncome()}}">⚠️ 本期支出超出爱心捐款，请注意合理规划采购</text>
         </view>
       </view>
 
       <view class="income-breakdown">
         <text class="section-title">收入构成</text>
         <view class="breakdown-row">
-          <text class="breakdown-label">爱心人士供养</text>
+          <text class="breakdown-label">爱心人士捐赠</text>
           <text class="breakdown-value">¥{{statistics.totalListDonationStr}}</text>
         </view>
         <view class="breakdown-row">
-          <text class="breakdown-label">随喜/现场供养</text>
+          <text class="breakdown-label">现场/其他捐款</text>
           <text class="breakdown-value">¥{{statistics.totalOtherDonationStr}}</text>
         </view>
       </view>

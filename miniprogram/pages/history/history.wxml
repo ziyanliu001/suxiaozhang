@@ -35,7 +35,7 @@
             <text class="stat-value">¥{{item.yesterdayBalanceStr}}</text>
           </view>
           <view class="stat-item">
-            <text class="stat-label">随喜收入</text>
+            <text class="stat-label">爱心收入</text>
             <text class="stat-value income">¥{{item.totalIncomeStr}}</text>
           </view>
           <view class="stat-item">

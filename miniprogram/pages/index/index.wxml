@@ -69,7 +69,7 @@
       </view>
 
       <view class="section">
-        <text class="label">爱心人士供养总输入框 (支持一次性粘贴所有名单，每行一个)</text>
+        <text class="label">爱心人士捐赠明细（支持批量粘贴）</text>
         <view class="textarea-wrap">
           <textarea class="textarea" auto-height placeholder="{{donationPlaceholder}}" value="{{allDonations}}" bindinput="onInput" data-field="allDonations" />
         </view>
@@ -100,7 +100,7 @@
       </view>
 
       <view class="form-group">
-        <text class="label">其他随喜/现场供养金额 (对应示例末尾固定加项)</text>
+        <text class="label">其他爱心捐款/现场赞助金额 (对应示例末尾固定加项)</text>
         <input class="input-box" type="digit" placeholder="如：5" model:value="{{otherDonation}}" />
       </view>
 
@@ -137,7 +137,7 @@
 
   <view class="footer-bar">
     <button class="action-btn btn-red {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">⚡ 一键生成汇报文本</button>
-    <button class="action-btn btn-gold" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">🎨 生成功德海报</button>
+    <button class="action-btn btn-gold" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">🎨 生成爱心海报</button>
     <view class="btn-group">
       <button class="btn-history" bindtap="goToHistory">📜 历史</button>
       <button class="btn-statistics" bindtap="goToStatistics">📊 统计</button>
@@ -150,7 +150,7 @@
     <view class="modal-mask"></view>
     <view class="modal-content" catchtap="stopPropagation">
       <view class="modal-header">
-        <text class="modal-title">功德海报预览</text>
+        <text class="modal-title">爱心海报预览</text>
         <view class="modal-close" bindtap="closePoster">
           <text class="close-icon">×</text>
         </view>
