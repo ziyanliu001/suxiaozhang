@@ -165,35 +165,6 @@ Page({
     this.setData({ parseResult: result });
   },
 
-  parseAllDonations(text: string) {
-    let allList = [];
-    if (!text) return allList;
-    
-    let lines = text.split('\n');
-    for (let line of lines) {
-      line = line.trim();
-      if (!line) continue;
-      
-      if (line.includes('爱心人士供养') || line.includes('用餐汇报') || line.includes('今日合计') || line.includes('店铺余额')) {
-        continue;
-      }
-      
-      line = line.replace(/元$/, '');
-      let match = line.match(/(.*?)\s*([\d.]+)\s*$/);
-      if (match) {
-        let name = match[1].trim();
-        let amount = parseFloat(match[2]);
-        if (!isNaN(amount)) {
-          allList.push({
-            text: `${name}${amount}元`,
-            amount: amount
-          });
-        }
-      }
-    }
-    return allList;
-  },
-
   async generateReport() {
     if (this.data.isSubmitting) {
       return;
