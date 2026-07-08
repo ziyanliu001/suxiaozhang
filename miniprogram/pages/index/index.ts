@@ -5,8 +5,19 @@ import { generateReportText } from '../../utils/reportGenerator';
 import { drawMeritPoster } from '../../utils/posterGenerator';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
 
+const debounce = <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: any[]) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  }) as T;
+};
+
+const DRAFT_KEY = 'REPORT_FORM_DRAFT';
+
 Page({
   isSubmitting = false,
+  debouncedSaveDraft: null as any,
 
   data: {
     reportDate: '',
@@ -24,6 +35,7 @@ Page({
     donationPlaceholder: '可以直接把所有供养名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
     headerSafeTop: 85,
     isSubmitting: false,
+    hasDraft: false,
     parseResult: {
       items: [],
       unrecognizedLines: [],
@@ -42,6 +54,8 @@ Page({
   },
 
   async onLoad() {
+    this.debouncedSaveDraft = debounce(() => this.saveDraft(), 500);
+
     const loginRes = await AuthService.ensureLogin();
     if (loginRes.isTemp) {
       console.warn('[Index] 使用临时 openid，数据将暂存本地');
@@ -68,8 +82,17 @@ Page({
       reportDate: `${yy}年${mm}月${dd}日`
     });
     
-    this.loadLastBalance();
+    await this.loadLastBalance();
     DataService.syncLocalDataToCloud();
+
+    const hasDraft = this.loadDraft();
+    if (hasDraft) {
+      wx.showToast({ 
+        title: '已为您自动恢复上次未提交的草稿 ✍️', 
+        icon: 'none',
+        duration: 3000 
+      });
+    }
   },
 
   onShow() {
@@ -126,6 +149,88 @@ Page({
     return formatMoney(value);
   },
 
+  saveDraft() {
+    const { reportDate, yesterdayBalance, allDonations, otherDonation, expenses, shopName, mpAccount } = this.data;
+    
+    const draftData = {
+      reportDate,
+      yesterdayBalance,
+      allDonations,
+      otherDonation,
+      expenses,
+      shopName,
+      mpAccount,
+      saveTime: Date.now()
+    };
+
+    wx.setStorage({
+      key: DRAFT_KEY,
+      data: draftData,
+      success: () => {
+        console.log('[草稿箱] 草稿已自动保存');
+      },
+      fail: (err) => {
+        console.error('[草稿箱] 草稿保存失败:', err);
+      }
+    });
+  },
+
+  loadDraft(): boolean {
+    try {
+      const draftData = wx.getStorageSync(DRAFT_KEY);
+      if (!draftData) return false;
+
+      const hasContent = draftData.allDonations || draftData.expenses || 
+                        draftData.otherDonation || draftData.yesterdayBalance !== '0.00';
+      
+      if (!hasContent) return false;
+
+      this.setData({
+        reportDate: draftData.reportDate || this.data.reportDate,
+        yesterdayBalance: draftData.yesterdayBalance || '0.00',
+        allDonations: draftData.allDonations || '',
+        otherDonation: draftData.otherDonation || '',
+        expenses: draftData.expenses || '',
+        shopName: draftData.shopName || this.data.shopName,
+        mpAccount: draftData.mpAccount || this.data.mpAccount,
+        hasDraft: true
+      });
+
+      if (draftData.allDonations) {
+        this.updateParseResult(draftData.allDonations);
+      }
+
+      console.log('[草稿箱] 已恢复上次未提交的草稿');
+      return true;
+    } catch (error) {
+      console.error('[草稿箱] 加载草稿失败:', error);
+      return false;
+    }
+  },
+
+  clearDraft() {
+    try {
+      wx.removeStorageSync(DRAFT_KEY);
+      this.setData({ hasDraft: false });
+      console.log('[草稿箱] 草稿已清空');
+    } catch (error) {
+      console.error('[草稿箱] 清空草稿失败:', error);
+    }
+  },
+
+  discardDraft() {
+    wx.showModal({
+      title: '提示',
+      content: '确定要丢弃当前草稿吗？',
+      success: (res) => {
+        if (res.confirm) {
+          this.clearDraft();
+          wx.showToast({ title: '已丢弃草稿', icon: 'none' });
+        }
+      }
+    });
+  },
+
   toggleSettings() {
     this.setData({
       showSettings: !this.data.showSettings
@@ -155,6 +260,8 @@ Page({
       balanceDiff: balanceDiff,
       adjustReason: isManualAdjust ? this.data.adjustReason : ''
     });
+
+    this.debouncedSaveDraft();
   },
 
   resetForm() {
@@ -174,9 +281,11 @@ Page({
             expenses: '',
             reportResult: '',
             showResult: false,
-            reportDate: `${yy}年${mm}月${dd}日`
+            reportDate: `${yy}年${mm}月${dd}日`,
+            hasDraft: false
           });
           
+          this.clearDraft();
           wx.showToast({ title: '已清空', icon: 'success' });
         }
       }
@@ -191,6 +300,8 @@ Page({
     if (field === 'allDonations') {
       this.updateParseResult(value);
     }
+
+    this.debouncedSaveDraft();
   },
 
   updateParseResult(text: string) {
@@ -404,6 +515,8 @@ Page({
         duration: 2000
       });
 
+      this.clearDraft();
+
       this.setData({
         reportResult: report,
         showResult: true
@@ -474,6 +587,8 @@ Page({
           balanceDiff: this.data.balanceDiff,
           adjustReason: adjustReason
         });
+
+        this.clearDraft();
 
         wx.showModal({
           title: '📶 网络信号较弱',

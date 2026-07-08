@@ -3,6 +3,12 @@
     <view class="header-title">{{shopName}}用餐汇报助手</view>
   </view>
 
+  <view class="draft-banner" wx:if="{{hasDraft}}">
+    <text class="draft-icon">📝</text>
+    <text class="draft-text">当前正在编辑保存的草稿</text>
+    <text class="draft-action" bindtap="discardDraft">[丢弃草稿]</text>
+  </view>
+
   <view class="offline-banner" wx:if="{{offlineQueueCount > 0}}" bindtap="syncOfflineQueueManually">
     <text class="offline-icon">📦</text>
     <text class="offline-text">有 {{offlineQueueCount}} 条离线账目待同步</text>

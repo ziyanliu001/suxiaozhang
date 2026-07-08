@@ -25,6 +25,32 @@ page {
   padding-bottom: 20rpx; 
 }
 
+.draft-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 16rpx 30rpx;
+  background: linear-gradient(135deg, #F0FFF4 0%, #E6FFFA 100%);
+  border-bottom: 2rpx solid #A7F3D0;
+}
+
+.draft-icon {
+  font-size: 28rpx;
+}
+
+.draft-text {
+  font-size: 24rpx;
+  color: #059669;
+}
+
+.draft-action {
+  font-size: 22rpx;
+  color: #0D9488;
+  font-weight: bold;
+  margin-left: 8rpx;
+}
+
 .content-scroll {
   flex: 1;
   padding: 30rpx;
