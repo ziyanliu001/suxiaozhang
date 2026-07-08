@@ -1,6 +1,8 @@
 import { DataService, formatMoney } from '../../utils/dataService';
 import { AuthService } from '../../utils/authService';
 import { parseDonorText } from '../../utils/parser';
+import { generateReportText } from '../../utils/reportGenerator';
+import { drawMeritPoster } from '../../utils/posterGenerator';
 
 Page({
   data: {
@@ -29,7 +31,10 @@ Page({
     systemBalance: 0,
     isManualAdjust: false,
     balanceDiff: 0,
-    adjustReason: ''
+    adjustReason: '',
+    isGeneratingPoster: false,
+    showPoster: false,
+    posterImage: ''
   },
 
   async onLoad() {
@@ -348,37 +353,19 @@ Page({
       const day = String(now.getDate()).padStart(2, '0');
       const dateString = `${year}-${month}-${day}`;
 
-      const report = `亲爱的家人们大家好[玫瑰]
-
-【${shopName}】用餐汇报
-${reportDate}
-
-一、爱心人士供养
-${listTexts.length ? listTexts.join('\n') : '暂无'}
-
-今日合计：${todayTotalStr}=${formatMoney(todayTotalSum)}
-
-二、店铺支出：${expenses || '无'}
-
-三、《店铺余额》
-${balanceFormula}=${formatMoney(newBalanceSum)}
-
-如有遗漏、错误请指正！
-
-四、没有杀戮，没有交易，只有感恩~为核心
-吃了就好，够了就好，做了就好，舍了就好，了了就好~五了精神
-
-五、弘扬中华传统文化，做有道德的中国人
-
-如果您有空欢迎回家看看，
-回家吃素和家人聊聊天，我们真诚等您回家！
-
-吃 素 一 日   健 康 一 天
-吃 素 一 日   环 保 一 天
-
-公众号：${mpAccount}
-
-—— 本报告由【素食小账本助手】智能生成。微信小程序搜索“素食小账本助手”，10秒轻松搞定日常餐报汇总！`;
+      const report = generateReportText({
+        shopName: shopName,
+        dateString: dateString,
+        reportDate: reportDate,
+        items: items,
+        totalAmount: donationsTotal,
+        otherDonation: b4_total,
+        yesterdayBalance: prevBalanceNum,
+        expenseAmount: expenseTotal,
+        todayBalance: newBalanceSum,
+        expenses: expenses,
+        mpAccount: mpAccount
+      });
 
       const receiptImages = await this.uploadReceiptImages();
 
@@ -425,6 +412,105 @@ ${balanceFormula}=${formatMoney(newBalanceSum)}
       data: this.data.reportResult,
       success() {
         wx.showToast({ title: '复制成功', icon: 'success' });
+      }
+    });
+  },
+
+  async generatePoster() {
+    if (this.data.isGeneratingPoster) {
+      return;
+    }
+
+    wx.showLoading({ title: '正在生成海报...' });
+    this.setData({ isGeneratingPoster: true });
+
+    try {
+      const { reportDate, otherDonation, expenses, shopName, mpAccount, parseResult, yesterdayBalance } = this.data;
+      const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
+      const b4_total = parseFloat(otherDonation) || 0;
+      const { items, totalAmount: donationsTotal, totalCount } = parseResult;
+
+      let expenseTotal = 0;
+      let expenseInput = expenses.trim();
+      if (expenseInput) {
+        expenseInput = expenseInput.replace(/元$/, '');
+        let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
+        if (expMatch) {
+          expenseTotal = parseFloat(expMatch[2]) || 0;
+        }
+      }
+
+      const todayTotalSum = donationsTotal + b4_total;
+      const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
+
+      const posterImage = await drawMeritPoster('meritPoster', {
+        shopName: shopName,
+        dateString: dateString,
+        reportDate: reportDate,
+        items: items,
+        totalCount: totalCount,
+        totalAmount: donationsTotal,
+        otherDonation: b4_total,
+        yesterdayBalance: prevBalanceNum,
+        expenseAmount: expenseTotal,
+        todayBalance: newBalanceSum,
+        mpAccount: mpAccount
+      });
+
+      this.setData({
+        posterImage: posterImage,
+        showPoster: true
+      });
+    } catch (error) {
+      console.error('[generatePoster] 异常:', error);
+      wx.showToast({ title: '生成海报失败，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ isGeneratingPoster: false });
+    }
+  },
+
+  closePoster() {
+    this.setData({ showPoster: false });
+  },
+
+  stopPropagation() {},
+
+  savePoster() {
+    const { posterImage } = this.data;
+    if (!posterImage) {
+      wx.showToast({ title: '海报图片为空', icon: 'none' });
+      return;
+    }
+
+    wx.saveImageToPhotosAlbum({
+      filePath: posterImage,
+      success: () => {
+        wx.showToast({ title: '保存成功', icon: 'success' });
+        this.closePoster();
+      },
+      fail: (err) => {
+        console.error('[savePoster] 保存失败:', err);
+        if (err.errMsg.includes('auth')) {
+          wx.showModal({
+            title: '提示',
+            content: '请授权允许保存图片到相册',
+            confirmText: '去授权',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting();
+              }
+            }
+          });
+        } else {
+          wx.showToast({ title: '保存失败', icon: 'none' });
+        }
       }
     });
   },

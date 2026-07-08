@@ -125,9 +125,31 @@
 
   <view class="footer-bar">
     <button class="action-btn btn-red" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">⚡ 一键生成汇报文本</button>
+    <button class="action-btn btn-gold" hover-class="btn-hover" bindtap="generatePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">🎨 生成功德海报</button>
     <view class="btn-group">
       <button class="btn-history" bindtap="goToHistory">📜 历史</button>
       <button class="btn-statistics" bindtap="goToStatistics">📊 统计</button>
+    </view>
+  </view>
+
+  <canvas canvas-id="meritPoster" class="poster-canvas" style="width: 680rpx; height: 960rpx;"></canvas>
+
+  <view class="poster-modal" wx:if="{{showPoster}}" bindtap="closePoster">
+    <view class="modal-mask"></view>
+    <view class="modal-content" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">功德海报预览</text>
+        <view class="modal-close" bindtap="closePoster">
+          <text class="close-icon">×</text>
+        </view>
+      </view>
+      <view class="modal-body">
+        <image class="poster-image" src="{{posterImage}}" mode="widthFix" />
+      </view>
+      <view class="modal-footer">
+        <button class="btn-close" bindtap="closePoster">关闭</button>
+        <button class="btn-save" bindtap="savePoster">保存到相册</button>
+      </view>
     </view>
   </view>
 </view>
