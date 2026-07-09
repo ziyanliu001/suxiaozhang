@@ -32,6 +32,9 @@ Page({
     showSettings: false,
     shopName: '海沧区雨花斋',
     mpAccount: '厦门海沧雨花斋！',
+    thankText: '感谢各位爱心人士的鼎力支持，感恩默默付出的义工团队！',
+    slogan1: '吃素一日  健康一天',
+    slogan2: '清晰记账  透明运行',
     donationPlaceholder: '可以直接把所有支持名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
     headerSafeTop: 85,
     isSubmitting: false,
@@ -150,7 +153,7 @@ Page({
   },
 
   saveDraft() {
-    const { reportDate, yesterdayBalance, allDonations, otherDonation, expenses, shopName, mpAccount } = this.data;
+    const { reportDate, yesterdayBalance, allDonations, otherDonation, expenses, shopName, mpAccount, thankText, slogan1, slogan2 } = this.data;
     
     const draftData = {
       reportDate,
@@ -160,6 +163,9 @@ Page({
       expenses,
       shopName,
       mpAccount,
+      thankText,
+      slogan1,
+      slogan2,
       saveTime: Date.now()
     };
 
@@ -193,6 +199,9 @@ Page({
         expenses: draftData.expenses || '',
         shopName: draftData.shopName || this.data.shopName,
         mpAccount: draftData.mpAccount || this.data.mpAccount,
+        thankText: draftData.thankText || this.data.thankText,
+        slogan1: draftData.slogan1 || this.data.slogan1,
+        slogan2: draftData.slogan2 || this.data.slogan2,
         hasDraft: true
       });
 
@@ -445,10 +454,8 @@ Page({
       let expenseInput = expenses.trim();
       if (expenseInput) {
         expenseInput = expenseInput.replace(/元$/, '');
-        let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
-        if (expMatch) {
-          expenseTotal = parseFloat(expMatch[2]) || 0;
-        }
+        const expenseMatches = expenseInput.match(/\d+(\.\d+)?/g) || [];
+        expenseTotal = expenseMatches.reduce((sum, val) => sum + Number(val), 0);
       }
       
       const donationsStr = formatMoney(donationsTotal);
@@ -482,7 +489,10 @@ Page({
         expenseAmount: expenseTotal,
         todayBalance: newBalanceSum,
         expenses: expenses,
-        mpAccount: mpAccount
+        mpAccount: mpAccount,
+        thankText: this.data.thankText,
+        slogan1: this.data.slogan1,
+        slogan2: this.data.slogan2
       });
 
       const receiptImages = await this.uploadReceiptImages();
@@ -539,10 +549,8 @@ Page({
         let expenseInput = expenses.trim();
         if (expenseInput) {
           expenseInput = expenseInput.replace(/元$/, '');
-          let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
-          if (expMatch) {
-            expenseTotal = parseFloat(expMatch[2]) || 0;
-          }
+          const expenseMatches = expenseInput.match(/\d+(\.\d+)?/g) || [];
+          expenseTotal = expenseMatches.reduce((sum, val) => sum + Number(val), 0);
         }
         
         const todayTotalSum = donationsTotal + b4_total;
@@ -565,7 +573,10 @@ Page({
           expenseAmount: expenseTotal,
           todayBalance: newBalanceSum,
           expenses: expenses,
-          mpAccount: mpAccount
+          mpAccount: mpAccount,
+          thankText: this.data.thankText,
+          slogan1: this.data.slogan1,
+          slogan2: this.data.slogan2
         });
 
         saveToQueue({
@@ -764,10 +775,8 @@ Page({
       let expenseInput = expenses.trim();
       if (expenseInput) {
         expenseInput = expenseInput.replace(/元$/, '');
-        let expMatch = expenseInput.match(/(.*?)\s*([\d.]+)\s*$/);
-        if (expMatch) {
-          expenseTotal = parseFloat(expMatch[2]) || 0;
-        }
+        const expenseMatches = expenseInput.match(/\d+(\.\d+)?/g) || [];
+        expenseTotal = expenseMatches.reduce((sum, val) => sum + Number(val), 0);
       }
 
       const todayTotalSum = donationsTotal + b4_total;
@@ -790,7 +799,9 @@ Page({
         yesterdayBalance: prevBalanceNum,
         expenseAmount: expenseTotal,
         todayBalance: newBalanceSum,
-        mpAccount: mpAccount
+        mpAccount: mpAccount,
+        thankText: this.data.thankText,
+        slogan1: this.data.slogan1
       });
 
       this.setData({
@@ -815,6 +826,24 @@ Page({
   },
 
   stopPropagation() {},
+
+  onThankTextInput(e: any) {
+    const value = e.detail.value;
+    this.setData({ thankText: value });
+    this.debouncedSaveDraft();
+  },
+
+  onSlogan1Input(e: any) {
+    const value = e.detail.value;
+    this.setData({ slogan1: value });
+    this.debouncedSaveDraft();
+  },
+
+  onSlogan2Input(e: any) {
+    const value = e.detail.value;
+    this.setData({ slogan2: value });
+    this.debouncedSaveDraft();
+  },
 
   savePoster() {
     const { posterImage } = this.data;

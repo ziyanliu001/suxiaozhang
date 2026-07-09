@@ -15,6 +15,9 @@ export interface ReportData {
   todayBalance: number;
   expenses: string;
   mpAccount: string;
+  thankText?: string;
+  slogan1?: string;
+  slogan2?: string;
 }
 
 export function formatMoney(value: number): string {
@@ -22,7 +25,11 @@ export function formatMoney(value: number): string {
 }
 
 export function generateReportText(data: ReportData): string {
-  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, todayBalance, expenses, mpAccount } = data;
+  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, todayBalance, expenses, mpAccount, thankText, slogan1, slogan2 } = data;
+  
+  const defaultThankText = '感谢大家的自愿赞助与默默付出的义工！';
+  const defaultSlogan1 = '吃 素 一 日   健 康 一 天';
+  const defaultSlogan2 = '吃 素 一 日   环 保 一 天';
   
   let text = `🌸 【${shopName}】今日用餐与爱心支持账目汇报（${reportDate}）\n\n`;
   
@@ -57,10 +64,10 @@ export function generateReportText(data: ReportData): string {
   
   text += `今日结余：${formatMoney(todayBalance)}元\n\n`;
   
-  text += `🙏 感谢大家的自愿赞助与默默付出的义工！\n\n`;
+  text += `🙏 ${thankText || defaultThankText}\n\n`;
   
-  text += `🌱 吃 素 一 日   健 康 一 天\n`;
-  text += `🌱 吃 素 一 日   环 保 一 天\n\n`;
+  text += `🌱 ${slogan1 || defaultSlogan1}\n`;
+  text += `🌱 ${slogan2 || defaultSlogan2}\n\n`;
   
   if (mpAccount) {
     text += `公众号：${mpAccount}\n\n`;

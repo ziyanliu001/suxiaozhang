@@ -15,6 +15,8 @@ export interface PosterData {
   expenseAmount: number;
   todayBalance: number;
   mpAccount: string;
+  thankText?: string;
+  slogan1?: string;
 }
 
 const BG_COLOR = '#FAF7F2';
@@ -63,7 +65,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.fillStyle = PRIMARY_COLOR;
           ctx.font = 'bold 24px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('清晰记账 透明运行', width / 2, 60);
+          ctx.fillText(data.slogan1 || '清晰记账 透明运行', width / 2, 60);
 
           ctx.fillStyle = SECONDARY_COLOR;
           ctx.font = '18px sans-serif';
@@ -140,7 +142,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
             ctx.fillText(`¥${data.otherDonation.toFixed(2)}`, 100, expenseY + 25);
           }
 
-          const listY = cardY + cardHeight + 15;
+          const listY = cardY + cardHeight + 35;
           ctx.fillStyle = PRIMARY_COLOR;
           ctx.font = 'bold 18px sans-serif';
           ctx.textAlign = 'center';
@@ -194,7 +196,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.fillStyle = LIGHT_TEXT;
           ctx.font = '12px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('🙏 感谢大家对社区助餐的支持', width / 2, footerY - 8);
+          ctx.fillText(`🙏 ${data.thankText || '感谢大家对社区助餐的支持'}`, width / 2, footerY - 8);
 
           ctx.fillStyle = '#999999';
           ctx.font = '12px sans-serif';

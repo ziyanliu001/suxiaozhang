@@ -292,7 +292,8 @@ page {
 .income-breakdown {
   background-color: #f7f8fa;
   border-radius: 16rpx;
-  padding: 20rpx;
+  padding: 24rpx;
+  margin-top: 24rpx;
 }
 
 .breakdown-row {
