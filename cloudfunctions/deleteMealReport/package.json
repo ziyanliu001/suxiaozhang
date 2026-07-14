@@ -1,0 +1,9 @@
+{
+  "name": "deleteMealReport",
+  "version": "1.0.0",
+  "description": "云函数：删除单条餐报记录（管理员权限）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

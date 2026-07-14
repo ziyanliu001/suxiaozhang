@@ -1,0 +1,156 @@
+<view class="help-page-container">
+
+  <view class="help-nav-bar" style="padding-top: {{navTop}}px;">
+    <text class="nav-back" bindtap="onGoBack">‹ 返回</text>
+    <text class="nav-title">📖 帮助中心</text>
+    <text class="nav-placeholder"></text>
+  </view>
+
+  <view class="help-tab-bar" style="top: {{contentTop}}px;">
+    <view class="tab-item {{activeTab === 'manager' ? 'active' : ''}}" bindtap="onSwitchTab" data-tab="manager">
+      🏪 店长篇
+    </view>
+    <view class="tab-item {{activeTab === 'finance' ? 'active' : ''}}" bindtap="onSwitchTab" data-tab="finance">
+      🔑 财务篇
+    </view>
+    <view class="tab-item {{activeTab === 'volunteer' ? 'active' : ''}}" bindtap="onSwitchTab" data-tab="volunteer">
+      ❤️ 志工篇
+    </view>
+    <view class="tab-item {{activeTab === 'faq' ? 'active' : ''}}" bindtap="onSwitchTab" data-tab="faq">
+      ❓ 常见问题
+    </view>
+  </view>
+
+  <scroll-view scroll-y class="help-content-scroll" style="margin-top: {{contentTop + 56}}px;">
+
+    <view class="guide-section" wx:if="{{activeTab === 'manager'}}">
+      <view class="section-hero">
+        <text class="hero-title">🏪 店长 / 负责人 3 步管理指南</text>
+        <text class="hero-sub">建立门店信任网络，一键审核义工记账权限</text>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">Step 1</text>
+          <text class="step-title">建立 / 绑定本门店</text>
+        </view>
+        <view class="step-body">
+          首次进入小程序时，选择或创建您的雨花斋门店（如"海沧区雨花斋"），系统将自动分配该门店唯一的 <text class="highlight">storeId</text>。
+        </view>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">Step 2</text>
+          <text class="step-title">生成并打印高颜值"门店绑定海报"</text>
+        </view>
+        <view class="step-body">
+          在首页点击 <text class="highlight">【🖼️ 生成门店邀请海报】</text>，系统将自动合成带雨花 Logo 和门店专属二维码的高清海报。点击 <text class="highlight">【保存到相册】</text> 后，可直接打印贴在财务桌上或分享至微信群。
+        </view>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">Step 3</text>
+          <text class="step-title">审批义工绑定申请</text>
+        </view>
+        <view class="step-body">
+          当新义工扫码申请财务权限时，首页顶部会弹出黄色提醒。点击 <text class="highlight">【同意授权】</text> 即可赋予其记账权限，防止陌生人随意动账。
+        </view>
+      </view>
+    </view>
+
+    <view class="guide-section" wx:if="{{activeTab === 'finance'}}">
+      <view class="section-hero">
+        <text class="hero-title">🔑 财务义工每日 1 分钟记账法</text>
+        <text class="hero-sub">告别手工计算器，收工对账高效精准</text>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">Step 1</text>
+          <text class="step-title">核对汇报日期与昨日余额</text>
+        </view>
+        <view class="step-body">
+          选择开餐日期，系统将自动检索并关联 <text class="highlight">前一次开餐的期末结余</text>（无需手动翻看旧账）。若遇休餐，可点击"历史"按钮一键代入。
+        </view>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">Step 2</text>
+          <text class="step-title">批量粘贴名单与填报支出</text>
+        </view>
+        <view class="step-body">
+          点击 <text class="highlight">【批量粘贴】</text>，把微信群里的赞助名单直接复制进来（如：张三 10 李四 20），系统自动解析识别总额；如有大额支出，填入"店铺租金6000 义工服2106"，系统会自动拆解为透明子项。
+        </view>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">Step 3</text>
+          <text class="step-title">一键公示海报与导出表格</text>
+        </view>
+        <view class="step-body">
+          点击 <text class="highlight">【生成公示海报】</text> 发送至微信群；月底可点击 <text class="highlight">【导出表格】</text> 原生生成 Excel/CSV 报表发至手机存储，零广告外链。
+        </view>
+      </view>
+    </view>
+
+    <view class="guide-section" wx:if="{{activeTab === 'volunteer'}}">
+      <view class="section-hero">
+        <text class="hero-title">❤️ 志工大众 / 现场家人指南</text>
+        <text class="hero-sub">查看收支透明账本，传播爱心宣导文案</text>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">1</text>
+          <text class="step-title">实时查看收支透明账本</text>
+        </view>
+        <view class="step-body">
+          在【统计分析页】随时查阅本店爱心汇入、日常开销与大额支出明细，账目 100% 绝对公开透明。
+        </view>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">2</text>
+          <text class="step-title">一键生成感恩文案与海报</text>
+        </view>
+        <view class="step-body">
+          点击 <text class="highlight">【⚡ 生成感恩文案】</text>，一键复制带有今日用餐人次和义工奉献工时的温馨文本，分享给爱心家人。
+        </view>
+      </view>
+    </view>
+
+    <view class="guide-section" wx:if="{{activeTab === 'faq'}}">
+      <view class="faq-item">
+        <view class="faq-q">❓ 切换汇报日期后，"昨日余额"为什么没有自动变？</view>
+        <view class="faq-a">
+          系统会严格按照选定日期的前一天倒查历史结余。如果在手机真机上因为网络问题未能自动出数，可点击"昨日余额"旁边的 <text class="highlight">【🔄 刷新图标】</text> 重新抓取，或者点击 <text class="highlight">【历史】</text> 按钮弹窗手动点击代入。
+        </view>
+      </view>
+
+      <view class="faq-item">
+        <view class="faq-q">❓ 大额支出被加成了一个总数字，怎么显示独立明细？</view>
+        <view class="faq-a">
+          录入大额支出时，建议按 <text class="highlight">"事由+金额"</text> 格式输入（如：店铺租金6000 义工服2106），系统内置的智能正则引擎会自动拆解为独立子项。如果旧数据缺失事由，可以在【统计分析】卡片上点击 <text class="highlight">【✏️ 点击补全事由】</text> 现场修正。
+        </view>
+      </view>
+
+      <view class="faq-item">
+        <view class="faq-q">❓ 导出导出的表格在手机里用 WPS/Excel 打开乱码怎么办？</view>
+        <view class="faq-a">
+          无需担心！本系统生成的 CSV 表格已强制注入 UTF-8 BOM 头部标识，在 iOS 和 Android 手机上直接调用微信文档打开时，所有中文事由与数字均可完美兼容不乱码。
+        </view>
+      </view>
+    </view>
+
+    <view class="help-footer">
+      <text class="footer-text">🙏 感恩您的发心护持，愿善有善报福慧双增</text>
+    </view>
+
+  </scroll-view>
+
+</view>

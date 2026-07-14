@@ -2,5 +2,7 @@
   "navigationBarTitleText": "",
   "navigationBarBackgroundColor": "#d32f2f",
   "navigationBarTextStyle": "white",
-  "usingComponents": {}
+  "usingComponents": {
+    "store-picker": "../../components/store-picker/store-picker"
+  }
 }

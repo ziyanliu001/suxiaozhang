@@ -1,0 +1,222 @@
+/* 极简大方胶囊容器 */
+.store-picker-capsule {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #FFFFFF;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 40rpx;
+  padding: 10rpx 28rpx;
+  height: 64rpx;
+  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.06);
+  box-sizing: border-box;
+  transition: opacity 0.2s ease;
+}
+
+.capsule-hover {
+  opacity: 0.8;
+}
+
+/* 定位图标 */
+.store-picker-capsule .pin-icon {
+  font-size: 30rpx;
+  margin-right: 10rpx;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 门店名称：大幅提升字号与加粗 */
+.store-picker-capsule .store-name {
+  font-size: 30rpx !important;
+  font-weight: bold !important;
+  color: #333333;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* 下拉箭头 */
+.store-picker-capsule .arrow {
+  font-size: 20rpx;
+  color: #888888;
+  margin-left: 12rpx;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ===== 关键突破：高层级全屏遮罩蒙层 ===== */
+.store-sheet-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 99999 !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.store-sheet-backdrop.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 底部滑出面板 */
+.store-sheet-panel {
+  width: 100%;
+  background: #FBF9F5;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  padding: 32rpx 28rpx;
+  box-sizing: border-box;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+  max-height: 75vh;
+}
+
+.store-sheet-backdrop.show .store-sheet-panel {
+  transform: translateY(0);
+}
+
+/* ===== 头部栏 ===== */
+.sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #EFE6D8;
+}
+
+.header-left {
+  flex: 1;
+  min-width: 0;
+  padding-right: 20rpx;
+}
+
+.sheet-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+  display: block;
+}
+
+.current-active-tip {
+  font-size: 22rpx;
+  color: #8C1D18;
+  margin-top: 6rpx;
+  display: block;
+  font-weight: 500;
+}
+
+.sheet-close-btn {
+  font-size: 36rpx;
+  color: #999999;
+  padding: 10rpx;
+  flex-shrink: 0;
+}
+
+/* ===== 滚动列表 ===== */
+.sheet-scroll-list {
+  max-height: 55vh;
+  margin-top: 20rpx;
+}
+
+/* 门店分组卡片基础样式 */
+.store-group-card {
+  position: relative;
+  background: #FFFFFF;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 20rpx;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-sizing: border-box;
+}
+
+/* 核心：选中态卡片 - 采用左侧高亮烫金线 + 柔和内阴影 */
+.store-group-card.active-store {
+  border-color: #8C1D18 !important;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF9 100%) !important;
+  box-shadow: 0 8rpx 24rpx rgba(140, 29, 24, 0.08) !important;
+  border-left: 8rpx solid #8C1D18 !important;
+}
+
+/* 门店标题 */
+.store-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 18rpx;
+}
+
+.store-icon {
+  font-size: 32rpx;
+  margin-right: 12rpx;
+  line-height: 1;
+}
+
+.store-name-text {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+  line-height: 1;
+}
+
+/* 身份胶囊选择行 */
+.role-selector-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+/* 身份可点击胶囊 */
+.role-choice-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 10rpx 22rpx;
+  border-radius: 32rpx;
+  background: #F8F9FA;
+  border: 1rpx solid #E9ECEF;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.role-choice-pill .role-icon {
+  font-size: 24rpx;
+  margin-right: 8rpx;
+  line-height: 1;
+}
+
+.role-choice-pill .role-label {
+  font-size: 24rpx;
+  color: #555555;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* 选中态对勾，带舒适边距 */
+.role-choice-pill .check-mark {
+  font-size: 20rpx;
+  color: #8C1D18;
+  margin-left: 10rpx;
+  font-weight: bold;
+  line-height: 1;
+}
+
+/* 选中高亮状态 (朱红浅底) */
+.role-choice-pill.selected {
+  border-color: #8C1D18 !important;
+  background: #FFEBEE !important;
+}
+
+.role-choice-pill.selected .role-label {
+  color: #8C1D18 !important;
+  font-weight: bold;
+}

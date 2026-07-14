@@ -1,0 +1,204 @@
+const cloud = require('wx-server-sdk');
+
+cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+const db = cloud.database();
+const _ = db.command;
+
+function parseAmountFromText(textStr) {
+  if (!textStr) return 0;
+  const matches = String(textStr).match(/\d+(\.\d+)?/g);
+  if (!matches) return 0;
+  return matches.reduce((sum, num) => sum + parseFloat(num), 0);
+}
+
+exports.main = async (event, context) => {
+  const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate } = event;
+  const { OPENID } = cloud.getWXContext();
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+  const todayStr = `${currentYear}-${currentMonth}-${String(now.getDate()).padStart(2, '0')}`;
+
+  let startDateStr = startDate || '';
+  let endDateStr = endDate || '';
+  let isCurrentPeriod = false;
+  let periodLabel = '';
+
+  // 1. 精确计算查询时间边界
+  if (tabType === 'month') {
+    const year = selectedYear || currentYear;
+    const month = selectedMonth || currentMonth;
+    startDateStr = `${year}-${month}-01`;
+    periodLabel = `${year}年${month}月`;
+
+    if (String(year) === String(currentYear) && String(month) === String(currentMonth)) {
+      endDateStr = todayStr;
+      isCurrentPeriod = true;
+    } else {
+      const lastDay = new Date(year, parseInt(month, 10), 0).getDate();
+      endDateStr = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+    }
+  } else if (tabType === 'year') {
+    const year = selectedYear || currentYear;
+    startDateStr = `${year}-01-01`;
+    periodLabel = `${year}年度`;
+
+    if (String(year) === String(currentYear)) {
+      endDateStr = todayStr;
+      isCurrentPeriod = true;
+    } else {
+      endDateStr = `${year}-12-31`;
+    }
+  } else if (tabType === 'week') {
+    const dayOfWeek = now.getDay() || 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek + 1);
+    const mondayStr = monday.toISOString().split('T')[0];
+    startDateStr = mondayStr;
+    endDateStr = todayStr;
+    isCurrentPeriod = true;
+    periodLabel = '本周';
+  } else if (tabType === 'custom') {
+    if (!startDateStr || !endDateStr) {
+      return { success: false, errMsg: '自定义模式必须传入 startDate 和 endDate' };
+    }
+    periodLabel = `${startDateStr} ~ ${endDateStr}`;
+  } else {
+    // 默认本周
+    const dayOfWeek = now.getDay() || 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek + 1);
+    startDateStr = monday.toISOString().split('T')[0];
+    endDateStr = todayStr;
+    isCurrentPeriod = true;
+    periodLabel = '本周';
+  }
+
+  console.log(`📅 [getStatisticsData] 类型: ${tabType}, 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}`);
+
+  try {
+    // 2. 数据库条件过滤查询
+    let whereConditions = {
+      dateString: _.gte(startDateStr).and(_.lte(endDateStr))
+    };
+
+    if (shopName && shopName !== '全部门店') {
+      whereConditions.shopName = shopName;
+    }
+
+    const recordRes = await db.collection('report_logs')
+      .where(whereConditions)
+      .limit(1000)
+      .get();
+
+    const records = recordRes.data || [];
+
+    // 3. 核心指标统计累加
+    let totalIncome = 0;
+    let selfSponsor = 0;
+    let otherIncome = 0;
+    let totalExpense = 0;
+    let foodExpense = 0;
+    let majorExpense = 0;
+    let totalDiningPeople = 0;
+    let totalVolunteers = 0;
+    let totalVolunteerHours = 0;
+    const materialSummary = [];
+
+    const FIXED_EXPENSE_KEYWORDS = ['租金', '房租', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置', '大额', '专项'];
+
+    records.forEach(r => {
+      const otherDonation = parseFloat(r.otherDonation) || 0;
+      const listDonationTotal = parseFloat(r.listDonationTotal) || 0;
+      const expenseAmount = parseFloat(r.expenseAmount) || 0;
+
+      totalIncome += (otherDonation + listDonationTotal);
+      selfSponsor += listDonationTotal;
+      otherIncome += otherDonation;
+      totalExpense += expenseAmount;
+
+      // 食材支出
+      let dailyExpense = parseFloat(r.dailyExpenseTotal) || 0;
+      const dailyExpenseText = r.dailyExpenseText || r.dailyIngredientText || '';
+      if (dailyExpense === 0 && dailyExpenseText) {
+        dailyExpense = parseAmountFromText(dailyExpenseText);
+      }
+      if (dailyExpense === 0 && expenseAmount > 0) {
+        const textContext = dailyExpenseText || r.expenses || r.remark || '';
+        const hasFixedKeyword = FIXED_EXPENSE_KEYWORDS.some(kw => textContext.includes(kw));
+        if (!hasFixedKeyword) {
+          dailyExpense = expenseAmount;
+        }
+      }
+      foodExpense += dailyExpense;
+
+      // 大额专项支出
+      let fixedExpense = parseFloat(r.fixedExpenseTotal) || 0;
+      const fixedExpenseText = r.fixedExpenseText || r.fixedMajorText || r.remark || '';
+      if (fixedExpense === 0 && fixedExpenseText) {
+        fixedExpense = parseAmountFromText(fixedExpenseText);
+      }
+      if (fixedExpense === 0 && expenseAmount > 0) {
+        const textContext = fixedExpenseText || r.expenses || r.remark || '';
+        const hasFixedKeyword = FIXED_EXPENSE_KEYWORDS.some(kw => textContext.includes(kw));
+        if (hasFixedKeyword) {
+          fixedExpense = expenseAmount;
+        }
+      }
+      majorExpense += fixedExpense;
+
+      totalDiningPeople += parseFloat(r.diningCount) || 0;
+      totalVolunteers += parseFloat(r.volunteerCount) || 0;
+      totalVolunteerHours += parseFloat(r.volunteerHours) || 0;
+
+      if (r.materials && Array.isArray(r.materials) && r.materials.length > 0) {
+        r.materials.forEach(m => {
+          if (m.item) {
+            materialSummary.push(`${m.item}${m.quantity ? m.quantity + (m.unit || '') : ''}`);
+          }
+        });
+      } else if (r.materials && typeof r.materials === 'string' && r.materials.trim()) {
+        materialSummary.push(r.materials.trim());
+      }
+    });
+
+    // 4. 计算单餐平均食材成本
+    const costPerMeal = totalDiningPeople > 0
+      ? (foodExpense / totalDiningPeople).toFixed(2)
+      : '0.00';
+
+    // 5. 本期净积累
+    const netAccumulation = (totalIncome - totalExpense).toFixed(2);
+
+    const dateRangeText = isCurrentPeriod
+      ? `${startDateStr} ~ ${endDateStr} (至今)`
+      : `${startDateStr} ~ ${endDateStr}`;
+
+    return {
+      success: true,
+      tabType,
+      periodLabel,
+      dateRangeText,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      totalIncome: totalIncome.toFixed(2),
+      selfSponsor: selfSponsor.toFixed(2),
+      otherIncome: otherIncome.toFixed(2),
+      totalExpense: totalExpense.toFixed(2),
+      foodExpense: foodExpense.toFixed(2),
+      majorExpense: majorExpense.toFixed(2),
+      netAccumulation,
+      totalDiningPeople,
+      totalVolunteers,
+      totalVolunteerHours,
+      costPerMeal,
+      recordCount: records.length,
+      materialSummaryText: materialSummary.length > 0 ? materialSummary.join('；') : '暂无捐赠明细记录'
+    };
+
+  } catch (err) {
+    console.error('💥 getStatisticsData 失败:', err);
+    return { success: false, errMsg: err.message || '统计查询失败' };
+  }
+};

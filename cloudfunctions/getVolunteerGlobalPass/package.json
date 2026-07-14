@@ -1,0 +1,9 @@
+{
+  "name": "getVolunteerGlobalPass",
+  "version": "1.0.0",
+  "description": "跨店义工工时汇总",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

@@ -1,50 +1,96 @@
-<view class="page-container">
-  <view class="custom-nav" style="padding-top: {{navTop}}px;">
-    <view class="nav-left" bindtap="goBack">
-      <text class="back-icon">←</text>
+<view class="history-page-wrapper">
+  <view class="fixed-top-header">
+    <view class="status-bar-spacer" style="height: {{statusBarHeight}}px;"></view>
+
+    <view class="nav-title-bar" style="height: {{navBarHeight}}px;">
+      <view class="btn-back-arrow" bindtap="goBack">←</view>
+      <text class="page-title-txt">历史餐报记录</text>
+      <view class="nav-right-placeholder"></view>
     </view>
-    <text class="nav-title">历史餐报记录</text>
-    <view class="nav-right"></view>
+
+    <view class="admin-switch" wx:if="{{isAdmin}}">
+      <view class="switch-label">查看模式</view>
+      <view class="switch-btn {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">全店汇总</view>
+      <view class="switch-btn {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">个人历史</view>
+    </view>
+
+    <view class="filter-pills-bar">
+      <view class="filter-controls-group">
+        <picker mode="selector" range="{{storeFilterOptions}}" value="{{storeFilterIndex}}" bindchange="onStoreFilterChange">
+          <view class="filter-pill">
+            <text class="lbl">{{selectedStoreName || '全部门店'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+
+        <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
+          <view class="filter-pill">
+            <text class="lbl">{{selectedMonthStr || '全部月份'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <view class="btn-clear-empty-pill" bindtap="onClearDirtyData">
+        <text class="icon">🗑️</text>
+        <text class="lbl">清理空记录</text>
+      </view>
+    </view>
   </view>
 
-  <view class="admin-switch" wx:if="{{isAdmin}}">
-    <view class="switch-label">查看模式</view>
-    <view class="switch-btn {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">全店汇总</view>
-    <view class="switch-btn {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">个人历史</view>
-  </view>
+  <scroll-view scroll-y class="history-scroll-list" style="padding-top: {{totalHeaderHeight}}px;">
+    <view class="history-tools-bar">
+      <view class="btn-fix-ledger" bindtap="onManualRecalculateLedger">
+        <text class="icon">🔄</text>
+        <text class="lbl">一键校准全线结余</text>
+      </view>
+    </view>
 
-  <scroll-view class="content-section" style="margin-top: {{isAdmin ? contentTop + 80 : contentTop}}px;" scroll-y>
-    <view class="report-list" wx:if="{{!loading && reports.length > 0}}">
-      <view wx:for="{{reports}}" wx:key="{{item._id || item._localId}}" class="report-card" data-index="{{index}}">
-        <view class="card-header">
-          <text class="card-date">{{item.dateString}}</text>
-          <view class="card-header-right">
-            <view class="delete-btn" bindtap="onDeleteRecord" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
-              <text class="delete-icon">🗑️</text>
-              <text class="delete-text">[删除]</text>
+    <view class="history-list-box" wx:if="{{!loading && filteredReports.length > 0}}">
+      <view wx:for="{{filteredReports}}" wx:key="_id" class="history-card {{item.isLocked ? 'locked-card' : ''}}" data-index="{{index}}" wx:if="{{item.dateString}}">
+
+        <view class="card-top-bar">
+          <view class="date-group">
+            <text class="record-date">{{item.dateString}}</text>
+            <text class="store-badge">{{item.shopName || '未命名'}}</text>
+          </view>
+
+          <view class="status-badge-group">
+            <view class="stamp-badge {{item.approvalStatus === 'APPROVED' ? 'approved' : ''}}" wx:if="{{item.approvalStatus === 'PENDING_APPROVAL' && isManagerOrAdmin}}" bindtap="onManagerApprove" data-id="{{item._id}}">
+              <text>{{item.approvalStatus === 'APPROVED' ? '✅ 店长已确认' : '⏳ 待店长确认'}}</text>
             </view>
-            <text class="card-shop">{{item.shopName || '店铺'}}</text>
+            <view class="stamp-badge {{item.approvalStatus === 'AUDITED_LOCKED' ? 'locked' : ''}}" wx:if="{{isFinanceOrAdmin}}" bindtap="onFinanceLockAudit" data-id="{{item._id}}">
+              <text>{{item.approvalStatus === 'AUDITED_LOCKED' ? '🔒 稽核已锁定' : '🔓 待稽核'}}</text>
+            </view>
           </view>
         </view>
 
-        <view class="card-divider"></view>
+        <view class="net-income-banner {{item.netChange >= 0 ? 'positive' : 'negative'}}">
+          <text class="banner-lbl">净增：</text>
+          <text class="banner-val">{{item.netChange >= 0 ? '+' : ''}}¥{{item.netChangeStr}}</text>
+        </view>
 
-        <view class="card-body">
-          <view class="stat-item">
-            <text class="stat-label">昨日余额</text>
-            <text class="stat-value">¥{{item.yesterdayBalanceStr}}</text>
+        <view class="card-header-tags">
+          <text class="metric-tag info" wx:if="{{item.diningCount > 0}}">👥 结缘 {{item.diningCount}}人</text>
+          <text class="metric-tag info" wx:if="{{item.volunteerCount > 0}}">❤️ 义工 {{item.volunteerCount}}人</text>
+        </view>
+
+        <view class="balance-4grid">
+          <view class="grid-cell">
+            <text class="cell-lbl">昨日余额</text>
+            <text class="cell-val bold">¥{{item.yesterdayBalanceStr}}</text>
           </view>
-          <view class="stat-item">
-            <text class="stat-label">爱心收入</text>
-            <text class="stat-value income">¥{{item.totalIncomeStr}}</text>
+          <view class="grid-cell">
+            <text class="cell-lbl">爱心收入</text>
+            <text class="cell-val green">+¥{{item.totalIncomeStr}}</text>
           </view>
-          <view class="stat-item">
-            <text class="stat-label">今日支出</text>
-            <text class="stat-value expense">¥{{item.expenseAmountStr}}</text>
+          <view class="grid-cell">
+            <text class="cell-lbl">今日支出</text>
+            <text class="cell-val red">-¥{{item.expenseAmountStr}}</text>
           </view>
-          <view class="stat-item">
-            <text class="stat-label">今日结余</text>
-            <text class="stat-value balance">¥{{item.todayBalanceStr}}</text>
+          <view class="grid-cell">
+            <text class="cell-lbl">今日结余</text>
+            <text class="cell-val orange bold">¥{{item.todayBalanceStr}}</text>
           </view>
         </view>
 
@@ -53,9 +99,10 @@
           <view class="receipts-list">
             <image 
               wx:for="{{item.receiptImages}}" 
+              wx:for-item="img"
               wx:key="index" 
               class="receipt-thumb" 
-              src="{{item}}" 
+              src="{{img}}" 
               mode="aspectFill"
               bindtap="previewReceipt"
               data-images="{{item.receiptImages}}"
@@ -64,24 +111,116 @@
           </view>
         </view>
 
-        <view class="card-footer">
-          <button class="copy-btn" hover-class="btn-hover" bindtap="copyReport" data-index="{{index}}">
-            <text class="copy-icon">📋</text>
-            <text>复制此日报文本</text>
+        <view class="card-bottom-actions">
+          <button class="btn-action-pill btn-share-wechat" open-type="share" catchtap="onShareReportToWeChat" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
+            <text class="icon">💬</text>
+            <text class="lbl">分享到微信</text>
           </button>
+
+          <block wx:if="{{!item.isLocked}}">
+            <view class="btn-action-pill btn-edit-record" bindtap="onEditReport" data-index="{{index}}">
+              <text class="icon">✏️</text>
+              <text class="lbl">编辑此记录</text>
+            </view>
+          </block>
+
+          <block wx:else>
+            <view class="locked-tip-tag">
+              <text>已由 {{item.auditedBy || '财务'}} 于 {{item.auditTime || ''}} 稽核锁定</text>
+            </view>
+            <view class="btn-action-pill btn-unlock-record" wx:if="{{isFinanceOrAdmin}}" bindtap="onUnlockRecord" data-id="{{item._id}}">
+              <text class="icon">🔓</text>
+              <text class="lbl">申请解封</text>
+            </view>
+          </block>
         </view>
+
       </view>
     </view>
 
-    <view class="empty-state" wx:if="{{!loading && reports.length === 0}}">
-      <text class="empty-icon">📋</text>
-      <text class="empty-text">暂无历史餐报记录</text>
-      <text class="empty-hint">今天还没有提交过餐报，快去记录一笔吧</text>
-      <button class="btn-go-home" hover-class="btn-hover" bindtap="goToHome">去录入今日餐报</button>
+    <view class="history-empty-box" wx:if="{{!loading && filteredReports.length === 0}}">
+      <text class="empty-icon">🍃</text>
+      <text class="empty-text">该筛选条件下暂无历史餐报记录</text>
+      <button class="btn-go-home" bindtap="goToHome">去录入今日餐报</button>
     </view>
 
     <view class="loading-state" wx:if="{{loading}}">
       <text class="loading-text">加载中...</text>
     </view>
   </scroll-view>
+
+  <view class="edit-modal-mask" wx:if="{{showEditModal}}" bindtap="onCancelEdit">
+    <view class="edit-modal-box" catchtap="stopPropagation">
+      <view class="edit-modal-header">
+        <text class="edit-modal-title">✏️ 编辑餐报记录</text>
+        <view class="btn-close-edit" bindtap="onCancelEdit">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="edit-modal-body">
+        <view class="edit-form-group">
+          <text class="form-label">日期</text>
+          <text class="form-value">{{editingRecord.dateString || editingRecord.reportDate}}</text>
+        </view>
+        <view class="edit-form-group">
+          <text class="form-label">门店</text>
+          <text class="form-value">{{editingRecord.shopName || '未命名'}}</text>
+        </view>
+        <view class="edit-form-group">
+          <text class="form-label">昨日余额</text>
+          <input type="digit" model:value="{{editingRecord.yesterdayBalance}}" class="form-input" placeholder="0.00" bindinput="onEditInput" data-field="yesterdayBalance" />
+        </view>
+        <view class="edit-form-group">
+          <text class="form-label">爱心收入</text>
+          <input type="digit" model:value="{{editingRecord.totalIncome}}" class="form-input" placeholder="0.00" bindinput="onEditInput" data-field="totalIncome" />
+        </view>
+        <view class="edit-form-group">
+          <text class="form-label">今日支出</text>
+          <input type="digit" model:value="{{editingRecord.expenseAmount}}" class="form-input" placeholder="0.00" bindinput="onEditInput" data-field="expenseAmount" />
+        </view>
+        <view class="edit-form-group">
+          <text class="form-label">今日结余</text>
+          <text class="form-value orange">¥{{editingRecord.calculatedTodayBalance || 0}}</text>
+        </view>
+
+        <view class="form-section-divider"></view>
+        <view class="form-section-title">🧡 用餐与义工数据</view>
+        <view class="edit-form-grid">
+          <view class="edit-form-group-half">
+            <text class="form-label">结缘用餐(人)</text>
+            <input type="number" model:value="{{editingRecord.diningPeople}}" class="form-input" placeholder="0" bindinput="onEditInput" data-field="diningPeople" />
+          </view>
+          <view class="edit-form-group-half">
+            <text class="form-label">到岗义工(人)</text>
+            <input type="number" model:value="{{editingRecord.volunteers}}" class="form-input" placeholder="0" bindinput="onEditInput" data-field="volunteers" />
+          </view>
+        </view>
+
+        <view class="form-section-divider"></view>
+        <view class="form-section-title">📷 支出凭证 / 小票管理</view>
+        <view class="image-manage-grid">
+          <block wx:for="{{editingRecord.receiptImageList || []}}" wx:key="index">
+            <view class="img-thumb-item">
+              <image class="thumb-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewEditImage" data-src="{{item}}" />
+              <view class="btn-delete-img" bindtap="onRemoveEditImage" data-index="{{index}}">✕</view>
+            </view>
+          </block>
+          <view class="btn-add-img" bindtap="onChooseNewEditImage" wx:if="{{canAddEditImage}}">
+            <text class="plus-icon">+</text>
+            <text class="add-text">添加小票</text>
+          </view>
+        </view>
+
+        <view class="form-section-divider"></view>
+        <view class="form-section-title">📝 修改说明 (可选)</view>
+        <view class="edit-form-group">
+          <input type="text" model:value="{{editingRecord.modifyReason}}" class="form-input-full" placeholder="例如：补录发票 / 修正用餐人数" bindinput="onEditInput" data-field="modifyReason" />
+        </view>
+      </scroll-view>
+
+      <view class="edit-modal-footer">
+        <button class="btn-cancel-edit" bindtap="onCancelEdit">取消</button>
+        <button class="btn-confirm-edit" bindtap="onConfirmEditHistory">确认保存并重算</button>
+      </view>
+    </view>
+  </view>
 </view>

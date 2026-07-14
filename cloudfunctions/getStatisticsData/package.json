@@ -1,0 +1,9 @@
+{
+  "name": "getStatisticsData",
+  "version": "1.0.0",
+  "description": "按时间区间严格过滤并聚合统计数据",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

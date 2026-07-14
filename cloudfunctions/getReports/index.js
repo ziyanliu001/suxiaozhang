@@ -1,13 +1,11 @@
 const cloud = require('wx-server-sdk');
 
-cloud.init({
-  env: 'cloudbase-d8g7hg2bf851750ab'
-});
+cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  const { startDate, endDate, shopName, limit = 100, viewMode } = event;
+  const { startDate, endDate, shopName, mpAccount, limit = 100, viewMode } = event;
   const { OPENID } = cloud.getWXContext();
 
   try {
@@ -28,6 +26,10 @@ exports.main = async (event, context) => {
 
     if (shopName) {
       whereConditions.shopName = shopName;
+    }
+
+    if (mpAccount) {
+      whereConditions.mpAccount = mpAccount;
     }
 
     const shouldFilterByOpenid = (viewMode === 'personal') || (userRole !== 'admin' && viewMode !== 'all');

@@ -1,0 +1,9 @@
+{
+  "name": "ocrExpenseReceipt",
+  "version": "1.0.0",
+  "description": "OCR小票识别与自动分类",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

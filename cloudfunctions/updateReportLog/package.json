@@ -1,0 +1,9 @@
+{
+  "name": "updateReportLog",
+  "version": "1.0.0",
+  "description": "更新餐报记录（支持跨门店权限校验）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

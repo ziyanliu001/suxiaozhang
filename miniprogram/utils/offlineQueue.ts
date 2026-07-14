@@ -23,6 +23,9 @@ export interface OfflineReportData {
   adjustedBalance: number;
   balanceDiff: number;
   adjustReason: string;
+  materials?: { donor: string; item: string; quantity: string; unit: string }[];
+  volunteerCount?: number;
+  volunteerHours?: number;
 }
 
 const STORAGE_KEY = 'PENDING_REPORTS';

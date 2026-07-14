@@ -1,0 +1,9 @@
+{
+  "name": "getPreviousBalance",
+  "version": "1.0.0",
+  "description": "查询指定店铺在目标日期之前最近一天的结余",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

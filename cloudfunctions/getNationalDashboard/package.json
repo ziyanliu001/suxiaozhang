@@ -1,0 +1,9 @@
+{
+  "name": "getNationalDashboard",
+  "version": "1.0.0",
+  "description": "超级管理员全国全网数据大屏聚合",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

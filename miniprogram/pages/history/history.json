@@ -1,4 +1,6 @@
 {
   "navigationStyle": "custom",
-  "usingComponents": {}
+  "usingComponents": {
+    "store-picker": "../../components/store-picker/store-picker"
+  }
 }

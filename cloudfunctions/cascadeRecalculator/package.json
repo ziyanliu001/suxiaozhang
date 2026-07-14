@@ -1,0 +1,9 @@
+{
+  "name": "cascadeRecalculator",
+  "version": "1.0.0",
+  "description": "统一级联重算云函数，支持更新重算、仅重算、删除后重算三种模式",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

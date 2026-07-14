@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "openapi": [],
+    "cloudbase": {
+      "env": "cloudbase-d8g7hg2bf851750ab",
+      "database": {
+        "stores": {
+          "read": true,
+          "write": false
+        },
+        "report_logs": {
+          "read": true,
+          "write": false
+        }
+      }
+    }
+  },
+  "runtime": "Nodejs16",
+  "envVariables": {}
+}

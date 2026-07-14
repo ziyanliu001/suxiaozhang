@@ -1,0 +1,9 @@
+{
+  "name": "getStoreReportLogs",
+  "version": "1.0.0",
+  "description": "基于角色的多门店隔离餐报查询",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

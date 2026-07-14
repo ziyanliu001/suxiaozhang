@@ -1,7 +1,17 @@
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
+const USER_ROLE_CACHE_KEY = 'auth_user_role';
 const LOGIN_TIMEOUT_MS = 5000;
 const TEMP_OPENID_PREFIX = 'local_';
+
+export type UserRole = 'super_admin' | 'store_manager' | 'finance' | 'volunteer';
+
+interface RoleInfo {
+  role: UserRole;
+  storeId: string;
+  storeName: string;
+  status: string;
+}
 
 function withTimeout(promise, timeoutMs, timeoutMsg) {
   let timer;
@@ -13,6 +23,71 @@ function withTimeout(promise, timeoutMs, timeoutMsg) {
 
 function generateTempOpenid(): string {
   return TEMP_OPENID_PREFIX + Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  super_admin: '超级管理员',
+  store_manager: '店长',
+  finance: '财务义工',
+  volunteer: '普通义工'
+};
+
+export interface PermissionFlags {
+  canSwitchStore: boolean;
+  canAuditUser: boolean;
+  canDeleteRecord: boolean;
+  canEditBalance: boolean;
+  canEditReport: boolean;
+  canExportData: boolean;
+  canViewNationalDashboard: boolean;
+}
+
+export function getPermissionFlags(roleInfo: { role?: string } | null | undefined): PermissionFlags {
+  const role = (roleInfo?.role || 'volunteer') as UserRole;
+
+  switch (role) {
+    case 'super_admin':
+      return {
+        canSwitchStore: true,
+        canAuditUser: true,
+        canDeleteRecord: true,
+        canEditBalance: true,
+        canEditReport: true,
+        canExportData: true,
+        canViewNationalDashboard: true
+      };
+    case 'store_manager':
+      return {
+        canSwitchStore: false,
+        canAuditUser: true,
+        canDeleteRecord: true,
+        canEditBalance: true,
+        canEditReport: true,
+        canExportData: true,
+        canViewNationalDashboard: false
+      };
+    case 'finance':
+      return {
+        canSwitchStore: false,
+        canAuditUser: false,
+        canDeleteRecord: false,
+        canEditBalance: true,
+        canEditReport: true,
+        canExportData: true,
+        canViewNationalDashboard: false
+      };
+    case 'volunteer':
+    default:
+      return {
+        canSwitchStore: false,
+        canAuditUser: false,
+        canDeleteRecord: false,
+        canEditBalance: false,
+        canEditReport: false,
+        canExportData: false,
+        canViewNationalDashboard: false
+      };
+  }
 }
 
 export const AuthService = {
@@ -77,19 +152,81 @@ export const AuthService = {
     return !!openid && openid.startsWith(TEMP_OPENID_PREFIX);
   },
 
-  getRole(): string {
+  // 新角色体系
+  async fetchUserRole(): Promise<{ success: boolean; roleInfo?: RoleInfo; error?: string }> {
+    try {
+      const result = await withTimeout(
+        wx.cloud.callFunction({ name: 'checkUserRole' }),
+        LOGIN_TIMEOUT_MS,
+        '角色查询超时'
+      );
+
+      const r = result.result as any;
+      if (r && r.success) {
+        const roleInfo: RoleInfo = {
+          role: (r.role || 'volunteer') as UserRole,
+          storeId: r.storeId || '',
+          storeName: r.storeName || '',
+          status: r.status || 'guest'
+        };
+        wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(roleInfo));
+        return { success: true, roleInfo };
+      }
+
+      return { success: false, error: r?.error || '角色查询失败' };
+    } catch (err: any) {
+      console.error('[AuthService] fetchUserRole 异常:', err);
+      return { success: false, error: err.message || '角色查询异常' };
+    }
+  },
+
+  getCachedRoleInfo(): RoleInfo | null {
+    try {
+      const data = wx.getStorageSync(USER_ROLE_CACHE_KEY);
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch {
+      // ignore
+    }
+    // 降级到旧 user 缓存
     const user = this.getUser();
-    return user?.role || 'user';
+    if (user) {
+      const oldRole = user.role || 'user';
+      return {
+        role: oldRole === 'admin' ? 'super_admin' : 'volunteer',
+        storeId: user.storeId || '',
+        storeName: user.storeName || '',
+        status: 'approved'
+      };
+    }
+    return null;
+  },
+
+  getRole(): string {
+    const roleInfo = this.getCachedRoleInfo();
+    return roleInfo?.role || 'volunteer';
   },
 
   isAdmin(): boolean {
-    return this.getRole() === 'admin';
+    const role = this.getRole();
+    return role === 'super_admin' || role === 'admin';
+  },
+
+  isSuperAdmin(): boolean {
+    return this.getRole() === 'super_admin';
+  },
+
+  getRoleLabel(): string {
+    const role = this.getRole() as UserRole;
+    return ROLE_LABELS[role] || '普通义工';
   },
 
   clearAuth(): void {
     try {
       wx.removeStorageSync(OPENID_CACHE_KEY);
       wx.removeStorageSync(USER_CACHE_KEY);
+      wx.removeStorageSync(USER_ROLE_CACHE_KEY);
       console.log('[AuthService] 登录缓存已清除');
     } catch (err) {
       console.error('[AuthService] clearAuth 异常:', err);

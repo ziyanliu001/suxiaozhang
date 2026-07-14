@@ -1,0 +1,10 @@
+{
+  "name": "exportAccountExcel",
+  "version": "1.0.0",
+  "description": "导出带样式的 Excel 收支明细表格",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest",
+    "exceljs": "^4.4.0"
+  }
+}

@@ -1,6 +1,10 @@
 <view class="page-container">
   <view class="custom-nav" style="padding-top: {{navTop}}px;">
     <text class="nav-title">统计分析</text>
+    <view class="nav-refresh-btn" bindtap="onRefreshData">
+      <text class="refresh-icon">🔄</text>
+      <text class="refresh-text">刷新数据</text>
+    </view>
   </view>
 
   <view class="admin-switch" wx:if="{{isAdmin}}">
@@ -9,149 +13,681 @@
     <view class="switch-btn {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">个人统计</view>
   </view>
 
-  <view class="top-section" style="margin-top: {{contentTop}}px;">
-    <view class="tab-bar">
-      <view 
-        class="tab-item {{currentTab === 'week' ? 'active' : ''}}" 
-        bindtap="switchTab" 
-        data-tab="week"
-      >
-        <text class="tab-icon">📅</text>
-        <text class="tab-text">周报</text>
-        <view class="tab-indicator" wx:if="{{currentTab === 'week'}}"></view>
+  <view class="content-area" style="padding-top: {{contentTop}}px;">
+    <view class="period-control-card">
+      <view class="store-select-header-row">
+        <view class="store-label">
+          <text class="pin-icon">📍</text>
+          <text class="title">当前统计门店</text>
+        </view>
+        <picker wx:if="{{currentUserRole === 'super_admin' && allStoresList.length > 0}}" bindchange="onSuperAdminSelectStore" range="{{allStoresList}}" range-key="storeName">
+          <view class="store-picker-pill">
+            <text class="name">{{shopName || '全部门店'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+        <view wx:elif="{{currentUserRole && currentUserRole !== 'super_admin'}}" class="store-picker-pill locked">
+          <text class="name">{{currentUserStoreName || shopName}}</text>
+          <text class="role-tag-badge">{{roleLabelMap[currentUserRole]}}</text>
+        </view>
+        <picker wx:elif="{{shopList && shopList.length > 0}}" bindchange="onShopChange" value="{{selectedShopIndex}}" range="{{shopList}}">
+          <view class="store-picker-pill">
+            <text class="name">{{shopList[selectedShopIndex] || '全部门店'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
       </view>
-      <view 
-        class="tab-item {{currentTab === 'month' ? 'active' : ''}}" 
-        bindtap="switchTab" 
-        data-tab="month"
-      >
-        <text class="tab-icon">📆</text>
-        <text class="tab-text">月报</text>
-        <view class="tab-indicator" wx:if="{{currentTab === 'month'}}"></view>
-      </view>
-      <view 
-        class="tab-item {{currentTab === 'year' ? 'active' : ''}}" 
-        bindtap="switchTab" 
-        data-tab="year"
-      >
-        <text class="tab-icon">📊</text>
-        <text class="tab-text">年报</text>
-        <view class="tab-indicator" wx:if="{{currentTab === 'year'}}"></view>
-      </view>
-      <view 
-        class="tab-item {{currentTab === 'custom' ? 'active' : ''}}" 
-        bindtap="switchTab" 
-        data-tab="custom"
-      >
-        <text class="tab-icon">🔍</text>
-        <text class="tab-text">自定义</text>
-        <view class="tab-indicator" wx:if="{{currentTab === 'custom'}}"></view>
-      </view>
-    </view>
 
-    <view class="custom-date-picker" wx:if="{{currentTab === 'custom'}}">
-      <view class="date-row">
+      <view class="period-tabs-segment">
+        <view class="tab-item {{currentTab === 'week' ? 'active' : ''}}" bindtap="switchTab" data-tab="week">周报</view>
+        <view class="tab-item {{currentTab === 'month' ? 'active' : ''}}" bindtap="switchTab" data-tab="month">月报</view>
+        <view class="tab-item {{currentTab === 'year' ? 'active' : ''}}" bindtap="switchTab" data-tab="year">年报</view>
+        <view class="tab-item {{currentTab === 'custom' ? 'active' : ''}}" bindtap="switchTab" data-tab="custom">自定义</view>
+      </view>
+
+      <view class="date-picker-subrow" wx:if="{{currentTab === 'month'}}">
+        <picker mode="date" fields="month" value="{{selectedYear}}-{{String(selectedMonth).padStart(2, '0')}}-01" bindchange="onMonthChange">
+          <view class="picker-pill-btn">
+            <text class="lbl">🗓️ 当前范围：{{selectedYear}}年{{selectedMonth}}月</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <view class="date-picker-subrow" wx:if="{{currentTab === 'year'}}">
+        <picker mode="date" fields="year" value="{{selectedYear}}-01-01" bindchange="onYearChange">
+          <view class="picker-pill-btn">
+            <text class="lbl">🗓️ 当前范围：{{selectedYear}}年</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <view class="date-picker-subrow" wx:if="{{currentTab === 'custom'}}">
         <picker mode="date" value="{{customStartDate}}" bindchange="onCustomStartDateChange">
-          <view class="date-btn">
-            <text>{{customStartDate || '开始日期'}}</text>
+          <view class="picker-pill-btn small">
+            <text class="lbl">{{customStartDate || '开始日期'}}</text>
             <text class="arrow">▼</text>
           </view>
         </picker>
         <text class="date-separator">至</text>
         <picker mode="date" value="{{customEndDate}}" bindchange="onCustomEndDateChange">
-          <view class="date-btn">
-            <text>{{customEndDate || '结束日期'}}</text>
+          <view class="picker-pill-btn small">
+            <text class="lbl">{{customEndDate || '结束日期'}}</text>
             <text class="arrow">▼</text>
           </view>
         </picker>
       </view>
-      <button class="btn-query" bindtap="loadCustomStatistics">查询统计</button>
+      <button class="btn-custom-query" wx:if="{{currentTab === 'custom'}}" bindtap="loadCustomStatistics">查询统计</button>
     </view>
   </view>
 
-  <scroll-view class="content-section" scroll-y>
-    <view class="stats-card" wx:if="{{statistics && statistics.recordCount > 0}}">
-      <view class="stats-header">
-        <text class="stats-title">{{getTabTitle()}}</text>
-        <text class="stats-date">{{statistics.startDate}} ~ {{statistics.endDate}}</text>
+  <!-- 超级管理员专享：全国全网数据大屏 -->
+  <view class="national-dashboard-container" wx:if="{{showNationalDashboard && nationalData.nationalTotalDiners !== undefined}}">
+    <view class="national-hero-card">
+      <view class="hero-header">
+        <text class="hero-title">🌐 雨花斋全国爱心矩阵数据大屏</text>
+        <text class="hero-badge">已覆盖 {{nationalData.totalStores}} 家门店</text>
       </view>
 
-      <view class="net-balance-card">
-        <text class="net-balance-value">¥{{statistics.netBalanceStr}}</text>
-        <text class="net-balance-label">净结余</text>
+      <view class="hero-main-num">
+        <text class="num-lbl">全国累计服务用餐人次</text>
+        <text class="num-val">{{nationalData.nationalTotalDiners}} <text class="unit">人次</text></text>
       </view>
 
-      <view class="stats-grid">
-        <view class="stat-item income">
-          <text class="stat-value">¥{{statistics.totalIncomeStr}}</text>
-          <text class="stat-label">总收入</text>
+      <view class="hero-grid-4">
+        <view class="h-cell">
+          <text class="h-val">+¥{{nationalData.nationalTotalIncome}}</text>
+          <text class="h-lbl">全国爱心汇入</text>
         </view>
-        <view class="stat-item expense">
-          <text class="stat-value">¥{{statistics.totalExpenseStr}}</text>
-          <text class="stat-label">总支出</text>
+        <view class="h-cell">
+          <text class="h-val">-¥{{nationalData.nationalTotalExpense}}</text>
+          <text class="h-lbl">全国开餐总支出</text>
         </view>
-      </view>
-
-      <view class="summary-section">
-        <view class="summary-row">
-          <text class="summary-label">累计开餐天数</text>
-          <text class="summary-value">{{statistics.recordCount}} 天</text>
-        </view>
-      </view>
-
-      <view class="progress-section">
-        <text class="section-title">收支比</text>
-        <view class="progress-bar">
-          <view 
-            class="progress-fill {{isExpenseOverIncome() ? 'warning' : 'normal'}}" 
-            style="width: {{getExpensePercent()}}%"
-          ></view>
-        </view>
-        <view class="progress-info">
-          <text class="progress-text">支出占比 {{getExpensePercent()}}%</text>
-          <text class="progress-alert" wx:if="{{isExpenseOverIncome()}}">⚠️ 本期支出超出赞助收入，请注意合理规划采购</text>
-        </view>
-      </view>
-
-      <view class="income-breakdown">
-        <text class="section-title">收入构成</text>
-        <view class="breakdown-row">
-          <text class="breakdown-label">自愿赞助</text>
-          <text class="breakdown-value">¥{{statistics.totalListDonationStr}}</text>
-        </view>
-        <view class="breakdown-row">
-          <text class="breakdown-label">现场/其他支持</text>
-          <text class="breakdown-value">¥{{statistics.totalOtherDonationStr}}</text>
+        <view class="h-cell">
+          <text class="h-val">{{nationalData.nationalOpenDays}} 天</text>
+          <text class="h-lbl">全国累计开餐天数</text>
         </view>
       </view>
     </view>
 
-    <view class="daily-list" wx:if="{{statistics && statistics.dailyRecords && statistics.dailyRecords.length > 0}}">
-      <text class="section-title">每日明细</text>
-      <view class="daily-item" wx:for="{{statistics.dailyRecords}}" wx:key="index">
-        <view class="daily-date">{{item.date}}</view>
-        <view class="daily-details">
-          <view class="daily-row">
-            <text class="detail-label">收入</text>
-            <text class="detail-value income">+¥{{item.incomeStr}}</text>
+    <view class="national-matrix-card">
+      <view class="matrix-header">
+        <text class="matrix-title">📊 全国各门店续航与单餐成本对比</text>
+      </view>
+
+      <view class="matrix-table">
+        <view class="table-thead">
+          <text class="th col-store">门店名称</text>
+          <text class="th col-cost">单餐成本</text>
+          <text class="th col-diners">服务人次</text>
+          <text class="th col-status">续航预警</text>
+        </view>
+
+        <view class="table-tbody">
+          <view class="table-tr" wx:for="{{nationalMatrixList}}" wx:key="storeId">
+            <text class="td col-store font-bold">{{item.storeName}}</text>
+            <view class="td col-cost">
+              <text class="cost-badge {{item.isCostValid ? 'valid' : 'neutral'}}">{{item.costPerMealStr}}</text>
+            </view>
+            <text class="td col-diners">{{item.totalDiners}} 人</text>
+            <view class="td col-status">
+              <text class="warning-pill {{item.statusLevel}}">{{item.statusText}}</text>
+            </view>
           </view>
-          <view class="daily-row">
-            <text class="detail-label">支出</text>
-            <text class="detail-value expense">-¥{{item.expenseStr}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view class="content-section" scroll-y wx:if="{{!showNationalDashboard}}">
+    <view class="stats-content" wx:if="{{statistics && statistics.recordCount > 0}}">
+      
+      <view class="health-card" style="background: linear-gradient(135deg, {{statistics.healthGradientFrom}} 0%, {{statistics.healthGradientTo}} 100%);">
+        <view class="health-header">
+          <text class="health-icon">{{statistics.healthIcon}}</text>
+          <view class="health-title-wrap">
+            <text class="health-title">爱心续航看板</text>
+            <text class="health-date">{{statsData.dateRangeText || (statistics.startDate + ' ~ ' + statistics.endDate)}}</text>
           </view>
-          <view class="daily-row">
-            <text class="detail-label">结余</text>
-            <text class="detail-value balance">¥{{item.balanceStr}}</text>
+        </view>
+        <view class="balance-amount">
+          <text class="balance-label">账户实时总结余</text>
+          <text class="balance-value">¥{{statistics.latestBalanceStr}}</text>
+        </view>
+        <view class="runway-box">
+          <text class="runway-label">预计可平稳开餐</text>
+          <text class="runway-days">{{statistics.runwayDaysStr}}</text>
+        </view>
+        <view class="material-pills-row">
+          <view class="mat-pill-capsule">
+            <text class="mat-icon">🍚</text>
+            <text class="mat-name">大米</text>
+            <view class="status-tag-pill {{statistics.riceStatusClass || 'success'}}">
+              <text class="dot"></text>
+              <text class="status-text">{{statistics.riceStatusText || '一般'}}</text>
+            </view>
+          </view>
+          <view class="mat-pill-capsule">
+            <text class="mat-icon">🫒</text>
+            <text class="mat-name">食用油</text>
+            <view class="status-tag-pill {{statistics.oilStatusClass || 'success'}}">
+              <text class="dot"></text>
+              <text class="status-text">{{statistics.oilStatusText || '充足'}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="health-tip">{{statistics.healthStatusText}}</view>
+      </view>
+
+      <view class="income-expense-card">
+        <view class="card-header">
+          <text class="card-title">收支透明账本</text>
+        </view>
+        <view class="ie-columns">
+          <view class="ie-col income-col">
+            <text class="ie-label">爱心汇入</text>
+            <text class="ie-value income">+¥{{statsData.totalIncome || statistics.totalIncomeStr}}</text>
+            <view class="ie-detail">
+              <text class="ie-detail-label">自愿赞助</text>
+              <text class="ie-detail-value">¥{{statsData.selfSponsor || statistics.totalListDonationStr}}</text>
+            </view>
+            <view class="ie-detail">
+              <text class="ie-detail-label">现场/其他支持</text>
+              <text class="ie-detail-value">¥{{statsData.otherIncome || statistics.totalOtherDonationStr}}</text>
+            </view>
+          </view>
+          <view class="ie-divider"></view>
+          <view class="ie-col expense-col">
+            <text class="ie-label">支出总额</text>
+            <text class="ie-value expense">-¥{{statsData.totalExpense || statistics.totalExpenseStr}}</text>
+            <view class="ie-detail">
+              <text class="ie-detail-label">日常开餐食材</text>
+              <text class="ie-detail-value">¥{{statsData.foodExpense || statistics.dailyExpenseTotalStr}}</text>
+            </view>
+            <view class="ie-detail">
+              <text class="ie-detail-label">房租/专项固定</text>
+              <text class="ie-detail-value highlight">¥{{statsData.majorExpense || statistics.largeExpenseTotalStr}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="net-accumulation-row">
+          <text class="net-label">本期爱心积累</text>
+          <view class="net-val-group">
+            <text class="net-value {{statistics.netAccumulationClass}}">{{statsData.netAccumulation || statistics.netAccumulationStr}}</text>
+            <text class="net-sub-tip" wx:if="{{statistics.showLargeExpenseTip}}">(含房租/专项大额)</text>
+          </view>
+        </view>
+
+        <view class="expense-structure">
+          <text class="structure-label">支出结构占比</text>
+          <view class="structure-bar">
+            <view class="structure-fill daily" style="width: {{statistics.dailyExpensePercent}}%;"></view>
+            <view class="structure-fill large" style="width: {{statistics.largeExpensePercent}}%;"></view>
+          </view>
+          <view class="structure-legend">
+            <view class="legend-item">
+              <view class="legend-dot daily"></view>
+              <text class="legend-text">日常开销 {{statistics.dailyExpensePercent}}%</text>
+            </view>
+            <view class="legend-item">
+              <view class="legend-dot large"></view>
+              <text class="legend-text">大额固定 {{statistics.largeExpensePercent}}%</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="major-detail-card" wx:if="{{statistics.majorExpenseList && statistics.majorExpenseList.length > 0}}">
+        <view class="card-header">
+          <view class="header-title-box">
+            <text class="card-icon">📋</text>
+            <text class="card-title">本期大额与专项支出明细</text>
+          </view>
+          <text class="count-badge">共 {{statistics.majorExpenseList.length}} 项</text>
+        </view>
+
+        <view class="detail-items-list">
+          <view class="detail-sub-item" wx:for="{{statistics.majorExpenseList}}" wx:key="index">
+            <view class="item-left-info">
+              <text class="item-title-text">{{item.detailText}}</text>
+              <text class="item-date-text">🗓️ {{item.date}}</text>
+            </view>
+            <view class="item-right-box">
+              <text class="amount-val">-¥{{item.amount}}</text>
+              <button 
+                class="btn-patch-text" 
+                wx:if="{{item.isMissingRemark}}" 
+                bindtap="onOpenEditMajorModal" 
+                data-item="{{item}}"
+              >
+                ✏️ 补全事由
+              </button>
+            </view>
+          </view>
+        </view>
+
+        <view class="card-footer-summary">
+          <text class="summary-lbl">大额专项支出合计</text>
+          <text class="summary-val">-¥{{statistics.largeExpenseTotalStr}}</text>
+        </view>
+      </view>
+
+      <view class="achievement-card">
+        <view class="card-header">
+          <text class="card-title">爱心成果与义工奉献</text>
+        </view>
+
+        <view class="achievement-grid" wx:if="{{statistics.openDays > 0}}">
+          <view class="achievement-item">
+            <text class="achievement-icon">🍱</text>
+            <text class="achievement-value">{{statistics.openDays || 0}}</text>
+            <text class="achievement-label">开餐天数 (休餐捐赠{{statistics.donationDays || 0}}天)</text>
+          </view>
+          <view class="achievement-item">
+            <text class="achievement-icon">👥</text>
+            <text class="achievement-value">{{statsData.totalDiningPeople || statistics.totalDiningCount}}</text>
+            <text class="achievement-label">服务用餐人次</text>
+          </view>
+          <view class="achievement-item" wx:if="{{statistics.showPerMealCost || statsData.costPerMeal}}">
+            <text class="achievement-icon">💚</text>
+            <text class="achievement-value">¥{{statsData.costPerMeal || statistics.perMealCostStr}}</text>
+            <text class="achievement-label">每餐爱心投入 (元)</text>
+          </view>
+          <view class="achievement-item" wx:else>
+            <text class="achievement-icon">💚</text>
+            <text class="achievement-value">—</text>
+            <text class="achievement-label">每餐爱心投入 (元)</text>
+          </view>
+          <view class="achievement-item">
+            <text class="achievement-icon">🧡</text>
+            <text class="achievement-value">{{statsData.totalVolunteerHours || statistics.totalVolunteerHours}}</text>
+            <text class="achievement-label">义工服务总工时</text>
+          </view>
+        </view>
+
+        <view class="warm-donation-box" wx:else>
+          <view class="warm-icon">🙏</view>
+          <view class="warm-title">本期为休餐筹措期</view>
+          <view class="warm-desc">
+            共收到 <text class="highlight">{{statistics.donationDays || 0}} 笔</text> 爱心汇入，积累资金用于后续持续开餐！
+          </view>
+        </view>
+
+        <view class="volunteer-summary-row" wx:if="{{statistics.totalVolunteerCount > 0 || statsData.totalVolunteers > 0}}">
+          <text class="vol-summary-text">❤️ 义工护持：{{statsData.totalVolunteers || statistics.totalVolunteerCount}} 人次 · {{statsData.totalVolunteerHours || statistics.totalVolunteerHours}} 小时</text>
+        </view>
+
+        <view class="materials-summary-card">
+          <text class="materials-title">📦 物资赞助明细汇总</text>
+          <view class="materials-empty" wx:if="{{!statistics.materialsSummary || statistics.materialsSummary.length === 0}}">
+            <text>暂无物资赞助记录</text>
+          </view>
+          <view class="materials-list" wx:else>
+            <view class="materials-item" wx:for="{{statistics.materialsSummary}}" wx:key="item">
+              <text class="materials-name">• {{item.item}}</text>
+              <text class="materials-qty">共 {{item.totalQty}} {{item.unit}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="daily-list-card">
+        <view class="detail-section-header">
+          <view class="header-main-row">
+            <view class="title-with-badge">
+              <text class="section-main-title">📅 每日明细</text>
+              <text class="record-count-tag">({{statistics.dailyRecords.length}}天记录)</text>
+            </view>
+            <text class="store-location-badge">{{shopName || '全部门店'}}</text>
+          </view>
+          <view class="header-tools-row">
+            <button class="tool-btn thanks" bindtap="onGenerateGratitudeReport">
+              📝 生成感恩汇报
+            </button>
+            <button class="tool-btn export" bindtap="exportToExcel">
+              📊 导出表格
+            </button>
+          </view>
+          <view class="export-tip-banner">
+            <text class="tip-text">💡 导出后建议选择发送给【文件传输助手】或微信群保存</text>
+          </view>
+        </view>
+
+        <!-- 智能提示：开餐期提示补录用餐人数，休餐期提示筹备状态 -->
+        <block wx:if="{{statistics.dailyExpenseTotal > 0 || (statsData.foodExpense && statsData.foodExpense > 0)}}">
+          <view class="batch-notice-bar" wx:if="{{statistics.missingCount > 0}}" bindtap="onOpenBatchDinerModal">
+            <text class="notice-icon">💡</text>
+            <text class="notice-text">检测到 {{statistics.missingCount}} 笔记录未填写用餐人数，<text class="highlight">点击快捷补录 ➔</text></text>
+          </view>
+        </block>
+        <block wx:else>
+          <view class="preparing-period-banner">
+            <text class="notice-icon">🌱</text>
+            <text class="notice-text">当前处于休餐筹措期，开餐后将开启用餐人数统计</text>
+          </view>
+        </block>
+
+        <view class="empty-box" wx:if="{{statistics.dailyRecords.length === 0}}">
+          <text class="empty-tip">该周期内【{{shopName || '全部门店'}}】暂无餐报记录</text>
+        </view>
+
+        <!-- 年报模式：按月聚合折叠展示 -->
+        <view class="monthly-aggregate-list" wx:elif="{{currentTab === 'year' && monthlyAggregatedList.length > 0}}">
+          <view class="month-card" wx:for="{{monthlyAggregatedList}}" wx:key="month" wx:for-item="monthItem">
+            <view class="month-card-header" bindtap="toggleMonthExpand" data-month="{{monthItem.month}}">
+              <view class="month-title-row">
+                <text class="month-name">📅 {{monthItem.monthName}}</text>
+                <text class="month-record-count">{{monthItem.recordCount}} 天</text>
+              </view>
+              <view class="month-summary-row">
+                <view class="month-summary-item">
+                  <text class="ms-label">汇入</text>
+                  <text class="ms-value green">+¥{{monthItem.incomeStr}}</text>
+                </view>
+                <view class="month-summary-item">
+                  <text class="ms-label">支出</text>
+                  <text class="ms-value red">-¥{{monthItem.totalExpenseStr}}</text>
+                </view>
+                <view class="month-summary-item">
+                  <text class="ms-label">用餐</text>
+                  <text class="ms-value">{{monthItem.diners}} 人次</text>
+                </view>
+                <text class="month-expand-arrow">{{expandedMonthSet[monthItem.month] ? '▲' : '▼'}}</text>
+              </view>
+            </view>
+
+            <view class="month-detail-body" wx:if="{{expandedMonthSet[monthItem.month]}}">
+              <view class="daily-item-card" wx:for="{{monthItem.days}}" wx:for-item="dayItem" wx:key="index" wx:for-index="dayIdx">
+                <view class="daily-card-header">
+                  <view class="date-box">
+                    <text class="date-text">{{dayItem.date}}</text>
+                    <text class="status-badge {{dayItem.statusTag}}">{{dayItem.statusLabel}}</text>
+                    <text class="major-expense-tag" wx:if="{{dayItem.hasLargeExpense}}">🖨️ 含专项大额</text>
+                  </view>
+                  <view class="net-change {{dayItem.netChange >= 0 ? 'plus' : 'minus'}}">
+                    {{dayItem.netChange >= 0 ? '+' : '-'}}{{dayItem.netChangeStr}} 元
+                  </view>
+                </view>
+
+                <view class="daily-card-body">
+                  <view class="grid-col">
+                    <text class="col-label">爱心收入</text>
+                    <text class="col-value green">+¥{{dayItem.incomeStr}}</text>
+                  </view>
+                  <view class="grid-col">
+                    <text class="col-label">日常食材</text>
+                    <text class="col-value red">-¥{{dayItem.dailyExpenseStr}}</text>
+                  </view>
+                  <view class="grid-col">
+                    <text class="col-label">用餐人次</text>
+                    <text class="col-value">{{dayItem.diningCount || 0}} 人</text>
+                  </view>
+                </view>
+
+                <view class="fixed-major-row" wx:if="{{dayItem.largeExpense > 0}}">
+                  <text class="major-label">🏢 房租/专项大额支出：</text>
+                  <text class="major-val">-¥{{dayItem.largeExpenseStr}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 周报/月报/自定义：每日明细卡片 -->
+        <view class="daily-card-list" wx:else>
+          <view class="daily-item-card" wx:for="{{statistics.dailyRecords}}" wx:key="index">
+            <view class="daily-card-header">
+              <view class="date-box">
+                <text class="date-text">{{item.date}}</text>
+                <text class="status-badge {{item.statusTag}}">{{item.statusLabel}}</text>
+                <text class="major-expense-tag" wx:if="{{item.hasLargeExpense}}">🖨️ 含专项大额</text>
+              </view>
+              <view class="net-change {{item.netChange >= 0 ? 'plus' : 'minus'}}">
+                {{item.netChange >= 0 ? '+' : '-'}}{{item.netChangeStr}} 元
+              </view>
+            </view>
+
+            <view class="daily-card-body">
+              <view class="grid-col">
+                <text class="col-label">爱心收入</text>
+                <text class="col-value green">+¥{{item.incomeStr}}</text>
+              </view>
+              <view class="grid-col">
+                <text class="col-label">日常食材</text>
+                <text class="col-value red">-¥{{item.dailyExpenseStr}}</text>
+              </view>
+              <view class="grid-col">
+                <text class="col-label">用餐人次</text>
+                <view class="diners-cell" bindtap="onQuickEditDiners" data-index="{{index}}">
+                  <text class="col-value">{{item.diningCount || 0}} 人</text>
+                  <text class="edit-icon" wx:if="{{!item.diningCount || item.diningCount === 0}}">✏️</text>
+                </view>
+              </view>
+            </view>
+
+            <view class="fixed-major-row" wx:if="{{item.largeExpense > 0}}">
+              <text class="major-label">🏢 房租/专项大额支出：</text>
+              <text class="major-val">-¥{{item.largeExpenseStr}}</text>
+            </view>
+
+            <view class="daily-card-footer" wx:if="{{item.volunteerCount || item.hasMaterials}}">
+              <text class="sub-tip" wx:if="{{item.volunteerCount}}">❤️ 到岗义工：{{item.volunteerCount}} 人</text>
+              <text class="sub-tip" wx:if="{{item.hasMaterials}}">📦 收到物资：{{item.materialsSummary}}</text>
+            </view>
           </view>
         </view>
       </view>
     </view>
 
-    <view class="empty-state" wx:if="{{!statistics || statistics.recordCount === 0}}">
+    <view class="smart-empty-card" wx:if="{{!statistics || statistics.recordCount === 0}}">
       <text class="empty-icon">📊</text>
-      <text class="empty-text">暂无统计数据</text>
-      <text class="empty-hint">请先在首页生成餐报记录</text>
-      <button class="btn-back-home" hover-class="btn-hover" bindtap="goBackHome">返回首页录入</button>
+      <text class="empty-title">暂无【{{shopName || '全部门店'}}】在选定周期的统计数据</text>
+      
+      <view class="debug-info-bar">
+        <text>🔍 系统诊断：本地共 {{totalRawCount}} 条历史记录 (成功解析日期 {{parseSuccessCount}} 条)</text>
+      </view>
+      
+      <view class="suggest-box" wx:if="{{currentStoreTotalCount > 0}}">
+        <text class="suggest-text">💡 该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
+        <button class="btn-primary-action" bindtap="onShowAllStoreRecords">显示【{{shopName || '全部门店'}}】全部 {{currentStoreTotalCount}} 条记录</button>
+      </view>
+
+      <view class="suggest-box" wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">
+        <text class="suggest-text">💡 该周期内其他门店存在餐报记录</text>
+        <button class="btn-primary-action" bindtap="onSwitchToAllStores">切换为【全部门店】查看</button>
+      </view>
+
+      <view class="action-btn-group" wx:else>
+        <button class="btn-secondary-action" bindtap="onSwitchToAllStores" wx:if="{{showAllStoresOption && !isAllStoresMode}}">查看全部门店汇总</button>
+        <button class="btn-back-home" hover-class="btn-hover" bindtap="goBackHome">返回首页录入新餐报</button>
+      </view>
     </view>
   </scroll-view>
+
+  <view class="bottom-sticky-bar" wx:if="{{statistics && statistics.recordCount > 0}}">
+    <button class="btn-primary-poster" bindtap="onGeneratePoster">
+      🖼️ 生成公示海报
+    </button>
+  </view>
+
+  <canvas 
+    type="2d" 
+    id="posterCanvas" 
+    style="position: fixed; left: -9999px; top: -9999px; width: 600px; height: 900px;"
+  ></canvas>
+
+  <view class="poster-modal-mask" wx:if="{{showPosterModal}}">
+    <view class="poster-modal-box">
+      <view class="modal-top-bar">
+        <text class="modal-title">🖼️ 收支公示海报已生成</text>
+        <text class="btn-close-modal" bindtap="onClosePosterModal">✕</text>
+      </view>
+
+      <view class="poster-preview-wrapper">
+        <image class="poster-img" src="{{posterTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
+      </view>
+
+      <view class="save-tip-text">💡 长按图片也可直接发送给好友或保存</view>
+
+      <view class="poster-action-group">
+        <button class="btn-poster-action close" bindtap="onClosePosterModal">关闭</button>
+        <button class="btn-poster-action share" bindtap="onSharePosterToWeChat">
+          <text class="icon">💬</text> 分享到微信
+        </button>
+        <button class="btn-poster-action save" bindtap="onSavePosterToAlbum">
+          <text class="icon">📥</text> 保存到相册
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view class="batch-modal-mask" wx:if="{{showBatchDinerModal}}">
+    <view class="batch-modal-content">
+      <view class="modal-header">
+        <text class="modal-title">🍲 批量补录用餐人数</text>
+        <text class="btn-close" bindtap="onCloseBatchDinerModal">✕</text>
+      </view>
+      
+      <view class="modal-tip">快速填入各日期的用餐人次（单位：人）</view>
+
+      <scroll-view scroll-y class="modal-scroll-list">
+        <view class="batch-input-row" wx:for="{{missingDinerRecords}}" wx:key="index">
+          <text class="row-date">{{item.date}}</text>
+          <text class="row-income">+¥{{item.incomeStr}}</text>
+          <input 
+            class="row-diner-input" 
+            type="number" 
+            placeholder="填人数" 
+            value="{{item.tempDiners}}" 
+            bindinput="onBatchDinerInput" 
+            data-index="{{index}}"
+          />
+        </view>
+      </scroll-view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCloseBatchDinerModal">取消</button>
+        <button class="btn-modal-submit" bindtap="onSubmitBatchDiners">一键保存更新</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="patch-modal-mask" wx:if="{{showEditMajorModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">✏️ 补全【{{editingTargetRecord.date}}】大额开销事由</text>
+        <text class="btn-close" bindtap="onCloseEditMajorModal">✕</text>
+      </view>
+
+      <view class="modal-tip">系统检测到该笔 -¥{{editingTargetRecord.amount}} 开销缺失具体事由，请填入明细（如：店铺租金6000 义工服2106）：</view>
+
+      <textarea 
+        class="patch-textarea" 
+        placeholder="例：店铺租金6000 义工服2106" 
+        bindinput="onMajorInputBlur"
+        value="{{editingInputText}}"
+      />
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCloseEditMajorModal">取消</button>
+        <button class="btn-modal-submit" bindtap="onSubmitPatchMajorText">保存并拆解明细</button>
+      </view>
+    </view>
+  </view>
+
+  <canvas 
+    type="2d" 
+    id="gratitudeReportCanvas" 
+    class="gratitude-canvas-hidden"
+    style="position: fixed; left: -9999px; top: -9999px; width: 320px; height: 580px;"
+  ></canvas>
+
+  <view class="gratitude-modal-backdrop" wx:if="{{showGratitudeModal}}">
+    <view class="gratitude-modal-card">
+      <view class="gratitude-modal-header">
+        <view class="header-title">
+          <text class="icon">❤️</text>
+          <text class="text">雨花斋感恩汇报</text>
+        </view>
+        <text class="close-btn" bindtap="onCloseGratitudeModal">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="gratitude-card-body">
+        <view class="report-poster-canvas-box">
+          <view class="poster-header-banner">
+            <view class="main-title">吃素一日 健康一天</view>
+            <view class="sub-title">📍 {{gratitudeReportData.storeName || '海沧区雨花斋'}} · {{gratitudeReportData.periodTitle || '2026年度'}}</view>
+          </view>
+
+          <view class="status-badge-bar {{isPreparingPhase ? 'preparing' : 'active'}}">
+            <text wx:if="{{isPreparingPhase}}">🌱 试运营筹措阶段 · 资金与场地筹备中</text>
+            <text wx:else>✨ 顺利开餐运营中 · 温暖爱心传递</text>
+          </view>
+
+          <view class="card-section-title">🧡 爱心护持成果</view>
+          <view class="metrics-grid-2x2">
+            <view class="grid-item">
+              <text class="grid-label">累计开餐</text>
+              <text class="grid-value">{{gratitudeReportData.diningDays > 0 ? gratitudeReportData.diningDays + ' 天' : '筹措期'}}</text>
+            </view>
+            <view class="grid-item">
+              <text class="grid-label">服务用餐</text>
+              <text class="grid-value highlight">{{gratitudeReportData.totalDiners || 0}} 人次</text>
+            </view>
+            <view class="grid-item">
+              <text class="grid-label">义工护持</text>
+              <text class="grid-value">{{gratitudeReportData.volunteerCount || 0}} 人次</text>
+            </view>
+            <view class="grid-item">
+              <text class="grid-label">无偿工时</text>
+              <text class="grid-value">{{gratitudeReportData.volunteerHours || 0}} 小时</text>
+            </view>
+          </view>
+
+          <view class="card-section-title">💰 收支透明账本</view>
+          <view class="finance-summary-box">
+            <view class="finance-row">
+              <text class="f-label">爱心汇入：</text>
+              <text class="f-val income">+¥{{gratitudeIncomeStr || '0.00'}}</text>
+            </view>
+            <view class="finance-row">
+              <text class="f-label">运营支出：</text>
+              <text class="f-val expense">-¥{{gratitudeExpenseStr || '0.00'}}</text>
+            </view>
+            <view class="finance-row total">
+              <text class="f-label bold">账户实时总结余：</text>
+              <text class="f-val balance">¥{{gratitudeBalanceStr || '0.00'}}</text>
+            </view>
+          </view>
+
+          <view class="material-status-bar">
+            <text class="m-title">📦 主食物资：</text>
+            <text class="m-tag {{gratitudeReportData.riceStatus === '告急' ? 'urgent' : ''}}">大米 [{{gratitudeReportData.riceStatus || '一般'}}]</text>
+            <text class="m-tag {{gratitudeReportData.oilStatus === '告急' ? 'urgent' : ''}}">食用油 [{{gratitudeReportData.oilStatus || '充足'}}]</text>
+          </view>
+
+          <view class="poster-footer-seal">
+            <view class="seal-text">
+              <text class="heart-quote">感恩各位爱心人士护持与义工团队无私付出！</text>
+              <text class="sub-quote">透明账本 · 实时可查</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="gratitude-modal-footer">
+        <button class="btn-copy-text" bindtap="onCopyGratitudeText">
+          <text>📋 复制文本</text>
+        </button>
+        <button class="btn-share-wx" bindtap="onForwardGratitudeToWeChat">
+          <text>💬 转发微信</text>
+        </button>
+        <button class="btn-save-card" bindtap="onSaveGratitudeCardToAlbum">
+          <text>📥 保存卡片</text>
+        </button>
+      </view>
+    </view>
+  </view>
 </view>

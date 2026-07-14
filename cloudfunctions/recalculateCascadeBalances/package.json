@@ -1,0 +1,9 @@
+{
+  "name": "recalculateCascadeBalances",
+  "version": "1.0.0",
+  "description": "级联重算历史账目余额",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

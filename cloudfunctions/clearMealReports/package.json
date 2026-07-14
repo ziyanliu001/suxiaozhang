@@ -1,0 +1,9 @@
+{
+  "name": "clearMealReports",
+  "version": "1.0.0",
+  "description": "云函数：批量清理餐报数据（支持清空全部或仅删除脏数据）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
