@@ -1,0 +1,9 @@
+{
+  "name": "checkImageContent",
+  "version": "1.0.0",
+  "description": "云函数：调用微信官方 imgSecCheck 进行图像内容安全审核",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

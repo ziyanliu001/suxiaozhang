@@ -1,0 +1,97 @@
+<view class="archive-modal-mask {{visible ? 'show' : ''}}" bindtap="onMaskTap">
+  <view class="archive-modal-content" catchtap="noop">
+    <!-- 头部装饰 -->
+    <view class="modal-header-decoration">
+      <view class="deco-line"></view>
+      <view class="lotus-icon"></view>
+      <view class="deco-line"></view>
+    </view>
+
+    <view class="modal-title">我的雨花护持档案</view>
+
+    <!-- 用户信息区 -->
+    <view class="user-profile-section">
+      <view class="avatar-ring">
+        <open-data class="user-avatar" type="userAvatarUrl"></open-data>
+      </view>
+      <view class="user-name-box">
+        <open-data class="user-name" type="userNickName"></open-data>
+        <text class="user-slogan">感恩您的每一次默默付出</text>
+      </view>
+    </view>
+
+    <!-- 数据卡片 -->
+    <view class="stats-card">
+      <view class="stat-cell">
+        <text class="stat-value">{{userInfo.totalDays || 0}}</text>
+        <text class="stat-label">累计护持/天</text>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-cell">
+        <text class="stat-value">{{userInfo.totalCheckInCount || 0}}</text>
+        <text class="stat-label">累计打卡/次</text>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-cell">
+        <text class="stat-value">{{userInfo.totalHours || 0}}</text>
+        <text class="stat-label">贡献工时/h</text>
+      </view>
+    </view>
+
+    <!-- 荣誉勋章 -->
+    <view class="honor-section">
+      <view class="medal-row">
+        <view class="medal-icon"></view>
+        <text class="medal-name">{{honor.currentLevelName || '初心行者'}}</text>
+      </view>
+
+      <!-- 金色渐变进度条 -->
+      <view class="progress-box">
+        <view class="progress-track">
+          <view class="progress-fill" style="width: {{honor.progressPercent || 0}}%;"></view>
+        </view>
+        <text class="progress-text" wx:if="{{honor.remainHours > 0}}">还需 {{honor.remainHours}} 小时升级</text>
+        <text class="progress-text progress-full" wx:else>已是最高荣誉等级</text>
+      </view>
+
+      <view class="next-level-tip" wx:if="{{honor.remainHours > 0}}">
+        距离「{{honor.nextLevelName}}」还差 {{honor.remainHours}} 小时
+      </view>
+    </view>
+
+    <!-- 感恩语 -->
+    <view class="gratitude-quote">
+      默默付出，积沙成塔。感恩每一位默默护持的家人！
+    </view>
+
+    <!-- 双按钮 -->
+    <view class="modal-actions">
+      <button class="btn-share-honor {{isDrawing ? 'loading' : ''}}" bindtap="onSharePoster">
+        <view class="btn-icon honor-icon"></view>
+        <text class="btn-text">{{isDrawing ? '生成中...' : '分享荣誉海报'}}</text>
+      </button>
+      <view class="btn-secondary-row">
+        <view class="btn-view-journey" bindtap="onViewJourney">
+          <view class="btn-icon journey-icon"></view>
+          <text class="btn-text">查看暖心历程</text>
+        </view>
+        <view class="btn-close" bindtap="onClose">
+          <text class="btn-text">继续护持</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 关闭小按钮 -->
+    <view class="modal-close-x" bindtap="onClose">
+      <text class="close-x-text">✕</text>
+    </view>
+
+    <!-- 离屏 Canvas：用于海报合成 -->
+    <canvas
+      type="2d"
+      id="honorPosterCanvas"
+      class="poster-canvas-offscreen"
+      style="width: 1px; height: 1px;"
+    ></canvas>
+  </view>
+</view>

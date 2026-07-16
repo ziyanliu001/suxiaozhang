@@ -1,0 +1,9 @@
+{
+  "name": "cleanDevData",
+  "version": "1.0.0",
+  "description": "云函数：突破OpenID限制的全量测试数据清洗",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

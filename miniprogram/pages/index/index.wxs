@@ -1,0 +1,27 @@
+// 前端展示脱敏：仅用于列表渲染，不影响提交/存储的原始数据
+function maskName(name) {
+  if (!name) {
+    return '';
+  }
+  var str = '' + name;
+  if (str.length <= 1) {
+    return str + '*';
+  }
+  return str.charAt(0) + '**';
+}
+
+function maskPhone(phone) {
+  if (!phone) {
+    return '';
+  }
+  var str = '' + phone;
+  if (str.length < 7) {
+    return str.charAt(0) + '****';
+  }
+  return str.slice(0, 3) + '****' + str.slice(-4);
+}
+
+module.exports = {
+  maskName: maskName,
+  maskPhone: maskPhone
+};

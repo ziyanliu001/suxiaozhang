@@ -98,6 +98,10 @@ Page({
   debouncedSaveDraft: null as any,
   _shopNameTimer: null as any,
   _balanceReqSeq: 0,
+  isNavigating: false,
+  // 任务C：待执行的锚点滚动目标（onLoad 解析后暂存，onShow 中触发滚动）
+  _pendingScrollTarget: '' as string,
+  _highlightTimer: null as any,
 
   data: {
     reportDate: '',
@@ -167,6 +171,7 @@ Page({
     showPoster: false,
     posterImage: '',
     showPosterModal: false,
+    qrCodeUrl: 'https://7a65-zeng-yuhua-cloud-123.tcb.qcloud.la/assets/yuhua_sun_code.png',
     todayInAmount: '0.00',
     todayOutAmount: '0.00',
     todayTotalBalance: '0.00',
@@ -175,6 +180,15 @@ Page({
     riceStatus: '充足',
     oilStatus: '充足',
     offlineQueueCount: 0,
+    // 任务C：锚点聚焦 - 控制打卡卡片的高亮动画
+    highlightCheckInCard: false,
+    // 档案弹窗
+    showArchiveModal: false,
+    archiveUserInfo: {
+      totalDays: 0,
+      totalCheckInCount: 0,
+      totalHours: 0
+    },
     showAgreement: false,
     canvasHeight: 667,
     showAdjustModal: false,
@@ -227,6 +241,9 @@ Page({
     currentUserRole: '' as string,
     permissions: {} as PermissionFlags,
     isVolunteer: false,
+    isManager: false,
+    isFinance: false,
+    isSuperAdmin: false,
     currentRole: 'VOLUNTEER' as 'VOLUNTEER' | 'MANAGER' | 'FINANCE',
     pendingAuditCount: 0,
     roleLabelMap: ROLE_LABELS,
@@ -249,7 +266,33 @@ Page({
     selectedShiftHours: 3.0,
     customHoursInput: '4.0',
     willEatLunch: true,
-    checkInLogs: [] as any[]
+    checkInLogs: [] as any[],
+    todayAccumulatedHours: 0,
+    allShiftsCompleted: false,
+    todayLogs: [] as any[],
+    myCheckInDays: 0,
+    myCheckInCount: 0,
+    myServiceHours: 0,
+    shiftDefinitions: [
+      { shiftKey: 'EARLY_MORNING', name: '🌌 凌晨熬粥与备菜班', hours: 4.0, timeDesc: '04:00 - 08:00 · 蒸饭煲汤' },
+      { shiftKey: 'MORNING', name: '🥗 早间准备与洗切班', hours: 2.5, timeDesc: '08:00 - 10:30 · 洗菜配菜' },
+      { shiftKey: 'LUNCH', name: '🍲 午餐打饭与引导班', hours: 3.0, timeDesc: '10:30 - 13:30 · 堂食引导' },
+      { shiftKey: 'CLEAN', name: '🧹 后厨洗碗与收尾班', hours: 1.5, timeDesc: '13:30 - 15:00 · 消毒整理' },
+      { shiftKey: 'NIGHT', name: '🌙 夜间整理与盘点班', hours: 3.0, timeDesc: '18:00 - 21:00 · 物资盘点' }
+    ] as any[],
+    availableShifts: [] as any[],
+    showGenCodeModal: false,
+    genTargetRole: 'MANAGER',
+    generatedCode: '',
+    targetGenStoreId: '',
+    targetGenStoreName: '',
+    showDevClearModal: false,
+    clearConfirmInput: '',
+    clearOptions: {
+      reports: true,
+      requests: true,
+      cache: true
+    }
   },
 
   _adjustResolve: null as (() => void) | null,
@@ -257,18 +300,28 @@ Page({
   async onLoad(options: any) {
     this.debouncedSaveDraft = debounce(() => this.saveDraft(), 500);
 
+    // 任务C：解析锚点聚焦参数
+    // 支持 action=checkInCard 或 targetElement=checkInCard 两种参数名
+    if (options) {
+      const action = options.action || '';
+      const target = options.targetElement || '';
+      if (action === 'checkInCard' || target === 'checkInCard') {
+        this._pendingScrollTarget = 'checkInCard';
+      }
+    }
+
     // 扫码进入时捕获 scene 参数 (支持格式: s=store_haicang)
     if (options && options.scene) {
       const sceneStr = decodeURIComponent(options.scene);
       let storeId = '';
-      
+
       try {
         const params = new URLSearchParams(sceneStr);
         storeId = params.get('s') || '';
       } catch (e) {
         storeId = sceneStr.replace('s=', '');
       }
-      
+
       if (storeId) {
         this.fetchStoreInfoAndPromptApply(storeId);
       }
@@ -340,6 +393,7 @@ Page({
       const isVolunteer = rawRole === 'VOLUNTEER';
       const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
       const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+      const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
       const roleMap: Record<string, string> = {
         'VOLUNTEER': 'volunteer',
         'MANAGER': 'store_manager',
@@ -350,7 +404,7 @@ Page({
       };
       const normalizedRole = roleMap[rawRole] || 'volunteer';
       const flags = getPermissionFlags({ role: normalizedRole });
-      return { rawRole, normalizedRole, isVolunteer, isManager, isFinance, flags };
+      return { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags };
     };
 
     const syncStorePicker = (storeId: string, storeName: string, rawRole: string) => {
@@ -365,7 +419,7 @@ Page({
 
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
-      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, flags } = computeRoleState(cached.role);
+      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags } = computeRoleState(cached.role);
       const storeName = cached.storeName || this.data.shopName;
       const storeId = cached.storeId || '';
 
@@ -376,10 +430,11 @@ Page({
         isVolunteer: isVolunteer,
         isManager: isManager,
         isFinance: isFinance,
+        isSuperAdmin: isSuperAdmin,
         currentStoreName: storeName,
         currentStoreId: storeId
       });
-      console.log('🚀 [Page Init] 缓存角色初始化完成, isVolunteer =', isVolunteer, ', rawRole =', rawRole);
+      console.log('🚀 [Page Init] 缓存角色初始化完成, isVolunteer =', isVolunteer, ', isSuperAdmin =', isSuperAdmin);
 
       syncStorePicker(storeId, storeName, rawRole);
 
@@ -394,7 +449,7 @@ Page({
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, flags } = computeRoleState(info.role);
+      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags } = computeRoleState(info.role);
       const storeName = info.storeName || this.data.shopName;
       const storeId = info.storeId || '';
 
@@ -405,10 +460,11 @@ Page({
         isVolunteer: isVolunteer,
         isManager: isManager,
         isFinance: isFinance,
+        isSuperAdmin: isSuperAdmin,
         currentStoreName: storeName,
         currentStoreId: storeId
       });
-      console.log('✅ [Page Init] 云端角色初始化完成, isVolunteer =', isVolunteer, ', rawRole =', rawRole);
+      console.log('✅ [Page Init] 云端角色初始化完成, isVolunteer =', isVolunteer, ', isSuperAdmin =', isSuperAdmin);
 
       syncStorePicker(storeId, storeName, rawRole);
 
@@ -744,6 +800,7 @@ Page({
     const isVolunteer = rawRole === 'VOLUNTEER';
     const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isSuperAdmin = rawRole === 'ADMIN' || rawRole === 'SUPER_ADMIN';
 
     const roleMap: Record<string, string> = {
       'VOLUNTEER': 'volunteer',
@@ -756,23 +813,30 @@ Page({
     const normalizedRole = roleMap[rawRole] || 'volunteer';
     const flags = getPermissionFlags({ role: normalizedRole });
 
-    console.log('⚡ [Role State] 重新计算后的状态:', { isVolunteer, isManager, isFinance, normalizedRole });
+    console.log('⚡ [Role State] 重新计算后的状态:', { isVolunteer, isManager, isFinance, isSuperAdmin, normalizedRole });
+
+    // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储
+    wx.setStorageSync('current_store_id', storeId);
+    wx.setStorageSync('current_store_name', storeName);
+    wx.setStorageSync('current_user_role', normalizedRole);
+    wx.setStorageSync('active_store_id', storeId);
+    wx.setStorageSync('active_role', normalizedRole);
 
     this.setData({
       currentStoreId: storeId,
       currentStoreName: storeName,
+      // 🔑 关键修复：同步更新 shopName 字段，确保 loadBalanceForDate 等函数使用新门店名
+      shopName: storeName,
       currentRole: rawRole,
       currentUserRole: normalizedRole,
       isVolunteer: isVolunteer,
       isManager: isManager,
       isFinance: isFinance,
+      isSuperAdmin: isSuperAdmin,
       permissions: flags
     }, () => {
       console.log('✅ [Page Data Set] 页面 UI 状态已更新，当前 isVolunteer =', this.data.isVolunteer);
     });
-
-    wx.setStorageSync('active_store_id', storeId);
-    wx.setStorageSync('active_role', normalizedRole);
 
     wx.showToast({
       title: `已切至 ${storeName} (${isVolunteer ? '义工视角' : (isFinance ? '财务视角' : '店长视角')})`,
@@ -780,6 +844,12 @@ Page({
     });
 
     this.fetchStoreSponsor(storeId);
+
+    // 🌟 切店后立即重新加载新门店的看板数据与义工统计
+    this.loadBalanceForDate(this.data.reportDate || this.data.reportDateValue || '');
+    if (typeof (this as any).loadVolunteerStats === 'function') {
+      (this as any).loadVolunteerStats();
+    }
 
     // 安全调用数据加载函数，防止 TypeError 崩溃
     const self = this as any;
@@ -828,6 +898,9 @@ Page({
   },
 
   onNavigateToHelp() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
     const role = this.data.currentUserRole || 'volunteer';
     let targetTab = 'volunteer';
     if (role === 'store_manager' || role === 'super_admin') {
@@ -836,7 +909,22 @@ Page({
       targetTab = 'finance';
     }
     wx.navigateTo({
-      url: `/pages/help/help?tab=${targetTab}`
+      url: `/pages/help/help?tab=${targetTab}`,
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  onNavigateToMine() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/mine/mine',
+      fail: () => {
+        this.isNavigating = false;
+      }
     });
   },
 
@@ -1559,6 +1647,171 @@ Page({
     this.setData({ showAuditModal: false });
   },
 
+  // ================= 🔑 生成动态邀请码 =================
+  onOpenGenCodeModal() {
+    const storeList = this.data.allStoresList || [];
+    const firstStore = storeList.length > 0 ? storeList[0] : null;
+    
+    this.setData({ 
+      showGenCodeModal: true, 
+      generatedCode: '',
+      genTargetRole: 'MANAGER',
+      targetGenStoreId: firstStore ? firstStore.storeId : this.data.currentStoreId || '',
+      targetGenStoreName: firstStore ? firstStore.storeName : this.data.currentStoreName || '海沧区雨花斋'
+    });
+  },
+
+  onCloseGenCodeModal() {
+    this.setData({ showGenCodeModal: false });
+  },
+
+  onOpenDevClearModal() {
+    this.setData({ showDevClearModal: true, clearConfirmInput: '' });
+  },
+
+  onCloseDevClearModal() {
+    this.setData({ showDevClearModal: false });
+  },
+
+  onDevOptionChange(e: any) {
+    const values = e.detail.value;
+    this.setData({
+      clearOptions: {
+        reports: values.includes('REPORTS'),
+        requests: values.includes('REQUESTS'),
+        cache: values.includes('CACHE')
+      }
+    });
+  },
+
+  onClearInput(e: any) {
+    this.setData({ clearConfirmInput: e.detail.value.trim() });
+  },
+
+  async onExecuteDevClear() {
+    if (this.data.clearConfirmInput !== 'CLEAR') {
+      wx.showToast({ title: '请输入大写 CLEAR 确认', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '全量环境清洗中...' });
+    const opts = this.data.clearOptions;
+
+    try {
+      if (opts.reports || opts.requests) {
+        await wx.cloud.callFunction({
+          name: 'cleanDevData',
+          data: {
+            clearReports: opts.reports,
+            clearRequests: opts.requests,
+            clearInvites: opts.requests
+          }
+        });
+      }
+
+      if (opts.cache) {
+        wx.removeStorageSync('my_authorized_roles');
+        wx.removeStorageSync('current_store_id');
+        wx.removeStorageSync('current_user_role');
+      }
+
+      wx.hideLoading();
+      this.setData({ showDevClearModal: false });
+
+      wx.showModal({
+        title: '🎉 测试数据已全量清洗',
+        content: '云端多账号测试数据与本地缓存已彻底归零，环境已恢复纯净。',
+        showCancel: false,
+        confirmText: '重启应用',
+        success: () => {
+          this.isNavigating = true;
+          setTimeout(() => {
+            wx.reLaunch({
+              url: '/pages/index/index',
+              fail: (err) => {
+                console.error('重启失败', err);
+                this.isNavigating = false;
+              }
+            });
+          }, 100);
+        }
+      });
+
+    } catch (err) {
+      wx.hideLoading();
+      console.error('清洗失败：', err);
+      wx.showToast({ title: '云函数清洗失败，请检查是否部署', icon: 'none' });
+    }
+  },
+
+  onSelectGenRole(e: any) {
+    this.setData({ genTargetRole: e.currentTarget.dataset.role, generatedCode: '' });
+  },
+
+  onSelectGenStore(e: any) {
+    const index = e.detail.value;
+    const selected = (this.data.allStoresList || [])[index];
+    if (selected) {
+      this.setData({
+        targetGenStoreId: selected.storeId,
+        targetGenStoreName: selected.storeName,
+        generatedCode: ''
+      });
+    }
+  },
+
+  async onGenerateInviteCode() {
+    const storeId = this.data.targetGenStoreId;
+    const storeName = this.data.targetGenStoreName;
+    const role = this.data.genTargetRole;
+
+    if (!storeId) {
+      wx.showToast({ title: '请先选择目标门店', icon: 'none' });
+      return;
+    }
+
+    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    wx.showLoading({ title: '邀请码安全生成中...' });
+
+    try {
+      const db = wx.cloud.database();
+      await db.collection('store_invites').add({
+        data: {
+          inviteCode: randomCode,
+          storeId: storeId,
+          storeName: storeName,
+          role: role,
+          isUsed: false,
+          createdAt: db.serverDate(),
+          creatorOpenId: wx.getStorageSync('my_openid') || 'ADMIN'
+        }
+      });
+
+      wx.hideLoading();
+      this.setData({ generatedCode: randomCode });
+      wx.showToast({ title: '生成成功', icon: 'success' });
+    } catch (err) {
+      wx.hideLoading();
+      console.warn('⚠️ [GenCode] 云端写入失败，启用离线模式:', err);
+      this.setData({ generatedCode: randomCode });
+      wx.showToast({ title: '邀请码生成成功(离线模式)', icon: 'none' });
+    }
+  },
+
+  onCopyGeneratedCode() {
+    const roleName = this.data.genTargetRole === 'FINANCE' ? '财务' : '店长';
+    const copyText = `🌸【雨花爱心餐报助手】\n恭请您护持【${this.data.targetGenStoreName || '雨花斋'}】！您的专属【${roleName}】激活码为：${this.data.generatedCode} 。请打开小程序，选择该门店并输入此码激活绑定。合十感恩！`;
+
+    wx.setClipboardData({
+      data: copyText,
+      success: () => {
+        wx.showToast({ title: '邀请信息已复制！', icon: 'success' });
+        this.setData({ showGenCodeModal: false });
+      }
+    });
+  },
+
   onSwitchAuditTab(e: any) {
     const tab = e.currentTarget.dataset.tab;
     this.setData({ auditActiveTab: tab });
@@ -1708,10 +1961,19 @@ Page({
     try {
       const db = wx.cloud.database();
       const _ = db.command;
+      // 🔑 数据隔离修复：强带 storeId / shopName 过滤，防止跨门店数据混淆
+      const currentStoreId = this.data.currentStoreId || wx.getStorageSync('current_store_id') || '';
+      const balanceHistoryWhere: any = {
+        dateString: _.lt(currentDate)
+      };
+      // 超管全国总览时不加门店过滤
+      if (currentStoreId && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES') {
+        balanceHistoryWhere.storeId = currentStoreId;
+      } else if (shopName && shopName !== '全部门店') {
+        balanceHistoryWhere.shopName = shopName;
+      }
       const res = await db.collection('report_logs')
-        .where({
-          dateString: _.lt(currentDate)
-        })
+        .where(balanceHistoryWhere)
         .orderBy('dateString', 'desc')
         .limit(15)
         .get();
@@ -2394,7 +2656,7 @@ Page({
           });
         }
       } else {
-        // 尝试简单格式：直接"大米50斤"（匿名捐赠）
+        // 尝试简单格式：直接"大米50斤"（匿名服务记录）
         const simpleMatch = trimmed.match(/^(?:赞助\s*)?(.+?)\s*(\d+(?:\.\d+)?)\s*(斤|公斤|kg|箱|袋|桶|瓶|份|个)?$/i);
         if (simpleMatch) {
           materials.push({
@@ -2415,26 +2677,60 @@ Page({
     this.setData({ materials, materialsInput: text });
   },
 
-  chooseReceiptImages() {
-    const remainingCount = 3 - this.data.receiptImages.length;
+  async chooseReceiptImages() {
+    const remainingCount = 9 - this.data.receiptImages.length;
     if (remainingCount <= 0) {
-      wx.showToast({ title: '最多上传3张图片', icon: 'none' });
+      wx.showToast({ title: '已达 9 张上限，无法继续添加', icon: 'none' });
       return;
     }
 
-    wx.chooseMedia({
-      count: remainingCount,
-      mediaType: ['image'],
-      sourceType: ['album', 'camera'],
-      success: (res) => {
-        const newImages = res.tempFiles.map(file => file.tempFilePath);
-        const updatedImages = [...this.data.receiptImages, ...newImages];
-        this.setData({ receiptImages: updatedImages });
-      },
-      fail: () => {
-        wx.showToast({ title: '选择图片失败', icon: 'none' });
+    try {
+      const res = await wx.chooseMedia({
+        count: remainingCount,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      });
+
+      if (!res.tempFiles || res.tempFiles.length === 0) return;
+
+      wx.showLoading({ title: '图片合规核验中...', mask: true });
+
+      const fs = wx.getFileSystemManager();
+
+      for (const file of res.tempFiles) {
+        try {
+          const base64Data = fs.readFileSync(file.tempFilePath, 'base64');
+          const checkRes = await wx.cloud.callFunction({
+            name: 'checkImageContent',
+            data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
+          });
+          const resultData = checkRes.result as any;
+
+          if (resultData && !resultData.isSafe) {
+            wx.hideLoading();
+            wx.showModal({
+              title: '⚠️ 违规内容拦截',
+              content: '系统检测到您选择的小票图片包含不合规、敏感或非法广告内容，已被全量阻断，请重新拍摄上传真实合规小票！',
+              showCancel: false,
+              confirmColor: '#D32F2F'
+            });
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('🛡️ 图片安全预读失败，降级进入下一张校验:', checkErr);
+        }
       }
-    });
+
+      wx.hideLoading();
+
+      const newImages = res.tempFiles.map(file => file.tempFilePath);
+      const updatedImages = [...this.data.receiptImages, ...newImages];
+      this.setData({ receiptImages: updatedImages });
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: '选择图片失败', icon: 'none' });
+    }
   },
 
   previewReceipt(e: any) {
@@ -2598,6 +2894,35 @@ Page({
       const totalFiles = chooseRes.tempFiles.length;
       const results = [];
       const uploadedFileIds = [];
+
+      wx.showLoading({ title: '图片合规核验中...', mask: true });
+
+      const fs = wx.getFileSystemManager();
+
+      for (let i = 0; i < totalFiles; i++) {
+        try {
+          const tempFilePath = chooseRes.tempFiles[i].tempFilePath;
+          const base64Data = fs.readFileSync(tempFilePath, 'base64');
+          const checkRes = await wx.cloud.callFunction({
+            name: 'checkImageContent',
+            data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
+          });
+          const resultData = checkRes.result as any;
+
+          if (resultData && !resultData.isSafe) {
+            wx.hideLoading();
+            wx.showModal({
+              title: '⚠️ 违规内容拦截',
+              content: '系统检测到您选择的图片包含不合规、敏感或非法广告内容，已被全量阻断，请重新拍摄上传真实合规小票！',
+              showCancel: false,
+              confirmColor: '#D32F2F'
+            });
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('🛡️ 图片安全预读失败，降级进入下一张校验:', checkErr);
+        }
+      }
 
       wx.showLoading({ title: 'AI 识别中 0/' + totalFiles, mask: true });
 
@@ -3266,8 +3591,14 @@ Page({
         recordSuccessfulSubmit(); // 记录提交成功（用于频率限制）
 
         if (this.data.isEditMode) {
+          this.isNavigating = true;
           setTimeout(() => {
-            wx.navigateBack({ delta: 1 });
+            wx.navigateBack({
+              delta: 1,
+              fail: () => {
+                this.isNavigating = false;
+              }
+            });
           }, 1500);
         }
       }
@@ -3543,8 +3874,39 @@ Page({
   },
 
   onShow() {
+    // 重置路由防重锁
+    this.isNavigating = false;
+
     // #11 清理过期的频率记录和警告确认记录
     cleanExpiredFrequencyRecords();
+
+    // 任务C：如果有待执行的锚点滚动，则在 onShow 中触发
+    // （需等待 onShow 完成 setData 后再执行，确保 DOM 已渲染）
+    if (this._pendingScrollTarget) {
+      const target = this._pendingScrollTarget;
+      // 清除暂存，避免下次 onShow 重复触发
+      this._pendingScrollTarget = '';
+      // 延迟 300ms 等待页面 setData 与 DOM 渲染完成
+      setTimeout(() => {
+        this.scrollToAnchorAndHighlight(target);
+      }, 300);
+    } else {
+      // 兼容 navigateBack 场景：通过 globalData 传递的待滚动目标
+      try {
+        const app = getApp() as any;
+        if (app.globalData && app.globalData.pendingScrollTarget) {
+          const target = app.globalData.pendingScrollTarget;
+          app.globalData.pendingScrollTarget = '';
+          setTimeout(() => {
+            this.scrollToAnchorAndHighlight(target);
+          }, 300);
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    this.refreshUserRoleView();
 
     const activeStore = getSelectedStore();
     if (activeStore && activeStore.storeName !== this.data.shopName) {
@@ -3578,6 +3940,90 @@ Page({
     if (storeId && reportDate && this.data.permissions?.canEditBalance) {
       this.checkAndAcquireLock(storeId, reportDate);
     }
+  },
+
+  /**
+   * 任务C：锚点聚焦 + 高亮动画
+   * 通过 wx.createSelectorQuery 计算目标元素位置，使用 wx.pageScrollTo 平滑滚动到屏幕中央，
+   * 然后为目标元素添加 .highlight-pulse 动画类，2秒后自动移除。
+   */
+  scrollToAnchorAndHighlight(targetSelector: string) {
+    const selector = `#${targetSelector}`;
+    const query = wx.createSelectorQuery().in(this);
+    query.select(selector).boundingClientRect();
+    query.selectViewport().scrollOffset();
+    query.exec((res) => {
+      if (!res || !res[0] || !res[1]) {
+        console.warn('[Index] 锚点元素未找到:', selector);
+        return;
+      }
+      const rect: any = res[0];
+      const scrollOffset: any = res[1];
+
+      // 计算让目标元素居中所需的滚动距离
+      // 屏幕高度通过 getSafeSystemInfo 获取
+      let windowHeight = 667;
+      try {
+        windowHeight = getSafeSystemInfo().windowHeight;
+      } catch (e) {
+        /* ignore */
+      }
+
+      const targetScrollTop = scrollOffset.scrollTop + rect.top - windowHeight / 2 + rect.height / 2;
+
+      // 平滑滚动到目标位置（duration 400ms 自然顺滑）
+      wx.pageScrollTo({
+        scrollTop: Math.max(0, targetScrollTop),
+        duration: 400,
+        complete: () => {
+          // 滚动完成后触发高亮动画
+          this.triggerHighlightPulse();
+        }
+      });
+    });
+  },
+
+  /**
+   * 触发 .highlight-pulse 高亮动画，2秒后自动移除
+   */
+  triggerHighlightPulse() {
+    // 清理上一次的定时器，避免重复
+    if (this._highlightTimer) {
+      clearTimeout(this._highlightTimer);
+    }
+
+    this.setData({ highlightCheckInCard: true });
+
+    this._highlightTimer = setTimeout(() => {
+      this.setData({ highlightCheckInCard: false });
+      this._highlightTimer = null;
+    }, 2000);
+  },
+
+  refreshUserRoleView() {
+    const role = wx.getStorageSync('current_user_role') || 'VOLUNTEER';
+    const storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '海沧区雨花斋';
+    const storeId = wx.getStorageSync('current_store_id') || '';
+
+    const rawRole = role.toUpperCase();
+    const isVolunteer = rawRole === 'VOLUNTEER';
+    const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+
+    this.setData({
+      currentUserRole: role,
+      currentRole: rawRole,
+      currentStoreName: storeName,
+      currentStoreId: storeId,
+      isVolunteer: isVolunteer,
+      isManager: isManager,
+      isFinance: isFinance,
+      isSuperAdmin: isSuperAdmin,
+      permissions: getPermissionFlags({ role })
+    });
+
+    console.log(`🎯 [主页视图精细化分流成功]: 当前身份为 ${role}, isManager=${isManager}, isFinance=${isFinance}, isSuperAdmin=${isSuperAdmin}`);
   },
 
   loadEditReportData() {
@@ -3678,6 +4124,9 @@ Page({
   },
 
   onHide() {
+    // 页面隐藏时解开路由锁，防止影响后续返回后的操作
+    this.isNavigating = false;
+
     const app = getApp();
     app.globalData.onNetworkReconnected = null;
     this.releaseDraftLock();
@@ -3969,6 +4418,14 @@ Page({
 
   onClosePosterModal() {
     this.setData({ showPosterModal: false });
+  },
+
+  onPreviewQrCode() {
+    const url = this.data.qrCodeUrl || '/images/sun_code_default.png';
+    wx.previewImage({
+      current: url,
+      urls: [url]
+    });
   },
 
   onSavePosterToPhotos() {
@@ -4264,22 +4721,65 @@ Page({
   },
 
   goToHistory() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
     wx.navigateTo({
-      url: '/pages/history/history'
+      url: '/pages/history/history',
+      fail: () => {
+        this.isNavigating = false;
+      }
     });
   },
 
   goToStatistics() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
     wx.navigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.shopName)}`
+      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.shopName)}`,
+      fail: () => {
+        this.isNavigating = false;
+      }
     });
   },
 
-  async onVolunteerCheckIn() {
+  onVolunteerCheckIn() {
+    this.refreshTodayShiftStatus();
+    this.setData({ showShiftSelectModal: true });
+  },
+
+  refreshTodayShiftStatus() {
+    const todayStr = new Date().toISOString().split('T')[0];
     const logs = wx.getStorageSync('my_checkin_logs') || [];
+
+    const todayLogs = logs.filter((log: any) => log.date === todayStr);
+    const completedShiftKeys = new Set(todayLogs.map((log: any) => log.shiftKey));
+    const todayHours = todayLogs.reduce((sum: number, log: any) => sum + (parseFloat(log.hours) || 0), 0);
+
+    let firstAvailableShift = '';
+    const updatedShifts = this.data.shiftDefinitions.map((item: any) => {
+      const isCompleted = completedShiftKeys.has(item.shiftKey);
+      if (!isCompleted && !firstAvailableShift) {
+        firstAvailableShift = item.shiftKey;
+      }
+      return {
+        ...item,
+        isCompleted: isCompleted
+      };
+    });
+
+    const allCompleted = updatedShifts.every((item: any) => item.isCompleted);
+
     this.setData({
-      showShiftSelectModal: true,
-      checkInLogs: logs
+      todayLogs: todayLogs,
+      todayAccumulatedHours: parseFloat(todayHours.toFixed(1)),
+      availableShifts: updatedShifts,
+      allShiftsCompleted: allCompleted,
+      selectedShift: firstAvailableShift || 'LUNCH',
+      selectedShiftHours: firstAvailableShift
+        ? (updatedShifts.find((s: any) => s.shiftKey === firstAvailableShift)?.hours || 3.0)
+        : 0
     });
   },
 
@@ -4291,16 +4791,9 @@ Page({
 
   onSelectShift(e: any) {
     const { shift, hours } = e.currentTarget.dataset;
-    let hoursNum = 3.0;
-    if (hours) {
-      hoursNum = parseFloat(hours);
-    } else {
-      hoursNum = parseFloat(this.data.customHoursInput || '4.0');
-    }
-
     this.setData({
       selectedShift: shift,
-      selectedShiftHours: hoursNum
+      selectedShiftHours: parseFloat(hours || '3.0')
     });
   },
 
@@ -4321,38 +4814,51 @@ Page({
   stopBubble() {},
 
   onConfirmShiftCheckIn() {
+    if (this.data.allShiftsCompleted) {
+      wx.showToast({ title: '您今日已完成所有班次护持，感恩您的无私付出！', icon: 'none' });
+      return;
+    }
+
     const todayStr = new Date().toISOString().split('T')[0];
     const logs = wx.getStorageSync('my_checkin_logs') || [];
 
-    const hasCheckedInToday = logs.some((log: any) => log.date === todayStr);
-
-    let addHours = this.data.selectedShiftHours || 3.0;
-    if (this.data.selectedShift === 'CUSTOM') {
-      addHours = parseFloat(this.data.customHoursInput || '4.0');
+    const isAlreadyChecked = logs.some((l: any) => l.date === todayStr && l.shiftKey === this.data.selectedShift);
+    if (isAlreadyChecked) {
+      wx.showToast({ title: '⚠️ 您今日已完成该班次打卡，请勿重复刷工时', icon: 'none' });
+      return;
     }
 
-    const shiftNames: Record<string, string> = {
-      'EARLY_MORNING': '🌌 凌晨熬粥与备菜班',
-      'MORNING': '🥗 早间准备与洗切班',
-      'LUNCH': '🍲 午餐打饭与引导班',
-      'CLEAN': '🧹 后厨洗碗与收尾班',
-      'NIGHT': '🌙 夜间整理与盘点班',
-      'CUSTOM': '⏱️ 特殊机动工时'
-    };
-    const shiftLabel = shiftNames[this.data.selectedShift] || '爱心护持班';
+    const addHours = this.data.selectedShiftHours || 3.0;
+    if (this.data.todayAccumulatedHours + addHours > 12.0) {
+      wx.showModal({
+        title: '🌸 义工关怀提醒',
+        content: `您今日已护持 ${this.data.todayAccumulatedHours} 小时，单日工时已达上限（12小时）。雨花家人请注意劳逸结合！`,
+        showCancel: false,
+        confirmText: '合十知晓',
+        confirmColor: '#8C1D18'
+      });
+      return;
+    }
 
+    const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === this.data.selectedShift);
+    const shiftLabel = shiftObj ? shiftObj.name : '爱心护持班';
+
+    const hasTodayLog = logs.some((l: any) => l.date === todayStr);
     const currentDays = this.data.myCheckInDays || 13;
-    const newDays = hasCheckedInToday ? currentDays : (currentDays + 1);
+    const newDays = hasTodayLog ? currentDays : (currentDays + 1);
 
     const newCount = (this.data.myCheckInCount || 16) + 1;
     const newHours = parseFloat(((this.data.myServiceHours || 48.0) + addHours).toFixed(1));
 
+    const timestamp = Date.now();
     const newLog = {
+      timestamp: timestamp,
       date: todayStr,
       time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      shiftKey: this.data.selectedShift,
       shiftName: shiftLabel,
       hours: addHours,
-      storeName: this.data.currentStoreName || '湖里区雨花斋',
+      storeName: this.data.currentStoreName || '海沧区雨花斋',
       willEatLunch: this.data.willEatLunch
     };
     logs.unshift(newLog);
@@ -4367,14 +4873,53 @@ Page({
       myCheckInCount: newCount,
       myServiceHours: newHours,
       checkInLogs: logs,
-      showShiftSelectModal: false
+      showShiftSelectModal: false,
+      showPosterModal: true
     });
 
-    const tipMsg = hasCheckedInToday
-      ? `今日第 ${logs.filter((log: any) => log.date === todayStr).length} 次到岗！成功叠加 ${addHours} 小时工时！`
-      : `感恩护持！已成功记录 ${shiftLabel} (${addHours}h)`;
+    wx.showToast({ title: `打卡成功！+${addHours}h`, icon: 'success' });
+  },
 
-    wx.showToast({ title: tipMsg, icon: 'none', duration: 3000 });
+  onRevokeTodayCheckIn(e: any) {
+    const { timestamp, hours } = e.currentTarget.dataset;
+    const revokeHours = parseFloat(hours || '0');
+
+    wx.showModal({
+      title: '↩️ 确认撤销打卡',
+      content: `确定要撤销此笔打卡记录吗？将自动扣减 ${revokeHours} 小时贡献工时。`,
+      confirmColor: '#D32F2F',
+      success: (res) => {
+        if (res.confirm) {
+          let logs = wx.getStorageSync('my_checkin_logs') || [];
+          const todayStr = new Date().toISOString().split('T')[0];
+
+          const ts = typeof timestamp === 'number' ? timestamp : parseInt(timestamp, 10);
+          logs = logs.filter((l: any) => l.timestamp !== ts);
+
+          const stillHasTodayLog = logs.some((l: any) => l.date === todayStr);
+
+          const currentDays = this.data.myCheckInDays || 13;
+          const newDays = stillHasTodayLog ? currentDays : Math.max(0, currentDays - 1);
+          const newCount = Math.max(0, (this.data.myCheckInCount || 16) - 1);
+          const newHours = parseFloat(Math.max(0, (this.data.myServiceHours || 48.0) - revokeHours).toFixed(1));
+
+          wx.setStorageSync('my_checkin_days', newDays);
+          wx.setStorageSync('my_checkin_count', newCount);
+          wx.setStorageSync('my_service_hours', newHours);
+          wx.setStorageSync('my_checkin_logs', logs);
+
+          this.setData({
+            myCheckInDays: newDays,
+            myCheckInCount: newCount,
+            myServiceHours: newHours,
+            checkInLogs: logs
+          });
+
+          this.refreshTodayShiftStatus();
+          wx.showToast({ title: '已成功撤销该笔记录', icon: 'none' });
+        }
+      }
+    });
   },
 
   loadVolunteerStats() {
@@ -4394,16 +4939,32 @@ Page({
   },
 
   onOpenMyCheckInHistory() {
-    const days = this.data.myCheckInDays || 12;
-    const hours = this.data.myServiceHours || 45;
+    const days = this.data.myCheckInDays || 0;
+    const hours = this.data.myServiceHours || 0;
+    const count = this.data.myCheckInCount || 0;
 
-    wx.showModal({
-      title: '📜 我的雨花护持档案',
-      content: `· 累计护持天数：${days} 天\n· 贡献爱心工时：${hours} 小时\n· 当前荣誉勋章：🌸 雨花爱心守候者\n\n默默付出，积沙成塔。感恩每一位默默护持的家人！`,
-      confirmText: '继续护持',
-      confirmColor: '#8C1D18',
-      showCancel: false
+    this.setData({
+      showArchiveModal: true,
+      archiveUserInfo: {
+        totalDays: days,
+        totalCheckInCount: count,
+        totalHours: hours
+      }
     });
+  },
+
+  onCloseArchiveModal() {
+    this.setData({ showArchiveModal: false });
+  },
+
+  onViewJourneyFromArchive() {
+    this.setData({ showArchiveModal: false });
+    // 延迟 200ms 等弹窗关闭动画完成再跳转
+    setTimeout(() => {
+      wx.navigateTo({
+        url: '/pages/journey/journey'
+      });
+    }, 200);
   },
 
   onOpenVolunteerAudit() {
@@ -4432,27 +4993,39 @@ Page({
 
     wx.showModal({
       title: '📖 阳光公开账本',
-      content: `【${storeName}】谨遵雨花斋“阳光透明”原则，所有爱心汇入与每日采购开支全量公开，接受社会监督。`,
+      content: `【${storeName}】谨遵雨花斋“阳光透明”原则，所有服务汇入与每日采购开支全量公开，接受社会监督。`,
       confirmText: '查看历史账目',
       cancelText: '关闭',
       confirmColor: '#8C1D18',
       success: (res) => {
         if (res.confirm) {
-          wx.navigateTo({
-            url: '/pages/history/history'
-          }).catch(() => {
-            wx.switchTab({ url: '/pages/history/history' });
-          });
+          this.isNavigating = true;
+          setTimeout(() => {
+            wx.navigateTo({
+              url: '/pages/history/history',
+              fail: () => {
+                wx.switchTab({
+                  url: '/pages/history/history',
+                  fail: () => {
+                    this.isNavigating = false;
+                  }
+                });
+              }
+            });
+          }, 100);
         }
       }
     });
   },
 
   onShareAppMessage() {
+    const store = this.data.currentStoreName || this.data.shopName || '雨花斋';
+    const date = this.data.reportDate || this.data.reportDateValue || '今日';
+
     return {
-      title: '✨ 账目清晰，信任传递！推荐使用【素小账】，10秒生成群汇报。',
-      path: '/pages/index/index',
-      imageUrl: ''
+      title: `🌸【${store}】${date}爱心餐报公示，请家人阅览！`,
+      path: `/pages/index/index?storeName=${encodeURIComponent(store)}`,
+      imageUrl: '/images/share_cover.png'
     };
   },
 

@@ -57,6 +57,49 @@
   background-color: var(--weui-FG-0);
 }
 
+/* ===== 新增：双功能模式「回家」按钮 ===== */
+
+.weui-navigation-bar__buttons_home_dual {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.weui-navigation-bar__btn_home_dual_wrapper {
+  padding: 11px 8px 11px 8px;
+  margin: -11px -8px -11px -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.weui-navigation-bar__btn_home_dual_wrapper.weui-active {
+  opacity: 0.5;
+}
+
+/* SVG 房子图标 - 内联 Base64 矢量图，跨平台一致渲染 */
+.weui-navigation-bar__btn_home_dual_icon {
+  width: 20px;
+  height: 20px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  -webkit-mask: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 9.5L12 3l9 6.5'/%3E%3Cpath d='M5 10v10h14V10'/%3E%3Cpath d='M10 20v-6h4v6'/%3E%3C/svg%3E") no-repeat 50% 50%;
+  mask: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 9.5L12 3l9 6.5'/%3E%3Cpath d='M5 10v10h14V10'/%3E%3Cpath d='M10 20v-6h4v6'/%3E%3C/svg%3E") no-repeat 50% 50%;
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  background-color: var(--weui-FG-0);
+}
+
+/* 返回与回家按钮之间的细分隔线 */
+.weui-navigation-bar__btn_divider {
+  width: 1px;
+  height: 16px;
+  background-color: rgba(0, 0, 0, 0.15);
+  margin-left: 6px;
+}
+
 .weui-navigation-bar__center {
   font-size: 15px;
   text-align: center;

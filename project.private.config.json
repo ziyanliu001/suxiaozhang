@@ -17,5 +17,18 @@
     "bigPackageSizeSupport": false,
     "checkInvalidKey": true,
     "ignoreDevUnusedFiles": true
+  },
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "首页",
+          "pathName": "pages/index/index",
+          "query": "",
+          "scene": null,
+          "launchMode": "default"
+        }
+      ]
+    }
   }
 }

@@ -7,7 +7,7 @@
     </view>
   </view>
 
-  <view class="admin-switch" wx:if="{{isAdmin}}">
+  <view class="admin-switch" wx:if="{{canViewAllStoresDropdown}}">
     <view class="switch-label">查看模式</view>
     <view class="switch-btn {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">全店汇总</view>
     <view class="switch-btn {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">个人统计</view>
@@ -20,14 +20,15 @@
           <text class="pin-icon">📍</text>
           <text class="title">当前统计门店</text>
         </view>
-        <picker wx:if="{{currentUserRole === 'super_admin' && allStoresList.length > 0}}" bindchange="onSuperAdminSelectStore" range="{{allStoresList}}" range-key="storeName">
+        <picker wx:if="{{canViewAllStoresDropdown && allStoresList.length > 0}}" bindchange="onSuperAdminSelectStore" range="{{allStoresList}}" range-key="storeName">
           <view class="store-picker-pill">
             <text class="name">{{shopName || '全部门店'}}</text>
             <text class="arrow">▼</text>
           </view>
         </picker>
-        <view wx:elif="{{currentUserRole && currentUserRole !== 'super_admin'}}" class="store-picker-pill locked">
+        <view wx:elif="{{currentUserRole && !canViewAllStoresDropdown}}" class="store-picker-pill locked">
           <text class="name">{{currentUserStoreName || shopName}}</text>
+          <text class="lock-icon">🔒</text>
           <text class="role-tag-badge">{{roleLabelMap[currentUserRole]}}</text>
         </view>
         <picker wx:elif="{{shopList && shopList.length > 0}}" bindchange="onShopChange" value="{{selectedShopIndex}}" range="{{shopList}}">
@@ -98,7 +99,7 @@
       <view class="hero-grid-4">
         <view class="h-cell">
           <text class="h-val">+¥{{nationalData.nationalTotalIncome}}</text>
-          <text class="h-lbl">全国爱心汇入</text>
+          <text class="h-lbl">全国服务汇入</text>
         </view>
         <view class="h-cell">
           <text class="h-val">-¥{{nationalData.nationalTotalExpense}}</text>
@@ -119,7 +120,7 @@
       <view class="matrix-table">
         <view class="table-thead">
           <text class="th col-store">门店名称</text>
-          <text class="th col-cost">单餐成本</text>
+          <text class="th col-cost" wx:if="{{canViewCrossStoreCost}}">单餐成本</text>
           <text class="th col-diners">服务人次</text>
           <text class="th col-status">续航预警</text>
         </view>
@@ -127,7 +128,7 @@
         <view class="table-tbody">
           <view class="table-tr" wx:for="{{nationalMatrixList}}" wx:key="storeId">
             <text class="td col-store font-bold">{{item.storeName}}</text>
-            <view class="td col-cost">
+            <view class="td col-cost" wx:if="{{canViewCrossStoreCost}}">
               <text class="cost-badge {{item.isCostValid ? 'valid' : 'neutral'}}">{{item.costPerMealStr}}</text>
             </view>
             <text class="td col-diners">{{item.totalDiners}} 人</text>
@@ -186,7 +187,7 @@
         </view>
         <view class="ie-columns">
           <view class="ie-col income-col">
-            <text class="ie-label">爱心汇入</text>
+            <text class="ie-label">服务汇入</text>
             <text class="ie-value income">+¥{{statsData.totalIncome || statistics.totalIncomeStr}}</text>
             <view class="ie-detail">
               <text class="ie-detail-label">自愿赞助</text>
@@ -213,7 +214,7 @@
         </view>
 
         <view class="net-accumulation-row">
-          <text class="net-label">本期爱心积累</text>
+          <text class="net-label">本期服务积累</text>
           <view class="net-val-group">
             <text class="net-value {{statistics.netAccumulationClass}}">{{statsData.netAccumulation || statistics.netAccumulationStr}}</text>
             <text class="net-sub-tip" wx:if="{{statistics.showLargeExpenseTip}}">(含房租/专项大额)</text>
@@ -283,7 +284,7 @@
           <view class="achievement-item">
             <text class="achievement-icon">🍱</text>
             <text class="achievement-value">{{statistics.openDays || 0}}</text>
-            <text class="achievement-label">开餐天数 (休餐捐赠{{statistics.donationDays || 0}}天)</text>
+            <text class="achievement-label">开餐天数 (休餐服务{{statistics.donationDays || 0}}天)</text>
           </view>
           <view class="achievement-item">
             <text class="achievement-icon">👥</text>
@@ -293,12 +294,12 @@
           <view class="achievement-item" wx:if="{{statistics.showPerMealCost || statsData.costPerMeal}}">
             <text class="achievement-icon">💚</text>
             <text class="achievement-value">¥{{statsData.costPerMeal || statistics.perMealCostStr}}</text>
-            <text class="achievement-label">每餐爱心投入 (元)</text>
+            <text class="achievement-label">每餐服务投入 (元)</text>
           </view>
           <view class="achievement-item" wx:else>
             <text class="achievement-icon">💚</text>
             <text class="achievement-value">—</text>
-            <text class="achievement-label">每餐爱心投入 (元)</text>
+            <text class="achievement-label">每餐服务投入 (元)</text>
           </view>
           <view class="achievement-item">
             <text class="achievement-icon">🧡</text>
@@ -309,9 +310,9 @@
 
         <view class="warm-donation-box" wx:else>
           <view class="warm-icon">🙏</view>
-          <view class="warm-title">本期为休餐筹措期</view>
+          <view class="warm-title">本期为休餐筹备期</view>
           <view class="warm-desc">
-            共收到 <text class="highlight">{{statistics.donationDays || 0}} 笔</text> 爱心汇入，积累资金用于后续持续开餐！
+            共收到 <text class="highlight">{{statistics.donationDays || 0}} 笔</text> 服务汇入，积累资金用于后续持续开餐！
           </view>
         </view>
 
@@ -365,7 +366,7 @@
         <block wx:else>
           <view class="preparing-period-banner">
             <text class="notice-icon">🌱</text>
-            <text class="notice-text">当前处于休餐筹措期，开餐后将开启用餐人数统计</text>
+            <text class="notice-text">当前处于休餐筹备期，开餐后将开启用餐人数统计</text>
           </view>
         </block>
 
@@ -413,7 +414,7 @@
 
                 <view class="daily-card-body">
                   <view class="grid-col">
-                    <text class="col-label">爱心收入</text>
+                    <text class="col-label">服务收入</text>
                     <text class="col-value green">+¥{{dayItem.incomeStr}}</text>
                   </view>
                   <view class="grid-col">
@@ -451,7 +452,7 @@
 
             <view class="daily-card-body">
               <view class="grid-col">
-                <text class="col-label">爱心收入</text>
+                <text class="col-label">服务收入</text>
                 <text class="col-value green">+¥{{item.incomeStr}}</text>
               </view>
               <view class="grid-col">
@@ -622,7 +623,7 @@
           </view>
 
           <view class="status-badge-bar {{isPreparingPhase ? 'preparing' : 'active'}}">
-            <text wx:if="{{isPreparingPhase}}">🌱 试运营筹措阶段 · 资金与场地筹备中</text>
+            <text wx:if="{{isPreparingPhase}}">🌱 试运营统筹阶段 · 资金与场地筹备中</text>
             <text wx:else>✨ 顺利开餐运营中 · 温暖爱心传递</text>
           </view>
 
@@ -630,7 +631,7 @@
           <view class="metrics-grid-2x2">
             <view class="grid-item">
               <text class="grid-label">累计开餐</text>
-              <text class="grid-value">{{gratitudeReportData.diningDays > 0 ? gratitudeReportData.diningDays + ' 天' : '筹措期'}}</text>
+              <text class="grid-value">{{gratitudeReportData.diningDays > 0 ? gratitudeReportData.diningDays + ' 天' : '筹备期'}}</text>
             </view>
             <view class="grid-item">
               <text class="grid-label">服务用餐</text>
@@ -649,7 +650,7 @@
           <view class="card-section-title">💰 收支透明账本</view>
           <view class="finance-summary-box">
             <view class="finance-row">
-              <text class="f-label">爱心汇入：</text>
+              <text class="f-label">服务汇入：</text>
               <text class="f-val income">+¥{{gratitudeIncomeStr || '0.00'}}</text>
             </view>
             <view class="finance-row">

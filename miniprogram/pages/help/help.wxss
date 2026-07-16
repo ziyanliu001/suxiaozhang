@@ -146,6 +146,31 @@ page {
   font-weight: bold;
 }
 
+/* 任务C：跳转首页打卡按钮 */
+.btn-goto-checkin {
+  margin-top: 16rpx;
+  width: 100%;
+  height: 76rpx;
+  line-height: 76rpx;
+  background: linear-gradient(135deg, #F5A623 0%, #E65100 100%);
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: bold;
+  border-radius: 38rpx;
+  padding: 0;
+  border: none;
+  box-shadow: 0 4rpx 12rpx rgba(245, 166, 35, 0.35);
+}
+
+.btn-goto-checkin::after {
+  border: none;
+}
+
+.btn-goto-checkin:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
 .faq-item {
   background: #FFFFFF;
   border-radius: 20rpx;

@@ -220,3 +220,155 @@
   color: #8C1D18 !important;
   font-weight: bold;
 }
+
+/* 未授权锁定的角色胶囊 */
+.role-choice-pill.locked {
+  background: #F2F4F8 !important;
+  border-color: #E2E8F0 !important;
+  opacity: 0.65;
+}
+
+.role-choice-pill.locked .role-label {
+  color: #888888 !important;
+}
+
+/* ===== 特权身份激活弹窗 ===== */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100000 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-card {
+  width: 85%;
+  max-width: 620rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 32rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #EFE6D8;
+  margin-bottom: 16rpx;
+}
+
+.modal-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  flex: 1;
+  padding-right: 20rpx;
+  line-height: 1.4;
+}
+
+.close-btn {
+  font-size: 32rpx;
+  color: #999999;
+  padding: 6rpx 10rpx;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* 激活弹窗选项卡 */
+.auth-tab-bar {
+  display: flex;
+  background: #F8F9FA;
+  border-radius: 16rpx;
+  padding: 6rpx;
+  margin: 16rpx 0;
+}
+
+.tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 12rpx 0;
+  font-size: 24rpx;
+  color: #666666;
+  border-radius: 12rpx;
+  transition: all 0.2s ease;
+}
+
+.tab-item.active {
+  background: #FFFFFF;
+  color: #8C1D18;
+  font-weight: bold;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+
+.auth-body {
+  margin: 24rpx 0;
+}
+
+.auth-tip {
+  font-size: 24rpx;
+  color: #555555;
+  line-height: 1.6;
+  display: block;
+  margin-bottom: 20rpx;
+}
+
+.auth-code-input {
+  background: #F8F9FA;
+  border: 2rpx solid #8C1D18;
+  border-radius: 16rpx;
+  height: 80rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  color: #333333;
+  box-sizing: border-box;
+}
+
+.sub-help-text {
+  font-size: 20rpx;
+  color: #999999;
+  margin-top: 12rpx;
+  display: block;
+}
+
+.auth-footer-btns {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.btn-cancel {
+  flex: 1;
+  background: #F8F9FA;
+  color: #666666;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+}
+
+.btn-cancel::after {
+  border: none;
+}
+
+.btn-confirm-auth {
+  flex: 1.5;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+}
+
+.btn-confirm-auth::after {
+  border: none;
+}
+
+.btn-confirm-auth:active {
+  opacity: 0.85;
+  transform: scale(0.98);
+}

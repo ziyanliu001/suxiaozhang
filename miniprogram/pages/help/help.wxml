@@ -109,7 +109,7 @@
           <text class="step-title">实时查看收支透明账本</text>
         </view>
         <view class="step-body">
-          在【统计分析页】随时查阅本店爱心汇入、日常开销与大额支出明细，账目 100% 绝对公开透明。
+          在【统计分析页】随时查阅本店服务汇入、日常开销与大额支出明细，账目 100% 绝对公开透明。
         </view>
       </view>
 
@@ -121,6 +121,17 @@
         <view class="step-body">
           点击 <text class="highlight">【⚡ 生成感恩文案】</text>，一键复制带有今日用餐人次和义工奉献工时的温馨文本，分享给爱心家人。
         </view>
+      </view>
+
+      <view class="step-card">
+        <view class="step-header">
+          <text class="step-tag">3</text>
+          <text class="step-title">到岗服务打卡</text>
+        </view>
+        <view class="step-body">
+          义工到岗后可点击首页的「义工到岗服务打卡」按钮记录今日护持工时。点击下方按钮立即回到首页打卡位置。
+        </view>
+        <button class="btn-goto-checkin" bindtap="onGotoCheckInCard">立即回首页打卡</button>
       </view>
     </view>
 

@@ -19,11 +19,31 @@
             </view>
           </view>
         </block>
-        <!-- 返回首页 -->
-        <block wx:if="{{homeButton}}">
+
+        <!-- 新增：紧邻返回按钮的「回到首页」按钮（双功能模式，actualShowHome 由 attached 计算得出） -->
+        <block wx:if="{{actualShowHome}}">
+          <view class="weui-navigation-bar__buttons weui-navigation-bar__buttons_home_dual">
+            <view
+              bindtap="goHome"
+              class="weui-navigation-bar__btn_home_dual_wrapper"
+              hover-class="weui-active"
+              hover-stay-time="100"
+              aria-role="button"
+              aria-label="回到首页"
+            >
+              <!-- 使用 SVG 房子图标（避免 Emoji 跨平台渲染差异） -->
+              <view class="weui-navigation-bar__btn_home_dual_icon"></view>
+            </view>
+            <!-- 按钮间细分隔线 -->
+            <view class="weui-navigation-bar__btn_divider"></view>
+          </view>
+        </block>
+
+        <!-- 返回首页（原独立模式，保留向后兼容） -->
+        <block wx:if="{{homeButton && !actualShowHome}}">
           <view class="weui-navigation-bar__buttons weui-navigation-bar__buttons_home">
             <view
-              bindtap="home"
+              bindtap="goHome"
               class="weui-navigation-bar__btn_home_wrapper"
               hover-class="weui-active"
               aria-role="button"

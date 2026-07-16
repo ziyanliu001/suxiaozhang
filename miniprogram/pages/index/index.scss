@@ -115,6 +115,15 @@ page {
   border-radius: 20rpx;
 }
 
+.btn-mine-capsule {
+  background-color: #FFF0ED;
+  color: #8C1D18;
+  font-size: 22rpx;
+  padding: 6rpx 20rpx;
+  border-radius: 20rpx;
+  font-weight: bold;
+}
+
 .manager-top-action-grid {
   display: flex;
   gap: 16rpx;
@@ -2023,72 +2032,114 @@ page {
 
 /* 凭证上传 */
 .receipt-upload-section {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx 16rpx;
   margin-top: 24rpx;
 }
 
-.receipt-upload-section .lbl-title {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #212529;
-  display: block;
-  margin-bottom: 12rpx;
-}
-
-.uploader-grid {
+.section-title-row {
   display: flex;
-  gap: 16rpx;
-  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20rpx;
+  position: relative;
 }
 
-.btn-upload-box {
-  width: 140rpx;
-  height: 140rpx;
-  border: 2rpx dashed #ADB5BD;
-  background: #F8F9FA;
+.sec-icon { font-size: 28rpx; margin-right: 8rpx; }
+.sec-title { font-size: 26rpx; font-weight: bold; color: #333333; }
+.sec-sub-tip { font-size: 22rpx; color: #888888; margin-left: 8rpx; }
+
+.upload-counter {
+  position: absolute;
+  right: 10rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #E65100;
+  background: #FFE0B2;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.upload-counter.counter-full {
+  color: #FFFFFF;
+  background: #D32F2F;
+}
+
+.receipt-grid-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.grid-image-item {
+  position: relative;
+  width: 100%;
+  padding-top: 100%;
+  border-radius: 16rpx;
+  overflow: visible;
+}
+
+.grid-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+  border: 1.5rpx solid #EFE6D8;
+}
+
+.img-delete-badge {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  width: 38rpx;
+  height: 38rpx;
+  background: rgba(211, 47, 47, 0.95);
+  color: #FFFFFF;
+  border-radius: 50%;
+  font-size: 22rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.15);
+}
+
+.grid-add-btn {
+  background: #FAF8F5;
+  border: 2.5rpx dashed #C8B195;
   border-radius: 16rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  aspect-ratio: 1 / 1;
 }
 
-.btn-upload-box .plus-icon {
-  font-size: 36rpx;
-  color: #868E96;
+.grid-add-btn .add-icon {
+  font-size: 48rpx;
+  color: #8C1D18;
+  line-height: 1;
+  font-weight: 300;
 }
 
-.btn-upload-box .upload-tip {
+.grid-add-btn .add-txt {
   font-size: 18rpx;
-  color: #868E96;
+  color: #8C1D18;
   margin-top: 4rpx;
-  text-align: center;
 }
 
-.upload-thumb-item {
-  width: 140rpx;
-  height: 140rpx;
-  position: relative;
-  border-radius: 16rpx;
-  overflow: hidden;
-}
-
-.upload-thumb-item .thumb-img {
-  width: 100%;
-  height: 100%;
-}
-
-.btn-del-img {
-  position: absolute;
-  top: 4rpx;
-  right: 4rpx;
-  width: 32rpx;
-  height: 32rpx;
-  background: rgba(0,0,0,0.6);
-  color: #FFFFFF;
-  border-radius: 50%;
+.upload-guide-text {
   font-size: 20rpx;
-  text-align: center;
-  line-height: 32rpx;
+  color: #E65100;
+  background: #FFF3E0;
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+  line-height: 1.4;
+  margin-top: 12rpx;
 }
 
 .form-row { display: flex; justify-content: space-between; gap: 16rpx; }
@@ -3035,6 +3086,501 @@ textarea, .textarea {
   border-radius: 16rpx;
   border: 1rpx solid #EFE6D8;
   box-sizing: border-box;
+}
+
+/* ================= 🔑 生成邀请码高亮按钮 ================= */
+.highlight-gold {
+  background: linear-gradient(180deg, #FFFDF0 0%, #FFE082 100%) !important;
+  border-color: #FFE082 !important;
+}
+
+/* ================= 🗑️ 危险操作红色按钮 ================= */
+.danger-red {
+  background: linear-gradient(180deg, #FFF5F5 0%, #FFCDD2 100%) !important;
+  border-color: #FFCDD2 !important;
+}
+
+/* ================= 🗑️ 全量清洗弹窗样式 ================= */
+.dev-clear-warning {
+  font-size: 24rpx;
+  color: #D32F2F;
+  font-weight: bold;
+  margin-bottom: 24rpx;
+  display: block;
+}
+
+.dev-clear-options {
+  margin-bottom: 24rpx;
+}
+
+.dev-clear-option {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+  font-size: 24rpx;
+  color: #444444;
+}
+
+.dev-clear-option checkbox {
+  margin-right: 16rpx;
+}
+
+.dev-clear-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-bottom: 24rpx;
+}
+
+.dev-clear-input-row text {
+  font-size: 24rpx;
+  color: #666666;
+}
+
+.dev-clear-input {
+  height: 80rpx;
+  border: 2rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 0 20rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  text-align: center;
+  letter-spacing: 4rpx;
+}
+
+.dev-clear-btn {
+  background: linear-gradient(180deg, #D32F2F 0%, #C62828 100%) !important;
+  color: #FFFFFF !important;
+  border: none !important;
+}
+
+/* ================= 顶栏快捷操作胶囊行 ================= */
+.manager-quick-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 14rpx;
+  margin: 24rpx 0;
+}
+
+.action-btn-capsule {
+  flex: 1;
+  background: linear-gradient(135deg, #FFFDF6 0%, #FFF9E6 100%);
+  border: 2rpx solid #FFE082;
+  border-radius: 20rpx;
+  padding: 16rpx 10rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 10rpx rgba(255, 224, 130, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.action-btn-capsule:active {
+  transform: scale(0.96);
+  background: #FFF3CD;
+}
+
+.action-btn-capsule .icon { font-size: 32rpx; margin-bottom: 6rpx; }
+.action-btn-capsule .txt { font-size: 20rpx; font-weight: bold; color: #795548; text-align: center; }
+
+.action-btn-capsule.danger-red {
+  background: linear-gradient(135deg, #FFF5F5 0%, #FFEBEE 100%);
+  border-color: #FFCDD2;
+}
+
+.action-btn-capsule.danger-red .txt { color: #C62828; }
+
+/* ================= 精致现代化工作台卡片 ================= */
+.workbench-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 24rpx;
+  border: 1rpx solid #EAECEF;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.03);
+}
+
+.workbench-title-row {
+  margin-bottom: 24rpx;
+  border-bottom: 1rpx solid #F1F3F5;
+  padding-bottom: 16rpx;
+}
+
+.workbench-title-row .wb-icon { font-size: 32rpx; margin-right: 8rpx; }
+.workbench-title-row .wb-name { font-size: 26rpx; font-weight: bold; color: #212529; }
+.workbench-title-row .wb-desc { font-size: 20rpx; color: #868E96; display: block; margin-top: 4rpx; }
+
+.wb-data-grid {
+  display: flex;
+  justify-content: space-between;
+}
+
+.data-cell {
+  flex: 1;
+  text-align: center;
+  position: relative;
+}
+
+.data-cell:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 1rpx;
+  background-color: #E9ECEF;
+}
+
+.data-cell .num { font-size: 36rpx; font-weight: bold; color: #495057; display: block; }
+.data-cell .num.highlight-green { color: #2E7D32; }
+.data-cell .num.danger-red { color: #C62828; }
+.data-cell .label { font-size: 20rpx; color: #868E96; margin-top: 6rpx; display: block; }
+
+/* ================= 精巧草稿提示条 ================= */
+.draft-notice-bar {
+  background: #E8F5E9;
+  border: 1.5rpx solid #A5D6A7;
+  border-radius: 16rpx;
+  padding: 16rpx 24rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.draft-left { display: flex; align-items: center; gap: 10rpx; }
+.draft-left .icon { font-size: 26rpx; }
+.draft-left .txt { font-size: 22rpx; color: #2E7D32; font-weight: 500; }
+.draft-actions { display: flex; align-items: center; gap: 12rpx; font-size: 22rpx; }
+.draft-actions .act-btn { font-weight: bold; padding: 4rpx 12rpx; }
+.draft-actions .btn-recover { color: #1B5E20; }
+.draft-actions .btn-discard { color: #C62828; }
+.draft-actions .split { color: #A5D6A7; }
+
+/* ================= 底部悬浮核心功能按钮 ================= */
+.bottom-action-floating-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 24rpx 32rpx;
+  display: flex;
+  gap: 20rpx;
+  border-top: 1rpx solid #E9ECEF;
+  box-shadow: 0 -8rpx 30rpx rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+  z-index: 90;
+}
+
+.btn-main-action {
+  flex: 1;
+  height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.btn-main-action:active {
+  transform: scale(0.97);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.05);
+}
+
+.text-gen-btn {
+  background: linear-gradient(135deg, #E53935 0%, #C62828 100%);
+  color: #FFFFFF;
+}
+
+.poster-gen-btn {
+  background: linear-gradient(135deg, #FFA000 0%, #FF8F00 100%);
+  color: #FFFFFF;
+}
+
+/* ================= 🔑 生成邀请码弹窗 ================= */
+.gencode-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.gencode-modal-card {
+  width: 85%;
+  max-width: 620rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 32rpx 24rpx;
+}
+
+.gencode-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.gencode-title-text {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.gencode-close-btn {
+  width: 56rpx;
+  height: 56rpx;
+  background: #F1F3F5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  color: #6B7280;
+}
+
+.gencode-body {
+  padding: 0 8rpx;
+}
+
+.gencode-role-row {
+  display: flex;
+  align-items: center;
+  margin: 20rpx 0;
+}
+
+.gencode-row-lab {
+  font-size: 26rpx;
+  color: #555;
+  margin-right: 16rpx;
+}
+
+.gencode-role-group {
+  display: flex;
+  gap: 16rpx;
+}
+
+.gencode-pill {
+  padding: 10rpx 24rpx;
+  border-radius: 30rpx;
+  background: #F8F9FA;
+  border: 1.5rpx solid #E9ECEF;
+  font-size: 24rpx;
+  color: #555;
+}
+
+.gencode-pill.active {
+  background: #FFEBEE;
+  border-color: #8C1D18;
+  color: #8C1D18;
+  font-weight: bold;
+}
+
+.gencode-result-box {
+  background: #FFFDF8;
+  border: 2rpx dashed #E65100;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  text-align: center;
+  margin: 24rpx 0;
+}
+
+.gencode-code-label {
+  font-size: 22rpx;
+  color: #666;
+  display: block;
+}
+
+.gencode-big-code {
+  font-size: 56rpx;
+  font-weight: bold;
+  color: #E65100;
+  letter-spacing: 12rpx;
+  display: block;
+  margin: 12rpx 0;
+  font-family: monospace;
+}
+
+.gencode-code-tip {
+  font-size: 20rpx;
+  color: #D32F2F;
+  display: block;
+}
+
+.gencode-btn-primary {
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  margin-top: 20rpx;
+  border: none;
+  width: 100%;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gencode-btn-primary::after {
+  border: none;
+}
+
+.form-item-row {
+  margin-bottom: 30rpx;
+}
+
+.form-label {
+  font-size: 24rpx;
+  color: #666666;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.form-picker-selector {
+  background: #FAF8F5;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 18rpx 24rpx;
+  font-size: 24rpx;
+  color: #333333;
+}
+
+.role-radio-group {
+  display: flex;
+  gap: 20rpx;
+}
+
+.role-radio-item {
+  flex: 1;
+  text-align: center;
+  background: #F8F9FA;
+  border: 1.5rpx solid #DEE2E6;
+  border-radius: 18rpx;
+  padding: 16rpx 0;
+  font-size: 24rpx;
+  color: #495057;
+  transition: all 0.2s ease;
+}
+
+.role-radio-item.active {
+  background: #FFF3E0;
+  border-color: #FFA000;
+  color: #E65100;
+  font-weight: bold;
+}
+
+.gen-result-box {
+  margin-top: 30rpx;
+  background: #FFF3E0;
+  border: 1.5rpx dashed #FFB74D;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  text-align: center;
+}
+
+.result-label {
+  font-size: 20rpx;
+  color: #E65100;
+  display: block;
+}
+
+.result-code {
+  font-size: 54rpx;
+  font-weight: bold;
+  color: #E65100;
+  display: block;
+  letter-spacing: 6rpx;
+  margin: 12rpx 0;
+  font-family: monospace;
+}
+
+.result-tip {
+  font-size: 18rpx;
+  color: #F57C00;
+  display: block;
+}
+
+.gen-code-footer {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.btn-cancel {
+  flex: 1;
+  background: #F1F3F5;
+  color: #6B7280;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  border: none;
+  height: 80rpx;
+}
+
+.btn-cancel::after {
+  border: none;
+}
+
+.btn-primary-gen {
+  flex: 1.5;
+  background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  border: none;
+  height: 80rpx;
+}
+
+.btn-primary-gen::after {
+  border: none;
+}
+
+.btn-copy-send {
+  flex: 1.5;
+  background: linear-gradient(135deg, #07C160 0%, #10B981 100%);
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  border: none;
+  height: 80rpx;
+}
+
+.btn-copy-send::after {
+  border: none;
+}
+
+.gencode-btn-copy {
+  background: #E65100;
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  border: none;
+  width: 100%;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16rpx;
+}
+
+.gencode-btn-copy::after {
+  border: none;
 }
 
 .expense-textarea.fixed-style {
@@ -4605,6 +5151,53 @@ textarea, .textarea {
   display: flex;
   flex-direction: column;
   gap: 20rpx;
+  /* 任务C：高亮动画的过渡基础 */
+  transition: box-shadow 0.3s ease, background-color 0.3s ease, transform 0.3s ease;
+  border-radius: 24rpx;
+  padding: 4rpx;
+}
+
+/* ===== 任务C：highlight-pulse 金色/红色呼吸闪烁动画（持续2秒） ===== */
+.volunteer-view-card .v-action-box.highlight-pulse {
+  animation: highlightPulse 2s ease-in-out 1;
+  /* 兜底光晕（动画失败时也能看出高亮） */
+  box-shadow: 0 0 24rpx 8rpx rgba(245, 166, 35, 0.6);
+  background-color: rgba(245, 166, 35, 0.08);
+}
+
+@keyframes highlightPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 166, 35, 0);
+    background-color: transparent;
+    transform: scale(1);
+  }
+  15% {
+    /* 第一次金色脉冲 */
+    box-shadow: 0 0 32rpx 12rpx rgba(245, 166, 35, 0.85);
+    background-color: rgba(245, 166, 35, 0.15);
+    transform: scale(1.02);
+  }
+  30% {
+    box-shadow: 0 0 16rpx 6rpx rgba(245, 166, 35, 0.3);
+    background-color: rgba(245, 166, 35, 0.04);
+    transform: scale(1);
+  }
+  50% {
+    /* 第二次红色脉冲（呼应雨花斋品牌色 #8C1D18） */
+    box-shadow: 0 0 32rpx 12rpx rgba(140, 29, 24, 0.7);
+    background-color: rgba(140, 29, 24, 0.10);
+    transform: scale(1.02);
+  }
+  70% {
+    box-shadow: 0 0 16rpx 6rpx rgba(140, 29, 24, 0.25);
+    background-color: rgba(140, 29, 24, 0.03);
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 166, 35, 0);
+    background-color: transparent;
+    transform: scale(1);
+  }
 }
 
 .volunteer-view-card .btn-volunteer-checkin {
@@ -4969,6 +5562,99 @@ textarea, .textarea {
   opacity: 0.9;
 }
 
+.header-titles {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.today-hours-tip {
+  font-size: 20rpx;
+  color: #777777;
+  display: block;
+  margin-top: 6rpx;
+}
+
+.today-hours-tip .highlight {
+  color: #8C1D18;
+  font-weight: bold;
+}
+
+.shift-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shift-item.disabled-completed {
+  background: #F2F4F7 !important;
+  border-color: #E2E8F0 !important;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.completed-tag {
+  font-size: 20rpx;
+  color: #2E7D32;
+  background: #E8F5E9;
+  padding: 2rpx 10rpx;
+  border-radius: 10rpx;
+  margin-left: 10rpx;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.today-checked-section {
+  background: #FFFDF9;
+  border: 1rpx dashed #FFE0B2;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  margin-top: 20rpx;
+}
+
+.section-title {
+  font-size: 22rpx;
+  color: #8D6E63;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.today-log-chip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  padding: 10rpx 16rpx;
+  border-radius: 12rpx;
+  margin-bottom: 10rpx;
+}
+
+.log-info {
+  font-size: 22rpx;
+  color: #333333;
+  word-break: break-all;
+  flex: 1;
+}
+
+.btn-revoke {
+  font-size: 20rpx;
+  color: #D32F2F;
+  background: #FFEBEE;
+  padding: 4rpx 16rpx;
+  border-radius: 10rpx;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
+.btn-disabled {
+  background: #CCCCCC !important;
+  color: #FFFFFF !important;
+  pointer-events: none;
+}
+
 /* ====== 爱心海报弹窗 (2x2 宫格版) ====== */
 
 .poster-modal-card {
@@ -5161,33 +5847,27 @@ textarea, .textarea {
 .p-footer-qr-row {
   display: flex;
   align-items: center;
-  border-top: 1rpx dashed #EFE6D8;
+  border-top: 1rpx dashed #E6DCCD;
   padding-top: 20rpx;
+  margin-top: 16rpx;
 }
 
-.qr-code-placeholder {
-  width: 100rpx;
-  height: 100rpx;
-  background: #F8F9FA;
-  border: 1rpx solid #DEE2E6;
-  border-radius: 12rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin-right: 16rpx;
+.qr-img-wrapper {
+  width: 104rpx;
+  height: 104rpx;
+  background: #FFFFFF;
+  border: 1.5rpx solid #E6DCCD;
+  border-radius: 16rpx;
+  padding: 6rpx;
+  margin-right: 20rpx;
   flex-shrink: 0;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.04);
 }
 
-.qr-icon {
-  font-size: 32rpx;
-  line-height: 1;
-}
-
-.qr-text {
-  font-size: 16rpx;
-  color: #888;
-  margin-top: 4rpx;
+.sun-code-real-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 12rpx;
 }
 
 .qr-right-text {
@@ -5198,7 +5878,7 @@ textarea, .textarea {
 .p-app-name {
   font-size: 24rpx;
   font-weight: bold;
-  color: #333333;
+  color: #222222;
 }
 
 .p-qr-tip {
@@ -5226,21 +5906,175 @@ textarea, .textarea {
   border: none;
 }
 
-.btn-save-p {
-  flex: 2;
-  background: #E65100;
+.btn-share-p {
+  flex: 1.8;
+  background: #07C160;
   color: #FFFFFF;
   border-radius: 40rpx;
   font-size: 26rpx;
   font-weight: bold;
   border: none;
+  box-shadow: 0 4rpx 12rpx rgba(7, 193, 96, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.btn-save-p::after {
+.btn-share-p::after {
   border: none;
 }
 
-.btn-save-p:active {
-  opacity: 0.9;
-  transform: scale(0.98);
+/* ==========================================
+   🌟 SVG 矢量图标系统 (真机兼容)
+   ========================================== */
+
+.idx-icon-svg {
+  width: 32rpx;
+  height: 32rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.idx-icon-sm {
+  width: 24rpx;
+  height: 24rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.idx-icon-lg {
+  width: 40rpx;
+  height: 40rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 👤 个人中心 */
+.idx-icon-user { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIwIDIxdi0yYTMgMyAwIDAgMC0zLTNIN2EzIDMgMCAwIDAtMyAzdjIiPjwvcGF0aD48Y2lyY2xlIGN4PSIxMiIgY3k9IjciIHI9IjQiPjwvY2lyY2xlPjwvc3ZnPg=='); }
+
+/* ❓ 帮助 */
+.idx-icon-help { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNDk1MDU3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxwYXRoIGQ9Ik05LjA5IDlhMyAzIDAgMCAxIDUuODMgMSBjMCAyLTMgMy0zIDMiPjwvcGF0aD48bGluZSB4MT0iMTIiIHkxPSIxNyIgeDI9IjEyLjAxIiB5Mj0iMTciPjwvbGluZT48L3N2Zz4='); }
+
+/* 🔒 锁定 */
+.idx-icon-lock { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRTY1MTAwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMTEiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxMSIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PHBhdGggZD0iTTcgMTFWN2E1IDUgMCAwIDEgMTAgMHY0Ij48L3BhdGg+PC9zdmc+'); }
+
+/* ✨ 闪光 */
+.idx-icon-sparkle { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRjU3QzAwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJsMS41IDZMNiA5LjVsNi41IDEuNUwxMiAxOGwtMS41LTcuNUw2IDl6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 🖼️ 图片/海报 */
+.idx-icon-image { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIgcnk9IjIiPjwvcmVjdD48Y2lyY2xlIGN4PSI4LjUiIGN5PSI4LjUiIHI9IjEuNSI+PC9jaXJjbGU+PHBhdGggZD0iTTIxIDE1bC01LTVMNSAyMSI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 👥 人群 */
+.idx-icon-people { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTcgMjF2LTJhNCA0IDAgMCAwLTQtNEgzIj48L3BhdGg+PHBhdGggZD0iTTIxIDIxdi0yYTQgNCAwIDAgMC00LTRoLTRhNCA0IDAgMCAwLTQgNHYyIj48L3BhdGg+PGNpcmNsZSBjeD0iNyIgY3k9IjciIHI9IjQiPjwvY2lyY2xlPjxwYXRoIGQ9Ik0xNiAzLjEzYTQgNCAwIDAgMSAwIDcuNSI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 🔑 钥匙 */
+.idx-icon-key { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDJsLTIgMm0tNy42MSA3LjYxYTUuNSA1LjUgMCAxIDEtNy43NzggNy43NzggNS41IDUuNSAwIDAgMSA3Ljc3Ny03Ljc3N3ptMCAwTDE1LjUgNy41bTAgMGwzIDNNMTUuNSA3LjVMMTggNSI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 🗑️ 垃圾桶 */
+.idx-icon-trash { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDMzMkYyIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMyA2IDUgNiAyMSA2Ij48L3BvbHlsaW5lPjxwYXRoIGQ9Ik0xOSA2djE0YTIgMiAwIDAgMS0yIDJIN2EyIDIgMCAwIDEtMi0yVjZtMyAwVjRhMiAyIDAgMCAxIDItMmg0YTIgMiAwIDAgMSAyIDJ2MiI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 👑 皇冠 */
+.idx-icon-crown { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRTY1MTAwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIgNGw1IDYgNS04IDUgOCA1LTZ2MTBIMnoiPjwvcGF0aD48L3N2Zz4='); }
+
+/* 📝 记事本 */
+.idx-icon-note { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4eiI+PC9wYXRoPjxwb2x5bGluZSBwb2ludHM9IjE0IDIgMTQgOCAyMCA4Ij48L3BvbHlsaW5lPjwvc3ZnPg=='); }
+
+/* 📦 箱子 */
+.idx-icon-box { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDE2VjhhMiAyIDAgMCAwLTEtMS43M2wtNy00YTIgMiAwIDAgMC0yIDBsLTcgNEEyIDIgMCAwIDAgMyA4djhhMiAyIDAgMCAwIDEgMS43M2w3IDRhMiAyIDAgMCAwIDIgMGw3LTRBMiAyIDAgMCAwIDIxIDE2eiI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 📢 喇叭 */
+.idx-icon-megaphone { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgMTFsMTgtNXYxNEwzIDE1di00eiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMS42IDE2LjhhMyA0IDAgMCAxIDAgNSAxLjkgMS45IDAgMCAwIDMuNy0uOHYtMy41Ij48L3BhdGg+PC9zdmc+'); }
+
+/* ⚙️ 齿轮 */
+.idx-icon-settings { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMyI+PC9jaXJjbGU+PHBhdGggZD0iTTE5LjQgMTVhMS42NSAxLjY1IDAgMCAwIC4zMyAxLjgybC4wNi4wNmEyIDIgMCAwIDEtMi44MyAyLjgzbC0uMDYtLjA2YTEuNjUgMS42NSAwIDAgMC0xLjgyLS4zMyAxLjY1IDEuNjUgMCAwIDAtMSAxLjUxVjIxYTIgMiAwIDAgMS00IDB2LS4wOUExLjY1IDEuNjUgMCAwIDAgOSAxOS40YTEuNjUgMS42NSAwIDAgMC0xLjgyLjMzbC0uMDYuMDZhMiAyIDAgMCAxLTIuODMtMi44M2wuMDYtLjA2YTEuNjUgMS42NSAwIDAgMCAuMzMtMS44MiAxLjY1IDEuNjUgMCAwIDAtMS41MS0xSDNhMiAyIDAgMCAxIDAtNGguMDlBMS42NSAxLjY1IDAgMCAwIDQuNiA5YTEuNjUgMS42NSAwIDAgMC0uMzMtMS44MmwtLjA2LS4wNmEyIDIgMCAwIDEgMi44My0yLjgzbC4wNi4wNmExLjY1IDEuNjUgMCAwIDAgMS44Mi4zM0g5YTEuNjUgMS42NSAwIDAgMCAxLTEuNTFWM2EyIDIgMCAwIDEgNCAwdi4wOWExLjY1IDEuNjUgMCAwIDAgMSAxLjUxIDEuNjUgMS42NSAwIDAgMCAxLjgyLS4zM2wuMDYtLjA2YTIgMiAwIDAgMSAyLjgzIDIuODNsLS4wNi4wNmExLjY1IDEuNjUgMCAwIDAtLjMzIDEuODJWOWExLjY1IDEuNjUgMCAwIDAgMS41MSAxeDIxYTIgMiAwIDAgMSAwIDRoLS4wOWExLjY1IDEuNjUgMCAwIDAtMS41MSAxeiI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 📅 日历 */
+.idx-icon-calendar { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIgcnk9IjIiPjwvcmVjdD48bGluZSB4MT0iMTYiIHkxPSIyIiB4Mj0iMTYiIHkyPSI2Ij48L2xpbmU+PGxpbmUgeDE9IjgiIHkxPSIyIiB4Mj0iOCIgeTI9IjYiPjwvbGluZT48L3N2Zz4='); }
+
+/* 💰 钱袋 */
+.idx-icon-wallet { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDEyVjdhMiAyIDAgMCAwLTItMkg1YTIgMiAwIDAgMC0yIDJ2MTBhMiAyIDAgMCAwIDIgMmgxNGEyIDIgMCAwIDAgMi0yek0xNiAxMmgyIj48L3BhdGg+PHBhdGggZD0iTTMgN0w5IDEzIj48L3BhdGg+PC9zdmc+'); }
+
+/* 🧹 清扫 */
+.idx-icon-broom { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgNmw1IDVtNiA2bDUgNU0xMiAyMkE5IDkgMCAwIDEgMyAxM2w4LThhMyAzIDAgMCAxIDQgNGw4IDhhMSAxIDAgMCAxIDAgMS41TDE1IDE4bC0zIDR6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 📊 图表 */
+.idx-icon-chart { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGxpbmUgeDE9IjE4IiB5MT0iMjAiIHgyPSIxOCIgeTI9IjEwIj48L2xpbmU+PGxpbmUgeDE9IjEyIiB5MT0iMjAiIHgyPSIxMiIgeTI9IjQiPjwvbGluZT48bGluZSB4MT0iNiIgeTE9IjIwIiB4Mj0iNiIgeTI9IjE0Ij48L2xpbmU+PC9zdmc+'); }
+
+/* 📷 相机 */
+.idx-icon-camera { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIzIDE5YTIgMiAwIDAgMS0yIDJIM2EyIDIgMCAwIDEtMi0yVjhhMiAyIDAgMCAxIDItMmg0bDItNGg4bDIgNGgyYTIgMiAwIDAgMSAyIDJ6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMyIgcj0iNCI+PC9jaXJjbGU+PC9zdmc+'); }
+
+/* 📋 剪贴板 */
+.idx-icon-clipboard { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE2IDRoMmEyIDIgMCAwIDEgMiAydjE0YTIgMiAwIDAgMS0yIDJINmEyIDIgMCAwIDEtMi0yVjZhMiAyIDAgMCAxIDItMmgyIj48L3BhdGg+PHJlY3QgeD0iOCIgeT0iMiIgd2lkdGg9IjgiIGhlaWdodD0iNCIgcng9IjEiIHJ5PSIxIj48L3JlY3Q+PC9zdmc+'); }
+
+/* ⚡ 闪电 */
+.idx-icon-bolt { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiPjwvcG9seWxpbmU+PC9zdmc+'); }
+
+/* 🎨 调色板 */
+.idx-icon-palette { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTMuNSIgY3k9IjYuNSIgcj0iLjUiPjwvY2lyY2xlPjxjaXJjbGUgY3g9IjE3LjUiIGN5PSIxMC41IiByPSIuNSI+PC9jaXJjbGU+PGNpcmNsZSBjeD0iOC41IiBjeT0iNy41IiByPSIuNSI+PC9jaXJjbGU+PGNpcmNsZSBjeD0iNi41IiBjeT0iMTIuNSIgcj0iLjUiPjwvY2lyY2xlPjxwYXRoIGQ9Ik0xMiAyQzYuNSAyIDIgNi41IDIgMTJzNC41IDEwIDEwIDEwYy45MzYgMCAxLjY0LS43NCAxLjY0LTEuNjQgMC0uNDUtLjE3LS44Ni0uNDUtMS4xNi0uMjctLjMtLjQ0LS43LS40NC0xLjE2IDAtLjkuNzQtMS42NCAxLjY0LTEuNjRoMS41OUE0IDQgMCAwIDAgMjIgMTJjMC01LjUyLTQuNDgtMTAtMTAtMTB6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 💬 对话 */
+.idx-icon-chat { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDExLjVhOC4zOCA4LjM4IDAgMCAxLS45IDMuOCA4LjUgOC41IDAgMCAxLTcuNiA0LjcgOC4zOCA4LjM4IDAgMCAxLTMuOC0uOUwzIDIxbDEuOS01LjdhOC4zOCA4LjM4IDAgMCAxLS45LTMuOCA4LjUgOC41IDAgMCAxIDQuNy03LjYgOC4zOCA4LjM4IDAgMCAxIDMuOC0uOWg1YTguNDggOC40OCAwIDAgMSA4IDguNXoiPjwvcGF0aD48L3N2Zz4='); }
+
+/* 📜 卷轴 */
+.idx-icon-scroll { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4eiI+PC9wYXRoPjxwb2x5bGluZSBwb2ludHM9IjE0IDIgMTQgOCAyMCA4Ij48L3BvbHlsaW5lPjxsaW5lIHgxPSIxNiIgeTE9IjEzIiB4Mj0iOCIgeTI9IjEzIj48L2xpbmU+PGxpbmUgeDE9IjE2IiB5MT0iMTciIHgyPSI4IiB5Mj0iMTciPjwvbGluZT48L3N2Zz4='); }
+
+/* 🔄 刷新 */
+.idx-icon-refresh { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMjMgNCAyMyAxMCAxNyAxMCI+PC9wb2x5bGluZT48cG9seWxpbmUgcG9pbnRzPSIxIDIwIDEgMTQgNyAxNCI+PC9wb2x5bGluZT48cGF0aCBkPSJNMy41MSA5YTEwIDEwIDAgMCAxIDE0Ljg1LTMuMzZMMjMgMTBNMSAxNEwxLjY0IDE4LjM2QTEwIDEwIDAgMCAwIDIwLjQ5IDE1TDEgMTQiPjwvcGF0aD48L3N2Zz4='); }
+
+/* ✏️ 编辑 */
+.idx-icon-edit { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIwaDI5TTYgMTd2MmEyIDIgMCAwIDAgMiAyaDRsMTAtMTBhMiAyIDAgMCAwIDAtM2wtNC00YTIgMiAwIDAgMC0zIDBMNiAxN3oiPjwvcGF0aD48L3N2Zz4='); }
+
+/* 🌸 莲花 */
+.idx-icon-flower { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjJjMC0zIDItNiA1LTZzNCAyIDQgNC0yIDItOSAyeiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiAyMmMwLTMtMi02LTUtNnMtNCAyLTQgNCAyIDIgOSAyeiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiA1Yy0yIDItMiA1IDAgN3M1IDAgNS0zLTEtNC01LTR6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* ❤️ 心形 */
+.idx-icon-heart { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDUwMDUwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIwLjg0IDQuNjFhNS41IDUuNSAwIDAgMC03Ljc4IDBMMTIgNS42N2wtMS4wNi0xLjA2YTUuNSA1LjUgMCAwIDAtNy43OCA3Ljc4bDEuMDYgMS4wNkwxMiAyMS4yM2w3Ljc4LTcuNzggMS4wNi0xLjA2YTUuNSA1LjUgMCAwIDAgMC03Ljc4eiI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* 🤝 握手 */
+.idx-icon-handshake { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTExIDE3bDIgMmwxLTFTMiAxMSAyIDEyIDEyYy41LS41IDEtMS41IDAtM3pNMjEgMTJsLTQtNCA0IDR6TTcgN2w0IDR6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 📖 书本 */
+.idx-icon-book { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQgMTkuNUEyLjUgMi41IDAgMCAxIDYuNSAxN0gyMCI+PC9wYXRoPjxwYXRoIGQ9Ik02LjUgMkgyMHYyMEg2LjVBMi41IDIuNSAwIDAgMSA0IDE5LjV2LTE1QTIuNSAyLjUgMCAwIDEgNi41IDJ6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 💡 提示灯 */
+.idx-icon-bulb { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRTY1MTAwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMThoNnMtMyAyLTQgNGw1LTRIMTJ6Ij48L3BhdGg+PHBhdGggZD0iTTUgOWEyIDIgMCAwIDEgMi0yaDEwYTIgMiAwIDAgMSAyIDJ2MmEyIDIgMCAwIDAtMiAydjFhMiAyIDAgMCAxLTIgMkg5YTIgMiAwIDAgMS0yLTJ2LTFhMiAyIDAgMCAwLTItMlY5eiI+PC9wYXRoPjwvc3ZnPg=='); }
+
+/* ⚠️ 警告 */
+.idx-icon-warning { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRjU5RTBCIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEwLjI5IDMuODYxIDEuODIgMThhMiAyIDAgMCAwIDEuNzEgM2gxNi45NGEyIDIgMCAwIDAgMS43MS0zTDEzLjcxIDMuODZhMiAyIDAgMCAwLTMuNDIgMHoiPjwvcGF0aD48bGluZSB4MT0iMTIiIHkxPSI5IiB4Mj0iMTIiIHkyPSIxMyI+PC9saW5lPjxsaW5lIHgxPSIxMiIgeTE9IjE3IiB4Mj0iMTIuMDEiIHkyPSIxNyI+PC9saW5lPjwvc3ZnPg=='); }
+
+/* 🔗 链接 */
+.idx-icon-link { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEwIDEzYTUgNSAwIDAgMCA3LjU0LjU0bDMtM2E1IDUgMCAwIDAtNy4wNy03LjA3bC0xLjcyIDEuNzEiPjwvcGF0aD48cGF0aCBkPSJNMTQgMTFhNSA1IDAgMCAwLTcuNTQtLjU0bC0zIDNhNSA1IDAgMCAwIDcuMDcgNy4wN2wxLjcxLTEuNzEiPjwvcGF0aD48L3N2Zz4='); }
+
+/* 🍲 餐碗 */
+.idx-icon-bowl { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgMTJoMThhOSA5IDAgMCAxLTE4IDB6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 📌 图钉 */
+.idx-icon-pin { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIuNUE0LjUgNC41IDAgMCAxIDE2LjUgN2MwIDEuNS0uNSAzLTEuNSA0bC0xIDEuNXY0bDIgMy0xIDFIMmwtMS0xIDItM3YtNEwyIDEwQzQgOSA0LjUgOCA0LjUgNy41Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 📱 手机 */
+.idx-icon-phone { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODY4RTk2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iNSIgeT0iMiIgd2lkdGg9IjE0IiBoZWlnaHQ9IjIwIiByeD0iMiIgcnk9IjIiPjwvcmVjdD48bGluZSB4MT0iMTIiIHkxPSIxOCIgeDI9IjEyLjAxIiB5Mj0iMTgiPjwvbGluZT48L3N2Zz4='); }
+
+/* ✍️ 写字 */
+.idx-icon-pen { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIwaDI5TTYgMTd2MmEyIDIgMCAwIDAgMiAyaDRsMTAtMTBhMiAyIDAgMCAwIDAtM2wtNC00YTIgMiAwIDAgMC0zIDBMNiAxN3oiPjwvcGF0aD48L3N2Zz4='); }
+/* 合规展示声明 */
+.compliance-disclaimer {
+  padding: 24rpx 32rpx 48rpx;
+  text-align: center;
+}
+.compliance-disclaimer-text {
+  font-size: 20rpx;
+  line-height: 1.6;
+  color: #9a9a9a;
 }

@@ -5,7 +5,7 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  const { startDate, endDate, shopName, viewMode } = event;
+  const { startDate, endDate, shopName, storeId, viewMode } = event;
   const { OPENID } = cloud.getWXContext();
 
   if (!startDate || !endDate) {
@@ -25,6 +25,11 @@ exports.main = async (event, context) => {
     let matchConditions = {
       dateString: db.command.gte(startDate).and(db.command.lte(endDate))
     };
+
+    // 🔑 多门店数据强隔离
+    if (storeId && storeId !== 'national_overview' && storeId !== 'ALL_STORES') {
+      matchConditions.storeId = storeId;
+    }
 
     if (shopName) {
       matchConditions.shopName = shopName;

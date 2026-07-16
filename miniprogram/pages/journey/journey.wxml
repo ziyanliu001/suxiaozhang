@@ -1,0 +1,124 @@
+<view class="journey-page">
+  <navigation-bar
+    title="暖心历程"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:back="onGoBack"
+    bind:home="onGoBack"
+  />
+
+  <scroll-view scroll-y class="journey-scroll" style="padding-top: {{navTop + 44}}px;">
+    <!-- 顶部统计卡片 -->
+    <view class="journey-header-card">
+      <view class="journey-title-row">
+        <view class="title-icon lotus-icon"></view>
+        <text class="journey-title">我的雨花护持历程</text>
+      </view>
+      <view class="journey-subtitle">每一滴汗水，都是爱的印记</view>
+
+      <view class="summary-stats">
+        <view class="summary-cell">
+          <text class="summary-num">{{totalDays}}</text>
+          <text class="summary-label">护持天数</text>
+        </view>
+        <view class="summary-cell">
+          <text class="summary-num">{{totalCount}}</text>
+          <text class="summary-label">累计打卡</text>
+        </view>
+        <view class="summary-cell">
+          <text class="summary-num">{{totalHours}}</text>
+          <text class="summary-label">贡献工时(h)</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 暖心热力图 -->
+    <view class="heatmap-card">
+      <view class="card-header">
+        <view class="card-header-left">
+          <view class="header-icon flame-icon"></view>
+          <text class="card-title">{{heatmapTitle}}</text>
+        </view>
+        <view class="heat-legend">
+          <text class="legend-label">少</text>
+          <view class="legend-dot level-1"></view>
+          <view class="legend-dot level-2"></view>
+          <view class="legend-dot level-3"></view>
+          <view class="legend-dot level-4"></view>
+          <text class="legend-label">多</text>
+        </view>
+      </view>
+
+      <view class="heatmap-grid">
+        <block wx:for="{{heatmapCells}}" wx:key="date">
+          <view class="heat-cell {{item.count > 0 ? 'active' : ''}} level-{{item.hours > 0 ? (item.hours >= maxHeatHours * 0.75 ? 4 : (item.hours >= maxHeatHours * 0.5 ? 3 : (item.hours >= maxHeatHours * 0.25 ? 2 : 1))) : 0}}"
+                bindtap="noop"
+                data-date="{{item.date}}"
+                data-hours="{{item.hours}}">
+            <view class="cell-icon"></view>
+            <text class="cell-date">{{item.dayLabel}}</text>
+          </view>
+        </block>
+      </view>
+
+      <view class="heatmap-tip">
+        <view class="tip-icon bulb-icon"></view>
+        <text class="tip-text">金色越亮、图标越满，代表当日护持工时越长</text>
+      </view>
+    </view>
+
+    <!-- 时间轴 -->
+    <view class="timeline-card">
+      <view class="card-header">
+        <view class="card-header-left">
+          <view class="header-icon scroll-icon"></view>
+          <text class="card-title">服务时间轴</text>
+        </view>
+        <view class="btn-toggle-all" bindtap="onToggleAll">
+          <text class="toggle-text">{{allExpanded ? '全部收起' : '全部展开'}}</text>
+          <text class="toggle-arrow {{allExpanded ? 'rotate' : ''}}">▾</text>
+        </view>
+      </view>
+
+      <view class="timeline-empty" wx:if="{{timelineGroups.length === 0}}">
+        <view class="empty-icon flower-icon"></view>
+        <text class="empty-title">暂无打卡记录</text>
+        <text class="empty-desc">回到首页完成第一次义工到岗打卡，开启您的暖心历程。</text>
+      </view>
+
+      <view class="timeline-groups" wx:else>
+        <block wx:for="{{timelineGroups}}" wx:key="monthKey">
+          <view class="timeline-group">
+            <view class="group-header" bindtap="onToggleGroup" data-month-key="{{item.monthKey}}">
+              <view class="group-dot"></view>
+              <text class="group-title">{{item.monthLabel}}</text>
+              <text class="group-count">共 {{item.logs.length}} 次</text>
+              <text class="group-arrow {{item.expanded ? 'rotate' : ''}}">▾</text>
+            </view>
+
+            <view class="group-items {{item.expanded ? 'expanded' : 'collapsed'}}">
+              <block wx:for="{{item.logs}}" wx:for-item="log" wx:key="timestamp">
+                <view class="timeline-item" style="animation-delay: {{index * 60}}ms;">
+                  <view class="item-left">
+                    <view class="service-icon icon-{{log.serviceType || 'other'}}"></view>
+                    <view class="item-line"></view>
+                  </view>
+                  <view class="item-body">
+                    <view class="item-title-row">
+                      <text class="item-shift">{{log.shiftName}}</text>
+                      <text class="item-hours">+{{log.hours}}h</text>
+                    </view>
+                    <view class="item-meta">
+                      <text class="item-date">{{log.date}} {{log.time}}</text>
+                      <text class="item-store">{{log.storeName}}</text>
+                    </view>
+                  </view>
+                </view>
+              </block>
+            </view>
+          </view>
+        </block>
+      </view>
+    </view>
+  </scroll-view>
+</view>

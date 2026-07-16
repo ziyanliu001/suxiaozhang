@@ -15,7 +15,7 @@ function getPrevDayIsoString(dateString) {
 }
 
 exports.main = async (event, context) => {
-  const { shopName, mpAccount, targetDateString } = event;
+  const { shopName, mpAccount, targetDateString, storeId } = event;
 
   if (!shopName || !targetDateString) {
     return {
@@ -34,6 +34,8 @@ exports.main = async (event, context) => {
   try {
     const cleanStore = (s) => String(s || '').replace(/[区市省店\s]/g, '').trim();
     const targetStore = cleanStore(shopName);
+    // 🔑 数据隔离：非全国总览时使用 storeId 精准过滤
+    const useStoreIdFilter = storeId && storeId !== 'national_overview' && storeId !== 'ALL_STORES';
 
     const prevDateString = getPrevDayIsoString(targetDateString);
 
@@ -41,11 +43,12 @@ exports.main = async (event, context) => {
     let matchType = 'none';
 
     if (targetStore && targetStore !== '全部门店') {
+      // 优先使用 storeId 精准查询
+      const exactWhere = useStoreIdFilter
+        ? { storeId: storeId, dateString: prevDateString }
+        : { shopName: shopName, dateString: prevDateString };
       const exactMatchRes = await db.collection('report_logs')
-        .where({
-          shopName: shopName,
-          dateString: prevDateString
-        })
+        .where(exactWhere)
         .limit(1)
         .get();
 

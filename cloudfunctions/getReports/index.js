@@ -5,7 +5,7 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  const { startDate, endDate, shopName, mpAccount, limit = 100, viewMode } = event;
+  const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode } = event;
   const { OPENID } = cloud.getWXContext();
 
   try {
@@ -22,6 +22,11 @@ exports.main = async (event, context) => {
       whereConditions.dateString = db.command.gte(startDate);
     } else if (endDate) {
       whereConditions.dateString = db.command.lte(endDate);
+    }
+
+    // 🔑 多门店数据强隔离：storeId 非空且不是全国总览标识时加入查询条件
+    if (storeId && storeId !== 'national_overview' && storeId !== 'ALL_STORES' && storeId !== 'all_stores') {
+      whereConditions.storeId = storeId;
     }
 
     if (shopName) {

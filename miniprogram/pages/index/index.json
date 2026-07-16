@@ -3,6 +3,7 @@
   "navigationBarBackgroundColor": "#d32f2f",
   "navigationBarTextStyle": "white",
   "usingComponents": {
-    "store-picker": "../../components/store-picker/store-picker"
+    "store-picker": "../../components/store-picker/store-picker",
+    "archive-modal": "../../components/archive-modal/archive-modal"
   }
 }

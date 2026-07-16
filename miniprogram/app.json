@@ -1,26 +1,18 @@
 {
   "pages": [
+    "pages/test/test",
     "pages/index/index",
     "pages/logs/logs",
     "pages/history/history",
     "pages/statistics/statistics",
-    "pages/help/help"
+    "pages/help/help",
+    "pages/mine/mine",
+    "pages/journey/journey"
   ],
   "window": {
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"
   },
   "style": "v2",
-  "rendererOptions": {
-    "skyline": {
-      "defaultDisplayBlock": true,
-      "defaultContentBox": true,
-      "disableABTest": true,
-      "sdkVersionBegin": "3.0.0",
-      "sdkVersionEnd": "15.255.255"
-    }
-  },
-  "componentFramework": "glass-easel",
-  "sitemapLocation": "sitemap.json",
-  "lazyCodeLoading": "requiredComponents"
+  "sitemapLocation": "sitemap.json"
 }

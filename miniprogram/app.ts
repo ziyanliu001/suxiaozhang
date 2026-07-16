@@ -1,13 +1,11 @@
 // app.ts
-import { AuthService } from './utils/authService';
-
 interface StorePermission {
   storeId: string;
   storeName: string;
   role: 'MANAGER' | 'FINANCE' | 'VOLUNTEER';
 }
 
-App<IAppOption>({
+App({
   globalData: {
     onNetworkReconnected: null as (() => void) | null,
     selectedStore: null as { storeId: string; storeName: string } | null,
@@ -20,37 +18,57 @@ App<IAppOption>({
   },
 
   onLaunch() {
-    wx.cloud.init({
-      env: 'cloudbase-d8g7hg2bf851750ab',
-      traceUser: true
+    console.log('[App] onLaunch start');
+
+    // 云开发初始化（延迟到首页再执行，避免阻塞启动）
+    try {
+      if (wx.cloud) {
+        wx.cloud.init({
+          env: 'cloudbase-d8g7hg2bf851750ab',
+          traceUser: true
+        });
+        console.log('[App] wx.cloud.init ok');
+      }
+    } catch (err) {
+      console.warn('[App] wx.cloud.init 失败:', err);
+    }
+
+    const logs = wx.getStorageSync('logs') || [];
+    logs.unshift(Date.now());
+    if (logs.length > 20) logs.length = 20;
+    wx.setStorageSync('logs', logs);
+
+    // 登录预热延迟执行，不阻塞首屏渲染
+    setTimeout(() => {
+      this._delayedLoginInit();
+    }, 500);
+
+    wx.onNetworkStatusChange((res) => {
+      if (res.isConnected && this.globalData.onNetworkReconnected) {
+        try {
+          this.globalData.onNetworkReconnected!();
+        } catch (error) {
+          console.error('[App] 网络恢复回调执行失败:', error);
+        }
+      }
     });
 
-    const logs = wx.getStorageSync('logs') || []
-    logs.unshift(Date.now())
-    wx.setStorageSync('logs', logs)
+    console.log('[App] onLaunch end');
+  },
 
-    AuthService.ensureLogin().then(res => {
+  async _delayedLoginInit() {
+    try {
+      const { AuthService } = require('./utils/authService');
+      const res = await AuthService.ensureLogin();
       if (res.success) {
         console.log('[App] 静默登录预热成功:', res.openid);
         this.fetchUserStorePermissions(res.openid!);
       } else {
         console.warn('[App] 静默登录预热失败:', res.error);
       }
-    });
-
-    wx.onNetworkStatusChange((res) => {
-      console.log('[App] 网络状态变化:', res);
-      if (res.isConnected) {
-        console.log('[App] 网络已恢复连接');
-        if (this.globalData.onNetworkReconnected) {
-          try {
-            this.globalData.onNetworkReconnected();
-          } catch (error) {
-            console.error('[App] 网络恢复回调执行失败:', error);
-          }
-        }
-      }
-    });
+    } catch (err) {
+      console.warn('[App] 登录预热异常:', err);
+    }
   },
 
   async fetchUserStorePermissions(openid: string) {

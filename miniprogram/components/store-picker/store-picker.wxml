@@ -31,18 +31,19 @@
             <text class="store-name-text">{{item.storeName}}</text>
           </view>
 
-          <!-- 该门店下的可选身份标签列表 (解耦自由选择) -->
+          <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定) -->
           <view class="role-selector-row">
             <view wx:for="{{item.roles}}"
                   wx:for-item="roleObj"
                   wx:key="role"
-                  class="role-choice-pill {{roleObj.role}} {{item.storeName === currentStore.storeName && roleObj.role === currentStore.role ? 'selected' : ''}}"
-                  bindtap="onSelectStoreAndRole"
+                  class="role-choice-pill {{roleObj.role}} {{item.storeName === currentStore.storeName && roleObj.role === currentStore.role ? 'selected' : ''}} {{!roleObj.isAuthorized ? 'locked' : ''}}"
+                  bindtap="onRolePillClick"
                   data-store-id="{{item.storeId}}"
                   data-store-name="{{item.storeName}}"
-                  data-role="{{roleObj.role}}">
+                  data-role="{{roleObj.role}}"
+                  data-authorized="{{roleObj.isAuthorized}}">
 
-              <text class="role-icon">{{roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🛡️' : '🌸'))}}</text>
+              <text class="role-icon">{{!roleObj.isAuthorized ? '🔒' : (roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🛡️' : '🌸')))}}</text>
               <text class="role-label">{{roleObj.label}}</text>
               <text class="check-mark" wx:if="{{item.storeName === currentStore.storeName && roleObj.role === currentStore.role}}">✔</text>
             </view>
@@ -53,5 +54,55 @@
       </block>
     </scroll-view>
 
+  </view>
+</view>
+
+<!-- 🔐 特权身份激活弹窗 (安全防泄漏版) -->
+<view class="modal-backdrop" wx:if="{{showAuthModal}}" catchtap="onCloseAuthModal">
+  <view class="modal-card auth-card" catchtap="stopBubble">
+    <view class="modal-header">
+      <text class="modal-title">🔐 激活【{{targetAuthStoreName}} · {{targetAuthRoleLabel}}】</text>
+      <text class="close-btn" bindtap="onCloseAuthModal">✕</text>
+    </view>
+
+    <!-- 选项卡：一次性邀请码 / 提交申请 -->
+    <view class="auth-tab-bar">
+      <view class="tab-item {{authTab === 'CODE' ? 'active' : ''}}" bindtap="onSwitchAuthTab" data-tab="CODE">一次性动态码</view>
+      <view class="tab-item {{authTab === 'APPLY' ? 'active' : ''}}" bindtap="onSwitchAuthTab" data-tab="APPLY">在线提交申请</view>
+    </view>
+
+    <!-- 通道 1：一次性动态邀请码 / 超管根密钥 -->
+    <view class="auth-body" wx:if="{{authTab === 'CODE'}}">
+      <text class="auth-tip" wx:if="{{targetAuthRole === 'SUPER_ADMIN'}}">👑 开发者/超管专属：请输入系统创世根密钥（支持 ROOT8888 / ADMIN2026 / YUHUA888）：</text>
+      <text class="auth-tip" wx:else>请输入现任店长或总管向您提供的 6 位动态邀请码（一客码，用完即失效）：</text>
+
+      <input class="auth-code-input"
+             type="text"
+             maxlength="20"
+             placeholder="{{targetAuthRole === 'SUPER_ADMIN' ? '请输入创世根密钥 (如 ROOT8888)' : '请输入 6 位动态邀请码'}}"
+             value="{{authCodeInput}}"
+             bindinput="onAuthCodeInput"/>
+
+      <text class="sub-help-text" wx:if="{{targetAuthRole === 'SUPER_ADMIN'}}">🔑 提示：验证成功后将瞬间解锁全国所有门店的管理与稽核特权。</text>
+      <text class="sub-help-text" wx:else>🔒 防泄漏保障：邀请码仅限使用一次，过期自动失效。</text>
+    </view>
+
+    <!-- 通道 2：在线提交申请流程 -->
+    <view class="auth-body" wx:if="{{authTab === 'APPLY'}}">
+      <text class="auth-tip">如果您未取得邀请码，可向【{{targetAuthStoreName}}】管理组提交绑定申请：</text>
+      <input class="auth-code-input"
+             type="text"
+             placeholder="请输入您的真实姓名/义工号"
+             value="{{applicantNameInput}}"
+             bindinput="onApplicantNameInput"/>
+      <text class="sub-help-text">提交后，现任店长将在【店长工作台】收到审核通知。</text>
+    </view>
+
+    <view class="auth-footer-btns">
+      <button class="btn-cancel" bindtap="onCloseAuthModal">取消</button>
+      <button class="btn-confirm-auth" bindtap="onVerifyAuthSubmit">
+        {{authTab === 'CODE' ? '合十激活' : '提交申请'}}
+      </button>
+    </view>
   </view>
 </view>

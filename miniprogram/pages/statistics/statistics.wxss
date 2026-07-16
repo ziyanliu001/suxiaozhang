@@ -154,6 +154,11 @@ page {
   display: none;
 }
 
+.store-picker-pill .lock-icon {
+  font-size: 20rpx;
+  margin-left: 6rpx;
+}
+
 .role-tag-badge {
   font-size: 18rpx;
   background: #FFF3BF;

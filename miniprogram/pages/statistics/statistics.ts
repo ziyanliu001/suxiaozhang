@@ -3,6 +3,7 @@ import { AuthService, ROLE_LABELS } from '../../utils/authService';
 import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { formatGratitudeReportText, GratitudeReportData } from '../../utils/reportFormatter';
 import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 
 function parseDate(dateStr: string): Date {
   return new Date(String(dateStr).replace(/-/g, '/'));
@@ -217,6 +218,8 @@ function filterRecordsByPeriodAndStore(
 }
 
 Page({
+  _navGuard: null as NavGuardInstance | null,
+
   data: {
     currentTab: 'week',
     shopName: '全部门店',
@@ -230,6 +233,9 @@ Page({
     navTop: 0,
     contentTop: 0,
     isAdmin: false,
+    canViewNationalDashboard: false,
+    canViewCrossStoreCost: false,
+    canViewAllStoresDropdown: false,
     viewMode: 'all' as 'all' | 'personal',
     isAllStoresMode: true,
     hasOtherStoreData: false,
@@ -276,11 +282,30 @@ Page({
     this.initCustomDates();
     this.initUserRole();
     this.reloadShopListAndStats();
+
+    // 注入物理返回键兜底拦截
+    this._navGuard = createNavGuard({
+      homePath: '/pages/index/index',
+      alertMessage: '即将退出雨花爱心餐报助手，是否返回首页继续使用？'
+    });
+    this._navGuard.setupOnLoad();
+  },
+
+  onUnload() {
+    if (this._navGuard) {
+      this._navGuard.teardown();
+      this._navGuard = null;
+    }
   },
 
   onShow() {
+    // navGuard 状态刷新
+    if (this._navGuard) {
+      this._navGuard.setupOnShow();
+    }
+
     const activeStore = getSelectedStore();
-    if (activeStore && activeStore.storeName !== this.data.shopName && this.data.currentUserRole !== 'super_admin') {
+    if (activeStore && activeStore.storeName !== this.data.shopName && !this.data.canViewAllStoresDropdown) {
       this.setData({
         shopName: activeStore.storeName
       });
@@ -315,39 +340,47 @@ Page({
   async initUserRole() {
     const cachedRole = AuthService.getCachedRoleInfo();
     if (cachedRole) {
-      this.setData({
-        isAdmin: cachedRole.role === 'super_admin',
-        currentUserRole: cachedRole.role,
-        currentUserStoreName: cachedRole.storeName
-      });
-      if (cachedRole.role === 'super_admin') {
-        this.loadNationalDashboard();
-      }
+      this.applyRolePermissions(cachedRole.role, cachedRole.storeName);
     }
 
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      this.setData({
-        isAdmin: info.role === 'super_admin',
-        currentUserRole: info.role,
-        currentUserStoreName: info.storeName
-      });
+      this.applyRolePermissions(info.role, info.storeName);
+    }
+  },
 
-      // 非超级管理员：锁定到本门店
-      if (info.role !== 'super_admin' && info.storeName) {
-        this.setData({
-          shopName: info.storeName,
-          isAllStoresMode: false
-        });
-      } else if (info.role === 'super_admin') {
-        this.loadNationalDashboard();
-      }
+  // 🛡️ 三级角色权限卡口：单店财务 / 总部财务 / 超级管理员
+  applyRolePermissions(role: string, storeName: string) {
+    const isSuperAdmin = role === 'super_admin';
+    const isHQFinance = role === 'hq_finance' || role === 'regional_finance';
+    // 权限 A：只有超管和总部财务才能看"全国大屏"与"跨店成本比对"
+    const canViewNationalDashboard = isSuperAdmin || isHQFinance;
+    const canViewCrossStoreCost = isSuperAdmin || isHQFinance;
+    const canViewAllStoresDropdown = isSuperAdmin || isHQFinance;
+
+    this.setData({
+      isAdmin: isSuperAdmin,
+      currentUserRole: role,
+      currentUserStoreName: storeName,
+      canViewNationalDashboard,
+      canViewCrossStoreCost,
+      canViewAllStoresDropdown
+    });
+
+    // 非总部级角色：锁定到本门店
+    if (!canViewAllStoresDropdown && storeName) {
+      this.setData({
+        shopName: storeName,
+        isAllStoresMode: false
+      });
+    } else if (canViewAllStoresDropdown) {
+      this.loadNationalDashboard();
     }
   },
 
   async loadNationalDashboard() {
-    if (this.data.currentUserRole !== 'super_admin') return;
+    if (!this.data.canViewNationalDashboard) return;
     if (!this.data.isAllStoresMode) return;
 
     this.setData({ showNationalDashboard: true });
@@ -386,7 +419,7 @@ Page({
       } else if (foodExpense === 0) {
         costPerMealStr = '无日常开销';
       } else {
-        costPerMealStr = '筹措备餐中';
+        costPerMealStr = '筹备中';
       }
 
       let dailyCostEstimate = foodExpense > 0 && days > 0 ? (foodExpense / days) : 100;
@@ -564,14 +597,14 @@ Page({
       isAllStoresMode: isAll,
       hasOtherStoreData: false,
       statistics: null,
-      showNationalDashboard: isAll && this.data.currentUserRole === 'super_admin'
+      showNationalDashboard: isAll && this.data.canViewNationalDashboard
     });
 
     if (!isAll && selected.storeName) {
       setSelectedStore({ storeId: selected.storeId || '', storeName: selected.storeName });
     }
 
-    if (isAll && this.data.currentUserRole === 'super_admin') {
+    if (isAll && this.data.canViewNationalDashboard) {
       this.loadNationalDashboard();
     } else {
       this.calculateStats();
@@ -1392,14 +1425,14 @@ Page({
         : '';
 
       let statusTag = 'donation';
-      let statusLabel = '爱心汇入';
+      let statusLabel = '服务汇入';
 
       if (hasDiners || (hasExpense && !hasIncome)) {
         statusTag = 'meal';
         statusLabel = '正常开餐';
       } else if (hasIncome && !hasDiners) {
         statusTag = 'donation';
-        statusLabel = '爱心汇入';
+        statusLabel = '服务汇入';
       }
 
       statistics.dailyRecords.push({
@@ -1499,7 +1532,7 @@ Page({
       // 真实运营赤字：余额较低才警告，大额房租但余额充足时降级
       if (statistics.latestBalance < 500) {
         statistics.healthStatus = 'fundUrgent';
-        statistics.healthStatusText = `⚠️ 账户结余较低 (¥${formatMoney(statistics.latestBalance)})，请留意后续爱心款项筹措`;
+        statistics.healthStatusText = `⚠️ 账户结余较低 (¥${formatMoney(statistics.latestBalance)})，请留意后续服务资金筹备`;
         statistics.healthStatusColor = '#E53935';
         statistics.healthIcon = '🔴';
       } else if (statistics.largeExpenseTotal > 0) {
@@ -1509,7 +1542,7 @@ Page({
         statistics.healthIcon = '💡';
       } else {
         statistics.healthStatus = 'fundUrgent';
-        statistics.healthStatusText = '⚠️ 本期支出大于爱心汇入，请留意筹措';
+        statistics.healthStatusText = '⚠️ 本期支出大于服务汇入，请留意资金筹备';
         statistics.healthStatusColor = '#E53935';
         statistics.healthIcon = '🔴';
       }
@@ -1523,7 +1556,7 @@ Page({
       statistics.healthIcon = '🟡';
     } else {
       statistics.healthStatus = 'healthy';
-      statistics.healthStatusText = '爱心资金与物资充足，平稳运行中';
+      statistics.healthStatusText = '服务资金与物资充足，平稳运行中';
       statistics.healthStatusColor = '#4CAF50';
       statistics.healthIcon = '🟢';
     }
@@ -1876,7 +1909,7 @@ Page({
           ctx.fillStyle = '#D32F2F';
           ctx.font = 'bold 12px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('🌱 试运营筹措阶段 · 资金与场地筹备中', w / 2, badgeY + 23);
+          ctx.fillText('🌱 试运营统筹阶段 · 资金与场地筹备中', w / 2, badgeY + 23);
         } else {
           ctx.fillStyle = '#E8F5E9';
           ctx.strokeStyle = '#C8E6C9';
@@ -1915,7 +1948,7 @@ Page({
           ctx.fillText(value, x + gridW / 2, y + 42);
         };
 
-        const diningDaysText = data.diningDays > 0 ? data.diningDays + ' 天' : '筹措期';
+        const diningDaysText = data.diningDays > 0 ? data.diningDays + ' 天' : '筹备期';
         drawGridItem(32, gridStartY, '累计开餐', diningDaysText);
         drawGridItem(32 + gridW + gridGap, gridStartY, '服务用餐', data.totalDiners + ' 人次', true);
         drawGridItem(32, gridStartY + gridH + gridGap, '义工护持', data.volunteerCount + ' 人次');
@@ -1936,7 +1969,7 @@ Page({
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillStyle = '#666666';
-        ctx.fillText('爱心汇入：', 48, financeBoxY + 24);
+        ctx.fillText('服务汇入：', 48, financeBoxY + 24);
         ctx.fillStyle = '#2E7D32';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'right';
@@ -2166,9 +2199,9 @@ Page({
 
           ctx.fillStyle = '#212529';
           ctx.font = 'bold 22px sans-serif';
-          ctx.fillText(`爱心汇入总额: +¥${statistics.totalIncomeStr}`, 60, 220);
+          ctx.fillText(`服务汇入总额: +¥${statistics.totalIncomeStr}`, 60, 220);
           ctx.fillText(`开餐支出总额: -¥${statistics.totalExpenseStr}`, 60, 270);
-          ctx.fillText(`本期爱心积累: ${statistics.netAccumulationStr}`, 60, 320);
+          ctx.fillText(`本期服务积累: ${statistics.netAccumulationStr}`, 60, 320);
 
           ctx.fillStyle = '#495057';
           ctx.font = '18px sans-serif';
@@ -2186,7 +2219,7 @@ Page({
             { label: '累计开餐天数', value: `${statistics.openDays} 天`, color: '#8C1D18' },
             { label: '服务用餐人次', value: `${statistics.totalDiningCount} 人`, color: '#8C1D18' },
             { label: '义工服务工时', value: `${statistics.totalVolunteerHours} 小时`, color: '#8C1D18' },
-            { label: '每餐爱心投入', value: statistics.showPerMealCost ? `¥${statistics.perMealCostStr}` : '-', color: '#2E7D32' }
+            { label: '每餐服务投入', value: statistics.showPerMealCost ? `¥${statistics.perMealCostStr}` : '-', color: '#2E7D32' }
           ];
 
           dataCards.forEach((card, index) => {
@@ -2236,7 +2269,7 @@ Page({
 
           const netAccumulation = parseFloat(statistics.netAccumulation) || 0;
           let statusBannerBg = '#FAB005';
-          let statusBannerText = '爱心资金与物资充足，平稳运行中';
+          let statusBannerText = '服务资金与物资充足，平稳运行中';
           if (netAccumulation < 0) {
             statusBannerBg = '#E03131';
             statusBannerText = '⚠️ 本期资金支出大于汇入，呼吁善士护持';
@@ -2453,7 +2486,7 @@ Page({
   },
 
   buildCSV(data: any[], storeName: string): string {
-    let csv = '日期,门店名称,爱心收入(元),日常食材开销(元),房租专项大额(元),总支出(元),净盈亏(元),用餐人次,到岗义工(人),大额备注/说明\n';
+    let csv = '日期,门店名称,服务收入(元),日常食材开销(元),房租专项大额(元),总支出(元),净盈亏(元),用餐人次,到岗义工(人),大额备注/说明\n';
 
     data.forEach(item => {
       const date = item.date || '';
@@ -2641,6 +2674,11 @@ Page({
   },
 
   goBackHome() {
+    // 优先使用 navGuard 的智能跳转（自动判断栈深度 + 栈中是否已有首页）
+    if (this._navGuard) {
+      this._navGuard.goHome();
+      return;
+    }
     const pages = getCurrentPages();
     if (pages.length > 1) {
       wx.navigateBack();

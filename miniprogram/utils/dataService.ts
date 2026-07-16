@@ -71,6 +71,7 @@ export const DataService = {
       dateString: reportData.dateString || '',
       reportDate: reportData.reportDate || '',
       shopName: reportData.shopName || '',
+      storeId: reportData.storeId || wx.getStorageSync('current_store_id') || '',
       mpAccount: reportData.mpAccount || '',
       yesterdayBalance: parseNumber(reportData.yesterdayBalance),
       otherDonation: parseNumber(reportData.otherDonation),
@@ -121,13 +122,17 @@ export const DataService = {
         };
       }
 
-      // 步骤 1: 查询同日期同门店是否已有记录（Upsert 查重）
+      // 步骤 1: 查询同日期同门店是否已有记录（Upsert 查重，强带 storeId 隔离）
+      const upsertWhere: any = {
+        dateString: formattedData.dateString,
+        shopName: formattedData.shopName,
+        _openid: openid || ''
+      };
+      if (formattedData.storeId) {
+        upsertWhere.storeId = formattedData.storeId;
+      }
       const existingQuery = await db.collection('report_logs')
-        .where({
-          dateString: formattedData.dateString,
-          shopName: formattedData.shopName,
-          _openid: openid || ''
-        })
+        .where(upsertWhere)
         .limit(1)
         .get();
 
@@ -248,24 +253,25 @@ export const DataService = {
     startDate?: string;
     endDate?: string;
     shopName?: string;
+    storeId?: string;
     mpAccount?: string;
     limit?: number;
     viewMode?: 'all' | 'personal';
   } = {}): Promise<{ success: boolean; data: any[]; source: 'cloud' | 'local' }> {
-    const { startDate, endDate, shopName, mpAccount, limit = 100, viewMode } = options;
+    const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode } = options;
 
     try {
-      // 云端查询不传 shopName，由前端进行模糊匹配，避免历史数据因少字漏匹配
+      // 云端查询传 storeId 做强隔离（超管全国总览时 storeId 为空或 ALL_STORES 则不过滤）
       const result = await wx.cloud.callFunction({
         name: 'getReports',
-        data: { startDate, endDate, mpAccount, limit, viewMode }
+        data: { startDate, endDate, storeId, mpAccount, limit, viewMode }
       });
 
       const r = result.result as any;
       if (r && r.success) {
         let cloudData = r.data || [];
 
-        // 前端模糊匹配门店名称
+        // 前端模糊匹配门店名称（向后兼容历史无 storeId 的数据）
         if (shopName) {
           cloudData = cloudData.filter((item: any) =>
             isStoreNameFuzzyMatch(item.shopName, shopName)
@@ -390,12 +396,16 @@ export const DataService = {
         dataToSync.isSynced = true;
         dataToSync.updateTime = db.serverDate();
 
+        const syncWhere: any = {
+          dateString: dataToSync.dateString,
+          shopName: dataToSync.shopName,
+          _openid: openid || ''
+        };
+        if (dataToSync.storeId) {
+          syncWhere.storeId = dataToSync.storeId;
+        }
         const existingQuery = await db.collection('report_logs')
-          .where({
-            dateString: dataToSync.dateString,
-            shopName: dataToSync.shopName,
-            _openid: openid || ''
-          })
+          .where(syncWhere)
           .limit(1)
           .get();
 
@@ -595,11 +605,12 @@ export const DataService = {
     }
   },
 
-  async getLatestReport(shopName?: string, mpAccount?: string): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
-    const result = await this.getReports({ 
+  async getLatestReport(shopName?: string, mpAccount?: string, storeId?: string): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
+    const result = await this.getReports({
       shopName,
+      storeId,
       mpAccount,
-      limit: 1 
+      limit: 1
     });
     
     if (result.success && result.data.length > 0) {
@@ -616,7 +627,7 @@ export const DataService = {
     };
   },
 
-  async getPreviousBalance(shopName: string, mpAccount: string, targetDateString: string): Promise<{ success: boolean; data?: any }> {
+  async getPreviousBalance(shopName: string, mpAccount: string, targetDateString: string, storeId?: string): Promise<{ success: boolean; data?: any }> {
     if (!shopName || !targetDateString) {
       return { success: false };
     }
@@ -632,7 +643,7 @@ export const DataService = {
     try {
       const result = await wx.cloud.callFunction({
         name: 'getPreviousBalance',
-        data: { shopName, mpAccount, targetDateString }
+        data: { shopName, mpAccount, targetDateString, storeId }
       });
 
       const r = result.result as any;
@@ -709,11 +720,11 @@ export const DataService = {
     }
   },
 
-  async getStatistics(startDate: string, endDate: string, shopName?: string, viewMode?: 'all' | 'personal'): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
+  async getStatistics(startDate: string, endDate: string, shopName?: string, viewMode?: 'all' | 'personal', storeId?: string): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
     try {
       const result = await wx.cloud.callFunction({
         name: 'getStatistics',
-        data: { startDate, endDate, shopName, viewMode }
+        data: { startDate, endDate, shopName, viewMode, storeId }
       });
 
       const r = result.result as any;
