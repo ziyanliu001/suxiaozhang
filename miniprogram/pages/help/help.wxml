@@ -1,9 +1,9 @@
 <view class="help-page-container">
 
   <view class="help-nav-bar" style="padding-top: {{navTop}}px;">
-    <text class="nav-back" bindtap="onGoBack">‹ 返回</text>
+    <view class="nav-back" hover-class="nav-back-hover" bindtap="onGoBack">←</view>
     <text class="nav-title">📖 帮助中心</text>
-    <text class="nav-placeholder"></text>
+    <view class="nav-placeholder"></view>
   </view>
 
   <view class="help-tab-bar" style="top: {{contentTop}}px;">
@@ -159,7 +159,7 @@
     </view>
 
     <view class="help-footer">
-      <text class="footer-text">🙏 感恩您的发心护持，愿善有善报福慧双增</text>
+      <text class="footer-text">❤️ 感恩您的爱心护持，愿平安喜乐、幸福安康</text>
     </view>
 
   </scroll-view>

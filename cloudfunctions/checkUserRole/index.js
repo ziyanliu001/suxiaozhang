@@ -29,7 +29,12 @@ exports.main = async (event, context) => {
         role: user.role || 'volunteer',
         storeId: user.storeId || '',
         storeName: user.storeName || '未绑定门店',
-        status: user.status || 'approved'
+        status: user.status || 'approved',
+        // 🏢 多租户：随身份一并下发所属机构 ID；platform_admin 账号本身不挂在任何 tenantId 下
+        tenantId: user.tenantId || '',
+        // 🙋 头像昵称填写规范：随角色信息一并下发，个人中心页面无需再单独查询
+        avatarUrl: user.avatarUrl || '',
+        nickName: user.nickName || ''
       };
     }
 
@@ -54,7 +59,9 @@ exports.main = async (event, context) => {
         role: mappedRole,
         storeId: user.storeId || '',
         storeName: user.storeName || '',
-        status: 'approved'
+        status: 'approved',
+        avatarUrl: user.avatarUrl || '',
+        nickName: user.nickName || ''
       };
     }
 
@@ -65,7 +72,9 @@ exports.main = async (event, context) => {
       role: 'volunteer',
       storeId: '',
       storeName: '未绑定门店',
-      status: 'guest'
+      status: 'guest',
+      avatarUrl: '',
+      nickName: ''
     };
   } catch (err) {
     console.error('[checkUserRole] 异常:', err);

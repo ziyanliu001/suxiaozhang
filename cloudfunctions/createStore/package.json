@@ -1,0 +1,9 @@
+{
+  "name": "createStore",
+  "version": "1.0.0",
+  "description": "云函数：机构超管在本机构下新建门店，受 tenant_subscriptions 门店配额约束",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

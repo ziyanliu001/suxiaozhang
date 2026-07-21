@@ -1,0 +1,234 @@
+<view class="sm-page">
+
+  <view class="sm-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="sm-nav-back" hover-class="sm-nav-back-hover" bindtap="goBack">←</view>
+    <text class="sm-nav-title">🏪 门店管理</text>
+    <view class="sm-nav-placeholder"></view>
+  </view>
+
+  <view class="sm-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
+    <text>校验身份中...</text>
+  </view>
+
+  <view class="sm-denied-state" wx:if="{{checkedAccess && !isSuperAdmin}}" style="margin-top: {{contentTop}}px;">
+    <text class="sm-denied-icon">🏠</text>
+    <text class="sm-denied-title">暂未分配门店</text>
+    <text class="sm-denied-sub">您的账号尚未分配所属门店，请联络您的团队负责人或店长将您加入门店。</text>
+    <button class="sm-denied-btn" bindtap="goBack">返回首页</button>
+  </view>
+
+  <view class="sm-body" wx:if="{{checkedAccess && isSuperAdmin}}" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+
+    <!-- 已激活 / 待审核 Tab -->
+    <view class="sm-tab-bar">
+      <view class="sm-tab-item {{activeTab === 'active' ? 'active' : ''}}" data-tab="active" bindtap="onSwitchTab">
+        已激活
+      </view>
+      <view class="sm-tab-item {{activeTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onSwitchTab">
+        待审核
+        <text class="sm-tab-badge" wx:if="{{pendingList.length > 0}}">{{pendingList.length}}</text>
+      </view>
+    </view>
+
+    <!-- 🛡️ 异常账目风控预警汇总条：呼叫 getRiskAlerts 云函数按门店逐个查询后在此汇总，
+         漏登日报/支出异常两类信号见 loadRiskBadges() -->
+    <view class="sm-risk-summary-bar" wx:if="{{activeTab === 'active' && riskAlertStoreCount > 0}}">
+      <text class="sm-risk-summary-icon">⚠️</text>
+      <text class="sm-risk-summary-text">{{riskAlertStoreCount}} 家门店存在风控预警，请留意下方标签</text>
+    </view>
+
+    <!-- ===== 已激活门店 ===== -->
+    <scroll-view scroll-y show-scrollbar="{{false}}" class="sm-content" wx:if="{{activeTab === 'active'}}">
+
+      <view class="sm-header-row" wx:if="{{list.length > 0}}">
+        <button class="sm-btn-create-inline" hover-class="sm-btn-create-hover" bindtap="onOpenCreateStore">➕ 创建新门店</button>
+      </view>
+
+      <!-- 全国总览公告：面向"全国总览"视角展示的机构级通用通告，与门店专属通告
+           严格互斥展示（不叠加），见 manageNotice 云函数 -->
+      <view class="sm-overview-notice-card">
+        <view class="sm-store-header-row">
+          <text class="sm-store-name">🌐 全国总览公告</text>
+        </view>
+        <text class="sm-overview-notice-hint">仅在超管切换到"全国总览"视角时展示，与各门店专属通告互斥（不叠加）</text>
+        <view class="sm-store-actions">
+          <button class="sm-btn-action" bindtap="onOpenOverviewNotice">📢 编辑通告</button>
+        </view>
+      </view>
+
+      <view class="sm-empty-state" wx:if="{{!loading && list.length === 0}}">
+        <text>本机构暂无门店</text>
+        <button class="sm-btn-create" hover-class="sm-btn-create-hover" bindtap="onOpenCreateStore">➕ 创建新门店</button>
+      </view>
+
+      <view class="sm-store-card {{item.status === 'inactive' ? 'inactive' : ''}}" wx:for="{{list}}" wx:key="storeId">
+        <view class="sm-store-header-row">
+          <text class="sm-store-name">{{item.storeName}}</text>
+          <text class="sm-status-badge {{item.status === 'inactive' ? 'inactive' : 'active'}}">
+            {{item.status === 'inactive' ? '已停用' : '已激活'}}
+          </text>
+        </view>
+
+        <view class="sm-risk-row" wx:if="{{item.riskMissingReport || item.riskExpenseWarning}}">
+          <text class="sm-risk-tag danger" wx:if="{{item.riskMissingReport}}">
+            ⚠️ 待补登日报{{item.riskDaysSinceLastReport ? '（' + item.riskDaysSinceLastReport + '天未提交）' : ''}}
+          </text>
+          <text class="sm-risk-tag warning" wx:if="{{item.riskExpenseWarning}}">⚠️ 支出异常，请复核凭证</text>
+        </view>
+
+        <view class="sm-store-actions">
+          <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onGoToGenerateCode">🔑 生成邀请码</button>
+          <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onOpenRename">✏️ 编辑名称</button>
+          <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onViewStoreStaff">👥 查看门店人员</button>
+          <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onOpenStoreNotice">📢 编辑通告</button>
+          <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" data-address="{{item.address}}" bindtap="onGenerateStorePoster">🎨 生成宣传海报</button>
+          <button
+            class="sm-btn-action {{item.status === 'inactive' ? 'sm-btn-activate' : 'sm-btn-deactivate'}}"
+            data-storeid="{{item.storeId}}"
+            data-storename="{{item.storeName}}"
+            data-status="{{item.status || 'active'}}"
+            bindtap="onToggleStoreStatus"
+          >
+            {{item.status === 'inactive' ? '▶️ 启用门店' : '⏸️ 停用门店'}}
+          </button>
+        </view>
+      </view>
+
+    </scroll-view>
+
+    <!-- ===== 待审核门店申请 ===== -->
+    <scroll-view scroll-y show-scrollbar="{{false}}" class="sm-content" wx:if="{{activeTab === 'pending'}}">
+
+      <view class="sm-pending-loading" wx:if="{{pendingLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="sm-empty-state" wx:if="{{!pendingLoading && pendingList.length === 0}}">
+        <text>暂无待审核的新建门店申请</text>
+      </view>
+
+      <view class="sm-pending-card" wx:for="{{pendingList}}" wx:key="_id">
+        <view class="sm-pending-name">{{item.customStoreName || item.storeName}}</view>
+        <view class="sm-pending-meta">申请人：{{item.applicantName || '未填写'}}</view>
+        <view class="sm-pending-meta">申请时间：{{item.applyTimeStr || '近期'}}</view>
+        <button
+          class="sm-btn-approve"
+          data-id="{{item._id}}"
+          bindtap="onApproveStoreRequest"
+          disabled="{{approvingId === item._id}}"
+          loading="{{approvingId === item._id}}"
+        >
+          ✅ 一键通过审核
+        </button>
+      </view>
+
+    </scroll-view>
+
+  </view>
+
+  <!-- 重命名弹窗 -->
+  <view class="sm-modal-mask" wx:if="{{showRenameModal}}" bindtap="onCloseRename">
+    <view class="sm-modal-box" catchtap="stopPropagation">
+      <text class="sm-modal-title">修改门店名称</text>
+
+      <text class="sm-form-label">当前名称：{{renameForm.oldName}}</text>
+      <input class="sm-modal-input" type="text" placeholder="请输入新的标准门店名称" value="{{renameForm.newName}}" bindinput="onRenameInput" />
+
+      <view class="sm-modal-actions">
+        <button class="sm-btn-cancel" bindtap="onCloseRename">取消</button>
+        <button class="sm-btn-submit" bindtap="onSubmitRename" disabled="{{submitting}}">确认修改</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 创建新门店弹窗 -->
+  <view class="sm-modal-mask" wx:if="{{showCreateModal}}" bindtap="onCloseCreateStore">
+    <view class="sm-modal-box" catchtap="stopPropagation">
+      <text class="sm-modal-title">创建新门店</text>
+
+      <text class="sm-form-label">门店名称</text>
+      <input class="sm-modal-input" type="text" placeholder="请输入门店名称" value="{{createForm.storeName}}" data-field="storeName" bindinput="onCreateFormInput" />
+
+      <text class="sm-form-label">门店地址</text>
+      <input class="sm-modal-input" type="text" placeholder="请输入门店地址（选填）" value="{{createForm.address}}" data-field="address" bindinput="onCreateFormInput" />
+
+      <text class="sm-form-label">初始公告</text>
+      <textarea class="sm-modal-textarea" placeholder="如：三源弘志愿者之家试营业" value="{{createForm.announcement}}" data-field="announcement" bindinput="onCreateFormInput" maxlength="200" />
+
+      <view class="sm-modal-actions">
+        <button class="sm-btn-cancel" bindtap="onCloseCreateStore">取消</button>
+        <button class="sm-btn-submit" bindtap="onSubmitCreateStore" disabled="{{creating}}">确认创建</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 查看门店人员弹窗 -->
+  <view class="sm-modal-mask" wx:if="{{showStaffModal}}" bindtap="onCloseStaffModal">
+    <view class="sm-modal-box" catchtap="stopPropagation">
+      <text class="sm-modal-title">{{staffStoreName}} · 门店人员</text>
+
+      <view class="sm-staff-loading" wx:if="{{staffLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="sm-staff-empty" wx:if="{{!staffLoading && staffList.length === 0}}">
+        <text>该门店暂无已绑定的店长/财务</text>
+      </view>
+
+      <scroll-view scroll-y show-scrollbar="{{false}}" class="sm-staff-list" wx:if="{{!staffLoading && staffList.length > 0}}">
+        <view class="sm-staff-item" wx:for="{{staffList}}" wx:key="_id">
+          <text class="sm-staff-role-tag">{{item.roleLabel}}</text>
+          <text class="sm-staff-name">{{item.applicantName || item.nickName || '未填写姓名'}}</text>
+        </view>
+      </scroll-view>
+
+      <view class="sm-modal-actions">
+        <button class="sm-btn-cancel" bindtap="onCloseStaffModal">关闭</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 编辑通告弹窗：门店专属 / 全国总览共用 -->
+  <view class="sm-modal-mask" wx:if="{{showNoticeModal}}" bindtap="onCloseNoticeModal">
+    <view class="sm-modal-box" catchtap="stopPropagation">
+      <text class="sm-modal-title">{{noticeForm.scopeLabel}} · 编辑通告</text>
+
+      <view class="sm-notice-loading" wx:if="{{noticeLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <block wx:if="{{!noticeLoading}}">
+        <text class="sm-form-label">标签</text>
+        <input class="sm-modal-input" type="text" placeholder="如：喜讯通报 / 开业公告" value="{{noticeForm.tag}}" bindinput="onNoticeTagInput" />
+
+        <text class="sm-form-label">标题</text>
+        <input class="sm-modal-input" type="text" placeholder="请输入通告标题" value="{{noticeForm.title}}" bindinput="onNoticeTitleInput" />
+
+        <text class="sm-form-label">内容</text>
+        <textarea class="sm-modal-textarea" placeholder="请输入通告内容" value="{{noticeForm.content}}" bindinput="onNoticeContentInput" maxlength="200" />
+
+        <view class="sm-modal-actions">
+          <button class="sm-btn-cancel" bindtap="onCloseNoticeModal">取消</button>
+          <button class="sm-btn-submit" bindtap="onSubmitNotice" disabled="{{noticeSubmitting}}">{{noticeForm.id ? '保存修改' : '发布通告'}}</button>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <!-- 🎨 门店宣传/招募海报预览弹窗：复用 drawStoreInvitationPoster（首页「生成门店海报」同一份绘制函数） -->
+  <view class="sm-modal-mask" wx:if="{{showStorePosterModal}}" bindtap="onCloseStorePosterModal">
+    <view class="sm-modal-box sm-poster-modal-box" catchtap="stopPropagation">
+      <text class="sm-modal-title">{{posterStoreName}} · 宣传海报</text>
+
+      <view class="sm-poster-canvas-wrapper">
+        <canvas type="2d" id="storePosterCanvas" class="sm-poster-canvas" style="width: 320px; height: 540px;"></canvas>
+      </view>
+
+      <view class="sm-modal-actions">
+        <button class="sm-btn-cancel" bindtap="onCloseStorePosterModal">关闭</button>
+        <button class="sm-btn-submit" bindtap="onSaveStorePosterToPhotos" disabled="{{!storePosterTempFilePath}}" loading="{{generatingStorePoster}}">保存到相册</button>
+      </view>
+    </view>
+  </view>
+
+</view>

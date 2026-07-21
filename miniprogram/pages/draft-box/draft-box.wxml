@@ -1,0 +1,40 @@
+<view class="draft-box-container">
+
+  <view class="status-bar-spacer" style="height: {{statusBarHeight}}px;"></view>
+  <view class="nav-title-bar" style="height: {{navBarHeight}}px;">
+    <view class="nav-back-arrow" hover-class="nav-back-arrow-hover" bindtap="onBackTap">←</view>
+    <text class="page-title-txt">草稿箱</text>
+    <view class="nav-right-placeholder"></view>
+  </view>
+
+  <view class="draft-loading" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+
+  <view class="draft-empty" wx:if="{{!loading && draftList.length === 0}}">
+    <text class="draft-empty-icon">✍️</text>
+    <text class="draft-empty-text">暂无未提交的草稿</text>
+    <text class="draft-empty-hint">在首页填写餐报时，系统会按日期自动保存草稿</text>
+  </view>
+
+  <scroll-view scroll-y class="draft-list" wx:if="{{!loading && draftList.length > 0}}">
+    <view class="draft-item" wx:for="{{draftList}}" wx:key="key">
+      <view class="draft-item-main" bindtap="onTapResume" data-date-value="{{item.dateValue}}" data-shop-name="{{item.shopName}}">
+        <view class="draft-item-top">
+          <text class="draft-item-shop">{{item.shopName}}</text>
+          <text class="draft-item-date">{{item.reportDate}}</text>
+        </view>
+        <text class="draft-item-time">{{item.saveTimeLabel}}</text>
+      </view>
+      <view class="draft-item-actions">
+        <view class="draft-btn draft-btn-resume" bindtap="onTapResume" data-date-value="{{item.dateValue}}" data-shop-name="{{item.shopName}}">
+          <text>恢复</text>
+        </view>
+        <view class="draft-btn draft-btn-delete" bindtap="onTapDelete" data-key="{{item.key}}">
+          <text>删除</text>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+</view>

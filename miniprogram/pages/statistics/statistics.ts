@@ -1,9 +1,10 @@
-import { DataService, formatMoney } from '../../utils/dataService';
+import { DataService, formatMoney, sanitizeReportForVolunteer } from '../../utils/dataService';
 import { AuthService, ROLE_LABELS } from '../../utils/authService';
 import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { formatGratitudeReportText, GratitudeReportData } from '../../utils/reportFormatter';
 import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
+import { recordRecentVisit } from '../../utils/recentPages';
 
 function parseDate(dateStr: string): Date {
   return new Date(String(dateStr).replace(/-/g, '/'));
@@ -44,15 +45,18 @@ function isAllStoresMode(storeName: string): boolean {
   return !storeName || storeName === 'ALL' || clean === '全部门店';
 }
 
+// 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
+// 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
+// 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
+// dateString 是本项目云函数与提交逻辑统一写入的规范字段（纯 'YYYY-MM-DD'），必须优先命中。
 function deepExtractDate(item: any): any {
   if (!item) return null;
-  
+
   const fieldCandidates = [
-    'reportDate', 'date', 'report_date', 'createTime', 'time',
-    'dateString', 'created_at', 'updated_at', 'report_time',
-    'day', 'reportDay'
+    'dateString', 'reportDate', 'date', 'report_date', 'day', 'reportDay',
+    'created_at', 'createTime', 'report_time', 'time', 'updated_at'
   ];
-  
+
   for (const field of fieldCandidates) {
     if (item[field]) return item[field];
   }
@@ -93,6 +97,16 @@ function deepExtractStoreName(item: any): string {
 function extractDateMeta(rawDate: any): { y: number; m: number; d: number; isoStr: string } | null {
   if (!rawDate) return null;
 
+  // 🛡️ 云端 db.serverDate() 字段读回客户端时是原生 Date 对象：直接取字段，不做字符串往返，
+  // 避免 String(dateObj) -> new Date(str) 二次解析在 iOS JavaScriptCore 环境下失败
+  if (rawDate instanceof Date) {
+    if (isNaN(rawDate.getTime())) return null;
+    const y = rawDate.getFullYear();
+    const m = rawDate.getMonth() + 1;
+    const d = rawDate.getDate();
+    return { y, m, d, isoStr: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+  }
+
   let str = String(rawDate).trim();
 
   if (/^\d{10,13}$/.test(str)) {
@@ -127,7 +141,10 @@ function extractDateMeta(rawDate: any): { y: number; m: number; d: number; isoSt
   }
 
   try {
-    const dateObj = new Date(str);
+    // 🛡️ 兜底解析前统一把 '-' 替换为 '/'：iOS Safari/JSCore 对 'YYYY-MM-DD' 这类连字符日期
+    // 字符串的 new Date() 解析不稳定（部分版本直接返回 Invalid Date），'/' 分隔格式兼容性更好
+    const normalized = str.replace(/-/g, '/');
+    const dateObj = new Date(normalized);
     if (!isNaN(dateObj.getTime())) {
       const y = dateObj.getFullYear();
       const m = dateObj.getMonth() + 1;
@@ -185,7 +202,7 @@ function filterRecordsByPeriodAndStore(
   let parseSuccessCount = 0;
   let storeMatchCount = 0;
 
-  const filtered = records.filter((item, idx) => {
+  const filtered = records.filter((item) => {
     if (!isAll) {
       const itemStoreRaw = deepExtractStoreName(item);
       const itemStoreClean = cleanStore(itemStoreRaw);
@@ -196,20 +213,16 @@ function filterRecordsByPeriodAndStore(
 
     const itemDateRaw = deepExtractDate(item);
     const meta = extractDateMeta(itemDateRaw);
-    
-    console.log(`[统计调试 #${idx}] 原始日期值: ${itemDateRaw}, 解析结果:`, meta, ', 门店:', deepExtractStoreName(item));
-    
+
     if (!meta) return false;
     parseSuccessCount++;
 
     return isDateInRange(meta);
   });
 
-  console.log('=== [统计分析调试汇总] ===');
-  console.log('原始记录总数:', records.length);
-  console.log('成功解析日期数:', parseSuccessCount);
-  if (!isAll) console.log('门店匹配数:', storeMatchCount);
-  console.log('最终匹配数:', filtered.length);
+  // 汇总日志仅保留一行，供开发者排查用；不再逐条打印（大数据量下性能浪费），
+  // 也不再向终端用户 UI 暴露这些计数（见 smart-empty-card 的精简重构）
+  console.log(`[Statistics] 记录总数=${records.length}, 日期解析成功=${parseSuccessCount}, 门店匹配=${isAll ? 'N/A(全部门店)' : storeMatchCount}, 最终匹配=${filtered.length}`);
 
   (filtered as any).totalRawCount = records.length;
   (filtered as any).parseSuccessCount = parseSuccessCount;
@@ -221,6 +234,7 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
+    watermarkIdentity: '',
     currentTab: 'week',
     shopName: '全部门店',
     shopList: [] as string[],
@@ -232,10 +246,20 @@ Page({
     statistics: null,
     navTop: 0,
     contentTop: 0,
+    // 🛡️ 自定义导航栏避让官方胶囊菜单：capsuleLeft/windowWidth 用于计算刷新按钮的右侧安全内边距
+    capsuleLeft: 0,
+    windowWidth: 0,
     isAdmin: false,
     canViewNationalDashboard: false,
     canViewCrossStoreCost: false,
     canViewAllStoresDropdown: false,
+    // 🌟 志工只读全国大屏：可查看汇总大屏，但门店选择器强制锁定为"全部门店"且禁用，
+    // 且成本类敏感数据在下方门店矩阵表中做屏蔽展示
+    isVolunteerNationalView: false,
+    // 店长/财务/超管（非志工）—— 用于精细化管理视图的条件渲染，如 wx:if="{{isManager}}"
+    isManager: false,
+    dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
+    dashboardRoleTag: '',
     viewMode: 'all' as 'all' | 'personal',
     isAllStoresMode: true,
     hasOtherStoreData: false,
@@ -257,6 +281,22 @@ Page({
     nationalData: {} as any,
     nationalMatrixList: [] as any[],
     showNationalDashboard: false,
+
+    // 🌟 超管专属高阶治理看板：核心指标/时间切片/离线门店预警/CSV 报表导出，见 getNationalDashboard
+    // 云函数 superAdminInsights（服务端已按 role==='super_admin' 二次校验，非超管拿到的字段恒为 null）
+    superAdminInsights: null as any,
+    nationalRangeType: 'all' as 'all' | '7d' | 'month' | 'quarter',
+    nationalRangeOptions: [
+      { value: 'all', label: '全部时间' },
+      { value: '7d', label: '近7天' },
+      { value: 'month', label: '本月' },
+      { value: 'quarter', label: '本季度' }
+    ],
+    // 一键快筛：门店矩阵表按"正常运营/需关注预警"二选一展示，见 nationalMatrixList wx:if
+    storeMatrixFilter: 'normal' as 'normal' | 'risk',
+    showNationalReportModal: false,
+    nationalReportSelection: { operations: true, financeAudit: false },
+    generatingNationalReport: false,
     showGratitudeModal: false,
     gratitudeTempFilePath: '',
     gratitudeReportData: {} as GratitudeReportData,
@@ -273,6 +313,7 @@ Page({
   },
 
   onLoad(options: any) {
+    recordRecentVisit('/pages/statistics/statistics', '统计分析');
     if (options && options.shopName) {
       this.setData({ shopName: options.shopName });
     }
@@ -282,6 +323,7 @@ Page({
     this.initCustomDates();
     this.initUserRole();
     this.reloadShopListAndStats();
+    this.initWatermarkIdentity();
 
     // 注入物理返回键兜底拦截
     this._navGuard = createNavGuard({
@@ -337,6 +379,13 @@ Page({
     }
   },
 
+  // 🛡️ 防截图/防外传水印：叠加当前操作者身份标识，用于追溯截图外传来源
+  initWatermarkIdentity() {
+    const openid = AuthService.getOpenid() || '';
+    const tail = openid ? openid.slice(-6) : '未登录';
+    this.setData({ watermarkIdentity: `操作人 ***${tail}` });
+  },
+
   async initUserRole() {
     const cachedRole = AuthService.getCachedRoleInfo();
     if (cachedRole) {
@@ -350,26 +399,44 @@ Page({
     }
   },
 
-  // 🛡️ 三级角色权限卡口：单店财务 / 总部财务 / 超级管理员
+  // 🛡️ 三级角色权限卡口：单店财务 / 总部财务 / 超级管理员 / 志工（只读全国大屏）
   applyRolePermissions(role: string, storeName: string) {
     const isSuperAdmin = role === 'super_admin';
     const isHQFinance = role === 'hq_finance' || role === 'regional_finance';
-    // 权限 A：只有超管和总部财务才能看"全国大屏"与"跨店成本比对"
-    const canViewNationalDashboard = isSuperAdmin || isHQFinance;
+    const isVolunteer = role === 'volunteer';
+    // 精细化管理视角：店长/财务/超管（非志工）均属于"管理者"，用于 wx:if="{{isManager}}"
+    const isManager = role === 'store_manager' || role === 'finance' || isSuperAdmin || isHQFinance;
+
+    // 权限 A：超管和总部财务可看"全国大屏"与"跨店成本比对"
+    // 🌟 志工也放开"全国数据大屏"访问（阳光公开账本诉求），
+    // 但强制锁定为全部门店只读视图，且不下放"单餐成本"等运营敏感数据
+    const canViewNationalDashboard = isSuperAdmin || isHQFinance || isVolunteer;
     const canViewCrossStoreCost = isSuperAdmin || isHQFinance;
     const canViewAllStoresDropdown = isSuperAdmin || isHQFinance;
+    const isVolunteerNationalView = isVolunteer;
 
     this.setData({
       isAdmin: isSuperAdmin,
+      isManager,
       currentUserRole: role,
       currentUserStoreName: storeName,
       canViewNationalDashboard,
       canViewCrossStoreCost,
-      canViewAllStoresDropdown
+      canViewAllStoresDropdown,
+      isVolunteerNationalView,
+      dashboardTitle: isVolunteer ? '🌐 雨花爱心矩阵数据大屏' : '🌐 雨花斋全国爱心矩阵数据大屏',
+      dashboardRoleTag: isVolunteer ? '（志工荣誉版）' : ''
     });
 
-    // 非总部级角色：锁定到本门店
-    if (!canViewAllStoresDropdown && storeName) {
+    if (isVolunteer) {
+      // 志工：强制锁定为"全部门店"只读大屏视图，不允许切换到单店视角
+      this.setData({
+        shopName: '',
+        isAllStoresMode: true
+      });
+      this.loadNationalDashboard();
+    } else if (!canViewAllStoresDropdown && storeName) {
+      // 非总部级角色（单店店长/财务）：锁定到本门店
       this.setData({
         shopName: storeName,
         isAllStoresMode: false
@@ -386,16 +453,26 @@ Page({
     this.setData({ showNationalDashboard: true });
 
     try {
+      // 🛡️ rangeType 仅超管高阶面板使用；云函数侧会再次校验调用者角色，非 super_admin
+      // 传了也会被服务端忽略，这里传参不代表前端信任该参数会生效
       const result = await wx.cloud.callFunction({
-        name: 'getNationalDashboard'
+        name: 'getNationalDashboard',
+        data: { rangeType: this.data.nationalRangeType }
       });
 
       const r = result.result as any;
       if (r && r.success) {
-        const cleanedMatrix = this.formatNationalMatrixData(r.storeMatrix || []);
+        // 🛡️ 客户端第二层脱敏防线：云函数出口已按角色做过服务端脱敏，
+        // 这里对拿到的数据再跑一遍同名 sanitizeReportForVolunteer，双重兜底
+        const role = this.data.currentUserRole;
+        const sanitizedSummary = sanitizeReportForVolunteer(r.nationalSummary || {}, role);
+        const sanitizedMatrix = sanitizeReportForVolunteer(r.storeMatrix || [], role);
+        const cleanedMatrix = this.formatNationalMatrixData(sanitizedMatrix);
         this.setData({
-          nationalData: r.nationalSummary,
-          nationalMatrixList: cleanedMatrix
+          nationalData: sanitizedSummary,
+          nationalMatrixList: cleanedMatrix,
+          // 非超管时云函数恒返回 null，这里原样落地，高阶面板 wx:if 会自动不渲染
+          superAdminInsights: r.superAdminInsights || null
         });
       }
     } catch (err) {
@@ -403,42 +480,104 @@ Page({
     }
   },
 
+  // 超管高阶面板：切换"近7天/本月/本季度/全部时间"，重新拉取云函数聚合数据
+  onSwitchNationalRange(e: any) {
+    const rangeType = e.currentTarget.dataset.range;
+    if (!rangeType || rangeType === this.data.nationalRangeType) return;
+    this.setData({ nationalRangeType: rangeType });
+    this.loadNationalDashboard();
+  },
+
+  // 一键快筛：正常运营门店 / 需关注预警门店——纯本地过滤 wx:if，数据已在 nationalMatrixList 里，不重新请求
+  onSwitchMatrixFilter(e: any) {
+    const filter = e.currentTarget.dataset.filter;
+    if (!filter || filter === this.data.storeMatrixFilter) return;
+    this.setData({ storeMatrixFilter: filter });
+  },
+
   formatNationalMatrixData(rawStores: any[]): any[] {
     return rawStores.map((store: any) => {
-      const balance = parseFloat(store.balance || store.latestBalance || 0);
       const diners = parseInt(store.totalDiners || store.diningCount || 0);
-      const foodExpense = parseFloat(store.foodExpense || store.dailyExpenseTotal || 0);
-      const days = parseInt(store.openDays || store.days || 0);
 
+      // 🌟 志工只读脱敏视角：服务端已将 costPerMeal 等成本字段置空并标记 isCostRestricted，
+      // 此时不再尝试用（同样被脱敏的）收支字段反推成本，直接展示统一遮罩文案
       let costPerMealStr = '';
       let isCostValid = false;
 
-      if (diners > 0 && foodExpense > 0) {
-        costPerMealStr = `¥${(foodExpense / diners).toFixed(2)}/餐`;
-        isCostValid = true;
-      } else if (foodExpense === 0) {
-        costPerMealStr = '无日常开销';
+      if (store.isCostRestricted) {
+        costPerMealStr = '***（仅店长可见）';
+        isCostValid = false;
       } else {
-        costPerMealStr = '筹备中';
+        const foodExpense = parseFloat(store.foodExpense || store.dailyExpenseTotal || store.ingredientExpense || 0);
+        if (diners > 0 && foodExpense > 0) {
+          costPerMealStr = `¥${(foodExpense / diners).toFixed(2)}/餐`;
+          isCostValid = true;
+        } else if (foodExpense === 0) {
+          // 🌟 去内卷文案：不用带背景框的"无日常开销"标签制造"这家店有问题"的观感，
+          // 统一改成中性、不带底色徽章的"暂无支出"——见 statistics.wxml 里
+          // isCostValid 为 false 且 costPerMealStr 命中这个值时不再套 .cost-badge 底色
+          costPerMealStr = '暂无支出';
+        } else {
+          costPerMealStr = '筹备中';
+        }
       }
 
-      let dailyCostEstimate = foodExpense > 0 && days > 0 ? (foodExpense / days) : 100;
-      if (dailyCostEstimate < 50) dailyCostEstimate = 100;
-
-      const estimatedDays = Math.floor(balance / dailyCostEstimate);
-
-      let statusLevel = 'urgent' as 'ample' | 'warning' | 'urgent';
+      let statusLevel: 'ample' | 'warning' | 'urgent' | 'nodata' = 'nodata';
       let statusText = '';
 
-      if (estimatedDays >= 10) {
+      // 🌟 精确续航天数属于可反推资金余额的财务隐私：志工脱敏响应中 runwayDays 已被
+      // 服务端置空，但定性的 healthStatus 标签依然保留——因此这里优先按 healthStatus
+      // 判断状态标签，仅当 runwayDays 是真实数字时才在文案里附上具体天数（管理者视角）
+      const hasExactDays = typeof store.runwayDays === 'number';
+
+      if (store.healthStatus === 'nodata') {
+        // 🐛 "告急(0天)"误报修复：门店压根没有日常开销/收支数据时，服务端已经把
+        // healthStatus 明确标成 'nodata'（而不是拿默认值 0 硬算出一个假的"资金告急"），
+        // 这里对应展示中性灰色的"数据建设中"，不制造不必要的焦虑感
+        statusLevel = 'nodata';
+        statusText = '⚪ 数据建设中';
+      } else if (store.healthStatus === 'healthy') {
         statusLevel = 'ample';
-        statusText = `🟢 充足(${estimatedDays}天)`;
-      } else if (estimatedDays >= 5) {
+        statusText = hasExactDays ? `🟢 充足(${store.runwayDays}天)` : '🟢 充足';
+      } else if (store.healthStatus === 'warning') {
         statusLevel = 'warning';
-        statusText = `🟡 注意(${estimatedDays}天)`;
-      } else {
+        statusText = hasExactDays ? `🟡 注意(${store.runwayDays}天)` : '🟡 注意';
+      } else if (store.healthStatus) {
+        // 'danger' 及其他未识别取值，一律按告急处理（历史即有的兜底口径，不改变含义）
         statusLevel = 'urgent';
-        statusText = `🔴 告急(${estimatedDays}天)`;
+        statusText = hasExactDays ? `🔴 告急(${store.runwayDays}天)` : '🔴 告急';
+      } else {
+        // 兼容旧数据：既无 healthStatus 也无 runwayDays 时，退回用余额/日均开销就地反推
+        // （仅管理者视角会走到这里——志工响应即使字段缺失也不会误算出虚假的告急状态）
+        // 🐛 同一个"告急(0天)"误报根因：balance/foodExpense/days 全部缺失时会被 parseFloat/parseInt
+        // 兜底成 0，估算出的 estimatedDays 也是 0，会被当成"资金见底"而不是"没有数据"。
+        // 先判断是否真的有任何一项原始字段存在，完全没有时展示中性的"数据建设中"
+        const hasBalanceField = store.balance != null || store.latestBalance != null;
+        const hasExpenseField = store.foodExpense != null || store.dailyExpenseTotal != null;
+        const hasDaysField = store.openDays != null || store.days != null;
+
+        if (!hasBalanceField && !hasExpenseField && !hasDaysField) {
+          statusLevel = 'nodata';
+          statusText = '⚪ 数据建设中';
+        } else {
+          const balance = parseFloat(store.balance || store.latestBalance || 0);
+          const foodExpense = parseFloat(store.foodExpense || store.dailyExpenseTotal || 0);
+          const days = parseInt(store.openDays || store.days || 0);
+          let dailyCostEstimate = foodExpense > 0 && days > 0 ? (foodExpense / days) : 100;
+          if (dailyCostEstimate < 50) dailyCostEstimate = 100;
+          const estimatedDays = Math.floor(balance / dailyCostEstimate);
+
+          if (estimatedDays >= 10) {
+            statusLevel = 'ample';
+            statusText = `🟢 充足(${estimatedDays}天)`;
+          } else if (estimatedDays >= 5) {
+            statusLevel = 'warning';
+            statusText = `🟡 注意(${estimatedDays}天)`;
+          } else {
+            statusLevel = 'urgent';
+            statusText = `🔴 告急(${estimatedDays}天)`;
+          }
+        }
       }
 
       return {
@@ -457,12 +596,21 @@ Page({
     this.calculateStats();
   },
 
+  // 🛡️ 紧急修复 UI 重叠 Bug：自定义导航栏的刷新胶囊此前用 position:absolute; right:24rpx
+  // 固定贴右，在部分机型上会与微信官方胶囊菜单按钮重叠遮挡。现动态读取官方胶囊的左边界
+  // (wx.getMenuButtonBoundingClientRect().left) 与屏幕宽度，换算出安全右内边距传给 WXML，
+  // 让自定义刷新按钮自动避让，不再依赖写死的固定像素值。
   calculateNavBarHeight() {
+    const sysInfo = wx.getSystemInfoSync();
+    const windowWidth = sysInfo.windowWidth || 375;
+
     const menuButton = wx.getMenuButtonBoundingClientRect();
     if (!menuButton) {
       this.setData({
         navTop: 44,
-        contentTop: 88
+        contentTop: 88,
+        windowWidth,
+        capsuleLeft: windowWidth - 87 // 官方胶囊默认宽度约 87px 的兜底估算，避免 API 不可用时右侧完全不避让
       });
       return;
     }
@@ -472,7 +620,9 @@ Page({
 
     this.setData({
       navTop: navTop,
-      contentTop: contentTop
+      contentTop: contentTop,
+      windowWidth,
+      capsuleLeft: menuButton.left
     });
   },
 
@@ -905,7 +1055,12 @@ Page({
 
         let healthGradientFrom = '#4CAF50';
         let healthGradientTo = '#66BB6A';
-        if (statistics.healthStatus === 'fundUrgent') {
+        if (statistics.healthStatus === 'nodata') {
+          // 🐛 "告急(0天)"误报修复的配套样式：无数据时用中性灰渐变，
+          // 不落入默认的绿色分支（那会显得像"已核实运行正常"，同样是不实信息）
+          healthGradientFrom = '#9E9E9E';
+          healthGradientTo = '#BDBDBD';
+        } else if (statistics.healthStatus === 'fundUrgent') {
           healthGradientFrom = '#E53935';
           healthGradientTo = '#EF5350';
         } else if (statistics.healthStatus === 'materialWarning') {
@@ -1226,8 +1381,8 @@ Page({
       runwayDays: 0,
       runwayDaysRange: '',
       emaDailyCost: '0.00',
-      runwayStatusLevel: 'ample' as 'ample' | 'warning' | 'urgent',
-      healthStatus: '' as 'healthy' | 'materialWarning' | 'fundUrgent',
+      runwayStatusLevel: 'ample' as 'ample' | 'warning' | 'urgent' | 'nodata',
+      healthStatus: '' as 'healthy' | 'materialWarning' | 'fundUrgent' | 'fundWarning' | 'preparing' | 'largeExpenseInfo' | 'nodata',
       healthStatusText: '',
       healthStatusColor: '',
       healthIcon: '',
@@ -1498,7 +1653,7 @@ Page({
     if (runwayResult.runwayDays >= 999) {
       statistics.runwayDaysRange = '资金充裕，持续开餐';
     } else {
-      statistics.runwayDaysRange = runwayResult.statusText.replace(/^[🟢🟡🔴]\s/, '').replace(/^资金/, '').replace(/^预警：/, '').replace(/^告急：/, '');
+      statistics.runwayDaysRange = runwayResult.statusText.replace(/^[🟢🟡🔴⚪]\s/, '').replace(/^资金/, '').replace(/^预警：/, '').replace(/^告急：/, '');
     }
 
     const totalMeals = statistics.totalDiningCount + statistics.totalVolunteerCount;
@@ -1512,7 +1667,14 @@ Page({
     const isOilUrgent = statistics.latestOilStatus === 'urgent';
     const isNetNegative = statistics.netAccumulation < 0;
 
-    if (runwayResult.statusLevel === 'urgent' && statistics.runwayDays < 999) {
+    if (runwayResult.statusLevel === 'nodata') {
+      // 🐛 "告急(0天)"误报修复：门店尚未提交任何记账数据，展示中性灰色提示，
+      // 不套用红色告急/绿色健康的强烈色彩，避免无中生有制造焦虑或过早报平安
+      statistics.healthStatus = 'nodata';
+      statistics.healthStatusText = '⚪ 暂无记账数据，运行状况建设中';
+      statistics.healthStatusColor = '#9E9E9E';
+      statistics.healthIcon = '⚪';
+    } else if (runwayResult.statusLevel === 'urgent' && statistics.runwayDays < 999) {
       statistics.healthStatus = 'fundUrgent';
       statistics.healthStatusText = runwayResult.statusText;
       statistics.healthStatusColor = '#E53935';
@@ -1745,6 +1907,130 @@ Page({
     });
   },
 
+  // ========== 🌟 超管专属：全国运营/财务报表 CSV 导出 ==========
+
+  onOpenNationalReportModal() {
+    if (!this.data.isAdmin) return;
+    this.setData({ showNationalReportModal: true });
+  },
+
+  onCloseNationalReportModal() {
+    if (this.data.generatingNationalReport) return;
+    this.setData({ showNationalReportModal: false });
+  },
+
+  onToggleReportSelection(e: any) {
+    const key = e.currentTarget.dataset.key as 'operations' | 'financeAudit';
+    this.setData({ [`nationalReportSelection.${key}`]: !this.data.nationalReportSelection[key] });
+  },
+
+  // 《全国门店运营汇总表》：服务人次/开餐天数/单餐成本/续航与离线预警，取自已加载的 nationalMatrixList
+  buildNationalOperationsCSV(): string {
+    let csv = '门店名称,城市,服务人次,开餐天数,单餐成本,续航预警,是否离线,最近记账日期\n';
+    (this.data.nationalMatrixList || []).forEach((s: any) => {
+      const name = String(s.storeName || '').replace(/"/g, '""');
+      const city = String(s.city || '未知').replace(/"/g, '""');
+      const costPerMeal = s.isCostRestricted ? '***' : (s.costPerMealStr || '');
+      const isOfflineText = s.isOffline === undefined ? '' : (s.isOffline ? '是' : '否');
+      csv += `"${name}","${city}",${s.totalDiners || 0},${s.openDays || 0},"${costPerMeal}","${s.statusText || ''}","${isOfflineText}","${s.lastReportDate || ''}"\n`;
+    });
+    return csv;
+  },
+
+  // 《全国财务与凭证审计表》：收支/结余 + 凭证合规率，凭证合规率为超管专属字段（普通角色恒为空）
+  buildNationalFinanceAuditCSV(): string {
+    let csv = '门店名称,服务汇入(元),开餐总支出(元),食材支出(元),账户结余(元),凭证合规率\n';
+    (this.data.nationalMatrixList || []).forEach((s: any) => {
+      const name = String(s.storeName || '').replace(/"/g, '""');
+      const complianceText = (s.receiptComplianceRate === null || s.receiptComplianceRate === undefined)
+        ? ''
+        : `${s.receiptComplianceRate}%`;
+      csv += `"${name}",${s.totalIncome || 0},${s.totalExpense || 0},${s.ingredientExpense || 0},${s.latestBalance || 0},"${complianceText}"\n`;
+    });
+
+    const insights = this.data.superAdminInsights;
+    if (insights) {
+      csv += `\n全国汇总（${insights.rangeLabel || ''}）\n`;
+      csv += `全国平均单餐成本(元),${insights.avgCostPerMeal}\n`;
+      csv += `全国凭证合规率,${insights.complianceRate === null ? '' : insights.complianceRate + '%'}\n`;
+      csv += `超过${insights.offlineAlertThresholdDays}天未记账门店数,${insights.offlineStoreCount}\n`;
+    }
+    return csv;
+  },
+
+  buildSelectedNationalReportCSV(): { csv: string; label: string } | null {
+    const { operations, financeAudit } = this.data.nationalReportSelection;
+    if (!operations && !financeAudit) return null;
+
+    const parts: string[] = [];
+    const labels: string[] = [];
+    if (operations) {
+      parts.push('《全国门店运营汇总表》\n' + this.buildNationalOperationsCSV());
+      labels.push('运营汇总表');
+    }
+    if (financeAudit) {
+      parts.push('《全国财务与凭证审计表》\n' + this.buildNationalFinanceAuditCSV());
+      labels.push('财务审计表');
+    }
+    return { csv: parts.join('\n\n'), label: labels.join('+') };
+  },
+
+  onCopyNationalReport() {
+    if (!this.data.isAdmin) return;
+    const built = this.buildSelectedNationalReportCSV();
+    if (!built) {
+      wx.showToast({ title: '请至少勾选一种报表', icon: 'none' });
+      return;
+    }
+    this.fallbackCopyToClipboard(built.csv);
+  },
+
+  onExportNationalReport() {
+    if (!this.data.isAdmin) return;
+    const built = this.buildSelectedNationalReportCSV();
+    if (!built) {
+      wx.showToast({ title: '请至少勾选一种报表', icon: 'none' });
+      return;
+    }
+
+    this.setData({ generatingNationalReport: true });
+    wx.showLoading({ title: '正在生成表格...', mask: true });
+
+    try {
+      const csvContent = '﻿' + built.csv;
+      const fs = wx.getFileSystemManager();
+      const rangeLabel = (this.data.superAdminInsights && this.data.superAdminInsights.rangeLabel) || '全部时间';
+      const fileName = `全国${built.label}_${rangeLabel}.csv`;
+      const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`;
+
+      fs.writeFileSync(filePath, csvContent, 'utf8');
+      wx.hideLoading();
+      this.setData({ generatingNationalReport: false, showNationalReportModal: false });
+
+      if (wx.shareFileMessage) {
+        wx.shareFileMessage({
+          filePath: filePath,
+          fileName: fileName,
+          success: () => {
+            wx.showToast({ title: '报表已成功导出并发送！', icon: 'success' });
+          },
+          fail: (err) => {
+            if (!err.errMsg || !err.errMsg.includes('cancel')) {
+              this.tryOpenDocumentFallback(filePath);
+            }
+          }
+        });
+      } else {
+        this.tryOpenDocumentFallback(filePath);
+      }
+    } catch (error) {
+      wx.hideLoading();
+      this.setData({ generatingNationalReport: false });
+      console.error('[NationalReport] CSV 导出失败:', error);
+      wx.showToast({ title: '导出失败，请重试', icon: 'none' });
+    }
+  },
+
   async onGenerateGratitudeReport() {
     const { statistics, shopName, selectedYear, selectedMonth, currentTab } = this.data;
     if (!statistics) {
@@ -1844,7 +2130,7 @@ Page({
         const dpr = wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2;
 
         const w = 320;
-        const h = 580;
+        const h = 605;
         canvas.width = w * dpr;
         canvas.height = h * dpr;
         ctx.scale(dpr, dpr);
@@ -2044,6 +2330,10 @@ Page({
         ctx.font = '10px sans-serif';
         ctx.fillText('透明账本 · 实时可查', w / 2, footerStartY + 46);
 
+        ctx.fillStyle = '#C4C4C4';
+        ctx.font = '9px sans-serif';
+        ctx.fillText('本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐', w / 2, footerStartY + 64);
+
         wx.canvasToTempFilePath({
           canvas,
           success: (res: any) => {
@@ -2163,7 +2453,7 @@ Page({
           const dpr = (wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2) || 2;
 
           const W = 600;
-          const H = 1000;
+          const H = 1030;
           canvas.width = W * dpr;
           canvas.height = H * dpr;
           ctx.scale(dpr, dpr);
@@ -2249,7 +2539,7 @@ Page({
           ctx.fillStyle = '#8C1D18';
           ctx.font = 'bold 18px sans-serif';
           ctx.textAlign = 'left';
-          ctx.fillText(`🍲 本期累计恭敬结缘开餐：${statistics.totalDiningCount} 人次`, 60, coreStartY + 30);
+          ctx.fillText(`🍲 本期累计服务用餐：${statistics.totalDiningCount} 人次`, 60, coreStartY + 30);
 
           ctx.fillStyle = '#495057';
           ctx.font = '15px sans-serif';
@@ -2272,7 +2562,7 @@ Page({
           let statusBannerText = '服务资金与物资充足，平稳运行中';
           if (netAccumulation < 0) {
             statusBannerBg = '#E03131';
-            statusBannerText = '⚠️ 本期资金支出大于汇入，呼吁善士护持';
+            statusBannerText = '⚠️ 本期资金支出大于汇入，恳请社会各界关注支持';
           }
 
           ctx.fillStyle = statusBannerBg;
@@ -2286,7 +2576,11 @@ Page({
           ctx.fillStyle = '#868E96';
           ctx.font = '12px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('扫码查看透明账本', W / 2, H - 25);
+          ctx.fillText('扫码查看透明账本', W / 2, H - 45);
+
+          ctx.fillStyle = '#ADB5BD';
+          ctx.font = '10px sans-serif';
+          ctx.fillText('本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐', W / 2, H - 20);
           ctx.textAlign = 'left';
 
           wx.canvasToTempFilePath({
@@ -2328,7 +2622,7 @@ Page({
   // 智能格式化海报天数/状态文案，避免“预计可支撑”与状态文本硬拼接产生语病
   getPosterDaysText(totalBalance: number, avgDailyExpense: number, isPreparingPeriod: boolean) {
     if (totalBalance <= 0) {
-      return '资金紧缺，呼吁善士护持';
+      return '资金紧缺，恳请社会各界关注支持';
     }
 
     // 休餐/筹备期（食材支出为 0）
@@ -2399,8 +2693,8 @@ Page({
           }
         });
         const res = result.result as any;
-        if (!res?.success) {
-          console.warn('[PatchMajor] 云函数更新失败:', res?.error);
+        if (!(res && res.success)) {
+          console.warn('[PatchMajor] 云函数更新失败:', res && res.error);
         }
       }
 
@@ -2544,8 +2838,8 @@ Page({
                   }
                 });
                 const res = result.result as any;
-                if (!res?.success) {
-                  console.warn('[DinerUpdate] 云函数更新失败:', res?.error);
+                if (!(res && res.success)) {
+                  console.warn('[DinerUpdate] 云函数更新失败:', res && res.error);
                 }
               } else if (item._localId) {
                 const localReports = wx.getStorageSync('local_report_logs') || [];
@@ -2625,9 +2919,9 @@ Page({
                 }
               });
               const res = result.result as any;
-              if (res?.success) {
+              if (res && res.success) {
                 updatedCount++;
-              } else if (res?.error && res.error.includes('doc not found')) {
+              } else if (res && res.error && res.error.includes('doc not found')) {
                 const localReports = wx.getStorageSync('local_report_logs') || [];
                 const idx = localReports.findIndex((r: any) => r._localId === item._localId || r._id === recordId);
                 if (idx >= 0) {
@@ -2636,7 +2930,7 @@ Page({
                   updatedCount++;
                 }
               } else {
-                console.warn('[BatchDiner] 云端更新失败:', res?.error);
+                console.warn('[BatchDiner] 云端更新失败:', res && res.error);
               }
             } catch (callErr) {
               console.warn('[BatchDiner] 云函数调用失败:', callErr);

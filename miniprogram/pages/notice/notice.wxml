@@ -1,0 +1,51 @@
+<view class="notice-page-container">
+
+  <view class="status-bar-spacer" style="height: {{statusBarHeight}}px;"></view>
+  <view class="nav-title-bar" style="height: {{navBarHeight}}px;">
+    <text class="page-title-txt">通知</text>
+  </view>
+
+  <scroll-view scroll-y class="notice-scroll-body">
+
+    <view class="notice-section" wx:if="{{systemMessages.length > 0}}">
+      <text class="section-label">系统消息</text>
+      <view class="notice-card system-card" wx:for="{{systemMessages}}" wx:key="id">
+        <text class="card-icon">{{item.icon}}</text>
+        <view class="card-main">
+          <text class="card-title">{{item.title}}</text>
+          <text class="card-desc">{{item.desc}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="notice-section">
+      <text class="section-label">账务与审核动态</text>
+
+      <view class="notice-card {{item.actionable ? 'actionable' : ''}} {{item.isMismatch ? 'mismatch' : ''}}"
+            wx:for="{{notifications}}"
+            wx:key="id"
+            bindtap="onTapNotification">
+        <text class="card-icon">{{item.icon}}</text>
+        <view class="card-main">
+          <view class="card-title-row">
+            <text class="card-title">{{item.shopName}} · {{item.dateString}}</text>
+            <text class="card-tag" wx:if="{{item.tag}}">{{item.tag}}</text>
+          </view>
+          <text class="card-desc">{{item.desc}}</text>
+        </view>
+        <text class="card-arrow" wx:if="{{item.actionable}}">›</text>
+      </view>
+
+      <view class="notice-empty" wx:if="{{!loading && notifications.length === 0}}">
+        <text class="empty-icon">🍃</text>
+        <text class="empty-text">暂无账务与审核动态</text>
+      </view>
+
+      <view class="notice-loading" wx:if="{{loading}}">
+        <text>加载中...</text>
+      </view>
+    </view>
+
+  </scroll-view>
+
+</view>

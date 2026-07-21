@@ -29,7 +29,7 @@ export interface RunwayResult {
   emaDailyExpense: string;
   emaDailyIncome: string;
   runwayDays: number;
-  statusLevel: 'ample' | 'warning' | 'urgent';
+  statusLevel: 'ample' | 'warning' | 'urgent' | 'nodata';
   statusText: string;
   trendSlope: number;
   trendLabel: string;
@@ -201,6 +201,29 @@ export function calculateEmaRunway(
 ): RunwayResult {
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const balance = parseFloat(String(currentBalance)) || 0;
+
+  // 🐛 "告急(0天)"误报修复：balance<=0 原来一律判成"资金告急"，但门店从未提交过
+  // 任何一条记录时，调用方给的 currentBalance 默认值也是 0——这是"完全没有数据"，
+  // 不是"记录在案的余额真的见底"。用 historyList 是否为空区分这两种情况：
+  // 完全没有历史记录时展示中性的"数据建设中"，不制造不必要的焦虑感；只有在
+  // 确实存在收支历史、balance 却仍非正时，才是真实的资金告急
+  if (balance <= 0 && (!historyList || historyList.length === 0)) {
+    return {
+      emaDailyCost: '0.00',
+      emaDailyExpense: '0.00',
+      emaDailyIncome: '0.00',
+      runwayDays: 0,
+      statusLevel: 'nodata',
+      statusText: '⚪ 数据建设中',
+      trendSlope: 0,
+      trendLabel: '持平',
+      confidenceLower: 0,
+      confidenceUpper: 0,
+      dataQuality: 'low',
+      dataQualityText: '暂无数据',
+      isSmaFallback: false
+    };
+  }
 
   // 余额非正直接返回告急
   if (balance <= 0) {

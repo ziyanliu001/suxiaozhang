@@ -1,6 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "store-picker": "../../components/store-picker/store-picker"
+    "store-picker": "../../components/store-picker/store-picker",
+    "watermark": "../../components/watermark/watermark"
   }
 }

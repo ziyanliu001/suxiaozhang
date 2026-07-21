@@ -1,0 +1,7 @@
+# 小程序代码上传密钥：绝不能进入版本库
+private.*.key
+*.pem
+
+# 本地开发者工具私有配置
+project.private.config.json
+miniprogram/project.private.config.json

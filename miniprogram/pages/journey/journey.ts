@@ -9,6 +9,11 @@
  */
 
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
+import { safeParseDate } from '../../utils/dateUtils';
+import { recordRecentVisit } from '../../utils/recentPages';
+import { AuthService } from '../../utils/authService';
+import { isCloudAvailable } from '../../utils/cloudGuard';
+import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
 
 interface CheckInLog {
   timestamp: number;
@@ -65,10 +70,16 @@ Page({
     isLoading: true,
     totalDays: 0,
     totalHours: 0,
-    totalCount: 0
+    totalCount: 0,
+
+    // 🆕 志愿者爱心荣誉卡
+    isGeneratingHonorCard: false,
+    showHonorModal: false,
+    honorCardImage: ''
   },
 
   onLoad(options: any) {
+    recordRecentVisit('/pages/journey/journey', '暖心历程');
     this.calculateNavBarHeight();
     this.loadStats();
     this.loadHeatmapData();
@@ -151,12 +162,18 @@ Page({
   loadTimelineData() {
     const logs: CheckInLog[] = wx.getStorageSync('my_checkin_logs') || [];
 
-    // 按时间倒序
-    const sortedLogs = [...logs].sort((a, b) => b.timestamp - a.timestamp);
+    // 按时间倒序（缺失/非法 timestamp 的历史脏数据一律兜底为 0，排到最后而不是破坏排序）
+    const sortedLogs = [...logs].sort((a, b) => {
+      const tsA = typeof a.timestamp === 'number' && isFinite(a.timestamp) ? a.timestamp : 0;
+      const tsB = typeof b.timestamp === 'number' && isFinite(b.timestamp) ? b.timestamp : 0;
+      return tsB - tsA;
+    });
 
     const groupMap = new Map<string, TimelineGroup>();
     sortedLogs.forEach((log) => {
-      const date = new Date(log.timestamp);
+      // 🐛 修复 NaN年NaN月：优先用 log.date（"YYYY-MM-DD"）做兼容解析，
+      // timestamp 缺失/损坏时也不会再渲染出 Invalid Date
+      const date = safeParseDate(log.date, log.timestamp);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthLabel = `${date.getFullYear()}年${date.getMonth() + 1}月`;
 
@@ -196,6 +213,123 @@ Page({
     const groups = this.data.timelineGroups.map((g) => ({ ...g, expanded: allExpanded }));
     this.setData({ timelineGroups: groups, allExpanded });
   },
+
+  // 🆕 生成我的爱心荣誉卡：服务天数取本页已有的本地打卡统计（totalDays），
+  // 经手透明账目/协助服务人次改由 getVolunteerHonorStats 云函数按 _openid 查真实值，
+  // 不在前端编造估算数字；头像/邀请码任一步下载失败都不阻断，由 posterGenerator.ts
+  // 优雅降级为占位图标/占位框
+  async onGenerateHonorCard() {
+    if (this.data.isGeneratingHonorCard) return;
+    this.setData({ isGeneratingHonorCard: true });
+    wx.showLoading({ title: '正在生成荣誉卡...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+
+      let roleInfo = AuthService.getCachedRoleInfo();
+      if (!roleInfo) {
+        const roleResult = await AuthService.fetchUserRole();
+        roleInfo = roleResult.roleInfo || null;
+      }
+      const storeId = (roleInfo && roleInfo.storeId) || '';
+      const storeName = (roleInfo && roleInfo.storeName) || '素小账 · 爱心公益';
+      const nickName = (roleInfo && roleInfo.nickName) || '';
+      const avatarUrl = (roleInfo && roleInfo.avatarUrl) || '';
+
+      // 经手透明账目 / 协助服务人次：服务端按 _openid 真实统计，查询失败时降级为 0，
+      // 不影响荣誉卡其余部分正常生成
+      let reportCount = 0;
+      let diningCount = 0;
+      try {
+        const statsRes = await wx.cloud.callFunction({ name: 'getVolunteerHonorStats' });
+        const statsResult = statsRes.result as any;
+        if (statsResult && statsResult.success) {
+          reportCount = statsResult.reportCount || 0;
+          diningCount = statsResult.diningCount || 0;
+        }
+      } catch (statsErr) {
+        console.warn('[onGenerateHonorCard] 荣誉数据查询失败，展示为 0:', statsErr);
+      }
+
+      // 邀请二维码：与首页"选择服务门店"推广码同一用途（非验真），未绑定具体门店时
+      // （storeId 为空）跳过生成，降级为占位框，不强行传空 storeId 请求云函数
+      let qrLocalPath = '';
+      if (storeId) {
+        try {
+          const qrRes = await wx.cloud.callFunction({
+            name: 'getStoreQRCode',
+            data: { storeId, storeName, purpose: 'certificate' }
+          });
+          const qrResult = qrRes.result as any;
+          if (qrResult && qrResult.success && qrResult.fileID) {
+            const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+            qrLocalPath = (downRes && downRes.tempFilePath) || '';
+          }
+        } catch (qrErr) {
+          console.warn('[onGenerateHonorCard] 邀请二维码生成/下载失败，降级为占位框:', qrErr);
+        }
+      }
+
+      const honorData: VolunteerHonorData = {
+        storeName,
+        nickName,
+        avatarUrl,
+        serviceDays: this.data.totalDays,
+        reportCount,
+        diningCount,
+        qrLocalPath
+      };
+
+      const honorCardImage = await drawVolunteerHonorCard(this, honorData);
+      this.setData({ honorCardImage, showHonorModal: true });
+    } catch (err: any) {
+      console.error('[onGenerateHonorCard] 荣誉卡生成失败:', err);
+      wx.showToast({ title: err.message || '荣誉卡生成失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ isGeneratingHonorCard: false });
+    }
+  },
+
+  onCloseHonorModal() {
+    this.setData({ showHonorModal: false });
+  },
+
+  // 保存到相册：与 index.ts savePoster 同一套权限拒绝引导（wx.openSetting），
+  // 保持全项目"保存图片"交互一致
+  onSaveHonorCard() {
+    const { honorCardImage } = this.data;
+    if (!honorCardImage) {
+      wx.showToast({ title: '荣誉卡图片为空', icon: 'none' });
+      return;
+    }
+
+    wx.saveImageToPhotosAlbum({
+      filePath: honorCardImage,
+      success: () => {
+        wx.showToast({ title: '保存成功', icon: 'success' });
+      },
+      fail: (err) => {
+        console.error('[onSaveHonorCard] 保存失败:', err);
+        if (err.errMsg.includes('auth')) {
+          wx.showModal({
+            title: '提示',
+            content: '请授权允许保存图片到相册',
+            confirmText: '去授权',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting();
+              }
+            }
+          });
+        } else {
+          wx.showToast({ title: '保存失败', icon: 'none' });
+        }
+      }
+    });
+  },
+
+  stopPropagation() {},
 
   onGoBack() {
     if (this._navGuard) {

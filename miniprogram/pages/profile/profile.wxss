@@ -1,0 +1,938 @@
+.mine-page-container {
+  min-height: 100vh;
+  background-color: #FDF6E3;
+  box-sizing: border-box;
+}
+
+.status-bar-spacer {
+  width: 100%;
+}
+
+.nav-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
+  position: relative;
+}
+
+.page-title-txt {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.quick-sheet-trigger-btn {
+  position: absolute;
+  right: 24rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quick-sheet-trigger-btn:active {
+  opacity: 0.6;
+}
+
+.quick-sheet-trigger-icon {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #666666;
+  line-height: 1;
+}
+
+.mine-content-wrapper {
+  /* 底部预留三段式导航栏高度（100rpx）+ 安全区，避免最后一项被遮挡 */
+  padding: 20rpx 24rpx calc(100rpx + env(safe-area-inset-bottom) + 40rpx) 24rpx;
+  box-sizing: border-box;
+}
+
+.user-profile-card {
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 36rpx 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  border: 1rpx solid #EFE6D8;
+  box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
+  margin-bottom: 30rpx;
+}
+
+/* 头像选择按钮：🐛 修复"点击无反应"——此前用 width: fit-content 让按钮跟随内层
+   .avatar-ring 自适应宽度，但微信 WXSS 引擎对 fit-content 支持不稳定，会导致按钮
+   实际点击热区坍缩/错位，与肉眼可见的圆形头像对不上，形成"看得见摸不着"的死区。
+   现改为按钮本身直接持有与头像相同的固定 128rpx×128rpx 尺寸，热区与视觉完全重合；
+   圆形裁切与渐变描边下放给内层 .avatar-ring 通过 width/height:100% 撑满即可，
+   两个职责（可点击热区 vs 视觉裁切）依然分离，只是不再依赖不可靠的 fit-content。 */
+.avatar-choose-btn {
+  width: 128rpx !important;
+  height: 128rpx !important;
+  /* 🛡️ 防拉伸兜底：flex-shrink:0 已阻止收缩，min-width/min-height 再加一道硬性下限，
+     即便昵称行内容过长挤压布局，头像宽高也不会被压成椭圆/橄榄球状 */
+  min-width: 128rpx;
+  min-height: 128rpx;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 0;
+  background: transparent;
+  display: block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.avatar-choose-btn::after {
+  border: none;
+}
+
+.avatar-choose-btn-hover {
+  opacity: 0.85;
+}
+
+/* 🐛 圆形裁剪失效修复：此前头像角标是 .avatar-ring 的子元素，导致 .avatar-ring
+   不敢加 overflow:hidden（加了会把角标一起裁掉），圆形裁剪只能靠最内层 .user-avatar
+   单独兜底，在部分渲染环境下不够可靠。现拆成两层：.avatar-outer 只负责定位，
+   .avatar-ring 专职裁剪（overflow:hidden + border-radius:50%）。角标已移除，
+   保留这层拆分是因为它本身就是让圆形裁剪稳定生效的正确结构，不依赖角标是否存在。 */
+.avatar-outer {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 🌟 渐变金边头像环：padding-box 撑开渐变描边，内层裁切绝对正圆，
+   彻底杜绝头像变形/背景裁切异常，同时提升整体质感 */
+.avatar-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  padding: 4rpx;
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #F1C40F 0%, #E8B923 45%, #EFE6D8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-avatar {
+  /* 🐛 回退为显式 rpx 定值：<image mode="aspectFill"> 配合百分比宽高在 flex 容器
+     （.avatar-ring 是 align-items:center，不会拉伸子项撑满）里计算裁剪区域时不够可靠，
+     曾观察到按图片自身原始像素尺寸而非容器尺寸取景、出现"放大只看到中间"的现象。
+     父级 .avatar-ring 内容区本就是固定 120rpx×120rpx，这里直接写死定值更稳妥。 */
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50% !important;
+  display: block;
+  overflow: hidden !important;
+  box-sizing: border-box;
+  background: #F1EFEA;
+}
+
+.user-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56rpx;
+  background: #F1EFEA;
+}
+
+.user-meta-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.nickname-edit-row {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* 🐛 彻底修复昵称与编辑图标重叠：裁切边界交给这层普通 <view>（flex:1 抢占剩余空间，
+   min-width:0 允许在 flex 容器里正常收缩，overflow:hidden 做硬裁切），
+   不再依赖原生 <input> 自身的 text-overflow——那个在部分机型上不可靠。 */
+.nickname-input-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 昵称输入框：视觉上仍表现为普通文字，聚焦编辑时才显现输入态；
+   width:100% 撑满外层 wrap 分配到的空间，真正的裁切由外层 wrap 的 overflow:hidden 保证，
+   这里的 white-space/text-overflow 仅作为该组件支持时的锦上添花，不是唯一防线 */
+.user-nickname-input {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.edit-profile-icon-btn {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  padding: 6rpx;
+}
+
+.edit-profile-icon-btn:active {
+  opacity: 0.6;
+}
+
+.role-badge-row {
+  display: flex;
+}
+
+.badge-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 20rpx;
+  border-radius: 30rpx;
+  font-size: 20rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  background: #FFF0ED;
+  border: 1rpx solid #FFCDD2;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.04);
+}
+
+.badge-tag.super_admin {
+  background: #FFF9E6;
+  color: #B57C1E;
+  border-color: #FFE082;
+}
+
+.badge-tag.store_manager {
+  background: #FFF3E0;
+  color: #E65100;
+  border-color: #FFCC80;
+}
+
+.badge-tag.finance {
+  background: #E8F5E9;
+  color: #2E7D32;
+  border-color: #A5D6A7;
+}
+
+/* 🌟 提升荣誉感：淡金色底 + 深棕色文字，志工身份也拥有仪式感的专属配色 */
+.badge-tag.volunteer {
+  background: #F9E79F;
+  color: #784212;
+  border-color: #F1C40F;
+}
+
+.merit-board-card {
+  position: relative;
+  overflow: hidden;
+  /* 🌟 简化背景：去掉此前干扰读数的满铺心形纹理，改为柔和的单向渐变，
+     仅在右上角留一枚极淡的莲花水印作点缀，视觉焦点回归数字本身 */
+  background: linear-gradient(155deg, #FFFDF7 0%, #FFFFFF 55%);
+  border: 1rpx solid #EFE6D8;
+  border-radius: 28rpx;
+  padding: 32rpx 20rpx 28rpx;
+  box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
+  margin-bottom: 30rpx;
+}
+
+.merit-board-card::after {
+  content: "";
+  position: absolute;
+  top: -20rpx;
+  right: -20rpx;
+  width: 160rpx;
+  height: 160rpx;
+  background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0YxQzQwRiIgb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMTIgMjFzLTYuNS00LjM1LTkuNS04LjVDMC43IDkuNiAxLjggNiA1IDVjMi0wLjYgMy44IDAuNCA1IDIgMS4yLTEuNiAzLTIuNiA1LTIgMy4yIDEgNC4zIDQuNiAyLjUgNy41QzE4LjUgMTYuNjUgMTIgMjEgMTIgMjF6Ij48L3BhdGg+PC9zdmc+');
+  background-repeat: no-repeat;
+  background-size: contain;
+  pointer-events: none;
+}
+
+.board-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 28rpx;
+}
+
+.board-header .header-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  letter-spacing: 2rpx;
+}
+
+/* 核心数据：护持天数 / 累计工时 —— 大号加粗，突出荣誉感 */
+.merit-hero-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.merit-hero-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.merit-hero-divider {
+  width: 1rpx;
+  height: 64rpx;
+  background: #EFE6D8;
+  flex-shrink: 0;
+}
+
+.merit-hero-num {
+  font-size: 64rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  line-height: 1.15;
+  margin-bottom: 8rpx;
+}
+
+.merit-hero-label {
+  font-size: 22rpx;
+  color: #A08A6A;
+  font-weight: 500;
+}
+
+/* 次要数据：登记餐报 / 稽核账本 —— 仅店长/财务/超管可见，弱化为辅助信息条。
+   🌟 与上方护持天数/累计工时拉开更明确的垂直间距（24→36rpx），主次数据分组更清晰 */
+.merit-sub-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  gap: 48rpx;
+  margin-top: 36rpx;
+  padding-top: 26rpx;
+  border-top: 1rpx dashed #EFE6D8;
+}
+
+.merit-sub-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.merit-sub-num {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #666666;
+}
+
+.merit-sub-label {
+  font-size: 20rpx;
+  color: #999999;
+}
+
+/* 分组小标题：弱化视觉但清晰划分列表语义分组，替代此前一整块无分组的长列表 */
+.list-group-label {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #A08A6A;
+  padding: 0 12rpx;
+  margin: 8rpx 0 14rpx;
+}
+
+/* 🌟 超级管理员视角切换卡片：此前 #F1C40F 是高饱和度亮黄，和整卡"预览/管理"的克制调性
+   不太搭，观感偏刺眼。改为低饱和度淡金边 + 更浅的底色，与常规列表项区分开的同时，
+   更贴近财务/管理场景该有的沉稳质感；文字颜色（#B57C1E 金棕）保持不变。 */
+.view-mode-switch-card {
+  background: #FFFBF0;
+  border: 1rpx solid #E6D0A0;
+  border-radius: 28rpx;
+  padding: 10rpx 0;
+  margin-bottom: 30rpx;
+  overflow: hidden;
+}
+
+.view-mode-switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx 32rpx;
+}
+
+.view-mode-switch-row:active {
+  background: #FFF9E6;
+}
+
+.view-mode-current-value {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.view-mode-current-label {
+  font-size: 26rpx;
+  color: #B57C1E;
+  font-weight: bold;
+}
+
+.view-mode-hint {
+  display: block;
+  font-size: 20rpx;
+  color: #B57C1E;
+  line-height: 1.5;
+  padding: 0 32rpx 20rpx;
+}
+
+.action-list-container {
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 28rpx;
+  padding: 10rpx 0;
+  margin-bottom: 30rpx;
+  overflow: hidden;
+}
+
+.action-item-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx 32rpx;
+  background: #FFFFFF;
+}
+
+.action-item-cell:not(:last-child) {
+  border-bottom: 1rpx solid #FAF6F0;
+}
+
+.action-item-cell:active {
+  background: #FAF8F5;
+}
+
+.item-left {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.item-text {
+  font-size: 26rpx;
+  color: #444444;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.item-arrow {
+  font-size: 20rpx;
+  color: #C7C7CC;
+}
+
+/* 核心荣誉分组：义工证书/徽章 —— 淡金底强化卡片，与普通列表项拉开视觉层级 */
+.honor-cell {
+  background: linear-gradient(135deg, #FFFDF5 0%, #FFF9E6 100%);
+}
+
+.honor-cell:active {
+  background: #FFF3D6;
+}
+
+/* 🌟 店长专属管理入口：与 .honor-cell 同一套"淡金底强化行"语言，让店长在自己的个人页里
+   一眼看到这一行明显跟普通义工看到的列表不一样——权限层级的视觉区隔，不只是多一行文字 */
+.manager-only-cell {
+  background: linear-gradient(135deg, #FFFDF5 0%, #FFF3E0 100%);
+}
+
+.manager-only-cell:active {
+  background: #FFE9C4;
+}
+
+.manager-only-emoji {
+  font-size: 32rpx;
+  width: 38rpx;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.item-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.item-sub-hint {
+  font-size: 20rpx;
+  color: #B57C1E;
+}
+
+/* 关于与帮助分组内的"切换身份"行：保留列表统一样式，仅文字提示危险语义 */
+.danger-cell:active {
+  background: #FFF5F5;
+}
+
+.item-text.danger-text {
+  color: #D32F2F;
+}
+
+/* 低权限自助入口：刻意置于列表最下方且弱化视觉，符合"高权限低频功能不抢焦点"的排版逻辑 */
+.subtle-group {
+  margin-bottom: 30rpx;
+}
+
+.subtle-cell {
+  padding: 22rpx 32rpx;
+}
+
+.subtle-text {
+  color: #999999;
+  font-weight: 400;
+  font-size: 24rpx;
+}
+
+.subtle-icon {
+  opacity: 0.45;
+}
+
+/* 开发者与超管工具箱：独立成卡（原先依附在 .action-list-container 内，
+   现已拆分为独立分组，需要补回卡片背景/边框，避免变成无背景的裸列表） */
+.admin-developer-section {
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 28rpx;
+  margin-bottom: 30rpx;
+  overflow: hidden;
+}
+
+.admin-divider {
+  font-size: 20rpx;
+  font-weight: bold;
+  color: #8E8E93;
+  background: #F2F2F7;
+  padding: 10rpx 32rpx;
+}
+
+/* ==========================================
+   🌟 核心修复：高兼容性 SVG 矢量背景图注入
+   ========================================== */
+
+.item-icon-svg {
+  width: 38rpx;
+  height: 38rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  flex-shrink: 0;
+}
+
+.badge-icon-svg {
+  width: 26rpx;
+  height: 26rpx;
+  margin-right: 8rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.header-icon-svg {
+  width: 32rpx;
+  height: 32rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.flip-x {
+  transform: scaleX(-1);
+}
+
+/* 🌟 统一菜单图标色调为深古铜色（不使用红色），提升整体质感的同时更符合"荣誉"而非"警示"的调性 */
+.icon-svg-history { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4eiI+PC9wYXRoPjxwb2x5bGluZSBwb2ludHM9IjE0IDIgMTQgOCAyMCA4Ij48L3BvbHlsaW5lPjxsaW5lIHgxPSIxNiIgeTE9IjEzIiB4Mj0iOCIgeTI9IjEzIj48L2xpbmU+PGxpbmUgeDE9IjE2IiB5MT0iMTciIHgyPSI4IiB5Mj0iMTciPjwvbGluZT48cG9seWxpbmUgcG9pbnRzPSIxMCA5IDkgOSA4IDkiPjwvcG9seWxpbmU+PC9zdmc+'); }
+
+.icon-svg-about { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIxYTkgOSAwIDEgMCAwLTE4IDkgOSAwIDAgMCAwIDE4eiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiAxNnYtNCI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiA4aC4wMSI+PC9wYXRoPjwvc3ZnPg=='); }
+
+.icon-svg-key { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDJsLTIgMm0tNy42MSA3LjYxYTUuNSA1LjUgMCAxIDEtNy43NzggNy43NzggNS41IDUuNSAwIDAgMSA3Ljc3Ny03Ljc3N3ptMCAwTDE1LjUgNy41bTAgMGwzIDNNMTUuNSA3LjVMMTggNSI+PC9wYXRoPjwvc3ZnPg=='); }
+
+.icon-svg-clear { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMyA2IDUgNiAyMSA2Ij48L3BvbHlsaW5lPjxwYXRoIGQ9Ik0xOSA2djE0YTIgMiAwIDAgMS0yIDJIN2EyIDIgMCAwIDEtMi0yVjZtMyAwVjRhMiAyIDAgMCAxIDItMmg0YTIgMiAwIDAgMSAyIDJ2MiI+PC9wYXRoPjxsaW5lIHgxPSIxMCIgeTE9IjExIiB4Mj0iMTAiIHkyPSIxNyI+PC9saW5lPjxsaW5lIHgxPSIxNCIgeTE9IjExIiB4Mj0iMTQiIHkyPSIxNyI+PC9saW5lPjwvc3ZnPg=='); }
+
+/* 🐛 顺带修复：原图标末尾坐标是损坏数据 y2="1*"，已修正为合法的 21 */
+.icon-svg-screen { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMiIgeT0iMyIgd2lkdGg9IjIwIiBoZWlnaHQ9IjE0IiByeD0iMiIgcnk9IjIiPjwvcmVjdD48bGluZSB4MT0iOCIgeTE9IjIxIiB4Mj0iMTYiIHkyPSIyMSI+PC9saW5lPjxsaW5lIHgxPSIxMiIgeTE9IjE3IiB4Mj0iMTIiIHkyPSIyMSI+PC9saW5lPjwvc3ZnPg=='); }
+
+/* 🐛 顺带修复：原图标 base64 数据已损坏（含非法字节，浏览器会渲染为空白/破图），重新绘制为简洁莲花双瓣造型 */
+.icon-svg-flower { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjJjMC0zIDItNiA1LTZzNCAyIDQgNC0yIDItOSAyeiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiAyMmMwLTMtMi02LTUtNnMtNCAyLTQgNCAyIDIgOSAyeiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiA1Yy0yIDItMiA1IDAgN3M1IDAgNS0zLTEtNC01LTR6Ij48L3BhdGg+PC9zdmc+'); }
+
+/* 新增：义工证书/徽章菜单项图标（奖章造型） */
+.icon-svg-badge { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSI4IiByPSI2Ij48L2NpcmNsZT48cGF0aCBkPSJNOC4yMSAxMy44OUw3IDIzbDUtMyA1IDMtMS4yMS05LjEyIj48L3BhdGg+PC9zdmc+'); }
+
+/* 新增：昵称行编辑入口图标（简洁铅笔造型） */
+.icon-svg-edit { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE3IDNhMi44MjggMi44MjggMCAxIDEgNCA0TDcuNSAyMC41IDIgMjJsMS41LTUuNVoiPjwvcGF0aD48L3N2Zz4='); }
+
+.icon-svg-release { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDMyRjJGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+IDxwYXRoIGQ9Ik05IDIxSDVhMiAyIDAgMCAxLTItMlY1YTIgMiAwIDAgMSAyLTJoNCI+PC9wYXRoPiA8cG9seWxpbmUgcG9pbnRzPSIxNiAxNyAyMSAxMiAxNiA3Ij48L3BvbHlsaW5lPiA8bGluZSB4MT0iMjEiIHkxPSIxMiIgeDI9IjkiIHkyPSIxMiI+PC9saW5lPiA8L3N2Zz4='); }
+
+/* ==========================================
+   🚪 卸任特权 Warning 弹窗
+   ========================================== */
+.release-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.release-modal-mask.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.release-modal-card {
+  width: 82%;
+  max-width: 620rpx;
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  padding: 48rpx 36rpx 36rpx;
+  box-sizing: border-box;
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+  transform: scale(0.9) translateY(20rpx);
+  opacity: 0;
+  transition: all 0.25s ease;
+}
+
+.release-modal-mask.show .release-modal-card {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.release-warning-icon {
+  display: block;
+  text-align: center;
+  font-size: 72rpx;
+  margin-bottom: 20rpx;
+  line-height: 1;
+}
+
+.release-modal-title {
+  display: block;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+  margin-bottom: 32rpx;
+  line-height: 1.5;
+}
+
+.release-role-highlight {
+  color: #D32F2F;
+}
+
+.release-consequence-list {
+  background: #FFF5F5;
+  border: 1.5rpx solid #FFCDD2;
+  border-radius: 20rpx;
+  padding: 24rpx 24rpx 8rpx;
+  margin-bottom: 36rpx;
+}
+
+.release-consequence-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16rpx;
+}
+
+.bullet-dot {
+  font-size: 26rpx;
+  color: #D32F2F;
+  margin-right: 12rpx;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+.bullet-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #5C5C5C;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.release-consequence-item.danger .bullet-text {
+  color: #D32F2F;
+  font-weight: bold;
+}
+
+.release-modal-footer {
+  display: flex;
+  gap: 20rpx;
+}
+
+.release-btn-cancel,
+.release-btn-confirm {
+  flex: 1;
+  height: 84rpx;
+  line-height: 84rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 42rpx;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.release-btn-cancel::after,
+.release-btn-confirm::after {
+  border: none;
+}
+
+.release-btn-cancel {
+  background: #F1F3F5;
+  color: #495057;
+}
+
+.release-btn-cancel:active {
+  transform: scale(0.96);
+  background: #E9ECEF;
+}
+
+.release-btn-confirm {
+  background: linear-gradient(135deg, #E53935 0%, #C62828 100%);
+  color: #FFFFFF;
+  box-shadow: 0 8rpx 20rpx rgba(198, 40, 40, 0.35);
+}
+
+.release-btn-confirm:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+  box-shadow: 0 4rpx 10rpx rgba(198, 40, 40, 0.3);
+}
+
+/* ================= 🏅 数字荣誉墙 ================= */
+
+.honor-wall-card {
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 28rpx;
+  padding: 24rpx 28rpx 28rpx;
+  margin-bottom: 30rpx;
+  box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
+}
+
+.honor-wall-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.honor-wall-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.honor-wall-cert-link {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  font-size: 22rpx;
+  color: #8C1D18;
+}
+
+.honor-badge-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.honor-badge-row {
+  display: flex;
+  gap: 28rpx;
+  padding: 4rpx 4rpx 8rpx;
+}
+
+.honor-badge-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+  width: 108rpx;
+  transition: transform 0.15s ease;
+}
+
+.honor-badge-item:active {
+  transform: scale(0.94);
+}
+
+.honor-badge-circle {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* 已解锁：饱满金色渐变 + 微光投影，点击时整体缩放做"微光"反馈（见 .honor-badge-item:active） */
+.honor-badge-item.unlocked .honor-badge-circle {
+  background: linear-gradient(135deg, #F1C40F 0%, #B8860B 100%);
+  box-shadow: 0 0 0 4rpx #FFF3BF, 0 6rpx 16rpx rgba(184, 134, 11, 0.45);
+}
+
+.honor-badge-item.unlocked .honor-badge-emoji {
+  font-size: 44rpx;
+}
+
+.honor-badge-item.unlocked .honor-badge-name {
+  color: #8C1D18;
+  font-weight: bold;
+}
+
+/* 未解锁：整体置灰半透明，与已解锁形成清晰的"未达成"视觉信号 */
+.honor-badge-item.locked .honor-badge-circle {
+  background: #E9ECEF;
+  opacity: 0.4;
+}
+
+.honor-badge-item.locked .honor-badge-emoji {
+  font-size: 40rpx;
+  filter: grayscale(100%);
+}
+
+.honor-badge-item.locked .honor-badge-name {
+  color: #ADB5BD;
+}
+
+.honor-badge-name {
+  font-size: 20rpx;
+  text-align: center;
+}
+
+/* ================= 🌟 义工证书 Modal ================= */
+
+.certificate-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.certificate-modal-card {
+  width: 88%;
+  max-width: 660rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 28rpx 24rpx 32rpx;
+  box-sizing: border-box;
+}
+
+.certificate-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.certificate-modal-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.certificate-modal-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+}
+
+.certificate-canvas-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 16rpx;
+  overflow: hidden;
+  background: #F1E6C8;
+  /* Canvas 用 style 里的 px 精确控制尺寸（与 drawVolunteerCertificate 的 width/height 参数一致），
+     这里用等比留白让容器高度跟随，避免绘制中/绘制前出现明显的高度跳变 */
+  min-height: 480rpx;
+}
+
+.certificate-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Canvas 节点本身不需要可见——它只是绘制源，最终展示的是下面的 <image>；
+     保留在文档流里但视觉上完全被 image 盖住即可，不需要额外裁剪技巧 */
+}
+
+.certificate-preview-img {
+  position: relative;
+  width: 100%;
+  display: block;
+  border-radius: 16rpx;
+}
+
+.certificate-loading-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(251, 246, 233, 0.9);
+  font-size: 24rpx;
+  color: #8C6D46;
+}
+
+.certificate-save-btn {
+  margin-top: 24rpx;
+  width: 100%;
+  height: 84rpx;
+  line-height: 84rpx;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 42rpx;
+  border: none;
+}
+
+.certificate-save-btn::after {
+  border: none;
+}
+
+.certificate-save-btn[disabled] {
+  opacity: 0.5;
+}

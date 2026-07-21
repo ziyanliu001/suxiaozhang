@@ -1,0 +1,9 @@
+{
+  "name": "ocrDonationList",
+  "version": "1.0.0",
+  "description": "微信收款/接龙截图 OCR 识别，提取爱心支持明细（昵称+金额）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

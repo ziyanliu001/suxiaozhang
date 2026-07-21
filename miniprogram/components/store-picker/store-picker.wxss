@@ -17,13 +17,21 @@
   opacity: 0.8;
 }
 
-/* 定位图标 */
-.store-picker-capsule .pin-icon {
-  font-size: 30rpx;
-  margin-right: 10rpx;
-  line-height: 1 !important;
+/* 圆形头像占位：取门店名首字，替代原先的定位图标 */
+.store-picker-capsule .capsule-avatar {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8C1D18 0%, #B8433C 100%);
+  color: #FFFFFF;
+  font-size: 22rpx;
+  font-weight: bold;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 /* 门店名称：大幅提升字号与加粗 */
@@ -75,11 +83,23 @@
   background: #FBF9F5;
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
-  padding: 32rpx 28rpx;
+  padding: 16rpx 28rpx 32rpx;
   box-sizing: border-box;
   transform: translateY(100%);
   transition: transform 0.25s ease;
   max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部拖拽把手：纯视觉提示，表明这是一张可下滑关闭的面板 */
+.sheet-drag-handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #E3D9C8;
+  margin: 0 auto 20rpx;
+  flex-shrink: 0;
 }
 
 .store-sheet-backdrop.show .store-sheet-panel {
@@ -127,6 +147,13 @@
 .sheet-scroll-list {
   max-height: 55vh;
   margin-top: 20rpx;
+}
+
+.store-list-loading-tip {
+  text-align: center;
+  padding: 16rpx 0;
+  font-size: 22rpx;
+  color: #999999;
 }
 
 /* 门店分组卡片基础样式 */
@@ -201,13 +228,19 @@
   line-height: 1;
 }
 
-/* 选中态对勾，带舒适边距 */
+/* 选中态对勾：Reddit 风格的实心蓝色圆形徽标（text 组件用 line-height 居中，不依赖 flex） */
 .role-choice-pill .check-mark {
-  font-size: 20rpx;
-  color: #8C1D18;
-  margin-left: 10rpx;
+  display: inline-block;
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  background: #1A73E8;
+  color: #FFFFFF;
+  font-size: 18rpx;
   font-weight: bold;
-  line-height: 1;
+  line-height: 28rpx;
+  text-align: center;
+  margin-left: 10rpx;
 }
 
 /* 选中高亮状态 (朱红浅底) */
@@ -230,6 +263,97 @@
 
 .role-choice-pill.locked .role-label {
   color: #888888 !important;
+}
+
+/* ===== ➕ 新建门店入口按钮：吸底高亮 CTA，视觉权重与"确认激活"按钮一致 ===== */
+.new-store-entry-btn {
+  margin-top: 20rpx;
+  flex-shrink: 0;
+  text-align: center;
+  padding: 22rpx 0;
+  border-radius: 40rpx;
+  color: #FFFFFF;
+  font-size: 27rpx;
+  font-weight: bold;
+  background: #8C1D18;
+  box-shadow: 0 8rpx 20rpx rgba(140, 29, 24, 0.22);
+}
+
+.new-store-entry-btn:active {
+  opacity: 0.85;
+}
+
+/* ===== 新建门店申请表单 ===== */
+.new-store-form {
+  margin-top: 20rpx;
+}
+
+.new-store-form-back {
+  font-size: 24rpx;
+  color: #8C1D18;
+  margin-bottom: 20rpx;
+}
+
+.new-store-form .form-label {
+  font-size: 24rpx;
+  color: #666666;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.new-store-form .form-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #8C1D18;
+  background: #FFF3E0;
+  border-radius: 10rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+  line-height: 1.6;
+}
+
+.new-store-input {
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  height: 76rpx;
+  padding: 0 24rpx;
+  font-size: 26rpx;
+  color: #333333;
+  box-sizing: border-box;
+  margin-bottom: 24rpx;
+}
+
+.new-store-role-group {
+  display: flex;
+  gap: 24rpx;
+  margin-bottom: 32rpx;
+}
+
+.new-store-role-item {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 24rpx;
+  color: #555555;
+}
+
+.new-store-submit-btn {
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.new-store-submit-btn::after {
+  border: none;
+}
+
+.new-store-submit-btn:active {
+  opacity: 0.85;
+  transform: scale(0.98);
 }
 
 /* ===== 特权身份激活弹窗 ===== */

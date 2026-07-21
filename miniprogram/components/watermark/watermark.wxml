@@ -1,0 +1,5 @@
+<view class="watermark-overlay" wx:if="{{fullText}}">
+  <view class="watermark-grid">
+    <text class="watermark-item" wx:for="{{cells}}" wx:key="*this">{{fullText}}</text>
+  </view>
+</view>

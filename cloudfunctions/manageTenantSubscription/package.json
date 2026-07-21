@@ -1,0 +1,9 @@
+{
+  "name": "manageTenantSubscription",
+  "version": "1.0.0",
+  "description": "云函数：SaaS 平台管理员专用 - 租户生命周期与服务订阅管理（不触碰任何门店业务数据）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

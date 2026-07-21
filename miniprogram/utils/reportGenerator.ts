@@ -1,8 +1,10 @@
+import { maskName } from './privacy';
+
 const YUHUA_GOLDEN_QUOTES = [
-  "“或饮食，或坐走，长者先，幼者后。” 恭敬端饭，感恩一米一蔬。",
-  "拒绝浪费，珍惜粮食；食存五观，感恩护持。",
-  "积沙成塔，集腋成裘。感恩每一位默默付出的家人与善士！",
-  "恭敬端上一碗饭，温暖世间一颗心。欢迎大家回家吃饭！"
+  "用一餐饭的温度，传递温暖与关爱。",
+  "拒绝浪费，珍惜粮食；一粥一饭，来之不易。",
+  "用一餐饭的温度，传递温暖与关爱。每一餐，都有您的爱心护持。",
+  "端上一碗热饭，温暖世间一颗心。欢迎大家回家吃饭！"
 ];
 
 export interface DonorItem {
@@ -37,6 +39,8 @@ export interface ReportData {
   slogan1?: string;
   slogan2?: string;
   materials?: MaterialItem[];
+  // 🔗 门店日志联动：与首页「今日大事记」编辑区同一份数据，见 index.ts fetchTodayActivity
+  activityText?: string;
   volunteerCount?: number;
   volunteerHours?: number;
   diningCount?: number;
@@ -54,7 +58,7 @@ export function formatMoney(value: number): string {
 }
 
 export function generateReportText(data: ReportData): string {
-  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode } = data;
+  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode } = data;
 
   const defaultThankText = '感谢大家的自愿赞助\n与默默付出的义工！';
   const defaultSlogan1 = '吃 素 一 日   健 康 一 天';
@@ -78,17 +82,17 @@ export function generateReportText(data: ReportData): string {
     let text = `🌸【${shopName}】每日爱心打卡 (${reportDate || new Date().toISOString().split('T')[0]})\n`;
     
     if (Number(diningCount) > 0) {
-      text += `🍲 今日恭敬结缘开餐：${diningCount} 人次 (食材投入 ¥${costPerMeal}/人)\n`;
+      text += `🍲 今日服务用餐：${diningCount} 人次 (食材投入 ¥${costPerMeal}/人)\n`;
     } else {
-      text += `🌱 今日为开餐筹措期，安居筹备，积蓄力量\n`;
+      text += `🌱 今日为开餐筹备期，蓄力待发\n`;
     }
 
     if (Number(volunteerCount) > 0) {
-      text += `🤝 ${volunteerCount} 位义工家人无偿服务 ${volunteerHours || 0} 小时\n`;
+      text += `🤝 ${volunteerCount} 位志愿者无偿服务 ${volunteerHours || 0} 小时\n`;
     }
 
     text += `💳 账户结余：¥${formatMoney(todayBalance)} 元 | 拒绝浪费，爱心传递！\n`;
-    text += `🙏 欢喜吉祥，欢迎各位家人回家吃饭！`;
+    text += `❤️ 欢迎各位家人回家吃饭！`;
     return text;
   }
 
@@ -114,7 +118,7 @@ export function generateReportText(data: ReportData): string {
       tagEmoji = '📦';
       spacedTag = '爱 心 物 资 呼 吁';
     } else if (noticeTag === '感恩致谢') {
-      tagEmoji = '🙏';
+      tagEmoji = '❤️';
       spacedTag = '感 恩 致 谢';
     } else if (noticeTag) {
       spacedTag = noticeTag.split('').join(' ');
@@ -150,7 +154,7 @@ export function generateReportText(data: ReportData): string {
     if (volunteerCount && volunteerCount > 0) {
       textArray.push(`• 到岗护持义工：${volunteerCount} 人 (服务总时长 ${volunteerHours || 0} 小时)`);
     }
-    textArray.push('感恩诸位义工菩萨无私奉献，恭敬端上一碗饭，温暖世间人心！');
+    textArray.push('感恩诸位志愿者无私奉献，用一餐饭的温度，温暖世间人心！');
     textArray.push('');
   }
 
@@ -197,9 +201,9 @@ export function generateReportText(data: ReportData): string {
       for (let i = 0; i < items.length; i += 2) {
         const left = items[i];
         const right = items[i + 1];
-        const leftStr = `${i + 1}.${left.name} ¥${formatMoney(left.amount)}`;
+        const leftStr = `${i + 1}.${maskName(left.name)} ¥${formatMoney(left.amount)}`;
         if (right) {
-          const rightStr = `${i + 2}.${right.name} ¥${formatMoney(right.amount)}`;
+          const rightStr = `${i + 2}.${maskName(right.name)} ¥${formatMoney(right.amount)}`;
           textArray.push(`${leftStr.padEnd(16, ' ')} | ${rightStr}`);
         } else {
           textArray.push(`${leftStr}`);
@@ -207,7 +211,7 @@ export function generateReportText(data: ReportData): string {
       }
     } else {
       items.forEach((item, index) => {
-        textArray.push(`${index + 1}. ${item.name}：¥${formatMoney(item.amount)}`);
+        textArray.push(`${index + 1}. ${maskName(item.name)}：¥${formatMoney(item.amount)}`);
       });
     }
     textArray.push(`📊 总人数：${items.length}人 | 总金额：¥${formatMoney(totalAmount)}`);
@@ -220,8 +224,15 @@ export function generateReportText(data: ReportData): string {
   if (materials && materials.length > 0) {
     textArray.push(`📦【现收物资赞助明细】`);
     materials.forEach(m => {
-      textArray.push(`• ${m.donor}：赞助 ${m.item} ${m.quantity}${m.unit}`);
+      textArray.push(`• ${maskName(m.donor)}：赞助 ${m.item} ${m.quantity}${m.unit}`);
     });
+    textArray.push('');
+  }
+
+  // 🔗 门店日志联动：与首页「今日大事记」编辑区同一份数据，见 index.ts fetchTodayActivity
+  if (activityText && activityText.trim()) {
+    textArray.push(`📌【今日门店日志】`);
+    textArray.push(activityText.trim());
     textArray.push('');
   }
 
@@ -236,7 +247,7 @@ export function generateReportText(data: ReportData): string {
     if (isRiceUrgent) urgentItems.push('大米/面粉');
     if (isOilUrgent) urgentItems.push('食用油');
     textArray.push('');
-    textArray.push(`🌾【急需爱心物资】雨花斋今日${urgentItems.join('与')}储备告急，恳请各位家人随喜结缘，广结善缘！`);
+    textArray.push(`🌾【急需爱心物资】雨花斋今日${urgentItems.join('与')}储备告急，恳请各位家人伸出援手，奉献一份爱心！`);
   }
 
   textArray.push('');
@@ -245,7 +256,7 @@ export function generateReportText(data: ReportData): string {
   textArray.push(`💡【雨花心语】${randomQuote}`);
   textArray.push('');
 
-  textArray.push(`🙏 ${thankText || defaultThankText}`);
+  textArray.push(`❤️ ${thankText || defaultThankText}`);
   textArray.push('');
 
   textArray.push(`🌱 ${slogan1 || defaultSlogan1}`);

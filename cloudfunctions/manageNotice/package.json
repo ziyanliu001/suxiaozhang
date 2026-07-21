@@ -1,0 +1,9 @@
+{
+  "name": "manageNotice",
+  "version": "1.0.0",
+  "description": "云函数：首页跑马灯通知增删改查（店长/财务限本店，超管可发本店或机构总览级，全员只读且按当前视角严格互斥查询）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

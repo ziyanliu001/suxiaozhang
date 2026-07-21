@@ -1,0 +1,132 @@
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 99998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.drawer-backdrop.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 76%;
+  max-width: 560rpx;
+  background: #FBF9F5;
+  box-sizing: border-box;
+  padding: 0 0 24rpx;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  box-shadow: 8rpx 0 24rpx rgba(0, 0, 0, 0.12);
+}
+
+.drawer-backdrop.show .drawer-panel {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  /* 🛡️ 顶部间距改由 side-drawer.ts 算出的安全区 margin-top 内联样式控制，
+     这里只保留左右与底部的常规内边距，不再用固定 72rpx 硬编码猜测安全区高度 */
+  padding: 24rpx 28rpx 24rpx;
+  border-bottom: 1rpx solid #EFE6D8;
+  flex-shrink: 0;
+}
+
+.drawer-brand-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8C1D18 0%, #B8433C 100%);
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 72rpx;
+  text-align: center;
+  flex-shrink: 0;
+  margin-right: 18rpx;
+}
+
+.drawer-brand-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-store-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drawer-role-label {
+  font-size: 22rpx;
+  color: #8C1D18;
+  margin-top: 6rpx;
+}
+
+.drawer-close {
+  font-size: 32rpx;
+  color: #999999;
+  padding: 8rpx;
+  flex-shrink: 0;
+}
+
+.drawer-scroll {
+  flex: 1;
+  padding: 12rpx 20rpx 0;
+  box-sizing: border-box;
+}
+
+.drawer-group {
+  margin-bottom: 28rpx;
+}
+
+.drawer-group-label {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  font-weight: 500;
+  padding: 0 12rpx 12rpx;
+}
+
+.drawer-item {
+  display: flex;
+  align-items: center;
+  padding: 22rpx 12rpx;
+  border-radius: 16rpx;
+}
+
+.drawer-item:active {
+  background: #F2E9DC;
+}
+
+.drawer-item-icon {
+  font-size: 30rpx;
+  margin-right: 18rpx;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.drawer-item-text {
+  font-size: 27rpx;
+  color: #333333;
+}

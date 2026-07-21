@@ -2,6 +2,7 @@ import { AuthService } from './authService';
 import { generateReportText } from './reportGenerator';
 import { isStoreNameFuzzyMatch } from './constants';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate } from './dateUtils';
+import { isCloudAvailable } from './cloudGuard';
 
 const STORAGE_KEY = 'local_report_logs';
 
@@ -62,16 +63,82 @@ export function formatMoney(value: any): string {
   return positiveNum === 0 ? "0.00" : positiveNum.toFixed(2);
 }
 
+const VOLUNTEER_MASK_TEXT = '***（仅店长可见）';
+
+// 财务/运营敏感字段黑名单：覆盖单条 report_logs 记录字段名，以及全国大屏
+// 门店矩阵/汇总对象的字段名，两类数据结构共用同一份脱敏逻辑
+const SENSITIVE_FIELD_KEYS = [
+  'singleMealCost', 'costPerMeal',
+  'totalIncome', 'totalExpense', 'ingredientExpense',
+  'nationalTotalIncome', 'nationalTotalExpense', 'nationalNetAccumulation',
+  'listDonationTotal', 'otherDonation', 'expenseAmount',
+  'dailyExpenseTotal', 'fixedExpenseTotal',
+  'latestBalance', 'balance', 'todayBalance', 'yesterdayBalance',
+  'systemBalance', 'adjustedBalance', 'balanceDiff',
+  // 精确续航天数可反推资金余额，属于财务隐私，志工只保留 healthStatus 状态标签
+  'runwayDays'
+];
+
+/**
+ * 🛡️ 统一数据脱敏处理函数：分层开放、数据脱敏
+ *
+ * 志工（VOLUNTEER）视角只应看到"集体荣誉"类服务成果（服务人次、开餐天数、续航状态标签），
+ * 单餐成本、收支金额、结余、精确续航天数等运营/财务隐私字段一律清除，而不是仅在 UI 上隐藏。
+ *
+ * 注意：这是客户端第二层防线（防止已拿到数据后被二次转发/落盘时仍带敏感字段）。
+ * 真正杜绝"抓包泄露"必须在云函数出口处（服务端）同步调用等价的脱敏逻辑，
+ * 数据从服务端下发时就已经不包含这些字段 —— 参见 cloudfunctions/getNationalDashboard
+ * 中的同名 sanitizeReportForVolunteer 实现。
+ *
+ * @param data 单条记录对象，或记录数组（如 storeMatrix / report_logs 列表）
+ * @param userRole 当前用户角色（'volunteer' 触发脱敏，其余角色原样返回）
+ */
+export function sanitizeReportForVolunteer<T = any>(data: T, userRole: string): T {
+  const isVolunteer = String(userRole || '').toLowerCase() === 'volunteer';
+  if (!isVolunteer || !data) {
+    return data;
+  }
+
+  const maskOne = (item: any): any => {
+    if (!item || typeof item !== 'object') return item;
+    const masked: any = { ...item };
+    SENSITIVE_FIELD_KEYS.forEach((key) => {
+      if (key in masked) {
+        masked[key] = null;
+      }
+    });
+    if ('costPerMeal' in item || 'costPerMealStr' in item) {
+      masked.costPerMealStr = VOLUNTEER_MASK_TEXT;
+    }
+    masked.isCostRestricted = true;
+    return masked;
+  };
+
+  if (Array.isArray(data)) {
+    return (data as any[]).map(maskOne) as any;
+  }
+  return maskOne(data);
+}
+
 export const DataService = {
   async saveReport(reportData: any): Promise<{ success: boolean; message: string; data?: any; errorDetail?: string }> {
-    const db = wx.cloud.database();
+    // 🌟 云开发 SDK 可用性防护：wx.cloud.database() 曾在个别环境（wx.cloud.init 内部
+    // 致命错误后）抛出 "Cannot read property 'getCloudAPI' of undefined"。
+    // 这行调用原本在 try/catch 保护范围之外，此处先做能力探测再决定是否调用，
+    // 不可用时用本地时间戳代替 db.serverDate()，稍后交由下方 try/catch 统一走本地兜底。
+    const cloudReady = isCloudAvailable();
+    const db = cloudReady ? wx.cloud.database() : null;
 
     const openid = AuthService.getOpenid();
+    // 🏢 多租户：写入时随手带上调用者所属机构 ID（来自登录时缓存的角色信息）
+    const cachedRoleInfoForTenant = AuthService.getCachedRoleInfo();
+    const tenantId = (cachedRoleInfoForTenant && cachedRoleInfoForTenant.tenantId) || '';
     const formattedData = {
       dateString: reportData.dateString || '',
       reportDate: reportData.reportDate || '',
       shopName: reportData.shopName || '',
       storeId: reportData.storeId || wx.getStorageSync('current_store_id') || '',
+      tenantId,
       mpAccount: reportData.mpAccount || '',
       yesterdayBalance: parseNumber(reportData.yesterdayBalance),
       otherDonation: parseNumber(reportData.otherDonation),
@@ -82,6 +149,9 @@ export const DataService = {
       fixedExpenseText: reportData.fixedExpenseText || '',
       dailyExpenseTotal: parseNumber(reportData.dailyExpenseTotal),
       fixedExpenseTotal: parseNumber(reportData.fixedExpenseTotal),
+      // 🔒 大额专项行级独立凭证：白名单里必须显式列出，否则会被这层 formattedData
+      // 静默丢弃（本对象只转发列出的字段，不是透传 reportData 原样对象）
+      fixedExpenseItems: reportData.fixedExpenseItems || [],
       majorExpenseItems: reportData.majorExpenseItems || [],
       dailyIngredientItems: reportData.dailyIngredientItems || [],
       donationItems: reportData.donationItems || [],
@@ -99,7 +169,7 @@ export const DataService = {
       diningCount: parseFloat(reportData.diningCount) || 0,
       stapleRiceStatus: reportData.stapleRiceStatus || 'normal',
       stapleOilStatus: reportData.stapleOilStatus || 'sufficient',
-      updateTime: db.serverDate(),
+      updateTime: db ? db.serverDate() : Date.now(),
       isSynced: false
     };
 
@@ -120,6 +190,10 @@ export const DataService = {
           message: '账目各项均为0且无物资赞助，已自动跳过保存',
           errorDetail: 'all_zero_skipped'
         };
+      }
+
+      if (!db) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，saveReport 降级为本地缓存模式');
       }
 
       // 步骤 1: 查询同日期同门店是否已有记录（Upsert 查重，强带 storeId 隔离）
@@ -176,6 +250,34 @@ export const DataService = {
         operationType = '已覆盖更新';
         console.log('[DataService] Upsert: 已覆盖更新同日记录:', existingId);
       } else {
+        // 🌟 重复录入拦截：本人名下没有同日记录，但同门店+同日期维度可能已被他人
+        // （另一账号/设备）提交过。若直接新增会产生两条互不关联的同日餐报，
+        // 造成"昨日余额+今日结余"资金流水断裂，因此这里按门店+日期（不限定提交人）广义查重。
+        if (!reportData.allowDuplicateDateOverride) {
+          const duplicateWhere: any = {
+            dateString: formattedData.dateString,
+            shopName: formattedData.shopName
+          };
+          if (formattedData.storeId) {
+            duplicateWhere.storeId = formattedData.storeId;
+          }
+          const duplicateQuery = await db.collection('report_logs')
+            .where(duplicateWhere)
+            .limit(1)
+            .get();
+
+          if (duplicateQuery.data && duplicateQuery.data.length > 0) {
+            const duplicateId = duplicateQuery.data[0]._id;
+            console.warn('[DataService] 检测到同门店同日期已存在他人提交的记录，已阻止重复录入:', duplicateId);
+            return {
+              success: false,
+              message: '该日期已存在餐报记录，请直接在历史记录中编辑或修改，避免重复录入',
+              errorDetail: 'duplicate_date_blocked',
+              data: { duplicateRecordId: duplicateId } as any
+            };
+          }
+        }
+
         // 步骤 2b: 不存在 - 新增
         formattedData.createTime = db.serverDate();
         cloudResult = await db.collection('report_logs').add({
@@ -183,6 +285,15 @@ export const DataService = {
         });
         operationType = '已新增';
         console.log('[DataService] Upsert: 新增记录:', cloudResult._id);
+      }
+
+      // 🛡️ 资金流水防篡改：客户端不持有 HMAC 密钥，写入后立即请求云函数在服务端补盖校验码；
+      // 该调用不阻塞主提交流程，失败仅记录日志，不影响餐报本身已保存成功的事实
+      if (cloudResult && cloudResult._id && isCloudAvailable()) {
+        wx.cloud.callFunction({
+          name: 'stampReportChecksum',
+          data: { id: cloudResult._id }
+        }).catch(e => console.warn('[DataService] 校验码补盖调用失败:', e));
       }
 
       // 步骤 3: 同步本地缓存
@@ -217,7 +328,11 @@ export const DataService = {
       // 强力捕获并暴露真实错误
       const errCode = error.errCode || error.code || 'N/A';
       const errMsg = error.errMsg || error.message || '未知错误';
-      console.error('[DataService] 云端写入失败:', error);
+      const isCloudDown = errMsg.includes('CLOUD_SDK_UNAVAILABLE');
+      console.error(
+        isCloudDown ? '[DataService] 云开发 SDK 不可用，saveReport 已降级为本地缓存模式' : '[DataService] 云端写入失败:',
+        isCloudDown ? '' : error
+      );
 
       // 尝试本地兜底
       try {
@@ -261,6 +376,10 @@ export const DataService = {
     const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode } = options;
 
     try {
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端查询');
+      }
+
       // 云端查询传 storeId 做强隔离（超管全国总览时 storeId 为空或 ALL_STORES 则不过滤）
       const result = await wx.cloud.callFunction({
         name: 'getReports',
@@ -317,9 +436,13 @@ export const DataService = {
         };
       }
 
-      throw new Error(r?.error || '云函数调用失败');
+      throw new Error((r && r.error) || '云函数调用失败');
     } catch (error: any) {
-      console.warn('[DataService] 云端查询失败，使用本地缓存:', error);
+      const isCloudDown = !!(error && error.message && error.message.includes('CLOUD_SDK_UNAVAILABLE'));
+      console.warn(
+        isCloudDown ? '[DataService] 云开发 SDK 不可用，getReports 已降级为本地缓存' : '[DataService] 云端查询失败，使用本地缓存:',
+        isCloudDown ? '' : error
+      );
 
       const openid = AuthService.getOpenid();
       let localReports = getLocalReports();
@@ -384,6 +507,14 @@ export const DataService = {
       return { success: true, syncedCount: 0, failedCount: 0 };
     }
 
+    // 🌟 云开发 SDK 可用性防护：此调用原本不在任何 try/catch 保护范围内，
+    // 一旦 wx.cloud 处于损坏状态会直接抛出未捕获异常。这里改为提前探测，
+    // 不可用时跳过本轮同步（本地数据保持 isSynced:false，下次联网/onShow 时会自动重试）。
+    if (!isCloudAvailable()) {
+      console.warn('[DataService] 云开发 SDK 不可用，本轮跳过本地数据同步，待下次自动重试');
+      return { success: false, syncedCount: 0, failedCount: unsyncedReports.length };
+    }
+
     const db = wx.cloud.database();
     let syncedCount = 0;
     let failedCount = 0;
@@ -395,6 +526,11 @@ export const DataService = {
         delete dataToSync.localCreateTime;
         dataToSync.isSynced = true;
         dataToSync.updateTime = db.serverDate();
+        // 🏢 多租户：补同步的离线草稿若创建于本字段上线之前，此处兜底补齐
+        if (!dataToSync.tenantId) {
+          const cachedRoleInfoForSync = AuthService.getCachedRoleInfo();
+          dataToSync.tenantId = (cachedRoleInfoForSync && cachedRoleInfoForSync.tenantId) || '';
+        }
 
         const syncWhere: any = {
           dateString: dataToSync.dateString,
@@ -425,6 +561,12 @@ export const DataService = {
           cloudId = result._id;
         }
 
+        // 🛡️ 资金流水防篡改：离线草稿补同步后同样需要服务端补盖 HMAC 校验码
+        wx.cloud.callFunction({
+          name: 'stampReportChecksum',
+          data: { id: cloudId }
+        }).catch(e => console.warn('[DataService] 离线同步校验码补盖调用失败:', e));
+
         const index = localReports.findIndex(r => r._localId === report._localId);
         if (index !== -1) {
           localReports[index].isSynced = true;
@@ -453,9 +595,13 @@ export const DataService = {
     };
   },
 
-  async deleteReport(id: string, reportData?: any): Promise<{ success: boolean; message: string }> {
+  async deleteReport(id: string, reason: string, reportData?: any): Promise<{ success: boolean; message: string }> {
     if (!id) {
       return { success: false, message: '缺少记录 ID' };
+    }
+
+    if (!reason || !reason.trim()) {
+      return { success: false, message: '请填写删除原因后再操作，删除历史餐报记录必须留痕' };
     }
 
     const isCloudRecord = !id.startsWith('local_');
@@ -464,9 +610,13 @@ export const DataService = {
 
     if (isCloudRecord) {
       try {
+        if (!isCloudAvailable()) {
+          throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端删除');
+        }
+
         const cloudResult = await wx.cloud.callFunction({
           name: 'deleteMealReport',
-          data: { id }
+          data: { id, reason: reason.trim() }
         });
         const r = cloudResult.result as any;
         
@@ -474,7 +624,7 @@ export const DataService = {
           cloudDeleted = true;
           console.log('[DataService] 云函数删除成功:', id);
         } else {
-          cloudError = r?.error || '云端删除失败';
+          cloudError = (r && r.error) || '云端删除失败';
           console.warn('[DataService] 云函数删除失败:', cloudError);
         }
       } catch (cloudErr: any) {
@@ -563,6 +713,10 @@ export const DataService = {
     };
 
     try {
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端清理');
+      }
+
       const cloudResult = await wx.cloud.callFunction({
         name: 'clearMealReports',
         data: { mode: 'dirty' }
@@ -641,6 +795,10 @@ export const DataService = {
     const targetPrevCnFull = `${targetPrevIso.substring(0, 4)}年${targetPrevIso.substring(5, 7)}月${targetPrevIso.substring(8, 10)}日`;
 
     try {
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端查询');
+      }
+
       const result = await wx.cloud.callFunction({
         name: 'getPreviousBalance',
         data: { shopName, mpAccount, targetDateString, storeId }
@@ -722,6 +880,10 @@ export const DataService = {
 
   async getStatistics(startDate: string, endDate: string, shopName?: string, viewMode?: 'all' | 'personal', storeId?: string): Promise<{ success: boolean; data?: any; source: 'cloud' | 'local' }> {
     try {
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端查询');
+      }
+
       const result = await wx.cloud.callFunction({
         name: 'getStatistics',
         data: { startDate, endDate, shopName, viewMode, storeId }
@@ -736,7 +898,7 @@ export const DataService = {
         };
       }
 
-      throw new Error(r?.error || '云函数调用失败');
+      throw new Error((r && r.error) || '云函数调用失败');
     } catch (error) {
       console.warn('[DataService] 云端统计查询失败，使用本地缓存:', error);
 

@@ -1,0 +1,9 @@
+{
+  "name": "getRiskAlerts",
+  "version": "1.0.0",
+  "description": "财务风控预警：余额异常突变、红字冲销频次、小票缺失明细扫描",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

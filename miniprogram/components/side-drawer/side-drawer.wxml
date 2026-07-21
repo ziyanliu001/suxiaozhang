@@ -1,0 +1,54 @@
+<!-- 左侧滑出功能导航抽屉：三个分组全部指向首页已有的真实入口，不新造功能 -->
+<view class="drawer-backdrop {{show ? 'show' : ''}}" bindtap="close" catchtouchmove="preventTouchMove">
+  <view class="drawer-panel" catchtap="stopBubble">
+
+    <view class="drawer-header" style="margin-top: {{sidebarTopMargin}}px;">
+      <view class="drawer-brand-avatar">{{storeInitial}}</view>
+      <view class="drawer-brand-text">
+        <text class="drawer-store-name">{{storeName || '素小账志愿服务'}}</text>
+        <text class="drawer-role-label">{{roleLabel}}</text>
+      </view>
+      <text class="drawer-close" bindtap="close">✕</text>
+    </view>
+
+    <scroll-view scroll-y class="drawer-scroll">
+
+      <view class="drawer-group">
+        <text class="drawer-group-label">核心记账</text>
+        <view class="drawer-item" bindtap="onTapAction" data-type="record">
+          <text class="drawer-item-icon">🧾</text>
+          <text class="drawer-item-text">常规记账</text>
+        </view>
+        <view class="drawer-item" wx:if="{{isManager || isFinance || isSuperAdmin}}" bindtap="onTapAction" data-type="template">
+          <text class="drawer-item-icon">⚙️</text>
+          <text class="drawer-item-text">高频账目模板（店铺自定义）</text>
+        </view>
+      </view>
+
+      <view class="drawer-group" wx:if="{{isManager || isFinance || isSuperAdmin}}">
+        <text class="drawer-group-label">公益项目管理</text>
+        <view class="drawer-item" wx:if="{{isManager || isSuperAdmin}}" bindtap="onTapAction" data-type="audit">
+          <text class="drawer-item-icon">🧑‍🤝‍🧑</text>
+          <text class="drawer-item-text">义工小队审核</text>
+        </view>
+        <view class="drawer-item" bindtap="onTapAction" data-type="statistics">
+          <text class="drawer-item-icon">📊</text>
+          <text class="drawer-item-text">数据统计与账本导出</text>
+        </view>
+        <view class="drawer-item" wx:if="{{isSuperAdmin}}" bindtap="onTapAction" data-type="storeManagement">
+          <text class="drawer-item-icon">🏪</text>
+          <text class="drawer-item-text">门店管理</text>
+        </view>
+      </view>
+
+      <view class="drawer-group" wx:if="{{recentList.length > 0}}">
+        <text class="drawer-group-label">最近访问</text>
+        <view class="drawer-item" wx:for="{{recentList}}" wx:key="path" bindtap="onTapRecent" data-path="{{item.path}}">
+          <text class="drawer-item-icon">🕘</text>
+          <text class="drawer-item-text">{{item.title}}</text>
+        </view>
+      </view>
+
+    </scroll-view>
+  </view>
+</view>

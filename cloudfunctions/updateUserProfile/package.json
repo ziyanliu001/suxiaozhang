@@ -1,0 +1,9 @@
+{
+  "name": "updateUserProfile",
+  "version": "1.0.0",
+  "description": "云函数：更新当前用户的头像/昵称（接入微信头像昵称填写规范），写入 user_roles 表",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

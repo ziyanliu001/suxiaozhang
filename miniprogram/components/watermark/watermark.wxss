@@ -1,0 +1,34 @@
+/* 敏感财务页面防截图水印：覆盖当前可视区域，随手机屏幕固定，不随内容滚动 */
+.watermark-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 999;
+}
+
+.watermark-grid {
+  position: absolute;
+  top: -30%;
+  left: -30%;
+  width: 160%;
+  height: 160%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  transform: rotate(-25deg);
+}
+
+.watermark-item {
+  width: 33.33%;
+  box-sizing: border-box;
+  padding: 48rpx 8rpx;
+  font-size: 20rpx;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.04);
+  white-space: nowrap;
+  text-align: center;
+}

@@ -1,0 +1,9 @@
+{
+  "name": "manageFinanceLock",
+  "version": "1.0.0",
+  "description": "财务批量稽核封账：按月锁定已通过店长确认的账本记录",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

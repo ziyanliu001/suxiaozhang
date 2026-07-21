@@ -1,0 +1,9 @@
+{
+  "name": "manageVolunteerBinding",
+  "version": "1.0.0",
+  "description": "已绑定义工管理：修改角色权限（财务记账/现场奉献）与解除绑定",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

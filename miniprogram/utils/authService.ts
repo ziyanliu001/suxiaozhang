@@ -1,16 +1,25 @@
+import { isCloudAvailable } from './cloudGuard';
+
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
 const USER_ROLE_CACHE_KEY = 'auth_user_role';
 const LOGIN_TIMEOUT_MS = 5000;
 const TEMP_OPENID_PREFIX = 'local_';
 
-export type UserRole = 'super_admin' | 'store_manager' | 'finance' | 'volunteer';
+// 🏢 platform_admin：SaaS 平台超级管理员（开发者/运维方），仅管理租户生命周期与云资源，
+// 与业务角色（super_admin ~ volunteer）分属两个维度，二者互不包含、互不提升
+export type UserRole = 'super_admin' | 'store_manager' | 'finance' | 'volunteer' | 'platform_admin';
 
 interface RoleInfo {
   role: UserRole;
   storeId: string;
   storeName: string;
   status: string;
+  // 🏢 多租户：所属机构 ID（一个机构下辖多个门店），platform_admin 无归属租户
+  tenantId?: string;
+  // 🙋 头像昵称填写规范
+  avatarUrl?: string;
+  nickName?: string;
 }
 
 function withTimeout(promise, timeoutMs, timeoutMsg) {
@@ -29,7 +38,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   super_admin: '超级管理员',
   store_manager: '店长',
   finance: '财务义工',
-  volunteer: '普通义工'
+  volunteer: '普通义工',
+  platform_admin: '平台管理员（开发者）'
 };
 
 export interface PermissionFlags {
@@ -43,7 +53,7 @@ export interface PermissionFlags {
 }
 
 export function getPermissionFlags(roleInfo: { role?: string } | null | undefined): PermissionFlags {
-  const role = (roleInfo?.role || 'volunteer') as UserRole;
+  const role = ((roleInfo && roleInfo.role) || 'volunteer') as UserRole;
 
   switch (role) {
     case 'super_admin':
@@ -76,6 +86,19 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canExportData: true,
         canViewNationalDashboard: false
       };
+    case 'platform_admin':
+      // 🏢 平台管理员（开发者）：仅在租户管理专属页面操作 tenants / tenant_subscriptions，
+      // 对任何门店的餐报业务数据一律不放行，与业务角色的权限彻底隔离，防止"商业运营方"
+      // 借运维身份窥探或篡改公益机构内部敏感财务明细
+      return {
+        canSwitchStore: false,
+        canAuditUser: false,
+        canDeleteRecord: false,
+        canEditBalance: false,
+        canEditReport: false,
+        canExportData: false,
+        canViewNationalDashboard: false
+      };
     case 'volunteer':
     default:
       return {
@@ -85,7 +108,9 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canEditBalance: false,
         canEditReport: false,
         canExportData: false,
-        canViewNationalDashboard: false
+        // 🛡️ 普通志工可查看全国大屏（成本类敏感数据由 sanitizeReportForVolunteer 在服务端脱敏），
+        // 但门店选择器强制锁定为"全部门店"，与 statistics.ts 的 isVolunteerNationalView 逻辑保持一致
+        canViewNationalDashboard: true
       };
   }
 }
@@ -98,6 +123,13 @@ export const AuthService = {
     }
 
     try {
+      // 🌟 云开发 SDK 不可用（如 wx.cloud.init 内部致命错误导致方法表损坏）时，
+      // 直接跳过云端登录尝试，走下方 catch 分支的临时 openid 兜底，避免抛出
+      // "Cannot read property 'getCloudAPI' of undefined" 之类的未受保护异常
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端登录');
+      }
+
       const result = await withTimeout(
         wx.cloud.callFunction({ name: 'login' }),
         LOGIN_TIMEOUT_MS,
@@ -114,12 +146,18 @@ export const AuthService = {
         return { success: true, openid: r.openid, isTemp: false };
       }
 
-      console.warn('[AuthService] 登录失败，使用临时 openid:', r?.error);
+      console.warn('[AuthService] 登录失败，使用临时 openid:', r && r.error);
       const tempOpenid = generateTempOpenid();
       wx.setStorageSync(OPENID_CACHE_KEY, tempOpenid);
       return { success: true, openid: tempOpenid, isTemp: true };
     } catch (err: any) {
-      console.error('[AuthService] 登录异常，使用临时 openid:', err);
+      const isCloudDown = !!(err && err.message && err.message.includes('CLOUD_SDK_UNAVAILABLE'));
+      console.error(
+        isCloudDown
+          ? '[AuthService] 云开发 SDK 不可用，本次登录直接降级为临时 openid（本地模式）'
+          : '[AuthService] 登录异常，使用临时 openid:',
+        isCloudDown ? '' : err
+      );
       const tempOpenid = generateTempOpenid();
       wx.setStorageSync(OPENID_CACHE_KEY, tempOpenid);
       return { success: true, openid: tempOpenid, isTemp: true };
@@ -155,6 +193,10 @@ export const AuthService = {
   // 新角色体系
   async fetchUserRole(): Promise<{ success: boolean; roleInfo?: RoleInfo; error?: string }> {
     try {
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过角色查询');
+      }
+
       const result = await withTimeout(
         wx.cloud.callFunction({ name: 'checkUserRole' }),
         LOGIN_TIMEOUT_MS,
@@ -167,15 +209,24 @@ export const AuthService = {
           role: (r.role || 'volunteer') as UserRole,
           storeId: r.storeId || '',
           storeName: r.storeName || '',
-          status: r.status || 'guest'
+          status: r.status || 'guest',
+          tenantId: r.tenantId || '',
+          avatarUrl: r.avatarUrl || '',
+          nickName: r.nickName || ''
         };
         wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(roleInfo));
         return { success: true, roleInfo };
       }
 
-      return { success: false, error: r?.error || '角色查询失败' };
+      return { success: false, error: (r && r.error) || '角色查询失败' };
     } catch (err: any) {
-      console.error('[AuthService] fetchUserRole 异常:', err);
+      const isCloudDown = !!(err && err.message && err.message.includes('CLOUD_SDK_UNAVAILABLE'));
+      console.error(
+        isCloudDown
+          ? '[AuthService] 云开发 SDK 不可用，角色查询已降级为本地缓存兜底'
+          : '[AuthService] fetchUserRole 异常:',
+        isCloudDown ? '' : err
+      );
       return { success: false, error: err.message || '角色查询异常' };
     }
   },
@@ -205,7 +256,7 @@ export const AuthService = {
 
   getRole(): string {
     const roleInfo = this.getCachedRoleInfo();
-    return roleInfo?.role || 'volunteer';
+    return (roleInfo && roleInfo.role) || 'volunteer';
   },
 
   isAdmin(): boolean {
@@ -217,9 +268,47 @@ export const AuthService = {
     return this.getRole() === 'super_admin';
   },
 
+  // 🏢 平台管理员（开发者运维身份），与业务角色维度完全独立，详见 UserRole 定义处注释
+  isPlatformAdmin(): boolean {
+    return this.getRole() === 'platform_admin';
+  },
+
   getRoleLabel(): string {
     const role = this.getRole() as UserRole;
     return ROLE_LABELS[role] || '普通义工';
+  },
+
+  // 🙋 头像昵称填写规范：更新云端记录并同步刷新本地缓存的 RoleInfo，
+  // 调用方（如个人中心页）无需自行处理缓存失效
+  async updateProfile(fields: { avatarUrl?: string; nickName?: string }): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!isCloudAvailable()) {
+        throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过资料更新');
+      }
+
+      const result = await wx.cloud.callFunction({ name: 'updateUserProfile', data: fields });
+      const r = result.result as any;
+
+      if (r && r.success) {
+        const cached = this.getCachedRoleInfo();
+        const merged: RoleInfo = {
+          role: (cached && cached.role) || 'volunteer',
+          storeId: (cached && cached.storeId) || '',
+          storeName: (cached && cached.storeName) || '',
+          status: (cached && cached.status) || 'guest',
+          tenantId: (cached && cached.tenantId) || '',
+          avatarUrl: fields.avatarUrl !== undefined ? fields.avatarUrl : ((cached && cached.avatarUrl) || ''),
+          nickName: fields.nickName !== undefined ? fields.nickName : ((cached && cached.nickName) || '')
+        };
+        wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(merged));
+        return { success: true };
+      }
+
+      return { success: false, error: (r && r.error) || '更新失败' };
+    } catch (err: any) {
+      console.error('[AuthService] updateProfile 异常:', err);
+      return { success: false, error: err.message || '更新异常' };
+    }
   },
 
   clearAuth(): void {

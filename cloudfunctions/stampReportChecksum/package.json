@@ -1,0 +1,9 @@
+{
+  "name": "stampReportChecksum",
+  "version": "1.0.0",
+  "description": "云函数：为餐报记录写入资金流水防篡改 HMAC 校验码",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

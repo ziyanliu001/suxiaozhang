@@ -1,0 +1,9 @@
+{
+  "name": "getVolunteerHonorStats",
+  "version": "1.0.0",
+  "description": "志愿者爱心荣誉卡：按 _openid 查询本人真实累计的经手账目笔数与协助服务人次",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

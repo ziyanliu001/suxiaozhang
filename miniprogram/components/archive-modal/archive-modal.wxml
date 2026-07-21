@@ -9,13 +9,16 @@
 
     <view class="modal-title">我的雨花护持档案</view>
 
-    <!-- 用户信息区 -->
+    <!-- 用户信息区：🛡️ 合规修复——微信已收回 <open-data> 展示个人头像/昵称的能力，
+         改用标准 <image>/<text> 绑定小程序自己存下来的头像/昵称（经 chooseAvatar/
+         type="nickname" 官方能力采集，见 pages/profile/profile），不再依赖 open-data -->
     <view class="user-profile-section">
       <view class="avatar-ring">
-        <open-data class="user-avatar" type="userAvatarUrl"></open-data>
+        <image wx:if="{{userInfo.avatarUrl}}" class="user-avatar" src="{{userInfo.avatarUrl}}" mode="aspectFill" />
+        <view wx:else class="user-avatar user-avatar-placeholder">👤</view>
       </view>
       <view class="user-name-box">
-        <open-data class="user-name" type="userNickName"></open-data>
+        <text class="user-name">{{userInfo.nickName || '雨花义工家人'}}</text>
         <text class="user-slogan">感恩您的每一次默默付出</text>
       </view>
     </view>
@@ -61,7 +64,7 @@
 
     <!-- 感恩语 -->
     <view class="gratitude-quote">
-      默默付出，积沙成塔。感恩每一位默默护持的家人！
+      用一餐饭的温度，传递温暖与关爱。感恩每一位默默护持的家人！
     </view>
 
     <!-- 双按钮 -->

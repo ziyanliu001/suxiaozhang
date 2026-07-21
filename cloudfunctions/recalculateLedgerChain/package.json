@@ -1,9 +1,0 @@
-{
-  "name": "recalculateLedgerChain",
-  "version": "1.0.0",
-  "description": "按时间轴滚动重算门店昨日余额与今日结余",
-  "main": "index.js",
-  "dependencies": {
-    "wx-server-sdk": "~2.6.3"
-  }
-}

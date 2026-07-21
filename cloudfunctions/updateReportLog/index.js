@@ -18,6 +18,13 @@ exports.main = async (event, context) => {
       return { success: false, error: '记录不存在' };
     }
 
+    // 🛡️ 状态机闭环：财务稽核封账（AUDITED_LOCKED）后任何人（含提交人本人）都不能再
+    // 修改该记录，必须先由财务走"解封"流程。此前本函数完全没有校验锁定状态，
+    // 即使记录已被 manageFinanceLock/AUDITED_LOCKED 锁定，提交人仍可绕过封账直接改字段。
+    if (logData.approvalStatus === 'AUDITED_LOCKED' || logData.isLocked) {
+      return { success: false, error: '该记录已被财务稽核锁定，请先联系财务解封后再修改' };
+    }
+
     const isCreator = logData._openid === OPENID;
 
     if (!isCreator) {
@@ -27,8 +34,10 @@ exports.main = async (event, context) => {
         .get();
 
       let userRole = 'volunteer';
+      let userTenantId = '';
       if (roleRes.data && roleRes.data.length > 0) {
         userRole = roleRes.data[0].role || 'volunteer';
+        userTenantId = roleRes.data[0].tenantId || '';
       } else {
         const userRes = await db.collection('users')
           .where({ _openid: OPENID })
@@ -39,7 +48,9 @@ exports.main = async (event, context) => {
         }
       }
 
-      if (userRole !== 'super_admin') {
+      // 🏢 多租户边界：super_admin 的越权兜底权限收敛到本机构内
+      const sameTenant = !userTenantId || !logData.tenantId || userTenantId === logData.tenantId;
+      if (userRole !== 'super_admin' || !sameTenant) {
         return { success: false, error: '无权限修改该记录' };
       }
     }

@@ -25,11 +25,19 @@ page {
 }
 
 .nav-back {
-  font-size: 30rpx;
-  color: #495057;
-  padding: 8rpx 12rpx;
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #212529;
   flex-shrink: 0;
-  min-width: 100rpx;
+}
+
+.nav-back-hover {
+  opacity: 0.5;
 }
 
 .nav-title {
@@ -41,7 +49,9 @@ page {
 }
 
 .nav-placeholder {
-  min-width: 100rpx;
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
 }
 
 .help-tab-bar {

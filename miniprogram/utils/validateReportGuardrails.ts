@@ -28,6 +28,8 @@ export interface GuardrailFormData {
   volunteerCount?: number;
   volunteerHours?: number;
   reportDate: string;
+  // 🛡️ 慈善法合规：支出/爱心明细自由文本，用于检测个人隐私联络方式（手机号/私人收款账号）
+  expenseFreeText?: string;
 }
 
 export interface GuardrailHistoryStats {
@@ -234,6 +236,36 @@ function persistAuditLog(logs: AuditLogEntry[]): void {
   } catch {}
 }
 
+// ─── 隐私合规检测：支出/爱心明细文本中的个人隐私联络方式 ───────────────
+
+/**
+ * 检测自由文本中是否包含个人隐私联络方式（手机号、银行卡/私人收款账号等）。
+ * 用于慈善法合规拦截：支出明细仅允许"食材采购"、"水电房租"等对公分类，
+ * 不得出现供应商手机号或私人收款账号。
+ */
+export function checkExpenseTextForPII(text: string): string[] {
+  const hits: string[] = [];
+  if (!text) return hits;
+
+  // 大陆手机号：1[3-9]开头的11位数字
+  if (/1[3-9]\d{9}/.test(text)) {
+    hits.push('手机号');
+  }
+
+  // 银行卡/私人收款账号：连续16-19位数字（排除已识别为手机号的11位片段）
+  const longDigitMatches = text.match(/\d{16,19}/g);
+  if (longDigitMatches && longDigitMatches.length > 0) {
+    hits.push('银行账号');
+  }
+
+  // 微信/支付宝账号关键词 + 紧邻的账号特征（字母数字组合）
+  if (/(微信号|支付宝账号|收款码|收款账号)[：:]?\s*\S+/.test(text)) {
+    hits.push('私人收款账号');
+  }
+
+  return Array.from(new Set(hits));
+}
+
 // ─── 主校验函数 ───────────────────────────────────────────
 
 export function validateReportGuardrails(
@@ -275,6 +307,22 @@ export function validateReportGuardrails(
     warnings: [],
     auditLog: []
   };
+
+  // ═══════════════════════════════════════════════════════
+  // 第零维：慈善法合规校验（隐私联络方式硬拦截）
+  // ═══════════════════════════════════════════════════════
+
+  // 0.1 支出/爱心明细文本中禁止出现个人隐私联络方式（供应商手机号、私人收款账号等）
+  if (formData.expenseFreeText) {
+    const piiHits = checkExpenseTextForPII(formData.expenseFreeText);
+    if (piiHits.length > 0) {
+      results.canSubmit = false;
+      results.blockReason = '🚨 合规拦截：支出明细中检测到疑似个人隐私联络方式（' + piiHits.join('、') + '），请仅填写"食材采购"、"水电房租"等对公合规分类，不得包含手机号或私人收款账号。';
+      addAuditLog(results.auditLog, 'expense_text_pii_detected', 'block', { hits: piiHits });
+      persistAuditLog(results.auditLog);
+      return results;
+    }
+  }
 
   // ═══════════════════════════════════════════════════════
   // 第一维：数据维度校验

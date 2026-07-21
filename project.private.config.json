@@ -1,11 +1,10 @@
 {
-  "libVersion": "3.5.8",
-  "projectname": "wxqjzgj",
+  "libVersion": "3.4.10",
+  "projectname": "miniprogram-1",
   "setting": {
-    "urlCheck": true,
+    "urlCheck": false,
     "coverView": false,
     "lazyloadPlaceholderEnable": false,
-    "skylineRenderEnable": true,
     "preloadBackgroundData": false,
     "autoAudits": false,
     "useApiHook": true,
@@ -14,21 +13,44 @@
     "useLanDebug": false,
     "showES6CompileOption": false,
     "compileHotReLoad": true,
-    "bigPackageSizeSupport": false,
     "checkInvalidKey": true,
-    "ignoreDevUnusedFiles": true
+    "ignoreDevUnusedFiles": true,
+    "skylineRenderEnable": false,
+    "bigPackageSizeSupport": false
   },
   "condition": {
     "miniprogram": {
       "list": [
         {
-          "name": "首页",
+          "name": "pages/index/index",
           "pathName": "pages/index/index",
           "query": "",
           "scene": null,
           "launchMode": "default"
+        },
+        {
+          "name": "首页",
+          "pathName": "pages/index/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "首页",
+          "pathName": "pages/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "",
+          "pathName": "pages/index/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
         }
       ]
     }
-  }
+  },
+  "description": "项目私有配置文件。此文件中的内容将覆盖 project.config.json 中的相同字段。项目的改动优先同步到此文件中。详见文档：https://developers.weixin.qq.com/miniprogram/dev/devtools/projectconfig.html"
 }

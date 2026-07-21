@@ -72,11 +72,36 @@ function compareIsoDates(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+/**
+ * 🐛 修复 "NaN年NaN月" Bug：iOS Safari/WKWebView 对 "YYYY-MM-DD" 短横线日期字符串的
+ * new Date() 解析不稳定（常返回 Invalid Date），统一替换为斜杠格式后再解析可兼容全平台。
+ * 优先使用 dateStr（如打卡记录的 log.date），仅当其缺失/无法解析时才回退到数值时间戳，
+ * 两者都失败时兜底返回当前时间，确保调用方永远拿到一个合法 Date，不会渲染出 NaN。
+ */
+function safeParseDate(dateStr?: string | null, fallbackTimestamp?: number): Date {
+  if (dateStr && typeof dateStr === 'string') {
+    const normalized = new Date(dateStr.replace(/-/g, '/'));
+    if (!isNaN(normalized.getTime())) {
+      return normalized;
+    }
+  }
+
+  if (typeof fallbackTimestamp === 'number' && isFinite(fallbackTimestamp)) {
+    const fromTimestamp = new Date(fallbackTimestamp);
+    if (!isNaN(fromTimestamp.getTime())) {
+      return fromTimestamp;
+    }
+  }
+
+  return new Date();
+}
+
 export {
   getTodayIsoString,
   getPrevDayIsoString,
   getNextDayIsoString,
   formatDateToCnShort,
   isValidIsoDate,
-  compareIsoDates
+  compareIsoDates,
+  safeParseDate
 };

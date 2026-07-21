@@ -35,12 +35,19 @@ exports.main = async (event, context) => {
     const role = userInfo.role;
     const userStoreId = userInfo.storeId;
     const userStoreName = userInfo.storeName;
+    const tenantId = userInfo.tenantId;
 
     let matchCondition = {};
 
+    // 🏢 多租户边界：任何角色的查询都先收敛到调用者所属机构，
+    // "全部门店"在多租户语境下始终指"本机构下的全部门店"，绝不跨机构
+    if (tenantId) {
+      matchCondition.tenantId = tenantId;
+    }
+
     // 2. 核心隔离逻辑
     if (role === 'super_admin' && (!queryStoreId || queryStoreId === 'ALL')) {
-      // 超级管理员查看全部门店，不限制 storeId
+      // 超级管理员查看本机构全部门店，不再额外限制 shopName
     } else if (role === 'super_admin' && queryStoreId && queryStoreId !== 'ALL') {
       // 超级管理员选择查看特定门店
       matchCondition.shopName = queryStoreId;

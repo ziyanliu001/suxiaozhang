@@ -7,6 +7,7 @@ const _ = db.command;
 
 exports.main = async (event, context) => {
   const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate } = event;
+  const { OPENID } = cloud.getWXContext();
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -50,11 +51,52 @@ exports.main = async (event, context) => {
   console.log(`📊 [exportAccountExcel] 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}`);
 
   try {
+    // 🏢 多租户边界：导出功能涉及完整财务明细，必须先收敛到调用者所属机构，
+    // "全部门店"仅指本机构下的全部门店，绝不允许导出他机构数据
+    // 🛡️ 此前 tenantId 解析失败（游客/未分配角色账号）时会直接跳过过滤条件，
+    // 导致该账号可导出全平台所有机构的收支明细——现在改为直接拒绝，宁可导出失败也不泄露。
+    let tenantId = '';
+    let userRole = '';
+    let userStoreId = '';
+    let userStoreName = '';
+    if (OPENID) {
+      const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+      if (roleRes.data && roleRes.data.length > 0) {
+        tenantId = roleRes.data[0].tenantId || '';
+        userRole = roleRes.data[0].role || '';
+        userStoreId = roleRes.data[0].storeId || '';
+        userStoreName = roleRes.data[0].storeName || '';
+      }
+    }
+
+    if (!tenantId) {
+      return { success: false, errMsg: '无法确认您所属的机构，暂不支持导出' };
+    }
+
+    // 🛡️ hq_finance/regional_finance（总部/大区财务）与 super_admin 一样，在 statistics
+    // 页面拥有跨店查看权限（canViewAllStoresDropdown），导出功能作为该页面的延伸操作，
+    // 口径保持一致
+    const isTenantWideAllowed = ['super_admin', 'hq_finance', 'regional_finance'].includes(userRole);
+    const wantsAllStores = !shopName || shopName === '全部门店';
+    if (wantsAllStores && !isTenantWideAllowed && !userStoreId && !userStoreName) {
+      return { success: false, errMsg: '您尚未绑定门店，无法导出' };
+    }
+
     // 1. 查询数据
     let whereConditions = {
-      dateString: _.gte(startDateStr).and(_.lte(endDateStr))
+      dateString: _.gte(startDateStr).and(_.lte(endDateStr)),
+      tenantId: tenantId,
+      // 🛡️ 已作废（红字冲销）的记录不计入导出明细/合计
+      isVoid: _.neq(true)
     };
-    if (shopName && shopName !== '全部门店') {
+    if (wantsAllStores && !isTenantWideAllowed) {
+      // 🛡️ 非超管请求"全部门店"一律强制收敛为本人所在门店，禁止导出他店数据
+      if (userStoreId) {
+        whereConditions.storeId = userStoreId;
+      } else {
+        whereConditions.shopName = userStoreName;
+      }
+    } else if (shopName && shopName !== '全部门店') {
       whereConditions.shopName = shopName;
     }
 
@@ -151,6 +193,10 @@ exports.main = async (event, context) => {
     let totalDiners = 0;
     let totalVolunteers = 0;
     let totalVolHours = 0;
+    // 🌟 月度财务审计表：物资捐赠笔数——按每条记录 materials 数组的条目数累加，
+    // 而不是"有物资捐赠的记录条数"，与门店财务公示海报（posterGenerator.ts
+    // drawMeritPoster 物资赞助明细）同一个"逐笔"统计口径
+    let totalMaterialsCount = 0;
 
     records.forEach(record => {
       const income = parseFloat(record.listDonationTotal || 0) + parseFloat(record.otherDonation || 0);
@@ -169,6 +215,9 @@ exports.main = async (event, context) => {
       totalDiners += diners;
       totalVolunteers += vols;
       totalVolHours += volHours;
+      if (Array.isArray(record.materials)) {
+        totalMaterialsCount += record.materials.length;
+      }
 
       let remark = '';
       if (record.materials && Array.isArray(record.materials) && record.materials.length > 0) {
@@ -271,12 +320,42 @@ exports.main = async (event, context) => {
     const fileList = tempUrlRes.fileList || [];
     const tempFileURL = fileList.length > 0 ? fileList[0].tempFileURL : '';
 
+    // 🌟 标准财务公示文本：与 Excel 附件互补，供店长一键复制粘贴到理事会/捐赠机构的
+    // 微信群或邮件正文，不强依赖对方能打开 xlsx 附件
+    const netTotal = totalIncome - totalExpense;
+    const nowStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    const auditText = [
+      `【${safeStoreName} · ${periodLabel} 财务审计公示】`,
+      `统计区间：${startDateStr} 至 ${endDateStr}`,
+      '——————————',
+      `总收入（爱心赞助）：¥${totalIncome.toFixed(2)}`,
+      `总支出：¥${totalExpense.toFixed(2)}`,
+      `净结余：¥${netTotal.toFixed(2)}`,
+      `累计服务人次：${totalDiners} 人次`,
+      `物资捐赠：${totalMaterialsCount} 笔`,
+      '——————————',
+      `数据来源：门店逐日提交的透明账本记录（共 ${records.length} 条），如有疑问欢迎联系门店核实。`,
+      `生成时间：${nowStr}`
+    ].join('\n');
+
     return {
       success: true,
       fileID: uploadRes.fileID,
       tempFileURL,
       fileName: `${safeStoreName}_收支明细_${periodLabel}.xlsx`,
-      recordCount: records.length
+      recordCount: records.length,
+      auditText,
+      auditSummary: {
+        periodLabel,
+        startDateStr,
+        endDateStr,
+        totalIncome: Number(totalIncome.toFixed(2)),
+        totalExpense: Number(totalExpense.toFixed(2)),
+        netTotal: Number(netTotal.toFixed(2)),
+        totalDiners,
+        materialsCount: totalMaterialsCount,
+        recordCount: records.length
+      }
     };
 
   } catch (err) {

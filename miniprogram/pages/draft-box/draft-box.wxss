@@ -1,0 +1,150 @@
+.draft-box-container {
+  min-height: 100vh;
+  background: #F8F9FA;
+  box-sizing: border-box;
+}
+
+.status-bar-spacer {
+  width: 100%;
+  background: #FFFFFF;
+}
+
+.nav-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16rpx;
+  background: #FFFFFF;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+}
+
+/* 统一的 Reddit 风格「←」返回按钮：64rpx 方形点击区，居中图标，带轻微点击态反馈 */
+.nav-back-arrow {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #212529;
+  flex-shrink: 0;
+}
+
+.nav-back-arrow-hover {
+  opacity: 0.5;
+}
+
+.page-title-txt {
+  flex: 1;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.nav-right-placeholder {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+}
+
+.draft-loading,
+.draft-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 160rpx 40rpx;
+  color: #999999;
+  font-size: 26rpx;
+}
+
+.draft-empty-icon {
+  font-size: 64rpx;
+  margin-bottom: 20rpx;
+}
+
+.draft-empty-text {
+  font-size: 28rpx;
+  color: #666666;
+  margin-bottom: 12rpx;
+}
+
+.draft-empty-hint {
+  font-size: 24rpx;
+  color: #AAAAAA;
+}
+
+.draft-list {
+  height: 100%;
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.draft-item {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.draft-item-main {
+  margin-bottom: 20rpx;
+}
+
+.draft-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+
+.draft-item-shop {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.draft-item-date {
+  font-size: 26rpx;
+  color: #8C1D18;
+  font-weight: 500;
+}
+
+.draft-item-time {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+.draft-item-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.draft-btn {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+  font-weight: 500;
+}
+
+.draft-btn-resume {
+  background: #8C1D18;
+  color: #FFFFFF;
+}
+
+.draft-btn-delete {
+  background: #F8F9FA;
+  color: #E03131;
+  border: 1.5rpx solid #F1D4D4;
+}
+
+.draft-btn:active {
+  opacity: 0.8;
+}

@@ -1,0 +1,408 @@
+page {
+  background: #F8F5F0;
+}
+
+.pv-page {
+  min-height: 100vh;
+}
+
+.pv-status-bar {
+  width: 100%;
+  background: #8C1D18;
+}
+
+.pv-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #8C1D18;
+}
+
+.pv-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.pv-loading,
+.pv-error,
+.pv-not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 200rpx 60rpx;
+  text-align: center;
+}
+
+.pv-error-icon {
+  font-size: 64rpx;
+  margin-bottom: 20rpx;
+}
+
+.pv-error-text {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.pv-error-sub {
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 12rpx;
+}
+
+.pv-content {
+  height: calc(100vh - 88rpx);
+  box-sizing: border-box;
+  padding: 24rpx;
+}
+
+/* 顶部存证标签：金字浅绿底，呼应"已核实/已存证"的信任感 */
+.pv-verified-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  background: #E6F4EA;
+  border: 1.5rpx solid #B7E4C7;
+  border-radius: 40rpx;
+  padding: 14rpx 0;
+  margin-bottom: 20rpx;
+}
+
+.pv-verified-star {
+  color: #D4AF37;
+  font-size: 26rpx;
+}
+
+.pv-verified-text {
+  color: #137333;
+  font-size: 26rpx;
+  font-weight: bold;
+}
+
+.pv-verified-sub {
+  display: block;
+  text-align: center;
+  font-size: 20rpx;
+  color: #8A8F99;
+  margin-bottom: 20rpx;
+}
+
+.pv-header-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+  text-align: center;
+}
+
+.pv-store-name {
+  display: block;
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.pv-date {
+  display: block;
+  font-size: 26rpx;
+  color: #999999;
+  margin-top: 8rpx;
+}
+
+.pv-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.pv-status-pill {
+  font-size: 22rpx;
+  font-weight: 500;
+  padding: 6rpx 20rpx;
+  border-radius: 20rpx;
+  background: #FEF7E0;
+  color: #B06000;
+}
+
+.pv-status-pill.locked {
+  background: #E6F4EA;
+  color: #137333;
+}
+
+.pv-audit-meta {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+.pv-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+.pv-card-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 20rpx;
+}
+
+.pv-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #F5F0E8;
+}
+
+.pv-summary-row:last-child {
+  border-bottom: none;
+}
+
+.pv-summary-row.total {
+  margin-top: 8rpx;
+  padding-top: 20rpx;
+  border-top: 1.5rpx solid #EFE6D8;
+}
+
+.pv-summary-label {
+  font-size: 26rpx;
+  color: #666666;
+}
+
+.pv-summary-value {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.pv-summary-value.expense {
+  color: #C5221F;
+}
+
+.pv-summary-row.total .pv-summary-value {
+  font-size: 32rpx;
+  color: #8C1D18;
+}
+
+.pv-expenses-text {
+  font-size: 26rpx;
+  color: #555555;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+/* 微信标准九宫格：与全站其余图片网格（daily-menu/activity-log）保持同一套写法 */
+.pv-receipt-grid,
+.pv-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+}
+
+.pv-receipt-item,
+.pv-activity-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  border-radius: 12rpx;
+  overflow: hidden;
+  background: #F0F0F0;
+}
+
+.pv-receipt-img,
+.pv-activity-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pv-donor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10rpx 0;
+  border-bottom: 1rpx solid #F5F0E8;
+}
+
+.pv-donor-row:last-child {
+  border-bottom: none;
+}
+
+.pv-donor-name {
+  font-size: 26rpx;
+  color: #444444;
+}
+
+.pv-donor-amount {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #C5221F;
+}
+
+/* ===== 爱心物资捐赠与消耗墙 ===== */
+.pv-materials-status-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.pv-materials-status-chip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 14rpx 20rpx;
+}
+
+.pv-materials-status-label {
+  font-size: 24rpx;
+  color: #666666;
+}
+
+.pv-materials-status-badge {
+  font-size: 22rpx;
+  font-weight: bold;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.pv-materials-status-badge.sufficient {
+  background: #E6F4EA;
+  color: #137333;
+}
+
+.pv-materials-status-badge.normal {
+  background: #FFF9DB;
+  color: #D9480E;
+}
+
+.pv-materials-status-badge.urgent {
+  background: #FCE8E6;
+  color: #C5221F;
+}
+
+.pv-materials-list {
+  margin-top: 4rpx;
+}
+
+.pv-materials-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  padding: 10rpx 0;
+  border-bottom: 1rpx solid #F5F0E8;
+}
+
+.pv-materials-row:last-child {
+  border-bottom: none;
+}
+
+.pv-materials-donor {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #444444;
+}
+
+.pv-materials-detail {
+  font-size: 26rpx;
+  color: #B8860B;
+}
+
+.pv-activity-title {
+  display: block;
+  font-size: 27rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 12rpx;
+}
+
+.pv-activity-content {
+  display: block;
+  font-size: 25rpx;
+  color: #555555;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin-bottom: 16rpx;
+}
+
+/* ===== 爱心感言墙：柔和粉绿渐变，与上方财务/物资卡片的冷静风格区隔开，
+   突出"人情味"而非"数据感" ===== */
+.pv-testimonial-card {
+  background: linear-gradient(135deg, #FDF0F3 0%, #EEF8F0 100%);
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(233, 30, 99, 0.06);
+}
+
+.pv-testimonial-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #C2185B;
+  margin-bottom: 16rpx;
+}
+
+.pv-testimonial-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+}
+
+.pv-testimonial-mark {
+  font-size: 44rpx;
+  font-weight: bold;
+  color: #7CB88F;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pv-testimonial-text {
+  flex: 1;
+  font-size: 26rpx;
+  color: #555555;
+  line-height: 1.8;
+  font-style: italic;
+}
+
+.pv-testimonial-hint {
+  display: block;
+  font-size: 20rpx;
+  color: #AAAAAA;
+  text-align: right;
+  margin-top: 12rpx;
+}
+
+.pv-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32rpx 0 60rpx;
+}
+
+.pv-footer-brand {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  margin-bottom: 8rpx;
+}
+
+.pv-footer-note {
+  font-size: 20rpx;
+  color: #AAAAAA;
+  text-align: center;
+}

@@ -1,0 +1,152 @@
+.notice-page-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  background-color: #F8F9FA;
+  box-sizing: border-box;
+}
+
+.status-bar-spacer {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.nav-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background-color: #FFFFFF;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+.page-title-txt {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.notice-scroll-body {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  /* 底部预留三段式导航栏高度（100rpx）+ 安全区，避免最后一项被遮挡 */
+  padding: 24rpx 24rpx calc(100rpx + env(safe-area-inset-bottom) + 40rpx) 24rpx;
+}
+
+.notice-section {
+  margin-bottom: 32rpx;
+}
+
+.section-label {
+  display: block;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #868E96;
+  margin-bottom: 16rpx;
+  padding-left: 4rpx;
+}
+
+.notice-card {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  border: 1rpx solid #F1F3F5;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.03);
+}
+
+.notice-card.actionable {
+  border-color: #FFE082;
+  background: linear-gradient(135deg, #FFFDF6 0%, #FFFBEA 100%);
+}
+
+.notice-card.mismatch {
+  border-color: #FFCDD2;
+}
+
+.card-icon {
+  font-size: 36rpx;
+  margin-right: 16rpx;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.card-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #212529;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.card-tag {
+  font-size: 20rpx;
+  color: #E65100;
+  background: #FFF3E0;
+  border-radius: 8rpx;
+  padding: 2rpx 10rpx;
+  white-space: nowrap;
+}
+
+.card-desc {
+  display: block;
+  font-size: 22rpx;
+  color: #868E96;
+  margin-top: 8rpx;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.card-arrow {
+  font-size: 32rpx;
+  color: #CED4DA;
+  margin-left: 12rpx;
+  flex-shrink: 0;
+}
+
+.system-card {
+  background: #F1F3F9;
+  border-color: #E3E8F5;
+}
+
+.notice-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 0;
+}
+
+.empty-icon {
+  font-size: 56rpx;
+  margin-bottom: 16rpx;
+}
+
+.empty-text {
+  font-size: 24rpx;
+  color: #ADB5BD;
+}
+
+.notice-loading {
+  text-align: center;
+  padding: 40rpx 0;
+  font-size: 24rpx;
+  color: #ADB5BD;
+}

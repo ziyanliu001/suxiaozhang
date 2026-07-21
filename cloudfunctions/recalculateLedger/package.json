@@ -1,0 +1,9 @@
+{
+  "name": "recalculateLedger",
+  "version": "1.0.0",
+  "description": "统一的一键校准全线结余流水入口：支持单店与全国范围校准",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

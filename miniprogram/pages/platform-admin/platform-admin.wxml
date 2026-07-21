@@ -1,0 +1,115 @@
+<view class="pa-page">
+
+  <view class="pa-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="pa-nav-back" hover-class="pa-nav-back-hover" bindtap="onGoBack">←</view>
+    <text class="pa-nav-title">🏢 SaaS 平台管理</text>
+    <view class="pa-nav-placeholder"></view>
+  </view>
+
+  <view class="pa-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
+    <text>校验身份中...</text>
+  </view>
+
+  <view class="pa-denied-state" wx:if="{{checkedAccess && !isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
+    <text class="pa-denied-icon">🚫</text>
+    <text class="pa-denied-title">无权限访问</text>
+    <text class="pa-denied-sub">本页面仅限 SaaS 平台管理员（开发者）使用，且不会显示任何门店财务明细。</text>
+    <button class="pa-denied-btn" bindtap="onGoBack">返回首页</button>
+  </view>
+
+  <scroll-view scroll-y class="pa-content" wx:if="{{checkedAccess && isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
+
+    <view class="pa-overview-grid" wx:if="{{overview}}">
+      <view class="pa-overview-card">
+        <text class="pa-ov-num">{{overview.totals.tenantCount}}</text>
+        <text class="pa-ov-label">机构总数</text>
+      </view>
+      <view class="pa-overview-card">
+        <text class="pa-ov-num">{{overview.totals.activeSubscriptionCount}}</text>
+        <text class="pa-ov-label">有效订阅</text>
+      </view>
+      <view class="pa-overview-card">
+        <text class="pa-ov-num">{{overview.totals.storeCount}}</text>
+        <text class="pa-ov-label">门店总数</text>
+      </view>
+      <view class="pa-overview-card">
+        <text class="pa-ov-num">{{overview.totals.reportLogCount}}</text>
+        <text class="pa-ov-label">餐报记录数</text>
+      </view>
+    </view>
+
+    <view class="pa-soon-expire-box" wx:if="{{overview.soonExpiringTenants.length > 0}}">
+      <text class="pa-soon-title">⚠️ 7 天内到期机构</text>
+      <view class="pa-soon-item" wx:for="{{overview.soonExpiringTenants}}" wx:key="_id">
+        <text>{{item.tenantId}} · {{planLabels[item.planType] || item.planType}} · 到期 {{item.serviceExpireDate}}</text>
+      </view>
+    </view>
+
+    <view class="pa-section-header">
+      <text class="pa-section-title">机构列表</text>
+      <button class="pa-btn-create" bindtap="onToggleCreateForm">{{showCreateForm ? '取消' : '+ 新建机构'}}</button>
+    </view>
+
+    <view class="pa-create-form" wx:if="{{showCreateForm}}">
+      <input class="pa-input" placeholder="机构名称（必填）" value="{{createForm.name}}" bindinput="onCreateFormInput" data-field="name" />
+      <input class="pa-input" placeholder="联系人姓名" value="{{createForm.contactName}}" bindinput="onCreateFormInput" data-field="contactName" />
+      <input class="pa-input" placeholder="联系电话" value="{{createForm.contactPhone}}" bindinput="onCreateFormInput" data-field="contactPhone" />
+      <button class="pa-btn-submit" bindtap="onSubmitCreateTenant">创建机构</button>
+    </view>
+
+    <view class="pa-tenant-empty" wx:if="{{!loading && tenants.length === 0}}">
+      <text>暂无机构，点击上方"+ 新建机构"创建第一个</text>
+    </view>
+
+    <view class="pa-tenant-card" wx:for="{{tenants}}" wx:key="_id">
+      <view class="pa-tenant-header">
+        <text class="pa-tenant-name">{{item.name}}</text>
+        <text class="pa-tenant-status pa-status-{{item.status}}">{{item.status}}</text>
+      </view>
+      <view class="pa-tenant-body">
+        <text class="pa-tenant-row" wx:if="{{item.subscription}}">
+          套餐：{{planLabels[item.subscription.planType] || item.subscription.planType}} · 到期：{{item.subscription.serviceExpireDate}}
+        </text>
+        <text class="pa-tenant-row" wx:else>尚未开通订阅</text>
+        <text class="pa-tenant-row pa-tenant-id">机构 ID：{{item._id}}</text>
+      </view>
+      <view class="pa-tenant-actions">
+        <button class="pa-btn-small" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">开通/续费</button>
+        <button class="pa-btn-small pa-btn-warn" data-tenantid="{{item._id}}" data-currentstatus="{{item.status}}" bindtap="onToggleTenantStatus">
+          {{item.status === 'suspended' ? '恢复服务' : '暂停服务'}}
+        </button>
+      </view>
+    </view>
+
+  </scroll-view>
+
+  <view class="pa-modal-mask" wx:if="{{showRenewForm}}" bindtap="onCloseRenewForm">
+    <view class="pa-modal-box" catchtap="noop">
+      <text class="pa-modal-title">为【{{renewForm.tenantName}}】开通/续费</text>
+
+      <view class="pa-plan-row">
+        <view class="pa-plan-tag {{renewForm.planType === 'basic' ? 'active' : ''}}" data-plan="basic" bindtap="onSelectPlan">基础版</view>
+        <view class="pa-plan-tag {{renewForm.planType === 'pro' ? 'active' : ''}}" data-plan="pro" bindtap="onSelectPlan">专业版</view>
+        <view class="pa-plan-tag {{renewForm.planType === 'enterprise' ? 'active' : ''}}" data-plan="enterprise" bindtap="onSelectPlan">旗舰版</view>
+      </view>
+
+      <text class="pa-field-label">服务开始日期</text>
+      <input class="pa-input" placeholder="YYYY-MM-DD" value="{{renewForm.serviceStartDate}}" bindinput="onRenewFormInput" data-field="serviceStartDate" />
+
+      <text class="pa-field-label">服务到期日期</text>
+      <input class="pa-input" placeholder="YYYY-MM-DD" value="{{renewForm.serviceExpireDate}}" bindinput="onRenewFormInput" data-field="serviceExpireDate" />
+
+      <text class="pa-field-label">门店数量配额</text>
+      <input class="pa-input" type="number" placeholder="如：5" value="{{renewForm.storeLimit}}" bindinput="onRenewFormInput" data-field="storeLimit" />
+
+      <text class="pa-field-label">开通/续费原因（必填，留痕审计）</text>
+      <textarea class="pa-textarea" placeholder="如：新机构首次开通 / 年度续费" value="{{renewForm.reason}}" bindinput="onRenewFormInput" data-field="reason" />
+
+      <view class="pa-modal-actions">
+        <button class="pa-btn-cancel" bindtap="onCloseRenewForm">取消</button>
+        <button class="pa-btn-submit" bindtap="onSubmitRenew">确认提交</button>
+      </view>
+    </view>
+  </view>
+
+</view>

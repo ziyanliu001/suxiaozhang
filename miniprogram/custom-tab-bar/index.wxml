@@ -1,0 +1,18 @@
+<view class="app-tab-bar">
+  <view class="app-tab-bar-inner">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="key"
+      class="tab-item"
+      data-index="{{index}}"
+      data-path="{{item.pagePath}}"
+      bindtap="onTapTab"
+    >
+      <view class="tab-icon-wrap">
+        <view class="tab-icon tab-icon-{{item.key}} {{selected === index ? 'is-active' : ''}}"></view>
+        <view class="tab-badge" wx:if="{{item.key === 'inbox' && badge > 0}}">{{badge > 99 ? '99+' : badge}}</view>
+      </view>
+      <text class="tab-label {{selected === index ? 'is-active' : ''}}">{{item.text}}</text>
+    </view>
+  </view>
+</view>

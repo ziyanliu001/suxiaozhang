@@ -104,6 +104,14 @@
   border-radius: 50%;
   overflow: hidden;
   display: block;
+  background: #F1EFEA;
+}
+
+.user-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56rpx;
 }
 
 .user-name-box {

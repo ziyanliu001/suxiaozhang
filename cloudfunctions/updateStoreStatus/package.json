@@ -1,0 +1,9 @@
+{
+  "name": "updateStoreStatus",
+  "version": "1.0.0",
+  "description": "云函数：超级管理员启用/停用门店（仅更新 stores.status，不删除数据、不影响历史记录）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

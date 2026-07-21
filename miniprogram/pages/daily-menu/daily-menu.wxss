@@ -1,0 +1,458 @@
+.dm-page {
+  min-height: 100vh;
+  background: #F8F5F0;
+}
+
+.dm-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  height: 88rpx;
+  background: #8C1D18;
+}
+
+.dm-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 36rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.dm-nav-back-hover {
+  opacity: 0.5;
+}
+
+.dm-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.dm-nav-action {
+  color: #FFFFFF;
+  font-size: 26rpx;
+  width: 110rpx;
+  text-align: right;
+}
+
+.dm-nav-action.hidden {
+  visibility: hidden;
+}
+
+.dm-list-scroll {
+  height: calc(100vh - 88rpx);
+  box-sizing: border-box;
+  padding: 20rpx 24rpx;
+}
+
+.dm-store-tip {
+  font-size: 24rpx;
+  color: #8C1D18;
+  margin-bottom: 16rpx;
+}
+
+.dm-section-divider {
+  display: flex;
+  align-items: center;
+  margin: 8rpx 4rpx 16rpx 4rpx;
+}
+
+.dm-divider-icon {
+  font-size: 20rpx;
+  margin-right: 8rpx;
+}
+
+.dm-divider-txt {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.dm-divider-date {
+  font-size: 22rpx;
+  color: #A67558;
+  margin-left: 12rpx;
+}
+
+.dm-today-card {
+  background: linear-gradient(135deg, #FFFDFB 0%, #FFF8F0 100%);
+  border: 1.5rpx solid #FFD3BE;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 8rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+.dm-today-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.dm-today-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  color: #444444;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.dm-today-empty-txt {
+  color: #999999;
+}
+
+.dm-btn-today-edit {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #8C1D18;
+  border-radius: 30rpx;
+  padding: 12rpx 20rpx;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.dm-btn-today-edit::after {
+  border: none;
+}
+
+/* 🌟 发布冲突提示：今日已存在食谱时，展示发布人与时间，弱化视觉不抢主标题 */
+.dm-publish-meta {
+  display: block;
+  font-size: 20rpx;
+  color: #999999;
+  margin-top: -8rpx;
+  margin-bottom: 8rpx;
+}
+
+.dm-menu-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+.dm-card-date {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  margin-bottom: 16rpx;
+}
+
+.dm-thumb-9grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+}
+
+.dm-thumb-grid-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  border-radius: 12rpx;
+  overflow: hidden;
+  background: #F0F0F0;
+}
+
+.dm-thumb-grid-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 🛡️ 缩略图加载失败兜底：<image> binderror 时切换成这个占位块，而不是放任小程序
+   原生裂图图标晾在原地；点击可重试，覆盖今日食谱/历史食谱/编辑表单三处图片网格 */
+.thumb-load-failed {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  border-radius: 12rpx;
+  background: #F5F5F5;
+  border: 1.5rpx dashed #D9D9D9;
+}
+
+.thumb-load-failed-icon {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.thumb-load-failed-text {
+  font-size: 18rpx;
+  color: #999999;
+}
+
+.dm-card-text {
+  font-size: 26rpx;
+  color: #555555;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.dm-card-footer {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F0EAE2;
+}
+
+.dm-btn-reuse {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  background: #FFF5F0;
+  border: 1.5rpx solid #FFD3BE;
+  border-radius: 32rpx;
+  padding: 12rpx 0;
+  line-height: 1.4;
+}
+
+.dm-btn-reuse::after {
+  border: none;
+}
+
+.dm-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 0;
+}
+
+.dm-empty-icon {
+  font-size: 72rpx;
+  margin-bottom: 16rpx;
+}
+
+.dm-empty-text {
+  font-size: 26rpx;
+  color: #999999;
+  margin-bottom: 24rpx;
+}
+
+.dm-empty-btn {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 26rpx;
+  padding: 0 40rpx;
+}
+
+.dm-loading-more,
+.dm-no-more {
+  text-align: center;
+  padding: 24rpx 0;
+  font-size: 22rpx;
+  color: #999999;
+}
+
+.dm-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+}
+
+.dm-detail-box,
+.dm-edit-box {
+  width: 100%;
+  max-height: 85vh;
+  background: #FFFFFF;
+  border-top-left-radius: 28rpx;
+  border-top-right-radius: 28rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.dm-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #EFE6D8;
+  margin-bottom: 20rpx;
+}
+
+.dm-detail-date {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.dm-detail-close {
+  font-size: 32rpx;
+  color: #999999;
+}
+
+.dm-detail-scroll {
+  max-height: 60vh;
+}
+
+.dm-detail-images {
+  margin-bottom: 20rpx;
+}
+
+.dm-detail-img {
+  width: 100%;
+  border-radius: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.dm-detail-text {
+  font-size: 28rpx;
+  color: #444444;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.dm-detail-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #EFE6D8;
+}
+
+.dm-btn-edit,
+.dm-btn-delete {
+  flex: 1;
+  font-size: 26rpx;
+}
+
+.dm-btn-edit {
+  background: #F8F5F0;
+  color: #8C1D18;
+}
+
+.dm-btn-delete {
+  background: #FBE9E7;
+  color: #C62828;
+}
+
+.dm-edit-scroll {
+  max-height: 62vh;
+}
+
+.dm-form-label {
+  display: block;
+  font-size: 24rpx;
+  color: #666666;
+  font-weight: bold;
+  margin-bottom: 12rpx;
+  margin-top: 20rpx;
+}
+
+.dm-form-picker,
+.dm-form-textarea {
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 14rpx;
+  padding: 18rpx 20rpx;
+  font-size: 26rpx;
+  color: #333333;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.dm-form-textarea {
+  min-height: 160rpx;
+}
+
+/* 微信标准九宫格：与上方 .dm-thumb-9grid 展示态同款布局（CSS Grid 三列 + padding-bottom
+   撑开正方形），保证编辑态的上传网格和发布后的展示网格视觉完全一致 */
+.dm-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+}
+
+.dm-image-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  border-radius: 12rpx;
+  overflow: visible;
+}
+
+.dm-image-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 12rpx;
+  background: #F0F0F0;
+}
+
+.dm-image-remove {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  background: #E03131;
+  color: #FFFFFF;
+  border-radius: 50%;
+  font-size: 22rpx;
+  font-weight: bold;
+  box-shadow: 0 2rpx 6rpx rgba(224, 49, 49, 0.4);
+  z-index: 1;
+}
+
+.dm-image-add {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5rpx dashed #C9B8A0;
+  border-radius: 12rpx;
+}
+
+.dm-image-add text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22rpx;
+  color: #999999;
+  white-space: nowrap;
+}
+
+.dm-submit-btn {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  margin-top: 24rpx;
+}

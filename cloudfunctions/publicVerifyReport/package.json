@@ -1,0 +1,9 @@
+{
+  "name": "publicVerifyReport",
+  "version": "1.0.0",
+  "description": "云函数：海报扫码验真的公开只读查询（无需登录/无权限校验），返回脱敏后的最小字段集",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

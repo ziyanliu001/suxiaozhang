@@ -30,6 +30,8 @@
           <text class="summary-label">贡献工时(h)</text>
         </view>
       </view>
+
+      <button class="btn-gen-honor-card" bindtap="onGenerateHonorCard" loading="{{isGeneratingHonorCard}}" disabled="{{isGeneratingHonorCard}}">🎖️ 生成我的爱心荣誉卡</button>
     </view>
 
     <!-- 暖心热力图 -->
@@ -121,4 +123,21 @@
       </view>
     </view>
   </scroll-view>
+
+  <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: 600px;"></canvas>
+
+  <!-- 🎖️ 爱心荣誉卡预览弹窗 -->
+  <view class="honor-modal-mask" wx:if="{{showHonorModal}}" bindtap="onCloseHonorModal">
+    <view class="honor-modal-box" catchtap="stopPropagation">
+      <view class="honor-modal-header">
+        <text class="honor-modal-title">我的爱心荣誉卡</text>
+        <text class="honor-modal-close" bindtap="onCloseHonorModal">✕</text>
+      </view>
+      <image class="honor-card-image" src="{{honorCardImage}}" mode="widthFix" />
+      <view class="honor-modal-actions">
+        <button class="honor-btn-cancel" bindtap="onCloseHonorModal">关闭</button>
+        <button class="honor-btn-save" bindtap="onSaveHonorCard">保存到相册</button>
+      </view>
+    </view>
+  </view>
 </view>

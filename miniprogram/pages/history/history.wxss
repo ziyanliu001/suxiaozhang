@@ -39,6 +39,10 @@
   color: #212529;
 }
 
+.btn-back-arrow-hover {
+  opacity: 0.5;
+}
+
 .page-title-txt {
   font-size: 32rpx;
   font-weight: bold;
@@ -51,6 +55,20 @@
 
 .nav-right-placeholder {
   width: 64rpx;
+}
+
+/* 🛡️ 一键校准入口降级：右上角"⚙️ 设置"图标承载二次菜单，替代原先常驻的显眼大按钮 */
+.btn-settings-gear {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+}
+
+.btn-settings-gear:active {
+  opacity: 0.6;
 }
 
 .mode-switch-row {
@@ -89,28 +107,6 @@
   font-weight: bold;
 }
 
-.admin-tools-row {
-  padding: 8rpx 24rpx 16rpx 24rpx;
-}
-
-.btn-recalibrate {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
-  color: #E65100;
-  border: 1rpx solid #FFCC80;
-  border-radius: 30rpx;
-  padding: 12rpx 0;
-  font-size: 22rpx;
-  font-weight: bold;
-}
-
-.btn-recalibrate .icon {
-  font-size: 26rpx;
-}
-
 .month-pill .lbl {
   font-size: 22rpx;
   color: #444;
@@ -125,7 +121,102 @@
 
 .filter-controls-group {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 16rpx;
+}
+
+.btn-export-audit {
+  display: flex;
+  align-items: center;
+  background: #FFF3E0;
+  border: 1rpx solid #F0C878;
+  color: #B8860B;
+  font-size: 22rpx;
+  font-weight: bold;
+  padding: 8rpx 20rpx;
+  border-radius: 30rpx;
+  white-space: nowrap;
+}
+
+.btn-export-audit:active {
+  opacity: 0.8;
+}
+
+/* ===== 月度财务审计表导出结果弹窗 ===== */
+.audit-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audit-modal-box {
+  width: 640rpx;
+  max-height: 80vh;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.audit-modal-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.audit-modal-close {
+  font-size: 32rpx;
+  color: #999999;
+  padding: 0 8rpx;
+}
+
+.audit-text-preview {
+  background: #F8F9FA;
+  border-radius: 14rpx;
+  padding: 20rpx;
+  max-height: 50vh;
+}
+
+.audit-text-content {
+  font-size: 24rpx;
+  color: #333333;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.audit-modal-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.audit-btn-copy {
+  flex: 1;
+  font-size: 26rpx;
+  background: #F8F5F0;
+  color: #666666;
+}
+
+.audit-btn-download {
+  flex: 1;
+  font-size: 26rpx;
+  font-weight: bold;
+  background: #8C1D18;
+  color: #FFFFFF;
 }
 
 .filter-pill {
@@ -242,7 +333,8 @@
 
 .history-scroll-list {
   height: 100vh;
-  padding: 0 24rpx 40rpx 24rpx;
+  /* history 已不是 TabBar 页面（通过 navigateTo 进入，无底部导航栏），仅预留安全区 */
+  padding: 0 24rpx calc(40rpx + env(safe-area-inset-bottom)) 24rpx;
   box-sizing: border-box;
 }
 
@@ -265,9 +357,15 @@
 }
 
 .history-card.state-voided {
-  background: #F8F9FA !important;
+  background-color: #fafafa !important;
   border-color: #E9ECEF !important;
   opacity: 0.8;
+}
+
+/* 已作废卡片内所有金额数字（净增/余额四宫格）统一压灰，与正常生效账册形成明显区分 */
+.history-card.state-voided .cell-val,
+.history-card.state-voided .banner-val {
+  color: #8c8c8c !important;
 }
 
 .void-seal-box {
@@ -313,6 +411,14 @@
   border-radius: 8rpx;
   margin-left: 12rpx;
   font-weight: bold;
+}
+
+.error-badge-tappable {
+  border: 1rpx solid #D32F2F;
+}
+
+.error-badge-tappable:active {
+  opacity: 0.6;
 }
 
 .date-title-row {
@@ -501,8 +607,10 @@
   color: #868E96;
 }
 
+/* 统一数字字体层级：基础态即加粗，不再依赖各调用处是否叠加 .bold，保证四格数字观感一致 */
 .cell-val {
-  font-size: 28rpx;
+  font-size: 30rpx;
+  font-weight: bold;
   color: #212529;
 }
 
@@ -631,28 +739,14 @@
 }
 
 .empty-icon {
-  font-size: 64rpx;
-  margin-bottom: 16rpx;
+  font-size: 72rpx;
+  margin-bottom: 20rpx;
+  opacity: 0.7;
 }
 
 .empty-text {
   font-size: 26rpx;
-  color: #868E96;
-}
-
-.btn-go-home {
-  font-size: 30rpx;
-  color: #fff;
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border: none;
-  border-radius: 44rpx;
-  padding: 20rpx 64rpx;
-  margin-top: 32rpx;
-  box-shadow: 0 8rpx 24rpx rgba(245, 158, 11, 0.3);
-}
-
-.btn-go-home::after {
-  border: none;
+  color: #ADB5BD;
 }
 
 .loading-state {
@@ -660,6 +754,19 @@
   align-items: center;
   justify-content: center;
   padding: 100rpx 0;
+}
+
+/* 合规展示声明 */
+.compliance-disclaimer {
+  padding: 24rpx 32rpx 48rpx;
+  text-align: center;
+}
+
+.compliance-disclaimer-text {
+  display: block;
+  font-size: 20rpx;
+  line-height: 1.6;
+  color: #9a9a9a;
 }
 
 .loading-text {
@@ -972,13 +1079,115 @@
 
 .form-textarea {
   width: 100%;
-  height: 120rpx;
+  min-height: 120rpx;
   background: #FDFDFD;
   border: 2rpx solid #D6CEBF;
   border-radius: 16rpx;
   padding: 16rpx;
   font-size: 26rpx;
   box-sizing: border-box;
+}
+
+.donations-textarea {
+  min-height: 160rpx;
+}
+
+.donations-total-tip {
+  font-size: 24rpx;
+  color: #666666;
+}
+
+.donations-total-val {
+  font-weight: bold;
+  color: #2E7D32;
+}
+
+.optional-tag {
+  font-size: 20rpx;
+  font-weight: normal;
+  color: #999999;
+  margin-left: 8rpx;
+}
+
+.edit-inventory-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.edit-inventory-row:last-child {
+  margin-bottom: 0;
+}
+
+.edit-inventory-name {
+  font-size: 26rpx;
+  color: #444444;
+}
+
+.edit-status-pill-group {
+  display: flex;
+  gap: 12rpx;
+}
+
+.edit-status-pill {
+  font-size: 22rpx;
+  color: #999999;
+  background: #F5F5F5;
+  border: 2rpx solid transparent;
+  border-radius: 24rpx;
+  padding: 8rpx 20rpx;
+}
+
+.edit-status-pill.green.active {
+  color: #2E7D32;
+  background: #E8F5E9;
+  border-color: #A5D6A7;
+  font-weight: bold;
+}
+
+.edit-status-pill.yellow.active {
+  color: #E65100;
+  background: #FFF3E0;
+  border-color: #FFCC80;
+  font-weight: bold;
+}
+
+.edit-status-pill.red.active {
+  color: #D32F2F;
+  background: #FFEBEE;
+  border-color: #EF9A9A;
+  font-weight: bold;
+}
+
+.modal-footer-danger-row {
+  margin-top: 20rpx;
+}
+
+.btn-delete-record {
+  width: 100%;
+  height: 72rpx;
+  background: #FFF5F5;
+  color: #D32F2F;
+  border: 2rpx solid #FFCDD2;
+  border-radius: 36rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.btn-delete-record::after {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.btn-delete-record:active {
+  background: #FFEBEE;
+  transform: scale(0.98);
 }
 
 .modal-footer-box {
@@ -1044,6 +1253,43 @@
 .receipt-title-row .r-icon { font-size: 24rpx; margin-right: 6rpx; }
 .receipt-title-row .r-title { font-size: 22rpx; font-weight: bold; color: #444444; }
 .receipt-title-row .r-count { font-size: 20rpx; color: #888888; margin-left: 6rpx; }
+
+/* "🔍 稽核"入口：跳转到财务对单/补传凭证详情弹窗，与下方直观预览缩略图区分开 */
+.r-audit-link {
+  margin-left: auto;
+  font-size: 20rpx;
+  color: #1565C0;
+  background: #E3F2FD;
+  padding: 4rpx 14rpx;
+  border-radius: 16rpx;
+  font-weight: 500;
+}
+
+/* 小票直观预览：60x60px 缩略图横排，点击直接原生放大 */
+.receipt-thumb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.thumb60-item {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 10rpx;
+  overflow: hidden;
+  border: 1.5rpx solid #EFE6D8;
+  flex-shrink: 0;
+}
+
+.thumb60-item.grey-img {
+  border-color: #E0E0E0;
+  opacity: 0.6;
+}
+
+.thumb60-img {
+  width: 100%;
+  height: 100%;
+}
 
 .receipt-horizontal-scroll {
   width: 100%;
@@ -1239,57 +1485,43 @@
   display: block;
 }
 
+/* 加深门店标签对比度：#888888 -> #5C5C5C，与日期文字层级拉开但仍清晰可读 */
 .store-tag {
   font-size: 20rpx;
-  color: #888888;
+  color: #5C5C5C;
   margin-top: 4rpx;
   display: block;
 }
 
-/* 状态胶囊容器 */
-.status-badge-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-  align-items: flex-end;
-}
-
-/* 状态胶囊基础样式 (加大字号与内边距) */
-.status-badge {
+/* 单行圆角状态 Flow Tag：同一时刻只展示一枚徽章，取代此前堆叠的两枚状态胶囊 */
+.status-flow-tag {
   display: inline-flex;
   align-items: center;
-  padding: 6rpx 16rpx;
-  border-radius: 20rpx;
-  font-size: 22rpx;
+  padding: 8rpx 20rpx;
+  border-radius: 24rpx;
+  font-size: 24rpx;
   font-weight: bold;
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
-.badge-icon { margin-right: 6rpx; font-size: 22rpx; }
-
-/* 待店长确认 (醒目亮黄) */
-.status-badge.pending-manager {
-  background: #FFF3E0;
-  color: #E65100;
-  border: 1rpx solid #FFE0B2;
-}
-
-/* 店长已确认 (柔和草绿) */
-.status-badge.confirmed {
-  background: #E8F5E9;
-  color: #2E7D32;
-  border: 1rpx solid #C8E6C9;
+/* 待店长确认：醒目黄橙实色背景，与其余淡色胶囊拉开视觉差距，第一时间抓住店长注意力 */
+.status-flow-tag.st-manager {
+  background: linear-gradient(135deg, #FFA726 0%, #FB8C00 100%);
+  color: #FFFFFF;
+  border: none;
+  box-shadow: 0 4rpx 10rpx rgba(251, 140, 0, 0.3);
 }
 
 /* 待财务稽核 (庄严淡红) */
-.status-badge.pending-finance {
+.status-flow-tag.st-finance {
   background: #FFEBEE;
   color: #C62828;
-  border: 1rpx solid #FFCDD2;
+  border: 1.5rpx solid #FFCDD2;
 }
 
-/* 账本已锁定 (烫金高级感) */
-.status-badge.audited {
+/* 已锁定 (烫金高级感) */
+.status-flow-tag.st-locked {
   background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
   color: #FFFFFF;
   box-shadow: 0 4rpx 10rpx rgba(46, 125, 50, 0.2);
@@ -1355,14 +1587,14 @@
 
 /* ================= 优化后的分层操作区样式 ================= */
 
-/* 操作区基础容器 */
+/* 操作区基础容器：主按钮与次级工具栏间距拉大，加强主次层级差距 */
 .card-action-footer {
   margin-top: 24rpx;
   border-top: 2rpx dashed #EFE6D8;
   padding-top: 20rpx;
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 20rpx;
 }
 
 /* 第一层：工作流大按钮 */
@@ -1391,24 +1623,39 @@
   margin: 0;
 }
 
-/* 待店长确认 */
-.btn-workflow-confirm {
+/* 主按钮：待店长确认 / 待财务稽核 —— 统一醒目 CTA 橙色 */
+.btn-workflow-audit-cta {
   background: linear-gradient(135deg, #FF9100 0%, #FF6D00 100%);
   color: #FFFFFF;
 }
 
-/* 待财务审计 */
-.btn-workflow-audit {
+/* 主按钮：已锁定状态下的分享/导出 —— 稳重绿色 */
+.btn-workflow-share {
   background: linear-gradient(135deg, #00C853 0%, #009624 100%);
   color: #FFFFFF;
 }
 
-/* 禁用与封账置灰态 */
-.btn-state-disabled, .btn-state-locked {
-  background: #ECEFF1 !important;
-  color: #90A4AE !important;
-  border: 1rpx solid #CFD8DC !important;
-  box-shadow: none !important;
+/* 已作废/冲销：无操作按钮，仅一条静态提示条 */
+.void-footer-notice {
+  text-align: center;
+  padding: 16rpx 0;
+  font-size: 24rpx;
+  color: #8c8c8c;
+  background: #fafafa;
+  border-radius: 12rpx;
+  font-weight: 500;
+}
+
+/* 已锁定状态下的极简"查看明细"链接 */
+.minimal-link-row {
+  text-align: center;
+}
+
+.btn-minimal-link {
+  font-size: 22rpx;
+  color: #868E96;
+  padding: 8rpx 0;
+  display: inline-block;
 }
 
 /* 第二层：轻量工具栏 */
@@ -1445,13 +1692,6 @@
 .btn-utility:active {
   background: #F8F9FA;
   transform: scale(0.97);
-}
-
-/* 分享微信高亮绿边 */
-.btn-util-share {
-  border-color: #A5D6A7;
-  color: #2E7D32;
-  background: #F1F8F5;
 }
 
 /* 编辑按钮淡雅蓝 */
@@ -1579,4 +1819,312 @@
 .btn-action-pill.btn-unlock-record:active {
   background: #FFE0B2;
   transform: scale(0.98);
+}
+
+/* ================= 🧾 凭证与账本：今日凭证与记账 + 历史小票九宫格 + 稽核详情弹窗 ================= */
+
+.section-divider-label {
+  display: flex;
+  align-items: center;
+  margin: 28rpx 4rpx 12rpx 4rpx;
+}
+
+.section-divider-label .divider-icon {
+  font-size: 20rpx;
+  margin-right: 8rpx;
+}
+
+.section-divider-label .divider-txt {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.section-divider-label .divider-date {
+  font-size: 22rpx;
+  color: #A67558;
+  margin-left: 12rpx;
+}
+
+.today-ledger-section {
+  margin-top: 16rpx;
+}
+
+/* 全国总览视角下"今日凭证与记账"整块隐藏，本模块顶部紧接固定头部的"一键校准"提示条，
+   额外补足呼吸间距，避免内容紧贴橙色提示条 */
+.history-ledger-divider {
+  margin-top: 20rpx;
+}
+
+/* 🌟 圆角与阴影统一为 16rpx / 0 4rpx 16rpx rgba(0,0,0,0.04)，边距整体提升，与空状态卡片一致 */
+.today-ledger-card {
+  background: linear-gradient(135deg, #FFFDFB 0%, #FFF8F0 100%);
+  border: 1.5rpx solid #FFD3BE;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.today-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.today-expense-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.today-expense-lbl {
+  font-size: 22rpx;
+  color: #A67558;
+  margin-bottom: 4rpx;
+}
+
+.today-expense-val {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #D32F2F;
+}
+
+.today-status-pill {
+  font-size: 22rpx;
+  font-weight: bold;
+  padding: 8rpx 18rpx;
+  border-radius: 20rpx;
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.today-status-pill.approved {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.today-status-pill.locked {
+  background: #ECEFF1;
+  color: #455A64;
+}
+
+.today-expense-detail-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.today-receipt-9grid,
+.receipt-9grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10rpx;
+  margin-bottom: 8rpx;
+}
+
+.grid9-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  border-radius: 12rpx;
+  overflow: hidden;
+  border: 1.5rpx solid #EFE6D8;
+}
+
+.grid9-item.grey-img {
+  filter: grayscale(100%);
+  opacity: 0.6;
+}
+
+.grid9-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.today-receipt-empty {
+  padding: 16rpx 0;
+  text-align: center;
+}
+
+.today-action-row {
+  margin-top: 16rpx;
+}
+
+/* 🌟 合并入口后仅剩一枚高亮通栏主按钮，取代此前"拍照识别OCR + 快捷补传凭证"两枚并排按钮 */
+.btn-today-action {
+  width: 100%;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+  padding: 18rpx 0;
+  line-height: 1.4;
+}
+
+.btn-today-upload {
+  background: #8C1D18;
+  color: #FFFFFF;
+  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.2);
+}
+
+.btn-today-upload:active {
+  opacity: 0.85;
+}
+
+/* 🌟 今日未录入餐报时的空状态卡：圆角与阴影统一为 16rpx / 0 4rpx 16rpx rgba(0,0,0,0.04)，
+   边距整体提升，OCR / 快捷补传凭证双入口不变 */
+.today-ledger-empty {
+  background: #FAF8F5;
+  border: 1.5rpx dashed #E0D5C5;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.today-empty-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.today-empty-top-row .empty-tip {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.btn-go-fill-today-mini {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  flex-shrink: 0;
+}
+
+.staged-receipt-block {
+  margin-bottom: 8rpx;
+}
+
+.staged-tip {
+  display: block;
+  font-size: 20rpx;
+  color: #E65100;
+  margin-top: 4rpx;
+  margin-bottom: 8rpx;
+}
+
+/* 历史卡片：小票九宫格标题行的锁定/对单徽章 */
+.r-lock-badge {
+  font-size: 18rpx;
+  color: #E65100;
+  background: #FFF3E0;
+  border-radius: 12rpx;
+  padding: 2rpx 10rpx;
+  margin-left: auto;
+}
+
+.r-lock-badge.locked {
+  color: #455A64;
+  background: #ECEFF1;
+}
+
+.r-reconcile-badge {
+  font-size: 18rpx;
+  color: #2E7D32;
+  background: #E8F5E9;
+  border-radius: 12rpx;
+  padding: 2rpx 10rpx;
+  margin-left: 8rpx;
+}
+
+/* 稽核详情弹窗 */
+.receipt-detail-card {
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.receipt-detail-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 0 32rpx 16rpx 32rpx;
+}
+
+.receipt-detail-info-row .detail-expense-val {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #D32F2F;
+}
+
+.receipt-detail-scroll {
+  padding: 0 32rpx;
+  max-height: 60vh;
+}
+
+.detail-9grid {
+  margin-bottom: 12rpx;
+}
+
+.detail-tip {
+  display: block;
+  font-size: 20rpx;
+  color: #AAAAAA;
+  text-align: center;
+  margin-bottom: 16rpx;
+}
+
+.receipt-detail-actions {
+  display: flex;
+  gap: 16rpx;
+  padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom)) 32rpx;
+  border-top: 1rpx solid #F0EAE2;
+}
+
+.btn-detail-action {
+  flex: 1;
+  font-size: 24rpx;
+  font-weight: bold;
+  border-radius: 36rpx;
+  padding: 14rpx 0;
+  line-height: 1.4;
+}
+
+.btn-reconcile {
+  background: #FFFFFF;
+  color: #2E7D32;
+  border: 1.5rpx solid #2E7D32;
+}
+
+.btn-reconcile.done {
+  background: #E8F5E9;
+}
+
+.btn-supplement {
+  background: #8C1D18;
+  color: #FFFFFF;
+}
+
+.preview-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin: 16rpx 24rpx 0;
+  padding: 16rpx 20rpx;
+  background: #FFF3E0;
+  border: 1.5rpx solid #FFB74D;
+  border-radius: 12rpx;
+}
+
+.preview-mode-banner-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+}
+
+.preview-mode-banner-text {
+  font-size: 24rpx;
+  color: #E65100;
+  line-height: 1.4;
+  flex: 1;
 }

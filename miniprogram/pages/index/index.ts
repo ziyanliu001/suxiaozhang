@@ -1,8 +1,8 @@
 import { DataService, formatMoney } from '../../utils/dataService';
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
-import { parseDonorText } from '../../utils/parser';
+import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
-import { drawMeritPoster } from '../../utils/posterGenerator';
+import { drawMeritPoster, drawStoryPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
 import { STORE_PRESETS, STORE_PICKER_LIST, CUSTOM_STORE_LABEL, findStorePreset } from '../../utils/constants';
@@ -10,32 +10,46 @@ import { getSafeSystemInfo } from '../../utils/util';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
+import { compressAndUploadImages } from '../../utils/imageCompress';
+import { isCloudAvailable } from '../../utils/cloudGuard';
+import { maskName } from '../../utils/privacy';
+import { md5 } from '../../utils/md5';
+import { applyRoleViewOverride, getPreviewViewMode, PreviewViewMode } from '../../utils/viewModePreview';
+import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
+import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
+import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
 
+const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
+// 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
+const DAILY_HOURS_CAP = 12.0;
+
+// 🐛 修复"喜讯通报：喜讯通报：..."套娃重复：title/content 本身不应再嵌入 tag 前缀，
+// tag 已经在展示时单独加上【】/📢，重复嵌入会导致视觉上连续出现两次"喜讯通报"
 const PRESET_NOTICES = {
   opening: {
     tag: '喜讯通报',
-    title: '喜讯通报：三源弘雨花敬老家园试营业',
-    content: '喜讯通报：三源弘雨花敬老家园，14号正式开启试营业。秉承恭敬生命、敬老行善，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行孝道，传递善意❤️。感恩大家支持！'
+    title: '三源弘雨花敬老家园试营业',
+    content: '三源弘雨花敬老家园，14号正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！'
   },
   volunteer: {
     tag: '义工招募',
     title: '爱心义工招募',
-    content: '【爱心义工招募】雨花斋的运转离不开义工家人的倾情护持！现急需择菜、洗碗、行堂义工数名，服务时间：每天上午 8:30 - 12:30。期待您的回家护持，共修福慧！❤️'
+    content: '【爱心义工招募】雨花斋的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️'
   },
   supplies: {
     tag: '物资呼吁',
     title: '爱心物资接力',
-    content: '【爱心物资接力】感恩各位善士大众的护持！当前小店大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都是满满的慈悲。恭敬感恩您的倾心付出！🙏'
+    content: '【爱心物资接力】感恩各位爱心人士的护持！当前小店大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️'
   },
   weather_closure: {
     tag: '暂停营业',
     title: '恶劣天气暂停开餐告示',
-    content: '【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，本斋将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。恭敬感恩大家的理解与支持！❤️'
+    content: '【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，本斋将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️'
   },
   renovation_closure: {
     tag: '暂停营业',
     title: '内部整修/例行消杀停业通知',
-    content: '【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，本斋将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！🙏'
+    content: '【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，本斋将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！❤️'
   },
   festival: {
     tag: '日常温馨提醒',
@@ -45,9 +59,48 @@ const PRESET_NOTICES = {
   thanks: {
     tag: '感恩致谢',
     title: '专项爱心致谢',
-    content: '【感恩致谢】特别感谢爱心企业/善士对本斋的慷慨支持，您的善举让更多长者感受到了社会的温暖。恭敬感恩您的无私奉献，愿善有善报，福慧双增！🙏❤️'
+    content: '【感恩致谢】特别感谢爱心企业/爱心人士对本斋的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️'
   }
 };
+
+// 🐛 防御性去重：无论是预置文案还是店长自行编辑保存的通报，只要 title/content 开头
+// 恰好又重复带了一遍 tag 前缀（如"喜讯通报：喜讯通报：..."），一律在这里剥离干净再落库/展示
+function stripTagPrefix(text: string, tag: string): string {
+  if (!text || !tag) return text || '';
+  const prefixes = [`${tag}：`, `${tag}:`, `【${tag}】`];
+  let result = text.trim();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const prefix of prefixes) {
+      if (result.startsWith(prefix)) {
+        result = result.slice(prefix.length).trim();
+        changed = true;
+      }
+    }
+  }
+  return result;
+}
+
+// 🔗 跑马灯通知云端化：把 manageNotice 云函数返回的原始记录（tenantId/storeId/
+// createdAt 等审计字段）映射成前端一直在用的展示形状（id/tag/title/content/
+// create_time），公告详情弹窗/复制文案等既有逻辑完全不用改
+function mapNoticeRecord(raw: any): any {
+  let createTime = '';
+  try {
+    createTime = new Date(raw.createdAt).toISOString().split('T')[0];
+  } catch (e) {
+    createTime = '';
+  }
+  return {
+    id: raw._id,
+    tag: raw.tag || '',
+    title: raw.title || '',
+    content: raw.content || '',
+    is_top: true,
+    create_time: createTime
+  };
+}
 
 const debounce = <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -63,6 +116,35 @@ const SETTINGS_KEY = 'SHOP_SETTINGS';
 function getDraftKeyForDate(dateStr: string, shopName: string): string {
   const cleanShop = (shopName || 'default').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
   return `DRAFT_${cleanShop}_${dateStr}`;
+}
+
+// 统一的两位小数四舍五入，避免浮点误差在多次加减后累积出细微偏差
+function round2(num: number): number {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+// 🌟 今日食谱动态卡片：后端 manageDailyMenu 存的是一整段自由文本 menuText
+// （没有结构化的菜品数组字段），要在首页把它渲染成小网格/标签云，只能从这段文本里
+// 尽力切出菜品名。
+// 🐛 最初按"顿号/逗号/换行都算分隔符 + 每段够短"来判断，结果一句用逗号断句的说明文字
+// （"今天食材紧张，暂时简化供应，具体以实际到货为准"）会被误判成三道"菜"——逗号在中文里
+// 既是列表分隔符也是普通语句的分句符号，太不可靠。顿号"、"则不同：中文里它几乎专属于
+// 并列列表项，很少出现在完整语句里。改为"文本里出现顿号才尝试按顿号/换行切分"，
+// 没有顿号一律直接回退到纯文本——用真实场景测试过逗号分隔的说明句能正确返回空数组。
+// 仍有极小概率的残余误判（有人偏偏用顿号写一整句话），但那是不符合中文标点习惯的
+// 小概率写法，且这里只影响展示样式（标签云 vs 纯文本），不涉及任何金额/账目计算，
+// 犯错代价很低，不值得为了这个再引入更复杂的分句判断逻辑。
+function splitMenuTextToDishes(menuText: string): string[] {
+  if (!menuText || !menuText.trim()) return [];
+  const trimmed = menuText.trim();
+  if (!trimmed.includes('、')) return [];
+
+  const dishes = trimmed
+    .split(/[、\n]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  const looksLikeDishList = dishes.length >= 2 && dishes.every(d => d.length > 0 && d.length <= 12);
+  return looksLikeDishList ? dishes : [];
 }
 
 function deriveDateString(reportDateValue: string, reportDate: string): string {
@@ -99,9 +181,12 @@ Page({
   _shopNameTimer: null as any,
   _balanceReqSeq: 0,
   isNavigating: false,
+  _checkInSubmitting: false,
   // 任务C：待执行的锚点滚动目标（onLoad 解析后暂存，onShow 中触发滚动）
   _pendingScrollTarget: '' as string,
   _highlightTimer: null as any,
+  // 🏪 门店选择器引导：因未选定具体门店而被拦截的操作，暂存回调，待用户选店后自动续跑
+  _pendingStoreSelectAction: null as (() => void) | null,
 
   data: {
     reportDate: '',
@@ -118,6 +203,23 @@ Page({
     totalExpense: 0,
     computedTodayBalance: '0.00',
     inputMode: 'text',
+    isScanningDonorList: false,
+    showFrequentDonorModal: false,
+    frequentDonorList: [] as { name: string; count: number }[],
+    // 🌟 高频账目模板：门店常用支出项目速录（云端存储，店长/财务/超管维护，全员可用）
+    showExpenseTemplateModal: false,
+    expenseTemplateCategory: 'daily' as 'daily' | 'fixed',
+    expenseTemplateTargetField: 'dailyExpenseText' as 'dailyExpenseText' | 'fixedExpenseText',
+    expenseTemplateDailyList: [] as { _id: string; itemName: string; defaultAmount: number | null }[],
+    expenseTemplateFixedList: [] as { _id: string; itemName: string; defaultAmount: number | null }[],
+    expenseTemplateLoaded: false,
+    expenseTemplateEditMode: false,
+    expenseTemplateNewName: '',
+    expenseTemplateNewAmount: '',
+    expenseTemplateSaving: false,
+    // 🌟 合规授权须知弹窗，见 checkComplianceNotice
+    showComplianceModal: false,
+    complianceModalScene: 'general' as 'general' | 'privileged' | 'review',
     yesterdayBalDisplay: '0.00',
     totalIncomeDisplay: '0.00',
     totalExpenseDisplay: '0.00',
@@ -128,7 +230,22 @@ Page({
     otherDonation: '',
     expenses: '',
     dailyExpenseText: '',
+    dailyExpenseParseCount: 0,
+    dailyExpenseParseAmount: '0.00',
     fixedExpenseText: '',
+    // 🌟 大额专项支出：从 fixedExpenseText 自由文本改为「逐条添加」结构化列表，
+    // 使每一条都能挂一个真实的独立凭证按钮（<textarea> 内部做不到按行挂按钮）。
+    // fixedExpenseText 保留、继续由 fixedExpenseItems 自动派生，下游（结算/提交/
+    // 草稿/历史编辑/海报）读到的仍是同一个字段，零改动。
+    fixedExpenseItems: [] as {
+      _key: string;
+      name: string;
+      amount: string;
+      independent_image_urls: string[];
+      expanded: boolean;
+    }[],
+    fixedExpenseNewName: '',
+    fixedExpenseNewAmount: '',
     reportResult: '',
     showResult: false,
     isResultExpanded: false,
@@ -152,6 +269,26 @@ Page({
     totalParsedAmount: '0.00',
     calculationFormulaText: '',
     receiptImages: [] as string[],
+    // 🛡️ 缩略图加载失败兜底：key 是图片路径本身，命中即代表这张图当前应该展示
+    // "加载失败，点击重试"占位块而不是一个空白/裂图的 <image>。receiptImages/
+    // independent_image_urls/recipeImages/activityImages 现在全部是纯字符串数组，
+    // 没有可以挂 loadFailed 字段的对象，统一用一张按路径查表的 map 来标记
+    imageLoadFailedMap: {} as Record<string, boolean>,
+    // 🛡️ 首页"今日食谱"/"今日门店日志"预览卡缩略图加载失败兜底：这两张卡此前是
+    // 全仓库唯一没有 binderror/失败占位保护的图片网格，云存储读权限异常等情况下
+    // 会呈现小程序原生的裂图/空白（也就是"缩略图不显示，呈占位色块"），现补齐
+    // 与 imageLoadFailedMap 同款的按 url 查表方案
+    previewImagesFailedMap: {} as Record<string, boolean>,
+    // 🍱 今日食谱照片（随餐报一并提交，最多 9 张）
+    // 🛡️ 与 receiptImages 100% 同构：纯字符串数组，选图后立即塞本地 tempFilePath，
+    // 压缩上传完成后原地把同一下标替换成云端 fileID 字符串——不再用 {url,thumbUrl}
+    // 对象，WXML 侧直接 {{item}} 绑定，不走任何属性路径解析
+    recipeImages: [] as string[],
+    recipeUploading: false,
+    // 📌 今日大事记照片 + 简短文字描述（随餐报一并提交，最多 18 张），同上纯字符串数组
+    activityImages: [] as string[],
+    activityUploading: false,
+    activityText: '',
     // 物资赞助数据结构
     materials: [] as { donor: string; item: string; quantity: string; unit: string }[],
     materialsInput: '', // 自由文本输入（如："张三：大米50斤；李四：食用油2箱"）
@@ -171,7 +308,20 @@ Page({
     showPoster: false,
     posterImage: '',
     showPosterModal: false,
-    qrCodeUrl: 'https://7a65-zeng-yuhua-cloud-123.tcb.qcloud.la/assets/yuhua_sun_code.png',
+    // 🆕 财务公示版 (4:3) / 温馨故事版 (9:16) 切换：posterType 只影响 .poster-modal
+    // （showPoster，展示 canvas 导出的真实图片）这一个预览弹窗，与 .modal-backdrop
+    // （showPosterModal，纯 WXML 拼版预览）互不相关，不需要跟着切
+    posterType: 'financial' as 'financial' | 'story',
+    isSwitchingPosterType: false,
+    // 🆕 海报右下角"扫码验真"用的真实小程序码本地临时路径（指向 pages/public-verify/index，
+    // 携带 storeId+date）：每次生成/切版式共用同一份，生成失败时为空字符串，
+    // 由 posterGenerator.ts 自行降级为占位框
+    verifyQrLocalPath: '',
+    // 🐛 修复"二维码显示为空白"：旧默认值是一个早期私人测试云环境的死链
+    // （zeng-yuhua-cloud-123.tcb.qcloud.la），且项目里根本没有 /images/ 静态资源目录，
+    // 兜底路径同样是空的。现改为状态机 + 动态生成，绝不再依赖任何写死的外部/本地图片路径。
+    qrCodeUrl: '',
+    qrCodeState: 'idle' as 'idle' | 'loading' | 'ready' | 'failed',
     todayInAmount: '0.00',
     todayOutAmount: '0.00',
     todayTotalBalance: '0.00',
@@ -187,7 +337,9 @@ Page({
     archiveUserInfo: {
       totalDays: 0,
       totalCheckInCount: 0,
-      totalHours: 0
+      totalHours: 0,
+      avatarUrl: '',
+      nickName: ''
     },
     showAgreement: false,
     canvasHeight: 667,
@@ -204,6 +356,14 @@ Page({
     ocrSuccessCount: 0,
     ocrFailCount: 0,
     ocrTotalAmount: '0.00',
+    // 🌟 强制焦点定位：弹窗打开时自动聚焦第一张小票的第一个金额输入框并全选文本，
+    // 方便店长直接键入修正，而不必先手动点击、再删除原有数字
+    ocrFocusFirstPrice: false,
+    ocrFocusSelectionEnd: 99,
+    // 🌟 OCR 确认弹窗"确认后预计结余"实时预览，见 updateOcrConfirmPreview
+    ocrPreviewExpense: '0.00',
+    ocrPreviewBalance: '0.00',
+    ocrPreviewFormula: '',
     showHistoryBalanceModal: false,
     historyBalanceList: [] as { date: string; store: string; balance: string }[],
     showBalanceHistoryModal: false,
@@ -211,6 +371,15 @@ Page({
     storePickerList: STORE_PICKER_LIST,
     selectedStoreIndex: 0,
     isCustomStore: false,
+    // 🔗 跑马灯通知云端化：noticeList 是当前视角（总览级/具体门店，严格互斥）
+    // 拉取到的全部有效通知，announcement 始终指向 noticeList[currentNoticeIndex]，
+    // 供详情弹窗/复制文案等既有逻辑直接读，不用感知背后是数组还是单条
+    noticeList: [] as any[],
+    // 🌟 首屏优雅过渡：初始为 true，avoid 在 fetchNotices() 真正返回之前就先闪一下
+    // "暂无通知"兜底提示——只有云端明确返回空列表之后，兜底提示才应该出现
+    noticesLoading: true,
+    currentNoticeIndex: 0,
+    isNoticeBarHiddenToday: false,
     announcement: null as {
       id: string;
       tag: string;
@@ -221,21 +390,25 @@ Page({
     } | null,
     showAnnouncementModal: false,
     showNoticeEditModal: false,
+    noticeEditId: '',
     noticeEditTag: '喜讯通报',
     noticeEditTitle: '',
     noticeEditContent: '',
     mergeToReportText: false,
-    noticeHidden: false,
     showApplyModal: false,
     applyForm: {
       storeId: '',
       storeName: '',
       realName: '',
       phone: '',
-      requestedRole: 'volunteer'
+      requestedRole: 'volunteer',
+      // 🏢 门店选择双模式：existing=从本机构已有门店中选择，custom=手动填写新门店名称
+      storeSelectionType: 'existing',
+      customStoreName: ''
     } as any,
     showAuditModal: false,
     auditActiveTab: 'pending' as 'pending' | 'approved',
+    auditIsNationalView: false,
     pendingApplyList: [] as any[],
     approvedVolunteerList: [] as any[],
     currentUserRole: '' as string,
@@ -244,15 +417,42 @@ Page({
     isManager: false,
     isFinance: false,
     isSuperAdmin: false,
+    // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
+    // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
+    isRealSuperAdmin: false,
+    currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     currentRole: 'VOLUNTEER' as 'VOLUNTEER' | 'MANAGER' | 'FINANCE',
     pendingAuditCount: 0,
     roleLabelMap: ROLE_LABELS,
     currentStoreName: '' as string,
+    // 🌟 财务专属功能区：风控预警数量（首页角标）、封账弹窗、风控预警明细弹窗
+    riskAlertCount: 0,
+    showFinanceLockModal: false,
+    financeLockMonthStr: '',
+    financeLockInFlight: false,
+    showRiskAlertsModal: false,
+    riskAlertsLoading: false,
+    riskAlertsList: [] as any[],
+    riskAlertsSummary: { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 },
     currentStoreId: '' as string,
+    isAllStoresView: false,
     allStoresList: [] as any[],
     showStorePosterModal: false,
     storePosterTempFilePath: '',
     currentSponsorInfo: null as any,
+    todayDateStr: '',
+    // 🍱 今日食谱首页预览卡（只读展示，编辑/发布已合并至【食谱管理中心】pages/daily-menu 页面）
+    todayMenu: null as any,
+    todayMenuDishes: [] as string[],
+    todayMenuLoaded: false,
+    // 📌 今日大事记首页预览卡（只读展示，编辑/发布已合并至【大事记中心】pages/activity-log 页面）
+    todayActivity: null as any,
+    todayActivityLoaded: false,
+    // 🔗 门店日志联动：记下当天已存在记录的 _id，提交报表时精准 update 这一条，
+    // 而不是走 autoSyncFromReport 的按键查找（避免跟"门店日志"页手动发布的记录
+    // 各自独立、堆出两条内容重复的大事记），见 publishRecipeAndActivityIfPresent
+    todayActivitySourceId: '',
+
     isReadOnlyByLock: false,
     lockOwnerName: '',
     lockRemainingSec: 0,
@@ -268,6 +468,11 @@ Page({
     willEatLunch: true,
     checkInLogs: [] as any[],
     todayAccumulatedHours: 0,
+    // 🌟 打卡弹窗实时工时预览：勾选班次后即时预估"若提交这一笔，今日总工时会变成多少"，
+    // 超限时禁用确认按钮，而不是等提交后才静默截断
+    previewTotalHours: 0,
+    isOverHoursLimit: false,
+    checkInSubmitting: false,
     allShiftsCompleted: false,
     todayLogs: [] as any[],
     myCheckInDays: 0,
@@ -282,23 +487,26 @@ Page({
     ] as any[],
     availableShifts: [] as any[],
     showGenCodeModal: false,
+    isGeneratingInviteCode: false,
     genTargetRole: 'MANAGER',
     generatedCode: '',
     targetGenStoreId: '',
     targetGenStoreName: '',
-    showDevClearModal: false,
-    clearConfirmInput: '',
-    clearOptions: {
-      reports: true,
-      requests: true,
-      cache: true
-    }
+    // 🏢 门店选择双模式：existing=从本机构已有门店下拉选择，custom=手动输入新门店名称
+    genStoreSelectionType: 'existing' as 'existing' | 'custom',
+    genCustomStoreName: '',
+    // 过滤掉"全国总览"等虚拟条目后的真实门店下拉选项
+    genStoreOptions: [] as any[]
   },
 
   _adjustResolve: null as (() => void) | null,
 
   async onLoad(options: any) {
     this.debouncedSaveDraft = debounce(() => this.saveDraft(), 500);
+
+    // 🐛 修复：todayDateStr 此前从未被赋值，义工视角"汇报日期"栏与首页快捷发布弹窗
+    // 的日期提示一直渲染为空白
+    this.setData({ todayDateStr: getTodayIsoString() });
 
     // 任务C：解析锚点聚焦参数
     // 支持 action=checkInCard 或 targetElement=checkInCard 两种参数名
@@ -370,12 +578,15 @@ Page({
     this.initStorePresetFromCache();
     this.loadSettings();
     await this.loadLastBalance();
-    this.loadAnnouncement();
     DataService.syncLocalDataToCloud();
     await this.initCurrentUserRole();
 
     const storeId = this.data.currentStoreId || 'store_haicang_001';
     this.fetchStoreSponsor(storeId);
+    // 🔗 跑马灯通知云端化：必须等 initCurrentUserRole 解析出真实 tenantId/currentStoreId
+    // 之后才能按"当前视角"发起严格互斥查询，不能像旧的本机 loadAnnouncement 那样在
+    // 角色未解析前就跑
+    this.fetchNotices();
 
     const hasDraft = await this.loadDraft();
     if (hasDraft) {
@@ -404,7 +615,23 @@ Page({
       };
       const normalizedRole = roleMap[rawRole] || 'volunteer';
       const flags = getPermissionFlags({ role: normalizedRole });
-      return { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags };
+
+      // 🌟 视角切换预览：真实角色是 super_admin 且已选择非全景视角时，展示层降级模拟
+      // 店长/财务视角；isRealSuperAdmin 保留真实值，供切换入口自身显隐判断
+      const isRealSuperAdmin = isSuperAdmin;
+      const overridden = applyRoleViewOverride(normalizedRole, {
+        currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin
+      });
+
+      return {
+        rawRole, normalizedRole, flags,
+        isVolunteer: overridden.isVolunteer,
+        isManager: overridden.isManager,
+        isFinance: overridden.isFinance,
+        isSuperAdmin: overridden.isSuperAdmin,
+        displayRole: overridden.currentUserRole,
+        isRealSuperAdmin
+      };
     };
 
     const syncStorePicker = (storeId: string, storeName: string, rawRole: string) => {
@@ -419,22 +646,25 @@ Page({
 
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
-      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags } = computeRoleState(cached.role);
+      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin } = computeRoleState(cached.role);
       const storeName = cached.storeName || this.data.shopName;
       const storeId = cached.storeId || '';
 
       this.setData({
-        currentUserRole: normalizedRole,
+        currentUserRole: displayRole,
         currentRole: rawRole,
         permissions: flags,
         isVolunteer: isVolunteer,
         isManager: isManager,
         isFinance: isFinance,
         isSuperAdmin: isSuperAdmin,
+        isRealSuperAdmin: isRealSuperAdmin,
+        currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
       });
       console.log('🚀 [Page Init] 缓存角色初始化完成, isVolunteer =', isVolunteer, ', isSuperAdmin =', isSuperAdmin);
+      this.checkComplianceNotice();
 
       syncStorePicker(storeId, storeName, rawRole);
 
@@ -449,22 +679,25 @@ Page({
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags } = computeRoleState(info.role);
+      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin } = computeRoleState(info.role);
       const storeName = info.storeName || this.data.shopName;
       const storeId = info.storeId || '';
 
       this.setData({
-        currentUserRole: normalizedRole,
+        currentUserRole: displayRole,
         currentRole: rawRole,
         permissions: flags,
         isVolunteer: isVolunteer,
         isManager: isManager,
         isFinance: isFinance,
         isSuperAdmin: isSuperAdmin,
+        isRealSuperAdmin: isRealSuperAdmin,
+        currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
       });
       console.log('✅ [Page Init] 云端角色初始化完成, isVolunteer =', isVolunteer, ', isSuperAdmin =', isSuperAdmin);
+      this.checkComplianceNotice();
 
       syncStorePicker(storeId, storeName, rawRole);
 
@@ -478,13 +711,14 @@ Page({
 
     const storeId = this.data.currentStoreId || '';
     const reportDate = this.data.reportDateRaw || '';
-    if (storeId && reportDate && this.data.permissions?.canEditBalance) {
+    if (storeId && reportDate && this.data.permissions && this.data.permissions.canEditBalance) {
       this.checkAndAcquireLock(storeId, reportDate);
     }
   },
 
   async fetchPendingAuditCount(storeId: string) {
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const db = wx.cloud.database();
       const res = await db.collection('user_roles')
         .where({ storeId: storeId, status: 'pending' })
@@ -505,13 +739,12 @@ Page({
         return;
       }
 
-      const db = wx.cloud.database();
-      // 添加 orderBy 避免全表扫描，使用 storeName 索引
-      const res = await db.collection('stores').orderBy('storeName', 'asc').limit(100).get();
-      const list = (res.data || []).map((s: any) => ({
-        storeId: s._id,
-        storeName: s.storeName || '未命名门店'
-      }));
+      // 🏢 多租户边界：门店列表通过云函数按调用者所属机构过滤后返回，
+      // 不再由前端直接全表查询 stores 集合（避免跨机构看到彼此的门店名单）
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const cloudRes = await wx.cloud.callFunction({ name: 'getStoreList' });
+      const cloudResult = cloudRes.result as any;
+      const list = (cloudResult && cloudResult.success) ? (cloudResult.list || []) : [];
       this.setData({ allStoresList: list });
 
       // 缓存到本地
@@ -524,6 +757,7 @@ Page({
 
   async fetchStoreSponsor(storeId: string) {
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await wx.cloud.callFunction({
         name: 'getStoreSponsor',
         data: { storeId }
@@ -538,6 +772,154 @@ Page({
       console.error('[fetchStoreSponsor] 查询失败:', e);
       this.setData({ currentSponsorInfo: null });
     }
+  },
+
+  // 🍽️ 首页/工作台"今日菜单"预览卡：全国总览无具体门店时不展示
+  async fetchTodayMenu() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') {
+      this.setData({ todayMenu: null, todayMenuLoaded: true });
+      return;
+    }
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({
+        name: 'manageDailyMenu',
+        data: { action: 'getByDate', storeId, dateString: todayStr }
+      });
+      const result = res.result as any;
+      const todayMenu = (result && result.success) ? result.data : null;
+      this.setData({
+        todayMenu,
+        todayMenuDishes: splitMenuTextToDishes(todayMenu ? todayMenu.menuText : ''),
+        todayMenuLoaded: true
+      });
+    } catch (e) {
+      console.error('[fetchTodayMenu] 查询失败:', e);
+      this.setData({ todayMenu: null, todayMenuDishes: [], todayMenuLoaded: true });
+    }
+  },
+
+  // 📌 首页/工作台"今日大事记"预览卡：全国总览无具体门店时不展示。取当天最新一条（同日多条时只做预览摘要）
+  // 🔗 门店日志联动：同一条记录也用来回填「今日大事记」的可编辑输入区默认值
+  // （见下方 activityText/activityImages 回填），并记下 todayActivitySourceId
+  // 供提交报表时精准 update 同一条，不重复新建。
+  async fetchTodayActivity() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') {
+      this.setData({ todayActivity: null, todayActivityLoaded: true, todayActivitySourceId: '' });
+      return;
+    }
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({
+        name: 'manageActivityLog',
+        data: { action: 'list', storeId, startDate: todayStr, endDate: todayStr, page: 1, pageSize: 1 }
+      });
+      const result = res.result as any;
+      const existing = (result && result.success && result.data && result.data.length > 0) ? result.data[0] : null;
+      this.setData({
+        todayActivity: existing,
+        todayActivityLoaded: true,
+        todayActivitySourceId: (existing && existing._id) || ''
+      });
+
+      // 🌟 仅当用户还没开始编辑（两个字段都还是空的）才回填，避免每次页面 onShow
+      // 重新拉取时覆盖掉用户正在编辑/已清空的内容——草稿箱本来就不持久化这两个
+      // 字段，所以这个判断就是唯一的保护
+      if (existing && !this.data.activityText && this.data.activityImages.length === 0) {
+        // 🛡️ activityImages 现在是纯字符串数组，但数据库里已发布记录的 images 字段
+        // 仍是 {url,thumbUrl} 对象（daily-menu/activity-log 页读它时还要用），回填时
+        // 取 img.url 摘成字符串；顺带兼容极少数已经是字符串的历史脏数据（img.url || img）
+        const rawImages = Array.isArray(existing.images) ? existing.images : [];
+        this.setData({
+          activityText: existing.content || '',
+          activityImages: rawImages.map((img: any) => (img && img.url) || img).filter((u: any) => u && typeof u === 'string')
+        });
+      }
+    } catch (e) {
+      console.error('[fetchTodayActivity] 查询失败:', e);
+      this.setData({ todayActivity: null, todayActivityLoaded: true, todayActivitySourceId: '' });
+    }
+  },
+
+  onGotoDailyMenu() {
+    wx.navigateTo({ url: '/pages/daily-menu/daily-menu' });
+  },
+
+  onGotoActivityLog() {
+    wx.navigateTo({ url: '/pages/activity-log/activity-log' });
+  },
+
+  onGotoStoreManagement() {
+    wx.navigateTo({ url: '/pages/store-management/store-management' });
+  },
+
+  // ================= 🍽️ 首页快捷发布：今日菜单 =================
+
+  // 🐛 修复"明明已选定具体门店却误触发 Toast"：this.data.currentStoreId 在角色初始化的
+  // 缓存回填路径中（onLoad 里 cached.storeId || ''）可能滞后为空，而 currentStoreName 早已
+  // 显示为具体门店名（如"海沧区雨花斋"，来自 shopName 的默认值），导致用户看着明明选了店却被拦。
+  // 这里在页面 state 为空/national 时，再回退读取全局持久化的门店选择作为兜底，尽量还原真实选择。
+  resolveEffectiveStoreId(): string {
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    const stateId = this.data.currentStoreId;
+    if (stateId && !NATIONAL_IDS.includes(stateId)) {
+      return stateId;
+    }
+
+    const stored = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
+    if (stored && !NATIONAL_IDS.includes(stored)) {
+      // 🔧 回填页面 state，避免后续图片上传路径/提交表单等仍引用滞后的空 currentStoreId
+      this.setData({ currentStoreId: stored });
+      return stored;
+    }
+
+    try {
+      const selected = getSelectedStore();
+      if (selected && selected.storeId && !NATIONAL_IDS.includes(selected.storeId)) {
+        this.setData({
+          currentStoreId: selected.storeId,
+          currentStoreName: selected.storeName || this.data.currentStoreName
+        });
+        return selected.storeId;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+
+    return stateId || '';
+  },
+
+  // 当前是否处于"全部门店/全国总览"汇总视角（真正需要弹出门店选择器的场景）
+  isNationalOverviewSelected(): boolean {
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    const storeId = this.resolveEffectiveStoreId();
+    return !storeId || NATIONAL_IDS.includes(storeId);
+  },
+
+  // 快捷发布类按钮共用的门店校验：已选定具体门店直接放行；处于全部门店/全国总览时自动拉起门店选择器。
+  // resumeAction 可选：门店选定后（onStoreChanged 触发）自动续跑一次原本被拦截的操作，无需用户再点一次。
+  ensureSpecificStoreSelected(resumeAction?: () => void): boolean {
+    if (!this.isNationalOverviewSelected()) return true;
+
+    wx.showToast({ title: '请先选择具体门店', icon: 'none' });
+    if (resumeAction) {
+      this._pendingStoreSelectAction = resumeAction;
+    }
+    const picker = this.selectComponent('#storePicker');
+    if (picker && typeof picker.onOpenSheet === 'function') {
+      picker.onOpenSheet();
+    }
+    return false;
   },
 
   _isAdminRole(): boolean {
@@ -570,6 +952,7 @@ Page({
   },
 
   _doRenew(storeId: string, dateStr: string) {
+    if (!isCloudAvailable()) return;
     wx.cloud.callFunction({
       name: 'manageDraftLock',
       data: {
@@ -608,6 +991,7 @@ Page({
   _startLockPolling(storeId: string, dateStr: string) {
     this._stopLockPolling();
     this._lockPollingTimer = setInterval(() => {
+      if (!isCloudAvailable()) return;
       wx.cloud.callFunction({
         name: 'manageDraftLock',
         data: {
@@ -640,6 +1024,7 @@ Page({
     }
 
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await wx.cloud.callFunction({
         name: 'manageDraftLock',
         data: {
@@ -684,6 +1069,7 @@ Page({
     this._stopLockPolling();
     this._lockActiveKey = '';
 
+    if (!isCloudAvailable()) return;
     wx.cloud.callFunction({
       name: 'manageDraftLock',
       data: {
@@ -710,6 +1096,7 @@ Page({
       success: async (res) => {
         if (!res.confirm) return;
         try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
           const result = await wx.cloud.callFunction({
             name: 'manageDraftLock',
             data: {
@@ -780,6 +1167,13 @@ Page({
     });
   },
 
+  // 门店列表变更（如超管刚新建了一家门店）：清缓存后重新拉取，确保列表包含新店
+  onStoreListChanged() {
+    wx.removeStorageSync('all_stores_list_cache');
+    wx.removeStorageSync('all_stores_list_cache_time');
+    this.fetchAllStoresList();
+  },
+
   onStoreChanged(e: any) {
     const detail = e.detail || {};
     const rawRole = (detail.role || detail.currentRole || wx.getStorageSync('active_role') || 'VOLUNTEER').toUpperCase();
@@ -815,12 +1209,20 @@ Page({
 
     console.log('⚡ [Role State] 重新计算后的状态:', { isVolunteer, isManager, isFinance, isSuperAdmin, normalizedRole });
 
-    // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储
+    // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储。
+    // 🛡️ 这里必须持久化真实的 normalizedRole，绝不能写入视角切换预览后的展示角色，
+    // 否则下次启动会把"店长视角预览"误当成真实身份，永久丢失超管权限。
     wx.setStorageSync('current_store_id', storeId);
     wx.setStorageSync('current_store_name', storeName);
     wx.setStorageSync('current_user_role', normalizedRole);
     wx.setStorageSync('active_store_id', storeId);
     wx.setStorageSync('active_role', normalizedRole);
+
+    const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
+    const isRealSuperAdmin = isSuperAdmin;
+    const overridden = applyRoleViewOverride(normalizedRole, {
+      currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin
+    });
 
     this.setData({
       currentStoreId: storeId,
@@ -828,14 +1230,25 @@ Page({
       // 🔑 关键修复：同步更新 shopName 字段，确保 loadBalanceForDate 等函数使用新门店名
       shopName: storeName,
       currentRole: rawRole,
-      currentUserRole: normalizedRole,
-      isVolunteer: isVolunteer,
-      isManager: isManager,
-      isFinance: isFinance,
-      isSuperAdmin: isSuperAdmin,
+      currentUserRole: overridden.currentUserRole,
+      isRealSuperAdmin: isRealSuperAdmin,
+      currentViewMode: getPreviewViewMode(),
+      isAllStoresView: isAllStoresView,
+      isVolunteer: overridden.isVolunteer,
+      isManager: overridden.isManager,
+      isFinance: overridden.isFinance,
+      isSuperAdmin: overridden.isSuperAdmin,
       permissions: flags
     }, () => {
       console.log('✅ [Page Data Set] 页面 UI 状态已更新，当前 isVolunteer =', this.data.isVolunteer);
+
+      // 🏪 门店选择器引导闭环：若此前有操作因"未选定具体门店"被拦截（如点击【发布今日食谱】），
+      // 且刚选定的确实是具体门店（非全部门店/全国总览），自动续跑一次原操作，无需用户再点一次
+      if (this._pendingStoreSelectAction && !this.isNationalOverviewSelected()) {
+        const resumeAction = this._pendingStoreSelectAction;
+        this._pendingStoreSelectAction = null;
+        setTimeout(() => resumeAction(), 200);
+      }
     });
 
     wx.showToast({
@@ -844,6 +1257,9 @@ Page({
     });
 
     this.fetchStoreSponsor(storeId);
+    this.fetchTodayMenu();
+    this.fetchTodayActivity();
+    this.fetchNotices();
 
     // 🌟 切店后立即重新加载新门店的看板数据与义工统计
     this.loadBalanceForDate(this.data.reportDate || this.data.reportDateValue || '');
@@ -916,16 +1332,75 @@ Page({
     });
   },
 
-  onNavigateToMine() {
-    if (this.isNavigating) return;
-    this.isNavigating = true;
+  // 🌟 视角切换预览提示条的快捷入口：跳转个人中心切回超级管理员全景
+  onNavigateToProfile() {
+    wx.switchTab({ url: '/pages/profile/profile' });
+  },
 
-    wx.navigateTo({
-      url: '/pages/mine/mine',
-      fail: () => {
-        this.isNavigating = false;
+  // 左侧功能导航抽屉：打开
+  onOpenSideDrawer() {
+    const drawer = this.selectComponent('#sideDrawer');
+    if (drawer && drawer.open) {
+      drawer.open();
+    }
+  },
+
+  // 左侧功能导航抽屉：点击项分发到已有的对应方法，抽屉组件本身不持有业务逻辑
+  onSideDrawerAction(e: any) {
+    const type = e.detail && e.detail.type;
+    switch (type) {
+      case 'record':
+        wx.pageScrollTo({ scrollTop: 0, duration: 300 });
+        break;
+      case 'template':
+        this._openExpenseTemplateModal('daily');
+        break;
+      case 'audit':
+        this.onOpenAuditModal();
+        break;
+      case 'statistics':
+        this.goToStatistics();
+        break;
+      case 'storeManagement':
+        this.onGotoStoreManagement();
+        break;
+      default:
+        break;
+    }
+  },
+
+  // 🛡️ 义工绑定审核弹窗的空状态入口专用：全国总览视角下，海报若仍按 storeId='all' 生成，
+  // 招募到的义工无法归属到具体门店，与"审核该门店义工绑定"的场景语义冲突，故此入口
+  // 要求先切到具体门店。首页其余入口（qa-promo-item 通用邀请海报）保留原有全国海报能力，不受影响。
+  onGenerateStorePosterFromAudit() {
+    if (this.isNationalOverviewSelected()) {
+      wx.showToast({ title: '请先选择具体的门店，再生成该门店的专属海报', icon: 'none', duration: 2500 });
+      return;
+    }
+    this.onGenerateStorePoster();
+  },
+
+  // 🌟 工作台宫格第 4 格"门店推广与邀请"：合并原先并排的两个推广入口（海报/邀请码）为一个菜单
+  onOpenPromoActionSheet() {
+    wx.showActionSheet({
+      itemList: ['🖼️ 生成门店邀请海报', '🔑 生成邀请码'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          this.onGenerateStorePoster();
+        } else if (res.tapIndex === 1) {
+          this.onOpenGenCodeModal();
+        }
       }
     });
+  },
+
+  // 🌟 财务视角的场景化邀请入口：复用同一套 generateInviteCode 弹窗（无需新建任何生成逻辑），
+  // 但跳过"生成门店邀请海报"这个偏对外宣传的选项——直接打开邀请码弹窗，并把默认身份
+  // 从管理端惯用的 MANAGER 改成 FINANCE，更贴近"财务找财务协同对账"这个具体场景；
+  // 用户仍可以在弹窗里的身份单选里手动切回"门店店长"
+  onOpenFinanceInviteMenu() {
+    this.onOpenGenCodeModal();
+    this.setData({ genTargetRole: 'FINANCE' });
   },
 
   async onGenerateStorePoster() {
@@ -937,11 +1412,19 @@ Page({
     wx.showLoading({ title: '正在合成精美海报...', mask: true });
 
     try {
-      const storeId = this.data.currentStoreId || 'store_haicang_001';
-      const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
+      // 🌐 全国总览视角：二维码扫码参数统一编码为规范化的 storeId=all（而非
+      // 'national_overview'/'ALL_STORES' 等内部各处不一致的哨兵值），配合
+      // fetchStoreInfoAndPromptApply 对 'all' 的专门识别逻辑；海报标题也改为
+      // "全国雨花爱心团队邀请"，不再显示具体门店名
+      const isNationalContext = this.isNationalOverviewSelected();
+      const storeId = isNationalContext ? 'all' : (this.data.currentStoreId || 'store_haicang_001');
+      const storeName = isNationalContext
+        ? '全国雨花爱心团队邀请'
+        : (this.data.currentStoreName || this.data.shopName || '海沧区雨花斋');
 
       let qrCodeLocalPath = '';
       try {
+        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
         const qrRes = await wx.cloud.callFunction({
           name: 'getStoreQRCode',
           data: { storeId, storeName }
@@ -1165,19 +1648,55 @@ Page({
   },
 
   // 解析食材/支出文本框中的实际支出总额，自动过滤小票合计、总计、虚线等总结行，避免重复相加
+  //
+  // 🛡️ "锚点行"设计：一张有优惠/运费调整的小票，逐条商品原价加总（如 ¥69.79）天然会比
+  // 实付金额（如 ¥57.30）偏高——如果不做处理，把商品明细行直接原样相加进「今日开餐支出」，
+  // 就会把优惠前的原价当成真实支出，比店长实际付的钱还多。OCR 自动填单时（见 onOcrAutoFill
+  // 等）会在每张小票的商品明细最后追加一行"实付合计：¥xx.xx"（数值来自云函数返回的、经过交叉
+  // 核对的 actual_pay），本函数据此把"这一张小票"当成一个块：遇到锚点行前累加的商品行金额
+  // 全部作废，改用锚点行的金额；没有锚点行的普通手动记账文本则完全不受影响，行为与之前一致。
   calculateTodayExpenseFromText(text: string): number {
     if (!text || !text.trim()) return 0;
 
+    const ANCHOR_REGEX = /实付合计|实付金额|实付|在线支付/;
+    const SKIP_REGEX = /小票合计|合计|总计|小计|加工费|优惠券|商品优惠|优惠|总金额/;
+
     const lines = text.split('\n');
     let total = 0;
+    let blockSum = 0;
+    let blockAnchored = false;
+
+    const closeBlock = () => {
+      total += blockSum;
+      blockSum = 0;
+      blockAnchored = false;
+    };
 
     lines.forEach(line => {
       const trimmed = line.trim();
-      // 核心防重守卫：跳过含有合计、虚线等总结行
+
+      if (!trimmed) {
+        // 空行代表一张小票/一笔记录的分隔边界，当前块到此结束
+        closeBlock();
+        return;
+      }
+
+      if (ANCHOR_REGEX.test(trimmed)) {
+        const match = trimmed.match(/[¥￥]\s*(\d+\.?\d*)|(\d+\.?\d*)\s*元/);
+        if (match) {
+          const amount = parseFloat(match[1] || match[2] || '0');
+          if (!isNaN(amount)) {
+            blockSum = amount; // 锚点值整体覆盖前面累加的商品行，而不是叠加
+            blockAnchored = true;
+          }
+        }
+        return;
+      }
+
+      // 🛡️ 核心防重守卫：跳过合计/汇总/费用类行，避免把"小票小计/加工费/优惠券"这类
+      // 非菜品金额当成又一笔支出重复累加进去
       if (
-        trimmed.includes('小票合计') ||
-        trimmed.includes('合计') ||
-        trimmed.includes('总计') ||
+        SKIP_REGEX.test(trimmed) ||
         trimmed.includes('----') ||
         trimmed.includes('====') ||
         trimmed.startsWith('----------------')
@@ -1185,17 +1704,110 @@ Page({
         return;
       }
 
-      // 匹配金额，优先提取 ¥ 或 元 后面的数字
+      // 锚点已经给出这张小票的权威实付金额，后面残留的商品行不再重复累加
+      if (blockAnchored) return;
+
+      // 匹配金额，优先提取 ¥ 或 元 后面的数字；每行只取第一个匹配，避免同一行内
+      // 出现多个数字（如注释里的单价/数量说明）被误当成多笔独立支出重复累加
       const match = trimmed.match(/[¥￥]\s*(\d+\.?\d*)|(\d+\.?\d*)\s*元/);
       if (match) {
         const amount = parseFloat(match[1] || match[2] || '0');
         if (!isNaN(amount)) {
-          total += amount;
+          blockSum += amount;
         }
       }
     });
 
+    closeBlock();
     return parseFloat(total.toFixed(2));
+  },
+
+  // 🌟 大额专项支出：fixedExpenseItems -> fixedExpenseText 单向派生。fixedExpenseItems
+  // 是本行的唯一编辑入口（逐条添加/改金额/删除/挂独立凭证），每次变动都调这个方法
+  // 重新拼出 fixedExpenseText，格式与高频模板插入的格式一致（`名称：¥金额`），
+  // 保证 calculateTodayExpenseFromText 能正确计入总额；下游（提交/草稿/历史/海报）
+  // 继续只读 fixedExpenseText，不需要感知 fixedExpenseItems 的存在。
+  regenerateFixedExpenseText() {
+    const text = this.data.fixedExpenseItems
+      .map(item => `${item.name}：¥${(parseFloat(item.amount) || 0).toFixed(2)}`)
+      .join('\n');
+    this.setData({ fixedExpenseText: text });
+    this.updateRealTimeBalance();
+    this.debouncedSaveDraft();
+  },
+
+  // 反向解析：仅用于从草稿/历史记录恢复出的旧 fixedExpenseText（用户手打或本功能上线前
+  // 提交的记录）重建 fixedExpenseItems 列表用于展示；恢复出的条目天然没有独立凭证图片
+  // （老数据本来就没有这个概念），这是预期行为，不是丢数据。
+  parseFixedExpenseTextToItems(text: string): { _key: string; name: string; amount: string; independent_image_urls: string[]; expanded: boolean }[] {
+    if (!text || !String(text).trim()) return [];
+
+    return String(text)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map((line, idx) => {
+        const match = line.match(/[¥￥]\s*(\d+\.?\d*)|(\d+\.?\d*)\s*元/);
+        const amount = match ? parseFloat(match[1] || match[2] || '0') : 0;
+        const name = match ? line.slice(0, line.indexOf(match[0])).replace(/[:：]\s*$/, '').trim() || line : line;
+        return {
+          _key: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+          name: name || `专项支出${idx + 1}`,
+          amount: (amount || 0).toFixed(2),
+          independent_image_urls: [] as string[],
+          expanded: false
+        };
+      });
+  },
+
+  // 🌟 唯一权威的"今日财务"计算入口：yesterdayBalance / todayIncome / todayExpense / todayBalance
+  // 全部由这一个函数统一算出，页面上任何展示这四个数字的地方（顶部算式校验、结果预览、
+  // 海报预览的"今日实时总结余"等）都必须调用它，绝不允许各自维护一份相似但不同的计算逻辑——
+  // 这正是此前"顶部算式校验 4027.83+0.00-61.71=3966.12"与"底部总结余 4027.83-77.69=3950.14"
+  // 两套数字对不上的根因：updateRealTimeBalance 用 expenses+dailyExpenseText+fixedExpenseText
+  // 三项相加，提交保存时用 dailyExpenseText+fixedExpenseText 两项，而海报生成 onGeneratePoster
+  // 更是完全只读取从未在界面上暴露过输入框的旧字段 expenses、对 dailyExpenseText/fixedExpenseText
+  // 视而不见——三处各算各的，自然三个数字互不相同。
+  computeTodayFinancials(): { yesterdayBalance: number; todayIncome: number; todayExpense: number; todayBalance: number; formulaString: string } {
+    const { yesterdayBalance, otherDonation, parseResult, dailyExpenseText, fixedExpenseText } = this.data;
+
+    const yesterdayBalanceNum = parseFloat(yesterdayBalance) || 0;
+    const otherDonationNum = parseFloat(otherDonation) || 0;
+    const donationsTotal = (parseResult && parseResult.totalAmount) || 0;
+    const todayIncome = round2(otherDonationNum + donationsTotal);
+
+    const dailyExpenseNum = this.calculateTodayExpenseFromText(dailyExpenseText);
+    const fixedExpenseNum = this.calculateTodayExpenseFromText(fixedExpenseText);
+    const todayExpense = round2(dailyExpenseNum + fixedExpenseNum);
+
+    const todayBalance = round2(yesterdayBalanceNum + todayIncome - todayExpense);
+
+    // 🌟 算式校验文案也在这里统一生成，页面上任何展示"昨日结余+今日汇入-今日支出=今日结余"
+    // 这行文字的地方都必须直接用这个 formulaString，禁止再各自用模板字符串手写一遍——
+    // 数字口径统一了，如果拼接文案的地方各写各的，仍然可能因为四舍五入方式不同而对不上。
+    const formulaString = `${yesterdayBalanceNum.toFixed(2)} + ${todayIncome.toFixed(2)} - ${todayExpense.toFixed(2)} = ${todayBalance.toFixed(2)}`;
+
+    return { yesterdayBalance: yesterdayBalanceNum, todayIncome, todayExpense, todayBalance, formulaString };
+  },
+
+  // 🌟 OCR 确认弹窗里的"确认后预计结余"预览：弹窗里的小票金额此时还没合并进
+  // dailyExpenseText/fixedExpenseText（要点击"自动填入"才会真正写入），所以不能直接读
+  // computeTodayFinancials() 的结果——但计算口径必须完全复用它，只是在它算出的"已有支出"
+  // 基础上，把这批还未确认的小票金额（ocrTotalAmount）加上去做一次假设性预览，
+  // 绝不能自己另起一套 yesterdayBalance+todayIncome-todayExpense 的算式，
+  // 否则又会变成本次要杜绝的"多处各算各的"问题。
+  updateOcrConfirmPreview() {
+    const { yesterdayBalance: yesterdayBalanceNum, todayIncome, todayExpense: existingExpense } = this.computeTodayFinancials();
+    const pendingOcrTotal = parseFloat(this.data.ocrTotalAmount) || 0;
+    const previewExpense = round2(existingExpense + pendingOcrTotal);
+    const previewBalance = round2(yesterdayBalanceNum + todayIncome - previewExpense);
+    const previewFormula = `${yesterdayBalanceNum.toFixed(2)} + ${todayIncome.toFixed(2)} - ${previewExpense.toFixed(2)} = ${previewBalance.toFixed(2)}`;
+
+    this.setData({
+      ocrPreviewExpense: previewExpense.toFixed(2),
+      ocrPreviewBalance: previewBalance.toFixed(2),
+      ocrPreviewFormula: previewFormula
+    });
   },
 
   parseExpenseTextToItems(textStr: string, fallbackAmount: number, dateStr: string): any[] {
@@ -1265,6 +1877,18 @@ Page({
     }
 
     return parsedResults;
+  },
+
+  // 输入即解析：食材与杂购文本框下方的实时反馈条，复用 parseExpenseTextToItems
+  // 的逐条解析逻辑，fallbackAmount 传 0 避免整段未匹配时被当成一条兜底记录，
+  // 保证「已解析 X 项」如实反映能识别出金额的行数。
+  updateDailyExpenseParsePreview(text: string) {
+    const items = this.parseExpenseTextToItems(text, 0, '');
+    const total = items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || 0), 0);
+    this.setData({
+      dailyExpenseParseCount: items.length,
+      dailyExpenseParseAmount: total.toFixed(2)
+    });
   },
 
   saveDraft() {
@@ -1347,12 +1971,17 @@ Page({
         hasDraft: true
       });
 
+      // 🌟 大额专项：草稿只存了派生出的 fixedExpenseText（不含独立凭证图片，与
+      // receiptImages 同样不进草稿的既有行为一致），恢复时反解析出条目供展示/继续编辑
+      this.setData({ fixedExpenseItems: this.parseFixedExpenseTextToItems(draftData.fixedExpenseText || '') });
+
       if (draftData.allDonations) {
         this.updateParseResult(draftData.allDonations);
       }
       if (draftData.materialsInput) {
         this.updateMaterialsParse(draftData.materialsInput);
       }
+      this.updateDailyExpenseParsePreview(draftData.dailyExpenseText || '');
 
       await this.loadBalanceForDate(dateStr);
       this.updateRealTimeBalance();
@@ -1405,6 +2034,8 @@ Page({
         materialsInput: draftData.materialsInput || '',
         hasDraft: true
       });
+
+      this.setData({ fixedExpenseItems: this.parseFixedExpenseTextToItems(draftData.fixedExpenseText || '') });
 
       if (draftData.allDonations) {
         this.updateParseResult(draftData.allDonations);
@@ -1530,15 +2161,38 @@ Page({
   // === 扫码绑定与义工审核 ===
 
   async fetchStoreInfoAndPromptApply(storeId: string) {
+    // 🐛 修复：扫描"全国总览"邀请码（scene=s=all）时，此前会去查 stores 表里
+    // 一个根本不存在的 _id='all' 文档，查询必然失败落入 catch，再把"全国总览"
+    // 当成一个真实门店预填进申请表单——用户可以直接提交一条 storeId='all' 的
+    // 无效申请，审批时根本无法归属到任何真实门店。
+    // 现在改为：识别到全国总览哨兵值就不预填任何门店，强制弹出门店选择器，
+    // 用户必须在下拉列表里选定一个具体门店后（走 onSubmitRoleApply 已有的
+    // "未选门店禁止提交"校验）才能提交申请。
+    const NATIONAL_SCENE_IDS = ['all', 'ALL', 'national_overview', 'ALL_STORES'];
+    if (NATIONAL_SCENE_IDS.includes(storeId)) {
+      this.setData({
+        'applyForm.storeId': '',
+        'applyForm.storeName': '',
+        'applyForm.storeSelectionType': 'existing',
+        'applyForm.customStoreName': '',
+        showApplyModal: true
+      });
+      if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
+        this.fetchAllStoresList();
+      }
+      wx.showToast({ title: '该邀请码为全国通用邀请，请选择您所属的具体门店', icon: 'none', duration: 3000 });
+      return;
+    }
+
     wx.showLoading({ title: '正在获取门店信息...' });
-    
+
     const storeNameMap: Record<string, string> = {
       'store_haicang': '海沧区雨花斋',
-      'store_haicang_001': '海沧区雨花斋',
-      'all': '全国总览'
+      'store_haicang_001': '海沧区雨花斋'
     };
 
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const db = wx.cloud.database();
       const res = await db.collection('stores').doc(storeId).get();
       wx.hideLoading();
@@ -1547,6 +2201,8 @@ Page({
         this.setData({
           'applyForm.storeId': storeId,
           'applyForm.storeName': (res.data as any).storeName || '未知门店',
+          'applyForm.storeSelectionType': 'existing',
+          'applyForm.customStoreName': '',
           showApplyModal: true
         });
       } else {
@@ -1558,6 +2214,8 @@ Page({
       this.setData({
         'applyForm.storeId': storeId,
         'applyForm.storeName': fallbackName,
+        'applyForm.storeSelectionType': 'existing',
+        'applyForm.customStoreName': '',
         showApplyModal: true
       });
     }
@@ -1568,8 +2226,14 @@ Page({
     this.setData({
       'applyForm.storeId': this.data.currentStoreId,
       'applyForm.storeName': storeName,
+      'applyForm.storeSelectionType': 'existing',
+      'applyForm.customStoreName': '',
       showApplyModal: true
     });
+    // 门店下拉列表若尚未加载，补拉一次（已由 getStoreList 云函数按本机构 tenantId 过滤）
+    if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
+      this.fetchAllStoresList();
+    }
   },
 
   onApplyRealNameInput(e: any) {
@@ -1584,12 +2248,38 @@ Page({
     this.setData({ 'applyForm.requestedRole': e.detail.value });
   },
 
+  // 🏢 切换"选择已有门店" / "新建门店"两种申请模式
+  onSwitchApplyStoreMode(e: any) {
+    const mode = e.currentTarget.dataset.mode as 'existing' | 'custom';
+    if (mode === this.data.applyForm.storeSelectionType) return;
+    this.setData({
+      'applyForm.storeSelectionType': mode,
+      'applyForm.storeId': '',
+      'applyForm.storeName': '',
+      'applyForm.customStoreName': ''
+    });
+  },
+
+  onSelectApplyStore(e: any) {
+    const index = parseInt(e.detail.value, 10);
+    const store = (this.data.allStoresList || [])[index];
+    if (!store) return;
+    this.setData({
+      'applyForm.storeId': store.storeId,
+      'applyForm.storeName': store.storeName
+    });
+  },
+
+  onCustomStoreNameInput(e: any) {
+    this.setData({ 'applyForm.customStoreName': e.detail.value });
+  },
+
   onCloseApplyModal() {
     this.setData({ showApplyModal: false });
   },
 
   async onSubmitRoleApply() {
-    const { storeId, storeName, realName, phone, requestedRole } = this.data.applyForm;
+    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName } = this.data.applyForm;
 
     if (!realName || !realName.trim()) {
       wx.showToast({ title: '请填写真实姓名', icon: 'none' });
@@ -1599,17 +2289,35 @@ Page({
       wx.showToast({ title: '请填写手机号', icon: 'none' });
       return;
     }
+    if (storeSelectionType === 'custom') {
+      if (!customStoreName || !customStoreName.trim()) {
+        wx.showToast({ title: '请填写新门店名称', icon: 'none' });
+        return;
+      }
+    } else if (!storeId) {
+      wx.showToast({ title: '请选择一个门店', icon: 'none' });
+      return;
+    }
 
     wx.showLoading({ title: '提交申请中...', mask: true });
 
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const db = wx.cloud.database();
+      // 🏢 多租户：随申请一并带上 tenantId，供审批云函数做机构边界校验与新建门店归属判定
+      const cachedRoleInfoForTenant = AuthService.getCachedRoleInfo();
+      const tenantId = (cachedRoleInfoForTenant && cachedRoleInfoForTenant.tenantId) || '';
+      const displayStoreName = storeSelectionType === 'custom' ? customStoreName.trim() : storeName;
+
       await db.collection('user_roles').add({
         data: {
           realName: realName.trim(),
           phone: phone.trim(),
-          storeId,
-          storeName,
+          storeId: storeSelectionType === 'custom' ? '' : storeId,
+          storeName: displayStoreName,
+          storeSelectionType,
+          customStoreName: storeSelectionType === 'custom' ? customStoreName.trim() : '',
+          tenantId,
           requestedRole,
           role: 'volunteer',
           status: 'pending',
@@ -1622,7 +2330,9 @@ Page({
 
       wx.showModal({
         title: '申请已提交',
-        content: `您已成功申请加入【${storeName}】，请联系店长或财务负责人完成身份审核！`,
+        content: storeSelectionType === 'custom'
+          ? `您已成功申请加入新门店【${displayStoreName}】，待超级管理员审核通过后将自动建店并完成身份审核！`
+          : `您已成功申请加入【${displayStoreName}】，请联系店长或财务负责人完成身份审核！`,
         showCancel: false,
         confirmText: '我知道了'
       });
@@ -1638,7 +2348,9 @@ Page({
   async onOpenAuditModal() {
     this.setData({
       showAuditModal: true,
-      auditActiveTab: 'pending'
+      auditActiveTab: 'pending',
+      // 🌐 全国总览 vs 单店视角：决定底部按钮文案与空状态引导语
+      auditIsNationalView: this.isNationalOverviewSelected()
     });
     await this.fetchPendingAuditList();
   },
@@ -1649,15 +2361,42 @@ Page({
 
   // ================= 🔑 生成动态邀请码 =================
   onOpenGenCodeModal() {
-    const storeList = this.data.allStoresList || [];
-    const firstStore = storeList.length > 0 ? storeList[0] : null;
-    
-    this.setData({ 
-      showGenCodeModal: true, 
+    // 🏢 过滤掉"全国总览"等虚拟条目，picker 只应展示本机构下的真实门店
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    const storeOptions = (this.data.allStoresList || []).filter((s: any) =>
+      s && s.storeName !== '全国总览' && !NATIONAL_IDS.includes(s.storeId)
+    );
+
+    const currentIsRealStore = this.data.currentStoreId && !NATIONAL_IDS.includes(this.data.currentStoreId);
+    const currentInOptions = currentIsRealStore
+      ? storeOptions.find((s: any) => s.storeId === this.data.currentStoreId)
+      : null;
+
+    // 默认选中顶部选择器中的真实门店；若当前处于"全国总览"或压根没有门店，默认切到手动输入
+    let mode: 'existing' | 'custom' = 'custom';
+    let defaultStoreId = '';
+    let defaultStoreName = '';
+
+    if (currentInOptions) {
+      mode = 'existing';
+      defaultStoreId = currentInOptions.storeId;
+      defaultStoreName = currentInOptions.storeName;
+    } else if (storeOptions.length > 0) {
+      mode = 'existing';
+      defaultStoreId = storeOptions[0].storeId;
+      defaultStoreName = storeOptions[0].storeName;
+    }
+
+    this.setData({
+      showGenCodeModal: true,
       generatedCode: '',
+      isGeneratingInviteCode: false,
       genTargetRole: 'MANAGER',
-      targetGenStoreId: firstStore ? firstStore.storeId : this.data.currentStoreId || '',
-      targetGenStoreName: firstStore ? firstStore.storeName : this.data.currentStoreName || '海沧区雨花斋'
+      genStoreOptions: storeOptions,
+      genStoreSelectionType: mode,
+      genCustomStoreName: '',
+      targetGenStoreId: mode === 'existing' ? defaultStoreId : '',
+      targetGenStoreName: mode === 'existing' ? defaultStoreName : ''
     });
   },
 
@@ -1665,84 +2404,6 @@ Page({
     this.setData({ showGenCodeModal: false });
   },
 
-  onOpenDevClearModal() {
-    this.setData({ showDevClearModal: true, clearConfirmInput: '' });
-  },
-
-  onCloseDevClearModal() {
-    this.setData({ showDevClearModal: false });
-  },
-
-  onDevOptionChange(e: any) {
-    const values = e.detail.value;
-    this.setData({
-      clearOptions: {
-        reports: values.includes('REPORTS'),
-        requests: values.includes('REQUESTS'),
-        cache: values.includes('CACHE')
-      }
-    });
-  },
-
-  onClearInput(e: any) {
-    this.setData({ clearConfirmInput: e.detail.value.trim() });
-  },
-
-  async onExecuteDevClear() {
-    if (this.data.clearConfirmInput !== 'CLEAR') {
-      wx.showToast({ title: '请输入大写 CLEAR 确认', icon: 'none' });
-      return;
-    }
-
-    wx.showLoading({ title: '全量环境清洗中...' });
-    const opts = this.data.clearOptions;
-
-    try {
-      if (opts.reports || opts.requests) {
-        await wx.cloud.callFunction({
-          name: 'cleanDevData',
-          data: {
-            clearReports: opts.reports,
-            clearRequests: opts.requests,
-            clearInvites: opts.requests
-          }
-        });
-      }
-
-      if (opts.cache) {
-        wx.removeStorageSync('my_authorized_roles');
-        wx.removeStorageSync('current_store_id');
-        wx.removeStorageSync('current_user_role');
-      }
-
-      wx.hideLoading();
-      this.setData({ showDevClearModal: false });
-
-      wx.showModal({
-        title: '🎉 测试数据已全量清洗',
-        content: '云端多账号测试数据与本地缓存已彻底归零，环境已恢复纯净。',
-        showCancel: false,
-        confirmText: '重启应用',
-        success: () => {
-          this.isNavigating = true;
-          setTimeout(() => {
-            wx.reLaunch({
-              url: '/pages/index/index',
-              fail: (err) => {
-                console.error('重启失败', err);
-                this.isNavigating = false;
-              }
-            });
-          }, 100);
-        }
-      });
-
-    } catch (err) {
-      wx.hideLoading();
-      console.error('清洗失败：', err);
-      wx.showToast({ title: '云函数清洗失败，请检查是否部署', icon: 'none' });
-    }
-  },
 
   onSelectGenRole(e: any) {
     this.setData({ genTargetRole: e.currentTarget.dataset.role, generatedCode: '' });
@@ -1750,7 +2411,7 @@ Page({
 
   onSelectGenStore(e: any) {
     const index = e.detail.value;
-    const selected = (this.data.allStoresList || [])[index];
+    const selected = (this.data.genStoreOptions || [])[index];
     if (selected) {
       this.setData({
         targetGenStoreId: selected.storeId,
@@ -1760,48 +2421,124 @@ Page({
     }
   },
 
+  // 🏢 切换"下拉选择已有门店" / "手动输入新门店名称"
+  onSwitchGenStoreMode(e: any) {
+    const mode = e.currentTarget.dataset.mode as 'existing' | 'custom';
+    if (mode === this.data.genStoreSelectionType) return;
+
+    if (mode === 'existing') {
+      const first = (this.data.genStoreOptions || [])[0];
+      this.setData({
+        genStoreSelectionType: mode,
+        targetGenStoreId: first ? first.storeId : '',
+        targetGenStoreName: first ? first.storeName : '',
+        genCustomStoreName: '',
+        generatedCode: ''
+      });
+    } else {
+      this.setData({
+        genStoreSelectionType: mode,
+        targetGenStoreId: '',
+        targetGenStoreName: '',
+        genCustomStoreName: '',
+        generatedCode: ''
+      });
+    }
+  },
+
+  onGenCustomStoreNameInput(e: any) {
+    this.setData({
+      genCustomStoreName: e.detail.value,
+      targetGenStoreName: e.detail.value,
+      generatedCode: ''
+    });
+  },
+
   async onGenerateInviteCode() {
-    const storeId = this.data.targetGenStoreId;
-    const storeName = this.data.targetGenStoreName;
+    const isCustom = this.data.genStoreSelectionType === 'custom';
+    const storeId = isCustom ? '' : this.data.targetGenStoreId;
+    const storeName = isCustom ? this.data.genCustomStoreName.trim() : this.data.targetGenStoreName;
     const role = this.data.genTargetRole;
 
-    if (!storeId) {
+    // 🛡️ 修复此前误报"请先选择目标门店"的 Bug：过去仅校验 storeId 是否为空，
+    // 手动输入新门店时 storeId 天然为空，导致永远无法通过校验；现改为校验门店名称，
+    // 且不再要求 storeId（新门店场景下门店尚未建立，本就没有 _id）
+    if (!storeName) {
+      wx.showToast({ title: isCustom ? '请输入新门店名称' : '请先选择目标门店', icon: 'none' });
+      return;
+    }
+    if (storeName === '全国总览') {
+      wx.showToast({ title: '不能为"全国总览"生成邀请码，请选择或输入具体门店', icon: 'none' });
+      return;
+    }
+    if (!isCustom && !storeId) {
       wx.showToast({ title: '请先选择目标门店', icon: 'none' });
       return;
     }
 
+    if (this.data.isGeneratingInviteCode) return;
+    this.setData({ isGeneratingInviteCode: true });
+
     const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    wx.showLoading({ title: '邀请码安全生成中...' });
+    wx.showLoading({ title: '邀请码安全生成中...', mask: true });
 
+    let dbWriteOk = true;
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const db = wx.cloud.database();
+      const cachedRoleInfoForTenant = AuthService.getCachedRoleInfo();
+      const tenantId = (cachedRoleInfoForTenant && cachedRoleInfoForTenant.tenantId) || '';
+
       await db.collection('store_invites').add({
         data: {
           inviteCode: randomCode,
           storeId: storeId,
           storeName: storeName,
           role: role,
+          // 🏢 双模式门店选择：与角色申请表单的字段命名保持一致
+          storeSelectionType: isCustom ? 'custom' : 'existing',
+          targetStoreId: storeId,
+          targetStoreName: storeName,
+          tenantId,
           isUsed: false,
           createdAt: db.serverDate(),
           creatorOpenId: wx.getStorageSync('my_openid') || 'ADMIN'
         }
       });
-
-      wx.hideLoading();
-      this.setData({ generatedCode: randomCode });
-      wx.showToast({ title: '生成成功', icon: 'success' });
     } catch (err) {
-      wx.hideLoading();
+      dbWriteOk = false;
       console.warn('⚠️ [GenCode] 云端写入失败，启用离线模式:', err);
-      this.setData({ generatedCode: randomCode });
-      wx.showToast({ title: '邀请码生成成功(离线模式)', icon: 'none' });
     }
+
+    wx.hideLoading();
+
+    // 🌟 一步到位：生成成功后直接复制邀请文案到剪贴板并关闭弹窗，不再需要用户
+    // 先看到裸邀请码、再点第二个按钮才真正完成复制——两步合一步，减少一次多余点击
+    const roleName = role === 'FINANCE' ? '财务' : '店长';
+    const copyText = `🌸【雨花爱心餐报助手】\n诚邀您加入【${storeName}】！您的专属【${roleName}】激活码为：${randomCode} 。请打开小程序，选择该门店并输入此码激活绑定。感恩您的加入！`;
+
+    wx.setClipboardData({
+      data: copyText,
+      success: () => {
+        this.setData({ isGeneratingInviteCode: false, showGenCodeModal: false, generatedCode: '' });
+        wx.showToast({
+          title: dbWriteOk ? '邀请码/邀请链接已成功复制，请发送给对应义工' : '邀请码已复制（离线模式），请发送给对应义工',
+          icon: 'none',
+          duration: 2500
+        });
+      },
+      fail: () => {
+        // 自动复制失败：不关闭弹窗，把码留在结果区，让用户点一下手动复制（见 onCopyGeneratedCode）
+        this.setData({ isGeneratingInviteCode: false, generatedCode: randomCode });
+        wx.showToast({ title: '自动复制失败，请点击邀请码手动复制', icon: 'none', duration: 2500 });
+      }
+    });
   },
 
   onCopyGeneratedCode() {
     const roleName = this.data.genTargetRole === 'FINANCE' ? '财务' : '店长';
-    const copyText = `🌸【雨花爱心餐报助手】\n恭请您护持【${this.data.targetGenStoreName || '雨花斋'}】！您的专属【${roleName}】激活码为：${this.data.generatedCode} 。请打开小程序，选择该门店并输入此码激活绑定。合十感恩！`;
+    const copyText = `🌸【雨花爱心餐报助手】\n诚邀您加入【${this.data.targetGenStoreName || '雨花斋'}】！您的专属【${roleName}】激活码为：${this.data.generatedCode} 。请打开小程序，选择该门店并输入此码激活绑定。感恩您的加入！`;
 
     wx.setClipboardData({
       data: copyText,
@@ -1823,13 +2560,23 @@ Page({
   async fetchPendingAuditList() {
     try {
       const roleInfo = AuthService.getCachedRoleInfo();
-      const storeId = roleInfo?.storeId || '';
-      const storeName = roleInfo?.storeName || this.data.shopName;
+      const storeId = (roleInfo && roleInfo.storeId) || '';
+      const storeName = (roleInfo && roleInfo.storeName) || this.data.shopName;
+      const isSuperAdmin = (roleInfo && roleInfo.role) === 'super_admin';
+      const tenantId = (roleInfo && roleInfo.tenantId) || '';
 
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const db = wx.cloud.database();
 
       let query: any;
-      if (storeId) {
+      if (isSuperAdmin && tenantId) {
+        // 🏢 超管按机构维度查看待审核申请，含"新建门店"申请（此时记录 storeId 为空，
+        // 若仍按 storeId/storeName 过滤会永远查不到这类申请）
+        query = db.collection('user_roles').where({
+          status: 'pending',
+          tenantId: tenantId
+        });
+      } else if (storeId) {
         query = db.collection('user_roles').where({
           status: 'pending',
           storeId: storeId
@@ -1859,9 +2606,10 @@ Page({
     wx.showLoading({ title: '加载已绑定列表...' });
     try {
       const roleInfo = AuthService.getCachedRoleInfo();
-      const storeId = roleInfo?.storeId || '';
-      const storeName = roleInfo?.storeName || this.data.shopName;
+      const storeId = (roleInfo && roleInfo.storeId) || '';
+      const storeName = (roleInfo && roleInfo.storeName) || this.data.shopName;
 
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const db = wx.cloud.database();
 
       let query: any;
@@ -1918,15 +2666,17 @@ Page({
       return;
     }
 
-    const storeId = applyItem.storeId;
     const loadingTitle = action === 'approve' ? '正在授权...' : '正在处理...';
 
     wx.showLoading({ title: loadingTitle, mask: true });
 
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      // 🛡️ storeId/storeName 不再由客户端传入：云函数会重新拉取申请记录本身来确定
+      // 目标门店（含"新建门店"申请的自动建店逻辑），避免信任客户端可篡改的字段
       const result = await wx.cloud.callFunction({
         name: 'processRoleAudit',
-        data: { applyId: id, action, storeId }
+        data: { applyId: id, action }
       });
 
       const res = result.result as any;
@@ -1942,7 +2692,7 @@ Page({
         this.setData({ pendingApplyList: newList });
       } else {
         wx.hideLoading();
-        wx.showToast({ title: res?.error || '操作失败', icon: 'none' });
+        wx.showToast({ title: (res && res.error) || '操作失败', icon: 'none' });
       }
     } catch (err) {
       wx.hideLoading();
@@ -1951,77 +2701,202 @@ Page({
     }
   },
 
+  // 🔄 修改已绑定义工的角色（财务记账 ↔ 现场奉献），需二次确认防止误触
+  onChangeVolunteerRole(e: any) {
+    const { id } = e.currentTarget.dataset;
+    const item = this.data.approvedVolunteerList.find((r: any) => r._id === id);
+    if (!item) return;
+
+    const currentRole = item.role === 'finance' ? 'finance' : 'volunteer';
+    const targetRole = currentRole === 'finance' ? 'volunteer' : 'finance';
+    const currentLabel = currentRole === 'finance' ? '财务义工' : '现场义工';
+    const targetLabel = targetRole === 'finance' ? '财务义工' : '现场义工';
+    const displayName = maskName(item.realName) || '该义工';
+
+    wx.showModal({
+      title: '修改角色',
+      content: `确认将「${displayName}」的角色从【${currentLabel}】切换为【${targetLabel}】吗？`,
+      confirmText: '确认切换',
+      cancelText: '我再想想',
+      success: async (res) => {
+        if (!res.confirm) return;
+        wx.showLoading({ title: '正在更新角色...', mask: true });
+        try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const result = await wx.cloud.callFunction({
+            name: 'manageVolunteerBinding',
+            data: { targetId: id, action: 'changeRole', newRole: targetRole }
+          });
+          const res2 = result.result as any;
+          wx.hideLoading();
+          if (res2 && res2.success) {
+            wx.showToast({ title: '角色已更新', icon: 'success' });
+            const newList = this.data.approvedVolunteerList.map((r: any) =>
+              r._id === id ? { ...r, role: targetRole } : r
+            );
+            this.setData({ approvedVolunteerList: newList });
+          } else {
+            wx.showModal({ title: '操作失败', content: (res2 && res2.error) || '未能更新角色', showCancel: false });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[onChangeVolunteerRole] 异常:', err);
+          wx.showModal({ title: '操作失败', content: '网络异常，请稍后重试', showCancel: false });
+        }
+      }
+    });
+  },
+
+  // 🚨 解除义工绑定：二次 Confirm 防止误踢，解除后需重新申请/使用邀请码才能再次绑定
+  onUnbindVolunteer(e: any) {
+    const { id } = e.currentTarget.dataset;
+    const item = this.data.approvedVolunteerList.find((r: any) => r._id === id);
+    if (!item) return;
+
+    const storeLabel = item.storeName || this.data.currentStoreName || '本门店';
+
+    wx.showModal({
+      title: '确认解除绑定？',
+      content: `解除后该义工将无法继续为【${storeLabel}】提交账目与服务记录。`,
+      confirmText: '确认解除',
+      confirmColor: '#D32F2F',
+      cancelText: '我再想想',
+      success: async (res) => {
+        if (!res.confirm) return;
+        wx.showLoading({ title: '正在解除绑定...', mask: true });
+        try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const result = await wx.cloud.callFunction({
+            name: 'manageVolunteerBinding',
+            data: { targetId: id, action: 'unbind' }
+          });
+          const res2 = result.result as any;
+          wx.hideLoading();
+          if (res2 && res2.success) {
+            wx.showToast({ title: '已解除绑定', icon: 'success' });
+            const newList = this.data.approvedVolunteerList.filter((r: any) => r._id !== id);
+            this.setData({ approvedVolunteerList: newList });
+          } else {
+            wx.showModal({ title: '操作失败', content: (res2 && res2.error) || '未能解除绑定', showCancel: false });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[onUnbindVolunteer] 异常:', err);
+          wx.showModal({ title: '操作失败', content: '网络异常，请稍后重试', showCancel: false });
+        }
+      }
+    });
+  },
+
   async onOpenBalanceHistoryModal() {
     wx.showLoading({ title: '正在调取账目流水...', mask: true });
 
-    let rawList: any[] = [];
-    const currentDate = this.data.reportDateValue;
-    const shopName = this.data.shopName;
-
+    // 🛡️ 防死锁修复：原来 wx.hideLoading() 只写在函数末尾，依赖代码"正常走到那一行"
+    // 才会执行——云端拉取失败时确实会被内层 try/catch 兜住转入本地缓存，但本地缓存的
+    // filter/sort/map 处理链一旦遇到脏数据（例如 local_report_logs 里混入了 null 项，
+    // r.dateString 会直接抛 TypeError），异常会全程无人捕获，hideLoading 那一行永远
+    // 到不了，遮罩就此死锁。现在把整段处理逻辑（含本地兜底与格式化）都收进外层
+    // try，hideLoading 移入 finally，无论云端成功/失败、本地兜底是否也异常，
+    // 保证只执行一次、且一定会执行。
     try {
-      const db = wx.cloud.database();
-      const _ = db.command;
-      // 🔑 数据隔离修复：强带 storeId / shopName 过滤，防止跨门店数据混淆
-      const currentStoreId = this.data.currentStoreId || wx.getStorageSync('current_store_id') || '';
-      const balanceHistoryWhere: any = {
-        dateString: _.lt(currentDate)
-      };
-      // 超管全国总览时不加门店过滤
-      if (currentStoreId && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES') {
-        balanceHistoryWhere.storeId = currentStoreId;
-      } else if (shopName && shopName !== '全部门店') {
-        balanceHistoryWhere.shopName = shopName;
-      }
-      const res = await db.collection('report_logs')
-        .where(balanceHistoryWhere)
-        .orderBy('dateString', 'desc')
-        .limit(15)
-        .get();
+      let rawList: any[] = [];
+      const currentDate = this.data.reportDateValue;
+      const shopName = this.data.shopName;
 
-      if (res.data && res.data.length > 0) {
-        rawList = res.data;
+      try {
+        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+        const db = wx.cloud.database();
+        const _ = db.command;
+        // 🔑 数据隔离修复：强带 storeId / shopName 过滤，防止跨门店数据混淆
+        const currentStoreId = this.data.currentStoreId || wx.getStorageSync('current_store_id') || '';
+        const balanceHistoryWhere: any = {
+          dateString: _.lt(currentDate)
+        };
+        // 超管全国总览时不加门店过滤
+        if (currentStoreId && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES') {
+          balanceHistoryWhere.storeId = currentStoreId;
+        } else if (shopName && shopName !== '全部门店') {
+          balanceHistoryWhere.shopName = shopName;
+        } else {
+          // 🏢 多租户边界：全国总览场景仍需收敛到调用者所属机构，绝不跨机构读取余额历史
+          const cachedRoleInfoForTenant = AuthService.getCachedRoleInfo();
+      const tenantId = (cachedRoleInfoForTenant && cachedRoleInfoForTenant.tenantId) || '';
+          if (tenantId) {
+            balanceHistoryWhere.tenantId = tenantId;
+          }
+        }
+        // 🛡️ 真机弱网熔断：finally 只有在 await 的 Promise 真正落定（resolve 或
+        // reject）后才会执行——真机弱网下请求可能既不成功也不报错，直接悬挂
+        // 不 settle，这种情况下 try/catch/finally 本身无能为力，遮罩会一直卡住。
+        // 用 Promise.race 叠加 4 秒强制超时保险丝，4 秒内请求仍未落定就主动放弃、
+        // 转入下面的本地兜底，确保真机上无论网络多差都不会无限转圈。
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_resolve, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), 4000);
+        });
+        const res: any = await Promise.race([
+          db.collection('report_logs')
+            .where(balanceHistoryWhere)
+            .orderBy('dateString', 'desc')
+            .limit(15)
+            .get(),
+          timeoutPromise
+        ]);
+        clearTimeout(timeoutId!);
+
+        if (res.data && res.data.length > 0) {
+          rawList = res.data;
+        }
+      } catch (err: any) {
+        console.warn('云端调取失败，转入本地缓存:', err);
+        wx.showToast({
+          title: err && err.message === 'TIMEOUT' ? '请求超时，已加载本地缓存' : '网络异常，已加载本地数据',
+          icon: 'none'
+        });
       }
+
+      if (rawList.length === 0) {
+        const localRecords = wx.getStorageSync('local_report_logs') || [];
+        rawList = localRecords.filter((r: any) => {
+          if (!r) return false;
+          const rDate = r.dateString || r.reportDate || r.date || '';
+          return rDate && rDate < currentDate;
+        }).sort((a: any, b: any) => {
+          const da = a.dateString || a.reportDate || a.date || '';
+          const db = b.dateString || b.reportDate || b.date || '';
+          return db.localeCompare(da);
+        }).slice(0, 15);
+      }
+
+      const currentBal = parseFloat(this.data.yesterdayBalance || 0).toFixed(2);
+
+      const formattedList = rawList.map((item: any) => {
+        const yBal = parseFloat(item.yesterdayBalance || item.prevBalance || 0);
+        const inc = parseFloat(item.income || item.loveIncome || item.totalDonation || 0);
+        const exp = parseFloat(item.expense || item.todayExpense || item.totalExpense || 0);
+        const endBal = parseFloat(item.todayBalance || item.closingBalance || item.endBalance || (yBal + inc - exp));
+        const endBalStr = endBal.toFixed(2);
+
+        return {
+          reportDate: item.dateString || item.reportDate || item.date || '未知日期',
+          yesterdayBal: yBal.toFixed(2),
+          income: inc.toFixed(2),
+          expense: exp.toFixed(2),
+          endingBalance: endBalStr,
+          isCurrentMatched: endBalStr === currentBal
+        };
+      });
+
+      this.setData({
+        recentBalanceHistoryList: formattedList,
+        showBalanceHistoryModal: true
+      });
     } catch (err) {
-      console.warn('云端调取失败，转入本地缓存:', err);
+      console.error('[onOpenBalanceHistoryModal] 拉取账目流水异常，本地兜底也失败:', err);
+      wx.showToast({ title: '数据加载异常，请稍后重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
     }
-
-    if (rawList.length === 0) {
-      const localRecords = wx.getStorageSync('local_report_logs') || [];
-      rawList = localRecords.filter((r: any) => {
-        const rDate = r.dateString || r.reportDate || r.date || '';
-        return rDate && rDate < currentDate;
-      }).sort((a: any, b: any) => {
-        const da = a.dateString || a.reportDate || a.date || '';
-        const db = b.dateString || b.reportDate || b.date || '';
-        return db.localeCompare(da);
-      }).slice(0, 15);
-    }
-
-    const currentBal = parseFloat(this.data.yesterdayBalance || 0).toFixed(2);
-
-    const formattedList = rawList.map((item: any) => {
-      const yBal = parseFloat(item.yesterdayBalance || item.prevBalance || 0);
-      const inc = parseFloat(item.income || item.loveIncome || item.totalDonation || 0);
-      const exp = parseFloat(item.expense || item.todayExpense || item.totalExpense || 0);
-      const endBal = parseFloat(item.todayBalance || item.closingBalance || item.endBalance || (yBal + inc - exp));
-      const endBalStr = endBal.toFixed(2);
-
-      return {
-        reportDate: item.dateString || item.reportDate || item.date || '未知日期',
-        yesterdayBal: yBal.toFixed(2),
-        income: inc.toFixed(2),
-        expense: exp.toFixed(2),
-        endingBalance: endBalStr,
-        isCurrentMatched: endBalStr === currentBal
-      };
-    });
-
-    wx.hideLoading();
-
-    this.setData({
-      recentBalanceHistoryList: formattedList,
-      showBalanceHistoryModal: true
-    });
   },
 
   onCloseBalanceHistoryModal() {
@@ -2086,7 +2961,7 @@ Page({
     const yesterdayStr = this.getFormattedDateStr(-1);
 
     const storeId = this.data.currentStoreId || '';
-    const hasEditPerm = this.data.permissions?.canEditBalance;
+    const hasEditPerm = this.data.permissions && this.data.permissions.canEditBalance;
 
     if (storeId && hasEditPerm) {
       this.releaseDraftLock();
@@ -2127,13 +3002,13 @@ Page({
     this.debouncedSaveDraft();
 
     const storeId = this.data.currentStoreId || '';
-    if (storeId && this.data.permissions?.canEditBalance) {
+    if (storeId && this.data.permissions && this.data.permissions.canEditBalance) {
       this.releaseDraftLock();
       this.checkAndAcquireLock(storeId, dateStr);
     }
   },
 
-  checkExistingRecord(dateString: string) {
+  async checkExistingRecord(dateString: string) {
     const allRecords = wx.getStorageSync('local_report_logs') || [];
     const normalizeStore = (str: string) => (str || '').replace(/[区市省店\s]/g, '').trim();
     const cleanCurrentStore = normalizeStore(this.data.shopName);
@@ -2175,6 +3050,35 @@ Page({
           }
         }
       });
+      return;
+    }
+
+    // 🌟 本地缓存查重未命中时（如他人/其他设备已提交、或本机缓存已清空），
+    // 兜底向云端查询同门店+同日期是否已存在记录，避免造成资金流水断裂的重复录入
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const db = wx.cloud.database();
+      const cloudWhere: any = { dateString: dateString, shopName: this.data.shopName };
+      if (this.data.currentStoreId) {
+        cloudWhere.storeId = this.data.currentStoreId;
+      }
+      const cloudRes = await db.collection('report_logs').where(cloudWhere).limit(1).get();
+
+      if (cloudRes.data && cloudRes.data.length > 0) {
+        wx.showModal({
+          title: '⚠️ 重复录入提醒',
+          content: '该日期已存在餐报记录，请直接在历史记录中编辑或修改，避免重复录入',
+          confirmText: '去历史记录',
+          cancelText: '我知道了',
+          success: (res) => {
+            if (res.confirm) {
+              wx.navigateTo({ url: '/pages/history/history' });
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[checkExistingRecord] 云端查重失败，跳过:', err);
     }
   },
 
@@ -2373,6 +3277,7 @@ Page({
       materialsInput: record.materialsInput || '',
       balanceMatchTip: '已载入历史记录'
     });
+    this.updateDailyExpenseParsePreview(record.dailyExpenseText || '');
 
     if (record.donationItems && record.donationItems.length > 0) {
       const text = record.donationItems.map((item: any) => `${item.name} ${item.amount}`).join('\n');
@@ -2385,27 +3290,30 @@ Page({
       this.setData({ materialsInput: text });
       this.updateMaterialsParse(text);
     }
+
+    // 🌟 大额专项：优先用记录里已有的结构化 fixedExpenseItems（本功能上线后提交的
+    // 新记录，能保留原来挂的独立凭证图片）；老记录没有这个字段时，从 fixedExpenseText
+    // 反解析出条目展示（图片天然为空，老数据本来就没有独立凭证）。
+    if (Array.isArray(record.fixedExpenseItems) && record.fixedExpenseItems.length > 0) {
+      this.setData({
+        fixedExpenseItems: record.fixedExpenseItems.map((item: any) => ({
+          _key: item._key || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: item.name || '',
+          amount: item.amount != null ? String(item.amount) : '0.00',
+          independent_image_urls: Array.isArray(item.independent_image_urls) ? item.independent_image_urls : [],
+          expanded: false
+        }))
+      });
+    } else {
+      this.setData({ fixedExpenseItems: this.parseFixedExpenseTextToItems(record.fixedExpenseText || '') });
+    }
   },
 
   updateRealTimeBalance() {
-    const { yesterdayBalance, otherDonation, parseResult, expenses, dailyExpenseText, fixedExpenseText } = this.data;
-
-    const yesterdayBalanceNum = parseFloat(yesterdayBalance) || 0;
-    const otherDonationNum = parseFloat(otherDonation) || 0;
-    const donationsTotal = parseResult?.totalAmount || 0;
-    const parsedTotalIncome = otherDonationNum + donationsTotal;
-
-    const expensesNum = parseFloat(expenses) || 0;
-    // 使用文本解析函数分别计算，避免小票合计重复累加
-    const dailyExpenseNum = this.calculateTodayExpenseFromText(dailyExpenseText);
-    const fixedExpenseNum = this.calculateTodayExpenseFromText(fixedExpenseText);
-    const totalExpense = expensesNum + dailyExpenseNum + fixedExpenseNum;
-
-    const todayBalance = yesterdayBalanceNum + parsedTotalIncome - totalExpense;
+    // 🌟 唯一权威计算入口，见 computeTodayFinancials 顶部注释；算式校验文案也直接取
+    // computeTodayFinancials 生成好的 formulaString，不再在这里手写模板字符串
+    const { yesterdayBalance: yesterdayBalanceNum, todayIncome: parsedTotalIncome, todayExpense: totalExpense, todayBalance, formulaString: calculationFormulaText } = this.computeTodayFinancials();
     const computedTodayBalance = todayBalance.toFixed(2);
-
-    // 生成算式校验字符串
-    const calculationFormulaText = `${yesterdayBalanceNum.toFixed(2)} + ${parsedTotalIncome.toFixed(2)} - ${totalExpense.toFixed(2)} = ${computedTodayBalance}`;
 
     this.setData({
       parsedTotalIncome,
@@ -2481,7 +3389,10 @@ Page({
             otherDonation: '',
             expenses: '',
             dailyExpenseText: '',
+            dailyExpenseParseCount: 0,
+            dailyExpenseParseAmount: '0.00',
             fixedExpenseText: '',
+            fixedExpenseItems: [],
             reportResult: '',
             showResult: false,
             calculationFormulaText: '',
@@ -2509,6 +3420,10 @@ Page({
 
     if (field === 'otherDonation' || field === 'expenses' || field === 'dailyExpenseText' || field === 'fixedExpenseText') {
       this.updateRealTimeBalance();
+    }
+
+    if (field === 'dailyExpenseText') {
+      this.updateDailyExpenseParsePreview(value);
     }
 
     if (field === 'shopName' || field === 'mpAccount') {
@@ -2549,6 +3464,295 @@ Page({
       totalParsedAmount: result.totalAmount.toFixed(2)
     });
     this.updateRealTimeBalance();
+  },
+
+  // 🌟 第二道防线：文本行级去重。图片 MD5 只能拦住"完全相同的一张图片"，拦不住
+  // "两张不同截图之间有重叠区域"（比如义工分两段截了同一个群收款列表，中间几条
+  // 重复出现）。这里复用 parseDonorText（与"批量粘贴"栏同一套解析口径，不再另起
+  // 一套判定逻辑）：把已经填在输入框里的旧文本、和这次 OCR 新识别出来的文本都各自
+  // 解析成 {姓名, 金额} 结构，只要【姓名】和【金额】完全一致就判定为同一笔，
+  // 新识别出来的那一行直接剔除，不追加进输入框——被剔除的这一条不进入任何计算，
+  // 从根源上避免同一笔供养被计入两次。
+  filterDuplicateDonorLines(existingText: string, newFormattedText: string): { keptText: string; removedCount: number } {
+    const existingItems = parseDonorText(existingText).items;
+    const existingKeys = new Set(existingItems.map(item => `${item.name}__${item.amount}`));
+
+    const keptLines: string[] = [];
+    let removedCount = 0;
+
+    newFormattedText.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      // 对单行文本复用同一个解析函数，取其识别出的姓名/金额做比对；
+      // 解析不出有效条目（如格式异常的行）一律原样保留，不参与去重判定，
+      // 避免把"识别不出来"误判成"重复"而静默丢弃真实数据
+      const singleLineItems = parseDonorText(trimmed).items;
+      if (singleLineItems.length === 1) {
+        const key = `${singleLineItems[0].name}__${singleLineItems[0].amount}`;
+        if (existingKeys.has(key)) {
+          removedCount++;
+          return;
+        }
+        // 同时纳入本次已保留的条目，防止这一次 OCR 结果内部自身就有重复
+        existingKeys.add(key);
+      }
+
+      keptLines.push(trimmed);
+    });
+
+    return { keptText: keptLines.join('\n'), removedCount };
+  },
+
+  // 🌟 历史名单·本地高频常客记录：每次餐报保存成功后（见 saveReportAsync），
+  // 把这一天的爱心支持名单里出现过的姓名各计一次，写进本地缓存 frequentDonorNames。
+  // 只做"计数"，不记具体金额——同一位常客每天供养的金额未必相同，选择常客时
+  // 只应该帮用户免打字把姓名填进去，金额还是要用户自己看着当天的实际数目填。
+  recordDonorFrequency(items: any[]) {
+    if (!items || items.length === 0) return;
+    try {
+      const map = wx.getStorageSync('frequentDonorNames') || {};
+      items.forEach((item: any) => {
+        const name = ((item && item.name) || '').trim();
+        if (!name) return;
+        map[name] = (map[name] || 0) + 1;
+      });
+      wx.setStorageSync('frequentDonorNames', map);
+    } catch (e) {
+      console.warn('[recordDonorFrequency] 写入本地常客名单失败:', e);
+    }
+  },
+
+  onOpenFrequentDonorPicker() {
+    let map: Record<string, number> = {};
+    try {
+      map = wx.getStorageSync('frequentDonorNames') || {};
+    } catch (e) {
+      console.warn('[onOpenFrequentDonorPicker] 读取本地常客名单失败:', e);
+    }
+    const list = Object.keys(map)
+      .map(name => ({ name, count: map[name] }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+
+    this.setData({ showFrequentDonorModal: true, frequentDonorList: list });
+  },
+
+  onCloseFrequentDonorModal() {
+    this.setData({ showFrequentDonorModal: false });
+  },
+
+  onSelectFrequentDonor(e: any) {
+    const name = e.currentTarget.dataset.name;
+    if (!name) return;
+
+    const current = (this.data.allDonations || '').trim();
+    // 只插入姓名，另起一行等用户接着填当天的金额；不预填金额数字，
+    // 避免用户漏改、把上一次的旧金额误当成这一次的实际供养额直接提交
+    const merged = current ? (current + '\n' + name) : name;
+
+    this.setData({
+      allDonations: merged,
+      inputMode: 'text',
+      showFrequentDonorModal: false
+    });
+    this.updateParseResult(merged);
+    this.debouncedSaveDraft();
+  },
+
+  // 🌟 高频账目模板：门店常用支出项目速录。云端存储（manageExpenseTemplate），
+  // 店长/财务/超管可维护，全员可用——与「选择常客」（本地设备记忆）不同，这里
+  // 是店铺共享配置，任何一台设备添加的模板，同店其他人打开都能看到。
+
+  _openExpenseTemplateModal(category: 'daily' | 'fixed') {
+    const targetField = category === 'fixed' ? 'fixedExpenseText' : 'dailyExpenseText';
+    this.setData({
+      showExpenseTemplateModal: true,
+      expenseTemplateCategory: category,
+      expenseTemplateTargetField: targetField,
+      expenseTemplateEditMode: false,
+      expenseTemplateNewName: '',
+      expenseTemplateNewAmount: ''
+    });
+    if (!this.data.expenseTemplateLoaded) {
+      this.fetchExpenseTemplateList();
+    }
+  },
+
+  onOpenExpenseTemplateModal(e: any) {
+    const category = (e.currentTarget.dataset.category === 'fixed') ? 'fixed' : 'daily';
+    this._openExpenseTemplateModal(category);
+  },
+
+  onCloseExpenseTemplateModal() {
+    this.setData({ showExpenseTemplateModal: false, expenseTemplateEditMode: false });
+  },
+
+  onSwitchExpenseTemplateCategory(e: any) {
+    const category = (e.currentTarget.dataset.category === 'fixed') ? 'fixed' : 'daily';
+    const targetField = category === 'fixed' ? 'fixedExpenseText' : 'dailyExpenseText';
+    this.setData({ expenseTemplateCategory: category, expenseTemplateTargetField: targetField });
+  },
+
+  onToggleExpenseTemplateEditMode() {
+    if (!(this.data.isManager || this.data.isFinance || this.data.isSuperAdmin)) return;
+    this.setData({
+      expenseTemplateEditMode: !this.data.expenseTemplateEditMode,
+      expenseTemplateNewName: '',
+      expenseTemplateNewAmount: ''
+    });
+  },
+
+  async fetchExpenseTemplateList() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') {
+      this.setData({ expenseTemplateDailyList: [], expenseTemplateFixedList: [], expenseTemplateLoaded: true });
+      return;
+    }
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({
+        name: 'manageExpenseTemplate',
+        data: { action: 'list', storeId }
+      });
+      const result = res.result as any;
+      const list = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+      this.setData({
+        expenseTemplateDailyList: list.filter((item: any) => item.category === 'daily'),
+        expenseTemplateFixedList: list.filter((item: any) => item.category === 'fixed'),
+        expenseTemplateLoaded: true
+      });
+    } catch (e) {
+      console.error('[fetchExpenseTemplateList] 查询失败:', e);
+      this.setData({ expenseTemplateLoaded: true });
+    }
+  },
+
+  onSelectExpenseTemplateItem(e: any) {
+    if (this.data.expenseTemplateEditMode) return; // 管理态下点击不触发插入，避免误触
+
+    const { name, amount } = e.currentTarget.dataset;
+    if (!name) return;
+
+    // 🌟 大额专项（fixed）已改为结构化 fixedExpenseItems（见 onAddFixedExpenseItem
+    // 同款字段形状），一键插入 = 直接落一条新记录，而不是像 daily 分类那样拼文本——
+    // 这样插入后立刻就能挂独立凭证，金额也仍可在列表里直接改。
+    if (this.data.expenseTemplateCategory === 'fixed') {
+      const newItem = {
+        _key: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        amount: ((amount !== '' && amount !== undefined) ? parseFloat(amount) : 0).toFixed(2),
+        independent_image_urls: [] as string[],
+        expanded: false
+      };
+      this.setData({
+        fixedExpenseItems: [...this.data.fixedExpenseItems, newItem],
+        showExpenseTemplateModal: false
+      });
+      this.regenerateFixedExpenseText();
+      return;
+    }
+
+    // 有默认金额：拼成 `名称：¥金额`，与 OCR 追加时同款格式，才能被
+    // calculateTodayExpenseFromText 正确计入今日支出总额；无默认金额：只插入名称，
+    // 不编造 ¥ 占位，理由同「选择常客」——具体金额因情况而异，不该替用户瞎填。
+    const line = (amount !== '' && amount !== undefined)
+      ? `${name}：¥${parseFloat(amount).toFixed(2)}`
+      : name;
+
+    const field = this.data.expenseTemplateTargetField;
+    const current = (this.data as any)[field] || '';
+    const merged = current ? (current + '\n\n' + line) : line;
+
+    this.setData({
+      [field]: merged,
+      showExpenseTemplateModal: false
+    } as any);
+
+    // 代码直接 setData 绕过了真实的 <textarea> bindinput，需要手动补上
+    // onInput 本该为这两个字段触发的副作用
+    this.updateRealTimeBalance();
+    this.debouncedSaveDraft();
+  },
+
+  onInputExpenseTemplateNewName(e: any) {
+    this.setData({ expenseTemplateNewName: e.detail.value });
+  },
+
+  onInputExpenseTemplateNewAmount(e: any) {
+    this.setData({ expenseTemplateNewAmount: e.detail.value });
+  },
+
+  async onAddExpenseTemplateItem() {
+    const name = (this.data.expenseTemplateNewName || '').trim();
+    if (!name) {
+      wx.showToast({ title: '请输入项目名称', icon: 'none' });
+      return;
+    }
+    if (this.data.expenseTemplateSaving) return;
+
+    const storeId = this.data.currentStoreId;
+    if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') {
+      wx.showToast({ title: '请先选择具体门店', icon: 'none' });
+      return;
+    }
+
+    this.setData({ expenseTemplateSaving: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+      const res = await wx.cloud.callFunction({
+        name: 'manageExpenseTemplate',
+        data: {
+          action: 'create',
+          storeId,
+          category: this.data.expenseTemplateCategory,
+          itemName: name,
+          defaultAmount: this.data.expenseTemplateNewAmount || undefined
+        }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({ expenseTemplateNewName: '', expenseTemplateNewAmount: '' });
+        await this.fetchExpenseTemplateList();
+      } else {
+        wx.showToast({ title: (result && result.error) || '添加失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('[onAddExpenseTemplateItem] 添加失败:', e);
+      wx.showToast({ title: '添加失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ expenseTemplateSaving: false });
+    }
+  },
+
+  onDeleteExpenseTemplateItem(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+
+    wx.showModal({
+      title: '提示',
+      content: '确定要删除这条常用项目吗？',
+      success: async (res) => {
+        if (!res.confirm) return;
+        try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+          const cbRes = await wx.cloud.callFunction({
+            name: 'manageExpenseTemplate',
+            data: { action: 'delete', id }
+          });
+          const result = cbRes.result as any;
+          if (result && result.success) {
+            await this.fetchExpenseTemplateList();
+          } else {
+            wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
+          }
+        } catch (err) {
+          console.error('[onDeleteExpenseTemplateItem] 删除失败:', err);
+          wx.showToast({ title: '删除失败，请重试', icon: 'none' });
+        }
+      }
+    });
   },
 
   onChangeInputMode(e: any) {
@@ -2621,59 +3825,8 @@ Page({
     }
   },
 
-  parseMaterials(text: string): { donor: string; item: string; quantity: string; unit: string }[] {
-    if (!text || text.trim() === '') return [];
-
-    const lines = text.split(/[;；\n]/).filter(l => l.trim());
-    const materials: { donor: string; item: string; quantity: string; unit: string }[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      // 格式匹配：支持 "张三：大米50斤" / "李四：赞助食用油2箱" / "匿名：面粉100公斤"
-      const match = trimmed.match(/^(.+?)[：:]\s*(?:赞助\s*)?(.+?)$/);
-      if (match) {
-        const donor = match[1].trim();
-        const itemPart = match[2].trim();
-
-        // 从物资描述中提取数量和单位
-        const qtyMatch = itemPart.match(/^(.+?)\s*(\d+(?:\.\d+)?)\s*(斤|公斤|kg|箱|袋|桶|瓶|份|个)?$/i);
-        if (qtyMatch) {
-          materials.push({
-            donor,
-            item: qtyMatch[1].trim(),
-            quantity: qtyMatch[2],
-            unit: qtyMatch[3] || '份'
-          });
-        } else {
-          // 无法解析数量时，整段作为物资描述
-          materials.push({
-            donor,
-            item: itemPart,
-            quantity: '1',
-            unit: '份'
-          });
-        }
-      } else {
-        // 尝试简单格式：直接"大米50斤"（匿名服务记录）
-        const simpleMatch = trimmed.match(/^(?:赞助\s*)?(.+?)\s*(\d+(?:\.\d+)?)\s*(斤|公斤|kg|箱|袋|桶|瓶|份|个)?$/i);
-        if (simpleMatch) {
-          materials.push({
-            donor: '匿名爱心人士',
-            item: simpleMatch[1].trim(),
-            quantity: simpleMatch[2],
-            unit: simpleMatch[3] || '份'
-          });
-        }
-      }
-    }
-
-    return materials;
-  },
-
   updateMaterialsParse(text: string) {
-    const materials = this.parseMaterials(text);
+    const materials = parseMaterials(text);
     this.setData({ materials, materialsInput: text });
   },
 
@@ -2697,8 +3850,10 @@ Page({
       wx.showLoading({ title: '图片合规核验中...', mask: true });
 
       const fs = wx.getFileSystemManager();
+      const canCheckImage = isCloudAvailable();
 
       for (const file of res.tempFiles) {
+        if (!canCheckImage) break;
         try {
           const base64Data = fs.readFileSync(file.tempFilePath, 'base64');
           const checkRes = await wx.cloud.callFunction({
@@ -2738,9 +3893,19 @@ Page({
     const images = this.data.receiptImages;
     if (images.length === 0 || index >= images.length) return;
 
+    // 🛡️ 防御性过滤：receiptImages 提交前存的是本机 tempFilePath，长时间填表/切页后
+    // 有概率被系统回收失效；过滤掉空值/非字符串，避免用一个已失效的路径卡死预览，
+    // 同时保证 current 仍能精确对应用户点的是过滤后数组里的哪一张
+    const validImages = images.filter((u: any) => u && typeof u === 'string');
+    const currentUrl = images[index];
+    if (!currentUrl || typeof currentUrl !== 'string') {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+
     wx.previewImage({
-      current: images[index],
-      urls: images
+      current: currentUrl,
+      urls: validImages
     });
   },
 
@@ -2751,9 +3916,372 @@ Page({
     this.setData({ receiptImages: images });
   },
 
+  // ================= 🍱 今日食谱照片（随餐报表单一并提交，最多 9 张） =================
+
+  async chooseRecipeImages() {
+    const remaining = 9 - this.data.recipeImages.length;
+    if (remaining <= 0) {
+      wx.showToast({ title: '已达 9 张上限，无法继续添加', icon: 'none' });
+      return;
+    }
+
+    try {
+      const chooseRes = await wx.chooseMedia({
+        count: remaining,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera']
+      });
+      const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
+      if (paths.length === 0) return;
+
+      // 🌟 与支出凭证(receiptImages)100% 同构：纯字符串数组，选完图立刻把本地
+      // tempFilePath 塞进数组先渲染出来，不等压缩上传跑完才显示——本地文件选完
+      // 那一刻就是有效路径，WXML 直接 {{item}} 绑定，不经过任何对象属性访问
+      const insertStart = this.data.recipeImages.length;
+      this.setData({ recipeImages: [...this.data.recipeImages, ...paths], recipeUploading: true });
+
+      try {
+        const uploaded = await compressAndUploadImages(HOME_COMPRESS_CANVAS_ID, paths, `daily_menus/${this.data.currentStoreId}`);
+        // 压缩上传跑完后，原地把本地路径字符串替换成云端 fileID 字符串——数组
+        // 顺序与 paths/uploaded 一一对应，按下标原地替换，不按值反查
+        const finalImages = [...this.data.recipeImages];
+        uploaded.forEach((u, i) => {
+          finalImages[insertStart + i] = u.url;
+        });
+        this.setData({ recipeImages: finalImages });
+      } catch (uploadErr) {
+        // 🛡️ 上传失败：撤回本轮插入的本地占位条目，不留下没有对应云端文件的
+        // 死路径；本地文件选择本身是成功的，只是后续压缩/上传这一步失败了
+        const rolledBack = this.data.recipeImages.filter((_, i) => i < insertStart || i >= insertStart + paths.length);
+        this.setData({ recipeImages: rolledBack });
+        throw uploadErr;
+      }
+
+      this.setData({ recipeUploading: false });
+    } catch (err) {
+      this.setData({ recipeUploading: false });
+      console.error('[chooseRecipeImages] 异常:', err);
+      wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
+    }
+  },
+
+  // 🌟 统一大图预览入口：录入端的小图缩略图、以及【生成结果预览】里新增的照片墙，
+  // 展示的都是同一份 recipeImages/activityImages 数据源（不是各自拷贝一份），
+  // 用 data-source 区分点的是"食谱照片"还是"大事记照片"，一份逻辑同时服务两处入口，
+  // 不需要再各写一套 previewXxxImage。
+  onPreviewImage(e: any) {
+    const source = e.currentTarget.dataset.source as 'recipe' | 'activity';
+    const index = e.currentTarget.dataset.index;
+    const images = source === 'activity' ? this.data.activityImages : this.data.recipeImages;
+    if (!images || images.length === 0 || index >= images.length) return;
+
+    // 🛡️ recipeImages/activityImages 现在是纯字符串数组（本机 tempFilePath 或
+    // 云端 fileID），直接过滤掉空值/非字符串即可，不再需要 .url 属性访问
+    const validUrls = images.filter((u: any) => u && typeof u === 'string');
+    const currentUrl = images[index];
+    if (!currentUrl || typeof currentUrl !== 'string') {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+
+    wx.previewImage({
+      current: currentUrl,
+      urls: validUrls
+    });
+  },
+
+  // 🛡️ 缩略图加载失败：上报诊断日志（用于确认真机"图片空白"是云存储读权限问题——
+  // 常见报错含 403/-1——还是别的原因，而不是盲猜），同时把这张图标记为"加载失败"，
+  // 驱动 WXML 展示可点击重试的占位块，而不是放任小程序原生的裂图/空白晾在那里
+  // （这就是"缩略图不显示，呈占位色块"最终呈现给用户的样子）。
+  // receiptImages/independent_image_urls/recipeImages/activityImages 现在全部是
+  // 纯字符串数组，没有对象字段可挂 loadFailed，统一用一张"路径 -> 是否失败"的 map。
+  // 🛡️ 不能用 `imageLoadFailedMap.${url}` 这种 setData 点路径写法——url 本身
+  // 大概率含点号（域名/文件后缀/cloud fileID），会被点路径解析器拆成好几段，直接写崩；
+  // 改成整份 map 对象替换，规避这个坑
+  onImageLoadError(e: any) {
+    const url = e.currentTarget.dataset.url;
+    console.warn('[index] 缩略图加载失败:', url, e.detail);
+    if (!url) return;
+    this.setData({ imageLoadFailedMap: { ...this.data.imageLoadFailedMap, [url]: true } });
+  },
+
+  // 点击"加载失败"占位块重试：从 map 里摘掉这张图的失败标记，wx:if/wx:else 会把
+  // <image> 节点整个卸载重挂，从而强制小程序重新发起一次网络请求——不依赖改 src
+  // 触发重试，因为 cloud:// fileID 不是普通 URL，拼接时间戳等缓存破坏参数可能
+  // 直接导致解析失败
+  onRetryImage(e: any) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    const next = { ...this.data.imageLoadFailedMap };
+    delete next[url];
+    this.setData({ imageLoadFailedMap: next });
+  },
+
+  // 🛡️ "今日食谱"/"今日门店日志"预览卡缩略图加载失败：todayMenu/todayActivity 是
+  // 只读预览对象（不是可编辑的表单数组），没有地方挂 loadFailed 字段，同样改用
+  // 按 url 查表的方案，与 imageLoadFailedMap 完全同款
+  onPreviewCardImageLoadError(e: any) {
+    const url = e.currentTarget.dataset.url;
+    console.warn('[index] 预览卡缩略图加载失败:', url, e.detail);
+    if (!url) return;
+    this.setData({ previewImagesFailedMap: { ...this.data.previewImagesFailedMap, [url]: true } });
+  },
+
+  onRetryPreviewCardImage(e: any) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    const next = { ...this.data.previewImagesFailedMap };
+    delete next[url];
+    this.setData({ previewImagesFailedMap: next });
+  },
+
+  deleteRecipeImage(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const images = [...this.data.recipeImages];
+    images.splice(index, 1);
+    this.setData({ recipeImages: images });
+  },
+
+  // ================= 📌 今日大事记照片（随餐报表单一并提交，最多 18 张） =================
+
+  async chooseActivityImages() {
+    const remaining = 18 - this.data.activityImages.length;
+    if (remaining <= 0) {
+      wx.showToast({ title: '已达 18 张上限，无法继续添加', icon: 'none' });
+      return;
+    }
+
+    try {
+      const chooseRes = await wx.chooseMedia({
+        count: remaining,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera']
+      });
+      const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
+      if (paths.length === 0) return;
+
+      // 🌟 与支出凭证(receiptImages)100% 同构：纯字符串数组，选完图立刻把本地
+      // tempFilePath 塞进数组先渲染出来，不等压缩上传跑完才显示
+      const insertStart = this.data.activityImages.length;
+      this.setData({ activityImages: [...this.data.activityImages, ...paths], activityUploading: true });
+
+      try {
+        const uploaded = await compressAndUploadImages(HOME_COMPRESS_CANVAS_ID, paths, `activity_logs/${this.data.currentStoreId}`);
+        // 压缩上传跑完后，原地把本地路径字符串替换成云端 fileID 字符串
+        const finalImages = [...this.data.activityImages];
+        uploaded.forEach((u, i) => {
+          finalImages[insertStart + i] = u.url;
+        });
+        this.setData({ activityImages: finalImages });
+      } catch (uploadErr) {
+        const rolledBack = this.data.activityImages.filter((_, i) => i < insertStart || i >= insertStart + paths.length);
+        this.setData({ activityImages: rolledBack });
+        throw uploadErr;
+      }
+
+      this.setData({ activityUploading: false });
+    } catch (err) {
+      this.setData({ activityUploading: false });
+      console.error('[chooseActivityImages] 异常:', err);
+      wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
+    }
+  },
+
+  deleteActivityImage(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const images = [...this.data.activityImages];
+    images.splice(index, 1);
+    this.setData({ activityImages: images });
+  },
+
+  onActivityTextInput(e: any) {
+    this.setData({ activityText: e.detail.value });
+  },
+
+  // 📥 合并【凭证与账本】页在今日餐报尚未提交时暂存的凭证图片（拍照识别OCR/快捷补传凭证 提前存的）
+  // 仅当填报日期就是今天、且尚未处于编辑模式时才合并，避免污染历史记录编辑或跨日草稿
+  mergeStagedReceiptStash() {
+    try {
+      if (this.data.isEditMode) return;
+      const todayStr = getTodayIsoString();
+      if (this.data.reportDateValue !== todayStr) return;
+
+      const storeId = this.data.currentStoreId || this.data.shopName || 'default';
+      const stashKey = `pending_receipt_stash_${storeId}_${todayStr}`;
+      const stash = wx.getStorageSync(stashKey);
+
+      if (stash && Array.isArray(stash.images) && stash.images.length > 0) {
+        const existing = this.data.receiptImages || [];
+        const merged = [...existing, ...stash.images.filter((u: string) => existing.indexOf(u) === -1)];
+        this.setData({ receiptImages: merged });
+        wx.removeStorageSync(stashKey);
+        wx.showToast({ title: `已自动带入 ${stash.images.length} 张暂存凭证`, icon: 'none', duration: 2500 });
+      }
+    } catch (err) {
+      console.warn('[mergeStagedReceiptStash] 合并暂存凭证失败:', err);
+    }
+  },
+
+  // ================= 🔒 大额专项支出：逐条添加 + 行级独立凭证 =================
+
+  onInputFixedExpenseNewName(e: any) {
+    this.setData({ fixedExpenseNewName: e.detail.value });
+  },
+
+  onInputFixedExpenseNewAmount(e: any) {
+    this.setData({ fixedExpenseNewAmount: e.detail.value });
+  },
+
+  onAddFixedExpenseItem() {
+    const name = (this.data.fixedExpenseNewName || '').trim();
+    if (!name) {
+      wx.showToast({ title: '请输入项目名称', icon: 'none' });
+      return;
+    }
+    const amount = parseFloat(this.data.fixedExpenseNewAmount) || 0;
+
+    const newItem = {
+      _key: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      amount: amount.toFixed(2),
+      independent_image_urls: [] as string[],
+      expanded: false
+    };
+
+    this.setData({
+      fixedExpenseItems: [...this.data.fixedExpenseItems, newItem],
+      fixedExpenseNewName: '',
+      fixedExpenseNewAmount: ''
+    });
+    this.regenerateFixedExpenseText();
+  },
+
+  onInputFixedExpenseItemAmount(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const items = [...this.data.fixedExpenseItems];
+    if (!items[index]) return;
+    items[index] = { ...items[index], amount: e.detail.value };
+    this.setData({ fixedExpenseItems: items });
+    this.regenerateFixedExpenseText();
+  },
+
+  onDeleteFixedExpenseItem(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const items = [...this.data.fixedExpenseItems];
+    if (!items[index]) return;
+    items.splice(index, 1);
+    this.setData({ fixedExpenseItems: items });
+    this.regenerateFixedExpenseText();
+  },
+
+  onToggleIndependentVoucher(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const items = [...this.data.fixedExpenseItems];
+    if (!items[index]) return;
+    items[index] = { ...items[index], expanded: !items[index].expanded };
+    this.setData({ fixedExpenseItems: items });
+  },
+
+  async onChooseIndependentVoucher(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const item = this.data.fixedExpenseItems[index];
+    if (!item) return;
+
+    const remaining = 3 - item.independent_image_urls.length;
+    if (remaining <= 0) {
+      wx.showToast({ title: '每条最多上传 3 张独立凭证', icon: 'none' });
+      return;
+    }
+
+    // 🛡️ 存储路径必须强制夹带 tenant_id：取不到就直接拦截上传，不落地到裸路径，
+    // 与门店级多租户隔离的既有约定保持一致（见 DataService.saveReport 的 tenantId 写入）
+    const cachedRoleInfo = AuthService.getCachedRoleInfo();
+    const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
+    if (!tenantId) {
+      wx.showToast({ title: '无法确认所属机构，暂时无法上传独立凭证', icon: 'none' });
+      return;
+    }
+
+    try {
+      const chooseRes = await wx.chooseMedia({
+        count: remaining,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      });
+      const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
+      if (paths.length === 0) return;
+
+      if (!isCloudAvailable()) {
+        wx.showToast({ title: '云服务暂不可用，无法上传独立凭证', icon: 'none' });
+        return;
+      }
+
+      wx.showLoading({ title: '图片压缩上传中...', mask: true });
+
+      const now = new Date();
+      const dateFolder = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const cloudPathPrefix = `expenses_independent/${tenantId}/${this.data.currentStoreId}/${dateFolder}`;
+
+      const uploaded = await compressAndUploadImages(HOME_COMPRESS_CANVAS_ID, paths, cloudPathPrefix);
+      wx.hideLoading();
+
+      const items = [...this.data.fixedExpenseItems];
+      const target = items[index];
+      if (!target) return; // 上传耗时期间该行可能已被删除
+      items[index] = {
+        ...target,
+        independent_image_urls: [...target.independent_image_urls, ...uploaded.map(u => u.url)]
+      };
+      this.setData({ fixedExpenseItems: items });
+      this.debouncedSaveDraft();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onChooseIndependentVoucher] 上传失败:', err);
+      wx.showToast({ title: '独立凭证上传失败', icon: 'none' });
+    }
+  },
+
+  onPreviewIndependentVoucher(e: any) {
+    const { index, imgIndex } = e.currentTarget.dataset;
+    const item = this.data.fixedExpenseItems[index];
+    if (!item || !item.independent_image_urls.length) return;
+
+    // 🛡️ 防御性过滤：过滤掉空值/非字符串，避免个别异常数据卡住整个预览
+    const validUrls = item.independent_image_urls.filter((u: any) => u && typeof u === 'string');
+    const currentUrl = item.independent_image_urls[imgIndex];
+    if (!currentUrl || typeof currentUrl !== 'string') {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+
+    wx.previewImage({
+      current: currentUrl,
+      urls: validUrls
+    });
+  },
+
+  onDeleteIndependentVoucher(e: any) {
+    const { index, imgIndex } = e.currentTarget.dataset;
+    const items = [...this.data.fixedExpenseItems];
+    const target = items[index];
+    if (!target) return;
+    const urls = [...target.independent_image_urls];
+    urls.splice(imgIndex, 1);
+    items[index] = { ...target, independent_image_urls: urls };
+    this.setData({ fixedExpenseItems: items });
+  },
+
   async uploadReceiptImages(): Promise<string[]> {
     const { receiptImages } = this.data;
     if (receiptImages.length === 0) {
+      return [];
+    }
+
+    if (!isCloudAvailable()) {
+      console.warn('[uploadReceiptImages] 云服务不可用，跳过图片上传，凭证图片本次将不会随餐报保存');
+      wx.showToast({ title: '云服务暂不可用，凭证图片本次未能上传', icon: 'none' });
       return [];
     }
 
@@ -2879,6 +4407,10 @@ Page({
 
   async onScanReceiptPhoto() {
     try {
+      if (!isCloudAvailable()) {
+        wx.showToast({ title: '云服务暂不可用，无法使用拍照识别', icon: 'none' });
+        return;
+      }
       // #10 支持多张图片批量识别（最多5张）
       const chooseRes = await wx.chooseMedia({
         count: 5,
@@ -2951,9 +4483,9 @@ Page({
           const result = ocrRes.result as any;
           if (result && result.success && (result.amount || result.totalAmount)) {
             const amount = parseFloat(result.amount || result.totalAmount || 0);
-            results.push({ ...result, totalAmount: amount });
+            results.push({ ...result, totalAmount: amount, fileID: uploadRes.fileID });
           } else {
-            const realErrMsg = result?.errMsg || result?.message || result?.error || '云函数返回数据异常';
+            const realErrMsg = (result && result.errMsg) || (result && result.message) || (result && result.error) || '云函数返回数据异常';
             console.error('❌ [OCR] 单张识别失败:', realErrMsg);
             results.push({ success: false, errMsg: realErrMsg, fileID: uploadRes.fileID });
           }
@@ -2974,7 +4506,7 @@ Page({
         const firstFail = results.find(r => !r.success);
         wx.showModal({
           title: '云函数返回错误诊断',
-          content: '【诊断原因】:\n' + (firstFail?.errMsg || '未能识别票据信息') + '\n\n请手动填写或重新拍摄清晰的小票。',
+          content: '【诊断原因】:\n' + ((firstFail && firstFail.errMsg) || '未能识别票据信息') + '\n\n请手动填写或重新拍摄清晰的小票。',
           showCancel: false,
           confirmText: '知道了'
         });
@@ -2982,6 +4514,10 @@ Page({
         this._cleanupReceiptImages(uploadedFileIds);
         return;
       }
+
+      // 🛡️ 单张小票金额超过此阈值时，无论置信度如何，一律附加红色预警提示，
+      // 提醒店长核对原图——日常食材采购通常不会单张小票超过这个量级
+      const OCR_AMOUNT_WARNING_THRESHOLD = 500;
 
       // 构建展示列表
       const receiptList = [];
@@ -2991,11 +4527,23 @@ Page({
         if (!r.success) continue;
         const amt = parseFloat(r.amount || r.totalAmount || 0);
         totalAmount += amt;
+        const isHighConfidence = r.isHighConfidence !== false;
         receiptList.push({
           merchantName: r.merchant || ('第' + (i + 1) + '张'),
           amount: amt.toFixed(2),
           itemList: r.itemList || [],
-          formattedText: r.formattedText || `小票金额：¥${amt.toFixed(2)}`
+          formattedText: r.formattedText || `小票金额：¥${amt.toFixed(2)}`,
+          fileID: r.fileID || '',
+          isHighConfidence,
+          // 🌟 图文同屏对比 + 高亮预警：低置信度或金额超阈值时展示红色提醒，
+          // 强调"识别结果仅供参考"，交由店长核对小票原图后再确认
+          showWarning: !isHighConfidence || amt > OCR_AMOUNT_WARNING_THRESHOLD,
+          // 🌟 云函数（AI/OCR 节点）已经把原价小计/运费/优惠/实付拆成互相独立的结构化字段，
+          // 这里原样透传给确认弹窗展示，让财务/店长核对时能看到"钱是怎么从原价变成实付的"，
+          // 而不是只看到一个不可回溯的最终数字
+          rawTotalAmount: r.raw_total_amount || '',
+          shippingFee: r.shipping_fee || '',
+          discountAmount: r.discount_amount || ''
         });
       }
 
@@ -3007,8 +4555,11 @@ Page({
         ocrReceiptList: receiptList,
         ocrSuccessCount: successCount,
         ocrFailCount: failCount,
-        ocrTotalAmount: totalAmount.toFixed(2)
+        ocrTotalAmount: totalAmount.toFixed(2),
+        // 弹窗每次都是 wx:if 重新挂载，focus 会随之重新触发，无需额外复位逻辑
+        ocrFocusFirstPrice: receiptList.length > 0 && receiptList[0].itemList.length > 0
       });
+      this.updateOcrConfirmPreview();
     } catch (e: any) {
       wx.hideLoading();
       console.error('❌ [Debug] 捕获到前端/网络异常:', e);
@@ -3025,10 +4576,171 @@ Page({
     }
   },
 
+  // 🌟 爱心支持明细·图片识别：上传微信群收款/接龙截图，OCR 识别"昵称+金额"明细，
+  // 自动追加进【批量粘贴】文本框。识别只负责"认字配对"，绝不在云函数里求和/去重——
+  // 结果统一交给前端唯一权威的 parseDonorText（经 updateParseResult 调用）解析汇总，
+  // 与手动粘贴文本走的是完全相同的一条路径，不会另开一套计算逻辑。
+  async onScanDonorScreenshot() {
+    // 🌟 诊断日志：如果点击按钮后连这一行都没打印出来，说明问题根本不在这个函数内部
+    // （大概率是小程序端跑的还不是最新编译产物），而不是这里的业务逻辑有 bug
+    console.log('[onScanDonorScreenshot] 图片识别按钮被点击');
+
+    if (this.data.isScanningDonorList) {
+      console.log('[onScanDonorScreenshot] 上一次识别仍在进行中，本次点击被忽略');
+      return;
+    }
+
+    try {
+      if (!isCloudAvailable()) {
+        console.warn('[onScanDonorScreenshot] isCloudAvailable() 返回 false，云能力不可用');
+        wx.showToast({ title: '云服务暂不可用，无法使用图片识别', icon: 'none' });
+        return;
+      }
+
+      const chooseRes = await wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      });
+
+      if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
+
+      const tempFilePath = chooseRes.tempFiles[0].tempFilePath;
+
+      // 🌟 第一道防线：图片 MD5 去重。在触发任何网络请求（内容安全检测/上传/OCR）之前，
+      // 先读取本地临时文件的原始二进制内容算出 MD5——同一张图片（哪怕文件名不同，
+      // chooseMedia 每次选择都会生成新的临时路径）字节内容完全一致，MD5 必然相同。
+      // 命中即直接拦截，连内容安全检测的网络请求都不发，最大程度节省一次无意义的调用。
+      const fs = wx.getFileSystemManager();
+      const fileBuffer = fs.readFileSync(tempFilePath) as ArrayBuffer;
+      const imageHash = md5(fileBuffer);
+
+      if (this._uploadedImageHashes.includes(imageHash)) {
+        console.log('[onScanDonorScreenshot] 命中重复图片 MD5，拦截:', imageHash);
+        wx.showModal({
+          title: '系统提示',
+          content: '您已上传过此图片，请勿重复提交相同截图。',
+          showCancel: false
+        });
+        return;
+      }
+      this._uploadedImageHashes.push(imageHash);
+
+      this.setData({ isScanningDonorList: true });
+      wx.showLoading({ title: '图片合规核验中...', mask: true });
+
+      let uploadedFileId = '';
+
+      try {
+        // 与小票拍照识别同一套合规校验：上传前先过内容安全检测，不合规直接拦截，不进入 OCR
+        const base64Data = fs.readFileSync(tempFilePath, 'base64');
+        const checkRes = await wx.cloud.callFunction({
+          name: 'checkImageContent',
+          data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
+        });
+        const checkResult = checkRes.result as any;
+        if (checkResult && !checkResult.isSafe) {
+          wx.hideLoading();
+          wx.showModal({
+            title: '⚠️ 违规内容拦截',
+            content: checkResult.reason || '图片内容未通过安全校验，请更换图片',
+            showCancel: false
+          });
+          return;
+        }
+
+        wx.showLoading({ title: 'AI 识别中...', mask: true });
+
+        const fileName = 'donation_screenshots/' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.jpg';
+        const uploadRes = await wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath });
+        uploadedFileId = uploadRes.fileID;
+
+        const ocrRes = await wx.cloud.callFunction({
+          name: 'ocrDonationList',
+          data: { fileID: uploadedFileId }
+        });
+
+        wx.hideLoading();
+
+        const result = ocrRes.result as any;
+        if (result && result.success && result.formattedText) {
+          const current = (this.data.allDonations || '').trim();
+
+          // 第二道防线：文本行级去重，见 filterDuplicateDonorLines 顶部注释——
+          // 与已有文本【姓名+金额】完全一致的新识别行会被剔除，不追加进输入框
+          const { keptText, removedCount } = this.filterDuplicateDonorLines(current, result.formattedText);
+
+          if (!keptText) {
+            // 这次识别出来的所有条目都是重复的，不需要追加任何内容
+            wx.showModal({
+              title: '系统提示',
+              content: `本次识别出的 ${result.totalCount} 条支持数据与已录入内容完全重复，未新增任何记录。`,
+              showCancel: false
+            });
+            return;
+          }
+
+          // 一行一条"姓名 金额"，与手动粘贴的格式完全一致，直接原样拼接即可，
+          // 不需要也不应该在这里再做一次金额加总——那是 updateParseResult 的职责
+          const merged = current ? (current + '\n' + keptText) : keptText;
+
+          this.setData({ allDonations: merged, inputMode: 'text' });
+          this.updateParseResult(merged);
+          this.debouncedSaveDraft();
+
+          const toastTitle = removedCount > 0
+            ? `已识别并新增 ${result.totalCount - removedCount} 人（已自动过滤 ${removedCount} 条重复数据），请核对`
+            : `已识别 ${result.totalCount} 人，请核对`;
+          wx.showToast({ title: toastTitle, icon: 'none', duration: 2500 });
+        } else {
+          wx.showModal({
+            title: '识别失败',
+            content: (result && result.errMsg) || '未能从截图中识别出有效的爱心支持明细，请手动录入或换一张更清晰的截图',
+            showCancel: false,
+            confirmText: '知道了'
+          });
+        }
+      } finally {
+        // 截图本身不是财务凭证，不需要像小票一样长期保留，识别完清理云存储
+        if (uploadedFileId) {
+          wx.cloud.deleteFile({ fileList: [uploadedFileId] }).catch((err: any) => {
+            console.warn('[onScanDonorScreenshot] 清理截图失败:', err);
+          });
+        }
+      }
+    } catch (e: any) {
+      wx.hideLoading();
+      const errMsg = e.errMsg || e.message || '';
+      console.warn('[onScanDonorScreenshot] 捕获到异常:', e);
+      if (errMsg.includes('cancel')) {
+        // 用户在系统相册/相机选择框里点了取消，这是正常操作，不需要弹提示打扰——
+        // 但控制台日志留着，方便和"点击后完全没反应"这类真正的 bug 区分开
+        console.log('[onScanDonorScreenshot] 用户取消了图片选择，静默返回');
+        return;
+      }
+      wx.showToast({ title: '识别失败：' + (e.message || errMsg || '未知错误'), icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ isScanningDonorList: false });
+    }
+  },
+
   _pendingOcrResults: [],
   _pendingOcrFileIds: [],
   _ocrPendingResults: [],
   _ocrPendingFileIds: [],
+  // 🌟 爱心支持明细·图片识别去重：本次页面会话内已上传过的截图 MD5，防止义工
+  // 手滑重复选中/重复提交同一张截图导致支持数据加倍——只在当前页面实例存活期间
+  // 有效（刷新/重进页面会清空），不做跨会话持久化，符合"当前会话去重"的定位
+  _uploadedImageHashes: [] as string[],
+
+  // 🌟 图文同屏对比：点击小票缩略图直接原生放大查看原图
+  onPreviewOcrReceiptImage(e: any) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    wx.previewImage({ current: url, urls: [url] });
+  },
 
   onOcrConfirmCancel() {
     this.setData({ showOcrConfirmModal: false });
@@ -3053,24 +4765,77 @@ Page({
     const val = e.detail.value;
     const list = [...this.data.ocrReceiptList];
     list[receiptIdx].itemList[itemIdx].name = val;
+    // 店长已经亲手编辑过这个品名，视为"已核对/已修正"，红色警示不再需要停留
+    list[receiptIdx].itemList[itemIdx].isSuspiciousName = false;
     this.setData({ ocrReceiptList: list });
   },
 
-  onEditOcrItemPrice(e: any) {
+  // 🐛 修复"输入一个字符光标就被抢走"的严重交互 Bug：根因不是"bindinput 太频繁"本身，
+  // 而是 ocrFocusFirstPrice（弹窗打开时用于自动聚焦第一件商品价格框的一次性标记）从未被
+  // 重置——它在 this.data 里一直停留为 true。之前 onEditOcrItemPrice/onEditOcrReceiptAmount
+  // 每敲一个字符就 setData 一次 ocrReceiptList，导致 wx:for 列表重渲染；只要重渲染，
+  // WXML 里 input-item-price 上的 focus="{{ocrFocusFirstPrice && index===0 && subIdx===0}}"
+  // 就会再次求值为 true，把光标从用户正在编辑的输入框"抢"回第一件商品的价格框。
+  // 修复分两层：① bindinput 阶段只把值记进实例变量草稿，绝不 setData、绝不重渲染列表；
+  // ② 真正的重算 + setData 延后到 bindblur（失焦）才执行，并在这次 setData 里顺手把
+  // ocrFocusFirstPrice 永久置为 false——用户一旦真正开始编辑，这个"仅用于弹窗刚打开那一次"
+  // 的自动聚焦标记就该失效，此后任何一次 setData 都不会再重新抢焦点。
+  _ocrItemPriceDraft: {} as Record<string, string>,
+  _ocrReceiptAmountDraft: {} as Record<string, string>,
+
+  onEditOcrItemPriceInput(e: any) {
     const receiptIdx = e.currentTarget.dataset.receiptIndex;
     const itemIdx = e.currentTarget.dataset.itemIndex;
-    const val = e.detail.value;
+    this._ocrItemPriceDraft[`${receiptIdx}_${itemIdx}`] = e.detail.value;
+  },
+
+  onEditOcrItemPriceBlur(e: any) {
+    const receiptIdx = e.currentTarget.dataset.receiptIndex;
+    const itemIdx = e.currentTarget.dataset.itemIndex;
+    const draftKey = `${receiptIdx}_${itemIdx}`;
+    const val = this._ocrItemPriceDraft[draftKey] !== undefined ? this._ocrItemPriceDraft[draftKey] : e.detail.value;
+    delete this._ocrItemPriceDraft[draftKey];
+
     const list = [...this.data.ocrReceiptList];
     list[receiptIdx].itemList[itemIdx].price = val;
 
     // 动态重新计算该小票总金额
     const newTotal = list[receiptIdx].itemList.reduce((sum: number, item: any) => sum + (parseFloat(item.price) || 0), 0);
     list[receiptIdx].amount = newTotal.toFixed(2);
+    // 逐条商品价格重新触发了自动汇总，视为已回到"跟随识别结果"的状态，
+    // 之前若手动改过总金额，这次编辑单价会覆盖它，不再保留手动覆盖标记
+    list[receiptIdx].manualAmountOverride = false;
 
     // 重新计算所有小票合计
     const ocrTotalAmount = list.reduce((sum: number, r: any) => sum + parseFloat(r.amount || 0), 0).toFixed(2);
 
-    this.setData({ ocrReceiptList: list, ocrTotalAmount });
+    this.setData({ ocrReceiptList: list, ocrTotalAmount, ocrFocusFirstPrice: false });
+    this.updateOcrConfirmPreview();
+  },
+
+  // 🌟 实付金额人工覆盖机制：OCR/明细累加算出的总额可能因优惠、运费识别不全而偏高或偏低，
+  // 财务志工核对小票原图后，可以直接在"实付合计"这里手动改成小票上真实的实付数字，
+  // 不必逐条修改商品明细去"凑"出正确的总数。这里改的 amount 会在 onOcrAutoFill 里
+  // 原样同步进 pending 结果，成为写入 dailyExpenseText/fixedExpenseText 的锚点金额，
+  // 也就是最终写进数据库 todayExpense 字段的那个数字——全程不再经过任何二次相加。
+  onEditOcrReceiptAmountInput(e: any) {
+    const receiptIdx = e.currentTarget.dataset.receiptIndex;
+    this._ocrReceiptAmountDraft[receiptIdx] = e.detail.value;
+  },
+
+  onEditOcrReceiptAmountBlur(e: any) {
+    const receiptIdx = e.currentTarget.dataset.receiptIndex;
+    const val = this._ocrReceiptAmountDraft[receiptIdx] !== undefined ? this._ocrReceiptAmountDraft[receiptIdx] : e.detail.value;
+    delete this._ocrReceiptAmountDraft[receiptIdx];
+
+    const list = [...this.data.ocrReceiptList];
+    list[receiptIdx].amount = val;
+    list[receiptIdx].manualAmountOverride = true;
+
+    const ocrTotalAmount = list.reduce((sum: number, r: any) => sum + (parseFloat(r.amount) || 0), 0).toFixed(2);
+
+    this.setData({ ocrReceiptList: list, ocrTotalAmount, ocrFocusFirstPrice: false });
+    this.updateOcrConfirmPreview();
   },
 
   onOcrAutoFill() {
@@ -3085,9 +4850,15 @@ Page({
     for (let i = 0; i < editedList.length; i++) {
       const edited = editedList[i];
       const pending = results.find((r: any) => r.success && (r.merchant || ('第' + (i + 1) + '张')) === edited.merchantName);
-      if (pending && edited.itemList) {
+      if (!pending) continue;
+      // 🐛 金额同步不能只在"有商品明细"时才生效：手动改总额（onEditOcrReceiptAmount）在
+      // itemList 为空（OCR 没识别出任何商品行，只有一个整体金额）的小票上同样成立，
+      // 之前把 pending.amount 的同步也一并锁在 edited.itemList 的判断里，会导致这种情况下
+      // 手动改的实付金额被静默丢弃，最终填进表单的还是识别错的旧数字。
+      pending.amount = edited.amount;
+      pending.manualAmountOverride = !!edited.manualAmountOverride;
+      if (edited.itemList) {
         pending.itemList = edited.itemList;
-        pending.amount = edited.amount;
         pending.formattedText = edited.itemList.map((item: any) => `• ${item.name}：¥${item.price}`).join('\n');
       }
     }
@@ -3108,6 +4879,10 @@ Page({
       let detailText = '';
       if (r.itemList && r.itemList.length > 0) {
         const lines = r.itemList.map((item: any) => `• ${item.name}：¥${item.price}`);
+        // 🌟 商品明细行原样相加得到的是折前原价小计，可能比店长实际付的钱更多（有优惠/运费时）；
+        // 追加这一行"实付合计"锚点，供 calculateTodayExpenseFromText 识别为这张小票的权威金额，
+        // 忽略前面逐条商品行的原价加总，从根源避免"AI 识别出的原价被误当成今日支出"。
+        lines.push(`实付合计：¥${amount.toFixed(2)}`);
         detailText = lines.join('\n');
       } else {
         detailText = r.formattedText || r.detailText || `食材采购小票：¥${amount.toFixed(2)}`;
@@ -3189,7 +4964,12 @@ Page({
     for (const r of results) {
       let detail = '';
       if (r.itemList && r.itemList.length > 0) {
-        detail = r.itemList.map(item => `• ${item.name}：¥${item.price}`).join('\n');
+        const lines = r.itemList.map(item => `• ${item.name}：¥${item.price}`);
+        // 见 calculateTodayExpenseFromText 顶部注释：追加锚点行，避免逐条商品原价被
+        // 直接相加当成今日支出，与实付金额（可能因优惠/运费而不同）脱节
+        const anchorAmount = parseFloat(r.amount || r.totalAmount || 0);
+        lines.push(`实付合计：¥${anchorAmount.toFixed(2)}`);
+        detail = lines.join('\n');
       } else {
         detail = r.formattedText || r.detailText || `食材采购小票：¥${r.totalAmount}`;
       }
@@ -3197,12 +4977,14 @@ Page({
       total += r.totalAmount;
     }
 
+    // 🐛 与追加锚点行配套：块与块之间必须用空行分隔，calculateTodayExpenseFromText 才能
+    // 正确识别"上一张小票已经结束"，否则上一张的锚点行会把这一张的商品行也一并吞掉/覆盖
     if (category === 'daily_food') {
       const current = this.data.dailyExpenseText || '';
-      this.setData({ dailyExpenseText: current ? (current + '\n' + itemsText) : itemsText });
+      this.setData({ dailyExpenseText: current ? (current + '\n\n' + itemsText) : itemsText });
     } else if (category === 'major_expense') {
       const current = this.data.fixedExpenseText || '';
-      this.setData({ fixedExpenseText: current ? (current + '\n' + itemsText) : itemsText });
+      this.setData({ fixedExpenseText: current ? (current + '\n\n' + itemsText) : itemsText });
     }
 
     this._cleanupReceiptImages(this._pendingOcrFileIds);
@@ -3231,16 +5013,24 @@ Page({
       success: (res) => {
         let detail = '';
         if (r.itemList && r.itemList.length > 0) {
-          detail = r.itemList.map(item => item.name + ' ¥' + item.price).join('\n');
+          const lines = r.itemList.map(item => item.name + ' ¥' + item.price);
+          // 见 calculateTodayExpenseFromText 顶部注释：追加锚点行，避免逐条商品原价被
+          // 直接相加当成今日支出，与实付金额（可能因优惠/运费而不同）脱节
+          const anchorAmount = parseFloat(r.amount || r.totalAmount || 0);
+          lines.push(`实付合计：¥${anchorAmount.toFixed(2)}`);
+          detail = lines.join('\n');
         } else {
           detail = r.formattedText || r.detailText || (r.merchant || '小票') + r.totalAmount;
         }
+        // 🐛 用单个空格拼接会把上一笔记录的最后一行与这张小票的第一行商品粘连成同一行文本，
+        // 导致 calculateTodayExpenseFromText 按行取数时漏算被粘连的那一项；改用与其它入口
+        // 一致的空行分隔，让每张小票单独成块
         if (res.tapIndex === 0) {
           const current = this.data.dailyExpenseText || '';
-          this.setData({ dailyExpenseText: current ? (current + ' ' + detail) : detail });
+          this.setData({ dailyExpenseText: current ? (current + '\n\n' + detail) : detail });
         } else if (res.tapIndex === 1) {
           const current = this.data.fixedExpenseText || '';
-          this.setData({ fixedExpenseText: current ? (current + ' ' + detail) : detail });
+          this.setData({ fixedExpenseText: current ? (current + '\n\n' + detail) : detail });
         }
         // 继续下一张
         this._adjustOcrCategoryOneByOne(index + 1);
@@ -3297,8 +5087,8 @@ Page({
 
       console.log('[generateReport] data 状态:', {
         isManualAdjust,
-        parseResultItems: parseResult?.items?.length || 0,
-        allDonations: this.data.allDonations?.length || 0
+        parseResultItems: (parseResult && parseResult.items && parseResult.items.length) || 0,
+        allDonations: (this.data.allDonations && this.data.allDonations.length) || 0
       });
 
       // 检查 parseResult 是否存在
@@ -3344,44 +5134,16 @@ Page({
 
       try {
         // ====== 第一步：纯前端生成文本（不依赖云端，绝不阻塞） ======
-        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement } = this.data;
+        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement } = this.data;
         const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
         const b4_total = parseFloat(otherDonation) || 0;
 
-        const extractExpenseAmount = (text: string): number => {
-          if (!text) return 0;
-          let total = 0;
-          const lines = text.split('\n');
-          lines.forEach(line => {
-            const trimmed = line.trim();
-            // 防重守卫：跳过含合计/虚线的总结行
-            if (
-              trimmed.includes('小票合计') ||
-              trimmed.includes('合计') ||
-              trimmed.includes('总计') ||
-              trimmed.includes('----') ||
-              trimmed.includes('====') ||
-              trimmed.startsWith('----------------')
-            ) {
-              return;
-            }
-            const matches = trimmed.match(/[¥￥]\s*(\d+\.?\d*)|(\d+\.?\d*)\s*元/g) || [];
-            matches.forEach(m => {
-              const numMatch = m.match(/\d+\.?\d*/);
-              if (numMatch) {
-                total += parseFloat(numMatch[0]);
-              }
-            });
-          });
-          return parseFloat(total.toFixed(2));
-        };
-
-        const dailyExpenseTotal = extractExpenseAmount(dailyExpenseText);
-        const fixedExpenseTotal = extractExpenseAmount(fixedExpenseText);
-        const expenseTotal = dailyExpenseTotal + fixedExpenseTotal;
-
-        const todayTotalSum = Math.round((donationsTotal + b4_total) * 100) / 100;
-        const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
+        // 🌟 唯一权威计算入口：dailyExpenseTotal/fixedExpenseTotal 复用与顶部算式校验
+        // 完全相同的 calculateTodayExpenseFromText，expenseTotal/todayTotalSum/newBalanceSum
+        // 直接取 computeTodayFinancials 的结果，确保提交保存的数字与页面上展示的分毫不差。
+        const dailyExpenseTotal = this.calculateTodayExpenseFromText(dailyExpenseText);
+        const fixedExpenseTotal = this.calculateTodayExpenseFromText(fixedExpenseText);
+        const { todayIncome: todayTotalSum, todayExpense: expenseTotal, todayBalance: newBalanceSum } = this.computeTodayFinancials();
 
         const dateString = deriveDateString(reportDateValue, reportDate);
 
@@ -3405,14 +5167,15 @@ Page({
           slogan1: slogan1,
           slogan2: slogan2,
           materials: materials || [],
+          activityText: activityText || '',
           volunteerCount: parseFloat(volunteerCount) || 0,
           volunteerHours: parseFloat(volunteerHours) || 0,
           diningCount: parseFloat(diningCount) || 0,
           stapleRiceStatus: stapleRiceStatus,
           stapleOilStatus: stapleOilStatus,
-          noticeTag: announcement?.tag,
-          noticeTitle: announcement?.title,
-          noticeContent: announcement?.content,
+          noticeTag: announcement && announcement.tag,
+          noticeTitle: announcement && announcement.title,
+          noticeContent: announcement && announcement.content,
           mergeToReportText: mergeToReportText
         });
 
@@ -3452,7 +5215,7 @@ Page({
         wx.setClipboardData({
           data: report,
           success() {
-            wx.showToast({ title: '文本已复制', icon: 'success', duration: 1500 });
+            wx.showToast({ title: '餐报已复制，可直接发送至微信群', icon: 'none', duration: 2000 });
           },
           fail() {
             console.warn('[generateReport] 自动复制失败，用户可手动复制');
@@ -3480,6 +5243,14 @@ Page({
           expenses: expenses,
           dailyExpenseText: dailyExpenseText,
           fixedExpenseText: fixedExpenseText,
+          // 🔒 大额专项行级独立凭证：附加字段，随报表一并落库，不影响 fixedExpenseText/
+          // majorExpenseItems 既有的金额结算与统计流转（那两个仍照旧只读派生文本）
+          fixedExpenseItems: (fixedExpenseItems || []).map((item: any) => ({
+            _key: item._key,
+            name: item.name,
+            amount: item.amount,
+            independent_image_urls: item.independent_image_urls || []
+          })),
           majorExpenseItems: majorExpenseItems,
           dailyIngredientItems: dailyIngredientItems,
           todayBalance: newBalanceSum,
@@ -3554,8 +5325,23 @@ Page({
         const errDetail = saveResult.errorDetail || saveResult.message || '未知错误';
         const isCollectionMissing = errDetail.includes('-501000') || errDetail.includes('resource') || errDetail.includes('not exist');
         const isAllZero = errDetail === 'all_zero_skipped';
+        const isDuplicateDate = errDetail === 'duplicate_date_blocked';
 
-        if (!isAllZero) {
+        if (isDuplicateDate) {
+          // 🌟 重复录入拦截：不能走离线队列重试（会一直被拦截，甚至在极端时序下仍可能造成重复），
+          // 直接引导用户去历史记录编辑/修改已存在的当日记录
+          wx.showModal({
+            title: '⚠️ 重复录入提醒',
+            content: saveResult.message || '该日期已存在餐报记录，请直接在历史记录中编辑或修改，避免重复录入',
+            confirmText: '去历史记录',
+            cancelText: '我知道了',
+            success: (res) => {
+              if (res.confirm) {
+                wx.navigateTo({ url: '/pages/history/history' });
+              }
+            }
+          });
+        } else if (!isAllZero) {
           wx.showModal({
             title: isCollectionMissing ? '云数据库集合未创建' : '保存到云端失败',
             content: isCollectionMissing
@@ -3575,7 +5361,9 @@ Page({
         // 用上传后的云地址更新页面状态，避免重复上传和编辑丢失
         this.setData({ receiptImages: uploadedReceiptImages });
         this.updateOfflineQueueCount();
-        
+        // 🌟 记录今天出现过的爱心支持姓名，供【选择常客】快速点选入口使用
+        this.recordDonorFrequency(submitData.donationItems);
+
         if (this.data.isEditMode) {
           await this.triggerAtomicCascadeUpdate(submitData);
         } else {
@@ -3589,6 +5377,10 @@ Page({
 
         wx.showToast({ title: '保存成功', icon: 'success', duration: 1500 });
         recordSuccessfulSubmit(); // 记录提交成功（用于频率限制）
+
+        // 🍱📌 餐报保存成功后，若随表单一并上传了食谱/大事记照片，则同步发布，
+        // 失败不影响餐报本身已保存成功的事实，仅静默提示可稍后手动补发
+        this.publishRecipeAndActivityIfPresent();
 
         if (this.data.isEditMode) {
           this.isNavigating = true;
@@ -3622,6 +5414,112 @@ Page({
         });
       }
     }
+  },
+
+  // 🍱📌 餐报提交成功后，若随表单一并上传了"今日食谱照片"/"今日大事记照片+描述"，
+  // 自动同步发布到 daily_menus / activity_logs，无需再手动跳去两个入口分别发布
+  async publishRecipeAndActivityIfPresent() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') {
+      return;
+    }
+
+    const { recipeImages, activityImages, activityText } = this.data;
+    const hasRecipe = recipeImages.length > 0;
+    const hasActivity = activityImages.length > 0 || !!activityText.trim();
+
+    if (!hasRecipe && !hasActivity) return;
+
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '云服务暂不可用，食谱/大事记照片未同步，可稍后手动补发', icon: 'none', duration: 2500 });
+      return;
+    }
+
+    const dateString = getTodayIsoString();
+    let recipeFailed = false;
+    let activityFailed = false;
+
+    // 🛡️ recipeImages/activityImages 在页面这一侧是纯字符串数组（与 receiptImages
+    // 同构，供 WXML 直接 {{item}} 绑定），但 manageDailyMenu/manageActivityLog 云函数
+    // 的 sanitizeImages 需要 {url,thumbUrl} 对象——传纯字符串进去，img.url 取不到值，
+    // 会被云端过滤器整批丢弃，导致"发布成功但图片全没了"。这里在真正发出请求前转换回
+    // 数据库期待的对象形状，字符串数组只是页面内部状态，不是持久化 schema
+    const recipeImagesForSubmit = recipeImages.map((url: string) => ({ url, thumbUrl: url }));
+    const activityImagesForSubmit = activityImages.map((url: string) => ({ url, thumbUrl: url }));
+
+    if (hasRecipe) {
+      try {
+        const res = await wx.cloud.callFunction({
+          name: 'manageDailyMenu',
+          data: { action: 'create', storeId, dateString, menuText: '', images: recipeImagesForSubmit }
+        });
+        const result = res.result as any;
+        if (!result || !result.success) {
+          recipeFailed = true;
+          console.warn('[publishRecipeAndActivityIfPresent] 今日食谱同步失败:', result && result.error);
+        } else {
+          this.fetchTodayMenu();
+        }
+      } catch (e) {
+        recipeFailed = true;
+        console.warn('[publishRecipeAndActivityIfPresent] 今日食谱同步异常:', e);
+      }
+    }
+
+    if (hasActivity) {
+      try {
+        // 🔗 门店日志联动：今天已经有一条记录（不管是"门店日志"页手动发布的，
+        // 还是之前的自动同步）就精准 update 那一条；只有今天完全没有记录时才
+        // 走 autoSyncFromReport 的新建流程。避免手动记录与自动同步记录各自
+        // 独立、堆出两条内容重复的大事记。
+        const sourceId = this.data.todayActivitySourceId;
+        const activityPayload: any = sourceId
+          ? {
+              action: 'update',
+              id: sourceId,
+              storeId,
+              title: `${this.data.currentStoreName || '门店'} · ${dateString} 门店日志`,
+              eventTime: dateString,
+              content: activityText.trim(),
+              images: activityImagesForSubmit
+            }
+          : {
+              action: 'create',
+              autoSyncFromReport: true,
+              storeId,
+              title: `${this.data.currentStoreName || '门店'} · ${dateString} 门店日志`,
+              eventTime: dateString,
+              content: activityText.trim(),
+              images: activityImagesForSubmit
+            };
+
+        const res = await wx.cloud.callFunction({
+          name: 'manageActivityLog',
+          data: activityPayload
+        });
+        const result = res.result as any;
+        if (!result || !result.success) {
+          activityFailed = true;
+          console.warn('[publishRecipeAndActivityIfPresent] 大事记同步失败:', result && result.error);
+        } else {
+          this.fetchTodayActivity();
+        }
+      } catch (e) {
+        activityFailed = true;
+        console.warn('[publishRecipeAndActivityIfPresent] 大事记同步异常:', e);
+      }
+    }
+
+    if (recipeFailed || activityFailed) {
+      wx.showToast({
+        title: '餐报已保存，但食谱/大事记照片同步失败，可稍后手动补发',
+        icon: 'none',
+        duration: 2500
+      });
+    }
+
+    // 清空表单内这两块内容，避免下次编辑/重复提交时误重发同一批照片
+    this.setData({ recipeImages: [], activityImages: [], activityText: '' });
   },
 
   async runGuardrailChecks(submitData: any): Promise<boolean> {
@@ -3679,8 +5577,9 @@ Page({
           avgBalance = validBalances.reduce((sum: number, v: number) => sum + v, 0) / validBalances.length;
         }
 
-        lastReportDate = sorted[sorted.length - 1]?.reportDate || '';
-        lastBalance = parseFloat(sorted[sorted.length - 1]?.todayBalance || 0);
+        const lastItem = sorted[sorted.length - 1];
+        lastReportDate = (lastItem && lastItem.reportDate) || '';
+        lastBalance = parseFloat((lastItem && lastItem.todayBalance) || 0);
       }
 
       const guardResult: GuardrailResult = validateReportGuardrails(
@@ -3692,7 +5591,10 @@ Page({
           totalDiners: parseFloat(submitData.diningCount || 0) + parseFloat(submitData.volunteerCount || 0),
           volunteerCount: parseFloat(submitData.volunteerCount || 0),
           volunteerHours: parseFloat(submitData.volunteerHours || 0),
-          reportDate: submitData.reportDate || ''
+          reportDate: submitData.reportDate || '',
+          expenseFreeText: [submitData.dailyExpenseText, submitData.fixedExpenseText, submitData.materialsInput]
+            .filter(Boolean)
+            .join('\n')
         },
         {
           avgDailyFoodExpense,
@@ -3753,23 +5655,28 @@ Page({
     }
   },
 
+  // 🛡️ 紧急安全修复：此前调用的 recalculateLedgerChain 云函数在 storeId 为空/'all' 时
+  // 会跳过门店过滤条件，把全部门店的历史记录当作同一条流水链混算，曾导致全库结余数据被
+  // 串联污染。现改为调用经过门店/租户强校验、且明确限定只写 report_logs 集合内
+  // yesterdayBalance/todayBalance 字段的 recalculateCascadeBalances，绝不触碰 storeId/storeName。
   async triggerCascadeRecalculation(submitData: any) {
     try {
       const shopName = submitData.shopName || this.data.shopName || '';
-      const fromDate = submitData.dateString || '';
+      const modifiedDate = submitData.dateString || '';
 
-      if (!shopName || !fromDate) {
+      if (!shopName || !modifiedDate) {
         console.log('[triggerCascadeRecalculation] 参数不足，跳过级联重算');
         return;
       }
 
-      console.log('🚀 [DEBUG] 正在触发级联重算云函数...', { shopName, fromDate });
+      console.log('🚀 [DEBUG] 正在触发级联重算云函数...', { shopName, modifiedDate });
 
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await wx.cloud.callFunction({
-        name: 'recalculateLedgerChain',
+        name: 'recalculateCascadeBalances',
         data: {
           shopName,
-          fromDate
+          modifiedDate
         }
       });
 
@@ -3792,21 +5699,22 @@ Page({
   async triggerAtomicCascadeUpdate(submitData: any) {
     try {
       const shopName = submitData.shopName || this.data.shopName || '';
-      const fromDate = submitData.dateString || '';
+      const modifiedDate = submitData.dateString || '';
 
-      if (!fromDate) {
+      if (!modifiedDate) {
         console.log('[triggerAtomicCascadeUpdate] 参数不足，回退到普通级联重算');
         await this.triggerCascadeRecalculation(submitData);
         return;
       }
 
-      console.log('🚀 [DEBUG] 正在触发原子化级联更新...', { shopName, fromDate });
+      console.log('🚀 [DEBUG] 正在触发原子化级联更新...', { shopName, modifiedDate });
 
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await wx.cloud.callFunction({
-        name: 'recalculateLedgerChain',
+        name: 'recalculateCascadeBalances',
         data: {
           shopName,
-          fromDate
+          modifiedDate
         }
       });
 
@@ -3838,6 +5746,8 @@ Page({
       otherDonation: '',
       expenses: '',
       dailyExpenseText: '',
+      dailyExpenseParseCount: 0,
+      dailyExpenseParseAmount: '0.00',
       fixedExpenseText: '',
       reportResult: '',
       showResult: false,
@@ -3877,6 +5787,18 @@ Page({
     // 重置路由防重锁
     this.isNavigating = false;
 
+    // 🌟 同步自定义 TabBar 高亮态：custom-tab-bar 是框架在 tabBar.list 页面外层自动挂载的
+    // 常驻组件，并非各页面自身 WXML 中声明的子组件，其 pageLifetimes.show 并不保证跟随
+    // 每次 switchTab 可靠触发，官方文档明确要求各 Tab 页面自行在 onShow 中显式同步一次。
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 0 });
+    }
+
+    // 🍽️ 首页展示当日菜单/大事记：每次页面重新可见时刷新一次（如跨零点、从子页返回）
+    this.fetchTodayMenu();
+    this.fetchTodayActivity();
+    this.fetchNotices();
+
     // #11 清理过期的频率记录和警告确认记录
     cleanExpiredFrequencyRecords();
 
@@ -3908,6 +5830,11 @@ Page({
 
     this.refreshUserRoleView();
 
+    // 🌟 财务视角首页角标：预先拉取一次风控预警数量，避免用户必须先点开弹窗才知道有没有异常
+    if ((this.data.isFinance || this.data.isSuperAdmin) && this.data.currentStoreId && !this.isNationalOverviewSelected()) {
+      this.fetchRiskAlerts();
+    }
+
     const activeStore = getSelectedStore();
     if (activeStore && activeStore.storeName !== this.data.shopName) {
       this.setData({
@@ -3926,6 +5853,7 @@ Page({
     DataService.syncLocalDataToCloud();
     this.updateOfflineQueueCount();
     this.autoSyncOfflineQueue();
+    this.mergeStagedReceiptStash();
 
     const app = getApp();
     app.globalData.onNetworkReconnected = () => {
@@ -3937,8 +5865,44 @@ Page({
     // 切后台回来后重新获取编辑锁
     const storeId = this.data.currentStoreId || '';
     const reportDate = this.data.reportDateRaw || '';
-    if (storeId && reportDate && this.data.permissions?.canEditBalance) {
+    if (storeId && reportDate && this.data.permissions && this.data.permissions.canEditBalance) {
       this.checkAndAcquireLock(storeId, reportDate);
+    }
+
+    this.checkPendingHandoffs();
+  },
+
+  // 草稿箱 / 设置页 跳回首页后的"交接标记"检查：全部复用已有的加载/弹窗逻辑，
+  // 本方法只负责识别标记并派发，不重写任何业务逻辑
+  checkPendingHandoffs() {
+    const resumeDraft = takeResumeDraftHandoff();
+    if (resumeDraft) {
+      this.loadDraftByDate(resumeDraft.dateValue, resumeDraft.shopName).then((hasDraft) => {
+        if (hasDraft) {
+          wx.showToast({ title: '已恢复所选草稿 ✍️', icon: 'none', duration: 2000 });
+        } else {
+          wx.showToast({ title: '该草稿已被清空或不存在', icon: 'none' });
+        }
+      });
+      return;
+    }
+
+    if (takeComplianceReviewRequest()) {
+      this.setData({ showComplianceModal: true, complianceModalScene: 'review' });
+      return;
+    }
+
+    // 门店管理页「生成邀请码」快捷按钮的交接：打开已有的邀请码弹窗后，直接覆盖预选为
+    // 目标门店（不依赖 currentStoreId 的默认选中逻辑——那反映的是"当前用户自己绑定的门店"，
+    // 超管在门店管理页点的可能是本机构下的任意一家门店，两者不一定相同）
+    const genCodeTarget = takeGenCodeHandoff();
+    if (genCodeTarget) {
+      this.onOpenGenCodeModal();
+      this.setData({
+        genStoreSelectionType: 'existing',
+        targetGenStoreId: genCodeTarget.storeId,
+        targetGenStoreName: genCodeTarget.storeName
+      });
     }
   },
 
@@ -4001,7 +5965,14 @@ Page({
   },
 
   refreshUserRoleView() {
-    const role = wx.getStorageSync('current_user_role') || 'VOLUNTEER';
+    // 🌟 本地开发 / 无真实登录环境兜底：current_user_role 只有在用户真正登录鉴权
+    // （云函数 checkUserRole 成功返回，或走完邀请码激活流程）后才会被显式写入 storage；
+    // 在本地开发或云函数暂不可用（如未绑定真实 appid）的环境下这个 key 永远是空的，
+    // 若按原逻辑兜底为 VOLUNTEER，管理者将永远只能看到义工打卡视图、看不到记账表单与工作台。
+    // 这里将"从未配置过角色"的兜底身份提升为超级管理员，方便本地开发者/管理者直接看到全量功能；
+    // 真实用户一旦完成登录，current_user_role 会被显式覆盖为其云端真实角色，此兜底不会生效。
+    const DEV_FALLBACK_ROLE = 'SUPER_ADMIN';
+    const role = wx.getStorageSync('current_user_role') || DEV_FALLBACK_ROLE;
     const storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '海沧区雨花斋';
     const storeId = wx.getStorageSync('current_store_id') || '';
 
@@ -4010,20 +5981,71 @@ Page({
     const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
+    const isRealSuperAdmin = isSuperAdmin;
+    const overridden = applyRoleViewOverride(role, {
+      currentUserRole: role, isVolunteer, isManager, isFinance, isSuperAdmin
+    });
 
     this.setData({
-      currentUserRole: role,
+      currentUserRole: overridden.currentUserRole,
       currentRole: rawRole,
       currentStoreName: storeName,
       currentStoreId: storeId,
-      isVolunteer: isVolunteer,
-      isManager: isManager,
-      isFinance: isFinance,
-      isSuperAdmin: isSuperAdmin,
+      isRealSuperAdmin: isRealSuperAdmin,
+      currentViewMode: getPreviewViewMode(),
+      isAllStoresView: isAllStoresView,
+      isVolunteer: overridden.isVolunteer,
+      isManager: overridden.isManager,
+      isFinance: overridden.isFinance,
+      isSuperAdmin: overridden.isSuperAdmin,
       permissions: getPermissionFlags({ role })
     });
 
-    console.log(`🎯 [主页视图精细化分流成功]: 当前身份为 ${role}, isManager=${isManager}, isFinance=${isFinance}, isSuperAdmin=${isSuperAdmin}`);
+    console.log(`🎯 [主页视图精细化分流成功]: 当前身份为 ${role}, isManager=${isManager}, isFinance=${isFinance}, isSuperAdmin=${isSuperAdmin}, isAllStoresView=${isAllStoresView}`);
+
+    this.checkComplianceNotice();
+  },
+
+  // 🌟 合规授权须知：分两档独立记忆，互不覆盖——
+  // 'general' 档：任何角色首次进入小程序都必须阅读一次「非官方属性 + 不提供募捐」声明；
+  // 'privileged' 档：即使已经读过 general 版，一旦这个设备上的账号第一次具备财务/店长/
+  // 超管权限（能看到/操作账目数据的角色），必须再单独确认一次——这类角色看到的是
+  // 具体金额与账本，合规风险高于普通义工视角，需要更明确地二次确认知悉其非官方属性。
+  // 两档各自的确认状态分别持久化在本地 storage，只弹一次，不会每次进入都打扰用户。
+  checkComplianceNotice() {
+    if (this.data.showComplianceModal) return;
+
+    const generalAck = wx.getStorageSync('complianceNoticeAck_general');
+    if (!generalAck) {
+      this.setData({ showComplianceModal: true, complianceModalScene: 'general' });
+      return;
+    }
+
+    const isPrivilegedView = this.data.isManager || this.data.isFinance || this.data.isSuperAdmin;
+    const privilegedAck = wx.getStorageSync('complianceNoticeAck_privileged');
+    if (isPrivilegedView && !privilegedAck) {
+      this.setData({ showComplianceModal: true, complianceModalScene: 'privileged' });
+    }
+  },
+
+  onAcknowledgeCompliance() {
+    wx.setStorageSync('complianceNoticeAck_general', true);
+    if (this.data.complianceModalScene === 'privileged') {
+      wx.setStorageSync('complianceNoticeAck_privileged', true);
+    }
+    this.setData({ showComplianceModal: false });
+  },
+
+  // 🌟 底部合规 Footer 的"查看完整声明"入口：随时可重新查看，'review' 场景下
+  // 已经通过了强制阅读，弹窗只展示一个普通【关闭】按钮，不会再要求二次确认
+  onViewFullComplianceNotice() {
+    this.setData({ showComplianceModal: true, complianceModalScene: 'review' });
+  },
+
+  onCloseComplianceReview() {
+    if (this.data.complianceModalScene !== 'review') return; // 强制场景下不允许通过这个入口关闭
+    this.setData({ showComplianceModal: false });
   },
 
   loadEditReportData() {
@@ -4058,8 +6080,8 @@ Page({
       }
     }
 
-    const allDonations = this.formatDonationItemsToText(report.donationItems || report.items || []);
-    const materialsInput = this.formatMaterialsToText(report.materials || []);
+    const allDonations = formatDonationItemsToText(report.donationItems || report.items || []);
+    const materialsInput = formatMaterialsToText(report.materials || []);
 
     this.setData({
       reportDate: reportDate || this.data.reportDate,
@@ -4095,30 +6117,6 @@ Page({
     }
   },
 
-  formatDonationItemsToText(items: any[]): string {
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return '';
-    }
-    return items.map(item => {
-      const name = item.name || item.donor || '';
-      const amount = item.amount || item.value || 0;
-      return `${name} ${amount}`;
-    }).join('\n');
-  },
-
-  formatMaterialsToText(materials: any[]): string {
-    if (!materials || !Array.isArray(materials) || materials.length === 0) {
-      return '';
-    }
-    return materials.map(m => {
-      const donor = m.donor || '匿名爱心人士';
-      const item = m.item || '';
-      const quantity = m.quantity || '';
-      const unit = m.unit || '';
-      return `${donor}：${item}${quantity}${unit}`;
-    }).join('；');
-  },
-
   onUnload() {
     this.releaseDraftLock();
   },
@@ -4140,6 +6138,11 @@ Page({
 
     const networkInfo = wx.getNetworkTypeSync();
     if (networkInfo.networkType === 'none') {
+      return;
+    }
+
+    if (!isCloudAvailable()) {
+      console.warn('[autoSyncOfflineQueue] 云服务不可用，跳过本轮离线队列同步');
       return;
     }
 
@@ -4194,8 +6197,13 @@ Page({
       return;
     }
 
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '云服务暂不可用，请稍后重试', icon: 'none' });
+      return;
+    }
+
     wx.showLoading({ title: '正在同步...' });
-    
+
     let successCount = 0;
     for (const item of queue) {
       try {
@@ -4244,6 +6252,92 @@ Page({
     }
   },
 
+  // 🆕 财务公示版 (4:3) PosterData 组装：从 onGeneratePoster 内联代码抽出来，
+  // 供首次生成和 onSwitchPosterType 切回财务版时共用——切版式只是换一种画法，
+  // 不需要把校验/内容安全检测/二维码生成整套流程再跑一遍
+  buildFinancialPosterData(): PosterData {
+    const { reportDate, shopName, mpAccount, parseResult } = this.data;
+    const b4_total = parseFloat(this.data.otherDonation) || 0;
+    const { items, totalAmount: donationsTotal, totalCount } = parseResult;
+    const { yesterdayBalance: prevBalanceNum, todayExpense: expenseTotal, todayBalance: newBalanceSum } = this.computeTodayFinancials();
+    const dateString = deriveDateString(this.data.reportDateValue, reportDate);
+
+    return {
+      shopName,
+      dateString,
+      reportDate,
+      items,
+      totalCount,
+      totalAmount: donationsTotal,
+      otherDonation: b4_total,
+      yesterdayBalance: prevBalanceNum,
+      expenseAmount: expenseTotal,
+      todayBalance: newBalanceSum,
+      mpAccount,
+      thankText: this.data.thankText,
+      slogan1: this.data.slogan1,
+      materials: this.data.materials,
+      activityText: this.data.activityText,
+      volunteerCount: parseFloat(this.data.volunteerCount) || 0,
+      volunteerHours: parseFloat(this.data.volunteerHours) || 0,
+      verifyQrLocalPath: this.data.verifyQrLocalPath
+    };
+  },
+
+  // 🆕 温馨故事版 (9:16) StoryPosterData 组装：门店日志首图 + 一句话感言 + 极简摘要，
+  // "爱心菜单 Y 款"取自食材杂购的实时解析条数（dailyExpenseParseCount，见输入框下方
+  // "已解析 X 项"同一份数据源），本项目没有单独的结构化"今日菜单"字段，这是最接近的真实口径
+  buildStoryPosterData(): StoryPosterData {
+    const { reportDate, shopName, activityText, activityImages, diningCount, dailyExpenseParseCount } = this.data;
+    const dateString = deriveDateString(this.data.reportDateValue, reportDate);
+    const heroImageUrl = (activityImages && activityImages.length > 0) ? activityImages[0] : '';
+
+    return {
+      shopName,
+      dateString,
+      heroImageUrl,
+      storyText: activityText,
+      diningCount: parseFloat(diningCount) || 0,
+      menuItemCount: dailyExpenseParseCount || 0,
+      verifyQrLocalPath: this.data.verifyQrLocalPath
+    };
+  },
+
+  // 🆕 财务公示版 / 温馨故事版 切换：重新调用对应的 draw 函数覆盖同一个 posterImage，
+  // canvasHeight 也要跟着换（故事版是固定 9:16，财务版按内容量动态算，与 onGeneratePoster
+  // 首次生成时的估算口径保持一致）
+  async onSwitchPosterType(e: any) {
+    const type = e.currentTarget.dataset.type as 'financial' | 'story';
+    const previousType = this.data.posterType;
+    if (type === previousType || this.data.isSwitchingPosterType) return;
+
+    this.setData({ isSwitchingPosterType: true, posterType: type });
+
+    try {
+      let posterImagePath: string;
+
+      if (type === 'story') {
+        this.setData({ canvasHeight: 667 });
+        posterImagePath = await drawStoryPoster(this, this.buildStoryPosterData());
+      } else {
+        const itemCount = (this.data.parseResult && this.data.parseResult.items.length) || 0;
+        const listContentHeight = itemCount * 26;
+        const dynamicHeight = Math.max(130 + 180 + 35 + 60 + listContentHeight + 24 + 70 + 20, 667);
+        this.setData({ canvasHeight: dynamicHeight });
+        posterImagePath = await drawMeritPoster(this, this.buildFinancialPosterData());
+      }
+
+      this.setData({ posterImage: posterImagePath });
+    } catch (err: any) {
+      console.error('[onSwitchPosterType] 切换海报版式失败:', err);
+      wx.showToast({ title: err.message || '切换失败，请重试', icon: 'none' });
+      // 切换失败时把 posterType 退回原样，避免 Tab 高亮和实际展示的图片对不上
+      this.setData({ posterType: previousType });
+    } finally {
+      this.setData({ isSwitchingPosterType: false });
+    }
+  },
+
   async onGeneratePoster() {
     console.log('[onGeneratePoster] 函数被调用');
 
@@ -4263,7 +6357,7 @@ Page({
       isGeneratingPoster: this.data.isGeneratingPoster,
       showResult,
       parseResultExists: !!parseResult,
-      itemsCount: parseResult?.items?.length || 0
+      itemsCount: (parseResult && parseResult.items && parseResult.items.length) || 0
     });
 
     // 检查是否已生成文本
@@ -4298,21 +6392,14 @@ Page({
     this.setData({ isGeneratingPoster: true });
 
     try {
-      const { reportDate, expenses, shopName, mpAccount, yesterdayBalance } = this.data;
-      const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
+      const { reportDate, expenses, shopName, mpAccount } = this.data;
       const b4_total = parseFloat(otherDonation) || 0;
       const { items, totalAmount: donationsTotal, totalCount } = parseResult;
 
-      let expenseTotal = 0;
-      let expenseInput = expenses.trim();
-      if (expenseInput) {
-        expenseInput = expenseInput.replace(/元$/, '');
-        const expenseMatches = expenseInput.match(/\d+(\.\d+)?/g) || [];
-        expenseTotal = expenseMatches.reduce((sum, val) => sum + Number(val), 0);
-      }
-
-      const todayTotalSum = donationsTotal + b4_total;
-      const newBalanceSum = Math.round((prevBalanceNum + todayTotalSum - expenseTotal) * 100) / 100;
+      // 🌟 唯一权威计算入口，见 computeTodayFinancials 顶部注释：
+      // 海报预览的"今日实时总结余"必须与顶部算式校验共享同一套计算结果，
+      // 不能再用已废弃、未绑定任何输入框的 expenses 字段单独算一遍。
+      const { yesterdayBalance: prevBalanceNum, todayIncome: todayTotalSum, todayExpense: expenseTotal, todayBalance: newBalanceSum } = this.computeTodayFinancials();
 
       const dateString = deriveDateString(this.data.reportDateValue, reportDate);
 
@@ -4332,14 +6419,15 @@ Page({
         slogan1: this.data.slogan1,
         slogan2: this.data.slogan2,
         materials: this.data.materials,
+        activityText: this.data.activityText,
         volunteerCount: parseFloat(this.data.volunteerCount) || 0,
         volunteerHours: parseFloat(this.data.volunteerHours) || 0,
         diningCount: parseFloat(this.data.diningCount) || 0,
         stapleRiceStatus: this.data.stapleRiceStatus,
         stapleOilStatus: this.data.stapleOilStatus,
-        noticeTag: this.data.announcement?.tag,
-        noticeTitle: this.data.announcement?.title,
-        noticeContent: this.data.announcement?.content,
+        noticeTag: this.data.announcement && this.data.announcement.tag,
+        noticeTitle: this.data.announcement && this.data.announcement.title,
+        noticeContent: this.data.announcement && this.data.announcement.content,
         mergeToReportText: this.data.mergeToReportText
       });
 
@@ -4368,29 +6456,31 @@ Page({
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const posterImagePath = await drawMeritPoster(this, {
-        shopName: shopName,
-        dateString: dateString,
-        reportDate: reportDate,
-        items: items,
-        totalCount: totalCount,
-        totalAmount: donationsTotal,
-        otherDonation: b4_total,
-        yesterdayBalance: prevBalanceNum,
-        expenseAmount: expenseTotal,
-        todayBalance: newBalanceSum,
-        mpAccount: mpAccount,
-        thankText: this.data.thankText,
-        slogan1: this.data.slogan1,
-        materials: this.data.materials,
-        volunteerCount: parseFloat(this.data.volunteerCount) || 0,
-        volunteerHours: parseFloat(this.data.volunteerHours) || 0
-      });
+      // 验真二维码必须先于海报绘制完成并写入 this.data——drawMeritPoster 内部要用
+      // ctx.drawImage 把它画进画布，不能和画布绘制并行（画布绘制读取 posterData 时
+      // 二维码本地路径必须已经就绪，否则只能画到占位框，等下次切版式才补上）
+      const verifyQrLocalPath = await this.resolveVerifyQrLocalPath();
+      this.setData({ verifyQrLocalPath });
+
+      // 海报画布绘制与门店推广二维码生成/下载并行进行；两者都是异步 IO，互不依赖，
+      // 用 Promise.all 一起等待，确保二维码要么已下载到本地临时路径（ready），
+      // 要么已明确进入 failed 占位态，弹窗渲染时绝不会出现"半下载/空白"的中间态
+      const [posterImagePath] = await Promise.all([
+        drawMeritPoster(this, this.buildFinancialPosterData()),
+        this.generateQrCode()
+      ]);
 
       this.setData({
         posterImage: posterImagePath,
         showPoster: true,
-        showPosterModal: true,
+        // 🐛 不能带上 showPosterModal: true——.modal-backdrop/.poster-modal-card
+        // 是打卡确认卡片复用的另一个弹窗组件（z-index: 99999，见 onConfirmShiftCheckIn），
+        // 跟这里生成的真实 canvas 海报（.poster-modal，z-index: 1000）毫不相干；两个都为
+        // true 时前者会整个盖住后者，用户完全看不到真实海报，也点不到"保存到相册"/
+        // "分享给好友"按钮——这正是海报生成完却"什么都点不了"的根因
+        // 🆕 每次重新生成都是全新的财务公示版海报，切换 Tab 状态归位，
+        // 不能残留上一次预览时用户切到「温馨故事版」的状态
+        posterType: 'financial',
         todayInAmount: todayTotalSum.toFixed(2),
         todayOutAmount: expenseTotal.toFixed(2),
         todayTotalBalance: newBalanceSum.toFixed(2),
@@ -4421,43 +6511,83 @@ Page({
   },
 
   onPreviewQrCode() {
-    const url = this.data.qrCodeUrl || '/images/sun_code_default.png';
+    if (this.data.qrCodeState !== 'ready' || !this.data.qrCodeUrl) {
+      if (this.data.qrCodeState === 'failed') this.generateQrCode();
+      return;
+    }
     wx.previewImage({
-      current: url,
-      urls: [url]
+      current: this.data.qrCodeUrl,
+      urls: [this.data.qrCodeUrl]
     });
   },
 
-  onSavePosterToPhotos() {
-    const { posterImage } = this.data;
-    if (!posterImage) {
-      wx.showToast({ title: '海报图片为空', icon: 'none' });
-      return;
-    }
+  // 🐛 修复"二维码显示为空白"：动态生成门店小程序码并下载到本地临时路径后才切换为 ready 状态，
+  // 生成/下载任一环节失败都会落到 failed 状态展示可重试的占位块，绝不出现空白方块
+  async generateQrCode(): Promise<void> {
+    this.setData({ qrCodeState: 'loading' });
 
-    wx.saveImageToPhotosAlbum({
-      filePath: posterImage,
-      success: () => {
-        wx.showToast({ title: '保存成功', icon: 'success' });
-      },
-      fail: (err) => {
-        console.error('[onSavePosterToPhotos] 保存失败:', err);
-        if (err.errMsg && err.errMsg.indexOf('auth') !== -1) {
-          wx.showModal({
-            title: '提示',
-            content: '请授权允许保存图片到相册',
-            confirmText: '去授权',
-            success: (res) => {
-              if (res.confirm) {
-                wx.openSetting();
-              }
-            }
-          });
-        } else {
-          wx.showToast({ title: '保存失败', icon: 'none' });
-        }
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+
+      const storeId = this.data.currentStoreId || 'store_haicang_001';
+      const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
+
+      const qrRes = await wx.cloud.callFunction({
+        name: 'getStoreQRCode',
+        data: { storeId, storeName }
+      });
+      const qrResult = qrRes.result as any;
+
+      if (!qrResult || !qrResult.success || !qrResult.fileID) {
+        throw new Error((qrResult && qrResult.errMsg) || '二维码生成失败');
       }
-    });
+
+      // 必须等云存储文件真正下载到本地 wxfile:// 临时路径后，再切换为 ready 触发 <image> 渲染，
+      // 避免直接把 cloud:// fileID 或半下载状态的路径丢给 <image>/canvas drawImage 导致空白
+      const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+      if (!downRes || !downRes.tempFilePath) {
+        throw new Error('二维码文件下载失败');
+      }
+
+      this.setData({ qrCodeUrl: downRes.tempFilePath, qrCodeState: 'ready' });
+    } catch (err) {
+      console.error('[generateQrCode] 二维码生成/加载失败:', err);
+      this.setData({ qrCodeUrl: '', qrCodeState: 'failed' });
+    }
+  },
+
+  // 🆕 海报「扫码验真」区域的真实二维码：指向 pages/public-verify/index，携带
+  // 当前门店 storeId + 报告日期，与首页推广码（generateQrCode，指向 pages/index/index）
+  // 是两个不同用途的码，各自独立生成/下载，互不影响。任何一步失败都返回空字符串，
+  // 由 posterGenerator.ts 优雅降级为占位框，绝不阻断整张海报的生成
+  async resolveVerifyQrLocalPath(): Promise<string> {
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+
+      const storeId = this.data.currentStoreId || 'store_haicang_001';
+      const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
+      const dateString = deriveDateString(this.data.reportDateValue, this.data.reportDate);
+
+      const qrRes = await wx.cloud.callFunction({
+        name: 'getStoreQRCode',
+        data: { storeId, storeName, purpose: 'verify', date: dateString }
+      });
+      const qrResult = qrRes.result as any;
+
+      if (!qrResult || !qrResult.success || !qrResult.fileID) {
+        throw new Error((qrResult && qrResult.error) || '验真二维码生成失败');
+      }
+
+      const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+      if (!downRes || !downRes.tempFilePath) {
+        throw new Error('验真二维码下载失败');
+      }
+
+      return downRes.tempFilePath;
+    } catch (err) {
+      console.warn('[resolveVerifyQrLocalPath] 验真二维码生成/下载失败，海报将回退为占位框:', err);
+      return '';
+    }
   },
 
   stopPropagation() {},
@@ -4516,8 +6646,28 @@ Page({
     });
   },
 
+  // 🆕 分享海报图片给微信好友：直接调起微信原生的图片分享面板（转发给好友/保存到相册/
+  // 收藏均由系统面板自带），不同于 open-type="share" 触发的小程序卡片转发
+  // （onShareAppMessage 分享的是小程序入口，不是这张具体的海报图片）
+  onSharePosterImage() {
+    const { posterImage } = this.data;
+    if (!posterImage) {
+      wx.showToast({ title: '海报图片为空', icon: 'none' });
+      return;
+    }
+
+    wx.showShareImageMenu({
+      path: posterImage,
+      fail: (err) => {
+        console.error('[onSharePosterImage] 分享失败:', err);
+        wx.showToast({ title: '分享失败，请重试', icon: 'none' });
+      }
+    });
+  },
+
   async checkContentSafety(text: string): Promise<boolean> {
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const result = await wx.cloud.callFunction({
         name: 'msgSecCheck',
         data: { text: text }
@@ -4539,41 +6689,68 @@ Page({
     this.setData({ showAgreement: true });
   },
 
-  loadAnnouncement() {
-    const cachedNotice = wx.getStorageSync('custom_notice');
-    const cachedMerge = wx.getStorageSync('notice_merge_to_report');
-    const cachedHidden = wx.getStorageSync('notice_hidden');
-    
-    let announcement;
-    if (cachedNotice && cachedNotice.tag && cachedNotice.content) {
-      announcement = {
-        id: 'custom_' + Date.now(),
-        tag: cachedNotice.tag,
-        title: cachedNotice.title || cachedNotice.tag,
-        content: cachedNotice.content,
-        is_top: true,
-        create_time: cachedNotice.create_time || new Date().toISOString().split('T')[0]
-      };
-    } else {
-      const defaultNotice = PRESET_NOTICES.opening;
-      announcement = {
-        id: 'ann_001',
-        tag: defaultNotice.tag,
-        title: defaultNotice.title,
-        content: defaultNotice.content,
-        is_top: true,
-        create_time: '2026-07-10'
-      };
+  // 🔗 跑马灯通知云端化：按"当前视角"严格互斥查询——总览视角只拿机构总览级
+  // 通知，具体门店视角只拿该店专属通知，两者不叠加展示（见 manageNotice 云函数）。
+  // 关闭状态（notice_bar_hidden_date）与查询结果分开判断：即使当天已关闭，也要
+  // 先把数据拉回来存好，下一次视角切换/新的一天自然又能正常展示。
+  async fetchNotices() {
+    // 🐛 首页跑马灯不可见根因：currentStoreId 为空字符串是超管默认总览视角（尚未手动
+    // 切换门店）的合法状态，不是"数据没准备好"——之前这里遇到空字符串直接提前返回、
+    // 从不发起查询，导致超管一进首页跑马灯永远是空的。manageNotice 云函数已经把空
+    // storeId 当总览级处理，这里不再拦截，一律发起查询。
+    const storeId = this.data.currentStoreId || '';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const hiddenDate = wx.getStorageSync('notice_bar_hidden_date');
+    const isHiddenToday = hiddenDate === todayStr;
+
+    this.setData({ noticesLoading: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: { action: 'list', storeId }
+      });
+      const result = res.result as any;
+      const rawList = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+      const noticeList = rawList.map(mapNoticeRecord);
+
+      this.setData({
+        noticeList,
+        currentNoticeIndex: 0,
+        announcement: noticeList.length > 0 ? noticeList[0] : null,
+        isNoticeBarHiddenToday: isHiddenToday,
+        noticesLoading: false
+      });
+    } catch (e) {
+      console.error('[fetchNotices] 查询失败:', e);
+      this.setData({
+        noticeList: [],
+        currentNoticeIndex: 0,
+        announcement: null,
+        isNoticeBarHiddenToday: isHiddenToday,
+        noticesLoading: false
+      });
     }
-    
-    this.setData({
-      announcement: announcement,
-      mergeToReportText: cachedMerge === true,
-      noticeHidden: cachedHidden === true
-    });
+  },
+
+  // 轮播切换：记下当前滚动到第几条，点击时才知道该打开详情弹窗里的哪一条
+  onSwiperNoticeChange(e: any) {
+    const idx = e.detail.current;
+    const item = this.data.noticeList[idx] || null;
+    this.setData({ currentNoticeIndex: idx, announcement: item });
+  },
+
+  // 关闭通知栏：写入"今天"这个日期，整条隐藏不留空白；到了新的一天这个判断
+  // 自然失效，不需要额外的清理逻辑
+  onCloseNoticeBar() {
+    const todayStr = new Date().toISOString().split('T')[0];
+    wx.setStorageSync('notice_bar_hidden_date', todayStr);
+    this.setData({ isNoticeBarHiddenToday: true });
   },
 
   openAnnouncement() {
+    if (!this.data.announcement) return;
     this.setData({
       showAnnouncementModal: true
     });
@@ -4602,6 +6779,7 @@ Page({
     });
   },
 
+  // 编辑当前正在看的这一条（更新）
   openNoticeEdit() {
     const { announcement, mergeToReportText } = this.data;
     if (!announcement) return;
@@ -4609,10 +6787,22 @@ Page({
     this.setData({
       showAnnouncementModal: false,
       showNoticeEditModal: true,
+      noticeEditId: announcement.id || '',
       noticeEditTag: announcement.tag || '喜讯通报',
       noticeEditTitle: announcement.title || '',
       noticeEditContent: announcement.content || '',
       mergeToReportText: mergeToReportText
+    });
+  },
+
+  // 新建一条通知（同一个编辑弹窗，只是清空并且不带 id）
+  openNoticeCreate() {
+    this.setData({
+      showNoticeEditModal: true,
+      noticeEditId: '',
+      noticeEditTag: '喜讯通报',
+      noticeEditTitle: '',
+      noticeEditContent: ''
     });
   },
 
@@ -4646,15 +6836,40 @@ Page({
     wx.setStorageSync('notice_merge_to_report', checked);
   },
 
-  onToggleNoticeHidden() {
-    const newHidden = !this.data.noticeHidden;
-    this.setData({ noticeHidden: newHidden });
-    wx.setStorageSync('notice_hidden', newHidden);
-    wx.showToast({
-      title: newHidden ? '通报栏已隐藏' : '通报栏已显示',
-      icon: 'none',
-      duration: 1500
+  // 🌟 物资护持交互联动：今日餐况卡片里的大米/食用油库存此前只是纯展示标签，
+  // 义工看到"告急"也不知道能做什么。点击后按当前库存状态给出对应引导——
+  // 充足时是一句感恩反馈，一般/告急时给出明确的护持指引，把"看到状态"和
+  // "下一步行动"连起来，而不是让状态标签停留在纯信息层面。
+  onTapMaterialStatus(e: any) {
+    const type = e.currentTarget.dataset.type as 'rice' | 'oil';
+    const status = type === 'rice' ? this.data.stapleRiceStatus : this.data.stapleOilStatus;
+    const label = type === 'rice' ? '大米' : '食用油';
+
+    if (status === 'sufficient') {
+      wx.showToast({ title: `${label}库存充足，感恩各位义工与家人的护持 🙏`, icon: 'none', duration: 2000 });
+      return;
+    }
+
+    const isUrgent = status === 'urgent';
+    // 🛡️ 去宗教化合规要求："发心"/"随喜"均带有宗教色彩，统一替换为"善意"/"随时"等现代公益用语
+    wx.showModal({
+      title: isUrgent ? `⚠️ ${label}库存告急` : `${label}库存提醒`,
+      content: isUrgent
+        ? `当前门店${label}库存告急，如您方便，欢迎护持${label}或直接联系店长了解具体所需数量，感恩您的善意！`
+        : `当前门店${label}库存为"一般"，仍有护持空间，欢迎随时护持，感恩您的关注！`,
+      showCancel: false,
+      confirmText: '知道了'
     });
+  },
+
+  // 🌟 智能物资引导跳转：库存不为"充足"时才会渲染的独立小胶囊入口（见 WXML wx:if 判断），
+  // 复用 onTapMaterialStatus 同一套引导逻辑而不重写一遍——这里不会走到"充足"分支
+  // （该按钮压根不会在充足状态下渲染），本质是给同一个引导流程再加一个更醒目的触发点。
+  // 目前没有一个"义工物资捐赠登记"的独立页面/表单，暂以弹窗形式给出明确指引；
+  // 未来若要接入真正的物资认领登记流程，替换这里的 wx.showModal 调用即可，
+  // 入口位置和触发时机（库存非充足）不需要再变。
+  navToSupport(e: any) {
+    this.onTapMaterialStatus(e);
   },
 
   onApplyPreset(e: any) {
@@ -4675,9 +6890,13 @@ Page({
     }
   },
 
-  onSaveNotice() {
-    const { noticeEditTag, noticeEditTitle, noticeEditContent } = this.data;
-    
+  // 🔗 通知云端化：不再写本机 custom_notice，改成呼叫 manageNotice 云函数落库。
+  // storeId 按当前视角自动带：总览视角下 super_admin 建的是机构总览级公告
+  // （云函数里留空 storeId），其余情况（具体门店视角，或非超管角色）都是店级，
+  // 云函数会按调用者角色再次强制校验，不信任前端传的 storeId。
+  async onSaveNotice() {
+    const { noticeEditId, noticeEditTag, noticeEditTitle, noticeEditContent, currentStoreId } = this.data;
+
     if (!noticeEditContent.trim()) {
       wx.showToast({
         title: '请输入通报内容',
@@ -4686,34 +6905,40 @@ Page({
       return;
     }
 
-    const newAnnouncement = {
-      id: 'custom_' + Date.now(),
-      tag: noticeEditTag,
-      title: noticeEditTitle || noticeEditTag,
-      content: noticeEditContent,
-      is_top: true,
-      create_time: new Date().toISOString().split('T')[0]
-    };
+    const cleanTitle = stripTagPrefix(noticeEditTitle || noticeEditTag, noticeEditTag);
+    const cleanContent = stripTagPrefix(noticeEditContent, noticeEditTag);
 
-    wx.setStorageSync('custom_notice', {
-      tag: noticeEditTag,
-      title: noticeEditTitle || noticeEditTag,
-      content: noticeEditContent,
-      create_time: newAnnouncement.create_time
-    });
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+      const res = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: {
+          action: noticeEditId ? 'update' : 'create',
+          id: noticeEditId || undefined,
+          storeId: currentStoreId,
+          tag: noticeEditTag,
+          title: cleanTitle,
+          content: cleanContent,
+          isActive: true
+        }
+      });
+      const result = res.result as any;
 
-    this.setData({
-      announcement: newAnnouncement,
-      showNoticeEditModal: false,
-      noticeHidden: false
-    });
+      wx.hideLoading();
 
-    wx.setStorageSync('notice_hidden', false);
-
-    wx.showToast({
-      title: '通报内容已更新',
-      icon: 'success'
-    });
+      if (result && result.success) {
+        this.setData({ showNoticeEditModal: false });
+        wx.showToast({ title: noticeEditId ? '通知已更新' : '通知已发布', icon: 'success' });
+        this.fetchNotices();
+      } else {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onSaveNotice] 保存失败:', err);
+      wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+    }
   },
 
   closeAgreement() {
@@ -4749,6 +6974,17 @@ Page({
     this.setData({ showShiftSelectModal: true });
   },
 
+  // 🌟 全角色打卡卡片（omni-checkin-card）的次级跳转：不是导航去另一个页面，
+  // 店务管理/财务稽核台本来就在同一页往下一点的位置（manager-home-card/finance-home-card），
+  // 用 wx.pageScrollTo 按 id 平滑滚动过去即可，比再开一个页面更轻量、也不会丢失打卡卡片的上下文
+  onScrollToManagerConsole() {
+    wx.pageScrollTo({ selector: '#managerConsoleAnchor', duration: 300 });
+  },
+
+  onScrollToFinanceConsole() {
+    wx.pageScrollTo({ selector: '#financeConsoleAnchor', duration: 300 });
+  },
+
   refreshTodayShiftStatus() {
     const todayStr = new Date().toISOString().split('T')[0];
     const logs = wx.getStorageSync('my_checkin_logs') || [];
@@ -4770,16 +7006,36 @@ Page({
     });
 
     const allCompleted = updatedShifts.every((item: any) => item.isCompleted);
+    const matchedShift = firstAvailableShift
+      ? updatedShifts.find((s: any) => s.shiftKey === firstAvailableShift)
+      : null;
+
+    const todayAccumulatedHours = parseFloat(todayHours.toFixed(1));
+    const selectedShiftHours = firstAvailableShift
+      ? ((matchedShift && matchedShift.hours) || 3.0)
+      : 0;
 
     this.setData({
       todayLogs: todayLogs,
-      todayAccumulatedHours: parseFloat(todayHours.toFixed(1)),
+      todayAccumulatedHours: todayAccumulatedHours,
       availableShifts: updatedShifts,
       allShiftsCompleted: allCompleted,
       selectedShift: firstAvailableShift || 'LUNCH',
-      selectedShiftHours: firstAvailableShift
-        ? (updatedShifts.find((s: any) => s.shiftKey === firstAvailableShift)?.hours || 3.0)
-        : 0
+      selectedShiftHours: selectedShiftHours
+    });
+    this.updateHoursPreview(todayAccumulatedHours, selectedShiftHours);
+  },
+
+  // 🌟 实时预览：勾选班次后即时算出"若提交这一笔，今日总工时会变成多少"，
+  // 超过 DAILY_HOURS_CAP 就标红并让确认按钮直接禁用，而不是等提交后才截断
+  updateHoursPreview(todayAccumulatedHours?: number, selectedShiftHours?: number) {
+    const baseHours = todayAccumulatedHours != null ? todayAccumulatedHours : this.data.todayAccumulatedHours;
+    const shiftHours = selectedShiftHours != null ? selectedShiftHours : this.data.selectedShiftHours;
+    const previewTotalHours = parseFloat((baseHours + shiftHours).toFixed(1));
+
+    this.setData({
+      previewTotalHours: previewTotalHours,
+      isOverHoursLimit: previewTotalHours > DAILY_HOURS_CAP
     });
   },
 
@@ -4791,10 +7047,12 @@ Page({
 
   onSelectShift(e: any) {
     const { shift, hours } = e.currentTarget.dataset;
+    const selectedShiftHours = parseFloat(hours || '3.0');
     this.setData({
       selectedShift: shift,
-      selectedShiftHours: parseFloat(hours || '3.0')
+      selectedShiftHours: selectedShiftHours
     });
+    this.updateHoursPreview(undefined, selectedShiftHours);
   },
 
   onCustomHoursInput(e: any) {
@@ -4814,33 +7072,66 @@ Page({
   stopBubble() {},
 
   onConfirmShiftCheckIn() {
+    // 🌟 防连点：双击/网络卡顿时同一次点击可能触发两次回调，读写 storage 之间存在竞态窗口，
+    // 仅靠"当天+同工种已打卡"判断无法拦截几乎同时发生的两次提交。用 data 字段（而非纯实例
+    // 属性）承载这个锁，好处是同一个值既能防重入，也能直接绑定按钮的 loading/disabled 态
+    if (this.data.checkInSubmitting) return;
+
     if (this.data.allShiftsCompleted) {
       wx.showToast({ title: '您今日已完成所有班次护持，感恩您的无私付出！', icon: 'none' });
       return;
     }
 
+    // 🌟 与按钮禁用态保持一致的服务端防线：前端已按 isOverHoursLimit 禁用按钮，
+    // 这里再做一次拦截防止残留点击（如禁用态切换前的最后一次触摸事件）
+    if (this.data.isOverHoursLimit) {
+      wx.showToast({ title: '工时超出每日上限，请撤销部分已打卡记录后再试', icon: 'none' });
+      return;
+    }
+
     const todayStr = new Date().toISOString().split('T')[0];
     const logs = wx.getStorageSync('my_checkin_logs') || [];
+    const selectedShift = this.data.selectedShift;
+    const now = Date.now();
 
-    const isAlreadyChecked = logs.some((l: any) => l.date === todayStr && l.shiftKey === this.data.selectedShift);
+    const isAlreadyChecked = logs.some((l: any) => l.date === todayStr && l.shiftKey === selectedShift);
     if (isAlreadyChecked) {
       wx.showToast({ title: '⚠️ 您今日已完成该班次打卡，请勿重复刷工时', icon: 'none' });
       return;
     }
 
-    const addHours = this.data.selectedShiftHours || 3.0;
-    if (this.data.todayAccumulatedHours + addHours > 12.0) {
+    // 🌟 防刷去重：同工种 10 分钟内重复提交一律视为无效打卡（防止双击/网络重发产生重复记录）
+    const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+    const recentDuplicate = logs.find((l: any) =>
+      l.shiftKey === selectedShift && typeof l.timestamp === 'number' && (now - l.timestamp) < DUPLICATE_WINDOW_MS
+    );
+    if (recentDuplicate) {
+      wx.showToast({ title: '⚠️ 检测到短时间内重复提交，请勿刷单', icon: 'none' });
+      return;
+    }
+
+    // 🌟 单日工时上限：正常流程下前端已按 isOverHoursLimit 禁用按钮拦在前面，
+    // 这里的截断逻辑作为服务端/极端时序下的兜底防线保留，不依赖前端状态
+    const requestedHours = this.data.selectedShiftHours || 3.0;
+    const remainingAllowance = parseFloat((DAILY_HOURS_CAP - this.data.todayAccumulatedHours).toFixed(1));
+
+    if (remainingAllowance <= 0) {
       wx.showModal({
         title: '🌸 义工关怀提醒',
-        content: `您今日已护持 ${this.data.todayAccumulatedHours} 小时，单日工时已达上限（12小时）。雨花家人请注意劳逸结合！`,
+        content: `您今日已护持 ${this.data.todayAccumulatedHours} 小时，已达单日工时上限（${DAILY_HOURS_CAP}小时），今日暂无法继续打卡，雨花家人请注意劳逸结合！`,
         showCancel: false,
-        confirmText: '合十知晓',
+        confirmText: '我知道了',
         confirmColor: '#8C1D18'
       });
       return;
     }
 
-    const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === this.data.selectedShift);
+    const wasTruncated = requestedHours > remainingAllowance;
+    const addHours = wasTruncated ? remainingAllowance : requestedHours;
+
+    this.setData({ checkInSubmitting: true });
+
+    const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === selectedShift);
     const shiftLabel = shiftObj ? shiftObj.name : '爱心护持班';
 
     const hasTodayLog = logs.some((l: any) => l.date === todayStr);
@@ -4850,12 +7141,12 @@ Page({
     const newCount = (this.data.myCheckInCount || 16) + 1;
     const newHours = parseFloat(((this.data.myServiceHours || 48.0) + addHours).toFixed(1));
 
-    const timestamp = Date.now();
+    const timestamp = now;
     const newLog = {
       timestamp: timestamp,
       date: todayStr,
       time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-      shiftKey: this.data.selectedShift,
+      shiftKey: selectedShift,
       shiftName: shiftLabel,
       hours: addHours,
       storeName: this.data.currentStoreName || '海沧区雨花斋',
@@ -4874,10 +7165,15 @@ Page({
       myServiceHours: newHours,
       checkInLogs: logs,
       showShiftSelectModal: false,
-      showPosterModal: true
+      showPosterModal: true,
+      checkInSubmitting: false
     });
 
-    wx.showToast({ title: `打卡成功！+${addHours}h`, icon: 'success' });
+    if (wasTruncated) {
+      wx.showToast({ title: `已为您自动截断至 +${addHours}h（单日上限${DAILY_HOURS_CAP}h）`, icon: 'none', duration: 2500 });
+    } else {
+      wx.showToast({ title: `打卡成功！+${addHours}h`, icon: 'success' });
+    }
   },
 
   onRevokeTodayCheckIn(e: any) {
@@ -4922,14 +7218,37 @@ Page({
     });
   },
 
+  // 🌟 顶部门店数据逻辑对齐：全国总览时展示全网汇总打卡数据（沿用全局累计计数器）；
+  // 切到具体门店时改为按 my_checkin_logs 中的 storeName 过滤，只统计"个人在该店"的打卡数据
   loadVolunteerStats() {
     try {
-      const checkInDays = wx.getStorageSync('my_checkin_days') || 12;
-      const checkInCount = wx.getStorageSync('my_checkin_count') || 15;
-      const serviceHours = wx.getStorageSync('my_service_hours') || 45;
+      const isAllStoresView = this.data.isAllStoresView;
+      const currentStoreName = this.data.currentStoreName || this.data.shopName || '';
+
+      if (isAllStoresView || !currentStoreName) {
+        const checkInDays = wx.getStorageSync('my_checkin_days') || 12;
+        const checkInCount = wx.getStorageSync('my_checkin_count') || 15;
+        const serviceHours = wx.getStorageSync('my_service_hours') || 45;
+
+        this.setData({
+          myCheckInDays: checkInDays,
+          myCheckInCount: checkInCount,
+          myServiceHours: serviceHours
+        });
+        return;
+      }
+
+      const logs = wx.getStorageSync('my_checkin_logs') || [];
+      const storeScopedLogs = logs.filter((l: any) => l.storeName === currentStoreName);
+
+      const uniqueDays = new Set(storeScopedLogs.map((l: any) => l.date));
+      const checkInCount = storeScopedLogs.length;
+      const serviceHours = parseFloat(
+        storeScopedLogs.reduce((sum: number, l: any) => sum + (parseFloat(l.hours) || 0), 0).toFixed(1)
+      );
 
       this.setData({
-        myCheckInDays: checkInDays,
+        myCheckInDays: uniqueDays.size,
         myCheckInCount: checkInCount,
         myServiceHours: serviceHours
       });
@@ -4938,19 +7257,46 @@ Page({
     }
   },
 
-  onOpenMyCheckInHistory() {
+  async onOpenMyCheckInHistory() {
     const days = this.data.myCheckInDays || 0;
     const hours = this.data.myServiceHours || 0;
     const count = this.data.myCheckInCount || 0;
 
+    // 🛡️ 合规修复：archive-modal 组件的 userInfo.avatarUrl/nickName 此前从未被真正赋值过——
+    // 头像/昵称完全靠内部两个 <open-data> 标签自己展示，userInfo 里这两个字段一直是 undefined。
+    // 现在改用 <image>/<text> 绑定真实数据后，必须在这里从 AuthService 缓存的角色信息里
+    // 把头像/昵称一并传进去，否则头像会变成空白占位、昵称会一直显示兜底文案。
+    const cachedRole = AuthService.getCachedRoleInfo();
+    const rawAvatarUrl = (cachedRole && cachedRole.avatarUrl) || '';
+    const nickName = (cachedRole && cachedRole.nickName) || '';
+    const isCloudAvatar = rawAvatarUrl.indexOf('cloud://') === 0;
+
+    // 🐛 修复"头像显示灰块/裂图"：cloud:// fileID 既不能直接喂给 archive-modal.wxml 的
+    // <image src>，也不能喂给组件内 Canvas 合成海报时用的 wx.downloadFile（该接口只认
+    // http(s) 地址，遇到 cloud:// 会直接下载失败）。先弹窗展示已有数据（头像留空更好过灰块），
+    // 再异步换成临时 https 链接补上，与 profile.ts 的处理方式保持一致。
     this.setData({
       showArchiveModal: true,
       archiveUserInfo: {
         totalDays: days,
         totalCheckInCount: count,
-        totalHours: hours
+        totalHours: hours,
+        avatarUrl: isCloudAvatar ? '' : rawAvatarUrl,
+        nickName
       }
     });
+
+    if (isCloudAvatar) {
+      try {
+        const res: any = await wx.cloud.getTempFileURL({ fileList: [rawAvatarUrl] });
+        const tempUrl = res && res.fileList && res.fileList[0] && res.fileList[0].tempFileURL;
+        if (tempUrl) {
+          this.setData({ 'archiveUserInfo.avatarUrl': tempUrl });
+        }
+      } catch (err) {
+        console.warn('[onOpenMyCheckInHistory] 头像临时链接转换失败:', err);
+      }
+    }
   },
 
   onCloseArchiveModal() {
@@ -4978,14 +7324,149 @@ Page({
     });
   },
 
+  // 🐛 修复"假导出"：此前无论选哪个选项都只弹一个"导出指令已发送"的成功提示，
+  // 没有调用任何真实导出逻辑（其中"区块链存证日志"更是纯虚构文案，项目里从未有过相关实现）。
+  // 统计分析页（pages/statistics）已有基于 exportAccountExcel 云函数的完整可用导出流程
+  // （含周/月/年/自定义周期选择 + 下载失败自动降级本地 CSV），直接复用而非在此重复实现。
   onExportExcelHistory() {
-    const storeName = this.data.currentStoreName || '雨花斋';
-    wx.showActionSheet({
-      itemList: [`导出【${storeName}】本月收支明细 Excel`, '导出近 90 天阳光账本汇总表', '查看防篡改区块链存证日志'],
-      success: (res) => {
-        wx.showToast({ title: '导出指令已发送', icon: 'success' });
+    this.onOpenFinanceExportMenu();
+  },
+
+  // 🌟 财务专属功能区「Excel 账本导出」：跳转到已有的、真实可用的统计导出页面
+  onOpenFinanceExportMenu() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+    wx.navigateTo({
+      url: '/pages/statistics/statistics',
+      fail: () => {
+        this.isNavigating = false;
       }
     });
+  },
+
+  // 🌟 财务专属功能区「稽核与封账」：按月批量锁定已通过店长确认的账本，锁定后禁止编辑/作废
+  onOpenFinanceLockModal() {
+    if (!this.data.isFinance && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅财务与超管可执行稽核封账', icon: 'none' });
+      return;
+    }
+    if (this.isNationalOverviewSelected()) {
+      wx.showToast({ title: '请先选择具体的门店再执行封账', icon: 'none', duration: 2500 });
+      return;
+    }
+    const now = new Date();
+    const defaultMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    this.setData({
+      showFinanceLockModal: true,
+      financeLockMonthStr: this.data.financeLockMonthStr || defaultMonthStr
+    });
+  },
+
+  onCloseFinanceLockModal() {
+    if (this.data.financeLockInFlight) return;
+    this.setData({ showFinanceLockModal: false });
+  },
+
+  onFinanceLockMonthChange(e: any) {
+    this.setData({ financeLockMonthStr: e.detail.value });
+  },
+
+  async onConfirmFinanceLock() {
+    if (this.data.financeLockInFlight) return;
+    const monthStr = this.data.financeLockMonthStr;
+    if (!monthStr) {
+      wx.showToast({ title: '请先选择要封账的月份', icon: 'none' });
+      return;
+    }
+    const [year, month] = monthStr.split('-');
+    const storeId = this.data.currentStoreId;
+    const storeLabel = this.data.currentStoreName || storeId;
+
+    wx.showModal({
+      title: '🔒 确认稽核封账？',
+      content: `即将批量锁定【${storeLabel}】${year}年${month}月所有已通过店长确认的账本记录。封账后，这些记录将无法再被店长编辑或作废，是否继续？`,
+      confirmText: '确认封账',
+      confirmColor: '#2E7D32',
+      cancelText: '我再想想',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.data.financeLockInFlight = true;
+        wx.showLoading({ title: '安全封账中...', mask: true });
+        try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const result = await wx.cloud.callFunction({
+            name: 'manageFinanceLock',
+            data: { action: 'lockMonth', storeId, year, month: parseInt(month, 10) }
+          });
+          const res2 = result.result as any;
+          wx.hideLoading();
+          if (res2 && res2.success) {
+            wx.showModal({
+              title: '封账完成',
+              content: res2.message || `已成功封账 ${res2.lockedCount || 0} 条记录`,
+              showCancel: false
+            });
+            this.setData({ showFinanceLockModal: false });
+          } else {
+            wx.showModal({ title: '封账失败', content: (res2 && res2.errMsg) || '云函数未返回正确结果', showCancel: false });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[onConfirmFinanceLock] 异常:', err);
+          wx.showModal({ title: '调用失败', content: '未成功触发封账，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
+        } finally {
+          this.data.financeLockInFlight = false;
+        }
+      }
+    });
+  },
+
+  // 🌟 财务专属功能区「风控预警日志」：余额异常突变 / 红字冲销频次 / 小票缺失明细
+  async onOpenRiskAlertsModal() {
+    if (!this.data.isFinance && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅财务与超管可查看风控预警', icon: 'none' });
+      return;
+    }
+    if (this.isNationalOverviewSelected()) {
+      wx.showToast({ title: '请先选择具体的门店再查看风控预警', icon: 'none', duration: 2500 });
+      return;
+    }
+
+    this.setData({ showRiskAlertsModal: true, riskAlertsLoading: true });
+    await this.fetchRiskAlerts();
+  },
+
+  onCloseRiskAlertsModal() {
+    this.setData({ showRiskAlertsModal: false });
+  },
+
+  async fetchRiskAlerts() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId) {
+      this.setData({ riskAlertsLoading: false });
+      return;
+    }
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const result = await wx.cloud.callFunction({
+        name: 'getRiskAlerts',
+        data: { storeId }
+      });
+      const res = result.result as any;
+      if (res && res.success) {
+        this.setData({
+          riskAlertsList: res.alerts || [],
+          riskAlertsSummary: res.summary || { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 },
+          riskAlertCount: (res.alerts || []).length
+        });
+      } else {
+        console.warn('[fetchRiskAlerts] 云函数返回失败:', res);
+      }
+    } catch (err) {
+      console.error('[fetchRiskAlerts] 异常:', err);
+    } finally {
+      this.setData({ riskAlertsLoading: false });
+    }
   },
 
   onViewPublicLedger() {

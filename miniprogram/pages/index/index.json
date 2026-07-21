@@ -4,6 +4,8 @@
   "navigationBarTextStyle": "white",
   "usingComponents": {
     "store-picker": "../../components/store-picker/store-picker",
-    "archive-modal": "../../components/archive-modal/archive-modal"
+    "archive-modal": "../../components/archive-modal/archive-modal",
+    "privacy-popup": "../../components/privacy-popup/privacy-popup",
+    "side-drawer": "../../components/side-drawer/side-drawer"
   }
 }

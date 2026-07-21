@@ -1,0 +1,534 @@
+.sm-page {
+  min-height: 100vh;
+  background: #F8F5F0;
+}
+
+.sm-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  height: 88rpx;
+  background: #8C1D18;
+}
+
+.sm-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 36rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sm-nav-back-hover {
+  opacity: 0.5;
+}
+
+.sm-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.sm-nav-placeholder {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+}
+
+.sm-loading-state,
+.sm-denied-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 48rpx;
+  text-align: center;
+}
+
+.sm-denied-icon {
+  font-size: 80rpx;
+  margin-bottom: 24rpx;
+}
+
+.sm-denied-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 16rpx;
+}
+
+.sm-denied-sub {
+  font-size: 26rpx;
+  color: #888888;
+  line-height: 1.6;
+  margin-bottom: 40rpx;
+}
+
+.sm-denied-btn {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  padding: 0 48rpx;
+}
+
+.sm-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 圆角胶囊指示器：不用底部下划线，改成分段控件式的滑块高亮，质感更接近原生 Tab */
+.sm-tab-bar {
+  display: flex;
+  background: #F0F1F3;
+  border-radius: 999rpx;
+  margin: 20rpx 24rpx 0;
+  padding: 6rpx;
+  flex-shrink: 0;
+}
+
+.sm-tab-item {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  font-size: 26rpx;
+  color: #666666;
+  border-radius: 999rpx;
+  transition: all 0.25s ease;
+}
+
+.sm-tab-item.active {
+  color: #8C1D18;
+  font-weight: bold;
+  background: #FFFFFF;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+}
+
+.sm-tab-badge {
+  display: inline-block;
+  min-width: 30rpx;
+  height: 30rpx;
+  line-height: 30rpx;
+  padding: 0 6rpx;
+  margin-left: 8rpx;
+  border-radius: 15rpx;
+  background: #E03131;
+  color: #FFFFFF;
+  font-size: 18rpx;
+  font-weight: bold;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* flex:1 自动吃满 .sm-body 里除 .sm-tab-bar 外的剩余空间，不再靠猜 Tab 栏
+   实际高度硬编码一个 calc(100vh - Nrpx)——那种写法只要 Tab 栏样式一变就会跟着错位 */
+.sm-content {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 24rpx;
+}
+
+/* 隐藏原生滚动条：右侧不再露出突兀的系统滚动条滑轨 */
+.sm-content::-webkit-scrollbar,
+.sm-staff-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  color: transparent;
+  background: transparent;
+}
+
+.sm-header-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20rpx;
+}
+
+.sm-btn-create-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 32rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+}
+
+.sm-empty-state {
+  text-align: center;
+  padding: 100rpx 0;
+  color: #999999;
+  font-size: 26rpx;
+}
+
+.sm-pending-loading,
+.sm-staff-loading,
+.sm-staff-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #999999;
+  font-size: 26rpx;
+}
+
+.sm-btn-create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px; /* 触控热区 ≥44pt */
+  margin-top: 32rpx;
+  padding: 0 48rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  transition: all 0.2s ease;
+}
+
+.sm-btn-create-hover {
+  opacity: 0.85;
+  transform: scale(0.97);
+}
+
+.sm-store-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+.sm-store-card.inactive {
+  opacity: 0.7;
+}
+
+.sm-store-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.sm-store-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
+}
+
+.sm-status-badge {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 500;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.sm-status-badge.active {
+  background: #E6F4EA;
+  color: #137333;
+}
+
+.sm-status-badge.inactive {
+  background: #F1F3F4;
+  color: #999999;
+}
+
+/* ===== 异常账目风控预警 ===== */
+.sm-risk-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: #FFF3E0;
+  border: 1rpx solid #F0C878;
+  border-radius: 14rpx;
+  padding: 16rpx 20rpx;
+  margin: 0 24rpx 16rpx;
+}
+
+.sm-risk-summary-icon {
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
+.sm-risk-summary-text {
+  font-size: 24rpx;
+  color: #B8860B;
+  font-weight: 500;
+}
+
+.sm-risk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.sm-risk-tag {
+  font-size: 20rpx;
+  font-weight: 500;
+  padding: 6rpx 16rpx;
+  border-radius: 16rpx;
+}
+
+.sm-risk-tag.danger {
+  background: #FCE8E6;
+  color: #C5221F;
+}
+
+.sm-risk-tag.warning {
+  background: #FFF3E0;
+  color: #B8860B;
+}
+
+.sm-store-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+}
+
+/* 次要功能按钮（生成邀请码/编辑名称/查看门店人员）：统一浅灰底+深灰字，
+   保持界面干净，把视觉重量都让给下面真正需要辨识度的状态切换按钮 */
+.sm-btn-action {
+  /* 🐛 左宽右窄根因：.sm-store-actions 的 1fr 1fr 轨道默认按 minmax(auto, 1fr) 解析，
+     "auto" 下限等于该列里最宽按钮的 min-content 宽度——"👥 查看门店人员"字数最多，
+     把它所在的第一列撑宽，导致左右两列看起来不等宽。min-width:0 去掉这个隐式下限，
+     两列才会严格按 1fr:1fr 五五分成，不受按钮文字长短影响 */
+  min-width: 0;
+  font-size: 24rpx;
+  background: #F7F8FA;
+  color: #323233;
+  padding: 0 16rpx;
+  min-height: 44px;
+  line-height: 44px;
+  border-radius: 12rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+/* 危险操作：停用门店，淡粉红底+醒目亮红字，一眼区别于普通功能按钮；
+   grid-column 撑满整行：按钮组现为奇数个（5 个），让它固定占满自己单独一行，
+   不在末尾留一格空白 */
+.sm-btn-deactivate {
+  grid-column: 1 / -1;
+  background: #FCE8E6;
+  color: #C5221F;
+}
+
+/* 状态切换：启用门店，淡绿底+翠绿字 */
+.sm-btn-activate {
+  grid-column: 1 / -1;
+  background: #E6F4EA;
+  color: #137333;
+}
+
+/* ===== 全国总览公告卡片 ===== */
+.sm-overview-notice-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+  border: 1.5rpx dashed #EFDCC8;
+}
+
+.sm-overview-notice-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  margin-bottom: 20rpx;
+}
+
+/* 总览卡片只有一个按钮，不套用两列网格，撑满整行更自然 */
+.sm-overview-notice-card .sm-store-actions {
+  display: block;
+}
+
+.sm-notice-loading {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #999999;
+  font-size: 26rpx;
+}
+
+/* ===== 待审核门店申请卡片 ===== */
+.sm-pending-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+.sm-pending-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 12rpx;
+}
+
+.sm-pending-meta {
+  font-size: 24rpx;
+  color: #888888;
+  margin-bottom: 6rpx;
+}
+
+.sm-btn-approve {
+  margin-top: 16rpx;
+  min-height: 44px;
+  line-height: 44px;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+}
+
+/* ===== 查看门店人员 ===== */
+.sm-staff-list {
+  max-height: 50vh;
+  margin-bottom: 20rpx;
+}
+
+.sm-staff-item {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F1EBE0;
+}
+
+.sm-staff-item:last-child {
+  border-bottom: none;
+}
+
+.sm-staff-role-tag {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #8C1D18;
+  background: #FDEDED;
+  padding: 4rpx 16rpx;
+  border-radius: 16rpx;
+  margin-right: 16rpx;
+}
+
+.sm-staff-name {
+  font-size: 26rpx;
+  color: #333333;
+}
+
+.sm-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sm-modal-box {
+  width: 600rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  box-sizing: border-box;
+}
+
+.sm-poster-modal-box {
+  width: 680rpx;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.sm-poster-canvas-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 20rpx 0;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 16rpx 0;
+}
+
+.sm-poster-canvas {
+  border-radius: 8rpx;
+}
+
+.sm-modal-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 20rpx;
+}
+
+.sm-form-label {
+  display: block;
+  font-size: 24rpx;
+  color: #999999;
+  margin-bottom: 12rpx;
+}
+
+.sm-modal-input {
+  /* 🐛 显式 height/line-height 对齐：此前只靠 padding 撑高度，placeholder 文字
+     下半截在部分机型上会被裁切；改为显式行高，垂直居中不再依赖 padding 反推 */
+  height: 76rpx;
+  line-height: 76rpx;
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 14rpx;
+  padding: 0 20rpx;
+  font-size: 28rpx;
+  color: #333333;
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 24rpx;
+}
+
+.sm-modal-textarea {
+  display: block;
+  width: 100%;
+  min-height: 140rpx;
+  line-height: 40rpx;
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 14rpx;
+  padding: 18rpx 20rpx;
+  font-size: 28rpx;
+  color: #333333;
+  box-sizing: border-box;
+  margin-bottom: 24rpx;
+}
+
+.sm-modal-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.sm-btn-cancel {
+  flex: 1;
+  font-size: 28rpx;
+  background: #F8F5F0;
+  color: #666666;
+}
+
+.sm-btn-submit {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: bold;
+  background: #8C1D18;
+  color: #FFFFFF;
+}

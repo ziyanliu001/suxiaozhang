@@ -1,17 +1,45 @@
 {
   "pages": [
-    "pages/test/test",
     "pages/index/index",
-    "pages/logs/logs",
+    "pages/notice/notice",
+    "pages/profile/profile",
     "pages/history/history",
+    "pages/logs/logs",
     "pages/statistics/statistics",
     "pages/help/help",
-    "pages/mine/mine",
-    "pages/journey/journey"
+    "pages/journey/journey",
+    "pages/platform-admin/platform-admin",
+    "pages/daily-menu/daily-menu",
+    "pages/activity-log/activity-log",
+    "pages/store-management/store-management",
+    "pages/draft-box/draft-box",
+    "pages/settings/settings",
+    "pages/public-verify/index",
+    "pages/test/test"
   ],
   "window": {
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#8E8E93",
+    "selectedColor": "#8C1D18",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "主页"
+      },
+      {
+        "pagePath": "pages/notice/notice",
+        "text": "通知"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "你"
+      }
+    ]
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"

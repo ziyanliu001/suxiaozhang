@@ -1,14 +1,239 @@
 <wxs src="./index.wxs" module="mask" />
 <view class="index-page-container">
+  <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseAvatar/chooseMedia 等隐私接口
+       （拍照识别小票、爱心支持明细图片识别等），必须放置该组件才能正常弹出授权 -->
+  <privacy-popup />
+
+  <!-- 🌟 合规授权须知弹窗（组件一）：'general'/'privileged' 场景下强制阅读——
+       不提供关闭按钮、mask 不绑定 tap，用户只能点底部按钮确认后才能继续使用；
+       'review' 场景（从底部 Footer「查看完整声明」点进来）已经通过强制阅读，
+       允许随时自由关闭，不重复写入确认标记 -->
+  <view class="compliance-modal-mask" wx:if="{{showComplianceModal}}">
+    <view class="compliance-modal-card">
+      <view class="compliance-modal-header">
+        <text class="compliance-modal-title">重要声明与合规须知</text>
+        <view class="compliance-modal-close" wx:if="{{complianceModalScene === 'review'}}" bindtap="onCloseComplianceReview">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="compliance-modal-body">
+        <view class="compliance-section">
+          <view class="compliance-section-title">一、开发主体与身份声明</view>
+          <view class="compliance-section-text">本小程序「雨花爱心餐报助手」由民间素食公益志愿者（义工）团队基于公益服务需求自发开发与维护，用于协助素食公益食堂进行内部餐报记录与信息公示。<text class="compliance-emphasis">本程序并非"雨花斋"商标持有人、雨花斋总部或其关联机构官方发布、授权或运营的产品</text>，与雨花斋总部及各地分支机构无隶属、代理或授权关系。程序内出现的"雨花""雨花斋"等字样，仅为沿用民间素食公益活动的通用称谓与历史习惯用语，不代表任何商标权利主张，亦不用于任何商业用途。</view>
+        </view>
+
+        <view class="compliance-section">
+          <view class="compliance-section-title">二、功能定位声明</view>
+          <!-- 🛡️ 去宗教化合规要求（用户已确认范围：仅本弹窗内文案，parser.ts 解析关键词与
+               代码注释保留不动，避免影响既有解析逻辑）："供养"替换为"支持/资助" -->
+          <view class="compliance-section-text">本小程序仅作为面向公益食堂内部使用的<text class="compliance-emphasis">数字化辅助记账与信息公示工具</text>，核心功能包括：当日开餐食材支出的录入与核算、爱心支持/资助/护持款项的手工登记与自动核对、以及供内部/信息公示使用的餐报文本与海报生成。所有数据处理均围绕已发生的线下业务展开，旨在提升门店账目透明度与信息化管理效率。</view>
+        </view>
+
+        <view class="compliance-section">
+          <view class="compliance-section-title">三、资金与募捐合规声明（重要）</view>
+          <view class="compliance-section-text"><text class="compliance-emphasis">本小程序不具备、也绝不提供任何形式的线上募捐、众筹、善款代收、在线支付或资金归集功能。</text>小程序内展示的所有金额数据，均为门店义工/店长/财务人员对线下已实际发生的现金或实物支持/资助、开支进行的后期人工录入与信息公示，仅用于账目留痕与对外透明公示，不构成、也不应被理解为面向公众的网络募捐邀约或众筹行为。如您希望向相关公益组织提供支持，请通过其官方、合规渠道进行。</view>
+        </view>
+
+        <view class="compliance-section">
+          <view class="compliance-section-title">四、信息安全声明</view>
+          <view class="compliance-section-text">程序中涉及的姓名等个人信息，已按照相关法律法规要求进行必要的脱敏处理，仅用于门店内部核账与公示用途，不作其他用途使用。</view>
+        </view>
+      </scroll-view>
+
+      <view class="compliance-modal-footer">
+        <button wx:if="{{complianceModalScene !== 'review'}}" class="compliance-confirm-btn" bindtap="onAcknowledgeCompliance">我已阅读并知悉其非官方属性</button>
+        <button wx:else class="compliance-confirm-btn compliance-confirm-btn-review" bindtap="onCloseComplianceReview">关闭</button>
+      </view>
+    </view>
+  </view>
   <view class="app-header-section" style="padding-top: {{headerSafeTop}}px;">
     <view class="main-title-header-box">
-      <text class="brand-header-title">雨花爱心餐报助手</text>
+      <view class="hamburger-menu-btn" bindtap="onOpenSideDrawer" hover-class="capsule-hover">
+        <view class="hamburger-line"></view>
+        <view class="hamburger-line"></view>
+        <view class="hamburger-line"></view>
+      </view>
+      <text class="brand-header-title">素小账志愿服务</text>
     </view>
 
     <view class="capsule-bar-row">
-      <store-picker id="storePicker" bind:storechange="onStoreChanged" />
-      <view class="btn-mine-capsule" bindtap="onNavigateToMine"><view class="idx-icon-sm idx-icon-user"></view> 我的</view>
+      <store-picker id="storePicker" bind:storechange="onStoreChanged" bind:storelistchange="onStoreListChanged" />
+      <!-- 🌟 财务角色专属的轻量邀请入口：管理员/超管已经有【门店推广与邀请】宫格卡片可以生成邀请码，
+           唯独纯财务角色（isFinance 且非 isManager）此前完全没有入口——财务稽核台以数据安全/对账
+           为核心，不适合再放一整张运营推广卡片，所以选择和"帮助"同款的极简小图标胶囊，
+           零卡片高度占用，命名也从泛化的"邀请"改成符合财务语境的"邀请协同"，见 onOpenFinanceInviteMenu -->
+      <view class="btn-invite-capsule" wx:if="{{isFinance && !isManager}}" bindtap="onOpenFinanceInviteMenu">
+        <view class="idx-icon-sm idx-icon-key"></view> 邀请协同
+      </view>
       <view class="btn-help-capsule" bindtap="onNavigateToHelp"><view class="idx-icon-sm idx-icon-help"></view> 帮助</view>
+    </view>
+  </view>
+
+  <!-- 🌟 视角切换预览提示条：仅超级管理员在非全景视角下可见，避免误以为真的丢失了管理权限 -->
+  <view class="preview-mode-banner" wx:if="{{isRealSuperAdmin && currentViewMode !== 'SUPER_ADMIN'}}" bindtap="onNavigateToProfile">
+    <text class="preview-mode-text">👁️ 正在预览【{{currentViewMode === 'STORE_MANAGER' ? '店长视角' : '财务视角'}}】，实际操作仍以超级管理员权限执行</text>
+    <text class="preview-mode-link">去切回 ›</text>
+  </view>
+
+  <!-- 🌟 C位核心：欢迎语 + 护持统计 + 打卡 CTA，志工视角下置于胶囊下方最顶部，
+       作为页面第一视觉焦点，不再被公告栏/食谱大事记预览卡挤到后面 -->
+  <view class="volunteer-hero-card" wx:if="{{isVolunteer}}">
+    <view class="v-header">
+      <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{isAllStoresView ? '雨花大家庭' : (currentStoreName || shopName || '海沧区雨花斋')}}</view>
+      <text class="v-sub">端上一碗热饭，温暖世间一颗心</text>
+    </view>
+
+    <!-- 🌟 核心荣誉统计面板：置于卡片头部，数字放大，并附温情激励语增强归属感 -->
+    <view class="volunteer-stats-banner" bindtap="onOpenMyCheckInHistory" hover-class="volunteer-stats-banner-hover" hover-stay-time="120">
+      <view class="volunteer-stats-row">
+        <view class="stat-item">
+          <text class="stat-num">{{myCheckInDays || 12}}</text>
+          <text class="stat-label">已护持/天</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-num">{{myCheckInCount || 15}}</text>
+          <text class="stat-label">累计打卡/次</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-num">{{myServiceHours || 45}}</text>
+          <text class="stat-label">贡献时长/h</text>
+        </view>
+      </view>
+      <!-- 🛡️ 去宗教化合规要求："愿心"/"发心"均带有宗教色彩，统一替换为"爱心"/"支持"等现代公益用语 -->
+      <text class="warm-encourage-text">{{myCheckInDays > 0 ? '感恩您已护持 ' + myCheckInDays + ' 天，爱心相续 🌸' : '这是您护持之路的开始，感恩支持 🌸'}}</text>
+      <view class="journey-entry-row">
+        <text class="journey-entry-text">📜 服务历程</text>
+        <text class="journey-entry-arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 🌟 第一核心操作：义工到岗打卡，紧随统计面板之后，视觉最突出 -->
+    <view class="v-action-box {{highlightCheckInCard ? 'highlight-pulse' : ''}}" id="checkInCard">
+      <button
+        class="btn-volunteer-checkin {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
+        bindtap="onVolunteerCheckIn"
+      >
+        <view class="idx-icon-sm idx-icon-handshake"></view>
+        {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '志愿者到岗服务打卡')}}
+      </button>
+      <text class="link-view-public-ledger" bindtap="goToStatistics">📖 查看公开账本 ›</text>
+    </view>
+  </view>
+
+  <!-- 🌟 全角色到岗打卡卡片：店长/财务此前完全看不到打卡入口——打卡按钮被锁死在只对
+       isVolunteer 渲染的 volunteer-hero-card 里，而 onVolunteerCheckIn/onConfirmShiftCheckIn
+       这两个真正写打卡数据的函数本身完全不关心角色，只按当天日期+班次去重、只写
+       my_checkin_days/my_service_hours 这类与角色无关的本地存储——也就是说打卡功能本来就是
+       "全角色通用"的，唯独入口按钮被裹在义工专属卡片里出不来。这里新增一张不依赖角色的
+       打卡卡片，只在非义工视角下渲染，复用同一套 onVolunteerCheckIn 逻辑与打卡按钮样式，
+       不改动 volunteer-hero-card 本身，避免给已经跑得好好的义工端引入回归风险。 -->
+  <view class="omni-checkin-card" wx:if="{{!isVolunteer}}">
+    <view class="omni-checkin-header">
+      <text class="omni-checkin-title">🙋 志愿服务打卡</text>
+      <text class="omni-checkin-sub">{{currentUserRole === 'store_manager' ? '店长' : (currentUserRole === 'finance' ? '财务' : '管理员')}}身份同样可以记录到岗时长，与全体志愿者共享同一份服务足迹</text>
+    </view>
+    <button
+      class="btn-volunteer-checkin omni-checkin-btn {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
+      bindtap="onVolunteerCheckIn"
+    >
+      <view class="idx-icon-sm idx-icon-handshake"></view>
+      {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '志愿者到岗服务打卡')}}
+    </button>
+
+    <!-- 次级跳转：滚动定位到下方对应的管理/财务控制台卡片，不是另开一个页面——
+         那张卡片本来就在同一页往下一点的位置，这里只是给个明确的"下一步在哪"的路标 -->
+    <view class="omni-checkin-manage-links">
+      <view class="omni-checkin-manage-link" wx:if="{{isManager}}" bindtap="onScrollToManagerConsole">
+        <text>进入店务管理</text>
+        <text class="omni-link-arrow">▶</text>
+      </view>
+      <view class="omni-checkin-manage-link" wx:if="{{isFinance}}" bindtap="onScrollToFinanceConsole">
+        <text>进入财务稽核台</text>
+        <text class="omni-link-arrow">▶</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 📢 门店公告：按当前视角（总览级/具体门店，严格互斥）从云端拉取的通知列表。
+       多条时垂直轮播；单条超长标题用水平跑马灯；没有任何有效通知时整块不占位。 -->
+  <view class="announce-bar" wx:if="{{noticeList.length > 0 && !isNoticeBarHiddenToday}}">
+    <text class="announce-bar-icon">📢</text>
+
+    <view class="announce-bar-viewport" wx:if="{{noticeList.length === 1}}" bindtap="openAnnouncement">
+      <text class="announce-bar-text {{noticeList[0].title.length > 14 ? 'marquee' : ''}}">{{noticeList[0].title}}<block wx:if="{{noticeList[0].title.length > 14}}">　　{{noticeList[0].title}}</block></text>
+    </view>
+
+    <swiper wx:if="{{noticeList.length > 1}}" class="announce-bar-swiper" vertical autoplay circular interval="3000" duration="500" bindchange="onSwiperNoticeChange">
+      <swiper-item wx:for="{{noticeList}}" wx:key="id">
+        <view class="announce-bar-viewport" bindtap="openAnnouncement">
+          <text class="announce-bar-text {{item.title.length > 14 ? 'marquee' : ''}}">{{item.title}}<block wx:if="{{item.title.length > 14}}">　　{{item.title}}</block></text>
+        </view>
+      </swiper-item>
+    </swiper>
+
+    <text class="announce-bar-edit" wx:if="{{(isManager || isFinance || isSuperAdmin) && noticeList.length > 0}}" catchtap="openNoticeEdit">✏️</text>
+    <text class="announce-bar-add" wx:if="{{isManager || isFinance || isSuperAdmin}}" catchtap="openNoticeCreate">＋</text>
+    <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
+  </view>
+
+  <!-- 🌟 兜底温馨提示：云端确认当前视角暂无有效通知时展示，避免跑马灯整块消失留白；
+       noticesLoading 期间不展示，防止请求还没返回就先闪一下"暂无通知" -->
+  <view class="announce-bar announce-bar-fallback" wx:if="{{noticeList.length === 0 && !noticesLoading && !isNoticeBarHiddenToday}}">
+    <text class="announce-bar-icon">📢</text>
+    <view class="announce-bar-viewport">
+      <text class="announce-bar-text">欢迎使用素小账，今日公益服务正常进行中</text>
+    </view>
+    <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
+  </view>
+
+  <!-- 🍱 今日食谱预览卡：全国总览视图不展示（无具体门店）；志工视角已合并进下方"今日餐况"单行摘要，此处不再重复展示。
+       🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页 -->
+  <view class="today-menu-preview-card {{todayMenu ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && todayMenuLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoDailyMenu' : ''}}">
+    <view class="tmp-main">
+      <view class="tmp-header">
+        <text class="tmp-title">🍱 今日食谱</text>
+      </view>
+      <view class="tmp-9grid" wx:if="{{todayMenu && todayMenu.images.length > 0}}">
+        <view class="tmp-grid-item" wx:for="{{todayMenu.images}}" wx:for-item="img" wx:key="url">
+          <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="tmp-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
+          <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
+            <text class="thumb-load-failed-icon">⚠️</text>
+            <text class="thumb-load-failed-text">加载失败</text>
+          </view>
+        </view>
+      </view>
+      <text class="tmp-text" wx:if="{{todayMenu}}">{{todayMenu.menuText || '（未填写文字菜谱，见图片）'}}</text>
+      <text class="tmp-empty-text" wx:else>今日食谱尚未发布</text>
+    </view>
+    <view class="tmp-side-action" catchtap="onGotoDailyMenu" wx:if="{{isManager || isSuperAdmin}}">
+      <text class="tmp-side-btn" wx:if="{{!todayMenu}}">+ 去发布</text>
+      <text class="tmp-side-link" wx:else>去管理 ›</text>
+    </view>
+  </view>
+
+  <!-- 📌 今日大事记预览卡：全国总览视图不展示（无具体门店）；志工视角已合并进下方"今日餐况"单行摘要，此处不再重复展示。
+       🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页 -->
+  <view class="today-menu-preview-card {{todayActivity ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && todayActivityLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoActivityLog' : ''}}">
+    <view class="tmp-main">
+      <view class="tmp-header">
+        <text class="tmp-title">📌 今日门店日志</text>
+      </view>
+      <view class="tmp-9grid" wx:if="{{todayActivity && todayActivity.images.length > 0}}">
+        <view class="tmp-grid-item" wx:for="{{todayActivity.images}}" wx:for-item="img" wx:key="url">
+          <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="tmp-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
+          <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
+            <text class="thumb-load-failed-icon">⚠️</text>
+            <text class="thumb-load-failed-text">加载失败</text>
+          </view>
+        </view>
+      </view>
+      <text class="tmp-text" wx:if="{{todayActivity}}">{{todayActivity.title}}</text>
+      <text class="tmp-empty-text" wx:else>今日尚无门店日志</text>
+    </view>
+    <view class="tmp-side-action" catchtap="onGotoActivityLog" wx:if="{{isManager || isSuperAdmin}}">
+      <text class="tmp-side-btn" wx:if="{{!todayActivity}}">+ 去发布</text>
+      <text class="tmp-side-link" wx:else>去管理 ›</text>
     </view>
   </view>
 
@@ -31,31 +256,12 @@
       <text class="slogan-tag" wx:if="{{currentSponsorInfo.brandSlogan}}">{{currentSponsorInfo.brandSlogan}}</text>
     </view>
 
-    <view class="manager-quick-actions" wx:if="{{isManager || isSuperAdmin}}">
-      <view class="action-btn-capsule" bindtap="onGenerateStorePoster">
-        <view class="icon idx-icon-svg idx-icon-image"></view>
-        <text class="txt">生成门店邀请海报</text>
-      </view>
-      <view class="action-btn-capsule" bindtap="onOpenAuditModal">
-        <view class="icon idx-icon-svg idx-icon-people"></view>
-        <text class="txt">义工审核 ({{pendingAuditCount || 0}})</text>
-      </view>
-      <view class="action-btn-capsule" bindtap="onOpenGenCodeModal">
-        <view class="icon idx-icon-svg idx-icon-key"></view>
-        <text class="txt">生成邀请码</text>
-      </view>
-      <view class="action-btn-capsule danger-red" bindtap="onOpenDevClearModal">
-        <view class="icon idx-icon-svg idx-icon-trash"></view>
-        <text class="txt">全量清洗测试数据</text>
-      </view>
-    </view>
-
-    <scroll-view scroll-y class="page-body-scroll">
-    <view class="manager-home-card" wx:if="{{isManager || isSuperAdmin}}">
+    <!-- 📊 数据概览卡片上移，充实上半屏视觉焦点 -->
+    <view class="manager-home-card" id="managerConsoleAnchor" wx:if="{{isManager || isSuperAdmin}}">
       <view class="card-header-welcome">
         <view class="welcome-icon idx-icon-svg idx-icon-crown"></view>
         <view class="welcome-text-box">
-          <text class="welcome-title">{{currentStoreName || '海沧区雨花斋'}} · 店长工作台</text>
+          <text class="welcome-title">{{currentStoreName || '海沧店'}} · 店长工作台</text>
           <text class="welcome-sub">掌管门店日常运营、小票记账与餐报发布</text>
         </view>
       </view>
@@ -68,21 +274,21 @@
         <view class="stat-divider"></view>
         <view class="stat-item" bindtap="onOpenVolunteerAudit">
           <text class="stat-num highlight">{{pendingAuditCount || 0}}</text>
-          <text class="stat-label">待审核义工/人</text>
+          <text class="stat-label">待审核志愿者/人</text>
         </view>
         <view class="stat-divider"></view>
         <view class="stat-item">
           <text class="stat-num">{{activeVolunteersCount || 28}}</text>
-          <text class="stat-label">护持团队/人</text>
+          <text class="stat-label">志愿团队/人</text>
         </view>
       </view>
     </view>
 
-    <view class="finance-home-card" wx:if="{{isFinance || isSuperAdmin}}">
+    <view class="finance-home-card" id="financeConsoleAnchor" wx:if="{{isFinance || isSuperAdmin}}">
       <view class="card-header-welcome">
         <view class="welcome-icon idx-icon-svg idx-icon-lock"></view>
         <view class="welcome-text-box">
-          <text class="welcome-title">{{currentStoreName || '海沧区雨花斋'}} · 财务稽核台</text>
+          <text class="welcome-title">{{currentStoreName || '海沧店'}} · 财务稽核台</text>
           <text class="welcome-sub">账本防篡改稽核、资金安全与数据导出</text>
         </view>
       </view>
@@ -98,13 +304,65 @@
           <text class="stat-label">月度导出/次</text>
         </view>
         <view class="stat-divider"></view>
-        <view class="stat-item">
-          <text class="stat-num">0</text>
+        <view class="stat-item" bindtap="onOpenRiskAlertsModal">
+          <text class="stat-num {{riskAlertCount > 0 ? 'highlight' : ''}}">{{riskAlertCount || 0}}</text>
           <text class="stat-label">异常风控预警</text>
+        </view>
+      </view>
+
+      <!-- 🌟 财务专属功能区：标准 2x2 宫格，聚焦稽核指标 + 账本审核 + 导出/封账 -->
+      <view class="qa-main-grid finance-qa-grid">
+        <view class="qa-grid-cell" bindtap="onOpenFinanceExportMenu">
+          <text class="qa-grid-emoji">📊</text>
+          <text class="txt">Excel 账本导出</text>
+        </view>
+        <view class="qa-grid-cell" bindtap="onOpenFinanceLockModal">
+          <text class="qa-grid-emoji">🔒</text>
+          <text class="txt">稽核与封账</text>
+        </view>
+        <view class="qa-grid-cell" bindtap="onOpenRiskAlertsModal">
+          <text class="qa-grid-emoji">⚠️</text>
+          <text class="txt">风控预警日志</text>
+        </view>
+        <view class="qa-grid-cell" bindtap="toggleSettings">
+          <view class="icon idx-icon-svg idx-icon-settings"></view>
+          <text class="txt">店铺模板自定义</text>
         </view>
       </view>
     </view>
 
+    <view class="manager-quick-actions-v2" wx:if="{{isManager || isSuperAdmin}}">
+      <!-- 🌟 固定 2x2 标准四宫格：四张卡片对所有管理角色恒定存在，不再因 isSuperAdmin 等条件
+           导致某个角色看到的宫格缺一角。原"门店管理"（仅超管）移至宫格下方独立入口，
+           原"门店邀请海报"+"生成邀请码"两个推广入口合并进第 4 张卡片的操作菜单 -->
+      <view class="qa-main-grid">
+        <view class="qa-grid-cell" bindtap="goToHistory">
+          <text class="qa-grid-emoji">🧾</text>
+          <text class="txt">凭证与账本</text>
+        </view>
+        <view class="qa-grid-cell" bindtap="onOpenAuditModal">
+          <view class="icon idx-icon-svg idx-icon-people"></view>
+          <text class="txt">义工审核 ({{pendingAuditCount || 0}})</text>
+        </view>
+        <view class="qa-grid-cell" bindtap="goToStatistics">
+          <view class="icon idx-icon-svg idx-icon-chart"></view>
+          <text class="txt">数据统计/账本导出</text>
+        </view>
+        <view class="qa-grid-cell" bindtap="onOpenPromoActionSheet">
+          <text class="qa-grid-emoji">🖼️</text>
+          <text class="txt">门店推广与邀请</text>
+        </view>
+      </view>
+
+      <!-- 门店管理：仅超管可见，独立于固定宫格之外，不再挤占/影响宫格对称性 -->
+      <view class="qa-extra-row" wx:if="{{isSuperAdmin}}" bindtap="onGotoStoreManagement">
+        <text class="qa-grid-emoji">🏪</text>
+        <text class="txt">门店管理</text>
+        <text class="qa-extra-arrow">›</text>
+      </view>
+    </view>
+
+    <scroll-view scroll-y class="page-body-scroll">
     <view class="draft-notice-banner" wx:if="{{hasDraft && (isManager || isSuperAdmin)}}">
       <view class="draft-left">
         <view class="icon idx-icon-sm idx-icon-note"></view>
@@ -123,32 +381,12 @@
       <text class="offline-action">[重传]</text>
     </view>
 
-    <view class="ui-card-wrapper notice-card" wx:if="{{announcement && !noticeHidden}}" bindtap="openAnnouncement">
-      <view class="notice-card-header">
-        <view class="megaphone-icon idx-icon-svg idx-icon-megaphone"></view>
-        <text class="notice-status-tag">【{{announcement.tag || '喜讯通报'}}】</text>
-        <text class="notice-title-text">{{announcement.title}}</text>
-        <view class="notice-status-badge" wx:if="{{mergeToReportText}}">
-          <text class="dot">●</text>已关联
-        </view>
-      </view>
-      <view class="notice-card-body">
-        {{announcement.content}}
-      </view>
-      <view class="notice-card-footer">
-        <text class="notice-link-btn" bindtap="openAnnouncement">查看全文</text>
-        <text class="notice-link-btn" bindtap="copyAnnouncement">复制文字</text>
-        <text class="notice-link-btn edit" catchtap="openNoticeEdit"><view class="idx-icon-sm idx-icon-edit" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>修改</text>
-        <text class="notice-link-btn hide" catchtap="onToggleNoticeHidden">隐藏</text>
-      </view>
-    </view>
-
-    <view class="notice-show-btn" wx:if="{{noticeHidden}}" bindtap="onToggleNoticeHidden">
-      <view class="show-icon idx-icon-sm idx-icon-megaphone"></view>
-      <text class="show-text">显示通报栏</text>
-    </view>
-
-    <view class="ui-card-wrapper template-card" bindtap="toggleSettings">
+    <!-- 🐛 与 finance-qa-grid 第 4 格【店铺模板自定义】(toggleSettings) 重复的通栏横条：
+         纯财务/超管已经能从四宫格进入同一个 toggleSettings，这里再展示一条一模一样的
+         入口纯属冗余视觉噪音。但对"只是店长、不是财务也不是超管"的角色来说，四宫格
+         (manager-quick-actions-v2) 里压根没有这一格，这条横条是他们唯一能进店铺模板
+         设置的入口——不能一并删掉，只隐藏"已经有格子可以点"的那部分用户 -->
+    <view class="ui-card-wrapper template-card" wx:if="{{!(isFinance || isSuperAdmin)}}" bindtap="toggleSettings">
       <view class="template-header-left">
         <view class="icon idx-icon-svg idx-icon-settings"></view>
         <text class="title">店铺模板自定义</text>
@@ -201,6 +439,12 @@
       </view>
     </view>
 
+    <!-- 🌟 职责隔离策略已按需求调整：财务义工每天稽核完账目、确认算式无误后，
+         需要亲自生成/提交当日餐报并公示，因此当日明细录入表单不再对纯财务角色隐藏——
+         纯财务与店长现在走完全相同的一套录入 + 提交 + 级联重算流程，不再区分。
+         真正的重复录入防护在 saveReportAsync -> DataService.saveReport 的
+         duplicate_date_blocked 校验里：当天若已有店长提交的记录，财务这里生成时
+         会被拦截并引导去历史记录编辑，不会产生重复/冲突的账本条目。 -->
     <view class="ui-card-wrapper form-main-card">
       <view class="form-card-header">
         <view class="title-group">
@@ -299,21 +543,28 @@
             <view class="lbl-bold"><view class="idx-icon-sm idx-icon-heart" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>爱心支持明细</view>
           </view>
           <view class="entry-mode-segmented">
-            <view 
-              class="segment-btn {{inputMode === 'form' ? 'active' : ''}}" 
-              bindtap="onChangeInputMode" 
+            <view
+              class="segment-btn {{inputMode === 'form' ? 'active' : ''}}"
+              bindtap="onChangeInputMode"
               data-mode="form"
             >
-              <view class="icon idx-icon-sm idx-icon-pen"></view>
-              <text class="txt">逐条录入</text>
+              <text class="txt">✍️ 逐条</text>
             </view>
-            <view 
-              class="segment-btn {{inputMode === 'text' ? 'active' : ''}}" 
-              bindtap="onChangeInputMode" 
+            <view
+              class="segment-btn {{inputMode === 'text' ? 'active' : ''}}"
+              bindtap="onChangeInputMode"
               data-mode="text"
             >
-              <view class="icon idx-icon-sm idx-icon-clipboard"></view>
-              <text class="txt">批量粘贴</text>
+              <text class="txt">📋 粘贴</text>
+            </view>
+            <!-- 🌟 图片识别不是一个持续的"模式"（不参与 form/text 互斥切换），
+                 是一次性动作：识别完成后直接把结果追加进批量粘贴文本框并自动切到该模式；
+                 "选中态"复用同一套 .active 高亮，只在识别进行中短暂点亮，识别完自动退回中性态 -->
+            <view
+              class="segment-btn segment-btn-ocr {{isScanningDonorList ? 'active' : ''}}"
+              bindtap="onScanDonorScreenshot"
+            >
+              <text class="txt">📸 识图</text>
             </view>
           </view>
         </view>
@@ -350,8 +601,17 @@
         <block wx:else>
           <view class="textarea-wrap">
             <textarea class="textarea autosize" auto-height maxlength="-1" placeholder="{{donationPlaceholder}}" value="{{allDonations}}" bindinput="onInput" data-field="allDonations" />
+            <!-- 🌟 历史名单轻量入口：右下角弱化文字链接，不占主要视觉权重 -->
+            <text class="btn-frequent-donor-link" bindtap="onOpenFrequentDonorPicker">🕒 选择常客</text>
           </view>
-          <view class="text-format-tip"><view class="idx-icon-sm idx-icon-bulb"></view> 支持空格、逗号、冒号分隔，系统将自动清洗识别金额</view>
+          <view class="tip-and-sum-row">
+            <view class="text-format-tip"><view class="idx-icon-sm idx-icon-bulb"></view> 支持空格、逗号、冒号分隔，系统将自动清洗识别金额</view>
+            <!-- 🌟 实时金额累加提示：直接读 parseResult/totalParsedAmount——这两个字段本就是
+                 updateParseResult（bindinput 和图片识别成功后都会调用）算好的结果，不再另起
+                 一套"抓数字求和"的逻辑，也让这里显示的数字与下方【今日预计结余算式预览】的
+                 收入变量始终是同一个数，不可能出现两处对不上的情况 -->
+            <text class="realtime-sum-tip" wx:if="{{parseResult.totalCount > 0}}">💡 系统已自动解析 {{parseResult.totalCount}} 笔支持，累加总额：¥{{totalParsedAmount}}</text>
+          </view>
 
           <view class="parse-preview" wx:if="{{parseResult.items.length > 0 || parseResult.unrecognizedLines.length > 0}}">
             <view class="preview-header">
@@ -524,23 +784,26 @@
     <!-- Card D: 今日支出明细录入与凭证上传卡片 -->
     <view class="ui-card-wrapper expense-main-card">
       <view class="card-title-bar">
-        <view class="title"><view class="idx-icon-sm idx-icon-wallet"></view> 今日支出明细录入</view>
+        <view class="title"><view class="idx-icon-sm idx-icon-wallet"></view> 今日支出录入</view>
       </view>
 
       <view class="expense-field-box">
         <view class="box-header">
-          <view class="lbl"><view class="idx-icon-sm idx-icon-bowl"></view> 每日开餐食材与杂购</view>
+          <view class="lbl"><view class="idx-icon-sm idx-icon-bowl"></view> 食材与杂购</view>
           <view class="header-action-row">
-            <text class="tag">计入每餐成本</text>
-            <view class="btn-scan-receipt-pill" bindtap="onScanReceiptPhoto">
+            <text class="tag">计入成本</text>
+            <view class="btn-expense-template-pill" hover-class="btn-expense-template-hover" bindtap="onOpenExpenseTemplateModal" data-category="daily">
+              <text class="lbl">🧾 常用项目</text>
+            </view>
+            <view class="btn-scan-receipt-pill" hover-class="btn-scan-receipt-hover" bindtap="onScanReceiptPhoto">
               <view class="icon idx-icon-sm idx-icon-camera"></view>
               <text class="lbl">拍照识别</text>
             </view>
           </view>
         </view>
-        <textarea 
-          class="expense-textarea" 
-          value="{{dailyExpenseText}}" 
+        <textarea
+          class="expense-textarea"
+          value="{{dailyExpenseText}}"
           placeholder="如：青菜30 豆腐20 煤气80"
           bindinput="onInput"
           data-field="dailyExpenseText"
@@ -548,21 +811,66 @@
           auto-height="{{true}}"
           style="min-height: 160rpx;"
         />
+        <text class="expense-parse-preview" wx:if="{{dailyExpenseParseCount > 0}}">已解析 {{dailyExpenseParseCount}} 项，预计金额：¥{{dailyExpenseParseAmount}} 元</text>
       </view>
 
       <view class="expense-field-box major-box">
         <view class="box-header">
           <view class="lbl"><view class="idx-icon-sm idx-icon-box"></view> 房租/设备/专项大额</view>
-          <text class="tag warm">不计入单日每餐成本</text>
+          <view class="header-action-row">
+            <text class="tag warm">不计入成本</text>
+            <view class="btn-expense-template-pill" hover-class="btn-expense-template-hover" bindtap="onOpenExpenseTemplateModal" data-category="fixed">
+              <text class="lbl">🧾 常用项目</text>
+            </view>
+          </view>
         </view>
-        <textarea 
-          class="expense-textarea warm-bg" 
-          value="{{fixedExpenseText}}" 
-          placeholder="如：店铺租金6000 义工服2100"
-          bindinput="onInput"
-          data-field="fixedExpenseText"
-          maxlength="500"
-        />
+        <!-- 🌟 大额专项已改为逐条添加的结构化列表（而非自由文本），因为要给
+             每一条挂一个真实的[独立凭证]按钮，<textarea> 做不到按行挂按钮。
+             fixedExpenseText 仍由 fixedExpenseItems 自动派生，无需手改。 -->
+        <view class="fixed-expense-add-row">
+          <input class="name-input" placeholder="项目名称，如：店铺租金" value="{{fixedExpenseNewName}}" bindinput="onInputFixedExpenseNewName" />
+          <input class="amount-input" type="digit" placeholder="金额" value="{{fixedExpenseNewAmount}}" bindinput="onInputFixedExpenseNewAmount" />
+          <button class="btn-add-item" bindtap="onAddFixedExpenseItem">+ 添加</button>
+        </view>
+
+        <view class="fixed-expense-empty" wx:if="{{fixedExpenseItems.length === 0}}">
+          <text>暂无大额专项支出，添加一条后可为其单独上传独立凭证</text>
+        </view>
+
+        <view class="fixed-expense-list" wx:else>
+          <view class="fixed-expense-item" wx:for="{{fixedExpenseItems}}" wx:for-item="item" wx:key="_key">
+            <view class="fixed-expense-row">
+              <view class="fe-left">
+                <text class="fe-name">{{item.name}}</text>
+                <view class="fe-amount-box">
+                  <text class="fe-currency">¥</text>
+                  <input class="fe-amount-input" type="digit" value="{{item.amount}}" data-index="{{index}}" bindinput="onInputFixedExpenseItemAmount" />
+                </view>
+              </view>
+              <view class="fe-right">
+                <view class="fe-voucher-btn {{item.independent_image_urls.length > 0 ? 'has-voucher' : ''}}" data-index="{{index}}" bindtap="onToggleIndependentVoucher">
+                  <text class="lbl">📂 独立凭证 ({{item.independent_image_urls.length}}/3)</text>
+                </view>
+                <text class="fe-del" data-index="{{index}}" bindtap="onDeleteFixedExpenseItem">✕</text>
+              </view>
+            </view>
+
+            <view class="fe-voucher-grid receipt-grid-container" wx:if="{{item.expanded}}">
+              <view class="grid-image-item" wx:for="{{item.independent_image_urls}}" wx:for-item="img" wx:for-index="imgIdx" wx:key="*this">
+                <image wx:if="{{!imageLoadFailedMap[img]}}" class="grid-img" src="{{img}}" mode="aspectFill" bindtap="onPreviewIndependentVoucher" data-index="{{index}}" data-img-index="{{imgIdx}}" binderror="onImageLoadError" data-url="{{img}}" />
+                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{img}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                  <text class="thumb-load-failed-text">加载失败</text>
+                </view>
+                <view class="img-delete-badge" catchtap="onDeleteIndependentVoucher" data-index="{{index}}" data-img-index="{{imgIdx}}">✕</view>
+              </view>
+              <view class="grid-add-btn" wx:if="{{item.independent_image_urls.length < 3}}" bindtap="onChooseIndependentVoucher" data-index="{{index}}">
+                <text class="add-icon">+</text>
+                <text class="add-txt">上传凭证</text>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
 
       <view class="receipt-upload-section">
@@ -570,14 +878,18 @@
           <view class="sec-icon idx-icon-sm idx-icon-camera"></view>
           <text class="sec-title">支出凭证 / 收据</text>
           <text class="sec-sub-tip">(可选)</text>
-          <text class="upload-counter {{receiptImages.length >= 9 ? 'counter-full' : ''}}">
+          <text class="upload-counter {{receiptImages.length > 0 ? 'has-count' : ''}} {{receiptImages.length >= 9 ? 'counter-full' : ''}}">
             {{receiptImages.length || 0}} / 9
           </text>
         </view>
 
         <view class="receipt-grid-container">
           <view class="grid-image-item" wx:for="{{receiptImages}}" wx:key="*this">
-            <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="previewReceipt" data-index="{{index}}"/>
+            <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="previewReceipt" data-index="{{index}}" binderror="onImageLoadError" data-url="{{item}}"/>
+            <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
             <view class="img-delete-badge" catchtap="deleteReceipt" data-index="{{index}}">✕</view>
           </view>
           
@@ -591,9 +903,76 @@
           <view class="idx-icon-sm idx-icon-bulb"></view> 提示：最多可传 9 张。若收据较多，推荐将多张小收据摆在一起拍照，不仅省空间，海报展示效果更佳！
         </view>
       </view>
+
+      <!-- 🍱 今日食谱照片：随餐报一并提交，成功后自动发布/更新首页今日食谱卡片 -->
+      <view class="receipt-upload-section">
+        <view class="section-title-row">
+          <text class="sec-icon-emoji">🍱</text>
+          <text class="sec-title">今日食谱照片</text>
+          <text class="sec-sub-tip">(可选)</text>
+          <text class="upload-counter {{recipeImages.length > 0 ? 'has-count' : ''}} {{recipeImages.length >= 9 ? 'counter-full' : ''}}">
+            {{recipeImages.length || 0}} / 9
+          </text>
+        </view>
+
+        <scroll-view scroll-x class="compact-photo-row">
+          <view class="compact-photo-item" wx:for="{{recipeImages}}" wx:key="*this">
+            <image wx:if="{{!imageLoadFailedMap[item]}}" class="compact-photo-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{index}}" binderror="onImageLoadError" data-url="{{item}}"/>
+            <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+            <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{index}}">✕</view>
+          </view>
+
+          <view class="compact-photo-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}">
+            <text class="add-icon">{{recipeUploading ? '…' : '+'}}</text>
+            <text class="add-txt">{{recipeUploading ? '压缩中' : '添加'}}</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <!-- 📌 门店今日日志/大事记：随餐报一并提交，成功后自动归档至门店日志时间轴 -->
+      <view class="receipt-upload-section">
+        <view class="section-title-row">
+          <text class="sec-icon-emoji">📌</text>
+          <text class="sec-title">门店今日日志/大事记</text>
+          <text class="sec-sub-tip">(可选)</text>
+          <text class="upload-counter {{activityImages.length > 0 ? 'has-count' : ''}} {{activityImages.length >= 18 ? 'counter-full' : ''}}">
+            {{activityImages.length || 0}} / 18
+          </text>
+        </view>
+
+        <textarea
+          class="expense-textarea activity-text-spacing"
+          value="{{activityText}}"
+          placeholder="在此记录今日的温馨故事、活动花絮或志愿者服务心得..."
+          bindinput="onActivityTextInput"
+          data-field="activityText"
+          maxlength="300"
+        />
+
+        <!-- 🌟 与「支出凭证」同款双九宫格网格（而非食谱区的单行横滚），
+             符合图文发布的视觉直觉：先文字，后图片网格 -->
+        <view class="receipt-grid-container">
+          <view class="grid-image-item" wx:for="{{activityImages}}" wx:key="*this">
+            <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-source="activity" data-index="{{index}}" binderror="onImageLoadError" data-url="{{item}}"/>
+            <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+            <view class="img-delete-badge" catchtap="deleteActivityImage" data-index="{{index}}">✕</view>
+          </view>
+
+          <view class="grid-add-btn" bindtap="chooseActivityImages" wx:if="{{activityImages.length < 18}}">
+            <text class="add-icon">{{activityUploading ? '…' : '+'}}</text>
+            <text class="add-txt">{{activityUploading ? '压缩中' : '添加照片'}}</text>
+          </view>
+        </view>
+      </view>
     </view>
 
-    <!-- 生成结果预览折叠面板 -->
+    <!-- 生成结果预览折叠面板：与录入表单可见性保持一致，财务角色现在也需要看到算式校验 -->
     <block wx:if="{{showResult}}">
       <view class="report-result-card {{isResultExpanded ? 'expanded' : 'collapsed'}}">
         <view class="result-card-header" bindtap="onToggleResultExpand">
@@ -608,83 +987,135 @@
           </view>
 
           <text class="output-text" user-select>{{reportResult}}</text>
+
+          <!-- 🎨 今日开餐实景图集：横向滚动，展示食谱照片；wx:if 保证没有照片时整块不渲染，
+               不会在纯文字报告下方留一块空白 -->
+          <view class="result-photo-section" wx:if="{{recipeImages.length > 0}}">
+            <view class="result-photo-title">🎨 今日开餐实景图集</view>
+            <scroll-view scroll-x class="result-photo-scroll">
+              <view class="result-photo-item" wx:for="{{recipeImages}}" wx:key="*this">
+                <image
+                  wx:if="{{!imageLoadFailedMap[item]}}"
+                  class="result-photo-img"
+                  src="{{item}}"
+                  mode="aspectFill"
+                  bindtap="onPreviewImage"
+                  data-source="recipe"
+                  data-index="{{index}}"
+                  binderror="onImageLoadError"
+                  data-url="{{item}}"
+                />
+                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                  <text class="thumb-load-failed-text">加载失败</text>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <!-- 📸 义工护持与大事记剪影：九宫格网格，展示大事记照片 -->
+          <view class="result-photo-section" wx:if="{{activityImages.length > 0}}">
+            <view class="result-photo-title">📸 义工护持与大事记剪影</view>
+            <view class="result-photo-grid">
+              <view class="result-photo-grid-item" wx:for="{{activityImages}}" wx:key="*this">
+                <image
+                  wx:if="{{!imageLoadFailedMap[item]}}"
+                  class="result-photo-grid-img"
+                  src="{{item}}"
+                  mode="aspectFill"
+                  bindtap="onPreviewImage"
+                  data-source="activity"
+                  data-index="{{index}}"
+                  binderror="onImageLoadError"
+                  data-url="{{item}}"
+                />
+                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                  <text class="thumb-load-failed-text">加载失败</text>
+                </view>
+              </view>
+            </view>
+          </view>
+
           <button class="btn-copy" bindtap="copyText"><view class="idx-icon-sm idx-icon-clipboard"></view> 复制文本到剪贴板</button>
         </view>
       </view>
     </block>
+
+    <!-- 主生成按钮已迁移至底部固定吸底的 .bottom-action-floating-bar，这里仅保留精简的反馈/协议链接 -->
+    <view class="bottom-links-card">
+      <view class="sub-btn-group">
+        <button class="btn-sub" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>意见反馈</button>
+      </view>
+      <view class="agreement-tips">
+        生成即代表同意 <text class="link" bindtap="showServiceAgreement">《用户服务协议》</text>
+      </view>
+      <!-- 吸底按钮组高度占位，避免固定按钮遮挡本区域内容 -->
+      <view class="floating-bar-spacer"></view>
+    </view>
+
   </scroll-view>
   </block>
 
   <block wx:elif="{{isVolunteer}}">
     <scroll-view scroll-y class="page-body-scroll">
       <view class="volunteer-view-card">
-        <view class="v-header">
-          <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{currentStoreName || shopName || '海沧区雨花斋'}}</view>
-          <text class="v-sub">恭敬端上一碗饭，温暖世间一颗心</text>
-        </view>
-
-        <view class="volunteer-stats-banner" bindtap="onOpenMyCheckInHistory">
-          <view class="stat-item">
-            <text class="stat-num">{{myCheckInDays || 12}}</text>
-            <text class="stat-label">已护持/天</text>
+        <!-- 🍚 今日餐况：开餐状态 + 主食物资 + 食谱/大事记精简摘要，合并为一张状态卡，
+             未发布时用单行提示代替独立空卡片，避免占用纵向空间 -->
+        <view class="today-status-card">
+          <view class="tsc-header">
+            <text class="tsc-title">今日餐况</text>
+            <text class="tsc-date">{{todayDateStr}}</text>
           </view>
-          <view class="stat-divider"></view>
-          <view class="stat-item">
-            <text class="stat-num">{{myCheckInCount || 15}}</text>
-            <text class="stat-label">累计打卡/次</text>
+          <view class="tsc-row">
+            <text class="tsc-label"><view class="idx-icon-sm idx-icon-bowl"></view> 开餐状态</text>
+            <text class="tsc-tag tag-success">正常供应中</text>
           </view>
-          <view class="stat-divider"></view>
-          <view class="stat-item">
-            <text class="stat-num">{{myServiceHours || 45}}</text>
-            <text class="stat-label">贡献时长/h</text>
+          <!-- 🌟 物资护持交互联动：此前这两行纯展示，义工看到"告急"也无从下手。
+               现在整行可点击，根据当前库存状态弹出对应的护持引导——把"看到问题"和
+               "下一步能做什么"接起来，而不是让状态标签停在纯信息层面 -->
+          <view class="tsc-row tsc-row-tappable" bindtap="onTapMaterialStatus" data-type="rice">
+            <text class="tsc-label"><view class="idx-icon-sm idx-icon-box"></view> 大米库存</text>
+            <view class="tsc-tag-group">
+              <!-- 🌟 智能物资引导：库存不是"充足"时，额外露出一个更醒目的独立跳转入口，
+                   不必等义工先点整行、再从弹窗里理解要护持什么——直接把行动号召摆在眼前。
+                   catchtap 阻止事件冒泡到父级 .tsc-row-tappable 的 bindtap，避免同一次点击
+                   触发两次响应（弹窗 + 跳转） -->
+              <text class="action-link" wx:if="{{stapleRiceStatus !== 'sufficient'}}" catchtap="navToSupport" data-type="rice">🌾 点我护持物资</text>
+              <text class="tsc-tag {{stapleRiceStatus === 'urgent' ? 'tag-danger' : (stapleRiceStatus === 'sufficient' ? 'tag-success' : 'tag-warning')}}">{{stapleRiceStatus === 'urgent' ? '告急' : (stapleRiceStatus === 'sufficient' ? '充足' : '一般')}}</text>
+              <text class="tsc-row-arrow">›</text>
+            </view>
           </view>
-          <text class="arrow-detail">查看历程 ›</text>
-        </view>
-
-        <view class="v-info-box">
-          <view class="info-item">
-            <view class="label"><view class="idx-icon-sm idx-icon-calendar"></view> 汇报日期</view>
-            <text class="val">{{todayDateStr}}</text>
+          <view class="tsc-row tsc-row-tappable" bindtap="onTapMaterialStatus" data-type="oil">
+            <text class="tsc-label"><view class="idx-icon-sm idx-icon-box"></view> 食用油库存</text>
+            <view class="tsc-tag-group">
+              <text class="action-link" wx:if="{{stapleOilStatus !== 'sufficient'}}" catchtap="navToSupport" data-type="oil">🌾 点我护持物资</text>
+              <text class="tsc-tag {{stapleOilStatus === 'urgent' ? 'tag-danger' : (stapleOilStatus === 'sufficient' ? 'tag-success' : 'tag-warning')}}">{{stapleOilStatus === 'urgent' ? '告急' : (stapleOilStatus === 'sufficient' ? '充足' : '一般')}}</text>
+              <text class="tsc-row-arrow">›</text>
+            </view>
           </view>
-          <view class="info-item">
-            <view class="label"><view class="idx-icon-sm idx-icon-bowl"></view> 今日开餐状态</view>
-            <text class="val highlight">午餐正常供应中</text>
+          <!-- 只读摘要：daily-menu/activity-log 编辑页尚无只读模式，志工不导航过去，仅在此展示摘要。
+               🌟 今日食谱动态卡片：todayMenuDishes 是后端自由文本 menuText 按顿号/逗号/换行
+               拆出来的菜品名列表（见 splitMenuTextToDishes），只有"看起来确实是一份菜单"
+               （拆出 ≥2 段、每段都够短）时才会非空，此时用小网格标签云展示；
+               拆不出结构化列表（比如整段说明文字，或菜单本身就没发布）时，
+               回退到原来的纯文本单行展示，不强行拆得支离破碎 -->
+          <view class="tsc-summary-row tsc-menu-row" wx:if="{{todayMenuLoaded}}">
+            <text class="tsc-summary-text" wx:if="{{todayMenuDishes.length === 0}}">🍱 今日食谱：{{todayMenu ? (todayMenu.menuText || '已发布（见图片）') : '尚未发布'}}</text>
+            <block wx:else>
+              <text class="tsc-summary-text tsc-menu-label">🍱 今日食谱</text>
+              <view class="tsc-dish-grid">
+                <text class="tsc-dish-chip" wx:for="{{todayMenuDishes}}" wx:key="*this">{{item}}</text>
+              </view>
+            </block>
           </view>
-          <view class="info-item">
-            <view class="label"><view class="idx-icon-sm idx-icon-box"></view> 主食物资</view>
-            <text class="val">大米[{{stapleRiceStatus === 'urgent' ? '告急' : (stapleRiceStatus === 'sufficient' ? '充足' : '一般')}}] / 油[{{stapleOilStatus === 'urgent' ? '告急' : (stapleOilStatus === 'sufficient' ? '充足' : '一般')}}]</text>
+          <view class="tsc-summary-row" wx:if="{{todayActivityLoaded}}">
+            <text class="tsc-summary-text">📌 今日门店日志：{{todayActivity ? todayActivity.title : '尚未发布'}}</text>
           </view>
-        </view>
-        <view class="v-action-box {{highlightCheckInCard ? 'highlight-pulse' : ''}}" id="checkInCard">
-          <button class="btn-volunteer-checkin" bindtap="onVolunteerCheckIn"><view class="idx-icon-sm idx-icon-handshake"></view> 义工到岗服务打卡</button>
-          <button class="btn-view-public-ledger" bindtap="goToStatistics"><view class="idx-icon-sm idx-icon-book"></view> 查看门店公开账本</button>
         </view>
       </view>
     </scroll-view>
   </block>
-
-  <view class="fixed-bottom-bar" wx:if="{{!isVolunteer}}">
-    <view class="primary-btn-group">
-      <button class="btn btn-primary {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}"><view class="idx-icon-sm idx-icon-bolt"></view> 生成文本</button>
-      <button class="btn btn-secondary" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}"><view class="idx-icon-sm idx-icon-palette"></view> 生成海报</button>
-    </view>
-    <view class="sub-btn-group">
-      <button class="btn-sub" bindtap="goToHistory"><view class="idx-icon-sm idx-icon-scroll" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>历史</button>
-      <button class="btn-sub" bindtap="goToStatistics"><view class="idx-icon-sm idx-icon-chart" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>统计</button>
-      <button class="btn-sub" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>反馈</button>
-    </view>
-    <view class="agreement-tips">
-      生成即代表同意 <text class="link" bindtap="showServiceAgreement">《用户服务协议》</text>
-    </view>
-  </view>
-
-  <view class="volunteer-bottom-bar" wx:if="{{isVolunteer}}">
-    <view class="vol-btn-group">
-      <button class="btn-vol-sub" bindtap="goToHistory"><view class="idx-icon-sm idx-icon-scroll" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>历史</button>
-      <button class="btn-vol-sub" bindtap="goToStatistics"><view class="idx-icon-sm idx-icon-chart" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>统计</button>
-      <button class="btn-vol-sub" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>反馈</button>
-    </view>
-  </view>
 
   <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: {{canvasHeight}}px;"></canvas>
 
@@ -697,12 +1128,27 @@
           <text class="close-icon">×</text>
         </view>
       </view>
+
+      <!-- 🆕 财务公示版 (4:3) / 温馨故事版 (9:16) 切换 -->
+      <view class="poster-type-switch" catchtap="stopPropagation">
+        <view class="poster-type-tab {{posterType === 'financial' ? 'active' : ''}}" bindtap="onSwitchPosterType" data-type="financial">
+          财务公示版 (4:3)
+        </view>
+        <view class="poster-type-tab {{posterType === 'story' ? 'active' : ''}}" bindtap="onSwitchPosterType" data-type="story">
+          温馨故事版 (9:16)
+        </view>
+      </view>
+
       <view class="modal-body">
+        <view class="poster-switching-mask" wx:if="{{isSwitchingPosterType}}">
+          <text>生成中...</text>
+        </view>
         <image class="poster-image" src="{{posterImage}}" mode="widthFix" />
       </view>
       <view class="modal-footer">
         <button class="btn-close" bindtap="closePoster">关闭</button>
         <button class="btn-save" bindtap="savePoster">保存到相册</button>
+        <button class="btn-share-poster" bindtap="onSharePosterImage">分享给好友</button>
       </view>
     </view>
   </view>
@@ -774,14 +1220,19 @@
           </view>
 
           <view class="p-quote-box">
-            <text class="quote-text">"积沙成塔，集腋成裘。感恩每一位默默付出的家人与爱心善士！"</text>
+            <text class="quote-text">"用一餐饭的温度，传递温暖与关爱。感恩每一位默默付出的家人与爱心人士！"</text>
           </view>
 
           <view class="p-footer-qr-row">
             <view class="qr-img-wrapper" bindtap="onPreviewQrCode">
-              <image class="sun-code-real-img"
-                     src="{{qrCodeUrl || '/images/sun_code_default.png'}}"
-                     mode="aspectFit"/>
+              <image wx:if="{{qrCodeState === 'ready'}}" class="sun-code-real-img" src="{{qrCodeUrl}}" mode="aspectFit"/>
+              <view wx:elif="{{qrCodeState === 'loading'}}" class="qr-loading-box">
+                <view class="qr-loading-spinner"></view>
+              </view>
+              <view wx:else class="qr-fallback-box">
+                <text class="qr-fallback-icon">⌗</text>
+                <text class="qr-fallback-text">点击重试</text>
+              </view>
             </view>
             <view class="qr-right-text">
               <text class="p-app-name">【素小账】雨花爱心餐报助手</text>
@@ -892,21 +1343,97 @@
         <text class="ocr-fail-tip" wx:if="{{ocrFailCount > 0}}">（{{ocrFailCount}} 张未识别）</text>
       </view>
 
+      <!-- 🌟 确认后预计结余实时预览：口径与页面顶部算式校验完全一致（同一套 computeTodayFinancials），
+           只是把这批还没点"自动填入"的小票金额也假设性地加进去，让财务在点确认前就能看到
+           "这一步会把结余变成多少"，杜绝先确认、后发现结余对不上的返工 -->
+      <view class="ocr-preview-banner" wx:if="{{ocrSuccessCount > 0}}">
+        <view class="preview-header">
+          <view class="idx-icon-sm idx-icon-chart"></view>
+          <text class="title">确认后预计结余</text>
+        </view>
+        <text class="preview-formula">{{ocrPreviewFormula}}</text>
+      </view>
+
       <scroll-view scroll-y class="ocr-detail-container">
         <block wx:for="{{ocrReceiptList}}" wx:key="index">
-          <view class="ocr-receipt-block">
+          <view class="ocr-receipt-block {{item.showWarning ? 'has-warning' : ''}}">
+            <!-- 🌟 图文同屏对比：上方小票原图（点击放大），下方识别金额与明细，一屏内完成核对 -->
+            <view class="ocr-receipt-image-wrap" wx:if="{{item.fileID}}" bindtap="onPreviewOcrReceiptImage" data-url="{{item.fileID}}">
+              <image class="ocr-receipt-image" src="{{item.fileID}}" mode="widthFix" lazy-load="{{true}}" />
+              <text class="ocr-receipt-image-hint">点击查看原图</text>
+            </view>
+
             <view class="ocr-receipt-title">
               <text class="receipt-index">第 {{index + 1}} 张</text>
               <text class="receipt-merchant">{{item.merchantName}}</text>
-              <text class="receipt-amount">¥{{item.amount}}</text>
             </view>
+
+            <!-- 🚨 低置信度 / 金额超阈值：红色预警提示，明确告知"仅供参考" -->
+            <view class="ocr-warning-banner" wx:if="{{item.showWarning}}">
+              <text>⚠️ 识别结果仅供参考，请核对小票原图</text>
+            </view>
+
+            <!-- 🌟 结构化财务字段展示：AI/OCR 节点只做"认字"，把原价小计/运费/优惠拆开呈现，
+                 让财务/店长能看清"钱是怎么从原价变成下面实付合计的"，而不是只丢一个终值让人盲信 -->
+            <view class="ocr-financial-breakdown" wx:if="{{item.rawTotalAmount || item.shippingFee || item.discountAmount}}">
+              <view class="breakdown-item" wx:if="{{item.rawTotalAmount}}">
+                <text class="breakdown-label">原价小计</text>
+                <text class="breakdown-val">¥{{item.rawTotalAmount}}</text>
+              </view>
+              <view class="breakdown-item" wx:if="{{item.shippingFee && item.shippingFee !== '0.00'}}">
+                <text class="breakdown-label">运费</text>
+                <text class="breakdown-val">+¥{{item.shippingFee}}</text>
+              </view>
+              <view class="breakdown-item" wx:if="{{item.discountAmount && item.discountAmount !== '0.00'}}">
+                <text class="breakdown-label">优惠</text>
+                <text class="breakdown-val discount">-¥{{item.discountAmount}}</text>
+              </view>
+            </view>
+
+            <!-- 🌟 实付合计人工覆盖：核对小票原图后，可直接在这里改成真实实付金额，
+                 不必逐条改商品明细去凑数；这个数字会原样写入最终的今日开餐支出 -->
+            <view class="ocr-receipt-amount-row">
+              <text class="amount-label">实付合计：</text>
+              <view class="amount-edit-wrap {{item.showWarning ? 'price-warning' : ''}}">
+                <text class="symbol">¥</text>
+                <input
+                  class="input-receipt-amount"
+                  type="digit"
+                  value="{{item.amount}}"
+                  bindinput="onEditOcrReceiptAmountInput"
+                  bindblur="onEditOcrReceiptAmountBlur"
+                  confirm-type="done"
+                  data-receipt-index="{{index}}"
+                />
+              </view>
+              <text class="manual-override-badge" wx:if="{{item.manualAmountOverride}}">已手动修改</text>
+            </view>
+
             <view class="ocr-item-list" wx:if="{{item.itemList && item.itemList.length > 0}}">
               <view class="ocr-detail-row" wx:for="{{item.itemList}}" wx:for-item="subItem" wx:for-index="subIdx" wx:key="subIdx">
                 <text class="bullet">•</text>
-                <input class="input-item-name" value="{{subItem.name}}" bindinput="onEditOcrItemName" data-receipt-index="{{index}}" data-item-index="{{subIdx}}" />
-                <view class="price-edit-wrap">
+                <!-- 🌟 品名疑似识别异常：云函数只负责结构性清洗（剥离残留的序号乱码字母、
+                     标记过短的孤字），不会尝试"猜"出正确品名去自动覆盖——猜错了会把错误数据
+                     悄悄写进账本。真正无法结构化判断的字符级错认（如"蜜薯"被认成"面酱"）
+                     结构上看不出异常，只能靠这里高亮提醒，交给店长核对小票原图后手动改，
+                     这个输入框本身就是可编辑的（onEditOcrItemName），不需要额外操作入口 -->
+                <input class="input-item-name {{subItem.isSuspiciousName ? 'name-suspicious' : ''}}" value="{{subItem.name}}" bindinput="onEditOcrItemName" data-receipt-index="{{index}}" data-item-index="{{subIdx}}" />
+                <text class="name-suspicious-badge" wx:if="{{subItem.isSuspiciousName}}">⚠️请核对</text>
+                <view class="price-edit-wrap {{item.showWarning ? 'price-warning' : ''}}">
                   <text class="symbol">¥</text>
-                  <input class="input-item-price" type="digit" value="{{subItem.price}}" bindinput="onEditOcrItemPrice" data-receipt-index="{{index}}" data-item-index="{{subIdx}}" />
+                  <input
+                    class="input-item-price"
+                    type="digit"
+                    value="{{subItem.price}}"
+                    bindinput="onEditOcrItemPriceInput"
+                    bindblur="onEditOcrItemPriceBlur"
+                    confirm-type="done"
+                    data-receipt-index="{{index}}"
+                    data-item-index="{{subIdx}}"
+                    focus="{{ocrFocusFirstPrice && index === 0 && subIdx === 0}}"
+                    selection-start="0"
+                    selection-end="{{ocrFocusSelectionEnd}}"
+                  />
                 </view>
               </view>
             </view>
@@ -1119,11 +1646,24 @@
   <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal">
     <view class="apply-modal-box" catchtap="stopPropagation">
       <view class="modal-header">
-        <view class="modal-title"><view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>加入【{{applyForm.storeName}}】</view>
+        <view class="modal-title"><view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店')}}</view>
         <text class="btn-close" bindtap="onCloseApplyModal">✕</text>
       </view>
 
       <view class="apply-form-body">
+        <view class="form-item">
+          <text class="form-label">门店</text>
+          <view class="store-mode-tabs">
+            <view class="store-mode-tab {{applyForm.storeSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
+            <view class="store-mode-tab {{applyForm.storeSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
+          </view>
+
+          <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
+            <view class="form-picker-selector">{{applyForm.storeName || '请选择门店'}}</view>
+          </picker>
+          <input wx:else class="form-input" placeholder="请输入新门店名称，如：雨花斋厦门海沧店" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">新门店需待超级管理员审核通过后自动建立</text>
+        </view>
         <view class="form-item">
           <text class="form-label">真实姓名</text>
           <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
@@ -1163,52 +1703,162 @@
       </view>
 
       <view class="gencode-body">
-        <!-- 1. 选择目标门店 -->
+        <!-- 1. 选择目标门店：下拉选择已有门店 / 手动输入新门店 双模式。
+             【选择已有门店】是默认态（onOpenGenCodeModal 打开弹窗时，只要本机构下有门店
+             就默认选中这一档，只有一家门店都没有时才会退到"手动输入新门店"）。 -->
         <view class="form-item-row">
           <text class="form-label">1. 选择授权门店：</text>
-          <picker mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectGenStore">
+          <view class="store-mode-tabs">
+            <view class="store-mode-tab {{genStoreSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchGenStoreMode">选择已有门店</view>
+            <view class="store-mode-tab {{genStoreSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchGenStoreMode">手动输入新门店</view>
+          </view>
+
+          <picker wx:if="{{genStoreSelectionType === 'existing'}}" mode="selector" range="{{genStoreOptions}}" range-key="storeName" bindchange="onSelectGenStore">
             <view class="form-picker-selector">
-              {{targetGenStoreName ? targetGenStoreName : '点击选择门店 ▼'}}
+              {{targetGenStoreName ? targetGenStoreName : (genStoreOptions.length > 0 ? '点击选择门店 ▼' : '本机构暂无门店，请切换到"手动输入新门店"')}}
             </view>
           </picker>
+
+          <!-- 🌟 自定义门店输入框常驻 DOM，靠 max-height/opacity 过渡做"向下展开"动画——
+               wx:if/wx:else 会直接卸载/挂载元素，没有中间态可过渡，做不出展开效果 -->
+          <view class="custom-store-input-wrap {{genStoreSelectionType === 'custom' ? 'expanded' : ''}}">
+            <!-- 🌟 本机构暂无门店时会自动切到这一档：这个输入框本身就是"快速新建门店"入口，
+                 提交后会直接带入建店流程并自动选中该门店用于生成邀请码，明确告知避免用户误以为
+                 只是在填写一个普通备注字段 -->
+            <text class="gencode-custom-hint" wx:if="{{genStoreSelectionType === 'custom' && genStoreOptions.length === 0}}">
+              本机构暂无门店，在此输入门店名称即可快速新建，创建后将自动选中该门店用于生成邀请码
+            </text>
+            <input class="gencode-custom-input" placeholder="请输入新门店名称，如：雨花斋厦门海沧店" value="{{genCustomStoreName}}" bindinput="onGenCustomStoreNameInput" />
+          </view>
         </view>
 
-        <!-- 2. 选择授权特权角色 -->
+        <!-- 2. 选择授权特权角色：默认选中身份由打开入口决定——
+             从【财务稽核台】的"邀请协同"进来（onOpenFinanceInviteMenu）默认选中【门店财务】，
+             从【门店推广与邀请】进来（onOpenGenCodeModal）默认选中【门店店长】。 -->
         <view class="form-item-row">
           <text class="form-label">2. 选择授权身份：</text>
-          <view class="role-radio-group">
-            <view class="role-radio-item {{genTargetRole === 'MANAGER' ? 'active' : ''}}"
+          <view class="gencode-role-group">
+            <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}}"
                   bindtap="onSelectGenRole" data-role="MANAGER">
-              <view class="idx-icon-sm idx-icon-crown" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>门店店长
+              <view class="role-check-badge" wx:if="{{genTargetRole === 'MANAGER'}}">✓</view>
+              <view class="idx-icon-sm idx-icon-crown" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
+              <text>门店店长</text>
             </view>
-            <view class="role-radio-item {{genTargetRole === 'FINANCE' ? 'active' : ''}}"
+            <view class="gencode-role-item {{genTargetRole === 'FINANCE' ? 'active' : 'inactive'}}"
                   bindtap="onSelectGenRole" data-role="FINANCE">
-              <view class="idx-icon-sm idx-icon-lock" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>门店财务
+              <view class="role-check-badge" wx:if="{{genTargetRole === 'FINANCE'}}">✓</view>
+              <view class="idx-icon-sm idx-icon-lock" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
+              <text>门店财务</text>
             </view>
           </view>
         </view>
 
-        <!-- 3. 生成结果展示区 -->
+        <!-- 3. 生成结果兜底展示区：正常流程点击【立即生成】后会自动复制+关闭弹窗，
+             根本看不到这里；只有自动复制到剪贴板失败这一种异常情况才会保留弹窗并显示，
+             让用户能长按/点击手动复制邀请码，而不是生成完全"丢失" -->
         <view class="gen-result-box" wx:if="{{generatedCode}}">
-          <view class="result-label"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>已成功生成 6 位动态邀请码：</view>
-          <text class="result-code">{{generatedCode}}</text>
+          <view class="result-label"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>自动复制失败，请点击下方邀请码手动复制：</view>
+          <text class="result-code" user-select bindtap="onCopyGeneratedCode">{{generatedCode}}</text>
           <view class="result-tip"><view class="idx-icon-sm idx-icon-warning" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>提示：该邀请码为一次性口令，绑定后立即失效。</view>
         </view>
       </view>
 
-      <!-- 底部操作按钮 -->
+      <!-- 底部操作按钮：固定关闭 + 立即生成两个按钮——点击【立即生成】后一步到位完成
+           "生成 + 复制到剪贴板 + 关闭弹窗"，不再需要先生成、再点第二个按钮才复制发送 -->
       <view class="gen-code-footer">
         <button class="btn-cancel" bindtap="onCloseGenCodeModal">关闭</button>
-        
-        <button class="btn-primary-gen" wx:if="{{!generatedCode}}" bindtap="onGenerateInviteCode">
+        <button class="btn-primary-gen {{isGeneratingInviteCode ? 'btn-disabled' : ''}}" bindtap="onGenerateInviteCode" loading="{{isGeneratingInviteCode}}" disabled="{{isGeneratingInviteCode}}">
           <view class="idx-icon-sm idx-icon-bolt" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>立即生成
-        </button>
-        <button class="btn-copy-send" wx:else bindtap="onCopyGeneratedCode">
-          <view class="idx-icon-sm idx-icon-clipboard" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>复制并去发送
         </button>
       </view>
     </view>
   </view>
+
+  <!-- 🌟 历史名单·选择常客弹窗：按本地缓存的出现次数倒序展示，点一下姓名直接插入
+       批量粘贴文本框新的一行，金额仍需用户当天手动填写 -->
+  <view class="frequent-donor-modal-mask" wx:if="{{showFrequentDonorModal}}" bindtap="onCloseFrequentDonorModal">
+    <view class="frequent-donor-modal-card" catchtap="stopPropagation">
+      <!-- 🛡️ 去宗教化合规要求："功德主"是佛教语境里对施主的称谓，统一改用
+           "常客"这一现代公益/志愿服务通用称谓，与触发此弹窗的【选择常客】按钮措辞保持一致 -->
+      <view class="frequent-donor-header">
+        <text class="title">🕒 常客名单</text>
+        <text class="close-btn" bindtap="onCloseFrequentDonorModal">✕</text>
+      </view>
+
+      <view class="frequent-donor-empty" wx:if="{{frequentDonorList.length === 0}}">
+        <text>暂无历史记录，成功提交几次餐报后，这里会自动出现常来支持的爱心人士名单</text>
+      </view>
+
+      <scroll-view scroll-y class="frequent-donor-list" wx:else>
+        <view class="frequent-donor-item" wx:for="{{frequentDonorList}}" wx:key="name" bindtap="onSelectFrequentDonor" data-name="{{item.name}}">
+          <text class="donor-name">{{item.name}}</text>
+          <text class="donor-count">出现 {{item.count}} 次</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 🌟 高频账目模板弹窗：门店常用支出项目速录，云端存储、店铺内共享（区别于上面
+       "选择常客"的本地设备记忆）。店长/财务/超管可增删，全员可点击插入表单 -->
+  <view class="expense-template-modal-mask" wx:if="{{showExpenseTemplateModal}}" bindtap="onCloseExpenseTemplateModal">
+    <view class="expense-template-modal-card" catchtap="stopPropagation">
+      <view class="expense-template-header">
+        <text class="title">🧾 常用支出项目</text>
+        <text class="close-btn" bindtap="onCloseExpenseTemplateModal">✕</text>
+      </view>
+
+      <view class="expense-template-segmented">
+        <view
+          class="segment-btn {{expenseTemplateCategory === 'daily' ? 'active' : ''}}"
+          bindtap="onSwitchExpenseTemplateCategory"
+          data-category="daily"
+        ><text class="txt">开餐食材</text></view>
+        <view
+          class="segment-btn {{expenseTemplateCategory === 'fixed' ? 'active' : ''}}"
+          bindtap="onSwitchExpenseTemplateCategory"
+          data-category="fixed"
+        ><text class="txt">大额专项</text></view>
+      </view>
+
+      <view class="expense-template-manage-row" wx:if="{{isManager || isFinance || isSuperAdmin}}">
+        <text class="manage-toggle" bindtap="onToggleExpenseTemplateEditMode">{{expenseTemplateEditMode ? '完成' : '✏️ 管理'}}</text>
+      </view>
+
+      <view class="expense-template-add-row" wx:if="{{expenseTemplateEditMode}}">
+        <input class="name-input" placeholder="项目名称" value="{{expenseTemplateNewName}}" bindinput="onInputExpenseTemplateNewName" />
+        <input class="amount-input" type="digit" placeholder="默认金额(选填)" value="{{expenseTemplateNewAmount}}" bindinput="onInputExpenseTemplateNewAmount" />
+        <button class="btn-add-item" bindtap="onAddExpenseTemplateItem" loading="{{expenseTemplateSaving}}">+ 添加</button>
+      </view>
+
+      <block wx:if="{{expenseTemplateCategory === 'daily'}}">
+        <view class="expense-template-empty" wx:if="{{expenseTemplateLoaded && expenseTemplateDailyList.length === 0}}">
+          <text>暂无常用项目{{(isManager || isFinance || isSuperAdmin) ? '，点上方"管理"添加几个常买的食材吧' : ''}}</text>
+        </view>
+        <scroll-view scroll-y class="expense-template-chip-list" wx:else>
+          <view class="expense-template-chip" wx:for="{{expenseTemplateDailyList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
+            <text class="chip-name">{{item.itemName}}</text>
+            <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
+            <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
+          </view>
+        </scroll-view>
+      </block>
+      <block wx:else>
+        <view class="expense-template-empty" wx:if="{{expenseTemplateLoaded && expenseTemplateFixedList.length === 0}}">
+          <text>暂无常用项目{{(isManager || isFinance || isSuperAdmin) ? '，点上方"管理"添加房租等固定支出吧' : ''}}</text>
+        </view>
+        <scroll-view scroll-y class="expense-template-chip-list" wx:else>
+          <view class="expense-template-chip" wx:for="{{expenseTemplateFixedList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
+            <text class="chip-name">{{item.itemName}}</text>
+            <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
+            <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
+          </view>
+        </scroll-view>
+      </block>
+    </view>
+  </view>
+
+  <!-- 图片压缩用离屏画布：餐报表单内"今日食谱照片"/"今日大事记照片"上传区共用 -->
+  <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
   <!-- 店长审核义工绑定抽屉 Modal -->
   <view class="audit-drawer-mask" wx:if="{{showAuditModal}}" bindtap="onCloseAuditModal">
@@ -1230,15 +1880,14 @@
           bindtap="onSwitchAuditTab"
           data-tab="pending"
         >
-          待审核列表
-          <text class="badge" wx:if="{{pendingApplyList.length > 0}}">{{pendingApplyList.length}}</text>
+          待审核列表 ({{pendingApplyList.length}})
         </view>
         <view
           class="tab-item {{auditActiveTab === 'approved' ? 'active' : ''}}"
           bindtap="onSwitchAuditTab"
           data-tab="approved"
         >
-          已绑定义工
+          已绑定义工 ({{approvedVolunteerList.length}})
         </view>
       </view>
 
@@ -1251,13 +1900,16 @@
             <view class="card-top-info">
               <view class="applicant-main">
                 <text class="applicant-name">{{mask.maskName(item.realName) || '义工家人'}}</text>
-                <text class="applicant-phone"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{mask.maskPhone(item.phone)}}</text>
+                <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
               </view>
               <text class="role-tag-badge {{item.requestedRole}}">
                 {{item.requestedRole === 'finance' ? '财务记账' : '现场奉献'}}
               </text>
             </view>
 
+            <view class="card-time-row">
+              <text class="time-lbl">申请门店：{{item.storeSelectionType === 'custom' ? ('🆕 ' + item.customStoreName + '（新建）') : item.storeName}}</text>
+            </view>
             <view class="card-time-row">
               <text class="time-lbl">申请时间：{{item.applyTimeStr || '近期'}}</text>
             </view>
@@ -1278,17 +1930,17 @@
                 data-item="{{item}}"
                 data-action="approve"
               >
-                一键同意授权
+                通过绑定
               </button>
             </view>
           </view>
 
           <view class="warm-empty-state" wx:if="{{pendingApplyList.length === 0}}">
             <view class="empty-emoji-icon idx-icon-svg idx-icon-sparkle"></view>
-            <text class="empty-title">当前暂无待处理的绑定申请</text>
-            <text class="empty-desc">您可以生成门店邀请海报，邀请财务或现场义工扫码绑定。</text>
-            <button class="btn-empty-invite" bindtap="onGenerateStorePoster">
-              <view class="idx-icon-sm idx-icon-image" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>生成门店邀请海报
+            <text class="empty-title">{{auditIsNationalView ? '当前全国各门店暂无待处理的义工申请' : '当前暂无待处理的绑定申请'}}</text>
+            <text class="empty-desc" wx:if="{{!auditIsNationalView}}">您可以生成门店邀请海报，邀请财务或现场义工扫码绑定。</text>
+            <button class="btn-empty-invite" bindtap="onGenerateStorePosterFromAudit">
+              🏪 生成门店邀请海报
             </button>
           </view>
         </block>
@@ -1299,11 +1951,28 @@
             <view class="card-top-info">
               <view class="applicant-main">
                 <text class="applicant-name">{{mask.maskName(item.realName)}}</text>
-                <text class="applicant-phone"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{mask.maskPhone(item.phone)}}</text>
+                <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
               </view>
               <text class="role-tag-badge {{item.role}}">
-                {{item.role === 'finance' ? '财务义工' : '现场义工'}}
+                {{item.role === 'finance' ? '财务记账' : '现场奉献'}}
               </text>
+            </view>
+
+            <view class="card-action-btns">
+              <button
+                class="btn-audit-act change-role"
+                bindtap="onChangeVolunteerRole"
+                data-id="{{item._id}}"
+              >
+                🔄 修改角色
+              </button>
+              <button
+                class="btn-audit-act unbind"
+                bindtap="onUnbindVolunteer"
+                data-id="{{item._id}}"
+              >
+                🚫 解除绑定
+              </button>
             </view>
           </view>
 
@@ -1350,7 +2019,8 @@
       <view class="modal-header">
         <view class="header-titles">
           <view class="modal-title"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>请选择今日护持岗位班次</view>
-          <text class="today-hours-tip">今日已记录工时：<text class="highlight">{{todayAccumulatedHours}}h</text> / 上限 12h</text>
+          <text class="today-hours-tip {{isOverHoursLimit ? 'over-limit' : ''}}">今日已记录工时：<text class="highlight {{isOverHoursLimit ? 'danger' : ''}}">{{previewTotalHours}}h</text> / 上限 12h</text>
+          <text class="over-limit-warning" wx:if="{{isOverHoursLimit}}">⚠️ 工时超出每日上限</text>
         </view>
         <text class="close-btn" bindtap="onCloseShiftModal">✕</text>
       </view>
@@ -1362,6 +2032,7 @@
                   bindtap="{{item.isCompleted ? '' : 'onSelectShift'}}"
                   data-shift="{{item.shiftKey}}"
                   data-hours="{{item.hours}}">
+              <view class="shift-check-badge" wx:if="{{!item.isCompleted && selectedShift === item.shiftKey}}">✓</view>
               <view class="shift-left">
                 <view class="shift-name-row">
                   <text class="shift-name">{{item.name}}</text>
@@ -1388,55 +2059,30 @@
         <text class="meal-tip">今日留在门店用餐 (方便后厨预留菜量)</text>
       </view>
 
-      <button class="btn-confirm-checkin {{allShiftsCompleted ? 'btn-disabled' : ''}}"
+      <button class="btn-confirm-checkin {{(allShiftsCompleted || isOverHoursLimit) ? 'btn-disabled' : ''}}"
+              loading="{{checkInSubmitting}}"
+              disabled="{{allShiftsCompleted || isOverHoursLimit || checkInSubmitting}}"
               bindtap="onConfirmShiftCheckIn">
-        {{allShiftsCompleted ? '今日班次已全部完成' : '合十确认打卡'}}
+        {{allShiftsCompleted ? '今日班次已全部完成' : (isOverHoursLimit ? '工时超出每日上限' : '确认打卡')}}
       </button>
     </view>
   </view>
 
-  <view class="gencode-modal-mask" wx:if="{{showDevClearModal}}" bindtap="onCloseDevClearModal">
-    <view class="gencode-modal-card" catchtap="stopPropagation">
-      <view class="gencode-header-bar">
-        <view class="gencode-title-text"><view class="idx-icon-sm idx-icon-trash" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>全量清洗测试数据</view>
-        <text class="gencode-close-btn" bindtap="onCloseDevClearModal">✕</text>
-      </view>
-
-      <view class="gencode-body">
-        <view class="dev-clear-warning"><view class="idx-icon-sm idx-icon-warning" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>危险操作：此操作将清除所有测试数据，请谨慎使用！</view>
-
-        <view class="dev-clear-options">
-          <view class="dev-clear-option">
-            <checkbox checked="{{clearOptions.reports}}" value="REPORTS" color="#8C1D18"/>
-            <text>清除餐报记录 (daily_reports & report_logs)</text>
-          </view>
-          <view class="dev-clear-option">
-            <checkbox checked="{{clearOptions.requests}}" value="REQUESTS" color="#8C1D18"/>
-            <text>清除角色申请与邀请码</text>
-          </view>
-          <view class="dev-clear-option">
-            <checkbox checked="{{clearOptions.cache}}" value="CACHE" color="#8C1D18"/>
-            <text>清除本地缓存</text>
-          </view>
-        </view>
-
-        <view class="dev-clear-input-row">
-          <text>请输入大写 CLEAR 确认：</text>
-          <input class="dev-clear-input" type="text" placeholder="CLEAR" value="{{clearConfirmInput}}" bindinput="onClearInput"/>
-        </view>
-
-        <button class="gencode-btn-primary dev-clear-btn" bindtap="onExecuteDevClear">
-        <view class="idx-icon-sm idx-icon-bolt" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>执行全量清洗
-      </button>
-    </view>
-  </view>
-
-  <view class="bottom-action-floating-bar" wx:if="{{isManager || isFinance || isSuperAdmin}}">
-    <button class="btn-main-action text-gen-btn" bindtap="onGenerateTextReport">
-      <view class="idx-icon-sm idx-icon-bolt" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>生成餐报文本
+  <!-- 生成餐报文本/海报本就是"填写当日明细"表单（见 form-main-card）的后续动作，
+       两者的可见性必须完全一致，否则会出现"能看到表单却找不到提交按钮"的空页面——
+       🐛 历史教训：这里曾经单独写成比表单条件更严格的角色判断，导致部分角色能看到表单却看不到按钮。
+       现在表单已经对所有非志工角色（含纯财务）开放，这里只保留 !isVolunteer，与表单条件保持同步。 -->
+  <!-- 🐛 修复图标"看不见"问题的真正根因：.idx-icon-bolt / .idx-icon-palette 是内联 base64 SVG
+       background-image，stroke 颜色写死为 #FFFFFF，不会跟随按钮文字颜色变化——白底红字的左按钮上，
+       白色图标直接和白色背景融为一体（看起来像"没有图标"）；金色底的右按钮上白色图标也和金黄背景
+       低对比度重叠。SVG 图标系统这里没法简单换色，改用原生 emoji 字符作为图标（用户自身颜色不受
+       按钮 color 影响，天然清晰可辨，也是需求里给出的示例做法），一步到位解决对比度问题。 -->
+  <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer}}">
+    <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
+      <text class="btn-emoji-icon">📋</text>生成餐报文本
     </button>
-    <button class="btn-main-action poster-gen-btn" bindtap="onOpenPosterModal">
-      <view class="idx-icon-sm idx-icon-palette" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>生成公示海报
+    <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">
+      <text class="btn-emoji-icon">🎨</text>生成公示海报
     </button>
   </view>
 
@@ -1448,8 +2094,87 @@
     bind:viewJourney="onViewJourneyFromArchive"
   />
 
-  <view class="compliance-disclaimer">
-    <text class="compliance-disclaimer-text">本小程序为公益服务记录与信息公示工具，所展示数据仅供内部管理与信息公开使用，不构成任何形式的网络募捐、众筹或支付服务；如涉及个人信息，已在前端做脱敏展示处理。</text>
+  <!-- 🌟 合规 Footer：常驻展示，字体清晰可读但视觉弱化——不与主功能抢视觉焦点，
+       但也不是此前那种几乎看不见的灰色小字。完整版声明见页面顶部的强制阅读弹窗
+       （showComplianceModal / checkComplianceNotice），这里是精简常驻版，
+       点击可随时重新查看完整声明全文 -->
+  <view class="compliance-footer">
+    <view class="compliance-footer-row">
+      <view class="compliance-footer-icon idx-icon-sm idx-icon-warning"></view>
+      <text class="compliance-footer-text">本小程序为民间公益志愿者团队独立开发维护的内部记账与信息公示辅助工具，非「雨花斋」品牌官方发布，不提供任何形式的网络募捐、众筹或代收款项服务。</text>
+    </view>
+    <text class="compliance-footer-link" bindtap="onViewFullComplianceNotice">查看完整声明 ›</text>
   </view>
-</view>
+
+  <!-- 🌟 财务专属功能区：稽核与封账弹窗（按月批量锁定已通过店长确认的账本记录） -->
+  <view class="finance-modal-mask" wx:if="{{showFinanceLockModal}}" bindtap="onCloseFinanceLockModal">
+    <view class="finance-modal-card" catchtap="stopPropagation">
+      <view class="finance-modal-header">
+        <text class="finance-modal-title">🔒 稽核与封账</text>
+        <view class="finance-modal-close" bindtap="onCloseFinanceLockModal">✕</view>
+      </view>
+
+      <text class="finance-modal-desc">选择要封账的月份，该月内所有已通过店长确认的记录将被批量锁定，锁定后店长无法再编辑或作废。</text>
+
+      <picker mode="date" fields="month" value="{{financeLockMonthStr}}" bindchange="onFinanceLockMonthChange">
+        <view class="finance-month-picker">
+          <text>{{financeLockMonthStr || '请选择月份'}}</text>
+          <text class="arrow">▼</text>
+        </view>
+      </picker>
+
+      <button class="finance-modal-confirm-btn" bindtap="onConfirmFinanceLock" disabled="{{financeLockInFlight}}">
+        {{financeLockInFlight ? '封账中...' : '确认封账'}}
+      </button>
+    </view>
+  </view>
+
+  <!-- 🌟 财务专属功能区：风控预警日志弹窗 -->
+  <view class="finance-modal-mask" wx:if="{{showRiskAlertsModal}}" bindtap="onCloseRiskAlertsModal">
+    <view class="finance-modal-card" catchtap="stopPropagation">
+      <view class="finance-modal-header">
+        <text class="finance-modal-title">⚠️ 风控预警日志</text>
+        <view class="finance-modal-close" bindtap="onCloseRiskAlertsModal">✕</view>
+      </view>
+
+      <text class="finance-modal-desc">近 60 天内的异常信号：红字冲销频次、小票缺失、余额异常突变</text>
+
+      <view class="risk-summary-row" wx:if="{{!riskAlertsLoading}}">
+        <view class="risk-summary-item">
+          <text class="risk-summary-num">{{riskAlertsSummary.voidCount}}</text>
+          <text class="risk-summary-label">红字冲销</text>
+        </view>
+        <view class="risk-summary-item">
+          <text class="risk-summary-num">{{riskAlertsSummary.missingReceiptCount}}</text>
+          <text class="risk-summary-label">小票缺失</text>
+        </view>
+        <view class="risk-summary-item">
+          <text class="risk-summary-num">{{riskAlertsSummary.balanceAnomalyCount}}</text>
+          <text class="risk-summary-label">余额异常</text>
+        </view>
+      </view>
+
+      <view class="risk-loading" wx:if="{{riskAlertsLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <scroll-view scroll-y class="risk-alert-list" wx:if="{{!riskAlertsLoading}}">
+        <view class="risk-alert-item {{item.level}}" wx:for="{{riskAlertsList}}" wx:key="index">
+          <text class="risk-alert-date">{{item.dateString}}</text>
+          <text class="risk-alert-msg">{{item.message}}</text>
+        </view>
+        <view class="risk-alert-empty" wx:if="{{riskAlertsList.length === 0}}">
+          <text>✅ 近期账本未发现异常信号</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <side-drawer id="sideDrawer"
+    store-name="{{currentStoreName || shopName}}"
+    role-label="{{isSuperAdmin ? '超级管理员' : (isManager ? '店长' : (isFinance ? '财务' : '义工'))}}"
+    is-manager="{{isManager}}"
+    is-finance="{{isFinance}}"
+    is-super-admin="{{isSuperAdmin}}"
+    bind:action="onSideDrawerAction" />
 </view>

@@ -49,7 +49,7 @@ export function formatGratitudeReportText(statsData: GratitudeReportData): strin
     text += `🍲 累计用餐服务：${totalDiners} 人次（单餐食材成本约 ¥${costPerMeal}/餐）\n`;
   } else if (isPreparing) {
     text += `📌 运营状态：休餐筹措期/准备期\n`;
-    text += `🙏 本期共收到 ${incomeDays || 0} 笔爱心汇入\n`;
+    text += `❤️ 本期共收到 ${incomeDays || 0} 笔爱心汇入\n`;
   } else {
     text += `🍲 累计用餐服务：${totalDiners} 人次\n`;
   }
@@ -66,7 +66,7 @@ export function formatGratitudeReportText(statsData: GratitudeReportData): strin
   text += `📦 核心物资：大米[${riceStatus}] / 食用油[${oilStatus}]\n`;
   text += `❤️ 义工护持：${volunteerCount} 人次（${volunteerHours} 小时）\n`;
   text += `──────────────────\n`;
-  text += `🙏 感恩各位家人与爱心人士无私护持，积沙成塔，共植福田！`;
+  text += `❤️ 用一餐饭的温度，传递温暖与关爱。每一餐，都有您的爱心护持。`;
 
   return text;
 }

@@ -14,6 +14,9 @@ export interface DrawPosterOptions {
   qrCodeTempPath: string;
   width: number;
   height: number;
+  // 🌟 门店简介/地址：可选，未提供时版式与升级前完全一致（原有 index.ts 调用点不用改）
+  address?: string;
+  intro?: string;
 }
 
 export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promise<void> {
@@ -40,7 +43,7 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   ctx.fillStyle = '#D9480E';
   ctx.font = 'bold 22px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('❤️ 恭敬生命 · 敬老行善', width / 2, 55);
+  ctx.fillText('❤️ 关爱生命 · 敬老行善', width / 2, 55);
 
   ctx.fillStyle = '#212529';
   ctx.font = 'bold 26px sans-serif';
@@ -108,6 +111,24 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   ctx.fillStyle = '#D9480E';
   ctx.font = 'bold 13px sans-serif';
   ctx.fillText('申请成为【财务记账义工】或【现场奉献家人】', width / 2, cardY + 258);
+
+  // 5.5 门店简介/地址：仅在调用方提供时才绘制，未提供时版式与升级前完全一致
+  // （原有 index.ts 调用点不传这两个字段，不受影响）。绘制区固定卡片正下方，
+  // 调用方若传了这两个字段，需要相应把 height 调高留出空间，避免和底部版权撞在一起
+  let introY = cardY + cardH + 34;
+  if (opts.address) {
+    ctx.fillStyle = '#666666';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`📍 ${opts.address}`, width / 2, introY);
+    introY += 22;
+  }
+  if (opts.intro) {
+    ctx.fillStyle = '#8C6D46';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(opts.intro, width / 2, introY);
+  }
 
   // 6. 底部版权
   ctx.fillStyle = '#8C6D46';

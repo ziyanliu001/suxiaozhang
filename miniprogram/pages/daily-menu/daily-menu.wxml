@@ -1,0 +1,162 @@
+<view class="dm-page">
+  <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseMedia（今日食谱图片上传）隐私接口 -->
+  <privacy-popup />
+
+  <view class="dm-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="dm-nav-back" hover-class="dm-nav-back-hover" bindtap="goBack">←</view>
+    <text class="dm-nav-title">🍱 食谱管理中心</text>
+    <text class="dm-nav-action {{canManage ? '' : 'hidden'}}" bindtap="onOpenTodayEditForm">编辑</text>
+  </view>
+
+  <!-- 图片压缩用离屏画布，全页面共用一个即可 -->
+  <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
+
+  <scroll-view scroll-y class="dm-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
+
+    <view class="dm-store-tip" wx:if="{{currentStoreName}}">📍 {{currentStoreName}}</view>
+
+    <!-- 🍱 今日食谱：顶部高亮区，右上角提供编辑/发布入口 -->
+    <view class="dm-section-divider">
+      <text class="dm-divider-icon">🔴</text>
+      <text class="dm-divider-txt">今日食谱</text>
+      <text class="dm-divider-date">{{todayDateStr}}</text>
+    </view>
+
+    <view class="dm-today-card">
+      <view class="dm-today-header">
+        <text class="dm-today-title" wx:if="{{todayItem}}">{{todayItem.menuText || '（未填写文字菜谱，见图片）'}}</text>
+        <text class="dm-today-title dm-today-empty-txt" wx:else>今日食谱尚未发布</text>
+        <button class="dm-btn-today-edit" wx:if="{{canManage}}" bindtap="onOpenTodayEditForm">
+          {{todayItem ? '✏️ 修改食谱' : '📷 发布今日食谱'}}
+        </button>
+      </view>
+
+      <!-- 🌟 发布冲突提示：今日已存在食谱时展示发布人与时间，避免重复发布/误覆盖 -->
+      <text class="dm-publish-meta" wx:if="{{todayItem}}">已由 {{todayItem.publisherLabel || '管理员'}} 于 {{todayItem.publishTimeStr}} 发布</text>
+
+      <view class="dm-thumb-9grid" wx:if="{{todayItem && todayItem.images.length > 0}}">
+        <view class="dm-thumb-grid-item" wx:for="{{todayItem.images}}" wx:for-item="img" wx:key="url">
+          <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="dm-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" bindtap="onPreviewImage" data-url="{{img.url}}" data-urls="{{todayItem.images}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
+          <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
+            <text class="thumb-load-failed-icon">⚠️</text>
+            <text class="thumb-load-failed-text">加载失败</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 📚 历史食谱：时间轴倒序，不含今天 -->
+    <view class="dm-section-divider">
+      <text class="dm-divider-icon">📚</text>
+      <text class="dm-divider-txt">历史食谱</text>
+    </view>
+
+    <view class="dm-menu-card" wx:for="{{historyList}}" wx:key="_id" bindtap="onOpenDetail" data-id="{{item._id}}">
+      <view class="dm-card-date">{{item.dateString}}</view>
+      <view class="dm-card-body">
+        <view class="dm-thumb-9grid" wx:if="{{item.images.length > 0}}">
+          <view class="dm-thumb-grid-item" wx:for="{{item.images}}" wx:for-item="img" wx:key="url">
+            <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="dm-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
+            <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+          </view>
+        </view>
+        <text class="dm-card-text">{{item.menuText || '（未填写文字菜谱，见图片）'}}</text>
+      </view>
+      <view class="dm-card-footer" wx:if="{{canManage}}">
+        <button class="dm-btn-reuse" catchtap="onReuseToToday" data-id="{{item._id}}">✨ 一键复用为今日食谱</button>
+      </view>
+    </view>
+
+    <view class="dm-empty-state" wx:if="{{!loading && historyList.length === 0}}">
+      <text class="dm-empty-icon">📖</text>
+      <text class="dm-empty-text">暂无历史食谱记录</text>
+    </view>
+
+    <view class="dm-loading-more" wx:if="{{loadingMore}}">
+      <text>加载中...</text>
+    </view>
+    <view class="dm-no-more" wx:if="{{!hasMore && historyList.length > 0}}">
+      <text>—— 已加载全部历史记录 ——</text>
+    </view>
+
+  </scroll-view>
+
+  <!-- 详情弹窗：点击后才加载展示压缩主图（非缩略图），文字全文 -->
+  <view class="dm-modal-mask" wx:if="{{showDetailModal}}" bindtap="onCloseDetail">
+    <view class="dm-detail-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="dm-detail-header">
+        <text class="dm-detail-date">{{detailItem.dateString}}</text>
+        <text class="dm-detail-close" bindtap="onCloseDetail">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="dm-detail-scroll">
+        <view class="dm-detail-images" wx:if="{{detailItem.images.length > 0}}">
+          <image
+            wx:for="{{detailItem.images}}"
+            wx:for-item="img"
+            wx:key="url"
+            class="dm-detail-img"
+            src="{{img.url}}"
+            mode="widthFix"
+            bindtap="onPreviewImage"
+            data-url="{{img.url}}"
+            data-urls="{{detailItem.images}}"
+          />
+        </view>
+        <text class="dm-detail-text">{{detailItem.menuText}}</text>
+      </scroll-view>
+
+      <view class="dm-detail-actions" wx:if="{{canManage}}">
+        <button class="dm-btn-edit" bindtap="onOpenEditForm" data-id="{{detailItem._id}}">编辑</button>
+        <button class="dm-btn-delete" bindtap="onDeleteMenu" data-id="{{detailItem._id}}">删除</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 发布/编辑表单 -->
+  <view class="dm-modal-mask" wx:if="{{showEditForm}}" bindtap="onCloseEditForm">
+    <view class="dm-edit-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="dm-detail-header">
+        <text class="dm-detail-date">{{editForm.id ? '编辑食谱' : '发布今日食谱'}}</text>
+        <text class="dm-detail-close" bindtap="onCloseEditForm">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="dm-edit-scroll">
+        <text class="dm-form-label">日期</text>
+        <picker mode="date" value="{{editForm.dateString}}" bindchange="onEditDateChange">
+          <view class="dm-form-picker">{{editForm.dateString}}</view>
+        </picker>
+
+        <text class="dm-form-label">菜谱文字</text>
+        <textarea
+          class="dm-form-textarea"
+          placeholder="如：红烧茄子 / 清炒时蔬 / 紫菜蛋花汤"
+          value="{{editForm.menuText}}"
+          bindinput="onEditTextInput"
+          maxlength="500"
+        />
+
+        <text class="dm-form-label">配图（最多 9 张，自动压缩至 300KB 以内，单张不超过 1MB）</text>
+        <view class="dm-image-grid">
+          <view class="dm-image-item" wx:for="{{editForm.images}}" wx:key="*this">
+            <image wx:if="{{!thumbFailedMap[item]}}" class="dm-image-thumb" src="{{item}}" mode="aspectFill" binderror="onImageLoadError" data-thumb-url="{{item}}" />
+            <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{item}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+            <text class="dm-image-remove" bindtap="onRemoveImage" data-index="{{index}}">✕</text>
+          </view>
+          <view class="dm-image-add" bindtap="onChooseImage" wx:if="{{editForm.images.length < 9}}">
+            <text>{{uploading ? '压缩中...' : '+ 添加'}}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <button class="dm-submit-btn" bindtap="onSubmitEdit" disabled="{{uploading}}">提交</button>
+    </view>
+  </view>
+
+</view>

@@ -3,16 +3,45 @@ import { AuthService, getPermissionFlags, PermissionFlags } from '../../utils/au
 import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { getSafeSystemInfo } from '../../utils/util';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
+import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
+import { getTodayIsoString } from '../../utils/dateUtils';
+import { isCloudAvailable } from '../../utils/cloudGuard';
+import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
+
+// 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
+// （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
+// 统一到这一个常量 + isNationalStoreId()，全文件三处判断都改为调用它，杜绝再次出现口径不一致。
+const NATIONAL_STORE_IDS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
+function isNationalStoreId(storeId: string): boolean {
+  return !storeId || NATIONAL_STORE_IDS.includes(storeId);
+}
 
 Page({
   _shareRecord: null as any,
   isNavigating: false,
   _navGuard: null as NavGuardInstance | null,
+  _managerAuditInFlight: false,
+  _financeAuditInFlight: false,
+  _voidInFlight: false,
+  _recalibrateInFlight: false,
+  _deleteInFlight: false,
+  _todayActionInFlight: false,
+  _supplementInFlight: false,
 
   data: {
+    watermarkIdentity: '',
     reports: [],
     filteredReports: [],
     loading: true,
+    // 🧾 今日凭证与记账（当日+历史一体化：置顶高亮展示当天记录，无需翻找历史列表）
+    todayLedger: null as any,
+    todayDateStr: '',
+    // 📥 今日尚未正式提交餐报时，允许提前拍照/OCR暂存凭证，提交餐报后自动带入
+    stagedReceiptImages: [] as string[],
+    // 🔍 历史小票稽核详情弹窗：放大原图 + 财务对单 + 补传凭证
+    showReceiptDetailModal: false,
+    receiptDetailItem: null as any,
+    receiptDetailImages: [] as string[],
     statusBarHeight: 20,
     navBarHeight: 44,
     totalHeaderHeight: 150,
@@ -31,7 +60,21 @@ Page({
     receiptImgCount: 0,
     isManagerOrAdmin: false,
     isFinanceOrAdmin: false,
-    shareRecord: null as any
+    showPreviewBanner: false,
+    previewBannerText: '',
+    shareRecord: null as any,
+    // 🐛 修复：placeholder 曾使用 XML 数字字符实体 &#10; 表示换行，微信 WXML 不会对其解码，
+    // 会把字面量 "&#10;" 原样展示给用户。这里改为在 TS 层用真实的 \n 换行符拼好，再绑定渲染。
+    donationsPlaceholder: '示例：张三 100\n李四 200（支持空格/逗号/冒号分隔，自动识别金额）',
+
+    // 🌟 月度财务审计表导出：月份取自上方已有的月份筛选器（selectedMonthStr），
+    // 未筛选时导出默认按钮字面意思——即"本月"
+    exportingAudit: false,
+    showAuditExportModal: false,
+    auditExportPeriodLabel: '',
+    auditExportText: '',
+    auditExportFileURL: '',
+    auditExportFileName: ''
   },
 
   onLoad() {
@@ -40,6 +83,7 @@ Page({
     this.initPermissions();
     this.loadReports();
     this.initShareMenu();
+    this.initWatermarkIdentity();
 
     // 注入物理返回键兜底拦截：分享直入此页时，物理返回会跳到首页而非退出
     this._navGuard = createNavGuard({
@@ -80,16 +124,27 @@ Page({
     const currentStoreId = wx.getStorageSync('current_store_id') || '';
     const currentStoreName = wx.getStorageSync('current_store_name') || '';
 
+    // 🐛 修复：此前分支只更新 selectedStoreName/currentStoreId，从未同步过 isAllStoresView，
+    // 导致从全国总览/多店视角进入或返回本页时，"今日凭证与记账"卡片仍按上一次的（可能是错的）
+    // 视角状态展示，最典型的表现就是全国总览下也照样显示今日记账卡片与 OCR/补传按钮。
+    let resolvedStoreId = this.data.currentStoreId;
     if (activeStore && activeStore.storeName !== this.data.selectedStoreName) {
+      resolvedStoreId = currentStoreId || activeStore.storeId || '';
       this.setData({
         selectedStoreName: activeStore.storeName,
-        currentStoreId: currentStoreId || activeStore.storeId || ''
+        currentStoreId: resolvedStoreId,
+        isAllStoresView: isNationalStoreId(resolvedStoreId)
       });
     } else if (currentStoreName && currentStoreName !== this.data.selectedStoreName) {
+      resolvedStoreId = currentStoreId;
       this.setData({
         selectedStoreName: currentStoreName,
-        currentStoreId: currentStoreId
+        currentStoreId: resolvedStoreId,
+        isAllStoresView: isNationalStoreId(resolvedStoreId)
       });
+    } else {
+      // 两个分支都未触发（店铺名未变）：仍要用当前已知的 storeId 校正一次视角标志，避免过期状态残留
+      this.setData({ isAllStoresView: isNationalStoreId(resolvedStoreId) });
     }
     this.initPermissions();
     this.loadReports();
@@ -105,7 +160,7 @@ Page({
     wx.setStorageSync('current_store_id', storeId || '');
     wx.setStorageSync('current_store_name', storeName || '');
 
-    const isAllStores = storeId === 'national_overview' || storeId === 'ALL_STORES';
+    const isAllStores = isNationalStoreId(storeId || '');
 
     this.setData({
       selectedStoreName: storeName || '',
@@ -122,6 +177,14 @@ Page({
     this.onStoreChange(e);
   },
 
+  // 🌟 常驻门店切换卡片：点击直接拉起顶部 store-picker 组件的选择面板
+  onOpenStorePickerSheet() {
+    const picker = this.selectComponent('#historyStorePicker');
+    if (picker && typeof picker.onOpenSheet === 'function') {
+      picker.onOpenSheet();
+    }
+  },
+
   // 🌟 高危功能：一键链式校准全线结余流水
   async onRecalibrateAllBalances() {
     if (!this.data.isManagerRole && !this.data.isFinanceRole && !this.data.isSuperAdmin) {
@@ -129,87 +192,141 @@ Page({
       return;
     }
 
-    const storeId = this.data.currentStoreId;
-    if (!storeId || storeId === 'ALL_STORES' || storeId === 'national_overview') {
-      wx.showToast({ title: '请先选择具体门店再进行校准', icon: 'none' });
-      return;
-    }
+    const currentStoreId = this.data.currentStoreId;
+    const isAllStoresContext = this.data.isAllStoresView || !currentStoreId || currentStoreId === 'ALL_STORES' || currentStoreId === 'national_overview' || currentStoreId === 'all';
 
-    wx.showModal({
-      title: '🔄 确定校准流水结余？',
-      content: '系统将按照日期由远及近，自动将前一天的“今日结余”校准为后一天的“昨日余额”，并重新计算每一天的结余，用于修复因补单或改账造成的账目差错。',
-      confirmText: '开始校准',
-      confirmColor: '#E65100',
-      success: async (res) => {
-        if (!res.confirm) return;
+    if (isAllStoresContext) {
+      // 🌟 超级管理员在全国总览视角下不再被拦截，改为走"全国所有门店"批量校准；
+      // 店长/财务在全国总览视角下依然无法确定校准哪家门店，引导先切换到具体门店
+      if (!this.data.isSuperAdmin) {
+        wx.showToast({ title: '店长模式下请先选择您管理的具体门店再进行校准', icon: 'none', duration: 2500 });
+        return;
+      }
 
-        wx.showLoading({ title: '全线账目重算中...' });
-
-        try {
-          const db = wx.cloud.database();
-          const _ = db.command;
-
-          // A. 拉取该门店所有非作废历史账单（按日期升序，由远及近重算）
-          const reportRes = await db.collection('report_logs')
-            .where({
-              storeId: storeId,
-              isVoid: _.neq(true)
-            })
-            .orderBy('dateString', 'asc')
-            .get();
-
-          const list = reportRes.data || [];
-          if (list.length < 2) {
-            wx.hideLoading();
-            wx.showToast({ title: '无需校准（记录不足2条）', icon: 'none' });
+      // 🛡️ 临时加固：近期曾发生全库数据异常事故，全国范围校准（影响面最大的一档操作）
+      // 现新增一道输入型二次确认，需手动键入"确认校准"四字才会进入下一步弹窗，
+      // 防止手滑/误触；云函数本身也已改为逐店事务+失败回滚，仅允许写结余/校验和字段。
+      wx.showModal({
+        title: '⚠️ 高风险操作二次确认',
+        content: '全国范围校准会遍历全部门店的历史账目。请务必确认 recalculateLedger 云函数已部署最新版本（事务+回滚+字段白名单）。请输入"确认校准"以继续：',
+        editable: true,
+        placeholderText: '请输入：确认校准',
+        confirmText: '下一步',
+        confirmColor: '#D32F2F',
+        success: (res) => {
+          if (!res.confirm) return;
+          if ((res.content || '').trim() !== '确认校准') {
+            wx.showToast({ title: '输入不匹配，已取消操作', icon: 'none' });
             return;
           }
 
-          // B. 链式滚雪球计算
-          let lastDayBalance = parseFloat(list[0].todayBalance || list[0].calculatedTodayBalance || '0');
-          const batchPromises = [];
+          wx.showModal({
+            title: '确认全国范围校准？',
+            content: '确认要重新校准【全国所有门店】的全线结余流水账目吗？这可能需要几秒钟。',
+            confirmText: '确认校准',
+            confirmColor: '#D32F2F',
+            cancelText: '我再想想',
+            success: async (res2) => {
+              if (!res2.confirm) return;
+              await this.executeRecalculateLedger('all');
+            }
+          });
+        }
+      });
+      return;
+    }
 
-          for (let i = 1; i < list.length; i++) {
-            const currentItem = list[i];
-            const otherDonation = parseFloat(currentItem.otherDonation || '0');
-            const listDonationTotal = parseFloat(currentItem.listDonationTotal || '0');
-            const expenseAmount = parseFloat(currentItem.expenseAmount || '0');
-            const inAmt = otherDonation + listDonationTotal;
+    // 🛡️ 防误触升级：单店校准此前只有一层普通确认弹窗，现同样加上输入型二次确认，
+    // 需手动键入"确认校准"才会进入下一步，与全国范围校准的防护级别保持一致
+    const storeLabel = this.data.selectedStoreName || currentStoreId;
+    wx.showModal({
+      title: '⚠️ 校准操作二次确认',
+      content: `即将重新校准【${storeLabel}】的全线结余流水账目。请输入"确认校准"以继续：`,
+      editable: true,
+      placeholderText: '请输入：确认校准',
+      confirmText: '下一步',
+      confirmColor: '#E65100',
+      success: (res) => {
+        if (!res.confirm) return;
+        if ((res.content || '').trim() !== '确认校准') {
+          wx.showToast({ title: '输入不匹配，已取消操作', icon: 'none' });
+          return;
+        }
 
-            // 强制对齐：昨日余额 = 前一天的今日结余
-            const newYesterdayBalance = parseFloat(lastDayBalance.toFixed(2));
-            // 重新推算今日结余
-            const newTodayBalance = parseFloat((newYesterdayBalance + inAmt - expenseAmount).toFixed(2));
-
-            batchPromises.push(
-              db.collection('report_logs').doc(currentItem._id).update({
-                data: {
-                  yesterdayBalance: newYesterdayBalance,
-                  todayBalance: newTodayBalance,
-                  calculatedTodayBalance: newTodayBalance.toFixed(2),
-                  calibratedAt: db.serverDate()
-                }
-              })
-            );
-
-            // 滚雪球传递
-            lastDayBalance = newTodayBalance;
+        wx.showModal({
+          title: `确认校准【${storeLabel}】？`,
+          content: '确认要重新校准该门店的全线结余流水账目吗？',
+          confirmText: '确认校准',
+          confirmColor: '#E65100',
+          cancelText: '我再想想',
+          success: async (res2) => {
+            if (!res2.confirm) return;
+            await this.executeRecalculateLedger(currentStoreId);
           }
+        });
+      }
+    });
+  },
 
-          // C. 批量提交云端更新
-          await Promise.all(batchPromises);
+  // 🛡️ 入口降级：一键校准从顶部常规区域移出，改为右上角"⚙️ 设置"入口的二次菜单，
+  // 降低误触概率；仅门店/超管等具备权限的角色可见该设置图标
+  onOpenHistorySettingsMenu() {
+    if (!this.data.isManagerRole && !this.data.isFinanceRole && !this.data.isSuperAdmin) {
+      return;
+    }
 
-          wx.hideLoading();
-          wx.showToast({ title: '🔄 流水全线校准成功', icon: 'success' });
-          this.loadReports();
-
-        } catch (err) {
-          wx.hideLoading();
-          wx.showToast({ title: '校准重算失败', icon: 'none' });
-          console.error('校准失败详情:', err);
+    wx.showActionSheet({
+      itemList: ['🔄 一键校准全线结余流水'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          this.onRecalibrateAllBalances();
         }
       }
     });
+  },
+
+  // storeId === 'all' 时全国全量重算；否则仅重算该单店，统一走同一个云函数
+  async executeRecalculateLedger(storeId: string) {
+    if (this._recalibrateInFlight) return;
+    this._recalibrateInFlight = true;
+
+    const isAll = storeId === 'all';
+    wx.showLoading({ title: isAll ? '全国门店账目重算中...' : '全线账目重算中...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({
+        name: 'recalculateLedger',
+        data: { storeId }
+      });
+      const result = res.result as any;
+
+      wx.hideLoading();
+
+      if (result && result.success) {
+        wx.showToast({ title: '✅ 全线结余流水校准完成', icon: 'success', duration: 2500 });
+        this.loadReports();
+      } else {
+        wx.showModal({
+          title: '校准失败',
+          content: (result && result.errMsg) || '云函数未返回正确结果',
+          showCancel: false
+        });
+      }
+    } catch (err: any) {
+      wx.hideLoading();
+      console.error('[executeRecalculateLedger] 异常:', err);
+      // 🛡️ 云函数当前处于紧急熔断状态（会主动 throw），把云端返回的真实错误文案透传给用户，
+      // 而不是笼统提示"请确认已部署"——避免维护期间的正常熔断被误判为部署/网络问题
+      const cloudErrMsg = err && (err.errMsg || err.message);
+      wx.showModal({
+        title: '调用失败',
+        content: cloudErrMsg || '未成功触发校准，请确认 recalculateLedger 云函数已右键【上传并部署】',
+        showCancel: false
+      });
+    } finally {
+      this._recalibrateInFlight = false;
+    }
   },
 
   async initPermissions() {
@@ -221,13 +338,23 @@ Page({
       const isManagerRole = normalizedRole === 'store_manager' || isSuperAdmin;
       const isFinanceRole = normalizedRole === 'finance' || isSuperAdmin;
       const flags = getPermissionFlags({ role: normalizedRole });
+
+      // 🛡️ 仅做提示，不做授权：本页所有权限判断全程只认 normalizedRole（真实身份），
+      // 从不接入 viewModePreview 的展示层覆盖——这里读取预览模式仅用于渲染一条
+      // 提示 Banner，告知超管"当前正在看店长视角的样子，但本页操作仍按真实的
+      // 超管身份执行"，避免误以为预览模式在这个页面上也切换了实际权限。
+      const previewMode = isSuperAdmin ? getPreviewViewMode() : 'SUPER_ADMIN';
+      const showPreviewBanner = isSuperAdmin && previewMode !== 'SUPER_ADMIN';
+
       this.setData({
         permissions: flags,
         isManagerOrAdmin: isManagerRole,
         isFinanceOrAdmin: isFinanceRole,
         isManagerRole: isManagerRole,
         isFinanceRole: isFinanceRole,
-        isSuperAdmin: isSuperAdmin
+        isSuperAdmin: isSuperAdmin,
+        showPreviewBanner: showPreviewBanner,
+        previewBannerText: showPreviewBanner ? `当前正在预览「${PREVIEW_VIEW_MODE_LABELS[previewMode]}」的界面样式，本页操作仍按您的真实身份（超级管理员）执行` : ''
       });
     };
 
@@ -263,6 +390,13 @@ Page({
     this.setData({ isAdmin }, () => {
       this.recalcTotalHeaderHeight();
     });
+  },
+
+  // 🛡️ 防截图/防外传水印：叠加当前操作者身份标识，用于追溯截图外传来源
+  initWatermarkIdentity() {
+    const openid = AuthService.getOpenid() || '';
+    const tail = openid ? openid.slice(-6) : '未登录';
+    this.setData({ watermarkIdentity: `操作人 ***${tail}` });
   },
 
   switchViewMode(e: any) {
@@ -301,7 +435,26 @@ Page({
     const extraPadding = 8;
 
     const totalHeaderHeight = statusBarHeight + navBarHeight + adminSwitchHeight + filterBarHeight + extraPadding;
-    this.setData({ totalHeaderHeight });
+    this.setData({ totalHeaderHeight }, () => {
+      this.measureActualHeaderHeight();
+    });
+  },
+
+  // 🐛 修复顶部固定筛选栏遮挡内容区：手算的 filterBarHeight 硬编码为 50px，
+  // 在门店切换胶囊、义工筛选行、管理员工具行等实际渲染更高的场景下会偏小，
+  // 导致"今日凭证与记账"卡片被固定栏部分遮挡产生错位重叠。
+  // 渲染完成后用 createSelectorQuery 实测真实高度做二次校正，比手算估值更可靠。
+  measureActualHeaderHeight() {
+    const query = wx.createSelectorQuery();
+    query.select('.fixed-top-header').boundingClientRect();
+    query.exec((res) => {
+      if (res && res[0] && res[0].height) {
+        const measuredHeight = Math.ceil(res[0].height) + 8;
+        if (Math.abs(measuredHeight - this.data.totalHeaderHeight) > 2) {
+          this.setData({ totalHeaderHeight: measuredHeight });
+        }
+      }
+    });
   },
 
   async loadReports() {
@@ -309,8 +462,8 @@ Page({
 
     const { viewMode, currentStoreId, selectedStoreName } = this.data;
     // 🔑 数据隔离：将 storeId 传给 DataService 做云端强隔离
-    // 超管全国总览时 storeId 为 'national_overview' / 'ALL_STORES' 则传空，不限制门店
-    const isAllStoresView = !currentStoreId || currentStoreId === 'national_overview' || currentStoreId === 'ALL_STORES';
+    // 超管全国总览/多店汇总时（'national_overview' / 'ALL_STORES' / 'all' 等哨兵值）传空，不限制门店
+    const isAllStoresView = isNationalStoreId(currentStoreId);
     const effectiveStoreId = isAllStoresView ? '' : currentStoreId;
     // 🌟 Bug 修复：全国总览时 shopName 也设为空，避免按 '全国总览' 过滤导致无数据
     const effectiveShopName = (!isAllStoresView && selectedStoreName && selectedStoreName !== '全部门店')
@@ -363,7 +516,8 @@ Page({
 
     this.setData({
       reports: formattedReports,
-      storeFilterOptions: storeOptions
+      storeFilterOptions: storeOptions,
+      isAllStoresView: isAllStoresView
     }, () => {
       this.convertReceiptImagesToUrls();
     });
@@ -389,6 +543,7 @@ Page({
     if (allCloudIds.length === 0) {
       this.setData({ loading: false });
       this.applyFilters();
+      this.computeTodayLedger();
       return;
     }
 
@@ -416,11 +571,504 @@ Page({
 
       this.setData({ reports: updatedReports, loading: false }, () => {
         this.applyFilters();
+        this.computeTodayLedger();
       });
     } catch (err) {
       console.warn('[convertReceiptImagesToUrls] 图片URL转换失败:', err);
       this.setData({ loading: false });
       this.applyFilters();
+      this.computeTodayLedger();
+    }
+  },
+
+  // 🧾 从已加载的账本记录中取出"今日"这一条，置顶高亮展示（当日+历史一体化，对齐食谱/大事记模块的交互模式）
+  computeTodayLedger() {
+    const { reports, isAllStoresView } = this.data;
+    const todayStr = getTodayIsoString();
+
+    // 全国总览视角不针对具体门店，"今日凭证"栏位无从谈起，仅展示历史列表
+    if (isAllStoresView) {
+      this.setData({ todayLedger: null, todayDateStr: todayStr });
+      return;
+    }
+
+    const todayItem = (reports || []).find((r: any) => r.dateString === todayStr && !r.isVoid);
+    this.setData({
+      todayLedger: todayItem ? this.processReportListAudit([todayItem])[0] : null,
+      todayDateStr: todayStr
+    });
+
+    // 今日尚未正式提交餐报时，读取本地暂存的凭证图片（拍照识别OCR/快捷补传凭证 提前存的）
+    if (!todayItem) {
+      this.loadStagedReceiptStash();
+    } else {
+      // 今日记录已存在（已通过首页提交，图片已在正式记录中），清理暂存，避免残留脏数据
+      try {
+        wx.removeStorageSync(this.getStashKey());
+      } catch (err) {
+        /* ignore */
+      }
+      this.setData({ stagedReceiptImages: [] });
+    }
+  },
+
+  getStashKey(): string {
+    const storeId = this.data.currentStoreId || this.data.selectedStoreName || 'default';
+    const todayStr = this.data.todayDateStr || getTodayIsoString();
+    return `pending_receipt_stash_${storeId}_${todayStr}`;
+  },
+
+  loadStagedReceiptStash() {
+    try {
+      const stash = wx.getStorageSync(this.getStashKey());
+      this.setData({ stagedReceiptImages: (stash && Array.isArray(stash.images)) ? stash.images : [] });
+    } catch (err) {
+      console.warn('[loadStagedReceiptStash] 读取暂存凭证失败:', err);
+    }
+  },
+
+  // 📥 今日尚未正式提交餐报：先把已上传的凭证图片暂存本地，待用户到首页提交今日餐报时自动带入
+  stashReceiptImagesLocally(newUrls: string[]) {
+    try {
+      const key = this.getStashKey();
+      const existing = wx.getStorageSync(key) || { images: [] };
+      const mergedImages = [...(existing.images || []), ...newUrls];
+      wx.setStorageSync(key, { images: mergedImages, updatedAt: Date.now() });
+      this.setData({ stagedReceiptImages: mergedImages });
+      wx.showToast({ title: `已暂存 ${newUrls.length} 张凭证，提交今日餐报时将自动带入`, icon: 'none', duration: 2500 });
+    } catch (err) {
+      console.error('[stashReceiptImagesLocally] 暂存失败:', err);
+      wx.showToast({ title: '暂存失败，请重试', icon: 'none' });
+    }
+  },
+
+  onPreviewStagedReceipt(e: any) {
+    const current = e.currentTarget.dataset.url;
+    // 🛡️ 防御性过滤：暂存凭证存的是本机 tempFilePath，长时间停留后有概率被系统回收失效，
+    // 过滤掉空值/非字符串，避免一张失效路径卡死整个预览画廊
+    const validUrls = (this.data.stagedReceiptImages || []).filter((u: any) => u && typeof u === 'string');
+    if (!current || typeof current !== 'string') {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+    wx.previewImage({ current, urls: validUrls.length > 0 ? validUrls : [current] });
+  },
+
+  // 📷 拍照识别 OCR：识别今日新增小票金额，累加进今日支出并追加为凭证
+  async onTodayOcrScan() {
+    if (!this.canOperateVoucherPermission()) return;
+    if (!this.ensureSpecificStoreForVoucher()) return;
+    const item = this.data.todayLedger;
+    if (item && !this.checkTodayNotLocked(item)) return;
+
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '当前环境不支持 OCR 识别，请使用快捷补传凭证', icon: 'none', duration: 2500 });
+      return;
+    }
+
+    const currentCount = item ? (item.receiptImages || item.receiptImageList || []).length : this.data.stagedReceiptImages.length;
+    const remainCount = 9 - currentCount;
+    if (remainCount <= 0) {
+      wx.showToast({ title: '今日凭证已达 9 张上限', icon: 'none' });
+      return;
+    }
+
+    let chooseRes: WechatMiniprogram.ChooseMediaSuccessCallbackResult;
+    try {
+      chooseRes = await wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      });
+    } catch (chooseErr: any) {
+      // 用户取消选择 / 拒绝相机相册权限：静默处理或给出友好提示，不抛出未捕获异常
+      const errMsg = (chooseErr && chooseErr.errMsg) || '';
+      if (errMsg.indexOf('cancel') === -1) {
+        if (errMsg.indexOf('auth deny') > -1 || errMsg.indexOf('authorize') > -1) {
+          wx.showModal({
+            title: '需要相机/相册权限',
+            content: '请在设置中允许小程序访问相机或相册，以便拍照识别小票',
+            success: (r) => {
+              if (r.confirm) wx.openSetting();
+            }
+          });
+        } else {
+          wx.showToast({ title: '未能选择图片，请重试', icon: 'none' });
+        }
+      }
+      return;
+    }
+
+    if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
+
+    try {
+      wx.showLoading({ title: '凭证合规性核验中...', mask: true });
+      const fs = wx.getFileSystemManager();
+
+      for (const file of chooseRes.tempFiles) {
+        try {
+          const base64Data = fs.readFileSync(file.tempFilePath, 'base64');
+          const checkRes = await wx.cloud.callFunction({
+            name: 'checkImageContent',
+            data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
+          });
+          const resultData = checkRes.result as any;
+          if (resultData && !resultData.isSafe) {
+            wx.hideLoading();
+            wx.showModal({
+              title: '⚠️ 违规内容拦截',
+              content: '系统检测到您选择的小票凭证图片包含不合规、敏感或非法广告内容，已被全量阻断，请重新拍摄上传真实合规小票！',
+              showCancel: false,
+              confirmColor: '#D32F2F'
+            });
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('🛡️ 图片安全预读失败，降级进入下一张校验:', checkErr);
+        }
+      }
+
+      const newUrls: string[] = [];
+      let recognizedTotal = 0;
+      let recognizedCount = 0;
+
+      for (let i = 0; i < chooseRes.tempFiles.length; i++) {
+        wx.showLoading({ title: `AI 识别中 ${i + 1}/${chooseRes.tempFiles.length}`, mask: true });
+        const tempFilePath = chooseRes.tempFiles[i].tempFilePath;
+        const cloudPath = `receipts/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
+
+        let fileID = '';
+        try {
+          const uploadRes = await wx.cloud.uploadFile({ cloudPath, filePath: tempFilePath });
+          fileID = uploadRes.fileID || '';
+        } catch (uploadErr) {
+          console.error('[onTodayOcrScan] 图片上传失败:', uploadErr);
+          continue;
+        }
+        if (!fileID) continue;
+        newUrls.push(fileID);
+
+        try {
+          const ocrRes = await wx.cloud.callFunction({
+            name: 'ocrExpenseReceipt',
+            data: { fileID }
+          });
+          const result = ocrRes.result as any;
+          if (result && result.success && (result.amount || result.totalAmount)) {
+            recognizedTotal += parseFloat(result.amount || result.totalAmount || 0);
+            recognizedCount++;
+          }
+        } catch (ocrErr) {
+          console.warn('[onTodayOcrScan] 单张识别失败，仅追加为凭证图片:', ocrErr);
+        }
+      }
+
+      wx.hideLoading();
+
+      if (newUrls.length === 0) {
+        wx.showToast({ title: '上传失败，请重试', icon: 'none' });
+        return;
+      }
+
+      const doAppend = (extraAmount: number, reasonSuffix: string) => {
+        if (item) {
+          this.appendReceiptImagesToReport(item, newUrls, extraAmount, `拍照识别OCR追加凭证${reasonSuffix}`, false);
+        } else {
+          // 今日尚未提交餐报：无处挂载金额，仅将图片暂存本地，识别到的金额只作为提示，不做任何自动写入
+          this.stashReceiptImagesLocally(newUrls);
+        }
+      };
+
+      if (recognizedCount > 0) {
+        const content = item
+          ? `已识别小票金额 ¥${recognizedTotal.toFixed(2)}，是否直接更新今日餐报记录？`
+          : `已识别小票金额 ¥${recognizedTotal.toFixed(2)}，今日餐报尚未提交，是否先暂存凭证，待提交今日餐报时自动带入？`;
+        wx.showModal({
+          title: '📷 识别完成',
+          content,
+          confirmText: item ? '确认更新' : '暂存凭证',
+          cancelText: item ? '仅存凭证' : '取消',
+          success: (res) => {
+            if (!res.confirm) {
+              if (item) doAppend(0, '（未累加金额）');
+              return;
+            }
+            doAppend(item ? recognizedTotal : 0, item ? `（¥${recognizedTotal.toFixed(2)}）` : '（暂存待提交）');
+          }
+        });
+      } else {
+        wx.showModal({
+          title: '识别失败',
+          content: '未能自动识别出小票金额，是否仅将图片' + (item ? '追加为凭证（不自动调整支出金额）？' : '暂存，稍后随今日餐报一并提交？'),
+          confirmText: item ? '仅追加凭证' : '暂存凭证',
+          success: (res) => {
+            if (res.confirm) {
+              doAppend(0, '（识别失败，仅存凭证）');
+            }
+          }
+        });
+      }
+    } catch (err: any) {
+      wx.hideLoading();
+      const errMsg = (err && err.message) || (err && err.errMsg) || '';
+      if (errMsg && errMsg.indexOf('cancel') === -1) {
+        console.error('[onTodayOcrScan] 异常:', err);
+        wx.showToast({ title: '识别失败，请重试', icon: 'none' });
+      }
+    }
+  },
+
+  // 权限校验：仅店长/财务/超管可操作今日凭证（拍照识别 OCR / 快捷补传凭证）
+  canOperateVoucherPermission(): boolean {
+    if (!this.data.isManagerRole && !this.data.isFinanceRole && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅店长/财务/超管可操作凭证', icon: 'none' });
+      return false;
+    }
+    return true;
+  },
+
+  // 门店校验：处于"全部门店/全国总览"汇总视角时，凭证无处可挂载，自动拉起门店选择器引导切换到具体门店
+  ensureSpecificStoreForVoucher(): boolean {
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    const noSpecificStore = this.data.isAllStoresView
+      || !this.data.currentStoreId
+      || NATIONAL_IDS.includes(this.data.currentStoreId);
+
+    if (!noSpecificStore) return true;
+
+    wx.showToast({ title: '请先选择具体门店', icon: 'none' });
+    this.onOpenStorePickerSheet();
+    return false;
+  },
+
+  // 今日记录已存在时，若已被财务锁定则拦截（尚未提交时不涉及此项，走本地暂存）
+  checkTodayNotLocked(item: any): boolean {
+    if (item.isLocked || item.approvalStatus === 'AUDITED_LOCKED') {
+      wx.showToast({ title: '今日账目已被财务锁定，请到历史记录中使用"补传凭证"', icon: 'none' });
+      return false;
+    }
+    return true;
+  },
+
+  // 🔧 共用：仅追加凭证图片（可选叠加支出金额），复用 updateAndRecalculateCascade 保证审计留痕与校验码一致
+  async appendReceiptImagesToReport(item: any, newUrls: string[], extraAmount: number, reason: string, isSupplementAfterLock: boolean) {
+    if (this._todayActionInFlight) return;
+    this._todayActionInFlight = true;
+    wx.showLoading({ title: '保存中...', mask: true });
+
+    try {
+      const existingImages = item.receiptImages || item.receiptImageList || [];
+      const mergedImages = [...existingImages, ...newUrls];
+      const newExpense = parseFloat(item.expenseAmount || 0) + (extraAmount || 0);
+
+      const res = await wx.cloud.callFunction({
+        name: 'updateAndRecalculateCascade',
+        data: {
+          docId: item._id,
+          shopName: item.shopName || '',
+          storeId: item.storeId || '',
+          reportDate: item.dateString || item.reportDate,
+          yesterdayBalance: parseFloat(item.yesterdayBalance || 0),
+          listDonationTotal: parseFloat(item.listDonationTotal || 0),
+          otherDonation: parseFloat(item.otherDonation || 0),
+          expense: newExpense,
+          diningPeople: Number(item.diningPeople || item.diningCount || 0),
+          volunteers: Number(item.volunteers || item.volunteerCount || 0),
+          receiptImageList: mergedImages,
+          receiptImages: mergedImages,
+          donationItems: item.donationItems || [],
+          materials: item.materials || [],
+          stapleRiceStatus: item.stapleRiceStatus || 'normal',
+          stapleOilStatus: item.stapleOilStatus || 'sufficient',
+          modifyReason: reason
+        }
+      });
+
+      wx.hideLoading();
+      const result = res.result as any;
+
+      if (result && result.success) {
+        wx.showToast({ title: '凭证已保存', icon: 'success' });
+        this.setData({ showReceiptDetailModal: false });
+        this.loadReports();
+      } else {
+        wx.showModal({
+          title: isSupplementAfterLock ? '补传失败' : '保存失败',
+          content: (result && result.errMsg) || '云函数未返回正确结果',
+          showCancel: false
+        });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[appendReceiptImagesToReport] 异常:', err);
+      wx.showModal({
+        title: '调用失败',
+        content: '未成功保存凭证，请确认 updateAndRecalculateCascade 云函数已右键【上传并部署】',
+        showCancel: false
+      });
+    } finally {
+      this._todayActionInFlight = false;
+    }
+  },
+
+  // 📷 直观预览：点击卡片内 60x60 小票缩略图直接原生放大，不经过稽核详情弹窗
+  onPreviewReceiptThumb(e: any) {
+    const { index, current } = e.currentTarget.dataset;
+    const item = this.data.filteredReports[index];
+    if (!item) return;
+
+    const urls = item.receiptImages && item.receiptImages.length > 0 ? item.receiptImages : (item.receiptImageList || []);
+    // 🛡️ 防御性过滤：过滤掉空值/非字符串，避免个别异常数据卡住整个预览
+    const validUrls = urls.filter((u: any) => u && typeof u === 'string');
+    const finalCurrent = (current && typeof current === 'string') ? current : validUrls[0];
+    if (!finalCurrent) {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+    wx.previewImage({
+      current: finalCurrent,
+      urls: validUrls.length > 0 ? validUrls : [finalCurrent]
+    });
+  },
+
+  // 🔍 "稽核"/"查看明细"入口：打开稽核详情弹窗（放大原图 / 财务对单 / 补传凭证）
+  onOpenReceiptDetail(e: any) {
+    const { index } = e.currentTarget.dataset;
+    const item = this.data.filteredReports[index];
+    if (!item) return;
+
+    const images = item.receiptImages || item.receiptImageList || [];
+    this.setData({
+      showReceiptDetailModal: true,
+      receiptDetailItem: item,
+      receiptDetailImages: images
+    });
+  },
+
+  onCloseReceiptDetail() {
+    this.setData({ showReceiptDetailModal: false, receiptDetailItem: null });
+  },
+
+  onPreviewFullReceiptFromDetail(e: any) {
+    const current = e.currentTarget.dataset.url;
+    // 🛡️ 防御性过滤：过滤掉空值/非字符串，避免个别异常数据卡住整个预览
+    const validUrls = (this.data.receiptDetailImages || []).filter((u: any) => u && typeof u === 'string');
+    if (!current || typeof current !== 'string') {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+    wx.previewImage({
+      current,
+      urls: validUrls.length > 0 ? validUrls : [current]
+    });
+  },
+
+  // ✅ 财务对单：标记该笔账目的小票凭证已与账目金额核对一致，用于稽核留痕（不涉及金额变更）
+  async onToggleFinanceReconcile() {
+    const item = this.data.receiptDetailItem;
+    if (!item || !item._id) return;
+
+    if (!this.data.isFinanceRole && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅财务与超管可标记对单', icon: 'none' });
+      return;
+    }
+
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '云服务暂不可用，无法保存对单标记', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      // 🛡️ 与其它审批动作一致，改为经服务端 manageReportApproval 校验角色/门店归属后再写库，
+      // 不再由客户端直接 db.collection('report_logs').update()
+      const approvalRes = await wx.cloud.callFunction({
+        name: 'manageReportApproval',
+        data: { action: 'reconcile', docId: item._id }
+      });
+      const approvalResult = approvalRes.result as any;
+      if (!approvalResult || !approvalResult.success) {
+        wx.hideLoading();
+        wx.showToast({ title: (approvalResult && approvalResult.errMsg) || '保存失败，请重试', icon: 'none' });
+        return;
+      }
+
+      const nextState = !!approvalResult.financeReconciled;
+      wx.hideLoading();
+      wx.showToast({ title: nextState ? '已标记对单' : '已取消对单标记', icon: 'success' });
+
+      const updatedItem = { ...item, financeReconciled: nextState };
+      this.setData({ receiptDetailItem: updatedItem });
+
+      const updatedList = this.data.filteredReports.map((r: any) => r._id === item._id ? { ...r, financeReconciled: nextState } : r);
+      this.setData({ filteredReports: updatedList });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onToggleFinanceReconcile] 异常:', err);
+      wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+    }
+  },
+
+  // 📤 补传凭证（稽核详情弹窗内）：即使账本已锁定也允许补充凭证图片，但绝不改动任何金额字段
+  async onSupplementReceiptFromDetail() {
+    const item = this.data.receiptDetailItem;
+    if (!item || !item._id) return;
+
+    const isLocked = item.isLocked || item.approvalStatus === 'AUDITED_LOCKED';
+    // 已锁定的账目仅限财务/超管补传（管理员权限过审计边界），未锁定则店长也可操作
+    const allowed = isLocked
+      ? (this.data.isFinanceRole || this.data.isSuperAdmin)
+      : (this.data.isManagerRole || this.data.isFinanceRole || this.data.isSuperAdmin);
+
+    if (!allowed) {
+      wx.showToast({ title: isLocked ? '已锁定账目仅限财务/超管补传' : '仅店长/财务/超管可补传凭证', icon: 'none' });
+      return;
+    }
+
+    if (this._supplementInFlight) return;
+
+    try {
+      const currentCount = (item.receiptImages || item.receiptImageList || []).length;
+      const remainCount = 9 - currentCount;
+      if (remainCount <= 0) {
+        wx.showToast({ title: '凭证已达 9 张上限', icon: 'none' });
+        return;
+      }
+
+      const res = await wx.chooseMedia({
+        count: remainCount,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera']
+      });
+      if (!res.tempFiles || res.tempFiles.length === 0) return;
+
+      this._supplementInFlight = true;
+      wx.showLoading({ title: '上传凭证中...', mask: true });
+
+      const newUrls: string[] = [];
+      for (const file of res.tempFiles) {
+        const cloudPath = `receipts/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
+        const uploadRes = await wx.cloud.uploadFile({ cloudPath, filePath: file.tempFilePath });
+        if (uploadRes.fileID) newUrls.push(uploadRes.fileID);
+      }
+      wx.hideLoading();
+
+      if (newUrls.length === 0) {
+        wx.showToast({ title: '上传失败，请重试', icon: 'none' });
+        this._supplementInFlight = false;
+        return;
+      }
+
+      await this.appendReceiptImagesToReport(item, newUrls, 0, `补传凭证（稽核补充材料，不涉及金额变更）`, isLocked);
+    } catch (err: any) {
+      wx.hideLoading();
+      const errMsg = (err && err.message) || '';
+      if (errMsg && !errMsg.includes('cancel')) {
+        console.error('[onSupplementReceiptFromDetail] 异常:', err);
+      }
+    } finally {
+      this._supplementInFlight = false;
     }
   },
 
@@ -482,6 +1130,133 @@ Page({
     this.setData({ selectedMonthStr: '' });
     this.applyFilters();
     wx.showToast({ title: '已展示全部月份', icon: 'none' });
+  },
+
+  // 🌟 导出本月财务审计表：复用 exportAccountExcel 云函数（tabType:'month'，
+  // 已有完整的月度汇总/xlsx 生成/云存储上传/多租户与角色权限校验逻辑，不重新写一份）。
+  // 月份优先取上方已有的月份筛选器 selectedMonthStr，未筛选时按钮字面意思——导出"本月"
+  async onExportMonthlyAudit() {
+    if (this.data.exportingAudit) return;
+
+    let yearMonth = this.data.selectedMonthStr;
+    if (!yearMonth) {
+      const now = new Date();
+      yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    const [selectedYear, selectedMonth] = yearMonth.split('-');
+
+    this.setData({ exportingAudit: true });
+    wx.showLoading({ title: '正在生成审计表...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+
+      const res = await wx.cloud.callFunction({
+        name: 'exportAccountExcel',
+        data: {
+          shopName: this.data.selectedStoreName || '全部门店',
+          tabType: 'month',
+          selectedYear,
+          selectedMonth
+        }
+      });
+      const result = res.result as any;
+
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.errMsg) || '该月无明细数据可导出', icon: 'none' });
+        return;
+      }
+
+      this.setData({
+        showAuditExportModal: true,
+        auditExportPeriodLabel: (result.auditSummary && result.auditSummary.periodLabel) || yearMonth,
+        auditExportText: result.auditText || '',
+        auditExportFileURL: result.tempFileURL || '',
+        auditExportFileName: result.fileName || `财务审计表_${yearMonth}.xlsx`
+      });
+    } catch (err: any) {
+      wx.hideLoading();
+      console.error('[onExportMonthlyAudit] 导出失败:', err);
+      wx.showToast({ title: '导出失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ exportingAudit: false });
+    }
+  },
+
+  onCloseAuditExportModal() {
+    this.setData({ showAuditExportModal: false });
+  },
+
+  onCopyAuditText() {
+    const { auditExportText } = this.data;
+    if (!auditExportText) return;
+    wx.setClipboardData({
+      data: auditExportText,
+      success: () => {
+        wx.showToast({ title: '审计文本已复制', icon: 'success' });
+      },
+      fail: () => {
+        wx.showToast({ title: '复制失败', icon: 'none' });
+      }
+    });
+  },
+
+  // 保存/下载报表：下载云存储 xlsx 到本地临时路径后，优先用 shareFileMessage 转发给文件
+  // （用户可在聊天列表选择"文件传输助手"保存到手机），不可用时退回 openDocument 直接打开，
+  // 与 statistics.ts downloadAndOpenExcel 同一套降级顺序，保持全项目"导出表格"体验一致
+  onDownloadAuditExcel() {
+    const { auditExportFileURL, auditExportFileName } = this.data;
+    if (!auditExportFileURL) {
+      wx.showToast({ title: '文件链接为空', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '正在下载表格...', mask: true });
+    wx.downloadFile({
+      url: auditExportFileURL,
+      success: (downloadRes) => {
+        wx.hideLoading();
+        const filePath = downloadRes.tempFilePath;
+
+        if (wx.shareFileMessage) {
+          wx.shareFileMessage({
+            filePath,
+            fileName: auditExportFileName,
+            success: () => {
+              wx.showToast({ title: '表格已导出成功', icon: 'success' });
+            },
+            fail: (shareErr) => {
+              if (!shareErr.errMsg || !shareErr.errMsg.includes('cancel')) {
+                this.tryOpenAuditDocumentFallback(filePath);
+              }
+            }
+          });
+        } else {
+          this.tryOpenAuditDocumentFallback(filePath);
+        }
+      },
+      fail: () => {
+        wx.hideLoading();
+        wx.showToast({ title: '下载失败，请重试', icon: 'none' });
+      }
+    });
+  },
+
+  tryOpenAuditDocumentFallback(filePath: string) {
+    wx.openDocument({
+      filePath,
+      fileType: 'xlsx',
+      showMenu: true,
+      fail: () => {
+        wx.showModal({
+          title: '已生成表格文件',
+          content: '请重新点击"保存/下载报表"，并在弹出的微信列表中选择【文件传输助手】即可保存到手机！',
+          showCancel: false
+        });
+      }
+    });
   },
 
   copyReport(e: any) {
@@ -546,7 +1321,7 @@ Page({
   },
 
   onShareAppMessage(options?: any) {
-    console.log('[Share] onShareAppMessage 被调用, from:', options?.from);
+    console.log('[Share] onShareAppMessage 被调用, from:', options && options.from);
     const record = this._shareRecord || this.data.shareRecord;
 
     if (!record) {
@@ -625,18 +1400,27 @@ Page({
     }
 
     const yesterdayBalance = parseFloat(report.yesterdayBalance || 0);
-    const totalIncome = parseFloat(report.totalIncomeStr || report.listDonationTotal || report.income || report.loveIncome || 0);
+    const otherDonation = parseFloat(report.otherDonation || 0);
     const expenseAmount = parseFloat(report.expenseAmountStr || report.dailyExpenseTotal || report.expense || report.todayExpense || 0);
-    const calculatedTodayBalance = (yesterdayBalance + totalIncome - expenseAmount).toFixed(2);
+
+    // 🌟 对齐首页录入项：爱心支持明细以可编辑文本形式还原（doc 中仅存结构化 donationItems，需反向拼装为文本）
+    const donationsText = formatDonationItemsToText(report.donationItems || []);
+    const donationsTotal = parseDonorText(donationsText).totalAmount;
+    const calculatedTodayBalance = (yesterdayBalance + donationsTotal + otherDonation - expenseAmount).toFixed(2);
 
     const editingRecord = {
       ...JSON.parse(JSON.stringify(report)),
       yesterdayBalance: yesterdayBalance.toString(),
-      totalIncome: totalIncome.toString(),
+      donationsText,
+      donationsTotalStr: formatMoney(donationsTotal),
+      otherDonation: otherDonation.toString(),
       expenseAmount: expenseAmount.toString(),
       calculatedTodayBalance,
       diningPeople: (report.diningPeople || report.diningCount || '0').toString(),
       volunteers: (report.volunteers || report.volunteerCount || '0').toString(),
+      materialsInput: formatMaterialsToText(report.materials || []),
+      stapleRiceStatus: report.stapleRiceStatus || 'normal',
+      stapleOilStatus: report.stapleOilStatus || 'sufficient',
       receiptImageList: report.receiptImageList || report.receiptImages || [],
       deletedImageIds: [],
       modifyReason: ''
@@ -648,14 +1432,6 @@ Page({
       editingRecord,
       canAddEditImage: imgCount < 9,
       receiptImgCount: imgCount
-    });
-  },
-
-  onPreviewHistoryCardImg(e: any) {
-    const { current, urls } = e.currentTarget.dataset;
-    wx.previewImage({
-      current: current,
-      urls: urls || [current]
     });
   },
 
@@ -675,18 +1451,60 @@ Page({
     const editingRecord = { ...this.data.editingRecord };
     editingRecord[field] = val;
 
-    const yest = parseFloat(editingRecord.yesterdayBalance || '0') || 0;
-    const inc = parseFloat(editingRecord.totalIncome || '0') || 0;
-    const exp = parseFloat(editingRecord.expenseAmount || '0') || 0;
-    editingRecord.calculatedTodayBalance = (yest + inc - exp).toFixed(2);
+    this.setData({ editingRecord: this.recalcEditBalance(editingRecord) });
+  },
 
+  // 🌟 爱心支持明细（对齐首页 allDonations 录入项）：自由文本实时解析为清单 + 合计
+  onEditDonationsInput(e: any) {
+    const val = e.detail.value;
+    const editingRecord = { ...this.data.editingRecord };
+    editingRecord.donationsText = val;
+
+    const parsed = parseDonorText(val);
+    editingRecord.donationsTotalStr = formatMoney(parsed.totalAmount);
+
+    this.setData({ editingRecord: this.recalcEditBalance(editingRecord) });
+  },
+
+  // 🌟 物资赞助明细（对齐首页 materialsInput 录入项）
+  onEditMaterialsInput(e: any) {
+    const val = e.detail.value;
+    const editingRecord = { ...this.data.editingRecord };
+    editingRecord.materialsInput = val;
     this.setData({ editingRecord });
+  },
+
+  // 🌟 主食物资储备状态（对齐首页 stapleRiceStatus / stapleOilStatus 录入项）
+  onEditStapleStatusChange(e: any) {
+    const { type, value } = e.currentTarget.dataset;
+    const editingRecord = { ...this.data.editingRecord };
+    if (type === 'rice') {
+      editingRecord.stapleRiceStatus = value;
+    } else if (type === 'oil') {
+      editingRecord.stapleOilStatus = value;
+    }
+    this.setData({ editingRecord });
+  },
+
+  // 今日结余 = 昨日余额 + 爱心支持明细合计 + 现场赞助/其他支持 - 今日支出
+  recalcEditBalance(editingRecord: any) {
+    const yest = parseFloat(editingRecord.yesterdayBalance || '0') || 0;
+    const donationsTotal = parseDonorText(editingRecord.donationsText || '').totalAmount;
+    const other = parseFloat(editingRecord.otherDonation || '0') || 0;
+    const exp = parseFloat(editingRecord.expenseAmount || '0') || 0;
+    editingRecord.calculatedTodayBalance = (yest + donationsTotal + other - exp).toFixed(2);
+    return editingRecord;
   },
 
   onPreviewEditImage(e: any) {
     const current = e.currentTarget.dataset.src;
-    const urls = this.data.editingRecord.receiptImageList || [];
-    wx.previewImage({ current, urls });
+    // 🛡️ 防御性过滤：过滤掉空值/非字符串，避免个别异常数据卡住整个预览
+    const validUrls = (this.data.editingRecord.receiptImageList || []).filter((u: any) => u && typeof u === 'string');
+    if (!current || typeof current !== 'string') {
+      wx.showToast({ title: '该图片已失效，请重新选择', icon: 'none' });
+      return;
+    }
+    wx.previewImage({ current, urls: validUrls.length > 0 ? validUrls : [current] });
   },
 
   onRemoveEditImage(e: any) {
@@ -795,16 +1613,25 @@ Page({
       return;
     }
 
+    if (!editForm.modifyReason || !String(editForm.modifyReason).trim()) {
+      wx.showToast({ title: '请填写修改说明后再保存', icon: 'none' });
+      return;
+    }
+
     const yesterdayBalance = parseFloat(editForm.yesterdayBalance || 0);
-    const income = parseFloat(editForm.totalIncome || 0);
+    const donationParseResult = parseDonorText(editForm.donationsText || '');
+    const listDonationTotal = donationParseResult.totalAmount;
+    const otherDonation = parseFloat(editForm.otherDonation || 0);
     const expense = parseFloat(editForm.expenseAmount || 0);
+    const materials = parseMaterials(editForm.materialsInput || '');
 
     console.log('🚀 [History] 用户点击了保存并重算，提交数据:', {
       docId: editForm._id,
       storeId: editForm.storeId,
       reportDate: editForm.dateString || editForm.reportDate,
       yesterdayBalance,
-      income,
+      listDonationTotal,
+      otherDonation,
       expense
     });
 
@@ -828,12 +1655,17 @@ Page({
           storeId: editForm.storeId || '',
           reportDate: editForm.dateString || editForm.reportDate,
           yesterdayBalance: yesterdayBalance,
-          income: income,
+          listDonationTotal: listDonationTotal,
+          otherDonation: otherDonation,
           expense: expense,
           diningPeople: Number(editForm.diningPeople || 0),
           volunteers: Number(editForm.volunteers || 0),
           receiptImageList: editForm.receiptImageList || [],
           receiptImages: editForm.receiptImageList || [],
+          donationItems: donationParseResult.items,
+          materials: materials,
+          stapleRiceStatus: editForm.stapleRiceStatus || 'normal',
+          stapleOilStatus: editForm.stapleOilStatus || 'sufficient',
           modifyReason: editForm.modifyReason || ''
         }
       });
@@ -872,6 +1704,86 @@ Page({
         showCancel: false
       });
     }
+  },
+
+  // 🌟 删除该条记录：解决重复录入同一日期餐报时无法清理多余记录的问题
+  // 二次弹窗确认防误删；删除成功后云函数会自动触发级联重算，保持资金流水连贯
+  onDeleteEditRecord() {
+    const editForm = this.data.editingRecord;
+
+    if (!editForm || !editForm._id) {
+      wx.showToast({ title: '未找到记录 ID，无法删除', icon: 'none' });
+      return;
+    }
+
+    const dateLabel = editForm.dateString || editForm.reportDate || '该条';
+    const shopLabel = editForm.shopName || '';
+
+    wx.showModal({
+      title: `⚠️ 确认删除【${shopLabel}】${dateLabel} 记录？`,
+      editable: true,
+      placeholderText: '请填写删除原因（如：重复录入、录入有误），删除后不可恢复',
+      confirmText: '确认删除',
+      confirmColor: '#D32F2F',
+      cancelText: '我再想想',
+      success: async (res) => {
+        if (!res.confirm) return;
+
+        const deleteReason = String(res.content || '').trim();
+        if (!deleteReason) {
+          wx.showToast({ title: '请填写删除原因后再确认', icon: 'none' });
+          return;
+        }
+
+        if (this._deleteInFlight) return;
+        this._deleteInFlight = true;
+
+        wx.showLoading({ title: '正在删除并重算...', mask: true });
+
+        try {
+          const delRes = await wx.cloud.callFunction({
+            name: 'deleteMealReport',
+            data: { id: editForm._id, reason: deleteReason }
+          });
+          const result = delRes.result as any;
+
+          wx.hideLoading();
+
+          if (result && result.success) {
+            this.setData({
+              showEditModal: false,
+              editingRecord: null
+            });
+
+            wx.showToast({
+              title: result.cascadeUpdatedCount > 0
+                ? `已删除，联动校正了 ${result.cascadeUpdatedCount} 天账目`
+                : '记录已删除',
+              icon: 'success',
+              duration: 2000
+            });
+
+            this.loadReports();
+          } else {
+            wx.showModal({
+              title: '删除失败',
+              content: (result && result.error) || '云函数未返回正确结果',
+              showCancel: false
+            });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('❌ [History] 调用 deleteMealReport 异常:', err);
+          wx.showModal({
+            title: '调用失败',
+            content: '未成功触发删除，请确认 deleteMealReport 云函数已右键【上传并部署】',
+            showCancel: false
+          });
+        } finally {
+          this._deleteInFlight = false;
+        }
+      }
+    });
   },
 
   async onSaveHistoryRecordDirect(e: any) {
@@ -917,6 +1829,16 @@ Page({
       wx.hideLoading();
 
       if (res.result && res.result.success) {
+        const alerts = (res.result as any).integrityAlerts || [];
+        if (alerts.length > 0) {
+          wx.showModal({
+            title: '🚨 检测到资金流水异常',
+            content: `发现 ${alerts.length} 条记录的校验码与存储数据不一致，疑似被直接改库篡改，相关记录已自动锁定，请联系超级管理员核查：\n${alerts.map((a: any) => a.dateString).join('、')}`,
+            showCancel: false,
+            confirmText: '知道了'
+          });
+        }
+
         wx.showToast({
           title: `已成功校正 ${res.result.updatedCount || 1} 天数据`,
           icon: 'success',
@@ -946,44 +1868,73 @@ Page({
   onVoidReportModal(e: any) {
     const { id, date } = e.currentTarget.dataset;
 
+    // 🛡️ 权限防线：即使入口按钮被非法暴露，函数内部也拦截非店长/超管的作废请求
+    if (!this.data.isManagerRole && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅店长与超管可执行作废操作', icon: 'none' });
+      return;
+    }
+
+    const item = this.data.filteredReports.find((r: any) => (r._id || r._localId) === id);
+    if (item && item.isVoid) {
+      wx.showToast({ title: '该记录已作废，无需重复操作', icon: 'none' });
+      return;
+    }
+    if (item && item.approvalStatus === 'AUDITED_LOCKED') {
+      wx.showToast({ title: '该账本已封账锁定，无法作废', icon: 'none' });
+      return;
+    }
+
+    // 🌟 状态机联动：待店长确认的单据尚未计入正式流水链，作废视为"驳回录入"，不触发冲销重算；
+    // 已通过店长审核（APPROVED）的单据已参与流水链计算，作废需级联重算后续日期的昨日余额/今日结余，
+    // 否则被排除的这笔记录会让此后每一天的开账余额与实际不符
+    const isApprovedStage = !!(item && item.approvalStatus === 'APPROVED');
+
     wx.showModal({
-      title: '⚠️ 确认红字作废此餐报？',
-      content: `确定要作废【${date}】的餐报记录吗？作废后该记录将打上"红字冲销"印章并保留在日志中供审计调阅，不可直接删除。`,
+      title: isApprovedStage ? '⚠️ 已审核账单作废确认' : '驳回/作废此笔录入？',
+      content: isApprovedStage
+        ? `【${date}】的餐报已通过店长审核，作废将生成红字冲销记录并重新核算后续日期的结余流水，是否继续？`
+        : `确定要驳回/作废【${date}】这笔尚未审核确认的录入吗？作废后不会生成冲销流水，仅将该单据标记为已作废。`,
       confirmText: '确认作废',
       confirmColor: '#D32F2F',
       success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '安全冲销中...' });
+        if (!res.confirm) return;
+        if (this._voidInFlight) return;
+        this._voidInFlight = true;
 
-          try {
-            const db = wx.cloud.database();
-            if (id && id.length > 5) {
-              await db.collection('report_logs').doc(id).update({
-                data: {
-                  isVoid: true,
-                  voidedAt: db.serverDate(),
-                  voidedBy: wx.getStorageSync('my_openid') || 'ADMIN'
-                }
-              });
-            }
+        wx.showLoading({ title: isApprovedStage ? '安全冲销中...' : '作废处理中...' });
 
-            const updated = this.data.reports.map((r: any) => {
-              if ((r._id || r._localId) === id) return { ...r, isVoid: true };
-              return r;
-            });
-
+        try {
+          // 🛡️ 状态机与权限判定统一收敛到 manageReportApproval 云函数：此前这里直接
+          // 用 wx.cloud.database().doc(id).update({isVoid:true}) 写库，服务端对该动作
+          // 完全没有角色/门店/机构/锁定状态的校验，等于把"能否作废"这道关卡完全交给
+          // 客户端 JS 判断（可被绕过）。现在改为调用云函数，由服务端重新核验一遍。
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const approvalRes = await wx.cloud.callFunction({
+            name: 'manageReportApproval',
+            data: { action: 'void', docId: id }
+          });
+          const approvalResult = approvalRes.result as any;
+          if (!approvalResult || !approvalResult.success) {
             wx.hideLoading();
-            this.setData({
-              reports: updated,
-              filteredReports: this.processReportListAudit(updated)
-            });
-
-            wx.showToast({ title: '已成功执行红字冲销', icon: 'success' });
-
-          } catch (err) {
-            wx.hideLoading();
-            wx.showToast({ title: '冲销提交失败', icon: 'none' });
+            wx.showToast({ title: (approvalResult && approvalResult.errMsg) || '作废失败', icon: 'none' });
+            this._voidInFlight = false;
+            return;
           }
+
+          if (approvalResult.cascadeWarning) {
+            wx.hideLoading();
+            wx.showModal({ title: '提示', content: approvalResult.cascadeWarning, showCancel: false });
+          } else {
+            wx.hideLoading();
+            wx.showToast({ title: isApprovedStage ? '已成功执行红字冲销' : '已作废该笔录入', icon: 'success' });
+          }
+
+          this.loadReports();
+        } catch (err) {
+          wx.hideLoading();
+          wx.showToast({ title: '冲销提交失败', icon: 'none' });
+        } finally {
+          this._voidInFlight = false;
         }
       }
     });
@@ -1008,7 +1959,13 @@ Page({
   },
 
   processReportListAudit(list: any[]) {
-    return list.map((item: any) => {
+    return list.map((item: any, index: number) => {
+      // 🐛 修复首条记录 Header 渲染缺失：wx:key 原绑定 _id，但当日刚提交、网络暂未同步的
+      // 本地草稿记录只有 _localId、没有 _id（排序最新常常正好排在第一位）。
+      // wx:key 拿到 undefined 会导致微信列表 diff 算法错乱，表现为首张卡片 header 区域渲染缺失。
+      // 统一兜底为稳定且非空的 rowKey，彻底避免 key 缺失/重复。
+      item.rowKey = item._id || item._localId || `${item.dateString || 'na'}_${item.shopName || 'na'}_${index}`;
+
       if (item.receiptImages && Array.isArray(item.receiptImages)) {
         item.receiptImages = item.receiptImages.map((img: string) => this.cleanImagePath(img));
       }
@@ -1017,18 +1974,56 @@ Page({
         item.receiptImageList = item.receiptImageList.map((img: string) => this.cleanImagePath(img));
       }
 
-      const last = parseFloat(item.lastBalance || item.yesterdayBalance || '0');
-      const inAmt = parseFloat(item.todayIn || item.totalIncome || '0');
-      const outAmt = parseFloat(item.todayOut || item.expenseAmount || '0');
-      const expectedBalance = (last + inAmt - outAmt).toFixed(2);
-      const actualBalance = parseFloat(item.todayBalance || item.calculatedTodayBalance || '0').toFixed(2);
+      // 资金平账公式校验：昨日余额 + 服务收入(捐赠清单+其他捐赠) - 今日支出 == 今日结余
+      // 🐛 修复：旧逻辑读取的 item.totalIncome / item.todayIn 字段在原始账本文档中并不存在，
+      // 导致服务收入恒为 0，几乎所有有收入的记录都被误判为"资金不平"。改为读取真实落库字段。
+      const yesterdayBalance = parseFloat(item.yesterdayBalance || '0') || 0;
+      const totalIncome = (parseFloat(item.otherDonation || '0') || 0) + (parseFloat(item.listDonationTotal || '0') || 0);
+      const expenseAmount = parseFloat(item.expenseAmount || '0') || 0;
+      const actualBalance = parseFloat(item.todayBalance || item.calculatedTodayBalance || '0') || 0;
 
-      const isMismatch = expectedBalance !== actualBalance;
+      const expectedBalance = Math.round((yesterdayBalance + totalIncome - expenseAmount) * 100) / 100;
+      const roundedActual = Math.round(actualBalance * 100) / 100;
+      const diffAmount = Math.round((roundedActual - expectedBalance) * 100) / 100;
+
+      // 浮点误差容忍 1 分钱，避免四舍五入导致的假性不平
+      const isMismatch = Math.abs(diffAmount) >= 0.01;
 
       return {
         ...item,
-        isAmountMismatch: isMismatch
+        isAmountMismatch: isMismatch,
+        mismatchExpectedBalance: expectedBalance.toFixed(2),
+        mismatchActualBalance: roundedActual.toFixed(2),
+        mismatchDiffAmount: diffAmount.toFixed(2)
       };
+    });
+  },
+
+  // 🌟 点击"资金不平"标签：弹出诊断 Modal，展示理论结余/实际结余/差额与排查建议
+  onShowMismatchDiagnosis(e: any) {
+    const { index } = e.currentTarget.dataset;
+    const item = this.data.filteredReports[index];
+
+    if (!item) {
+      wx.showToast({ title: '数据异常', icon: 'none' });
+      return;
+    }
+
+    const diff = parseFloat(item.mismatchDiffAmount || '0');
+    const diffDesc = diff > 0
+      ? `实际填报结余比理论值多 ¥${Math.abs(diff).toFixed(2)}，可能存在支出漏记、支出金额录入偏小，或收入被重复计入。`
+      : `实际填报结余比理论值少 ¥${Math.abs(diff).toFixed(2)}，可能存在收入漏记、收入金额录入偏小，或支出被重复计入。`;
+
+    wx.showModal({
+      title: '⚠️ 资金不平诊断',
+      content:
+        `【${item.dateString || ''}】${item.shopName || '未命名门店'}\n\n` +
+        `理论结余（昨日余额+服务收入-今日支出）：¥${item.mismatchExpectedBalance}\n` +
+        `实际填报结余：¥${item.mismatchActualBalance}\n` +
+        `差额：${diff >= 0 ? '+' : ''}¥${item.mismatchDiffAmount}\n\n` +
+        `排查建议：\n${diffDesc}\n建议核对当日捐赠明细、支出小票凭证是否录入完整；确认无误后，可联系店长/财务使用"一键校准全线结余流水"功能重新链式核算。`,
+      showCancel: false,
+      confirmText: '知道了'
     });
   },
 
@@ -1062,7 +2057,18 @@ Page({
       console.log('✅ [DEBUG] 云函数重算返回结果:', res.result);
 
       const result = res.result as any;
-      if (result && result.success && result.updatedCount && result.updatedCount > 0) {
+      const alerts = result && result.integrityAlerts ? result.integrityAlerts : [];
+      if (alerts.length > 0) {
+        wx.showModal({
+          title: '🚨 检测到资金流水异常',
+          content: `发现 ${alerts.length} 条记录的校验码与存储数据不一致，疑似被直接改库篡改，相关记录已自动锁定，请联系超级管理员核查：\n${alerts.map((a: any) => a.dateString).join('、')}`,
+          showCancel: false,
+          confirmText: '知道了',
+          success: () => {
+            this.loadReports();
+          }
+        });
+      } else if (result && result.success && result.updatedCount && result.updatedCount > 0) {
         wx.showModal({
           title: '级联校正完成',
           content: `已为您自动重算并更新了后续 ${result.updatedCount} 天的账目余额！`,
@@ -1156,55 +2162,6 @@ Page({
     });
   },
 
-  async onManualRecalculateLedger() {
-    let shopName = this.data.selectedStoreName;
-
-    if (!shopName) {
-      if (this.data.storeFilterOptions.length === 2) {
-        shopName = this.data.storeFilterOptions[1];
-      } else {
-        wx.showToast({ title: '请先选择要校准的门店', icon: 'none' });
-        return;
-      }
-    }
-
-    wx.showLoading({ title: '正在校准全线账本...', mask: true });
-
-    try {
-      const res = await wx.cloud.callFunction({
-        name: 'recalculateLedgerChain',
-        data: { shopName }
-      });
-
-      wx.hideLoading();
-
-      const result = res.result as any;
-      if (result && result.success) {
-        wx.showModal({
-          title: '校准完成',
-          content: `已按时间顺序校准“${shopName}”的流水结余，共修正 ${result.updatedCount || 0} 条记录。`,
-          showCancel: false,
-          confirmText: '我知道了'
-        });
-        this.loadReports();
-      } else {
-        wx.showModal({
-          title: '校准失败',
-          content: result ? result.errMsg : '云函数未返回正确结果',
-          showCancel: false
-        });
-      }
-    } catch (err) {
-      wx.hideLoading();
-      console.error('❌ [History] 一键校准异常:', err);
-      wx.showModal({
-        title: '调用失败',
-        content: '未成功触发校准，请确认 recalculateLedgerChain 云函数已右键【上传并部署】',
-        showCancel: false
-      });
-    }
-  },
-
   // 店长线上审批确认
   // 店长确认操作
   async onManagerAuditClick(e: any) {
@@ -1216,6 +2173,15 @@ Page({
       return;
     }
 
+    // 🛡️ 权限防线：状态胶囊等入口未受角色 wx:if 限制，函数内部需再次校验身份，
+    // 避免普通义工点击后误触发店长核对确认，也防止其重复点击造成的并发提交
+    if (!this.data.isManagerRole && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅店长与超管可执行核对确认', icon: 'none' });
+      return;
+    }
+
+    if (this._managerAuditInFlight) return;
+
     if (item && item.approvalStatus === 'APPROVED') {
       wx.showToast({ title: '店长已完成该餐报的核对确认', icon: 'none' });
       return;
@@ -1226,39 +2192,69 @@ Page({
       return;
     }
 
+    // 🌟 无凭证审核防错拦截：未上传小票凭证时，先提醒店长，避免"无票也能过审"被无意间放行
+    const hasReceipt = !!(item && (
+      (item.receiptImages && item.receiptImages.length > 0) ||
+      (item.receiptImageList && item.receiptImageList.length > 0)
+    ));
+
+    if (!hasReceipt) {
+      wx.showModal({
+        title: '⚠️ 无凭证提醒',
+        content: '该笔记录未上传小票凭证，确认要直接审核通过吗？',
+        confirmText: '依然通过',
+        cancelText: '去补传凭证',
+        success: (res) => {
+          if (res.confirm) {
+            this.proceedManagerAuditConfirm(docId, item);
+          } else {
+            this.onOpenReceiptDetail(e);
+          }
+        }
+      });
+      return;
+    }
+
+    this.proceedManagerAuditConfirm(docId, item);
+  },
+
+  // 店长核对确认的实际提交逻辑：从 onManagerAuditClick 中抽出，
+  // 供"正常有凭证"与"无凭证但依然通过"两条路径共用
+  proceedManagerAuditConfirm(docId: string, item: any) {
     wx.showModal({
       title: '👑 店长核对确认',
-      content: `确认【${item?.dateString || '该餐报'}】的菜品供应与记账小票核对无误，并提交财务做最终稽核吗？`,
+      content: `确认【${(item && item.dateString) || '该餐报'}】的菜品供应与记账小票核对无误，并提交财务做最终稽核吗？`,
       confirmText: '确认提交',
       confirmColor: '#E65100',
       success: async (res) => {
         if (!res.confirm) return;
+        if (this._managerAuditInFlight) return;
+        this._managerAuditInFlight = true;
 
         wx.showLoading({ title: '提交中...' });
         try {
-          const db = wx.cloud.database();
-          const cached = AuthService.getCachedRoleInfo();
-          const userName = cached?.role === 'store_manager' ? '店长' : '管理员';
-          const nowStr = new Date().toLocaleString();
-
-          await db.collection('report_logs').doc(docId).update({
-            data: {
-              isManagerConfirmed: true,
-              managerConfirmedAt: db.serverDate(),
-              managerConfirmedBy: userName,
-              approvalStatus: 'APPROVED',
-              approvedBy: userName,
-              approveTime: nowStr
-            }
+          // 🛡️ 店长核对确认此前是客户端直接 db.collection('report_logs').doc(docId)
+          // .update()，服务端对"是否真的是店长/是否本店"没有任何校验。现在改为调用
+          // manageReportApproval 云函数，由服务端重新核验角色、门店归属与当前状态。
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const approvalRes = await wx.cloud.callFunction({
+            name: 'manageReportApproval',
+            data: { action: 'confirm', docId }
           });
+          const approvalResult = approvalRes.result as any;
+          if (!approvalResult || !approvalResult.success) {
+            wx.hideLoading();
+            wx.showToast({ title: (approvalResult && approvalResult.errMsg) || '审批失败，请重试', icon: 'none' });
+            return;
+          }
 
+          const nowStr = new Date().toLocaleString();
           const updatedList = this.data.filteredReports.map((r: any) => {
             if (r._id === docId) {
-              return { 
-                ...r, 
-                isManagerConfirmed: true, 
+              return {
+                ...r,
+                isManagerConfirmed: true,
                 approvalStatus: 'APPROVED',
-                approvedBy: userName,
                 approveTime: nowStr
               };
             }
@@ -1274,15 +2270,9 @@ Page({
         } catch (err: any) {
           wx.hideLoading();
           console.error('店长确认失败:', err);
-          if (err && (err.errCode === -502005 || (err.errMsg && err.errMsg.indexOf('DATABASE_COLLECTION_NOT_EXIST') > -1))) {
-            wx.showModal({
-              title: '数据库集合缺失',
-              content: '请先打开微信开发者工具 → 云开发 → 数据库，手动新建名为 [report_logs] 的集合！',
-              showCancel: false
-            });
-          } else {
-            wx.showToast({ title: '审批失败，请重试', icon: 'none' });
-          }
+          wx.showToast({ title: '审批失败，请重试', icon: 'none' });
+        } finally {
+          this._managerAuditInFlight = false;
         }
       }
     });
@@ -1297,6 +2287,15 @@ Page({
       wx.showToast({ title: '参数异常', icon: 'none' });
       return;
     }
+
+    // 🛡️ 权限防线：状态胶囊等入口未受角色 wx:if 限制，函数内部需再次校验身份，
+    // 避免普通义工/店长点击后误触发财务稽核封账
+    if (!this.data.isFinanceRole && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅财务与超管可执行稽核封账', icon: 'none' });
+      return;
+    }
+
+    if (this._financeAuditInFlight) return;
 
     if (item && item.approvalStatus !== 'APPROVED') {
       wx.showToast({ title: '请先等待店长完成首轮确认', icon: 'none' });
@@ -1315,45 +2314,39 @@ Page({
 
     wx.showModal({
       title: '🔒 确认稽核并封账？',
-      content: warningMsg + `您正在对【${item?.dateString || '该餐报'}】的餐报进行终审。封账后，该记录将永久归档，任何人（包括店长与财务）将无法再修改其中数据。`,
+      content: warningMsg + `您正在对【${(item && item.dateString) || '该餐报'}】的餐报进行终审。封账后，该记录将永久归档，任何人（包括店长与财务）将无法再修改其中数据。`,
       confirmText: '确认封账',
       confirmColor: '#2E7D32',
       success: async (res) => {
         if (!res.confirm) return;
+        if (this._financeAuditInFlight) return;
+        this._financeAuditInFlight = true;
 
         wx.showLoading({ title: '安全封账中...' });
         try {
-          const db = wx.cloud.database();
-          const cached = AuthService.getCachedRoleInfo();
-          const userName = cached?.role === 'finance' ? '财务稽核员' : '管理员';
-          const nowStr = new Date().toLocaleString();
-
-          await db.collection('report_logs').doc(docId).update({
-            data: {
-              isFinanceAudited: true,
-              financeAuditedAt: db.serverDate(),
-              financeAuditedBy: userName,
-              isLocked: true,
-              approvalStatus: 'AUDITED_LOCKED',
-              auditedBy: userName,
-              auditTime: nowStr,
-              auditLogs: db.command.push({
-                operator: userName,
-                action: 'AUDIT_LOCK',
-                timestamp: nowStr,
-                reason: '财务完成核对并打上稽核锁定章'
-              })
-            }
+          // 🛡️ 财务稽核封账此前是客户端直接 db.collection('report_logs').doc(docId)
+          // .update()，服务端对"是否真的是财务/是否本店"没有任何校验——这是整套
+          // RBAC 体系里最敏感的一步（封账后声称"任何人都无法再修改"），必须服务端把关。
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const approvalRes = await wx.cloud.callFunction({
+            name: 'manageReportApproval',
+            data: { action: 'financeAudit', docId }
           });
+          const approvalResult = approvalRes.result as any;
+          if (!approvalResult || !approvalResult.success) {
+            wx.hideLoading();
+            wx.showToast({ title: (approvalResult && approvalResult.errMsg) || '锁定失败，请重试', icon: 'none' });
+            return;
+          }
 
+          const nowStr = new Date().toLocaleString();
           const updatedList = this.data.filteredReports.map((r: any) => {
             if (r._id === docId) {
-              return { 
-                ...r, 
-                isFinanceAudited: true, 
+              return {
+                ...r,
+                isFinanceAudited: true,
                 isLocked: true,
                 approvalStatus: 'AUDITED_LOCKED',
-                auditedBy: userName,
                 auditTime: nowStr
               };
             }
@@ -1369,22 +2362,25 @@ Page({
         } catch (err: any) {
           wx.hideLoading();
           console.error('稽核锁定失败:', err);
-          if (err && (err.errCode === -502005 || (err.errMsg && err.errMsg.indexOf('DATABASE_COLLECTION_NOT_EXIST') > -1))) {
-            wx.showModal({
-              title: '数据库集合缺失',
-              content: '请先打开微信开发者工具 → 云开发 → 数据库，手动新建名为 [report_logs] 的集合！',
-              showCancel: false
-            });
-          } else {
-            wx.showToast({ title: '锁定失败，请重试', icon: 'none' });
-          }
+          wx.showToast({ title: '锁定失败，请重试', icon: 'none' });
+        } finally {
+          this._financeAuditInFlight = false;
         }
       }
     });
   },
 
   // 财务解锁已锁定记录
+  // 🛡️ 此前本函数没有任何角色判断（连客户端 UI 层的 isFinanceRole/isSuperAdmin 检查都没有），
+  // 且直接 db.collection('report_logs').doc(docId).update() 写库——服务端完全没有校验
+  // "谁能解封"，理论上任何登录用户都能就地解封任意一条已封账记录。补上客户端判断的同时，
+  // 真正的把关全部收敛到 manageReportApproval 云函数（unlock action 仅 finance/super_admin）。
   onUnlockRecord(e: any) {
+    if (!this.data.isFinanceRole && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅财务与超管可执行解封', icon: 'none' });
+      return;
+    }
+
     const docId = e.currentTarget.dataset.id;
     if (!docId) {
       wx.showToast({ title: '参数异常', icon: 'none' });
@@ -1405,24 +2401,17 @@ Page({
 
         wx.showLoading({ title: '解封中...' });
         try {
-          const db = wx.cloud.database();
-          const cached = AuthService.getCachedRoleInfo();
-          const userName = cached?.role === 'finance' ? '财务管理员' : '管理员';
-          const nowStr = new Date().toLocaleString();
-
-          await db.collection('report_logs').doc(docId).update({
-            data: {
-              isLocked: false,
-              approvalStatus: 'APPROVED',
-              isFinanceAudited: false,
-              auditLogs: db.command.push({
-                operator: userName,
-                action: 'UNLOCK',
-                timestamp: nowStr,
-                reason: res.content.trim()
-              })
-            }
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const approvalRes = await wx.cloud.callFunction({
+            name: 'manageReportApproval',
+            data: { action: 'unlock', docId, reason: res.content.trim() }
           });
+          const approvalResult = approvalRes.result as any;
+          if (!approvalResult || !approvalResult.success) {
+            wx.hideLoading();
+            wx.showToast({ title: (approvalResult && approvalResult.errMsg) || '解封失败，请重试', icon: 'none' });
+            return;
+          }
 
           wx.hideLoading();
           wx.showToast({ title: '已解封，可重新编辑', icon: 'success' });
@@ -1430,15 +2419,7 @@ Page({
         } catch (err: any) {
           wx.hideLoading();
           console.error('解封失败:', err);
-          if (err && (err.errCode === -502005 || (err.errMsg && err.errMsg.indexOf('DATABASE_COLLECTION_NOT_EXIST') > -1))) {
-            wx.showModal({
-              title: '数据库集合缺失',
-              content: '请先打开微信开发者工具 → 云开发 → 数据库，手动新建名为 [daily_records] 的集合！',
-              showCancel: false
-            });
-          } else {
-            wx.showToast({ title: '解封失败，请重试', icon: 'none' });
-          }
+          wx.showToast({ title: '解封失败，请重试', icon: 'none' });
         }
       }
     });
@@ -1471,9 +2452,19 @@ Page({
       return;
     }
 
+    // 🛡️ 防御性过滤：过滤掉空值/非字符串，避免个别异常数据卡住整个预览；
+    // current 优先取用户实际点的那张，它被过滤掉了才退回第一张有效图
+    const rawCurrent = images[index];
+    const validUrls = images.filter((u: any) => u && typeof u === 'string');
+    const current = (rawCurrent && typeof rawCurrent === 'string') ? rawCurrent : validUrls[0];
+    if (!current) {
+      wx.showToast({ title: '图片数据异常', icon: 'none' });
+      return;
+    }
+
     wx.previewImage({
-      current: images[index],
-      urls: images
+      current,
+      urls: validUrls
     });
   },
 

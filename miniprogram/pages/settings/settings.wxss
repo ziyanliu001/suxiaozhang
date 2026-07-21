@@ -1,0 +1,100 @@
+.settings-container {
+  min-height: 100vh;
+  background: #F8F9FA;
+  box-sizing: border-box;
+}
+
+.status-bar-spacer {
+  width: 100%;
+  background: #FFFFFF;
+}
+
+.nav-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16rpx;
+  background: #FFFFFF;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+}
+
+/* 统一的 Reddit 风格「←」返回按钮：64rpx 方形点击区，居中图标，带轻微点击态反馈 */
+.nav-back-arrow {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #212529;
+  flex-shrink: 0;
+}
+
+.nav-back-arrow-hover {
+  opacity: 0.5;
+}
+
+.page-title-txt {
+  flex: 1;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.nav-right-placeholder {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+}
+
+.settings-content {
+  padding: 24rpx;
+}
+
+.settings-group-label {
+  font-size: 24rpx;
+  color: #999999;
+  padding: 12rpx 12rpx;
+  margin-top: 12rpx;
+}
+
+.settings-list {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  margin-bottom: 12rpx;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 24rpx;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+.settings-item:last-child {
+  border-bottom: none;
+}
+
+.settings-item:active {
+  background: #F8F9FA;
+}
+
+.settings-item-text {
+  font-size: 28rpx;
+  color: #333333;
+}
+
+.settings-item-arrow {
+  font-size: 28rpx;
+  color: #C9C0B0;
+}
+
+.danger-text {
+  color: #E03131;
+}

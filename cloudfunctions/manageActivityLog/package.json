@@ -1,0 +1,9 @@
+{
+  "name": "manageActivityLog",
+  "version": "1.0.0",
+  "description": "云函数：义工工作与活动大事记增删改查（店长/超管可写，全员只读，分页+多租户隔离）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

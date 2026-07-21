@@ -1,0 +1,9 @@
+{
+  "name": "updateStoreName",
+  "version": "1.0.0",
+  "description": "云函数：超级管理员修改/重命名门店名称（仅更新 stores 表，不回溯历史餐报与角色记录）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

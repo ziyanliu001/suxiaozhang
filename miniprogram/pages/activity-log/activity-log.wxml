@@ -1,0 +1,198 @@
+<view class="al-page">
+  <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseMedia（大事记图片上传）隐私接口 -->
+  <privacy-popup />
+
+  <view class="al-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="al-nav-back" hover-class="al-nav-back-hover" bindtap="goBack">←</view>
+    <text class="al-nav-title">📌 门店日志</text>
+    <text class="al-nav-action {{canManage ? '' : 'hidden'}}" bindtap="onOpenTodayEditForm">编辑</text>
+  </view>
+
+  <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
+
+  <scroll-view scroll-y class="al-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
+
+    <view class="al-store-tip" wx:if="{{currentStoreName}}">📍 {{currentStoreName}}</view>
+
+    <!-- 📌 今日动态：顶部高亮区，右上角提供编辑/追加入口 -->
+    <view class="al-section-divider">
+      <text class="al-divider-icon">🔴</text>
+      <text class="al-divider-txt">今日动态</text>
+      <text class="al-divider-date">{{todayDateStr}}</text>
+    </view>
+
+    <view class="al-today-card">
+      <view class="al-today-header">
+        <text class="al-today-title" wx:if="{{todayItem}}">{{todayItem.title}}</text>
+        <text class="al-today-title al-today-empty-txt" wx:else>今日暂无动态</text>
+        <button class="al-btn-today-edit" wx:if="{{canManage}}" bindtap="onOpenTodayEditForm">
+          {{todayItem ? '✏️ 编辑/追加今日动态' : '📷 记录今日动态'}}
+        </button>
+      </view>
+
+      <!-- 🌟 发布冲突提示：今日已有记录时展示发布人与时间 -->
+      <text class="al-publish-meta" wx:if="{{todayItem}}">已由 {{todayItem.publisherLabel || '管理员'}} 于 {{todayItem.publishTimeStr}} 发布</text>
+
+      <text class="al-today-content" wx:if="{{todayItem && todayItem.content}}">{{todayItem.content}}</text>
+
+      <view class="al-thumb-9grid" wx:if="{{todayItem && todayItem.images.length > 0}}">
+        <view class="al-thumb-grid-item" wx:for="{{todayItem.images}}" wx:for-item="img" wx:key="url">
+          <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="al-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" bindtap="onPreviewImage" data-url="{{img.url}}" data-urls="{{todayItem.images}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
+          <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
+            <text class="thumb-load-failed-icon">⚠️</text>
+            <text class="thumb-load-failed-text">加载失败</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🕰 历史动态：时光轴倒序，不含顶部已展示的今日记录 -->
+    <view class="al-section-divider">
+      <text class="al-divider-icon">🕰</text>
+      <text class="al-divider-txt">历史动态</text>
+    </view>
+
+    <view class="al-timeline">
+      <view class="al-timeline-item" wx:for="{{historyList}}" wx:key="_id" bindtap="onOpenDetail" data-id="{{item._id}}">
+        <view class="al-timeline-dot-col">
+          <view class="al-timeline-dot"></view>
+          <view class="al-timeline-line"></view>
+        </view>
+        <view class="al-timeline-card">
+          <view class="al-card-header-row">
+            <view class="al-card-header-left">
+              <view class="al-card-time">{{item.eventTime}}</view>
+              <view class="al-card-title">{{item.title}}</view>
+            </view>
+            <button class="al-btn-card-edit" wx:if="{{canManage}}" catchtap="onOpenEditForm" data-id="{{item._id}}">✏️ 编辑/追加照片</button>
+          </view>
+          <view class="al-thumb-9grid" wx:if="{{item.images.length > 0}}">
+            <view class="al-thumb-grid-item" wx:for="{{item.images}}" wx:for-item="img" wx:key="url">
+              <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="al-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
+              <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
+                <text class="thumb-load-failed-icon">⚠️</text>
+                <text class="thumb-load-failed-text">加载失败</text>
+              </view>
+            </view>
+          </view>
+          <text class="al-card-content" wx:if="{{item.content}}">{{item.content}}</text>
+          <view class="al-card-footer">
+            <button class="al-btn-export-poster" catchtap="onExportPoster" data-id="{{item._id}}">📤 导出活动海报</button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="al-empty-state" wx:if="{{!loading && historyList.length === 0}}">
+      <text class="al-empty-icon">🕰</text>
+      <text class="al-empty-text">暂无历史动态记录</text>
+    </view>
+
+    <view class="al-loading-more" wx:if="{{loadingMore}}">
+      <text>加载中...</text>
+    </view>
+    <view class="al-no-more" wx:if="{{!hasMore && historyList.length > 0}}">
+      <text>—— 已加载全部历史记录 ——</text>
+    </view>
+
+  </scroll-view>
+
+  <!-- 详情弹窗 -->
+  <view class="al-modal-mask" wx:if="{{showDetailModal}}" bindtap="onCloseDetail">
+    <view class="al-detail-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="al-detail-header">
+        <text class="al-detail-title">{{detailItem.title}}</text>
+        <text class="al-detail-close" bindtap="onCloseDetail">✕</text>
+      </view>
+      <text class="al-detail-time">{{detailItem.eventTime}}</text>
+
+      <scroll-view scroll-y class="al-detail-scroll">
+        <view class="al-detail-images" wx:if="{{detailItem.images.length > 0}}">
+          <image
+            wx:for="{{detailItem.images}}"
+            wx:for-item="img"
+            wx:key="url"
+            class="al-detail-img"
+            src="{{img.url}}"
+            mode="widthFix"
+            bindtap="onPreviewImage"
+            data-url="{{img.url}}"
+            data-urls="{{detailItem.images}}"
+          />
+        </view>
+        <text class="al-detail-content">{{detailItem.content}}</text>
+      </scroll-view>
+
+      <view class="al-detail-actions" wx:if="{{canManage}}">
+        <button class="al-btn-edit" bindtap="onOpenEditForm" data-id="{{detailItem._id}}">编辑</button>
+        <button class="al-btn-delete" bindtap="onDeleteLog" data-id="{{detailItem._id}}">删除</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 发布/编辑表单 -->
+  <view class="al-modal-mask" wx:if="{{showEditForm}}" bindtap="onCloseEditForm">
+    <view class="al-edit-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="al-detail-header">
+        <text class="al-detail-title">{{editForm.id ? '编辑动态' : '发布今日动态'}}</text>
+        <text class="al-detail-close" bindtap="onCloseEditForm">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="al-edit-scroll">
+        <text class="al-form-label">标题</text>
+        <input class="al-form-input" placeholder-class="al-input-placeholder" placeholder="如：今日志愿服务启动、门店迎新活动" value="{{editForm.title}}" bindinput="onEditTitleInput" />
+
+        <text class="al-form-label">发生时间</text>
+        <picker mode="date" value="{{editForm.eventTime}}" bindchange="onEditTimeChange">
+          <view class="al-form-picker">{{editForm.eventTime}}</view>
+        </picker>
+
+        <text class="al-form-label">图文内容</text>
+        <textarea
+          class="al-form-textarea"
+          placeholder="在此记录今日的温馨故事、活动花絮或志愿者服务心得..."
+          value="{{editForm.content}}"
+          bindinput="onEditContentInput"
+          maxlength="1000"
+        />
+
+        <text class="al-form-label">配图（最多 18 张，自动压缩至 300KB 以内，单张不超过 1MB）</text>
+        <view class="al-image-grid">
+          <view class="al-image-item" wx:for="{{editForm.images}}" wx:key="*this">
+            <image wx:if="{{!thumbFailedMap[item]}}" class="al-image-thumb" src="{{item}}" mode="aspectFill" binderror="onImageLoadError" data-thumb-url="{{item}}" />
+            <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{item}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+            <text class="al-image-remove" bindtap="onRemoveImage" data-index="{{index}}">✕</text>
+          </view>
+          <view class="al-image-add" bindtap="onChooseImage" wx:if="{{editForm.images.length < 18}}">
+            <text>{{uploading ? '压缩中...' : '+ 添加'}}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <button class="al-submit-btn" bindtap="onSubmitEdit" disabled="{{uploading}}">提交</button>
+    </view>
+  </view>
+
+  <!-- 📤 活动海报导出预览 -->
+  <view class="al-modal-mask" wx:if="{{showPosterModal}}" bindtap="onClosePosterModal">
+    <view class="al-poster-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="al-detail-header">
+        <text class="al-detail-title">活动海报</text>
+        <text class="al-detail-close" bindtap="onClosePosterModal">✕</text>
+      </view>
+
+      <view class="al-poster-canvas-wrapper">
+        <canvas type="2d" id="activityPosterCanvas" class="al-poster-canvas" style="width: 320px; height: 560px;"></canvas>
+      </view>
+
+      <view class="al-poster-actions">
+        <button class="al-btn-poster-save" bindtap="onSavePosterToAlbum" disabled="{{!posterReady}}">💾 保存到相册</button>
+        <button class="al-btn-poster-share" open-type="share" disabled="{{!posterReady}}">📤 分享给好友</button>
+      </view>
+    </view>
+  </view>
+
+</view>

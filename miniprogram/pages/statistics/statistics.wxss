@@ -17,11 +17,33 @@ page {
   background-color: #f7f8fa;
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* 🛡️ 改为 space-between 自由布局：标题与刷新胶囊各自占位，
+     不再用 position:absolute 强行贴右覆盖，配合动态 padding-right 避让官方胶囊菜单 */
+  justify-content: space-between;
   padding: 16rpx 24rpx;
+  box-sizing: border-box;
+}
+
+/* 统一的 Reddit 风格「←」返回按钮：64rpx 方形点击区，居中图标，带轻微点击态反馈 */
+.nav-back-arrow {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #323233;
+  flex-shrink: 0;
+}
+
+.nav-back-arrow-hover {
+  opacity: 0.5;
 }
 
 .nav-title {
+  flex: 1;
+  text-align: center;
   font-size: 34rpx;
   font-weight: bold;
   color: #323233;
@@ -29,8 +51,6 @@ page {
 }
 
 .nav-refresh-btn {
-  position: absolute;
-  right: 24rpx;
   display: flex;
   align-items: center;
   gap: 4rpx;
@@ -38,6 +58,7 @@ page {
   background-color: #fff;
   border-radius: 24rpx;
   border: 1rpx solid #e8e8e8;
+  flex-shrink: 0;
 }
 
 .refresh-icon {
@@ -252,10 +273,20 @@ page {
   font-size: 24rpx;
 }
 
+/* 🌟 去内卷文案：暂无支出/数据为空不该用一个带底色的徽章框强调出来，
+   那看起来像"这家店有问题"——改成不带背景框的纯文字，语气更平和 */
 .cost-badge.neutral {
-  color: #868E96;
-  background: #F1F3F5;
-  font-size: 20rpx;
+  color: #ADB5BD;
+  font-size: 22rpx;
+  font-weight: normal;
+}
+
+/* 🌟 志工视角：单餐成本等运营敏感数据以遮罩形式展示，仅提示"店长可见"而不泄露具体数值 */
+.cost-badge.masked {
+  color: #ADB5BD;
+  background: #F8F9FA;
+  border: 1rpx dashed #DEE2E6;
+  font-size: 18rpx;
   padding: 4rpx 12rpx;
   border-radius: 10rpx;
 }
@@ -281,6 +312,12 @@ page {
 .warning-pill.urgent {
   background: #FFF5F5;
   color: #E03131;
+}
+
+/* 🐛 "告急(0天)"误报修复配套样式：无数据时用中性灰徽章，不落入红/绿强色调 */
+.warning-pill.nodata {
+  background: #F1F3F5;
+  color: #868E96;
 }
 
 .net-val-group {
@@ -424,7 +461,10 @@ page {
   overflow: hidden;
   padding: 24rpx;
   padding-top: 16rpx;
-  padding-bottom: 144rpx !important;
+  /* 🛡️ 底部固定按钮 .bottom-sticky-bar 自身高度 128rpx（20+88+20），这里的
+     padding-bottom 必须再叠加 env(safe-area-inset-bottom)，否则全面屏机型的
+     底部手势条会让最后内容和按钮贴得过近——此前是固定 144rpx，没算安全区 */
+  padding-bottom: calc(144rpx + env(safe-area-inset-bottom)) !important;
 }
 
 .stats-content {
@@ -1178,37 +1218,25 @@ page {
   margin-bottom: 24rpx;
 }
 
-.debug-info-bar {
-  width: 100%;
-  padding: 14rpx 20rpx;
-  background-color: #F8F9FA;
-  border-radius: 12rpx;
-  font-size: 22rpx;
+/* 🌟 精简空状态文案与按钮：不再用黄色卡片框包裹建议文本，扁平直陈即可 */
+.empty-suggest-text {
+  display: block;
+  font-size: 24rpx;
   color: #868E96;
   text-align: center;
-  margin-bottom: 24rpx;
-  box-sizing: border-box;
+  margin-bottom: 20rpx;
 }
 
-.suggest-box {
+.empty-action-group {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: #FFF9DB;
-  border: 1rpx solid #FFE066;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  width: 100%;
-  box-sizing: border-box;
 }
 
-.suggest-text {
-  font-size: 24rpx;
-  color: #D9480E;
-  margin-bottom: 16rpx;
-}
-
-.btn-primary-action {
+/* 统一主操作按钮：扁平圆角 + 页面主色调（呼应周期 Tab 的 active 橙色），
+   替代此前 .btn-primary-action(实心橙) / .btn-secondary-action(灰边框) 两套不一致的样式 */
+.btn-empty-action {
   background: #FF922B;
   color: #FFFFFF;
   font-size: 26rpx;
@@ -1216,29 +1244,17 @@ page {
   border-radius: 40rpx;
   padding: 12rpx 36rpx;
   border: none;
+  margin-bottom: 16rpx;
 }
 
-.btn-secondary-action {
-  background: #F1F3F5;
-  color: #495057;
-  font-size: 26rpx;
-  border-radius: 40rpx;
-  padding: 12rpx 36rpx;
-  margin-bottom: 20rpx;
-  border: 1rpx solid #DEE2E6;
+.btn-empty-action::after {
+  border: none;
 }
 
-.action-btn-group {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.btn-back-home {
+/* 次要操作：扁平文字链接，弱化视觉但仍保持同色系 */
+.btn-empty-secondary {
   font-size: 26rpx;
   color: #FF922B;
-  text-decoration: underline;
   padding: 0;
   background: none;
   border: none;
@@ -1718,6 +1734,19 @@ page {
   padding: 0 24rpx 24rpx;
 }
 
+/* 合规展示声明 */
+.compliance-disclaimer {
+  padding: 24rpx 32rpx 48rpx;
+  text-align: center;
+}
+
+.compliance-disclaimer-text {
+  display: block;
+  font-size: 20rpx;
+  line-height: 1.6;
+  color: #9a9a9a;
+}
+
 .national-hero-card {
   background: linear-gradient(135deg, #1C7ED6 0%, #1971C2 100%);
   border-radius: 28rpx;
@@ -1744,6 +1773,14 @@ page {
   background: rgba(255, 255, 255, 0.2);
   padding: 4rpx 14rpx;
   border-radius: 20rpx;
+}
+
+/* 🌟 志工荣誉版标识：与标题同行展示，突出"这是属于我的共享荣誉大屏" */
+.hero-role-tag {
+  font-size: 22rpx;
+  font-weight: normal;
+  color: #FFE066;
+  margin-left: 8rpx;
 }
 
 .hero-main-num {
@@ -1790,6 +1827,30 @@ page {
   opacity: 0.8;
 }
 
+/* 🌟 志工视角：资金汇入/支出数额脱敏遮罩样式，弱化显示避免误导为"没有数据" */
+.masked-cell {
+  opacity: 0.6;
+}
+
+.masked-val {
+  color: rgba(255, 255, 255, 0.7) !important;
+  letter-spacing: 4rpx;
+}
+
+/* 🌟 志工荣誉版温馨提示条 */
+.volunteer-warm-tip {
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.15);
+  text-align: center;
+}
+
+.volunteer-warm-tip .tip-text {
+  font-size: 22rpx;
+  color: #FFE066;
+  line-height: 1.6;
+}
+
 .national-matrix-card {
   background: #FFFFFF;
   border-radius: 24rpx;
@@ -1801,10 +1862,183 @@ page {
   margin-bottom: 16rpx;
 }
 
+.matrix-filter-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.matrix-filter-tab {
+  flex: 1;
+  text-align: center;
+  padding: 10rpx 0;
+  font-size: 22rpx;
+  color: #666666;
+  background: #F8F9FA;
+  border-radius: 30rpx;
+}
+
+.matrix-filter-tab.active {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.matrix-filter-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #999999;
+  font-size: 24rpx;
+}
+
 .matrix-title {
   font-size: 28rpx;
   font-weight: bold;
   color: #212529;
+}
+
+/* ===== 🌟 超管专属高阶治理面板 ===== */
+.super-admin-insights-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  border: 1.5rpx dashed #E8D5B5;
+}
+
+.range-tab-row {
+  display: flex;
+  gap: 12rpx;
+  margin: 16rpx 0;
+}
+
+.range-tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 12rpx 0;
+  font-size: 22rpx;
+  color: #666666;
+  background: #F8F9FA;
+  border-radius: 30rpx;
+}
+
+.range-tab-item.active {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.insights-metric-grid {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.insights-metric-cell {
+  flex: 1;
+  text-align: center;
+  background: #F8F9FA;
+  border-radius: 16rpx;
+  padding: 20rpx 8rpx;
+}
+
+.insights-metric-cell.warn {
+  background: #FFF5F5;
+}
+
+.insights-metric-val {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #212529;
+  margin-bottom: 6rpx;
+}
+
+.insights-metric-cell.warn .insights-metric-val {
+  color: #E03131;
+}
+
+.insights-metric-lbl {
+  display: block;
+  font-size: 20rpx;
+  color: #999999;
+}
+
+/* 高对比度核心数据卡：深色底 + 白字，2x2 网格换行，与下方浅灰底的次要指标区隔出主次 */
+.insights-metric-grid.hero-contrast {
+  flex-wrap: wrap;
+}
+
+.hero-contrast-cell {
+  flex: 0 0 calc(50% - 8rpx);
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #3D2416 0%, #1F1209 100%);
+  padding: 24rpx 8rpx;
+}
+
+.hero-contrast-cell .insights-metric-val {
+  color: #FFD966;
+  font-size: 34rpx;
+}
+
+.hero-contrast-cell .insights-metric-lbl {
+  color: #E8D5B5;
+}
+
+.hero-contrast-cell.warn {
+  background: linear-gradient(135deg, #5C1A1A 0%, #2B0A0A 100%);
+}
+
+.hero-contrast-cell.warn .insights-metric-val {
+  color: #FF8787;
+}
+
+.offline-store-list {
+  background: #FFF5F5;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.offline-store-list-title {
+  display: block;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #E03131;
+  margin-bottom: 12rpx;
+}
+
+.offline-store-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8rpx 0;
+  font-size: 24rpx;
+  color: #495057;
+}
+
+.offline-store-days {
+  color: #E03131;
+}
+
+.btn-generate-national-report {
+  width: 100%;
+  min-height: 44px;
+  line-height: 44px;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+}
+
+.report-check-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 20rpx 0;
+  font-size: 26rpx;
+  color: #333333;
+  border-bottom: 1rpx solid #F1F3F5;
 }
 
 .matrix-table {

@@ -3,6 +3,12 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
+const _ = db.command;
+
+// 🛡️ 真正拥有"跨店查看本机构全部门店汇总"权限的角色；其余角色一律强制收敛到自己所在门店，
+// 杜绝 viewMode==='all' 被普通义工/店长/财务用来越权拉取全机构财务汇总
+// （此前 `userRole !== 'admin'` 的判断永远为真，等于形同虚设）。
+const TENANT_WIDE_ROLES = ['super_admin', 'hq_finance', 'regional_finance'];
 
 exports.main = async (event, context) => {
   const { startDate, endDate, shopName, storeId, viewMode } = event;
@@ -16,26 +22,61 @@ exports.main = async (event, context) => {
   }
 
   try {
-    const userRes = await db.collection('users')
+    // 🏢 多租户：优先从 user_roles 取角色与 tenantId，users 仅作旧数据兼容兜底
+    const roleRes = await db.collection('user_roles')
       .where({ _openid: OPENID })
       .limit(1)
       .get();
-    const userRole = userRes.data && userRes.data.length > 0 ? userRes.data[0].role : 'user';
+
+    let userRole = 'user';
+    let tenantId = '';
+    let userStoreId = '';
+    let userStoreName = '';
+    if (roleRes.data && roleRes.data.length > 0) {
+      userRole = roleRes.data[0].role || 'user';
+      tenantId = roleRes.data[0].tenantId || '';
+      userStoreId = roleRes.data[0].storeId || '';
+      userStoreName = roleRes.data[0].storeName || '';
+    } else {
+      const userRes = await db.collection('users')
+        .where({ _openid: OPENID })
+        .limit(1)
+        .get();
+      userRole = userRes.data && userRes.data.length > 0 ? userRes.data[0].role : 'user';
+    }
 
     let matchConditions = {
-      dateString: db.command.gte(startDate).and(db.command.lte(endDate))
+      dateString: db.command.gte(startDate).and(db.command.lte(endDate)),
+      // 🛡️ 已作废（红字冲销）的记录不参与统计汇总
+      isVoid: _.neq(true)
     };
 
+    // 🏢 多租户边界：始终收敛到调用者所属机构；无法解析出 tenantId 时不再静默跳过过滤条件
+    const isTenantWideAllowed = TENANT_WIDE_ROLES.includes(userRole) && !!tenantId;
+    if (tenantId) {
+      matchConditions.tenantId = tenantId;
+    }
+
     // 🔑 多门店数据强隔离
-    if (storeId && storeId !== 'national_overview' && storeId !== 'ALL_STORES') {
+    const wantsAllStores = !storeId || storeId === 'national_overview' || storeId === 'ALL_STORES';
+    if (!wantsAllStores) {
       matchConditions.storeId = storeId;
+    } else if (!isTenantWideAllowed) {
+      // 🛡️ 非超管请求"全部门店"一律强制收敛为本人所在门店
+      if (userStoreId) {
+        matchConditions.storeId = userStoreId;
+      } else if (userStoreName) {
+        matchConditions.shopName = userStoreName;
+      } else {
+        matchConditions._openid = OPENID;
+      }
     }
 
     if (shopName) {
       matchConditions.shopName = shopName;
     }
 
-    const shouldFilterByOpenid = (viewMode === 'personal') || (userRole !== 'admin' && viewMode !== 'all');
+    const shouldFilterByOpenid = (viewMode === 'personal') || (!isTenantWideAllowed && !matchConditions.storeId && !matchConditions.shopName);
     if (shouldFilterByOpenid) {
       matchConditions._openid = OPENID;
     }

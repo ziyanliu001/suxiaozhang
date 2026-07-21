@@ -78,17 +78,52 @@ exports.main = async (event, context) => {
   console.log(`📅 [getStatisticsData] 类型: ${tabType}, 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}`);
 
   try {
-    // 2. 数据库条件过滤查询
-    let whereConditions = {
-      dateString: _.gte(startDateStr).and(_.lte(endDateStr))
-    };
+    // 🏢 多租户边界：始终收敛到调用者所属机构，"全部门店"仅指本机构下的全部门店
+    // 🛡️ 此前本函数完全没有角色校验：任何登录用户（甚至游客）传入 shopName='全部门店'
+    // 即可拿到跨机构的收支明细聚合。现按角色收敛：本机构超管/总部财务/大区财务
+    // （与 statistics 页面 canViewAllStoresDropdown 的口径保持一致）可查看"全部门店"汇总，
+    // 其余角色一律强制收敛到本人所在门店；无法解析出所属机构/门店时直接拒绝，不再兜底放行。
+    let tenantId = '';
+    let userRole = 'volunteer';
+    let userStoreId = '';
+    let userStoreName = '';
+    const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+    if (roleRes.data && roleRes.data.length > 0) {
+      tenantId = roleRes.data[0].tenantId || '';
+      userRole = roleRes.data[0].role || 'volunteer';
+      userStoreId = roleRes.data[0].storeId || '';
+      userStoreName = roleRes.data[0].storeName || '';
+    }
 
-    if (shopName && shopName !== '全部门店') {
-      whereConditions.shopName = shopName;
+    if (!tenantId) {
+      return { success: false, errMsg: '无法确认您所属的机构，暂不支持查看统计数据' };
+    }
+
+    const isTenantWideAllowed = ['super_admin', 'hq_finance', 'regional_finance'].includes(userRole);
+    const wantsAllStores = !shopName || shopName === '全部门店';
+    if (wantsAllStores && !isTenantWideAllowed && !userStoreId && !userStoreName) {
+      return { success: false, errMsg: '您尚未绑定门店，无法查看统计数据' };
+    }
+
+    // 2. 数据库条件过滤查询
+    // 🛡️ 修复"统计数据全为 0"根因：多租户改造上线前写入的历史 report_logs 记录可能完全
+    // 没有 tenantId 字段；此前用严格相等匹配 { tenantId } 会把这些历史数据整体过滤掉，
+    // 造成明明有数据却查出全 0 的假象。改为"匹配当前机构 tenantId 或字段本身不存在"均放行。
+    const andConditions = [
+      { dateString: _.gte(startDateStr).and(_.lte(endDateStr)) },
+      { isVoid: _.neq(true) },
+      _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])
+    ];
+
+    if (wantsAllStores && !isTenantWideAllowed) {
+      // 🛡️ 非超管请求"全部门店"一律强制收敛为本人所在门店
+      andConditions.push(userStoreId ? { storeId: userStoreId } : { shopName: userStoreName });
+    } else if (shopName && shopName !== '全部门店') {
+      andConditions.push({ shopName: shopName });
     }
 
     const recordRes = await db.collection('report_logs')
-      .where(whereConditions)
+      .where(_.and(andConditions))
       .limit(1000)
       .get();
 

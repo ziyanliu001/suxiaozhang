@@ -267,7 +267,15 @@ Component({
       ctx.beginPath()
       ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
       ctx.clip()
-      ctx.drawImage(img, x, y, size, size)
+
+      // 🐛 修复：旧写法 drawImage(img, x, y, size, size) 是把源图整张拉伸铺满 size×size，
+      // 源图不是正方形时会被压扁/拉长变形。改为居中裁出源图的最大正方形区域再铺满，
+      // 与头像上传侧的 compressAndUploadSquareImage（miniprogram/utils/imageCompress.ts）
+      // 保持同一套"裁剪优先于缩放"逻辑，避免历史头像（裁剪前上传的非正方形原图）在海报里走形
+      const cropSize = Math.min(img.width, img.height)
+      const cropX = (img.width - cropSize) / 2
+      const cropY = (img.height - cropSize) / 2
+      ctx.drawImage(img, cropX, cropY, cropSize, cropSize, x, y, size, size)
       ctx.restore()
 
       // 头像金色边框
@@ -396,7 +404,7 @@ Component({
       // 底部品牌语
       ctx.fillStyle = '#8C1D18'
       ctx.font = 'bold 30px sans-serif'
-      ctx.fillText('恭敬端上一碗饭，温暖世间一颗心', 450, 1420)
+      ctx.fillText('端上一碗热饭，温暖世间一颗心', 450, 1420)
     },
 
     _drawDecorativeQRCode(ctx: any, x: number, y: number, size: number) {

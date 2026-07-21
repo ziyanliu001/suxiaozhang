@@ -16,6 +16,7 @@ function getPrevDayIsoString(dateString) {
 
 exports.main = async (event, context) => {
   const { shopName, mpAccount, targetDateString, storeId } = event;
+  const { OPENID } = cloud.getWXContext();
 
   if (!shopName || !targetDateString) {
     return {
@@ -32,6 +33,17 @@ exports.main = async (event, context) => {
   }
 
   try {
+    // 🏢 多租户边界：模糊匹配/降级匹配会跨门店扫描，必须先收敛到调用者所属机构，
+    // 否则"上期结余"可能降级匹配到另一个机构的记录，直接泄露其账目余额
+    let tenantId = '';
+    if (OPENID) {
+      const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+      if (roleRes.data && roleRes.data.length > 0) {
+        tenantId = roleRes.data[0].tenantId || '';
+      }
+    }
+    const tenantWhere = tenantId ? { tenantId } : {};
+
     const cleanStore = (s) => String(s || '').replace(/[区市省店\s]/g, '').trim();
     const targetStore = cleanStore(shopName);
     // 🔑 数据隔离：非全国总览时使用 storeId 精准过滤
@@ -45,8 +57,8 @@ exports.main = async (event, context) => {
     if (targetStore && targetStore !== '全部门店') {
       // 优先使用 storeId 精准查询
       const exactWhere = useStoreIdFilter
-        ? { storeId: storeId, dateString: prevDateString }
-        : { shopName: shopName, dateString: prevDateString };
+        ? { ...tenantWhere, storeId: storeId, dateString: prevDateString }
+        : { ...tenantWhere, shopName: shopName, dateString: prevDateString };
       const exactMatchRes = await db.collection('report_logs')
         .where(exactWhere)
         .limit(1)
@@ -59,6 +71,7 @@ exports.main = async (event, context) => {
       } else {
         const fuzzyMatchRes = await db.collection('report_logs')
           .where({
+            ...tenantWhere,
             dateString: prevDateString
           })
           .limit(10)
@@ -78,6 +91,7 @@ exports.main = async (event, context) => {
     if (!matched) {
       const fallbackRes = await db.collection('report_logs')
         .where({
+          ...tenantWhere,
           dateString: _.lt(targetDateString)
         })
         .orderBy('dateString', 'desc')

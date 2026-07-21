@@ -1,0 +1,9 @@
+{
+  "name": "manageReportApproval",
+  "version": "1.0.0",
+  "description": "云函数：餐报审批状态机（核对确认/财务稽核封账/解封/作废）唯一服务端入口",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,145 @@
+<view class="pv-page">
+
+  <view class="pv-status-bar" style="height: {{statusBarHeight}}px;"></view>
+  <view class="pv-nav-bar" style="height: {{navBarHeight}}px;">
+    <text class="pv-nav-title">账目透明看板</text>
+  </view>
+
+  <view class="pv-loading" wx:if="{{loading}}">
+    <text>正在查询存证账目...</text>
+  </view>
+
+  <view class="pv-error" wx:if="{{!loading && errorMsg}}">
+    <text class="pv-error-icon">⚠️</text>
+    <text class="pv-error-text">{{errorMsg}}</text>
+  </view>
+
+  <view class="pv-not-found" wx:if="{{!loading && !errorMsg && !found}}">
+    <text class="pv-error-icon">🔍</text>
+    <text class="pv-error-text">未查询到 {{dateString}} 的账目记录</text>
+    <text class="pv-error-sub">可能尚未发布，或二维码信息有误</text>
+  </view>
+
+  <scroll-view scroll-y class="pv-content" wx:if="{{!loading && found}}">
+
+    <!-- 顶部：存证标签 + 门店/日期 -->
+    <view class="pv-verified-badge">
+      <text class="pv-verified-star">★</text>
+      <text class="pv-verified-text">数据已存证·账目100%透明</text>
+    </view>
+    <!-- 🛡️ 合规措辞：本项目基于微信云开发数据库，并非区块链/链上存证，此处不使用
+         "上链"/"区块链校验"等失实表述——用"实时查询机构云端数据库、非静态截图"
+         传达同样的"数据未经人工篡改、当场可核验"信任信号，但表述必须真实准确 -->
+    <text class="pv-verified-sub">数据实时查询自机构云端数据库，非人工截图，可与海报信息逐项比对核验</text>
+    <view class="pv-header-card">
+      <text class="pv-store-name">{{storeName}}</text>
+      <text class="pv-date">{{dateString}}</text>
+      <view class="pv-status-row">
+        <text class="pv-status-pill {{approvalStatusLabel === '已稽核封账' ? 'locked' : ''}}">{{approvalStatusLabel}}</text>
+        <text class="pv-audit-meta" wx:if="{{auditedBy}}">稽核人：{{auditedBy}} · {{auditTime}}</text>
+      </view>
+    </view>
+
+    <!-- 中部：收支摘要 -->
+    <view class="pv-card">
+      <text class="pv-card-title">💰 收支摘要</text>
+      <view class="pv-summary-row">
+        <text class="pv-summary-label">昨日结余</text>
+        <text class="pv-summary-value">¥{{yesterdayBalance}}</text>
+      </view>
+      <view class="pv-summary-row">
+        <text class="pv-summary-label">今日支持（其他）</text>
+        <text class="pv-summary-value">¥{{otherDonation}}</text>
+      </view>
+      <view class="pv-summary-row">
+        <text class="pv-summary-label">今日支持（明细）</text>
+        <text class="pv-summary-value">¥{{listDonationTotal}}</text>
+      </view>
+      <view class="pv-summary-row">
+        <text class="pv-summary-label">今日支出</text>
+        <text class="pv-summary-value expense">-¥{{expenseAmount}}</text>
+      </view>
+      <view class="pv-summary-row total">
+        <text class="pv-summary-label">今日结余</text>
+        <text class="pv-summary-value">¥{{todayBalance}}</text>
+      </view>
+    </view>
+
+    <!-- 支出明细文字 -->
+    <view class="pv-card" wx:if="{{expenses}}">
+      <text class="pv-card-title">🧾 支出明细</text>
+      <text class="pv-expenses-text">{{expenses}}</text>
+    </view>
+
+    <!-- 小票凭证 -->
+    <view class="pv-card" wx:if="{{receiptImages.length > 0}}">
+      <text class="pv-card-title">📸 小票凭证（点击查看原图）</text>
+      <view class="pv-receipt-grid">
+        <view class="pv-receipt-item" wx:for="{{receiptImages}}" wx:key="*this" bindtap="onPreviewReceipt" data-url="{{item}}">
+          <image class="pv-receipt-img" src="{{item}}" mode="aspectFill" lazy-load="{{true}}" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 爱心支持名单 -->
+    <view class="pv-card" wx:if="{{donationItems.length > 0}}">
+      <text class="pv-card-title">🧡 爱心支持名单</text>
+      <view class="pv-donor-row" wx:for="{{donationItems}}" wx:key="index">
+        <text class="pv-donor-name">{{item.name}}</text>
+        <text class="pv-donor-amount">¥{{item.amount}}</text>
+      </view>
+    </view>
+
+    <!-- 爱心物资捐赠与消耗墙 -->
+    <view class="pv-card" wx:if="{{materials.length > 0 || stapleRiceStatusLabel || stapleOilStatusLabel}}">
+      <text class="pv-card-title">📦 爱心物资捐赠与消耗墙</text>
+
+      <view class="pv-materials-status-row" wx:if="{{stapleRiceStatusLabel || stapleOilStatusLabel}}">
+        <view class="pv-materials-status-chip" wx:if="{{stapleRiceStatusLabel}}">
+          <text class="pv-materials-status-label">大米/面粉</text>
+          <text class="pv-materials-status-badge {{stapleRiceStatusLabel === '告急' ? 'urgent' : (stapleRiceStatusLabel === '充足' ? 'sufficient' : 'normal')}}">{{stapleRiceStatusLabel}}</text>
+        </view>
+        <view class="pv-materials-status-chip" wx:if="{{stapleOilStatusLabel}}">
+          <text class="pv-materials-status-label">食用油</text>
+          <text class="pv-materials-status-badge {{stapleOilStatusLabel === '告急' ? 'urgent' : (stapleOilStatusLabel === '充足' ? 'sufficient' : 'normal')}}">{{stapleOilStatusLabel}}</text>
+        </view>
+      </view>
+
+      <view class="pv-materials-list" wx:if="{{materials.length > 0}}">
+        <view class="pv-materials-row" wx:for="{{materials}}" wx:key="index">
+          <text class="pv-materials-donor">{{item.donor}}</text>
+          <text class="pv-materials-detail">捐赠 {{item.item}} {{item.quantity}}{{item.unit}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部：门店日志 -->
+    <view class="pv-card" wx:if="{{activity}}">
+      <text class="pv-card-title">📌 门店今日动态</text>
+      <text class="pv-activity-title" wx:if="{{activity.title}}">{{activity.title}}</text>
+      <text class="pv-activity-content" wx:if="{{activity.content}}">{{activity.content}}</text>
+      <view class="pv-activity-grid" wx:if="{{activity.images.length > 0}}">
+        <view class="pv-activity-item" wx:for="{{activity.images}}" wx:key="url" bindtap="onPreviewActivityImage" data-url="{{item.url}}">
+          <image class="pv-activity-img" src="{{item.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 爱心感言墙：优先展示当天志愿者记录的门店日志内容，没有时降级为固定温馨感言 -->
+    <view class="pv-testimonial-card">
+      <text class="pv-testimonial-title">❤️ 来自用餐老人的温暖感言</text>
+      <view class="pv-testimonial-body">
+        <text class="pv-testimonial-mark">"</text>
+        <text class="pv-testimonial-text">{{testimonialText}}</text>
+      </view>
+      <text class="pv-testimonial-hint" wx:if="{{testimonialIsDefault}}">（当天暂无具体记录，展示常规温馨寄语）</text>
+    </view>
+
+    <view class="pv-footer">
+      <text class="pv-footer-brand">素小账 · 公益透明支持</text>
+      <text class="pv-footer-note">本页数据来自门店实时录入，如有疑问请联系门店义工团队</text>
+    </view>
+
+  </scroll-view>
+
+</view>

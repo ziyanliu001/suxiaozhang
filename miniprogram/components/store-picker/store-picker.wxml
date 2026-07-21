@@ -1,6 +1,6 @@
 <!-- 顶部门店选择胶囊 (极简清爽版) -->
 <view class="store-picker-capsule" bindtap="onOpenSheet" hover-class="capsule-hover">
-  <text class="pin-icon">📍</text>
+  <view class="capsule-avatar">{{storeInitial}}</view>
   <text class="store-name">{{currentStore.storeName || '海沧区雨花斋'}}</text>
   <text class="arrow">▼</text>
 </view>
@@ -8,6 +8,8 @@
 <!-- 2. 自定义绝对高层级 Bottom Sheet (替代 page-container，解决不弹窗问题) -->
 <view class="store-sheet-backdrop {{showPickerSheet ? 'show' : ''}}" bindtap="onCloseSheet" catchtouchmove="preventTouchMove">
   <view class="store-sheet-panel" catchtap="stopBubble">
+
+    <view class="sheet-drag-handle"></view>
 
     <!-- 头部栏 -->
     <view class="sheet-header">
@@ -19,8 +21,11 @@
       <text class="sheet-close-btn" bindtap="onCloseSheet">✕</text>
     </view>
 
-    <!-- 按门店分组列表 -->
-    <scroll-view scroll-y class="sheet-scroll-list">
+    <!-- 按门店分组列表 / 新建门店申请表单 二选一展示 -->
+    <scroll-view scroll-y class="sheet-scroll-list" wx:if="{{!showNewStoreForm}}">
+      <view class="store-list-loading-tip" wx:if="{{storeListLoading}}">
+        <text>正在加载最新门店列表...</text>
+      </view>
       <block wx:for="{{groupedStoreList}}" wx:key="storeId">
 
         <view class="store-group-card {{item.storeName === currentStore.storeName ? 'active-store' : ''}}">
@@ -54,6 +59,46 @@
       </block>
     </scroll-view>
 
+    <!-- ➕ 找不到门店？申请新建/加入新门店 -->
+    <view class="new-store-entry-btn" wx:if="{{!showNewStoreForm}}" bindtap="onToggleNewStoreForm">
+      <text>➕ 找不到您的门店？申请新建/加入新门店</text>
+    </view>
+
+    <!-- 申请新门店表单 -->
+    <view class="new-store-form" wx:if="{{showNewStoreForm}}">
+      <view class="new-store-form-back" bindtap="onToggleNewStoreForm">‹ 返回门店列表</view>
+
+      <text class="form-label">新门店名称</text>
+      <input class="new-store-input"
+             type="text"
+             placeholder="如：雨花斋集美区店"
+             value="{{newStoreForm.customStoreName}}"
+             bindinput="onNewStoreNameInput"/>
+
+      <block wx:if="{{currentStore.role !== 'ADMIN'}}">
+        <text class="form-label">申请身份</text>
+        <radio-group class="new-store-role-group" bindchange="onSelectNewStoreRole">
+          <label class="new-store-role-item">
+            <radio value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}" color="#8C1D18"/>
+            <text>👑 店长</text>
+          </label>
+          <label class="new-store-role-item">
+            <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
+            <text>🔒 财务</text>
+          </label>
+          <label class="new-store-role-item">
+            <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
+            <text>🌸 义工</text>
+          </label>
+        </radio-group>
+      </block>
+      <view class="form-hint" wx:else>👑 您是超级管理员，提交后将直接建店并自动获得该店管理权限，无需审批</view>
+
+      <button class="new-store-submit-btn" bindtap="onSubmitNewStoreApply">
+        {{currentStore.role === 'ADMIN' ? '立即创建门店' : '提交申请，等待超管审批'}}
+      </button>
+    </view>
+
   </view>
 </view>
 
@@ -71,20 +116,20 @@
       <view class="tab-item {{authTab === 'APPLY' ? 'active' : ''}}" bindtap="onSwitchAuthTab" data-tab="APPLY">在线提交申请</view>
     </view>
 
-    <!-- 通道 1：一次性动态邀请码 / 超管根密钥 -->
+    <!-- 通道 1：一次性动态邀请码（店长/财务）；超级管理员无自助激活入口 -->
     <view class="auth-body" wx:if="{{authTab === 'CODE'}}">
-      <text class="auth-tip" wx:if="{{targetAuthRole === 'SUPER_ADMIN'}}">👑 开发者/超管专属：请输入系统创世根密钥（支持 ROOT8888 / ADMIN2026 / YUHUA888）：</text>
+      <text class="auth-tip" wx:if="{{targetAuthRole === 'ADMIN' || targetAuthRole === 'SUPER_ADMIN'}}">👑 超级管理员权限不支持在小程序内自助开通，请联系平台管理员为您的账号开通。</text>
       <text class="auth-tip" wx:else>请输入现任店长或总管向您提供的 6 位动态邀请码（一客码，用完即失效）：</text>
 
       <input class="auth-code-input"
+             wx:if="{{targetAuthRole !== 'ADMIN' && targetAuthRole !== 'SUPER_ADMIN'}}"
              type="text"
              maxlength="20"
-             placeholder="{{targetAuthRole === 'SUPER_ADMIN' ? '请输入创世根密钥 (如 ROOT8888)' : '请输入 6 位动态邀请码'}}"
+             placeholder="请输入 6 位动态邀请码"
              value="{{authCodeInput}}"
              bindinput="onAuthCodeInput"/>
 
-      <text class="sub-help-text" wx:if="{{targetAuthRole === 'SUPER_ADMIN'}}">🔑 提示：验证成功后将瞬间解锁全国所有门店的管理与稽核特权。</text>
-      <text class="sub-help-text" wx:else>🔒 防泄漏保障：邀请码仅限使用一次，过期自动失效。</text>
+      <text class="sub-help-text" wx:if="{{targetAuthRole !== 'ADMIN' && targetAuthRole !== 'SUPER_ADMIN'}}">🔒 防泄漏保障：邀请码仅限使用一次，过期自动失效。</text>
     </view>
 
     <!-- 通道 2：在线提交申请流程 -->
@@ -101,7 +146,7 @@
     <view class="auth-footer-btns">
       <button class="btn-cancel" bindtap="onCloseAuthModal">取消</button>
       <button class="btn-confirm-auth" bindtap="onVerifyAuthSubmit">
-        {{authTab === 'CODE' ? '合十激活' : '提交申请'}}
+        {{authTab === 'CODE' ? '确认激活' : '提交申请'}}
       </button>
     </view>
   </view>

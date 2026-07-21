@@ -1,0 +1,297 @@
+<view class="mine-page-container">
+  <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseAvatar（头像选择）隐私接口，
+       必须放置该组件才能正常弹出授权，否则点击头像会被平台静默拦截、毫无反应 -->
+  <privacy-popup />
+
+  <view class="status-bar-spacer" style="height: {{statusBarHeight}}px;"></view>
+  <view class="nav-title-bar" style="height: {{navBarHeight}}px;">
+    <text class="page-title-txt">个人中心</text>
+    <!-- 🛡️ 动态避让官方胶囊菜单：right 由 capsuleLeft/windowWidth 换算得出，不再用
+         固定 24rpx 贴右——position:absolute 元素的 right 值不受父级 padding-right
+         影响，必须直接算在按钮自己身上，否则不同机型胶囊实际左边距不同时，
+         这个按钮仍会被胶囊重叠/裁切 -->
+    <view class="quick-sheet-trigger-btn" style="right: {{windowWidth - capsuleLeft + 10}}px;" bindtap="onOpenQuickSheet">
+      <text class="quick-sheet-trigger-icon">⋯</text>
+    </view>
+  </view>
+
+  <view class="mine-content-wrapper">
+
+    <!-- 图片压缩用离屏画布：头像上传专用 -->
+    <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
+
+    <view class="user-profile-card">
+      <!-- 🌟 诊断专用：bindtap 和 bindchooseavatar 分开打点，用来区分"按钮完全没收到点击"
+           和"点击收到了、但头像选择这个专属事件没有触发"（后者常见于手机微信客户端本身版本
+           偏旧，低于 chooseAvatar 能力要求的基础库，即使小程序项目把 libVersion 配得再高，
+           实际运行时的基础库上限仍然取决于用户手机安装的微信客户端版本） -->
+      <button class="avatar-choose-btn" hover-class="avatar-choose-btn-hover" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar" bindtap="onAvatarBtnTap">
+        <view class="avatar-outer">
+          <view class="avatar-ring">
+            <image wx:if="{{userAvatarUrl && !avatarLoadFailed}}" class="user-avatar" src="{{userAvatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" />
+            <view wx:else class="user-avatar user-avatar-placeholder">👤</view>
+          </view>
+        </view>
+      </button>
+      <view class="user-meta-info">
+        <!-- 🐛 昵称与编辑图标重叠的真正根因：<input> 是微信小程序里的原生组件，它自己身上的
+             text-overflow/overflow 样式并不总是可靠生效（此前只在 .user-nickname-input 自身
+             加 max-width + ellipsis 试过一次，见旧注释，长昵称依然会视觉溢出压住右侧图标）。
+             可靠的做法是把"裁切边界"下放给外层普通 <view>——普通元素的 overflow:hidden
+             是稳定生效的，用它兜底给原生 input 做硬裁切，而不是指望 input 自己截断。 -->
+        <view class="nickname-edit-row">
+          <view class="nickname-input-wrap">
+            <input
+              class="user-nickname-input"
+              type="nickname"
+              placeholder="点击设置昵称"
+              value="{{userNickName}}"
+              bindblur="onNicknameBlur"
+            />
+          </view>
+          <view class="edit-profile-icon-btn" bindtap="onTapEditProfileHint">
+            <view class="item-icon-svg icon-svg-edit"></view>
+          </view>
+        </view>
+
+        <view class="role-badge-row">
+          <view class="badge-tag {{currentUserRole}}">
+            <view class="badge-icon-svg icon-svg-flower"></view>
+            <text>{{currentUserRole === 'super_admin' ? '全局超级管理员' :
+              currentUserRole === 'store_manager' ? currentStoreName + ' · 店长' :
+              currentUserRole === 'finance' ? currentStoreName + ' · 财务' : '雨花斋志工'}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="merit-board-card">
+      <view class="board-header">
+        <view class="header-icon-svg icon-svg-flower"></view>
+        <text class="header-title">爱心护持榜</text>
+        <view class="header-icon-svg icon-svg-flower flip-x"></view>
+      </view>
+
+      <!-- 🌟 核心荣誉数据：护持天数 / 累计工时，大号加粗突出，与次要统计做视觉分层 -->
+      <view class="merit-hero-row">
+        <view class="merit-hero-cell">
+          <text class="merit-hero-num">{{stats.volunteerDays || 0}}</text>
+          <text class="merit-hero-label">护持天数</text>
+        </view>
+        <view class="merit-hero-divider"></view>
+        <view class="merit-hero-cell">
+          <text class="merit-hero-num">{{stats.volunteerHours || 0}}</text>
+          <text class="merit-hero-label">累计工时</text>
+        </view>
+      </view>
+
+      <view class="merit-sub-row" wx:if="{{hasPrivilege}}">
+        <view class="merit-sub-cell" wx:if="{{currentUserRole === 'store_manager' || currentUserRole === 'super_admin'}}">
+          <text class="merit-sub-num">{{stats.submittedReports || 0}}</text>
+          <text class="merit-sub-label">登记餐报</text>
+        </view>
+        <view class="merit-sub-cell" wx:if="{{currentUserRole === 'finance' || currentUserRole === 'super_admin'}}">
+          <text class="merit-sub-num">{{stats.auditedReports || 0}}</text>
+          <text class="merit-sub-label">稽核账本</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色 -->
+    <view class="view-mode-switch-card" wx:if="{{isRealSuperAdmin}}">
+      <picker mode="selector" range="{{viewModeOptionLabels}}" value="{{viewModeOptionIndex}}" bindchange="onSwitchViewMode">
+        <view class="view-mode-switch-row">
+          <view class="item-left">
+            <view class="item-icon-svg icon-svg-key"></view>
+            <text class="item-text">管理视角切换</text>
+          </view>
+          <view class="view-mode-current-value">
+            <text class="view-mode-current-label">{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
+            <view class="item-arrow">❯</view>
+          </view>
+        </view>
+      </picker>
+      <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
+    </view>
+
+    <!-- 分组一：核心荣誉 —— 数字荣誉墙（横向滚动徽章展架），替换原来的单薄列表项 -->
+    <view class="list-group-label">核心荣誉</view>
+    <view class="honor-wall-card">
+      <view class="honor-wall-header">
+        <text class="honor-wall-title">🏅 我的核心荣誉</text>
+        <view class="honor-wall-cert-link" bindtap="onGoToBadges">
+          <text>义工证书</text>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <scroll-view scroll-x="true" class="honor-badge-scroll" enable-flex>
+        <view class="honor-badge-row">
+          <view
+            class="honor-badge-item {{item.unlocked ? 'unlocked' : 'locked'}}"
+            wx:for="{{badgeList}}"
+            wx:key="id"
+            bindtap="onTapBadge"
+            data-id="{{item.id}}"
+          >
+            <view class="honor-badge-circle">
+              <text class="honor-badge-emoji">{{item.emoji}}</text>
+            </view>
+            <text class="honor-badge-name">{{item.name}}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 分组二：日常记录 —— 护持足迹（打卡历程）与餐报提交记录，命名区分避免混淆 -->
+    <view class="list-group-label">日常记录</view>
+    <view class="action-list-container">
+      <view class="action-item-cell" bindtap="onGoToJourney">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-flower"></view>
+          <text class="item-text">我的护持足迹</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell" bindtap="onGoToMySubmissions">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-history"></view>
+          <text class="item-text">我的餐报提交记录</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <!-- 🌟 店长专属管理入口：与普通义工个人页形成权限层级的视觉区隔，
+           复用首页已有的 goToStatistics 同一个数据统计页，不新开一套统计逻辑 -->
+      <view class="action-item-cell manager-only-cell" wx:if="{{currentUserRole === 'store_manager' || currentUserRole === 'super_admin'}}" bindtap="onGoToStoreOverview">
+        <view class="item-left">
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">门店营运数据总览</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区 -->
+    <view class="list-group-label">关于与帮助</view>
+    <view class="action-list-container">
+      <view class="action-item-cell" bindtap="onGoToAbout">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-about"></view>
+          <text class="item-text">关于雨花斋与阳光账本</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell danger-cell" wx:if="{{hasPrivilege}}" bindtap="onReleaseUserRole">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-release"></view>
+          <text class="item-text danger-text">切换身份 / 退出当前绑定</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- 分组四：低权限自助入口 —— 刻意置底、弱化视觉，避免与核心操作抢焦点 -->
+    <view class="action-list-container subtle-group" wx:if="{{!hasPrivilege}}">
+      <view class="action-item-cell subtle-cell" bindtap="onTriggerActivate">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-key subtle-icon"></view>
+          <text class="item-text subtle-text">激活店长 / 财务特权</text>
+        </view>
+        <view class="item-arrow subtle-icon">❯</view>
+      </view>
+    </view>
+
+    <!-- 分组五：系统/管理权限 —— 仅超级管理员可见的开发者工具箱 -->
+    <view class="admin-developer-section" wx:if="{{isSuperAdmin}}">
+      <view class="admin-divider">开发者与超管工具箱</view>
+
+      <view class="action-item-cell" bindtap="onTriggerGenCode">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-key"></view>
+          <text class="item-text">生成特权邀请码</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell" bindtap="onTriggerClearCache">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-clear"></view>
+          <text class="item-text">一键清洗系统测试缓存</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell" bindtap="onGoToStatistics">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-screen"></view>
+          <text class="item-text">全国数据大屏</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+  </view>
+
+  <!-- 卸任特权 Warning 弹窗 -->
+  <view class="release-modal-mask {{showReleaseModal ? 'show' : ''}}" bindtap="onCancelReleaseModal">
+    <view class="release-modal-card" catchtap="stopPropagation">
+      <view class="release-warning-icon">⚠️</view>
+
+      <text class="release-modal-title">确认退出 <text class="release-role-highlight">「{{releaseRoleLabel}}」</text> 身份？</text>
+
+      <view class="release-consequence-list">
+        <view class="release-consequence-item">
+          <text class="bullet-dot">•</text>
+          <text class="bullet-text">立即失去【{{currentStoreName || '当前门店'}}】的写账 / 审账权限</text>
+        </view>
+        <view class="release-consequence-item">
+          <text class="bullet-dot">•</text>
+          <text class="bullet-text">本地权限凭证将被清除，需重新申请或扫码激活</text>
+        </view>
+        <view class="release-consequence-item">
+          <text class="bullet-dot">•</text>
+          <text class="bullet-text">新负责人可使用激活码重新绑定该门店身份</text>
+        </view>
+        <view class="release-consequence-item danger">
+          <text class="bullet-dot">•</text>
+          <text class="bullet-text">该操作不可逆，请务必确认后再操作</text>
+        </view>
+      </view>
+
+      <view class="release-modal-footer">
+        <button class="release-btn-cancel" bindtap="onCancelReleaseModal">我再想想</button>
+        <button class="release-btn-confirm" bindtap="onConfirmReleaseRole" loading="{{isReleasing}}" disabled="{{isReleasing}}">确认退出</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🌟 义工证书全屏 Modal：Canvas 绘制完成前展示加载态，完成后展示可保存的长图预览 -->
+  <view class="certificate-modal-mask" wx:if="{{showCertificateModal}}" bindtap="onCloseCertificateModal">
+    <view class="certificate-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header">
+        <text class="certificate-modal-title">爱心护持荣誉证书</text>
+        <view class="certificate-modal-close" bindtap="onCloseCertificateModal">✕</view>
+      </view>
+
+      <view class="certificate-canvas-wrap">
+        <!-- Canvas 本身始终挂载在 DOM 里供 selectorQuery 查询，绘制完成后用生成的图片
+             覆盖显示在它上面——2D Canvas 无法直接作为图片展示/长按保存，必须转成图片 -->
+        <canvas type="2d" id="certificateCanvas" class="certificate-canvas" style="width: 340px; height: 480px;"></canvas>
+        <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
+        <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}">
+          <text>正在生成证书…</text>
+        </view>
+      </view>
+
+      <button class="certificate-save-btn" bindtap="onSaveCertificateToAlbum" disabled="{{certificateGenerating || !certificateTempFilePath}}">
+        💾 保存证书分享朋友圈
+      </button>
+    </view>
+  </view>
+
+  <mine-quick-sheet id="mineQuickSheet" />
+
+</view>

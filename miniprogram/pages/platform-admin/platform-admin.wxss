@@ -1,0 +1,337 @@
+.pa-page {
+  min-height: 100vh;
+  background: #F4F5F7;
+}
+
+.pa-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  height: 88rpx;
+  background: #1C2530;
+}
+
+.pa-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 36rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.pa-nav-back-hover {
+  opacity: 0.5;
+}
+
+.pa-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.pa-nav-placeholder {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+}
+
+.pa-loading-state,
+.pa-denied-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 48rpx;
+  text-align: center;
+}
+
+.pa-denied-icon {
+  font-size: 80rpx;
+  margin-bottom: 24rpx;
+}
+
+.pa-denied-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 16rpx;
+}
+
+.pa-denied-sub {
+  font-size: 26rpx;
+  color: #888888;
+  line-height: 1.6;
+  margin-bottom: 40rpx;
+}
+
+.pa-denied-btn {
+  background: #1C2530;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  padding: 0 48rpx;
+}
+
+.pa-content {
+  height: calc(100vh - 88rpx);
+  box-sizing: border-box;
+  padding: 24rpx;
+}
+
+.pa-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.pa-overview-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pa-ov-num {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #1C2530;
+}
+
+.pa-ov-label {
+  font-size: 22rpx;
+  color: #999999;
+  margin-top: 8rpx;
+}
+
+.pa-soon-expire-box {
+  background: #FFF3E0;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.pa-soon-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #E65100;
+  margin-bottom: 8rpx;
+  display: block;
+}
+
+.pa-soon-item {
+  font-size: 24rpx;
+  color: #BF6000;
+  display: block;
+  padding: 4rpx 0;
+}
+
+.pa-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.pa-section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.pa-btn-create {
+  font-size: 24rpx;
+  background: #1C2530;
+  color: #FFFFFF;
+  padding: 0 24rpx;
+  line-height: 60rpx;
+}
+
+.pa-create-form,
+.pa-tenant-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-input {
+  background: #F4F5F7;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  font-size: 26rpx;
+  margin-bottom: 16rpx;
+}
+
+.pa-textarea {
+  background: #F4F5F7;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  font-size: 26rpx;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120rpx;
+  margin-bottom: 16rpx;
+}
+
+.pa-btn-submit {
+  background: #1C2530;
+  color: #FFFFFF;
+  font-size: 28rpx;
+}
+
+.pa-tenant-empty {
+  text-align: center;
+  padding: 80rpx 0;
+  color: #999999;
+  font-size: 26rpx;
+}
+
+.pa-tenant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.pa-tenant-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.pa-tenant-status {
+  font-size: 20rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  color: #FFFFFF;
+  background: #999999;
+}
+
+.pa-status-active {
+  background: #2E7D32;
+}
+
+.pa-status-trial {
+  background: #F9A825;
+}
+
+.pa-status-suspended,
+.pa-status-expired {
+  background: #C62828;
+}
+
+.pa-tenant-row {
+  display: block;
+  font-size: 24rpx;
+  color: #666666;
+  margin-bottom: 6rpx;
+}
+
+.pa-tenant-id {
+  color: #BBBBBB;
+  font-size: 20rpx;
+}
+
+.pa-tenant-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.pa-btn-small {
+  flex: 1;
+  font-size: 24rpx;
+  background: #EDEFF2;
+  color: #333333;
+  line-height: 64rpx;
+}
+
+.pa-btn-warn {
+  background: #FBE9E7;
+  color: #C62828;
+}
+
+.pa-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pa-modal-box {
+  width: 600rpx;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  box-sizing: border-box;
+}
+
+.pa-modal-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 24rpx;
+}
+
+.pa-plan-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-plan-tag {
+  flex: 1;
+  text-align: center;
+  font-size: 24rpx;
+  padding: 16rpx 0;
+  background: #F4F5F7;
+  border-radius: 10rpx;
+  color: #666666;
+}
+
+.pa-plan-tag.active {
+  background: #1C2530;
+  color: #FFFFFF;
+}
+
+.pa-field-label {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  margin-bottom: 8rpx;
+}
+
+.pa-modal-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.pa-btn-cancel {
+  flex: 1;
+  font-size: 28rpx;
+  background: #EDEFF2;
+  color: #333333;
+}
+
+.pa-modal-actions .pa-btn-submit {
+  flex: 1;
+}

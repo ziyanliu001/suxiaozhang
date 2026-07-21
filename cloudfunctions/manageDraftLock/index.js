@@ -282,7 +282,16 @@ exports.main = async (event, context) => {
     try {
       const result = await db.runTransaction(async (transaction) => {
         // 事务内验证管理员身份
-        const userInfo = await getUserRoleInTransaction(transaction, openId);
+        const roleRes = await transaction.collection('user_roles').where({ _openid: openId }).limit(1).get();
+        const adminDoc = roleRes.data && roleRes.data[0];
+        const userInfo = adminDoc
+          ? {
+              role: adminDoc.role || 'volunteer',
+              tenantId: adminDoc.tenantId || '',
+              isAdmin: ['super_admin', 'store_manager'].includes(adminDoc.role)
+            }
+          : { role: 'volunteer', tenantId: '', isAdmin: false };
+
         if (!userInfo.isAdmin) {
           return { success: false, errMsg: '无管理员权限' };
         }
@@ -303,6 +312,15 @@ exports.main = async (event, context) => {
         // 校验 storeId
         if (!validateLockStoreId(currentLock, storeId)) {
           return { success: false, errMsg: '门店数据异常' };
+        }
+
+        // 🏢 多租户边界：仅可强制解锁本机构门店的锁，防止跨机构越权操作
+        if (userInfo.tenantId) {
+          const storeDoc = await transaction.collection('stores').doc(storeId).get().catch(() => null);
+          const targetTenantId = storeDoc && storeDoc.data && storeDoc.data.tenantId;
+          if (targetTenantId && targetTenantId !== userInfo.tenantId) {
+            return { success: false, errMsg: '无权强制解锁其他机构的门店' };
+          }
         }
 
         await transaction.collection('store_locks').doc(lockDocId).remove();
