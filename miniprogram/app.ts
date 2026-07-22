@@ -55,29 +55,29 @@ App({
   onLaunch() {
     console.log('[App] onLaunch start');
 
-    // 云开发初始化（延迟到首页再执行，避免阻塞启动）
-    // 🐛 容错 + 时序错开：wx.cloud.init 本身可能同步抛出致命错误（典型表现：Fatal:
-    // unexpected loadSdkSubPackage case），本地 Linux 模拟器环境下高频出现，真机环境
-    // 完全正常——根因是开发者工具在 onLaunch 阶段异步挂载云开发基础库分包，如果在
-    // onLaunch 同步执行阶段就立刻调用 wx.cloud.init，容易撞上分包还没挂载完全的窗口期。
-    // 用 wx.nextTick 先让出当前这一帧，再叠加 1500ms 的宏任务延迟，把首次调用尽量错开到
-    // 分包加载大概率已经完成、主线程空闲之后再执行；仍失败则再重试一次。
-    // 🛡️ isCloudReady 目前唯一的读取点在 fetchUserStorePermissions（经 _delayedLoginInit
-    // 500ms 后触发），如果只把这里的首次调用推迟到 1500ms，会出现"登录预热跑在云初始化
-    // 完成之前"的时序倒挂——健康的真机环境下也会因为读到还没来得及置位的 isCloudReady
-    // 而被误判成云不可用，静默跳过多店权限拉取。为此把 fetchUserStorePermissions 里的
-    // 判断改成了实时探测的 isCloudAvailable()（与全项目其余云调用点一致的判定方式），
-    // 不再依赖这个只会在 onLaunch 里某个时间点才置位一次的缓存标记，从根上消除这个时序耦合。
-    wx.nextTick(() => {
-      setTimeout(() => {
-        if (!this._attemptCloudInit()) {
-          console.log('[App] wx.cloud.init 首次尝试失败，1000ms 后发起重试...');
-          setTimeout(() => {
-            this._attemptCloudInit();
-          }, 1000);
-        }
-      }, 1500);
-    });
+    // 云开发初始化
+    // 🐛 根因修复：此前无条件把首次 wx.cloud.init 延迟到 onLaunch 后 1.5s 才执行，
+    // 是为了避开本地 Linux 开发者工具在 init 阶段偶发的致命错误（Fatal: unexpected
+    // loadSdkSubPackage case）——但该问题按既有排查结论"本地 Linux 模拟器环境下高频
+    // 出现，真机环境完全正常"，也就是说这 1.5s+ 的人为延迟对真机用户毫无必要，却让
+    // 所有真机用户在这段窗口期内的早期云调用（例如首页 onLoad 就发起的云函数请求）
+    // 100% 撞上 "Cloud API isn't enabled, please call wx.cloud.init first"。
+    // 改为优先同步尝试一次：真机/健康环境下 onLaunch 内同步执行就能立刻就绪，早于
+    // 任何页面的 onLoad；仅当这次同步尝试真的失败（判定为撞上了那个已知的 Linux
+    // 开发者工具问题）时，才退回原来的延迟重试兜底路径，不让该环境的用户失去保护。
+    if (!this._attemptCloudInit()) {
+      console.log('[App] wx.cloud.init 同步尝试失败（疑似本地开发者工具已知问题），进入延迟重试...');
+      wx.nextTick(() => {
+        setTimeout(() => {
+          if (!this._attemptCloudInit()) {
+            console.log('[App] wx.cloud.init 延迟重试仍失败，1000ms 后再次发起...');
+            setTimeout(() => {
+              this._attemptCloudInit();
+            }, 1000);
+          }
+        }, 1500);
+      });
+    }
 
     const logs = wx.getStorageSync('logs') || [];
     logs.unshift(Date.now());
@@ -158,10 +158,10 @@ App({
 
   async fetchUserStorePermissions(openid: string) {
     try {
-      // 🌟 这里改用 isCloudAvailable() 实时探测，而不是读取 globalData.isCloudReady 缓存标记：
-      // 云初始化已延迟到 onLaunch 后约 1.5s 才发起（见上方 wx.nextTick 时序调整），而
-      // _delayedLoginInit 仍固定在 500ms 触发本方法，若继续依赖缓存标记，健康设备上也会
-      // 因为标记还没来得及置 true 而被误判为"云不可用"，导致多店权限拉取被永久跳过。
+      // 🌟 用 isCloudAvailable() 实时探测（其内部本就会核对 globalData.isCloudReady，
+      // 见 utils/cloudGuard.ts）：多数环境下 onLaunch 已同步完成 wx.cloud.init，
+      // 但退回延迟重试路径的少数环境里，_delayedLoginInit 固定 500ms 触发的本方法仍可能
+      // 早于云初始化真正就绪，实时探测能正确识别这种情况并跳过，而不是走缓存的一次性判断。
       if (!isCloudAvailable()) {
         console.warn('[App] 云开发 SDK 不可用，跳过多店权限拉取');
         return;

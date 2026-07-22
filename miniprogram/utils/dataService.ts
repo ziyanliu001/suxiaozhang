@@ -6,6 +6,16 @@ import { isCloudAvailable } from './cloudGuard';
 
 const STORAGE_KEY = 'local_report_logs';
 
+// 🛡️ "云不可用，本轮跳过整批同步" 这条路径此前完全没有节流：MAX_OFFLINE_SYNC_RETRIES
+// 熔断只统计【单条记录真正打了云函数请求但失败】的次数，而 isCloudAvailable() 为 false
+// 时函数在打请求之前就直接 return，根本不会走到那段计数逻辑——如果设备持续离线/云初始化
+// 迟迟未就绪，index/history/statistics 任一页面每次 onLoad/onShow 都会重新命中这条
+// "跳过"分支并打一条 console.warn，天数越长、访问越频繁，控制台里就越像"疯狂刷屏"。
+// 这里给这条路径单独加一个轻量节流：同一个冷却窗口内只打印一次警告，但不影响实际
+// 跳过同步这个行为本身——云一旦恢复可用，下一次调用仍会正常继续同步，不是被拦死。
+const CLOUD_UNAVAILABLE_WARN_COOLDOWN_MS = 30 * 1000;
+let lastCloudUnavailableWarnAt = 0;
+
 function getLocalReports(): any[] {
   try {
     const data = wx.getStorageSync(STORAGE_KEY);
@@ -509,7 +519,11 @@ export const DataService = {
     // 一旦 wx.cloud 处于损坏状态会直接抛出未捕获异常。这里改为提前探测，
     // 不可用时跳过本轮同步（本地数据保持 isSynced:false，下次联网/onShow 时会自动重试）。
     if (!isCloudAvailable()) {
-      console.warn('[DataService] 云开发 SDK 不可用，本轮跳过本地数据同步，待下次自动重试');
+      const now = Date.now();
+      if (now - lastCloudUnavailableWarnAt > CLOUD_UNAVAILABLE_WARN_COOLDOWN_MS) {
+        lastCloudUnavailableWarnAt = now;
+        console.warn('[DataService] 云开发 SDK 不可用，本轮跳过本地数据同步，待下次自动重试');
+      }
       return { success: false, syncedCount: 0, failedCount: unsyncedReports.length };
     }
 

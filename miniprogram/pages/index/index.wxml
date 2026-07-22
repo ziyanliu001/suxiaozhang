@@ -918,21 +918,23 @@
         <!-- 🍱 3 列九宫格菜品卡片：图+菜名一一对应，与 daily-menu 食谱管理页的
              展示网格保持同一套视觉语言 -->
         <view class="recipe-dish-grid">
-          <view class="recipe-dish-item" wx:for="{{recipeImages}}" wx:for-item="img" wx:for-index="idx" wx:key="url">
-            <view class="recipe-dish-img-wrap">
-              <image wx:if="{{img.url && !imageLoadFailedMap[img.url]}}" class="recipe-dish-img" src="{{img.url}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{idx}}" binderror="onImageLoadError" data-url="{{img.url}}"/>
-              <view wx:elif="{{img.url}}" class="thumb-load-failed" bindtap="onRetryImage" data-url="{{img.url}}">
-                <text class="thumb-load-failed-icon">⚠️</text>
-                <text class="thumb-load-failed-text">加载失败</text>
+          <block wx:for="{{recipeImages}}" wx:key="index" wx:for-item="img" wx:for-index="idx">
+            <view class="recipe-dish-item">
+              <view class="recipe-dish-img-wrap">
+                <image wx:if="{{(img.url || img) && !imageLoadFailedMap[img.url || img]}}" class="recipe-dish-img" src="{{img.url || img}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{idx}}" binderror="onImageLoadError" data-url="{{img.url || img}}"/>
+                <view wx:elif="{{img.url || img}}" class="thumb-load-failed" bindtap="onRetryImage" data-url="{{img.url || img}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                  <text class="thumb-load-failed-text">加载失败</text>
+                </view>
+                <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{idx}}">✕</view>
               </view>
-              <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{idx}}">✕</view>
+              <input class="recipe-dish-name-input" placeholder="菜名" value="{{img.name}}" bindinput="onRecipeDishNameInput" data-index="{{idx}}" maxlength="20" />
             </view>
-            <input class="recipe-dish-name-input" placeholder="输入菜名，如：红烧冬瓜" value="{{img.name}}" bindinput="onRecipeDishNameInput" data-index="{{idx}}" maxlength="20" />
-          </view>
+          </block>
 
           <view class="recipe-dish-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}">
-            <text class="add-icon">{{recipeUploading ? '…' : '+'}}</text>
-            <text class="add-txt">{{recipeUploading ? '压缩中' : '添加'}}</text>
+            <view class="recipe-add-icon">{{recipeUploading ? '…' : '+'}}</view>
+            <view class="recipe-add-txt">{{recipeUploading ? '压缩中' : '添加照片'}}</view>
           </view>
         </view>
       </view>
@@ -999,21 +1001,24 @@
             <view class="result-photo-title">🎨 今日开餐实景图集</view>
             <scroll-view scroll-x class="result-photo-scroll">
               <view class="result-photo-item" wx:for="{{recipeImages}}" wx:key="*this">
+                <!-- 🛡️ recipeImages 现在是 {url,name}[]，但这里用 item.url || item 兼容
+                     万一遇到纯字符串数组的场景，两种数据形状都能正常出图 -->
                 <image
-                  wx:if="{{!imageLoadFailedMap[item]}}"
+                  wx:if="{{!imageLoadFailedMap[item.url || item]}}"
                   class="result-photo-img"
-                  src="{{item}}"
+                  src="{{item.url || item}}"
                   mode="aspectFill"
                   bindtap="onPreviewImage"
                   data-source="recipe"
                   data-index="{{index}}"
                   binderror="onImageLoadError"
-                  data-url="{{item}}"
+                  data-url="{{item.url || item}}"
                 />
-                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item.url || item}}">
                   <text class="thumb-load-failed-icon">⚠️</text>
                   <text class="thumb-load-failed-text">加载失败</text>
                 </view>
+                <text class="result-photo-name" wx:if="{{item.name}}">{{item.name}}</text>
               </view>
             </scroll-view>
           </view>
