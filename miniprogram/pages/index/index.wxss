@@ -2331,55 +2331,82 @@ page {
   margin-top: 4rpx;
 }
 
-/* 紧凑单行预览：今日食谱照片 / 今日大事记照片 专用，横向滚动，图片数量再多也只占一行高度 */
-.compact-photo-row {
-  width: 100%;
-  white-space: nowrap;
+/* 🍱 今日食谱照片：3 列九宫格菜品卡片（实拍图 + 菜名输入框），与
+   pages/daily-menu 食谱管理页的 .dm-image-grid 展示态同款布局与配色，
+   保证首页随手拍的食谱和食谱管理页看起来是同一套视觉语言 */
+.recipe-dish-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin-bottom: 16rpx;
 }
 
-.compact-photo-item {
+.recipe-dish-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recipe-dish-img-wrap {
   position: relative;
-  display: inline-block;
-  width: 120rpx;
-  height: 120rpx;
-  margin-right: 16rpx;
-  vertical-align: top;
+  width: 100%;
+  padding-top: 100%;
+  border-radius: 16rpx;
+  overflow: visible;
 }
 
-.compact-photo-img {
+.recipe-dish-img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  border-radius: 12rpx;
+  border-radius: 16rpx;
   border: 1.5rpx solid #EFE6D8;
 }
 
-/* 边框/图标规格与 .grid-add-btn 统一（支出凭证/大事记网格同款虚线框），
-   仅保留自身固定 120rpx 尺寸——横滚单行布局本就需要固定宽高，与网格按格子宽度
-   自适应是两种不同的排布方式，不属于本次要统一的范畴 */
-.compact-photo-add {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 120rpx;
-  height: 120rpx;
+.recipe-dish-name-input {
+  margin-top: 8rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  font-size: 22rpx;
+  color: #333333;
+  text-align: center;
+  background: #FAF8F5;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 10rpx;
+  box-sizing: border-box;
+}
+
+/* 边框/图标规格与 .grid-add-btn 统一（支出凭证/大事记网格同款虚线框） */
+.recipe-dish-add {
+  position: relative;
+  width: 100%;
+  padding-top: 100%;
   background: #FAF8F5;
   border: 2.5rpx dashed #C8B195;
   border-radius: 16rpx;
-  vertical-align: top;
 }
 
-.compact-photo-add .add-icon {
+.recipe-dish-add .add-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -70%);
   font-size: 40rpx;
   color: #8C1D18;
   line-height: 1;
   font-weight: 300;
 }
 
-.compact-photo-add .add-txt {
+.recipe-dish-add .add-txt {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, 40%);
   font-size: 18rpx;
   color: #8C1D18;
-  margin-top: 2rpx;
+  white-space: nowrap;
 }
 
 .upload-guide-text {

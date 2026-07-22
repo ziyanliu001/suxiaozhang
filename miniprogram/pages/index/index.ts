@@ -271,8 +271,8 @@ Page({
     receiptImages: [] as string[],
     // 🛡️ 缩略图加载失败兜底：key 是图片路径本身，命中即代表这张图当前应该展示
     // "加载失败，点击重试"占位块而不是一个空白/裂图的 <image>。receiptImages/
-    // independent_image_urls/recipeImages/activityImages 现在全部是纯字符串数组，
-    // 没有可以挂 loadFailed 字段的对象，统一用一张按路径查表的 map 来标记
+    // independent_image_urls/activityImages 是纯字符串数组，recipeImages 是
+    // {url,name}[]（取 .url 当 key），统一用一张按路径查表的 map 来标记
     imageLoadFailedMap: {} as Record<string, boolean>,
     // 🛡️ 首页"今日食谱"/"今日门店日志"预览卡缩略图加载失败兜底：这两张卡此前是
     // 全仓库唯一没有 binderror/失败占位保护的图片网格，云存储读权限异常等情况下
@@ -280,10 +280,10 @@ Page({
     // 与 imageLoadFailedMap 同款的按 url 查表方案
     previewImagesFailedMap: {} as Record<string, boolean>,
     // 🍱 今日食谱照片（随餐报一并提交，最多 9 张）
-    // 🛡️ 与 receiptImages 100% 同构：纯字符串数组，选图后立即塞本地 tempFilePath，
-    // 压缩上传完成后原地把同一下标替换成云端 fileID 字符串——不再用 {url,thumbUrl}
-    // 对象，WXML 侧直接 {{item}} 绑定，不走任何属性路径解析
-    recipeImages: [] as string[],
+    // 每个元素对应一道菜：{url: 本地临时路径/云端 fileID, name: 菜品名称}——
+    // 与 daily-menu 页面 editForm.images 同构，提交时一并组装成 [{url,name}] 传给
+    // manageDailyMenu 云函数，让首页随手拍的食谱也能落上菜名
+    recipeImages: [] as Array<{ url: string; name: string }>,
     recipeUploading: false,
     // 📌 今日大事记照片 + 简短文字描述（随餐报一并提交，最多 18 张），同上纯字符串数组
     activityImages: [] as string[],
@@ -3915,19 +3915,19 @@ Page({
       const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
       if (paths.length === 0) return;
 
-      // 🌟 与支出凭证(receiptImages)100% 同构：纯字符串数组，选完图立刻把本地
-      // tempFilePath 塞进数组先渲染出来，不等压缩上传跑完才显示——本地文件选完
-      // 那一刻就是有效路径，WXML 直接 {{item}} 绑定，不经过任何对象属性访问
+      // 选完图立刻把本地 tempFilePath 塞进数组先渲染出来（name 先留空待用户填写），
+      // 不等压缩上传跑完才显示——本地文件选完那一刻就是有效路径
       const insertStart = this.data.recipeImages.length;
-      this.setData({ recipeImages: [...this.data.recipeImages, ...paths], recipeUploading: true });
+      const placeholders = paths.map((p) => ({ url: p, name: '' }));
+      this.setData({ recipeImages: [...this.data.recipeImages, ...placeholders], recipeUploading: true });
 
       try {
         const uploaded = await compressAndUploadImages(HOME_COMPRESS_CANVAS_ID, paths, `daily_menus/${this.data.currentStoreId}`);
-        // 压缩上传跑完后，原地把本地路径字符串替换成云端 fileID 字符串——数组
-        // 顺序与 paths/uploaded 一一对应，按下标原地替换，不按值反查
+        // 压缩上传跑完后，原地把每个条目的本地路径 url 替换成云端 fileID——数组
+        // 顺序与 paths/uploaded 一一对应，按下标原地替换 url，保留用户此时已输入的 name
         const finalImages = [...this.data.recipeImages];
         uploaded.forEach((u, i) => {
-          finalImages[insertStart + i] = u.url;
+          finalImages[insertStart + i] = { ...finalImages[insertStart + i], url: u.url };
         });
         this.setData({ recipeImages: finalImages });
       } catch (uploadErr) {
@@ -3946,6 +3946,12 @@ Page({
     }
   },
 
+  // 🍱 每道菜的名称输入框：与其配图同一个 recipeImages[index] 对象，只改 name 字段
+  onRecipeDishNameInput(e: any) {
+    const index = e.currentTarget.dataset.index;
+    this.setData({ [`recipeImages[${index}].name`]: e.detail.value });
+  },
+
   // 🌟 统一大图预览入口：录入端的小图缩略图、以及【生成结果预览】里新增的照片墙，
   // 展示的都是同一份 recipeImages/activityImages 数据源（不是各自拷贝一份），
   // 用 data-source 区分点的是"食谱照片"还是"大事记照片"，一份逻辑同时服务两处入口，
@@ -3953,11 +3959,17 @@ Page({
   onPreviewImage(e: any) {
     const source = e.currentTarget.dataset.source as 'recipe' | 'activity';
     const index = e.currentTarget.dataset.index;
-    const images = source === 'activity' ? this.data.activityImages : this.data.recipeImages;
-    if (!images || images.length === 0 || index >= images.length) return;
 
-    // 🛡️ recipeImages/activityImages 现在是纯字符串数组（本机 tempFilePath 或
-    // 云端 fileID），直接过滤掉空值/非字符串即可，不再需要 .url 属性访问
+    // 🛡️ recipeImages 是 {url,name}[]（每道菜一图一名），activityImages 仍是纯
+    // 字符串数组（本机 tempFilePath 或云端 fileID）——两种数据源在这里统一先摘出
+    // 一份纯字符串 url 列表，再走同一套预览逻辑
+    const rawImages = source === 'activity' ? this.data.activityImages : this.data.recipeImages;
+    if (!rawImages || rawImages.length === 0 || index >= rawImages.length) return;
+
+    const images: string[] = source === 'recipe'
+      ? rawImages.map((img: any) => img && img.url)
+      : rawImages;
+
     const validUrls = images.filter((u: any) => u && typeof u === 'string');
     const currentUrl = images[index];
     if (!currentUrl || typeof currentUrl !== 'string') {
@@ -3975,8 +3987,9 @@ Page({
   // 常见报错含 403/-1——还是别的原因，而不是盲猜），同时把这张图标记为"加载失败"，
   // 驱动 WXML 展示可点击重试的占位块，而不是放任小程序原生的裂图/空白晾在那里
   // （这就是"缩略图不显示，呈占位色块"最终呈现给用户的样子）。
-  // receiptImages/independent_image_urls/recipeImages/activityImages 现在全部是
-  // 纯字符串数组，没有对象字段可挂 loadFailed，统一用一张"路径 -> 是否失败"的 map。
+  // receiptImages/independent_image_urls/activityImages 是纯字符串数组，
+  // recipeImages 是 {url,name}[]，都没有合适的地方挂 loadFailed，统一用一张
+  // "路径 -> 是否失败"的 map（recipeImages 取其 .url 当 key）。
   // 🛡️ 不能用 `imageLoadFailedMap.${url}` 这种 setData 点路径写法——url 本身
   // 大概率含点号（域名/文件后缀/cloud fileID），会被点路径解析器拆成好几段，直接写崩；
   // 改成整份 map 对象替换，规避这个坑
@@ -5393,12 +5406,10 @@ Page({
     let recipeFailed = false;
     let activityFailed = false;
 
-    // 🛡️ recipeImages/activityImages 在页面这一侧是纯字符串数组（与 receiptImages
-    // 同构，供 WXML 直接 {{item}} 绑定），但 manageDailyMenu/manageActivityLog 云函数
-    // 的 sanitizeImages 需要 {url,thumbUrl} 对象——传纯字符串进去，img.url 取不到值，
-    // 会被云端过滤器整批丢弃，导致"发布成功但图片全没了"。这里在真正发出请求前转换回
-    // 数据库期待的对象形状，字符串数组只是页面内部状态，不是持久化 schema
-    const recipeImagesForSubmit = recipeImages.map((url: string) => ({ url, thumbUrl: url }));
+    // 🛡️ recipeImages 页面内部状态是 {url,name}[]，提交前补上 manageDailyMenu 云函数
+    // sanitizeImages 需要的 thumbUrl 字段（复用 url，与 daily-menu 页面同款做法）。
+    // activityImages 仍是纯字符串数组，同样转换成 manageActivityLog 期待的对象形状
+    const recipeImagesForSubmit = recipeImages.map((img: any) => ({ url: img.url, thumbUrl: img.url, name: (img.name || '').trim() }));
     const activityImagesForSubmit = activityImages.map((url: string) => ({ url, thumbUrl: url }));
 
     if (hasRecipe) {

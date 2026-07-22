@@ -915,21 +915,26 @@
           </text>
         </view>
 
-        <scroll-view scroll-x class="compact-photo-row">
-          <view class="compact-photo-item" wx:for="{{recipeImages}}" wx:key="*this">
-            <image wx:if="{{!imageLoadFailedMap[item]}}" class="compact-photo-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{index}}" binderror="onImageLoadError" data-url="{{item}}"/>
-            <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
-              <text class="thumb-load-failed-icon">⚠️</text>
-              <text class="thumb-load-failed-text">加载失败</text>
+        <!-- 🍱 3 列九宫格菜品卡片：图+菜名一一对应，与 daily-menu 食谱管理页的
+             展示网格保持同一套视觉语言 -->
+        <view class="recipe-dish-grid">
+          <view class="recipe-dish-item" wx:for="{{recipeImages}}" wx:for-item="img" wx:for-index="idx" wx:key="url">
+            <view class="recipe-dish-img-wrap">
+              <image wx:if="{{img.url && !imageLoadFailedMap[img.url]}}" class="recipe-dish-img" src="{{img.url}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{idx}}" binderror="onImageLoadError" data-url="{{img.url}}"/>
+              <view wx:elif="{{img.url}}" class="thumb-load-failed" bindtap="onRetryImage" data-url="{{img.url}}">
+                <text class="thumb-load-failed-icon">⚠️</text>
+                <text class="thumb-load-failed-text">加载失败</text>
+              </view>
+              <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{idx}}">✕</view>
             </view>
-            <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{index}}">✕</view>
+            <input class="recipe-dish-name-input" placeholder="输入菜名，如：红烧冬瓜" value="{{img.name}}" bindinput="onRecipeDishNameInput" data-index="{{idx}}" maxlength="20" />
           </view>
 
-          <view class="compact-photo-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}">
+          <view class="recipe-dish-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}">
             <text class="add-icon">{{recipeUploading ? '…' : '+'}}</text>
             <text class="add-txt">{{recipeUploading ? '压缩中' : '添加'}}</text>
           </view>
-        </scroll-view>
+        </view>
       </view>
 
       <!-- 📌 门店今日日志/大事记：随餐报一并提交，成功后自动归档至门店日志时间轴 -->
