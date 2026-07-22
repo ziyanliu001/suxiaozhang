@@ -1,7 +1,7 @@
 import { AuthService } from '../../utils/authService';
 import { getSelectedStore } from '../../utils/storeManager';
 import { getSafeSystemInfo } from '../../utils/util';
-import { compressAndUploadSquareImage } from '../../utils/imageCompress';
+import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { drawVolunteerCertificate } from '../../utils/drawVolunteerCertificate';
 import {
@@ -364,13 +364,15 @@ Page({
     }
 
     try {
-      // 🐛 头像"被放大只显示中央局部"排查结论：wx.chooseAvatar 的原生裁剪 UI 在部分手机
-      // 微信客户端版本/开发者工具 Linux 模拟环境下不总是可靠触发正方形裁剪，导致这里拿到的
-      // tempAvatarUrl 实际是非正方形原图；而 <image mode="aspectFill"> 只能裁剪"显示效果"，
-      // 裁不掉底层文件本身的长宽比，于是在圆形头像框里表现为把原图长边居中裁掉一大截、
-      // 视觉上像是"被放大只看到中间"。改用 compressAndUploadSquareImage 从源头强制居中裁剪成
-      // 正方形再压缩上传，存进云端的文件本身就是 1:1，不再依赖原生裁剪 UI 是否生效。
-      const uploaded = await compressAndUploadSquareImage(PROFILE_COMPRESS_CANVAS_ID, tempAvatarUrl, 'users/avatars');
+      // 🐛 头像"被严重放大只看到局部色块"根因修复：此前这里用 compressAndUploadSquareImage
+      // 在本地 Canvas 上做强制方形像素裁剪（指定源矩形 sx/sy/sw/sh 截取）。经 [verify] 双重
+      // 独立测量（wx.getImageInfo 与 canvas.createImage() 的 img.width/height 互相印证）
+      // 确认裁剪公式本身无误，但换成相册高清大图实测后依然稳定复现同样的"爆图"——问题出在
+      // 「指定源矩形做二次采样」这条路径本身，与图片尺寸/裁剪公式无关。改用
+      // compressAndUploadScaledImage：全程只做整图等比缩放，不做任何源矩形子区域截取
+      // （与食谱照片/支出凭证共用同一条已被大量验证稳定的管道），圆形/方形展示效果完全
+      // 交给 <image mode="aspectFill"> 在展示层做，不再依赖本地 Canvas 像素级裁剪。
+      const uploaded = await compressAndUploadScaledImage(PROFILE_COMPRESS_CANVAS_ID, tempAvatarUrl, 'users/avatars');
 
       const result = await AuthService.updateProfile({ avatarUrl: uploaded.url });
 

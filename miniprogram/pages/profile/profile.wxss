@@ -127,13 +127,16 @@
      （.avatar-ring 是 align-items:center，不会拉伸子项撑满）里计算裁剪区域时不够可靠，
      曾观察到按图片自身原始像素尺寸而非容器尺寸取景、出现"放大只看到中间"的现象。
      父级 .avatar-ring 内容区本就是固定 120rpx×120rpx，这里直接写死定值更稳妥。 */
-  width: 120rpx;
-  height: 120rpx;
+  width: 120rpx !important;
+  height: 120rpx !important;
   border-radius: 50% !important;
   display: block;
   overflow: hidden !important;
   box-sizing: border-box;
   background: #F1EFEA;
+  /* 🛡️ 与 mode="aspectFill" 是同一语义的双保险：object-fit 在部分基础库/渲染路径下
+     对 <image> 生效更可靠，两者一起兜底，不冲突 */
+  object-fit: cover !important;
 }
 
 .user-avatar-placeholder {

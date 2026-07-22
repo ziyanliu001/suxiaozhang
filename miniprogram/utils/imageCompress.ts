@@ -111,40 +111,6 @@ function loadImageOntoCanvasScaled(canvas: any, src: string, maxLongEdge: number
   });
 }
 
-// 带源图裁剪区域的绘制：用于头像等必须强制 1:1 的场景。
-// 与 loadImageOntoCanvasScaled 的区别：那个函数是把整张源图等比缩放铺满目标画布（保留原始宽高比），
-// 这个函数先在源图上截取正方形区域，再铺满目标画布——即"裁剪优先于缩放"，保证无论源图原始宽高比
-// 是多少，画出来的都是一张真正的正方形图，而不是依赖 <image mode="aspectFill"> 在展示层做二次裁剪
-// （那只能裁"显示效果"，存进云端的文件本身仍是非正方形原图）。
-//
-// 🐛 关键修复：裁剪区域改为基于【canvas 内 img 节点自己 onload 后报告的 img.width/img.height】计算，
-// 不再依赖调用方提前通过 wx.getImageInfo 拿到的尺寸。两者本应一致，但曾怀疑存在方向/缓存导致的不一致，
-// 这里让"用什么尺寸算裁剪框"和"实际画的是哪张图"始终来自同一个数据源，杜绝任何不一致的可能性。
-function loadImageOntoCanvasCropped(canvas: any, src: string, destSize: number): Promise<{ naturalWidth: number; naturalHeight: number; cropX: number; cropY: number; cropSize: number }> {
-  return new Promise((resolve, reject) => {
-    canvas.width = destSize;
-    canvas.height = destSize;
-    const ctx = canvas.getContext('2d');
-    const img = canvas.createImage();
-    img.onload = () => {
-      const naturalWidth = img.width || destSize;
-      const naturalHeight = img.height || destSize;
-      const cropSize = Math.min(naturalWidth, naturalHeight);
-      const cropX = Math.max(0, Math.round((naturalWidth - cropSize) / 2));
-      const cropY = Math.max(0, Math.round((naturalHeight - cropSize) / 2));
-
-      ctx.clearRect(0, 0, destSize, destSize);
-      ctx.drawImage(img, cropX, cropY, cropSize, cropSize, 0, 0, destSize, destSize);
-      resolve({ naturalWidth, naturalHeight, cropX, cropY, cropSize });
-    };
-    img.onerror = (err: any) => {
-      console.error('[imageCompress] 头像图片加载失败:', err);
-      reject(new Error('图片加载失败'));
-    };
-    img.src = src;
-  });
-}
-
 function exportCanvas(canvas: any, width: number, height: number, quality: number): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.canvasToTempFilePath({
@@ -210,52 +176,23 @@ export async function compressImageLocal(canvasId: string, src: string): Promise
 }
 
 /**
- * 压缩单张图片并强制居中裁剪为正方形：返回主图（≤640px 边长，≤300KB）与缩略图（≤320px 边长）的本地临时路径。
- * 专供头像等"必须 1:1"的场景使用——不依赖 wx.chooseAvatar 原生裁剪 UI 是否在当前设备/基础库上正常触发
- * （不同手机微信客户端版本、开发者工具的 Linux 模拟环境等，原生裁剪 UI 的可靠性并不总是一致），
- * 从源头保证存进云端的文件本身就是正方形，而不是把"裁不裁得对"这件事完全交给展示层的
- * <image mode="aspectFill">（那只能裁剪显示效果，裁不掉底层文件本身的非正方形长宽比）。
+ * 🐛 头像"被严重放大只看到局部色块"根因修复：此前 compressAndUploadSquareImage 依赖
+ * loadImageOntoCanvasCropped 做本地方形像素裁剪（sx/sy/sw/sh 源矩形截取）。经过
+ * [verify] 双重独立测量（wx.getImageInfo 与 canvas.createImage() 的 img.width/height
+ * 互相印证），已确认小图（132×132，微信头像快选）场景下裁剪数学完全正确、无裁剪发生；
+ * 但换成相册高清大图实测后依然稳定复现同样的"爆图"，说明问题出在 loadImageOntoCanvasCropped
+ * 这条【源矩形裁剪】路径本身（大概率是设备 DPI / 图片方向元数据在"指定源矩形二次采样"
+ * 这一步上的不一致，只在有源矩形裁剪运算时才会触发，与图片尺寸无关）。
+ *
+ * 而 loadImageOntoCanvasScaled（compressImageLocal 用的这条路径）全程只做"整图等比缩放"，
+ * 不做任何源矩形子区域截取——同一个画布/同一套设备环境下，食谱照片、支出凭证等所有
+ * 走这条路径的图片，在本项目从未出现过这一类问题。因此头像改为复用这条已被大量验证
+ * 稳定的等比缩放管道，不再依赖本地方形裁剪；最终的圆形/方形展示效果完全交给
+ * <image mode="aspectFill"> 在展示层做（这是原生渲染管线，不经过任何自定义 Canvas
+ * 像素运算，天然不会有源矩形裁剪那类坐标错位问题）。
  */
-export async function compressSquareImageLocal(canvasId: string, src: string): Promise<{ mainPath: string; thumbPath: string }> {
-  const AVATAR_MAX_SIZE = 640;
-
-  // 仅用于粗定一个不离谱的目标导出边长（避免对着一张 4000×3000 的原图硬导出成 3000×3000）；
-  // 真正决定裁剪框的尺寸来自 loadImageOntoCanvasCropped 内部 img.onload 报告的真实自然尺寸
-  const info = await getImageInfo(src).catch(() => ({ width: AVATAR_MAX_SIZE, height: AVATAR_MAX_SIZE }));
-  const roughDestSize = Math.min(Math.min(info.width, info.height), AVATAR_MAX_SIZE);
-
-  const canvas = await getCanvasNode(canvasId);
-  const cropInfo = await loadImageOntoCanvasCropped(canvas, src, roughDestSize);
-  const destSize = roughDestSize;
-
-  let quality = 0.85;
-  let mainPath = await exportCanvas(canvas, destSize, destSize, quality);
-  let size = await getFileSize(mainPath);
-
-  let attempts = 0;
-  while (size > MAX_FILE_SIZE && quality > MIN_QUALITY && attempts < 5) {
-    quality = Math.max(MIN_QUALITY, quality - 0.15);
-    mainPath = await exportCanvas(canvas, destSize, destSize, quality);
-    size = await getFileSize(mainPath);
-    attempts++;
-  }
-
-  if (size > HARD_MAX_FILE_SIZE) {
-    throw new Error(`头像压缩后仍超过 1MB（${(size / 1024 / 1024).toFixed(2)}MB），请更换一张图片重试`);
-  }
-
-  const thumbDestSize = Math.min(destSize, THUMB_LONG_EDGE);
-  await loadImageOntoCanvasCropped(canvas, src, thumbDestSize);
-  const thumbPath = await exportCanvas(canvas, thumbDestSize, thumbDestSize, 0.6);
-
-  return { mainPath, thumbPath };
-}
-
-/**
- * 压缩（强制正方形裁剪）并上传头像到云存储，返回主图与缩略图的 fileID
- */
-export async function compressAndUploadSquareImage(canvasId: string, src: string, cloudPathPrefix: string): Promise<CompressUploadResult> {
-  const { mainPath, thumbPath } = await compressSquareImageLocal(canvasId, src);
+export async function compressAndUploadScaledImage(canvasId: string, src: string, cloudPathPrefix: string): Promise<CompressUploadResult> {
+  const { mainPath, thumbPath } = await compressImageLocal(canvasId, src);
 
   const safePrefix = sanitizeCloudPathPrefix(cloudPathPrefix);
   const ts = Date.now();

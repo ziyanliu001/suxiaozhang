@@ -23,8 +23,11 @@
     <view class="user-profile-card">
       <button class="avatar-choose-btn" hover-class="avatar-choose-btn-hover" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
         <view class="avatar-outer">
-          <view class="avatar-ring">
-            <image wx:if="{{userAvatarUrl && !avatarLoadFailed}}" class="user-avatar" src="{{userAvatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" />
+          <!-- 🛡️ avatar-ring 兼作 avatar-container：overflow/border-radius/position 行内强约束，
+               防止布局层面爆图；width/height 沿用 CSS（100% 撑满 avatar-outer），不额外用行内
+               px 定值锁死，避免破坏 4rpx 内边距撑出的金色描边视觉 -->
+          <view class="avatar-ring" style="overflow: hidden !important; border-radius: 50% !important; position: relative !important; flex-shrink: 0 !important;">
+            <image wx:if="{{userAvatarUrl && !avatarLoadFailed}}" class="user-avatar avatar-img" src="{{userAvatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" style="width: 100% !important; height: 100% !important; display: block !important; object-fit: cover !important;" />
             <view wx:else class="user-avatar user-avatar-placeholder">👤</view>
           </view>
         </view>
