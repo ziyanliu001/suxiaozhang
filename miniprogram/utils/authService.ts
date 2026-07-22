@@ -316,6 +316,13 @@ export const AuthService = {
       wx.removeStorageSync(OPENID_CACHE_KEY);
       wx.removeStorageSync(USER_CACHE_KEY);
       wx.removeStorageSync(USER_ROLE_CACHE_KEY);
+      // 🛡️ 同一台设备换绑/切换账号时必须一并清掉：这是 pages/profile/profile.ts
+      // 头像上传宽限期机制持久化的"上一次确认为真"的 fileID，键名与其定义处
+      // CONFIRMED_AVATAR_CACHE_KEY 保持一致。若残留旧账号的记录，新账号登录后
+      // checkUserRole 查到自己真实的 avatarUrl 时，会被误判成"与已确认值不一致的
+      // 陈旧数据"而被忽略，导致新账号头像显示不出来——不是这里字面用到这个变量，
+      // 而是必须与那处的字符串字面量保持同步。
+      wx.removeStorageSync('confirmed_avatar_grace');
       console.log('[AuthService] 登录缓存已清除');
     } catch (err) {
       console.error('[AuthService] clearAuth 异常:', err);

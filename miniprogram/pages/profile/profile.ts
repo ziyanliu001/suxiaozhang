@@ -2,6 +2,7 @@ import { AuthService } from '../../utils/authService';
 import { getSelectedStore } from '../../utils/storeManager';
 import { getSafeSystemInfo } from '../../utils/util';
 import { compressAndUploadSquareImage } from '../../utils/imageCompress';
+import { isCloudAvailable } from '../../utils/cloudGuard';
 import { drawVolunteerCertificate } from '../../utils/drawVolunteerCertificate';
 import {
   applyRoleViewOverride, getPreviewViewMode, setPreviewViewMode,
@@ -12,6 +13,16 @@ const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'F
 
 const PROFILE_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 const CERTIFICATE_CANVAS_ID = 'certificateCanvas';
+// 🛡️ "上传后立刻显示新图，但切页/退出重进又变回旧图"的真正根因：lastConfirmedAvatarFileId/
+// lastConfirmedAvatarAt 只是 Page 实例上的普通字段（不在 data 里），只存在于内存中。
+// 同一次小程序运行期间切换自定义 TabBar 不会重建页面实例，字段能保留、宽限期确实生效；
+// 但完整退出小程序再重新打开会重建全新的 Page 实例，这两个字段被重新初始化为 ''/0，
+// 宽限期形同虚设——而"云数据库最终一致性延迟"这个宽限期本来要防的场景，恰恰最容易发生在
+// "刚上传完就退出重进"这个时间点。于是 loadUserProfile 里 checkUserRole 读到的哪怕是
+// 尚未追平的旧 avatarUrl，也会在 withinGrace 恒为 false 的情况下被无条件覆盖回去。
+// 用一个本地持久化 key 把这两个字段镜像存一份，页面重新加载时优先从这里恢复，
+// 让宽限期跨小程序重启依然生效。
+const CONFIRMED_AVATAR_CACHE_KEY = 'confirmed_avatar_grace';
 
 // 🌟 荣誉徽章解锁规则：护持天数 / 累计工时任一维度达标即视为解锁。
 // 阈值为产品侧可调参数，这里给出一组由浅入深、早期容易触达的示例梯度，
@@ -35,6 +46,16 @@ Page({
   // （更新鲜的）结果永远不会被先发起、但后返回的旧结果覆盖。
   avatarApplySeq: 0,
   lastAppliedAvatarSeq: 0,
+  // 🐛 fetchSeq 预占号只解决了"同一个 loadUserProfile 周期内，缓存渲染 vs
+  // checkUserRole 刷新谁先 resolve"的时序竞争；但即使按发起顺序正确排到了最新一号，
+  // checkUserRole 读到的 user_roles 记录本身仍可能是云数据库对"刚刚那次写入"的
+  // 最终一致性延迟（写入后极短时间内的读请求命中了还没同步到的副本），返回一个
+  // 比"我们自己刚刚上传确认过"的 fileID 更旧的 avatarUrl——这不是客户端时序问题，
+  // 单靠调整 seq 无法解决。用这两个字段记录"上一次成功上传后确认为真"的 fileID
+  // 与确认时刻，在这之后一段宽限期内，即使 checkUserRole 返回了不一致的旧值，
+  // 也优先信任本地刚确认过的结果，而不是照单全收覆盖回去。
+  lastConfirmedAvatarFileId: '',
+  lastConfirmedAvatarAt: 0,
 
   data: {
     statusBarHeight: 20,
@@ -84,9 +105,26 @@ Page({
 
   onLoad() {
     this.calculateNavBarHeight();
+    this.hydrateConfirmedAvatarFromStorage();
+  },
+
+  // 🛡️ 从本地持久化恢复"上一次上传确认为真"的头像记录：见 CONFIRMED_AVATAR_CACHE_KEY
+  // 处的根因说明。只在页面刚创建（onLoad）时读一次即可——之后同一个实例存活期间
+  // 一直靠内存里的这两个字段，onChooseAvatar 成功时会同步更新内存与本地持久化两处。
+  hydrateConfirmedAvatarFromStorage() {
+    try {
+      const saved = wx.getStorageSync(CONFIRMED_AVATAR_CACHE_KEY);
+      if (saved && saved.fileId && typeof saved.at === 'number') {
+        this.lastConfirmedAvatarFileId = saved.fileId;
+        this.lastConfirmedAvatarAt = saved.at;
+      }
+    } catch (err) {
+      console.warn('[profile] 恢复头像确认记录失败:', err);
+    }
   },
 
   onShow() {
+    console.log('[verify] profile.onShow 已触发, 当前 userAvatarUrl=', this.data.userAvatarUrl);
     this.isNavigating = false;
     this.initMinePage();
     this.loadUserProfile();
@@ -178,15 +216,40 @@ Page({
 
   // 🙋 头像昵称填写规范：优先用缓存的 RoleInfo 秒开显示，再静默刷新一次确保最新
   loadUserProfile() {
+    console.log('[verify] loadUserProfile 已触发, lastConfirmedAvatarFileId=', this.lastConfirmedAvatarFileId);
     const cached = AuthService.getCachedRoleInfo();
+    console.log('[verify] 本地缓存 cached.avatarUrl=', cached && cached.avatarUrl);
     if (cached) {
       this.applyAvatarUrl(cached.avatarUrl || '');
       this.setData({ userNickName: cached.nickName || '' });
     }
 
+    // 🐛 关键修复：seq 号必须在发起 fetchUserRole 请求的这一刻就同步占好，不能等
+    // checkUserRole 网络请求真正 resolve 之后才在 .then 回调里临时取号——原来的写法
+    // 会导致"发起得早、但这一轮网络恰好慢"的请求，仅仅因为"resolve 得晚"就被误判成
+    // "更新鲜"，进而把已经正确展示的新头像覆盖回它自己携带的旧数据（截图里 seq=7 新
+    // 头像被 seq=8 的旧头像覆盖、seq=10 新头像又被 seq=11 旧头像覆盖，就是这个根因）。
+    // 号的大小现在只取决于"这次 loadUserProfile 调用本身发生的时间"，与网络快慢无关。
+    const fetchSeq = ++this.avatarApplySeq;
     AuthService.fetchUserRole().then(result => {
+      console.log('[verify] fetchUserRole resolve, success=', result.success, 'roleInfo.avatarUrl=', result.roleInfo && result.roleInfo.avatarUrl);
       if (result.success && result.roleInfo) {
-        this.applyAvatarUrl(result.roleInfo.avatarUrl || '');
+        // 🐛 云数据库最终一致性兜底：见类定义处 lastConfirmedAvatarFileId 的注释——
+        // 如果这次 checkUserRole 返回的 avatarUrl 跟"刚上传成功、已确认为真"的
+        // fileID 对不上，且还在宽限期内，大概率是写入后的读请求命中了还没追平的
+        // 副本，不是用户真的换了新头像，此时保留本地已确认的展示，不覆盖回去。
+        const CONFIRMED_AVATAR_GRACE_MS = 5 * 60 * 1000;
+        const fetchedAvatarUrl = result.roleInfo.avatarUrl || '';
+        const withinGrace = this.lastConfirmedAvatarFileId
+          && (Date.now() - this.lastConfirmedAvatarAt) < CONFIRMED_AVATAR_GRACE_MS;
+        if (withinGrace && fetchedAvatarUrl !== this.lastConfirmedAvatarFileId) {
+          console.warn(
+            '[profile] checkUserRole 返回的 avatarUrl 与刚确认的上传结果不一致，' +
+            '宽限期内忽略，保留本地已确认值:', fetchedAvatarUrl, 'vs', this.lastConfirmedAvatarFileId
+          );
+        } else {
+          this.applyAvatarUrl(fetchedAvatarUrl, fetchSeq);
+        }
         this.setData({ userNickName: result.roleInfo.nickName || '' });
       }
     }).catch(err => {
@@ -195,20 +258,34 @@ Page({
   },
 
   // 🐛 修复"头像显示灰块/裂图"：数据库里存的 avatarUrl 是 wx.cloud.uploadFile 返回的
-  // cloud:// fileID，不是可以直接喂给 <image> 的 http(s) 地址——部分基础库/设备环境下
-  // <image src> 无法解析 cloud:// 协议，表现为灰块或裂图图标。必须先用
-  // wx.cloud.getTempFileURL 换成临时 https 链接再 setData，与 history.ts 处理凭证图片
-  // 的方式保持一致。非 cloud:// 值（本地临时路径/已经是 https 链接）直接使用，不做转换。
-  async applyAvatarUrl(avatarUrl: string) {
-    // 按发起顺序取号，而不是按 resolve 顺序——见类定义处 avatarApplySeq 的注释
-    const seq = ++this.avatarApplySeq;
+  // cloud:// fileID，不是可以直接喂给 <image> 的地址——必须先用 wx.cloud.downloadFile
+  // 换成本地临时文件路径再 setData（原先用 getTempFileURL 换 https 链接，但换来的签名
+  // URL 可能被客户端按 URL 字符串缓存住旧内容，见下方 downloadFile 处的详细说明）。
+  // 非 cloud:// 值（本地临时路径/已经是 https 链接）直接使用，不做转换。
+  // 🐛 seq 支持外部预先占号（见 loadUserProfile 里 fetchUserRole 分支的注释）：
+  // 号必须按【发起时刻】分配，而不是按【resolve 时刻】分配，否则一次发起得早、
+  // 但网络恰好慢的请求会因为"最后才 resolve"被误判成最新，把它携带的旧数据
+  // 盖过已经正确展示的新头像。不传时退回自增（用于同步/无需等待网络的分支）。
+  async applyAvatarUrl(avatarUrl: string, preAssignedSeq?: number) {
+    const seq = preAssignedSeq !== undefined ? preAssignedSeq : ++this.avatarApplySeq;
     const commit = (patch: { userAvatarUrl: string; avatarLoadFailed: boolean }) => {
       if (seq < this.lastAppliedAvatarSeq) {
         // 已经有发起时间更晚（更新鲜）的一次调用抢先落地过，这次是姗姗来迟的旧结果，丢弃
         return;
       }
       this.lastAppliedAvatarSeq = seq;
-      this.setData(patch);
+
+      // 🐛 强制经历一次"从空到有"，绕开个别基础库版本下 <image> 的 src 从一个已加载过的
+      // 旧地址直接切到新地址时不重新发起请求的怪癖（低概率，但作为兜底保留）。
+      const prevUrl = this.data.userAvatarUrl;
+      if (prevUrl && patch.userAvatarUrl && prevUrl !== patch.userAvatarUrl) {
+        this.setData({ userAvatarUrl: '', avatarLoadFailed: false });
+        wx.nextTick(() => {
+          this.setData(patch);
+        });
+      } else {
+        this.setData(patch);
+      }
     };
 
     if (!avatarUrl) {
@@ -222,16 +299,34 @@ Page({
     }
 
     try {
-      const res: any = await wx.cloud.getTempFileURL({ fileList: [avatarUrl] });
-      const tempUrl = res && res.fileList && res.fileList[0] && res.fileList[0].tempFileURL;
-      // 🛡️ 不要在这个 URL 后面拼接任何查询参数（包括曾经试过的 ?t= / &_cb=）：
-      // 腾讯云 getTempFileURL 返回的是带签名的完整链接，附加参数即使改了名字仍然会
-      // 破坏签名校验、被 CDN 判定非法（表现为头像裂图/灰块）。每次新上传的 cloudPath
-      // 本身就带时间戳+随机串（见 imageCompress.ts compressAndUploadSquareImage），
-      // fileID 不同，这里换来的 tempUrl 天然就是一个新地址，不需要额外破缓存。
-      commit({ userAvatarUrl: tempUrl || avatarUrl, avatarLoadFailed: false });
+      // 🐛 真机 [verify] 抓包已经证实：即使 userAvatarUrl 是一个刚由 wx.cloud.downloadFile
+      // 全新下载出来、从未被访问过的本地临时路径（wxfile://tmp_xxx），画面依然渲染成旧图——
+      // 说明连"路径本身是全新的"这层保证都不足以避开真机 <image> 组件的解码/缓存行为，
+      // 缓存大概率不是按 URL/路径字符串匹配的。改成读出文件字节、拼成 data: base64 URI 再
+      // setData：data URI 不经过任何独立的资源请求，src 本身就是图像内容，没有"路径"或
+      // "URL"可供任何缓存层匹配，从根本上绕开这一整类问题。
+      const res: any = await wx.cloud.downloadFile({ fileID: avatarUrl });
+      const localPath = res && res.tempFilePath;
+      if (!localPath) {
+        commit({ userAvatarUrl: avatarUrl, avatarLoadFailed: false });
+        return;
+      }
+
+      const fs = wx.getFileSystemManager();
+      fs.readFile({
+        filePath: localPath,
+        encoding: 'base64',
+        success: (readRes: any) => {
+          const dataUri = `data:image/jpeg;base64,${readRes.data}`;
+          commit({ userAvatarUrl: dataUri, avatarLoadFailed: false });
+        },
+        fail: (readErr: any) => {
+          console.warn('[profile] 头像文件读取为 base64 失败，降级用本地路径:', readErr);
+          commit({ userAvatarUrl: localPath, avatarLoadFailed: false });
+        }
+      });
     } catch (err) {
-      console.warn('[profile] 头像临时链接转换失败:', err);
+      console.warn('[profile] 头像文件下载失败:', err);
       commit({ userAvatarUrl: avatarUrl, avatarLoadFailed: false });
     }
   },
@@ -255,6 +350,18 @@ Page({
 
     this.setData({ avatarUploading: true });
     wx.showLoading({ title: '头像上传中...', mask: true });
+
+    // 🛡️ 云开发就绪防护：与 authService.ts 里 fetchUserRole/updateProfile 同款判定口径。
+    // 此前 wx.cloud.uploadFile（压缩上传这一步）之前完全没有这道检查——如果云初始化还没
+    // 完成就调用，会直接抛出 "Cloud API isn't enabled" 而不是走后面 updateProfile 那句
+    // 更友好的 CLOUD_SDK_UNAVAILABLE 提示，用户只会看到笼统的"头像上传失败，请重试"，
+    // 看不出真正原因是云还没就绪。提前拦截，给出更明确的提示，且不发起注定失败的请求。
+    if (!isCloudAvailable()) {
+      wx.hideLoading();
+      this.setData({ avatarUploading: false });
+      wx.showToast({ title: '云服务尚未就绪，请稍后重试', icon: 'none' });
+      return;
+    }
 
     try {
       // 🐛 头像"被放大只显示中央局部"排查结论：wx.chooseAvatar 的原生裁剪 UI 在部分手机
@@ -283,6 +390,23 @@ Page({
         const seq = ++this.avatarApplySeq;
         this.lastAppliedAvatarSeq = seq;
         this.setData({ userAvatarUrl: tempAvatarUrl, avatarLoadFailed: false });
+
+        // 🐛 记录"刚上传确认为真"的 fileID + 时刻：见类定义处 lastConfirmedAvatarFileId
+        // 的注释，供后续 loadUserProfile 的 checkUserRole 分支判断是否命中最终一致性
+        // 延迟、要不要信任这次云端读到的 avatarUrl。
+        this.lastConfirmedAvatarFileId = uploaded.url;
+        this.lastConfirmedAvatarAt = Date.now();
+        // 🛡️ 同步镜像一份到本地持久化：见 CONFIRMED_AVATAR_CACHE_KEY 处的根因说明，
+        // 让这层宽限期保护跨小程序退出重进依然生效，而不是只活在这个页面实例的内存里
+        try {
+          wx.setStorageSync(CONFIRMED_AVATAR_CACHE_KEY, {
+            fileId: this.lastConfirmedAvatarFileId,
+            at: this.lastConfirmedAvatarAt
+          });
+        } catch (storageErr) {
+          console.warn('[profile] 持久化头像确认记录失败:', storageErr);
+        }
+
         wx.showToast({ title: '头像已更新', icon: 'success' });
       } else {
         wx.showToast({ title: result.error || '头像保存失败', icon: 'none' });
