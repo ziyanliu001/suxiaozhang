@@ -179,16 +179,12 @@ Page({
   // 🙋 头像昵称填写规范：优先用缓存的 RoleInfo 秒开显示，再静默刷新一次确保最新
   loadUserProfile() {
     const cached = AuthService.getCachedRoleInfo();
-    // 🩺 临时诊断日志：定位"头像退出重进又变回旧值"到底是缓存脏了还是云端返回的数据本身
-    // 就不对——排查完成后请删除这两行 console.log（搜索 [诊断][loadUserProfile]）
-    console.log('[诊断][loadUserProfile] 本地缓存 cached.avatarUrl =', cached && cached.avatarUrl);
     if (cached) {
       this.applyAvatarUrl(cached.avatarUrl || '');
       this.setData({ userNickName: cached.nickName || '' });
     }
 
     AuthService.fetchUserRole().then(result => {
-      console.log('[诊断][loadUserProfile] checkUserRole 返回 roleInfo.avatarUrl =', result.roleInfo && result.roleInfo.avatarUrl);
       if (result.success && result.roleInfo) {
         this.applyAvatarUrl(result.roleInfo.avatarUrl || '');
         this.setData({ userNickName: result.roleInfo.nickName || '' });
@@ -212,7 +208,6 @@ Page({
         return;
       }
       this.lastAppliedAvatarSeq = seq;
-      console.log('[诊断][applyAvatarUrl] 落地 seq=', seq, 'userAvatarUrl=', patch.userAvatarUrl);
       this.setData(patch);
     };
 
@@ -229,6 +224,11 @@ Page({
     try {
       const res: any = await wx.cloud.getTempFileURL({ fileList: [avatarUrl] });
       const tempUrl = res && res.fileList && res.fileList[0] && res.fileList[0].tempFileURL;
+      // 🛡️ 不要在这个 URL 后面拼接任何查询参数（包括曾经试过的 ?t= / &_cb=）：
+      // 腾讯云 getTempFileURL 返回的是带签名的完整链接，附加参数即使改了名字仍然会
+      // 破坏签名校验、被 CDN 判定非法（表现为头像裂图/灰块）。每次新上传的 cloudPath
+      // 本身就带时间戳+随机串（见 imageCompress.ts compressAndUploadSquareImage），
+      // fileID 不同，这里换来的 tempUrl 天然就是一个新地址，不需要额外破缓存。
       commit({ userAvatarUrl: tempUrl || avatarUrl, avatarLoadFailed: false });
     } catch (err) {
       console.warn('[profile] 头像临时链接转换失败:', err);
@@ -244,21 +244,9 @@ Page({
     this.setData({ avatarLoadFailed: true });
   },
 
-  // 🌟 诊断专用：与 bindchooseavatar 分开打点。如果点击头像后这里打印了、但
-  // onChooseAvatar 那条日志始终没出现，说明按钮本身能收到点击，问题出在
-  // chooseAvatar 这个专属事件没有被触发——最常见原因是手机微信客户端版本偏旧，
-  // 实际运行时基础库低于 chooseAvatar 能力要求的 2.21.2（无论项目 libVersion 配多高，
-  // 真正生效的基础库上限取决于用户手机安装的微信版本，不受项目配置约束）。
-  onAvatarBtnTap() {
-    const sysInfo = getSafeSystemInfo();
-    console.log('[onAvatarBtnTap] 头像按钮已收到点击，当前运行时基础库 SDKVersion =', sysInfo.SDKVersion);
-  },
-
-  // 选择微信头像（官方 chooseAvatar 能力）：拿到本地临时文件后压缩上传至云存储，再落库
+  // 选择微信头像（官方 chooseAvatar 能力）：拿到本地临时文件后压缩上传至云存储，再落库。
+  // 依赖手机微信客户端基础库 >= 2.21.2；版本过低时该回调不会触发，属已知限制。
   async onChooseAvatar(e: any) {
-    // 🌟 诊断日志：点击头像后连这一行都没打印，说明问题不在这个函数内部，
-    // 大概率是当前预览/真机跑的还不是最新编译产物（同类问题参见图片识别按钮排查记录）
-    console.log('[onChooseAvatar] 头像选择回调已触发', e.detail);
     const tempAvatarUrl = e.detail && e.detail.avatarUrl;
     if (!tempAvatarUrl) {
       console.warn('[onChooseAvatar] e.detail.avatarUrl 为空，微信未返回临时头像文件');
@@ -286,6 +274,14 @@ Page({
         // 🐛 优先用本地临时路径（tempAvatarUrl）立即更新视图，不等云端 fileID 转临时链接
         // 那一轮网络往返——本地路径此刻已经是裁剪压缩后的正方形图，直接可用，视觉上更即时，
         // 也避免了 cloud:// fileID 在少数设备/基础库上无法被 <image> 直接解析的问题
+        //
+        // 🛡️ 这里也要走 avatarApplySeq 序号，而不是裸 setData：如果本页面在这次上传之前
+        // 还有一个尚未 resolve 的 applyAvatarUrl（比如页面首次打开时那次 loadUserProfile
+        // 触发的 fetchUserRole 请求还没回来），旧请求晚一点才 resolve 的话，会把刚上传成功
+        // 的新头像又覆盖回旧值。把这次乐观展示也计入序号，能让所有更早发起的旧请求
+        // 事后一律被判定为过期而丢弃。
+        const seq = ++this.avatarApplySeq;
+        this.lastAppliedAvatarSeq = seq;
         this.setData({ userAvatarUrl: tempAvatarUrl, avatarLoadFailed: false });
         wx.showToast({ title: '头像已更新', icon: 'success' });
       } else {
@@ -301,7 +297,6 @@ Page({
 
   // 昵称编辑（官方 <input type="nickname"> 能力）：失焦后保存
   async onNicknameBlur(e: any) {
-    console.log('[onNicknameBlur] 昵称输入框已失焦', e.detail);
     const nickName = ((e.detail && e.detail.value) || '').trim();
     if (!nickName || nickName === this.data.userNickName) {
       return;
@@ -709,8 +704,9 @@ Page({
     });
   },
 
-  // 🌟 店长专属入口：门店营运数据总览，复用首页 goToStatistics 同一个统计页面
-  // （/pages/statistics/statistics），不新建一套统计逻辑，只是从个人中心多开一个入口
+  // 🌟 店长专属入口：本店数据明细（携带 shopName 预选中本店，与超管工具箱里
+  // 不带 shopName、默认落到全国汇总视角的"全国多店大屏"区分开），复用同一个
+  // 统计页面（/pages/statistics/statistics），不新建一套统计逻辑
   onGoToStoreOverview() {
     if (this.isNavigating) return;
     this.isNavigating = true;
