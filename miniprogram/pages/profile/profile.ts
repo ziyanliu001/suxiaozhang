@@ -11,7 +11,6 @@ import {
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
-const PROFILE_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 const CERTIFICATE_CANVAS_ID = 'certificateCanvas';
 // 🛡️ "上传后立刻显示新图，但切页/退出重进又变回旧图"的真正根因：lastConfirmedAvatarFileId/
 // lastConfirmedAvatarAt 只是 Page 实例上的普通字段（不在 data 里），只存在于内存中。
@@ -257,77 +256,37 @@ Page({
     });
   },
 
-  // 🐛 修复"头像显示灰块/裂图"：数据库里存的 avatarUrl 是 wx.cloud.uploadFile 返回的
-  // cloud:// fileID，不是可以直接喂给 <image> 的地址——必须先用 wx.cloud.downloadFile
-  // 换成本地临时文件路径再 setData（原先用 getTempFileURL 换 https 链接，但换来的签名
-  // URL 可能被客户端按 URL 字符串缓存住旧内容，见下方 downloadFile 处的详细说明）。
-  // 非 cloud:// 值（本地临时路径/已经是 https 链接）直接使用，不做转换。
+  // 🐛 头像"严重放大只看到局部色块"根因修复：这里此前会对 cloud:// 开头的 avatarUrl
+  // 额外调用 wx.cloud.downloadFile 换成本地临时文件路径再 setData（更早之前甚至读成
+  // data: base64 URI），逐层排查（原始临时路径正常 → 本地压缩后 mainPath 正常 →
+  // 只有走完云端上传/下载这一轮往返后才变成色块）已经定位到问题就出在这个手动
+  // downloadFile 转换步骤本身。本项目其余所有图片（食谱、支出凭证、日常日志等）都是
+  // 直接把 cloud:// fileID 原样绑定到 <image src>，交给微信原生 <image> 组件自行解析，
+  // 从未出现过这类问题——现改为同款做法，不再手动 downloadFile，avatarUrl 是什么就
+  // 原样展示什么，与全项目其余图片保持完全一致的绑定方式。
   // 🐛 seq 支持外部预先占号（见 loadUserProfile 里 fetchUserRole 分支的注释）：
   // 号必须按【发起时刻】分配，而不是按【resolve 时刻】分配，否则一次发起得早、
   // 但网络恰好慢的请求会因为"最后才 resolve"被误判成最新，把它携带的旧数据
   // 盖过已经正确展示的新头像。不传时退回自增（用于同步/无需等待网络的分支）。
-  async applyAvatarUrl(avatarUrl: string, preAssignedSeq?: number) {
+  applyAvatarUrl(avatarUrl: string, preAssignedSeq?: number) {
     const seq = preAssignedSeq !== undefined ? preAssignedSeq : ++this.avatarApplySeq;
-    const commit = (patch: { userAvatarUrl: string; avatarLoadFailed: boolean }) => {
-      if (seq < this.lastAppliedAvatarSeq) {
-        // 已经有发起时间更晚（更新鲜）的一次调用抢先落地过，这次是姗姗来迟的旧结果，丢弃
-        return;
-      }
-      this.lastAppliedAvatarSeq = seq;
+    if (seq < this.lastAppliedAvatarSeq) {
+      // 已经有发起时间更晚（更新鲜）的一次调用抢先落地过，这次是姗姗来迟的旧结果，丢弃
+      return;
+    }
+    this.lastAppliedAvatarSeq = seq;
 
-      // 🐛 强制经历一次"从空到有"，绕开个别基础库版本下 <image> 的 src 从一个已加载过的
-      // 旧地址直接切到新地址时不重新发起请求的怪癖（低概率，但作为兜底保留）。
-      const prevUrl = this.data.userAvatarUrl;
-      if (prevUrl && patch.userAvatarUrl && prevUrl !== patch.userAvatarUrl) {
-        this.setData({ userAvatarUrl: '', avatarLoadFailed: false });
-        wx.nextTick(() => {
-          this.setData(patch);
-        });
-      } else {
+    const patch = { userAvatarUrl: avatarUrl || '', avatarLoadFailed: false };
+    // 🐛 强制经历一次"从空到有"，绕开个别基础库版本下 <image> 的 src 从一个已加载过的
+    // 旧地址直接切到新地址时不重新发起请求的怪癖（低概率，但作为兜底保留）。
+    const prevUrl = this.data.userAvatarUrl;
+    if (prevUrl && patch.userAvatarUrl && prevUrl !== patch.userAvatarUrl) {
+      this.setData({ userAvatarUrl: '', avatarLoadFailed: false });
+      wx.nextTick(() => {
         this.setData(patch);
-      }
-    };
-
-    if (!avatarUrl) {
-      commit({ userAvatarUrl: '', avatarLoadFailed: false });
-      return;
-    }
-
-    if (avatarUrl.indexOf('cloud://') !== 0) {
-      commit({ userAvatarUrl: avatarUrl, avatarLoadFailed: false });
-      return;
-    }
-
-    try {
-      // 🐛 真机 [verify] 抓包已经证实：即使 userAvatarUrl 是一个刚由 wx.cloud.downloadFile
-      // 全新下载出来、从未被访问过的本地临时路径（wxfile://tmp_xxx），画面依然渲染成旧图——
-      // 说明连"路径本身是全新的"这层保证都不足以避开真机 <image> 组件的解码/缓存行为，
-      // 缓存大概率不是按 URL/路径字符串匹配的。改成读出文件字节、拼成 data: base64 URI 再
-      // setData：data URI 不经过任何独立的资源请求，src 本身就是图像内容，没有"路径"或
-      // "URL"可供任何缓存层匹配，从根本上绕开这一整类问题。
-      const res: any = await wx.cloud.downloadFile({ fileID: avatarUrl });
-      const localPath = res && res.tempFilePath;
-      if (!localPath) {
-        commit({ userAvatarUrl: avatarUrl, avatarLoadFailed: false });
-        return;
-      }
-
-      const fs = wx.getFileSystemManager();
-      fs.readFile({
-        filePath: localPath,
-        encoding: 'base64',
-        success: (readRes: any) => {
-          const dataUri = `data:image/jpeg;base64,${readRes.data}`;
-          commit({ userAvatarUrl: dataUri, avatarLoadFailed: false });
-        },
-        fail: (readErr: any) => {
-          console.warn('[profile] 头像文件读取为 base64 失败，降级用本地路径:', readErr);
-          commit({ userAvatarUrl: localPath, avatarLoadFailed: false });
-        }
       });
-    } catch (err) {
-      console.warn('[profile] 头像文件下载失败:', err);
-      commit({ userAvatarUrl: avatarUrl, avatarLoadFailed: false });
+    } else {
+      this.setData(patch);
     }
   },
 
@@ -364,15 +323,12 @@ Page({
     }
 
     try {
-      // 🐛 头像"被严重放大只看到局部色块"根因修复：此前这里用 compressAndUploadSquareImage
-      // 在本地 Canvas 上做强制方形像素裁剪（指定源矩形 sx/sy/sw/sh 截取）。经 [verify] 双重
-      // 独立测量（wx.getImageInfo 与 canvas.createImage() 的 img.width/height 互相印证）
-      // 确认裁剪公式本身无误，但换成相册高清大图实测后依然稳定复现同样的"爆图"——问题出在
-      // 「指定源矩形做二次采样」这条路径本身，与图片尺寸/裁剪公式无关。改用
-      // compressAndUploadScaledImage：全程只做整图等比缩放，不做任何源矩形子区域截取
-      // （与食谱照片/支出凭证共用同一条已被大量验证稳定的管道），圆形/方形展示效果完全
-      // 交给 <image mode="aspectFill"> 在展示层做，不再依赖本地 Canvas 像素级裁剪。
-      const uploaded = await compressAndUploadScaledImage(PROFILE_COMPRESS_CANVAS_ID, tempAvatarUrl, 'users/avatars');
+      // 🐛 头像"被严重放大只看到局部色块"根因修复（最终版）：真正原因是主图经过本地
+      // Canvas 重绘-导出这一整套流程，在部分设备/基础库的 Canvas 2D 实现上不可靠——本项目
+      // 早前修复"食谱/门店日志照片主体被裁切"时就踩过同一类问题，解法是让主图完全绕开
+      // Canvas、直接上传原始临时文件（见 imageCompress.ts compressAndUploadImage 的注释）。
+      // 头像不需要缩略图，因此彻底不再触碰 Canvas。
+      const uploaded = await compressAndUploadScaledImage(tempAvatarUrl, 'users/avatars');
 
       const result = await AuthService.updateProfile({ avatarUrl: uploaded.url });
 

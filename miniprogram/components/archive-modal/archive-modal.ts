@@ -270,8 +270,8 @@ Component({
 
       // 🐛 修复：旧写法 drawImage(img, x, y, size, size) 是把源图整张拉伸铺满 size×size，
       // 源图不是正方形时会被压扁/拉长变形。改为居中裁出源图的最大正方形区域再铺满，
-      // 与头像上传侧的 compressAndUploadSquareImage（miniprogram/utils/imageCompress.ts）
-      // 保持同一套"裁剪优先于缩放"逻辑，避免历史头像（裁剪前上传的非正方形原图）在海报里走形
+      // 避免非正方形头像（本项目头像上传现在直接存原始文件，不再强制方形裁剪，
+      // 见 miniprogram/utils/imageCompress.ts compressAndUploadScaledImage）在海报里走形
       const cropSize = Math.min(img.width, img.height)
       const cropX = (img.width - cropSize) / 2
       const cropY = (img.height - cropSize) / 2

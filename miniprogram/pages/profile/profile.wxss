@@ -63,54 +63,64 @@
   margin-bottom: 30rpx;
 }
 
-/* 头像选择按钮：🐛 修复"点击无反应"——此前用 width: fit-content 让按钮跟随内层
-   .avatar-ring 自适应宽度，但微信 WXSS 引擎对 fit-content 支持不稳定，会导致按钮
-   实际点击热区坍缩/错位，与肉眼可见的圆形头像对不上，形成"看得见摸不着"的死区。
-   现改为按钮本身直接持有与头像相同的固定 128rpx×128rpx 尺寸，热区与视觉完全重合；
-   圆形裁切与渐变描边下放给内层 .avatar-ring 通过 width/height:100% 撑满即可，
-   两个职责（可点击热区 vs 视觉裁切）依然分离，只是不再依赖不可靠的 fit-content。 */
-.avatar-choose-btn {
+/* 🐛 头像"严重放大只看到局部色块"根因排查：交叉测试确认同一张照片走食谱照片的普通
+   <view><image> 结构完全正常，问题限定在头像——而头像与食谱照片唯一的结构性差异，
+   就是头像的 <image> 之前被嵌套在 <button open-type="chooseAvatar"> 原生组件内部。
+   现改为：可见展示（.avatar-outer 及以下）搬到 .avatar-tap-wrap 这个普通 <view> 下，
+   与 chooseAvatar 按钮变成兄弟节点；按钮本身降级为铺满同一区域的纯透明点击热区
+   （.avatar-choose-btn-overlay），只负责触发选择事件，不再包裹/展示任何内容。
+   固定 128rpx×128rpx 尺寸与热区/视觉重合的设计保持不变，仅仅是从按钮身上移到
+   .avatar-tap-wrap 身上。 */
+.avatar-tap-wrap {
+  position: relative;
   width: 128rpx !important;
   height: 128rpx !important;
-  /* 🛡️ 防拉伸兜底：flex-shrink:0 已阻止收缩，min-width/min-height 再加一道硬性下限，
-     即便昵称行内容过长挤压布局，头像宽高也不会被压成椭圆/橄榄球状 */
   min-width: 128rpx;
   min-height: 128rpx;
-  padding: 0 !important;
-  margin: 0 !important;
-  line-height: 0;
-  background: transparent;
-  display: block;
   flex-shrink: 0;
-  border-radius: 50%;
   box-sizing: border-box;
 }
 
-.avatar-choose-btn::after {
-  border: none;
+.avatar-choose-btn-overlay {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 50%;
+  z-index: 2;
 }
 
-.avatar-choose-btn-hover {
-  opacity: 0.85;
+.avatar-choose-btn-overlay::after {
+  border: none;
 }
 
 /* 🐛 圆形裁剪失效修复：此前头像角标是 .avatar-ring 的子元素，导致 .avatar-ring
    不敢加 overflow:hidden（加了会把角标一起裁掉），圆形裁剪只能靠最内层 .user-avatar
    单独兜底，在部分渲染环境下不够可靠。现拆成两层：.avatar-outer 只负责定位，
    .avatar-ring 专职裁剪（overflow:hidden + border-radius:50%）。角标已移除，
-   保留这层拆分是因为它本身就是让圆形裁剪稳定生效的正确结构，不依赖角标是否存在。 */
+   保留这层拆分是因为它本身就是让圆形裁剪稳定生效的正确结构，不依赖角标是否存在。
+   🛡️ 物理锁死：width/height 由 100%（相对 .avatar-tap-wrap 128rpx 解出）改为直接
+   写死 128rpx，链路上不再有任何百分比宽高需要逐层解析。 */
 .avatar-outer {
-  width: 100%;
-  height: 100%;
+  width: 128rpx !important;
+  height: 128rpx !important;
   position: relative;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 /* 🌟 渐变金边头像环：padding-box 撑开渐变描边，内层裁切绝对正圆，
-   彻底杜绝头像变形/背景裁切异常，同时提升整体质感 */
+   彻底杜绝头像变形/背景裁切异常，同时提升整体质感。
+   🛡️ 物理锁死：同上，改百分比为写死 128rpx；4rpx padding + box-sizing:border-box
+   解出的内容区正好是 120rpx，与 .user-avatar 的固定尺寸严丝合缝，不依赖任何
+   百分比换算。 */
 .avatar-ring {
-  width: 100%;
-  height: 100%;
+  width: 128rpx !important;
+  height: 128rpx !important;
   border-radius: 50% !important;
   overflow: hidden !important;
   padding: 4rpx;
@@ -126,7 +136,10 @@
   /* 🐛 回退为显式 rpx 定值：<image mode="aspectFill"> 配合百分比宽高在 flex 容器
      （.avatar-ring 是 align-items:center，不会拉伸子项撑满）里计算裁剪区域时不够可靠，
      曾观察到按图片自身原始像素尺寸而非容器尺寸取景、出现"放大只看到中间"的现象。
-     父级 .avatar-ring 内容区本就是固定 120rpx×120rpx，这里直接写死定值更稳妥。 */
+     父级 .avatar-ring 内容区本就是固定 120rpx×120rpx，这里直接写死定值更稳妥。
+     🛡️ 这条 !important 规则本身从一开始就是对的——真正的问题是 WXML 里 <image>
+     标签自己的行内 style 曾用 width:100% !important 把这条规则盖掉了，已在
+     profile.wxml 里移除那处行内覆盖，现在这条规则能不受干扰地直接生效。 */
   width: 120rpx !important;
   height: 120rpx !important;
   border-radius: 50% !important;

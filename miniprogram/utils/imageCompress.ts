@@ -39,16 +39,6 @@ function sanitizeCloudPathPrefix(prefix: string): string {
   return segments.length > 0 ? segments.join('/') : 'uploads';
 }
 
-function getImageInfo(src: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    wx.getImageInfo({
-      src,
-      success: (res) => resolve({ width: res.width, height: res.height }),
-      fail: reject
-    });
-  });
-}
-
 function getFileSize(path: string): Promise<number> {
   return new Promise((resolve, reject) => {
     // wx.getFileInfo 已废弃，改用官方推荐的 wx.getFileSystemManager().getFileInfo
@@ -140,70 +130,26 @@ function computeScaledSize(width: number, height: number, maxLongEdge: number): 
 }
 
 /**
- * 压缩单张图片：返回主图（≤1920px 长边，≤300KB）与缩略图（≤320px 长边）的本地临时路径
+ * 🐛 头像"被严重放大只看到局部色块"根因修复（最终定位）：这里此前复用
+ * compressImageLocal——先把主图导出到本地临时文件，再立刻在【同一块共享离屏 canvas】
+ * 上重绘缩略图。本项目其实早就在另一处踩过、并修复过同一类问题：见下方
+ * compressAndUploadImage 的注释——"食谱/门店日志照片主体被裁切"根因就是主图经过
+ * Canvas 重新绘制-导出这一整套流程，在部分设备/基础库的 Canvas 2D 实现上不可靠，
+ * 当时的修复方案是让主图完全绕开 Canvas、直接上传 chooseMedia/chooseAvatar 原始
+ * 文件。此前给头像写这个函数时，误以为 compressImageLocal 是食谱/支出凭证也在用的
+ * 稳定管道——实际从未有任何生产路径用过它，食谱/支出凭证用的是下面这个完全不同的
+ * compressAndUploadImage。现改为对齐这条真正已验证的模式：主图不经过 Canvas，直接
+ * 上传原始临时文件；头像本身不需要缩略图（没有任何地方消费 avatarUrl 的 thumbUrl），
+ * 因此彻底不再触碰 Canvas，从根源上排除这一整类"设备相关 Canvas 2D 重绘不可靠"风险。
  */
-export async function compressImageLocal(canvasId: string, src: string): Promise<{ mainPath: string; thumbPath: string }> {
-  const canvas = await getCanvasNode(canvasId);
-
-  // 1. 主图：按最长边缩放后绘制，迭代降低质量直到文件大小达标。目标尺寸从
-  // canvas 自己解码这张图后报告的 img.width/img.height 算出（见函数注释），
-  // 不再单独调用 wx.getImageInfo 取一份可能不一致的尺寸。
-  const mainSize = await loadImageOntoCanvasScaled(canvas, src, MAX_LONG_EDGE);
-
-  let quality = 0.8;
-  let mainPath = await exportCanvas(canvas, mainSize.width, mainSize.height, quality);
-  let size = await getFileSize(mainPath);
-
-  let attempts = 0;
-  while (size > MAX_FILE_SIZE && quality > MIN_QUALITY && attempts < 5) {
-    quality = Math.max(MIN_QUALITY, quality - 0.15);
-    mainPath = await exportCanvas(canvas, mainSize.width, mainSize.height, quality);
-    size = await getFileSize(mainPath);
-    attempts++;
-  }
-
-  // 🛡️ 硬性兜底：迭代降质后仍超过 1MB 视为异常图像，直接拒绝而非静默上传超大文件
-  if (size > HARD_MAX_FILE_SIZE) {
-    throw new Error(`图片压缩后仍超过 1MB（${(size / 1024 / 1024).toFixed(2)}MB），请更换一张图片重试`);
-  }
-
-  // 2. 缩略图：单独按更小尺寸重新绘制导出，用于列表懒加载（同样从这张图自己的
-  // 解码结果重新算一遍目标尺寸，不复用上一步主图的 mainSize）
-  const thumbSize = await loadImageOntoCanvasScaled(canvas, src, THUMB_LONG_EDGE);
-  const thumbPath = await exportCanvas(canvas, thumbSize.width, thumbSize.height, 0.6);
-
-  return { mainPath, thumbPath };
-}
-
-/**
- * 🐛 头像"被严重放大只看到局部色块"根因修复：此前 compressAndUploadSquareImage 依赖
- * loadImageOntoCanvasCropped 做本地方形像素裁剪（sx/sy/sw/sh 源矩形截取）。经过
- * [verify] 双重独立测量（wx.getImageInfo 与 canvas.createImage() 的 img.width/height
- * 互相印证），已确认小图（132×132，微信头像快选）场景下裁剪数学完全正确、无裁剪发生；
- * 但换成相册高清大图实测后依然稳定复现同样的"爆图"，说明问题出在 loadImageOntoCanvasCropped
- * 这条【源矩形裁剪】路径本身（大概率是设备 DPI / 图片方向元数据在"指定源矩形二次采样"
- * 这一步上的不一致，只在有源矩形裁剪运算时才会触发，与图片尺寸无关）。
- *
- * 而 loadImageOntoCanvasScaled（compressImageLocal 用的这条路径）全程只做"整图等比缩放"，
- * 不做任何源矩形子区域截取——同一个画布/同一套设备环境下，食谱照片、支出凭证等所有
- * 走这条路径的图片，在本项目从未出现过这一类问题。因此头像改为复用这条已被大量验证
- * 稳定的等比缩放管道，不再依赖本地方形裁剪；最终的圆形/方形展示效果完全交给
- * <image mode="aspectFill"> 在展示层做（这是原生渲染管线，不经过任何自定义 Canvas
- * 像素运算，天然不会有源矩形裁剪那类坐标错位问题）。
- */
-export async function compressAndUploadScaledImage(canvasId: string, src: string, cloudPathPrefix: string): Promise<CompressUploadResult> {
-  const { mainPath, thumbPath } = await compressImageLocal(canvasId, src);
-
+export async function compressAndUploadScaledImage(src: string, cloudPathPrefix: string): Promise<CompressUploadResult> {
   const safePrefix = sanitizeCloudPathPrefix(cloudPathPrefix);
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
 
-  const [mainRes, thumbRes] = await Promise.all([
-    wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}.jpg`, filePath: mainPath }),
-    wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}_thumb.jpg`, filePath: thumbPath })
-  ]);
+  const mainRes = await wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}.jpg`, filePath: src });
 
-  return { url: mainRes.fileID, thumbUrl: thumbRes.fileID };
+  return { url: mainRes.fileID, thumbUrl: mainRes.fileID };
 }
 
 /**

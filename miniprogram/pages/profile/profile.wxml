@@ -17,21 +17,29 @@
 
   <view class="mine-content-wrapper">
 
-    <!-- 图片压缩用离屏画布：头像上传专用 -->
-    <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
-
     <view class="user-profile-card">
-      <button class="avatar-choose-btn" hover-class="avatar-choose-btn-hover" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+      <!-- 🐛 头像"严重放大只看到局部色块"根因排查：交叉测试证实同一张照片走食谱照片的
+           <view><image> 结构完全正常，问题 100% 限定在头像这里——而食谱照片和头像的
+           唯一结构性差异，就是头像的 <image> 之前被嵌套在 <button open-type="chooseAvatar">
+           内部。微信原生组件（camera/video/map，以及部分特殊 open-type 按钮）有据可查地
+           存在"原生层级高于普通 WXML 渲染层，可能与自身子节点的展示层叠加/干扰"的问题。
+           这里把头像的可见展示（.avatar-outer 及其内部）从按钮里完全搬出来，改成普通
+           <view> 兄弟节点；chooseAvatar 按钮降级为一个铺满同等区域、纯透明的点击热区，
+           只负责触发 bindchooseavatar 事件，不再包裹任何要展示的内容。 -->
+      <view class="avatar-tap-wrap">
         <view class="avatar-outer">
-          <!-- 🛡️ avatar-ring 兼作 avatar-container：overflow/border-radius/position 行内强约束，
-               防止布局层面爆图；width/height 沿用 CSS（100% 撑满 avatar-outer），不额外用行内
-               px 定值锁死，避免破坏 4rpx 内边距撑出的金色描边视觉 -->
           <view class="avatar-ring" style="overflow: hidden !important; border-radius: 50% !important; position: relative !important; flex-shrink: 0 !important;">
-            <image wx:if="{{userAvatarUrl && !avatarLoadFailed}}" class="user-avatar avatar-img" src="{{userAvatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" style="width: 100% !important; height: 100% !important; display: block !important; object-fit: cover !important;" />
+            <!-- 🛡️ 不要在这里加行内 width/height（哪怕是 100%）：.user-avatar 的
+                 CSS 注释明确记录过 mode="aspectFill" 配合百分比宽高会导致裁剪区域计算
+                 错乱、表现为"放大只看到中间/色块"，固定 120rpx 定值是已验证过的修复。
+                 行内 !important 的优先级高于外部样式表 !important，加了就会覆盖掉那份
+                 修复——只保留 display/object-fit 这类不影响宽高数值的行内加固。 -->
+            <image wx:if="{{userAvatarUrl && !avatarLoadFailed}}" class="user-avatar avatar-img" src="{{userAvatarUrl}}" mode="aspectFill" binderror="onAvatarLoadError" style="display: block !important; object-fit: cover !important;" />
             <view wx:else class="user-avatar user-avatar-placeholder">👤</view>
           </view>
         </view>
-      </button>
+        <button class="avatar-choose-btn-overlay" hover-class="none" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar"></button>
+      </view>
       <view class="user-meta-info">
         <!-- 🐛 昵称与编辑图标重叠的真正根因：<input> 是微信小程序里的原生组件，它自己身上的
              text-overflow/overflow 样式并不总是可靠生效（此前只在 .user-nickname-input 自身
