@@ -1296,6 +1296,13 @@ Page({
     }
 
     this.fetchStoreSponsor(storeId);
+    // 🐛 门店切换后公告栏/今日食谱/大事记不刷新的根因修复（另一处）：这个入口此前
+    // 只刷新了赞助商信息，没有一并刷新这三项同样按当前门店严格互斥查询的数据——
+    // 与 onStoreChanged 里那组刷新调用对齐，确保这条切店路径也不会遗留上一个门店的
+    // 公告/食谱/大事记内容
+    this.fetchTodayMenu();
+    this.fetchTodayActivity();
+    this.fetchNotices();
 
     wx.showToast({
       title: `当前门店：${storeName}`,
@@ -5748,11 +5755,6 @@ Page({
       this.getTabBar().setData({ selected: 0 });
     }
 
-    // 🍽️ 首页展示当日菜单/大事记：每次页面重新可见时刷新一次（如跨零点、从子页返回）
-    this.fetchTodayMenu();
-    this.fetchTodayActivity();
-    this.fetchNotices();
-
     // #11 清理过期的频率记录和警告确认记录
     cleanExpiredFrequencyRecords();
 
@@ -5783,6 +5785,18 @@ Page({
     }
 
     this.refreshUserRoleView();
+
+    // 🐛 门店切换后公告栏/今日食谱/大事记不刷新的根因修复：这三个请求都依赖
+    // this.data.currentStoreId，但它们此前排在 refreshUserRoleView() 之前调用——
+    // refreshUserRoleView() 才是真正把 storage 里最新的 current_store_id 同步进
+    // this.data 的地方。如果切店发生在别的页面（或通过 storage 持久化，而不是本页
+    // onStoreChanged/switchStoreTarget 这两个会自行 setData 的入口），仅靠 switchTab
+    // 回到首页触发 onShow 时，这三个请求会先用着切店前的旧 currentStoreId 发起，
+    // 稍后 refreshUserRoleView() 才把新门店 id 写进 this.data，为时已晚。
+    // 现移到 refreshUserRoleView() 之后，确保总是用最新门店 id 发起请求。
+    this.fetchTodayMenu();
+    this.fetchTodayActivity();
+    this.fetchNotices();
 
     // 🌟 财务视角首页角标：预先拉取一次风控预警数量，避免用户必须先点开弹窗才知道有没有异常
     if ((this.data.isFinance || this.data.isSuperAdmin) && this.data.currentStoreId && !this.isNationalOverviewSelected()) {
