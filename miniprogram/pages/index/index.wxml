@@ -915,26 +915,30 @@
           </text>
         </view>
 
-        <!-- 🍱 3 列九宫格菜品卡片：图+菜名一一对应，与 daily-menu 食谱管理页的
-             展示网格保持同一套视觉语言 -->
-        <view class="recipe-dish-grid">
+        <!-- 🍱 3 列九宫格菜品卡片：图+菜名一一对应。
+             🛡️ 行内 style 兜底：外部 index.wxss 里的 .recipe-dish-* 类名样式在设备上
+             反复出现"编译不生效/缓存不刷新"的问题（历经切换项目根目录、清缓存、全量编译
+             均未解决），行内 style 的优先级最高，且直接写在这份 WXML 里、不依赖任何外部
+             .wxss 文件被正确加载/编译，能绕开一切样式表层面的缓存问题。class 属性仍然保留
+             （便于将来外部样式表恢复生效后无缝接管，也用于 thumb-load-failed 等既有逻辑）。 -->
+        <view class="recipe-dish-grid" style="display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 16rpx !important; width: 100% !important; margin-top: 16rpx !important; margin-bottom: 16rpx !important; box-sizing: border-box !important;">
           <block wx:for="{{recipeImages}}" wx:key="index" wx:for-item="img" wx:for-index="idx">
-            <view class="recipe-dish-item">
-              <view class="recipe-dish-img-wrap">
-                <image wx:if="{{(img.url || img) && !imageLoadFailedMap[img.url || img]}}" class="recipe-dish-img" src="{{img.url || img}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{idx}}" binderror="onImageLoadError" data-url="{{img.url || img}}"/>
-                <view wx:elif="{{img.url || img}}" class="thumb-load-failed" bindtap="onRetryImage" data-url="{{img.url || img}}">
+            <view class="recipe-dish-item" style="width: 100% !important; margin: 0 !important; display: flex !important; flex-direction: column !important; min-width: 0 !important;">
+              <view class="recipe-dish-img-wrap" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border-radius: 12rpx !important; overflow: hidden !important; box-sizing: border-box !important;">
+                <image wx:if="{{(img.url || img) && !imageLoadFailedMap[img.url || img]}}" class="recipe-dish-img" src="{{img.url || img}}" mode="aspectFill" bindtap="onPreviewImage" data-source="recipe" data-index="{{idx}}" binderror="onImageLoadError" data-url="{{img.url || img}}" style="position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 12rpx !important;"/>
+                <view wx:elif="{{img.url || img}}" class="thumb-load-failed" bindtap="onRetryImage" data-url="{{img.url || img}}" style="position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;">
                   <text class="thumb-load-failed-icon">⚠️</text>
                   <text class="thumb-load-failed-text">加载失败</text>
                 </view>
-                <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{idx}}">✕</view>
+                <view class="img-delete-badge" catchtap="deleteRecipeImage" data-index="{{idx}}" style="position: absolute !important; top: 6rpx !important; right: 6rpx !important; width: 36rpx !important; height: 36rpx !important; background: rgba(224, 49, 49, 0.9) !important; color: #fff !important; border-radius: 50% !important; font-size: 20rpx !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 10 !important;">✕</view>
               </view>
-              <input class="recipe-dish-name-input" placeholder="菜名" value="{{img.name}}" bindinput="onRecipeDishNameInput" data-index="{{idx}}" maxlength="20" />
+              <input class="recipe-dish-name-input" placeholder="菜名" value="{{img.name}}" bindinput="onRecipeDishNameInput" data-index="{{idx}}" maxlength="20" style="margin-top: 8rpx !important; height: 48rpx !important; background: #f8f8f8 !important; border-radius: 8rpx !important; font-size: 22rpx !important; text-align: center !important; width: 100% !important; box-sizing: border-box !important;" />
             </view>
           </block>
 
-          <view class="recipe-dish-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}">
-            <view class="recipe-add-icon">{{recipeUploading ? '…' : '+'}}</view>
-            <view class="recipe-add-txt">{{recipeUploading ? '压缩中' : '添加照片'}}</view>
+          <view class="recipe-dish-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border: 2rpx dashed #C8B195 !important; background-color: #FAF8F5 !important; border-radius: 12rpx !important; box-sizing: border-box !important; margin: 0 !important;">
+            <view class="recipe-add-icon" style="position: absolute !important; top: 35% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 40rpx !important; color: #8C1D18 !important; line-height: 1 !important;">{{recipeUploading ? '…' : '+'}}</view>
+            <view class="recipe-add-txt" style="position: absolute !important; top: 65% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 22rpx !important; color: #8C1D18 !important; white-space: nowrap !important;">{{recipeUploading ? '压缩中' : '添加照片'}}</view>
           </view>
         </view>
       </view>
