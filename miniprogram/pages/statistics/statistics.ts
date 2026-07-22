@@ -472,12 +472,33 @@ Page({
           nationalData: sanitizedSummary,
           nationalMatrixList: cleanedMatrix,
           // 非超管时云函数恒返回 null，这里原样落地，高阶面板 wx:if 会自动不渲染
-          superAdminInsights: r.superAdminInsights || null
+          superAdminInsights: this.formatSuperAdminInsights(r.superAdminInsights, sanitizedSummary)
         });
       }
     } catch (err) {
       console.error('[loadNationalDashboard] 加载失败:', err);
     }
+  },
+
+  // 🐛 修复"全国平均单餐成本"异常金额：云函数已按 nationalTotalDiners>0 兜底过一次，
+  // 但活跃门店数为 0（例如切到"近7天"等窄区间恰好全员离线）时同样不该展示一个具体金额——
+  // 分母门店数为 0 时哪怕算出的数值本身不是 NaN，也不代表"真实的单餐成本"，这里补上
+  // activeStoreCount 维度的兜底，并统一格式化成两位小数字符串，避免 wxml 直接吐出裸数字 0
+  formatSuperAdminInsights(insights: any, summary: any): any {
+    if (!insights) return null;
+
+    const totalDiners = Number(summary && summary.nationalTotalDiners) || 0;
+    const activeStoreCount = Number(insights.activeStoreCount) || 0;
+    const rawAvgCost = Number(insights.avgCostPerMeal);
+
+    const avgCostPerMealStr = (activeStoreCount <= 0 || totalDiners <= 0 || !isFinite(rawAvgCost))
+      ? '—'
+      : formatMoney(rawAvgCost);
+
+    return {
+      ...insights,
+      avgCostPerMealStr
+    };
   },
 
   // 超管高阶面板：切换"近7天/本月/本季度/全部时间"，重新拉取云函数聚合数据
@@ -959,11 +980,6 @@ Page({
     const { shopName, viewMode } = this.data;
     const isAll = isAllStoresMode(shopName);
 
-    console.log('=== [Statistics] loadStatistics 开始 ===');
-    console.log('日期范围:', startDate, '~', endDate);
-    console.log('门店:', shopName, ', isAll:', isAll);
-    console.log('viewMode:', viewMode);
-
     try {
       let allRecords: any[] = [];
 
@@ -972,9 +988,8 @@ Page({
           viewMode,
           limit: 1000
         });
-        
+
         allRecords = allResult.success && allResult.data ? allResult.data : [];
-        console.log('[Statistics] 云端查询结果:', allRecords.length, '条');
       } catch (cloudError) {
         console.warn('[Statistics] 云端查询失败:', cloudError);
       }
@@ -989,7 +1004,6 @@ Page({
               allRecords = JSON.parse(localData);
             }
           }
-          console.log('[Statistics] 本地缓存读取结果:', allRecords.length, '条');
         } catch (localError) {
           console.warn('[Statistics] 本地缓存读取失败:', localError);
         }
@@ -997,22 +1011,16 @@ Page({
 
       const cleanStore = (s: string) => String(s || '').replace(/[区市省店\s]/g, '').trim();
       const targetStoreClean = cleanStore(shopName);
-      console.log('[Statistics] 门店匹配:', '目标:', shopName, '->', targetStoreClean);
-      
-      const storeAllRecords = isAll 
-        ? allRecords 
+
+      const storeAllRecords = isAll
+        ? allRecords
         : allRecords.filter(item => {
             const itemStoreClean = cleanStore(item.shopName || item.store || item.storeName || '');
-            const match = itemStoreClean.includes(targetStoreClean) || targetStoreClean.includes(itemStoreClean);
-            if (!match) {
-              console.log('[Statistics] 门店不匹配:', item.shopName || item.store || item.storeName, '->', itemStoreClean);
-            }
-            return match;
+            return itemStoreClean.includes(targetStoreClean) || targetStoreClean.includes(itemStoreClean);
           });
-      
+
       const currentStoreTotalCount = storeAllRecords.length;
-      console.log('[Statistics] 门店过滤后:', currentStoreTotalCount, '条');
-      
+
       const filteredData = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, shopName);
       const totalRawCount = (filteredData as any).totalRawCount || allRecords.length;
       const parseSuccessCount = (filteredData as any).parseSuccessCount || 0;
@@ -1951,7 +1959,7 @@ Page({
     const insights = this.data.superAdminInsights;
     if (insights) {
       csv += `\n全国汇总（${insights.rangeLabel || ''}）\n`;
-      csv += `全国平均单餐成本(元),${insights.avgCostPerMeal}\n`;
+      csv += `全国平均单餐成本(元),${insights.avgCostPerMealStr || '—'}\n`;
       csv += `全国凭证合规率,${insights.complianceRate === null ? '' : insights.complianceRate + '%'}\n`;
       csv += `超过${insights.offlineAlertThresholdDays}天未记账门店数,${insights.offlineStoreCount}\n`;
     }
@@ -2730,9 +2738,6 @@ Page({
     if (wx.showShareImageMenu) {
       wx.showShareImageMenu({
         path: filePath,
-        success: () => {
-          console.log('✅ 唤起微信分享菜单成功');
-        },
         fail: (err: any) => {
           console.warn('唤起分享菜单失败，降级为预览模式:', err);
           wx.previewImage({ current: filePath, urls: [filePath] });

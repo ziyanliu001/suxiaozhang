@@ -248,7 +248,6 @@ export const DataService = {
         });
         cloudResult = { _id: existingId };
         operationType = '已覆盖更新';
-        console.log('[DataService] Upsert: 已覆盖更新同日记录:', existingId);
       } else {
         // 🌟 重复录入拦截：本人名下没有同日记录，但同门店+同日期维度可能已被他人
         // （另一账号/设备）提交过。若直接新增会产生两条互不关联的同日餐报，
@@ -284,7 +283,6 @@ export const DataService = {
           data: formattedData
         });
         operationType = '已新增';
-        console.log('[DataService] Upsert: 新增记录:', cloudResult._id);
       }
 
       // 🛡️ 资金流水防篡改：客户端不持有 HMAC 密钥，写入后立即请求云函数在服务端补盖校验码；
@@ -585,7 +583,6 @@ export const DataService = {
     saveLocalReports(localReports);
 
     if (syncedCount > 0) {
-      console.log(`[DataService] 成功同步 ${syncedCount} 条本地数据到云端`);
     }
 
     return {
@@ -622,7 +619,6 @@ export const DataService = {
         
         if (r && r.success) {
           cloudDeleted = true;
-          console.log('[DataService] 云函数删除成功:', id);
         } else {
           cloudError = (r && r.error) || '云端删除失败';
           console.warn('[DataService] 云函数删除失败:', cloudError);
@@ -657,7 +653,6 @@ export const DataService = {
 
       if (afterLen < beforeLen) {
         saveLocalReports(filteredReports);
-        console.log(`[DataService] 本地缓存删除成功，${beforeLen} -> ${afterLen}`);
       }
 
       if (isCloudRecord) {
@@ -806,7 +801,6 @@ export const DataService = {
 
       const r = result.result as any;
       if (r && r.success) {
-        console.log('[getPreviousBalance] 云函数返回的上期结余数据:', r.data);
         return {
           success: true,
           data: r.data
@@ -847,20 +841,10 @@ export const DataService = {
 
       if (matchedReports.length > 0) {
         const record = matchedReports[0];
-        
-        console.log('[getPreviousBalance] 本地降级查询到的上期原始记录:', {
-          dateString: record.dateString,
-          shopName: record.shopName,
-          yesterdayBalance: record.yesterdayBalance,
-          todayBalance: record.todayBalance,
-          adjustedBalance: record.adjustedBalance
-        });
 
         const balance = record.todayBalance != null && record.todayBalance !== ''
           ? record.todayBalance
           : (record.adjustedBalance != null ? record.adjustedBalance : null);
-
-        console.log('[getPreviousBalance] 本地降级最终选取的余额值:', balance);
 
         return {
           success: true,
@@ -873,7 +857,6 @@ export const DataService = {
         };
       }
 
-      console.log('[getPreviousBalance] 本地降级未找到匹配记录');
       return { success: false, data: null };
     }
   },

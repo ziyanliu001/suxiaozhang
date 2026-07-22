@@ -154,7 +154,6 @@ Page({
   // 🌟 切店全局响应：store-picker 触发 storechange 时同步刷新历史记录
   onStoreChange(e: any) {
     const { storeId, storeName } = e.detail || {};
-    console.log('🔄 [history onStoreChange] 切店事件:', { storeId, storeName });
 
     // 持久化当前门店
     wx.setStorageSync('current_store_id', storeId || '');
@@ -330,7 +329,6 @@ Page({
   },
 
   async initPermissions() {
-    console.log('🛡️ [history] 开始安全核验权限...');
 
     const applyRoleFlags = (roleSource: string) => {
       const normalizedRole = (roleSource || 'volunteer').toLowerCase();
@@ -375,7 +373,6 @@ Page({
       const result = await Promise.race([rolePromise, timeoutPromise]);
 
       if (result && result.success && result.roleInfo && result.roleInfo.role) {
-        console.log('✅ [history] 云端最新角色权限为:', result.roleInfo.role);
         applyRoleFlags(result.roleInfo.role);
       }
     } catch (err: any) {
@@ -1283,7 +1280,6 @@ Page({
 
   onShareReportToWeChat(e: any) {
     const { id, date } = e.currentTarget.dataset;
-    console.log('[Share] 点击分享按钮, id:', id, ', date:', date);
 
     if (!id) {
       wx.showToast({ title: '数据异常', icon: 'none' });
@@ -1297,7 +1293,6 @@ Page({
       if (filteredReport) {
         this._shareRecord = filteredReport;
         this.setData({ shareRecord: filteredReport });
-        console.log('[Share] 从filteredReports找到记录:', filteredReport.dateString);
       } else {
         wx.showToast({ title: '未找到记录', icon: 'none' });
         return;
@@ -1305,7 +1300,6 @@ Page({
     } else {
       this._shareRecord = report;
       this.setData({ shareRecord: report });
-      console.log('[Share] 从reports找到记录:', report.dateString);
     }
 
     const reportText = DataService.buildReportText(this._shareRecord);
@@ -1321,7 +1315,6 @@ Page({
   },
 
   onShareAppMessage(options?: any) {
-    console.log('[Share] onShareAppMessage 被调用, from:', options && options.from);
     const record = this._shareRecord || this.data.shareRecord;
 
     if (!record) {
@@ -1336,14 +1329,11 @@ Page({
     const store = record.shopName || '雨花斋';
     const balance = parseFloat(record.todayBalance || 0).toFixed(2);
 
-    console.log('[Share] 分享标题:', `${store}·${date}餐报`);
-
     return {
       title: `${store}·${date}餐报`,
       path: '/pages/index/index',
       imageUrl: '',
       success: (res: any) => {
-        console.log('[Share] 分享成功:', res);
         wx.showToast({ title: '分享成功', icon: 'success' });
       },
       fail: (err: any) => {
@@ -1353,7 +1343,6 @@ Page({
   },
 
   onShareTimeline() {
-    console.log('[Share] onShareTimeline 被调用');
     const record = this._shareRecord || this.data.shareRecord;
 
     if (!record) {
@@ -1625,23 +1614,12 @@ Page({
     const expense = parseFloat(editForm.expenseAmount || 0);
     const materials = parseMaterials(editForm.materialsInput || '');
 
-    console.log('🚀 [History] 用户点击了保存并重算，提交数据:', {
-      docId: editForm._id,
-      storeId: editForm.storeId,
-      reportDate: editForm.dateString || editForm.reportDate,
-      yesterdayBalance,
-      listDonationTotal,
-      otherDonation,
-      expense
-    });
-
     wx.showLoading({ title: '正在保存并级联重算...', mask: true });
 
     try {
       if (editForm.deletedImageIds && editForm.deletedImageIds.length > 0) {
         try {
           await wx.cloud.deleteFile({ fileList: editForm.deletedImageIds });
-          console.log('🗑️ 旧凭证图片已从云存储清理:', editForm.deletedImageIds);
         } catch (delErr) {
           console.warn('清理旧图文件警告:', delErr);
         }
@@ -1669,8 +1647,6 @@ Page({
           modifyReason: editForm.modifyReason || ''
         }
       });
-
-      console.log('✅ [History] 云函数 updateAndRecalculateCascade 返回结果:', res.result);
 
       wx.hideLoading();
 
@@ -1795,17 +1771,6 @@ Page({
 
     wx.showLoading({ title: '正在级联更新...', mask: true });
 
-    console.log('🚀 [前端发包] 准备调用 cascadeRecalculator，参数:', {
-      docId: item._id,
-      shopName: item.shopName || this.data.selectedStoreName,
-      dateString: item.dateString || item.reportDate,
-      yesterdayBalance: item.yesterdayBalance,
-      listDonationTotal: item.listDonationTotal || item.income || item.loveIncome,
-      otherDonation: item.otherDonation || 0,
-      dailyExpenseTotal: item.dailyExpenseTotal || item.expense || item.todayExpense,
-      fixedExpenseTotal: item.fixedExpenseTotal || 0
-    });
-
     try {
       const res = await wx.cloud.callFunction({
         name: 'cascadeRecalculator',
@@ -1823,8 +1788,6 @@ Page({
           }
         }
       });
-
-      console.log('✅ [云函数返回结果]:', res.result);
 
       wx.hideLoading();
 
@@ -2034,11 +1997,8 @@ Page({
       const modifiedDate = report.dateString || '';
 
       if ((!shopName && !storeId) || !modifiedDate) {
-        console.log('[triggerCascadeRecalculation] 参数不足，跳过级联重算');
         return;
       }
-
-      console.log('🚀 [DEBUG] 历史页触发级联重算...', { shopName, storeId, modifiedDate });
 
       wx.showLoading({ title: '正在级联校正后续账目...', mask: true });
 
@@ -2053,8 +2013,6 @@ Page({
       });
 
       wx.hideLoading();
-
-      console.log('✅ [DEBUG] 云函数重算返回结果:', res.result);
 
       const result = res.result as any;
       const alerts = result && result.integrityAlerts ? result.integrityAlerts : [];
@@ -2111,7 +2069,6 @@ Page({
         });
       },
       fail: () => {
-        console.log('用户取消举报');
       }
     });
   },

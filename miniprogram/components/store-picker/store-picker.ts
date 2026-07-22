@@ -76,7 +76,6 @@ Component({
 
     // 开启弹窗
     onOpenSheet() {
-      console.log('🔘 [store-picker] 执行打开 Bottom Sheet 面板');
       this.loadStoreInfo();
       this.setData({ showPickerSheet: true });
       this.fetchStoreListFromCloud();
@@ -256,7 +255,6 @@ Component({
         const inputCode = (this.data.authCodeInput || '').trim().toUpperCase();
         const targetRole = this.data.targetAuthRole;
 
-        console.log('🔑 [Auth Attempt]:', { inputCode, targetRole });
 
         // 🛡️ 安全修复：此前这里存在硬编码"创世根密钥"（ROOT8888/ADMIN2026/YUHUA888 等），
         // 任何人只要拿到小程序包反编译查看源码即可提取这些字符串，完全绕过云端校验直接
@@ -536,7 +534,6 @@ Component({
           role: newRole as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN'
         }
       });
-      console.log('🔘 [store-picker] 接收父页面同步，更新内部 UI:', { newStoreName, newRole });
       // 绝不调用 triggerEvent('storechange')，防止反向死循环
     }
   }

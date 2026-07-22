@@ -5,3 +5,9 @@ private.*.key
 # 本地开发者工具私有配置
 project.private.config.json
 miniprogram/project.private.config.json
+
+# 本地校验用临时依赖（tsc 等），不进入版本库
+node_modules/
+
+# 微信开发者工具本地云函数调试缓存
+.cloudbase/

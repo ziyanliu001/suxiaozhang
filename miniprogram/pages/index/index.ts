@@ -639,7 +639,6 @@ Page({
         const picker = this.selectComponent('#storePicker');
         if (picker && (picker as any).updateCurrentStore) {
           (picker as any).updateCurrentStore({ storeId, storeName, role: rawRole });
-          console.log('📡 [Role Sync] 已通知 store-picker 更新徽章:', rawRole);
         }
       });
     };
@@ -663,7 +662,6 @@ Page({
         currentStoreName: storeName,
         currentStoreId: storeId
       });
-      console.log('🚀 [Page Init] 缓存角色初始化完成, isVolunteer =', isVolunteer, ', isSuperAdmin =', isSuperAdmin);
       this.checkComplianceNotice();
 
       syncStorePicker(storeId, storeName, rawRole);
@@ -696,7 +694,6 @@ Page({
         currentStoreName: storeName,
         currentStoreId: storeId
       });
-      console.log('✅ [Page Init] 云端角色初始化完成, isVolunteer =', isVolunteer, ', isSuperAdmin =', isSuperAdmin);
       this.checkComplianceNotice();
 
       syncStorePicker(storeId, storeName, rawRole);
@@ -1185,11 +1182,8 @@ Page({
       this.data.currentStoreId === storeId &&
       this.data.currentRole === rawRole
     ) {
-      console.log('🛑 [Prevent Loop] 选中的门店与角色未发生改变，忽略响应');
       return;
     }
-
-    console.log('🔄 [onStoreChanged] 收到切换事件:', { storeName, storeId, rawRole });
 
     const isVolunteer = rawRole === 'VOLUNTEER';
     const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
@@ -1206,8 +1200,6 @@ Page({
     };
     const normalizedRole = roleMap[rawRole] || 'volunteer';
     const flags = getPermissionFlags({ role: normalizedRole });
-
-    console.log('⚡ [Role State] 重新计算后的状态:', { isVolunteer, isManager, isFinance, isSuperAdmin, normalizedRole });
 
     // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储。
     // 🛡️ 这里必须持久化真实的 normalizedRole，绝不能写入视角切换预览后的展示角色，
@@ -1240,7 +1232,6 @@ Page({
       isSuperAdmin: overridden.isSuperAdmin,
       permissions: flags
     }, () => {
-      console.log('✅ [Page Data Set] 页面 UI 状态已更新，当前 isVolunteer =', this.data.isVolunteer);
 
       // 🏪 门店选择器引导闭环：若此前有操作因"未选定具体门店"被拦截（如点击【发布今日食谱】），
       // 且刚选定的确实是具体门店（非全部门店/全国总览），自动续跑一次原操作，无需用户再点一次
@@ -1276,7 +1267,6 @@ Page({
     } else if (typeof self.loadPageData === 'function') {
       self.loadPageData();
     } else {
-      console.log('✅ [Role Changed] 页面模式已成功切换为:', rawRole);
     }
   },
 
@@ -1923,7 +1913,6 @@ Page({
       key: draftKey,
       data: draftData,
       success: () => {
-        console.log('[草稿箱] 日期草稿已保存:', draftKey);
       },
       fail: (err) => {
         console.error('[草稿箱] 草稿保存失败:', err);
@@ -1986,7 +1975,6 @@ Page({
       await this.loadBalanceForDate(dateStr);
       this.updateRealTimeBalance();
 
-      console.log('[草稿箱] 已载入', dateStr, '草稿');
       wx.showToast({ title: `已载入 ${dateStr} 草稿`, icon: 'none', duration: 1200 });
       return true;
     } catch (error) {
@@ -2047,7 +2035,6 @@ Page({
       await this.loadBalanceForDate(this.data.reportDateValue);
       this.updateRealTimeBalance();
 
-      console.log('[草稿箱] 已恢复上次未提交的草稿');
       return true;
     } catch (error) {
       console.error('[草稿箱] 加载草稿失败:', error);
@@ -2062,7 +2049,6 @@ Page({
       wx.removeStorageSync(draftKey);
       wx.removeStorageSync(DRAFT_KEY);
       this.setData({ hasDraft: false });
-      console.log('[草稿箱] 草稿已清空');
     } catch (error) {
       console.error('[草稿箱] 清空草稿失败:', error);
     }
@@ -2080,7 +2066,6 @@ Page({
         slogan1: settingsData.slogan1 || this.data.slogan1,
         slogan2: settingsData.slogan2 || this.data.slogan2
       });
-      console.log('[设置] 已加载用户自定义设置');
     } catch (error) {
       console.error('[设置] 加载设置失败:', error);
     }
@@ -2107,7 +2092,6 @@ Page({
         setSelectedStore({ storeId: '', storeName: shopName });
       }
 
-      console.log('[设置] 已保存用户自定义设置');
     } catch (error) {
       console.error('[设置] 保存设置失败:', error);
     }
@@ -2403,7 +2387,6 @@ Page({
   onCloseGenCodeModal() {
     this.setData({ showGenCodeModal: false });
   },
-
 
   onSelectGenRole(e: any) {
     this.setData({ genTargetRole: e.currentTarget.dataset.role, generatedCode: '' });
@@ -3131,8 +3114,6 @@ Page({
         } else {
           tipMsg = `✓ 已自动代入 ${tipDate} 结余`;
         }
-
-        console.log(`[loadBalanceForDate] ${tipMsg}, 金额: ¥${systemBalanceNum}`);
 
         this.setData({
           prevBalance: balance,
@@ -4478,8 +4459,6 @@ Page({
             data: { fileID: uploadRes.fileID }
           });
 
-          console.log('📄 [Debug] 云函数返回原始数据:', ocrRes);
-
           const result = ocrRes.result as any;
           if (result && result.success && (result.amount || result.totalAmount)) {
             const amount = parseFloat(result.amount || result.totalAmount || 0);
@@ -4583,10 +4562,8 @@ Page({
   async onScanDonorScreenshot() {
     // 🌟 诊断日志：如果点击按钮后连这一行都没打印出来，说明问题根本不在这个函数内部
     // （大概率是小程序端跑的还不是最新编译产物），而不是这里的业务逻辑有 bug
-    console.log('[onScanDonorScreenshot] 图片识别按钮被点击');
 
     if (this.data.isScanningDonorList) {
-      console.log('[onScanDonorScreenshot] 上一次识别仍在进行中，本次点击被忽略');
       return;
     }
 
@@ -4617,7 +4594,6 @@ Page({
       const imageHash = md5(fileBuffer);
 
       if (this._uploadedImageHashes.includes(imageHash)) {
-        console.log('[onScanDonorScreenshot] 命中重复图片 MD5，拦截:', imageHash);
         wx.showModal({
           title: '系统提示',
           content: '您已上传过此图片，请勿重复提交相同截图。',
@@ -4716,7 +4692,6 @@ Page({
       if (errMsg.includes('cancel')) {
         // 用户在系统相册/相机选择框里点了取消，这是正常操作，不需要弹提示打扰——
         // 但控制台日志留着，方便和"点击后完全没反应"这类真正的 bug 区分开
-        console.log('[onScanDonorScreenshot] 用户取消了图片选择，静默返回');
         return;
       }
       wx.showToast({ title: '识别失败：' + (e.message || errMsg || '未知错误'), icon: 'none' });
@@ -5069,10 +5044,8 @@ Page({
   },
 
   async generateReport() {
-    console.log('[generateReport] 函数被调用，开始执行');
 
     if (this.isSubmitting) {
-      console.log('[防重刷] 正在提交中，拦截重复点击');
       wx.showToast({ title: '请稍候...', icon: 'none', duration: 1000 });
       return;
     }
@@ -5085,12 +5058,6 @@ Page({
     try {
       const { isManualAdjust, systemBalance, yesterdayBalance, balanceDiff, parseResult, shopName } = this.data;
 
-      console.log('[generateReport] data 状态:', {
-        isManualAdjust,
-        parseResultItems: (parseResult && parseResult.items && parseResult.items.length) || 0,
-        allDonations: (this.data.allDonations && this.data.allDonations.length) || 0
-      });
-
       // 检查 parseResult 是否存在
       if (!parseResult) {
         console.error('[generateReport] parseResult 未初始化');
@@ -5102,12 +5069,8 @@ Page({
         return;
       }
 
-      console.log('[generateReport] parseResult 检查通过:', JSON.stringify(parseResult));
-
       // 允许空数据继续执行（用户可能只输入了其他支持或支出）
       const { items = [], totalAmount: donationsTotal = 0 } = parseResult;
-
-      console.log('[generateReport] 解析数据:', { itemsCount: items.length, donationsTotal });
 
       // 检查必要字段是否存在
       if (!shopName) {
@@ -5178,8 +5141,6 @@ Page({
           noticeContent: announcement && announcement.content,
           mergeToReportText: mergeToReportText
         });
-
-        console.log('[generateReport] 文本生成完成，长度:', report.length);
 
         // 内容安全检测 - 设置超时保护
         let isContentSafe = true;
@@ -5354,10 +5315,8 @@ Page({
           saveToQueue(submitData);
           this.updateOfflineQueueCount();
         } else {
-          console.log('[saveReportAsync] 全0无效数据，已自动跳过保存');
         }
       } else {
-        console.log('[saveReportAsync] 保存成功:', saveResult.message);
         // 用上传后的云地址更新页面状态，避免重复上传和编辑丢失
         this.setData({ receiptImages: uploadedReceiptImages });
         this.updateOfflineQueueCount();
@@ -5367,12 +5326,7 @@ Page({
         if (this.data.isEditMode) {
           await this.triggerAtomicCascadeUpdate(submitData);
         } else {
-          console.log('🚀 [DEBUG] 保存成功，即将触发级联重算...', {
-            shopName: submitData.shopName,
-            dateString: submitData.dateString
-          });
           await this.triggerCascadeRecalculation(submitData);
-          console.log('✅ [DEBUG] 级联重算调用完成');
         }
 
         wx.showToast({ title: '保存成功', icon: 'success', duration: 1500 });
@@ -5665,11 +5619,8 @@ Page({
       const modifiedDate = submitData.dateString || '';
 
       if (!shopName || !modifiedDate) {
-        console.log('[triggerCascadeRecalculation] 参数不足，跳过级联重算');
         return;
       }
-
-      console.log('🚀 [DEBUG] 正在触发级联重算云函数...', { shopName, modifiedDate });
 
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await wx.cloud.callFunction({
@@ -5679,8 +5630,6 @@ Page({
           modifiedDate
         }
       });
-
-      console.log('✅ [DEBUG] 云函数重算返回结果:', res.result);
 
       const result = res.result as any;
       if (result && result.success && result.updatedCount && result.updatedCount > 0) {
@@ -5702,12 +5651,9 @@ Page({
       const modifiedDate = submitData.dateString || '';
 
       if (!modifiedDate) {
-        console.log('[triggerAtomicCascadeUpdate] 参数不足，回退到普通级联重算');
         await this.triggerCascadeRecalculation(submitData);
         return;
       }
-
-      console.log('🚀 [DEBUG] 正在触发原子化级联更新...', { shopName, modifiedDate });
 
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await wx.cloud.callFunction({
@@ -5717,8 +5663,6 @@ Page({
           modifiedDate
         }
       });
-
-      console.log('✅ [DEBUG] 原子化级联更新返回结果:', res.result);
 
       const result = res.result as any;
       if (result && result.success && result.updatedCount && result.updatedCount > 0) {
@@ -5760,7 +5704,6 @@ Page({
       volunteerHours: ''
     });
     this.clearDraft();
-    console.log('[resetFormSilently] 保存成功，表单已重置');
   },
 
   copyText() {
@@ -6001,8 +5944,6 @@ Page({
       isSuperAdmin: overridden.isSuperAdmin,
       permissions: getPermissionFlags({ role })
     });
-
-    console.log(`🎯 [主页视图精细化分流成功]: 当前身份为 ${role}, isManager=${isManager}, isFinance=${isFinance}, isSuperAdmin=${isSuperAdmin}, isAllStoresView=${isAllStoresView}`);
 
     this.checkComplianceNotice();
   },
@@ -6339,10 +6280,8 @@ Page({
   },
 
   async onGeneratePoster() {
-    console.log('[onGeneratePoster] 函数被调用');
 
     if (this.data.isGeneratingPoster) {
-      console.log('[onGeneratePoster] 正在生成中，拦截重复点击');
       return;
     }
 
@@ -6352,13 +6291,6 @@ Page({
     }
 
     const { parseResult, otherDonation, showResult } = this.data;
-
-    console.log('[onGeneratePoster] data 状态:', {
-      isGeneratingPoster: this.data.isGeneratingPoster,
-      showResult,
-      parseResultExists: !!parseResult,
-      itemsCount: (parseResult && parseResult.items && parseResult.items.length) || 0
-    });
 
     // 检查是否已生成文本
     if (!showResult) {

@@ -133,10 +133,6 @@ function loadImageOntoCanvasCropped(canvas: any, src: string, destSize: number):
       const cropX = Math.max(0, Math.round((naturalWidth - cropSize) / 2));
       const cropY = Math.max(0, Math.round((naturalHeight - cropSize) / 2));
 
-      console.log('[imageCompress] 正方形裁剪诊断:', {
-        src, naturalWidth, naturalHeight, cropSize, cropX, cropY, destSize
-      });
-
       ctx.clearRect(0, 0, destSize, destSize);
       ctx.drawImage(img, cropX, cropY, cropSize, cropSize, 0, 0, destSize, destSize);
       resolve({ naturalWidth, naturalHeight, cropX, cropY, cropSize });
@@ -247,8 +243,6 @@ export async function compressSquareImageLocal(canvasId: string, src: string): P
   if (size > HARD_MAX_FILE_SIZE) {
     throw new Error(`头像压缩后仍超过 1MB（${(size / 1024 / 1024).toFixed(2)}MB），请更换一张图片重试`);
   }
-
-  console.log('[imageCompress] 头像主图导出完成:', { mainPath, destSize, fileSize: size, cropInfo });
 
   const thumbDestSize = Math.min(destSize, THUMB_LONG_EDGE);
   await loadImageOntoCanvasCropped(canvas, src, thumbDestSize);

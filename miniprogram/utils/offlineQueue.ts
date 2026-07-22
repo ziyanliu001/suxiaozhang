@@ -52,7 +52,6 @@ export function saveToQueue(reportData: Omit<OfflineReportData, 'id' | 'timestam
   queue.push(newItem);
   try {
     wx.setStorageSync(STORAGE_KEY, queue);
-    console.log('[offlineQueue] saveToQueue success, queue length:', queue.length);
   } catch (error) {
     console.error('[offlineQueue] saveToQueue error:', error);
   }
@@ -64,7 +63,6 @@ export function removeFromQueue(id: string): void {
   const newQueue = queue.filter(item => item.id !== id);
   try {
     wx.setStorageSync(STORAGE_KEY, newQueue);
-    console.log('[offlineQueue] removeFromQueue success, remaining:', newQueue.length);
   } catch (error) {
     console.error('[offlineQueue] removeFromQueue error:', error);
   }
@@ -73,7 +71,6 @@ export function removeFromQueue(id: string): void {
 export function clearQueue(): void {
   try {
     wx.setStorageSync(STORAGE_KEY, []);
-    console.log('[offlineQueue] clearQueue success');
   } catch (error) {
     console.error('[offlineQueue] clearQueue error:', error);
   }

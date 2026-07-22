@@ -224,7 +224,7 @@
 
       <view class="insights-metric-grid">
         <view class="insights-metric-cell">
-          <text class="insights-metric-val">¥{{superAdminInsights.avgCostPerMeal}}</text>
+          <text class="insights-metric-val">{{superAdminInsights.avgCostPerMealStr === '—' ? '—' : '¥' + superAdminInsights.avgCostPerMealStr}}</text>
           <text class="insights-metric-lbl">全国平均单餐成本</text>
         </view>
         <view class="insights-metric-cell">
