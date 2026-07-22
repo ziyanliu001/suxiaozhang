@@ -56,11 +56,15 @@ function normalizePage(page, pageSize) {
   return { page: p, size };
 }
 
+// 🍱 菜品名称最大长度：与前端编辑表单 dm-dish-name-input 的 maxlength 对齐
+const MAX_DISH_NAME_LENGTH = 20;
+
 function sanitizeImages(images) {
   if (!Array.isArray(images)) return [];
   return images.slice(0, MAX_IMAGES).map(img => ({
     url: (img && img.url) || '',
-    thumbUrl: (img && (img.thumbUrl || img.url)) || ''
+    thumbUrl: (img && (img.thumbUrl || img.url)) || '',
+    name: (img && typeof img.name === 'string') ? img.name.trim().slice(0, MAX_DISH_NAME_LENGTH) : ''
   })).filter(img => img.url);
 }
 

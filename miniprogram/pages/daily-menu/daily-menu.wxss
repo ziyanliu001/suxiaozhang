@@ -54,6 +54,9 @@
   height: calc(100vh - 88rpx);
   box-sizing: border-box;
   padding: 20rpx 24rpx;
+  /* 🛡️ 底部固定的"生成食谱宣传海报"按钮栏自身约 128rpx 高，这里预留足够的
+     滚动内容底部间距，避免最后一条历史食谱被吸底按钮遮挡 */
+  padding-bottom: calc(148rpx + env(safe-area-inset-bottom));
 }
 
 .dm-store-tip {
@@ -79,12 +82,6 @@
   color: #8C1D18;
 }
 
-.dm-divider-date {
-  font-size: 22rpx;
-  color: #A67558;
-  margin-left: 12rpx;
-}
-
 .dm-today-card {
   background: linear-gradient(135deg, #FFFDFB 0%, #FFF8F0 100%);
   border: 1.5rpx solid #FFD3BE;
@@ -94,41 +91,70 @@
   box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
 }
 
-.dm-today-header {
+/* 🍱 今日食谱顶部：左侧日期+餐次，右侧管理员轻量化 [修改][删除] 按钮组 */
+.dm-today-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 12rpx;
 }
 
-.dm-today-title {
-  flex: 1;
+.dm-today-top-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
   min-width: 0;
+}
+
+.dm-today-date {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.dm-today-tag {
+  font-size: 22rpx;
+  color: #8C1D18;
+  background: #FFF0E6;
+  border-radius: 8rpx;
+  padding: 2rpx 10rpx;
+  flex-shrink: 0;
+}
+
+.dm-today-actions {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex-shrink: 0;
+}
+
+.dm-action-btn {
+  font-size: 24rpx;
+  color: #8C1D18;
+}
+
+.dm-action-btn-delete {
+  color: #C62828;
+}
+
+.dm-action-btn-primary {
+  font-weight: bold;
+}
+
+.dm-today-note {
+  display: block;
   font-size: 26rpx;
   color: #444444;
   line-height: 1.6;
   white-space: pre-wrap;
+  margin-bottom: 16rpx;
 }
 
 .dm-today-empty-txt {
+  display: block;
   color: #999999;
-}
-
-.dm-btn-today-edit {
-  flex-shrink: 0;
-  font-size: 22rpx;
-  font-weight: bold;
-  color: #FFFFFF;
-  background: #8C1D18;
-  border-radius: 30rpx;
-  padding: 12rpx 20rpx;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.dm-btn-today-edit::after {
-  border: none;
+  font-size: 26rpx;
 }
 
 /* 🌟 发布冲突提示：今日已存在食谱时，展示发布人与时间，弱化视觉不抢主标题 */
@@ -136,7 +162,7 @@
   display: block;
   font-size: 20rpx;
   color: #999999;
-  margin-top: -8rpx;
+  margin-top: -4rpx;
   margin-bottom: 8rpx;
 }
 
@@ -155,14 +181,22 @@
   margin-bottom: 16rpx;
 }
 
-.dm-thumb-9grid {
+/* 🍱 标准九宫格菜品卡片：3 列流式网格，每张卡片 = 上层实拍图（1:1 圆角方图）+
+   下层居中粗体菜名，今日食谱/历史食谱/详情弹窗三处复用同一套样式 */
+.dm-dish-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10rpx;
+  gap: 16rpx;
   margin-bottom: 16rpx;
 }
 
-.dm-thumb-grid-item {
+.dm-dish-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dm-dish-img-wrap {
   position: relative;
   width: 100%;
   padding-bottom: 100%;
@@ -171,12 +205,47 @@
   background: #F0F0F0;
 }
 
-.dm-thumb-grid-img {
+.dm-dish-img {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+.dm-dish-name {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 🥬 默认素食占位图：菜品缺少实拍图时的兜底展示，与"加载失败"态（⚠️ 可点重试）
+   区分开——这里是"根本没有图"，不提供重试操作 */
+.dm-dish-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44rpx;
+  background: #F0F7ED;
+  border-radius: 12rpx;
+}
+
+.dm-dish-placeholder-lg {
+  position: static;
+  height: 320rpx;
+  font-size: 64rpx;
+  margin-bottom: 12rpx;
 }
 
 /* 🛡️ 缩略图加载失败兜底：<image> binderror 时切换成这个占位块，而不是放任小程序
@@ -315,14 +384,23 @@
   max-height: 60vh;
 }
 
-.dm-detail-images {
-  margin-bottom: 20rpx;
+.dm-detail-dish {
+  margin-bottom: 24rpx;
 }
 
 .dm-detail-img {
   width: 100%;
   border-radius: 12rpx;
-  margin-bottom: 16rpx;
+  display: block;
+}
+
+.dm-detail-dish-name {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  text-align: center;
 }
 
 .dm-detail-text {
@@ -385,15 +463,22 @@
   min-height: 160rpx;
 }
 
-/* 微信标准九宫格：与上方 .dm-thumb-9grid 展示态同款布局（CSS Grid 三列 + padding-bottom
-   撑开正方形），保证编辑态的上传网格和发布后的展示网格视觉完全一致 */
+/* 微信标准九宫格：与上方 .dm-dish-grid 展示态同款布局（CSS Grid 三列 + padding-bottom
+   撑开正方形），保证编辑态的上传网格和发布后的展示网格视觉完全一致；每个格子下方
+   多一行菜名输入框，用于给这道菜命名 */
 .dm-image-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16rpx;
+  gap: 16rpx 16rpx;
 }
 
 .dm-image-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dm-image-thumb-wrap {
   position: relative;
   width: 100%;
   padding-bottom: 100%;
@@ -409,6 +494,19 @@
   height: 100%;
   border-radius: 12rpx;
   background: #F0F0F0;
+}
+
+.dm-dish-name-input {
+  margin-top: 8rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  font-size: 22rpx;
+  color: #333333;
+  text-align: center;
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 10rpx;
+  box-sizing: border-box;
 }
 
 .dm-image-remove {
@@ -455,4 +553,76 @@
   font-size: 28rpx;
   font-weight: bold;
   margin-top: 24rpx;
+}
+
+/* 📤 页面底部固定栏：生成食谱宣传海报，safe-area 适配见内联 style */
+.dm-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20rpx 24rpx;
+  background: #FFFFFF;
+  box-shadow: 0 -6rpx 20rpx rgba(0, 0, 0, 0.06);
+  z-index: 99;
+}
+
+.dm-btn-poster {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.dm-btn-poster[disabled] {
+  background: #E0D5C8;
+  color: #FFFFFF;
+}
+
+.dm-poster-box {
+  width: 100%;
+  max-height: 85vh;
+  background: #FFFFFF;
+  border-top-left-radius: 28rpx;
+  border-top-right-radius: 28rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.dm-poster-canvas-wrapper {
+  max-height: 60vh;
+  display: flex;
+  justify-content: center;
+}
+
+.dm-poster-canvas {
+  margin: 0 auto;
+}
+
+.dm-poster-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #EFE6D8;
+}
+
+.dm-btn-poster-save,
+.dm-btn-poster-share {
+  flex: 1;
+  font-size: 26rpx;
+}
+
+.dm-btn-poster-save {
+  background: #8C1D18;
+  color: #FFFFFF;
+}
+
+.dm-btn-poster-share {
+  background: #F8F5F0;
+  color: #8C1D18;
 }

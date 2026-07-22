@@ -3,9 +3,15 @@ import { getSelectedStore } from '../../utils/storeManager';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
+import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../utils/drawDailyMenuPoster';
 
 const CANVAS_ID = 'imgCompressCanvas';
+const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
+const POSTER_WIDTH = 320;
 const PAGE_SIZE = 10;
+// 🍱 本项目雨花爱心餐目前每店每日仅供应一次午餐（无早/晚餐场次），"餐次"因此是
+// 固定文案，不是需要落库的字段——见 pages/index/index.ts 中"午餐正常供应中"等既有措辞
+const MEAL_LABEL = '午餐';
 
 function getTodayStr(): string {
   const now = new Date();
@@ -15,12 +21,32 @@ function getTodayStr(): string {
   return `${y}-${m}-${d}`;
 }
 
+// "YYYY-MM-DD" -> "YYYY年M月D日"，用于食谱卡片顶部日期展示
+function formatDisplayDate(dateStr: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+  if (!m) return dateStr || '';
+  return `${m[1]}年${parseInt(m[2], 10)}月${parseInt(m[3], 10)}日`;
+}
+
 // updateTime 是云端 db.serverDate() 读回的原生 Date 对象，格式化为 HH:mm 用于"已发布"提示
 function formatHHmm(time: any): string {
   if (!time) return '';
   const d = time instanceof Date ? time : new Date(time);
   if (isNaN(d.getTime())) return '';
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// 数据库 images 字段 {url, thumbUrl, name}[] -> 九宫格菜品卡片渲染用的 dishes 数组，
+// 过滤掉没有 url 的脏数据（理论上 sanitizeImages 早已保证不会落库，这里仅作展示层兜底）
+function buildDishList(images: any): Array<{ url: string; thumbUrl: string; name: string }> {
+  if (!Array.isArray(images)) return [];
+  return images
+    .map((img: any) => ({
+      url: (img && img.url) || '',
+      thumbUrl: (img && (img.thumbUrl || img.url)) || '',
+      name: (img && img.name) || ''
+    }))
+    .filter((d) => d.url);
 }
 
 Page({
@@ -36,7 +62,10 @@ Page({
 
     // 🍱 今日食谱（顶部高亮区）
     todayDateStr: getTodayStr(),
+    todayDateDisplay: formatDisplayDate(getTodayStr()),
+    mealLabel: MEAL_LABEL,
     todayItem: null as any,
+    todayDishes: [] as any[],
     todayLoading: false,
 
     // 📚 历史食谱（下方时间轴，不含今天，避免与顶部重复展示）
@@ -56,9 +85,17 @@ Page({
       id: '',
       dateString: getTodayStr(),
       menuText: '',
-      images: [] as string[]
+      // 🍱 每个元素对应一道菜：{url: 本地临时路径/云端 fileID, name: 菜品名称}
+      images: [] as Array<{ url: string; name: string }>
     },
     uploading: false,
+
+    // 📤 生成食谱宣传海报
+    showPosterModal: false,
+    posterReady: false,
+    posterGenerating: false,
+    posterCanvasWidth: POSTER_WIDTH,
+    posterCanvasHeight: 400,
 
     // 🛡️ 缩略图加载失败兜底：key 是图片路径本身。今日食谱/历史食谱/编辑表单三处
     // 图片网格结构各不相同（单条记录 / 列表套子数组 / 编辑中的数组），共用一张按
@@ -134,10 +171,10 @@ Page({
       if (item) {
         item.publishTimeStr = formatHHmm(item.updateTime);
       }
-      this.setData({ todayItem: item });
+      this.setData({ todayItem: item, todayDishes: buildDishList(item && item.images) });
     } catch (err) {
       console.error('[daily-menu] loadTodayMenu 异常:', err);
-      this.setData({ todayItem: null });
+      this.setData({ todayItem: null, todayDishes: [] });
     } finally {
       this.setData({ todayLoading: false });
     }
@@ -166,7 +203,13 @@ Page({
       const result = res.result as any;
 
       if (result && result.success) {
-        const newList = reset ? (result.data || []) : this.data.list.concat(result.data || []);
+        const rawList = result.data || [];
+        // 附加展示层派生字段：格式化日期、九宫格菜品卡片数组
+        rawList.forEach((item: any) => {
+          item.dateDisplay = formatDisplayDate(item.dateString);
+          item.dishes = buildDishList(item.images);
+        });
+        const newList = reset ? rawList : this.data.list.concat(rawList);
         // 「历史食谱」区域不重复展示今天（今天已在顶部高亮区单独呈现）
         const historyList = newList.filter((item: any) => item.dateString !== this.data.todayDateStr);
         this.setData({
@@ -217,10 +260,7 @@ Page({
         id: item ? item._id : '',
         dateString: this.data.todayDateStr,
         menuText: item ? (item.menuText || '') : '',
-        // 🛡️ editForm.images 现在是纯字符串数组（与 receiptImages 同构，供 WXML
-        // 直接 {{item}} 绑定），但数据库里已发布记录的 images 字段仍是 {url,thumbUrl}
-        // 对象，回显进编辑表单时要摘出 url
-        images: item ? this.toImagePathList(item.images) : []
+        images: item ? this.toEditableDishList(item.images) : []
       }
     });
   },
@@ -236,16 +276,19 @@ Page({
         id: item._id,
         dateString: item.dateString,
         menuText: item.menuText || '',
-        images: this.toImagePathList(item.images)
+        images: this.toEditableDishList(item.images)
       }
     });
   },
 
-  // 数据库记录的 images 字段是 {url,thumbUrl}[]，editForm.images 页面内部状态是
-  // 纯字符串数组，这里统一做一次转换；顺带兼容万一已经是字符串的数据
-  toImagePathList(images: any): string[] {
+  // 数据库记录的 images 字段是 {url,thumbUrl,name}[]，editForm.images 页面内部状态是
+  // {url,name}[]（url 先是本地临时路径，压缩上传完成后原地替换成云端 fileID），这里
+  // 统一做一次转换，供发布/编辑/一键复用三处入口共用
+  toEditableDishList(images: any): Array<{ url: string; name: string }> {
     if (!Array.isArray(images)) return [];
-    return images.map((img: any) => (img && img.url) || img).filter((u: any) => u && typeof u === 'string');
+    return images
+      .map((img: any) => ({ url: (img && img.url) || '', name: (img && img.name) || '' }))
+      .filter((d) => d.url);
   },
 
   onCloseEditForm() {
@@ -267,7 +310,13 @@ Page({
     this.setData({ 'editForm.images': images });
   },
 
-  // 🖼️ 微信标准九宫格：今日食谱最多 9 张配图
+  // 🍱 每道菜的名称输入框：与其配图同一个 editForm.images[index] 对象，只改 name 字段
+  onDishNameInput(e: any) {
+    const index = e.currentTarget.dataset.index;
+    this.setData({ [`editForm.images[${index}].name`]: e.detail.value });
+  },
+
+  // 🖼️ 微信标准九宫格：今日食谱最多 9 道菜（每道菜一张实拍图）
   async onChooseImage() {
     const MAX_IMAGES = 9;
     const remaining = MAX_IMAGES - this.data.editForm.images.length;
@@ -286,21 +335,21 @@ Page({
       const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
       if (paths.length === 0) return;
 
-      // 🌟 与支出凭证(receiptImages)100% 同构：纯字符串数组，选完图立刻把本地
-      // tempFilePath 塞进数组先渲染出来，不等压缩上传跑完才显示——本地文件选完
-      // 那一刻就是有效路径，WXML 直接 {{item}} 绑定，不经过任何对象属性访问
+      // 选完图立刻把本地 tempFilePath 塞进数组先渲染出来（name 先留空待管理员填写），
+      // 不等压缩上传跑完才显示——本地文件选完那一刻就是有效路径
       const insertStart = this.data.editForm.images.length;
-      this.setData({ 'editForm.images': [...this.data.editForm.images, ...paths], uploading: true });
+      const placeholders = paths.map((p) => ({ url: p, name: '' }));
+      this.setData({ 'editForm.images': [...this.data.editForm.images, ...placeholders], uploading: true });
 
       try {
         // 逐张压缩上传：控制单张 ≤300KB / 长边 ≤1920px，并生成列表懒加载用的缩略图
         const uploaded = await compressAndUploadImages(CANVAS_ID, paths, `daily_menus/${this.data.currentStoreId}`);
 
-        // 压缩上传跑完后，原地把本地路径字符串替换成云端 fileID 字符串——数组
-        // 顺序与 paths/uploaded 一一对应，按下标原地替换，不按值反查
+        // 压缩上传跑完后，原地把每个条目的本地路径 url 替换成云端 fileID——数组
+        // 顺序与 paths/uploaded 一一对应，按下标原地替换 url，保留管理员此时已输入的 name
         const finalImages = [...this.data.editForm.images];
         uploaded.forEach((u, i) => {
-          finalImages[insertStart + i] = u.url;
+          finalImages[insertStart + i] = { ...finalImages[insertStart + i], url: u.url };
         });
         this.setData({ 'editForm.images': finalImages });
       } catch (uploadErr) {
@@ -329,11 +378,7 @@ Page({
     wx.showLoading({ title: '提交中...', mask: true });
 
     try {
-      // 🛡️ images 在页面这一侧是纯字符串数组，但 manageDailyMenu 云函数的
-      // sanitizeImages 需要 {url,thumbUrl} 对象——直接传字符串进去，img.url 取不到
-      // 值会被云端过滤器整批丢弃，导致"提交成功但图片全没了"。这里转换回数据库
-      // 期待的对象形状，字符串数组只是页面内部状态，不是持久化 schema
-      const imagesForSubmit = images.map((url: string) => ({ url, thumbUrl: url }));
+      const imagesForSubmit = images.map((img) => ({ url: img.url, thumbUrl: img.url, name: (img.name || '').trim() }));
       const res = await wx.cloud.callFunction({
         name: 'manageDailyMenu',
         data: {
@@ -422,7 +467,7 @@ Page({
             id: todayItem ? todayItem._id : '',
             dateString: this.data.todayDateStr,
             menuText: item.menuText || '',
-            images: item.images || []
+            images: this.toEditableDishList(item.images)
           }
         });
       }
@@ -464,6 +509,122 @@ Page({
     const next = { ...this.data.thumbFailedMap };
     delete next[url];
     this.setData({ thumbFailedMap: next });
+  },
+
+  // 📤 生成今日食谱宣传海报：下载每道菜的云端实拍图到本地临时路径后，绘制成
+  // 3 列九宫格菜品卡片（图+菜名）的可保存/分享海报
+  async onGenerateMenuPoster() {
+    if (!this.data.todayItem) {
+      wx.showToast({ title: '今日暂无食谱，无法生成海报', icon: 'none' });
+      return;
+    }
+    if (this.data.posterGenerating) return;
+
+    this.setData({ showPosterModal: true, posterReady: false, posterGenerating: true });
+    wx.showLoading({ title: '正在生成海报...', mask: true });
+
+    try {
+      const dishes = this.data.todayDishes;
+      // 配图落库存的是云存储 fileID（cloud://...），需用 wx.cloud.downloadFile 而非 wx.downloadFile 下载
+      const downloaded = await Promise.all(
+        dishes.map(async (dish: any) => {
+          if (!dish.url) return { name: dish.name, photoTempPath: '' };
+          try {
+            const res = await wx.cloud.downloadFile({ fileID: dish.url });
+            return { name: dish.name, photoTempPath: res.tempFilePath };
+          } catch (err) {
+            console.warn('[daily-menu] 海报配图下载失败，使用占位:', err);
+            return { name: dish.name, photoTempPath: '' };
+          }
+        })
+      );
+
+      const posterHeight = calcDailyMenuPosterHeight(downloaded.length, !!this.data.todayItem.menuText, POSTER_WIDTH);
+      this.setData({ posterCanvasHeight: posterHeight });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const query = wx.createSelectorQuery();
+      query.select(`#${POSTER_CANVAS_ID}`)
+        .fields({ node: true, size: true })
+        .exec(async (res) => {
+          if (!res[0] || !res[0].node) {
+            wx.hideLoading();
+            this.setData({ posterGenerating: false });
+            wx.showToast({ title: 'Canvas 初始化失败', icon: 'none' });
+            return;
+          }
+          const canvas = res[0].node;
+          try {
+            await drawDailyMenuPoster({
+              canvas,
+              storeName: this.data.currentStoreName,
+              dateDisplay: this.data.todayDateDisplay,
+              menuText: this.data.todayItem.menuText,
+              dishes: downloaded,
+              width: POSTER_WIDTH,
+              height: posterHeight
+            });
+            wx.hideLoading();
+            this.setData({ posterReady: true, posterGenerating: false });
+          } catch (drawErr) {
+            wx.hideLoading();
+            this.setData({ posterGenerating: false });
+            console.error('[daily-menu] 海报绘制失败:', drawErr);
+            wx.showToast({ title: '海报绘制失败', icon: 'none' });
+          }
+        });
+    } catch (err) {
+      wx.hideLoading();
+      this.setData({ posterGenerating: false });
+      console.error('[daily-menu] onGenerateMenuPoster 异常:', err);
+      wx.showToast({ title: '海报生成失败，请重试', icon: 'none' });
+    }
+  },
+
+  onClosePosterModal() {
+    this.setData({ showPosterModal: false, posterReady: false });
+  },
+
+  onSavePosterToAlbum() {
+    if (!this.data.posterReady) {
+      wx.showToast({ title: '海报尚未绘制完成', icon: 'none' });
+      return;
+    }
+    const query = wx.createSelectorQuery();
+    query.select(`#${POSTER_CANVAS_ID}`)
+      .fields({ node: true })
+      .exec((res) => {
+        if (!res[0] || !res[0].node) return;
+        wx.canvasToTempFilePath({
+          canvas: res[0].node,
+          success: (tempRes) => {
+            wx.saveImageToPhotosAlbum({
+              filePath: tempRes.tempFilePath,
+              success: () => {
+                wx.showToast({ title: '海报已保存至相册', icon: 'success' });
+                this.onClosePosterModal();
+              },
+              fail: (err) => {
+                if (err.errMsg && err.errMsg.indexOf('auth deny') >= 0) {
+                  wx.showModal({
+                    title: '需要相册权限',
+                    content: '请在设置中允许小程序保存图片到您的相册',
+                    success: (r) => {
+                      if (r.confirm) wx.openSetting();
+                    }
+                  });
+                } else {
+                  wx.showToast({ title: '保存失败', icon: 'none' });
+                }
+              }
+            });
+          },
+          fail: () => {
+            wx.showToast({ title: '海报生成失败', icon: 'none' });
+          }
+        });
+      });
   },
 
   goBack() {

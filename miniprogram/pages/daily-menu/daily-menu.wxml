@@ -15,32 +15,39 @@
 
     <view class="dm-store-tip" wx:if="{{currentStoreName}}">📍 {{currentStoreName}}</view>
 
-    <!-- 🍱 今日食谱：顶部高亮区，右上角提供编辑/发布入口 -->
-    <view class="dm-section-divider">
-      <text class="dm-divider-icon">🔴</text>
-      <text class="dm-divider-txt">今日食谱</text>
-      <text class="dm-divider-date">{{todayDateStr}}</text>
-    </view>
-
+    <!-- 🍱 今日食谱：顶部标注日期与餐次，管理员右侧提供轻量化修改/删除入口 -->
     <view class="dm-today-card">
-      <view class="dm-today-header">
-        <text class="dm-today-title" wx:if="{{todayItem}}">{{todayItem.menuText || '（未填写文字菜谱，见图片）'}}</text>
-        <text class="dm-today-title dm-today-empty-txt" wx:else>今日食谱尚未发布</text>
-        <button class="dm-btn-today-edit" wx:if="{{canManage}}" bindtap="onOpenTodayEditForm">
-          {{todayItem ? '✏️ 修改食谱' : '📷 发布今日食谱'}}
-        </button>
+      <view class="dm-today-top">
+        <view class="dm-today-top-left">
+          <text class="dm-today-date">{{todayDateDisplay}} {{mealLabel}}</text>
+          <text class="dm-today-tag">今日食谱</text>
+        </view>
+        <view class="dm-today-actions" wx:if="{{canManage}}">
+          <block wx:if="{{todayItem}}">
+            <text class="dm-action-btn" bindtap="onOpenTodayEditForm">修改</text>
+            <text class="dm-action-btn dm-action-btn-delete" catchtap="onDeleteMenu" data-id="{{todayItem._id}}">删除</text>
+          </block>
+          <text class="dm-action-btn dm-action-btn-primary" wx:else bindtap="onOpenTodayEditForm">发布食谱</text>
+        </view>
       </view>
 
       <!-- 🌟 发布冲突提示：今日已存在食谱时展示发布人与时间，避免重复发布/误覆盖 -->
       <text class="dm-publish-meta" wx:if="{{todayItem}}">已由 {{todayItem.publisherLabel || '管理员'}} 于 {{todayItem.publishTimeStr}} 发布</text>
 
-      <view class="dm-thumb-9grid" wx:if="{{todayItem && todayItem.images.length > 0}}">
-        <view class="dm-thumb-grid-item" wx:for="{{todayItem.images}}" wx:for-item="img" wx:key="url">
-          <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="dm-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" bindtap="onPreviewImage" data-url="{{img.url}}" data-urls="{{todayItem.images}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
-          <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
-            <text class="thumb-load-failed-icon">⚠️</text>
-            <text class="thumb-load-failed-text">加载失败</text>
+      <text class="dm-today-note" wx:if="{{todayItem && todayItem.menuText}}">{{todayItem.menuText}}</text>
+      <text class="dm-today-empty-txt" wx:if="{{!todayItem}}">今日食谱尚未发布</text>
+
+      <view class="dm-dish-grid" wx:if="{{todayDishes.length > 0}}">
+        <view class="dm-dish-card" wx:for="{{todayDishes}}" wx:for-item="dish" wx:key="url">
+          <view class="dm-dish-img-wrap" bindtap="onPreviewImage" data-url="{{dish.url}}" data-urls="{{todayDishes}}">
+            <image wx:if="{{dish.thumbUrl && !thumbFailedMap[dish.thumbUrl]}}" class="dm-dish-img" src="{{dish.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onImageLoadError" data-thumb-url="{{dish.thumbUrl}}" />
+            <view wx:elif="{{dish.thumbUrl}}" class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{dish.thumbUrl}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+            <view wx:else class="dm-dish-placeholder">🥬</view>
           </view>
+          <text class="dm-dish-name">{{dish.name || '未命名菜品'}}</text>
         </view>
       </view>
     </view>
@@ -52,18 +59,22 @@
     </view>
 
     <view class="dm-menu-card" wx:for="{{historyList}}" wx:key="_id" bindtap="onOpenDetail" data-id="{{item._id}}">
-      <view class="dm-card-date">{{item.dateString}}</view>
+      <view class="dm-card-date">{{item.dateDisplay}} {{mealLabel}}</view>
       <view class="dm-card-body">
-        <view class="dm-thumb-9grid" wx:if="{{item.images.length > 0}}">
-          <view class="dm-thumb-grid-item" wx:for="{{item.images}}" wx:for-item="img" wx:key="url">
-            <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="dm-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
-            <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
-              <text class="thumb-load-failed-icon">⚠️</text>
-              <text class="thumb-load-failed-text">加载失败</text>
+        <view class="dm-dish-grid" wx:if="{{item.dishes.length > 0}}">
+          <view class="dm-dish-card" wx:for="{{item.dishes}}" wx:for-item="dish" wx:key="url">
+            <view class="dm-dish-img-wrap">
+              <image wx:if="{{dish.thumbUrl && !thumbFailedMap[dish.thumbUrl]}}" class="dm-dish-img" src="{{dish.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onImageLoadError" data-thumb-url="{{dish.thumbUrl}}" />
+              <view wx:elif="{{dish.thumbUrl}}" class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{dish.thumbUrl}}">
+                <text class="thumb-load-failed-icon">⚠️</text>
+                <text class="thumb-load-failed-text">加载失败</text>
+              </view>
+              <view wx:else class="dm-dish-placeholder">🥬</view>
             </view>
+            <text class="dm-dish-name">{{dish.name || '未命名菜品'}}</text>
           </view>
         </view>
-        <text class="dm-card-text">{{item.menuText || '（未填写文字菜谱，见图片）'}}</text>
+        <text class="dm-card-text" wx:if="{{item.menuText}}">{{item.menuText}}</text>
       </view>
       <view class="dm-card-footer" wx:if="{{canManage}}">
         <button class="dm-btn-reuse" catchtap="onReuseToToday" data-id="{{item._id}}">✨ 一键复用为今日食谱</button>
@@ -84,29 +95,36 @@
 
   </scroll-view>
 
+  <!-- 📤 页面底部固定按钮：生成今日食谱宣传海报 -->
+  <view class="dm-bottom-bar" style="padding-bottom: calc(20rpx + env(safe-area-inset-bottom));">
+    <button class="dm-btn-poster" bindtap="onGenerateMenuPoster" disabled="{{!todayItem || posterGenerating}}">
+      🖼️ {{posterGenerating ? '生成中...' : '生成食谱宣传海报'}}
+    </button>
+  </view>
+
   <!-- 详情弹窗：点击后才加载展示压缩主图（非缩略图），文字全文 -->
   <view class="dm-modal-mask" wx:if="{{showDetailModal}}" bindtap="onCloseDetail">
     <view class="dm-detail-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
       <view class="dm-detail-header">
-        <text class="dm-detail-date">{{detailItem.dateString}}</text>
+        <text class="dm-detail-date">{{detailItem.dateDisplay}} {{mealLabel}}</text>
         <text class="dm-detail-close" bindtap="onCloseDetail">✕</text>
       </view>
 
       <scroll-view scroll-y class="dm-detail-scroll">
-        <view class="dm-detail-images" wx:if="{{detailItem.images.length > 0}}">
+        <view class="dm-detail-dish" wx:for="{{detailItem.dishes}}" wx:for-item="dish" wx:key="url">
           <image
-            wx:for="{{detailItem.images}}"
-            wx:for-item="img"
-            wx:key="url"
+            wx:if="{{dish.url}}"
             class="dm-detail-img"
-            src="{{img.url}}"
+            src="{{dish.url}}"
             mode="widthFix"
             bindtap="onPreviewImage"
-            data-url="{{img.url}}"
-            data-urls="{{detailItem.images}}"
+            data-url="{{dish.url}}"
+            data-urls="{{detailItem.dishes}}"
           />
+          <view wx:else class="dm-detail-img dm-dish-placeholder dm-dish-placeholder-lg">🥬</view>
+          <text class="dm-detail-dish-name">{{dish.name || '未命名菜品'}}</text>
         </view>
-        <text class="dm-detail-text">{{detailItem.menuText}}</text>
+        <text class="dm-detail-text" wx:if="{{detailItem.menuText}}">{{detailItem.menuText}}</text>
       </scroll-view>
 
       <view class="dm-detail-actions" wx:if="{{canManage}}">
@@ -130,24 +148,28 @@
           <view class="dm-form-picker">{{editForm.dateString}}</view>
         </picker>
 
-        <text class="dm-form-label">菜谱文字</text>
+        <text class="dm-form-label">菜谱文字备注（选填）</text>
         <textarea
           class="dm-form-textarea"
-          placeholder="如：红烧茄子 / 清炒时蔬 / 紫菜蛋花汤"
+          placeholder="如：今日食材紧张，暂时简化供应"
           value="{{editForm.menuText}}"
           bindinput="onEditTextInput"
           maxlength="500"
         />
 
-        <text class="dm-form-label">配图（最多 9 张，自动压缩至 300KB 以内，单张不超过 1MB）</text>
+        <text class="dm-form-label">菜品（最多 9 道，每道菜一图一名，图片自动压缩至 300KB 以内）</text>
         <view class="dm-image-grid">
-          <view class="dm-image-item" wx:for="{{editForm.images}}" wx:key="*this">
-            <image wx:if="{{!thumbFailedMap[item]}}" class="dm-image-thumb" src="{{item}}" mode="aspectFill" binderror="onImageLoadError" data-thumb-url="{{item}}" />
-            <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{item}}">
-              <text class="thumb-load-failed-icon">⚠️</text>
-              <text class="thumb-load-failed-text">加载失败</text>
+          <view class="dm-image-item" wx:for="{{editForm.images}}" wx:for-item="img" wx:for-index="idx" wx:key="url">
+            <view class="dm-image-thumb-wrap">
+              <image wx:if="{{img.url && !thumbFailedMap[img.url]}}" class="dm-image-thumb" src="{{img.url}}" mode="aspectFill" binderror="onImageLoadError" data-thumb-url="{{img.url}}" />
+              <view wx:elif="{{img.url}}" class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{img.url}}">
+                <text class="thumb-load-failed-icon">⚠️</text>
+                <text class="thumb-load-failed-text">加载失败</text>
+              </view>
+              <view wx:else class="dm-dish-placeholder">🥬</view>
+              <text class="dm-image-remove" catchtap="onRemoveImage" data-index="{{idx}}">✕</text>
             </view>
-            <text class="dm-image-remove" bindtap="onRemoveImage" data-index="{{index}}">✕</text>
+            <input class="dm-dish-name-input" placeholder="菜品名称" value="{{img.name}}" bindinput="onDishNameInput" data-index="{{idx}}" maxlength="20" />
           </view>
           <view class="dm-image-add" bindtap="onChooseImage" wx:if="{{editForm.images.length < 9}}">
             <text>{{uploading ? '压缩中...' : '+ 添加'}}</text>
@@ -156,6 +178,25 @@
       </scroll-view>
 
       <button class="dm-submit-btn" bindtap="onSubmitEdit" disabled="{{uploading}}">提交</button>
+    </view>
+  </view>
+
+  <!-- 📤 生成食谱宣传海报弹窗 -->
+  <view class="dm-modal-mask" wx:if="{{showPosterModal}}" bindtap="onClosePosterModal">
+    <view class="dm-poster-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="dm-detail-header">
+        <text class="dm-detail-date">食谱宣传海报</text>
+        <text class="dm-detail-close" bindtap="onClosePosterModal">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="dm-poster-canvas-wrapper">
+        <canvas type="2d" id="dailyMenuPosterCanvas" class="dm-poster-canvas" style="width: {{posterCanvasWidth}}px; height: {{posterCanvasHeight}}px;"></canvas>
+      </scroll-view>
+
+      <view class="dm-poster-actions">
+        <button class="dm-btn-poster-save" bindtap="onSavePosterToAlbum" disabled="{{!posterReady}}">💾 保存到相册</button>
+        <button class="dm-btn-poster-share" open-type="share" disabled="{{!posterReady}}">📤 分享给好友</button>
+      </view>
     </view>
   </view>
 
