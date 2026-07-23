@@ -1802,9 +1802,9 @@ page {
 .reuse-yesterday-btn {
   flex-shrink: 0;
   font-size: 22rpx;
-  color: #B45309;
-  background: #FFF9F0;
-  border: 1rpx solid #FFE8CC;
+  color: #E65100;
+  background: #FFF3E0;
+  border: 1rpx solid #FFE0B2;
   border-radius: 20rpx;
   padding: 8rpx 18rpx;
   white-space: nowrap;
@@ -1871,48 +1871,23 @@ page {
   white-space: nowrap !important;
 }
 
-/* 🍱 用餐/义工细分统计自动汇总行：用餐总数/志愿者总人次只读展示，随细分输入框实时联动 */
-.stats-auto-total-row {
+/* 🍱 用餐总数/志愿者总人次汇总卡：双列对齐大数字展示，随细分输入框实时联动 */
+.stats-summary-card {
   display: flex;
+  justify-content: space-between;
   gap: 16rpx;
-  margin-top: 12rpx;
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  background: #FAFAFA;
+  border-radius: 12rpx;
+  border: 1rpx solid #F0F0F0;
 }
 
-/* 🍱 用餐总数/志愿者总人次微卡片：中性高亮配色，展现清晰的计算逻辑构成，
-   随细分输入框实时刷新 */
-.auto-total-item {
+.summary-item {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  background: #FAFAFA;
-  border: 1rpx solid #E5E5E5;
-  border-radius: 12rpx;
-  padding: 10rpx 14rpx;
-}
-
-.auto-total-lbl {
-  font-size: 22rpx;
-  font-weight: bold;
-  color: #495057;
-}
-
-.auto-total-formula {
-  font-size: 18rpx;
-  font-weight: normal;
-  color: #ADB5BD;
-}
-
-.auto-total-val {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #D9480E;
-}
-
-.auto-total-unit {
-  font-size: 20rpx;
-  font-weight: normal;
-  color: #ADB5BD;
 }
 
 .stats-input-wrap {
@@ -8569,4 +8544,15 @@ button.poster-gen-btn[disabled] {
   opacity: 1 !important;
   border: none !important;
   box-shadow: 0 4rpx 12rpx rgba(198, 40, 40, 0.3) !important;
+}
+
+/* 🍱 义工与用餐统计标题按钮/汇总卡片保险：class 名沿用既有的 .reuse-yesterday-btn
+   （未采用请求里的 .btn-reuse-yesterday，是为了不影响 disabled 态判断走的同一个 class） */
+.reuse-yesterday-btn:active {
+  opacity: 0.8;
+  background: #FFE0B2 !important;
+}
+
+.stats-summary-card {
+  box-shadow: inset 0 1rpx 3rpx rgba(0, 0, 0, 0.02);
 }

@@ -727,9 +727,18 @@
       </view>
 
       <view class="form-sub-block top-space">
-        <view class="block-title-row">
-          <view class="block-title no-margin"><view class="idx-icon-sm idx-icon-heart"></view> 义工与用餐统计 <text class="optional-tag">(选填，用餐总数/志愿者总人次自动计算)</text></view>
-          <view class="reuse-yesterday-btn {{!hasYesterdayStats ? 'disabled' : ''}}" catchtap="onReuseYesterdayStats">📋 复用昨日</view>
+        <view class="block-title-row" style="display: flex !important; justify-content: space-between !important; align-items: center !important; margin-bottom: 16rpx !important;">
+          <view class="block-title no-margin" style="display: flex !important; align-items: center !important;">
+            <text style="color: #E53935; font-size: 28rpx; margin-right: 8rpx;">♡</text>
+            <text style="font-size: 28rpx; font-weight: bold; color: #333333;">义工与用餐统计</text>
+            <text class="optional-tag" style="font-size: 20rpx; color: #999999; margin-left: 8rpx;">(自动计算)</text>
+          </view>
+          <!-- 🛡️ 保留原有 hasYesterdayStats 禁用态：enabled/disabled 配色仍走 .reuse-yesterday-btn(.disabled) class，
+               不对 background/border/文字颜色做行内覆盖，避免"无昨日数据可复用"时的置灰提示被行内样式盖掉 -->
+          <view class="reuse-yesterday-btn {{!hasYesterdayStats ? 'disabled' : ''}}" catchtap="onReuseYesterdayStats" style="display: flex !important; align-items: center !important; padding: 6rpx 16rpx !important; border-radius: 20rpx !important;">
+            <text style="font-size: 22rpx !important; margin-right: 4rpx !important;">📋</text>
+            <text style="font-size: 22rpx !important; font-weight: 500 !important;">复用昨日</text>
+          </view>
         </view>
 
         <!-- 🛡️ 6 宫格布局保险：真机上出现过单列拉通崩溃（疑似构建缓存导致 class 样式未生效），
@@ -786,14 +795,23 @@
           </view>
         </view>
 
-        <view class="stats-auto-total-row">
-          <view class="auto-total-item">
-            <text class="auto-total-lbl">用餐总数 <text class="auto-total-formula">(堂食+送餐+打包)</text></text>
-            <text class="auto-total-val">{{totalDineCount}} <text class="auto-total-unit">人</text></text>
+        <view class="stats-summary-card" style="display: flex !important; justify-content: space-between !important; gap: 16rpx !important; margin-top: 20rpx !important; padding: 16rpx 20rpx !important; background: #FAFAFA !important; border-radius: 12rpx !important; border: 1rpx solid #F0F0F0 !important;">
+          <view class="summary-item" style="flex: 1 !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
+            <text style="font-size: 22rpx !important; color: #666666 !important;">用餐总数 (堂食+送餐+打包)</text>
+            <view style="display: flex !important; align-items: baseline !important; margin-top: 4rpx !important;">
+              <text style="font-size: 36rpx !important; font-weight: bold !important; color: #C62828 !important;">{{totalDineCount}}</text>
+              <text style="font-size: 22rpx !important; color: #333333 !important; margin-left: 4rpx !important;">人</text>
+            </view>
           </view>
-          <view class="auto-total-item">
-            <text class="auto-total-lbl">志愿者总人次 <text class="auto-total-formula">(堂食+送餐)</text></text>
-            <text class="auto-total-val">{{totalVolunteers}} <text class="auto-total-unit">人次</text></text>
+
+          <view style="width: 1rpx !important; background: #E0E0E0 !important; height: 50rpx !important; align-self: center !important;"></view>
+
+          <view class="summary-item" style="flex: 1 !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
+            <text style="font-size: 22rpx !important; color: #666666 !important;">志愿者总人次 (堂食+送餐)</text>
+            <view style="display: flex !important; align-items: baseline !important; margin-top: 4rpx !important;">
+              <text style="font-size: 36rpx !important; font-weight: bold !important; color: #E65100 !important;">{{totalVolunteers}}</text>
+              <text style="font-size: 22rpx !important; color: #333333 !important; margin-left: 4rpx !important;">人次</text>
+            </view>
           </view>
         </view>
       </view>
