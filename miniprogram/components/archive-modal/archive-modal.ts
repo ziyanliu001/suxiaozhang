@@ -121,48 +121,60 @@ Component({
       this.triggerEvent('viewJourney', {}, {})
     },
 
-    onSharePoster() {
+    // 🐛 修复"卡在正在生成海报..无法退出"：此前 drawHonorPoster() 内部用
+    // wx.downloadFile 下载头像，但本项目头像上传后存的是 cloud:// fileID（见
+    // utils/imageCompress.ts compressAndUploadScaledImage），wx.downloadFile 只支持
+    // http(s):// 协议——传入 cloud:// 地址在部分机型/基础库上既不触发 success 也不
+    // 触发 fail 回调，导致整条 Promise 链永久悬空，单纯加 try/catch 拦不住"永远不
+    // resolve/reject"的情况。这里双管齐下：① 用 Promise.race 叠加超时兜底，保证无论
+    // 如何 15 秒后必然退出 loading；② 从根源修复头像下载逻辑，按协议头正确分流到
+    // wx.cloud.downloadFile（cloud://）或 wx.downloadFile（http/https），与
+    // utils/posterGenerator.ts 里 resolveHeroImageLocalPath 的既有处理口径保持一致
+    async onSharePoster() {
       if (this.data.isDrawing) return
       this.setData({ isDrawing: true })
       wx.showLoading({ title: '正在生成海报...', mask: true })
 
-      this.drawHonorPoster()
-        .then((tempFilePath: string) => {
-          return wx.saveImageToPhotosAlbum({ filePath: tempFilePath })
-        })
-        .then(() => {
-          wx.hideLoading()
-          this.setData({ isDrawing: false })
-          wx.showToast({ title: '海报已保存到相册', icon: 'success' })
-        })
-        .catch((err: any) => {
-          wx.hideLoading()
-          this.setData({ isDrawing: false })
-          if (err.errMsg && err.errMsg.indexOf('auth deny') >= 0) {
-            wx.showModal({
-              title: '需要授权',
-              content: '保存海报需要您授权「保存到相册」权限',
-              confirmText: '去设置',
-              success: (res) => {
-                if (res.confirm) {
-                  wx.openSetting()
-                }
+      try {
+        const posterPath = await Promise.race([
+          this.drawHonorPoster(),
+          new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error('海报生成超时，请检查网络后重试')), 15000)
+          })
+        ])
+
+        await wx.saveImageToPhotosAlbum({ filePath: posterPath })
+        wx.showToast({ title: '海报已保存到相册', icon: 'success' })
+      } catch (err: any) {
+        if (err && err.errMsg && err.errMsg.indexOf('auth deny') >= 0) {
+          wx.showModal({
+            title: '需要授权',
+            content: '保存海报需要您授权「保存到相册」权限',
+            confirmText: '去设置',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting()
               }
-            })
-          } else if (err.errMsg && err.errMsg.indexOf('cancel') >= 0) {
-            // 用户取消，不提示
-          } else {
-            console.error('[archive-modal] 生成海报失败:', err)
-            wx.showToast({ title: '海报生成失败', icon: 'none' })
-          }
-        })
+            }
+          })
+        } else if (err && err.errMsg && err.errMsg.indexOf('cancel') >= 0) {
+          // 用户取消，不提示
+        } else {
+          console.error('[archive-modal] 生成/保存海报失败:', err)
+          wx.showToast({ title: (err && err.message) || '海报生成失败，请重试', icon: 'none' })
+        }
+      } finally {
+        // 🛡️ 双重保险：无论成功、失败还是超时兜底触发，必须关闭 loading 与按钮锁定态
+        wx.hideLoading()
+        this.setData({ isDrawing: false })
+      }
     },
 
     /**
      * Canvas 合成荣誉海报
      * 画布尺寸：900 x 1440 px（2x 高清）
      */
-    drawHonorPoster(): Promise<string> {
+    async drawHonorPoster(): Promise<string> {
       const userInfo = this.data.userInfo as ArchiveUserInfo
       const honor = this.data.honor as HonorProgress
       const nickName = userInfo.nickName || '雨花义工家人'
@@ -170,8 +182,65 @@ Component({
       const totalHours = userInfo.totalHours || 0
       const totalCount = userInfo.totalCheckInCount || 0
 
-      const query = wx.createSelectorQuery().in(this)
+      const canvas = await this._getCanvasNode()
+      const ctx = canvas.getContext('2d')
+      const dpr = wx.getSystemInfoSync().pixelRatio || 1
+      canvas.width = 900 * dpr
+      canvas.height = 1440 * dpr
+      ctx.scale(dpr, dpr)
+
+      // 1. 背景：禅意米色渐变
+      const bgGradient = ctx.createLinearGradient(0, 0, 900, 1440)
+      bgGradient.addColorStop(0, '#FDFBF6')
+      bgGradient.addColorStop(0.5, '#F9F5ED')
+      bgGradient.addColorStop(1, '#F3EDE2')
+      ctx.fillStyle = bgGradient
+      ctx.fillRect(0, 0, 900, 1440)
+
+      // 顶部装饰弧线
+      ctx.beginPath()
+      ctx.arc(450, -200, 600, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(178,34,34,0.06)'
+      ctx.fill()
+
+      // 底部装饰弧线
+      ctx.beginPath()
+      ctx.arc(450, 1640, 600, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(245,166,35,0.08)'
+      ctx.fill()
+
+      // 2. 标题
+      ctx.textAlign = 'center'
+      ctx.fillStyle = '#8C1D18'
+      ctx.font = 'bold 52px sans-serif'
+      ctx.fillText('我的雨花护持档案', 450, 120)
+
+      // 3. 头像（圆形裁剪）：先把 avatarUrl（cloud:// fileID / http(s) 直链 / 本机临时路径）
+      // 统一解析成一个可直接喂给 canvas.createImage() 的本地路径，任何一步失败都
+      // 优雅降级为默认头像图标，不让整张海报的生成因为头像下载失败而卡死/报错
+      const avatarSize = 160
+      const avatarX = 450 - avatarSize / 2
+      const avatarY = 190
+      const localAvatarPath = await this._resolveAvatarLocalPath(userInfo.avatarUrl || '')
+
+      if (localAvatarPath) {
+        const img = await this._loadCanvasImage(canvas, localAvatarPath)
+        if (img) {
+          this._drawAvatar(ctx, img, avatarX, avatarY, avatarSize)
+        } else {
+          this._drawDefaultAvatar(ctx, avatarX, avatarY, avatarSize)
+        }
+      } else {
+        this._drawDefaultAvatar(ctx, avatarX, avatarY, avatarSize)
+      }
+
+      this._drawPosterContent(ctx, nickName, totalDays, totalHours, totalCount, honor)
+      return this._canvasToTempFile(canvas)
+    },
+
+    _getCanvasNode(): Promise<any> {
       return new Promise((resolve, reject) => {
+        const query = wx.createSelectorQuery().in(this)
         query.select('#honorPosterCanvas')
           .fields({ node: true, size: true })
           .exec((res) => {
@@ -179,86 +248,51 @@ Component({
               reject(new Error('canvas node not found'))
               return
             }
-
-            const canvas = res[0].node as any
-            const ctx = canvas.getContext('2d')
-            const dpr = wx.getSystemInfoSync().pixelRatio || 1
-            canvas.width = 900 * dpr
-            canvas.height = 1440 * dpr
-            ctx.scale(dpr, dpr)
-
-            // 1. 背景：禅意米色渐变
-            const bgGradient = ctx.createLinearGradient(0, 0, 900, 1440)
-            bgGradient.addColorStop(0, '#FDFBF6')
-            bgGradient.addColorStop(0.5, '#F9F5ED')
-            bgGradient.addColorStop(1, '#F3EDE2')
-            ctx.fillStyle = bgGradient
-            ctx.fillRect(0, 0, 900, 1440)
-
-            // 顶部装饰弧线
-            ctx.beginPath()
-            ctx.arc(450, -200, 600, 0, Math.PI * 2)
-            ctx.fillStyle = 'rgba(178,34,34,0.06)'
-            ctx.fill()
-
-            // 底部装饰弧线
-            ctx.beginPath()
-            ctx.arc(450, 1640, 600, 0, Math.PI * 2)
-            ctx.fillStyle = 'rgba(245,166,35,0.08)'
-            ctx.fill()
-
-            // 2. 标题
-            ctx.textAlign = 'center'
-            ctx.fillStyle = '#8C1D18'
-            ctx.font = 'bold 52px sans-serif'
-            ctx.fillText('我的雨花护持档案', 450, 120)
-
-            // 3. 头像（圆形裁剪）
-            const avatarUrl = userInfo.avatarUrl
-            const avatarSize = 160
-            const avatarX = 450 - avatarSize / 2
-            const avatarY = 190
-
-            if (avatarUrl) {
-              wx.getImageInfo({
-                src: avatarUrl,
-                success: (imgInfo: any) => {
-                  // 下载头像为本地临时路径
-                  wx.downloadFile({
-                    url: avatarUrl,
-                    success: (downloadRes: any) => {
-                      const img = canvas.createImage()
-                      img.src = downloadRes.tempFilePath
-                      img.onload = () => {
-                        this._drawAvatar(ctx, img, avatarX, avatarY, avatarSize)
-                        this._drawPosterContent(ctx, nickName, totalDays, totalHours, totalCount, honor)
-                        this._canvasToTempFile(canvas).then(resolve).catch(reject)
-                      }
-                      img.onerror = () => {
-                        this._drawDefaultAvatar(ctx, avatarX, avatarY, avatarSize)
-                        this._drawPosterContent(ctx, nickName, totalDays, totalHours, totalCount, honor)
-                        this._canvasToTempFile(canvas).then(resolve).catch(reject)
-                      }
-                    },
-                    fail: () => {
-                      this._drawDefaultAvatar(ctx, avatarX, avatarY, avatarSize)
-                      this._drawPosterContent(ctx, nickName, totalDays, totalHours, totalCount, honor)
-                      this._canvasToTempFile(canvas).then(resolve).catch(reject)
-                    }
-                  })
-                },
-                fail: () => {
-                  this._drawDefaultAvatar(ctx, avatarX, avatarY, avatarSize)
-                  this._drawPosterContent(ctx, nickName, totalDays, totalHours, totalCount, honor)
-                  this._canvasToTempFile(canvas).then(resolve).catch(reject)
-                }
-              })
-            } else {
-              this._drawDefaultAvatar(ctx, avatarX, avatarY, avatarSize)
-              this._drawPosterContent(ctx, nickName, totalDays, totalHours, totalCount, honor)
-              this._canvasToTempFile(canvas).then(resolve).catch(reject)
-            }
+            resolve(res[0].node)
           })
+      })
+    },
+
+    // 🐛 根因修复：本项目头像上传后存的是 cloud:// fileID（utils/imageCompress.ts
+    // compressAndUploadScaledImage），不是 http(s) 直链——wx.downloadFile 只认
+    // http(s):// 协议，此前不分青红皂白一律走 wx.downloadFile，遇到 cloud:// 地址在
+    // 部分机型/基础库上既不 success 也不 fail，海报生成 Promise 永久悬空。这里按
+    // 协议头正确分流，与 utils/posterGenerator.ts resolveHeroImageLocalPath 同一套口径：
+    // cloud:// 用 wx.cloud.downloadFile，http(s) 用 wx.downloadFile，其余（已经是
+    // 本机临时路径）直接原样使用，不再重复下载。任何一步失败都返回 null 交给调用方
+    // 降级为默认头像图标，不让整张海报因为头像下载失败而报错/卡死
+    async _resolveAvatarLocalPath(avatarUrl: string): Promise<string | null> {
+      if (!avatarUrl) return null
+      try {
+        if (avatarUrl.indexOf('cloud://') === 0) {
+          const res = await wx.cloud.downloadFile({ fileID: avatarUrl })
+          return res.tempFilePath
+        }
+        if (avatarUrl.indexOf('http://') === 0 || avatarUrl.indexOf('https://') === 0) {
+          // 🐛 wx.downloadFile 在本项目的类型声明里是回调式（返回 DownloadTask 而非
+          // Promise），与 wx.cloud.downloadFile 不同，不能直接 await——手动包一层
+          // Promise，与 utils/posterGenerator.ts downloadHttpFile 同一套写法
+          return await new Promise<string>((resolve, reject) => {
+            wx.downloadFile({
+              url: avatarUrl,
+              success: (res) => resolve(res.tempFilePath),
+              fail: (err) => reject(err)
+            })
+          })
+        }
+        return avatarUrl
+      } catch (err) {
+        console.warn('[archive-modal] 头像下载失败，海报将使用默认头像图标:', err)
+        return null
+      }
+    },
+
+    _loadCanvasImage(canvas: any, src: string): Promise<any | null> {
+      return new Promise((resolve) => {
+        const img = canvas.createImage()
+        img.src = src
+        img.onload = () => resolve(img)
+        img.onerror = () => resolve(null)
       })
     },
 
