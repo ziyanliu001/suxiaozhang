@@ -1,38 +1,45 @@
 .weui-navigation-bar {
   --weui-FG-0:rgba(0,0,0,.9);
-  --height: 44px;
-  --left: 16px;
-}
-.weui-navigation-bar .android {
-  --height: 48px;
 }
 
 .weui-navigation-bar {
+  position: relative;
   overflow: hidden;
   color: var(--weui-FG-0);
   flex: none;
+  box-sizing: border-box;
+  /* 实际高度（含状态栏）由 navigation-bar.ts _layout() 按胶囊按钮实测坐标算出，
+     写入内联 barStyle，不再使用固定 44/48px + env(safe-area-inset-top) 的估算写法 */
 }
 
 .weui-navigation-bar__inner {
   position: relative;
-  top: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* 内容区：left/center/right 的容器。top/height 直接取自胶囊按钮的实测坐标
+   （wx.getMenuButtonBoundingClientRect），与胶囊严格对齐，避免不同机型
+   （尤其是挖孔屏/刘海屏）因 statusBarHeight/safeArea 误差导致内容偏高、
+   被状态栏或前置摄像头遮挡的问题 */
+.weui-navigation-bar__content {
+  position: absolute;
   left: 0;
-  height: calc(var(--height) + env(safe-area-inset-top));
+  width: 100%;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  padding-top: env(safe-area-inset-top);
-  width: 100%;
   box-sizing: border-box;
 }
 
 .weui-navigation-bar__left {
   position: relative;
-  padding-left: var(--left);
+  padding-left: 16px;
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
+  align-items: center;
   height: 100%;
   box-sizing: border-box;
 }
@@ -57,7 +64,7 @@
   background-color: var(--weui-FG-0);
 }
 
-/* ===== 新增：双功能模式「回家」按钮 ===== */
+/* ===== 双功能模式「回家」按钮 ===== */
 
 .weui-navigation-bar__buttons_home_dual {
   display: flex;
@@ -105,17 +112,15 @@
   text-align: center;
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   font-weight: bold;
   flex: 1;
   height: 100%;
   overflow: hidden;
   line-height: 1.4;
-  padding-bottom: 4px;
-  padding-right: 120rpx;
-  padding-top: 70px;
+  padding: 0 120rpx 0 8px;
+  box-sizing: border-box;
 }
 
 .weui-navigation-bar__center text {

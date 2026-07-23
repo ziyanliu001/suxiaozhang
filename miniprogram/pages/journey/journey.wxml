@@ -5,9 +5,10 @@
     showHomeButton="auto"
     bind:back="onGoBack"
     bind:home="onGoBack"
+    bind:layout="onNavLayout"
   />
 
-  <scroll-view scroll-y class="journey-scroll" style="padding-top: {{navTop + 44}}px;">
+  <scroll-view scroll-y class="journey-scroll" style="padding-top: {{navBarTotalHeight}}px;">
     <!-- 顶部统计卡片 -->
     <view class="journey-header-card">
       <view class="journey-title-row">

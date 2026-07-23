@@ -53,9 +53,8 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
-    // 页面元数据
-    navTop: 0,
-    safeTop: 0,
+    // 页面元数据（由 navigation-bar 组件 bind:layout 上报，见 onNavLayout）
+    navBarTotalHeight: 0,
 
     // 热力图数据
     heatmapTitle: '近 30 天护持足迹',
@@ -80,7 +79,6 @@ Page({
 
   onLoad(options: any) {
     recordRecentVisit('/pages/journey/journey', '暖心历程');
-    this.calculateNavBarHeight();
     this.loadStats();
     this.loadHeatmapData();
     this.loadTimelineData();
@@ -110,13 +108,9 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    const sysInfo = wx.getSystemInfoSync();
-    this.setData({
-      safeTop: sysInfo.statusBarHeight || 0,
-      navTop: menuButton ? menuButton.top : sysInfo.statusBarHeight || 0
-    });
+  // navigation-bar 组件按胶囊按钮实测坐标算出真实导航栏高度后通过 layout 事件上报
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ navBarTotalHeight: e.detail.totalHeight });
   },
 
   loadStats() {
