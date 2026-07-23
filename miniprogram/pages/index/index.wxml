@@ -2259,12 +2259,13 @@
        但也不是此前那种几乎看不见的灰色小字。完整版声明见页面顶部的强制阅读弹窗
        （showComplianceModal / checkComplianceNotice），这里是精简常驻版，
        点击可随时重新查看完整声明全文 -->
-  <view class="compliance-footer">
-    <view class="compliance-footer-row">
-      <view class="compliance-footer-icon idx-icon-sm idx-icon-warning"></view>
-      <text class="compliance-footer-text">本小程序为民间公益志愿者团队独立开发维护的内部记账与信息公示辅助工具，非「雨花斋」品牌官方发布，不提供任何形式的网络募捐、众筹或代收款项服务。</text>
+  <view class="compliance-footer disclaimer-card" style="margin: 32rpx 24rpx 20rpx 24rpx !important; padding: 20rpx 24rpx !important; background: #FAF9F6 !important; border: 1rpx solid #EFECE6 !important; border-radius: 12rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
+    <view class="compliance-footer-row" style="display: flex !important; align-items: center !important; margin-bottom: 8rpx !important;">
+      <text style="font-size: 22rpx !important; color: #999999 !important; margin-right: 6rpx !important;">ℹ️</text>
+      <text style="font-size: 22rpx !important; font-weight: bold !important; color: #888888 !important;">公益辅助工具说明</text>
     </view>
-    <text class="compliance-footer-link" bindtap="onViewFullComplianceNotice">查看完整声明 ›</text>
+    <text class="compliance-footer-text" style="font-size: 20rpx !important; color: #999999 !important; line-height: 1.6 !important; text-align: center !important; letter-spacing: 0.5rpx !important;">本小程序为民间公益志愿者团队独立开发维护的内部记账与信息公示辅助工具，非「雨花斋」品牌官方发布，不提供任何形式的网络募捐、众筹或代收款项服务。</text>
+    <text class="compliance-footer-link" bindtap="onViewFullComplianceNotice" style="margin-top: 10rpx !important; margin-left: 0 !important;">查看完整声明 ›</text>
   </view>
 
   <!-- 🌟 财务专属功能区：稽核与封账弹窗（按月批量锁定已通过店长确认的账本记录） -->
