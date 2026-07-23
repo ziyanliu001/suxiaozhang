@@ -187,17 +187,29 @@
     <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
   </view>
 
-  <!-- 🌸 每日修身微卡片：非宗教化的传统文化/正能量宣导，纯本地静态内容，不依赖门店/角色。
-       标题里的来源标签是动态的（人生十六最/雨花家训/立志格言/雨花家道 核心精神视当前
-       抽中的金句而定），不固定写死"雨花人生十六最"，避免展示其他来源的金句时文不对题 -->
-  <view class="cultural-card" wx:if="{{cultureQuote.text}}">
-    <view class="cultural-card-header">
-      <text class="cultural-card-title">🌸 每日修身·{{cultureQuote.source}}</text>
+  <!-- 🌸 每日修身·雨花家训卡片：非宗教化的传统文化/正能量宣导，纯本地静态内容，
+       不依赖门店/角色，无需等云端数据即可展示（有兜底金句，不会有短暂空白）。
+       金句仍从立志格言/人生十六最/雨花家训/雨花家道 核心精神四个来源里轮流抽取
+       （见 onRefreshCultureQuote/getDailyCultureQuote），标题固定不随来源变化 -->
+  <view class="culture-motto-card">
+    <view class="motto-header">
+      <text class="motto-title-icon">🌸</text>
+      <text class="motto-title-text">每日修身 · 雨花家训</text>
     </view>
-    <text class="cultural-card-quote">{{cultureQuote.text}}</text>
-    <view class="cultural-card-actions">
-      <text class="cultural-action-btn" catchtap="onRefreshCultureQuote">🔄 换一换</text>
-      <text class="cultural-action-btn" catchtap="onShowFamilyMottoModal">📖 查看完整家训</text>
+
+    <view class="motto-content">
+      <text class="motto-quote">"</text>
+      <text class="motto-text">{{cultureQuote.text || '常生惭愧，常怀忏悔。'}}</text>
+      <text class="motto-quote">"</text>
+    </view>
+
+    <view class="motto-actions">
+      <view class="motto-btn motto-btn-refresh" catchtap="onRefreshCultureQuote">
+        <text>🔄 换一换</text>
+      </view>
+      <view class="motto-btn motto-btn-detail" catchtap="onShowFamilyMottoModal">
+        <text>📖 查看完整家训</text>
+      </view>
     </view>
   </view>
 

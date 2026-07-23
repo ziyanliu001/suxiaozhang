@@ -3786,7 +3786,8 @@ textarea, .textarea {
 
 /* 🌸 每日修身微卡片：非宗教化传统文化/正能量宣导，轻柔配色，不喧宾夺主 */
 /* 🌸 每日修身·雨花人生十六最 卡片：独立精美卡片，图标+标题、居中金句、底部并排小按钮 */
-.cultural-card {
+/* 🌸 每日修身·雨花家训卡片 */
+.culture-motto-card {
   background: linear-gradient(135deg, #FFF9F0 0%, #FFF3E8 100%);
   border: 1rpx solid #FFE8CC;
   border-radius: 20rpx;
@@ -3795,35 +3796,56 @@ textarea, .textarea {
   box-shadow: 0 4rpx 16rpx rgba(180, 83, 9, 0.06);
 }
 
-.cultural-card-header {
-  text-align: center;
+.motto-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
   margin-bottom: 18rpx;
 }
 
-.cultural-card-title {
+.motto-title-icon {
+  font-size: 26rpx;
+}
+
+.motto-title-text {
   font-size: 27rpx;
   font-weight: bold;
   color: #B45309;
 }
 
-.cultural-card-quote {
-  display: block;
+.motto-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 0 12rpx;
+  margin-bottom: 24rpx;
+}
+
+.motto-quote {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #E8C275;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.motto-text {
   font-size: 30rpx;
   line-height: 1.8;
   color: #5C4326;
   text-align: center;
-  padding: 0 12rpx;
-  margin-bottom: 24rpx;
   letter-spacing: 1rpx;
 }
 
-.cultural-card-actions {
+.motto-actions {
   display: flex;
   justify-content: center;
   gap: 20rpx;
 }
 
-.cultural-action-btn {
+.motto-btn {
   font-size: 23rpx;
   color: #B45309;
   background: #FFFFFF;
