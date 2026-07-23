@@ -262,6 +262,8 @@ Page({
     dashboardRoleTag: '',
     viewMode: 'all' as 'all' | 'personal',
     isAllStoresMode: true,
+    // 🏠 门店人员与服务人群画像：仅单店视角下有值，来自 manageStoreProfile 云函数
+    storeProfile: null as any,
     hasOtherStoreData: false,
     showAllStoresOption: false,
     currentStoreTotalCount: 0,
@@ -441,8 +443,36 @@ Page({
         shopName: storeName,
         isAllStoresMode: false
       });
+      this.fetchStoreProfile();
     } else if (canViewAllStoresDropdown) {
       this.loadNationalDashboard();
+    }
+  },
+
+  // 🏠 门店人员与服务人群画像：仅单店视角下展示，切到全部门店/尚未选定门店时清空。
+  // 传 storeName 而非 storeId——本页面从未维护过任何门店的 storeId（allStoresList
+  // 只有 storeName/recordCount，见 loadShopList），manageStoreProfile 服务端会按角色
+  // 分别处理：店长/财务自动按自身绑定门店解析（忽略传入的 storeName），
+  // super_admin/hq_finance/regional_finance 才会真正用 storeName 反查门店
+  async fetchStoreProfile() {
+    if (this.data.isAllStoresMode || !this.data.shopName) {
+      this.setData({ storeProfile: null });
+      return;
+    }
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get', storeName: this.data.shopName }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        this.setData({ storeProfile: result.data });
+      } else {
+        this.setData({ storeProfile: null });
+      }
+    } catch (err) {
+      console.error('[fetchStoreProfile] 获取门店人员画像失败:', err);
+      this.setData({ storeProfile: null });
     }
   },
 
@@ -748,8 +778,9 @@ Page({
       if (!isAll && cleanShopName) {
         setSelectedStore({ storeId: '', storeName: cleanShopName });
       }
-      
+
       this.calculateStats();
+      this.fetchStoreProfile();
     }
   },
 
@@ -780,6 +811,7 @@ Page({
     } else {
       this.calculateStats();
     }
+    this.fetchStoreProfile();
   },
 
   switchTab(e: any) {

@@ -1302,6 +1302,65 @@ page {
   font-weight: 500;
 }
 
+/* 🏠 门店人员与服务人群画像：与 .major-detail-card 同款卡片外观 */
+.store-people-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  margin-top: 20rpx;
+}
+
+.store-people-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #F1F3F5;
+  margin-bottom: 20rpx;
+}
+
+.store-people-card .card-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.store-people-grid-4col {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20rpx 16rpx;
+}
+
+.store-people-grid-4col .grid-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.store-people-grid-4col .cell-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.store-people-grid-4col .cell-val {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.store-people-grid-4col .cell-val.party-highlight {
+  color: #D9363E;
+}
+
+.store-people-grid-4col .cell-val.orange {
+  color: #D2691E;
+}
+
+.store-people-grid-4col .cell-val.grey {
+  color: #495057;
+}
+
 .detail-items-list {
   display: flex;
   flex-direction: column;

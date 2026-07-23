@@ -618,6 +618,46 @@
       </view>
     </view>
 
+    <!-- 🏠 门店人员与服务人群画像：独立于本期是否有餐报记录展示，仅在单店视角下出现 -->
+    <view class="store-people-card" wx:if="{{!isAllStoresMode && storeProfile}}">
+      <view class="card-header">
+        <view class="header-title-box">
+          <text class="card-icon">👥</text>
+          <text class="card-title">门店人员与服务人群画像</text>
+        </view>
+      </view>
+      <view class="store-people-grid-4col">
+        <view class="grid-cell">
+          <text class="cell-lbl">中共党员</text>
+          <text class="cell-val party-highlight">{{storeProfile.partyMembers}}</text>
+        </view>
+        <view class="grid-cell">
+          <text class="cell-lbl">社会工作者</text>
+          <text class="cell-val orange">{{storeProfile.socialWorkers}}</text>
+        </view>
+        <view class="grid-cell">
+          <text class="cell-lbl">志愿者</text>
+          <text class="cell-val orange">{{storeProfile.volunteersCount}}</text>
+        </view>
+        <view class="grid-cell">
+          <text class="cell-lbl">堂食老人</text>
+          <text class="cell-val orange">{{storeProfile.dineInSeniorsCount}}</text>
+        </view>
+        <view class="grid-cell">
+          <text class="cell-lbl">送餐老人</text>
+          <text class="cell-val orange">{{storeProfile.deliverySeniorsCount}}</text>
+        </view>
+        <view class="grid-cell">
+          <text class="cell-lbl">倾听陪伴老人</text>
+          <text class="cell-val orange">{{storeProfile.listeningSeniorsCount}}</text>
+        </view>
+        <view class="grid-cell">
+          <text class="cell-lbl">其他</text>
+          <text class="cell-val grey">{{storeProfile.otherCount}}</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 🌟 精简空状态：去掉"系统诊断"调试文本与外层黄色卡片框，按钮统一为扁平圆角主色调 -->
     <view class="smart-empty-card" wx:if="{{!statistics || statistics.recordCount === 0}}">
       <text class="empty-icon">📊</text>
