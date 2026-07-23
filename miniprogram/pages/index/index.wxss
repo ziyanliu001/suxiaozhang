@@ -20,7 +20,7 @@ page {
      财务稽核台/管理宫格等一整段非滚动区内容，矮屏设备上这段总高度可能超出 100vh，
      导致页面本体（而非内部 page-body-scroll）整体上滚，此时底部固定吸底双按钮栏仍会
      盖住刚露出的这段内容——额外预留 160rpx 占位，确保滑到底时数据不被遮挡 */
-  padding-bottom: 160rpx !important;
+  padding-bottom: 180rpx !important;
 }
 
 .app-header-section {
@@ -8389,11 +8389,11 @@ textarea, .textarea {
    但不采用高饱和度色彩，保持视觉上的次要地位。 */
 .compliance-footer,
 .disclaimer-card {
-  margin: 32rpx 24rpx calc(140rpx + env(safe-area-inset-bottom)) 24rpx !important;
+  margin: 32rpx 24rpx calc(180rpx + env(safe-area-inset-bottom)) 24rpx !important;
   padding: 20rpx 24rpx !important;
-  background: #FAF9F6 !important;
-  border: 1rpx solid #EFECE6 !important;
-  border-radius: 12rpx !important;
+  background: #FAFAFA !important;
+  border: 1rpx solid #EFEFEF !important;
+  border-radius: 16rpx !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -8403,15 +8403,16 @@ textarea, .textarea {
 .compliance-footer-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6rpx;
   margin-bottom: 8rpx;
 }
 
 .compliance-footer-text {
-  font-size: 20rpx;
-  color: #999999;
+  font-size: 22rpx;
+  color: #8C8C8C;
   line-height: 1.6;
-  text-align: center;
+  text-align: justify;
   letter-spacing: 0.5rpx;
 }
 

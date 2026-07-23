@@ -2259,12 +2259,17 @@
        但也不是此前那种几乎看不见的灰色小字。完整版声明见页面顶部的强制阅读弹窗
        （showComplianceModal / checkComplianceNotice），这里是精简常驻版，
        点击可随时重新查看完整声明全文 -->
-  <view class="compliance-footer disclaimer-card" style="margin: 32rpx 24rpx 20rpx 24rpx !important; padding: 20rpx 24rpx !important; background: #FAF9F6 !important; border: 1rpx solid #EFECE6 !important; border-radius: 12rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
-    <view class="compliance-footer-row" style="display: flex !important; align-items: center !important; margin-bottom: 8rpx !important;">
+  <!-- 🚨 上一版这里的行内 style 把 margin-bottom 写死成了 20rpx !important，
+       行内样式优先级高于任何外部 wxss（哪怕外部也带 !important），实际把下面
+       .disclaimer-card class 里 calc(140rpx+安全区) 的避让间距整个覆盖掉了——
+       这才是"文字被 TabBar 挡住"反复出现的真正原因，不是构建缓存。这次行内不再
+       写死 margin-bottom，交由 class 统一控制，且已按本轮要求提到 180rpx -->
+  <view class="compliance-footer disclaimer-card" style="margin: 32rpx 24rpx !important; padding: 20rpx 24rpx !important; background: #FAFAFA !important; border: 1rpx solid #EFEFEF !important; border-radius: 16rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
+    <view class="compliance-footer-row" style="display: flex !important; align-items: center !important; justify-content: center !important; margin-bottom: 8rpx !important;">
       <text style="font-size: 22rpx !important; color: #999999 !important; margin-right: 6rpx !important;">ℹ️</text>
       <text style="font-size: 22rpx !important; font-weight: bold !important; color: #888888 !important;">公益辅助工具说明</text>
     </view>
-    <text class="compliance-footer-text" style="font-size: 20rpx !important; color: #999999 !important; line-height: 1.6 !important; text-align: center !important; letter-spacing: 0.5rpx !important;">本小程序为民间公益志愿者团队独立开发维护的内部记账与信息公示辅助工具，非「雨花斋」品牌官方发布，不提供任何形式的网络募捐、众筹或代收款项服务。</text>
+    <text class="compliance-footer-text" style="font-size: 22rpx !important; color: #8C8C8C !important; line-height: 1.6 !important; text-align: justify !important; letter-spacing: 0.5rpx !important;">本工具系民间志愿团队自研的内部食谱与账目信息公示辅助工具，不涉及「雨花斋」官方品牌行政关系，不提供任何形式的网络公开筹款或在线支付服务。</text>
     <text class="compliance-footer-link" bindtap="onViewFullComplianceNotice" style="margin-top: 10rpx !important; margin-left: 0 !important;">查看完整声明 ›</text>
   </view>
 
