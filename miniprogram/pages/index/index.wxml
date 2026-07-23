@@ -2333,13 +2333,17 @@
 
   <!-- 🌸 【查看完整家训】弹窗：展示雨花家训心字诀 + 家训正文 + 为学之方完整原文，
        三段结构化展示（而非拼成一整段文字），小标题加粗，提升可读性 -->
+  <!-- 🚨 家训弹窗容器加行内保险下移 + 限高，避开右上角原生胶囊按钮；关闭按钮
+       改为绝对定位悬浮在卡片右上角，不再和标题挤同一行——这三处内联样式只作用于
+       本弹窗这一个元素实例，不影响 .modal-backdrop/.modal-card/.modal-header-bar/
+       .modal-close-btn 这些其他弹窗共用的基础 class -->
   <view class="modal-backdrop" wx:if="{{showFamilyMottoModal}}" bindtap="onCloseFamilyMottoModal">
-    <view class="modal-card family-motto-card" catchtap="stopPropagation">
-      <view class="modal-header-bar family-motto-header">
+    <view class="modal-card family-motto-card" catchtap="stopPropagation" style="max-height: 75vh !important; margin-top: 60rpx !important; position: relative !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
+      <view class="motto-modal-close" bindtap="onCloseFamilyMottoModal" style="position: absolute !important; right: 24rpx !important; top: 24rpx !important; width: 60rpx !important; height: 60rpx !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 36rpx !important; color: #999999 !important; z-index: 10 !important;">✕</view>
+      <view class="modal-header-bar family-motto-header" style="justify-content: center !important; padding-right: 60rpx !important;">
         <text class="modal-title-text">📖 雨花家训</text>
-        <text class="modal-close-btn" bindtap="onCloseFamilyMottoModal">✕</text>
       </view>
-      <scroll-view scroll-y class="family-motto-scroll">
+      <scroll-view scroll-y class="family-motto-scroll" style="max-height: 58vh !important; flex: 1 !important;">
         <text class="motto-section-title">雨花心字诀</text>
         <text class="motto-section-text">{{familyMottoMindFormula}}</text>
 

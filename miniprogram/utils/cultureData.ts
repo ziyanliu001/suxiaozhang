@@ -75,7 +75,7 @@ export const SIXTEEN_BESTS: string[] = [
 
 // 七、雨花家训（心字诀 + 家训正文 + 为学之方）
 export const FAMILY_MOTTO = {
-  mindFormula: '雨花心字诀：雨花训，皆用心。志悲恳，惜忠恒，憼忍愛，悟忈恩，忏慎慧，恕德性。字依心，心现相；心同体，命同根。',
+  mindFormula: '雨花训，皆用心。志悲恳，惜忠恒，憼忍愛，悟忈恩，忏慎慧，恕德性。字依心，心现相；心同体，命同根。',
   creedLines: [
     '提倡素食，康乐长寿。',
     '惜命戒杀，众生祥和。',
@@ -96,7 +96,7 @@ export const FAMILY_MOTTO = {
     '都是老师，唯我学生。',
     '依此修学，圣贤驯致！'
   ],
-  studyMethod: '为学之方：通过研习，明了家训的真实义，掌握运用家训的方法，提升内化家训的能力；时时体察自己的心念，事事践行家训的义理，处处检验学习的成效。居敬持志、知行合一。'
+  studyMethod: '通过研习，明了家训的真实义，掌握运用家训的方法，提升内化家训的能力；时时体察自己的心念，事事践行家训的义理，处处检验学习的成效。居敬持志、知行合一。'
 };
 
 // 八、雨花家仪 —— 感恩词
@@ -177,7 +177,15 @@ export function getGratitudeTextFull(): string {
   return GRATITUDE_TEXT.join('\n');
 }
 
-// 拼合完整雨花家训文本（用于首页【查看完整家训】弹窗）
+// 拼合完整雨花家训纯文本（无独立视觉标题的场景使用，如分享文案/海报落款，
+// 故在这里而非 FAMILY_MOTTO 原始数据上补回"雨花心字诀："/"为学之方："前缀——
+// 首页弹窗有独立加粗小标题，直接用 FAMILY_MOTTO.mindFormula/studyMethod 即可，不会重复）
 export function getFamilyMottoFullText(): string {
-  return [FAMILY_MOTTO.mindFormula, '', ...FAMILY_MOTTO.creedLines, '', FAMILY_MOTTO.studyMethod].join('\n');
+  return [
+    '雨花心字诀：' + FAMILY_MOTTO.mindFormula,
+    '',
+    ...FAMILY_MOTTO.creedLines,
+    '',
+    '为学之方：' + FAMILY_MOTTO.studyMethod
+  ].join('\n');
 }

@@ -8556,3 +8556,13 @@ button.poster-gen-btn[disabled] {
 .stats-summary-card {
   box-shadow: inset 0 1rpx 3rpx rgba(0, 0, 0, 0.02);
 }
+
+/* 🚨 雨花家训弹窗保险：类名沿用 .family-motto-card（这个类本就只用在这一个弹窗），
+   未采用请求里的 .motto-modal-card，避免和其他地方潜在同名类冲突 */
+.family-motto-card {
+  margin-top: 80rpx !important;
+}
+
+.motto-modal-close:active {
+  opacity: 0.6;
+}
