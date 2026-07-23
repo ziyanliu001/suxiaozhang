@@ -61,8 +61,9 @@ Page({
     const cached = AuthService.getCachedRoleInfo();
     const role = ((cached && cached.role) || wx.getStorageSync('current_user_role') || 'volunteer').toLowerCase();
     const isSuperAdmin = role === 'super_admin';
-    const isManagerRole = role === 'store_manager' || isSuperAdmin;
-    const isFinanceRole = role === 'finance' || isSuperAdmin;
+    // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
+    const isManagerRole = role === 'store_manager' || role === 'store_patriarch' || isSuperAdmin;
+    const isFinanceRole = role === 'finance' || role === 'store_patriarch' || isSuperAdmin;
 
     this.setData({ isManagerRole, isFinanceRole, isSuperAdmin });
   },

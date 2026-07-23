@@ -34,10 +34,11 @@ exports.main = async (event) => {
 
   try {
     const caller = await resolveCaller(OPENID);
-    if (!caller || !['finance', 'super_admin'].includes(caller.role)) {
-      return { success: false, errMsg: '无权限：仅财务与超级管理员可执行稽核封账' };
+    // 🏛️ 权限向下继承：大家长天然拥有财务的全套日常管理权限
+    if (!caller || !['finance', 'store_patriarch', 'super_admin'].includes(caller.role)) {
+      return { success: false, errMsg: '无权限：仅财务/大家长与超级管理员可执行稽核封账' };
     }
-    if (caller.role === 'finance' && caller.storeId && caller.storeId !== storeId) {
+    if ((caller.role === 'finance' || caller.role === 'store_patriarch') && caller.storeId && caller.storeId !== storeId) {
       return { success: false, errMsg: '无权限：不能封账其他门店的账本' };
     }
 
@@ -63,7 +64,7 @@ exports.main = async (event) => {
       return { success: true, lockedCount: 0, message: `${year}年${mm}月没有可封账的记录（需先由店长完成确认）` };
     }
 
-    const userName = caller.role === 'finance' ? '财务稽核员' : '超级管理员';
+    const userName = caller.role === 'finance' ? '财务稽核员' : (caller.role === 'store_patriarch' ? '大家长' : '超级管理员');
     const nowStr = new Date().toLocaleString();
 
     let lockedCount = 0;

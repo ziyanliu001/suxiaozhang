@@ -51,7 +51,8 @@ function checkCanStamp(doc, openId, caller) {
 
   if (caller.tenantId && doc.tenantId && caller.tenantId !== doc.tenantId) return false;
   if (caller.role === 'super_admin') return true;
-  if (caller.role === 'store_manager' || caller.role === 'finance') {
+  // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
+  if (caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') {
     return !!((caller.storeId && doc.storeId && caller.storeId === doc.storeId)
       || (caller.storeName && doc.shopName && caller.storeName === doc.shopName));
   }

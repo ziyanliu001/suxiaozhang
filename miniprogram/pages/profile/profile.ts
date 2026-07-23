@@ -189,12 +189,15 @@ Page({
 
     // 🌟 视角切换预览：仅真实身份为 super_admin 时才可能生效，展示层降级模拟
     // 店长/财务视角；hasPrivilege 随预览角色一并变化（volunteer 视角下应隐藏管理入口）
+    // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
     const overridden = applyRoleViewOverride(role, {
       currentUserRole: role, isVolunteer: role === 'volunteer',
-      isManager: role === 'store_manager', isFinance: role === 'finance', isSuperAdmin: isRealSuperAdmin
+      isManager: role === 'store_manager' || role === 'store_patriarch',
+      isFinance: role === 'finance' || role === 'store_patriarch',
+      isSuperAdmin: isRealSuperAdmin
     });
     const displayRole = overridden.currentUserRole;
-    const hasPrivilege = displayRole === 'store_manager' || displayRole === 'finance' || displayRole === 'super_admin';
+    const hasPrivilege = displayRole === 'store_manager' || displayRole === 'finance' || displayRole === 'store_patriarch' || displayRole === 'super_admin';
     const currentViewMode = getPreviewViewMode();
 
     this.setData({
@@ -489,7 +492,8 @@ Page({
       let auditedCount = 0;
 
       try {
-        if ((role === 'store_manager' || role === 'super_admin') && tenantId) {
+        // 🏛️ 权限向下继承：大家长同样可能承担日常提交/稽核工作，统计口径一并覆盖
+        if ((role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin') && tenantId) {
           const subRes = await db.collection('report_logs')
             .where({
               tenantId,
@@ -502,7 +506,7 @@ Page({
         // 这两个数字是直接展示给用户的"已提交/已稽核"荣誉墙统计，不是单纯的"是否存在"
         // 判断，所以不能用 limit(1) 替代——limit(1) 只能回答"有没有"，答不出"有多少"。
         // 真正的优化点是让 tenantId+auditedBy 复合索引生效，把全表扫描收窄到单租户内。
-        if ((role === 'finance' || role === 'super_admin') && tenantId) {
+        if ((role === 'finance' || role === 'store_patriarch' || role === 'super_admin') && tenantId) {
           const audRes = await db.collection('report_logs')
             .where({
               tenantId,
@@ -524,8 +528,8 @@ Page({
           volunteerDays,
           volunteerHours,
           volunteerCheckInCount,
-          submittedReports: submittedCount || (role === 'store_manager' || role === 'super_admin' ? 14 : 0),
-          auditedReports: auditedCount || (role === 'finance' || role === 'super_admin' ? 8 : 0)
+          submittedReports: submittedCount || (role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin' ? 14 : 0),
+          auditedReports: auditedCount || (role === 'finance' || role === 'store_patriarch' || role === 'super_admin' ? 8 : 0)
         }
       });
       this.computeBadgeList();
@@ -540,8 +544,8 @@ Page({
           volunteerDays,
           volunteerHours,
           volunteerCheckInCount,
-          submittedReports: role === 'store_manager' || role === 'super_admin' ? 14 : 0,
-          auditedReports: role === 'finance' || role === 'super_admin' ? 8 : 0
+          submittedReports: role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin' ? 14 : 0,
+          auditedReports: role === 'finance' || role === 'store_patriarch' || role === 'super_admin' ? 8 : 0
         }
       });
       this.computeBadgeList();

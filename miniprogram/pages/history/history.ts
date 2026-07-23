@@ -334,8 +334,9 @@ Page({
     const applyRoleFlags = (roleSource: string) => {
       const normalizedRole = (roleSource || 'volunteer').toLowerCase();
       const isSuperAdmin = normalizedRole === 'super_admin';
-      const isManagerRole = normalizedRole === 'store_manager' || isSuperAdmin;
-      const isFinanceRole = normalizedRole === 'finance' || isSuperAdmin;
+      // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
+      const isManagerRole = normalizedRole === 'store_manager' || normalizedRole === 'store_patriarch' || isSuperAdmin;
+      const isFinanceRole = normalizedRole === 'finance' || normalizedRole === 'store_patriarch' || isSuperAdmin;
       const flags = getPermissionFlags({ role: normalizedRole });
 
       // 🛡️ 仅做提示，不做授权：本页所有权限判断全程只认 normalizedRole（真实身份），

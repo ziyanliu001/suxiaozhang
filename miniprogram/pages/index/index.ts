@@ -451,6 +451,8 @@ Page({
       storeSelectionType: 'existing',
       customStoreName: ''
     } as any,
+    applyRoleTipText: '✅ 即刻生效，开始护持',
+    applyRoleTipVariant: 'auto' as 'auto' | 'patriarch' | 'pending',
     showAuditModal: false,
     auditActiveTab: 'pending' as 'pending' | 'approved',
     auditIsNationalView: false,
@@ -653,13 +655,16 @@ Page({
     const computeRoleState = (roleStr: string) => {
       const rawRole = (roleStr || 'VOLUNTEER').toUpperCase();
       const isVolunteer = rawRole === 'VOLUNTEER';
-      const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
-      const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+      // 🏛️ 权限向下继承：大家长（store_patriarch/PATRIARCH）天然拥有店长 + 财务的全套
+      // 日常管理权限（录入餐报/发布食谱/编写日志/管理工时等），无需再兼任多重角色
+      const isManager = ['MANAGER', 'STORE_MANAGER', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+      const isFinance = ['FINANCE', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
       const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
       const roleMap: Record<string, string> = {
         'VOLUNTEER': 'volunteer',
         'MANAGER': 'store_manager',
         'STORE_MANAGER': 'store_manager',
+        'STORE_PATRIARCH': 'store_patriarch',
         'FINANCE': 'finance',
         'ADMIN': 'super_admin',
         'SUPER_ADMIN': 'super_admin'
@@ -1237,14 +1242,17 @@ Page({
     }
 
     const isVolunteer = rawRole === 'VOLUNTEER';
-    const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
-    const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    // 🏛️ 权限向下继承：大家长（store_patriarch/PATRIARCH）天然拥有店长 + 财务的全套
+    // 日常管理权限（录入餐报/发布食谱/编写日志/管理工时等），无需再兼任多重角色
+    const isManager = ['MANAGER', 'STORE_MANAGER', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isFinance = ['FINANCE', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isSuperAdmin = rawRole === 'ADMIN' || rawRole === 'SUPER_ADMIN';
 
     const roleMap: Record<string, string> = {
       'VOLUNTEER': 'volunteer',
       'MANAGER': 'store_manager',
       'STORE_MANAGER': 'store_manager',
+      'STORE_PATRIARCH': 'store_patriarch',
       'FINANCE': 'finance',
       'ADMIN': 'super_admin',
       'SUPER_ADMIN': 'super_admin'
@@ -2236,12 +2244,15 @@ Page({
     // 用户必须在下拉列表里选定一个具体门店后（走 onSubmitRoleApply 已有的
     // "未选门店禁止提交"校验）才能提交申请。
     const NATIONAL_SCENE_IDS = ['all', 'ALL', 'national_overview', 'ALL_STORES'];
+    const applyTip = this.computeApplyRoleTip(this.data.applyForm.requestedRole);
     if (NATIONAL_SCENE_IDS.includes(storeId)) {
       this.setData({
         'applyForm.storeId': '',
         'applyForm.storeName': '',
         'applyForm.storeSelectionType': 'existing',
         'applyForm.customStoreName': '',
+        applyRoleTipText: applyTip.text,
+        applyRoleTipVariant: applyTip.variant,
         showApplyModal: true
       });
       if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
@@ -2270,6 +2281,8 @@ Page({
           'applyForm.storeName': (res.data as any).storeName || '未知门店',
           'applyForm.storeSelectionType': 'existing',
           'applyForm.customStoreName': '',
+          applyRoleTipText: applyTip.text,
+          applyRoleTipVariant: applyTip.variant,
           showApplyModal: true
         });
       } else {
@@ -2283,6 +2296,8 @@ Page({
         'applyForm.storeName': fallbackName,
         'applyForm.storeSelectionType': 'existing',
         'applyForm.customStoreName': '',
+        applyRoleTipText: applyTip.text,
+        applyRoleTipVariant: applyTip.variant,
         showApplyModal: true
       });
     }
@@ -2290,11 +2305,14 @@ Page({
 
   onOpenRoleApplyModal() {
     const storeName = this.data.currentStoreName || this.data.shopName;
+    const tip = this.computeApplyRoleTip(this.data.applyForm.requestedRole);
     this.setData({
       'applyForm.storeId': this.data.currentStoreId,
       'applyForm.storeName': storeName,
       'applyForm.storeSelectionType': 'existing',
       'applyForm.customStoreName': '',
+      applyRoleTipText: tip.text,
+      applyRoleTipVariant: tip.variant,
       showApplyModal: true
     });
     // 门店下拉列表若尚未加载，补拉一次（已由 getStoreList 云函数按本机构 tenantId 过滤）
@@ -2311,8 +2329,32 @@ Page({
     this.setData({ 'applyForm.phone': e.detail.value });
   },
 
+  // 🏛️ 大家长/店长/财务/义工四种身份提交后的提示文案与视觉变体：
+  // - 义工：免审即时生效
+  // - 大家长：天然包含店长+财务全套权限，无需重复申请（若当前已是店长，
+  //   提示改为"正在申请升级为大家长身份"）
+  // - 店长/财务：常规待审批提示
+  computeApplyRoleTip(requestedRole: string): { text: string; variant: 'auto' | 'patriarch' | 'pending' } {
+    if (requestedRole === 'volunteer') {
+      return { text: '✅ 即刻生效，开始护持', variant: 'auto' };
+    }
+    if (requestedRole === 'store_patriarch') {
+      if (this.data.currentUserRole === 'store_manager') {
+        return { text: '👑 正在申请升级为大家长身份', variant: 'patriarch' };
+      }
+      return { text: '💡 说明：大家长身份天然包含【店长】与【财务】的全套日常管理权限，无需重复申请。', variant: 'patriarch' };
+    }
+    return { text: '⏳ 提交申请，等待超管/大家长审批', variant: 'pending' };
+  },
+
   onApplyRoleChange(e: any) {
-    this.setData({ 'applyForm.requestedRole': e.detail.value });
+    const requestedRole = e.detail.value;
+    const tip = this.computeApplyRoleTip(requestedRole);
+    this.setData({
+      'applyForm.requestedRole': requestedRole,
+      applyRoleTipText: tip.text,
+      applyRoleTipVariant: tip.variant
+    });
   },
 
   // 🏢 切换"选择已有门店" / "新建门店"两种申请模式
@@ -6127,8 +6169,10 @@ Page({
 
     const rawRole = role.toUpperCase();
     const isVolunteer = rawRole === 'VOLUNTEER';
-    const isManager = ['MANAGER', 'STORE_MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
-    const isFinance = ['FINANCE', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    // 🏛️ 权限向下继承：大家长（store_patriarch/PATRIARCH）天然拥有店长 + 财务的全套
+    // 日常管理权限（录入餐报/发布食谱/编写日志/管理工时等），无需再兼任多重角色
+    const isManager = ['MANAGER', 'STORE_MANAGER', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isFinance = ['FINANCE', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
     const isRealSuperAdmin = isSuperAdmin;

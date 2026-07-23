@@ -81,7 +81,10 @@ async function resolveReadTarget(caller, requestedStoreId, requestedStoreName) {
 async function resolveWriteTarget(caller, requestedStoreId) {
   if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
 
-  if (caller.role === 'store_manager') {
+  // 🏛️ 权限向下继承：大家长天然拥有店长的全套日常管理权限（自己发起的编辑直接生效，
+  // 不会像普通店长那样被下面的家长风控锁挂起——见 update 分支里 caller.role ===
+  // 'store_manager' 的判断，patriarch 自己编辑自己不需要"等自己确认"）
+  if (caller.role === 'store_manager' || caller.role === 'store_patriarch') {
     if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店，无法编辑门店画像' };
     return { allowed: true, storeId: caller.storeId };
   }
@@ -136,7 +139,7 @@ exports.main = async (event, context) => {
         data: {
           storeId: target.storeId,
           storeName: store.storeName || '',
-          canEdit: caller && (caller.role === 'store_manager' || caller.role === 'super_admin'),
+          canEdit: caller && (caller.role === 'store_manager' || caller.role === 'store_patriarch' || caller.role === 'super_admin'),
           // 🏛️ 家长/店长姓名：海报落款、验真页、家长大盘展示姓名的唯一数据来源
           patriarch: store.patriarch || '',
           manager: store.manager || '',

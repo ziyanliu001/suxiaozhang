@@ -406,8 +406,9 @@ Page({
     const isSuperAdmin = role === 'super_admin';
     const isHQFinance = role === 'hq_finance' || role === 'regional_finance';
     const isVolunteer = role === 'volunteer';
-    // 精细化管理视角：店长/财务/超管（非志工）均属于"管理者"，用于 wx:if="{{isManager}}"
-    const isManager = role === 'store_manager' || role === 'finance' || isSuperAdmin || isHQFinance;
+    // 精细化管理视角：店长/财务/大家长/超管（非志工）均属于"管理者"，用于 wx:if="{{isManager}}"
+    // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
+    const isManager = role === 'store_manager' || role === 'finance' || role === 'store_patriarch' || isSuperAdmin || isHQFinance;
 
     // 权限 A：超管和总部财务可看"全国大屏"与"跨店成本比对"
     // 🌟 志工也放开"全国数据大屏"访问（阳光公开账本诉求），

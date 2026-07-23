@@ -28,7 +28,8 @@ async function resolveCaller(OPENID) {
 async function resolveWriteTarget(caller, requestedStoreId) {
   if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
 
-  if (caller.role === 'store_manager' || caller.role === 'finance') {
+  // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
+  if (caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') {
     if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店，无法管理支出模板' };
     return { allowed: true, storeId: caller.storeId, storeName: caller.storeName || '', tenantId: caller.tenantId || '' };
   }
@@ -134,7 +135,7 @@ exports.main = async (event) => {
         if (!target.allowed) {
           return { success: false, error: target.error };
         }
-        if ((caller.role === 'store_manager' || caller.role === 'finance') && existing.storeId !== target.storeId) {
+        if ((caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
           return { success: false, error: '无权限：不能编辑其他门店的模板' };
         }
         if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
@@ -169,7 +170,7 @@ exports.main = async (event) => {
         if (!target.allowed) {
           return { success: false, error: target.error };
         }
-        if ((caller.role === 'store_manager' || caller.role === 'finance') && existing.storeId !== target.storeId) {
+        if ((caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
           return { success: false, error: '无权限：不能删除其他门店的模板' };
         }
         if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {

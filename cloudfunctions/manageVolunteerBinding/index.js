@@ -26,8 +26,9 @@ exports.main = async (event) => {
   try {
     const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
     const caller = callerRes.data && callerRes.data[0];
-    if (!caller || !['store_manager', 'super_admin'].includes(caller.role)) {
-      return { success: false, error: '无权限：仅店长/超级管理员可管理义工绑定' };
+    // 🏛️ 权限向下继承：大家长天然拥有店长的全套日常管理权限
+    if (!caller || !['store_manager', 'store_patriarch', 'super_admin'].includes(caller.role)) {
+      return { success: false, error: '无权限：仅店长/大家长/超级管理员可管理义工绑定' };
     }
 
     const targetRes = await db.collection('user_roles').doc(targetId).get().catch(() => null);
@@ -43,7 +44,7 @@ exports.main = async (event) => {
     }
 
     const isAllowed = caller.role === 'super_admin' ||
-      (caller.role === 'store_manager' && caller.storeId === target.storeId);
+      ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && caller.storeId === target.storeId);
     if (!isAllowed) {
       return { success: false, error: '无权限：不能管理其他门店的义工绑定' };
     }

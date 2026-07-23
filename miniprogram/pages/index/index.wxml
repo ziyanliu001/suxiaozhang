@@ -1849,9 +1849,9 @@
               <text><view class="idx-icon-sm idx-icon-heart" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>现场义工</text>
             </label>
           </radio-group>
-          <!-- 🌟 动态提示：义工加入已有门店免审即时生效；管理身份（大家长/店长/财务）
-               需要提交后等待超管或本店大家长审批 -->
-          <text class="form-hint apply-role-tip">{{applyForm.requestedRole === 'volunteer' ? '✅ 即刻生效，开始护持' : '⏳ 提交申请，等待超管/大家长审批'}}</text>
+          <!-- 🌟 动态提示：义工免审即时生效；大家长天然包含店长+财务全套权限（如当前
+               已是店长则提示"正在申请升级为大家长"）；店长/财务走常规待审批提示 -->
+          <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
         </view>
       </view>
 

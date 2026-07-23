@@ -51,8 +51,8 @@ async function checkCanEdit(doc) {
       if (user.role === 'super_admin') {
         return { allowed: true, role: 'super_admin' };
       }
-      // 🛡️ 店长/财务仅可编辑本门店数据，禁止跨店修改他店记录（防越权/防个人营私）
-      if (user.role === 'store_manager' || user.role === 'finance') {
+      // 🛡️ 店长/财务/大家长（权限向下继承）仅可编辑本门店数据，禁止跨店修改他店记录
+      if (user.role === 'store_manager' || user.role === 'finance' || user.role === 'store_patriarch') {
         const sameStore = (user.storeId && doc.storeId && user.storeId === doc.storeId)
           || (user.storeName && doc.shopName && user.storeName === doc.shopName);
         if (sameStore) {

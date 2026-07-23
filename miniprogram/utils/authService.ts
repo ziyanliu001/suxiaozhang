@@ -90,15 +90,18 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canApproveSensitiveOps: false,
         isPatriarch: false
       };
-    // 🏛️ 家长/督导：最高监督权与知情权，但免去日常记账繁琐操作——不碰账目/画像的
-    // 编辑，只对店长发起的高风险操作（门店画像变更、餐报作废）有确认/驳回权
+    // 🏛️ 家长/督导：权限向下继承——新店开业"大家长与店长为同一人"场景下，大家长
+    // 天然拥有 store_manager + finance 的全套日常管理权限（录入餐报/发布食谱/
+    // 编写日志/管理工时/审核义工/编辑账目等），无需再额外兼任多重角色；
+    // canApproveSensitiveOps 是叠加在这之上的家长专属监督权（对店长发起的高风险
+    // 操作——门店画像变更、餐报作废——仍有确认/驳回权，这是普通店长/财务没有的）
     case 'store_patriarch':
       return {
         canSwitchStore: false,
-        canAuditUser: false,
-        canDeleteRecord: false,
-        canEditBalance: false,
-        canEditReport: false,
+        canAuditUser: true,
+        canDeleteRecord: true,
+        canEditBalance: true,
+        canEditReport: true,
         canExportData: true,
         canViewNationalDashboard: false,
         canApproveSensitiveOps: true,

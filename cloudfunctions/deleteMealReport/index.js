@@ -47,8 +47,8 @@ async function checkCanDelete(doc) {
       if (role === 'super_admin') {
         return { allowed: true, role };
       }
-      // 🛡️ 店长/财务仅可操作本门店数据，禁止跨店删除他店记录（防越权/防个人营私）
-      if (role === 'store_manager' || role === 'finance') {
+      // 🛡️ 店长/财务/大家长（权限向下继承）仅可操作本门店数据，禁止跨店删除他店记录
+      if (role === 'store_manager' || role === 'finance' || role === 'store_patriarch') {
         const sameStore = (user.storeId && doc.storeId && user.storeId === doc.storeId)
           || (user.storeName && doc.shopName && user.storeName === doc.shopName);
         if (sameStore) {

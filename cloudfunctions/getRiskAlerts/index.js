@@ -47,10 +47,11 @@ exports.main = async (event) => {
 
   try {
     const caller = await resolveCaller(OPENID);
-    if (!caller || !['finance', 'super_admin'].includes(caller.role)) {
-      return { success: false, errMsg: '无权限：仅财务与超级管理员可查看风控预警' };
+    // 🏛️ 权限向下继承：大家长天然拥有财务的全套日常管理权限
+    if (!caller || !['finance', 'store_patriarch', 'super_admin'].includes(caller.role)) {
+      return { success: false, errMsg: '无权限：仅财务/大家长与超级管理员可查看风控预警' };
     }
-    if (caller.role === 'finance' && caller.storeId && caller.storeId !== storeId) {
+    if ((caller.role === 'finance' || caller.role === 'store_patriarch') && caller.storeId && caller.storeId !== storeId) {
       return { success: false, errMsg: '无权限：不能查看其他门店的风控数据' };
     }
 

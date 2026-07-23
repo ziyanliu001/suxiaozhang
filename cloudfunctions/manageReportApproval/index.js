@@ -48,7 +48,8 @@ function isSameScope(caller, doc) {
 const ACTION_RULES = {
   // 店长核对确认：PENDING(未确认) -> APPROVED
   confirm: {
-    allowedRoles: ['store_manager', 'super_admin'],
+    // 🏛️ 权限向下继承：大家长天然拥有店长的全套日常管理权限
+    allowedRoles: ['store_manager', 'store_patriarch', 'super_admin'],
     roleErrMsg: '无权限：仅店长与超级管理员可执行核对确认',
     check(doc) {
       if (doc.approvalStatus === 'APPROVED') return '店长已完成该餐报的核对确认';
@@ -67,7 +68,8 @@ const ACTION_RULES = {
   },
   // 财务稽核封账：APPROVED -> AUDITED_LOCKED
   financeAudit: {
-    allowedRoles: ['finance', 'super_admin'],
+    // 🏛️ 权限向下继承：大家长天然拥有财务的全套日常管理权限
+    allowedRoles: ['finance', 'store_patriarch', 'super_admin'],
     roleErrMsg: '无权限：仅财务与超级管理员可执行稽核封账',
     check(doc) {
       if (doc.approvalStatus === 'AUDITED_LOCKED') return '该账本已由财务完成稽核锁定，无法篡改';
@@ -89,7 +91,8 @@ const ACTION_RULES = {
   },
   // 财务解封：AUDITED_LOCKED -> APPROVED（必须填写理由）
   unlock: {
-    allowedRoles: ['finance', 'super_admin'],
+    // 🏛️ 权限向下继承：大家长天然拥有财务的全套日常管理权限
+    allowedRoles: ['finance', 'store_patriarch', 'super_admin'],
     roleErrMsg: '无权限：仅财务与超级管理员可执行解封',
     requireReason: true,
     check(doc) {
@@ -108,7 +111,8 @@ const ACTION_RULES = {
   },
   // 作废（红字冲销）：任何未锁定/未作废状态 -> isVoid=true
   void: {
-    allowedRoles: ['store_manager', 'super_admin'],
+    // 🏛️ 权限向下继承：大家长天然拥有店长的全套日常管理权限
+    allowedRoles: ['store_manager', 'store_patriarch', 'super_admin'],
     roleErrMsg: '无权限：仅店长与超级管理员可执行作废操作',
     check(doc) {
       if (doc.isVoid) return '该记录已作废，无需重复操作';
@@ -125,7 +129,8 @@ const ACTION_RULES = {
   },
   // 财务对单：标记小票凭证已与账目金额核对一致，不涉及金额/状态变更，可反复切换
   reconcile: {
-    allowedRoles: ['finance', 'super_admin'],
+    // 🏛️ 权限向下继承：大家长天然拥有财务的全套日常管理权限
+    allowedRoles: ['finance', 'store_patriarch', 'super_admin'],
     roleErrMsg: '无权限：仅财务与超级管理员可标记对单',
     check() {
       return null;
@@ -300,6 +305,7 @@ exports.main = async (event) => {
     const operatorRoleLabel = {
       store_manager: '店长',
       finance: '财务稽核员',
+      store_patriarch: '大家长',
       super_admin: '超级管理员'
     }[caller.role] || caller.role;
     // 沿用各字段此前在直连写库时代已使用的命名，避免破坏既有展示逻辑

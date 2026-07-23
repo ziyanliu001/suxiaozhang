@@ -8569,3 +8569,15 @@ button.poster-gen-btn[disabled] {
 .disclaimer-card {
   box-sizing: border-box !important;
 }
+
+/* 🏛️ 申请身份弹窗：大家长（含"升级为大家长"）动态提示改浅金色底，
+   与义工/店长/财务的常规灰底提示区分开，突出"无需重复申请"的说明性质 */
+.apply-role-tip-patriarch {
+  display: block;
+  background: #FFF8E1;
+  border: 1rpx solid #FFE082;
+  color: #8D6E00;
+  border-radius: 8rpx;
+  padding: 10rpx 16rpx;
+  margin-top: 10rpx;
+}
