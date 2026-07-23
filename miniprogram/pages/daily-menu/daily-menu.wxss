@@ -166,6 +166,49 @@
   margin-bottom: 8rpx;
 }
 
+/* 🙏 餐前感恩词：默认折叠的轻柔提示条，不与上方食谱内容抢视觉重量 */
+.dm-gratitude-block {
+  margin-top: 8rpx;
+  border-top: 1rpx dashed #F1E4D8;
+  padding-top: 16rpx;
+}
+
+.dm-gratitude-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dm-gratitude-title {
+  font-size: 24rpx;
+  color: #B45309;
+  font-weight: bold;
+}
+
+.dm-gratitude-arrow {
+  font-size: 22rpx;
+  color: #C2853D;
+  transition: transform 0.2s ease;
+}
+
+.dm-gratitude-arrow.rotate {
+  transform: rotate(180deg);
+}
+
+.dm-gratitude-body {
+  margin-top: 12rpx;
+  background: #FFF9F0;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+}
+
+.dm-gratitude-line {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.8;
+  color: #5C4326;
+}
+
 .dm-menu-card {
   background: #FFFFFF;
   border-radius: 20rpx;

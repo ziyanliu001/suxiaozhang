@@ -1,4 +1,5 @@
 import { maskName } from './privacy';
+import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 
 export interface MaterialItem {
   donor: string;
@@ -37,6 +38,11 @@ export interface PosterData {
   // 🆕 验真二维码本地临时路径（getStoreQRCode 下载后的 wxfile:// 路径）：
   // 有值时画真实可扫码的小程序码，未提供/生成失败时优雅降级为占位框
   verifyQrLocalPath?: string;
+  // 🌸 可选落款：雨花家风「仁·中·和」与感恩词，仅财务公示版（drawMeritPoster）支持，
+  // 未开启时版式与升级前完全一致，见 drawMeritPoster 内 showFamilyStyleFooter/
+  // showGratitudeFooter 分支
+  showFamilyStyleFooter?: boolean;
+  showGratitudeFooter?: boolean;
 }
 
 // 🆕 9:16 竖屏「温馨故事版」海报数据：只收调用方已经准备好的展示值（与 PosterData
@@ -114,6 +120,12 @@ const FOOTER_HEIGHT = 90;
 const VERIFY_QR_SIZE = 120;
 const VERIFY_AREA_HEIGHT = 170;
 
+// 🌸 可选落款（雨花家风/感恩词）：紧凑行高，字号比常规落款更小，突出"轻量点缀"而非主体内容
+const CULTURE_FOOTER_LINE_HEIGHT = 16;
+// 保守估字数（用于建高度预估的上界，口径同 ACTIVITY_CHARS_PER_LINE：字号更小、
+// 实际每行能容纳更多字，这里刻意估少一点，确保预估高度不小于真实绘制高度）
+const CULTURE_GRATITUDE_CHARS_PER_LINE = 18;
+
 // 🆕 温馨故事版 (9:16) 专属尺寸：宽度沿用与财务公示版相同的 375（复用同一个
 // #posterCanvas 节点，不用在 wxml 里再加一个 canvas），高度按 16:9 换算取整，
 // 与请求方给出的"例如 750x1334px"最终导出分辨率一致（375×2 / 667×2 = 750×1334）
@@ -136,7 +148,7 @@ const SINGLE_COL_NAME_MAX = 200;
 const DOUBLE_COL_NAME_MAX = 110;
 const ELLIPSIS = '...';
 
-function calculateCanvasHeight(itemCount: number, materialsLineCount: number = 0, hasVolunteer: boolean = false, activityLineCount: number = 0): number {
+function calculateCanvasHeight(itemCount: number, materialsLineCount: number = 0, hasVolunteer: boolean = false, activityLineCount: number = 0, cultureFooterHeight: number = 0): number {
   const useTwoColumns = itemCount > TWO_COLUMN_THRESHOLD;
   const itemsPerColumn = useTwoColumns ? Math.ceil(itemCount / 2) : itemCount;
   const listContentHeight = itemsPerColumn * ITEM_ROW_HEIGHT;
@@ -157,7 +169,7 @@ function calculateCanvasHeight(itemCount: number, materialsLineCount: number = 0
     ? ACTIVITY_TITLE_HEIGHT + activityLineCount * ACTIVITY_LINE_HEIGHT + 20
     : 0;
 
-  const totalHeight = CARD_TOP + CARD_HEIGHT + 35 + materialsHeight + volunteerHeight + activityHeight + LIST_TITLE_HEIGHT + listContentHeight + FOOTER_TOP_MARGIN + FOOTER_HEIGHT + VERIFY_AREA_HEIGHT + 40;
+  const totalHeight = CARD_TOP + CARD_HEIGHT + 35 + materialsHeight + volunteerHeight + activityHeight + LIST_TITLE_HEIGHT + listContentHeight + FOOTER_TOP_MARGIN + FOOTER_HEIGHT + cultureFooterHeight + VERIFY_AREA_HEIGHT + 40;
 
   return Math.max(totalHeight, 667);
 }
@@ -361,7 +373,18 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           : rawActivityText;
         const activityLineCount = activityText ? Math.ceil(activityText.length / ACTIVITY_CHARS_PER_LINE) : 0;
 
-        const height = calculateCanvasHeight(itemCount, materialsLineCount, hasVolunteer, activityLineCount);
+        // 🌸 可选落款：雨花家风「仁·中·和」（固定 1 行）+ 感恩词（拼接全文后按保守
+        // 字数估算换行数，与 activityLineCount 同一套"上界估算，真实绘制只会更矮"口径）
+        const showFamilyStyleFooter = !!data.showFamilyStyleFooter;
+        const showGratitudeFooter = !!data.showGratitudeFooter;
+        const gratitudeJoined = showGratitudeFooter ? GRATITUDE_TEXT.join('') : '';
+        const gratitudeLineCount = gratitudeJoined ? Math.ceil(gratitudeJoined.length / CULTURE_GRATITUDE_CHARS_PER_LINE) : 0;
+        const familyStyleLineCount = showFamilyStyleFooter ? 1 : 0;
+        const cultureFooterHeight = (showFamilyStyleFooter || showGratitudeFooter)
+          ? 14 + familyStyleLineCount * CULTURE_FOOTER_LINE_HEIGHT + gratitudeLineCount * CULTURE_FOOTER_LINE_HEIGHT
+          : 0;
+
+        const height = calculateCanvasHeight(itemCount, materialsLineCount, hasVolunteer, activityLineCount, cultureFooterHeight);
 
         canvas.width = width * dpr;
         canvas.height = height * dpr;
@@ -663,8 +686,35 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.font = '11px sans-serif';
           ctx.fillText('素小账', width / 2, footerTop + FOOTER_LINE_HEIGHT * 4 + 20);
 
+          // 🌸 可选落款：雨花家风「仁·中·和」+ 感恩词，未开启时版式与升级前完全一致
+          if (showFamilyStyleFooter || showGratitudeFooter) {
+            let cultureY = footerTop + FOOTER_LINE_HEIGHT * 4 + 20 + 18;
+
+            ctx.strokeStyle = '#EDE0C8';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(70, cultureY - 12);
+            ctx.lineTo(width - 70, cultureY - 12);
+            ctx.stroke();
+
+            if (showFamilyStyleFooter) {
+              ctx.fillStyle = PRIMARY_COLOR;
+              ctx.font = 'bold 12px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${FAMILY_STYLE.title}：${FAMILY_STYLE.text}`, width / 2, cultureY);
+              cultureY += CULTURE_FOOTER_LINE_HEIGHT;
+            }
+
+            if (showGratitudeFooter && gratitudeJoined) {
+              ctx.fillStyle = '#8C6D46';
+              ctx.font = '11px sans-serif';
+              ctx.textAlign = 'center';
+              cultureY = drawMultiLineText(ctx, gratitudeJoined, width / 2, cultureY, width - 80, CULTURE_FOOTER_LINE_HEIGHT);
+            }
+          }
+
           // 🆕 右下角扫码验真区域（共用 drawVerifyQRPlaceholder，见函数顶部注释）
-          const qrAreaTop = footerTop + FOOTER_HEIGHT;
+          const qrAreaTop = footerTop + FOOTER_HEIGHT + cultureFooterHeight;
           const qrSize = VERIFY_QR_SIZE;
           // 整体向左留出 30px 右边距（原 20px），配合 drawVerifyQRPlaceholder 内部的
           // 文字宽度夹取，双重保证不再有任何溢出

@@ -3784,6 +3784,72 @@ textarea, .textarea {
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🌸 每日修身微卡片：非宗教化传统文化/正能量宣导，轻柔配色，不喧宾夺主 */
+.culture-card {
+  background: linear-gradient(135deg, #FFF9F0 0%, #FFF3E8 100%);
+  border: 1rpx solid #FFE8CC;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin: 0 24rpx 24rpx;
+}
+
+.culture-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+}
+
+.culture-card-icon {
+  font-size: 24rpx;
+}
+
+.culture-card-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #B45309;
+  flex: 1;
+}
+
+.culture-card-source {
+  font-size: 20rpx;
+  color: #C2853D;
+  background: #FFF3E0;
+  padding: 2rpx 12rpx;
+  border-radius: 10rpx;
+}
+
+.culture-card-text {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: #5C4326;
+  margin-bottom: 12rpx;
+}
+
+.culture-card-actions {
+  display: flex;
+  gap: 24rpx;
+}
+
+.culture-action-btn {
+  font-size: 22rpx;
+  color: #B45309;
+}
+
+.family-motto-scroll {
+  max-height: 68vh;
+  margin: 16rpx 0;
+}
+
+.family-motto-text {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.9;
+  color: #333333;
+  white-space: pre-wrap;
+}
+
 .today-menu-preview-card.is-empty {
   background: #FFFDFB;
   border: 2rpx dashed #FFCCA8;
@@ -5011,6 +5077,28 @@ textarea, .textarea {
   background: #8C1D18;
   color: #FFFFFF;
   font-weight: bold;
+}
+
+.poster-culture-footer-toggles {
+  display: flex;
+  gap: 12rpx;
+  padding: 16rpx 30rpx 0;
+}
+
+.culture-toggle-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF9F0;
+  border: 1rpx solid #FFE8CC;
+  border-radius: 10rpx;
+  padding: 10rpx 16rpx;
+}
+
+.culture-toggle-label {
+  font-size: 22rpx;
+  color: #B45309;
 }
 
 .poster-switching-mask {
@@ -7792,6 +7880,36 @@ textarea, .textarea {
   color: #E65100;
   font-style: italic;
   line-height: 1.5;
+}
+
+/* 🙏 打卡成功修身提醒：雨花敬老行为准则【十个有没有】，2 列栅格，轻柔不抢主视觉 */
+.p-tenhaveyou-box {
+  background: #FFF9F0;
+  border: 1rpx solid #FFE8CC;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.p-tenhaveyou-title {
+  display: block;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #B45309;
+  text-align: center;
+  margin-bottom: 12rpx;
+}
+
+.p-tenhaveyou-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8rpx 12rpx;
+}
+
+.p-tenhaveyou-item {
+  font-size: 20rpx;
+  color: #5C4326;
+  line-height: 1.6;
 }
 
 .p-footer-qr-row {

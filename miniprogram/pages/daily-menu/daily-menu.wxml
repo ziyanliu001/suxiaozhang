@@ -50,6 +50,17 @@
           <text class="dm-dish-name">{{dish.name || '未命名菜品'}}</text>
         </view>
       </view>
+
+      <!-- 🙏 餐前感恩词：默认折叠，点击展开，不占今日食谱卡片的视觉重量 -->
+      <view class="dm-gratitude-block">
+        <view class="dm-gratitude-header" bindtap="onToggleGratitude">
+          <text class="dm-gratitude-title">🙏 餐前感恩词</text>
+          <text class="dm-gratitude-arrow {{gratitudeExpanded ? 'rotate' : ''}}">▾</text>
+        </view>
+        <view class="dm-gratitude-body" wx:if="{{gratitudeExpanded}}">
+          <text class="dm-gratitude-line" wx:for="{{gratitudeLines}}" wx:key="*this">{{item}}</text>
+        </view>
+      </view>
     </view>
 
     <!-- 📚 历史食谱：时间轴倒序，不含今天 -->

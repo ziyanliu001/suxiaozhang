@@ -18,6 +18,7 @@ import { applyRoleViewOverride, getPreviewViewMode, PreviewViewMode } from '../.
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
+import { getDailyCultureQuote, getRandomCultureQuote, getFamilyMottoFullText, DailyCultureQuote, SENIORS_CARE } from '../../utils/cultureData';
 
 const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
@@ -323,6 +324,10 @@ Page({
     // （showPosterModal，纯 WXML 拼版预览）互不相关，不需要跟着切
     posterType: 'financial' as 'financial' | 'story',
     isSwitchingPosterType: false,
+    // 🌸 财务公示版海报可选落款：雨花家风「仁·中·和」/ 感恩词，仅影响 drawMeritPoster
+    // 财务公示版（温馨故事版 StoryPosterData 未接入此项，见 posterGenerator.ts 说明）
+    posterShowFamilyStyleFooter: true,
+    posterShowGratitudeFooter: true,
     // 🆕 海报右下角"扫码验真"用的真实小程序码本地临时路径（指向 pages/public-verify/index，
     // 携带 storeId+date）：每次生成/切版式共用同一份，生成失败时为空字符串，
     // 由 posterGenerator.ts 自行降级为占位框
@@ -390,6 +395,13 @@ Page({
     noticesLoading: true,
     currentNoticeIndex: 0,
     isNoticeBarHiddenToday: false,
+    // 🌸 每日修身卡片：跑马灯下方的非宗教化传统文化/正能量微卡片，纯静态内容，
+    // 不查云端；cultureQuote 由 onLoad/onShow 调 getDailyCultureQuote() 按自然日选取
+    cultureQuote: { text: '', source: '' } as { text: string; source: string },
+    showFamilyMottoModal: false,
+    familyMottoFullText: '',
+    // 🙏 打卡成功弹窗内展示的【敬老行为准则·十个有没有】，纯静态内容，无需查云端
+    tenHaveYous: SENIORS_CARE.tenHaveYous as string[],
     announcement: null as {
       id: string;
       tag: string;
@@ -604,6 +616,10 @@ Page({
     // 之后才能按"当前视角"发起严格互斥查询，不能像旧的本机 loadAnnouncement 那样在
     // 角色未解析前就跑
     this.fetchNotices();
+
+    // 🌸 每日修身卡片：纯静态文化内容，不查云端，按自然日期确定性选取，
+    // 同一天内多次进入首页展示同一条，跨天自动切换
+    this.setData({ cultureQuote: getDailyCultureQuote() });
 
     const hasDraft = await this.loadDraft();
     if (hasDraft) {
@@ -5890,6 +5906,7 @@ Page({
     this.fetchTodayMenu();
     this.fetchTodayActivity();
     this.fetchNotices();
+    this.setData({ cultureQuote: getDailyCultureQuote() });
 
     // 🌟 财务视角首页角标：预先拉取一次风控预警数量，避免用户必须先点开弹窗才知道有没有异常
     if ((this.data.isFinance || this.data.isSuperAdmin) && this.data.currentStoreId && !this.isNationalOverviewSelected()) {
@@ -6347,7 +6364,9 @@ Page({
       activityText: this.data.activityText,
       volunteerCount: parseFloat(this.data.volunteerCount) || 0,
       volunteerHours: parseFloat(this.data.volunteerHours) || 0,
-      verifyQrLocalPath: this.data.verifyQrLocalPath
+      verifyQrLocalPath: this.data.verifyQrLocalPath,
+      showFamilyStyleFooter: this.data.posterShowFamilyStyleFooter,
+      showGratitudeFooter: this.data.posterShowGratitudeFooter
     };
   },
 
@@ -6373,6 +6392,32 @@ Page({
   // 🆕 财务公示版 / 温馨故事版 切换：重新调用对应的 draw 函数覆盖同一个 posterImage，
   // canvasHeight 也要跟着换（故事版是固定 9:16，财务版按内容量动态算，与 onGeneratePoster
   // 首次生成时的估算口径保持一致）
+  // 🌸 财务公示版海报可选落款开关：雨花家风「仁·中·和」/ 感恩词。仅在当前正展示
+  // 财务公示版时才需要重新画一次预览图；温馨故事版未接入这两项落款，切换不触发重绘
+  async onTogglePosterFamilyStyleFooter(e: any) {
+    this.setData({ posterShowFamilyStyleFooter: !!e.detail.value });
+    await this.regeneratePosterIfFinancialShown();
+  },
+
+  async onTogglePosterGratitudeFooter(e: any) {
+    this.setData({ posterShowGratitudeFooter: !!e.detail.value });
+    await this.regeneratePosterIfFinancialShown();
+  },
+
+  async regeneratePosterIfFinancialShown() {
+    if (!this.data.showPoster || this.data.posterType !== 'financial' || this.data.isSwitchingPosterType) return;
+    this.setData({ isSwitchingPosterType: true });
+    try {
+      const posterImagePath = await drawMeritPoster(this, this.buildFinancialPosterData());
+      this.setData({ posterImage: posterImagePath });
+    } catch (err: any) {
+      console.error('[regeneratePosterIfFinancialShown] 重新生成海报失败:', err);
+      wx.showToast({ title: err.message || '落款设置已保存，但预览刷新失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ isSwitchingPosterType: false });
+    }
+  },
+
   async onSwitchPosterType(e: any) {
     const type = e.currentTarget.dataset.type as 'financial' | 'story';
     const previousType = this.data.posterType;
@@ -6751,6 +6796,23 @@ Page({
   // 通知，具体门店视角只拿该店专属通知，两者不叠加展示（见 manageNotice 云函数）。
   // 关闭状态（notice_bar_hidden_date）与查询结果分开判断：即使当天已关闭，也要
   // 先把数据拉回来存好，下一次视角切换/新的一天自然又能正常展示。
+  // 🌸 每日修身卡片【换一换】：随机换一条，不查云端，纯本地静态内容
+  onRefreshCultureQuote() {
+    const current = this.data.cultureQuote && this.data.cultureQuote.text;
+    this.setData({ cultureQuote: getRandomCultureQuote(current) });
+  },
+
+  onShowFamilyMottoModal() {
+    this.setData({
+      showFamilyMottoModal: true,
+      familyMottoFullText: getFamilyMottoFullText()
+    });
+  },
+
+  onCloseFamilyMottoModal() {
+    this.setData({ showFamilyMottoModal: false });
+  },
+
   async fetchNotices() {
     // 🐛 首页跑马灯不可见根因：currentStoreId 为空字符串是超管默认总览视角（尚未手动
     // 切换门店）的合法状态，不是"数据没准备好"——之前这里遇到空字符串直接提前返回、

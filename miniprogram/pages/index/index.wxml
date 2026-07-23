@@ -187,6 +187,20 @@
     <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
   </view>
 
+  <!-- 🌸 每日修身微卡片：非宗教化的传统文化/正能量宣导，纯本地静态内容，不依赖门店/角色 -->
+  <view class="culture-card" wx:if="{{cultureQuote.text}}">
+    <view class="culture-card-header">
+      <text class="culture-card-icon">🌸</text>
+      <text class="culture-card-title">每日修身</text>
+      <text class="culture-card-source">{{cultureQuote.source}}</text>
+    </view>
+    <text class="culture-card-text">{{cultureQuote.text}}</text>
+    <view class="culture-card-actions">
+      <text class="culture-action-btn" catchtap="onRefreshCultureQuote">🔄 换一换</text>
+      <text class="culture-action-btn" catchtap="onShowFamilyMottoModal">📖 查看完整家训</text>
+    </view>
+  </view>
+
   <!-- 🍱 今日食谱预览卡：全国总览视图不展示（无具体门店）；志工视角已合并进下方"今日餐况"单行摘要，此处不再重复展示。
        🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页 -->
   <view class="today-menu-preview-card {{todayMenu ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && todayMenuLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoDailyMenu' : ''}}">
@@ -1188,6 +1202,18 @@
         </view>
       </view>
 
+      <!-- 🌸 财务公示版可选落款：雨花家风「仁·中·和」/ 感恩词，温馨故事版暂未接入不展示 -->
+      <view class="poster-culture-footer-toggles" wx:if="{{posterType === 'financial'}}" catchtap="stopPropagation">
+        <view class="culture-toggle-item">
+          <text class="culture-toggle-label">雨花家风落款</text>
+          <switch checked="{{posterShowFamilyStyleFooter}}" bindchange="onTogglePosterFamilyStyleFooter" color="#B8860B" />
+        </view>
+        <view class="culture-toggle-item">
+          <text class="culture-toggle-label">感恩词落款</text>
+          <switch checked="{{posterShowGratitudeFooter}}" bindchange="onTogglePosterGratitudeFooter" color="#B8860B" />
+        </view>
+      </view>
+
       <view class="modal-body">
         <view class="poster-switching-mask" wx:if="{{isSwitchingPosterType}}">
           <text>生成中...</text>
@@ -1270,6 +1296,14 @@
 
           <view class="p-quote-box">
             <text class="quote-text">"用一餐饭的温度，传递温暖与关爱。感恩每一位默默付出的家人与爱心人士！"</text>
+          </view>
+
+          <!-- 🙏 打卡成功修身提醒：雨花敬老行为准则【十个有没有】 -->
+          <view class="p-tenhaveyou-box">
+            <text class="p-tenhaveyou-title">🙏 敬老行为准则 · 十个有没有</text>
+            <view class="p-tenhaveyou-grid">
+              <text class="p-tenhaveyou-item" wx:for="{{tenHaveYous}}" wx:key="*this">{{item}}</text>
+            </view>
           </view>
 
           <view class="p-footer-qr-row">
@@ -2243,6 +2277,19 @@
         <view class="risk-alert-empty" wx:if="{{riskAlertsList.length === 0}}">
           <text>✅ 近期账本未发现异常信号</text>
         </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 🌸 【查看完整家训】弹窗：展示雨花家训心字诀 + 家训正文 + 为学之方完整原文 -->
+  <view class="modal-backdrop" wx:if="{{showFamilyMottoModal}}" bindtap="onCloseFamilyMottoModal">
+    <view class="modal-card family-motto-card" catchtap="stopPropagation">
+      <view class="modal-header-bar">
+        <text class="modal-title-text">📖 雨花家训</text>
+        <text class="modal-close-btn" bindtap="onCloseFamilyMottoModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="family-motto-scroll">
+        <text class="family-motto-text">{{familyMottoFullText}}</text>
       </scroll-view>
     </view>
   </view>

@@ -4,6 +4,7 @@ import { compressAndUploadImages } from '../../utils/imageCompress';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../utils/drawDailyMenuPoster';
+import { GRATITUDE_TEXT } from '../../utils/cultureData';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
@@ -101,7 +102,11 @@ Page({
     // 图片网格结构各不相同（单条记录 / 列表套子数组 / 编辑中的数组），共用一张按
     // 路径查表的 map 比分别给每个嵌套结构维护 loadFailed 字段简单得多——反正每个
     // <image> 上早就都带着 data-url，直接拿来当 key 用
-    thumbFailedMap: {} as Record<string, boolean>
+    thumbFailedMap: {} as Record<string, boolean>,
+
+    // 🙏 餐前感恩词：默认折叠，不占今日食谱卡片的视觉重量
+    gratitudeLines: GRATITUDE_TEXT,
+    gratitudeExpanded: false
   },
 
   async onLoad() {
@@ -625,6 +630,10 @@ Page({
           }
         });
       });
+  },
+
+  onToggleGratitude() {
+    this.setData({ gratitudeExpanded: !this.data.gratitudeExpanded });
   },
 
   goBack() {
