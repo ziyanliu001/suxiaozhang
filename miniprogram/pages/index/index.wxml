@@ -671,7 +671,7 @@
     <view class="ui-card-wrapper math-preview-card">
       <view class="field-item-row">
         <view class="label-with-tip">
-          <view class="lbl-bold"><view class="idx-icon-sm idx-icon-wallet"></view> 现场赞助/其他支持金额</view>
+          <view class="lbl-bold"><view class="idx-icon-sm idx-icon-wallet"></view> 现场爱心随喜/其他结余（线下）</view>
           <text class="sub-tip">(末尾固定加项)</text>
         </view>
         <view class="small-currency-input-box">
@@ -707,7 +707,7 @@
     <!-- Card B: 物资赞助与服务统计卡片 -->
     <view class="ui-card-wrapper stats-grid-card">
       <view class="form-sub-block">
-        <view class="block-title"><view class="idx-icon-sm idx-icon-box"></view> 物资赞助明细 <text class="optional-tag">(选填)</text></view>
+        <view class="block-title"><view class="idx-icon-sm idx-icon-box"></view> 爱心物资明细 <text class="optional-tag">(选填)</text></view>
         <view class="input-wrapper-inner">
           <textarea 
             class="single-line-textarea" 
@@ -722,7 +722,10 @@
       </view>
 
       <view class="form-sub-block top-space">
-        <view class="block-title"><view class="idx-icon-sm idx-icon-heart"></view> 义工与用餐统计 <text class="optional-tag">(选填，用餐总数/志愿者总人次自动计算)</text></view>
+        <view class="block-title-row">
+          <view class="block-title no-margin"><view class="idx-icon-sm idx-icon-heart"></view> 义工与用餐统计 <text class="optional-tag">(选填，用餐总数/志愿者总人次自动计算)</text></view>
+          <view class="reuse-yesterday-btn {{!hasYesterdayStats ? 'disabled' : ''}}" catchtap="onReuseYesterdayStats">📋 复用昨日</view>
+        </view>
 
         <!-- 🛡️ 6 宫格布局保险：真机上出现过单列拉通崩溃（疑似构建缓存导致 class 样式未生效），
              这里在关键容器上叠加行内 style + !important 兜底，双保险不依赖 WXSS 是否命中 -->
@@ -780,12 +783,12 @@
 
         <view class="stats-auto-total-row">
           <view class="auto-total-item">
-            <text class="auto-total-lbl">用餐总数</text>
-            <text class="auto-total-val">{{totalDineCount}} 人</text>
+            <text class="auto-total-lbl">用餐总数 <text class="auto-total-formula">(堂食+送餐+打包)</text></text>
+            <text class="auto-total-val">{{totalDineCount}} <text class="auto-total-unit">人</text></text>
           </view>
           <view class="auto-total-item">
-            <text class="auto-total-lbl">志愿者总人次</text>
-            <text class="auto-total-val">{{totalVolunteers}} 人次</text>
+            <text class="auto-total-lbl">志愿者总人次 <text class="auto-total-formula">(堂食+送餐)</text></text>
+            <text class="auto-total-val">{{totalVolunteers}} <text class="auto-total-unit">人次</text></text>
           </view>
         </view>
       </view>

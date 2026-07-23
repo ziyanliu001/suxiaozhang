@@ -308,6 +308,13 @@ Page({
     takeawayCount: '', // 打包份数
     totalDineCount: '0', // 用餐总数（自动计算：堂食长者+送餐长者+打包+堂食志愿者）
     totalVolunteers: '0', // 志愿者总人次（自动计算：送餐志愿者+堂食志愿者）
+    // 📋 【一键复用昨日数据】：loadBalanceForDate 查昨日结余时顺手带出的细分统计快照，
+    // 供用户点"复用昨日"按钮一键填充；全 0（老记录没有细分字段/无昨日记录）时按钮置灰不可用
+    yesterdayStatsSnapshot: null as null | {
+      dineInSeniors: number; deliverySeniors: number; takeawayCount: number;
+      dineInVolunteers: number; deliveryVolunteers: number; volunteerHours: number;
+    },
+    hasYesterdayStats: false,
     // 主食物资储备状态
     stapleRiceStatus: 'normal', // 大米/面粉: sufficient/normal/urgent
     stapleOilStatus: 'sufficient', // 食用油: sufficient/normal/urgent
@@ -3191,6 +3198,18 @@ Page({
           tipMsg = `✓ 已自动代入 ${tipDate} 结余`;
         }
 
+        // 📋 【一键复用昨日数据】：与结余匹配同一次查询，顺手带出上一条记录的
+        // 用餐/义工细分统计快照；全部为 0（老记录没有细分字段）时视为无可复用数据
+        const snapshot = {
+          dineInSeniors: parseFloat(result.data.dineInSeniors) || 0,
+          deliverySeniors: parseFloat(result.data.deliverySeniors) || 0,
+          takeawayCount: parseFloat(result.data.takeawayCount) || 0,
+          dineInVolunteers: parseFloat(result.data.dineInVolunteers) || 0,
+          deliveryVolunteers: parseFloat(result.data.deliveryVolunteers) || 0,
+          volunteerHours: parseFloat(result.data.volunteerHours) || 0
+        };
+        const hasYesterdayStats = Object.values(snapshot).some((v) => v > 0);
+
         this.setData({
           prevBalance: balance,
           yesterdayBalance: balance,
@@ -3199,7 +3218,9 @@ Page({
           balanceDiff: 0,
           adjustReason: '',
           balanceMatchTip: tipMsg,
-          yesterdayBalDisplay: systemBalanceNum.toFixed(2)
+          yesterdayBalDisplay: systemBalanceNum.toFixed(2),
+          yesterdayStatsSnapshot: snapshot,
+          hasYesterdayStats
         });
         this.updateRealTimeBalance();
       } else {
@@ -3211,7 +3232,9 @@ Page({
           balanceDiff: 0,
           adjustReason: '',
           balanceMatchTip: `💡 首次记账，请输入初始余额`,
-          yesterdayBalDisplay: '0.00'
+          yesterdayBalDisplay: '0.00',
+          yesterdayStatsSnapshot: null,
+          hasYesterdayStats: false
         });
         this.updateRealTimeBalance();
       }
@@ -3532,6 +3555,28 @@ Page({
       diningCount: String(totalDineCount),
       volunteerCount: String(totalVolunteers)
     });
+  },
+
+  // 📋 【一键复用昨日数据】：把 loadBalanceForDate 时顺手带出的昨日细分统计快照
+  // 填进当前表单的 6 个输入框，方便义工在昨日基础上快速微调而不用从零重填
+  onReuseYesterdayStats() {
+    const snapshot = this.data.yesterdayStatsSnapshot;
+    if (!snapshot || !this.data.hasYesterdayStats) {
+      wx.showToast({ title: '暂无昨日数据可复用', icon: 'none' });
+      return;
+    }
+
+    this.setData({
+      dineInSeniors: String(snapshot.dineInSeniors),
+      deliverySeniors: String(snapshot.deliverySeniors),
+      takeawayCount: String(snapshot.takeawayCount),
+      dineInVolunteers: String(snapshot.dineInVolunteers),
+      deliveryVolunteers: String(snapshot.deliveryVolunteers),
+      volunteerHours: String(snapshot.volunteerHours)
+    });
+    this.recalcDiningStats();
+    this.debouncedSaveDraft();
+    wx.showToast({ title: '已复用昨日数据，可继续微调', icon: 'none' });
   },
 
   onMaterialsInput(e: any) {

@@ -124,7 +124,16 @@ exports.main = async (event, context) => {
           dateString: matched.dateString,
           shopName: matched.shopName,
           mpAccount: matched.mpAccount,
-          matchType: matchType
+          matchType: matchType,
+          // 🍱 【一键复用昨日数据】：随手一并带出上一条记录的用餐/义工细分统计，
+          // 供首页"复用昨日"按钮直接填充输入框；老记录没有细分字段时统一给 0，
+          // 前端据此判断是否有可复用的数据（全 0 视为"无可复用数据"）
+          dineInSeniors: matched.dineInSeniors || 0,
+          deliverySeniors: matched.deliverySeniors || 0,
+          takeawayCount: matched.takeawayCount || 0,
+          dineInVolunteers: matched.dineInVolunteers || 0,
+          deliveryVolunteers: matched.deliveryVolunteers || 0,
+          volunteerHours: matched.volunteerHours || 0
         }
       };
     }

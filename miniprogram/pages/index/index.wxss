@@ -1702,23 +1702,23 @@ page {
 
 /* 高亮算式 Banner */
 .formula-preview-banner {
-  background: linear-gradient(135deg, #F8F9FA 0%, #E9ECEF 100%);
+  background: linear-gradient(135deg, #FFF9F0 0%, #FFF1DC 100%);
   border-radius: 16rpx;
   padding: 20rpx;
-  border: 1rpx solid #DEE2E6;
+  border: 1rpx solid #FFD79A;
 }
 
 .formula-header {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  margin-bottom: 12rpx;
+  margin-bottom: 14rpx;
 }
 
 .formula-header .title {
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: bold;
-  color: #495057;
+  color: #B45309;
 }
 
 .formula-expression-row {
@@ -1726,12 +1726,13 @@ page {
   align-items: center;
   flex-wrap: wrap;
   gap: 10rpx;
-  font-size: 26rpx;
+  font-size: 30rpx;
   color: #212529;
 }
 
 .formula-expression-row .num-item {
   font-weight: bold;
+  color: #343A40;
 }
 
 .formula-expression-row .unit {
@@ -1741,10 +1742,10 @@ page {
 }
 
 .formula-expression-row .operator {
-  font-size: 26rpx;
+  font-size: 30rpx;
   font-weight: bold;
-  color: #868E96;
-  padding: 0 2rpx;
+  color: #B45309;
+  padding: 0 4rpx;
 }
 
 .formula-expression-row .green {
@@ -1758,7 +1759,7 @@ page {
 }
 
 .formula-expression-row .result-val.orange {
-  font-size: 32rpx;
+  font-size: 38rpx;
   font-weight: bold;
   color: #D9480E;
 }
@@ -1776,6 +1777,38 @@ page {
   color: #212529;
   display: block;
   margin-bottom: 12rpx;
+}
+
+/* 📋 【一键复用昨日数据】：仅"义工与用餐统计"标题这一处需要在右侧并排放按钮，
+   新起一层包装行，不改 .block-title 本身（其余多处仍是单独一行纯文本标题） */
+.block-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.block-title-row .block-title.no-margin {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.reuse-yesterday-btn {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #B45309;
+  background: #FFF9F0;
+  border: 1rpx solid #FFE8CC;
+  border-radius: 20rpx;
+  padding: 8rpx 18rpx;
+  white-space: nowrap;
+}
+
+.reuse-yesterday-btn.disabled {
+  color: #ADB5BD;
+  background: #F8F9FA;
+  border-color: #E9ECEF;
 }
 
 .form-sub-block.top-space {
@@ -1840,26 +1873,41 @@ page {
   margin-top: 12rpx;
 }
 
+/* 🍱 用餐总数/志愿者总人次微卡片：中性高亮配色，展现清晰的计算逻辑构成，
+   随细分输入框实时刷新 */
 .auto-total-item {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #E7F5FF;
-  border: 1rpx solid #A5D8FF;
+  background: #FAFAFA;
+  border: 1rpx solid #E5E5E5;
   border-radius: 12rpx;
   padding: 10rpx 14rpx;
 }
 
 .auto-total-lbl {
-  font-size: 20rpx;
-  color: #1864AB;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #495057;
+}
+
+.auto-total-formula {
+  font-size: 18rpx;
+  font-weight: normal;
+  color: #ADB5BD;
 }
 
 .auto-total-val {
-  font-size: 28rpx;
+  font-size: 30rpx;
   font-weight: bold;
-  color: #1864AB;
+  color: #D9480E;
+}
+
+.auto-total-unit {
+  font-size: 20rpx;
+  font-weight: normal;
+  color: #ADB5BD;
 }
 
 .stats-input-wrap {
@@ -1969,11 +2017,11 @@ page {
 }
 
 .status-pill.red.active {
-  background: #FCE8E6;
-  color: #C5221F;
-  border: 2rpx solid #C5221F;
+  background: #FFF2F0;
+  color: #FF4D4F;
+  border: 2rpx solid #FFA39E;
   font-weight: bold;
-  box-shadow: 0 0 0 4rpx rgba(197, 34, 31, 0.15);
+  box-shadow: 0 0 0 4rpx rgba(255, 77, 79, 0.12);
 }
 
 .status-pill.red.active::after {
@@ -6863,8 +6911,9 @@ textarea, .textarea {
 }
 
 .volunteer-view-card .tsc-tag.tag-danger {
-  background: #FCE8E6;
-  color: #C5221F;
+  background: #FFF2F0;
+  color: #FF4D4F;
+  border: 1rpx solid #FFA39E;
 }
 
 /* 🌟 物资护持交互联动：大米/食用油两行从纯展示升级为可点击，箭头给出明确的"可点击"提示，
