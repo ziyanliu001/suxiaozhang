@@ -1797,19 +1797,32 @@ page {
   line-height: 1.5;
 }
 
-.stats-3grid {
+/* 🍱 义工与用餐统计：2 行 x 3 列 6 宫格卡片网格 */
+.stats-grid-container {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 16rpx;
 }
 
-.grid-input-item {
-  flex: 1 1 30%;
-  min-width: 140rpx;
+.stats-grid-row {
+  display: flex;
+  gap: 16rpx;
 }
 
-.grid-input-item.wide {
-  flex: 1 1 100%;
+.stats-card-item {
+  flex: 1;
+  min-width: 0;
+  background: #FFFFFF;
+  border: 1rpx solid #F1F3F5;
+  border-radius: 14rpx;
+  padding: 14rpx 12rpx;
+}
+
+.stats-item-label {
+  font-size: 20rpx;
+  color: #495057;
+  margin-bottom: 8rpx;
+  display: block;
 }
 
 /* 🍱 用餐/义工细分统计自动汇总行：用餐总数/志愿者总人次只读展示，随细分输入框实时联动 */
@@ -1841,14 +1854,7 @@ page {
   color: #1864AB;
 }
 
-.item-lbl {
-  font-size: 20rpx;
-  color: #495057;
-  margin-bottom: 6rpx;
-  display: block;
-}
-
-.input-suffix-box {
+.stats-input-wrap {
   display: flex;
   align-items: center;
   background: #FFF9DB;
@@ -1857,14 +1863,14 @@ page {
   padding: 10rpx 12rpx;
 }
 
-.input-suffix-box .input-field {
+.stats-input {
   font-size: 26rpx;
   font-weight: bold;
   color: #212529;
   width: 100%;
 }
 
-.input-suffix-box .suffix {
+.stats-unit {
   font-size: 20rpx;
   color: #8C6D46;
   margin-left: 4rpx;

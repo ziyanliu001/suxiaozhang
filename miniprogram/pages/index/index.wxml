@@ -724,52 +724,54 @@
       <view class="form-sub-block top-space">
         <view class="block-title"><view class="idx-icon-sm idx-icon-heart"></view> 义工与用餐统计 <text class="optional-tag">(选填，用餐总数/志愿者总人次自动计算)</text></view>
 
-        <view class="stats-3grid">
-          <view class="grid-input-item">
-            <text class="item-lbl">堂食长者</text>
-            <view class="input-suffix-box">
-              <input class="input-field" type="number" value="{{dineInSeniors}}" placeholder="30" bindinput="onInput" data-field="dineInSeniors" />
-              <text class="suffix">人</text>
+        <view class="stats-grid-container">
+          <!-- 第一行：用餐统计 -->
+          <view class="stats-grid-row">
+            <view class="stats-card-item">
+              <text class="stats-item-label">堂食长者</text>
+              <view class="stats-input-wrap">
+                <input class="stats-input" type="number" value="{{dineInSeniors}}" placeholder="0" bindinput="onInput" data-field="dineInSeniors" />
+                <text class="stats-unit">人</text>
+              </view>
+            </view>
+            <view class="stats-card-item">
+              <text class="stats-item-label">送餐长者</text>
+              <view class="stats-input-wrap">
+                <input class="stats-input" type="number" value="{{deliverySeniors}}" placeholder="0" bindinput="onInput" data-field="deliverySeniors" />
+                <text class="stats-unit">人</text>
+              </view>
+            </view>
+            <view class="stats-card-item">
+              <text class="stats-item-label">打包份数</text>
+              <view class="stats-input-wrap">
+                <input class="stats-input" type="number" value="{{takeawayCount}}" placeholder="0" bindinput="onInput" data-field="takeawayCount" />
+                <text class="stats-unit">份</text>
+              </view>
             </view>
           </view>
 
-          <view class="grid-input-item">
-            <text class="item-lbl">送餐长者</text>
-            <view class="input-suffix-box">
-              <input class="input-field" type="number" value="{{deliverySeniors}}" placeholder="20" bindinput="onInput" data-field="deliverySeniors" />
-              <text class="suffix">人</text>
+          <!-- 第二行：志愿者统计 -->
+          <view class="stats-grid-row">
+            <view class="stats-card-item">
+              <text class="stats-item-label">到岗志愿者</text>
+              <view class="stats-input-wrap">
+                <input class="stats-input" type="number" value="{{dineInVolunteers}}" placeholder="0" bindinput="onInput" data-field="dineInVolunteers" />
+                <text class="stats-unit">人</text>
+              </view>
             </view>
-          </view>
-
-          <view class="grid-input-item">
-            <text class="item-lbl">打包份数</text>
-            <view class="input-suffix-box">
-              <input class="input-field" type="number" value="{{takeawayCount}}" placeholder="5" bindinput="onInput" data-field="takeawayCount" />
-              <text class="suffix">份</text>
+            <view class="stats-card-item">
+              <text class="stats-item-label">送餐志愿者</text>
+              <view class="stats-input-wrap">
+                <input class="stats-input" type="number" value="{{deliveryVolunteers}}" placeholder="0" bindinput="onInput" data-field="deliveryVolunteers" />
+                <text class="stats-unit">人</text>
+              </view>
             </view>
-          </view>
-
-          <view class="grid-input-item">
-            <text class="item-lbl">堂食/到岗志愿者</text>
-            <view class="input-suffix-box">
-              <input class="input-field" type="number" value="{{dineInVolunteers}}" placeholder="8" bindinput="onInput" data-field="dineInVolunteers" />
-              <text class="suffix">人</text>
-            </view>
-          </view>
-
-          <view class="grid-input-item">
-            <text class="item-lbl">送餐志愿者</text>
-            <view class="input-suffix-box">
-              <input class="input-field" type="number" value="{{deliveryVolunteers}}" placeholder="4" bindinput="onInput" data-field="deliveryVolunteers" />
-              <text class="suffix">人</text>
-            </view>
-          </view>
-
-          <view class="grid-input-item">
-            <text class="item-lbl">服务总工时</text>
-            <view class="input-suffix-box">
-              <input class="input-field" type="digit" value="{{volunteerHours}}" placeholder="36" bindinput="onInput" data-field="volunteerHours" />
-              <text class="suffix">小时</text>
+            <view class="stats-card-item">
+              <text class="stats-item-label">服务总工时</text>
+              <view class="stats-input-wrap">
+                <input class="stats-input" type="digit" value="{{volunteerHours}}" placeholder="0" bindinput="onInput" data-field="volunteerHours" />
+                <text class="stats-unit">小时</text>
+              </view>
             </view>
           </view>
         </view>
