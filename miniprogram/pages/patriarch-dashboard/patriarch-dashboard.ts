@@ -40,9 +40,11 @@ Page({
     pendingVoidList: [] as any[],
     pendingProfileUpdate: null as any,
     pendingProfileItems: [] as { label: string; value: number }[],
+    pendingRoleRequests: [] as any[],
 
     voidActionInFlight: false,
-    profileActionInFlight: false
+    profileActionInFlight: false,
+    roleActionInFlight: false
   },
 
   async onLoad() {
@@ -124,7 +126,8 @@ Page({
         totalCount: data.totalCount || 0,
         pendingVoidList: data.pendingVoidList || [],
         pendingProfileUpdate: data.pendingProfileUpdate || null,
-        pendingProfileItems
+        pendingProfileItems,
+        pendingRoleRequests: data.pendingRoleRequests || []
       });
     } catch (err) {
       console.error('[fetchDashboard] 加载家长大盘异常:', err);
@@ -187,6 +190,34 @@ Page({
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ profileActionInFlight: false });
+    }
+  },
+
+  // 🏛️ 审批本店店长/财务申请：家长与超管均可，云函数 processRoleAudit 已实现分级校验
+  async onDecideRoleRequest(e: any) {
+    if (this.data.roleActionInFlight) return;
+    const { id, action } = e.currentTarget.dataset; // action: 'approve' | 'reject'
+
+    this.setData({ roleActionInFlight: true });
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { applyId: id, action }
+      });
+      const result = res.result;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: action === 'approve' ? '已审核通过' : '已拒绝申请', icon: 'success' });
+      this.fetchDashboard();
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ roleActionInFlight: false });
     }
   },
 

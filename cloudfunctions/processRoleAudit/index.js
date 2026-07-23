@@ -127,15 +127,81 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
   return { storeId: createRes._id, storeName };
 }
 
+// 🌸 提交身份申请：从原来客户端直接 db.collection('user_roles').add() 收拢到这里，
+// 服务端统一决定 status/role/approveTime，客户端不再能直接摆布这几个字段——
+// 否则客户端理论上可以直接 add 一条 status:'approved'、requestedRole:'store_manager'
+// 的记录自我提权，而不是老实走 pending 审批。
+// 义工加入已有门店：免审核即刻生效（提升义工体验）；其余场景（管理身份 / 新建门店）
+// 一律进入 pending，交由 approve/reject 分支按权限分级处理。
+async function submitRoleApply(event, OPENID) {
+  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId } = event;
+
+  if (!realName || !String(realName).trim()) return { success: false, error: '请填写真实姓名' };
+  if (!phone || !String(phone).trim()) return { success: false, error: '请填写手机号' };
+  if (!requestedRole) return { success: false, error: '请选择申请岗位' };
+
+  const isCustom = storeSelectionType === 'custom';
+  if (isCustom) {
+    if (!customStoreName || !String(customStoreName).trim()) {
+      return { success: false, error: '请填写新门店名称' };
+    }
+  } else if (!storeId) {
+    return { success: false, error: '请选择一个门店' };
+  }
+
+  // 义工 + 已有门店：门店必须真实存在才允许免审即时生效，避免伪造/过期 storeId 也能自动过审
+  let autoApprove = false;
+  if (requestedRole === 'volunteer' && !isCustom) {
+    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+    autoApprove = !!(storeRes && storeRes.data);
+  }
+
+  const docData = {
+    realName: String(realName).trim(),
+    phone: String(phone).trim(),
+    storeId: isCustom ? '' : storeId,
+    storeName: isCustom ? String(customStoreName).trim() : storeName,
+    storeSelectionType: storeSelectionType || 'existing',
+    customStoreName: isCustom ? String(customStoreName).trim() : '',
+    tenantId: tenantId || '',
+    requestedRole,
+    role: 'volunteer',
+    status: autoApprove ? 'approved' : 'pending',
+    applyTime: db.serverDate()
+  };
+  if (autoApprove) {
+    docData.approveTime = db.serverDate();
+  }
+
+  const addRes = await db.collection('user_roles').add({ data: docData });
+
+  return {
+    success: true,
+    autoApproved: autoApprove,
+    applyId: addRes._id,
+    message: autoApprove ? '已加入门店，即刻生效' : '申请已提交，请等待审核'
+  };
+}
+
 exports.main = async (event, context) => {
   const { applyId, action } = event;
   const { OPENID } = cloud.getWXContext();
 
-  if (!applyId || !action) {
-    return { success: false, error: '参数不完整' };
-  }
   if (!OPENID) {
     return { success: false, error: '无法获取用户身份' };
+  }
+
+  if (action === 'apply') {
+    try {
+      return await submitRoleApply(event, OPENID);
+    } catch (err) {
+      console.error('processRoleAudit submitRoleApply error:', err);
+      return { success: false, error: err.message || '提交失败' };
+    }
+  }
+
+  if (!applyId || !action) {
+    return { success: false, error: '参数不完整' };
   }
 
   try {
@@ -209,11 +275,15 @@ exports.main = async (event, context) => {
         return { success: false, error: storeErr.message || '建店失败' };
       }
     } else {
-      // 已有门店：仅本店店长或本机构超级管理员可审核
+      // 已有门店：本店店长/本店大家长/本机构超级管理员均可审核。
+      // 🏛️ 家长任命本身在上面已经限定仅超管可批（走到这里 requestedRole 必然不是
+      // store_patriarch），家长审批的只会是本店店长/财务这类申请，与"家长监督店长"
+      // 的人文架构分工一致
       const isAuditorAllowed = auditor.role === 'super_admin' ||
-        (auditor.role === 'store_manager' && auditor.storeId === targetStoreId);
+        (auditor.role === 'store_manager' && auditor.storeId === targetStoreId) ||
+        (auditor.role === 'store_patriarch' && auditor.storeId === targetStoreId);
       if (!isAuditorAllowed) {
-        return { success: false, error: '无权限：仅本门店店长或超级管理员可审核角色申请' };
+        return { success: false, error: '无权限：仅本门店店长/大家长或超级管理员可审核角色申请' };
       }
     }
 

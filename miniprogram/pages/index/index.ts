@@ -2370,36 +2370,51 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const db = wx.cloud.database();
       // 🏢 多租户：随申请一并带上 tenantId，供审批云函数做机构边界校验与新建门店归属判定
       const cachedRoleInfoForTenant = AuthService.getCachedRoleInfo();
       const tenantId = (cachedRoleInfoForTenant && cachedRoleInfoForTenant.tenantId) || '';
       const displayStoreName = storeSelectionType === 'custom' ? customStoreName.trim() : storeName;
 
-      await db.collection('user_roles').add({
+      // 🛡️ 提交改走 processRoleAudit 云函数（action:'apply'），不再由客户端直接写
+      // status/role 字段——服务端统一决定是否自动通过（目前仅"义工 + 已有门店"
+      // 免审即时生效），避免客户端能直接摆布这两个字段自我提权
+      const res = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
         data: {
-          realName: realName.trim(),
-          phone: phone.trim(),
+          action: 'apply',
           storeId: storeSelectionType === 'custom' ? '' : storeId,
           storeName: displayStoreName,
           storeSelectionType,
           customStoreName: storeSelectionType === 'custom' ? customStoreName.trim() : '',
           tenantId,
           requestedRole,
-          role: 'volunteer',
-          status: 'pending',
-          applyTime: db.serverDate()
+          realName: realName.trim(),
+          phone: phone.trim()
         }
       });
+      const result = res.result as any;
 
       wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '提交失败，请重试', icon: 'none' });
+        return;
+      }
+
       this.setData({ showApplyModal: false });
 
+      let content: string;
+      if (result.autoApproved) {
+        content = `您已成功加入【${displayStoreName}】，义工身份即刻生效，可以开始护持啦！`;
+      } else if (storeSelectionType === 'custom') {
+        content = `您已成功申请加入新门店【${displayStoreName}】，待超级管理员审核通过后将自动建店并完成身份审核！`;
+      } else {
+        content = `您已成功申请加入【${displayStoreName}】，请联系店长/大家长或超级管理员完成身份审核！`;
+      }
+
       wx.showModal({
-        title: '申请已提交',
-        content: storeSelectionType === 'custom'
-          ? `您已成功申请加入新门店【${displayStoreName}】，待超级管理员审核通过后将自动建店并完成身份审核！`
-          : `您已成功申请加入【${displayStoreName}】，请联系店长或财务负责人完成身份审核！`,
+        title: result.autoApproved ? '🎉 加入成功' : '申请已提交',
+        content,
         showCancel: false,
         confirmText: '我知道了'
       });

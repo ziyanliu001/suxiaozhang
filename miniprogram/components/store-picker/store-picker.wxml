@@ -104,6 +104,10 @@
         <text class="form-label">申请身份</text>
         <radio-group class="new-store-role-group" bindchange="onSelectNewStoreRole">
           <label class="new-store-role-item">
+            <radio value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}" color="#8C1D18"/>
+            <text>👑 大家长</text>
+          </label>
+          <label class="new-store-role-item">
             <radio value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}" color="#8C1D18"/>
             <text>👑 店长</text>
           </label>

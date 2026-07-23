@@ -95,6 +95,26 @@ exports.main = async (event) => {
       expenseAmount: r.expenseAmount || 0
     }));
 
+    // 🏛️ 待审核角色申请：本店的店长/财务申请，家长可与超管一起分级审批
+    // （家长任命本身仍仅限超管，见 processRoleAudit，这里不展示 store_patriarch 申请）
+    const pendingRoleRes = await db.collection('user_roles')
+      .where({
+        storeId: target.storeId,
+        status: 'pending',
+        requestedRole: _.in(['store_manager', 'finance'])
+      })
+      .orderBy('applyTime', 'desc')
+      .limit(20)
+      .get();
+    const pendingRoleRequests = (pendingRoleRes.data || []).map((r) => ({
+      applyId: r._id,
+      realName: r.realName || '',
+      phone: r.phone || '',
+      requestedRole: r.requestedRole || '',
+      requestedRoleLabel: r.requestedRole === 'store_manager' ? '店长' : '财务',
+      applyTime: r.applyTime ? new Date(r.applyTime).toLocaleDateString('zh-CN') : ''
+    }));
+
     return {
       success: true,
       data: {
@@ -110,6 +130,7 @@ exports.main = async (event) => {
         auditedCount,
         totalCount: monthReports.length,
         pendingVoidList,
+        pendingRoleRequests,
         pendingProfileUpdate: store.pendingProfileUpdate || null
       }
     };

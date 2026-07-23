@@ -32,7 +32,7 @@ Component({
     showNewStoreForm: false,
     newStoreForm: {
       customStoreName: '',
-      applyRole: 'volunteer' as 'store_manager' | 'finance' | 'volunteer'
+      applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer'
     },
     currentStore: {
       storeId: 'haicang_yuhuazhai',

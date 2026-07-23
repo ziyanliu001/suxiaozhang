@@ -73,7 +73,23 @@
       </view>
     </view>
 
-    <view class="pd-empty-tip" wx:if="{{pendingVoidList.length === 0 && !pendingProfileUpdate && !loading}}">
+    <!-- 待确认队列：店长/财务角色申请（家长与超管均可审批，见 processRoleAudit） -->
+    <view class="pd-section-title" wx:if="{{pendingRoleRequests.length > 0}}">
+      <text class="pd-section-icon">⏳</text>
+      <text class="pd-section-txt">待审核的店长/财务申请（{{pendingRoleRequests.length}}）</text>
+    </view>
+    <view class="pd-void-card" wx:for="{{pendingRoleRequests}}" wx:key="applyId">
+      <view class="pd-void-info">
+        <text class="pd-void-date">{{item.realName}} · 申请【{{item.requestedRoleLabel}}】</text>
+        <text class="pd-void-amount">手机号 {{item.phone}} · {{item.applyTime}}</text>
+      </view>
+      <view class="pd-void-actions">
+        <button class="pd-btn-reject" data-id="{{item.applyId}}" data-action="reject" bindtap="onDecideRoleRequest" disabled="{{roleActionInFlight}}">驳回</button>
+        <button class="pd-btn-approve" data-id="{{item.applyId}}" data-action="approve" bindtap="onDecideRoleRequest" disabled="{{roleActionInFlight}}">通过</button>
+      </view>
+    </view>
+
+    <view class="pd-empty-tip" wx:if="{{pendingVoidList.length === 0 && !pendingProfileUpdate && pendingRoleRequests.length === 0 && !loading}}">
       <text>✅ 当前没有待确认的高风险操作</text>
     </view>
 
