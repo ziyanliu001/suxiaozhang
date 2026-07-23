@@ -16,6 +16,11 @@ page {
      单靠 env() 不够，故强制再叠加 80rpx 兜底，与 headerSafeTop 的动态胶囊测算共同生效，
      确保首屏渲染早于 JS 测算完成时内容也不会被遮挡 */
   padding-top: calc(env(safe-area-inset-top) + 80rpx) !important;
+  /* 🛡️ 非义工视角（店长/财务/超管）在 .page-body-scroll 之外还叠了打卡卡片/店长工作台/
+     财务稽核台/管理宫格等一整段非滚动区内容，矮屏设备上这段总高度可能超出 100vh，
+     导致页面本体（而非内部 page-body-scroll）整体上滚，此时底部固定吸底双按钮栏仍会
+     盖住刚露出的这段内容——额外预留 160rpx 占位，确保滑到底时数据不被遮挡 */
+  padding-bottom: 160rpx;
 }
 
 .app-header-section {
@@ -3849,10 +3854,10 @@ textarea, .textarea {
 /* 🌸 每日修身·雨花人生十六最 卡片：独立精美卡片，图标+标题、居中金句、底部并排小按钮 */
 /* 🌸 每日修身·雨花家训卡片 */
 .culture-motto-card {
-  background: linear-gradient(135deg, #FFF9F0 0%, #FFF3E8 100%);
-  border: 1rpx solid #FFE8CC;
+  background: linear-gradient(135deg, #FFFDF8 0%, #FFFAF2 100%);
+  border: 1rpx solid #EAE3D6;
   border-radius: 20rpx;
-  padding: 28rpx 28rpx 24rpx;
+  padding: 28rpx 28rpx 20rpx;
   margin: 0 24rpx 24rpx;
   box-shadow: 0 4rpx 16rpx rgba(180, 83, 9, 0.06);
 }
@@ -3893,7 +3898,7 @@ textarea, .textarea {
 }
 
 .motto-text {
-  font-size: 30rpx;
+  font-size: 28rpx;
   line-height: 1.8;
   color: #5C4326;
   text-align: center;
@@ -3902,17 +3907,21 @@ textarea, .textarea {
 
 .motto-actions {
   display: flex;
-  justify-content: center;
-  gap: 20rpx;
+  justify-content: flex-end;
+  gap: 28rpx;
+  margin-top: 4rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #F2ECE0;
 }
 
 .motto-btn {
-  font-size: 23rpx;
+  font-size: 22rpx;
+  color: #A8763E;
+  padding: 4rpx 2rpx;
+}
+
+.motto-btn-refresh {
   color: #B45309;
-  background: #FFFFFF;
-  border: 1rpx solid #FFDDA8;
-  border-radius: 30rpx;
-  padding: 10rpx 26rpx;
 }
 
 /* 🌸 家训弹窗头部：单独加顶部内边距，避免关闭按钮与右上角胶囊（如切店胶囊）重叠——
@@ -7214,6 +7223,19 @@ textarea, .textarea {
 .omni-link-arrow {
   font-size: 20rpx;
   color: #C97B3D;
+}
+
+.omni-checkin-store-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16rpx;
+  padding: 14rpx;
+  background: #F8F9FA;
+  border: 1rpx dashed #DEE2E6;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  color: #868E96;
 }
 
 .manager-home-card,

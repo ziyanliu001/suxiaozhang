@@ -131,7 +131,7 @@
   <view class="omni-checkin-card" wx:if="{{!isVolunteer}}">
     <view class="omni-checkin-header">
       <text class="omni-checkin-title">🙋 志愿服务打卡</text>
-      <text class="omni-checkin-sub">{{currentUserRole === 'store_manager' ? '店长' : (currentUserRole === 'finance' ? '财务' : '管理员')}}身份同样可以记录到岗时长，与全体志愿者共享同一份服务足迹</text>
+      <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
     </view>
     <button
       class="btn-volunteer-checkin omni-checkin-btn {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
@@ -142,8 +142,10 @@
     </button>
 
     <!-- 次级跳转：滚动定位到下方对应的管理/财务控制台卡片，不是另开一个页面——
-         那张卡片本来就在同一页往下一点的位置，这里只是给个明确的"下一步在哪"的路标 -->
-    <view class="omni-checkin-manage-links">
+         那张卡片本来就在同一页往下一点的位置，这里只是给个明确的"下一步在哪"的路标。
+         🛡️ 全国总览视角下没有具体门店上下文，"进入店务管理/财务稽核台"点进去的卡片
+         本身也是按 currentStoreId 展示的门店级数据，这里改为提示先选店，避免身份/权限观感混乱 -->
+    <view class="omni-checkin-manage-links" wx:if="{{!isAllStoresView}}">
       <view class="omni-checkin-manage-link" wx:if="{{isManager}}" bindtap="onScrollToManagerConsole">
         <text>进入店务管理</text>
         <text class="omni-link-arrow">▶</text>
@@ -152,6 +154,9 @@
         <text>进入财务稽核台</text>
         <text class="omni-link-arrow">▶</text>
       </view>
+    </view>
+    <view class="omni-checkin-store-hint" wx:else>
+      <text>📍 请先选择具体门店，解锁店务管理入口</text>
     </view>
   </view>
 
@@ -208,7 +213,7 @@
         <text>🔄 换一换</text>
       </view>
       <view class="motto-btn motto-btn-detail" catchtap="onShowFamilyMottoModal">
-        <text>📖 查看完整家训</text>
+        <text>📖 完整家训</text>
       </view>
     </view>
   </view>
