@@ -133,7 +133,14 @@ Component({
     async onSharePoster() {
       if (this.data.isDrawing) return
       this.setData({ isDrawing: true })
-      wx.showLoading({ title: '正在生成海报...', mask: true })
+      // 🐛 修复"卡在生成海报界面退不出来"：mask:true 会加一层原生全屏触摸拦截层，
+      // 挡住下面本来就可以点的 X/继续护持关闭按钮，用户直观感受就是"界面卡死"——
+      // 哪怕 15 秒超时兜底最终会退出 loading，这段时间内也完全点不动关闭按钮。
+      // 这里改为不加全屏遮罩，仅保留顶部提示条文案，按钮自身的"生成中..."态
+      // 已经能表达"正在处理"，用户随时可以点击关闭，生成任务在后台继续跑，
+      // 结束后 finally 里的 hideLoading/setData 依然会正常执行（组件只是被
+      // visible=false 隐藏，并未销毁）
+      wx.showLoading({ title: '正在生成海报...', mask: false })
 
       try {
         const posterPath = await Promise.race([
