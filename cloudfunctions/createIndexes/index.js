@@ -137,6 +137,15 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'notice_templates', index: 'tenant_store_system', status: 'success' });
 
+    // 🏛️ 门店大事记/发展历程：门店+发生日期复合索引，支撑 manageStoreMilestone 的
+    // list（按 storeId 过滤 + eventDate 倒序）查询
+    await db.collection('store_milestones').createIndex({
+      name: 'store_eventDate',
+      keys: [{ storeId: 1 }, { eventDate: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'store_milestones', index: 'store_eventDate', status: 'success' });
+
     return {
       success: true,
       message: '索引创建完成',

@@ -1,4 +1,11 @@
 import { AuthService } from '../../utils/authService';
+import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
+
+const OPERATING_STATUS_LABELS: Record<string, string> = {
+  operating: '运营中',
+  preparing: '筹备中',
+  paused: '暂停运营'
+};
 
 // 🛡️ user_roles 集合里"角色审核通过"的真实哨兵值是 'approved'（见 processRoleAudit /
 // setupSuperAdmin 云函数落库逻辑），而不是 'active'（那是 stores 集合门店启停用的哨兵值）——
@@ -40,7 +47,25 @@ Component({
     // 已审核通过的 super_admin，由 fetchStoreListFromCloud() 按真实角色动态决定，
     // 确保面板首次渲染（网络请求返回前）也不会对非超管账号闪现该选项
     storeListLoading: false,
-    groupedStoreList: [] as any[]
+    groupedStoreList: [] as any[],
+
+    // 🌐 全国家园网络：完整门店数据（不含"全国总览"虚拟条目）+ 搜索/省市筛选/附近排序，
+    // groupedStoreList 是 allStores 按当前筛选/排序条件派生出的展示态，"全国总览"条目
+    // 不参与筛选/排序，单独存着按需拼在展示列表最前面
+    allStores: [] as any[],
+    nationalOverviewEntry: null as any,
+    searchKeyword: '',
+    provinceOptions: [] as string[],
+    cityOptions: [] as string[],
+    // <picker mode="selector"> 的 range 需要一个现成数组（WXML 绑定表达式不支持展开
+    // 语法拼接"全部省份"/"全部城市"占位项），这里在 TS 侧提前拼好
+    provinceOptionsWithAll: ['全部省份'] as string[],
+    cityOptionsWithAll: ['全部城市'] as string[],
+    selectedProvince: '',
+    selectedCity: '',
+    sortMode: 'default' as 'default' | 'nearby',
+    userLocation: null as { latitude: number; longitude: number } | null,
+    locationLoading: false
   },
 
   lifetimes: {
@@ -105,6 +130,12 @@ Component({
         const fetchedStores = list.map((s: any) => ({
           storeId: s.storeId,
           storeName: s.storeName,
+          operatingStatus: s.operatingStatus || 'operating',
+          operatingStatusLabel: OPERATING_STATUS_LABELS[s.operatingStatus] || '运营中',
+          province: s.province || '',
+          city: s.city || '',
+          latitude: typeof s.latitude === 'number' ? s.latitude : undefined,
+          longitude: typeof s.longitude === 'number' ? s.longitude : undefined,
           roles: [
             { role: 'VOLUNTEER', label: '义工', isAuthorized: true },
             { role: 'MANAGER', label: '店长', isAuthorized: false },
@@ -112,17 +143,27 @@ Component({
           ]
         }));
 
-        // 仅已核验的 super_admin 账号才在列表顶部插入"全国总览"；其余角色（店长/财务/义工）
-        // 完全过滤掉该条目，只保留其真实绑定的具体门店
-        const groupedStoreList = isSuperAdmin
-          ? [{
+        // 仅已核验的 super_admin 账号才展示"全国总览"；其余角色（店长/财务/义工）
+        // 完全过滤掉该条目，只保留其真实绑定的具体门店。该条目不参与筛选/排序，
+        // 单独存着，展示时始终拼在筛选结果最前面
+        const nationalOverviewEntry = isSuperAdmin
+          ? {
               storeId: 'national_overview',
               storeName: '全国总览',
               roles: [{ role: 'ADMIN', label: '超级管理员', isAuthorized: false }]
-            }, ...fetchedStores]
-          : fetchedStores;
+            }
+          : null;
 
-        this.setData({ groupedStoreList });
+        // 省份筛选选项：从实际门店数据里动态推导，不维护全国行政区划静态数据集——
+        // 门店铺开到新省市时选项会自动出现，不需要额外维护数据文件
+        const provinceOptions = Array.from(new Set(fetchedStores.map((s: any) => s.province).filter(Boolean))) as string[];
+
+        this.setData({
+          allStores: fetchedStores,
+          nationalOverviewEntry,
+          provinceOptions,
+          provinceOptionsWithAll: ['全部省份', ...provinceOptions]
+        });
         this.refreshRolePermissions();
       } catch (err) {
         console.warn('[store-picker] fetchStoreListFromCloud 失败，保留现有列表:', err);
@@ -135,7 +176,7 @@ Component({
     refreshRolePermissions() {
       const authKeys = wx.getStorageSync('my_authorized_roles') || [];
 
-      const updatedList = this.data.groupedStoreList.map((store: any) => {
+      const updatedStores = this.data.allStores.map((store: any) => {
         const roles = store.roles.map((r: any) => {
           if (r.role === 'VOLUNTEER') return { ...r, isAuthorized: true };
           const key = `${store.storeId}_${r.role}`;
@@ -145,7 +186,128 @@ Component({
         return { ...store, roles };
       });
 
-      this.setData({ groupedStoreList: updatedList });
+      this.setData({ allStores: updatedStores });
+      this.applyFilters();
+    },
+
+    // 🌐 搜索/省市筛选/附近排序：从 allStores 派生出 groupedStoreList 展示态，
+    // "全国总览"虚拟条目不参与筛选/排序，始终拼在结果最前面
+    applyFilters() {
+      const { allStores, nationalOverviewEntry, searchKeyword, selectedProvince, selectedCity, sortMode, userLocation } = this.data;
+
+      let filtered = allStores;
+
+      const keyword = (searchKeyword || '').trim();
+      if (keyword) {
+        filtered = filtered.filter((s: any) => (s.storeName || '').includes(keyword));
+      }
+      if (selectedProvince) {
+        filtered = filtered.filter((s: any) => s.province === selectedProvince);
+      }
+      if (selectedCity) {
+        filtered = filtered.filter((s: any) => s.city === selectedCity);
+      }
+
+      if (sortMode === 'nearby' && userLocation) {
+        filtered = filtered.map((s: any) => {
+          if (typeof s.latitude !== 'number' || typeof s.longitude !== 'number') {
+            return { ...s, distanceKm: Infinity, distanceLabel: '' };
+          }
+          const distanceKm = haversineDistanceKm(userLocation.latitude, userLocation.longitude, s.latitude, s.longitude);
+          return { ...s, distanceKm, distanceLabel: formatDistance(distanceKm) };
+        });
+        filtered = [...filtered].sort((a: any, b: any) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+      }
+
+      const groupedStoreList = nationalOverviewEntry ? [nationalOverviewEntry, ...filtered] : filtered;
+      this.setData({ groupedStoreList });
+    },
+
+    onSearchInput(e: any) {
+      this.setData({ searchKeyword: e.detail.value });
+      this.applyFilters();
+    },
+
+    onProvinceChange(e: any) {
+      const index = parseInt(e.detail.value, 10);
+      // 选项数组第 0 项固定是"全部省份"
+      const selectedProvince = index === 0 ? '' : this.data.provinceOptions[index - 1];
+      const cityOptions = Array.from(
+        new Set(
+          this.data.allStores
+            .filter((s: any) => !selectedProvince || s.province === selectedProvince)
+            .map((s: any) => s.city)
+            .filter(Boolean)
+        )
+      ) as string[];
+      this.setData({
+        selectedProvince,
+        cityOptions,
+        cityOptionsWithAll: ['全部城市', ...cityOptions],
+        selectedCity: ''
+      });
+      this.applyFilters();
+    },
+
+    onCityChange(e: any) {
+      const index = parseInt(e.detail.value, 10);
+      const selectedCity = index === 0 ? '' : this.data.cityOptions[index - 1];
+      this.setData({ selectedCity });
+      this.applyFilters();
+    },
+
+    onClearFilters() {
+      this.setData({
+        searchKeyword: '',
+        selectedProvince: '',
+        selectedCity: '',
+        cityOptions: [],
+        cityOptionsWithAll: ['全部城市'],
+        sortMode: 'default'
+      });
+      this.applyFilters();
+    },
+
+    // 📍 附近门店：首次开启时请求定位，成功后按距离升序排列；用户拒绝授权/定位失败时
+    // 优雅降级为原有默认排序 + toast 提示，不阻断使用
+    async onToggleNearbySort() {
+      if (this.data.sortMode === 'nearby') {
+        this.setData({ sortMode: 'default' });
+        this.applyFilters();
+        return;
+      }
+
+      if (this.data.userLocation) {
+        this.setData({ sortMode: 'nearby' });
+        this.applyFilters();
+        return;
+      }
+
+      this.setData({ locationLoading: true });
+      try {
+        const res: any = await wx.getLocation({ type: 'gcj02' });
+        this.setData({
+          userLocation: { latitude: res.latitude, longitude: res.longitude },
+          sortMode: 'nearby'
+        });
+        this.applyFilters();
+      } catch (err: any) {
+        console.warn('[store-picker] 获取定位失败:', err);
+        const isDenied = !!(err && err.errMsg && err.errMsg.indexOf('auth deny') >= 0);
+        wx.showModal({
+          title: '无法获取当前位置',
+          content: isDenied ? '您此前拒绝了位置权限，如需使用"附近门店"，请在系统设置中开启位置权限' : '定位失败，请检查网络或稍后重试',
+          showCancel: isDenied,
+          confirmText: isDenied ? '去设置' : '我知道了',
+          success: (modalRes) => {
+            if (isDenied && modalRes.confirm) {
+              wx.openSetting();
+            }
+          }
+        });
+      } finally {
+        this.setData({ locationLoading: false });
+      }
     },
 
     // 关闭弹窗

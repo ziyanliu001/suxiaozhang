@@ -23,6 +23,11 @@
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"
   },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于计算附近门店的距离，方便您快速找到最近的雨花斋"
+    }
+  },
   "tabBar": {
     "custom": true,
     "color": "#8E8E93",

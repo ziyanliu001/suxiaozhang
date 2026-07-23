@@ -1,4 +1,7 @@
 <view class="sp-page">
+  <!-- 图片压缩用离屏画布（大事记配图上传），全页面共用一个即可 -->
+  <canvas type="2d" id="milestoneImgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
+
   <view class="sp-nav-bar" style="padding-top: {{navTop}}px;">
     <view class="sp-nav-back" hover-class="sp-nav-back-hover" bindtap="goBack">←</view>
     <text class="sp-nav-title">🏠 门店档案</text>
@@ -8,14 +11,93 @@
   <scroll-view scroll-y class="sp-scroll" style="margin-top: {{contentTop}}px;">
 
     <view class="sp-store-card">
-      <text class="sp-store-name">{{currentStoreName || '未命名门店'}}</text>
-      <text class="sp-store-address" wx:if="{{storeAddress}}">📍 {{storeAddress}}</text>
+      <view class="sp-store-name-row">
+        <text class="sp-store-name">{{currentStoreName || '未命名门店'}}</text>
+        <text class="sp-operating-badge {{operatingStatus}}">{{operatingStatusLabel}}</text>
+      </view>
+      <text class="sp-store-address" wx:if="{{address}}">📍 {{address}}</text>
     </view>
 
-    <!-- 🏛️ 家长风控锁：本店已绑定家长/督导时，店长发起的画像变更需先经确认才生效 -->
+    <!-- 🏛️ 家长风控锁：本店已绑定家长/督导时，店长发起的门店档案变更需先经确认才生效 -->
     <view class="sp-pending-banner" wx:if="{{pendingProfileUpdate}}">
       <text class="sp-pending-icon">⏳</text>
-      <text class="sp-pending-text">有一份画像更新正在等待家长/超管审批，当前展示的仍是生效中的数据</text>
+      <text class="sp-pending-text">有一份门店档案更新正在等待家长/超管审批，当前展示的仍是生效中的数据</text>
+    </view>
+
+    <!-- 🏛️ 门店档案信息：详细地址/开业日期/民政登记名称/发起背景/家园特色 + 省市/运营状态/位置 -->
+    <view class="sp-section-title">
+      <text class="sp-section-icon">📖</text>
+      <text class="sp-section-txt">门店档案信息</text>
+    </view>
+
+    <view class="sp-archive-card" wx:if="{{!editing}}">
+      <view class="sp-archive-row">
+        <text class="sp-archive-lbl">开业日期</text>
+        <text class="sp-archive-val">{{openDate || '未填写'}}</text>
+      </view>
+      <view class="sp-archive-row">
+        <text class="sp-archive-lbl">民政登记名称</text>
+        <text class="sp-archive-val">{{registeredName || '未填写'}}</text>
+      </view>
+      <view class="sp-archive-row">
+        <text class="sp-archive-lbl">所在省市</text>
+        <text class="sp-archive-val">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
+      </view>
+      <view class="sp-archive-row vertical" wx:if="{{background}}">
+        <text class="sp-archive-lbl">发起背景</text>
+        <text class="sp-archive-val-block">{{background}}</text>
+      </view>
+      <view class="sp-archive-row vertical" wx:if="{{characteristics}}">
+        <text class="sp-archive-lbl">家园特色</text>
+        <text class="sp-archive-val-block">{{characteristics}}</text>
+      </view>
+    </view>
+
+    <view class="sp-archive-edit-card" wx:if="{{editing}}">
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">详细地址</text>
+        <input class="sp-edit-input full" value="{{editForm.address}}" bindinput="onEditInput" data-field="address" placeholder="请输入门店详细地址" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">开业日期</text>
+        <picker mode="date" value="{{editForm.openDate}}" bindchange="onEditOpenDateChange">
+          <view class="sp-edit-input full sp-date-picker-value">{{editForm.openDate || '点击选择日期'}}</view>
+        </picker>
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">民政登记名称</text>
+        <input class="sp-edit-input full" value="{{editForm.registeredName}}" bindinput="onEditInput" data-field="registeredName" placeholder="请输入民政登记全称" />
+      </view>
+      <view class="sp-edit-row-2col">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">省份</text>
+          <input class="sp-edit-input full" value="{{editForm.province}}" bindinput="onEditInput" data-field="province" placeholder="如：福建省" />
+        </view>
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">城市</text>
+          <input class="sp-edit-input full" value="{{editForm.city}}" bindinput="onEditInput" data-field="city" placeholder="如：厦门市" />
+        </view>
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">发起背景</text>
+        <textarea class="sp-edit-textarea" value="{{editForm.background}}" bindinput="onEditInput" data-field="background" placeholder="请输入发起背景" maxlength="500" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">家园特色</text>
+        <textarea class="sp-edit-textarea" value="{{editForm.characteristics}}" bindinput="onEditInput" data-field="characteristics" placeholder="请输入家园特色" maxlength="500" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">运营状态</text>
+        <view class="sp-status-pill-row">
+          <view class="sp-status-pill {{editForm.operatingStatus === 'operating' ? 'active' : ''}}" bindtap="onSelectOperatingStatus" data-value="operating">运营中</view>
+          <view class="sp-status-pill {{editForm.operatingStatus === 'preparing' ? 'active' : ''}}" bindtap="onSelectOperatingStatus" data-value="preparing">筹备中</view>
+          <view class="sp-status-pill {{editForm.operatingStatus === 'paused' ? 'active' : ''}}" bindtap="onSelectOperatingStatus" data-value="paused">暂停运营</view>
+        </view>
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">门店位置（用于"附近门店"距离排序）</text>
+        <view class="sp-location-picker-btn" bindtap="onChooseLocation">{{editForm.locationLabel || '📍 点击选择门店位置'}}</view>
+      </view>
     </view>
 
     <view class="sp-section-title">
@@ -96,5 +178,89 @@
       <text>加载中...</text>
     </view>
 
+    <!-- 🏛️ 门店大事记/发展历程：按年份分组的时间轴，参照 pages/journey 的展开/收起范式 -->
+    <view class="sp-section-title sp-milestone-title-row">
+      <text class="sp-section-icon">📜</text>
+      <text class="sp-section-txt">门店大事记 / 发展历程</text>
+      <view class="sp-milestone-title-actions">
+        <text class="sp-btn-toggle-all" wx:if="{{milestoneTimelineGroups.length > 0}}" bindtap="onToggleAllMilestones">{{allMilestonesExpanded ? '全部收起' : '全部展开'}}</text>
+        <text class="sp-btn-add-milestone" wx:if="{{canManage}}" bindtap="onOpenAddMilestone">+ 添加</text>
+      </view>
+    </view>
+
+    <view class="sp-milestone-groups" wx:if="{{!milestonesLoading && milestoneTimelineGroups.length > 0}}">
+      <view class="sp-milestone-group" wx:for="{{milestoneTimelineGroups}}" wx:key="yearKey">
+        <view class="sp-milestone-group-header" bindtap="onToggleMilestoneGroup" data-year-key="{{item.yearKey}}">
+          <view class="sp-milestone-group-dot"></view>
+          <text class="sp-milestone-group-label">{{item.yearLabel}}</text>
+          <text class="sp-milestone-group-count">共 {{item.items.length}} 条</text>
+          <text class="sp-milestone-group-arrow {{item.expanded ? 'rotate' : ''}}">▾</text>
+        </view>
+        <view class="sp-milestone-items {{item.expanded ? 'expanded' : 'collapsed'}}">
+          <view class="sp-milestone-item" wx:for="{{item.items}}" wx:for-item="ms" wx:key="_id">
+            <view class="sp-milestone-item-left">
+              <view class="sp-milestone-dot"></view>
+              <view class="sp-milestone-line"></view>
+            </view>
+            <view class="sp-milestone-item-body">
+              <view class="sp-milestone-item-header">
+                <text class="sp-milestone-date">{{ms.eventDate}}</text>
+                <text class="sp-milestone-title">{{ms.title}}</text>
+              </view>
+              <text class="sp-milestone-content" wx:if="{{ms.content}}">{{ms.content}}</text>
+              <view class="sp-milestone-img-grid" wx:if="{{ms.images.length > 0}}">
+                <image class="sp-milestone-img" wx:for="{{ms.images}}" wx:for-item="img" wx:key="*this" src="{{img.url}}" mode="aspectFill" />
+              </view>
+              <view class="sp-milestone-item-actions" wx:if="{{canManage}}">
+                <text class="sp-milestone-action-btn" data-item="{{ms}}" bindtap="onOpenEditMilestone">编辑</text>
+                <text class="sp-milestone-action-btn danger" data-id="{{ms._id}}" bindtap="onDeleteMilestone">删除</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="sp-milestone-empty" wx:if="{{!milestonesLoading && milestoneTimelineGroups.length === 0}}">
+      <text>暂无大事记，{{canManage ? '点击右上角"+ 添加"记录门店发展历程' : '敬请期待'}}</text>
+    </view>
+
   </scroll-view>
+
+  <!-- 大事记新增/编辑弹窗 -->
+  <view class="sp-modal-backdrop" wx:if="{{showMilestoneModal}}" bindtap="onCloseMilestoneModal">
+    <view class="sp-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">{{milestoneForm.id ? '编辑大事记' : '添加大事记'}}</text>
+        <text class="sp-modal-close" bindtap="onCloseMilestoneModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <text class="sp-form-label">标题</text>
+        <input class="sp-modal-input" value="{{milestoneForm.title}}" bindinput="onMilestoneTitleInput" placeholder="如：门店成立仪式" maxlength="40" />
+
+        <text class="sp-form-label">发生日期</text>
+        <picker mode="date" value="{{milestoneForm.eventDate}}" bindchange="onMilestoneDateChange">
+          <view class="sp-modal-input sp-date-picker-value">{{milestoneForm.eventDate || '点击选择日期'}}</view>
+        </picker>
+
+        <text class="sp-form-label">内容描述</text>
+        <textarea class="sp-modal-textarea" value="{{milestoneForm.content}}" bindinput="onMilestoneContentInput" placeholder="请输入这段大事记的详细内容" maxlength="500" />
+
+        <text class="sp-form-label">配图（最多 9 张）</text>
+        <view class="sp-milestone-img-edit-grid">
+          <view class="sp-milestone-img-wrap" wx:for="{{milestoneForm.images}}" wx:key="*this">
+            <image class="sp-milestone-img" src="{{item}}" mode="aspectFill" />
+            <view class="sp-milestone-img-remove" data-index="{{index}}" catchtap="onRemoveMilestoneImage">✕</view>
+          </view>
+          <view class="sp-milestone-img-add" bindtap="onChooseMilestoneImage" wx:if="{{milestoneForm.images.length < 9}}">
+            <text>+</text>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseMilestoneModal">取消</button>
+        <button class="sp-btn-save" bindtap="onSaveMilestone" loading="{{milestoneSaving}}" disabled="{{milestoneSaving || milestoneUploading}}">保存</button>
+      </view>
+    </view>
+  </view>
 </view>

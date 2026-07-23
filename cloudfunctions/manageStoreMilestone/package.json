@@ -1,0 +1,9 @@
+{
+  "name": "manageStoreMilestone",
+  "version": "1.0.0",
+  "description": "云函数：门店大事记/发展历程（按年份分组的精选里程碑）增删改查（店长限本店/超管限本机构可写，全员只读本店）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

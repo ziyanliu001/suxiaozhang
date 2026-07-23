@@ -36,7 +36,12 @@ Page({
     createForm: {
       storeName: '',
       address: '',
-      announcement: ''
+      announcement: '',
+      province: '',
+      operatingStatus: 'operating' as 'operating' | 'preparing' | 'paused',
+      latitude: undefined as number | undefined,
+      longitude: undefined as number | undefined,
+      locationLabel: ''
     },
     creating: false,
 
@@ -699,7 +704,10 @@ Page({
   onOpenCreateStore() {
     this.setData({
       showCreateModal: true,
-      createForm: { storeName: '', address: '', announcement: '' }
+      createForm: {
+        storeName: '', address: '', announcement: '',
+        province: '', operatingStatus: 'operating', latitude: undefined, longitude: undefined, locationLabel: ''
+      }
     });
   },
 
@@ -713,8 +721,31 @@ Page({
     this.setData({ [`createForm.${field}`]: e.detail.value });
   },
 
+  onSelectCreateOperatingStatus(e: any) {
+    this.setData({ 'createForm.operatingStatus': e.currentTarget.dataset.value });
+  },
+
+  // 📍 建店时选择门店位置：wx.chooseLocation 与 store-picker 的 wx.getLocation
+  // 共用同一条 app.json "scope.userLocation" 权限声明
+  async onChooseStoreLocation() {
+    try {
+      const res: any = await wx.chooseLocation({});
+      this.setData({
+        'createForm.latitude': res.latitude,
+        'createForm.longitude': res.longitude,
+        'createForm.locationLabel': res.name || res.address || `${res.latitude}, ${res.longitude}`
+      });
+      // 未手动填写地址时，用选点结果顺手带出地址，减少重复输入
+      if (!this.data.createForm.address && res.address) {
+        this.setData({ 'createForm.address': res.address });
+      }
+    } catch (err) {
+      console.warn('[store-management] 选择门店位置失败/取消:', err);
+    }
+  },
+
   async onSubmitCreateStore() {
-    const { storeName, address, announcement } = this.data.createForm;
+    const { storeName, address, announcement, province, operatingStatus, latitude, longitude } = this.data.createForm;
     const trimmedName = (storeName || '').trim();
 
     if (!trimmedName) {
@@ -732,6 +763,9 @@ Page({
           storeName: trimmedName,
           address: (address || '').trim(),
           initialAnnouncement: (announcement || '').trim(),
+          province: (province || '').trim(),
+          operatingStatus,
+          ...(typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : {}),
           bindAsManager: true
         }
       });

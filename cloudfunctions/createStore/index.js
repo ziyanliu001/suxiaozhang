@@ -114,7 +114,9 @@ async function resolveCallerTenantId(caller) {
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
-  const { storeName, city, address, initialAnnouncement, bindAsManager } = event;
+  const { storeName, city, address, initialAnnouncement, bindAsManager, province, operatingStatus, latitude, longitude } = event;
+  const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
+  const finalOperatingStatus = VALID_OPERATING_STATUSES.includes(operatingStatus) ? operatingStatus : 'operating';
 
   if (!OPENID) {
     return { success: false, error: '无法获取用户身份' };
@@ -194,6 +196,11 @@ exports.main = async (event) => {
           initialAnnouncement: initialAnnouncement || '',
           tenantId,
           status: 'active',
+          // 🌐 门店选择器：运营状态（与上面 status 是两个不同维度，见 getStoreList 同款注释）
+          // + 省份（城市已有 city 字段）+ 经纬度（供"附近门店"距离排序，可选，未提供时省略字段）
+          operatingStatus: finalOperatingStatus,
+          province: province || '',
+          ...(typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : {}),
           createdBy: OPENID,
           createdAt: db.serverDate()
         }

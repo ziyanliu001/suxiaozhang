@@ -53,7 +53,16 @@ exports.main = async (event) => {
       status: s.status || 'active',
       // 🌟 门店宣传/招募海报（drawStoreInvitationPoster）需要展示地址，
       // createStore 云函数本就落库 address 字段，这里一并透出，不新增查询
-      address: s.address || ''
+      address: s.address || '',
+      // 🌐 门店选择器：运营状态（与上面 status 是两个不同维度的字段——status 是
+      // 超管的启用/停用软删除开关，operatingStatus 是"运营中/筹备中/暂停运营"的
+      // 真实业务状态展示）+ 省市（供级联筛选）+ 经纬度（供"附近门店"距离排序，
+      // 未设置坐标的门店这两项为 undefined，前端自行判断降级）
+      operatingStatus: s.operatingStatus || 'operating',
+      province: s.province || '',
+      city: s.city || '',
+      latitude: typeof s.latitude === 'number' ? s.latitude : undefined,
+      longitude: typeof s.longitude === 'number' ? s.longitude : undefined
     }));
 
     return { success: true, list };

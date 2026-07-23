@@ -21,10 +21,33 @@
       <text class="sheet-close-btn" bindtap="onCloseSheet">✕</text>
     </view>
 
+    <!-- 🌐 全国家园网络：搜索 + 省市级联筛选 + 附近门店排序 -->
+    <view class="store-filter-bar" wx:if="{{!showNewStoreForm}}">
+      <view class="filter-search-box">
+        <text class="filter-search-icon">🔍</text>
+        <input class="filter-search-input" placeholder="搜索门店名称" value="{{searchKeyword}}" bindinput="onSearchInput" />
+      </view>
+      <view class="filter-row">
+        <picker mode="selector" range="{{provinceOptionsWithAll}}" bindchange="onProvinceChange">
+          <view class="filter-pill {{selectedProvince ? 'active' : ''}}">{{selectedProvince || '全部省份'}} ▾</view>
+        </picker>
+        <picker mode="selector" range="{{cityOptionsWithAll}}" bindchange="onCityChange" disabled="{{!selectedProvince}}">
+          <view class="filter-pill {{selectedCity ? 'active' : ''}} {{!selectedProvince ? 'disabled' : ''}}">{{selectedCity || '全部城市'}} ▾</view>
+        </picker>
+        <view class="filter-pill nearby-pill {{sortMode === 'nearby' ? 'active' : ''}}" bindtap="onToggleNearbySort">
+          {{locationLoading ? '定位中...' : '📍 附近门店'}}
+        </view>
+      </view>
+    </view>
+
     <!-- 按门店分组列表 / 新建门店申请表单 二选一展示 -->
     <scroll-view scroll-y class="sheet-scroll-list" wx:if="{{!showNewStoreForm}}">
       <view class="store-list-loading-tip" wx:if="{{storeListLoading}}">
         <text>正在加载最新门店列表...</text>
+      </view>
+      <view class="store-empty-tip" wx:if="{{!storeListLoading && groupedStoreList.length === 0}}">
+        <text>没有找到符合条件的门店，试试清空筛选条件</text>
+        <text class="btn-clear-filters" bindtap="onClearFilters">清空筛选</text>
       </view>
       <block wx:for="{{groupedStoreList}}" wx:key="storeId">
 
@@ -34,6 +57,8 @@
           <view class="store-card-header">
             <text class="store-icon">🏪</text>
             <text class="store-name-text">{{item.storeName}}</text>
+            <text class="store-operating-badge {{item.operatingStatus}}" wx:if="{{item.operatingStatusLabel}}">{{item.operatingStatusLabel}}</text>
+            <text class="store-distance-label" wx:if="{{item.distanceLabel}}">{{item.distanceLabel}}</text>
           </view>
 
           <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定) -->

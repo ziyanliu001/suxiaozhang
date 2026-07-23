@@ -143,6 +143,109 @@
   flex-shrink: 0;
 }
 
+/* ===== 🌐 全国家园网络：搜索 + 省市筛选 + 附近门店 ===== */
+.store-filter-bar {
+  margin-top: 20rpx;
+}
+
+.filter-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #F8F5F0;
+  border-radius: 16rpx;
+  padding: 14rpx 20rpx;
+  margin-bottom: 14rpx;
+}
+
+.filter-search-icon {
+  font-size: 24rpx;
+}
+
+.filter-search-input {
+  flex: 1;
+  font-size: 26rpx;
+  color: #222222;
+}
+
+.filter-row {
+  display: flex;
+  gap: 12rpx;
+}
+
+.filter-pill {
+  flex: 1;
+  text-align: center;
+  font-size: 22rpx;
+  color: #666666;
+  background: #F8F5F0;
+  border-radius: 20rpx;
+  padding: 12rpx 0;
+  white-space: nowrap;
+}
+
+.filter-pill.active {
+  background: #FFF3E0;
+  color: #8C1D18;
+  font-weight: bold;
+}
+
+.filter-pill.disabled {
+  opacity: 0.5;
+}
+
+.filter-pill.nearby-pill {
+  background: #FFF9F0;
+  color: #B45309;
+}
+
+.filter-pill.nearby-pill.active {
+  background: #B45309;
+  color: #FFFFFF;
+}
+
+.store-empty-tip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 40rpx 0;
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.btn-clear-filters {
+  color: #8C1D18;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.store-operating-badge {
+  font-size: 20rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 10rpx;
+  margin-left: 12rpx;
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.store-operating-badge.preparing {
+  background: #FFF3E0;
+  color: #D48806;
+}
+
+.store-operating-badge.paused {
+  background: #F1F3F5;
+  color: #868E96;
+}
+
+.store-distance-label {
+  margin-left: auto;
+  font-size: 22rpx;
+  color: #B45309;
+  font-weight: bold;
+}
+
 /* ===== 滚动列表 ===== */
 .sheet-scroll-list {
   max-height: 55vh;

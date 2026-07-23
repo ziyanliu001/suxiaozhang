@@ -152,6 +152,21 @@
       <text class="sm-form-label">门店地址</text>
       <input class="sm-modal-input" type="text" placeholder="请输入门店地址（选填）" value="{{createForm.address}}" data-field="address" bindinput="onCreateFormInput" />
 
+      <text class="sm-form-label">省份（选填，用于门店选择器省市筛选）</text>
+      <input class="sm-modal-input" type="text" placeholder="如：福建省" value="{{createForm.province}}" data-field="province" bindinput="onCreateFormInput" />
+
+      <text class="sm-form-label">门店位置（选填，用于"附近门店"距离排序）</text>
+      <view class="sm-location-picker-btn" bindtap="onChooseStoreLocation">
+        <text>{{createForm.locationLabel || '📍 点击选择门店位置'}}</text>
+      </view>
+
+      <text class="sm-form-label">运营状态</text>
+      <view class="sm-operating-status-row">
+        <view class="sm-status-pill {{createForm.operatingStatus === 'operating' ? 'active' : ''}}" bindtap="onSelectCreateOperatingStatus" data-value="operating">运营中</view>
+        <view class="sm-status-pill {{createForm.operatingStatus === 'preparing' ? 'active' : ''}}" bindtap="onSelectCreateOperatingStatus" data-value="preparing">筹备中</view>
+        <view class="sm-status-pill {{createForm.operatingStatus === 'paused' ? 'active' : ''}}" bindtap="onSelectCreateOperatingStatus" data-value="paused">暂停运营</view>
+      </view>
+
       <text class="sm-form-label">初始公告</text>
       <textarea class="sm-modal-textarea" placeholder="如：三源弘志愿者之家试营业" value="{{createForm.announcement}}" data-field="announcement" bindinput="onCreateFormInput" maxlength="200" />
 

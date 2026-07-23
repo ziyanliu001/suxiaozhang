@@ -1,4 +1,5 @@
-// 云函数：manageStoreProfile - 门店人员与服务人群画像（7 项人数指标）的读取与编辑
+// 云函数：manageStoreProfile - 门店档案（人员画像 7 项人数指标 + 品牌档案信息 +
+// 运营状态/省市/坐标）的读取与编辑
 //
 // 权限模型：
 // - 读（get）：任意已绑定门店的角色（店长/财务/义工）只读本店画像；super_admin/
@@ -13,6 +14,7 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
+// 人员画像：7 项人数指标，走 clampCount（非负整数）
 const PROFILE_FIELDS = [
   'partyMembers',
   'socialWorkers',
@@ -22,6 +24,22 @@ const PROFILE_FIELDS = [
   'listeningSeniorsCount',
   'otherCount'
 ];
+
+// 门店档案信息：文本/日期类字段，走 sanitizeText（裁剪长度），不走数字 clamp。
+// address 此前只在 createStore 时写一次，这里补上编辑入口
+const TEXT_PROFILE_FIELDS = ['address', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'];
+const MAX_TEXT_FIELD_LENGTH = 500;
+const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
+
+function sanitizeText(v) {
+  if (v === undefined || v === null) return '';
+  return String(v).trim().slice(0, MAX_TEXT_FIELD_LENGTH);
+}
+
+function sanitizeCoord(v) {
+  const n = parseFloat(v);
+  return isFinite(n) ? n : undefined;
+}
 
 // 允许跨店查看（不限于自己绑定门店）的角色：与 getStatisticsData/getNationalDashboard
 // 里"总部级只读汇总"的角色口径一致，仅用于本函数的 get（只读），不影响 update 权限
@@ -111,17 +129,22 @@ exports.main = async (event, context) => {
 
       const profile = {};
       PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || 0; });
+      TEXT_PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || ''; });
 
       return {
         success: true,
         data: {
           storeId: target.storeId,
           storeName: store.storeName || '',
-          address: store.address || '',
           canEdit: caller && (caller.role === 'store_manager' || caller.role === 'super_admin'),
           // 🏛️ 家长/店长姓名：海报落款、验真页、家长大盘展示姓名的唯一数据来源
           patriarch: store.patriarch || '',
           manager: store.manager || '',
+          // 🌐 运营状态（与门店启用/停用的 status 是两个不同维度）+ 坐标
+          // （未设置时为 undefined，前端据此判断是否参与"附近门店"距离计算）
+          operatingStatus: store.operatingStatus || 'operating',
+          latitude: typeof store.latitude === 'number' ? store.latitude : undefined,
+          longitude: typeof store.longitude === 'number' ? store.longitude : undefined,
           // 待审批的画像变更（若有）：供 store-profile 页展示"有一份更新正在等待审批"提示
           pendingProfileUpdate: store.pendingProfileUpdate || null,
           ...profile
@@ -135,6 +158,20 @@ exports.main = async (event, context) => {
 
       const updateFields = {};
       PROFILE_FIELDS.forEach((f) => { updateFields[f] = clampCount(event[f]); });
+      // 🐛 只在调用方真的传了这个字段时才写入——文本字段和上面的数字字段不同，
+      // 数字字段本来就是"表单里的每一格都必填"，但文本档案字段（地址/开业日期等）
+      // 可能只想单独改其中一项，若不管有没有传都无条件塞 sanitizeText(undefined) === ''，
+      // 会把没在本次请求里出现的字段静默清空，等于每次局部更新都顺带抹掉其余档案信息
+      TEXT_PROFILE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f]); });
+      if (VALID_OPERATING_STATUSES.includes(event.operatingStatus)) {
+        updateFields.operatingStatus = event.operatingStatus;
+      }
+      const lat = sanitizeCoord(event.latitude);
+      const lng = sanitizeCoord(event.longitude);
+      if (lat !== undefined && lng !== undefined) {
+        updateFields.latitude = lat;
+        updateFields.longitude = lng;
+      }
 
       // 🏛️ 家长风控锁：店长发起且本店已绑定家长/督导时，不直接生效，改为存入
       // pendingProfileUpdate 挂起对象等待确认；超管发起或门店未绑定家长时，
@@ -195,6 +232,14 @@ exports.main = async (event, context) => {
       const pending = store.pendingProfileUpdate;
       const updateData = {};
       PROFILE_FIELDS.forEach((f) => { updateData[f] = clampCount(pending[f]); });
+      TEXT_PROFILE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = sanitizeText(pending[f]); });
+      if (VALID_OPERATING_STATUSES.includes(pending.operatingStatus)) {
+        updateData.operatingStatus = pending.operatingStatus;
+      }
+      if (typeof pending.latitude === 'number' && typeof pending.longitude === 'number') {
+        updateData.latitude = pending.latitude;
+        updateData.longitude = pending.longitude;
+      }
       updateData.lastProfileUpdatedBy = pending.requestedBy || '';
       updateData.lastProfileUpdatedAt = db.serverDate();
       updateData.pendingProfileUpdate = null;
