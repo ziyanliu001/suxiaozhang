@@ -1748,6 +1748,13 @@
   background: #FFEBEE;
 }
 
+/* 🏛️ 家长风控锁：已提交待确认的作废申请，替代原"红字作废"按钮所在位置 */
+.btn-util-void-pending {
+  border: 1rpx solid #FFE58F;
+  color: #D48806;
+  background: #FFFBE6;
+}
+
 .btn-void-danger {
   flex: 0.8;
   background: #FFEBEE;

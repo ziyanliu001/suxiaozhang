@@ -26,6 +26,15 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
+// 🏛️ 家长风控锁：门店是否绑定了家长/督导——绑定了才需要走"店长发起、家长/超管确认"
+// 的挂起流程；未绑定家长的门店，行为与升级前完全一致（店长直接生效）
+async function hasBoundPatriarch(storeId) {
+  if (!storeId) return false;
+  const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+  const store = storeRes && storeRes.data;
+  return !!(store && store.patriarchOpenId);
+}
+
 // 职责分离版本的门店/机构归属校验：与 checkCanEdit 不同，这里【不】自动放行"提交人本人"，
 // 核对确认/稽核封账/解封/作废这四个动作本质是"审批别人提交的东西"，提交人不能自证自批。
 function isSameScope(caller, doc) {
@@ -103,6 +112,7 @@ const ACTION_RULES = {
     roleErrMsg: '无权限：仅店长与超级管理员可执行作废操作',
     check(doc) {
       if (doc.isVoid) return '该记录已作废，无需重复操作';
+      if (doc.voidPending) return '该记录已提交过作废申请，正在等待家长/超管确认，请勿重复提交';
       if (doc.approvalStatus === 'AUDITED_LOCKED') return '该账本已封账锁定，无法作废，请先解封';
       return null;
     },
@@ -131,6 +141,94 @@ const ACTION_RULES = {
   }
 };
 
+// 🏛️ 待家长/超管确认的作废请求：审批（真正生效）或驳回（仅清除挂起标记）。
+// 与 ACTION_RULES 状态机分开处理——这两个动作操作的是 voidPending 挂起标记，
+// 不是 approvalStatus 状态机本身
+async function handlePendingVoidDecision(action, docId, OPENID) {
+  const caller = await resolveCaller(OPENID);
+  if (!caller || (caller.role !== 'store_patriarch' && caller.role !== 'super_admin')) {
+    return { success: false, errMsg: '无权限：仅家长/督导或超级管理员可确认作废申请' };
+  }
+
+  const docRes = await db.collection('report_logs').doc(docId).get().catch(() => null);
+  const docData = docRes && docRes.data;
+  if (!docData) {
+    return { success: false, errMsg: '记录不存在' };
+  }
+  if (!isSameScope(caller, docData)) {
+    return { success: false, errMsg: '无权限：不能审批其他门店/机构的记录' };
+  }
+  if (!docData.voidPending) {
+    return { success: false, errMsg: '该记录当前没有待确认的作废申请' };
+  }
+
+  if (action === 'rejectPendingVoid') {
+    await db.collection('report_logs').doc(docId).update({
+      data: { voidPending: false, voidRequestedBy: db.command.remove(), voidRequestedAt: db.command.remove() }
+    });
+    return { success: true, message: '已驳回作废申请，记录保持原状' };
+  }
+
+  // approvePendingVoid：真正执行原 void 规则的效果，并清掉挂起标记
+  const transaction = await db.startTransaction();
+  try {
+    await transaction.collection('report_logs').doc(docId).update({
+      data: {
+        isVoid: true,
+        voidedAt: db.serverDate(),
+        voidPending: false,
+        voidApprovedBy: OPENID,
+        updateTime: db.serverDate()
+      }
+    });
+    await transaction.collection('report_audit_logs').add({
+      data: {
+        operator_id: OPENID,
+        operator_role: caller.role,
+        operate_time: db.serverDate(),
+        action: 'approval_void_confirmed',
+        target_collection: 'report_logs',
+        target_id: docId,
+        target_date: docData.dateString,
+        target_store: docData.shopName,
+        old_value: { approvalStatus: docData.approvalStatus, isLocked: docData.isLocked, isVoid: docData.isVoid, voidPending: docData.voidPending },
+        reason: ''
+      }
+    });
+    await transaction.commit();
+  } catch (txErr) {
+    await transaction.rollback();
+    throw txErr;
+  }
+
+  let cascadeUpdatedCount = 0;
+  let cascadeWarning = '';
+  if (docData.approvalStatus === 'APPROVED') {
+    try {
+      const cascadeRes = await cloud.callFunction({
+        name: 'cascadeRecalculator',
+        data: {
+          action: 'recalculate_after_delete',
+          shopName: docData.shopName,
+          storeId: docData.storeId,
+          dateString: docData.dateString
+        }
+      });
+      const cascadeResult = cascadeRes.result || {};
+      if (!cascadeResult.success) {
+        cascadeWarning = '作废已成功，但后续日期的结余流水自动重算未完成，请手动执行【一键校准】';
+      } else {
+        cascadeUpdatedCount = cascadeResult.updatedCount || 0;
+      }
+    } catch (cascadeErr) {
+      console.error('[manageReportApproval] 确认作废后级联重算调用失败:', cascadeErr);
+      cascadeWarning = '作废已成功，但后续日期的结余流水自动重算未完成，请手动执行【一键校准】';
+    }
+  }
+
+  return { success: true, message: '已确认作废', cascadeUpdatedCount, cascadeWarning };
+}
+
 exports.main = async (event) => {
   const { action, docId, reason } = event;
   const { OPENID } = cloud.getWXContext();
@@ -138,6 +236,17 @@ exports.main = async (event) => {
   if (!OPENID) {
     return { success: false, errMsg: '无法获取用户身份' };
   }
+
+  if (action === 'approvePendingVoid' || action === 'rejectPendingVoid') {
+    if (!docId) return { success: false, errMsg: '缺少 docId 参数' };
+    try {
+      return await handlePendingVoidDecision(action, docId, OPENID);
+    } catch (err) {
+      console.error('[manageReportApproval] 确认/驳回作废申请异常:', err);
+      return { success: false, errMsg: err.message || '操作失败' };
+    }
+  }
+
   const rule = ACTION_RULES[action];
   if (!rule) {
     return { success: false, errMsg: `不支持的 action: ${action}` };
@@ -170,6 +279,19 @@ exports.main = async (event) => {
     const stateErr = rule.check(docData);
     if (stateErr) {
       return { success: false, errMsg: stateErr };
+    }
+
+    // 🏛️ 家长风控锁：店长发起作废时，若本店已绑定家长/督导，不直接生效，改为挂起
+    // 待确认；super_admin 发起或门店未绑定家长时，行为与升级前完全一致（直接生效）
+    if (action === 'void' && caller.role === 'store_manager' && await hasBoundPatriarch(docData.storeId)) {
+      await db.collection('report_logs').doc(docId).update({
+        data: {
+          voidPending: true,
+          voidRequestedBy: OPENID,
+          voidRequestedAt: db.serverDate()
+        }
+      });
+      return { success: true, pending: true, errMsg: '', message: '已提交家长/超管审批，确认后生效' };
     }
 
     const rawPatch = rule.apply(docData, reason ? String(reason).trim() : '');

@@ -8,7 +8,12 @@ const TEMP_OPENID_PREFIX = 'local_';
 
 // 🏢 platform_admin：SaaS 平台超级管理员（开发者/运维方），仅管理租户生命周期与云资源，
 // 与业务角色（super_admin ~ volunteer）分属两个维度，二者互不包含、互不提升
-export type UserRole = 'super_admin' | 'store_manager' | 'finance' | 'volunteer' | 'platform_admin';
+//
+// 🏛️ store_patriarch（家长/督导）：与 store_manager 平级、各自独立绑定同一门店的
+// 监督角色（雨花斋人文架构里"家长管对外与文化督导，店长管日常记账执行"的分工），
+// 二者是两个不同的自然人，各自持有自己的 user_roles 记录——不是同一人身兼两角色，
+// 因此完整复用本项目"一个 openid = 一条 user_roles 记录 = 一个角色"的既有假设
+export type UserRole = 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer' | 'platform_admin';
 
 interface RoleInfo {
   role: UserRole;
@@ -37,6 +42,7 @@ function generateTempOpenid(): string {
 export const ROLE_LABELS: Record<UserRole, string> = {
   super_admin: '超级管理员',
   store_manager: '店长',
+  store_patriarch: '家长/督导',
   finance: '财务义工',
   volunteer: '普通义工',
   platform_admin: '平台管理员（开发者）'
@@ -50,6 +56,10 @@ export interface PermissionFlags {
   canEditReport: boolean;
   canExportData: boolean;
   canViewNationalDashboard: boolean;
+  // 🏛️ 家长/督导专属：对店长发起的门店画像变更、餐报作废等高风险操作有确认/驳回权
+  canApproveSensitiveOps: boolean;
+  // 供页面 wx:if 判断"当前是否为家长视角"，避免各页面各自重复 role === 'store_patriarch' 字面量比较
+  isPatriarch: boolean;
 }
 
 export function getPermissionFlags(roleInfo: { role?: string } | null | undefined): PermissionFlags {
@@ -64,7 +74,9 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canEditBalance: true,
         canEditReport: true,
         canExportData: true,
-        canViewNationalDashboard: true
+        canViewNationalDashboard: true,
+        canApproveSensitiveOps: true,
+        isPatriarch: false
       };
     case 'store_manager':
       return {
@@ -74,7 +86,23 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canEditBalance: true,
         canEditReport: true,
         canExportData: true,
-        canViewNationalDashboard: false
+        canViewNationalDashboard: false,
+        canApproveSensitiveOps: false,
+        isPatriarch: false
+      };
+    // 🏛️ 家长/督导：最高监督权与知情权，但免去日常记账繁琐操作——不碰账目/画像的
+    // 编辑，只对店长发起的高风险操作（门店画像变更、餐报作废）有确认/驳回权
+    case 'store_patriarch':
+      return {
+        canSwitchStore: false,
+        canAuditUser: false,
+        canDeleteRecord: false,
+        canEditBalance: false,
+        canEditReport: false,
+        canExportData: true,
+        canViewNationalDashboard: false,
+        canApproveSensitiveOps: true,
+        isPatriarch: true
       };
     case 'finance':
       return {
@@ -84,7 +112,9 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canEditBalance: true,
         canEditReport: true,
         canExportData: true,
-        canViewNationalDashboard: false
+        canViewNationalDashboard: false,
+        canApproveSensitiveOps: false,
+        isPatriarch: false
       };
     case 'platform_admin':
       // 🏢 平台管理员（开发者）：仅在租户管理专属页面操作 tenants / tenant_subscriptions，
@@ -97,7 +127,9 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canEditBalance: false,
         canEditReport: false,
         canExportData: false,
-        canViewNationalDashboard: false
+        canViewNationalDashboard: false,
+        canApproveSensitiveOps: false,
+        isPatriarch: false
       };
     case 'volunteer':
     default:
@@ -110,7 +142,9 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
         canExportData: false,
         // 🛡️ 普通志工可查看全国大屏（成本类敏感数据由 sanitizeReportForVolunteer 在服务端脱敏），
         // 但门店选择器强制锁定为"全部门店"，与 statistics.ts 的 isVolunteerNationalView 逻辑保持一致
-        canViewNationalDashboard: true
+        canViewNationalDashboard: true,
+        canApproveSensitiveOps: false,
+        isPatriarch: false
       };
   }
 }

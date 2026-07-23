@@ -63,6 +63,21 @@ exports.main = async (event) => {
       return { success: true, found: false };
     }
 
+    // 🏛️ 护持家长/日常店长姓名：与海报落款同一份数据来源（stores 文档缓存字段），
+    // 体现雨花斋人文双署名文化；查询失败不影响主流程（验真的核心是账目）
+    let patriarch = '';
+    let manager = '';
+    try {
+      const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+      const store = storeRes && storeRes.data;
+      if (store) {
+        patriarch = store.patriarch || '';
+        manager = store.manager || '';
+      }
+    } catch (storeErr) {
+      console.warn('[publicVerifyReport] 门店姓名查询失败（不影响主流程）:', storeErr);
+    }
+
     // 门店日志/大事记：同店同日取最新一条，与 activity-log 页面口径一致；
     // 查询失败不影响主流程（验真的核心是账目，日志只是锦上添花）
     let activityItem = null;
@@ -104,6 +119,8 @@ exports.main = async (event) => {
       found: true,
       data: {
         storeName: report.shopName || '',
+        patriarch,
+        manager,
         dateString: report.dateString || date,
         approvalStatus: report.approvalStatus || 'PENDING_APPROVAL',
         auditedBy: report.auditedBy || '',

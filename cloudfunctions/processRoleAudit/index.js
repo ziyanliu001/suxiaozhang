@@ -176,6 +176,12 @@ exports.main = async (event, context) => {
       return { success: false, error: '无效操作' };
     }
 
+    // 🏛️ 家长/督导任命仅限超级管理员审批：家长是监督店长的角色，店长本人（哪怕正是
+    // 本店店长）不能审批自己门店的督导人选，无论是已有门店还是新建门店分支
+    if (applyData.requestedRole === 'store_patriarch' && auditor.role !== 'super_admin') {
+      return { success: false, error: '无权限：家长/督导任命仅限超级管理员审批' };
+    }
+
     const isCustomStore = applyData.storeSelectionType === 'custom' || !applyData.storeId;
     let targetStoreId = applyData.storeId;
     let targetStoreName = applyData.storeName;
@@ -222,6 +228,18 @@ exports.main = async (event, context) => {
         tenantId: resolvedTenantId
       }
     });
+
+    // 🏛️ 家长/店长姓名回写到 stores 文档：海报落款、验真页、家长大盘展示姓名的唯一
+    // 数据来源，避免每次展示都要另起 user_roles 联表查询
+    if (applyData.requestedRole === 'store_patriarch') {
+      await db.collection('stores').doc(targetStoreId).update({
+        data: { patriarch: applyData.realName || '', patriarchOpenId: applyData._openid || '' }
+      }).catch((err) => console.warn('[processRoleAudit] 回写门店家长姓名失败（不影响审批本身）:', err));
+    } else if (applyData.requestedRole === 'store_manager') {
+      await db.collection('stores').doc(targetStoreId).update({
+        data: { manager: applyData.realName || '', managerOpenId: applyData._openid || '' }
+      }).catch((err) => console.warn('[processRoleAudit] 回写门店店长姓名失败（不影响审批本身）:', err));
+    }
 
     return {
       success: true,

@@ -38,6 +38,11 @@ Page({
     listeningSeniorsCount: 0,
     otherCount: 0,
 
+    // 🏛️ 家长风控锁：本店若绑定了家长/督导，店长发起的画像变更会先落到这里等待确认，
+    // 不为空时页面显示"有一份更新正在等待审批"提示；数据结构与 manageStoreProfile
+    // 云函数的 pendingProfileUpdate 字段一致（7 项指标 + requestedBy/requestedAt）
+    pendingProfileUpdate: null as any,
+
     // 编辑态：与展示态字段同名，但存字符串，供 input 双向绑定
     editing: false,
     saving: false,
@@ -123,7 +128,8 @@ Page({
       const update: any = {
         storeAddress: data.address || '',
         canManage: !!data.canEdit,
-        currentStoreName: data.storeName || this.data.currentStoreName
+        currentStoreName: data.storeName || this.data.currentStoreName,
+        pendingProfileUpdate: data.pendingProfileUpdate || null
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       this.setData(update);
@@ -167,7 +173,17 @@ Page({
         return;
       }
 
-      const update: any = { editing: false };
+      if (result.pending) {
+        // 🏛️ 家长风控锁：本店已绑定家长/督导，未直接生效，转为待确认——
+        // 展示态的 7 项指标保持不变，只把提交内容记进 pendingProfileUpdate 供提示条展示
+        const pendingProfileUpdate: any = { requestedAt: Date.now() };
+        PROFILE_FIELDS.forEach((f) => { pendingProfileUpdate[f] = payload[f]; });
+        this.setData({ editing: false, pendingProfileUpdate });
+        wx.showModal({ title: '已提交审批', content: result.message || '已提交家长/超管审批，确认后生效', showCancel: false });
+        return;
+      }
+
+      const update: any = { editing: false, pendingProfileUpdate: null };
       PROFILE_FIELDS.forEach((f) => { update[f] = payload[f]; });
       this.setData(update);
       wx.showToast({ title: '门店画像已更新', icon: 'success' });

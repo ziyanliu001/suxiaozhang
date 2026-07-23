@@ -139,6 +139,21 @@ page {
   color: #999999;
 }
 
+/* 🏛️ 护持家长/日常店长：体现雨花斋人文双署名文化 */
+.pv-people-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8rpx 20rpx;
+  margin-top: 12rpx;
+}
+
+.pv-people-item {
+  font-size: 22rpx;
+  color: #8C6D46;
+}
+
 .pv-card {
   background: #FFFFFF;
   border-radius: 20rpx;

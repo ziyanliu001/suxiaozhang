@@ -38,6 +38,10 @@
         <text class="pv-status-pill {{approvalStatusLabel === '已稽核封账' ? 'locked' : ''}}">{{approvalStatusLabel}}</text>
         <text class="pv-audit-meta" wx:if="{{auditedBy}}">稽核人：{{auditedBy}} · {{auditTime}}</text>
       </view>
+      <view class="pv-people-row" wx:if="{{patriarch || manager}}">
+        <text class="pv-people-item" wx:if="{{patriarch}}">🏛️ 护持家长：{{patriarch}}</text>
+        <text class="pv-people-item" wx:if="{{manager}}">📋 日常店长：{{manager}}</text>
+      </view>
     </view>
 
     <!-- 中部：收支摘要 -->

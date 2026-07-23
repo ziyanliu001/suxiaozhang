@@ -13,6 +13,7 @@
     "pages/activity-log/activity-log",
     "pages/store-management/store-management",
     "pages/store-profile/store-profile",
+    "pages/patriarch-dashboard/patriarch-dashboard",
     "pages/draft-box/draft-box",
     "pages/settings/settings",
     "pages/public-verify/index",

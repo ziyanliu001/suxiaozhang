@@ -64,7 +64,7 @@ Page({
     // 不同机型胶囊按钮的实际左边距不同，硬编码在部分机型上会被胶囊直接盖住/裁切
     windowWidth: 0,
     capsuleLeft: 0,
-    currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'finance' | 'volunteer',
+    currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer',
     currentStoreName: '',
     // 🛡️ 语义化权限状态：避免模板里反复重复 role 字符串比较
     hasPrivilege: false,
@@ -807,6 +807,18 @@ Page({
 
     wx.navigateTo({
       url: '/pages/store-profile/store-profile',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  onGoToPatriarchDashboard() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/patriarch-dashboard/patriarch-dashboard',
       fail: () => {
         this.isNavigating = false;
       }

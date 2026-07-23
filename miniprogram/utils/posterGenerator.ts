@@ -43,6 +43,11 @@ export interface PosterData {
   // showGratitudeFooter 分支
   showFamilyStyleFooter?: boolean;
   showGratitudeFooter?: boolean;
+  // 🏛️ 可选落款：护持家长（对外关系与文化督导）+ 日常店长（记账执行），体现雨花斋
+  // 人文双署名文化，均未绑定或未开启 showPeopleSignature 时版式与升级前完全一致
+  patriarchName?: string;
+  managerName?: string;
+  showPeopleSignature?: boolean;
 }
 
 // 🆕 9:16 竖屏「温馨故事版」海报数据：只收调用方已经准备好的展示值（与 PosterData
@@ -380,8 +385,11 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
         const gratitudeJoined = showGratitudeFooter ? GRATITUDE_TEXT.join('') : '';
         const gratitudeLineCount = gratitudeJoined ? Math.ceil(gratitudeJoined.length / CULTURE_GRATITUDE_CHARS_PER_LINE) : 0;
         const familyStyleLineCount = showFamilyStyleFooter ? 1 : 0;
-        const cultureFooterHeight = (showFamilyStyleFooter || showGratitudeFooter)
-          ? 14 + familyStyleLineCount * CULTURE_FOOTER_LINE_HEIGHT + gratitudeLineCount * CULTURE_FOOTER_LINE_HEIGHT
+        // 🏛️ 护持家长/日常店长落款：固定 1 行，仅在开关打开且至少一个姓名非空时才占用高度
+        const showPeopleSignature = !!data.showPeopleSignature && !!((data.patriarchName || '').trim() || (data.managerName || '').trim());
+        const peopleSignatureLineCount = showPeopleSignature ? 1 : 0;
+        const cultureFooterHeight = (showFamilyStyleFooter || showGratitudeFooter || showPeopleSignature)
+          ? 14 + familyStyleLineCount * CULTURE_FOOTER_LINE_HEIGHT + gratitudeLineCount * CULTURE_FOOTER_LINE_HEIGHT + peopleSignatureLineCount * CULTURE_FOOTER_LINE_HEIGHT
           : 0;
 
         const height = calculateCanvasHeight(itemCount, materialsLineCount, hasVolunteer, activityLineCount, cultureFooterHeight);
@@ -686,8 +694,9 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ctx.font = '11px sans-serif';
           ctx.fillText('素小账', width / 2, footerTop + FOOTER_LINE_HEIGHT * 4 + 20);
 
-          // 🌸 可选落款：雨花家风「仁·中·和」+ 感恩词，未开启时版式与升级前完全一致
-          if (showFamilyStyleFooter || showGratitudeFooter) {
+          // 🌸 可选落款：雨花家风「仁·中·和」+ 感恩词 + 护持家长/日常店长署名，
+          // 未开启任何一项时版式与升级前完全一致
+          if (showFamilyStyleFooter || showGratitudeFooter || showPeopleSignature) {
             let cultureY = footerTop + FOOTER_LINE_HEIGHT * 4 + 20 + 18;
 
             ctx.strokeStyle = '#EDE0C8';
@@ -710,6 +719,19 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
               ctx.font = '11px sans-serif';
               ctx.textAlign = 'center';
               cultureY = drawMultiLineText(ctx, gratitudeJoined, width / 2, cultureY, width - 80, CULTURE_FOOTER_LINE_HEIGHT);
+            }
+
+            if (showPeopleSignature) {
+              const patriarchName = (data.patriarchName || '').trim();
+              const managerName = (data.managerName || '').trim();
+              const parts: string[] = [];
+              if (patriarchName) parts.push(`护持家长：${patriarchName}`);
+              if (managerName) parts.push(`日常店长：${managerName}`);
+              ctx.fillStyle = SECONDARY_COLOR;
+              ctx.font = '11px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(parts.join('　'), width / 2, cultureY);
+              cultureY += CULTURE_FOOTER_LINE_HEIGHT;
             }
           }
 

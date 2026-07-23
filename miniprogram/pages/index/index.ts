@@ -328,6 +328,11 @@ Page({
     // 财务公示版（温馨故事版 StoryPosterData 未接入此项，见 posterGenerator.ts 说明）
     posterShowFamilyStyleFooter: true,
     posterShowGratitudeFooter: true,
+    // 🏛️ 护持家长/日常店长落款：姓名来自 stores 文档缓存字段（manageStoreProfile
+    // 的 get action 顺带返回），未绑定家长/店长姓名时对应半句不画，两者都空则整行不画
+    posterShowPeopleSignature: true,
+    storePatriarchName: '',
+    storeManagerName: '',
     // 🆕 海报右下角"扫码验真"用的真实小程序码本地临时路径（指向 pages/public-verify/index，
     // 携带 storeId+date）：每次生成/切版式共用同一份，生成失败时为空字符串，
     // 由 posterGenerator.ts 自行降级为占位框
@@ -616,6 +621,8 @@ Page({
     // 之后才能按"当前视角"发起严格互斥查询，不能像旧的本机 loadAnnouncement 那样在
     // 角色未解析前就跑
     this.fetchNotices();
+    // 🏛️ 护持家长/日常店长姓名：海报落款用，非阻塞式预取，生成海报时大概率已就绪
+    this.fetchStorePeopleNames();
 
     // 🌸 每日修身卡片：纯静态文化内容，不查云端，按自然日期确定性选取，
     // 同一天内多次进入首页展示同一条，跨天自动切换
@@ -6366,8 +6373,33 @@ Page({
       volunteerHours: parseFloat(this.data.volunteerHours) || 0,
       verifyQrLocalPath: this.data.verifyQrLocalPath,
       showFamilyStyleFooter: this.data.posterShowFamilyStyleFooter,
-      showGratitudeFooter: this.data.posterShowGratitudeFooter
+      showGratitudeFooter: this.data.posterShowGratitudeFooter,
+      patriarchName: this.data.storePatriarchName,
+      managerName: this.data.storeManagerName,
+      showPeopleSignature: this.data.posterShowPeopleSignature
     };
+  },
+
+  // 🏛️ 拉取本店护持家长/日常店长姓名，供海报落款使用——复用 manageStoreProfile 的
+  // get action（该函数已经在读整份 stores 文档，patriarch/manager 是其中的缓存字段，
+  // 不需要额外查询）。失败时静默降级为空字符串，不阻断海报生成主流程
+  async fetchStorePeopleNames() {
+    try {
+      if (!isCloudAvailable()) return;
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get', storeId: this.data.currentStoreId }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        this.setData({
+          storePatriarchName: result.data.patriarch || '',
+          storeManagerName: result.data.manager || ''
+        });
+      }
+    } catch (err) {
+      console.warn('[fetchStorePeopleNames] 获取护持家长/日常店长姓名失败（不影响海报生成主流程）:', err);
+    }
   },
 
   // 🆕 温馨故事版 (9:16) StoryPosterData 组装：门店日志首图 + 一句话感言 + 极简摘要，
@@ -6401,6 +6433,11 @@ Page({
 
   async onTogglePosterGratitudeFooter(e: any) {
     this.setData({ posterShowGratitudeFooter: !!e.detail.value });
+    await this.regeneratePosterIfFinancialShown();
+  },
+
+  async onTogglePosterPeopleSignature(e: any) {
+    this.setData({ posterShowPeopleSignature: !!e.detail.value });
     await this.regeneratePosterIfFinancialShown();
   },
 

@@ -1937,7 +1937,11 @@ Page({
             return;
           }
 
-          if (approvalResult.cascadeWarning) {
+          if (approvalResult.pending) {
+            // 🏛️ 家长风控锁：本店已绑定家长/督导，作废未直接生效，已转为待确认状态
+            wx.hideLoading();
+            wx.showModal({ title: '已提交审批', content: approvalResult.message || '已提交家长/超管审批，确认后生效', showCancel: false });
+          } else if (approvalResult.cascadeWarning) {
             wx.hideLoading();
             wx.showModal({ title: '提示', content: approvalResult.cascadeWarning, showCancel: false });
           } else {

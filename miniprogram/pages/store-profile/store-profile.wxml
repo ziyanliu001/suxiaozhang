@@ -12,6 +12,12 @@
       <text class="sp-store-address" wx:if="{{storeAddress}}">📍 {{storeAddress}}</text>
     </view>
 
+    <!-- 🏛️ 家长风控锁：本店已绑定家长/督导时，店长发起的画像变更需先经确认才生效 -->
+    <view class="sp-pending-banner" wx:if="{{pendingProfileUpdate}}">
+      <text class="sp-pending-icon">⏳</text>
+      <text class="sp-pending-text">有一份画像更新正在等待家长/超管审批，当前展示的仍是生效中的数据</text>
+    </view>
+
     <view class="sp-section-title">
       <text class="sp-section-icon">👥</text>
       <text class="sp-section-txt">门店人员与服务人群画像</text>

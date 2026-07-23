@@ -1212,6 +1212,10 @@
           <text class="culture-toggle-label">感恩词落款</text>
           <switch checked="{{posterShowGratitudeFooter}}" bindchange="onTogglePosterGratitudeFooter" color="#B8860B" />
         </view>
+        <view class="culture-toggle-item" wx:if="{{storePatriarchName || storeManagerName}}">
+          <text class="culture-toggle-label">家长/店长落款</text>
+          <switch checked="{{posterShowPeopleSignature}}" bindchange="onTogglePosterPeopleSignature" color="#B8860B" />
+        </view>
       </view>
 
       <view class="modal-body">
@@ -1794,6 +1798,10 @@
               <radio value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
               <text><view class="idx-icon-sm idx-icon-key" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>财务义工</text>
             </label>
+            <label class="role-radio-item">
+              <radio value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
+              <text>🏛️ 家长/督导（对外关系与文化督导，仅超管可审核）</text>
+            </label>
           </radio-group>
         </view>
       </view>
@@ -2014,7 +2022,7 @@
                 <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
               </view>
               <text class="role-tag-badge {{item.requestedRole}}">
-                {{item.requestedRole === 'finance' ? '财务记账' : '现场奉献'}}
+                {{item.requestedRole === 'finance' ? '财务记账' : (item.requestedRole === 'store_patriarch' ? '🏛️ 家长/督导' : '现场奉献')}}
               </text>
             </view>
 

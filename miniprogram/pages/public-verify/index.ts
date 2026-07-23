@@ -48,6 +48,9 @@ Page({
     approvalStatusLabel: '',
     auditedBy: '',
     auditTime: '',
+    // 🏛️ 护持家长/日常店长：体现雨花斋人文双署名文化，无绑定时不展示
+    patriarch: '',
+    manager: '',
 
     yesterdayBalance: '0.00',
     otherDonation: '0.00',
@@ -159,6 +162,8 @@ Page({
         approvalStatusLabel: APPROVAL_STATUS_LABELS[d.approvalStatus] || d.approvalStatus || '',
         auditedBy: d.auditedBy || '',
         auditTime: d.auditTime || '',
+        patriarch: d.patriarch || '',
+        manager: d.manager || '',
         yesterdayBalance: Number(d.yesterdayBalance || 0).toFixed(2),
         otherDonation: Number(d.otherDonation || 0).toFixed(2),
         listDonationTotal: Number(d.listDonationTotal || 0).toFixed(2),

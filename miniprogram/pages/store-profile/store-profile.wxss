@@ -55,6 +55,28 @@
   padding: 20rpx 24rpx 60rpx;
 }
 
+/* 🏛️ 家长风控锁：待审批提示条 */
+.sp-pending-banner {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: #FFFBE6;
+  border: 1rpx solid #FFE58F;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.sp-pending-icon {
+  font-size: 26rpx;
+}
+
+.sp-pending-text {
+  font-size: 22rpx;
+  color: #D48806;
+  flex: 1;
+}
+
 .sp-store-card {
   background: #FFFFFF;
   border-radius: 16rpx;

@@ -287,9 +287,10 @@
               <button class="btn-utility btn-util-edit" bindtap="onEditReport" data-index="{{index}}">
                 ✏️ 编辑
               </button>
-              <button class="btn-utility btn-util-void" bindtap="onVoidReportModal" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
+              <button class="btn-utility btn-util-void" wx:if="{{!item.voidPending}}" bindtap="onVoidReportModal" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
                 🚨 红字作废
               </button>
+              <text class="btn-utility btn-util-void-pending" wx:else>⏳ 待家长确认作废中</text>
             </view>
           </block>
 

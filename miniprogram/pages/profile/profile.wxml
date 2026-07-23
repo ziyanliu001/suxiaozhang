@@ -200,6 +200,16 @@
         </view>
         <view class="item-arrow">❯</view>
       </view>
+
+      <!-- 🏛️ 家长监督台：仅家长/督导角色可见，查看极简门店健康大盘 + 处理待确认的
+           门店画像变更/餐报作废申请 -->
+      <view class="action-item-cell manager-only-cell" wx:if="{{currentUserRole === 'store_patriarch'}}" bindtap="onGoToPatriarchDashboard">
+        <view class="item-left">
+          <text class="manager-only-emoji">🏛️</text>
+          <text class="item-text">家长监督台</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
     </view>
 
     <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区 -->

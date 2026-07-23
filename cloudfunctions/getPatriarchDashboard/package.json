@@ -1,0 +1,9 @@
+{
+  "name": "getPatriarchDashboard",
+  "version": "1.0.0",
+  "description": "云函数：家长/督导专属极简门店健康大盘（本月服务人次/收支总览/验真状态/待审批队列）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
