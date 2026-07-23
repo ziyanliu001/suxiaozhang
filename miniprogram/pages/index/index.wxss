@@ -3854,16 +3854,20 @@ textarea, .textarea {
 /* 🌸 每日修身·雨花人生十六最 卡片：独立精美卡片，图标+标题、居中金句、底部并排小按钮 */
 /* 🌸 每日修身·雨花家训卡片 */
 .culture-motto-card {
+  display: flex !important;
+  flex-direction: column !important;
   background: linear-gradient(135deg, #FFFDF8 0%, #FFFAF2 100%);
   border: 1rpx solid #EAE3D6;
   border-radius: 20rpx;
   padding: 28rpx 28rpx 20rpx;
   margin: 0 24rpx 24rpx;
   box-shadow: 0 4rpx 16rpx rgba(180, 83, 9, 0.06);
+  box-sizing: border-box !important;
 }
 
 .motto-header {
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   align-items: center;
   justify-content: center;
   gap: 8rpx;
@@ -3881,7 +3885,8 @@ textarea, .textarea {
 }
 
 .motto-content {
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   align-items: flex-start;
   justify-content: center;
   gap: 4rpx;
@@ -3906,22 +3911,31 @@ textarea, .textarea {
 }
 
 .motto-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 28rpx;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16rpx !important;
+  width: 100% !important;
   margin-top: 4rpx;
-  padding-top: 12rpx;
-  border-top: 1rpx solid #F2ECE0;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed #EFE5D5;
+  box-sizing: border-box !important;
 }
 
 .motto-btn {
-  font-size: 22rpx;
-  color: #A8763E;
-  padding: 4rpx 2rpx;
-}
-
-.motto-btn-refresh {
-  color: #B45309;
+  flex: 1 !important;
+  height: 56rpx !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 24rpx;
+  color: #666666;
+  background: #FFFFFF !important;
+  border: 1rpx solid #E0D0B8 !important;
+  border-radius: 28rpx !important;
+  box-sizing: border-box !important;
 }
 
 /* 🌸 家训弹窗头部：单独加顶部内边距，避免关闭按钮与右上角胶囊（如切店胶囊）重叠——

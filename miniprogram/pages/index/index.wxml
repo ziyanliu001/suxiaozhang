@@ -196,23 +196,23 @@
        不依赖门店/角色，无需等云端数据即可展示（有兜底金句，不会有短暂空白）。
        金句仍从立志格言/人生十六最/雨花家训/雨花家道 核心精神四个来源里轮流抽取
        （见 onRefreshCultureQuote/getDailyCultureQuote），标题固定不随来源变化 -->
-  <view class="culture-motto-card">
-    <view class="motto-header">
+  <view class="culture-motto-card" style="display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
+    <view class="motto-header" style="display: flex !important; flex-direction: row !important; align-items: center !important;">
       <text class="motto-title-icon">🌸</text>
       <text class="motto-title-text">每日修身 · 雨花家训</text>
     </view>
 
-    <view class="motto-content">
+    <view class="motto-content" style="display: flex !important; flex-direction: row !important; align-items: flex-start !important; justify-content: center !important;">
       <text class="motto-quote">"</text>
       <text class="motto-text">{{cultureQuote.text || '常生惭愧，常怀忏悔。'}}</text>
       <text class="motto-quote">"</text>
     </view>
 
-    <view class="motto-actions">
-      <view class="motto-btn motto-btn-refresh" catchtap="onRefreshCultureQuote">
+    <view class="motto-actions" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; gap: 16rpx !important; width: 100% !important; box-sizing: border-box !important;">
+      <view class="motto-btn" catchtap="onRefreshCultureQuote" style="flex: 1 !important; height: 56rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1rpx solid #E0D0B8 !important; border-radius: 28rpx !important; box-sizing: border-box !important;">
         <text>🔄 换一换</text>
       </view>
-      <view class="motto-btn motto-btn-detail" catchtap="onShowFamilyMottoModal">
+      <view class="motto-btn" catchtap="onShowFamilyMottoModal" style="flex: 1 !important; height: 56rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1rpx solid #E0D0B8 !important; border-radius: 28rpx !important; box-sizing: border-box !important;">
         <text>📖 完整家训</text>
       </view>
     </view>
