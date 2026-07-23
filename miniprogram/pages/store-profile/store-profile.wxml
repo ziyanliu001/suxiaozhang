@@ -1,0 +1,94 @@
+<view class="sp-page">
+  <view class="sp-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="sp-nav-back" hover-class="sp-nav-back-hover" bindtap="goBack">←</view>
+    <text class="sp-nav-title">🏠 门店档案</text>
+    <text class="sp-nav-action {{canManage && !editing ? '' : 'hidden'}}" bindtap="onStartEdit">编辑</text>
+  </view>
+
+  <scroll-view scroll-y class="sp-scroll" style="margin-top: {{contentTop}}px;">
+
+    <view class="sp-store-card">
+      <text class="sp-store-name">{{currentStoreName || '未命名门店'}}</text>
+      <text class="sp-store-address" wx:if="{{storeAddress}}">📍 {{storeAddress}}</text>
+    </view>
+
+    <view class="sp-section-title">
+      <text class="sp-section-icon">👥</text>
+      <text class="sp-section-txt">门店人员与服务人群画像</text>
+    </view>
+
+    <!-- 展示态：4 列 x 2 行栅格，中共党员用红色高亮，其余暖橘/深灰数字 -->
+    <view class="sp-profile-grid-4col" wx:if="{{!editing}}">
+      <view class="grid-cell">
+        <text class="cell-lbl">中共党员</text>
+        <text class="cell-val party-highlight">{{partyMembers}}</text>
+      </view>
+      <view class="grid-cell">
+        <text class="cell-lbl">社会工作者</text>
+        <text class="cell-val orange">{{socialWorkers}}</text>
+      </view>
+      <view class="grid-cell">
+        <text class="cell-lbl">志愿者</text>
+        <text class="cell-val orange">{{volunteersCount}}</text>
+      </view>
+      <view class="grid-cell">
+        <text class="cell-lbl">堂食老人</text>
+        <text class="cell-val orange">{{dineInSeniorsCount}}</text>
+      </view>
+      <view class="grid-cell">
+        <text class="cell-lbl">送餐老人</text>
+        <text class="cell-val orange">{{deliverySeniorsCount}}</text>
+      </view>
+      <view class="grid-cell">
+        <text class="cell-lbl">倾听陪伴老人</text>
+        <text class="cell-val orange">{{listeningSeniorsCount}}</text>
+      </view>
+      <view class="grid-cell">
+        <text class="cell-lbl">其他</text>
+        <text class="cell-val grey">{{otherCount}}</text>
+      </view>
+    </view>
+
+    <!-- 编辑态：同 7 项指标的输入框 -->
+    <view class="sp-edit-grid" wx:if="{{editing}}">
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl party-highlight">中共党员</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.partyMembers}}" bindinput="onEditInput" data-field="partyMembers" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">社会工作者</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.socialWorkers}}" bindinput="onEditInput" data-field="socialWorkers" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">志愿者</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.volunteersCount}}" bindinput="onEditInput" data-field="volunteersCount" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">堂食老人</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.dineInSeniorsCount}}" bindinput="onEditInput" data-field="dineInSeniorsCount" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">送餐老人</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.deliverySeniorsCount}}" bindinput="onEditInput" data-field="deliverySeniorsCount" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">倾听陪伴老人</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.listeningSeniorsCount}}" bindinput="onEditInput" data-field="listeningSeniorsCount" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">其他</text>
+        <input class="sp-edit-input" type="number" value="{{editForm.otherCount}}" bindinput="onEditInput" data-field="otherCount" />
+      </view>
+    </view>
+
+    <view class="sp-edit-footer" wx:if="{{editing}}">
+      <button class="sp-btn-cancel" bindtap="onCancelEdit">取消</button>
+      <button class="sp-btn-save" bindtap="onSaveProfile" loading="{{saving}}" disabled="{{saving}}">保存</button>
+    </view>
+
+    <view class="sp-loading-box" wx:if="{{loading}}">
+      <text>加载中...</text>
+    </view>
+
+  </scroll-view>
+</view>

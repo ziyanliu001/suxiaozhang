@@ -801,6 +801,18 @@ Page({
     });
   },
 
+  onGoToStoreProfile() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/store-profile/store-profile',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
   onGoToAbout() {
     if (this.isNavigating) return;
     this.isNavigating = true;

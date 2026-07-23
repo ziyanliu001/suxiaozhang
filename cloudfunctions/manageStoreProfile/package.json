@@ -1,0 +1,9 @@
+{
+  "name": "manageStoreProfile",
+  "version": "1.0.0",
+  "description": "云函数：门店人员与服务人群画像（7 项人数指标）读取与编辑（店长限本店/超管限本机构可写，全员只读本店）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

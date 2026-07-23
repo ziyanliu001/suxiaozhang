@@ -190,6 +190,16 @@
         </view>
         <view class="item-arrow">❯</view>
       </view>
+
+      <!-- 🏠 门店档案：门店人员与服务人群画像（中共党员/社会工作者/志愿者/堂食老人等 7 项人数指标），
+           店长/超管可编辑维护，财务只读查看，义工不展示（与上方管理入口同一权限层级） -->
+      <view class="action-item-cell manager-only-cell" wx:if="{{!isVolunteer}}" bindtap="onGoToStoreProfile">
+        <view class="item-left">
+          <text class="manager-only-emoji">🏠</text>
+          <text class="item-text">门店档案</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
     </view>
 
     <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区 -->

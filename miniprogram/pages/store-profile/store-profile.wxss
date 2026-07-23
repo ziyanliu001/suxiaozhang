@@ -1,0 +1,205 @@
+.sp-page {
+  min-height: 100vh;
+  background: #F8F5F0;
+}
+
+.sp-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  height: 88rpx;
+  background: #8C1D18;
+}
+
+.sp-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 36rpx;
+  font-weight: 600;
+}
+
+.sp-nav-back-hover {
+  opacity: 0.5;
+}
+
+.sp-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.sp-nav-action {
+  color: #FFFFFF;
+  font-size: 26rpx;
+  width: 110rpx;
+  text-align: right;
+}
+
+.sp-nav-action.hidden {
+  visibility: hidden;
+}
+
+.sp-scroll {
+  height: calc(100vh - 88rpx);
+  box-sizing: border-box;
+  padding: 20rpx 24rpx 60rpx;
+}
+
+.sp-store-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.sp-store-name {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+  margin-bottom: 8rpx;
+}
+
+.sp-store-address {
+  display: block;
+  font-size: 24rpx;
+  color: #868E96;
+}
+
+.sp-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 12rpx;
+}
+
+.sp-section-icon {
+  font-size: 26rpx;
+}
+
+.sp-section-txt {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+/* 4 列 x 2 行栅格：与 history.wxss 的 .dining-breakdown-grid 同款 grid-cell/cell-lbl/cell-val 口径 */
+.sp-profile-grid-4col {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20rpx 16rpx;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx 20rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.grid-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.cell-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.cell-val {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+/* 中共党员：醒目红色高亮，与其余暖橘色指标区分 */
+.cell-val.party-highlight {
+  color: #D9363E;
+}
+
+.cell-val.orange {
+  color: #D2691E;
+}
+
+.cell-val.grey {
+  color: #495057;
+}
+
+.sp-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx 20rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.sp-edit-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.sp-edit-lbl {
+  font-size: 22rpx;
+  color: #495057;
+}
+
+.sp-edit-lbl.party-highlight {
+  color: #D9363E;
+  font-weight: bold;
+}
+
+.sp-edit-input {
+  background: #F8F9FA;
+  border: 1rpx solid #CED4DA;
+  border-radius: 10rpx;
+  height: 72rpx;
+  padding: 0 16rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.sp-edit-footer {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.sp-btn-cancel {
+  flex: 1;
+  background: #F1F3F5;
+  color: #495057;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
+.sp-btn-save {
+  flex: 1;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.sp-loading-box {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #ADB5BD;
+  font-size: 24rpx;
+}
