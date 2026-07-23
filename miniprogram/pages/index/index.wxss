@@ -1804,35 +1804,33 @@ page {
 .stats-grid-container {
   display: flex !important;
   flex-direction: column !important;
-  gap: 16rpx;
-  margin: 16rpx 0;
-  width: 100%;
+  gap: 16rpx !important;
+  width: 100% !important;
 }
 
 .stats-grid-row {
   display: flex !important;
   flex-direction: row !important;
-  gap: 16rpx;
-  width: 100%;
+  gap: 12rpx !important;
+  width: 100% !important;
 }
 
 .stats-card-item {
   flex: 1 !important;
-  min-width: 0;
-  background: #FFFDF7;
-  border: 1rpx solid #F5E6CD;
-  border-radius: 12rpx;
-  padding: 12rpx 8rpx;
+  min-width: 0 !important;
+  background: #FFFDF7 !important;
+  border: 1rpx solid #F5E6CD !important;
+  border-radius: 12rpx !important;
+  padding: 12rpx 4rpx !important;
   display: flex !important;
   flex-direction: column !important;
-  align-items: center;
+  align-items: center !important;
 }
 
 .stats-item-label {
-  font-size: 22rpx;
-  color: #7A6343;
-  margin-bottom: 8rpx;
-  white-space: nowrap;
+  font-size: 20rpx !important;
+  color: #7A6343 !important;
+  white-space: nowrap !important;
 }
 
 /* 🍱 用餐/义工细分统计自动汇总行：用餐总数/志愿者总人次只读展示，随细分输入框实时联动 */
@@ -1865,25 +1863,25 @@ page {
 }
 
 .stats-input-wrap {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  width: 100%;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: baseline !important;
+  justify-content: center !important;
 }
 
 .stats-input {
-  width: 70rpx;
-  height: 48rpx;
-  text-align: center;
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #D9531E;
+  width: 60rpx !important;
+  height: 44rpx !important;
+  text-align: center !important;
+  font-size: 28rpx !important;
+  font-weight: bold !important;
+  color: #D9531E !important;
 }
 
 .stats-unit {
-  font-size: 20rpx;
-  color: #999999;
-  margin-left: 2rpx;
+  font-size: 18rpx !important;
+  color: #999999 !important;
+  white-space: nowrap !important;
 }
 
 /* Card C: 主食物资单选胶囊 */
