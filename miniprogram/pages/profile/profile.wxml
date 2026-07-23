@@ -169,9 +169,21 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🌟 店长专属管理入口：与普通义工个人页形成权限层级的视觉区隔，
-           复用首页已有的 goToStatistics 同一个数据统计页，不新开一套统计逻辑 -->
-      <view class="action-item-cell manager-only-cell" wx:if="{{currentUserRole === 'store_manager' || currentUserRole === 'super_admin'}}" bindtap="onGoToStoreOverview">
+      <!-- 🌟 管理入口：与普通义工个人页形成权限层级的视觉区隔，复用首页已有的
+           统计页（onGoToStoreOverview → pages/statistics/statistics），不新开一套
+           统计逻辑。两个身份跳的是同一个页面：statistics.ts 自己的 applyRolePermissions
+           已经按角色分流——super_admin/hq_finance 等 canViewAllStoresDropdown 角色
+           一律展示"全国总览"大屏，store_manager/finance 则被强制锁定在自己门店，
+           与传入的 shopName 无关，因此这里只需要按角色区分入口文案，不需要区分跳转参数。 -->
+      <view class="action-item-cell manager-only-cell" wx:if="{{currentUserRole === 'super_admin'}}" bindtap="onGoToStoreOverview">
+        <view class="item-left">
+          <text class="manager-only-emoji">🌐</text>
+          <text class="item-text">超级管理员全景</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell manager-only-cell" wx:elif="{{currentUserRole === 'store_manager'}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">本店数据明细</text>

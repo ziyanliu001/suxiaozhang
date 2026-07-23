@@ -1527,6 +1527,36 @@ page {
   background-color: #FFEBE0;
 }
 
+/* 🌟 云端模板标签：与内置 7 条预设文案的 .preset-tag 同款外观，
+   多一个左侧【公共】/【本店】小徽章区分模板来源 */
+.preset-tag.template-tag {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  color: #2B8A3E;
+  background-color: #EBFBEE;
+  border-color: #B2F2BB;
+}
+
+.template-badge {
+  flex-shrink: 0;
+  font-size: 18rpx;
+  font-weight: bold;
+  padding: 2rpx 10rpx;
+  border-radius: 16rpx;
+  line-height: 1.6;
+}
+
+.template-badge.badge-system {
+  color: #FFFFFF;
+  background-color: #F08C00;
+}
+
+.template-badge.badge-store {
+  color: #FFFFFF;
+  background-color: #2B8A3E;
+}
+
 .notice-edit-footer {
   display: flex;
   gap: 20rpx;
@@ -1552,6 +1582,15 @@ page {
   background-color: #fff;
   color: #646566;
   border: 2rpx solid #ddd;
+}
+
+/* 🌟 存为模板：与取消/保存并应用并列的第三个按钮，用中性的琥珀色区分于
+   绿色的"保存并应用"，避免视觉上误以为是主操作 */
+.notice-edit-btn.template-btn {
+  background-color: #FFF3BF;
+  color: #E8590C;
+  border: 2rpx solid #FFE066;
+  font-size: 26rpx;
 }
 
 .notice-edit-btn.save-btn {
@@ -2045,6 +2084,25 @@ page {
   display: flex;
   gap: 12rpx;
   margin-bottom: 16rpx;
+}
+
+/* 📐 大额支出新增列 3 段式比例调整：.name-input/.amount-input/.btn-add-item 是
+   全局共用类名（同时还用在"爱心人士姓名"单笔支持行、支出模板新增行），这里用
+   .fixed-expense-add-row 限定，只调整这一行的比例，不影响另外两处 */
+.fixed-expense-add-row .name-input {
+  flex: 1;
+}
+
+.fixed-expense-add-row .amount-input {
+  flex: none;
+  width: 220rpx !important;
+  min-width: 220rpx;
+}
+
+.fixed-expense-add-row .btn-add-item {
+  flex: none;
+  width: 120rpx !important;
+  padding: 0 12rpx !important;
 }
 
 .fixed-expense-empty {
@@ -8201,4 +8259,20 @@ textarea, .textarea {
 
 .compliance-confirm-btn::after {
   border: none;
+}
+
+/* 🚨 页面末尾强制覆盖：正红渐变 + 纯白大字，压过微信原生 button[disabled] 半透明遮罩。
+   与本文件前面 .poster-gen-btn 那份规则内容一致，这里追加在文件最末尾仅为提高
+   源码顺序上的最终优先级，双重保险。 */
+.poster-gen-btn,
+button.poster-gen-btn,
+.poster-gen-btn[disabled],
+button.poster-gen-btn[disabled] {
+  background: #C62828 !important;
+  background-image: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
+  color: #FFFFFF !important;
+  font-weight: bold !important;
+  opacity: 1 !important;
+  border: none !important;
+  box-shadow: 0 4rpx 12rpx rgba(198, 40, 40, 0.3) !important;
 }

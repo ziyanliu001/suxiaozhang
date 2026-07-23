@@ -128,6 +128,15 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'notices', index: 'tenant_store', status: 'success' });
 
+    // 📢 公告模板库：机构+门店+公共标记复合索引，支撑 getTemplates 的
+    // tenantId + (isSystem:true ∪ storeId=当前门店) 组合查询
+    await db.collection('notice_templates').createIndex({
+      name: 'tenant_store_system',
+      keys: [{ tenantId: 1 }, { storeId: 1 }, { isSystem: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'notice_templates', index: 'tenant_store_system', status: 'success' });
+
     return {
       success: true,
       message: '索引创建完成',

@@ -828,9 +828,9 @@
              每一条挂一个真实的[独立凭证]按钮，<textarea> 做不到按行挂按钮。
              fixedExpenseText 仍由 fixedExpenseItems 自动派生，无需手改。 -->
         <view class="fixed-expense-add-row">
-          <input class="name-input" placeholder="项目名称，如：店铺租金" value="{{fixedExpenseNewName}}" bindinput="onInputFixedExpenseNewName" />
-          <input class="amount-input" type="digit" placeholder="金额" value="{{fixedExpenseNewAmount}}" bindinput="onInputFixedExpenseNewAmount" />
-          <button class="btn-add-item" bindtap="onAddFixedExpenseItem">+ 添加</button>
+          <input class="name-input" placeholder="项目名称" value="{{fixedExpenseNewName}}" bindinput="onInputFixedExpenseNewName" style="flex: 1 !important;" />
+          <input class="amount-input" type="digit" placeholder="金额" value="{{fixedExpenseNewAmount}}" bindinput="onInputFixedExpenseNewAmount" style="width: 220rpx !important; min-width: 220rpx !important; flex: none !important;" />
+          <button class="btn-add-item" bindtap="onAddFixedExpenseItem" style="width: 120rpx !important; padding: 0 12rpx !important; flex: none !important;">+ 添加</button>
         </view>
 
         <view class="fixed-expense-empty" wx:if="{{fixedExpenseItems.length === 0}}">
@@ -1526,6 +1526,18 @@
           </view>
         </view>
 
+        <!-- 🌟 公告模板库：与上面固定的 7 条内置文案不同，这里是云端拉取的
+             全域公共模板 + 本店私有模板，用【公共】/【本店】标签区分来源 -->
+        <view class="notice-edit-section" wx:if="{{noticeTemplates.length > 0}}">
+          <view class="notice-edit-label"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>我的模板库（点击套用）</view>
+          <view class="preset-tags">
+            <view class="preset-tag template-tag" wx:for="{{noticeTemplates}}" wx:key="_id" bindtap="onApplyCloudTemplate" data-id="{{item._id}}">
+              <text class="template-badge {{item.isSystem ? 'badge-system' : 'badge-store'}}">{{item.isSystem ? '公共' : '本店'}}</text>
+              <text>{{item.title}}</text>
+            </view>
+          </view>
+        </view>
+
         <view class="notice-edit-section">
           <text class="notice-edit-label">通报标题</text>
           <input 
@@ -1561,9 +1573,24 @@
             <view class="merge-title"><view class="idx-icon-sm idx-icon-link" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>合并到每日汇报文本</view>
             <text class="merge-desc">开启后，点击【生成文本】将自动在日报开头附带此通报</text>
           </view>
-          <switch 
-            checked="{{mergeToReportText}}" 
-            bindchange="onToggleMergeToReport" 
+          <switch
+            checked="{{mergeToReportText}}"
+            bindchange="onToggleMergeToReport"
+            color="#FF922B"
+          />
+        </view>
+
+        <!-- 🌟 仅超级管理员可见：勾选后"存为模板"会把这条模板设为全域公共，
+             本机构任意门店都能在自己的编辑弹窗里看到并套用；不勾选则只存为
+             当前门店的私有模板。店长/财务看不到这个开关，存的永远是本店模板 -->
+        <view class="merge-option-bar" wx:if="{{isSuperAdmin}}">
+          <view class="merge-info">
+            <view class="merge-title"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>设为全域公共模板</view>
+            <text class="merge-desc">开启后"存为模板"将对本机构所有门店可见和可用</text>
+          </view>
+          <switch
+            checked="{{saveAsSystemTemplate}}"
+            bindchange="onToggleSaveAsSystemTemplate"
             color="#FF922B"
           />
         </view>
@@ -1571,6 +1598,7 @@
 
       <view class="notice-edit-footer">
         <button class="notice-edit-btn cancel-btn" bindtap="closeNoticeEdit">取消</button>
+        <button class="notice-edit-btn template-btn" bindtap="onSaveAsTemplate">存为模板</button>
         <button class="notice-edit-btn save-btn" bindtap="onSaveNotice">保存并应用</button>
       </view>
     </view>
@@ -2095,7 +2123,7 @@
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text>生成餐报文本
     </button>
-    <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">
+    <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
       <text class="btn-emoji-icon">🎨</text>生成公示海报
     </button>
   </view>

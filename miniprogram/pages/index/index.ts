@@ -394,6 +394,13 @@ Page({
     noticeEditTag: '喜讯通报',
     noticeEditTitle: '',
     noticeEditContent: '',
+    // 🌟 公告模板库：与静态的 PRESET_NOTICES（本机内置 7 条示例文案）并列展示，
+    // 云端拉取——isSystem:true 为全域公共模板（本机构任意门店可用），其余为
+    // 当前门店自己保存的私有模板，两者互不越界（见 manageNotice getTemplates）
+    noticeTemplates: [] as any[],
+    noticeTemplatesLoading: false,
+    // 仅超级管理员在"存为模板"时可勾选，决定新模板是私有（本店）还是全域公共
+    saveAsSystemTemplate: false,
     mergeToReportText: false,
     showApplyModal: false,
     applyForm: {
@@ -6748,8 +6755,10 @@ Page({
       noticeEditTag: announcement.tag || '喜讯通报',
       noticeEditTitle: announcement.title || '',
       noticeEditContent: announcement.content || '',
-      mergeToReportText: mergeToReportText
+      mergeToReportText: mergeToReportText,
+      saveAsSystemTemplate: false
     });
+    this.fetchNoticeTemplates();
   },
 
   // 新建一条通知（同一个编辑弹窗，只是清空并且不带 id）
@@ -6759,8 +6768,101 @@ Page({
       noticeEditId: '',
       noticeEditTag: '喜讯通报',
       noticeEditTitle: '',
-      noticeEditContent: ''
+      noticeEditContent: '',
+      saveAsSystemTemplate: false
     });
+    this.fetchNoticeTemplates();
+  },
+
+  // 🌟 拉取当前视角可用的公告模板：全域公共模板 + 当前门店自己的私有模板，
+  // 由云函数按 tenantId/storeId 严格隔离，不信任前端做二次过滤
+  async fetchNoticeTemplates() {
+    if (!isCloudAvailable()) {
+      this.setData({ noticeTemplates: [] });
+      return;
+    }
+    this.setData({ noticeTemplatesLoading: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: { action: 'getTemplates', storeId: this.data.currentStoreId }
+      });
+      const result = res.result as any;
+      const list = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+      this.setData({ noticeTemplates: list });
+    } catch (e) {
+      console.error('[fetchNoticeTemplates] 查询失败:', e);
+      this.setData({ noticeTemplates: [] });
+    } finally {
+      this.setData({ noticeTemplatesLoading: false });
+    }
+  },
+
+  // 套用云端模板（区别于 onApplyPreset 套用本机内置的 7 条示例文案）
+  onApplyCloudTemplate(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const tpl = this.data.noticeTemplates.find((t: any) => t._id === id);
+    if (!tpl) return;
+
+    this.setData({
+      noticeEditTag: tpl.tag || '',
+      noticeEditTitle: tpl.title || '',
+      noticeEditContent: tpl.content || ''
+    });
+    wx.showToast({ title: '已导入模板', icon: 'success', duration: 1500 });
+  },
+
+  onToggleSaveAsSystemTemplate(e: any) {
+    this.setData({ saveAsSystemTemplate: e.detail.value });
+  },
+
+  // 🌟 把当前编辑框里的标题/正文存成一条可复用模板：店长/财务恒为本店私有模板；
+  // 仅超级管理员能通过 saveAsSystemTemplate 勾选存成全域公共模板——云函数会再次
+  // 校验角色，不信任这里传的 isSystem 标志位
+  async onSaveAsTemplate() {
+    const { noticeEditTag, noticeEditTitle, noticeEditContent, currentStoreId, saveAsSystemTemplate, isSuperAdmin } = this.data;
+
+    if (!noticeEditTitle.trim()) {
+      wx.showToast({ title: '请先填写标题', icon: 'none' });
+      return;
+    }
+    if (!noticeEditContent.trim()) {
+      wx.showToast({ title: '请先填写正文', icon: 'none' });
+      return;
+    }
+
+    const cleanTitle = stripTagPrefix(noticeEditTitle || noticeEditTag, noticeEditTag);
+    const cleanContent = stripTagPrefix(noticeEditContent, noticeEditTag);
+
+    wx.showLoading({ title: '保存模板中...', mask: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+      const res = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: {
+          action: 'createTemplate',
+          storeId: currentStoreId,
+          tag: noticeEditTag,
+          title: cleanTitle,
+          content: cleanContent,
+          isSystem: isSuperAdmin ? saveAsSystemTemplate : false
+        }
+      });
+      const result = res.result as any;
+
+      wx.hideLoading();
+
+      if (result && result.success) {
+        wx.showToast({ title: result.message || '模板已保存', icon: 'success' });
+        this.fetchNoticeTemplates();
+      } else {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onSaveAsTemplate] 保存失败:', err);
+      wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+    }
   },
 
   closeNoticeEdit() {

@@ -15,6 +15,13 @@
 // 🏢 多租户边界：tenantId 永远取调用者自己的机构，从不信任前端传入值；
 // "全国总览"这里不是跨机构的平台级广播，只是"本机构的总览层级"，与
 // getStoreList/createStore 的机构隔离模式保持一致。
+//
+// 🌟 公告模板（getTemplates/createTemplate）：与上面的 notices 是完全独立的
+// notice_templates 集合，模板只是编辑弹窗"一键套用"的可复用文案，从不进入跑马灯。
+// - getTemplates：isSystem:true（全域公共）∪ storeId=当前门店（本店私有），两者严格
+//   按 tenantId 收敛，绝不返回其他门店的私有模板。
+// - createTemplate：店长/财务权限口径与发布公告一致（storeId 强制取自己门店），
+//   isSystem 仅 super_admin 可置为 true，其余角色一律强制 false。
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -22,6 +29,11 @@ const db = cloud.database();
 const _ = db.command;
 
 const COLLECTION = 'notices';
+// 🌟 公告模板库：与 notices（已发布/正在展示的公告）是两个完全独立的集合——模板只是
+// 编辑弹窗里"一键套用"用的可复用文案，本身从不出现在跑马灯里。isSystem:true 表示
+// 全域公共模板（本机构内所有门店都能看到并套用，仅超级管理员可创建）；isSystem:false
+// 则是某个具体门店的私有模板（storeId 恒等于该店店长/财务自己的 storeId）。
+const TEMPLATE_COLLECTION = 'notice_templates';
 const MAX_LIST_LIMIT = 20;
 const OVERVIEW_SENTINELS = ['national_overview', 'ALL_STORES'];
 
@@ -191,6 +203,88 @@ exports.main = async (event) => {
           .get();
 
         return { success: true, data: listRes.data || [] };
+      }
+
+      // 🌟 公告模板：拉取"当前视角可用"的模板列表 —— 全域公共模板（isSystem:true）
+      // 加上当前门店自己的私有模板（storeId 等于当前门店），严禁掺入任何其他门店的
+      // 私有模板。两个条件用 _.or 合并后，再用 _.and 叠加 tenantId 边界。
+      case 'getTemplates': {
+        const { storeId } = event;
+        if (!caller || !caller.tenantId) {
+          return { success: true, data: [] };
+        }
+
+        // 总览视角/未选定具体门店：只能看到公共模板，effectiveStoreId 留空——
+        // 私有模板的 storeId 永远是具体门店 id，不会与空字符串匹配，不会误漏
+        const effectiveStoreId = (!storeId || OVERVIEW_SENTINELS.includes(storeId)) ? '' : storeId;
+
+        const where = _.and([
+          { tenantId: caller.tenantId },
+          _.or([
+            { isSystem: true },
+            { storeId: effectiveStoreId }
+          ])
+        ]);
+
+        const listRes = await db.collection(TEMPLATE_COLLECTION)
+          .where(where)
+          .orderBy('createdAt', 'desc')
+          .limit(MAX_LIST_LIMIT)
+          .get();
+
+        return { success: true, data: listRes.data || [] };
+      }
+
+      // 🌟 保存为模板：权限口径复用 resolveWriteTarget（与发布公告同一套店级/超管边界），
+      // 唯独 isSystem 单独加一道闸——只有 super_admin 能把模板设为全域公共，
+      // 其余角色即使传了 isSystem:true 也会被强制改回 false，绝不信任前端这个标志位。
+      case 'createTemplate': {
+        const { storeId, tag, title, content, isSystem } = event;
+
+        if (!title || !String(title).trim()) {
+          return { success: false, error: '请填写模板标题' };
+        }
+        if (!content || !String(content).trim()) {
+          return { success: false, error: '请填写模板内容' };
+        }
+
+        const wantsSystem = !!isSystem;
+        if (wantsSystem && (!caller || caller.role !== 'super_admin')) {
+          return { success: false, error: '无权限：仅超级管理员可创建全域公共模板' };
+        }
+
+        const target = await resolveWriteTarget(caller, wantsSystem ? '' : storeId);
+        if (!target.allowed) {
+          return { success: false, error: target.error };
+        }
+
+        const finalIsSystem = wantsSystem && caller.role === 'super_admin';
+        // 公共模板不挂具体门店；私有模板挂 target.storeId
+        // （店长/财务恒为自己门店，超管为其当前选择的门店）
+        const finalStoreId = finalIsSystem ? '' : target.storeId;
+        const finalStoreName = finalIsSystem ? '' : target.storeName;
+
+        const createRes = await db.collection(TEMPLATE_COLLECTION).add({
+          data: {
+            tenantId: target.tenantId,
+            storeId: finalStoreId,
+            storeName: finalStoreName,
+            isSystem: finalIsSystem,
+            tag: tag || '',
+            title: String(title).trim(),
+            content: String(content).trim(),
+            createdBy: OPENID,
+            createdAt: db.serverDate(),
+            updateTime: db.serverDate(),
+            publisherLabel: resolvePublisherLabel(caller.role)
+          }
+        });
+
+        return {
+          success: true,
+          id: createRes._id,
+          message: finalIsSystem ? '已保存为全域公共模板' : '已保存为本店模板'
+        };
       }
 
       default:
