@@ -1802,6 +1802,7 @@ page {
   display: flex;
   flex-direction: column;
   gap: 16rpx;
+  margin: 16rpx 0;
 }
 
 .stats-grid-row {
@@ -1811,18 +1812,20 @@ page {
 
 .stats-card-item {
   flex: 1;
-  min-width: 0;
-  background: #FFFFFF;
-  border: 1rpx solid #F1F3F5;
-  border-radius: 14rpx;
-  padding: 14rpx 12rpx;
+  background: #FFFDF7;
+  border: 1rpx solid #F5E6CD;
+  border-radius: 12rpx;
+  padding: 12rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .stats-item-label {
-  font-size: 20rpx;
-  color: #495057;
+  font-size: 22rpx;
+  color: #7A6343;
   margin-bottom: 8rpx;
-  display: block;
+  white-space: nowrap;
 }
 
 /* 🍱 用餐/义工细分统计自动汇总行：用餐总数/志愿者总人次只读展示，随细分输入框实时联动 */
@@ -1856,25 +1859,24 @@ page {
 
 .stats-input-wrap {
   display: flex;
-  align-items: center;
-  background: #FFF9DB;
-  border: 1rpx solid #FFE066;
-  border-radius: 12rpx;
-  padding: 10rpx 12rpx;
+  align-items: baseline;
+  justify-content: center;
+  width: 100%;
 }
 
 .stats-input {
-  font-size: 26rpx;
+  width: 70rpx;
+  height: 48rpx;
+  text-align: center;
+  font-size: 32rpx;
   font-weight: bold;
-  color: #212529;
-  width: 100%;
+  color: #D9531E;
 }
 
 .stats-unit {
   font-size: 20rpx;
-  color: #8C6D46;
-  margin-left: 4rpx;
-  flex-shrink: 0;
+  color: #999999;
+  margin-left: 2rpx;
 }
 
 /* Card C: 主食物资单选胶囊 */
