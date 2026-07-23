@@ -3785,56 +3785,57 @@ textarea, .textarea {
 }
 
 /* 🌸 每日修身微卡片：非宗教化传统文化/正能量宣导，轻柔配色，不喧宾夺主 */
-.culture-card {
+/* 🌸 每日修身·雨花人生十六最 卡片：独立精美卡片，图标+标题、居中金句、底部并排小按钮 */
+.cultural-card {
   background: linear-gradient(135deg, #FFF9F0 0%, #FFF3E8 100%);
   border: 1rpx solid #FFE8CC;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
+  border-radius: 20rpx;
+  padding: 28rpx 28rpx 24rpx;
   margin: 0 24rpx 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(180, 83, 9, 0.06);
 }
 
-.culture-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  margin-bottom: 10rpx;
+.cultural-card-header {
+  text-align: center;
+  margin-bottom: 18rpx;
 }
 
-.culture-card-icon {
-  font-size: 24rpx;
-}
-
-.culture-card-title {
-  font-size: 26rpx;
+.cultural-card-title {
+  font-size: 27rpx;
   font-weight: bold;
   color: #B45309;
-  flex: 1;
 }
 
-.culture-card-source {
-  font-size: 20rpx;
-  color: #C2853D;
-  background: #FFF3E0;
-  padding: 2rpx 12rpx;
-  border-radius: 10rpx;
-}
-
-.culture-card-text {
+.cultural-card-quote {
   display: block;
-  font-size: 26rpx;
-  line-height: 1.7;
+  font-size: 30rpx;
+  line-height: 1.8;
   color: #5C4326;
-  margin-bottom: 12rpx;
+  text-align: center;
+  padding: 0 12rpx;
+  margin-bottom: 24rpx;
+  letter-spacing: 1rpx;
 }
 
-.culture-card-actions {
+.cultural-card-actions {
   display: flex;
-  gap: 24rpx;
+  justify-content: center;
+  gap: 20rpx;
 }
 
-.culture-action-btn {
-  font-size: 22rpx;
+.cultural-action-btn {
+  font-size: 23rpx;
   color: #B45309;
+  background: #FFFFFF;
+  border: 1rpx solid #FFDDA8;
+  border-radius: 30rpx;
+  padding: 10rpx 26rpx;
+}
+
+/* 🌸 家训弹窗头部：单独加顶部内边距，避免关闭按钮与右上角胶囊（如切店胶囊）重叠——
+   只影响这一个弹窗，不改 .modal-header-bar 这个多处弹窗共用的基础类 */
+.family-motto-header {
+  padding-top: 20rpx;
 }
 
 .family-motto-scroll {
@@ -3842,12 +3843,32 @@ textarea, .textarea {
   margin: 16rpx 0;
 }
 
-.family-motto-text {
+.motto-section-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  margin-top: 28rpx;
+  margin-bottom: 12rpx;
+}
+
+.motto-section-title:first-child {
+  margin-top: 0;
+}
+
+.motto-section-text {
   display: block;
   font-size: 26rpx;
-  line-height: 1.9;
+  line-height: 1.8;
   color: #333333;
   white-space: pre-wrap;
+}
+
+.motto-creed-line {
+  font-size: 26rpx;
+  line-height: 1.8;
+  color: #333333;
+  margin-bottom: 6rpx;
 }
 
 .today-menu-preview-card.is-empty {

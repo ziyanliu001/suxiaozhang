@@ -18,7 +18,7 @@ import { applyRoleViewOverride, getPreviewViewMode, PreviewViewMode } from '../.
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
-import { getDailyCultureQuote, getRandomCultureQuote, getFamilyMottoFullText, DailyCultureQuote, SENIORS_CARE } from '../../utils/cultureData';
+import { getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, DailyCultureQuote, SENIORS_CARE } from '../../utils/cultureData';
 
 const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
@@ -404,7 +404,11 @@ Page({
     // 不查云端；cultureQuote 由 onLoad/onShow 调 getDailyCultureQuote() 按自然日选取
     cultureQuote: { text: '', source: '' } as { text: string; source: string },
     showFamilyMottoModal: false,
-    familyMottoFullText: '',
+    // 拆成结构化的三段（心字诀/家训正文各行/为学之方），而不是拼成一整段纯文本，
+    // 是为了让弹窗里"雨花心字诀"/"为学之方"这类小标题能加粗独立展示，提升可读性
+    familyMottoMindFormula: '',
+    familyMottoCreedLines: [] as string[],
+    familyMottoStudyMethod: '',
     // 🙏 打卡成功弹窗内展示的【敬老行为准则·十个有没有】，纯静态内容，无需查云端
     tenHaveYous: SENIORS_CARE.tenHaveYous as string[],
     announcement: null as {
@@ -6842,7 +6846,9 @@ Page({
   onShowFamilyMottoModal() {
     this.setData({
       showFamilyMottoModal: true,
-      familyMottoFullText: getFamilyMottoFullText()
+      familyMottoMindFormula: FAMILY_MOTTO.mindFormula,
+      familyMottoCreedLines: FAMILY_MOTTO.creedLines,
+      familyMottoStudyMethod: FAMILY_MOTTO.studyMethod
     });
   },
 
