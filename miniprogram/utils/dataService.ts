@@ -177,6 +177,16 @@ export const DataService = {
       volunteerCount: parseFloat(reportData.volunteerCount) || 0,
       volunteerHours: parseFloat(reportData.volunteerHours) || 0,
       diningCount: parseFloat(reportData.diningCount) || 0,
+      // 🍱 用餐/义工细分统计（堂食/送餐/打包），totalDineCount/totalVolunteers 由前端
+      // recalcDiningStats() 算好传入，这里只做落库，不重复计算（与 diningCount/volunteerCount
+      // 保持同源，避免两套计算口径漂移）
+      dineInSeniors: parseFloat(reportData.dineInSeniors) || 0,
+      deliverySeniors: parseFloat(reportData.deliverySeniors) || 0,
+      dineInVolunteers: parseFloat(reportData.dineInVolunteers) || 0,
+      deliveryVolunteers: parseFloat(reportData.deliveryVolunteers) || 0,
+      takeawayCount: parseFloat(reportData.takeawayCount) || 0,
+      totalDineCount: parseFloat(reportData.totalDineCount) || 0,
+      totalVolunteers: parseFloat(reportData.totalVolunteers) || 0,
       stapleRiceStatus: reportData.stapleRiceStatus || 'normal',
       stapleOilStatus: reportData.stapleOilStatus || 'sufficient',
       updateTime: db ? db.serverDate() : Date.now(),
@@ -253,6 +263,16 @@ export const DataService = {
             materials: formattedData.materials,
             volunteerCount: formattedData.volunteerCount,
             volunteerHours: formattedData.volunteerHours,
+            diningCount: formattedData.diningCount,
+            dineInSeniors: formattedData.dineInSeniors,
+            deliverySeniors: formattedData.deliverySeniors,
+            dineInVolunteers: formattedData.dineInVolunteers,
+            deliveryVolunteers: formattedData.deliveryVolunteers,
+            takeawayCount: formattedData.takeawayCount,
+            totalDineCount: formattedData.totalDineCount,
+            totalVolunteers: formattedData.totalVolunteers,
+            stapleRiceStatus: formattedData.stapleRiceStatus,
+            stapleOilStatus: formattedData.stapleOilStatus,
             updateTime: db.serverDate()
           }
         });

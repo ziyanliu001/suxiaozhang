@@ -53,6 +53,7 @@ Page({
     currentStoreId: '',
     isAllStoresView: false,
     selectedMonthStr: '',
+    selectedMonthDisplay: '', // 筛选胶囊展示用："2026-07" -> "2026年07月"，不影响 selectedMonthStr 本身的过滤/导出口径
     permissions: {} as PermissionFlags,
     showEditModal: false,
     editingRecord: null as any,
@@ -482,6 +483,9 @@ Page({
       const netChange = totalIncome - expenseAmount;
       const diningCount = parseInt(item.diningCount || 0);
       const volunteerCount = parseInt(item.volunteerCount || 0);
+      // 🍱 用餐/义工细分统计：只有历史记录本身带细分字段（新样式记录，或老记录被
+      // 编辑弹窗补录过）才展示细分栅格卡片，否则沿用老式的"结缘/义工"两枚汇总标签
+      const hasDiningBreakdown = !!(item.dineInSeniors || item.deliverySeniors || item.dineInVolunteers || item.deliveryVolunteers || item.takeawayCount);
 
       return {
         ...item,
@@ -496,6 +500,14 @@ Page({
         netChangeLabel: netChange >= 0 ? '今日净增' : '今日支出',
         diningCount: diningCount,
         volunteerCount: volunteerCount,
+        hasDiningBreakdown: hasDiningBreakdown,
+        dineInSeniors: parseInt(item.dineInSeniors || 0),
+        deliverySeniors: parseInt(item.deliverySeniors || 0),
+        dineInVolunteers: parseInt(item.dineInVolunteers || 0),
+        deliveryVolunteers: parseInt(item.deliveryVolunteers || 0),
+        takeawayCount: parseInt(item.takeawayCount || 0),
+        totalDineCount: parseInt(item.totalDineCount || diningCount || 0),
+        totalVolunteers: parseInt(item.totalVolunteers || volunteerCount || 0),
         approvalStatus: item.approvalStatus || 'PENDING_APPROVAL',
         isLocked: item.isLocked || false,
         approvedBy: item.approvedBy || '',
@@ -1116,15 +1128,18 @@ Page({
 
   onMonthFilterChange(e: any) {
     const monthStr = e.detail.value;
+    const parts = monthStr.split('-');
+    const monthDisplay = parts.length === 2 ? `${parts[0]}年${parts[1]}月` : monthStr;
     this.setData({
-      selectedMonthStr: monthStr
+      selectedMonthStr: monthStr,
+      selectedMonthDisplay: monthDisplay
     }, () => {
       this.applyFilters();
     });
   },
 
   onClearMonthFilter() {
-    this.setData({ selectedMonthStr: '' });
+    this.setData({ selectedMonthStr: '', selectedMonthDisplay: '' });
     this.applyFilters();
     wx.showToast({ title: '已展示全部月份', icon: 'none' });
   },
@@ -1407,6 +1422,11 @@ Page({
       calculatedTodayBalance,
       diningPeople: (report.diningPeople || report.diningCount || '0').toString(),
       volunteers: (report.volunteers || report.volunteerCount || '0').toString(),
+      dineInSeniors: report.dineInSeniors != null ? String(report.dineInSeniors) : '',
+      deliverySeniors: report.deliverySeniors != null ? String(report.deliverySeniors) : '',
+      dineInVolunteers: report.dineInVolunteers != null ? String(report.dineInVolunteers) : '',
+      deliveryVolunteers: report.deliveryVolunteers != null ? String(report.deliveryVolunteers) : '',
+      takeawayCount: report.takeawayCount != null ? String(report.takeawayCount) : '',
       materialsInput: formatMaterialsToText(report.materials || []),
       stapleRiceStatus: report.stapleRiceStatus || 'normal',
       stapleOilStatus: report.stapleOilStatus || 'sufficient',
@@ -1414,6 +1434,7 @@ Page({
       deletedImageIds: [],
       modifyReason: ''
     };
+    this.recalcEditDiningStats(editingRecord);
 
     const imgCount = (editingRecord.receiptImageList || []).length;
     this.setData({
@@ -1440,7 +1461,9 @@ Page({
     const editingRecord = { ...this.data.editingRecord };
     editingRecord[field] = val;
 
-    this.setData({ editingRecord: this.recalcEditBalance(editingRecord) });
+    const recalced = this.recalcEditBalance(editingRecord);
+    this.recalcEditDiningStats(recalced);
+    this.setData({ editingRecord: recalced });
   },
 
   // 🌟 爱心支持明细（对齐首页 allDonations 录入项）：自由文本实时解析为清单 + 合计
@@ -1482,6 +1505,31 @@ Page({
     const other = parseFloat(editingRecord.otherDonation || '0') || 0;
     const exp = parseFloat(editingRecord.expenseAmount || '0') || 0;
     editingRecord.calculatedTodayBalance = (yest + donationsTotal + other - exp).toFixed(2);
+    return editingRecord;
+  },
+
+  // 🍱 编辑弹窗内的用餐/义工细分统计实时计算：只有本次真的填了细分字段才用细分
+  // 重算出 diningPeople/volunteers（用餐总数/志愿者总人次的可编辑镜像字段）；
+  // 老记录未曾补录细分统计时，沿用原有汇总值，不因为没碰细分区域就被清零
+  recalcEditDiningStats(editingRecord: any) {
+    const nDineInSeniors = parseFloat(editingRecord.dineInSeniors) || 0;
+    const nDeliverySeniors = parseFloat(editingRecord.deliverySeniors) || 0;
+    const nDineInVolunteers = parseFloat(editingRecord.dineInVolunteers) || 0;
+    const nDeliveryVolunteers = parseFloat(editingRecord.deliveryVolunteers) || 0;
+    const nTakeaway = parseFloat(editingRecord.takeawayCount) || 0;
+    const hasBreakdown = !!(editingRecord.dineInSeniors || editingRecord.deliverySeniors || editingRecord.dineInVolunteers || editingRecord.deliveryVolunteers || editingRecord.takeawayCount);
+
+    if (hasBreakdown) {
+      const totalDineCount = nDineInSeniors + nDeliverySeniors + nTakeaway + nDineInVolunteers;
+      const totalVolunteers = nDeliveryVolunteers + nDineInVolunteers;
+      editingRecord.totalDineCount = String(totalDineCount);
+      editingRecord.totalVolunteers = String(totalVolunteers);
+      editingRecord.diningPeople = String(totalDineCount);
+      editingRecord.volunteers = String(totalVolunteers);
+    } else {
+      editingRecord.totalDineCount = editingRecord.diningPeople || '0';
+      editingRecord.totalVolunteers = editingRecord.volunteers || '0';
+    }
     return editingRecord;
   },
 
@@ -1638,6 +1686,11 @@ Page({
           expense: expense,
           diningPeople: Number(editForm.diningPeople || 0),
           volunteers: Number(editForm.volunteers || 0),
+          dineInSeniors: editForm.dineInSeniors,
+          deliverySeniors: editForm.deliverySeniors,
+          dineInVolunteers: editForm.dineInVolunteers,
+          deliveryVolunteers: editForm.deliveryVolunteers,
+          takeawayCount: editForm.takeawayCount,
           receiptImageList: editForm.receiptImageList || [],
           receiptImages: editForm.receiptImageList || [],
           donationItems: donationParseResult.items,

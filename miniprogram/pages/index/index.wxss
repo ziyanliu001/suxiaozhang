@@ -1799,15 +1799,46 @@ page {
 
 .stats-3grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 16rpx;
 }
 
 .grid-input-item {
-  flex: 1;
+  flex: 1 1 30%;
+  min-width: 140rpx;
 }
 
 .grid-input-item.wide {
-  flex: 1.2;
+  flex: 1 1 100%;
+}
+
+/* 🍱 用餐/义工细分统计自动汇总行：用餐总数/志愿者总人次只读展示，随细分输入框实时联动 */
+.stats-auto-total-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
+.auto-total-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #E7F5FF;
+  border: 1rpx solid #A5D8FF;
+  border-radius: 12rpx;
+  padding: 10rpx 14rpx;
+}
+
+.auto-total-lbl {
+  font-size: 20rpx;
+  color: #1864AB;
+}
+
+.auto-total-val {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #1864AB;
 }
 
 .item-lbl {

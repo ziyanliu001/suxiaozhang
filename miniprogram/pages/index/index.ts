@@ -293,10 +293,20 @@ Page({
     materials: [] as { donor: string; item: string; quantity: string; unit: string }[],
     materialsInput: '', // 自由文本输入（如："张三：大米50斤；李四：食用油2箱"）
     // 义工时间统计
-    volunteerCount: '', // 今日到岗义工人数
+    volunteerCount: '', // 今日到岗义工人数（自 dineInVolunteers+deliveryVolunteers 自动镜像，兼容统计大屏/海报/导出等下游）
     volunteerHours: '', // 今日义工总工时
     // 用餐人次
-    diningCount: '', // 今日用餐人次
+    diningCount: '', // 今日用餐人次（自 totalDineCount 自动镜像，同上）
+    // 🍱 用餐/义工细分统计（堂食/送餐/打包场景区分）：totalDineCount/totalVolunteers
+    // 由 recalcDiningStats() 实时算出，并同步镜像进 diningCount/volunteerCount，
+    // 兼容统计大屏/海报生成/Excel 导出/风控校验等一切既有只认 diningCount/volunteerCount 的下游消费方
+    dineInSeniors: '', // 堂食长者数
+    deliverySeniors: '', // 送餐长者数
+    dineInVolunteers: '', // 堂食/到岗志愿者数
+    deliveryVolunteers: '', // 送餐志愿者数
+    takeawayCount: '', // 打包份数
+    totalDineCount: '0', // 用餐总数（自动计算：堂食长者+送餐长者+打包+堂食志愿者）
+    totalVolunteers: '0', // 志愿者总人次（自动计算：送餐志愿者+堂食志愿者）
     // 主食物资储备状态
     stapleRiceStatus: 'normal', // 大米/面粉: sufficient/normal/urgent
     stapleOilStatus: 'sufficient', // 食用油: sufficient/normal/urgent
@@ -1896,8 +1906,8 @@ Page({
   },
 
   saveDraft() {
-    const { reportDate, reportDateValue, yesterdayBalance, allDonations, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, materialsInput } = this.data;
-    
+    const { reportDate, reportDateValue, yesterdayBalance, allDonations, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+
     const draftData = {
       reportDate,
       reportDateValue,
@@ -1918,6 +1928,11 @@ Page({
       stapleRiceStatus,
       stapleOilStatus,
       materialsInput,
+      dineInSeniors,
+      deliverySeniors,
+      dineInVolunteers,
+      deliveryVolunteers,
+      takeawayCount,
       saveTime: Date.now()
     };
 
@@ -1971,8 +1986,19 @@ Page({
         stapleRiceStatus: draftData.stapleRiceStatus || 'normal',
         stapleOilStatus: draftData.stapleOilStatus || 'sufficient',
         materialsInput: draftData.materialsInput || '',
+        dineInSeniors: draftData.dineInSeniors || '',
+        deliverySeniors: draftData.deliverySeniors || '',
+        dineInVolunteers: draftData.dineInVolunteers || '',
+        deliveryVolunteers: draftData.deliveryVolunteers || '',
+        takeawayCount: draftData.takeawayCount || '',
         hasDraft: true
       });
+
+      // 🌟 老草稿没有细分字段时，diningCount/volunteerCount 已按上面原样恢复，
+      // 不能在此重算覆盖成 0；只有草稿本身带细分字段时才需要重新对齐镜像值
+      if (draftData.dineInSeniors || draftData.deliverySeniors || draftData.dineInVolunteers || draftData.deliveryVolunteers || draftData.takeawayCount) {
+        this.recalcDiningStats();
+      }
 
       // 🌟 大额专项：草稿只存了派生出的 fixedExpenseText（不含独立凭证图片，与
       // receiptImages 同样不进草稿的既有行为一致），恢复时反解析出条目供展示/继续编辑
@@ -2034,8 +2060,17 @@ Page({
         stapleRiceStatus: draftData.stapleRiceStatus || 'normal',
         stapleOilStatus: draftData.stapleOilStatus || 'sufficient',
         materialsInput: draftData.materialsInput || '',
+        dineInSeniors: draftData.dineInSeniors || '',
+        deliverySeniors: draftData.deliverySeniors || '',
+        dineInVolunteers: draftData.dineInVolunteers || '',
+        deliveryVolunteers: draftData.deliveryVolunteers || '',
+        takeawayCount: draftData.takeawayCount || '',
         hasDraft: true
       });
+
+      if (draftData.dineInSeniors || draftData.deliverySeniors || draftData.dineInVolunteers || draftData.deliveryVolunteers || draftData.takeawayCount) {
+        this.recalcDiningStats();
+      }
 
       this.setData({ fixedExpenseItems: this.parseFixedExpenseTextToItems(draftData.fixedExpenseText || '') });
 
@@ -3269,9 +3304,19 @@ Page({
       volunteerCount: record.volunteerCount != null ? String(record.volunteerCount) : '',
       volunteerHours: record.volunteerHours != null ? String(record.volunteerHours) : '',
       diningCount: record.diningCount != null ? String(record.diningCount) : '',
+      dineInSeniors: record.dineInSeniors != null ? String(record.dineInSeniors) : '',
+      deliverySeniors: record.deliverySeniors != null ? String(record.deliverySeniors) : '',
+      dineInVolunteers: record.dineInVolunteers != null ? String(record.dineInVolunteers) : '',
+      deliveryVolunteers: record.deliveryVolunteers != null ? String(record.deliveryVolunteers) : '',
+      takeawayCount: record.takeawayCount != null ? String(record.takeawayCount) : '',
       materialsInput: record.materialsInput || '',
       balanceMatchTip: '已载入历史记录'
     });
+    // 老记录没有细分字段时，上面已按原样恢复 diningCount/volunteerCount，不重算覆盖；
+    // 只有记录本身带细分字段时才需要重新对齐 totalDineCount/totalVolunteers 展示
+    if (record.dineInSeniors != null || record.deliverySeniors != null || record.dineInVolunteers != null || record.deliveryVolunteers != null || record.takeawayCount != null) {
+      this.recalcDiningStats();
+    }
     this.updateDailyExpenseParsePreview(record.dailyExpenseText || '');
 
     if (record.donationItems && record.donationItems.length > 0) {
@@ -3421,6 +3466,10 @@ Page({
       this.updateDailyExpenseParsePreview(value);
     }
 
+    if (field === 'dineInSeniors' || field === 'deliverySeniors' || field === 'dineInVolunteers' || field === 'deliveryVolunteers' || field === 'takeawayCount') {
+      this.recalcDiningStats();
+    }
+
     if (field === 'shopName' || field === 'mpAccount') {
       this.saveSettings();
     }
@@ -3434,6 +3483,28 @@ Page({
     }
 
     this.debouncedSaveDraft();
+  },
+
+  // 🍱 用餐/义工细分统计实时计算：用餐总数 = 堂食长者+送餐长者+打包+堂食志愿者；
+  // 志愿者总人次 = 送餐志愿者+堂食志愿者。计算结果同时镜像进 diningCount/volunteerCount，
+  // 使统计大屏、海报生成、Excel 导出、风控校验等一切既有下游无需感知本次细分字段改造
+  recalcDiningStats() {
+    const { dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+    const nDineInSeniors = parseFloat(dineInSeniors) || 0;
+    const nDeliverySeniors = parseFloat(deliverySeniors) || 0;
+    const nDineInVolunteers = parseFloat(dineInVolunteers) || 0;
+    const nDeliveryVolunteers = parseFloat(deliveryVolunteers) || 0;
+    const nTakeaway = parseFloat(takeawayCount) || 0;
+
+    const totalDineCount = nDineInSeniors + nDeliverySeniors + nTakeaway + nDineInVolunteers;
+    const totalVolunteers = nDeliveryVolunteers + nDineInVolunteers;
+
+    this.setData({
+      totalDineCount: String(totalDineCount),
+      totalVolunteers: String(totalVolunteers),
+      diningCount: String(totalDineCount),
+      volunteerCount: String(totalVolunteers)
+    });
   },
 
   onMaterialsInput(e: any) {
@@ -5124,7 +5195,7 @@ Page({
 
       try {
         // ====== 第一步：纯前端生成文本（不依赖云端，绝不阻塞） ======
-        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement } = this.data;
+        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, totalDineCount, totalVolunteers } = this.data;
         const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
         const b4_total = parseFloat(otherDonation) || 0;
 
@@ -5254,6 +5325,13 @@ Page({
           volunteerCount: parseFloat(volunteerCount) || 0,
           volunteerHours: parseFloat(volunteerHours) || 0,
           diningCount: parseFloat(diningCount) || 0,
+          dineInSeniors: parseFloat(dineInSeniors) || 0,
+          deliverySeniors: parseFloat(deliverySeniors) || 0,
+          dineInVolunteers: parseFloat(dineInVolunteers) || 0,
+          deliveryVolunteers: parseFloat(deliveryVolunteers) || 0,
+          takeawayCount: parseFloat(takeawayCount) || 0,
+          totalDineCount: parseFloat(totalDineCount) || 0,
+          totalVolunteers: parseFloat(totalVolunteers) || 0,
           stapleRiceStatus: stapleRiceStatus,
           stapleOilStatus: stapleOilStatus
         };
@@ -5726,7 +5804,15 @@ Page({
       materials: [],
       materialsInput: '',
       volunteerCount: '',
-      volunteerHours: ''
+      volunteerHours: '',
+      diningCount: '',
+      dineInSeniors: '',
+      deliverySeniors: '',
+      dineInVolunteers: '',
+      deliveryVolunteers: '',
+      takeawayCount: '',
+      totalDineCount: '0',
+      totalVolunteers: '0'
     });
     this.clearDraft();
   },
@@ -6074,6 +6160,11 @@ Page({
       volunteerCount: report.volunteerCount ? String(report.volunteerCount) : '',
       volunteerHours: report.volunteerHours ? String(report.volunteerHours) : '',
       diningCount: report.diningCount ? String(report.diningCount) : '',
+      dineInSeniors: report.dineInSeniors != null ? String(report.dineInSeniors) : '',
+      deliverySeniors: report.deliverySeniors != null ? String(report.deliverySeniors) : '',
+      dineInVolunteers: report.dineInVolunteers != null ? String(report.dineInVolunteers) : '',
+      deliveryVolunteers: report.deliveryVolunteers != null ? String(report.deliveryVolunteers) : '',
+      takeawayCount: report.takeawayCount != null ? String(report.takeawayCount) : '',
       stapleRiceStatus: report.stapleRiceStatus || 'normal',
       stapleOilStatus: report.stapleOilStatus || 'sufficient',
       shopName: report.shopName || this.data.shopName,
@@ -6084,6 +6175,9 @@ Page({
       hasDraft: true,
       editReportId: report._id || ''
     });
+    if (report.dineInSeniors != null || report.deliverySeniors != null || report.dineInVolunteers != null || report.deliveryVolunteers != null || report.takeawayCount != null) {
+      this.recalcDiningStats();
+    }
 
     if (allDonations) {
       this.updateParseResult(allDonations);

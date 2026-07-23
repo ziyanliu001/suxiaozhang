@@ -596,6 +596,18 @@
   margin-bottom: 20rpx;
 }
 
+/* 🍱 用餐/义工细分栅格：与 .balance-4grid 共用 .grid-cell/.cell-lbl/.cell-val，
+   仅列数不同（4 列，7 项数据两行排布，用餐总数/志愿者总人次高亮收尾） */
+.dining-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16rpx 16rpx;
+  padding: 16rpx 0;
+  border-top: 1rpx dashed #F1F3F5;
+  border-bottom: 1rpx dashed #F1F3F5;
+  margin-bottom: 20rpx;
+}
+
 .grid-cell {
   display: flex;
   flex-direction: column;
@@ -1006,6 +1018,34 @@
   font-size: 28rpx;
   font-weight: bold;
   color: #333333;
+}
+
+.edit-auto-total-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.edit-auto-total-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFDF8;
+  border: 1rpx solid #FFE8A3;
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+}
+
+.edit-auto-total-item .lbl {
+  font-size: 22rpx;
+  color: #8C6D46;
+}
+
+.edit-auto-total-item .val {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #D9480E;
 }
 
 .receipt-grid {

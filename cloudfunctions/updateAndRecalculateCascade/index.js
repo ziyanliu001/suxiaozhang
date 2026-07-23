@@ -84,7 +84,9 @@ exports.main = async (event, context) => {
     income, listDonationTotal, otherDonation, expense,
     diningPeople, volunteers, receiptImageList, receiptImages,
     donationItems, materials, stapleRiceStatus, stapleOilStatus,
-    modifyReason
+    modifyReason,
+    // 🍱 用餐/义工细分统计（堂食/送餐/打包），见下方 hasBreakdown 分支说明
+    dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount
   } = event;
   const targetShop = shopName || storeId || '';
   const strReportDate = String(reportDate || '').trim();
@@ -116,6 +118,22 @@ exports.main = async (event, context) => {
     const numExpense = round2(expense);
     const newTodayBal = round2(numYesterdayBal + numIncome - numExpense);
     const netIncrease = round2(numIncome - numExpense);
+
+    // 🍱 用餐/义工细分统计：只有前端本次真的传了细分字段（新样式记录，或本次编辑
+    // 首次填写细分统计）才由服务端按细分重新算出权威的用餐总数/志愿者总人次；
+    // 老记录/本次编辑压根没碰细分区域时，不能强行按 0 覆盖，必须原样沿用前端传来的
+    // diningPeople/volunteers（即编辑弹窗里仍保留可编辑的历史汇总值）
+    const hasBreakdown = [dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount]
+      .some((v) => v !== undefined && v !== null && v !== '');
+    const numDineInSeniors = round2(dineInSeniors);
+    const numDeliverySeniors = round2(deliverySeniors);
+    const numDineInVolunteers = round2(dineInVolunteers);
+    const numDeliveryVolunteers = round2(deliveryVolunteers);
+    const numTakeaway = round2(takeawayCount);
+    const computedTotalDineCount = round2(numDineInSeniors + numDeliverySeniors + numTakeaway + numDineInVolunteers);
+    const computedTotalVolunteers = round2(numDeliveryVolunteers + numDineInVolunteers);
+    const finalDiningPeople = hasBreakdown ? computedTotalDineCount : Number(diningPeople || 0);
+    const finalVolunteers = hasBreakdown ? computedTotalVolunteers : Number(volunteers || 0);
 
     // 1. 取出原记录做权限校验
     const logRes = await db.collection('report_logs').doc(docId).get();
@@ -188,8 +206,17 @@ exports.main = async (event, context) => {
           expenseAmount: numExpense,
           todayBalance: newTodayBal,
           netIncrease: netIncrease,
-          diningPeople: Number(diningPeople || 0),
-          volunteers: Number(volunteers || 0),
+          diningPeople: finalDiningPeople,
+          volunteers: finalVolunteers,
+          diningCount: finalDiningPeople,
+          volunteerCount: finalVolunteers,
+          totalDineCount: finalDiningPeople,
+          totalVolunteers: finalVolunteers,
+          dineInSeniors: hasBreakdown ? numDineInSeniors : (logData.dineInSeniors || 0),
+          deliverySeniors: hasBreakdown ? numDeliverySeniors : (logData.deliverySeniors || 0),
+          dineInVolunteers: hasBreakdown ? numDineInVolunteers : (logData.dineInVolunteers || 0),
+          deliveryVolunteers: hasBreakdown ? numDeliveryVolunteers : (logData.deliveryVolunteers || 0),
+          takeawayCount: hasBreakdown ? numTakeaway : (logData.takeawayCount || 0),
           receiptImages: finalReceiptImages,
           receiptImageList: finalReceiptImages,
           donationItems: Array.isArray(donationItems) ? donationItems : [],

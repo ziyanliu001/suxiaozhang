@@ -32,7 +32,7 @@
         <view class="month-filter-capsule-box">
           <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
             <view class="filter-pill month-pill {{selectedMonthStr ? 'has-value' : ''}}">
-              <text class="lbl">📅 {{selectedMonthStr || '全部月份'}}</text>
+              <text class="lbl">📅 {{selectedMonthDisplay || '全部月份'}}</text>
               <text class="arrow" wx:if="{{!selectedMonthStr}}">▼</text>
             </view>
           </picker>
@@ -44,7 +44,7 @@
           wx:if="{{isManagerOrAdmin || isFinanceOrAdmin}}"
           bindtap="onExportMonthlyAudit"
         >
-          <text wx:if="{{!exportingAudit}}">📄 导出{{selectedMonthStr || '本月'}}财务审计表</text>
+          <text wx:if="{{!exportingAudit}}">📄 导出{{selectedMonthDisplay || '本月'}}财务审计表</text>
           <text wx:else>生成中...</text>
         </view>
       </view>
@@ -159,9 +159,42 @@
           <text class="banner-val">{{item.netChange >= 0 ? '+' : ''}}¥{{item.netChangeStr}}</text>
         </view>
 
-        <view class="card-header-tags">
+        <!-- 🍱 用餐/义工细分栅格：记录本身带细分统计（新记录，或老记录被编辑弹窗补录过）才展示；
+             老记录没有细分数据时，沿用此前的"结缘/义工"两枚汇总标签 -->
+        <view class="card-header-tags" wx:if="{{!item.hasDiningBreakdown}}">
           <text class="metric-tag info" wx:if="{{item.diningCount > 0}}">👥 结缘 {{item.diningCount}}人</text>
           <text class="metric-tag info" wx:if="{{item.volunteerCount > 0}}">❤️ 义工 {{item.volunteerCount}}人</text>
+        </view>
+
+        <view class="dining-breakdown-grid" wx:if="{{item.hasDiningBreakdown}}">
+          <view class="grid-cell">
+            <text class="cell-lbl">送餐长者</text>
+            <text class="cell-val">{{item.deliverySeniors}} 人</text>
+          </view>
+          <view class="grid-cell">
+            <text class="cell-lbl">送餐志愿者</text>
+            <text class="cell-val">{{item.deliveryVolunteers}} 人</text>
+          </view>
+          <view class="grid-cell">
+            <text class="cell-lbl">堂食长者</text>
+            <text class="cell-val">{{item.dineInSeniors}} 人</text>
+          </view>
+          <view class="grid-cell">
+            <text class="cell-lbl">打包份数</text>
+            <text class="cell-val">{{item.takeawayCount}} 份</text>
+          </view>
+          <view class="grid-cell">
+            <text class="cell-lbl">用餐志愿者</text>
+            <text class="cell-val">{{item.dineInVolunteers}} 人</text>
+          </view>
+          <view class="grid-cell highlight-bg">
+            <text class="cell-lbl">用餐总数</text>
+            <text class="cell-val orange bold">{{item.totalDineCount}} 人</text>
+          </view>
+          <view class="grid-cell highlight-bg">
+            <text class="cell-lbl">志愿者总人次</text>
+            <text class="cell-val orange bold">{{item.totalVolunteers}} 人次</text>
+          </view>
         </view>
 
         <view class="balance-4grid {{item.isVoid ? 'strikethrough' : ''}}">
@@ -361,26 +394,43 @@
         </view>
 
         <view class="form-group-section">
-          <view class="section-badge">👥 护持数据统计</view>
-          
+          <view class="section-badge">👥 护持数据统计 <text class="optional-tag">(选填，用餐总数/志愿者总人次自动计算)</text></view>
+
           <view class="double-column-row">
             <view class="column-item">
-              <text class="col-label">结缘用餐 (人)</text>
-              <input class="col-input" 
-                     type="number" 
-                     placeholder="0" 
-                     value="{{editingRecord.diningPeople}}" 
-                     bindinput="onEditInput" 
-                     data-field="diningPeople" />
+              <text class="col-label">堂食长者 (人)</text>
+              <input class="col-input" type="number" placeholder="0" value="{{editingRecord.dineInSeniors}}" bindinput="onEditInput" data-field="dineInSeniors" />
             </view>
             <view class="column-item">
-              <text class="col-label">到岗义工 (人)</text>
-              <input class="col-input" 
-                     type="number" 
-                     placeholder="0" 
-                     value="{{editingRecord.volunteers}}" 
-                     bindinput="onEditInput" 
-                     data-field="volunteers" />
+              <text class="col-label">送餐长者 (人)</text>
+              <input class="col-input" type="number" placeholder="0" value="{{editingRecord.deliverySeniors}}" bindinput="onEditInput" data-field="deliverySeniors" />
+            </view>
+          </view>
+          <view class="double-column-row">
+            <view class="column-item">
+              <text class="col-label">打包份数 (份)</text>
+              <input class="col-input" type="number" placeholder="0" value="{{editingRecord.takeawayCount}}" bindinput="onEditInput" data-field="takeawayCount" />
+            </view>
+            <view class="column-item">
+              <text class="col-label">堂食/到岗志愿者 (人)</text>
+              <input class="col-input" type="number" placeholder="0" value="{{editingRecord.dineInVolunteers}}" bindinput="onEditInput" data-field="dineInVolunteers" />
+            </view>
+          </view>
+          <view class="double-column-row">
+            <view class="column-item">
+              <text class="col-label">送餐志愿者 (人)</text>
+              <input class="col-input" type="number" placeholder="0" value="{{editingRecord.deliveryVolunteers}}" bindinput="onEditInput" data-field="deliveryVolunteers" />
+            </view>
+          </view>
+
+          <view class="edit-auto-total-row">
+            <view class="edit-auto-total-item">
+              <text class="lbl">用餐总数</text>
+              <text class="val">{{editingRecord.totalDineCount || editingRecord.diningPeople || 0}} 人</text>
+            </view>
+            <view class="edit-auto-total-item">
+              <text class="lbl">志愿者总人次</text>
+              <text class="val">{{editingRecord.totalVolunteers || editingRecord.volunteers || 0}} 人次</text>
             </view>
           </view>
         </view>
