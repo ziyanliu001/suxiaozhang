@@ -1797,27 +1797,34 @@ page {
   line-height: 1.5;
 }
 
-/* 🍱 义工与用餐统计：2 行 x 3 列 6 宫格卡片网格 */
+/* 🍱 义工与用餐统计：2 行 x 3 列 6 宫格卡片网格。
+   真机上出现过单列拉通崩溃（疑似构建缓存导致这里的 class 样式未命中），
+   .stats-grid-row 补上原本省略的 flex-direction: row（虽是默认值，显式写死
+   更保险）+ !important，与 WXML 行内 style 双保险，任一层生效都能撑住布局 */
 .stats-grid-container {
-  display: flex;
-  flex-direction: column;
+  display: flex !important;
+  flex-direction: column !important;
   gap: 16rpx;
   margin: 16rpx 0;
+  width: 100%;
 }
 
 .stats-grid-row {
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   gap: 16rpx;
+  width: 100%;
 }
 
 .stats-card-item {
-  flex: 1;
+  flex: 1 !important;
+  min-width: 0;
   background: #FFFDF7;
   border: 1rpx solid #F5E6CD;
   border-radius: 12rpx;
   padding: 12rpx 8rpx;
-  display: flex;
-  flex-direction: column;
+  display: flex !important;
+  flex-direction: column !important;
   align-items: center;
 }
 
