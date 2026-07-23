@@ -2599,15 +2599,26 @@ Page({
 
           const netAccumulation = parseFloat(statistics.netAccumulation) || 0;
           let statusBannerBg = '#FAB005';
+          let statusBannerBorder = '';
+          let statusBannerTextColor = '#FFFFFF';
           let statusBannerText = '服务资金与物资充足，平稳运行中';
           if (netAccumulation < 0) {
-            statusBannerBg = '#E03131';
-            statusBannerText = '⚠️ 本期资金支出大于汇入，恳请社会各界关注支持';
+            // 🛡️ 合规脱敏：避免刺眼深红警报色与"恳请关注支持"类劝募嫌疑文案，
+            // 改为中性浅橙/浅黄暖色的"财务分析提示卡"风格，而非"紧急筹款呼吁"
+            statusBannerBg = '#FFFBE6';
+            statusBannerBorder = '#FFE58F';
+            statusBannerTextColor = '#D48806';
+            statusBannerText = '⚠️ 本期支出大于汇入，请注意收支平衡';
           }
 
           ctx.fillStyle = statusBannerBg;
           ctx.fillRect(30, H - 100, 540, 50);
-          ctx.fillStyle = '#FFFFFF';
+          if (statusBannerBorder) {
+            ctx.strokeStyle = statusBannerBorder;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(30, H - 100, 540, 50);
+          }
+          ctx.fillStyle = statusBannerTextColor;
           ctx.font = 'bold 20px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(statusBannerText, W / 2, H - 65);
@@ -2620,7 +2631,7 @@ Page({
 
           ctx.fillStyle = '#ADB5BD';
           ctx.font = '10px sans-serif';
-          ctx.fillText('本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐', W / 2, H - 20);
+          ctx.fillText('本海报仅用于内部爱心服务与账目信息公示，不提供任何形式的网络公开筹款服务。', W / 2, H - 20);
           ctx.textAlign = 'left';
 
           wx.canvasToTempFilePath({
@@ -2662,7 +2673,8 @@ Page({
   // 智能格式化海报天数/状态文案，避免“预计可支撑”与状态文本硬拼接产生语病
   getPosterDaysText(totalBalance: number, avgDailyExpense: number, isPreparingPeriod: boolean) {
     if (totalBalance <= 0) {
-      return '资金紧缺，恳请社会各界关注支持';
+      // 🛡️ 合规脱敏：与上方赤字提示条同一口径，避免"恳请社会各界"类劝募嫌疑措辞
+      return '资金结余较低，请注意收支平衡';
     }
 
     // 休餐/筹备期（食材支出为 0）
