@@ -385,3 +385,125 @@
   opacity: 0;
   pointer-events: none;
 }
+
+/* ===== 【我的爱心荣誉卡】预览弹窗：z-index 比 .archive-modal-mask 高一层，
+   叠在它上面展示——配色改用暖橘色系，呼应重构后海报本身的"现代温馨"风格，
+   与本组件其余部分（金色/深红）刻意区分开，让用户一眼认出"这是海报预览" ===== */
+.poster-preview-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1300;
+}
+
+.poster-preview-card {
+  width: 84%;
+  max-width: 640rpx;
+  max-height: 86vh;
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  box-shadow: 0 16rpx 60rpx rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.poster-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 28rpx 20rpx;
+  flex-shrink: 0;
+}
+
+.poster-preview-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #FF7043;
+}
+
+.poster-preview-close {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* 图片本体：mode="widthFix" 让高度按图片原始比例自适应，这里只需固定宽度
+   （撑满卡片可用宽度）并居中，不设固定高度，避免和长图的实际比例打架 */
+.poster-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 0 28rpx;
+  box-sizing: border-box;
+}
+
+.poster-preview {
+  display: block;
+  width: 100%;
+  margin: 0 auto 8rpx;
+  border-radius: 16rpx;
+  background: #F5F5F5;
+}
+
+.poster-preview-footer {
+  display: flex;
+  gap: 16rpx;
+  padding: 20rpx 28rpx 28rpx;
+  flex-shrink: 0;
+}
+
+.poster-preview-btn-secondary {
+  flex: 1;
+  height: 84rpx;
+  border-radius: 42rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #F1F3F5;
+  color: #495057;
+  font-size: 28rpx;
+  font-weight: 500;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.poster-preview-btn-secondary:active {
+  background-color: #E9ECEF;
+  transform: scale(0.98);
+}
+
+.poster-preview-btn-primary {
+  flex: 2;
+  height: 84rpx;
+  line-height: 84rpx;
+  border-radius: 42rpx;
+  background: linear-gradient(135deg, #FF8A65 0%, #FF7043 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border: none;
+  box-shadow: 0 8rpx 20rpx rgba(255, 112, 67, 0.35);
+}
+
+.poster-preview-btn-primary::after {
+  border: none;
+}
+
+.poster-preview-btn-primary:active {
+  opacity: 0.85;
+}
+
+.poster-preview-btn-primary.loading {
+  opacity: 0.75;
+}

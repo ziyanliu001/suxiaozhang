@@ -1,5 +1,5 @@
 import { AuthService } from '../../utils/authService';
-import { getSelectedStore } from '../../utils/storeManager';
+import { getSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { getSafeSystemInfo } from '../../utils/util';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable } from '../../utils/cloudGuard';
@@ -34,6 +34,19 @@ const BADGE_CONFIG: Array<{ id: string; emoji: string; name: string; type: 'days
   { id: 'guardian', emoji: '🛡️', name: '护持先锋', type: 'hours', threshold: 500 }
 ];
 
+// 🏛️ 家长管理 / 资源兜底：门店人员画像 7 项字段名，与 manageStoreProfile 云函数一致——
+// 迁移自已废弃的 pages/patriarch-dashboard，用于展示 pendingProfileUpdate 里
+// "店长本次提交了什么"的明细列表
+const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
+  partyMembers: '中共党员',
+  socialWorkers: '社会工作者',
+  volunteersCount: '志愿者',
+  dineInSeniorsCount: '堂食老人',
+  deliverySeniorsCount: '送餐老人',
+  listeningSeniorsCount: '倾听陪伴老人',
+  otherCount: '其他'
+};
+
 Page({
   isNavigating: false,
   // 🐛 头像"退出重进又变回旧值"根因：loadUserProfile 里缓存优先渲染（快）与云端
@@ -64,11 +77,23 @@ Page({
     // 不同机型胶囊按钮的实际左边距不同，硬编码在部分机型上会被胶囊直接盖住/裁切
     windowWidth: 0,
     capsuleLeft: 0,
-    currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer',
+    currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer' | 'store_family',
     currentStoreName: '',
+    // 🏪 门店运营状态：见 utils/storeManager.ts fetchAndSyncStoreStatus/getCachedStoreStatus，
+    // 全局态与 Storage 双写同步，"查看店铺状态"菜单标题据此动态渲染
+    currentStoreStatus: '',
     // 🛡️ 语义化权限状态：避免模板里反复重复 role 字符串比较
     hasPrivilege: false,
     isSuperAdmin: false,
+    // 🌟 isVolunteer 严格指"已审核通过的真实义工"，用于和 isFamily 互斥区分；
+    // isFamily/isServiceUser：新用户/未审核用户的默认身份（家人 · 服务对象），
+    // 底层 role 与真实义工共用同一个 'volunteer' 值，只能靠 status !== 'approved'
+    // 这个信号区分（见 checkUserRole 云函数：未审核账号 role 恒为 volunteer）
+    isVolunteer: false,
+    isFamily: false,
+    isServiceUser: false,
+    // 🏛️ 家长管理 / 资源兜底卡片的显隐开关：家长本人或超管可见
+    isPatriarch: false,
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，用于切换入口自身的显隐判断；
     // currentViewMode 与选项文案，供页面内的切换 Picker 使用
     isRealSuperAdmin: false,
@@ -81,6 +106,41 @@ Page({
       submittedReports: 0,
       auditedReports: 0
     },
+
+    // 🏪 查看店铺状态 Modal：日常记录列表里的只读入口，展示当前门店名称与运营状态
+    showStoreStatusModal: false,
+    storeStatusInfo: {
+      loading: false,
+      storeName: '',
+      operatingStatus: '',
+      operatingStatusLabel: ''
+    },
+
+    // 🏛️ 家长管理 / 资源兜底：内嵌自已废弃的 pages/patriarch-dashboard，
+    // 单独收拢进一个命名空间对象，避免和本页其余字段混在一起
+    patriarchData: {
+      loading: true,
+      currentStoreId: '',
+      storeName: '',
+      patriarch: '',
+      manager: '',
+      monthLabel: '',
+      monthDiners: 0,
+      monthIncome: '0.00',
+      monthExpense: '0.00',
+      monthNet: '0.00',
+      monthNetPositive: true,
+      auditedCount: 0,
+      totalCount: 0,
+      pendingVoidList: [] as any[],
+      pendingProfileUpdate: null as any,
+      pendingProfileItems: [] as { label: string; value: number }[],
+      pendingRoleRequests: [] as any[],
+      voidActionInFlight: false,
+      profileActionInFlight: false,
+      roleActionInFlight: false
+    },
+
     showReleaseModal: false,
     releaseRoleLabel: '',
     isReleasing: false,
@@ -127,6 +187,7 @@ Page({
     this.isNavigating = false;
     this.initMinePage();
     this.loadUserProfile();
+    this.refreshStoreStatus();
 
     // 🌟 同步自定义 TabBar 高亮态（见 index.ts onShow 中的说明）
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
@@ -168,10 +229,25 @@ Page({
       storeName = cachedRoleInfo.storeName || '';
     }
 
+    // 🌟 家人（服务对象）默认判定：新用户/未审核用户在 checkUserRole 云函数里
+    // role 恒为 'volunteer' 且 status !== 'approved'，用这个组合区分"真实义工"
+    // 与"默认家人视角"，不会误伤已审核通过的真实义工（那时 status === 'approved'）。
+    // 这只是没有手动切换过身份时的兜底默认值，下面 storageRole 一旦存在就优先生效
+    let isFamily = role === 'volunteer' && (!cachedRoleInfo || cachedRoleInfo.status !== 'approved');
+
+    // 🛡️ 强制优先读取切换后的生效角色，严禁被 cachedRoleInfo 覆盖降级：store-picker
+    // 切身份/切店（首页的全局 storePicker、本页嵌入的 patriarchStorePicker 都共用
+    // 同一套 _applyRoleSwitch 持久化逻辑）会同步写入这个 key——只要它存在，就必须
+    // 无条件以它为准，完全不再理会上面基于 cachedRoleInfo 算出的默认值/isFamily
+    // 兜底判断，否则"选了家长/家人但刷新后又被服务端缓存的 volunteer 打回原形"
     const storageRole = wx.getStorageSync('current_user_role');
     if (storageRole) {
       role = storageRole.toLowerCase();
+      // 手动切换的具体身份说了算：选家人就是家人，选除家人外的任何身份
+      // （含义工/家长/店长/财务/超管）都不再是"默认未审核家人"视角
+      isFamily = role === 'store_family';
     }
+    console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, '-> 生效role=', role);
 
     const storageStoreName = wx.getStorageSync('current_store_name');
     if (storageStoreName) {
@@ -199,6 +275,14 @@ Page({
     const displayRole = overridden.currentUserRole;
     const hasPrivilege = displayRole === 'store_manager' || displayRole === 'finance' || displayRole === 'store_patriarch' || displayRole === 'super_admin';
     const currentViewMode = getPreviewViewMode();
+    // 🏛️ 家长管理卡片显隐：预览模式的可选项里没有"家长"这一档（VIEW_MODE_OPTIONS
+    // 只有 SUPER_ADMIN/STORE_MANAGER/FINANCE），displayRole 能等于 store_patriarch
+    // 只可能是真实角色本身就是家长，不受超管预览切换影响
+    const isPatriarch = displayRole === 'store_patriarch';
+    // 🌟 isVolunteer 严格指"真实义工"，与 isFamily 互斥——两者底层 currentUserRole
+    // 都是 'volunteer'，靠 isFamily 区分展示哪一套版面
+    const isVolunteer = displayRole === 'volunteer' && !isFamily;
+    console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
 
     this.setData({
       currentUserRole: displayRole as any,
@@ -206,6 +290,10 @@ Page({
       hasPrivilege,
       isSuperAdmin: overridden.isSuperAdmin,
       isRealSuperAdmin,
+      isPatriarch,
+      isVolunteer,
+      isFamily,
+      isServiceUser: isFamily,
       currentViewMode,
       viewModeOptionIndex: VIEW_MODE_OPTIONS.indexOf(currentViewMode)
     });
@@ -214,6 +302,171 @@ Page({
     // 预览视角切换时无需重新查询，WXML 侧的显隐已经按 currentUserRole 展示角色自动收敛）
     this.fetchMeritStats(role);
     this.loadVolunteerStats();
+
+    // 🏛️ 家长管理 / 资源兜底：仅家长本人或超管（含预览降级后的超管，与卡片
+    // wx:if 口径保持一致）才需要加载，避免给普通义工/店长/财务发多余的云函数请求
+    if (isPatriarch || overridden.isSuperAdmin) {
+      this.fetchPatriarchDashboardData();
+    }
+  },
+
+  // 🏛️ 家长管理 / 资源兜底：迁移自已废弃的 pages/patriarch-dashboard，
+  // 合并了原页面 initStore() + fetchDashboard() 两步——家长/督导锁定本店，
+  // 超管沿用全局门店切换器选中的门店（与 store-profile/daily-menu 一致）
+  async fetchPatriarchDashboardData() {
+    let roleInfo = AuthService.getCachedRoleInfo();
+    if (!roleInfo) {
+      const result = await AuthService.fetchUserRole();
+      roleInfo = result.roleInfo || null;
+    }
+    const store = getSelectedStore();
+    const storeId = (roleInfo && roleInfo.role === 'store_patriarch' && roleInfo.storeId) || store.storeId || '';
+
+    this.setData({ 'patriarchData.currentStoreId': storeId, 'patriarchData.loading': true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'getPatriarchDashboard',
+        data: { storeId: this.data.patriarchData.currentStoreId }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载大盘失败', icon: 'none' });
+        return;
+      }
+
+      const data = result.data;
+      const pendingProfileItems = data.pendingProfileUpdate
+        ? Object.keys(PATRIARCH_PROFILE_FIELD_LABELS)
+            .filter((f) => data.pendingProfileUpdate[f] !== undefined)
+            .map((f) => ({ label: PATRIARCH_PROFILE_FIELD_LABELS[f], value: data.pendingProfileUpdate[f] }))
+        : [];
+
+      this.setData({
+        patriarchData: {
+          ...this.data.patriarchData,
+          currentStoreId: data.storeId || this.data.patriarchData.currentStoreId,
+          storeName: data.storeName || '',
+          patriarch: data.patriarch || '',
+          manager: data.manager || '',
+          monthLabel: data.monthLabel || '',
+          monthDiners: data.monthDiners || 0,
+          monthIncome: (data.monthIncome || 0).toFixed(2),
+          monthExpense: (data.monthExpense || 0).toFixed(2),
+          monthNet: Math.abs(data.monthNet || 0).toFixed(2),
+          monthNetPositive: (data.monthNet || 0) >= 0,
+          auditedCount: data.auditedCount || 0,
+          totalCount: data.totalCount || 0,
+          pendingVoidList: data.pendingVoidList || [],
+          pendingProfileUpdate: data.pendingProfileUpdate || null,
+          pendingProfileItems,
+          pendingRoleRequests: data.pendingRoleRequests || []
+        }
+      });
+    } catch (err) {
+      console.error('[fetchPatriarchDashboardData] 加载家长大盘异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ 'patriarchData.loading': false });
+    }
+  },
+
+  // 🔄 内嵌 store-picker 切换门店/身份后回调
+  //
+  // 🐛 根因修复："切到家长身份后个人中心仍显示志工"：此前这里只刷新了
+  // patriarchData（家长面板自己的数据），完全没有重新计算 currentUserRole/
+  // isPatriarch 这些顶层状态——WXML 里的身份徽章和
+  // wx:if="{{isPatriarch || isSuperAdmin}}" 家长卡片本身都读的是顶层字段，
+  // 只刷新面板数据不会触发它们重绘。改为重新走一遍 initMinePage()——它会
+  // 重新计算 currentUserRole/isPatriarch/isSuperAdmin 等全部顶层字段并
+  // setData，其内部本就会在 isPatriarch || isSuperAdmin 时再自动调用一次
+  // fetchPatriarchDashboardData()，不需要在这里重复调用
+  onPatriarchStoreChanged() {
+    this.initMinePage();
+  },
+
+  async onDecideVoid(e: any) {
+    if (this.data.patriarchData.voidActionInFlight) return;
+    const { id, action } = e.currentTarget.dataset; // action: 'approve' | 'reject'
+    const cloudAction = action === 'approve' ? 'approvePendingVoid' : 'rejectPendingVoid';
+
+    this.setData({ 'patriarchData.voidActionInFlight': true });
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageReportApproval',
+        data: { action: cloudAction, docId: id }
+      });
+      const result = res.result;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.errMsg) || '操作失败', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: action === 'approve' ? '已确认作废' : '已驳回申请', icon: 'success' });
+      this.fetchPatriarchDashboardData();
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ 'patriarchData.voidActionInFlight': false });
+    }
+  },
+
+  async onDecideProfileUpdate(e: any) {
+    if (this.data.patriarchData.profileActionInFlight) return;
+    const { action } = e.currentTarget.dataset; // action: 'approve' | 'reject'
+    const cloudAction = action === 'approve' ? 'approveProfileUpdate' : 'rejectProfileUpdate';
+
+    this.setData({ 'patriarchData.profileActionInFlight': true });
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: cloudAction, storeId: this.data.patriarchData.currentStoreId }
+      });
+      const result = res.result;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: action === 'approve' ? '已确认变更' : '已驳回申请', icon: 'success' });
+      this.fetchPatriarchDashboardData();
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ 'patriarchData.profileActionInFlight': false });
+    }
+  },
+
+  // 🏛️ 审批本店店长/财务申请：家长与超管均可，云函数 processRoleAudit 已实现分级校验
+  async onDecideRoleRequest(e: any) {
+    if (this.data.patriarchData.roleActionInFlight) return;
+    const { id, action } = e.currentTarget.dataset; // action: 'approve' | 'reject'
+
+    this.setData({ 'patriarchData.roleActionInFlight': true });
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { applyId: id, action }
+      });
+      const result = res.result;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: action === 'approve' ? '已审核通过' : '已拒绝申请', icon: 'success' });
+      this.fetchPatriarchDashboardData();
+    } catch (err) {
+      wx.hideLoading();
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ 'patriarchData.roleActionInFlight': false });
+    }
   },
 
   // 🙋 头像昵称填写规范：优先用缓存的 RoleInfo 秒开显示，再静默刷新一次确保最新
@@ -558,7 +811,9 @@ Page({
     const roleMap: Record<string, string> = {
       'store_manager': '店长',
       'finance': '财务',
-      'super_admin': '超级管理员'
+      'super_admin': '超级管理员',
+      'store_patriarch': '大家长',
+      'store_family': '家人'
     };
     const roleLabel = roleMap[this.data.currentUserRole] || '管理员';
 
@@ -817,16 +1072,85 @@ Page({
     });
   },
 
-  onGoToPatriarchDashboard() {
-    if (this.isNavigating) return;
-    this.isNavigating = true;
-
-    wx.navigateTo({
-      url: '/pages/patriarch-dashboard/patriarch-dashboard',
-      fail: () => {
-        this.isNavigating = false;
-      }
+  // 🏪 查看店铺状态：复用 manageStoreProfile 'get' 动作，该动作本就允许任意已绑定
+  // 门店的角色只读查看（店长/财务/义工/家人皆可），不需要新开云函数或放宽权限
+  async onShowStoreStatus() {
+    this.setData({
+      showStoreStatusModal: true,
+      'storeStatusInfo.loading': true
     });
+
+    try {
+      const store = getSelectedStore();
+      if (!store || !store.storeId) {
+        this.setData({
+          'storeStatusInfo.loading': false,
+          'storeStatusInfo.storeName': this.data.currentStoreName || '',
+          'storeStatusInfo.operatingStatus': '',
+          'storeStatusInfo.operatingStatusLabel': ''
+        });
+        return;
+      }
+
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get', storeId: store.storeId }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载店铺状态失败', icon: 'none' });
+        this.setData({ 'storeStatusInfo.loading': false });
+        return;
+      }
+
+      const data = result.data || {};
+      const OPERATING_STATUS_LABELS: Record<string, string> = {
+        operating: '运营中',
+        preparing: '筹备中',
+        paused: '暂停运营'
+      };
+      const statusLabel = OPERATING_STATUS_LABELS[data.operatingStatus] || '运营中';
+      this.setData({
+        'storeStatusInfo.loading': false,
+        'storeStatusInfo.storeName': data.storeName || this.data.currentStoreName || '',
+        'storeStatusInfo.operatingStatus': data.operatingStatus || 'operating',
+        'storeStatusInfo.operatingStatusLabel': statusLabel,
+        // 🏪 顺手同步全局态：这次弹窗已经查到了最新状态，直接复用，不必再额外
+        // 发一次 fetchAndSyncStoreStatus 请求
+        currentStoreStatus: statusLabel
+      });
+      const app = getApp() as any;
+      if (app && app.globalData) {
+        app.globalData.currentStoreStatus = statusLabel;
+      }
+      wx.setStorageSync('current_store_status', statusLabel);
+    } catch (err) {
+      console.error('[onShowStoreStatus] 加载店铺状态异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      this.setData({ 'storeStatusInfo.loading': false });
+    }
+  },
+
+  onCloseStoreStatusModal() {
+    this.setData({ showStoreStatusModal: false });
+  },
+
+  // 🏪 门店状态静默刷新：onShow 每次切回个人页都调用，先用缓存秒显，再后台悄悄
+  // 刷新最新值，失败不打扰用户（见 utils/storeManager.ts fetchAndSyncStoreStatus）
+  refreshStoreStatus() {
+    const cached = getCachedStoreStatus();
+    if (cached) {
+      this.setData({ currentStoreStatus: cached });
+    }
+
+    const store = getSelectedStore();
+    if (store && store.storeId) {
+      fetchAndSyncStoreStatus(store.storeId).then((label) => {
+        if (label) {
+          this.setData({ currentStoreStatus: label });
+        }
+      });
+    }
   },
 
   onGoToAbout() {

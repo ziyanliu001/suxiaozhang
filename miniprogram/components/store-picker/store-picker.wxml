@@ -16,7 +16,7 @@
       <view class="header-left">
         <text class="sheet-title">📍 选择服务的雨花斋门店与身份</text>
         <!-- 当前生效身份小贴士 -->
-        <text class="current-active-tip">当前生效：{{currentStore.storeName || '海沧区雨花斋'}} · {{currentStore.role === 'FINANCE' ? '🔒 财务' : (currentStore.role === 'MANAGER' ? '👑 店长' : (currentStore.role === 'ADMIN' ? '🛡️ 超级管理员' : '🌸 义工'))}}</text>
+        <text class="current-active-tip">当前生效：{{currentStore.storeName || '海沧区雨花斋'}} · {{currentStore.role === 'FINANCE' ? '🔒 财务' : (currentStore.role === 'MANAGER' ? '👑 店长' : (currentStore.role === 'PATRIARCH' ? '🙏 大家长' : (currentStore.role === 'ADMIN' ? '🛡️ 超级管理员' : (currentStore.role === 'FAMILY' ? '❤️ 家人' : '🌸 义工'))))}}</text>
       </view>
       <text class="sheet-close-btn" bindtap="onCloseSheet">✕</text>
     </view>
@@ -73,7 +73,7 @@
                   data-role="{{roleObj.role}}"
                   data-authorized="{{roleObj.isAuthorized}}">
 
-              <text class="role-icon">{{!roleObj.isAuthorized ? '🔒' : (roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🛡️' : '🌸')))}}</text>
+              <text class="role-icon">{{!roleObj.isAuthorized ? '🔒' : (roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'PATRIARCH' ? '🙏' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🛡️' : (roleObj.role === 'FAMILY' ? '❤️' : '🌸')))))}}</text>
               <text class="role-label">{{roleObj.label}}</text>
               <text class="check-mark" wx:if="{{item.storeName === currentStore.storeName && roleObj.role === currentStore.role}}">✔</text>
             </view>
@@ -176,6 +176,40 @@
       <button class="btn-cancel" bindtap="onCloseAuthModal">取消</button>
       <button class="btn-confirm-auth" bindtap="onVerifyAuthSubmit">
         {{authTab === 'CODE' ? '确认激活' : '提交申请'}}
+      </button>
+    </view>
+  </view>
+</view>
+
+<!-- 🏛️ 大家长任命申请弹窗：与上方店长/财务激活弹窗完全独立——家长任命没有客户端
+     口令/邀请码通道，只能提交真实姓名/手机号，交由服务端 processRoleAudit 走
+     "仅超级管理员可审批"的真实审核流程 -->
+<view class="modal-backdrop" wx:if="{{showPatriarchApplyModal}}" catchtap="onClosePatriarchApplyModal">
+  <view class="modal-card auth-card" catchtap="stopBubble">
+    <view class="modal-header">
+      <text class="modal-title">🙏 申请【{{patriarchApplyStoreName}} · 大家长】</text>
+      <text class="close-btn" bindtap="onClosePatriarchApplyModal">✕</text>
+    </view>
+
+    <view class="auth-body">
+      <text class="auth-tip">大家长（督导）任命仅限超级管理员审批，请填写真实姓名与手机号提交任命申请：</text>
+      <input class="auth-code-input"
+             type="text"
+             placeholder="请输入您的真实姓名"
+             value="{{patriarchApplyRealName}}"
+             bindinput="onPatriarchApplyRealNameInput"/>
+      <input class="auth-code-input"
+             type="number"
+             placeholder="请输入您的手机号"
+             value="{{patriarchApplyPhone}}"
+             bindinput="onPatriarchApplyPhoneInput"/>
+      <text class="sub-help-text">提交后，超级管理员将在管理后台收到审核通知，请耐心等待。</text>
+    </view>
+
+    <view class="auth-footer-btns">
+      <button class="btn-cancel" bindtap="onClosePatriarchApplyModal" disabled="{{patriarchApplySubmitting}}">取消</button>
+      <button class="btn-confirm-auth" bindtap="onSubmitPatriarchApply" loading="{{patriarchApplySubmitting}}" disabled="{{patriarchApplySubmitting}}">
+        提交申请
       </button>
     </view>
   </view>

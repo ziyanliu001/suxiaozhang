@@ -3,6 +3,7 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "privacy-popup": "../../components/privacy-popup/privacy-popup",
-    "mine-quick-sheet": "../../components/mine-quick-sheet/mine-quick-sheet"
+    "mine-quick-sheet": "../../components/mine-quick-sheet/mine-quick-sheet",
+    "store-picker": "../../components/store-picker/store-picker"
   }
 }

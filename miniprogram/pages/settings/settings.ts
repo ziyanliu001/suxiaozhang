@@ -97,7 +97,9 @@ Page({
     const roleMap: Record<string, string> = {
       store_manager: '店长',
       finance: '财务',
-      super_admin: '超级管理员'
+      super_admin: '超级管理员',
+      store_patriarch: '大家长',
+      store_family: '家人'
     };
     const roleLabel = roleMap[this.data.currentUserRole] || '管理员';
 

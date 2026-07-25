@@ -37,7 +37,7 @@ Component({
     currentStore: {
       storeId: 'haicang_yuhuazhai',
       storeName: '海沧区雨花斋',
-      role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN'
+      role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
     },
     // WXML 表达式不支持字符串下标 name[0]，胶囊头像的首字改由 observers 算好后绑定展示
     storeInitial: '海',
@@ -65,7 +65,23 @@ Component({
     selectedCity: '',
     sortMode: 'default' as 'default' | 'nearby',
     userLocation: null as { latitude: number; longitude: number } | null,
-    locationLoading: false
+    locationLoading: false,
+
+    // 🛡️ 已核验的 super_admin：由 fetchStoreListFromCloud 用服务端下发的角色信息判定
+    // （与"全国总览"虚拟条目是否插入用同一个 isVerifiedSuperAdmin 判断口径），
+    // 供 refreshRolePermissions 解锁本机构内所有门店的店长/财务身份切换——
+    // getStoreList 云函数本身已按 tenantId 过滤，这里拿到的门店列表天然就是本机构范围
+    isSuperAdmin: false,
+
+    // 🏛️ 大家长任命申请弹窗：与店长/财务共用的 showAuthModal 完全独立——家长任命
+    // 走真实的 processRoleAudit(action:'apply') 服务端审批（仅超管可批），不提供
+    // 任何客户端口令/邀请码通道，避免出现可被反编译绕过的自我提权入口
+    showPatriarchApplyModal: false,
+    patriarchApplyStoreId: '',
+    patriarchApplyStoreName: '',
+    patriarchApplyRealName: '',
+    patriarchApplyPhone: '',
+    patriarchApplySubmitting: false
   },
 
   lifetimes: {
@@ -93,7 +109,7 @@ Component({
           currentStore: {
             storeId: raw.storeId,
             storeName: raw.storeName,
-            role: this._normalizeRole(raw.role) as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN'
+            role: this._normalizeRole(raw.role) as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
           }
         });
       }
@@ -137,9 +153,11 @@ Component({
           latitude: typeof s.latitude === 'number' ? s.latitude : undefined,
           longitude: typeof s.longitude === 'number' ? s.longitude : undefined,
           roles: [
+            { role: 'FAMILY', label: '家人', isAuthorized: true },
             { role: 'VOLUNTEER', label: '义工', isAuthorized: true },
             { role: 'MANAGER', label: '店长', isAuthorized: false },
-            { role: 'FINANCE', label: '财务', isAuthorized: false }
+            { role: 'FINANCE', label: '财务', isAuthorized: false },
+            { role: 'PATRIARCH', label: '家长', isAuthorized: false }
           ]
         }));
 
@@ -162,7 +180,8 @@ Component({
           allStores: fetchedStores,
           nationalOverviewEntry,
           provinceOptions,
-          provinceOptionsWithAll: ['全部省份', ...provinceOptions]
+          provinceOptionsWithAll: ['全部省份', ...provinceOptions],
+          isSuperAdmin
         });
         this.refreshRolePermissions();
       } catch (err) {
@@ -173,12 +192,36 @@ Component({
     },
 
     // 刷新角色鉴权状态 (义工默认 true，店长/财务/管理员校验 userAuthorizedKeys)
+    //
+    // 🐛 修复：super_admin 此前和普通账号走同一套 my_authorized_roles 邀请码校验，
+    // 导致超管在自己机构内的门店上也会看到店长/财务胶囊锁住、点了只会弹激活码
+    // 弹窗——超管本就该对本机构门店有管理权限，不应该还要逐店领邀请码。这里
+    // isSuperAdmin 为 true 时，店长/财务两个胶囊直接解锁；allStores 本身已经是
+    // getStoreList 云函数按 tenantId 过滤后的结果，不会解锁到其他机构的门店
+    //
+    // 🏛️ 家长胶囊鉴权走另一套口径：不查 my_authorized_roles（那是店长/财务的本地
+    // 演示态邀请码缓存，客户端可自行写入，不能用来判定"仅超管可批"的家长任命）——
+    // 而是直接读服务端下发、经 processRoleAudit 审批落地的真实角色缓存
+    // （role==='store_patriarch' && status==='approved'）。当前数据模型下一个账号
+    // 只会缓存一条角色记录（对应其唯一绑定的门店），尚不支持"一人同时是多店家长"，
+    // 这里只按这一条真实记录判断，不做多店位扩展
     refreshRolePermissions() {
       const authKeys = wx.getStorageSync('my_authorized_roles') || [];
+      const isSuperAdmin = this.data.isSuperAdmin;
+      const cachedRole = AuthService.getCachedRoleInfo();
+      const isVerifiedPatriarch = !!(cachedRole && cachedRole.role === 'store_patriarch' && cachedRole.status === 'approved');
+      const patriarchStoreId = isVerifiedPatriarch && cachedRole ? cachedRole.storeId : '';
 
       const updatedStores = this.data.allStores.map((store: any) => {
         const roles = store.roles.map((r: any) => {
-          if (r.role === 'VOLUNTEER') return { ...r, isAuthorized: true };
+          // ❤️ 家人（服务对象）与义工同级：自我声明式身份，无需邀请码/审批
+          if (r.role === 'VOLUNTEER' || r.role === 'FAMILY') return { ...r, isAuthorized: true };
+          if (isSuperAdmin && (r.role === 'MANAGER' || r.role === 'FINANCE' || r.role === 'PATRIARCH')) {
+            return { ...r, isAuthorized: true };
+          }
+          if (r.role === 'PATRIARCH') {
+            return { ...r, isAuthorized: isVerifiedPatriarch && patriarchStoreId === store.storeId };
+          }
           const key = `${store.storeId}_${r.role}`;
           const isAuth = Array.isArray(authKeys) && authKeys.includes(key);
           return { ...r, isAuthorized: isAuth };
@@ -293,18 +336,28 @@ Component({
         this.applyFilters();
       } catch (err: any) {
         console.warn('[store-picker] 获取定位失败:', err);
+        // 🛡️ 定位失败不再用阻塞式 Error Dialog 打断用户："附近门店"只是可选的排序方式，
+        // 不是必须完成的流程。只有"用户明确拒绝过授权"这一种情况才值得主动弹一次引导——
+        // 因为 wx.openSetting 必须由用户点击触发，没法用 toast 代替；其余情况（模拟器未
+        // 开定位、网络超时等）一律轻量 toast 提示，并静默降级为默认排序，不打断使用
         const isDenied = !!(err && err.errMsg && err.errMsg.indexOf('auth deny') >= 0);
-        wx.showModal({
-          title: '无法获取当前位置',
-          content: isDenied ? '您此前拒绝了位置权限，如需使用"附近门店"，请在系统设置中开启位置权限' : '定位失败，请检查网络或稍后重试',
-          showCancel: isDenied,
-          confirmText: isDenied ? '去设置' : '我知道了',
-          success: (modalRes) => {
-            if (isDenied && modalRes.confirm) {
-              wx.openSetting();
+        if (isDenied) {
+          wx.showModal({
+            title: '开启位置权限',
+            content: '如需按距离显示附近门店，请前往设置开启位置权限',
+            confirmText: '去设置',
+            cancelText: '暂不',
+            success: (modalRes) => {
+              if (modalRes.confirm) {
+                wx.openSetting();
+              }
             }
-          }
-        });
+          });
+        } else {
+          wx.showToast({ title: '未获取到位置，已为您切换至默认排序', icon: 'none' });
+        }
+        this.setData({ sortMode: 'default' });
+        this.applyFilters();
       } finally {
         this.setData({ locationLoading: false });
       }
@@ -319,9 +372,18 @@ Component({
     stopBubble() {},
     preventTouchMove() {},
 
+    // 🛡️ 全局排查修复：这里的入参既可能是本组件自己胶囊点击产生的裸值（'PATRIARCH'/
+    // 'FAMILY'，见 onRolePillClick/_applyRoleSwitch），也可能是 app.ts 多店权限加载
+    // （fetchMultiStorePermissions）里对数据库 snake_case 角色值直接 toUpperCase() 得到的
+    // 'STORE_PATRIARCH'/'STORE_FAMILY'——两种拼法都要能归一化成本组件角色胶囊使用的
+    // 裸值形式，否则 currentStore.role 会停留在无法匹配任何胶囊的 'STORE_PATRIARCH'，
+    // 导致"当前生效"提示与选中态 checkmark 都对不上真实身份
     _normalizeRole(role: string): string {
       const r = (role || 'VOLUNTEER').toUpperCase();
       if (r === 'SUPER_ADMIN') return 'ADMIN';
+      if (r === 'STORE_PATRIARCH') return 'PATRIARCH';
+      if (r === 'STORE_MANAGER') return 'MANAGER';
+      if (r === 'STORE_FAMILY') return 'FAMILY';
       return r;
     },
 
@@ -333,11 +395,27 @@ Component({
         'FINANCE': '财务',
         'VOLUNTEER': '义工',
         'ADMIN': '超级管理员',
-        'SUPER_ADMIN': '超级管理员'
+        'SUPER_ADMIN': '超级管理员',
+        'PATRIARCH': '大家长',
+        'FAMILY': '家人'
       };
 
-      // 未授权：弹出激活核验弹窗
       if (!authorized) {
+        // 🏛️ 大家长任命走独立的真实申请流程（processRoleAudit action:'apply'，
+        // 仅超级管理员可审批），不复用店长/财务的邀请码/本地申请弹窗——那条通道
+        // 写入的是店长可自行审批的 role_requests 演示态数据，家长任命绝不能走这条
+        if (role === 'PATRIARCH') {
+          this.setData({
+            showPatriarchApplyModal: true,
+            patriarchApplyStoreId: storeId,
+            patriarchApplyStoreName: storeName,
+            patriarchApplyRealName: '',
+            patriarchApplyPhone: ''
+          });
+          return;
+        }
+
+        // 未授权：弹出激活核验弹窗
         this.setData({
           showAuthModal: true,
           authTab: 'CODE',
@@ -351,17 +429,115 @@ Component({
         return;
       }
 
-      // 已授权：顺畅切换
+      // 已授权：顺畅切换。家长身份额外导向个人中心的【家长管理/资源兜底】卡片
+      // （原独立页面 pages/patriarch-dashboard 已废弃并入个人中心），不只是切换
+      // "当前预览身份"就结束——这是家长角色的主入口，与店长/财务/义工纯粹的
+      // "切视角"语义不同。若当前就已经在个人中心（例如从该页自己内嵌的
+      // store-picker 发起切换），不重复跳转——_applyRoleSwitch 触发的
+      // storechange 事件会由该页自己的处理函数刷新面板数据
       this._applyRoleSwitch(storeId, storeName, role);
+      if (role === 'PATRIARCH') {
+        const pages = getCurrentPages();
+        const currentPage = pages[pages.length - 1];
+        const currentRoute = currentPage ? '/' + currentPage.route : '';
+        if (currentRoute !== '/pages/profile/profile') {
+          wx.navigateTo({ url: '/pages/profile/profile' });
+        }
+      }
+    },
+
+    // 大家长任命申请弹窗：输入框
+    onPatriarchApplyRealNameInput(e: any) {
+      this.setData({ patriarchApplyRealName: e.detail.value });
+    },
+
+    onPatriarchApplyPhoneInput(e: any) {
+      this.setData({ patriarchApplyPhone: e.detail.value });
+    },
+
+    onClosePatriarchApplyModal() {
+      if (this.data.patriarchApplySubmitting) return;
+      this.setData({ showPatriarchApplyModal: false });
+    },
+
+    // 🏛️ 大家长任命申请：统一走 processRoleAudit(action:'apply')，与首页
+    // onSubmitRoleApply 同一套服务端审批口径（仅 super_admin 可批准，见该云函数
+    // approve 分支的 requestedRole==='store_patriarch' 校验），客户端只负责收集
+    // 必填的真实姓名/手机号并提交，不掺杂任何本地口令/自助激活逻辑
+    async onSubmitPatriarchApply() {
+      if (this.data.patriarchApplySubmitting) return;
+      const realName = (this.data.patriarchApplyRealName || '').trim();
+      const phone = (this.data.patriarchApplyPhone || '').trim();
+
+      if (!realName) {
+        wx.showToast({ title: '请填写真实姓名', icon: 'none' });
+        return;
+      }
+      if (!phone) {
+        wx.showToast({ title: '请填写手机号', icon: 'none' });
+        return;
+      }
+
+      this.setData({ patriarchApplySubmitting: true });
+      wx.showLoading({ title: '提交申请中...', mask: true });
+
+      try {
+        const cachedRole = AuthService.getCachedRoleInfo();
+        const tenantId = (cachedRole && cachedRole.tenantId) || '';
+
+        const res = await wx.cloud.callFunction({
+          name: 'processRoleAudit',
+          data: {
+            action: 'apply',
+            storeId: this.data.patriarchApplyStoreId,
+            storeName: this.data.patriarchApplyStoreName,
+            storeSelectionType: 'existing',
+            tenantId,
+            requestedRole: 'store_patriarch',
+            realName,
+            phone
+          }
+        });
+        const result = res.result as any;
+        wx.hideLoading();
+
+        if (!result || !result.success) {
+          wx.showToast({ title: (result && result.error) || '提交失败，请重试', icon: 'none' });
+          return;
+        }
+
+        this.setData({ showPatriarchApplyModal: false });
+        wx.showModal({
+          title: '📩 申请已提交',
+          content: `已提交【${this.data.patriarchApplyStoreName}】大家长任命申请，仅限超级管理员审批，请耐心等待审核结果。`,
+          showCancel: false,
+          confirmText: '我知道了'
+        });
+      } catch (err) {
+        wx.hideLoading();
+        console.error('[store-picker] onSubmitPatriarchApply 提交失败:', err);
+        wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+      } finally {
+        this.setData({ patriarchApplySubmitting: false });
+      }
     },
 
     // 内部：执行角色切换 (公共逻辑)
+    //
+    // 🐛 根因修复："切到家长身份后个人中心仍显示志工"：本方法此前只写了
+    // active_store_id/active_role 两个 key，从没写过 current_user_role/
+    // current_store_name——而 profile.ts 的 initMinePage() 恰恰优先读
+    // current_user_role（有值就用它覆盖 AuthService 缓存里的真实角色），这个
+    // key 此前只有 index.ts 自己的 onStoreChanged 会写。于是任何"只经过
+    // store-picker、没有先在首页触发过 onStoreChanged"的角色切换，profile.ts
+    // 重新计算角色时读到的都是这个滞留的旧值——现在这里也补上同一份持久化，
+    // 与 index.ts onStoreChanged 的 roleMap 保持同一套映射口径
     _applyRoleSwitch(storeId: string, storeName: string, role: string) {
       this.setData({
         currentStore: {
           storeId,
           storeName,
-          role: role as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN'
+          role: role as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
         },
         showPickerSheet: false
       });
@@ -376,7 +552,24 @@ Component({
       wx.setStorageSync('active_store_id', storeId);
       wx.setStorageSync('active_role', role);
 
-      const roleText = role === 'FINANCE' ? '财务' : (role === 'MANAGER' ? '店长' : (role === 'ADMIN' ? '超级管理员' : '义工'));
+      // 🛡️ 全局排查修复：role 入参在实践中恒为本组件胶囊裸值（PATRIARCH/FAMILY 等），
+      // 但仍额外补上 STORE_ 前缀键做防御性冗余——万一将来有调用方直接传入服务端
+      // snake_case 值转大写后的形式，也不会静默落进下面的 || 'volunteer' 兜底
+      const roleStorageMap: Record<string, string> = {
+        MANAGER: 'store_manager',
+        STORE_MANAGER: 'store_manager',
+        FINANCE: 'finance',
+        VOLUNTEER: 'volunteer',
+        PATRIARCH: 'store_patriarch',
+        STORE_PATRIARCH: 'store_patriarch',
+        ADMIN: 'super_admin',
+        FAMILY: 'store_family',
+        STORE_FAMILY: 'store_family'
+      };
+      wx.setStorageSync('current_user_role', roleStorageMap[role] || 'volunteer');
+      wx.setStorageSync('current_store_name', storeName);
+
+      const roleText = role === 'FINANCE' ? '财务' : (role === 'MANAGER' ? '店长' : (role === 'PATRIARCH' ? '大家长' : (role === 'ADMIN' ? '超级管理员' : (role === 'FAMILY' ? '家人' : '义工'))));
       wx.showToast({
         title: `已切至 ${storeName} (${roleText})`,
         icon: 'none'
@@ -693,7 +886,7 @@ Component({
         currentStore: {
           storeId: newStoreId,
           storeName: newStoreName,
-          role: newRole as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN'
+          role: newRole as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
         }
       });
       // 绝不调用 triggerEvent('storechange')，防止反向死循环

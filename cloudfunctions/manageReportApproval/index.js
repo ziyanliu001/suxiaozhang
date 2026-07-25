@@ -281,6 +281,17 @@ exports.main = async (event) => {
       return { success: false, errMsg: '无权限：不能审批其他门店/机构的记录' };
     }
 
+    // 🛡️ 职责分离真正的强制执行点：此前本文件顶部注释一直声称"提交人本人不能自我核对
+    // 确认/自我稽核封账/自我解封"，但主流程从未真正比对过 docData._openid 与调用者
+    // OPENID——一个同时是提交人、又持有 store_manager/finance/store_patriarch 角色
+    // 的账号，此前完全可以对自己提交的记录执行 confirm/financeAudit/unlock，等同于
+    // 自我审批，注释描述的安全边界形同虚设。void/reconcile 不受影响（作废自己提交的
+    // 错误记录、财务给自己提交的记录标记"小票已核对"均不涉及职责分离要保护的场景）
+    const SELF_ACTION_BLOCKED_ACTIONS = ['confirm', 'financeAudit', 'unlock'];
+    if (SELF_ACTION_BLOCKED_ACTIONS.includes(action) && docData._openid === OPENID) {
+      return { success: false, errMsg: '职责分离：不能对自己提交的记录执行审批操作，请由同店其他店长/财务/家长处理' };
+    }
+
     const stateErr = rule.check(docData);
     if (stateErr) {
       return { success: false, errMsg: stateErr };

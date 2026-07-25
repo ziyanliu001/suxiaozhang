@@ -1,0 +1,9 @@
+{
+  "name": "getSunshineLedger",
+  "version": "1.0.0",
+  "description": "云函数：首页「阳光账本」入口的公开只读汇总查询（无需登录/无权限校验），严格只统计 approvalStatus 为 APPROVED/AUDITED_LOCKED 的记录",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,5 +1,7 @@
 import { maskName } from './privacy';
 import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
+import { drawStaticWxacodeFallback } from './staticWxacode';
+import { computeHonorProgress, drawMedalBadge } from './honorLevels';
 
 export interface MaterialItem {
   donor: string;
@@ -78,6 +80,9 @@ export interface VolunteerHonorData {
   serviceDays: number;
   reportCount: number;
   diningCount: number;
+  // 🆕 累计护持工时：用于按 utils/honorLevels.ts 的等级门槛现算成就徽章
+  // （初心行者/爱心学习者/……），未提供时按 0 小时处理，退化为最低一级的灰色徽章
+  totalHours?: number;
   // 邀请二维码本地临时路径（getStoreQRCode 默认用途，非 purpose:'verify'），
   // 语义与 verifyQrLocalPath 一致：有值画真图，未提供/失败时降级为占位框
   qrLocalPath?: string;
@@ -241,9 +246,14 @@ function drawVerifyQRPlaceholder(ctx: any, x: number, y: number, size: number, c
 }
 
 // 🆕 二维码区域：有真实小程序码本地路径时画可扫码的真图，加载/绘制失败
-// （文件损坏、canvas 节点异常等）时降级为占位框——绝不能因为二维码画失败
-// 就让整张海报生成中断。title 默认"微信扫码验真"，志愿者荣誉卡的邀请二维码
-// 传自己的标题（见 drawVolunteerHonorCard），同一份绘制/降级逻辑两种用途共用
+// （文件损坏、canvas 节点异常等）时降级为随包打包的官方静态小程序码兜底
+// （utils/staticWxacode.ts）——绝不能因为二维码画失败就让整张海报生成中断，
+// 也不再用本地 QR 编码算法现画一张只能编码纯文本/通用链接的码：那种码微信
+// 扫一扫客户端会直接拦下提示"暂不支持展示二维码中的文本内容"，等于没有码，
+// 反而比诚实的占位提示更容易让用户以为自己手机有问题。静态官方码的代价是
+// 没有 scene 场景值（无法精确指向具体的验真页/邀请页，统一进小程序默认首页），
+// 但至少 100% 能扫码拉起小程序。title 默认"微信扫码验真"，志愿者荣誉卡的邀请
+// 二维码传自己的标题（见 drawVolunteerHonorCard），同一份绘制/降级逻辑两种用途共用
 async function drawVerifyQRArea(ctx: any, canvas: any, x: number, y: number, size: number, caption: string, canvasWidth: number, qrLocalPath?: string, title?: string): Promise<void> {
   if (qrLocalPath) {
     try {
@@ -257,10 +267,22 @@ async function drawVerifyQRArea(ctx: any, canvas: any, x: number, y: number, siz
       drawVerifyCaptionText(ctx, x, y, size, caption, canvasWidth, title);
       return;
     } catch (err) {
-      console.warn('[drawVerifyQRArea] 真实二维码绘制失败，降级为占位框:', err);
+      console.warn('[drawVerifyQRArea] 真实二维码绘制失败，将改用官方静态小程序码兜底:', err);
     }
   }
-  drawVerifyQRPlaceholder(ctx, x, y, size, caption, canvasWidth, title);
+
+  try {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(x, y, size, size);
+    await drawStaticWxacodeFallback(ctx, canvas, x, y, size);
+    ctx.strokeStyle = BORDER_COLOR;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, size, size);
+    drawVerifyCaptionText(ctx, x, y, size, caption, canvasWidth, title);
+  } catch (err) {
+    console.warn('[drawVerifyQRArea] 静态小程序码兜底加载异常，降级为占位框:', err);
+    drawVerifyQRPlaceholder(ctx, x, y, size, caption, canvasWidth, title);
+  }
 }
 
 // 🆕 圆角矩形路径：只画路径，不 fill/stroke/clip，由调用方决定怎么用这个路径
@@ -1112,10 +1134,19 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            ctx.fillStyle = TEXT_COLOR;
+            // 🆕 成就徽章：叠在头像右下角，颜色随累计护持工时对应的等级变化（初心行者=灰、
+            // 爱心学习者=铜、守望者=银……见 utils/honorLevels.ts），与身份行的等级名
+            // 一起构成"根据护持天数/工时动态展示成就徽章"这一差异化设计要求
+            const honor = computeHonorProgress(data.totalHours || 0);
+            const badgeR = 18;
+            const badgeCx = avatarCx + HONOR_AVATAR_RADIUS * 0.68;
+            const badgeCy = avatarCy + HONOR_AVATAR_RADIUS * 0.68;
+            drawMedalBadge(ctx, badgeCx, badgeCy, badgeR, honor.currentLevelColor);
+
+            ctx.fillStyle = honor.currentLevelColor;
             ctx.font = 'bold 17px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(`志愿者 · ${data.nickName || '爱心义工'}`, width / 2, avatarCy + HONOR_AVATAR_RADIUS + 34);
+            ctx.fillText(`${honor.currentLevelName} · ${data.nickName || '爱心义工'}`, width / 2, avatarCy + HONOR_AVATAR_RADIUS + 34);
 
             ctx.fillStyle = SECONDARY_COLOR;
             ctx.font = 'italic 13px sans-serif';

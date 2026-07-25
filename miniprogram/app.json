@@ -13,7 +13,6 @@
     "pages/activity-log/activity-log",
     "pages/store-management/store-management",
     "pages/store-profile/store-profile",
-    "pages/patriarch-dashboard/patriarch-dashboard",
     "pages/draft-box/draft-box",
     "pages/settings/settings",
     "pages/public-verify/index",
@@ -28,6 +27,7 @@
       "desc": "用于计算附近门店的距离，方便您快速找到最近的雨花斋"
     }
   },
+  "requiredPrivateInfos": ["getLocation"],
   "tabBar": {
     "custom": true,
     "color": "#8E8E93",

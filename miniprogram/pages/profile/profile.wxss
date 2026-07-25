@@ -242,11 +242,73 @@
   border-color: #A5D6A7;
 }
 
+/* 🏛️ 雨花家长：与超管/店长/财务视觉区隔的暖金棕色系，呼应家长管理卡片的配色 */
+.badge-tag.store_patriarch {
+  background: #FFFBF0;
+  color: #8C1D18;
+  border-color: #E6D0A0;
+}
+
 /* 🌟 提升荣誉感：淡金色底 + 深棕色文字，志工身份也拥有仪式感的专属配色 */
 .badge-tag.volunteer {
   background: #F9E79F;
   color: #784212;
   border-color: #F1C40F;
+}
+
+/* ❤️ 家人（服务对象）：暖红系配色，与志工的金色系明确区分开 */
+.badge-tag.family {
+  background: #FFF0ED;
+  color: #C0392B;
+  border-color: #FFCDD2;
+}
+
+/* ❤️ 家人（服务对象）极简关怀版面：与 merit-board-card 同款卡片骨架，
+   暖红色系与志工的金色系区分开，突出"关怀"而非"荣誉" */
+.family-care-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(155deg, #FFF8F7 0%, #FFFFFF 55%);
+  border: 1rpx solid #FFE0DB;
+  border-radius: 28rpx;
+  padding: 32rpx 20rpx 28rpx;
+  box-shadow: 0 6rpx 20rpx rgba(255, 224, 219, 0.3);
+  margin-bottom: 30rpx;
+}
+
+.family-care-card .header-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #C0392B;
+  letter-spacing: 2rpx;
+}
+
+.family-care-hint {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: 24rpx;
+  color: #8C4A42;
+  line-height: 1.6;
+  text-align: center;
+  margin-bottom: 24rpx;
+  padding: 0 12rpx;
+}
+
+/* 🛡️ 视觉统一：此前是半透明白 rgba(255,255,255,0.6)，会透出 .family-care-card 自身
+   的暖粉渐变背景，列表看起来泛淡黄/奶咖色。改为纯不透明白，与义工版本"日常记录"
+   列表（.action-list-container 默认就是纯白）保持一致 */
+.family-care-list {
+  position: relative;
+  z-index: 1;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+}
+
+/* 卡片内嵌的"日常记录"小标题：与 .list-group-label 同一套弱化语义分组样式，
+   只是紧跟在关怀语之后，顶部留白收窄一些，避免和上面的 hint 文字挤在一起 */
+.family-care-list-label {
+  margin-top: 0;
 }
 
 .merit-board-card {
@@ -409,6 +471,222 @@
   color: #B57C1E;
   line-height: 1.5;
   padding: 0 32rpx 20rpx;
+}
+
+/* ===== 🏛️ 家长管理 / 资源兜底：内嵌自原 pages/patriarch-dashboard，样式沿用
+   该页原有的 pd-* 命名，外层包一层与本页其余卡片一致的金边容器 ===== */
+.patriarch-panel-card {
+  background: #FFFBF0;
+  border: 1rpx solid #E6D0A0;
+  border-radius: 28rpx;
+  padding: 24rpx;
+  margin-bottom: 30rpx;
+  box-sizing: border-box;
+}
+
+.patriarch-panel-header {
+  margin-bottom: 16rpx;
+}
+
+.patriarch-panel-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.pd-store-switch-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 20rpx;
+}
+
+.pd-store-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.pd-store-name {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+  margin-bottom: 12rpx;
+}
+
+.pd-people-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.pd-people-item {
+  font-size: 24rpx;
+  color: #5C4326;
+}
+
+.pd-health-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.pd-health-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+  margin-bottom: 16rpx;
+}
+
+.pd-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.pd-health-cell {
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.pd-health-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.pd-health-val {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.pd-health-val.green {
+  color: #2B8A3E;
+}
+
+.pd-health-val.red {
+  color: #E03131;
+}
+
+.pd-verify-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx dashed #F1F3F5;
+}
+
+.pd-verify-icon {
+  font-size: 24rpx;
+}
+
+.pd-verify-text {
+  font-size: 24rpx;
+  color: #495057;
+}
+
+.pd-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin: 20rpx 0 12rpx;
+}
+
+.pd-section-icon {
+  font-size: 24rpx;
+}
+
+.pd-section-txt {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #D48806;
+}
+
+.pd-void-card,
+.pd-profile-card {
+  background: #FFFBE6;
+  border: 1rpx solid #FFE58F;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.pd-void-info {
+  margin-bottom: 16rpx;
+}
+
+.pd-void-date {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+  margin-bottom: 6rpx;
+}
+
+.pd-void-amount {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.pd-profile-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.pd-profile-item {
+  font-size: 24rpx;
+  color: #5C4326;
+}
+
+.pd-void-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.pd-btn-reject {
+  flex: 1;
+  background: #F1F3F5;
+  color: #495057;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+}
+
+.pd-btn-approve {
+  flex: 1;
+  background: #D48806;
+  color: #FFFFFF;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  height: 72rpx;
+  line-height: 72rpx;
+}
+
+.pd-empty-tip {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #ADB5BD;
+  font-size: 24rpx;
+}
+
+.pd-loading-box {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #ADB5BD;
+  font-size: 24rpx;
 }
 
 .action-list-container {
@@ -901,6 +1179,8 @@
   /* Canvas 用 style 里的 px 精确控制尺寸（与 drawVolunteerCertificate 的 width/height 参数一致），
      这里用等比留白让容器高度跟随，避免绘制中/绘制前出现明显的高度跳变 */
   min-height: 480rpx;
+  /* 给证书卡片加一圈投影，让它从弹窗背景里"浮"出来，更有实体证书的质感 */
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.18);
 }
 
 .certificate-canvas {
@@ -933,22 +1213,127 @@
 }
 
 .certificate-save-btn {
-  margin-top: 24rpx;
+  margin-top: 40rpx;
   width: 100%;
-  height: 84rpx;
-  line-height: 84rpx;
+  height: 88rpx;
+  line-height: 88rpx;
   background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
   color: #FFFFFF;
   font-size: 28rpx;
   font-weight: bold;
-  border-radius: 42rpx;
+  border-radius: 44rpx;
   border: none;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
 }
 
 .certificate-save-btn::after {
   border: none;
 }
 
+.certificate-save-btn:active {
+  opacity: 0.85;
+  box-shadow: 0 2rpx 6rpx rgba(184, 134, 11, 0.2);
+}
+
 .certificate-save-btn[disabled] {
   opacity: 0.5;
+  box-shadow: none;
+}
+
+/* 🏪 查看店铺状态 Modal：与 .certificate-modal-mask/.certificate-modal-card 同款
+   遮罩+卡片骨架，内容更轻量（只读两行信息），复用同一套视觉语言 */
+.store-status-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.store-status-modal-card {
+  width: 82%;
+  max-width: 560rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 28rpx 24rpx 32rpx;
+  box-sizing: border-box;
+}
+
+.store-status-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.store-status-modal-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.store-status-modal-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+}
+
+.store-status-loading-box {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #ADB5BD;
+  font-size: 24rpx;
+}
+
+.store-status-info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.store-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.store-status-lbl {
+  font-size: 26rpx;
+  color: #868E96;
+}
+
+.store-status-val {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+/* 与 store-profile.wxss 的 .sp-operating-badge 同一套配色，保持全局运营状态标签视觉一致 */
+.store-status-badge {
+  font-size: 22rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 10rpx;
+  font-weight: bold;
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.store-status-badge.preparing {
+  background: #FFF3E0;
+  color: #D48806;
+}
+
+.store-status-badge.paused {
+  background: #F1F3F5;
+  color: #868E96;
 }

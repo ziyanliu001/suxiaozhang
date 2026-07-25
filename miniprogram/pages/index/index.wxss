@@ -99,6 +99,28 @@ page {
   gap: 16rpx;
   margin-bottom: 24rpx;
 }
+/* 🏪 首页顶部门店运营状态徽标：配色方案与 store-profile.wxss 的 .sp-operating-badge
+   保持一致（运营中-绿色/筹备中-黄色/暂停运营-灰色），小巧精致，不抢店名视觉焦点 */
+.store-status-badge-header {
+  font-size: 20rpx;
+  font-weight: bold;
+  padding: 2rpx 12rpx;
+  border-radius: 10rpx;
+  background: #E8F5E9;
+  color: #2E7D32;
+  white-space: nowrap;
+}
+
+.store-status-badge-header.preparing {
+  background: #FFF3E0;
+  color: #D48806;
+}
+
+.store-status-badge-header.paused {
+  background: #F1F3F5;
+  color: #868E96;
+}
+
 
 .tag-badge-capsule.blue-theme {
   display: flex;
@@ -3156,7 +3178,7 @@ page {
 }
 
 .name-input {
-  flex: 2;
+  flex: 1.5;
   height: 76rpx;
   background: #F8F9FA;
   border: 1rpx solid #CED4DA;
@@ -3167,7 +3189,8 @@ page {
 }
 
 .amount-input {
-  flex: 1;
+  flex: none;
+  width: 140rpx;
   height: 76rpx;
   background: #F8F9FA;
   border: 1rpx solid #CED4DA;
@@ -3178,6 +3201,8 @@ page {
 }
 
 .btn-add-item {
+  flex: none;
+  width: 160rpx;
   height: 76rpx;
   line-height: 76rpx;
   background: #FF922B;
@@ -3187,6 +3212,8 @@ page {
   border-radius: 12rpx;
   padding: 0 24rpx;
   margin: 0;
+  box-sizing: border-box;
+  text-align: center;
 }
 
 .support-list-preview {
@@ -3918,14 +3945,29 @@ textarea, .textarea {
 }
 
 /* 🌸 家训弹窗头部：单独加顶部内边距，避免关闭按钮与右上角胶囊（如切店胶囊）重叠——
-   只影响这一个弹窗，不改 .modal-header-bar 这个多处弹窗共用的基础类 */
+   只影响这一个弹窗，不改 .modal-header-bar 这个多处弹窗共用的基础类。
+   🐛 缩小到 12rpx：原 20rpx 加上 .family-motto-scroll 自身的顶部间距，两层叠加
+   导致标题栏和"雨花心字诀"之间空得太多，头重脚轻 */
 .family-motto-header {
-  padding-top: 20rpx;
+  padding-top: 12rpx;
 }
 
+/* 🌸 标题突出：与 .modal-title-text 的通用灰黑小字区隔开，用品牌深红 + 加大字号 +
+   字间距，与下方正文之间建立清晰的视觉层级（标题一眼可辨，不与心字诀/家训正文
+   混同）；只在家训头部作用域内覆盖，不影响其他弹窗共用的 .modal-title-text */
+.family-motto-header .modal-title-text {
+  font-size: 34rpx;
+  color: #8C1D18;
+  letter-spacing: 4rpx;
+}
+
+/* 🐛 内容整体加内边距（而不是只靠 margin），让文字与弹窗左右边框、顶部标题栏都
+   留出均匀的呼吸空间；margin 只保留一个较小的顶部值，避免和内边距叠加出过大留白 */
 .family-motto-scroll {
   max-height: 68vh;
-  margin: 16rpx 0;
+  margin: 8rpx 0 16rpx;
+  padding: 16rpx 28rpx;
+  box-sizing: border-box;
 }
 
 .motto-section-title {
@@ -3933,28 +3975,111 @@ textarea, .textarea {
   font-size: 28rpx;
   font-weight: bold;
   color: #8C1D18;
-  margin-top: 28rpx;
-  margin-bottom: 12rpx;
+  letter-spacing: 2rpx;
+  margin-top: 32rpx;
+  margin-bottom: 14rpx;
 }
 
 .motto-section-title:first-child {
   margin-top: 0;
 }
 
+/* 🌸 心字诀/为学之方正文：加字间距 + 加大行高，配合居中对齐，让四字一顿的
+   古风短句有呼吸感，不再挤成密密麻麻的一整块；短句在窄屏下换行也不会显得突兀 */
 .motto-section-text {
   display: block;
   font-size: 26rpx;
-  line-height: 1.8;
+  line-height: 1.9;
+  letter-spacing: 3rpx;
   color: #333333;
+  text-align: center;
   white-space: pre-wrap;
 }
 
 .motto-creed-line {
   font-size: 26rpx;
-  line-height: 1.8;
+  line-height: 1.9;
+  letter-spacing: 3rpx;
   color: #333333;
-  margin-bottom: 6rpx;
+  margin-bottom: 12rpx;
 }
+
+/* 🌸 「雨花家训」小标题 + 十八句家训正文独立居中区块：与上方心字诀/下方为学之方
+   保持清晰的区块间距，不影响 .family-motto-scroll 的滚动或弹窗高度（只加
+   margin/padding）。
+   🐛 单靠 text-align: center 未生效——子元素 .motto-section-title/.motto-creed-line
+   各自还有自己的 display/width 设定，光靠继承的 text-align 压不过去，这里改用
+   flex 列布局 + align-items:center 从容器层面强制居中，再对两个子元素类名加
+   !important 兜底，双保险确保样式优先级足够高 */
+.motto-creed-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center !important;
+  margin: 36rpx 0;
+  padding: 20rpx 0;
+  box-sizing: border-box;
+}
+
+.motto-creed-block .motto-section-title,
+.motto-creed-block .motto-creed-line {
+  width: 100% !important;
+  text-align: center !important;
+  display: block !important;
+}
+
+/* 🌸 区块内小标题「雨花家训」单独精致化：加深文字颜色、字号加大、上下加淡金色
+   分隔线，与最顶部彈窗标题「📖 雨花家训」区隔开，避免看起来像重复的同一行字 */
+.motto-creed-block .motto-section-title {
+  color: #8B0000;
+  font-size: 32rpx;
+  margin: 0 0 20rpx;
+  padding: 12rpx 0;
+  border-top: 1rpx solid rgba(212, 175, 55, 0.35);
+  border-bottom: 1rpx solid rgba(212, 175, 55, 0.35);
+}
+/* 📖 雨花文化全集弹窗新增样式：与既有 .motto-section-title/.motto-section-text/
+   .motto-creed-line 共用同一套视觉语言，补充三类新增排版需求 */
+
+/* 一、社会主义核心价值观：三行短语横排展示，用圆角小标签区分每个词，
+   比纯文字更醒目，也不会和下面模块的正文段落混淆 */
+.culture-value-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 10rpx;
+}
+
+.culture-value-chip {
+  font-size: 24rpx;
+  color: #8C1D18;
+  background: #FFF3E0;
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+}
+
+/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），比模块主标题小一号，
+   保持从属关系清晰 */
+.culture-sub-title {
+  font-size: 26rpx;
+  margin-top: 20rpx;
+  margin-bottom: 10rpx;
+}
+
+/* 十个有没有/人生十六最/感恩词/一日修身小结等逐行列表：与 .motto-section-text
+   同款字号/行高/字间距，但左对齐、逐行独立展示（不做 .motto-creed-line 那种
+   强制居中），更符合这类条目式列表的阅读习惯 */
+.culture-list-line {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.9;
+  letter-spacing: 3rpx;
+  color: #333333;
+  text-align: left;
+  margin-bottom: 8rpx;
+}
+
 
 .today-menu-preview-card.is-empty {
   background: #FFFDFB;
@@ -4373,8 +4498,7 @@ textarea, .textarea {
 }
 
 /* 🌟 左右两个按钮做主次区分：生成餐报文本是流程首步、可反复重新生成校对，用白底红描边，
-   视觉上更"轻"；生成公示海报是最终对外公示的产出物，用与全站 .btn-gold 一致的品牌金色实底
-   渐变强调，作为这组操作的主 CTA，让用户一眼看出"这是最终要点的那个按钮" */
+   视觉上更"轻"；生成公示海报是最终对外公示的产出物，用正红色实底强调，作为这组操作的主 CTA */
 .text-gen-btn {
   background: #FFFFFF;
   color: #C62828;
@@ -4386,18 +4510,28 @@ textarea, .textarea {
   background: #FFF0ED;
 }
 
-.poster-gen-btn {
-  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
-  /* 🐛 修复严重对比度问题：金黄色底配白色文字几乎读不出字，改为深咖啡棕色——
-     远比白色更符合"高亮金黄底 + 内敛深色字"的视觉规范，质感也更接近实体印章/证书配色 */
-  color: #4A3200;
-  border: none;
-  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+/* 🐛 该按钮初始 disabled（showResult 默认 false，需先生成餐报文本才可点），微信原生
+   button[disabled] 自带 color 覆盖 + opacity 遮罩，之前的金/橙渐变系配色在遮罩下始终糊成一片。
+   彻底放弃黄橙色系，改用与左侧描边按钮同色系的正红渐变 + 纯白粗体字，四个选择器
+   （基础态/element+class/两种 disabled 态）全部加 !important 兜底覆盖原生样式。
+   若改动后画面仍无变化，大概率是 WeChat DevTools 未重新编译，而非本文件的样式没生效——
+   需要手动点击"编译"或清除数据缓存后重试。 */
+.poster-gen-btn,
+button.poster-gen-btn,
+.poster-gen-btn[disabled],
+button.poster-gen-btn[disabled] {
+  background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
+  color: #FFFFFF !important;
+  font-weight: bold !important;
+  font-size: 28rpx !important;
+  opacity: 1 !important;
+  border: none !important;
+  box-shadow: 0 4rpx 12rpx rgba(198, 40, 40, 0.3) !important;
 }
 
 .poster-gen-btn:active {
-  opacity: 0.8;
-  box-shadow: 0 2rpx 6rpx rgba(184, 134, 11, 0.2);
+  opacity: 0.8 !important;
+  box-shadow: 0 2rpx 6rpx rgba(198, 40, 40, 0.2) !important;
 }
 
 /* ================= 🔑 生成邀请码弹窗 ================= */
@@ -8580,4 +8714,176 @@ button.poster-gen-btn[disabled] {
   border-radius: 8rpx;
   padding: 10rpx 16rpx;
   margin-top: 10rpx;
+}
+
+/* ☀️ 阳光账本入口卡片：标题正下方、全角色可见、位置最优先，阳光公益质感——
+   暖金渐变 + 太阳图标，与页面其余卡片的米白基调区分开，一眼可辨识出这是
+   "公开透明数据"入口而非普通功能入口 */
+.sunshine-ledger-entry {
+  display: flex;
+  align-items: center;
+  margin: 16rpx 24rpx 20rpx;
+  padding: 24rpx 28rpx;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
+  border: 1rpx solid #FFD54F;
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 16rpx rgba(255, 193, 7, 0.2);
+}
+
+.sunshine-ledger-entry:active {
+  opacity: 0.85;
+}
+
+.sunshine-ledger-icon {
+  font-size: 44rpx;
+  margin-right: 16rpx;
+}
+
+.sunshine-ledger-text-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.sunshine-ledger-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #8D5B00;
+}
+
+.sunshine-ledger-sub {
+  font-size: 22rpx;
+  color: #A87B1F;
+}
+
+.sunshine-ledger-arrow {
+  font-size: 22rpx;
+  color: #C99A2E;
+}
+
+/* ☀️ 阳光账本 Modal：与 .compliance-modal-mask/.compliance-modal-card 同款遮罩+
+   卡片骨架，头部沿用暖金主题呼应入口卡片，内容轻量（三项汇总数字 + 一条透明说明） */
+.sunshine-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.sunshine-modal-card {
+  width: 84%;
+  max-width: 600rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 32rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.sunshine-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.sunshine-modal-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #8D5B00;
+}
+
+.sunshine-modal-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+}
+
+.sunshine-modal-loading {
+  text-align: center;
+  padding: 60rpx 0;
+  color: #ADB5BD;
+  font-size: 26rpx;
+}
+
+.sunshine-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sunshine-store-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.sunshine-period-label {
+  font-size: 22rpx;
+  color: #868E96;
+  margin-top: 6rpx;
+  margin-bottom: 24rpx;
+}
+
+.sunshine-stat-grid {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #FFFDF5 0%, #FFF8E1 100%);
+  border-radius: 20rpx;
+  padding: 24rpx 16rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+}
+
+.sunshine-stat-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.sunshine-stat-num {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #8D5B00;
+}
+
+.sunshine-stat-lbl {
+  font-size: 22rpx;
+  color: #A87B1F;
+}
+
+.sunshine-transparency-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+  width: 100%;
+  background: #F1F8F1;
+  border-radius: 12rpx;
+  padding: 14rpx 16rpx;
+  box-sizing: border-box;
+}
+
+.sunshine-tip-icon {
+  font-size: 22rpx;
+}
+
+.sunshine-tip-text {
+  flex: 1;
+  font-size: 22rpx;
+  color: #4A7C4A;
+  line-height: 1.6;
 }

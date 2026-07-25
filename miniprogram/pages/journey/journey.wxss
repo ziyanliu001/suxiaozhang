@@ -85,13 +85,18 @@
 
 .btn-gen-honor-card {
   margin-top: 28rpx;
-  min-height: 44px;
-  line-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88rpx;
+  padding: 16rpx 24rpx;
+  line-height: 1.4;
   background: #8C1D18;
   color: #FFFFFF;
   font-size: 26rpx;
   font-weight: bold;
   border-radius: 40rpx;
+  box-sizing: border-box;
 }
 
 /* ===== 爱心荣誉卡预览弹窗 ===== */
@@ -107,7 +112,7 @@
 
 .honor-modal-box {
   width: 600rpx;
-  max-height: 85vh;
+  max-height: 90vh;
   background: #FFFFFF;
   border-radius: 24rpx;
   padding: 24rpx;
@@ -130,37 +135,95 @@
 }
 
 .honor-modal-close {
-  font-size: 32rpx;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.close-x-text {
+  font-size: 28rpx;
   color: #999999;
-  padding: 0 8rpx;
+}
+
+/* 🐛 根因修复（第二轮）：第一轮把 flex:1 从 <image> 挪到了外层 scroll-view，
+   但 .honor-modal-box 本身只有 max-height（没有确定的 height），flex:1 需要
+   父容器有"确定的剩余空间"才能算出高度——父容器高度本身又是"内容撑出来的
+   auto 值，上限 90vh"，两边互相依赖，浏览器/小程序引擎会把这种不确定情况
+   解成 0，预览区域还是会塌陷成空白。改为给 scroll-view 一个具体的 max-height
+   （而不是 flex:1 抢"剩余空间"），不再依赖父容器的确定高度，从根上避免这种
+   循环依赖 */
+.honor-card-scroll {
+  max-height: 60vh;
 }
 
 .honor-card-image {
+  display: block;
   width: 100%;
   border-radius: 16rpx;
-  flex: 1;
-  min-height: 0;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.15);
 }
 
-.honor-modal-actions {
+.honor-loading {
   display: flex;
-  gap: 16rpx;
-  margin-top: 20rpx;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 0;
 }
 
-.honor-btn-cancel {
-  flex: 1;
-  font-size: 28rpx;
-  background: #F8F5F0;
-  color: #666666;
+.honor-loading-spinner {
+  width: 56rpx;
+  height: 56rpx;
+  border: 5rpx solid #F1ECE3;
+  border-top-color: #8C1D18;
+  border-radius: 50%;
+  margin-bottom: 20rpx;
+  animation: honor-spin 0.8s linear infinite;
+}
+
+@keyframes honor-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.honor-loading-text {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+.honor-modal-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #B5A190;
+  text-align: center;
+  margin-top: 16rpx;
 }
 
 .honor-btn-save {
-  flex: 1;
+  width: 100%;
+  margin-top: 16rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  border-radius: 42rpx;
   font-size: 28rpx;
   font-weight: bold;
   background: #8C1D18;
   color: #FFFFFF;
+  box-shadow: 0 8rpx 20rpx rgba(140, 29, 24, 0.3);
+}
+
+.honor-btn-save::after {
+  border: none;
+}
+
+.honor-btn-save[disabled] {
+  opacity: 0.5;
+  box-shadow: none;
 }
 
 /* 通用卡片 */
@@ -390,6 +453,26 @@
   color: #868E96;
   text-align: center;
   line-height: 1.6;
+}
+
+/* 空状态 CTA：淡金色描边 + 极浅暖橙底色，与页面整体的金色/暖橙配色呼应，
+   比实心按钮更轻，符合"引导但不抢戏"的空状态语境 */
+.empty-cta-btn {
+  margin-top: 28rpx;
+  padding: 16rpx 48rpx;
+  border-radius: 40rpx;
+  border: 1rpx solid #D4AF37;
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.empty-cta-btn:active {
+  background: rgba(212, 175, 55, 0.18);
+}
+
+.empty-cta-text {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #B8860B;
 }
 
 /* 时间轴分组 */

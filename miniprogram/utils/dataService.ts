@@ -190,7 +190,14 @@ export const DataService = {
       stapleRiceStatus: reportData.stapleRiceStatus || 'normal',
       stapleOilStatus: reportData.stapleOilStatus || 'sufficient',
       updateTime: db ? db.serverDate() : Date.now(),
-      isSynced: false
+      isSynced: false,
+      // 🛡️ 六大角色餐报提交对齐：无论提交者角色是什么，新记录一律从 PENDING 起步，
+      // 不存在"店长/家长/财务/超管提交即自动审核通过"的捷径——真正的审核通过/稽核
+      // 封账只能经 manageReportApproval 云函数由他人（非本人）执行。此前这里完全没有
+      // 写这个字段，新记录的 approvalStatus 是 undefined，虽然大多数状态判断用
+      // "=== 'AUDITED_LOCKED'"这类显式比较所以不会误判，但任何按 === 'PENDING'
+      // 精确匹配的查询/展示逻辑（包括本轮新加的"我的待审核记录可编辑"判断）都会漏判
+      approvalStatus: 'PENDING'
     };
 
     try {
@@ -235,7 +242,23 @@ export const DataService = {
 
       if (existingQuery.data && existingQuery.data.length > 0) {
         // 步骤 2a: 已存在 - 提取 _id，调用 doc().update() 覆盖
-        const existingId = existingQuery.data[0]._id;
+        const existingRecord = existingQuery.data[0];
+        const existingId = existingRecord._id;
+
+        // 🛡️ 状态防护：这条 upsert 路径此前对目标记录的 approvalStatus 完全没有校验——
+        // 只要同一账号在同门店同日期再次提交（哪怕只是手滑重复点击），就会直接覆盖一条
+        // 已经店长核对确认（APPROVED）甚至财务稽核封账（AUDITED_LOCKED）的记录，等同于
+        // 绕开 updateAndRecalculateCascade 里专门加的锁定校验，从首页原始提交表单开了
+        // 一个后门。未设置 approvalStatus 的历史记录（本次修复前创建，视为等同 PENDING）
+        // 不受影响，仍可正常覆盖保存
+        if (existingRecord.approvalStatus === 'APPROVED' || existingRecord.approvalStatus === 'AUDITED_LOCKED') {
+          return {
+            success: false,
+            message: '该日期的餐报已进入审核/封账流程，无法通过重新提交覆盖，如需修改请前往"我的餐报提交记录"使用编辑入口',
+            errorDetail: 'record_locked_for_upsert'
+          };
+        }
+
         await db.collection('report_logs').doc(existingId).update({
           data: {
             reportDate: formattedData.reportDate,
@@ -511,10 +534,28 @@ export const DataService = {
     }
   },
 
+  // 🛡️ 熔断阈值：某条离线草稿如果连续同步失败达到这个次数（通常是数据本身有问题，
+  // 比如字段校验不通过），说明重试大概率无法自愈。之前这里没有任何计数或上限，
+  // 每次 index/history/statistics 任一页面 onLoad/onShow 触发 syncLocalDataToCloud
+  // 都会把所有仍然失败的旧记录重新打一遍云函数请求，日积月累在控制台刷出大量
+  // "同步单条数据失败"报错、并占用真实的网络请求配额。达到上限后不再自动重试，
+  // 本地数据本身不会丢（仍保留在 localStorage，isSynced 仍是 false），只是不再
+  // 每次进页面就重新尝试，等到未来这条记录被人工修复/删除后自然不再匹配本条件。
+  MAX_OFFLINE_SYNC_RETRIES: 3,
+
   async syncLocalDataToCloud(): Promise<{ success: boolean; syncedCount: number; failedCount: number }> {
     const openid = AuthService.getOpenid();
     const localReports = getLocalReports();
     let unsyncedReports = localReports.filter(r => !r.isSynced);
+
+    const circuitBrokenCount = unsyncedReports.filter(
+      r => (r.syncFailCount || 0) >= this.MAX_OFFLINE_SYNC_RETRIES
+    ).length;
+    if (circuitBrokenCount > 0) {
+      unsyncedReports = unsyncedReports.filter(
+        r => (r.syncFailCount || 0) < this.MAX_OFFLINE_SYNC_RETRIES
+      );
+    }
 
     if (openid) {
       unsyncedReports = unsyncedReports.filter(r => r._openid === openid);
@@ -611,6 +652,18 @@ export const DataService = {
       } catch (error) {
         console.error('[DataService] 同步单条数据失败:', error);
         failedCount++;
+
+        const failIndex = localReports.findIndex(r => r._localId === report._localId);
+        if (failIndex !== -1) {
+          const nextCount = (localReports[failIndex].syncFailCount || 0) + 1;
+          localReports[failIndex].syncFailCount = nextCount;
+          if (nextCount >= this.MAX_OFFLINE_SYNC_RETRIES) {
+            console.warn(
+              `[DataService] 该条本地数据已连续同步失败 ${nextCount} 次，达到上限，` +
+              '本轮起暂停自动重试（数据仍保留在本地，不会丢失）'
+            );
+          }
+        }
       }
     }
 

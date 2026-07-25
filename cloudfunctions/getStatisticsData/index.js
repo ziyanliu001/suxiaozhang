@@ -115,8 +115,13 @@ exports.main = async (event, context) => {
       _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])
     ];
 
-    if (wantsAllStores && !isTenantWideAllowed) {
-      // 🛡️ 非超管请求"全部门店"一律强制收敛为本人所在门店
+    if (!isTenantWideAllowed) {
+      // 🛡️ 安全修复：非本机构总部级角色（店长/财务/家长）一律强制收敛到本人绑定
+      // 门店，完全忽略客户端传入的 shopName——此前只在 wantsAllStores（未传店名/
+      // 传"全部门店"）时才收敛，若客户端显式传入本机构内其他门店的 shopName，
+      // 这里会原样放行查询，等同于任何店长/财务/家长账号都能查到同机构下
+      // 其他门店的收支明细。现在不论客户端传了什么，非总部级角色一律只能查到
+      // 自己绑定的门店
       andConditions.push(userStoreId ? { storeId: userStoreId } : { shopName: userStoreName });
     } else if (shopName && shopName !== '全部门店') {
       andConditions.push({ shopName: shopName });
@@ -139,6 +144,10 @@ exports.main = async (event, context) => {
     let totalDiningPeople = 0;
     let totalVolunteers = 0;
     let totalVolunteerHours = 0;
+    // 🆕 凭证合规率：与 getPatriarchDashboard 的 auditedCount/totalCount 同一套
+    // 口径（approvalStatus === 'AUDITED_LOCKED' 视为已完成稽核/凭证合规），
+    // 复用本函数已经查出来的 records，不需要额外发起一次查询
+    let auditedCount = 0;
     const materialSummary = [];
 
     const FIXED_EXPENSE_KEYWORDS = ['租金', '房租', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置', '大额', '专项'];
@@ -187,6 +196,8 @@ exports.main = async (event, context) => {
       totalVolunteers += parseFloat(r.volunteerCount) || 0;
       totalVolunteerHours += parseFloat(r.volunteerHours) || 0;
 
+      if (r.approvalStatus === 'AUDITED_LOCKED') auditedCount += 1;
+
       if (r.materials && Array.isArray(r.materials) && r.materials.length > 0) {
         r.materials.forEach(m => {
           if (m.item) {
@@ -205,6 +216,12 @@ exports.main = async (event, context) => {
 
     // 5. 本期净积累
     const netAccumulation = (totalIncome - totalExpense).toFixed(2);
+
+    // 6. 凭证合规率：与 getPatriarchDashboard 同一口径，无记录时返回 null（区分
+    // "0% 合规"与"本期还没有任何记账"两种语义，前端据此展示"暂无数据"而非误导的 0%）
+    const complianceRate = records.length > 0
+      ? Math.round((auditedCount / records.length) * 100)
+      : null;
 
     const dateRangeText = isCurrentPeriod
       ? `${startDateStr} ~ ${endDateStr} (至今)`
@@ -229,6 +246,8 @@ exports.main = async (event, context) => {
       totalVolunteerHours,
       costPerMeal,
       recordCount: records.length,
+      auditedCount,
+      complianceRate,
       materialSummaryText: materialSummary.length > 0 ? materialSummary.join('；') : '暂无捐赠明细记录'
     };
 

@@ -636,16 +636,14 @@ Page({
     this.setData({ gratitudeExpanded: !this.data.gratitudeExpanded });
   },
 
+  // 🛡️ 全局返回逻辑排查修复：goHome() 是给分享直入场景的物理返回键设计的，不该
+  // 挪用给自定义导航栏的"←"按钮——那会导致不管从哪个页面点进来都被强制跳回首页
   goBack() {
-    if (this._navGuard) {
-      this._navGuard.goHome();
-      return;
-    }
     const pages = getCurrentPages();
     if (pages.length > 1) {
-      wx.navigateBack();
+      wx.navigateBack({ delta: 1 });
     } else {
-      wx.reLaunch({ url: '/pages/index/index' });
+      wx.switchTab({ url: '/pages/index/index' });
     }
   }
 });

@@ -32,7 +32,19 @@ function calculateExpense(doc) {
 
 async function checkCanEdit(doc) {
   const { OPENID } = cloud.getWXContext();
-  if (!doc || doc._openid === OPENID) return { allowed: true, role: 'self' };
+  if (!doc) return { allowed: false, role: 'unknown' };
+
+  if (doc._openid === OPENID) {
+    // 🛡️ 职责分离延伸到编辑动作：本人提交的记录一旦经店长核对确认（APPROVED），
+    // 就不能再由提交人自己修改——哪怕提交人自己也持有 store_manager/finance/
+    // store_patriarch/super_admin 等角色，这条限制同样适用，保护的是"对自己
+    // 提交的记录"这件事本身，不是角色高低。AUDITED_LOCKED 由下面 main() 里已有的
+    // 统一锁定校验兜底覆盖所有角色（含他人编辑），这里不用重复判断
+    if (doc.approvalStatus === 'APPROVED') {
+      return { allowed: false, role: 'self_after_approval' };
+    }
+    return { allowed: true, role: 'self' };
+  }
 
   try {
     const roleRes = await db.collection('user_roles')
@@ -144,7 +156,10 @@ exports.main = async (event, context) => {
 
     const { allowed: canEdit, role: operatorRole } = await checkCanEdit(logData);
     if (!canEdit) {
-      return { success: false, errMsg: '无权限修改该记录' };
+      const errMsg = operatorRole === 'self_after_approval'
+        ? '该记录已由店长完成核对确认，提交人不能再自行修改，如有问题请联系店长/家长处理'
+        : '无权限修改该记录';
+      return { success: false, errMsg };
     }
 
     // 🛡️ 状态机闭环：财务稽核封账（AUDITED_LOCKED）后任何角色都不能再修改金额，

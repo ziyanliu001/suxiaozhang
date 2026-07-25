@@ -42,6 +42,10 @@ App({
       role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER'
     },
     userStoresList: [] as StorePermission[],
+    // 🏪 门店运营状态全局态：与 current_store_status 本地存储双写同步，
+    // 见 utils/storeManager.ts 的 fetchAndSyncStoreStatus() —— 一处拉取，
+    // 全局共享，避免个人页/首页各自发起重复查询还容易互相不一致
+    currentStoreStatus: '' as string,
     // 🔔 通知 Tab 红点徽标计数：由 pages/notice/notice.ts 每次拉取列表后写入，
     // custom-tab-bar 组件读取展示（详见 custom-tab-bar/index.ts 的 syncBadgeFromGlobal）
     pendingApprovalCount: 0,

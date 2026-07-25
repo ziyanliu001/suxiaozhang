@@ -78,7 +78,16 @@ Page({
     auditExportFileName: ''
   },
 
-  onLoad() {
+  onLoad(options: any) {
+    // 🛡️ 六大角色对齐："我的餐报提交记录"（profile.ts onGoToMySubmissions 跳转的
+    // /pages/history/history?view=mine）此前完全没有读取过这个查询参数——onLoad
+    // 从来不接收 options，viewMode 一直停留在默认的 'all'，导致"我的记录"入口
+    // 实际展示的是全店所有人的记录，而不是严格收敛到 createdBy/_openid === 当前
+    // 用户自己。getReports 云函数早就支持 viewMode==='personal' 时按 _openid 收敛
+    // （见该函数 shouldFilterByOpenid 判断），只是客户端这里从未真正传过这个值
+    if (options && options.view === 'mine') {
+      this.setData({ viewMode: 'personal' });
+    }
     this.calculateNavBarHeight();
     this.checkAdminStatus();
     this.initPermissions();
@@ -474,6 +483,11 @@ Page({
       shopName: effectiveShopName
     });
     
+    // 🛡️ 六大角色对齐：预先算好"这条记录是不是我自己提交、且还没被审核"，供列表里的
+    // 编辑按钮 wx:if 直接读取——WXML 里没法即时比较 item._openid 与当前登录用户，
+    // 必须在这一层跟其余展示态字段（hasDiningBreakdown 等）一样预先算好
+    const myOpenid = AuthService.getOpenid();
+
     const formattedReports = result.data.map((item: any) => {
       const yesterdayBalance = parseFloat(item.yesterdayBalance || 0);
       const otherDonation = parseFloat(item.otherDonation || 0);
@@ -514,7 +528,12 @@ Page({
         approvedBy: item.approvedBy || '',
         approveTime: item.approveTime || '',
         auditedBy: item.auditedBy || '',
-        auditTime: item.auditTime || ''
+        auditTime: item.auditTime || '',
+        // 🛡️ 六大角色对齐：义工/家人/财务/店长/家长/超管提交的记录，只要还没被店长
+        // 核对确认（APPROVED）或财务稽核封账（AUDITED_LOCKED），提交人本人就能编辑——
+        // 用于 WXML 里给"编辑"按钮单独开一个不依赖 isManagerRole/isSuperAdmin 的入口
+        isOwnPendingRecord: !!myOpenid && item._openid === myOpenid
+          && item.approvalStatus !== 'APPROVED' && item.approvalStatus !== 'AUDITED_LOCKED'
       };
     });
 
@@ -1390,12 +1409,39 @@ Page({
       return;
     }
 
-    if (!this.data.isManagerOrAdmin && !this.data.isSuperAdmin) {
+    // 🛡️ 六大角色对齐：义工/家人/财务/店长/家长/超管都可能是这条记录的提交人本人——
+    // 只要记录还处于 PENDING（未经任何人核对确认），提交人就有权自行修正后重新提交，
+    // 不必等店长/超管出面。用 report.approvalStatus !== 'APPROVED'/'AUDITED_LOCKED'
+    // 判断"还没进入审核流"，而不是正向匹配字符串 'PENDING'——列表展示层（见上面
+    // formattedReports 的映射）会把缺失的 approvalStatus 兜底显示成 'PENDING_APPROVAL'
+    // 这个展示态标签，正向匹配 'PENDING' 会漏判老记录
+    const myOpenid = AuthService.getOpenid();
+    const isOwnRecord = !!myOpenid && report._openid === myOpenid;
+    const isStillPending = report.approvalStatus !== 'APPROVED' && report.approvalStatus !== 'AUDITED_LOCKED';
+    const isOwnPendingEdit = isOwnRecord && isStillPending;
+
+    if (!this.data.isManagerOrAdmin && !this.data.isSuperAdmin && !isOwnPendingEdit) {
       wx.showToast({ title: '仅店长与超管拥有编辑权限', icon: 'none' });
       return;
     }
 
-    if (report.isLocked) {
+    // 🛡️ 职责分离延伸到编辑动作：只要这条记录是"我自己"提交的，一旦店长完成核对确认
+    // （APPROVED）就必须锁死，不能等到财务稽核封账（AUDITED_LOCKED）才拦——否则
+    // 提交人可以在店长确认之后、财务稽核之前，悄悄改动已经被"确认过"的金额，让店长的
+    // 确认名不副实。这条限制不因为"我恰好也是店长/超管"而豁免——职责分离保护的是
+    // "对自己提交的记录"这件事本身，不是角色。店长/超管编辑他人（非本人提交）的记录
+    // 不受此限制，仍按原逻辑只在 AUDITED_LOCKED 时拦（这是他们履行审核/纠错职责的
+    // 正常范围，与自我审批无关）
+    if (isOwnRecord && report.approvalStatus === 'APPROVED') {
+      wx.showModal({
+        title: '记录已核对确认',
+        content: '该记录已由店长完成核对确认，提交人不能再自行修改，如有问题请联系店长/家长处理。',
+        showCancel: false
+      });
+      return;
+    }
+
+    if (report.isLocked || report.approvalStatus === 'AUDITED_LOCKED') {
       wx.showModal({
         title: '记录已锁定',
         content: '该记录已被财务稽核锁定，如需修改请联系财务人员申请解封。',
@@ -2440,22 +2486,25 @@ Page({
     });
   },
 
+  // 🛡️ 全局返回逻辑排查统一：与其余二级页面对齐为同一套直接判断 pages.length 的
+  // 写法，不再依赖 navGuard.isDeepLinkEntry() 这个在 onLoad/onShow 时刻缓存、
+  // 点击时可能已经不是最新状态的标记
   goBack() {
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    // 分享直入场景：栈深度=1 时直接走 navGuard 的回首页逻辑
-    if (this._navGuard && this._navGuard.isDeepLinkEntry()) {
-      this._navGuard.goHome();
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      wx.navigateBack({
+        delta: 1,
+        fail: () => {
+          this.isNavigating = false;
+        }
+      });
+    } else {
+      wx.switchTab({ url: '/pages/index/index' });
       this.isNavigating = false;
-      return;
     }
-
-    wx.navigateBack({
-      fail: () => {
-        this.isNavigating = false;
-      }
-    });
   },
 
   previewReceipt(e: any) {

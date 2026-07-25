@@ -74,7 +74,8 @@ Page({
     // 🆕 志愿者爱心荣誉卡
     isGeneratingHonorCard: false,
     showHonorModal: false,
-    honorCardImage: ''
+    honorCardImage: '',
+    isSavingHonorCard: false
   },
 
   onLoad(options: any) {
@@ -188,6 +189,11 @@ Page({
   /**
    * 切换某一月份的折叠/展开
    */
+  // 空状态"去首页打卡"：首页是 tabBar 页面，必须用 wx.switchTab 而非 navigateTo
+  onGoCheckIn() {
+    wx.switchTab({ url: '/pages/index/index' });
+  },
+
   onToggleGroup(e: any) {
     const monthKey = e.currentTarget.dataset.monthKey;
     const groups = this.data.timelineGroups.map((g) => {
@@ -214,8 +220,13 @@ Page({
   // 优雅降级为占位图标/占位框
   async onGenerateHonorCard() {
     if (this.data.isGeneratingHonorCard) return;
-    this.setData({ isGeneratingHonorCard: true });
-    wx.showLoading({ title: '正在生成荣誉卡...', mask: true });
+    // 🐛 体验修复：此前弹窗要等整个生成流程（云函数查数据 + 下载邀请码 + Canvas
+    // 绘制）全部跑完才 setData 打开，中间只有一个全局 wx.showLoading 蒙层，用户
+    // 完全看不到"弹窗本身"，容易以为点击没反应。改为立刻打开弹窗（此时
+    // honorCardImage 还是空的），弹窗内部用 isGeneratingHonorCard 展示加载态，
+    // 图片生成好之后再原地填进去——全程都能看到弹窗在，只是内容从"加载中"变成
+    // "荣誉卡"，不会出现从"什么都没有"到"突然弹出一张图"的跳变
+    this.setData({ isGeneratingHonorCard: true, showHonorModal: true, honorCardImage: '' });
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
@@ -271,16 +282,18 @@ Page({
         serviceDays: this.data.totalDays,
         reportCount,
         diningCount,
+        totalHours: this.data.totalHours,
         qrLocalPath
       };
 
       const honorCardImage = await drawVolunteerHonorCard(this, honorData);
-      this.setData({ honorCardImage, showHonorModal: true });
+      this.setData({ honorCardImage });
     } catch (err: any) {
       console.error('[onGenerateHonorCard] 荣誉卡生成失败:', err);
       wx.showToast({ title: err.message || '荣誉卡生成失败', icon: 'none' });
+      // 生成失败时弹窗里没有图可看，直接关掉比留一个永远转圈的空壳更清楚
+      this.setData({ showHonorModal: false });
     } finally {
-      wx.hideLoading();
       this.setData({ isGeneratingHonorCard: false });
     }
   },
@@ -292,16 +305,18 @@ Page({
   // 保存到相册：与 index.ts savePoster 同一套权限拒绝引导（wx.openSetting），
   // 保持全项目"保存图片"交互一致
   onSaveHonorCard() {
+    if (this.data.isSavingHonorCard) return;
     const { honorCardImage } = this.data;
     if (!honorCardImage) {
       wx.showToast({ title: '荣誉卡图片为空', icon: 'none' });
       return;
     }
 
+    this.setData({ isSavingHonorCard: true });
     wx.saveImageToPhotosAlbum({
       filePath: honorCardImage,
       success: () => {
-        wx.showToast({ title: '保存成功', icon: 'success' });
+        wx.showToast({ title: '已保存至相册', icon: 'success' });
       },
       fail: (err) => {
         console.error('[onSaveHonorCard] 保存失败:', err);
@@ -316,25 +331,26 @@ Page({
               }
             }
           });
-        } else {
+        } else if (!err.errMsg.includes('cancel')) {
           wx.showToast({ title: '保存失败', icon: 'none' });
         }
+      },
+      complete: () => {
+        this.setData({ isSavingHonorCard: false });
       }
     });
   },
 
   stopPropagation() {},
 
+  // 🛡️ 全局返回逻辑排查修复：goHome() 是给分享直入场景的物理返回键设计的，不该
+  // 挪用给自定义导航栏的"←"按钮——那会导致不管从哪个页面点进来都被强制跳回首页
   onGoBack() {
-    if (this._navGuard) {
-      this._navGuard.goHome();
-      return;
-    }
     const pages = getCurrentPages();
     if (pages.length > 1) {
-      wx.navigateBack();
+      wx.navigateBack({ delta: 1 });
     } else {
-      wx.reLaunch({ url: '/pages/index/index' });
+      wx.switchTab({ url: '/pages/index/index' });
     }
   }
 });

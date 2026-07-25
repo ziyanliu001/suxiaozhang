@@ -145,12 +145,36 @@ export interface DailyCultureQuote {
   source: string;
 }
 
-// 每日修身卡片的轮播池：立志格言 + 人生十六最 + 雨花家训正文 + 雨花家道核心精神
+// 每日修身卡片的轮播池：全量覆盖十大文化模块，每条附带所属模块标题——
+// 逐条摘录短句直接可用的模块（立志格言/十个有没有/人生十六最/雨花家训/雨花家道
+// 四个分组）拆成多条，便于"换一换"呈现更丰富的变化；感恩词/一日修身小结这类
+// 原文本身是不可拆分的连续韵文（逐行以逗号收尾、单独摘一行会显得残缺），
+// 保持整段原文拼接（不改动任何文字，仅原样拼接），作为单独一条完整摘录
 export const DAILY_CULTURE_QUOTES: DailyCultureQuote[] = [
+  // 一、社会主义核心价值观
+  { text: [...CORE_VALUES.national, ...CORE_VALUES.social, ...CORE_VALUES.individual].join(' '), source: '社会主义核心价值观' },
+  // 二、立志格言
   ...FAMOUS_QUOTES.map((text) => ({ text, source: '立志格言' })),
-  ...SIXTEEN_BESTS.map((text) => ({ text, source: '雨花人生十六最' })),
+  // 三、雨花家道
+  { text: RAIN_FLOWER_HOME.coreSpirit, source: '雨花家道 · 核心精神' },
+  { text: RAIN_FLOWER_HOME.sanYou.items.join('，') + '。', source: '雨花家道 · ' + RAIN_FLOWER_HOME.sanYou.title },
+  { text: RAIN_FLOWER_HOME.wuLe.items.join('，') + '。', source: '雨花家道 · ' + RAIN_FLOWER_HOME.wuLe.title },
+  { text: RAIN_FLOWER_HOME.liuTong.items.join('；'), source: '雨花家道 · ' + RAIN_FLOWER_HOME.liuTong.title },
+  { text: RAIN_FLOWER_HOME.baXin.items.join('，') + '。', source: '雨花家道 · ' + RAIN_FLOWER_HOME.baXin.title },
+  // 四、雨花敬老核心理念
+  { text: SENIORS_CARE.coreBelief, source: '雨花敬老 · 核心理念' },
+  // 五、雨花敬老行为准则【十个有没有】
+  ...SENIORS_CARE.tenHaveYous.map((text) => ({ text, source: '雨花敬老 · 十个有没有' })),
+  // 六、雨花家德【雨花人生十六最】
+  ...SIXTEEN_BESTS.map((text) => ({ text, source: '雨花家德 · 人生十六最' })),
+  // 七、雨花家训
   ...FAMILY_MOTTO.creedLines.map((text) => ({ text, source: '雨花家训' })),
-  { text: RAIN_FLOWER_HOME.coreSpirit, source: '雨花家道 · 核心精神' }
+  // 八、雨花家仪【感恩词】——连续韵文，保持整段原文，不拆行
+  { text: GRATITUDE_TEXT.join(''), source: '雨花家仪 · 感恩词' },
+  // 九、一日修身小结【感恩与祈盼】——同上，保持整段原文
+  { text: DAILY_SUMMARY.gratitude.join('') + DAILY_SUMMARY.aspiration.join(''), source: '一日修身小结 · 感恩与祈盼' },
+  // 十、雨花家风
+  { text: FAMILY_STYLE.text, source: FAMILY_STYLE.title }
 ];
 
 // 按自然日期确定性选取一条（同一天多次进入首页展示同一条，跨天自动更新）

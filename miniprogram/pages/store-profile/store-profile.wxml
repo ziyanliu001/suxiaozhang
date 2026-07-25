@@ -5,7 +5,6 @@
   <view class="sp-nav-bar" style="padding-top: {{navTop}}px;">
     <view class="sp-nav-back" hover-class="sp-nav-back-hover" bindtap="goBack">←</view>
     <text class="sp-nav-title">🏠 门店档案</text>
-    <text class="sp-nav-action {{canManage && !editing ? '' : 'hidden'}}" bindtap="onStartEdit">编辑</text>
   </view>
 
   <scroll-view scroll-y class="sp-scroll" style="margin-top: {{contentTop}}px;">
@@ -24,10 +23,15 @@
       <text class="sp-pending-text">有一份门店档案更新正在等待家长/超管审批，当前展示的仍是生效中的数据</text>
     </view>
 
-    <!-- 🏛️ 门店档案信息：详细地址/开业日期/民政登记名称/发起背景/家园特色 + 省市/运营状态/位置 -->
-    <view class="sp-section-title">
+    <!-- 🏛️ 门店档案信息：详细地址/开业日期/民政登记名称/发起背景/家园特色 + 省市/运营状态/位置
+         🛡️ 编辑入口改为卡片标题栏内的行内按钮，与下方"门店人员与服务人群画像"完全同款结构
+         （sp-profile-title-row + sp-btn-edit-profile-count，样式通用，非"画像"专属）——
+         此前放在顶部导航栏的"编辑"文字反复出现不渲染/被遮挡的问题，根治方案是不再依赖
+         导航栏这套单独的定位/层级逻辑，统一复用已验证稳定可见的卡片标题按钮模式 -->
+    <view class="sp-section-title sp-profile-title-row">
       <text class="sp-section-icon">📖</text>
       <text class="sp-section-txt">门店档案信息</text>
+      <text class="sp-btn-edit-profile-count" wx:if="{{canManage && !editing}}" bindtap="onEditProfile">✏️ 修改</text>
     </view>
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
@@ -100,40 +104,42 @@
       </view>
     </view>
 
-    <view class="sp-section-title">
+    <view class="sp-section-title sp-profile-title-row">
       <text class="sp-section-icon">👥</text>
       <text class="sp-section-txt">门店人员与服务人群画像</text>
+      <text class="sp-btn-edit-profile-count" wx:if="{{canManage}}" bindtap="onOpenProfileCountModal">✏️ 修改</text>
     </view>
 
-    <!-- 展示态：4 列 x 2 行栅格，中共党员用红色高亮，其余暖橘/深灰数字 -->
+    <!-- 展示态：4 列 x 2 行栅格，中共党员用红色高亮，其余暖橘/深灰数字；数值为 0 时
+         降级为素灰简约样式（.zero），避免满屏彩色数字里混着一堆没意义的高亮 0 -->
     <view class="sp-profile-grid-4col" wx:if="{{!editing}}">
       <view class="grid-cell">
         <text class="cell-lbl">中共党员</text>
-        <text class="cell-val party-highlight">{{partyMembers}}</text>
+        <text class="cell-val {{partyMembers > 0 ? 'party-highlight' : 'zero'}}">{{partyMembers}}</text>
       </view>
       <view class="grid-cell">
         <text class="cell-lbl">社会工作者</text>
-        <text class="cell-val orange">{{socialWorkers}}</text>
+        <text class="cell-val {{socialWorkers > 0 ? 'orange' : 'zero'}}">{{socialWorkers}}</text>
       </view>
       <view class="grid-cell">
         <text class="cell-lbl">志愿者</text>
-        <text class="cell-val orange">{{volunteersCount}}</text>
+        <text class="cell-val {{volunteersCount > 0 ? 'orange' : 'zero'}}">{{volunteersCount}}</text>
       </view>
       <view class="grid-cell">
         <text class="cell-lbl">堂食老人</text>
-        <text class="cell-val orange">{{dineInSeniorsCount}}</text>
+        <text class="cell-val {{dineInSeniorsCount > 0 ? 'orange' : 'zero'}}">{{dineInSeniorsCount}}</text>
       </view>
       <view class="grid-cell">
         <text class="cell-lbl">送餐老人</text>
-        <text class="cell-val orange">{{deliverySeniorsCount}}</text>
+        <text class="cell-val {{deliverySeniorsCount > 0 ? 'orange' : 'zero'}}">{{deliverySeniorsCount}}</text>
       </view>
       <view class="grid-cell">
         <text class="cell-lbl">倾听陪伴老人</text>
-        <text class="cell-val orange">{{listeningSeniorsCount}}</text>
+        <text class="cell-val {{listeningSeniorsCount > 0 ? 'orange' : 'zero'}}">{{listeningSeniorsCount}}</text>
       </view>
       <view class="grid-cell">
         <text class="cell-lbl">其他</text>
-        <text class="cell-val grey">{{otherCount}}</text>
+        <text class="cell-val {{otherCount > 0 ? 'grey' : 'zero'}}">{{otherCount}}</text>
       </view>
     </view>
 
@@ -260,6 +266,53 @@
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseMilestoneModal">取消</button>
         <button class="sp-btn-save" bindtap="onSaveMilestone" loading="{{milestoneSaving}}" disabled="{{milestoneSaving || milestoneUploading}}">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 门店人员与服务人群画像 · 快捷修改弹窗：只改这 7 项人数指标，比进入整页"编辑"
+       模式更轻量——那个模式还会一并带出地址/开业日期等一大堆档案字段 -->
+  <view class="sp-modal-backdrop" wx:if="{{showProfileCountModal}}" bindtap="onCloseProfileCountModal">
+    <view class="sp-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">修改人员与服务人群画像</text>
+        <text class="sp-modal-close" bindtap="onCloseProfileCountModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <view class="sp-edit-grid">
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl party-highlight">中共党员</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.partyMembers}}" bindinput="onProfileCountInput" data-field="partyMembers" />
+          </view>
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl">社会工作者</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.socialWorkers}}" bindinput="onProfileCountInput" data-field="socialWorkers" />
+          </view>
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl">志愿者</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.volunteersCount}}" bindinput="onProfileCountInput" data-field="volunteersCount" />
+          </view>
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl">堂食老人</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.dineInSeniorsCount}}" bindinput="onProfileCountInput" data-field="dineInSeniorsCount" />
+          </view>
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl">送餐老人</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.deliverySeniorsCount}}" bindinput="onProfileCountInput" data-field="deliverySeniorsCount" />
+          </view>
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl">倾听陪伴老人</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.listeningSeniorsCount}}" bindinput="onProfileCountInput" data-field="listeningSeniorsCount" />
+          </view>
+          <view class="sp-edit-item">
+            <text class="sp-edit-lbl">其他</text>
+            <input class="sp-edit-input" type="number" value="{{profileCountForm.otherCount}}" bindinput="onProfileCountInput" data-field="otherCount" />
+          </view>
+        </view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseProfileCountModal">取消</button>
+        <button class="sp-btn-save" bindtap="onSaveProfileCount" loading="{{profileCountSaving}}" disabled="{{profileCountSaving}}">保存</button>
       </view>
     </view>
   </view>

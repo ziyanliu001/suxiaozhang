@@ -97,4 +97,40 @@
       style="width: 1px; height: 1px;"
     ></canvas>
   </view>
+
+  <!-- 🌟【我的爱心荣誉卡】预览：海报生成完成后先展示出来，用户确认好看再手动保存，
+       而不是像此前那样生成完直接静默存进相册——用户完全看不到长什么样 -->
+  <view class="poster-preview-mask" wx:if="{{showPosterPreview}}" catchtap="onClosePosterPreview">
+    <view class="poster-preview-card" catchtap="noop">
+      <view class="poster-preview-header">
+        <text class="poster-preview-title">💛 我的爱心荣誉卡</text>
+        <view class="poster-preview-close" catchtap="onClosePosterPreview">
+          <text class="close-x-text">✕</text>
+        </view>
+      </view>
+
+      <scroll-view scroll-y class="poster-preview-scroll">
+        <image
+          src="{{posterTempFilePath}}"
+          mode="widthFix"
+          class="poster-preview"
+          show-menu-by-longpress="{{true}}"
+        />
+      </scroll-view>
+
+      <view class="poster-preview-footer">
+        <view class="poster-preview-btn-secondary" catchtap="onClosePosterPreview">
+          <text class="btn-text">再想想</text>
+        </view>
+        <button
+          class="poster-preview-btn-primary {{posterSaving ? 'loading' : ''}}"
+          bindtap="onConfirmSavePoster"
+          loading="{{posterSaving}}"
+          disabled="{{posterSaving}}"
+        >
+          <text class="btn-text">{{posterSaving ? '保存中...' : '💾 保存到相册'}}</text>
+        </button>
+      </view>
+    </view>
+  </view>
 </view>

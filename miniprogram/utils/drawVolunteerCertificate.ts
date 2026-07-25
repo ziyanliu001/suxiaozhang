@@ -2,6 +2,7 @@
  * 绘制义工爱心护持荣誉证书 (Canvas 2D)，风格参考 drawStorePoster.ts 的绘制方式
  */
 import { getSafeSystemInfo } from './util';
+import { drawStaticWxacodeFallback } from './staticWxacode';
 
 export interface CertificateData {
   canvas: any;
@@ -11,36 +12,72 @@ export interface CertificateData {
   qrCodeTempPath: string;
   width: number;
   height: number;
+  // 落款右侧的红色印章是可选装饰，默认展示；如某天需要一个"无印章"的简洁版本，
+  // 调用方可以直接传 false 关掉，不用改这个绘制函数本身
+  showSeal?: boolean;
 }
 
-// 中文按字符宽度换行更准确（英文单词换行规则不适用），逐字测宽、超宽就换行
-function drawWrappedText(ctx: any, text: string, x: number, y: number, maxWidth: number, lineHeight: number): number {
-  if (!text) return y;
-  let line = '';
-  let currentY = y;
-  for (const ch of text) {
-    const testLine = line + ch;
-    if (ctx.measureText(testLine).width > maxWidth && line) {
-      ctx.fillText(line, x, currentY);
-      line = ch;
-      currentY += lineHeight;
-    } else {
-      line = testLine;
+interface TextRun {
+  text: string;
+  font: string;
+  color: string;
+}
+
+// 富文本换行：按字符宽度逐字测宽换行，同时支持每个 run 各自的字号/字重/颜色
+// （用于正文里"天数/工时"这类需要加粗强调色、但前后文字是普通样式的场景）
+function drawRichWrappedText(ctx: any, runs: TextRun[], x: number, y: number, maxWidth: number, lineHeight: number): number {
+  let curX = x;
+  let curY = y;
+  for (const run of runs) {
+    ctx.font = run.font;
+    ctx.fillStyle = run.color;
+    for (const ch of run.text) {
+      const chWidth = ctx.measureText(ch).width;
+      if (curX + chWidth > x + maxWidth && curX > x) {
+        curX = x;
+        curY += lineHeight;
+      }
+      ctx.fillText(ch, curX, curY);
+      curX += chWidth;
     }
   }
-  if (line) {
-    ctx.fillText(line, x, currentY);
-    currentY += lineHeight;
-  }
-  return currentY;
+  return curY + lineHeight;
 }
 
 function formatCertificateDate(d: Date): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 颁发`;
 }
 
+// 红色印章：双圈描边 + 居中两行小字，整体略微倾斜，模拟盖章效果；
+// globalAlpha < 1 让压在签名文字上的部分保留"透一点底"的手工盖章质感
+function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: number): void {
+  ctx.save();
+  ctx.globalAlpha = 0.86;
+  ctx.translate(centerX, centerY);
+  ctx.rotate((-10 * Math.PI) / 180);
+
+  ctx.strokeStyle = '#D81E06';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - 5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = '#D81E06';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('雨花爱心', 0, -6);
+  ctx.fillText('公益认证', 0, 10);
+
+  ctx.restore();
+}
+
 export async function drawVolunteerCertificate(opts: CertificateData): Promise<void> {
-  const { canvas, nickname, days, hours, qrCodeTempPath, width, height } = opts;
+  const { canvas, nickname, days, hours, qrCodeTempPath, width, height, showSeal = true } = opts;
   const ctx = canvas.getContext('2d');
   // 复用项目已有的 getSafeSystemInfo（已经把 wx.getWindowInfo 缺失时的兜底封装好了），
   // 不再各文件各写一遍同样的三元表达式
@@ -57,12 +94,27 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  // 2. 外层描边 + 内层细线，两层边框营造"证书感"
+  // 1b. 四角淡淡压暗的暗角叠加，叠加在底色渐变之上，让纸张看起来更有厚度/年份感
+  //     （而不是新增一层独立肌理算法，避免小画布上性能/观感双重打折）
+  const vignette = ctx.createRadialGradient(width / 2, height / 2, Math.max(width, height) * 0.32, width / 2, height / 2, Math.max(width, height) * 0.72);
+  vignette.addColorStop(0, 'rgba(140, 109, 70, 0)');
+  vignette.addColorStop(1, 'rgba(140, 109, 70, 0.10)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+
+  // 2. 外层描边 + 中间虚线 + 内层细线，三层边框营造更正式的"证书花边"感
   const outerMargin = 18;
   const innerMargin = outerMargin + 10;
+  const midMargin = (outerMargin + innerMargin) / 2;
   ctx.strokeStyle = '#B8860B';
   ctx.lineWidth = 2.5;
   ctx.strokeRect(outerMargin, outerMargin, width - outerMargin * 2, height - outerMargin * 2);
+  ctx.save();
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = '#D4AF6A';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(midMargin, midMargin, width - midMargin * 2, height - midMargin * 2);
+  ctx.restore();
   ctx.strokeStyle = '#D4AF6A';
   ctx.lineWidth = 1;
   ctx.strokeRect(innerMargin, innerMargin, width - innerMargin * 2, height - innerMargin * 2);
@@ -104,29 +156,58 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
   ctx.lineTo(width / 2 + 56, innerMargin + 108);
   ctx.stroke();
 
-  // 6. 正文段落：居中区域内自动换行
+  // 6. 义工姓名单独一行、加粗居中展示；过长昵称自动缩字号，避免超出内边框
   const safeNickname = nickname || '爱心义工';
   const safeDays = Math.max(0, Math.floor(days || 0));
   const safeHours = Math.max(0, Math.round((hours || 0) * 10) / 10);
+  const nameText = `【${safeNickname}】`;
+  const nameMaxWidth = width - innerMargin * 2 - 36;
+  let nameFontSize = 22;
+  ctx.font = `bold ${nameFontSize}px sans-serif`;
+  while (ctx.measureText(nameText).width > nameMaxWidth && nameFontSize > 14) {
+    nameFontSize -= 1;
+    ctx.font = `bold ${nameFontSize}px sans-serif`;
+  }
+  ctx.fillStyle = '#8C1D18';
+  ctx.textAlign = 'center';
+  const nameY = innerMargin + 144;
+  ctx.fillText(nameText, width / 2, nameY);
+
+  // 7. 正文段落：护持天数/累积工时用加粗强调色单独标出，其余为普通正文，
   // 🛡️ 去宗教化合规要求：证书文案禁止出现"同修"等宗教色彩词汇，统一采用
   // "义工伙伴"这类现代公益/志愿服务通用称谓
-  const bodyText = `【${safeNickname}】义工伙伴，感谢您在雨花斋公益活动中的无私奉献。截止目前，您已累计护持 ${safeDays} 天，累计工时达 ${safeHours} 小时。特发此证，以兹鼓励。`;
+  const normalFont = '15px sans-serif';
+  const normalColor = '#4A3200';
+  const highlightFont = 'bold 18px sans-serif';
+  const highlightColor = '#D81E06';
+  const bodyRuns: TextRun[] = [
+    { text: '义工伙伴，感谢您在雨花斋公益活动中的无私奉献。截止目前，您已累计护持 ', font: normalFont, color: normalColor },
+    { text: `${safeDays} 天`, font: highlightFont, color: highlightColor },
+    { text: '，累计工时达 ', font: normalFont, color: normalColor },
+    { text: `${safeHours} 小时`, font: highlightFont, color: highlightColor },
+    { text: '。特发此证，以兹鼓励。', font: normalFont, color: normalColor }
+  ];
 
-  ctx.fillStyle = '#4A3200';
-  ctx.font = '15px sans-serif';
   ctx.textAlign = 'left';
   const bodyMaxWidth = width - innerMargin * 2 - 36;
-  drawWrappedText(ctx, bodyText, innerMargin + 18, innerMargin + 150, bodyMaxWidth, 26);
+  drawRichWrappedText(ctx, bodyRuns, innerMargin + 18, nameY + 34, bodyMaxWidth, 28);
 
-  // 7. 落款：团队名 + 颁发日期，置于左下角，与右下角二维码分区不冲突
+  // 8. 落款：团队名 + 颁发日期，靠右对齐置于右下角——传统证书落款惯例是贴右边界，
+  // X 坐标固定在内边框内侧（width - innerMargin - 18），配合印章盖在文字右上方
+  const signRightX = width - innerMargin - 18;
   ctx.fillStyle = '#8C6D46';
   ctx.font = 'bold 14px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('雨花爱心餐报助手团队', innerMargin + 18, height - innerMargin - 62);
+  ctx.textAlign = 'right';
+  ctx.fillText('雨花爱心餐报助手团队', signRightX, height - innerMargin - 62);
   ctx.font = '12px sans-serif';
-  ctx.fillText(formatCertificateDate(new Date()), innerMargin + 18, height - innerMargin - 42);
+  ctx.fillText(formatCertificateDate(new Date()), signRightX, height - innerMargin - 42);
 
-  // 8. 右下角圆形小程序码
+  // 9. 左下角二维码（落款移到右下角后，二维码换到左下角，避免和落款/印章挤在一起）
+  const qrSize = 64;
+  const qrX = innerMargin + 18;
+  const qrY = height - innerMargin - qrSize - 18;
+  let realQrLoaded = false;
+
   if (qrCodeTempPath) {
     try {
       const qrImage = canvas.createImage();
@@ -136,10 +217,8 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
         qrImage.onerror = () => reject(new Error('qr load failed'));
       });
 
-      const qrSize = 72;
-      const qrX = width - innerMargin - qrSize - 18;
-      const qrY = height - innerMargin - qrSize - 18;
-
+      // 真小程序码走圆形裁剪展示（图片自带白色留白，裁掉的只是留白角落，不动到
+      // 定位图形），与整体证书的圆润视觉语言更搭
       ctx.save();
       ctx.beginPath();
       ctx.arc(qrX + qrSize / 2, qrY + qrSize / 2, qrSize / 2, 0, Math.PI * 2);
@@ -153,8 +232,37 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
       ctx.beginPath();
       ctx.arc(qrX + qrSize / 2, qrY + qrSize / 2, qrSize / 2, 0, Math.PI * 2);
       ctx.stroke();
+      realQrLoaded = true;
     } catch (e) {
-      console.warn('[drawVolunteerCertificate] 小程序码加载失败，证书将不显示二维码:', e);
+      console.warn('[drawVolunteerCertificate] 小程序码加载失败，将改用本地兜底二维码:', e);
     }
+  }
+
+  if (!realQrLoaded) {
+    // 🐛 云函数不可用（无网络/超时/权限异常）或压根没传 qrCodeTempPath 时，不再
+    // 直接留空，也不再用 utils/qrEncoder.ts 现算本地 QR 码——那种码只能编码纯
+    // 文本/通用链接，微信扫一扫客户端会直接拦下提示"暂不支持展示二维码中的文本
+    // 内容"，等于没有码。改用随包打包的官方静态小程序码兜底（见
+    // utils/staticWxacode.ts），扫码 100% 能拉起本小程序。注意：这里不能套用
+    // 上面真小程序码的圆形裁剪，圆形会切掉正方形码四角的定位图形导致扫不出来——
+    // 兜底必须是方形、四周留白完整的方式绘制
+    try {
+      await drawStaticWxacodeFallback(ctx, canvas, qrX, qrY, qrSize);
+      ctx.strokeStyle = '#B8860B';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+    } catch (e) {
+      console.warn('[drawVolunteerCertificate] 静态小程序码兜底加载异常:', e);
+    }
+  }
+
+  // 10. 红色印章：自然盖在靠右落款文字的右侧/上方，压住团队名一角，略微倾斜、半透明，
+  // 模拟实体印章盖上去的效果；放在最后画，保证压在签名文字之上。圆心相对 signRightX
+  // 向左内缩半个直径，让圆的右边缘落在内边框以内，不会被边框裁切
+  if (showSeal) {
+    const sealRadius = 30;
+    const sealCenterX = signRightX - sealRadius + 6;
+    const sealCenterY = height - innerMargin - 62 - 10;
+    drawSealStamp(ctx, sealCenterX, sealCenterY, sealRadius);
   }
 }

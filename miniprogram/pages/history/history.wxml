@@ -283,14 +283,20 @@
               </button>
             </view>
 
-            <view class="utility-actions-row" wx:if="{{isManagerRole || isSuperAdmin}}">
+            <!-- 🛡️ 六大角色对齐：编辑按钮不再只对店长/超管开放——只要这条记录是提交人
+                 本人提交、且还没进入 APPROVED/AUDITED_LOCKED（item.isOwnPendingRecord，
+                 见 loadReports() 里的预计算），提交人也能看到编辑入口修正自己的草稿。
+                 红字作废仍严格保持仅店长/超管可见，不随这次放宽扩大 -->
+            <view class="utility-actions-row" wx:if="{{isManagerRole || isSuperAdmin || item.isOwnPendingRecord}}">
               <button class="btn-utility btn-util-edit" bindtap="onEditReport" data-index="{{index}}">
                 ✏️ 编辑
               </button>
-              <button class="btn-utility btn-util-void" wx:if="{{!item.voidPending}}" bindtap="onVoidReportModal" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
-                🚨 红字作废
-              </button>
-              <text class="btn-utility btn-util-void-pending" wx:else>⏳ 待家长确认作废中</text>
+              <block wx:if="{{isManagerRole || isSuperAdmin}}">
+                <button class="btn-utility btn-util-void" wx:if="{{!item.voidPending}}" bindtap="onVoidReportModal" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
+                  🚨 红字作废
+                </button>
+                <text class="btn-utility btn-util-void-pending" wx:else>⏳ 待家长确认作废中</text>
+              </block>
             </view>
           </block>
 

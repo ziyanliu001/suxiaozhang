@@ -5,6 +5,8 @@ import { formatGratitudeReportText, GratitudeReportData } from '../../utils/repo
 import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
+import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
+import { getSafeSystemInfo } from '../../utils/util';
 
 function parseDate(dateStr: string): Date {
   return new Date(String(dateStr).replace(/-/g, '/'));
@@ -258,8 +260,47 @@ Page({
     isVolunteerNationalView: false,
     // 店长/财务/超管（非志工）—— 用于精细化管理视图的条件渲染，如 wx:if="{{isManager}}"
     isManager: false,
+    // 🆕 精细化单店角色：三者互斥（同一账号的 role 只会命中其中一个），各自渲染
+    // 专属卡片与专属海报按钮文案，取代此前"isManager 就都看同一份通用单店视图"
+    isStoreAdmin: false,
+    isFinance: false,
+    isPatriarch: false,
     dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
     dashboardRoleTag: '',
+
+    // 🆕 家长专属：资源储备/资金物资兜底/续航预警，复用 getPatriarchDashboard
+    // 云函数（该函数早已对 store_patriarch 做 storeId 硬隔离，见该云函数
+    // resolveTarget，无需在这里额外传角色声明）
+    patriarchStatsLoading: false,
+    patriarchStats: {
+      storeName: '',
+      monthLabel: '',
+      monthDiners: 0,
+      monthIncome: 0,
+      monthExpense: 0,
+      monthNet: 0,
+      monthNetPositive: true,
+      auditedCount: 0,
+      totalCount: 0,
+      pendingVoidCount: 0,
+      pendingProfileUpdate: false
+    },
+
+    // 🆕 个人视角：非管理角色（普通义工/无角色账号）打开本页时，不再看精简版的
+    // 全国/门店治理大屏，改看只属于自己的护持数据——与 isManager 互斥
+    showPersonalView: false,
+    personalStatsLoading: false,
+    personalStats: {
+      totalDays: 0,
+      totalHours: 0,
+      totalCount: 0,
+      diningCount: 0
+    } as { totalDays: number; totalHours: number; totalCount: number; diningCount: number },
+    personalMonthlyTrend: [] as Array<{ monthLabel: string; count: number; barPercent: number }>,
+    isGeneratingPersonalPoster: false,
+    showPersonalPosterModal: false,
+    personalPosterImage: '',
+    isSavingPersonalPoster: false,
     viewMode: 'all' as 'all' | 'personal',
     isAllStoresMode: true,
     // 🏠 门店人员与服务人群画像：仅单店视角下有值，来自 manageStoreProfile 云函数
@@ -409,45 +450,262 @@ Page({
     // 精细化管理视角：店长/财务/大家长/超管（非志工）均属于"管理者"，用于 wx:if="{{isManager}}"
     // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
     const isManager = role === 'store_manager' || role === 'finance' || role === 'store_patriarch' || isSuperAdmin || isHQFinance;
+    // 🆕 精细化单店角色：三者互斥，各自决定渲染哪一张专属卡片/哪一个海报按钮文案
+    const isStoreAdmin = role === 'store_manager';
+    const isFinance = role === 'finance';
+    const isPatriarch = role === 'store_patriarch';
 
     // 权限 A：超管和总部财务可看"全国大屏"与"跨店成本比对"
-    // 🌟 志工也放开"全国数据大屏"访问（阳光公开账本诉求），
-    // 但强制锁定为全部门店只读视图，且不下放"单餐成本"等运营敏感数据
-    const canViewNationalDashboard = isSuperAdmin || isHQFinance || isVolunteer;
+    // 🆕 志工/无角色个人不再放行"全国数据大屏"（哪怕是脱敏只读版）——改为下方
+    // showPersonalView 分支的专属个人视角，数据范围收窄到"只有我自己的"，
+    // 既满足阳光账本的知情诉求，又不再让个人账号看到任何跨门店/治理类信息
+    const canViewNationalDashboard = isSuperAdmin || isHQFinance;
     const canViewCrossStoreCost = isSuperAdmin || isHQFinance;
     const canViewAllStoresDropdown = isSuperAdmin || isHQFinance;
     const isVolunteerNationalView = isVolunteer;
+    // 🆕 个人视角：非管理角色（包含 volunteer，也兜底覆盖角色查询失败/未识别的
+    // 情况）——与 isManager 互斥，isManager 已经把 store_manager/finance/
+    // store_patriarch/super_admin/hq_finance 全部纳入，这里取反即可
+    const showPersonalView = !isManager;
 
     this.setData({
       isAdmin: isSuperAdmin,
       isManager,
+      isStoreAdmin,
+      isFinance,
+      isPatriarch,
       currentUserRole: role,
       currentUserStoreName: storeName,
       canViewNationalDashboard,
       canViewCrossStoreCost,
       canViewAllStoresDropdown,
       isVolunteerNationalView,
-      dashboardTitle: isVolunteer ? '🌐 雨花爱心矩阵数据大屏' : '🌐 雨花斋全国爱心矩阵数据大屏',
-      dashboardRoleTag: isVolunteer ? '（志工荣誉版）' : ''
+      showPersonalView,
+      dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
+      dashboardRoleTag: ''
     });
 
-    if (isVolunteer) {
-      // 志工：强制锁定为"全部门店"只读大屏视图，不允许切换到单店视角
-      this.setData({
-        shopName: '',
-        isAllStoresMode: true
-      });
-      this.loadNationalDashboard();
+    if (showPersonalView) {
+      // 个人视角：不触碰门店选择器/全国大屏那套状态，只加载属于自己的数据
+      this.loadPersonalDashboard();
     } else if (!canViewAllStoresDropdown && storeName) {
-      // 非总部级角色（单店店长/财务）：锁定到本门店
+      // 非总部级角色（单店店长/财务/家长）：锁定到本门店
       this.setData({
         shopName: storeName,
         isAllStoresMode: false
       });
       this.fetchStoreProfile();
+      if (isPatriarch) {
+        // 🆕 家长专属：资源储备/资金物资兜底/续航预警——与店长/财务共用的
+        // 单店营运卡片是两套不同的数据源，单独加载
+        this.loadPatriarchResourceStats();
+      }
     } else if (canViewAllStoresDropdown) {
       this.loadNationalDashboard();
     }
+  },
+
+  // 🆕 家长专属资源续航看板：复用 getPatriarchDashboard 云函数（该函数早已把
+  // store_patriarch 的 storeId 硬锁定为调用者自己绑定的门店，见其 resolveTarget，
+  // 不接受客户端传参指定查其他门店），只在本页面重新映射展示字段，不重复实现
+  // 权限校验逻辑
+  async loadPatriarchResourceStats() {
+    this.setData({ patriarchStatsLoading: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'getPatriarchDashboard',
+        data: {}
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载资源续航数据失败', icon: 'none' });
+        return;
+      }
+      const data = result.data;
+      this.setData({
+        patriarchStats: {
+          storeName: data.storeName || '',
+          monthLabel: data.monthLabel || '',
+          monthDiners: data.monthDiners || 0,
+          monthIncome: data.monthIncome || 0,
+          monthExpense: data.monthExpense || 0,
+          monthNet: data.monthNet || 0,
+          monthNetPositive: (data.monthNet || 0) >= 0,
+          auditedCount: data.auditedCount || 0,
+          totalCount: data.totalCount || 0,
+          pendingVoidCount: (data.pendingVoidList || []).length,
+          pendingProfileUpdate: !!data.pendingProfileUpdate
+        }
+      });
+    } catch (err) {
+      console.error('[loadPatriarchResourceStats] 加载家长资源续航数据异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ patriarchStatsLoading: false });
+    }
+  },
+
+  // 🆕 个人视角：加载"只属于我自己"的护持数据——累计天数/工时来自本地打卡统计
+  // （与 pages/journey 同一份 my_checkin_days/my_service_hours/my_checkin_logs，
+  // 全项目统一口径，不重复定义一套"服务天数"），服务人次（诚信提交的餐报人次）
+  // 改由 getVolunteerHonorStats 云函数按调用者 _openid 查真实值——该云函数服务端
+  // 硬编码用 cloud.getWXContext().OPENID 查询，不接受客户端传参指定查谁的数据，
+  // 天然满足"非超管角色仅能查到自己的统计数据"的隔离要求
+  async loadPersonalDashboard() {
+    this.setData({ personalStatsLoading: true });
+    try {
+      const totalDays = wx.getStorageSync('my_checkin_days') || 0;
+      const totalHours = wx.getStorageSync('my_service_hours') || 0;
+      const logs: Array<{ date?: string }> = wx.getStorageSync('my_checkin_logs') || [];
+
+      let diningCount = 0;
+      try {
+        const statsRes: any = await wx.cloud.callFunction({ name: 'getVolunteerHonorStats' });
+        const statsResult = statsRes.result;
+        if (statsResult && statsResult.success) {
+          diningCount = statsResult.diningCount || 0;
+        }
+      } catch (statsErr) {
+        console.warn('[loadPersonalDashboard] 个人荣誉数据查询失败，展示为 0:', statsErr);
+      }
+
+      // 近 6 个月护持频次趋势：按月分组统计打卡次数，月份分组口径与
+      // pages/journey.ts loadTimelineData 的 monthKey 一致（YYYY-MM）
+      const monthMap = new Map<string, number>();
+      const now = new Date();
+      const monthKeys: string[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthKeys.push(key);
+        monthMap.set(key, 0);
+      }
+      logs.forEach((log) => {
+        const dateStr = log && log.date;
+        if (!dateStr) return;
+        const key = String(dateStr).slice(0, 7);
+        if (monthMap.has(key)) {
+          monthMap.set(key, (monthMap.get(key) || 0) + 1);
+        }
+      });
+      const maxCount = Math.max(1, ...Array.from(monthMap.values()));
+      const personalMonthlyTrend = monthKeys.map((key) => {
+        const monthNum = parseInt(key.split('-')[1], 10);
+        const count = monthMap.get(key) || 0;
+        return {
+          monthLabel: `${monthNum}月`,
+          count,
+          barPercent: Math.round((count / maxCount) * 100)
+        };
+      });
+
+      this.setData({
+        personalStats: { totalDays, totalHours, totalCount: logs.length, diningCount },
+        personalMonthlyTrend
+      });
+    } catch (err) {
+      console.error('[loadPersonalDashboard] 个人数据加载异常:', err);
+    } finally {
+      this.setData({ personalStatsLoading: false });
+    }
+  },
+
+  // 🆕 生成我的个人爱心海报：直接复用 utils/posterGenerator.ts 的 drawVolunteerHonorCard
+  // （与 pages/journey.ts「生成我的爱心荣誉卡」同一张卡片同一套绘制/兜底逻辑），
+  // 避免为同一种"个人荣誉卡"在项目里维护第二份画图代码
+  async onGeneratePersonalPoster() {
+    if (this.data.isGeneratingPersonalPoster) return;
+    // 与 journey.ts 同款体验修复：立刻打开弹窗展示加载态，而不是等全流程跑完
+    // 才 setData，避免用户以为点击没反应
+    this.setData({
+      isGeneratingPersonalPoster: true,
+      showPersonalPosterModal: true,
+      personalPosterImage: ''
+    });
+
+    try {
+      const roleInfo = AuthService.getCachedRoleInfo();
+      const storeId = (roleInfo && roleInfo.storeId) || '';
+      const storeName = (roleInfo && roleInfo.storeName) || '素小账 · 爱心公益';
+      const nickName = (roleInfo && roleInfo.nickName) || '';
+      const avatarUrl = (roleInfo && roleInfo.avatarUrl) || '';
+
+      // 邀请二维码：未绑定具体门店时跳过生成，降级为占位框，不强行传空 storeId 请求云函数
+      let qrLocalPath = '';
+      if (storeId) {
+        try {
+          const qrRes: any = await wx.cloud.callFunction({
+            name: 'getStoreQRCode',
+            data: { storeId, storeName, purpose: 'certificate' }
+          });
+          const qrResult = qrRes.result;
+          if (qrResult && qrResult.success && qrResult.fileID) {
+            const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+            qrLocalPath = (downRes && downRes.tempFilePath) || '';
+          }
+        } catch (qrErr) {
+          console.warn('[onGeneratePersonalPoster] 邀请二维码生成/下载失败，降级为占位:', qrErr);
+        }
+      }
+
+      const { totalDays, totalHours, totalCount, diningCount } = this.data.personalStats;
+      const honorData: VolunteerHonorData = {
+        storeName,
+        nickName,
+        avatarUrl,
+        serviceDays: totalDays,
+        reportCount: totalCount,
+        diningCount,
+        totalHours,
+        qrLocalPath
+      };
+
+      const personalPosterImage = await drawVolunteerHonorCard(this, honorData);
+      this.setData({ personalPosterImage });
+    } catch (err: any) {
+      console.error('[onGeneratePersonalPoster] 生成失败:', err);
+      wx.showToast({ title: err.message || '海报生成失败，请重试', icon: 'none' });
+      this.setData({ showPersonalPosterModal: false });
+    } finally {
+      this.setData({ isGeneratingPersonalPoster: false });
+    }
+  },
+
+  onClosePersonalPosterModal() {
+    if (this.data.isSavingPersonalPoster) return;
+    this.setData({ showPersonalPosterModal: false });
+  },
+
+  onSavePersonalPoster() {
+    if (this.data.isSavingPersonalPoster || !this.data.personalPosterImage) return;
+    this.setData({ isSavingPersonalPoster: true });
+
+    wx.saveImageToPhotosAlbum({
+      filePath: this.data.personalPosterImage,
+      success: () => {
+        wx.showToast({ title: '已保存至相册', icon: 'success' });
+      },
+      fail: (err: any) => {
+        console.error('[onSavePersonalPoster] 保存失败:', err);
+        if (err.errMsg && err.errMsg.includes('auth')) {
+          wx.showModal({
+            title: '提示',
+            content: '请授权允许保存图片到相册',
+            confirmText: '去授权',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting();
+              }
+            }
+          });
+        } else if (!(err.errMsg && err.errMsg.includes('cancel'))) {
+          wx.showToast({ title: '保存失败', icon: 'none' });
+        }
+      },
+      complete: () => {
+        this.setData({ isSavingPersonalPoster: false });
+      }
+    });
   },
 
   // 🏠 门店人员与服务人群画像：仅单店视角下展示，切到全部门店/尚未选定门店时清空。
@@ -2656,6 +2914,130 @@ Page({
     }
   },
 
+  // 🆕 超管专属：全国公示海报——与 onGeneratePoster（单店收支海报）复用同一个
+  // #posterCanvas 节点与 showPosterModal 预览弹窗，数据源换成 nationalData
+  // （全国口径），版式简化为一屏核心数字，不逐项照搬单店海报的历史字段
+  onGenerateNationalPoster() {
+    const { nationalData } = this.data;
+    if (!nationalData || nationalData.nationalTotalDiners === undefined) {
+      wx.showToast({ title: '暂无数据', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '正在合成全国公示海报...', mask: true });
+
+    try {
+      const query = wx.createSelectorQuery();
+      query.select('#posterCanvas')
+        .fields({ node: true, size: true })
+        .exec((res: any) => {
+          if (!res[0] || !res[0].node) {
+            wx.hideLoading();
+            wx.showToast({ title: 'Canvas 初始化失败', icon: 'none' });
+            return;
+          }
+
+          const canvas = res[0].node;
+          const ctx = canvas.getContext('2d');
+          // 🌟 复用项目已有的 getSafeSystemInfo（已经把 wx.getWindowInfo 缺失时的兜底
+          // 封装好了），不再新增一处 wx.getWindowInfo 直接调用的已知类型缺口实例
+          const dpr = getSafeSystemInfo().pixelRatio || 2;
+
+          const W = 600;
+          const H = 820;
+          canvas.width = W * dpr;
+          canvas.height = H * dpr;
+          ctx.scale(dpr, dpr);
+
+          ctx.fillStyle = '#FAF6F0';
+          ctx.fillRect(0, 0, W, H);
+
+          ctx.fillStyle = '#1C7ED6';
+          ctx.fillRect(0, 0, W, 140);
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 26px "PingFang SC", sans-serif';
+          ctx.fillText('🌐 雨花斋全国爱心矩阵 · 公示海报', 40, 60);
+          ctx.font = '18px sans-serif';
+          ctx.fillText(`已覆盖 ${nationalData.totalStores || 0} 家门店`, 40, 100);
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.05)';
+          ctx.shadowBlur = 10;
+          ctx.fillRect(30, 160, 540, 540);
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = '#212529';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.fillText('全国累计服务用餐人次', 60, 210);
+          ctx.fillStyle = '#1C7ED6';
+          ctx.font = 'bold 44px sans-serif';
+          ctx.fillText(`${nationalData.nationalTotalDiners}`, 60, 265);
+          ctx.font = '16px sans-serif';
+          ctx.fillStyle = '#868E96';
+          ctx.fillText('人次', 60 + ctx.measureText(`${nationalData.nationalTotalDiners}`).width + 12, 262);
+
+          const cardStartY = 320;
+          const cardW = (W - 100) / 2;
+          const cardH = 90;
+          const cardGapX = 20;
+          const dataCards = [
+            { label: '全国服务汇入', value: `+¥${nationalData.nationalTotalIncome}`, color: '#2B8A3E' },
+            { label: '全国开餐总支出', value: `-¥${nationalData.nationalTotalExpense}`, color: '#C62828' },
+            { label: '全国累计开餐天数', value: `${nationalData.nationalOpenDays} 天`, color: '#8C1D18' },
+            { label: '覆盖门店数量', value: `${nationalData.totalStores || 0} 家`, color: '#8C1D18' }
+          ];
+          dataCards.forEach((card, index) => {
+            const col = index % 2;
+            const row = Math.floor(index / 2);
+            const x = 40 + col * (cardW + cardGapX);
+            const y = cardStartY + row * (cardH + 16);
+
+            ctx.fillStyle = '#F8F9FA';
+            this.roundRect(ctx, x, y, cardW, cardH, 10, true);
+
+            ctx.fillStyle = '#868E96';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(card.label, x + cardW / 2, y + 30);
+
+            ctx.fillStyle = card.color;
+            ctx.font = 'bold 22px sans-serif';
+            ctx.fillText(card.value, x + cardW / 2, y + 65);
+          });
+          ctx.textAlign = 'left';
+
+          const footerY = cardStartY + 2 * (cardH + 16) + 30;
+          ctx.fillStyle = '#8C7355';
+          ctx.font = '14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('感恩各位爱心人士护持与全国义工团队无私付出！', W / 2, footerY);
+          ctx.fillStyle = '#ADB5BD';
+          ctx.font = '10px sans-serif';
+          ctx.fillText('本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐', W / 2, footerY + 24);
+          ctx.textAlign = 'left';
+
+          wx.canvasToTempFilePath({
+            canvas: canvas,
+            success: (tempRes: any) => {
+              wx.hideLoading();
+              this.setData({
+                posterTempFilePath: tempRes.tempFilePath,
+                showPosterModal: true
+              });
+            },
+            fail: () => {
+              wx.hideLoading();
+              wx.showToast({ title: '海报生成失败', icon: 'none' });
+            }
+          });
+        });
+    } catch (e) {
+      wx.hideLoading();
+      wx.showToast({ title: '海报生成异常', icon: 'none' });
+    }
+  },
+
   roundRect(ctx: any, x: number, y: number, w: number, h: number, r: number, fill: boolean) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -3017,19 +3399,15 @@ Page({
     }
   },
 
+  // 🛡️ 全局返回逻辑排查修复：goHome() 是给分享直入场景的物理返回键设计的，不该
+  // 挪用给自定义导航栏的"←"按钮——那会导致不管从哪个页面点进来都被强制跳回首页，
+  // 注释此前写的"智能跳转"其实从未按 pages.length 真正判断过
   goBackHome() {
-    // 优先使用 navGuard 的智能跳转（自动判断栈深度 + 栈中是否已有首页）
-    if (this._navGuard) {
-      this._navGuard.goHome();
-      return;
-    }
     const pages = getCurrentPages();
     if (pages.length > 1) {
-      wx.navigateBack();
+      wx.navigateBack({ delta: 1 });
     } else {
-      wx.reLaunch({
-        url: '/pages/index/index'
-      });
+      wx.switchTab({ url: '/pages/index/index' });
     }
   }
 });

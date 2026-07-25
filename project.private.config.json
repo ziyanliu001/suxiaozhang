@@ -29,6 +29,13 @@
           "launchMode": "default"
         },
         {
+          "name": "pages/index/index",
+          "pathName": "pages/index/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
           "name": "首页",
           "pathName": "pages/index/index",
           "query": "",

@@ -8,7 +8,7 @@ import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../uti
 import { STORE_PRESETS, STORE_PICKER_LIST, CUSTOM_STORE_LABEL, findStorePreset } from '../../utils/constants';
 import { getSafeSystemInfo } from '../../utils/util';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
-import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
+import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable } from '../../utils/cloudGuard';
@@ -18,7 +18,10 @@ import { applyRoleViewOverride, getPreviewViewMode, PreviewViewMode } from '../.
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
-import { getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, DailyCultureQuote, SENIORS_CARE } from '../../utils/cultureData';
+import {
+  getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, DailyCultureQuote, SENIORS_CARE,
+  CORE_VALUES, FAMOUS_QUOTES, RAIN_FLOWER_HOME, SIXTEEN_BESTS, GRATITUDE_TEXT, DAILY_SUMMARY, FAMILY_STYLE
+} from '../../utils/cultureData';
 
 const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
@@ -221,6 +224,17 @@ Page({
     // 🌟 合规授权须知弹窗，见 checkComplianceNotice
     showComplianceModal: false,
     complianceModalScene: 'general' as 'general' | 'privileged' | 'review',
+    // ☀️ 阳光账本轻量弹窗：见 onOpenSunshineLedger，数据来自公开只读云函数 getSunshineLedger
+    showSunshineLedgerModal: false,
+    sunshineLedgerLoading: false,
+    sunshineLedgerData: {
+      storeName: '',
+      periodLabel: '',
+      recordCount: 0,
+      totalDining: 0,
+      totalDelivery: 0,
+      totalVolunteerHours: 0
+    },
     yesterdayBalDisplay: '0.00',
     totalIncomeDisplay: '0.00',
     totalExpenseDisplay: '0.00',
@@ -416,6 +430,28 @@ Page({
     familyMottoMindFormula: '',
     familyMottoCreedLines: [] as string[],
     familyMottoStudyMethod: '',
+    // 📖 雨花文化全集弹窗：module 7（雨花家训）复用上面三个既有字段，
+    // 这里补齐其余九大模块，随 onShowFamilyMottoModal 一次性填好，纯静态内容
+    cultureFullData: {
+      coreValuesNational: [] as string[],
+      coreValuesSocial: [] as string[],
+      coreValuesIndividual: [] as string[],
+      famousQuotes: [] as string[],
+      homeCoreSpirit: '',
+      homeSanYouTitle: '', homeSanYouItems: [] as string[],
+      homeWuLeTitle: '', homeWuLeItems: [] as string[],
+      homeLiuTongTitle: '', homeLiuTongItems: [] as string[],
+      homeBaXinTitle: '', homeBaXinItems: [] as string[],
+      seniorsCoreBelief: '',
+      seniorsTenHaveYous: [] as string[],
+      sixteenBests: [] as string[],
+      gratitudeText: [] as string[],
+      dailySummaryTitle: '',
+      dailySummaryGratitude: [] as string[],
+      dailySummaryAspiration: [] as string[],
+      familyStyleTitle: '',
+      familyStyleText: ''
+    },
     // 🙏 打卡成功弹窗内展示的【敬老行为准则·十个有没有】，纯静态内容，无需查云端
     tenHaveYous: SENIORS_CARE.tenHaveYous as string[],
     announcement: null as {
@@ -472,6 +508,9 @@ Page({
     pendingAuditCount: 0,
     roleLabelMap: ROLE_LABELS,
     currentStoreName: '' as string,
+    // 🏪 门店运营状态徽标：见 utils/storeManager.ts fetchAndSyncStoreStatus/
+    // getCachedStoreStatus，全局态与 Storage 双写同步，与 profile.ts 共用同一份数据
+    currentStoreStatus: '' as string,
     // 🌟 财务专属功能区：风控预警数量（首页角标）、封账弹窗、风控预警明细弹窗
     riskAlertCount: 0,
     showFinanceLockModal: false,
@@ -657,17 +696,23 @@ Page({
       const isVolunteer = rawRole === 'VOLUNTEER';
       // 🏛️ 权限向下继承：大家长（store_patriarch/PATRIARCH）天然拥有店长 + 财务的全套
       // 日常管理权限（录入餐报/发布食谱/编写日志/管理工时等），无需再兼任多重角色
-      const isManager = ['MANAGER', 'STORE_MANAGER', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
-      const isFinance = ['FINANCE', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+      // 🛡️ 全局排查修复：这里的输入既可能是服务端下发的 snake_case 值大写后的
+      // 'STORE_PATRIARCH'，也可能是 store-picker 角色胶囊直接传来的裸值 'PATRIARCH'
+      // （二者拼写不同，只对其中一种做判断会导致另一种静默漏判），两种拼法都要覆盖
+      const isManager = ['MANAGER', 'STORE_MANAGER', 'PATRIARCH', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+      const isFinance = ['FINANCE', 'PATRIARCH', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
       const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
       const roleMap: Record<string, string> = {
         'VOLUNTEER': 'volunteer',
         'MANAGER': 'store_manager',
         'STORE_MANAGER': 'store_manager',
+        'PATRIARCH': 'store_patriarch',
         'STORE_PATRIARCH': 'store_patriarch',
         'FINANCE': 'finance',
         'ADMIN': 'super_admin',
-        'SUPER_ADMIN': 'super_admin'
+        'SUPER_ADMIN': 'super_admin',
+        'FAMILY': 'store_family',
+        'STORE_FAMILY': 'store_family'
       };
       const normalizedRole = roleMap[rawRole] || 'volunteer';
       const flags = getPermissionFlags({ role: normalizedRole });
@@ -767,6 +812,23 @@ Page({
     if (storeId && reportDate && this.data.permissions && this.data.permissions.canEditBalance) {
       this.checkAndAcquireLock(storeId, reportDate);
     }
+
+    this.refreshStoreStatus(storeId);
+  },
+
+  // 🏪 门店运营状态：先用缓存秒显（避免首页顶部徽标短暂空白/闪烁），再静默刷新
+  // 最新值，失败不打扰用户（见 utils/storeManager.ts fetchAndSyncStoreStatus）
+  refreshStoreStatus(storeId: string) {
+    const cached = getCachedStoreStatus();
+    if (cached) {
+      this.setData({ currentStoreStatus: cached });
+    }
+    if (!storeId) return;
+    fetchAndSyncStoreStatus(storeId).then((label) => {
+      if (label) {
+        this.setData({ currentStoreStatus: label });
+      }
+    });
   },
 
   async fetchPendingAuditCount(storeId: string) {
@@ -1244,18 +1306,27 @@ Page({
     const isVolunteer = rawRole === 'VOLUNTEER';
     // 🏛️ 权限向下继承：大家长（store_patriarch/PATRIARCH）天然拥有店长 + 财务的全套
     // 日常管理权限（录入餐报/发布食谱/编写日志/管理工时等），无需再兼任多重角色
-    const isManager = ['MANAGER', 'STORE_MANAGER', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
-    const isFinance = ['FINANCE', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    // 🛡️ 全局排查修复：store-picker 角色胶囊点击直接传来的是裸值 'PATRIARCH'（无下划线），
+    // 不是 'STORE_PATRIARCH'——此前这里只认后者，导致点击【家长】胶囊时 isManager/
+    // isFinance 当场判定为 false，且下面 roleMap 查不到键，静默降级写入 'volunteer'。
+    // 两种拼法（裸值 / 服务端 snake_case 转大写）都必须覆盖，防止任一调用路径漏判
+    const isManager = ['MANAGER', 'STORE_MANAGER', 'PATRIARCH', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    const isFinance = ['FINANCE', 'PATRIARCH', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isSuperAdmin = rawRole === 'ADMIN' || rawRole === 'SUPER_ADMIN';
 
     const roleMap: Record<string, string> = {
       'VOLUNTEER': 'volunteer',
       'MANAGER': 'store_manager',
       'STORE_MANAGER': 'store_manager',
+      'PATRIARCH': 'store_patriarch',
       'STORE_PATRIARCH': 'store_patriarch',
       'FINANCE': 'finance',
       'ADMIN': 'super_admin',
-      'SUPER_ADMIN': 'super_admin'
+      'SUPER_ADMIN': 'super_admin',
+      // ❤️ 家人（服务对象）：store-picker 里与义工并列的自我声明式身份，必须显式映射，
+      // 否则会落进下面的 || 'volunteer' 兜底，被悄悄降级回普通义工
+      'FAMILY': 'store_family',
+      'STORE_FAMILY': 'store_family'
     };
     const normalizedRole = roleMap[rawRole] || 'volunteer';
     const flags = getPermissionFlags({ role: normalizedRole });
@@ -1302,7 +1373,7 @@ Page({
     });
 
     wx.showToast({
-      title: `已切至 ${storeName} (${isVolunteer ? '义工视角' : (isFinance ? '财务视角' : '店长视角')})`,
+      title: `已切至 ${storeName} (${rawRole === 'FAMILY' ? '家人视角' : (isVolunteer ? '义工视角' : (isFinance ? '财务视角' : '店长视角'))})`,
       icon: 'none'
     });
 
@@ -1310,6 +1381,13 @@ Page({
     this.fetchTodayMenu();
     this.fetchTodayActivity();
     this.fetchNotices();
+
+    // 🏪 切店后同步刷新门店运营状态徽标；"全国总览"等虚拟门店 ID 不对应真实门店记录，跳过
+    if (!isAllStoresView) {
+      this.refreshStoreStatus(storeId);
+    } else {
+      this.setData({ currentStoreStatus: '' });
+    }
 
     // 🌟 切店后立即重新加载新门店的看板数据与义工统计
     this.loadBalanceForDate(this.data.reportDate || this.data.reportDateValue || '');
@@ -6840,6 +6918,54 @@ Page({
 
   stopPropagation() {},
 
+  // ☀️ 阳光账本：全角色/无登录门槛可查看，数据来自 getSunshineLedger 云函数
+  // （不做任何 user_roles/OPENID 权限校验，与扫码验真 publicVerifyReport 同一套
+  // 设计哲学——只接受调用方明确指定的当前门店 storeId，不支持跨店/全部门店聚合）
+  async onOpenSunshineLedger() {
+    this.setData({ showSunshineLedgerModal: true, sunshineLedgerLoading: true });
+
+    const storeId = this.data.currentStoreId;
+    if (!storeId) {
+      wx.showToast({ title: '请先选择门店', icon: 'none' });
+      this.setData({ showSunshineLedgerModal: false, sunshineLedgerLoading: false });
+      return;
+    }
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'getSunshineLedger',
+        data: { storeId }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载阳光账本失败', icon: 'none' });
+        this.setData({ showSunshineLedgerModal: false });
+        return;
+      }
+
+      this.setData({
+        sunshineLedgerData: {
+          storeName: result.storeName || '',
+          periodLabel: result.periodLabel || '',
+          recordCount: result.recordCount || 0,
+          totalDining: result.totalDining || 0,
+          totalDelivery: result.totalDelivery || 0,
+          totalVolunteerHours: result.totalVolunteerHours || 0
+        }
+      });
+    } catch (err) {
+      console.error('[onOpenSunshineLedger] 加载阳光账本异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      this.setData({ showSunshineLedgerModal: false });
+    } finally {
+      this.setData({ sunshineLedgerLoading: false });
+    }
+  },
+
+  onCloseSunshineLedgerModal() {
+    this.setData({ showSunshineLedgerModal: false });
+  },
+
   onThankTextInput(e: any) {
     const value = e.detail.value;
     this.setData({ thankText: value });
@@ -6947,12 +7073,34 @@ Page({
     this.setData({ cultureQuote: getRandomCultureQuote(current) });
   },
 
+  // 📖 雨花文化全集：一次性把十大模块数据摆进 data，弹窗内 scroll-view 结构化分层
+  // 展示全貌——module 7（雨花家训）沿用既有三个字段，不重复赋值
   onShowFamilyMottoModal() {
     this.setData({
       showFamilyMottoModal: true,
       familyMottoMindFormula: FAMILY_MOTTO.mindFormula,
       familyMottoCreedLines: FAMILY_MOTTO.creedLines,
-      familyMottoStudyMethod: FAMILY_MOTTO.studyMethod
+      familyMottoStudyMethod: FAMILY_MOTTO.studyMethod,
+      cultureFullData: {
+        coreValuesNational: CORE_VALUES.national,
+        coreValuesSocial: CORE_VALUES.social,
+        coreValuesIndividual: CORE_VALUES.individual,
+        famousQuotes: FAMOUS_QUOTES,
+        homeCoreSpirit: RAIN_FLOWER_HOME.coreSpirit,
+        homeSanYouTitle: RAIN_FLOWER_HOME.sanYou.title, homeSanYouItems: RAIN_FLOWER_HOME.sanYou.items,
+        homeWuLeTitle: RAIN_FLOWER_HOME.wuLe.title, homeWuLeItems: RAIN_FLOWER_HOME.wuLe.items,
+        homeLiuTongTitle: RAIN_FLOWER_HOME.liuTong.title, homeLiuTongItems: RAIN_FLOWER_HOME.liuTong.items,
+        homeBaXinTitle: RAIN_FLOWER_HOME.baXin.title, homeBaXinItems: RAIN_FLOWER_HOME.baXin.items,
+        seniorsCoreBelief: SENIORS_CARE.coreBelief,
+        seniorsTenHaveYous: SENIORS_CARE.tenHaveYous,
+        sixteenBests: SIXTEEN_BESTS,
+        gratitudeText: GRATITUDE_TEXT,
+        dailySummaryTitle: DAILY_SUMMARY.title,
+        dailySummaryGratitude: DAILY_SUMMARY.gratitude,
+        dailySummaryAspiration: DAILY_SUMMARY.aspiration,
+        familyStyleTitle: FAMILY_STYLE.title,
+        familyStyleText: FAMILY_STYLE.text
+      }
     });
   },
 
@@ -7678,8 +7826,8 @@ Page({
   onOpenVolunteerAudit() {
     const count = this.data.pendingAuditCount || 0;
     wx.showModal({
-      title: '👥 义工到岗审核',
-      content: count > 0 ? `当前有 ${count} 位义工提交了到岗打卡请求，是否进入审核？` : '当前暂无待审核的义工打卡记录，门店护持秩序良好！',
+      title: '👥 审核',
+      content: count > 0 ? `当前有 ${count} 位提交了到岗打卡请求，是否进入审核？` : '当前暂无待审核的打卡记录，门店护持秩序良好！',
       confirmText: '查看列表',
       confirmColor: '#8C1D18',
       showCancel: false

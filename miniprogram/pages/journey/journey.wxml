@@ -85,8 +85,11 @@
 
       <view class="timeline-empty" wx:if="{{timelineGroups.length === 0}}">
         <view class="empty-icon flower-icon"></view>
-        <text class="empty-title">暂无打卡记录</text>
-        <text class="empty-desc">回到首页完成第一次义工到岗打卡，开启您的暖心历程。</text>
+        <text class="empty-title">尚无护持足迹</text>
+        <text class="empty-desc">一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！</text>
+        <view class="empty-cta-btn" bindtap="onGoCheckIn">
+          <text class="empty-cta-text">去首页打卡</text>
+        </view>
       </view>
 
       <view class="timeline-groups" wx:else>
@@ -132,13 +135,35 @@
     <view class="honor-modal-box" catchtap="stopPropagation">
       <view class="honor-modal-header">
         <text class="honor-modal-title">我的爱心荣誉卡</text>
-        <text class="honor-modal-close" bindtap="onCloseHonorModal">✕</text>
+        <view class="honor-modal-close" bindtap="onCloseHonorModal">
+          <text class="close-x-text">✕</text>
+        </view>
       </view>
-      <image class="honor-card-image" src="{{honorCardImage}}" mode="widthFix" />
-      <view class="honor-modal-actions">
-        <button class="honor-btn-cancel" bindtap="onCloseHonorModal">关闭</button>
-        <button class="honor-btn-save" bindtap="onSaveHonorCard">保存到相册</button>
-      </view>
+
+      <scroll-view scroll-y class="honor-card-scroll">
+        <view class="honor-loading" wx:if="{{isGeneratingHonorCard}}">
+          <view class="honor-loading-spinner"></view>
+          <text class="honor-loading-text">正在为您生成荣誉卡...</text>
+        </view>
+        <image
+          wx:else
+          class="honor-card-image"
+          src="{{honorCardImage}}"
+          mode="widthFix"
+          show-menu-by-longpress="{{true}}"
+        />
+      </scroll-view>
+
+      <text class="honor-modal-hint">💡 保存图片后可发送至朋友圈或微信群</text>
+
+      <button
+        class="honor-btn-save"
+        bindtap="onSaveHonorCard"
+        loading="{{isSavingHonorCard}}"
+        disabled="{{isGeneratingHonorCard || isSavingHonorCard || !honorCardImage}}"
+      >
+        {{isSavingHonorCard ? '保存中...' : '💾 保存到相册'}}
+      </button>
     </view>
   </view>
 </view>

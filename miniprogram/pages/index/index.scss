@@ -93,6 +93,28 @@ page {
   gap: 16rpx;
   margin-bottom: 24rpx;
 }
+/* 🏪 首页顶部门店运营状态徽标：配色方案与 store-profile.wxss 的 .sp-operating-badge
+   保持一致（运营中-绿色/筹备中-黄色/暂停运营-灰色），小巧精致，不抢店名视觉焦点 */
+.store-status-badge-header {
+  font-size: 20rpx;
+  font-weight: bold;
+  padding: 2rpx 12rpx;
+  border-radius: 10rpx;
+  background: #E8F5E9;
+  color: #2E7D32;
+  white-space: nowrap;
+}
+
+.store-status-badge-header.preparing {
+  background: #FFF3E0;
+  color: #D48806;
+}
+
+.store-status-badge-header.paused {
+  background: #F1F3F5;
+  color: #868E96;
+}
+
 
 .tag-badge-capsule.blue-theme {
   display: flex;
@@ -7922,4 +7944,393 @@ textarea, .textarea {
 
 .compliance-confirm-btn::after {
   border: none;
+}
+
+/* 🚨 雨花家训（每日修身卡片 + 完整弹窗）补全同步：这一整块此前只直接加在编译产物
+   index.wxss 里，从未写回这份 .scss 源文件——项目用 sass 编译插件，下次从源码
+   重新编译会读不到这些规则，等于这整个功能的样式随时可能被静默冲掉。这里把
+   index.wxss 里对应的现状原样补齐（含本轮排版优化），让两份文件保持一致 */
+.motto-card-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 20rpx 24rpx !important;
+  padding: 24rpx !important;
+  background: #FFFDF8 !important;
+  border: 1rpx solid #F2E8D8 !important;
+  border-radius: 16rpx !important;
+  box-shadow: 0 4rpx 12rpx rgba(212, 160, 89, 0.08) !important;
+  box-sizing: border-box !important;
+}
+
+.motto-header {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.motto-title-icon {
+  font-size: 26rpx;
+  margin-right: 8rpx;
+}
+
+.motto-title-text {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C6A3C;
+}
+
+.motto-content {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12rpx 0 20rpx 0;
+}
+
+.motto-quote {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #D4A059;
+}
+
+.motto-quote:first-child {
+  margin-right: 6rpx;
+}
+
+.motto-quote:last-child {
+  margin-left: 6rpx;
+}
+
+.motto-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333333;
+  letter-spacing: 2rpx;
+}
+
+.motto-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16rpx !important;
+  width: 100% !important;
+  margin-top: 4rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed #EFE5D5;
+  box-sizing: border-box !important;
+}
+
+.motto-btn {
+  flex: 1 !important;
+  height: 56rpx !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 24rpx;
+  color: #666666;
+  background: #FFFFFF !important;
+  border: 1rpx solid #E0D0B8 !important;
+  border-radius: 28rpx !important;
+  box-sizing: border-box !important;
+}
+
+.family-motto-header {
+  padding-top: 12rpx;
+}
+
+.family-motto-header .modal-title-text {
+  font-size: 34rpx;
+  color: #8C1D18;
+  letter-spacing: 4rpx;
+}
+
+.family-motto-scroll {
+  max-height: 68vh;
+  margin: 8rpx 0 16rpx;
+  padding: 16rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.motto-section-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  letter-spacing: 2rpx;
+  margin-top: 32rpx;
+  margin-bottom: 14rpx;
+}
+
+.motto-section-title:first-child {
+  margin-top: 0;
+}
+
+.motto-section-text {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.9;
+  letter-spacing: 3rpx;
+  color: #333333;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.motto-creed-line {
+  font-size: 26rpx;
+  line-height: 1.9;
+  letter-spacing: 3rpx;
+  color: #333333;
+  margin-bottom: 12rpx;
+}
+
+.motto-creed-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center !important;
+  margin: 36rpx 0;
+  padding: 20rpx 0;
+  box-sizing: border-box;
+}
+
+.motto-creed-block .motto-section-title,
+.motto-creed-block .motto-creed-line {
+  width: 100% !important;
+  text-align: center !important;
+  display: block !important;
+}
+
+.motto-creed-block .motto-section-title {
+  color: #8B0000;
+  font-size: 32rpx;
+  margin: 0 0 20rpx;
+  padding: 12rpx 0;
+  border-top: 1rpx solid rgba(212, 175, 55, 0.35);
+  border-bottom: 1rpx solid rgba(212, 175, 55, 0.35);
+}
+/* 📖 雨花文化全集弹窗新增样式：与既有 .motto-section-title/.motto-section-text/
+   .motto-creed-line 共用同一套视觉语言，补充三类新增排版需求 */
+
+/* 一、社会主义核心价值观：三行短语横排展示，用圆角小标签区分每个词，
+   比纯文字更醒目，也不会和下面模块的正文段落混淆 */
+.culture-value-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 10rpx;
+}
+
+.culture-value-chip {
+  font-size: 24rpx;
+  color: #8C1D18;
+  background: #FFF3E0;
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+}
+
+/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），比模块主标题小一号，
+   保持从属关系清晰 */
+.culture-sub-title {
+  font-size: 26rpx;
+  margin-top: 20rpx;
+  margin-bottom: 10rpx;
+}
+
+/* 十个有没有/人生十六最/感恩词/一日修身小结等逐行列表：与 .motto-section-text
+   同款字号/行高/字间距，但左对齐、逐行独立展示（不做 .motto-creed-line 那种
+   强制居中），更符合这类条目式列表的阅读习惯 */
+.culture-list-line {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.9;
+  letter-spacing: 3rpx;
+  color: #333333;
+  text-align: left;
+  margin-bottom: 8rpx;
+}
+
+
+.family-motto-card {
+  margin-top: 80rpx !important;
+}
+
+.motto-modal-close:active {
+  opacity: 0.6;
+}
+
+/* ☀️ 阳光账本入口卡片：标题正下方、全角色可见、位置最优先，阳光公益质感——
+   暖金渐变 + 太阳图标，与页面其余卡片的米白基调区分开，一眼可辨识出这是
+   "公开透明数据"入口而非普通功能入口 */
+.sunshine-ledger-entry {
+  display: flex;
+  align-items: center;
+  margin: 16rpx 24rpx 20rpx;
+  padding: 24rpx 28rpx;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
+  border: 1rpx solid #FFD54F;
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 16rpx rgba(255, 193, 7, 0.2);
+}
+
+.sunshine-ledger-entry:active {
+  opacity: 0.85;
+}
+
+.sunshine-ledger-icon {
+  font-size: 44rpx;
+  margin-right: 16rpx;
+}
+
+.sunshine-ledger-text-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.sunshine-ledger-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #8D5B00;
+}
+
+.sunshine-ledger-sub {
+  font-size: 22rpx;
+  color: #A87B1F;
+}
+
+.sunshine-ledger-arrow {
+  font-size: 22rpx;
+  color: #C99A2E;
+}
+
+/* ☀️ 阳光账本 Modal：与 .compliance-modal-mask/.compliance-modal-card 同款遮罩+
+   卡片骨架，头部沿用暖金主题呼应入口卡片，内容轻量（三项汇总数字 + 一条透明说明） */
+.sunshine-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.sunshine-modal-card {
+  width: 84%;
+  max-width: 600rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 32rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.sunshine-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.sunshine-modal-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #8D5B00;
+}
+
+.sunshine-modal-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+}
+
+.sunshine-modal-loading {
+  text-align: center;
+  padding: 60rpx 0;
+  color: #ADB5BD;
+  font-size: 26rpx;
+}
+
+.sunshine-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sunshine-store-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.sunshine-period-label {
+  font-size: 22rpx;
+  color: #868E96;
+  margin-top: 6rpx;
+  margin-bottom: 24rpx;
+}
+
+.sunshine-stat-grid {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #FFFDF5 0%, #FFF8E1 100%);
+  border-radius: 20rpx;
+  padding: 24rpx 16rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+}
+
+.sunshine-stat-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.sunshine-stat-num {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #8D5B00;
+}
+
+.sunshine-stat-lbl {
+  font-size: 22rpx;
+  color: #A87B1F;
+}
+
+.sunshine-transparency-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+  width: 100%;
+  background: #F1F8F1;
+  border-radius: 12rpx;
+  padding: 14rpx 16rpx;
+  box-sizing: border-box;
+}
+
+.sunshine-tip-icon {
+  font-size: 22rpx;
+}
+
+.sunshine-tip-text {
+  flex: 1;
+  font-size: 22rpx;
+  color: #4A7C4A;
+  line-height: 1.6;
 }

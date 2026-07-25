@@ -45,6 +45,47 @@
       </view>
     </view>
   </view>
+
+  <!-- ☀️ 阳光账本轻量弹窗：全角色/无登录门槛可查看，数据来自 getSunshineLedger
+       （只统计 APPROVED/AUDITED_LOCKED，严格排除待审核草稿） -->
+  <view class="sunshine-modal-mask" wx:if="{{showSunshineLedgerModal}}" bindtap="onCloseSunshineLedgerModal">
+    <view class="sunshine-modal-card" catchtap="stopPropagation">
+      <view class="sunshine-modal-header">
+        <text class="sunshine-modal-title">☀️ 阳光账本</text>
+        <view class="sunshine-modal-close" bindtap="onCloseSunshineLedgerModal">✕</view>
+      </view>
+
+      <view class="sunshine-modal-loading" wx:if="{{sunshineLedgerLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="sunshine-modal-body" wx:else>
+        <text class="sunshine-store-name">{{sunshineLedgerData.storeName || currentStoreName || '本门店'}}</text>
+        <text class="sunshine-period-label">{{sunshineLedgerData.periodLabel || ''}}数据大盘</text>
+
+        <view class="sunshine-stat-grid">
+          <view class="sunshine-stat-cell">
+            <text class="sunshine-stat-num">{{sunshineLedgerData.totalDining || 0}}</text>
+            <text class="sunshine-stat-lbl">就餐人次</text>
+          </view>
+          <view class="sunshine-stat-cell">
+            <text class="sunshine-stat-num">{{sunshineLedgerData.totalDelivery || 0}}</text>
+            <text class="sunshine-stat-lbl">送餐份数</text>
+          </view>
+          <view class="sunshine-stat-cell">
+            <text class="sunshine-stat-num">{{sunshineLedgerData.totalVolunteerHours || 0}}</text>
+            <text class="sunshine-stat-lbl">爱心工时</text>
+          </view>
+        </view>
+
+        <view class="sunshine-transparency-tip">
+          <text class="sunshine-tip-icon">🛡️</text>
+          <text class="sunshine-tip-text">所有数据均经店长/财务双重核销后展示，实时公开、接受全民监督</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
   <view class="app-header-section" style="padding-top: {{headerSafeTop}}px;">
     <view class="main-title-header-box">
       <view class="hamburger-menu-btn" bindtap="onOpenSideDrawer" hover-class="capsule-hover">
@@ -52,11 +93,17 @@
         <view class="hamburger-line"></view>
         <view class="hamburger-line"></view>
       </view>
-      <text class="brand-header-title">素小账志愿服务</text>
+      <text class="brand-header-title">素小账服务</text>
     </view>
 
     <view class="capsule-bar-row">
       <store-picker id="storePicker" bind:storechange="onStoreChanged" bind:storelistchange="onStoreListChanged" />
+      <!-- 🏪 门店运营状态徽标：紧贴 store-picker 胶囊右侧，不侵入该共享组件自身
+           （被 profile/history 等页面共用，改动它的 wxml 影响面更大）。"全国总览"等
+           虚拟门店场景下 currentStoreStatus 会被清空（见 onStoreChanged），此时不渲染 -->
+      <view class="store-status-badge-header {{currentStoreStatus === '筹备中' ? 'preparing' : (currentStoreStatus === '暂停运营' ? 'paused' : 'operating')}}" wx:if="{{currentStoreStatus}}">
+        [{{currentStoreStatus}}]
+      </view>
       <!-- 🌟 财务角色专属的轻量邀请入口：管理员/超管已经有【门店推广与邀请】宫格卡片可以生成邀请码，
            唯独纯财务角色（isFinance 且非 isManager）此前完全没有入口——财务稽核台以数据安全/对账
            为核心，不适合再放一整张运营推广卡片，所以选择和"帮助"同款的极简小图标胶囊，
@@ -66,6 +113,18 @@
       </view>
       <view class="btn-help-capsule" bindtap="onNavigateToHelp"><view class="idx-icon-sm idx-icon-help"></view> 帮助</view>
     </view>
+  </view>
+
+  <!-- ☀️ 阳光账本入口：标题正下方、全角色可见、位置最优先——公开透明数据入口，
+       不依赖任何角色判断，任何视角都能看到同一个位置。点击触发 onOpenSunshineLedger，
+       拉取 getSunshineLedger 云函数（无需登录/无权限门槛，与扫码验真同一套设计） -->
+  <view class="sunshine-ledger-entry" bindtap="onOpenSunshineLedger">
+    <view class="sunshine-ledger-icon">☀️</view>
+    <view class="sunshine-ledger-text-group">
+      <text class="sunshine-ledger-title">阳光账本</text>
+      <text class="sunshine-ledger-sub">公开透明 · 全民监督</text>
+    </view>
+    <view class="sunshine-ledger-arrow">❯</view>
   </view>
 
   <!-- 🌟 视角切换预览提示条：仅超级管理员在非全景视角下可见，避免误以为真的丢失了管理权限 -->
@@ -115,7 +174,7 @@
         bindtap="onVolunteerCheckIn"
       >
         <view class="idx-icon-sm idx-icon-handshake"></view>
-        {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '志愿者到岗服务打卡')}}
+        {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '到岗服务打卡')}}
       </button>
       <text class="link-view-public-ledger" bindtap="goToStatistics">📖 查看公开账本 ›</text>
     </view>
@@ -130,7 +189,7 @@
        不改动 volunteer-hero-card 本身，避免给已经跑得好好的义工端引入回归风险。 -->
   <view class="omni-checkin-card" wx:if="{{!isVolunteer}}">
     <view class="omni-checkin-header">
-      <text class="omni-checkin-title">🙋 志愿服务打卡</text>
+      <text class="omni-checkin-title">🙋 服务打卡</text>
       <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
     </view>
     <button
@@ -138,7 +197,7 @@
       bindtap="onVolunteerCheckIn"
     >
       <view class="idx-icon-sm idx-icon-handshake"></view>
-      {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '志愿者到岗服务打卡')}}
+      {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '到岗服务打卡')}}
     </button>
 
     <!-- 次级跳转：滚动定位到下方对应的管理/财务控制台卡片，不是另开一个页面——
@@ -192,14 +251,14 @@
     <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
   </view>
 
-  <!-- 🌸 每日修身·雨花家训卡片：非宗教化的传统文化/正能量宣导，纯本地静态内容，
+  <!-- 🌸 每日修身卡片：非宗教化的传统文化/正能量宣导，纯本地静态内容，
        不依赖门店/角色，无需等云端数据即可展示（有兜底金句，不会有短暂空白）。
-       金句仍从立志格言/人生十六最/雨花家训/雨花家道 核心精神四个来源里轮流抽取
-       （见 onRefreshCultureQuote/getDailyCultureQuote），标题固定不随来源变化 -->
+       金句全量覆盖十大文化模块轮流抽取（见 onRefreshCultureQuote/getDailyCultureQuote/
+       DAILY_CULTURE_QUOTES），标题随 cultureQuote.source 动态显示所属模块 -->
   <view class="culture-motto-card motto-card-wrapper" style="margin: 20rpx 24rpx !important; padding: 24rpx !important; background: #FFFDF8 !important; border: 1rpx solid #F2E8D8 !important; border-radius: 16rpx !important; box-shadow: 0 4rpx 12rpx rgba(212, 160, 89, 0.08) !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
     <view class="motto-header" style="display: flex !important; flex-direction: row !important; align-items: center !important; margin-bottom: 16rpx !important;">
       <text class="motto-title-icon" style="font-size: 26rpx !important; margin-right: 8rpx !important;">🌸</text>
-      <text class="motto-title-text" style="font-size: 26rpx !important; font-weight: bold !important; color: #8C6A3C !important;">每日修身 · 雨花家训</text>
+      <text class="motto-title-text" style="font-size: 26rpx !important; font-weight: bold !important; color: #8C6A3C !important;">每日修身 · {{cultureQuote.source || '雨花家训'}}</text>
     </view>
 
     <view class="motto-content" style="display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; text-align: center !important; padding: 12rpx 0 20rpx 0 !important;">
@@ -213,7 +272,7 @@
         <text style="font-size: 24rpx !important; color: #666666 !important;">🔄 换一换</text>
       </view>
       <view class="motto-btn" catchtap="onShowFamilyMottoModal" style="flex: 1 !important; height: 56rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1rpx solid #E0D0B8 !important; border-radius: 28rpx !important; box-sizing: border-box !important;">
-        <text style="font-size: 24rpx !important; color: #666666 !important;">📖 完整家训</text>
+        <text style="font-size: 24rpx !important; color: #666666 !important;">📖 文化全集</text>
       </view>
     </view>
   </view>
@@ -305,7 +364,7 @@
         <view class="stat-divider"></view>
         <view class="stat-item" bindtap="onOpenVolunteerAudit">
           <text class="stat-num highlight">{{pendingAuditCount || 0}}</text>
-          <text class="stat-label">待审核志愿者/人</text>
+          <text class="stat-label">待审核/人</text>
         </view>
         <view class="stat-divider"></view>
         <view class="stat-item">
@@ -373,7 +432,7 @@
         </view>
         <view class="qa-grid-cell" bindtap="onOpenAuditModal">
           <view class="icon idx-icon-svg idx-icon-people"></view>
-          <text class="txt">义工审核 ({{pendingAuditCount || 0}})</text>
+          <text class="txt">审核 ({{pendingAuditCount || 0}})</text>
         </view>
         <view class="qa-grid-cell" bindtap="goToStatistics">
           <view class="icon idx-icon-svg idx-icon-chart"></view>
@@ -2036,7 +2095,7 @@
       <view class="drawer-header-bar">
         <view class="header-title-box">
           <view class="header-icon idx-icon-svg idx-icon-people"></view>
-          <text class="header-title-text">门店义工绑定审核</text>
+          <text class="header-title-text">门店审核</text>
         </view>
         <view class="btn-close-drawer-circle" bindtap="onCloseAuditModal">✕</view>
       </view>
@@ -2055,7 +2114,7 @@
           bindtap="onSwitchAuditTab"
           data-tab="approved"
         >
-          已绑定义工 ({{approvedVolunteerList.length}})
+          已审核通过 ({{approvedVolunteerList.length}})
         </view>
       </view>
 
@@ -2105,7 +2164,7 @@
 
           <view class="warm-empty-state" wx:if="{{pendingApplyList.length === 0}}">
             <view class="empty-emoji-icon idx-icon-svg idx-icon-sparkle"></view>
-            <text class="empty-title">{{auditIsNationalView ? '当前全国各门店暂无待处理的义工申请' : '当前暂无待处理的绑定申请'}}</text>
+            <text class="empty-title">{{auditIsNationalView ? '当前全国各门店暂无待处理的申请' : '当前暂无待处理的绑定申请'}}</text>
             <text class="empty-desc" wx:if="{{!auditIsNationalView}}">您可以生成门店邀请海报，邀请财务或现场义工扫码绑定。</text>
             <button class="btn-empty-invite" bindtap="onGenerateStorePosterFromAudit">
               🏪 生成门店邀请海报
@@ -2146,7 +2205,7 @@
 
           <view class="warm-empty-state" wx:if="{{approvedVolunteerList.length === 0}}">
             <view class="empty-emoji-icon idx-icon-svg idx-icon-flower"></view>
-            <text class="empty-title">本店暂无已绑定的义工</text>
+            <text class="empty-title">本店暂无已审核通过的记录</text>
           </view>
         </block>
 
@@ -2262,23 +2321,6 @@
     bind:viewJourney="onViewJourneyFromArchive"
   />
 
-  <!-- 🌟 合规 Footer：常驻展示，字体清晰可读但视觉弱化——不与主功能抢视觉焦点，
-       但也不是此前那种几乎看不见的灰色小字。完整版声明见页面顶部的强制阅读弹窗
-       （showComplianceModal / checkComplianceNotice），这里是精简常驻版，
-       点击可随时重新查看完整声明全文 -->
-  <!-- 🚨 上一版这里的行内 style 把 margin-bottom 写死成了 20rpx !important，
-       行内样式优先级高于任何外部 wxss（哪怕外部也带 !important），实际把下面
-       .disclaimer-card class 里 calc(140rpx+安全区) 的避让间距整个覆盖掉了——
-       这才是"文字被 TabBar 挡住"反复出现的真正原因，不是构建缓存。这次行内不再
-       写死 margin-bottom，交由 class 统一控制，且已按本轮要求提到 180rpx -->
-  <view class="compliance-footer disclaimer-card" style="margin: 32rpx 24rpx !important; padding: 20rpx 24rpx !important; background: #FAFAFA !important; border: 1rpx solid #EFEFEF !important; border-radius: 16rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
-    <view class="compliance-footer-row" style="display: flex !important; align-items: center !important; justify-content: center !important; margin-bottom: 8rpx !important;">
-      <text style="font-size: 22rpx !important; color: #999999 !important; margin-right: 6rpx !important;">ℹ️</text>
-      <text style="font-size: 22rpx !important; font-weight: bold !important; color: #888888 !important;">公益辅助工具说明</text>
-    </view>
-    <text class="compliance-footer-text" style="font-size: 22rpx !important; color: #8C8C8C !important; line-height: 1.6 !important; text-align: justify !important; letter-spacing: 0.5rpx !important;">本工具系民间志愿团队自研的内部食谱与账目信息公示辅助工具，不涉及「雨花斋」官方品牌行政关系，不提供任何形式的网络公开筹款或在线支付服务。</text>
-    <text class="compliance-footer-link" bindtap="onViewFullComplianceNotice" style="margin-top: 10rpx !important; margin-left: 0 !important;">查看完整声明 ›</text>
-  </view>
 
   <!-- 🌟 财务专属功能区：稽核与封账弹窗（按月批量锁定已通过店长确认的账本记录） -->
   <view class="finance-modal-mask" wx:if="{{showFinanceLockModal}}" bindtap="onCloseFinanceLockModal">
@@ -2344,8 +2386,9 @@
     </view>
   </view>
 
-  <!-- 🌸 【查看完整家训】弹窗：展示雨花家训心字诀 + 家训正文 + 为学之方完整原文，
-       三段结构化展示（而非拼成一整段文字），小标题加粗，提升可读性 -->
+  <!-- 📖 【雨花文化全集】弹窗：十大文化模块结构化分层展示完整原文，小标题加粗，
+       提升可读性——module 7（雨花家训）保留原有的居中家训正文块，其余模块与之
+       共用同一套 .motto-section-title/.motto-section-text/.motto-creed-line 视觉语言 -->
   <!-- 🚨 家训弹窗容器加行内保险下移 + 限高，避开右上角原生胶囊按钮；关闭按钮
        改为绝对定位悬浮在卡片右上角，不再和标题挤同一行——这三处内联样式只作用于
        本弹窗这一个元素实例，不影响 .modal-backdrop/.modal-card/.modal-header-bar/
@@ -2354,17 +2397,71 @@
     <view class="modal-card family-motto-card" catchtap="stopPropagation" style="max-height: 75vh !important; margin-top: 60rpx !important; position: relative !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
       <view class="motto-modal-close" bindtap="onCloseFamilyMottoModal" style="position: absolute !important; right: 24rpx !important; top: 24rpx !important; width: 60rpx !important; height: 60rpx !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 36rpx !important; color: #999999 !important; z-index: 10 !important;">✕</view>
       <view class="modal-header-bar family-motto-header" style="justify-content: center !important; padding-right: 60rpx !important;">
-        <text class="modal-title-text">📖 雨花家训</text>
+        <text class="modal-title-text">📖 雨花文化全集</text>
       </view>
       <scroll-view scroll-y class="family-motto-scroll" style="max-height: 58vh !important; flex: 1 !important;">
-        <text class="motto-section-title">雨花心字诀</text>
+
+        <!-- 一、社会主义核心价值观 -->
+        <text class="motto-section-title">一、社会主义核心价值观</text>
+        <view class="culture-value-row" wx:for="{{cultureFullData.coreValuesNational}}" wx:key="*this" wx:for-item="v"><text class="culture-value-chip">{{v}}</text></view>
+        <view class="culture-value-row" wx:for="{{cultureFullData.coreValuesSocial}}" wx:key="*this" wx:for-item="v"><text class="culture-value-chip">{{v}}</text></view>
+        <view class="culture-value-row" wx:for="{{cultureFullData.coreValuesIndividual}}" wx:key="*this" wx:for-item="v"><text class="culture-value-chip">{{v}}</text></view>
+
+        <!-- 二、立志格言 -->
+        <text class="motto-section-title">二、立志格言</text>
+        <text class="motto-section-text" wx:for="{{cultureFullData.famousQuotes}}" wx:key="*this">{{item}}</text>
+
+        <!-- 三、雨花家道 -->
+        <text class="motto-section-title">三、雨花家道</text>
+        <text class="motto-section-text">【雨花核心精神】{{cultureFullData.homeCoreSpirit}}</text>
+        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeSanYouTitle}}】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.homeSanYouItems}}" wx:key="*this">{{item}}</text>
+        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeWuLeTitle}}】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.homeWuLeItems}}" wx:key="*this">{{item}}</text>
+        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeLiuTongTitle}}】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.homeLiuTongItems}}" wx:key="*this">{{item}}</text>
+        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeBaXinTitle}}】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.homeBaXinItems}}" wx:key="*this">{{item}}</text>
+
+        <!-- 四、雨花敬老核心理念 -->
+        <text class="motto-section-title">四、雨花敬老核心理念</text>
+        <text class="motto-section-text">{{cultureFullData.seniorsCoreBelief}}</text>
+
+        <!-- 五、雨花敬老行为准则【十个有没有】 -->
+        <text class="motto-section-title">五、雨花敬老行为准则——【十个有没有】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.seniorsTenHaveYous}}" wx:key="*this">{{item}}</text>
+
+        <!-- 六、雨花家德【雨花人生十六最】 -->
+        <text class="motto-section-title">六、雨花家德——【雨花人生十六最】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.sixteenBests}}" wx:key="*this">{{item}}</text>
+
+        <!-- 七、雨花家训 -->
+        <text class="motto-section-title">七、雨花家训</text>
+        <text class="motto-section-title culture-sub-title">【雨花心字诀】</text>
         <text class="motto-section-text">{{familyMottoMindFormula}}</text>
 
-        <text class="motto-section-title">雨花家训</text>
-        <view class="motto-creed-line" wx:for="{{familyMottoCreedLines}}" wx:key="*this">{{item}}</view>
+        <!-- 🌸 「雨花家训」小标题 + 家训正文十八句整体居中，独立成块，
+             与上下两段（心字诀/为学之方）用 margin 隔开，避免和左对齐正文挤在一起 -->
+        <view class="motto-creed-block" style="text-align: center !important; width: 100%;">
+          <text class="motto-section-title">【雨花家训】</text>
+          <view class="motto-creed-line" wx:for="{{familyMottoCreedLines}}" wx:key="*this" style="text-align: center !important; width: 100%;">{{item}}</view>
+        </view>
 
-        <text class="motto-section-title">为学之方</text>
+        <text class="motto-section-title culture-sub-title">【为学之方】</text>
         <text class="motto-section-text">{{familyMottoStudyMethod}}</text>
+
+        <!-- 八、雨花家仪【感恩词】 -->
+        <text class="motto-section-title">八、雨花家仪——【感恩词】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.gratitudeText}}" wx:key="*this">{{item}}</text>
+
+        <!-- 九、一日修身小结【感恩与祈盼】 -->
+        <text class="motto-section-title">九、一日修身小结——【感恩与祈盼】</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.dailySummaryGratitude}}" wx:key="*this">{{item}}</text>
+        <text class="culture-list-line" wx:for="{{cultureFullData.dailySummaryAspiration}}" wx:key="*this">{{item}}</text>
+
+        <!-- 十、雨花家风 -->
+        <text class="motto-section-title">十、雨花家风</text>
+        <text class="motto-section-text">{{cultureFullData.familyStyleText}}</text>
       </scroll-view>
     </view>
   </view>

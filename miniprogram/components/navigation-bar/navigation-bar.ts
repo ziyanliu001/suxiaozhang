@@ -188,12 +188,20 @@ Component({
         displayStyle
       })
     },
+    // 🛡️ 全局返回逻辑排查修复：这里此前不管页面栈深度，只要 delta 为真值就无条件
+    // navigateBack——分享直入等无上一页可退的场景下会静默失败（按钮点了没反应）。
+    // 补上与其余二级页面一致的 pages.length 判断，没有上一页时安全落到首页 Tab
     back() {
       const data = this.data
       if (data.delta) {
-        wx.navigateBack({
-          delta: data.delta
-        })
+        const pages = getCurrentPages()
+        if (pages.length > 1) {
+          wx.navigateBack({
+            delta: data.delta
+          })
+        } else {
+          wx.switchTab({ url: '/pages/index/index' })
+        }
       }
       this.triggerEvent('back', { delta: data.delta }, {})
     },

@@ -62,20 +62,73 @@
         </view>
 
         <view class="role-badge-row">
-          <view class="badge-tag {{currentUserRole}}">
+          <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
             <view class="badge-icon-svg icon-svg-flower"></view>
             <text>{{currentUserRole === 'super_admin' ? '全局超级管理员' :
               currentUserRole === 'store_manager' ? currentStoreName + ' · 店长' :
-              currentUserRole === 'finance' ? currentStoreName + ' · 财务' : '雨花斋志工'}}</text>
+              currentUserRole === 'finance' ? currentStoreName + ' · 财务' :
+              currentUserRole === 'store_patriarch' ? '🙏 ' + currentStoreName + ' · 家长' :
+              isFamily ? (currentStoreName ? ('❤️ ' + currentStoreName + ' · 家人') : '❤️ 请选择门店 · 家人') :
+              (currentStoreName ? ('🌸 ' + currentStoreName + ' · 志工') : '🌸 请选择门店 · 志工')}}</text>
           </view>
         </view>
       </view>
     </view>
 
+    <!-- ❤️ 家人（服务对象）版面：新用户/未审核用户的默认身份视角。原"极简关怀"版面
+         全面对齐修复——护持榜/核心荣誉模块不再隐藏（见上方 merit-board-card/
+         honor-wall-card 的 isFamily 专属标题），这张卡片专注日常护持向导 -->
+    <view class="family-care-card" wx:if="{{isFamily}}">
+      <view class="board-header">
+        <view class="header-icon-svg icon-svg-flower"></view>
+        <text class="header-title">日常护持</text>
+        <view class="header-icon-svg icon-svg-flower flip-x"></view>
+      </view>
+
+      <text class="family-care-hint">感恩家人的倾心护持，共同守护雨花温情</text>
+
+      <text class="list-group-label family-care-list-label">日常记录</text>
+      <view class="action-list-container family-care-list">
+        <!-- 🆕 店铺状态：替换掉此前的"今日菜谱"/"开餐时间"入口，标题实时显示当前
+             运营状态（见 refreshStoreStatus，onShow 每次都静默刷新），点击仍可弹出
+             轻量 Modal 展示门店名称与运营状态，复用 manageStoreProfile 'get' 动作——
+             该动作本就允许任意已绑定门店的角色只读查看，不需要新开云函数 -->
+        <view class="action-item-cell" bindtap="onShowStoreStatus">
+          <view class="item-left">
+            <text class="manager-only-emoji">🏪</text>
+            <text class="item-text">店铺状态：{{currentStoreStatus || '运营中'}}</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <view class="action-item-cell" bindtap="onGoToStoreProfile">
+          <view class="item-left">
+            <text class="manager-only-emoji">🏠</text>
+            <text class="item-text">门店档案</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <!-- 🆕 补回：家人也是自己足迹的记录者，同样需要能看到自己历史提交的餐报审核
+             状态——与义工版本用的是同一个入口/同一个页面（?view=mine 已收敛到
+             createdBy===自己，见 history.ts onLoad 的 viewMode 处理） -->
+        <view class="action-item-cell" bindtap="onGoToMySubmissions">
+          <view class="item-left">
+            <view class="item-icon-svg icon-svg-history"></view>
+            <text class="item-text">我的餐报提交记录</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🌟 家人骨干版护持榜：与流动义工共用同一套统计结构（护持天数/累计工时），
+         只是标题文案换成"家人"专属用语，与义工版视觉区分开——不是隐藏，是选项 B
+         （保留家人页面顶部的护持榜/核心荣誉模块，只调整专属称谓） -->
     <view class="merit-board-card">
       <view class="board-header">
         <view class="header-icon-svg icon-svg-flower"></view>
-        <text class="header-title">爱心护持榜</text>
+        <text class="header-title">{{isFamily ? '家人护持榜' : '爱心护持榜'}}</text>
         <view class="header-icon-svg icon-svg-flower flip-x"></view>
       </view>
 
@@ -121,11 +174,118 @@
       <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
     </view>
 
-    <!-- 分组一：核心荣誉 —— 数字荣誉墙（横向滚动徽章展架），替换原来的单薄列表项 -->
-    <view class="list-group-label">核心荣誉</view>
+    <!-- 🏛️ 家长管理 / 资源兜底：原独立页面 pages/patriarch-dashboard 已废弃，
+         全部内嵌到个人中心。仅家长/督导本人或超级管理员可见——家长锁定本店，
+         超管跟随全局门店切换器（fetchPatriarchDashboardData 内部与原页面
+         initStore 同一套口径） -->
+    <view class="patriarch-panel-card" wx:if="{{isPatriarch || isSuperAdmin}}">
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">🏛️ 家长管理 / 资源兜底</text>
+      </view>
+
+      <!-- 身份/门店快捷切换：超管借此在各门店的家长看板间跳转，家长本人切走后
+           面板会跟随重新加载（见 onPatriarchStoreChanged） -->
+      <view class="pd-store-switch-row">
+        <store-picker id="patriarchStorePicker" bind:storechange="onPatriarchStoreChanged" />
+      </view>
+
+      <view class="pd-store-card">
+        <text class="pd-store-name">{{patriarchData.storeName || '未命名门店'}}</text>
+        <view class="pd-people-row">
+          <text class="pd-people-item" wx:if="{{patriarchData.patriarch}}">🏛️ 护持家长：{{patriarchData.patriarch}}</text>
+          <text class="pd-people-item" wx:if="{{patriarchData.manager}}">📋 日常店长：{{patriarchData.manager}}</text>
+        </view>
+      </view>
+
+      <!-- 极简门店健康大盘：本月服务人次 + 收支总览 + 验真状态 -->
+      <view class="pd-health-card">
+        <view class="pd-health-title">📊 {{patriarchData.monthLabel}}门店健康大盘</view>
+        <view class="pd-health-grid">
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月服务人次</text>
+            <text class="pd-health-val">{{patriarchData.monthDiners}} 人次</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月收入</text>
+            <text class="pd-health-val green">¥{{patriarchData.monthIncome}}</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月支出</text>
+            <text class="pd-health-val red">¥{{patriarchData.monthExpense}}</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月净额</text>
+            <text class="pd-health-val {{patriarchData.monthNetPositive ? 'green' : 'red'}}">{{patriarchData.monthNetPositive ? '+' : '-'}}¥{{patriarchData.monthNet}}</text>
+          </view>
+        </view>
+        <view class="pd-verify-row">
+          <text class="pd-verify-icon">🛡️</text>
+          <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
+        </view>
+      </view>
+
+      <!-- 待确认队列：作废申请 -->
+      <view class="pd-section-title" wx:if="{{patriarchData.pendingVoidList.length > 0}}">
+        <text class="pd-section-icon">⏳</text>
+        <text class="pd-section-txt">待确认的作废申请（{{patriarchData.pendingVoidList.length}}）</text>
+      </view>
+      <view class="pd-void-card" wx:for="{{patriarchData.pendingVoidList}}" wx:key="docId">
+        <view class="pd-void-info">
+          <text class="pd-void-date">{{item.dateString}}</text>
+          <text class="pd-void-amount">今日结余 ¥{{item.todayBalance}} · 支出 ¥{{item.expenseAmount}}</text>
+        </view>
+        <view class="pd-void-actions">
+          <button class="pd-btn-reject" data-id="{{item.docId}}" data-action="reject" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">驳回</button>
+          <button class="pd-btn-approve" data-id="{{item.docId}}" data-action="approve" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">确认作废</button>
+        </view>
+      </view>
+
+      <!-- 待确认队列：门店画像变更 -->
+      <view class="pd-section-title" wx:if="{{patriarchData.pendingProfileUpdate}}">
+        <text class="pd-section-icon">⏳</text>
+        <text class="pd-section-txt">待确认的门店画像变更</text>
+      </view>
+      <view class="pd-profile-card" wx:if="{{patriarchData.pendingProfileUpdate}}">
+        <view class="pd-profile-items">
+          <text class="pd-profile-item" wx:for="{{patriarchData.pendingProfileItems}}" wx:for-item="pf" wx:key="label">{{pf.label}}：{{pf.value}}</text>
+        </view>
+        <view class="pd-void-actions">
+          <button class="pd-btn-reject" data-action="reject" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">驳回</button>
+          <button class="pd-btn-approve" data-action="approve" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">确认变更</button>
+        </view>
+      </view>
+
+      <!-- 待确认队列：店长/财务角色申请（家长与超管均可审批，见 processRoleAudit） -->
+      <view class="pd-section-title" wx:if="{{patriarchData.pendingRoleRequests.length > 0}}">
+        <text class="pd-section-icon">⏳</text>
+        <text class="pd-section-txt">待审核的店长/财务申请（{{patriarchData.pendingRoleRequests.length}}）</text>
+      </view>
+      <view class="pd-void-card" wx:for="{{patriarchData.pendingRoleRequests}}" wx:key="applyId">
+        <view class="pd-void-info">
+          <text class="pd-void-date">{{item.realName}} · 申请【{{item.requestedRoleLabel}}】</text>
+          <text class="pd-void-amount">手机号 {{item.phone}} · {{item.applyTime}}</text>
+        </view>
+        <view class="pd-void-actions">
+          <button class="pd-btn-reject" data-id="{{item.applyId}}" data-action="reject" bindtap="onDecideRoleRequest" disabled="{{patriarchData.roleActionInFlight}}">驳回</button>
+          <button class="pd-btn-approve" data-id="{{item.applyId}}" data-action="approve" bindtap="onDecideRoleRequest" disabled="{{patriarchData.roleActionInFlight}}">通过</button>
+        </view>
+      </view>
+
+      <view class="pd-empty-tip" wx:if="{{patriarchData.pendingVoidList.length === 0 && !patriarchData.pendingProfileUpdate && patriarchData.pendingRoleRequests.length === 0 && !patriarchData.loading}}">
+        <text>✅ 当前没有待确认的高风险操作</text>
+      </view>
+
+      <view class="pd-loading-box" wx:if="{{patriarchData.loading}}">
+        <text>加载中...</text>
+      </view>
+    </view>
+
+    <!-- 分组一：核心荣誉 —— 数字荣誉墙（横向滚动徽章展架），替换原来的单薄列表项。
+         选项 B：家人骨干同样保留这个模块，标题换成"家人荣誉"专属用语区分义工版 -->
+    <view class="list-group-label">{{isFamily ? '家人荣誉' : '核心荣誉'}}</view>
     <view class="honor-wall-card">
       <view class="honor-wall-header">
-        <text class="honor-wall-title">🏅 我的核心荣誉</text>
+        <text class="honor-wall-title">{{isFamily ? '🏅 我的家人荣誉' : '🏅 我的核心荣誉'}}</text>
         <view class="honor-wall-cert-link" bindtap="onGoToBadges">
           <text>义工证书</text>
           <view class="item-arrow">❯</view>
@@ -150,9 +310,10 @@
       </scroll-view>
     </view>
 
-    <!-- 分组二：日常记录 —— 护持足迹（打卡历程）与餐报提交记录，命名区分避免混淆 -->
-    <view class="list-group-label">日常记录</view>
-    <view class="action-list-container">
+    <!-- 分组二：日常记录 —— 护持足迹（打卡历程）与餐报提交记录，命名区分避免混淆。
+         家人（服务对象）没有打卡/护持记录，整组隐藏，改由上方的极简关怀卡片承接 -->
+    <view class="list-group-label" wx:if="{{!isFamily}}">日常记录</view>
+    <view class="action-list-container" wx:if="{{!isFamily}}">
       <view class="action-item-cell" bindtap="onGoToJourney">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
@@ -165,6 +326,18 @@
         <view class="item-left">
           <view class="item-icon-svg icon-svg-history"></view>
           <text class="item-text">我的餐报提交记录</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <!-- 🆕 义工/普通个人专属入口：复用与超管同一个统计页（statistics.ts 自己按
+           角色分流成个人视角，见 applyRolePermissions 里的 showPersonalView），
+           直接复用已有的 onGoToStatistics（不带 shopName 参数的裸跳转），
+           不需要额外定义一个新 handler ——两者跳的是同一个页面同一个函数 -->
+      <view class="action-item-cell" wx:if="{{isVolunteer}}" bindtap="onGoToStatistics">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-screen"></view>
+          <text class="item-text">我的统计数据</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -183,7 +356,10 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell manager-only-cell" wx:elif="{{currentUserRole === 'store_manager'}}" bindtap="onGoToStoreOverview">
+      <!-- 🛡️ 视觉统一：不再用 .manager-only-cell 的暖金/桃色高亮背景——保留
+           .manager-only-emoji 让📊图标尺寸与相邻项一致，外层容器改回纯 .action-item-cell，
+           背景/圆角/内边距/hover 全部与"我的护持足迹"等相邻项统一为纯白 -->
+      <view class="action-item-cell" wx:elif="{{currentUserRole === 'store_manager'}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">本店数据明细</text>
@@ -192,8 +368,13 @@
       </view>
 
       <!-- 🏠 门店档案：门店人员与服务人群画像（中共党员/社会工作者/志愿者/堂食老人等 7 项人数指标），
-           店长/超管可编辑维护，财务只读查看，义工不展示（与上方管理入口同一权限层级） -->
-      <view class="action-item-cell manager-only-cell" wx:if="{{!isVolunteer}}" bindtap="onGoToStoreProfile">
+           店长/超管可编辑维护，财务只读查看，义工不展示。
+           🛡️ 视觉统一：不再复用 .manager-only-cell 的暖金/桃色高亮背景——那套"强化行"
+           语言现在只留给"超级管理员全景"这一个真正的跨店管理大屏入口，门店档案/本店数据
+           明细都只是普通的资料查看/编辑入口，套上同款高亮反而显得比"我的护持足迹"等
+           相邻项更突兀刺眼。保留 .manager-only-emoji 让🏠图标尺寸与上面管理入口的图标
+           一致，但外层容器改回纯 .action-item-cell，背景/圆角/内边距/hover 全部与相邻项统一 -->
+      <view class="action-item-cell" wx:if="{{!isVolunteer}}" bindtap="onGoToStoreProfile">
         <view class="item-left">
           <text class="manager-only-emoji">🏠</text>
           <text class="item-text">门店档案</text>
@@ -201,15 +382,6 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🏛️ 家长监督台：仅家长/督导角色可见，查看极简门店健康大盘 + 处理待确认的
-           门店画像变更/餐报作废申请 -->
-      <view class="action-item-cell manager-only-cell" wx:if="{{currentUserRole === 'store_patriarch'}}" bindtap="onGoToPatriarchDashboard">
-        <view class="item-left">
-          <text class="manager-only-emoji">🏛️</text>
-          <text class="item-text">家长监督台</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
     </view>
 
     <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区 -->
@@ -328,6 +500,32 @@
       <button class="certificate-save-btn" bindtap="onSaveCertificateToAlbum" disabled="{{certificateGenerating || !certificateTempFilePath}}">
         💾 保存证书分享朋友圈
       </button>
+    </view>
+  </view>
+
+  <!-- 🏪 查看店铺状态 Modal：轻量只读展示，复用 manageStoreProfile 'get' 动作查到的
+       门店名称与运营状态，不新开云函数 -->
+  <view class="store-status-modal-mask" wx:if="{{showStoreStatusModal}}" bindtap="onCloseStoreStatusModal">
+    <view class="store-status-modal-card" catchtap="stopPropagation">
+      <view class="store-status-modal-header">
+        <text class="store-status-modal-title">🏪 店铺状态</text>
+        <view class="store-status-modal-close" bindtap="onCloseStoreStatusModal">✕</view>
+      </view>
+
+      <view class="store-status-loading-box" wx:if="{{storeStatusInfo.loading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="store-status-info-body" wx:else>
+        <view class="store-status-row">
+          <text class="store-status-lbl">门店名称</text>
+          <text class="store-status-val">{{storeStatusInfo.storeName || currentStoreName || '未命名门店'}}</text>
+        </view>
+        <view class="store-status-row">
+          <text class="store-status-lbl">运营状态</text>
+          <text class="store-status-badge {{storeStatusInfo.operatingStatus}}">{{storeStatusInfo.operatingStatusLabel || '运营中'}}</text>
+        </view>
+      </view>
     </view>
   </view>
 

@@ -5,7 +5,7 @@
     <view class="drawer-header" style="margin-top: {{sidebarTopMargin}}px;">
       <view class="drawer-brand-avatar">{{storeInitial}}</view>
       <view class="drawer-brand-text">
-        <text class="drawer-store-name">{{storeName || '素小账志愿服务'}}</text>
+        <text class="drawer-store-name">{{storeName || '素小账服务'}}</text>
         <text class="drawer-role-label">{{roleLabel}}</text>
       </view>
       <text class="drawer-close" bindtap="close">✕</text>

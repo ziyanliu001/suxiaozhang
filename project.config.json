@@ -15,7 +15,7 @@
     },
     "coverView": false,
     "postcss": false,
-    "minified": false,
+    "minified": true,
     "autoReload": false,
     "enhance": false,
     "lazyCodeLoading": false,

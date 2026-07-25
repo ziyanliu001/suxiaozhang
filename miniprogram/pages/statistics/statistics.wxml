@@ -251,6 +251,12 @@
     <view class="compliance-disclaimer">
       <text class="compliance-disclaimer-text">本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐；如涉及个人信息，已在前端做脱敏展示处理。</text>
     </view>
+
+    <!-- 🆕 超管专属：全国公示海报——与全国运营/财务报表（文字导出）是两种不同产物，
+         这里生成的是可直接分享/张贴的图片海报 -->
+    <button class="btn-primary-poster national-poster-btn" bindtap="onGenerateNationalPoster" wx:if="{{isAdmin}}">
+      🖼️ 生成全国公示海报
+    </button>
   </view>
 
   <!-- 🌟 超管专属：全国运营/财务报表生成弹窗（结构对齐本页既有 .patch-modal-mask 弹窗写法） -->
@@ -277,9 +283,170 @@
     </view>
   </view>
 
-  <scroll-view class="content-section" scroll-y wx:if="{{!showNationalDashboard}}">
+  <!-- 🆕 个人视角：非管理角色（普通义工/无角色账号）专属，与「全国大屏」/「单店明细」
+       完全独立——不展示任何跨门店治理/运营敏感数据，只有属于自己的护持数据 -->
+  <view class="personal-dashboard-container" wx:if="{{showPersonalView}}">
+    <view class="personal-hero-card">
+      <view class="hero-header">
+        <text class="hero-title">💛 我的雨花爱心微数据</text>
+      </view>
+
+      <view class="hero-main-num">
+        <text class="num-lbl">累计护持天数</text>
+        <text class="num-val">{{personalStats.totalDays}} <text class="unit">天</text></text>
+      </view>
+
+      <view class="hero-grid-4">
+        <view class="h-cell">
+          <text class="h-val">{{personalStats.diningCount}}</text>
+          <text class="h-lbl">累计服务人次</text>
+        </view>
+        <view class="h-cell">
+          <text class="h-val">{{personalStats.totalHours}}</text>
+          <text class="h-lbl">贡献工时(h)</text>
+        </view>
+        <view class="h-cell">
+          <text class="h-val">{{personalStats.totalCount}}</text>
+          <text class="h-lbl">累计打卡次数</text>
+        </view>
+      </view>
+
+      <view class="volunteer-warm-tip">
+        <text class="tip-text">用一餐饭的温度，传递温暖与关爱。感恩您的每一次默默付出！</text>
+      </view>
+    </view>
+
+    <view class="personal-trend-card">
+      <view class="matrix-header">
+        <text class="matrix-title">📈 我的月度护持频次趋势</text>
+      </view>
+
+      <view class="personal-trend-loading" wx:if="{{personalStatsLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="personal-trend-chart" wx:else>
+        <view class="trend-bar-col" wx:for="{{personalMonthlyTrend}}" wx:key="monthLabel">
+          <view class="trend-bar-track">
+            <view class="trend-bar-fill" style="height: {{item.barPercent}}%;"></view>
+          </view>
+          <text class="trend-bar-count">{{item.count}}</text>
+          <text class="trend-bar-label">{{item.monthLabel}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="compliance-disclaimer">
+      <text class="compliance-disclaimer-text">本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐；如涉及个人信息，已在前端做脱敏展示处理。</text>
+    </view>
+
+    <view class="bottom-sticky-bar">
+      <button class="btn-primary-poster" bindtap="onGeneratePersonalPoster">
+        🖼️ 生成我的个人爱心海报
+      </button>
+    </view>
+  </view>
+
+  <!-- 🎖️ 个人爱心海报预览弹窗：与 pages/journey.ts「爱心荣誉卡」同一套预览体验
+       （立刻打开 + 加载态 + scroll-view max-height，避免图片区域塌陷成空白） -->
+  <view class="honor-modal-mask" wx:if="{{showPersonalPosterModal}}" bindtap="onClosePersonalPosterModal">
+    <view class="honor-modal-box" catchtap="stopPropagation">
+      <view class="honor-modal-header">
+        <text class="honor-modal-title">我的个人爱心海报</text>
+        <view class="honor-modal-close" bindtap="onClosePersonalPosterModal">
+          <text class="close-x-text">✕</text>
+        </view>
+      </view>
+
+      <scroll-view scroll-y class="honor-card-scroll">
+        <view class="honor-loading" wx:if="{{isGeneratingPersonalPoster}}">
+          <view class="honor-loading-spinner"></view>
+          <text class="honor-loading-text">正在为您生成海报...</text>
+        </view>
+        <image
+          wx:else
+          class="honor-card-image"
+          src="{{personalPosterImage}}"
+          mode="widthFix"
+          show-menu-by-longpress="{{true}}"
+        />
+      </scroll-view>
+
+      <text class="honor-modal-hint">💡 保存图片后可发送至朋友圈或微信群</text>
+
+      <button
+        class="honor-btn-save"
+        bindtap="onSavePersonalPoster"
+        loading="{{isSavingPersonalPoster}}"
+        disabled="{{isGeneratingPersonalPoster || isSavingPersonalPoster || !personalPosterImage}}"
+      >
+        {{isSavingPersonalPoster ? '保存中...' : '💾 保存到相册'}}
+      </button>
+    </view>
+  </view>
+
+  <scroll-view class="content-section" scroll-y wx:if="{{!showNationalDashboard && !showPersonalView}}">
     <view class="stats-content" wx:if="{{statistics && statistics.recordCount > 0}}">
-      
+
+      <!-- 🆕 财务专属：门店财务与凭证合规大屏——突出单餐成本/记账笔数/凭证合规率 -->
+      <view class="finance-compliance-card" wx:if="{{isFinance}}">
+        <view class="card-header">
+          <text class="card-title">💳 门店财务与凭证合规大屏</text>
+        </view>
+        <view class="finance-metric-grid">
+          <view class="finance-metric-cell">
+            <text class="finance-metric-val">¥{{statsData.costPerMeal || '0.00'}}</text>
+            <text class="finance-metric-lbl">单餐成本</text>
+          </view>
+          <view class="finance-metric-cell">
+            <text class="finance-metric-val">{{statsData.recordCount || 0}}</text>
+            <text class="finance-metric-lbl">记账笔数</text>
+          </view>
+          <view class="finance-metric-cell">
+            <text class="finance-metric-val">{{statsData.auditedCount || 0}}</text>
+            <text class="finance-metric-lbl">已稽核笔数</text>
+          </view>
+          <view class="finance-metric-cell {{statsData.complianceRate !== null && statsData.complianceRate < 60 ? 'warn' : ''}}">
+            <text class="finance-metric-val">{{statsData.complianceRate === null || statsData.complianceRate === undefined ? '暂无数据' : statsData.complianceRate + '%'}}</text>
+            <text class="finance-metric-lbl">凭证合规率</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 🆕 家长专属：资源储备/资金物资兜底状况与续航预警天数——数据来自
+           getPatriarchDashboard（该云函数已把 storeId 硬锁定为本人绑定门店） -->
+      <view class="patriarch-resource-card" wx:if="{{isPatriarch}}">
+        <view class="card-header">
+          <text class="card-title">🏛️ 门店资源储备与续航预警</text>
+        </view>
+        <view class="patriarch-loading" wx:if="{{patriarchStatsLoading}}">
+          <text>加载中...</text>
+        </view>
+        <view wx:else>
+          <view class="finance-metric-grid">
+            <view class="finance-metric-cell">
+              <text class="finance-metric-val">{{patriarchStats.monthDiners}}</text>
+              <text class="finance-metric-lbl">{{patriarchStats.monthLabel}}服务人次</text>
+            </view>
+            <view class="finance-metric-cell {{patriarchStats.monthNetPositive ? 'green' : 'warn'}}">
+              <text class="finance-metric-val">{{patriarchStats.monthNetPositive ? '+' : '-'}}¥{{patriarchStats.monthNet}}</text>
+              <text class="finance-metric-lbl">本月资金结余</text>
+            </view>
+            <view class="finance-metric-cell">
+              <text class="finance-metric-val">{{patriarchStats.auditedCount}} / {{patriarchStats.totalCount}}</text>
+              <text class="finance-metric-lbl">防伪验真进度</text>
+            </view>
+            <view class="finance-metric-cell {{patriarchStats.pendingVoidCount > 0 || patriarchStats.pendingProfileUpdate ? 'warn' : ''}}">
+              <text class="finance-metric-val">{{patriarchStats.pendingVoidCount + (patriarchStats.pendingProfileUpdate ? 1 : 0)}}</text>
+              <text class="finance-metric-lbl">待确认高风险操作</text>
+            </view>
+          </view>
+          <view class="patriarch-resource-tip" wx:if="{{patriarchStats.pendingVoidCount > 0 || patriarchStats.pendingProfileUpdate}}">
+            <text>⚠️ 有待确认的作废申请/门店画像变更，请前往【个人中心 · 家长管理】处理</text>
+          </view>
+        </view>
+      </view>
+
       <view class="health-card" style="background: linear-gradient(135deg, {{statistics.healthGradientFrom}} 0%, {{statistics.healthGradientTo}} 100%);">
         <view class="health-header">
           <text class="health-icon">{{statistics.healthIcon}}</text>
@@ -686,7 +853,7 @@
 
   <view class="bottom-sticky-bar" wx:if="{{statistics && statistics.recordCount > 0}}">
     <button class="btn-primary-poster" bindtap="onGeneratePoster">
-      🖼️ 生成公示海报
+      🖼️ {{isFinance ? '生成门店财务月报海报' : (isPatriarch ? '生成门店续航/爱心公示海报' : '生成本店营运月报海报')}}
     </button>
   </view>
 
