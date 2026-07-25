@@ -128,6 +128,13 @@ function round2(num: number): number {
   return Math.round((num + Number.EPSILON) * 100) / 100;
 }
 
+// 📖 雨花文化全集【十个有没有】：把"只有他人，没有自己。"这类逗号分句的原文
+// 拆成左右两列（左：只有…；右：没有…），供弹窗内的双列网格逐行渲染
+function splitTenHaveYouPair(text: string): { left: string; right: string } {
+  const idx = text.indexOf('，');
+  return idx >= 0 ? { left: text.slice(0, idx), right: text.slice(idx + 1) } : { left: text, right: '' };
+}
+
 // 🌟 今日食谱动态卡片：后端 manageDailyMenu 存的是一整段自由文本 menuText
 // （没有结构化的菜品数组字段），要在首页把它渲染成小网格/标签云，只能从这段文本里
 // 尽力切出菜品名。
@@ -456,6 +463,7 @@ Page({
       homeBaXinTitle: '', homeBaXinItems: [] as string[],
       seniorsCoreBelief: '',
       seniorsTenHaveYous: [] as string[],
+      seniorsTenHaveYouPairs: [] as { left: string; right: string }[],
       sixteenBests: [] as string[],
       gratitudeText: [] as string[],
       dailySummaryTitle: '',
@@ -7172,6 +7180,7 @@ Page({
         homeBaXinTitle: RAIN_FLOWER_HOME.baXin.title, homeBaXinItems: RAIN_FLOWER_HOME.baXin.items,
         seniorsCoreBelief: SENIORS_CARE.coreBelief,
         seniorsTenHaveYous: SENIORS_CARE.tenHaveYous,
+        seniorsTenHaveYouPairs: SENIORS_CARE.tenHaveYous.map(splitTenHaveYouPair),
         sixteenBests: SIXTEEN_BESTS,
         gratitudeText: GRATITUDE_TEXT,
         dailySummaryTitle: DAILY_SUMMARY.title,

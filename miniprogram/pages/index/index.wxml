@@ -2418,21 +2418,21 @@
         <!-- 三、雨花家道 -->
         <text class="motto-section-title">三、雨花家道</text>
         <text class="motto-section-text">【雨花核心精神】{{cultureFullData.homeCoreSpirit}}</text>
-        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeSanYouTitle}}】</text>
+        <text class="culture-sub-title">—— {{cultureFullData.homeSanYouTitle}} ——</text>
         <!-- 🌸 三由/五了/六同/八欣：短句对仗型内容，用 flex-wrap 居中网格包裹，
              避免手机窄屏下每句独占一行、右侧留出大片空白 -->
         <view class="culture-pair-grid">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeSanYouItems}}" wx:key="*this">{{item}}</text>
         </view>
-        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeWuLeTitle}}】</text>
+        <text class="culture-sub-title">—— {{cultureFullData.homeWuLeTitle}} ——</text>
         <view class="culture-pair-grid">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeWuLeItems}}" wx:key="*this">{{item}}</text>
         </view>
-        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeLiuTongTitle}}】</text>
+        <text class="culture-sub-title">—— {{cultureFullData.homeLiuTongTitle}} ——</text>
         <view class="culture-pair-grid">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeLiuTongItems}}" wx:key="*this">{{item}}</text>
         </view>
-        <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeBaXinTitle}}】</text>
+        <text class="culture-sub-title">—— {{cultureFullData.homeBaXinTitle}} ——</text>
         <view class="culture-pair-grid">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeBaXinItems}}" wx:key="*this">{{item}}</text>
         </view>
@@ -2441,29 +2441,35 @@
         <text class="motto-section-title">四、雨花敬老核心理念</text>
         <text class="motto-section-text">{{cultureFullData.seniorsCoreBelief}}</text>
 
-        <!-- 五、雨花敬老行为准则【十个有没有】：同为短句对仗型内容，同样用 flex-wrap 居中网格 -->
+        <!-- 五、雨花敬老行为准则【十个有没有】：拆成"只有…/没有…"双列网格，
+             左右两列各自居中对齐，替代此前逗号连写在一行的拥挤排版 -->
         <text class="motto-section-title">五、雨花敬老行为准则——【十个有没有】</text>
-        <view class="culture-pair-grid">
-          <text class="culture-list-line" wx:for="{{cultureFullData.seniorsTenHaveYous}}" wx:key="*this">{{item}}</text>
+        <view class="culture-two-col-grid">
+          <block wx:for="{{cultureFullData.seniorsTenHaveYouPairs}}" wx:key="left">
+            <text class="culture-two-col-cell">{{item.left}}</text>
+            <text class="culture-two-col-cell">{{item.right}}</text>
+          </block>
         </view>
 
-        <!-- 六、雨花家德【雨花人生十六最】 -->
+        <!-- 六、雨花家德【雨花人生十六最】：单列纵向列表，左对齐 + 缩进 + 加大行高段距 -->
         <text class="motto-section-title">六、雨花家德——【雨花人生十六最】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.sixteenBests}}" wx:key="*this">{{item}}</text>
+        <view class="culture-list-single-column">
+          <text class="culture-list-line" wx:for="{{cultureFullData.sixteenBests}}" wx:key="*this">{{item}}</text>
+        </view>
 
         <!-- 七、雨花家训 -->
         <text class="motto-section-title">七、雨花家训</text>
-        <text class="motto-section-title culture-sub-title">【雨花心字诀】</text>
+        <text class="culture-sub-title">—— 雨花心字诀 ——</text>
         <text class="motto-section-text">{{familyMottoMindFormula}}</text>
 
         <!-- 🌸 「雨花家训」小标题 + 家训正文十八句整体居中，独立成块，
              与上下两段（心字诀/为学之方）用 margin 隔开，避免和左对齐正文挤在一起 -->
         <view class="motto-creed-block" style="text-align: center !important; width: 100%;">
-          <text class="motto-section-title">【雨花家训】</text>
+          <text class="culture-sub-title">—— 雨花家训 ——</text>
           <view class="motto-creed-line" wx:for="{{familyMottoCreedLines}}" wx:key="*this" style="text-align: center !important; width: 100%;">{{item}}</view>
         </view>
 
-        <text class="motto-section-title culture-sub-title">【为学之方】</text>
+        <text class="culture-sub-title">—— 为学之方 ——</text>
         <text class="motto-section-text">{{familyMottoStudyMethod}}</text>
 
         <!-- 八、雨花家仪【感恩词】 -->

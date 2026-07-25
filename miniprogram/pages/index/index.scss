@@ -8051,25 +8051,32 @@ textarea, .textarea {
   letter-spacing: 4rpx;
 }
 
+/* 🐛 text-align:center 是 .motto-section-title 改成 inline-block 后能整体居中的
+   关键——inline-block 元素自身的 margin:auto 不会生效（这是 CSS 规范行为，不是
+   笔误），真正让它水平居中的是这里父容器的 text-align:center；子元素里已经
+   显式声明 text-align:left（.culture-list-line 等）的仍按各自声明为准，不受影响。
+   底部额外留出 50rpx，滚动到「十、雨花家风」最后一屏时留有呼吸感 */
 .family-motto-scroll {
   max-height: 62vh;
   margin: 8rpx 0 16rpx;
-  padding: 16rpx 28rpx;
+  padding: 16rpx 28rpx 50rpx;
   box-sizing: border-box;
+  text-align: center;
 }
 
-/* 🌸 一至十章节主标题：手机端一律居中展示，深暖红/棕色加粗 + 微背景卡片；
-   display:table + margin:auto 让底色卡片贴合文字宽度居中，而非撑满整行 */
+/* 🌸 一至十章节主标题：手机端一律居中展示，深暖红/棕色加粗 + 细下划线；
+   display:inline-block 让下划线只贴合文字本身宽度，不再贯穿彈窗左右两侧
+   （水平居中依赖父级 .family-motto-scroll 的 text-align:center，见上方注释），
+   与无底色的子标题（.culture-sub-title）拉开清晰的章节/子模块层级关系 */
 .motto-section-title {
-  display: table;
-  font-size: 28rpx;
+  display: inline-block;
+  font-size: 32rpx;
   font-weight: bold;
   color: #8B261C;
   letter-spacing: 2rpx;
-  margin: 40rpx auto 16rpx;
-  padding: 10rpx 24rpx;
-  background: rgba(139, 38, 28, 0.06);
-  border-radius: 8rpx;
+  margin: 40rpx 0 20rpx;
+  padding: 0 8rpx 12rpx;
+  border-bottom: 2rpx solid rgba(139, 38, 28, 0.3);
   text-align: center;
 }
 
@@ -8107,22 +8114,10 @@ textarea, .textarea {
   box-sizing: border-box;
 }
 
-.motto-creed-block .motto-section-title,
 .motto-creed-block .motto-creed-line {
   width: 100% !important;
   text-align: center !important;
   display: block !important;
-}
-
-.motto-creed-block .motto-section-title {
-  color: #8B0000;
-  font-size: 32rpx;
-  margin: 0 0 20rpx;
-  padding: 12rpx 0;
-  border-top: 1rpx solid rgba(212, 175, 55, 0.35);
-  border-bottom: 1rpx solid rgba(212, 175, 55, 0.35);
-  background: none;
-  border-radius: 0;
 }
 /* 📖 雨花文化全集弹窗新增样式：与既有 .motto-section-title/.motto-section-text/
    .motto-creed-line 共用同一套视觉语言，补充三类新增排版需求 */
@@ -8147,21 +8142,22 @@ textarea, .textarea {
   box-sizing: border-box;
 }
 
-/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），手机端居中展示，
-   暖橙色微背景卡片包裝，与一至十章节主标题（深红卡片）区隔出更细一级的视觉层次 */
+/* 🌸 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】、【雨花家训】）：
+   彻底去除粉色卡片底色，改为简洁庄重的纯文字——深暖红加粗 + 前后 "——" 居中
+   破折号装饰（装饰符直接写进 WXML 文本内容，小程序原生组件不支持
+   ::before/::after），全站所有子标题 100% 统一这一套格式，不再有例外，
+   与一至十章节主标题（细下划线）区隔出更轻一级的视觉层次 */
 .culture-sub-title {
-  display: table;
-  font-size: 26rpx;
+  display: block;
+  font-size: 32rpx;
   font-weight: bold;
   color: #8B261C;
-  background: #FFF3E0;
-  padding: 6rpx 22rpx;
-  border-radius: 8rpx;
-  margin: 24rpx auto 12rpx;
+  letter-spacing: 4rpx;
+  margin: 24rpx 0 14rpx;
   text-align: center;
 }
 
-/* 🌸 三由/五了/六同/八欣/十个有没有：短句对仗型内容的居中 flex-wrap 网格容器，
+/* 🌸 三由/五了/六同/八欣：短句对仗型内容的居中 flex-wrap 网格容器，
    让手机窄屏下的短句并排流动展示，避免每句独占一行造成大片左侧留白 */
 .culture-pair-grid {
   display: flex;
@@ -8177,7 +8173,39 @@ textarea, .textarea {
   margin-bottom: 0;
 }
 
-/* 十个有没有/人生十六最/感恩词/一日修身小结等逐行列表：与 .motto-section-text
+/* 🌸 十个有没有：拆成"只有…/没有…"双列网格，每行左右两列各自居中对齐，
+   替代逗号连写在一整行里的拥挤排版；wx:for 用 <block> 每次循环输出左右两个
+   cell，按文档流自动落进两列网格 */
+.culture-two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14rpx 6rpx;
+  margin-bottom: 12rpx;
+}
+
+.culture-two-col-cell {
+  font-size: 28rpx;
+  line-height: 1.7;
+  color: #333333;
+  text-align: center;
+}
+
+/* 🌸 人生十六最：单列纵向列表，左对齐 + 适度缩进，行高/段距进一步加大，
+   与其余条目式列表（.culture-list-line 默认样式）区隔出更从容的阅读节奏 */
+.culture-list-single-column {
+  display: flex;
+  flex-direction: column;
+  padding-left: 20rpx;
+  box-sizing: border-box;
+}
+
+.culture-list-single-column .culture-list-line {
+  line-height: 1.8;
+  margin-bottom: 16rpx;
+  text-align: left;
+}
+
+/* 感恩词/一日修身小结等逐行列表：与 .motto-section-text
    同款字号/行高/字间距，但左对齐、逐行独立展示（不做 .motto-creed-line 那种
    强制居中），更符合这类条目式列表的阅读习惯 */
 .culture-list-line {
