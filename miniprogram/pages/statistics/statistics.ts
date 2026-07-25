@@ -389,8 +389,14 @@ Page({
       this._navGuard.setupOnShow();
     }
 
+    // 🐛 根因修复的配套修复：此前这里用 !canViewAllStoresDropdown（权限位）而不是
+    // !isAllStoresMode（当前实际所处的视图模式）挡住超管——导致超管即使当前正停留
+    // 在具体某家门店的视角，切走 Tab 再切回来，也不会跟着全局门店切换器同步更新，
+    // 页面停留在切 Tab 前的旧门店。改成看"是否正处于全部门店/全国矩阵模式"：
+    // 只有真的在全国视图下才不被静默覆盖（这是用户主动选择的展示状态，不该被打断），
+    // 处于具体门店视角时，任何角色都应该跟随全局门店切换器保持同步
     const activeStore = getSelectedStore();
-    if (activeStore && activeStore.storeName !== this.data.shopName && !this.data.canViewAllStoresDropdown) {
+    if (activeStore && activeStore.storeName !== this.data.shopName && !this.data.isAllStoresMode) {
       this.setData({
         shopName: activeStore.storeName
       });
@@ -455,13 +461,17 @@ Page({
     const isFinance = role === 'finance';
     const isPatriarch = role === 'store_patriarch';
 
-    // 权限 A：超管和总部财务可看"全国大屏"与"跨店成本比对"
+    // 权限 A："全国大屏"/"跨店成本比对"/门店选择器里的"全部门店"选项，严格收窄到
+    // 真正的超级管理员——hq_finance/regional_finance 不在项目实际角色枚举
+    // （super_admin/store_manager/store_patriarch/finance/volunteer/platform_admin）
+    // 之内，checkUserRole 云函数永远不会下发这两个值，此前写在这里是永远不会命中的
+    // 死判断，一并按明确要求收紧为仅 SUPER_ADMIN
     // 🆕 志工/无角色个人不再放行"全国数据大屏"（哪怕是脱敏只读版）——改为下方
     // showPersonalView 分支的专属个人视角，数据范围收窄到"只有我自己的"，
     // 既满足阳光账本的知情诉求，又不再让个人账号看到任何跨门店/治理类信息
-    const canViewNationalDashboard = isSuperAdmin || isHQFinance;
-    const canViewCrossStoreCost = isSuperAdmin || isHQFinance;
-    const canViewAllStoresDropdown = isSuperAdmin || isHQFinance;
+    const canViewNationalDashboard = isSuperAdmin;
+    const canViewCrossStoreCost = isSuperAdmin;
+    const canViewAllStoresDropdown = isSuperAdmin;
     const isVolunteerNationalView = isVolunteer;
     // 🆕 个人视角：非管理角色（包含 volunteer，也兜底覆盖角色查询失败/未识别的
     // 情况）——与 isManager 互斥，isManager 已经把 store_manager/finance/
@@ -488,10 +498,20 @@ Page({
     if (showPersonalView) {
       // 个人视角：不触碰门店选择器/全国大屏那套状态，只加载属于自己的数据
       this.loadPersonalDashboard();
-    } else if (!canViewAllStoresDropdown && storeName) {
-      // 非总部级角色（单店店长/财务/家长）：锁定到本门店
+    } else {
+      // 🐛 根因修复："统计分析页预设显示全国数据"：此前 canViewAllStoresDropdown
+      // 为 true（超管）时，页面初始化会无条件直接 loadNationalDashboard()，
+      // 完全不看当前实际切换到的是哪家门店——哪怕超管刚刚在首页把门店切到了
+      // 具体某一家，一进统计页看到的还是全国大屏。全部门店/全国矩阵只应该是
+      // 用户在门店选择器里主动选择的结果（见 onSuperAdminSelectStore），不应该是
+      // 页面初始化的默认行为。现在不论角色是否具备"全部门店"切换权限，初始化都
+      // 统一默认展示当前切换门店（getSelectedStore 兜底，覆盖 storeName 参数
+      // 为空的情况——超管在 user_roles 里未必绑定固定门店）的数据
+      const activeStore = getSelectedStore();
+      const effectiveStoreName = storeName || (activeStore && activeStore.storeName) || '';
+
       this.setData({
-        shopName: storeName,
+        shopName: effectiveStoreName,
         isAllStoresMode: false
       });
       this.fetchStoreProfile();
@@ -500,8 +520,6 @@ Page({
         // 单店营运卡片是两套不同的数据源，单独加载
         this.loadPatriarchResourceStats();
       }
-    } else if (canViewAllStoresDropdown) {
-      this.loadNationalDashboard();
     }
   },
 

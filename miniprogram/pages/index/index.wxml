@@ -55,6 +55,14 @@
         <view class="sunshine-modal-close" bindtap="onCloseSunshineLedgerModal">✕</view>
       </view>
 
+      <!-- 🗓️ 月份切换器：‹ 2026年07月 › ，左右箭头调用 onSunshineLedgerPrevMonth/
+           onSunshineLedgerNextMonth，已到当前月时右箭头置灰禁用（不允许切到未来月份） -->
+      <view class="sunshine-month-switcher">
+        <view class="sunshine-month-arrow" bindtap="onSunshineLedgerPrevMonth">‹</view>
+        <text class="sunshine-month-label">{{sunshineLedgerData.periodLabel || selectedYearMonth}}</text>
+        <view class="sunshine-month-arrow {{isSunshineLedgerAtCurrentMonth ? 'sunshine-month-arrow-disabled' : ''}}" bindtap="onSunshineLedgerNextMonth">›</view>
+      </view>
+
       <view class="sunshine-modal-loading" wx:if="{{sunshineLedgerLoading}}">
         <text>加载中...</text>
       </view>
@@ -63,8 +71,8 @@
         <text class="sunshine-store-name">{{sunshineLedgerData.storeName || currentStoreName || '本门店'}}</text>
         <text class="sunshine-period-label">{{sunshineLedgerData.periodLabel || ''}}数据大盘</text>
 
-        <!-- 📊 2x2 网格数据大盘：7 项指标，最后一项独占末行，wx:for 遍历预先在
-             onOpenSunshineLedger 里拼好的展示数组，避免 7 个 view 手写重复结构 -->
+        <!-- 📊 4x2 网格数据大盘：8 项指标，wx:for 遍历预先在 fetchSunshineLedgerData
+             里拼好的展示数组，避免 8 个 view 手写重复结构 -->
         <view class="sunshine-stat-grid-2x2">
           <view class="sunshine-stat-cell-2x2" wx:for="{{sunshineStatCards}}" wx:key="label">
             <text class="sunshine-stat-num-2x2">{{item.value}}</text>
@@ -2387,18 +2395,21 @@
        本弹窗这一个元素实例，不影响 .modal-backdrop/.modal-card/.modal-header-bar/
        .modal-close-btn 这些其他弹窗共用的基础 class -->
   <view class="modal-backdrop" wx:if="{{showFamilyMottoModal}}" bindtap="onCloseFamilyMottoModal">
-    <view class="modal-card family-motto-card" catchtap="stopPropagation" style="max-height: 75vh !important; margin-top: 60rpx !important; position: relative !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
+    <view class="modal-card family-motto-card" catchtap="stopPropagation" style="max-height: 78vh !important; margin-top: 60rpx !important; position: relative !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
       <view class="motto-modal-close" bindtap="onCloseFamilyMottoModal" style="position: absolute !important; right: 24rpx !important; top: 24rpx !important; width: 60rpx !important; height: 60rpx !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 36rpx !important; color: #999999 !important; z-index: 10 !important;">✕</view>
-      <view class="modal-header-bar family-motto-header" style="justify-content: center !important; padding-right: 60rpx !important;">
+      <view class="modal-header-bar family-motto-header" style="justify-content: center !important; padding-right: 60rpx !important; flex-shrink: 0 !important;">
         <text class="modal-title-text">📖 雨花文化全集</text>
       </view>
-      <scroll-view scroll-y class="family-motto-scroll" style="max-height: 58vh !important; flex: 1 !important;">
+      <scroll-view scroll-y class="family-motto-scroll" style="max-height: 62vh !important; flex: 1 !important;">
 
-        <!-- 一、社会主义核心价值观 -->
+        <!-- 一、社会主义核心价值观：12 个词汇统一收进 4 列 x 3 行的胶囊网格，
+             三个数组按国家/社会/个人层面依次排布，网格按文档流自动分行 -->
         <text class="motto-section-title">一、社会主义核心价值观</text>
-        <view class="culture-value-row" wx:for="{{cultureFullData.coreValuesNational}}" wx:key="*this" wx:for-item="v"><text class="culture-value-chip">{{v}}</text></view>
-        <view class="culture-value-row" wx:for="{{cultureFullData.coreValuesSocial}}" wx:key="*this" wx:for-item="v"><text class="culture-value-chip">{{v}}</text></view>
-        <view class="culture-value-row" wx:for="{{cultureFullData.coreValuesIndividual}}" wx:key="*this" wx:for-item="v"><text class="culture-value-chip">{{v}}</text></view>
+        <view class="culture-value-grid">
+          <text class="culture-value-chip" wx:for="{{cultureFullData.coreValuesNational}}" wx:key="*this">{{item}}</text>
+          <text class="culture-value-chip" wx:for="{{cultureFullData.coreValuesSocial}}" wx:key="*this">{{item}}</text>
+          <text class="culture-value-chip" wx:for="{{cultureFullData.coreValuesIndividual}}" wx:key="*this">{{item}}</text>
+        </view>
 
         <!-- 二、立志格言 -->
         <text class="motto-section-title">二、立志格言</text>

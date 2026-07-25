@@ -3964,20 +3964,26 @@ textarea, .textarea {
 /* 🐛 内容整体加内边距（而不是只靠 margin），让文字与弹窗左右边框、顶部标题栏都
    留出均匀的呼吸空间；margin 只保留一个较小的顶部值，避免和内边距叠加出过大留白 */
 .family-motto-scroll {
-  max-height: 68vh;
+  max-height: 62vh;
   margin: 8rpx 0 16rpx;
   padding: 16rpx 28rpx;
   box-sizing: border-box;
 }
 
+/* 🌸 一至十章节主标题：加粗深暖红/棕色 + 左侧竖条装饰 + 微背景底色，
+   与下方子模块/正文拉开清晰的视觉层级 */
 .motto-section-title {
   display: block;
   font-size: 28rpx;
   font-weight: bold;
-  color: #8C1D18;
+  color: #8B261C;
   letter-spacing: 2rpx;
-  margin-top: 32rpx;
-  margin-bottom: 14rpx;
+  margin-top: 40rpx;
+  margin-bottom: 16rpx;
+  padding: 10rpx 16rpx;
+  border-left: 6rpx solid #8B261C;
+  background: rgba(139, 38, 28, 0.06);
+  border-radius: 6rpx;
 }
 
 .motto-section-title:first-child {
@@ -3989,16 +3995,17 @@ textarea, .textarea {
 .motto-section-text {
   display: block;
   font-size: 26rpx;
-  line-height: 1.9;
+  line-height: 1.7;
   letter-spacing: 3rpx;
   color: #333333;
   text-align: center;
   white-space: pre-wrap;
+  margin-bottom: 14rpx;
 }
 
 .motto-creed-line {
   font-size: 26rpx;
-  line-height: 1.9;
+  line-height: 1.7;
   letter-spacing: 3rpx;
   color: #333333;
   margin-bottom: 12rpx;
@@ -4038,33 +4045,48 @@ textarea, .textarea {
   padding: 12rpx 0;
   border-top: 1rpx solid rgba(212, 175, 55, 0.35);
   border-bottom: 1rpx solid rgba(212, 175, 55, 0.35);
+  /* 🐛 取消基础 .motto-section-title 新增的左侧竖条/底色装饰——「雨花家训」
+     这块是居中的金线夹标题，套用左对齐竖条会和居中排版打架 */
+  border-left: none;
+  background: none;
+  border-radius: 0;
 }
 /* 📖 雨花文化全集弹窗新增样式：与既有 .motto-section-title/.motto-section-text/
    .motto-creed-line 共用同一套视觉语言，补充三类新增排版需求 */
 
-/* 一、社会主义核心价值观：三行短语横排展示，用圆角小标签区分每个词，
-   比纯文字更醒目，也不会和下面模块的正文段落混淆 */
-.culture-value-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10rpx;
-  margin-bottom: 10rpx;
+/* 一、社会主义核心价值观：12 个词汇统一收进 4 列 x 3 行的胶囊网格容器，
+   替代此前"每个词单独占一行"的 .culture-value-row 纵向堆叠布局 */
+.culture-value-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+  margin-bottom: 16rpx;
 }
 
 .culture-value-chip {
+  display: block;
   font-size: 24rpx;
-  color: #8C1D18;
-  background: #FFF3E0;
-  border-radius: 8rpx;
-  padding: 4rpx 14rpx;
+  color: #8B261C;
+  background: #FFF8F0;
+  border-radius: 30rpx;
+  padding: 10rpx 6rpx;
+  text-align: center;
+  box-sizing: border-box;
 }
 
-/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），比模块主标题小一号，
-   保持从属关系清晰 */
+/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），用深暖红小括号卡片
+   样式包裝，与一至十章节主标题（左侧竖条）区隔出更细一级的视觉层次 */
 .culture-sub-title {
+  display: inline-block;
   font-size: 26rpx;
-  margin-top: 20rpx;
-  margin-bottom: 10rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #8B261C;
+  border-left: none;
+  padding: 6rpx 22rpx;
+  border-radius: 8rpx;
+  margin-top: 24rpx;
+  margin-bottom: 12rpx;
 }
 
 /* 十个有没有/人生十六最/感恩词/一日修身小结等逐行列表：与 .motto-section-text
@@ -4073,11 +4095,11 @@ textarea, .textarea {
 .culture-list-line {
   display: block;
   font-size: 26rpx;
-  line-height: 1.9;
+  line-height: 1.7;
   letter-spacing: 3rpx;
   color: #333333;
   text-align: left;
-  margin-bottom: 8rpx;
+  margin-bottom: 12rpx;
 }
 
 
@@ -8839,9 +8861,42 @@ button.poster-gen-btn[disabled] {
   margin-bottom: 24rpx;
 }
 
-/* 📊 2x2 网格数据大盘：7 项指标（2 列自动换行，末项独占最后一行），
-   每格独立卡片化（此前 3 项是不分格的横向 flex 一行，7 项撑不下需要真正
-   的网格布局），保留同一套暖金配色 */
+/* 🗓️ 月份切换器：‹ 2026年07月 › ，标题下方、数据网格上方 */
+.sunshine-month-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.sunshine-month-arrow {
+  width: 44rpx;
+  height: 44rpx;
+  line-height: 44rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #FFF3D6;
+  color: #E6A23C;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.sunshine-month-arrow-disabled {
+  color: #D9D9D9;
+  background: #F5F5F5;
+}
+
+.sunshine-month-label {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8D5B00;
+  min-width: 160rpx;
+  text-align: center;
+}
+
+/* 📊 4x2 网格数据大盘：8 项指标（2 列 x 4 行），每格独立卡片化，
+   保留同一套暖金配色 */
 .sunshine-stat-grid-2x2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -8862,9 +8917,9 @@ button.poster-gen-btn[disabled] {
 }
 
 .sunshine-stat-num-2x2 {
-  font-size: 34rpx;
+  font-size: 36rpx;
   font-weight: bold;
-  color: #8D5B00;
+  color: #E6A23C;
 }
 
 .sunshine-stat-lbl-2x2 {

@@ -22,6 +22,7 @@ import {
   getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, DailyCultureQuote, SENIORS_CARE,
   CORE_VALUES, FAMOUS_QUOTES, RAIN_FLOWER_HOME, SIXTEEN_BESTS, GRATITUDE_TEXT, DAILY_SUMMARY, FAMILY_STYLE
 } from '../../utils/cultureData';
+import { computeMyCheckInStats } from '../../utils/checkinStats';
 
 const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
@@ -224,9 +225,12 @@ Page({
     // 🌟 合规授权须知弹窗，见 checkComplianceNotice
     showComplianceModal: false,
     complianceModalScene: 'general' as 'general' | 'privileged' | 'review',
-    // ☀️ 阳光账本轻量弹窗：见 onOpenSunshineLedger，数据来自公开只读云函数 getSunshineLedger
+    // ☀️ 阳光账本轻量弹窗：见 onOpenSunshineLedger/fetchSunshineLedgerData，
+    // 数据来自公开只读云函数 getSunshineLedger，支持按 selectedYearMonth 切月查看
     showSunshineLedgerModal: false,
     sunshineLedgerLoading: false,
+    selectedYearMonth: '',
+    isSunshineLedgerAtCurrentMonth: true,
     sunshineLedgerData: {
       storeName: '',
       periodLabel: '',
@@ -236,11 +240,13 @@ Page({
       takeawayMeals: 0,
       totalHours: 0,
       volunteerCount: 0,
-      operatingDays: 0
+      operatingDays: 0,
+      ledgerPublicRate: null as string | null
     },
-    // ☀️ 阳光账本 2x2 网格展示数组：从 sunshineLedgerData 派生，供 WXML wx:for
-    // 渲染，避免 7 个统计格子手写重复结构
-    sunshineStatCards: [] as { label: string; value: number }[],
+    // ☀️ 阳光账本 4x2 网格展示数组：从 sunshineLedgerData 派生，供 WXML wx:for
+    // 渲染，避免 8 个统计格子手写重复结构；value 统一存字符串（账本公开率是
+    // "100%"/"暂无数据"这类文本，与其余数字指标共用同一套渲染逻辑更简单）
+    sunshineStatCards: [] as { label: string; value: string }[],
     yesterdayBalDisplay: '0.00',
     totalIncomeDisplay: '0.00',
     totalExpenseDisplay: '0.00',
@@ -6928,7 +6934,58 @@ Page({
   // （不做任何 user_roles/OPENID 权限校验，与扫码验真 publicVerifyReport 同一套
   // 设计哲学——只接受调用方明确指定的当前门店 storeId，不支持跨店/全部门店聚合）
   async onOpenSunshineLedger() {
-    this.setData({ showSunshineLedgerModal: true, sunshineLedgerLoading: true });
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    this.setData({
+      showSunshineLedgerModal: true,
+      // 🗓️ 每次重新打开都回到当前月，不记忆上次关闭前切到的历史月份——
+      // "阳光账本"首先应该展示的是最新数据，历史月份是用户当次打开后的临时探索
+      selectedYearMonth: currentYearMonth,
+      isSunshineLedgerAtCurrentMonth: true
+    });
+
+    await this.fetchSunshineLedgerData(currentYearMonth);
+  },
+
+  // ☀️ 阳光账本月份切换器：‹ 2026年07月 › 左右箭头，重新拉取 getSunshineLedger。
+  // 不允许切到未来月份——阳光账本展示的是已发生的历史数据，未来月份必然是空的
+  onSunshineLedgerPrevMonth() {
+    this.shiftSunshineLedgerMonth(-1);
+  },
+
+  onSunshineLedgerNextMonth() {
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (this.data.selectedYearMonth >= currentYearMonth) {
+      wx.showToast({ title: '已经是最新月份啦', icon: 'none' });
+      return;
+    }
+    this.shiftSunshineLedgerMonth(1);
+  },
+
+  shiftSunshineLedgerMonth(delta: number) {
+    const [yearStr, monthStr] = (this.data.selectedYearMonth || '').split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    if (!year || !month) return;
+
+    // Date 的月份参数是 0-11，先转换再加减，避免手写跨年进位/退位的边界判断
+    const shifted = new Date(year, month - 1 + delta, 1);
+    const nextYearMonth = `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}`;
+
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    this.setData({
+      selectedYearMonth: nextYearMonth,
+      isSunshineLedgerAtCurrentMonth: nextYearMonth >= currentYearMonth
+    });
+    this.fetchSunshineLedgerData(nextYearMonth);
+  },
+
+  async fetchSunshineLedgerData(yearMonth: string) {
+    this.setData({ sunshineLedgerLoading: true });
 
     const storeId = this.data.currentStoreId;
     if (!storeId) {
@@ -6940,7 +6997,7 @@ Page({
     try {
       const res: any = await wx.cloud.callFunction({
         name: 'getSunshineLedger',
-        data: { storeId }
+        data: { storeId, yearMonth }
       });
       const result = res.result;
       if (!result || !result.success) {
@@ -6958,22 +7015,25 @@ Page({
         takeawayMeals: result.takeawayMeals || 0,
         totalHours: result.totalHours || 0,
         volunteerCount: result.volunteerCount || 0,
-        operatingDays: result.operatingDays || 0
+        operatingDays: result.operatingDays || 0,
+        ledgerPublicRate: result.ledgerPublicRate || null
       };
       this.setData({
         sunshineLedgerData: ledgerData,
+        // 📊 完美 4x2 网格：固定 8 项，缺数据时展示"暂无数据"而不是编造出的百分比
         sunshineStatCards: [
-          { label: '累计就餐人次', value: ledgerData.totalDiners },
-          { label: '当月就餐人次', value: ledgerData.monthlyDiners },
-          { label: '爱心送餐份数', value: ledgerData.takeawayMeals },
-          { label: '累计护持工时', value: ledgerData.totalHours },
-          { label: '参与护持总人次', value: ledgerData.volunteerCount },
-          { label: '已核销餐报篇数', value: ledgerData.auditedReportsCount },
-          { label: '安全营运天数', value: ledgerData.operatingDays }
+          { label: '累计就餐人次', value: String(ledgerData.totalDiners) },
+          { label: '当月就餐人次', value: String(ledgerData.monthlyDiners) },
+          { label: '爱心送餐份数', value: String(ledgerData.takeawayMeals) },
+          { label: '累计护持工时', value: String(ledgerData.totalHours) },
+          { label: '参与护持总人次', value: String(ledgerData.volunteerCount) },
+          { label: '已核销餐报篇数', value: String(ledgerData.auditedReportsCount) },
+          { label: '安全营运天数', value: String(ledgerData.operatingDays) },
+          { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }
         ]
       });
     } catch (err) {
-      console.error('[onOpenSunshineLedger] 加载阳光账本异常:', err);
+      console.error('[fetchSunshineLedgerData] 加载阳光账本异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
       this.setData({ showSunshineLedgerModal: false });
     } finally {
@@ -7663,14 +7723,19 @@ Page({
     const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === selectedShift);
     const shiftLabel = shiftObj ? shiftObj.name : '爱心护持班';
 
+    // 🛡️ 全局计数器：必须从 storage 里的旧值递增，不能读 this.data.myCheckInDays 等——
+    // 这三个 data 字段现在展示的是"按当前门店过滤"后的结果（见下方 scopedStats），
+    // 不再等于全局值，拿它们做递增会把错误的数字写回全局计数器
     const hasTodayLog = logs.some((l: any) => l.date === todayStr);
-    const currentDays = this.data.myCheckInDays || 13;
-    const newDays = hasTodayLog ? currentDays : (currentDays + 1);
+    const oldGlobalDays = wx.getStorageSync('my_checkin_days') || 0;
+    const newDays = hasTodayLog ? oldGlobalDays : (oldGlobalDays + 1);
 
-    const newCount = (this.data.myCheckInCount || 16) + 1;
-    const newHours = parseFloat(((this.data.myServiceHours || 48.0) + addHours).toFixed(1));
+    const newCount = (wx.getStorageSync('my_checkin_count') || 0) + 1;
+    const newHours = parseFloat(((wx.getStorageSync('my_service_hours') || 0) + addHours).toFixed(1));
 
     const timestamp = now;
+    const currentStoreId = this.data.currentStoreId || '';
+    const currentStoreName = this.data.currentStoreName || '海沧区雨花斋';
     const newLog = {
       timestamp: timestamp,
       date: todayStr,
@@ -7678,20 +7743,31 @@ Page({
       shiftKey: selectedShift,
       shiftName: shiftLabel,
       hours: addHours,
-      storeName: this.data.currentStoreName || '海沧区雨花斋',
+      // 🏪 门店隔离：补上 storeId（此前只存 storeName），供 computeMyCheckInStats
+      // 精确按门店过滤；storeName 继续保留，作为老记录（没有 storeId）的兜底匹配字段
+      storeId: currentStoreId,
+      storeName: currentStoreName,
       willEatLunch: this.data.willEatLunch
     };
     logs.unshift(newLog);
 
+    // 🛡️ 全局计数器继续照常维护，不删除——journey.ts/statistics.ts 的个人看板仍在读
+    // 这三个 key，本次门店隔离修复不改变它们的既有语义（全部门店/历史累计口径）
     wx.setStorageSync('my_checkin_days', newDays);
     wx.setStorageSync('my_checkin_count', newCount);
     wx.setStorageSync('my_service_hours', newHours);
     wx.setStorageSync('my_checkin_logs', logs);
 
+    // 🐛 门店隔离修复：首页顶部展示的护持天数/工时/次数改为按当前门店动态过滤
+    // 统计（见 computeMyCheckInStats），不再直接用上面刚写入的全局递增值——
+    // 全国总览视角下仍汇总全部门店，与 loadVolunteerStats 的口径保持一致
+    const isAllStoresView = this.data.isAllStoresView;
+    const scopedStats = computeMyCheckInStats(currentStoreId, currentStoreName, isAllStoresView || !currentStoreName);
+
     this.setData({
-      myCheckInDays: newDays,
-      myCheckInCount: newCount,
-      myServiceHours: newHours,
+      myCheckInDays: scopedStats.days,
+      myCheckInCount: scopedStats.count,
+      myServiceHours: scopedStats.hours,
       checkInLogs: logs,
       showShiftSelectModal: false,
       showPosterModal: true,
@@ -7723,20 +7799,32 @@ Page({
 
           const stillHasTodayLog = logs.some((l: any) => l.date === todayStr);
 
-          const currentDays = this.data.myCheckInDays || 13;
-          const newDays = stillHasTodayLog ? currentDays : Math.max(0, currentDays - 1);
-          const newCount = Math.max(0, (this.data.myCheckInCount || 16) - 1);
-          const newHours = parseFloat(Math.max(0, (this.data.myServiceHours || 48.0) - revokeHours).toFixed(1));
+          // 🛡️ 全局计数器：必须从 storage 里的旧值递减，不能读 this.data.myCheckInDays 等——
+          // 这三个 data 字段现在展示的是"按当前门店过滤"后的结果（见下方 scopedStats），
+          // 不再等于全局值，拿它们做递减会把错误的数字写回全局计数器
+          const oldGlobalDays = wx.getStorageSync('my_checkin_days') || 0;
+          const oldGlobalCount = wx.getStorageSync('my_checkin_count') || 0;
+          const oldGlobalHours = wx.getStorageSync('my_service_hours') || 0;
+          const newGlobalDays = stillHasTodayLog ? oldGlobalDays : Math.max(0, oldGlobalDays - 1);
+          const newGlobalCount = Math.max(0, oldGlobalCount - 1);
+          const newGlobalHours = parseFloat(Math.max(0, oldGlobalHours - revokeHours).toFixed(1));
 
-          wx.setStorageSync('my_checkin_days', newDays);
-          wx.setStorageSync('my_checkin_count', newCount);
-          wx.setStorageSync('my_service_hours', newHours);
+          wx.setStorageSync('my_checkin_days', newGlobalDays);
+          wx.setStorageSync('my_checkin_count', newGlobalCount);
+          wx.setStorageSync('my_service_hours', newGlobalHours);
           wx.setStorageSync('my_checkin_logs', logs);
 
+          // 🐛 门店隔离修复：撤销后同样按当前门店重新动态计算展示值，口径与
+          // onConfirmShiftCheckIn/loadVolunteerStats 保持一致
+          const currentStoreId = this.data.currentStoreId || '';
+          const currentStoreName = this.data.currentStoreName || '';
+          const isAllStoresView = this.data.isAllStoresView;
+          const scopedStats = computeMyCheckInStats(currentStoreId, currentStoreName, isAllStoresView || !currentStoreName);
+
           this.setData({
-            myCheckInDays: newDays,
-            myCheckInCount: newCount,
-            myServiceHours: newHours,
+            myCheckInDays: scopedStats.days,
+            myCheckInCount: scopedStats.count,
+            myServiceHours: scopedStats.hours,
             checkInLogs: logs
           });
 
@@ -7747,39 +7835,23 @@ Page({
     });
   },
 
-  // 🌟 顶部门店数据逻辑对齐：全国总览时展示全网汇总打卡数据（沿用全局累计计数器）；
-  // 切到具体门店时改为按 my_checkin_logs 中的 storeName 过滤，只统计"个人在该店"的打卡数据
+  // 🏪 门店隔离：全国总览/未选定具体门店时展示全部历史汇总；切到具体门店时改为按
+  // computeMyCheckInStats（my_checkin_logs 按 storeId 精确过滤，storeId 缺失的老
+  // 记录退回 storeName 匹配）动态统计，只算"个人在该店"的打卡数据，与
+  // onConfirmShiftCheckIn/onRevokeTodayCheckIn 用的是同一套口径
   loadVolunteerStats() {
     try {
       const isAllStoresView = this.data.isAllStoresView;
+      const currentStoreId = this.data.currentStoreId || '';
       const currentStoreName = this.data.currentStoreName || this.data.shopName || '';
 
-      if (isAllStoresView || !currentStoreName) {
-        const checkInDays = wx.getStorageSync('my_checkin_days') || 12;
-        const checkInCount = wx.getStorageSync('my_checkin_count') || 15;
-        const serviceHours = wx.getStorageSync('my_service_hours') || 45;
-
-        this.setData({
-          myCheckInDays: checkInDays,
-          myCheckInCount: checkInCount,
-          myServiceHours: serviceHours
-        });
-        return;
-      }
-
-      const logs = wx.getStorageSync('my_checkin_logs') || [];
-      const storeScopedLogs = logs.filter((l: any) => l.storeName === currentStoreName);
-
-      const uniqueDays = new Set(storeScopedLogs.map((l: any) => l.date));
-      const checkInCount = storeScopedLogs.length;
-      const serviceHours = parseFloat(
-        storeScopedLogs.reduce((sum: number, l: any) => sum + (parseFloat(l.hours) || 0), 0).toFixed(1)
-      );
+      const scopedStats = computeMyCheckInStats(currentStoreId, currentStoreName, isAllStoresView || !currentStoreName);
 
       this.setData({
-        myCheckInDays: uniqueDays.size,
-        myCheckInCount: checkInCount,
-        myServiceHours: serviceHours
+        // 全国总览/未选定门店时沿用原有的演示态兜底值，避免空态直接显示 0
+        myCheckInDays: scopedStats.days || (isAllStoresView || !currentStoreName ? 12 : 0),
+        myCheckInCount: scopedStats.count || (isAllStoresView || !currentStoreName ? 15 : 0),
+        myServiceHours: scopedStats.hours || (isAllStoresView || !currentStoreName ? 45 : 0)
       });
     } catch (err) {
       console.warn('⚠️ 读取护持统计数据失败:', err);

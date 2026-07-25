@@ -19,13 +19,20 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-// 🛡️ 单次查询上限：本店按日累计的审核通过记录，理论上限是"运营天数"，1000 条约等于
-// 2.7 年的每日记录；超过这个规模的门店（存续更久）累计类指标会低估，但公开只读接口
+// 🛡️ 单次查询上限：本店按日累计的审核通过记录，理论上限是"运营天数"，2000 条约等于
+// 5.4 年的每日记录；超过这个规模的门店（存续更久）累计类指标会低估，但公开只读接口
 // 不适合为极端场景无限拉取全表，与 getStatisticsData 等同类云函数的 limit 口径一致
 const QUERY_LIMIT = 2000;
 
+const YEAR_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function daysInMonth(year, month) {
+  // month: 1-12
+  return new Date(year, month, 0).getDate();
+}
+
 exports.main = async (event) => {
-  const { storeId } = event;
+  const { storeId, yearMonth } = event;
 
   if (!storeId || !String(storeId).trim()) {
     return { success: false, error: '缺少门店标识，无法查询' };
@@ -33,11 +40,27 @@ exports.main = async (event) => {
 
   try {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const monthStartStr = `${year}-${month}-01`;
-    const monthEndStr = `${year}-${month}-${String(now.getDate()).padStart(2, '0')}`;
-    const periodLabel = `${year}年${month}月`;
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // 🛡️ yearMonth 参数校验：格式不对/缺失一律退回当前月，不因客户端传入脏数据
+    // 就让查询条件失效或抛异常——公开接口的输入始终按"不可信"处理
+    let targetYear = currentYear;
+    let targetMonth = currentMonth;
+    if (yearMonth && YEAR_MONTH_RE.test(String(yearMonth))) {
+      const parts = String(yearMonth).split('-');
+      targetYear = parseInt(parts[0], 10);
+      targetMonth = parseInt(parts[1], 10);
+    }
+    const isCurrentMonth = targetYear === currentYear && targetMonth === currentMonth;
+
+    const monthStr = String(targetMonth).padStart(2, '0');
+    const monthStartStr = `${targetYear}-${monthStr}-01`;
+    // 当月只统计到今天为止（避免"未来日期"污染），非当月（历史月份）统计完整一个月
+    const monthEndStr = isCurrentMonth
+      ? `${targetYear}-${monthStr}-${String(now.getDate()).padStart(2, '0')}`
+      : `${targetYear}-${monthStr}-${String(daysInMonth(targetYear, targetMonth)).padStart(2, '0')}`;
+    const periodLabel = `${targetYear}年${monthStr}月`;
 
     // 🏪 门店名称：与 publicVerifyReport 同一份数据来源，查询失败不影响主流程
     let storeName = '';
@@ -87,18 +110,27 @@ exports.main = async (event) => {
       }
     });
 
+    // ☀️ 第 8 项指标——账本公开率：本函数的查询条件本身就严格白名单只取
+    // APPROVED/AUDITED_LOCKED（见文件头注释），也就是说只要有查到记录，
+    // 这些记录 100% 都是已完成审核公示的，不存在"部分公开"的中间态，
+    // 因此这里是按定义直接给定的常量展示值，不是从另一个分母算出来的比率——
+    // 没有记录时展示为 null，由前端呈现"暂无数据"而不是误导性的 100%
+    const ledgerPublicRate = records.length > 0 ? '100%' : null;
+
     return {
       success: true,
       storeId,
       storeName,
       periodLabel,
+      yearMonth: `${targetYear}-${monthStr}`,
       auditedReportsCount: records.length,
       totalDiners,
       monthlyDiners,
       takeawayMeals,
       totalHours: Math.round(totalHours * 10) / 10,
       volunteerCount,
-      operatingDays: operatingDateSet.size
+      operatingDays: operatingDateSet.size,
+      ledgerPublicRate
     };
   } catch (err) {
     console.error('[getSunshineLedger] 查询异常:', err);

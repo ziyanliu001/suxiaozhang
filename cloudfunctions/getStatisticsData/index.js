@@ -99,7 +99,11 @@ exports.main = async (event, context) => {
       return { success: false, errMsg: '无法确认您所属的机构，暂不支持查看统计数据' };
     }
 
-    const isTenantWideAllowed = ['super_admin', 'hq_finance', 'regional_finance'].includes(userRole);
+    // 🛡️ 全网/全部门店查询权限严格收窄为仅 super_admin：hq_finance/regional_finance
+    // 不在项目实际角色枚举（super_admin/store_manager/store_patriarch/finance/
+    // volunteer/platform_admin）之内，checkUserRole 云函数永远不会下发这两个值，
+    // 此前写在这里是永远不会命中的死判断，一并按明确要求收紧
+    const isTenantWideAllowed = userRole === 'super_admin';
     const wantsAllStores = !shopName || shopName === '全部门店';
     if (wantsAllStores && !isTenantWideAllowed && !userStoreId && !userStoreName) {
       return { success: false, errMsg: '您尚未绑定门店，无法查看统计数据' };

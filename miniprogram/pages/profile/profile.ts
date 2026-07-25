@@ -1,5 +1,6 @@
 import { AuthService } from '../../utils/authService';
 import { getSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
+import { computeMyCheckInStats } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable } from '../../utils/cloudGuard';
@@ -687,16 +688,20 @@ Page({
   /**
    * 任务C：加载本地护持统计（与首页共享同一组 localStorage 数据）
    */
+  // 🏪 门店隔离：改为按当前门店动态过滤 my_checkin_logs（见 computeMyCheckInStats），
+  // 不再直接读全局递增计数器——切换门店后这里展示的天数/工时只统计在当前门店的贡献
   loadVolunteerStats() {
     try {
-      const checkInDays = wx.getStorageSync('my_checkin_days') || 0;
-      const checkInCount = wx.getStorageSync('my_checkin_count') || 0;
-      const serviceHours = wx.getStorageSync('my_service_hours') || 0;
+      const activeStore = getSelectedStore();
+      const scopedStats = computeMyCheckInStats(
+        (activeStore && activeStore.storeId) || '',
+        (activeStore && activeStore.storeName) || ''
+      );
 
       this.setData({
-        'stats.volunteerDays': checkInDays,
-        'stats.volunteerHours': serviceHours,
-        'stats.volunteerCheckInCount': checkInCount
+        'stats.volunteerDays': scopedStats.days,
+        'stats.volunteerHours': scopedStats.hours,
+        'stats.volunteerCheckInCount': scopedStats.count
       });
       this.computeBadgeList();
     } catch (err) {
@@ -740,29 +745,47 @@ Page({
       // 而不是退化成全表扫描；同时也顺带堵住了"跨租户读到别的机构统计数字"的隔离漏洞。
       const cachedRoleInfo = AuthService.getCachedRoleInfo();
       const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
+      // 🏪 门店隔离：本页顶层 data.currentStoreId 从未被真正赋值过（只有
+      // patriarchData.currentStoreId 这个同名但不同用途的嵌套字段），这里直接现取
+      // 当前生效门店，确保"登记餐报/稽核账本"只统计当前门店，不会把用户在别的门店
+      // 的历史记录也计进来
+      const activeStore = getSelectedStore();
+      const storeId = (activeStore && activeStore.storeId) || '';
 
       let submittedCount = 0;
       let auditedCount = 0;
 
       try {
+        // 🐛 严重根因修复：report_logs 集合从未写过 createdBy 字段（createdBy 只在
+        // stores/notice/daily_menu 等其他集合里使用），提交人身份统一走云开发自动
+        // 挂载的 _openid（updateReportLog/getReports/manageReportApproval 等云函数
+        // 判断"是否为提交人本人"全都用的是 docData._openid）。此前按 createdBy 查询，
+        // 查询条件恒不命中，"登记餐报"这项荣誉墙统计对所有人都是 0。
         // 🏛️ 权限向下继承：大家长同样可能承担日常提交/稽核工作，统计口径一并覆盖
-        if ((role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin') && tenantId) {
+        if ((role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin') && tenantId && storeId) {
           const subRes = await db.collection('report_logs')
             .where({
               tenantId,
-              createdBy: openid
+              storeId,
+              _openid: openid
             })
             .count();
           submittedCount = subRes.total || 0;
         }
 
+        // 🛡️ 已知局限（非本次可修复范围）：report_logs.auditedBy 由 manageReportApproval
+        // 写入的是角色标签字符串（如"财务稽核员"/"大家长"），不是个人 openid——真正的
+        // 个人操作者身份只记录在独立的 report_audit_logs.operator_id 里，report_logs
+        // 文档本身不具备"这条记录是谁个人稽核的"这个字段，无法在这条查询上做到与
+        // submittedCount 同等的个人隔离，暂时只能收窄到"当前门店 + 本机构"维度
+        // （即"本店已稽核的账目数"，不是"我个人稽核过的账目数"）。
         // 这两个数字是直接展示给用户的"已提交/已稽核"荣誉墙统计，不是单纯的"是否存在"
         // 判断，所以不能用 limit(1) 替代——limit(1) 只能回答"有没有"，答不出"有多少"。
-        // 真正的优化点是让 tenantId+auditedBy 复合索引生效，把全表扫描收窄到单租户内。
-        if ((role === 'finance' || role === 'store_patriarch' || role === 'super_admin') && tenantId) {
+        if ((role === 'finance' || role === 'store_patriarch' || role === 'super_admin') && tenantId && storeId) {
           const audRes = await db.collection('report_logs')
             .where({
               tenantId,
+              storeId,
               auditedBy: db.command.exists(true)
             })
             .count();
@@ -772,15 +795,15 @@ Page({
         console.warn('[fetchMeritStats] 数据库查询失败，使用兜底数据:', dbErr);
       }
 
-      const volunteerDays = wx.getStorageSync('my_checkin_days') || 0;
-      const volunteerHours = wx.getStorageSync('my_service_hours') || 0;
-      const volunteerCheckInCount = wx.getStorageSync('my_checkin_count') || 0;
+      // 🏪 门店隔离：与 loadVolunteerStats 同一套口径，按当前门店动态过滤
+      // my_checkin_logs，不再直接读全局递增计数器
+      const scopedStats = computeMyCheckInStats(storeId, (activeStore && activeStore.storeName) || '');
 
       this.setData({
         stats: {
-          volunteerDays,
-          volunteerHours,
-          volunteerCheckInCount,
+          volunteerDays: scopedStats.days,
+          volunteerHours: scopedStats.hours,
+          volunteerCheckInCount: scopedStats.count,
           submittedReports: submittedCount || (role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin' ? 14 : 0),
           auditedReports: auditedCount || (role === 'finance' || role === 'store_patriarch' || role === 'super_admin' ? 8 : 0)
         }
@@ -788,15 +811,17 @@ Page({
       this.computeBadgeList();
     } catch (err) {
       console.error('[fetchMeritStats] 加载失败:', err);
-      const volunteerDays = wx.getStorageSync('my_checkin_days') || 0;
-      const volunteerHours = wx.getStorageSync('my_service_hours') || 0;
-      const volunteerCheckInCount = wx.getStorageSync('my_checkin_count') || 0;
+      const fallbackStore = getSelectedStore();
+      const fallbackStats = computeMyCheckInStats(
+        (fallbackStore && fallbackStore.storeId) || '',
+        (fallbackStore && fallbackStore.storeName) || ''
+      );
 
       this.setData({
         stats: {
-          volunteerDays,
-          volunteerHours,
-          volunteerCheckInCount,
+          volunteerDays: fallbackStats.days,
+          volunteerHours: fallbackStats.hours,
+          volunteerCheckInCount: fallbackStats.count,
           submittedReports: role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin' ? 14 : 0,
           auditedReports: role === 'finance' || role === 'store_patriarch' || role === 'super_admin' ? 8 : 0
         }
