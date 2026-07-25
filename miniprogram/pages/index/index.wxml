@@ -2419,21 +2419,33 @@
         <text class="motto-section-title">三、雨花家道</text>
         <text class="motto-section-text">【雨花核心精神】{{cultureFullData.homeCoreSpirit}}</text>
         <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeSanYouTitle}}】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.homeSanYouItems}}" wx:key="*this">{{item}}</text>
+        <!-- 🌸 三由/五了/六同/八欣：短句对仗型内容，用 flex-wrap 居中网格包裹，
+             避免手机窄屏下每句独占一行、右侧留出大片空白 -->
+        <view class="culture-pair-grid">
+          <text class="culture-list-line" wx:for="{{cultureFullData.homeSanYouItems}}" wx:key="*this">{{item}}</text>
+        </view>
         <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeWuLeTitle}}】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.homeWuLeItems}}" wx:key="*this">{{item}}</text>
+        <view class="culture-pair-grid">
+          <text class="culture-list-line" wx:for="{{cultureFullData.homeWuLeItems}}" wx:key="*this">{{item}}</text>
+        </view>
         <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeLiuTongTitle}}】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.homeLiuTongItems}}" wx:key="*this">{{item}}</text>
+        <view class="culture-pair-grid">
+          <text class="culture-list-line" wx:for="{{cultureFullData.homeLiuTongItems}}" wx:key="*this">{{item}}</text>
+        </view>
         <text class="motto-section-title culture-sub-title">【{{cultureFullData.homeBaXinTitle}}】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.homeBaXinItems}}" wx:key="*this">{{item}}</text>
+        <view class="culture-pair-grid">
+          <text class="culture-list-line" wx:for="{{cultureFullData.homeBaXinItems}}" wx:key="*this">{{item}}</text>
+        </view>
 
         <!-- 四、雨花敬老核心理念 -->
         <text class="motto-section-title">四、雨花敬老核心理念</text>
         <text class="motto-section-text">{{cultureFullData.seniorsCoreBelief}}</text>
 
-        <!-- 五、雨花敬老行为准则【十个有没有】 -->
+        <!-- 五、雨花敬老行为准则【十个有没有】：同为短句对仗型内容，同样用 flex-wrap 居中网格 -->
         <text class="motto-section-title">五、雨花敬老行为准则——【十个有没有】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.seniorsTenHaveYous}}" wx:key="*this">{{item}}</text>
+        <view class="culture-pair-grid">
+          <text class="culture-list-line" wx:for="{{cultureFullData.seniorsTenHaveYous}}" wx:key="*this">{{item}}</text>
+        </view>
 
         <!-- 六、雨花家德【雨花人生十六最】 -->
         <text class="motto-section-title">六、雨花家德——【雨花人生十六最】</text>

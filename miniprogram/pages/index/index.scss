@@ -8058,20 +8058,19 @@ textarea, .textarea {
   box-sizing: border-box;
 }
 
-/* 🌸 一至十章节主标题：加粗深暖红/棕色 + 左侧竖条装饰 + 微背景底色，
-   与下方子模块/正文拉开清晰的视觉层级 */
+/* 🌸 一至十章节主标题：手机端一律居中展示，深暖红/棕色加粗 + 微背景卡片；
+   display:table + margin:auto 让底色卡片贴合文字宽度居中，而非撑满整行 */
 .motto-section-title {
-  display: block;
+  display: table;
   font-size: 28rpx;
   font-weight: bold;
   color: #8B261C;
   letter-spacing: 2rpx;
-  margin-top: 40rpx;
-  margin-bottom: 16rpx;
-  padding: 10rpx 16rpx;
-  border-left: 6rpx solid #8B261C;
+  margin: 40rpx auto 16rpx;
+  padding: 10rpx 24rpx;
   background: rgba(139, 38, 28, 0.06);
-  border-radius: 6rpx;
+  border-radius: 8rpx;
+  text-align: center;
 }
 
 .motto-section-title:first-child {
@@ -8122,9 +8121,6 @@ textarea, .textarea {
   padding: 12rpx 0;
   border-top: 1rpx solid rgba(212, 175, 55, 0.35);
   border-bottom: 1rpx solid rgba(212, 175, 55, 0.35);
-  /* 🐛 取消基础 .motto-section-title 新增的左侧竖条/底色装饰——「雨花家训」
-     这块是居中的金线夹标题，套用左对齐竖条会和居中排版打架 */
-  border-left: none;
   background: none;
   border-radius: 0;
 }
@@ -8151,19 +8147,34 @@ textarea, .textarea {
   box-sizing: border-box;
 }
 
-/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），用深暖红小括号卡片
-   样式包裝，与一至十章节主标题（左侧竖条）区隔出更细一级的视觉层次 */
+/* 雨花家道/为学之方等模块内的二级小标题（如【雨花三由】），手机端居中展示，
+   暖橙色微背景卡片包裝，与一至十章节主标题（深红卡片）区隔出更细一级的视觉层次 */
 .culture-sub-title {
-  display: inline-block;
+  display: table;
   font-size: 26rpx;
   font-weight: bold;
-  color: #FFFFFF;
-  background: #8B261C;
-  border-left: none;
+  color: #8B261C;
+  background: #FFF3E0;
   padding: 6rpx 22rpx;
   border-radius: 8rpx;
-  margin-top: 24rpx;
-  margin-bottom: 12rpx;
+  margin: 24rpx auto 12rpx;
+  text-align: center;
+}
+
+/* 🌸 三由/五了/六同/八欣/十个有没有：短句对仗型内容的居中 flex-wrap 网格容器，
+   让手机窄屏下的短句并排流动展示，避免每句独占一行造成大片左侧留白 */
+.culture-pair-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10rpx 20rpx;
+  margin-bottom: 8rpx;
+}
+
+.culture-pair-grid .culture-list-line {
+  flex: 0 1 auto;
+  text-align: center;
+  margin-bottom: 0;
 }
 
 /* 十个有没有/人生十六最/感恩词/一日修身小结等逐行列表：与 .motto-section-text
