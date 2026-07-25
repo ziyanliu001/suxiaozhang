@@ -61,15 +61,18 @@
           </view>
         </view>
 
+        <!-- 🛡️ 身份胶囊文案清理：不在文字前拼接角色专属 emoji（🙏/❤️/🌸 等）——
+             胶囊本身已有统一的 .badge-icon-svg 装饰图标作为唯一视觉标记，文字区
+             只保留门店名称 · 角色的纯文字结构，避免图标与文字里的 emoji 重复堆叠 -->
         <view class="role-badge-row">
           <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
             <view class="badge-icon-svg icon-svg-flower"></view>
             <text>{{currentUserRole === 'super_admin' ? '全局超级管理员' :
               currentUserRole === 'store_manager' ? currentStoreName + ' · 店长' :
               currentUserRole === 'finance' ? currentStoreName + ' · 财务' :
-              currentUserRole === 'store_patriarch' ? '🙏 ' + currentStoreName + ' · 家长' :
-              isFamily ? (currentStoreName ? ('❤️ ' + currentStoreName + ' · 家人') : '❤️ 请选择门店 · 家人') :
-              (currentStoreName ? ('🌸 ' + currentStoreName + ' · 志工') : '🌸 请选择门店 · 志工')}}</text>
+              currentUserRole === 'store_patriarch' ? currentStoreName + ' · 家长' :
+              isFamily ? (currentStoreName ? (currentStoreName + ' · 家人') : '请选择门店 · 家人') :
+              (currentStoreName ? (currentStoreName + ' · 志工') : '请选择门店 · 志工')}}</text>
           </view>
         </view>
       </view>
