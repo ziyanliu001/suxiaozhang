@@ -317,10 +317,10 @@
          家人（服务对象）没有打卡/护持记录，整组隐藏，改由上方的极简关怀卡片承接 -->
     <view class="list-group-label" wx:if="{{!isFamily}}">日常记录</view>
     <view class="action-list-container" wx:if="{{!isFamily}}">
-      <view class="action-item-cell" bindtap="onGoToJourney">
+      <view class="action-item-cell" bindtap="onTapServiceHistory">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
-          <text class="item-text">我的护持足迹</text>
+          <text class="item-text">📜 服务历程</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>

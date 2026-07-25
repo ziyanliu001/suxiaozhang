@@ -63,18 +63,12 @@
         <text class="sunshine-store-name">{{sunshineLedgerData.storeName || currentStoreName || '本门店'}}</text>
         <text class="sunshine-period-label">{{sunshineLedgerData.periodLabel || ''}}数据大盘</text>
 
-        <view class="sunshine-stat-grid">
-          <view class="sunshine-stat-cell">
-            <text class="sunshine-stat-num">{{sunshineLedgerData.totalDining || 0}}</text>
-            <text class="sunshine-stat-lbl">就餐人次</text>
-          </view>
-          <view class="sunshine-stat-cell">
-            <text class="sunshine-stat-num">{{sunshineLedgerData.totalDelivery || 0}}</text>
-            <text class="sunshine-stat-lbl">送餐份数</text>
-          </view>
-          <view class="sunshine-stat-cell">
-            <text class="sunshine-stat-num">{{sunshineLedgerData.totalVolunteerHours || 0}}</text>
-            <text class="sunshine-stat-lbl">爱心工时</text>
+        <!-- 📊 2x2 网格数据大盘：7 项指标，最后一项独占末行，wx:for 遍历预先在
+             onOpenSunshineLedger 里拼好的展示数组，避免 7 个 view 手写重复结构 -->
+        <view class="sunshine-stat-grid-2x2">
+          <view class="sunshine-stat-cell-2x2" wx:for="{{sunshineStatCards}}" wx:key="label">
+            <text class="sunshine-stat-num-2x2">{{item.value}}</text>
+            <text class="sunshine-stat-lbl-2x2">{{item.label}}</text>
           </view>
         </view>
 
@@ -161,13 +155,13 @@
       </view>
       <!-- 🛡️ 去宗教化合规要求："愿心"/"发心"均带有宗教色彩，统一替换为"爱心"/"支持"等现代公益用语 -->
       <text class="warm-encourage-text">{{myCheckInDays > 0 ? '感恩您已护持 ' + myCheckInDays + ' 天，爱心相续 🌸' : '这是您护持之路的开始，感恩支持 🌸'}}</text>
-      <view class="journey-entry-row">
-        <text class="journey-entry-text">📜 服务历程</text>
-        <text class="journey-entry-arrow">›</text>
-      </view>
     </view>
 
-    <!-- 🌟 第一核心操作：义工到岗打卡，紧随统计面板之后，视觉最突出 -->
+    <!-- 🌟 第一核心操作：义工到岗打卡，紧随统计面板之后，视觉最突出。
+         🛡️ 打卡卡片精简：移除"📜 服务历程"胶囊（已整合进个人页"日常记录"列表，
+         见 profile.wxml onTapServiceHistory）与"📖 查看公开账本"文字链接
+         （公开账本统一由顶部"☀️ 阳光账本"卡片承载），卡片只保留 3 项数据 +
+         打卡主按钮，视觉更聚焦 -->
     <view class="v-action-box {{highlightCheckInCard ? 'highlight-pulse' : ''}}" id="checkInCard">
       <button
         class="btn-volunteer-checkin {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
@@ -176,7 +170,6 @@
         <view class="idx-icon-sm idx-icon-handshake"></view>
         {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '到岗服务打卡')}}
       </button>
-      <text class="link-view-public-ledger" bindtap="goToStatistics">📖 查看公开账本 ›</text>
     </view>
   </view>
 

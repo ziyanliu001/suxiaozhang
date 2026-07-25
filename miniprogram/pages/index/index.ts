@@ -230,11 +230,17 @@ Page({
     sunshineLedgerData: {
       storeName: '',
       periodLabel: '',
-      recordCount: 0,
-      totalDining: 0,
-      totalDelivery: 0,
-      totalVolunteerHours: 0
+      auditedReportsCount: 0,
+      totalDiners: 0,
+      monthlyDiners: 0,
+      takeawayMeals: 0,
+      totalHours: 0,
+      volunteerCount: 0,
+      operatingDays: 0
     },
+    // ☀️ 阳光账本 2x2 网格展示数组：从 sunshineLedgerData 派生，供 WXML wx:for
+    // 渲染，避免 7 个统计格子手写重复结构
+    sunshineStatCards: [] as { label: string; value: number }[],
     yesterdayBalDisplay: '0.00',
     totalIncomeDisplay: '0.00',
     totalExpenseDisplay: '0.00',
@@ -6943,15 +6949,28 @@ Page({
         return;
       }
 
+      const ledgerData = {
+        storeName: result.storeName || '',
+        periodLabel: result.periodLabel || '',
+        auditedReportsCount: result.auditedReportsCount || 0,
+        totalDiners: result.totalDiners || 0,
+        monthlyDiners: result.monthlyDiners || 0,
+        takeawayMeals: result.takeawayMeals || 0,
+        totalHours: result.totalHours || 0,
+        volunteerCount: result.volunteerCount || 0,
+        operatingDays: result.operatingDays || 0
+      };
       this.setData({
-        sunshineLedgerData: {
-          storeName: result.storeName || '',
-          periodLabel: result.periodLabel || '',
-          recordCount: result.recordCount || 0,
-          totalDining: result.totalDining || 0,
-          totalDelivery: result.totalDelivery || 0,
-          totalVolunteerHours: result.totalVolunteerHours || 0
-        }
+        sunshineLedgerData: ledgerData,
+        sunshineStatCards: [
+          { label: '累计就餐人次', value: ledgerData.totalDiners },
+          { label: '当月就餐人次', value: ledgerData.monthlyDiners },
+          { label: '爱心送餐份数', value: ledgerData.takeawayMeals },
+          { label: '累计护持工时', value: ledgerData.totalHours },
+          { label: '参与护持总人次', value: ledgerData.volunteerCount },
+          { label: '已核销餐报篇数', value: ledgerData.auditedReportsCount },
+          { label: '安全营运天数', value: ledgerData.operatingDays }
+        ]
       });
     } catch (err) {
       console.error('[onOpenSunshineLedger] 加载阳光账本异常:', err);

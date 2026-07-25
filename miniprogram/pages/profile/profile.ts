@@ -887,7 +887,9 @@ Page({
     });
   },
 
-  onGoToJourney() {
+  // 📜 服务历程：原 onGoToJourney，首页打卡卡片精简后"服务历程"入口收拢到
+  // 个人页"日常记录"列表统一承载，导航目标/逻辑保持不变，仅重命名对齐新入口
+  onTapServiceHistory() {
     if (this.isNavigating) return;
     this.isNavigating = true;
 
