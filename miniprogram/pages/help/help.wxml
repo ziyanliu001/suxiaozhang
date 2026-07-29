@@ -14,7 +14,7 @@
       🔑 财务篇
     </view>
     <view class="tab-item {{activeTab === 'volunteer' ? 'active' : ''}}" bindtap="onSwitchTab" data-tab="volunteer">
-      ❤️ 志工篇
+      ❤️ 义工篇
     </view>
     <view class="tab-item {{activeTab === 'faq' ? 'active' : ''}}" bindtap="onSwitchTab" data-tab="faq">
       ❓ 常见问题
@@ -99,7 +99,7 @@
 
     <view class="guide-section" wx:if="{{activeTab === 'volunteer'}}">
       <view class="section-hero">
-        <text class="hero-title">❤️ 志工大众 / 现场家人指南</text>
+        <text class="hero-title">❤️ 义工大众 / 现场家人指南</text>
         <text class="hero-sub">查看收支透明账本，传播爱心宣导文案</text>
       </view>
 

@@ -72,7 +72,7 @@
               currentUserRole === 'finance' ? currentStoreName + ' · 财务' :
               currentUserRole === 'store_patriarch' ? currentStoreName + ' · 家长' :
               isFamily ? (currentStoreName ? (currentStoreName + ' · 家人') : '请选择门店 · 家人') :
-              (currentStoreName ? (currentStoreName + ' · 志工') : '请选择门店 · 志工')}}</text>
+              (currentStoreName ? (currentStoreName + ' · 义工') : '请选择门店 · 义工')}}</text>
           </view>
         </view>
       </view>
