@@ -42,7 +42,7 @@ function generateTempOpenid(): string {
 export const ROLE_LABELS: Record<UserRole, string> = {
   super_admin: '超级管理员',
   store_manager: '店长',
-  store_patriarch: '家长/督导',
+  store_patriarch: '家长',
   finance: '财务义工',
   volunteer: '普通义工',
   platform_admin: '平台管理员（开发者）'

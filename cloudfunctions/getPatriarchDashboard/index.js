@@ -49,7 +49,7 @@ async function resolveTarget(caller, requestedStoreId) {
     return { allowed: true, storeId: requestedStoreId };
   }
 
-  return { allowed: false, error: '无权限：仅家长/督导或超级管理员可查看本大盘' };
+  return { allowed: false, error: '无权限：仅家长或超级管理员可查看本大盘' };
 }
 
 exports.main = async (event) => {

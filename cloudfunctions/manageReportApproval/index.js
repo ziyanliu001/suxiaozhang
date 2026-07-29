@@ -164,7 +164,7 @@ const ACTION_RULES = {
 async function handlePendingVoidDecision(action, docId, OPENID) {
   const caller = await resolveCaller(OPENID);
   if (!caller || (caller.role !== 'store_patriarch' && caller.role !== 'super_admin')) {
-    return { success: false, errMsg: '无权限：仅家长/督导或超级管理员可确认作废申请' };
+    return { success: false, errMsg: '无权限：仅家长或超级管理员可确认作废申请' };
   }
 
   const docRes = await db.collection('report_logs').doc(docId).get().catch(() => null);

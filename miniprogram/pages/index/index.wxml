@@ -2275,7 +2275,7 @@
                 <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
               </view>
               <text class="role-tag-badge {{item.requestedRole}}">
-                {{item.requestedRole === 'finance' ? '财务记账' : (item.requestedRole === 'store_patriarch' ? '🏛️ 家长/督导' : '现场奉献')}}
+                {{item.requestedRole === 'finance' ? '财务记账' : (item.requestedRole === 'store_patriarch' ? '🏛️ 家长' : '现场奉献')}}
               </text>
             </view>
 

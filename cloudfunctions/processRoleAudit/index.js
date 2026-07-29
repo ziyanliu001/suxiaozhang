@@ -245,7 +245,7 @@ const REQUESTED_ROLE_LABELS = {
   volunteer: '义工',
   finance: '财务',
   store_manager: '店长',
-  store_patriarch: '家长/督导'
+  store_patriarch: '家长'
 };
 
 // 🏛️ 分角色列出待审批申请：店长/家长只看本店的普通成员申请（义工/财务），
@@ -456,7 +456,7 @@ exports.main = async (event, context) => {
     // 🏛️ 家长/督导任命仅限超级管理员审批：家长是监督店长的角色，店长本人（哪怕正是
     // 本店店长）不能审批自己门店的督导人选，无论是已有门店还是新建门店分支
     if (applyData.requestedRole === 'store_patriarch' && auditor.role !== 'super_admin') {
-      return { success: false, error: '无权限：家长/督导任命仅限超级管理员审批' };
+      return { success: false, error: '无权限：家长任命仅限超级管理员审批' };
     }
 
     const isCustomStore = applyData.storeSelectionType === 'custom' || !applyData.storeId;

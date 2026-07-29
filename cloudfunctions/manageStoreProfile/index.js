@@ -221,7 +221,7 @@ exports.main = async (event, context) => {
 
     if (action === 'approveProfileUpdate' || action === 'rejectProfileUpdate') {
       if (!caller || (caller.role !== 'store_patriarch' && caller.role !== 'super_admin')) {
-        return { success: false, error: '无权限：仅家长/督导或超级管理员可确认画像变更申请' };
+        return { success: false, error: '无权限：仅家长或超级管理员可确认画像变更申请' };
       }
       if (!storeId) return { success: false, error: '缺少 storeId 参数' };
 
