@@ -47,6 +47,16 @@ function isAllStoresMode(storeName: string): boolean {
   return !storeName || storeName === 'ALL' || clean === '全部门店';
 }
 
+// 🛡️ "全国总览"/"全部门店" 是 store-picker 里仅供 super_admin 选用的虚拟聚合
+// 门店名（见 components/store-picker/store-picker.ts 的 national_overview 条目），
+// 一旦被写进 app.globalData.currentStore/本地 selectedStore 缓存，任何页面直接用
+// getSelectedStore() 兜底 shopName 时都可能把它带出来——非超管账号绝不能把这个
+// 聚合占位名当成"自己门店"展示出去
+const VIRTUAL_STORE_NAMES = ['全国总览', '全部门店'];
+function isVirtualStoreName(storeName: string): boolean {
+  return VIRTUAL_STORE_NAMES.includes(String(storeName || '').trim());
+}
+
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
 // 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
@@ -244,7 +254,11 @@ Page({
   data: {
     watermarkIdentity: '',
     currentTab: 'week',
-    shopName: '全部门店',
+    // 🐛 根因修复：默认值绝不能是"全部门店"这种超管专属聚合占位——角色尚未解析
+    // 完成的加载窗口期，非超管账号会先看到这个默认值（模板兜底文案已改成
+    // '当前门店'，见 statistics.wxml），等 applyRolePermissions()/loadShopList()
+    // 解析出真实角色后再被覆盖为具体门店名（或超管才会覆盖回"全部门店"）
+    shopName: '',
     shopList: [] as string[],
     selectedShopIndex: 0,
     selectedYear: new Date().getFullYear(),
@@ -407,7 +421,12 @@ Page({
     // 只有真的在全国视图下才不被静默覆盖（这是用户主动选择的展示状态，不该被打断），
     // 处于具体门店视角时，任何角色都应该跟随全局门店切换器保持同步
     const activeStore = getSelectedStore();
-    if (activeStore && activeStore.storeName !== this.data.shopName && !this.data.isAllStoresMode) {
+    // 🐛 根因修复：非超管账号绝不能被这里同步进"全国总览"/"全部门店"这类超管
+    // 专属聚合占位名——getSelectedStore() 可能残留 store-picker 的
+    // national_overview 虚拟条目写入的全局态，canViewAllStoresDropdown 已严格
+    // 收窄到 super_admin，与其同一条口径
+    const canAdoptActiveStore = this.data.canViewAllStoresDropdown || !isVirtualStoreName(activeStore && activeStore.storeName);
+    if (activeStore && activeStore.storeName !== this.data.shopName && !this.data.isAllStoresMode && canAdoptActiveStore) {
       this.setData({
         shopName: activeStore.storeName
       });
@@ -544,7 +563,13 @@ Page({
       // 统一默认展示当前切换门店（getSelectedStore 兜底，覆盖 storeName 参数
       // 为空的情况——超管在 user_roles 里未必绑定固定门店）的数据
       const activeStore = getSelectedStore();
-      const effectiveStoreName = storeName || (activeStore && activeStore.storeName) || '';
+      const rawActiveStoreName = (activeStore && activeStore.storeName) || '';
+      // 🐛 根因修复：非超管（isSuperAdmin 已在上面收窄为 false）绝不能把
+      // getSelectedStore() 兜底出来的"全国总览"/"全部门店"这类超管专属聚合占位
+      // 名当成自己门店展示——这个全局态是 store-picker 的 national_overview
+      // 虚拟条目写入 app.globalData.currentStore 时留下的，roleInfo.storeName
+      // 为空时若直接兜底用它，会把超管视角的文案错误地渲染给店长/财务/义工账号
+      const effectiveStoreName = storeName || (isSuperAdmin || !isVirtualStoreName(rawActiveStoreName) ? rawActiveStoreName : '');
 
       this.setData({
         shopName: effectiveStoreName,

@@ -36,7 +36,7 @@
           </view>
         </picker>
         <view wx:else class="store-picker-pill locked">
-          <text class="name">{{currentUserStoreName || shopName || '加载中...'}}</text>
+          <text class="name">{{currentUserStoreName || shopName || '当前门店'}}</text>
           <text class="lock-icon">🔒</text>
           <text class="role-tag-badge" wx:if="{{currentUserRole}}">{{roleLabelMap[currentUserRole]}}</text>
         </view>
@@ -643,7 +643,7 @@
               <text class="section-main-title">📅 每日明细</text>
               <text class="record-count-tag">({{statistics.dailyRecords.length}}天记录)</text>
             </view>
-            <text class="store-location-badge">{{shopName || '全部门店'}}</text>
+            <text class="store-location-badge">{{(canViewAllStoresDropdown ? shopName : (currentUserStoreName || shopName)) || '当前门店'}}</text>
           </view>
           <view class="header-tools-row">
             <button class="tool-btn thanks" bindtap="onGenerateGratitudeReport">
@@ -673,7 +673,7 @@
         </block>
 
         <view class="empty-box" wx:if="{{statistics.dailyRecords.length === 0}}">
-          <text class="empty-tip">该周期内【{{shopName || '全部门店'}}】暂无餐报记录</text>
+          <text class="empty-tip">该周期内【{{(canViewAllStoresDropdown ? shopName : (currentUserStoreName || shopName)) || '当前门店'}}】暂无餐报记录</text>
         </view>
 
         <!-- 年报模式：按月聚合折叠展示 -->
@@ -827,11 +827,11 @@
     <!-- 🌟 精简空状态：去掉"系统诊断"调试文本与外层黄色卡片框，按钮统一为扁平圆角主色调 -->
     <view class="smart-empty-card" wx:if="{{!statistics || statistics.recordCount === 0}}">
       <text class="empty-icon">📊</text>
-      <text class="empty-title">暂无【{{shopName || '全部门店'}}】在选定周期的统计数据</text>
+      <text class="empty-title">暂无【{{(canViewAllStoresDropdown ? shopName : (currentUserStoreName || shopName)) || '当前门店'}}】在选定周期的统计数据</text>
 
       <block wx:if="{{currentStoreTotalCount > 0}}">
         <text class="empty-suggest-text">该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
-        <button class="btn-empty-action" bindtap="onShowAllStoreRecords">显示【{{shopName || '全部门店'}}】全部 {{currentStoreTotalCount}} 条记录</button>
+        <button class="btn-empty-action" bindtap="onShowAllStoreRecords">显示【{{(canViewAllStoresDropdown ? shopName : (currentUserStoreName || shopName)) || '当前门店'}}】全部 {{currentStoreTotalCount}} 条记录</button>
       </block>
 
       <block wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">
