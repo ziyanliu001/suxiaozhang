@@ -294,18 +294,20 @@ exports.main = async (event) => {
 
         const where = {};
 
-        if (storeId === 'ALL') {
-          if (!isSuperAdmin) {
-            if (caller && caller.storeId) {
-              where.storeId = caller.storeId;
-            } else {
-              return { success: true, data: [], page: p, pageSize: size, total: 0, hasMore: false };
-            }
+        // 🛡️ 门店隔离：此前非超管传入任意非 'ALL' 的 storeId（哪怕是伪造的其他门店 ID）
+        // 都会被原样信任写进查询条件——'ALL' 分支专门做了越权收敛，但只要不精确等于
+        // 这个字面量哨兵值，校验就被绕过了，等同于任何店长/义工都能读到同机构下其他
+        // 门店的完整日志。改为：非超管无论客户端传了什么，一律强制收敛为自己绑定的
+        // 门店；只有 super_admin 才能查看指定门店之外的范围（含不传 storeId 时的
+        // 全机构汇总视角）
+        if (!isSuperAdmin) {
+          if (caller && caller.storeId) {
+            where.storeId = caller.storeId;
+          } else {
+            return { success: true, data: [], page: p, pageSize: size, total: 0, hasMore: false };
           }
-        } else if (storeId) {
+        } else if (storeId && storeId !== 'ALL') {
           where.storeId = storeId;
-        } else if (caller && caller.storeId) {
-          where.storeId = caller.storeId;
         }
 
         if (caller && caller.tenantId) {

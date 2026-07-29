@@ -1042,8 +1042,19 @@ Page({
     if (shopList && shopList.length > 0 && index >= 0 && index < shopList.length) {
       let displayShopName = shopList[index];
       const cleanShopName = displayShopName.replace(/\s*\(\d+条记录\)$/, '');
-      const isAll = index === 0 || isAllStoresMode(cleanShopName);
-      
+      const requestedAll = index === 0 || isAllStoresMode(cleanShopName);
+      // 🛡️ 这个兜底 picker（wx:elif="{{shopList && shopList.length > 0}}"）会在
+      // initUserRole()/loadShopList() 两个并行发起的异步请求之间的窗口期短暂渲染
+      // 出来（见 onLoad），此时 canViewAllStoresDropdown 可能还没被真正的角色收敛
+      // 结果覆盖。哪怕用户在这个窗口期点了"全部门店"，也绝不能让非超管进入
+      // isAllStoresMode——与 canViewAllStoresDropdown（严格收窄到 super_admin）
+      // 保持同一条权限口径，杜绝越权拿到全国汇总视图
+      if (requestedAll && !this.data.canViewAllStoresDropdown) {
+        wx.showToast({ title: '暂无权限查看全部门店汇总', icon: 'none' });
+        return;
+      }
+      const isAll = requestedAll;
+
       this.setData({
         selectedShopIndex: index,
         shopName: isAll ? '全部门店' : cleanShopName,

@@ -143,22 +143,31 @@ Page({
       this.setData({
         selectedStoreName: activeStore.storeName,
         currentStoreId: resolvedStoreId,
-        isAllStoresView: isNationalStoreId(resolvedStoreId)
+        isAllStoresView: this.resolveIsAllStoresView(resolvedStoreId)
       });
     } else if (currentStoreName && currentStoreName !== this.data.selectedStoreName) {
       resolvedStoreId = currentStoreId;
       this.setData({
         selectedStoreName: currentStoreName,
         currentStoreId: resolvedStoreId,
-        isAllStoresView: isNationalStoreId(resolvedStoreId)
+        isAllStoresView: this.resolveIsAllStoresView(resolvedStoreId)
       });
     } else {
       // 两个分支都未触发（店铺名未变）：仍要用当前已知的 storeId 校正一次视角标志，避免过期状态残留
-      this.setData({ isAllStoresView: isNationalStoreId(resolvedStoreId) });
+      this.setData({ isAllStoresView: this.resolveIsAllStoresView(resolvedStoreId) });
     }
     this.initPermissions();
     this.loadReports();
     DataService.syncLocalDataToCloud();
+  },
+
+  // 🛡️ 非超管禁止越权停留在"全国总览"视角：门店 ID 是否命中全国哨兵值只是必要
+  // 条件之一，还必须叠加当前真实角色是 super_admin——storage 里缓存的 current_store_id
+  // 可能是共享设备上一次超管会话残留、或账号被降级后未清理的旧值，不能仅凭这个
+  // 哨兵值本身就判定"可以看全国汇总"。与 activity-log.ts/store-profile.ts 同一套
+  // "storage 值需叠加角色校验才生效"的防御口径对齐
+  resolveIsAllStoresView(storeId: string): boolean {
+    return isNationalStoreId(storeId) && !!this.data.isSuperAdmin;
   },
 
   // 🌟 切店全局响应：store-picker 触发 storechange 时同步刷新历史记录
@@ -169,7 +178,7 @@ Page({
     wx.setStorageSync('current_store_id', storeId || '');
     wx.setStorageSync('current_store_name', storeName || '');
 
-    const isAllStores = isNationalStoreId(storeId || '');
+    const isAllStores = this.resolveIsAllStoresView(storeId || '');
 
     this.setData({
       selectedStoreName: storeName || '',
@@ -365,6 +374,14 @@ Page({
         showPreviewBanner: showPreviewBanner,
         previewBannerText: showPreviewBanner ? `当前正在预览「${PREVIEW_VIEW_MODE_LABELS[previewMode]}」的界面样式，本页操作仍按您的真实身份（超级管理员）执行` : ''
       });
+
+      // 🛡️ onShow() 里对 isAllStoresView 的赋值发生在 initPermissions()（本函数）
+      // 之前，此时 isSuperAdmin 用的还是上一轮渲染的旧值——一旦这一轮角色查询
+      // 得到的真实结果是"非超管"，必须在这里用当前已知的 currentStoreId 重新收敛
+      // 一次，防止残留的旧 isSuperAdmin=true 状态让非超管账号继续停留在全国总览视角
+      if (!isSuperAdmin && this.data.isAllStoresView) {
+        this.setData({ isAllStoresView: false });
+      }
     };
 
     const cached = AuthService.getCachedRoleInfo();
