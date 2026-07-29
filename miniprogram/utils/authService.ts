@@ -296,6 +296,31 @@ export const AuthService = {
     return (roleInfo && roleInfo.role) || 'volunteer';
   },
 
+  // 🐛 根因修复：cachedRole（本地持久化的服务端角色缓存）与 storageRole（手动
+  // 切换身份后写入的 current_user_role 生效角色）不一致时，调用方必须立即用这个
+  // 方法把生效角色写回持久化缓存——否则任何直接调用 getCachedRoleInfo()/getRole()
+  // 的页面（例如统计页 initUserRole 里 fetchUserRole() 异步校验落地前的同步兜底
+  // 分支），在这个窗口期读到的仍是残留的旧角色（典型场景：曾经是 super_admin、
+  // 后来被切换/降级为 store_manager，但 auth_user_role 缓存没人主动更新过），
+  // 从而把"全部门店"等超管专属能力错误地放给非超管账号
+  overwriteCachedRole(role: UserRole): void {
+    try {
+      const cached = this.getCachedRoleInfo();
+      const merged: RoleInfo = {
+        role,
+        storeId: (cached && cached.storeId) || '',
+        storeName: (cached && cached.storeName) || '',
+        status: (cached && cached.status) || 'guest',
+        tenantId: (cached && cached.tenantId) || '',
+        avatarUrl: (cached && cached.avatarUrl) || '',
+        nickName: (cached && cached.nickName) || ''
+      };
+      wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(merged));
+    } catch (e) {
+      console.warn('[AuthService] overwriteCachedRole 异常:', e);
+    }
+  },
+
   isAdmin(): boolean {
     const role = this.getRole();
     return role === 'super_admin' || role === 'admin';

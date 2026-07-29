@@ -449,14 +449,30 @@ Page({
   async initUserRole() {
     const cachedRole = AuthService.getCachedRoleInfo();
     if (cachedRole) {
-      this.applyRolePermissions(cachedRole.role, cachedRole.storeName);
+      this.applyRolePermissions(this.resolveEffectiveRole(cachedRole.role), cachedRole.storeName);
     }
 
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      this.applyRolePermissions(info.role, info.storeName);
+      this.applyRolePermissions(this.resolveEffectiveRole(info.role), info.storeName);
     }
+  },
+
+  // 🐛 根因修复：cachedRole/服务端下发的角色只是"最近一次校验/查询到的角色"，
+  // 手动切换身份时写入的 current_user_role 才是真正的生效角色（同一套口径见
+  // profile.ts initMinePage）——一旦存在就必须以它为准，严禁在 isSuperAdmin/
+  // canViewAllStoresDropdown 的判定里直接使用未经这层校验的 cachedRole.role，
+  // 否则残留的旧 super_admin 缓存会让"全部门店"权限位在这里被错误地放行
+  resolveEffectiveRole(cachedRole: string): string {
+    const storageRole = wx.getStorageSync('current_user_role');
+    if (storageRole) {
+      const normalized = String(storageRole).toLowerCase();
+      // store_family 只是个人中心用来区分"家人视角"的展示态，不在真实角色枚举里，
+      // 对应的真实底层角色就是 volunteer，这里按真实角色归一化
+      return normalized === 'store_family' ? 'volunteer' : normalized;
+    }
+    return cachedRole;
   },
 
   // 🛡️ 三级角色权限卡口：单店财务 / 总部财务 / 超级管理员 / 志工（只读全国大屏）
@@ -505,6 +521,15 @@ Page({
       dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
       dashboardRoleTag: ''
     });
+
+    // 🛡️ 双保险：生效role 一旦不是 super_admin，强制清空/重置"全部门店"权限位与
+    // 当前视图模式，不依赖下面 showPersonalView/else 分支各自都覆盖到——例如
+    // showPersonalView 分支完全不触碰 isAllStoresMode，一个账号从 super_admin
+    // （isAllStoresMode 可能残留 true）切换/降级为志工后，这个旧值不会在那个
+    // 分支里被清掉，后续任何复用它的入口都会被误判成仍处于"全部门店"聚合视图
+    if (!isSuperAdmin) {
+      this.setData({ canViewAllStoresDropdown: false, isAllStoresMode: false });
+    }
 
     if (showPersonalView) {
       // 个人视角：不触碰门店选择器/全国大屏那套状态，只加载属于自己的数据

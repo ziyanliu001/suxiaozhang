@@ -114,7 +114,14 @@ Page({
       const result = await AuthService.fetchUserRole();
       cached = result.roleInfo || null;
     }
-    const isSuperAdmin = !!(cached && cached.role === 'super_admin');
+    // 🐛 根因修复：门店管理页此前直接用 cached.role 判定 isSuperAdmin，完全没看
+    // current_user_role（手动切换身份后的生效角色，见 profile.ts initMinePage /
+    // statistics.ts resolveEffectiveRole 同一套口径）——如果 cached 是残留的旧
+    // super_admin、而生效角色其实已经是 store_manager，这里会把门店管理这个
+    // 超管专属页面错误地放行给非超管账号
+    const storageRole = wx.getStorageSync('current_user_role');
+    const effectiveRole = storageRole ? String(storageRole).toLowerCase() : ((cached && cached.role) || '');
+    const isSuperAdmin = effectiveRole === 'super_admin';
     this.setData({ checkedAccess: true, isSuperAdmin });
 
     if (isSuperAdmin) {

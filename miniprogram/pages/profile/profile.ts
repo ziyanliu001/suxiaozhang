@@ -366,6 +366,20 @@ Page({
       // 手动切换的具体身份说了算：选家人就是家人，选除家人外的任何身份
       // （含义工/家长/店长/财务/超管）都不再是"默认未审核家人"视角
       isFamily = role === 'store_family';
+
+      // 🐛 根因修复：cachedRoleInfo（服务端角色的本地持久化缓存）与这里刚解析出的
+      // 生效role 不一致时（典型场景：曾是 super_admin、后来被切换/降级为
+      // store_manager，但 auth_user_role 缓存从没人主动更新过），必须立即把生效
+      // role 覆盖写回持久化缓存——否则统计页等其他页面直接调用
+      // AuthService.getCachedRoleInfo() 时，在它们自己的 fetchUserRole() 异步
+      // 校验落地前，读到的仍是这份没被覆盖、残留的旧 super_admin，从而把"全部
+      // 门店"等超管专属能力错误地放给已经不是超管的账号
+      // store_family 是本页面用于区分"家人视角"的展示态、不在 UserRole 枚举里，
+      // 它对应的真实底层角色就是 volunteer，写回缓存时要按真实角色归一化
+      const roleForCache = role === 'store_family' ? 'volunteer' : role;
+      if (!cachedRoleInfo || cachedRoleInfo.role !== roleForCache) {
+        AuthService.overwriteCachedRole(roleForCache as any);
+      }
     }
     console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, '-> 生效role=', role);
 
