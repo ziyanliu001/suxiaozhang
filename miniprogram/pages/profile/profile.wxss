@@ -1786,10 +1786,13 @@
   margin-left: 12rpx;
 }
 
+/* 🐛 可读性修复：20rpx + #ADB5BD 浅灰在小屏幕上时间文本糊成一团难以辨认，
+   调大字号并加深至清晰的墨灰色，加中等字重提升辨识度 */
 .fa-item-time {
   display: block;
-  font-size: 20rpx;
-  color: #ADB5BD;
+  font-size: 26rpx;
+  color: #4A5568;
+  font-weight: 500;
   margin-bottom: 12rpx;
 }
 

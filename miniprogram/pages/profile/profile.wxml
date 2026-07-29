@@ -1040,7 +1040,12 @@
         <view class="my-feedback-item {{item.status === 'rejected' ? 'tappable' : ''}}" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id" data-index="{{index}}" bindtap="onTapMyVolunteerSubmissionItem">
           <view class="fa-item-header">
             <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 用餐人数' : '🌾 物资消耗'}}</text>
-            <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
+            <!-- 🐛 根因修复：这份 volunteer_submissions 记录的 dateString 由服务端
+                 handleSubmit 兜底成提交当天（前端从不单独传别的日期），createTimeStr
+                 也是同一时刻生成的，两者永远是同一天，此前"dateString · createTimeStr"
+                 拼接必然产生"2026-07-29 · 2026-07-29 22:46"这种年月日重复展示——
+                 createTimeStr 本身已经是完整的"YYYY-MM-DD HH:mm"，直接展示它即可 -->
+            <text class="fa-item-time">🗓️ {{item.createTimeStr}}</text>
           </view>
 
           <block wx:if="{{item.type === 'menu'}}">
@@ -1121,7 +1126,9 @@
             <text class="fa-item-nickname">{{item.nickName || '匿名义工'}}</text>
             <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 用餐人数' : '🌾 物资消耗'}}</text>
           </view>
-          <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
+          <!-- 🐛 根因修复：同一条根因——dateString/createTimeStr 永远是同一天，
+               去掉重复的日期前缀，只展示完整的 createTimeStr -->
+          <text class="fa-item-time">🗓️ {{item.createTimeStr}}</text>
 
           <block wx:if="{{item.type === 'menu'}}">
             <text class="fa-item-content" wx:if="{{item.mealStatus === 'closed'}}">今日休餐</text>
