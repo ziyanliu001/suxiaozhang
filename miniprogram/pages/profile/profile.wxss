@@ -1636,6 +1636,14 @@
   opacity: 0.7;
 }
 
+/* 🚨 已驳回卡片警示态：淡红底 + 柔和红框，让需要修改重提的卡片在列表里一眼可辨，
+   不用逐条看状态标签才知道哪几条要处理 */
+.my-feedback-item.rejected {
+  background: #FFF5F5;
+  border: 1rpx solid #FED7D7;
+  border-radius: 16rpx;
+}
+
 .my-feedback-reply {
   margin-top: 12rpx;
 }
@@ -1784,6 +1792,8 @@
   border-radius: 20rpx;
   flex-shrink: 0;
   margin-left: 12rpx;
+  /* 🐛 修复：与右侧紧接着的 .fa-item-time 日历图标贴在一起没有呼吸感，补一点右边距 */
+  margin-right: 16rpx;
 }
 
 /* 🐛 可读性修复：20rpx + #ADB5BD 浅灰在小屏幕上时间文本糊成一团难以辨认，
@@ -1802,6 +1812,31 @@
   color: #495057;
   line-height: 1.6;
   margin-bottom: 16rpx;
+}
+
+/* 🌟 核心数据加强：用餐人数（早/午/晚）与物资消耗（米/面/油/菜）是这张卡片
+   最重要的信息，比备注/说明这类次要文本更需要一眼看清——只加在这两行上，
+   不影响 .fa-item-content 在意见箱内容/手机号/门店档案等其他场景的展示 */
+.fa-item-core-data {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1A202C;
+  line-height: 1.5;
+}
+
+/* 📝 备注/说明：与上面核心数据行区分开的次要信息，上下各留一点边距，
+   避免紧挨着核心数据行或底部的【店长已采纳】/【待店长确认】状态标签 */
+.fa-item-note {
+  font-size: 26rpx;
+  color: #4A5568;
+  margin-top: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+/* 数字高亮：在核心数据行内进一步突出具体数量，让人数/斤数比周围的标签文字更醒目 */
+.highlight-num {
+  color: #27AE60;
+  font-weight: 600;
 }
 
 /* 待处理行动区：标记为已处理 / 回复家人 并排两个按钮 */

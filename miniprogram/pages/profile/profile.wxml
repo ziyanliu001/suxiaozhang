@@ -1037,7 +1037,7 @@
           <text>暂无提交记录，去登记今天的菜单人数或物资消耗吧</text>
         </view>
 
-        <view class="my-feedback-item {{item.status === 'rejected' ? 'tappable' : ''}}" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id" data-index="{{index}}" bindtap="onTapMyVolunteerSubmissionItem">
+        <view class="my-feedback-item {{item.status === 'rejected' ? 'tappable rejected' : ''}}" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id" data-index="{{index}}" bindtap="onTapMyVolunteerSubmissionItem">
           <view class="fa-item-header">
             <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 用餐人数' : '🌾 物资消耗'}}</text>
             <!-- 🐛 根因修复：这份 volunteer_submissions 记录的 dateString 由服务端
@@ -1050,12 +1050,12 @@
 
           <block wx:if="{{item.type === 'menu'}}">
             <text class="fa-item-content" wx:if="{{item.mealStatus === 'closed'}}">今日休餐</text>
-            <text class="fa-item-content" wx:else>早: {{item.breakfastCount || 0}} 人 | 午: {{item.lunchCount || 0}} 人 | 晚: {{item.dinnerCount || 0}} 人</text>
-            <text class="fa-item-content" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
+            <text class="fa-item-content fa-item-core-data" wx:else>早: <text class="highlight-num">{{item.breakfastCount || 0}}</text> 人 | 午: <text class="highlight-num">{{item.lunchCount || 0}}</text> 人 | 晚: <text class="highlight-num">{{item.dinnerCount || 0}}</text> 人</text>
+            <text class="fa-item-content fa-item-note" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
           </block>
           <block wx:else>
-            <text class="fa-item-content">米: {{item.riceCount || 0}}斤 | 面: {{item.flourCount || 0}}斤 | 油: {{item.oilCount || 0}}斤 | 菜: {{item.vegetableCount || 0}}斤</text>
-            <text class="fa-item-content" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
+            <text class="fa-item-content fa-item-core-data">米: <text class="highlight-num">{{item.riceCount || 0}}</text>斤 | 面: <text class="highlight-num">{{item.flourCount || 0}}</text>斤 | 油: <text class="highlight-num">{{item.oilCount || 0}}</text>斤 | 菜: <text class="highlight-num">{{item.vegetableCount || 0}}</text>斤</text>
+            <text class="fa-item-content fa-item-note" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
           </block>
 
           <text class="my-vs-status-tag approved" wx:if="{{item.status === 'approved'}}">✅ 店长已采纳入库</text>
@@ -1084,12 +1084,12 @@
 
       <block wx:if="{{rejectedSubmissionItem.type === 'menu'}}">
         <text class="fa-item-content" wx:if="{{rejectedSubmissionItem.mealStatus === 'closed'}}">今日休餐</text>
-        <text class="fa-item-content" wx:else>早: {{rejectedSubmissionItem.breakfastCount || 0}} 人 | 午: {{rejectedSubmissionItem.lunchCount || 0}} 人 | 晚: {{rejectedSubmissionItem.dinnerCount || 0}} 人</text>
-        <text class="fa-item-content" wx:if="{{rejectedSubmissionItem.menuNote}}">备注：{{rejectedSubmissionItem.menuNote}}</text>
+        <text class="fa-item-content fa-item-core-data" wx:else>早: <text class="highlight-num">{{rejectedSubmissionItem.breakfastCount || 0}}</text> 人 | 午: <text class="highlight-num">{{rejectedSubmissionItem.lunchCount || 0}}</text> 人 | 晚: <text class="highlight-num">{{rejectedSubmissionItem.dinnerCount || 0}}</text> 人</text>
+        <text class="fa-item-content fa-item-note" wx:if="{{rejectedSubmissionItem.menuNote}}">备注：{{rejectedSubmissionItem.menuNote}}</text>
       </block>
       <block wx:else>
-        <text class="fa-item-content">米: {{rejectedSubmissionItem.riceCount || 0}}斤 | 面: {{rejectedSubmissionItem.flourCount || 0}}斤 | 油: {{rejectedSubmissionItem.oilCount || 0}}斤 | 菜: {{rejectedSubmissionItem.vegetableCount || 0}}斤</text>
-        <text class="fa-item-content" wx:if="{{rejectedSubmissionItem.lossNote}}">说明：{{rejectedSubmissionItem.lossNote}}</text>
+        <text class="fa-item-content fa-item-core-data">米: <text class="highlight-num">{{rejectedSubmissionItem.riceCount || 0}}</text>斤 | 面: <text class="highlight-num">{{rejectedSubmissionItem.flourCount || 0}}</text>斤 | 油: <text class="highlight-num">{{rejectedSubmissionItem.oilCount || 0}}</text>斤 | 菜: <text class="highlight-num">{{rejectedSubmissionItem.vegetableCount || 0}}</text>斤</text>
+        <text class="fa-item-content fa-item-note" wx:if="{{rejectedSubmissionItem.lossNote}}">说明：{{rejectedSubmissionItem.lossNote}}</text>
       </block>
 
       <text class="my-vs-reject-reason detail">驳回原因：{{rejectedSubmissionItem.rejectReason || '店长未填写具体原因'}}</text>
@@ -1132,12 +1132,12 @@
 
           <block wx:if="{{item.type === 'menu'}}">
             <text class="fa-item-content" wx:if="{{item.mealStatus === 'closed'}}">今日休餐</text>
-            <text class="fa-item-content" wx:else>早: {{item.breakfastCount || 0}} 人 | 午: {{item.lunchCount || 0}} 人 | 晚: {{item.dinnerCount || 0}} 人</text>
-            <text class="fa-item-content" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
+            <text class="fa-item-content fa-item-core-data" wx:else>早: <text class="highlight-num">{{item.breakfastCount || 0}}</text> 人 | 午: <text class="highlight-num">{{item.lunchCount || 0}}</text> 人 | 晚: <text class="highlight-num">{{item.dinnerCount || 0}}</text> 人</text>
+            <text class="fa-item-content fa-item-note" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
           </block>
           <block wx:else>
-            <text class="fa-item-content">米: {{item.riceCount || 0}}斤 | 面: {{item.flourCount || 0}}斤 | 油: {{item.oilCount || 0}}斤 | 菜: {{item.vegetableCount || 0}}斤</text>
-            <text class="fa-item-content" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
+            <text class="fa-item-content fa-item-core-data">米: <text class="highlight-num">{{item.riceCount || 0}}</text>斤 | 面: <text class="highlight-num">{{item.flourCount || 0}}</text>斤 | 油: <text class="highlight-num">{{item.oilCount || 0}}</text>斤 | 菜: <text class="highlight-num">{{item.vegetableCount || 0}}</text>斤</text>
+            <text class="fa-item-content fa-item-note" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
           </block>
 
           <view class="fa-item-actions">
