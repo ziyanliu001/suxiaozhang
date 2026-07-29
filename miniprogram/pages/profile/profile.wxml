@@ -1130,6 +1130,19 @@
       </view>
 
       <text class="vt-form-label">驳回原因</text>
+
+      <!-- 🏷️ 快捷驳回标签：点击直接填入常见原因，减少店长手动打字 -->
+      <view class="quick-reject-tag-row">
+        <text
+          class="quick-reject-tag {{rejectSubmissionReason === tag ? 'active' : ''}}"
+          wx:for="{{quickRejectReasonTags}}"
+          wx:key="*this"
+          wx:for-item="tag"
+          data-tag="{{tag}}"
+          bindtap="onQuickRejectReasonTagTap"
+        >{{tag}}</text>
+      </view>
+
       <textarea
         class="feedback-content-textarea"
         placeholder="如：人数填写有误，请核实后重提交"

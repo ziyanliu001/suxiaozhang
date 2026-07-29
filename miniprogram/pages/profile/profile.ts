@@ -207,6 +207,8 @@ Page({
     rejectSubmissionId: '',
     rejectSubmissionReason: '',
     rejectSubmissionSubmitting: false,
+    // 🏷️ 快捷驳回标签：点击直接把常见驳回原因填进 textarea，减少店长手动打字
+    quickRejectReasonTags: ['人数填写有误', '物资产量/斤数填错', '重复提交', '凭证/备注不清晰'] as string[],
 
     // 👥 待审批的本店成员申请（义工/财务）：店长/家长可见，与「爱心意见箱管理」
     // 同一套模态列表 + 角标视觉语言。🏛️ 待审批的高级角色与新店申请（店长/家长/
@@ -1623,6 +1625,14 @@ Page({
     this.setData({ rejectSubmissionReason: e.detail.value });
   },
 
+  // 🏷️ 快捷驳回标签：点击即把该短语填入 textarea，覆盖当前内容（与"选一个现成理由"
+  // 的直觉一致，不追加拼接，避免点多个标签后文字乱七八糟）
+  onQuickRejectReasonTagTap(e: any) {
+    const tag = e.currentTarget.dataset.tag;
+    if (!tag) return;
+    this.setData({ rejectSubmissionReason: tag });
+  },
+
   async onSubmitRejectSubmission() {
     if (this.data.rejectSubmissionSubmitting) return;
 
@@ -1630,7 +1640,7 @@ Page({
     const rejectReason = (this.data.rejectSubmissionReason || '').trim();
     if (!id) return;
     if (!rejectReason) {
-      wx.showToast({ title: '请填写驳回原因', icon: 'none' });
+      wx.showToast({ title: '请填写或选择驳回原因', icon: 'none' });
       return;
     }
 

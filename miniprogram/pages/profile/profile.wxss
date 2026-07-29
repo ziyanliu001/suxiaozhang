@@ -1117,6 +1117,11 @@
 
 /* ================= 🌟 义工证书 Modal ================= */
 
+/* 🐛 硬性根治：本弹窗（驳回原因/拒绝申请原因等）经常是从「待审核的义工餐报与
+   物资」这类半屏抽屉（.feedback-sheet-backdrop/.feedback-sheet-panel，
+   z-index: 999998/999999 !important）里点开的二级弹窗。此前 z-index: 2000
+   远低于抽屉的层级，导致弹出后视觉上仍被压在抽屉下面、看不见驳回输入框。
+   这里顶到比抽屉更高的层级，并同样用 !important 排除任何后续样式意外覆盖 */
 .certificate-modal-mask {
   position: fixed;
   top: 0;
@@ -1127,7 +1132,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 9999999 !important;
 }
 
 .certificate-modal-card {
@@ -1157,6 +1162,30 @@
   background: #F1F3F5;
   color: #6B7280;
   font-size: 24rpx;
+}
+
+/* 🏷️ 快捷驳回标签：常见驳回原因一键填入，减少店长手动打字 */
+.quick-reject-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.quick-reject-tag {
+  font-size: 22rpx;
+  color: #6B5B45;
+  background: #F5F0E6;
+  border: 1rpx solid #E5DCC8;
+  border-radius: 999rpx;
+  padding: 8rpx 20rpx;
+  line-height: 1.4;
+}
+
+.quick-reject-tag.active {
+  color: #FFFFFF;
+  background: #C0392B;
+  border-color: #C0392B;
 }
 
 .certificate-canvas-wrap {
