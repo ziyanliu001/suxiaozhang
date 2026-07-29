@@ -275,6 +275,9 @@ Page({
     // 只服务店长/财务的正式台账历史（/pages/history/history?view=mine）
     showMyVolunteerSubmissionsModal: false,
     myVolunteerSubmissionsLoading: false,
+    // 🔴 "我的餐报提交记录"入口角标：myVolunteerSubmissionsList 里 status==='rejected'
+    // 的条数，见 fetchMyVolunteerSubmissions()
+    rejectedCount: 0,
     myVolunteerSubmissionsList: [] as Array<{
       _id: string; type: string; dateString: string; status: string; createTimeStr: string;
       mealStatus?: string; breakfastCount?: number; lunchCount?: number; dinnerCount?: number;
@@ -470,6 +473,13 @@ Page({
     // （一个数"店里有几条没处理"，一个数"我提交的意见有几条被回复了没看"）
     if (isFamily) {
       this.fetchUnreadReplyCount();
+    }
+
+    // 🔴 义工端"我的餐报提交记录"入口角标：提前查一次自己的提交列表算出
+    // rejectedCount，让红点在打开半屏弹窗之前就能在入口上看到，与上面
+    // fetchPendingVolunteerSubmissions() 给店长端角标提前预取的做法保持一致
+    if (isVolunteer && !isFamily) {
+      this.fetchMyVolunteerSubmissions(true);
     }
   },
 
@@ -1445,9 +1455,15 @@ Page({
     }
   },
 
-  async fetchMyVolunteerSubmissions() {
+  // 🔴 silent=true 供 initMinePage() 在打开半屏弹窗之前静默预取角标数字用——
+  // 与 fetchPendingVolunteerSubmissions() 给店长端角标预取的做法一致：不弹
+  // loading 态、失败也只 console.warn，不打扰用户；显式打开弹窗（silent 缺省
+  // false）时才保留原有的 loading 态与失败 toast 反馈
+  async fetchMyVolunteerSubmissions(silent: boolean = false) {
     if (!isCloudAvailable()) return;
-    this.setData({ myVolunteerSubmissionsLoading: true });
+    if (!silent) {
+      this.setData({ myVolunteerSubmissionsLoading: true });
+    }
 
     try {
       const res: any = await wx.cloud.callFunction({
@@ -1456,15 +1472,25 @@ Page({
       });
       const result = res.result;
       if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        if (!silent) {
+          wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        }
         return;
       }
-      this.setData({ myVolunteerSubmissionsList: result.data.list || [] });
+      const list = result.data.list || [];
+      // 🔴 我的餐报提交记录入口角标：与 wxml 里 rejectedCount > 0 时展示的
+      // unread-badge 对应，统计有几条已被店长驳回、还没重新修改提交
+      const rejectedCount = list.filter((item: any) => item && item.status === 'rejected').length;
+      this.setData({ myVolunteerSubmissionsList: list, rejectedCount });
     } catch (err) {
       console.error('[fetchMyVolunteerSubmissions] 加载异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      if (!silent) {
+        wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      }
     } finally {
-      this.setData({ myVolunteerSubmissionsLoading: false });
+      if (!silent) {
+        this.setData({ myVolunteerSubmissionsLoading: false });
+      }
     }
   },
 

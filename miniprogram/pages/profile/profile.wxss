@@ -673,7 +673,12 @@
   gap: 12rpx;
 }
 
-.badge {
+/* 🔴 .unread-badge 与 .badge 共用同一套醒目红色圆角数字角标样式——.badge 一般
+   放在行尾（靠近箭头），.unread-badge 紧跟在入口标题文字右侧（如"我的餐报
+   提交记录"），两种排布位置不同但视觉语言保持一致 */
+.badge,
+.unread-badge {
+  display: inline-block;
   min-width: 32rpx;
   height: 32rpx;
   line-height: 32rpx;

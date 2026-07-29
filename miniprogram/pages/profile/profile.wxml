@@ -411,6 +411,7 @@
         <view class="item-left">
           <view class="item-icon-svg icon-svg-history"></view>
           <text class="item-text">我的餐报提交记录</text>
+          <text class="unread-badge" wx:if="{{rejectedCount > 0}}">{{rejectedCount}}</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
