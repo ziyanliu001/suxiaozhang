@@ -116,7 +116,13 @@ exports.main = async (event, context) => {
     const andConditions = [
       { dateString: _.gte(startDateStr).and(_.lte(endDateStr)) },
       { isVoid: _.neq(true) },
-      _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])
+      _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]),
+      // 🛡️ 二级审核门槛：义工/店长刚提交的记录 approvalStatus 恒为 'PENDING'，
+      // 必须经店长核对确认（APPROVED）或财务稽核封账（AUDITED_LOCKED）才算真正
+      // 归档，才该计入统计大盘——与 cloudfunctions/getSunshineLedger 的
+      // approvalStatus 过滤同一条口径。本函数专供 pages/statistics 使用，不像
+      // getReports 那样被审核列表/待办徽标共用，可以无条件收紧
+      { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) }
     ];
 
     if (!isTenantWideAllowed) {

@@ -15,7 +15,7 @@ const _ = db.command;
 const TENANT_WIDE_ROLES = ['super_admin'];
 
 exports.main = async (event, context) => {
-  const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode } = event;
+  const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode, approvedOnly } = event;
   const { OPENID } = cloud.getWXContext();
 
   try {
@@ -46,6 +46,17 @@ exports.main = async (event, context) => {
       // 🛡️ 已作废（红字冲销）的记录不参与正常报表展示/汇总，与 recalculateLedger 的口径保持一致
       isVoid: _.neq(true)
     };
+
+    // 🛡️ 二级审核门槛：approvedOnly 仅供"大盘统计"类调用方（如 statistics.ts）
+    // 显式传入——义工提交后先是 PENDING（未经店长核对），只有店长核对确认
+    // （APPROVED）或财务稽核封账（AUDITED_LOCKED）后才算真正归档，才该计入统计。
+    // 【默认不加这层过滤】：本函数同时被 history.ts（店长/财务的待审核列表，必须
+    // 看到 PENDING 记录才能审核）、custom-tab-bar/notice.ts（待处理徽标/通知，同样
+    // 需要 PENDING 记录）共用，默认收紧会直接弄坏这几处审核工作流。与
+    // cloudfunctions/getSunshineLedger 的 approvalStatus 过滤同一条口径
+    if (approvedOnly) {
+      whereConditions.approvalStatus = _.in(['APPROVED', 'AUDITED_LOCKED']);
+    }
 
     // 🏢 多租户边界：始终收敛到调用者所属机构；若无法解析出 tenantId（新用户/未分配角色），
     // 一律拒绝任何"跨门店/全部"查询，只允许强制退回本人提交的记录，绝不静默退化为全库扫描。

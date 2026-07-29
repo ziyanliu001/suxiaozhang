@@ -423,8 +423,16 @@ export const DataService = {
     mpAccount?: string;
     limit?: number;
     viewMode?: 'all' | 'personal';
+    // 🛡️ 二级审核门槛：本参数【默认 false】——getReports 是被 history.ts（店长/
+    // 财务待审核列表）、custom-tab-bar/notice.ts（待处理徽标/通知）共用的通用
+    // 查询入口，这几处必须能看到 PENDING（未经店长核对）的记录才能完成审核，
+    // 默认收紧会直接弄坏审核工作流。只有 statistics.ts 这类"大盘统计"场景，
+    // 数据在归档（approvalStatus 至少达到 APPROVED）前不该计入统计，才显式传
+    // true——与 cloudfunctions/getSunshineLedger 的 approvalStatus 过滤同一条口径
+    approvedOnly?: boolean;
   } = {}): Promise<{ success: boolean; data: any[]; source: 'cloud' | 'local' }> {
-    const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode } = options;
+    const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode, approvedOnly = false } = options;
+    const isApproved = (r: any) => r && (r.approvalStatus === 'APPROVED' || r.approvalStatus === 'AUDITED_LOCKED');
 
     try {
       if (!isCloudAvailable()) {
@@ -434,7 +442,7 @@ export const DataService = {
       // 云端查询传 storeId 做强隔离（超管全国总览时 storeId 为空或 ALL_STORES 则不过滤）
       const result = await wx.cloud.callFunction({
         name: 'getReports',
-        data: { startDate, endDate, storeId, mpAccount, limit, viewMode }
+        data: { startDate, endDate, storeId, mpAccount, limit, viewMode, approvedOnly }
       });
 
       const r = result.result as any;
@@ -450,6 +458,9 @@ export const DataService = {
 
         const localReports = getLocalReports();
         const openid = AuthService.getOpenid();
+        // 🛡️ 本地未同步草稿从没经过云函数查询、approvalStatus 过滤对它们完全不生效——
+        // 单独在合并前先按同一条件筛掉，避免"我这台设备刚提交、还没同步、还没被
+        // 店长确认"的草稿抢先出现在只该展示已归档数据的统计页里
         let unsyncedReports = openid
           ? localReports.filter(r => !r.isSynced && r._openid === openid)
           : localReports.filter(r => !r.isSynced);
@@ -458,6 +469,10 @@ export const DataService = {
           unsyncedReports = unsyncedReports.filter(r =>
             isStoreNameFuzzyMatch(r.shopName, shopName)
           );
+        }
+
+        if (approvedOnly) {
+          unsyncedReports = unsyncedReports.filter(isApproved);
         }
 
         const mergedData = [...cloudData];
@@ -518,6 +533,10 @@ export const DataService = {
 
       if (mpAccount) {
         localReports = localReports.filter(r => r.mpAccount === mpAccount);
+      }
+
+      if (approvedOnly) {
+        localReports = localReports.filter(isApproved);
       }
 
       localReports.sort((a, b) => {

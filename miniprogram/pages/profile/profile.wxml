@@ -994,6 +994,10 @@
         </view>
       </view>
 
+      <!-- 🌾 防腐引导：物资只做斤数/重量的大颗粒度健康评估，容忍采购毛重与
+           后厨净重的正常损耗误差，不是精确 ERP 库存盘点，无需为凑数精确称重 -->
+      <text class="volunteer-tools-hint">提示：填报数量为预估毛重即可，无需精确称重，店长采纳与审核后将自动归档。</text>
+
       <text class="vt-form-label">报损 / 蔬菜种类 / 补充说明</text>
       <textarea
         class="feedback-content-textarea"

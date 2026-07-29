@@ -59,6 +59,12 @@ function isVirtualStoreName(storeName: string): boolean {
   return VIRTUAL_STORE_NAMES.includes(String(storeName || '').trim());
 }
 
+// 🛡️ 与 VIRTUAL_STORE_NAMES 同一件事的 storeId 哨兵值形态（见
+// cloudfunctions/getReports 的 wantsAllStores 判断、history.ts 的
+// NATIONAL_STORE_IDS），本地 Storage 里的 current_store_id/active_store_id
+// 兜底读取时同样要排除，不能当真实门店 id 使用
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
+
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
 // 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
@@ -503,14 +509,58 @@ Page({
   async initUserRole() {
     const cachedRole = AuthService.getCachedRoleInfo();
     if (cachedRole) {
-      this.applyRolePermissions(this.resolveEffectiveRole(cachedRole.role), cachedRole.storeName, cachedRole.storeId);
+      const identity = this.resolveEffectiveStoreIdentity(cachedRole);
+      this.applyRolePermissions(this.resolveEffectiveRole(cachedRole.role), identity.storeName, identity.storeId);
     }
 
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      this.applyRolePermissions(this.resolveEffectiveRole(info.role), info.storeName, info.storeId);
+      const identity = this.resolveEffectiveStoreIdentity(info);
+      this.applyRolePermissions(this.resolveEffectiveRole(info.role), identity.storeName, identity.storeId);
     }
+  },
+
+  // 🐛 多重兼容读取：角色信息里的门店 id/名偶发缺失（历史数据/字段命名差异），
+  // 这里依次尝试 roleInfo 上的几种可能字段名，缺失时再退回本机其他几处也会
+  // 写入"当前门店"的本地态兜底（getSelectedStore() 汇总了 app.globalData.
+  // currentStore 与 selectedStore 缓存；current_store_id/current_store_name
+  // 是 index.ts/store-picker 写入切店结果的原始 Storage key）。
+  // 🛡️ 无论从哪个来源读到，都严禁把"全国总览"/"全部门店"这类超管专属虚拟聚合名
+  // 当成非超管的真实门店——命中就当作没读到，交给下面的空值兜底处理
+  resolveEffectiveStoreIdentity(roleInfo: any): { storeId: string; storeName: string } {
+    let storeId = (roleInfo && (roleInfo.storeId || roleInfo.shopId || roleInfo.store_id)) || '';
+    let storeName = (roleInfo && (roleInfo.storeName || roleInfo.shopName)) || '';
+
+    if (isVirtualStoreName(storeName)) {
+      storeName = '';
+    }
+
+    if (!storeId || !storeName) {
+      const activeStore = getSelectedStore();
+      const activeStoreName = (activeStore && activeStore.storeName) || '';
+      const activeStoreIsVirtual = isVirtualStoreName(activeStoreName);
+      if (!storeName && activeStoreName && !activeStoreIsVirtual) {
+        storeName = activeStoreName;
+      }
+      if (!storeId && activeStore && activeStore.storeId && !activeStoreIsVirtual) {
+        storeId = activeStore.storeId;
+      }
+    }
+
+    if (!storeId) {
+      // 🛡️ "national_overview"/"ALL_STORES"/"all" 是全国总览虚拟条目的 storeId
+      // 哨兵值（见 components/store-picker/store-picker.ts），与门店名的
+      // "全国总览"/"全部门店" 是同一件事的两种表现形式，同样不能当真实门店 id
+      const storedId = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
+      storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
+    }
+    if (!storeName) {
+      const storedName = wx.getStorageSync('current_store_name') || '';
+      storeName = isVirtualStoreName(storedName) ? '' : storedName;
+    }
+
+    return { storeId, storeName };
   },
 
   // 🐛 根因修复：cachedRole/服务端下发的角色只是"最近一次校验/查询到的角色"，
@@ -559,25 +609,17 @@ Page({
     // store_patriarch/super_admin/hq_finance 全部纳入，这里取反即可
     const showPersonalView = !isManager;
 
-    // 🐛 硬性根治：非超管的门店名优先取服务端角色信息里这个账号真实绑定的
-    // storeName/storeId（本函数入参），再退回 this.data 里上一次已解析出的值；
-    // 两者都还没有值时（典型场景：initUserRole() 的同步 cachedRole 分支跑在
-    // store-picker 刚切换完身份、fetchUserRole() 还没落地的窗口期），才退回读取
-    // getSelectedStore()/app.globalData.currentStore 这个全局态——但严格排除
-    // "全国总览"/"全部门店" 这类超管专属虚拟聚合名，绝不能把这类占位值当成
-    // 非超管的真实门店；紧接着的 fetchUserRole() 异步结果会用服务端权威数据
-    // 覆盖这里的兜底值
+    // 🐛 硬性根治：storeName/storeId 入参在调用前已经过 resolveEffectiveStoreIdentity()
+    // 多源兼容解析+虚拟聚合名过滤（见 initUserRole），这里只需要在其为空时退回
+    // this.data 里上一次已解析出的值。【绝对禁止】非超管的门店名是"全国总览"/
+    // "全部门店"——哪怕万一入参真的带着这类脏值（例如服务端 user_roles.storeName
+    // 历史脏数据），这里也要再兜底剔除一次，双重保险。effectiveStoreName/Id 到此为止
+    // 只可能是"真实门店"或"空"这两种状态，不掺任何占位文案——干净的值才能安全
+    // 写回 setSelectedStore() 同步进全局态，不会把占位文案污染出去
     let effectiveStoreName = isSuperAdmin ? storeName : (storeName || this.data.currentUserStoreName || '');
-    let effectiveStoreId = isSuperAdmin ? storeId : (storeId || this.data.currentUserStoreId || '');
-    if (!isSuperAdmin && !effectiveStoreName) {
-      const activeStore = getSelectedStore();
-      const activeStoreName = (activeStore && activeStore.storeName) || '';
-      if (activeStoreName && !isVirtualStoreName(activeStoreName)) {
-        effectiveStoreName = activeStoreName;
-        if (!effectiveStoreId) {
-          effectiveStoreId = (activeStore && activeStore.storeId) || '';
-        }
-      }
+    const effectiveStoreId = isSuperAdmin ? storeId : (storeId || this.data.currentUserStoreId || '');
+    if (!isSuperAdmin && isVirtualStoreName(effectiveStoreName)) {
+      effectiveStoreName = '';
     }
 
     this.setData({
@@ -587,7 +629,14 @@ Page({
       isFinance,
       isPatriarch,
       currentUserRole: role,
-      currentUserStoreName: effectiveStoreName,
+      // 🛡️ 硬性回退文字：非超管账号真实门店名确实解析不出来时（本地/服务端都
+      // 没有任何来源能提供），展示层只允许回退成中性占位文案"当前门店"，绝不
+      // 允许是空字符串继续在 UI 上裸露、更绝不允许是任何"全部门店/全国总览"
+      // 聚合文案——门店身份的实际数据隔离由 currentUserStoreId 驱动（见
+      // loadStatistics 的 storeId 精确匹配），这里只是保证胶囊/空态文案不裸露
+      // 空白；只在 setData 这一步才落这个占位文案，不影响上面 effectiveStoreName
+      // 这个"干净值"去同步全局态
+      currentUserStoreName: (!isSuperAdmin && !effectiveStoreName) ? '当前门店' : effectiveStoreName,
       currentUserStoreId: effectiveStoreId,
       canViewNationalDashboard,
       canViewCrossStoreCost,
@@ -608,8 +657,9 @@ Page({
 
       // 🧹 清洗全域污染：把 app.globalData.currentStore / 本地 selectedStore
       // 缓存强制同步为这个账号真实绑定的门店——防止其他任何复用
-      // getSelectedStore() 的页面/组件继续读到超管视角下残留的"全国总览"，
-      // 从源头切断污染而不是每个读取点各自打补丁
+      // getSelectedStore() 的页面/组件继续读到超管视角下残留的"全国总览"。只用
+      // 上面还没套用占位文案的 effectiveStoreName（干净值）同步，绝不能把
+      // "当前门店"这个占位文案也写进全局态污染其他页面
       if (effectiveStoreName) {
         setSelectedStore({ storeId: effectiveStoreId, storeName: effectiveStoreName });
       }
@@ -1081,7 +1131,9 @@ Page({
       let allRecords: any[] = [];
       
       try {
-        const result = await DataService.getReports({ limit: 1000 });
+        // 🛡️ 二级审核门槛：门店列表/记录条数这类统计入口同样只应该看到已归档
+        // （店长核对确认/财务稽核封账）的数据，PENDING 待审草稿不该出现在这里
+        const result = await DataService.getReports({ limit: 1000, approvedOnly: true });
         if (result.success && result.data && result.data.length > 0) {
           allRecords = result.data;
         }
@@ -1095,11 +1147,14 @@ Page({
           if (localData && Array.isArray(localData)) {
             allRecords = localData;
           }
+          // 🛡️ 二级审核门槛：同一条口径，绕开 approvedOnly 过滤的本地兜底直读
+          // 也必须重新套用一遍
+          allRecords = allRecords.filter((r: any) => r && (r.approvalStatus === 'APPROVED' || r.approvalStatus === 'AUDITED_LOCKED'));
         } catch (localError) {
           console.warn('[Statistics] 本地缓存读取失败:', localError);
         }
       }
-      
+
       if (allRecords.length > 0) {
         const shopCountMap = new Map<string, number>();
         allRecords.forEach((item: any) => {
@@ -1420,7 +1475,6 @@ Page({
     // currentUserStoreName（服务端角色信息的权威来源）兜底；isSuperAdmin 再加
     // 一道硬性闸门——哪怕 shopName 真的等于"全部门店"/空，非超管也绝不允许进入
     // 聚合模式，与 canViewAllStoresDropdown（严格收窄到 super_admin）同一条口径
-    const { viewMode } = this.data;
     const isSuperAdmin = this.data.canViewAllStoresDropdown;
     const shopName = isSuperAdmin
       ? this.data.shopName
@@ -1430,6 +1484,18 @@ Page({
     // 查询条件传下去——这里只可能是空字符串或账号真实绑定的 storeId，两者都是
     // 安全值；super_admin 需要跨店浏览整个机构数据集用于客户端筛选，不传 storeId
     const shopStoreId = isSuperAdmin ? '' : (this.data.currentUserStoreId || '');
+    // 🐛 硬性根治：非超管绝不能把 this.data.viewMode 的默认值 'all' 原样传给
+    // getReports——viewMode==='all' 这个字面量容易被误解成"查全部门店"（实际
+    // 云函数里 viewMode 只用来决定是否额外收窄到"仅我自己提交的记录"，真正的
+    // 门店隔离始终由 storeId 驱动），但字面上包含"all"就是这个 BUG 反复出现的
+    // 根源之一，索性非超管一律不传这个字段，只让 storeId 决定查询范围；
+    // 切页面里"全店汇总/个人统计"这个开关本身也只对 super_admin 渲染（wx:if=
+    // "{{canViewAllStoresDropdown}}"），非超管永远不会主动把它切到 'personal'，
+    // 所以这里不传等价于原先的"全店"语义，行为不变
+    const reportsViewMode = isSuperAdmin ? this.data.viewMode : undefined;
+    if (!isSuperAdmin && !shopStoreId) {
+      console.warn('[Statistics][loadStatistics] 非超管账号 storeId 仍未解析出来，本次查询将退回服务端按 openid 兜底收敛，请检查该账号 user_roles.storeId 是否缺失');
+    }
 
     // 🪵 Debug 日志：定位"门店匹配=0"类问题时，直接从这行日志确认 effectiveRole
     // 与门店 id/名是否已正确解析，以及最终传给 getReports 的过滤参数是什么
@@ -1437,16 +1503,19 @@ Page({
       'currentUserStoreId=', this.data.currentUserStoreId,
       'currentUserStoreName=', this.data.currentUserStoreName,
       'isSuperAdmin=', isSuperAdmin,
-      'getReports过滤参数=', { viewMode, storeId: shopStoreId || undefined, limit: 1000 });
+      'getReports过滤参数=', { viewMode: reportsViewMode, storeId: shopStoreId || undefined, limit: 1000, approvedOnly: true });
 
     try {
       let allRecords: any[] = [];
 
       try {
+        // 🛡️ 二级审核门槛：待店长核对确认/财务稽核封账（approvalStatus 至少
+        // 达到 APPROVED）之前，义工/店长刚提交的 PENDING 草稿绝不能计入统计分析
         const allResult = await DataService.getReports({
-          viewMode,
+          viewMode: reportsViewMode,
           limit: 1000,
-          storeId: shopStoreId || undefined
+          storeId: shopStoreId || undefined,
+          approvedOnly: true
         });
 
         allRecords = allResult.success && allResult.data ? allResult.data : [];
@@ -1464,6 +1533,10 @@ Page({
               allRecords = JSON.parse(localData);
             }
           }
+          // 🛡️ 二级审核门槛：这是绕开 DataService.getReports()（已经过
+          // approvedOnly 过滤）的最后兜底直读，同一条口径必须在这里重新套用一遍，
+          // 否则还没被店长核对确认的本地草稿会在云端查询失败时抢先计入统计
+          allRecords = allRecords.filter((r: any) => r && (r.approvalStatus === 'APPROVED' || r.approvalStatus === 'AUDITED_LOCKED'));
         } catch (localError) {
           console.warn('[Statistics] 本地缓存读取失败:', localError);
         }
