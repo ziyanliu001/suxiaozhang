@@ -165,13 +165,19 @@ function filterRecordsByPeriodAndStore(
   records: any[],
   startIso: string,
   endIso: string,
-  targetStore: string
+  targetStore: string,
+  allowAllStores: boolean
 ): any[] {
   if (!Array.isArray(records) || records.length === 0) return [];
 
   const cleanStore = (s: string) => String(s || '').replace(/[区市省店\s]/g, '').trim();
   const targetStoreClean = cleanStore(targetStore);
-  const isAll = isAllStoresMode(targetStore);
+  // 🛡️ 严禁非 super_admin 触发"全部门店"聚合模式：targetStore 在调用方可能因为
+  // onLoad 里 initUserRole()/reloadShopListAndStats() 的并行加载时序，短暂拿到
+  // 空字符串（isAllStoresMode() 的 !storeName 分支会把它误判为"全部门店"）——
+  // allowAllStores 由调用方传入 canViewAllStoresDropdown（严格收窄到 super_admin），
+  // 哪怕 targetStore 真的是空/"全部门店"，非超管也强制走"按门店名匹配"分支
+  const isAll = allowAllStores && isAllStoresMode(targetStore);
 
   const startMeta = extractDateMeta(startIso);
   const endMeta = extractDateMeta(endIso);
@@ -302,7 +308,12 @@ Page({
     personalPosterImage: '',
     isSavingPersonalPoster: false,
     viewMode: 'all' as 'all' | 'personal',
-    isAllStoresMode: true,
+    // 🛡️ 预默认必须是 false：这是页面刚加载、角色尚未解析完成前的初始值，若默认
+    // true，非超管账号会在 initUserRole()/reloadShopListAndStats() 并行请求的
+    // 窗口期内短暂（甚至持续，如果角色解析本身就慢）处于"全部门店"聚合状态——
+    // 与 canViewAllStoresDropdown（默认同样是 false，严格收窄到 super_admin）
+    // 保持同一条口径，只有确认是 super_admin 才允许被置为 true
+    isAllStoresMode: false,
     // 🏠 门店人员与服务人群画像：仅单店视角下有值，来自 manageStoreProfile 云函数
     storeProfile: null as any,
     hasOtherStoreData: false,
@@ -1280,8 +1291,20 @@ Page({
   async loadStatistics(startDate: string, endDate: string) {
     wx.showLoading({ title: '加载中...' });
 
-    const { shopName, viewMode } = this.data;
-    const isAll = isAllStoresMode(shopName);
+    // 🛡️ 门店隔离根因修复：this.data.shopName 在 onLoad 触发的 initUserRole()/
+    // reloadShopListAndStats() 两个并行异步请求之间的窗口期可能仍是初始空值——
+    // isAllStoresMode('') 会把空字符串误判为"全部门店"模式，导致非超管账号仅仅
+    // 因为加载时序问题就被打上"全部门店"标记（见 statistics.ts 原 227 行日志
+    // "门店匹配=N/A(全部门店)"）。这里优先用 applyRolePermissions() 已解析出的
+    // currentUserStoreName（服务端角色信息的权威来源）兜底；isSuperAdmin 再加
+    // 一道硬性闸门——哪怕 shopName 真的等于"全部门店"/空，非超管也绝不允许进入
+    // 聚合模式，与 canViewAllStoresDropdown（严格收窄到 super_admin）同一条口径
+    const { viewMode } = this.data;
+    const isSuperAdmin = this.data.canViewAllStoresDropdown;
+    const shopName = isSuperAdmin
+      ? this.data.shopName
+      : (this.data.currentUserStoreName || this.data.shopName || '');
+    const isAll = isSuperAdmin && isAllStoresMode(shopName);
 
     try {
       let allRecords: any[] = [];
@@ -1324,13 +1347,16 @@ Page({
 
       const currentStoreTotalCount = storeAllRecords.length;
 
-      const filteredData = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, shopName);
+      const filteredData = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, shopName, isSuperAdmin);
       const totalRawCount = (filteredData as any).totalRawCount || allRecords.length;
       const parseSuccessCount = (filteredData as any).parseSuccessCount || 0;
-      
+
       let hasOtherStoreData = false;
-      if (!isAll && filteredData.length === 0) {
-        const allStoreFiltered = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, '全部门店');
+      // 🛡️ "查看全部门店汇总"提示仅对 super_admin 有意义（只有他们能真正切换过去，
+      // 见 showAllStoresOption/onSwitchToAllStores 的同一条权限口径），非超管即使
+      // 本店当期无数据也不该被引导去查"全部门店"
+      if (isSuperAdmin && !isAll && filteredData.length === 0) {
+        const allStoreFiltered = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, '全部门店', isSuperAdmin);
         hasOtherStoreData = allStoreFiltered.length > 0;
       }
       
@@ -1468,7 +1494,7 @@ Page({
       console.error('[Statistics] 加载统计数据失败:', error);
       this.setData({
         statistics: null,
-        isAllStoresMode: isAllStoresMode(shopName),
+        isAllStoresMode: isAll,
         hasOtherStoreData: false,
         currentStoreTotalCount: 0
       });
