@@ -1785,15 +1785,15 @@
 }
 
 .fa-item-type-tag {
-  font-size: 20rpx;
+  font-size: 26rpx;
   color: #D9480E;
   background-color: #FFF3BF;
-  padding: 4rpx 14rpx;
+  padding: 8rpx 20rpx;
   border-radius: 20rpx;
   flex-shrink: 0;
   margin-left: 12rpx;
   /* 🐛 修复：与右侧紧接着的 .fa-item-time 日历图标贴在一起没有呼吸感，补一点右边距 */
-  margin-right: 16rpx;
+  margin-right: 20rpx;
 }
 
 /* 🐛 可读性修复：20rpx + #ADB5BD 浅灰在小屏幕上时间文本糊成一团难以辨认，
@@ -2075,8 +2075,8 @@
 .my-vs-status-tag {
   display: inline-block;
   margin-top: 12rpx;
-  font-size: 22rpx;
-  padding: 4rpx 16rpx;
+  font-size: 24rpx;
+  padding: 8rpx 20rpx;
   border-radius: 20rpx;
 }
 
@@ -2099,9 +2099,13 @@
 .my-vs-reject-reason {
   display: block;
   margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #C92A2A;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #C0392B;
   line-height: 1.6;
+  background: #FFF0F0;
+  border-left: 6rpx solid #E53E3E;
+  padding: 12rpx 16rpx;
 }
 
 /* 详情弹窗里的驳回原因：字号略大、独立成段，与列表卡片上精简展示的同名样式区分 */
@@ -2114,11 +2118,27 @@
   border-radius: 12rpx;
 }
 
-.my-vs-tap-hint {
+.resubmit-btn {
   display: block;
-  margin-top: 12rpx;
-  font-size: 20rpx;
-  color: #ADB5BD;
+  width: 100%;
+  height: 72rpx;
+  line-height: 72rpx;
+  margin-top: 16rpx;
+  padding: 0;
+  background: #C0392B;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 36rpx;
+  border: none;
+}
+
+.resubmit-btn::after {
+  border: none;
+}
+
+.resubmit-btn:active {
+  opacity: 0.85;
 }
 
 /* 📊 门店餐饮与物资统计：三段 pd-health-grid 堆叠起来比其他 warm-story-modal-*

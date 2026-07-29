@@ -1062,7 +1062,7 @@
           <block wx:elif="{{item.status === 'rejected'}}">
             <text class="my-vs-status-tag rejected">❌ 已驳回</text>
             <text class="my-vs-reject-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</text>
-            <text class="my-vs-tap-hint">点击查看详情 · 重新修改并提交 ❯</text>
+            <button class="resubmit-btn" catchtap="onTapMyVolunteerSubmissionItem" data-index="{{index}}">✏️ 重新修改并提交</button>
           </block>
           <text class="my-vs-status-tag pending" wx:else>⏳ 待店长确认</text>
         </view>
