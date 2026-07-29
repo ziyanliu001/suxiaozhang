@@ -43,14 +43,6 @@
   font-weight: bold;
   white-space: nowrap;
 }
-
-.sp-nav-action {
-  position: absolute;
-  right: 24rpx;
-  color: #FFFFFF;
-  font-size: 26rpx;
-}
-
 .sp-scroll {
   height: calc(100vh - 88rpx);
   box-sizing: border-box;
@@ -392,198 +384,6 @@
   font-size: 24rpx;
   color: #B45309;
 }
-
-/* 🏛️ 门店大事记/发展历程：年份分组时间轴，展开/收起动画照抄 pages/journey。
-   同上，不用 justify-content: space-between——即使 .sp-milestone-title-actions
-   包装层始终渲染（不受 canManage 影响），3 个子元素下 space-between 仍会把中间的
-   标题文字推到与图标/操作区等距的位置，而不是紧贴图标；本来看着"没问题"只是因为
-   标题文字够长、几乎吃满整行，可用空间小才不明显，换更短的标题或更宽的屏幕就会
-   露馅。同样改用 .sp-milestone-title-actions 自身的 margin-left: auto 独立定位 */
-.sp-milestone-title-actions {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  margin-left: auto;
-}
-
-.sp-btn-toggle-all {
-  font-size: 22rpx;
-  color: #868E96;
-}
-
-.sp-btn-add-milestone {
-  font-size: 24rpx;
-  color: #8C1D18;
-  font-weight: bold;
-}
-
-.sp-milestone-groups {
-  margin-bottom: 20rpx;
-}
-
-.sp-milestone-group {
-  background: #FFFFFF;
-  border-radius: 16rpx;
-  padding: 20rpx;
-  margin-bottom: 16rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-}
-
-.sp-milestone-group-header {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.sp-milestone-group-dot {
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: #8C1D18;
-  flex-shrink: 0;
-}
-
-.sp-milestone-group-label {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #212529;
-}
-
-.sp-milestone-group-count {
-  font-size: 22rpx;
-  color: #ADB5BD;
-  margin-left: auto;
-}
-
-.sp-milestone-group-arrow {
-  font-size: 22rpx;
-  color: #ADB5BD;
-  transition: transform 0.2s ease;
-}
-
-.sp-milestone-group-arrow.rotate {
-  transform: rotate(180deg);
-}
-
-.sp-milestone-items {
-  overflow: hidden;
-  max-height: 4000rpx;
-  opacity: 1;
-  transition: max-height 0.35s ease, opacity 0.3s ease;
-  padding-left: 6rpx;
-}
-
-.sp-milestone-items.collapsed {
-  max-height: 0;
-  opacity: 0;
-}
-
-.sp-milestone-item {
-  display: flex;
-  gap: 16rpx;
-  padding-top: 20rpx;
-}
-
-.sp-milestone-item-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 16rpx;
-  flex-shrink: 0;
-}
-
-.sp-milestone-dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  background: #D2691E;
-  flex-shrink: 0;
-  margin-top: 8rpx;
-}
-
-.sp-milestone-line {
-  flex: 1;
-  width: 2rpx;
-  background: #F1F3F5;
-  margin-top: 6rpx;
-}
-
-.sp-milestone-item:last-child .sp-milestone-line {
-  display: none;
-}
-
-.sp-milestone-item-body {
-  flex: 1;
-  padding-bottom: 20rpx;
-  border-bottom: 1rpx dashed #F1F3F5;
-}
-
-.sp-milestone-item:last-child .sp-milestone-item-body {
-  border-bottom: none;
-}
-
-.sp-milestone-item-header {
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-  margin-bottom: 8rpx;
-}
-
-.sp-milestone-date {
-  font-size: 22rpx;
-  color: #ADB5BD;
-  flex-shrink: 0;
-}
-
-.sp-milestone-title {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #212529;
-}
-
-.sp-milestone-content {
-  display: block;
-  font-size: 24rpx;
-  color: #495057;
-  line-height: 1.6;
-  margin-bottom: 12rpx;
-}
-
-.sp-milestone-img-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8rpx;
-  margin-bottom: 12rpx;
-}
-
-.sp-milestone-img {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 8rpx;
-  background: #F1F3F5;
-}
-
-.sp-milestone-item-actions {
-  display: flex;
-  gap: 24rpx;
-}
-
-.sp-milestone-action-btn {
-  font-size: 22rpx;
-  color: #868E96;
-}
-
-.sp-milestone-action-btn.danger {
-  color: #D32F2F;
-}
-
-.sp-milestone-empty {
-  text-align: center;
-  padding: 40rpx 0;
-  color: #ADB5BD;
-  font-size: 24rpx;
-}
-
 /* 大事记新增/编辑弹窗 */
 .sp-modal-backdrop {
   position: fixed;
@@ -633,87 +433,91 @@
 .sp-modal-scroll {
   max-height: 60vh;
 }
-
-.sp-form-label {
-  display: block;
-  font-size: 22rpx;
-  color: #868E96;
-  margin-bottom: 10rpx;
-}
-
-.sp-modal-input {
-  height: 72rpx;
-  line-height: 72rpx;
-  background: #F8F9FA;
-  border: 1rpx solid #CED4DA;
-  border-radius: 10rpx;
-  padding: 0 16rpx;
-  font-size: 26rpx;
-  color: #212529;
-  width: 100%;
-  box-sizing: border-box;
-  margin-bottom: 20rpx;
-}
-
-.sp-modal-textarea {
-  background: #F8F9FA;
-  border: 1rpx solid #CED4DA;
-  border-radius: 10rpx;
-  min-height: 120rpx;
-  padding: 12rpx 16rpx;
-  font-size: 26rpx;
-  color: #212529;
-  width: 100%;
-  box-sizing: border-box;
-  margin-bottom: 20rpx;
-}
-
-.sp-milestone-img-edit-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12rpx;
-}
-
-.sp-milestone-img-wrap {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1;
-}
-
-.sp-milestone-img-wrap .sp-milestone-img {
-  width: 100%;
-  height: 100%;
-}
-
-.sp-milestone-img-remove {
-  position: absolute;
-  top: -10rpx;
-  right: -10rpx;
-  width: 36rpx;
-  height: 36rpx;
-  line-height: 36rpx;
-  text-align: center;
-  background: rgba(0, 0, 0, 0.6);
-  color: #FFFFFF;
-  border-radius: 50%;
-  font-size: 20rpx;
-}
-
-.sp-milestone-img-add {
-  width: 100%;
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #F8F9FA;
-  border: 1rpx dashed #CED4DA;
-  border-radius: 8rpx;
-  font-size: 40rpx;
-  color: #ADB5BD;
-}
-
 .sp-modal-footer {
   display: flex;
   gap: 16rpx;
   margin-top: 20rpx;
+}
+
+/* 🏪 门店照片：展示态缩略图小网格 */
+.sp-photo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.sp-photo-thumb {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 12rpx;
+  border: 1.5rpx solid #EFE6D8;
+}
+
+/* 🏪 门店照片：编辑态上传九宫格，与 store-picker 组件的新建门店表单同款视觉
+   （组件样式默认隔离不共享页面 wxss，这里单独复制一份） */
+.receipt-grid-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.grid-image-item {
+  position: relative;
+  width: 100%;
+  padding-top: 100%;
+  border-radius: 16rpx;
+  overflow: visible;
+}
+
+.grid-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+  border: 1.5rpx solid #EFE6D8;
+}
+
+.img-delete-badge {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  width: 38rpx;
+  height: 38rpx;
+  background: rgba(211, 47, 47, 0.95);
+  color: #FFFFFF;
+  border-radius: 50%;
+  font-size: 22rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.15);
+}
+
+.grid-add-btn {
+  background: #FAF8F5;
+  border: 2.5rpx dashed #C8B195;
+  border-radius: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1/1;
+}
+
+.grid-add-btn .add-icon {
+  font-size: 40rpx;
+  color: #8C1D18;
+  line-height: 1;
+  font-weight: 300;
+}
+
+.grid-add-btn .add-txt {
+  font-size: 18rpx;
+  color: #8C1D18;
+  margin-top: 4rpx;
 }

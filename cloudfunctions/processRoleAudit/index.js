@@ -16,9 +16,35 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
+const _ = db.command;
+
 const TRIAL_DEFAULT_STORE_LIMIT = 3;
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
+const MAX_STORE_PHOTOS = 9;
+const MAX_TEXT_FIELD_LENGTH = 500;
+
+function sanitizeText(v) {
+  if (v === undefined || v === null) return '';
+  return String(v).trim().slice(0, MAX_TEXT_FIELD_LENGTH);
+}
+
+// storePhotos 是新建门店申请阶段收集的云存储 fileID 数组，门店本身尚未创建，
+// 只能先落在申请文档上，approve 时再一并写入新建/复用的 stores 文档
+function sanitizePhotos(v) {
+  if (!Array.isArray(v)) return [];
+  return v.filter((item) => typeof item === 'string' && item.trim()).slice(0, MAX_STORE_PHOTOS);
+}
+
+// 🐛 云函数容器时区固定为 UTC，与 submitFeedback/index.js 同一套换算，避免申请
+// 时间字符串比北京时间少 8 小时（这个坑在项目里已经踩过不止一次）
+function formatCreateTime(createTime) {
+  const d = createTime instanceof Date ? createTime : new Date(createTime);
+  if (isNaN(d.getTime())) return '';
+  const cst = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${cst.getUTCFullYear()}-${pad(cst.getUTCMonth() + 1)}-${pad(cst.getUTCDate())} ${pad(cst.getUTCHours())}:${pad(cst.getUTCMinutes())}`;
+}
 
 // 确保默认机构（及其订阅配额）存在，供缺失 tenantId 的 super_admin 账号兜底使用
 // （与 createStore 云函数保持一致的自愈逻辑）
@@ -134,19 +160,45 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
 // 义工加入已有门店：免审核即刻生效（提升义工体验）；其余场景（管理身份 / 新建门店）
 // 一律进入 pending，交由 approve/reject 分支按权限分级处理。
 async function submitRoleApply(event, OPENID) {
-  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId } = event;
+  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos } = event;
 
   if (!realName || !String(realName).trim()) return { success: false, error: '请填写真实姓名' };
   if (!phone || !String(phone).trim()) return { success: false, error: '请填写手机号' };
   if (!requestedRole) return { success: false, error: '请选择申请岗位' };
 
   const isCustom = storeSelectionType === 'custom';
+  const isElevatedRole = requestedRole === 'store_manager' || requestedRole === 'store_patriarch';
+
   if (isCustom) {
     if (!customStoreName || !String(customStoreName).trim()) {
       return { success: false, error: '请填写新门店名称' };
     }
-  } else if (!storeId) {
-    return { success: false, error: '请选择一个门店' };
+    // 🛡️ 服务端兜底：新建门店申请必须先补全门店档案（客户端已做同款拦截，
+    // 这里防止绕过客户端直接调云函数），三项缺一不可
+    if (!address || !String(address).trim() || !contactPhone || !String(contactPhone).trim() || !Array.isArray(storePhotos) || sanitizePhotos(storePhotos).length === 0) {
+      return { success: false, error: '申请新建门店需先补全门店档案（地址/联系电话/门店照片）' };
+    }
+  } else {
+    if (!storeId) {
+      return { success: false, error: '请选择一个门店' };
+    }
+    // 🛡️ 新店长/新家长任命申请（已有门店）：此前这里的门店档案完整性校验只挂在
+    // isCustom 分支下，"高阶角色申请"其实从未真正被拦截过——只要选的是已有门店，
+    // 申请店长/家长完全不检查该店档案是否补全。校验对象是目标门店【已存的】
+    // address/contactPhone/storePhotos（不是本次申请提交的字段——申请人此刻大概率
+    // 还没有编辑门店档案的权限，见 manageStoreProfile resolveWriteTarget），
+    // 避免一家档案空白的门店被批出店长/家长
+    if (isElevatedRole) {
+      const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+      const store = storeRes && storeRes.data;
+      if (!store) return { success: false, error: '目标门店不存在' };
+      const hasPhotos = Array.isArray(store.storePhotos) && store.storePhotos.length > 0;
+      const hasAddress = !!(store.address && String(store.address).trim());
+      const hasContactPhone = !!(store.contactPhone && String(store.contactPhone).trim());
+      if (!hasAddress || !hasContactPhone || !hasPhotos) {
+        return { success: false, error: '该门店档案尚未补全（地址/联系电话/门店照片），请先联系现任店长在【门店档案】页补全后再申请' };
+      }
+    }
   }
 
   // 义工 + 已有门店：门店必须真实存在才允许免审即时生效，避免伪造/过期 storeId 也能自动过审
@@ -169,6 +221,12 @@ async function submitRoleApply(event, OPENID) {
     status: autoApprove ? 'approved' : 'pending',
     applyTime: db.serverDate()
   };
+  // 🏪 新建门店阶段收集的门店档案：approve 时随建店/复用逻辑一并写入 stores 文档
+  if (isCustom) {
+    docData.address = sanitizeText(address);
+    docData.contactPhone = sanitizeText(contactPhone);
+    docData.storePhotos = sanitizePhotos(storePhotos);
+  }
   if (autoApprove) {
     docData.approveTime = db.serverDate();
   }
@@ -180,6 +238,135 @@ async function submitRoleApply(event, OPENID) {
     autoApproved: autoApprove,
     applyId: addRes._id,
     message: autoApprove ? '已加入门店，即刻生效' : '申请已提交，请等待审核'
+  };
+}
+
+const REQUESTED_ROLE_LABELS = {
+  volunteer: '义工',
+  finance: '财务',
+  store_manager: '店长',
+  store_patriarch: '家长/督导'
+};
+
+// 🏛️ 分角色列出待审批申请：店长/家长只看本店的普通成员申请（义工/财务），
+// 超管看全机构范围内的高阶角色（店长/家长）与新建门店申请——与 approve() 里
+// isAuditorAllowed / isCustomStore 的权限判定口径完全对齐，谁能审谁就能看
+async function listPendingApplications(OPENID) {
+  const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+  const caller = callerRes.data && callerRes.data[0];
+  if (!caller) {
+    return { success: false, error: '无权限：未找到您的角色信息' };
+  }
+
+  if (caller.role === 'store_manager' || caller.role === 'store_patriarch') {
+    if (!caller.storeId) {
+      return { success: true, queueType: 'member', data: [] };
+    }
+    const res = await db.collection('user_roles')
+      .where({ storeId: caller.storeId, status: 'pending', requestedRole: _.in(['volunteer', 'finance']) })
+      .orderBy('applyTime', 'desc')
+      .limit(50)
+      .get();
+
+    const data = (res.data || []).map((r) => ({
+      applyId: r._id,
+      realName: r.realName || '',
+      phone: r.phone || '',
+      requestedRole: r.requestedRole || '',
+      requestedRoleLabel: REQUESTED_ROLE_LABELS[r.requestedRole] || r.requestedRole,
+      applyTimeStr: formatCreateTime(r.applyTime)
+    }));
+
+    return { success: true, queueType: 'member', data };
+  }
+
+  if (caller.role === 'super_admin') {
+    const tenantId = await resolveAuditorTenantId(caller);
+    // 🐛 修复"待审核列表漏单"：此前这里严格按 { tenantId, status: 'pending' } 精确匹配，
+    // 但 submitRoleApply 落库的 tenantId 来自申请人客户端缓存的角色信息，账号从未
+    // 缓存过角色（例如全新用户首次直接申请店长/家长）时会写成空字符串——与 approve()
+    // 里 auditor.tenantId && applyData.tenantId && ... 的宽松校验口径不一致，导致这类
+    // 申请在 approve() 里本可正常审批，却永远不会出现在 listPendingApplications 里，
+    // 超管根本看不到、审不了。这里放宽为：tenantId 匹配当前机构，或申请记录本身
+    // tenantId 缺失/为空（历史遗留 / 全新用户），两种都纳入
+    const res = await db.collection('user_roles')
+      .where(_.and([
+        { status: 'pending' },
+        _.or([{ tenantId }, { tenantId: '' }, { tenantId: _.exists(false) }])
+      ]))
+      .orderBy('applyTime', 'desc')
+      .limit(50)
+      .get();
+
+    const elevated = (res.data || []).filter((r) => {
+      const isCustomStore = r.storeSelectionType === 'custom' || !r.storeId;
+      return isCustomStore || r.requestedRole === 'store_manager' || r.requestedRole === 'store_patriarch';
+    });
+
+    // 已有门店的高阶角色申请：目标门店已存在，附带其当前门店档案供超管审核参考；
+    // 新建门店的申请：门店本身还不存在，直接用申请文档自带的档案字段
+    const data = await Promise.all(elevated.map(async (r) => {
+      const isCustomStore = r.storeSelectionType === 'custom' || !r.storeId;
+      let storeProfile = {
+        storeName: r.storeName || r.customStoreName || '',
+        address: r.address || '',
+        contactPhone: r.contactPhone || '',
+        storePhotos: Array.isArray(r.storePhotos) ? r.storePhotos : []
+      };
+
+      if (!isCustomStore && r.storeId) {
+        const storeRes = await db.collection('stores').doc(r.storeId).get().catch(() => null);
+        const store = storeRes && storeRes.data;
+        if (store) {
+          storeProfile = {
+            storeName: store.storeName || r.storeName || '',
+            address: store.address || '',
+            contactPhone: store.contactPhone || '',
+            storePhotos: Array.isArray(store.storePhotos) ? store.storePhotos : []
+          };
+        }
+      }
+
+      return {
+        applyId: r._id,
+        realName: r.realName || '',
+        phone: r.phone || '',
+        requestedRole: r.requestedRole || '',
+        requestedRoleLabel: REQUESTED_ROLE_LABELS[r.requestedRole] || r.requestedRole,
+        applyTimeStr: formatCreateTime(r.applyTime),
+        isCustomStore,
+        storeProfile
+      };
+    }));
+
+    return { success: true, queueType: 'elevated', data };
+  }
+
+  return { success: true, queueType: 'none', data: [] };
+}
+
+// 🔒 申请人本人查询自己是否有正在 pending 的申请：供 store-picker "选择门店与身份"
+// 弹窗锁定按钮、防止重复提交用，与 checkUserRole 那种 limit(1) 不保证取到哪条的
+// 查询彻底分开——这里显式按 applyTime 倒序只取最新一条 pending 记录
+async function getMyApplicationStatus(OPENID) {
+  const res = await db.collection('user_roles')
+    .where({ _openid: OPENID, status: 'pending' })
+    .orderBy('applyTime', 'desc')
+    .limit(1)
+    .get();
+
+  const pending = res.data && res.data[0];
+  if (!pending) {
+    return { success: true, hasPending: false };
+  }
+
+  return {
+    success: true,
+    hasPending: true,
+    requestedRole: pending.requestedRole || '',
+    storeId: pending.storeId || '',
+    storeName: pending.storeName || pending.customStoreName || '',
+    storeSelectionType: pending.storeSelectionType || 'existing'
   };
 }
 
@@ -197,6 +384,24 @@ exports.main = async (event, context) => {
     } catch (err) {
       console.error('processRoleAudit submitRoleApply error:', err);
       return { success: false, error: err.message || '提交失败' };
+    }
+  }
+
+  if (action === 'listPendingApplications') {
+    try {
+      return await listPendingApplications(OPENID);
+    } catch (err) {
+      console.error('processRoleAudit listPendingApplications error:', err);
+      return { success: false, error: err.message || '查询失败' };
+    }
+  }
+
+  if (action === 'getMyApplicationStatus') {
+    try {
+      return await getMyApplicationStatus(OPENID);
+    } catch (err) {
+      console.error('processRoleAudit getMyApplicationStatus error:', err);
+      return { success: false, error: err.message || '查询失败' };
     }
   }
 
@@ -229,9 +434,15 @@ exports.main = async (event, context) => {
     }
 
     if (action === 'reject') {
+      // 🛡️ 驳回必须说明原因：申请人才知道下次该补什么材料，也避免审核人随手一点就拒绝
+      const rejectReason = sanitizeText(event.rejectReason);
+      if (!rejectReason) {
+        return { success: false, error: '请填写驳回原因' };
+      }
       await db.collection('user_roles').doc(applyId).update({
         data: {
           status: 'rejected',
+          rejectReason,
           approveTime: db.serverDate()
         }
       });
@@ -271,14 +482,27 @@ exports.main = async (event, context) => {
         const resolved = await resolveOrCreateStore(auditorTenantId, customName, OPENID);
         targetStoreId = resolved.storeId;
         targetStoreName = resolved.storeName;
+
+        // 🏪 把申请阶段收集的门店档案（补全校验已在 submitRoleApply 里强制要求）
+        // 一并写入新建/复用的门店文档，避免新店档案永远空白
+        await db.collection('stores').doc(targetStoreId).update({
+          data: {
+            address: applyData.address || '',
+            contactPhone: applyData.contactPhone || '',
+            storePhotos: Array.isArray(applyData.storePhotos) ? applyData.storePhotos : []
+          }
+        }).catch((err) => console.warn('[processRoleAudit] 回写新店档案失败（不影响审批本身）:', err));
       } catch (storeErr) {
         return { success: false, error: storeErr.message || '建店失败' };
       }
+    } else if (applyData.requestedRole === 'store_manager') {
+      // 🛡️ 收敛为与家长任命同一档：店长任命仅限超级管理员审批。此前允许同店的
+      // 另一位店长审批同店的店长申请，与"店长/家长=超管专属"的两层权限模型不一致
+      if (auditor.role !== 'super_admin') {
+        return { success: false, error: '无权限：店长任命仅限超级管理员审批' };
+      }
     } else {
-      // 已有门店：本店店长/本店大家长/本机构超级管理员均可审核。
-      // 🏛️ 家长任命本身在上面已经限定仅超管可批（走到这里 requestedRole 必然不是
-      // store_patriarch），家长审批的只会是本店店长/财务这类申请，与"家长监督店长"
-      // 的人文架构分工一致
+      // 已有门店的义工/财务申请：本店店长/本店大家长/本机构超级管理员均可审核
       const isAuditorAllowed = auditor.role === 'super_admin' ||
         (auditor.role === 'store_manager' && auditor.storeId === targetStoreId) ||
         (auditor.role === 'store_patriarch' && auditor.storeId === targetStoreId);

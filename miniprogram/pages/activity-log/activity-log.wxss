@@ -314,6 +314,90 @@
   border: none;
 }
 
+/* ⏳ 待确认的义工投稿：暖金描边区分于下方公开时间轴的白卡，强调"还没生效" */
+.al-pending-card {
+  background: #FFFDF5;
+  border: 1.5rpx solid #F0DFA6;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.al-pending-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 6rpx;
+}
+
+.al-pending-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.al-pending-time {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #999999;
+}
+
+.al-pending-meta {
+  display: block;
+  font-size: 22rpx;
+  color: #B8860B;
+  margin-bottom: 12rpx;
+}
+
+.al-pending-content {
+  display: block;
+  font-size: 24rpx;
+  color: #666666;
+  line-height: 1.6;
+  margin-bottom: 12rpx;
+}
+
+.al-pending-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.al-btn-pending-reject {
+  flex: 1;
+  font-size: 24rpx;
+  color: #999999;
+  background: #F5F5F5;
+  border: 1.5rpx solid #E0E0E0;
+  border-radius: 32rpx;
+  padding: 12rpx 0;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.al-btn-pending-reject::after {
+  border: none;
+}
+
+.al-btn-pending-approve {
+  flex: 1;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  border-radius: 32rpx;
+  padding: 12rpx 0;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.al-btn-pending-approve::after {
+  border: none;
+}
+
 .al-empty-state {
   display: flex;
   flex-direction: column;

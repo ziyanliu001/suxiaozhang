@@ -9,6 +9,9 @@ import {
   applyRoleViewOverride, getPreviewViewMode, setPreviewViewMode,
   PreviewViewMode, PREVIEW_VIEW_MODE_LABELS
 } from '../../utils/viewModePreview';
+import { requestOpenSunshineLedger } from '../../utils/sunshineLedgerHandoff';
+import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
+import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
@@ -108,15 +111,6 @@ Page({
       auditedReports: 0
     },
 
-    // 🏪 查看店铺状态 Modal：日常记录列表里的只读入口，展示当前门店名称与运营状态
-    showStoreStatusModal: false,
-    storeStatusInfo: {
-      loading: false,
-      storeName: '',
-      operatingStatus: '',
-      operatingStatusLabel: ''
-    },
-
     // 🏛️ 家长管理 / 资源兜底：内嵌自已废弃的 pages/patriarch-dashboard，
     // 单独收拢进一个命名空间对象，避免和本页其余字段混在一起
     patriarchData: {
@@ -136,10 +130,8 @@ Page({
       pendingVoidList: [] as any[],
       pendingProfileUpdate: null as any,
       pendingProfileItems: [] as { label: string; value: number }[],
-      pendingRoleRequests: [] as any[],
       voidActionInFlight: false,
-      profileActionInFlight: false,
-      roleActionInFlight: false
+      profileActionInFlight: false
     },
 
     showReleaseModal: false,
@@ -160,7 +152,134 @@ Page({
     badgeList: [] as Array<{ id: string; emoji: string; name: string; unlocked: boolean; hint: string }>,
     showCertificateModal: false,
     certificateTempFilePath: '',
-    certificateGenerating: false
+    certificateGenerating: false,
+    // 家人版纯文本证书的落款日期："{{年}}年{{月}}月"，在 onOpenCertificateModal 里
+    // 按打开时的实际日期动态生成，不硬编码具体年月避免几个月后文案过期失真
+    certificateIssueDate: '',
+
+    // 🌸 家人专属【雨花温情故事】说明弹窗：引导 + 直达门店日志，不重新做一套独立
+    // 的故事内容库（真正的故事内容沉淀在 activity_logs 门店日志里）
+    showWarmStoryModal: false,
+
+    // 📮 爱心意见箱：小程序原生半屏弹窗，替代微信官方 open-type="feedback"——
+    // 提交内容落进本项目自己的 feedback_submissions 集合，店长/运营才看得到
+    showFeedbackModal: false,
+    feedbackTypeOptions: [
+      { key: 'meal', label: '🍱 餐饮菜品' },
+      { key: 'env', label: '🧹 门店环境' },
+      { key: 'volunteer', label: '🤝 义工服务' },
+      { key: 'suggestion', label: '💡 运营建议' }
+    ] as Array<{ key: string; label: string }>,
+    feedbackSelectedType: 'meal',
+    feedbackContent: '',
+    feedbackSubmitting: false,
+
+    // 📮 爱心意见箱管理：店长/家长/超管共用，与 patriarch-panel-card 共用同一次
+    // 加载时机（initMinePage 里 isPatriarch || isSuperAdmin || 店长 时触发）
+    pendingFeedbackCount: 0,
+    showFeedbackAdminModal: false,
+    feedbackAdminLoading: false,
+    feedbackAdminList: [] as Array<{
+      _id: string; nickName: string; type: string; typeLabel: string;
+      content: string; status: string; createTimeStr: string; handling?: boolean;
+      replyContent?: string; replyByName?: string; replyTimeStr?: string;
+    }>,
+    // 💬 回复家人：feedbackReplyingId 标记当前展开回复框的是列表里哪一条（空字符串=
+    // 都没展开），同一时间只允许展开一条，避免多个 textarea 抢同一个 feedbackReplyContent
+    feedbackReplyingId: '',
+    feedbackReplyContent: '',
+    feedbackReplySubmitting: false,
+
+    // 📥 待审核的义工餐报与物资：店长/家长/超管共用，与"爱心意见箱管理"同一次
+    // 加载时机（initMinePage 里 isPatriarch || isSuperAdmin || 店长 时触发）
+    pendingVolunteerSubmissionCount: 0,
+    showVolunteerSubmissionAdminModal: false,
+    volunteerSubmissionAdminLoading: false,
+    volunteerSubmissionAdminList: [] as Array<{
+      _id: string; type: string; dateString: string; status: string; createTimeStr: string;
+      nickName?: string; mealStatus?: string; breakfastCount?: number; lunchCount?: number;
+      dinnerCount?: number; totalCount?: number; menuNote?: string;
+      riceCount?: number; flourCount?: number; oilCount?: number; vegetableCount?: number;
+      lossNote?: string; processing?: boolean;
+    }>,
+    // ❌ 驳回原因弹窗：与义工意见箱回复框同一套"记住当前操作的是哪一条"模式
+    showRejectSubmissionModal: false,
+    rejectSubmissionId: '',
+    rejectSubmissionReason: '',
+    rejectSubmissionSubmitting: false,
+
+    // 👥 待审批的本店成员申请（义工/财务）：店长/家长可见，与「爱心意见箱管理」
+    // 同一套模态列表 + 角标视觉语言。🏛️ 待审批的高级角色与新店申请（店长/家长/
+    // 新建门店）：仅超管可见。两张卡片共用同一个云函数 action listPendingApplications，
+    // 服务端按 caller 角色分流返回对应队列，见 processRoleAudit
+    pendingMemberApplicationCount: 0,
+    showMemberApplicationModal: false,
+    memberApplicationLoading: false,
+    memberApplicationList: [] as Array<{
+      applyId: string; realName: string; phone: string; requestedRole: string;
+      requestedRoleLabel: string; applyTimeStr: string;
+    }>,
+    pendingElevatedApplicationCount: 0,
+    showElevatedApplicationModal: false,
+    elevatedApplicationLoading: false,
+    elevatedApplicationList: [] as Array<{
+      applyId: string; realName: string; phone: string; requestedRole: string;
+      requestedRoleLabel: string; applyTimeStr: string; isCustomStore: boolean;
+      storeProfile: { storeName: string; address: string; contactPhone: string; storePhotos: string[] };
+    }>,
+    // ❌ 驳回申请原因弹窗：member/elevated 两个队列共用同一套输入框，
+    // rejectApplicationQueue 记住当前驳回的是哪一个队列的申请，便于处理完后
+    // 更新对应的列表与角标
+    showRejectApplicationModal: false,
+    rejectApplicationId: '',
+    rejectApplicationQueue: 'member' as 'member' | 'elevated',
+    rejectApplicationReason: '',
+    rejectApplicationSubmitting: false,
+
+    // 🍚 门店餐饮与物资统计：不新建汇总表，即时查询 volunteer_submissions/
+    // material_logs（见 manageVolunteerSubmission 的 statsSummary 动作），
+    // 义工/店长/家长/超管共用同一个入口和同一份数据
+    showStoreStatsModal: false,
+    storeStatsLoading: false,
+    storeStats: {
+      today: '',
+      mealTotals: { breakfastCount: 0, lunchCount: 0, dinnerCount: 0, totalCount: 0 },
+      todayMaterialTotals: { riceCount: 0, flourCount: 0, oilCount: 0, vegetableCount: 0 },
+      monthMaterialTotals: { riceCount: 0, flourCount: 0, oilCount: 0, vegetableCount: 0 }
+    },
+
+    // 💌 家人端【我的反馈与回复】：与提交共用同一个半屏弹窗，靠 feedbackModalTab
+    // 切换两块内容；unreadReplyCount 只对家人身份加载（initMinePage 里 isFamily 时触发）
+    unreadReplyCount: 0,
+    feedbackModalTab: 'submit' as 'submit' | 'mine',
+    myFeedbackLoading: false,
+    myFeedbackList: [] as Array<{
+      _id: string; type: string; typeLabel: string; content: string; status: string;
+      createTimeStr: string; replyContent?: string; replyByName?: string; replyTimeStr?: string;
+    }>,
+
+    // 🍱 义工现场服务工具：菜单人数 + 物资消耗，两个独立的半屏填报 Sheet，
+    // 都写进 volunteer_submissions（不进 report_logs，理由见 profile.wxml 注释）
+    showDailyMenuModal: false,
+    dailyMenuForm: { mealStatus: 'open' as 'open' | 'closed', breakfastCount: '', lunchCount: '', dinnerCount: '', menuNote: '' },
+    dailyMenuSubmitting: false,
+
+    showMaterialUsageModal: false,
+    materialUsageForm: { riceCount: '', flourCount: '', oilCount: '', vegetableCount: '', lossNote: '' },
+    materialUsageSubmitting: false,
+
+    // 📄 义工版【我的餐报提交记录】：查的是 volunteer_submissions（义工自己提交的
+    // 菜单/物资原始记录），不是 report_logs——义工从不写 report_logs，那张表继续
+    // 只服务店长/财务的正式台账历史（/pages/history/history?view=mine）
+    showMyVolunteerSubmissionsModal: false,
+    myVolunteerSubmissionsLoading: false,
+    myVolunteerSubmissionsList: [] as Array<{
+      _id: string; type: string; dateString: string; status: string; createTimeStr: string;
+      mealStatus?: string; breakfastCount?: number; lunchCount?: number; dinnerCount?: number;
+      totalCount?: number; menuNote?: string;
+      riceCount?: number; flourCount?: number; oilCount?: number; vegetableCount?: number;
+      lossNote?: string;
+    }>
   },
 
   onLoad() {
@@ -309,6 +428,20 @@ Page({
     if (isPatriarch || overridden.isSuperAdmin) {
       this.fetchPatriarchDashboardData();
     }
+
+    // 📮 爱心意见箱管理入口的可见范围比家长大盘更宽（含店长），角标需要独立
+    // 判断加载时机，不能只挂在上面 isPatriarch || isSuperAdmin 这个条件下
+    if (displayRole === 'store_manager' || isPatriarch || overridden.isSuperAdmin) {
+      this.fetchPendingFeedbackCount();
+      this.fetchPendingVolunteerSubmissions();
+      this.fetchPendingApplications();
+    }
+
+    // 💌 家人端未读回复红点：与上面管理端角标是两套完全独立的计数
+    // （一个数"店里有几条没处理"，一个数"我提交的意见有几条被回复了没看"）
+    if (isFamily) {
+      this.fetchUnreadReplyCount();
+    }
   },
 
   // 🏛️ 家长管理 / 资源兜底：迁移自已废弃的 pages/patriarch-dashboard，
@@ -360,8 +493,7 @@ Page({
           totalCount: data.totalCount || 0,
           pendingVoidList: data.pendingVoidList || [],
           pendingProfileUpdate: data.pendingProfileUpdate || null,
-          pendingProfileItems,
-          pendingRoleRequests: data.pendingRoleRequests || []
+          pendingProfileItems
         }
       });
     } catch (err) {
@@ -372,18 +504,170 @@ Page({
     }
   },
 
-  // 🔄 内嵌 store-picker 切换门店/身份后回调
-  //
-  // 🐛 根因修复："切到家长身份后个人中心仍显示志工"：此前这里只刷新了
-  // patriarchData（家长面板自己的数据），完全没有重新计算 currentUserRole/
-  // isPatriarch 这些顶层状态——WXML 里的身份徽章和
-  // wx:if="{{isPatriarch || isSuperAdmin}}" 家长卡片本身都读的是顶层字段，
-  // 只刷新面板数据不会触发它们重绘。改为重新走一遍 initMinePage()——它会
-  // 重新计算 currentUserRole/isPatriarch/isSuperAdmin 等全部顶层字段并
-  // setData，其内部本就会在 isPatriarch || isSuperAdmin 时再自动调用一次
-  // fetchPatriarchDashboardData()，不需要在这里重复调用
-  onPatriarchStoreChanged() {
-    this.initMinePage();
+  // 📮 爱心意见箱管理：门店 ID 解析口径与 fetchPatriarchDashboardData 一致——
+  // 优先用角色绑定的门店，兜底取全局门店切换器当前选中的门店
+  async resolveManageStoreId(): Promise<string> {
+    let roleInfo = AuthService.getCachedRoleInfo();
+    if (!roleInfo) {
+      const result = await AuthService.fetchUserRole();
+      roleInfo = result.roleInfo || null;
+    }
+    const store = getSelectedStore();
+    return (roleInfo && roleInfo.storeId) || store.storeId || '';
+  },
+
+  async fetchPendingFeedbackCount() {
+    if (!isCloudAvailable()) return;
+    try {
+      const storeId = await this.resolveManageStoreId();
+      if (!storeId) return;
+
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'count', storeId }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        this.setData({ pendingFeedbackCount: (result.data && result.data.count) || 0 });
+      }
+    } catch (err) {
+      console.warn('[fetchPendingFeedbackCount] 加载未处理意见数量失败:', err);
+    }
+  },
+
+  async onOpenFeedbackAdminModal() {
+    this.setData({ showFeedbackAdminModal: true, feedbackAdminLoading: true, feedbackAdminList: [] });
+
+    try {
+      const storeId = await this.resolveManageStoreId();
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'list', storeId }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        return;
+      }
+      this.setData({ feedbackAdminList: result.data.list || [] });
+    } catch (err) {
+      console.error('[onOpenFeedbackAdminModal] 加载意见列表异常:', err);
+      // 🛡️ 云端 submitFeedback 已经把 -502005（意见箱集合尚未初始化）当作"空列表"
+      // 处理，正常不会再抛到这里——这里是兜底：万一云端还是旧版本代码没重新部署，
+      // 至少不能让店长端直接崩溃/报出一串英文错误码
+      if (this.isCollectionNotExistError(err)) {
+        wx.showToast({ title: '意见箱数据库初始化中，请联系店长或重新尝试', icon: 'none', duration: 3000 });
+      } else {
+        wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      }
+    } finally {
+      this.setData({ feedbackAdminLoading: false });
+    }
+  },
+
+  // -502005 DATABASE_COLLECTION_NOT_EXIST：云函数内部已对 count/list 做了优雅
+  // 降级，理论上不会再抛到客户端；这里只是防御一层"云函数还没重新部署"的旧版本场景
+  isCollectionNotExistError(err: any): boolean {
+    return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String((err && (err.errMsg || err.message)) || '')));
+  },
+
+  onCloseFeedbackAdminModal() {
+    this.setData({ showFeedbackAdminModal: false });
+  },
+
+  async onMarkFeedbackHandled(e: any) {
+    const feedbackId = e.currentTarget.dataset.id;
+    if (!feedbackId) return;
+
+    const list = this.data.feedbackAdminList;
+    const idx = list.findIndex((item) => item._id === feedbackId);
+    if (idx === -1 || list[idx].handling) return;
+
+    this.setData({ [`feedbackAdminList[${idx}].handling`]: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'markHandled', feedbackId }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        this.setData({ [`feedbackAdminList[${idx}].handling`]: false });
+        return;
+      }
+
+      this.setData({
+        [`feedbackAdminList[${idx}].status`]: 'handled',
+        [`feedbackAdminList[${idx}].handling`]: false,
+        pendingFeedbackCount: Math.max(0, this.data.pendingFeedbackCount - 1)
+      });
+      wx.showToast({ title: '已标记为处理', icon: 'success' });
+    } catch (err) {
+      console.error('[onMarkFeedbackHandled] 操作异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      this.setData({ [`feedbackAdminList[${idx}].handling`]: false });
+    }
+  },
+
+  // 💬 回复家人：展开/收起某一条意见下方的回复输入框，同一时间只展开一条——
+  // 再次点击同一条会收起（当作取消），点击另一条会自动切走并清空未提交的草稿
+  onToggleFeedbackReplyBox(e: any) {
+    const feedbackId = e.currentTarget.dataset.id;
+    const isSameOne = this.data.feedbackReplyingId === feedbackId;
+    this.setData({
+      feedbackReplyingId: isSameOne ? '' : feedbackId,
+      feedbackReplyContent: ''
+    });
+  },
+
+  onFeedbackReplyInput(e: any) {
+    this.setData({ feedbackReplyContent: e.detail.value });
+  },
+
+  async onSubmitFeedbackReply() {
+    const feedbackId = this.data.feedbackReplyingId;
+    if (!feedbackId || this.data.feedbackReplySubmitting) return;
+
+    const replyContent = (this.data.feedbackReplyContent || '').trim();
+    if (!replyContent) {
+      wx.showToast({ title: '请输入回复内容', icon: 'none' });
+      return;
+    }
+
+    const list = this.data.feedbackAdminList;
+    const idx = list.findIndex((item) => item._id === feedbackId);
+    if (idx === -1) return;
+
+    this.setData({ feedbackReplySubmitting: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'reply', feedbackId, replyContent }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '回复失败', icon: 'none' });
+        return;
+      }
+
+      const wasUnhandled = list[idx].status !== 'handled';
+      this.setData({
+        [`feedbackAdminList[${idx}].status`]: 'handled',
+        [`feedbackAdminList[${idx}].replyContent`]: replyContent,
+        [`feedbackAdminList[${idx}].replyTimeStr`]: '刚刚',
+        feedbackReplyingId: '',
+        feedbackReplyContent: '',
+        pendingFeedbackCount: wasUnhandled ? Math.max(0, this.data.pendingFeedbackCount - 1) : this.data.pendingFeedbackCount
+      });
+      wx.showToast({ title: '回复成功', icon: 'success' });
+    } catch (err) {
+      console.error('[onSubmitFeedbackReply] 回复异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ feedbackReplySubmitting: false });
+    }
   },
 
   async onDecideVoid(e: any) {
@@ -439,34 +723,6 @@ Page({
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ 'patriarchData.profileActionInFlight': false });
-    }
-  },
-
-  // 🏛️ 审批本店店长/财务申请：家长与超管均可，云函数 processRoleAudit 已实现分级校验
-  async onDecideRoleRequest(e: any) {
-    if (this.data.patriarchData.roleActionInFlight) return;
-    const { id, action } = e.currentTarget.dataset; // action: 'approve' | 'reject'
-
-    this.setData({ 'patriarchData.roleActionInFlight': true });
-    wx.showLoading({ title: '处理中...', mask: true });
-    try {
-      const res: any = await wx.cloud.callFunction({
-        name: 'processRoleAudit',
-        data: { applyId: id, action }
-      });
-      const result = res.result;
-      wx.hideLoading();
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
-        return;
-      }
-      wx.showToast({ title: action === 'approve' ? '已审核通过' : '已拒绝申请', icon: 'success' });
-      this.fetchPatriarchDashboardData();
-    } catch (err) {
-      wx.hideLoading();
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-    } finally {
-      this.setData({ 'patriarchData.roleActionInFlight': false });
     }
   },
 
@@ -913,7 +1169,9 @@ Page({
   },
 
   // 📜 服务历程：原 onGoToJourney，首页打卡卡片精简后"服务历程"入口收拢到
-  // 个人页"日常记录"列表统一承载，导航目标/逻辑保持不变，仅重命名对齐新入口
+  // 个人页"日常记录"列表统一承载。这个入口现在只出现在 !isFamily 分组里
+  // （家人分支已改用 onGoToActivityLog 直达门店日志），故不再需要按 isFamily
+  // 分流目标页面，固定跳个人打卡历程页即可
   onTapServiceHistory() {
     if (this.isNavigating) return;
     this.isNavigating = true;
@@ -1060,7 +1318,28 @@ Page({
     });
   },
 
+  // 🖼️ 家人证书专属保存按钮：家人证书是纯 WXML 文本渲染，没有对应的 Canvas 长图——
+  // 与义工分支共用 certificateTempFilePath 这个字段判断：理论上家人分支永远是空的
+  // （onOpenCertificateModal 每次打开都会清空它），直接给温情提示；万一将来家人分支也
+  // 接上图片生成，这里已经能直接复用 onSaveCertificateToAlbum 走相册保存，不用改这里
+  onSaveCertificateImage() {
+    if (this.data.certificateTempFilePath) {
+      this.onSaveCertificateToAlbum();
+      return;
+    }
+    wx.showToast({ title: '感恩家人的护持与陪伴！', icon: 'none' });
+  },
+
+  // 📄 我的餐报提交记录：义工从不写 report_logs（见 volunteer_submissions 相关注释），
+  // 对义工来说这个入口原本导向的"我的正式台账历史"永远是空列表——改为按角色分流：
+  // 义工打开自己的 volunteer_submissions 记录弹窗，其余角色（店长/财务/超管）
+  // 保持原有行为不变，仍是真实的 report_logs 历史页
   onGoToMySubmissions() {
+    if (this.data.isVolunteer && !this.data.isFamily) {
+      this.onOpenMyVolunteerSubmissions();
+      return;
+    }
+
     if (this.isNavigating) return;
     this.isNavigating = true;
 
@@ -1070,6 +1349,330 @@ Page({
         this.isNavigating = false;
       }
     });
+  },
+
+  onOpenMyVolunteerSubmissions() {
+    this.setData({ showMyVolunteerSubmissionsModal: true });
+    this.fetchMyVolunteerSubmissions();
+  },
+
+  onCloseMyVolunteerSubmissionsModal() {
+    this.setData({ showMyVolunteerSubmissionsModal: false });
+  },
+
+  async fetchMyVolunteerSubmissions() {
+    if (!isCloudAvailable()) return;
+    this.setData({ myVolunteerSubmissionsLoading: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'myList' }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        return;
+      }
+      this.setData({ myVolunteerSubmissionsList: result.data.list || [] });
+    } catch (err) {
+      console.error('[fetchMyVolunteerSubmissions] 加载异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ myVolunteerSubmissionsLoading: false });
+    }
+  },
+
+  // 📥 待审核的义工餐报与物资：店长/家长/超管入口，与 resolveManageStoreId
+  // （爱心意见箱管理同一套门店范围收敛）共用
+  async fetchPendingVolunteerSubmissions() {
+    if (!isCloudAvailable()) return;
+    try {
+      const storeId = await this.resolveManageStoreId();
+      if (!storeId) return;
+
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'listPending', storeId }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        const list = result.data.list || [];
+        this.setData({ volunteerSubmissionAdminList: list, pendingVolunteerSubmissionCount: list.length });
+      }
+    } catch (err) {
+      console.warn('[fetchPendingVolunteerSubmissions] 加载失败:', err);
+    }
+  },
+
+  onOpenVolunteerSubmissionAdminModal() {
+    this.setData({ showVolunteerSubmissionAdminModal: true, volunteerSubmissionAdminLoading: true });
+    this.fetchPendingVolunteerSubmissions().finally(() => {
+      this.setData({ volunteerSubmissionAdminLoading: false });
+    });
+  },
+
+  onCloseVolunteerSubmissionAdminModal() {
+    this.setData({ showVolunteerSubmissionAdminModal: false });
+  },
+
+  // 👥🏛️ 待审批的成员/高级角色申请：服务端已按 caller 角色分流（店长/家长只拿本店
+  // 义工/财务申请，超管拿全机构店长/家长/新店申请），客户端只需按返回的 queueType
+  // 落到对应的列表 + 角标，不需要分开发两次请求
+  async fetchPendingApplications() {
+    if (!isCloudAvailable()) return;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { action: 'listPendingApplications' }
+      });
+      const result = res.result;
+      if (!result || !result.success) return;
+
+      const list = result.data || [];
+      if (result.queueType === 'member') {
+        this.setData({ memberApplicationList: list, pendingMemberApplicationCount: list.length });
+      } else if (result.queueType === 'elevated') {
+        this.setData({ elevatedApplicationList: list, pendingElevatedApplicationCount: list.length });
+      }
+    } catch (err) {
+      console.warn('[fetchPendingApplications] 加载失败:', err);
+    }
+  },
+
+  onOpenMemberApplicationModal() {
+    this.setData({ showMemberApplicationModal: true, memberApplicationLoading: true });
+    this.fetchPendingApplications().finally(() => {
+      this.setData({ memberApplicationLoading: false });
+    });
+  },
+
+  onCloseMemberApplicationModal() {
+    this.setData({ showMemberApplicationModal: false });
+  },
+
+  onOpenElevatedApplicationModal() {
+    this.setData({ showElevatedApplicationModal: true, elevatedApplicationLoading: true });
+    this.fetchPendingApplications().finally(() => {
+      this.setData({ elevatedApplicationLoading: false });
+    });
+  },
+
+  onCloseElevatedApplicationModal() {
+    this.setData({ showElevatedApplicationModal: false });
+  },
+
+  _removeApplicationFromQueue(id: string, queue: 'member' | 'elevated') {
+    if (queue === 'elevated') {
+      const next = this.data.elevatedApplicationList.filter((item) => item.applyId !== id);
+      this.setData({ elevatedApplicationList: next, pendingElevatedApplicationCount: next.length });
+    } else {
+      const next = this.data.memberApplicationList.filter((item) => item.applyId !== id);
+      this.setData({ memberApplicationList: next, pendingMemberApplicationCount: next.length });
+    }
+  },
+
+  async onApproveApplication(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const queue = e.currentTarget.dataset.queue as 'member' | 'elevated';
+    if (!id) return;
+
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { applyId: id, action: 'approve' }
+      });
+      const result = res.result;
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+      this._removeApplicationFromQueue(id, queue);
+      wx.showToast({ title: '已通过', icon: 'success' });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onApproveApplication] 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    }
+  },
+
+  onOpenRejectApplicationModal(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const queue = e.currentTarget.dataset.queue as 'member' | 'elevated';
+    if (!id) return;
+    this.setData({ showRejectApplicationModal: true, rejectApplicationId: id, rejectApplicationQueue: queue, rejectApplicationReason: '' });
+  },
+
+  onPreviewApplicationStorePhoto(e: any) {
+    const { url, urls } = e.currentTarget.dataset;
+    if (!url) return;
+    wx.previewImage({ current: url, urls: urls || [url] });
+  },
+
+  onCloseRejectApplicationModal() {
+    if (this.data.rejectApplicationSubmitting) return;
+    this.setData({ showRejectApplicationModal: false, rejectApplicationId: '' });
+  },
+
+  onRejectApplicationReasonInput(e: any) {
+    this.setData({ rejectApplicationReason: e.detail.value });
+  },
+
+  async onSubmitRejectApplication() {
+    if (this.data.rejectApplicationSubmitting) return;
+
+    const id = this.data.rejectApplicationId;
+    const queue = this.data.rejectApplicationQueue;
+    const rejectReason = (this.data.rejectApplicationReason || '').trim();
+    if (!id) return;
+    if (!rejectReason) {
+      wx.showToast({ title: '请填写拒绝原因', icon: 'none' });
+      return;
+    }
+
+    this.setData({ rejectApplicationSubmitting: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { applyId: id, action: 'reject', rejectReason }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+      this._removeApplicationFromQueue(id, queue);
+      this.setData({ showRejectApplicationModal: false, rejectApplicationId: '' });
+      wx.showToast({ title: '已拒绝', icon: 'none' });
+    } catch (err) {
+      console.error('[onSubmitRejectApplication] 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ rejectApplicationSubmitting: false });
+    }
+  },
+
+  // ✅ 一键采纳入库：type='menu' 时尝试合并进当日 report_logs（仅字段级更新已
+  // 存在的文档，绝不新建——见 manageVolunteerSubmission 云函数头部安全边界说明），
+  // type='material' 时归档进 material_logs 消耗流水
+  async onApproveSubmission(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+
+    const list = this.data.volunteerSubmissionAdminList;
+    const idx = list.findIndex((item) => item._id === id);
+    if (idx === -1 || list[idx].processing) return;
+
+    this.setData({ [`volunteerSubmissionAdminList[${idx}].processing`]: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'approve', id }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        this.setData({ [`volunteerSubmissionAdminList[${idx}].processing`]: false });
+        return;
+      }
+
+      const nextList = this.data.volunteerSubmissionAdminList.filter((item) => item._id !== id);
+      this.setData({
+        volunteerSubmissionAdminList: nextList,
+        pendingVolunteerSubmissionCount: nextList.length
+      });
+      wx.showToast({ title: result.message || '已成功采纳并同步入库', icon: 'success', duration: 2500 });
+    } catch (err) {
+      console.error('[onApproveSubmission] 操作异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      this.setData({ [`volunteerSubmissionAdminList[${idx}].processing`]: false });
+    }
+  },
+
+  onOpenRejectModal(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    this.setData({ showRejectSubmissionModal: true, rejectSubmissionId: id, rejectSubmissionReason: '' });
+  },
+
+  onCloseRejectModal() {
+    if (this.data.rejectSubmissionSubmitting) return;
+    this.setData({ showRejectSubmissionModal: false, rejectSubmissionId: '' });
+  },
+
+  onRejectSubmissionReasonInput(e: any) {
+    this.setData({ rejectSubmissionReason: e.detail.value });
+  },
+
+  async onSubmitRejectSubmission() {
+    if (this.data.rejectSubmissionSubmitting) return;
+
+    const id = this.data.rejectSubmissionId;
+    const rejectReason = (this.data.rejectSubmissionReason || '').trim();
+    if (!id) return;
+    if (!rejectReason) {
+      wx.showToast({ title: '请填写驳回原因', icon: 'none' });
+      return;
+    }
+
+    this.setData({ rejectSubmissionSubmitting: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'reject', id, rejectReason }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+
+      const nextList = this.data.volunteerSubmissionAdminList.filter((item) => item._id !== id);
+      this.setData({
+        volunteerSubmissionAdminList: nextList,
+        pendingVolunteerSubmissionCount: nextList.length,
+        showRejectSubmissionModal: false,
+        rejectSubmissionId: ''
+      });
+      wx.showToast({ title: '已驳回', icon: 'success' });
+    } catch (err) {
+      console.error('[onSubmitRejectSubmission] 操作异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ rejectSubmissionSubmitting: false });
+    }
+  },
+
+  // 🍚 门店餐饮与物资统计：即时查询，不缓存不预加载，每次打开都拿最新数字
+  onOpenStoreStatsModal() {
+    this.setData({ showStoreStatsModal: true, storeStatsLoading: true });
+
+    wx.cloud.callFunction({
+      name: 'manageVolunteerSubmission',
+      data: { action: 'statsSummary' }
+    }).then((res: any) => {
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        return;
+      }
+      this.setData({ storeStats: result.data });
+    }).catch((err) => {
+      console.error('[onOpenStoreStatsModal] 加载异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    }).finally(() => {
+      this.setData({ storeStatsLoading: false });
+    });
+  },
+
+  onCloseStoreStatsModal() {
+    this.setData({ showStoreStatsModal: false });
   },
 
   // 🌟 店长专属入口：本店数据明细（携带 shopName 预选中本店，与超管工具箱里
@@ -1099,69 +1702,6 @@ Page({
     });
   },
 
-  // 🏪 查看店铺状态：复用 manageStoreProfile 'get' 动作，该动作本就允许任意已绑定
-  // 门店的角色只读查看（店长/财务/义工/家人皆可），不需要新开云函数或放宽权限
-  async onShowStoreStatus() {
-    this.setData({
-      showStoreStatusModal: true,
-      'storeStatusInfo.loading': true
-    });
-
-    try {
-      const store = getSelectedStore();
-      if (!store || !store.storeId) {
-        this.setData({
-          'storeStatusInfo.loading': false,
-          'storeStatusInfo.storeName': this.data.currentStoreName || '',
-          'storeStatusInfo.operatingStatus': '',
-          'storeStatusInfo.operatingStatusLabel': ''
-        });
-        return;
-      }
-
-      const res: any = await wx.cloud.callFunction({
-        name: 'manageStoreProfile',
-        data: { action: 'get', storeId: store.storeId }
-      });
-      const result = res.result;
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '加载店铺状态失败', icon: 'none' });
-        this.setData({ 'storeStatusInfo.loading': false });
-        return;
-      }
-
-      const data = result.data || {};
-      const OPERATING_STATUS_LABELS: Record<string, string> = {
-        operating: '运营中',
-        preparing: '筹备中',
-        paused: '暂停运营'
-      };
-      const statusLabel = OPERATING_STATUS_LABELS[data.operatingStatus] || '运营中';
-      this.setData({
-        'storeStatusInfo.loading': false,
-        'storeStatusInfo.storeName': data.storeName || this.data.currentStoreName || '',
-        'storeStatusInfo.operatingStatus': data.operatingStatus || 'operating',
-        'storeStatusInfo.operatingStatusLabel': statusLabel,
-        // 🏪 顺手同步全局态：这次弹窗已经查到了最新状态，直接复用，不必再额外
-        // 发一次 fetchAndSyncStoreStatus 请求
-        currentStoreStatus: statusLabel
-      });
-      const app = getApp() as any;
-      if (app && app.globalData) {
-        app.globalData.currentStoreStatus = statusLabel;
-      }
-      wx.setStorageSync('current_store_status', statusLabel);
-    } catch (err) {
-      console.error('[onShowStoreStatus] 加载店铺状态异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-      this.setData({ 'storeStatusInfo.loading': false });
-    }
-  },
-
-  onCloseStoreStatusModal() {
-    this.setData({ showStoreStatusModal: false });
-  },
-
   // 🏪 门店状态静默刷新：onShow 每次切回个人页都调用，先用缓存秒显，再后台悄悄
   // 刷新最新值，失败不打扰用户（见 utils/storeManager.ts fetchAndSyncStoreStatus）
   refreshStoreStatus() {
@@ -1180,12 +1720,465 @@ Page({
     }
   },
 
+  // ☀️ 关于雨花斋与阳光账本：阳光账本弹窗唯一实现在首页 index.ts
+  // （sunshineLedgerData/onOpenSunshineLedger），本页不重复一套数据管线——
+  // 写交接标记后跳首页 tabBar，首页 onShow 的 checkPendingHandoffs 据此自动打开弹窗。
+  // /pages/index/index 是 tabBar 页，必须用 switchTab，navigateTo 会直接报错
   onGoToAbout() {
     if (this.isNavigating) return;
     this.isNavigating = true;
 
+    requestOpenSunshineLedger();
+    wx.switchTab({
+      url: '/pages/index/index',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 💖 家人专属【我的爱心】· 阳光账本直达：与"关于与帮助"分组里的 onGoToAbout
+  // 是完全同一个动作（写交接标记 + 跳首页 tabBar，由首页打开已有的阳光账本弹窗），
+  // 这里只是家人视角下换了个更直白的入口文案，直接复用不重复实现
+  onGoToSunshineLedger() {
+    this.onGoToAbout();
+  },
+
+  // 📮 爱心意见箱：小程序原生半屏弹窗，替代微信官方 open-type="feedback"——
+  // 那个入口去到微信平台通用反馈通道，不落在本项目自己的数据里，店长/运营看不到
+  onOpenFeedbackModal() {
+    this.setData({
+      showFeedbackModal: true,
+      feedbackModalTab: 'submit',
+      feedbackSelectedType: 'meal',
+      feedbackContent: ''
+    });
+  },
+
+  onCloseFeedbackModal() {
+    if (this.data.feedbackSubmitting) return;
+    this.setData({ showFeedbackModal: false });
+  },
+
+  onSelectFeedbackType(e: any) {
+    const type = e.currentTarget.dataset.type;
+    this.setData({ feedbackSelectedType: type });
+  },
+
+  onFeedbackContentInput(e: any) {
+    this.setData({ feedbackContent: e.detail.value });
+  },
+
+  // 💌 家人端 Tab 切换：切到"我的反馈与回复"时才去拉列表（不预加载，避免每次
+  // 打开意见箱都多发一次云函数请求），并顺手把未读回复清空——这正是需求里
+  // "打开该 Tab 后自动将未读回复标记为已读"的落地位置
+  onSwitchFeedbackModalTab(e: any) {
+    const tab = e.currentTarget.dataset.tab;
+    if (tab === this.data.feedbackModalTab) return;
+
+    this.setData({ feedbackModalTab: tab });
+    if (tab === 'mine') {
+      this.fetchMySubmissions();
+      this.markRepliedReplyAsRead();
+    }
+  },
+
+  async fetchMySubmissions() {
+    if (!isCloudAvailable()) return;
+    this.setData({ myFeedbackLoading: true });
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'mySubmissions' }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        return;
+      }
+      this.setData({ myFeedbackList: result.data.list || [] });
+    } catch (err) {
+      console.error('[fetchMySubmissions] 加载我的反馈异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ myFeedbackLoading: false });
+    }
+  },
+
+  async fetchUnreadReplyCount() {
+    if (!isCloudAvailable()) return;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'unreadReplyCount' }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        this.setData({ unreadReplyCount: (result.data && result.data.count) || 0 });
+      }
+    } catch (err) {
+      console.warn('[fetchUnreadReplyCount] 加载未读回复数量失败:', err);
+    }
+  },
+
+  // 批量清已读：本地角标直接归零，不等云端返回——即使这次网络失败，下次
+  // fetchUnreadReplyCount 重新加载也会自然收敛，不需要让家人等这个请求转圈
+  async markRepliedReplyAsRead() {
+    if (!isCloudAvailable() || this.data.unreadReplyCount === 0) return;
+    this.setData({ unreadReplyCount: 0 });
+    try {
+      await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: { action: 'markRepliedRead' }
+      });
+    } catch (err) {
+      console.warn('[markRepliedReplyAsRead] 标记已读失败:', err);
+    }
+  },
+
+  // 提交前先走一遍与 index.ts checkContentSafety 相同的 msgSecCheck 内容安全检测——
+  // 意见箱是自由文本，同样需要这层兜底；检测服务本身异常时不阻塞提交（跳过检测）
+  async checkFeedbackContentSafety(text: string): Promise<boolean> {
+    try {
+      if (!isCloudAvailable()) return true;
+      const result = await wx.cloud.callFunction({ name: 'msgSecCheck', data: { text } });
+      const r = result.result as any;
+      if (r && !r.safe) {
+        wx.showToast({ title: '内容包含违规信息，请修改后重试', icon: 'none' });
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[checkFeedbackContentSafety] 内容安全检测调用失败，跳过检测:', err);
+      return true;
+    }
+  },
+
+  async onSubmitFeedback() {
+    if (this.data.feedbackSubmitting) return;
+
+    const content = (this.data.feedbackContent || '').trim();
+    if (!content) {
+      wx.showToast({ title: '请输入您的宝贵意见', icon: 'none' });
+      return;
+    }
+
+    this.setData({ feedbackSubmitting: true });
+
+    const safe = await this.checkFeedbackContentSafety(content);
+    if (!safe) {
+      this.setData({ feedbackSubmitting: false });
+      return;
+    }
+
+    let collectionMissing = false;
+    try {
+      if (isCloudAvailable()) {
+        // 🐛 家人提交的意见店长端看不到，根因：家人账号大多没有 user_roles 记录
+        // （store_family 只是本地/客户端角色，从不写服务端），云函数原先靠
+        // resolveCaller(OPENID).storeId 取门店，家人查出来是空字符串，意见就存成了
+        // storeId: ''——而店长端 list/count 永远按自己的真实 storeId 查询，两边
+        // 对不上，意见形同消失。这里改为把"当前正在浏览的门店"（getSelectedStore，
+        // 与 fetchMeritStats 里同一个门店隔离修复用的是同一个数据源）显式传给云函数，
+        // 云函数收到就优先用它，不再依赖对家人账号必然查不到的角色绑定门店
+        const activeStore = getSelectedStore();
+        await wx.cloud.callFunction({
+          name: 'submitFeedback',
+          data: {
+            action: 'submit',
+            type: this.data.feedbackSelectedType,
+            content,
+            storeId: (activeStore && activeStore.storeId) || '',
+            storeName: (activeStore && activeStore.storeName) || ''
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[onSubmitFeedback] 提交云端失败:', err);
+      // 🛡️ 云端 submitFeedback 已经会在集合不存在时自动建表重试一次，正常不会再
+      // 抛到这里——命中说明底层确实没写进去，不能按"已收到"处理，否则家人会以为
+      // 意见提交成功了，实际数据完全丢失；其余偶发网络错误仍按原先的静默降级处理，
+      // 避免网络抖动让人以为需要反复重试一份低风险、非事务性的轻量提交
+      collectionMissing = this.isCollectionNotExistError(err);
+    }
+
+    this.setData({ feedbackSubmitting: false, showFeedbackModal: false, feedbackContent: '' });
+
+    if (collectionMissing) {
+      wx.showToast({ title: '意见箱数据库初始化中，请联系店长或重新尝试', icon: 'none', duration: 3000 });
+    } else {
+      wx.showToast({ title: '感恩您的宝贵建议！', icon: 'none' });
+    }
+  },
+
+  // 💌 家人专属【我的爱心】· 爱心感谢卡 / 荣誉证书：与义工版护持证书共用同一个
+  // 弹窗壳（showCertificateModal），正文按 isFamily 在 WXML 里分流成纯文本证书——
+  // 不需要 Canvas 绘制、不需要二维码，直接打开即可，无需异步生成。
+  // 落款日期按当前打开时间动态生成；certificateTempFilePath 顺手清空——理论上
+  // 家人分支永远不会用到它，但如果之前这个账号切换过义工视角生成过证书图片，
+  // 残留的 tempFilePath 不清掉的话，家人版的"保存"按钮会误保存到那张旧图
+  onOpenCertificateModal() {
+    const now = new Date();
+    this.setData({
+      showCertificateModal: true,
+      certificateTempFilePath: '',
+      certificateIssueDate: `${now.getFullYear()}年${now.getMonth() + 1}月`
+    });
+  },
+
+  // 🏡 家人专属【雨花家园】· 门店日志（原"门店服务历程"）：家人没有个人打卡记录，
+  // 直接跳门店整体大事记列表，不同于义工/店长版会先判断个人/门店两种口径
+  onGoToActivityLog() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
     wx.navigateTo({
-      url: '/pages/help/help',
+      url: '/pages/activity-log/activity-log',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 🏡 家人专属【雨花家园】· 我关注的雨花门店：与"文化与帮助"分组里的
+  // onOpenFamilyStorePicker 是完全同一个动作，这里只是换了个更贴近家人视角的
+  // 入口文案，直接复用不重复实现
+  onGoToStorePicker() {
+    this.onOpenFamilyStorePicker();
+  },
+
+  // 🌸 家人专属【雨花家园】· 雨花温情故事：项目里没有独立的"故事内容库"，
+  // 真正沉淀温馨故事/活动花絮的地方是门店日志（activity_logs）——这里展示一段
+  // 引导语，不编造一份假的故事列表，点击直达已有的门店日志入口
+  onOpenWarmStory() {
+    this.setData({ showWarmStoryModal: true });
+  },
+
+  onCloseWarmStory() {
+    this.setData({ showWarmStoryModal: false });
+  },
+
+  onViewActivityLogFromWarmStory() {
+    this.setData({ showWarmStoryModal: false });
+    this.onGoToActivityLog();
+  },
+
+  // 📖 家人专属【文化与帮助】· 雨花家训与文化全集：唯一实现在首页 index.ts
+  // （onShowFamilyMottoModal，十大模块完整原文），本页不重复一套内容——写交接
+  // 标记后跳首页 tabBar，首页 onShow 的 checkPendingHandoffs 据此自动打开弹窗
+  onGoToCultureFull() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    requestOpenCultureFull();
+    wx.switchTab({
+      url: '/pages/index/index',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 🔀 家人专属【文化与帮助】· 切换关注门店：门店选择器唯一可见实例在首页
+  // index.wxml（id="storePicker"）。个人页此前隐藏挂载了自己的一份（width:0/
+  // height:0 试图隐藏），结果因自定义组件宿主标签默认 display:inline、宽高
+  // 不生效，导致底部露出一个失控的可见胶囊——已彻底移除该隐藏实例，改为写
+  // 交接标记后跳首页 tabBar，由首页 checkPendingHandoffs 直接拉起它自己的面板
+  onOpenFamilyStorePicker() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    requestOpenStorePicker();
+    wx.switchTab({
+      url: '/pages/index/index',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 🍱 登记今日菜单与人数：写入独立的 volunteer_submissions 集合（不进 report_logs，
+  // 见 onOpenDailyMenuModal 旁 WXML 注释的完整理由），店长后续人工参考汇总进正式报告
+  onOpenDailyMenuModal() {
+    this.setData({
+      showDailyMenuModal: true,
+      dailyMenuForm: { mealStatus: 'open', breakfastCount: '', lunchCount: '', dinnerCount: '', menuNote: '' }
+    });
+  },
+
+  onCloseDailyMenuModal() {
+    if (this.data.dailyMenuSubmitting) return;
+    this.setData({ showDailyMenuModal: false });
+  },
+
+  onSelectMealStatus(e: any) {
+    const status = e.currentTarget.dataset.status;
+    this.setData({ 'dailyMenuForm.mealStatus': status });
+  },
+
+  onBreakfastCountInput(e: any) {
+    this.setData({ 'dailyMenuForm.breakfastCount': e.detail.value });
+  },
+
+  onLunchCountInput(e: any) {
+    this.setData({ 'dailyMenuForm.lunchCount': e.detail.value });
+  },
+
+  onDinnerCountInput(e: any) {
+    this.setData({ 'dailyMenuForm.dinnerCount': e.detail.value });
+  },
+
+  onMenuNoteInput(e: any) {
+    this.setData({ 'dailyMenuForm.menuNote': e.detail.value });
+  },
+
+  async onSubmitDailyMenu() {
+    if (this.data.dailyMenuSubmitting) return;
+
+    const { mealStatus, breakfastCount, lunchCount, dinnerCount, menuNote } = this.data.dailyMenuForm;
+    if (mealStatus === 'open' && !breakfastCount && !lunchCount && !dinnerCount) {
+      wx.showToast({ title: '请至少填写一餐人数', icon: 'none' });
+      return;
+    }
+
+    this.setData({ dailyMenuSubmitting: true });
+
+    const note = (menuNote || '').trim();
+    if (note) {
+      const safe = await this.checkFeedbackContentSafety(note);
+      if (!safe) {
+        this.setData({ dailyMenuSubmitting: false });
+        return;
+      }
+    }
+
+    try {
+      const activeStore = getSelectedStore();
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: {
+          action: 'submit',
+          type: 'menu',
+          mealStatus,
+          breakfastCount,
+          lunchCount,
+          dinnerCount,
+          menuNote: note,
+          storeId: (activeStore && activeStore.storeId) || '',
+          storeName: (activeStore && activeStore.storeName) || ''
+        }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '提交失败', icon: 'none' });
+        return;
+      }
+      this.setData({ showDailyMenuModal: false });
+      wx.showToast({ title: '已提交，待店长确认', icon: 'success' });
+    } catch (err) {
+      console.error('[onSubmitDailyMenu] 提交异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ dailyMenuSubmitting: false });
+    }
+  },
+
+  // 🌾 登记物资消耗与报损：与菜单人数共用同一张 volunteer_submissions 集合
+  // （type 字段区分），同样不进 report_logs
+  onOpenMaterialUsageModal() {
+    this.setData({
+      showMaterialUsageModal: true,
+      materialUsageForm: { riceCount: '', flourCount: '', oilCount: '', vegetableCount: '', lossNote: '' }
+    });
+  },
+
+  onCloseMaterialUsageModal() {
+    if (this.data.materialUsageSubmitting) return;
+    this.setData({ showMaterialUsageModal: false });
+  },
+
+  onRiceCountInput(e: any) {
+    this.setData({ 'materialUsageForm.riceCount': e.detail.value });
+  },
+
+  onFlourCountInput(e: any) {
+    this.setData({ 'materialUsageForm.flourCount': e.detail.value });
+  },
+
+  onOilCountInput(e: any) {
+    this.setData({ 'materialUsageForm.oilCount': e.detail.value });
+  },
+
+  onVegetableCountInput(e: any) {
+    this.setData({ 'materialUsageForm.vegetableCount': e.detail.value });
+  },
+
+  onLossNoteInput(e: any) {
+    this.setData({ 'materialUsageForm.lossNote': e.detail.value });
+  },
+
+  async onSubmitMaterialUsage() {
+    if (this.data.materialUsageSubmitting) return;
+
+    const { riceCount, flourCount, oilCount, vegetableCount, lossNote } = this.data.materialUsageForm;
+    if (!riceCount && !flourCount && !oilCount && !vegetableCount && !(lossNote || '').trim()) {
+      wx.showToast({ title: '请至少填写一项消耗或报损说明', icon: 'none' });
+      return;
+    }
+
+    this.setData({ materialUsageSubmitting: true });
+
+    const note = (lossNote || '').trim();
+    if (note) {
+      const safe = await this.checkFeedbackContentSafety(note);
+      if (!safe) {
+        this.setData({ materialUsageSubmitting: false });
+        return;
+      }
+    }
+
+    try {
+      const activeStore = getSelectedStore();
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: {
+          action: 'submit',
+          type: 'material',
+          riceCount,
+          flourCount,
+          oilCount,
+          vegetableCount,
+          lossNote: note,
+          storeId: (activeStore && activeStore.storeId) || '',
+          storeName: (activeStore && activeStore.storeName) || ''
+        }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '提交失败', icon: 'none' });
+        return;
+      }
+      this.setData({ showMaterialUsageModal: false });
+      wx.showToast({ title: '已提交，待店长确认', icon: 'success' });
+    } catch (err) {
+      console.error('[onSubmitMaterialUsage] 提交异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ materialUsageSubmitting: false });
+    }
+  },
+
+  // 📷 记录今日护持动态：门店日志页（activity-log）已经具备完整的表单/图片
+  // 上传能力，且刚打通了义工提交权限（server 端 manageActivityLog 新增
+  // volunteer create 分支，写入 status: 'PENDING' 待店长确认）——个人页不重新
+  // 实现一套 Modal，直接跳转到已有页面，避免重复造轮子
+  onOpenVolunteerJournalModal() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/activity-log/activity-log',
       fail: () => {
         this.isNavigating = false;
       }

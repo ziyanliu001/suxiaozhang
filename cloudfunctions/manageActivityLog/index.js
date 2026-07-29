@@ -1,8 +1,15 @@
 // 云函数：manageActivityLog - 义工工作与活动大事记增删改查
 //
 // 权限模型与 manageDailyMenu 一致：
-// - 写（create/update/delete）：仅 store_manager（限本店）或 super_admin（限本机构）。
-// - 读（get/list）：任意已登录角色只读；storeId==='ALL' 汇总列表仅 super_admin 可用。
+// - 写（update/delete）：仅 store_manager（限本店）或 super_admin（限本机构）。
+// - 写（create）：store_manager/super_admin 直接发布（立即公开）；volunteer 也可以
+//   create，但只能新增、不能 update/delete 任何记录（含自己提交的），且新记录带
+//   approvalStatus: 'PENDING'，需经店长/超管在 approvePending 确认后才会出现在
+//   面向所有人的 list 里——义工不是"没有发布权限"，而是"发布的东西要先过一道确认"。
+// - 读（get/list）：任意已登录角色只读，但 list 默认过滤掉 approvalStatus==='PENDING'
+//   的记录（不让未确认的义工投稿提前出现在门店日志公开列表/家人监督视图里）；
+//   listPending/approvePending/rejectPending 三个动作专供 store_manager/store_patriarch/
+//   super_admin 审核待确认的义工投稿。storeId==='ALL' 汇总列表仅 super_admin 可用。
 //
 // 与每日菜单的区别：同一天可发生多条大事记，因此 create 默认为纯新增（不做按日期 upsert），
 // 按 eventTime 倒序做时间轴展示；分页同样支持 page/pageSize。
@@ -10,8 +17,9 @@
 // 🔗 唯一例外：今日记账表单（index.ts publishRecipeAndActivityIfPresent）随餐报一并提交的
 // "门店今日日志/大事记"，传 autoSyncFromReport:true 触发按 {storeId, eventTime, autoSynced:true}
 // 查找-命中则更新/未命中则新建的 upsert 语义——同一天多次编辑/重新提交餐报时更新同一条自动
-// 同步记录，而不是每次都新插入一条重复的大事记。这个 upsert 键专属于自动同步场景，完全不影响
-// 义工/店长在「门店日志」独立发布页手动创建的记录（那些记录没有 autoSynced 标记，永远各自独立）。
+// 同步记录，而不是每次都新插入一条重复的大事记。这个 upsert 键专属于自动同步场景（只有店长/
+// 超管能提交餐报，不涉及 volunteer 分支），完全不影响义工/店长在「门店日志」独立发布页
+// 手动创建的记录（那些记录没有 autoSynced 标记，永远各自独立）。
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -31,7 +39,8 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
-async function resolveWriteTarget(caller, requestedStoreId) {
+async function resolveWriteTarget(caller, requestedStoreId, opts) {
+  opts = opts || {};
   if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
 
   // 🏛️ 权限向下继承：大家长天然拥有店长的全套日常管理权限
@@ -51,7 +60,41 @@ async function resolveWriteTarget(caller, requestedStoreId) {
     return { allowed: true, storeId: requestedStoreId, storeName: store.storeName || '', tenantId: caller.tenantId || store.tenantId || '' };
   }
 
+  // 🌟 义工现场护持动态：仅在 opts.allowVolunteerCreate 显式打开时才放行（只用于
+  // 纯新增场景），且强制取自己绑定的门店——不能像 super_admin 那样指定任意门店，
+  // 也不能走这条分支去 update/delete 任何记录（那两个 action 调用本函数时不会
+  // 传 allowVolunteerCreate，volunteer 会落到下面的兜底拒绝）
+  if (caller.role === 'volunteer' && opts.allowVolunteerCreate) {
+    if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店，无法提交护持动态' };
+    return {
+      allowed: true,
+      storeId: caller.storeId,
+      storeName: caller.storeName || '',
+      tenantId: caller.tenantId || '',
+      isVolunteerSubmission: true
+    };
+  }
+
   return { allowed: false, error: '无权限：仅店长或超级管理员可发布/编辑/删除大事记' };
+}
+
+// 待确认队列（listPending/approvePending/rejectPending）共用的门店范围收敛：
+// 与 submitFeedback 云函数 resolveManageStoreId 同一套口径——店长/家长强制取
+// 自己绑定的门店，超管使用前端传入的具体门店 ID
+async function resolveReviewStoreId(caller, requestedStoreId) {
+  if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
+
+  if (caller.role === 'store_manager' || caller.role === 'store_patriarch') {
+    if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店' };
+    return { allowed: true, storeId: caller.storeId };
+  }
+
+  if (caller.role === 'super_admin') {
+    if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
+    return { allowed: true, storeId: requestedStoreId };
+  }
+
+  return { allowed: false, error: '无权限：仅店长、家长或超级管理员可审核待确认动态' };
 }
 
 function normalizePage(page, pageSize) {
@@ -68,11 +111,12 @@ function sanitizeImages(images) {
   })).filter(img => img.url);
 }
 
-// 发布人展示标签：仅用角色身份（店长/超级管理员），不落库/不回传真实姓名等 PII
+// 发布人展示标签：仅用角色身份，不落库/不回传真实姓名等 PII
 function resolvePublisherLabel(role) {
   if (role === 'super_admin') return '超级管理员';
   if (role === 'store_manager') return '店长';
   if (role === 'store_patriarch') return '大家长';
+  if (role === 'volunteer') return '义工';
   return '管理员';
 }
 
@@ -100,7 +144,12 @@ exports.main = async (event) => {
         }
         const safeImages = sanitizeImages(images);
 
-        const target = await resolveWriteTarget(caller, storeId);
+        // 只有纯新增（create）且不是餐报自动同步场景才允许义工走通——update/delete
+        // 和 autoSyncFromReport 都不传这个 opt，volunteer 会在 resolveWriteTarget 里
+        // 被兜底拒绝，不会误伤"义工能不能编辑别人记录"这条权限边界
+        const target = await resolveWriteTarget(caller, storeId, {
+          allowVolunteerCreate: action === 'create' && !autoSyncFromReport
+        });
         if (!target.allowed) {
           return { success: false, error: target.error };
         }
@@ -171,6 +220,9 @@ exports.main = async (event) => {
           return { success: true, id, message: '大事记已更新' };
         }
 
+        // 🌟 义工提交的记录先落 PENDING，不直接进公开列表；店长/超管发布的记录
+        // 明确落 APPROVED，与旧数据（没有 approvalStatus 字段）在 list 的
+        // _.neq('PENDING') 过滤下表现一致（都会被列出）
         const createRes = await db.collection(COLLECTION).add({
           data: {
             tenantId: target.tenantId,
@@ -183,11 +235,18 @@ exports.main = async (event) => {
             createdBy: OPENID,
             createdAt: db.serverDate(),
             updateTime: db.serverDate(),
-            publisherLabel: resolvePublisherLabel(caller.role)
+            publisherLabel: resolvePublisherLabel(caller.role),
+            approvalStatus: target.isVolunteerSubmission ? 'PENDING' : 'APPROVED'
           }
         });
 
-        return { success: true, id: createRes._id, message: '大事记已发布' };
+        return {
+          success: true,
+          id: createRes._id,
+          message: target.isVolunteerSubmission
+            ? '护持动态已提交，等待店长确认后将在门店日志公开展示'
+            : '大事记已发布'
+        };
       }
 
       case 'delete': {
@@ -263,6 +322,11 @@ exports.main = async (event) => {
           where.eventTime = _.lte(endDate);
         }
 
+        // 🌟 公开列表默认过滤掉待确认的义工投稿（approvalStatus === 'PENDING'）——
+        // 老数据从没写过这个字段，_.neq('PENDING') 对"字段不存在"同样成立，
+        // 不会把发布时间早于本次改动的历史记录误过滤掉
+        where.approvalStatus = _.neq('PENDING');
+
         const countRes = await db.collection(COLLECTION).where(where).count();
         const listRes = await db.collection(COLLECTION)
           .where(where)
@@ -279,6 +343,64 @@ exports.main = async (event) => {
           total: countRes.total,
           hasMore: p * size < countRes.total
         };
+      }
+
+      // ⏳ 待确认的义工投稿：仅 store_manager/store_patriarch/super_admin 可查看，
+      // 门店范围收敛口径与 submitFeedback 云函数一致（见 resolveReviewStoreId）
+      case 'listPending': {
+        const { storeId } = event;
+        const target = await resolveReviewStoreId(caller, storeId);
+        if (!target.allowed) return { success: false, error: target.error };
+
+        const listRes = await db.collection(COLLECTION)
+          .where({ storeId: target.storeId, approvalStatus: 'PENDING' })
+          .orderBy('createdAt', 'desc')
+          .limit(MAX_PAGE_SIZE)
+          .get();
+
+        return { success: true, data: listRes.data || [] };
+      }
+
+      case 'approvePending': {
+        const { id } = event;
+        if (!id) return { success: false, error: '缺少 id 参数' };
+
+        const existingRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+        const existing = existingRes && existingRes.data;
+        if (!existing) return { success: false, error: '记录不存在' };
+
+        const target = await resolveReviewStoreId(caller, existing.storeId);
+        if (!target.allowed || target.storeId !== existing.storeId) {
+          return { success: false, error: '无权限：仅可确认本店的待确认动态' };
+        }
+
+        await db.collection(COLLECTION).doc(id).update({
+          data: {
+            approvalStatus: 'APPROVED',
+            approvedBy: OPENID,
+            approvedAt: db.serverDate()
+          }
+        });
+        return { success: true, message: '已确认，门店日志公开列表将展示这条动态' };
+      }
+
+      // 驳回：直接删除该条待确认记录（没有专门的"已驳回"状态可供义工再单独查看，
+      // 与义工意见箱的"标记为已处理"不同——门店日志的驳回等同于"这条不采用"）
+      case 'rejectPending': {
+        const { id } = event;
+        if (!id) return { success: false, error: '缺少 id 参数' };
+
+        const existingRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+        const existing = existingRes && existingRes.data;
+        if (!existing) return { success: true, message: '记录不存在或已处理' };
+
+        const target = await resolveReviewStoreId(caller, existing.storeId);
+        if (!target.allowed || target.storeId !== existing.storeId) {
+          return { success: false, error: '无权限：仅可驳回本店的待确认动态' };
+        }
+
+        await db.collection(COLLECTION).doc(id).remove();
+        return { success: true, message: '已驳回' };
       }
 
       default:

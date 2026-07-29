@@ -78,60 +78,16 @@
       </view>
     </view>
 
-    <!-- ❤️ 家人（服务对象）版面：新用户/未审核用户的默认身份视角。原"极简关怀"版面
-         全面对齐修复——护持榜/核心荣誉模块不再隐藏（见上方 merit-board-card/
-         honor-wall-card 的 isFamily 专属标题），这张卡片专注日常护持向导 -->
-    <view class="family-care-card" wx:if="{{isFamily}}">
-      <view class="board-header">
-        <view class="header-icon-svg icon-svg-flower"></view>
-        <text class="header-title">日常护持</text>
-        <view class="header-icon-svg icon-svg-flower flip-x"></view>
-      </view>
-
-      <text class="family-care-hint">感恩家人的倾心护持，共同守护雨花温情</text>
-
-      <text class="list-group-label family-care-list-label">日常记录</text>
-      <view class="action-list-container family-care-list">
-        <!-- 🆕 店铺状态：替换掉此前的"今日菜谱"/"开餐时间"入口，标题实时显示当前
-             运营状态（见 refreshStoreStatus，onShow 每次都静默刷新），点击仍可弹出
-             轻量 Modal 展示门店名称与运营状态，复用 manageStoreProfile 'get' 动作——
-             该动作本就允许任意已绑定门店的角色只读查看，不需要新开云函数 -->
-        <view class="action-item-cell" bindtap="onShowStoreStatus">
-          <view class="item-left">
-            <text class="manager-only-emoji">🏪</text>
-            <text class="item-text">店铺状态：{{currentStoreStatus || '运营中'}}</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
-        <view class="action-item-cell" bindtap="onGoToStoreProfile">
-          <view class="item-left">
-            <text class="manager-only-emoji">🏠</text>
-            <text class="item-text">门店档案</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
-        <!-- 🆕 补回：家人也是自己足迹的记录者，同样需要能看到自己历史提交的餐报审核
-             状态——与义工版本用的是同一个入口/同一个页面（?view=mine 已收敛到
-             createdBy===自己，见 history.ts onLoad 的 viewMode 处理） -->
-        <view class="action-item-cell" bindtap="onGoToMySubmissions">
-          <view class="item-left">
-            <view class="item-icon-svg icon-svg-history"></view>
-            <text class="item-text">我的餐报提交记录</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-    </view>
-
     <!-- 🌟 家人骨干版护持榜：与流动义工共用同一套统计结构（护持天数/累计工时），
          只是标题文案换成"家人"专属用语，与义工版视觉区分开——不是隐藏，是选项 B
-         （保留家人页面顶部的护持榜/核心荣誉模块，只调整专属称谓） -->
-    <view class="merit-board-card">
+         （保留家人页面顶部的护持榜/核心荣誉模块，只调整专属称谓）。
+         🔀 排在「日常护持」前面：个人信息卡片下方第一优先展示护持榜 -->
+    <!-- 🐛 家人（服务对象）没有打卡/护持数据可展示——护持榜对他们没有意义，
+         完全隐藏（原先只是换个标题文案展示 0 数据，现在直接不渲染） -->
+    <view class="merit-board-card" wx:if="{{!isFamily}}">
       <view class="board-header">
         <view class="header-icon-svg icon-svg-flower"></view>
-        <text class="header-title">{{isFamily ? '家人护持榜' : '爱心护持榜'}}</text>
+        <text class="header-title">爱心护持榜</text>
         <view class="header-icon-svg icon-svg-flower flip-x"></view>
       </view>
 
@@ -160,6 +116,114 @@
       </view>
     </view>
 
+    <!-- ❤️ 家人（服务对象）版面：新用户/未审核用户的默认身份视角。原"极简关怀"版面
+         精简版：护持榜/核心荣誉模块对家人完全隐藏（见上方 merit-board-card/
+         honor-wall-card 的 wx:if="{{!isFamily}}"），这张卡片专注日常护持向导 -->
+    <view class="family-care-card" wx:if="{{isFamily}}">
+      <view class="board-header">
+        <view class="header-icon-svg icon-svg-flower"></view>
+        <text class="header-title">雨花家园</text>
+        <view class="header-icon-svg icon-svg-flower flip-x"></view>
+      </view>
+
+      <text class="family-care-hint">公开透明 · 广结善缘 · 全民监督</text>
+
+      <!-- 💖 我的爱心：阳光账本直达（护持不记名，汇入公开账本）+ 温情感谢卡/荣誉证书 -->
+      <text class="list-group-label family-care-list-label">💖 我的爱心</text>
+      <view class="action-list-container family-care-list">
+        <view class="action-item-cell" bindtap="onGoToSunshineLedger">
+          <view class="item-left">
+            <text class="manager-only-emoji">📖</text>
+            <text class="item-text">阳光账本直达</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <view class="action-item-cell" bindtap="onOpenCertificateModal">
+          <view class="item-left">
+            <text class="manager-only-emoji">💌</text>
+            <text class="item-text">爱心感谢卡 / 荣誉证书</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 🏡 雨花家园：门店整体视角——档案 + 日志 + 关注门店 + 温情故事 + 建议反馈 -->
+      <text class="list-group-label family-care-list-label">🏡 雨花家园</text>
+      <view class="action-list-container family-care-list">
+        <view class="action-item-cell" bindtap="onGoToStoreProfile">
+          <view class="item-left">
+            <text class="manager-only-emoji">🏠</text>
+            <text class="item-text">门店档案</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <!-- 门店日志（原"门店服务历程"）：家人没有个人打卡记录，onGoToActivityLog
+             直接跳门店整体大事记列表（而不是个人 0 数据的 journey 页） -->
+        <view class="action-item-cell" bindtap="onGoToActivityLog">
+          <view class="item-left">
+            <view class="item-icon-svg icon-svg-flower"></view>
+            <text class="item-text">门店日志</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <view class="action-item-cell" bindtap="onGoToStorePicker">
+          <view class="item-left">
+            <text class="manager-only-emoji">🤝</text>
+            <text class="item-text">我关注的雨花门店</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <view class="action-item-cell" bindtap="onOpenWarmStory">
+          <view class="item-left">
+            <text class="manager-only-emoji">🌸</text>
+            <text class="item-text">雨花温情故事</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <!-- 爱心建议箱：改为小程序原生半屏弹窗（见底部 feedback-sheet-*），
+             不再用微信官方 open-type="feedback" 原生反馈页——那个入口去到的是
+             微信平台通用反馈通道，不落在本项目自己的数据里，店长/运营看不到 -->
+        <view class="action-item-cell" bindtap="onOpenFeedbackModal">
+          <view class="item-left">
+            <text class="manager-only-emoji">📮</text>
+            <text class="item-text">爱心建议箱</text>
+          </view>
+          <view class="pd-feedback-entry-right">
+            <view class="badge" wx:if="{{unreadReplyCount > 0}}">{{unreadReplyCount}}</view>
+            <view class="item-arrow">❯</view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 📚 文化与帮助：家训文化 + 使用帮助。
+           🐛 原本这里还有一个"切换关注门店"，与上方"雨花家园"分组新增的
+           "我关注的雨花门店"（onGoToStorePicker）是完全同一个动作，两个入口
+           重复——按要求物理删除这里的重复项，只保留雨花家园分组那一个 -->
+      <text class="list-group-label family-care-list-label">📚 文化与帮助</text>
+      <view class="action-list-container family-care-list">
+        <view class="action-item-cell" bindtap="onGoToCultureFull">
+          <view class="item-left">
+            <text class="manager-only-emoji">📖</text>
+            <text class="item-text">雨花家训与文化全集</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <navigator class="action-item-cell" url="/pages/help/help">
+          <view class="item-left">
+            <text class="manager-only-emoji">❓</text>
+            <text class="item-text">使用帮助</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </navigator>
+      </view>
+    </view>
+
     <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色 -->
     <view class="view-mode-switch-card" wx:if="{{isRealSuperAdmin}}">
       <picker mode="selector" range="{{viewModeOptionLabels}}" value="{{viewModeOptionIndex}}" bindchange="onSwitchViewMode">
@@ -181,146 +245,164 @@
          全部内嵌到个人中心。仅家长/督导本人或超级管理员可见——家长锁定本店，
          超管跟随全局门店切换器（fetchPatriarchDashboardData 内部与原页面
          initStore 同一套口径） -->
-    <view class="patriarch-panel-card" wx:if="{{isPatriarch || isSuperAdmin}}">
-      <view class="patriarch-panel-header">
-        <text class="patriarch-panel-title">🏛️ 家长管理 / 资源兜底</text>
-      </view>
-
-      <!-- 身份/门店快捷切换：超管借此在各门店的家长看板间跳转，家长本人切走后
-           面板会跟随重新加载（见 onPatriarchStoreChanged） -->
-      <view class="pd-store-switch-row">
-        <store-picker id="patriarchStorePicker" bind:storechange="onPatriarchStoreChanged" />
-      </view>
-
-      <view class="pd-store-card">
-        <text class="pd-store-name">{{patriarchData.storeName || '未命名门店'}}</text>
-        <view class="pd-people-row">
-          <text class="pd-people-item" wx:if="{{patriarchData.patriarch}}">🏛️ 护持家长：{{patriarchData.patriarch}}</text>
-          <text class="pd-people-item" wx:if="{{patriarchData.manager}}">📋 日常店长：{{patriarchData.manager}}</text>
+    <!-- 🐛 卡片可见范围扩大到店长：原本只有 isPatriarch || isSuperAdmin 能看到这张卡片，
+         店长完全没有管理面板。但卡片里"作废申请/门店画像变更/店长财务申请"这几个审批
+         队列服务端只认家长/超管（processRoleAudit 等云函数的权限口径不含 store_manager），
+         直接把整张卡片对店长开放会让店长看到一堆点了也会被服务端拒绝的按钮——因此内部
+         再拆一层 wx:if，店长只看得到下面新增的"爱心意见箱管理"，家长/超管才看得到
+         原有的审批队列 -->
+    <view class="patriarch-panel-card" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">
+      <block wx:if="{{isPatriarch || isSuperAdmin}}">
+        <view class="patriarch-panel-header">
+          <text class="patriarch-panel-title">🏛️ 家长管理</text>
         </view>
-      </view>
 
-      <!-- 极简门店健康大盘：本月服务人次 + 收支总览 + 验真状态 -->
-      <view class="pd-health-card">
-        <view class="pd-health-title">📊 {{patriarchData.monthLabel}}门店健康大盘</view>
-        <view class="pd-health-grid">
-          <view class="pd-health-cell">
-            <text class="pd-health-lbl">本月服务人次</text>
-            <text class="pd-health-val">{{patriarchData.monthDiners}} 人次</text>
+        <!-- 极简门店健康大盘：本月服务人次 + 收支总览 + 验真状态 -->
+        <view class="pd-health-card">
+          <view class="pd-health-title">📊 {{patriarchData.monthLabel}}门店健康大盘</view>
+          <view class="pd-health-grid">
+            <view class="pd-health-cell">
+              <text class="pd-health-lbl">本月服务人次</text>
+              <text class="pd-health-val">{{patriarchData.monthDiners}} 人次</text>
+            </view>
+            <view class="pd-health-cell">
+              <text class="pd-health-lbl">本月收入</text>
+              <text class="pd-health-val green">¥{{patriarchData.monthIncome}}</text>
+            </view>
+            <view class="pd-health-cell">
+              <text class="pd-health-lbl">本月支出</text>
+              <text class="pd-health-val red">¥{{patriarchData.monthExpense}}</text>
+            </view>
+            <view class="pd-health-cell">
+              <text class="pd-health-lbl">本月净额</text>
+              <text class="pd-health-val {{patriarchData.monthNetPositive ? 'green' : 'red'}}">{{patriarchData.monthNetPositive ? '+' : '-'}}¥{{patriarchData.monthNet}}</text>
+            </view>
           </view>
-          <view class="pd-health-cell">
-            <text class="pd-health-lbl">本月收入</text>
-            <text class="pd-health-val green">¥{{patriarchData.monthIncome}}</text>
-          </view>
-          <view class="pd-health-cell">
-            <text class="pd-health-lbl">本月支出</text>
-            <text class="pd-health-val red">¥{{patriarchData.monthExpense}}</text>
-          </view>
-          <view class="pd-health-cell">
-            <text class="pd-health-lbl">本月净额</text>
-            <text class="pd-health-val {{patriarchData.monthNetPositive ? 'green' : 'red'}}">{{patriarchData.monthNetPositive ? '+' : '-'}}¥{{patriarchData.monthNet}}</text>
+          <view class="pd-verify-row">
+            <text class="pd-verify-icon">🛡️</text>
+            <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
           </view>
         </view>
-        <view class="pd-verify-row">
-          <text class="pd-verify-icon">🛡️</text>
-          <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
+
+        <!-- 待确认队列：作废申请 -->
+        <view class="pd-section-title" wx:if="{{patriarchData.pendingVoidList.length > 0}}">
+          <text class="pd-section-icon">⏳</text>
+          <text class="pd-section-txt">待确认的作废申请（{{patriarchData.pendingVoidList.length}}）</text>
         </view>
+        <view class="pd-void-card" wx:for="{{patriarchData.pendingVoidList}}" wx:key="docId">
+          <view class="pd-void-info">
+            <text class="pd-void-date">{{item.dateString}}</text>
+            <text class="pd-void-amount">今日结余 ¥{{item.todayBalance}} · 支出 ¥{{item.expenseAmount}}</text>
+          </view>
+          <view class="pd-void-actions">
+            <button class="pd-btn-reject" data-id="{{item.docId}}" data-action="reject" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">驳回</button>
+            <button class="pd-btn-approve" data-id="{{item.docId}}" data-action="approve" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">确认作废</button>
+          </view>
+        </view>
+
+        <!-- 待确认队列：门店画像变更 -->
+        <view class="pd-section-title" wx:if="{{patriarchData.pendingProfileUpdate}}">
+          <text class="pd-section-icon">⏳</text>
+          <text class="pd-section-txt">待确认的门店画像变更</text>
+        </view>
+        <view class="pd-profile-card" wx:if="{{patriarchData.pendingProfileUpdate}}">
+          <view class="pd-profile-items">
+            <text class="pd-profile-item" wx:for="{{patriarchData.pendingProfileItems}}" wx:for-item="pf" wx:key="label">{{pf.label}}：{{pf.value}}</text>
+          </view>
+          <view class="pd-void-actions">
+            <button class="pd-btn-reject" data-action="reject" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">驳回</button>
+            <button class="pd-btn-approve" data-action="approve" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">确认变更</button>
+          </view>
+        </view>
+
+        <!-- 待审核的店长/财务/家长/新店申请已迁移到下方门店管理分区的独立弹窗入口
+             （「👥 待审批的本店成员申请」/「🏛️ 待审批的高级角色与新店申请」），
+             不再占用这张大盘卡片的位置，同一份数据只保留一套 UI -->
+        <view class="pd-empty-tip" wx:if="{{patriarchData.pendingVoidList.length === 0 && !patriarchData.pendingProfileUpdate && !patriarchData.loading}}">
+          <text>✅ 当前没有待确认的高风险操作</text>
+        </view>
+
+        <view class="pd-loading-box" wx:if="{{patriarchData.loading}}">
+          <text>加载中...</text>
+        </view>
+      </block>
+
+      <!-- 📮 爱心意见箱管理：店长/家长/超管三方共有，唯一不受上面 block 限制的入口 -->
+      <view class="pd-section-title pd-feedback-entry-title" wx:if="{{!isPatriarch && !isSuperAdmin}}">
+        <text class="pd-section-icon">⚙️</text>
+        <text class="pd-section-txt">门店管理</text>
       </view>
 
-      <!-- 待确认队列：作废申请 -->
-      <view class="pd-section-title" wx:if="{{patriarchData.pendingVoidList.length > 0}}">
-        <text class="pd-section-icon">⏳</text>
-        <text class="pd-section-txt">待确认的作废申请（{{patriarchData.pendingVoidList.length}}）</text>
-      </view>
-      <view class="pd-void-card" wx:for="{{patriarchData.pendingVoidList}}" wx:key="docId">
-        <view class="pd-void-info">
-          <text class="pd-void-date">{{item.dateString}}</text>
-          <text class="pd-void-amount">今日结余 ¥{{item.todayBalance}} · 支出 ¥{{item.expenseAmount}}</text>
+      <!-- 👥 待审批的本店成员申请：店长/家长可见，义工/财务两类申请，与超管的
+           高级角色/新店申请队列彻底分开（见 processRoleAudit listPendingApplications
+           按 caller 角色分流） -->
+      <view class="action-item-cell pd-feedback-entry-cell" wx:if="{{currentUserRole === 'store_manager' || isPatriarch}}" bindtap="onOpenMemberApplicationModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">👥</text>
+          <text class="item-text">待审批的本店成员申请</text>
         </view>
-        <view class="pd-void-actions">
-          <button class="pd-btn-reject" data-id="{{item.docId}}" data-action="reject" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">驳回</button>
-          <button class="pd-btn-approve" data-id="{{item.docId}}" data-action="approve" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">确认作废</button>
-        </view>
-      </view>
-
-      <!-- 待确认队列：门店画像变更 -->
-      <view class="pd-section-title" wx:if="{{patriarchData.pendingProfileUpdate}}">
-        <text class="pd-section-icon">⏳</text>
-        <text class="pd-section-txt">待确认的门店画像变更</text>
-      </view>
-      <view class="pd-profile-card" wx:if="{{patriarchData.pendingProfileUpdate}}">
-        <view class="pd-profile-items">
-          <text class="pd-profile-item" wx:for="{{patriarchData.pendingProfileItems}}" wx:for-item="pf" wx:key="label">{{pf.label}}：{{pf.value}}</text>
-        </view>
-        <view class="pd-void-actions">
-          <button class="pd-btn-reject" data-action="reject" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">驳回</button>
-          <button class="pd-btn-approve" data-action="approve" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">确认变更</button>
-        </view>
-      </view>
-
-      <!-- 待确认队列：店长/财务角色申请（家长与超管均可审批，见 processRoleAudit） -->
-      <view class="pd-section-title" wx:if="{{patriarchData.pendingRoleRequests.length > 0}}">
-        <text class="pd-section-icon">⏳</text>
-        <text class="pd-section-txt">待审核的店长/财务申请（{{patriarchData.pendingRoleRequests.length}}）</text>
-      </view>
-      <view class="pd-void-card" wx:for="{{patriarchData.pendingRoleRequests}}" wx:key="applyId">
-        <view class="pd-void-info">
-          <text class="pd-void-date">{{item.realName}} · 申请【{{item.requestedRoleLabel}}】</text>
-          <text class="pd-void-amount">手机号 {{item.phone}} · {{item.applyTime}}</text>
-        </view>
-        <view class="pd-void-actions">
-          <button class="pd-btn-reject" data-id="{{item.applyId}}" data-action="reject" bindtap="onDecideRoleRequest" disabled="{{patriarchData.roleActionInFlight}}">驳回</button>
-          <button class="pd-btn-approve" data-id="{{item.applyId}}" data-action="approve" bindtap="onDecideRoleRequest" disabled="{{patriarchData.roleActionInFlight}}">通过</button>
-        </view>
-      </view>
-
-      <view class="pd-empty-tip" wx:if="{{patriarchData.pendingVoidList.length === 0 && !patriarchData.pendingProfileUpdate && patriarchData.pendingRoleRequests.length === 0 && !patriarchData.loading}}">
-        <text>✅ 当前没有待确认的高风险操作</text>
-      </view>
-
-      <view class="pd-loading-box" wx:if="{{patriarchData.loading}}">
-        <text>加载中...</text>
-      </view>
-    </view>
-
-    <!-- 分组一：核心荣誉 —— 数字荣誉墙（横向滚动徽章展架），替换原来的单薄列表项。
-         选项 B：家人骨干同样保留这个模块，标题换成"家人荣誉"专属用语区分义工版 -->
-    <view class="list-group-label">{{isFamily ? '家人荣誉' : '核心荣誉'}}</view>
-    <view class="honor-wall-card">
-      <view class="honor-wall-header">
-        <text class="honor-wall-title">{{isFamily ? '🏅 我的家人荣誉' : '🏅 我的核心荣誉'}}</text>
-        <view class="honor-wall-cert-link" bindtap="onGoToBadges">
-          <text>义工证书</text>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
           <view class="item-arrow">❯</view>
         </view>
       </view>
 
-      <scroll-view scroll-x="true" class="honor-badge-scroll" enable-flex>
-        <view class="honor-badge-row">
-          <view
-            class="honor-badge-item {{item.unlocked ? 'unlocked' : 'locked'}}"
-            wx:for="{{badgeList}}"
-            wx:key="id"
-            bindtap="onTapBadge"
-            data-id="{{item.id}}"
-          >
-            <view class="honor-badge-circle">
-              <text class="honor-badge-emoji">{{item.emoji}}</text>
-            </view>
-            <text class="honor-badge-name">{{item.name}}</text>
-          </view>
+      <!-- 🏛️ 待审批的高级角色与新店申请：仅超管可见（店长/家长任命 + 新建门店，
+           见 processRoleAudit approve() 的权限分级——这三类都只能超管批） -->
+      <view class="action-item-cell pd-feedback-entry-cell" wx:if="{{isSuperAdmin}}" bindtap="onOpenElevatedApplicationModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🏛️</text>
+          <text class="item-text">待审批的高级角色与新店申请</text>
         </view>
-      </scroll-view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingElevatedApplicationCount > 0}}">{{pendingElevatedApplicationCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" bindtap="onOpenFeedbackAdminModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📮</text>
+          <text class="item-text">爱心意见箱管理</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingFeedbackCount > 0}}">{{pendingFeedbackCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 📥 待审核的义工餐报与物资：与爱心意见箱管理同一组，一键采纳/驳回 -->
+      <view class="action-item-cell pd-feedback-entry-cell" bindtap="onOpenVolunteerSubmissionAdminModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📥</text>
+          <text class="item-text">待审核的义工餐报与物资</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 🍚 门店餐饮与物资统计：与义工端共用同一个入口/同一份即时查询数据 -->
+      <view class="action-item-cell pd-feedback-entry-cell" bindtap="onOpenStoreStatsModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">门店餐饮与物资统计</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
     </view>
 
     <!-- 分组二：日常记录 —— 护持足迹（打卡历程）与餐报提交记录，命名区分避免混淆。
-         家人（服务对象）没有打卡/护持记录，整组隐藏，改由上方的极简关怀卡片承接 -->
+         家人（服务对象）没有打卡/护持记录，整组隐藏；家人版"服务历程"已迁移到
+         上方 family-care-card 自己的"日常记录"列表首位，不在这里重复展示。
+         🔀 排在「核心荣誉」前面：日常操作类入口优先于荣誉展示 -->
     <view class="list-group-label" wx:if="{{!isFamily}}">日常记录</view>
     <view class="action-list-container" wx:if="{{!isFamily}}">
       <view class="action-item-cell" bindtap="onTapServiceHistory">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
-          <text class="item-text">📜 服务历程</text>
+          <text class="item-text">服务历程</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -361,8 +443,14 @@
 
       <!-- 🛡️ 视觉统一：不再用 .manager-only-cell 的暖金/桃色高亮背景——保留
            .manager-only-emoji 让📊图标尺寸与相邻项一致，外层容器改回纯 .action-item-cell，
-           背景/圆角/内边距/hover 全部与"我的护持足迹"等相邻项统一为纯白 -->
-      <view class="action-item-cell" wx:elif="{{currentUserRole === 'store_manager'}}" bindtap="onGoToStoreOverview">
+           背景/圆角/内边距/hover 全部与"我的护持足迹"等相邻项统一为纯白。
+           🐛 权限判断修复：此前硬编码只认 currentUserRole === 'store_manager'，
+           与上面注释"store_manager/finance 则被强制锁定在自己门店"的设计意图不符——
+           财务/大家长切到自己身份后完全看不到这个入口。改用 hasPrivilege（已在
+           initMinePage 里统一算好：store_manager/finance/store_patriarch/super_admin
+           均为 true），管理层角色都能看到；super_admin 命中上面的 wx:if 分支，
+           不会重复展示这一项 -->
+      <view class="action-item-cell" wx:elif="{{hasPrivilege}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">本店数据明细</text>
@@ -371,13 +459,16 @@
       </view>
 
       <!-- 🏠 门店档案：门店人员与服务人群画像（中共党员/社会工作者/志愿者/堂食老人等 7 项人数指标），
-           店长/超管可编辑维护，财务只读查看，义工不展示。
+           店长/超管可编辑维护，财务/义工只读查看。
            🛡️ 视觉统一：不再复用 .manager-only-cell 的暖金/桃色高亮背景——那套"强化行"
            语言现在只留给"超级管理员全景"这一个真正的跨店管理大屏入口，门店档案/本店数据
            明细都只是普通的资料查看/编辑入口，套上同款高亮反而显得比"我的护持足迹"等
            相邻项更突兀刺眼。保留 .manager-only-emoji 让🏠图标尺寸与上面管理入口的图标
-           一致，但外层容器改回纯 .action-item-cell，背景/圆角/内边距/hover 全部与相邻项统一 -->
-      <view class="action-item-cell" wx:if="{{!isVolunteer}}" bindtap="onGoToStoreProfile">
+           一致，但外层容器改回纯 .action-item-cell，背景/圆角/内边距/hover 全部与相邻项统一。
+           🐛 权限修复：此前用 wx:if="{{!isVolunteer}}" 把义工排除在外，与义工日常记录
+           清单本应包含"门店档案"的设计意图不符——这里改为无条件展示（本区块外层已经
+           被 !isFamily 挡住，只有义工/管理层能走到这里，义工也该看到） -->
+      <view class="action-item-cell" bindtap="onGoToStoreProfile">
         <view class="item-left">
           <text class="manager-only-emoji">🏠</text>
           <text class="item-text">门店档案</text>
@@ -387,12 +478,100 @@
 
     </view>
 
-    <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区 -->
-    <view class="list-group-label">关于与帮助</view>
-    <view class="action-list-container">
+    <!-- 分组一：核心荣誉 —— 数字荣誉墙（横向滚动徽章展架），替换原来的单薄列表项。
+         🐛 家人（服务对象）没有打卡/护持记录，也就没有徽章/证书可展示——完全隐藏，
+         不再展示"家人荣誉"这个 0 数据的空壳版本 -->
+    <view class="list-group-label" wx:if="{{!isFamily}}">核心荣誉</view>
+    <view class="honor-wall-card" wx:if="{{!isFamily}}">
+      <view class="honor-wall-header">
+        <text class="honor-wall-title">🏅 我的核心荣誉</text>
+        <view class="honor-wall-cert-link" bindtap="onGoToBadges">
+          <text>义工证书</text>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <scroll-view scroll-x="true" class="honor-badge-scroll" enable-flex>
+        <view class="honor-badge-row">
+          <view
+            class="honor-badge-item {{item.unlocked ? 'unlocked' : 'locked'}}"
+            wx:for="{{badgeList}}"
+            wx:key="id"
+            bindtap="onTapBadge"
+            data-id="{{item.id}}"
+          >
+            <view class="honor-badge-circle">
+              <text class="honor-badge-emoji">{{item.emoji}}</text>
+            </view>
+            <text class="honor-badge-name">{{item.name}}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 🛠️ 义工现场服务工具：三个入口现在全部打通真实提交。
+         🛡️ 「菜单人数」「物资消耗」不写进 report_logs——那是参与跨天结转的门店
+         财务台账，义工只填人数/菜单/物资这类原始信息，直接插入会在结转链路里
+         造出一个"零收支幽灵日"，还可能撞上店长同一天的正式报告触发去重拦截。
+         这两项改为写入独立的 volunteer_submissions 集合（见 manageVolunteerSubmission
+         云函数），店长后续人工参考、自行汇总进正式报告。
+         「记录今日护持动态」已打通真实提交（见 manageActivityLog 云函数
+         volunteer create 分支 + status: 'PENDING'），直接跳转到已具备完整表单
+         能力的门店日志页，不在个人页重复实现 -->
+    <!-- 🐛 权限收紧过头修复：这张卡片曾经只对 isVolunteer 显示，导致店长/家长/
+         超管即使有更高权限也进不了这套轻量登记表单（服务端 manageVolunteerSubmission
+         也曾只放行 caller.role === 'volunteer'，两边一起挡）。现在放宽为"任一合法
+         门店角色"都能看到、都能提交，与云函数 ALLOWED_SUBMIT_ROLES 保持同一份口径 -->
+    <view class="list-group-label" wx:if="{{!isFamily && (isVolunteer || currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin)}}">🛠️ 义工现场服务工具</view>
+    <view class="volunteer-tools-card" wx:if="{{!isFamily && (isVolunteer || currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin)}}">
+      <view class="action-list-container">
+        <view class="action-item-cell" bindtap="onOpenDailyMenuModal">
+          <view class="item-left">
+            <text class="manager-only-emoji">🍱</text>
+            <text class="item-text">登记今日菜单与人数</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <view class="action-item-cell" bindtap="onOpenMaterialUsageModal">
+          <view class="item-left">
+            <text class="manager-only-emoji">🌾</text>
+            <text class="item-text">登记物资消耗与报损</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <view class="action-item-cell" bindtap="onOpenVolunteerJournalModal">
+          <view class="item-left">
+            <text class="manager-only-emoji">📷</text>
+            <text class="item-text">记录今日护持动态</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+
+        <!-- 门店餐饮与物资统计：店长/家长/超管已经在上方"门店管理"分组里有同一个
+             入口（onOpenStoreStatsModal），这里只对义工展示，避免重复一条 -->
+        <view class="action-item-cell" wx:if="{{isVolunteer}}" bindtap="onOpenStoreStatsModal">
+          <view class="item-left">
+            <text class="manager-only-emoji">📊</text>
+            <text class="item-text">门店餐饮与物资统计</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <text class="volunteer-tools-hint">* 填报数据将提交至店长与财务审核，审核通过后归档至阳光账本。</text>
+    </view>
+
+    <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区。
+         🐛 家人（服务对象）整组隐藏：唯一内容"关于雨花斋与阳光账本"已经在上方
+         family-care-card 自己的"日常记录"列表里出现过，家人版不再重复展示；
+         "切换身份"本就靠 hasPrivilege 对家人隐藏，整组隐藏不影响任何其他角色 -->
+    <view class="list-group-label" wx:if="{{!isFamily}}">关于与帮助</view>
+    <view class="action-list-container" wx:if="{{!isFamily}}">
       <view class="action-item-cell" bindtap="onGoToAbout">
         <view class="item-left">
-          <view class="item-icon-svg icon-svg-about"></view>
+          <text class="manager-only-emoji">☀️</text>
           <text class="item-text">关于雨花斋与阳光账本</text>
         </view>
         <view class="item-arrow">❯</view>
@@ -407,8 +586,11 @@
       </view>
     </view>
 
-    <!-- 分组四：低权限自助入口 —— 刻意置底、弱化视觉，避免与核心操作抢焦点 -->
-    <view class="action-list-container subtle-group" wx:if="{{!hasPrivilege}}">
+    <!-- 分组四：低权限自助入口 —— 刻意置底、弱化视觉，避免与核心操作抢焦点。
+         🐛 家人（服务对象）越权 BUG：!hasPrivilege 对家人账号也成立（家人本就没有
+         店长/财务特权），导致"激活店长/财务特权"入口误漏到家人视角——家人是服务
+         对象，不存在"激活管理特权"的场景，必须强制排除 -->
+    <view class="action-list-container subtle-group" wx:if="{{!isFamily && !hasPrivilege}}">
       <view class="action-item-cell subtle-cell" bindtap="onTriggerActivate">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key subtle-icon"></view>
@@ -482,53 +664,708 @@
     </view>
   </view>
 
-  <!-- 🌟 义工证书全屏 Modal：Canvas 绘制完成前展示加载态，完成后展示可保存的长图预览 -->
+  <!-- 🌟 荣誉证书 Modal：义工/家人共用同一个弹窗壳（遮罩 + 卡片 + 关闭按钮），
+       正文按角色分流——义工是 Canvas 绘制的长图证书（可保存相册），家人是纯 WXML
+       文本证书（系统没有家人的护持统计口径，也不需要生成图片）。
+       🐛 此前家人版是独立的一份"爱心感谢卡"弹窗（.gratitude-modal-*），与本证书
+       弹窗视觉高度相似，两套并存容易让人以为"重复渲染了两张证书卡片"——现在合并
+       为一个弹窗，彻底消除这种重叠观感 -->
   <view class="certificate-modal-mask" wx:if="{{showCertificateModal}}" bindtap="onCloseCertificateModal">
     <view class="certificate-modal-card" catchtap="stopPropagation">
+      <!-- 标题文字已删除：义工版标题直接画在证书图片本体里，家人版正文自带称谓，
+           这里再放一遍"爱心护持荣誉证书"文字反而是重复表述，只保留关闭按钮 -->
       <view class="certificate-modal-header">
-        <text class="certificate-modal-title">爱心护持荣誉证书</text>
         <view class="certificate-modal-close" bindtap="onCloseCertificateModal">✕</view>
       </view>
 
-      <view class="certificate-canvas-wrap">
-        <!-- Canvas 本身始终挂载在 DOM 里供 selectorQuery 查询，绘制完成后用生成的图片
-             覆盖显示在它上面——2D Canvas 无法直接作为图片展示/长按保存，必须转成图片 -->
-        <canvas type="2d" id="certificateCanvas" class="certificate-canvas" style="width: 340px; height: 480px;"></canvas>
-        <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
-        <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}">
-          <text>正在生成证书…</text>
+      <!-- 家人分支：纯文本证书，无 Canvas、无工时统计、无二维码。古典边框 + 落款
+           印鑑营造仪式感，纹饰复用 family-care-card 头部同一对镜像莲花图标 -->
+      <view class="certificate-family-body" wx:if="{{isFamily}}">
+        <view class="cf-title-row">
+          <view class="header-icon-svg icon-svg-flower"></view>
+          <text class="cf-title">📜 爱心护持荣誉证书</text>
+          <view class="header-icon-svg icon-svg-flower flip-x"></view>
+        </view>
+
+        <view class="cf-inner-border">
+          <text class="certificate-family-icon">🌸</text>
+
+          <view class="cert-salutation">尊敬的家人【{{userNickName}}】：</view>
+          <view class="cert-paragraph">感谢您对雨花斋公益事业的倾心关怀与倾心护持。一碗热饭，温暖世间。雨花斋因您的守护而更具温情！</view>
+          <view class="cert-paragraph">特发此证，以兹感谢。</view>
+
+          <view class="cf-signature-row">
+            <view class="cf-seal">
+              <text class="cf-seal-line">雨花</text>
+              <text class="cf-seal-line">爱心</text>
+            </view>
+            <view class="cf-signature-text">
+              <text class="cf-sign-line">雨花斋公益团队</text>
+              <text class="cf-sign-line">{{certificateIssueDate}}</text>
+            </view>
+          </view>
         </view>
       </view>
 
-      <button class="certificate-save-btn" bindtap="onSaveCertificateToAlbum" disabled="{{certificateGenerating || !certificateTempFilePath}}">
-        💾 保存证书分享朋友圈
+      <button wx:if="{{isFamily}}" class="certificate-family-save-btn" bindtap="onSaveCertificateImage">
+        🖼️ 保存证书海报
       </button>
+
+      <!-- 义工分支：原有 Canvas 证书生成流程，保留工时/天数统计文案 -->
+      <block wx:else>
+        <view class="certificate-canvas-wrap">
+          <!-- Canvas 本身始终挂载在 DOM 里供 selectorQuery 查询，绘制完成后用生成的图片
+               覆盖显示在它上面——2D Canvas 无法直接作为图片展示/长按保存，必须转成图片。
+               🐛 双重渲染修复：canvas 与 image 尺寸口径不完全一致（canvas 是固定 340×480px，
+               image 是按容器宽度等比缩放），生成完成后 canvas 边缘可能在 image 周围露出一圈
+               像素，观感上像"叠了两张证书"——图片就绪后直接把 canvas 从渲染树里摘掉，
+               保证画面上任何时刻都只有一张完整证书可见 -->
+          <canvas wx:if="{{!certificateTempFilePath}}" type="2d" id="certificateCanvas" class="certificate-canvas" style="width: 340px; height: 480px;"></canvas>
+          <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
+          <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}">
+            <text>正在生成证书…</text>
+          </view>
+        </view>
+
+        <button class="certificate-save-btn" bindtap="onSaveCertificateToAlbum" disabled="{{certificateGenerating || !certificateTempFilePath}}">
+          💾 保存证书分享朋友圈
+        </button>
+      </block>
     </view>
   </view>
 
-  <!-- 🏪 查看店铺状态 Modal：轻量只读展示，复用 manageStoreProfile 'get' 动作查到的
-       门店名称与运营状态，不新开云函数 -->
-  <view class="store-status-modal-mask" wx:if="{{showStoreStatusModal}}" bindtap="onCloseStoreStatusModal">
-    <view class="store-status-modal-card" catchtap="stopPropagation">
-      <view class="store-status-modal-header">
-        <text class="store-status-modal-title">🏪 店铺状态</text>
-        <view class="store-status-modal-close" bindtap="onCloseStoreStatusModal">✕</view>
+  <!-- 🌸 家人专属【雨花温情故事】说明弹窗：项目里真正沉淀"温馨故事、活动花絮"
+       内容的地方是各门店的日志（activity_logs，见 activity-log.wxml 里同款
+       placeholder 文案），这里不重新做一套独立的故事内容库，而是给一段引导语
+       + 直达入口，复用 onGoToActivityLog 已有的跳转逻辑，不重复实现 -->
+  <view class="warm-story-modal-mask" wx:if="{{showWarmStoryModal}}" bindtap="onCloseWarmStory">
+    <view class="warm-story-modal-card" catchtap="stopPropagation">
+      <view class="warm-story-modal-header">
+        <text class="warm-story-modal-title">🌸 雨花温情故事</text>
+        <view class="warm-story-modal-close" bindtap="onCloseWarmStory">✕</view>
       </view>
 
-      <view class="store-status-loading-box" wx:if="{{storeStatusInfo.loading}}">
+      <view class="warm-story-modal-body">
+        <text class="warm-story-modal-icon">🌸</text>
+        <text class="warm-story-modal-text">每一段温情故事，都记录在门店的日常日志里——义工的忙碌身影、家人的温暖笑脸、护持路上的点点滴滴。</text>
+        <text class="warm-story-modal-text">欢迎前往门店日志，看看雨花斋这个大家庭最新的动人瞬间。</text>
+
+        <button class="warm-story-view-log-btn" bindtap="onViewActivityLogFromWarmStory">查看门店日志 ›</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 📮 爱心意见箱：小程序原生半屏弹窗，替代微信官方 open-type="feedback"，
+       提交内容落在本项目自己的 feedback_submissions 集合，店长/运营可查阅 -->
+  <view class="feedback-sheet-backdrop {{showFeedbackModal ? 'show' : ''}}" wx:if="{{showFeedbackModal}}" bindtap="onCloseFeedbackModal">
+    <view class="feedback-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">📮 爱心意见箱</text>
+          <text class="feedback-sheet-subtitle">感恩您的倾心护持，共同守护雨花温情</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseFeedbackModal">✕</view>
+      </view>
+
+      <view class="feedback-modal-tab-row">
+        <view
+          class="feedback-modal-tab {{feedbackModalTab === 'submit' ? 'active' : ''}}"
+          bindtap="onSwitchFeedbackModalTab"
+          data-tab="submit"
+        >✍️ 提交建议</view>
+        <view
+          class="feedback-modal-tab {{feedbackModalTab === 'mine' ? 'active' : ''}}"
+          bindtap="onSwitchFeedbackModalTab"
+          data-tab="mine"
+        >
+          💌 我的反馈与回复
+          <view class="badge feedback-modal-tab-badge" wx:if="{{unreadReplyCount > 0}}">{{unreadReplyCount}}</view>
+        </view>
+      </view>
+
+      <block wx:if="{{feedbackModalTab === 'submit'}}">
+        <view class="feedback-type-row">
+          <view
+            class="feedback-type-pill {{feedbackSelectedType === item.key ? 'active' : ''}}"
+            wx:for="{{feedbackTypeOptions}}"
+            wx:key="key"
+            bindtap="onSelectFeedbackType"
+            data-type="{{item.key}}"
+          >{{item.label}}</view>
+        </view>
+
+        <textarea
+          class="feedback-content-textarea"
+          placeholder="请输入您的宝贵意见或建议..."
+          placeholder-class="feedback-textarea-placeholder"
+          value="{{feedbackContent}}"
+          bindinput="onFeedbackContentInput"
+          maxlength="500"
+          auto-height
+        ></textarea>
+
+        <button class="feedback-submit-btn" bindtap="onSubmitFeedback" loading="{{feedbackSubmitting}}" disabled="{{feedbackSubmitting}}">📮 提交宝贵意见</button>
+      </block>
+
+      <!-- 💌 我的反馈与回复：家人自己的历史提交 + 团队回复，Tab 内自成一个可滚动列表 -->
+      <scroll-view scroll-y class="my-feedback-list-scroll" wx:if="{{feedbackModalTab === 'mine'}}">
+        <view class="feedback-admin-loading" wx:if="{{myFeedbackLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="feedback-admin-empty" wx:if="{{!myFeedbackLoading && myFeedbackList.length === 0}}">
+          <text>暂无提交记录，快去提交您的第一条爱心意见吧</text>
+        </view>
+
+        <view class="my-feedback-item" wx:for="{{myFeedbackList}}" wx:key="_id">
+          <view class="fa-item-header">
+            <text class="fa-item-type-tag">{{item.typeLabel}}</text>
+            <text class="fa-item-time">🗓️ {{item.createTimeStr}}</text>
+          </view>
+          <text class="fa-item-content">{{item.content}}</text>
+
+          <view class="fa-reply-display my-feedback-reply" wx:if="{{item.replyContent}}">
+            <text class="fa-reply-display-label">💬 店长回复{{item.replyByName ? '（' + item.replyByName + '）' : ''}} · {{item.replyTimeStr}}</text>
+            <text class="fa-reply-display-text">{{item.replyContent}}</text>
+          </view>
+          <text class="my-feedback-pending-tag" wx:else>⏳ 团队审阅中</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 📮 爱心意见箱管理：店长/家长/超管审阅入口，与提交侧共用同一套半屏弹窗视觉语言 -->
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showFeedbackAdminModal ? 'show' : ''}}" wx:if="{{showFeedbackAdminModal}}" bindtap="onCloseFeedbackAdminModal">
+    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">📮 爱心意见箱管理</text>
+          <text class="feedback-sheet-subtitle">家人提交的宝贵意见，处理后自动清空未处理角标</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseFeedbackAdminModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="feedback-admin-list-scroll">
+        <view class="feedback-admin-loading" wx:if="{{feedbackAdminLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="feedback-admin-empty" wx:if="{{!feedbackAdminLoading && feedbackAdminList.length === 0}}">
+          <text>暂无家人提交的爱心意见</text>
+        </view>
+
+        <view class="feedback-admin-item {{item.status === 'handled' ? 'is-handled' : ''}}" wx:for="{{feedbackAdminList}}" wx:key="_id">
+          <view class="fa-item-header">
+            <text class="fa-item-nickname">{{item.nickName || '匿名家人'}}</text>
+            <text class="fa-item-type-tag">{{item.typeLabel}}</text>
+          </view>
+          <text class="fa-item-time">🗓️ {{item.createTimeStr}}</text>
+          <text class="fa-item-content">{{item.content}}</text>
+
+          <!-- 已回复：无论 status 是什么，只要有回复内容就优先展示回复本身 -->
+          <view class="fa-reply-display" wx:if="{{item.replyContent}}">
+            <text class="fa-reply-display-label">🗣️ 已回复{{item.replyByName ? '（' + item.replyByName + '）' : ''}}</text>
+            <text class="fa-reply-display-text">{{item.replyContent}}</text>
+          </view>
+
+          <!-- 未回复但已标记处理：只展示一个轻量已处理标签 -->
+          <text class="fa-item-handled-tag" wx:elif="{{item.status === 'handled'}}">✅ 已处理</text>
+
+          <!-- 待处理：标记为已处理 / 回复家人 二选一 -->
+          <block wx:else>
+            <view class="fa-item-actions">
+              <button
+                class="fa-item-handle-btn"
+                bindtap="onMarkFeedbackHandled"
+                data-id="{{item._id}}"
+                disabled="{{item.handling}}"
+              >✅ 标记为已处理</button>
+              <button
+                class="fa-item-reply-btn"
+                bindtap="onToggleFeedbackReplyBox"
+                data-id="{{item._id}}"
+              >{{feedbackReplyingId === item._id ? '收起' : '💬 回复家人'}}</button>
+            </view>
+
+            <view class="fa-reply-box" wx:if="{{feedbackReplyingId === item._id}}">
+              <textarea
+                class="fa-reply-textarea"
+                placeholder="输入给这位家人的回复..."
+                value="{{feedbackReplyContent}}"
+                bindinput="onFeedbackReplyInput"
+                maxlength="500"
+                auto-height
+              ></textarea>
+              <button
+                class="fa-reply-submit-btn"
+                bindtap="onSubmitFeedbackReply"
+                loading="{{feedbackReplySubmitting}}"
+                disabled="{{feedbackReplySubmitting}}"
+              >发送回复</button>
+            </view>
+          </block>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 🍱 登记今日菜单与人数：写入 volunteer_submissions（不进 report_logs） -->
+  <view class="feedback-sheet-backdrop {{showDailyMenuModal ? 'show' : ''}}" wx:if="{{showDailyMenuModal}}" bindtap="onCloseDailyMenuModal">
+    <view class="feedback-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">🍱 登记今日菜单与人数</text>
+          <text class="feedback-sheet-subtitle">提交后待店长确认，仅供门店参考汇总</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseDailyMenuModal">✕</view>
+      </view>
+
+      <text class="vt-form-label">开餐状态</text>
+      <view class="vt-status-row">
+        <view class="vt-status-pill {{dailyMenuForm.mealStatus === 'open' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="open">🍚 正常开餐</view>
+        <view class="vt-status-pill {{dailyMenuForm.mealStatus === 'closed' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="closed">🚫 今日休餐</view>
+      </view>
+
+      <view class="vt-count-row vt-count-row-3" wx:if="{{dailyMenuForm.mealStatus === 'open'}}">
+        <view class="vt-count-cell">
+          <text class="vt-form-label">早餐人数</text>
+          <input class="vt-count-input" type="number" placeholder="0" value="{{dailyMenuForm.breakfastCount}}" bindinput="onBreakfastCountInput" />
+        </view>
+        <view class="vt-count-cell">
+          <text class="vt-form-label">午餐人数</text>
+          <input class="vt-count-input" type="number" placeholder="0" value="{{dailyMenuForm.lunchCount}}" bindinput="onLunchCountInput" />
+        </view>
+        <view class="vt-count-cell">
+          <text class="vt-form-label">晚餐人数</text>
+          <input class="vt-count-input" type="number" placeholder="0" value="{{dailyMenuForm.dinnerCount}}" bindinput="onDinnerCountInput" />
+        </view>
+      </view>
+
+      <text class="vt-form-label">备注 / 菜单说明</text>
+      <textarea
+        class="feedback-content-textarea"
+        placeholder="今日菜品、特殊情况等（选填）"
+        placeholder-class="feedback-textarea-placeholder"
+        value="{{dailyMenuForm.menuNote}}"
+        bindinput="onMenuNoteInput"
+        maxlength="300"
+        auto-height
+      ></textarea>
+
+      <button class="feedback-submit-btn" bindtap="onSubmitDailyMenu" loading="{{dailyMenuSubmitting}}" disabled="{{dailyMenuSubmitting}}">📮 提交登记</button>
+    </view>
+  </view>
+
+  <!-- 🌾 登记物资消耗与报损：与菜单人数共用同一张 volunteer_submissions 集合 -->
+  <view class="feedback-sheet-backdrop {{showMaterialUsageModal ? 'show' : ''}}" wx:if="{{showMaterialUsageModal}}" bindtap="onCloseMaterialUsageModal">
+    <view class="feedback-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">🌾 登记物资消耗与报损</text>
+          <text class="feedback-sheet-subtitle">提交后待店长确认，仅供门店参考汇总</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseMaterialUsageModal">✕</view>
+      </view>
+
+      <view class="vt-count-grid-2x2">
+        <view class="vt-count-cell">
+          <text class="vt-form-label">大米消耗（斤）</text>
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.riceCount}}" bindinput="onRiceCountInput" />
+        </view>
+        <view class="vt-count-cell">
+          <text class="vt-form-label">面粉消耗（斤）</text>
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.flourCount}}" bindinput="onFlourCountInput" />
+        </view>
+        <view class="vt-count-cell">
+          <text class="vt-form-label">食用油消耗（斤）</text>
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.oilCount}}" bindinput="onOilCountInput" />
+        </view>
+        <view class="vt-count-cell">
+          <text class="vt-form-label">蔬菜消耗（斤）</text>
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.vegetableCount}}" bindinput="onVegetableCountInput" />
+        </view>
+      </view>
+
+      <text class="vt-form-label">报损 / 蔬菜种类 / 补充说明</text>
+      <textarea
+        class="feedback-content-textarea"
+        placeholder="如有物资报损、蔬菜种类或其他需要说明的情况（选填）"
+        placeholder-class="feedback-textarea-placeholder"
+        value="{{materialUsageForm.lossNote}}"
+        bindinput="onLossNoteInput"
+        maxlength="300"
+        auto-height
+      ></textarea>
+
+      <button class="feedback-submit-btn" bindtap="onSubmitMaterialUsage" loading="{{materialUsageSubmitting}}" disabled="{{materialUsageSubmitting}}">📮 提交登记</button>
+    </view>
+  </view>
+
+  <!-- 📄 义工版【我的餐报提交记录】：volunteer_submissions 里"我自己"的菜单/物资
+       原始记录，与店长/财务在 history 页看到的正式台账历史彻底隔离 -->
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMyVolunteerSubmissionsModal ? 'show' : ''}}" wx:if="{{showMyVolunteerSubmissionsModal}}" bindtap="onCloseMyVolunteerSubmissionsModal">
+    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">📄 我的餐报提交记录</text>
+          <text class="feedback-sheet-subtitle">您提交的菜单人数与物资消耗登记</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseMyVolunteerSubmissionsModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="feedback-admin-list-scroll">
+        <view class="feedback-admin-loading" wx:if="{{myVolunteerSubmissionsLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="feedback-admin-empty" wx:if="{{!myVolunteerSubmissionsLoading && myVolunteerSubmissionsList.length === 0}}">
+          <text>暂无提交记录，去登记今天的菜单人数或物资消耗吧</text>
+        </view>
+
+        <view class="my-feedback-item" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id">
+          <view class="fa-item-header">
+            <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 菜单人数' : '🌾 物资消耗'}}</text>
+            <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
+          </view>
+
+          <block wx:if="{{item.type === 'menu'}}">
+            <text class="fa-item-content" wx:if="{{item.mealStatus === 'closed'}}">今日休餐</text>
+            <text class="fa-item-content" wx:else>早: {{item.breakfastCount || 0}} 人 | 午: {{item.lunchCount || 0}} 人 | 晚: {{item.dinnerCount || 0}} 人</text>
+            <text class="fa-item-content" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
+          </block>
+          <block wx:else>
+            <text class="fa-item-content">米: {{item.riceCount || 0}}斤 | 面: {{item.flourCount || 0}}斤 | 油: {{item.oilCount || 0}}斤 | 菜: {{item.vegetableCount || 0}}斤</text>
+            <text class="fa-item-content" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
+          </block>
+
+          <text class="my-vs-status-tag approved" wx:if="{{item.status === 'approved'}}">✅ 店长已采纳入库</text>
+          <block wx:elif="{{item.status === 'rejected'}}">
+            <text class="my-vs-status-tag rejected">❌ 已驳回</text>
+            <text class="my-vs-reject-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</text>
+          </block>
+          <text class="my-vs-status-tag pending" wx:else>⏳ 待店长确认</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 📥 待审核的义工餐报与物资：店长/家长/超管审阅入口，与爱心意见箱管理同一套
+       半屏弹窗视觉语言 -->
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showVolunteerSubmissionAdminModal ? 'show' : ''}}" wx:if="{{showVolunteerSubmissionAdminModal}}" bindtap="onCloseVolunteerSubmissionAdminModal">
+    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">📥 待审核的义工餐报与物资</text>
+          <text class="feedback-sheet-subtitle">采纳后自动同步入库，驳回需填写原因</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseVolunteerSubmissionAdminModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="feedback-admin-list-scroll">
+        <view class="feedback-admin-loading" wx:if="{{volunteerSubmissionAdminLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="feedback-admin-empty" wx:if="{{!volunteerSubmissionAdminLoading && volunteerSubmissionAdminList.length === 0}}">
+          <text>暂无待审核的义工投稿</text>
+        </view>
+
+        <view class="feedback-admin-item" wx:for="{{volunteerSubmissionAdminList}}" wx:key="_id">
+          <view class="fa-item-header">
+            <text class="fa-item-nickname">{{item.nickName || '匿名义工'}}</text>
+            <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 菜单人数' : '🌾 物资消耗'}}</text>
+          </view>
+          <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
+
+          <block wx:if="{{item.type === 'menu'}}">
+            <text class="fa-item-content" wx:if="{{item.mealStatus === 'closed'}}">今日休餐</text>
+            <text class="fa-item-content" wx:else>早: {{item.breakfastCount || 0}} 人 | 午: {{item.lunchCount || 0}} 人 | 晚: {{item.dinnerCount || 0}} 人</text>
+            <text class="fa-item-content" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
+          </block>
+          <block wx:else>
+            <text class="fa-item-content">米: {{item.riceCount || 0}}斤 | 面: {{item.flourCount || 0}}斤 | 油: {{item.oilCount || 0}}斤 | 菜: {{item.vegetableCount || 0}}斤</text>
+            <text class="fa-item-content" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
+          </block>
+
+          <view class="fa-item-actions">
+            <button
+              class="fa-item-reply-btn"
+              bindtap="onOpenRejectModal"
+              data-id="{{item._id}}"
+              disabled="{{item.processing}}"
+            >❌ 驳回</button>
+            <button
+              class="fa-item-handle-btn"
+              bindtap="onApproveSubmission"
+              data-id="{{item._id}}"
+              disabled="{{item.processing}}"
+            >✅ 一键采纳入库</button>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- ❌ 驳回原因弹窗：与证书/温情故事等说明弹窗共用 certificate-modal-* 视觉规范 -->
+  <view class="certificate-modal-mask" wx:if="{{showRejectSubmissionModal}}" bindtap="onCloseRejectModal">
+    <view class="certificate-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header">
+        <view class="certificate-modal-close" bindtap="onCloseRejectModal">✕</view>
+      </view>
+
+      <text class="vt-form-label">驳回原因</text>
+      <textarea
+        class="feedback-content-textarea"
+        placeholder="如：人数填写有误，请核实后重提交"
+        placeholder-class="feedback-textarea-placeholder"
+        value="{{rejectSubmissionReason}}"
+        bindinput="onRejectSubmissionReasonInput"
+        maxlength="300"
+        auto-height
+      ></textarea>
+
+      <button
+        class="feedback-submit-btn"
+        bindtap="onSubmitRejectSubmission"
+        loading="{{rejectSubmissionSubmitting}}"
+        disabled="{{rejectSubmissionSubmitting}}"
+      >确认驳回</button>
+    </view>
+  </view>
+
+  <!-- 👥 待审批的本店成员申请：店长/家长入口，义工/财务两类，与「爱心意见箱管理」/
+       「待审核的义工餐报」同一套半屏弹窗视觉语言 -->
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMemberApplicationModal ? 'show' : ''}}" wx:if="{{showMemberApplicationModal}}" bindtap="onCloseMemberApplicationModal">
+    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">👥 待审批的本店成员申请</text>
+          <text class="feedback-sheet-subtitle">义工/财务身份申请，拒绝需填写原因</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseMemberApplicationModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="feedback-admin-list-scroll">
+        <view class="feedback-admin-loading" wx:if="{{memberApplicationLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="feedback-admin-empty" wx:if="{{!memberApplicationLoading && memberApplicationList.length === 0}}">
+          <text>暂无待审批的成员申请</text>
+        </view>
+
+        <view class="feedback-admin-item" wx:for="{{memberApplicationList}}" wx:key="applyId">
+          <view class="fa-item-header">
+            <text class="fa-item-nickname">{{item.realName}}</text>
+            <text class="fa-item-type-tag">{{item.requestedRoleLabel}}</text>
+          </view>
+          <text class="fa-item-time">🗓️ {{item.applyTimeStr}}</text>
+          <text class="fa-item-content">手机号：{{item.phone}}</text>
+
+          <view class="fa-item-actions">
+            <button
+              class="fa-item-reply-btn"
+              bindtap="onOpenRejectApplicationModal"
+              data-id="{{item.applyId}}"
+              data-queue="member"
+            >❌ 拒绝</button>
+            <button
+              class="fa-item-handle-btn"
+              bindtap="onApproveApplication"
+              data-id="{{item.applyId}}"
+              data-queue="member"
+            >✅ 通过</button>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 🏛️ 待审批的高级角色与新店申请：仅超管入口，附带门店档案预览 -->
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showElevatedApplicationModal ? 'show' : ''}}" wx:if="{{showElevatedApplicationModal}}" bindtap="onCloseElevatedApplicationModal">
+    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">🏛️ 待审批的高级角色与新店申请</text>
+          <text class="feedback-sheet-subtitle">店长/家长任命与新建门店，拒绝需填写原因</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseElevatedApplicationModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="feedback-admin-list-scroll">
+        <view class="feedback-admin-loading" wx:if="{{elevatedApplicationLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="feedback-admin-empty" wx:if="{{!elevatedApplicationLoading && elevatedApplicationList.length === 0}}">
+          <text>暂无待审批的高级角色/新店申请</text>
+        </view>
+
+        <view class="feedback-admin-item" wx:for="{{elevatedApplicationList}}" wx:key="applyId">
+          <view class="fa-item-header">
+            <text class="fa-item-nickname">{{item.realName}}</text>
+            <text class="fa-item-type-tag">{{item.isCustomStore ? '🆕 新建门店' : ''}}{{item.requestedRoleLabel}}</text>
+          </view>
+          <text class="fa-item-time">🗓️ {{item.applyTimeStr}}</text>
+          <text class="fa-item-content">手机号：{{item.phone}}</text>
+
+          <!-- 🏪 门店档案预览：新建门店用申请表单自带的字段，已有门店用其当前档案 -->
+          <view class="ea-store-profile-card">
+            <text class="fa-item-content">门店：{{item.storeProfile.storeName}}</text>
+            <text class="fa-item-content">地址：{{item.storeProfile.address || '未填写'}}</text>
+            <text class="fa-item-content">联系电话：{{item.storeProfile.contactPhone || '未填写'}}</text>
+            <scroll-view scroll-x class="ea-store-photo-row" wx:if="{{item.storeProfile.storePhotos.length > 0}}">
+              <image
+                wx:for="{{item.storeProfile.storePhotos}}"
+                wx:for-item="photo"
+                wx:key="*this"
+                class="ea-store-photo-thumb"
+                src="{{photo}}"
+                mode="aspectFill"
+                bindtap="onPreviewApplicationStorePhoto"
+                data-url="{{photo}}"
+                data-urls="{{item.storeProfile.storePhotos}}"
+              />
+            </scroll-view>
+          </view>
+
+          <view class="fa-item-actions">
+            <button
+              class="fa-item-reply-btn"
+              bindtap="onOpenRejectApplicationModal"
+              data-id="{{item.applyId}}"
+              data-queue="elevated"
+            >❌ 拒绝</button>
+            <button
+              class="fa-item-handle-btn"
+              bindtap="onApproveApplication"
+              data-id="{{item.applyId}}"
+              data-queue="elevated"
+            >✅ 通过</button>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- ❌ 拒绝申请原因弹窗：member/elevated 两个队列共用，与义工投稿驳回同一套
+       certificate-modal-* 视觉规范 -->
+  <view class="certificate-modal-mask" wx:if="{{showRejectApplicationModal}}" bindtap="onCloseRejectApplicationModal">
+    <view class="certificate-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header">
+        <view class="certificate-modal-close" bindtap="onCloseRejectApplicationModal">✕</view>
+      </view>
+
+      <text class="vt-form-label">拒绝原因</text>
+      <textarea
+        class="feedback-content-textarea"
+        placeholder="如：门店档案信息不全、身份信息核实失败"
+        placeholder-class="feedback-textarea-placeholder"
+        value="{{rejectApplicationReason}}"
+        bindinput="onRejectApplicationReasonInput"
+        maxlength="300"
+        auto-height
+      ></textarea>
+
+      <button
+        class="feedback-submit-btn"
+        bindtap="onSubmitRejectApplication"
+        loading="{{rejectApplicationSubmitting}}"
+        disabled="{{rejectApplicationSubmitting}}"
+      >确认拒绝</button>
+    </view>
+  </view>
+
+  <!-- 🍚 门店餐饮与物资统计：即时查询 volunteer_submissions/material_logs，
+       不新建汇总表，与 warm-story-modal-* 共用弹窗视觉规范 -->
+  <view class="warm-story-modal-mask" wx:if="{{showStoreStatsModal}}" bindtap="onCloseStoreStatsModal">
+    <view class="warm-story-modal-card store-stats-modal-card" catchtap="stopPropagation">
+      <view class="warm-story-modal-header">
+        <text class="warm-story-modal-title">📊 门店餐饮与物资统计</text>
+        <view class="warm-story-modal-close" bindtap="onCloseStoreStatsModal">✕</view>
+      </view>
+
+      <view class="feedback-admin-loading" wx:if="{{storeStatsLoading}}">
         <text>加载中...</text>
       </view>
 
-      <view class="store-status-info-body" wx:else>
-        <view class="store-status-row">
-          <text class="store-status-lbl">门店名称</text>
-          <text class="store-status-val">{{storeStatusInfo.storeName || currentStoreName || '未命名门店'}}</text>
+      <scroll-view scroll-y class="store-stats-scroll" wx:else>
+        <text class="pd-health-title">🍚 今日三餐人数（{{storeStats.today}}）</text>
+        <view class="pd-health-grid">
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">早餐人数</text>
+            <text class="pd-health-val">{{storeStats.mealTotals.breakfastCount}} 人次</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">午餐人数</text>
+            <text class="pd-health-val">{{storeStats.mealTotals.lunchCount}} 人次</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">晚餐人数</text>
+            <text class="pd-health-val">{{storeStats.mealTotals.dinnerCount}} 人次</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">今日总计</text>
+            <text class="pd-health-val green">{{storeStats.mealTotals.totalCount}} 人次</text>
+          </view>
         </view>
-        <view class="store-status-row">
-          <text class="store-status-lbl">运营状态</text>
-          <text class="store-status-badge {{storeStatusInfo.operatingStatus}}">{{storeStatusInfo.operatingStatusLabel || '运营中'}}</text>
+
+        <text class="pd-health-title">🌾 今日物资消耗</text>
+        <view class="pd-health-grid">
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">大米</text>
+            <text class="pd-health-val">{{storeStats.todayMaterialTotals.riceCount}} 斤</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">面粉</text>
+            <text class="pd-health-val">{{storeStats.todayMaterialTotals.flourCount}} 斤</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">食用油</text>
+            <text class="pd-health-val">{{storeStats.todayMaterialTotals.oilCount}} 斤</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">蔬菜</text>
+            <text class="pd-health-val">{{storeStats.todayMaterialTotals.vegetableCount}} 斤</text>
+          </view>
         </view>
-      </view>
+
+        <text class="pd-health-title">📅 本月累计物资消耗</text>
+        <view class="pd-health-grid">
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">大米</text>
+            <text class="pd-health-val">{{storeStats.monthMaterialTotals.riceCount}} 斤</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">面粉</text>
+            <text class="pd-health-val">{{storeStats.monthMaterialTotals.flourCount}} 斤</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">食用油</text>
+            <text class="pd-health-val">{{storeStats.monthMaterialTotals.oilCount}} 斤</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">蔬菜</text>
+            <text class="pd-health-val">{{storeStats.monthMaterialTotals.vegetableCount}} 斤</text>
+          </view>
+        </view>
+      </scroll-view>
     </view>
   </view>
 

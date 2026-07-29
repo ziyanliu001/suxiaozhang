@@ -494,39 +494,6 @@
   color: #8C1D18;
 }
 
-.pd-store-switch-row {
-  display: flex;
-  justify-content: flex-start;
-  margin-bottom: 20rpx;
-}
-
-.pd-store-card {
-  background: #FFFFFF;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-}
-
-.pd-store-name {
-  display: block;
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #212529;
-  margin-bottom: 12rpx;
-}
-
-.pd-people-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.pd-people-item {
-  font-size: 24rpx;
-  color: #5C4326;
-}
-
 .pd-health-card {
   background: #FFFFFF;
   border-radius: 16rpx;
@@ -689,6 +656,37 @@
   font-size: 24rpx;
 }
 
+/* 📮 爱心意见箱管理入口：店长/家长/超管共用的 patriarch-panel-card 内新增区块 */
+.pd-feedback-entry-title {
+  margin-top: 8rpx;
+}
+
+.pd-feedback-entry-cell {
+  background: #FAF8F5;
+  border-radius: 16rpx;
+  margin: 0;
+}
+
+.pd-feedback-entry-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.badge {
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 16rpx;
+  background: #E03131;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  font-weight: bold;
+  text-align: center;
+  box-sizing: border-box;
+}
+
 .action-list-container {
   background: #FFFFFF;
   border: 1rpx solid #EFE6D8;
@@ -732,16 +730,7 @@
   color: #C7C7CC;
 }
 
-/* 核心荣誉分组：义工证书/徽章 —— 淡金底强化卡片，与普通列表项拉开视觉层级 */
-.honor-cell {
-  background: linear-gradient(135deg, #FFFDF5 0%, #FFF9E6 100%);
-}
-
-.honor-cell:active {
-  background: #FFF3D6;
-}
-
-/* 🌟 店长专属管理入口：与 .honor-cell 同一套"淡金底强化行"语言，让店长在自己的个人页里
+/* 🌟 店长专属管理入口："淡金底强化行"语言，让店长在自己的个人页里
    一眼看到这一行明显跟普通义工看到的列表不一样——权限层级的视觉区隔，不只是多一行文字 */
 .manager-only-cell {
   background: linear-gradient(135deg, #FFFDF5 0%, #FFF3E0 100%);
@@ -756,17 +745,6 @@
   width: 38rpx;
   flex-shrink: 0;
   text-align: center;
-}
-
-.item-right {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.item-sub-hint {
-  font-size: 20rpx;
-  color: #B57C1E;
 }
 
 /* 关于与帮助分组内的"切换身份"行：保留列表统一样式，仅文字提示危险语义 */
@@ -865,9 +843,6 @@
 
 /* 🐛 顺带修复：原图标 base64 数据已损坏（含非法字节，浏览器会渲染为空白/破图），重新绘制为简洁莲花双瓣造型 */
 .icon-svg-flower { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjJjMC0zIDItNiA1LTZzNCAyIDQgNC0yIDItOSAyeiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiAyMmMwLTMtMi02LTUtNnMtNCAyLTQgNCAyIDIgOSAyeiI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiA1Yy0yIDItMiA1IDAgN3M1IDAgNS0zLTEtNC01LTR6Ij48L3BhdGg+PC9zdmc+'); }
-
-/* 新增：义工证书/徽章菜单项图标（奖章造型） */
-.icon-svg-badge { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSI4IiByPSI2Ij48L2NpcmNsZT48cGF0aCBkPSJNOC4yMSAxMy44OUw3IDIzbDUtMyA1IDMtMS4yMS05LjEyIj48L3BhdGg+PC9zdmc+'); }
 
 /* 新增：昵称行编辑入口图标（简洁铅笔造型） */
 .icon-svg-edit { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE3IDNhMi44MjggMi44MjggMCAxIDEgNCA0TDcuNSAyMC41IDIgMjJsMS41LTUuNVoiPjwvcGF0aD48L3N2Zz4='); }
@@ -1031,6 +1006,24 @@
   box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
 }
 
+/* 🛠️ 义工现场服务工具：外层卡片只负责包住列表 + 底部提示语，
+   列表本身复用通用 .action-list-container，不重复一套列表样式 */
+.volunteer-tools-card {
+  margin-bottom: 30rpx;
+}
+
+.volunteer-tools-card .action-list-container {
+  margin-bottom: 12rpx;
+}
+
+.volunteer-tools-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #A08A6A;
+  line-height: 1.6;
+  padding: 0 12rpx;
+}
+
 .honor-wall-header {
   display: flex;
   align-items: center;
@@ -1149,14 +1142,10 @@
 .certificate-modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* 标题文字已删除，header 现在只剩关闭按钮——改成 flex-end 让它继续贴右上角，
+     不再需要 space-between 那种"两端对齐"布局 */
+  justify-content: flex-end;
   margin-bottom: 20rpx;
-}
-
-.certificate-modal-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #222222;
 }
 
 .certificate-modal-close {
@@ -1240,9 +1229,143 @@
   box-shadow: none;
 }
 
-/* 🏪 查看店铺状态 Modal：与 .certificate-modal-mask/.certificate-modal-card 同款
-   遮罩+卡片骨架，内容更轻量（只读两行信息），复用同一套视觉语言 */
-.store-status-modal-mask {
+/* 家人证书专属操作按钮：与义工版 certificate-save-btn 同一套暖金质感，
+   与义工按钮独立成一份，避免共用类名时因家人分支 disabled 语义不同而互相牵连 */
+.certificate-family-save-btn {
+  margin-top: 24rpx;
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+}
+
+.certificate-family-save-btn::after {
+  border: none;
+}
+
+.certificate-family-save-btn:active {
+  opacity: 0.85;
+  box-shadow: 0 2rpx 6rpx rgba(184, 134, 11, 0.2);
+}
+
+/* 🌸 家人版纯文本证书：与义工版 Canvas 证书共用同一个 certificate-modal-mask/
+   certificate-modal-card 弹窗壳，这里只负责正文区域的排版，不含 Canvas/二维码。
+   宣纸暖米白底 + 双重古典边框 + 朱红印鑑，营造纸质荣誉证书的仪式感 */
+.certificate-family-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12rpx 8rpx 8rpx;
+  background: #FAF6F0;
+  border-radius: 12rpx;
+}
+
+.cf-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.cf-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  letter-spacing: 2rpx;
+}
+
+/* 双重边框：外层 certificate-family-body 的暖米白底本身算作外圈，
+   这里再加一圈实线 + 内边距，形成"证书纸+装裱边框"的双层观感 */
+.cf-inner-border {
+  width: 100%;
+  box-sizing: border-box;
+  border: 2rpx solid #E2D1B2;
+  padding: 24rpx;
+  border-radius: 8rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.certificate-family-icon {
+  font-size: 56rpx;
+  margin-bottom: 20rpx;
+}
+
+/* 抬头顶格加粗：与正文分开单独一行，模拟传统证书"尊敬的...："起首语气 */
+.cert-salutation {
+  align-self: stretch;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #5A3E2B;
+  margin-bottom: 16rpx;
+  text-align: left;
+}
+
+/* 正文段落：首行缩进两字 + 两端对齐，贴近实体证书的排版手感 */
+.cert-paragraph {
+  align-self: stretch;
+  font-size: 26rpx;
+  color: #6C4F3B;
+  line-height: 1.8;
+  text-indent: 2em;
+  text-align: justify;
+  margin-bottom: 12rpx;
+  letter-spacing: 1rpx;
+}
+
+.cf-signature-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: stretch;
+  gap: 16rpx;
+  margin-top: 32rpx;
+}
+
+.cf-signature-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.cf-sign-line {
+  font-size: 24rpx;
+  color: #6B4C1E;
+  line-height: 1.5;
+}
+
+/* 朱红古典印鑑：正方形、微旋转，模拟盖章时的随手歪斜手感 */
+.cf-seal {
+  width: 88rpx;
+  height: 88rpx;
+  flex-shrink: 0;
+  border: 3rpx solid #C0392B;
+  border-radius: 6rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-6deg);
+  color: #C0392B;
+  opacity: 0.88;
+  box-shadow: 0 0 0 1rpx rgba(192, 57, 43, 0.15) inset;
+}
+
+.cf-seal-line {
+  font-size: 22rpx;
+  font-weight: bold;
+  line-height: 1.3;
+}
+
+/* 🌸 雨花温情故事说明弹窗：与 certificate-modal-* 同一套弹窗视觉规范 */
+.warm-story-modal-mask {
   position: fixed;
   top: 0;
   left: 0;
@@ -1255,29 +1378,29 @@
   z-index: 2000;
 }
 
-.store-status-modal-card {
-  width: 82%;
-  max-width: 560rpx;
-  background: #FFFFFF;
+.warm-story-modal-card {
+  width: 88%;
+  max-width: 660rpx;
+  background: linear-gradient(155deg, #FFF8F0 0%, #FFFFFF 60%);
   border-radius: 28rpx;
   padding: 28rpx 24rpx 32rpx;
   box-sizing: border-box;
 }
 
-.store-status-modal-header {
+.warm-story-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20rpx;
 }
 
-.store-status-modal-title {
+.warm-story-modal-title {
   font-size: 30rpx;
   font-weight: bold;
   color: #222222;
 }
 
-.store-status-modal-close {
+.warm-story-modal-close {
   width: 48rpx;
   height: 48rpx;
   line-height: 48rpx;
@@ -1288,52 +1411,635 @@
   font-size: 24rpx;
 }
 
-.store-status-loading-box {
+.warm-story-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8rpx 4rpx 0;
+}
+
+.warm-story-modal-icon {
+  font-size: 56rpx;
+  margin-bottom: 16rpx;
+}
+
+/* 正文段落：改居中为两端对齐 + 首行缩进两字，贴近实体文章的阅读排版；
+   align-self:stretch 覆盖父级 .warm-story-modal-body 的 align-items:center
+   （默认会把文本框收缩成"内容多宽就多宽"，text-indent/justify 需要撑满整行才有意义） */
+.warm-story-modal-text {
+  display: block;
+  align-self: stretch;
+  font-size: 26rpx;
+  color: #6B4C1E;
+  line-height: 1.8;
+  text-align: justify;
+  text-indent: 2em;
+  letter-spacing: 1rpx;
+  margin-bottom: 12rpx;
+}
+
+.warm-story-view-log-btn {
+  width: 100%;
+  height: 84rpx;
+  line-height: 84rpx;
+  margin-top: 12rpx;
+  background: linear-gradient(135deg, #E6A23C 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 42rpx;
+  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(230, 162, 60, 0.35);
+}
+
+.warm-story-view-log-btn::after {
+  border: none;
+}
+
+.warm-story-view-log-btn:active {
+  opacity: 0.85;
+}
+
+/* 📮 爱心意见箱：半屏底部弹窗，与 mine-quick-sheet 组件同一套 backdrop/panel/
+   drag-handle 视觉规范（fixed 遮罩 + 底部滑出面板），保持全站弹窗手感统一 */
+/* 🐛 自定义 TabBar（custom-tab-bar，z-index: 998）曾经把本弹窗底部的提交按钮
+   盖住——弹窗结构里没有独立的遮罩层元素，.feedback-sheet-backdrop 本身同时
+   兼任"全屏遮罩"与"面板定位容器"两个角色，这里用 !important 顶到最高层级，
+   排除任何后续样式意外覆盖的可能 */
+.feedback-sheet-backdrop {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999998 !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.feedback-sheet-backdrop.show {
+  opacity: 1;
+}
+
+.feedback-sheet-panel {
+  position: relative;
+  z-index: 999999 !important;
+  width: 100%;
+  background: #FBF9F5;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  /* 140rpx 安全抬升边距：custom-tab-bar 实际高度 100rpx，这里额外多留 40rpx
+     缓冲，确保提交按钮完整露在 TabBar 上方——不再依赖按钮自己的 padding-bottom
+     去凑这个安全区，直接在面板层级一次性预留够 */
+  padding: 16rpx 28rpx calc(140rpx + env(safe-area-inset-bottom)) !important;
+  box-sizing: border-box;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.feedback-sheet-backdrop.show .feedback-sheet-panel {
+  transform: translateY(0);
+}
+
+.feedback-sheet-drag-handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #E3D9C8;
+  margin: 0 auto 24rpx;
+}
+
+.feedback-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.feedback-sheet-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.feedback-sheet-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.feedback-sheet-subtitle {
+  font-size: 22rpx;
+  color: #A08A6A;
+}
+
+.feedback-sheet-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
   text-align: center;
-  padding: 40rpx 0;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+
+/* 💌 家人意见箱双 Tab：提交建议 / 我的反馈与回复 */
+.feedback-modal-tab-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+  border-bottom: 1rpx solid #F1EBE0;
+}
+
+.feedback-modal-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 16rpx 0;
+  font-size: 26rpx;
+  color: #A08A6A;
+  border-bottom: 4rpx solid transparent;
+}
+
+.feedback-modal-tab.active {
+  color: #B8860B;
+  font-weight: bold;
+  border-bottom-color: #DAA520;
+}
+
+.feedback-modal-tab-badge {
+  position: relative;
+  top: 0;
+}
+
+.my-feedback-list-scroll {
+  max-height: 60vh;
+}
+
+.my-feedback-item {
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.my-feedback-reply {
+  margin-top: 12rpx;
+}
+
+.my-feedback-pending-tag {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #ADB5BD;
+}
+
+.feedback-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.feedback-type-pill {
+  padding: 14rpx 24rpx;
+  border-radius: 32rpx;
+  background: #F1EBE0;
+  border: 2rpx solid transparent;
+  color: #6B5B45;
+  font-size: 24rpx;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.feedback-type-pill.active {
+  background: linear-gradient(135deg, #E6A23C 0%, #DAA520 100%);
+  border-color: #B8860B;
+  color: #FFFFFF;
+  font-weight: bold;
+  box-shadow: 0 4rpx 12rpx rgba(184, 134, 11, 0.4);
+}
+
+.feedback-content-textarea {
+  width: 100%;
+  min-height: 180rpx;
+  max-height: 320rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  box-sizing: border-box;
+  font-size: 26rpx;
+  color: #333333;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.feedback-textarea-placeholder {
+  color: #C7BBA8;
+}
+
+.feedback-submit-btn {
+  width: 100%;
+  min-height: 88rpx;
+  /* 安全区缓冲已经由 .feedback-sheet-panel 的 padding-bottom 统一预留
+     （140rpx + env(safe-area-inset-bottom)），这里不再重复叠加一次，
+     避免按钮下方出现两倍安全区的多余空白 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24rpx;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+}
+
+.feedback-submit-btn::after {
+  border: none;
+}
+
+.feedback-submit-btn:active {
+  opacity: 0.85;
+}
+
+.feedback-submit-btn[disabled] {
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+/* 📮 爱心意见箱管理弹窗：复用 .feedback-sheet-backdrop/.feedback-sheet-panel 的
+   遮罩+滑出动效，这里只补充"列表可滚动、限制最大高度"这类管理弹窗特有的样式 */
+.feedback-admin-sheet-panel {
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.feedback-admin-list-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.feedback-admin-loading,
+.feedback-admin-empty {
+  text-align: center;
+  padding: 60rpx 0;
   color: #ADB5BD;
   font-size: 24rpx;
 }
 
-.store-status-info-body {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
+.feedback-admin-item {
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.04);
+  transition: opacity 0.15s ease;
 }
 
-.store-status-row {
+.feedback-admin-item.is-handled {
+  opacity: 0.6;
+}
+
+.fa-item-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  margin-bottom: 8rpx;
 }
 
-.store-status-lbl {
+.fa-item-nickname {
+  flex: 1;
+  min-width: 0;
   font-size: 26rpx;
-  color: #868E96;
-}
-
-.store-status-val {
-  font-size: 28rpx;
   font-weight: bold;
-  color: #212529;
+  color: #333333;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-/* 与 store-profile.wxss 的 .sp-operating-badge 同一套配色，保持全局运营状态标签视觉一致 */
-.store-status-badge {
+.fa-item-type-tag {
+  font-size: 20rpx;
+  color: #D9480E;
+  background-color: #FFF3BF;
+  padding: 4rpx 14rpx;
+  border-radius: 20rpx;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
+.fa-item-time {
+  display: block;
+  font-size: 20rpx;
+  color: #ADB5BD;
+  margin-bottom: 12rpx;
+}
+
+.fa-item-content {
+  display: block;
+  font-size: 26rpx;
+  color: #495057;
+  line-height: 1.6;
+  margin-bottom: 16rpx;
+}
+
+/* 待处理行动区：标记为已处理 / 回复家人 并排两个按钮 */
+.fa-item-actions {
+  display: flex;
+  gap: 12rpx;
+}
+
+.fa-item-handle-btn {
+  flex: 1;
+  height: 64rpx;
+  line-height: 64rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #2B8A3E;
+  background: #EBFBEE;
+  border: 1rpx solid #B2F2BB;
+  border-radius: 32rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.fa-item-handle-btn::after {
+  border: none;
+}
+
+.fa-item-handle-btn:active {
+  transform: scale(0.97);
+  opacity: 0.8;
+}
+
+.fa-item-handle-btn[disabled] {
+  opacity: 0.6;
+}
+
+.fa-item-reply-btn {
+  flex: 1;
+  height: 64rpx;
+  line-height: 64rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #B8860B;
+  background: #FFF9E6;
+  border: 1rpx solid #F0DFA6;
+  border-radius: 32rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.fa-item-reply-btn::after {
+  border: none;
+}
+
+.fa-item-reply-btn:active {
+  transform: scale(0.97);
+  opacity: 0.8;
+}
+
+.fa-item-handled-tag {
+  display: inline-block;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #2B8A3E;
+  background: #EBFBEE;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+/* 💬 展开式回复输入框：与 feedback-content-textarea 同一套输入框视觉规范 */
+.fa-reply-box {
+  margin-top: 16rpx;
+}
+
+.fa-reply-textarea {
+  width: 100%;
+  min-height: 120rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
+  font-size: 25rpx;
+  color: #333333;
+  line-height: 1.6;
+  margin-bottom: 12rpx;
+}
+
+.fa-reply-submit-btn {
+  width: 100%;
+  height: 64rpx;
+  line-height: 64rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  border-radius: 32rpx;
+  border: none;
+}
+
+.fa-reply-submit-btn::after {
+  border: none;
+}
+
+.fa-reply-submit-btn[disabled] {
+  opacity: 0.6;
+}
+
+/* 🗣️ 已回复展示区：柔和暖金背景，与待处理行动区互斥展示 */
+.fa-reply-display {
+  background: #FFF9E6;
+  border-radius: 12rpx;
+  padding: 14rpx 16rpx;
+  margin-top: 8rpx;
+}
+
+.fa-reply-display-label {
+  display: block;
+  font-size: 20rpx;
+  color: #B8860B;
+  font-weight: bold;
+  margin-bottom: 6rpx;
+}
+
+/* 🏪 高级角色/新店申请队列专属：门店档案预览卡片（地址/联系电话/照片横滚），
+   与 .fa-reply-display 同款柔和底色，视觉上归入"这条申请的附加信息" */
+.ea-store-profile-card {
+  background: #FAF7F0;
+  border-radius: 12rpx;
+  padding: 14rpx 16rpx;
+  margin-top: 4rpx;
+  margin-bottom: 16rpx;
+}
+
+.ea-store-profile-card .fa-item-content {
+  margin-bottom: 6rpx;
+}
+
+.ea-store-photo-row {
+  white-space: nowrap;
+  margin-top: 8rpx;
+}
+
+.ea-store-photo-thumb {
+  display: inline-block;
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  margin-right: 12rpx;
+  border: 1rpx solid #EFE6D8;
+}
+
+.fa-reply-display-text {
+  display: block;
+  font-size: 24rpx;
+  color: #6B5B45;
+  line-height: 1.6;
+}
+
+/* 🍱🌾 义工现场服务工具表单：与 feedback-sheet-* 共用弹窗壳，这里只补充
+   表单专属的标签/单选胶囊/数字输入框样式 */
+.vt-form-label {
+  display: block;
+  font-size: 24rpx;
+  color: #6B5B45;
+  margin-bottom: 12rpx;
+}
+
+.vt-status-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.vt-status-pill {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  border-radius: 16rpx;
+  background: #F1EBE0;
+  color: #6B5B45;
+  font-size: 26rpx;
+  border: 2rpx solid transparent;
+  box-sizing: border-box;
+}
+
+.vt-status-pill.active {
+  background: linear-gradient(135deg, #E6A23C 0%, #DAA520 100%);
+  border-color: #B8860B;
+  color: #FFFFFF;
+  font-weight: bold;
+  box-shadow: 0 4rpx 12rpx rgba(184, 134, 11, 0.4);
+}
+
+.vt-count-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+/* 三餐人数：三列比原本两列窄，缩小列间距和输入框左右内边距，避免数字被挤压 */
+.vt-count-row-3 {
+  gap: 12rpx;
+}
+
+.vt-count-row-3 .vt-count-input {
+  padding: 0 8rpx;
+  text-align: center;
+}
+
+.vt-count-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 🌾 物资消耗四项：2x2 网格，比 3 列一行更宽裕，数字不用挤在一起 */
+.vt-count-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.vt-count-input {
+  width: 100%;
+  height: 76rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 0 20rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  color: #333333;
+}
+
+/* 📄 我的餐报提交记录：待确认/已确认状态标签，与 fa-item-handled-tag 呼应但
+   多一个"待确认"的暖金强调态，避免家人/义工看到全灰色以为提交没生效 */
+.my-vs-status-tag {
+  display: inline-block;
+  margin-top: 12rpx;
   font-size: 22rpx;
   padding: 4rpx 16rpx;
-  border-radius: 10rpx;
+  border-radius: 20rpx;
+}
+
+.my-vs-status-tag.pending {
+  color: #B8860B;
+  background: #FFF9E6;
+}
+
+.my-vs-status-tag.approved {
+  color: #2B8A3E;
+  background: #EBFBEE;
   font-weight: bold;
-  background: #E8F5E9;
-  color: #2E7D32;
 }
 
-.store-status-badge.preparing {
-  background: #FFF3E0;
-  color: #D48806;
+.my-vs-status-tag.rejected {
+  color: #C92A2A;
+  background: #FFF0F0;
 }
 
-.store-status-badge.paused {
-  background: #F1F3F5;
-  color: #868E96;
+.my-vs-reject-reason {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #C92A2A;
+  line-height: 1.6;
 }
+
+/* 📊 门店餐饮与物资统计：三段 pd-health-grid 堆叠起来比其他 warm-story-modal-*
+   用途（纯文案说明）更高，加个滚动容器兜底，避免小屏幕溢出弹窗卡片 */
+.store-stats-modal-card {
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.store-stats-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.store-stats-scroll .pd-health-title {
+  margin-top: 20rpx;
+}
+
+.store-stats-scroll .pd-health-title:first-child {
+  margin-top: 0;
+}
+

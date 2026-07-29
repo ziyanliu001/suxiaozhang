@@ -1300,6 +1300,8 @@ page {
   padding: 4rpx 14rpx;
   border-radius: 20rpx;
   font-weight: 500;
+  flex-shrink: 0;
+  margin-right: 4rpx;
 }
 
 /* 🏠 门店人员与服务人群画像：与 .major-detail-card 同款卡片外观 */
@@ -1382,12 +1384,19 @@ page {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
+  /* 🐛 修复金额贴边/溢出：flex 子项默认 min-width:auto，长事由文字（item-title-text）
+     不会自动收缩换行，会把整行撑宽到超出卡片边界，导致右侧金额被挤出可视区域甚至
+     裁切——flex:1 让左侧文字区域参与收缩分配剩余空间，min-width:0 解除"不缩小于
+     内容宽度"的默认限制，使超长文字改为正常换行而不是撑爆容器 */
+  flex: 1;
+  min-width: 0;
 }
 
 .item-title-text {
   font-size: 26rpx;
   font-weight: bold;
   color: #343A40;
+  word-break: break-word;
 }
 
 .item-date-text {
@@ -1401,12 +1410,16 @@ page {
   align-items: flex-end;
   gap: 8rpx;
   padding-left: 24rpx;
+  /* 🐛 金额区域始终保持自身宽度，绝不被左侧长文字挤压变形/换行 */
+  flex-shrink: 0;
+  margin-right: 16rpx;
 }
 
 .amount-val {
   font-size: 28rpx;
   font-weight: bold;
   color: #E03131;
+  flex-shrink: 0;
 }
 
 .card-footer-summary {
@@ -1421,6 +1434,8 @@ page {
 .summary-lbl {
   font-size: 22rpx;
   color: #495057;
+  flex: 1;
+  min-width: 0;
 }
 
 .summary-val {
@@ -1428,6 +1443,8 @@ page {
   font-weight: bold;
   color: #C92A2A;
   padding-left: 24rpx;
+  flex-shrink: 0;
+  margin-right: 16rpx;
 }
 
 .ie-detail-value.highlight {
@@ -2402,12 +2419,6 @@ button.btn-primary-poster {
   padding: 4rpx 14rpx;
   margin-top: 6rpx;
   line-height: 1.2;
-}
-
-.item-right-box {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
 }
 
 .patch-modal-mask {

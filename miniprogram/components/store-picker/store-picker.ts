@@ -1,11 +1,18 @@
 import { AuthService } from '../../utils/authService';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
+import { compressAndUploadImages } from '../../utils/imageCompress';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
   preparing: '筹备中',
   paused: '暂停运营'
 };
+
+const CANVAS_ID = 'storePickerImgCompressCanvas';
+
+// 🛡️ 与 processRoleAudit approve() 的权限分级口径对齐：店长/财长任命 + 新建门店
+// 仅超管可批，义工/财务本店店长/家长即可批——用来决定"待审核"锁定文案该显示哪一档
+const ELEVATED_REQUESTED_ROLES = new Set(['store_manager', 'store_patriarch']);
 
 // 🛡️ user_roles 集合里"角色审核通过"的真实哨兵值是 'approved'（见 processRoleAudit /
 // setupSuperAdmin 云函数落库逻辑），而不是 'active'（那是 stores 集合门店启停用的哨兵值）——
@@ -24,6 +31,7 @@ Component({
     authTab: 'CODE',
     authCodeInput: '',
     applicantNameInput: '',
+    applicantPhoneInput: '',
     targetAuthStoreId: '',
     targetAuthStoreName: '',
     targetAuthRole: '',
@@ -32,8 +40,22 @@ Component({
     showNewStoreForm: false,
     newStoreForm: {
       customStoreName: '',
-      applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer'
+      applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer',
+      // 🙋 申请人本人信息：processRoleAudit submitRoleApply 必填，与门店联系电话
+      // （contactPhone，门店对外公示的号码）是两个不同的号码，不能互相顶替
+      realName: '',
+      phone: '',
+      // 🏪 新建门店档案补全：门店此刻还不存在，字段先收进申请表单本身，见
+      // onSubmitNewStoreApply / processRoleAudit submitRoleApply 的完整性校验
+      address: '',
+      contactPhone: '',
+      storePhotos: [] as string[]
     },
+    newStorePhotoUploading: false,
+
+    // 🔒 申请人本人是否有正在 pending 的申请：用来在角色胶囊上锁定"⏳ 待审核"状态，
+    // 防止重复提交。见 getMyApplicationStatus（processRoleAudit 新增 action）
+    myPendingApplication: null as { requestedRole: string; storeId: string; storeSelectionType: string } | null,
     currentStore: {
       storeId: 'haicang_yuhuazhai',
       storeName: '海沧区雨花斋',
@@ -120,6 +142,33 @@ Component({
       this.loadStoreInfo();
       this.setData({ showPickerSheet: true });
       this.fetchStoreListFromCloud();
+      this.fetchMyApplicationStatus();
+    },
+
+    // 🔒 查询自己是否有正在 pending 的申请，用于锁定角色胶囊、防止重复提交。
+    // 静默失败——查不到就当没有 pending，不阻断门店选择器本身的使用
+    async fetchMyApplicationStatus() {
+      try {
+        const res = await wx.cloud.callFunction({
+          name: 'processRoleAudit',
+          data: { action: 'getMyApplicationStatus' }
+        });
+        const result = res.result as any;
+        if (result && result.success && result.hasPending) {
+          this.setData({
+            myPendingApplication: {
+              requestedRole: result.requestedRole || '',
+              storeId: result.storeId || '',
+              storeSelectionType: result.storeSelectionType || 'existing'
+            }
+          });
+        } else {
+          this.setData({ myPendingApplication: null });
+        }
+        this.refreshRolePermissions();
+      } catch (err) {
+        console.warn('[store-picker] fetchMyApplicationStatus 失败:', err);
+      }
     },
 
     // 🐛 修复"新建门店看不到"：每次打开面板都向 getStoreList 云函数活查询本机构最新门店列表，
@@ -164,11 +213,16 @@ Component({
         // 仅已核验的 super_admin 账号才展示"全国总览"；其余角色（店长/财务/义工）
         // 完全过滤掉该条目，只保留其真实绑定的具体门店。该条目不参与筛选/排序，
         // 单独存着，展示时始终拼在筛选结果最前面
+        // 🐛 修复：这个分支本身就已经用 isVerifiedSuperAdmin(roleInfo) 核验过身份
+        // （见上方 isSuperAdmin 赋值），isAuthorized 却硬编码成 false，导致已验真的
+        // 超管点击自己的【管理员】胶囊也会被当成"未授权"弹去激活码弹窗，而
+        // refreshRolePermissions() 又只遍历 allStores、从不回填这个独立存放的虚拟
+        // 条目，isAuthorized 永远得不到纠正。这里既然已经验真，直接标记为已授权
         const nationalOverviewEntry = isSuperAdmin
           ? {
               storeId: 'national_overview',
               storeName: '全国总览',
-              roles: [{ role: 'ADMIN', label: '超级管理员', isAuthorized: false }]
+              roles: [{ role: 'ADMIN', label: '管理员', isAuthorized: true }]
             }
           : null;
 
@@ -212,19 +266,39 @@ Component({
       const isVerifiedPatriarch = !!(cachedRole && cachedRole.role === 'store_patriarch' && cachedRole.status === 'approved');
       const patriarchStoreId = isVerifiedPatriarch && cachedRole ? cachedRole.storeId : '';
 
+      // 🔒 待审核锁定：只有"申请成为已有门店的店长/家长/财务"这种绑定了 storeId 的
+      // pending 申请才对应到某个具体胶囊；新建门店的 pending（storeId 为空）不落在
+      // 任何门店卡片上，只影响"新建门店"表单本身（见 onSubmitNewStoreApply 里的拦截）
+      const pending = this.data.myPendingApplication;
+      const pillRoleToRequestedRole: Record<string, string> = {
+        MANAGER: 'store_manager',
+        FINANCE: 'finance',
+        PATRIARCH: 'store_patriarch'
+      };
+
       const updatedStores = this.data.allStores.map((store: any) => {
         const roles = store.roles.map((r: any) => {
           // ❤️ 家人（服务对象）与义工同级：自我声明式身份，无需邀请码/审批
-          if (r.role === 'VOLUNTEER' || r.role === 'FAMILY') return { ...r, isAuthorized: true };
+          if (r.role === 'VOLUNTEER' || r.role === 'FAMILY') return { ...r, isAuthorized: true, isPending: false };
           if (isSuperAdmin && (r.role === 'MANAGER' || r.role === 'FINANCE' || r.role === 'PATRIARCH')) {
-            return { ...r, isAuthorized: true };
+            return { ...r, isAuthorized: true, isPending: false };
           }
+
+          const isPending = !!(
+            pending &&
+            pending.storeId === store.storeId &&
+            pillRoleToRequestedRole[r.role] === pending.requestedRole
+          );
+          const pendingLabel = isPending
+            ? (ELEVATED_REQUESTED_ROLES.has(pending!.requestedRole) ? '⏳ 待超管审核' : '⏳ 待店长审核')
+            : '';
+
           if (r.role === 'PATRIARCH') {
-            return { ...r, isAuthorized: isVerifiedPatriarch && patriarchStoreId === store.storeId };
+            return { ...r, isAuthorized: isVerifiedPatriarch && patriarchStoreId === store.storeId, isPending, pendingLabel };
           }
           const key = `${store.storeId}_${r.role}`;
           const isAuth = Array.isArray(authKeys) && authKeys.includes(key);
-          return { ...r, isAuthorized: isAuth };
+          return { ...r, isAuthorized: isAuth, isPending, pendingLabel };
         });
         return { ...store, roles };
       });
@@ -389,16 +463,23 @@ Component({
 
     // 点击角色胶囊 (带鉴权拦截)
     onRolePillClick(e: any) {
-      const { storeId, storeName, role, authorized } = e.currentTarget.dataset;
+      const { storeId, storeName, role, authorized, pending } = e.currentTarget.dataset;
       const roleLabels: Record<string, string> = {
         'MANAGER': '店长',
         'FINANCE': '财务',
         'VOLUNTEER': '义工',
-        'ADMIN': '超级管理员',
-        'SUPER_ADMIN': '超级管理员',
+        'ADMIN': '管理员',
+        'SUPER_ADMIN': '管理员',
         'PATRIARCH': '大家长',
         'FAMILY': '家人'
       };
+
+      // 🔒 已有一份 pending 申请在审核中：直接提示，不再弹激活码/申请弹窗，
+      // 防止同一身份重复提交多条申请
+      if (pending) {
+        wx.showToast({ title: '您的申请正在审核中，请勿重复提交', icon: 'none' });
+        return;
+      }
 
       if (!authorized) {
         // 🏛️ 大家长任命走独立的真实申请流程（processRoleAudit action:'apply'，
@@ -421,6 +502,7 @@ Component({
           authTab: 'CODE',
           authCodeInput: '',
           applicantNameInput: '',
+          applicantPhoneInput: '',
           targetAuthStoreId: storeId,
           targetAuthStoreName: storeName,
           targetAuthRole: role,
@@ -569,7 +651,7 @@ Component({
       wx.setStorageSync('current_user_role', roleStorageMap[role] || 'volunteer');
       wx.setStorageSync('current_store_name', storeName);
 
-      const roleText = role === 'FINANCE' ? '财务' : (role === 'MANAGER' ? '店长' : (role === 'PATRIARCH' ? '大家长' : (role === 'ADMIN' ? '超级管理员' : (role === 'FAMILY' ? '家人' : '义工'))));
+      const roleText = role === 'FINANCE' ? '财务' : (role === 'MANAGER' ? '店长' : (role === 'PATRIARCH' ? '大家长' : (role === 'ADMIN' ? '管理员' : (role === 'FAMILY' ? '家人' : '义工'))));
       wx.showToast({
         title: `已切至 ${storeName} (${roleText})`,
         icon: 'none'
@@ -591,6 +673,11 @@ Component({
     // 激活弹窗：输入申请人姓名
     onApplicantNameInput(e: any) {
       this.setData({ applicantNameInput: e.detail.value });
+    },
+
+    // 激活弹窗：输入申请人手机号（processRoleAudit submitRoleApply 必填）
+    onApplicantPhoneInput(e: any) {
+      this.setData({ applicantPhoneInput: e.detail.value });
     },
 
     // 切换选项卡
@@ -692,28 +779,57 @@ Component({
       }
 
       // 通道二：提交在线申请给店长
+      //
+      // 🐛 根因修复：此前这里直接写 role_requests 集合，那是一条从未被任何审批逻辑
+      // （processRoleAudit / getPatriarchDashboard / store-management.ts）读取过的
+      // 死路径——提交后永远不会被处理。现改为统一走 processRoleAudit(action:'apply')，
+      // 与首页 onSubmitRoleApply、家长任命申请同一套服务端审批口径，写入的是真正
+      // 会被审批的 user_roles 记录，同时也让"申请中锁定按钮"这个新功能能识别到它
       const name = (this.data.applicantNameInput || '').trim();
       if (!name) {
         wx.showToast({ title: '请输入姓名/义工号', icon: 'none' });
+        return;
+      }
+      const phone = (this.data.applicantPhoneInput || '').trim();
+      if (!phone) {
+        wx.showToast({ title: '请输入手机号', icon: 'none' });
+        return;
+      }
+      const targetRole = this.data.targetAuthRole;
+      const requestedRoleMap: Record<string, string> = { MANAGER: 'store_manager', FINANCE: 'finance' };
+      const requestedRole = requestedRoleMap[targetRole];
+      if (!requestedRole) {
+        wx.showToast({ title: '暂不支持该身份的在线申请', icon: 'none' });
         return;
       }
 
       wx.showLoading({ title: '提交申请中...' });
 
       try {
-        const db = wx.cloud.database();
-        await db.collection('role_requests').add({
+        const cachedRole = AuthService.getCachedRoleInfo();
+        const tenantId = (cachedRole && cachedRole.tenantId) || '';
+
+        const res = await wx.cloud.callFunction({
+          name: 'processRoleAudit',
           data: {
-            applicantName: name,
+            action: 'apply',
             storeId: this.data.targetAuthStoreId,
             storeName: this.data.targetAuthStoreName,
-            role: this.data.targetAuthRole,
-            status: 'PENDING',
-            createdAt: db.serverDate()
+            storeSelectionType: 'existing',
+            tenantId,
+            requestedRole,
+            realName: name,
+            phone
           }
         });
-
+        const result = res.result as any;
         wx.hideLoading();
+
+        if (!result || !result.success) {
+          wx.showToast({ title: (result && result.error) || '提交失败，请重试', icon: 'none' });
+          return;
+        }
+
         wx.showModal({
           title: '📩 申请已提交',
           content: `已将您的特权申请提交给【${this.data.targetAuthStoreName}】管理组，请等待现任店长在工作台审核通过。`,
@@ -722,11 +838,11 @@ Component({
           confirmColor: '#8C1D18'
         });
         this.setData({ showAuthModal: false });
+        this.fetchMyApplicationStatus();
       } catch (err) {
         wx.hideLoading();
         console.warn('⚠️ [store-picker] 申请提交异常:', err);
-        wx.showToast({ title: '申请提交成功，请等待店长审核', icon: 'none' });
-        this.setData({ showAuthModal: false });
+        wx.showToast({ title: '提交失败，请重试', icon: 'none' });
       }
     },
 
@@ -734,7 +850,7 @@ Component({
     onToggleNewStoreForm() {
       this.setData({
         showNewStoreForm: !this.data.showNewStoreForm,
-        newStoreForm: { customStoreName: '', applyRole: 'volunteer' }
+        newStoreForm: { customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', address: '', contactPhone: '', storePhotos: [] }
       });
     },
 
@@ -742,19 +858,92 @@ Component({
       this.setData({ 'newStoreForm.customStoreName': e.detail.value });
     },
 
+    onNewStoreRealNameInput(e: any) {
+      this.setData({ 'newStoreForm.realName': e.detail.value });
+    },
+
+    onNewStorePhoneInput(e: any) {
+      this.setData({ 'newStoreForm.phone': e.detail.value });
+    },
+
     onSelectNewStoreRole(e: any) {
       this.setData({ 'newStoreForm.applyRole': e.detail.value });
     },
 
+    onNewStoreAddressInput(e: any) {
+      this.setData({ 'newStoreForm.address': e.detail.value });
+    },
+
+    onNewStoreContactPhoneInput(e: any) {
+      this.setData({ 'newStoreForm.contactPhone': e.detail.value });
+    },
+
+    // 🏪 新建门店档案照片：与 activity-log.ts/index.ts 同一套 chooseMedia +
+    // compressAndUploadImages 模式，门店此刻还不存在，先挂在申请表单上
+    async onChooseNewStorePhoto() {
+      const MAX_PHOTOS = 9;
+      const remaining = MAX_PHOTOS - this.data.newStoreForm.storePhotos.length;
+      if (remaining <= 0) {
+        wx.showToast({ title: `最多上传 ${MAX_PHOTOS} 张门店照片`, icon: 'none' });
+        return;
+      }
+
+      try {
+        const chooseRes = await wx.chooseMedia({
+          count: remaining,
+          mediaType: ['image'],
+          sourceType: ['album', 'camera']
+        });
+
+        const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
+        if (paths.length === 0) return;
+
+        const insertStart = this.data.newStoreForm.storePhotos.length;
+        this.setData({
+          'newStoreForm.storePhotos': [...this.data.newStoreForm.storePhotos, ...paths],
+          newStorePhotoUploading: true
+        });
+
+        try {
+          const uploaded = await compressAndUploadImages(CANVAS_ID, paths, 'store_apply_photos/' + Date.now());
+          const finalPhotos = [...this.data.newStoreForm.storePhotos];
+          uploaded.forEach((u, i) => { finalPhotos[insertStart + i] = u.url; });
+          this.setData({ 'newStoreForm.storePhotos': finalPhotos });
+        } catch (uploadErr) {
+          const rolledBack = this.data.newStoreForm.storePhotos.filter((_: string, i: number) => i < insertStart || i >= insertStart + paths.length);
+          this.setData({ 'newStoreForm.storePhotos': rolledBack });
+          throw uploadErr;
+        }
+
+        this.setData({ newStorePhotoUploading: false });
+      } catch (err) {
+        this.setData({ newStorePhotoUploading: false });
+        console.error('[store-picker] onChooseNewStorePhoto 异常:', err);
+        wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
+      }
+    },
+
+    onDeleteNewStorePhoto(e: any) {
+      const index = e.currentTarget.dataset.index;
+      const next = this.data.newStoreForm.storePhotos.filter((_: string, i: number) => i !== index);
+      this.setData({ 'newStoreForm.storePhotos': next });
+    },
+
     // 提交"新建门店"：
-    // - super_admin：直接建店并自动绑定为该店管理者，免去二次审批流程（见 directCreateStoreAsSuperAdmin）
-    // - 其他角色：走真实的角色申请体系（user_roles 集合 + processRoleAudit 云函数审批），
-    //   而非本组件其余部分使用的本地演示态 role_requests/my_authorized_roles。
-    //   字段命名与 pages/index/index.ts 的 onSubmitRoleApply 保持一致，
-    //   确保 processRoleAudit 能正确识别 storeSelectionType==='custom' 的新建门店申请。
+    // - super_admin：直接建店并自动绑定为该店管理者，免去二次审批流程（见 directCreateStoreAsSuperAdmin），
+    //   不受下方门店档案补全校验约束——即时生效，档案可日后在门店档案页补充。
+    // - 其他角色：统一走 processRoleAudit(action:'apply')（与首页 onSubmitRoleApply 同一套服务端
+    //   审批口径），不再由客户端直接写 user_roles 的 status/role 字段。
+    //   🛡️ 根因修复：此前这里客户端直接 db.collection('user_roles').add(...)，绕过服务端校验，
+    //   与项目其余"服务端为唯一权威"的加固方向相悖，也导致这类申请无法被"申请中锁定"识别到。
     async onSubmitNewStoreApply() {
       const customStoreName = (this.data.newStoreForm.customStoreName || '').trim();
       const applyRole = this.data.newStoreForm.applyRole;
+      const realName = (this.data.newStoreForm.realName || '').trim();
+      const phone = (this.data.newStoreForm.phone || '').trim();
+      const address = (this.data.newStoreForm.address || '').trim();
+      const contactPhone = (this.data.newStoreForm.contactPhone || '').trim();
+      const storePhotos = this.data.newStoreForm.storePhotos || [];
 
       if (!customStoreName) {
         wx.showToast({ title: '请输入新门店名称', icon: 'none' });
@@ -766,6 +955,26 @@ Component({
       // 🛡️ 超级管理员：无需申请/审批，直接建店并自动获得管理权限
       if (roleInfo && roleInfo.role === 'super_admin') {
         await this.directCreateStoreAsSuperAdmin(customStoreName);
+        return;
+      }
+
+      if (!realName) {
+        wx.showToast({ title: '请填写真实姓名', icon: 'none' });
+        return;
+      }
+      if (!phone) {
+        wx.showToast({ title: '请填写手机号', icon: 'none' });
+        return;
+      }
+
+      // 🛡️ 申请高阶角色/新建门店需先补全门店档案：门店此刻还不存在，字段就收在
+      // 这张申请表单里，与首页 onSubmitRoleApply 同款拦截 + processRoleAudit 服务端兜底
+      if (!address || !contactPhone || storePhotos.length === 0) {
+        wx.showModal({
+          title: '门店档案未补全',
+          content: '申请新建门店需先补全门店档案（地址、联系电话、门店照片）',
+          showCancel: false
+        });
         return;
       }
 
@@ -784,24 +993,34 @@ Component({
       wx.showLoading({ title: '提交申请中...', mask: true });
 
       try {
-        const db = wx.cloud.database();
-        await db.collection('user_roles').add({
+        const res = await wx.cloud.callFunction({
+          name: 'processRoleAudit',
           data: {
+            action: 'apply',
             storeId: '',
             storeName: customStoreName,
             storeSelectionType: 'custom',
-            customStoreName: customStoreName,
-            requestedRole: applyRole,
-            role: 'volunteer',
-            status: 'pending',
+            customStoreName,
+            address,
+            contactPhone,
+            storePhotos,
             tenantId,
-            applyTime: db.serverDate()
+            requestedRole: applyRole,
+            realName,
+            phone
           }
         });
-
+        const result = res.result as any;
         wx.hideLoading();
+
+        if (!result || !result.success) {
+          wx.showToast({ title: (result && result.error) || '提交失败，请重试', icon: 'none' });
+          return;
+        }
+
         this.setData({ showNewStoreForm: false, showPickerSheet: false });
         wx.showToast({ title: '申请已提交，请等待超级管理员审批开通！', icon: 'none', duration: 2500 });
+        this.fetchMyApplicationStatus();
       } catch (err) {
         wx.hideLoading();
         console.error('[store-picker] onSubmitNewStoreApply 提交失败:', err);

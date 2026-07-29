@@ -47,44 +47,71 @@
   </view>
 
   <!-- ☀️ 阳光账本轻量弹窗：全角色/无登录门槛可查看，数据来自 getSunshineLedger
-       （只统计 APPROVED/AUDITED_LOCKED，严格排除待审核草稿） -->
+       （只统计 APPROVED/AUDITED_LOCKED，严格排除待审核草稿）。
+       🛡️ 结构升级：标题栏固定在外层，其余内容（理念介绍/月份切换/数据大盘）
+       包进 scroll-view，避免新增的理念卡片让弹窗在小屏设备上被撑出屏幕 -->
   <view class="sunshine-modal-mask" wx:if="{{showSunshineLedgerModal}}" bindtap="onCloseSunshineLedgerModal">
     <view class="sunshine-modal-card" catchtap="stopPropagation">
       <view class="sunshine-modal-header">
-        <text class="sunshine-modal-title">☀️ 阳光账本</text>
+        <text class="sunshine-modal-title">☀️ 阳光账本与雨花理念</text>
         <view class="sunshine-modal-close" bindtap="onCloseSunshineLedgerModal">✕</view>
       </view>
 
-      <!-- 🗓️ 月份切换器：‹ 2026年07月 › ，左右箭头调用 onSunshineLedgerPrevMonth/
-           onSunshineLedgerNextMonth，已到当前月时右箭头置灰禁用（不允许切到未来月份） -->
-      <view class="sunshine-month-switcher">
-        <view class="sunshine-month-arrow" bindtap="onSunshineLedgerPrevMonth">‹</view>
-        <text class="sunshine-month-label">{{sunshineLedgerData.periodLabel || selectedYearMonth}}</text>
-        <view class="sunshine-month-arrow {{isSunshineLedgerAtCurrentMonth ? 'sunshine-month-arrow-disabled' : ''}}" bindtap="onSunshineLedgerNextMonth">›</view>
-      </view>
-
-      <view class="sunshine-modal-loading" wx:if="{{sunshineLedgerLoading}}">
-        <text>加载中...</text>
-      </view>
-
-      <view class="sunshine-modal-body" wx:else>
-        <text class="sunshine-store-name">{{sunshineLedgerData.storeName || currentStoreName || '本门店'}}</text>
-        <text class="sunshine-period-label">{{sunshineLedgerData.periodLabel || ''}}数据大盘</text>
-
-        <!-- 📊 4x2 网格数据大盘：8 项指标，wx:for 遍历预先在 fetchSunshineLedgerData
-             里拼好的展示数组，避免 8 个 view 手写重复结构 -->
-        <view class="sunshine-stat-grid-2x2">
-          <view class="sunshine-stat-cell-2x2" wx:for="{{sunshineStatCards}}" wx:key="label">
-            <text class="sunshine-stat-num-2x2">{{item.value}}</text>
-            <text class="sunshine-stat-lbl-2x2">{{item.label}}</text>
+      <scroll-view scroll-y class="sunshine-modal-scroll">
+        <!-- 📖 理念介绍卡片，置于数据大盘上方——先讲清楚"这是什么/为什么要公开"，
+             再看具体数字，避免纯数据表格显得冷冰冰。
+             🐛 不再重复"关于雨花斋与阳光账本"这个次级标题——弹窗 Header 本身已经
+             叫"☀️ 阳光账本与雨花理念"，卡片内再放一遍会造成标题叠加 -->
+        <view class="sunshine-intro-card">
+          <view class="sunshine-intro-block">
+            <text class="sunshine-intro-label">雨花精神</text>
+            <text class="sunshine-intro-text">雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与公益互助。</text>
+          </view>
+          <view class="sunshine-intro-block">
+            <text class="sunshine-intro-label">阳光宣言</text>
+            <text class="sunshine-intro-text">阳光账本坚持公开透明、全民监督，所有供餐与收支数据均经双重核销实时公示。</text>
           </view>
         </view>
 
-        <view class="sunshine-transparency-tip">
-          <text class="sunshine-tip-icon">🛡️</text>
-          <text class="sunshine-tip-text">所有数据均经店长/财务双重核销后展示，实时公开、接受全民监督</text>
+        <!-- ✨ 理念与数据大盘的分界线：虚线 + 居中微光标签，让"理念介绍"与
+             "实时数据大盘"两个层次分明，不会读起来像同一块内容 -->
+        <view class="sunshine-section-divider">
+          <view class="sunshine-divider-line"></view>
+          <text class="sunshine-divider-label">实时数据大盘</text>
+          <view class="sunshine-divider-line"></view>
         </view>
-      </view>
+
+        <!-- 🗓️ 月份切换器：‹ 2026年07月 › ，左右箭头调用 onSunshineLedgerPrevMonth/
+             onSunshineLedgerNextMonth，已到当前月时右箭头置灰禁用（不允许切到未来月份） -->
+        <view class="sunshine-month-switcher">
+          <view class="sunshine-month-arrow" bindtap="onSunshineLedgerPrevMonth">‹</view>
+          <text class="sunshine-month-label">{{sunshineLedgerData.periodLabel || selectedYearMonth}}</text>
+          <view class="sunshine-month-arrow {{isSunshineLedgerAtCurrentMonth ? 'sunshine-month-arrow-disabled' : ''}}" bindtap="onSunshineLedgerNextMonth">›</view>
+        </view>
+
+        <view class="sunshine-modal-loading" wx:if="{{sunshineLedgerLoading}}">
+          <text>加载中...</text>
+        </view>
+
+        <view class="sunshine-modal-body" wx:else>
+          <text class="sunshine-store-name">{{sunshineLedgerData.storeName || currentStoreName || '本门店'}}</text>
+          <text class="sunshine-period-label">{{sunshineLedgerData.periodLabel || ''}}数据大盘</text>
+
+          <!-- 📊 4x2 网格数据大盘：8 项指标，wx:for 遍历预先在 fetchSunshineLedgerData
+               里拼好的展示数组，避免 8 个 view 手写重复结构 -->
+          <view class="sunshine-stat-grid-2x2">
+            <view class="sunshine-stat-cell-2x2" wx:for="{{sunshineStatCards}}" wx:key="label">
+              <text class="sunshine-stat-num-2x2">{{item.value}}</text>
+              <text class="sunshine-stat-lbl-2x2">{{item.label}}</text>
+            </view>
+          </view>
+
+          <view class="sunshine-transparency-tip">
+            <text class="sunshine-tip-icon">🛡️</text>
+            <text class="sunshine-tip-text">所有数据均经店长/财务双重核销后展示，实时公开、接受全民监督</text>
+          </view>
+        </view>
+      </scroll-view>
     </view>
   </view>
 
@@ -117,10 +144,13 @@
     </view>
   </view>
 
-  <!-- ☀️ 阳光账本入口：标题正下方、全角色可见、位置最优先——公开透明数据入口，
-       不依赖任何角色判断，任何视角都能看到同一个位置。点击触发 onOpenSunshineLedger，
-       拉取 getSunshineLedger 云函数（无需登录/无权限门槛，与扫码验真同一套设计） -->
-  <view class="sunshine-ledger-entry" bindtap="onOpenSunshineLedger">
+  <!-- ☀️ 阳光账本入口：标题正下方、位置最优先——公开透明数据入口，点击触发
+       onOpenSunshineLedger，拉取 getSunshineLedger 云函数（无需登录/无权限门槛，
+       与扫码验真同一套设计）。
+       🐛 精简重复：家人首页自己的第一模块【☀️ 阳光账本核心大盘】已经是这张卡片
+       的放大版（同一套数据管线 + 同一个点击入口），这里加 !isFamily 排除，
+       避免家人视角下同一个功能重复出现两次 -->
+  <view class="sunshine-ledger-entry" wx:if="{{!isFamily}}" bindtap="onOpenSunshineLedger">
     <view class="sunshine-ledger-icon">☀️</view>
     <view class="sunshine-ledger-text-group">
       <text class="sunshine-ledger-title">阳光账本</text>
@@ -187,8 +217,10 @@
        my_checkin_days/my_service_hours 这类与角色无关的本地存储——也就是说打卡功能本来就是
        "全角色通用"的，唯独入口按钮被裹在义工专属卡片里出不来。这里新增一张不依赖角色的
        打卡卡片，只在非义工视角下渲染，复用同一套 onVolunteerCheckIn 逻辑与打卡按钮样式，
-       不改动 volunteer-hero-card 本身，避免给已经跑得好好的义工端引入回归风险。 -->
-  <view class="omni-checkin-card" wx:if="{{!isVolunteer}}">
+       不改动 volunteer-hero-card 本身，避免给已经跑得好好的义工端引入回归风险。
+       🐛 精简重复：家人（服务对象）不是来"到岗服务"的角色，打卡卡片对他们没有意义——
+       此前条件只排除了 isVolunteer，没排除 isFamily，加 !isFamily 彻底屏蔽 -->
+  <view class="omni-checkin-card" wx:if="{{!isVolunteer && !isFamily}}">
     <view class="omni-checkin-header">
       <text class="omni-checkin-title">🙋 服务打卡</text>
       <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
@@ -279,8 +311,11 @@
   </view>
 
   <!-- 🍱 今日食谱预览卡：全国总览视图不展示（无具体门店）；志工视角已合并进下方"今日餐况"单行摘要，此处不再重复展示。
-       🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页 -->
-  <view class="today-menu-preview-card {{todayMenu ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && todayMenuLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoDailyMenu' : ''}}">
+       🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页。
+       🐛 精简重复：此前只排除了 isVolunteer，没排除 isFamily——这张简陋预览卡
+       会跟家人首页自己更精美的【🍱 今日菜谱】模块（大字号/高对比度）同时出现，
+       加 !isFamily 排除，家人视角下只保留那张质感更好的版本 -->
+  <view class="today-menu-preview-card {{todayMenu ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && !isFamily && todayMenuLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoDailyMenu' : ''}}">
     <view class="tmp-main">
       <view class="tmp-header">
         <text class="tmp-title">🍱 今日食谱</text>
@@ -304,8 +339,10 @@
   </view>
 
   <!-- 📌 今日大事记预览卡：全国总览视图不展示（无具体门店）；志工视角已合并进下方"今日餐况"单行摘要，此处不再重复展示。
-       🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页 -->
-  <view class="today-menu-preview-card {{todayActivity ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && todayActivityLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoActivityLog' : ''}}">
+       🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页。
+       🐛 精简重复：同上，加 !isFamily 排除——家人首页自己的【📌 雨花大事记与
+       护持剪影】模块已经承载同一份 todayActivity 数据，功能完全重叠 -->
+  <view class="today-menu-preview-card {{todayActivity ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && !isFamily && todayActivityLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoActivityLog' : ''}}">
     <view class="tmp-main">
       <view class="tmp-header">
         <text class="tmp-title">📌 今日门店日志</text>
@@ -337,7 +374,10 @@
     <view class="lock-force-btn" wx:if="{{currentUserRole === 'super_admin' || currentUserRole === 'store_manager'}}" bindtap="onForceUnlock">强制解锁</view>
   </view>
 
-  <block wx:if="{{!isVolunteer}}">
+  <!-- 🛡️ 家人（服务对象）不填报表、不需要计算工具——整段日报填写表单（含算式
+       预览/物资登记/支出登记等十几张卡片）改为 !isVolunteer && !isFamily 才展示，
+       家人走下方新增的 wx:elif="{{isFamily}}" 透明监督版分支 -->
+  <block wx:if="{{!isVolunteer && !isFamily}}">
     <view class="sponsor-brand-banner" wx:if="{{currentSponsorInfo}}">
       <view class="sponsor-left">
         <view class="sparkle idx-icon-sm idx-icon-sparkle"></view>
@@ -1282,6 +1322,93 @@
     </scroll-view>
   </block>
 
+  <!-- ❤️ 家人（服务对象）「透明监督版」首页：不填报表、不需要计算工具，
+       专注三件事——阳光账本大盘、今日菜谱、雨花大事记与护持剪影 -->
+  <block wx:elif="{{isFamily}}">
+    <scroll-view scroll-y class="page-body-scroll">
+      <view class="family-home-container">
+
+        <!-- 模块一：阳光账本核心大盘——复用弹窗那套 sunshineLedgerData/sunshineStatCards
+             数据管线（见 onShow 里的自动拉取），点击整卡打开既有的 8 项详情弹窗 -->
+        <view class="family-sunshine-hero-card" bindtap="onOpenSunshineLedger">
+          <view class="fsh-badge">☀️ 公开透明 · 全民监督</view>
+          <text class="fsh-store-name">{{sunshineLedgerData.storeName || currentStoreName || shopName || '本门店'}}</text>
+          <text class="fsh-period">{{sunshineLedgerData.periodLabel || ''}}阳光账本</text>
+
+          <view class="fsh-hero-row">
+            <view class="fsh-hero-cell">
+              <text class="fsh-hero-num">{{sunshineLedgerData.totalDiners || 0}}</text>
+              <text class="fsh-hero-label">累计就餐人次</text>
+            </view>
+            <view class="fsh-hero-divider"></view>
+            <view class="fsh-hero-cell">
+              <text class="fsh-hero-num">{{sunshineLedgerData.volunteerCount || 0}}</text>
+              <text class="fsh-hero-label">参与护持总人次</text>
+            </view>
+            <view class="fsh-hero-divider"></view>
+            <view class="fsh-hero-cell">
+              <text class="fsh-hero-num">{{sunshineLedgerData.auditedReportsCount || 0}}</text>
+              <text class="fsh-hero-label">已核销餐报篇数</text>
+            </view>
+          </view>
+
+          <view class="fsh-footer">
+            <text class="fsh-footer-text">🛡️ 数据经店长/财务双重核销后公开展示</text>
+            <text class="fsh-footer-link">查看完整账本 ›</text>
+          </view>
+        </view>
+
+        <!-- 模块二：今日菜谱展示——大字号、高对比度，专注让家人一眼看清今天吃什么 -->
+        <view class="family-menu-card">
+          <view class="fm-header">
+            <text class="fm-title">🍱 今日菜谱</text>
+            <text class="fm-date">{{todayDateStr}}</text>
+          </view>
+          <view class="fm-body" wx:if="{{todayMenu}}">
+            <view class="fm-9grid" wx:if="{{todayMenu.images.length > 0}}">
+              <view class="fm-grid-item" wx:for="{{todayMenu.images}}" wx:for-item="img" wx:key="url">
+                <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="fm-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
+                <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                  <text class="thumb-load-failed-text">加载失败</text>
+                </view>
+              </view>
+            </view>
+            <text class="fm-text">{{todayMenu.menuText || '（未填写文字菜谱，见图片）'}}</text>
+          </view>
+          <view class="fm-empty" wx:elif="{{todayMenuLoaded}}">
+            <text class="fm-empty-icon">🍚</text>
+            <text class="fm-empty-text">今日菜谱尚未发布，感恩耐心等候 🌸</text>
+          </view>
+        </view>
+
+        <!-- 模块三：雨花大事记与护持剪影 -->
+        <view class="family-activity-card">
+          <view class="fa-header">
+            <text class="fa-title">📌 雨花大事记与护持剪影</text>
+          </view>
+          <view class="fa-body" wx:if="{{todayActivity}}">
+            <view class="fa-9grid" wx:if="{{todayActivity.images.length > 0}}">
+              <view class="fa-grid-item" wx:for="{{todayActivity.images}}" wx:for-item="img" wx:key="url">
+                <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="fa-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
+                <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                  <text class="thumb-load-failed-text">加载失败</text>
+                </view>
+              </view>
+            </view>
+            <text class="fa-text">{{todayActivity.title}}</text>
+          </view>
+          <view class="fa-empty" wx:elif="{{todayActivityLoaded}}">
+            <text class="fa-empty-icon">🌸</text>
+            <text class="fa-empty-text">今日暂无护持剪影，感恩每一份默默付出</text>
+          </view>
+        </view>
+
+      </view>
+    </scroll-view>
+  </block>
+
   <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: {{canvasHeight}}px;"></canvas>
 
   <view class="poster-modal" wx:if="{{showPoster}}" bindtap="closePoster">
@@ -1513,6 +1640,33 @@
       <view class="adjust-footer">
         <button class="adjust-btn cancel" bindtap="onAdjustCancel">取消修改</button>
         <button class="adjust-btn danger" bindtap="onAdjustConfirm">确认提交</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🛡️ 拒绝角色/门店申请原因弹窗：复用 adjust-modal 的原因确认视觉语言 -->
+  <view class="adjust-modal" wx:if="{{showAuditRejectModal}}">
+    <view class="adjust-mask" bindtap="onCloseAuditRejectModal"></view>
+    <view class="adjust-content" catchtap="stopPropagation">
+      <view class="adjust-header">
+        <view class="adjust-header-title">拒绝原因确认</view>
+        <view class="adjust-close" bindtap="onCloseAuditRejectModal">✕</view>
+      </view>
+      <view class="adjust-body">
+        <view class="adjust-textarea-wrap">
+          <textarea
+            class="adjust-textarea"
+            auto-height
+            maxlength="500"
+            placeholder="请输入拒绝原因，申请人将会看到（如：门店档案信息不全、身份信息核实失败）"
+            value="{{auditRejectReason}}"
+            bindinput="onAuditRejectReasonInput"
+          />
+        </view>
+      </view>
+      <view class="adjust-footer">
+        <button class="adjust-btn cancel" bindtap="onCloseAuditRejectModal" disabled="{{auditRejectSubmitting}}">取消</button>
+        <button class="adjust-btn danger" bindtap="onSubmitAuditReject" loading="{{auditRejectSubmitting}}" disabled="{{auditRejectSubmitting}}">确认拒绝</button>
       </view>
     </view>
   </view>
@@ -1779,43 +1933,6 @@
     </view>
   </view>
 
-  <view class="history-balance-modal" wx:if="{{showHistoryBalanceModal}}" bindtap="closeHistoryBalanceModal">
-    <view class="history-balance-mask"></view>
-    <view class="history-balance-content" catchtap="stopPropagation">
-      <view class="history-balance-header">
-        <view class="history-balance-title"><view class="idx-icon-sm idx-icon-chart" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>历史结余查询</view>
-        <view class="history-balance-close" bindtap="closeHistoryBalanceModal">
-          <text class="close-icon">×</text>
-        </view>
-      </view>
-      <scroll-view scroll-y class="history-balance-body">
-        <view class="history-balance-list" wx:if="{{historyBalanceList && historyBalanceList.length > 0}}">
-          <view 
-            class="history-balance-item" 
-            wx:for="{{historyBalanceList}}" 
-            wx:key="date"
-            bindtap="onSelectHistoryBalance"
-            data-balance="{{item.balance}}"
-            data-date="{{item.date}}"
-          >
-            <view class="history-balance-item-left">
-              <text class="history-balance-date">{{item.date}}</text>
-              <text class="history-balance-store">{{item.store}}</text>
-            </view>
-            <view class="history-balance-item-right">
-              <text class="history-balance-value">¥{{item.balance}}</text>
-              <text class="history-balance-select">选择</text>
-            </view>
-          </view>
-        </view>
-        <view class="history-balance-empty" wx:else>
-          <view class="empty-icon idx-icon-svg idx-icon-clipboard"></view>
-          <text class="empty-text">暂无历史结余数据</text>
-        </view>
-      </scroll-view>
-    </view>
-  </view>
-
   <view class="balance-history-modal-mask" wx:if="{{showBalanceHistoryModal}}" bindtap="onCloseBalanceHistoryModal">
     <view class="balance-history-modal-box" catchtap="stopPropagation">
       <view class="modal-top-header">
@@ -1881,6 +1998,33 @@
           <input wx:else class="form-input" placeholder="请输入新门店名称，如：雨花斋厦门海沧店" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">新门店需待超级管理员审核通过后自动建立</text>
         </view>
+
+        <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进
+             申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案 -->
+        <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
+          <view class="form-item">
+            <text class="form-label">门店地址</text>
+            <input class="form-input" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
+          </view>
+          <view class="form-item">
+            <text class="form-label">联系电话</text>
+            <input class="form-input" type="number" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
+          </view>
+          <view class="form-item">
+            <text class="form-label">门店照片</text>
+            <view class="receipt-grid-container">
+              <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
+                <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" />
+                <view class="img-delete-badge" catchtap="onDeleteApplyStorePhoto" data-index="{{index}}">✕</view>
+              </view>
+              <view class="grid-add-btn" bindtap="onChooseApplyStorePhoto" wx:if="{{applyForm.storePhotos.length < 9}}">
+                <text class="add-icon">{{applyStorePhotoUploading ? '…' : '+'}}</text>
+                <text class="add-txt">{{applyStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
+              </view>
+            </view>
+          </view>
+        </block>
+
         <view class="form-item">
           <text class="form-label">真实姓名</text>
           <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
@@ -2145,9 +2289,8 @@
             <view class="card-action-btns">
               <button
                 class="btn-audit-act reject"
-                bindtap="onProcessAudit"
+                bindtap="onOpenAuditRejectModal"
                 data-id="{{item._id}}"
-                data-action="reject"
               >
                 拒绝
               </button>
@@ -2411,39 +2554,45 @@
           <text class="culture-value-chip" wx:for="{{cultureFullData.coreValuesIndividual}}" wx:key="*this">{{item}}</text>
         </view>
 
-        <!-- 二、立志格言 -->
+        <!-- 二、立志格言：四句分行居中展示，而非拼成一整句 -->
         <text class="motto-section-title">二、立志格言</text>
-        <text class="motto-section-text" wx:for="{{cultureFullData.famousQuotes}}" wx:key="*this">{{item}}</text>
+        <text class="motto-section-text culture-quote-line" wx:for="{{cultureFullData.famousQuoteLines}}" wx:key="*this">{{item}}</text>
 
         <!-- 三、雨花家道 -->
         <text class="motto-section-title">三、雨花家道</text>
-        <text class="motto-section-text">【雨花核心精神】{{cultureFullData.homeCoreSpirit}}</text>
+        <text class="culture-sub-title">—— 雨花核心精神 ——</text>
+        <text class="motto-section-text culture-core-spirit-text">{{cultureFullData.homeCoreSpirit}}</text>
         <text class="culture-sub-title">—— {{cultureFullData.homeSanYouTitle}} ——</text>
-        <!-- 🌸 三由/五了/六同/八欣：短句对仗型内容，用 flex-wrap 居中网格包裹，
+        <!-- 🌸 三由/六同：短句对仗型内容，用 flex-wrap 居中网格包裹，
              避免手机窄屏下每句独占一行、右侧留出大片空白 -->
         <view class="culture-pair-grid">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeSanYouItems}}" wx:key="*this">{{item}}</text>
         </view>
+        <!-- 🌸 五了：5 句短语，撤销多列网格，改为单列逐行居中展示 -->
         <text class="culture-sub-title">—— {{cultureFullData.homeWuLeTitle}} ——</text>
-        <view class="culture-pair-grid">
+        <view class="culture-list-single-column-center">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeWuLeItems}}" wx:key="*this">{{item}}</text>
         </view>
         <text class="culture-sub-title">—— {{cultureFullData.homeLiuTongTitle}} ——</text>
         <view class="culture-pair-grid">
           <text class="culture-list-line" wx:for="{{cultureFullData.homeLiuTongItems}}" wx:key="*this">{{item}}</text>
         </view>
+        <!-- 🌸 八欣：8 句短语，两列 CSS Grid 天然排成 2 列 x 4 行 -->
         <text class="culture-sub-title">—— {{cultureFullData.homeBaXinTitle}} ——</text>
-        <view class="culture-pair-grid">
-          <text class="culture-list-line" wx:for="{{cultureFullData.homeBaXinItems}}" wx:key="*this">{{item}}</text>
+        <view class="culture-two-col-grid">
+          <text class="culture-two-col-cell" wx:for="{{cultureFullData.homeBaXinItems}}" wx:key="*this">{{item}}</text>
         </view>
 
-        <!-- 四、雨花敬老核心理念 -->
+        <!-- 四、雨花敬老核心理念：拆成两行短句，加大字号与行高 -->
         <text class="motto-section-title">四、雨花敬老核心理念</text>
-        <text class="motto-section-text">{{cultureFullData.seniorsCoreBelief}}</text>
+        <text class="motto-section-text culture-elder-belief-text" wx:for="{{cultureFullData.seniorsCoreBeliefLines}}" wx:key="*this">{{item}}</text>
 
         <!-- 五、雨花敬老行为准则【十个有没有】：拆成"只有…/没有…"双列网格，
              左右两列各自居中对齐，替代此前逗号连写在一行的拥挤排版 -->
-        <text class="motto-section-title">五、雨花敬老行为准则——【十个有没有】</text>
+        <view class="motto-section-title">
+          <text class="motto-title-line">五、雨花敬老行为准则——</text>
+          <text class="motto-title-line">【十个有没有】</text>
+        </view>
         <view class="culture-two-col-grid">
           <block wx:for="{{cultureFullData.seniorsTenHaveYouPairs}}" wx:key="left">
             <text class="culture-two-col-cell">{{item.left}}</text>
@@ -2452,15 +2601,19 @@
         </view>
 
         <!-- 六、雨花家德【雨花人生十六最】：单列纵向列表，左对齐 + 缩进 + 加大行高段距 -->
-        <text class="motto-section-title">六、雨花家德——【雨花人生十六最】</text>
+        <view class="motto-section-title">
+          <text class="motto-title-line">六、雨花家德——</text>
+          <text class="motto-title-line">【雨花人生十六最】</text>
+        </view>
         <view class="culture-list-single-column">
           <text class="culture-list-line" wx:for="{{cultureFullData.sixteenBests}}" wx:key="*this">{{item}}</text>
         </view>
 
         <!-- 七、雨花家训 -->
         <text class="motto-section-title">七、雨花家训</text>
+        <!-- 雨花心字诀：四言韵律短句，按四句一换行拆成 3 行居中展示 -->
         <text class="culture-sub-title">—— 雨花心字诀 ——</text>
-        <text class="motto-section-text">{{familyMottoMindFormula}}</text>
+        <text class="motto-section-text" wx:for="{{familyMottoMindFormulaLines}}" wx:key="*this">{{item}}</text>
 
         <!-- 🌸 「雨花家训」小标题 + 家训正文十八句整体居中，独立成块，
              与上下两段（心字诀/为学之方）用 margin 隔开，避免和左对齐正文挤在一起 -->
@@ -2469,17 +2622,35 @@
           <view class="motto-creed-line" wx:for="{{familyMottoCreedLines}}" wx:key="*this" style="text-align: center !important; width: 100%;">{{item}}</view>
         </view>
 
+        <!-- 为学之方：单列逐行居中，开篇一句 / 中间六句分句 / 结语一句加粗 -->
         <text class="culture-sub-title">—— 为学之方 ——</text>
-        <text class="motto-section-text">{{familyMottoStudyMethod}}</text>
+        <view class="culture-study-method-block">
+          <text class="motto-section-text culture-study-line">{{familyMottoStudyIntro}}</text>
+          <text class="motto-section-text culture-study-line" wx:for="{{familyMottoStudyMiddleLines}}" wx:key="*this">{{item}}</text>
+          <text class="motto-section-text culture-study-line culture-study-conclusion">{{familyMottoStudyConclusion}}</text>
+        </view>
 
-        <!-- 八、雨花家仪【感恩词】 -->
-        <text class="motto-section-title">八、雨花家仪——【感恩词】</text>
-        <text class="culture-list-line" wx:for="{{cultureFullData.gratitudeText}}" wx:key="*this">{{item}}</text>
+        <!-- 八、雨花家仪【感恩词】：逐行单列居中展示 -->
+        <view class="motto-section-title">
+          <text class="motto-title-line">八、雨花家仪——</text>
+          <text class="motto-title-line">【感恩词】</text>
+        </view>
+        <view class="culture-list-single-column-center">
+          <text class="culture-list-line" wx:for="{{cultureFullData.gratitudeText}}" wx:key="*this">{{item}}</text>
+        </view>
 
-        <!-- 九、一日修身小结【感恩与祈盼】 -->
-        <text class="motto-section-title">九、一日修身小结——【感恩与祈盼】</text>
+        <!-- 九、一日修身小结【感恩与祈盼】：前两段（感恩铺垫 + 祈盼引导）保持单列，
+             后 3 句"祈盼…，让…！"排比句拆成 6 行单列居中展示，每两行一组，
+             组间距靠 culture-aspiration-line-group-end 加大 -->
+        <view class="motto-section-title">
+          <text class="motto-title-line">九、一日修身小结——</text>
+          <text class="motto-title-line">【感恩与祈盼】</text>
+        </view>
         <text class="culture-list-line" wx:for="{{cultureFullData.dailySummaryGratitude}}" wx:key="*this">{{item}}</text>
         <text class="culture-list-line" wx:for="{{cultureFullData.dailySummaryAspiration}}" wx:key="*this">{{item}}</text>
+        <view class="culture-list-single-column-center">
+          <text class="culture-list-line culture-aspiration-line {{index % 2 === 1 ? 'culture-aspiration-line-group-end' : ''}}" wx:for="{{cultureFullData.dailySummaryAspirationLines}}" wx:for-index="index" wx:key="*this">{{item}}</text>
+        </view>
 
         <!-- 十、雨花家风 -->
         <text class="motto-section-title">十、雨花家风</text>

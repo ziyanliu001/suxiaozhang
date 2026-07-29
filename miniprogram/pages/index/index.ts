@@ -5,7 +5,7 @@ import { generateReportText } from '../../utils/reportGenerator';
 import { drawMeritPoster, drawStoryPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
-import { STORE_PRESETS, STORE_PICKER_LIST, CUSTOM_STORE_LABEL, findStorePreset } from '../../utils/constants';
+import { STORE_PRESETS, STORE_PICKER_LIST, findStorePreset } from '../../utils/constants';
 import { getSafeSystemInfo } from '../../utils/util';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
@@ -18,8 +18,11 @@ import { applyRoleViewOverride, getPreviewViewMode, PreviewViewMode } from '../.
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
+import { takeOpenSunshineLedgerRequest } from '../../utils/sunshineLedgerHandoff';
+import { takeOpenCultureFullRequest } from '../../utils/cultureFullHandoff';
+import { takeOpenStorePickerRequest } from '../../utils/storePickerHandoff';
 import {
-  getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, DailyCultureQuote, SENIORS_CARE,
+  getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, SENIORS_CARE,
   CORE_VALUES, FAMOUS_QUOTES, RAIN_FLOWER_HOME, SIXTEEN_BESTS, GRATITUDE_TEXT, DAILY_SUMMARY, FAMILY_STYLE
 } from '../../utils/cultureData';
 import { computeMyCheckInStats } from '../../utils/checkinStats';
@@ -128,12 +131,31 @@ function round2(num: number): number {
   return Math.round((num + Number.EPSILON) * 100) / 100;
 }
 
-// 📖 雨花文化全集【十个有没有】：把"只有他人，没有自己。"这类逗号分句的原文
-// 拆成左右两列（左：只有…；右：没有…），供弹窗内的双列网格逐行渲染
-function splitTenHaveYouPair(text: string): { left: string; right: string } {
+// 📖 雨花文化全集【十个有没有/祈盼排比句】：把"只有他人，没有自己。"
+// "祈盼公益餐桌无限延伸，让孝悌忠信走进千家万户!"这类首个逗号分句的原文
+// 拆成左右两列，供弹窗内的双列网格逐行渲染。
+// keepCommaOnLeft：十个有没有的既定展示是左右都不带逗号（默认 false）；
+// 祈盼排比句要求左列保留逗号（如"祈盼公益餐桌无限延伸，"），传 true
+function splitAtFirstComma(text: string, keepCommaOnLeft: boolean = false): { left: string; right: string } {
   const idx = text.indexOf('，');
-  return idx >= 0 ? { left: text.slice(0, idx), right: text.slice(idx + 1) } : { left: text, right: '' };
+  if (idx < 0) return { left: text, right: '' };
+  return { left: text.slice(0, keepCommaOnLeft ? idx + 1 : idx), right: text.slice(idx + 1) };
 }
+
+// 📖 雨花文化全集【立志格言/雨花心字诀/雨花敬老核心理念】：把逗号/句号/分号收尾的
+// 原文按标点切成一句一句的短句，再按 clausesPerLine 分组换行——立志格言/敬老核心
+// 理念每句独立一行 (=1)，雨花心字诀是四言韵律短句，按四句一换行 (=4)。只做展示层
+// 的换行分组，不改动任何文字，源头仍是 FAMILY_MOTTO/FAMOUS_QUOTES/SENIORS_CARE
+// 里未经改写的权威原文
+function splitIntoClauseLines(text: string, clausesPerLine: number): string[] {
+  const clauses = text.match(/[^，。；]+[，。；]/g) || [text];
+  const lines: string[] = [];
+  for (let i = 0; i < clauses.length; i += clausesPerLine) {
+    lines.push(clauses.slice(i, i + clausesPerLine).join(''));
+  }
+  return lines;
+}
+
 
 // 🌟 今日食谱动态卡片：后端 manageDailyMenu 存的是一整段自由文本 menuText
 // （没有结构化的菜品数组字段），要在首页把它渲染成小网格/标签云，只能从这段文本里
@@ -424,8 +446,6 @@ Page({
     ocrPreviewExpense: '0.00',
     ocrPreviewBalance: '0.00',
     ocrPreviewFormula: '',
-    showHistoryBalanceModal: false,
-    historyBalanceList: [] as { date: string; store: string; balance: string }[],
     showBalanceHistoryModal: false,
     recentBalanceHistoryList: [] as any[],
     storePickerList: STORE_PICKER_LIST,
@@ -447,8 +467,13 @@ Page({
     // 拆成结构化的三段（心字诀/家训正文各行/为学之方），而不是拼成一整段纯文本，
     // 是为了让弹窗里"雨花心字诀"/"为学之方"这类小标题能加粗独立展示，提升可读性
     familyMottoMindFormula: '',
+    familyMottoMindFormulaLines: [] as string[],
     familyMottoCreedLines: [] as string[],
     familyMottoStudyMethod: '',
+    // 🌸 为学之方拆成三段单列居中展示：开篇一句 / 中间六句分句 / 结语一句加粗
+    familyMottoStudyIntro: '',
+    familyMottoStudyMiddleLines: [] as string[],
+    familyMottoStudyConclusion: '',
     // 📖 雨花文化全集弹窗：module 7（雨花家训）复用上面三个既有字段，
     // 这里补齐其余九大模块，随 onShowFamilyMottoModal 一次性填好，纯静态内容
     cultureFullData: {
@@ -456,12 +481,14 @@ Page({
       coreValuesSocial: [] as string[],
       coreValuesIndividual: [] as string[],
       famousQuotes: [] as string[],
+      famousQuoteLines: [] as string[],
       homeCoreSpirit: '',
       homeSanYouTitle: '', homeSanYouItems: [] as string[],
       homeWuLeTitle: '', homeWuLeItems: [] as string[],
       homeLiuTongTitle: '', homeLiuTongItems: [] as string[],
       homeBaXinTitle: '', homeBaXinItems: [] as string[],
       seniorsCoreBelief: '',
+      seniorsCoreBeliefLines: [] as string[],
       seniorsTenHaveYous: [] as string[],
       seniorsTenHaveYouPairs: [] as { left: string; right: string }[],
       sixteenBests: [] as string[],
@@ -469,6 +496,7 @@ Page({
       dailySummaryTitle: '',
       dailySummaryGratitude: [] as string[],
       dailySummaryAspiration: [] as string[],
+      dailySummaryAspirationLines: [] as string[],
       familyStyleTitle: '',
       familyStyleText: ''
     },
@@ -505,8 +533,14 @@ Page({
       requestedRole: 'volunteer',
       // 🏢 门店选择双模式：existing=从本机构已有门店中选择，custom=手动填写新门店名称
       storeSelectionType: 'existing',
-      customStoreName: ''
+      customStoreName: '',
+      // 🏪 新建门店档案补全：门店此刻还不存在，只能先收进申请表单本身，approve
+      // 时由 processRoleAudit 一并写入新建的 stores 文档，见 submitRoleApply
+      address: '',
+      contactPhone: '',
+      storePhotos: [] as string[]
     } as any,
+    applyStorePhotoUploading: false,
     applyRoleTipText: '✅ 即刻生效，开始护持',
     applyRoleTipVariant: 'auto' as 'auto' | 'patriarch' | 'pending',
     showAuditModal: false,
@@ -514,12 +548,22 @@ Page({
     auditIsNationalView: false,
     pendingApplyList: [] as any[],
     approvedVolunteerList: [] as any[],
+    // 🛡️ 拒绝角色/门店申请必须说明原因（processRoleAudit action:'reject' 服务端强制
+    // 校验 rejectReason），点击"拒绝"先弹这个原因输入框，而不是直接调用云函数
+    showAuditRejectModal: false,
+    auditRejectId: '',
+    auditRejectReason: '',
+    auditRejectSubmitting: false,
     currentUserRole: '' as string,
     permissions: {} as PermissionFlags,
     isVolunteer: false,
     isManager: false,
     isFinance: false,
     isSuperAdmin: false,
+    // ❤️ 家人（服务对象）：新增于首页角色分流——store_family 真实身份，或新用户/
+    // 未审核通过的默认 volunteer 账号（与 profile.ts isFamily 判定口径一致）。
+    // 默认 false，避免角色数据到位前首页先闪一下"家人版"布局
+    isFamily: false,
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
     // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
     isRealSuperAdmin: false,
@@ -570,7 +614,6 @@ Page({
     showShiftSelectModal: false,
     selectedShift: 'LUNCH',
     selectedShiftHours: 3.0,
-    customHoursInput: '4.0',
     willEatLunch: true,
     checkInLogs: [] as any[],
     todayAccumulatedHours: 0,
@@ -711,7 +754,7 @@ Page({
   },
 
   async initCurrentUserRole() {
-    const computeRoleState = (roleStr: string) => {
+    const computeRoleState = (roleStr: string, status?: string) => {
       const rawRole = (roleStr || 'VOLUNTEER').toUpperCase();
       const isVolunteer = rawRole === 'VOLUNTEER';
       // 🏛️ 权限向下继承：大家长（store_patriarch/PATRIARCH）天然拥有店长 + 财务的全套
@@ -744,14 +787,25 @@ Page({
         currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin
       });
 
+      // ❤️ 家人（服务对象）：normalizedRole 显式为 store_family 时直接判定；新用户/
+      // 未审核通过的默认 volunteer 账号也按家人视角展示——与 profile.ts isFamily
+      // 判定口径一致，避免未审核用户在首页看到打卡/计算工具等管理类模块。
+      // 用未经 applyRoleViewOverride 覆盖的原始 isVolunteer，不受超管预览视角影响
+      // （预览视角只在 SUPER_ADMIN/STORE_MANAGER/FINANCE 之间切换，不涉及家人）
+      const isFamily = normalizedRole === 'store_family' || (isVolunteer && status !== 'approved');
+
       return {
         rawRole, normalizedRole, flags,
-        isVolunteer: overridden.isVolunteer,
+        // 🛡️ isVolunteer/isFamily 互斥：与 profile.ts 同一口径——未审核默认账号
+        // 两者按原始规则都会算出 true，这里显式排除，避免首页 wx:if/wx:elif
+        // 角色分流链（!isFamily / isVolunteer / isFamily）同时命中两个分支
+        isVolunteer: overridden.isVolunteer && !isFamily,
         isManager: overridden.isManager,
         isFinance: overridden.isFinance,
         isSuperAdmin: overridden.isSuperAdmin,
         displayRole: overridden.currentUserRole,
-        isRealSuperAdmin
+        isRealSuperAdmin,
+        isFamily
       };
     };
 
@@ -766,7 +820,7 @@ Page({
 
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
-      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin } = computeRoleState(cached.role);
+      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(cached.role, cached.status);
       const storeName = cached.storeName || this.data.shopName;
       const storeId = cached.storeId || '';
 
@@ -779,6 +833,7 @@ Page({
         isFinance: isFinance,
         isSuperAdmin: isSuperAdmin,
         isRealSuperAdmin: isRealSuperAdmin,
+        isFamily: isFamily,
         currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
@@ -798,7 +853,7 @@ Page({
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin } = computeRoleState(info.role);
+      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(info.role, info.status);
       const storeName = info.storeName || this.data.shopName;
       const storeId = info.storeId || '';
 
@@ -811,6 +866,7 @@ Page({
         isFinance: isFinance,
         isSuperAdmin: isSuperAdmin,
         isRealSuperAdmin: isRealSuperAdmin,
+        isFamily: isFamily,
         currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
@@ -1261,47 +1317,6 @@ Page({
     return `${s}秒`;
   },
 
-  onSuperAdminSwitchStore() {
-    const itemList = [
-      '👑 视角：超级管理员 (全权限)',
-      '🏪 视角：店长 (可审核与发海报)',
-      '🔑 视角：财务记账义工',
-      '❤️ 视角：志工/大众家人 (仅查看)',
-      '📍 切换门店：海沧区雨花斋',
-      '📍 切换门店：全国总览'
-    ];
-
-    wx.showActionSheet({
-      title: '切换体验视角或管辖门店',
-      itemList: itemList,
-      itemColor: '#212529',
-      success: (res) => {
-        const tapIndex = res.tapIndex;
-
-        switch (tapIndex) {
-          case 0:
-            this.switchRolePerspective('super_admin');
-            break;
-          case 1:
-            this.switchRolePerspective('store_manager');
-            break;
-          case 2:
-            this.switchRolePerspective('finance');
-            break;
-          case 3:
-            this.switchRolePerspective('volunteer');
-            break;
-          case 4:
-            this.switchStoreTarget('store_haicang', '海沧区雨花斋');
-            break;
-          case 5:
-            this.switchStoreTarget('all', '全国总览');
-            break;
-        }
-      }
-    });
-  },
-
   // 门店列表变更（如超管刚新建了一家门店）：清缓存后重新拉取，确保列表包含新店
   onStoreListChanged() {
     wx.removeStorageSync('all_stores_list_cache');
@@ -1350,6 +1365,10 @@ Page({
     };
     const normalizedRole = roleMap[rawRole] || 'volunteer';
     const flags = getPermissionFlags({ role: normalizedRole });
+    // ❤️ 家人：store-picker 角色胶囊点击直传的裸值 'FAMILY'，normalizedRole 已映射为
+    // store_family——这里是用户主动切换身份的场景，不需要 initCurrentUserRole 里
+    // "未审核默认按家人展示"那条兜底规则
+    const isFamily = normalizedRole === 'store_family';
 
     // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储。
     // 🛡️ 这里必须持久化真实的 normalizedRole，绝不能写入视角切换预览后的展示角色，
@@ -1380,6 +1399,7 @@ Page({
       isManager: overridden.isManager,
       isFinance: overridden.isFinance,
       isSuperAdmin: overridden.isSuperAdmin,
+      isFamily: isFamily,
       permissions: flags
     }, () => {
 
@@ -1425,19 +1445,6 @@ Page({
       self.loadPageData();
     } else {
     }
-  },
-
-  switchRolePerspective(role: string) {
-    const flags = getPermissionFlags({ role });
-    this.setData({
-      currentUserRole: role,
-      permissions: flags
-    });
-
-    wx.showToast({
-      title: `已切换至：${ROLE_LABELS[role as keyof typeof ROLE_LABELS] || role}`,
-      icon: 'none'
-    });
   },
 
   switchStoreTarget(storeId: string, storeName: string) {
@@ -1645,37 +1652,6 @@ Page({
 
   onCloseStorePosterModal() {
     this.setData({ showStorePosterModal: false });
-  },
-
-  onSaveStorePosterToAlbum() {
-    const filePath = this.data.storePosterTempFilePath;
-    if (!filePath) {
-      wx.showToast({ title: '海报尚未绘制完成', icon: 'none' });
-      return;
-    }
-
-    wx.saveImageToPhotosAlbum({
-      filePath,
-      success: () => {
-        wx.showToast({ title: '海报已保存至相册', icon: 'success' });
-        this.setData({ showStorePosterModal: false });
-      },
-      fail: (err) => {
-        if (err.errMsg && err.errMsg.indexOf('auth deny') >= 0) {
-          wx.showModal({
-            title: '需要相册权限',
-            content: '请在设置中允许小程序保存图片到您的相册',
-            success: (res) => {
-              if (res.confirm) {
-                wx.openSetting();
-              }
-            }
-          });
-        } else {
-          wx.showToast({ title: '保存失败', icon: 'none' });
-        }
-      }
-    });
   },
 
   initStorePresetFromCache() {
@@ -2320,12 +2296,6 @@ Page({
     }
   },
 
-  onResetToAutoBalance() {
-    this.setData({ isBalanceLocked: true });
-    this.loadBalanceForDate(this.data.reportDateValue);
-    wx.showToast({ title: '已恢复系统自动匹配', icon: 'success', duration: 1500 });
-  },
-
   onForceRefreshBalance() {
     this.setData({ isBalanceLocked: true });
     this.loadBalanceForDate(this.data.reportDateValue);
@@ -2401,24 +2371,6 @@ Page({
     }
   },
 
-  onOpenRoleApplyModal() {
-    const storeName = this.data.currentStoreName || this.data.shopName;
-    const tip = this.computeApplyRoleTip(this.data.applyForm.requestedRole);
-    this.setData({
-      'applyForm.storeId': this.data.currentStoreId,
-      'applyForm.storeName': storeName,
-      'applyForm.storeSelectionType': 'existing',
-      'applyForm.customStoreName': '',
-      applyRoleTipText: tip.text,
-      applyRoleTipVariant: tip.variant,
-      showApplyModal: true
-    });
-    // 门店下拉列表若尚未加载，补拉一次（已由 getStoreList 云函数按本机构 tenantId 过滤）
-    if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
-      this.fetchAllStoresList();
-    }
-  },
-
   onApplyRealNameInput(e: any) {
     this.setData({ 'applyForm.realName': e.detail.value });
   },
@@ -2463,7 +2415,10 @@ Page({
       'applyForm.storeSelectionType': mode,
       'applyForm.storeId': '',
       'applyForm.storeName': '',
-      'applyForm.customStoreName': ''
+      'applyForm.customStoreName': '',
+      'applyForm.address': '',
+      'applyForm.contactPhone': '',
+      'applyForm.storePhotos': []
     });
   },
 
@@ -2481,12 +2436,71 @@ Page({
     this.setData({ 'applyForm.customStoreName': e.detail.value });
   },
 
+  onApplyAddressInput(e: any) {
+    this.setData({ 'applyForm.address': e.detail.value });
+  },
+
+  onApplyContactPhoneInput(e: any) {
+    this.setData({ 'applyForm.contactPhone': e.detail.value });
+  },
+
+  // 🏪 新建门店档案照片：门店此刻还未创建，先以云存储 fileID 数组形式挂在申请表单上，
+  // 与 activity-log.ts onChooseImage 同一套 chooseMedia + compressAndUploadImages 模式
+  async onChooseApplyStorePhoto() {
+    const MAX_PHOTOS = 9;
+    const remaining = MAX_PHOTOS - this.data.applyForm.storePhotos.length;
+    if (remaining <= 0) {
+      wx.showToast({ title: `最多上传 ${MAX_PHOTOS} 张门店照片`, icon: 'none' });
+      return;
+    }
+
+    try {
+      const chooseRes = await wx.chooseMedia({
+        count: remaining,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera']
+      });
+
+      const paths = (chooseRes.tempFiles || []).map(f => f.tempFilePath);
+      if (paths.length === 0) return;
+
+      const insertStart = this.data.applyForm.storePhotos.length;
+      this.setData({
+        'applyForm.storePhotos': [...this.data.applyForm.storePhotos, ...paths],
+        applyStorePhotoUploading: true
+      });
+
+      try {
+        const uploaded = await compressAndUploadImages(HOME_COMPRESS_CANVAS_ID, paths, 'store_apply_photos/' + Date.now());
+        const finalPhotos = [...this.data.applyForm.storePhotos];
+        uploaded.forEach((u, i) => { finalPhotos[insertStart + i] = u.url; });
+        this.setData({ 'applyForm.storePhotos': finalPhotos });
+      } catch (uploadErr) {
+        const rolledBack = this.data.applyForm.storePhotos.filter((_: string, i: number) => i < insertStart || i >= insertStart + paths.length);
+        this.setData({ 'applyForm.storePhotos': rolledBack });
+        throw uploadErr;
+      }
+
+      this.setData({ applyStorePhotoUploading: false });
+    } catch (err) {
+      this.setData({ applyStorePhotoUploading: false });
+      console.error('[onChooseApplyStorePhoto] 异常:', err);
+      wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
+    }
+  },
+
+  onDeleteApplyStorePhoto(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const next = this.data.applyForm.storePhotos.filter((_: string, i: number) => i !== index);
+    this.setData({ 'applyForm.storePhotos': next });
+  },
+
   onCloseApplyModal() {
     this.setData({ showApplyModal: false });
   },
 
   async onSubmitRoleApply() {
-    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName } = this.data.applyForm;
+    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, address, contactPhone, storePhotos } = this.data.applyForm;
 
     if (!realName || !realName.trim()) {
       wx.showToast({ title: '请填写真实姓名', icon: 'none' });
@@ -2499,6 +2513,16 @@ Page({
     if (storeSelectionType === 'custom') {
       if (!customStoreName || !customStoreName.trim()) {
         wx.showToast({ title: '请填写新门店名称', icon: 'none' });
+        return;
+      }
+      // 🛡️ 申请高阶角色/新建门店需先补全门店档案：新门店此刻还不存在，档案
+      // 就收在这张申请表单里（与客户端拦截配套的服务端兜底见 processRoleAudit）
+      if (!address || !address.trim() || !contactPhone || !contactPhone.trim() || !storePhotos || storePhotos.length === 0) {
+        wx.showModal({
+          title: '门店档案未补全',
+          content: '申请高阶角色/新建门店需先补全门店档案（地址、联系电话、门店照片）',
+          showCancel: false
+        });
         return;
       }
     } else if (!storeId) {
@@ -2526,6 +2550,9 @@ Page({
           storeName: displayStoreName,
           storeSelectionType,
           customStoreName: storeSelectionType === 'custom' ? customStoreName.trim() : '',
+          address: storeSelectionType === 'custom' ? address.trim() : '',
+          contactPhone: storeSelectionType === 'custom' ? contactPhone.trim() : '',
+          storePhotos: storeSelectionType === 'custom' ? storePhotos : [],
           tenantId,
           requestedRole,
           realName: realName.trim(),
@@ -2919,6 +2946,62 @@ Page({
       wx.hideLoading();
       console.error('[onProcessAudit] 审核失败:', err);
       wx.showToast({ title: '操作失败', icon: 'none' });
+    }
+  },
+
+  // 🛡️ 拒绝角色/门店申请必须先说明原因（processRoleAudit action:'reject' 服务端
+  // 强制校验 rejectReason），点击"拒绝"先弹这个原因输入框，确认后才真正提交
+  onOpenAuditRejectModal(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    this.setData({ showAuditRejectModal: true, auditRejectId: id, auditRejectReason: '' });
+  },
+
+  onCloseAuditRejectModal() {
+    if (this.data.auditRejectSubmitting) return;
+    this.setData({ showAuditRejectModal: false, auditRejectId: '' });
+  },
+
+  onAuditRejectReasonInput(e: any) {
+    this.setData({ auditRejectReason: e.detail.value });
+  },
+
+  async onSubmitAuditReject() {
+    if (this.data.auditRejectSubmitting) return;
+
+    const id = this.data.auditRejectId;
+    const rejectReason = (this.data.auditRejectReason || '').trim();
+    if (!id) return;
+    if (!rejectReason) {
+      wx.showToast({ title: '请填写拒绝原因', icon: 'none' });
+      return;
+    }
+
+    this.setData({ auditRejectSubmitting: true });
+    wx.showLoading({ title: '正在处理...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const result = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { applyId: id, action: 'reject', rejectReason }
+      });
+      const res = result.result as any;
+      wx.hideLoading();
+
+      if (res && res.success) {
+        wx.showToast({ title: '已拒绝申请', icon: 'none' });
+        const newList = this.data.pendingApplyList.filter((r: any) => r._id !== id);
+        this.setData({ pendingApplyList: newList, showAuditRejectModal: false, auditRejectId: '' });
+      } else {
+        wx.showToast({ title: (res && res.error) || '操作失败', icon: 'none' });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onSubmitAuditReject] 拒绝失败:', err);
+      wx.showToast({ title: '操作失败', icon: 'none' });
+    } finally {
+      this.setData({ auditRejectSubmitting: false });
     }
   },
 
@@ -3398,100 +3481,6 @@ Page({
       if (reqSeq !== this._balanceReqSeq) return;
       this.setData({
         balanceMatchTip: `⚠️ 查询失败，请手动输入 ${shortPrevLabel} 余额`
-      });
-    }
-  },
-
-  formatToStandardIsoDate(dateStr: string): string {
-    if (!dateStr) return '';
-    let str = String(dateStr).trim();
-
-    if (/^\d{2}年/.test(str)) {
-      str = '20' + str;
-    }
-
-    const matches = str.match(/(\d{4})[\-\/年\.](\d{1,2})[\-\/月\.](\d{1,2})/);
-    if (matches) {
-      const mm = String(parseInt(matches[2], 10)).padStart(2, '0');
-      const dd = String(parseInt(matches[3], 10)).padStart(2, '0');
-      return `${matches[1]}-${mm}-${dd}`;
-    }
-    return str;
-  },
-
-  findAndFillYesterdayBalance(curTuple: { y: number; m: number; d: number }, prevTuple: { y: number; m: number; d: number }) {
-    const allRecords = wx.getStorageSync('local_report_logs') || [];
-    const normalizeStore = (str: string) => (str || '').replace(/[区市省店\s]/g, '').trim();
-    const cleanCurrentStore = normalizeStore(this.data.shopName);
-
-    const parseDateToTuple = (dateStr: string): { y: number; m: number; d: number } | null => {
-      if (!dateStr) return null;
-      let str = String(dateStr).trim();
-      if (/^\d{2}年/.test(str)) str = '20' + str;
-      const match = str.match(/(\d{4})[\-\/年\.](\d{1,2})[\-\/月\.](\d{1,2})/);
-      if (match) {
-        return {
-          y: parseInt(match[1], 10),
-          m: parseInt(match[2], 10),
-          d: parseInt(match[3], 10)
-        };
-      }
-      return null;
-    };
-
-    const findRecordByTuple = (y: number, m: number, d: number) => {
-      return allRecords.find((item: any) => {
-        const recordStore = normalizeStore(item.shopName);
-        const isStoreMatch = recordStore.includes(cleanCurrentStore) || cleanCurrentStore.includes(recordStore);
-        const recTuple = parseDateToTuple(item.dateString || item.reportDate);
-        return isStoreMatch && recTuple && recTuple.y === y && recTuple.m === m && recTuple.d === d;
-      });
-    };
-
-    const yesterdayRecord = findRecordByTuple(prevTuple.y, prevTuple.m, prevTuple.d);
-
-    if (yesterdayRecord) {
-      const matchedBalance = yesterdayRecord.todayBalance != null ? yesterdayRecord.todayBalance : (yesterdayRecord.closingBalance || yesterdayRecord.endBalance || '0.00');
-      this.setData({
-        yesterdayBalance: String(matchedBalance),
-        balanceMatchTip: `已自动载入 ${prevTuple.m}月${prevTuple.d}日 结余 ¥${matchedBalance}`
-      });
-      return;
-    }
-
-    const sortedStoreRecords = allRecords
-      .filter((item: any) => {
-        const recordStore = normalizeStore(item.shopName);
-        return recordStore.includes(cleanCurrentStore) || cleanCurrentStore.includes(recordStore);
-      })
-      .filter((item: any) => {
-        const recTuple = parseDateToTuple(item.dateString || item.reportDate);
-        return recTuple && (recTuple.y < curTuple.y || 
-          (recTuple.y === curTuple.y && recTuple.m < curTuple.m) || 
-          (recTuple.y === curTuple.y && recTuple.m === curTuple.m && recTuple.d < curTuple.d));
-      })
-      .sort((a: any, b: any) => {
-        const ta = parseDateToTuple(a.dateString || a.reportDate);
-        const tb = parseDateToTuple(b.dateString || b.reportDate);
-        if (!ta || !tb) return 0;
-        if (ta.y !== tb.y) return tb.y - ta.y;
-        if (ta.m !== tb.m) return tb.m - ta.m;
-        return tb.d - ta.d;
-      });
-
-    if (sortedStoreRecords.length > 0) {
-      const lastRecord = sortedStoreRecords[0];
-      const lastBalance = lastRecord.todayBalance != null ? lastRecord.todayBalance : (lastRecord.closingBalance || lastRecord.endBalance || '0.00');
-      const lastTuple = parseDateToTuple(lastRecord.dateString || lastRecord.reportDate);
-      const lastDateStr = lastTuple ? `${lastTuple.m}月${lastTuple.d}日` : '历史';
-      this.setData({
-        yesterdayBalance: String(lastBalance),
-        balanceMatchTip: `⚠️ 未找到前一天记录，已套用 ${lastDateStr} 末次结余 ¥${lastBalance}`
-      });
-    } else {
-      this.setData({
-        yesterdayBalance: '',
-        balanceMatchTip: `⚠️ 未匹配到 ${prevTuple.m}月${prevTuple.d}日 记录，请手动确认`
       });
     }
   },
@@ -4636,58 +4625,6 @@ Page({
         adjustInput: this.data.adjustReason || ''
       });
     });
-  },
-
-  onOpenHistoryBalanceModal() {
-    const allRecords = wx.getStorageSync('local_report_logs') || [];
-    const normalizeStore = (str: string) => (str || '').replace(/[区市省店\s]/g, '').trim();
-    const cleanCurrentStore = normalizeStore(this.data.shopName);
-
-    const filteredRecords = allRecords
-      .filter((item: any) => {
-        const recordStore = normalizeStore(item.shopName);
-        return recordStore.includes(cleanCurrentStore) || cleanCurrentStore.includes(recordStore);
-      })
-      .sort((a: any, b: any) => {
-        const dateA = toStandardIsoDate(a.reportDate || a.dateString);
-        const dateB = toStandardIsoDate(b.reportDate || b.dateString);
-        return dateB.localeCompare(dateA);
-      })
-      .slice(0, 30)
-      .map((item: any) => ({
-        date: toStandardIsoDate(item.reportDate || item.dateString),
-        store: item.shopName || '',
-        balance: item.todayBalance || item.closingBalance || item.endBalance || '0.00'
-      }));
-
-    this.setData({
-      showHistoryBalanceModal: true,
-      historyBalanceList: filteredRecords
-    });
-  },
-
-  closeHistoryBalanceModal() {
-    this.setData({
-      showHistoryBalanceModal: false
-    });
-  },
-
-  onSelectHistoryBalance(e: any) {
-    const { balance, date } = e.currentTarget.dataset;
-    if (!balance) return;
-
-    this.setData({
-      yesterdayBalance: String(balance),
-      systemBalance: parseFloat(balance) || 0,
-      isManualAdjust: false,
-      balanceDiff: 0,
-      adjustReason: '',
-      balanceMatchTip: `已手动选择 ${date} 结余 ¥${balance}`,
-      showHistoryBalanceModal: false
-    });
-
-    this.updateRealTimeBalance();
-    this.debouncedSaveDraft();
   },
 
   onAdjustInput(e: any) {
@@ -6009,41 +5946,6 @@ Page({
     }
   },
 
-  resetFormSilently() {
-    const now = new Date();
-    const yyyy = String(now.getFullYear());
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-
-    this.setData({
-      allDonations: '',
-      otherDonation: '',
-      expenses: '',
-      dailyExpenseText: '',
-      dailyExpenseParseCount: 0,
-      dailyExpenseParseAmount: '0.00',
-      fixedExpenseText: '',
-      reportResult: '',
-      showResult: false,
-      reportDate: `${yyyy}年${mm}月${dd}日`,
-      reportDateValue: `${yyyy}-${mm}-${dd}`,
-      hasDraft: false,
-      materials: [],
-      materialsInput: '',
-      volunteerCount: '',
-      volunteerHours: '',
-      diningCount: '',
-      dineInSeniors: '',
-      deliverySeniors: '',
-      dineInVolunteers: '',
-      deliveryVolunteers: '',
-      takeawayCount: '',
-      totalDineCount: '0',
-      totalVolunteers: '0'
-    });
-    this.clearDraft();
-  },
-
   copyText() {
     wx.setClipboardData({
       data: this.data.reportResult,
@@ -6119,6 +6021,15 @@ Page({
     this.fetchNotices();
     this.setData({ cultureQuote: getDailyCultureQuote() });
 
+    // ❤️ 家人首页第一模块【阳光账本核心大盘】：复用弹窗那套 fetchSunshineLedgerData/
+    // sunshineStatCards 数据管线，只是这里直接内联展示在首页卡片上，不弹窗；
+    // 卡片本身的"查看完整账本"入口仍点击 onOpenSunshineLedger 弹出详情
+    if (this.data.isFamily && this.data.currentStoreId && !this.isNationalOverviewSelected()) {
+      const now = new Date();
+      const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      this.fetchSunshineLedgerData(currentYearMonth);
+    }
+
     // 🌟 财务视角首页角标：预先拉取一次风控预警数量，避免用户必须先点开弹窗才知道有没有异常
     if ((this.data.isFinance || this.data.isSuperAdmin) && this.data.currentStoreId && !this.isNationalOverviewSelected()) {
       this.fetchRiskAlerts();
@@ -6178,6 +6089,31 @@ Page({
 
     if (takeComplianceReviewRequest()) {
       this.setData({ showComplianceModal: true, complianceModalScene: 'review' });
+      return;
+    }
+
+    // 个人页「关于雨花斋与阳光账本」交接：阳光账本弹窗唯一实现在本页，
+    // 个人页只标记意图，这里据此直接打开已有的弹窗（复用 onOpenSunshineLedger
+    // 完整的数据拉取流程，不重复实现）
+    if (takeOpenSunshineLedgerRequest()) {
+      this.onOpenSunshineLedger();
+      return;
+    }
+
+    // 个人页「雨花家训与文化全集」交接：文化全集弹窗唯一实现在本页，复用
+    // onShowFamilyMottoModal 完整的十大模块数据装配逻辑，不重复实现
+    if (takeOpenCultureFullRequest()) {
+      this.onShowFamilyMottoModal();
+      return;
+    }
+
+    // 个人页「切换关注门店」交接：门店选择器唯一可见实例挂载在本页
+    // （id="storePicker"），个人页不再自己隐藏挂载一份，直接拉起本页已有的面板
+    if (takeOpenStorePickerRequest()) {
+      const picker = this.selectComponent('#storePicker');
+      if (picker && typeof (picker as any).onOpenSheet === 'function') {
+        (picker as any).onOpenSheet();
+      }
       return;
     }
 
@@ -6272,6 +6208,9 @@ Page({
     const isManager = ['MANAGER', 'STORE_MANAGER', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isFinance = ['FINANCE', 'STORE_PATRIARCH', 'ADMIN', 'SUPER_ADMIN'].includes(rawRole);
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(rawRole);
+    // ❤️ 家人：role 这里已经是 storage 里存的规范化值（如 'store_family'），
+    // rawRole 是它的大写形式 'STORE_FAMILY'
+    const isFamily = rawRole === 'STORE_FAMILY';
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
     const isRealSuperAdmin = isSuperAdmin;
     const overridden = applyRoleViewOverride(role, {
@@ -6290,6 +6229,7 @@ Page({
       isManager: overridden.isManager,
       isFinance: overridden.isFinance,
       isSuperAdmin: overridden.isSuperAdmin,
+      isFamily: isFamily,
       permissions: getPermissionFlags({ role })
     });
 
@@ -6324,12 +6264,6 @@ Page({
       wx.setStorageSync('complianceNoticeAck_privileged', true);
     }
     this.setData({ showComplianceModal: false });
-  },
-
-  // 🌟 底部合规 Footer 的"查看完整声明"入口：随时可重新查看，'review' 场景下
-  // 已经通过了强制阅读，弹窗只展示一个普通【关闭】按钮，不会再要求二次确认
-  onViewFullComplianceNotice() {
-    this.setData({ showComplianceModal: true, complianceModalScene: 'review' });
   },
 
   onCloseComplianceReview() {
@@ -7166,26 +7100,45 @@ Page({
     this.setData({
       showFamilyMottoModal: true,
       familyMottoMindFormula: FAMILY_MOTTO.mindFormula,
+      familyMottoMindFormulaLines: splitIntoClauseLines(FAMILY_MOTTO.mindFormula, 4),
       familyMottoCreedLines: FAMILY_MOTTO.creedLines,
       familyMottoStudyMethod: FAMILY_MOTTO.studyMethod,
+      ...(() => {
+        const lines = splitIntoClauseLines(FAMILY_MOTTO.studyMethod, 1);
+        return {
+          familyMottoStudyIntro: lines[0] || '',
+          familyMottoStudyMiddleLines: lines.slice(1, lines.length - 1),
+          familyMottoStudyConclusion: lines[lines.length - 1] || ''
+        };
+      })(),
       cultureFullData: {
         coreValuesNational: CORE_VALUES.national,
         coreValuesSocial: CORE_VALUES.social,
         coreValuesIndividual: CORE_VALUES.individual,
         famousQuotes: FAMOUS_QUOTES,
+        famousQuoteLines: splitIntoClauseLines(FAMOUS_QUOTES.join(''), 1),
         homeCoreSpirit: RAIN_FLOWER_HOME.coreSpirit,
         homeSanYouTitle: RAIN_FLOWER_HOME.sanYou.title, homeSanYouItems: RAIN_FLOWER_HOME.sanYou.items,
         homeWuLeTitle: RAIN_FLOWER_HOME.wuLe.title, homeWuLeItems: RAIN_FLOWER_HOME.wuLe.items,
         homeLiuTongTitle: RAIN_FLOWER_HOME.liuTong.title, homeLiuTongItems: RAIN_FLOWER_HOME.liuTong.items,
         homeBaXinTitle: RAIN_FLOWER_HOME.baXin.title, homeBaXinItems: RAIN_FLOWER_HOME.baXin.items,
         seniorsCoreBelief: SENIORS_CARE.coreBelief,
+        seniorsCoreBeliefLines: splitIntoClauseLines(SENIORS_CARE.coreBelief, 1),
         seniorsTenHaveYous: SENIORS_CARE.tenHaveYous,
-        seniorsTenHaveYouPairs: SENIORS_CARE.tenHaveYous.map(splitTenHaveYouPair),
+        seniorsTenHaveYouPairs: SENIORS_CARE.tenHaveYous.map((s) => splitAtFirstComma(s)),
         sixteenBests: SIXTEEN_BESTS,
         gratitudeText: GRATITUDE_TEXT,
         dailySummaryTitle: DAILY_SUMMARY.title,
         dailySummaryGratitude: DAILY_SUMMARY.gratitude,
-        dailySummaryAspiration: DAILY_SUMMARY.aspiration,
+        // 🌸 感恩与祈盼：前 3 句是"让我们共同祈盼："式的引导铺垫，保持原单列展示；
+        // 后 3 句"祈盼…，让…！"排比句，每句在首个逗号处拆成两行（祈盼.../让...），
+        // 展开成 6 行单列居中展示，每两行为一组
+        dailySummaryAspiration: DAILY_SUMMARY.aspiration.slice(0, 3),
+        dailySummaryAspirationLines: DAILY_SUMMARY.aspiration.slice(3).reduce((lines: string[], s) => {
+          const pair = splitAtFirstComma(s, true);
+          lines.push(pair.left, pair.right);
+          return lines;
+        }, []),
         familyStyleTitle: FAMILY_STYLE.title,
         familyStyleText: FAMILY_STYLE.text
       }
@@ -7653,21 +7606,11 @@ Page({
     this.updateHoursPreview(undefined, selectedShiftHours);
   },
 
-  onCustomHoursInput(e: any) {
-    const val = e.detail.value;
-    this.setData({
-      customHoursInput: val,
-      selectedShiftHours: parseFloat(val || '0')
-    });
-  },
-
   onToggleMealReserve() {
     this.setData({
       willEatLunch: !this.data.willEatLunch
     });
   },
-
-  stopBubble() {},
 
   onConfirmShiftCheckIn() {
     // 🌟 防连点：双击/网络卡顿时同一次点击可能触发两次回调，读写 storage 之间存在竞态窗口，
@@ -8077,36 +8020,6 @@ Page({
     } finally {
       this.setData({ riskAlertsLoading: false });
     }
-  },
-
-  onViewPublicLedger() {
-    const storeName = this.data.currentStoreName || '海沧区雨花斋';
-
-    wx.showModal({
-      title: '📖 阳光公开账本',
-      content: `【${storeName}】谨遵雨花斋“阳光透明”原则，所有服务汇入与每日采购开支全量公开，接受社会监督。`,
-      confirmText: '查看历史账目',
-      cancelText: '关闭',
-      confirmColor: '#8C1D18',
-      success: (res) => {
-        if (res.confirm) {
-          this.isNavigating = true;
-          setTimeout(() => {
-            wx.navigateTo({
-              url: '/pages/history/history',
-              fail: () => {
-                wx.switchTab({
-                  url: '/pages/history/history',
-                  fail: () => {
-                    this.isNavigating = false;
-                  }
-                });
-              }
-            });
-          }, 100);
-        }
-      }
-    });
   },
 
   onShareAppMessage() {

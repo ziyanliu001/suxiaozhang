@@ -323,7 +323,14 @@ exports.main = async (event, context) => {
     // 🌟 标准财务公示文本：与 Excel 附件互补，供店长一键复制粘贴到理事会/捐赠机构的
     // 微信群或邮件正文，不强依赖对方能打开 xlsx 附件
     const netTotal = totalIncome - totalExpense;
-    const nowStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    // 🐛 云函数容器时区固定为 UTC，new Date().toLocaleString() 不传 timeZone 会
+    // 直接按 UTC 渲染，导致"生成时间"比北京时间少 8 小时——显式指定 Asia/Shanghai
+    const nowStr = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    }).format(new Date());
     const auditText = [
       `【${safeStoreName} · ${periodLabel} 财务审计公示】`,
       `统计区间：${startDateStr} 至 ${endDateStr}`,

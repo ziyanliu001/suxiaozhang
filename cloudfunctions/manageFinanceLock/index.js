@@ -12,6 +12,17 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// 🐛 云函数容器时区固定为 UTC，new Date().toLocaleString() 不传 timeZone 会
+// 直接按 UTC 渲染，导致落库的稽核时间字符串比北京时间少 8 小时
+function formatBeijingTimeString(date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).format(date instanceof Date ? date : new Date(date));
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -65,7 +76,7 @@ exports.main = async (event) => {
     }
 
     const userName = caller.role === 'finance' ? '财务稽核员' : (caller.role === 'store_patriarch' ? '大家长' : '超级管理员');
-    const nowStr = new Date().toLocaleString();
+    const nowStr = formatBeijingTimeString(new Date());
 
     let lockedCount = 0;
     const results = await Promise.allSettled(targets.map((item) =>

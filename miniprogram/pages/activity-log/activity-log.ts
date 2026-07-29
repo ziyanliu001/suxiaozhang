@@ -34,6 +34,17 @@ Page({
     currentStoreId: '',
     currentStoreName: '',
     canManage: false,
+    // 🛡️ 权限收紧：门店提示标签"📍 全国总览"只有超管才该看到（家人/义工/普通
+    // 店长财务的 currentStoreName 理论上不该是这个虚拟门店名，但一旦发生—— 比如
+    // 共用设备上超管上次选过"全国总览"、getSelectedStore() 缓存串号——也不能
+    // 让非超管看到这个越权提示，见 initRoleAndStore
+    isSuperAdmin: false,
+    // 🛡️ "📷 记录今日动态"发布按钮的权限位：canManage（店长/超管）或 isVolunteer
+    // 才能发布，家人（服务对象）isFamily 恒为 false 时按钮不受影响，isFamily 为
+    // true 时不会同时命中 canManage/isVolunteer（与 profile.ts/index.ts 同一套
+    // 互斥口径），保持纯只读监督视图
+    isVolunteer: false,
+    isFamily: false,
 
     // 📌 今日大事记（顶部高亮区，取当天最新一条；同一天允许多条时其余的仍展示在下方时光轴）
     todayDateStr: getTodayStr(),
@@ -69,7 +80,11 @@ Page({
 
     // 🛡️ 缩略图加载失败兜底：key 是图片路径本身，今日动态/历史动态/编辑表单三处
     // 图片网格结构各不相同，共用一张按路径查表的 map 比分别维护 loadFailed 字段简单
-    thumbFailedMap: {} as Record<string, boolean>
+    thumbFailedMap: {} as Record<string, boolean>,
+
+    // ⏳ 待确认的义工投稿：仅 canManage（店长/超管）可见，与下方公开时间轴彻底分开展示
+    pendingList: [] as any[],
+    pendingLoading: false
   },
 
   async onLoad() {
@@ -85,6 +100,16 @@ Page({
       alertMessage: '即将退出雨花爱心餐报助手，是否返回首页继续使用？'
     });
     this._navGuard.setupOnLoad();
+  },
+
+  // 🐛 根因修复："全国总览"标签/发布按钮偶发对非超管越权可见：此前角色/门店状态
+  // 只在 onLoad（页面实例首次创建）同步一次。如果先在别的页面切换身份/门店
+  // （store-picker 写 storage），页面实例仍在导航栈里，onLoad 不会重新触发，
+  // 只有 onShow——不补上这个钩子，isFamily/isSuperAdmin/currentStoreName 会
+  // 一直停留在第一次进入本页那一刻的旧值。onShow 本就会紧跟首次 onLoad 触发一次，
+  // 这里重复调用是无害的（与 profile.ts initMinePage 的刷新时机口径一致）
+  async onShow() {
+    await this.initRoleAndStore();
   },
 
   onUnload() {
@@ -116,9 +141,116 @@ Page({
     const store = getSelectedStore();
     const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
     const storeName = (roleInfo && roleInfo.storeName) || store.storeName || '';
-    const canManage = (roleInfo && roleInfo.role === 'store_manager') || (roleInfo && roleInfo.role === 'super_admin');
 
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage });
+    // ❤️ 'store_family' 是本地切身份体系的产物（store-picker _applyRoleSwitch 写入
+    // current_user_role），不在服务端 checkUserRole 返回的 UserRole 联合类型里
+    // （比较 roleInfo.role === 'store_family' 连 tsc 都过不了），必须读 storage
+    // 里的规范化值判断，与 index.ts/profile.ts 读同一个 key 保持口径一致。
+    // 🐛 根因修复（第二轮）：storageRole 必须整体覆盖生效角色，而不能只用来决定
+    // isFamily。上一轮修复只做到"isFamily 为 true 时清零"，但 isSuperAdmin/
+    // canManage/isVolunteer 仍然直接读 roleInfo.role（服务端真实角色，不随本地
+    // 预览切换而变）——真实身份是 super_admin 的账号切到"义工"（或店长/财务）
+    // 预览视角后，storageRole 是 'volunteer'，isFamily 判定为 false，但
+    // roleInfo.role 依然是 super_admin，isSuperAdmin 跟着继续为 true，"全国总览"
+    // 标签/管理类按钮在义工预览视角下越权重新冒出来。与 profile.ts initMinePage()/
+    // store-profile.ts initRoleAndStore() 同一套优先级口径对齐：storage 一旦有值
+    // 就整体作为生效角色，不再理会服务端角色
+    const storageRole = (wx.getStorageSync('current_user_role') || '').toLowerCase();
+    const effectiveRole = storageRole || (roleInfo && roleInfo.role) || '';
+    const isFamily = effectiveRole === 'store_family';
+    const isSuperAdmin = !isFamily && effectiveRole === 'super_admin';
+    const canManage = !isFamily && (effectiveRole === 'store_manager' || isSuperAdmin);
+    const isVolunteer = !isFamily && effectiveRole === 'volunteer';
+
+    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, isSuperAdmin, isVolunteer, isFamily });
+
+    // ⏳ 待确认的义工投稿：与本页其余"管理入口"（编辑/删除按钮）同一套 canManage
+    // 判定口径，只有店长/超管才需要发这个查询
+    if (canManage) {
+      this.fetchPendingList();
+    }
+  },
+
+  async fetchPendingList() {
+    if (!this.data.currentStoreId) return;
+    this.setData({ pendingLoading: true });
+
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'manageActivityLog',
+        data: { action: 'listPending', storeId: this.data.currentStoreId }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({ pendingList: result.data || [] });
+      }
+    } catch (err) {
+      console.warn('[activity-log] fetchPendingList 异常:', err);
+    } finally {
+      this.setData({ pendingLoading: false });
+    }
+  },
+
+  async onApprovePending(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+
+    wx.showLoading({ title: '确认中...', mask: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'manageActivityLog',
+        data: { action: 'approvePending', id }
+      });
+      wx.hideLoading();
+      const result = res.result as any;
+      if (result && result.success) {
+        wx.showToast({ title: '已确认', icon: 'success' });
+        this.fetchPendingList();
+        // 刚确认的这条动态可能就是今天的，公开列表/今日高亮区需要一并刷新
+        this.loadTodayActivity();
+        this.fetchList(true);
+      } else {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[activity-log] onApprovePending 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    }
+  },
+
+  onRejectPending(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+
+    wx.showModal({
+      title: '确认驳回这条投稿？',
+      content: '驳回后该条护持动态将被删除，义工需要重新提交',
+      confirmColor: '#D32F2F',
+      success: async (res) => {
+        if (!res.confirm) return;
+
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cbRes = await wx.cloud.callFunction({
+            name: 'manageActivityLog',
+            data: { action: 'rejectPending', id }
+          });
+          wx.hideLoading();
+          const result = cbRes.result as any;
+          if (result && result.success) {
+            wx.showToast({ title: '已驳回', icon: 'success' });
+            this.fetchPendingList();
+          } else {
+            wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[activity-log] onRejectPending 异常:', err);
+          wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+        }
+      }
+    });
   },
 
   // 📌 查询今天最新一条大事记，用于顶部高亮区展示 + 编辑表单预填。
@@ -227,8 +359,14 @@ Page({
 
   // 📌 顶部【编辑/追加今日大事记】按钮：今日已有记录则预填回显（更新模式），否则空白新建
   onOpenTodayEditForm() {
-    if (!this.data.canManage) return;
-    const item = this.data.todayItem;
+    // 🛡️ 与 WXML 按钮的 wx:if="{{!isFamily && (canManage || isVolunteer)}}"
+    // 保持同一套判定（含显式 isFamily 硬性拦截，不完全依赖互斥前提），否则义工
+    // 点得到按钮却被这里静默拦截、表单永远打不开
+    if (this.data.isFamily || (!this.data.canManage && !this.data.isVolunteer)) return;
+    // 🌟 义工提交的是"新的一条待确认动态"，服务端只放行 create（不放行 update），
+    // 不能预填/接续今天已存在的正式记录——只有 canManage（店长/超管）才允许在
+    // 今日已有记录的基础上继续编辑/追加
+    const item = this.data.canManage ? this.data.todayItem : null;
     this.setData({
       showEditForm: true,
       editForm: {

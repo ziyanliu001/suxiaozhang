@@ -368,6 +368,19 @@
   color: #888888 !important;
 }
 
+/* 🔒 申请审核中：区别于纯粹"未授权"的 locked（灰色不可交互暗示"去申请"），
+   pending 用琥珀色提示"已经提交、正在等审核"，视觉上更接近"进行中"而非"被拒" */
+.role-choice-pill.pending {
+  background: #FFF8E1 !important;
+  border-color: #F0C36D !important;
+  opacity: 1;
+}
+
+.role-choice-pill.pending .role-label {
+  color: #B8860B !important;
+  font-weight: 500;
+}
+
 /* ===== ➕ 新建门店入口按钮：吸底高亮 CTA，视觉权重与"确认激活"按钮一致 ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
@@ -440,6 +453,76 @@
   gap: 6rpx;
   font-size: 24rpx;
   color: #555555;
+}
+
+/* 🏪 新建门店档案照片九宫格：与 pages/index/index.wxss 的 .receipt-grid-container
+   同款视觉，组件样式默认隔离不共享页面 wxss，这里单独复制一份精简版（不含缩略图
+   加载失败兜底，这张表单里的图片选完直接展示本地/云端路径，用不到那层） */
+.receipt-grid-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.grid-image-item {
+  position: relative;
+  width: 100%;
+  padding-top: 100%;
+  border-radius: 16rpx;
+  overflow: visible;
+}
+
+.grid-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+  border: 1.5rpx solid #EFE6D8;
+}
+
+.img-delete-badge {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  width: 38rpx;
+  height: 38rpx;
+  background: rgba(211, 47, 47, 0.95);
+  color: #FFFFFF;
+  border-radius: 50%;
+  font-size: 22rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.15);
+}
+
+.grid-add-btn {
+  background: #FAF8F5;
+  border: 2.5rpx dashed #C8B195;
+  border-radius: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1/1;
+}
+
+.grid-add-btn .add-icon {
+  font-size: 40rpx;
+  color: #8C1D18;
+  line-height: 1;
+  font-weight: 300;
+}
+
+.grid-add-btn .add-txt {
+  font-size: 18rpx;
+  color: #8C1D18;
+  margin-top: 4rpx;
 }
 
 .new-store-submit-btn {

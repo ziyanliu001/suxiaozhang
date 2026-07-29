@@ -26,14 +26,23 @@ const PROFILE_FIELDS = [
 ];
 
 // 门店档案信息：文本/日期类字段，走 sanitizeText（裁剪长度），不走数字 clamp。
-// address 此前只在 createStore 时写一次，这里补上编辑入口
-const TEXT_PROFILE_FIELDS = ['address', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'];
+// address 此前只在 createStore 时写一次，这里补上编辑入口。contactPhone 是
+// 申请高阶角色/新建门店前的档案补全校验（processRoleAudit）新增依赖的字段之一，
+// 之前门店层级完全没有这个字段
+const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'];
 const MAX_TEXT_FIELD_LENGTH = 500;
+const MAX_STORE_PHOTOS = 9;
 const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
 
 function sanitizeText(v) {
   if (v === undefined || v === null) return '';
   return String(v).trim().slice(0, MAX_TEXT_FIELD_LENGTH);
+}
+
+// storePhotos：门店照片，云存储 fileID 数组，参考 activity-log 九宫格惯例上限 9 张
+function sanitizePhotos(v) {
+  if (!Array.isArray(v)) return [];
+  return v.filter((item) => typeof item === 'string' && item.trim()).slice(0, MAX_STORE_PHOTOS);
 }
 
 function sanitizeCoord(v) {
@@ -133,6 +142,7 @@ exports.main = async (event, context) => {
       const profile = {};
       PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || ''; });
+      profile.storePhotos = Array.isArray(store.storePhotos) ? store.storePhotos : [];
 
       return {
         success: true,
@@ -166,6 +176,7 @@ exports.main = async (event, context) => {
       // 可能只想单独改其中一项，若不管有没有传都无条件塞 sanitizeText(undefined) === ''，
       // 会把没在本次请求里出现的字段静默清空，等于每次局部更新都顺带抹掉其余档案信息
       TEXT_PROFILE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f]); });
+      if (event.storePhotos !== undefined) updateFields.storePhotos = sanitizePhotos(event.storePhotos);
       if (VALID_OPERATING_STATUSES.includes(event.operatingStatus)) {
         updateFields.operatingStatus = event.operatingStatus;
       }
@@ -236,6 +247,7 @@ exports.main = async (event, context) => {
       const updateData = {};
       PROFILE_FIELDS.forEach((f) => { updateData[f] = clampCount(pending[f]); });
       TEXT_PROFILE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = sanitizeText(pending[f]); });
+      if (pending.storePhotos !== undefined) updateData.storePhotos = sanitizePhotos(pending.storePhotos);
       if (VALID_OPERATING_STATUSES.includes(pending.operatingStatus)) {
         updateData.operatingStatus = pending.operatingStatus;
       }

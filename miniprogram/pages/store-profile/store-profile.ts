@@ -4,6 +4,9 @@ import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 
+const CANVAS_ID = 'storeProfileImgCompressCanvas';
+const MAX_STORE_PHOTOS = 9;
+
 // 门店人员与服务人群画像：7 项人数指标，字段名与 manageStoreProfile 云函数一致
 const PROFILE_FIELDS = [
   'partyMembers',
@@ -17,12 +20,15 @@ const PROFILE_FIELDS = [
 
 type ProfileField = typeof PROFILE_FIELDS[number];
 
-// 门店档案信息：文本/日期类字段，字段名与 manageStoreProfile 云函数的 TEXT_PROFILE_FIELDS 一致
-const TEXT_PROFILE_FIELDS = ['address', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'] as const;
+// 门店档案信息：文本/日期类字段，字段名与 manageStoreProfile 云函数的 TEXT_PROFILE_FIELDS 一致。
+// contactPhone（门店对外公示联系电话）是 processRoleAudit 申请高阶角色/新建门店档案补全校验
+// 依赖的字段之一，此前门店档案页从未提供编辑入口，只能通过建店/申请流程写入，这里补齐
+const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'] as const;
 type TextProfileField = typeof TEXT_PROFILE_FIELDS[number];
 
 const TEXT_PROFILE_FIELD_LABELS: Record<TextProfileField, string> = {
   address: '详细地址',
+  contactPhone: '联系电话',
   openDate: '开业日期',
   registeredName: '民政登记名称',
   background: '发起背景',
@@ -36,9 +42,6 @@ const OPERATING_STATUS_LABELS: Record<string, string> = {
   preparing: '筹备中',
   paused: '暂停运营'
 };
-
-const MILESTONE_CANVAS_ID = 'milestoneImgCompressCanvas';
-const MAX_MILESTONE_IMAGES = 9;
 
 Page({
   _navGuard: null as NavGuardInstance | null,
@@ -63,6 +66,7 @@ Page({
 
     // 展示态：门店档案信息（文本/日期）+ 运营状态 + 坐标
     address: '',
+    contactPhone: '',
     openDate: '',
     registeredName: '',
     background: '',
@@ -74,6 +78,9 @@ Page({
     latitude: null as number | null,
     longitude: null as number | null,
     locationLabel: '',
+    // 🏪 门店照片：云存储 fileID 数组，与 manageStoreProfile 云函数的 storePhotos 字段一致
+    storePhotos: [] as string[],
+    storePhotoUploading: false,
 
     // 🏛️ 家长风控锁：本店若绑定了家长/督导，店长发起的画像变更会先落到这里等待确认，
     // 不为空时页面显示"有一份更新正在等待审批"提示；数据结构与 manageStoreProfile
@@ -94,6 +101,7 @@ Page({
       listeningSeniorsCount: '0',
       otherCount: '0',
       address: '',
+      contactPhone: '',
       openDate: '',
       registeredName: '',
       background: '',
@@ -103,7 +111,8 @@ Page({
       operatingStatus: 'operating' as 'operating' | 'preparing' | 'paused',
       latitude: undefined as number | undefined,
       longitude: undefined as number | undefined,
-      locationLabel: ''
+      locationLabel: '',
+      storePhotos: [] as string[]
     },
 
     // 👥 门店人员与服务人群画像 · 快捷修改弹窗：只改这 7 项人数指标的独立轻量弹窗，
@@ -119,22 +128,6 @@ Page({
       deliverySeniorsCount: '0',
       listeningSeniorsCount: '0',
       otherCount: '0'
-    },
-
-    // 🏛️ 门店大事记/发展历程：按年份分组的时间轴，复用 pages/journey 的
-    // {yearKey,yearLabel,items,expanded} + 展开/收起交互范式
-    milestonesLoading: true,
-    milestoneTimelineGroups: [] as any[],
-    allMilestonesExpanded: true,
-    showMilestoneModal: false,
-    milestoneSaving: false,
-    milestoneUploading: false,
-    milestoneForm: {
-      id: '',
-      title: '',
-      eventDate: '',
-      content: '',
-      images: [] as string[]
     }
   },
 
@@ -160,7 +153,6 @@ Page({
   async onShow() {
     await this.initRoleAndStore();
     this.fetchProfile();
-    this.fetchMilestones();
   },
 
   onUnload() {
@@ -257,6 +249,7 @@ Page({
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
+      update.storePhotos = Array.isArray(data.storePhotos) ? data.storePhotos : [];
       this.setData(update);
       // 🛡️ canManage 不在这份 update 里——它自始至终只由 initRoleAndStore() 的
       // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
@@ -277,6 +270,7 @@ Page({
     editForm.latitude = this.data.latitude;
     editForm.longitude = this.data.longitude;
     editForm.locationLabel = this.data.locationLabel || '';
+    editForm.storePhotos = [...this.data.storePhotos];
     this.setData({ editing: true, editForm });
   },
 
@@ -299,6 +293,56 @@ Page({
   },
 
   stopPropagation() {},
+
+  // 🏪 门店照片：与 store-picker.ts onChooseNewStorePhoto 同一套 chooseMedia +
+  // compressAndUploadImages 模式，上限 9 张，仅编辑态可操作
+  async onChooseStorePhoto() {
+    const remaining = MAX_STORE_PHOTOS - this.data.editForm.storePhotos.length;
+    if (remaining <= 0) {
+      wx.showToast({ title: `最多上传 ${MAX_STORE_PHOTOS} 张门店照片`, icon: 'none' });
+      return;
+    }
+
+    try {
+      const chooseRes = await wx.chooseMedia({
+        count: remaining,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera']
+      });
+
+      const paths = (chooseRes.tempFiles || []).map((f) => f.tempFilePath);
+      if (paths.length === 0) return;
+
+      const insertStart = this.data.editForm.storePhotos.length;
+      this.setData({
+        'editForm.storePhotos': [...this.data.editForm.storePhotos, ...paths],
+        storePhotoUploading: true
+      });
+
+      try {
+        const uploaded = await compressAndUploadImages(CANVAS_ID, paths, 'store_profile_photos/' + this.data.currentStoreId + '/' + Date.now());
+        const finalPhotos = [...this.data.editForm.storePhotos];
+        uploaded.forEach((u, i) => { finalPhotos[insertStart + i] = u.url; });
+        this.setData({ 'editForm.storePhotos': finalPhotos });
+      } catch (uploadErr) {
+        const rolledBack = this.data.editForm.storePhotos.filter((_: string, i: number) => i < insertStart || i >= insertStart + paths.length);
+        this.setData({ 'editForm.storePhotos': rolledBack });
+        throw uploadErr;
+      }
+
+      this.setData({ storePhotoUploading: false });
+    } catch (err) {
+      this.setData({ storePhotoUploading: false });
+      console.error('[store-profile] onChooseStorePhoto 异常:', err);
+      wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
+    }
+  },
+
+  onDeleteStorePhoto(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const next = this.data.editForm.storePhotos.filter((_: string, i: number) => i !== index);
+    this.setData({ 'editForm.storePhotos': next });
+  },
 
   // 📍 编辑态设置门店位置：与 store-management 建店表单共用同一条
   // app.json "scope.userLocation" 权限声明
@@ -327,6 +371,7 @@ Page({
       PROFILE_FIELDS.forEach((f) => { payload[f] = parseInt(this.data.editForm[f], 10) || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { payload[f] = this.data.editForm[f] || ''; });
       payload.operatingStatus = this.data.editForm.operatingStatus;
+      payload.storePhotos = this.data.editForm.storePhotos || [];
       if (typeof this.data.editForm.latitude === 'number' && typeof this.data.editForm.longitude === 'number') {
         payload.latitude = this.data.editForm.latitude;
         payload.longitude = this.data.editForm.longitude;
@@ -346,6 +391,7 @@ Page({
         const pendingProfileUpdate: any = { requestedAt: Date.now() };
         PROFILE_FIELDS.forEach((f) => { pendingProfileUpdate[f] = payload[f]; });
         TEXT_PROFILE_FIELDS.forEach((f) => { pendingProfileUpdate[f] = payload[f]; });
+        pendingProfileUpdate.storePhotos = payload.storePhotos;
         this.setData({ editing: false, pendingProfileUpdate });
         wx.showModal({ title: '已提交审批', content: result.message || '已提交家长/超管审批，确认后生效', showCancel: false });
         return;
@@ -359,6 +405,7 @@ Page({
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = payload[f]; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = payload[f]; });
+      update.storePhotos = payload.storePhotos;
       if (payload.latitude !== undefined) {
         update.latitude = payload.latitude;
         update.longitude = payload.longitude;
@@ -430,214 +477,6 @@ Page({
       wx.hideLoading();
       this.setData({ profileCountSaving: false });
     }
-  },
-
-  // ============ 🏛️ 门店大事记/发展历程：按年份分组的时间轴 ============
-  // 数据结构/展开-收起交互照抄 pages/journey 的 {yearKey,yearLabel,items,expanded}
-  // + onToggleGroup/onToggleAll 范式，仅把"按月"换成"按年"
-
-  async fetchMilestones() {
-    if (!this.data.currentStoreId) {
-      this.setData({ milestonesLoading: false });
-      return;
-    }
-    this.setData({ milestonesLoading: true });
-    try {
-      const res: any = await wx.cloud.callFunction({
-        name: 'manageStoreMilestone',
-        data: { action: 'list', storeId: this.data.currentStoreId }
-      });
-      const result = res.result;
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '加载大事记失败', icon: 'none' });
-        return;
-      }
-
-      const items = (result.data || []).sort((a: any, b: any) => (b.eventDate || '').localeCompare(a.eventDate || ''));
-      const groupMap = new Map<string, any>();
-      items.forEach((item: any) => {
-        const yearKey = String(item.year || (item.eventDate || '').slice(0, 4));
-        if (!groupMap.has(yearKey)) {
-          groupMap.set(yearKey, { yearKey, yearLabel: `${yearKey}年`, items: [], expanded: this.data.allMilestonesExpanded });
-        }
-        groupMap.get(yearKey).items.push(item);
-      });
-      const milestoneTimelineGroups = Array.from(groupMap.values()).sort((a, b) => b.yearKey.localeCompare(a.yearKey));
-
-      this.setData({ milestoneTimelineGroups });
-    } catch (err) {
-      console.error('[fetchMilestones] 加载大事记异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-    } finally {
-      this.setData({ milestonesLoading: false });
-    }
-  },
-
-  onToggleMilestoneGroup(e: any) {
-    const yearKey = e.currentTarget.dataset.yearKey;
-    const groups = this.data.milestoneTimelineGroups.map((g: any) => (g.yearKey === yearKey ? { ...g, expanded: !g.expanded } : g));
-    this.setData({ milestoneTimelineGroups: groups });
-  },
-
-  onToggleAllMilestones() {
-    const allExpanded = !this.data.allMilestonesExpanded;
-    const groups = this.data.milestoneTimelineGroups.map((g: any) => ({ ...g, expanded: allExpanded }));
-    this.setData({ milestoneTimelineGroups: groups, allMilestonesExpanded: allExpanded });
-  },
-
-  onOpenAddMilestone() {
-    this.setData({
-      showMilestoneModal: true,
-      milestoneForm: { id: '', title: '', eventDate: '', content: '', images: [] }
-    });
-  },
-
-  onOpenEditMilestone(e: any) {
-    const item = e.currentTarget.dataset.item;
-    this.setData({
-      showMilestoneModal: true,
-      milestoneForm: {
-        id: item._id,
-        title: item.title || '',
-        eventDate: item.eventDate || '',
-        content: item.content || '',
-        images: (Array.isArray(item.images) ? item.images : []).map((img: any) => (img && img.url) || img).filter((u: any) => u && typeof u === 'string')
-      }
-    });
-  },
-
-  onCloseMilestoneModal() {
-    if (this.data.milestoneSaving) return;
-    this.setData({ showMilestoneModal: false });
-  },
-
-  onMilestoneTitleInput(e: any) {
-    this.setData({ 'milestoneForm.title': e.detail.value });
-  },
-
-  onMilestoneDateChange(e: any) {
-    this.setData({ 'milestoneForm.eventDate': e.detail.value });
-  },
-
-  onMilestoneContentInput(e: any) {
-    this.setData({ 'milestoneForm.content': e.detail.value });
-  },
-
-  onRemoveMilestoneImage(e: any) {
-    const index = e.currentTarget.dataset.index;
-    const images = [...this.data.milestoneForm.images];
-    images.splice(index, 1);
-    this.setData({ 'milestoneForm.images': images });
-  },
-
-  // 🖼️ 大事记配图：与门店日志(activity-log)同款流程，最多 9 张（大事记数量少，
-  // 不需要门店日志那种双九宫格 18 张上限）
-  async onChooseMilestoneImage() {
-    const remaining = MAX_MILESTONE_IMAGES - this.data.milestoneForm.images.length;
-    if (remaining <= 0) {
-      wx.showToast({ title: `最多上传 ${MAX_MILESTONE_IMAGES} 张配图`, icon: 'none' });
-      return;
-    }
-
-    try {
-      const chooseRes = await wx.chooseMedia({
-        count: Math.min(remaining, 9),
-        mediaType: ['image'],
-        sourceType: ['album', 'camera']
-      });
-
-      const paths = (chooseRes.tempFiles || []).map((f) => f.tempFilePath);
-      if (paths.length === 0) return;
-
-      const insertStart = this.data.milestoneForm.images.length;
-      this.setData({ 'milestoneForm.images': [...this.data.milestoneForm.images, ...paths], milestoneUploading: true });
-
-      try {
-        const uploaded = await compressAndUploadImages(MILESTONE_CANVAS_ID, paths, `store_milestones/${this.data.currentStoreId}`);
-        const finalImages = [...this.data.milestoneForm.images];
-        uploaded.forEach((u, i) => { finalImages[insertStart + i] = u.url; });
-        this.setData({ 'milestoneForm.images': finalImages });
-      } catch (uploadErr) {
-        const rolledBack = this.data.milestoneForm.images.filter((_: any, i: number) => i < insertStart || i >= insertStart + paths.length);
-        this.setData({ 'milestoneForm.images': rolledBack });
-        throw uploadErr;
-      }
-
-      this.setData({ milestoneUploading: false });
-    } catch (err) {
-      this.setData({ milestoneUploading: false });
-      console.error('[onChooseMilestoneImage] 图片处理失败:', err);
-      wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
-    }
-  },
-
-  async onSaveMilestone() {
-    if (this.data.milestoneSaving) return;
-    const { id, title, eventDate, content, images } = this.data.milestoneForm;
-
-    if (!title || !title.trim()) {
-      wx.showToast({ title: '请填写标题', icon: 'none' });
-      return;
-    }
-    if (!eventDate) {
-      wx.showToast({ title: '请选择发生日期', icon: 'none' });
-      return;
-    }
-
-    this.setData({ milestoneSaving: true });
-    try {
-      const res: any = await wx.cloud.callFunction({
-        name: 'manageStoreMilestone',
-        data: {
-          action: id ? 'update' : 'create',
-          id,
-          storeId: this.data.currentStoreId,
-          title: title.trim(),
-          eventDate,
-          content: content || '',
-          images: images.map((url: string) => ({ url, thumbUrl: url }))
-        }
-      });
-      const result = res.result;
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
-        return;
-      }
-
-      wx.showToast({ title: id ? '大事记已更新' : '大事记已发布', icon: 'success' });
-      this.setData({ showMilestoneModal: false });
-      this.fetchMilestones();
-    } catch (err) {
-      console.error('[onSaveMilestone] 保存大事记异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-    } finally {
-      this.setData({ milestoneSaving: false });
-    }
-  },
-
-  onDeleteMilestone(e: any) {
-    const id = e.currentTarget.dataset.id;
-    wx.showModal({
-      title: '删除大事记',
-      content: '确定要删除这条大事记吗？删除后不可恢复。',
-      confirmColor: '#D32F2F',
-      success: async (res) => {
-        if (!res.confirm) return;
-        try {
-          const cloudRes: any = await wx.cloud.callFunction({ name: 'manageStoreMilestone', data: { action: 'delete', id } });
-          const result = cloudRes.result;
-          if (!result || !result.success) {
-            wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
-            return;
-          }
-          wx.showToast({ title: '已删除', icon: 'success' });
-          this.fetchMilestones();
-        } catch (err) {
-          console.error('[onDeleteMilestone] 删除大事记异常:', err);
-          wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-        }
-      }
-    });
   },
 
   // 🛡️ 全局返回逻辑排查修复：此前这里的 pages.length 判断因为上面一段无条件调用

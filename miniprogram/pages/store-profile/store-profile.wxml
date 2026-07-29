@@ -1,7 +1,4 @@
 <view class="sp-page">
-  <!-- 图片压缩用离屏画布（大事记配图上传），全页面共用一个即可 -->
-  <canvas type="2d" id="milestoneImgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
-
   <view class="sp-nav-bar" style="padding-top: {{navTop}}px;">
     <view class="sp-nav-back" hover-class="sp-nav-back-hover" bindtap="goBack">←</view>
     <text class="sp-nav-title">🏠 门店档案</text>
@@ -36,6 +33,10 @@
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
       <view class="sp-archive-row">
+        <text class="sp-archive-lbl">联系电话</text>
+        <text class="sp-archive-val">{{contactPhone || '未填写'}}</text>
+      </view>
+      <view class="sp-archive-row">
         <text class="sp-archive-lbl">开业日期</text>
         <text class="sp-archive-val">{{openDate || '未填写'}}</text>
       </view>
@@ -55,12 +56,22 @@
         <text class="sp-archive-lbl">家园特色</text>
         <text class="sp-archive-val-block">{{characteristics}}</text>
       </view>
+      <view class="sp-archive-row vertical" wx:if="{{storePhotos.length > 0}}">
+        <text class="sp-archive-lbl">门店照片</text>
+        <view class="sp-photo-grid">
+          <image class="sp-photo-thumb" wx:for="{{storePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
+        </view>
+      </view>
     </view>
 
     <view class="sp-archive-edit-card" wx:if="{{editing}}">
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">详细地址</text>
         <input class="sp-edit-input full" value="{{editForm.address}}" bindinput="onEditInput" data-field="address" placeholder="请输入门店详细地址" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">联系电话</text>
+        <input class="sp-edit-input full" type="number" value="{{editForm.contactPhone}}" bindinput="onEditInput" data-field="contactPhone" placeholder="请输入门店联系电话" />
       </view>
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">开业日期</text>
@@ -101,6 +112,19 @@
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">门店位置（用于"附近门店"距离排序）</text>
         <view class="sp-location-picker-btn" bindtap="onChooseLocation">{{editForm.locationLabel || '📍 点击选择门店位置'}}</view>
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">门店照片（最多 9 张）</text>
+        <view class="receipt-grid-container">
+          <view class="grid-image-item" wx:for="{{editForm.storePhotos}}" wx:key="*this">
+            <image class="grid-img" src="{{item}}" mode="aspectFill" />
+            <view class="img-delete-badge" catchtap="onDeleteStorePhoto" data-index="{{index}}">✕</view>
+          </view>
+          <view class="grid-add-btn" bindtap="onChooseStorePhoto" wx:if="{{editForm.storePhotos.length < 9}}">
+            <text class="add-icon">{{storePhotoUploading ? '…' : '+'}}</text>
+            <text class="add-txt">{{storePhotoUploading ? '压缩中' : '添加照片'}}</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -184,91 +208,7 @@
       <text>加载中...</text>
     </view>
 
-    <!-- 🏛️ 门店大事记/发展历程：按年份分组的时间轴，参照 pages/journey 的展开/收起范式 -->
-    <view class="sp-section-title sp-milestone-title-row">
-      <text class="sp-section-icon">📜</text>
-      <text class="sp-section-txt">门店大事记 / 发展历程</text>
-      <view class="sp-milestone-title-actions">
-        <text class="sp-btn-toggle-all" wx:if="{{milestoneTimelineGroups.length > 0}}" bindtap="onToggleAllMilestones">{{allMilestonesExpanded ? '全部收起' : '全部展开'}}</text>
-        <text class="sp-btn-add-milestone" wx:if="{{canManage}}" bindtap="onOpenAddMilestone">+ 添加</text>
-      </view>
-    </view>
-
-    <view class="sp-milestone-groups" wx:if="{{!milestonesLoading && milestoneTimelineGroups.length > 0}}">
-      <view class="sp-milestone-group" wx:for="{{milestoneTimelineGroups}}" wx:key="yearKey">
-        <view class="sp-milestone-group-header" bindtap="onToggleMilestoneGroup" data-year-key="{{item.yearKey}}">
-          <view class="sp-milestone-group-dot"></view>
-          <text class="sp-milestone-group-label">{{item.yearLabel}}</text>
-          <text class="sp-milestone-group-count">共 {{item.items.length}} 条</text>
-          <text class="sp-milestone-group-arrow {{item.expanded ? 'rotate' : ''}}">▾</text>
-        </view>
-        <view class="sp-milestone-items {{item.expanded ? 'expanded' : 'collapsed'}}">
-          <view class="sp-milestone-item" wx:for="{{item.items}}" wx:for-item="ms" wx:key="_id">
-            <view class="sp-milestone-item-left">
-              <view class="sp-milestone-dot"></view>
-              <view class="sp-milestone-line"></view>
-            </view>
-            <view class="sp-milestone-item-body">
-              <view class="sp-milestone-item-header">
-                <text class="sp-milestone-date">{{ms.eventDate}}</text>
-                <text class="sp-milestone-title">{{ms.title}}</text>
-              </view>
-              <text class="sp-milestone-content" wx:if="{{ms.content}}">{{ms.content}}</text>
-              <view class="sp-milestone-img-grid" wx:if="{{ms.images.length > 0}}">
-                <image class="sp-milestone-img" wx:for="{{ms.images}}" wx:for-item="img" wx:key="*this" src="{{img.url}}" mode="aspectFill" />
-              </view>
-              <view class="sp-milestone-item-actions" wx:if="{{canManage}}">
-                <text class="sp-milestone-action-btn" data-item="{{ms}}" bindtap="onOpenEditMilestone">编辑</text>
-                <text class="sp-milestone-action-btn danger" data-id="{{ms._id}}" bindtap="onDeleteMilestone">删除</text>
-              </view>
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
-
-    <view class="sp-milestone-empty" wx:if="{{!milestonesLoading && milestoneTimelineGroups.length === 0}}">
-      <text>暂无大事记，{{canManage ? '点击右上角"+ 添加"记录门店发展历程' : '敬请期待'}}</text>
-    </view>
-
   </scroll-view>
-
-  <!-- 大事记新增/编辑弹窗 -->
-  <view class="sp-modal-backdrop" wx:if="{{showMilestoneModal}}" bindtap="onCloseMilestoneModal">
-    <view class="sp-modal-card" catchtap="stopPropagation">
-      <view class="sp-modal-header">
-        <text class="sp-modal-title">{{milestoneForm.id ? '编辑大事记' : '添加大事记'}}</text>
-        <text class="sp-modal-close" bindtap="onCloseMilestoneModal">✕</text>
-      </view>
-      <scroll-view scroll-y class="sp-modal-scroll">
-        <text class="sp-form-label">标题</text>
-        <input class="sp-modal-input" value="{{milestoneForm.title}}" bindinput="onMilestoneTitleInput" placeholder="如：门店成立仪式" maxlength="40" />
-
-        <text class="sp-form-label">发生日期</text>
-        <picker mode="date" value="{{milestoneForm.eventDate}}" bindchange="onMilestoneDateChange">
-          <view class="sp-modal-input sp-date-picker-value">{{milestoneForm.eventDate || '点击选择日期'}}</view>
-        </picker>
-
-        <text class="sp-form-label">内容描述</text>
-        <textarea class="sp-modal-textarea" value="{{milestoneForm.content}}" bindinput="onMilestoneContentInput" placeholder="请输入这段大事记的详细内容" maxlength="500" />
-
-        <text class="sp-form-label">配图（最多 9 张）</text>
-        <view class="sp-milestone-img-edit-grid">
-          <view class="sp-milestone-img-wrap" wx:for="{{milestoneForm.images}}" wx:key="*this">
-            <image class="sp-milestone-img" src="{{item}}" mode="aspectFill" />
-            <view class="sp-milestone-img-remove" data-index="{{index}}" catchtap="onRemoveMilestoneImage">✕</view>
-          </view>
-          <view class="sp-milestone-img-add" bindtap="onChooseMilestoneImage" wx:if="{{milestoneForm.images.length < 9}}">
-            <text>+</text>
-          </view>
-        </view>
-      </scroll-view>
-      <view class="sp-modal-footer">
-        <button class="sp-btn-cancel" bindtap="onCloseMilestoneModal">取消</button>
-        <button class="sp-btn-save" bindtap="onSaveMilestone" loading="{{milestoneSaving}}" disabled="{{milestoneSaving || milestoneUploading}}">保存</button>
-      </view>
-    </view>
-  </view>
 
   <!-- 门店人员与服务人群画像 · 快捷修改弹窗：只改这 7 项人数指标，比进入整页"编辑"
        模式更轻量——那个模式还会一并带出地址/开业日期等一大堆档案字段 -->
@@ -316,4 +256,6 @@
       </view>
     </view>
   </view>
+
+  <canvas type="2d" id="storeProfileImgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 </view>

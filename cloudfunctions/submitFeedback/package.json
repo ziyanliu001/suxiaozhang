@@ -1,0 +1,9 @@
+{
+  "name": "submitFeedback",
+  "version": "1.0.0",
+  "description": "云函数：个人页「爱心意见箱」提交，任意已登录用户可用，仅追加写入不做审核流转",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

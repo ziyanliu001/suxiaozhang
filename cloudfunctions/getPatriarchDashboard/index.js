@@ -19,6 +19,16 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
+// 🐛 云函数容器时区固定为 UTC，new Date(...).toLocaleDateString('zh-CN') 不传
+// timeZone 会直接按 UTC 渲染日期——跨越北京时间零点前后几小时的申请会被显示成
+// 前一天/后一天，这里显式指定 Asia/Shanghai
+function formatBeijingDateString(date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(date instanceof Date ? date : new Date(date));
+}
+
 // 权限：家长/督导锁定本店；超管可指定本机构内任意门店
 async function resolveTarget(caller, requestedStoreId) {
   if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
@@ -95,25 +105,8 @@ exports.main = async (event) => {
       expenseAmount: r.expenseAmount || 0
     }));
 
-    // 🏛️ 待审核角色申请：本店的店长/财务申请，家长可与超管一起分级审批
-    // （家长任命本身仍仅限超管，见 processRoleAudit，这里不展示 store_patriarch 申请）
-    const pendingRoleRes = await db.collection('user_roles')
-      .where({
-        storeId: target.storeId,
-        status: 'pending',
-        requestedRole: _.in(['store_manager', 'finance'])
-      })
-      .orderBy('applyTime', 'desc')
-      .limit(20)
-      .get();
-    const pendingRoleRequests = (pendingRoleRes.data || []).map((r) => ({
-      applyId: r._id,
-      realName: r.realName || '',
-      phone: r.phone || '',
-      requestedRole: r.requestedRole || '',
-      requestedRoleLabel: r.requestedRole === 'store_manager' ? '店长' : '财务',
-      applyTime: r.applyTime ? new Date(r.applyTime).toLocaleDateString('zh-CN') : ''
-    }));
+    // 🏛️ 待审核角色申请（店长/财务/家长/新店）已迁移到 processRoleAudit 的
+    // listPendingApplications action + profile.ts 的独立弹窗入口，这里不再重复查询/返回
 
     return {
       success: true,
@@ -130,7 +123,6 @@ exports.main = async (event) => {
         auditedCount,
         totalCount: monthReports.length,
         pendingVoidList,
-        pendingRoleRequests,
         pendingProfileUpdate: store.pendingProfileUpdate || null
       }
     };

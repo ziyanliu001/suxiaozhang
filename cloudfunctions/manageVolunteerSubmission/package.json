@@ -1,0 +1,9 @@
+{
+  "name": "manageVolunteerSubmission",
+  "version": "1.0.0",
+  "description": "云函数：义工现场服务工具（菜单人数/物资消耗）提交，独立于 report_logs 财务台账",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

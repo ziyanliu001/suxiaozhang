@@ -12,7 +12,45 @@
 
   <scroll-view scroll-y class="al-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
 
-    <view class="al-store-tip" wx:if="{{currentStoreName}}">📍 {{currentStoreName}}</view>
+    <!-- 🛡️ 权限死锁修复（双保险）："全国总览"这个虚拟门店名只有超管才该看到。
+         TS 侧 initRoleAndStore 已经在 isFamily 为 true 时把 isSuperAdmin 强制清零
+         （根因修复），这里的显式 !isFamily 是 WXML 层面再加一道硬约束，不完全依赖
+         那次赋值——两个分支互斥，覆盖"是/不是全国总览"两种情况：非"全国总览"的
+         真实门店名对任何角色都正常显示；"全国总览"仅家人以外的超管才显示 -->
+    <view class="al-store-tip" wx:if="{{!isFamily && isSuperAdmin && currentStoreName === '全国总览' || (currentStoreName && currentStoreName !== '全国总览')}}">📍 {{currentStoreName}}</view>
+
+    <!-- ⏳ 待确认的义工投稿：仅店长/超管可见，与下方公开时间轴完全分开——
+         这里的记录还没通过确认，不会出现在今日动态/历史动态里 -->
+    <block wx:if="{{canManage && pendingList.length > 0}}">
+      <view class="al-section-divider">
+        <text class="al-divider-icon">⏳</text>
+        <text class="al-divider-txt">待确认的义工投稿（{{pendingList.length}}）</text>
+      </view>
+
+      <view class="al-pending-card" wx:for="{{pendingList}}" wx:key="_id">
+        <view class="al-pending-header">
+          <text class="al-pending-title">{{item.title}}</text>
+          <text class="al-pending-time">{{item.eventTime}}</text>
+        </view>
+        <text class="al-pending-meta">🙋 {{item.publisherLabel || '义工'}}提交</text>
+        <text class="al-pending-content" wx:if="{{item.content}}">{{item.content}}</text>
+
+        <view class="al-thumb-9grid" wx:if="{{item.images.length > 0}}">
+          <view class="al-thumb-grid-item" wx:for="{{item.images}}" wx:for-item="img" wx:key="url">
+            <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="al-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" bindtap="onPreviewImage" data-url="{{img.url}}" data-urls="{{item.images}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
+            <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="al-pending-actions">
+          <button class="al-btn-pending-reject" catchtap="onRejectPending" data-id="{{item._id}}">驳回</button>
+          <button class="al-btn-pending-approve" catchtap="onApprovePending" data-id="{{item._id}}">✅ 确认</button>
+        </view>
+      </view>
+    </block>
 
     <!-- 📌 今日动态：顶部高亮区，右上角提供编辑/追加入口 -->
     <view class="al-section-divider">
@@ -25,9 +63,16 @@
       <view class="al-today-header">
         <text class="al-today-title" wx:if="{{todayItem}}">{{todayItem.title}}</text>
         <text class="al-today-title al-today-empty-txt" wx:else>今日暂无动态</text>
-        <button class="al-btn-today-edit" wx:if="{{canManage}}" bindtap="onOpenTodayEditForm">
+        <!-- 🛡️ 权限死锁修复：发布/编辑入口仅对有管理或发布权限的角色开放
+             （店长/超管/义工）。显式加上 !isFamily 硬性前置条件，不完全依赖
+             canManage/isVolunteer 与 isFamily 互斥这一隐含前提——即便未来
+             判定逻辑出现疏漏，家人也在 WXML 层面被直接、无条件挡住 -->
+        <!-- 🌟 义工点这个按钮永远是"新提交一条待确认动态"（服务端只放行 create），
+             不会像店长那样接续编辑当天已有的正式记录，文案固定不随 todayItem 变化 -->
+        <button class="al-btn-today-edit" wx:if="{{!isFamily && canManage}}" bindtap="onOpenTodayEditForm">
           {{todayItem ? '✏️ 编辑/追加今日动态' : '📷 记录今日动态'}}
         </button>
+        <button class="al-btn-today-edit" wx:elif="{{!isFamily && isVolunteer}}" bindtap="onOpenTodayEditForm">📷 提交护持动态</button>
       </view>
 
       <!-- 🌟 发布冲突提示：今日已有记录时展示发布人与时间 -->

@@ -20,6 +20,18 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
+// 🐛 云函数容器时区固定为 UTC，new Date().toLocaleString() 不传 timeZone 会
+// 直接按 UTC 渲染，导致 approveTime/auditTime 等落库的审批时间字符串比北京
+// 时间少 8 小时
+function formatBeijingTimeString(date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).format(date instanceof Date ? date : new Date(date));
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -62,7 +74,7 @@ const ACTION_RULES = {
         isManagerConfirmed: true,
         managerConfirmedAt: db.serverDate(),
         approvalStatus: 'APPROVED',
-        approveTime: new Date().toLocaleString()
+        approveTime: formatBeijingTimeString(new Date())
       };
     }
   },
@@ -78,7 +90,7 @@ const ACTION_RULES = {
       return null;
     },
     apply() {
-      const nowStr = new Date().toLocaleString();
+      const nowStr = formatBeijingTimeString(new Date());
       return {
         isFinanceAudited: true,
         financeAuditedAt: db.serverDate(),
@@ -100,7 +112,7 @@ const ACTION_RULES = {
       return null;
     },
     apply(_doc, reason) {
-      const nowStr = new Date().toLocaleString();
+      const nowStr = formatBeijingTimeString(new Date());
       return {
         isLocked: false,
         approvalStatus: 'APPROVED',

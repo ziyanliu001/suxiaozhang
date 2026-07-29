@@ -114,59 +114,6 @@ page {
   background: #F1F3F5;
   color: #868E96;
 }
-
-
-.tag-badge-capsule.blue-theme {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  background: linear-gradient(135deg, #1C7ED6 0%, #1971C2 100%);
-  color: #FFFFFF;
-  font-size: 24rpx;
-  font-weight: bold;
-  padding: 8rpx 24rpx;
-  border-radius: 30rpx;
-  box-shadow: 0 4rpx 12rpx rgba(28, 126, 214, 0.3);
-  transition: all 0.2s ease;
-}
-
-.tag-badge-capsule.blue-theme:active {
-  transform: scale(0.96);
-  opacity: 0.9;
-}
-
-.tag-badge-capsule.blue-theme .icon {
-  font-size: 22rpx;
-}
-
-.tag-badge-capsule.blue-theme .lbl {
-  font-size: 24rpx;
-}
-
-.tag-badge-capsule.blue-theme .arrow {
-  font-size: 20rpx;
-  margin-left: 4rpx;
-}
-
-.tag-btn-capsule.gray-theme {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  background-color: #F1F3F5;
-  color: #495057;
-  font-size: 22rpx;
-  padding: 6rpx 20rpx;
-  border-radius: 20rpx;
-}
-
-.tag-btn-capsule.gray-theme .icon {
-  font-size: 22rpx;
-}
-
-.tag-btn-capsule.gray-theme .lbl {
-  font-size: 22rpx;
-}
-
 .btn-help-capsule {
   background-color: #F1F3F5;
   color: #495057;
@@ -184,43 +131,6 @@ page {
   padding: 6rpx 20rpx;
   border-radius: 20rpx;
 }
-
-.manager-top-action-grid {
-  display: flex;
-  gap: 16rpx;
-  padding: 0 24rpx;
-  margin-bottom: 0;
-}
-
-.golden-action-card {
-  flex: 1;
-  height: 80rpx;
-  background: linear-gradient(180deg, #FFF9DB 0%, #FFE066 100%);
-  border: 1rpx solid #FCC419;
-  border-radius: 20rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10rpx;
-  box-shadow: 0 4rpx 10rpx rgba(252, 196, 25, 0.2);
-  transition: all 0.2s ease;
-}
-
-.golden-action-card:active {
-  transform: scale(0.98);
-  opacity: 0.9;
-}
-
-.golden-action-card .card-icon {
-  font-size: 28rpx;
-}
-
-.golden-action-card .card-text {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #7A4D00;
-}
-
 .lock-readonly-banner {
   background: linear-gradient(90deg, #FFF5F5 0%, #FFE3E3 100%);
   border: 1rpx solid #FFC9C9;
@@ -346,21 +256,6 @@ page {
   overflow: hidden;
   margin-top: 160rpx;
 }
-
-.poster-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-bottom: 20rpx;
-}
-
-.poster-modal-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #212529;
-}
-
 .modal-header-row {
   width: 100%;
   display: flex;
@@ -399,13 +294,6 @@ page {
   background-color: #E9ECEF;
   transform: scale(0.9);
 }
-
-.poster-btn-close {
-  font-size: 32rpx;
-  color: #868E96;
-  padding: 8rpx 16rpx;
-}
-
 .poster-canvas-wrapper {
   display: flex;
   justify-content: center;
@@ -483,11 +371,6 @@ page {
 .btn-draft-act.recover { color: #0CA678; font-weight: bold; }
 .btn-draft-act.discard { color: #F03E3E; }
 .draft-actions .divider { color: #20C997; font-size: 20rpx; }
-
-.notice-banner-row {
-  margin-bottom: 16rpx;
-}
-
 .template-card {
   display: flex;
   justify-content: space-between;
@@ -775,257 +658,9 @@ page {
   border-color: #74C0FC;
   transform: scale(0.98);
 }
-
-/* ===== 旧类名兼容兜底 ===== */
-.form-grid-equal-height {
-  display: flex;
-  gap: 20rpx;
-  align-items: stretch;
-  margin-bottom: 24rpx;
-}
-
-.grid-pod-card {
-  flex: 1 1 0%;
-  min-width: 0;
-  background: #F8F9FA;
-  border: 1rpx solid #E9ECEF;
-  border-radius: 20rpx;
-  padding: 24rpx;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.pod-row-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 44rpx;
-  margin-bottom: 16rpx;
-  white-space: nowrap;
-}
-
-.pod-row-header .lbl-title {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #212529;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pod-row-input {
-  min-height: 80rpx;
-  display: flex;
-  align-items: center;
-  margin-bottom: 16rpx;
-}
-
-.picker-input-box,
-.currency-input-wrapper {
-  width: 100%;
-  min-height: 80rpx;
-  background: #FFFFFF;
-  border: 1rpx solid #CED4DA;
-  border-radius: 16rpx;
-  padding: 0 20rpx;
-  box-sizing: border-box;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.currency-input-wrapper.is-editing {
-  border-color: #FCC419;
-}
-
-.date-val-text,
-.balance-real-input {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #212529;
-}
-
-.balance-real-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.currency-symbol {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #212529;
-  margin-right: 6rpx;
-}
-
-.btn-input-refresh-touch {
-  padding: 12rpx 14rpx;
-  margin-right: -10rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-input-refresh-touch:active {
-  opacity: 0.6;
-  transform: scale(0.9);
-}
-
-.btn-input-refresh-touch:active .refresh-icon {
-  transform: rotate(180deg);
-  transition: transform 0.3s ease;
-}
-
 .refresh-icon {
   font-size: 26rpx;
 }
-
-.pod-row-footer {
-  display: flex;
-  width: 100%;
-  margin-top: auto;
-  box-sizing: border-box;
-}
-
-.pod-row-footer.date-footer {
-  display: flex;
-  gap: 12rpx;
-  align-items: center;
-}
-
-.quick-date-btn {
-  flex: 1;
-  height: 60rpx;
-  background: #FFFFFF;
-  color: #495057;
-  border: 1rpx solid #CED4DA;
-  border-radius: 14rpx;
-  font-size: 24rpx;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.quick-date-btn.active {
-  background: linear-gradient(180deg, #FFF9DB 0%, #FFE066 100%);
-  color: #7A4D00;
-  border-color: #FCC419;
-  box-shadow: 0 4rpx 10rpx rgba(252, 196, 25, 0.25);
-}
-
-.pod-row-footer.balance-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  margin-top: auto;
-}
-
-.balance-matched-tip-bar {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-}
-
-.balance-matched-tip-bar .tip-icon {
-  font-size: 24rpx;
-  font-weight: bold;
-  color: #2B8A3E;
-}
-
-.balance-matched-tip-bar .tip-text {
-  font-size: 22rpx;
-  font-weight: bold;
-  color: #2B8A3E;
-  line-height: 1.3;
-  word-break: break-all;
-}
-
-.balance-matched-tip-bar.warning .tip-icon,
-.balance-matched-tip-bar.warning .tip-text {
-  color: #E03131;
-}
-
-.btn-unlock-pill {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  background: #E9ECEF;
-  color: #495057;
-  padding: 8rpx 16rpx;
-  border-radius: 20rpx;
-  font-size: 22rpx;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.btn-unlock-pill.editing {
-  background: #FFF3BF;
-  color: #D9480E;
-  border: 1rpx solid #FFE066;
-  font-weight: bold;
-}
-
-.btn-unlock-pill:active {
-  transform: scale(0.95);
-  opacity: 0.8;
-}
-
-.btn-history-pill {
-  width: 100%;
-  height: 64rpx;
-  background: #E7F5FF;
-  border: 1rpx solid #A5D8FF;
-  border-radius: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  box-sizing: border-box;
-  transition: all 0.2s ease;
-}
-
-.btn-history-pill:active {
-  background: #D0EBFF;
-  border-color: #74C0FC;
-  transform: scale(0.98);
-}
-
-.btn-history-pill .icon {
-  font-size: 26rpx;
-}
-
-.btn-history-pill .lbl {
-  font-size: 24rpx;
-  color: #1C7ED6;
-  font-weight: bold;
-  white-space: nowrap;
-}
-
-.input-mode-tags {
-  display: flex;
-  gap: 12rpx;
-}
-
-.mode-tag {
-  font-size: 22rpx;
-  color: #495057;
-  background: #F1F3F5;
-  padding: 6rpx 16rpx;
-  border-radius: 12rpx;
-  white-space: nowrap;
-}
-
-.mode-tag.active {
-  background: #FFF3BF;
-  color: #D9480E;
-  font-weight: bold;
-}
-
 .field-header-with-segment {
   display: flex;
   justify-content: space-between;
@@ -1093,87 +728,6 @@ page {
 .form-field-block {
   margin-bottom: 8rpx;
 }
-
-.announcement-card {
-  display: flex;
-  flex-direction: column;
-  background: #FFFBF0;
-  border: 1rpx solid #FFE066;
-  border-radius: 24rpx;
-  padding: 24rpx;
-  margin: 0 24rpx;
-  margin-top: 20rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.02);
-}
-
-.announcement-icon {
-  font-size: 40rpx;
-  margin-bottom: 12rpx;
-}
-
-.announcement-content {
-  flex: 1;
-}
-
-.announcement-header {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  margin-bottom: 12rpx;
-}
-
-.announcement-tag {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #E03131;
-  flex-shrink: 0;
-}
-
-.announcement-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #212529;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.announcement-text {
-  font-size: 26rpx;
-  color: #495057;
-  line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.announcement-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 20rpx;
-  margin-top: 16rpx;
-  padding-top: 16rpx;
-  border-top: 1rpx dashed #FFE066;
-}
-
-.action-btn {
-  font-size: 24rpx;
-  color: #F59F00;
-  font-weight: 500;
-}
-
-.action-btn.edit-btn {
-  color: #2B8A3E;
-}
-
-.action-btn.hide-btn {
-  color: #868E96;
-}
-
 .announcement-modal {
   position: fixed;
   top: 0;
@@ -1308,17 +862,6 @@ page {
   background-color: #F1F3F5;
   color: #495057;
 }
-
-.action-btn.edit-btn {
-  color: #E53935;
-  font-weight: bold;
-}
-
-.action-btn.hide-btn {
-  color: #969799;
-  font-weight: 500;
-}
-
 .merge-option-bar {
   display: flex;
   justify-content: space-between;
@@ -1558,40 +1101,6 @@ page {
   color: #fff;
   box-shadow: 0 8rpx 24rpx rgba(76, 175, 80, 0.3);
 }
-
-.content-scroll {
-  flex: 1;
-  padding: 30rpx;
-  padding-bottom: 280rpx;
-  box-sizing: border-box;
-}
-
-.form-card {
-  background-color: #fff;
-  border-radius: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
-  overflow: hidden;
-  margin: 0 24rpx 24rpx;
-}
-
-.card-action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10rpx 5rpx 20rpx 5rpx;
-}
-
-.card-tip {
-  font-size: 26rpx;
-  color: #666;
-}
-
-.reset-link {
-  font-size: 26rpx;
-  color: #007aff;
-  font-weight: 500;
-}
-
 .form-main-card .section { 
   background-color: transparent; 
   padding: 24rpx 0; 
@@ -1756,50 +1265,6 @@ page {
   min-height: 60rpx;
   line-height: 1.5;
 }
-
-.stats-3grid {
-  display: flex;
-  gap: 16rpx;
-}
-
-.grid-input-item {
-  flex: 1;
-}
-
-.grid-input-item.wide {
-  flex: 1.2;
-}
-
-.item-lbl {
-  font-size: 20rpx;
-  color: #495057;
-  margin-bottom: 6rpx;
-  display: block;
-}
-
-.input-suffix-box {
-  display: flex;
-  align-items: center;
-  background: #FFF9DB;
-  border: 1rpx solid #FFE066;
-  border-radius: 12rpx;
-  padding: 10rpx 12rpx;
-}
-
-.input-suffix-box .input-field {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #212529;
-  width: 100%;
-}
-
-.input-suffix-box .suffix {
-  font-size: 20rpx;
-  color: #8C6D46;
-  margin-left: 4rpx;
-  flex-shrink: 0;
-}
-
 /* Card C: 主食物资单选胶囊 */
 .card-title-bar {
   margin-bottom: 8rpx;
@@ -2016,12 +1481,6 @@ page {
   box-sizing: border-box;
   line-height: 1.6;
 }
-
-.expense-textarea.warm-bg {
-  background: #FFFDF5;
-  border-color: #FFE066;
-}
-
 .expense-textarea.activity-text-spacing {
   min-height: 100rpx;
   margin-bottom: 16rpx;
@@ -2315,60 +1774,6 @@ page {
   color: #8C1D18;
   margin-top: 4rpx;
 }
-
-/* 紧凑单行预览：今日食谱照片 / 今日大事记照片 专用，横向滚动，图片数量再多也只占一行高度 */
-.compact-photo-row {
-  width: 100%;
-  white-space: nowrap;
-}
-
-// 🛡️ 同 .grid-image-item：不设 overflow:hidden，避免裁掉 .img-delete-badge 露出
-// 卡片角外的删除按钮；圆角遮罩由 .compact-photo-img 自身完成
-.compact-photo-item {
-  position: relative;
-  display: inline-block;
-  width: 120rpx;
-  height: 120rpx;
-  margin-right: 16rpx;
-  vertical-align: top;
-}
-
-.compact-photo-img {
-  width: 100%;
-  height: 100%;
-  border-radius: 12rpx;
-  border: 1.5rpx solid #EFE6D8;
-}
-
-/* 边框/图标规格与 .grid-add-btn 统一（支出凭证/大事记网格同款虚线框），
-   仅保留自身固定 120rpx 尺寸——横滚单行布局本就需要固定宽高，与网格按格子宽度
-   自适应是两种不同的排布方式，不属于本次要统一的范畴 */
-.compact-photo-add {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 120rpx;
-  height: 120rpx;
-  background: #FAF8F5;
-  border: 2.5rpx dashed #C8B195;
-  border-radius: 16rpx;
-  vertical-align: top;
-}
-
-.compact-photo-add .add-icon {
-  font-size: 40rpx;
-  color: #8C1D18;
-  line-height: 1;
-  font-weight: 300;
-}
-
-.compact-photo-add .add-txt {
-  font-size: 18rpx;
-  color: #8C1D18;
-  margin-top: 2rpx;
-}
-
 .upload-guide-text {
   font-size: 20rpx;
   color: #E65100;
@@ -2377,10 +1782,7 @@ page {
   padding: 12rpx 16rpx;
   line-height: 1.4;
   margin-top: 12rpx;
-}
-
-.form-row { display: flex; justify-content: space-between; gap: 16rpx; }
-.form-item { flex: 1; min-width: 0; }
+}.form-item { flex: 1; min-width: 0; }
 .row { display: flex; justify-content: space-between; }
 .col { width: 48%; }
 .col-full { width: 100%; }
@@ -2391,371 +1793,7 @@ page {
   display: block; 
   text-align: left; 
   white-space: nowrap;
-}
-
-.label-bar { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  margin-bottom: 10rpx; 
-} 
-.header-action-group {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  flex-shrink: 0 !important;
-}
-
-.btn-micro-capsule {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3rpx 10rpx;
-  border-radius: 12rpx;
-  background-color: #E9ECEF;
-  border: 1rpx solid #CED4DA;
-  white-space: nowrap !important;
-  flex-shrink: 0 !important;
-  transition: all 0.2s ease;
-}
-
-.btn-micro-text {
-  font-size: 20rpx;
-  color: #495057;
-  line-height: 1.2;
-  font-weight: 500;
-}
-
-.btn-micro-capsule:active {
-  opacity: 0.8;
-  transform: scale(0.96);
-}
-
-.btn-micro-capsule.primary {
-  background-color: #E7F5FF;
-  border-color: #A5D8FF;
-}
-
-.btn-micro-capsule.primary .btn-micro-text {
-  color: #1C7ED6;
-}
-
-.btn-micro-capsule.primary.editing-active {
-  background-color: #FFF3BF !important;
-  border-color: #FFE066 !important;
-}
-
-.btn-micro-capsule.primary.editing-active .btn-micro-text {
-  color: #D9480E !important;
-  font-weight: bold;
-}
-
-.input-box.has-value {
-  border-color: #CED4DA;
-  background-color: #FFFFFF;
-}
-
-.input-box.is-empty {
-  border-color: #FFC9C9;
-  background-color: #FFF5F5;
-}
-
-.status-tip-text {
-  font-size: 21rpx;
-  line-height: 1.5;
-  margin-top: 8rpx;
-  padding: 4rpx 0;
-  transition: color 0.2s ease;
-  word-break: keep-all;
-  white-space: normal;
-}
-
-.status-tip-text.success {
-  color: #2B8A3E;
-  font-weight: 500;
-}
-
-.status-tip-text.warning {
-  color: #D9480E;
-  font-weight: 500;
-}
-
-.currency-input-wrapper {
-  width: 100%;
-  height: 88rpx;
-  border-radius: 16rpx;
-  padding: 0 24rpx;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s ease;
-}
-
-.currency-input-wrapper.is-locked {
-  background-color: #F8F9FA;
-  border: 1rpx solid #E9ECEF;
-}
-
-.currency-input-wrapper.is-editing {
-  background-color: #FFFFFF;
-  border: 2rpx solid #FAB005;
-  box-shadow: 0 0 8rpx rgba(250, 176, 5, 0.2);
-}
-
-.currency-symbol {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #343A40;
-  margin-right: 8rpx;
-  flex-shrink: 0;
-}
-
-.balance-real-input {
-  flex: 1;
-  height: 100%;
-  background-color: transparent;
-  border: none;
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #212529;
-  box-sizing: border-box;
-}
-
-.btn-reset-auto {
-  font-size: 28rpx;
-  padding: 8rpx 12rpx;
-  color: #F59F00;
-  flex-shrink: 0;
-}
-
-.history-balance-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.history-balance-mask {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-}
-
-.history-balance-content {
-  position: relative;
-  width: 620rpx;
-  max-height: 70vh;
-  background-color: #FFFFFF;
-  border-radius: 24rpx;
-  overflow: hidden;
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15);
-}
-
-.history-balance-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 32rpx;
-  border-bottom: 1rpx solid #F0F0F0;
-}
-
-.history-balance-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #333333;
-}
-
-.history-balance-close {
-  width: 48rpx;
-  height: 48rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.history-balance-body {
-  max-height: 60vh;
-  padding: 16rpx;
-}
-
-.history-balance-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.history-balance-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24rpx;
-  background-color: #FAFAFA;
-  border-radius: 16rpx;
-  transition: all 0.2s ease;
-}
-
-.history-balance-item:active {
-  background-color: #F0F0F0;
-  transform: scale(0.98);
-}
-
-.history-balance-item-left {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.history-balance-date {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #333333;
-}
-
-.history-balance-store {
-  font-size: 22rpx;
-  color: #999999;
-}
-
-.history-balance-item-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6rpx;
-}
-
-.history-balance-value {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #E53935;
-}
-
-.history-balance-select {
-  font-size: 22rpx;
-  color: #1C7ED6;
-  padding: 4rpx 12rpx;
-  background-color: #E7F5FF;
-  border-radius: 12rpx;
-}
-
-.history-balance-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80rpx 0;
-  gap: 16rpx;
-}
-
-.empty-icon {
-  font-size: 64rpx;
-}
-
-.empty-text {
-  font-size: 26rpx;
-  color: #999999;
-}
-
-.input-wrapper {
-  width: 100%;
-  height: 88rpx;
-  border-radius: 16rpx;
-  padding: 0 24rpx;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s ease;
-}
-
-.input-wrapper.disabled-style {
-  background-color: #F8F9FA;
-  border: 1rpx solid #E9ECEF;
-}
-
-.input-wrapper.editable-active {
-  background-color: #FFFFFF;
-  border: 2rpx solid #FF922B;
-  box-shadow: 0 0 12rpx rgba(255, 146, 43, 0.2);
-}
-
-.input-box { 
-  width: 100%;
-  height: 100%;
-  background-color: transparent; 
-  border: none;
-  border-radius: 16rpx; 
-  font-size: 32rpx; 
-  font-weight: bold;
-  color: #333333; 
-  box-sizing: border-box;
-} 
-
-
-
-.field-header-flex {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 44rpx;
-  margin-bottom: 12rpx;
-}
-
-.field-header-flex .label {
-  margin-bottom: 0;
-  flex-shrink: 0;
-  white-space: nowrap !important;
-}
-
-.label-with-refresh {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.refresh-icon-btn {
-  font-size: 24rpx;
-  color: #1C7ED6;
-  padding: 4rpx 8rpx;
-  line-height: 1;
-}
-
-.quick-date-tags {
-  display: flex;
-  gap: 8rpx;
-}
-
-.date-tag {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  align-items: center;
-  justify-content: center;
-  font-size: 22rpx;
-  padding: 6rpx 16rpx;
-  border-radius: 20rpx;
-  background-color: #F1F3F5;
-  color: #495057;
-  border: 1rpx solid #E9ECEF;
-  white-space: nowrap !important;
-  flex-shrink: 0;
-  line-height: 1.2;
-  transition: all 0.2s ease;
-}
-
-.date-tag.active {
-  background-color: #FFF3BF;
-  color: #D9480E;
-  font-weight: bold;
-  border: 1rpx solid #FFE066;
-}
-
-.date-picker-box {
+}.date-picker-box {
   width: 100%;
   height: 88rpx;
   background: #FFFFFF;
@@ -2767,49 +1805,10 @@ page {
   align-items: center;
   justify-content: space-between;
   gap: 10rpx;
-}
-
-.date-display-text {
-  flex: 1;
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #212529;
-  white-space: nowrap;
-  letter-spacing: -0.5rpx;
-}
-
-.arrow-icon {
-  font-size: 20rpx;
-  color: #ADB5BD;
-  flex-shrink: 0;
-}
-
-.toggle-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16rpx 0;
-  border-bottom: 2rpx solid #f0f0f0;
-}
-.toggle-icon {
+}.toggle-icon {
   font-size: 36rpx;
   margin-right: 12rpx;
 }
-.toggle-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #666;
-  flex: 1;
-}
-.toggle-arrow {
-  font-size: 24rpx;
-  color: #999;
-  transition: transform 0.3s;
-}
-.toggle-content {
-  padding-top: 20rpx;
-}
-
 .input { 
   background-color: #ffffff;
   border: 2rpx solid #e1e4e8; 
@@ -2861,27 +1860,11 @@ page {
   font-size: 24rpx;
   margin-left: 12rpx;
 }
-
-.detail-header-flex {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16rpx;
-}
-
 .section-title {
   font-size: 28rpx;
   font-weight: bold;
   color: #444;
 }
-
-.tab-switch-box {
-  display: flex;
-  background: #F1F3F5;
-  border-radius: 24rpx;
-  padding: 4rpx;
-}
-
 .tab-item {
   font-size: 22rpx;
   padding: 8rpx 18rpx;
@@ -3083,156 +2066,6 @@ textarea, .textarea {
   height: auto;
   max-height: none;
 }
-
-.textarea.materials-input {
-  min-height: 120rpx;
-  background-color: #f9fafb;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 8rpx;
-}
-
-.materials-preview {
-  margin-top: 24rpx;
-  background-color: #f8f9fa;
-  border-radius: 12rpx;
-  padding: 24rpx;
-  border: 1rpx solid #e9ecef;
-}
-
-.preview-count {
-  font-size: 24rpx;
-  color: #059669;
-  font-weight: bold;
-}
-
-.materials-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
-.materials-item {
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-}
-
-.materials-donor {
-  font-size: 26rpx;
-  color: #e53935;
-  font-weight: bold;
-}
-
-.materials-desc {
-  font-size: 24rpx;
-  color: #666;
-}
-
-.volunteer-section {
-  background-color: #FFF8F0;
-  border: 1rpx solid #FFE4C4;
-  border-radius: 12rpx;
-  padding: 24rpx;
-}
-
-.volunteer-row {
-  display: flex;
-  gap: 24rpx;
-  margin-top: 16rpx;
-}
-
-.volunteer-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.volunteer-label {
-  font-size: 24rpx;
-  color: #8B6914;
-  white-space: nowrap;
-}
-
-.volunteer-input {
-  flex: 1;
-  height: 60rpx;
-  padding: 0 16rpx;
-  background-color: #fff;
-  border: 1rpx solid #FFE4C4;
-  border-radius: 8rpx;
-  font-size: 26rpx;
-  color: #333;
-  text-align: center;
-}
-
-.volunteer-unit {
-  font-size: 24rpx;
-  color: #B8860B;
-  font-weight: bold;
-  white-space: nowrap;
-}
-
-.staple-status-section {
-  background-color: #F0FFF4;
-  border: 1rpx solid #C6F6D5;
-  border-radius: 12rpx;
-  padding: 24rpx;
-}
-
-.staple-row {
-  margin-top: 16rpx;
-}
-
-.staple-item {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.staple-label {
-  font-size: 26rpx;
-  color: #276749;
-  font-weight: 500;
-}
-
-.staple-options {
-  display: flex;
-  gap: 12rpx;
-}
-
-.staple-option {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 64rpx;
-  background-color: #fff;
-  border: 2rpx solid #E2E8F0;
-  border-radius: 8rpx;
-  font-size: 24rpx;
-  color: #64748B;
-  transition: all 0.2s;
-}
-
-.staple-option.active.sufficient {
-  background-color: #F0FFF4;
-  border-color: #48BB78;
-  color: #276749;
-}
-
-.staple-option.active.normal {
-  background-color: #FFFFF0;
-  border-color: #ECC94B;
-  color: #92400E;
-}
-
-.staple-option.active.urgent {
-  background-color: #FFF5F5;
-  border-color: #F56565;
-  color: #9B2C2C;
-}
-
 .parse-preview {
   margin-top: 24rpx;
   background-color: #f8f9fa;
@@ -3322,28 +2155,6 @@ textarea, .textarea {
   font-size: 24rpx;
   color: #e53935;
 }
-
-.sub-input-group {
-  background: #ffffff;
-  border-radius: 16rpx;
-  padding: 20rpx;
-  border: 1rpx solid #e9ecef;
-}
-
-.sub-input-group.margin-top {
-  margin-top: 16rpx;
-}
-
-.group-label {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #343a40;
-  margin-bottom: 12rpx;
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
 .expense-textarea {
   width: 100%;
   min-height: 160rpx;
@@ -3355,19 +2166,6 @@ textarea, .textarea {
   border: 1rpx solid #EFE6D8;
   box-sizing: border-box;
 }
-
-/* ================= 🔑 生成邀请码高亮按钮 ================= */
-.highlight-gold {
-  background: linear-gradient(180deg, #FFFDF0 0%, #FFE082 100%) !important;
-  border-color: #FFE082 !important;
-}
-
-/* ================= 🗑️ 危险操作红色按钮 ================= */
-.danger-red {
-  background: linear-gradient(180deg, #FFF5F5 0%, #FFCDD2 100%) !important;
-  border-color: #FFCDD2 !important;
-}
-
 /* ================= 顶栏快捷操作胶囊行 ================= */
 /* ===== 首页快捷操作区 v3：标准 2x2 管理宫格 + 底部极简双粒推广工具栏 ===== */
 .manager-quick-actions-v2 {
@@ -3599,6 +2397,194 @@ textarea, .textarea {
   50% { box-shadow: 0 0 16rpx rgba(255, 152, 0, 0.18); }
 }
 
+/* ❤️ 家人（服务对象）「透明监督版」首页三模块：不填报表、不需要计算工具，
+   专注阳光账本大盘 / 今日菜谱 / 雨花大事记与护持剪影三件事 */
+.family-home-container {
+  padding: 0 24rpx;
+  box-sizing: border-box;
+}
+
+/* 模块一：阳光账本核心大盘——金/暖色质感背景，突出"公开透明·全民监督" */
+.family-sunshine-hero-card {
+  background: linear-gradient(155deg, #FFF3D6 0%, #FDE7B8 55%, #F8D992 100%);
+  border: 1rpx solid #E6C179;
+  border-radius: 28rpx;
+  padding: 32rpx 28rpx 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(230, 162, 60, 0.2);
+  box-sizing: border-box;
+}
+
+.fsh-badge {
+  display: inline-block;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #8B5A00;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 20rpx;
+  padding: 6rpx 18rpx;
+  margin-bottom: 16rpx;
+}
+
+.fsh-store-name {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #6B3E00;
+}
+
+.fsh-period {
+  display: block;
+  font-size: 22rpx;
+  color: #8B6A2E;
+  margin-top: 4rpx;
+  margin-bottom: 20rpx;
+}
+
+.fsh-hero-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 20rpx;
+  padding: 20rpx 8rpx;
+  margin-bottom: 20rpx;
+}
+
+.fsh-hero-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fsh-hero-num {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #8B5A00;
+}
+
+.fsh-hero-label {
+  font-size: 20rpx;
+  color: #8B6A2E;
+  margin-top: 6rpx;
+  text-align: center;
+}
+
+.fsh-hero-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: rgba(139, 90, 0, 0.2);
+}
+
+.fsh-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fsh-footer-text {
+  font-size: 20rpx;
+  color: #8B6A2E;
+}
+
+.fsh-footer-link {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #6B3E00;
+  flex-shrink: 0;
+}
+
+/* 模块二：今日菜谱展示——大字号、高对比度，专注让家人一眼看清今天吃什么 */
+.family-menu-card,
+.family-activity-card {
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.fm-header,
+.fa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.fm-title,
+.fa-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.fm-date {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.fm-9grid,
+.fa-9grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10rpx;
+  margin-bottom: 20rpx;
+}
+
+.fm-grid-item,
+.fa-grid-item {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12rpx;
+  overflow: hidden;
+  background: #F5F5F5;
+}
+
+.fm-grid-img,
+.fa-grid-img {
+  width: 100%;
+  height: 100%;
+}
+
+.fm-text {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  line-height: 1.8;
+  color: #222222;
+}
+
+.fa-text {
+  display: block;
+  font-size: 28rpx;
+  line-height: 1.7;
+  color: #333333;
+}
+
+.fm-empty,
+.fa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48rpx 0;
+}
+
+.fm-empty-icon,
+.fa-empty-icon {
+  font-size: 56rpx;
+  margin-bottom: 12rpx;
+}
+
+.fm-empty-text,
+.fa-empty-text {
+  font-size: 26rpx;
+  color: #999999;
+  text-align: center;
+}
+
 .tmp-main {
   flex: 1;
   min-width: 0;
@@ -3686,210 +2672,10 @@ textarea, .textarea {
   color: #8C1D18;
   white-space: nowrap;
 }
-
-/* ===== 首页快捷发布弹窗：今日菜单 / 活动大事记 共用样式 ===== */
-.quick-pub-modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 300;
-  display: flex;
-  align-items: flex-end;
-}
-
-.quick-pub-modal-box {
-  width: 100%;
-  max-height: 85vh;
-  background: #FFFFFF;
-  border-top-left-radius: 28rpx;
-  border-top-right-radius: 28rpx;
-  padding: 28rpx;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-
-.quick-pub-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 12rpx;
-}
-
-.quick-pub-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #333333;
-}
-
-.quick-pub-close {
-  font-size: 32rpx;
-  color: #999999;
-}
-
-.quick-pub-store-tip {
-  font-size: 22rpx;
-  color: #8C1D18;
-  display: block;
-  padding-bottom: 20rpx;
-  border-bottom: 1rpx solid #EFE6D8;
-  margin-bottom: 20rpx;
-}
-
-.quick-pub-scroll {
-  max-height: 56vh;
-}
-
-.quick-pub-label {
-  display: block;
-  font-size: 24rpx;
-  color: #666666;
-  font-weight: bold;
-  margin-bottom: 12rpx;
-  margin-top: 20rpx;
-}
-
-.quick-pub-label:first-child {
-  margin-top: 0;
-}
-
-.quick-pub-input,
-.quick-pub-picker,
-.quick-pub-textarea {
-  background: #F8F9FA;
-  border: 1.5rpx solid #EFE6D8;
-  border-radius: 14rpx;
-  padding: 18rpx 20rpx;
-  font-size: 26rpx;
-  color: #333333;
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.quick-pub-textarea {
-  min-height: 160rpx;
-}
-
-.quick-pub-image-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.quick-pub-image-item {
-  position: relative;
-  width: 160rpx;
-  height: 160rpx;
-}
-
-.quick-pub-image-thumb {
-  width: 100%;
-  height: 100%;
-  border-radius: 12rpx;
-  background: #F0F0F0;
-}
-
-.quick-pub-image-remove {
-  position: absolute;
-  top: -12rpx;
-  right: -12rpx;
-  width: 40rpx;
-  height: 40rpx;
-  line-height: 40rpx;
-  text-align: center;
-  background: rgba(0, 0, 0, 0.6);
-  color: #FFFFFF;
-  border-radius: 50%;
-  font-size: 22rpx;
-}
-
-.quick-pub-image-add {
-  width: 160rpx;
-  height: 160rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5rpx dashed #C9B8A0;
-  border-radius: 12rpx;
-  font-size: 22rpx;
-  color: #999999;
-}
-
-.quick-pub-submit-btn {
-  background: #8C1D18;
-  color: #FFFFFF;
-  font-size: 28rpx;
-  font-weight: bold;
-  margin-top: 24rpx;
-}
-
-/* ================= 精致现代化工作台卡片 ================= */
-.workbench-card {
-  background: #FFFFFF;
-  border-radius: 24rpx;
-  padding: 28rpx 24rpx;
-  margin-bottom: 24rpx;
-  border: 1rpx solid #EAECEF;
-  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.03);
-}
-
-.workbench-title-row {
-  margin-bottom: 24rpx;
-  border-bottom: 1rpx solid #F1F3F5;
-  padding-bottom: 16rpx;
-}
-
-.workbench-title-row .wb-icon { font-size: 32rpx; margin-right: 8rpx; }
-.workbench-title-row .wb-name { font-size: 26rpx; font-weight: bold; color: #212529; }
-.workbench-title-row .wb-desc { font-size: 20rpx; color: #868E96; display: block; margin-top: 4rpx; }
-
-.wb-data-grid {
-  display: flex;
-  justify-content: space-between;
-}
-
-.data-cell {
-  flex: 1;
-  text-align: center;
-  position: relative;
-}
-
-.data-cell:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 20%;
-  height: 60%;
-  width: 1rpx;
-  background-color: #E9ECEF;
-}
-
-.data-cell .num { font-size: 36rpx; font-weight: bold; color: #495057; display: block; }
-.data-cell .num.highlight-green { color: #2E7D32; }
-.data-cell .num.danger-red { color: #C62828; }
-.data-cell .label { font-size: 20rpx; color: #868E96; margin-top: 6rpx; display: block; }
-
-/* ================= 精巧草稿提示条 ================= */
-.draft-notice-bar {
-  background: #E8F5E9;
-  border: 1.5rpx solid #A5D6A7;
-  border-radius: 16rpx;
-  padding: 16rpx 24rpx;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24rpx;
-}
-
 .draft-left { display: flex; align-items: center; gap: 10rpx; }
 .draft-left .icon { font-size: 26rpx; }
 .draft-left .txt { font-size: 22rpx; color: #2E7D32; font-weight: 500; }
 .draft-actions { display: flex; align-items: center; gap: 12rpx; font-size: 22rpx; }
-.draft-actions .act-btn { font-weight: bold; padding: 4rpx 12rpx; }
-.draft-actions .btn-recover { color: #1B5E20; }
-.draft-actions .btn-discard { color: #C62828; }
-.draft-actions .split { color: #A5D6A7; }
-
 /* ================= 底部悬浮核心功能按钮 ================= */
 .bottom-action-floating-bar {
   position: fixed;
@@ -4223,57 +3009,6 @@ textarea, .textarea {
 .gencode-body {
   padding: 0 8rpx;
 }
-
-.gencode-result-box {
-  background: #FFFDF8;
-  border: 2rpx dashed #E65100;
-  border-radius: 20rpx;
-  padding: 24rpx;
-  text-align: center;
-  margin: 24rpx 0;
-}
-
-.gencode-code-label {
-  font-size: 22rpx;
-  color: #666;
-  display: block;
-}
-
-.gencode-big-code {
-  font-size: 56rpx;
-  font-weight: bold;
-  color: #E65100;
-  letter-spacing: 12rpx;
-  display: block;
-  margin: 12rpx 0;
-  font-family: monospace;
-}
-
-.gencode-code-tip {
-  font-size: 20rpx;
-  color: #D32F2F;
-  display: block;
-}
-
-.gencode-btn-primary {
-  background: #8C1D18;
-  color: #FFFFFF;
-  border-radius: 40rpx;
-  font-size: 26rpx;
-  font-weight: bold;
-  margin-top: 20rpx;
-  border: none;
-  width: 100%;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.gencode-btn-primary::after {
-  border: none;
-}
-
 .form-item-row {
   margin-bottom: 30rpx;
 }
@@ -4451,121 +3186,11 @@ textarea, .textarea {
 .btn-primary-gen::after {
   border: none;
 }
-
-.btn-copy-send {
-  flex: 1.5;
-  background: linear-gradient(135deg, #07C160 0%, #10B981 100%);
-  color: #FFFFFF;
-  border-radius: 40rpx;
-  font-size: 26rpx;
-  font-weight: bold;
-  border: none;
-  height: 80rpx;
-}
-
-.btn-copy-send::after {
-  border: none;
-}
-
-.gencode-btn-copy {
-  background: #E65100;
-  color: #FFFFFF;
-  border-radius: 40rpx;
-  font-size: 26rpx;
-  font-weight: bold;
-  border: none;
-  width: 100%;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 16rpx;
-}
-
-.gencode-btn-copy::after {
-  border: none;
-}
-
-.expense-textarea.fixed-style {
-  background: #FFFDF5;
-  border-color: #FFE066;
-}
-
-.receipt-upload-area {
-  margin-top: 20rpx;
-}
-
-.receipt-label {
-  display: block;
-  font-size: 26rpx;
-  color: #666;
-  margin-bottom: 12rpx;
-}
-
-.receipt-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.receipt-image-item {
-  position: relative;
-  width: 160rpx;
-  height: 160rpx;
-  border-radius: 8rpx;
-  overflow: hidden;
-  border: 2rpx solid #e0e0e0;
-}
-
-.receipt-image {
-  width: 100%;
-  height: 100%;
-}
-
-.receipt-delete {
-  position: absolute;
-  top: -2rpx;
-  right: -2rpx;
-  width: 40rpx;
-  height: 40rpx;
-  background-color: #e53935;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.delete-icon {
-  color: #fff;
-  font-size: 28rpx;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.receipt-add-btn {
-  width: 160rpx;
-  height: 160rpx;
-  border: 2rpx dashed #ccc;
-  border-radius: 8rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background-color: #fafafa;
-}
-
 .add-icon {
   font-size: 48rpx;
   color: #999;
   line-height: 1;
 }
-
-.add-text {
-  font-size: 22rpx;
-  color: #999;
-  margin-top: 8rpx;
-}
-
 .adjust-tag {
   display: inline-flex;
   align-items: center;
@@ -4585,76 +3210,6 @@ textarea, .textarea {
   font-size: 24rpx;
   color: #f59e0b;
 }
-
-.balance-status-tip {
-  font-size: 20rpx;
-  margin-top: 6rpx;
-  padding: 2rpx 6rpx;
-}
-
-.balance-status-tip.success {
-  color: #2B8A3E;
-}
-
-.balance-status-tip.warning {
-  color: #E03131;
-}
-
-.calc-preview-card {
-  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
-  border: 1rpx solid #E2E8F0;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin: 24rpx 0;
-}
-
-.calc-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #334155;
-  margin-bottom: 16rpx;
-}
-
-.calc-formula-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8rpx;
-  font-size: 26rpx;
-}
-
-.calc-num {
-  font-weight: bold;
-  color: #1E293B;
-}
-
-.calc-num.green {
-  color: #22C55E;
-}
-
-.calc-num.red {
-  color: #EF4444;
-}
-
-.calc-op {
-  font-size: 22rpx;
-  color: #64748B;
-}
-
-.calc-symbol {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #475569;
-  margin: 0 4rpx;
-}
-
-.calc-result {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #F97316;
-  margin-left: 8rpx;
-}
-
 .poster-modal {
   position: fixed;
   top: 0;
@@ -4802,13 +3357,6 @@ textarea, .textarea {
   border: none;
   border-radius: 44rpx;
 }
-
-.btn-gold {
-  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
-  color: #fff;
-  border: none;
-}
-
 .offline-banner {
   display: flex;
   align-items: center;
@@ -4953,17 +3501,6 @@ textarea, .textarea {
   word-break: keep-all;
   white-space: nowrap;
 }
-
-.output-box {
-  width: 100%;
-  box-sizing: border-box;
-  background-color: #FFF5F5;
-  border: 1rpx solid #FFE3E3;
-  padding: 28rpx 32rpx;
-  border-radius: 20rpx;
-  margin-bottom: 24rpx;
-}
-
 .output-text { 
   width: 100%;
   font-size: 28rpx; 
@@ -6355,31 +4892,6 @@ textarea, .textarea {
   margin-top: 12rpx;
   line-height: 1.5;
 }
-
-/* 🐛 修复重叠 Bug：此前"查看历程 ›"用 position: absolute 悬浮在卡片右上角，
-   与"贡献时长/h"数值文本视觉重叠。现改为卡片底部独立一行，样式统一、点击区域清晰 */
-.volunteer-hero-card .journey-entry-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6rpx;
-  margin-top: 16rpx;
-  padding: 14rpx 0;
-  border-top: 1rpx dashed #FFE0B2;
-}
-
-.volunteer-hero-card .journey-entry-text {
-  font-size: 22rpx;
-  color: #C97B3D;
-  font-weight: 500;
-}
-
-.volunteer-hero-card .journey-entry-arrow {
-  font-size: 22rpx;
-  color: #C97B3D;
-  font-weight: bold;
-}
-
 /* 🍚 今日餐况状态卡：开餐状态 + 主食物资合并展示，用胶囊 Tag 呈现代替纯文字 */
 .volunteer-view-card .today-status-card {
   background: #FFFDF8;
@@ -6636,16 +5148,6 @@ textarea, .textarea {
 .volunteer-hero-card .btn-volunteer-checkin.state-done:active {
   background: #1B5E20;
 }
-
-.volunteer-hero-card .link-view-public-ledger {
-  display: block;
-  text-align: center;
-  font-size: 24rpx;
-  font-weight: 500;
-  color: #8C7355;
-  padding: 8rpx 0;
-}
-
 /* ================= 🙋 全角色到岗打卡卡片（店长/财务视角） =================
    与 .volunteer-hero-card 的按钮视觉语言保持一致，但这里的样式全部自成一套、
    不依赖 .volunteer-hero-card 作为祖先选择器——原按钮样式都写成
@@ -7154,33 +5656,6 @@ textarea, .textarea {
   flex-shrink: 0;
   white-space: nowrap;
 }
-
-.custom-input-box {
-  display: flex;
-  align-items: center;
-  background: #FFFFFF;
-  border: 1rpx solid #8C1D18;
-  border-radius: 12rpx;
-  padding: 4rpx 12rpx;
-  flex-shrink: 0;
-}
-
-.custom-hours-input {
-  width: 80rpx;
-  height: 48rpx;
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #8C1D18;
-  text-align: center;
-}
-
-.custom-input-box .unit {
-  font-size: 22rpx;
-  color: #8C1D18;
-  font-weight: bold;
-  margin-left: 4rpx;
-}
-
 .meal-reserve-row {
   display: flex;
   align-items: center;
@@ -7683,21 +6158,6 @@ textarea, .textarea {
   display: inline-block;
   vertical-align: middle;
 }
-
-.idx-icon-lg {
-  width: 40rpx;
-  height: 40rpx;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  flex-shrink: 0;
-  display: inline-block;
-  vertical-align: middle;
-}
-
-/* 👤 个人中心 */
-.idx-icon-user { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIwIDIxdi0yYTMgMyAwIDAgMC0zLTNIN2EzIDMgMCAwIDAtMyAzdjIiPjwvcGF0aD48Y2lyY2xlIGN4PSIxMiIgY3k9IjciIHI9IjQiPjwvY2lyY2xlPjwvc3ZnPg=='); }
-
 /* ❓ 帮助 */
 .idx-icon-help { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNDk1MDU3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiPjwvY2lyY2xlPjxwYXRoIGQ9Ik05LjA5IDlhMyAzIDAgMCAxIDUuODMgMSBjMCAyLTMgMy0zIDMiPjwvcGF0aD48bGluZSB4MT0iMTIiIHkxPSIxNyIgeDI9IjEyLjAxIiB5Mj0iMTciPjwvbGluZT48L3N2Zz4='); }
 
@@ -7778,10 +6238,6 @@ textarea, .textarea {
 
 /* 🤝 握手 */
 .idx-icon-handshake { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTExIDE3bDIgMmwxLTFTMiAxMSAyIDEyIDEyYy41LS41IDEtMS41IDAtM3pNMjEgMTJsLTQtNCA0IDR6TTcgN2w0IDR6Ij48L3BhdGg+PC9zdmc+'); }
-
-/* 📖 书本 */
-.idx-icon-book { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQgMTkuNUEyLjUgMi41IDAgMCAxIDYuNSAxN0gyMCI+PC9wYXRoPjxwYXRoIGQ9Ik02LjUgMkgyMHYyMEg2LjVBMi41IDIuNSAwIDAgMSA0IDE5LjV2LTE1QTIuNSAyLjUgMCAwIDEgNi41IDJ6Ij48L3BhdGg+PC9zdmc+'); }
-
 /* 💡 提示灯 */
 .idx-icon-bulb { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRTY1MTAwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMThoNnMtMyAyLTQgNGw1LTRIMTJ6Ij48L3BhdGg+PHBhdGggZD0iTTUgOWEyIDIgMCAwIDEgMi0yaDEwYTIgMiAwIDAgMSAyIDJ2MmEyIDIgMCAwIDAtMiAydjFhMiAyIDAgMCAxLTIgMkg5YTIgMiAwIDAgMS0yLTJ2LTFhMiAyIDAgMCAwLTItMlY5eiI+PC9wYXRoPjwvc3ZnPg=='); }
 
@@ -7799,51 +6255,6 @@ textarea, .textarea {
 
 /* 📱 手机 */
 .idx-icon-phone { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODY4RTk2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iNSIgeT0iMiIgd2lkdGg9IjE0IiBoZWlnaHQ9IjIwIiByeD0iMiIgcnk9IjIiPjwvcmVjdD48bGluZSB4MT0iMTIiIHkxPSIxOCIgeDI9IjEyLjAxIiB5Mj0iMTgiPjwvbGluZT48L3N2Zz4='); }
-
-/* ✍️ 写字 */
-.idx-icon-pen { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEMxRDE4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIwaDI5TTYgMTd2MmEyIDIgMCAwIDAgMiAyaDRsMTAtMTBhMiAyIDAgMCAwIDAtM2wtNC00YTIgMiAwIDAgMC0zIDBMNiAxN3oiPjwvcGF0aD48L3N2Zz4='); }
-/* 🌟 合规 Footer（组件二）：此前 20rpx/#a0a0a0 的小灰字几乎不可读，等同于"藏起来"，
-   不符合"清晰可读但视觉弱化、不干扰主功能"的要求——弱化应该体现在色彩/层级上，
-   不能体现在"读不清楚"上。改为浅米色卡片背景 + 常规可读字号，与主内容明确分区，
-   但不采用高饱和度色彩，保持视觉上的次要地位。 */
-.compliance-footer {
-  margin: 32rpx 24rpx calc(140rpx + env(safe-area-inset-bottom));
-  padding: 20rpx 24rpx;
-  background: #FBF8F2;
-  border: 1rpx solid #EFE6D8;
-  border-radius: 16rpx;
-}
-
-.compliance-footer-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10rpx;
-}
-
-.compliance-footer-icon {
-  flex-shrink: 0;
-  width: 24rpx;
-  height: 24rpx;
-  margin-top: 2rpx;
-  opacity: 0.6;
-}
-
-.compliance-footer-text {
-  flex: 1;
-  font-size: 22rpx;
-  color: #8A8580;
-  line-height: 1.6;
-}
-
-.compliance-footer-link {
-  display: block;
-  margin-top: 10rpx;
-  margin-left: 34rpx;
-  font-size: 22rpx;
-  color: #8C1D18;
-  font-weight: 500;
-}
-
 /* 🌟 合规授权须知弹窗（组件一）：首次进入 / 首次切换到财务/店长视角强制阅读，
    与站内其它弹窗一致的白卡片圆角风格，仅在内容与关闭规则上更严格——
    'general'/'privileged' 场景下没有关闭按钮、mask 不响应 tap，只能读完点底部按钮 */
@@ -8084,6 +6495,16 @@ textarea, .textarea {
   margin-top: 0;
 }
 
+/* 🌸 五/六/八/九大标题：破折号后的【副标题】强制另起一行，避免窄屏下折行错位——
+   .motto-section-title 此时改用 <view> 包裹两个 display:block 的 <text> 子行，
+   每行独立居中，字号/加粗沿用父级 32rpx Bold，仅额外统一 line-height 与 margin */
+.motto-title-line {
+  display: block;
+  line-height: 1.4;
+  text-align: center;
+  margin: 0 auto;
+}
+
 .motto-section-text {
   display: block;
   font-size: 26rpx;
@@ -8093,6 +6514,44 @@ textarea, .textarea {
   text-align: center;
   white-space: pre-wrap;
   margin-bottom: 14rpx;
+}
+
+/* 🌸 立志格言：四句分行居中，行高加大到 1.8 + 加粗，比普通正文更有大气庄重感 */
+.culture-quote-line {
+  line-height: 1.8;
+  font-weight: 600;
+}
+
+/* 🌸 雨花核心精神：独立成句、加粗展示，与下方三由/五了等条目区隔开 */
+.culture-core-spirit-text {
+  font-weight: bold;
+}
+
+/* 🌸 雨花敬老核心理念：五句逐行单列居中，字号 28rpx / 行高 1.8，段落间距均匀 */
+.culture-elder-belief-text {
+  font-size: 28rpx;
+  line-height: 1.8;
+  margin: 0 auto 14rpx;
+  text-align: center;
+}
+
+/* 🌸 为学之方：单列逐行居中——开篇一句 / 中间六句分句 / 结语一句加粗，
+   字号 28rpx、行高 1.8，段落间距均匀一致 */
+.culture-study-method-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.culture-study-line {
+  font-size: 28rpx;
+  line-height: 1.8;
+  margin: 0 auto 14rpx;
+  text-align: center;
+}
+
+.culture-study-conclusion {
+  font-weight: bold;
 }
 
 .motto-creed-line {
@@ -8205,6 +6664,31 @@ textarea, .textarea {
   text-align: left;
 }
 
+/* 🌸 感恩词/雨花五了：单列逐行居中展示，行高加大到 1.8 + 段间距加大，
+   与 .culture-list-single-column（人生十六最，左对齐）区分开 */
+.culture-list-single-column-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.culture-list-single-column-center .culture-list-line {
+  text-align: center;
+  margin: 0 auto 18rpx;
+  line-height: 1.8;
+}
+
+/* 🌸 感恩与祈盼·祈盼排比句：三句"祈盼…，让…！"在首个逗号处拆成 6 行单列居中
+   展示（左：祈盼…；右：让…依次排列），字号 28rpx，每两行为一组，组间距
+   （culture-aspiration-line-group-end）比组内行距更大，避免折行时显得拥挤 */
+.culture-list-single-column-center .culture-aspiration-line {
+  font-size: 28rpx;
+}
+
+.culture-list-single-column-center .culture-aspiration-line-group-end {
+  margin-bottom: 32rpx;
+}
+
 /* 感恩词/一日修身小结等逐行列表：与 .motto-section-text
    同款字号/行高/字间距，但左对齐、逐行独立展示（不做 .motto-creed-line 那种
    强制居中），更符合这类条目式列表的阅读习惯 */
@@ -8291,10 +6775,13 @@ textarea, .textarea {
 .sunshine-modal-card {
   width: 84%;
   max-width: 600rpx;
+  max-height: 82vh;
   background: #FFFFFF;
   border-radius: 28rpx;
   padding: 32rpx 28rpx;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .sunshine-modal-header {
@@ -8302,6 +6789,7 @@ textarea, .textarea {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24rpx;
+  flex-shrink: 0;
 }
 
 .sunshine-modal-title {
@@ -8319,6 +6807,81 @@ textarea, .textarea {
   background: #F1F3F5;
   color: #6B7280;
   font-size: 24rpx;
+}
+
+/* 🛡️ min-height: 0 是让 flex 子项能被压缩到小于内容高度的关键，缺了这行
+   scroll-view 会撑到内容的完整高度，滚动条永远不会真正生效 */
+.sunshine-modal-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 📖 理念介绍卡片：暖金质感背景，与下方数据大盘的配色自然衔接，
+   避免纯数字表格显得冷冰冰。弹窗 Header 已经承载"关于雨花斋与阳光账本"
+   这层标题，卡片内部不再重复次级标题，直接进两段内容 */
+.sunshine-intro-card {
+  width: 100%;
+  background: linear-gradient(155deg, #FFF8E8 0%, #FFF3D6 100%);
+  border: 1rpx solid #F0D9A0;
+  border-radius: 20rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+}
+
+/* 🌸 侧条高亮卡片：每段文案独立一张浅底小卡 + 左侧金色竖条，
+   替代此前"整段文案堆在一起"的排版，段落之间呼吸感更强 */
+.sunshine-intro-block {
+  background: rgba(255, 255, 255, 0.55);
+  border-left: 6rpx solid #E6A23C;
+  border-radius: 8rpx;
+  padding: 14rpx 16rpx;
+  margin-bottom: 18rpx;
+}
+
+.sunshine-intro-block:last-child {
+  margin-bottom: 0;
+}
+
+.sunshine-intro-label {
+  display: inline-block;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #E6A23C;
+  border-radius: 6rpx;
+  padding: 2rpx 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.sunshine-intro-text {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #6B4C1E;
+}
+
+/* ✨ 理念介绍 / 数据大盘分界线：虚线 + 居中标签，标签文字带一点暖金微光，
+   让两段内容读起来是两个层次，而不是同一块内容的延续 */
+.sunshine-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin: 20rpx 0;
+}
+
+.sunshine-divider-line {
+  flex: 1;
+  height: 0;
+  border-top: 2rpx dashed rgba(230, 162, 60, 0.4);
+}
+
+.sunshine-divider-label {
+  font-size: 20rpx;
+  font-weight: bold;
+  color: #C08A3E;
+  text-shadow: 0 0 8rpx rgba(230, 162, 60, 0.35);
+  white-space: nowrap;
 }
 
 .sunshine-modal-loading {
