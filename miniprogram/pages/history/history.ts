@@ -131,30 +131,42 @@ Page({
     }
 
     const activeStore = getSelectedStore();
-    const currentStoreId = wx.getStorageSync('current_store_id') || '';
-    const currentStoreName = wx.getStorageSync('current_store_name') || '';
+    // 🐛 硬性根治："切到全国汇总账本查不出记录"根因：current_store_id/
+    // active_store_id 是店铺切换/角色切换各自独立写入的原始 Storage key，可能
+    // 互相不同步或残留旧门店的值（例如通过 store-picker 角色切换到"全国总览"
+    // 时只写 active_store_id/current_store_name，从不写 current_store_id）。
+    // getSelectedStore()（activeStore）汇总了 app.globalData.currentStore/
+    // selectedStore 缓存，是全局最新、最权威的"当前选中门店"来源，必须优先采信；
+    // 此前这里反过来优先信 currentStoreId 这个原始 Storage key，一旦它残留着
+    // 某个具体门店的旧 id，就会用这个不相关的旧 id 覆盖掉 activeStore 里正确的
+    // 'national_overview'，导致按错误门店去查询，查出 0 条
+    const storedStoreId = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
+    const storedStoreName = wx.getStorageSync('current_store_name') || '';
+    const resolvedStoreName = (activeStore && activeStore.storeName) || storedStoreName || '';
+    const resolvedStoreId = (activeStore && activeStore.storeId) || storedStoreId || '';
 
     // 🐛 修复：此前分支只更新 selectedStoreName/currentStoreId，从未同步过 isAllStoresView，
     // 导致从全国总览/多店视角进入或返回本页时，"今日凭证与记账"卡片仍按上一次的（可能是错的）
     // 视角状态展示，最典型的表现就是全国总览下也照样显示今日记账卡片与 OCR/补传按钮。
-    let resolvedStoreId = this.data.currentStoreId;
-    if (activeStore && activeStore.storeName !== this.data.selectedStoreName) {
-      resolvedStoreId = currentStoreId || activeStore.storeId || '';
+    if (resolvedStoreName !== this.data.selectedStoreName || resolvedStoreId !== this.data.currentStoreId) {
       this.setData({
-        selectedStoreName: activeStore.storeName,
-        currentStoreId: resolvedStoreId,
-        isAllStoresView: this.resolveIsAllStoresView(resolvedStoreId)
-      });
-    } else if (currentStoreName && currentStoreName !== this.data.selectedStoreName) {
-      resolvedStoreId = currentStoreId;
-      this.setData({
-        selectedStoreName: currentStoreName,
+        selectedStoreName: resolvedStoreName,
         currentStoreId: resolvedStoreId,
         isAllStoresView: this.resolveIsAllStoresView(resolvedStoreId)
       });
     } else {
-      // 两个分支都未触发（店铺名未变）：仍要用当前已知的 storeId 校正一次视角标志，避免过期状态残留
+      // 两个信号源都未变化：仍要用当前已知的 storeId 校正一次视角标志，避免过期状态残留
       this.setData({ isAllStoresView: this.resolveIsAllStoresView(resolvedStoreId) });
+    }
+
+    // 🛡️ 门店选择 Pill 控件同步：<store-picker> 组件只在自己 attached() 时读一次
+    // app.globalData.currentStore，本页作为常驻 tab 页再次 onShow 时组件不会自动
+    // 重新挂载——如果门店是在别的页面切换的（例如切到"全国总览"），这里手动催一次
+    // loadStoreInfo()，确保 Pill 显示与本页刚解析出的 resolvedStoreName 保持一致，
+    // 不会停留在旧门店名
+    const historyStorePicker = this.selectComponent('#historyStorePicker') as any;
+    if (historyStorePicker && typeof historyStorePicker.loadStoreInfo === 'function') {
+      historyStorePicker.loadStoreInfo();
     }
     this.initPermissions();
     this.loadReports();
@@ -375,12 +387,16 @@ Page({
         previewBannerText: showPreviewBanner ? `当前正在预览「${PREVIEW_VIEW_MODE_LABELS[previewMode]}」的界面样式，本页操作仍按您的真实身份（超级管理员）执行` : ''
       });
 
-      // 🛡️ onShow() 里对 isAllStoresView 的赋值发生在 initPermissions()（本函数）
-      // 之前，此时 isSuperAdmin 用的还是上一轮渲染的旧值——一旦这一轮角色查询
-      // 得到的真实结果是"非超管"，必须在这里用当前已知的 currentStoreId 重新收敛
-      // 一次，防止残留的旧 isSuperAdmin=true 状态让非超管账号继续停留在全国总览视角
-      if (!isSuperAdmin && this.data.isAllStoresView) {
-        this.setData({ isAllStoresView: false });
+      // 🐛 硬性根治：onShow() 里对 isAllStoresView 的赋值发生在 initPermissions()
+      // （本函数）之前，此时用的 isSuperAdmin 还是上一轮渲染的旧值（首次进页时
+      // 默认 false）。此前这里只处理"非超管却残留 isAllStoresView=true"这一个
+      // 方向的纠偏，遗漏了相反方向——如果这一轮角色查询确认真实身份就是
+      // super_admin、且当前门店确实是"全国总览"哨兵值，必须把 isAllStoresView
+      // 纠正为 true，否则会一直卡在"🏪 门店完整账本"的错误标签和"今日凭证"卡片
+      // 误显示，即使门店选择器里明明选的是全国总览
+      const correctedIsAllStoresView = isNationalStoreId(this.data.currentStoreId) && isSuperAdmin;
+      if (correctedIsAllStoresView !== this.data.isAllStoresView) {
+        this.setData({ isAllStoresView: correctedIsAllStoresView });
       }
     };
 
