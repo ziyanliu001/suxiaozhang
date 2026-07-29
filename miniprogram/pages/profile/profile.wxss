@@ -1621,6 +1621,16 @@
   margin-bottom: 16rpx;
 }
 
+/* 🐛 根因修复：已驳回的卡片现在可点击查看详情/重新修改提交，加一点可点击的
+   视觉提示（active 态轻微变暗），区别于待确认/已采纳这两个纯展示态卡片 */
+.my-feedback-item.tappable {
+  transition: opacity 0.15s ease;
+}
+
+.my-feedback-item.tappable:active {
+  opacity: 0.7;
+}
+
 .my-feedback-reply {
   margin-top: 12rpx;
 }
@@ -2049,6 +2059,23 @@
   font-size: 22rpx;
   color: #C92A2A;
   line-height: 1.6;
+}
+
+/* 详情弹窗里的驳回原因：字号略大、独立成段，与列表卡片上精简展示的同名样式区分 */
+.my-vs-reject-reason.detail {
+  margin-top: 20rpx;
+  margin-bottom: 20rpx;
+  font-size: 24rpx;
+  padding: 16rpx;
+  background: #FFF0F0;
+  border-radius: 12rpx;
+}
+
+.my-vs-tap-hint {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 20rpx;
+  color: #ADB5BD;
 }
 
 /* 📊 门店餐饮与物资统计：三段 pd-health-grid 堆叠起来比其他 warm-story-modal-*

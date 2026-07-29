@@ -1036,7 +1036,7 @@
           <text>暂无提交记录，去登记今天的菜单人数或物资消耗吧</text>
         </view>
 
-        <view class="my-feedback-item" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id">
+        <view class="my-feedback-item {{item.status === 'rejected' ? 'tappable' : ''}}" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id" data-index="{{index}}" bindtap="onTapMyVolunteerSubmissionItem">
           <view class="fa-item-header">
             <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 用餐人数' : '🌾 物资消耗'}}</text>
             <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
@@ -1056,10 +1056,39 @@
           <block wx:elif="{{item.status === 'rejected'}}">
             <text class="my-vs-status-tag rejected">❌ 已驳回</text>
             <text class="my-vs-reject-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</text>
+            <text class="my-vs-tap-hint">点击查看详情 · 重新修改并提交 ❯</text>
           </block>
           <text class="my-vs-status-tag pending" wx:else>⏳ 待店长确认</text>
         </view>
       </scroll-view>
+    </view>
+  </view>
+
+  <!-- ❌ 已驳回投稿详情弹窗：展示驳回原因，并提供"重新修改并提交"入口，把原始
+       数据带回对应的填报表单——与证书/驳回原因等说明弹窗共用 certificate-modal-*
+       视觉规范，z-index 已顶到高于半屏抽屉，不会被"我的餐报提交记录"遮挡 -->
+  <view class="certificate-modal-mask" wx:if="{{showRejectedSubmissionModal}}" bindtap="onCloseRejectedSubmissionModal">
+    <view class="certificate-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header">
+        <view class="certificate-modal-close" bindtap="onCloseRejectedSubmissionModal">✕</view>
+      </view>
+
+      <text class="vt-form-label">{{rejectedSubmissionItem.type === 'menu' ? '🍱 用餐人数登记（已驳回）' : '🌾 物资消耗登记（已驳回）'}}</text>
+      <text class="fa-item-time">🗓️ {{rejectedSubmissionItem.dateString}}</text>
+
+      <block wx:if="{{rejectedSubmissionItem.type === 'menu'}}">
+        <text class="fa-item-content" wx:if="{{rejectedSubmissionItem.mealStatus === 'closed'}}">今日休餐</text>
+        <text class="fa-item-content" wx:else>早: {{rejectedSubmissionItem.breakfastCount || 0}} 人 | 午: {{rejectedSubmissionItem.lunchCount || 0}} 人 | 晚: {{rejectedSubmissionItem.dinnerCount || 0}} 人</text>
+        <text class="fa-item-content" wx:if="{{rejectedSubmissionItem.menuNote}}">备注：{{rejectedSubmissionItem.menuNote}}</text>
+      </block>
+      <block wx:else>
+        <text class="fa-item-content">米: {{rejectedSubmissionItem.riceCount || 0}}斤 | 面: {{rejectedSubmissionItem.flourCount || 0}}斤 | 油: {{rejectedSubmissionItem.oilCount || 0}}斤 | 菜: {{rejectedSubmissionItem.vegetableCount || 0}}斤</text>
+        <text class="fa-item-content" wx:if="{{rejectedSubmissionItem.lossNote}}">说明：{{rejectedSubmissionItem.lossNote}}</text>
+      </block>
+
+      <text class="my-vs-reject-reason detail">驳回原因：{{rejectedSubmissionItem.rejectReason || '店长未填写具体原因'}}</text>
+
+      <button class="feedback-submit-btn" bindtap="onResubmitRejectedSubmission">✏️ 重新修改并提交</button>
     </view>
   </view>
 
