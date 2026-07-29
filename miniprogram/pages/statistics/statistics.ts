@@ -47,6 +47,18 @@ function isAllStoresMode(storeName: string): boolean {
   return !storeName || storeName === 'ALL' || clean === '全部门店';
 }
 
+// 🛡️ "全国总览"/"全部门店" 是 store-picker 里仅供 super_admin 选用的虚拟聚合
+// 门店名（见 components/store-picker/store-picker.ts 的 national_overview 条目），
+// 一旦被写进 app.globalData.currentStore/本地 selectedStore 缓存，任何页面直接用
+// getSelectedStore() 兜底门店名时都可能把它带出来。非超管账号可以把 getSelectedStore()
+// 当成"用户刚手动切换过去的真实门店名"这一正常场景的兜底来源（例如 store-picker
+// 切身份后 fetchUserRole() 还没落地的窗口期），但必须先过滤掉这个虚拟聚合名，
+// 绝不能把它当成自己门店展示/查询
+const VIRTUAL_STORE_NAMES = ['全国总览', '全部门店'];
+function isVirtualStoreName(storeName: string): boolean {
+  return VIRTUAL_STORE_NAMES.includes(String(storeName || '').trim());
+}
+
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
 // 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
@@ -237,18 +249,18 @@ function filterRecordsByPeriodAndStore(
 
   const filtered = records.filter((item) => {
     if (!isAll) {
-      // 🐛 硬性根治：storeId 是门店身份的权威标识（record 与 currentUserStoreId
-      // 都能取到时），精确匹配；只有历史数据缺 storeId 时才退回门店名模糊匹配，
-      // 避免改名/录入格式差异导致本店记录被误判成"不匹配"从而算出 0 笔
+      // 🐛 硬性根治：storeId 精确匹配与门店名模糊匹配是【或】的关系，而非二选一
+      // 互斥——此前改成"两边都有 storeId 就只认 storeId、否则才退回名称匹配"，
+      // 一旦 user_roles.storeId 与该条 report_logs.storeId 因历史数据迁移/口径
+      // 不一致而对不上（哪怕门店名明明相同），会把这条本该匹配的记录错误剔除，
+      // 导致门店匹配数被压成 0。现在只要 storeId 命中或门店名模糊命中任意一个，
+      // 就判定为匹配，只会比原先的纯名称匹配匹配到更多，不会更少
       const itemStoreId = deepExtractStoreId(item);
-      let matchStore: boolean;
-      if (targetStoreId && itemStoreId) {
-        matchStore = itemStoreId === targetStoreId;
-      } else {
-        const itemStoreRaw = deepExtractStoreName(item);
-        const itemStoreClean = cleanStore(itemStoreRaw);
-        matchStore = itemStoreClean.includes(targetStoreClean) || targetStoreClean.includes(itemStoreClean);
-      }
+      const idMatch = !!(targetStoreId && itemStoreId && itemStoreId === targetStoreId);
+      const itemStoreRaw = deepExtractStoreName(item);
+      const itemStoreClean = cleanStore(itemStoreRaw);
+      const nameMatch = itemStoreClean.includes(targetStoreClean) || targetStoreClean.includes(itemStoreClean);
+      const matchStore = idMatch || nameMatch;
       if (!matchStore) return false;
       storeMatchCount++;
     }
@@ -547,15 +559,26 @@ Page({
     // store_patriarch/super_admin/hq_finance 全部纳入，这里取反即可
     const showPersonalView = !isManager;
 
-    // 🐛 硬性根治：非超管的门店名只有一个合法来源——服务端角色信息里这个账号
-    // 真实绑定的 storeName/storeId（本函数的 storeName/storeId 入参）；缺失时
-    // 退回 this.data 里上一次已解析出的 currentUserStoreName/currentUserStoreId
-    // （同一账号在本次页面生命周期内不会变），绝对不读取 getSelectedStore()/
-    // app.globalData.currentStore/wx.getStorageSync('selectedStore') 这类全局
-    // 态——那是超管在门店选择器里的浏览态，可能残留"全国总览"虚拟选择，与非
-    // 超管账号的真实身份无关，非超管分支下读它本身就是这个 BUG 的根源
-    const effectiveStoreName = isSuperAdmin ? storeName : (storeName || this.data.currentUserStoreName || '');
-    const effectiveStoreId = isSuperAdmin ? storeId : (storeId || this.data.currentUserStoreId || '');
+    // 🐛 硬性根治：非超管的门店名优先取服务端角色信息里这个账号真实绑定的
+    // storeName/storeId（本函数入参），再退回 this.data 里上一次已解析出的值；
+    // 两者都还没有值时（典型场景：initUserRole() 的同步 cachedRole 分支跑在
+    // store-picker 刚切换完身份、fetchUserRole() 还没落地的窗口期），才退回读取
+    // getSelectedStore()/app.globalData.currentStore 这个全局态——但严格排除
+    // "全国总览"/"全部门店" 这类超管专属虚拟聚合名，绝不能把这类占位值当成
+    // 非超管的真实门店；紧接着的 fetchUserRole() 异步结果会用服务端权威数据
+    // 覆盖这里的兜底值
+    let effectiveStoreName = isSuperAdmin ? storeName : (storeName || this.data.currentUserStoreName || '');
+    let effectiveStoreId = isSuperAdmin ? storeId : (storeId || this.data.currentUserStoreId || '');
+    if (!isSuperAdmin && !effectiveStoreName) {
+      const activeStore = getSelectedStore();
+      const activeStoreName = (activeStore && activeStore.storeName) || '';
+      if (activeStoreName && !isVirtualStoreName(activeStoreName)) {
+        effectiveStoreName = activeStoreName;
+        if (!effectiveStoreId) {
+          effectiveStoreId = (activeStore && activeStore.storeId) || '';
+        }
+      }
+    }
 
     this.setData({
       isAdmin: isSuperAdmin,
@@ -1202,17 +1225,27 @@ Page({
     const tabMap: Record<string, string> = { week: 'week', month: 'month', year: 'year', custom: 'custom' };
     const tabType = tabMap[currentTab] || 'week';
 
+    const statisticsCallData = {
+      shopName: shopName || 'default',
+      tabType,
+      selectedYear: String(selectedYear),
+      selectedMonth: String(selectedMonth).padStart(2, '0'),
+      startDate: customStartDate,
+      endDate: customEndDate
+    };
+
+    // 🪵 Debug 日志：定位"门店匹配=0"类问题时，确认 getStatisticsData 云函数调用
+    // 前 effectiveRole/门店 id/名与实际传参是否一致（该云函数服务端会按
+    // userStoreId/userStoreName 自行收敛，这里的 shopName 仅供展示分组用）
+    console.log('[Statistics][fetchStatistics] effectiveRole=', this.data.currentUserRole,
+      'currentUserStoreId=', this.data.currentUserStoreId,
+      'currentUserStoreName=', this.data.currentUserStoreName,
+      'getStatisticsData调用参数=', statisticsCallData);
+
     try {
       const res = await wx.cloud.callFunction({
         name: 'getStatisticsData',
-        data: {
-          shopName: shopName || 'default',
-          tabType,
-          selectedYear: String(selectedYear),
-          selectedMonth: String(selectedMonth).padStart(2, '0'),
-          startDate: customStartDate,
-          endDate: customEndDate
-        }
+        data: statisticsCallData
       });
 
       const result = (res.result || {}) as any;
@@ -1398,6 +1431,14 @@ Page({
     // 安全值；super_admin 需要跨店浏览整个机构数据集用于客户端筛选，不传 storeId
     const shopStoreId = isSuperAdmin ? '' : (this.data.currentUserStoreId || '');
 
+    // 🪵 Debug 日志：定位"门店匹配=0"类问题时，直接从这行日志确认 effectiveRole
+    // 与门店 id/名是否已正确解析，以及最终传给 getReports 的过滤参数是什么
+    console.log('[Statistics][loadStatistics] effectiveRole=', this.data.currentUserRole,
+      'currentUserStoreId=', this.data.currentUserStoreId,
+      'currentUserStoreName=', this.data.currentUserStoreName,
+      'isSuperAdmin=', isSuperAdmin,
+      'getReports过滤参数=', { viewMode, storeId: shopStoreId || undefined, limit: 1000 });
+
     try {
       let allRecords: any[] = [];
 
@@ -1434,12 +1475,14 @@ Page({
       const storeAllRecords = isAll
         ? allRecords
         : allRecords.filter(item => {
+            // 🐛 硬性根治：与 filterRecordsByPeriodAndStore 同一条口径——storeId
+            // 精确匹配和门店名模糊匹配是"或"的关系，任一命中即视为本店记录，
+            // 避免 storeId 因历史数据不一致对不上时把真实属于本店的记录漏算
             const itemStoreId = deepExtractStoreId(item);
-            if (shopStoreId && itemStoreId) {
-              return itemStoreId === shopStoreId;
-            }
+            const idMatch = !!(shopStoreId && itemStoreId && itemStoreId === shopStoreId);
             const itemStoreClean = cleanStore(item.shopName || item.store || item.storeName || '');
-            return itemStoreClean.includes(targetStoreClean) || targetStoreClean.includes(itemStoreClean);
+            const nameMatch = itemStoreClean.includes(targetStoreClean) || targetStoreClean.includes(itemStoreClean);
+            return idMatch || nameMatch;
           });
 
       const currentStoreTotalCount = storeAllRecords.length;
