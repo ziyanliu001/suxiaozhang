@@ -2161,6 +2161,20 @@ Page({
       return;
     }
 
+    // 🛡️ 防错机制：提交前二次核对数据，避免手滑填错人数就直接交给店长审核——
+    // 只有点击"确认提交"才继续往下走，"返回修改"原样留在当前表单，不清空已填内容
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '请核对餐报数据',
+        content: `早餐: ${breakfastCount || 0} 人\n午餐: ${lunchCount || 0} 人\n晚餐: ${dinnerCount || 0} 人\n\n确认无误并提交吗？`,
+        confirmText: '确认提交',
+        cancelText: '返回修改',
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
     this.setData({ dailyMenuSubmitting: true });
 
     const note = (menuNote || '').trim();
@@ -2245,6 +2259,20 @@ Page({
       wx.showToast({ title: '请至少填写一项消耗或报损说明', icon: 'none' });
       return;
     }
+
+    // 🛡️ 防错机制：提交前二次核对数据，避免手滑填错斤数就直接交给店长审核——
+    // 只有点击"确认提交"才继续往下走，"返回修改"原样留在当前表单，不清空已填内容
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '请核对物资产量与消耗',
+        content: `大米: ${riceCount || 0} 斤\n面粉: ${flourCount || 0} 斤\n食用油: ${oilCount || 0} 斤\n蔬菜: ${vegetableCount || 0} 斤\n\n确认无误并提交吗？`,
+        confirmText: '确认提交',
+        cancelText: '返回修改',
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
 
     this.setData({ materialUsageSubmitting: true });
 
