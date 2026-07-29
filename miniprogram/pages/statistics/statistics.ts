@@ -986,24 +986,38 @@ Page({
             shopCountMap.set(name, (shopCountMap.get(name) || 0) + 1);
           }
         });
-        
-        let shopList = Array.from(shopCountMap.keys()).map(name => {
-          const count = shopCountMap.get(name) || 0;
-          return `${name} (${count}条记录)`;
-        });
-        
-        if (shopList.length > 0) {
-          shopList.unshift('全部门店');
 
-          // 同时构建 allStoresList（用于超级管理员 picker）
-          const allStoresList = [{ storeName: '全部门店' }, ...Array.from(shopCountMap.keys()).map(name => ({
-            storeName: name,
-            recordCount: shopCountMap.get(name) || 0
-          }))];
+        // 🛡️ 门店隔离：仅 super_admin 才允许在下拉里看到/选到"全部门店"聚合选项，
+        // 与 canViewAllStoresDropdown（严格收窄到 super_admin）保持同一条权限口径。
+        // 非超管的 shopNames 强制收窄为自己绑定的门店——不信任 allRecords 里可能
+        // 混进来的其他门店名（哪怕 getReports 云函数已经做了服务端强隔离，本地缓存
+        // local_report_logs 仍可能是共享设备上残留的旧数据），只用 applyRolePermissions
+        // 已经从服务端角色信息里解析出的 currentUserStoreName 作为唯一权威来源
+        const isSuperAdmin = this.data.canViewAllStoresDropdown;
+        let shopNames = Array.from(shopCountMap.keys());
+        if (!isSuperAdmin) {
+          const ownStoreName = this.data.currentUserStoreName || this.data.shopName || '';
+          shopNames = ownStoreName ? [ownStoreName] : [];
+        }
+
+        let shopList = shopNames.map(name => {
+          const count = shopCountMap.get(name) || 0;
+          return count > 0 ? `${name} (${count}条记录)` : name;
+        });
+
+        if (shopList.length > 0) {
+          if (isSuperAdmin) {
+            shopList.unshift('全部门店');
+          }
+
+          // 同时构建 allStoresList（用于超级管理员 picker），非超管不含"全部门店"
+          const allStoresList = (isSuperAdmin ? [{ storeName: '全部门店' }] : []).concat(
+            shopNames.map(name => ({ storeName: name, recordCount: shopCountMap.get(name) || 0 }))
+          );
 
           const currentShopName = this.data.shopName;
           let selectedIndex = 0;
-          if (currentShopName) {
+          if (isSuperAdmin && currentShopName) {
             const exactIdx = shopList.findIndex(shop => {
               const cleanName = shop.replace(/\s*\(\d+条记录\)$/, '');
               return cleanName === currentShopName;
@@ -1011,17 +1025,22 @@ Page({
             if (exactIdx !== -1) {
               selectedIndex = exactIdx;
             } else {
-              const fuzzyIdx = shopList.findIndex(shop => 
+              const fuzzyIdx = shopList.findIndex(shop =>
                 shop !== '全部门店' && isStoreNameFuzzyMatch(shop.replace(/\s*\(\d+条记录\)$/, ''), currentShopName)
               );
               if (fuzzyIdx !== -1) selectedIndex = fuzzyIdx;
             }
           }
+          // 🛡️ 非超管强制锁定选中自己的门店：shopList 此时只包含这一项（index 0），
+          // 不走上面的"全部门店"匹配逻辑，永远不会误选到聚合视图
+          if (!isSuperAdmin) {
+            selectedIndex = 0;
+          }
           this.setData({
             shopList,
             selectedShopIndex: selectedIndex,
-            shopName: selectedIndex === 0 ? '全部门店' : shopList[selectedIndex].replace(/\s*\(\d+条记录\)$/, ''),
-            showAllStoresOption: shopList.length > 1,
+            shopName: (isSuperAdmin && selectedIndex === 0) ? '全部门店' : shopList[selectedIndex].replace(/\s*\(\d+条记录\)$/, ''),
+            showAllStoresOption: isSuperAdmin && shopList.length > 1,
             allStoresList
           });
         }
@@ -1034,42 +1053,6 @@ Page({
   async reloadShopListAndStats() {
     await this.loadShopList();
     this.calculateStats();
-  },
-
-  onShopChange(e: any) {
-    const index = parseInt(e.detail.value);
-    const shopList = this.data.shopList;
-    if (shopList && shopList.length > 0 && index >= 0 && index < shopList.length) {
-      let displayShopName = shopList[index];
-      const cleanShopName = displayShopName.replace(/\s*\(\d+条记录\)$/, '');
-      const requestedAll = index === 0 || isAllStoresMode(cleanShopName);
-      // 🛡️ 这个兜底 picker（wx:elif="{{shopList && shopList.length > 0}}"）会在
-      // initUserRole()/loadShopList() 两个并行发起的异步请求之间的窗口期短暂渲染
-      // 出来（见 onLoad），此时 canViewAllStoresDropdown 可能还没被真正的角色收敛
-      // 结果覆盖。哪怕用户在这个窗口期点了"全部门店"，也绝不能让非超管进入
-      // isAllStoresMode——与 canViewAllStoresDropdown（严格收窄到 super_admin）
-      // 保持同一条权限口径，杜绝越权拿到全国汇总视图
-      if (requestedAll && !this.data.canViewAllStoresDropdown) {
-        wx.showToast({ title: '暂无权限查看全部门店汇总', icon: 'none' });
-        return;
-      }
-      const isAll = requestedAll;
-
-      this.setData({
-        selectedShopIndex: index,
-        shopName: isAll ? '全部门店' : cleanShopName,
-        isAllStoresMode: isAll,
-        hasOtherStoreData: false,
-        statistics: null
-      });
-      
-      if (!isAll && cleanShopName) {
-        setSelectedStore({ storeId: '', storeName: cleanShopName });
-      }
-
-      this.calculateStats();
-      this.fetchStoreProfile();
-    }
   },
 
   onSuperAdminSelectStore(e: any) {
@@ -1580,6 +1563,9 @@ Page({
   },
 
   onSwitchToAllStores() {
+    // 🛡️ 与 loadShopList() 同一条权限口径：非超管的 shopList 现在已经不会再包含
+    // "全部门店"这一项，这里额外加一道角色校验做防御性冗余
+    if (!this.data.canViewAllStoresDropdown) return;
     const shopList = this.data.shopList;
     const allIndex = shopList.indexOf('全部门店');
     if (allIndex !== -1) {

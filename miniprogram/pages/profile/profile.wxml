@@ -1034,7 +1034,7 @@
 
         <view class="my-feedback-item" wx:for="{{myVolunteerSubmissionsList}}" wx:key="_id">
           <view class="fa-item-header">
-            <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 菜单人数' : '🌾 物资消耗'}}</text>
+            <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 用餐人数' : '🌾 物资消耗'}}</text>
             <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
           </view>
 
@@ -1085,7 +1085,7 @@
         <view class="feedback-admin-item" wx:for="{{volunteerSubmissionAdminList}}" wx:key="_id">
           <view class="fa-item-header">
             <text class="fa-item-nickname">{{item.nickName || '匿名义工'}}</text>
-            <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 菜单人数' : '🌾 物资消耗'}}</text>
+            <text class="fa-item-type-tag">{{item.type === 'menu' ? '🍱 用餐人数' : '🌾 物资消耗'}}</text>
           </view>
           <text class="fa-item-time">🗓️ {{item.dateString}} · {{item.createTimeStr}}</text>
 
@@ -1111,7 +1111,7 @@
               bindtap="onApproveSubmission"
               data-id="{{item._id}}"
               disabled="{{item.processing}}"
-            >✅ 一键采纳入库</button>
+            >{{item.type === 'menu' ? '✅ 确认采纳' : '✅ 一键采纳入库'}}</button>
           </view>
         </view>
       </scroll-view>

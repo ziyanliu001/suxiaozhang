@@ -24,23 +24,22 @@
           <text class="pin-icon">📍</text>
           <text class="title">当前统计门店</text>
         </view>
+        <!-- 🛡️ "全部门店"下拉选择器完全受 canViewAllStoresDropdown（严格收窄到
+             super_admin）控制：非超管（含角色尚未解析完成的加载期间，此时该字段
+             的初始值就是 false，不会有任何闪烁）一律走下面纯文字展示的锁定态，
+             不渲染任何可点击切换门店的 picker，避免出现能选到其他门店/全部门店
+             的可乘之机 -->
         <picker wx:if="{{canViewAllStoresDropdown && allStoresList.length > 0}}" bindchange="onSuperAdminSelectStore" range="{{allStoresList}}" range-key="storeName">
           <view class="store-picker-pill">
             <text class="name">{{shopName || '全部门店'}}</text>
             <text class="arrow">▼</text>
           </view>
         </picker>
-        <view wx:elif="{{currentUserRole && !canViewAllStoresDropdown}}" class="store-picker-pill locked">
-          <text class="name">{{isVolunteerNationalView ? '全部门店' : (currentUserStoreName || shopName)}}</text>
+        <view wx:else class="store-picker-pill locked">
+          <text class="name">{{currentUserStoreName || shopName || '加载中...'}}</text>
           <text class="lock-icon">🔒</text>
-          <text class="role-tag-badge">{{roleLabelMap[currentUserRole]}}</text>
+          <text class="role-tag-badge" wx:if="{{currentUserRole}}">{{roleLabelMap[currentUserRole]}}</text>
         </view>
-        <picker wx:elif="{{shopList && shopList.length > 0}}" bindchange="onShopChange" value="{{selectedShopIndex}}" range="{{shopList}}">
-          <view class="store-picker-pill">
-            <text class="name">{{shopList[selectedShopIndex] || '全部门店'}}</text>
-            <text class="arrow">▼</text>
-          </view>
-        </picker>
       </view>
 
       <view class="period-tabs-segment">
