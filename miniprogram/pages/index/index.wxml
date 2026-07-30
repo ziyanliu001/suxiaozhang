@@ -260,21 +260,37 @@
        跨 Tab 跳转；表单状态/提交/校验逻辑唯一实现在组件里，两个页面共用同一份，
        不会出现改了一头忘改另一头。护持动态本来就是独立页面，直接 navigateTo。
        访客/家人角色不显示 -->
-  <view class="home-vt-card" wx:if="{{isVolunteer || isManager}}">
-    <view class="home-vt-title">🛠️ 义工现场服务工具</view>
-    <view class="home-vt-grid">
-      <view class="home-vt-item" bindtap="onTapToolDailyMenu">
-        <view class="home-vt-icon">🍱</view>
-        <text class="home-vt-text">登记菜单人数</text>
+  <!-- 🛡️ 内联 style + class 双重保障：class 仍保留（供 index.wxss 里同名规则
+       兜底 min-width:0/word-break 等防溢出细节，见该文件注释），但视觉呈现的
+       核心样式直接写进 style，不依赖任何 wxss 规则匹配是否生效 -->
+  <view
+    class="home-vt-card"
+    style="margin: 20rpx 28rpx; padding: 24rpx; background: #ffffff; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06);"
+    wx:if="{{isVolunteer || isManager}}"
+  >
+    <view class="home-vt-title" style="font-size: 28rpx; font-weight: bold; color: #2D3748; margin-bottom: 20rpx; text-align: left;">
+      🛠️ 义工现场服务工具
+    </view>
+    <view class="home-vt-grid" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+
+      <!-- 1. 登记菜单人数 -->
+      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="none" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+        <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">🍱</text>
+        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记菜单人数</text>
       </view>
-      <view class="home-vt-item" bindtap="onTapToolMaterialUsage">
-        <view class="home-vt-icon">🌾</view>
-        <text class="home-vt-text">登记物资消耗</text>
+
+      <!-- 2. 登记物资消耗 -->
+      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="none" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+        <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">🌾</text>
+        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记物资消耗</text>
       </view>
-      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal">
-        <view class="home-vt-icon">📷</view>
-        <text class="home-vt-text">记录护持动态</text>
+
+      <!-- 3. 记录护持动态 -->
+      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="none" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+        <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">📷</text>
+        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">记录护持动态</text>
       </view>
+
     </view>
   </view>
 

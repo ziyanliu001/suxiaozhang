@@ -7602,7 +7602,7 @@ button.poster-gen-btn[disabled] {
    相邻卡片上（此前已经踩过一次这个坑，这里直接一并补上，避免同一类问题
    在未来换更长文案时再犯一次） */
 .home-vt-card {
-  margin: 24rpx 28rpx;
+  margin: 20rpx 28rpx;
   padding: 24rpx;
   background: #ffffff;
   border-radius: 20rpx;

@@ -91,7 +91,8 @@
         <view class="header-icon-svg icon-svg-flower flip-x"></view>
       </view>
 
-      <!-- 🌟 核心荣誉数据：护持天数 / 累计工时，大号加粗突出，与次要统计做视觉分层 -->
+      <!-- 🌟 核心荣誉数据：护持天数 / 累计工时，暖金渐变底 + 微阴影提升仪式感，
+           大号加粗突出，与次要统计做视觉分层 -->
       <view class="merit-hero-row">
         <view class="merit-hero-cell">
           <text class="merit-hero-num">{{stats.volunteerDays || 0}}</text>
@@ -102,6 +103,13 @@
           <text class="merit-hero-num">{{stats.volunteerHours || 0}}</text>
           <text class="merit-hero-label">累计工时</text>
         </view>
+      </view>
+
+      <!-- 🎖️ 义工电子证书快捷入口：与 honor-wall-header 里的"义工证书"共用
+           同一个 onGoToBadges，方便义工在护持榜顶部就能直接查看/分享荣誉证书 -->
+      <view class="merit-cert-entry" bindtap="onGoToBadges">
+        <text class="merit-cert-entry-text">🎖️ 义工电子证书</text>
+        <view class="item-arrow">❯</view>
       </view>
 
       <view class="merit-sub-row" wx:if="{{hasPrivilege}}">
@@ -383,17 +391,12 @@
         </view>
       </view>
 
-      <!-- 🍚 门店餐饮与物资统计：与义工端共用同一个入口/同一份即时查询数据 -->
-      <view class="action-item-cell pd-feedback-entry-cell" bindtap="onOpenStoreStatsModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📊</text>
-          <text class="item-text">门店餐饮与物资统计</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
     </view>
 
-    <!-- 分组二：日常记录 —— 护持足迹（打卡历程）与餐报提交记录，命名区分避免混淆。
+    <!-- 分组二：日常记录 —— 原【我的餐报提交记录】+【我的统计数据】两个入口
+         合并重构为两个更清晰的入口：「我的护持历程」（个人打卡/参与日志，即原
+         "服务历程"改名）与「我的提交与数据」（餐报+物资提交历史，弹窗内新增
+         月度统计摘要 + 跳转完整统计的入口，见下方 my-vs-monthly-stats）。
          家人（服务对象）没有打卡/护持记录，整组隐藏；家人版"服务历程"已迁移到
          上方 family-care-card 自己的"日常记录"列表首位，不在这里重复展示。
          🔀 排在「核心荣誉」前面：日常操作类入口优先于荣誉展示 -->
@@ -402,7 +405,7 @@
       <view class="action-item-cell" bindtap="onTapServiceHistory">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
-          <text class="item-text">服务历程</text>
+          <text class="item-text">📜 我的护持历程</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -410,20 +413,21 @@
       <view class="action-item-cell" bindtap="onGoToMySubmissions">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-history"></view>
-          <text class="item-text">我的餐报提交记录</text>
+          <text class="item-text">📝 我的提交与数据</text>
           <text class="unread-badge" wx:if="{{rejectedCount > 0}}">{{rejectedCount}}</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🆕 义工/普通个人专属入口：复用与超管同一个统计页（statistics.ts 自己按
-           角色分流成个人视角，见 applyRolePermissions 里的 showPersonalView），
-           直接复用已有的 onGoToStatistics（不带 shopName 参数的裸跳转），
-           不需要额外定义一个新 handler ——两者跳的是同一个页面同一个函数 -->
-      <view class="action-item-cell" wx:if="{{isVolunteer}}" bindtap="onGoToStatistics">
+      <!-- 🍚 门店餐饮与物资统计：此前分散成两份（义工版在已删除的"义工现场服务
+           工具"卡片里，管理版在"门店管理"面板里，且后者的外层 patriarch-panel-card
+           只认 store_manager/isPatriarch/isSuperAdmin，纯财务角色其实完全看不到）。
+           合并成这一处，用 hasPrivilege（store_manager/finance/store_patriarch/
+           super_admin 均为 true）统一收口，财务角色也能看到 -->
+      <view class="action-item-cell" wx:if="{{hasPrivilege}}" bindtap="onOpenStoreStatsModal">
         <view class="item-left">
-          <view class="item-icon-svg icon-svg-screen"></view>
-          <text class="item-text">我的统计数据</text>
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">门店餐饮与物资统计</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -510,60 +514,11 @@
       </scroll-view>
     </view>
 
-    <!-- 🛠️ 义工现场服务工具：三个入口现在全部打通真实提交。
-         🛡️ 「菜单人数」「物资消耗」不写进 report_logs——那是参与跨天结转的门店
-         财务台账，义工只填人数/菜单/物资这类原始信息，直接插入会在结转链路里
-         造出一个"零收支幽灵日"，还可能撞上店长同一天的正式报告触发去重拦截。
-         这两项改为写入独立的 volunteer_submissions 集合（见 manageVolunteerSubmission
-         云函数），店长后续人工参考、自行汇总进正式报告。
-         「记录今日护持动态」已打通真实提交（见 manageActivityLog 云函数
-         volunteer create 分支 + status: 'PENDING'），直接跳转到已具备完整表单
-         能力的门店日志页，不在个人页重复实现 -->
-    <!-- 🐛 权限收紧过头修复：这张卡片曾经只对 isVolunteer 显示，导致店长/家长/
-         超管即使有更高权限也进不了这套轻量登记表单（服务端 manageVolunteerSubmission
-         也曾只放行 caller.role === 'volunteer'，两边一起挡）。现在放宽为"任一合法
-         门店角色"都能看到、都能提交，与云函数 ALLOWED_SUBMIT_ROLES 保持同一份口径 -->
-    <view class="list-group-label" wx:if="{{!isFamily && (isVolunteer || currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin)}}">🛠️ 义工现场服务工具</view>
-    <view class="volunteer-tools-card" wx:if="{{!isFamily && (isVolunteer || currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin)}}">
-      <view class="action-list-container">
-        <view class="action-item-cell" bindtap="onOpenDailyMenuModal">
-          <view class="item-left">
-            <text class="manager-only-emoji">🍱</text>
-            <text class="item-text">登记今日菜单与人数</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
-        <view class="action-item-cell" bindtap="onOpenMaterialUsageModal">
-          <view class="item-left">
-            <text class="manager-only-emoji">🌾</text>
-            <text class="item-text">登记物资消耗与报损</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
-        <view class="action-item-cell" bindtap="onOpenVolunteerJournalModal">
-          <view class="item-left">
-            <text class="manager-only-emoji">📷</text>
-            <text class="item-text">记录今日护持动态</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
-        <!-- 门店餐饮与物资统计：店长/家长/超管已经在上方"门店管理"分组里有同一个
-             入口（onOpenStoreStatsModal），这里只对义工展示，避免重复一条 -->
-        <view class="action-item-cell" wx:if="{{isVolunteer}}" bindtap="onOpenStoreStatsModal">
-          <view class="item-left">
-            <text class="manager-only-emoji">📊</text>
-            <text class="item-text">门店餐饮与物资统计</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <text class="volunteer-tools-hint" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">* 您提交的数据将作为权威数据直接采纳入库并更新账本，可在历史记录中随时撤回。</text>
-      <text class="volunteer-tools-hint" wx:else>* 填报数据将提交至店长审核，审核通过后归档入库。</text>
-    </view>
+    <!-- 🛠️ 义工现场服务工具：已平铺内嵌到 Tab1 首页「义工现场服务工具」金刚区
+         （index.wxml home-vt-* 系列 + daily-menu-modal/material-usage-modal 组件），
+         个人页不再重复展示这一组入口，避免功能冗余。daily-menu-modal/
+         material-usage-modal 组件仍挂载在本页（见下方），供「我的提交与数据」里
+         "重新修改并提交"通过 selectComponent 调用 presetForm() 复用 -->
 
     <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区。
          🐛 家人（服务对象）整组隐藏：唯一内容"关于雨花斋与阳光账本"已经在上方
@@ -663,6 +618,29 @@
         <button class="release-btn-cancel" bindtap="onCancelReleaseModal">我再想想</button>
         <button class="release-btn-confirm" bindtap="onConfirmReleaseRole" loading="{{isReleasing}}" disabled="{{isReleasing}}">确认退出</button>
       </view>
+    </view>
+  </view>
+
+  <!-- 🎖️ 徽章详情 Modal：点击核心荣誉墙任一枚徽章展示名称/图标/解锁条件/进度条，
+       复用 certificate-modal-* 同一套弹窗壳视觉规范 -->
+  <view class="certificate-modal-mask" wx:if="{{showBadgeDetailModal}}" bindtap="onCloseBadgeDetailModal">
+    <view class="certificate-modal-card badge-detail-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header">
+        <view class="certificate-modal-close" bindtap="onCloseBadgeDetailModal">✕</view>
+      </view>
+
+      <view class="badge-detail-circle {{selectedBadge.unlocked ? 'unlocked' : 'locked'}}">
+        <text class="badge-detail-emoji">{{selectedBadge.emoji}}</text>
+      </view>
+      <text class="badge-detail-name">{{selectedBadge.name}}</text>
+      <text class="badge-detail-status unlocked" wx:if="{{selectedBadge.unlocked}}">✅ 已解锁</text>
+      <text class="badge-detail-status" wx:else>🔒 未解锁</text>
+      <text class="badge-detail-desc">{{selectedBadge.unlockDesc}}</text>
+
+      <view class="badge-detail-progress-track">
+        <view class="badge-detail-progress-fill" style="width: {{selectedBadge.progressPercent}}%;"></view>
+      </view>
+      <text class="badge-detail-progress-text">当前进度 {{selectedBadge.progressCurrent}}/{{selectedBadge.progressThreshold}} {{selectedBadge.progressUnit}}</text>
     </view>
   </view>
 
@@ -916,9 +894,9 @@
   </view>
 
   <!-- 🍱 登记今日菜单与人数 / 🌾 登记物资消耗与报损：表单唯一实现已提炼为独立
-       自定义组件（daily-menu-modal / material-usage-modal，与首页共用），id 供
-       onOpenDailyMenuModal/onTapMyVolunteerSubmissionItem 等通过 selectComponent
-       调用 resetForm()/presetForm() -->
+       自定义组件（daily-menu-modal / material-usage-modal，与首页共用）。入口
+       已迁移到首页，本页仅供 onTapMyVolunteerSubmissionItem "重新修改并提交"
+       通过 selectComponent 调用 presetForm() 复用 -->
   <daily-menu-modal
     id="dailyMenuModal"
     visible="{{showDailyMenuModal}}"
@@ -940,10 +918,21 @@
 
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
-          <text class="feedback-sheet-title">📄 我的餐报提交记录</text>
-          <text class="feedback-sheet-subtitle">您提交的菜单人数与物资消耗登记</text>
+          <text class="feedback-sheet-title">📝 我的提交与数据</text>
+          <text class="feedback-sheet-subtitle">餐报/物资提交历史与本月统计</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseMyVolunteerSubmissionsModal">✕</view>
+      </view>
+
+      <!-- 📊 个人月度统计摘要：合并原"我的统计数据"入口——只做轻量摘要（基于本次
+           已拉取的 myVolunteerSubmissionsList 按当月 dateString 前缀客户端过滤计数），
+           完整的门店/多维度统计仍跳转 onGoToStatistics 对应的统计页，不在这里重复实现 -->
+      <view class="my-vs-monthly-stats">
+        <view class="my-vs-monthly-stats-row">
+          <text class="my-vs-monthly-stats-title">📊 本月提交 {{monthlySubmissionStats.total}} 次</text>
+          <view class="my-vs-monthly-stats-link" bindtap="onGoToStatistics">查看完整统计 ❯</view>
+        </view>
+        <text class="my-vs-monthly-stats-detail">✅ 已采纳 {{monthlySubmissionStats.approved}} · ⏳ 待确认 {{monthlySubmissionStats.pending}} · ❌ 已驳回 {{monthlySubmissionStats.rejected}}</text>
       </view>
 
       <scroll-view scroll-y class="feedback-admin-list-scroll">

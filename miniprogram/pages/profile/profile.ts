@@ -149,7 +149,18 @@ Page({
     avatarUploading: false,
 
     // 🌟 数字荣誉墙 + 电子证书
-    badgeList: [] as Array<{ id: string; emoji: string; name: string; unlocked: boolean; hint: string }>,
+    badgeList: [] as Array<{
+      id: string; emoji: string; name: string; unlocked: boolean; hint: string;
+      unlockDesc: string; progressCurrent: number; progressThreshold: number;
+      progressUnit: string; progressPercent: number;
+    }>,
+    // 🎖️ 徽章详情弹窗：点击核心荣誉墙任一枚徽章时展示名称/图标/解锁条件/进度条
+    showBadgeDetailModal: false,
+    selectedBadge: null as null | {
+      id: string; emoji: string; name: string; unlocked: boolean; hint: string;
+      unlockDesc: string; progressCurrent: number; progressThreshold: number;
+      progressUnit: string; progressPercent: number;
+    },
     showCertificateModal: false,
     certificateTempFilePath: '',
     certificateGenerating: false,
@@ -281,6 +292,8 @@ Page({
       riceCount?: number; flourCount?: number; oilCount?: number; vegetableCount?: number;
       lossNote?: string; rejectReason?: string;
     }>,
+    // 📊 「我的提交与数据」弹窗顶部月度统计摘要，见 computeMonthlySubmissionStats()
+    monthlySubmissionStats: { total: 0, approved: 0, pending: 0, rejected: 0 },
   },
 
   onLoad() {
@@ -1000,13 +1013,22 @@ Page({
       const remaining = Math.max(0, Math.ceil(cfg.threshold - current));
       const unit = cfg.type === 'days' ? '天' : '小时';
       const verb = cfg.type === 'days' ? '护持' : '累计';
+      // 🎖️ 徽章详情弹窗用：解锁条件文案 + 进度条（当前进度 clamp 到不超过阈值，
+      // 百分比同理 clamp 到 100，避免已解锁很久、累计数字远超阈值时进度条溢出）
+      const progressCurrent = Math.min(Math.round(current), cfg.threshold);
+      const progressPercent = cfg.threshold > 0 ? Math.min(100, Math.round((current / cfg.threshold) * 100)) : 100;
 
       return {
         id: cfg.id,
         emoji: cfg.emoji,
         name: cfg.name,
         unlocked,
-        hint: unlocked ? '' : `再${verb} ${remaining} ${unit}即可解锁「${cfg.name}」徽章`
+        hint: unlocked ? '' : `再${verb} ${remaining} ${unit}即可解锁「${cfg.name}」徽章`,
+        unlockDesc: `累计${verb}满 ${cfg.threshold} ${unit}可解锁`,
+        progressCurrent,
+        progressThreshold: cfg.threshold,
+        progressUnit: unit,
+        progressPercent
       };
     });
 
@@ -1206,19 +1228,20 @@ Page({
     });
   },
 
-  // 🌟 数字荣誉墙：点击某枚徽章。已解锁 -> 直接打开证书弹窗（与"义工证书"入口共用同一套
-  // 生成逻辑，个人只有一张证书，不区分是从哪枚徽章点进来的）；未解锁 -> 提示还差多少即可解锁，
-  // 不弹证书——避免用户以为点了没有解锁的徽章也能拿到证书
+  // 🌟 数字荣誉墙：点击任一枚徽章，弹出详情弹窗展示名称/图标/解锁条件/当前进度条——
+  // 不再区分已解锁/未解锁走不同分支（原先已解锁直接跳证书、未解锁只弹 toast），
+  // 统一体验更清晰；查看电子证书仍走 honor-wall-header 里独立的"义工证书"入口
+  // （onGoToBadges），两者不冲突
   onTapBadge(e: any) {
     const id = e.currentTarget.dataset.id;
     const badge = (this.data.badgeList || []).find((b: any) => b.id === id);
     if (!badge) return;
 
-    if (badge.unlocked) {
-      this.onGoToBadges();
-    } else {
-      wx.showToast({ title: badge.hint, icon: 'none', duration: 2200 });
-    }
+    this.setData({ showBadgeDetailModal: true, selectedBadge: badge });
+  },
+
+  onCloseBadgeDetailModal() {
+    this.setData({ showBadgeDetailModal: false });
   },
 
   // 义工证书：异步绘制一张长图证书（Canvas 2D），绘制完成后展示为可保存的全屏预览
@@ -1522,7 +1545,7 @@ Page({
       // 🔴 我的餐报提交记录入口角标：与 wxml 里 rejectedCount > 0 时展示的
       // unread-badge 对应，统计有几条已被店长驳回、还没重新修改提交
       const rejectedCount = list.filter((item: any) => item && item.status === 'rejected').length;
-      this.setData({ myVolunteerSubmissionsList: list, rejectedCount });
+      this.setData({ myVolunteerSubmissionsList: list, rejectedCount, monthlySubmissionStats: this.computeMonthlySubmissionStats(list) });
     } catch (err) {
       console.error('[fetchMyVolunteerSubmissions] 加载异常:', err);
       if (!silent) {
@@ -1533,6 +1556,23 @@ Page({
         this.setData({ myVolunteerSubmissionsLoading: false });
       }
     }
+  },
+
+  // 📊 「我的提交与数据」弹窗顶部的月度统计摘要：合并原"我的统计数据"入口——
+  // 只在客户端对已经拉取到的 myVolunteerSubmissionsList（最近最多 50 条）按
+  // 当月 dateString 前缀过滤计数，不额外请求云函数；完整的多维度统计仍通过
+  // onGoToStatistics 跳转独立的统计页
+  computeMonthlySubmissionStats(list: any[]) {
+    const now = new Date();
+    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const thisMonth = (list || []).filter((item: any) => item && String(item.dateString || '').startsWith(monthPrefix));
+
+    return {
+      total: thisMonth.length,
+      approved: thisMonth.filter((item: any) => item.status === 'approved').length,
+      pending: thisMonth.filter((item: any) => item.status === 'pending').length,
+      rejected: thisMonth.filter((item: any) => item.status === 'rejected').length
+    };
   },
 
   // 📥 待审核的义工餐报与物资：店长/家长/超管入口，与 resolveManageStoreId
@@ -2158,43 +2198,16 @@ Page({
     });
   },
 
-  // 🍱 登记今日菜单与人数：表单状态/提交逻辑已提炼进 daily-menu-modal 组件，
-  // 页面只负责控制显隐 + 打开前清空表单（对齐"每次打开都是全新登记"的原行为）
-  onOpenDailyMenuModal() {
-    const modal = this.selectComponent('#dailyMenuModal') as any;
-    if (modal) modal.resetForm();
-    this.setData({ showDailyMenuModal: true });
-  },
-
+  // 🍱🌾 登记今日菜单与人数 / 登记物资消耗与报损：入口已迁移到 Tab1 首页金刚区，
+  // 这里只保留关闭方法——daily-menu-modal/material-usage-modal 组件仍挂载在本页
+  // （见下方 wxml），供"我的提交与数据"里"重新修改并提交"通过 selectComponent
+  // 调用 presetForm() 后复用同一套表单
   onCloseDailyMenuModal() {
     this.setData({ showDailyMenuModal: false });
   },
 
-  // 🌾 登记物资消耗与报损：同理，逻辑在 material-usage-modal 组件里
-  onOpenMaterialUsageModal() {
-    const modal = this.selectComponent('#materialUsageModal') as any;
-    if (modal) modal.resetForm();
-    this.setData({ showMaterialUsageModal: true });
-  },
-
   onCloseMaterialUsageModal() {
     this.setData({ showMaterialUsageModal: false });
-  },
-
-  // 📷 记录今日护持动态：门店日志页（activity-log）已经具备完整的表单/图片
-  // 上传能力，且刚打通了义工提交权限（server 端 manageActivityLog 新增
-  // volunteer create 分支，写入 status: 'PENDING' 待店长确认）——个人页不重新
-  // 实现一套 Modal，直接跳转到已有页面，避免重复造轮子
-  onOpenVolunteerJournalModal() {
-    if (this.isNavigating) return;
-    this.isNavigating = true;
-
-    wx.navigateTo({
-      url: '/pages/activity-log/activity-log',
-      fail: () => {
-        this.isNavigating = false;
-      }
-    });
   },
 
   onTriggerGenCode() {

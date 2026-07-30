@@ -361,6 +361,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 16rpx;
 }
 
 .merit-hero-cell {
@@ -368,13 +369,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 20rpx 12rpx;
+  border-radius: 20rpx;
+  /* 🌟 暖金渐变底 + 微阴影：让护持天数/累计工时这两个核心数字自带一张
+     "小卡片"质感，比裸露在渐变大卡片上更有仪式感 */
+  background: linear-gradient(135deg, #FFFBF0 0%, #FFF3D6 100%);
+  box-shadow: 0 4rpx 12rpx rgba(212, 175, 55, 0.15);
 }
 
+/* 每个数据格已经改成独立的金色小卡片，中间这条细线 divider 反而显得多余，隐藏掉 */
 .merit-hero-divider {
-  width: 1rpx;
-  height: 64rpx;
-  background: #EFE6D8;
-  flex-shrink: 0;
+  display: none;
 }
 
 .merit-hero-num {
@@ -389,6 +394,31 @@
   font-size: 22rpx;
   color: #A08A6A;
   font-weight: 500;
+}
+
+/* 🎖️ 义工电子证书快捷入口：护持榜数字下方的小胶囊链接，样式弱化不与核心数字
+   抢视觉焦点，但热区和箭头提示保证一眼能看出可点击 */
+.merit-cert-entry {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  margin-top: 20rpx;
+  padding: 12rpx 0;
+  border-radius: 32rpx;
+  background: rgba(184, 134, 11, 0.06);
+}
+
+.merit-cert-entry:active {
+  background: rgba(184, 134, 11, 0.12);
+}
+
+.merit-cert-entry-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #8C1D18;
 }
 
 /* 次要数据：登记餐报 / 稽核账本 —— 仅店长/财务/超管可见，弱化为辅助信息条。
@@ -1011,24 +1041,6 @@
   box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
 }
 
-/* 🛠️ 义工现场服务工具：外层卡片只负责包住列表 + 底部提示语，
-   列表本身复用通用 .action-list-container，不重复一套列表样式 */
-.volunteer-tools-card {
-  margin-bottom: 30rpx;
-}
-
-.volunteer-tools-card .action-list-container {
-  margin-bottom: 12rpx;
-}
-
-.volunteer-tools-hint {
-  display: block;
-  font-size: 22rpx;
-  color: #A08A6A;
-  line-height: 1.6;
-  padding: 0 12rpx;
-}
-
 .honor-wall-header {
   display: flex;
   align-items: center;
@@ -1118,6 +1130,93 @@
 .honor-badge-name {
   font-size: 20rpx;
   text-align: center;
+}
+
+/* ================= 🎖️ 徽章详情 Modal ================= */
+/* 复用 .certificate-modal-mask/.certificate-modal-header/.certificate-modal-close
+   同一套弹窗壳，这里只需要 badge-detail-card 覆盖内边距 + 卡片正文样式 */
+.badge-detail-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8rpx;
+}
+
+.badge-detail-circle {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin-bottom: 16rpx;
+}
+
+.badge-detail-circle.unlocked {
+  background: linear-gradient(135deg, #F1C40F 0%, #B8860B 100%);
+  box-shadow: 0 0 0 6rpx #FFF3BF, 0 6rpx 16rpx rgba(184, 134, 11, 0.45);
+}
+
+.badge-detail-circle.unlocked .badge-detail-emoji {
+  font-size: 56rpx;
+}
+
+.badge-detail-circle.locked {
+  background: #E9ECEF;
+  opacity: 0.6;
+}
+
+.badge-detail-circle.locked .badge-detail-emoji {
+  font-size: 52rpx;
+  filter: grayscale(100%);
+}
+
+.badge-detail-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 8rpx;
+}
+
+.badge-detail-status {
+  font-size: 22rpx;
+  color: #ADB5BD;
+  margin-bottom: 16rpx;
+}
+
+.badge-detail-status.unlocked {
+  color: #2B8A3E;
+  font-weight: bold;
+}
+
+.badge-detail-desc {
+  font-size: 24rpx;
+  color: #6B5B45;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 20rpx;
+}
+
+.badge-detail-progress-track {
+  width: 100%;
+  height: 16rpx;
+  border-radius: 8rpx;
+  background: #F1F3F5;
+  overflow: hidden;
+  margin-bottom: 12rpx;
+}
+
+.badge-detail-progress-fill {
+  height: 100%;
+  border-radius: 8rpx;
+  background: linear-gradient(135deg, #F1C40F 0%, #B8860B 100%);
+  transition: width 0.3s ease;
+}
+
+.badge-detail-progress-text {
+  font-size: 22rpx;
+  color: #A08A6A;
 }
 
 /* ================= 🌟 义工证书 Modal ================= */
@@ -2001,6 +2100,44 @@
   font-size: 24rpx;
   color: #6B5B45;
   margin-bottom: 12rpx;
+}
+
+/* 📊「我的提交与数据」弹窗顶部月度统计摘要：合并原"我的统计数据"入口，
+   轻量摘要 + 跳转完整统计页的入口，见 computeMonthlySubmissionStats() */
+.my-vs-monthly-stats {
+  background: #FFF9F0;
+  border: 1rpx solid #F1E6D8;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.my-vs-monthly-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.my-vs-monthly-stats-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.my-vs-monthly-stats-link {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  font-size: 22rpx;
+  color: #B8860B;
+  flex-shrink: 0;
+}
+
+.my-vs-monthly-stats-detail {
+  display: block;
+  font-size: 22rpx;
+  color: #A08A6A;
+  margin-top: 8rpx;
 }
 
 /* 📄 我的餐报提交记录：待确认/已确认状态标签，与 fa-item-handled-tag 呼应但
