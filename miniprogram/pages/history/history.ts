@@ -504,12 +504,30 @@ Page({
     const { viewMode, currentStoreId, selectedStoreName } = this.data;
     // 🔑 数据隔离：将 storeId 传给 DataService 做云端强隔离
     // 超管全国总览/多店汇总时（'national_overview' / 'ALL_STORES' / 'all' 等哨兵值）传空，不限制门店
-    const isAllStoresView = isNationalStoreId(currentStoreId);
-    const effectiveStoreId = isAllStoresView ? '' : currentStoreId;
+    // 🛡️ 越权修复：此前这里直接用 isNationalStoreId(currentStoreId) 判定"是否全国视角"，
+    // 漏掉了角色校验——非超管账号只要 currentStoreId 因共享设备残留旧会话/跨页状态未同步
+    // 等原因变成了哨兵值，这里就会把 effectiveStoreId 置空、并把这个未经角色校验的结果
+    // 写回下方 setData 的 isAllStoresView，导致顶部"查看视角"标签越权显示成
+    // "🌐 全国汇总账本"（即使实际查询已被服务端 getReports 云函数强制收敛回本店，
+    // 展示层仍然是错的）。改用与 resolveIsAllStoresView() 完全同一套"哨兵值必须叠加
+    // isSuperAdmin 才成立"的判定口径，杜绝这条独立分支再次绕过角色校验
+    const isAllStoresView = this.resolveIsAllStoresView(currentStoreId);
+    let effectiveStoreId = isAllStoresView ? '' : currentStoreId;
     // 🌟 Bug 修复：全国总览时 shopName 也设为空，避免按 '全国总览' 过滤导致无数据
-    const effectiveShopName = (!isAllStoresView && selectedStoreName && selectedStoreName !== '全部门店')
+    let effectiveShopName = (!isAllStoresView && selectedStoreName && selectedStoreName !== '全部门店')
       ? selectedStoreName
       : '';
+
+    // 🛡️ 双重兜底：非超管时哪怕 currentStoreId 本身就是哨兵值（上面已强制
+    // isAllStoresView=false，但 effectiveStoreId 此时会原样等于这个哨兵字符串，
+    // 既不是空字符串也不是真实门店 id），强制收敛为账号真实绑定的门店，绝不把
+    // 哨兵值当门店 id 传给云函数，防止前端绕过切换到全国视角
+    if (!this.data.isSuperAdmin && isNationalStoreId(effectiveStoreId)) {
+      const roleInfo = AuthService.getCachedRoleInfo();
+      effectiveStoreId = (roleInfo && roleInfo.storeId) || '';
+      effectiveShopName = '';
+    }
+
     const result = await DataService.getReports({
       viewMode,
       storeId: effectiveStoreId,

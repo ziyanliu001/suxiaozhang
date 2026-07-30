@@ -16,8 +16,13 @@
     <view class="mode-switch-row">
       <text class="mode-label">查看视角：</text>
       <view class="mode-switch-pill">
+        <!-- 🛡️ 越权兜底：即使 isAllStoresView 因某种异常状态被误置为 true，
+             这里再叠加一层 isSuperAdmin 校验，非超管永远只能看到"🏪 门店完整账本"，
+             绝不渲染"🌐 全国汇总账本"文案——与 resolveIsAllStoresView()/loadReports()
+             的角色校验口径保持一致，双保险 -->
         <view class="tab {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">
-          {{isAllStoresView ? '🌐 全国汇总账本' : '🏪 门店完整账本'}}
+          <block wx:if="{{isSuperAdmin}}">{{isAllStoresView ? '🌐 全国汇总账本' : '🏪 门店完整账本'}}</block>
+          <block wx:else>🏪 门店完整账本</block>
         </view>
         <view class="tab {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">
           👤 我的提交记录
