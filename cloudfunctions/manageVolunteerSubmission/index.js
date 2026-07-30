@@ -12,11 +12,15 @@
 // action：
 // - submit：volunteer/store_manager/store_patriarch/super_admin 均可提交一条
 //   type='menu'（今日菜单与人数）或 type='material'（物资消耗与报损）记录，
-//   status 固定 'pending'，自动绑定当前门店。不放行家人/其他未识别角色。
+//   自动绑定当前门店。不放行家人/其他未识别角色。
 //   🛡️ 历史上这里曾只放行 caller.role === 'volunteer'，挡住了两类合法场景：
 //   超管用"视角切换预览"看义工视图时客户端显示 isVolunteer=true 但服务端
 //   caller.role 是真实的 super_admin；以及店长/家长本人想用这套轻量表单
 //   临时登记，不想走完整正式报告流程。
+//   🏛️ 店长/家长本人提交免二次审核：caller.role（这里查出来的登录者真实
+//   角色，不是 event 里任何客户端字段）是 store_manager/store_patriarch 时，
+//   status 直接落 'approved' 并复用 approve 动作同一套入库逻辑（安全边界见
+//   下方 approve 小节），省掉"自己审自己"这道多余流程；其余角色仍是 'pending'。
 // - myList：义工查看自己提交过的全部记录（按 _openid，不区分门店）。
 // - listPending：店长/家长/超管查看本店待处理的义工投稿——权限模型与
 //   manageActivityLog 的 resolveReviewStoreId 一致。
@@ -34,9 +38,15 @@
 //     没有任何库存基线可供"扣减"——这里只是流水式记录消耗，不是真正的库存
 //     扣减，避免打着"扣库存"的旗号却没有库存系统支撑）。
 // - reject：驳回一条投稿，必须携带 rejectReason，status 置为 'rejected'。
-// - deleteMine：义工自己删除一条已被驳回的记录（撤销，不再重新修改提交了）。
-//   服务端强制校验"必须是本人提交 + 当前状态仍是 rejected"，避免误删/越权删
-//   除别人的记录，或删掉还在流程中的 pending/已入库的 approved 记录。
+// - deleteMine：义工自己删除一条已被驳回（不改了不重提了）或还在待审核中
+//   （提交手滑了，店长还没处理，先撤回）的记录。服务端强制校验"必须是本人
+//   提交 + 当前状态仍是 rejected/pending"，避免误删/越权删除别人的记录，
+//   或删掉已经被店长采纳入库的 approved 记录。
+// - revokeMine：撤回一条自己提交、已经采纳入库（approved）的记录——把它当初
+//   合并进 report_logs（type='menu'）/ 追加进 material_logs（type='material'）
+//   的贡献反向冲减掉，再删除这条记录本身。menu 类型只有在 report_logs 当天
+//   的早/午/晚/合计人数仍与这条记录写入时完全一致（没被别的记录后续覆盖）
+//   才会执行，否则拒绝撤回并报错，避免冲掉别人刚采纳的数据（见 revertMenuFromReportLogs）。
 // - statsSummary：全店餐饮/物资统计——不新建 store_daily_stats 汇总表，即时查询
 //   volunteer_submissions（今日已采纳的分餐人数）+ material_logs（本月已入库的
 //   物资消耗），店长/家长/超管/义工均可查看本店范围（超管需传 storeId）。
@@ -124,6 +134,14 @@ async function handleSubmit(event, OPENID) {
     tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
   }
 
+  // 🏛️ 管理者（店长/家长/超管）本人填报免二次审核：本来就是有权确认这笔数据
+  // 的人，自己填的没有再走一遍"提交给自己审核"的意义——直接采纳入库，省掉
+  // 多余步骤。必须以这里刚查出来的 caller.role（登录者的真实角色）为准，绝
+  // 不能信 event 里任何客户端传来的角色/审批标记：否则任何登录用户都能在
+  // 请求体里伪造一个 autoApprove 标记，绕过审核直接把数据写进正式台账
+  const AUTO_APPROVE_ROLES = ['store_manager', 'store_patriarch', 'super_admin'];
+  const autoApprove = AUTO_APPROVE_ROLES.includes(caller.role);
+
   const doc = {
     _openid: OPENID,
     nickName: caller.nickName || '',
@@ -135,9 +153,13 @@ async function handleSubmit(event, OPENID) {
     storeName,
     tenantId,
     dateString: (event.dateString && /^\d{4}-\d{2}-\d{2}$/.test(event.dateString)) ? event.dateString : todayStr(),
-    status: 'pending',
+    status: autoApprove ? 'approved' : 'pending',
     createTime: db.serverDate()
   };
+  if (autoApprove) {
+    doc.approvedBy = OPENID;
+    doc.approveTime = db.serverDate();
+  }
 
   if (type === 'menu') {
     doc.mealStatus = event.mealStatus === 'closed' ? 'closed' : 'open';
@@ -155,16 +177,34 @@ async function handleSubmit(event, OPENID) {
     doc.lossNote = String(event.lossNote || '').trim().slice(0, MAX_NOTE_LENGTH);
   }
 
+  let addRes;
   try {
-    await db.collection(COLLECTION).add({ data: doc });
+    addRes = await db.collection(COLLECTION).add({ data: doc });
   } catch (err) {
     // .add() 通常会在集合不存在时自动建表，这里兜底：万一没有，显式建一次再重试
     if (!isCollectionNotExistError(err)) throw err;
     await db.createCollection(COLLECTION).catch(() => {});
-    await db.collection(COLLECTION).add({ data: doc });
+    addRes = await db.collection(COLLECTION).add({ data: doc });
   }
 
-  return { success: true };
+  if (!autoApprove) {
+    return { success: true };
+  }
+
+  // 复用 handleApprove 里同一套"只更新当天已存在的 report_logs 文档/追加
+  // material_logs 流水"的安全边界（见文件头部注释），不重复一份逻辑
+  doc._id = addRes._id;
+  let message = '已直接确认并归档入库';
+  if (type === 'menu') {
+    const mergeResult = await mergeMenuIntoReportLogs(doc);
+    if (!mergeResult.merged) {
+      message = '已直接确认，今日尚无正式餐报，人数与菜单需在提交今日报告时手动核对补录';
+    }
+  } else {
+    await writeMaterialLog(doc, OPENID);
+  }
+
+  return { success: true, autoApproved: true, message };
 }
 
 function mapItem(item) {
@@ -262,6 +302,53 @@ async function mergeMenuIntoReportLogs(doc) {
 
   await db.collection('report_logs').doc(existing._id).update({ data: updateData });
   return { merged: true };
+}
+
+// mergeMenuIntoReportLogs 的镜像操作：撤回一条已采纳的菜单登记时，把它当初
+// 写进 report_logs 的贡献冲减回去。🛡️ 早/午/晚/合计人数是"覆盖式合并"（每次
+// 采纳都用最新数字直接覆盖，不是累加），所以只有当 report_logs 当天这几个字段
+// 现在的值仍然和这条记录当初写入的值完全一致时，才能安全清零——如果期间又有
+// 别的投稿被采纳、把这几个字段覆盖成了别人的数字，贸然清零会把别人刚采纳的数据
+// 一起冲掉，这种情况下拒绝撤回，返回明确原因，让人工去 report_logs 核对
+async function revertMenuFromReportLogs(doc) {
+  const existingRes = await db.collection('report_logs')
+    .where({ storeId: doc.storeId, dateString: doc.dateString })
+    .limit(1)
+    .get();
+  const existing = existingRes.data && existingRes.data[0];
+
+  if (!existing) {
+    // 当天没有正式报告可合并，采纳时就没写进 report_logs，本来就没有账本可冲减
+    return { reverted: true };
+  }
+
+  const stillMatches = (existing.breakfastCount || 0) === (doc.breakfastCount || 0)
+    && (existing.lunchCount || 0) === (doc.lunchCount || 0)
+    && (existing.dinnerCount || 0) === (doc.dinnerCount || 0)
+    && (existing.totalCount || 0) === (doc.totalCount || 0);
+  if (!stillMatches) {
+    return { reverted: false, error: '门店当天账本已被其他记录覆盖，无法安全撤回，请联系财务人工核对' };
+  }
+
+  const updateData = { breakfastCount: 0, lunchCount: 0, dinnerCount: 0, totalCount: 0 };
+  // diningCount 当初只在店长还没填过时才会被这条记录带入，只有它仍等于这条
+  // 记录写入的值时才一并清零，避免误清掉店长后来自己手动核实填写的人数
+  if (existing.diningCount === doc.totalCount) {
+    updateData.diningCount = 0;
+  }
+
+  const summaryLine = `[义工登记] 早:${doc.breakfastCount || 0} 午:${doc.lunchCount || 0} 晚:${doc.dinnerCount || 0}` +
+    (doc.menuNote ? ` 备注:${doc.menuNote}` : '');
+  if (existing.reportText) {
+    const lines = existing.reportText.split('\n');
+    if (lines[lines.length - 1] === summaryLine) {
+      lines.pop();
+      updateData.reportText = lines.join('\n');
+    }
+  }
+
+  await db.collection('report_logs').doc(existing._id).update({ data: updateData });
+  return { reverted: true };
 }
 
 // material_logs 是全新的流水记录集合，不存在任何库存基线，这里只追加一条
@@ -363,7 +450,42 @@ async function handleDeleteMine(event, OPENID) {
   const doc = docRes && docRes.data;
   if (!doc) return { success: false, error: '该条记录不存在或已被删除' };
   if (doc._openid !== OPENID) return { success: false, error: '无权限：只能删除自己提交的记录' };
-  if (doc.status !== 'rejected') return { success: false, error: '只能删除已驳回的记录' };
+  if (doc.status !== 'rejected' && doc.status !== 'pending') {
+    return { success: false, error: '只能删除已驳回或待审核的记录' };
+  }
+
+  await db.collection(COLLECTION).doc(id).remove();
+  return { success: true };
+}
+
+// 撤回一条已采纳入库的记录：与 handleDeleteMine 分开单独成一个动作，因为这里
+// 除了删记录本身，还要先把它当初写进 report_logs/material_logs 的贡献反向
+// 冲减掉——风险和校验逻辑都比"删一条还没生效的 pending/rejected 草稿"重得多，
+// 混在一个函数里会让两种截然不同的操作互相牵连，拆开更安全也更好读
+async function handleRevokeMine(event, OPENID) {
+  if (!OPENID) return { success: false, error: '未登录，无法操作' };
+
+  const id = event.id;
+  if (!id) return { success: false, error: '缺少 id 参数' };
+
+  const docRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+  const doc = docRes && docRes.data;
+  if (!doc) return { success: false, error: '该条记录不存在或已被删除' };
+  if (doc._openid !== OPENID) return { success: false, error: '无权限：只能撤回自己提交的记录' };
+  if (doc.status !== 'approved') return { success: false, error: '只能撤回已采纳入库的记录' };
+
+  if (doc.type === 'menu') {
+    const revertResult = await revertMenuFromReportLogs(doc);
+    if (!revertResult.reverted) {
+      return { success: false, error: revertResult.error || '撤回失败，请稍后重试' };
+    }
+  } else {
+    const logRes = await db.collection('material_logs').where({ sourceSubmissionId: id }).limit(1).get().catch(() => null);
+    const logDoc = logRes && logRes.data && logRes.data[0];
+    if (logDoc) {
+      await db.collection('material_logs').doc(logDoc._id).remove();
+    }
+  }
 
   await db.collection(COLLECTION).doc(id).remove();
   return { success: true };
@@ -476,6 +598,8 @@ exports.main = async (event) => {
       return handleReject(event, OPENID);
     case 'deleteMine':
       return handleDeleteMine(event, OPENID);
+    case 'revokeMine':
+      return handleRevokeMine(event, OPENID);
     case 'statsSummary':
       return handleStatsSummary(event, OPENID);
     default:

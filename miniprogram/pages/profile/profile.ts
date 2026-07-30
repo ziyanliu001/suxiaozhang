@@ -1429,20 +1429,22 @@ Page({
     }
   },
 
-  // 🗑️ 删除/撤销已驳回记录：义工确认不再需要修改重提这条记录时，彻底清掉它。
-  // 服务端 deleteMine 动作会再校验一次"必须是本人提交 + 状态仍是 rejected"，
-  // 双重防线避免误删待确认/已采纳入库的记录
+  // 🗑️ 删除/撤销已驳回或待审核记录：义工确认不再需要这条记录时，彻底清掉它——
+  // 已驳回的是"不改了不重提了"，待审核的是"提交手滑了，店长还没处理，先撤回"。
+  // 服务端 deleteMine 动作会再校验一次"必须是本人提交 + 状态仍是 rejected/pending"，
+  // 双重防线避免误删已经被店长采纳入库的记录
   async onDeleteMyVolunteerSubmission(e: any) {
     if (!isCloudAvailable()) return;
     const index = e.currentTarget.dataset.index;
     const item = this.data.myVolunteerSubmissionsList[index];
-    if (!item || item.status !== 'rejected') return;
+    if (!item || (item.status !== 'rejected' && item.status !== 'pending')) return;
 
+    const isPending = item.status === 'pending';
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
-        title: '删除记录',
-        content: '确定要删除此条已驳回记录吗？',
-        confirmText: '删除',
+        title: isPending ? '撤销提交' : '删除记录',
+        content: isPending ? '确定要撤销并删除这条尚未审核的提交吗？' : '确定要删除此条已驳回记录吗？',
+        confirmText: isPending ? '撤销' : '删除',
         confirmColor: '#C0392B',
         success: (res) => resolve(!!res.confirm),
         fail: () => resolve(false)
@@ -1460,10 +1462,52 @@ Page({
         wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
         return;
       }
-      wx.showToast({ title: '已删除', icon: 'success' });
+      wx.showToast({ title: isPending ? '已撤销' : '已删除', icon: 'success' });
       this.fetchMyVolunteerSubmissions();
     } catch (err) {
       console.error('[onDeleteMyVolunteerSubmission] 删除异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    }
+  },
+
+  // 🔄 撤回已采纳入库的记录：与 onDeleteMyVolunteerSubmission 分开单独成一个
+  // 处理函数——这条记录已经把数据合并进了门店当天的 report_logs/material_logs，
+  // 撤回不只是删记录本身，还要先把当初写入的贡献反向冲减掉，风险和确认文案都
+  // 与"删一条还没生效的 pending/rejected 草稿"不同。服务端 revokeMine 会再校验
+  // 一次"必须是本人提交 + 状态仍是 approved"，如果账本在此期间已被别的记录覆盖，
+  // 会拒绝撤回并原样报错，避免冲掉别人刚采纳的数据
+  async onRevokeApprovedSubmission(e: any) {
+    if (!isCloudAvailable()) return;
+    const index = e.currentTarget.dataset.index;
+    const item = this.data.myVolunteerSubmissionsList[index];
+    if (!item || item.status !== 'approved') return;
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '撤回记录',
+        content: '撤回后将同步冲减扣除已更新的门店账本与库存，确定撤回吗？',
+        confirmText: '撤回',
+        confirmColor: '#C0392B',
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'revokeMine', id: item._id }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '撤回失败', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '已撤回', icon: 'success' });
+      this.fetchMyVolunteerSubmissions();
+    } catch (err) {
+      console.error('[onRevokeApprovedSubmission] 撤回异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     }
   },
@@ -2221,7 +2265,14 @@ Page({
         return;
       }
       this.setData({ showDailyMenuModal: false });
-      wx.showToast({ title: '已提交，待店长确认', icon: 'success' });
+      // 🏛️ 店长/家长本人填报免二次审核：服务端 handleSubmit 会按登录者的真实角色
+      // （不是这里的展示态 currentUserRole，防止超管"视角切换预览"时被误当店长
+      // 放行）自动判断是否直接采纳入库，result.autoApproved 如实反映服务端的
+      // 处理结果，据此决定提示语，不在前端自行猜测
+      wx.showToast({
+        title: result.autoApproved ? (result.message || '管理者数据已自动采纳并更新账本') : '已提交，待店长确认',
+        icon: 'success'
+      });
     } catch (err) {
       console.error('[onSubmitDailyMenu] 提交异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
@@ -2320,7 +2371,11 @@ Page({
         return;
       }
       this.setData({ showMaterialUsageModal: false });
-      wx.showToast({ title: '已提交，待店长确认', icon: 'success' });
+      // 🏛️ 与 onSubmitDailyMenu 同理：以服务端 result.autoApproved 为准决定提示语
+      wx.showToast({
+        title: result.autoApproved ? (result.message || '管理者数据已自动采纳并更新账本') : '已提交，待店长确认',
+        icon: 'success'
+      });
     } catch (err) {
       console.error('[onSubmitMaterialUsage] 提交异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });

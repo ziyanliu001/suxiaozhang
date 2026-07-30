@@ -561,7 +561,8 @@
         </view>
       </view>
 
-      <text class="volunteer-tools-hint">* 填报数据将提交至店长与财务审核，审核通过后归档至阳光账本。</text>
+      <text class="volunteer-tools-hint" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">* 您提交的数据将作为权威数据直接采纳入库并更新账本，可在历史记录中随时撤回。</text>
+      <text class="volunteer-tools-hint" wx:else>* 填报数据将提交至店长审核，审核通过后归档入库。</text>
     </view>
 
     <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区。
@@ -922,7 +923,8 @@
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
           <text class="feedback-sheet-title">🍱 登记今日菜单与人数</text>
-          <text class="feedback-sheet-subtitle">提交后待店长确认，仅供门店参考汇总</text>
+          <text class="feedback-sheet-subtitle" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">提交后将直接确认并归档入库</text>
+          <text class="feedback-sheet-subtitle" wx:else>提交后待店长确认，仅供门店参考汇总</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseDailyMenuModal">✕</view>
       </view>
@@ -971,7 +973,8 @@
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
           <text class="feedback-sheet-title">🌾 登记物资消耗与报损</text>
-          <text class="feedback-sheet-subtitle">提交后待店长确认，仅供门店参考汇总</text>
+          <text class="feedback-sheet-subtitle" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">提交后将直接确认并归档入库</text>
+          <text class="feedback-sheet-subtitle" wx:else>提交后待店长确认，仅供门店参考汇总</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseMaterialUsageModal">✕</view>
       </view>
@@ -1058,7 +1061,12 @@
             <text class="fa-item-content fa-item-note" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
           </block>
 
-          <text class="my-vs-status-tag approved" wx:if="{{item.status === 'approved'}}">✅ 店长已采纳入库</text>
+          <block wx:if="{{item.status === 'approved'}}">
+            <text class="my-vs-status-tag approved">✅ 已采纳入库</text>
+            <view class="my-vs-action-row">
+              <button class="delete-submission-btn" catchtap="onRevokeApprovedSubmission" data-index="{{index}}">🗑️ 撤回记录</button>
+            </view>
+          </block>
           <block wx:elif="{{item.status === 'rejected'}}">
             <text class="my-vs-status-tag rejected">❌ 已驳回</text>
             <text class="my-vs-reject-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</text>
@@ -1067,7 +1075,12 @@
               <button class="delete-submission-btn" catchtap="onDeleteMyVolunteerSubmission" data-index="{{index}}">🗑️ 删除</button>
             </view>
           </block>
-          <text class="my-vs-status-tag pending" wx:else>⏳ 待店长确认</text>
+          <block wx:else>
+            <text class="my-vs-status-tag pending">⏳ 待店长确认</text>
+            <view class="my-vs-action-row">
+              <button class="cancel-pending-btn" catchtap="onDeleteMyVolunteerSubmission" data-index="{{index}}">🗑️ 撤销提交</button>
+            </view>
+          </block>
         </view>
       </scroll-view>
     </view>

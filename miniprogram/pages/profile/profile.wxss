@@ -1830,7 +1830,7 @@
   font-size: 26rpx;
   color: #4A5568;
   margin-top: 12rpx;
-  margin-bottom: 12rpx;
+  margin-bottom: 16rpx;
 }
 
 /* 数字高亮：在核心数据行内进一步突出具体数量，让人数/斤数比周围的标签文字更醒目 */
@@ -2088,6 +2088,7 @@
 .my-vs-status-tag.approved {
   color: #2B8A3E;
   background: #EBFBEE;
+  border: 2rpx solid #2B8A3E;
   font-weight: bold;
 }
 
@@ -2158,6 +2159,29 @@
 }
 
 .delete-submission-btn:active {
+  opacity: 0.7;
+}
+
+.cancel-pending-btn {
+  display: block;
+  flex: 1;
+  height: 72rpx;
+  line-height: 68rpx;
+  margin-top: 0;
+  padding: 0;
+  background: #FFFFFF;
+  color: #868E96;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 36rpx;
+  border: 2rpx solid #CED4DA;
+}
+
+.cancel-pending-btn::after {
+  border: none;
+}
+
+.cancel-pending-btn:active {
   opacity: 0.7;
 }
 
