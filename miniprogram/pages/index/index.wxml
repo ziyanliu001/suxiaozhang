@@ -252,6 +252,32 @@
     </view>
   </view>
 
+  <!-- 🛠️ 义工现场服务工具金刚区：紧随到岗打卡卡片之后，把个人页【我的】里
+       已有的三个轻量填报入口（菜单人数/物资消耗/护持动态）平铺展示，让义工/
+       管理者到岗后第一屏就能直接点进去，不用先跳个人页再找入口。菜单人数/
+       物资消耗两个填报弹窗提炼成了独立自定义组件（components/daily-menu-modal、
+       components/material-usage-modal），首页与个人页各自在原地直接弹出，不再
+       跨 Tab 跳转；表单状态/提交/校验逻辑唯一实现在组件里，两个页面共用同一份，
+       不会出现改了一头忘改另一头。护持动态本来就是独立页面，直接 navigateTo。
+       访客/家人角色不显示 -->
+  <view class="home-vt-card" wx:if="{{isVolunteer || isManager}}">
+    <view class="home-vt-title">🛠️ 义工现场服务工具</view>
+    <view class="home-vt-grid">
+      <view class="home-vt-item" bindtap="onTapToolDailyMenu">
+        <view class="home-vt-icon">🍱</view>
+        <text class="home-vt-text">登记菜单人数</text>
+      </view>
+      <view class="home-vt-item" bindtap="onTapToolMaterialUsage">
+        <view class="home-vt-icon">🌾</view>
+        <text class="home-vt-text">登记物资消耗</text>
+      </view>
+      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal">
+        <view class="home-vt-icon">📷</view>
+        <text class="home-vt-text">记录护持动态</text>
+      </view>
+    </view>
+  </view>
+
   <!-- 📢 门店公告：按当前视角（总览级/具体门店，严格互斥）从云端拉取的通知列表。
        多条时垂直轮播；单条超长标题用水平跑马灯；没有任何有效通知时整块不占位。 -->
   <view class="announce-bar" wx:if="{{noticeList.length > 0 && !isNoticeBarHiddenToday}}">
@@ -2463,6 +2489,22 @@
     userInfo="{{archiveUserInfo}}"
     bind:close="onCloseArchiveModal"
     bind:viewJourney="onViewJourneyFromArchive"
+  />
+
+  <!-- 🛠️ 义工现场服务工具金刚区对应的两个填报弹窗：原地直弹，不再 switchTab 跳
+       个人页。isAutoApproveRole 只影响弹窗内的提示文案，真正的免审批判定始终
+       由服务端按登录者真实角色重新核定，见组件文件头部注释 -->
+  <daily-menu-modal
+    id="dailyMenuModal"
+    visible="{{showDailyMenuModal}}"
+    isAutoApproveRole="{{isManager}}"
+    bind:close="onCloseDailyMenuModal"
+  />
+  <material-usage-modal
+    id="materialUsageModal"
+    visible="{{showMaterialUsageModal}}"
+    isAutoApproveRole="{{isManager}}"
+    bind:close="onCloseMaterialUsageModal"
   />
 
 

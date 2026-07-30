@@ -1,0 +1,170 @@
+/* 组件默认样式隔离（isolated），这里是这张表单唯一的样式来源，
+   不依赖宿主页面（index.wxss / profile.wxss）里同名 class 的定义 */
+
+.feedback-sheet-backdrop {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999998 !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.feedback-sheet-backdrop.show {
+  opacity: 1;
+}
+
+.feedback-sheet-panel {
+  position: relative;
+  z-index: 999999 !important;
+  width: 100%;
+  background: #FBF9F5;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  padding: 16rpx 28rpx calc(140rpx + env(safe-area-inset-bottom)) !important;
+  box-sizing: border-box;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.feedback-sheet-backdrop.show .feedback-sheet-panel {
+  transform: translateY(0);
+}
+
+.feedback-sheet-drag-handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #E3D9C8;
+  margin: 0 auto 24rpx;
+}
+
+.feedback-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.feedback-sheet-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.feedback-sheet-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.feedback-sheet-subtitle {
+  font-size: 22rpx;
+  color: #A08A6A;
+}
+
+.feedback-sheet-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+
+.vt-form-label {
+  display: block;
+  font-size: 24rpx;
+  color: #6B5B45;
+  margin-bottom: 12rpx;
+}
+
+/* 🌾 物资消耗四项：2x2 网格，比 3 列一行更宽裕，数字不用挤在一起 */
+.vt-count-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.vt-count-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+.vt-count-input {
+  width: 100%;
+  height: 76rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 0 20rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  color: #333333;
+}
+
+.tool-hint-text {
+  display: block;
+  font-size: 22rpx;
+  color: #A08A6A;
+  line-height: 1.6;
+  margin-bottom: 20rpx;
+}
+
+.feedback-content-textarea {
+  width: 100%;
+  min-height: 180rpx;
+  max-height: 320rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  box-sizing: border-box;
+  font-size: 26rpx;
+  color: #333333;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.feedback-textarea-placeholder {
+  color: #C7BBA8;
+}
+
+.feedback-submit-btn {
+  width: 100%;
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24rpx;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+}
+
+.feedback-submit-btn::after {
+  border: none;
+}
+
+.feedback-submit-btn:active {
+  opacity: 0.85;
+}
+
+.feedback-submit-btn[disabled] {
+  opacity: 0.5;
+  box-shadow: none;
+}

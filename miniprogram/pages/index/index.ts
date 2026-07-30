@@ -416,6 +416,10 @@ Page({
     highlightCheckInCard: false,
     // 档案弹窗
     showArchiveModal: false,
+    // 🛠️ 义工现场服务工具金刚区：菜单人数/物资消耗两个填报弹窗（daily-menu-modal/
+    // material-usage-modal 组件）的显隐，表单状态本身由组件内部持有
+    showDailyMenuModal: false,
+    showMaterialUsageModal: false,
     archiveUserInfo: {
       totalDays: 0,
       totalCheckInCount: 0,
@@ -2716,7 +2720,7 @@ Page({
       return;
     }
     if (storeName === '全国总览') {
-      wx.showToast({ title: '不能为"全国总览"生成邀请码，请选择或输入具体门店', icon: 'none' });
+      wx.showToast({ title: '不能为"全国总览"生成邀请码，请选择或输入具体门店', icon: 'none', duration: 2500 });
       return;
     }
     if (!isCustom && !storeId) {
@@ -2791,7 +2795,7 @@ Page({
     wx.setClipboardData({
       data: copyText,
       success: () => {
-        wx.showToast({ title: '邀请信息已复制！', icon: 'success' });
+        wx.showToast({ title: '邀请信息已复制！', icon: 'none', duration: 2500 });
         this.setData({ showGenCodeModal: false });
       }
     });
@@ -5438,7 +5442,7 @@ Page({
         wx.setClipboardData({
           data: report,
           success() {
-            wx.showToast({ title: '餐报已复制，可直接发送至微信群', icon: 'none', duration: 2000 });
+            wx.showToast({ title: '餐报已复制，可直接发送至微信群', icon: 'none', duration: 2500 });
           },
           fail() {
             console.warn('[generateReport] 自动复制失败，用户可手动复制');
@@ -6413,9 +6417,9 @@ Page({
 
     if (successCount > 0) {
       this.updateOfflineQueueCount();
-      wx.showToast({ 
-        title: `已为您自动同步 ${successCount} 条离线保存的账目汇报！🎉`, 
-        icon: 'success',
+      wx.showToast({
+        title: `已为您自动同步 ${successCount} 条离线保存的账目汇报！🎉`,
+        icon: 'none',
         duration: 3000
       });
     }
@@ -7534,6 +7538,45 @@ Page({
 
   onScrollToFinanceConsole() {
     wx.pageScrollTo({ selector: '#financeConsoleAnchor', duration: 300 });
+  },
+
+  // 🛠️ 义工现场服务工具金刚区：菜单人数/物资消耗两个填报弹窗是独立自定义组件
+  // （daily-menu-modal/material-usage-modal），原地直弹，不再跨 Tab 跳转到
+  // 个人页。打开前调用组件暴露的 resetForm() 清空表单（对齐此前 profile.ts
+  // onOpenDailyMenuModal 的"每次打开都是全新登记"行为）
+  onTapToolDailyMenu() {
+    const modal = this.selectComponent('#dailyMenuModal') as any;
+    if (modal) modal.resetForm();
+    this.setData({ showDailyMenuModal: true });
+  },
+
+  onCloseDailyMenuModal() {
+    this.setData({ showDailyMenuModal: false });
+  },
+
+  onTapToolMaterialUsage() {
+    const modal = this.selectComponent('#materialUsageModal') as any;
+    if (modal) modal.resetForm();
+    this.setData({ showMaterialUsageModal: true });
+  },
+
+  onCloseMaterialUsageModal() {
+    this.setData({ showMaterialUsageModal: false });
+  },
+
+  // 📷 记录今日护持动态：本来就是独立页面（活动日志），个人页的同名入口
+  // （onOpenVolunteerJournalModal）也是直接 navigateTo 过去，这里跳同一个
+  // 目标页面即可，不需要交接标记
+  onTapToolVolunteerJournal() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/activity-log/activity-log',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
   },
 
   refreshTodayShiftStatus() {

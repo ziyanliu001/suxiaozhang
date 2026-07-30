@@ -1,0 +1,51 @@
+<!-- 🍱 登记今日菜单与人数：写入独立的 volunteer_submissions 集合（不进 report_logs——
+     它是门店每日资金台账，参与结转链路，义工/管理者这里只填报人数/菜单原始信息），
+     店长/家长/超管本人提交时服务端会自动采纳入库，其余角色则待店长审核 -->
+<view class="feedback-sheet-backdrop {{visible ? 'show' : ''}}" wx:if="{{visible}}" bindtap="onClose">
+  <view class="feedback-sheet-panel" catchtap="stopPropagation">
+    <view class="feedback-sheet-drag-handle"></view>
+
+    <view class="feedback-sheet-header">
+      <view class="feedback-sheet-header-text">
+        <text class="feedback-sheet-title">🍱 登记今日菜单与人数</text>
+        <text class="feedback-sheet-subtitle" wx:if="{{isAutoApproveRole}}">提交后将直接确认并归档入库</text>
+        <text class="feedback-sheet-subtitle" wx:else>提交后待店长确认，仅供门店参考汇总</text>
+      </view>
+      <view class="feedback-sheet-close" bindtap="onClose">✕</view>
+    </view>
+
+    <text class="vt-form-label">开餐状态</text>
+    <view class="vt-status-row">
+      <view class="vt-status-pill {{form.mealStatus === 'open' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="open">🍚 正常开餐</view>
+      <view class="vt-status-pill {{form.mealStatus === 'closed' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="closed">🚫 今日休餐</view>
+    </view>
+
+    <view class="vt-count-row vt-count-row-3" wx:if="{{form.mealStatus === 'open'}}">
+      <view class="vt-count-cell">
+        <text class="vt-form-label">早餐人数</text>
+        <input class="vt-count-input" type="number" placeholder="0" value="{{form.breakfastCount}}" bindinput="onBreakfastCountInput" />
+      </view>
+      <view class="vt-count-cell">
+        <text class="vt-form-label">午餐人数</text>
+        <input class="vt-count-input" type="number" placeholder="0" value="{{form.lunchCount}}" bindinput="onLunchCountInput" />
+      </view>
+      <view class="vt-count-cell">
+        <text class="vt-form-label">晚餐人数</text>
+        <input class="vt-count-input" type="number" placeholder="0" value="{{form.dinnerCount}}" bindinput="onDinnerCountInput" />
+      </view>
+    </view>
+
+    <text class="vt-form-label">备注 / 菜单说明</text>
+    <textarea
+      class="feedback-content-textarea"
+      placeholder="今日菜品、特殊情况等（选填）"
+      placeholder-class="feedback-textarea-placeholder"
+      value="{{form.menuNote}}"
+      bindinput="onMenuNoteInput"
+      maxlength="300"
+      auto-height
+    ></textarea>
+
+    <button class="feedback-submit-btn" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">📮 提交登记</button>
+  </view>
+</view>

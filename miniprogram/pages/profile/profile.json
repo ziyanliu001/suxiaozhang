@@ -3,6 +3,8 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "privacy-popup": "../../components/privacy-popup/privacy-popup",
-    "mine-quick-sheet": "../../components/mine-quick-sheet/mine-quick-sheet"
+    "mine-quick-sheet": "../../components/mine-quick-sheet/mine-quick-sheet",
+    "daily-menu-modal": "../../components/daily-menu-modal/daily-menu-modal",
+    "material-usage-modal": "../../components/material-usage-modal/material-usage-modal"
   }
 }

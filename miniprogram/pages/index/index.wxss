@@ -434,6 +434,28 @@ page {
   margin-top: -16rpx;
 }
 
+/* 🌟 店铺模板自定义表单：行间距/标签与输入框间距加大，避免在小屏机型上显得拥挤；
+   .row/.col/.label/.input/.picker-select-box 目前只在这张表单里使用，直接调整即可 */
+.template-expand-panel .row {
+  margin-bottom: 20rpx;
+}
+
+.template-expand-panel .row:last-child {
+  margin-bottom: 0;
+}
+
+.template-expand-panel .label {
+  margin-bottom: 10rpx;
+}
+
+/* 感谢语/致谢词文本域：单独收紧到这张表单内，不影响页面里其余共用 textarea/.textarea 的样式 */
+.template-expand-panel .textarea {
+  border: 2rpx solid #E1E4E8;
+  border-radius: 14rpx;
+  padding: 20rpx 24rpx;
+  background-color: #FFFFFF;
+}
+
 .form-main-card .form-card-header {
   display: flex;
   justify-content: space-between;
@@ -2153,11 +2175,11 @@ page {
 }
 .input {
   background-color: #ffffff;
-  border: 2rpx solid #e1e4e8;
+  border: 2rpx solid #E1E4E8;
   height: 80rpx;
   line-height: 80rpx;
-  padding: 0 20rpx;
-  border-radius: 8rpx;
+  padding: 0 24rpx;
+  border-radius: 14rpx;
   font-size: 28rpx;
   width: 100%;
   box-sizing: border-box;
@@ -2172,11 +2194,11 @@ page {
 
 .picker-select-box {
   background-color: #ffffff;
-  border: 2rpx solid #e1e4e8;
+  border: 2rpx solid #E1E4E8;
   height: 80rpx;
   line-height: 80rpx;
-  padding: 0 20rpx;
-  border-radius: 8rpx;
+  padding: 0 24rpx;
+  border-radius: 14rpx;
   font-size: 28rpx;
   width: 100%;
   box-sizing: border-box;
@@ -2523,26 +2545,26 @@ textarea, .textarea {
 }
 
 /* 🌟 常用管理入口：标准对称 2x2 宫格，四张卡片对所有管理角色恒定存在（不再有条件缺角）。
-   统一白底 / 20rpx 圆角 / 24rpx 内边距 / 微阴影，无粗边框 */
+   统一白底 / 24rpx 圆角 / 28rpx 内边距 / 微阴影，无粗边框——间距与热区加大，方便单手点按 */
 .qa-main-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
+  gap: 20rpx;
 }
 
 .qa-grid-cell {
   min-width: 0;
-  min-height: 120rpx;
+  min-height: 132rpx;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10rpx;
-  padding: 24rpx;
+  padding: 28rpx;
   background: #FFFFFF;
-  border-radius: 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 18rpx rgba(0, 0, 0, 0.06);
   transition: transform 0.15s ease;
 }
 
@@ -6049,10 +6071,10 @@ button.poster-gen-btn[disabled] {
 .manager-home-card,
 .finance-home-card {
   background: #FFFFFF;
-  border-radius: 16rpx;
+  border-radius: 20rpx;
   padding: 28rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.06);
 }
 
 .manager-home-card .card-header-welcome,
@@ -6095,7 +6117,8 @@ button.poster-gen-btn[disabled] {
   align-items: center;
   justify-content: space-around;
   border-radius: 20rpx;
-  padding: 20rpx 16rpx;
+  padding: 24rpx 20rpx;
+  margin-top: 4rpx;
   position: relative;
 }
 
@@ -7569,4 +7592,73 @@ button.poster-gen-btn[disabled] {
   font-size: 22rpx;
   color: #4A7C4A;
   line-height: 1.6;
+}
+
+/* 🛠️ 首页「义工现场服务工具」金刚区：与旧的 .volunteer-tools-card/.tool-grid-item
+   系列完全独立的一套 home-vt-* 命名，不与页面内任何既有样式共用/继承。
+   🐛 .home-vt-item 补了 min-width: 0，.home-vt-text 补了 width: 100% +
+   min-width: 0 + word-break——flex 子项默认 min-width: auto 会按文字"不换行
+   宽度"撑开，不加这两处会导致长一点的中文标签在 3 等分栏宽下溢出、挤到
+   相邻卡片上（此前已经踩过一次这个坑，这里直接一并补上，避免同一类问题
+   在未来换更长文案时再犯一次） */
+.home-vt-card {
+  margin: 24rpx 28rpx;
+  padding: 24rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.home-vt-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #2D3748;
+  margin-bottom: 20rpx;
+  text-align: left;
+}
+
+.home-vt-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.home-vt-item {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx 8rpx;
+  margin: 0 8rpx;
+  background: #F7FAFC;
+  border-radius: 16rpx;
+  border: 1rpx solid #EDF2F7;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.home-vt-item:active {
+  transform: scale(0.96);
+  background: #EDF2F7;
+}
+
+.home-vt-icon {
+  font-size: 40rpx;
+  line-height: 1;
+  margin-bottom: 8rpx;
+}
+
+.home-vt-text {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #2D3748;
+  text-align: center;
+  line-height: 1.3;
+  word-break: break-word;
 }

@@ -260,15 +260,11 @@ Page({
       createTimeStr: string; replyContent?: string; replyByName?: string; replyTimeStr?: string;
     }>,
 
-    // 🍱 义工现场服务工具：菜单人数 + 物资消耗，两个独立的半屏填报 Sheet，
-    // 都写进 volunteer_submissions（不进 report_logs，理由见 profile.wxml 注释）
+    // 🍱 义工现场服务工具：菜单人数 + 物资消耗，两个独立的半屏填报 Sheet，均已
+    // 提炼为独立自定义组件（daily-menu-modal/material-usage-modal，与首页共用），
+    // 表单状态/提交逻辑在组件内部，页面只持有控制显隐的这两个字段
     showDailyMenuModal: false,
-    dailyMenuForm: { mealStatus: 'open' as 'open' | 'closed', breakfastCount: '', lunchCount: '', dinnerCount: '', menuNote: '' },
-    dailyMenuSubmitting: false,
-
     showMaterialUsageModal: false,
-    materialUsageForm: { riceCount: '', flourCount: '', oilCount: '', vegetableCount: '', lossNote: '' },
-    materialUsageSubmitting: false,
 
     // 📄 义工版【我的餐报提交记录】：查的是 volunteer_submissions（义工自己提交的
     // 菜单/物资原始记录），不是 report_logs——义工从不写 report_logs，那张表继续
@@ -1400,31 +1396,19 @@ Page({
     const item = this.data.myVolunteerSubmissionsList[index];
     if (!item || item.status !== 'rejected') return;
 
-    const toStr = (v: number | undefined) => (v || v === 0) ? String(v) : '';
-
     if (item.type === 'menu') {
+      const modal = this.selectComponent('#dailyMenuModal') as any;
+      if (modal) modal.presetForm(item);
       this.setData({
         showMyVolunteerSubmissionsModal: false,
-        showDailyMenuModal: true,
-        dailyMenuForm: {
-          mealStatus: item.mealStatus === 'closed' ? 'closed' : 'open',
-          breakfastCount: toStr(item.breakfastCount),
-          lunchCount: toStr(item.lunchCount),
-          dinnerCount: toStr(item.dinnerCount),
-          menuNote: item.menuNote || ''
-        }
+        showDailyMenuModal: true
       });
     } else {
+      const modal = this.selectComponent('#materialUsageModal') as any;
+      if (modal) modal.presetForm(item);
       this.setData({
         showMyVolunteerSubmissionsModal: false,
-        showMaterialUsageModal: true,
-        materialUsageForm: {
-          riceCount: toStr(item.riceCount),
-          flourCount: toStr(item.flourCount),
-          oilCount: toStr(item.oilCount),
-          vegetableCount: toStr(item.vegetableCount),
-          lossNote: item.lossNote || ''
-        }
+        showMaterialUsageModal: true
       });
     }
   },
@@ -2174,214 +2158,27 @@ Page({
     });
   },
 
-  // 🍱 登记今日菜单与人数：写入独立的 volunteer_submissions 集合（不进 report_logs，
-  // 见 onOpenDailyMenuModal 旁 WXML 注释的完整理由），店长后续人工参考汇总进正式报告
+  // 🍱 登记今日菜单与人数：表单状态/提交逻辑已提炼进 daily-menu-modal 组件，
+  // 页面只负责控制显隐 + 打开前清空表单（对齐"每次打开都是全新登记"的原行为）
   onOpenDailyMenuModal() {
-    this.setData({
-      showDailyMenuModal: true,
-      dailyMenuForm: { mealStatus: 'open', breakfastCount: '', lunchCount: '', dinnerCount: '', menuNote: '' }
-    });
+    const modal = this.selectComponent('#dailyMenuModal') as any;
+    if (modal) modal.resetForm();
+    this.setData({ showDailyMenuModal: true });
   },
 
   onCloseDailyMenuModal() {
-    if (this.data.dailyMenuSubmitting) return;
     this.setData({ showDailyMenuModal: false });
   },
 
-  onSelectMealStatus(e: any) {
-    const status = e.currentTarget.dataset.status;
-    this.setData({ 'dailyMenuForm.mealStatus': status });
-  },
-
-  onBreakfastCountInput(e: any) {
-    this.setData({ 'dailyMenuForm.breakfastCount': e.detail.value });
-  },
-
-  onLunchCountInput(e: any) {
-    this.setData({ 'dailyMenuForm.lunchCount': e.detail.value });
-  },
-
-  onDinnerCountInput(e: any) {
-    this.setData({ 'dailyMenuForm.dinnerCount': e.detail.value });
-  },
-
-  onMenuNoteInput(e: any) {
-    this.setData({ 'dailyMenuForm.menuNote': e.detail.value });
-  },
-
-  async onSubmitDailyMenu() {
-    if (this.data.dailyMenuSubmitting) return;
-
-    const { mealStatus, breakfastCount, lunchCount, dinnerCount, menuNote } = this.data.dailyMenuForm;
-    if (mealStatus === 'open' && !breakfastCount && !lunchCount && !dinnerCount) {
-      wx.showToast({ title: '请至少填写一餐人数', icon: 'none' });
-      return;
-    }
-
-    // 🛡️ 防错机制：提交前二次核对数据，避免手滑填错人数就直接交给店长审核——
-    // 只有点击"确认提交"才继续往下走，"返回修改"原样留在当前表单，不清空已填内容
-    const confirmed = await new Promise<boolean>((resolve) => {
-      wx.showModal({
-        title: '请核对餐报数据',
-        content: `早餐: ${breakfastCount || 0} 人\n午餐: ${lunchCount || 0} 人\n晚餐: ${dinnerCount || 0} 人\n\n确认无误并提交吗？`,
-        confirmText: '确认提交',
-        cancelText: '返回修改',
-        success: (res) => resolve(!!res.confirm),
-        fail: () => resolve(false)
-      });
-    });
-    if (!confirmed) return;
-
-    this.setData({ dailyMenuSubmitting: true });
-
-    const note = (menuNote || '').trim();
-    if (note) {
-      const safe = await this.checkFeedbackContentSafety(note);
-      if (!safe) {
-        this.setData({ dailyMenuSubmitting: false });
-        return;
-      }
-    }
-
-    try {
-      const activeStore = getSelectedStore();
-      const res: any = await wx.cloud.callFunction({
-        name: 'manageVolunteerSubmission',
-        data: {
-          action: 'submit',
-          type: 'menu',
-          mealStatus,
-          breakfastCount,
-          lunchCount,
-          dinnerCount,
-          menuNote: note,
-          storeId: (activeStore && activeStore.storeId) || '',
-          storeName: (activeStore && activeStore.storeName) || ''
-        }
-      });
-      const result = res.result;
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '提交失败', icon: 'none' });
-        return;
-      }
-      this.setData({ showDailyMenuModal: false });
-      // 🏛️ 店长/家长本人填报免二次审核：服务端 handleSubmit 会按登录者的真实角色
-      // （不是这里的展示态 currentUserRole，防止超管"视角切换预览"时被误当店长
-      // 放行）自动判断是否直接采纳入库，result.autoApproved 如实反映服务端的
-      // 处理结果，据此决定提示语，不在前端自行猜测
-      wx.showToast({
-        title: result.autoApproved ? (result.message || '管理者数据已自动采纳并更新账本') : '已提交，待店长确认',
-        icon: 'success'
-      });
-    } catch (err) {
-      console.error('[onSubmitDailyMenu] 提交异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-    } finally {
-      this.setData({ dailyMenuSubmitting: false });
-    }
-  },
-
-  // 🌾 登记物资消耗与报损：与菜单人数共用同一张 volunteer_submissions 集合
-  // （type 字段区分），同样不进 report_logs
+  // 🌾 登记物资消耗与报损：同理，逻辑在 material-usage-modal 组件里
   onOpenMaterialUsageModal() {
-    this.setData({
-      showMaterialUsageModal: true,
-      materialUsageForm: { riceCount: '', flourCount: '', oilCount: '', vegetableCount: '', lossNote: '' }
-    });
+    const modal = this.selectComponent('#materialUsageModal') as any;
+    if (modal) modal.resetForm();
+    this.setData({ showMaterialUsageModal: true });
   },
 
   onCloseMaterialUsageModal() {
-    if (this.data.materialUsageSubmitting) return;
     this.setData({ showMaterialUsageModal: false });
-  },
-
-  onRiceCountInput(e: any) {
-    this.setData({ 'materialUsageForm.riceCount': e.detail.value });
-  },
-
-  onFlourCountInput(e: any) {
-    this.setData({ 'materialUsageForm.flourCount': e.detail.value });
-  },
-
-  onOilCountInput(e: any) {
-    this.setData({ 'materialUsageForm.oilCount': e.detail.value });
-  },
-
-  onVegetableCountInput(e: any) {
-    this.setData({ 'materialUsageForm.vegetableCount': e.detail.value });
-  },
-
-  onLossNoteInput(e: any) {
-    this.setData({ 'materialUsageForm.lossNote': e.detail.value });
-  },
-
-  async onSubmitMaterialUsage() {
-    if (this.data.materialUsageSubmitting) return;
-
-    const { riceCount, flourCount, oilCount, vegetableCount, lossNote } = this.data.materialUsageForm;
-    if (!riceCount && !flourCount && !oilCount && !vegetableCount && !(lossNote || '').trim()) {
-      wx.showToast({ title: '请至少填写一项消耗或报损说明', icon: 'none' });
-      return;
-    }
-
-    // 🛡️ 防错机制：提交前二次核对数据，避免手滑填错斤数就直接交给店长审核——
-    // 只有点击"确认提交"才继续往下走，"返回修改"原样留在当前表单，不清空已填内容
-    const confirmed = await new Promise<boolean>((resolve) => {
-      wx.showModal({
-        title: '请核对物资产量与消耗',
-        content: `大米: ${riceCount || 0} 斤\n面粉: ${flourCount || 0} 斤\n食用油: ${oilCount || 0} 斤\n蔬菜: ${vegetableCount || 0} 斤\n\n确认无误并提交吗？`,
-        confirmText: '确认提交',
-        cancelText: '返回修改',
-        success: (res) => resolve(!!res.confirm),
-        fail: () => resolve(false)
-      });
-    });
-    if (!confirmed) return;
-
-    this.setData({ materialUsageSubmitting: true });
-
-    const note = (lossNote || '').trim();
-    if (note) {
-      const safe = await this.checkFeedbackContentSafety(note);
-      if (!safe) {
-        this.setData({ materialUsageSubmitting: false });
-        return;
-      }
-    }
-
-    try {
-      const activeStore = getSelectedStore();
-      const res: any = await wx.cloud.callFunction({
-        name: 'manageVolunteerSubmission',
-        data: {
-          action: 'submit',
-          type: 'material',
-          riceCount,
-          flourCount,
-          oilCount,
-          vegetableCount,
-          lossNote: note,
-          storeId: (activeStore && activeStore.storeId) || '',
-          storeName: (activeStore && activeStore.storeName) || ''
-        }
-      });
-      const result = res.result;
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '提交失败', icon: 'none' });
-        return;
-      }
-      this.setData({ showMaterialUsageModal: false });
-      // 🏛️ 与 onSubmitDailyMenu 同理：以服务端 result.autoApproved 为准决定提示语
-      wx.showToast({
-        title: result.autoApproved ? (result.message || '管理者数据已自动采纳并更新账本') : '已提交，待店长确认',
-        icon: 'success'
-      });
-    } catch (err) {
-      console.error('[onSubmitMaterialUsage] 提交异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
-    } finally {
-      this.setData({ materialUsageSubmitting: false });
-    }
   },
 
   // 📷 记录今日护持动态：门店日志页（activity-log）已经具备完整的表单/图片

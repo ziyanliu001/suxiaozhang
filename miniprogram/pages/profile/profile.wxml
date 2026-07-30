@@ -915,107 +915,22 @@
     </view>
   </view>
 
-  <!-- 🍱 登记今日菜单与人数：写入 volunteer_submissions（不进 report_logs） -->
-  <view class="feedback-sheet-backdrop {{showDailyMenuModal ? 'show' : ''}}" wx:if="{{showDailyMenuModal}}" bindtap="onCloseDailyMenuModal">
-    <view class="feedback-sheet-panel" catchtap="stopPropagation">
-      <view class="feedback-sheet-drag-handle"></view>
-
-      <view class="feedback-sheet-header">
-        <view class="feedback-sheet-header-text">
-          <text class="feedback-sheet-title">🍱 登记今日菜单与人数</text>
-          <text class="feedback-sheet-subtitle" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">提交后将直接确认并归档入库</text>
-          <text class="feedback-sheet-subtitle" wx:else>提交后待店长确认，仅供门店参考汇总</text>
-        </view>
-        <view class="feedback-sheet-close" bindtap="onCloseDailyMenuModal">✕</view>
-      </view>
-
-      <text class="vt-form-label">开餐状态</text>
-      <view class="vt-status-row">
-        <view class="vt-status-pill {{dailyMenuForm.mealStatus === 'open' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="open">🍚 正常开餐</view>
-        <view class="vt-status-pill {{dailyMenuForm.mealStatus === 'closed' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="closed">🚫 今日休餐</view>
-      </view>
-
-      <view class="vt-count-row vt-count-row-3" wx:if="{{dailyMenuForm.mealStatus === 'open'}}">
-        <view class="vt-count-cell">
-          <text class="vt-form-label">早餐人数</text>
-          <input class="vt-count-input" type="number" placeholder="0" value="{{dailyMenuForm.breakfastCount}}" bindinput="onBreakfastCountInput" />
-        </view>
-        <view class="vt-count-cell">
-          <text class="vt-form-label">午餐人数</text>
-          <input class="vt-count-input" type="number" placeholder="0" value="{{dailyMenuForm.lunchCount}}" bindinput="onLunchCountInput" />
-        </view>
-        <view class="vt-count-cell">
-          <text class="vt-form-label">晚餐人数</text>
-          <input class="vt-count-input" type="number" placeholder="0" value="{{dailyMenuForm.dinnerCount}}" bindinput="onDinnerCountInput" />
-        </view>
-      </view>
-
-      <text class="vt-form-label">备注 / 菜单说明</text>
-      <textarea
-        class="feedback-content-textarea"
-        placeholder="今日菜品、特殊情况等（选填）"
-        placeholder-class="feedback-textarea-placeholder"
-        value="{{dailyMenuForm.menuNote}}"
-        bindinput="onMenuNoteInput"
-        maxlength="300"
-        auto-height
-      ></textarea>
-
-      <button class="feedback-submit-btn" bindtap="onSubmitDailyMenu" loading="{{dailyMenuSubmitting}}" disabled="{{dailyMenuSubmitting}}">📮 提交登记</button>
-    </view>
-  </view>
-
-  <!-- 🌾 登记物资消耗与报损：与菜单人数共用同一张 volunteer_submissions 集合 -->
-  <view class="feedback-sheet-backdrop {{showMaterialUsageModal ? 'show' : ''}}" wx:if="{{showMaterialUsageModal}}" bindtap="onCloseMaterialUsageModal">
-    <view class="feedback-sheet-panel" catchtap="stopPropagation">
-      <view class="feedback-sheet-drag-handle"></view>
-
-      <view class="feedback-sheet-header">
-        <view class="feedback-sheet-header-text">
-          <text class="feedback-sheet-title">🌾 登记物资消耗与报损</text>
-          <text class="feedback-sheet-subtitle" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">提交后将直接确认并归档入库</text>
-          <text class="feedback-sheet-subtitle" wx:else>提交后待店长确认，仅供门店参考汇总</text>
-        </view>
-        <view class="feedback-sheet-close" bindtap="onCloseMaterialUsageModal">✕</view>
-      </view>
-
-      <view class="vt-count-grid-2x2">
-        <view class="vt-count-cell">
-          <text class="vt-form-label">大米消耗（斤）</text>
-          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.riceCount}}" bindinput="onRiceCountInput" />
-        </view>
-        <view class="vt-count-cell">
-          <text class="vt-form-label">面粉消耗（斤）</text>
-          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.flourCount}}" bindinput="onFlourCountInput" />
-        </view>
-        <view class="vt-count-cell">
-          <text class="vt-form-label">食用油消耗（斤）</text>
-          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.oilCount}}" bindinput="onOilCountInput" />
-        </view>
-        <view class="vt-count-cell">
-          <text class="vt-form-label">蔬菜消耗（斤）</text>
-          <input class="vt-count-input" type="digit" placeholder="0" value="{{materialUsageForm.vegetableCount}}" bindinput="onVegetableCountInput" />
-        </view>
-      </view>
-
-      <!-- 🌾 防腐引导：物资只做斤数/重量的大颗粒度健康评估，容忍采购毛重与
-           后厨净重的正常损耗误差，不是精确 ERP 库存盘点，无需为凑数精确称重 -->
-      <text class="volunteer-tools-hint">提示：填报数量为预估毛重即可，无需精确称重，店长采纳与审核后将自动归档。</text>
-
-      <text class="vt-form-label">报损 / 蔬菜种类 / 补充说明</text>
-      <textarea
-        class="feedback-content-textarea"
-        placeholder="如有物资报损、蔬菜种类或其他需要说明的情况（选填）"
-        placeholder-class="feedback-textarea-placeholder"
-        value="{{materialUsageForm.lossNote}}"
-        bindinput="onLossNoteInput"
-        maxlength="300"
-        auto-height
-      ></textarea>
-
-      <button class="feedback-submit-btn" bindtap="onSubmitMaterialUsage" loading="{{materialUsageSubmitting}}" disabled="{{materialUsageSubmitting}}">📮 提交登记</button>
-    </view>
-  </view>
+  <!-- 🍱 登记今日菜单与人数 / 🌾 登记物资消耗与报损：表单唯一实现已提炼为独立
+       自定义组件（daily-menu-modal / material-usage-modal，与首页共用），id 供
+       onOpenDailyMenuModal/onTapMyVolunteerSubmissionItem 等通过 selectComponent
+       调用 resetForm()/presetForm() -->
+  <daily-menu-modal
+    id="dailyMenuModal"
+    visible="{{showDailyMenuModal}}"
+    isAutoApproveRole="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}"
+    bind:close="onCloseDailyMenuModal"
+  />
+  <material-usage-modal
+    id="materialUsageModal"
+    visible="{{showMaterialUsageModal}}"
+    isAutoApproveRole="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}"
+    bind:close="onCloseMaterialUsageModal"
+  />
 
   <!-- 📄 义工版【我的餐报提交记录】：volunteer_submissions 里"我自己"的菜单/物资
        原始记录，与店长/财务在 history 页看到的正式台账历史彻底隔离 -->

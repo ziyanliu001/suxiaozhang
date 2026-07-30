@@ -6,6 +6,8 @@
     "store-picker": "../../components/store-picker/store-picker",
     "archive-modal": "../../components/archive-modal/archive-modal",
     "privacy-popup": "../../components/privacy-popup/privacy-popup",
-    "side-drawer": "../../components/side-drawer/side-drawer"
+    "side-drawer": "../../components/side-drawer/side-drawer",
+    "daily-menu-modal": "../../components/daily-menu-modal/daily-menu-modal",
+    "material-usage-modal": "../../components/material-usage-modal/material-usage-modal"
   }
 }
