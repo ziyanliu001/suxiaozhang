@@ -34,6 +34,9 @@
 //     没有任何库存基线可供"扣减"——这里只是流水式记录消耗，不是真正的库存
 //     扣减，避免打着"扣库存"的旗号却没有库存系统支撑）。
 // - reject：驳回一条投稿，必须携带 rejectReason，status 置为 'rejected'。
+// - deleteMine：义工自己删除一条已被驳回的记录（撤销，不再重新修改提交了）。
+//   服务端强制校验"必须是本人提交 + 当前状态仍是 rejected"，避免误删/越权删
+//   除别人的记录，或删掉还在流程中的 pending/已入库的 approved 记录。
 // - statsSummary：全店餐饮/物资统计——不新建 store_daily_stats 汇总表，即时查询
 //   volunteer_submissions（今日已采纳的分餐人数）+ material_logs（本月已入库的
 //   物资消耗），店长/家长/超管/义工均可查看本店范围（超管需传 storeId）。
@@ -350,6 +353,22 @@ async function handleReject(event, OPENID) {
   return { success: true };
 }
 
+async function handleDeleteMine(event, OPENID) {
+  if (!OPENID) return { success: false, error: '未登录，无法操作' };
+
+  const id = event.id;
+  if (!id) return { success: false, error: '缺少 id 参数' };
+
+  const docRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+  const doc = docRes && docRes.data;
+  if (!doc) return { success: false, error: '该条记录不存在或已被删除' };
+  if (doc._openid !== OPENID) return { success: false, error: '无权限：只能删除自己提交的记录' };
+  if (doc.status !== 'rejected') return { success: false, error: '只能删除已驳回的记录' };
+
+  await db.collection(COLLECTION).doc(id).remove();
+  return { success: true };
+}
+
 // 与 resolveReviewStoreId 的区别：这里额外放行 volunteer 角色（只读，看的是本店
 // 汇总数字，不含任何个人隐私/财务明细），店长/家长/超管仍走同一套门店范围收敛
 async function resolveReadStoreId(caller, requestedStoreId) {
@@ -455,6 +474,8 @@ exports.main = async (event) => {
       return handleApprove(event, OPENID);
     case 'reject':
       return handleReject(event, OPENID);
+    case 'deleteMine':
+      return handleDeleteMine(event, OPENID);
     case 'statsSummary':
       return handleStatsSummary(event, OPENID);
     default:

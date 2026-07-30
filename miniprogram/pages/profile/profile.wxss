@@ -2108,22 +2108,19 @@
   padding: 12rpx 16rpx;
 }
 
-/* 详情弹窗里的驳回原因：字号略大、独立成段，与列表卡片上精简展示的同名样式区分 */
-.my-vs-reject-reason.detail {
-  margin-top: 20rpx;
-  margin-bottom: 20rpx;
-  font-size: 24rpx;
-  padding: 16rpx;
-  background: #FFF0F0;
-  border-radius: 12rpx;
+.my-vs-action-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 16rpx;
 }
 
 .resubmit-btn {
   display: block;
-  width: 100%;
+  flex: 2;
   height: 72rpx;
   line-height: 72rpx;
-  margin-top: 16rpx;
+  margin-top: 0;
   padding: 0;
   background: #C0392B;
   color: #FFFFFF;
@@ -2139,6 +2136,29 @@
 
 .resubmit-btn:active {
   opacity: 0.85;
+}
+
+.delete-submission-btn {
+  display: block;
+  flex: 1;
+  height: 72rpx;
+  line-height: 68rpx;
+  margin-top: 0;
+  padding: 0;
+  background: #FFFFFF;
+  color: #C0392B;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 36rpx;
+  border: 2rpx solid #C0392B;
+}
+
+.delete-submission-btn::after {
+  border: none;
+}
+
+.delete-submission-btn:active {
+  opacity: 0.7;
 }
 
 /* 📊 门店餐饮与物资统计：三段 pd-health-grid 堆叠起来比其他 warm-story-modal-*

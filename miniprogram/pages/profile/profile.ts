@@ -285,19 +285,6 @@ Page({
       riceCount?: number; flourCount?: number; oilCount?: number; vegetableCount?: number;
       lossNote?: string; rejectReason?: string;
     }>,
-
-    // ❌ 已驳回投稿详情弹窗：点击【我的餐报提交记录】里状态为 rejected 的卡片时
-    // 弹出，展示店长填写的驳回原因，并提供"重新修改并提交"入口——把这条记录的
-    // 原始数据带回对应的填报表单，义工改完直接调用同一个 submit 动作重新提交，
-    // 不需要新增服务端能力（旧的驳回记录仍保留在列表里作为历史留痕）
-    showRejectedSubmissionModal: false,
-    rejectedSubmissionItem: null as null | {
-      _id: string; type: string; dateString: string; status: string;
-      mealStatus?: string; breakfastCount?: number; lunchCount?: number; dinnerCount?: number;
-      menuNote?: string;
-      riceCount?: number; flourCount?: number; oilCount?: number; vegetableCount?: number;
-      lossNote?: string; rejectReason?: string;
-    }
   },
 
   onLoad() {
@@ -1401,33 +1388,22 @@ Page({
 
   // 🐛 根因修复："点击已驳回记录无反应"：此前列表卡片没有绑定任何 bindtap，
   // 点了完全没反应。待店长确认/已采纳两种状态目前没有额外可交互的内容（原因/
-  // 详情已经直接展示在卡片上），点击时不做动作；只有已驳回的记录点击后弹出
-  // 详情弹窗，展示驳回原因并提供"重新修改并提交"入口
+  // 详情已经直接展示在卡片上），点击时不做动作。
+  // ✏️ 重新修改并提交：已驳回的记录点击卡片本身或"重新修改并提交"按钮时，
+  // 直接把这条记录的原始数据带回对应的填报表单（菜单人数/物资消耗）并关掉
+  // "我的提交记录"列表弹窗——不再经过中间的"驳回原因详情"弹窗，驳回原因已经
+  // 直接展示在列表卡片上了（见 .my-vs-reject-reason），没必要多一层确认才能
+  // 进入编辑。复用已有的 submit 动作生成一条新的 pending 记录，被驳回的这条
+  // 仍留在列表里作为历史留痕，不做任何删除/覆盖（如需清掉见 onDeleteMyVolunteerSubmission）
   onTapMyVolunteerSubmissionItem(e: any) {
     const index = e.currentTarget.dataset.index;
     const item = this.data.myVolunteerSubmissionsList[index];
     if (!item || item.status !== 'rejected') return;
-    this.setData({ showRejectedSubmissionModal: true, rejectedSubmissionItem: item as any });
-  },
-
-  onCloseRejectedSubmissionModal() {
-    this.setData({ showRejectedSubmissionModal: false, rejectedSubmissionItem: null });
-  },
-
-  // ✏️ 重新修改并提交：把这条被驳回记录的原始数据带回对应的填报表单（菜单人数 /
-  // 物资消耗），关掉详情弹窗与"我的提交记录"列表弹窗，让义工在原表单上直接改
-  // 完重新提交——复用已有的 submit 动作生成一条新的 pending 记录，被驳回的这条
-  // 仍留在列表里作为历史留痕，不做任何删除/覆盖
-  onResubmitRejectedSubmission() {
-    const item = this.data.rejectedSubmissionItem;
-    if (!item) return;
 
     const toStr = (v: number | undefined) => (v || v === 0) ? String(v) : '';
 
     if (item.type === 'menu') {
       this.setData({
-        showRejectedSubmissionModal: false,
-        rejectedSubmissionItem: null,
         showMyVolunteerSubmissionsModal: false,
         showDailyMenuModal: true,
         dailyMenuForm: {
@@ -1440,8 +1416,6 @@ Page({
       });
     } else {
       this.setData({
-        showRejectedSubmissionModal: false,
-        rejectedSubmissionItem: null,
         showMyVolunteerSubmissionsModal: false,
         showMaterialUsageModal: true,
         materialUsageForm: {
@@ -1452,6 +1426,45 @@ Page({
           lossNote: item.lossNote || ''
         }
       });
+    }
+  },
+
+  // 🗑️ 删除/撤销已驳回记录：义工确认不再需要修改重提这条记录时，彻底清掉它。
+  // 服务端 deleteMine 动作会再校验一次"必须是本人提交 + 状态仍是 rejected"，
+  // 双重防线避免误删待确认/已采纳入库的记录
+  async onDeleteMyVolunteerSubmission(e: any) {
+    if (!isCloudAvailable()) return;
+    const index = e.currentTarget.dataset.index;
+    const item = this.data.myVolunteerSubmissionsList[index];
+    if (!item || item.status !== 'rejected') return;
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '删除记录',
+        content: '确定要删除此条已驳回记录吗？',
+        confirmText: '删除',
+        confirmColor: '#C0392B',
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'deleteMine', id: item._id }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '已删除', icon: 'success' });
+      this.fetchMyVolunteerSubmissions();
+    } catch (err) {
+      console.error('[onDeleteMyVolunteerSubmission] 删除异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     }
   },
 
