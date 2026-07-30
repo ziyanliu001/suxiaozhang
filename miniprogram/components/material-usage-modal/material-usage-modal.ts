@@ -4,12 +4,19 @@
 import { getSelectedStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
 
+type StockStatus = 'sufficient' | 'normal' | 'urgent';
+
 interface MaterialUsageForm {
   riceCount: string;
   flourCount: string;
   oilCount: string;
   vegetableCount: string;
   lossNote: string;
+  // 🌟 大米/食用油库存状态：单轨制改造后，这是全店唯一能设置该状态的地方
+  // （原"填写今日明细"表单里的重复选择器已移除），首页依赖这里最近一次
+  // 提交的值展示"今日餐况"的充足/一般/告急标签
+  riceStatus: StockStatus;
+  oilStatus: StockStatus;
 }
 
 const BLANK_FORM: MaterialUsageForm = {
@@ -17,7 +24,9 @@ const BLANK_FORM: MaterialUsageForm = {
   flourCount: '',
   oilCount: '',
   vegetableCount: '',
-  lossNote: ''
+  lossNote: '',
+  riceStatus: 'normal',
+  oilStatus: 'sufficient'
 };
 
 Component({
@@ -53,6 +62,8 @@ Component({
       oilCount?: number;
       vegetableCount?: number;
       lossNote?: string;
+      riceStatus?: StockStatus;
+      oilStatus?: StockStatus;
     }) {
       const toStr = (v: number | undefined) => (v || v === 0) ? String(v) : '';
       this.setData({
@@ -61,7 +72,9 @@ Component({
           flourCount: toStr(item.flourCount),
           oilCount: toStr(item.oilCount),
           vegetableCount: toStr(item.vegetableCount),
-          lossNote: item.lossNote || ''
+          lossNote: item.lossNote || '',
+          riceStatus: item.riceStatus || 'normal',
+          oilStatus: item.oilStatus || 'sufficient'
         }
       });
     },
@@ -91,10 +104,18 @@ Component({
       this.setData({ 'form.lossNote': e.detail.value });
     },
 
+    onSelectRiceStatus(e: any) {
+      this.setData({ 'form.riceStatus': e.currentTarget.dataset.value });
+    },
+
+    onSelectOilStatus(e: any) {
+      this.setData({ 'form.oilStatus': e.currentTarget.dataset.value });
+    },
+
     async onSubmit() {
       if (this.data.submitting) return;
 
-      const { riceCount, flourCount, oilCount, vegetableCount, lossNote } = this.data.form;
+      const { riceCount, flourCount, oilCount, vegetableCount, lossNote, riceStatus, oilStatus } = this.data.form;
       if (!riceCount && !flourCount && !oilCount && !vegetableCount && !(lossNote || '').trim()) {
         wx.showToast({ title: '请至少填写一项消耗或报损说明', icon: 'none' });
         return;
@@ -137,6 +158,8 @@ Component({
             oilCount,
             vegetableCount,
             lossNote: note,
+            riceStatus,
+            oilStatus,
             storeId: (activeStore && activeStore.storeId) || '',
             storeName: (activeStore && activeStore.storeName) || ''
           }

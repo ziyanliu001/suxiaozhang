@@ -109,11 +109,20 @@
               <view class="al-card-time">{{item.eventTime}}</view>
               <view class="al-card-title">{{item.title}}</view>
             </view>
-            <button class="al-btn-card-edit" wx:if="{{canManage}}" catchtap="onOpenEditForm" data-id="{{item._id}}">✏️ 编辑/追加照片</button>
           </view>
+
+          <!-- 🙋 发布者身份：角色 Badge（义工/店长/大家长/超级管理员）+ 精确发布时间。
+               🛡️ 本页对家人（服务对象）也是只读监督视图，刻意不展示发布者真实姓名/
+               头像——manageActivityLog 云函数 resolvePublisherLabel 只落库/回传角色
+               标签，不落库真实 PII，这里维持同一条隐私边界 -->
+          <view class="al-card-publisher-row">
+            <text class="al-card-publisher-badge">{{item.publisherLabel || '管理员'}}</text>
+            <text class="al-card-publisher-time" wx:if="{{item.publishTimeStr}}">{{item.publishTimeStr}} 发布</text>
+          </view>
+
           <view class="al-thumb-9grid" wx:if="{{item.images.length > 0}}">
             <view class="al-thumb-grid-item" wx:for="{{item.images}}" wx:for-item="img" wx:key="url">
-              <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="al-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
+              <image wx:if="{{!thumbFailedMap[img.thumbUrl]}}" class="al-thumb-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" catchtap="onPreviewImage" data-url="{{img.url}}" data-urls="{{item.images}}" binderror="onImageLoadError" data-thumb-url="{{img.thumbUrl}}" />
               <view wx:else class="thumb-load-failed" catchtap="onRetryImage" data-thumb-url="{{img.thumbUrl}}">
                 <text class="thumb-load-failed-icon">⚠️</text>
                 <text class="thumb-load-failed-text">加载失败</text>
@@ -121,6 +130,14 @@
             </view>
           </view>
           <text class="al-card-content" wx:if="{{item.content}}">{{item.content}}</text>
+
+          <!-- ✏️🗑️ 编辑/删除：本店管理者（店长/家长/超管）或记录本人可见，单独
+               一行，与下面 al-card-footer 的"导出活动海报"分开，避免挤压 -->
+          <view class="al-card-actions-row" wx:if="{{canManage || item.createdBy === currentUserOpenid}}">
+            <button class="al-btn-card-edit" catchtap="onOpenEditForm" data-id="{{item._id}}">✏️ 编辑/追加照片</button>
+            <button class="al-btn-card-delete" catchtap="onDeleteLog" data-id="{{item._id}}">🗑️ 删除</button>
+          </view>
+
           <view class="al-card-footer">
             <button class="al-btn-export-poster" catchtap="onExportPoster" data-id="{{item._id}}">📤 导出活动海报</button>
           </view>
@@ -168,7 +185,7 @@
         <text class="al-detail-content">{{detailItem.content}}</text>
       </scroll-view>
 
-      <view class="al-detail-actions" wx:if="{{canManage}}">
+      <view class="al-detail-actions" wx:if="{{canManage || detailItem.createdBy === currentUserOpenid}}">
         <button class="al-btn-edit" bindtap="onOpenEditForm" data-id="{{detailItem._id}}">编辑</button>
         <button class="al-btn-delete" bindtap="onDeleteLog" data-id="{{detailItem._id}}">删除</button>
       </view>

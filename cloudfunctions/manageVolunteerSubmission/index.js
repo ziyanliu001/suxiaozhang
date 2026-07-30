@@ -175,6 +175,12 @@ async function handleSubmit(event, OPENID) {
     doc.oilCount = Math.max(0, parseFloat(event.oilCount) || 0);
     doc.vegetableCount = Math.max(0, parseFloat(event.vegetableCount) || 0);
     doc.lossNote = String(event.lossNote || '').trim().slice(0, MAX_NOTE_LENGTH);
+    // 🌟 大米/食用油库存状态：单轨制改造后，这是全店唯一还能设置该状态的地方
+    // （原"填写今日明细"表单里的重复选择器已移除）。选填，不合法/缺省时兜底
+    // 为原来的默认值，不阻断提交
+    const STOCK_STATUS_VALUES = ['sufficient', 'normal', 'urgent'];
+    doc.riceStatus = STOCK_STATUS_VALUES.includes(event.riceStatus) ? event.riceStatus : 'normal';
+    doc.oilStatus = STOCK_STATUS_VALUES.includes(event.oilStatus) ? event.oilStatus : 'sufficient';
   }
 
   let addRes;
@@ -225,6 +231,8 @@ function mapItem(item) {
     oilCount: item.oilCount,
     vegetableCount: item.vegetableCount,
     lossNote: item.lossNote || '',
+    riceStatus: item.riceStatus || 'normal',
+    oilStatus: item.oilStatus || 'sufficient',
     rejectReason: item.rejectReason || ''
   };
 }
@@ -364,6 +372,10 @@ async function writeMaterialLog(doc, OPENID) {
     oilCount: doc.oilCount || 0,
     vegetableCount: doc.vegetableCount || 0,
     lossNote: doc.lossNote || '',
+    // 🌟 单轨制：随流水一起落库，供 handleStatsSummary 取"最近一次提交"的
+    // 库存状态展示在首页，不再依赖店长在正式报告表单里手动重复勾选
+    riceStatus: doc.riceStatus || 'normal',
+    oilStatus: doc.oilStatus || 'sufficient',
     sourceSubmissionId: doc._id,
     submittedBy: doc._openid,
     submittedByName: doc.nickName || '',
@@ -575,9 +587,68 @@ async function handleStatsSummary(event, OPENID) {
     if (!isCollectionNotExistError(err)) throw err;
   }
 
+  // 🌟 单轨制：首页"今日餐况"的大米/食用油库存状态不再由店长在正式报告表单里
+  // 手动勾选，改为直接取本店最近一次物资消耗提交（不限当月，只看时间最新的
+  // 一条）里录入的 riceStatus/oilStatus——与"🌾 登记物资消耗与报损"弹窗提交的
+  // 具体斤数同源，杜绝两条数据轨道互相矛盾
+  let latestRiceStatus = 'normal';
+  let latestOilStatus = 'sufficient';
+  try {
+    const latestRes = await db.collection('material_logs')
+      .where({ storeId: target.storeId })
+      .orderBy('createTime', 'desc')
+      .limit(1)
+      .get();
+    const latest = latestRes.data && latestRes.data[0];
+    if (latest) {
+      latestRiceStatus = latest.riceStatus || 'normal';
+      latestOilStatus = latest.oilStatus || 'sufficient';
+    }
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+  }
+
+  // 🌟 门店动态健康看板（store-profile）："今日护持"人数——到岗打卡目前只是
+  // 纯本地设备统计（见 getVolunteerHonorStats 头部注释），没有任何跨用户的云端
+  // 记录可查，不编造一个假数字。改用"今日已被采纳的菜单/物资提交"里出现过的
+  // 不同提交人数（_openid 去重）作为更贴近真实的代理信号——今天确实为门店提交
+  // 过工作记录，基本等同于今天到岗服务过
+  let todayVolunteerCount = 0;
+  try {
+    const todayAllRes = await db.collection(COLLECTION)
+      .where({ storeId: target.storeId, status: 'approved', dateString: today })
+      .field({ _openid: true })
+      .get();
+    const openidSet = new Set((todayAllRes.data || []).map((item) => item._openid).filter(Boolean));
+    todayVolunteerCount = openidSet.size;
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+  }
+
+  // 🌟 今日开餐状态：取本店今天最新一条已采纳的菜单类投稿的 mealStatus；今天
+  // 还没有人提交过菜单登记时为 null（前端据此展示"待录入"，不是"正常"也不是
+  // "休餐"这类会误导人的默认值）
+  let todayMealStatus = null;
+  try {
+    const latestMenuRes = await db.collection(COLLECTION)
+      .where({ storeId: target.storeId, type: 'menu', status: 'approved', dateString: today })
+      .orderBy('createTime', 'desc')
+      .limit(1)
+      .get();
+    const latestMenu = latestMenuRes.data && latestMenuRes.data[0];
+    if (latestMenu) {
+      todayMealStatus = latestMenu.mealStatus === 'closed' ? 'closed' : 'open';
+    }
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+  }
+
   return {
     success: true,
-    data: { today, mealTotals, todayMaterialTotals, monthMaterialTotals }
+    data: {
+      today, mealTotals, todayMaterialTotals, monthMaterialTotals,
+      latestRiceStatus, latestOilStatus, todayVolunteerCount, todayMealStatus
+    }
   };
 }
 

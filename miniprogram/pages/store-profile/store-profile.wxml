@@ -10,8 +10,32 @@
       <view class="sp-store-name-row">
         <text class="sp-store-name">{{currentStoreName || '未命名门店'}}</text>
         <text class="sp-operating-badge {{operatingStatus}}">{{operatingStatusLabel}}</text>
+        <!-- ✏️ 修改档案：与下方"门店档案信息"标题栏里的编辑入口共用同一个 onEditProfile，
+             这里只是在店名旁再放一个更显眼的快捷入口 -->
+        <text class="sp-btn-edit-archive" wx:if="{{canManage && !editing}}" bindtap="onEditProfile">✏️ 修改档案</text>
       </view>
       <text class="sp-store-address" wx:if="{{address}}">📍 {{address}}</text>
+    </view>
+
+    <!-- 📊 门店动态健康看板：4 格矩形健康度指标，数据来自 fetchHealthDashboard()
+         （manageVolunteerSubmission statsSummary，与首页"今日餐况"同一数据源） -->
+    <view class="sp-health-grid">
+      <view class="sp-health-tile">
+        <text class="sp-health-lbl">🍽️ 今日开餐</text>
+        <text class="sp-health-val {{todayMealStatusClass}}">{{todayMealStatusLabel}}</text>
+      </view>
+      <view class="sp-health-tile">
+        <text class="sp-health-lbl">🌾 物资健康度</text>
+        <text class="sp-health-val {{materialHealthClass}}">{{materialHealthLabel}}</text>
+      </view>
+      <view class="sp-health-tile">
+        <text class="sp-health-lbl">🙋 今日护持</text>
+        <text class="sp-health-val neutral">{{todayVolunteerCount}} 人</text>
+      </view>
+      <view class="sp-health-tile">
+        <text class="sp-health-lbl">🍚 今日服务</text>
+        <text class="sp-health-val neutral">{{todayDiningCount}} 人次</text>
+      </view>
     </view>
 
     <!-- 🏛️ 家长风控锁：本店已绑定家长/督导时，店长发起的门店档案变更需先经确认才生效 -->
@@ -34,7 +58,10 @@
     <view class="sp-archive-card" wx:if="{{!editing}}">
       <view class="sp-archive-row">
         <text class="sp-archive-lbl">联系电话</text>
-        <text class="sp-archive-val">{{contactPhone || '未填写'}}</text>
+        <view class="sp-archive-val-with-action">
+          <text class="sp-archive-val">{{contactPhone || '未填写'}}</text>
+          <text class="sp-btn-quick-action" wx:if="{{contactPhone}}" catchtap="onCallPhone">📞 一键拨打</text>
+        </view>
       </view>
       <view class="sp-archive-row">
         <text class="sp-archive-lbl">开业日期</text>
@@ -48,6 +75,13 @@
         <text class="sp-archive-lbl">所在省市</text>
         <text class="sp-archive-val">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
       </view>
+      <view class="sp-archive-row">
+        <text class="sp-archive-lbl">详细地址</text>
+        <view class="sp-archive-val-with-action">
+          <text class="sp-archive-val">{{address || '未填写'}}</text>
+          <text class="sp-btn-quick-action" wx:if="{{address}}" catchtap="onOpenNavigation">📍 一键导航</text>
+        </view>
+      </view>
       <view class="sp-archive-row vertical" wx:if="{{background}}">
         <text class="sp-archive-lbl">发起背景</text>
         <text class="sp-archive-val-block">{{background}}</text>
@@ -59,8 +93,41 @@
       <view class="sp-archive-row vertical" wx:if="{{storePhotos.length > 0}}">
         <text class="sp-archive-lbl">门店照片</text>
         <view class="sp-photo-grid">
-          <image class="sp-photo-thumb" wx:for="{{storePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
+          <image class="sp-photo-thumb" wx:for="{{storePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storePhotos}}" />
         </view>
+      </view>
+    </view>
+
+    <!-- 🏅 门店资质与实景公示：门头照 / 民政备案复印件 / 食品安全承诺，点击大图全屏预览；
+         编辑通过独立的 showQualificationModal 快捷弹窗（onOpenQualificationModal 内部会
+         再校验一次 canManage，"暂未上传"占位对所有角色可见，点击时才拦权限） -->
+    <view class="sp-section-title sp-profile-title-row" wx:if="{{!editing && (storefrontPhotos.length > 0 || civilAffairsPhotos.length > 0 || foodSafetyPledgePhotos.length > 0 || canManage)}}">
+      <text class="sp-section-icon">🏅</text>
+      <text class="sp-section-txt">门店资质与实景公示</text>
+      <text class="sp-btn-edit-profile-count" wx:if="{{canManage}}" bindtap="onOpenQualificationModal">✏️ 修改</text>
+    </view>
+
+    <view class="sp-archive-card" wx:if="{{!editing && (storefrontPhotos.length > 0 || civilAffairsPhotos.length > 0 || foodSafetyPledgePhotos.length > 0 || canManage)}}">
+      <view class="sp-archive-row vertical">
+        <text class="sp-archive-lbl">门头照</text>
+        <view class="sp-photo-grid" wx:if="{{storefrontPhotos.length > 0}}">
+          <image class="sp-photo-thumb" wx:for="{{storefrontPhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storefrontPhotos}}" />
+        </view>
+        <text class="sp-archive-empty-hint" wx:else bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+      </view>
+      <view class="sp-archive-row vertical">
+        <text class="sp-archive-lbl">民政备案复印件</text>
+        <view class="sp-photo-grid" wx:if="{{civilAffairsPhotos.length > 0}}">
+          <image class="sp-photo-thumb" wx:for="{{civilAffairsPhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" />
+        </view>
+        <text class="sp-archive-empty-hint" wx:else bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+      </view>
+      <view class="sp-archive-row vertical">
+        <text class="sp-archive-lbl">食品安全承诺</text>
+        <view class="sp-photo-grid" wx:if="{{foodSafetyPledgePhotos.length > 0}}">
+          <image class="sp-photo-thumb" wx:for="{{foodSafetyPledgePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" />
+        </view>
+        <text class="sp-archive-empty-hint" wx:else bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
       </view>
     </view>
 
@@ -118,9 +185,9 @@
         <view class="receipt-grid-container">
           <view class="grid-image-item" wx:for="{{editForm.storePhotos}}" wx:key="*this">
             <image class="grid-img" src="{{item}}" mode="aspectFill" />
-            <view class="img-delete-badge" catchtap="onDeleteStorePhoto" data-index="{{index}}">✕</view>
+            <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="storePhotos" data-index="{{index}}">✕</view>
           </view>
-          <view class="grid-add-btn" bindtap="onChooseStorePhoto" wx:if="{{editForm.storePhotos.length < 9}}">
+          <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="storePhotos" wx:if="{{editForm.storePhotos.length < 9}}">
             <text class="add-icon">{{storePhotoUploading ? '…' : '+'}}</text>
             <text class="add-txt">{{storePhotoUploading ? '压缩中' : '添加照片'}}</text>
           </view>
@@ -253,6 +320,63 @@
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseProfileCountModal">取消</button>
         <button class="sp-btn-save" bindtap="onSaveProfileCount" loading="{{profileCountSaving}}" disabled="{{profileCountSaving}}">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 门店资质与实景公示 · 快捷修改弹窗：门头照/民政备案复印件/食品安全承诺各最多 6 张，
+       与 storePhotos 共用 onChoosePhoto/onDeletePhoto，data-target="qualificationForm"
+       区分不写入整页 editForm -->
+  <view class="sp-modal-backdrop" wx:if="{{showQualificationModal}}" bindtap="onCloseQualificationModal">
+    <view class="sp-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">修改门店资质与实景公示</text>
+        <text class="sp-modal-close" bindtap="onCloseQualificationModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">门头照（最多 6 张）</text>
+          <view class="receipt-grid-container">
+            <view class="grid-image-item" wx:for="{{qualificationForm.storefrontPhotos}}" wx:key="*this">
+              <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.storefrontPhotos}}" />
+              <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="storefrontPhotos" data-target="qualificationForm" data-index="{{index}}">✕</view>
+            </view>
+            <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="storefrontPhotos" data-target="qualificationForm" wx:if="{{qualificationForm.storefrontPhotos.length < 6}}">
+              <text class="add-icon">{{storePhotoUploading ? '…' : '+'}}</text>
+              <text class="add-txt">{{storePhotoUploading ? '压缩中' : '添加照片'}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">民政备案复印件（最多 6 张）</text>
+          <view class="receipt-grid-container">
+            <view class="grid-image-item" wx:for="{{qualificationForm.civilAffairsPhotos}}" wx:key="*this">
+              <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.civilAffairsPhotos}}" />
+              <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="civilAffairsPhotos" data-target="qualificationForm" data-index="{{index}}">✕</view>
+            </view>
+            <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="civilAffairsPhotos" data-target="qualificationForm" wx:if="{{qualificationForm.civilAffairsPhotos.length < 6}}">
+              <text class="add-icon">{{storePhotoUploading ? '…' : '+'}}</text>
+              <text class="add-txt">{{storePhotoUploading ? '压缩中' : '添加照片'}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">食品安全承诺（最多 6 张）</text>
+          <view class="receipt-grid-container">
+            <view class="grid-image-item" wx:for="{{qualificationForm.foodSafetyPledgePhotos}}" wx:key="*this">
+              <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.foodSafetyPledgePhotos}}" />
+              <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="foodSafetyPledgePhotos" data-target="qualificationForm" data-index="{{index}}">✕</view>
+            </view>
+            <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="foodSafetyPledgePhotos" data-target="qualificationForm" wx:if="{{qualificationForm.foodSafetyPledgePhotos.length < 6}}">
+              <text class="add-icon">{{storePhotoUploading ? '…' : '+'}}</text>
+              <text class="add-txt">{{storePhotoUploading ? '压缩中' : '添加照片'}}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseQualificationModal">取消</button>
+        <button class="sp-btn-save" bindtap="onSaveQualification" loading="{{qualificationSaving}}" disabled="{{qualificationSaving}}">保存</button>
       </view>
     </view>
   </view>

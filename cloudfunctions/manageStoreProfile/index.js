@@ -34,15 +34,21 @@ const MAX_TEXT_FIELD_LENGTH = 500;
 const MAX_STORE_PHOTOS = 9;
 const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
 
+// 🏪 门店资质与实景公示：门头照/民政备案复印件/食品安全承诺，与原有的 storePhotos
+// （门店环境照）是四个各自独立的照片分类，同走 sanitizePhotos 校验，只是分类
+// 存储、上限各自更小——这几类通常只需要 1-2 张证件/门头照，不需要 9 张这么多
+const CATEGORY_PHOTOS_MAX = 6;
+const PHOTO_FIELDS = ['storePhotos', 'storefrontPhotos', 'civilAffairsPhotos', 'foodSafetyPledgePhotos'];
+
 function sanitizeText(v) {
   if (v === undefined || v === null) return '';
   return String(v).trim().slice(0, MAX_TEXT_FIELD_LENGTH);
 }
 
 // storePhotos：门店照片，云存储 fileID 数组，参考 activity-log 九宫格惯例上限 9 张
-function sanitizePhotos(v) {
+function sanitizePhotos(v, max) {
   if (!Array.isArray(v)) return [];
-  return v.filter((item) => typeof item === 'string' && item.trim()).slice(0, MAX_STORE_PHOTOS);
+  return v.filter((item) => typeof item === 'string' && item.trim()).slice(0, max || MAX_STORE_PHOTOS);
 }
 
 function sanitizeCoord(v) {
@@ -142,7 +148,7 @@ exports.main = async (event, context) => {
       const profile = {};
       PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || ''; });
-      profile.storePhotos = Array.isArray(store.storePhotos) ? store.storePhotos : [];
+      PHOTO_FIELDS.forEach((f) => { profile[f] = Array.isArray(store[f]) ? store[f] : []; });
 
       return {
         success: true,
@@ -170,13 +176,21 @@ exports.main = async (event, context) => {
       if (!target.allowed) return { success: false, error: target.error };
 
       const updateFields = {};
-      PROFILE_FIELDS.forEach((f) => { updateFields[f] = clampCount(event[f]); });
-      // 🐛 只在调用方真的传了这个字段时才写入——文本字段和上面的数字字段不同，
-      // 数字字段本来就是"表单里的每一格都必填"，但文本档案字段（地址/开业日期等）
-      // 可能只想单独改其中一项，若不管有没有传都无条件塞 sanitizeText(undefined) === ''，
-      // 会把没在本次请求里出现的字段静默清空，等于每次局部更新都顺带抹掉其余档案信息
+      // 🐛 只在调用方真的传了这个字段时才写入——此前这里无条件对全部 7 项数字
+      // 字段调用 clampCount(event[f])，而 clampCount(undefined) 会返回 0，导致
+      // 任何"只想单独更新其他字段"的局部提交（例如资质公示照片管理弹窗只提交
+      // 3 个照片字段，压根不带这 7 项数字字段）都会把人员与服务人群画像的真实
+      // 数字静默清零。与下面 TEXT_PROFILE_FIELDS/PHOTO_FIELDS 已有的"只在提供时
+      // 才写入"逻辑对齐，明确传 0 仍然会写入（0 !== undefined），只有完全不传
+      // 这个字段才跳过
+      PROFILE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = clampCount(event[f]); });
+      // 文本档案字段（地址/开业日期等）可能只想单独改其中一项，若不管有没有传都
+      // 无条件塞 sanitizeText(undefined) === ''，会把没在本次请求里出现的字段
+      // 静默清空，等于每次局部更新都顺带抹掉其余档案信息
       TEXT_PROFILE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f]); });
-      if (event.storePhotos !== undefined) updateFields.storePhotos = sanitizePhotos(event.storePhotos);
+      PHOTO_FIELDS.forEach((f) => {
+        if (event[f] !== undefined) updateFields[f] = sanitizePhotos(event[f], f === 'storePhotos' ? MAX_STORE_PHOTOS : CATEGORY_PHOTOS_MAX);
+      });
       if (VALID_OPERATING_STATUSES.includes(event.operatingStatus)) {
         updateFields.operatingStatus = event.operatingStatus;
       }
@@ -245,9 +259,13 @@ exports.main = async (event, context) => {
 
       const pending = store.pendingProfileUpdate;
       const updateData = {};
-      PROFILE_FIELDS.forEach((f) => { updateData[f] = clampCount(pending[f]); });
+      // 🐛 与 update 分支同一处修复：只在这份挂起申请当初真的提交过这个字段时
+      // 才写入，避免只提交了资质公示照片的挂起申请，审批通过后把人员画像数字清零
+      PROFILE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = clampCount(pending[f]); });
       TEXT_PROFILE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = sanitizeText(pending[f]); });
-      if (pending.storePhotos !== undefined) updateData.storePhotos = sanitizePhotos(pending.storePhotos);
+      PHOTO_FIELDS.forEach((f) => {
+        if (pending[f] !== undefined) updateData[f] = sanitizePhotos(pending[f], f === 'storePhotos' ? MAX_STORE_PHOTOS : CATEGORY_PHOTOS_MAX);
+      });
       if (VALID_OPERATING_STATUSES.includes(pending.operatingStatus)) {
         updateData.operatingStatus = pending.operatingStatus;
       }

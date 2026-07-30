@@ -959,60 +959,12 @@
       </view>
     </view>
 
-    <!-- Card C: 主食物资储备状态卡片 -->
-    <view class="ui-card-wrapper inventory-status-card">
-      <view class="card-title-bar">
-        <view class="title"><view class="idx-icon-sm idx-icon-box"></view> 主食物资储备状态 <text class="optional-tag">(选填)</text></view>
-      </view>
-
-      <view class="inventory-row">
-        <view class="item-name"><view class="idx-icon-sm idx-icon-bowl" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>大米/面粉</view>
-        <view class="status-pill-group">
-          <view 
-            class="status-pill green {{stapleRiceStatus === 'sufficient' ? 'active' : ''}}" 
-            bindtap="onStapleStatusChange" data-type="rice" data-value="sufficient"
-          >
-            充足
-          </view>
-          <view 
-            class="status-pill yellow {{stapleRiceStatus === 'normal' ? 'active' : ''}}" 
-            bindtap="onStapleStatusChange" data-type="rice" data-value="normal"
-          >
-            一般
-          </view>
-          <view 
-            class="status-pill red {{stapleRiceStatus === 'urgent' ? 'active' : ''}}" 
-            bindtap="onStapleStatusChange" data-type="rice" data-value="urgent"
-          >
-            告急
-          </view>
-        </view>
-      </view>
-
-      <view class="inventory-row">
-        <view class="item-name"><view class="idx-icon-sm idx-icon-box"></view> 食用油</view>
-        <view class="status-pill-group">
-          <view 
-            class="status-pill green {{stapleOilStatus === 'sufficient' ? 'active' : ''}}" 
-            bindtap="onStapleStatusChange" data-type="oil" data-value="sufficient"
-          >
-            充足
-          </view>
-          <view 
-            class="status-pill yellow {{stapleOilStatus === 'normal' ? 'active' : ''}}" 
-            bindtap="onStapleStatusChange" data-type="oil" data-value="normal"
-          >
-            一般
-          </view>
-          <view 
-            class="status-pill red {{stapleOilStatus === 'urgent' ? 'active' : ''}}" 
-            bindtap="onStapleStatusChange" data-type="oil" data-value="urgent"
-          >
-            告急
-          </view>
-        </view>
-      </view>
-    </view>
+    <!-- 🌟 Card C（主食物资储备状态手动勾选卡片）已彻底移除：与"🌾 登记物资消耗与
+         报损"弹窗提交的实际斤数是两条互相矛盾的数据轨道，店长这里选"充足"、义工
+         那边却刚提交濒临告急的消耗记录，谁也说不准哪个是真的。改为单一数据源——
+         stapleRiceStatus/stapleOilStatus 现在由 fetchLatestMaterialStatus() 自动
+         读取最近一次物资消耗提交里录入的库存状态，不再需要人工二次勾选，下游的
+         "今日餐况"卡片/报告文案/海报继续读同一套字段，无需改动 -->
 
     <!-- Card D: 今日支出明细录入与凭证上传卡片 -->
     <view class="ui-card-wrapper expense-main-card">

@@ -111,10 +111,66 @@
   color: #868E96;
 }
 
+/* ✏️ 修改档案：店名旁的快捷编辑入口，与 .sp-btn-edit-profile-count 视觉呼应
+   但独立成一个 class，避免两处布局语境（flex 行内 vs 标题栏）耦合出意外样式 */
+.sp-btn-edit-archive {
+  margin-left: auto;
+  font-size: 22rpx;
+  color: #8C1D18;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
 .sp-store-address {
   display: block;
   font-size: 24rpx;
   color: #868E96;
+}
+
+/* 📊 门店动态健康看板：4 格矩形指标，白底圆角小卡片 + 弱化标签/加粗数值，
+   状态色（good/warn/danger）与 material-usage-modal 三档选择器同一套语义 */
+.sp-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.sp-health-tile {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 16rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.sp-health-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.sp-health-val {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.sp-health-val.good {
+  color: #2E7D32;
+}
+
+.sp-health-val.warn {
+  color: #D48806;
+}
+
+.sp-health-val.danger {
+  color: #D32F2F;
+}
+
+.sp-health-val.neutral {
+  color: #495057;
 }
 
 .sp-section-title {
@@ -146,20 +202,27 @@
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🌟 重构为白底圆角外卡 + 浅黄底色小格双层结构：每个指标自带一张淡黄色小卡片，
+   比裸露排布在共用白底容器里的纯文字更有"数据卡片"质感，数字加粗放大更醒目 */
 .grid-cell {
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  align-items: center;
+  gap: 6rpx;
+  background: #FFFBEE;
+  border-radius: 16rpx;
+  padding: 20rpx 6rpx;
 }
 
 .cell-lbl {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #868E96;
+  text-align: center;
 }
 
 .cell-val {
-  font-size: 34rpx;
-  font-weight: bold;
+  font-size: 40rpx;
+  font-weight: 800;
   color: #212529;
 }
 
@@ -307,6 +370,32 @@
   font-size: 26rpx;
   color: #212529;
   line-height: 1.6;
+}
+
+/* 📞📍 一键拨打/一键导航：与对应字段的值同一行，右侧一个零成本快捷按键 */
+.sp-archive-val-with-action {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.sp-btn-quick-action {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #8C1D18;
+  border-radius: 20rpx;
+  padding: 6rpx 16rpx;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sp-archive-empty-hint {
+  font-size: 24rpx;
+  color: #FF8C42;
+  text-decoration: underline;
+  padding: 4rpx 0;
 }
 
 .sp-archive-edit-card .sp-edit-item {

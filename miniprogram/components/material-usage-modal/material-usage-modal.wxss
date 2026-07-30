@@ -113,6 +113,47 @@
   color: #333333;
 }
 
+/* 🌟 大米/食用油库存状态：三档胶囊选择器，颜色语义与首页原"主食物资储备状态"
+   卡片保持一致（绿=充足/黄=一般/红=告急），方便义工/店长一眼辨认严重程度 */
+.vt-status-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.vt-status-pill {
+  flex: 1;
+  text-align: center;
+  padding: 12rpx 0;
+  border-radius: 16rpx;
+  background: #F8F9FA;
+  color: #868E96;
+  font-size: 24rpx;
+  border: 2rpx solid transparent;
+  box-sizing: border-box;
+}
+
+.vt-status-pill.green.active {
+  background: #E6F4EA;
+  color: #137333;
+  border-color: #137333;
+  font-weight: bold;
+}
+
+.vt-status-pill.yellow.active {
+  background: #FEF7E0;
+  color: #B06000;
+  border-color: #B06000;
+  font-weight: bold;
+}
+
+.vt-status-pill.red.active {
+  background: #FFF2F0;
+  color: #FF4D4F;
+  border-color: #FFA39E;
+  font-weight: bold;
+}
+
 .tool-hint-text {
   display: block;
   font-size: 22rpx;

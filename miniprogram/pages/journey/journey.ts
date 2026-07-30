@@ -13,6 +13,7 @@ import { safeParseDate } from '../../utils/dateUtils';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { AuthService } from '../../utils/authService';
 import { isCloudAvailable } from '../../utils/cloudGuard';
+import { resolveHonorCardStoreName } from '../../utils/storeIdentity';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
 
 interface CheckInLog {
@@ -237,7 +238,8 @@ Page({
         roleInfo = roleResult.roleInfo || null;
       }
       const storeId = (roleInfo && roleInfo.storeId) || '';
-      const storeName = (roleInfo && roleInfo.storeName) || '素小账 · 爱心公益';
+      const isSuperAdmin = !!roleInfo && roleInfo.role === 'super_admin';
+      const storeName = resolveHonorCardStoreName(roleInfo && roleInfo.storeName, isSuperAdmin);
       const nickName = (roleInfo && roleInfo.nickName) || '';
       const avatarUrl = (roleInfo && roleInfo.avatarUrl) || '';
 

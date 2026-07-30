@@ -37,6 +37,23 @@
          后厨净重的正常损耗误差，不是精确 ERP 库存盘点，无需为凑数精确称重 -->
     <text class="tool-hint-text">提示：填报数量为预估毛重即可，无需精确称重，店长采纳与审核后将自动归档。</text>
 
+    <!-- 🌟 大米/食用油库存状态：单轨制改造后，这里是全店唯一能设置该状态的地方
+         （原"填写今日明细"表单里的重复选择器已移除），首页"今日餐况"卡片的
+         充足/一般/告急标签直接读取本次提交的这两个字段 -->
+    <text class="vt-form-label">大米/面粉库存状态</text>
+    <view class="vt-status-row">
+      <view class="vt-status-pill green {{form.riceStatus === 'sufficient' ? 'active' : ''}}" bindtap="onSelectRiceStatus" data-value="sufficient">充足</view>
+      <view class="vt-status-pill yellow {{form.riceStatus === 'normal' ? 'active' : ''}}" bindtap="onSelectRiceStatus" data-value="normal">一般</view>
+      <view class="vt-status-pill red {{form.riceStatus === 'urgent' ? 'active' : ''}}" bindtap="onSelectRiceStatus" data-value="urgent">告急</view>
+    </view>
+
+    <text class="vt-form-label">食用油库存状态</text>
+    <view class="vt-status-row">
+      <view class="vt-status-pill green {{form.oilStatus === 'sufficient' ? 'active' : ''}}" bindtap="onSelectOilStatus" data-value="sufficient">充足</view>
+      <view class="vt-status-pill yellow {{form.oilStatus === 'normal' ? 'active' : ''}}" bindtap="onSelectOilStatus" data-value="normal">一般</view>
+      <view class="vt-status-pill red {{form.oilStatus === 'urgent' ? 'active' : ''}}" bindtap="onSelectOilStatus" data-value="urgent">告急</view>
+    </view>
+
     <text class="vt-form-label">报损 / 蔬菜种类 / 补充说明</text>
     <textarea
       class="feedback-content-textarea"

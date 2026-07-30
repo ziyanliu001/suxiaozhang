@@ -216,20 +216,68 @@
   color: #333333;
 }
 
-.al-btn-card-edit {
-  flex-shrink: 0;
+/* 🙋 发布者身份行：角色 Badge + 精确发布时间，紧贴标题下方 */
+.al-card-publisher-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 12rpx;
+}
+
+.al-card-publisher-badge {
   font-size: 20rpx;
-  font-weight: bold;
+  font-weight: 600;
   color: #8C1D18;
-  background: #FFF5F0;
-  border: 1.5rpx solid #FFD3BE;
+  background: #FFF3E0;
+  border-radius: 16rpx;
+  padding: 4rpx 14rpx;
+}
+
+.al-card-publisher-time {
+  font-size: 20rpx;
+  color: #999999;
+}
+
+/* ✏️🗑️ 编辑/删除操作行：与下方 al-card-footer 的"导出活动海报"分开一行，
+   避免互相挤压。编辑用淡灰底表示常规操作，删除用淡红底表示危险操作，
+   两者视觉上一眼可区分 */
+.al-card-actions-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.al-btn-card-edit {
+  flex: 1;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #495057;
+  background: #F1F3F5;
+  border: 1.5rpx solid #E1E4E8;
   border-radius: 24rpx;
-  padding: 8rpx 16rpx;
+  padding: 10rpx 0;
   line-height: 1.4;
   margin: 0;
 }
 
 .al-btn-card-edit::after {
+  border: none;
+}
+
+.al-btn-card-delete {
+  flex: 1;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #C0392B;
+  background: #FFF0F0;
+  border: 1.5rpx solid #FFD3D3;
+  border-radius: 24rpx;
+  padding: 10rpx 0;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.al-btn-card-delete::after {
   border: none;
 }
 

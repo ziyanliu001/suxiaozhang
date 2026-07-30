@@ -7,6 +7,17 @@ import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
 import { getSafeSystemInfo } from '../../utils/util';
+import { isVirtualStoreName, resolveHonorCardStoreName } from '../../utils/storeIdentity';
+
+// 🌾 大米/食用油库存状态展示口径：与"爱心续航看板"健康卡片、material-usage-modal
+// 组件的三档选择器共用同一套 sufficient/normal/urgent 语义，提炼成模块级常量供
+// calculateStatistics（历史 report_logs 兜底）与 fetchLatestMaterialStockStatus
+// （单轨制改造后的真实数据源）共用同一份文案/颜色映射
+const STOCK_STATUS_DISPLAY_MAP: Record<string, { text: string; color: string; icon: string; className: string }> = {
+  sufficient: { text: '充足', color: '#4CAF50', icon: '🟢', className: 'success' },
+  normal: { text: '一般', color: '#FF9800', icon: '🟡', className: 'warning' },
+  urgent: { text: '告急', color: '#E53935', icon: '🔴', className: 'danger' }
+};
 
 function parseDate(dateStr: string): Date {
   return new Date(String(dateStr).replace(/-/g, '/'));
@@ -53,11 +64,8 @@ function isAllStoresMode(storeName: string): boolean {
 // getSelectedStore() 兜底门店名时都可能把它带出来。非超管账号可以把 getSelectedStore()
 // 当成"用户刚手动切换过去的真实门店名"这一正常场景的兜底来源（例如 store-picker
 // 切身份后 fetchUserRole() 还没落地的窗口期），但必须先过滤掉这个虚拟聚合名，
-// 绝不能把它当成自己门店展示/查询
-const VIRTUAL_STORE_NAMES = ['全国总览', '全部门店'];
-function isVirtualStoreName(storeName: string): boolean {
-  return VIRTUAL_STORE_NAMES.includes(String(storeName || '').trim());
-}
+// 绝不能把它当成自己门店展示/查询——定义提炼进 utils/storeIdentity.ts 供本文件与
+// journey.ts 等其余"个人荣誉卡"生成逻辑共用，不再各自维护一份
 
 // 🛡️ 与 VIRTUAL_STORE_NAMES 同一件事的 storeId 哨兵值形态（见
 // cloudfunctions/getReports 的 wantsAllStores 判断、history.ts 的
@@ -816,7 +824,12 @@ Page({
     try {
       const roleInfo = AuthService.getCachedRoleInfo();
       const storeId = (roleInfo && roleInfo.storeId) || '';
-      const storeName = (roleInfo && roleInfo.storeName) || '素小账 · 爱心公益';
+      // 🐛 根因修复：此前直接取 roleInfo.storeName，账号一旦曾经是 super_admin
+      // 后被降级、服务端 user_roles.storeName 字段没跟着重置，就会把历史脏值
+      // "全国总览"原样印上海报——改用 resolveHonorCardStoreName 统一口径
+      // （非超管过滤虚拟聚合名 + getSelectedStore 兜底），见 utils/storeIdentity.ts
+      const isSuperAdmin = !!roleInfo && roleInfo.role === 'super_admin';
+      const storeName = resolveHonorCardStoreName(roleInfo && roleInfo.storeName, isSuperAdmin);
       const nickName = (roleInfo && roleInfo.nickName) || '';
       const avatarUrl = (roleInfo && roleInfo.avatarUrl) || '';
 
@@ -1589,19 +1602,8 @@ Page({
           ? Math.round((statistics.largeExpenseTotal / totalExpenseForPercent) * 100) 
           : 0;
 
-        const riceStatusMap: Record<string, { text: string; color: string; icon: string; className: string }> = {
-          sufficient: { text: '充足', color: '#4CAF50', icon: '🟢', className: 'success' },
-          normal: { text: '一般', color: '#FF9800', icon: '🟡', className: 'warning' },
-          urgent: { text: '告急', color: '#E53935', icon: '🔴', className: 'danger' }
-        };
-        const oilStatusMap: Record<string, { text: string; color: string; icon: string; className: string }> = {
-          sufficient: { text: '充足', color: '#4CAF50', icon: '🟢', className: 'success' },
-          normal: { text: '一般', color: '#FF9800', icon: '🟡', className: 'warning' },
-          urgent: { text: '告急', color: '#E53935', icon: '🔴', className: 'danger' }
-        };
-
-        const riceStatus = riceStatusMap[statistics.latestRiceStatus] || riceStatusMap.sufficient;
-        const oilStatus = oilStatusMap[statistics.latestOilStatus] || oilStatusMap.sufficient;
+        const riceStatus = STOCK_STATUS_DISPLAY_MAP[statistics.latestRiceStatus] || STOCK_STATUS_DISPLAY_MAP.sufficient;
+        const oilStatus = STOCK_STATUS_DISPLAY_MAP[statistics.latestOilStatus] || STOCK_STATUS_DISPLAY_MAP.sufficient;
 
         let healthGradientFrom = '#4CAF50';
         let healthGradientTo = '#66BB6A';
@@ -1692,6 +1694,14 @@ Page({
           parseSuccessCount: parseSuccessCount,
           monthlyAggregatedList: monthlyAggregated
         });
+
+        // 🌟 单轨制：上面 riceStatus/oilStatus 是从历史 report_logs.stapleRiceStatus
+        // 兜底算出来的（老字段，店长表单里的选择器已移除，新报告不会再手动填这个值）。
+        // 这里再用本店最近一次"🌾 登记物资消耗与报损"提交的真实状态覆盖一次，
+        // 具体门店（非全部门店聚合视角）才有意义覆盖
+        if (!isAll && shopStoreId) {
+          this.fetchLatestMaterialStockStatus(shopStoreId);
+        }
       } else {
         this.setData({
           statistics: null,
@@ -1711,6 +1721,39 @@ Page({
         hasOtherStoreData: false,
         currentStoreTotalCount: 0
       });
+    }
+  },
+
+  // 🌾 大米/食用油库存状态单轨制改造：与首页 index.ts fetchLatestMaterialStatus
+  // 同理，不再信任 report_logs.stapleRiceStatus/stapleOilStatus（店长表单里的
+  // 重复选择器已移除，老字段今后只会停留在默认值），改为直接查询
+  // manageVolunteerSubmission statsSummary 返回的"本店最近一次物资消耗提交"里
+  // 录入的真实状态，覆盖 calculateStatistics 从历史报告兜底算出的展示字段
+  async fetchLatestMaterialStockStatus(storeId: string) {
+    if (!this.data.statistics) return;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'statsSummary', storeId }
+      });
+      const result = res.result;
+      if (!result || !result.success || !result.data) return;
+
+      const riceStatus = STOCK_STATUS_DISPLAY_MAP[result.data.latestRiceStatus] || STOCK_STATUS_DISPLAY_MAP.sufficient;
+      const oilStatus = STOCK_STATUS_DISPLAY_MAP[result.data.latestOilStatus] || STOCK_STATUS_DISPLAY_MAP.sufficient;
+
+      this.setData({
+        'statistics.riceStatusText': riceStatus.text,
+        'statistics.riceStatusColor': riceStatus.color,
+        'statistics.riceStatusIcon': riceStatus.icon,
+        'statistics.riceStatusClass': riceStatus.className,
+        'statistics.oilStatusText': oilStatus.text,
+        'statistics.oilStatusColor': oilStatus.color,
+        'statistics.oilStatusIcon': oilStatus.icon,
+        'statistics.oilStatusClass': oilStatus.className
+      });
+    } catch (err) {
+      console.warn('[fetchLatestMaterialStockStatus] 查询最新物资库存状态失败，保留历史兜底值:', err);
     }
   },
 

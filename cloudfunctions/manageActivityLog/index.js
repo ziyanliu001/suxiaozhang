@@ -144,7 +144,48 @@ exports.main = async (event) => {
         }
         const safeImages = sanitizeImages(images);
 
-        // 只有纯新增（create）且不是餐报自动同步场景才允许义工走通——update/delete
+        // ✏️ 编辑已有记录：先看是不是作者本人发布的——本人编辑/删除自己发布的
+        // 记录不需要 store_manager/patriarch/super_admin 身份，也不受门店/机构
+        // 边界限制（本来就是自己发的，不存在"越权改别人门店记录"的问题），与
+        // manageVolunteerSubmission 的 deleteMine/revokeMine 同一套"自己的东西
+        // 自己能改"口径——义工也能编辑自己发布过的护持动态（即便已审核通过、
+        // 公开展示）。不是本人才继续走下面 resolveWriteTarget 的店铺级权限校验，
+        // 这段必须在 resolveWriteTarget 之前判断：resolveWriteTarget 对 update
+        // 从不放行 volunteer（allowVolunteerCreate 只在纯 create 时为 true），
+        // 放在后面会让义工在走到本人判断之前就已经被拒绝
+        if (action === 'update' && id) {
+          const existingRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+          const existing = existingRes && existingRes.data;
+          if (!existing) return { success: false, error: '记录不存在' };
+
+          const isOwner = !!existing.createdBy && !!OPENID && existing.createdBy === OPENID;
+          if (!isOwner) {
+            const target = await resolveWriteTarget(caller, storeId, { allowVolunteerCreate: false });
+            if (!target.allowed) {
+              return { success: false, error: target.error };
+            }
+            if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+              return { success: false, error: '无权限：该记录不属于您所在的机构' };
+            }
+            if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
+              return { success: false, error: '无权限：不能编辑其他门店的大事记' };
+            }
+          }
+
+          await db.collection(COLLECTION).doc(id).update({
+            data: {
+              title: String(title).trim(),
+              eventTime,
+              content: content || '',
+              images: safeImages,
+              updateTime: db.serverDate(),
+              publisherLabel: resolvePublisherLabel(caller.role)
+            }
+          });
+          return { success: true, id, message: '大事记已更新' };
+        }
+
+        // 只有纯新增（create）且不是餐报自动同步场景才允许义工走通——delete
         // 和 autoSyncFromReport 都不传这个 opt，volunteer 会在 resolveWriteTarget 里
         // 被兜底拒绝，不会误伤"义工能不能编辑别人记录"这条权限边界
         const target = await resolveWriteTarget(caller, storeId, {
@@ -196,30 +237,6 @@ exports.main = async (event) => {
           return { success: true, id: createAutoRes._id, message: '门店日志已发布' };
         }
 
-        if (action === 'update' && id) {
-          const existingRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
-          const existing = existingRes && existingRes.data;
-          if (!existing) return { success: false, error: '记录不存在' };
-          if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
-            return { success: false, error: '无权限：该记录不属于您所在的机构' };
-          }
-          if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
-            return { success: false, error: '无权限：不能编辑其他门店的大事记' };
-          }
-
-          await db.collection(COLLECTION).doc(id).update({
-            data: {
-              title: String(title).trim(),
-              eventTime,
-              content: content || '',
-              images: safeImages,
-              updateTime: db.serverDate(),
-              publisherLabel: resolvePublisherLabel(caller.role)
-            }
-          });
-          return { success: true, id, message: '大事记已更新' };
-        }
-
         // 🌟 义工提交的记录先落 PENDING，不直接进公开列表；店长/超管发布的记录
         // 明确落 APPROVED，与旧数据（没有 approvalStatus 字段）在 list 的
         // _.neq('PENDING') 过滤下表现一致（都会被列出）
@@ -257,15 +274,20 @@ exports.main = async (event) => {
         const existing = existingRes && existingRes.data;
         if (!existing) return { success: true, message: '记录不存在或已删除' };
 
-        const target = await resolveWriteTarget(caller, existing.storeId);
-        if (!target.allowed) {
-          return { success: false, error: target.error };
-        }
-        if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
-          return { success: false, error: '无权限：不能删除其他门店的大事记' };
-        }
-        if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
-          return { success: false, error: '无权限：该记录不属于您所在的机构' };
+        // 🌟 作者本人删除自己发布的记录：与上面 update 分支同一套"自己的东西
+        // 自己能删"口径，见该处注释
+        const isOwner = !!existing.createdBy && !!OPENID && existing.createdBy === OPENID;
+        if (!isOwner) {
+          const target = await resolveWriteTarget(caller, existing.storeId);
+          if (!target.allowed) {
+            return { success: false, error: target.error };
+          }
+          if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
+            return { success: false, error: '无权限：不能删除其他门店的大事记' };
+          }
+          if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+            return { success: false, error: '无权限：该记录不属于您所在的机构' };
+          }
         }
 
         await db.collection(COLLECTION).doc(id).remove();

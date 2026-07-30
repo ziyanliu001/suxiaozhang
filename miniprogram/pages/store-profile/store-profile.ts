@@ -43,6 +43,30 @@ const OPERATING_STATUS_LABELS: Record<string, string> = {
   paused: '暂停运营'
 };
 
+// 🏪 门店资质与实景公示：门头照/民政备案复印件/食品安全承诺，与原有的门店环境照
+// （storePhotos）是四个各自独立的照片分类，字段名与 manageStoreProfile 云函数一致；
+// 沿用同一套 onChoosePhoto/onDeletePhoto 通用逻辑（用 data-category 区分），不为
+// 每个分类各写一份几乎一样的上传/删除代码
+const PHOTO_FIELDS = ['storePhotos', 'storefrontPhotos', 'civilAffairsPhotos', 'foodSafetyPledgePhotos'] as const;
+type PhotoField = typeof PHOTO_FIELDS[number];
+const PHOTO_FIELD_MAX: Record<PhotoField, number> = {
+  storePhotos: 9,
+  storefrontPhotos: 6,
+  civilAffairsPhotos: 6,
+  foodSafetyPledgePhotos: 6
+};
+const PHOTO_FIELD_LABELS: Record<PhotoField, string> = {
+  storePhotos: '门店照片',
+  storefrontPhotos: '门头照',
+  civilAffairsPhotos: '民政备案复印件',
+  foodSafetyPledgePhotos: '食品安全承诺'
+};
+
+// 🌾 物资健康度展示：与 material-usage-modal 组件三档选择器、statistics.ts
+// STOCK_STATUS_DISPLAY_MAP 同一套 sufficient/normal/urgent 语义
+const STOCK_STATUS_RANK: Record<string, number> = { sufficient: 0, normal: 1, urgent: 2 };
+const STOCK_STATUS_LABEL: Record<string, string> = { sufficient: '充裕', normal: '一般', urgent: '告急' };
+
 Page({
   _navGuard: null as NavGuardInstance | null,
 
@@ -54,6 +78,16 @@ Page({
     currentStoreName: '',
     canManage: false,
     loading: true,
+
+    // 📊 门店动态健康看板：今日开餐 / 物资健康度 / 今日护持 / 今日服务，见
+    // fetchHealthDashboard()。数据来自 manageVolunteerSubmission 的 statsSummary，
+    // 与首页 index.ts fetchLatestMaterialStatus 同一个数据源，杜绝多处口径不一致
+    todayMealStatusLabel: '待录入',
+    todayMealStatusClass: 'neutral',
+    materialHealthLabel: '暂无数据',
+    materialHealthClass: 'neutral',
+    todayVolunteerCount: 0,
+    todayDiningCount: 0,
 
     // 展示态：7 项人数指标
     partyMembers: 0,
@@ -78,8 +112,12 @@ Page({
     latitude: null as number | null,
     longitude: null as number | null,
     locationLabel: '',
-    // 🏪 门店照片：云存储 fileID 数组，与 manageStoreProfile 云函数的 storePhotos 字段一致
+    // 🏪 门店照片 + 门头照/民政备案复印件/食品安全承诺：均为云存储 fileID 数组，
+    // 与 manageStoreProfile 云函数的同名字段一致
     storePhotos: [] as string[],
+    storefrontPhotos: [] as string[],
+    civilAffairsPhotos: [] as string[],
+    foodSafetyPledgePhotos: [] as string[],
     storePhotoUploading: false,
 
     // 🏛️ 家长风控锁：本店若绑定了家长/督导，店长发起的画像变更会先落到这里等待确认，
@@ -128,6 +166,19 @@ Page({
       deliverySeniorsCount: '0',
       listeningSeniorsCount: '0',
       otherCount: '0'
+    },
+
+    // 🏅 门店资质与实景公示 · 快捷修改弹窗：同 showProfileCountModal 的设计——
+    // 只改门头照/民政备案复印件/食品安全承诺这 3 个照片分类的独立轻量弹窗，
+    // 与整页 editing/editForm 相互独立，日常只想传一张资质照片没必要进整页编辑态
+    // （也避免了一次提交同时带出 7 项人数指标，历史上曾因此误把它们清零，见
+    // manageStoreProfile 云函数 update/approveProfileUpdate 分支的字段级修复）
+    showQualificationModal: false,
+    qualificationSaving: false,
+    qualificationForm: {
+      storefrontPhotos: [] as string[],
+      civilAffairsPhotos: [] as string[],
+      foodSafetyPledgePhotos: [] as string[]
     }
   },
 
@@ -153,6 +204,7 @@ Page({
   async onShow() {
     await this.initRoleAndStore();
     this.fetchProfile();
+    this.fetchHealthDashboard();
   },
 
   onUnload() {
@@ -249,7 +301,7 @@ Page({
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
-      update.storePhotos = Array.isArray(data.storePhotos) ? data.storePhotos : [];
+      PHOTO_FIELDS.forEach((f) => { update[f] = Array.isArray(data[f]) ? data[f] : []; });
       this.setData(update);
       // 🛡️ canManage 不在这份 update 里——它自始至终只由 initRoleAndStore() 的
       // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
@@ -262,6 +314,62 @@ Page({
     }
   },
 
+  // 📊 门店动态健康看板：今日开餐 / 物资健康度 / 今日护持 / 今日服务，均来自
+  // manageVolunteerSubmission statsSummary（与首页 index.ts fetchLatestMaterialStatus
+  // 同一个数据源），不额外新增云函数
+  async fetchHealthDashboard() {
+    if (!this.data.currentStoreId) return;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'statsSummary', storeId: this.data.currentStoreId }
+      });
+      const result = res.result;
+      if (!result || !result.success || !result.data) return;
+
+      const d = result.data;
+
+      let todayMealStatusLabel = '待录入';
+      let todayMealStatusClass = 'neutral';
+      if (d.todayMealStatus === 'open') {
+        todayMealStatusLabel = '正常供餐';
+        todayMealStatusClass = 'good';
+      } else if (d.todayMealStatus === 'closed') {
+        todayMealStatusLabel = '休餐';
+        todayMealStatusClass = 'warn';
+      }
+
+      // 🌾 物资健康度：大米/食用油两项取"更紧急"的那一项做主展示，两项都告急/
+      // 一般时合并成一句话，避免只挑其中一项漏报另一项的风险
+      const riceStatus = d.latestRiceStatus || 'normal';
+      const oilStatus = d.latestOilStatus || 'sufficient';
+      const riceRank = STOCK_STATUS_RANK[riceStatus] ?? 1;
+      const oilRank = STOCK_STATUS_RANK[oilStatus] ?? 0;
+      const worstRank = Math.max(riceRank, oilRank);
+      let materialHealthLabel = '🍚 物资充裕';
+      let materialHealthClass = 'good';
+      if (worstRank > 0) {
+        const riceWorst = riceRank === worstRank;
+        const oilWorst = oilRank === worstRank;
+        const names = [riceWorst ? '大米' : '', oilWorst ? '食用油' : ''].filter(Boolean).join('/');
+        const emoji = worstRank === 2 ? '🚨' : '⚠️';
+        materialHealthLabel = `${emoji} ${names}${STOCK_STATUS_LABEL[worstRank === 2 ? 'urgent' : 'normal']}`;
+        materialHealthClass = worstRank === 2 ? 'danger' : 'warn';
+      }
+
+      this.setData({
+        todayMealStatusLabel,
+        todayMealStatusClass,
+        materialHealthLabel,
+        materialHealthClass,
+        todayVolunteerCount: d.todayVolunteerCount || 0,
+        todayDiningCount: (d.mealTotals && d.mealTotals.totalCount) || 0
+      });
+    } catch (err) {
+      console.warn('[fetchHealthDashboard] 查询门店动态健康看板数据失败:', err);
+    }
+  },
+
   onEditProfile() {
     const editForm: any = {};
     PROFILE_FIELDS.forEach((f) => { editForm[f] = String((this.data as any)[f] || 0); });
@@ -270,6 +378,9 @@ Page({
     editForm.latitude = this.data.latitude;
     editForm.longitude = this.data.longitude;
     editForm.locationLabel = this.data.locationLabel || '';
+    // 🏅 门头照/民政备案复印件/食品安全承诺不在这份整页编辑表单里——它们有自己
+    // 独立的"门店资质与实景公示"快捷弹窗（见 onOpenQualificationModal），避免
+    // 同一批照片存在两条互相独立、可能互相覆盖的编辑路径
     editForm.storePhotos = [...this.data.storePhotos];
     this.setData({ editing: true, editForm });
   },
@@ -294,12 +405,20 @@ Page({
 
   stopPropagation() {},
 
-  // 🏪 门店照片：与 store-picker.ts onChooseNewStorePhoto 同一套 chooseMedia +
-  // compressAndUploadImages 模式，上限 9 张，仅编辑态可操作
-  async onChooseStorePhoto() {
-    const remaining = MAX_STORE_PHOTOS - this.data.editForm.storePhotos.length;
+  // 🏪 门店照片 / 门头照 / 民政备案复印件 / 食品安全承诺：四个分类共用同一套
+  // chooseMedia + compressAndUploadImages 上传逻辑（与 store-picker.ts
+  // onChooseNewStorePhoto 同一套模式），用 data-category 区分分类而不是各写一份
+  // 几乎相同的代码。data-target 区分写到哪个表单对象——整页编辑态用 editForm，
+  // "门店资质与实景公示"快捷弹窗用 qualificationForm，不传时按 editForm 兜底，
+  // 兼容整页编辑态里原有的 storePhotos 上传格没有加 data-target 的写法
+  async onChoosePhoto(e: any) {
+    const category = e.currentTarget.dataset.category as PhotoField;
+    const target = (e.currentTarget.dataset.target || 'editForm') as 'editForm' | 'qualificationForm';
+    const max = PHOTO_FIELD_MAX[category] || MAX_STORE_PHOTOS;
+    const current = (this.data[target] as any)[category] as string[];
+    const remaining = max - current.length;
     if (remaining <= 0) {
-      wx.showToast({ title: `最多上传 ${MAX_STORE_PHOTOS} 张门店照片`, icon: 'none' });
+      wx.showToast({ title: `最多上传 ${max} 张${PHOTO_FIELD_LABELS[category]}`, icon: 'none' });
       return;
     }
 
@@ -313,35 +432,73 @@ Page({
       const paths = (chooseRes.tempFiles || []).map((f) => f.tempFilePath);
       if (paths.length === 0) return;
 
-      const insertStart = this.data.editForm.storePhotos.length;
+      const insertStart = current.length;
       this.setData({
-        'editForm.storePhotos': [...this.data.editForm.storePhotos, ...paths],
+        [`${target}.${category}`]: [...current, ...paths],
         storePhotoUploading: true
       });
 
       try {
-        const uploaded = await compressAndUploadImages(CANVAS_ID, paths, 'store_profile_photos/' + this.data.currentStoreId + '/' + Date.now());
-        const finalPhotos = [...this.data.editForm.storePhotos];
+        const uploaded = await compressAndUploadImages(CANVAS_ID, paths, `store_profile_photos/${category}/${this.data.currentStoreId}/${Date.now()}`);
+        const finalPhotos = [...((this.data[target] as any)[category] as string[])];
         uploaded.forEach((u, i) => { finalPhotos[insertStart + i] = u.url; });
-        this.setData({ 'editForm.storePhotos': finalPhotos });
+        this.setData({ [`${target}.${category}`]: finalPhotos });
       } catch (uploadErr) {
-        const rolledBack = this.data.editForm.storePhotos.filter((_: string, i: number) => i < insertStart || i >= insertStart + paths.length);
-        this.setData({ 'editForm.storePhotos': rolledBack });
+        const rolledBack = ((this.data[target] as any)[category] as string[]).filter((_: string, i: number) => i < insertStart || i >= insertStart + paths.length);
+        this.setData({ [`${target}.${category}`]: rolledBack });
         throw uploadErr;
       }
 
       this.setData({ storePhotoUploading: false });
     } catch (err) {
       this.setData({ storePhotoUploading: false });
-      console.error('[store-profile] onChooseStorePhoto 异常:', err);
+      console.error('[store-profile] onChoosePhoto 异常:', err);
       wx.showToast({ title: '图片处理失败，请重试', icon: 'none' });
     }
   },
 
-  onDeleteStorePhoto(e: any) {
+  onDeletePhoto(e: any) {
+    const category = e.currentTarget.dataset.category as PhotoField;
+    const target = (e.currentTarget.dataset.target || 'editForm') as 'editForm' | 'qualificationForm';
     const index = e.currentTarget.dataset.index;
-    const next = this.data.editForm.storePhotos.filter((_: string, i: number) => i !== index);
-    this.setData({ 'editForm.storePhotos': next });
+    const next = ((this.data[target] as any)[category] as string[]).filter((_: string, i: number) => i !== index);
+    this.setData({ [`${target}.${category}`]: next });
+  },
+
+  // 🖼️ 门店资质与实景公示：展示态点击任一分类的照片时全屏预览，与该分类其余
+  // 照片一起支持左右滑动查看
+  onPreviewProfilePhoto(e: any) {
+    const url = e.currentTarget.dataset.url;
+    const urls = e.currentTarget.dataset.urls;
+    if (!url) return;
+    wx.previewImage({ current: url, urls: Array.isArray(urls) && urls.length > 0 ? urls : [url] });
+  },
+
+  // 📞 一键拨打门店联系电话
+  onCallPhone() {
+    if (!this.data.contactPhone) {
+      wx.showToast({ title: '门店尚未填写联系电话', icon: 'none' });
+      return;
+    }
+    wx.makePhoneCall({ phoneNumber: this.data.contactPhone }).catch((err) => {
+      console.warn('[store-profile] onCallPhone 拨打失败/取消:', err);
+    });
+  },
+
+  // 📍 一键导航：唤起微信内置地图，需要门店已设置过经纬度（编辑态"设置门店位置"）
+  onOpenNavigation() {
+    if (typeof this.data.latitude !== 'number' || typeof this.data.longitude !== 'number') {
+      wx.showToast({ title: '门店尚未设置具体位置，无法导航', icon: 'none' });
+      return;
+    }
+    wx.openLocation({
+      latitude: this.data.latitude,
+      longitude: this.data.longitude,
+      name: this.data.currentStoreName || '门店位置',
+      address: this.data.address || ''
+    }).catch((err) => {
+      console.warn('[store-profile] onOpenNavigation 打开地图失败:', err);
+    });
   },
 
   // 📍 编辑态设置门店位置：与 store-management 建店表单共用同一条
@@ -371,6 +528,10 @@ Page({
       PROFILE_FIELDS.forEach((f) => { payload[f] = parseInt(this.data.editForm[f], 10) || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { payload[f] = this.data.editForm[f] || ''; });
       payload.operatingStatus = this.data.editForm.operatingStatus;
+      // 🏅 只提交 storePhotos——门头照/民政备案复印件/食品安全承诺走各自独立的
+      // "门店资质与实景公示"弹窗（onSaveQualification），不在这份整页提交里，
+      // 避免把 payload 里不存在的字段用 undefined 覆盖回本地展示态（见下方两处
+      // pendingProfileUpdate/update 同理只回显 storePhotos）
       payload.storePhotos = this.data.editForm.storePhotos || [];
       if (typeof this.data.editForm.latitude === 'number' && typeof this.data.editForm.longitude === 'number') {
         payload.latitude = this.data.editForm.latitude;
@@ -476,6 +637,84 @@ Page({
     } finally {
       wx.hideLoading();
       this.setData({ profileCountSaving: false });
+    }
+  },
+
+  // ============ 🏅 门店资质与实景公示 · 快捷修改弹窗 ============
+
+  // 点击标题栏"✏️ 修改"按钮或某个分类的"暂未上传"占位区域都会先经过这里做
+  // 一次权限校验——"暂未上传"占位在展示态对所有角色可见（含义工/家人只读
+  // 浏览），不能只靠按钮的 wx:if 隐藏拦人，必须在打开弹窗前显式拦一次
+  onOpenQualificationModal() {
+    if (!this.data.canManage) {
+      wx.showToast({ title: '仅店长/家长/超管可编辑门店资质公示', icon: 'none' });
+      return;
+    }
+    this.setData({
+      showQualificationModal: true,
+      qualificationForm: {
+        storefrontPhotos: [...this.data.storefrontPhotos],
+        civilAffairsPhotos: [...this.data.civilAffairsPhotos],
+        foodSafetyPledgePhotos: [...this.data.foodSafetyPledgePhotos]
+      }
+    });
+  },
+
+  onCloseQualificationModal() {
+    if (this.data.qualificationSaving) return;
+    this.setData({ showQualificationModal: false });
+  },
+
+  async onSaveQualification() {
+    if (this.data.qualificationSaving) return;
+    this.setData({ qualificationSaving: true });
+    wx.showLoading({ title: '正在保存...', mask: true });
+
+    try {
+      // 🐛 只提交这 3 个照片字段——manageStoreProfile 云函数的 update 分支已经
+      // 修复为"只在传了这个字段时才写入"，不会像修复前那样把没传的 7 项人数
+      // 指标当作 0 静默清零，这份局部提交是安全的
+      const payload: any = {
+        action: 'update',
+        storeId: this.data.currentStoreId,
+        storefrontPhotos: this.data.qualificationForm.storefrontPhotos,
+        civilAffairsPhotos: this.data.qualificationForm.civilAffairsPhotos,
+        foodSafetyPledgePhotos: this.data.qualificationForm.foodSafetyPledgePhotos
+      };
+
+      const res: any = await wx.cloud.callFunction({ name: 'manageStoreProfile', data: payload });
+      const result = res.result;
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+        return;
+      }
+
+      if (result.pending) {
+        // 🏛️ 家长风控锁：与 onSaveProfile/onSaveProfileCount 同一套挂起逻辑——
+        // 本店已绑定家长/督导时不会直接生效，展示态照片保持不变，只更新待审批提示条
+        const pendingProfileUpdate: any = { ...this.data.pendingProfileUpdate, requestedAt: Date.now() };
+        pendingProfileUpdate.storefrontPhotos = payload.storefrontPhotos;
+        pendingProfileUpdate.civilAffairsPhotos = payload.civilAffairsPhotos;
+        pendingProfileUpdate.foodSafetyPledgePhotos = payload.foodSafetyPledgePhotos;
+        this.setData({ showQualificationModal: false, pendingProfileUpdate });
+        wx.showModal({ title: '已提交审批', content: result.message || '已提交家长/超管审批，确认后生效', showCancel: false });
+        return;
+      }
+
+      this.setData({
+        showQualificationModal: false,
+        storefrontPhotos: payload.storefrontPhotos,
+        civilAffairsPhotos: payload.civilAffairsPhotos,
+        foodSafetyPledgePhotos: payload.foodSafetyPledgePhotos
+      });
+      wx.showToast({ title: '门店资质公示已更新', icon: 'success' });
+    } catch (err: any) {
+      console.error('[onSaveQualification] 保存门店资质公示异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ qualificationSaving: false });
     }
   },
 

@@ -34,6 +34,9 @@ Page({
     currentStoreId: '',
     currentStoreName: '',
     canManage: false,
+    // 🔑 当前登录者的 openid：用于"本人发布的记录可以自己编辑/删除"的按钮显隐判断，
+    // 与云函数 manageActivityLog 的 isOwner（existing.createdBy === OPENID）口径一致
+    currentUserOpenid: '',
     // 🛡️ 权限收紧：门店提示标签"📍 全国总览"只有超管才该看到（家人/义工/普通
     // 店长财务的 currentStoreName 理论上不该是这个虚拟门店名，但一旦发生—— 比如
     // 共用设备上超管上次选过"全国总览"、getSelectedStore() 缓存串号——也不能
@@ -159,10 +162,16 @@ Page({
     const effectiveRole = storageRole || (roleInfo && roleInfo.role) || '';
     const isFamily = effectiveRole === 'store_family';
     const isSuperAdmin = !isFamily && effectiveRole === 'super_admin';
-    const canManage = !isFamily && (effectiveRole === 'store_manager' || isSuperAdmin);
+    // 🐛 权限缺口修复：此前 canManage 漏掉了 store_patriarch——服务端
+    // resolveWriteTarget/resolveReviewStoreId 对 store_patriarch 和 store_manager
+    // 一视同仁（大家长天然继承店长的全套日常管理权限），但这里只认
+    // store_manager，导致大家长点得到编辑/删除入口却会被云函数拒绝，或者压根
+    // 看不到"待确认的义工投稿"审核队列。补上 store_patriarch，与服务端口径对齐
+    const canManage = !isFamily && (effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || isSuperAdmin);
     const isVolunteer = !isFamily && effectiveRole === 'volunteer';
+    const currentUserOpenid = AuthService.getOpenid() || '';
 
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, isSuperAdmin, isVolunteer, isFamily });
+    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, isSuperAdmin, isVolunteer, isFamily, currentUserOpenid });
 
     // ⏳ 待确认的义工投稿：与本页其余"管理入口"（编辑/删除按钮）同一套 canManage
     // 判定口径，只有店长/超管才需要发这个查询
@@ -319,7 +328,13 @@ Page({
       const result = res.result as any;
 
       if (result && result.success) {
-        const newList = reset ? (result.data || []) : this.data.list.concat(result.data || []);
+        // 🕐 与 loadTodayActivity 同一套处理：updateTime 是云端 db.serverDate() 读回的
+        // 原生 Date，格式化成 HH:mm 供历史动态卡片展示"发布者 + 精确发布时间"
+        const pageItems = (result.data || []).map((item: any) => ({
+          ...item,
+          publishTimeStr: formatHHmm(item.updateTime)
+        }));
+        const newList = reset ? pageItems : this.data.list.concat(pageItems);
         this.setData({
           list: newList,
           page: targetPage,
@@ -383,10 +398,14 @@ Page({
   },
 
   onOpenEditForm(e: any) {
-    if (!this.data.canManage) return;
     const id = e.currentTarget.dataset.id;
     const item = this.data.list.find((r: any) => r._id === id);
     if (!item) return;
+    // 🛡️ 与 WXML 按钮的 wx:if="{{canManage || item.createdBy === currentUserOpenid}}"
+    // 保持同一套判定：店长/家长/超管可编辑任意本店记录，其余角色只能编辑自己
+    // 发布的那一条（服务端 update 动作会再校验一次 isOwner，双重防线）
+    const isOwner = !!item.createdBy && item.createdBy === this.data.currentUserOpenid;
+    if (!this.data.canManage && !isOwner) return;
     this.setData({
       showEditForm: true,
       editForm: {

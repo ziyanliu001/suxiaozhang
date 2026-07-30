@@ -1046,6 +1046,36 @@ Page({
     }
   },
 
+  // 🌟 大米/食用油库存状态单轨制改造：此前 stapleRiceStatus/stapleOilStatus 是
+  // 店长在"填写今日明细"表单里手动勾选的"充足/一般/告急"，与"🌾 登记物资消耗与
+  // 报损"弹窗提交的实际斤数是两条完全独立、经常互相矛盾的数据轨道（店长选了
+  // "充足"，义工却刚提交了一条大米只剩几斤的消耗记录）。现在改为单一数据源：
+  // 每次进页直接读取 manageVolunteerSubmission statsSummary 返回的最近一次物资
+  // 消耗提交里录入的库存状态，this.data.stapleRiceStatus/stapleOilStatus 不再
+  // 允许手动修改，其余下游（今日餐况卡片、报告文案、海报）无需改动，照常读取
+  // 这两个字段即可自动跟着变
+  async fetchLatestMaterialStatus() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || this.isNationalOverviewSelected()) return;
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({
+        name: 'manageVolunteerSubmission',
+        data: { action: 'statsSummary', storeId }
+      });
+      const result = res.result as any;
+      if (result && result.success && result.data) {
+        this.setData({
+          stapleRiceStatus: result.data.latestRiceStatus || 'normal',
+          stapleOilStatus: result.data.latestOilStatus || 'sufficient'
+        });
+      }
+    } catch (e) {
+      console.warn('[fetchLatestMaterialStatus] 查询最新物资库存状态失败，保留上次已知状态:', e);
+    }
+  },
+
   onGotoDailyMenu() {
     wx.navigateTo({ url: '/pages/daily-menu/daily-menu' });
   },
@@ -2026,7 +2056,7 @@ Page({
   },
 
   saveDraft() {
-    const { reportDate, reportDateValue, yesterdayBalance, allDonations, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+    const { reportDate, reportDateValue, yesterdayBalance, allDonations, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
 
     const draftData = {
       reportDate,
@@ -2045,8 +2075,10 @@ Page({
       volunteerCount,
       volunteerHours,
       diningCount,
-      stapleRiceStatus,
-      stapleOilStatus,
+      // 🌟 stapleRiceStatus/stapleOilStatus 不再是草稿需要记住的"用户手动输入"，
+      // 已改为 fetchLatestMaterialStatus() 每次进页自动读取最新物资消耗提交的
+      // 库存状态——草稿箱不保存这两个字段，避免旧草稿里的过期值把刚拉取到的
+      // 最新状态又覆盖回去
       materialsInput,
       dineInSeniors,
       deliverySeniors,
@@ -2103,8 +2135,6 @@ Page({
         volunteerCount: draftData.volunteerCount || '',
         volunteerHours: draftData.volunteerHours || '',
         diningCount: draftData.diningCount || '',
-        stapleRiceStatus: draftData.stapleRiceStatus || 'normal',
-        stapleOilStatus: draftData.stapleOilStatus || 'sufficient',
         materialsInput: draftData.materialsInput || '',
         dineInSeniors: draftData.dineInSeniors || '',
         deliverySeniors: draftData.deliverySeniors || '',
@@ -2177,8 +2207,6 @@ Page({
         volunteerCount: draftData.volunteerCount || '',
         volunteerHours: draftData.volunteerHours || '',
         diningCount: draftData.diningCount || '',
-        stapleRiceStatus: draftData.stapleRiceStatus || 'normal',
-        stapleOilStatus: draftData.stapleOilStatus || 'sufficient',
         materialsInput: draftData.materialsInput || '',
         dineInSeniors: draftData.dineInSeniors || '',
         deliverySeniors: draftData.deliverySeniors || '',
@@ -3730,16 +3758,6 @@ Page({
   onMaterialsInput(e: any) {
     const value = e.detail.value;
     this.updateMaterialsParse(value);
-    this.debouncedSaveDraft();
-  },
-
-  onStapleStatusChange(e: any) {
-    const { type, value } = e.currentTarget.dataset;
-    if (type === 'rice') {
-      this.setData({ stapleRiceStatus: value });
-    } else if (type === 'oil') {
-      this.setData({ stapleOilStatus: value });
-    }
     this.debouncedSaveDraft();
   },
 
@@ -6023,6 +6041,7 @@ Page({
     this.fetchTodayMenu();
     this.fetchTodayActivity();
     this.fetchNotices();
+    this.fetchLatestMaterialStatus();
     this.setData({ cultureQuote: getDailyCultureQuote() });
 
     // ❤️ 家人首页第一模块【阳光账本核心大盘】：复用弹窗那套 fetchSunshineLedgerData/
@@ -6333,8 +6352,6 @@ Page({
       dineInVolunteers: report.dineInVolunteers != null ? String(report.dineInVolunteers) : '',
       deliveryVolunteers: report.deliveryVolunteers != null ? String(report.deliveryVolunteers) : '',
       takeawayCount: report.takeawayCount != null ? String(report.takeawayCount) : '',
-      stapleRiceStatus: report.stapleRiceStatus || 'normal',
-      stapleOilStatus: report.stapleOilStatus || 'sufficient',
       shopName: report.shopName || this.data.shopName,
       mpAccount: report.mpAccount || this.data.mpAccount,
       receiptImages: report.receiptImages || [],
