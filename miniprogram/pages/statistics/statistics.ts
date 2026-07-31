@@ -458,6 +458,13 @@ Page({
     this.reloadShopListAndStats();
     this.initWatermarkIdentity();
 
+    // 🐛 DEBUG：initUserRole() 是异步的，onLoad 执行到这里时角色信息大概率还没解析
+    // 回来，这里打印的是【调用发起前】的初始态（currentUserRole 此时通常还是空
+    // 字符串，showNationalDashboard 还是默认 false）；真正解析完成后的值要看下面
+    // applyRolePermissions() 末尾的那条日志
+    console.log('[DEBUG] onLoad 时刻 currentUserRole（角色解析可能仍在进行中）：', this.data.currentUserRole);
+    console.log('[DEBUG] onLoad 时刻 showNationalDashboard 状态：', this.data.showNationalDashboard);
+
     // 注入物理返回键兜底拦截
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',
@@ -700,18 +707,28 @@ Page({
       // 统一默认展示当前切换门店（仅超管才兜底读取 getSelectedStore()，覆盖
       // storeName 参数为空的情况——超管在 user_roles 里未必绑定固定门店；非超管
       // 已在上面用 effectiveStoreName 锁死为真实绑定门店，这里不再重复处理）的数据
+      // 🐛 根因修复：上一版注释误以为 resolveEffectiveStoreIdentity() 已经把
+      // "全国总览"/"全部门店" 这类虚拟聚合名从 getSelectedStore() 里过滤干净了——
+      // 但那是另一次独立的 getSelectedStore() 调用（在 initUserRole 里，结果只
+      // 落进 storeName/storeId 入参），这里是全新发起的第二次 getSelectedStore()
+      // 调用，从未经过任何过滤。超管此前在别的页面（如 store-picker 组件，见其
+      // storeId:'national_overview'/storeName:'全国总览' 虚拟条目）选过"全国总览"
+      // 时，这里会原样把 '全国总览' 当成一个真实门店名传下去——非空字符串，
+      // 导致下面 shouldDefaultToNational 被误判为 false，showNationalDashboard
+      // 也就永远不会被置为 true，单店查询又查不到名叫"全国总览"的门店，最终两边
+      // 都没有数据可展示。这里补上与本文件其余各处一致的 isVirtualStoreName 过滤
+      const rawSelectedStoreName = (getSelectedStore().storeName) || '';
+      const cleanSelectedStoreName = isVirtualStoreName(rawSelectedStoreName) ? '' : rawSelectedStoreName;
       const finalShopName = isSuperAdmin
-        ? (effectiveStoreName || (getSelectedStore().storeName) || '')
+        ? (effectiveStoreName || cleanSelectedStoreName)
         : effectiveStoreName;
 
-      // 🐛 根因修复：超管账号在角色缓存/服务端/全局态/本地存储任何来源都解析不出
-      // 一个真实门店时——典型场景是从未在任何页面手动选过具体门店，或者上次选的
-      // 就是"全国总览"（resolveEffectiveStoreIdentity 已把这类虚拟名过滤成空）——
-      // finalShopName 会是空字符串。此前不管这种情况，无条件 isAllStoresMode:false，
-      // 后续单店查询拿着一个空字符串当门店名去查，只会查出"什么都没有"的假空态，
-      // 而不是真正有意义的"全国总览"。只在这种"压根没有可展示的具体门店"时才
-      // 回退到全国总览，不会重新引入此前"无条件默认全国大屏"的旧 Bug——那个 Bug
-      // 是不看实际选择、永远默认全国；这里只在无从选择时才兜底
+      // 超管账号在角色缓存/服务端/全局态/本地存储任何来源都解析不出一个真实门店时
+      // ——典型场景是从未在任何页面手动选过具体门店，或者上次选的就是"全国总览"/
+      // "全部门店"这类虚拟聚合名（现已在上面被过滤成空）——finalShopName 会是
+      // 空字符串。只在这种"压根没有可展示的具体门店"时才回退到全国总览，不会
+      // 重新引入此前"无条件默认全国大屏"的旧 Bug——那个 Bug 是不看实际选择、
+      // 永远默认全国；这里只在无从选择时才兜底
       const shouldDefaultToNational = isSuperAdmin && !finalShopName;
 
       this.setData({
@@ -729,6 +746,12 @@ Page({
         this.loadNationalDashboard();
       }
     }
+
+    // 🐛 DEBUG：本函数内的多次 setData 都是同步写入 this.data 的，这里读到的已经
+    // 是本轮角色解析结束后的最终值（不存在 userRole 这个字段，项目里的等价字段是
+    // currentUserRole，见上面 setData 里的 currentUserRole: role）
+    console.log('[DEBUG] applyRolePermissions 结束时 currentUserRole 权限数据：', this.data.currentUserRole);
+    console.log('[DEBUG] applyRolePermissions 结束时 showNationalDashboard 状态：', this.data.showNationalDashboard);
   },
 
   // 🆕 家长专属资源续航看板：复用 getPatriarchDashboard 云函数（该函数早已把
@@ -976,12 +999,25 @@ Page({
     try {
       // 🛡️ rangeType 仅超管高阶面板使用；云函数侧会再次校验调用者角色，非 super_admin
       // 传了也会被服务端忽略，这里传参不代表前端信任该参数会生效
+      const callParams = { rangeType: this.data.nationalRangeType };
+      console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
+
       const result = await wx.cloud.callFunction({
         name: 'getNationalDashboard',
-        data: { rangeType: this.data.nationalRangeType }
+        data: callParams
       });
 
+      console.log('[DEBUG] getNationalDashboard 返回原始结果：', result);
+
       const r = result.result as any;
+      // 🐛 DEBUG：本云函数的响应体没有 data/errMsg 字段（见 cloudfunctions/
+      // getNationalDashboard/index.js 的 return 语句），成功时是 nationalSummary/
+      // storeMatrix/superAdminInsights，失败时业务错误信息在 r.error（result.errMsg
+      // 是 wx.cloud.callFunction 这层 SDK 调用失败才会有的字段，业务上的失败走的是
+      // success:false + error，这里按真实响应结构打印，不按不存在的字段名瞎打）
+      console.log('[DEBUG] getNationalDashboard 业务数据 result.nationalSummary/storeMatrix：', r && r.nationalSummary, r && r.storeMatrix);
+      console.log('[DEBUG] getNationalDashboard 业务报错信息 result.error：', r && r.error);
+
       if (r && r.success) {
         // 🛡️ 客户端第二层脱敏防线：云函数出口已按角色做过服务端脱敏，
         // 这里对拿到的数据再跑一遍同名 sanitizeReportForVolunteer，双重兜底
