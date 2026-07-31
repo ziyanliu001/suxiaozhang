@@ -828,6 +828,13 @@ page {
   color: #646566;
 }
 
+.achievement-sub {
+  font-size: 20rpx;
+  color: #969799;
+  display: block;
+  margin-top: 6rpx;
+}
+
 .volunteer-summary-row {
   text-align: center;
   margin-top: 20rpx;

@@ -1286,9 +1286,14 @@ Page({
   },
 
   // 拉取后端真实过滤数据（严格按时间区间隔离）
+  // 🐛 根因修复："全国总览"聚合视图曾在这里被无条件跳过，压根不会调用
+  // getStatisticsData——但该云函数早在 beb3e25（先于本 return 加入）就已经支持
+  // wantsAllStores（super_admin 传 shopName='全部门店' 或不传时聚合本机构全部
+  // 门店），这个 return 是当年更早那次改动遗留的过时防御，从未跟进删除。直接
+  // 后果：财务合规大屏的单餐成本/记账笔数/已稽核笔数/凭证合规率（statsData.*，
+  // 无 statistics.* 兜底，见 wxml finance-metric-cell）在"全国总览"下永远停留
+  // 在初始占位值，哪怕数据库里其实有数据
   async fetchStatistics() {
-    if (this.data.isAllStoresMode) return;
-
     const { currentTab, shopName, selectedYear, selectedMonth, customStartDate, customEndDate } = this.data;
     const tabMap: Record<string, string> = { week: 'week', month: 'month', year: 'year', custom: 'custom' };
     const tabType = tabMap[currentTab] || 'week';
@@ -1984,6 +1989,14 @@ Page({
       healthIcon: '',
       perMealCost: 0,
       totalDiningCount: 0,
+      // 🍱 用餐与服务总人次的堂食/送餐/打包细分：数据源是 report_logs 里
+      // dineInSeniors/deliverySeniors/dineInVolunteers/deliveryVolunteers/
+      // takeawayCount 这几个字段（首页 recalcDiningStats() 算好后随 diningCount
+      // 一并落库，见 dataService.ts saveReport），totalDiningCount 本身已经是
+      // 三者之和（同源镜像），这里只是额外拆出细分供卡片展示，不是另一套口径
+      totalDineInCount: 0,
+      totalDeliveryCount: 0,
+      totalTakeawayCount: 0,
       totalVolunteerCount: 0,
       totalVolunteerHours: 0,
       totalDonorCount: 0,
@@ -2048,6 +2061,9 @@ Page({
       statistics.totalVolunteerHours += parseFloat(item.volunteerHours) || 0;
       statistics.totalDiningCount += diningCount;
       statistics.totalVolunteerCount += volunteerCount;
+      statistics.totalDineInCount += (parseFloat(item.dineInSeniors) || 0) + (parseFloat(item.dineInVolunteers) || 0);
+      statistics.totalDeliveryCount += (parseFloat(item.deliverySeniors) || 0) + (parseFloat(item.deliveryVolunteers) || 0);
+      statistics.totalTakeawayCount += parseFloat(item.takeawayCount) || 0;
 
       const dailyIncome = otherDonation + listDonationTotal;
       const hasIncome = dailyIncome > 0;

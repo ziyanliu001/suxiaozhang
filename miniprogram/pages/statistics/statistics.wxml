@@ -592,6 +592,7 @@
             <text class="achievement-icon">👥</text>
             <text class="achievement-value">{{statsData.totalDiningPeople || statistics.totalDiningCount}}</text>
             <text class="achievement-label">服务用餐人次</text>
+            <text class="achievement-sub" wx:if="{{statistics.totalDineInCount > 0 || statistics.totalDeliveryCount > 0 || statistics.totalTakeawayCount > 0}}">堂食{{statistics.totalDineInCount}}·送餐{{statistics.totalDeliveryCount}}·打包{{statistics.totalTakeawayCount}}</text>
           </view>
           <view class="achievement-item" wx:if="{{statistics.showPerMealCost || statsData.costPerMeal}}">
             <text class="achievement-icon">💚</text>
@@ -631,6 +632,31 @@
             <view class="materials-item" wx:for="{{statistics.materialsSummary}}" wx:key="item">
               <text class="materials-name">• {{item.item}}</text>
               <text class="materials-qty">共 {{item.totalQty}} {{item.unit}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 🌾 核心物资消耗总量：大米/面粉/食用油/蔬菜累计斤数，来自 material_logs
+             （义工登记消耗经采纳后落库，见 getStatisticsData 云函数），与上面
+             "物资赞助明细汇总"（report_logs 里记录的捐赠物资）是两套不同数据源 -->
+        <view class="materials-summary-card" wx:if="{{statsData.riceTotal > 0 || statsData.flourTotal > 0 || statsData.oilTotal > 0 || statsData.vegetableTotal > 0}}">
+          <text class="materials-title">🌾 核心物资消耗总量</text>
+          <view class="materials-list">
+            <view class="materials-item" wx:if="{{statsData.riceTotal > 0}}">
+              <text class="materials-name">• 大米</text>
+              <text class="materials-qty">共 {{statsData.riceTotal}} 斤</text>
+            </view>
+            <view class="materials-item" wx:if="{{statsData.flourTotal > 0}}">
+              <text class="materials-name">• 面粉</text>
+              <text class="materials-qty">共 {{statsData.flourTotal}} 斤</text>
+            </view>
+            <view class="materials-item" wx:if="{{statsData.oilTotal > 0}}">
+              <text class="materials-name">• 食用油</text>
+              <text class="materials-qty">共 {{statsData.oilTotal}} 斤</text>
+            </view>
+            <view class="materials-item" wx:if="{{statsData.vegetableTotal > 0}}">
+              <text class="materials-name">• 蔬菜</text>
+              <text class="materials-qty">共 {{statsData.vegetableTotal}} 斤</text>
             </view>
           </view>
         </view>

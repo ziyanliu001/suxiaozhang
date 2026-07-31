@@ -219,6 +219,40 @@ exports.main = async (event, context) => {
       }
     });
 
+    // 3.5 核心物资消耗总量：大米/面粉/食用油/蔬菜累计斤数，来自 material_logs——
+    // 义工登记的物资消耗经店长/家长/超管采纳后才会落到这张表（见
+    // manageVolunteerSubmission writeMaterialLog），与 report_logs 完全独立，
+    // 复用同一套 tenantId/门店范围收敛口径（material_logs 用 storeId/storeName
+    // 存店，没有 shopName 字段，与 report_logs 的 shopName 口径不同，分开拼条件）
+    let riceTotal = 0;
+    let flourTotal = 0;
+    let oilTotal = 0;
+    let vegetableTotal = 0;
+    try {
+      const materialConditions = [
+        { dateString: _.gte(startDateStr).and(_.lte(endDateStr)) },
+        _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])
+      ];
+      if (!isTenantWideAllowed) {
+        materialConditions.push(userStoreId ? { storeId: userStoreId } : { storeName: userStoreName });
+      } else if (shopName && shopName !== '全部门店') {
+        materialConditions.push({ storeName: shopName });
+      }
+      const materialRes = await db.collection('material_logs')
+        .where(_.and(materialConditions))
+        .limit(1000)
+        .get();
+      (materialRes.data || []).forEach((m) => {
+        riceTotal += parseFloat(m.riceCount) || 0;
+        flourTotal += parseFloat(m.flourCount) || 0;
+        oilTotal += parseFloat(m.oilCount) || 0;
+        vegetableTotal += parseFloat(m.vegetableCount) || 0;
+      });
+    } catch (err) {
+      // material_logs 集合可能尚未创建（该机构还没有任何一条物资消耗提交被采纳过），
+      // 视为总量 0，不影响主统计
+    }
+
     // 4. 计算单餐平均食材成本
     const costPerMeal = totalDiningPeople > 0
       ? (foodExpense / totalDiningPeople).toFixed(2)
@@ -258,7 +292,11 @@ exports.main = async (event, context) => {
       recordCount: records.length,
       auditedCount,
       complianceRate,
-      materialSummaryText: materialSummary.length > 0 ? materialSummary.join('；') : '暂无捐赠明细记录'
+      materialSummaryText: materialSummary.length > 0 ? materialSummary.join('；') : '暂无捐赠明细记录',
+      riceTotal: Math.round(riceTotal * 10) / 10,
+      flourTotal: Math.round(flourTotal * 10) / 10,
+      oilTotal: Math.round(oilTotal * 10) / 10,
+      vegetableTotal: Math.round(vegetableTotal * 10) / 10
     };
 
   } catch (err) {
