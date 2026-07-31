@@ -130,7 +130,12 @@ exports.main = async (event, context) => {
     let skip = 0;
     const logsQueryConditions = [
       _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]),
-      { isVoid: _.neq(true) }
+      { isVoid: _.neq(true) },
+      // 🐛 二级审核门槛缺失：本函数此前唯独没有套用 getReports(approvedOnly)/
+      // getStatisticsData 全站统一的 approvalStatus 过滤，义工/店长刚提交、店长
+      // 还没核对确认的 PENDING 草稿会直接计入"全国总览"的人次/收支汇总，与
+      // 单店视角（走 getStatisticsData，已过滤）口径不一致，数字对不上
+      { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) }
     ];
     if (rangeStartDate) {
       logsQueryConditions.push({ dateString: _.gte(rangeStartDate) });
@@ -150,10 +155,52 @@ exports.main = async (event, context) => {
       if (skip >= 1000) break;
     }
 
+    // 🌾 全国核心物资消耗总量：大米/面粉/食用油/蔬菜累计斤数，来自 material_logs——
+    // 与 getStatisticsData 单店视角同一张表、同一套字段，这里只是把门店范围放宽到
+    // 本机构全部门店，时间范围复用上面已经算好的 rangeStartDate（近7天/本月/
+    // 本季度/全部时间）
+    let nationalRiceTotal = 0;
+    let nationalFlourTotal = 0;
+    let nationalOilTotal = 0;
+    let nationalVegetableTotal = 0;
+    try {
+      const materialConditions = [_.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])];
+      if (rangeStartDate) {
+        materialConditions.push({ dateString: _.gte(rangeStartDate) });
+      }
+      let allMaterialLogs = [];
+      let materialSkip = 0;
+      while (true) {
+        const batch = await db.collection('material_logs')
+          .where(_.and(materialConditions))
+          .skip(materialSkip)
+          .limit(batchLimit)
+          .get();
+        if (!batch.data || batch.data.length === 0) break;
+        allMaterialLogs = allMaterialLogs.concat(batch.data);
+        if (batch.data.length < batchLimit) break;
+        materialSkip += batchLimit;
+        if (materialSkip >= 1000) break;
+      }
+      allMaterialLogs.forEach((m) => {
+        nationalRiceTotal += parseFloat(m.riceCount) || 0;
+        nationalFlourTotal += parseFloat(m.flourCount) || 0;
+        nationalOilTotal += parseFloat(m.oilCount) || 0;
+        nationalVegetableTotal += parseFloat(m.vegetableCount) || 0;
+      });
+    } catch (err) {
+      // material_logs 集合可能尚未创建（该机构还没有任何一条物资消耗提交被采纳过），
+      // 视为总量 0，不影响主统计
+    }
+
     let nationalTotalDiners = 0;
     let nationalTotalIncome = 0;
     let nationalTotalExpense = 0;
     let nationalOpenDays = 0;
+    // 🌟 全国志愿服务：到岗人次与工时，与 getStatisticsData 单店视角同一套
+    // report_logs.volunteerCount/volunteerHours 字段来源
+    let nationalTotalVolunteers = 0;
+    let nationalTotalVolunteerHours = 0;
     // 🌟 全国凭证合规率：有支出金额的记录中，附带小票/发票凭证图片的占比
     let nationalExpenseRecordCount = 0;
     let nationalReceiptRecordCount = 0;
@@ -229,6 +276,8 @@ exports.main = async (event, context) => {
       nationalTotalDiners += diners;
       nationalTotalIncome += income;
       nationalTotalExpense += expense;
+      nationalTotalVolunteers += parseFloat(log.volunteerCount) || 0;
+      nationalTotalVolunteerHours += parseFloat(log.volunteerHours) || 0;
       if (diners > 0 || dailyExpense > 0) nationalOpenDays++;
 
       // 🌟 凭证合规率统计：与 getRiskAlerts 同款判定口径（expenseAmount>0 且无
@@ -337,7 +386,13 @@ exports.main = async (event, context) => {
       nationalTotalIncome: nationalTotalIncome.toFixed(2),
       nationalTotalExpense: nationalTotalExpense.toFixed(2),
       nationalNetAccumulation: (nationalTotalIncome - nationalTotalExpense).toFixed(2),
-      nationalOpenDays
+      nationalOpenDays,
+      nationalTotalVolunteers,
+      nationalTotalVolunteerHours: Math.round(nationalTotalVolunteerHours * 10) / 10,
+      nationalRiceTotal: Math.round(nationalRiceTotal * 10) / 10,
+      nationalFlourTotal: Math.round(nationalFlourTotal * 10) / 10,
+      nationalOilTotal: Math.round(nationalOilTotal * 10) / 10,
+      nationalVegetableTotal: Math.round(nationalVegetableTotal * 10) / 10
     };
 
     // 🌟 超管专属高阶治理看板：核心指标 + 时间切片 + 离线门店预警，见需求2/3

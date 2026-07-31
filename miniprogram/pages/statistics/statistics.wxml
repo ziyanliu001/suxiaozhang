@@ -129,6 +129,38 @@
         </view>
       </view>
 
+      <!-- 🌟 全国志愿服务与物资消耗：非财务数据（志愿工时/人次、物资消耗斤数），
+           所有角色（含志工）都可见，不走 isManager 脱敏分支——与全国开餐天数
+           同一档"服务成果类"指标，不是运营/财务隐私 -->
+      <view class="hero-grid-4">
+        <view class="h-cell">
+          <text class="h-val">{{nationalData.nationalTotalVolunteers}} 人次</text>
+          <text class="h-lbl">全国义工到岗人次</text>
+        </view>
+        <view class="h-cell">
+          <text class="h-val">{{nationalData.nationalTotalVolunteerHours}} 小时</text>
+          <text class="h-lbl">全国义工服务工时</text>
+        </view>
+      </view>
+      <view class="hero-grid-4" wx:if="{{nationalData.nationalRiceTotal > 0 || nationalData.nationalFlourTotal > 0 || nationalData.nationalOilTotal > 0 || nationalData.nationalVegetableTotal > 0}}">
+        <view class="h-cell" wx:if="{{nationalData.nationalRiceTotal > 0}}">
+          <text class="h-val">{{nationalData.nationalRiceTotal}} 斤</text>
+          <text class="h-lbl">全国大米消耗</text>
+        </view>
+        <view class="h-cell" wx:if="{{nationalData.nationalFlourTotal > 0}}">
+          <text class="h-val">{{nationalData.nationalFlourTotal}} 斤</text>
+          <text class="h-lbl">全国面粉消耗</text>
+        </view>
+        <view class="h-cell" wx:if="{{nationalData.nationalOilTotal > 0}}">
+          <text class="h-val">{{nationalData.nationalOilTotal}} 斤</text>
+          <text class="h-lbl">全国食用油消耗</text>
+        </view>
+        <view class="h-cell" wx:if="{{nationalData.nationalVegetableTotal > 0}}">
+          <text class="h-val">{{nationalData.nationalVegetableTotal}} 斤</text>
+          <text class="h-lbl">全国蔬菜消耗</text>
+        </view>
+      </view>
+
       <!-- 志工荣誉版温馨提示 -->
       <view class="volunteer-warm-tip" wx:if="{{isVolunteerNationalView}}">
         <text class="tip-text">用一餐饭的温度，传递温暖与关爱。每一餐，都有您的爱心护持。</text>
