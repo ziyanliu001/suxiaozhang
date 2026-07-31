@@ -400,6 +400,15 @@ Page({
     nationalData: {} as any,
     nationalMatrixList: [] as any[],
     showNationalDashboard: false,
+    // 🐛 根因修复：wxml 容器此前用 nationalData.nationalTotalDiners !== undefined
+    // 作为"是否已加载好"的隐式判据——loadNationalDashboard() 云调用还在飞行中，
+    // 或者失败/报错时，这个字段永远是 undefined，容器就一直不渲染。而此时
+    // showNationalDashboard 已经是 true，下方 stats-content 又已经因为
+    // !showNationalDashboard 被隐藏，两边都不出内容，界面表现为"点了全国总览
+    // 但什么反应都没有"。改为容器本身只认 showNationalDashboard，内部用这两个
+    // 状态显式区分"正在加载"与"加载失败"，不再用数据字段反推加载状态
+    nationalDashboardLoading: false,
+    nationalDashboardError: '',
 
     // 🌟 超管专属高阶治理看板：核心指标/时间切片/离线门店预警/CSV 报表导出，见 getNationalDashboard
     // 云函数 superAdminInsights（服务端已按 role==='super_admin' 二次校验，非超管拿到的字段恒为 null）
@@ -942,7 +951,7 @@ Page({
     if (!this.data.canViewNationalDashboard) return;
     if (!this.data.isAllStoresMode) return;
 
-    this.setData({ showNationalDashboard: true });
+    this.setData({ showNationalDashboard: true, nationalDashboardLoading: true, nationalDashboardError: '' });
 
     try {
       // 🛡️ rangeType 仅超管高阶面板使用；云函数侧会再次校验调用者角色，非 super_admin
@@ -966,9 +975,21 @@ Page({
           // 非超管时云函数恒返回 null，这里原样落地，高阶面板 wx:if 会自动不渲染
           superAdminInsights: this.formatSuperAdminInsights(r.superAdminInsights, sanitizedSummary)
         });
+      } else {
+        // 🐛 根因修复：此前云函数返回 success:false（例如账号缺 tenantId、无权限）
+        // 时什么反馈都没有，容器又靠 nationalData 是否有值来决定渲不渲染，
+        // 用户只会看到点了"全部门店"后界面空白，不知道发生了什么
+        const errMsg = (r && r.error) || '全国总览加载失败，请重试';
+        this.setData({ nationalDashboardError: errMsg });
+        wx.showToast({ title: errMsg, icon: 'none', duration: 4000 });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[loadNationalDashboard] 加载失败:', err);
+      const errMsg = (err && err.errMsg) || '网络异常，全国总览加载失败';
+      this.setData({ nationalDashboardError: errMsg });
+      wx.showToast({ title: errMsg, icon: 'none', duration: 4000 });
+    } finally {
+      this.setData({ nationalDashboardLoading: false });
     }
   },
 

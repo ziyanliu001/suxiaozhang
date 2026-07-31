@@ -1820,6 +1820,23 @@ button.btn-primary-poster {
   padding: 0 24rpx 24rpx;
 }
 
+.national-dashboard-loading,
+.national-dashboard-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 40rpx;
+  text-align: center;
+  color: #969799;
+  font-size: 26rpx;
+}
+
+.national-dashboard-error .error-text {
+  color: #E53935;
+  margin-bottom: 24rpx;
+}
+
 /* 合规展示声明 */
 .compliance-disclaimer {
   padding: 24rpx 32rpx 48rpx;

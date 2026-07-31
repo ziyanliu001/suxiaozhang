@@ -42,6 +42,11 @@
         </view>
       </view>
 
+      <!-- 🐛 周/月/年/自定义这套 Tab 只对"单店历史统计"（getStatisticsData）有意义——
+           "全部门店"选中后走的是完全独立的全国大屏（自己的近7天/本月/本季度/
+           全部时间范围选择器，见下方 super-admin-insights-card），此前这套 Tab
+           在全国大屏模式下仍然常驻显示，切了也没有任何效果，纯属误导 -->
+      <block wx:if="{{!showNationalDashboard}}">
       <view class="period-tabs-segment">
         <view class="tab-item {{currentTab === 'week' ? 'active' : ''}}" bindtap="switchTab" data-tab="week">周报</view>
         <view class="tab-item {{currentTab === 'month' ? 'active' : ''}}" bindtap="switchTab" data-tab="month">月报</view>
@@ -83,11 +88,27 @@
         </picker>
       </view>
       <button class="btn-custom-query" wx:if="{{currentTab === 'custom'}}" bindtap="loadCustomStatistics">查询统计</button>
+      </block>
     </view>
   </view>
 
-  <!-- 全国全网数据大屏：超管/总部财务精细化管理视角，志工只读荣誉版 -->
-  <view class="national-dashboard-container" wx:if="{{showNationalDashboard && nationalData.nationalTotalDiners !== undefined}}">
+  <!-- 全国全网数据大屏：超管/总部财务精细化管理视角，志工只读荣誉版
+       🐛 根因修复：容器本身只认 showNationalDashboard——此前额外叠加
+       nationalData.nationalTotalDiners !== undefined 当作"已加载完成"的隐式判据，
+       loadNationalDashboard() 云调用还在飞行中或失败时这个字段永远是 undefined，
+       容器就一直不渲染；而下方单店 stats-content 又已经因 !showNationalDashboard
+       被隐藏，两边都不出内容，界面表现为"点了全部门店但什么反应都没有"。现在容器
+       优先渲染，内部用 nationalDashboardLoading/nationalDashboardError 显式区分
+       "正在加载"/"加载失败"两种过渡态，不再用数据字段反推加载状态 -->
+  <view class="national-dashboard-container" wx:if="{{showNationalDashboard}}">
+    <view class="national-dashboard-loading" wx:if="{{nationalDashboardLoading}}">
+      <text>全国总览加载中...</text>
+    </view>
+    <view class="national-dashboard-error" wx:elif="{{nationalDashboardError}}">
+      <text class="error-text">{{nationalDashboardError}}</text>
+      <button class="btn-empty-action" bindtap="loadNationalDashboard">重试</button>
+    </view>
+    <block wx:elif="{{nationalData.nationalTotalDiners !== undefined}}">
     <view class="national-hero-card">
       <view class="hero-header">
         <text class="hero-title">{{dashboardTitle}}<text class="hero-role-tag" wx:if="{{dashboardRoleTag}}">{{dashboardRoleTag}}</text></text>
@@ -288,6 +309,7 @@
     <button class="btn-primary-poster national-poster-btn" bindtap="onGenerateNationalPoster" wx:if="{{isAdmin}}">
       🖼️ 生成全国公示海报
     </button>
+    </block>
   </view>
 
   <!-- 🌟 超管专属：全国运营/财务报表生成弹窗（结构对齐本页既有 .patch-modal-mask 弹窗写法） -->
