@@ -699,15 +699,29 @@ Page({
         ? (effectiveStoreName || (getSelectedStore().storeName) || '')
         : effectiveStoreName;
 
+      // 🐛 根因修复：超管账号在角色缓存/服务端/全局态/本地存储任何来源都解析不出
+      // 一个真实门店时——典型场景是从未在任何页面手动选过具体门店，或者上次选的
+      // 就是"全国总览"（resolveEffectiveStoreIdentity 已把这类虚拟名过滤成空）——
+      // finalShopName 会是空字符串。此前不管这种情况，无条件 isAllStoresMode:false，
+      // 后续单店查询拿着一个空字符串当门店名去查，只会查出"什么都没有"的假空态，
+      // 而不是真正有意义的"全国总览"。只在这种"压根没有可展示的具体门店"时才
+      // 回退到全国总览，不会重新引入此前"无条件默认全国大屏"的旧 Bug——那个 Bug
+      // 是不看实际选择、永远默认全国；这里只在无从选择时才兜底
+      const shouldDefaultToNational = isSuperAdmin && !finalShopName;
+
       this.setData({
-        shopName: finalShopName,
-        isAllStoresMode: false
+        shopName: shouldDefaultToNational ? '全部门店' : finalShopName,
+        isAllStoresMode: shouldDefaultToNational
       });
       this.fetchStoreProfile();
       if (isPatriarch) {
         // 🆕 家长专属：资源储备/资金物资兜底/续航预警——与店长/财务共用的
         // 单店营运卡片是两套不同的数据源，单独加载
         this.loadPatriarchResourceStats();
+      }
+      if (shouldDefaultToNational) {
+        this.setData({ showNationalDashboard: true });
+        this.loadNationalDashboard();
       }
     }
   },
@@ -948,6 +962,7 @@ Page({
   },
 
   async loadNationalDashboard() {
+    console.log('[NationalDashboard] 开始拉取全国大屏数据...');
     if (!this.data.canViewNationalDashboard) return;
     if (!this.data.isAllStoresMode) return;
 
@@ -1485,6 +1500,12 @@ Page({
   },
 
   calculateStats() {
+    // 🐛 根因修复：reloadShopListAndStats()（onLoad/onShow 都会触发）此前无条件
+    // 调用本方法，哪怕当前正展示的是全国大屏（showNationalDashboard=true，走
+    // getNationalDashboard 单独的数据源）——单店周/月/年报的 loadStatistics/
+    // fetchStatistics(getStatisticsData/getReports) 结果根本不会被渲染（stats-content
+    // 整块被 wx:if="{{!showNationalDashboard}}" 隐藏），纯属浪费一次云函数调用
+    if (this.data.showNationalDashboard) return;
     switch (this.data.currentTab) {
       case 'week':
         this.loadWeekStatistics();
