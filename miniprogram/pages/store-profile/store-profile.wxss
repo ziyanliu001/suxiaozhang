@@ -393,9 +393,15 @@
 
 .sp-archive-empty-hint {
   font-size: 24rpx;
+  color: #ADB5BD;
+  padding: 4rpx 0;
+}
+
+/* 仅 canManage 为 true 时套用——视觉上标记"暂未上传"占位可点击直达上传弹窗，
+   只读角色（义工/财务/家属）看到的是不带下划线的纯灰提示，不暗示可交互 */
+.sp-archive-empty-hint.clickable {
   color: #FF8C42;
   text-decoration: underline;
-  padding: 4rpx 0;
 }
 
 .sp-archive-edit-card .sp-edit-item {

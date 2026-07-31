@@ -98,36 +98,40 @@
       </view>
     </view>
 
-    <!-- 🏅 门店资质与实景公示：门头照 / 民政备案复印件 / 食品安全承诺，点击大图全屏预览；
-         编辑通过独立的 showQualificationModal 快捷弹窗（onOpenQualificationModal 内部会
-         再校验一次 canManage，"暂未上传"占位对所有角色可见，点击时才拦权限） -->
-    <view class="sp-section-title sp-profile-title-row" wx:if="{{!editing && (storefrontPhotos.length > 0 || civilAffairsPhotos.length > 0 || foodSafetyPledgePhotos.length > 0 || canManage)}}">
+    <!-- 🏅 门店资质与实景公示：门头照 / 民政备案复印件 / 食品安全承诺。卡片本身对所有角色
+         （义工/财务/家属/店长等）常驻可见，与是否已上传照片、是否有管理权限无关——只有
+         右上角【✏️ 修改】按钮与"暂未上传"占位的可点击态才受 canManage 约束。已上传的图片
+         点击大图预览 (onPreviewProfilePhoto) 对所有角色开放 -->
+    <view class="sp-section-title sp-profile-title-row" wx:if="{{!editing}}">
       <text class="sp-section-icon">🏅</text>
       <text class="sp-section-txt">门店资质与实景公示</text>
       <text class="sp-btn-edit-profile-count" wx:if="{{canManage}}" bindtap="onOpenQualificationModal">✏️ 修改</text>
     </view>
 
-    <view class="sp-archive-card" wx:if="{{!editing && (storefrontPhotos.length > 0 || civilAffairsPhotos.length > 0 || foodSafetyPledgePhotos.length > 0 || canManage)}}">
+    <view class="sp-archive-card" wx:if="{{!editing}}">
       <view class="sp-archive-row vertical">
         <text class="sp-archive-lbl">门头照</text>
         <view class="sp-photo-grid" wx:if="{{storefrontPhotos.length > 0}}">
           <image class="sp-photo-thumb" wx:for="{{storefrontPhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storefrontPhotos}}" />
         </view>
-        <text class="sp-archive-empty-hint" wx:else bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
       </view>
       <view class="sp-archive-row vertical">
         <text class="sp-archive-lbl">民政备案复印件</text>
         <view class="sp-photo-grid" wx:if="{{civilAffairsPhotos.length > 0}}">
           <image class="sp-photo-thumb" wx:for="{{civilAffairsPhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" />
         </view>
-        <text class="sp-archive-empty-hint" wx:else bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
       </view>
       <view class="sp-archive-row vertical">
         <text class="sp-archive-lbl">食品安全承诺</text>
         <view class="sp-photo-grid" wx:if="{{foodSafetyPledgePhotos.length > 0}}">
           <image class="sp-photo-thumb" wx:for="{{foodSafetyPledgePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" />
         </view>
-        <text class="sp-archive-empty-hint" wx:else bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
       </view>
     </view>
 
