@@ -1537,6 +1537,15 @@ Page({
         });
 
         allRecords = allResult.success && allResult.data ? allResult.data : [];
+        // 🐛 根因排查配套：allResult.error 只在真正的云端报错（非离线降级）时才有值
+        // （见 dataService.ts getReports），例如超管账号缺 tenantId 导致"全国总览"
+        // 查询被拒绝——这种情况下面会呈现的"暂无统计数据"空状态具有强烈误导性
+        // （看起来像是真的没数据），必须把真实原因喊出来，而不是让用户以为门店
+        // 真的没开餐
+        if (allResult.error) {
+          wx.showToast({ title: allResult.error, icon: 'none', duration: 4000 });
+          console.error('[Statistics][loadStatistics] getReports 返回明确错误（非静默降级）:', allResult.error);
+        }
       } catch (cloudError) {
         console.warn('[Statistics] 云端查询失败:', cloudError);
       }

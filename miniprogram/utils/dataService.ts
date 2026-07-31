@@ -430,7 +430,7 @@ export const DataService = {
     // 数据在归档（approvalStatus 至少达到 APPROVED）前不该计入统计，才显式传
     // true——与 cloudfunctions/getSunshineLedger 的 approvalStatus 过滤同一条口径
     approvedOnly?: boolean;
-  } = {}): Promise<{ success: boolean; data: any[]; source: 'cloud' | 'local' }> {
+  } = {}): Promise<{ success: boolean; data: any[]; source: 'cloud' | 'local'; error?: string }> {
     const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode, approvedOnly = false } = options;
     const isApproved = (r: any) => r && (r.approvalStatus === 'APPROVED' || r.approvalStatus === 'AUDITED_LOCKED');
 
@@ -548,7 +548,14 @@ export const DataService = {
       return {
         success: true,
         data: localReports.slice(0, limit),
-        source: 'local'
+        source: 'local',
+        // 🐛 根因排查：云端调用失败时静默退化为本地缓存，此前这个原始错误信息
+        // 彻底丢失——调用方（如 statistics.ts 全国总览）拿到的永远是
+        // success:true/data:[]，跟"这个机构真的没有数据"长得一模一样，没法
+        // 区分"真空"与"权限/账号数据缺陷（如超管账号缺 tenantId）导致的查询失败"。
+        // 只在真是云端报错（非离线降级）时才带上，避免把"设备没网"这种正常
+        // 场景也标红
+        error: isCloudDown ? undefined : (error && error.message)
       };
     }
   },

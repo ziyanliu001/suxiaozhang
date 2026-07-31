@@ -137,12 +137,43 @@ exports.main = async (event, context) => {
       andConditions.push({ shopName: shopName });
     }
 
-    const recordRes = await db.collection('report_logs')
-      .where(_.and(andConditions))
-      .limit(1000)
-      .get();
+    // 🌾 核心物资消耗总量：大米/面粉/食用油/蔬菜累计斤数，来自 material_logs——
+    // 义工登记的物资消耗经店长/家长/超管采纳后才会落到这张表（见
+    // manageVolunteerSubmission writeMaterialLog），与 report_logs 完全独立，
+    // 复用同一套 tenantId/门店范围收敛口径（material_logs 用 storeId/storeName
+    // 存店，没有 shopName 字段，与 report_logs 的 shopName 口径不同，分开拼条件）
+    const materialConditions = [
+      { dateString: _.gte(startDateStr).and(_.lte(endDateStr)) },
+      _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])
+    ];
+    if (!isTenantWideAllowed) {
+      materialConditions.push(userStoreId ? { storeId: userStoreId } : { storeName: userStoreName });
+    } else if (shopName && shopName !== '全部门店') {
+      materialConditions.push({ storeName: shopName });
+    }
+
+    // report_logs 与 material_logs 是两张互相独立的表，查询条件互不依赖，
+    // 并发发起而非顺序 await，减少一次往返延迟
+    const [recordRes, materialRes] = await Promise.all([
+      db.collection('report_logs').where(_.and(andConditions)).limit(1000).get(),
+      db.collection('material_logs').where(_.and(materialConditions)).limit(1000).get()
+        // material_logs 集合可能尚未创建（该机构还没有任何一条物资消耗提交被
+        // 采纳过）——这里单独兜底成空结果，不能让它拖垮上面的 report_logs 查询
+        .catch(() => ({ data: [] }))
+    ]);
 
     const records = recordRes.data || [];
+
+    let riceTotal = 0;
+    let flourTotal = 0;
+    let oilTotal = 0;
+    let vegetableTotal = 0;
+    (materialRes.data || []).forEach((m) => {
+      riceTotal += parseFloat(m.riceCount) || 0;
+      flourTotal += parseFloat(m.flourCount) || 0;
+      oilTotal += parseFloat(m.oilCount) || 0;
+      vegetableTotal += parseFloat(m.vegetableCount) || 0;
+    });
 
     // 3. 核心指标统计累加
     let totalIncome = 0;
@@ -218,40 +249,6 @@ exports.main = async (event, context) => {
         materialSummary.push(r.materials.trim());
       }
     });
-
-    // 3.5 核心物资消耗总量：大米/面粉/食用油/蔬菜累计斤数，来自 material_logs——
-    // 义工登记的物资消耗经店长/家长/超管采纳后才会落到这张表（见
-    // manageVolunteerSubmission writeMaterialLog），与 report_logs 完全独立，
-    // 复用同一套 tenantId/门店范围收敛口径（material_logs 用 storeId/storeName
-    // 存店，没有 shopName 字段，与 report_logs 的 shopName 口径不同，分开拼条件）
-    let riceTotal = 0;
-    let flourTotal = 0;
-    let oilTotal = 0;
-    let vegetableTotal = 0;
-    try {
-      const materialConditions = [
-        { dateString: _.gte(startDateStr).and(_.lte(endDateStr)) },
-        _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])
-      ];
-      if (!isTenantWideAllowed) {
-        materialConditions.push(userStoreId ? { storeId: userStoreId } : { storeName: userStoreName });
-      } else if (shopName && shopName !== '全部门店') {
-        materialConditions.push({ storeName: shopName });
-      }
-      const materialRes = await db.collection('material_logs')
-        .where(_.and(materialConditions))
-        .limit(1000)
-        .get();
-      (materialRes.data || []).forEach((m) => {
-        riceTotal += parseFloat(m.riceCount) || 0;
-        flourTotal += parseFloat(m.flourCount) || 0;
-        oilTotal += parseFloat(m.oilCount) || 0;
-        vegetableTotal += parseFloat(m.vegetableCount) || 0;
-      });
-    } catch (err) {
-      // material_logs 集合可能尚未创建（该机构还没有任何一条物资消耗提交被采纳过），
-      // 视为总量 0，不影响主统计
-    }
 
     // 4. 计算单餐平均食材成本
     const costPerMeal = totalDiningPeople > 0

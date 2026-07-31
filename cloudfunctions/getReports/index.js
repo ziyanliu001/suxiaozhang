@@ -77,6 +77,16 @@ exports.main = async (event, context) => {
     const wantsAllStores = !storeId || storeId === 'national_overview' || storeId === 'ALL_STORES' || storeId === 'all_stores';
     if (!wantsAllStores) {
       whereConditions.storeId = storeId;
+    } else if (TENANT_WIDE_ROLES.includes(userRole) && !tenantId) {
+      // 🐛 根因修复："全国总览"查询全部为空的一个真实成因：本该有权跨店查看的
+      // super_admin，若自己的 user_roles 记录缺失 tenantId（账号数据不完整，
+      // 常见于早期未走完整入驻流程的历史账号），isTenantWideAllowed 会静默
+      // 判 false，直接掉进下面 !isTenantWideAllowed 分支收敛成
+      // { _openid: OPENID }——超管账号自己几乎从不提交餐报，这条查询条件
+      // 几乎总是精确命中 0 条记录，页面表现为"全国总览没有任何数据"却没有
+      // 任何报错信息，容易被误诊为查询/聚合逻辑坏了。这里改为显式报错，指向
+      // 真正的根因（账号缺少 tenantId），而不是放宽 tenantId 隔离本身去"兼容"
+      return { success: false, error: '您的管理员账号缺少所属机构（tenantId）信息，无法查看全国总览，请联系技术支持为该账号补全归属机构后重试' };
     } else if (!isTenantWideAllowed) {
       // 🛡️ 非超管请求"全部门店"一律强制收敛为本人所在门店，禁止跨店查看他店流水
       if (userStoreId) {
