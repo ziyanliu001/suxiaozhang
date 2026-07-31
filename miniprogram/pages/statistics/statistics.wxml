@@ -29,7 +29,7 @@
              的初始值就是 false，不会有任何闪烁）一律走下面纯文字展示的锁定态，
              不渲染任何可点击切换门店的 picker，避免出现能选到其他门店/全部门店
              的可乘之机 -->
-        <picker wx:if="{{canViewAllStoresDropdown && allStoresList.length > 0}}" bindchange="onSuperAdminSelectStore" range="{{allStoresList}}" range-key="storeName">
+        <picker wx:if="{{canViewAllStoresDropdown && storePickerArray.length > 0}}" mode="selector" range="{{storePickerArray}}" range-key="shopName" bindchange="onSuperAdminSelectStore">
           <view class="store-picker-pill">
             <text class="name">{{currentUserStoreName || shopName}}</text>
             <text class="arrow">▼</text>

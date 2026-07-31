@@ -396,7 +396,12 @@ Page({
     currentUserStoreName: '',
     currentUserStoreId: '',
     roleLabelMap: ROLE_LABELS,
-    allStoresList: [] as any[],
+    // 🆕 超管专属门店切换 Picker 数据源：第一项固定为"🌐 全国总览"虚拟聚合项
+    // （storeId 用 'ALL' 哨兵值标记，仅供 onSuperAdminSelectStore 内部判断选中项
+    // 是否为聚合视图用，不直接写入 this.data.shopName——后者仍需保持 '全部门店'
+    // 这个后端 getStatisticsData 云函数认识的字面量，见该函数 wantsAllStores 判断），
+    // 后续项为当前租户下的真实门店
+    storePickerArray: [] as any[],
     nationalData: {} as any,
     nationalMatrixList: [] as any[],
     showNationalDashboard: false,
@@ -935,8 +940,8 @@ Page({
   },
 
   // 🏠 门店人员与服务人群画像：仅单店视角下展示，切到全部门店/尚未选定门店时清空。
-  // 传 storeName 而非 storeId——本页面从未维护过任何门店的 storeId（allStoresList
-  // 只有 storeName/recordCount，见 loadShopList），manageStoreProfile 服务端会按角色
+  // 传 storeName 而非 storeId——本页面从未维护过任何真实门店的 storeId（storePickerArray
+  // 里普通门店项的 storeId 恒为空串，见 loadShopList），manageStoreProfile 服务端会按角色
   // 分别处理：店长/财务自动按自身绑定门店解析（忽略传入的 storeName），
   // super_admin/hq_finance/regional_finance 才会真正用 storeName 反查门店
   async fetchStoreProfile() {
@@ -1236,9 +1241,10 @@ Page({
             shopList.unshift('全部门店');
           }
 
-          // 同时构建 allStoresList（用于超级管理员 picker），非超管不含"全部门店"
-          const allStoresList = (isSuperAdmin ? [{ storeName: '全部门店' }] : []).concat(
-            shopNames.map(name => ({ storeName: name, recordCount: shopCountMap.get(name) || 0 }))
+          // 同时构建 storePickerArray（用于超级管理员门店切换 picker），非超管不含
+          // "🌐 全国总览"聚合项
+          const storePickerArray = (isSuperAdmin ? [{ shopName: '🌐 全国总览', storeId: 'ALL' }] : []).concat(
+            shopNames.map(name => ({ shopName: name, storeId: '', recordCount: shopCountMap.get(name) || 0 }))
           );
 
           const currentShopName = this.data.shopName;
@@ -1267,7 +1273,7 @@ Page({
             selectedShopIndex: selectedIndex,
             shopName: (isSuperAdmin && selectedIndex === 0) ? '全部门店' : shopList[selectedIndex].replace(/\s*\(\d+条记录\)$/, ''),
             showAllStoresOption: isSuperAdmin && shopList.length > 1,
-            allStoresList
+            storePickerArray
           });
         }
       }
@@ -1283,30 +1289,37 @@ Page({
 
   onSuperAdminSelectStore(e: any) {
     const index = parseInt(e.detail.value);
-    const allStoresList = this.data.allStoresList;
-    if (!allStoresList || allStoresList.length === 0) return;
+    const storePickerArray = this.data.storePickerArray;
+    if (!storePickerArray || storePickerArray.length === 0) return;
 
-    const selected = allStoresList[index];
+    const selected = storePickerArray[index];
     if (!selected) return;
 
-    const isAll = !selected.storeName || selected.storeName === '全部门店';
+    // 🛡️ 'ALL' 只是 storePickerArray 条目自带的哨兵值，用于判断本次选中的是否为
+    // "🌐 全国总览"聚合项——this.data.shopName 一旦真正切到聚合视图，仍必须落回
+    // '全部门店' 这个字面量（getStatisticsData 云函数的 wantsAllStores 判断认的
+    // 就是这个值，见 fetchStatistics 的调用参数），不能直接写成 'ALL'
+    const isAll = selected.storeId === 'ALL';
 
     this.setData({
-      shopName: isAll ? '全部门店' : selected.storeName,
+      shopName: isAll ? '全部门店' : selected.shopName,
+      currentUserStoreName: isAll ? '🌐 全国总览' : selected.shopName,
+      currentUserStoreId: isAll ? '' : (selected.storeId || ''),
       isAllStoresMode: isAll,
       hasOtherStoreData: false,
       statistics: null,
-      showNationalDashboard: isAll && this.data.canViewNationalDashboard
+      showNationalDashboard: isAll
     });
 
-    if (!isAll && selected.storeName) {
-      setSelectedStore({ storeId: selected.storeId || '', storeName: selected.storeName });
+    if (!isAll && selected.shopName) {
+      setSelectedStore({ storeId: selected.storeId || '', storeName: selected.shopName });
     }
 
-    if (isAll && this.data.canViewNationalDashboard) {
+    if (isAll) {
       this.loadNationalDashboard();
     } else {
       this.calculateStats();
+      this.fetchStatistics();
     }
     this.fetchStoreProfile();
   },
