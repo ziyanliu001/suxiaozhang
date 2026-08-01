@@ -40,13 +40,20 @@
 // - reject：驳回一条投稿，必须携带 rejectReason，status 置为 'rejected'。
 // - deleteMine：义工自己删除一条已被驳回（不改了不重提了）或还在待审核中
 //   （提交手滑了，店长还没处理，先撤回）的记录。服务端强制校验"必须是本人
-//   提交 + 当前状态仍是 rejected/pending"，避免误删/越权删除别人的记录，
-//   或删掉已经被店长采纳入库的 approved 记录。
-// - revokeMine：撤回一条自己提交、已经采纳入库（approved）的记录——把它当初
-//   合并进 report_logs（type='menu'）/ 追加进 material_logs（type='material'）
-//   的贡献反向冲减掉，再删除这条记录本身。menu 类型只有在 report_logs 当天
-//   的早/午/晚/合计人数仍与这条记录写入时完全一致（没被别的记录后续覆盖）
-//   才会执行，否则拒绝撤回并报错，避免冲掉别人刚采纳的数据（见 revertMenuFromReportLogs）。
+//   提交 + 当前状态仍是 rejected/pending"，避免误删/越权删除别人的记录。
+//   🛡️ status === 'approved' 的记录对任何角色（含超级管理员）一律拒绝走这个
+//   动作删除——它已合并进 report_logs/material_logs，直接 remove() 不会冲减
+//   已写入的账本贡献，必须改走 revokeMine。
+// - revokeMine：撤回一条已经采纳入库（approved）的记录——把它当初合并进
+//   report_logs（type='menu'）/ 追加进 material_logs（type='material'）的贡献
+//   反向冲减掉，再删除这条记录本身，全程记入 report_audit_logs 审计日志。
+//   🛡️ 三道风控闸门：① 仅超级管理员可执行，普通提交人（含店长/家长本人）一律
+//   拒绝，提示联系店长线下发起冲销；② 目标日期若已被财务稽核封账
+//   （isLocked/AUDITED_LOCKED）强制拦截，必须先由财务解封；③ menu 类型只有在
+//   report_logs 当天的早/午/晚/合计人数仍与这条记录写入时完全一致（没被别的
+//   记录后续覆盖）才会执行，否则拒绝撤回并报错，避免冲掉别人刚采纳的数据
+//   （见 revertMenuFromReportLogs）。整个撤回（账本冲减 + 删除 + 审计日志）
+//   在同一个数据库事务内原子提交。
 // - statsSummary：全店餐饮/物资统计——不新建 store_daily_stats 汇总表，即时查询
 //   volunteer_submissions（今日已采纳的分餐人数）+ material_logs（本月已入库的
 //   物资消耗），店长/家长/超管/义工均可查看本店范围（超管需传 storeId）。
@@ -312,19 +319,32 @@ async function mergeMenuIntoReportLogs(doc) {
   return { merged: true };
 }
 
+// 撤回已采纳记录前的封账拦截：与 updateReportLog/deleteMealReport 同一套
+// isLocked/AUDITED_LOCKED 判定口径——一旦门店当天账本已被财务稽核封账，
+// 任何人（含超级管理员）都不能再级联反改，必须先由财务走解封流程
+async function findDateReportLog(storeId, dateString) {
+  if (!storeId || !dateString) return null;
+  const res = await db.collection('report_logs')
+    .where({ storeId, dateString })
+    .limit(1)
+    .get()
+    .catch(() => null);
+  return (res && res.data && res.data[0]) || null;
+}
+
+function isDateLocked(reportLogDoc) {
+  return !!(reportLogDoc && (reportLogDoc.isLocked || reportLogDoc.approvalStatus === 'AUDITED_LOCKED'));
+}
+
 // mergeMenuIntoReportLogs 的镜像操作：撤回一条已采纳的菜单登记时，把它当初
 // 写进 report_logs 的贡献冲减回去。🛡️ 早/午/晚/合计人数是"覆盖式合并"（每次
 // 采纳都用最新数字直接覆盖，不是累加），所以只有当 report_logs 当天这几个字段
 // 现在的值仍然和这条记录当初写入的值完全一致时，才能安全清零——如果期间又有
 // 别的投稿被采纳、把这几个字段覆盖成了别人的数字，贸然清零会把别人刚采纳的数据
-// 一起冲掉，这种情况下拒绝撤回，返回明确原因，让人工去 report_logs 核对
-async function revertMenuFromReportLogs(doc) {
-  const existingRes = await db.collection('report_logs')
-    .where({ storeId: doc.storeId, dateString: doc.dateString })
-    .limit(1)
-    .get();
-  const existing = existingRes.data && existingRes.data[0];
-
+// 一起冲掉，这种情况下拒绝撤回，返回明确原因，让人工去 report_logs 核对。
+// client 参数：传入事务对象时在事务内更新（handleRevokeMine 用），保证与
+// volunteer_submissions 删除、审计日志写入同一事务原子生效
+async function revertMenuFromReportLogs(doc, existing, client) {
   if (!existing) {
     // 当天没有正式报告可合并，采纳时就没写进 report_logs，本来就没有账本可冲减
     return { reverted: true };
@@ -355,7 +375,7 @@ async function revertMenuFromReportLogs(doc) {
     }
   }
 
-  await db.collection('report_logs').doc(existing._id).update({ data: updateData });
+  await client.collection('report_logs').doc(existing._id).update({ data: updateData });
   return { reverted: true };
 }
 
@@ -463,7 +483,11 @@ async function handleDeleteMine(event, OPENID) {
   if (!doc) return { success: false, error: '该条记录不存在或已被删除' };
   if (doc._openid !== OPENID) return { success: false, error: '无权限：只能删除自己提交的记录' };
   if (doc.status !== 'rejected' && doc.status !== 'pending') {
-    return { success: false, error: '只能删除已驳回或待审核的记录' };
+    // 🛡️ 已采纳入库（approved）的记录一律不允许经此动作删除——它已经合并进
+    // report_logs/material_logs，直接 remove() 只会删掉溯源记录本身，不会冲减
+    // 已写入的账本贡献，等于留下一条"数据对不上"的幽灵账目。哪怕是超级管理员
+    // 也必须改走 revokeMine（级联反向冲减 + 审计留痕），这里对所有角色一视同仁拦截
+    return { success: false, error: '该记录已采纳入库，无法通过此操作删除，如需撤回请使用"撤回记录"', errCode: 'ERR_FORBIDDEN' };
   }
 
   await db.collection(COLLECTION).doc(id).remove();
@@ -473,33 +497,88 @@ async function handleDeleteMine(event, OPENID) {
 // 撤回一条已采纳入库的记录：与 handleDeleteMine 分开单独成一个动作，因为这里
 // 除了删记录本身，还要先把它当初写进 report_logs/material_logs 的贡献反向
 // 冲减掉——风险和校验逻辑都比"删一条还没生效的 pending/rejected 草稿"重得多，
-// 混在一个函数里会让两种截然不同的操作互相牵连，拆开更安全也更好读
+// 混在一个函数里会让两种截然不同的操作互相牵连，拆开更安全也更好读。
+// 🛡️ 风控三道闸门（务必按顺序保留，不要因为"看起来重复"而合并/删减）：
+// 1. 权限闸门：只有超级管理员能执行——已采纳入库的记录级联影响门店账本/库存
+//    统计，普通提交人（含店长/家长本人）一律拒绝，提示联系店长走线下冲销；
+// 2. 封账闸门：目标日期若已被财务稽核封账（isLocked/AUDITED_LOCKED），即使是
+//    超级管理员也强制拦截，必须先由财务解封；
+// 3. 一致性闸门：见 revertMenuFromReportLogs 内 stillMatches 校验，账本当天
+//    字段已被其他记录覆盖时拒绝撤回，避免冲掉别人刚采纳的数据。
+// 撤回动作本身（账本冲减 + 溯源记录删除 + 审计日志）放在同一个事务里提交，
+// 与 deleteMealReport 的"删除与审计日志原子生效"同一套模式，不存在撤回成功
+// 但审计留痕丢失的静默场景
 async function handleRevokeMine(event, OPENID) {
   if (!OPENID) return { success: false, error: '未登录，无法操作' };
 
   const id = event.id;
   if (!id) return { success: false, error: '缺少 id 参数' };
 
+  const caller = await resolveCaller(OPENID);
   const docRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
   const doc = docRes && docRes.data;
   if (!doc) return { success: false, error: '该条记录不存在或已被删除' };
-  if (doc._openid !== OPENID) return { success: false, error: '无权限：只能撤回自己提交的记录' };
   if (doc.status !== 'approved') return { success: false, error: '只能撤回已采纳入库的记录' };
 
-  if (doc.type === 'menu') {
-    const revertResult = await revertMenuFromReportLogs(doc);
-    if (!revertResult.reverted) {
-      return { success: false, error: revertResult.error || '撤回失败，请稍后重试' };
-    }
-  } else {
-    const logRes = await db.collection('material_logs').where({ sourceSubmissionId: id }).limit(1).get().catch(() => null);
-    const logDoc = logRes && logRes.data && logRes.data[0];
-    if (logDoc) {
-      await db.collection('material_logs').doc(logDoc._id).remove();
-    }
+  if (!caller || caller.role !== 'super_admin') {
+    return { success: false, error: '该记录已采纳入库，如需修改请联系店长发起冲销', errCode: 'ERR_FORBIDDEN' };
+  }
+  // 🛡️ 有意不再校验 doc._openid === OPENID：一旦门槛收紧到"仅超级管理员"，
+  // 是否恰好是本人提交已不重要——前端入口仍只在"我的提交与数据"（自己的 myList）
+  // 里出现，天然自限范围，这里放开纯粹是避免"超管想代自己名下另一个身份撤回"
+  // 这种边缘场景被误伤，角色闸门本身已经是唯一且充分的权限边界
+
+  const existingReportLog = await findDateReportLog(doc.storeId, doc.dateString);
+  if (isDateLocked(existingReportLog)) {
+    return { success: false, error: '该历史周期已封账，禁止撤回已采纳数据', errCode: 'ERR_LOCKED' };
   }
 
-  await db.collection(COLLECTION).doc(id).remove();
+  let materialLogDoc = null;
+  if (doc.type === 'material') {
+    const logRes = await db.collection('material_logs').where({ sourceSubmissionId: id }).limit(1).get().catch(() => null);
+    materialLogDoc = (logRes && logRes.data && logRes.data[0]) || null;
+  }
+
+  const transaction = await db.startTransaction();
+  try {
+    if (doc.type === 'menu') {
+      const revertResult = await revertMenuFromReportLogs(doc, existingReportLog, transaction);
+      if (!revertResult.reverted) {
+        await transaction.rollback();
+        return { success: false, error: revertResult.error || '撤回失败，请稍后重试' };
+      }
+    } else if (materialLogDoc) {
+      await transaction.collection('material_logs').doc(materialLogDoc._id).remove();
+    }
+
+    const removeResult = await transaction.collection(COLLECTION).doc(id).remove();
+    if (removeResult.stats.removed === 0) {
+      await transaction.rollback();
+      return { success: false, error: '记录不存在或已被处理' };
+    }
+
+    // 🛡️ 审计留痕：与 deleteMealReport/manageReportApproval 同一套 report_audit_logs
+    // 规范字段，old_value 存撤回前的完整原始记录，供事后核查冲减是否准确
+    await transaction.collection('report_audit_logs').add({
+      data: {
+        operator_id: OPENID,
+        operator_role: caller.role,
+        operate_time: db.serverDate(),
+        action: 'revokeApprovedVolunteerSubmission',
+        target_collection: COLLECTION,
+        target_id: id,
+        target_date: doc.dateString,
+        target_store: doc.storeName,
+        old_value: doc
+      }
+    });
+
+    await transaction.commit();
+  } catch (txErr) {
+    await transaction.rollback();
+    throw txErr;
+  }
+
   return { success: true };
 }
 

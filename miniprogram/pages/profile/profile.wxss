@@ -2255,6 +2255,32 @@
   opacity: 0.7;
 }
 
+/* 🔒 申请冲销：已采纳入库记录对非超管的替代按钮，视觉上刻意做成灰色弱化的
+   "非直接可执行"操作（与 .cancel-pending-btn 同款克制配色），点击只弹出引导
+   联系店长的说明，不真正触发任何撤回/删除动作 */
+.request-writeoff-btn {
+  display: block;
+  flex: 1;
+  height: 72rpx;
+  line-height: 68rpx;
+  margin-top: 0;
+  padding: 0;
+  background: #F1F3F5;
+  color: #868E96;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 36rpx;
+  border: 2rpx solid #DEE2E6;
+}
+
+.request-writeoff-btn::after {
+  border: none;
+}
+
+.request-writeoff-btn:active {
+  opacity: 0.7;
+}
+
 /* 📊 门店餐饮与物资统计：三段 pd-health-grid 堆叠起来比其他 warm-story-modal-*
    用途（纯文案说明）更高，加个滚动容器兜底，避免小屏幕溢出弹窗卡片 */
 .store-stats-modal-card {

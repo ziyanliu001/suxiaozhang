@@ -1477,14 +1477,30 @@ Page({
     }
   },
 
+  // 🔒 申请冲销：已采纳入库记录对非超管的替代入口——不触发任何撤回/删除动作，
+  // 只弹出说明引导线下联系店长处理，与 onRevokeApprovedSubmission（仅超管可见）
+  // 彻底分开，避免普通提交人误触发级联扣减统计数据
+  onRequestWriteOff() {
+    wx.showModal({
+      title: '暂不支持自助撤回',
+      content: '该记录已采纳入库，如需修改请联系店长发起冲销',
+      showCancel: false,
+      confirmText: '知道了'
+    });
+  },
+
   // 🔄 撤回已采纳入库的记录：与 onDeleteMyVolunteerSubmission 分开单独成一个
   // 处理函数——这条记录已经把数据合并进了门店当天的 report_logs/material_logs，
   // 撤回不只是删记录本身，还要先把当初写入的贡献反向冲减掉，风险和确认文案都
-  // 与"删一条还没生效的 pending/rejected 草稿"不同。服务端 revokeMine 会再校验
-  // 一次"必须是本人提交 + 状态仍是 approved"，如果账本在此期间已被别的记录覆盖，
-  // 会拒绝撤回并原样报错，避免冲掉别人刚采纳的数据
+  // 与"删一条还没生效的 pending/rejected 草稿"不同。
+  // 🛡️ 仅超级管理员可见/可执行（见 wxml wx:if="{{isRealSuperAdmin}}"，此处再做一次
+  // 二次校验兜底）：已采纳入库的记录级联影响门店账本/库存统计，普通提交人一律
+  // 走 onRequestWriteOff 的"联系店长"提示，不再允许自助撤回。服务端 revokeMine
+  // 同步校验一次"必须是超级管理员 + 状态仍是 approved + 所在日期未封账"，如果
+  // 账本在此期间已被别的记录覆盖或已被财务封账，会拒绝撤回并原样报错
   async onRevokeApprovedSubmission(e: any) {
     if (!isCloudAvailable()) return;
+    if (!this.data.isRealSuperAdmin) return;
     const index = e.currentTarget.dataset.index;
     const item = this.data.myVolunteerSubmissionsList[index];
     if (!item || item.status !== 'approved') return;
@@ -1492,8 +1508,8 @@ Page({
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
         title: '撤回记录',
-        content: '撤回后将同步冲减扣除已更新的门店账本与库存，确定撤回吗？',
-        confirmText: '撤回',
+        content: '该记录已计入库房/账本，撤回将级联扣减统计数据，确定撤回吗？',
+        confirmText: '确定撤回',
         confirmColor: '#C0392B',
         success: (res) => resolve(!!res.confirm),
         fail: () => resolve(false)
@@ -1512,6 +1528,9 @@ Page({
         return;
       }
       wx.showToast({ title: '已撤回', icon: 'success' });
+      // 📊 统计数据刷新闭环：fetchMyVolunteerSubmissions 内部会重新计算
+      // monthlySubmissionStats（本月提交/已采纳/待确认/已驳回）与 rejectedCount
+      // 角标并 setData，确保弹窗顶部摘要与个人页角标同步撤回结果
       this.fetchMyVolunteerSubmissions();
     } catch (err) {
       console.error('[onRevokeApprovedSubmission] 撤回异常:', err);

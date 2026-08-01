@@ -967,8 +967,12 @@
 
           <block wx:if="{{item.status === 'approved'}}">
             <text class="my-vs-status-tag approved">✅ 已采纳入库</text>
+            <!-- 🛡️ 已采纳入库的记录已合并进门店账本/库存统计，普通提交人（含店长/家长
+                 本人）不再允许自助撤回——按钮替换为"申请冲销"提示语，引导线下联系店长
+                 处理；仅超级管理员保留真正的撤回操作，且走二次强确认 + 服务端级联撤销 -->
             <view class="my-vs-action-row">
-              <button class="delete-submission-btn" catchtap="onRevokeApprovedSubmission" data-index="{{index}}">🗑️ 撤回记录</button>
+              <button wx:if="{{isRealSuperAdmin}}" class="delete-submission-btn" catchtap="onRevokeApprovedSubmission" data-index="{{index}}">🗑️ 撤回记录</button>
+              <button wx:else class="request-writeoff-btn" catchtap="onRequestWriteOff" data-index="{{index}}">🔒 申请冲销</button>
             </view>
           </block>
           <block wx:elif="{{item.status === 'rejected'}}">
