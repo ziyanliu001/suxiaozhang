@@ -1,0 +1,9 @@
+{
+  "name": "manageVolunteerCheckIn",
+  "version": "1.0.0",
+  "description": "护持岗位班次打卡云端台账：写入/撤销 volunteer_duty_logs，服务端重算当日工时防超 12h 上限",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

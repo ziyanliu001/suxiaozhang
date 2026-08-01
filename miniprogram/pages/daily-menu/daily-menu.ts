@@ -5,14 +5,34 @@ import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../utils/drawDailyMenuPoster';
 import { GRATITUDE_TEXT } from '../../utils/cultureData';
+import { isVirtualStoreName } from '../../utils/storeIdentity';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
 const POSTER_WIDTH = 320;
 const PAGE_SIZE = 10;
-// 🍱 本项目雨花爱心餐目前每店每日仅供应一次午餐（无早/晚餐场次），"餐次"因此是
-// 固定文案，不是需要落库的字段——见 pages/index/index.ts 中"午餐正常供应中"等既有措辞
-const MEAL_LABEL = '午餐';
+
+// 🍱 早/午/晚餐可独立发布食谱，云函数 manageDailyMenu 按 {storeId, dateString,
+// mealType} 三元组区分记录（存量记录没有 mealType 字段，云函数兼容按 lunch 处理）
+type MealType = 'breakfast' | 'lunch' | 'dinner';
+const DEFAULT_MEAL_TYPE: MealType = 'lunch';
+const MEAL_TYPE_OPTIONS: Array<{ value: MealType; label: string }> = [
+  { value: 'breakfast', label: '早餐' },
+  { value: 'lunch', label: '午餐' },
+  { value: 'dinner', label: '晚餐' }
+];
+const MEAL_LABEL_MAP: Record<string, string> = {
+  breakfast: '早餐',
+  lunch: '午餐',
+  dinner: '晚餐'
+};
+function mealTypeLabel(mealType: string): string {
+  return MEAL_LABEL_MAP[mealType] || MEAL_LABEL_MAP[DEFAULT_MEAL_TYPE];
+}
+
+// 🛡️ "全国总览"/"全部门店" 的 storeId 哨兵值，与 statistics.ts 同一份定义
+// （见该文件 NATIONAL_STORE_ID_SENTINELS 头部注释），本地缓存兜底时同样要过滤
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
 
 function getTodayStr(): string {
   const now = new Date();
@@ -27,6 +47,18 @@ function formatDisplayDate(dateStr: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
   if (!m) return dateStr || '';
   return `${m[1]}年${parseInt(m[2], 10)}月${parseInt(m[3], 10)}日`;
+}
+
+// 日期导航 ◀ 上一天/下一天 ▶：按天平移，跨月/跨年由 Date 对象自动处理
+function shiftDateStr(dateStr: string, deltaDays: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+  if (!m) return dateStr;
+  const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  d.setDate(d.getDate() + deltaDays);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
 }
 
 // updateTime 是云端 db.serverDate() 读回的原生 Date 对象，格式化为 HH:mm 用于"已发布"提示
@@ -60,16 +92,24 @@ Page({
     currentStoreId: '',
     currentStoreName: '',
     canManage: false,
+    isSuperAdmin: false,
+    // 🛡️ 门店身份异步解析完成前的骨架占位标记，见 applyRolePermissions()——
+    // 避免 currentStoreName 到达前的那一帧默认回退显示任何门店名/全国总览
+    roleReady: false,
 
-    // 🍱 今日食谱（顶部高亮区）
-    todayDateStr: getTodayStr(),
-    todayDateDisplay: formatDisplayDate(getTodayStr()),
-    mealLabel: MEAL_LABEL,
+    // 🍱 当前查看/管理的日期+餐别（默认今天+午餐），顶部高亮区随之联动
+    selectedDateStr: getTodayStr(),
+    selectedDateDisplay: formatDisplayDate(getTodayStr()),
+    isSelectedToday: true,
+    selectedMealType: DEFAULT_MEAL_TYPE as MealType,
+    mealLabel: mealTypeLabel(DEFAULT_MEAL_TYPE),
+    mealTypeOptions: MEAL_TYPE_OPTIONS,
     todayItem: null as any,
     todayDishes: [] as any[],
     todayLoading: false,
 
-    // 📚 历史食谱（下方时间轴，不含今天，避免与顶部重复展示）
+    // 📚 历史食谱（下方时间轴，不含当前选中日期，避免与顶部重复展示；按
+    // selectedMealType 服务端过滤，见 fetchList）
     list: [] as any[],
     historyList: [] as any[],
     page: 1,
@@ -85,11 +125,15 @@ Page({
     editForm: {
       id: '',
       dateString: getTodayStr(),
+      mealType: DEFAULT_MEAL_TYPE as MealType,
       menuText: '',
       // 🍱 每个元素对应一道菜：{url: 本地临时路径/云端 fileID, name: 菜品名称}
       images: [] as Array<{ url: string; name: string }>
     },
     uploading: false,
+
+    // ✨ 引用历史食谱：从 historyList 里挑一条带入编辑表单，见 onOpenReuseTemplatePicker
+    showReuseTemplateModal: false,
 
     // 📤 生成食谱宣传海报
     showPosterModal: false,
@@ -97,6 +141,8 @@ Page({
     posterGenerating: false,
     posterCanvasWidth: POSTER_WIDTH,
     posterCanvasHeight: 400,
+    // 海报画完后 canvasToTempFilePath 的结果，保存到相册/分享海报共用，避免重复生成
+    posterTempFilePath: '',
 
     // 🛡️ 缩略图加载失败兜底：key 是图片路径本身。今日食谱/历史食谱/编辑表单三处
     // 图片网格结构各不相同（单条记录 / 列表套子数组 / 编辑中的数组），共用一张按
@@ -113,8 +159,8 @@ Page({
     recordRecentVisit('/pages/daily-menu/daily-menu', '食谱管理中心');
     this.calculateNavBarHeight();
     // 🔑 需先拿到 currentStoreId 再查今日食谱（getByDate 要求 storeId 必填），故此处 await 顺序执行
-    await this.initRoleAndStore();
-    this.loadTodayMenu();
+    await this.applyRolePermissions();
+    this.loadSelectedMenu();
     this.fetchList(true);
 
     this._navGuard = createNavGuard({
@@ -143,25 +189,93 @@ Page({
     });
   },
 
-  async initRoleAndStore() {
+  // 🐛 根因修复：cachedRole/服务端下发的角色只是"最近一次校验/查询到的角色"，
+  // 手动切换身份时写入的 current_user_role 才是真正的生效角色（同一套口径见
+  // profile.ts initMinePage、statistics.ts resolveEffectiveRole）——一旦存在就必须
+  // 以它为准，否则残留的旧 super_admin 缓存会让本页误判成超管
+  resolveEffectiveRole(cachedRole: string): string {
+    const storageRole = wx.getStorageSync('current_user_role');
+    if (storageRole) {
+      const normalized = String(storageRole).toLowerCase();
+      // store_family 只是个人中心用来区分"家人视角"的展示态，不在真实角色枚举里，
+      // 对应的真实底层角色就是 volunteer
+      return normalized === 'store_family' ? 'volunteer' : normalized;
+    }
+    return cachedRole;
+  },
+
+  // 🐛 核心权限 Bug 修复：此前直接拿 roleInfo.storeName 当门店名用，完全没有过滤
+  // "全国总览/全部门店"这类仅超管可用的虚拟聚合名——user_roles 文档一旦曾经是
+  // super_admin（storeId:'' storeName:'全国总览'），账号降级后这个脏值会一直残留，
+  // 非超管账号打开本页就会在顶部误显示"全国总览"。解析口径与 statistics.ts
+  // resolveEffectiveStoreIdentity 完全一致：
+  // 1. 非超管：storeName 命中虚拟聚合名一律当作"没有真实门店"，退回本地已选中门店；
+  // 2. 真超管：允许 storeId 为空（此时顶部展示"全国总览"，但必须先在全局
+  //    store-picker 选定具体门店才允许发布/编辑，否则 getByDate/create 都会因
+  //    storeId 缺失被云函数拒绝）。
+  async applyRolePermissions() {
     let roleInfo = AuthService.getCachedRoleInfo();
     if (!roleInfo) {
       const result = await AuthService.fetchUserRole();
       roleInfo = result.roleInfo || null;
     }
 
-    const store = getSelectedStore();
-    const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
-    const storeName = (roleInfo && roleInfo.storeName) || store.storeName || '';
-    const canManage = (roleInfo && roleInfo.role === 'store_manager') || (roleInfo && roleInfo.role === 'super_admin');
+    const effectiveRole = this.resolveEffectiveRole(roleInfo ? roleInfo.role : 'volunteer');
+    const isSuperAdmin = effectiveRole === 'super_admin';
 
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage });
+    let storeId = (roleInfo && roleInfo.storeId) || '';
+    let storeName = (roleInfo && roleInfo.storeName) || '';
+    if (!isSuperAdmin && isVirtualStoreName(storeName)) {
+      storeName = '';
+    }
+
+    if (!storeId || !storeName) {
+      const activeStore = getSelectedStore();
+      const activeStoreName = (activeStore && activeStore.storeName) || '';
+      const activeStoreIsVirtual = isVirtualStoreName(activeStoreName);
+      if (!storeName && activeStoreName && !(!isSuperAdmin && activeStoreIsVirtual)) {
+        storeName = activeStoreName;
+      }
+      if (!storeId && activeStore && activeStore.storeId && !(!isSuperAdmin && activeStoreIsVirtual)) {
+        storeId = activeStore.storeId;
+      }
+    }
+
+    if (!storeId) {
+      const storedId = wx.getStorageSync('current_store_id') || '';
+      storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
+    }
+    if (!storeName) {
+      const storedName = wx.getStorageSync('current_store_name') || '';
+      storeName = (!isSuperAdmin && isVirtualStoreName(storedName)) ? '' : storedName;
+    }
+
+    // 🛡️ 展示口径：超管在没有选定具体门店时才允许显示"全国总览"（这是其真实身份
+    // 状态）；除此之外的所有情况（非超管，或超管已选定门店）一律显示真实门店名，
+    // 严禁出现虚拟聚合名
+    const displayStoreName = (isSuperAdmin && !storeId) ? '全国总览' : storeName;
+
+    // 🛡️ canManage：与云函数 manageDailyMenu.resolveWriteTarget 的权限模型对齐——
+    // store_manager/store_patriarch（大家长天然继承店长的日常管理权限）可管理本店，
+    // 超管仅在已选定具体门店时才允许管理（全国总览态下没有 storeId，发布/编辑一定会
+    // 被云函数拒绝，前端索性不放行，避免用户点了却报错）
+    const canManage = effectiveRole === 'store_manager'
+      || effectiveRole === 'store_patriarch'
+      || (isSuperAdmin && !!storeId);
+
+    this.setData({
+      currentStoreId: storeId,
+      currentStoreName: displayStoreName,
+      canManage,
+      isSuperAdmin,
+      roleReady: true
+    });
   },
 
-  // 🍱 查询今天是否已发布食谱，用于顶部高亮区展示 + 编辑表单预填
-  async loadTodayMenu() {
+  // 🍱 查询当前选中日期+餐别是否已发布食谱，用于顶部高亮区展示 + 编辑表单预填
+  async loadSelectedMenu() {
     if (!this.data.currentStoreId) {
-      this.setData({ todayItem: null });
+      this.setData({ todayItem: null, todayDishes: [] });
       return;
     }
 
@@ -169,7 +283,12 @@ Page({
     try {
       const res = await wx.cloud.callFunction({
         name: 'manageDailyMenu',
-        data: { action: 'getByDate', storeId: this.data.currentStoreId, dateString: this.data.todayDateStr }
+        data: {
+          action: 'getByDate',
+          storeId: this.data.currentStoreId,
+          dateString: this.data.selectedDateStr,
+          mealType: this.data.selectedMealType
+        }
       });
       const result = res.result as any;
       const item = (result && result.success) ? result.data : null;
@@ -178,11 +297,18 @@ Page({
       }
       this.setData({ todayItem: item, todayDishes: buildDishList(item && item.images) });
     } catch (err) {
-      console.error('[daily-menu] loadTodayMenu 异常:', err);
+      console.error('[daily-menu] loadSelectedMenu 异常:', err);
       this.setData({ todayItem: null, todayDishes: [] });
     } finally {
       this.setData({ todayLoading: false });
     }
+  },
+
+  // 📚 历史食谱按 selectedMealType 服务端过滤；historyList 只需按日期排重
+  // （list 结果里的每一条都已经是当前选中餐别，见下方 recomputeHistoryList）
+  recomputeHistoryList() {
+    const historyList = this.data.list.filter((item: any) => item.dateString !== this.data.selectedDateStr);
+    this.setData({ historyList });
   },
 
   async fetchList(reset: boolean) {
@@ -201,6 +327,7 @@ Page({
         data: {
           action: 'list',
           storeId: this.data.currentStoreId,
+          mealType: this.data.selectedMealType,
           page: targetPage,
           pageSize: PAGE_SIZE
         }
@@ -215,15 +342,13 @@ Page({
           item.dishes = buildDishList(item.images);
         });
         const newList = reset ? rawList : this.data.list.concat(rawList);
-        // 「历史食谱」区域不重复展示今天（今天已在顶部高亮区单独呈现）
-        const historyList = newList.filter((item: any) => item.dateString !== this.data.todayDateStr);
         this.setData({
           list: newList,
-          historyList,
           page: targetPage,
           total: result.total || 0,
           hasMore: !!result.hasMore
         });
+        this.recomputeHistoryList();
       } else {
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
       }
@@ -233,6 +358,40 @@ Page({
     } finally {
       this.setData({ loading: false, loadingMore: false });
     }
+  },
+
+  // ◀ 上一天 / 下一天 ▶：只影响顶部高亮区 + historyList 的排重日期，list 本身
+  // 已按 selectedMealType 拉取完毕，不需要重新分页请求
+  onPrevDay() {
+    this.changeSelectedDate(shiftDateStr(this.data.selectedDateStr, -1));
+  },
+
+  onNextDay() {
+    this.changeSelectedDate(shiftDateStr(this.data.selectedDateStr, 1));
+  },
+
+  onSelectedDateChange(e: any) {
+    this.changeSelectedDate(e.detail.value);
+  },
+
+  changeSelectedDate(dateStr: string) {
+    if (!dateStr || dateStr === this.data.selectedDateStr) return;
+    this.setData({
+      selectedDateStr: dateStr,
+      selectedDateDisplay: formatDisplayDate(dateStr),
+      isSelectedToday: dateStr === getTodayStr()
+    });
+    this.loadSelectedMenu();
+    this.recomputeHistoryList();
+  },
+
+  // [早餐][午餐][晚餐] 分段控件：切换餐别后服务端过滤条件变了，list 必须重新分页拉取
+  onSelectMealType(e: any) {
+    const mealType = e.currentTarget.dataset.meal as MealType;
+    if (!mealType || mealType === this.data.selectedMealType) return;
+    this.setData({ selectedMealType: mealType, mealLabel: mealTypeLabel(mealType) });
+    this.loadSelectedMenu();
+    this.fetchList(true);
   },
 
   onReachBottom() {
@@ -255,7 +414,8 @@ Page({
     this.setData({ showDetailModal: false, detailItem: null });
   },
 
-  // 🍱 顶部【编辑/发布今日食谱】按钮：今日已发布则预填回显（更新模式），否则空白新建
+  // 🍱 顶部【编辑/发布该日食谱】按钮：当前选中日期+餐别已发布则预填回显（更新模式），
+  // 否则空白新建
   onOpenTodayEditForm() {
     if (!this.data.canManage) return;
     const item = this.data.todayItem;
@@ -263,7 +423,8 @@ Page({
       showEditForm: true,
       editForm: {
         id: item ? item._id : '',
-        dateString: this.data.todayDateStr,
+        dateString: this.data.selectedDateStr,
+        mealType: this.data.selectedMealType,
         menuText: item ? (item.menuText || '') : '',
         images: item ? this.toEditableDishList(item.images) : []
       }
@@ -280,6 +441,7 @@ Page({
       editForm: {
         id: item._id,
         dateString: item.dateString,
+        mealType: item.mealType || DEFAULT_MEAL_TYPE,
         menuText: item.menuText || '',
         images: this.toEditableDishList(item.images)
       }
@@ -373,7 +535,7 @@ Page({
   },
 
   async onSubmitEdit() {
-    const { id, dateString, menuText, images } = this.data.editForm;
+    const { id, dateString, mealType, menuText, images } = this.data.editForm;
 
     if (!menuText.trim() && images.length === 0) {
       wx.showToast({ title: '请至少填写菜谱文字或上传一张配图', icon: 'none' });
@@ -391,6 +553,7 @@ Page({
           id,
           storeId: this.data.currentStoreId,
           dateString,
+          mealType: mealType || DEFAULT_MEAL_TYPE,
           menuText: menuText.trim(),
           images: imagesForSubmit
         }
@@ -402,8 +565,8 @@ Page({
       if (result && result.success) {
         wx.showToast({ title: result.message || '提交成功', icon: 'success' });
         this.setData({ showEditForm: false });
-        // 提交的记录可能是今天（顶部区）或历史某天（下方区），两处都刷新一次以保持同步
-        this.loadTodayMenu();
+        // 提交的记录可能是当前选中日期（顶部区）或历史某天（下方区），两处都刷新一次以保持同步
+        this.loadSelectedMenu();
         this.fetchList(true);
       } else {
         wx.showModal({ title: '提交失败', content: (result && result.error) || '未知错误', showCancel: false });
@@ -437,7 +600,7 @@ Page({
           if (result && result.success) {
             wx.showToast({ title: '已删除', icon: 'success' });
             this.setData({ showDetailModal: false });
-            this.loadTodayMenu();
+            this.loadSelectedMenu();
             this.fetchList(true);
           } else {
             wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
@@ -451,7 +614,24 @@ Page({
     });
   },
 
-  // ✨ 一键复用为今日食谱：将历史食谱的菜名明细与配图直接带入今日食谱编辑框（同页内操作，无需跳转）
+  // ✨ 一键复用为该日食谱：将历史食谱的菜名明细与配图直接带入当前选中日期+餐别的
+  // 编辑框（同页内操作，无需跳转）。history-list 卡片按钮与"引用历史食谱"弹窗
+  // （见 onOpenReuseTemplatePicker）共用这一份逻辑，唯一区别是触发确认弹窗的文案
+  reuseItemToSelected(item: any) {
+    const todayItem = this.data.todayItem;
+    this.setData({
+      showEditForm: true,
+      editForm: {
+        // 当前选中日期+餐别若已有记录，复用仍落在"更新"模式下，避免产生重复记录
+        id: todayItem ? todayItem._id : '',
+        dateString: this.data.selectedDateStr,
+        mealType: this.data.selectedMealType,
+        menuText: item.menuText || '',
+        images: this.toEditableDishList(item.images)
+      }
+    });
+  },
+
   onReuseToToday(e: any) {
     if (!this.data.canManage) return;
     const id = e.currentTarget.dataset.id;
@@ -459,24 +639,37 @@ Page({
     if (!item) return;
 
     wx.showModal({
-      title: '一键复用为今日食谱',
-      content: `将把【${item.dateString}】的菜品明细与配图带入今日食谱编辑框，确认后可微调再发布，是否继续？`,
+      title: `一键复用为${this.data.isSelectedToday ? '今日' : '该日'}食谱`,
+      content: `将把【${item.dateString}】的菜品明细与配图带入编辑框，确认后可微调再发布，是否继续？`,
       confirmText: '去确认发布',
       success: (res) => {
         if (!res.confirm) return;
-        const todayItem = this.data.todayItem;
-        this.setData({
-          showEditForm: true,
-          editForm: {
-            // 今日若已有记录，复用仍落在"更新"模式下，避免产生重复的当天食谱记录
-            id: todayItem ? todayItem._id : '',
-            dateString: this.data.todayDateStr,
-            menuText: item.menuText || '',
-            images: this.toEditableDishList(item.images)
-          }
-        });
+        this.reuseItemToSelected(item);
       }
     });
+  },
+
+  // 📖 引用历史食谱：未发布状态下的辅助入口，弹出 historyList 供挑选，
+  // 免去先划到下方历史区再点复用的来回操作
+  onOpenReuseTemplatePicker() {
+    if (!this.data.canManage) return;
+    if (this.data.historyList.length === 0) {
+      wx.showToast({ title: '暂无历史食谱可引用，请先发布一次', icon: 'none' });
+      return;
+    }
+    this.setData({ showReuseTemplateModal: true });
+  },
+
+  onCloseReuseTemplateModal() {
+    this.setData({ showReuseTemplateModal: false });
+  },
+
+  onPickReuseTemplate(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const item = this.data.historyList.find((r: any) => r._id === id);
+    if (!item) return;
+    this.setData({ showReuseTemplateModal: false });
+    this.reuseItemToSelected(item);
   },
 
   onPreviewImage(e: any) {
@@ -517,15 +710,15 @@ Page({
   },
 
   // 📤 生成今日食谱宣传海报：下载每道菜的云端实拍图到本地临时路径后，绘制成
-  // 3 列九宫格菜品卡片（图+菜名）的可保存/分享海报
+  // 3 列九宫格菜品卡片（图+菜名）+ 感恩词摘要 + 小程序码的可保存/分享海报
   async onGenerateMenuPoster() {
     if (!this.data.todayItem) {
-      wx.showToast({ title: '今日暂无食谱，无法生成海报', icon: 'none' });
+      wx.showToast({ title: '暂无食谱，无法生成海报', icon: 'none' });
       return;
     }
     if (this.data.posterGenerating) return;
 
-    this.setData({ showPosterModal: true, posterReady: false, posterGenerating: true });
+    this.setData({ showPosterModal: true, posterReady: false, posterGenerating: true, posterTempFilePath: '' });
     wx.showLoading({ title: '正在生成海报...', mask: true });
 
     try {
@@ -544,7 +737,32 @@ Page({
         })
       );
 
-      const posterHeight = calcDailyMenuPosterHeight(downloaded.length, !!this.data.todayItem.menuText, POSTER_WIDTH);
+      // 门店推广二维码：与 index.ts onGenerateStorePoster 同款获取方式，失败时
+      // 优雅降级为不画（不阻断海报生成）
+      let qrLocalPath = '';
+      try {
+        const qrRes = await wx.cloud.callFunction({
+          name: 'getStoreQRCode',
+          data: { storeId: this.data.currentStoreId, storeName: this.data.currentStoreName }
+        });
+        const qrResult = qrRes.result as any;
+        if (qrResult && qrResult.success && qrResult.fileID) {
+          const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+          qrLocalPath = downRes.tempFilePath;
+        }
+      } catch (qrErr) {
+        console.warn('[daily-menu] 海报二维码获取失败，跳过:', qrErr);
+      }
+
+      const gratitudeLine = GRATITUDE_TEXT[0] || '';
+      const mealLabelText = mealTypeLabel(this.data.todayItem.mealType || DEFAULT_MEAL_TYPE);
+      const posterHeight = calcDailyMenuPosterHeight(
+        downloaded.length,
+        !!this.data.todayItem.menuText,
+        POSTER_WIDTH,
+        !!gratitudeLine,
+        !!qrLocalPath
+      );
       this.setData({ posterCanvasHeight: posterHeight });
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -564,14 +782,29 @@ Page({
             await drawDailyMenuPoster({
               canvas,
               storeName: this.data.currentStoreName,
-              dateDisplay: this.data.todayDateDisplay,
+              dateDisplay: this.data.selectedDateDisplay,
+              mealLabel: mealLabelText,
               menuText: this.data.todayItem.menuText,
               dishes: downloaded,
               width: POSTER_WIDTH,
-              height: posterHeight
+              height: posterHeight,
+              gratitudeLine,
+              qrLocalPath
             });
-            wx.hideLoading();
-            this.setData({ posterReady: true, posterGenerating: false });
+            // 海报画完立即生成一次临时文件路径，保存到相册/分享海报共用，
+            // 避免两处各自重复调用 canvasToTempFilePath
+            wx.canvasToTempFilePath({
+              canvas,
+              success: (tempRes) => {
+                this.setData({ posterReady: true, posterGenerating: false, posterTempFilePath: tempRes.tempFilePath });
+                wx.hideLoading();
+              },
+              fail: () => {
+                // 生成临时文件失败不影响海报本身已经画好，只是保存/分享按钮暂不可用
+                this.setData({ posterReady: true, posterGenerating: false });
+                wx.hideLoading();
+              }
+            });
           } catch (drawErr) {
             wx.hideLoading();
             this.setData({ posterGenerating: false });
@@ -592,44 +825,49 @@ Page({
   },
 
   onSavePosterToAlbum() {
-    if (!this.data.posterReady) {
+    if (!this.data.posterReady || !this.data.posterTempFilePath) {
       wx.showToast({ title: '海报尚未绘制完成', icon: 'none' });
       return;
     }
-    const query = wx.createSelectorQuery();
-    query.select(`#${POSTER_CANVAS_ID}`)
-      .fields({ node: true })
-      .exec((res) => {
-        if (!res[0] || !res[0].node) return;
-        wx.canvasToTempFilePath({
-          canvas: res[0].node,
-          success: (tempRes) => {
-            wx.saveImageToPhotosAlbum({
-              filePath: tempRes.tempFilePath,
-              success: () => {
-                wx.showToast({ title: '海报已保存至相册', icon: 'success' });
-                this.onClosePosterModal();
-              },
-              fail: (err) => {
-                if (err.errMsg && err.errMsg.indexOf('auth deny') >= 0) {
-                  wx.showModal({
-                    title: '需要相册权限',
-                    content: '请在设置中允许小程序保存图片到您的相册',
-                    success: (r) => {
-                      if (r.confirm) wx.openSetting();
-                    }
-                  });
-                } else {
-                  wx.showToast({ title: '保存失败', icon: 'none' });
-                }
-              }
-            });
-          },
-          fail: () => {
-            wx.showToast({ title: '海报生成失败', icon: 'none' });
-          }
-        });
-      });
+    wx.saveImageToPhotosAlbum({
+      filePath: this.data.posterTempFilePath,
+      success: () => {
+        wx.showToast({ title: '海报已保存至相册', icon: 'success' });
+        this.onClosePosterModal();
+      },
+      fail: (err) => {
+        if (err.errMsg && err.errMsg.indexOf('auth deny') >= 0) {
+          wx.showModal({
+            title: '需要相册权限',
+            content: '请在设置中允许小程序保存图片到您的相册',
+            success: (r) => {
+              if (r.confirm) wx.openSetting();
+            }
+          });
+        } else {
+          wx.showToast({ title: '保存失败', icon: 'none' });
+        }
+      }
+    });
+  },
+
+  // 📤 一键分享海报到微信群/朋友圈：wx.showShareImageMenu 是微信提供的、专门
+  // 用于把一张本地图片直接分享到聊天/朋友圈的原生面板 API，比 open-type="share"
+  // （分享的是小程序卡片，不是这张具体的海报图片）更贴合"把海报发出去"的诉求。
+  // miniprogram-api-typings 还没收录这个较新的 API，用 (wx as any) 显式绕过，
+  // 与仓库里其它地方对新版 wx API/云函数返回值的处理手法一致
+  onShareMenuPoster() {
+    if (!this.data.posterReady || !this.data.posterTempFilePath) {
+      wx.showToast({ title: '海报尚未绘制完成', icon: 'none' });
+      return;
+    }
+    (wx as any).showShareImageMenu({
+      path: this.data.posterTempFilePath,
+      fail: (err: any) => {
+        console.warn('[daily-menu] 分享海报失败:', err);
+        wx.showToast({ title: '分享失败', icon: 'none' });
+      }
+    });
   },
 
   onToggleGratitude() {
@@ -645,5 +883,27 @@ Page({
     } else {
       wx.switchTab({ url: '/pages/index/index' });
     }
+  },
+
+  // 🔗 顶部原生"…"菜单的分享入口（与海报弹窗里 onShareMenuPoster 分享的是同一张
+  // 海报图片这件事无关，这里分享的是小程序卡片）：参照 history.ts 同款写法，
+  // title 用门店+日期+餐别拼一句话，path 回退到首页，imageUrl 留空用系统默认截图
+  onShareAppMessage() {
+    const store = this.data.currentStoreName || '雨花斋';
+    const date = this.data.selectedDateDisplay || '';
+    const meal = this.data.mealLabel || '';
+    return {
+      title: `🍱【${store}】${date}${meal}食谱，欢迎参考！`,
+      path: '/pages/index/index',
+      imageUrl: ''
+    };
+  },
+
+  onShareTimeline() {
+    const store = this.data.currentStoreName || '雨花斋';
+    return {
+      title: `${store}·今日食谱 · 雨花斋餐报助手`,
+      query: ''
+    };
   }
 });

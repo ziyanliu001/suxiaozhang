@@ -111,6 +111,15 @@ function sanitizeImages(images) {
   })).filter(img => img.url);
 }
 
+// 🏷️ 分类 Tag：[日常运营][设备维护][爱心捐款/物资][重要访客][异常提醒]，与前端
+// activity-log.ts 的 CATEGORY_OPTIONS 同一份白名单。非法值/未选一律落空字符串
+// （前端展示层显示"未分类"灰色标签，不是报错）
+const CATEGORY_VALUES = ['daily', 'maintenance', 'donation', 'visitor', 'incident'];
+
+function sanitizeCategory(category) {
+  return CATEGORY_VALUES.includes(category) ? category : '';
+}
+
 // 发布人展示标签：仅用角色身份，不落库/不回传真实姓名等 PII
 function resolvePublisherLabel(role) {
   if (role === 'super_admin') return '超级管理员';
@@ -134,7 +143,7 @@ exports.main = async (event) => {
     switch (action) {
       case 'create':
       case 'update': {
-        const { id, storeId, title, eventTime, content, images, autoSyncFromReport } = event;
+        const { id, storeId, title, eventTime, content, images, category, autoSyncFromReport } = event;
 
         if (!title || !String(title).trim()) {
           return { success: false, error: '请填写标题' };
@@ -143,6 +152,9 @@ exports.main = async (event) => {
           return { success: false, error: '请提供合法的发生时间 (YYYY-MM-DD)' };
         }
         const safeImages = sanitizeImages(images);
+        // 🏷️ 分类仅对手动发布的门店日志/护持动态生效，餐报自动同步（autoSyncFromReport）
+        // 那条记录不经过分类选择表单，不落这个字段
+        const safeCategory = sanitizeCategory(category);
 
         // ✏️ 编辑已有记录：先看是不是作者本人发布的——本人编辑/删除自己发布的
         // 记录不需要 store_manager/patriarch/super_admin 身份，也不受门店/机构
@@ -178,6 +190,7 @@ exports.main = async (event) => {
               eventTime,
               content: content || '',
               images: safeImages,
+              category: safeCategory,
               updateTime: db.serverDate(),
               publisherLabel: resolvePublisherLabel(caller.role)
             }
@@ -249,6 +262,7 @@ exports.main = async (event) => {
             eventTime,
             content: content || '',
             images: safeImages,
+            category: safeCategory,
             createdBy: OPENID,
             createdAt: db.serverDate(),
             updateTime: db.serverDate(),
@@ -294,6 +308,34 @@ exports.main = async (event) => {
         return { success: true, message: '大事记已删除' };
       }
 
+      // 📌 置顶/取消置顶：与 update/delete 不同，这是店长/超管的管理强化能力，
+      // 不下放给记录本人（volunteer 哪怕是自己发布的动态也不能置顶）——resolveWriteTarget
+      // 默认不传 allowVolunteerCreate，volunteer 会在这里被兜底拒绝
+      case 'togglePin': {
+        const { id, pinned } = event;
+        if (!id) return { success: false, error: '缺少 id 参数' };
+
+        const existingRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+        const existing = existingRes && existingRes.data;
+        if (!existing) return { success: false, error: '记录不存在' };
+
+        const target = await resolveWriteTarget(caller, existing.storeId);
+        if (!target.allowed) {
+          return { success: false, error: target.error };
+        }
+        if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
+          return { success: false, error: '无权限：不能操作其他门店的大事记' };
+        }
+        if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+          return { success: false, error: '无权限：该记录不属于您所在的机构' };
+        }
+
+        await db.collection(COLLECTION).doc(id).update({
+          data: { isPinned: !!pinned }
+        });
+        return { success: true, message: pinned ? '已置顶' : '已取消置顶' };
+      }
+
       case 'get': {
         const { id } = event;
         if (!id) return { success: false, error: '缺少 id 参数' };
@@ -310,7 +352,7 @@ exports.main = async (event) => {
       }
 
       case 'list': {
-        const { storeId, page, pageSize, startDate, endDate } = event;
+        const { storeId, page, pageSize, startDate, endDate, pinFirst } = event;
         const { page: p, size } = normalizePage(page, pageSize);
         const isSuperAdmin = caller && caller.role === 'super_admin';
 
@@ -352,8 +394,14 @@ exports.main = async (event) => {
         where.approvalStatus = _.neq('PENDING');
 
         const countRes = await db.collection(COLLECTION).where(where).count();
-        const listRes = await db.collection(COLLECTION)
-          .where(where)
+        // 📌 pinFirst 仅供"历史动态"时光轴显式请求置顶优先排序；今日大事记
+        // （loadTodayActivity 按 pageSize:1 取"最新一条"）不传这个参数，排序行为
+        // 与改动前完全一致，不会因为某条更早的记录被置顶而错误地顶替成"今日记录"
+        let listQuery = db.collection(COLLECTION).where(where);
+        if (pinFirst) {
+          listQuery = listQuery.orderBy('isPinned', 'desc');
+        }
+        const listRes = await listQuery
           .orderBy('eventTime', 'desc')
           .skip((p - 1) * size)
           .limit(size)

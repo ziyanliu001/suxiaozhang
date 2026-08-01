@@ -2465,6 +2465,75 @@ button.btn-primary-poster {
   padding: 32rpx;
 }
 
+.export-preview-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin: 20rpx 0;
+}
+
+.export-preview-summary-cell {
+  flex: 1 1 40%;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.export-preview-summary-num {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.export-preview-summary-num.income {
+  color: #2B8A3E;
+}
+
+.export-preview-summary-num.expense {
+  color: #E03131;
+}
+
+.export-preview-summary-num.audited {
+  color: #2B8A3E;
+}
+
+.export-preview-summary-num.anomaly {
+  color: #E8590C;
+}
+
+.export-preview-summary-lbl {
+  font-size: 20rpx;
+  color: #868E96;
+  margin-top: 6rpx;
+}
+
+.export-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+.export-preview-row-shop {
+  font-size: 22rpx;
+  color: #868E96;
+  flex-shrink: 0;
+}
+
+.export-preview-receipt-badge {
+  font-size: 20rpx;
+  color: #2B8A3E;
+  flex-shrink: 0;
+}
+
+.export-preview-receipt-badge.is-missing {
+  color: #E8590C;
+}
+
 .patch-textarea {
   width: 100%;
   height: 160rpx;
@@ -3030,4 +3099,147 @@ button.btn-primary-poster {
 
 .national-poster-btn {
   margin-top: 24rpx;
+}
+
+/* ===== 🆕 时间周期「◀ 上一期/下一期 ▶」快捷翻页 ===== */
+.period-nav-btn {
+  flex: 0 0 auto;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFF9DB;
+  border: 1rpx solid #FFE066;
+  border-radius: 50%;
+  color: #D9480E;
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+.period-nav-btn-hover {
+  opacity: 0.6;
+}
+
+.nav-label-pill {
+  justify-content: center;
+}
+
+/* ===== 🆕 引导型空状态：快捷补报餐报 / 查看有数据月份 ===== */
+.empty-state-guide-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 8rpx;
+}
+
+.btn-empty-primary,
+button.btn-empty-primary {
+  width: 100%;
+  background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+  padding: 16rpx 36rpx;
+  border: none;
+  margin-bottom: 16rpx;
+  box-shadow: 0 6rpx 16rpx rgba(198, 40, 40, 0.25);
+}
+
+.btn-empty-primary::after {
+  border: none;
+}
+
+/* ===== 🆕 2x2 核心经营指标骨架卡：与 statistics 是否有数据解耦，固定渲染 ===== */
+.core-metrics-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.core-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.core-metrics-cell {
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.core-metrics-val {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.core-metrics-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.core-metrics-yoy {
+  font-size: 20rpx;
+  font-weight: bold;
+}
+
+.core-metrics-yoy.up {
+  color: #E03131;
+}
+
+.core-metrics-yoy.down {
+  color: #2B8A3E;
+}
+
+.core-metrics-yoy.flat {
+  color: #868E96;
+}
+
+/* ===== 🆕 底部固定导出账本快捷入口：与生成海报按钮同排 flex 布局，
+   单独出现时自动撑满整行，不影响 .content-section 已按 128rpx 单行高度
+   预留的 padding-bottom ===== */
+.bottom-sticky-bar {
+  display: flex;
+  gap: 16rpx;
+}
+
+.btn-primary-poster,
+button.btn-primary-poster {
+  flex: 1;
+  width: auto !important;
+}
+
+.btn-export-shortcut,
+button.btn-export-shortcut {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: #E6FCF5 !important;
+  color: #0CA678 !important;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: 1rpx solid #63E6BE;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.btn-export-shortcut::after {
+  border: none;
+}
+
+.btn-export-shortcut:active {
+  opacity: 0.85;
 }

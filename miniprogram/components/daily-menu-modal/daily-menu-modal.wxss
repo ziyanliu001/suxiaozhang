@@ -149,6 +149,37 @@
   color: #333333;
 }
 
+/* 🚫 休餐状态下人数输入框禁用态：与休餐胶囊同一套灰调，明确传达"当前不可填" */
+.vt-count-input[disabled] {
+  background: #F1EBE0;
+  color: #B4A88E;
+}
+
+.vt-form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.vt-form-label-row .vt-form-label {
+  margin-bottom: 0;
+}
+
+/* 🍲 快捷引用昨日菜单 */
+.vt-quick-fill-btn {
+  font-size: 22rpx;
+  color: #B8860B;
+  background: #FBF3E0;
+  border: 1rpx solid #EFD9A8;
+  border-radius: 20rpx;
+  padding: 6rpx 16rpx;
+}
+
+.vt-quick-fill-btn:active {
+  background: #F5E7C4;
+}
+
 .feedback-content-textarea {
   width: 100%;
   min-height: 180rpx;

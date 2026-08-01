@@ -1,3 +1,4 @@
+<wxs src="./profile-stats.wxs" module="stats" />
 <view class="mine-page-container">
   <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseAvatar（头像选择）隐私接口，
        必须放置该组件才能正常弹出授权，否则点击头像会被平台静默拦截、毫无反应 -->
@@ -120,6 +121,41 @@
         <view class="merit-sub-cell" wx:if="{{currentUserRole === 'finance' || currentUserRole === 'super_admin'}}">
           <text class="merit-sub-num">{{stats.auditedReports || 0}}</text>
           <text class="merit-sub-label">稽核账本</text>
+        </view>
+      </view>
+
+      <!-- ❤️ 爱心护持榜：本月/年度/总贡献三档，前 20 名 + 前三名奖牌 + 当前登录用户
+           自己的排名与距上一名差距，姓名统一脱敏展示 -->
+      <view class="leaderboard-divider"></view>
+      <view class="leaderboard-section">
+        <view class="leaderboard-tab-row">
+          <view class="leaderboard-tab {{leaderboardRange === 'month' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="month">本月榜</view>
+          <view class="leaderboard-tab {{leaderboardRange === 'year' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="year">年度榜</view>
+          <view class="leaderboard-tab {{leaderboardRange === 'total' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="total">总贡献榜</view>
+        </view>
+
+        <view class="leaderboard-loading" wx:if="{{leaderboardLoading}}">加载中…</view>
+        <block wx:elif="{{leaderboardList.length > 0}}">
+          <view class="leaderboard-row {{item.isSelf ? 'is-self' : ''}}" wx:for="{{leaderboardList}}" wx:key="rank">
+            <view class="leaderboard-rank {{item.rank <= 3 ? 'top3' : ''}}">
+              <text wx:if="{{item.rank === 1}}">🥇</text>
+              <text wx:elif="{{item.rank === 2}}">🥈</text>
+              <text wx:elif="{{item.rank === 3}}">🥉</text>
+              <text wx:else>{{item.rank}}</text>
+            </view>
+            <text class="leaderboard-name">{{item.displayName}}</text>
+            <text class="leaderboard-hours">{{item.hours}}h</text>
+          </view>
+        </block>
+        <view class="leaderboard-empty" wx:else>暂无护持记录，快去打卡吧～</view>
+
+        <view class="leaderboard-self-footer" wx:if="{{leaderboardSelfRank > 0}}">
+          <text>当前排名：第 {{leaderboardSelfRank}} 名</text>
+          <text wx:if="{{leaderboardGapToNext > 0}}"> · 距上一名还差 {{leaderboardGapToNext}} 工时</text>
+          <text wx:else> · 🎉 您已是本榜第一名</text>
+        </view>
+        <view class="leaderboard-self-footer unranked" wx:elif="{{!leaderboardLoading}}">
+          <text>您暂未上榜，打卡即可参与排名</text>
         </view>
       </view>
     </view>
@@ -507,6 +543,8 @@
           >
             <view class="honor-badge-circle">
               <text class="honor-badge-emoji">{{item.emoji}}</text>
+              <!-- 未点亮：柔和灰阶基础上叠加完成百分比，让人一眼看到"还差多少" -->
+              <text class="honor-badge-percent" wx:if="{{!item.unlocked}}">{{item.progressPercent}}%</text>
             </view>
             <text class="honor-badge-name">{{item.name}}</text>
           </view>
@@ -629,18 +667,27 @@
         <view class="certificate-modal-close" bindtap="onCloseBadgeDetailModal">✕</view>
       </view>
 
-      <view class="badge-detail-circle {{selectedBadge.unlocked ? 'unlocked' : 'locked'}}">
+      <view class="badge-detail-circle {{selectedBadge.unlocked ? 'unlocked glow-anim' : 'locked'}}">
         <text class="badge-detail-emoji">{{selectedBadge.emoji}}</text>
       </view>
       <text class="badge-detail-name">{{selectedBadge.name}}</text>
       <text class="badge-detail-status unlocked" wx:if="{{selectedBadge.unlocked}}">✅ 已解锁</text>
-      <text class="badge-detail-status" wx:else>🔒 未解锁</text>
+      <text class="badge-detail-status" wx:else>🔒 未解锁（{{selectedBadge.progressPercent}}%）</text>
+      <!-- 🎖️ 勋章寓意：与解锁条件分两行展示，寓意在前，条件在后 -->
+      <text class="badge-detail-meaning">{{selectedBadge.meaning}}</text>
       <text class="badge-detail-desc">{{selectedBadge.unlockDesc}}</text>
 
       <view class="badge-detail-progress-track">
         <view class="badge-detail-progress-fill" style="width: {{selectedBadge.progressPercent}}%;"></view>
       </view>
-      <text class="badge-detail-progress-text">当前进度 {{selectedBadge.progressCurrent}}/{{selectedBadge.progressThreshold}} {{selectedBadge.progressUnit}}</text>
+      <text class="badge-detail-progress-text">{{selectedBadge.progressStatusText}}</text>
+
+      <!-- 🌟 已点亮荣誉可分享；未点亮不展示该按钮，避免诱导分享一份还没达成的成就 -->
+      <button
+        wx:if="{{selectedBadge.unlocked}}"
+        class="badge-detail-share-btn"
+        open-type="share"
+      >📤 分享荣誉</button>
     </view>
   </view>
 
@@ -701,7 +748,7 @@
                像素，观感上像"叠了两张证书"——图片就绪后直接把 canvas 从渲染树里摘掉，
                保证画面上任何时刻都只有一张完整证书可见 -->
           <canvas wx:if="{{!certificateTempFilePath}}" type="2d" id="certificateCanvas" class="certificate-canvas" style="width: 340px; height: 480px;"></canvas>
-          <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
+          <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" bindtap="onPreviewCertificateImage" />
           <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}">
             <text>正在生成证书…</text>
           </view>
@@ -1256,23 +1303,29 @@
       </view>
 
       <scroll-view scroll-y class="store-stats-scroll" wx:else>
-        <text class="pd-health-title">🍚 今日三餐人数（{{storeStats.today}}）</text>
+        <view class="store-stats-timestamp">
+          <text>统计日期：{{storeStats.today}}</text>
+          <text class="store-stats-timestamp-dot">|</text>
+          <text class="store-stats-refresh">刚刚更新 🔄</text>
+        </view>
+
+        <text class="pd-health-title">🍚 今日三餐人数（共 {{storeStats.mealTotals.totalCount}} 人次）</text>
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">早餐人数</text>
-            <text class="pd-health-val">{{storeStats.mealTotals.breakfastCount}} 人次</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.breakfastCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtCount(storeStats.mealTotals.breakfastCount, '人次')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">午餐人数</text>
-            <text class="pd-health-val">{{storeStats.mealTotals.lunchCount}} 人次</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.lunchCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtCount(storeStats.mealTotals.lunchCount, '人次')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">晚餐人数</text>
-            <text class="pd-health-val">{{storeStats.mealTotals.dinnerCount}} 人次</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.dinnerCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtCount(storeStats.mealTotals.dinnerCount, '人次')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">今日总计</text>
-            <text class="pd-health-val green">{{storeStats.mealTotals.totalCount}} 人次</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.totalCount) ? 'pd-health-val-zero' : 'green'}}">{{stats.fmtCount(storeStats.mealTotals.totalCount, '人次')}}</text>
           </view>
         </view>
 
@@ -1280,19 +1333,19 @@
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">大米</text>
-            <text class="pd-health-val">{{storeStats.todayMaterialTotals.riceCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.riceCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.riceCount, 'rice')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">面粉</text>
-            <text class="pd-health-val">{{storeStats.todayMaterialTotals.flourCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.flourCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.flourCount, 'flour')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">食用油</text>
-            <text class="pd-health-val">{{storeStats.todayMaterialTotals.oilCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.oilCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.oilCount, 'oil')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">蔬菜</text>
-            <text class="pd-health-val">{{storeStats.todayMaterialTotals.vegetableCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.vegetableCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.vegetableCount, 'vegetable')}}</text>
           </view>
         </view>
 
@@ -1300,22 +1353,34 @@
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">大米</text>
-            <text class="pd-health-val">{{storeStats.monthMaterialTotals.riceCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.riceCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.riceCount, 'rice')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">面粉</text>
-            <text class="pd-health-val">{{storeStats.monthMaterialTotals.flourCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.flourCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.flourCount, 'flour')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">食用油</text>
-            <text class="pd-health-val">{{storeStats.monthMaterialTotals.oilCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.oilCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.oilCount, 'oil')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">蔬菜</text>
-            <text class="pd-health-val">{{storeStats.monthMaterialTotals.vegetableCount}} 斤</text>
+            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.vegetableCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.vegetableCount, 'vegetable')}}</text>
           </view>
         </view>
+
+        <!-- 🌱 空状态引导：今日三餐人数与物资消耗全为 0，大概率是今天还没人录入，
+             直接给一个"前往补报"的快捷按钮，比干巴巴一堆 0/-- 更有指引性 -->
+        <view class="store-stats-empty-hint" wx:if="{{storeStatsAllZero}}">
+          <text class="store-stats-empty-text">今日暂无录入数据</text>
+          <button class="store-stats-empty-btn" bindtap="onGoToStoreStatsSupplement">前往补报</button>
+        </view>
       </scroll-view>
+
+      <view class="store-stats-footer-actions">
+        <view class="store-stats-footer-btn store-stats-footer-btn-detail" bindtap="onGoToStoreStatsDetail">查看消耗明细</view>
+        <view class="store-stats-footer-btn store-stats-footer-btn-supplement" bindtap="onGoToStoreStatsSupplement">补报今日数据</view>
+      </view>
     </view>
   </view>
 

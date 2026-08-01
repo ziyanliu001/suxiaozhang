@@ -16,6 +16,11 @@ import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
 const CERTIFICATE_CANVAS_ID = 'certificateCanvas';
+// ⚡️ 爱心护持榜 ViewModel 本地缓存失效期：切换 Segment 来回点、频繁 onShow 都不必
+// 每次都重新打云函数，10 分钟内命中缓存直接复用——护持榜数据本就不要求逐秒实时
+const LEADERBOARD_CACHE_TTL_MS = 10 * 60 * 1000;
+// ⚡️ 切换 Segment 时的防抖延迟：快速连点多个榜单 Tab 只在停下来的最后一次真正发起请求
+const LEADERBOARD_FETCH_DEBOUNCE_MS = 250;
 // 🛡️ "上传后立刻显示新图，但切页/退出重进又变回旧图"的真正根因：lastConfirmedAvatarFileId/
 // lastConfirmedAvatarAt 只是 Page 实例上的普通字段（不在 data 里），只存在于内存中。
 // 同一次小程序运行期间切换自定义 TabBar 不会重建页面实例，字段能保留、宽限期确实生效；
@@ -27,15 +32,49 @@ const CERTIFICATE_CANVAS_ID = 'certificateCanvas';
 // 让宽限期跨小程序重启依然生效。
 const CONFIRMED_AVATAR_CACHE_KEY = 'confirmed_avatar_grace';
 
+// 🛡️ 门店餐饮与物资统计弹窗的兜底：云函数 statsSummary 正常情况下每个字段都有
+// 默认值，但网络异常/云函数返回结构变化时 result.data 可能整体或局部缺失，
+// 这里统一做 || 0 归一化，避免 WXML 侧因 null/undefined 渲染出空白或 NaN
+function normalizeStoreStats(raw: any) {
+  const meal = (raw && raw.mealTotals) || {};
+  const todayMat = (raw && raw.todayMaterialTotals) || {};
+  const monthMat = (raw && raw.monthMaterialTotals) || {};
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const now = new Date();
+  const fallbackToday = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  return {
+    today: (raw && raw.today) || fallbackToday,
+    mealTotals: {
+      breakfastCount: meal.breakfastCount || 0,
+      lunchCount: meal.lunchCount || 0,
+      dinnerCount: meal.dinnerCount || 0,
+      totalCount: meal.totalCount || 0
+    },
+    todayMaterialTotals: {
+      riceCount: todayMat.riceCount || 0,
+      flourCount: todayMat.flourCount || 0,
+      oilCount: todayMat.oilCount || 0,
+      vegetableCount: todayMat.vegetableCount || 0
+    },
+    monthMaterialTotals: {
+      riceCount: monthMat.riceCount || 0,
+      flourCount: monthMat.flourCount || 0,
+      oilCount: monthMat.oilCount || 0,
+      vegetableCount: monthMat.vegetableCount || 0
+    }
+  };
+}
+
 // 🌟 荣誉徽章解锁规则：护持天数 / 累计工时任一维度达标即视为解锁。
 // 阈值为产品侧可调参数，这里给出一组由浅入深、早期容易触达的示例梯度，
 // 让新义工也能较快解锁第一枚徽章，建立正反馈。
-const BADGE_CONFIG: Array<{ id: string; emoji: string; name: string; type: 'days' | 'hours'; threshold: number }> = [
-  { id: 'starter', emoji: '🌱', name: '初心', type: 'days', threshold: 1 },
-  { id: 'storm', emoji: '☔', name: '风雨无阻', type: 'days', threshold: 30 },
-  { id: 'hours100', emoji: '⏰', name: '百时勋章', type: 'hours', threshold: 100 },
-  { id: 'century', emoji: '💯', name: '百日精进', type: 'days', threshold: 100 },
-  { id: 'guardian', emoji: '🛡️', name: '护持先锋', type: 'hours', threshold: 500 }
+const BADGE_CONFIG: Array<{ id: string; emoji: string; name: string; type: 'days' | 'hours'; threshold: number; meaning: string }> = [
+  { id: 'starter', emoji: '🌱', name: '初心', type: 'days', threshold: 1, meaning: '义工之路的第一步，代表你迈出了守护雨花斋的初心' },
+  { id: 'storm', emoji: '☔', name: '风雨无阻', type: 'days', threshold: 30, meaning: '无论刮风下雨，你始终坚持到岗，是雨花斋最踏实的陪伴' },
+  { id: 'hours100', emoji: '⏰', name: '百时勋章', type: 'hours', threshold: 100, meaning: '累计护持满百小时，见证你日积月累的默默付出' },
+  { id: 'century', emoji: '💯', name: '百日精进', type: 'days', threshold: 100, meaning: '百日精进，代表你已把护持融入日常，是雨花斋的中坚力量' },
+  { id: 'guardian', emoji: '🛡️', name: '护持先锋', type: 'hours', threshold: 500, meaning: '累计工时突破 500 小时，是雨花斋当之无愧的护持先锋' }
 ];
 
 // 🏛️ 家长管理 / 资源兜底：门店人员画像 7 项字段名，与 manageStoreProfile 云函数一致——
@@ -53,6 +92,10 @@ const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
 
 Page({
   isNavigating: false,
+  // ❤️ 爱心护持榜：ViewModel 本地缓存（10 分钟失效）+ 切换 Segment 防抖计时器，
+  // 都是纯运行时状态，不需要触发 setData/持久化，与 isNavigating 同样挂在实例上
+  _leaderboardCache: {} as Record<string, { time: number; data: any }>,
+  _leaderboardFetchTimer: null as any,
   // 🐛 头像"退出重进又变回旧值"根因：loadUserProfile 里缓存优先渲染（快）与云端
   // fetchUserRole 刷新（慢，多一轮 checkUserRole 云函数往返）各自独立调用
   // applyAvatarUrl，谁的 getTempFileURL 请求先返回完全看网络时序，不保证按发起顺序
@@ -111,6 +154,15 @@ Page({
       auditedReports: 0
     },
 
+    // ❤️ 爱心护持榜：本月/年度/总贡献三档切换，前 20 名 + 当前登录用户自己的排名
+    leaderboardRange: 'month' as 'month' | 'year' | 'total',
+    leaderboardLoading: false,
+    leaderboardList: [] as Array<{ rank: number; displayName: string; hours: number; isSelf: boolean }>,
+    leaderboardSelfRank: 0,
+    leaderboardSelfHours: 0,
+    leaderboardGapToNext: 0,
+    leaderboardTotalRanked: 0,
+
     // 🏛️ 家长管理 / 资源兜底：内嵌自已废弃的 pages/patriarch-dashboard，
     // 单独收拢进一个命名空间对象，避免和本页其余字段混在一起
     patriarchData: {
@@ -150,15 +202,15 @@ Page({
 
     // 🌟 数字荣誉墙 + 电子证书
     badgeList: [] as Array<{
-      id: string; emoji: string; name: string; unlocked: boolean; hint: string;
-      unlockDesc: string; progressCurrent: number; progressThreshold: number;
+      id: string; emoji: string; name: string; meaning: string; unlocked: boolean; hint: string;
+      unlockDesc: string; progressStatusText: string; progressCurrent: number; progressThreshold: number;
       progressUnit: string; progressPercent: number;
     }>,
     // 🎖️ 徽章详情弹窗：点击核心荣誉墙任一枚徽章时展示名称/图标/解锁条件/进度条
     showBadgeDetailModal: false,
     selectedBadge: null as null | {
-      id: string; emoji: string; name: string; unlocked: boolean; hint: string;
-      unlockDesc: string; progressCurrent: number; progressThreshold: number;
+      id: string; emoji: string; name: string; meaning: string; unlocked: boolean; hint: string;
+      unlockDesc: string; progressStatusText: string; progressCurrent: number; progressThreshold: number;
       progressUnit: string; progressPercent: number;
     },
     showCertificateModal: false,
@@ -260,6 +312,9 @@ Page({
       todayMaterialTotals: { riceCount: 0, flourCount: 0, oilCount: 0, vegetableCount: 0 },
       monthMaterialTotals: { riceCount: 0, flourCount: 0, oilCount: 0, vegetableCount: 0 }
     },
+    // 🌱 今日三餐人数 + 今日物资消耗是否全为 0——用于弹窗底部"今日暂无录入数据"
+    // 空状态引导的显隐判断，见 onOpenStoreStatsModal
+    storeStatsAllZero: false,
 
     // 💌 家人端【我的反馈与回复】：与提交共用同一个半屏弹窗，靠 feedbackModalTab
     // 切换两块内容；unreadReplyCount 只对家人身份加载（initMinePage 里 isFamily 时触发）
@@ -450,6 +505,10 @@ Page({
     // 预览视角切换时无需重新查询，WXML 侧的显隐已经按 currentUserRole 展示角色自动收敛）
     this.fetchMeritStats(role);
     this.loadVolunteerStats();
+    // ❤️ 爱心护持榜：家人视角没有护持数据，不加载；命中 10 分钟本地缓存时不打云函数
+    if (!isFamily) {
+      this.fetchLeaderboard();
+    }
 
     // 🏛️ 家长管理 / 资源兜底：仅家长本人或超管（含预览降级后的超管，与卡片
     // wx:if 口径保持一致）才需要加载，避免给普通义工/店长/财务发多余的云函数请求
@@ -1022,9 +1081,15 @@ Page({
         id: cfg.id,
         emoji: cfg.emoji,
         name: cfg.name,
+        meaning: cfg.meaning,
         unlocked,
         hint: unlocked ? '' : `再${verb} ${remaining} ${unit}即可解锁「${cfg.name}」徽章`,
         unlockDesc: `累计${verb}满 ${cfg.threshold} ${unit}可解锁`,
+        // 🎖️ 弹窗正文的进度状态句：未解锁如"已护持 45/100 小时，还差 55 小时解锁"，
+        // 已解锁则改用鼓励式文案，不再提"还差多少"
+        progressStatusText: unlocked
+          ? `已${verb} ${progressCurrent} ${unit}，恭喜解锁「${cfg.name}」！`
+          : `已${verb} ${progressCurrent}/${cfg.threshold} ${unit}，还差 ${remaining} ${unit}解锁`,
         progressCurrent,
         progressThreshold: cfg.threshold,
         progressUnit: unit,
@@ -1128,6 +1193,71 @@ Page({
       });
       this.computeBadgeList();
     }
+  },
+
+  // ❤️ 切换爱心护持榜 Segment：[本月榜]/[年度榜]/[总贡献榜]
+  onSwitchLeaderboardRange(e: any) {
+    const range = e.currentTarget.dataset.range;
+    if (!range || range === this.data.leaderboardRange) return;
+    this.setData({ leaderboardRange: range });
+    this.fetchLeaderboard(range);
+  },
+
+  // ❤️ 爱心护持榜数据加载：10 分钟 ViewModel 本地缓存（同门店+同榜单档位命中即用，
+  // 不重新打云函数）+ 切换 Segment 连点防抖，两者共同减少护持榜对云函数的调用频率，
+  // 消除频繁请求 volunteer_duty_logs 聚合查询带来的加载卡顿
+  fetchLeaderboard(range?: 'month' | 'year' | 'total', forceRefresh = false) {
+    if (this.data.isFamily) return;
+
+    const targetRange = range || this.data.leaderboardRange;
+    const activeStore = getSelectedStore();
+    const storeId = (activeStore && activeStore.storeId) || '';
+    if (!storeId) return;
+
+    const cacheKey = `${storeId}_${targetRange}`;
+    if (!forceRefresh) {
+      const cached = this._leaderboardCache[cacheKey];
+      if (cached && (Date.now() - cached.time) < LEADERBOARD_CACHE_TTL_MS) {
+        this.applyLeaderboardResult(cached.data);
+        return;
+      }
+    }
+
+    if (this._leaderboardFetchTimer) {
+      clearTimeout(this._leaderboardFetchTimer);
+    }
+
+    this.setData({ leaderboardLoading: true });
+    this._leaderboardFetchTimer = setTimeout(async () => {
+      try {
+        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+        const res: any = await wx.cloud.callFunction({
+          name: 'manageVolunteerCheckIn',
+          data: { action: 'leaderboard', range: targetRange, storeId }
+        });
+        const result = res.result;
+        if (result && result.success) {
+          this._leaderboardCache[cacheKey] = { time: Date.now(), data: result };
+          this.applyLeaderboardResult(result);
+        } else {
+          this.setData({ leaderboardLoading: false });
+        }
+      } catch (err) {
+        console.warn('[fetchLeaderboard] 加载失败:', err);
+        this.setData({ leaderboardLoading: false });
+      }
+    }, LEADERBOARD_FETCH_DEBOUNCE_MS);
+  },
+
+  applyLeaderboardResult(result: any) {
+    this.setData({
+      leaderboardList: result.list || [],
+      leaderboardSelfRank: result.selfRank || 0,
+      leaderboardSelfHours: result.selfHours || 0,
+      leaderboardGapToNext: result.gapToNext || 0,
+      leaderboardTotalRanked: result.totalRanked || 0,
+      leaderboardLoading: false
+    });
   },
 
   onReleaseUserRole() {
@@ -1244,9 +1374,56 @@ Page({
     this.setData({ showBadgeDetailModal: false });
   },
 
+  // 🎖️ 分享荣誉：徽章详情弹窗里"分享荣誉"按钮（open-type="share"，仅已解锁徽章
+  // 展示）触发的标准微信分享卡片，按当前选中徽章动态生成标题
+  onShareAppMessage() {
+    const badge = this.data.selectedBadge;
+    if (badge && badge.unlocked) {
+      return {
+        title: `我在雨花斋解锁了「${badge.name}」荣誉徽章，一起来护持吧！`,
+        path: '/pages/index/index'
+      };
+    }
+    return {
+      title: '雨花爱心餐报助手 · 一起护持爱心餐桌',
+      path: '/pages/index/index'
+    };
+  },
+
+  // 🛡️ 义工证书生成前的空值校验：不直接信任 this.data 上可能滞后的
+  // userNickName/stats/currentStoreName（例如页面刚 onShow、initMinePage 里的异步
+  // fetchMeritStats 还没回来就点了这个入口），现场重新兜底取一遍——护持天数/工时
+  // 来自本地 my_checkin_logs 本就同步读取无竞态，这里额外用 computeMyCheckInStats
+  // 现算一遍而不是信任可能残留旧门店视角的 this.data.stats，门店名/昵称同样各自
+  // 兜底到 AuthService 缓存/getSelectedStore()，确保传给 Canvas 绘制的一定是非空值
+  resolveCertificateProfile(): { nickname: string; storeName: string; storeId: string; days: number; hours: number; certNo: string } {
+    const cachedRole = AuthService.getCachedRoleInfo();
+    const activeStore = getSelectedStore();
+    const storeId = (activeStore && activeStore.storeId) || (cachedRole && cachedRole.storeId) || '';
+    const storeName = this.data.currentStoreName || (activeStore && activeStore.storeName) || (cachedRole && cachedRole.storeName) || '';
+    const nickname = this.data.userNickName || (cachedRole && cachedRole.nickName) || '爱心义工';
+
+    const scopedStats = computeMyCheckInStats(storeId, storeName);
+    const days = scopedStats.days || this.data.stats.volunteerDays || 0;
+    const hours = scopedStats.hours || this.data.stats.volunteerHours || 0;
+
+    // 🔖 专属证书编号：openid + 门店 + 当天日期派生的确定性短码，同一账号同一天
+    // 多次打开生成的编号保持一致，不需要额外的云端序列号表
+    const openid = AuthService.getOpenid() || '';
+    const todayCompact = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    let hash = 0;
+    const hashSrc = openid + storeId;
+    for (let i = 0; i < hashSrc.length; i++) {
+      hash = (hash * 31 + hashSrc.charCodeAt(i)) >>> 0;
+    }
+    const certNo = `YH${todayCompact}-${hash.toString(16).toUpperCase().padStart(6, '0').slice(-6)}`;
+
+    return { nickname, storeName, storeId, days, hours, certNo };
+  },
+
   // 义工证书：异步绘制一张长图证书（Canvas 2D），绘制完成后展示为可保存的全屏预览
   async onGoToBadges() {
-    const { userNickName, stats, currentStoreName } = this.data;
+    const { nickname: userNickName, storeName: currentStoreName, storeId: certStoreId, days: certDays, hours: certHours, certNo } = this.resolveCertificateProfile();
 
     this.setData({
       showCertificateModal: true,
@@ -1261,8 +1438,7 @@ Page({
     // 这里获取失败也不阻断证书生成，只是最终图上不显示二维码
     let qrCodeLocalPath = '';
     try {
-      const cachedRole = AuthService.getCachedRoleInfo();
-      const storeId = (cachedRole && cachedRole.storeId) || '';
+      const storeId = certStoreId;
       if (storeId) {
         const qrRes = await wx.cloud.callFunction({
           name: 'getStoreQRCode',
@@ -1299,11 +1475,13 @@ Page({
             await drawVolunteerCertificate({
               canvas,
               nickname: userNickName,
-              days: stats.volunteerDays || 0,
-              hours: stats.volunteerHours || 0,
+              days: certDays,
+              hours: certHours,
               qrCodeTempPath: qrCodeLocalPath,
               width: 340,
-              height: 480
+              height: 480,
+              storeName: currentStoreName,
+              certNo
             });
 
             wx.canvasToTempFilePath({
@@ -1331,6 +1509,15 @@ Page({
 
   onCloseCertificateModal() {
     this.setData({ showCertificateModal: false });
+  },
+
+  // 🖼️ 点击证书图片全屏预览：wx.previewImage 自带的系统工具栏本就包含"发送给朋友/
+  // 收藏/保存图片"，与 image 组件的 show-menu-by-longpress 长按菜单互为补充——
+  // 很多用户不知道要长按，点一下就能进入预览态更符合直觉
+  onPreviewCertificateImage() {
+    const filePath = this.data.certificateTempFilePath;
+    if (!filePath) return;
+    wx.previewImage({ current: filePath, urls: [filePath] });
   },
 
   onSaveCertificateToAlbum() {
@@ -1881,7 +2068,13 @@ Page({
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
         return;
       }
-      this.setData({ storeStats: result.data });
+      const storeStats = normalizeStoreStats(result.data);
+      const storeStatsAllZero = storeStats.mealTotals.totalCount === 0
+        && storeStats.todayMaterialTotals.riceCount === 0
+        && storeStats.todayMaterialTotals.flourCount === 0
+        && storeStats.todayMaterialTotals.oilCount === 0
+        && storeStats.todayMaterialTotals.vegetableCount === 0;
+      this.setData({ storeStats, storeStatsAllZero });
     }).catch((err) => {
       console.error('[onOpenStoreStatsModal] 加载异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
@@ -1892,6 +2085,41 @@ Page({
 
   onCloseStoreStatsModal() {
     this.setData({ showStoreStatsModal: false });
+  },
+
+  // 📖 查看消耗明细：跳去店长/财务日常就在用的正式台账历史页，不新建一套
+  // "物资流水"专属页面——material_logs 的每一笔消耗本就是账本历史的一部分
+  onGoToStoreStatsDetail() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    this.setData({ showStoreStatsModal: false });
+    wx.navigateTo({
+      url: '/pages/history/history',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // ✍️ 补报今日数据：菜单人数、物资消耗是两张独立表单，用 ActionSheet 让用户
+  // 先选清楚要补哪一项，再复用 daily-menu-modal/material-usage-modal 现成的
+  // resetForm() 全新登记入口（与首页金刚区 onTapToolDailyMenu 同一套调用方式）
+  onGoToStoreStatsSupplement() {
+    wx.showActionSheet({
+      itemList: ['登记今日菜单人数', '登记物资消耗与报损'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          const modal = this.selectComponent('#dailyMenuModal') as any;
+          if (modal) modal.resetForm();
+          this.setData({ showStoreStatsModal: false, showDailyMenuModal: true });
+        } else if (res.tapIndex === 1) {
+          const modal = this.selectComponent('#materialUsageModal') as any;
+          if (modal) modal.resetForm();
+          this.setData({ showStoreStatsModal: false, showMaterialUsageModal: true });
+        }
+      }
+    });
   },
 
   // 🌟 店长专属入口：本店数据明细（携带 shopName 预选中本店，与超管工具箱里

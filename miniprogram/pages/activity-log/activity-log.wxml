@@ -12,12 +12,24 @@
 
   <scroll-view scroll-y class="al-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
 
-    <!-- 🛡️ 权限死锁修复（双保险）："全国总览"这个虚拟门店名只有超管才该看到。
-         TS 侧 initRoleAndStore 已经在 isFamily 为 true 时把 isSuperAdmin 强制清零
-         （根因修复），这里的显式 !isFamily 是 WXML 层面再加一道硬约束，不完全依赖
-         那次赋值——两个分支互斥，覆盖"是/不是全国总览"两种情况：非"全国总览"的
-         真实门店名对任何角色都正常显示；"全国总览"仅家人以外的超管才显示 -->
-    <view class="al-store-tip" wx:if="{{!isFamily && isSuperAdmin && currentStoreName === '全国总览' || (currentStoreName && currentStoreName !== '全国总览')}}">📍 {{currentStoreName}}</view>
+    <!-- 📍 门店身份 Header：sticky 吸顶展示当前门店名，异步解析完成前用骨架占位
+         兜底，避免闪现任何默认值。currentStoreName 已经过 applyRolePermissions/
+         resolveEffectiveStoreIdentity 统一解析与虚拟店名过滤，非超管这里只会是
+         真实绑定门店名；只有超管才会看到"全国总览"与右侧切换门店入口 -->
+    <view class="al-store-bar-skeleton" wx:if="{{!roleReady}}"></view>
+    <view class="al-store-bar" wx:elif="{{currentStoreName}}">
+      <text class="al-store-bar-name">📍 {{currentStoreName}}</text>
+      <picker
+        wx:if="{{isSuperAdmin}}"
+        mode="selector"
+        range="{{superAdminStoreOptions}}"
+        range-key="storeName"
+        value="{{superAdminStoreIndex}}"
+        bindchange="onSuperAdminStoreChange"
+      >
+        <view class="al-store-switch-btn">切换门店 ▾</view>
+      </picker>
+    </view>
 
     <!-- ⏳ 待确认的义工投稿：仅店长/超管可见，与下方公开时间轴完全分开——
          这里的记录还没通过确认，不会出现在今日动态/历史动态里 -->
@@ -77,6 +89,7 @@
 
       <!-- 🌟 发布冲突提示：今日已有记录时展示发布人与时间 -->
       <text class="al-publish-meta" wx:if="{{todayItem}}">已由 {{todayItem.publisherLabel || '管理员'}} 于 {{todayItem.publishTimeStr}} 发布</text>
+      <text class="al-card-category-tag {{todayItem.category ? 'tagged' : ''}}" wx:if="{{todayItem}}">{{todayItem.categoryLabelText}}</text>
 
       <text class="al-today-content" wx:if="{{todayItem && todayItem.content}}">{{todayItem.content}}</text>
 
@@ -91,10 +104,21 @@
       </view>
     </view>
 
-    <!-- 🕰 历史动态：时光轴倒序，不含顶部已展示的今日记录 -->
-    <view class="al-section-divider">
-      <text class="al-divider-icon">🕰</text>
-      <text class="al-divider-txt">历史动态</text>
+    <!-- 🕰 历史动态：时光轴倒序，不含顶部已展示的今日记录。右侧日期选择器 +
+         ◀/▶ 快捷翻页支持精确调取某一天的历史日志，不用在漫长的分页时光轴里翻找 -->
+    <view class="al-section-divider al-history-header">
+      <view class="al-history-header-left">
+        <text class="al-divider-icon">🕰</text>
+        <text class="al-divider-txt">历史动态</text>
+      </view>
+      <view class="al-history-filter">
+        <text class="al-history-filter-arrow" bindtap="onHistoryPrevDay">◀</text>
+        <picker mode="date" value="{{historyFilterDate}}" bindchange="onHistoryDateChange">
+          <view class="al-history-filter-date">📅 {{historyFilterDate || '选择日期'}}</view>
+        </picker>
+        <text class="al-history-filter-arrow" bindtap="onHistoryNextDay">▶</text>
+        <text class="al-history-filter-clear" wx:if="{{historyFilterDate}}" bindtap="onClearHistoryDateFilter">✕</text>
+      </view>
     </view>
 
     <view class="al-timeline">
@@ -107,7 +131,17 @@
           <view class="al-card-header-row">
             <view class="al-card-header-left">
               <view class="al-card-time">{{item.eventTime}}</view>
-              <view class="al-card-title">{{item.title}}</view>
+              <view class="al-card-title-row">
+                <text class="al-card-title">{{item.title}}</text>
+                <text class="al-card-pinned-badge" wx:if="{{item.isPinned}}">📌 已置顶</text>
+              </view>
+              <text class="al-card-category-tag {{item.category ? 'tagged' : ''}}">{{item.categoryLabelText}}</text>
+            </view>
+            <!-- 📌🗑 店长/超管权限强化：卡片右上角置顶/删除，与下方 al-card-actions-row
+                 的编辑/自助删除（面向记录本人）是两套互不重叠的入口 -->
+            <view class="al-card-corner-actions" wx:if="{{canManage}}">
+              <text class="al-card-corner-icon al-card-corner-icon-pin {{item.isPinned ? 'active' : ''}}" catchtap="onTogglePin" data-id="{{item._id}}" data-pinned="{{item.isPinned}}">📌</text>
+              <text class="al-card-corner-icon al-card-corner-icon-delete" catchtap="onDeleteLog" data-id="{{item._id}}">🗑</text>
             </view>
           </view>
 
@@ -131,11 +165,13 @@
           </view>
           <text class="al-card-content" wx:if="{{item.content}}">{{item.content}}</text>
 
-          <!-- ✏️🗑️ 编辑/删除：本店管理者（店长/家长/超管）或记录本人可见，单独
-               一行，与下面 al-card-footer 的"导出活动海报"分开，避免挤压 -->
+          <!-- ✏️ 编辑：本店管理者（店长/家长/超管）或记录本人可见，单独一行，与
+               下面 al-card-footer 的"导出活动海报"分开，避免挤压。删除对管理者
+               已收进右上角 al-card-corner-actions，这里的删除只留给"记录本人但
+               不是管理者"这种自助场景，避免同一张卡片上出现两处删除入口 -->
           <view class="al-card-actions-row" wx:if="{{canManage || item.createdBy === currentUserOpenid}}">
             <button class="al-btn-card-edit" catchtap="onOpenEditForm" data-id="{{item._id}}">✏️ 编辑/追加照片</button>
-            <button class="al-btn-card-delete" catchtap="onDeleteLog" data-id="{{item._id}}">🗑️ 删除</button>
+            <button class="al-btn-card-delete" wx:if="{{!canManage && item.createdBy === currentUserOpenid}}" catchtap="onDeleteLog" data-id="{{item._id}}">🗑️ 删除</button>
           </view>
 
           <view class="al-card-footer">
@@ -147,7 +183,8 @@
 
     <view class="al-empty-state" wx:if="{{!loading && historyList.length === 0}}">
       <text class="al-empty-icon">🕰</text>
-      <text class="al-empty-text">暂无历史动态记录</text>
+      <text class="al-empty-text" wx:if="{{historyFilterDate}}">{{historyFilterDate}} 当天暂无历史动态记录</text>
+      <text class="al-empty-text" wx:else>暂无历史动态记录</text>
     </view>
 
     <view class="al-loading-more" wx:if="{{loadingMore}}">
@@ -167,6 +204,7 @@
         <text class="al-detail-close" bindtap="onCloseDetail">✕</text>
       </view>
       <text class="al-detail-time">{{detailItem.eventTime}}</text>
+      <text class="al-card-category-tag {{detailItem.category ? 'tagged' : ''}}">{{detailItem.categoryLabelText}}</text>
 
       <scroll-view scroll-y class="al-detail-scroll">
         <view class="al-detail-images" wx:if="{{detailItem.images.length > 0}}">
@@ -208,6 +246,17 @@
         <picker mode="date" value="{{editForm.eventTime}}" bindchange="onEditTimeChange">
           <view class="al-form-picker">{{editForm.eventTime}}</view>
         </picker>
+
+        <text class="al-form-label">分类（选填）</text>
+        <view class="al-category-chip-row">
+          <view
+            class="al-category-chip {{editForm.category === item.value ? 'active' : ''}}"
+            wx:for="{{categoryOptions}}"
+            wx:key="value"
+            data-value="{{item.value}}"
+            bindtap="onSelectCategory"
+          >{{item.label}}</view>
+        </view>
 
         <text class="al-form-label">图文内容</text>
         <textarea

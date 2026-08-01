@@ -20,25 +20,29 @@
       <view class="vt-status-pill {{form.mealStatus === 'closed' ? 'active' : ''}}" bindtap="onSelectMealStatus" data-status="closed">🚫 今日休餐</view>
     </view>
 
-    <view class="vt-count-row vt-count-row-3" wx:if="{{form.mealStatus === 'open'}}">
+    <view class="vt-count-row vt-count-row-3">
       <view class="vt-count-cell">
         <text class="vt-form-label">早餐人数</text>
-        <input class="vt-count-input" type="number" placeholder="0" value="{{form.breakfastCount}}" bindinput="onBreakfastCountInput" />
+        <input class="vt-count-input" type="number" placeholder="0" value="{{form.breakfastCount}}" bindinput="onBreakfastCountInput" disabled="{{form.mealStatus === 'closed'}}" />
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">午餐人数</text>
-        <input class="vt-count-input" type="number" placeholder="0" value="{{form.lunchCount}}" bindinput="onLunchCountInput" />
+        <input class="vt-count-input" type="number" placeholder="0" value="{{form.lunchCount}}" bindinput="onLunchCountInput" disabled="{{form.mealStatus === 'closed'}}" />
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">晚餐人数</text>
-        <input class="vt-count-input" type="number" placeholder="0" value="{{form.dinnerCount}}" bindinput="onDinnerCountInput" />
+        <input class="vt-count-input" type="number" placeholder="0" value="{{form.dinnerCount}}" bindinput="onDinnerCountInput" disabled="{{form.mealStatus === 'closed'}}" />
       </view>
     </view>
 
-    <text class="vt-form-label">备注 / 菜单说明</text>
+    <view class="vt-form-label-row" wx:if="{{form.mealStatus === 'open'}}">
+      <text class="vt-form-label">备注 / 菜单说明</text>
+      <view class="vt-quick-fill-btn" bindtap="onQuickFillYesterdayMenu">🍲 快捷引用昨日菜单</view>
+    </view>
+    <text class="vt-form-label" wx:else>备注 / 菜单说明</text>
     <textarea
       class="feedback-content-textarea"
-      placeholder="今日菜品、特殊情况等（选填）"
+      placeholder="{{form.mealStatus === 'closed' ? '请输入休餐原因（如：例行休整、设备维修）' : '今日菜品、特殊情况等（选填）'}}"
       placeholder-class="feedback-textarea-placeholder"
       value="{{form.menuNote}}"
       bindinput="onMenuNoteInput"
@@ -46,6 +50,6 @@
       auto-height
     ></textarea>
 
-    <button class="feedback-submit-btn" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">📮 提交登记</button>
+    <button class="feedback-submit-btn" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">{{form.mealStatus === 'closed' ? '📮 提交休餐登记' : '📮 提交登记'}}</button>
   </view>
 </view>

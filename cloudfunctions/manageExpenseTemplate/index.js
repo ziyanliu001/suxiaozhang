@@ -6,12 +6,17 @@
 //   这三个角色的门店级写权限组合与 recalculateCascadeBalances/manageFinanceLock 一致。
 // - 读（list）：任意已登录角色只读，仅做门店/机构范围收敛，不做角色限制——填报表单时
 //   任何人都要能看到模板列表，只是增删改按钮在前端对非管理角色隐藏。
+// - incrementUsage：任意已登录角色可调用（点击 Chip 即计数），仅做机构范围收敛，
+//   不需要店长/财务写权限——这只是使用频次埋点，不改变项目名称/金额本身。
 //
-// 规模上限：同门店同 category 最多 30 条，避免列表无界增长；量级小，不引入分页/排序字段。
+// 规模上限：同门店同 category 最多 30 条，避免列表无界增长；量级小，不引入分页字段。
+// 🔥 高频置顶：list 默认按 usageCount 降序排列（同频次按创建时间先后兜底排序），
+// 点击 Chip 记账即调用 incrementUsage 计数，常用项目会自然浮到列表前面。
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
 
 const COLLECTION = 'expense_item_templates';
 const MAX_ITEMS_PER_CATEGORY = 30;
@@ -114,6 +119,7 @@ exports.main = async (event) => {
             category,
             itemName: safeName,
             defaultAmount: safeAmount,
+            usageCount: 0,
             createdBy: OPENID,
             createdAt: db.serverDate(),
             updateTime: db.serverDate()
@@ -181,6 +187,28 @@ exports.main = async (event) => {
         return { success: true, message: '已删除' };
       }
 
+      // 🔥 使用频次埋点：点击 Chip 即调用一次，配合 list 的 usageCount 降序排列，
+      // 让常用项目自然浮到列表前面——任意已登录角色可调（不要求店长/财务写权限），
+      // 仅做机构范围收敛，防止跨机构盲写
+      case 'incrementUsage': {
+        const { id } = event;
+        if (!id) return { success: false, error: '缺少 id 参数' };
+        if (!caller) return { success: false, error: '无权限：未找到您的角色信息' };
+
+        const existingRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
+        const existing = existingRes && existingRes.data;
+        if (!existing) return { success: true, message: '记录不存在，忽略计数' };
+
+        if (existing.tenantId && caller.tenantId && existing.tenantId !== caller.tenantId) {
+          return { success: false, error: '无权限：该记录不属于您所在的机构' };
+        }
+
+        await db.collection(COLLECTION).doc(id).update({
+          data: { usageCount: _.inc(1) }
+        });
+        return { success: true };
+      }
+
       case 'list': {
         const { storeId, category } = event;
         const isSuperAdmin = caller && caller.role === 'super_admin';
@@ -215,6 +243,7 @@ exports.main = async (event) => {
 
         const listRes = await db.collection(COLLECTION)
           .where(where)
+          .orderBy('usageCount', 'desc')
           .orderBy('createdAt', 'asc')
           .limit(MAX_LIST_LIMIT)
           .get();

@@ -6,7 +6,7 @@ const db = cloud.database();
 const _ = db.command;
 
 exports.main = async (event, context) => {
-  const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate } = event;
+  const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate, previewOnly } = event;
   const { OPENID } = cloud.getWXContext();
 
   const now = new Date();
@@ -112,6 +112,79 @@ exports.main = async (event, context) => {
 
     if (records.length === 0) {
       return { success: false, errMsg: '该周期内无明细数据可导出' };
+    }
+
+    // 🌟 「先核对、再确认、后导出」安全闭环：previewOnly 模式下只查询、汇总、
+    // 整理明细列表返回给前端做核对展示，完全不触碰下方 ExcelJS 工作簿构建/
+    // 云存储上传，不产生任何文件——真正生成 xlsx 必须走用户点击「确认并导出」
+    // 后不带 previewOnly 的第二次调用
+    if (previewOnly) {
+      let previewIncome = 0;
+      let previewExpense = 0;
+      let previewDiners = 0;
+      let previewMaterialsCount = 0;
+      // 🌟「先核对、再确认、后导出」预览摘要新增两项，供财务一眼判断这批数据是否
+      // 值得放心导出：已审核小票数（有凭证图片佐证的记录）、异常标记数（有支出
+      // 但完全没上传凭证——与 cloudfunctions/getRiskAlerts 的 missing_receipt
+      // 判定同一条口径，不重复实现红字冲销/余额链路那套需要跨记录比对的逻辑，
+      // 那类异常已作废记录本就被上面 isVoid 过滤掉、不会出现在待导出明细里）
+      let previewAuditedReceiptCount = 0;
+      let previewAnomalyCount = 0;
+
+      const previewRecords = records.map(record => {
+        const income = parseFloat(record.listDonationTotal || 0) + parseFloat(record.otherDonation || 0);
+        const expense = parseFloat(record.expenseAmount || 0);
+        const diningCount = parseInt(record.diningCount || 0, 10);
+        const receiptCount = (record.receiptImages && record.receiptImages.length) ||
+          (record.receiptImageList && record.receiptImageList.length) || 0;
+
+        previewIncome += income;
+        previewExpense += expense;
+        previewDiners += diningCount;
+        if (Array.isArray(record.materials)) {
+          previewMaterialsCount += record.materials.length;
+        }
+        if (receiptCount > 0) {
+          previewAuditedReceiptCount++;
+        }
+        if (expense > 0 && receiptCount === 0) {
+          previewAnomalyCount++;
+        }
+
+        return {
+          date: record.dateString || '',
+          shopName: record.shopName || '',
+          income: Number(income.toFixed(2)),
+          expense: Number(expense.toFixed(2)),
+          net: Number((income - expense).toFixed(2)),
+          diningCount,
+          hasReceipt: receiptCount > 0,
+          receiptCount
+        };
+      });
+
+      return {
+        success: true,
+        previewOnly: true,
+        periodLabel,
+        startDateStr,
+        endDateStr,
+        recordCount: records.length,
+        records: previewRecords,
+        summary: {
+          periodLabel,
+          startDateStr,
+          endDateStr,
+          totalIncome: Number(previewIncome.toFixed(2)),
+          totalExpense: Number(previewExpense.toFixed(2)),
+          netTotal: Number((previewIncome - previewExpense).toFixed(2)),
+          totalDiners: previewDiners,
+          materialsCount: previewMaterialsCount,
+          recordCount: records.length,
+          auditedReceiptCount: previewAuditedReceiptCount,
+          anomalyCount: previewAnomalyCount
+        }
+      };
     }
 
     // 2. 构建 Excel 工作簿

@@ -65,6 +65,16 @@
   margin-bottom: 16rpx;
 }
 
+/* 🛡️ 门店身份异步解析完成前的骨架占位：避免 currentStoreName 到达前的那一帧
+   默认回退显示任何门店名/全国总览，见 daily-menu.ts applyRolePermissions */
+.dm-store-tip-skeleton {
+  width: 200rpx;
+  height: 28rpx;
+  border-radius: 6rpx;
+  background: #EFE6D8;
+  margin-bottom: 16rpx;
+}
+
 .dm-section-divider {
   display: flex;
   align-items: center;
@@ -89,6 +99,56 @@
   padding: 24rpx;
   margin-bottom: 8rpx;
   box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+/* 📅 日期导航：◀ 上一天 / 下一天 ▶ + 日历 picker，与三段式餐别切换共同构成
+   本次新增的"当前查看/管理哪一天哪一餐"入口，视觉上做成今日食谱卡片内的一个
+   独立分区，与卡片下方内容用留白分开 */
+.dm-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.dm-date-nav-arrow {
+  font-size: 24rpx;
+  color: #8C1D18;
+  padding: 6rpx 12rpx;
+}
+
+.dm-date-nav-picker {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #333333;
+  min-width: 180rpx;
+  text-align: center;
+}
+
+/* 🍚 餐别切换：三段式分段控件，选中态用品牌红底白字，未选中态浅灰背景，
+   与 .dm-form-picker/.dm-action-btn 已有的视觉语言保持一致 */
+.dm-meal-switcher {
+  display: flex;
+  background: #F8F5F0;
+  border-radius: 12rpx;
+  padding: 4rpx;
+  margin-bottom: 20rpx;
+}
+
+.dm-meal-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  color: #8C1D18;
+  padding: 12rpx 0;
+  border-radius: 10rpx;
+}
+
+.dm-meal-tab.active {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-weight: bold;
 }
 
 /* 🍱 今日食谱顶部：左侧日期+餐次，右侧管理员轻量化 [修改][删除] 按钮组 */
@@ -138,10 +198,6 @@
   color: #C62828;
 }
 
-.dm-action-btn-primary {
-  font-weight: bold;
-}
-
 .dm-today-note {
   display: block;
   font-size: 26rpx;
@@ -155,6 +211,37 @@
   display: block;
   color: #999999;
   font-size: 26rpx;
+  margin-bottom: 20rpx;
+}
+
+/* 🍱 未发布状态主行动区：主 CTA【+ 立即发布该日食谱】+ 次要辅助按钮
+   【引用历史食谱】，替代此前不起眼的纯文字"发布食谱"链接 */
+.dm-publish-cta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.dm-btn-publish-primary {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 12rpx;
+}
+
+.dm-btn-reuse-template {
+  background: #FFF5F0;
+  color: #8C1D18;
+  border: 1.5rpx solid #FFD3BE;
+  font-size: 26rpx;
+  border-radius: 12rpx;
+}
+
+.dm-btn-publish-primary::after,
+.dm-btn-reuse-template::after {
+  border: none;
 }
 
 /* 🌟 发布冲突提示：今日已存在食谱时，展示发布人与时间，弱化视觉不抢主标题 */
@@ -348,29 +435,37 @@
   border: none;
 }
 
+/* 📖 历史食谱空状态：与 statistics.wxss .smart-empty-card 同款白底圆角卡片 +
+   阴影 + 居中大图标，保持与全局其它空状态视觉一致，不再用一套裸文字堆叠 */
 .dm-empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 100rpx 0;
+  justify-content: center;
+  padding: 80rpx 40rpx;
+  margin: 8rpx 0 32rpx;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
 .dm-empty-icon {
-  font-size: 72rpx;
-  margin-bottom: 16rpx;
-}
-
-.dm-empty-text {
-  font-size: 26rpx;
-  color: #999999;
+  font-size: 96rpx;
   margin-bottom: 24rpx;
 }
 
-.dm-empty-btn {
-  background: #8C1D18;
-  color: #FFFFFF;
-  font-size: 26rpx;
-  padding: 0 40rpx;
+.dm-empty-title {
+  font-size: 28rpx;
+  color: #495057;
+  font-weight: 500;
+  text-align: center;
+  margin-bottom: 12rpx;
+}
+
+.dm-empty-suggest {
+  font-size: 24rpx;
+  color: #868E96;
+  text-align: center;
 }
 
 .dm-loading-more,
@@ -504,6 +599,13 @@
 
 .dm-form-textarea {
   min-height: 160rpx;
+}
+
+/* 🍚 编辑表单里的餐别展示：只读，不可在编辑中途切换餐别（切餐别请回到顶部
+   分段控件），浅灰文字与可编辑的 .dm-form-picker 区分开 */
+.dm-form-picker-readonly {
+  color: #999999;
+  background: #F1F1EE;
 }
 
 /* 微信标准九宫格：与上方 .dm-dish-grid 展示态同款布局（CSS Grid 三列 + padding-bottom
@@ -668,4 +770,38 @@
 .dm-btn-poster-share {
   background: #F8F5F0;
   color: #8C1D18;
+}
+
+/* 📖 引用历史食谱弹窗：复用 .dm-detail-box 弹窗壳，列表项样式与 .dm-menu-card
+   同一套卡片语言，但更紧凑（一行日期 + 一行摘要），适合快速扫视挑选 */
+.dm-reuse-template-scroll {
+  max-height: 60vh;
+}
+
+.dm-reuse-template-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #F0EAE2;
+}
+
+.dm-reuse-template-item:last-child {
+  border-bottom: none;
+}
+
+.dm-reuse-template-item:active {
+  opacity: 0.6;
+}
+
+.dm-reuse-template-date {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  margin-bottom: 6rpx;
+}
+
+.dm-reuse-template-preview {
+  font-size: 24rpx;
+  color: #666666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

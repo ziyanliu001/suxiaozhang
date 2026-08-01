@@ -451,6 +451,112 @@
   color: #999999;
 }
 
+/* ❤️ 爱心护持榜 */
+.leaderboard-divider {
+  border-top: 1rpx dashed #EFE6D8;
+  margin-top: 28rpx;
+}
+
+.leaderboard-section {
+  position: relative;
+  z-index: 1;
+  margin-top: 20rpx;
+}
+
+.leaderboard-tab-row {
+  display: flex;
+  background: #F8F4EA;
+  border-radius: 16rpx;
+  padding: 6rpx;
+  margin-bottom: 16rpx;
+}
+
+.leaderboard-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 24rpx;
+  color: #8C6D46;
+  padding: 12rpx 0;
+  border-radius: 12rpx;
+  transition: all 0.2s ease;
+}
+
+.leaderboard-tab.active {
+  background: #FFFFFF;
+  color: #8C1D18;
+  font-weight: bold;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+
+.leaderboard-loading,
+.leaderboard-empty {
+  text-align: center;
+  font-size: 24rpx;
+  color: #ADB5BD;
+  padding: 32rpx 0;
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  padding: 14rpx 8rpx;
+  border-bottom: 1rpx solid #F5EFE0;
+  gap: 16rpx;
+}
+
+.leaderboard-row:last-child {
+  border-bottom: none;
+}
+
+.leaderboard-row.is-self {
+  background: rgba(184, 134, 11, 0.08);
+  border-radius: 12rpx;
+}
+
+.leaderboard-rank {
+  width: 48rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #A08A6A;
+  flex-shrink: 0;
+}
+
+.leaderboard-rank.top3 {
+  font-size: 32rpx;
+}
+
+.leaderboard-name {
+  flex: 1;
+  font-size: 26rpx;
+  color: #333333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-hours {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  flex-shrink: 0;
+}
+
+.leaderboard-self-footer {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed #EFE6D8;
+  text-align: center;
+  font-size: 23rpx;
+  color: #8C6D46;
+  font-weight: 600;
+}
+
+.leaderboard-self-footer.unranked {
+  color: #ADB5BD;
+  font-weight: normal;
+}
+
 /* 分组小标题：弱化视觉但清晰划分列表语义分组，替代此前一整块无分组的长列表 */
 .list-group-label {
   font-size: 22rpx;
@@ -572,6 +678,11 @@
 
 .pd-health-val.red {
   color: #E03131;
+}
+
+.pd-health-val-zero {
+  color: #ADB5BD;
+  font-weight: normal;
 }
 
 .pd-verify-row {
@@ -1088,6 +1199,7 @@
 }
 
 .honor-badge-circle {
+  position: relative;
   width: 96rpx;
   height: 96rpx;
   border-radius: 50%;
@@ -1097,10 +1209,31 @@
   box-sizing: border-box;
 }
 
-/* 已解锁：饱满金色渐变 + 微光投影，点击时整体缩放做"微光"反馈（见 .honor-badge-item:active） */
+/* 已解锁：饱满金色渐变 + 微光投影 + 持续炫光呼吸动画，点击时整体缩放做"微光"反馈（见 .honor-badge-item:active） */
 .honor-badge-item.unlocked .honor-badge-circle {
   background: linear-gradient(135deg, #F1C40F 0%, #B8860B 100%);
   box-shadow: 0 0 0 4rpx #FFF3BF, 0 6rpx 16rpx rgba(184, 134, 11, 0.45);
+  animation: badgeGlowPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes badgeGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 4rpx #FFF3BF, 0 6rpx 16rpx rgba(184, 134, 11, 0.45); }
+  50% { box-shadow: 0 0 0 8rpx #FFF3BF, 0 6rpx 24rpx rgba(184, 134, 11, 0.7); }
+}
+
+/* 未点亮：小圆角百分比标签叠在徽章圆环右下角，柔和灰阶基础上标出完成进度 */
+.honor-badge-percent {
+  position: absolute;
+  right: -6rpx;
+  bottom: -6rpx;
+  font-size: 16rpx;
+  color: #8C6D46;
+  background: #FFF9E8;
+  border: 1rpx solid #E9D8B0;
+  border-radius: 16rpx;
+  padding: 1rpx 8rpx;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .honor-badge-item.unlocked .honor-badge-emoji {
@@ -1158,6 +1291,10 @@
   box-shadow: 0 0 0 6rpx #FFF3BF, 0 6rpx 16rpx rgba(184, 134, 11, 0.45);
 }
 
+.badge-detail-circle.glow-anim {
+  animation: badgeGlowPulse 2.4s ease-in-out infinite;
+}
+
 .badge-detail-circle.unlocked .badge-detail-emoji {
   font-size: 56rpx;
 }
@@ -1190,6 +1327,16 @@
   font-weight: bold;
 }
 
+/* 🎖️ 勋章寓意：比解锁条件更"有温度"的一句话说明，颜色略深、字号略大做视觉区分 */
+.badge-detail-meaning {
+  font-size: 25rpx;
+  color: #8C1D18;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 10rpx;
+  font-weight: 500;
+}
+
 .badge-detail-desc {
   font-size: 24rpx;
   color: #6B5B45;
@@ -1217,6 +1364,24 @@
 .badge-detail-progress-text {
   font-size: 22rpx;
   color: #A08A6A;
+}
+
+/* 🌟 已解锁荣誉的分享入口 */
+.badge-detail-share-btn {
+  width: 100%;
+  margin-top: 20rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #F1C40F 0%, #B8860B 100%);
+  border-radius: 38rpx;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+}
+
+.badge-detail-share-btn::after {
+  border: none;
 }
 
 /* ================= 🌟 义工证书 Modal ================= */
@@ -2300,5 +2465,79 @@
 
 .store-stats-scroll .pd-health-title:first-child {
   margin-top: 0;
+}
+
+.store-stats-timestamp {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-size: 22rpx;
+  color: #868E96;
+  margin-bottom: 20rpx;
+}
+
+.store-stats-timestamp-dot {
+  color: #DEE2E6;
+}
+
+.store-stats-refresh {
+  color: #2B8A3E;
+}
+
+.store-stats-empty-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  padding: 32rpx 0 12rpx;
+}
+
+.store-stats-empty-text {
+  font-size: 26rpx;
+  color: #868E96;
+}
+
+.store-stats-empty-btn {
+  font-size: 26rpx;
+  color: #FFFFFF;
+  background: #8C1D18;
+  padding: 12rpx 40rpx;
+  line-height: 1.6;
+  border-radius: 999rpx;
+}
+
+.store-stats-empty-btn::after {
+  border: none;
+}
+
+.store-stats-footer-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #EEE;
+  flex-shrink: 0;
+}
+
+.store-stats-footer-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  padding: 18rpx 0;
+  border-radius: 12rpx;
+}
+
+.store-stats-footer-btn:active {
+  opacity: 0.7;
+}
+
+.store-stats-footer-btn-detail {
+  background: #F1F3F5;
+  color: #495057;
+}
+
+.store-stats-footer-btn-supplement {
+  background: #8C1D18;
+  color: #FFFFFF;
 }
 

@@ -1,0 +1,34 @@
+// 🍚 门店餐饮与物资统计弹窗的数值格式化：0/未录入统一显示为 '--'（灰色，
+// 由调用处配 .pd-health-val-zero 类名），避免与"确实统计到 0"混淆的同时
+// 又不让一堆真零把弹窗撑得花花绿绿。物资单位集中放在 MATERIAL_UNITS 这一张
+// 表里——目前大米/面粉/食用油/蔬菜的登记表单（material-usage-modal）全部
+// 按"斤"计量，没有升级单位；如果未来表单支持食用油按"升"登记，只需改这一
+// 处映射，不用再满 wxml 找文案
+var MATERIAL_UNITS = {
+  rice: '斤',
+  flour: '斤',
+  oil: '斤',
+  vegetable: '斤'
+};
+
+function isZero(value) {
+  return !(value > 0);
+}
+
+function fmtCount(value, unit) {
+  var n = value || 0;
+  if (n <= 0) {
+    return '--';
+  }
+  return n + ' ' + unit;
+}
+
+function fmtMaterial(value, key) {
+  return fmtCount(value, MATERIAL_UNITS[key] || '斤');
+}
+
+module.exports = {
+  isZero: isZero,
+  fmtCount: fmtCount,
+  fmtMaterial: fmtMaterial
+};

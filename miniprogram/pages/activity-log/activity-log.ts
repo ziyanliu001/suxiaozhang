@@ -1,12 +1,32 @@
 import { AuthService } from '../../utils/authService';
-import { getSelectedStore } from '../../utils/storeManager';
+import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { drawActivityPoster } from '../../utils/drawActivityPoster';
 import { recordRecentVisit } from '../../utils/recentPages';
+import { isVirtualStoreName } from '../../utils/storeIdentity';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const PAGE_SIZE = 10;
+
+// 🛡️ "全国总览"/"全部门店" 的 storeId 哨兵值，与 statistics.ts 同一份定义
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
+
+// 🏷️ 分类 Tag：与云函数 manageActivityLog 的 CATEGORY_VALUES 同一份白名单
+const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'daily', label: '日常运营' },
+  { value: 'maintenance', label: '设备维护' },
+  { value: 'donation', label: '爱心捐款/物资' },
+  { value: 'visitor', label: '重要访客' },
+  { value: 'incident', label: '异常提醒' }
+];
+const CATEGORY_LABEL_MAP: Record<string, string> = CATEGORY_OPTIONS.reduce((acc, opt) => {
+  acc[opt.value] = opt.label;
+  return acc;
+}, {} as Record<string, string>);
+function categoryLabel(category: string): string {
+  return CATEGORY_LABEL_MAP[category] || '未分类';
+}
 
 function getTodayStr(): string {
   const now = new Date();
@@ -14,6 +34,18 @@ function getTodayStr(): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+// 历史动态 ◀ 上一天/下一天 ▶ 快捷翻页：按天平移，跨月/跨年由 Date 对象自动处理
+function shiftDateStr(dateStr: string, deltaDays: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+  if (!m) return dateStr;
+  const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  d.setDate(d.getDate() + deltaDays);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
 }
 
 // updateTime 是云端 db.serverDate() 读回的原生 Date 对象，格式化为 HH:mm 用于"已发布"提示
@@ -40,8 +72,11 @@ Page({
     // 🛡️ 权限收紧：门店提示标签"📍 全国总览"只有超管才该看到（家人/义工/普通
     // 店长财务的 currentStoreName 理论上不该是这个虚拟门店名，但一旦发生—— 比如
     // 共用设备上超管上次选过"全国总览"、getSelectedStore() 缓存串号——也不能
-    // 让非超管看到这个越权提示，见 initRoleAndStore
+    // 让非超管看到这个越权提示，见 applyRolePermissions/resolveEffectiveStoreIdentity
     isSuperAdmin: false,
+    // 🛡️ 门店身份异步解析完成前的骨架占位标记，避免 currentStoreName 到达前的
+    // 那一帧默认回退显示任何门店名/全国总览
+    roleReady: false,
     // 🛡️ "📷 记录今日动态"发布按钮的权限位：canManage（店长/超管）或 isVolunteer
     // 才能发布，家人（服务对象）isFamily 恒为 false 时按钮不受影响，isFamily 为
     // true 时不会同时命中 canManage/isVolunteer（与 profile.ts/index.ts 同一套
@@ -49,12 +84,18 @@ Page({
     isVolunteer: false,
     isFamily: false,
 
+    // 🌐 超管专属门店切换：只有超管才允许在顶部切换门店，非超管的 currentStoreName
+    // 必须锁定为自己绑定的门店，见 applyRolePermissions
+    superAdminStoreOptions: [] as Array<{ storeId: string; storeName: string }>,
+    superAdminStoreIndex: 0,
+
     // 📌 今日大事记（顶部高亮区，取当天最新一条；同一天允许多条时其余的仍展示在下方时光轴）
     todayDateStr: getTodayStr(),
     todayItem: null as any,
     todayLoading: false,
 
-    // 🕰 历史大事记（下方时光轴，不含顶部已展示的那一条）
+    // 🕰 历史大事记（下方时光轴，不含顶部已展示的那一条）。支持按 historyFilterDate
+    // 精确筛选某一天，为空时按原有全量分页时光轴展示
     list: [] as any[],
     historyList: [] as any[],
     page: 1,
@@ -62,6 +103,7 @@ Page({
     hasMore: true,
     loading: false,
     loadingMore: false,
+    historyFilterDate: '',
 
     showDetailModal: false,
     detailItem: null as any,
@@ -72,8 +114,10 @@ Page({
       title: '',
       eventTime: getTodayStr(),
       content: '',
+      category: '',
       images: [] as string[]
     },
+    categoryOptions: CATEGORY_OPTIONS,
     uploading: false,
 
     // 📤 活动海报导出
@@ -134,6 +178,94 @@ Page({
     });
   },
 
+  // ❤️ 'store_family' 是本地切身份体系的产物（store-picker _applyRoleSwitch 写入
+  // current_user_role），不在服务端 checkUserRole 返回的 UserRole 联合类型里
+  // （比较 roleInfo.role === 'store_family' 连 tsc 都过不了），必须读 storage
+  // 里的规范化值判断，与 index.ts/profile.ts/statistics.ts resolveEffectiveRole
+  // 读同一个 key、同一套优先级：storage 一旦有值就整体作为生效角色，不再理会
+  // 服务端角色——否则真实身份是 super_admin 的账号切到"义工"预览视角后，
+  // isSuperAdmin 仍会继续为 true，"全国总览"标签/管理类按钮越权冒出来
+  resolveEffectiveRole(cachedRole: string): string {
+    const storageRole = (wx.getStorageSync('current_user_role') || '').toLowerCase();
+    return storageRole || cachedRole || '';
+  },
+
+  // 🐛 核心权限 Bug 修复：此前直接拿 roleInfo.storeName 当门店名用，完全没有过滤
+  // "全国总览/全部门店"这类仅超管可用的虚拟聚合名——user_roles 文档一旦曾经是
+  // super_admin，账号降级/切换预览视角后这个脏值会一直残留，非超管打开本页会在
+  // 顶部误显示"全国总览"。解析口径与 statistics.ts resolveEffectiveStoreIdentity
+  // 完全一致：非超管一律过滤虚拟名后退回本地已选中门店；超管允许 storeId 为空
+  // （此时顶部展示"全国总览"，这是其真实身份状态）
+  resolveEffectiveStoreIdentity(roleInfo: any, isSuperAdmin: boolean): { storeId: string; storeName: string } {
+    let storeId = (roleInfo && roleInfo.storeId) || '';
+    let storeName = (roleInfo && roleInfo.storeName) || '';
+    if (!isSuperAdmin && isVirtualStoreName(storeName)) {
+      storeName = '';
+    }
+
+    if (!storeId || !storeName) {
+      const activeStore = getSelectedStore();
+      const activeStoreName = (activeStore && activeStore.storeName) || '';
+      const activeStoreIsVirtual = isVirtualStoreName(activeStoreName);
+      if (!storeName && activeStoreName && !(!isSuperAdmin && activeStoreIsVirtual)) {
+        storeName = activeStoreName;
+      }
+      if (!storeId && activeStore && activeStore.storeId && !(!isSuperAdmin && activeStoreIsVirtual)) {
+        storeId = activeStore.storeId;
+      }
+    }
+
+    if (!storeId) {
+      const storedId = wx.getStorageSync('current_store_id') || '';
+      storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
+    }
+    if (!storeName) {
+      const storedName = wx.getStorageSync('current_store_name') || '';
+      storeName = (!isSuperAdmin && isVirtualStoreName(storedName)) ? '' : storedName;
+    }
+
+    return { storeId, storeName };
+  },
+
+  // 🛡️ 统一落地角色/门店权限位：canManage/isSuperAdmin/currentStoreName 等展示态
+  // 只从这里写入，是本页唯一的权限收口
+  applyRolePermissions(role: string, storeName: string, storeId: string) {
+    const isFamily = role === 'store_family';
+    const isSuperAdmin = !isFamily && role === 'super_admin';
+    // 🐛 权限缺口修复：canManage 补上 store_patriarch——服务端
+    // resolveWriteTarget/resolveReviewStoreId 对 store_patriarch 和 store_manager
+    // 一视同仁（大家长天然继承店长的全套日常管理权限）
+    const canManage = !isFamily && (role === 'store_manager' || role === 'store_patriarch' || isSuperAdmin);
+    const isVolunteer = !isFamily && role === 'volunteer';
+    const currentUserOpenid = AuthService.getOpenid() || '';
+
+    // 🛡️ 展示口径：超管在没有选定具体门店时才允许显示"全国总览"（真实身份状态）；
+    // 其余所有情况一律显示真实门店名，严禁出现虚拟聚合名
+    const displayStoreName = (isSuperAdmin && !storeId) ? '全国总览' : storeName;
+
+    this.setData({
+      currentStoreId: storeId,
+      currentStoreName: displayStoreName,
+      canManage,
+      isSuperAdmin,
+      isVolunteer,
+      isFamily,
+      currentUserOpenid,
+      roleReady: true
+    });
+
+    // ⏳ 待确认的义工投稿：与本页其余"管理入口"（编辑/删除按钮）同一套 canManage
+    // 判定口径，只有店长/超管才需要发这个查询
+    if (canManage) {
+      this.fetchPendingList();
+    }
+
+    // 🌐 超管专属门店切换：只有真正解析出超管身份才需要拉取可选门店列表
+    if (isSuperAdmin) {
+      this.fetchSuperAdminStoreOptions(storeId);
+    }
+  },
+
   async initRoleAndStore() {
     let roleInfo = AuthService.getCachedRoleInfo();
     if (!roleInfo) {
@@ -141,43 +273,44 @@ Page({
       roleInfo = result.roleInfo || null;
     }
 
-    const store = getSelectedStore();
-    const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
-    const storeName = (roleInfo && roleInfo.storeName) || store.storeName || '';
+    const effectiveRole = this.resolveEffectiveRole(roleInfo ? roleInfo.role : '');
+    const isSuperAdmin = effectiveRole === 'super_admin';
+    const identity = this.resolveEffectiveStoreIdentity(roleInfo, isSuperAdmin);
+    this.applyRolePermissions(effectiveRole, identity.storeName, identity.storeId);
+  },
 
-    // ❤️ 'store_family' 是本地切身份体系的产物（store-picker _applyRoleSwitch 写入
-    // current_user_role），不在服务端 checkUserRole 返回的 UserRole 联合类型里
-    // （比较 roleInfo.role === 'store_family' 连 tsc 都过不了），必须读 storage
-    // 里的规范化值判断，与 index.ts/profile.ts 读同一个 key 保持口径一致。
-    // 🐛 根因修复（第二轮）：storageRole 必须整体覆盖生效角色，而不能只用来决定
-    // isFamily。上一轮修复只做到"isFamily 为 true 时清零"，但 isSuperAdmin/
-    // canManage/isVolunteer 仍然直接读 roleInfo.role（服务端真实角色，不随本地
-    // 预览切换而变）——真实身份是 super_admin 的账号切到"义工"（或店长/财务）
-    // 预览视角后，storageRole 是 'volunteer'，isFamily 判定为 false，但
-    // roleInfo.role 依然是 super_admin，isSuperAdmin 跟着继续为 true，"全国总览"
-    // 标签/管理类按钮在义工预览视角下越权重新冒出来。与 profile.ts initMinePage()/
-    // store-profile.ts initRoleAndStore() 同一套优先级口径对齐：storage 一旦有值
-    // 就整体作为生效角色，不再理会服务端角色
-    const storageRole = (wx.getStorageSync('current_user_role') || '').toLowerCase();
-    const effectiveRole = storageRole || (roleInfo && roleInfo.role) || '';
-    const isFamily = effectiveRole === 'store_family';
-    const isSuperAdmin = !isFamily && effectiveRole === 'super_admin';
-    // 🐛 权限缺口修复：此前 canManage 漏掉了 store_patriarch——服务端
-    // resolveWriteTarget/resolveReviewStoreId 对 store_patriarch 和 store_manager
-    // 一视同仁（大家长天然继承店长的全套日常管理权限），但这里只认
-    // store_manager，导致大家长点得到编辑/删除入口却会被云函数拒绝，或者压根
-    // 看不到"待确认的义工投稿"审核队列。补上 store_patriarch，与服务端口径对齐
-    const canManage = !isFamily && (effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || isSuperAdmin);
-    const isVolunteer = !isFamily && effectiveRole === 'volunteer';
-    const currentUserOpenid = AuthService.getOpenid() || '';
-
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, isSuperAdmin, isVolunteer, isFamily, currentUserOpenid });
-
-    // ⏳ 待确认的义工投稿：与本页其余"管理入口"（编辑/删除按钮）同一套 canManage
-    // 判定口径，只有店长/超管才需要发这个查询
-    if (canManage) {
-      this.fetchPendingList();
+  // 🌐 超管专属门店切换：复用 getStoreList 云函数（本就按 tenantId 收敛，不新建
+  // 查询逻辑），前面拼一条"全国总览"虚拟聚合项，与 store-picker 组件的口径一致
+  async fetchSuperAdminStoreOptions(currentStoreId: string) {
+    try {
+      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: {} });
+      const result = res.result as any;
+      const stores = (result && result.success) ? (result.list || []) : [];
+      const options = [{ storeId: '', storeName: '全国总览' }].concat(
+        stores.map((s: any) => ({ storeId: s.storeId, storeName: s.storeName }))
+      );
+      const index = Math.max(0, options.findIndex((o) => o.storeId === currentStoreId));
+      this.setData({ superAdminStoreOptions: options, superAdminStoreIndex: index });
+    } catch (err) {
+      console.warn('[activity-log] fetchSuperAdminStoreOptions 异常:', err);
     }
+  },
+
+  // 🌐 超管在顶部切换门店：切到"全国总览"清空 storeId（顶部展示全国总览，
+  // 发布/管理入口按 applyRolePermissions 的口径自动收起）；切到具体门店则
+  // 调用 setSelectedStore 同步全局态，与首页/其它页面的门店切换行为保持一致
+  onSuperAdminStoreChange(e: any) {
+    const index = parseInt(e.detail.value, 10) || 0;
+    const option = this.data.superAdminStoreOptions[index];
+    if (!option) return;
+
+    this.setData({ superAdminStoreIndex: index });
+    if (option.storeId) {
+      setSelectedStore({ storeId: option.storeId, storeName: option.storeName });
+    }
+    this.applyRolePermissions('super_admin', option.storeName, option.storeId);
+    this.loadTodayActivity();
+    this.fetchList(true);
   },
 
   async fetchPendingList() {
@@ -287,6 +420,7 @@ Page({
       const existing = (result && result.success && result.data && result.data.length > 0) ? result.data[0] : null;
       if (existing) {
         existing.publishTimeStr = formatHHmm(existing.updateTime);
+        existing.categoryLabelText = categoryLabel(existing.category);
       }
       this.setData({ todayItem: existing });
       this.recomputeHistoryList();
@@ -305,6 +439,8 @@ Page({
     this.setData({ historyList });
   },
 
+  // 📅 历史动态支持按 historyFilterDate 精确筛选某一天：为空时是原有全量分页
+  // 时光轴，有值时 startDate/endDate 都传这一天，服务端按 eventTime 区间过滤
   async fetchList(reset: boolean) {
     if (reset) {
       this.setData({ page: 1, list: [], hasMore: true, loading: true });
@@ -314,6 +450,7 @@ Page({
     }
 
     const targetPage = reset ? 1 : this.data.page + 1;
+    const filterDate = this.data.historyFilterDate;
 
     try {
       const res = await wx.cloud.callFunction({
@@ -322,17 +459,23 @@ Page({
           action: 'list',
           storeId: this.data.currentStoreId,
           page: targetPage,
-          pageSize: PAGE_SIZE
+          pageSize: PAGE_SIZE,
+          // 📌 置顶优先排序：仅历史时光轴需要，今日大事记查询（loadTodayActivity）
+          // 不传这个参数，行为与改动前完全一致
+          pinFirst: true,
+          ...(filterDate ? { startDate: filterDate, endDate: filterDate } : {})
         }
       });
       const result = res.result as any;
 
       if (result && result.success) {
         // 🕐 与 loadTodayActivity 同一套处理：updateTime 是云端 db.serverDate() 读回的
-        // 原生 Date，格式化成 HH:mm 供历史动态卡片展示"发布者 + 精确发布时间"
+        // 原生 Date，格式化成 HH:mm 供历史动态卡片展示"发布者 + 精确发布时间"；
+        // categoryLabelText 供卡片展示分类 Tag，未分类的老记录展示"未分类"
         const pageItems = (result.data || []).map((item: any) => ({
           ...item,
-          publishTimeStr: formatHHmm(item.updateTime)
+          publishTimeStr: formatHHmm(item.updateTime),
+          categoryLabelText: categoryLabel(item.category)
         }));
         const newList = reset ? pageItems : this.data.list.concat(pageItems);
         this.setData({
@@ -359,6 +502,31 @@ Page({
 
   onPullDownRefresh() {
     this.fetchList(true).finally(() => wx.stopPullDownRefresh());
+  },
+
+  // 📅 历史动态日期筛选：日历 picker 直接选定某一天
+  onHistoryDateChange(e: any) {
+    this.setData({ historyFilterDate: e.detail.value });
+    this.fetchList(true);
+  },
+
+  // ◀ 上一天 / 下一天 ▶：未设筛选时从"今天"起步，之后按天平移
+  onHistoryPrevDay() {
+    const base = this.data.historyFilterDate || this.data.todayDateStr;
+    this.setData({ historyFilterDate: shiftDateStr(base, -1) });
+    this.fetchList(true);
+  },
+
+  onHistoryNextDay() {
+    const base = this.data.historyFilterDate || this.data.todayDateStr;
+    this.setData({ historyFilterDate: shiftDateStr(base, 1) });
+    this.fetchList(true);
+  },
+
+  onClearHistoryDateFilter() {
+    if (!this.data.historyFilterDate) return;
+    this.setData({ historyFilterDate: '' });
+    this.fetchList(true);
   },
 
   onOpenDetail(e: any) {
@@ -389,6 +557,7 @@ Page({
         title: item ? (item.title || '') : '',
         eventTime: this.data.todayDateStr,
         content: item ? (item.content || '') : '',
+        category: item ? (item.category || '') : '',
         // 🛡️ editForm.images 现在是纯字符串数组（与 receiptImages 同构，供 WXML
         // 直接 {{item}} 绑定），但数据库里已发布记录的 images 字段仍是 {url,thumbUrl}
         // 对象，回显进编辑表单时要摘出 url
@@ -413,9 +582,16 @@ Page({
         title: item.title || '',
         eventTime: item.eventTime,
         content: item.content || '',
+        category: item.category || '',
         images: this.toImagePathList(item.images)
       }
     });
+  },
+
+  // 🏷️ 分类 Tag Chips：单选，再次点击当前已选中的分类会清空（改回未分类）
+  onSelectCategory(e: any) {
+    const value = e.currentTarget.dataset.value;
+    this.setData({ 'editForm.category': this.data.editForm.category === value ? '' : value });
   },
 
   // 数据库记录的 images 字段是 {url,thumbUrl}[]，editForm.images 页面内部状态是
@@ -502,7 +678,7 @@ Page({
   },
 
   async onSubmitEdit() {
-    const { id, title, eventTime, content, images } = this.data.editForm;
+    const { id, title, eventTime, content, category, images } = this.data.editForm;
 
     if (!title.trim()) {
       wx.showToast({ title: '请填写标题', icon: 'none' });
@@ -526,6 +702,7 @@ Page({
           title: title.trim(),
           eventTime,
           content: content.trim(),
+          category,
           images: imagesForSubmit
         }
       });
@@ -582,6 +759,36 @@ Page({
           wx.showToast({ title: '删除失败，请重试', icon: 'none' });
         }
       }
+    });
+  },
+
+  // 📌 置顶/取消置顶：店长/超管权限强化能力，与卡片右上角图标一一对应。
+  // 服务端 togglePin 不放行 volunteer（哪怕是自己发布的动态），前端 WXML 也
+  // 只在 canManage 时渲染这个入口，双重防线
+  onTogglePin(e: any) {
+    if (!this.data.canManage) return;
+    const id = e.currentTarget.dataset.id;
+    const pinned = !e.currentTarget.dataset.pinned;
+    if (!id) return;
+
+    wx.showLoading({ title: pinned ? '置顶中...' : '取消置顶中...', mask: true });
+    wx.cloud.callFunction({
+      name: 'manageActivityLog',
+      data: { action: 'togglePin', id, pinned }
+    }).then((res: any) => {
+      wx.hideLoading();
+      const result = res.result;
+      if (result && result.success) {
+        wx.showToast({ title: result.message || (pinned ? '已置顶' : '已取消置顶'), icon: 'success' });
+        this.loadTodayActivity();
+        this.fetchList(true);
+      } else {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+      }
+    }).catch((err: any) => {
+      wx.hideLoading();
+      console.error('[activity-log] onTogglePin 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     });
   },
 

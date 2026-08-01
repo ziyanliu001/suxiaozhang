@@ -55,6 +55,12 @@
       </view>
     </view>
 
+    <!-- 🌟 从首页「风控预警日志」弹窗点击卡片跳转过来时的精准追溯筛选提示 -->
+    <view class="anomaly-filter-banner" wx:if="{{anomalyFilterType}}">
+      <text class="anomaly-filter-text">🔍 风控筛选：{{anomalyFilterLabel}}明细</text>
+      <view class="anomaly-filter-clear" catchtap="onClearAnomalyFilter">清除 ✕</view>
+    </view>
+
   </view>
 
   <scroll-view scroll-y class="history-scroll-list" style="padding-top: {{totalHeaderHeight}}px;">
@@ -563,6 +569,62 @@
         </button>
       </view>
 
+    </view>
+  </view>
+
+  <!-- 🌟「先核对、再确认、后导出」导出预览核对弹窗：onExportMonthlyAudit 只发起
+       previewOnly 查询，真正生成 xlsx 必须等用户在这里点击「确认并导出」 -->
+  <view class="audit-modal-mask" wx:if="{{showExportPreviewModal}}" bindtap="onCloseExportPreviewModal">
+    <view class="audit-modal-box" catchtap="stopPropagation">
+      <view class="audit-modal-header">
+        <text class="audit-modal-title">🧾 凭证与账本核对 · {{exportPreviewSummary.periodLabel}}</text>
+        <text class="audit-modal-close" bindtap="onCloseExportPreviewModal">✕</text>
+      </view>
+
+      <view class="export-preview-summary-grid">
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num income">¥{{exportPreviewSummary.totalIncome}}</text>
+          <text class="export-preview-summary-lbl">总收入</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num expense">¥{{exportPreviewSummary.totalExpense}}</text>
+          <text class="export-preview-summary-lbl">总支出</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num">¥{{exportPreviewSummary.netTotal}}</text>
+          <text class="export-preview-summary-lbl">净结余</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num">{{exportPreviewSummary.recordCount}}</text>
+          <text class="export-preview-summary-lbl">总笔数</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num audited">{{exportPreviewSummary.auditedReceiptCount}}</text>
+          <text class="export-preview-summary-lbl">已审核小票数</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num {{exportPreviewSummary.anomalyCount > 0 ? 'anomaly' : ''}}">{{exportPreviewSummary.anomalyCount}}</text>
+          <text class="export-preview-summary-lbl">异常标记数</text>
+        </view>
+      </view>
+
+      <scroll-view scroll-y class="audit-text-preview export-preview-list">
+        <view class="export-preview-row" wx:for="{{exportPreviewRecords}}" wx:key="date" wx:for-item="rec">
+          <text class="export-preview-row-date">{{rec.date}}</text>
+          <text class="export-preview-row-shop">{{rec.shopName}}</text>
+          <text class="export-preview-row-amounts">收¥{{rec.income}} 支¥{{rec.expense}}</text>
+          <text class="export-preview-receipt-badge" wx:if="{{rec.hasReceipt}}">🧾{{rec.receiptCount}}</text>
+          <text class="export-preview-receipt-badge is-missing" wx:else>⚠️无票</text>
+        </view>
+        <view class="empty-box" wx:if="{{exportPreviewRecords.length === 0}}">
+          <text class="empty-tip">该周期内暂无明细数据</text>
+        </view>
+      </scroll-view>
+
+      <view class="audit-modal-actions">
+        <button class="audit-btn-copy" bindtap="onExportPreviewGoFix">发现异常，前去核对</button>
+        <button class="audit-btn-download" bindtap="onExportPreviewConfirm">数据无误，确认并导出</button>
+      </view>
     </view>
   </view>
 

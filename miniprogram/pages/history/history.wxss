@@ -219,6 +219,98 @@
   color: #FFFFFF;
 }
 
+.export-preview-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.export-preview-summary-cell {
+  flex: 1 1 40%;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.export-preview-summary-num {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.export-preview-summary-num.income {
+  color: #2B8A3E;
+}
+
+.export-preview-summary-num.expense {
+  color: #E03131;
+}
+
+.export-preview-summary-num.audited {
+  color: #2B8A3E;
+}
+
+.export-preview-summary-num.anomaly {
+  color: #E8590C;
+}
+
+.export-preview-summary-lbl {
+  font-size: 20rpx;
+  color: #999999;
+  margin-top: 6rpx;
+}
+
+.export-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+.export-preview-row-date {
+  font-size: 24rpx;
+  color: #333333;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.export-preview-row-shop {
+  font-size: 20rpx;
+  color: #999999;
+  flex-shrink: 0;
+}
+
+.export-preview-row-amounts {
+  font-size: 22rpx;
+  color: #495057;
+  flex: 1;
+}
+
+.export-preview-receipt-badge {
+  font-size: 20rpx;
+  color: #2B8A3E;
+  flex-shrink: 0;
+}
+
+.export-preview-receipt-badge.is-missing {
+  color: #E8590C;
+}
+
+.export-preview-list .empty-box {
+  padding: 40rpx 0;
+  text-align: center;
+}
+
+.export-preview-list .empty-tip {
+  font-size: 24rpx;
+  color: #999999;
+}
+
 .filter-pill {
   display: flex;
   align-items: center;
@@ -276,6 +368,31 @@
 .filter-pill .arrow {
   font-size: 20rpx;
   color: #868E96;
+}
+
+.anomaly-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF3E0;
+  border: 1rpx solid #FFCC80;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+  margin: 12rpx 20rpx 0;
+}
+
+.anomaly-filter-text {
+  font-size: 24rpx;
+  color: #E65100;
+  font-weight: 500;
+}
+
+.anomaly-filter-clear {
+  font-size: 22rpx;
+  color: #C62828;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 16rpx;
 }
 
 .btn-clear-empty-pill {

@@ -30,6 +30,38 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// 🆕 2x2 核心指标摘要区「同比变化」：把 'YYYY-MM-DD' 整体平移若干年，用于算出
+// "去年同期"日期区间。复用 extractDateMeta 同款 '-' → '/' 归一化，避免 iOS
+// Safari/JSCore 对连字符日期字符串的 new Date() 解析不稳定
+function shiftDateByYears(dateStr: string, deltaYears: number): string {
+  const normalized = String(dateStr || '').replace(/-/g, '/');
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return dateStr;
+  d.setFullYear(d.getFullYear() + deltaYears);
+  return formatDate(d);
+}
+
+// 🆕 同比百分比：prev 为 0/缺失时视为"无可比基数"，返回 null 让 wxml 隐藏徽标，
+// 而不是误导性地显示 "+∞%"/"+100%"
+function computePctChange(curr: number, prev: number): number | null {
+  if (!prev) return null;
+  return Math.round(((curr - prev) / prev) * 1000) / 10;
+}
+
+// 🆕 2x2 核心指标摘要区无数据兜底态：与 data.coreMetrics 初始值同一份形状，
+// loadStatistics() 里查无当期记录/云端调用失败两个分支复用，保持结构不塌陷
+const EMPTY_CORE_METRICS = {
+  hasData: false,
+  diningCount: 0,
+  volunteerCount: 0,
+  expenseTotalStr: '--',
+  perMealCostStr: '--',
+  diningCountYoy: null as number | null,
+  volunteerCountYoy: null as number | null,
+  expenseTotalYoy: null as number | null,
+  perMealCostYoy: null as number | null
+};
+
 function normalizeStoreName(str: string): string {
   return (str || '').replace(/[区市省店\s]/g, '').trim();
 }
@@ -300,6 +332,14 @@ function filterRecordsByPeriodAndStore(
 
 Page({
   _navGuard: null as NavGuardInstance | null,
+  // 🐛 见 data.roleReady 注释：reloadShopListAndStats() 在角色尚未就绪时把这次
+  // 请求记成待办，不放进 data（不需要驱动渲染），applyRolePermissions() 落地后读取
+  _pendingStatsReload: false,
+  // 🌟 首页「Excel 账本导出」带 ?autoShowExport=true 跳转过来时置位，等
+  // loadStatistics() 首次把 statistics 灌好后自动触发一次 exportToExcel()，
+  // 免去用户落地后还要再手动点一次「导出表格」；消费一次后立即清零，不随
+  // onShow/切 Tab 反复重放
+  _autoShowExportPending: false,
 
   data: {
     watermarkIdentity: '',
@@ -313,9 +353,26 @@ Page({
     selectedShopIndex: 0,
     selectedYear: new Date().getFullYear(),
     selectedMonth: new Date().getMonth() + 1,
+    // 🌟 周报「◀ 上一期/下一期 ▶」快捷翻页：相对本周的偏移量（0=本周，-1=上一周），
+    // 月报/年报复用已有的 selectedYear/selectedMonth 字段翻页，无需单独 offset
+    weekOffset: 0,
+    // 🌟 周报专属：本周（或翻页后目标周）的日期范围展示文案，如 "08/25 - 08/31"，
+    // 由 getWeekRange() 每次计算时一并写入，供 period-nav-row 展示（月报/年报
+    // 直接复用已有 picker-pill-btn 展示 selectedYear/selectedMonth，无需此字段）
+    weekRangeLabel: '',
     customStartDate: '',
     customEndDate: '',
     statistics: null,
+    // 🆕 2x2 核心经营指标骨架卡：与 statistics 是否有数据解耦，无论当期是否有
+    // 记录都固定渲染这四格，避免"无数据=页面结构直接塌陷"，见 statistics.wxml
+    // core-metrics-card 与 loadStatistics() 里的计算逻辑
+    coreMetrics: EMPTY_CORE_METRICS,
+    // 🆕 引导型空状态「查看有数据月份」：loadStatistics() 在当期查无记录、但
+    // 该门店存在历史记录（currentStoreTotalCount>0）时，从已拉取到手的
+    // storeAllRecords 里找出最近一条记录所在的年/月，供空状态按钮一键跳转
+    latestDataYear: null as number | null,
+    latestDataMonth: null as number | null,
+    latestDataLabel: '',
     navTop: 0,
     contentTop: 0,
     // 🛡️ 自定义导航栏避让官方胶囊菜单：capsuleLeft/windowWidth 用于计算刷新按钮的右侧安全内边距
@@ -395,6 +452,25 @@ Page({
     currentUserRole: '' as string,
     currentUserStoreName: '',
     currentUserStoreId: '',
+    // 🐛 根因修复：initUserRole() 是异步的（缓存命中时同步落地，缓存缺失时要等
+    // AuthService.fetchUserRole() 网络往返完成）——onLoad/onShow 此前无条件立即
+    // 调用 reloadShopListAndStats()，冷缓存场景下会在角色/storeId 尚未解析出来
+    // 时就发起 getReports/getStatisticsData 请求（见 loadStatistics 日志里的
+    // "viewMode: undefined, storeId: undefined"），之后角色解析完成也不会自动
+    // 补一次刷新，导致界面停留在这次无效请求的兜底结果上。roleReady 标记角色是否
+    // 已至少完整解析过一轮（见 applyRolePermissions 末尾），reloadShopListAndStats
+    // 在它为 false 时改为记录待办（this._pendingStatsReload），等 applyRolePermissions
+    // 落地后自动补触发一次，不再凭空打空请求
+    roleReady: false,
+    // 🐛 防抖锁：给实际发起 getStatisticsData 云调用的 fetchStatistics() 加锁，
+    // 避免 onLoad/onShow 前后脚各触发一次 reloadShopListAndStats()（或用户快速
+    // 切换 Tab/年月）导致同一时刻并发打出多个重复云函数请求
+    statisticsFetchLoading: false,
+    // 🐛 防抖锁：给单店周/月/年报的 loadStatistics() 同样加锁——它内部有
+    // wx.showLoading/hideLoading 配对，onLoad/onShow 前后脚并发触发时后完成的
+    // 那次会在没有对应 showLoading 的情况下调用 hideLoading，触发开发者工具
+    // "showLoading、hideLoading 必须配对使用" 告警，见该方法内的详细说明
+    statisticsLoadLoading: false,
     roleLabelMap: ROLE_LABELS,
     // 🆕 超管专属门店切换 Picker 数据源：第一项固定为"🌐 全国总览"虚拟聚合项
     // （storeId 用 'ALL' 哨兵值标记，仅供 onSuperAdminSelectStore 内部判断选中项
@@ -442,13 +518,20 @@ Page({
     monthsList: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'],
     statsData: {} as any,
     monthlyAggregatedList: [] as any[],
-    expandedMonthSet: {} as Record<string, boolean>
+    expandedMonthSet: {} as Record<string, boolean>,
+    // 🌟「先核对、再确认、后导出」导出预览核对弹窗
+    showExportPreviewModal: false,
+    exportPreviewSummary: {} as any,
+    exportPreviewRecords: [] as any[]
   },
 
   onLoad(options: any) {
     recordRecentVisit('/pages/statistics/statistics', '统计分析');
     if (options && options.shopName) {
       this.setData({ shopName: options.shopName });
+    }
+    if (options && options.autoShowExport === 'true') {
+      this._autoShowExportPending = true;
     }
 
     this.sanitizeDateVariables();
@@ -547,6 +630,18 @@ Page({
       const info = result.roleInfo;
       const identity = this.resolveEffectiveStoreIdentity(info);
       this.applyRolePermissions(this.resolveEffectiveRole(info.role), identity.storeName, identity.storeId);
+    } else if (!cachedRole) {
+      // 🛡️ 兜底：既没有缓存角色、这次网络请求又失败/未拿到角色信息（例如彻底离线），
+      // applyRolePermissions() 全程不会被调用，roleReady 会永远停在 false，
+      // reloadShopListAndStats() 的待办也就永远无法被补触发，页面彻底空白。
+      // 这种"确实解析不出角色"的场景下，退回原有行为——直接放行一次待触发的
+      // 刷新，让 loadStatistics 走它自己"按 openid 兜底收敛"的服务端降级路径，
+      // 而不是让用户在弱网下看着空白页面干等
+      this.setData({ roleReady: true });
+      if (this._pendingStatsReload) {
+        this._pendingStatsReload = false;
+        this.reloadShopListAndStats();
+      }
     }
   },
 
@@ -745,6 +840,15 @@ Page({
         this.setData({ showNationalDashboard: true });
         this.loadNationalDashboard();
       }
+    }
+
+    // 🐛 根因修复：角色（含 storeId）到这里已经完整解析落地，标记 roleReady 并把
+    // reloadShopListAndStats() 之前记下的待办（见该方法与 data.roleReady 注释）
+    // 补触发一次——覆盖"冷缓存时 onLoad/onShow 抢跑在角色解析完成之前"的时序窗口
+    this.setData({ roleReady: true });
+    if (this._pendingStatsReload) {
+      this._pendingStatsReload = false;
+      this.reloadShopListAndStats();
     }
 
     // 🐛 DEBUG：本函数内的多次 setData 都是同步写入 this.data 的，这里读到的已经
@@ -1191,7 +1295,7 @@ Page({
   // (wx.getMenuButtonBoundingClientRect().left) 与屏幕宽度，换算出安全右内边距传给 WXML，
   // 让自定义刷新按钮自动避让，不再依赖写死的固定像素值。
   calculateNavBarHeight() {
-    const sysInfo = wx.getSystemInfoSync();
+    const sysInfo = getSafeSystemInfo();
     const windowWidth = sysInfo.windowWidth || 375;
 
     const menuButton = wx.getMenuButtonBoundingClientRect();
@@ -1319,6 +1423,13 @@ Page({
   },
 
   async reloadShopListAndStats() {
+    // 🐛 根因修复：角色/storeId 还没解析出来时（见上面 roleReady 字段注释），
+    // 先记一笔"待办"就返回，不发起任何请求；applyRolePermissions() 落地后会
+    // 自动读到这个待办并补触发一次真正带着正确 storeId 的刷新
+    if (!this.data.roleReady) {
+      this._pendingStatsReload = true;
+      return;
+    }
     await this.loadShopList();
     this.calculateStats();
   },
@@ -1379,6 +1490,14 @@ Page({
   // 无 statistics.* 兜底，见 wxml finance-metric-cell）在"全国总览"下永远停留
   // 在初始占位值，哪怕数据库里其实有数据
   async fetchStatistics() {
+    // 🐛 根因修复：onLoad/onShow 前后脚各触发一次 reloadShopListAndStats()（或
+    // 用户手快连点 Tab/年月切换）会让本方法在上一次云调用还没返回时又并发发起
+    // 一次，同一屏 statsData 被 2~4 个并发请求的返回顺序竞争覆盖。isLoading 式
+    // 防抖锁：已有请求在途时直接跳过，等它自己的 finally 解锁后由触发方自然收敛
+    if (this.data.statisticsFetchLoading) {
+      console.log('[Statistics][fetchStatistics] 已有请求在途，跳过本次重复调用');
+      return;
+    }
     const { currentTab, shopName, selectedYear, selectedMonth, customStartDate, customEndDate } = this.data;
     const tabMap: Record<string, string> = { week: 'week', month: 'month', year: 'year', custom: 'custom' };
     const tabType = tabMap[currentTab] || 'week';
@@ -1400,6 +1519,7 @@ Page({
       'currentUserStoreName=', this.data.currentUserStoreName,
       'getStatisticsData调用参数=', statisticsCallData);
 
+    this.setData({ statisticsFetchLoading: true });
     try {
       const res = await wx.cloud.callFunction({
         name: 'getStatisticsData',
@@ -1414,6 +1534,8 @@ Page({
       }
     } catch (err) {
       console.error('[fetchStatistics] 调用失败:', err);
+    } finally {
+      this.setData({ statisticsFetchLoading: false });
     }
   },
 
@@ -1453,14 +1575,20 @@ Page({
   },
 
   getWeekRange() {
+    // 🌟 「◀ 上一期/下一期 ▶」翻页：weekOffset 是相对本周的偏移量（0=本周，
+    // -1=上一周），叠加进 diff 里即可平移整周，不影响原有"本周一至本周日"算法
+    const offset = this.data.weekOffset || 0;
     const now = new Date();
     const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1) + offset * 7;
     const startDate = new Date(now.setDate(diff));
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
+
+    const mmdd = (d: Date) => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+    this.setData({ weekRangeLabel: `${mmdd(startDate)} - ${mmdd(endDate)}` });
 
     return {
       startDate: formatDate(startDate),
@@ -1548,6 +1676,65 @@ Page({
     this.loadStatistics(range.startDate, range.endDate);
   },
 
+  // 🌟 时间周期「◀ 上一期/下一期 ▶」快捷翻页：财务人员无需反复打开 Picker 弹窗
+  // 即可连续前后查看不同周期。按 currentTab 语义分别平移 weekOffset/
+  // selectedYear+selectedMonth/selectedYear/customStartDate+customEndDate，
+  // 复用各 tab 已有的 calculateStats()+fetchStatistics()（或 custom 专属的
+  // loadCustomStatistics()）触发真正的数据刷新，与 switchTab()/onYearChange()/
+  // onMonthChange() 同一条口径
+  onPeriodNav(e: any) {
+    const dir = parseInt(e.currentTarget.dataset.dir, 10) || 0;
+    if (!dir) return;
+    const { currentTab, selectedYear, selectedMonth, weekOffset, customStartDate, customEndDate } = this.data;
+
+    if (currentTab === 'week') {
+      this.setData({ weekOffset: (weekOffset || 0) + dir, statistics: null });
+    } else if (currentTab === 'month') {
+      let year = selectedYear;
+      let month = selectedMonth + dir;
+      if (month < 1) { month = 12; year -= 1; }
+      else if (month > 12) { month = 1; year += 1; }
+      if (year < 2020 || year > 2030) {
+        wx.showToast({ title: '已到可查询周期边界', icon: 'none' });
+        return;
+      }
+      this.setData({ selectedYear: year, selectedMonth: month, statistics: null });
+    } else if (currentTab === 'year') {
+      const year = selectedYear + dir;
+      if (year < 2020 || year > 2030) {
+        wx.showToast({ title: '已到可查询周期边界', icon: 'none' });
+        return;
+      }
+      this.setData({ selectedYear: year, statistics: null });
+    } else if (currentTab === 'custom') {
+      if (!customStartDate || !customEndDate) {
+        wx.showToast({ title: '请先选择起止日期', icon: 'none' });
+        return;
+      }
+      const normalize = (s: string) => new Date(String(s).replace(/-/g, '/'));
+      const start = normalize(customStartDate);
+      const end = normalize(customEndDate);
+      const spanDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+      const shiftDays = spanDays * dir;
+      const newStart = new Date(start);
+      newStart.setDate(newStart.getDate() + shiftDays);
+      const newEnd = new Date(end);
+      newEnd.setDate(newEnd.getDate() + shiftDays);
+      this.setData({
+        customStartDate: formatDate(newStart),
+        customEndDate: formatDate(newEnd),
+        statistics: null
+      });
+      this.loadCustomStatistics();
+      return;
+    } else {
+      return;
+    }
+
+    this.calculateStats();
+    this.fetchStatistics();
+  },
+
   calculateStats() {
     // 🐛 根因修复：reloadShopListAndStats()（onLoad/onShow 都会触发）此前无条件
     // 调用本方法，哪怕当前正展示的是全国大屏（showNationalDashboard=true，走
@@ -1574,6 +1761,15 @@ Page({
   },
 
   async loadStatistics(startDate: string, endDate: string) {
+    // 🐛 防抖锁：onLoad/onShow 前后脚并发触发时，先返回的那次调用 wx.hideLoading()
+    // 后，后返回的那次仍会再调用一次 wx.hideLoading()——此时已无对应的 showLoading
+    // 在途，触发开发者工具"showLoading、hideLoading 必须配对使用"告警。早退发生
+    // 在 wx.showLoading() 之前，不会留下未关闭的 loading
+    if (this.data.statisticsLoadLoading) {
+      console.log('[Statistics][loadStatistics] 已有请求在途，跳过本次重复调用');
+      return;
+    }
+    this.setData({ statisticsLoadLoading: true });
     wx.showLoading({ title: '加载中...' });
 
     // 🛡️ 门店隔离根因修复：this.data.shopName 在 onLoad 触发的 initUserRole()/
@@ -1678,6 +1874,28 @@ Page({
 
       const currentStoreTotalCount = storeAllRecords.length;
 
+      // 🆕 引导型空状态「查看有数据月份」：无论当期是否有数据，都从
+      // storeAllRecords（本店全部历史记录，与 currentStoreTotalCount 同源）里
+      // 找出最近一条记录所在的年/月，供空状态按钮一键跳转（仅当确有历史记录时
+      // latestDataLabel 才非空，wxml 据此决定是否渲染该按钮）
+      let latestDataYear: number | null = null;
+      let latestDataMonth: number | null = null;
+      let latestDataLabel = '';
+      if (currentStoreTotalCount > 0) {
+        let latestIso = '';
+        storeAllRecords.forEach((rec: any) => {
+          const meta = extractDateMeta(deepExtractDate(rec));
+          if (meta && meta.isoStr > latestIso) {
+            latestIso = meta.isoStr;
+            latestDataYear = meta.y;
+            latestDataMonth = meta.m;
+          }
+        });
+        if (latestDataYear && latestDataMonth) {
+          latestDataLabel = `${latestDataYear}年${latestDataMonth}月`;
+        }
+      }
+
       const filteredData = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, shopName, isSuperAdmin, shopStoreId);
       const totalRawCount = (filteredData as any).totalRawCount || allRecords.length;
       const parseSuccessCount = (filteredData as any).parseSuccessCount || 0;
@@ -1690,12 +1908,38 @@ Page({
         const allStoreFiltered = filterRecordsByPeriodAndStore(allRecords, startDate, endDate, '全部门店', isSuperAdmin);
         hasOtherStoreData = allStoreFiltered.length > 0;
       }
-      
-      wx.hideLoading();
-      
+
       if (filteredData.length > 0) {
         const statistics = this.calculateStatistics(filteredData, startDate, endDate);
-        
+
+        // 🆕 2x2 核心指标摘要区「同比变化」：直接复用本次已拉取到手的 allRecords
+        // （1000 条上限内的全量数据），按"去年同期"重新跑一遍同一套
+        // filterRecordsByPeriodAndStore + calculateStatistics 算出对比基数，
+        // 不需要为对比数据额外发起一次云函数调用
+        let prevYearStats: any = null;
+        try {
+          const prevStart = shiftDateByYears(startDate, -1);
+          const prevEnd = shiftDateByYears(endDate, -1);
+          const prevFiltered = filterRecordsByPeriodAndStore(allRecords, prevStart, prevEnd, shopName, isSuperAdmin, shopStoreId);
+          if (prevFiltered.length > 0) {
+            prevYearStats = this.calculateStatistics(prevFiltered, prevStart, prevEnd);
+          }
+        } catch (yoyError) {
+          console.warn('[Statistics] 同比对比数据计算失败，本次仅展示当期数值:', yoyError);
+        }
+
+        const coreMetrics = {
+          hasData: true,
+          diningCount: statistics.totalDiningCount || 0,
+          volunteerCount: statistics.totalVolunteerCount || 0,
+          expenseTotalStr: '¥' + formatMoney(statistics.dailyExpenseTotal),
+          perMealCostStr: statistics.perMealCost > 0 ? '¥' + formatMoney(statistics.perMealCost) : '--',
+          diningCountYoy: prevYearStats ? computePctChange(statistics.totalDiningCount, prevYearStats.totalDiningCount) : null,
+          volunteerCountYoy: prevYearStats ? computePctChange(statistics.totalVolunteerCount, prevYearStats.totalVolunteerCount) : null,
+          expenseTotalYoy: prevYearStats ? computePctChange(statistics.dailyExpenseTotal, prevYearStats.dailyExpenseTotal) : null,
+          perMealCostYoy: prevYearStats ? computePctChange(statistics.perMealCost, prevYearStats.perMealCost) : null
+        };
+
         const netAccumulation = statistics.netAccumulation;
         const netAccumulationStr = (netAccumulation >= 0 ? '+' : '-') + formatMoney(Math.abs(netAccumulation));
         
@@ -1797,7 +2041,11 @@ Page({
           currentStoreTotalCount,
           totalRawCount: totalRawCount,
           parseSuccessCount: parseSuccessCount,
-          monthlyAggregatedList: monthlyAggregated
+          monthlyAggregatedList: monthlyAggregated,
+          coreMetrics,
+          latestDataYear,
+          latestDataMonth,
+          latestDataLabel
         });
 
         // 🌟 单轨制：上面 riceStatus/oilStatus 是从历史 report_logs.stapleRiceStatus
@@ -1814,18 +2062,35 @@ Page({
           hasOtherStoreData: hasOtherStoreData,
           currentStoreTotalCount,
           totalRawCount,
-          parseSuccessCount
+          parseSuccessCount,
+          coreMetrics: EMPTY_CORE_METRICS,
+          latestDataYear,
+          latestDataMonth,
+          latestDataLabel
         });
       }
     } catch (error) {
-      wx.hideLoading();
       console.error('[Statistics] 加载统计数据失败:', error);
       this.setData({
         statistics: null,
         isAllStoresMode: isAll,
         hasOtherStoreData: false,
-        currentStoreTotalCount: 0
+        currentStoreTotalCount: 0,
+        coreMetrics: EMPTY_CORE_METRICS
       });
+    } finally {
+      // 🐛 与函数开头的防抖锁配套：wx.showLoading/wx.hideLoading 严格一对一，
+      // 无论正常返回还是抛出异常都统一在这里收尾，不再在 try 中段提前 hide
+      wx.hideLoading();
+      this.setData({ statisticsLoadLoading: false });
+    }
+
+    // 🌟 首页「Excel 账本导出」带 ?autoShowExport=true 跳转过来时，本函数是
+    // statistics 首次被真正灌好数据的地方——消费一次待办标记后立即清零，避免
+    // onShow/切换 Tab/年月再次触发本函数时重复弹出核对弹窗
+    if (this._autoShowExportPending) {
+      this._autoShowExportPending = false;
+      this.exportToExcel();
     }
   },
 
@@ -1969,12 +2234,31 @@ Page({
 
   onShowAllStoreRecords() {
     const { shopName } = this.data;
-    
+
     const now = new Date();
     const startDate = `1970-01-01`;
     const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    
+
     this.loadStatistics(startDate, endDate);
+  },
+
+  // 🆕 引导型空状态「查看有数据月份」：latestDataYear/latestDataMonth 由
+  // loadStatistics() 从本店全部历史记录里找出的最近一条记录年月，直接切到
+  // 月报 tab 定位过去，不需要用户自己一个个月份试错翻页
+  onJumpToLatestDataPeriod() {
+    const { latestDataYear, latestDataMonth } = this.data;
+    if (!latestDataYear || !latestDataMonth) {
+      wx.showToast({ title: '未找到有数据的历史周期', icon: 'none' });
+      return;
+    }
+    this.setData({
+      currentTab: 'month',
+      selectedYear: latestDataYear,
+      selectedMonth: latestDataMonth,
+      statistics: null
+    });
+    this.calculateStats();
+    this.fetchStatistics();
   },
 
   parseAmountFromText(textStr: string): number {
@@ -2448,28 +2732,80 @@ Page({
     return statistics;
   },
 
+  // 🌟「先核对、再确认、后导出」安全闭环：点击「导出表格」不再直接生成文件，
+  // 而是先用 previewOnly 调一次 exportAccountExcel 取回同一份 date range 解析出
+  // 的明细/汇总供用户核对，确认无误后才在 onExportPreviewConfirm 里发起真正的
+  // 导出调用——保证「核对的」与「导出的」严格是同一份数据
+  buildExportCallData() {
+    const { shopName, selectedYear, selectedMonth, currentTab, customStartDate, customEndDate } = this.data;
+    return {
+      shopName: shopName || 'default',
+      tabType: currentTab,
+      selectedYear: String(selectedYear),
+      selectedMonth: String(selectedMonth).padStart(2, '0'),
+      startDate: customStartDate,
+      endDate: customEndDate
+    };
+  },
+
   async exportToExcel() {
-    const { statistics, shopName, selectedYear, selectedMonth, currentTab, customStartDate, customEndDate } = this.data;
+    const { statistics } = this.data;
 
     if (!statistics || !statistics.dailyRecords || statistics.dailyRecords.length === 0) {
       wx.showToast({ title: '当前周期无明细可导出', icon: 'none' });
       return;
     }
 
+    wx.showLoading({ title: '正在核对数据...', mask: true });
+
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'exportAccountExcel',
+        data: { ...this.buildExportCallData(), previewOnly: true }
+      });
+      const result = (res.result || {}) as any;
+      wx.hideLoading();
+
+      if (result.success) {
+        this.setData({
+          showExportPreviewModal: true,
+          exportPreviewSummary: result.summary || {},
+          exportPreviewRecords: result.records || []
+        });
+      } else {
+        wx.showToast({ title: result.errMsg || '核对数据加载失败，请重试', icon: 'none' });
+      }
+    } catch (err: any) {
+      wx.hideLoading();
+      console.error('[exportToExcel] 核对数据加载失败:', err);
+      wx.showToast({ title: '核对数据加载失败，请重试', icon: 'none' });
+    }
+  },
+
+  onCloseExportPreviewModal() {
+    this.setData({ showExportPreviewModal: false });
+  },
+
+  // 「发现异常，前去处理」：关闭预览弹窗，跳转账本页核实/处理
+  onExportPreviewGoFix() {
+    this.setData({ showExportPreviewModal: false });
+    wx.navigateTo({ url: '/pages/history/history' });
+  },
+
+  // 「数据无误，确认并导出」：关闭预览弹窗，发起真正的 xlsx 生成
+  async onExportPreviewConfirm() {
+    this.setData({ showExportPreviewModal: false });
+    await this.performExcelExport();
+  },
+
+  async performExcelExport() {
     wx.showLoading({ title: '正在生成 Excel 表格...', mask: true });
 
     try {
       // 优先使用云函数生成带样式的 xlsx
       const res = await wx.cloud.callFunction({
         name: 'exportAccountExcel',
-        data: {
-          shopName: shopName || 'default',
-          tabType: currentTab,
-          selectedYear: String(selectedYear),
-          selectedMonth: String(selectedMonth).padStart(2, '0'),
-          startDate: customStartDate,
-          endDate: customEndDate
-        }
+        data: this.buildExportCallData()
       });
 
       const result = (res.result || {}) as any;

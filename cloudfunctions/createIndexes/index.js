@@ -146,6 +146,86 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'store_milestones', index: 'store_eventDate', status: 'success' });
 
+    // 🏪 门店审核弹窗（index.ts fetchPendingAuditList/fetchApprovedVolunteerList，
+    // processRoleAudit.js listPendingApplications）四类高频组合查询，此前只有
+    // user_roles 上的单字段 openid/tenantId 索引，status+applyTime/approveTime 排序
+    // 全部落到内存排序，控制台会持续弹出【索引建议】警告。按实际查询形状逐一补全：
+    //   - 超管按机构维度看待审核：{status, tenantId} + orderBy(applyTime)
+    //   - 店长/家长按本店看待审核：{status, storeId} + orderBy(applyTime)
+    //   - 已审核通过按本店查：{status, storeId} + orderBy(approveTime)
+    //   - storeId 缺失时的兜底（历史数据/异常态）按门店名查：{status, storeName} + orderBy(approveTime)
+    await db.collection('user_roles').createIndex({
+      name: 'tenantId_status_applyTime',
+      keys: [{ tenantId: 1 }, { status: 1 }, { applyTime: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'user_roles', index: 'tenantId_status_applyTime', status: 'success' });
+
+    await db.collection('user_roles').createIndex({
+      name: 'storeId_status_applyTime',
+      keys: [{ storeId: 1 }, { status: 1 }, { applyTime: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'user_roles', index: 'storeId_status_applyTime', status: 'success' });
+
+    await db.collection('user_roles').createIndex({
+      name: 'storeId_status_approveTime',
+      keys: [{ storeId: 1 }, { status: 1 }, { approveTime: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'user_roles', index: 'storeId_status_approveTime', status: 'success' });
+
+    await db.collection('user_roles').createIndex({
+      name: 'storeName_status_approveTime',
+      keys: [{ storeName: 1 }, { status: 1 }, { approveTime: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'user_roles', index: 'storeName_status_approveTime', status: 'success' });
+
+    // storeId 均缺失时（历史数据）待审核列表按门店名兜底查询，见 fetchPendingAuditList 的 else 分支
+    await db.collection('user_roles').createIndex({
+      name: 'storeName_status_applyTime',
+      keys: [{ storeName: 1 }, { status: 1 }, { applyTime: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'user_roles', index: 'storeName_status_applyTime', status: 'success' });
+
+    // 🍱 report_logs 的 upsert 查重（DataService.saveReport/syncLocalDataToCloud，
+    // 见 miniprogram/utils/dataService.ts）此前只按 dateString+shopName(+storeId)
+    // 匹配，从未带 tenantId，云开发控制台会对这类高频组合查询持续弹【索引建议】
+    // 警告。补一条 {tenantId, storeId, openid} 复合索引，与查询同步加上的 tenantId
+    // 过滤条件对齐，同时也是 saveReport 新增的"防抖锁"（reportSaveLocks，按
+    // tenantId+storeId+openid 维度阻止并发重复提交）天然对应的查询维度
+    await db.collection('report_logs').createIndex({
+      name: 'tenantId_storeId_openid',
+      keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'report_logs', index: 'tenantId_storeId_openid', status: 'success' });
+
+    // 🙋 护持岗位班次打卡云端台账（manageVolunteerCheckIn，volunteer_duty_logs 集合）：
+    // checkin 时按 {tenantId, storeId, _openid, dateString, status} 现查"今日已打卡记录"
+    // 重算工时上限与同工种去重，高频命中，补一条对齐查询形状的复合索引；status 单独放在
+    // 复合索引末位（低基数字段放后面，避免抢占更具区分度的 dateString 排序位置）
+    await db.collection('volunteer_duty_logs').createIndex({
+      name: 'tenantId_storeId_openid_dateString',
+      keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }, { dateString: 1 }, { status: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'volunteer_duty_logs', index: 'tenantId_storeId_openid_dateString', status: 'success' });
+
+    // ❤️ 爱心护持榜（manageVolunteerCheckIn action:'leaderboard'）按 {tenantId, storeId,
+    // status} + dateString 区间扫描全店（不限定单个 _openid）来聚合每位义工的工时排名——
+    // 与上面 checkin 用的复合索引字段顺序不同（_openid 排在 dateString/status 之前，
+    // 一旦查询不带 _openid 就无法命中该索引的有效前缀），需要单独补一条不含 _openid
+    // 的复合索引
+    await db.collection('volunteer_duty_logs').createIndex({
+      name: 'tenantId_storeId_status_dateString',
+      keys: [{ tenantId: 1 }, { storeId: 1 }, { status: 1 }, { dateString: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'volunteer_duty_logs', index: 'tenantId_storeId_status_dateString', status: 'success' });
+
     return {
       success: true,
       message: '索引创建完成',

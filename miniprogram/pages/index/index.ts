@@ -31,6 +31,13 @@ const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
 const DAILY_HOURS_CAP = 12.0;
 
+// 🧾 常用支出项目「一键预置模版」：仅覆盖两个分类各自语义相符的高频项，不混着塞——
+// 食材类（daily）与水电/维修这类大额专项（fixed）本就不该出现在同一个分类下
+const EXPENSE_TEMPLATE_PRESETS: Record<'daily' | 'fixed', string[]> = {
+  daily: ['米面油', '蔬菜采买', '调味副食'],
+  fixed: ['水电燃气', '厨房维修']
+};
+
 // 🐛 修复"喜讯通报：喜讯通报：..."套娃重复：title/content 本身不应再嵌入 tag 前缀，
 // tag 已经在展示时单独加上【】/📢，重复嵌入会导致视觉上连续出现两次"喜讯通报"
 const PRESET_NOTICES = {
@@ -221,8 +228,19 @@ Page({
   _highlightTimer: null as any,
   // 🏪 门店选择器引导：因未选定具体门店而被拦截的操作，暂存回调，待用户选店后自动续跑
   _pendingStoreSelectAction: null as (() => void) | null,
+  // 🐛 防抖锁：见 loadHomeDynamicData() 注释，避免 onLoad/onShow 前后脚触发导致
+  // 同一批首页动态数据请求并发重复发起
+  _homeDataFetchInFlight: false,
 
   data: {
+    // 🐛 根因修复：小程序框架 onLoad/onShow 是背靠背同步触发的，onShow 几乎必然抢在
+    // onLoad 里 await AuthService.ensureLogin()/initCurrentUserRole() 完成之前就跑完，
+    // 此前 onShow 无条件重新发起 fetchTodayMenu/fetchTodayActivity/fetchNotices/
+    // fetchLatestMaterialStatus 四个云函数请求，导致冷启动时用着角色/门店尚未解析出
+    // 来的旧状态重复打一遍请求。hasInitedData 标记 onLoad 是否已在角色就绪后完整
+    // 触发过一轮数据初始化——为 false 时 onShow 直接跳过这一批请求，交给 onLoad 自己
+    // 触发唯一一次；后续真正的"切回页面"场景（hasInitedData 已为 true）照常刷新
+    hasInitedData: false,
     reportDate: '',
     reportDateValue: '',
     prevBalance: '0.00',
@@ -244,13 +262,24 @@ Page({
     showExpenseTemplateModal: false,
     expenseTemplateCategory: 'daily' as 'daily' | 'fixed',
     expenseTemplateTargetField: 'dailyExpenseText' as 'dailyExpenseText' | 'fixedExpenseText',
-    expenseTemplateDailyList: [] as { _id: string; itemName: string; defaultAmount: number | null }[],
-    expenseTemplateFixedList: [] as { _id: string; itemName: string; defaultAmount: number | null }[],
+    expenseTemplateDailyList: [] as { _id: string; itemName: string; defaultAmount: number | null; usageCount?: number }[],
+    expenseTemplateFixedList: [] as { _id: string; itemName: string; defaultAmount: number | null; usageCount?: number }[],
     expenseTemplateLoaded: false,
     expenseTemplateEditMode: false,
     expenseTemplateNewName: '',
     expenseTemplateNewAmount: '',
     expenseTemplateSaving: false,
+    // ✏️ 管理态重命名：与新建共用同一个 name/amount 输入行为不同，重命名要先选中一条
+    // 已有记录再改名，用独立的 id/name 字段承载，避免和"新建"的表单状态互相污染
+    expenseTemplateRenamingId: '',
+    expenseTemplateRenamingName: '',
+    // ⚡ 极速记账：点击"开餐食材"分类的 Chip 后，不再静默拼接文本，改为弹出这个
+    // 迷你金额确认框——项目名称已带入，金额输入框自动 focus，确认后才真正落到
+    // dailyExpenseText。"大额专项"分类走另一条路（直接插入结构化 fixedExpenseItems
+    // 并 focus 该条目自己的金额框），不需要这个弹窗
+    showQuickAmountModal: false,
+    quickAmountItemName: '',
+    quickAmountValue: '',
     // 🌟 合规授权须知弹窗，见 checkComplianceNotice
     showComplianceModal: false,
     complianceModalScene: 'general' as 'general' | 'privileged' | 'review',
@@ -299,6 +328,9 @@ Page({
       amount: string;
       independent_image_urls: string[];
       expanded: boolean;
+      // ⚡ 极速记账：从「常用支出项目」一键插入时短暂置 true，驱动金额输入框自动
+      // focus 一次；其余来源（手动新建/OCR/草稿恢复）的条目均为 false
+      _focusAmount?: boolean;
     }[],
     fixedExpenseNewName: '',
     fixedExpenseNewAmount: '',
@@ -552,11 +584,18 @@ Page({
     auditIsNationalView: false,
     pendingApplyList: [] as any[],
     approvedVolunteerList: [] as any[],
+    // 🔍 角色筛选（全部/义工/财务/大家长+店长合并为一档）与已通过列表的姓名/手机号搜索：
+    // 两个 Tab 共用同一份筛选态，纯前端对已拉取的列表做二次过滤，无需为筛选组合再打云函数
+    auditRoleFilter: 'all' as 'all' | 'volunteer' | 'finance' | 'leader',
+    auditSearchKeyword: '',
+    filteredPendingList: [] as any[],
+    filteredApprovedList: [] as any[],
     // 🛡️ 拒绝角色/门店申请必须说明原因（processRoleAudit action:'reject' 服务端强制
     // 校验 rejectReason），点击"拒绝"先弹这个原因输入框，而不是直接调用云函数
     showAuditRejectModal: false,
     auditRejectId: '',
     auditRejectReason: '',
+    auditRejectPreset: '',
     auditRejectSubmitting: false,
     currentUserRole: '' as string,
     permissions: {} as PermissionFlags,
@@ -564,6 +603,9 @@ Page({
     isManager: false,
     isFinance: false,
     isSuperAdmin: false,
+    // 🏛️ 大家长（store_patriarch）：批量解封/反封账等"大家长"专属操作的权限判定，
+    // 与 isManager/isFinance 等"权限向下继承"标志并列，但精确指向该具体角色本身
+    isPatriarch: false,
     // ❤️ 家人（服务对象）：新增于首页角色分流——store_family 真实身份，或新用户/
     // 未审核通过的默认 volunteer 账号（与 profile.ts isFamily 判定口径一致）。
     // 默认 false，避免角色数据到位前首页先闪一下"家人版"布局
@@ -582,12 +624,25 @@ Page({
     // 🌟 财务专属功能区：风控预警数量（首页角标）、封账弹窗、风控预警明细弹窗
     riskAlertCount: 0,
     showFinanceLockModal: false,
-    financeLockMonthStr: '',
+    // 🌟 稽核与封账：自定义起止日期区间（取代原先的单一月份 Picker），支持跨月批量封账/解封
+    financeLockStartDate: '',
+    financeLockEndDate: '',
     financeLockInFlight: false,
+    financeUnlockInFlight: false,
+    financeLockStatusLoading: false,
+    lockStatusText: '',
+    financeLockRangeLocked: false,
     showRiskAlertsModal: false,
     riskAlertsLoading: false,
     riskAlertsList: [] as any[],
+    // 🌟 详情筛选：点击风控卡片后仅展示该类型的明细，'' 表示不筛选、展示全部
+    riskAlertsFilterType: '' as '' | 'void' | 'missing_receipt' | 'balance',
+    riskAlertsFilteredList: [] as any[],
     riskAlertsSummary: { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 },
+    // 🌟 是否存在任意异常：驱动弹窗头部图标/配色在"绿色安全"与"橙红警示"之间联动
+    riskAlertsHasAnomaly: false,
+    // 🌟 统计区间文案，例如"近 60 天：2026-06-02 至 2026-08-01"
+    riskAlertsRangeLabel: '',
     currentStoreId: '' as string,
     isAllStoresView: false,
     allStoresList: [] as any[],
@@ -619,6 +674,9 @@ Page({
     selectedShift: 'LUNCH',
     selectedShiftHours: 3.0,
     willEatLunch: true,
+    // 🍚 留店用餐细分餐别：勾选"今日留店用餐"后展开的早/午/晚 Chip 多选态，
+    // 提交打卡时随 reservedMeals 一并写入后厨预留量数据（见 onConfirmShiftCheckIn）
+    reservedMeals: ['lunch'] as string[],
     checkInLogs: [] as any[],
     todayAccumulatedHours: 0,
     // 🌟 打卡弹窗实时工时预览：勾选班次后即时预估"若提交这一笔，今日总工时会变成多少"，
@@ -736,10 +794,13 @@ Page({
 
     const storeId = this.data.currentStoreId || 'store_haicang_001';
     this.fetchStoreSponsor(storeId);
-    // 🔗 跑马灯通知云端化：必须等 initCurrentUserRole 解析出真实 tenantId/currentStoreId
-    // 之后才能按"当前视角"发起严格互斥查询，不能像旧的本机 loadAnnouncement 那样在
-    // 角色未解析前就跑
-    this.fetchNotices();
+    // 🔗 跑马灯通知云端化等首屏动态数据：必须等 initCurrentUserRole 解析出真实
+    // tenantId/currentStoreId 之后才能按"当前视角"发起严格互斥查询，不能像旧的
+    // 本机 loadAnnouncement 那样在角色未解析前就跑。统一收进 loadHomeDynamicData()
+    // 触发（见 data.hasInitedData 注释），并标记 hasInitedData，供 onShow 判断
+    // 是否需要再触发一轮刷新
+    this.loadHomeDynamicData();
+    this.setData({ hasInitedData: true });
     // 🏛️ 护持家长/日常店长姓名：海报落款用，非阻塞式预取，生成海报时大概率已就绪
     this.fetchStorePeopleNames();
 
@@ -797,6 +858,9 @@ Page({
       // 用未经 applyRoleViewOverride 覆盖的原始 isVolunteer，不受超管预览视角影响
       // （预览视角只在 SUPER_ADMIN/STORE_MANAGER/FINANCE 之间切换，不涉及家人）
       const isFamily = normalizedRole === 'store_family' || (isVolunteer && status !== 'approved');
+      // 🏛️ 大家长：不受 applyRoleViewOverride 预览覆盖影响（预览仅针对 super_admin 本人），
+      // 直接取规范化角色判定，供「解封/反封账」等大家长专属操作的权限校验使用
+      const isPatriarch = normalizedRole === 'store_patriarch';
 
       return {
         rawRole, normalizedRole, flags,
@@ -807,6 +871,7 @@ Page({
         isManager: overridden.isManager,
         isFinance: overridden.isFinance,
         isSuperAdmin: overridden.isSuperAdmin,
+        isPatriarch,
         displayRole: overridden.currentUserRole,
         isRealSuperAdmin,
         isFamily
@@ -824,7 +889,7 @@ Page({
 
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
-      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(cached.role, cached.status);
+      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(cached.role, cached.status);
       const storeName = cached.storeName || this.data.shopName;
       const storeId = cached.storeId || '';
 
@@ -836,6 +901,7 @@ Page({
         isManager: isManager,
         isFinance: isFinance,
         isSuperAdmin: isSuperAdmin,
+        isPatriarch: isPatriarch,
         isRealSuperAdmin: isRealSuperAdmin,
         isFamily: isFamily,
         currentViewMode: getPreviewViewMode(),
@@ -857,7 +923,7 @@ Page({
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
-      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(info.role, info.status);
+      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(info.role, info.status);
       const storeName = info.storeName || this.data.shopName;
       const storeId = info.storeId || '';
 
@@ -869,6 +935,7 @@ Page({
         isManager: isManager,
         isFinance: isFinance,
         isSuperAdmin: isSuperAdmin,
+        isPatriarch: isPatriarch,
         isRealSuperAdmin: isRealSuperAdmin,
         isFamily: isFamily,
         currentViewMode: getPreviewViewMode(),
@@ -1285,14 +1352,23 @@ Page({
     }
   },
 
+  // 🛡️ 内存泄漏修复：此前 _stopHeartbeat()/_stopLockPolling() 排在 storeId/reportDate
+  // 判空 return 之后——一旦页面在这两个字段尚未就绪时（如角色/门店信息还在异步加载、
+  // 或处于"全国总览"视角 storeId 为空）触发 onUnload/onHide，函数会直接提前返回，
+  // 心跳续期（5 分钟一次）与锁轮询（3 秒一次）这两个 setInterval 定时器完全不会被清除，
+  // 会绑定着已卸载页面的旧 this 引用持续在后台运行、无限期发起 wx.cloud.callFunction
+  // 请求——这正是控制台报"内存泄漏"（残留定时器持续持有闭包引用）的根因。现在把两个
+  // 定时器清理提到判空 return 之前，保证无论 storeId/reportDate 是否就绪，页面卸载/
+  // 隐藏时定时器一定会被清除；storeId/reportDate 判空只用来决定要不要再打一次
+  // RELEASE 云函数请求（没有门店/日期上下文也就没有锁可释放）
   releaseDraftLock() {
-    const storeId = this.data.currentStoreId || '';
-    const reportDate = this.data.reportDateRaw || '';
-    if (!storeId || !reportDate) return;
-
     this._stopHeartbeat();
     this._stopLockPolling();
     this._lockActiveKey = '';
+
+    const storeId = this.data.currentStoreId || '';
+    const reportDate = this.data.reportDateRaw || '';
+    if (!storeId || !reportDate) return;
 
     if (!isCloudAvailable()) return;
     wx.cloud.callFunction({
@@ -1403,6 +1479,7 @@ Page({
     // store_family——这里是用户主动切换身份的场景，不需要 initCurrentUserRole 里
     // "未审核默认按家人展示"那条兜底规则
     const isFamily = normalizedRole === 'store_family';
+    const isPatriarch = normalizedRole === 'store_patriarch';
 
     // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储。
     // 🛡️ 这里必须持久化真实的 normalizedRole，绝不能写入视角切换预览后的展示角色，
@@ -1433,6 +1510,7 @@ Page({
       isManager: overridden.isManager,
       isFinance: overridden.isFinance,
       isSuperAdmin: overridden.isSuperAdmin,
+      isPatriarch: isPatriarch,
       isFamily: isFamily,
       permissions: flags
     }, () => {
@@ -2630,6 +2708,8 @@ Page({
     this.setData({
       showAuditModal: true,
       auditActiveTab: 'pending',
+      auditRoleFilter: 'all',
+      auditSearchKeyword: '',
       // 🌐 全国总览 vs 单店视角：决定底部按钮文案与空状态引导语
       auditIsNationalView: this.isNationalOverviewSelected()
     });
@@ -2837,6 +2917,53 @@ Page({
     }
   },
 
+  // 👥 角色筛选 Segment：[全部]/[义工]/[财务]/[大家长+店长]，两个 Tab 共用
+  onSwitchAuditRoleFilter(e: any) {
+    const filter = e.currentTarget.dataset.filter;
+    if (filter === this.data.auditRoleFilter) return;
+    this.setData({ auditRoleFilter: filter });
+    this.recomputeAuditFilteredLists();
+  },
+
+  // 🔍 已通过列表的姓名/手机号模糊搜索：对已拉取的原始列表做前端过滤，不额外打云函数
+  onAuditSearchInput(e: any) {
+    this.setData({ auditSearchKeyword: e.detail.value });
+    this.recomputeAuditFilteredLists();
+  },
+
+  onClearAuditSearch() {
+    if (!this.data.auditSearchKeyword) return;
+    this.setData({ auditSearchKeyword: '' });
+    this.recomputeAuditFilteredLists();
+  },
+
+  // 依据当前角色筛选 + 搜索关键字，从原始的 pendingApplyList/approvedVolunteerList
+  // 重新计算实际渲染用的 filteredPendingList/filteredApprovedList
+  recomputeAuditFilteredLists() {
+    const roleFilter = this.data.auditRoleFilter;
+    const keyword = (this.data.auditSearchKeyword || '').trim();
+
+    const matchesRoleFilter = (role: string) => {
+      if (roleFilter === 'all') return true;
+      if (roleFilter === 'leader') return role === 'store_manager' || role === 'store_patriarch';
+      return role === roleFilter;
+    };
+
+    const filteredPending = (this.data.pendingApplyList || []).filter((item: any) =>
+      matchesRoleFilter(item.requestedRole)
+    );
+
+    const filteredApproved = (this.data.approvedVolunteerList || []).filter((item: any) => {
+      if (!matchesRoleFilter(item.role)) return false;
+      if (!keyword) return true;
+      const name = item.realName || '';
+      const phone = item.phone || '';
+      return name.includes(keyword) || phone.includes(keyword);
+    });
+
+    this.setData({ filteredPendingList: filteredPending, filteredApprovedList: filteredApproved });
+  },
+
   async fetchPendingAuditList() {
     try {
       const roleInfo = AuthService.getCachedRoleInfo();
@@ -2876,6 +3003,7 @@ Page({
       }));
 
       this.setData({ pendingApplyList: formattedList });
+      this.recomputeAuditFilteredLists();
     } catch (e) {
       console.error('[fetchPendingAuditList] 加载失败:', e);
       wx.showToast({ title: '加载申请列表失败', icon: 'none' });
@@ -2909,6 +3037,7 @@ Page({
 
       wx.hideLoading();
       this.setData({ approvedVolunteerList: res.data || [] });
+      this.recomputeAuditFilteredLists();
     } catch (e) {
       wx.hideLoading();
       console.error('[fetchApprovedVolunteerList] 加载失败:', e);
@@ -2937,6 +3066,8 @@ Page({
     return month + '月' + day + '日 ' + hour + ':' + min;
   },
 
+  // 🔒 高权限角色（财务/店长/大家长）授权前需二次强确认，避免店长手滑一点就把
+  // 账本权限批给了非本意人选；义工无需二次确认，维持原有一键通过的体验
   async onProcessAudit(e: any) {
     const { id, action } = e.currentTarget.dataset;
     const applyItem = this.data.pendingApplyList.find((r: any) => r._id === id);
@@ -2946,6 +3077,30 @@ Page({
       return;
     }
 
+    const SENSITIVE_ROLES = ['finance', 'store_manager', 'store_patriarch'];
+    if (action === 'approve' && SENSITIVE_ROLES.includes(applyItem.requestedRole)) {
+      const roleLabel = applyItem.requestedRole === 'finance'
+        ? '财务'
+        : (applyItem.requestedRole === 'store_patriarch' ? '大家长' : '店长');
+      const displayName = maskName(applyItem.realName) || '该申请人';
+
+      wx.showModal({
+        title: '⚠️ 高权限角色确认',
+        content: `授权后「${displayName}」将以【${roleLabel}】身份操作/查看门店账本，确认通过吗？`,
+        confirmText: '确认通过',
+        confirmColor: '#D32F2F',
+        cancelText: '我再想想',
+        success: (res) => {
+          if (res.confirm) this.executeProcessAudit(id, action);
+        }
+      });
+      return;
+    }
+
+    await this.executeProcessAudit(id, action);
+  },
+
+  async executeProcessAudit(id: string, action: string) {
     const loadingTitle = action === 'approve' ? '正在授权...' : '正在处理...';
 
     wx.showLoading({ title: loadingTitle, mask: true });
@@ -2963,13 +3118,14 @@ Page({
 
       if (res && res.success) {
         wx.hideLoading();
-        wx.showToast({ 
-          title: action === 'approve' ? '已授权通过' : '已拒绝申请', 
-          icon: action === 'approve' ? 'success' : 'none' 
+        wx.showToast({
+          title: action === 'approve' ? '已授权通过' : '已拒绝申请',
+          icon: action === 'approve' ? 'success' : 'none'
         });
 
         const newList = this.data.pendingApplyList.filter((r: any) => r._id !== id);
         this.setData({ pendingApplyList: newList });
+        this.recomputeAuditFilteredLists();
       } else {
         wx.hideLoading();
         wx.showToast({ title: (res && res.error) || '操作失败', icon: 'none' });
@@ -2986,7 +3142,7 @@ Page({
   onOpenAuditRejectModal(e: any) {
     const id = e.currentTarget.dataset.id;
     if (!id) return;
-    this.setData({ showAuditRejectModal: true, auditRejectId: id, auditRejectReason: '' });
+    this.setData({ showAuditRejectModal: true, auditRejectId: id, auditRejectReason: '', auditRejectPreset: '' });
   },
 
   onCloseAuditRejectModal() {
@@ -2995,7 +3151,16 @@ Page({
   },
 
   onAuditRejectReasonInput(e: any) {
-    this.setData({ auditRejectReason: e.detail.value });
+    // 手动改字后不再视为命中某个快捷选项，取消高亮，避免"选中态"与实际文案不符
+    this.setData({ auditRejectReason: e.detail.value, auditRejectPreset: '' });
+  },
+
+  // ⚡ 快捷拒绝理由：非本店义工/信息不符/请重新填写，点击直接填入文本框，
+  // 仍可在此基础上手动编辑补充，而不是强制二选一
+  onSelectAuditRejectPreset(e: any) {
+    const reason = e.currentTarget.dataset.reason;
+    if (!reason) return;
+    this.setData({ auditRejectReason: reason, auditRejectPreset: reason });
   },
 
   async onSubmitAuditReject() {
@@ -3025,6 +3190,7 @@ Page({
         wx.showToast({ title: '已拒绝申请', icon: 'none' });
         const newList = this.data.pendingApplyList.filter((r: any) => r._id !== id);
         this.setData({ pendingApplyList: newList, showAuditRejectModal: false, auditRejectId: '' });
+        this.recomputeAuditFilteredLists();
       } else {
         wx.showToast({ title: (res && res.error) || '操作失败', icon: 'none' });
       }
@@ -3071,6 +3237,7 @@ Page({
               r._id === id ? { ...r, role: targetRole } : r
             );
             this.setData({ approvedVolunteerList: newList });
+            this.recomputeAuditFilteredLists();
           } else {
             wx.showModal({ title: '操作失败', content: (res2 && res2.error) || '未能更新角色', showCancel: false });
           }
@@ -3112,6 +3279,7 @@ Page({
             wx.showToast({ title: '已解除绑定', icon: 'success' });
             const newList = this.data.approvedVolunteerList.filter((r: any) => r._id !== id);
             this.setData({ approvedVolunteerList: newList });
+            this.recomputeAuditFilteredLists();
           } else {
             wx.showModal({ title: '操作失败', content: (res2 && res2.error) || '未能解除绑定', showCancel: false });
           }
@@ -3936,42 +4104,84 @@ Page({
   onSelectExpenseTemplateItem(e: any) {
     if (this.data.expenseTemplateEditMode) return; // 管理态下点击不触发插入，避免误触
 
-    const { name, amount } = e.currentTarget.dataset;
+    const { name, amount, id } = e.currentTarget.dataset;
     if (!name) return;
+
+    // 🔥 使用频次埋点：点了就算一次，不阻塞主流程——失败静默，不影响记账本身
+    this.bumpExpenseTemplateUsage(id);
 
     // 🌟 大额专项（fixed）已改为结构化 fixedExpenseItems（见 onAddFixedExpenseItem
     // 同款字段形状），一键插入 = 直接落一条新记录，而不是像 daily 分类那样拼文本——
-    // 这样插入后立刻就能挂独立凭证，金额也仍可在列表里直接改。
+    // 这样插入后立刻就能挂独立凭证，金额也仍可在列表里直接改。⚡ 插入后关掉常用项目
+    // 弹窗，回到始终可见的记账表单，并把这条新记录的金额输入框自动 focus 一次，
+    // 一步到位极速记账
     if (this.data.expenseTemplateCategory === 'fixed') {
       const newItem = {
         _key: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         name,
         amount: ((amount !== '' && amount !== undefined) ? parseFloat(amount) : 0).toFixed(2),
         independent_image_urls: [] as string[],
-        expanded: false
+        expanded: false,
+        _focusAmount: true
       };
       this.setData({
-        fixedExpenseItems: [...this.data.fixedExpenseItems, newItem],
+        fixedExpenseItems: [...this.data.fixedExpenseItems.map((it: any) => ({ ...it, _focusAmount: false })), newItem],
         showExpenseTemplateModal: false
       });
       this.regenerateFixedExpenseText();
       return;
     }
 
-    // 有默认金额：拼成 `名称：¥金额`，与 OCR 追加时同款格式，才能被
-    // calculateTodayExpenseFromText 正确计入今日支出总额；无默认金额：只插入名称，
-    // 不编造 ¥ 占位，理由同「选择常客」——具体金额因情况而异，不该替用户瞎填。
-    const line = (amount !== '' && amount !== undefined)
-      ? `${name}：¥${parseFloat(amount).toFixed(2)}`
-      : name;
+    // ⚡ 开餐食材：不再静默拼接文本——关闭常用项目弹窗，弹出「金额确认」迷你框，
+    // 项目名称已带入、金额输入框自动 focus，确认后才真正拼进 dailyExpenseText
+    this.setData({
+      showExpenseTemplateModal: false,
+      showQuickAmountModal: true,
+      quickAmountItemName: name,
+      quickAmountValue: (amount !== '' && amount !== undefined) ? String(amount) : ''
+    });
+  },
 
+  // 🔥 使用频次：静默调用，不 await、不提示成功/失败——这是次要的埋点动作，
+  // 不该让用户感知到任何等待或干扰主流程（记账）本身
+  bumpExpenseTemplateUsage(id: string) {
+    if (!id || !isCloudAvailable()) return;
+    wx.cloud.callFunction({
+      name: 'manageExpenseTemplate',
+      data: { action: 'incrementUsage', id }
+    }).catch((err) => console.warn('[bumpExpenseTemplateUsage] 计数失败（不影响记账）:', err));
+  },
+
+  onCloseQuickAmountModal() {
+    this.setData({ showQuickAmountModal: false, quickAmountItemName: '', quickAmountValue: '' });
+  },
+
+  onInputQuickAmountValue(e: any) {
+    this.setData({ quickAmountValue: e.detail.value });
+  },
+
+  // ⚡ 确认金额：拼接格式与旧的静默插入路径完全一致（`名称：¥金额`，未填金额则只插
+  // 名称），确保 calculateTodayExpenseFromText 仍能正确识别这一行计入今日支出总额
+  onConfirmQuickAmount() {
+    const name = this.data.quickAmountItemName;
+    if (!name) return;
+
+    const amountStr = (this.data.quickAmountValue || '').trim();
+    if (amountStr && (isNaN(parseFloat(amountStr)) || parseFloat(amountStr) < 0)) {
+      wx.showToast({ title: '请输入正确的金额', icon: 'none' });
+      return;
+    }
+
+    const line = amountStr ? `${name}：¥${parseFloat(amountStr).toFixed(2)}` : name;
     const field = this.data.expenseTemplateTargetField;
     const current = (this.data as any)[field] || '';
     const merged = current ? (current + '\n\n' + line) : line;
 
     this.setData({
       [field]: merged,
-      showExpenseTemplateModal: false
+      showQuickAmountModal: false,
+      quickAmountItemName: '',
+      quickAmountValue: ''
     } as any);
 
     // 代码直接 setData 绕过了真实的 <textarea> bindinput，需要手动补上
@@ -3980,12 +4190,75 @@ Page({
     this.debouncedSaveDraft();
   },
 
+  // 🌟 新插入的大额专项条目金额框完成一次自动 focus 后，清掉标记——避免 WXML 里
+  // 那个 <input focus="{{item._focusAmount}}"> 因为该字段一直是 true 而在下次
+  // setData 时被判定为"值没变"从而不重新触发 focus（后续再插入新条目时，前一条
+  // 也已被统一置回 false，这里只是双保险）
+  onFixedExpenseAmountFocused(e: any) {
+    const index = e.currentTarget.dataset.index;
+    if (index === undefined || index === null) return;
+    const key = `fixedExpenseItems[${index}]._focusAmount`;
+    this.setData({ [key]: false } as any);
+  },
+
   onInputExpenseTemplateNewName(e: any) {
     this.setData({ expenseTemplateNewName: e.detail.value });
   },
 
   onInputExpenseTemplateNewAmount(e: any) {
     this.setData({ expenseTemplateNewAmount: e.detail.value });
+  },
+
+  // 💡 空状态一键预置：降低首次配置成本，按当前分类批量导入几个高频项目，
+  // 逐条调用既有的 create（而不是新开一个批量云函数），量级只有 2~3 条，
+  // 已存在同名的会被服务端拒绝（"该分类下已存在同名项目"），静默跳过不中断整批
+  async onQuickImportExpenseTemplates() {
+    if (!(this.data.isManager || this.data.isFinance || this.data.isSuperAdmin)) {
+      wx.showToast({ title: '仅店长/财务/超管可导入常用标签', icon: 'none' });
+      return;
+    }
+    const storeId = this.data.currentStoreId;
+    if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') {
+      wx.showToast({ title: '请先选择具体门店', icon: 'none' });
+      return;
+    }
+    if (this.data.expenseTemplateSaving) return;
+
+    const category = this.data.expenseTemplateCategory;
+    const presets = EXPENSE_TEMPLATE_PRESETS[category] || [];
+    if (presets.length === 0) return;
+
+    this.setData({ expenseTemplateSaving: true });
+    wx.showLoading({ title: '正在导入...', mask: true });
+
+    let importedCount = 0;
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      for (const name of presets) {
+        try {
+          const res = await wx.cloud.callFunction({
+            name: 'manageExpenseTemplate',
+            data: { action: 'create', storeId, category, itemName: name }
+          });
+          const result = res.result as any;
+          if (result && result.success) importedCount++;
+        } catch (err) {
+          console.warn('[onQuickImportExpenseTemplates] 单条导入失败:', name, err);
+        }
+      }
+      await this.fetchExpenseTemplateList();
+      wx.hideLoading();
+      wx.showToast({
+        title: importedCount > 0 ? `已导入 ${importedCount} 个常用标签` : '常用标签已是最新，无需重复导入',
+        icon: importedCount > 0 ? 'success' : 'none'
+      });
+    } catch (e) {
+      wx.hideLoading();
+      console.error('[onQuickImportExpenseTemplates] 导入失败:', e);
+      wx.showToast({ title: '导入失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ expenseTemplateSaving: false });
+    }
   },
 
   async onAddExpenseTemplateItem() {
@@ -4054,6 +4327,46 @@ Page({
         } catch (err) {
           console.error('[onDeleteExpenseTemplateItem] 删除失败:', err);
           wx.showToast({ title: '删除失败，请重试', icon: 'none' });
+        }
+      }
+    });
+  },
+
+  // ✏️ 管理态重命名：复用 wx.showModal 的 editable 单行输入能力，不需要为此单独
+  // 建一个自定义弹窗——与「删除」共用同一套 wx.showModal 确认交互语言
+  onRenameExpenseTemplateItem(e: any) {
+    const { id, name } = e.currentTarget.dataset;
+    if (!id) return;
+
+    wx.showModal({
+      title: '重命名常用项目',
+      editable: true,
+      placeholderText: name || '请输入新名称',
+      success: async (res) => {
+        if (!res.confirm) return;
+        const newName = (res.content || '').trim();
+        if (!newName) {
+          wx.showToast({ title: '名称不能为空', icon: 'none' });
+          return;
+        }
+        if (newName === name) return;
+
+        try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+          const cbRes = await wx.cloud.callFunction({
+            name: 'manageExpenseTemplate',
+            data: { action: 'update', id, itemName: newName }
+          });
+          const result = cbRes.result as any;
+          if (result && result.success) {
+            wx.showToast({ title: '已重命名', icon: 'success' });
+            await this.fetchExpenseTemplateList();
+          } else {
+            wx.showToast({ title: (result && result.error) || '重命名失败', icon: 'none' });
+          }
+        } catch (err) {
+          console.error('[onRenameExpenseTemplateItem] 重命名失败:', err);
+          wx.showToast({ title: '重命名失败，请重试', icon: 'none' });
         }
       }
     });
@@ -5988,6 +6301,27 @@ Page({
     this.setData({ offlineQueueCount: count });
   },
 
+  // 🐛 根因修复：统一首页动态数据（公告/今日食谱/大事记/物资状态）的唯一触发入口。
+  // onLoad 在角色解析就绪（await initCurrentUserRole() 完成）后调用一次并标记
+  // hasInitedData；onShow 只在 hasInitedData 已为 true（即真正的"切回本页"，
+  // 而非与 onLoad 冷启动赛跑的那次）时才会再调用。_homeDataFetchInFlight 做
+  // 进行中防抖，避免快速连续触发（如短时间内切换多次 Tab）导致并发重复请求
+  loadHomeDynamicData() {
+    if (this._homeDataFetchInFlight) {
+      console.log('[Index][loadHomeDynamicData] 已有请求在途，跳过本次重复调用');
+      return;
+    }
+    this._homeDataFetchInFlight = true;
+    Promise.allSettled([
+      this.fetchTodayMenu(),
+      this.fetchTodayActivity(),
+      this.fetchNotices(),
+      this.fetchLatestMaterialStatus()
+    ]).finally(() => {
+      this._homeDataFetchInFlight = false;
+    });
+  },
+
   onShow() {
     // 重置路由防重锁
     this.isNavigating = false;
@@ -6030,18 +6364,23 @@ Page({
 
     this.refreshUserRoleView();
 
-    // 🐛 门店切换后公告栏/今日食谱/大事记不刷新的根因修复：这三个请求都依赖
+    // 🐛 门店切换后公告栏/今日食谱/大事记不刷新的根因修复：这几个请求都依赖
     // this.data.currentStoreId，但它们此前排在 refreshUserRoleView() 之前调用——
     // refreshUserRoleView() 才是真正把 storage 里最新的 current_store_id 同步进
     // this.data 的地方。如果切店发生在别的页面（或通过 storage 持久化，而不是本页
     // onStoreChanged/switchStoreTarget 这两个会自行 setData 的入口），仅靠 switchTab
-    // 回到首页触发 onShow 时，这三个请求会先用着切店前的旧 currentStoreId 发起，
+    // 回到首页触发 onShow 时，这几个请求会先用着切店前的旧 currentStoreId 发起，
     // 稍后 refreshUserRoleView() 才把新门店 id 写进 this.data，为时已晚。
     // 现移到 refreshUserRoleView() 之后，确保总是用最新门店 id 发起请求。
-    this.fetchTodayMenu();
-    this.fetchTodayActivity();
-    this.fetchNotices();
-    this.fetchLatestMaterialStatus();
+    //
+    // 🐛 根因修复：onLoad/onShow 是背靠背同步触发的，onShow 几乎必然抢在 onLoad 里
+    // await initCurrentUserRole() 完成之前跑完——冷启动时 hasInitedData 还是 false，
+    // 这里直接跳过，交给 onLoad 在角色就绪后触发 loadHomeDynamicData() 唯一一次；
+    // 后续真正"切回本页"的场景（hasInitedData 已为 true）照常刷新，不改变现有的
+    // 返回页面即刷新的产品行为
+    if (this.data.hasInitedData) {
+      this.loadHomeDynamicData();
+    }
     this.setData({ cultureQuote: getDailyCultureQuote() });
 
     // ❤️ 家人首页第一模块【阳光账本核心大盘】：复用弹窗那套 fetchSunshineLedgerData/
@@ -6213,16 +6552,37 @@ Page({
   },
 
   refreshUserRoleView() {
-    // 🌟 本地开发 / 无真实登录环境兜底：current_user_role 只有在用户真正登录鉴权
-    // （云函数 checkUserRole 成功返回，或走完邀请码激活流程）后才会被显式写入 storage；
-    // 在本地开发或云函数暂不可用（如未绑定真实 appid）的环境下这个 key 永远是空的，
-    // 若按原逻辑兜底为 VOLUNTEER，管理者将永远只能看到义工打卡视图、看不到记账表单与工作台。
-    // 这里将"从未配置过角色"的兜底身份提升为超级管理员，方便本地开发者/管理者直接看到全量功能；
-    // 真实用户一旦完成登录，current_user_role 会被显式覆盖为其云端真实角色，此兜底不会生效。
+    // 🛡️ 门店 Guard 纠偏：current_user_role/current_store_name/current_store_id 这三个
+    // storage key 只应反映"已核验超管本人"主动发起的视角预览/门店切换（见 store-picker.ts
+    // _applyRoleSwitch 与 isVerifiedSuperAdmin），不是任意登录者的身份真相来源。此前这里
+    // 无条件信任这三个 key：只要设备上曾经预览过"全国总览"，或账号从未走过角色切换胶囊
+    // 导致三个 key 从未写入（此时命中下面的 DEV_FALLBACK_ROLE 兜底），店长/义工等真实
+    // 非超管账号每次 onShow（如切 Tab 再切回）都会被这里错误置换成超管视角、背景门店名
+    // 被顶成"全国总览"或残留的其他门店——这是一次真实的越权展示 Bug。现在改为：先取
+    // AuthService 缓存的服务端已核验角色作为权威依据；只有当权威角色确已核验为
+    // super_admin 时，才允许 storage 里的预览/切换态接管展示；其余角色一律强制锁定为
+    // 自己绑定的真实门店，绝不读取可能残留超管预览态的 storage 三件套。
+    const cached = AuthService.getCachedRoleInfo();
+    const isVerifiedSuperAdminAccount = !!(cached && cached.role === 'super_admin' && cached.status === 'approved');
+
+    // 🌟 本地开发 / 无真实登录环境兜底：仅在压根没有任何已核验角色信息（cached 为空）
+    // 时才生效，方便本地开发者/管理者在无真实登录环境下直接看到全量功能；真实非超管
+    // 账号一旦完成登录（cached 有值），永远不会走到这条兜底
     const DEV_FALLBACK_ROLE = 'SUPER_ADMIN';
-    const role = wx.getStorageSync('current_user_role') || DEV_FALLBACK_ROLE;
-    const storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '海沧区雨花斋';
-    const storeId = wx.getStorageSync('current_store_id') || '';
+
+    let role: string;
+    let storeName: string;
+    let storeId: string;
+    if (cached && !isVerifiedSuperAdminAccount) {
+      // 🔒 真实非超管账号：强制锁定为服务端下发的真实绑定门店
+      role = cached.role;
+      storeName = cached.storeName || this.data.shopName || '海沧区雨花斋';
+      storeId = cached.storeId || '';
+    } else {
+      role = wx.getStorageSync('current_user_role') || DEV_FALLBACK_ROLE;
+      storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '海沧区雨花斋';
+      storeId = wx.getStorageSync('current_store_id') || '';
+    }
 
     const rawRole = role.toUpperCase();
     const isVolunteer = rawRole === 'VOLUNTEER';
@@ -6234,6 +6594,7 @@ Page({
     // ❤️ 家人：role 这里已经是 storage 里存的规范化值（如 'store_family'），
     // rawRole 是它的大写形式 'STORE_FAMILY'
     const isFamily = rawRole === 'STORE_FAMILY';
+    const isPatriarch = rawRole === 'STORE_PATRIARCH';
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
     const isRealSuperAdmin = isSuperAdmin;
     const overridden = applyRoleViewOverride(role, {
@@ -6252,6 +6613,7 @@ Page({
       isManager: overridden.isManager,
       isFinance: overridden.isFinance,
       isSuperAdmin: overridden.isSuperAdmin,
+      isPatriarch: isPatriarch,
       isFamily: isFamily,
       permissions: getPermissionFlags({ role })
     });
@@ -6371,6 +6733,12 @@ Page({
 
   onUnload() {
     this.releaseDraftLock();
+    // 🛡️ 与 onHide 同款清理：页面卸载时也要清掉全局单槽回调，避免已销毁页面的闭包
+    // 继续被 app.ts 的网络恢复监听持有
+    const app = getApp() as any;
+    if (app && app.globalData) {
+      app.globalData.onNetworkReconnected = null;
+    }
   },
 
   onHide() {
@@ -7603,16 +7971,21 @@ Page({
     const todayLogs = logs.filter((log: any) => log.date === todayStr);
     const completedShiftKeys = new Set(todayLogs.map((log: any) => log.shiftKey));
     const todayHours = todayLogs.reduce((sum: number, log: any) => sum + (parseFloat(log.hours) || 0), 0);
+    const todayAccumulatedHours = parseFloat(todayHours.toFixed(1));
 
+    // ⏱️ 动态工时上限：勾选前就按"已录入工时 + 该班次工时"逐一算好是否会超过 12h 上限，
+    // 供 WXML 单独禁用会超限的班次选项（而不是等选完了才在按钮上统一拦截）
     let firstAvailableShift = '';
     const updatedShifts = this.data.shiftDefinitions.map((item: any) => {
       const isCompleted = completedShiftKeys.has(item.shiftKey);
-      if (!isCompleted && !firstAvailableShift) {
+      const wouldExceedCap = !isCompleted && parseFloat((todayAccumulatedHours + item.hours).toFixed(1)) > DAILY_HOURS_CAP;
+      if (!isCompleted && !wouldExceedCap && !firstAvailableShift) {
         firstAvailableShift = item.shiftKey;
       }
       return {
         ...item,
-        isCompleted: isCompleted
+        isCompleted: isCompleted,
+        wouldExceedCap: wouldExceedCap
       };
     });
 
@@ -7621,7 +7994,6 @@ Page({
       ? updatedShifts.find((s: any) => s.shiftKey === firstAvailableShift)
       : null;
 
-    const todayAccumulatedHours = parseFloat(todayHours.toFixed(1));
     const selectedShiftHours = firstAvailableShift
       ? ((matchedShift && matchedShift.hours) || 3.0)
       : 0;
@@ -7656,6 +8028,12 @@ Page({
     });
   },
 
+  // ⏱️ 勾选会导致超出单日 12h 上限的班次：WXML 已按 item.wouldExceedCap 禁用其 tap
+  // 路由到本方法而非 onSelectShift，这里只负责给出明确的提示文案，不做任何状态变更
+  onSelectShiftBlocked() {
+    wx.showToast({ title: '单日护持工时已达 12h 上限，请核对班次', icon: 'none', duration: 2500 });
+  },
+
   onSelectShift(e: any) {
     const { shift, hours } = e.currentTarget.dataset;
     const selectedShiftHours = parseFloat(hours || '3.0');
@@ -7667,12 +8045,25 @@ Page({
   },
 
   onToggleMealReserve() {
+    const next = !this.data.willEatLunch;
+    // 🍚 关闭"留店用餐"时同步清空已选餐别；重新打开时默认勾选午餐（与此前
+    // willEatLunch 单一开关的语义保持一致，避免用户还要多点一次）
     this.setData({
-      willEatLunch: !this.data.willEatLunch
+      willEatLunch: next,
+      reservedMeals: next ? (this.data.reservedMeals.length ? this.data.reservedMeals : ['lunch']) : []
     });
   },
 
-  onConfirmShiftCheckIn() {
+  // 🍚 留店用餐细分餐别 Chip 多选：早餐/午餐/晚餐可任意组合勾选
+  onToggleReservedMeal(e: any) {
+    const meal = e.currentTarget.dataset.meal;
+    if (!meal) return;
+    const current = this.data.reservedMeals || [];
+    const next = current.includes(meal) ? current.filter((m: string) => m !== meal) : [...current, meal];
+    this.setData({ reservedMeals: next });
+  },
+
+  async onConfirmShiftCheckIn() {
     // 🌟 防连点：双击/网络卡顿时同一次点击可能触发两次回调，读写 storage 之间存在竞态窗口，
     // 仅靠"当天+同工种已打卡"判断无法拦截几乎同时发生的两次提交。用 data 字段（而非纯实例
     // 属性）承载这个锁，好处是同一个值既能防重入，也能直接绑定按钮的 loading/disabled 态
@@ -7686,7 +8077,13 @@ Page({
     // 🌟 与按钮禁用态保持一致的服务端防线：前端已按 isOverHoursLimit 禁用按钮，
     // 这里再做一次拦截防止残留点击（如禁用态切换前的最后一次触摸事件）
     if (this.data.isOverHoursLimit) {
-      wx.showToast({ title: '工时超出每日上限，请撤销部分已打卡记录后再试', icon: 'none' });
+      wx.showToast({ title: '单日护持工时已达 12h 上限，请核对班次', icon: 'none', duration: 2500 });
+      return;
+    }
+
+    // 🍚 勾选了"留店用餐"但没选具体餐别：后厨没法据此备餐，拦下来让用户至少选一个
+    if (this.data.willEatLunch && (!this.data.reservedMeals || this.data.reservedMeals.length === 0)) {
+      wx.showToast({ title: '请至少选择一个留餐时段', icon: 'none' });
       return;
     }
 
@@ -7727,13 +8124,50 @@ Page({
       return;
     }
 
-    const wasTruncated = requestedHours > remainingAllowance;
-    const addHours = wasTruncated ? remainingAllowance : requestedHours;
+    let wasTruncated = requestedHours > remainingAllowance;
+    let addHours = wasTruncated ? remainingAllowance : requestedHours;
 
     this.setData({ checkInSubmitting: true });
 
     const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === selectedShift);
     const shiftLabel = shiftObj ? shiftObj.name : '爱心护持班';
+    const currentStoreId = this.data.currentStoreId || '';
+    const currentStoreName = this.data.currentStoreName || '海沧区雨花斋';
+    const reservedMeals = this.data.willEatLunch ? this.data.reservedMeals.slice() : [];
+
+    // ⚡️ 云端台账：manageVolunteerCheckIn 尽力而为同步一份到 volunteer_duty_logs
+    // （服务端会按 {tenantId, storeId, _openid, dateString} 重新核算工时上限，比本地
+    // storage 更权威），成功则采用服务端返回的 hours/wasTruncated 覆盖本地估算值，
+    // 并记下 cloudLogId 供撤销时精确对应云端记录；云端不可用/失败时静默降级为
+    // 纯本地打卡（与项目其余提交流程一致的离线兜底策略），不阻断打卡本身
+    let cloudLogId = '';
+    try {
+      if (isCloudAvailable()) {
+        const res: any = await wx.cloud.callFunction({
+          name: 'manageVolunteerCheckIn',
+          data: {
+            action: 'checkin',
+            storeId: currentStoreId,
+            storeName: currentStoreName,
+            shiftKey: selectedShift,
+            shiftName: shiftLabel,
+            hours: requestedHours,
+            willEatLunch: this.data.willEatLunch,
+            reservedMeals
+          }
+        });
+        const result = res.result;
+        if (result && result.success) {
+          cloudLogId = result.logId || '';
+          addHours = typeof result.hours === 'number' ? result.hours : addHours;
+          wasTruncated = !!result.wasTruncated;
+        } else if (result && result.error) {
+          console.warn('[onConfirmShiftCheckIn] 云端打卡同步失败，已降级为本地记录:', result.error);
+        }
+      }
+    } catch (err) {
+      console.warn('[onConfirmShiftCheckIn] 云端打卡调用异常，已降级为本地记录:', err);
+    }
 
     // 🛡️ 全局计数器：必须从 storage 里的旧值递增，不能读 this.data.myCheckInDays 等——
     // 这三个 data 字段现在展示的是"按当前门店过滤"后的结果（见下方 scopedStats），
@@ -7746,8 +8180,6 @@ Page({
     const newHours = parseFloat(((wx.getStorageSync('my_service_hours') || 0) + addHours).toFixed(1));
 
     const timestamp = now;
-    const currentStoreId = this.data.currentStoreId || '';
-    const currentStoreName = this.data.currentStoreName || '海沧区雨花斋';
     const newLog = {
       timestamp: timestamp,
       date: todayStr,
@@ -7759,7 +8191,12 @@ Page({
       // 精确按门店过滤；storeName 继续保留，作为老记录（没有 storeId）的兜底匹配字段
       storeId: currentStoreId,
       storeName: currentStoreName,
-      willEatLunch: this.data.willEatLunch
+      willEatLunch: this.data.willEatLunch,
+      // 🍚 具体留餐餐别（早/午/晚 子集），随打卡记录一并落地，供后厨据此精确备餐
+      reservedMeals,
+      // ☁️ 对应 volunteer_duty_logs 云端文档 _id，撤销时用它调用 manageVolunteerCheckIn
+      // action:'revoke'；云端同步失败时为空字符串，撤销会自动降级为仅本地删除
+      cloudLogId
     };
     logs.unshift(newLog);
 
@@ -7793,18 +8230,63 @@ Page({
     }
   },
 
-  onRevokeTodayCheckIn(e: any) {
-    const { timestamp, hours } = e.currentTarget.dataset;
+  // 🔒 撤销打卡：限当天（today-checked-section 本就只渲染 todayLogs，天然满足"限当天"）
+  // 且当日门店账本未被财务稽核封账时才允许——封账前先查一次 report_logs，避免弹出
+  // 确认框之后才告知用户无法撤销
+  async onRevokeTodayCheckIn(e: any) {
+    const { timestamp, hours, cloudLogId } = e.currentTarget.dataset;
     const revokeHours = parseFloat(hours || '0');
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentStoreId = this.data.currentStoreId || '';
+
+    if (currentStoreId && isCloudAvailable()) {
+      try {
+        const db = wx.cloud.database();
+        const lockRes = await db.collection('report_logs')
+          .where({ storeId: currentStoreId, dateString: todayStr })
+          .limit(1)
+          .get();
+        const report = lockRes.data && lockRes.data[0];
+        if (report && report.approvalStatus === 'AUDITED_LOCKED') {
+          wx.showModal({
+            title: '无法撤销',
+            content: '今日门店账本已被财务稽核封账，打卡记录无法撤销',
+            showCancel: false
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('[onRevokeTodayCheckIn] 封账状态查询失败，放行撤销:', err);
+      }
+    }
 
     wx.showModal({
       title: '↩️ 确认撤销打卡',
       content: `确定要撤销此笔打卡记录吗？将自动扣减 ${revokeHours} 小时贡献工时。`,
       confirmColor: '#D32F2F',
-      success: (res) => {
-        if (res.confirm) {
+      success: async (res) => {
+        if (!res.confirm) return;
+
+        // ☁️ 云端台账同步撤销：仅当这笔打卡当初成功同步过云端（cloudLogId 非空）才调用，
+        // 与 onConfirmShiftCheckIn 的云端失败降级策略对称——本地记录该字段为空时直接跳过
+        if (cloudLogId) {
+          try {
+            const cloudRes: any = await wx.cloud.callFunction({
+              name: 'manageVolunteerCheckIn',
+              data: { action: 'revoke', logId: cloudLogId }
+            });
+            const result = cloudRes.result;
+            if (result && !result.success) {
+              wx.showModal({ title: '撤销失败', content: result.error || '云端撤销失败，请重试', showCancel: false });
+              return;
+            }
+          } catch (err) {
+            console.warn('[onRevokeTodayCheckIn] 云端撤销调用异常，仅执行本地撤销:', err);
+          }
+        }
+
+        {
           let logs = wx.getStorageSync('my_checkin_logs') || [];
-          const todayStr = new Date().toISOString().split('T')[0];
 
           const ts = typeof timestamp === 'number' ? timestamp : parseInt(timestamp, 10);
           logs = logs.filter((l: any) => l.timestamp !== ts);
@@ -7950,17 +8432,17 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
     wx.navigateTo({
-      url: '/pages/statistics/statistics',
+      url: '/pages/statistics/statistics?autoShowExport=true',
       fail: () => {
         this.isNavigating = false;
       }
     });
   },
 
-  // 🌟 财务专属功能区「稽核与封账」：按月批量锁定已通过店长确认的账本，锁定后禁止编辑/作废
+  // 🌟 财务专属功能区「稽核与封账」：按自定义起止日期区间批量锁定/解封已通过店长确认的账本
   onOpenFinanceLockModal() {
-    if (!this.data.isFinance && !this.data.isSuperAdmin) {
-      wx.showToast({ title: '仅财务与超管可执行稽核封账', icon: 'none' });
+    if (!this.data.isFinance && !this.data.isSuperAdmin && !this.data.isPatriarch) {
+      wx.showToast({ title: '仅财务、大家长与超管可执行稽核封账', icon: 'none' });
       return;
     }
     if (this.isNationalOverviewSelected()) {
@@ -7968,48 +8450,109 @@ Page({
       return;
     }
     const now = new Date();
-    const defaultMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const defaultEndDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const defaultStartDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
     this.setData({
       showFinanceLockModal: true,
-      financeLockMonthStr: this.data.financeLockMonthStr || defaultMonthStr
+      financeLockStartDate: this.data.financeLockStartDate || defaultStartDate,
+      financeLockEndDate: this.data.financeLockEndDate || defaultEndDate,
+      lockStatusText: ''
+    }, () => {
+      this.checkRangeLockStatus();
     });
   },
 
   onCloseFinanceLockModal() {
-    if (this.data.financeLockInFlight) return;
+    if (this.data.financeLockInFlight || this.data.financeUnlockInFlight) return;
     this.setData({ showFinanceLockModal: false });
   },
 
-  onFinanceLockMonthChange(e: any) {
-    this.setData({ financeLockMonthStr: e.detail.value });
+  onFinanceLockStartDateChange(e: any) {
+    this.setData({ financeLockStartDate: e.detail.value }, () => {
+      this.checkRangeLockStatus();
+    });
+  },
+
+  onFinanceLockEndDateChange(e: any) {
+    this.setData({ financeLockEndDate: e.detail.value }, () => {
+      this.checkRangeLockStatus();
+    });
+  },
+
+  // 🌟 实时查询当前选定区间的封账状态：区间是否已全部封账、封账人/时间，或区间内待审核笔数，
+  // 用于驱动 lock-status-tip 提示文案与"确认封账/解封/反封账"按钮的显隐切换
+  async checkRangeLockStatus() {
+    const { financeLockStartDate: startDate, financeLockEndDate: endDate, currentStoreId: storeId } = this.data;
+    if (!startDate || !endDate || !storeId) return;
+    if (startDate > endDate) {
+      this.setData({ lockStatusText: '⚠️ 开始日期不能晚于结束日期', financeLockRangeLocked: false });
+      return;
+    }
+
+    this.setData({ financeLockStatusLoading: true, lockStatusText: '查询区间状态中...' });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const result = await wx.cloud.callFunction({
+        name: 'manageFinanceLock',
+        data: { action: 'checkRangeStatus', storeId, startDate, endDate }
+      });
+      const res = result.result as any;
+      if (res && res.success) {
+        let tip = '';
+        if (res.isLocked) {
+          tip = `🔒 该区间已封账（共 ${res.lockedCount} 条${res.lockedBy ? `，由 ${res.lockedBy}` : ''}${res.lockedAt ? ` 于 ${res.lockedAt}` : ''}）`;
+        } else if (res.pendingCount > 0) {
+          tip = `⚠️ 区间内还有 ${res.pendingCount} 笔待审核，需全部审核或作废后才能封账`;
+        } else if (res.approvedCount > 0) {
+          tip = `已审核待封账 ${res.approvedCount} 笔`;
+        } else {
+          tip = '该区间暂无可封账的记录';
+        }
+        this.setData({
+          lockStatusText: tip,
+          financeLockRangeLocked: !!res.isLocked
+        });
+      } else {
+        this.setData({ lockStatusText: (res && res.errMsg) || '查询区间状态失败', financeLockRangeLocked: false });
+      }
+    } catch (err) {
+      console.error('[checkRangeLockStatus] 异常:', err);
+      this.setData({ lockStatusText: '查询区间状态失败，请检查网络', financeLockRangeLocked: false });
+    } finally {
+      this.setData({ financeLockStatusLoading: false });
+    }
   },
 
   async onConfirmFinanceLock() {
     if (this.data.financeLockInFlight) return;
-    const monthStr = this.data.financeLockMonthStr;
-    if (!monthStr) {
-      wx.showToast({ title: '请先选择要封账的月份', icon: 'none' });
+    const { financeLockStartDate: startDate, financeLockEndDate: endDate } = this.data;
+    if (!startDate || !endDate) {
+      wx.showToast({ title: '请先选择要封账的起止日期', icon: 'none' });
       return;
     }
-    const [year, month] = monthStr.split('-');
+    if (startDate > endDate) {
+      wx.showToast({ title: '开始日期不能晚于结束日期', icon: 'none' });
+      return;
+    }
     const storeId = this.data.currentStoreId;
     const storeLabel = this.data.currentStoreName || storeId;
 
     wx.showModal({
       title: '🔒 确认稽核封账？',
-      content: `即将批量锁定【${storeLabel}】${year}年${month}月所有已通过店长确认的账本记录。封账后，这些记录将无法再被店长编辑或作废，是否继续？`,
+      content: `确定要封账【${storeLabel}】${startDate} 至 ${endDate} 的账目吗？锁定后店长将无法修改。`,
       confirmText: '确认封账',
-      confirmColor: '#2E7D32',
+      confirmColor: '#D32F2F',
       cancelText: '我再想想',
       success: async (res) => {
         if (!res.confirm) return;
-        this.data.financeLockInFlight = true;
+        this.setData({ financeLockInFlight: true });
         wx.showLoading({ title: '安全封账中...', mask: true });
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
           const result = await wx.cloud.callFunction({
             name: 'manageFinanceLock',
-            data: { action: 'lockMonth', storeId, year, month: parseInt(month, 10) }
+            data: { action: 'lockRange', storeId, startDate, endDate }
           });
           const res2 = result.result as any;
           wx.hideLoading();
@@ -8019,16 +8562,71 @@ Page({
               content: res2.message || `已成功封账 ${res2.lockedCount || 0} 条记录`,
               showCancel: false
             });
-            this.setData({ showFinanceLockModal: false });
+            this.checkRangeLockStatus();
+          } else if (res2 && res2.error === 'SELECTED_RANGE_HAS_PENDING_REPORTS') {
+            wx.showModal({ title: '无法封账', content: res2.message || '选中区间内存在待审核数据，请全部审核或作废后再封账！', showCancel: false });
           } else {
-            wx.showModal({ title: '封账失败', content: (res2 && res2.errMsg) || '云函数未返回正确结果', showCancel: false });
+            wx.showModal({ title: '封账失败', content: (res2 && (res2.message || res2.errMsg)) || '云函数未返回正确结果', showCancel: false });
           }
         } catch (err) {
           wx.hideLoading();
           console.error('[onConfirmFinanceLock] 异常:', err);
           wx.showModal({ title: '调用失败', content: '未成功触发封账，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
         } finally {
-          this.data.financeLockInFlight = false;
+          this.setData({ financeLockInFlight: false });
+        }
+      }
+    });
+  },
+
+  // 🌟 大家长专属「解封 / 反封账」：仅 isPatriarch || isSuperAdmin 可执行，finance 无权批量解封
+  handleUnlockMonth() {
+    if (this.data.financeUnlockInFlight) return;
+    if (!this.data.isPatriarch && !this.data.isSuperAdmin) {
+      wx.showToast({ title: '仅大家长与超级管理员可执行解封', icon: 'none' });
+      return;
+    }
+    const { financeLockStartDate: startDate, financeLockEndDate: endDate, currentStoreId: storeId } = this.data;
+    if (!startDate || !endDate) {
+      wx.showToast({ title: '请先选择要解封的起止日期', icon: 'none' });
+      return;
+    }
+    const storeLabel = this.data.currentStoreName || storeId;
+
+    wx.showModal({
+      title: '⚠️ 确认解除封账？',
+      content: `仅限大家长权限操作，确定要解除【${storeLabel}】${startDate} 至 ${endDate} 的账目锁定吗？`,
+      confirmText: '确认解封',
+      confirmColor: '#E65100',
+      cancelText: '我再想想',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.setData({ financeUnlockInFlight: true });
+        wx.showLoading({ title: '解封处理中...', mask: true });
+        try {
+          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+          const result = await wx.cloud.callFunction({
+            name: 'manageFinanceLock',
+            data: { action: 'unlockRange', storeId, startDate, endDate }
+          });
+          const res2 = result.result as any;
+          wx.hideLoading();
+          if (res2 && res2.success) {
+            wx.showModal({
+              title: '解封完成',
+              content: res2.message || `已成功解封 ${res2.unlockedCount || 0} 条记录`,
+              showCancel: false
+            });
+            this.checkRangeLockStatus();
+          } else {
+            wx.showModal({ title: '解封失败', content: (res2 && (res2.message || res2.errMsg)) || '云函数未返回正确结果', showCancel: false });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[handleUnlockMonth] 异常:', err);
+          wx.showModal({ title: '调用失败', content: '未成功触发解封，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
+        } finally {
+          this.setData({ financeUnlockInFlight: false });
         }
       }
     });
@@ -8045,12 +8643,58 @@ Page({
       return;
     }
 
-    this.setData({ showRiskAlertsModal: true, riskAlertsLoading: true });
+    this.setData({ showRiskAlertsModal: true, riskAlertsLoading: true, riskAlertsFilterType: '' });
     await this.fetchRiskAlerts();
   },
 
   onCloseRiskAlertsModal() {
     this.setData({ showRiskAlertsModal: false });
+  },
+
+  // 🌟 统计区间文案："近 N 天：起始日期 至 结束日期"，N 取云函数实际返回的 scanRangeDays，
+  // 不在前端硬编码天数，避免与后端扫描窗口（cloudfunctions/getRiskAlerts SCAN_DAYS）脱节
+  buildRiskAlertsRangeLabel(scanRangeDays: number): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - scanRangeDays);
+    return `近 ${scanRangeDays} 天：${fmt(start)} 至 ${fmt(end)}`;
+  },
+
+  // 🌟 按类型筛选明细：'balance' 同时覆盖余额链路断裂(balance_break)与单日净变动过大(balance_jump)，
+  // 二者共同构成汇总卡片里的"余额异常"计数
+  computeFilteredRiskAlerts(list: any[], filterType: string): any[] {
+    if (!filterType) return list;
+    if (filterType === 'balance') {
+      return list.filter((item) => item.type === 'balance_break' || item.type === 'balance_jump');
+    }
+    return list.filter((item) => item.type === filterType);
+  },
+
+  // 🌟 点击汇总卡片：再次点击同一张卡片可取消筛选、回到全部明细
+  onRiskCardTap(e: any) {
+    const type = e.currentTarget.dataset.type as string;
+    if (!type) return;
+    const nextFilterType = this.data.riskAlertsFilterType === type ? '' : type;
+    this.setData({
+      riskAlertsFilterType: nextFilterType,
+      riskAlertsFilteredList: this.computeFilteredRiskAlerts(this.data.riskAlertsList, nextFilterType)
+    });
+  },
+
+  // 🌟 精准追溯：从当前筛选类型跳转到历史账本页，携带 anomalyType 参数，
+  // history.ts 会按同一条判定口径（见其 filterByAnomalyType）自动预筛选明细
+  onGoToHistoryAnomalyDetail() {
+    const type = this.data.riskAlertsFilterType;
+    if (!type) return;
+    wx.navigateTo({ url: `/pages/history/history?anomalyType=${type}` });
+  },
+
+  onRefreshRiskAlerts() {
+    if (this.data.riskAlertsLoading) return;
+    this.setData({ riskAlertsLoading: true });
+    this.fetchRiskAlerts();
   },
 
   async fetchRiskAlerts() {
@@ -8067,10 +8711,16 @@ Page({
       });
       const res = result.result as any;
       if (res && res.success) {
+        const alerts = res.alerts || [];
+        const summary = res.summary || { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 };
+        const filterType = this.data.riskAlertsFilterType;
         this.setData({
-          riskAlertsList: res.alerts || [],
-          riskAlertsSummary: res.summary || { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 },
-          riskAlertCount: (res.alerts || []).length
+          riskAlertsList: alerts,
+          riskAlertsFilteredList: this.computeFilteredRiskAlerts(alerts, filterType),
+          riskAlertsSummary: summary,
+          riskAlertsHasAnomaly: (summary.voidCount + summary.missingReceiptCount + summary.balanceAnomalyCount) > 0,
+          riskAlertsRangeLabel: this.buildRiskAlertsRangeLabel(res.scanRangeDays || 60),
+          riskAlertCount: alerts.length
         });
       } else {
         console.warn('[fetchRiskAlerts] 云函数返回失败:', res);

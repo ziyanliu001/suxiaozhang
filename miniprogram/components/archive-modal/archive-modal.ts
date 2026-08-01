@@ -11,6 +11,7 @@
 import { AuthService } from '../../utils/authService'
 import { drawStaticWxacodeFallback } from '../../utils/staticWxacode'
 import { HonorProgress, computeHonorProgress, lightenHex, drawMedalBadge } from '../../utils/honorLevels'
+import { getSafeSystemInfo } from '../../utils/util'
 
 export type { HonorProgress }
 
@@ -181,7 +182,7 @@ Component({
       const H = 1500
       const canvas = await this._getCanvasNode()
       const ctx = canvas.getContext('2d')
-      const dpr = wx.getSystemInfoSync().pixelRatio || 1
+      const dpr = getSafeSystemInfo().pixelRatio || 1
       canvas.width = W * dpr
       canvas.height = H * dpr
       ctx.scale(dpr, dpr)

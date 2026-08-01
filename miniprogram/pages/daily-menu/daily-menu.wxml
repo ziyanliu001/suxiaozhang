@@ -13,29 +13,54 @@
 
   <scroll-view scroll-y class="dm-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
 
-    <view class="dm-store-tip" wx:if="{{currentStoreName}}">📍 {{currentStoreName}}</view>
+    <view class="dm-store-tip-skeleton" wx:if="{{!roleReady}}"></view>
+    <view class="dm-store-tip" wx:elif="{{currentStoreName}}">📍 {{currentStoreName}}</view>
 
-    <!-- 🍱 今日食谱：顶部标注日期与餐次，管理员右侧提供轻量化修改/删除入口 -->
+    <!-- 🍱 当前查看/管理的食谱：顶部标注日期与餐次，管理员右侧提供轻量化修改/删除入口 -->
     <view class="dm-today-card">
+      <!-- 📅 日期导航：◀ 上一天 / 下一天 ▶ + 日历 picker -->
+      <view class="dm-date-nav">
+        <text class="dm-date-nav-arrow" bindtap="onPrevDay">◀</text>
+        <picker mode="date" value="{{selectedDateStr}}" bindchange="onSelectedDateChange">
+          <view class="dm-date-nav-picker">{{selectedDateDisplay}}</view>
+        </picker>
+        <text class="dm-date-nav-arrow" bindtap="onNextDay">▶</text>
+      </view>
+
+      <!-- 🍚 餐别切换：早/午/晚餐各自独立发布 -->
+      <view class="dm-meal-switcher">
+        <view
+          class="dm-meal-tab {{selectedMealType === item.value ? 'active' : ''}}"
+          wx:for="{{mealTypeOptions}}"
+          wx:key="value"
+          data-meal="{{item.value}}"
+          bindtap="onSelectMealType"
+        >{{item.label}}</view>
+      </view>
+
       <view class="dm-today-top">
         <view class="dm-today-top-left">
-          <text class="dm-today-date">{{todayDateDisplay}} {{mealLabel}}</text>
-          <text class="dm-today-tag">今日食谱</text>
+          <text class="dm-today-date">{{selectedDateDisplay}} {{mealLabel}}</text>
+          <text class="dm-today-tag">{{isSelectedToday ? '今日食谱' : '该日食谱'}}</text>
         </view>
-        <view class="dm-today-actions" wx:if="{{canManage}}">
-          <block wx:if="{{todayItem}}">
-            <text class="dm-action-btn" bindtap="onOpenTodayEditForm">修改</text>
-            <text class="dm-action-btn dm-action-btn-delete" catchtap="onDeleteMenu" data-id="{{todayItem._id}}">删除</text>
-          </block>
-          <text class="dm-action-btn dm-action-btn-primary" wx:else bindtap="onOpenTodayEditForm">发布食谱</text>
+        <view class="dm-today-actions" wx:if="{{canManage && todayItem}}">
+          <text class="dm-action-btn" bindtap="onOpenTodayEditForm">修改</text>
+          <text class="dm-action-btn dm-action-btn-delete" catchtap="onDeleteMenu" data-id="{{todayItem._id}}">删除</text>
         </view>
       </view>
 
-      <!-- 🌟 发布冲突提示：今日已存在食谱时展示发布人与时间，避免重复发布/误覆盖 -->
+      <!-- 🌟 发布冲突提示：该日食谱已存在时展示发布人与时间，避免重复发布/误覆盖 -->
       <text class="dm-publish-meta" wx:if="{{todayItem}}">已由 {{todayItem.publisherLabel || '管理员'}} 于 {{todayItem.publishTimeStr}} 发布</text>
 
       <text class="dm-today-note" wx:if="{{todayItem && todayItem.menuText}}">{{todayItem.menuText}}</text>
-      <text class="dm-today-empty-txt" wx:if="{{!todayItem}}">今日食谱尚未发布</text>
+
+      <block wx:if="{{!todayItem}}">
+        <text class="dm-today-empty-txt">{{isSelectedToday ? '今日' : '该日'}}食谱尚未发布</text>
+        <view class="dm-publish-cta-group" wx:if="{{canManage}}">
+          <button class="dm-btn-publish-primary" bindtap="onOpenTodayEditForm">+ 立即发布{{isSelectedToday ? '今日' : '该日'}}食谱</button>
+          <button class="dm-btn-reuse-template" wx:if="{{historyList.length > 0}}" bindtap="onOpenReuseTemplatePicker">📖 引用历史食谱</button>
+        </view>
+      </block>
 
       <view class="dm-dish-grid" wx:if="{{todayDishes.length > 0}}">
         <view class="dm-dish-card" wx:for="{{todayDishes}}" wx:for-item="dish" wx:key="url">
@@ -88,13 +113,14 @@
         <text class="dm-card-text" wx:if="{{item.menuText}}">{{item.menuText}}</text>
       </view>
       <view class="dm-card-footer" wx:if="{{canManage}}">
-        <button class="dm-btn-reuse" catchtap="onReuseToToday" data-id="{{item._id}}">✨ 一键复用为今日食谱</button>
+        <button class="dm-btn-reuse" catchtap="onReuseToToday" data-id="{{item._id}}">✨ 一键复用为{{isSelectedToday ? '今日' : '该日'}}食谱</button>
       </view>
     </view>
 
     <view class="dm-empty-state" wx:if="{{!loading && historyList.length === 0}}">
       <text class="dm-empty-icon">📖</text>
-      <text class="dm-empty-text">暂无历史食谱记录</text>
+      <text class="dm-empty-title">暂无历史食谱记录</text>
+      <text class="dm-empty-suggest">切换餐别或发布一份食谱后，历史记录会显示在这里</text>
     </view>
 
     <view class="dm-loading-more" wx:if="{{loadingMore}}">
@@ -149,7 +175,7 @@
   <view class="dm-modal-mask" wx:if="{{showEditForm}}" bindtap="onCloseEditForm">
     <view class="dm-edit-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
       <view class="dm-detail-header">
-        <text class="dm-detail-date">{{editForm.id ? '编辑食谱' : '发布今日食谱'}}</text>
+        <text class="dm-detail-date">{{editForm.id ? '编辑食谱' : '发布' + (isSelectedToday ? '今日' : '该日') + '食谱'}}</text>
         <text class="dm-detail-close" bindtap="onCloseEditForm">✕</text>
       </view>
 
@@ -158,6 +184,9 @@
         <picker mode="date" value="{{editForm.dateString}}" bindchange="onEditDateChange">
           <view class="dm-form-picker">{{editForm.dateString}}</view>
         </picker>
+
+        <text class="dm-form-label">餐别</text>
+        <view class="dm-form-picker dm-form-picker-readonly">{{editForm.mealType === 'breakfast' ? '早餐' : (editForm.mealType === 'dinner' ? '晚餐' : '午餐')}}</view>
 
         <text class="dm-form-label">菜谱文字备注（选填）</text>
         <textarea
@@ -206,8 +235,30 @@
 
       <view class="dm-poster-actions">
         <button class="dm-btn-poster-save" bindtap="onSavePosterToAlbum" disabled="{{!posterReady}}">💾 保存到相册</button>
-        <button class="dm-btn-poster-share" open-type="share" disabled="{{!posterReady}}">📤 分享给好友</button>
+        <button class="dm-btn-poster-share" bindtap="onShareMenuPoster" disabled="{{!posterReady}}">📤 分享海报</button>
       </view>
+    </view>
+  </view>
+
+  <!-- 📖 引用历史食谱：未发布状态下的辅助入口，从下方 historyList 里挑一条
+       带入编辑框，免去先划到下方历史区再点复用的来回操作 -->
+  <view class="dm-modal-mask" wx:if="{{showReuseTemplateModal}}" bindtap="onCloseReuseTemplateModal">
+    <view class="dm-detail-box" style="max-height: calc(100vh - {{contentTop}}px - 20rpx);" catchtap="stopPropagation">
+      <view class="dm-detail-header">
+        <text class="dm-detail-date">引用历史食谱</text>
+        <text class="dm-detail-close" bindtap="onCloseReuseTemplateModal">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="dm-reuse-template-scroll">
+        <view class="dm-reuse-template-item" wx:for="{{historyList}}" wx:key="_id" bindtap="onPickReuseTemplate" data-id="{{item._id}}">
+          <view class="dm-reuse-template-date">{{item.dateDisplay}}</view>
+          <view class="dm-reuse-template-preview">
+            <text wx:if="{{item.menuText}}">{{item.menuText}}</text>
+            <text wx:elif="{{item.dishes.length > 0}}">{{item.dishes.length}} 道菜品</text>
+            <text wx:else>（无文字备注）</text>
+          </view>
+        </view>
+      </scroll-view>
     </view>
   </view>
 

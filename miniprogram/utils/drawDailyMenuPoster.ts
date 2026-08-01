@@ -12,10 +12,19 @@ export interface DrawDailyMenuPosterOptions {
   canvas: any;
   storeName: string;
   dateDisplay: string;
+  // 🍱 早/午/晚餐可独立发布，海报头部展示的餐别文案由调用方按当前记录的
+  // mealType 传入，不再写死"午餐"
+  mealLabel: string;
   menuText?: string;
   dishes: DailyMenuPosterDish[];
   width: number;
   height: number;
+  // 🙏 餐前感恩词摘要（一行即可，不整段塞进海报喧宾夺主），未提供则不画这一行
+  gratitudeLine?: string;
+  // 小程序码本地临时路径（getStoreQRCode 下载后的 wxfile:// 路径），未提供/
+  // 生成失败时优雅降级为不画（不占位留白），与 utils/posterGenerator.ts 里
+  // 其它海报对二维码的降级口径一致
+  qrLocalPath?: string;
 }
 
 const COLS = 3;
@@ -26,6 +35,9 @@ const ROW_GAP = 14;
 const HEADER_HEIGHT = 100;
 const FOOTER_HEIGHT = 40;
 const MENU_TEXT_LINE_HEIGHT = 20;
+const GRATITUDE_LINE_HEIGHT = 32;
+const QR_SIZE = 72;
+const QR_BLOCK_HEIGHT = QR_SIZE + 18 + 16;
 
 function wrapText(ctx: any, text: string, maxWidth: number, maxLines: number): string[] {
   const lines: string[] = [];
@@ -92,19 +104,28 @@ function drawImageCover(ctx: any, img: any, dx: number, dy: number, dw: number, 
 }
 
 /**
- * 根据菜品数量与是否有菜谱文字备注，计算海报画布应有的高度，供调用方在绘制前
- * 设置 <canvas> 尺寸（画布尺寸必须在绘制前确定，无法绘制完再回头改高度）
+ * 根据菜品数量/是否有菜谱文字备注/是否有感恩词/是否有二维码，计算海报画布应有的
+ * 高度，供调用方在绘制前设置 <canvas> 尺寸（画布尺寸必须在绘制前确定，无法绘制
+ * 完再回头改高度）
  */
-export function calcDailyMenuPosterHeight(dishCount: number, hasMenuText: boolean, width: number): number {
+export function calcDailyMenuPosterHeight(
+  dishCount: number,
+  hasMenuText: boolean,
+  width: number,
+  hasGratitude: boolean = false,
+  hasQr: boolean = false
+): number {
   const cellW = (width - CELL_MARGIN_X * 2 - GRID_GAP * (COLS - 1)) / COLS;
   const rowH = cellW + ROW_NAME_HEIGHT + ROW_GAP;
   const rows = Math.max(1, Math.ceil(dishCount / COLS));
   const menuTextHeight = hasMenuText ? MENU_TEXT_LINE_HEIGHT * 2 + 12 : 0;
-  return HEADER_HEIGHT + 24 + menuTextHeight + rows * rowH + FOOTER_HEIGHT;
+  const gratitudeHeight = hasGratitude ? GRATITUDE_LINE_HEIGHT : 0;
+  const qrHeight = hasQr ? QR_BLOCK_HEIGHT : 0;
+  return HEADER_HEIGHT + 24 + menuTextHeight + rows * rowH + gratitudeHeight + qrHeight + FOOTER_HEIGHT;
 }
 
 export async function drawDailyMenuPoster(opts: DrawDailyMenuPosterOptions): Promise<void> {
-  const { canvas, storeName, dateDisplay, menuText, dishes, width, height } = opts;
+  const { canvas, storeName, dateDisplay, mealLabel, menuText, dishes, width, height, gratitudeLine, qrLocalPath } = opts;
   const ctx = canvas.getContext('2d');
   const dpr = getSafeSystemInfo().pixelRatio || 2;
 
@@ -134,7 +155,7 @@ export async function drawDailyMenuPoster(opts: DrawDailyMenuPosterOptions): Pro
 
   ctx.fillStyle = '#FFE8CC';
   ctx.font = '13px sans-serif';
-  ctx.fillText(`${dateDisplay} 午餐`, width / 2, 88);
+  ctx.fillText(`${dateDisplay} ${mealLabel}`, width / 2, 88);
 
   let cursorY = HEADER_HEIGHT + 28;
 
@@ -195,7 +216,43 @@ export async function drawDailyMenuPoster(opts: DrawDailyMenuPosterOptions): Pro
   const rows = Math.max(1, Math.ceil(dishes.length / COLS));
   cursorY += rows * (cellW + ROW_NAME_HEIGHT + ROW_GAP) - ROW_GAP + 24;
 
-  // 5. 底部版权
+  // 5. 餐前感恩词摘要（可选，一行即可）
+  if (gratitudeLine && gratitudeLine.trim()) {
+    ctx.fillStyle = '#B45309';
+    ctx.font = 'italic 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`🙏 ${gratitudeLine.trim()}`, width / 2, cursorY);
+    cursorY += GRATITUDE_LINE_HEIGHT;
+  }
+
+  // 6. 小程序码（可选）：有真实临时路径才画，加载失败/未提供一律跳过，不占位留白
+  if (qrLocalPath) {
+    try {
+      const qrImg = canvas.createImage();
+      qrImg.src = qrLocalPath;
+      await new Promise<void>((resolve, reject) => {
+        qrImg.onload = () => resolve();
+        qrImg.onerror = () => reject(new Error('qrcode image load failed'));
+      });
+      const qrX = (width - QR_SIZE) / 2;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(qrX, cursorY, QR_SIZE, QR_SIZE);
+      ctx.drawImage(qrImg, qrX, cursorY, QR_SIZE, QR_SIZE);
+      ctx.strokeStyle = '#E8E4DC';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(qrX, cursorY, QR_SIZE, QR_SIZE);
+
+      ctx.fillStyle = '#999999';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('微信扫码查看', width / 2, cursorY + QR_SIZE + 16);
+      cursorY += QR_BLOCK_HEIGHT;
+    } catch (e) {
+      console.warn('[drawDailyMenuPoster] 二维码绘制失败，跳过:', e);
+    }
+  }
+
+  // 7. 底部版权
   ctx.fillStyle = '#A67558';
   ctx.font = 'bold 12px sans-serif';
   ctx.textAlign = 'center';

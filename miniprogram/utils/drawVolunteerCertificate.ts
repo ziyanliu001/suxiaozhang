@@ -15,6 +15,11 @@ export interface CertificateData {
   // 落款右侧的红色印章是可选装饰，默认展示；如某天需要一个"无印章"的简洁版本，
   // 调用方可以直接传 false 关掉，不用改这个绘制函数本身
   showSeal?: boolean;
+  // 🏪 所属门店：与姓名同一视觉层级展示，空值不绘制该行（不占位）
+  storeName?: string;
+  // 🔖 专属证书编号：由调用方生成（通常按 openid+日期派生的确定性短码），
+  // 空值不绘制该行
+  certNo?: string;
 }
 
 interface TextRun {
@@ -77,7 +82,7 @@ function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: numbe
 }
 
 export async function drawVolunteerCertificate(opts: CertificateData): Promise<void> {
-  const { canvas, nickname, days, hours, qrCodeTempPath, width, height, showSeal = true } = opts;
+  const { canvas, nickname, days, hours, qrCodeTempPath, width, height, showSeal = true, storeName = '', certNo = '' } = opts;
   const ctx = canvas.getContext('2d');
   // 复用项目已有的 getSafeSystemInfo（已经把 wx.getWindowInfo 缺失时的兜底封装好了），
   // 不再各文件各写一遍同样的三元表达式
@@ -173,6 +178,17 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
   const nameY = innerMargin + 144;
   ctx.fillText(nameText, width / 2, nameY);
 
+  // 6b. 所属门店：紧贴姓名下方一行，字号较小、颜色较淡，与姓名形成主次层级；
+  // 空值不绘制，也不占用下方正文的起始行高
+  let bodyStartY = nameY + 34;
+  if (storeName) {
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#8C6D46';
+    ctx.textAlign = 'center';
+    ctx.fillText(`所属门店：${storeName}`, width / 2, nameY + 22);
+    bodyStartY = nameY + 56;
+  }
+
   // 7. 正文段落：护持天数/累积工时用加粗强调色单独标出，其余为普通正文，
   // 🛡️ 去宗教化合规要求：证书文案禁止出现"同修"等宗教色彩词汇，统一采用
   // "义工伙伴"这类现代公益/志愿服务通用称谓
@@ -190,7 +206,7 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
 
   ctx.textAlign = 'left';
   const bodyMaxWidth = width - innerMargin * 2 - 36;
-  drawRichWrappedText(ctx, bodyRuns, innerMargin + 18, nameY + 34, bodyMaxWidth, 28);
+  drawRichWrappedText(ctx, bodyRuns, innerMargin + 18, bodyStartY, bodyMaxWidth, 28);
 
   // 8. 落款：团队名 + 颁发日期，靠右对齐置于右下角——传统证书落款惯例是贴右边界，
   // X 坐标固定在内边框内侧（width - innerMargin - 18），配合印章盖在文字右上方
@@ -201,6 +217,15 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
   ctx.fillText('雨花爱心餐报助手团队', signRightX, height - innerMargin - 62);
   ctx.font = '12px sans-serif';
   ctx.fillText(formatCertificateDate(new Date()), signRightX, height - innerMargin - 42);
+
+  // 8b. 专属证书编号：左对齐落在 QR 码右侧与印章之间的空白横向区域，与右侧的
+  // 颁发日期同一行基线对齐，空值不绘制
+  if (certNo) {
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = '#A08A6A';
+    ctx.textAlign = 'left';
+    ctx.fillText(`证书编号：${certNo}`, innerMargin + 18, height - innerMargin - 42);
+  }
 
   // 9. 左下角二维码（落款移到右下角后，二维码换到左下角，避免和落款/印章挤在一起）
   const qrSize = 64;

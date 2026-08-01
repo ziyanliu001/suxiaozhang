@@ -16,6 +16,17 @@ const STORAGE_KEY = 'local_report_logs';
 const CLOUD_UNAVAILABLE_WARN_COOLDOWN_MS = 30 * 1000;
 let lastCloudUnavailableWarnAt = 0;
 
+// 🛡️ 防抖锁：同一 {tenantId, storeId, openid} 维度的 saveReport 调用若仍在途中，
+// 拒绝并发发起第二次云端写入——网络延迟下连续点击提交按钮曾经可能触发两次几乎
+// 同时的 upsert 查重（查重本身有竞态窗口：两次调用都查到"尚不存在"再各自 add()，
+// 产生两条重复餐报）。与 report_logs 新增的 {tenantId, storeId, _openid} 复合索引
+// 配合，同一维度内天然只应有一条"进行中"的提交
+const reportSaveLocks = new Map<string, boolean>();
+
+function buildReportSaveLockKey(tenantId: string, storeId: string, openid: string): string {
+  return `${tenantId || 'no_tenant'}|${storeId || 'no_store'}|${openid || 'no_openid'}`;
+}
+
 function getLocalReports(): any[] {
   try {
     const data = wx.getStorageSync(STORAGE_KEY);
@@ -200,6 +211,18 @@ export const DataService = {
       approvalStatus: 'PENDING'
     };
 
+    // 🛡️ 防抖锁：同一提交人在同一门店的上一次 saveReport 尚未落地前，拒绝本次并发调用
+    const lockKey = buildReportSaveLockKey(tenantId, formattedData.storeId, openid || '');
+    if (reportSaveLocks.get(lockKey)) {
+      console.warn('[DataService] 检测到并发重复提交，已拒绝本次调用:', lockKey);
+      return {
+        success: false,
+        message: '正在提交中，请勿重复点击',
+        errorDetail: 'concurrent_submit_blocked'
+      };
+    }
+    reportSaveLocks.set(lockKey, true);
+
     try {
       // 前置校验：阻止全 0 且无物资的无效数据（防止并发产生脏数据）
       const allZero =
@@ -223,7 +246,9 @@ export const DataService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，saveReport 降级为本地缓存模式');
       }
 
-      // 步骤 1: 查询同日期同门店是否已有记录（Upsert 查重，强带 storeId 隔离）
+      // 步骤 1: 查询同日期同门店是否已有记录（Upsert 查重，强带 storeId/tenantId 隔离，
+      // 与 createIndexes 里新增的 {tenantId, storeId, _openid} 复合索引对齐，避免
+      // 控制台弹出【索引建议】警告，也比纯 shopName 字符串匹配更抗门店改名/重名）
       const upsertWhere: any = {
         dateString: formattedData.dateString,
         shopName: formattedData.shopName,
@@ -231,6 +256,9 @@ export const DataService = {
       };
       if (formattedData.storeId) {
         upsertWhere.storeId = formattedData.storeId;
+      }
+      if (formattedData.tenantId) {
+        upsertWhere.tenantId = formattedData.tenantId;
       }
       const existingQuery = await db.collection('report_logs')
         .where(upsertWhere)
@@ -412,6 +440,8 @@ export const DataService = {
         data: formattedData,
         errorDetail: `错误码: ${errCode}\n错误信息: ${errMsg}`
       };
+    } finally {
+      reportSaveLocks.delete(lockKey);
     }
   },
 
@@ -638,6 +668,9 @@ export const DataService = {
         };
         if (dataToSync.storeId) {
           syncWhere.storeId = dataToSync.storeId;
+        }
+        if (dataToSync.tenantId) {
+          syncWhere.tenantId = dataToSync.tenantId;
         }
         const existingQuery = await db.collection('report_logs')
           .where(syncWhere)

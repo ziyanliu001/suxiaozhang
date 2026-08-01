@@ -1034,12 +1034,18 @@ page {
 }
 
 .notice-edit-textarea {
+  display: block;
   width: 100%;
   min-height: 200rpx;
+  border: 2rpx solid #e0e0e0;
+  padding: 20rpx;
+  border-radius: 8rpx;
   font-size: 30rpx;
   line-height: 1.6;
   color: #323233;
   background-color: transparent;
+  box-sizing: border-box;
+  text-align: left;
 }
 
 .preset-tags {
@@ -1259,11 +1265,18 @@ page {
 }
 
 .single-line-textarea {
+  display: block;
   font-size: 24rpx;
   color: #212529;
   width: 100%;
   min-height: 60rpx;
   line-height: 1.5;
+  border: 2rpx solid #e0e0e0;
+  padding: 20rpx;
+  border-radius: 8rpx;
+  background-color: #fafafa;
+  box-sizing: border-box;
+  text-align: left;
 }
 /* Card C: 主食物资单选胶囊 */
 .card-title-bar {
@@ -2044,7 +2057,7 @@ page {
   border-radius: 12rpx;
 }
 
-textarea, .textarea { 
+.textarea {
   display: block;
   width: 100%; 
   min-height: 260rpx; 
@@ -2964,6 +2977,28 @@ textarea, .textarea {
   line-height: 1.6;
 }
 
+/* 💡 空状态一键预置模版 */
+.btn-quick-import-template {
+  margin: 20rpx auto 0;
+  width: fit-content;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #7A4D00;
+  background: linear-gradient(180deg, #FFF9DB 0%, #FFE066 100%);
+  border: 1rpx solid #FCC419;
+  border-radius: 32rpx;
+  padding: 12rpx 28rpx;
+  line-height: 1.4;
+}
+
+.btn-quick-import-template::after {
+  border: none;
+}
+
+.btn-quick-import-template:active {
+  background: linear-gradient(180deg, #FFE066 0%, #FCC419 100%);
+}
+
 .expense-template-chip-list {
   max-height: 50vh;
   display: flex;
@@ -2999,11 +3034,117 @@ textarea, .textarea {
   color: #D9480E;
 }
 
+.expense-template-chip .chip-rename {
+  font-size: 20rpx;
+  padding: 0 4rpx;
+  margin-left: 4rpx;
+  flex-shrink: 0;
+}
+
 .expense-template-chip .chip-del {
   font-size: 22rpx;
-  color: #ADB5BD;
-  padding: 0 6rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #E03131;
+  width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  text-align: center;
+  border-radius: 50%;
+  padding: 0;
   margin-left: 4rpx;
+  flex-shrink: 0;
+}
+
+.expense-template-chip .chip-del:active {
+  background: #C92A2A;
+}
+
+/* ⚡ 极速记账：金额确认迷你弹窗 */
+.quick-amount-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.quick-amount-modal-card {
+  width: 78%;
+  max-width: 520rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 32rpx 28rpx;
+}
+
+.quick-amount-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.quick-amount-header .title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #222222;
+}
+
+.quick-amount-header .close-btn {
+  width: 48rpx;
+  height: 48rpx;
+  background: #F1F3F5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.quick-amount-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #FAF8F5;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.quick-amount-input-row .currency {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #D9480E;
+}
+
+.quick-amount-input {
+  flex: 1;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.quick-amount-confirm-btn {
+  width: 100%;
+  height: 80rpx;
+  line-height: 80rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #F97316 0%, #D9480E 100%);
+  border-radius: 40rpx;
+}
+
+.quick-amount-confirm-btn::after {
+  border: none;
 }
 
 .gencode-body {
@@ -3746,6 +3887,30 @@ textarea, .textarea {
 
 .adjust-textarea-wrap {
   margin-top: 16rpx;
+}
+
+/* ⚡ 拒绝原因快捷选择 chips */
+.reject-quick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.reject-quick-chip {
+  font-size: 24rpx;
+  color: #495057;
+  background: #F1F3F5;
+  padding: 10rpx 22rpx;
+  border-radius: 24rpx;
+  border: 1rpx solid transparent;
+  transition: all 0.15s ease;
+}
+
+.reject-quick-chip.active {
+  background: #FFF5F5;
+  color: #E03131;
+  border-color: #FFC9C9;
+  font-weight: bold;
 }
 
 .adjust-textarea {
@@ -4593,6 +4758,60 @@ textarea, .textarea {
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
+/* 👥 角色筛选 Segment：全部/义工/财务/大家长+店长 */
+.audit-role-filter-segment {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.role-filter-chip {
+  font-size: 22rpx;
+  color: #495057;
+  background: #F1F3F5;
+  padding: 10rpx 20rpx;
+  border-radius: 24rpx;
+  border: 1rpx solid transparent;
+  transition: all 0.15s ease;
+}
+
+.role-filter-chip.active {
+  background: #FFF3E0;
+  color: #D9480E;
+  border-color: #FFD8A8;
+  font-weight: bold;
+}
+
+/* 🔍 已通过列表姓名/手机号搜索 */
+.audit-search-box {
+  display: flex;
+  align-items: center;
+  background: #F8F9FA;
+  border-radius: 16rpx;
+  padding: 12rpx 20rpx;
+  margin-bottom: 16rpx;
+  gap: 10rpx;
+}
+
+.audit-search-icon {
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+
+.audit-search-input {
+  flex: 1;
+  font-size: 26rpx;
+  color: #212529;
+}
+
+.audit-search-clear {
+  font-size: 22rpx;
+  color: #ADB5BD;
+  padding: 4rpx 8rpx;
+  flex-shrink: 0;
+}
+
 /* 滚动列表区：🛡️ 修复底部被自定义 TabBar 遮挡——补上安全内边距，
    确保空状态的【生成邀请海报】按钮与卡片底部操作按钮完整可见、点击无阻碍 */
 .drawer-content-scroll {
@@ -4661,6 +4880,16 @@ textarea, .textarea {
 .role-tag-badge.volunteer {
   background: #E7F5FF;
   color: #1C7ED6;
+}
+
+.role-tag-badge.store_manager {
+  background: #E6FCF5;
+  color: #087F5B;
+}
+
+.role-tag-badge.store_patriarch {
+  background: #F3F0FF;
+  color: #5F3DC4;
 }
 
 .card-time-row {
@@ -5420,6 +5649,24 @@ textarea, .textarea {
   margin-bottom: 24rpx;
 }
 
+.finance-range-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.finance-range-picker-row .finance-month-picker {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.finance-range-sep {
+  font-size: 24rpx;
+  color: #868E96;
+  flex-shrink: 0;
+}
+
 .finance-month-picker {
   display: flex;
   align-items: center;
@@ -5437,6 +5684,16 @@ textarea, .textarea {
 .finance-month-picker .arrow {
   font-size: 20rpx;
   color: #ADB5BD;
+}
+
+/* 🌟 稽核与封账：区间状态动态提示（已审核笔数 / 封账人与时间 / 待审核阻断提示等） */
+.lock-status-tip {
+  display: block;
+  font-size: 24rpx;
+  color: #E65100;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+  min-height: 34rpx;
 }
 
 .finance-modal-confirm-btn {
@@ -5457,12 +5714,113 @@ textarea, .textarea {
   border: none;
 }
 
-.risk-summary-row {
-  display: flex;
-  justify-content: space-around;
-  background: #FAF8F5;
+/* 🌟 稽核封账主按钮：警示深红色，体现财务锁定操作的严肃性，与「解封」暗橙色区分 */
+.finance-modal-confirm-btn.btn-danger {
+  background: #D32F2F;
+}
+
+/* 🌟 大家长专属「解封 / 反封账」：暗橙色，与封账的深红色形成醒目区分 */
+.finance-modal-confirm-btn.btn-unlock {
+  background: #E65100;
+}
+
+/* 🌟 非大家长角色遇到已封账区间：置灰禁用，仅提示状态，不可点击 */
+.finance-modal-confirm-btn.btn-locked-disabled {
+  background: #CED4DA;
+  color: #868E96;
+}
+
+/* 🌟 弹窗入场动效：轻微 Scale + Fade，仅作用于风控预警弹窗，不影响其他共用 .finance-modal-card 的弹窗 */
+@keyframes riskModalPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.risk-modal-card {
+  animation: riskModalPopIn 0.25s ease-out;
+}
+
+.risk-modal-header {
   border-radius: 16rpx;
-  padding: 20rpx 0;
+  padding: 16rpx 20rpx;
+  margin: -4rpx -4rpx 12rpx;
+  transition: background-color 0.25s ease;
+}
+
+.risk-modal-header.is-safe {
+  background: linear-gradient(135deg, #E8F5E9 0%, #F1F8F2 100%);
+}
+
+.risk-modal-header.is-danger {
+  background: linear-gradient(135deg, #FFF3E0 0%, #FFEBEE 100%);
+}
+
+.risk-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.risk-modal-icon {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.risk-range-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 14rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.risk-range-label {
+  font-size: 22rpx;
+  color: #495057;
+}
+
+.risk-range-refresh {
+  font-size: 22rpx;
+  color: #2E7D32;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
+@keyframes riskRefreshSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.risk-range-refresh.is-spinning {
+  display: inline-block;
+  animation: riskRefreshSpin 0.8s linear infinite;
+}
+
+/* 🌟 数据卡片化：红字冲销/小票缺失/余额异常改为可点击的渐变微卡片，正常淡绿、异常淡红 */
+@keyframes riskCardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.risk-summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
   margin-bottom: 20rpx;
 }
 
@@ -5471,6 +5829,23 @@ textarea, .textarea {
   flex-direction: column;
   align-items: center;
   gap: 6rpx;
+  padding: 20rpx 8rpx;
+  border-radius: 16rpx;
+  border: 2rpx solid transparent;
+  animation: riskCardFadeIn 0.3s ease-out;
+}
+
+.risk-summary-item.is-safe {
+  background: linear-gradient(135deg, #E8F5E9 0%, #F1F8F2 100%);
+}
+
+.risk-summary-item.is-danger {
+  background: linear-gradient(135deg, #FFEBEE 0%, #FFF3E0 100%);
+}
+
+.risk-summary-item.is-active {
+  border-color: #FF7043;
+  box-shadow: 0 0 0 2rpx rgba(255, 112, 67, 0.15);
 }
 
 .risk-summary-num {
@@ -5479,9 +5854,44 @@ textarea, .textarea {
   color: #C62828;
 }
 
+.risk-summary-item.is-safe .risk-summary-num {
+  color: #2E7D32;
+}
+
 .risk-summary-label {
   font-size: 20rpx;
   color: #868E96;
+}
+
+.risk-filter-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 22rpx;
+  color: #E65100;
+  background: #FFF8E1;
+  border-radius: 10rpx;
+  padding: 10rpx 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.risk-filter-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.risk-filter-goto {
+  color: #2E7D32;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.risk-filter-clear {
+  color: #C62828;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: 16rpx;
 }
 
 .risk-loading {
@@ -5676,6 +6086,33 @@ textarea, .textarea {
   line-height: 1.4;
 }
 
+/* 🍚 留店用餐细分餐别 Chip 多选 */
+.meal-type-chip-row {
+  display: flex;
+  gap: 12rpx;
+  padding: 0 28rpx;
+  margin-top: 12rpx;
+}
+
+.meal-type-chip {
+  flex: 1;
+  text-align: center;
+  font-size: 24rpx;
+  color: #8D6E63;
+  background: #FFF9DB;
+  border: 2rpx solid #F5E6C8;
+  border-radius: 14rpx;
+  padding: 12rpx 0;
+  transition: all 0.15s ease;
+}
+
+.meal-type-chip.active {
+  background: #FFF3E0;
+  color: #8C1D18;
+  border-color: #F97316;
+  font-weight: bold;
+}
+
 .btn-confirm-checkin {
   width: 100%;
   height: 88rpx;
@@ -5754,6 +6191,25 @@ textarea, .textarea {
   font-size: 20rpx;
   color: #2E7D32;
   background: #E8F5E9;
+  padding: 2rpx 10rpx;
+  border-radius: 10rpx;
+  margin-left: 10rpx;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+/* ⏱️ 会导致超出单日 12h 上限的班次：视觉上禁用，但保留 tap 事件（不设 pointer-events:none），
+   路由到 onSelectShiftBlocked 弹出提醒，而不是像 disabled-completed 那样彻底吃掉点击 */
+.shift-item.disabled-exceed {
+  background: #FFF5F5 !important;
+  border-color: #FFC9C9 !important;
+  opacity: 0.7;
+}
+
+.exceed-tag {
+  font-size: 20rpx;
+  color: #C92A2A;
+  background: #FFF0F0;
   padding: 2rpx 10rpx;
   border-radius: 10rpx;
   margin-left: 10rpx;

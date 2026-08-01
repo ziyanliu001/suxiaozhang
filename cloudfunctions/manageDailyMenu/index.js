@@ -21,6 +21,27 @@ const MAX_PAGE_SIZE = 50;
 // 相应的存储成本增长是已知且接受的权衡，如需再次收紧请同步调整前端 onChooseImage 的上限。
 const MAX_IMAGES = 9;
 
+// 🍱 餐别：本项目最初每店每日仅发一次午餐，daily_menus 存量记录完全没有 mealType
+// 字段。现支持早/午/晚餐独立发布，查重键从 {storeId, dateString} 扩为 {storeId,
+// dateString, mealType}——但查 lunch 时必须把"字段缺失"也当作 lunch 兼容，否则这次
+// 改动上线的瞬间，所有存量午餐记录会因为查不出 mealType==='lunch' 而"凭空消失"。
+// breakfast/dinner 没有历史包袱，精确匹配即可。
+const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
+const DEFAULT_MEAL_TYPE = 'lunch';
+
+function normalizeMealType(mealType) {
+  return MEAL_TYPES.includes(mealType) ? mealType : DEFAULT_MEAL_TYPE;
+}
+
+// 供 create 查重、getByDate、list 可选过滤三处共用同一份"缺失字段按 lunch 兼容"逻辑
+function buildMealTypeCondition(mealType) {
+  const safe = normalizeMealType(mealType);
+  if (safe === DEFAULT_MEAL_TYPE) {
+    return _.eq(DEFAULT_MEAL_TYPE).or(_.exists(false));
+  }
+  return safe;
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -92,7 +113,8 @@ exports.main = async (event) => {
     switch (action) {
       case 'create':
       case 'update': {
-        const { id, storeId, dateString, menuText, images } = event;
+        const { id, storeId, dateString, menuText, images, mealType } = event;
+        const safeMealType = normalizeMealType(mealType);
 
         if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
           return { success: false, error: '请提供合法的日期 (YYYY-MM-DD)' };
@@ -121,6 +143,7 @@ exports.main = async (event) => {
           await db.collection(COLLECTION).doc(id).update({
             data: {
               dateString,
+              mealType: safeMealType,
               menuText: menuText || '',
               images: safeImages,
               updateTime: db.serverDate(),
@@ -130,9 +153,9 @@ exports.main = async (event) => {
           return { success: true, id, message: '菜单已更新' };
         }
 
-        // 新建：同店同日期已存在则视为覆盖更新，避免同一天重复出现多份菜单
+        // 新建：同店同日期同餐别已存在则视为覆盖更新，避免同一天同一餐重复出现多份菜单
         const dupRes = await db.collection(COLLECTION)
-          .where({ storeId: target.storeId, dateString })
+          .where({ storeId: target.storeId, dateString, mealType: buildMealTypeCondition(safeMealType) })
           .limit(1)
           .get();
 
@@ -140,6 +163,7 @@ exports.main = async (event) => {
           const dupId = dupRes.data[0]._id;
           await db.collection(COLLECTION).doc(dupId).update({
             data: {
+              mealType: safeMealType,
               menuText: menuText || '',
               images: safeImages,
               updateTime: db.serverDate(),
@@ -155,6 +179,7 @@ exports.main = async (event) => {
             storeId: target.storeId,
             storeName: target.storeName,
             dateString,
+            mealType: safeMealType,
             menuText: menuText || '',
             images: safeImages,
             createdBy: OPENID,
@@ -191,12 +216,14 @@ exports.main = async (event) => {
       }
 
       case 'getByDate': {
-        const { storeId, dateString } = event;
+        const { storeId, dateString, mealType } = event;
         if (!storeId || !dateString) {
           return { success: false, error: '缺少 storeId 或 dateString 参数' };
         }
 
-        const where = { storeId, dateString };
+        // 不传 mealType 的旧调用点（如首页随手拍食谱）一直操作的就是"午餐"，
+        // buildMealTypeCondition 缺省按 lunch 兼容，行为与改动前完全一致
+        const where = { storeId, dateString, mealType: buildMealTypeCondition(mealType) };
         if (caller && caller.tenantId) {
           where.tenantId = caller.tenantId;
         }
@@ -206,7 +233,7 @@ exports.main = async (event) => {
       }
 
       case 'list': {
-        const { storeId, page, pageSize, startDate, endDate } = event;
+        const { storeId, page, pageSize, startDate, endDate, mealType } = event;
         const { page: p, size } = normalizePage(page, pageSize);
         const isSuperAdmin = caller && caller.role === 'super_admin';
 
@@ -241,6 +268,11 @@ exports.main = async (event) => {
           where.dateString = _.gte(startDate);
         } else if (endDate) {
           where.dateString = _.lte(endDate);
+        }
+
+        // 🍱 餐别过滤为可选参数：不传时行为与改动前完全一致（不筛餐别，返回全部）
+        if (mealType) {
+          where.mealType = buildMealTypeCondition(mealType);
         }
 
         const countRes = await db.collection(COLLECTION).where(where).count();

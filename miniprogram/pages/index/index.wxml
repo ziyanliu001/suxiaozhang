@@ -1029,7 +1029,7 @@
                 <text class="fe-name">{{item.name}}</text>
                 <view class="fe-amount-box">
                   <text class="fe-currency">¥</text>
-                  <input class="fe-amount-input" type="digit" value="{{item.amount}}" data-index="{{index}}" bindinput="onInputFixedExpenseItemAmount" />
+                  <input class="fe-amount-input" type="digit" value="{{item.amount}}" data-index="{{index}}" bindinput="onInputFixedExpenseItemAmount" focus="{{item._focusAmount}}" bindfocus="onFixedExpenseAmountFocused" />
                 </view>
               </view>
               <view class="fe-right">
@@ -1647,6 +1647,24 @@
         <view class="adjust-close" bindtap="onCloseAuditRejectModal">✕</view>
       </view>
       <view class="adjust-body">
+        <!-- ⚡ 快捷拒绝理由：点击直接填入下方文本框，仍可继续手动编辑补充 -->
+        <view class="reject-quick-options">
+          <view
+            class="reject-quick-chip {{auditRejectPreset === '非本店义工' ? 'active' : ''}}"
+            bindtap="onSelectAuditRejectPreset"
+            data-reason="非本店义工"
+          >非本店义工</view>
+          <view
+            class="reject-quick-chip {{auditRejectPreset === '信息不符' ? 'active' : ''}}"
+            bindtap="onSelectAuditRejectPreset"
+            data-reason="信息不符"
+          >信息不符</view>
+          <view
+            class="reject-quick-chip {{auditRejectPreset === '请重新填写' ? 'active' : ''}}"
+            bindtap="onSelectAuditRejectPreset"
+            data-reason="请重新填写"
+          >请重新填写</view>
+        </view>
         <view class="adjust-textarea-wrap">
           <textarea
             class="adjust-textarea"
@@ -2199,11 +2217,18 @@
       <block wx:if="{{expenseTemplateCategory === 'daily'}}">
         <view class="expense-template-empty" wx:if="{{expenseTemplateLoaded && expenseTemplateDailyList.length === 0}}">
           <text>暂无常用项目{{(isManager || isFinance || isSuperAdmin) ? '，点上方"管理"添加几个常买的食材吧' : ''}}</text>
+          <button
+            wx:if="{{isManager || isFinance || isSuperAdmin}}"
+            class="btn-quick-import-template"
+            bindtap="onQuickImportExpenseTemplates"
+            loading="{{expenseTemplateSaving}}"
+          >⚡️ 一键导入公益常用标签</button>
         </view>
-        <scroll-view scroll-y class="expense-template-chip-list" wx:else>
-          <view class="expense-template-chip" wx:for="{{expenseTemplateDailyList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
+        <scroll-view scroll-y enable-flex="true" class="expense-template-chip-list" wx:else>
+          <view class="expense-template-chip" wx:for="{{expenseTemplateDailyList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
             <text class="chip-name">{{item.itemName}}</text>
             <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
+            <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
             <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
           </view>
         </scroll-view>
@@ -2211,15 +2236,47 @@
       <block wx:else>
         <view class="expense-template-empty" wx:if="{{expenseTemplateLoaded && expenseTemplateFixedList.length === 0}}">
           <text>暂无常用项目{{(isManager || isFinance || isSuperAdmin) ? '，点上方"管理"添加房租等固定支出吧' : ''}}</text>
+          <button
+            wx:if="{{isManager || isFinance || isSuperAdmin}}"
+            class="btn-quick-import-template"
+            bindtap="onQuickImportExpenseTemplates"
+            loading="{{expenseTemplateSaving}}"
+          >⚡️ 一键导入公益常用标签</button>
         </view>
-        <scroll-view scroll-y class="expense-template-chip-list" wx:else>
-          <view class="expense-template-chip" wx:for="{{expenseTemplateFixedList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
+        <scroll-view scroll-y enable-flex="true" class="expense-template-chip-list" wx:else>
+          <view class="expense-template-chip" wx:for="{{expenseTemplateFixedList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
             <text class="chip-name">{{item.itemName}}</text>
             <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
+            <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
             <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
           </view>
         </scroll-view>
       </block>
+    </view>
+  </view>
+
+  <!-- ⚡ 极速记账：开餐食材 Chip 点击后的金额确认迷你弹窗，项目名称已带入，
+       金额输入框自动 focus，确认后拼进 dailyExpenseText -->
+  <view class="quick-amount-modal-mask" wx:if="{{showQuickAmountModal}}" bindtap="onCloseQuickAmountModal">
+    <view class="quick-amount-modal-card" catchtap="stopPropagation">
+      <view class="quick-amount-header">
+        <text class="title">{{quickAmountItemName}}</text>
+        <text class="close-btn" bindtap="onCloseQuickAmountModal">✕</text>
+      </view>
+      <view class="quick-amount-input-row">
+        <text class="currency">¥</text>
+        <input
+          class="quick-amount-input"
+          type="digit"
+          placeholder="输入金额（选填）"
+          value="{{quickAmountValue}}"
+          bindinput="onInputQuickAmountValue"
+          focus="{{showQuickAmountModal}}"
+          confirm-type="done"
+          bindconfirm="onConfirmQuickAmount"
+        />
+      </view>
+      <button class="quick-amount-confirm-btn" bindtap="onConfirmQuickAmount">✔ 确认带入</button>
     </view>
   </view>
 
@@ -2257,19 +2314,40 @@
         </view>
       </view>
 
+      <!-- 👥 角色筛选 Segment：两个 Tab 共用 -->
+      <view class="audit-role-filter-segment">
+        <view class="role-filter-chip {{auditRoleFilter === 'all' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="all">全部</view>
+        <view class="role-filter-chip {{auditRoleFilter === 'volunteer' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="volunteer">义工</view>
+        <view class="role-filter-chip {{auditRoleFilter === 'finance' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="finance">财务</view>
+        <view class="role-filter-chip {{auditRoleFilter === 'leader' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="leader">大家长/店长</view>
+      </view>
+
+      <!-- 🔍 已通过列表姓名/手机号搜索 -->
+      <view class="audit-search-box" wx:if="{{auditActiveTab === 'approved'}}">
+        <text class="audit-search-icon">🔍</text>
+        <input
+          class="audit-search-input"
+          placeholder="搜索姓名/手机号"
+          value="{{auditSearchKeyword}}"
+          bindinput="onAuditSearchInput"
+          confirm-type="search"
+        />
+        <view class="audit-search-clear" wx:if="{{auditSearchKeyword}}" bindtap="onClearAuditSearch">✕</view>
+      </view>
+
       <!-- 滚动列表区 -->
       <scroll-view scroll-y class="drawer-content-scroll">
 
         <!-- 待审核列表 -->
         <block wx:if="{{auditActiveTab === 'pending'}}">
-          <view class="audit-applicant-card" wx:for="{{pendingApplyList}}" wx:key="_id">
+          <view class="audit-applicant-card" wx:for="{{filteredPendingList}}" wx:key="_id">
             <view class="card-top-info">
               <view class="applicant-main">
                 <text class="applicant-name">{{mask.maskName(item.realName) || '义工家人'}}</text>
                 <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
               </view>
               <text class="role-tag-badge {{item.requestedRole}}">
-                {{item.requestedRole === 'finance' ? '财务记账' : (item.requestedRole === 'store_patriarch' ? '🏛️ 家长' : '现场奉献')}}
+                {{item.requestedRole === 'finance' ? '财务记账' : (item.requestedRole === 'store_patriarch' ? '🏛️ 家长' : (item.requestedRole === 'store_manager' ? '🏪 店长' : '现场奉献'))}}
               </text>
             </view>
 
@@ -2308,28 +2386,34 @@
               🏪 生成门店邀请海报
             </button>
           </view>
+          <view class="warm-empty-state" wx:elif="{{filteredPendingList.length === 0}}">
+            <text class="empty-title">未找到匹配「{{auditRoleFilter === 'volunteer' ? '义工' : (auditRoleFilter === 'finance' ? '财务' : '大家长/店长')}}」的待审核申请</text>
+          </view>
         </block>
 
         <!-- 已绑定义工列表 -->
         <block wx:if="{{auditActiveTab === 'approved'}}">
-          <view class="audit-applicant-card approved-card" wx:for="{{approvedVolunteerList}}" wx:key="_id">
+          <view class="audit-applicant-card approved-card" wx:for="{{filteredApprovedList}}" wx:key="_id">
             <view class="card-top-info">
               <view class="applicant-main">
                 <text class="applicant-name">{{mask.maskName(item.realName)}}</text>
                 <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
               </view>
               <text class="role-tag-badge {{item.role}}">
-                {{item.role === 'finance' ? '财务记账' : '现场奉献'}}
+                {{item.role === 'finance' ? '财务记账' : (item.role === 'store_patriarch' ? '🏛️ 大家长' : (item.role === 'store_manager' ? '🏪 店长' : '现场奉献'))}}
               </text>
             </view>
 
-            <view class="card-action-btns">
+            <!-- 🛡️ 变更角色/解除绑定仅支持 finance/volunteer：店长/大家长权限回收需走更审慎的
+                 专属流程（manageVolunteerBinding 云函数本身也拒绝这两类角色），此处直接不出按钮，
+                 避免点了才弹"无权限"提示 -->
+            <view class="card-action-btns" wx:if="{{item.role === 'finance' || item.role === 'volunteer'}}">
               <button
                 class="btn-audit-act change-role"
                 bindtap="onChangeVolunteerRole"
                 data-id="{{item._id}}"
               >
-                🔄 修改角色
+                🔄 变更角色
               </button>
               <button
                 class="btn-audit-act unbind"
@@ -2344,6 +2428,9 @@
           <view class="warm-empty-state" wx:if="{{approvedVolunteerList.length === 0}}">
             <view class="empty-emoji-icon idx-icon-svg idx-icon-flower"></view>
             <text class="empty-title">本店暂无已审核通过的记录</text>
+          </view>
+          <view class="warm-empty-state" wx:elif="{{filteredApprovedList.length === 0}}">
+            <text class="empty-title">{{auditSearchKeyword ? '未找到匹配「' + auditSearchKeyword + '」的记录' : '未找到匹配当前筛选条件的记录'}}</text>
           </view>
         </block>
 
@@ -2393,8 +2480,8 @@
       <scroll-view scroll-y class="shift-scroll-area">
         <view class="shift-option-list">
           <block wx:for="{{availableShifts}}" wx:key="shiftKey">
-            <view class="shift-item {{item.isCompleted ? 'disabled-completed' : (selectedShift === item.shiftKey ? 'active' : '')}}"
-                  bindtap="{{item.isCompleted ? '' : 'onSelectShift'}}"
+            <view class="shift-item {{item.isCompleted ? 'disabled-completed' : (item.wouldExceedCap ? 'disabled-exceed' : (selectedShift === item.shiftKey ? 'active' : ''))}}"
+                  bindtap="{{item.isCompleted ? '' : (item.wouldExceedCap ? 'onSelectShiftBlocked' : 'onSelectShift')}}"
                   data-shift="{{item.shiftKey}}"
                   data-hours="{{item.hours}}">
               <view class="shift-check-badge" wx:if="{{!item.isCompleted && selectedShift === item.shiftKey}}">✓</view>
@@ -2402,6 +2489,7 @@
                 <view class="shift-name-row">
                   <text class="shift-name">{{item.name}}</text>
                   <text class="completed-tag" wx:if="{{item.isCompleted}}">✔ 今日已打卡</text>
+                  <text class="exceed-tag" wx:elif="{{item.wouldExceedCap}}">⚠️ 超出12h上限</text>
                 </view>
                 <text class="shift-time">{{item.timeDesc}}</text>
               </view>
@@ -2414,14 +2502,21 @@
           <view class="section-title"><view class="idx-icon-sm idx-icon-pin" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>今日已打卡记录 (误选可撤销)：</view>
           <view class="today-log-chip" wx:for="{{todayLogs}}" wx:key="timestamp">
             <text class="log-info">{{item.shiftName}} (+{{item.hours}}h)</text>
-            <text class="btn-revoke" bindtap="onRevokeTodayCheckIn" data-timestamp="{{item.timestamp}}" data-hours="{{item.hours}}">撤销</text>
+            <text class="btn-revoke" bindtap="onRevokeTodayCheckIn" data-timestamp="{{item.timestamp}}" data-hours="{{item.hours}}" data-cloud-log-id="{{item.cloudLogId}}">撤销此班次</text>
           </view>
         </view>
       </scroll-view>
 
       <view class="meal-reserve-row" bindtap="onToggleMealReserve">
         <checkbox checked="{{willEatLunch}}" color="#8C1D18"/>
-        <text class="meal-tip">今日留在门店用餐 (方便后厨预留菜量)</text>
+        <text class="meal-tip">☑️ 今日留店用餐 (方便后厨预留餐量)</text>
+      </view>
+
+      <!-- 🍚 留店用餐细分餐别：勾选后展开早/午/晚 Chip 多选，精确到具体餐别方便后厨备餐 -->
+      <view class="meal-type-chip-row" wx:if="{{willEatLunch}}">
+        <view class="meal-type-chip {{reservedMeals.includes('breakfast') ? 'active' : ''}}" catchtap="onToggleReservedMeal" data-meal="breakfast">早餐</view>
+        <view class="meal-type-chip {{reservedMeals.includes('lunch') ? 'active' : ''}}" catchtap="onToggleReservedMeal" data-meal="lunch">午餐</view>
+        <view class="meal-type-chip {{reservedMeals.includes('dinner') ? 'active' : ''}}" catchtap="onToggleReservedMeal" data-meal="dinner">晚餐</view>
       </view>
 
       <button class="btn-confirm-checkin {{(allShiftsCompleted || isOverHoursLimit) ? 'btn-disabled' : ''}}"
@@ -2476,7 +2571,7 @@
   />
 
 
-  <!-- 🌟 财务专属功能区：稽核与封账弹窗（按月批量锁定已通过店长确认的账本记录） -->
+  <!-- 🌟 财务专属功能区：稽核与封账弹窗（自定义起止日期区间批量锁定/解封已通过店长确认的账本记录） -->
   <view class="finance-modal-mask" wx:if="{{showFinanceLockModal}}" bindtap="onCloseFinanceLockModal">
     <view class="finance-modal-card" catchtap="stopPropagation">
       <view class="finance-modal-header">
@@ -2484,43 +2579,90 @@
         <view class="finance-modal-close" bindtap="onCloseFinanceLockModal">✕</view>
       </view>
 
-      <text class="finance-modal-desc">选择要封账的月份，该月内所有已通过店长确认的记录将被批量锁定，锁定后店长无法再编辑或作废。</text>
+      <text class="finance-modal-desc">选择要封账的起止日期区间，区间内所有已通过店长确认的记录将被批量锁定，锁定后店长无法再编辑或作废。</text>
 
-      <picker mode="date" fields="month" value="{{financeLockMonthStr}}" bindchange="onFinanceLockMonthChange">
-        <view class="finance-month-picker">
-          <text>{{financeLockMonthStr || '请选择月份'}}</text>
-          <text class="arrow">▼</text>
-        </view>
-      </picker>
+      <view class="finance-range-picker-row">
+        <picker mode="date" value="{{financeLockStartDate}}" bindchange="onFinanceLockStartDateChange">
+          <view class="finance-month-picker">
+            <text>{{financeLockStartDate || '开始日期'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+        <text class="finance-range-sep">至</text>
+        <picker mode="date" value="{{financeLockEndDate}}" bindchange="onFinanceLockEndDateChange">
+          <view class="finance-month-picker">
+            <text>{{financeLockEndDate || '结束日期'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
 
-      <button class="finance-modal-confirm-btn" bindtap="onConfirmFinanceLock" disabled="{{financeLockInFlight}}">
+      <view class="lock-status-tip">{{ lockStatusText }}</view>
+
+      <button
+        wx:if="{{!financeLockRangeLocked}}"
+        class="finance-modal-confirm-btn btn-danger"
+        bindtap="onConfirmFinanceLock"
+        disabled="{{financeLockInFlight}}"
+      >
         {{financeLockInFlight ? '封账中...' : '确认封账'}}
+      </button>
+      <button
+        wx:elif="{{isPatriarch || isSuperAdmin}}"
+        class="finance-modal-confirm-btn btn-unlock"
+        bindtap="handleUnlockMonth"
+        disabled="{{financeUnlockInFlight}}"
+      >
+        {{financeUnlockInFlight ? '解封中...' : '解封 / 反封账'}}
+      </button>
+      <button
+        wx:else
+        class="finance-modal-confirm-btn btn-locked-disabled"
+        disabled="true"
+      >
+        该区间已封账
       </button>
     </view>
   </view>
 
   <!-- 🌟 财务专属功能区：风控预警日志弹窗 -->
   <view class="finance-modal-mask" wx:if="{{showRiskAlertsModal}}" bindtap="onCloseRiskAlertsModal">
-    <view class="finance-modal-card" catchtap="stopPropagation">
-      <view class="finance-modal-header">
-        <text class="finance-modal-title">⚠️ 风控预警日志</text>
+    <view class="finance-modal-card risk-modal-card" catchtap="stopPropagation">
+      <view class="finance-modal-header risk-modal-header {{riskAlertsHasAnomaly ? 'is-danger' : 'is-safe'}}">
+        <view class="risk-modal-title-row">
+          <text class="risk-modal-icon">{{riskAlertsHasAnomaly ? '⚠️' : '🛡️'}}</text>
+          <text class="finance-modal-title">风控预警日志</text>
+        </view>
         <view class="finance-modal-close" bindtap="onCloseRiskAlertsModal">✕</view>
       </view>
 
-      <text class="finance-modal-desc">近 60 天内的异常信号：红字冲销频次、小票缺失、余额异常突变</text>
+      <text class="finance-modal-desc">红字冲销频次、小票缺失、余额异常突变——点击下方卡片可查看对应明细</text>
+
+      <view class="risk-range-row" bindtap="onRefreshRiskAlerts">
+        <text class="risk-range-label">{{riskAlertsRangeLabel || '统计区间加载中...'}}</text>
+        <text class="risk-range-refresh {{riskAlertsLoading ? 'is-spinning' : ''}}">⟳ 刷新</text>
+      </view>
 
       <view class="risk-summary-row" wx:if="{{!riskAlertsLoading}}">
-        <view class="risk-summary-item">
+        <view class="risk-summary-item {{riskAlertsSummary.voidCount > 0 ? 'is-danger' : 'is-safe'}} {{riskAlertsFilterType === 'void' ? 'is-active' : ''}}" data-type="void" bindtap="onRiskCardTap">
           <text class="risk-summary-num">{{riskAlertsSummary.voidCount}}</text>
           <text class="risk-summary-label">红字冲销</text>
         </view>
-        <view class="risk-summary-item">
+        <view class="risk-summary-item {{riskAlertsSummary.missingReceiptCount > 0 ? 'is-danger' : 'is-safe'}} {{riskAlertsFilterType === 'missing_receipt' ? 'is-active' : ''}}" data-type="missing_receipt" bindtap="onRiskCardTap">
           <text class="risk-summary-num">{{riskAlertsSummary.missingReceiptCount}}</text>
           <text class="risk-summary-label">小票缺失</text>
         </view>
-        <view class="risk-summary-item">
+        <view class="risk-summary-item {{riskAlertsSummary.balanceAnomalyCount > 0 ? 'is-danger' : 'is-safe'}} {{riskAlertsFilterType === 'balance' ? 'is-active' : ''}}" data-type="balance" bindtap="onRiskCardTap">
           <text class="risk-summary-num">{{riskAlertsSummary.balanceAnomalyCount}}</text>
           <text class="risk-summary-label">余额异常</text>
+        </view>
+      </view>
+
+      <view class="risk-filter-tip" wx:if="{{riskAlertsFilterType}}">
+        <text>已按该类型筛选，仅显示相关明细</text>
+        <view class="risk-filter-actions">
+          <text class="risk-filter-goto" wx:if="{{riskAlertsFilteredList.length > 0}}" bindtap="onGoToHistoryAnomalyDetail">查看账本明细 →</text>
+          <text class="risk-filter-clear" data-type="{{riskAlertsFilterType}}" bindtap="onRiskCardTap">清除筛选 ✕</text>
         </view>
       </view>
 
@@ -2529,12 +2671,15 @@
       </view>
 
       <scroll-view scroll-y class="risk-alert-list" wx:if="{{!riskAlertsLoading}}">
-        <view class="risk-alert-item {{item.level}}" wx:for="{{riskAlertsList}}" wx:key="index">
+        <view class="risk-alert-item {{item.level}}" wx:for="{{riskAlertsFilteredList}}" wx:key="index">
           <text class="risk-alert-date">{{item.dateString}}</text>
           <text class="risk-alert-msg">{{item.message}}</text>
         </view>
-        <view class="risk-alert-empty" wx:if="{{riskAlertsList.length === 0}}">
+        <view class="risk-alert-empty" wx:if="{{riskAlertsFilteredList.length === 0 && !riskAlertsFilterType}}">
           <text>✅ 近期账本未发现异常信号</text>
+        </view>
+        <view class="risk-alert-empty" wx:if="{{riskAlertsFilteredList.length === 0 && riskAlertsFilterType}}">
+          <text>该类型暂无明细</text>
         </view>
       </scroll-view>
     </view>

@@ -1,6 +1,8 @@
 // 左侧滑出功能导航抽屉：纯展示 + 事件转发，不直接持有业务逻辑。
 // 具体动作（记账/审核/统计/门店管理等）全部由宿主页面（index.ts）已有方法执行，
 // 本组件只负责 UI 呈现与"用户点了哪一项"的事件转发，避免和 index.ts 产生逻辑重复。
+import { getSafeSystemInfo } from '../../utils/util';
+
 const RECENT_PAGES_KEY = 'recent_visited_pages';
 
 Component({
@@ -48,7 +50,7 @@ Component({
           return;
         }
 
-        const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : null;
+        const systemInfo = getSafeSystemInfo();
         const safeTop = (systemInfo && systemInfo.safeArea && systemInfo.safeArea.top) || (systemInfo && systemInfo.statusBarHeight) || 34;
         this.setData({ sidebarTopMargin: safeTop + 10 });
       } catch (err) {

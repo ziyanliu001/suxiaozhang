@@ -56,10 +56,45 @@
   padding: 20rpx 24rpx;
 }
 
-.al-store-tip {
-  font-size: 24rpx;
-  color: #8C1D18;
+/* 📍 门店身份 Header：sticky 吸顶展示，异步解析完成前显示骨架占位 */
+.al-store-bar-skeleton {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 240rpx;
+  height: 56rpx;
+  border-radius: 10rpx;
+  background: #EFE6D8;
   margin-bottom: 16rpx;
+}
+
+.al-store-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF8F0;
+  border: 1.5rpx solid #FFD3BE;
+  border-radius: 12rpx;
+  padding: 14rpx 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.al-store-bar-name {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.al-store-switch-btn {
+  font-size: 22rpx;
+  color: #8C1D18;
+  background: #FFFFFF;
+  border: 1.5rpx solid #FFD3BE;
+  border-radius: 20rpx;
+  padding: 6rpx 16rpx;
 }
 
 /* ===== 📌 今日大事记（顶部高亮区） ===== */
@@ -84,6 +119,44 @@
   font-size: 22rpx;
   color: #A67558;
   margin-left: 12rpx;
+}
+
+/* 📅 历史动态标题行：左侧标题，右侧日期选择器 + ◀/▶ 快捷翻页 */
+.al-history-header {
+  justify-content: space-between;
+}
+
+.al-history-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.al-history-filter {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.al-history-filter-arrow {
+  font-size: 22rpx;
+  color: #8C1D18;
+  padding: 4rpx 8rpx;
+}
+
+.al-history-filter-date {
+  font-size: 22rpx;
+  color: #8C1D18;
+  background: #FFF5F0;
+  border: 1.5rpx solid #FFD3BE;
+  border-radius: 20rpx;
+  padding: 6rpx 16rpx;
+  white-space: nowrap;
+}
+
+.al-history-filter-clear {
+  font-size: 22rpx;
+  color: #999999;
+  padding: 4rpx 6rpx;
 }
 
 .al-today-card {
@@ -149,6 +222,23 @@
   margin-bottom: 12rpx;
 }
 
+/* 🏷️ 分类 Tag：今日大事记/历史卡片/详情弹窗三处复用同一套样式，未分类的老记录
+   （category 为空）走灰色兜底配色，不与真实分类混淆 */
+.al-card-category-tag {
+  display: inline-block;
+  font-size: 20rpx;
+  color: #999999;
+  background: #F1F1EE;
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.al-card-category-tag.tagged {
+  color: #8C1D18;
+  background: #FFF0E6;
+}
+
 /* ===== 时间轴 ===== */
 .al-timeline-item {
   display: flex;
@@ -210,10 +300,53 @@
   margin-bottom: 8rpx;
 }
 
+.al-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 8rpx;
+}
+
 .al-card-title {
   font-size: 28rpx;
   font-weight: bold;
   color: #333333;
+}
+
+.al-card-pinned-badge {
+  font-size: 20rpx;
+  color: #B45309;
+  background: #FFF3D6;
+  border-radius: 8rpx;
+  padding: 2rpx 10rpx;
+}
+
+/* 📌🗑 卡片右上角店长/超管权限强化入口：置顶（未置顶态灰色描边，置顶后变
+   品牌色实心）+ 删除 */
+.al-card-corner-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
+}
+
+.al-card-corner-icon {
+  font-size: 30rpx;
+  color: #C9B8A0;
+  padding: 4rpx;
+}
+
+.al-card-corner-icon-pin.active {
+  color: #B45309;
+}
+
+.al-card-corner-icon-delete {
+  color: #C9B8A0;
+}
+
+.al-card-corner-icon-delete:active {
+  color: #C62828;
 }
 
 /* 🙋 发布者身份行：角色 Badge + 精确发布时间，紧贴标题下方 */
@@ -603,6 +736,29 @@
 
 .al-form-textarea {
   min-height: 160rpx;
+}
+
+/* 🏷️ 分类 Tag Chips：单选，选中态品牌红底白字，未选中态浅灰描边 */
+.al-category-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.al-category-chip {
+  font-size: 24rpx;
+  color: #666666;
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 28rpx;
+  padding: 10rpx 20rpx;
+}
+
+.al-category-chip.active {
+  color: #FFFFFF;
+  background: #8C1D18;
+  border-color: #8C1D18;
+  font-weight: bold;
 }
 
 /* 🐛 修复原生 input 的 placeholder 文字下半部分被截断的问题：单独拆出固定 height，

@@ -54,25 +54,40 @@
         <view class="tab-item {{currentTab === 'custom' ? 'active' : ''}}" bindtap="switchTab" data-tab="custom">自定义</view>
       </view>
 
-      <view class="date-picker-subrow" wx:if="{{currentTab === 'month'}}">
+      <!-- 🌟 「◀ 上一期/下一期 ▶」快捷翻页：三侧布局包住原有的周/月/年/自定义
+           展示区，免去财务人员反复打开 Picker 弹窗才能连续前后翻看不同周期 -->
+      <view class="date-picker-subrow period-nav-subrow" wx:if="{{currentTab === 'week'}}">
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="-1">◀</view>
+        <view class="picker-pill-btn nav-label-pill">
+          <text class="lbl">🗓️ 当前范围：{{weekRangeLabel}}</text>
+        </view>
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="1">▶</view>
+      </view>
+
+      <view class="date-picker-subrow period-nav-subrow" wx:if="{{currentTab === 'month'}}">
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="-1">◀</view>
         <picker mode="date" fields="month" value="{{selectedYear}}-{{String(selectedMonth).padStart(2, '0')}}-01" bindchange="onMonthChange">
           <view class="picker-pill-btn">
             <text class="lbl">🗓️ 当前范围：{{selectedYear}}年{{selectedMonth}}月</text>
             <text class="arrow">▼</text>
           </view>
         </picker>
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="1">▶</view>
       </view>
 
-      <view class="date-picker-subrow" wx:if="{{currentTab === 'year'}}">
+      <view class="date-picker-subrow period-nav-subrow" wx:if="{{currentTab === 'year'}}">
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="-1">◀</view>
         <picker mode="date" fields="year" value="{{selectedYear}}-01-01" bindchange="onYearChange">
           <view class="picker-pill-btn">
             <text class="lbl">🗓️ 当前范围：{{selectedYear}}年</text>
             <text class="arrow">▼</text>
           </view>
         </picker>
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="1">▶</view>
       </view>
 
-      <view class="date-picker-subrow" wx:if="{{currentTab === 'custom'}}">
+      <view class="date-picker-subrow period-nav-subrow" wx:if="{{currentTab === 'custom'}}">
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="-1">◀</view>
         <picker mode="date" value="{{customStartDate}}" bindchange="onCustomStartDateChange">
           <view class="picker-pill-btn small">
             <text class="lbl">{{customStartDate || '开始日期'}}</text>
@@ -86,6 +101,7 @@
             <text class="arrow">▼</text>
           </view>
         </picker>
+        <view class="period-nav-btn" hover-class="period-nav-btn-hover" bindtap="onPeriodNav" data-dir="1">▶</view>
       </view>
       <button class="btn-custom-query" wx:if="{{currentTab === 'custom'}}" bindtap="loadCustomStatistics">查询统计</button>
       </block>
@@ -336,6 +352,63 @@
     </view>
   </view>
 
+  <!-- 🌟「先核对、再确认、后导出」导出预览核对弹窗：exportToExcel 只发起 previewOnly
+       查询，真正生成 xlsx 必须等用户在这里点击「确认并导出」 -->
+  <view class="patch-modal-mask" wx:if="{{showExportPreviewModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">🧾 凭证与账本核对 · {{exportPreviewSummary.periodLabel}}</text>
+        <text class="btn-close" bindtap="onCloseExportPreviewModal">✕</text>
+      </view>
+      <text class="modal-tip">导出前请核对以下明细，确认无误后再导出</text>
+
+      <view class="export-preview-summary-grid">
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num income">¥{{exportPreviewSummary.totalIncome}}</text>
+          <text class="export-preview-summary-lbl">总收入</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num expense">¥{{exportPreviewSummary.totalExpense}}</text>
+          <text class="export-preview-summary-lbl">总支出</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num">¥{{exportPreviewSummary.netTotal}}</text>
+          <text class="export-preview-summary-lbl">净结余</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num">{{exportPreviewSummary.recordCount}}</text>
+          <text class="export-preview-summary-lbl">总笔数</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num audited">{{exportPreviewSummary.auditedReceiptCount}}</text>
+          <text class="export-preview-summary-lbl">已审核小票数</text>
+        </view>
+        <view class="export-preview-summary-cell">
+          <text class="export-preview-summary-num {{exportPreviewSummary.anomalyCount > 0 ? 'anomaly' : ''}}">{{exportPreviewSummary.anomalyCount}}</text>
+          <text class="export-preview-summary-lbl">异常标记数</text>
+        </view>
+      </view>
+
+      <scroll-view scroll-y class="modal-scroll-list export-preview-list">
+        <view class="export-preview-row" wx:for="{{exportPreviewRecords}}" wx:key="date" wx:for-item="rec">
+          <text class="row-date">{{rec.date}}</text>
+          <text class="export-preview-row-shop">{{rec.shopName}}</text>
+          <text class="row-income">收¥{{rec.income}} 支¥{{rec.expense}}</text>
+          <text class="export-preview-receipt-badge" wx:if="{{rec.hasReceipt}}">🧾{{rec.receiptCount}}</text>
+          <text class="export-preview-receipt-badge is-missing" wx:else>⚠️无票</text>
+        </view>
+        <view class="empty-box" wx:if="{{exportPreviewRecords.length === 0}}">
+          <text class="empty-tip">该周期内暂无明细数据</text>
+        </view>
+      </scroll-view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onExportPreviewGoFix">发现异常，前去核对</button>
+        <button class="btn-modal-submit" bindtap="onExportPreviewConfirm">数据无误，确认并导出</button>
+      </view>
+    </view>
+  </view>
+
   <!-- 🆕 个人视角：非管理角色（普通义工/无角色账号）专属，与「全国大屏」/「单店明细」
        完全独立——不展示任何跨门店治理/运营敏感数据，只有属于自己的护持数据 -->
   <view class="personal-dashboard-container" wx:if="{{showPersonalView}}">
@@ -439,6 +512,46 @@
   </view>
 
   <scroll-view class="content-section" scroll-y wx:if="{{!showNationalDashboard && !showPersonalView}}">
+
+    <!-- 🆕 核心经营指标骨架卡：独立于下方 statistics.recordCount>0 才渲染的
+         stats-content，无论当期是否有数据都固定展示这 2x2 网格结构，避免
+         "无数据=页面直接塌陷成空状态卡"——无数据时四格显示 "--"，同比徽标一并隐藏 -->
+    <view class="core-metrics-card">
+      <view class="card-header">
+        <text class="card-title">📌 核心经营指标</text>
+      </view>
+      <view class="core-metrics-grid">
+        <view class="core-metrics-cell">
+          <text class="core-metrics-val">{{coreMetrics.hasData ? coreMetrics.diningCount : '--'}}</text>
+          <text class="core-metrics-lbl">总餐次数</text>
+          <view class="core-metrics-yoy {{coreMetrics.diningCountYoy > 0 ? 'up' : (coreMetrics.diningCountYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.diningCountYoy !== null}}">
+            <text>{{coreMetrics.diningCountYoy > 0 ? '▲' : (coreMetrics.diningCountYoy < 0 ? '▼' : '—')}} {{coreMetrics.diningCountYoy}}%</text>
+          </view>
+        </view>
+        <view class="core-metrics-cell">
+          <text class="core-metrics-val">{{coreMetrics.hasData ? coreMetrics.volunteerCount : '--'}}</text>
+          <text class="core-metrics-lbl">服务人次</text>
+          <view class="core-metrics-yoy {{coreMetrics.volunteerCountYoy > 0 ? 'up' : (coreMetrics.volunteerCountYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.volunteerCountYoy !== null}}">
+            <text>{{coreMetrics.volunteerCountYoy > 0 ? '▲' : (coreMetrics.volunteerCountYoy < 0 ? '▼' : '—')}} {{coreMetrics.volunteerCountYoy}}%</text>
+          </view>
+        </view>
+        <view class="core-metrics-cell">
+          <text class="core-metrics-val">{{coreMetrics.expenseTotalStr}}</text>
+          <text class="core-metrics-lbl">支出总额</text>
+          <view class="core-metrics-yoy {{coreMetrics.expenseTotalYoy > 0 ? 'up' : (coreMetrics.expenseTotalYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.expenseTotalYoy !== null}}">
+            <text>{{coreMetrics.expenseTotalYoy > 0 ? '▲' : (coreMetrics.expenseTotalYoy < 0 ? '▼' : '—')}} {{coreMetrics.expenseTotalYoy}}%</text>
+          </view>
+        </view>
+        <view class="core-metrics-cell">
+          <text class="core-metrics-val">{{coreMetrics.perMealCostStr}}</text>
+          <text class="core-metrics-lbl">平均单餐成本</text>
+          <view class="core-metrics-yoy {{coreMetrics.perMealCostYoy > 0 ? 'up' : (coreMetrics.perMealCostYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.perMealCostYoy !== null}}">
+            <text>{{coreMetrics.perMealCostYoy > 0 ? '▲' : (coreMetrics.perMealCostYoy < 0 ? '▼' : '—')}} {{coreMetrics.perMealCostYoy}}%</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <view class="stats-content" wx:if="{{statistics && statistics.recordCount > 0}}">
 
       <!-- 🆕 财务专属：门店财务与凭证合规大屏——突出单餐成本/记账笔数/凭证合规率 -->
@@ -904,7 +1017,11 @@
       </view>
     </view>
 
-    <!-- 🌟 精简空状态：去掉"系统诊断"调试文本与外层黄色卡片框，按钮统一为扁平圆角主色调 -->
+    <!-- 🌟 精简空状态：去掉"系统诊断"调试文本与外层黄色卡片框，按钮统一为扁平圆角主色调
+         🆕 引导型空状态：三个历史数据分支各自的专属操作保留在上半部分，底部统一
+         追加「快捷补报餐报」主按钮 + 「查看有数据月份」辅助按钮（后者仅当
+         latestDataLabel 已从本店历史记录里解析出最近一条数据所在月份时才显示，
+         见 loadStatistics() 里的计算逻辑） -->
     <view class="smart-empty-card" wx:if="{{!statistics || statistics.recordCount === 0}}">
       <text class="empty-icon">📊</text>
       <text class="empty-title">暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
@@ -919,9 +1036,13 @@
         <button class="btn-empty-action" bindtap="onSwitchToAllStores">切换为【全部门店】查看</button>
       </block>
 
-      <view class="empty-action-group" wx:else>
-        <button class="btn-empty-action" bindtap="onSwitchToAllStores" wx:if="{{showAllStoresOption && !isAllStoresMode}}">查看全部门店汇总</button>
-        <button class="btn-empty-secondary" hover-class="btn-hover" bindtap="goBackHome">返回首页录入新餐报</button>
+      <block wx:elif="{{showAllStoresOption && !isAllStoresMode}}">
+        <button class="btn-empty-action" bindtap="onSwitchToAllStores">查看全部门店汇总</button>
+      </block>
+
+      <view class="empty-state-guide-actions">
+        <button class="btn-empty-primary" hover-class="btn-hover" bindtap="goBackHome">📝 快捷补报餐报</button>
+        <button class="btn-empty-action" wx:if="{{latestDataLabel}}" bindtap="onJumpToLatestDataPeriod">📅 查看有数据月份（{{latestDataLabel}}）</button>
       </view>
     </view>
 
@@ -930,9 +1051,15 @@
     </view>
   </scroll-view>
 
-  <view class="bottom-sticky-bar" wx:if="{{statistics && statistics.recordCount > 0}}">
-    <button class="btn-primary-poster" bindtap="onGeneratePoster">
+  <!-- 🆕 底部固定导出入口：无论当期是否有数据都常驻展示，点击直接复用
+       exportToExcel() 拉起"先预览核对、再确认导出"弹窗，免去用户还要滚动到
+       每日明细区去找那个「导出表格」按钮 -->
+  <view class="bottom-sticky-bar" wx:if="{{!showNationalDashboard && !showPersonalView}}">
+    <button class="btn-primary-poster" wx:if="{{statistics && statistics.recordCount > 0}}" bindtap="onGeneratePoster">
       🖼️ {{isFinance ? '生成门店财务月报海报' : (isPatriarch ? '生成门店续航/爱心公示海报' : '生成本店营运月报海报')}}
+    </button>
+    <button class="btn-export-shortcut" bindtap="exportToExcel">
+      📊 导出当前周期 Excel 账本
     </button>
   </view>
 

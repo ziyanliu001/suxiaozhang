@@ -16,6 +16,49 @@ function isNationalStoreId(storeId: string): boolean {
   return !storeId || NATIONAL_STORE_IDS.includes(storeId);
 }
 
+// 🌟 首页「风控预警日志」弹窗"查看账本明细"精准追溯：与 cloudfunctions/getRiskAlerts
+// 同一条判定口径（红字冲销/小票缺失/余额异常），在已加载的账本记录里原样复用一遍，
+// 不额外请求云函数。'balance' 需要按门店分组、按日期升序比对相邻两条记录的余额链路，
+// 因此不能像另外两类那样逐条独立判断
+const BALANCE_JUMP_THRESHOLD = 1000;
+function filterByAnomalyType(list: any[], anomalyType: string): any[] {
+  if (anomalyType === 'void') {
+    return list.filter((item: any) => !!item.isVoid);
+  }
+  if (anomalyType === 'missing_receipt') {
+    return list.filter((item: any) => {
+      if (item.isVoid) return false;
+      const expenseAmount = parseFloat(item.expenseAmount || 0);
+      const hasReceipt = (item.receiptImages && item.receiptImages.length > 0) ||
+        (item.receiptImageList && item.receiptImageList.length > 0);
+      return expenseAmount > 0 && !hasReceipt;
+    });
+  }
+  if (anomalyType === 'balance') {
+    const ascending = list
+      .filter((item: any) => !item.isVoid)
+      .slice()
+      .sort((a: any, b: any) => String(a.dateString || '').localeCompare(String(b.dateString || '')));
+    const prevBalanceByStore = new Map<string, number>();
+    const matchedKeys = new Set<any>();
+    ascending.forEach((item: any) => {
+      const storeKey = item.shopName || item.storeId || '';
+      const yesterdayBalance = parseFloat(item.yesterdayBalance || 0);
+      const todayBalance = parseFloat(item.todayBalance || 0);
+      const prevTodayBalance = prevBalanceByStore.has(storeKey) ? prevBalanceByStore.get(storeKey)! : null;
+      if (prevTodayBalance !== null && Math.abs(yesterdayBalance - prevTodayBalance) > 0.01) {
+        matchedKeys.add(item);
+      }
+      if (Math.abs(todayBalance - yesterdayBalance) > BALANCE_JUMP_THRESHOLD) {
+        matchedKeys.add(item);
+      }
+      prevBalanceByStore.set(storeKey, todayBalance);
+    });
+    return list.filter((item: any) => matchedKeys.has(item));
+  }
+  return list;
+}
+
 Page({
   _shareRecord: null as any,
   isNavigating: false,
@@ -54,6 +97,10 @@ Page({
     isAllStoresView: false,
     selectedMonthStr: '',
     selectedMonthDisplay: '', // 筛选胶囊展示用："2026-07" -> "2026年07月"，不影响 selectedMonthStr 本身的过滤/导出口径
+    // 🌟 从首页「风控预警日志」弹窗点击卡片跳转过来时携带的精准追溯筛选：
+    // 'void'=红字冲销 / 'missing_receipt'=小票缺失 / 'balance'=余额异常（含链路断裂+单日净变动过大）
+    anomalyFilterType: '' as '' | 'void' | 'missing_receipt' | 'balance',
+    anomalyFilterLabel: '',
     permissions: {} as PermissionFlags,
     showEditModal: false,
     editingRecord: null as any,
@@ -71,6 +118,10 @@ Page({
     // 🌟 月度财务审计表导出：月份取自上方已有的月份筛选器（selectedMonthStr），
     // 未筛选时导出默认按钮字面意思——即"本月"
     exportingAudit: false,
+    // 🌟「先核对、再确认、后导出」导出预览核对弹窗
+    showExportPreviewModal: false,
+    exportPreviewSummary: {} as any,
+    exportPreviewRecords: [] as any[],
     showAuditExportModal: false,
     auditExportPeriodLabel: '',
     auditExportText: '',
@@ -87,6 +138,19 @@ Page({
     // （见该函数 shouldFilterByOpenid 判断），只是客户端这里从未真正传过这个值
     if (options && options.view === 'mine') {
       this.setData({ viewMode: 'personal' });
+    }
+    // 🌟 首页「风控预警日志」弹窗点击卡片"查看账本明细"跳转过来（携带 anomalyType
+    // 查询参数）时，进页面即自动按同一类型精准筛选，不需要用户再手动翻找
+    const anomalyLabelMap: Record<string, string> = {
+      void: '🔴 红字冲销',
+      missing_receipt: '🧾 小票缺失',
+      balance: '⚠️ 余额异常'
+    };
+    if (options && options.anomalyType && anomalyLabelMap[options.anomalyType]) {
+      this.setData({
+        anomalyFilterType: options.anomalyType,
+        anomalyFilterLabel: anomalyLabelMap[options.anomalyType]
+      });
     }
     this.calculateNavBarHeight();
     this.checkAdminStatus();
@@ -1153,8 +1217,8 @@ Page({
   },
 
   applyFilters() {
-    const { reports, selectedStoreName, selectedMonthStr } = this.data;
-    
+    const { reports, selectedStoreName, selectedMonthStr, anomalyFilterType } = this.data;
+
     let filtered = [...reports];
 
     // 🌟 Bug 修复：全国总览/全部门店时不按具体门店名过滤
@@ -1171,6 +1235,10 @@ Page({
         const itemMonth = `${match[1]}-${String(match[2]).padStart(2, '0')}`;
         return itemMonth === selectedMonthStr;
       });
+    }
+
+    if (anomalyFilterType) {
+      filtered = filterByAnomalyType(filtered, anomalyFilterType);
     }
 
     filtered.sort((a: any, b: any) => {
@@ -1215,9 +1283,20 @@ Page({
     wx.showToast({ title: '已展示全部月份', icon: 'none' });
   },
 
-  // 🌟 导出本月财务审计表：复用 exportAccountExcel 云函数（tabType:'month'，
-  // 已有完整的月度汇总/xlsx 生成/云存储上传/多租户与角色权限校验逻辑，不重新写一份）。
-  // 月份优先取上方已有的月份筛选器 selectedMonthStr，未筛选时按钮字面意思——导出"本月"
+  onClearAnomalyFilter() {
+    this.setData({ anomalyFilterType: '', anomalyFilterLabel: '' });
+    this.applyFilters();
+    wx.showToast({ title: '已清除风控筛选', icon: 'none' });
+  },
+
+  // 🌟「先核对、再确认、后导出」安全闭环：复用 exportAccountExcel 云函数
+  // （tabType:'month'，已有完整的月度汇总/xlsx 生成/云存储上传/多租户与角色权限
+  // 校验逻辑，不重新写一份）。月份优先取上方已有的月份筛选器 selectedMonthStr，
+  // 未筛选时按钮字面意思——导出"本月"。点击按钮不再直接生成文件，先用
+  // previewOnly 取回同一份明细供核对，确认无误后才在 performMonthlyAuditExport
+  // 里发起真正的导出调用
+  _pendingAuditParams: null as { shopName: string; selectedYear: string; selectedMonth: string; yearMonth: string } | null,
+
   async onExportMonthlyAudit() {
     if (this.data.exportingAudit) return;
 
@@ -1227,6 +1306,66 @@ Page({
       yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     }
     const [selectedYear, selectedMonth] = yearMonth.split('-');
+    const shopName = this.data.selectedStoreName || '全部门店';
+
+    this.setData({ exportingAudit: true });
+    wx.showLoading({ title: '正在核对数据...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+
+      const res = await wx.cloud.callFunction({
+        name: 'exportAccountExcel',
+        data: { shopName, tabType: 'month', selectedYear, selectedMonth, previewOnly: true }
+      });
+      const result = res.result as any;
+
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.errMsg) || '该月无明细数据可导出', icon: 'none' });
+        return;
+      }
+
+      this._pendingAuditParams = { shopName, selectedYear, selectedMonth, yearMonth };
+      this.setData({
+        showExportPreviewModal: true,
+        exportPreviewSummary: result.summary || {},
+        exportPreviewRecords: result.records || []
+      });
+    } catch (err: any) {
+      wx.hideLoading();
+      console.error('[onExportMonthlyAudit] 核对数据加载失败:', err);
+      wx.showToast({ title: '核对数据加载失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ exportingAudit: false });
+    }
+  },
+
+  onCloseExportPreviewModal() {
+    this._pendingAuditParams = null;
+    this.setData({ showExportPreviewModal: false });
+  },
+
+  // 「发现异常，前去处理」：本来就在账本页，直接关闭弹窗让用户往上滚动查看即可
+  onExportPreviewGoFix() {
+    this._pendingAuditParams = null;
+    this.setData({ showExportPreviewModal: false });
+  },
+
+  // 「数据无误，确认并导出」：关闭预览弹窗，发起真正的 xlsx 生成
+  async onExportPreviewConfirm() {
+    this.setData({ showExportPreviewModal: false });
+    await this.performMonthlyAuditExport();
+  },
+
+  async performMonthlyAuditExport() {
+    const params = this._pendingAuditParams;
+    if (!params) return;
+    this._pendingAuditParams = null;
+
+    if (this.data.exportingAudit) return;
+    const { shopName, selectedYear, selectedMonth, yearMonth } = params;
 
     this.setData({ exportingAudit: true });
     wx.showLoading({ title: '正在生成审计表...', mask: true });
@@ -1236,12 +1375,7 @@ Page({
 
       const res = await wx.cloud.callFunction({
         name: 'exportAccountExcel',
-        data: {
-          shopName: this.data.selectedStoreName || '全部门店',
-          tabType: 'month',
-          selectedYear,
-          selectedMonth
-        }
+        data: { shopName, tabType: 'month', selectedYear, selectedMonth }
       });
       const result = res.result as any;
 
@@ -1261,7 +1395,7 @@ Page({
       });
     } catch (err: any) {
       wx.hideLoading();
-      console.error('[onExportMonthlyAudit] 导出失败:', err);
+      console.error('[performMonthlyAuditExport] 导出失败:', err);
       wx.showToast({ title: '导出失败，请重试', icon: 'none' });
     } finally {
       this.setData({ exportingAudit: false });
