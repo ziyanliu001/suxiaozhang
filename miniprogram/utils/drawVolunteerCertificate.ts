@@ -50,14 +50,31 @@ function drawRichWrappedText(ctx: any, runs: TextRun[], x: number, y: number, ma
 }
 
 function formatCertificateDate(d: Date): string {
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 颁发`;
+  return `颁发日期：${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+// 量出实际渲染宽度后收缩字号直到放得下 maxWidth，用于长度不完全可控的动态文本
+// （如证书编号）与固定文案共用同一段有限宽度时，保证谁都不会意外撑出预留区域
+function fitFontSize(ctx: any, text: string, weight: string, baseSize: number, minSize: number, maxWidth: number): number {
+  let size = baseSize;
+  ctx.font = `${weight} ${size}px sans-serif`.trim();
+  while (ctx.measureText(text).width > maxWidth && size > minSize) {
+    size -= 1;
+    ctx.font = `${weight} ${size}px sans-serif`.trim();
+  }
+  return size;
 }
 
 // 红色印章：双圈描边 + 居中两行小字，整体略微倾斜，模拟盖章效果；
-// globalAlpha < 1 让压在签名文字上的部分保留"透一点底"的手工盖章质感
+// globalAlpha < 1 让压在签名文字上的部分保留"透一点底"的手工盖章质感——印章
+// 收紧到只覆盖团队名这一行后半径变小，透明度也相应调低一档（0.86→0.75），
+// 视觉上更像一枚轻压的小章，不会让底下的团队名文字完全看不清。
+// 🐛 内部两行字号/行距此前是按半径 30 写死的固定像素值，radius 改小之后如果
+// 不跟着缩，文字会直接超出圆圈范围——这里改为按半径等比例换算，圆章大小无论
+// 怎么调，内部文字始终与圆圈边界保持同一比例的留白
 function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: number): void {
   ctx.save();
-  ctx.globalAlpha = 0.86;
+  ctx.globalAlpha = 0.75;
   ctx.translate(centerX, centerY);
   ctx.rotate((-10 * Math.PI) / 180);
 
@@ -71,12 +88,16 @@ function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: numbe
   ctx.arc(0, 0, radius - 5, 0, Math.PI * 2);
   ctx.stroke();
 
+  // 内圈直径 (radius-5)*2 要装下 4 个汉字一行，系数按"字宽约等于字号"估算并
+  // 留出安全余量（0.9 折）反推：fontSize ≈ 内圈直径 * 0.9 / 4 ≈ radius * 0.32
+  const sealFontSize = Math.max(6, Math.round(radius * 0.32));
+  const sealLineOffset = radius * 0.2;
   ctx.fillStyle = '#D81E06';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 11px sans-serif';
-  ctx.fillText('雨花爱心', 0, -6);
-  ctx.fillText('公益认证', 0, 10);
+  ctx.font = `bold ${sealFontSize}px sans-serif`;
+  ctx.fillText('雨花爱心', 0, -sealLineOffset);
+  ctx.fillText('公益认证', 0, sealLineOffset);
 
   ctx.restore();
 }
@@ -206,31 +227,59 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
 
   ctx.textAlign = 'left';
   const bodyMaxWidth = width - innerMargin * 2 - 36;
-  drawRichWrappedText(ctx, bodyRuns, innerMargin + 18, bodyStartY, bodyMaxWidth, 28);
+  // 🐛 二维码从 64 放大到 100 后，其顶边（qrY，见下方步骤 8）比原来高出 36px、
+  // 更往上顶——原来 28px 的行距下，这段正文换行后最后一行的落点在典型天数/工时
+  // 数字长度下会非常接近甚至压进二维码顶边。收紧到 24px 行距，换取足够的余量，
+  // 不需要按二维码坐标反向裁剪正文（正文在二维码坐标算出来之前就已经画完）
+  drawRichWrappedText(ctx, bodyRuns, innerMargin + 18, bodyStartY, bodyMaxWidth, 24);
 
-  // 8. 落款：团队名 + 颁发日期，靠右对齐置于右下角——传统证书落款惯例是贴右边界，
-  // X 坐标固定在内边框内侧（width - innerMargin - 18），配合印章盖在文字右上方
-  const signRightX = width - innerMargin - 18;
-  ctx.fillStyle = '#8C6D46';
-  ctx.font = 'bold 14px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('雨花爱心餐报助手团队', signRightX, height - innerMargin - 62);
-  ctx.font = '12px sans-serif';
-  ctx.fillText(formatCertificateDate(new Date()), signRightX, height - innerMargin - 42);
-
-  // 8b. 专属证书编号：左对齐落在 QR 码右侧与印章之间的空白横向区域，与右侧的
-  // 颁发日期同一行基线对齐，空值不绘制
-  if (certNo) {
-    ctx.font = '10px sans-serif';
-    ctx.fillStyle = '#A08A6A';
-    ctx.textAlign = 'left';
-    ctx.fillText(`证书编号：${certNo}`, innerMargin + 18, height - innerMargin - 42);
-  }
-
-  // 9. 左下角二维码（落款移到右下角后，二维码换到左下角，避免和落款/印章挤在一起）
-  const qrSize = 64;
+  // 8. 底部信息区整体布局：左下角放大到 100x100 的小程序码，右侧纵向排列
+  // 团队名 / 证书编号 / 颁发日期三行文字，彼此用留白隔开，任何一处都不会互相
+  // 压字——此前证书编号与二维码共用同一段 X/Y 区域，二维码在证书编号之后才
+  // 绘制，会直接盖掉证书编号左侧一截文字；红色印章的绘制范围也下探到了颁发
+  // 日期那一行的基线上，同样存在裁切/遮挡。这里重新规划坐标，各元素之间预留
+  // 明确间距，并整体收紧了印章的绘制范围，只压住团队名一角，不再触达日期行。
+  const qrSize = 100;
   const qrX = innerMargin + 18;
   const qrY = height - innerMargin - qrSize - 18;
+
+  // 二维码右侧的文字列：与二维码右边缘间隔 14px（远超"至少留 12rpx 间距"的要求），
+  // 右边界贴到内边框内侧。证书编号是运行时生成的动态字符串，长度不完全可控，
+  // 与团队名/颁发日期共用这段有限宽度的右对齐文字列——量出实际宽度后自动收缩
+  // 字号直到放得下，而不是凭经验估算字号，避免个别长字符串意外撑出这段区域、
+  // 反过来压回二维码
+  const infoColX = qrX + qrSize + 14;
+  const infoColRightX = width - innerMargin - 18;
+  const infoColWidth = infoColRightX - infoColX;
+  const teamNameY = qrY + 18;
+  // 🐛 团队名下方紧跟印章（见下方 sealRadius=18 的圆压在这一行上），22px 的行距
+  // 只够容纳印章底边和证书编号文字顶部之间几像素的空隙，字体渲染细节稍有出入就
+  // 可能贴到一起——加宽到 30px，确保印章边缘与证书编号文字之间有肉眼可辨的留白
+  const certNoY = teamNameY + 30;
+  const dateY = certNoY + 20;
+
+  ctx.textAlign = 'right';
+
+  const teamNameText = '雨花爱心餐报助手团队';
+  const teamNameSize = fitFontSize(ctx, teamNameText, 'bold', 13, 9, infoColWidth);
+  ctx.fillStyle = '#8C6D46';
+  ctx.font = `bold ${teamNameSize}px sans-serif`;
+  ctx.fillText(teamNameText, infoColRightX, teamNameY);
+
+  if (certNo) {
+    const certNoText = `证书编号：${certNo}`;
+    const certNoSize = fitFontSize(ctx, certNoText, '', 10, 7, infoColWidth);
+    ctx.fillStyle = '#A08A6A';
+    ctx.font = `${certNoSize}px sans-serif`;
+    ctx.fillText(certNoText, infoColRightX, certNoY);
+  }
+
+  const dateText = formatCertificateDate(new Date());
+  const dateSize = fitFontSize(ctx, dateText, '', 11, 8, infoColWidth);
+  ctx.fillStyle = '#8C6D46';
+  ctx.font = `${dateSize}px sans-serif`;
+  ctx.fillText(dateText, infoColRightX, dateY);
+
   let realQrLoaded = false;
 
   if (qrCodeTempPath) {
@@ -281,13 +330,16 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
     }
   }
 
-  // 10. 红色印章：自然盖在靠右落款文字的右侧/上方，压住团队名一角，略微倾斜、半透明，
-  // 模拟实体印章盖上去的效果；放在最后画，保证压在签名文字之上。圆心相对 signRightX
-  // 向左内缩半个直径，让圆的右边缘落在内边框以内，不会被边框裁切
+  // 10. 红色印章：自然压住团队名一角，模拟实体印章盖上去的效果；放在最后画，
+  // 保证压在文字之上。🐛 此前印章半径/圆心是按落款贴在右下角单独一处时的坐标算的，
+  // 团队名/证书编号/颁发日期改成三行纵向堆叠后，原印章的绘制范围会一路下探到
+  // 颁发日期那一行的基线，出现"公章压住日期文字"的裁切观感。这里收紧印章半径，
+  // 只覆盖团队名这一行，圆心相对 infoColRightX 向左内缩，与下方证书编号/颁发日期
+  // 之间留出明确间距，绝不触达
   if (showSeal) {
-    const sealRadius = 30;
-    const sealCenterX = signRightX - sealRadius + 6;
-    const sealCenterY = height - innerMargin - 62 - 10;
+    const sealRadius = 18;
+    const sealCenterX = infoColRightX - sealRadius + 6;
+    const sealCenterY = teamNameY - 6;
     drawSealStamp(ctx, sealCenterX, sealCenterY, sealRadius);
   }
 }

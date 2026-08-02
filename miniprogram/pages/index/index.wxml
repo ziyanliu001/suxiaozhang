@@ -2087,32 +2087,22 @@
       </view>
 
       <view class="gencode-body">
-        <!-- 1. 选择目标门店：下拉选择已有门店 / 手动输入新门店 双模式。
-             【选择已有门店】是默认态（onOpenGenCodeModal 打开弹窗时，只要本机构下有门店
-             就默认选中这一档，只有一家门店都没有时才会退到"手动输入新门店"）。 -->
+        <!-- 1. 选择目标门店：仅面向本机构已有门店生成邀请码——"手动输入新门店"这一档
+             已彻底移除，它此前生成的邀请码 storeId 为空，而唯一的兑换入口
+             （store-picker.ts onVerifyAuthSubmit）永远按选中的真实 storeId 匹配，
+             受邀人的门店选择器里根本找不到一个还不存在的门店，等于生成了一个 100%
+             无法兑换的邀请码。新建门店请走"门店选择器 → 找不到门店？申请新建/加入
+             新门店"这条完整、可用的独立通道。 -->
         <view class="form-item-row">
           <text class="form-label">1. 选择授权门店：</text>
-          <view class="store-mode-tabs">
-            <view class="store-mode-tab {{genStoreSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchGenStoreMode">选择已有门店</view>
-            <view class="store-mode-tab {{genStoreSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchGenStoreMode">手动输入新门店</view>
-          </view>
 
-          <picker wx:if="{{genStoreSelectionType === 'existing'}}" mode="selector" range="{{genStoreOptions}}" range-key="storeName" bindchange="onSelectGenStore">
+          <picker wx:if="{{genStoreOptions.length > 0}}" mode="selector" range="{{genStoreOptions}}" range-key="storeName" bindchange="onSelectGenStore">
             <view class="form-picker-selector">
-              {{targetGenStoreName ? targetGenStoreName : (genStoreOptions.length > 0 ? '点击选择门店 ▼' : '本机构暂无门店，请切换到"手动输入新门店"')}}
+              {{targetGenStoreName || '点击选择门店 ▼'}}
             </view>
           </picker>
-
-          <!-- 🌟 自定义门店输入框常驻 DOM，靠 max-height/opacity 过渡做"向下展开"动画——
-               wx:if/wx:else 会直接卸载/挂载元素，没有中间态可过渡，做不出展开效果 -->
-          <view class="custom-store-input-wrap {{genStoreSelectionType === 'custom' ? 'expanded' : ''}}">
-            <!-- 🌟 本机构暂无门店时会自动切到这一档：这个输入框本身就是"快速新建门店"入口，
-                 提交后会直接带入建店流程并自动选中该门店用于生成邀请码，明确告知避免用户误以为
-                 只是在填写一个普通备注字段 -->
-            <text class="gencode-custom-hint" wx:if="{{genStoreSelectionType === 'custom' && genStoreOptions.length === 0}}">
-              本机构暂无门店，在此输入门店名称即可快速新建，创建后将自动选中该门店用于生成邀请码
-            </text>
-            <input class="gencode-custom-input" placeholder="请输入新门店名称，如：雨花斋厦门海沧店" value="{{genCustomStoreName}}" bindinput="onGenCustomStoreNameInput" />
+          <view class="gencode-no-store-tip" wx:else>
+            本机构暂无门店，请先在「门店管理」创建门店后再生成邀请码
           </view>
         </view>
 
@@ -2151,7 +2141,7 @@
            "生成 + 复制到剪贴板 + 关闭弹窗"，不再需要先生成、再点第二个按钮才复制发送 -->
       <view class="gen-code-footer">
         <button class="btn-cancel" bindtap="onCloseGenCodeModal">关闭</button>
-        <button class="btn-primary-gen {{isGeneratingInviteCode ? 'btn-disabled' : ''}}" bindtap="onGenerateInviteCode" loading="{{isGeneratingInviteCode}}" disabled="{{isGeneratingInviteCode}}">
+        <button class="btn-primary-gen {{(isGeneratingInviteCode || !targetGenStoreId) ? 'btn-disabled' : ''}}" bindtap="onGenerateInviteCode" loading="{{isGeneratingInviteCode}}" disabled="{{isGeneratingInviteCode || !targetGenStoreId}}">
           <view class="idx-icon-sm idx-icon-bolt" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>立即生成
         </button>
       </view>

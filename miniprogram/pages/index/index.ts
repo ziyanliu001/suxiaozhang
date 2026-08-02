@@ -703,9 +703,6 @@ Page({
     generatedCode: '',
     targetGenStoreId: '',
     targetGenStoreName: '',
-    // 🏢 门店选择双模式：existing=从本机构已有门店下拉选择，custom=手动输入新门店名称
-    genStoreSelectionType: 'existing' as 'existing' | 'custom',
-    genCustomStoreName: '',
     // 过滤掉"全国总览"等虚拟条目后的真实门店下拉选项
     genStoreOptions: [] as any[]
   },
@@ -2721,6 +2718,17 @@ Page({
   },
 
   // ================= 🔑 生成动态邀请码 =================
+  //
+  // 🛡️ 根因修复："手动输入新门店"分支曾经允许在这里为一个尚不存在的门店生成邀请码
+  // （storeId 写成空字符串），但邀请码唯一的兑换入口（store-picker.ts 的
+  // onVerifyAuthSubmit CODE 分支）永远按"从门店列表里选中的真实 storeId"去匹配
+  // store_invites 记录，从未支持、也不可能支持"storeId 为空即代表待建门店"这种
+  // 兑换语义——受邀人打开小程序后，门店选择器里根本找不到这个还不存在的门店，
+  // 自然也就无法"选择该门店并输入此码激活绑定"，生成的邀请码 100% 无法被兑换。
+  // 新建门店本就有一条完整、可用的独立通道（store-picker.ts 的"➕ 找不到门店？
+  // 申请新建/加入新门店"：超管走 createStore 立即建店，其余角色走
+  // processRoleAudit 的审批流程），这里不再重复/伪造一套注定走不通的建店能力，
+  // 直接收窄为"仅面向本机构已有门店生成邀请码"。
   onOpenGenCodeModal() {
     // 🏢 过滤掉"全国总览"等虚拟条目，picker 只应展示本机构下的真实门店
     const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
@@ -2733,20 +2741,9 @@ Page({
       ? storeOptions.find((s: any) => s.storeId === this.data.currentStoreId)
       : null;
 
-    // 默认选中顶部选择器中的真实门店；若当前处于"全国总览"或压根没有门店，默认切到手动输入
-    let mode: 'existing' | 'custom' = 'custom';
-    let defaultStoreId = '';
-    let defaultStoreName = '';
-
-    if (currentInOptions) {
-      mode = 'existing';
-      defaultStoreId = currentInOptions.storeId;
-      defaultStoreName = currentInOptions.storeName;
-    } else if (storeOptions.length > 0) {
-      mode = 'existing';
-      defaultStoreId = storeOptions[0].storeId;
-      defaultStoreName = storeOptions[0].storeName;
-    }
+    // 默认选中顶部选择器中的真实门店；不在选项里（如处于全国总览）就退回第一家，
+    // 本机构压根没有门店时留空，由 UI 引导去正确的建店入口
+    const defaultStore = currentInOptions || storeOptions[0] || null;
 
     this.setData({
       showGenCodeModal: true,
@@ -2754,10 +2751,8 @@ Page({
       isGeneratingInviteCode: false,
       genTargetRole: 'MANAGER',
       genStoreOptions: storeOptions,
-      genStoreSelectionType: mode,
-      genCustomStoreName: '',
-      targetGenStoreId: mode === 'existing' ? defaultStoreId : '',
-      targetGenStoreName: mode === 'existing' ? defaultStoreName : ''
+      targetGenStoreId: defaultStore ? defaultStore.storeId : '',
+      targetGenStoreName: defaultStore ? defaultStore.storeName : ''
     });
   },
 
@@ -2781,58 +2776,20 @@ Page({
     }
   },
 
-  // 🏢 切换"下拉选择已有门店" / "手动输入新门店名称"
-  onSwitchGenStoreMode(e: any) {
-    const mode = e.currentTarget.dataset.mode as 'existing' | 'custom';
-    if (mode === this.data.genStoreSelectionType) return;
-
-    if (mode === 'existing') {
-      const first = (this.data.genStoreOptions || [])[0];
-      this.setData({
-        genStoreSelectionType: mode,
-        targetGenStoreId: first ? first.storeId : '',
-        targetGenStoreName: first ? first.storeName : '',
-        genCustomStoreName: '',
-        generatedCode: ''
-      });
-    } else {
-      this.setData({
-        genStoreSelectionType: mode,
-        targetGenStoreId: '',
-        targetGenStoreName: '',
-        genCustomStoreName: '',
-        generatedCode: ''
-      });
-    }
-  },
-
-  onGenCustomStoreNameInput(e: any) {
-    this.setData({
-      genCustomStoreName: e.detail.value,
-      targetGenStoreName: e.detail.value,
-      generatedCode: ''
-    });
-  },
-
   async onGenerateInviteCode() {
-    const isCustom = this.data.genStoreSelectionType === 'custom';
-    const storeId = isCustom ? '' : this.data.targetGenStoreId;
-    const storeName = isCustom ? this.data.genCustomStoreName.trim() : this.data.targetGenStoreName;
+    const storeId = this.data.targetGenStoreId;
+    const storeName = this.data.targetGenStoreName;
     const role = this.data.genTargetRole;
 
-    // 🛡️ 修复此前误报"请先选择目标门店"的 Bug：过去仅校验 storeId 是否为空，
-    // 手动输入新门店时 storeId 天然为空，导致永远无法通过校验；现改为校验门店名称，
-    // 且不再要求 storeId（新门店场景下门店尚未建立，本就没有 _id）
-    if (!storeName) {
-      wx.showToast({ title: isCustom ? '请输入新门店名称' : '请先选择目标门店', icon: 'none' });
+    if (!storeId || !storeName) {
+      wx.showToast({
+        title: this.data.genStoreOptions.length === 0 ? '本机构暂无门店，请先创建门店' : '请先选择目标门店',
+        icon: 'none'
+      });
       return;
     }
     if (storeName === '全国总览') {
-      wx.showToast({ title: '不能为"全国总览"生成邀请码，请选择或输入具体门店', icon: 'none', duration: 2500 });
-      return;
-    }
-    if (!isCustom && !storeId) {
-      wx.showToast({ title: '请先选择目标门店', icon: 'none' });
+      wx.showToast({ title: '不能为"全国总览"生成邀请码，请选择具体门店', icon: 'none', duration: 2500 });
       return;
     }
 
@@ -2856,8 +2813,6 @@ Page({
           storeId: storeId,
           storeName: storeName,
           role: role,
-          // 🏢 双模式门店选择：与角色申请表单的字段命名保持一致
-          storeSelectionType: isCustom ? 'custom' : 'existing',
           targetStoreId: storeId,
           targetStoreName: storeName,
           tenantId,
@@ -6486,7 +6441,6 @@ Page({
     if (genCodeTarget) {
       this.onOpenGenCodeModal();
       this.setData({
-        genStoreSelectionType: 'existing',
         targetGenStoreId: genCodeTarget.storeId,
         targetGenStoreName: genCodeTarget.storeName
       });

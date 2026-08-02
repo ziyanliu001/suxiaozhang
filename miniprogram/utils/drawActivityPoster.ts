@@ -1,4 +1,5 @@
 import { getSafeSystemInfo } from './util';
+import { safeRoundRect } from './canvasShapes';
 
 /**
  * 绘制大事记活动海报 (Canvas 2D)
@@ -108,12 +109,8 @@ export async function drawActivityPoster(opts: DrawActivityPosterOptions): Promi
       const dy = photoTop - (drawH - boxH) / 2;
 
       ctx.save();
-      ctx.beginPath();
-      if (typeof ctx.roundRect === 'function') {
-        ctx.roundRect(24, photoTop, boxW, boxH, 12);
-      } else {
-        ctx.rect(24, photoTop, boxW, boxH);
-      }
+      // 🛡️ 不依赖原生 ctx.roundRect 存在性检查，见 utils/canvasShapes.ts safeRoundRect 说明
+      safeRoundRect(ctx, 24, photoTop, boxW, boxH, 12);
       ctx.clip();
       ctx.drawImage(img, dx, dy, drawW, drawH);
       ctx.restore();

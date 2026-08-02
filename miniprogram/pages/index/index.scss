@@ -3171,41 +3171,15 @@ page {
   color: #333333;
 }
 
-/* 🌟 自定义门店输入框的"向下展开"动画：常驻 DOM，用 max-height + opacity 过渡
-   模拟折叠面板效果——wx:if 切换没有中间态、没法做动画，这是小程序里做展开动画的标准写法 */
-.custom-store-input-wrap {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  margin-top: 0;
-  transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.25s ease;
-}
-
-.custom-store-input-wrap.expanded {
-  /* 🌟 原本只需容纳输入框本身（72rpx），现在暂无门店时会多展示一行引导文案，
-     预算调宽到 160rpx 保证不被 overflow:hidden 裁掉 */
-  max-height: 160rpx;
-  opacity: 1;
-  margin-top: 12rpx;
-}
-
-.gencode-custom-hint {
-  display: block;
-  font-size: 22rpx;
+/* 🌟 本机构暂无门店时的引导提示：替代此前会生成无法兑换邀请码的"手动输入新门店"入口 */
+.gencode-no-store-tip {
+  font-size: 24rpx;
   color: #8C1D18;
-  line-height: 1.5;
-  margin-bottom: 12rpx;
-}
-
-.gencode-custom-input {
-  width: 100%;
-  height: 72rpx;
-  background: #F8F9FA;
-  border: 1rpx solid #DEE2E6;
+  background: #FFF3E0;
+  border: 1rpx dashed #FFB74D;
   border-radius: 12rpx;
-  padding: 0 20rpx;
-  font-size: 28rpx;
-  box-sizing: border-box;
+  padding: 18rpx 20rpx;
+  line-height: 1.5;
 }
 
 /* 🌟 身份选择卡片：类名改为 gencode- 前缀限定作用域，与"申请加入门店"弹窗里同名的

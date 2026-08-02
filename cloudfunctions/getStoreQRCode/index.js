@@ -74,6 +74,22 @@ exports.main = async (event, context) => {
       ? { page: 'pages/public-verify/index', scene: `t_${storeId}_d_${dateDigits}` }
       : { page: 'pages/index/index', scene: `s=${storeId}` };
 
+    // 🛡️ scene 字段硬限制 32 字符（wxacode.getUnlimited API 限制）——storeId 是微信
+    // 云数据库自动生成的 _id，不保证是短字符串，实际长度取决于云环境的 ID 生成规则，
+    // 拼上 t_/s=/_d_<8位日期> 等前缀后有可能超出 32 字符硬顶。
+    // 这里刻意不做有损截断：无论是 pages/index/index 扫码后的"自动识别门店并提示
+    // 申请加入"（fetchStoreInfoAndPromptApply），还是 pages/public-verify 的
+    // "扫码验真"，两端解析 scene 时都要求拿到完整、精确的 storeId 去做数据库精确
+    // 查询——截断成短前缀的话，两端要么查不到任何门店，要么（更危险）误撞到另一家
+    // 门店，让"扫码验真"这种关系到公众信任的功能悄悄指向错误数据。宁可在生成阶段
+    // 就明确失败并返回可诊断的错误信息，也不要发一个注定超限、或即使侥幸成功也
+    // 无法被正确解析回真实门店的二维码。
+    const MAX_SCENE_LENGTH = 32;
+    if (codeTarget.scene.length > MAX_SCENE_LENGTH) {
+      console.error('[getStoreQRCode] scene 超出 32 字符硬限制:', codeTarget.scene, `(${codeTarget.scene.length} 字符)`);
+      return { success: false, error: `门店标识过长（scene ${codeTarget.scene.length} 字符，上限 32），暂无法生成二维码` };
+    }
+
     const result = await cloud.openapi.wxacode.getUnlimited({
       scene: codeTarget.scene,
       page: codeTarget.page,

@@ -370,6 +370,48 @@ async function getMyApplicationStatus(OPENID) {
   };
 }
 
+// 🛡️ 根因修复："卸任特权 / 退出当前绑定"（profile.ts onConfirmReleaseRole）此前只清
+// 本地 storage、从未调用任何云函数——服务端 user_roles 记录里的 role/storeId/status
+// 原封不动，checkUserRole 是纯粹按 _openid 查这条记录直接回传，不认本地缓存。于是
+// "已卸任"只是客户端的一次性错觉：下次任意页面 onLoad/onShow 触发 fetchUserRole()
+// 重新查询，服务端返回的仍是卸任前的角色，权限原样复活，用户完全不知情地仍持有
+// 门店的写账/审账权限——与弹窗文案"该操作不可逆"背道而驰。这里补上真正的服务端
+// 撤销：把调用者自己的 user_roles 记录重置为 volunteer + 清空门店绑定，并保留一次
+// 卸任审计痕迹（releasedFrom/releasedAt），不是简单标记 status 就完事——本项目里
+// resolveCaller/checkUserRole 全部只认 role/storeId 字段本身，从不检查 status，
+// 只改 status 不改 role 起不到任何实际撤销效果
+async function releaseSelf(OPENID) {
+  const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+  const caller = callerRes.data && callerRes.data[0];
+  if (!caller) {
+    return { success: false, error: '未找到您的角色信息，无需卸任' };
+  }
+
+  // 🛡️ 超级管理员不支持自助卸任：与 setupSuperAdmin 只能由平台方线下开通的原则对称——
+  // 如果机构恰好只有这一位超管，自助卸任会导致该机构再无人能审批高权限申请/新建门店，
+  // 陷入无人可管理的死锁，必须走人工线下流程处理
+  if (caller.role === 'super_admin') {
+    return { success: false, error: '超级管理员身份不支持自助卸任，请联系平台管理员处理' };
+  }
+
+  if (caller.role === 'volunteer' || caller.role === 'store_family') {
+    return { success: false, error: '当前身份无需卸任' };
+  }
+
+  await db.collection('user_roles').doc(caller._id).update({
+    data: {
+      role: 'volunteer',
+      status: 'approved',
+      storeId: '',
+      storeName: '',
+      releasedFrom: caller.role,
+      releasedAt: db.serverDate()
+    }
+  });
+
+  return { success: true, message: '已成功卸任' };
+}
+
 exports.main = async (event, context) => {
   const { applyId, action } = event;
   const { OPENID } = cloud.getWXContext();
@@ -402,6 +444,15 @@ exports.main = async (event, context) => {
     } catch (err) {
       console.error('processRoleAudit getMyApplicationStatus error:', err);
       return { success: false, error: err.message || '查询失败' };
+    }
+  }
+
+  if (action === 'releaseSelf') {
+    try {
+      return await releaseSelf(OPENID);
+    } catch (err) {
+      console.error('processRoleAudit releaseSelf error:', err);
+      return { success: false, error: err.message || '卸任失败' };
     }
   }
 

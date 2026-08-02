@@ -1,6 +1,7 @@
 /**
  * 绘制高颜值雨花斋门店邀请海报 (Canvas 2D)
  */
+import { safeRoundRect } from './canvasShapes';
 export interface SponsorInfo {
   companyName: string;
   brandSlogan: string;
@@ -76,12 +77,11 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   ctx.strokeStyle = '#FFE066';
   ctx.lineWidth = 2;
 
-  ctx.beginPath();
-  if (typeof ctx.roundRect === 'function') {
-    ctx.roundRect(cardX, cardY, cardW, cardH, 16);
-  } else {
-    ctx.rect(cardX, cardY, cardW, cardH);
-  }
+  // 🛡️ 不再用 typeof ctx.roundRect === 'function' 做存在性检查后直接调用原生
+  // roundRect——Linux 平台微信开发者工具模拟器上该方法虽然存在，但对单数字 radius
+  // 参数处理不规范，调用时直接抛 TypeError，存在性检查拦不住"存在但调用即抛"，
+  // 见 utils/canvasShapes.ts safeRoundRect 的说明
+  safeRoundRect(ctx, cardX, cardY, cardW, cardH, 16);
   ctx.fill();
   ctx.stroke();
 

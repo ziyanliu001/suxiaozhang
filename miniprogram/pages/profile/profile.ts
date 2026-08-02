@@ -764,10 +764,33 @@ Page({
     }
   },
 
+  // 🛡️ "确认作废"前强确认：approvePendingVoid 会把记录标记为 isVoid、级联重算
+  // 此后所有日期的结余流水、并写入审计日志——影响面不亚于"确认封账"（index.ts
+  // 的 onConfirmFinanceLock 就为此弹了 wx.showModal），此前这里一点即执行、
+  // 没有任何二次确认，手滑一下就永久作废一条账目且牵连后续流水，风险与保护力度
+  // 明显不对等，这里补齐。"驳回"影响仅是清除挂起标记、不改动账目本身，维持
+  // 原有的一键处理，不需要同等强度的确认
   async onDecideVoid(e: any) {
     if (this.data.patriarchData.voidActionInFlight) return;
     const { id, action } = e.currentTarget.dataset; // action: 'approve' | 'reject'
     const cloudAction = action === 'approve' ? 'approvePendingVoid' : 'rejectPendingVoid';
+
+    if (action === 'approve') {
+      const target = (this.data.patriarchData.pendingVoidList || []).find((r: any) => r.docId === id);
+      const dateLabel = target && target.dateString ? `${target.dateString} 的` : '这条';
+      const confirmed = await new Promise<boolean>((resolve) => {
+        wx.showModal({
+          title: '⚠️ 确认作废？',
+          content: `确认作废${dateLabel}账目记录吗？作废后将级联重算此后所有日期的结余流水，且不可撤销。`,
+          confirmText: '确认作废',
+          confirmColor: '#D32F2F',
+          cancelText: '我再想想',
+          success: (res) => resolve(!!res.confirm),
+          fail: () => resolve(false)
+        });
+      });
+      if (!confirmed) return;
+    }
 
     this.setData({ 'patriarchData.voidActionInFlight': true });
     wx.showLoading({ title: '处理中...', mask: true });
@@ -1285,39 +1308,54 @@ Page({
     this.setData({ showReleaseModal: false });
   },
 
-  onConfirmReleaseRole() {
+  // 🛡️ 根因修复：此前这里只清本地 storage，从未通知服务端——user_roles 记录里的
+  // role/storeId 原封不动，下次任意页面重新 fetchUserRole() 时服务端照样吐回卸任前
+  // 的角色，权限在用户毫不知情的情况下自动复活，与弹窗"该操作不可逆"的承诺完全相反。
+  // 现在改为先调用 processRoleAudit(action:'releaseSelf') 让服务端真正重置这条记录，
+  // 服务端确认成功后才清本地缓存、跳转首页；服务端拒绝（如超管账号不支持自助卸任）
+  // 或网络异常时，本地状态原样不动，不能让用户以为已经卸任成功
+  async onConfirmReleaseRole() {
     if (this.data.isReleasing) return;
     this.setData({ isReleasing: true });
 
     wx.showLoading({ title: '安全卸任中...' });
 
     try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { action: 'releaseSelf' }
+      });
+      const result = res.result;
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        this.setData({ isReleasing: false });
+        wx.showModal({ title: '无法卸任', content: (result && result.error) || '卸任失败，请重试', showCancel: false });
+        return;
+      }
+
       wx.removeStorageSync('current_user_role');
       wx.removeStorageSync('my_authorized_roles');
       wx.removeStorageSync('current_user_role_info');
-
       AuthService.clearAuth();
-
       wx.setStorageSync('current_user_role', 'volunteer');
 
+      this.setData({ showReleaseModal: false, isReleasing: false });
+      wx.showToast({ title: '身份已卸任重置', icon: 'success' });
+
       setTimeout(() => {
-        wx.hideLoading();
-        this.setData({ showReleaseModal: false, isReleasing: false });
-        wx.showToast({ title: '身份已卸任重置', icon: 'success' });
-
-        setTimeout(() => {
-          this.isNavigating = true;
-          wx.reLaunch({
-            url: '/pages/index/index',
-            fail: () => {
-              this.isNavigating = false;
-            }
-          });
-        }, 600);
-      }, 500);
-
+        this.isNavigating = true;
+        wx.reLaunch({
+          url: '/pages/index/index',
+          fail: () => {
+            this.isNavigating = false;
+          }
+        });
+      }, 600);
     } catch (err) {
       wx.hideLoading();
+      console.error('[onConfirmReleaseRole] 卸任异常:', err);
       this.setData({ isReleasing: false });
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     }
@@ -1870,10 +1908,45 @@ Page({
     }
   },
 
+  // 🛡️ 高权限角色审批前强确认：与首页工作台的门店审核弹窗（index.ts onProcessAudit）
+  // 走的是同一个 processRoleAudit 云函数、同一套权限敏感度，此前这里两个队列
+  // （member 里的义工/财务申请、elevated 里的店长/家长/新建门店申请）通过按钮一律
+  // 无确认直接批准——elevated 队列清一色是高权限授权，member 队列里的"财务"申请
+  // 同样能看到/操作门店账本，都应该在授权前弹一次强确认，而不是只有首页那份入口
+  // 才有这层保护，本页留了个能一键提权的缺口
   async onApproveApplication(e: any) {
     const id = e.currentTarget.dataset.id;
     const queue = e.currentTarget.dataset.queue as 'member' | 'elevated';
     if (!id) return;
+
+    const list = queue === 'elevated' ? this.data.elevatedApplicationList : this.data.memberApplicationList;
+    const item = (list as any[]).find((r) => r.applyId === id);
+
+    // elevated 队列（店长/家长任命、新建门店）恒为高权限；member 队列仅 finance 敏感，
+    // volunteer 维持原有一键通过的轻量体验
+    const isSensitive = queue === 'elevated' || (item && item.requestedRole === 'finance');
+
+    if (isSensitive && item) {
+      const displayName = item.realName || '该申请人';
+      const content = queue === 'elevated'
+        ? (item.isCustomStore
+          ? `通过后将自动创建新门店【${item.storeProfile ? item.storeProfile.storeName : ''}】并授予「${displayName}」对应管理权限，确认通过吗？`
+          : `授权后「${displayName}」将以【${item.requestedRoleLabel}】身份管理门店账本与人员，确认通过吗？`)
+        : `授权后「${displayName}」将以【财务】身份操作/查看门店账本，确认通过吗？`;
+
+      const confirmed = await new Promise<boolean>((resolve) => {
+        wx.showModal({
+          title: '⚠️ 高权限角色确认',
+          content,
+          confirmText: '确认通过',
+          confirmColor: '#D32F2F',
+          cancelText: '我再想想',
+          success: (res) => resolve(!!res.confirm),
+          fail: () => resolve(false)
+        });
+      });
+      if (!confirmed) return;
+    }
 
     wx.showLoading({ title: '处理中...', mask: true });
     try {
@@ -2319,35 +2392,59 @@ Page({
       return;
     }
 
+    if (!isCloudAvailable()) {
+      this.setData({ feedbackSubmitting: false });
+      wx.showToast({ title: '云服务尚未就绪，请稍后重试', icon: 'none' });
+      return;
+    }
+
     let collectionMissing = false;
     try {
-      if (isCloudAvailable()) {
-        // 🐛 家人提交的意见店长端看不到，根因：家人账号大多没有 user_roles 记录
-        // （store_family 只是本地/客户端角色，从不写服务端），云函数原先靠
-        // resolveCaller(OPENID).storeId 取门店，家人查出来是空字符串，意见就存成了
-        // storeId: ''——而店长端 list/count 永远按自己的真实 storeId 查询，两边
-        // 对不上，意见形同消失。这里改为把"当前正在浏览的门店"（getSelectedStore，
-        // 与 fetchMeritStats 里同一个门店隔离修复用的是同一个数据源）显式传给云函数，
-        // 云函数收到就优先用它，不再依赖对家人账号必然查不到的角色绑定门店
-        const activeStore = getSelectedStore();
-        await wx.cloud.callFunction({
-          name: 'submitFeedback',
-          data: {
-            action: 'submit',
-            type: this.data.feedbackSelectedType,
-            content,
-            storeId: (activeStore && activeStore.storeId) || '',
-            storeName: (activeStore && activeStore.storeName) || ''
-          }
-        });
+      // 🐛 家人提交的意见店长端看不到，根因：家人账号大多没有 user_roles 记录
+      // （store_family 只是本地/客户端角色，从不写服务端），云函数原先靠
+      // resolveCaller(OPENID).storeId 取门店，家人查出来是空字符串，意见就存成了
+      // storeId: ''——而店长端 list/count 永远按自己的真实 storeId 查询，两边
+      // 对不上，意见形同消失。这里改为把"当前正在浏览的门店"（getSelectedStore，
+      // 与 fetchMeritStats 里同一个门店隔离修复用的是同一个数据源）显式传给云函数，
+      // 云函数收到就优先用它，不再依赖对家人账号必然查不到的角色绑定门店
+      const activeStore = getSelectedStore();
+      const res: any = await wx.cloud.callFunction({
+        name: 'submitFeedback',
+        data: {
+          action: 'submit',
+          type: this.data.feedbackSelectedType,
+          content,
+          storeId: (activeStore && activeStore.storeId) || '',
+          storeName: (activeStore && activeStore.storeName) || ''
+        }
+      });
+
+      // 🛡️ 根因修复：此前这里只 await 了云函数调用、从不检查 result.success——
+      // wx.cloud.callFunction 只要网络层面成功往返就会 resolve，即使云函数内部业务
+      // 逻辑判定失败（最典型的是登录态失效时 handleSubmit 返回的"未登录，无法提交"）
+      // 也不会走进 catch 分支。此前的代码在这种情况下会直接落到下面"感恩您的宝贵
+      // 建议！"的成功提示，把一次实际上完全没有落库的提交伪装成已收到，家人的意见
+      // 就这样悄无声息地丢失且毫无感知。现在与本文件其余所有云函数调用一致，显式
+      // 检查 result.success，失败时如实提示、不清空已填内容，让用户能重试
+      const result = res.result;
+      if (!result || !result.success) {
+        this.setData({ feedbackSubmitting: false });
+        wx.showToast({ title: (result && result.error) || '提交失败，请重试', icon: 'none' });
+        return;
       }
     } catch (err) {
       console.warn('[onSubmitFeedback] 提交云端失败:', err);
       // 🛡️ 云端 submitFeedback 已经会在集合不存在时自动建表重试一次，正常不会再
       // 抛到这里——命中说明底层确实没写进去，不能按"已收到"处理，否则家人会以为
-      // 意见提交成功了，实际数据完全丢失；其余偶发网络错误仍按原先的静默降级处理，
-      // 避免网络抖动让人以为需要反复重试一份低风险、非事务性的轻量提交
+      // 意见提交成功了，实际数据完全丢失。其余异常（真实网络故障等）此前会被当作
+      // 成功静默吞掉，同样是数据丢失且用户毫无感知——统一改为如实告知"网络异常，
+      // 请重试"，不清空已填内容，用户可以直接再点一次提交，摩擦成本很低
       collectionMissing = this.isCollectionNotExistError(err);
+      if (!collectionMissing) {
+        this.setData({ feedbackSubmitting: false });
+        wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+        return;
+      }
     }
 
     this.setData({ feedbackSubmitting: false, showFeedbackModal: false, feedbackContent: '' });
