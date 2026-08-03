@@ -699,12 +699,26 @@ Page({
     availableShifts: [] as any[],
     showGenCodeModal: false,
     isGeneratingInviteCode: false,
-    genTargetRole: 'MANAGER',
+    genTargetRole: 'MANAGER' as 'MANAGER' | 'FINANCE' | 'FAMILY' | 'VOLUNTEER',
     generatedCode: '',
     targetGenStoreId: '',
     targetGenStoreName: '',
     // 过滤掉"全国总览"等虚拟条目后的真实门店下拉选项
-    genStoreOptions: [] as any[]
+    genStoreOptions: [] as any[],
+    // 🛡️ 发码防越权：非超管强制锁定为当前所属门店、禁用下拉切换，防止跨店发码
+    genStoreSelectorDisabled: false,
+    // 🛡️ 身份阶梯权限过滤：当前调用者实际可选的目标身份白名单，与
+    // cloudfunctions/manageStoreInviteCode 的 checkGeneratePermission 口径一致——
+    // 超管可选四种，店长/大家长只放开 [家人, 志愿者]
+    genAvailableRoles: ['MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'] as string[],
+
+    // 🔑 生成结果弹窗：展示 8 位邀请码 + 对应太阳码，与 gencode-modal 是两个独立弹窗——
+    // 生成成功后立即关闭 gencode-modal、打开这个结果弹窗，不再像旧版那样自动复制关闭
+    showInviteResultModal: false,
+    inviteResultCode: '',
+    inviteResultQrPath: '',
+    inviteResultStoreName: '',
+    inviteResultRoleLabel: ''
   },
 
   _adjustResolve: null as (() => void) | null,
@@ -1665,12 +1679,17 @@ Page({
   },
 
   // 🌟 财务视角的场景化邀请入口：复用同一套 generateInviteCode 弹窗（无需新建任何生成逻辑），
-  // 但跳过"生成门店邀请海报"这个偏对外宣传的选项——直接打开邀请码弹窗，并把默认身份
-  // 从管理端惯用的 MANAGER 改成 FINANCE，更贴近"财务找财务协同对账"这个具体场景；
-  // 用户仍可以在弹窗里的身份单选里手动切回"门店店长"
+  // 但跳过"生成门店邀请海报"这个偏对外宣传的选项——直接打开邀请码弹窗。
+  // 🛡️ 身份阶梯权限过滤：只有 super_admin 才允许生成"门店财务"邀请码——纯财务角色
+  // 本身已被 onOpenGenCodeModal 的权限阶梯挡在门外（financer 不在
+  // [super_admin, store_manager, store_patriarch] 名单内），能走到这里说明当前
+  // 是店长/大家长/超管本人在用这个场景化入口；只有超管才把默认身份预填为 FINANCE，
+  // 店长/大家长的可选身份里根本没有 FINANCE 这一档，不能无条件覆盖选中它
   onOpenFinanceInviteMenu() {
     this.onOpenGenCodeModal();
-    this.setData({ genTargetRole: 'FINANCE' });
+    if (this.data.isSuperAdmin) {
+      this.setData({ genTargetRole: 'FINANCE' });
+    }
   },
 
   async onGenerateStorePoster() {
@@ -2717,40 +2736,67 @@ Page({
     this.setData({ showAuditModal: false });
   },
 
-  // ================= 🔑 生成动态邀请码 =================
+  // ================= 🔑 生成特权邀请码 =================
   //
-  // 🛡️ 根因修复："手动输入新门店"分支曾经允许在这里为一个尚不存在的门店生成邀请码
-  // （storeId 写成空字符串），但邀请码唯一的兑换入口（store-picker.ts 的
-  // onVerifyAuthSubmit CODE 分支）永远按"从门店列表里选中的真实 storeId"去匹配
-  // store_invites 记录，从未支持、也不可能支持"storeId 为空即代表待建门店"这种
-  // 兑换语义——受邀人打开小程序后，门店选择器里根本找不到这个还不存在的门店，
-  // 自然也就无法"选择该门店并输入此码激活绑定"，生成的邀请码 100% 无法被兑换。
-  // 新建门店本就有一条完整、可用的独立通道（store-picker.ts 的"➕ 找不到门店？
-  // 申请新建/加入新门店"：超管走 createStore 立即建店，其余角色走
-  // processRoleAudit 的审批流程），这里不再重复/伪造一套注定走不通的建店能力，
-  // 直接收窄为"仅面向本机构已有门店生成邀请码"。
+  // 🛡️ 全链路重构：此前小程序端直接 wx.cloud.database().collection('store_invites')
+  // .add()——真正的权限判定只停留在客户端 JS（this.data.isManager/isSuperAdmin），
+  // 任何人打开开发者工具对同一个小程序会话直接调用 wx.cloud.database() API 就能绕过，
+  // 生成任意门店/任意角色的邀请码。现改为服务端 cloudfunctions/manageStoreInviteCode
+  // 统一收口生成与核销，客户端这里只负责收集参数 + 展示结果，不再直接触碰数据库。
+  //
+  // 🛡️ 身份阶梯权限过滤：仅超级管理员/店长/大家长可打开本弹窗——财务/义工/家人
+  // 不在权限阶梯里，不能自我复制/越级授权（与云函数 checkGeneratePermission 同一口径，
+  // 这里提前拦截只是避免用户填完表单才在最后一步被云函数拒绝，真正的强制点在服务端）
   onOpenGenCodeModal() {
-    // 🏢 过滤掉"全国总览"等虚拟条目，picker 只应展示本机构下的真实门店
+    const canGenerate = this.data.isSuperAdmin || this.data.isManager || this.data.isPatriarch;
+    if (!canGenerate) {
+      wx.showToast({ title: '无权限：仅超级管理员/店长/大家长可生成邀请码', icon: 'none', duration: 2500 });
+      return;
+    }
+
     const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
-    const storeOptions = (this.data.allStoresList || []).filter((s: any) =>
-      s && s.storeName !== '全国总览' && !NATIONAL_IDS.includes(s.storeId)
-    );
+    const isSuperAdmin = this.data.isSuperAdmin;
 
-    const currentIsRealStore = this.data.currentStoreId && !NATIONAL_IDS.includes(this.data.currentStoreId);
-    const currentInOptions = currentIsRealStore
-      ? storeOptions.find((s: any) => s.storeId === this.data.currentStoreId)
-      : null;
+    let storeOptions: any[];
+    let genStoreSelectorDisabled: boolean;
+    let defaultStore: any;
 
-    // 默认选中顶部选择器中的真实门店；不在选项里（如处于全国总览）就退回第一家，
-    // 本机构压根没有门店时留空，由 UI 引导去正确的建店入口
-    const defaultStore = currentInOptions || storeOptions[0] || null;
+    if (isSuperAdmin) {
+      // 🏢 过滤掉"全国总览"等虚拟条目，picker 只应展示本机构下的真实门店
+      storeOptions = (this.data.allStoresList || []).filter((s: any) =>
+        s && s.storeName !== '全国总览' && !NATIONAL_IDS.includes(s.storeId)
+      );
+      genStoreSelectorDisabled = false;
+      const currentIsRealStore = this.data.currentStoreId && !NATIONAL_IDS.includes(this.data.currentStoreId);
+      const currentInOptions = currentIsRealStore
+        ? storeOptions.find((s: any) => s.storeId === this.data.currentStoreId)
+        : null;
+      // 默认选中顶部选择器中的真实门店；不在选项里（如处于全国总览）就退回第一家，
+      // 本机构压根没有门店时留空，由 UI 引导去正确的建店入口
+      defaultStore = currentInOptions || storeOptions[0] || null;
+    } else {
+      // 🛡️ 发码防越权：非超管（店长/大家长）强制锁定为当前所属门店，禁用切换，
+      // 从入口就杜绝跨店发码，而不只是依赖服务端事后拒绝
+      const ownStoreId = this.data.currentStoreId && !NATIONAL_IDS.includes(this.data.currentStoreId) ? this.data.currentStoreId : '';
+      storeOptions = ownStoreId ? [{ storeId: ownStoreId, storeName: this.data.currentStoreName }] : [];
+      genStoreSelectorDisabled = true;
+      defaultStore = storeOptions[0] || null;
+    }
+
+    // 🛡️ 身份阶梯权限过滤：超管可选四种；店长/大家长严格禁止生成"门店财务"/
+    // "门店店长"，只放开低于自身权限的 [家人, 志愿者]
+    const genAvailableRoles = isSuperAdmin
+      ? ['MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER']
+      : ['FAMILY', 'VOLUNTEER'];
 
     this.setData({
       showGenCodeModal: true,
       generatedCode: '',
       isGeneratingInviteCode: false,
-      genTargetRole: 'MANAGER',
+      genTargetRole: genAvailableRoles[0] as any,
       genStoreOptions: storeOptions,
+      genStoreSelectorDisabled,
+      genAvailableRoles,
       targetGenStoreId: defaultStore ? defaultStore.storeId : '',
       targetGenStoreName: defaultStore ? defaultStore.storeName : ''
     });
@@ -2761,10 +2807,15 @@ Page({
   },
 
   onSelectGenRole(e: any) {
-    this.setData({ genTargetRole: e.currentTarget.dataset.role, generatedCode: '' });
+    const role = e.currentTarget.dataset.role;
+    // 🛡️ 二次拦截：即使 WXML 因某种极端时序渲染出了不该出现的选项，这里也兜底
+    // 拒绝选中不在 genAvailableRoles 白名单内的角色
+    if (!this.data.genAvailableRoles.includes(role)) return;
+    this.setData({ genTargetRole: role, generatedCode: '' });
   },
 
   onSelectGenStore(e: any) {
+    if (this.data.genStoreSelectorDisabled) return;
     const index = e.detail.value;
     const selected = (this.data.genStoreOptions || [])[index];
     if (selected) {
@@ -2788,79 +2839,110 @@ Page({
       });
       return;
     }
-    if (storeName === '全国总览') {
-      wx.showToast({ title: '不能为"全国总览"生成邀请码，请选择具体门店', icon: 'none', duration: 2500 });
+    if (!this.data.genAvailableRoles.includes(role)) {
+      wx.showToast({ title: '无权限：不能生成该身份的邀请码', icon: 'none' });
       return;
     }
 
     if (this.data.isGeneratingInviteCode) return;
     this.setData({ isGeneratingInviteCode: true });
-
-    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
-
     wx.showLoading({ title: '邀请码安全生成中...', mask: true });
 
-    let dbWriteOk = true;
-    try {
-      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const db = wx.cloud.database();
-      const cachedRoleInfoForTenant = AuthService.getCachedRoleInfo();
-      const tenantId = (cachedRoleInfoForTenant && cachedRoleInfoForTenant.tenantId) || '';
+    const ROLE_SERVER_MAP: Record<string, string> = {
+      MANAGER: 'STORE_MANAGER', FINANCE: 'FINANCE', FAMILY: 'FAMILY', VOLUNTEER: 'VOLUNTEER'
+    };
+    const ROLE_LABEL_MAP: Record<string, string> = {
+      MANAGER: '门店店长', FINANCE: '门店财务', FAMILY: '家人', VOLUNTEER: '志愿者'
+    };
 
-      await db.collection('store_invites').add({
-        data: {
-          inviteCode: randomCode,
-          storeId: storeId,
-          storeName: storeName,
-          role: role,
-          targetStoreId: storeId,
-          targetStoreName: storeName,
-          tenantId,
-          isUsed: false,
-          createdAt: db.serverDate(),
-          creatorOpenId: wx.getStorageSync('my_openid') || 'ADMIN'
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreInviteCode',
+        data: { action: 'generate', storeId, targetRole: ROLE_SERVER_MAP[role] }
+      });
+      const result = res.result;
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        this.setData({ isGeneratingInviteCode: false });
+        wx.showToast({ title: (result && result.error) || '生成失败，请重试', icon: 'none', duration: 2500 });
+        return;
+      }
+
+      const { code, qrFileID } = result.data;
+
+      // 🌟 太阳码为可选增强：下载失败不阻断结果弹窗展示，邀请码本身仍可正常
+      // 手动复制/核销，只是弹窗里不显示太阳码图片
+      let qrTempPath = '';
+      if (qrFileID) {
+        try {
+          const downRes = await wx.cloud.downloadFile({ fileID: qrFileID });
+          qrTempPath = downRes.tempFilePath;
+        } catch (qrErr) {
+          console.warn('[onGenerateInviteCode] 太阳码下载失败:', qrErr);
         }
+      }
+
+      this.setData({
+        isGeneratingInviteCode: false,
+        showGenCodeModal: false,
+        showInviteResultModal: true,
+        inviteResultCode: code,
+        inviteResultQrPath: qrTempPath,
+        inviteResultStoreName: storeName,
+        inviteResultRoleLabel: ROLE_LABEL_MAP[role] || role
       });
     } catch (err) {
-      dbWriteOk = false;
-      console.warn('⚠️ [GenCode] 云端写入失败，启用离线模式:', err);
+      wx.hideLoading();
+      this.setData({ isGeneratingInviteCode: false });
+      console.error('[onGenerateInviteCode] 异常:', err);
+      wx.showToast({ title: '网络异常，生成失败，请重试', icon: 'none' });
     }
+  },
 
-    wx.hideLoading();
+  onCloseInviteResultModal() {
+    this.setData({ showInviteResultModal: false, inviteResultCode: '', inviteResultQrPath: '' });
+  },
 
-    // 🌟 一步到位：生成成功后直接复制邀请文案到剪贴板并关闭弹窗，不再需要用户
-    // 先看到裸邀请码、再点第二个按钮才真正完成复制——两步合一步，减少一次多余点击
-    const roleName = role === 'FINANCE' ? '财务' : '店长';
-    const copyText = `🌸【雨花爱心餐报助手】\n诚邀您加入【${storeName}】！您的专属【${roleName}】激活码为：${randomCode} 。请打开小程序，选择该门店并输入此码激活绑定。感恩您的加入！`;
-
+  onCopyInviteResultCode() {
     wx.setClipboardData({
-      data: copyText,
-      success: () => {
-        this.setData({ isGeneratingInviteCode: false, showGenCodeModal: false, generatedCode: '' });
-        wx.showToast({
-          title: dbWriteOk ? '邀请码/邀请链接已成功复制，请发送给对应义工' : '邀请码已复制（离线模式），请发送给对应义工',
-          icon: 'none',
-          duration: 2500
-        });
-      },
-      fail: () => {
-        // 自动复制失败：不关闭弹窗，把码留在结果区，让用户点一下手动复制（见 onCopyGeneratedCode）
-        this.setData({ isGeneratingInviteCode: false, generatedCode: randomCode });
-        wx.showToast({ title: '自动复制失败，请点击邀请码手动复制', icon: 'none', duration: 2500 });
+      data: this.data.inviteResultCode,
+      success: () => wx.showToast({ title: '邀请码已复制', icon: 'success' })
+    });
+  },
+
+  // 📥 保存太阳码图片到相册，便于直接发到朋友圈/群聊而不需要额外截图
+  onSaveInviteResultQr() {
+    const filePath = this.data.inviteResultQrPath;
+    if (!filePath) {
+      wx.showToast({ title: '太阳码尚未生成完成，请稍候', icon: 'none' });
+      return;
+    }
+    wx.saveImageToPhotosAlbum({
+      filePath,
+      success: () => wx.showToast({ title: '太阳码已保存至相册', icon: 'success' }),
+      fail: (err: any) => {
+        if (err.errMsg && err.errMsg.includes('auth deny')) {
+          wx.showModal({
+            title: '需要相册权限',
+            content: '请在设置中允许小程序访问相册，才能保存太阳码图片',
+            confirmText: '去设置',
+            success: (res) => { if (res.confirm) wx.openSetting(); }
+          });
+        } else {
+          wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+        }
       }
     });
   },
 
-  onCopyGeneratedCode() {
-    const roleName = this.data.genTargetRole === 'FINANCE' ? '财务' : '店长';
-    const copyText = `🌸【雨花爱心餐报助手】\n诚邀您加入【${this.data.targetGenStoreName || '雨花斋'}】！您的专属【${roleName}】激活码为：${this.data.generatedCode} 。请打开小程序，选择该门店并输入此码激活绑定。感恩您的加入！`;
-
+  onShareInviteResultCode() {
+    const roleLabel = this.data.inviteResultRoleLabel;
+    const copyText = `🌸【雨花爱心餐报助手】\n诚邀您加入【${this.data.inviteResultStoreName || '雨花斋'}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
     wx.setClipboardData({
       data: copyText,
-      success: () => {
-        wx.showToast({ title: '邀请信息已复制！', icon: 'none', duration: 2500 });
-        this.setData({ showGenCodeModal: false });
-      }
+      success: () => wx.showToast({ title: '邀请文案已复制，快发送给TA吧', icon: 'none', duration: 2500 })
     });
   },
 
@@ -6437,14 +6519,20 @@ Page({
 
     // 门店管理页「生成邀请码」快捷按钮的交接：打开已有的邀请码弹窗后，直接覆盖预选为
     // 目标门店（不依赖 currentStoreId 的默认选中逻辑——那反映的是"当前用户自己绑定的门店"，
-    // 超管在门店管理页点的可能是本机构下的任意一家门店，两者不一定相同）
+    // 超管在门店管理页点的可能是本机构下的任意一家门店，两者不一定相同）。
+    // 🛡️ store-management.ts 本身已把整个页面访问收窄到仅 isSuperAdmin（见该页
+    // checkedAccess 逻辑），这个交接触发点理论上只有超管能走到；这里再加一层
+    // isSuperAdmin 防御，非超管（店长/大家长）即使因某种极端时序收到这个交接，
+    // 也绝不允许用它覆盖 onOpenGenCodeModal 已经强制锁定的"仅本店"选择
     const genCodeTarget = takeGenCodeHandoff();
     if (genCodeTarget) {
       this.onOpenGenCodeModal();
-      this.setData({
-        targetGenStoreId: genCodeTarget.storeId,
-        targetGenStoreName: genCodeTarget.storeName
-      });
+      if (this.data.isSuperAdmin) {
+        this.setData({
+          targetGenStoreId: genCodeTarget.storeId,
+          targetGenStoreName: genCodeTarget.storeName
+        });
+      }
     }
   },
 

@@ -1,0 +1,9 @@
+{
+  "name": "manageStoreInviteCode",
+  "version": "1.0.0",
+  "description": "特权邀请码：越权前置阻断的发码 + 一次性核销，替代旧 store_invites 全客户端直连写库方案",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

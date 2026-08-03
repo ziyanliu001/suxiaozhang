@@ -218,7 +218,12 @@ exports.main = async (event) => {
     if (!caller || !['finance', 'store_patriarch', 'super_admin'].includes(caller.role)) {
       return { success: false, errMsg: '无权限：仅财务/大家长与超级管理员可操作稽核封账' };
     }
-    if ((caller.role === 'finance' || caller.role === 'store_patriarch') && caller.storeId && caller.storeId !== storeId) {
+    // 🛡️ 修复"空 storeId 恒真"漏洞：此前 `caller.storeId && caller.storeId !== storeId`
+    // 在 caller.storeId 为空/未绑定门店时整个条件短路为 false，直接跳过拒绝分支——
+    // 一个尚未绑定任何门店的 finance/store_patriarch 账号反而能对任意 storeId 的账本
+    // 批量封账/解封。改为无条件要求 caller.storeId 与目标 storeId 严格相等（storeId
+    // 参数在上方已校验非空），未绑定门店时必然不相等，正确落入拒绝分支
+    if ((caller.role === 'finance' || caller.role === 'store_patriarch') && caller.storeId !== storeId) {
       return { success: false, errMsg: '无权限：不能操作其他门店的账本' };
     }
 

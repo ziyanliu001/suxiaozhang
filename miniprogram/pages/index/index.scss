@@ -3171,6 +3171,24 @@ page {
   color: #333333;
 }
 
+/* 🛡️ 发码防越权：非超管门店选择器锁定态——与可点击的 .form-picker-selector
+   共用底色/边框规范，仅追加禁用视觉语言（灰化 + 锁形标签），让用户一眼看出
+   "这里不能点/不能切店"，而不是误以为选择器失效了 */
+.form-picker-locked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F1F3F5;
+  color: #6B7280;
+}
+
+.picker-locked-tag {
+  font-size: 20rpx;
+  color: #ADB5BD;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
 /* 🌟 本机构暂无门店时的引导提示：替代此前会生成无法兑换邀请码的"手动输入新门店"入口 */
 .gencode-no-store-tip {
   font-size: 24rpx;
@@ -3188,12 +3206,16 @@ page {
    全靠层叠顺序侥幸不冲突，稍改一处就可能悄悄影响另一个完全不相关的弹窗。 */
 .gencode-role-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 20rpx;
 }
 
 .gencode-role-item {
   position: relative;
-  flex: 1;
+  /* 🌟 身份选项从 2 档扩到 4 档（店长/财务/家人/志愿者）：flex-basis 按"每行两个"
+     换算（50% 减去一半 gap），配合父级 flex-wrap 形成 2x2 网格，而不是把 4 个
+     选项硬挤进同一行 */
+  flex: 1 1 calc(50% - 10rpx);
   text-align: center;
   background: #F8F9FA;
   border: 2rpx solid #DEE2E6;
@@ -3202,6 +3224,26 @@ page {
   font-size: 24rpx;
   color: #495057;
   transition: all 0.2s ease;
+}
+
+/* 🛡️ 身份阶梯权限过滤：店长/大家长打开弹窗时，"门店财务"/"门店店长"两个选项
+   不在 genAvailableRoles 白名单内，置灰禁用——与 .inactive（同样是"未选中"但
+   仍可点击）区分开，禁用态用更低的透明度 + 不可点击手势，明确传达"这个选项
+   本次不可用"，而不是"还没选它" */
+.gencode-role-item.gencode-role-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  border-style: dashed;
+}
+
+.gencode-role-restrict-tip {
+  margin-top: 16rpx;
+  font-size: 20rpx;
+  color: #8C6D46;
+  background: #FFF8E1;
+  border-radius: 10rpx;
+  padding: 12rpx 16rpx;
+  line-height: 1.5;
 }
 
 /* 未选中态进一步弱化：边框变浅灰虚线、文字降低对比度，与选中态形成更强烈的视觉落差 */
@@ -3235,8 +3277,37 @@ page {
   box-shadow: 0 2rpx 6rpx rgba(184, 134, 11, 0.4);
 }
 
-.gen-result-box {
-  margin-top: 30rpx;
+/* ================= 🔑 邀请码生成结果弹窗 ================= */
+.invite-result-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.invite-result-modal-card {
+  width: 85%;
+  max-width: 620rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 32rpx 24rpx;
+}
+
+.invite-result-summary {
+  font-size: 24rpx;
+  color: #666666;
+  text-align: center;
+  margin-bottom: 20rpx;
+  line-height: 1.5;
+}
+
+.invite-result-code-box {
   background: #FFF3E0;
   border: 1.5rpx dashed #FFB74D;
   border-radius: 20rpx;
@@ -3244,26 +3315,58 @@ page {
   text-align: center;
 }
 
-.result-label {
-  font-size: 20rpx;
-  color: #E65100;
-  display: block;
-}
-
-.result-code {
+.invite-result-code {
   font-size: 54rpx;
   font-weight: bold;
   color: #E65100;
   display: block;
   letter-spacing: 6rpx;
-  margin: 12rpx 0;
+  margin-bottom: 16rpx;
   font-family: monospace;
 }
 
-.result-tip {
-  font-size: 18rpx;
+.invite-result-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  border: 1.5rpx solid #FFB74D;
+  border-radius: 30rpx;
+  color: #E65100;
+  font-size: 22rpx;
+  font-weight: bold;
+  padding: 10rpx 24rpx;
+}
+
+.invite-result-qr-box {
+  margin-top: 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.invite-result-qr-img {
+  width: 280rpx;
+  height: 280rpx;
+  border-radius: 16rpx;
+  border: 1.5rpx solid #EFE6D8;
+  background: #FAF8F5;
+}
+
+.invite-result-qr-hint {
+  margin-top: 10rpx;
+  font-size: 20rpx;
+  color: #ADB5BD;
+}
+
+.invite-result-tip {
+  margin-top: 24rpx;
+  font-size: 20rpx;
   color: #F57C00;
-  display: block;
+  background: #FFF8E1;
+  border-radius: 12rpx;
+  padding: 16rpx 18rpx;
+  line-height: 1.6;
 }
 
 .gen-code-footer {

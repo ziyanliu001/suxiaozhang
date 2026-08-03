@@ -712,7 +712,15 @@ Component({
           return;
         }
 
-        // ================= 2. 普通店长/财务动态邀请码云端核验 =================
+        // ================= 2. 特权邀请码云端核验/核销 =================
+        // 🛡️ 全链路重构：此前这里直接 wx.cloud.database().collection('store_invites')
+        // .where(...).get()/.update() 校验+核销一次性口令——真正的权限判定只停留在
+        // 客户端 JS，任何人打开开发者工具对同一个小程序会话直接调用 wx.cloud.database()
+        // API 就能绕过（伪造 isUsed:false 查询条件、甚至直接把任意记录标记为已使用）。
+        // 现改为服务端 cloudfunctions/manageStoreInviteCode 的 redeem 动作统一核验+核销，
+        // 客户端这里只传一个邀请码，storeId/角色完全由服务端根据邀请码记录本身解析，
+        // 不再信任/依赖 targetAuthStoreId/targetAuthRole 这两个"用户点了哪个胶囊进来"
+        // 的客户端上下文作为权威值——邀请码本身才是唯一真源。
         if (!inputCode || inputCode.length < 4) {
           wx.showToast({ title: '请输入有效的邀请码', icon: 'none' });
           return;
@@ -721,55 +729,61 @@ Component({
         wx.showLoading({ title: '安全核验中...' });
 
         try {
-          const db = wx.cloud.database();
-          const res = await db.collection('store_invites').where({
-            inviteCode: inputCode,
-            storeId: this.data.targetAuthStoreId,
-            role: this.data.targetAuthRole,
-            isUsed: false
-          }).get();
+          const res = await wx.cloud.callFunction({
+            name: 'manageStoreInviteCode',
+            data: { action: 'redeem', code: inputCode }
+          });
+          const result = res.result as any;
+          wx.hideLoading();
 
-          if (res.data && res.data.length > 0) {
-            const inviteRecord = res.data[0];
-
-            // 标记该邀请码已被使用 (销毁一次性凭证)
-            // 🛡️ 修复：此前这里写入的是字面量字符串 '{openid}'（未做变量替换的占位符），
-            // 导致邀请码使用记录里的"使用人"字段永远是假数据，审计时完全无法追溯真实用户
-            await db.collection('store_invites').doc(inviteRecord._id).update({
-              data: {
-                isUsed: true,
-                usedAt: db.serverDate(),
-                usedByOpenId: AuthService.getOpenid() || ''
-              }
-            });
-
-            wx.hideLoading();
-
-            // 本地缓存特权关系
-            const authKeys: string[] = wx.getStorageSync('my_authorized_roles') || [];
-            const newKey = `${this.data.targetAuthStoreId}_${this.data.targetAuthRole}`;
-            if (!authKeys.includes(newKey)) {
-              authKeys.push(newKey);
-              wx.setStorageSync('my_authorized_roles', authKeys);
-            }
-
-            wx.showToast({ title: '🎉 身份激活成功！', icon: 'success' });
-            this.setData({ showAuthModal: false });
-            this.refreshRolePermissions();
-
-            // 自动切换到刚激活的特权身份
-            this._applyRoleSwitch(
-              this.data.targetAuthStoreId,
-              this.data.targetAuthStoreName,
-              this.data.targetAuthRole
-            );
-          } else {
-            wx.hideLoading();
-            wx.showToast({ title: '邀请码无效或已被使用', icon: 'none' });
+          if (!result || !result.success) {
+            wx.showToast({ title: (result && result.error) || '邀请码无效或已被使用', icon: 'none', duration: 2500 });
+            return;
           }
+
+          const { storeId, storeName, role: serverRole } = result.data;
+          // 服务端角色值（STORE_MANAGER/FINANCE/FAMILY/VOLUNTEER 或落库后的
+          // store_manager/finance 等小写 role 字段）-> 本组件的本地胶囊角色词汇
+          // （MANAGER/FINANCE/FAMILY/VOLUNTEER），复用既有的 _applyRoleSwitch/
+          // roleText 文案映射，不需要另起一套
+          const SERVER_ROLE_TO_PILL: Record<string, string> = {
+            STORE_MANAGER: 'MANAGER',
+            store_manager: 'MANAGER',
+            FINANCE: 'FINANCE',
+            finance: 'FINANCE',
+            FAMILY: 'FAMILY',
+            VOLUNTEER: 'VOLUNTEER',
+            volunteer: 'VOLUNTEER'
+          };
+          const pillRole = SERVER_ROLE_TO_PILL[serverRole] || this.data.targetAuthRole;
+
+          // 本地缓存特权关系：refreshRolePermissions() 仍按这份本地缓存即时判断
+          // MANAGER/FINANCE 胶囊是否解锁——服务端 user_roles 现在才是真正的权限
+          // 来源，这里只是让门店选择器胶囊墙的展示立即跟上，不用等下一次
+          // fetchStoreListFromCloud 重新拉取
+          const authKeys: string[] = wx.getStorageSync('my_authorized_roles') || [];
+          const newKey = `${storeId}_${pillRole}`;
+          if (!authKeys.includes(newKey)) {
+            authKeys.push(newKey);
+            wx.setStorageSync('my_authorized_roles', authKeys);
+          }
+
+          // 🛡️ 核销是服务端真正的角色晋升（写入 user_roles.role/roles 数组），
+          // 不再只是本地演示态标记——核销成功后立即拉一次最新角色，让
+          // AuthService 缓存（profile.ts/index.ts 等页面据此展示角色）跟上
+          // 服务端的真实结果
+          await AuthService.fetchUserRole();
+
+          wx.showToast({ title: '🎉 身份激活成功！', icon: 'success' });
+          this.setData({ showAuthModal: false });
+          this.refreshRolePermissions();
+
+          // 自动切换到刚核销到手的特权身份：以服务端返回的 storeId/storeName/role
+          // 为准（邀请码本身就唯一决定了这三者）
+          this._applyRoleSwitch(storeId, storeName, pillRole);
         } catch (err) {
           wx.hideLoading();
-          console.warn('⚠️ [store-picker] 云数据库校验异常:', err);
+          console.warn('⚠️ [store-picker] 邀请码核销异常:', err);
           // 🛡️ 安全修复：此前云端校验异常时会退回硬编码临时动态码（YUHUA2026 等）直接放行，
           // 等同于又一处可反编译提取的权限后门，现已移除。校验失败时统一提示重试，
           // 绝不在网络异常时静默授予权限。

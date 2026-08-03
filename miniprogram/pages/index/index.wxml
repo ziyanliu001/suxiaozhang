@@ -2078,7 +2078,7 @@
     </view>
   </view>
 
-  <!-- ================= 🔑 生成邀请码弹窗 (仅限超管与授权店长) ================= -->
+  <!-- ================= 🔑 生成邀请码弹窗 (仅限超级管理员/店长/大家长，见 onOpenGenCodeModal 权限阶梯) ================= -->
   <view class="gencode-modal-mask" wx:if="{{showGenCodeModal}}" bindtap="onCloseGenCodeModal">
     <view class="gencode-modal-card" catchtap="stopPropagation">
       <view class="gencode-header-bar">
@@ -2089,60 +2089,112 @@
       <view class="gencode-body">
         <!-- 1. 选择目标门店：仅面向本机构已有门店生成邀请码——"手动输入新门店"这一档
              已彻底移除，它此前生成的邀请码 storeId 为空，而唯一的兑换入口
-             （store-picker.ts onVerifyAuthSubmit）永远按选中的真实 storeId 匹配，
-             受邀人的门店选择器里根本找不到一个还不存在的门店，等于生成了一个 100%
-             无法兑换的邀请码。新建门店请走"门店选择器 → 找不到门店？申请新建/加入
-             新门店"这条完整、可用的独立通道。 -->
+             永远按选中的真实 storeId 匹配，受邀人的门店选择器里根本找不到一个还不存在
+             的门店，等于生成了一个 100% 无法兑换的邀请码。新建门店请走"门店选择器 →
+             找不到门店？申请新建/加入新门店"这条完整、可用的独立通道。
+             🛡️ 发码防越权：非超管（店长/大家长）强制锁定为当前所属门店且禁用切换
+             （genStoreSelectorDisabled，见 onOpenGenCodeModal），从入口就杜绝跨店发码。 -->
         <view class="form-item-row">
           <text class="form-label">1. 选择授权门店：</text>
 
-          <picker wx:if="{{genStoreOptions.length > 0}}" mode="selector" range="{{genStoreOptions}}" range-key="storeName" bindchange="onSelectGenStore">
+          <picker wx:if="{{genStoreOptions.length > 0 && !genStoreSelectorDisabled}}" mode="selector" range="{{genStoreOptions}}" range-key="storeName" bindchange="onSelectGenStore">
             <view class="form-picker-selector">
               {{targetGenStoreName || '点击选择门店 ▼'}}
             </view>
           </picker>
+          <view class="form-picker-selector form-picker-locked" wx:elif="{{genStoreOptions.length > 0 && genStoreSelectorDisabled}}">
+            <text>{{targetGenStoreName}}</text>
+            <text class="picker-locked-tag">🔒 仅限本店</text>
+          </view>
           <view class="gencode-no-store-tip" wx:else>
             本机构暂无门店，请先在「门店管理」创建门店后再生成邀请码
           </view>
         </view>
 
         <!-- 2. 选择授权特权角色：默认选中身份由打开入口决定——
-             从【财务稽核台】的"邀请协同"进来（onOpenFinanceInviteMenu）默认选中【门店财务】，
-             从【门店推广与邀请】进来（onOpenGenCodeModal）默认选中【门店店长】。 -->
+             从【财务稽核台】的"邀请协同"进来（onOpenFinanceInviteMenu）超管默认选中
+             【门店财务】，从【门店推广与邀请】进来（onOpenGenCodeModal）默认选中
+             genAvailableRoles 的第一项。
+             🛡️ 身份阶梯权限过滤：超管可选四种身份；店长/大家长严格禁止越权生成
+             "门店财务"/"门店店长"，genAvailableRoles 不含这两项时对应选项置灰禁用
+             （gencode-role-disabled），点击不生效，见 onSelectGenRole 的二次拦截。 -->
         <view class="form-item-row">
           <text class="form-label">2. 选择授权身份：</text>
           <view class="gencode-role-group">
-            <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}}"
+            <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('MANAGER') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="MANAGER">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'MANAGER'}}">✓</view>
               <view class="idx-icon-sm idx-icon-crown" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
               <text>门店店长</text>
             </view>
-            <view class="gencode-role-item {{genTargetRole === 'FINANCE' ? 'active' : 'inactive'}}"
+            <view class="gencode-role-item {{genTargetRole === 'FINANCE' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('FINANCE') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="FINANCE">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'FINANCE'}}">✓</view>
               <view class="idx-icon-sm idx-icon-lock" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
               <text>门店财务</text>
             </view>
+            <view class="gencode-role-item {{genTargetRole === 'FAMILY' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('FAMILY') ? 'gencode-role-disabled' : ''}}"
+                  bindtap="onSelectGenRole" data-role="FAMILY">
+              <view class="role-check-badge" wx:if="{{genTargetRole === 'FAMILY'}}">✓</view>
+              <view class="idx-icon-sm idx-icon-people" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
+              <text>家人</text>
+            </view>
+            <view class="gencode-role-item {{genTargetRole === 'VOLUNTEER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('VOLUNTEER') ? 'gencode-role-disabled' : ''}}"
+                  bindtap="onSelectGenRole" data-role="VOLUNTEER">
+              <view class="role-check-badge" wx:if="{{genTargetRole === 'VOLUNTEER'}}">✓</view>
+              <view class="idx-icon-sm idx-icon-heart" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
+              <text>志愿者</text>
+            </view>
           </view>
-        </view>
-
-        <!-- 3. 生成结果兜底展示区：正常流程点击【立即生成】后会自动复制+关闭弹窗，
-             根本看不到这里；只有自动复制到剪贴板失败这一种异常情况才会保留弹窗并显示，
-             让用户能长按/点击手动复制邀请码，而不是生成完全"丢失" -->
-        <view class="gen-result-box" wx:if="{{generatedCode}}">
-          <view class="result-label"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>自动复制失败，请点击下方邀请码手动复制：</view>
-          <text class="result-code" user-select bindtap="onCopyGeneratedCode">{{generatedCode}}</text>
-          <view class="result-tip"><view class="idx-icon-sm idx-icon-warning" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>提示：该邀请码为一次性口令，绑定后立即失效。</view>
+          <view class="gencode-role-restrict-tip" wx:if="{{!genAvailableRoles.includes('FINANCE')}}">
+            🔒 店长/大家长仅可发放【家人】【志愿者】邀请码，门店财务/门店店长身份需超级管理员授权
+          </view>
         </view>
       </view>
 
-      <!-- 底部操作按钮：固定关闭 + 立即生成两个按钮——点击【立即生成】后一步到位完成
-           "生成 + 复制到剪贴板 + 关闭弹窗"，不再需要先生成、再点第二个按钮才复制发送 -->
+      <!-- 底部操作按钮：点击【立即生成】调用云函数生成成功后，关闭本弹窗、
+           打开下方的"生成结果"弹窗（inviteResultModal）展示邀请码 + 太阳码 -->
       <view class="gen-code-footer">
         <button class="btn-cancel" bindtap="onCloseGenCodeModal">关闭</button>
         <button class="btn-primary-gen {{(isGeneratingInviteCode || !targetGenStoreId) ? 'btn-disabled' : ''}}" bindtap="onGenerateInviteCode" loading="{{isGeneratingInviteCode}}" disabled="{{isGeneratingInviteCode || !targetGenStoreId}}">
           <view class="idx-icon-sm idx-icon-bolt" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>立即生成
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <!-- ================= 🔑 邀请码生成结果弹窗：邀请码 + 太阳码 + 复制/保存/分享 ================= -->
+  <view class="invite-result-modal-mask" wx:if="{{showInviteResultModal}}" bindtap="onCloseInviteResultModal">
+    <view class="invite-result-modal-card" catchtap="stopPropagation">
+      <view class="gencode-header-bar">
+        <view class="gencode-title-text"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>邀请码生成成功</view>
+        <text class="gencode-close-btn" bindtap="onCloseInviteResultModal">✕</text>
+      </view>
+
+      <view class="invite-result-summary">
+        为【{{inviteResultStoreName}}】生成的【{{inviteResultRoleLabel}}】专属邀请码
+      </view>
+
+      <view class="invite-result-code-box">
+        <text class="invite-result-code" user-select bindtap="onCopyInviteResultCode">{{inviteResultCode}}</text>
+        <view class="invite-result-copy-btn" bindtap="onCopyInviteResultCode">
+          <view class="idx-icon-sm idx-icon-clipboard" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>一键复制邀请码
+        </view>
+      </view>
+
+      <view class="invite-result-qr-box" wx:if="{{inviteResultQrPath}}">
+        <image class="invite-result-qr-img" src="{{inviteResultQrPath}}" mode="aspectFit" show-menu-by-longpress bindtap="onSaveInviteResultQr" />
+        <text class="invite-result-qr-hint">长按或点击太阳码保存到相册</text>
+      </view>
+
+      <view class="invite-result-tip">
+        <view class="idx-icon-sm idx-icon-warning" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>该邀请码为一次性特权码，有效期 24 小时，核销后自动作废。
+      </view>
+
+      <view class="gen-code-footer">
+        <button class="btn-cancel" bindtap="onSaveInviteResultQr">保存太阳码</button>
+        <button class="btn-primary-gen" bindtap="onShareInviteResultCode">
+          <view class="idx-icon-sm idx-icon-link" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>复制邀请文案
         </button>
       </view>
     </view>
