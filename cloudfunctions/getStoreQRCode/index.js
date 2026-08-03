@@ -70,9 +70,15 @@ exports.main = async (event, context) => {
     // （见该页 resolveTarget 里的兼容格式）
     const isVerifyQr = purpose === 'verify';
     const dateDigits = String(date || '').replace(/[^0-9]/g, '');
+    // 🌟 证书二维码 scene 极简编码：证书场景不需要完整 storeId，只用于朋友圈扫码
+    // 引流时让 app.ts 识别出"谁分享的、指向哪家门店"，两段各截取前 10 位足以
+    // 支撑邀请弹窗的模糊匹配，且能稳定控制在 32 字符硬限制内（不像完整 storeId
+    // 拼接后长度取决于云环境 ID 生成规则，存在超限风险，见下方 MAX_SCENE_LENGTH 校验）
     const codeTarget = (isVerifyQr && dateDigits.length === 8)
       ? { page: 'pages/public-verify/index', scene: `t_${storeId}_d_${dateDigits}` }
-      : { page: 'pages/index/index', scene: `s=${storeId}` };
+      : isPersonalCertificate
+        ? { page: 'pages/index/index', scene: `u=${String(OPENID || '').substring(0, 10)}&s=${String(storeId).substring(0, 10)}` }
+        : { page: 'pages/index/index', scene: `s=${storeId}` };
 
     // 🛡️ scene 字段硬限制 32 字符（wxacode.getUnlimited API 限制）——storeId 是微信
     // 云数据库自动生成的 _id，不保证是短字符串，实际长度取决于云环境的 ID 生成规则，

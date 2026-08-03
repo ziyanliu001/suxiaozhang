@@ -1,0 +1,9 @@
+{
+  "name": "bindReferralStore",
+  "version": "1.0.0",
+  "description": "朋友圈证书扫码引流：解析邀请上下文并把当前用户绑定到对应门店",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

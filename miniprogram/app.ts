@@ -32,6 +32,16 @@ interface StorePermission {
   role: 'MANAGER' | 'FINANCE' | 'VOLUNTEER';
 }
 
+// 🌟 朋友圈扫码引流：证书二维码 scene 编码为 "u=<openid前10位>&s=<storeId前10位>"
+// （见 cloudfunctions/getStoreQRCode 的 isPersonalCertificate 分支），扫码启动时
+// 在这里解析出"谁分享的、指向哪家门店"，暂存进 globalData 供首页 onShow 弹出
+// 邀请绑定确认框；两个字段都只是截断前缀，不是完整 ID（见 bindReferralStore
+// 云函数的模糊匹配说明）
+interface InviteContext {
+  referrerUserId: string;
+  targetStoreId: string;
+}
+
 App({
   globalData: {
     onNetworkReconnected: null as (() => void) | null,
@@ -53,11 +63,16 @@ App({
     // "Fatal: unexpected loadSdkSubPackage case"，此后 wx.cloud 可能残留为半初始化状态，
     // 后续 getCloudAPI 相关调用会直接 TypeError。全局记录一次探测结果，
     // 页面/工具函数可据此判断是否要跳过云端路径、直接走本地缓存。
-    isCloudReady: false
+    isCloudReady: false,
+    // 🌟 朋友圈扫码引流：非空时代表本次启动/切前台携带了一个尚未处理的证书邀请，
+    // 首页 onShow 读取后按需弹出绑定确认框，处理完（用户确认/取消/已绑定过）
+    // 由首页自行清空，避免同一个 scene 在多次 onShow 间反复弹窗
+    inviteContext: null as InviteContext | null
   },
 
-  onLaunch() {
+  onLaunch(options: any) {
     console.log('[App] onLaunch start');
+    this._captureInviteContext(options);
 
     // 云开发初始化
     // 🐛 根因修复：此前无条件把首次 wx.cloud.init 延迟到 onLaunch 后 1.5s 才执行，
@@ -104,6 +119,44 @@ App({
     });
 
     console.log('[App] onLaunch end');
+  },
+
+  // 🌟 从后台切回前台（例如点开朋友圈证书图片里的小程序码）同样要能捕获 scene——
+  // onLaunch 只在小程序冷启动时触发一次，热启动/已在后台被拉起到前台走的是 onShow
+  onShow(options: any) {
+    this._captureInviteContext(options);
+  },
+
+  // 扫码启动时解析出邀请上下文：微信官方两种可能的携带形式都尝试一遍——
+  // wxacode.getUnlimited 生成的码，scene 原样透传在 options.scene（原始编码串，
+  // 需要 decodeURIComponent）；如果将来改用完整路径+query 的其它入口方式启动，
+  // 则会走 options.query.scene。两者任一存在即可，取到就不再看另一个。
+  _captureInviteContext(options: any) {
+    try {
+      const rawScene = (options && options.query && options.query.scene) || (options && options.scene) || '';
+      if (!rawScene) return;
+
+      const sceneStr = decodeURIComponent(String(rawScene));
+      // 🛡️ 不用 URLSearchParams：项目 tsconfig 的 lib 未包含 DOM 类型，手动按 & 分段
+      // 解析 key=value，与 index.ts 里已有的 scene 解析兜底写法保持同一种风格
+      let referrerUserId = '';
+      let targetStoreId = '';
+      sceneStr.split('&').forEach((pair) => {
+        const idx = pair.indexOf('=');
+        if (idx < 0) return;
+        const key = pair.slice(0, idx);
+        const value = pair.slice(idx + 1);
+        if (key === 'u') referrerUserId = value;
+        if (key === 's') targetStoreId = value;
+      });
+
+      if (referrerUserId && targetStoreId) {
+        this.globalData.inviteContext = { referrerUserId, targetStoreId };
+        console.log('[App] 捕获朋友圈邀请上下文:', this.globalData.inviteContext);
+      }
+    } catch (err) {
+      console.warn('[App] 解析邀请 scene 失败:', err);
+    }
   },
 
   // 尝试一次 wx.cloud.init + 方法表完整性校验，返回是否成功就绪。

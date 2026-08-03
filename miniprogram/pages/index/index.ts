@@ -6387,6 +6387,7 @@ Page({
     }
 
     this.checkPendingHandoffs();
+    this.checkPendingInviteContext();
   },
 
   // 草稿箱 / 设置页 跳回首页后的"交接标记"检查：全部复用已有的加载/弹窗逻辑，
@@ -6444,6 +6445,88 @@ Page({
         targetGenStoreId: genCodeTarget.storeId,
         targetGenStoreName: genCodeTarget.storeName
       });
+    }
+  },
+
+  // 🌟 朋友圈证书扫码引流：app.ts 的 onLaunch/onShow 已经把 scene 解析成
+  // globalData.inviteContext（referrerUserId/targetStoreId 均为 10 位前缀，见
+  // getStoreQRCode 的证书 scene 简化编码）。这里只在真正需要时才弹窗——已绑定
+  // 同一门店（当前 currentStoreId 命中该前缀）视为已加入，静默清空即可，
+  // 不打扰用户
+  async checkPendingInviteContext() {
+    const app = getApp() as any;
+    const inviteContext = app.globalData && app.globalData.inviteContext;
+    if (!inviteContext || !inviteContext.targetStoreId) return;
+
+    const currentStoreId = this.data.currentStoreId || '';
+    if (currentStoreId && currentStoreId.startsWith(inviteContext.targetStoreId)) {
+      app.globalData.inviteContext = null;
+      return;
+    }
+
+    if (!isCloudAvailable()) return;
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'bindReferralStore',
+        data: {
+          action: 'resolve',
+          storeIdPrefix: inviteContext.targetStoreId,
+          referrerIdPrefix: inviteContext.referrerUserId
+        }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        app.globalData.inviteContext = null;
+        return;
+      }
+
+      const { storeName, referrerNickName } = result.data;
+      wx.showModal({
+        title: '❤️ 爱心邀请',
+        content: `来自 ${referrerNickName} 的邀请，是否加入 ${storeName}？`,
+        confirmText: '加入',
+        cancelText: '暂不',
+        success: (modalRes) => {
+          if (modalRes.confirm) {
+            this.confirmInviteBind(inviteContext);
+          } else {
+            app.globalData.inviteContext = null;
+          }
+        },
+        fail: () => {
+          app.globalData.inviteContext = null;
+        }
+      });
+    } catch (err) {
+      console.warn('[checkPendingInviteContext] 解析邀请上下文失败:', err);
+      app.globalData.inviteContext = null;
+    }
+  },
+
+  async confirmInviteBind(inviteContext: { referrerUserId: string; targetStoreId: string }) {
+    const app = getApp() as any;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'bindReferralStore',
+        data: {
+          action: 'bind',
+          storeIdPrefix: inviteContext.targetStoreId,
+          referrerIdPrefix: inviteContext.referrerUserId
+        }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        wx.showToast({ title: `已加入${result.data.storeName}`, icon: 'success' });
+        this.refreshUserRoleView();
+      } else {
+        wx.showToast({ title: (result && result.error) || '加入失败，请重试', icon: 'none' });
+      }
+    } catch (err) {
+      console.warn('[confirmInviteBind] 绑定门店异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      app.globalData.inviteContext = null;
     }
   },
 

@@ -12,6 +12,7 @@ import {
 import { requestOpenSunshineLedger } from '../../utils/sunshineLedgerHandoff';
 import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
 import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
+import { isVirtualStoreName } from '../../utils/storeIdentity';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
@@ -1434,16 +1435,31 @@ Page({
   // 来自本地 my_checkin_logs 本就同步读取无竞态，这里额外用 computeMyCheckInStats
   // 现算一遍而不是信任可能残留旧门店视角的 this.data.stats，门店名/昵称同样各自
   // 兜底到 AuthService 缓存/getSelectedStore()，确保传给 Canvas 绘制的一定是非空值
-  resolveCertificateProfile(): { nickname: string; storeName: string; storeId: string; days: number; hours: number; certNo: string } {
+  resolveCertificateProfile(): { nickname: string; storeName: string; storeId: string; qrStoreId: string; days: number; hours: number; certNo: string } {
     const cachedRole = AuthService.getCachedRoleInfo();
     const activeStore = getSelectedStore();
-    const storeId = (activeStore && activeStore.storeId) || (cachedRole && cachedRole.storeId) || '';
-    const storeName = this.data.currentStoreName || (activeStore && activeStore.storeName) || (cachedRole && cachedRole.storeName) || '';
+    // 🌐 证书右下角二维码始终指向当前实际选中的门店（哪怕正文按全国总览聚合工时），
+    // 与下面 storeId（工时统计口径，全国总览时会置空改为不限门店）分开维护
+    const qrStoreId = (activeStore && activeStore.storeId) || (cachedRole && cachedRole.storeId) || '';
+
+    // 🛡️ 严格权限隔离：仅 super_admin 允许查看"全国总览"聚合工时并生成对应证书——
+    // 大家长/店长/财务/义工/家人一律禁止，与 store-picker 组件"全国总览"虚拟条目
+    // 仅对已核验 super_admin 展示的口径完全一致（见 components/store-picker/
+    // store-picker.ts isVerifiedSuperAdmin）。哪怕 currentStoreName/getSelectedStore()
+    // 因历史脏数据或极端时序偶然携带"全国总览"字样，非超管账号也必须强制过滤掉该值、
+    // 收敛回自己真实绑定的具体门店，绝不据此统计全部门店工时或在证书上印出"全国总览"
+    const rawStoreName = this.data.currentStoreName || (activeStore && activeStore.storeName) || (cachedRole && cachedRole.storeName) || '';
+    const isNational = this.data.isSuperAdmin && isVirtualStoreName(rawStoreName);
+
+    const storeId = isNational ? '' : qrStoreId;
+    const storeName = isNational ? '全国总览' : (isVirtualStoreName(rawStoreName) ? '' : rawStoreName);
     const nickname = this.data.userNickName || (cachedRole && cachedRole.nickName) || '爱心义工';
 
-    const scopedStats = computeMyCheckInStats(storeId, storeName);
-    const days = scopedStats.days || this.data.stats.volunteerDays || 0;
-    const hours = scopedStats.hours || this.data.stats.volunteerHours || 0;
+    const scopedStats = computeMyCheckInStats(storeId, storeName, isNational);
+    // 🐛 全国总览分支不做 this.data.stats 兜底回退——那份数据始终是"当前单店"口径，
+    // 用它兜底聚合结果会让全国总览证书悄悄显示成单店数字
+    const days = isNational ? scopedStats.days : (scopedStats.days || this.data.stats.volunteerDays || 0);
+    const hours = isNational ? scopedStats.hours : (scopedStats.hours || this.data.stats.volunteerHours || 0);
 
     // 🔖 专属证书编号：openid + 门店 + 当天日期派生的确定性短码，同一账号同一天
     // 多次打开生成的编号保持一致，不需要额外的云端序列号表
@@ -1456,12 +1472,19 @@ Page({
     }
     const certNo = `YH${todayCompact}-${hash.toString(16).toUpperCase().padStart(6, '0').slice(-6)}`;
 
-    return { nickname, storeName, storeId, days, hours, certNo };
+    return { nickname, storeName, storeId, qrStoreId, days, hours, certNo };
   },
 
   // 义工证书：异步绘制一张长图证书（Canvas 2D），绘制完成后展示为可保存的全屏预览
   async onGoToBadges() {
-    const { nickname: userNickName, storeName: currentStoreName, storeId: certStoreId, days: certDays, hours: certHours, certNo } = this.resolveCertificateProfile();
+    const { nickname: userNickName, storeName: currentStoreName, qrStoreId, days: certDays, hours: certHours, certNo } = this.resolveCertificateProfile();
+
+    // 🛡️ 零工时拦截：没有任何护持记录时生成的证书正文只会是"0 天 0 小时"，
+    // 既无意义也容易被截图滥用，直接在绘制前拦下，不消耗一次 Canvas 绘制
+    if (certHours <= 0 || certDays <= 0) {
+      wx.showToast({ title: '当前暂无护持工时，无法生成证书', icon: 'none' });
+      return;
+    }
 
     this.setData({
       showCertificateModal: true,
@@ -1476,7 +1499,7 @@ Page({
     // 这里获取失败也不阻断证书生成，只是最终图上不显示二维码
     let qrCodeLocalPath = '';
     try {
-      const storeId = certStoreId;
+      const storeId = qrStoreId;
       if (storeId) {
         const qrRes = await wx.cloud.callFunction({
           name: 'getStoreQRCode',
