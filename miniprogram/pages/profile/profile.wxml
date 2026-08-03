@@ -626,6 +626,38 @@
 
   </view>
 
+  <!-- 🏛️ 切换身份面板：账号兼任多个身份（switchableRoleOptions 非空）时，
+       点击"切换身份/退出当前绑定"优先展示这个面板——列出可直接切换过去的
+       其他身份（纯客户端展示态切换，不改动服务端数据）+ 底部"退出当前门店
+       绑定"入口（转入下面的卸任确认弹窗，走真正的服务端卸任）。只有单一
+       身份时 onReleaseUserRole 会跳过本面板，直接打开卸任确认弹窗 -->
+  <view class="switch-identity-modal-mask {{showSwitchIdentityModal ? 'show' : ''}}" bindtap="onCloseSwitchIdentityModal">
+    <view class="switch-identity-card" catchtap="stopPropagation">
+      <view class="switch-identity-header">
+        <text class="switch-identity-title">切换身份</text>
+        <text class="switch-identity-close" bindtap="onCloseSwitchIdentityModal">✕</text>
+      </view>
+      <text class="switch-identity-desc">您在【{{currentStoreName || '当前门店'}}】同时持有多个身份，可直接切换查看视角</text>
+
+      <view class="switch-identity-option-list">
+        <view
+          class="switch-identity-option"
+          wx:for="{{switchableRoleOptions}}"
+          wx:key="role"
+          bindtap="onSwitchToRole"
+          data-role="{{item.role}}"
+        >
+          <text class="option-text">切换至 {{item.label}}</text>
+          <text class="option-arrow">❯</text>
+        </view>
+      </view>
+
+      <view class="switch-identity-divider"></view>
+
+      <button class="btn-exit-binding" bindtap="onOpenReleaseConfirmModal">退出当前门店绑定</button>
+    </view>
+  </view>
+
   <!-- 卸任特权 Warning 弹窗 -->
   <view class="release-modal-mask {{showReleaseModal ? 'show' : ''}}" bindtap="onCancelReleaseModal">
     <view class="release-modal-card" catchtap="stopPropagation">
@@ -636,20 +668,27 @@
       <view class="release-consequence-list">
         <view class="release-consequence-item">
           <text class="bullet-dot">•</text>
-          <text class="bullet-text">立即失去【{{currentStoreName || '当前门店'}}】的写账 / 审账权限</text>
+          <text class="bullet-text">立即失去【{{currentStoreName || '当前门店'}}】「{{releaseRoleLabel}}」身份对应的写账 / 审账权能</text>
         </view>
         <view class="release-consequence-item">
           <text class="bullet-dot">•</text>
-          <text class="bullet-text">本地权限凭证将被清除，需重新申请或扫码激活</text>
+          <text class="bullet-text">若您还兼任其他身份，将自动平滑切换为其中权限最高的一档；否则重置为未绑定门店状态</text>
         </view>
         <view class="release-consequence-item">
           <text class="bullet-dot">•</text>
-          <text class="bullet-text">新负责人可使用激活码重新绑定该门店身份</text>
+          <text class="bullet-text">新负责人可使用邀请码重新绑定该门店身份</text>
         </view>
         <view class="release-consequence-item danger">
           <text class="bullet-dot">•</text>
           <text class="bullet-text">该操作不可逆，请务必确认后再操作</text>
         </view>
+      </view>
+
+      <!-- 🌟 工时保留承诺：与上方"失去权能"的警示形成清晰对比，单独一块浅绿底色
+           展示，避免用户误以为退出身份连累积的护持记录也会被清空 -->
+      <view class="release-safe-notice">
+        <text class="safe-icon">✅</text>
+        <text class="safe-text">您的护持工时、打卡记录与其他持有身份完全不受影响，不会被清除</text>
       </view>
 
       <view class="release-modal-footer">

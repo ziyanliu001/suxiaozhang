@@ -345,6 +345,87 @@ async function listPendingApplications(OPENID) {
   return { success: true, queueType: 'none', data: [] };
 }
 
+// 🏢 全国总览/全部门店等虚拟聚合选择，不是真实 storeId——与 statistics.ts
+// NATIONAL_STORE_ID_SENTINELS 同一份哨兵值，超管传了这些值等同于"不按门店过滤"
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
+
+// 🛡️ 首页【门店审核】抽屉的统一列表查询：替代此前小程序端直接
+// wx.cloud.database().collection('user_roles').where(...).get() 的客户端直连查询——
+// 那种写法的门店/机构隔离完全依赖客户端缓存的 AuthService.getCachedRoleInfo()
+// （可被篡改/滞后）+ 数据库安全规则（本仓库不可见、无法审计），与本项目其余所有
+// 审核/审批类查询统一收拢进云函数、服务端按真实 openid 重新核验身份的既定架构
+// 不一致。这里按调用者真实角色重新推导数据范围，客户端传入的 storeId 只在
+// super_admin 分支下生效（用于"按选中门店过滤"），非超管一律强制忽略、只认
+// 服务端查到的 caller.storeId，不给跨店越权留任何口子。
+//
+// tab: 'pending' | 'approved'；返回字段统一为 applyId（对应 user_roles 文档 _id，
+// 与 approve/reject/manageVolunteerBinding 等下游调用需要的 id 完全一致）+
+// role（pending 取 requestedRole，approved 取 role，两个 tab 前端按同一个字段名
+// 过滤/展示，不用再分别处理两种字段名）
+async function listAuditQueue(event, OPENID) {
+  const { tab, storeId: requestedStoreId } = event;
+  const status = tab === 'approved' ? 'approved' : 'pending';
+  const timeField = status === 'approved' ? 'approveTime' : 'applyTime';
+
+  const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+  const caller = callerRes.data && callerRes.data[0];
+  if (!caller) {
+    return { success: false, error: '无权限：未找到您的角色信息' };
+  }
+
+  let query;
+  if (caller.role === 'super_admin') {
+    const tenantId = await resolveAuditorTenantId(caller);
+    const scopeStoreId = (requestedStoreId && !NATIONAL_STORE_ID_SENTINELS.includes(requestedStoreId)) ? requestedStoreId : '';
+
+    if (scopeStoreId) {
+      // 超管按选中门店过滤：只看该店，与非超管的单店视角字段完全一致
+      query = db.collection('user_roles').where({ storeId: scopeStoreId, status });
+    } else if (status === 'pending') {
+      // 🐛 与 listPendingApplications 同一处修复：申请记录的 tenantId 可能因申请人
+      // 从未缓存过角色而写成空字符串，这里同样放宽兼容缺失/空值，避免超管全国视角
+      // 漏看这类申请
+      query = db.collection('user_roles').where(_.and([
+        { status },
+        _.or([{ tenantId }, { tenantId: '' }, { tenantId: _.exists(false) }])
+      ]));
+    } else {
+      query = db.collection('user_roles').where({ status, tenantId });
+    }
+  } else if (caller.role === 'store_manager' || caller.role === 'store_patriarch') {
+    // 🛡️ 严格门店隔离：非超管无论客户端传了什么 storeId，一律强制收敛到调用者
+    // 自己服务端记录的 storeId，绝不可能跨店拉取/审核他店的申请记录
+    if (!caller.storeId) {
+      return { success: true, data: [] };
+    }
+    query = db.collection('user_roles').where({ storeId: caller.storeId, status });
+  } else {
+    // finance/volunteer/family 等角色本就无审核权限，不返回任何数据
+    return { success: true, data: [] };
+  }
+
+  const res = await query.orderBy(timeField, 'desc').limit(50).get();
+
+  const data = (res.data || []).map((r) => {
+    const role = status === 'approved' ? (r.role || '') : (r.requestedRole || '');
+    const isCustomStore = status === 'pending' && (r.storeSelectionType === 'custom' || !r.storeId);
+    return {
+      applyId: r._id,
+      realName: r.realName || '',
+      phone: r.phone || '',
+      avatarUrl: r.avatarUrl || '',
+      role,
+      roleLabel: REQUESTED_ROLE_LABELS[role] || role,
+      storeId: r.storeId || '',
+      storeName: r.storeName || r.customStoreName || '',
+      isCustomStore,
+      timeStr: formatCreateTime(status === 'approved' ? r.approveTime : r.applyTime)
+    };
+  });
+
+  return { success: true, data };
+}
+
 // 🔒 申请人本人查询自己是否有正在 pending 的申请：供 store-picker "选择门店与身份"
 // 弹窗锁定按钮、防止重复提交用，与 checkUserRole 那种 limit(1) 不保证取到哪条的
 // 查询彻底分开——这里显式按 applyTime 倒序只取最新一条 pending 记录
@@ -370,17 +451,41 @@ async function getMyApplicationStatus(OPENID) {
   };
 }
 
+// 邀请码目标角色（大写）-> user_roles.role 应写入的值；FAMILY 不是独立 role 值，
+// 仍落在 volunteer，靠 status !== 'approved' 区分"家人"展示态——与
+// manageStoreInviteCode 的 TARGET_ROLE_TO_PRIMARY 同一份映射
+const RELEASE_ROLE_TO_PRIMARY = {
+  STORE_PATRIARCH: 'store_patriarch',
+  STORE_MANAGER: 'store_manager',
+  FINANCE: 'finance',
+  VOLUNTEER: 'volunteer',
+  FAMILY: 'volunteer'
+};
+// 身份阶梯排名：剥离目标角色后，若还持有其他身份，取剩余身份里权限最高的一档
+// 作为退出后展示的身份——与 manageStoreInviteCode 的 ROLE_RANK 同一份口径
+const RELEASE_ROLE_RANK = {
+  FAMILY: 0,
+  VOLUNTEER: 1,
+  FINANCE: 2,
+  STORE_MANAGER: 3,
+  STORE_PATRIARCH: 3
+};
+
 // 🛡️ 根因修复："卸任特权 / 退出当前绑定"（profile.ts onConfirmReleaseRole）此前只清
 // 本地 storage、从未调用任何云函数——服务端 user_roles 记录里的 role/storeId/status
 // 原封不动，checkUserRole 是纯粹按 _openid 查这条记录直接回传，不认本地缓存。于是
 // "已卸任"只是客户端的一次性错觉：下次任意页面 onLoad/onShow 触发 fetchUserRole()
 // 重新查询，服务端返回的仍是卸任前的角色，权限原样复活，用户完全不知情地仍持有
 // 门店的写账/审账权限——与弹窗文案"该操作不可逆"背道而驰。这里补上真正的服务端
-// 撤销：把调用者自己的 user_roles 记录重置为 volunteer + 清空门店绑定，并保留一次
-// 卸任审计痕迹（releasedFrom/releasedAt），不是简单标记 status 就完事——本项目里
-// resolveCaller/checkUserRole 全部只认 role/storeId 字段本身，从不检查 status，
-// 只改 status 不改 role 起不到任何实际撤销效果
-async function releaseSelf(OPENID) {
+// 撤销。
+//
+// 🏛️ 多角色兼任（manageStoreInviteCode 的 redeem 动作核销邀请码时往 roles 数组
+// 追加身份，如 ['STORE_MANAGER','FINANCE']）：退出时只应剥离客户端当前选中/展示
+// 的那一档身份，不能像早期版本那样无条件把整条记录清空成 volunteer——那样会把
+// 用户明明还持有、且是另一次合法核销授予的身份也一并抹掉。targetRole 由客户端
+// 传入（对应"当前正在查看的身份"），服务端强制校验其确实在调用者自己的 roles
+// 清单内，不信任任何客户端可篡改的字符串。
+async function releaseSelf(event, OPENID) {
   const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
   const caller = callerRes.data && callerRes.data[0];
   if (!caller) {
@@ -394,22 +499,78 @@ async function releaseSelf(OPENID) {
     return { success: false, error: '超级管理员身份不支持自助卸任，请联系平台管理员处理' };
   }
 
-  if (caller.role === 'volunteer' || caller.role === 'store_family') {
+  // 🛡️ roles 数组是权威的"当前持有哪些身份"清单；早于多角色兼任功能上线的历史
+  // 记录没有这个字段，按主 role 字段单值兜底重建，保证老账号也能正常卸任
+  const currentRoles = Array.isArray(caller.roles) && caller.roles.length > 0
+    ? caller.roles
+    : (caller.role && caller.role !== 'volunteer' ? [String(caller.role).toUpperCase()] : []);
+
+  if (currentRoles.length === 0) {
     return { success: false, error: '当前身份无需卸任' };
   }
 
+  const requestedTargetRole = event && event.targetRole ? String(event.targetRole).toUpperCase() : '';
+  // 未传 targetRole 时兜底按主 role 字段释放，兼容尚未升级的旧客户端调用
+  const targetRole = requestedTargetRole || (caller.role ? String(caller.role).toUpperCase() : '');
+  if (!currentRoles.includes(targetRole)) {
+    return { success: false, error: '无权限：您当前并未持有该身份，无法卸任' };
+  }
+
+  const remainingRoles = currentRoles.filter((r) => r !== targetRole);
+
+  let finalRole = 'volunteer';
+  let finalStatus = 'approved';
+  let finalStoreId = '';
+  let finalStoreName = '';
+
+  if (remainingRoles.length > 0) {
+    // 🌟 降级兜底：仍持有其他身份时，平滑切回剩余身份里权限最高的一档展示，
+    // 门店绑定保留（仍然属于这家门店的某个身份），不清空 storeId/storeName
+    const topRemaining = remainingRoles.reduce((best, r) =>
+      (RELEASE_ROLE_RANK[r] || 0) > (RELEASE_ROLE_RANK[best] || 0) ? r : best, remainingRoles[0]);
+    finalRole = RELEASE_ROLE_TO_PRIMARY[topRemaining] || 'volunteer';
+    finalStatus = topRemaining === 'FAMILY' ? 'guest' : 'approved';
+    finalStoreId = caller.storeId || '';
+    finalStoreName = caller.storeName || '';
+  }
+  // remainingRoles 为空：无其他身份，finalRole/finalStatus/finalStoreId/
+  // finalStoreName 维持上面声明的初始值——彻底重置为未绑定门店状态
+
+  // 🛡️ 工时数据无缝保留：与 manageStoreInviteCode 的 redeem 同一原则，update() 只
+  // 写下面这几个字段，完全不触碰 volunteer_hours/my_checkin_* 等打卡工时相关字段，
+  // 退出/降级不会以任何形式抹除用户原有的护持工时数据
   await db.collection('user_roles').doc(caller._id).update({
     data: {
-      role: 'volunteer',
-      status: 'approved',
-      storeId: '',
-      storeName: '',
-      releasedFrom: caller.role,
+      role: finalRole,
+      status: finalStatus,
+      storeId: finalStoreId,
+      storeName: finalStoreName,
+      roles: remainingRoles,
+      releasedFrom: targetRole,
       releasedAt: db.serverDate()
     }
   });
 
-  return { success: true, message: '已成功卸任' };
+  // 🛡️ 审计留痕：记录退出的具体角色、目标门店与操作时间，供后续追溯
+  await db.collection('audit_logs').add({
+    data: {
+      operator_id: OPENID,
+      action: 'release_self_role',
+      released_role: targetRole,
+      remaining_roles: remainingRoles,
+      target_store_id: caller.storeId || '',
+      target_store_name: caller.storeName || '',
+      operate_time: db.serverDate()
+    }
+  }).catch((err) => console.warn('[processRoleAudit] 写入退出审计日志失败（不影响卸任本身）:', err));
+
+  return {
+    success: true,
+    message: '已成功卸任',
+    remainingRole: finalRole,
+    remainingStatus: finalStatus,
+    hasRemainingRoles: remainingRoles.length > 0
+  };
 }
 
 exports.main = async (event, context) => {
@@ -426,6 +587,15 @@ exports.main = async (event, context) => {
     } catch (err) {
       console.error('processRoleAudit submitRoleApply error:', err);
       return { success: false, error: err.message || '提交失败' };
+    }
+  }
+
+  if (action === 'listAuditQueue') {
+    try {
+      return await listAuditQueue(event, OPENID);
+    } catch (err) {
+      console.error('processRoleAudit listAuditQueue error:', err);
+      return { success: false, error: err.message || '查询失败' };
     }
   }
 
@@ -449,7 +619,7 @@ exports.main = async (event, context) => {
 
   if (action === 'releaseSelf') {
     try {
-      return await releaseSelf(OPENID);
+      return await releaseSelf(event, OPENID);
     } catch (err) {
       console.error('processRoleAudit releaseSelf error:', err);
       return { success: false, error: err.message || '卸任失败' };

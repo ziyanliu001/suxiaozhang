@@ -25,6 +25,12 @@ interface RoleInfo {
   // 🙋 头像昵称填写规范
   avatarUrl?: string;
   nickName?: string;
+  // 🏛️ 多角色兼任：manageStoreInviteCode 的 redeem 动作核销邀请码时追加写入
+  // user_roles.roles（如 ['STORE_MANAGER','FINANCE']），由 checkUserRole 随
+  // 角色信息一并下发。role 字段仍是"当前展示角色"这唯一权威值，roles 只是
+  // "还持有哪些身份"的清单，供 profile.ts 的"切换身份"面板判断是否需要展示
+  // 多身份切换列表
+  roles?: string[];
 }
 
 function withTimeout(promise, timeoutMs, timeoutMsg) {
@@ -249,7 +255,8 @@ export const AuthService = {
           status: r.status || 'guest',
           tenantId: r.tenantId || '',
           avatarUrl: r.avatarUrl || '',
-          nickName: r.nickName || ''
+          nickName: r.nickName || '',
+          roles: Array.isArray(r.roles) ? r.roles : []
         };
         wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(roleInfo));
         return { success: true, roleInfo };
@@ -313,7 +320,8 @@ export const AuthService = {
         status: (cached && cached.status) || 'guest',
         tenantId: (cached && cached.tenantId) || '',
         avatarUrl: (cached && cached.avatarUrl) || '',
-        nickName: (cached && cached.nickName) || ''
+        nickName: (cached && cached.nickName) || '',
+        roles: (cached && cached.roles) || []
       };
       wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(merged));
     } catch (e) {
@@ -360,7 +368,8 @@ export const AuthService = {
           status: (cached && cached.status) || 'guest',
           tenantId: (cached && cached.tenantId) || '',
           avatarUrl: fields.avatarUrl !== undefined ? fields.avatarUrl : ((cached && cached.avatarUrl) || ''),
-          nickName: fields.nickName !== undefined ? fields.nickName : ((cached && cached.nickName) || '')
+          nickName: fields.nickName !== undefined ? fields.nickName : ((cached && cached.nickName) || ''),
+          roles: (cached && cached.roles) || []
         };
         wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(merged));
         return { success: true };

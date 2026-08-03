@@ -1141,6 +1141,169 @@
   box-shadow: 0 4rpx 10rpx rgba(198, 40, 40, 0.3);
 }
 
+/* 🌟 工时保留承诺：与上方 .release-consequence-list 的淡红警示形成鲜明对比，
+   浅绿底色传达"这部分不受影响、可以放心"，两种情绪在同一屏内清晰可辨 */
+.release-safe-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+  background: #EBFBEE;
+  border: 1.5rpx solid #B2F2BB;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 36rpx;
+}
+
+.safe-icon {
+  font-size: 26rpx;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+.safe-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #2B8A3E;
+  font-weight: bold;
+  line-height: 1.6;
+}
+
+/* ================= 🏛️ 切换身份面板：多角色兼任时的身份切换/退出入口 ================= */
+.switch-identity-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.switch-identity-modal-mask.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.switch-identity-card {
+  width: 82%;
+  max-width: 620rpx;
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  padding: 40rpx 36rpx 36rpx;
+  box-sizing: border-box;
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+  transform: scale(0.9) translateY(20rpx);
+  opacity: 0;
+  transition: all 0.25s ease;
+}
+
+.switch-identity-modal-mask.show .switch-identity-card {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.switch-identity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.switch-identity-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.switch-identity-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #868E96;
+  font-size: 26rpx;
+}
+
+.switch-identity-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #868E96;
+  line-height: 1.6;
+  margin-bottom: 28rpx;
+}
+
+.switch-identity-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.switch-identity-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF8E1;
+  border: 1.5rpx solid #FFE082;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  transition: all 0.15s ease;
+}
+
+.switch-identity-option:active {
+  transform: scale(0.98);
+  background: #FFECB3;
+}
+
+.switch-identity-option .option-text {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C5A00;
+}
+
+.switch-identity-option .option-arrow {
+  font-size: 22rpx;
+  color: #D9A441;
+}
+
+.switch-identity-divider {
+  height: 1.5rpx;
+  background: #F1F3F5;
+  margin: 32rpx 0 24rpx;
+}
+
+.btn-exit-binding {
+  width: 100%;
+  height: 80rpx;
+  line-height: 80rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #868E96;
+  background: #F1F3F5;
+  border-radius: 40rpx;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.btn-exit-binding::after {
+  border: none;
+}
+
+.btn-exit-binding:active {
+  transform: scale(0.97);
+  background: #E9ECEF;
+}
+
 /* ================= 🏅 数字荣誉墙 ================= */
 
 .honor-wall-card {

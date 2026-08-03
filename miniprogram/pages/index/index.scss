@@ -4810,8 +4810,9 @@ page {
   transform: scale(0.92);
 }
 
-/* 双选项卡 Tab */
+/* 双选项卡 Tab：position:relative 承载下方绝对定位的滑动指示条 */
 .audit-tab-segment {
+  position: relative;
   display: flex;
   background: #F8F9FA;
   border-radius: 16rpx;
@@ -4819,24 +4820,71 @@ page {
   margin: 20rpx 0;
 }
 
+/* 🌟 滑动指示条：宽度固定 50%（两个 Tab 平分），随 auditActiveTab 切换用
+   transform translateX 平移到对应一侧，比"背景直接切换"多一层运动过渡感。
+   z-index 压在 .tab-item 下面（tab-item 本身不设背景色，靠这条指示条
+   提供选中态底色），文字/徽章通过 position:relative 叠在指示条之上 */
+.tab-slide-indicator {
+  position: absolute;
+  top: 6rpx;
+  left: 6rpx;
+  width: calc(50% - 6rpx);
+  height: calc(100% - 12rpx);
+  background: #FFFFFF;
+  border-radius: 12rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  transition: transform 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+.tab-slide-indicator.to-second {
+  transform: translateX(100%);
+}
+
 .audit-tab-segment .tab-item {
+  position: relative;
+  z-index: 1;
   flex: 1;
   text-align: center;
   font-size: 26rpx;
   color: #495057;
   padding: 14rpx 0;
   border-radius: 12rpx;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .audit-tab-segment .tab-item.active {
-  background: #FFFFFF;
   color: #D9480E;
   font-weight: bold;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
-/* 👥 角色筛选 Segment：全部/义工/财务/大家长+店长 */
+/* 🔢 数量徽章：紧跟 Tab 文字后的小圆角胶囊，0 个申请时用更淡的灰阶弱化存在感，
+   避免"待审核列表 (0)"这类空数字在视觉上跟有效数字一样抢眼 */
+.tab-count-badge {
+  display: inline-block;
+  min-width: 30rpx;
+  margin-left: 6rpx;
+  padding: 0 8rpx;
+  font-size: 20rpx;
+  font-weight: bold;
+  line-height: 30rpx;
+  border-radius: 15rpx;
+  background: #E9ECEF;
+  color: #ADB5BD;
+  vertical-align: middle;
+}
+
+.tab-count-badge.has-count {
+  background: #FFE8CC;
+  color: #D9480E;
+}
+
+.audit-tab-segment .tab-item.active .tab-count-badge.has-count {
+  background: #D9480E;
+  color: #FFFFFF;
+}
+
+/* 👥 角色筛选 Segment：全部/义工/财务/大家长+店长——选中态用品牌红/金渐变背景
+   + 微阴影强化存在感，未选中态收敛为清爽的浅灰阶，两者对比更分明 */
 .audit-role-filter-segment {
   display: flex;
   flex-wrap: wrap;
@@ -4846,19 +4894,20 @@ page {
 
 .role-filter-chip {
   font-size: 22rpx;
-  color: #495057;
+  color: #868E96;
   background: #F1F3F5;
-  padding: 10rpx 20rpx;
+  padding: 10rpx 22rpx;
   border-radius: 24rpx;
   border: 1rpx solid transparent;
   transition: all 0.15s ease;
 }
 
 .role-filter-chip.active {
-  background: #FFF3E0;
-  color: #D9480E;
-  border-color: #FFD8A8;
+  background: linear-gradient(135deg, #FFF3E0 0%, #FFE8CC 100%);
+  color: #8C1D18;
+  border-color: #FFC078;
   font-weight: bold;
+  box-shadow: 0 3rpx 10rpx rgba(217, 72, 14, 0.16);
 }
 
 /* 🔍 已通过列表姓名/手机号搜索 */
@@ -4915,11 +4964,39 @@ page {
 
 .card-top-info {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
+  gap: 16rpx;
+}
+
+/* 🙋 申请人头像：真实微信头像优先，取不到时用统一的占位圆圈+人形 emoji 兜底，
+   与 profile.ts 头像加载失败时的降级思路一致——不留一块空白 */
+.applicant-avatar-wrap {
+  flex-shrink: 0;
+  width: 72rpx;
+  height: 72rpx;
+}
+
+.applicant-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #F1F3F5;
+}
+
+.applicant-avatar-placeholder {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #F1F3F5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34rpx;
 }
 
 .applicant-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4rpx;
@@ -4931,14 +5008,24 @@ page {
   color: #212529;
 }
 
+/* 📞 点击拨打/复制：用底色浅胶囊 + 品牌蓝提示"这里可以点"，与纯展示性文字
+   区分开，不需要额外的下划线/按钮外观打破卡片的整体简洁感 */
 .applicant-phone {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
   font-size: 24rpx;
-  color: #868E96;
+  color: #1C7ED6;
+  background: #E7F5FF;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
 }
 
-/* 无手机号占位：与正常手机号保持同一行高，避免卡片高度参差不齐 */
+/* 无手机号占位：与正常手机号保持同一行高，避免卡片高度参差不齐；不可点击 */
 .applicant-phone.unbound {
   color: #C7C7CC;
+  background: transparent;
+  padding: 4rpx 0;
   font-style: italic;
 }
 
@@ -5063,11 +5150,22 @@ page {
   text-align: center;
 }
 
+/* 🌸 插画感：图标不再裸放在留白里，套一层柔和的圆形底色，视觉上更像一枚
+   温馨插画而不是孤零零的线框图标 */
+.empty-emoji-circle {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FFF9DB 0%, #FFF3BF 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24rpx;
+}
+
 .empty-emoji-icon {
-  width: 72rpx;
-  height: 72rpx;
-  margin-top: 8rpx;
-  margin-bottom: 20rpx;
+  width: 64rpx;
+  height: 64rpx;
 }
 
 .empty-title {
@@ -5087,15 +5185,19 @@ page {
   line-height: 1.6;
 }
 
+/* 🌟 空状态主 CTA：升级为与 .btn-primary-gen 同一套品牌渐变，视觉权重更接近
+   "推荐的下一步操作"，而不是一个可有可无的浅色按钮；active 态缩放力度也
+   加大到 0.95，点击反馈更明显 */
 .btn-empty-invite {
-  background: #FFF3BF;
-  color: #D9480E;
-  border: 1rpx solid #FFE066;
-  font-size: 24rpx;
+  background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
+  color: #FFFFFF;
+  border: none;
+  font-size: 26rpx;
   font-weight: bold;
-  border-radius: 30rpx;
-  padding: 12rpx 36rpx;
+  border-radius: 40rpx;
+  padding: 16rpx 44rpx;
   margin: 0;
+  box-shadow: 0 6rpx 16rpx rgba(140, 29, 24, 0.28);
   transition: all 0.15s ease;
 }
 
@@ -5104,8 +5206,90 @@ page {
 }
 
 .btn-empty-invite:active {
-  background: #FFE066;
-  transform: scale(0.98);
+  transform: scale(0.95);
+  box-shadow: 0 3rpx 8rpx rgba(140, 29, 24, 0.24);
+}
+
+/* ================= 🦴 骨架屏：待审核/已审核列表加载中的占位卡片 ================= */
+.audit-skeleton-list {
+  padding-top: 4rpx;
+}
+
+.skeleton-card {
+  background: #FFFFFF;
+  border: 1rpx solid #F1F3F5;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.skeleton-avatar {
+  flex-shrink: 0;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+}
+
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.skeleton-line {
+  height: 22rpx;
+  border-radius: 8rpx;
+}
+
+.skeleton-line.w60 { width: 60%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w80 { width: 80%; }
+.skeleton-line.spaced { margin: 20rpx 0; }
+
+.skeleton-badge {
+  flex-shrink: 0;
+  width: 96rpx;
+  height: 36rpx;
+  border-radius: 12rpx;
+}
+
+.skeleton-btns {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.skeleton-btn {
+  flex: 1;
+  height: 68rpx;
+  border-radius: 16rpx;
+}
+
+.skeleton-btn.wide {
+  flex: 2;
+}
+
+/* 统一的骨架"呼吸"底色 + shimmer 动画：所有占位块共用同一个渐变扫光效果，
+   而不是死板的纯灰色块，视觉上更接近"正在加载"而不是"坏掉了" */
+.skeleton-avatar,
+.skeleton-line,
+.skeleton-badge,
+.skeleton-btn {
+  background: linear-gradient(90deg, #F1F3F5 25%, #E9ECEF 37%, #F1F3F5 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 
 /* 🌟 C位核心卡片：欢迎语+护持统计+打卡 CTA，置于胶囊下方最顶部，独立于滚动区之外，

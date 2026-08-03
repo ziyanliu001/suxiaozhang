@@ -34,7 +34,12 @@ exports.main = async (event, context) => {
         tenantId: user.tenantId || '',
         // 🙋 头像昵称填写规范：随角色信息一并下发，个人中心页面无需再单独查询
         avatarUrl: user.avatarUrl || '',
-        nickName: user.nickName || ''
+        nickName: user.nickName || '',
+        // 🏛️ 多角色兼任：manageStoreInviteCode 的 redeem 动作会往这个数组里追加
+        // 已核销的邀请码身份（如 ['STORE_MANAGER','FINANCE']）；此前从未随
+        // checkUserRole 下发过，客户端完全看不到，profile.ts 的"切换身份"面板
+        // 需要靠它判断当前账号是否兼任了多个身份
+        roles: Array.isArray(user.roles) ? user.roles : []
       };
     }
 
@@ -61,7 +66,8 @@ exports.main = async (event, context) => {
         storeName: user.storeName || '',
         status: 'approved',
         avatarUrl: user.avatarUrl || '',
-        nickName: user.nickName || ''
+        nickName: user.nickName || '',
+        roles: []
       };
     }
 
@@ -74,7 +80,8 @@ exports.main = async (event, context) => {
       storeName: '未绑定门店',
       status: 'guest',
       avatarUrl: '',
-      nickName: ''
+      nickName: '',
+      roles: []
     };
   } catch (err) {
     console.error('[checkUserRole] 异常:', err);

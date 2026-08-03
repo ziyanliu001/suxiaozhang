@@ -605,6 +605,16 @@ Page({
     auditIsNationalView: false,
     pendingApplyList: [] as any[],
     approvedVolunteerList: [] as any[],
+    // 🐛 请求去重锁：切换 待审核/已审核 Tab 或角色 Filter 时手快连点，此前
+    // fetchPendingAuditList/fetchApprovedVolunteerList 各自独立发起云函数请求，
+    // 完全没有防抖，会打出并发/重复请求，返回顺序还可能乱序覆盖列表。
+    // fetchAuditQueue() 统一用这把锁：已有请求在途时直接跳过，等它自己的
+    // finally 解锁后由触发方自然收敛，与 statistics.ts fetchStatistics() 的
+    // statisticsFetchLoading 防抖锁同一套写法
+    pendingAuditRequest: false,
+    // 🦴 骨架屏：弹窗刚拉起、云函数还没返回之前渲染占位骨架卡片，避免
+    // "先闪一下空状态插画、数据到了才变成列表"这种视觉跳动
+    auditListLoading: false,
     // 🔍 角色筛选（全部/义工/财务/大家长+店长合并为一档）与已通过列表的姓名/手机号搜索：
     // 两个 Tab 共用同一份筛选态，纯前端对已拉取的列表做二次过滤，无需为筛选组合再打云函数
     auditRoleFilter: 'all' as 'all' | 'volunteer' | 'finance' | 'leader',
@@ -2749,9 +2759,12 @@ Page({
       auditRoleFilter: 'all',
       auditSearchKeyword: '',
       // 🌐 全国总览 vs 单店视角：决定底部按钮文案与空状态引导语
-      auditIsNationalView: this.isNationalOverviewSelected()
+      auditIsNationalView: this.isNationalOverviewSelected(),
+      // 🦴 清空上一次已加载的列表，避免骨架屏结束后短暂闪现旧门店/旧角色的残留数据
+      pendingApplyList: [],
+      filteredPendingList: []
     });
-    await this.fetchPendingAuditList();
+    await this.fetchAuditQueue('pending');
   },
 
   onCloseAuditModal() {
@@ -2964,9 +2977,13 @@ Page({
 
   onSwitchAuditTab(e: any) {
     const tab = e.currentTarget.dataset.tab;
+    // 🐛 同一个 Tab 手快连点不该重复触发 setData/请求
+    if (tab === this.data.auditActiveTab) return;
     this.setData({ auditActiveTab: tab });
     if (tab === 'approved' && this.data.approvedVolunteerList.length === 0) {
-      this.fetchApprovedVolunteerList();
+      // fetchAuditQueue 内部的 pendingAuditRequest 锁已经能防住并发重复调用，
+      // 这里的"已加载过就不重新拉"只是额外的一层缓存优化，两者互不冲突
+      this.fetchAuditQueue('approved');
     }
   },
 
@@ -3003,7 +3020,7 @@ Page({
     };
 
     const filteredPending = (this.data.pendingApplyList || []).filter((item: any) =>
-      matchesRoleFilter(item.requestedRole)
+      matchesRoleFilter(item.role)
     );
 
     const filteredApproved = (this.data.approvedVolunteerList || []).filter((item: any) => {
@@ -3017,113 +3034,54 @@ Page({
     this.setData({ filteredPendingList: filteredPending, filteredApprovedList: filteredApproved });
   },
 
-  async fetchPendingAuditList() {
+  // 🛡️ 统一的门店审核列表拉取：替代此前 fetchPendingAuditList/
+  // fetchApprovedVolunteerList 各自直接 wx.cloud.database().collection('user_roles')
+  // .where(...).get() 的客户端直连查询（门店/机构隔离完全依赖客户端缓存的
+  // AuthService.getCachedRoleInfo() + 不可见的数据库安全规则）——现改为服务端
+  // processRoleAudit 的 listAuditQueue 动作，按调用者真实角色重新推导数据范围，
+  // 单店店长/大家长严格锁定自己的 storeId，超管按当前选中门店过滤或看全机构。
+  //
+  // 🐛 请求去重：pendingAuditRequest 锁在方法一开始就置位，已有请求在途时直接
+  // 跳过本次调用，避免切换 Tab/角色 Filter 连点触发并发请求、返回顺序竞争覆盖列表
+  async fetchAuditQueue(tab: 'pending' | 'approved') {
+    if (this.data.pendingAuditRequest) {
+      console.log('[fetchAuditQueue] 已有请求在途，跳过本次重复调用');
+      return;
+    }
+    this.setData({ pendingAuditRequest: true, auditListLoading: true });
+
     try {
-      const roleInfo = AuthService.getCachedRoleInfo();
-      const storeId = (roleInfo && roleInfo.storeId) || '';
-      const storeName = (roleInfo && roleInfo.storeName) || this.data.shopName;
-      const isSuperAdmin = (roleInfo && roleInfo.role) === 'super_admin';
-      const tenantId = (roleInfo && roleInfo.tenantId) || '';
-
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const db = wx.cloud.database();
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { action: 'listAuditQueue', tab, storeId: this.data.currentStoreId }
+      });
+      const result = res.result;
 
-      let query: any;
-      if (isSuperAdmin && tenantId) {
-        // 🏢 超管按机构维度查看待审核申请，含"新建门店"申请（此时记录 storeId 为空，
-        // 若仍按 storeId/storeName 过滤会永远查不到这类申请）
-        query = db.collection('user_roles').where({
-          status: 'pending',
-          tenantId: tenantId
-        });
-      } else if (storeId) {
-        query = db.collection('user_roles').where({
-          status: 'pending',
-          storeId: storeId
-        });
-      } else {
-        query = db.collection('user_roles').where({
-          status: 'pending',
-          storeName: storeName
-        });
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || (tab === 'pending' ? '加载申请列表失败' : '加载已通过列表失败'), icon: 'none' });
+        return;
       }
 
-      const res = await query.orderBy('applyTime', 'desc').limit(50).get();
-
-      const formattedList = (res.data || []).map((item: any) => ({
-        ...item,
-        applyTimeStr: item.applyTime ? this.formatApplyTime(item.applyTime) : '近期'
-      }));
-
-      this.setData({ pendingApplyList: formattedList });
-      this.recomputeAuditFilteredLists();
-    } catch (e) {
-      console.error('[fetchPendingAuditList] 加载失败:', e);
-      wx.showToast({ title: '加载申请列表失败', icon: 'none' });
-    }
-  },
-
-  async fetchApprovedVolunteerList() {
-    wx.showLoading({ title: '加载已绑定列表...' });
-    try {
-      const roleInfo = AuthService.getCachedRoleInfo();
-      const storeId = (roleInfo && roleInfo.storeId) || '';
-      const storeName = (roleInfo && roleInfo.storeName) || this.data.shopName;
-
-      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const db = wx.cloud.database();
-
-      let query: any;
-      if (storeId) {
-        query = db.collection('user_roles').where({
-          status: 'approved',
-          storeId: storeId
-        });
+      if (tab === 'pending') {
+        this.setData({ pendingApplyList: result.data || [] });
       } else {
-        query = db.collection('user_roles').where({
-          status: 'approved',
-          storeName: storeName
-        });
+        this.setData({ approvedVolunteerList: result.data || [] });
       }
-
-      const res = await query.orderBy('approveTime', 'desc').limit(50).get();
-
-      wx.hideLoading();
-      this.setData({ approvedVolunteerList: res.data || [] });
       this.recomputeAuditFilteredLists();
     } catch (e) {
-      wx.hideLoading();
-      console.error('[fetchApprovedVolunteerList] 加载失败:', e);
-      wx.showToast({ title: '加载失败', icon: 'none' });
+      console.error(`[fetchAuditQueue:${tab}] 加载失败:`, e);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ pendingAuditRequest: false, auditListLoading: false });
     }
-  },
-
-  formatApplyTime(time: any): string {
-    if (!time) return '近期';
-    const date = time instanceof Date ? time : new Date(time);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return '刚刚';
-    if (diffMins < 60) return diffMins + '分钟前';
-    if (diffHours < 24) return diffHours + '小时前';
-    if (diffDays < 7) return diffDays + '天前';
-
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const hour = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    return month + '月' + day + '日 ' + hour + ':' + min;
   },
 
   // 🔒 高权限角色（财务/店长/大家长）授权前需二次强确认，避免店长手滑一点就把
   // 账本权限批给了非本意人选；义工无需二次确认，维持原有一键通过的体验
   async onProcessAudit(e: any) {
     const { id, action } = e.currentTarget.dataset;
-    const applyItem = this.data.pendingApplyList.find((r: any) => r._id === id);
+    const applyItem = this.data.pendingApplyList.find((r: any) => r.applyId === id);
 
     if (!applyItem) {
       wx.showToast({ title: '申请记录不存在', icon: 'none' });
@@ -3131,10 +3089,10 @@ Page({
     }
 
     const SENSITIVE_ROLES = ['finance', 'store_manager', 'store_patriarch'];
-    if (action === 'approve' && SENSITIVE_ROLES.includes(applyItem.requestedRole)) {
-      const roleLabel = applyItem.requestedRole === 'finance'
+    if (action === 'approve' && SENSITIVE_ROLES.includes(applyItem.role)) {
+      const roleLabel = applyItem.role === 'finance'
         ? '财务'
-        : (applyItem.requestedRole === 'store_patriarch' ? '大家长' : '店长');
+        : (applyItem.role === 'store_patriarch' ? '大家长' : '店长');
       const displayName = maskName(applyItem.realName) || '该申请人';
 
       wx.showModal({
@@ -3176,7 +3134,7 @@ Page({
           icon: action === 'approve' ? 'success' : 'none'
         });
 
-        const newList = this.data.pendingApplyList.filter((r: any) => r._id !== id);
+        const newList = this.data.pendingApplyList.filter((r: any) => r.applyId !== id);
         this.setData({ pendingApplyList: newList });
         this.recomputeAuditFilteredLists();
       } else {
@@ -3241,7 +3199,7 @@ Page({
 
       if (res && res.success) {
         wx.showToast({ title: '已拒绝申请', icon: 'none' });
-        const newList = this.data.pendingApplyList.filter((r: any) => r._id !== id);
+        const newList = this.data.pendingApplyList.filter((r: any) => r.applyId !== id);
         this.setData({ pendingApplyList: newList, showAuditRejectModal: false, auditRejectId: '' });
         this.recomputeAuditFilteredLists();
       } else {
@@ -3259,7 +3217,7 @@ Page({
   // 🔄 修改已绑定义工的角色（财务记账 ↔ 现场奉献），需二次确认防止误触
   onChangeVolunteerRole(e: any) {
     const { id } = e.currentTarget.dataset;
-    const item = this.data.approvedVolunteerList.find((r: any) => r._id === id);
+    const item = this.data.approvedVolunteerList.find((r: any) => r.applyId === id);
     if (!item) return;
 
     const currentRole = item.role === 'finance' ? 'finance' : 'volunteer';
@@ -3287,7 +3245,7 @@ Page({
           if (res2 && res2.success) {
             wx.showToast({ title: '角色已更新', icon: 'success' });
             const newList = this.data.approvedVolunteerList.map((r: any) =>
-              r._id === id ? { ...r, role: targetRole } : r
+              r.applyId === id ? { ...r, role: targetRole } : r
             );
             this.setData({ approvedVolunteerList: newList });
             this.recomputeAuditFilteredLists();
@@ -3306,7 +3264,7 @@ Page({
   // 🚨 解除义工绑定：二次 Confirm 防止误踢，解除后需重新申请/使用邀请码才能再次绑定
   onUnbindVolunteer(e: any) {
     const { id } = e.currentTarget.dataset;
-    const item = this.data.approvedVolunteerList.find((r: any) => r._id === id);
+    const item = this.data.approvedVolunteerList.find((r: any) => r.applyId === id);
     if (!item) return;
 
     const storeLabel = item.storeName || this.data.currentStoreName || '本门店';
@@ -3330,7 +3288,7 @@ Page({
           wx.hideLoading();
           if (res2 && res2.success) {
             wx.showToast({ title: '已解除绑定', icon: 'success' });
-            const newList = this.data.approvedVolunteerList.filter((r: any) => r._id !== id);
+            const newList = this.data.approvedVolunteerList.filter((r: any) => r.applyId !== id);
             this.setData({ approvedVolunteerList: newList });
             this.recomputeAuditFilteredLists();
           } else {
@@ -3340,6 +3298,29 @@ Page({
           wx.hideLoading();
           console.error('[onUnbindVolunteer] 异常:', err);
           wx.showModal({ title: '操作失败', content: '网络异常，请稍后重试', showCancel: false });
+        }
+      }
+    });
+  },
+
+  // 📞 申请人/已通过成员的手机号：屏幕上仍用 mask.maskPhone 脱敏展示（WXS 纯展示层
+  // 转换，不影响底层数据），点击时用 dataset 里传入的真实号码发起拨打/复制——
+  // 号码本就存在于 pendingApplyList/approvedVolunteerList 这份已授权可见的审核数据里，
+  // 只是不在屏幕上明文常驻展示，点击后的操作动作使用真实号码不算额外泄露
+  onTapApplicantPhone(e: any) {
+    const phone = e.currentTarget.dataset.phone;
+    if (!phone) return;
+
+    wx.showActionSheet({
+      itemList: ['拨打电话', '复制手机号'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          wx.makePhoneCall({ phoneNumber: phone, fail: () => { /* 用户取消拨号，静默忽略 */ } });
+        } else if (res.tapIndex === 1) {
+          wx.setClipboardData({
+            data: phone,
+            success: () => wx.showToast({ title: '手机号已复制', icon: 'success' })
+          });
         }
       }
     });

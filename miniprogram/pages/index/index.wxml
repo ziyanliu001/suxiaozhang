@@ -2345,21 +2345,24 @@
         <view class="btn-close-drawer-circle" bindtap="onCloseAuditModal">✕</view>
       </view>
 
-      <!-- Tab 选项卡 -->
+      <!-- Tab 选项卡：底部滑动指示条随 auditActiveTab 平移动画 + 数量徽章 -->
       <view class="audit-tab-segment">
+        <view class="tab-slide-indicator {{auditActiveTab === 'approved' ? 'to-second' : ''}}"></view>
         <view
           class="tab-item {{auditActiveTab === 'pending' ? 'active' : ''}}"
           bindtap="onSwitchAuditTab"
           data-tab="pending"
         >
-          待审核列表 ({{pendingApplyList.length}})
+          待审核列表
+          <text class="tab-count-badge {{pendingApplyList.length > 0 ? 'has-count' : ''}}">{{pendingApplyList.length}}</text>
         </view>
         <view
           class="tab-item {{auditActiveTab === 'approved' ? 'active' : ''}}"
           bindtap="onSwitchAuditTab"
           data-tab="approved"
         >
-          已审核通过 ({{approvedVolunteerList.length}})
+          已审核通过
+          <text class="tab-count-badge {{approvedVolunteerList.length > 0 ? 'has-count' : ''}}">{{approvedVolunteerList.length}}</text>
         </view>
       </view>
 
@@ -2387,39 +2390,64 @@
       <!-- 滚动列表区 -->
       <scroll-view scroll-y class="drawer-content-scroll">
 
+        <!-- 🦴 骨架屏：弹窗刚拉起/切 Tab 云函数还没返回时的占位卡片，避免空状态插画
+             先闪一下、数据到了才变成列表这种视觉跳动 -->
+        <view class="audit-skeleton-list" wx:if="{{auditListLoading}}">
+          <view class="skeleton-card" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+            <view class="skeleton-row">
+              <view class="skeleton-avatar"></view>
+              <view class="skeleton-lines">
+                <view class="skeleton-line w60"></view>
+                <view class="skeleton-line w40"></view>
+              </view>
+              <view class="skeleton-badge"></view>
+            </view>
+            <view class="skeleton-line w80 spaced"></view>
+            <view class="skeleton-btns">
+              <view class="skeleton-btn"></view>
+              <view class="skeleton-btn wide"></view>
+            </view>
+          </view>
+        </view>
+
         <!-- 待审核列表 -->
-        <block wx:if="{{auditActiveTab === 'pending'}}">
-          <view class="audit-applicant-card" wx:for="{{filteredPendingList}}" wx:key="_id">
+        <block wx:if="{{auditActiveTab === 'pending' && !auditListLoading}}">
+          <view class="audit-applicant-card" wx:for="{{filteredPendingList}}" wx:key="applyId">
             <view class="card-top-info">
+              <view class="applicant-avatar-wrap">
+                <image class="applicant-avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
+                <view class="applicant-avatar-placeholder" wx:else>👤</view>
+              </view>
               <view class="applicant-main">
                 <text class="applicant-name">{{mask.maskName(item.realName) || '义工家人'}}</text>
-                <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
+                <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}" bindtap="onTapApplicantPhone" data-phone="{{item.phone}}">
+                  <view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}
+                </text>
               </view>
-              <text class="role-tag-badge {{item.requestedRole}}">
-                {{item.requestedRole === 'finance' ? '财务记账' : (item.requestedRole === 'store_patriarch' ? '🏛️ 家长' : (item.requestedRole === 'store_manager' ? '🏪 店长' : '现场奉献'))}}
+              <text class="role-tag-badge {{item.role}}">
+                {{item.role === 'finance' ? '🏅 财务申请' : (item.role === 'store_patriarch' ? '🏛️ 家长申请' : (item.role === 'store_manager' ? '👑 店长申请' : '🙋 现场奉献'))}}
               </text>
             </view>
 
             <view class="card-time-row">
-              <text class="time-lbl">申请门店：{{item.storeSelectionType === 'custom' ? ('🆕 ' + item.customStoreName + '（新建）') : item.storeName}}</text>
+              <text class="time-lbl">申请门店：{{item.isCustomStore ? ('🆕 ' + item.storeName + '（新建）') : item.storeName}}</text>
             </view>
             <view class="card-time-row">
-              <text class="time-lbl">申请时间：{{item.applyTimeStr || '近期'}}</text>
+              <text class="time-lbl">申请时间：{{item.timeStr || '近期'}}</text>
             </view>
 
             <view class="card-action-btns">
               <button
                 class="btn-audit-act reject"
                 bindtap="onOpenAuditRejectModal"
-                data-id="{{item._id}}"
+                data-id="{{item.applyId}}"
               >
                 拒绝
               </button>
               <button
                 class="btn-audit-act approve"
                 bindtap="onProcessAudit"
-                data-id="{{item._id}}"
-                data-item="{{item}}"
+                data-id="{{item.applyId}}"
                 data-action="approve"
               >
                 通过绑定
@@ -2428,7 +2456,9 @@
           </view>
 
           <view class="warm-empty-state" wx:if="{{pendingApplyList.length === 0}}">
-            <view class="empty-emoji-icon idx-icon-svg idx-icon-sparkle"></view>
+            <view class="empty-emoji-circle">
+              <view class="empty-emoji-icon idx-icon-svg idx-icon-sparkle"></view>
+            </view>
             <text class="empty-title">{{auditIsNationalView ? '当前全国各门店暂无待处理的申请' : '当前暂无待处理的绑定申请'}}</text>
             <text class="empty-desc" wx:if="{{!auditIsNationalView}}">您可以生成门店邀请海报，邀请财务或现场义工扫码绑定。</text>
             <button class="btn-empty-invite" bindtap="onGenerateStorePosterFromAudit">
@@ -2441,16 +2471,26 @@
         </block>
 
         <!-- 已绑定义工列表 -->
-        <block wx:if="{{auditActiveTab === 'approved'}}">
-          <view class="audit-applicant-card approved-card" wx:for="{{filteredApprovedList}}" wx:key="_id">
+        <block wx:if="{{auditActiveTab === 'approved' && !auditListLoading}}">
+          <view class="audit-applicant-card approved-card" wx:for="{{filteredApprovedList}}" wx:key="applyId">
             <view class="card-top-info">
+              <view class="applicant-avatar-wrap">
+                <image class="applicant-avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
+                <view class="applicant-avatar-placeholder" wx:else>👤</view>
+              </view>
               <view class="applicant-main">
                 <text class="applicant-name">{{mask.maskName(item.realName)}}</text>
-                <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}"><view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}</text>
+                <text class="applicant-phone {{!item.phone ? 'unbound' : ''}}" bindtap="onTapApplicantPhone" data-phone="{{item.phone}}">
+                  <view class="idx-icon-sm idx-icon-phone" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>{{item.phone ? mask.maskPhone(item.phone) : '未绑定手机'}}
+                </text>
               </view>
               <text class="role-tag-badge {{item.role}}">
-                {{item.role === 'finance' ? '财务记账' : (item.role === 'store_patriarch' ? '🏛️ 大家长' : (item.role === 'store_manager' ? '🏪 店长' : '现场奉献'))}}
+                {{item.role === 'finance' ? '🏅 财务记账' : (item.role === 'store_patriarch' ? '🏛️ 大家长' : (item.role === 'store_manager' ? '👑 店长' : '🙋 现场奉献'))}}
               </text>
+            </view>
+
+            <view class="card-time-row">
+              <text class="time-lbl">通过时间：{{item.timeStr || '近期'}}</text>
             </view>
 
             <!-- 🛡️ 变更角色/解除绑定仅支持 finance/volunteer：店长/大家长权限回收需走更审慎的
@@ -2460,14 +2500,14 @@
               <button
                 class="btn-audit-act change-role"
                 bindtap="onChangeVolunteerRole"
-                data-id="{{item._id}}"
+                data-id="{{item.applyId}}"
               >
                 🔄 变更角色
               </button>
               <button
                 class="btn-audit-act unbind"
                 bindtap="onUnbindVolunteer"
-                data-id="{{item._id}}"
+                data-id="{{item.applyId}}"
               >
                 🚫 解除绑定
               </button>
@@ -2475,7 +2515,9 @@
           </view>
 
           <view class="warm-empty-state" wx:if="{{approvedVolunteerList.length === 0}}">
-            <view class="empty-emoji-icon idx-icon-svg idx-icon-flower"></view>
+            <view class="empty-emoji-circle">
+              <view class="empty-emoji-icon idx-icon-svg idx-icon-flower"></view>
+            </view>
             <text class="empty-title">本店暂无已审核通过的记录</text>
           </view>
           <view class="warm-empty-state" wx:elif="{{filteredApprovedList.length === 0}}">

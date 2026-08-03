@@ -16,6 +16,23 @@ import { isVirtualStoreName } from '../../utils/storeIdentity';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
+// 🏛️ 多角色兼任"切换身份"面板：roles 数组里的大写 token（与 manageStoreInviteCode/
+// processRoleAudit releaseSelf 同一份词汇）<-> 本模块展示用的 label/snake_case 值。
+// 不含 FAMILY——"家人"只是退出最后一个身份后的自动兜底展示态（服务端按 status
+// 区分，不是一个可以手动切换过去的独立身份），本面板只列可手动切换的四种实体角色
+const ROLE_TOKEN_LABELS: Record<string, string> = {
+  STORE_PATRIARCH: '大家长',
+  STORE_MANAGER: '店长',
+  FINANCE: '财务',
+  VOLUNTEER: '义工'
+};
+const ROLE_TOKEN_TO_LOWER: Record<string, 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer'> = {
+  STORE_PATRIARCH: 'store_patriarch',
+  STORE_MANAGER: 'store_manager',
+  FINANCE: 'finance',
+  VOLUNTEER: 'volunteer'
+};
+
 const CERTIFICATE_CANVAS_ID = 'certificateCanvas';
 // ⚡️ 爱心护持榜 ViewModel 本地缓存失效期：切换 Segment 来回点、频繁 onShow 都不必
 // 每次都重新打云函数，10 分钟内命中缓存直接复用——护持榜数据本就不要求逐秒实时
@@ -189,7 +206,18 @@ Page({
 
     showReleaseModal: false,
     releaseRoleLabel: '',
+    // 🛡️ 当前正在操作退出的具体身份（大写，如 'STORE_MANAGER'）：多角色兼任场景下
+    // 用户可能同时持有多个身份，退出必须精确指定剥离哪一个，不能笼统按主 role 字段处理
+    releaseTargetRole: '',
     isReleasing: false,
+
+    // 🏛️ 切换身份面板：点击"切换身份/退出当前绑定"时，若账号兼任多个身份
+    // （cachedRole.roles.length > 1），优先展示这个面板——列出"切换至 X"选项
+    // （纯客户端展示态切换，不改动服务端数据）+ 底部"退出当前门店绑定"按钮
+    // （转入下面的 showReleaseModal 走真正的服务端卸任）；只有单一身份时跳过
+    // 本面板，直接进入退出确认弹窗，与升级前的单身份体验保持一致
+    showSwitchIdentityModal: false,
+    switchableRoleOptions: [] as Array<{ role: string; label: string }>,
 
     // 🙋 头像昵称填写规范
     userAvatarUrl: '',
@@ -1284,9 +1312,80 @@ Page({
     });
   },
 
+  // 🛡️ 身份词汇换算：this.data.currentUserRole（snake_case 展示态，isFamily 为真时
+  // 底层其实还是 'volunteer'）-> roles 数组里的大写 token，供"切换身份"面板判断
+  // 当前正在查看的是哪一档、以及退出时该向服务端声明剥离哪一个
+  currentRoleToken(): string {
+    if (this.data.isFamily) return 'FAMILY';
+    const map: Record<string, string> = {
+      store_manager: 'STORE_MANAGER',
+      store_patriarch: 'STORE_PATRIARCH',
+      finance: 'FINANCE',
+      volunteer: 'VOLUNTEER',
+      super_admin: 'SUPER_ADMIN'
+    };
+    return map[this.data.currentUserRole] || 'VOLUNTEER';
+  },
+
+  // 🏛️ 多角色兼任入口：账号持有 2 个及以上身份（roles.length > 1）时，优先展示
+  // "切换身份"面板；只有单一身份（或未升级的历史记录，roles 缺失/长度 ≤1）时，
+  // 跳过面板直接进入退出确认弹窗，与升级前的单身份体验完全一致
   onReleaseUserRole() {
     if (this.isNavigating) return;
 
+    const cachedRole = AuthService.getCachedRoleInfo();
+    const heldRoles = (cachedRole && Array.isArray(cachedRole.roles)) ? cachedRole.roles : [];
+
+    if (heldRoles.length > 1) {
+      const currentToken = this.currentRoleToken();
+      const switchableRoleOptions = heldRoles
+        .filter((r: string) => r !== currentToken && ROLE_TOKEN_LABELS[r])
+        .map((r: string) => ({ role: r, label: ROLE_TOKEN_LABELS[r] }));
+
+      this.setData({
+        showSwitchIdentityModal: true,
+        switchableRoleOptions
+      });
+      return;
+    }
+
+    this.onOpenReleaseConfirmModal();
+  },
+
+  onCloseSwitchIdentityModal() {
+    this.setData({ showSwitchIdentityModal: false });
+  },
+
+  // 🔄 切换至已持有的另一档身份：纯客户端展示态切换（两个身份都已由服务端合法
+  // 核销授权过，不需要也不应该为"换个视角看"这件事再打一次云函数）。与
+  // store-picker.ts _applyRoleSwitch 同一套本地存储 key，保持两处切换身份的
+  // 落地效果一致
+  onSwitchToRole(e: any) {
+    const role = e.currentTarget.dataset.role;
+    const storageRole = ROLE_TOKEN_TO_LOWER[role];
+    if (!storageRole) return;
+
+    const cachedRole = AuthService.getCachedRoleInfo();
+    const storeId = (cachedRole && cachedRole.storeId) || '';
+    const storeName = (cachedRole && cachedRole.storeName) || this.data.currentStoreName;
+
+    wx.setStorageSync('current_user_role', storageRole);
+    wx.setStorageSync('current_store_name', storeName);
+    wx.setStorageSync('active_store_id', storeId);
+    AuthService.overwriteCachedRole(storageRole);
+
+    const app = getApp() as any;
+    if (app && app.globalData) {
+      app.globalData.currentStore = { storeId, storeName, role };
+    }
+
+    this.setData({ showSwitchIdentityModal: false });
+    wx.showToast({ title: `已切换至${ROLE_TOKEN_LABELS[role] || role}视角`, icon: 'none' });
+    this.initMinePage();
+  },
+
+  // 🚪 从"切换身份"面板转入退出确认弹窗：退出的目标固定为当前正在查看的这一档身份
+  onOpenReleaseConfirmModal() {
     const roleMap: Record<string, string> = {
       'store_manager': '店长',
       'finance': '财务',
@@ -1297,8 +1396,10 @@ Page({
     const roleLabel = roleMap[this.data.currentUserRole] || '管理员';
 
     this.setData({
+      showSwitchIdentityModal: false,
       showReleaseModal: true,
-      releaseRoleLabel: roleLabel
+      releaseRoleLabel: roleLabel,
+      releaseTargetRole: this.currentRoleToken()
     });
   },
 
@@ -1312,9 +1413,16 @@ Page({
   // 🛡️ 根因修复：此前这里只清本地 storage，从未通知服务端——user_roles 记录里的
   // role/storeId 原封不动，下次任意页面重新 fetchUserRole() 时服务端照样吐回卸任前
   // 的角色，权限在用户毫不知情的情况下自动复活，与弹窗"该操作不可逆"的承诺完全相反。
-  // 现在改为先调用 processRoleAudit(action:'releaseSelf') 让服务端真正重置这条记录，
-  // 服务端确认成功后才清本地缓存、跳转首页；服务端拒绝（如超管账号不支持自助卸任）
-  // 或网络异常时，本地状态原样不动，不能让用户以为已经卸任成功
+  // 现在改为先调用 processRoleAudit(action:'releaseSelf', targetRole) 让服务端真正
+  // 剥离这一个具体身份——服务端会按 caller.roles 数组算出"剥离后剩余身份里权限
+  // 最高的一档"作为降级结果（remainingRole/remainingStatus），仍持有其他身份时
+  // 平滑切回那一档展示，彻底无身份时才清空门店绑定。
+  //
+  // 🛡️ 不再用 AuthService.clearAuth() 整体清空登录态——那会连 openid 一起丢弃，
+  // 逼用户重新走一遍登录，而这里退出的只是某一个身份，不是注销账号。改为重新
+  // 拉取 AuthService.fetchUserRole()（服务端刚写入的最新角色）+ 同步本地
+  // current_user_role 展示态存储，避免 initMinePage() 的"storageRole 优先"读取
+  // 逻辑覆盖回卸任前的旧值；也不再强制 reLaunch 跳首页，原地刷新即可平滑过渡
   async onConfirmReleaseRole() {
     if (this.data.isReleasing) return;
     this.setData({ isReleasing: true });
@@ -1325,9 +1433,9 @@ Page({
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res: any = await wx.cloud.callFunction({
         name: 'processRoleAudit',
-        data: { action: 'releaseSelf' }
+        data: { action: 'releaseSelf', targetRole: this.data.releaseTargetRole }
       });
-      const result = res.result;
+      const result: any = res.result;
       wx.hideLoading();
 
       if (!result || !result.success) {
@@ -1336,24 +1444,23 @@ Page({
         return;
       }
 
-      wx.removeStorageSync('current_user_role');
-      wx.removeStorageSync('my_authorized_roles');
-      wx.removeStorageSync('current_user_role_info');
-      AuthService.clearAuth();
-      wx.setStorageSync('current_user_role', 'volunteer');
+      await AuthService.fetchUserRole();
+
+      const storageRole = (result.remainingRole === 'volunteer' && result.remainingStatus !== 'approved')
+        ? 'store_family'
+        : (result.remainingRole || 'volunteer');
+      wx.setStorageSync('current_user_role', storageRole);
+      if (!result.hasRemainingRoles) {
+        // 彻底无身份可降级：门店绑定已被服务端清空，本地这两份缓存也一并清理，
+        // 避免残留旧门店名/旧胶囊解锁记录
+        wx.removeStorageSync('current_store_name');
+        wx.removeStorageSync('my_authorized_roles');
+      }
 
       this.setData({ showReleaseModal: false, isReleasing: false });
-      wx.showToast({ title: '身份已卸任重置', icon: 'success' });
+      wx.showToast({ title: '已成功退出该身份', icon: 'success' });
 
-      setTimeout(() => {
-        this.isNavigating = true;
-        wx.reLaunch({
-          url: '/pages/index/index',
-          fail: () => {
-            this.isNavigating = false;
-          }
-        });
-      }, 600);
+      this.initMinePage();
     } catch (err) {
       wx.hideLoading();
       console.error('[onConfirmReleaseRole] 卸任异常:', err);
