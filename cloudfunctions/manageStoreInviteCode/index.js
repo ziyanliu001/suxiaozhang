@@ -15,7 +15,12 @@ const CODE_TTL_MS = 24 * 3600 * 1000;
 // 🌟 "高对比度"字符集：剔除 0/O、1/I 这类肉眼易混淆的字符对，人工朗读/誊抄邀请码时
 // 不容易抄错，而不是指视觉设计意义上的高对比度配色
 const CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const VALID_TARGET_ROLES = ['STORE_MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'];
+const VALID_TARGET_ROLES = ['STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'];
+// 🛡️ scene 字段硬限制 32 字符（wxacode.getUnlimited API 限制），与 getStoreQRCode
+// 同一口径的防御性校验——邀请码固定 8 位 + "code=" 前缀恒为 13 字符，理论上不可能
+// 超限，这里仍显式校验一次，任何未来调整编码格式的改动都会被这道校验立即拦下，
+// 不会悄悄生成一个注定触发 errCode 40169 的太阳码
+const MAX_SCENE_LENGTH = 32;
 
 // 🛡️ 身份阶梯权限：数值越大权限越高，用于 redeem 时判断"是否需要提升调用者的主角色"，
 // 与 authService.ts 的 UserRole 体系对齐——FAMILY 不是一个正式 role（家人/服务对象
@@ -31,6 +36,7 @@ const ROLE_RANK = {
 
 // 邀请目标角色 -> user_roles.role 单值字段应写入的值（FAMILY 例外，不提升主角色）
 const TARGET_ROLE_TO_PRIMARY = {
+  STORE_PATRIARCH: 'store_patriarch',
   STORE_MANAGER: 'store_manager',
   FINANCE: 'finance',
   VOLUNTEER: 'volunteer'
@@ -55,7 +61,7 @@ async function resolveCaller(OPENID) {
 }
 
 // 🛡️ 越权前置阻断：服务端强制校验调用者身份，任何客户端传参都不可信。
-// - 非 super_admin 且尝试生成 FINANCE 或跨店 STORE_MANAGER：直接拒绝
+// - 非 super_admin 且尝试生成 STORE_PATRIARCH/FINANCE 或跨店 STORE_MANAGER：直接拒绝
 // - 只有 super_admin / store_manager / store_patriarch 三种角色允许发码，
 //   finance/volunteer/family 一律无权限（不在权限阶梯里，不能自我复制/越级授权）
 function checkGeneratePermission(caller, storeId, targetRole) {
@@ -72,9 +78,11 @@ function checkGeneratePermission(caller, storeId, targetRole) {
   if (!caller.storeId || caller.storeId !== storeId) {
     return '无权限：不能为其他门店生成邀请码';
   }
-  // 严格禁止越权生成"门店财务"或"门店店长"——只放开低于自身权限的 [家人, 志愿者]
-  if (targetRole === 'FINANCE' || targetRole === 'STORE_MANAGER') {
-    return '无权限：店长/大家长不能生成"门店财务"或"门店店长"邀请码，请联系超级管理员';
+  // 严格禁止越权生成"大家长"/"门店财务"/"门店店长"——这三档与调用者自身同级或更高
+  // （store_patriarch 与 store_manager 互为平级监督关系，不是上下级），只放开
+  // 低于自身权限的 [家人, 志愿者]
+  if (targetRole === 'STORE_PATRIARCH' || targetRole === 'FINANCE' || targetRole === 'STORE_MANAGER') {
+    return '无权限：店长/大家长不能生成"大家长"/"门店财务"/"门店店长"邀请码，请联系超级管理员';
   }
   return null;
 }
@@ -110,28 +118,35 @@ async function handleGenerate(event, OPENID) {
   const now = Date.now();
   const expiresAt = now + CODE_TTL_MS;
 
-  // 🌟 太阳码：scene 编码为 ic=<邀请码>，与证书邀请 scene（见 getStoreQRCode 的
-  // isPersonalCertificate 分支）同一套"极简 scene + app.ts 解析"思路，但这里
-  // 生成的太阳码目前只作为"可视化展示/分享"用途，实际核验入口仍是手动输入邀请码
+  // 🌟 太阳码：scene 编码为 code=<邀请码>，与证书邀请 scene（见 getStoreQRCode 的
+  // isPersonalCertificate 分支）同一套"极简 scene + app.ts 解析"思路——app.ts/
+  // index.ts 扫码启动时按这个前缀识别出这是一张邀请码太阳码（而不是证书太阳码的
+  // u=/s= 格式），拉起"确认绑定并加入 [门店名称]"引导 Modal，直接调用本函数的
+  // redeem 动作核销，不需要用户再手动打字输入邀请码
+  const qrScene = `code=${codeNormalized}`;
   let qrFileID = '';
-  try {
-    const qrResult = await cloud.openapi.wxacode.getUnlimited({
-      scene: `ic=${codeNormalized}`,
-      page: 'pages/index/index',
-      width: 430,
-      isHyaline: false
-    });
-    if (qrResult.errCode === 0) {
-      const uploadRes = await cloud.uploadFile({
-        cloudPath: `invite_qrcodes/qr_${codeNormalized}.png`,
-        fileContent: qrResult.buffer
+  if (qrScene.length > MAX_SCENE_LENGTH) {
+    console.error('[manageStoreInviteCode] scene 超出 32 字符硬限制:', qrScene, `(${qrScene.length} 字符)`);
+  } else {
+    try {
+      const qrResult = await cloud.openapi.wxacode.getUnlimited({
+        scene: qrScene,
+        page: 'pages/index/index',
+        width: 430,
+        isHyaline: false
       });
-      qrFileID = uploadRes.fileID;
-    } else {
-      console.warn('[manageStoreInviteCode] 太阳码生成失败:', qrResult);
+      if (qrResult.errCode === 0) {
+        const uploadRes = await cloud.uploadFile({
+          cloudPath: `invite_qrcodes/qr_${codeNormalized}.png`,
+          fileContent: qrResult.buffer
+        });
+        qrFileID = uploadRes.fileID;
+      } else {
+        console.warn('[manageStoreInviteCode] 太阳码生成失败:', qrResult);
+      }
+    } catch (qrErr) {
+      console.warn('[manageStoreInviteCode] 太阳码生成异常，邀请码本身仍可正常使用:', qrErr);
     }
-  } catch (qrErr) {
-    console.warn('[manageStoreInviteCode] 太阳码生成异常，邀请码本身仍可正常使用:', qrErr);
   }
 
   await db.collection('store_invite_codes').add({
@@ -240,6 +255,37 @@ async function handleRedeem(event, OPENID) {
   };
 }
 
+// 🌟 扫码直达：app.ts/index.ts 解析出邀请码太阳码的 scene（code=<邀请码>）后，
+// 需要先把门店名/目标身份展示在"确认绑定并加入 [门店名称]"引导 Modal 里，用户
+// 确认之后才真正调用 redeem 核销——peek 只读查询，不消耗、不修改这张一次性口令，
+// 与 handleRedeem 共用同一套查找/状态/过期校验，但不落任何写操作
+async function handlePeek(event) {
+  const codeNormalized = normalizeCodeInput(event.code);
+  if (!codeNormalized) {
+    return { success: false, error: '请输入有效的邀请码' };
+  }
+
+  const inviteRes = await db.collection('store_invite_codes')
+    .where({ codeNormalized })
+    .limit(1)
+    .get();
+  const invite = inviteRes.data && inviteRes.data[0];
+  if (!invite) {
+    return { success: false, error: '邀请码不存在或输入有误' };
+  }
+  if (invite.status !== 'UNUSED') {
+    return { success: false, error: '该邀请码已被核销，一次性口令不可重复使用' };
+  }
+  if (invite.expiresAt && Date.now() > invite.expiresAt) {
+    return { success: false, error: '邀请码已过期（有效期 24 小时），请联系发码人重新生成' };
+  }
+
+  return {
+    success: true,
+    data: { storeId: invite.storeId, storeName: invite.storeName, targetRole: invite.targetRole, expiresAt: invite.expiresAt }
+  };
+}
+
 exports.main = async (event) => {
   const { action } = event;
   const { OPENID } = cloud.getWXContext();
@@ -254,6 +300,9 @@ exports.main = async (event) => {
     }
     if (action === 'redeem') {
       return await handleRedeem(event, OPENID);
+    }
+    if (action === 'peek') {
+      return await handlePeek(event);
     }
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {

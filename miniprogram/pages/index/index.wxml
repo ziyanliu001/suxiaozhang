@@ -2115,12 +2115,19 @@
              从【财务稽核台】的"邀请协同"进来（onOpenFinanceInviteMenu）超管默认选中
              【门店财务】，从【门店推广与邀请】进来（onOpenGenCodeModal）默认选中
              genAvailableRoles 的第一项。
-             🛡️ 身份阶梯权限过滤：超管可选四种身份；店长/大家长严格禁止越权生成
-             "门店财务"/"门店店长"，genAvailableRoles 不含这两项时对应选项置灰禁用
-             （gencode-role-disabled），点击不生效，见 onSelectGenRole 的二次拦截。 -->
+             🛡️ 身份阶梯权限过滤：超管可选五种身份；店长/大家长严格禁止越权生成
+             "大家长"/"门店财务"/"门店店长"（均与自身同级或更高），genAvailableRoles
+             不含这三项时对应选项置灰禁用（gencode-role-disabled），点击不生效，
+             见 onSelectGenRole 的二次拦截。 -->
         <view class="form-item-row">
           <text class="form-label">2. 选择授权身份：</text>
           <view class="gencode-role-group">
+            <view class="gencode-role-item {{genTargetRole === 'PATRIARCH' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('PATRIARCH') ? 'gencode-role-disabled' : ''}}"
+                  bindtap="onSelectGenRole" data-role="PATRIARCH">
+              <view class="role-check-badge" wx:if="{{genTargetRole === 'PATRIARCH'}}">✓</view>
+              <view class="idx-icon-sm idx-icon-handshake" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
+              <text>大家长</text>
+            </view>
             <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('MANAGER') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="MANAGER">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'MANAGER'}}">✓</view>
@@ -2147,7 +2154,7 @@
             </view>
           </view>
           <view class="gencode-role-restrict-tip" wx:if="{{!genAvailableRoles.includes('FINANCE')}}">
-            🔒 店长/大家长仅可发放【家人】【志愿者】邀请码，门店财务/门店店长身份需超级管理员授权
+            🔒 店长/大家长仅可发放【家人】【志愿者】邀请码，大家长/门店财务/门店店长身份需超级管理员授权
           </view>
         </view>
       </view>

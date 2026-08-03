@@ -67,7 +67,12 @@ App({
     // 🌟 朋友圈扫码引流：非空时代表本次启动/切前台携带了一个尚未处理的证书邀请，
     // 首页 onShow 读取后按需弹出绑定确认框，处理完（用户确认/取消/已绑定过）
     // 由首页自行清空，避免同一个 scene 在多次 onShow 间反复弹窗
-    inviteContext: null as InviteContext | null
+    inviteContext: null as InviteContext | null,
+    // 🔑 特权邀请码太阳码：scene 编码为 code=<邀请码>（见 cloudfunctions/
+    // manageStoreInviteCode 的 generate 动作），与上面证书邀请的 u=/s= 格式是
+    // 两种互斥的 scene 形态——扫这张码启动/切前台时暂存邀请码本身，首页 onShow
+    // 据此调用 manageStoreInviteCode 的 peek/redeem 动作完成"扫码直达绑定"闭环
+    pendingInviteCode: '' as string
   },
 
   onLaunch(options: any) {
@@ -131,6 +136,10 @@ App({
   // wxacode.getUnlimited 生成的码，scene 原样透传在 options.scene（原始编码串，
   // 需要 decodeURIComponent）；如果将来改用完整路径+query 的其它入口方式启动，
   // 则会走 options.query.scene。两者任一存在即可，取到就不再看另一个。
+  //
+  // 🔑 两种互斥的 scene 形态：证书邀请码（u=<openid前10位>&s=<storeId前10位>）
+  // vs 特权邀请码太阳码（code=<8位邀请码>）——同一段 scene 字符串只会命中其中
+  // 一种，按解析出的 key 分流写入 inviteContext 或 pendingInviteCode
   _captureInviteContext(options: any) {
     try {
       const rawScene = (options && options.query && options.query.scene) || (options && options.scene) || '';
@@ -141,6 +150,7 @@ App({
       // 解析 key=value，与 index.ts 里已有的 scene 解析兜底写法保持同一种风格
       let referrerUserId = '';
       let targetStoreId = '';
+      let inviteCode = '';
       sceneStr.split('&').forEach((pair) => {
         const idx = pair.indexOf('=');
         if (idx < 0) return;
@@ -148,11 +158,15 @@ App({
         const value = pair.slice(idx + 1);
         if (key === 'u') referrerUserId = value;
         if (key === 's') targetStoreId = value;
+        if (key === 'code') inviteCode = value;
       });
 
       if (referrerUserId && targetStoreId) {
         this.globalData.inviteContext = { referrerUserId, targetStoreId };
         console.log('[App] 捕获朋友圈邀请上下文:', this.globalData.inviteContext);
+      } else if (inviteCode) {
+        this.globalData.pendingInviteCode = inviteCode;
+        console.log('[App] 捕获特权邀请码:', inviteCode);
       }
     } catch (err) {
       console.warn('[App] 解析邀请 scene 失败:', err);

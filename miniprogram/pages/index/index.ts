@@ -31,6 +31,27 @@ const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
 const DAILY_HOURS_CAP = 12.0;
 
+// 🔑 特权邀请码身份词汇映射：本组件的本地胶囊角色词汇（PATRIARCH/MANAGER/FINANCE/
+// FAMILY/VOLUNTEER）<-> cloudfunctions/manageStoreInviteCode 的服务端角色词汇
+// （STORE_PATRIARCH/STORE_MANAGER/FINANCE/FAMILY/VOLUNTEER）。onGenerateInviteCode
+// （发码）与 checkPendingInviteCode/confirmInviteCodeRedeem（扫码直达核销）两处
+// 都要用同一套映射，提到模块级避免各自重复定义、口径走偏
+const INVITE_ROLE_SERVER_MAP: Record<string, string> = {
+  PATRIARCH: 'STORE_PATRIARCH', MANAGER: 'STORE_MANAGER', FINANCE: 'FINANCE', FAMILY: 'FAMILY', VOLUNTEER: 'VOLUNTEER'
+};
+const INVITE_ROLE_LABEL_MAP: Record<string, string> = {
+  PATRIARCH: '大家长', MANAGER: '门店店长', FINANCE: '门店财务', FAMILY: '家人', VOLUNTEER: '志愿者'
+};
+// 服务端角色词汇 -> 本地胶囊词汇（大小写两种形式都兜底，落库后的 role 单值字段是
+// 小写 snake_case，targetRole 邀请码字段本身是大写）
+const INVITE_SERVER_ROLE_TO_LOCAL: Record<string, string> = {
+  STORE_PATRIARCH: 'PATRIARCH', store_patriarch: 'PATRIARCH',
+  STORE_MANAGER: 'MANAGER', store_manager: 'MANAGER',
+  FINANCE: 'FINANCE', finance: 'FINANCE',
+  FAMILY: 'FAMILY',
+  VOLUNTEER: 'VOLUNTEER', volunteer: 'VOLUNTEER'
+};
+
 // 🧾 常用支出项目「一键预置模版」：仅覆盖两个分类各自语义相符的高频项，不混着塞——
 // 食材类（daily）与水电/维修这类大额专项（fixed）本就不该出现在同一个分类下
 const EXPENSE_TEMPLATE_PRESETS: Record<'daily' | 'fixed', string[]> = {
@@ -699,7 +720,7 @@ Page({
     availableShifts: [] as any[],
     showGenCodeModal: false,
     isGeneratingInviteCode: false,
-    genTargetRole: 'MANAGER' as 'MANAGER' | 'FINANCE' | 'FAMILY' | 'VOLUNTEER',
+    genTargetRole: 'MANAGER' as 'PATRIARCH' | 'MANAGER' | 'FINANCE' | 'FAMILY' | 'VOLUNTEER',
     generatedCode: '',
     targetGenStoreId: '',
     targetGenStoreName: '',
@@ -709,8 +730,9 @@ Page({
     genStoreSelectorDisabled: false,
     // 🛡️ 身份阶梯权限过滤：当前调用者实际可选的目标身份白名单，与
     // cloudfunctions/manageStoreInviteCode 的 checkGeneratePermission 口径一致——
-    // 超管可选四种，店长/大家长只放开 [家人, 志愿者]
-    genAvailableRoles: ['MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'] as string[],
+    // 超管可选五种，店长/大家长只放开 [家人, 志愿者]（大家长/店长/财务三档
+    // 与调用者自身同级或更高，严禁越权生成）
+    genAvailableRoles: ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'] as string[],
 
     // 🔑 生成结果弹窗：展示 8 位邀请码 + 对应太阳码，与 gencode-modal 是两个独立弹窗——
     // 生成成功后立即关闭 gencode-modal、打开这个结果弹窗，不再像旧版那样自动复制关闭
@@ -2783,10 +2805,11 @@ Page({
       defaultStore = storeOptions[0] || null;
     }
 
-    // 🛡️ 身份阶梯权限过滤：超管可选四种；店长/大家长严格禁止生成"门店财务"/
-    // "门店店长"，只放开低于自身权限的 [家人, 志愿者]
+    // 🛡️ 身份阶梯权限过滤：超管可选五种；店长/大家长严格禁止生成"大家长"/
+    // "门店财务"/"门店店长"（均与自身同级或更高），只放开低于自身权限的
+    // [家人, 志愿者]，与云函数 checkGeneratePermission 的口径完全一致
     const genAvailableRoles = isSuperAdmin
-      ? ['MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER']
+      ? ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER']
       : ['FAMILY', 'VOLUNTEER'];
 
     this.setData({
@@ -2848,18 +2871,11 @@ Page({
     this.setData({ isGeneratingInviteCode: true });
     wx.showLoading({ title: '邀请码安全生成中...', mask: true });
 
-    const ROLE_SERVER_MAP: Record<string, string> = {
-      MANAGER: 'STORE_MANAGER', FINANCE: 'FINANCE', FAMILY: 'FAMILY', VOLUNTEER: 'VOLUNTEER'
-    };
-    const ROLE_LABEL_MAP: Record<string, string> = {
-      MANAGER: '门店店长', FINANCE: '门店财务', FAMILY: '家人', VOLUNTEER: '志愿者'
-    };
-
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
       const res: any = await wx.cloud.callFunction({
         name: 'manageStoreInviteCode',
-        data: { action: 'generate', storeId, targetRole: ROLE_SERVER_MAP[role] }
+        data: { action: 'generate', storeId, targetRole: INVITE_ROLE_SERVER_MAP[role] }
       });
       const result = res.result;
       wx.hideLoading();
@@ -2891,7 +2907,7 @@ Page({
         inviteResultCode: code,
         inviteResultQrPath: qrTempPath,
         inviteResultStoreName: storeName,
-        inviteResultRoleLabel: ROLE_LABEL_MAP[role] || role
+        inviteResultRoleLabel: INVITE_ROLE_LABEL_MAP[role] || role
       });
     } catch (err) {
       wx.hideLoading();
@@ -6470,6 +6486,7 @@ Page({
 
     this.checkPendingHandoffs();
     this.checkPendingInviteContext();
+    this.checkPendingInviteCode();
   },
 
   // 草稿箱 / 设置页 跳回首页后的"交接标记"检查：全部复用已有的加载/弹窗逻辑，
@@ -6615,6 +6632,90 @@ Page({
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       app.globalData.inviteContext = null;
+    }
+  },
+
+  // 🔑 特权邀请码扫码直达：app.ts 已把 scene 里的 code=<邀请码> 解析进
+  // globalData.pendingInviteCode（见 cloudfunctions/manageStoreInviteCode 的
+  // generate 动作、太阳码 scene 简化编码）。只对"未绑定新用户"（isFamily，即
+  // 家人/服务对象的默认态）自动弹出确认框——已持有正式身份的账号不应被一次
+  // 扫码悄悄改变角色，若确实想兑换别的邀请码，走 store-picker 手动输入邀请码
+  // 的既有通道（那里有胶囊上下文可核对，不会被扫码环境悄悄替换身份）。
+  // peek 动作只读查询、不消耗一次性口令，确认后才真正调用 redeem
+  async checkPendingInviteCode() {
+    const app = getApp() as any;
+    const code = app.globalData && app.globalData.pendingInviteCode;
+    if (!code) return;
+
+    if (!this.data.isFamily) {
+      app.globalData.pendingInviteCode = '';
+      return;
+    }
+
+    if (!isCloudAvailable()) return;
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreInviteCode',
+        data: { action: 'peek', code }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        app.globalData.pendingInviteCode = '';
+        if (result && result.error) {
+          wx.showToast({ title: result.error, icon: 'none', duration: 2500 });
+        }
+        return;
+      }
+
+      const { storeName, targetRole } = result.data;
+      const localRole = INVITE_SERVER_ROLE_TO_LOCAL[targetRole];
+      const roleLabel = (localRole && INVITE_ROLE_LABEL_MAP[localRole]) || targetRole;
+
+      wx.showModal({
+        title: '❤️ 爱心邀请',
+        content: `确认绑定并加入【${storeName}】，成为【${roleLabel}】吗？`,
+        confirmText: '确认加入',
+        cancelText: '暂不',
+        success: (modalRes) => {
+          if (modalRes.confirm) {
+            this.confirmInviteCodeRedeem(code);
+          } else {
+            app.globalData.pendingInviteCode = '';
+          }
+        },
+        fail: () => {
+          app.globalData.pendingInviteCode = '';
+        }
+      });
+    } catch (err) {
+      console.warn('[checkPendingInviteCode] 邀请码预检异常:', err);
+      app.globalData.pendingInviteCode = '';
+    }
+  },
+
+  async confirmInviteCodeRedeem(code: string) {
+    const app = getApp() as any;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreInviteCode',
+        data: { action: 'redeem', code }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        // 🛡️ 核销是服务端真正的角色晋升（写入 user_roles.role/roles 数组），
+        // 立即拉一次最新角色，让 AuthService 缓存与本页展示跟上服务端的真实结果
+        await AuthService.fetchUserRole();
+        wx.showToast({ title: `已加入${result.data.storeName}`, icon: 'success' });
+        this.refreshUserRoleView();
+      } else {
+        wx.showToast({ title: (result && result.error) || '绑定失败，请重试', icon: 'none' });
+      }
+    } catch (err) {
+      console.warn('[confirmInviteCodeRedeem] 核销异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      app.globalData.pendingInviteCode = '';
     }
   },
 

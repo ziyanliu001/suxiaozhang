@@ -3212,10 +3212,11 @@ page {
 
 .gencode-role-item {
   position: relative;
-  /* 🌟 身份选项从 2 档扩到 4 档（店长/财务/家人/志愿者）：flex-basis 按"每行两个"
-     换算（50% 减去一半 gap），配合父级 flex-wrap 形成 2x2 网格，而不是把 4 个
-     选项硬挤进同一行 */
-  flex: 1 1 calc(50% - 10rpx);
+  /* 🌟 身份选项从 4 档扩到 5 档（大家长/店长/财务/家人/志愿者）：flex-basis 按
+     "每行三个"换算（33.333% 减去约 2/3 个 gap），配合父级 flex-wrap 形成
+     3+2 的两行网格，而不是把 5 个选项硬挤进同一行、或 2 个一行导致末尾单独
+     落单一项 */
+  flex: 1 1 calc(33.333% - 14rpx);
   text-align: center;
   background: #F8F9FA;
   border: 2rpx solid #DEE2E6;
