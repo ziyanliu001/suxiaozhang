@@ -74,11 +74,22 @@ exports.main = async (event, context) => {
     // 引流时让 app.ts 识别出"谁分享的、指向哪家门店"，两段各截取前 10 位足以
     // 支撑邀请弹窗的模糊匹配，且能稳定控制在 32 字符硬限制内（不像完整 storeId
     // 拼接后长度取决于云环境 ID 生成规则，存在超限风险，见下方 MAX_SCENE_LENGTH 校验）
+    // 🐛 根治「scene 34 字符，上限 32」报错：门店主邀请码此前固定拼
+    // `s=${storeId}`，而云数据库自动生成的 _id 本身就是 32 位十六进制字符串
+    // （如 1a4410256a5e2c29015e01965a1550a4）——"s=" 这两个字符的前缀是纯浪费，
+    // 32 + 2 = 34 必然超出 wxacode.getUnlimited 的 32 字符硬限制，等于但凡是
+    // 云数据库自动 _id 的门店（绝大多数，只有少量手工建的种子门店如
+    // 'store_haicang_001' 是短 ID）一律生成失败。既然这条主邀请码分支从不需要
+    // 跟其它 key（如证书码的 u=&s=）共用一个 scene 承载多个字段，直接把 scene
+    // 设为裸 storeId 本身，不做任何 key=value 包装——32 位 UUID 也刚好卡在
+    // 32 字符上限内，不再有溢出空间可浪费。扫码解析侧同步适配（见
+    // pages/index/index.ts onLoad），且保留对存量已生成/已分享二维码里
+    // "s=<storeId>" 老格式的兼容解析，不影响已经印出去、发出去的海报
     const codeTarget = (isVerifyQr && dateDigits.length === 8)
       ? { page: 'pages/public-verify/index', scene: `t_${storeId}_d_${dateDigits}` }
       : isPersonalCertificate
         ? { page: 'pages/index/index', scene: `u=${String(OPENID || '').substring(0, 10)}&s=${String(storeId).substring(0, 10)}` }
-        : { page: 'pages/index/index', scene: `s=${storeId}` };
+        : { page: 'pages/index/index', scene: String(storeId) };
 
     // 🛡️ scene 字段硬限制 32 字符（wxacode.getUnlimited API 限制）——storeId 是微信
     // 云数据库自动生成的 _id，不保证是短字符串，实际长度取决于云环境的 ID 生成规则，

@@ -784,16 +784,29 @@ Page({
       }
     }
 
-    // 扫码进入时捕获 scene 参数 (支持格式: s=store_haicang)
+    // 🐛 scene 32 字符硬限制修复后（见 getStoreQRCode 云函数），门店主邀请码
+    // 的 scene 格式已从 "s=<storeId>" 改成裸 storeId 字符串（不带 key=value
+    // 前缀，省下来的 2 个字符正好用来装满 32 位云数据库自动 _id）。这里同时
+    // 兼容两种格式：新码不含 "="，整段就是 storeId；已经印刷/分享出去的存量
+    // 老码仍是 "s=<storeId>" 形式，按有没有等号区分，不影响已经在流通的海报。
+    // 🛡️ 不用 URLSearchParams：项目 tsconfig 的 lib 未包含 DOM 类型（之前这里
+    // 一直是个编译错误，try/catch 兜底也从没真正用上 URLSearchParams 分支），
+    // 改成手动按 & 分段解析 key=value，与 app.ts _captureInviteContext 的
+    // scene 解析保持同一种写法
     if (options && options.scene) {
       const sceneStr = decodeURIComponent(options.scene);
       let storeId = '';
 
-      try {
-        const params = new URLSearchParams(sceneStr);
-        storeId = params.get('s') || '';
-      } catch (e) {
-        storeId = sceneStr.replace('s=', '');
+      if (sceneStr.indexOf('=') === -1) {
+        storeId = sceneStr;
+      } else {
+        sceneStr.split('&').forEach((pair) => {
+          const idx = pair.indexOf('=');
+          if (idx < 0) return;
+          const key = pair.slice(0, idx);
+          const value = pair.slice(idx + 1);
+          if (key === 's') storeId = value;
+        });
       }
 
       if (storeId) {
