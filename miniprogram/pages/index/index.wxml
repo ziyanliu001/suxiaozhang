@@ -2594,6 +2594,17 @@
           <view class="poster-canvas-spinner"></view>
           <text class="poster-canvas-loading-text">正在合成精美海报...</text>
         </view>
+        <!-- 🐛 二维码重试兜底：多次拉取失败后海报仍正常生成（画面里是圆角占位卡），
+             这里在预览区底部叠一条可点击的提示条，让用户不用读懂占位卡里的小字，
+             一键重新只拉二维码这一步 -->
+        <view
+          class="poster-qr-retry-banner"
+          hover-class="ui-hover"
+          wx:if="{{storePosterTempFilePath && storePosterQrFailed && !isStorePosterDrawing}}"
+          catchtap="onRetryStoreQr"
+        >
+          ⚠️ 二维码生成失败，点击重新生成
+        </view>
       </view>
 
       <view class="poster-actions-bar">

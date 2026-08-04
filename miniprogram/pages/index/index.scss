@@ -377,6 +377,27 @@ page {
   font-weight: 500;
 }
 
+/* 🐛 二维码重试提示条：贴在预览图底部的半透明深色胶囊，遮罩期间不显示
+   （见 wxml 上的 !isStorePosterDrawing 条件），只在"海报已生成但二维码是
+   占位卡"这一种状态下出现 */
+.poster-qr-retry-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 20rpx;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 24rpx;
+  background: rgba(217, 72, 14, 0.92);
+  color: #FFFFFF;
+  font-size: 22rpx;
+  font-weight: 500;
+  border-radius: 32rpx;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
 .poster-actions-bar {
   width: 100%;
   padding: 0 12rpx;

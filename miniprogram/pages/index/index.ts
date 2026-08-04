@@ -683,6 +683,10 @@ Page({
     // 看到的是一块空白画布（此前 wx.showLoading 只在全局顶层转圈，不覆盖弹窗内
     // 画布区域本身，观感上就是"白屏"）；生成失败时同样兜底收起弹窗，不留白屏残影
     isStorePosterDrawing: false,
+    // 🐛 真机二维码重试兜底：_fetchStoreQrLocalPath 重试耗尽后海报仍会带着圆角
+    // 占位卡正常生成（不阻断），但此时应该让用户能一键只重新拉二维码，而不是
+    // 教他们去读那张卡片上的"请稍后重试"小字——这个标记驱动预览区底部的重试提示条
+    storePosterQrFailed: false,
     currentSponsorInfo: null as any,
     todayDateStr: '',
     // 🍱 今日食谱首页预览卡（只读展示，编辑/发布已合并至【食谱管理中心】pages/daily-menu 页面）
@@ -1807,7 +1811,7 @@ Page({
     // 转圈看好几秒（叠加新增的重试逻辑，最长可能到十几秒），看不出到底在做什么。
     // 现在弹窗立即打开，isStorePosterDrawing 驱动的品牌色 Loading 遮罩（同时覆盖
     // 二维码拉取 + Canvas 绘制两个阶段）取代全局 loading
-    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '' });
+    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '', storePosterQrFailed: false });
 
     // 🐛 根因修复：此前 loading/isStorePosterDrawing 复位分散写在四五个成功/失败
     // 分支里，只要漏掉一条新增的失败路径就会导致 loading 卡死。统一收口到这一个
@@ -1823,6 +1827,10 @@ Page({
 
     try {
       const qrCodeLocalPath = await this._fetchStoreQrLocalPath(storeId, storeName);
+      // 🐛 重试兜底 UI：拉取彻底失败（重试耗尽）时先标记出来，海报仍会正常生成
+      // （drawStoreInvitationPoster 内部会画圆角占位卡兜底），标记只用于驱动预览
+      // 区底部"重新生成二维码"提示条的显隐，不影响本次绘制流程
+      this.setData({ storePosterQrFailed: !qrCodeLocalPath });
 
       setTimeout(() => {
         const query = wx.createSelectorQuery();
@@ -1850,6 +1858,13 @@ Page({
                 width: 320,
                 height: 500
               });
+
+              // 🐛 真机导出空图修复：drawStoreInvitationPoster resolve 只代表最后一条
+              // 绘制指令已经发出，不代表原生渲染层已经把整个绘制队列真正刷进 canvas
+              // 缓冲区——部分 Android 真机上 wx.canvasToTempFilePath 紧跟着调用会读到
+              // 还没刷完的半帧，导出结果是空白或缺角的图。等一个 100ms 宏任务，
+              // 给原生层留出把绘制队列落盘到缓冲区的时间，再执行导出
+              await new Promise(resolve => setTimeout(resolve, 100));
 
               wx.canvasToTempFilePath({
                 canvas,
@@ -1895,6 +1910,18 @@ Page({
     const now = Date.now();
     if (now - (this._lastSharePosterTapAt || 0) < 800) return;
     this._lastSharePosterTapAt = now;
+  },
+
+  // 🐛 二维码重试兜底：_fetchStoreQrLocalPath 重试耗尽（storePosterQrFailed）后，
+  // 预览区会露出一条"重新生成二维码"提示条——不单独实现只重画二维码的分支，
+  // 直接整张海报重新走一遍 onGenerateStorePoster（本身就带门店/loading 状态判断，
+  // 重新生成的成本很低，不值得为这一个失败分支多维护一套局部重绘逻辑）
+  _lastRetryStoreQrAt: 0,
+  onRetryStoreQr() {
+    const now = Date.now();
+    if (now - (this._lastRetryStoreQrAt || 0) < 800) return;
+    this._lastRetryStoreQrAt = now;
+    this.onGenerateStorePoster();
   },
 
   async loadLastBalance() {
