@@ -9,8 +9,10 @@
   />
 
   <scroll-view scroll-y class="journey-scroll" style="padding-top: {{navBarTotalHeight}}px;">
-    <!-- 顶部统计卡片 -->
-    <view class="journey-header-card">
+    <!-- 顶部统计卡片：.ui-card-wrapper 是全站统一的圆角柔和阴影基础层（本页在
+         journey.wxss 本地复刻同款数值，WXSS 页面级作用域不跨页共享样式），
+         叠加各卡片自己的渐变/边框作为差异化装饰 -->
+    <view class="ui-card-wrapper journey-header-card">
       <view class="journey-title-row">
         <view class="title-icon lotus-icon"></view>
         <text class="journey-title">我的雨花护持历程</text>
@@ -30,6 +32,10 @@
           <text class="summary-num">{{totalHours}}</text>
           <text class="summary-label">贡献工时(h)</text>
         </view>
+        <view class="summary-cell">
+          <text class="summary-num">{{totalMeals}}</text>
+          <text class="summary-label">护持餐数</text>
+        </view>
       </view>
 
       <button class="btn-gen-honor-card" bindtap="onGenerateHonorCard" loading="{{isGeneratingHonorCard}}" disabled="{{isGeneratingHonorCard}}">🎖️ 生成我的爱心荣誉卡</button>
@@ -37,7 +43,7 @@
 
     <!-- 🔒 全国纵览：数据硬卡口——只有 isSuperAdmin === true 才渲染这张卡片，
          非管理员从 wxml 层面直接看不到入口，彻底防范越权查看全局数据 -->
-    <view class="national-overview-card" wx:if="{{isSuperAdmin}}">
+    <view class="ui-card-wrapper national-overview-card" wx:if="{{isSuperAdmin}}">
       <view class="card-header">
         <view class="card-header-left">
           <view class="header-icon globe-icon"></view>
@@ -80,7 +86,7 @@
     </view>
 
     <!-- 🎖️ 勋章墙：3 列 Grid，未解锁项高斯模糊 + 锁定态，点击任意一枚查看解锁条件 -->
-    <view class="badge-wall-card" wx:if="{{badgeList.length > 0}}">
+    <view class="ui-card-wrapper badge-wall-card" wx:if="{{badgeList.length > 0}}">
       <view class="card-header">
         <view class="card-header-left">
           <view class="header-icon medal-icon"></view>
@@ -111,7 +117,7 @@
     </view>
 
     <!-- 暖心热力图 -->
-    <view class="heatmap-card">
+    <view class="ui-card-wrapper heatmap-card">
       <view class="card-header">
         <view class="card-header-left">
           <view class="header-icon flame-icon"></view>
@@ -146,7 +152,7 @@
     </view>
 
     <!-- 时间轴 -->
-    <view class="timeline-card">
+    <view class="ui-card-wrapper timeline-card">
       <view class="card-header">
         <view class="card-header-left">
           <view class="header-icon scroll-icon"></view>
@@ -161,7 +167,7 @@
       <view class="timeline-empty" wx:if="{{timelineGroups.length === 0}}">
         <view class="empty-day-badge">Day 1</view>
         <view class="empty-icon flower-icon"></view>
-        <text class="empty-title">开启您的护持之旅第一天</text>
+        <text class="empty-title">开启您的第一次雨花护持之旅</text>
         <text class="empty-desc">一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！</text>
         <view class="empty-cta-btn" bindtap="onGoCheckIn">
           <text class="empty-cta-text">去首页打卡</text>

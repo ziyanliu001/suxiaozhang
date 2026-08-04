@@ -1,15 +1,14 @@
 /**
  * 个人打卡数据的门店隔离统计——从本地打卡流水 my_checkin_logs 按门店动态过滤汇总，
- * 取代"全局递增计数器，切店也不分家"的旧口径。
+ * 取代"全局递增计数器，切店也不分家"的旧口径。index.ts/profile.ts/journey.ts
+ * 现已统一改读本文件的计算结果，不再各自直接读 my_checkin_days 等全局递增计数器。
  *
  * 🛡️ 历史兼容：本次修复前写入的打卡记录只有 storeName，没有 storeId 字段；
  * 优先按 storeId 精确匹配，storeId 缺失（老记录）或未提供时退回按 storeName 匹配，
  * 避免这些历史数据在切到"按门店隔离"后直接从统计里消失。
- *
- * 🛡️ 全局计数器（my_checkin_days/my_checkin_count/my_service_hours）本身继续保留
- * 不动——journey.ts/statistics.ts 的个人看板仍在读这三个 key，本文件只新增
- * "按门店过滤"这一种新的读取方式，不影响其余页面的既有读取逻辑。
  */
+
+import { safeParseDate } from './dateUtils';
 
 export interface CheckInLogEntry {
   timestamp: number;
@@ -37,15 +36,18 @@ export function getMyCheckInLogs(): CheckInLogEntry[] {
   }
 }
 
-// includeAllStores：全国总览/未选定具体门店场景下汇总全部历史打卡，不按门店过滤
+// includeAllStores：全国总览/未选定具体门店场景下汇总全部历史打卡，不按门店过滤——
+// 与 computeMyCheckInStreak 共用同一套过滤口径，避免两个函数各写一份筛选逻辑后走偏
+function scopeByStore(logs: CheckInLogEntry[], storeId: string, storeName: string, includeAllStores: boolean): CheckInLogEntry[] {
+  if (includeAllStores) return logs;
+  return logs.filter((l) => {
+    if (storeId && l.storeId) return l.storeId === storeId;
+    return !!storeName && l.storeName === storeName;
+  });
+}
+
 export function computeMyCheckInStats(storeId: string, storeName: string, includeAllStores: boolean = false): CheckInStats {
-  const logs = getMyCheckInLogs();
-  const scoped = includeAllStores
-    ? logs
-    : logs.filter((l) => {
-      if (storeId && l.storeId) return l.storeId === storeId;
-      return !!storeName && l.storeName === storeName;
-    });
+  const scoped = scopeByStore(getMyCheckInLogs(), storeId, storeName, includeAllStores);
 
   const uniqueDays = new Set(scoped.map((l) => l.date));
   const hours = parseFloat(
@@ -53,4 +55,39 @@ export function computeMyCheckInStats(storeId: string, storeName: string, includ
   );
 
   return { days: uniqueDays.size, count: scoped.length, hours };
+}
+
+/**
+ * 连续护持天数（streak）：从最近一次打卡往前数，中间没有断档的连续自然日天数。
+ * 语义与常见"连续打卡"一致——若最近一次打卡不是今天或昨天，视为已断档，返回 0，
+ * 不保留断档前的旧连续记录（避免用户很久没来却还显示"连续 30 天"的误导）。
+ * 🐛 日期解析统一走 safeParseDate，避免 iOS Safari/WKWebView 对 "YYYY-MM-DD"
+ * 短横线字符串 new Date() 解析不稳定这个本项目已知坑（见该函数注释）。
+ */
+export function computeMyCheckInStreak(storeId: string, storeName: string, includeAllStores: boolean = false): number {
+  const scoped = scopeByStore(getMyCheckInLogs(), storeId, storeName, includeAllStores);
+  const uniqueDates = Array.from(new Set(scoped.map((l) => l.date))).filter(Boolean).sort();
+  if (uniqueDates.length === 0) return 0;
+
+  const now = new Date();
+  const todayIso = now.toISOString().split('T')[0];
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const yesterdayIso = yesterday.toISOString().split('T')[0];
+
+  const latest = uniqueDates[uniqueDates.length - 1];
+  if (latest !== todayIso && latest !== yesterdayIso) return 0;
+
+  let streak = 1;
+  for (let i = uniqueDates.length - 1; i > 0; i--) {
+    const cur = safeParseDate(uniqueDates[i]);
+    const prev = safeParseDate(uniqueDates[i - 1]);
+    const diffDays = Math.round((cur.getTime() - prev.getTime()) / 86400000);
+    if (diffDays === 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
 }

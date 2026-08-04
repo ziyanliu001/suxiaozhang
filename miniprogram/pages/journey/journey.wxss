@@ -10,6 +10,21 @@
   padding: 24rpx 24rpx 60rpx 24rpx;
 }
 
+/* 🌟 全站统一的卡片基础层：圆角柔和阴影，与 index.wxss 的 .ui-card-wrapper 同一套
+   数值规范（WXSS 页面级作用域不跨页共享样式，这里本地复刻一份）。本页每张卡片都
+   叠加这个基础类，再各自用更具体的类名覆盖圆角/阴影/边框做差异化装饰（金色/翡翠绿
+   渐变、金属光泽描边等），后写的具体规则在 CSS 层叠顺序上自然覆盖这里的基础值 */
+.ui-card-wrapper {
+  width: 100%;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  border: 1rpx solid #F1F3F5;
+  box-sizing: border-box;
+}
+
 /* 顶部统计卡片：金色渐变 + 微金属光泽边框（内高光描边模拟金属反光，
    WXSS 对 border-image 渐变支持不稳定，改用 inset 高光线这种更可靠的手法） */
 .journey-header-card {
@@ -64,9 +79,11 @@
   margin-bottom: 28rpx;
 }
 
+/* 4 项核心数据（护持天数/累计打卡/贡献工时/护持餐数）改用等宽 Grid，比 flex
+   space-around 在 4 列时更均匀，不会因文案长度不同挤压相邻列 */
 .summary-stats {
-  display: flex;
-  justify-content: space-around;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   align-items: center;
 }
 
@@ -78,13 +95,13 @@
 }
 
 .summary-num {
-  font-size: 48rpx;
+  font-size: 40rpx;
   font-weight: bold;
   color: #B22222;
 }
 
 .summary-label {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #8C6D46;
 }
 
@@ -801,6 +818,20 @@
   box-shadow: 0 4rpx 12rpx rgba(212, 175, 55, 0.25);
 }
 
+/* 已解锁：柔和辉光呼吸动效，与未解锁的模糊灰阶态形成强烈的"荣耀感"对比 */
+.badge-cell.unlocked .badge-circle {
+  animation: badge-glow-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes badge-glow-pulse {
+  0%, 100% {
+    box-shadow: 0 4rpx 12rpx rgba(212, 175, 55, 0.25), 0 0 0 0 rgba(255, 217, 140, 0.45);
+  }
+  50% {
+    box-shadow: 0 4rpx 16rpx rgba(212, 175, 55, 0.35), 0 0 0 10rpx rgba(255, 217, 140, 0);
+  }
+}
+
 .badge-emoji {
   font-size: 44rpx;
   line-height: 1;
@@ -881,6 +912,7 @@
 .badge-detail-circle.unlocked {
   background: linear-gradient(135deg, #FFF3D6 0%, #FFE2A8 100%);
   box-shadow: 0 6rpx 16rpx rgba(212, 175, 55, 0.35);
+  animation: badge-glow-pulse 2.4s ease-in-out infinite;
 }
 
 .badge-detail-circle.locked {

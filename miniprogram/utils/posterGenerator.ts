@@ -1133,7 +1133,10 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
 
             ctx.fillStyle = SECONDARY_COLOR;
             ctx.font = '13px sans-serif';
-            ctx.fillText(data.storeName || '', width / 2, 70);
+            // 🐛 长图溢出修复：门店名是用户可自定义的文本，此前直接 fillText 不设宽度上限，
+            // 超长门店名会在窄幅卡片上左右溢出/与边缘重叠。收窄到画布宽度留白 60px 以内，
+            // 超出部分用 truncateText（已在本文件其余海报函数验证过的同一套截断逻辑）省略号收尾
+            ctx.fillText(truncateText(ctx, data.storeName || '', width - 60), width / 2, 70);
 
             // Profile：圆形头像 + 描边 + 身份 + 荣誉标语
             const avatarCx = width / 2;
@@ -1158,7 +1161,10 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             ctx.fillStyle = honor.currentLevelColor;
             ctx.font = 'bold 17px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(`${honor.currentLevelName} · ${data.nickName || '爱心义工'}`, width / 2, avatarCy + HONOR_AVATAR_RADIUS + 34);
+            // 🐛 长图溢出修复：微信昵称可能是很长的表情符号组合，等级名+昵称拼接后同样
+            // 没有宽度上限，会挤出画布甚至压到左右两侧的其他元素上
+            const identityLine = truncateText(ctx, `${honor.currentLevelName} · ${data.nickName || '爱心义工'}`, width - 50);
+            ctx.fillText(identityLine, width / 2, avatarCy + HONOR_AVATAR_RADIUS + 34);
 
             ctx.fillStyle = SECONDARY_COLOR;
             ctx.font = 'italic 13px sans-serif';

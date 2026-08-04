@@ -1,6 +1,6 @@
 import { AuthService } from '../../utils/authService';
 import { getSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
-import { computeMyCheckInStats } from '../../utils/checkinStats';
+import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable } from '../../utils/cloudGuard';
@@ -1107,9 +1107,17 @@ Page({
   computeBadgeList() {
     const volunteerDays = this.data.stats.volunteerDays || 0;
     const volunteerHours = this.data.stats.volunteerHours || 0;
+    // 🔥 连续护持天数（streak）纯本地打卡流水计算，与云端校准的 days/hours 各自
+    // 独立取数互不影响——不管调用方（loadVolunteerStats/fetchMeritStats 等）当次
+    // 走的是本地口径还是云端校准口径，streak 统一按当前选中门店自行推算一次
+    const activeStore = getSelectedStore();
+    const volunteerStreak = computeMyCheckInStreak(
+      (activeStore && activeStore.storeId) || '',
+      (activeStore && activeStore.storeName) || ''
+    );
     // 解锁规则/阈值提取到 utils/badgeWall.ts 共享给 journey.ts 的 3 列勋章墙，
     // 这里只是调用同一份计算，不再各画一套
-    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours) });
+    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours, volunteerStreak) });
   },
 
   async fetchMeritStats(role: string) {

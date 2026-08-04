@@ -15,7 +15,7 @@ import { AuthService } from '../../utils/authService';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { resolveHonorCardStoreName } from '../../utils/storeIdentity';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
-import { computeMyCheckInStats } from '../../utils/checkinStats';
+import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { computeBadgeList as computeBadgeListShared, BadgeItem } from '../../utils/badgeWall';
 
 interface CheckInLog {
@@ -74,6 +74,7 @@ Page({
     totalDays: 0,
     totalHours: 0,
     totalCount: 0,
+    totalMeals: 0,
 
     // 🆕 志愿者爱心荣誉卡
     isGeneratingHonorCard: false,
@@ -104,6 +105,7 @@ Page({
     this.loadStats();
     this.loadHeatmapData();
     this.loadTimelineData();
+    this.loadMealStat();
     // 🔒 全国纵览：权限判定 + 数据拉取全部异步、非阻塞，isSuperAdmin 解析出来前
     // wxml 的 wx:if="{{isSuperAdmin}}" 默认 false，不会有"先露一下又收回去"的闪烁
     this.loadNationalSummary();
@@ -150,19 +152,36 @@ Page({
   loadStats() {
     try {
       const stats = computeMyCheckInStats('', '', true);
+      const streak = computeMyCheckInStreak('', '', true);
       this.animateCountUp('totalDays', stats.days);
       this.animateCountUp('totalCount', stats.count);
       this.animateCountUp('totalHours', stats.hours);
-      this.computeBadgeList(stats.days, stats.hours);
+      this.computeBadgeList(stats.days, stats.hours, streak);
     } catch (e) {
       console.warn('[journey] loadStats failed:', e);
     }
   },
 
+  // 🍚 护持餐数（雨花敬老餐/素食餐）：与荣誉卡使用同一个云函数的个人统计动作，
+  // 按 _openid 服务端真实统计，不在前端编造估算数字；独立于生成荣誉卡的流程，
+  // 页面一进来就展示，不用等用户点开荣誉卡弹窗才看到这个数字
+  async loadMealStat() {
+    try {
+      if (!isCloudAvailable()) return;
+      const res = await wx.cloud.callFunction({ name: 'getVolunteerHonorStats' });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.animateCountUp('totalMeals', result.diningCount || 0);
+      }
+    } catch (err) {
+      console.warn('[journey] 护持餐数加载失败:', err);
+    }
+  },
+
   // 🎖️ 3 列勋章墙：解锁规则与 profile.ts 共享（见 utils/badgeWall.ts），
   // current >= threshold 即视为解锁，不会出现"已达成条件仍显示锁定"的问题
-  computeBadgeList(volunteerDays: number, volunteerHours: number) {
-    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours) });
+  computeBadgeList(volunteerDays: number, volunteerHours: number, volunteerStreak: number = 0) {
+    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours, volunteerStreak) });
   },
 
   onTapBadge(e: any) {
@@ -179,7 +198,7 @@ Page({
   // 🔢 核心数据数字递增动画：ease-out 缓动，600ms 内从 0 平滑滚动到目标值。
   // 用 setInterval 而非逐帧 requestAnimationFrame——小程序页面态更适合这种轻量
   // 步进定时器，且 onUnload 里统一 clearInterval，不会有页面销毁后仍在跳动的残留计时器
-  animateCountUp(field: 'totalDays' | 'totalCount' | 'totalHours', target: number, duration: number = 600) {
+  animateCountUp(field: 'totalDays' | 'totalCount' | 'totalHours' | 'totalMeals', target: number, duration: number = 600) {
     if (this._countUpTimers[field]) {
       clearInterval(this._countUpTimers[field]);
       delete this._countUpTimers[field];
