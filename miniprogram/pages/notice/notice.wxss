@@ -39,34 +39,78 @@
   margin-bottom: 32rpx;
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  padding-left: 4rpx;
+}
+
 .section-label {
   display: block;
   font-size: 24rpx;
   font-weight: bold;
   color: #868E96;
-  margin-bottom: 16rpx;
-  padding-left: 4rpx;
+}
+
+/* 🌟 全局视觉对齐：与首页 .ui-card-wrapper 同一套圆角/阴影/边框规范。
+   WXSS 页面级作用域不跨页共享样式，这里按同样的数值在本页本地复刻一份 */
+.ui-card-wrapper {
+  width: 100%;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  border: 1rpx solid #F1F3F5;
+  box-sizing: border-box;
+}
+
+.ui-hover {
+  opacity: 0.85;
+  transform: scale(0.99);
 }
 
 .notice-card {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  width: 100%;
-  box-sizing: border-box;
-  background: #FFFFFF;
-  border-radius: 20rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
-  border: 1rpx solid #F1F3F5;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.notice-card.actionable {
-  border-color: #FFE082;
-  background: linear-gradient(135deg, #FFFDF6 0%, #FFFBEA 100%);
+/* 未读：品牌红左侧高亮条 + 轻微暖色底，与已读卡片形成明确的视觉分层 */
+.unread-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8rpx;
+  background: linear-gradient(180deg, #B22222 0%, #8C1D18 100%);
 }
 
-.notice-card.mismatch {
+.notice-card.is-unread {
+  background: #FFFBFA;
+  border-color: #F8E1DE;
+  padding-left: 32rpx;
+}
+
+/* 已读：柔和浅灰降级，标题/描述整体压暗一档，与未读卡片拉开对比 */
+.notice-card.is-read {
+  background: #FAFBFC;
+}
+
+.notice-card.is-read .card-title {
+  color: #868E96;
+  font-weight: 500;
+}
+
+.notice-card.is-read .card-desc {
+  color: #ADB5BD;
+}
+
+.notice-card.is-mismatch {
   border-color: #FFCDD2;
 }
 
@@ -97,13 +141,28 @@
   word-break: break-all;
 }
 
-.card-tag {
+/* 🎨 分类标签：按 approval / ledger / system 三类各自专属配色，一眼区分消息性质 */
+.cat-tag {
   font-size: 20rpx;
+  font-weight: 500;
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
+  white-space: nowrap;
+}
+
+.cat-tag-approval {
   color: #E65100;
   background: #FFF3E0;
-  border-radius: 8rpx;
-  padding: 2rpx 10rpx;
-  white-space: nowrap;
+}
+
+.cat-tag-ledger {
+  color: #2B8A3E;
+  background: #EBFBEE;
+}
+
+.cat-tag-system {
+  color: #3B5BDB;
+  background: #EDF2FF;
 }
 
 .card-desc {
@@ -113,6 +172,38 @@
   margin-top: 8rpx;
   min-width: 0;
   word-break: break-all;
+  line-height: 1.6;
+}
+
+/* 🌟 长文本折叠态：固定 max-height（约两行）+ transition，展开时切到足够大的
+   max-height，配合 overflow:hidden 实现平滑展开/收起动画 */
+.card-desc.is-clamped {
+  max-height: 72rpx;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
+.card-desc:not(.is-clamped) {
+  max-height: 1200rpx;
+  transition: max-height 0.25s ease;
+}
+
+.card-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10rpx;
+}
+
+.card-time {
+  font-size: 20rpx;
+  color: #ADB5BD;
+}
+
+.card-expand-toggle {
+  font-size: 20rpx;
+  color: #1C7ED6;
+  font-weight: 500;
 }
 
 .card-arrow {
@@ -120,33 +211,148 @@
   color: #CED4DA;
   margin-left: 12rpx;
   flex-shrink: 0;
+  align-self: center;
 }
 
-.system-card {
-  background: #F1F3F9;
-  border-color: #E3E8F5;
+/* 🌟 一键已读：胶囊按钮，isMarkingRead 期间禁用点击态视觉（配合 JS 内的防抖锁） */
+.btn-mark-all-read {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140rpx;
+  height: 48rpx;
+  padding: 0 20rpx;
+  background: #FFF5F5;
+  border: 1rpx solid #FFC9C9;
+  border-radius: 24rpx;
+  font-size: 22rpx;
+  color: #C92A2A;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.btn-mark-all-read:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+.btn-mark-all-read.is-saving {
+  opacity: 0.7;
+}
+
+.mark-read-spinner {
+  width: 22rpx;
+  height: 22rpx;
+  border: 3rpx solid rgba(201, 42, 42, 0.25);
+  border-top-color: #C92A2A;
+  border-radius: 50%;
+  animation: notice-spin 0.7s linear infinite;
+}
+
+@keyframes notice-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.notice-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  padding: 24rpx 0;
+  font-size: 22rpx;
+  color: #ADB5BD;
+}
+
+.load-more-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  border: 3rpx solid #E9ECEF;
+  border-top-color: #ADB5BD;
+  border-radius: 50%;
+  animation: notice-spin 0.7s linear infinite;
+}
+
+.notice-no-more {
+  text-align: center;
+  padding: 20rpx 0;
+  font-size: 20rpx;
+  color: #CED4DA;
 }
 
 .notice-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 80rpx 0;
+  padding: 100rpx 0;
 }
 
 .empty-icon {
-  font-size: 56rpx;
-  margin-bottom: 16rpx;
+  font-size: 64rpx;
+  margin-bottom: 20rpx;
 }
 
 .empty-text {
-  font-size: 24rpx;
-  color: #ADB5BD;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #868E96;
+  margin-bottom: 8rpx;
 }
 
-.notice-loading {
-  text-align: center;
-  padding: 40rpx 0;
-  font-size: 24rpx;
-  color: #ADB5BD;
+.empty-sub {
+  font-size: 22rpx;
+  color: #CED4DA;
+}
+
+/* ================= 🦴 骨架屏：首屏加载中的占位卡片 ================= */
+.notice-skeleton .skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #F1F3F5;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+}
+
+.skeleton-icon {
+  flex-shrink: 0;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+}
+
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.skeleton-line {
+  height: 22rpx;
+  border-radius: 8rpx;
+}
+
+.skeleton-line-title {
+  width: 60%;
+}
+
+.skeleton-line-desc {
+  width: 85%;
+}
+
+/* 统一的骨架"呼吸"底色 + shimmer 扫光动画 */
+.skeleton-icon,
+.skeleton-line {
+  background: linear-gradient(90deg, #F1F3F5 25%, #E9ECEF 37%, #F1F3F5 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }

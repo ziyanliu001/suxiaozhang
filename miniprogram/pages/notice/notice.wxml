@@ -5,46 +5,110 @@
     <text class="page-title-txt">通知</text>
   </view>
 
-  <scroll-view scroll-y class="notice-scroll-body">
+  <!-- 🌟 页面是"固定头部 + 内部滚动区"的 flex 布局（与首页同款结构），无法使用页面级
+       onPullDownRefresh/onReachBottom（会把固定头部一起拖走）。改用 scroll-view 自身的
+       下拉刷新（refresher-enabled）与触底事件（bindscrolltolower），效果等价 -->
+  <scroll-view
+    scroll-y
+    class="notice-scroll-body"
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onScrollRefresh"
+    bindscrolltolower="onScrollToLower"
+    lower-threshold="120"
+  >
 
-    <view class="notice-section" wx:if="{{systemMessages.length > 0}}">
-      <text class="section-label">系统消息</text>
-      <view class="notice-card system-card" wx:for="{{systemMessages}}" wx:key="id">
-        <text class="card-icon">{{item.icon}}</text>
-        <view class="card-main">
-          <text class="card-title">{{item.title}}</text>
-          <text class="card-desc">{{item.desc}}</text>
+    <!-- 骨架屏：首屏加载中且尚无任何数据时展示，避免空白闪烁 -->
+    <view class="notice-skeleton" wx:if="{{loading}}">
+      <view class="skeleton-card" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+        <view class="skeleton-icon"></view>
+        <view class="skeleton-lines">
+          <view class="skeleton-line skeleton-line-title"></view>
+          <view class="skeleton-line skeleton-line-desc"></view>
         </view>
       </view>
     </view>
 
-    <view class="notice-section">
-      <text class="section-label">账务与审核动态</text>
+    <block wx:else>
 
-      <view class="notice-card {{item.actionable ? 'actionable' : ''}} {{item.isMismatch ? 'mismatch' : ''}}"
-            wx:for="{{notifications}}"
-            wx:key="id"
-            bindtap="onTapNotification">
-        <text class="card-icon">{{item.icon}}</text>
-        <view class="card-main">
-          <view class="card-title-row">
-            <text class="card-title">{{item.shopName}} · {{item.dateString}}</text>
-            <text class="card-tag" wx:if="{{item.tag}}">{{item.tag}}</text>
+      <!-- 分区一：待处理提醒（大家长审批/权限提醒 · 账目变更），不分页，每次刷新整份重取 -->
+      <view class="notice-section" wx:if="{{reminders.length > 0}}">
+        <view class="section-header">
+          <text class="section-label">待处理提醒</text>
+        </view>
+
+        <view
+          class="ui-card-wrapper notice-card {{item.unread ? 'is-unread' : 'is-read'}} {{item.isMismatch ? 'is-mismatch' : ''}}"
+          wx:for="{{reminders}}"
+          wx:key="id"
+          hover-class="ui-hover"
+          bindtap="onTapReminder"
+        >
+          <view class="unread-bar" wx:if="{{item.unread}}"></view>
+          <text class="card-icon">{{item.icon}}</text>
+          <view class="card-main">
+            <view class="card-title-row">
+              <text class="card-title">{{item.shopName}} · {{item.dateString}}</text>
+              <text class="cat-tag cat-tag-{{item.category}}" wx:if="{{item.tag}}">{{item.tag}}</text>
+            </view>
+            <text class="card-desc">{{item.desc}}</text>
+            <text class="card-time">{{item.timeLabel}}</text>
           </view>
-          <text class="card-desc">{{item.desc}}</text>
+          <text class="card-arrow" wx:if="{{item.actionable}}">›</text>
         </view>
-        <text class="card-arrow" wx:if="{{item.actionable}}">›</text>
       </view>
 
-      <view class="notice-empty" wx:if="{{!loading && notifications.length === 0}}">
+      <!-- 分区二：系统通知 / 门店公告，真分页 + 一键已读（云端持久化） -->
+      <view class="notice-section">
+        <view class="section-header">
+          <text class="section-label">系统通知</text>
+          <view class="btn-mark-all-read {{isMarkingRead ? 'is-saving' : ''}}" bindtap="onMarkAllRead">
+            <view class="mark-read-spinner" wx:if="{{isMarkingRead}}"></view>
+            <text wx:else>{{unreadAnnounceCount > 0 ? ('一键已读 (' + unreadAnnounceCount + ')') : '一键已读'}}</text>
+          </view>
+        </view>
+
+        <view
+          class="ui-card-wrapper notice-card cat-system {{item.unread ? 'is-unread' : 'is-read'}}"
+          wx:for="{{announcements}}"
+          wx:key="id"
+          hover-class="ui-hover"
+          bindtap="onToggleExpand"
+          data-id="{{item.id}}"
+          data-section="announcements"
+        >
+          <view class="unread-bar" wx:if="{{item.unread}}"></view>
+          <text class="card-icon">{{item.icon}}</text>
+          <view class="card-main">
+            <view class="card-title-row">
+              <text class="card-title">{{item.title}}</text>
+              <text class="cat-tag cat-tag-system" wx:if="{{item.tag}}">{{item.tag}}</text>
+            </view>
+            <text class="card-desc {{item.expandable && !item.expanded ? 'is-clamped' : ''}}">{{item.desc}}</text>
+            <view class="card-footer-row">
+              <text class="card-time">{{item.timeLabel}}</text>
+              <text class="card-expand-toggle" wx:if="{{item.expandable}}">{{item.expanded ? '收起 ▲' : '展开 ▼'}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="notice-load-more" wx:if="{{announceLoadingMore && announcements.length > 0}}">
+          <view class="load-more-spinner"></view>
+          <text>加载中...</text>
+        </view>
+        <view class="notice-no-more" wx:if="{{!announceHasMore && announcements.length > 0}}">
+          <text>—— 已加载全部通知 ——</text>
+        </view>
+      </view>
+
+      <!-- 空状态：两个分区都没有数据 -->
+      <view class="notice-empty" wx:if="{{reminders.length === 0 && announcements.length === 0}}">
         <text class="empty-icon">🍃</text>
-        <text class="empty-text">暂无账务与审核动态</text>
+        <text class="empty-text">暂无新通知</text>
+        <text class="empty-sub">门店动态与系统公告都会汇总展示在这里</text>
       </view>
 
-      <view class="notice-loading" wx:if="{{loading}}">
-        <text>加载中...</text>
-      </view>
-    </view>
+    </block>
 
   </scroll-view>
 

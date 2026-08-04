@@ -96,6 +96,51 @@ function safeParseDate(dateStr?: string | null, fallbackTimestamp?: number): Dat
   return new Date();
 }
 
+/**
+ * 相对时间展示："刚刚" / "N分钟前" / "N小时前"（当天内）/ "昨天 HH:mm" /
+ * "M月D日"（同年）/ "YYYY年M月D日"（跨年）。用于通知页消息卡片的时间标签。
+ * input 支持 Date / 毫秒时间戳 / 日期字符串（字符串走 safeParseDate 兼容 iOS 解析）。
+ */
+function formatRelativeTime(input?: Date | number | string | null): string {
+  if (!input && input !== 0) return '';
+
+  const target = input instanceof Date
+    ? input
+    : (typeof input === 'number' ? new Date(input) : safeParseDate(input));
+
+  const targetMs = target.getTime();
+  if (isNaN(targetMs)) return '';
+
+  const now = new Date();
+  const diffMs = now.getTime() - targetMs;
+
+  // 未来时间（时钟偏差等异常情况）不显示负数"前"，直接按日期兜底展示
+  if (diffMs >= 0) {
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return '刚刚';
+    if (diffMin < 60) return `${diffMin}分钟前`;
+
+    const isSameDay = target.getFullYear() === now.getFullYear()
+      && target.getMonth() === now.getMonth()
+      && target.getDate() === now.getDate();
+    if (isSameDay) return `${Math.floor(diffMin / 60)}小时前`;
+  }
+
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const isYesterday = target.getFullYear() === yesterday.getFullYear()
+    && target.getMonth() === yesterday.getMonth()
+    && target.getDate() === yesterday.getDate();
+  if (isYesterday) {
+    const hh = String(target.getHours()).padStart(2, '0');
+    const mm = String(target.getMinutes()).padStart(2, '0');
+    return `昨天 ${hh}:${mm}`;
+  }
+
+  const isSameYear = target.getFullYear() === now.getFullYear();
+  if (isSameYear) return `${target.getMonth() + 1}月${target.getDate()}日`;
+  return `${target.getFullYear()}年${target.getMonth() + 1}月${target.getDate()}日`;
+}
+
 export {
   getTodayIsoString,
   getPrevDayIsoString,
@@ -103,5 +148,6 @@ export {
   formatDateToCnShort,
   isValidIsoDate,
   compareIsoDates,
-  safeParseDate
+  safeParseDate,
+  formatRelativeTime
 };

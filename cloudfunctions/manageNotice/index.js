@@ -175,6 +175,66 @@ exports.main = async (event) => {
         return { success: true, message: '通知已删除' };
       }
 
+      // 🌟 通知页"消息记录"分区分页拉取：与 list 共用完全相同的 tenantId/storeId
+      // 严格互斥隔离条件，额外附加真分页（page/pageSize + hasMore）与按调用者自己的
+      // lastNoticeReadAt 已读游标计算的 unread 标记 / 全局未读总数
+      case 'listPaged': {
+        const { storeId, page, pageSize } = event;
+        if (!caller || !caller.tenantId) {
+          return { success: true, data: [], hasMore: false, unreadCount: 0 };
+        }
+
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const size = Math.min(50, Math.max(1, parseInt(pageSize, 10) || 15));
+
+        const where = { tenantId: caller.tenantId, is_active: true };
+        if (!storeId || OVERVIEW_SENTINELS.includes(storeId)) {
+          where.storeId = '';
+        } else {
+          where.storeId = storeId;
+        }
+
+        const today = todayStr();
+        where.effectiveDate = _.or([_.eq(''), _.lte(today)]);
+        where.expireDate = _.or([_.eq(''), _.gte(today)]);
+
+        const readAt = caller.lastNoticeReadAt || null;
+        // 未读总数：createdAt 晚于调用者自己的已读游标才算未读；从未标记过已读（游标缺失）
+        // 时全部视为未读——与下面单条 data.unread 的判定口径保持一致
+        const unreadWhere = readAt ? { ...where, createdAt: _.gt(readAt) } : where;
+
+        const [countRes, listRes, unreadRes] = await Promise.all([
+          db.collection(COLLECTION).where(where).count(),
+          db.collection(COLLECTION).where(where).orderBy('createdAt', 'desc').skip((pageNum - 1) * size).limit(size).get(),
+          db.collection(COLLECTION).where(unreadWhere).count()
+        ]);
+
+        const total = countRes.total || 0;
+        const hasMore = pageNum * size < total;
+        const readAtMs = readAt ? new Date(readAt).getTime() : 0;
+
+        const data = (listRes.data || []).map((n) => ({
+          ...n,
+          unread: readAtMs ? (new Date(n.createdAt).getTime() > readAtMs) : true
+        }));
+
+        return { success: true, data, hasMore, unreadCount: unreadRes.total || 0 };
+      }
+
+      // 🌟 一键已读：只推进调用者自己的已读游标（lastNoticeReadAt），不修改任何公告本身，
+      // 不影响其他用户各自的已读状态。挂在 user_roles 上而不是新建集合，避免"消息 x 用户"
+      // 的行级已读表在门店规模变大后引入不必要的写放大
+      case 'markAllRead': {
+        if (!caller || !caller._id) {
+          return { success: false, error: '无权限：未找到您的角色信息' };
+        }
+        const now = new Date();
+        await db.collection('user_roles').doc(caller._id).update({
+          data: { lastNoticeReadAt: now }
+        });
+        return { success: true, lastNoticeReadAt: now.getTime() };
+      }
+
       case 'list': {
         const { storeId } = event;
         if (!caller || !caller.tenantId) {
