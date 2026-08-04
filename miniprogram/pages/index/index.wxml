@@ -2596,17 +2596,19 @@
                避免用户在提高后的超时窗口内误以为页面卡死 -->
           <text class="poster-canvas-loading-text">{{storePosterQrRetrying ? '网络较慢，正在重试...' : '正在合成精美海报...'}}</text>
         </view>
-        <!-- 🐛 二维码重试兜底：多次拉取失败后海报仍正常生成（画面里是圆角占位卡），
-             这里在预览区底部叠一条可点击的提示条，让用户不用读懂占位卡里的小字，
-             一键重新只拉二维码这一步 -->
-        <view
-          class="poster-qr-retry-banner"
-          hover-class="ui-hover"
-          wx:if="{{storePosterTempFilePath && storePosterQrFailed && !isStorePosterDrawing}}"
-          catchtap="onRetryStoreQr"
-        >
-          ⚠️ 二维码生成失败，点击重新生成
-        </view>
+      </view>
+
+      <!-- 🐛 二维码重试兜底：多次拉取失败后海报仍正常生成（画面里是圆角占位卡），
+           这里给一条可点击的提示条，让用户不用读懂占位卡里的小字，一键重新只拉
+           二维码这一步。🎨 放在预览区外的独立一行（而不是叠在海报图上），避免
+           跟海报底部"雨花斋餐报助手"标语在视觉上重叠遮挡 -->
+      <view
+        class="poster-qr-retry-banner"
+        hover-class="ui-hover"
+        wx:if="{{storePosterTempFilePath && storePosterQrFailed && !isStorePosterDrawing}}"
+        catchtap="onRetryStoreQr"
+      >
+        ⚠️ 二维码生成失败，点击重新生成
       </view>
 
       <view class="poster-actions-bar">

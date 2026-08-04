@@ -377,25 +377,26 @@ page {
   font-weight: 500;
 }
 
-/* 🐛 二维码重试提示条：贴在预览图底部的半透明深色胶囊，遮罩期间不显示
-   （见 wxml 上的 !isStorePosterDrawing 条件），只在"海报已生成但二维码是
-   占位卡"这一种状态下出现 */
+/* 🎨 二维码重试提示条：此前叠在预览图正上方（position: absolute + 贴底），
+   在没有 address/intro 的默认版式下会跟海报图内绘制的"雨花斋餐报助手"底部
+   标语挤在同一小块区域、观感重叠——现在改成预览区下方的独立一行，走正常
+   文档流，永远不会跟海报图里的任何内容重叠；flex-shrink: 0 保证跟分享按钮
+   一样不被预览区的 flex:1 挤压 */
 .poster-qr-retry-banner {
-  position: absolute;
-  left: 50%;
-  bottom: 20rpx;
-  transform: translateX(-50%);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 12rpx 24rpx;
-  background: rgba(217, 72, 14, 0.92);
-  color: #FFFFFF;
+  margin-bottom: 16rpx;
+  background: rgba(217, 72, 14, 0.1);
+  color: #D9480E;
   font-size: 22rpx;
   font-weight: 500;
-  border-radius: 32rpx;
-  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.25);
-  white-space: nowrap;
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(217, 72, 14, 0.25);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .poster-actions-bar {

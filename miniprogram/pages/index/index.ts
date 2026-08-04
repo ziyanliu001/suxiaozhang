@@ -1740,24 +1740,60 @@ Page({
     }
   },
 
+  // 🐛 门店二维码本地缓存 key：按 storeId 区分，同一门店的邀请二维码内容固定
+  // 不变（getStoreQRCode 的 scene 固定编码为 s=storeId），没有随时间失效的必要
+  _storeQrCacheKey(storeId: string): string {
+    return `store_qr_cache_${storeId}`;
+  },
+
+  _readStoreQrCache(storeId: string): { fileID?: string; tempFilePath?: string } | null {
+    try {
+      const cache = wx.getStorageSync(this._storeQrCacheKey(storeId));
+      return cache && typeof cache === 'object' ? cache : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  _writeStoreQrCache(storeId: string, data: { fileID?: string; tempFilePath?: string }) {
+    try {
+      wx.setStorageSync(this._storeQrCacheKey(storeId), { ...data, cachedAt: Date.now() });
+    } catch (e) {
+      // 本地存储写入失败（容量满/隐私模式）不影响本次已经拿到手的二维码，静默忽略
+      console.warn('[onGenerateStorePoster] 二维码本地缓存写入失败:', e);
+    }
+  },
+
+  // 🐛 兼容强化：正常路径是云函数返回 fileID（cloud:// 云存储路径），必须走
+  // wx.cloud.downloadFile 换成本地 tempFilePath 才能喂给离屏 canvas 的
+  // createImage()。这里额外兼容云函数未来改为直接返回 base64/dataURL 的情况，
+  // 用 wx.getFileSystemManager().writeFileSync 落一份本地临时文件
+  _writeBase64ToTempFile(base64OrDataUrl: string): string {
+    const base64Data = base64OrDataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const filePath = `${wx.env.USER_DATA_PATH}/store_qr_${Date.now()}.png`;
+    wx.getFileSystemManager().writeFileSync(filePath, base64Data, 'base64');
+    return filePath;
+  },
+
   // 🐛 真机 Bug 修复 + 重试兜底：getStoreQRCode 云函数返回的 fileID 是 cloud://
   // 路径，必须走 wx.cloud.downloadFile 换成本地 tempFilePath 才能喂给离屏 canvas
   // 的 createImage()——开发者工具模拟器对 cloud:// 有一定兼容降级容易掩盖问题，
   // 真机上 downloadFile 缺失/网络抖动会直接导致二维码区域空白。
   //
-  // 🐛 超时阈值根因修正：最初给两步各自套了同一个 8s 超时，实测（见线上日志
-  // "二维码请求超时"两次都精确卡在 8000ms）8s 对 callFunction 这一步完全不够——
-  // getStoreQRCode 内部要串行跑「查 user_roles 鉴权 → 调用微信 openapi
-  // wxacode.getUnlimited 生成码 → cloud.uploadFile 上传」，其中 wxacode.getUnlimited
-  // 是跨公众平台服务器的调用，云函数冷启动叠加上这条链路，正常情况就可能到
-  // 5~10s，8s 超时下极易把"还在正常处理中"误判成"卡死"，重试两次也只是把
-  // 同一个不够用的等待窗口又跑了一遍，结果必然还是超时。现在两步分开设置超时：
-  // callFunction 给足 18s（覆盖冷启动 + openapi + 上传全链路），downloadFile
-  // 只是拉一张几十 KB 的图片，6s 绰绰有余；同时把每次尝试的真实耗时打进日志，
-  // 方便后续区分"just slow"还是"真的卡死不返回"
+  // 🐛 超时阈值：callFunction 内部要串行跑「查 user_roles 鉴权 → 调用微信
+  // openapi wxacode.getUnlimited 生成码 → cloud.uploadFile 上传」，其中
+  // wxacode.getUnlimited 是跨公众平台服务器的调用，真机移动网络下叠加云函数
+  // 冷启动，10s+ 都是正常范围，单次超时给 15s，downloadFile 只是拉一张几十 KB
+  // 的图片，6s 足够；保留 2 次重试，每次尝试的真实耗时打进日志
+  //
+  // 🐛 Cache-First：门店二维码内容固定不变，没必要每次打开海报都重新走一遍
+  // 最贵的"云函数鉴权 + openapi 生成码 + 上传"全链路。优先读本地缓存的
+  // tempFilePath，文件还在（accessSync 不抛）直接秒开；文件被系统回收了但
+  // fileID 还在，就跳过最贵的生成步骤，只用 fileID 重新 downloadFile 一次；
+  // 两条捷径都走不通才落回完整生成流程
   async _fetchStoreQrLocalPath(storeId: string, storeName: string): Promise<string> {
     const MAX_ATTEMPTS = 2;
-    const CALL_FUNCTION_TIMEOUT_MS = 18000;
+    const CALL_FUNCTION_TIMEOUT_MS = 15000;
     const DOWNLOAD_FILE_TIMEOUT_MS = 6000;
     const cachedRoleInfo = AuthService.getCachedRoleInfo();
     const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
@@ -1769,6 +1805,31 @@ Page({
       ]);
     };
 
+    const cache = this._readStoreQrCache(storeId);
+    if (cache && cache.tempFilePath) {
+      try {
+        wx.getFileSystemManager().accessSync(cache.tempFilePath);
+        return cache.tempFilePath;
+      } catch (e) {
+        console.warn('[onGenerateStorePoster] 二维码本地缓存文件已失效（大概率被系统回收），尝试用缓存 fileID 重新下载:', e);
+      }
+    }
+    if (cache && cache.fileID) {
+      try {
+        const downRes: any = await withTimeout(
+          wx.cloud.downloadFile({ fileID: cache.fileID }),
+          DOWNLOAD_FILE_TIMEOUT_MS,
+          `downloadFile 超时（>${DOWNLOAD_FILE_TIMEOUT_MS}ms）`
+        );
+        if (downRes && downRes.tempFilePath) {
+          this._writeStoreQrCache(storeId, { fileID: cache.fileID, tempFilePath: downRes.tempFilePath });
+          return downRes.tempFilePath;
+        }
+      } catch (e) {
+        console.warn('[onGenerateStorePoster] 用缓存 fileID 重新下载失败，回退到完整生成流程:', e);
+      }
+    }
+
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const attemptStartedAt = Date.now();
       try {
@@ -1779,18 +1840,29 @@ Page({
           `getStoreQRCode 调用超时（>${CALL_FUNCTION_TIMEOUT_MS}ms）`
         );
         const qrResult = qrRes && qrRes.result;
-        if (!qrResult || !qrResult.success || !qrResult.fileID) {
-          throw new Error((qrResult && qrResult.error) || 'getStoreQRCode 未返回有效 fileID');
+        if (!qrResult || !qrResult.success) {
+          throw new Error((qrResult && qrResult.error) || 'getStoreQRCode 返回失败');
         }
-        const downRes: any = await withTimeout(
-          wx.cloud.downloadFile({ fileID: qrResult.fileID }),
-          DOWNLOAD_FILE_TIMEOUT_MS,
-          `downloadFile 超时（>${DOWNLOAD_FILE_TIMEOUT_MS}ms）`
-        );
-        if (!downRes || !downRes.tempFilePath) {
-          throw new Error('downloadFile 未返回 tempFilePath');
+
+        let tempFilePath = '';
+        if (qrResult.fileID) {
+          const downRes: any = await withTimeout(
+            wx.cloud.downloadFile({ fileID: qrResult.fileID }),
+            DOWNLOAD_FILE_TIMEOUT_MS,
+            `downloadFile 超时（>${DOWNLOAD_FILE_TIMEOUT_MS}ms）`
+          );
+          if (!downRes || !downRes.tempFilePath) {
+            throw new Error('downloadFile 未返回 tempFilePath');
+          }
+          tempFilePath = downRes.tempFilePath;
+        } else if (qrResult.base64 || qrResult.dataURL) {
+          tempFilePath = this._writeBase64ToTempFile(qrResult.base64 || qrResult.dataURL);
+        } else {
+          throw new Error('getStoreQRCode 未返回有效的 fileID/base64');
         }
-        return downRes.tempFilePath;
+
+        this._writeStoreQrCache(storeId, { fileID: qrResult.fileID || '', tempFilePath });
+        return tempFilePath;
       } catch (err) {
         const elapsedMs = Date.now() - attemptStartedAt;
         console.warn(`[onGenerateStorePoster] 二维码获取失败（第${attempt}/${MAX_ATTEMPTS}次，耗时${elapsedMs}ms）:`, err);
