@@ -1,0 +1,9 @@
+{
+  "name": "checkTenantPermission",
+  "version": "1.0.0",
+  "description": "云函数：通用租户订阅鉴权 Helper - 按 tenantId + featureKey 判断当前有效套餐是否放行该功能",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -750,10 +750,11 @@ Page({
     genStoreOptions: [] as any[],
     // 🛡️ 发码防越权：非超管强制锁定为当前所属门店、禁用下拉切换，防止跨店发码
     genStoreSelectorDisabled: false,
-    // 🛡️ 身份阶梯权限过滤：当前调用者实际可选的目标身份白名单，与
-    // cloudfunctions/manageStoreInviteCode 的 checkGeneratePermission 口径一致——
-    // 超管可选五种，店长/大家长只放开 [家人, 志愿者]（大家长/店长/财务三档
-    // 与调用者自身同级或更高，严禁越权生成）
+    // 🏛️ 身份阶梯权限过滤：当前调用者实际可选的目标身份白名单，onOpenGenCodeModal
+    // 每次打开弹窗时都会重新算一遍并覆盖这里的初始值，与 cloudfunctions/
+    // manageStoreInviteCode 的 checkGeneratePermission 口径一致——超管/大家长
+    // 可选全部五种（大家长是门店最高负责人），店长只放开 [门店财务, 家人, 志愿者]
+    // （大家长/门店店长两档与调用者自身同级或更高，严禁越权生成）
     genAvailableRoles: ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'] as string[],
 
     // 🔑 生成结果弹窗：展示 8 位邀请码 + 对应太阳码，与 gencode-modal 是两个独立弹窗——

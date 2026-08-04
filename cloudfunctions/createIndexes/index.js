@@ -111,6 +111,19 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'tenant_subscriptions', index: 'tenantId', status: 'success' });
 
+    // 🔐 manageTenantSubscription 的 getTenantDetail/listTenants、以及新增的
+    // checkTenantPermission（多门店汇总看板/Excel 导出鉴权）、getNationalDashboard
+    // 的服务端硬校验，都是同一个查询形状：{tenantId} + orderBy(lastRenewedAt desc)
+    // + limit(1) 取"最近一次续费的订阅记录"——此前只有上面的单字段 tenantId
+    // 索引，排序落不到索引里，随着调用点变多(从 1 个变成 4 个) 有必要补一条
+    // 完全匹配查询形状的复合索引
+    await db.collection('tenant_subscriptions').createIndex({
+      name: 'tenantId_lastRenewedAt',
+      keys: [{ tenantId: 1 }, { lastRenewedAt: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'tenant_subscriptions', index: 'tenantId_lastRenewedAt', status: 'success' });
+
     // 🍽️ 每日菜单 / 📌 活动大事记：门店+日期(时间) 复合索引，支撑分页列表查询
     await db.collection('daily_menus').createIndex({
       name: 'store_date',

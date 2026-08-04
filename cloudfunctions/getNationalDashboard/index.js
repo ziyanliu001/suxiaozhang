@@ -107,6 +107,28 @@ exports.main = async (event, context) => {
       return { success: false, error: '无法确认您所属的机构，暂不支持访问数据大屏' };
     }
 
+    // 🔐 多门店汇总看板属于专业版专属功能：仅角色卡口（ALLOWED_ROLES）不够——
+    // 免费版租户即使账号是 super_admin，也不该能看到跨门店的汇总财务数据。
+    // 与 cloudfunctions/checkTenantPermission 同一套判断逻辑（各云函数独立
+    // 部署，没有跨函数共享模块机制，这里按项目一贯做法直接复制这一小段，
+    // 不新增运行时依赖）——这是真正的硬拦截点，前端 statistics.ts 的弹窗提示
+    // 只是体验层面的提前拦截，防止用户填完操作才被这里拒绝
+    const subRes = await db.collection('tenant_subscriptions')
+      .where({ tenantId })
+      .orderBy('lastRenewedAt', 'desc')
+      .limit(1)
+      .get();
+    const sub = subRes.data && subRes.data[0];
+    let effectivePlanType = 'basic';
+    if (sub) {
+      const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
+      const isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+      effectivePlanType = isExpired ? 'basic' : (sub.planType || 'basic');
+    }
+    if (!['pro', 'enterprise'].includes(effectivePlanType)) {
+      return { success: false, error: '该功能为专业版专属，请联系大家长升级套餐', errorCode: 'PLAN_UPGRADE_REQUIRED' };
+    }
+
     // 🛡️ 超管专属高阶治理看板：时间维度切片仅对已核验的 super_admin 生效——即使
     // hq_finance/regional_finance/volunteer 在 event 里传了 rangeType，也一律忽略，
     // 继续走原有的全量聚合，不额外扩大这些角色的数据访问范围（见需求4：后端二次校验）

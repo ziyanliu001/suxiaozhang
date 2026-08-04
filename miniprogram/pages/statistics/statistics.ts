@@ -8,6 +8,7 @@ import { recordRecentVisit } from '../../utils/recentPages';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
 import { getSafeSystemInfo } from '../../utils/util';
 import { isVirtualStoreName, resolveHonorCardStoreName } from '../../utils/storeIdentity';
+import { checkTenantPermission, promptTenantUpgrade, FEATURE_KEYS } from '../../utils/tenantPermission';
 
 // 🌾 大米/食用油库存状态展示口径：与"爱心续航看板"健康卡片、material-usage-modal
 // 组件的三档选择器共用同一套 sufficient/normal/urgent 语义，提炼成模块级常量供
@@ -1100,6 +1101,31 @@ Page({
     console.log('[NationalDashboard] 开始拉取全国大屏数据...');
     if (!this.data.canViewNationalDashboard) return;
     if (!this.data.isAllStoresMode) return;
+
+    // 🔐 多门店汇总看板为专业版专属功能：与角色卡口（canViewNationalDashboard，
+    // 严格收窄到 super_admin 等）是两条独立的准入条件——免费版租户即使账号是
+    // super_admin 也拦在这里。服务端 getNationalDashboard 云函数内部有一份
+    // 完全相同的判断兜底，这里只是提前拦截，避免真发起云调用才被拒绝。
+    // 🐛 调用方 onSuperAdminSelectStore 在触发本函数前已经把 isAllStoresMode/
+    // shopName 切到"全部门店"聚合态——被拦截时如果只 return，页面会卡在一个
+    // 已经切换成聚合视图、却永远没有数据回来的空白状态（与海报生成白屏是同一
+    // 类根因）。这里把状态退回到用户自己的实际门店，并重新拉一遍单店数据，
+    // 而不是留一块空白
+    const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
+    if (!permission.allowed) {
+      const ownStore = getSelectedStore();
+      this.setData({
+        isAllStoresMode: false,
+        showNationalDashboard: false,
+        shopName: ownStore.storeName || '',
+        currentUserStoreName: ownStore.storeName || '',
+        currentUserStoreId: ownStore.storeId || ''
+      });
+      promptTenantUpgrade();
+      this.calculateStats();
+      this.fetchStatistics();
+      return;
+    }
 
     this.setData({ showNationalDashboard: true, nationalDashboardLoading: true, nationalDashboardError: '' });
 
@@ -2762,6 +2788,18 @@ Page({
 
     if (!statistics || !statistics.dailyRecords || statistics.dailyRecords.length === 0) {
       wx.showToast({ title: '当前周期无明细可导出', icon: 'none' });
+      return;
+    }
+
+    // 🔐 Excel 批量导出为专业版专属功能：这是纯前端拦截——exportAccountExcel
+    // 云函数本身没有加同款服务端硬校验，因为 performExcelExport 云调用失败时
+    // 会自动降级走本地 CSV（exportLocalCSV），如果只在云函数里拒绝会被这条
+    // 降级路径悄悄绕过，要彻底堵住还需要额外区分"云端主动拒绝"与"云端故障"
+    // 两种失败、且让降级逻辑认识这个新错误码——这部分改动本次不做，此处的前端
+    // 拦截是当前唯一的把关点
+    const permission = await checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT);
+    if (!permission.allowed) {
+      promptTenantUpgrade();
       return;
     }
 
