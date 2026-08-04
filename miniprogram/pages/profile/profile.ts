@@ -13,6 +13,7 @@ import { requestOpenSunshineLedger } from '../../utils/sunshineLedgerHandoff';
 import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
 import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
 import { isVirtualStoreName } from '../../utils/storeIdentity';
+import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
@@ -83,17 +84,6 @@ function normalizeStoreStats(raw: any) {
     }
   };
 }
-
-// 🌟 荣誉徽章解锁规则：护持天数 / 累计工时任一维度达标即视为解锁。
-// 阈值为产品侧可调参数，这里给出一组由浅入深、早期容易触达的示例梯度，
-// 让新义工也能较快解锁第一枚徽章，建立正反馈。
-const BADGE_CONFIG: Array<{ id: string; emoji: string; name: string; type: 'days' | 'hours'; threshold: number; meaning: string }> = [
-  { id: 'starter', emoji: '🌱', name: '初心', type: 'days', threshold: 1, meaning: '义工之路的第一步，代表你迈出了守护雨花斋的初心' },
-  { id: 'storm', emoji: '☔', name: '风雨无阻', type: 'days', threshold: 30, meaning: '无论刮风下雨，你始终坚持到岗，是雨花斋最踏实的陪伴' },
-  { id: 'hours100', emoji: '⏰', name: '百时勋章', type: 'hours', threshold: 100, meaning: '累计护持满百小时，见证你日积月累的默默付出' },
-  { id: 'century', emoji: '💯', name: '百日精进', type: 'days', threshold: 100, meaning: '百日精进，代表你已把护持融入日常，是雨花斋的中坚力量' },
-  { id: 'guardian', emoji: '🛡️', name: '护持先锋', type: 'hours', threshold: 500, meaning: '累计工时突破 500 小时，是雨花斋当之无愧的护持先锋' }
-];
 
 // 🏛️ 家长管理 / 资源兜底：门店人员画像 7 项字段名，与 manageStoreProfile 云函数一致——
 // 迁移自已废弃的 pages/patriarch-dashboard，用于展示 pendingProfileUpdate 里
@@ -1117,39 +1107,9 @@ Page({
   computeBadgeList() {
     const volunteerDays = this.data.stats.volunteerDays || 0;
     const volunteerHours = this.data.stats.volunteerHours || 0;
-
-    const badgeList = BADGE_CONFIG.map(cfg => {
-      const current = cfg.type === 'days' ? volunteerDays : volunteerHours;
-      const unlocked = current >= cfg.threshold;
-      const remaining = Math.max(0, Math.ceil(cfg.threshold - current));
-      const unit = cfg.type === 'days' ? '天' : '小时';
-      const verb = cfg.type === 'days' ? '护持' : '累计';
-      // 🎖️ 徽章详情弹窗用：解锁条件文案 + 进度条（当前进度 clamp 到不超过阈值，
-      // 百分比同理 clamp 到 100，避免已解锁很久、累计数字远超阈值时进度条溢出）
-      const progressCurrent = Math.min(Math.round(current), cfg.threshold);
-      const progressPercent = cfg.threshold > 0 ? Math.min(100, Math.round((current / cfg.threshold) * 100)) : 100;
-
-      return {
-        id: cfg.id,
-        emoji: cfg.emoji,
-        name: cfg.name,
-        meaning: cfg.meaning,
-        unlocked,
-        hint: unlocked ? '' : `再${verb} ${remaining} ${unit}即可解锁「${cfg.name}」徽章`,
-        unlockDesc: `累计${verb}满 ${cfg.threshold} ${unit}可解锁`,
-        // 🎖️ 弹窗正文的进度状态句：未解锁如"已护持 45/100 小时，还差 55 小时解锁"，
-        // 已解锁则改用鼓励式文案，不再提"还差多少"
-        progressStatusText: unlocked
-          ? `已${verb} ${progressCurrent} ${unit}，恭喜解锁「${cfg.name}」！`
-          : `已${verb} ${progressCurrent}/${cfg.threshold} ${unit}，还差 ${remaining} ${unit}解锁`,
-        progressCurrent,
-        progressThreshold: cfg.threshold,
-        progressUnit: unit,
-        progressPercent
-      };
-    });
-
-    this.setData({ badgeList });
+    // 解锁规则/阈值提取到 utils/badgeWall.ts 共享给 journey.ts 的 3 列勋章墙，
+    // 这里只是调用同一份计算，不再各画一套
+    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours) });
   },
 
   async fetchMeritStats(role: string) {

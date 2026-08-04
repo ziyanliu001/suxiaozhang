@@ -35,6 +35,81 @@
       <button class="btn-gen-honor-card" bindtap="onGenerateHonorCard" loading="{{isGeneratingHonorCard}}" disabled="{{isGeneratingHonorCard}}">🎖️ 生成我的爱心荣誉卡</button>
     </view>
 
+    <!-- 🔒 全国纵览：数据硬卡口——只有 isSuperAdmin === true 才渲染这张卡片，
+         非管理员从 wxml 层面直接看不到入口，彻底防范越权查看全局数据 -->
+    <view class="national-overview-card" wx:if="{{isSuperAdmin}}">
+      <view class="card-header">
+        <view class="card-header-left">
+          <view class="header-icon globe-icon"></view>
+          <text class="card-title national-title">全国纵览</text>
+        </view>
+        <text class="national-badge">超管专属</text>
+      </view>
+
+      <view class="national-loading" wx:if="{{isLoadingNationalSummary}}">
+        <view class="national-loading-spinner"></view>
+        <text>正在汇总全国数据...</text>
+      </view>
+
+      <view class="national-grid" wx:else>
+        <view class="national-cell">
+          <text class="national-num">{{nationalSummary.totalVolunteers}}</text>
+          <text class="national-label">义工总数</text>
+        </view>
+        <view class="national-cell">
+          <text class="national-num">{{nationalSummary.totalServiceHours}}</text>
+          <text class="national-label">总服务工时</text>
+        </view>
+        <view class="national-cell">
+          <text class="national-num">{{nationalSummary.totalActiveStores}}</text>
+          <text class="national-label">活跃门店</text>
+        </view>
+        <view class="national-cell">
+          <text class="national-num">{{nationalSummary.totalServiceDays}}</text>
+          <text class="national-label">总护持天数</text>
+        </view>
+        <view class="national-cell">
+          <text class="national-num">{{nationalSummary.totalDiningCount}}</text>
+          <text class="national-label">累计供餐人次</text>
+        </view>
+        <view class="national-cell">
+          <text class="national-num">{{nationalSummary.totalReportCount}}</text>
+          <text class="national-label">餐报总数</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🎖️ 勋章墙：3 列 Grid，未解锁项高斯模糊 + 锁定态，点击任意一枚查看解锁条件 -->
+    <view class="badge-wall-card" wx:if="{{badgeList.length > 0}}">
+      <view class="card-header">
+        <view class="card-header-left">
+          <view class="header-icon medal-icon"></view>
+          <text class="card-title">勋章墙</text>
+        </view>
+        <text class="badge-progress-tip">{{badgeList.length}} 枚成就等你解锁</text>
+      </view>
+
+      <view class="badge-grid">
+        <view
+          class="badge-cell {{item.unlocked ? 'unlocked' : 'locked'}}"
+          wx:for="{{badgeList}}"
+          wx:key="id"
+          bindtap="onTapBadge"
+          data-id="{{item.id}}"
+          hover-class="badge-cell-hover"
+        >
+          <view class="badge-circle">
+            <text class="badge-emoji">{{item.emoji}}</text>
+          </view>
+          <view class="badge-lock-overlay" wx:if="{{!item.unlocked}}">
+            <text class="badge-lock-icon">🔒</text>
+          </view>
+          <text class="badge-name">{{item.name}}</text>
+          <text class="badge-percent" wx:if="{{!item.unlocked}}">{{item.progressPercent}}%</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 暖心热力图 -->
     <view class="heatmap-card">
       <view class="card-header">
@@ -84,8 +159,9 @@
       </view>
 
       <view class="timeline-empty" wx:if="{{timelineGroups.length === 0}}">
+        <view class="empty-day-badge">Day 1</view>
         <view class="empty-icon flower-icon"></view>
-        <text class="empty-title">尚无护持足迹</text>
+        <text class="empty-title">开启您的护持之旅第一天</text>
         <text class="empty-desc">一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！</text>
         <view class="empty-cta-btn" bindtap="onGoCheckIn">
           <text class="empty-cta-text">去首页打卡</text>
@@ -164,6 +240,30 @@
       >
         {{isSavingHonorCard ? '保存中...' : '💾 保存到相册'}}
       </button>
+    </view>
+  </view>
+
+  <!-- 🎖️ 勋章详情弹窗：点击勋章墙任一枚，查看名称/寓意/解锁条件与进度 -->
+  <view class="badge-modal-mask" wx:if="{{showBadgeDetailModal}}" bindtap="onCloseBadgeModal">
+    <view class="badge-modal-box" catchtap="stopPropagation">
+      <view class="badge-detail-circle {{selectedBadge.unlocked ? 'unlocked' : 'locked'}}">
+        <text class="badge-detail-emoji">{{selectedBadge.emoji}}</text>
+      </view>
+      <text class="badge-detail-name">{{selectedBadge.name}}</text>
+      <text class="badge-detail-status unlocked" wx:if="{{selectedBadge.unlocked}}">✅ 已解锁</text>
+      <text class="badge-detail-status" wx:else>🔒 未解锁（{{selectedBadge.progressPercent}}%）</text>
+
+      <text class="badge-detail-meaning">{{selectedBadge.meaning}}</text>
+      <text class="badge-detail-desc">{{selectedBadge.unlockDesc}}</text>
+
+      <view class="badge-detail-progress-track">
+        <view class="badge-detail-progress-fill" style="width: {{selectedBadge.progressPercent}}%;"></view>
+      </view>
+      <text class="badge-detail-progress-text">{{selectedBadge.progressStatusText}}</text>
+
+      <view class="badge-modal-close-btn" bindtap="onCloseBadgeModal">
+        <text>关闭</text>
+      </view>
     </view>
   </view>
 </view>

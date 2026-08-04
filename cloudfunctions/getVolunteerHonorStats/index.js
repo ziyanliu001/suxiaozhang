@@ -15,39 +15,124 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-exports.main = async () => {
+async function handlePersonalStats(OPENID) {
+  let reportCount = 0;
+  let diningCount = 0;
+  let skip = 0;
+  const batchLimit = 100;
+
+  while (true) {
+    const batch = await db.collection('report_logs')
+      .where({ _openid: OPENID, isVoid: _.neq(true) })
+      .field({ diningCount: true, diners: true })
+      .skip(skip)
+      .limit(batchLimit)
+      .get();
+
+    if (!batch.data || batch.data.length === 0) break;
+
+    batch.data.forEach((item) => {
+      reportCount++;
+      diningCount += parseInt(item.diningCount || item.diners || 0, 10);
+    });
+
+    if (batch.data.length < batchLimit) break;
+    skip += batchLimit;
+    if (skip >= 2000) break; // 防御性上限，避免极端账号无限翻页
+  }
+
+  return { success: true, reportCount, diningCount };
+}
+
+// 🌟 全国纵览（journey.ts「暖心历程」页专属，仅 super_admin 可调用）：聚合调用者
+// 所属机构（tenantId）范围内、全部门店的义工工时数据 + 报表供餐数据。
+// 🛡️ 权限与隔离：与本项目其余"总览级"查询同一套口径——严格收敛在 caller.tenantId
+// 内，绝不跨机构；非 super_admin 或账号缺失 tenantId 一律拒绝，不静默降级返回空数据
+// （避免"看起来查到了 0"与"其实没权限"混淆）。
+// 数据来源：volunteer_duty_logs（工时/义工数/打卡天数，与 manageVolunteerCheckIn
+// 的 leaderboard 同一张表，这里不限 storeId，覆盖机构内全部门店）+ report_logs
+// （供餐人次/报表数/活跃门店数，与本函数个人版同一张表，这里不限 _openid）
+async function handleNetworkSummary(OPENID) {
+  const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+  const caller = (roleRes.data && roleRes.data[0]) || null;
+  if (!caller || caller.role !== 'super_admin') {
+    return { success: false, error: '无权限：仅超级管理员可查看全国纵览数据' };
+  }
+  if (!caller.tenantId) {
+    return { success: false, error: '您的管理员账号缺少所属机构（tenantId）信息，无法查看全国纵览' };
+  }
+  const tenantId = caller.tenantId;
+  const batchLimit = 100;
+  const BATCH_CAP = 5000; // 与 manageVolunteerCheckIn 的 leaderboard 同一防御性上限
+
+  const volunteerOpenids = new Set();
+  const volunteerDays = new Set();
+  let totalHours = 0;
+  let skip = 0;
+  while (true) {
+    const batch = await db.collection('volunteer_duty_logs')
+      .where({ tenantId, status: 'active' })
+      .field({ _openid: true, hours: true, dateString: true })
+      .skip(skip)
+      .limit(batchLimit)
+      .get();
+    if (!batch.data || batch.data.length === 0) break;
+    batch.data.forEach((item) => {
+      volunteerOpenids.add(item._openid);
+      volunteerDays.add(`${item._openid}_${item.dateString}`);
+      totalHours += parseFloat(item.hours) || 0;
+    });
+    if (batch.data.length < batchLimit) break;
+    skip += batchLimit;
+    if (skip >= BATCH_CAP) break;
+  }
+
+  let reportCount = 0;
+  let diningCount = 0;
+  const activeStoreIds = new Set();
+  skip = 0;
+  while (true) {
+    const batch = await db.collection('report_logs')
+      .where({ tenantId, isVoid: _.neq(true) })
+      .field({ diningCount: true, diners: true, storeId: true })
+      .skip(skip)
+      .limit(batchLimit)
+      .get();
+    if (!batch.data || batch.data.length === 0) break;
+    batch.data.forEach((item) => {
+      reportCount++;
+      diningCount += parseInt(item.diningCount || item.diners || 0, 10);
+      if (item.storeId) activeStoreIds.add(item.storeId);
+    });
+    if (batch.data.length < batchLimit) break;
+    skip += batchLimit;
+    if (skip >= BATCH_CAP) break;
+  }
+
+  return {
+    success: true,
+    totalVolunteers: volunteerOpenids.size,
+    totalServiceDays: volunteerDays.size,
+    totalServiceHours: parseFloat(totalHours.toFixed(1)),
+    totalReportCount: reportCount,
+    totalDiningCount: diningCount,
+    totalActiveStores: activeStoreIds.size
+  };
+}
+
+exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   if (!OPENID) {
     return { success: false, error: '无法获取用户身份' };
   }
 
+  const action = (event && event.action) || 'personal';
+
   try {
-    let reportCount = 0;
-    let diningCount = 0;
-    let skip = 0;
-    const batchLimit = 100;
-
-    while (true) {
-      const batch = await db.collection('report_logs')
-        .where({ _openid: OPENID, isVoid: _.neq(true) })
-        .field({ diningCount: true, diners: true })
-        .skip(skip)
-        .limit(batchLimit)
-        .get();
-
-      if (!batch.data || batch.data.length === 0) break;
-
-      batch.data.forEach((item) => {
-        reportCount++;
-        diningCount += parseInt(item.diningCount || item.diners || 0, 10);
-      });
-
-      if (batch.data.length < batchLimit) break;
-      skip += batchLimit;
-      if (skip >= 2000) break; // 防御性上限，避免极端账号无限翻页
+    if (action === 'networkSummary') {
+      return await handleNetworkSummary(OPENID);
     }
-
-    return { success: true, reportCount, diningCount };
+    return await handlePersonalStats(OPENID);
   } catch (err) {
     console.error('[getVolunteerHonorStats] 异常:', err);
     return { success: false, error: err.message || '荣誉数据查询失败' };

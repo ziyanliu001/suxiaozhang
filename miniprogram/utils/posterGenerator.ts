@@ -153,6 +153,11 @@ const HONOR_CANVAS_WIDTH = 375;
 const HONOR_CANVAS_HEIGHT = 600;
 const HONOR_AVATAR_RADIUS = 44;
 const HONOR_QR_SIZE = 70;
+// 🐛 圆角裁剪问题：journey.wxml 预览用的 <image class="honor-card-image"> 靠 CSS
+// border-radius 伪装圆角，但 wx.saveImageToPhotosAlbum 保存的是 canvas 导出的原始
+// 像素——CSS 圆角不会写进图片文件，保存/转发到微信外部时四角其实是直角，与预览
+// 观感不一致。改为在画布层面真正 clip 出圆角矩形，导出的 PNG 本身四角透明镂空
+const HONOR_CARD_RADIUS = 24;
 
 const SINGLE_COL_NAME_MAX = 200;
 const DOUBLE_COL_NAME_MAX = 110;
@@ -1106,6 +1111,13 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
 
         (async () => {
           try {
+            // 🐛 圆角裁剪：整张卡片先 clip 成圆角矩形，之后所有绘制（背景/头像/数据卡/
+            // 二维码）都天然被裁在圆角范围内，导出的 PNG 四角是真实透明镂空，
+            // 不再依赖预览层的 CSS border-radius 假装圆角
+            ctx.save();
+            drawRoundedRectPath(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
+            ctx.clip();
+
             // 暖金渐变底：比故事版的橙粉调更庄重，呼应"荣誉证书"调性
             const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
             bgGradient.addColorStop(0, '#FFF8ED');
@@ -1195,6 +1207,8 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             const qrY = height - HONOR_QR_SIZE - 44 - 20;
             const qrX = width - 30 - HONOR_QR_SIZE;
             await drawVerifyQRArea(ctx, canvas, qrX, qrY, HONOR_QR_SIZE, '微信扫码·一起加入爱心公益', width, data.qrLocalPath, '微信扫码加入');
+
+            ctx.restore(); // 对应开头的圆角裁剪 save/clip
 
             wx.canvasToTempFilePath({
               canvas,

@@ -15,6 +15,8 @@ import { AuthService } from '../../utils/authService';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { resolveHonorCardStoreName } from '../../utils/storeIdentity';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
+import { computeMyCheckInStats } from '../../utils/checkinStats';
+import { computeBadgeList as computeBadgeListShared, BadgeItem } from '../../utils/badgeWall';
 
 interface CheckInLog {
   timestamp: number;
@@ -52,6 +54,7 @@ const SERVICE_TYPE_MAP: Record<string, 'reception' | 'kitchen' | 'finance' | 'ot
 
 Page({
   _navGuard: null as NavGuardInstance | null,
+  _countUpTimers: {} as Record<string, any>,
 
   data: {
     // 页面元数据（由 navigation-bar 组件 bind:layout 上报，见 onNavLayout）
@@ -76,7 +79,24 @@ Page({
     isGeneratingHonorCard: false,
     showHonorModal: false,
     honorCardImage: '',
-    isSavingHonorCard: false
+    isSavingHonorCard: false,
+
+    // 🎖️ 3 列勋章墙：解锁规则与 profile.ts 共享（见 utils/badgeWall.ts）
+    badgeList: [] as BadgeItem[],
+    showBadgeDetailModal: false,
+    selectedBadge: null as BadgeItem | null,
+
+    // 🔒 全国纵览：仅 super_admin 可见，聚合本机构全部门店的义工/供餐数据
+    isSuperAdmin: false,
+    isLoadingNationalSummary: false,
+    nationalSummary: {
+      totalVolunteers: 0,
+      totalServiceDays: 0,
+      totalServiceHours: 0,
+      totalReportCount: 0,
+      totalDiningCount: 0,
+      totalActiveStores: 0
+    }
   },
 
   onLoad(options: any) {
@@ -84,6 +104,9 @@ Page({
     this.loadStats();
     this.loadHeatmapData();
     this.loadTimelineData();
+    // 🔒 全国纵览：权限判定 + 数据拉取全部异步、非阻塞，isSuperAdmin 解析出来前
+    // wxml 的 wx:if="{{isSuperAdmin}}" 默认 false，不会有"先露一下又收回去"的闪烁
+    this.loadNationalSummary();
 
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',
@@ -102,6 +125,8 @@ Page({
       this._navGuard.teardown();
       this._navGuard = null;
     }
+    Object.keys(this._countUpTimers).forEach((key) => clearInterval(this._countUpTimers[key]));
+    this._countUpTimers = {};
   },
 
   onShow() {
@@ -115,14 +140,117 @@ Page({
     this.setData({ navBarTotalHeight: e.detail.totalHeight });
   },
 
+  // 🐛 数据硬核对齐：此前直接读全局递增计数器（my_checkin_days 等），与首页/个人页
+  // 早已迁移到的 computeMyCheckInStats（按 my_checkin_logs 流水动态重算）口径不一致，
+  // 同一个人在不同页面可能看到不同的护持天数/工时。改为统一走同一份计算逻辑——
+  // "暖心历程"本身是回顾全部足迹的页面，includeAllStores 恒为 true，不受当前选中
+  // 门店影响（与下方热力图/时间轴本就展示全部门店记录的口径保持一致）。
+  // parseFloat(...) || 0 的双重兜底在 computeMyCheckInStats 内部已处理，这里不会出现
+  // NaN/undefined。
   loadStats() {
     try {
-      const days = wx.getStorageSync('my_checkin_days') || 0;
-      const hours = wx.getStorageSync('my_service_hours') || 0;
-      const count = wx.getStorageSync('my_checkin_count') || 0;
-      this.setData({ totalDays: days, totalHours: hours, totalCount: count });
+      const stats = computeMyCheckInStats('', '', true);
+      this.animateCountUp('totalDays', stats.days);
+      this.animateCountUp('totalCount', stats.count);
+      this.animateCountUp('totalHours', stats.hours);
+      this.computeBadgeList(stats.days, stats.hours);
     } catch (e) {
       console.warn('[journey] loadStats failed:', e);
+    }
+  },
+
+  // 🎖️ 3 列勋章墙：解锁规则与 profile.ts 共享（见 utils/badgeWall.ts），
+  // current >= threshold 即视为解锁，不会出现"已达成条件仍显示锁定"的问题
+  computeBadgeList(volunteerDays: number, volunteerHours: number) {
+    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours) });
+  },
+
+  onTapBadge(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const badge = (this.data.badgeList || []).find((b: any) => b.id === id);
+    if (!badge) return;
+    this.setData({ showBadgeDetailModal: true, selectedBadge: badge });
+  },
+
+  onCloseBadgeModal() {
+    this.setData({ showBadgeDetailModal: false });
+  },
+
+  // 🔢 核心数据数字递增动画：ease-out 缓动，600ms 内从 0 平滑滚动到目标值。
+  // 用 setInterval 而非逐帧 requestAnimationFrame——小程序页面态更适合这种轻量
+  // 步进定时器，且 onUnload 里统一 clearInterval，不会有页面销毁后仍在跳动的残留计时器
+  animateCountUp(field: 'totalDays' | 'totalCount' | 'totalHours', target: number, duration: number = 600) {
+    if (this._countUpTimers[field]) {
+      clearInterval(this._countUpTimers[field]);
+      delete this._countUpTimers[field];
+    }
+
+    const isDecimal = field === 'totalHours';
+    const steps = 20;
+    const stepTime = Math.max(16, Math.round(duration / steps));
+    let currentStep = 0;
+
+    if (!target) {
+      this.setData({ [field]: 0 });
+      return;
+    }
+
+    this._countUpTimers[field] = setInterval(() => {
+      currentStep++;
+      const progress = Math.min(1, currentStep / steps);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const value = target * eased;
+      this.setData({ [field]: isDecimal ? parseFloat(value.toFixed(1)) : Math.round(value) });
+
+      if (progress >= 1) {
+        clearInterval(this._countUpTimers[field]);
+        delete this._countUpTimers[field];
+        // 收尾强制对齐目标值，避免缓动舍入误差导致最终停留在 99.9 这类肉眼可辨的偏差
+        this.setData({ [field]: target });
+      }
+    }, stepTime);
+  },
+
+  // 🔒 全国纵览：checkUserRole 权限判定（经 AuthService 封装，与 onGenerateHonorCard
+  // 同一套角色解析路径）——只有 isSuperAdmin === true 才请求聚合数据，wxml 端再叠加
+  // wx:if="{{isSuperAdmin}}" 双重把关，非管理员既拿不到数据也看不到入口
+  async loadNationalSummary() {
+    try {
+      let roleInfo = AuthService.getCachedRoleInfo();
+      if (!roleInfo) {
+        const roleResult = await AuthService.fetchUserRole();
+        roleInfo = roleResult.roleInfo || null;
+      }
+      const isSuperAdmin = !!roleInfo && roleInfo.role === 'super_admin';
+      this.setData({ isSuperAdmin });
+      if (!isSuperAdmin) return;
+
+      this.setData({ isLoadingNationalSummary: true });
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+
+      const res = await wx.cloud.callFunction({
+        name: 'getVolunteerHonorStats',
+        data: { action: 'networkSummary' }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({
+          nationalSummary: {
+            totalVolunteers: result.totalVolunteers || 0,
+            totalServiceDays: result.totalServiceDays || 0,
+            totalServiceHours: result.totalServiceHours || 0,
+            totalReportCount: result.totalReportCount || 0,
+            totalDiningCount: result.totalDiningCount || 0,
+            totalActiveStores: result.totalActiveStores || 0
+          }
+        });
+      } else {
+        console.warn('[journey] 全国纵览数据查询失败:', result && result.error);
+      }
+    } catch (err) {
+      console.warn('[journey] 全国纵览加载异常:', err);
+    } finally {
+      this.setData({ isLoadingNationalSummary: false });
     }
   },
 
