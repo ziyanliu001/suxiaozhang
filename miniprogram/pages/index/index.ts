@@ -1218,14 +1218,38 @@ Page({
   // 缓存回填路径中（onLoad 里 cached.storeId || ''）可能滞后为空，而 currentStoreName 早已
   // 显示为具体门店名（如"海沧区雨花斋"，来自 shopName 的默认值），导致用户看着明明选了店却被拦。
   // 这里在页面 state 为空/national 时，再回退读取全局持久化的门店选择作为兜底，尽量还原真实选择。
+  // 🐛 真机防御：currentStoreId 理论上是 string，但历史缓存格式变更/组件事件透传
+  // 不规范等情况下，真机上观察到过它被意外写成 { storeId: 'all', ... } 这样的
+  // 对象、或 undefined/null——'{}' 之类的非法值直接参与 === 'all' / includes()
+  // 比较时既不等于任何 NATIONAL_IDS 字符串，又是 truthy，会被 resolveEffectiveStoreId
+  // 误判成"一个合法的具体门店 ID"直接放行，全国总览的拦截形同虚设。这里统一做
+  // 字符串强转：字符串原样返回；对象类型尝试取其 storeId/id 字段；其余一律归空
+  _coerceToStoreIdString(value: any): string {
+    if (typeof value === 'string') return value.trim();
+    if (value && typeof value === 'object') {
+      if (typeof value.storeId === 'string') return value.storeId.trim();
+      if (typeof value.id === 'string') return value.id.trim();
+    }
+    return '';
+  },
+
+  _coerceToStoreNameString(value: any): string {
+    if (typeof value === 'string') return value.trim();
+    if (value && typeof value === 'object' && typeof value.storeName === 'string') {
+      return value.storeName.trim();
+    }
+    return '';
+  },
+
   resolveEffectiveStoreId(): string {
     const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
-    const stateId = this.data.currentStoreId;
+    const stateId = this._coerceToStoreIdString(this.data.currentStoreId);
     if (stateId && !NATIONAL_IDS.includes(stateId)) {
       return stateId;
     }
 
-    const stored = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
+    const storedRaw = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
+    const stored = this._coerceToStoreIdString(storedRaw);
     if (stored && !NATIONAL_IDS.includes(stored)) {
       // 🔧 回填页面 state，避免后续图片上传路径/提交表单等仍引用滞后的空 currentStoreId
       this.setData({ currentStoreId: stored });
@@ -1234,12 +1258,13 @@ Page({
 
     try {
       const selected = getSelectedStore();
-      if (selected && selected.storeId && !NATIONAL_IDS.includes(selected.storeId)) {
+      const selectedStoreId = selected ? this._coerceToStoreIdString(selected.storeId) : '';
+      if (selectedStoreId && !NATIONAL_IDS.includes(selectedStoreId)) {
         this.setData({
-          currentStoreId: selected.storeId,
+          currentStoreId: selectedStoreId,
           currentStoreName: selected.storeName || this.data.currentStoreName
         });
-        return selected.storeId;
+        return selectedStoreId;
       }
     } catch (e) {
       /* ignore */
@@ -1792,6 +1817,10 @@ Page({
   // fileID 还在，就跳过最贵的生成步骤，只用 fileID 重新 downloadFile 一次；
   // 两条捷径都走不通才落回完整生成流程
   async _fetchStoreQrLocalPath(storeId: string, storeName: string): Promise<string> {
+    // 🐛 【海报调试】真机排查专用：确认传到这一层的 storeId/storeName 是否
+    // 仍然是调用方（onGenerateStorePoster）已经强转、校验过的合法字符串
+    console.log('【海报调试】当前 storeId:', storeId, 'storeName:', storeName);
+
     const MAX_ATTEMPTS = 2;
     const CALL_FUNCTION_TIMEOUT_MS = 15000;
     const DOWNLOAD_FILE_TIMEOUT_MS = 6000;
@@ -1878,25 +1907,52 @@ Page({
   },
 
   async onGenerateStorePoster() {
+    // 🐛 【海报调试】真机排查专用：无条件打在最前面，不受任何早退分支影响，
+    // 方便对照 vConsole 里权限拦截/全国总览拦截到底是哪一步触发的
+    console.log('【海报调试】当前 storeId:', this.data.currentStoreId, 'storeName:', this.data.currentStoreName);
+
     if (!this.data.permissions.canAuditUser) {
       wx.showToast({ title: '仅店长/管理员可生成', icon: 'none' });
       return;
     }
-    // 🔒 全国总览视角下禁止生成海报：早期版本这里允许生成一张 storeId='all' 的
-    // "全国雨花爱心团队邀请"海报，但招募到的义工/财务实际绑定审核时必须落到
-    // 具体门店，全国海报在业务上从未真正可用——现在所有入口统一拦截，弹 Toast
-    // 引导先切到具体门店，不再生成这种无效海报
-    if (this.isNationalOverviewSelected()) {
-      wx.showToast({ title: '请先选择具体门店后再生成邀请海报', icon: 'none', duration: 2500 });
+
+    // 🚨 全国总览强卡口：此前只调用 isNationalOverviewSelected()，而它内部的
+    // resolveEffectiveStoreId() 对 this.data.currentStoreId 直接做 === 'all' /
+    // NATIONAL_IDS.includes() 比较——真机上如果 currentStoreId 因为历史缓存
+    // 格式变更、组件事件透传等原因意外变成 { storeId: 'all' } 这样的对象，
+    // 它既不严格等于任何字符串哨兵值，本身又是 truthy，会被直接当成"一个合法
+    // 具体门店 ID"放行，全国总览拦截形同虚设。这里不再单纯依赖那一条判断，
+    // 而是先把 storeId/storeName 强制转成字符串，再显式枚举所有已知的
+    // "全国总览"信号（空值/三个哨兵 ID/门店名精确匹配/门店名包含"全国"），
+    // 任意一条命中就立即拦截；最后仍然 OR 上 isNationalOverviewSelected()
+    // 的结果兜底，双重保险
+    const normalizedStoreId = this._coerceToStoreIdString(this.data.currentStoreId);
+    const normalizedStoreName = this._coerceToStoreNameString(this.data.currentStoreName) || this.data.shopName || '';
+    const isNationalScope = !normalizedStoreId
+      || normalizedStoreId === 'all'
+      || normalizedStoreId === 'national_overview'
+      || normalizedStoreId === 'ALL_STORES'
+      || normalizedStoreName === '全国总览'
+      || normalizedStoreName.includes('全国')
+      || this.isNationalOverviewSelected();
+
+    if (isNationalScope) {
+      console.warn('【海报调试】全国总览拦截命中，终止生成:', { normalizedStoreId, normalizedStoreName });
+      wx.showToast({ title: '请先选择具体门店', icon: 'none' });
       return;
     }
+
     // 🛡️ 防抖：入口按钮无重入守卫时，快速连点会并发跑多份绘制流程，
     // 后一次的 finishDrawing 会把前一次还没画完的状态提前复位，
     // 界面就停在半张画布的"白屏"状态
     if (this.data.isStorePosterDrawing) return;
 
-    const storeId = this.data.currentStoreId || 'store_haicang_001';
-    const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
+    // 🐛 此前这里直接写 this.data.currentStoreId || 'store_haicang_001'，一旦
+    // currentStoreId 是个 truthy 的非法对象，会绕过上面的拦截把对象原样传下去
+    // （拼进云函数 data、拼进本地缓存 key 都会变成 "[object Object]"）。
+    // 改用上面已经强制转成字符串、且已确认不是全国总览的 normalizedStoreId
+    const storeId = normalizedStoreId || 'store_haicang_001';
+    const storeName = normalizedStoreName || '海沧区雨花斋';
 
     // 🐛 体验修复：此前用全局 wx.showLoading 盖住"二维码拉取 + Canvas 绘制"整个
     // 耗时过程，弹窗本身要等二维码拉取完才打开——真机网络慢时用户盯着一个通用
