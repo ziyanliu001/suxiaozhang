@@ -1079,7 +1079,7 @@
         </view>
       </view>
 
-      <view class="receipt-upload-section">
+      <view class="ui-card-wrapper receipt-upload-section">
         <view class="section-title-row">
           <view class="sec-icon idx-icon-sm idx-icon-camera"></view>
           <text class="sec-title">支出凭证 / 收据</text>
@@ -1111,7 +1111,7 @@
       </view>
 
       <!-- 🍱 今日食谱照片：随餐报一并提交，成功后自动发布/更新首页今日食谱卡片 -->
-      <view class="receipt-upload-section">
+      <view class="ui-card-wrapper receipt-upload-section">
         <view class="section-title-row">
           <text class="sec-icon-emoji">🍱</text>
           <text class="sec-title">今日食谱照片</text>
@@ -1142,7 +1142,7 @@
             </view>
           </block>
 
-          <view class="recipe-dish-add" bindtap="chooseRecipeImages" wx:if="{{recipeImages.length < 9}}" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border: 2rpx dashed #C8B195 !important; background-color: #FAF8F5 !important; border-radius: 12rpx !important; box-sizing: border-box !important; margin: 0 !important;">
+          <view class="recipe-dish-add" bindtap="chooseRecipeImages" hover-class="ui-hover" wx:if="{{recipeImages.length < 9}}" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border: 2rpx dashed #C8B195 !important; background-color: #FAF8F5 !important; border-radius: 12rpx !important; box-sizing: border-box !important; margin: 0 !important;">
             <view class="recipe-add-icon" style="position: absolute !important; top: 35% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 40rpx !important; color: #8C1D18 !important; line-height: 1 !important;">{{recipeUploading ? '…' : '+'}}</view>
             <view class="recipe-add-txt" style="position: absolute !important; top: 65% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 22rpx !important; color: #8C1D18 !important; white-space: nowrap !important;">{{recipeUploading ? '压缩中' : '添加照片'}}</view>
           </view>
@@ -1150,7 +1150,7 @@
       </view>
 
       <!-- 📌 门店今日日志/大事记：随餐报一并提交，成功后自动归档至门店日志时间轴 -->
-      <view class="receipt-upload-section">
+      <view class="ui-card-wrapper receipt-upload-section">
         <view class="section-title-row">
           <text class="sec-icon-emoji">📌</text>
           <text class="sec-title">门店今日日志/大事记</text>
@@ -1160,14 +1160,20 @@
           </text>
         </view>
 
-        <textarea
-          class="expense-textarea activity-text-spacing"
-          value="{{activityText}}"
-          placeholder="在此记录今日的温馨故事、活动花絮或志愿者服务心得..."
-          bindinput="onActivityTextInput"
-          data-field="activityText"
-          maxlength="300"
-        />
+        <view class="activity-textarea-box">
+          <textarea
+            class="expense-textarea activity-text-spacing"
+            value="{{activityText}}"
+            placeholder="在此记录今日的温馨故事、活动花絮或志愿者服务心得..."
+            bindinput="onActivityTextInput"
+            data-field="activityText"
+            maxlength="300"
+            cursor-spacing="20"
+            adjust-position="{{true}}"
+            show-confirm-bar="{{false}}"
+          />
+          <text class="activity-textarea-count">{{activityText.length || 0}}/300</text>
+        </view>
 
         <!-- 🌟 与「支出凭证」同款双九宫格网格（而非食谱区的单行横滚），
              符合图文发布的视觉直觉：先文字，后图片网格 -->
@@ -1181,7 +1187,7 @@
             <view class="img-delete-badge" catchtap="deleteActivityImage" data-index="{{index}}">✕</view>
           </view>
 
-          <view class="grid-add-btn" bindtap="chooseActivityImages" wx:if="{{activityImages.length < 18}}">
+          <view class="grid-add-btn" bindtap="chooseActivityImages" hover-class="ui-hover" wx:if="{{activityImages.length < 18}}">
             <text class="add-icon">{{activityUploading ? '…' : '+'}}</text>
             <text class="add-txt">{{activityUploading ? '压缩中' : '添加照片'}}</text>
           </view>
@@ -1265,7 +1271,7 @@
     <!-- 主生成按钮已迁移至底部固定吸底的 .bottom-action-floating-bar，这里仅保留精简的反馈/协议链接 -->
     <view class="bottom-links-card">
       <view class="sub-btn-group">
-        <button class="btn-sub" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>意见反馈</button>
+        <button class="btn-sub" hover-class="ui-hover" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>意见反馈</button>
       </view>
       <view class="agreement-tips">
         生成即代表同意 <text class="link" bindtap="showServiceAgreement">《用户服务协议》</text>
@@ -2650,7 +2656,7 @@
        低对比度重叠。SVG 图标系统这里没法简单换色，改用原生 emoji 字符作为图标（用户自身颜色不受
        按钮 color 影响，天然清晰可辨，也是需求里给出的示例做法），一步到位解决对比度问题。 -->
   <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer}}">
-    <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
+    <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="ui-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text>生成餐报文本
     </button>
     <button class="btn-main-action poster-gen-btn" hover-class="ui-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">

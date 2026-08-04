@@ -1613,6 +1613,23 @@ page {
   margin-bottom: 16rpx;
 }
 
+/* 🌟 大事记文本框字数统计：右下角浮标，不挤占文本框自身的内边距布局 */
+.activity-textarea-box {
+  position: relative;
+}
+
+.activity-textarea-count {
+  position: absolute;
+  right: 12rpx;
+  bottom: 26rpx;
+  font-size: 20rpx;
+  color: #ADB5BD;
+  background: rgba(253, 251, 247, 0.9);
+  padding: 2rpx 8rpx;
+  border-radius: 8rpx;
+  pointer-events: none;
+}
+
 .expense-parse-preview {
   display: block;
   margin-top: 10rpx;

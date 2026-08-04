@@ -4589,6 +4589,12 @@ Page({
   // ================= 🍱 今日食谱照片（随餐报表单一并提交，最多 9 张） =================
 
   async chooseRecipeImages() {
+    // 🛡️ 防重提交：上一批还在压缩/上传时，insertStart 是基于当时的数组长度算出的
+    // 快照——若此时再次触发选图，两批异步任务并发结束时会用各自过时的下标原地
+    // 写回 recipeImages，导致互相覆盖或漏写。上传态期间直接拦掉，等上一批收尾
+    // （recipeUploading 复位）后再允许下一次选图
+    if (this.data.recipeUploading) return;
+
     const remaining = 9 - this.data.recipeImages.length;
     if (remaining <= 0) {
       wx.showToast({ title: '已达 9 张上限，无法继续添加', icon: 'none' });
@@ -4729,6 +4735,9 @@ Page({
   // ================= 📌 今日大事记照片（随餐报表单一并提交，最多 18 张） =================
 
   async chooseActivityImages() {
+    // 🛡️ 防重提交：与 chooseRecipeImages 同一处根因，上一批上传未收尾前拦截新的选图
+    if (this.data.activityUploading) return;
+
     const remaining = 18 - this.data.activityImages.length;
     if (remaining <= 0) {
       wx.showToast({ title: '已达 18 张上限，无法继续添加', icon: 'none' });
