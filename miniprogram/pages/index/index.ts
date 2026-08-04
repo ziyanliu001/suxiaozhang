@@ -5,7 +5,6 @@ import { generateReportText } from '../../utils/reportGenerator';
 import { drawMeritPoster, drawStoryPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
-import { STORE_PRESETS, STORE_PICKER_LIST, findStorePreset } from '../../utils/constants';
 import { getSafeSystemInfo } from '../../utils/util';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
@@ -359,6 +358,9 @@ Page({
     showResult: false,
     isResultExpanded: false,
     showSettings: false,
+    isSavingTemplate: false,
+    templateStorePickerIndex: 0,
+    templateFocusField: '',
     shopName: '海沧区雨花斋',
     mpAccount: '厦门海沧雨花斋！',
     thankText: '感谢各位爱心人士的鼎力支持，感恩默默付出的义工团队！',
@@ -505,9 +507,6 @@ Page({
     ocrPreviewFormula: '',
     showBalanceHistoryModal: false,
     recentBalanceHistoryList: [] as any[],
-    storePickerList: STORE_PICKER_LIST,
-    selectedStoreIndex: 0,
-    isCustomStore: false,
     // 🔗 跑马灯通知云端化：noticeList 是当前视角（总览级/具体门店，严格互斥）
     // 拉取到的全部有效通知，announcement 始终指向 noticeList[currentNoticeIndex]，
     // 供详情弹窗/复制文案等既有逻辑直接读，不用感知背后是数组还是单条
@@ -829,7 +828,6 @@ Page({
       isYesterdaySelected: false
     });
     
-    this.initStorePresetFromCache();
     this.loadSettings();
     await this.loadLastBalance();
     DataService.syncLocalDataToCloud();
@@ -837,6 +835,9 @@ Page({
 
     const storeId = this.data.currentStoreId || 'store_haicang_001';
     this.fetchStoreSponsor(storeId);
+    // 🌟 店铺模板自定义（致谢词/宣传标语/公众号名称）：非阻塞式预取该门店云端最新保存值，
+    // 确保当日餐报文本/公示海报生成时优先使用云端模板，而不是本地缓存或硬编码默认值
+    this.loadStoreTemplateFromCloud(storeId);
     // 🔗 跑马灯通知云端化等首屏动态数据：必须等 initCurrentUserRole 解析出真实
     // tenantId/currentStoreId 之后才能按"当前视角"发起严格互斥查询，不能像旧的
     // 本机 loadAnnouncement 那样在角色未解析前就跑。统一收进 loadHomeDynamicData()
@@ -1576,6 +1577,8 @@ Page({
     this.fetchTodayMenu();
     this.fetchTodayActivity();
     this.fetchNotices();
+    // 🌟 切店后同步刷新该门店云端保存的模板自定义内容，避免沿用切店前门店的致谢词/标语
+    this.loadStoreTemplateFromCloud(storeId);
 
     // 🏪 切店后同步刷新门店运营状态徽标；"全国总览"等虚拟门店 ID 不对应真实门店记录，跳过
     if (!isAllStoresView) {
@@ -1605,7 +1608,10 @@ Page({
   switchStoreTarget(storeId: string, storeName: string) {
     this.setData({
       currentStoreId: storeId,
-      currentStoreName: storeName
+      currentStoreName: storeName,
+      // 🔑 与 onStoreChanged 对齐：shopName 是餐报提交/余额查询实际读取的字段，
+      // 必须跟随 currentStoreName 同步，否则会继续沿用切店前的门店名
+      shopName: storeName
     });
 
     setSelectedStore({ storeId, storeName });
@@ -1622,6 +1628,8 @@ Page({
     this.fetchTodayMenu();
     this.fetchTodayActivity();
     this.fetchNotices();
+    // 🌟 同步刷新该门店云端保存的模板自定义内容（致谢词/宣传标语/公众号名称）
+    this.loadStoreTemplateFromCloud(storeId);
 
     wx.showToast({
       title: `当前门店：${storeName}`,
@@ -1812,81 +1820,6 @@ Page({
 
   onCloseStorePosterModal() {
     this.setData({ showStorePosterModal: false });
-  },
-
-  initStorePresetFromCache() {
-    try {
-      const cached = wx.getStorageSync('last_selected_store_config') as any;
-      if (cached && cached.storeName) {
-        const preset = findStorePreset(cached.storeName);
-        const index = STORE_PICKER_LIST.indexOf(cached.storeName);
-        if (preset && index >= 0) {
-          this.setData({
-            selectedStoreIndex: index,
-            shopName: preset.storeName,
-            mpAccount: preset.officialAccount,
-            thankText: preset.thanksWord,
-            slogan1: preset.slogan1,
-            slogan2: preset.slogan2,
-            isCustomStore: false
-          });
-          return;
-        }
-        // 缓存为自定义门店，保留用户配置
-        this.setData({
-          selectedStoreIndex: STORE_PRESETS.length,
-          isCustomStore: true,
-          shopName: cached.storeName,
-          mpAccount: cached.mpAccount || this.data.mpAccount
-        });
-        return;
-      }
-      this.applyStorePreset(0);
-    } catch (error) {
-      console.error('[门店预设] 读取缓存失败:', error);
-      this.applyStorePreset(0);
-    }
-  },
-
-  onStorePickerChange(e: any) {
-    const index = parseInt(e.detail.value, 10);
-    if (index === STORE_PRESETS.length) {
-      this.setData({
-        selectedStoreIndex: index,
-        isCustomStore: true,
-        shopName: '',
-        mpAccount: ''
-      });
-    } else {
-      this.applyStorePreset(index);
-    }
-  },
-
-  applyStorePreset(index: number) {
-    const preset = STORE_PRESETS[index];
-    if (!preset) return;
-    this.setData({
-      selectedStoreIndex: index,
-      isCustomStore: false,
-      shopName: preset.storeName,
-      mpAccount: preset.officialAccount,
-      thankText: preset.thanksWord,
-      slogan1: preset.slogan1,
-      slogan2: preset.slogan2
-    });
-    try {
-      wx.setStorageSync('last_selected_store_config', preset);
-    } catch (error) {
-      console.error('[门店预设] 保存缓存失败:', error);
-    }
-    
-    setSelectedStore({ storeId: preset.storeId || '', storeName: preset.storeName });
-    
-    const dateValue = this.data.reportDateValue;
-    if (dateValue && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
-      this.loadBalanceForDate(dateValue);
-      this.checkExistingRecord(dateValue);
-    }
   },
 
   async loadLastBalance() {
@@ -2396,7 +2329,7 @@ Page({
 
   saveSettings() {
     try {
-      const { shopName, mpAccount, thankText, slogan1, slogan2, isCustomStore } = this.data;
+      const { shopName, mpAccount, thankText, slogan1, slogan2 } = this.data;
       const settingsData = {
         shopName,
         mpAccount,
@@ -2406,15 +2339,6 @@ Page({
         saveTime: Date.now()
       };
       wx.setStorageSync(SETTINGS_KEY, settingsData);
-
-      const storeConfig = isCustomStore
-        ? { storeName: shopName, mpAccount }
-        : findStorePreset(shopName);
-      if (storeConfig) {
-        wx.setStorageSync('last_selected_store_config', storeConfig);
-        setSelectedStore({ storeId: '', storeName: shopName });
-      }
-
     } catch (error) {
       console.error('[设置] 保存设置失败:', error);
     }
@@ -2434,9 +2358,103 @@ Page({
   },
 
   toggleSettings() {
-    this.setData({
-      showSettings: !this.data.showSettings
-    });
+    const next = !this.data.showSettings;
+    this.setData({ showSettings: next });
+    // 🌟 展开时才拉取，避免用户从未点开这张卡片也白白发一次云端请求；
+    // 每次展开都重新拉取，保证展示的是该门店云端最新保存的模板（而非上次打开时的旧值）
+    if (next) {
+      this.syncTemplateStorePickerIndex();
+      this.loadStoreTemplateFromCloud(this.data.currentStoreId);
+    }
+  },
+
+  // 🌟 店铺模板自定义 - 超管专属店铺切换下拉框的选中项，与真实 allStoresList（含
+  // 真实 storeId，来自 getStoreList 云函数）对齐，不再是与真实门店脱节的旧版硬编码预设
+  syncTemplateStorePickerIndex() {
+    const list = this.data.allStoresList || [];
+    const idx = list.findIndex((s: any) => s.storeId === this.data.currentStoreId);
+    this.setData({ templateStorePickerIndex: idx >= 0 ? idx : 0 });
+  },
+
+  // 🛡️ 数据硬卡口：拉取指定门店云端已保存的模板自定义内容（致谢词/宣传标语/公众号名称）。
+  // "全国总览"等虚拟门店 ID 无对应真实门店记录，直接跳过
+  async loadStoreTemplateFromCloud(storeId: string) {
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    if (!storeId || NATIONAL_IDS.includes(storeId)) return;
+    try {
+      if (!isCloudAvailable()) return;
+      const res = await wx.cloud.callFunction({ name: 'manageStoreProfile', data: { action: 'get', storeId } });
+      const result = res.result as any;
+      if (result && result.success && result.data) {
+        const d = result.data;
+        this.setData({
+          thankText: d.thankText || this.data.thankText,
+          slogan1: d.slogan1 || this.data.slogan1,
+          slogan2: d.slogan2 || this.data.slogan2,
+          mpAccount: d.mpAccount || this.data.mpAccount
+        });
+      }
+    } catch (error) {
+      console.error('[店铺模板] 拉取云端模板配置失败:', error);
+    }
+  },
+
+  // 🛡️ 越权隔离：仅超级管理员可在此下拉框切换编辑目标门店；wxml 已按 isSuperAdmin
+  // 隐藏该 picker，这里再做一次兜底拦截。选中后复用 switchStoreTarget（原本定义但
+  // 从未被调用的既有方法）联动切换页面当前门店上下文，与顶部 store-picker 切店口径一致
+  onTemplateStorePickerChange(e: any) {
+    if (!this.data.isSuperAdmin) return;
+    const index = parseInt(e.detail.value, 10);
+    const target = (this.data.allStoresList || [])[index];
+    if (!target || !target.storeId) return;
+    this.setData({ templateStorePickerIndex: index });
+    this.switchStoreTarget(target.storeId, target.storeName);
+    this.loadStoreTemplateFromCloud(target.storeId);
+  },
+
+  onTemplateFieldFocus(e: any) {
+    this.setData({ templateFocusField: e.currentTarget.dataset.field || '' });
+  },
+
+  onTemplateFieldBlur() {
+    this.setData({ templateFocusField: '' });
+  },
+
+  async onSaveTemplateSettings() {
+    if (this.data.isSavingTemplate) return;
+
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    const storeId = this.data.currentStoreId;
+    if (!storeId || NATIONAL_IDS.includes(storeId)) {
+      wx.showToast({ title: '请先选择具体门店', icon: 'none' });
+      return;
+    }
+
+    const { thankText, slogan1, slogan2, mpAccount } = this.data;
+    this.setData({ isSavingTemplate: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
+      // 🛡️ 数据硬卡口：storeId 固定取 currentStoreId（非超管在 wxml 里已被锁死无法更改；
+      // 超管切店走 onTemplateStorePickerChange 会同步更新 currentStoreId）。云函数端
+      // resolveWriteTarget 对店长/大家长还会再强制取其自身绑定 storeId，不信任任何客户端值
+      const res = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'update', storeId, thankText, slogan1, slogan2, mpAccount }
+      });
+      const result = res.result as any;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+        return;
+      }
+      // 刷新本地缓存，离线/弱网时报表提交仍可读到最新模板
+      this.saveSettings();
+      wx.showToast({ title: result.pending ? '已提交家长/超管审批' : '模板已保存', icon: result.pending ? 'none' : 'success' });
+    } catch (error) {
+      console.error('[店铺模板] 保存失败:', error);
+      wx.showToast({ title: '保存失败，请检查网络', icon: 'none' });
+    } finally {
+      this.setData({ isSavingTemplate: false });
+    }
   },
 
   toggleBalanceLock() {

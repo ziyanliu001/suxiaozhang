@@ -34,15 +34,26 @@ const MAX_TEXT_FIELD_LENGTH = 500;
 const MAX_STORE_PHOTOS = 9;
 const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
 
+// 🏪 店铺模板自定义（首页"店铺模板自定义"卡片）：致谢词/宣传标语/公众号名称，
+// 与人员画像字段一样落在 stores 集合，各自长度上限对齐前端 wxml 的 maxlength，
+// 防止超长文本破坏餐报文本/公示海报排版
+const TEMPLATE_FIELD_LIMITS = {
+  thankText: 150,
+  slogan1: 60,
+  slogan2: 60,
+  mpAccount: 100
+};
+const TEMPLATE_FIELDS = Object.keys(TEMPLATE_FIELD_LIMITS);
+
 // 🏪 门店资质与实景公示：门头照/民政备案复印件/食品安全承诺，与原有的 storePhotos
 // （门店环境照）是四个各自独立的照片分类，同走 sanitizePhotos 校验，只是分类
 // 存储、上限各自更小——这几类通常只需要 1-2 张证件/门头照，不需要 9 张这么多
 const CATEGORY_PHOTOS_MAX = 6;
 const PHOTO_FIELDS = ['storePhotos', 'storefrontPhotos', 'civilAffairsPhotos', 'foodSafetyPledgePhotos'];
 
-function sanitizeText(v) {
+function sanitizeText(v, maxLength) {
   if (v === undefined || v === null) return '';
-  return String(v).trim().slice(0, MAX_TEXT_FIELD_LENGTH);
+  return String(v).trim().slice(0, maxLength || MAX_TEXT_FIELD_LENGTH);
 }
 
 // storePhotos：门店照片，云存储 fileID 数组，参考 activity-log 九宫格惯例上限 9 张
@@ -148,6 +159,7 @@ exports.main = async (event, context) => {
       const profile = {};
       PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { profile[f] = store[f] || ''; });
+      TEMPLATE_FIELDS.forEach((f) => { profile[f] = store[f] || ''; });
       PHOTO_FIELDS.forEach((f) => { profile[f] = Array.isArray(store[f]) ? store[f] : []; });
 
       return {
@@ -188,6 +200,9 @@ exports.main = async (event, context) => {
       // 无条件塞 sanitizeText(undefined) === ''，会把没在本次请求里出现的字段
       // 静默清空，等于每次局部更新都顺带抹掉其余档案信息
       TEXT_PROFILE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f]); });
+      // 🌟 店铺模板自定义字段：同样"只在调用方真的传了才写入"，只提交部分字段（如只改
+      // 致谢词）时不会把没提交的宣传标语静默清空
+      TEMPLATE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f], TEMPLATE_FIELD_LIMITS[f]); });
       PHOTO_FIELDS.forEach((f) => {
         if (event[f] !== undefined) updateFields[f] = sanitizePhotos(event[f], f === 'storePhotos' ? MAX_STORE_PHOTOS : CATEGORY_PHOTOS_MAX);
       });
@@ -263,6 +278,7 @@ exports.main = async (event, context) => {
       // 才写入，避免只提交了资质公示照片的挂起申请，审批通过后把人员画像数字清零
       PROFILE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = clampCount(pending[f]); });
       TEXT_PROFILE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = sanitizeText(pending[f]); });
+      TEMPLATE_FIELDS.forEach((f) => { if (pending[f] !== undefined) updateData[f] = sanitizeText(pending[f], TEMPLATE_FIELD_LIMITS[f]); });
       PHOTO_FIELDS.forEach((f) => {
         if (pending[f] !== undefined) updateData[f] = sanitizePhotos(pending[f], f === 'storePhotos' ? MAX_STORE_PHOTOS : CATEGORY_PHOTOS_MAX);
       });
