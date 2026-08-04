@@ -648,7 +648,10 @@ Page({
     }
   },
 
+  // 🐛 防抖遮罩：复用已有的 loading 态字段做防抖判定，拦截打开动画/网络往返期间的
+  // 连续点击——此前无任何拦截，手速快或网络慢时会并发打出多个重复的云函数请求
   async onOpenFeedbackAdminModal() {
+    if (this.data.feedbackAdminLoading) return;
     this.setData({ showFeedbackAdminModal: true, feedbackAdminLoading: true, feedbackAdminList: [] });
 
     try {
@@ -1940,6 +1943,7 @@ Page({
   },
 
   onOpenVolunteerSubmissionAdminModal() {
+    if (this.data.volunteerSubmissionAdminLoading) return;
     this.setData({ showVolunteerSubmissionAdminModal: true, volunteerSubmissionAdminLoading: true });
     this.fetchPendingVolunteerSubmissions().finally(() => {
       this.setData({ volunteerSubmissionAdminLoading: false });
@@ -1975,6 +1979,7 @@ Page({
   },
 
   onOpenMemberApplicationModal() {
+    if (this.data.memberApplicationLoading) return;
     this.setData({ showMemberApplicationModal: true, memberApplicationLoading: true });
     this.fetchPendingApplications().finally(() => {
       this.setData({ memberApplicationLoading: false });
@@ -1986,6 +1991,7 @@ Page({
   },
 
   onOpenElevatedApplicationModal() {
+    if (this.data.elevatedApplicationLoading) return;
     this.setData({ showElevatedApplicationModal: true, elevatedApplicationLoading: true });
     this.fetchPendingApplications().finally(() => {
       this.setData({ elevatedApplicationLoading: false });
@@ -2228,6 +2234,7 @@ Page({
 
   // 🍚 门店餐饮与物资统计：即时查询，不缓存不预加载，每次打开都拿最新数字
   onOpenStoreStatsModal() {
+    if (this.data.storeStatsLoading) return;
     this.setData({ showStoreStatsModal: true, storeStatsLoading: true });
 
     wx.cloud.callFunction({

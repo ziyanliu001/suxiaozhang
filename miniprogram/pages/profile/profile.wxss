@@ -4,6 +4,19 @@
   box-sizing: border-box;
 }
 
+/* 🌟 全站统一的卡片基础层：圆角柔和阴影，与 index.wxss/journey.wxss 等页面的
+   .ui-card-wrapper 同一套数值规范（WXSS 页面级作用域不跨页共享样式，这里本地
+   复刻一份）。菜单列表容器（.action-list-container/.admin-developer-section）
+   自己的 border-radius/padding/border 定义在本文件更靠后的位置，会按 CSS
+   层叠顺序正常覆盖这里的基础值——不会把列表行自身的内边距挤成两层 */
+.ui-card-wrapper {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  border: 1rpx solid #F1F3F5;
+  box-sizing: border-box;
+}
+
 .status-bar-spacer {
   width: 100%;
 }
@@ -855,6 +868,12 @@
 }
 
 .action-item-cell:active {
+  background: #FAF8F5;
+}
+
+/* 🌟 菜单项点击态统一使用 hover-class="ui-hover"（比 :active 伪类更可靠的小程序
+   触控反馈机制），与 :active 背景色保持一致，两者共存不冲突 */
+.ui-hover {
   background: #FAF8F5;
 }
 

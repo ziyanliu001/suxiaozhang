@@ -174,8 +174,8 @@
 
       <!-- 💖 我的爱心：阳光账本直达（护持不记名，汇入公开账本）+ 温情感谢卡/荣誉证书 -->
       <text class="list-group-label family-care-list-label">💖 我的爱心</text>
-      <view class="action-list-container family-care-list">
-        <view class="action-item-cell" bindtap="onGoToSunshineLedger">
+      <view class="ui-card-wrapper action-list-container family-care-list">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToSunshineLedger">
           <view class="item-left">
             <text class="manager-only-emoji">📖</text>
             <text class="item-text">阳光账本直达</text>
@@ -183,7 +183,7 @@
           <view class="item-arrow">❯</view>
         </view>
 
-        <view class="action-item-cell" bindtap="onOpenCertificateModal">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenCertificateModal">
           <view class="item-left">
             <text class="manager-only-emoji">💌</text>
             <text class="item-text">爱心感谢卡 / 荣誉证书</text>
@@ -194,8 +194,8 @@
 
       <!-- 🏡 雨花家园：门店整体视角——档案 + 日志 + 关注门店 + 温情故事 + 建议反馈 -->
       <text class="list-group-label family-care-list-label">🏡 雨花家园</text>
-      <view class="action-list-container family-care-list">
-        <view class="action-item-cell" bindtap="onGoToStoreProfile">
+      <view class="ui-card-wrapper action-list-container family-care-list">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStoreProfile">
           <view class="item-left">
             <text class="manager-only-emoji">🏠</text>
             <text class="item-text">门店档案</text>
@@ -205,7 +205,7 @@
 
         <!-- 门店日志（原"门店服务历程"）：家人没有个人打卡记录，onGoToActivityLog
              直接跳门店整体大事记列表（而不是个人 0 数据的 journey 页） -->
-        <view class="action-item-cell" bindtap="onGoToActivityLog">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToActivityLog">
           <view class="item-left">
             <view class="item-icon-svg icon-svg-flower"></view>
             <text class="item-text">门店日志</text>
@@ -213,7 +213,7 @@
           <view class="item-arrow">❯</view>
         </view>
 
-        <view class="action-item-cell" bindtap="onGoToStorePicker">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStorePicker">
           <view class="item-left">
             <text class="manager-only-emoji">🤝</text>
             <text class="item-text">我关注的雨花门店</text>
@@ -221,7 +221,7 @@
           <view class="item-arrow">❯</view>
         </view>
 
-        <view class="action-item-cell" bindtap="onOpenWarmStory">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenWarmStory">
           <view class="item-left">
             <text class="manager-only-emoji">🌸</text>
             <text class="item-text">雨花温情故事</text>
@@ -232,7 +232,7 @@
         <!-- 爱心建议箱：改为小程序原生半屏弹窗（见底部 feedback-sheet-*），
              不再用微信官方 open-type="feedback" 原生反馈页——那个入口去到的是
              微信平台通用反馈通道，不落在本项目自己的数据里，店长/运营看不到 -->
-        <view class="action-item-cell" bindtap="onOpenFeedbackModal">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenFeedbackModal">
           <view class="item-left">
             <text class="manager-only-emoji">📮</text>
             <text class="item-text">爱心建议箱</text>
@@ -249,8 +249,8 @@
            "我关注的雨花门店"（onGoToStorePicker）是完全同一个动作，两个入口
            重复——按要求物理删除这里的重复项，只保留雨花家园分组那一个 -->
       <text class="list-group-label family-care-list-label">📚 文化与帮助</text>
-      <view class="action-list-container family-care-list">
-        <view class="action-item-cell" bindtap="onGoToCultureFull">
+      <view class="ui-card-wrapper action-list-container family-care-list">
+        <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToCultureFull">
           <view class="item-left">
             <text class="manager-only-emoji">📖</text>
             <text class="item-text">雨花家训与文化全集</text>
@@ -258,7 +258,7 @@
           <view class="item-arrow">❯</view>
         </view>
 
-        <navigator class="action-item-cell" url="/pages/help/help">
+        <navigator class="action-item-cell" hover-class="ui-hover" url="/pages/help/help">
           <view class="item-left">
             <text class="manager-only-emoji">❓</text>
             <text class="item-text">使用帮助</text>
@@ -380,7 +380,7 @@
       <!-- 👥 待审批的本店成员申请：店长/家长可见，义工/财务两类申请，与超管的
            高级角色/新店申请队列彻底分开（见 processRoleAudit listPendingApplications
            按 caller 角色分流） -->
-      <view class="action-item-cell pd-feedback-entry-cell" wx:if="{{currentUserRole === 'store_manager' || isPatriarch}}" bindtap="onOpenMemberApplicationModal">
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{currentUserRole === 'store_manager' || isPatriarch}}" bindtap="onOpenMemberApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">👥</text>
           <text class="item-text">待审批的本店成员申请</text>
@@ -393,7 +393,7 @@
 
       <!-- 🏛️ 待审批的高级角色与新店申请：仅超管可见（店长/家长任命 + 新建门店，
            见 processRoleAudit approve() 的权限分级——这三类都只能超管批） -->
-      <view class="action-item-cell pd-feedback-entry-cell" wx:if="{{isSuperAdmin}}" bindtap="onOpenElevatedApplicationModal">
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onOpenElevatedApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">🏛️</text>
           <text class="item-text">待审批的高级角色与新店申请</text>
@@ -404,7 +404,7 @@
         </view>
       </view>
 
-      <view class="action-item-cell pd-feedback-entry-cell" bindtap="onOpenFeedbackAdminModal">
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📮</text>
           <text class="item-text">爱心意见箱管理</text>
@@ -416,7 +416,7 @@
       </view>
 
       <!-- 📥 待审核的义工餐报与物资：与爱心意见箱管理同一组，一键采纳/驳回 -->
-      <view class="action-item-cell pd-feedback-entry-cell" bindtap="onOpenVolunteerSubmissionAdminModal">
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📥</text>
           <text class="item-text">待审核的义工餐报与物资</text>
@@ -437,19 +437,24 @@
          上方 family-care-card 自己的"日常记录"列表首位，不在这里重复展示。
          🔀 排在「核心荣誉」前面：日常操作类入口优先于荣誉展示 -->
     <view class="list-group-label" wx:if="{{!isFamily}}">日常记录</view>
-    <view class="action-list-container" wx:if="{{!isFamily}}">
-      <view class="action-item-cell" bindtap="onTapServiceHistory">
+    <view class="ui-card-wrapper action-list-container" wx:if="{{!isFamily}}">
+      <!-- 🐛 双重图标修复：此前左侧 .item-icon-svg（SVG 矢量图标）与文案里手打的
+           emoji（📜/📝）同时存在，等于同一个入口画了两枚图标，且 emoji 字形的行高
+           与相邻纯文字菜单项不一致，会导致这两行看起来比其他行更高/字体更跳。
+           统一改为与全页其余 .item-icon-svg 菜单项完全一致的单图标 + 纯文字模式
+           （如"门店日志""管理视角切换"），字体大小/字重/颜色/行高全部复用 .item-text -->
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTapServiceHistory">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
-          <text class="item-text">📜 我的护持历程</text>
+          <text class="item-text">我的护持历程</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" bindtap="onGoToMySubmissions">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToMySubmissions">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-history"></view>
-          <text class="item-text">📝 我的提交与数据</text>
+          <text class="item-text">我的提交与数据</text>
           <text class="unread-badge" wx:if="{{rejectedCount > 0}}">{{rejectedCount}}</text>
         </view>
         <view class="item-arrow">❯</view>
@@ -460,7 +465,7 @@
            只认 store_manager/isPatriarch/isSuperAdmin，纯财务角色其实完全看不到）。
            合并成这一处，用 hasPrivilege（store_manager/finance/store_patriarch/
            super_admin 均为 true）统一收口，财务角色也能看到 -->
-      <view class="action-item-cell" wx:if="{{hasPrivilege}}" bindtap="onOpenStoreStatsModal">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege}}" bindtap="onOpenStoreStatsModal">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">门店餐饮与物资统计</text>
@@ -474,7 +479,7 @@
            已经按角色分流——super_admin/hq_finance 等 canViewAllStoresDropdown 角色
            一律展示"全国总览"大屏，store_manager/finance 则被强制锁定在自己门店，
            与传入的 shopName 无关，因此这里只需要按角色区分入口文案，不需要区分跳转参数。 -->
-      <view class="action-item-cell manager-only-cell" wx:if="{{currentUserRole === 'super_admin'}}" bindtap="onGoToStoreOverview">
+      <view class="action-item-cell manager-only-cell" hover-class="ui-hover" wx:if="{{currentUserRole === 'super_admin'}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">🌐</text>
           <text class="item-text">超级管理员全景</text>
@@ -491,7 +496,7 @@
            initMinePage 里统一算好：store_manager/finance/store_patriarch/super_admin
            均为 true），管理层角色都能看到；super_admin 命中上面的 wx:if 分支，
            不会重复展示这一项 -->
-      <view class="action-item-cell" wx:elif="{{hasPrivilege}}" bindtap="onGoToStoreOverview">
+      <view class="action-item-cell" hover-class="ui-hover" wx:elif="{{hasPrivilege}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">本店数据明细</text>
@@ -509,7 +514,7 @@
            🐛 权限修复：此前用 wx:if="{{!isVolunteer}}" 把义工排除在外，与义工日常记录
            清单本应包含"门店档案"的设计意图不符——这里改为无条件展示（本区块外层已经
            被 !isFamily 挡住，只有义工/管理层能走到这里，义工也该看到） -->
-      <view class="action-item-cell" bindtap="onGoToStoreProfile">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStoreProfile">
         <view class="item-left">
           <text class="manager-only-emoji">🏠</text>
           <text class="item-text">门店档案</text>
@@ -563,8 +568,8 @@
          family-care-card 自己的"日常记录"列表里出现过，家人版不再重复展示；
          "切换身份"本就靠 hasPrivilege 对家人隐藏，整组隐藏不影响任何其他角色 -->
     <view class="list-group-label" wx:if="{{!isFamily}}">关于与帮助</view>
-    <view class="action-list-container" wx:if="{{!isFamily}}">
-      <view class="action-item-cell" bindtap="onGoToAbout">
+    <view class="ui-card-wrapper action-list-container" wx:if="{{!isFamily}}">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToAbout">
         <view class="item-left">
           <text class="manager-only-emoji">☀️</text>
           <text class="item-text">关于雨花斋与阳光账本</text>
@@ -572,7 +577,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell danger-cell" wx:if="{{hasPrivilege}}" bindtap="onReleaseUserRole">
+      <view class="action-item-cell danger-cell" hover-class="ui-hover" wx:if="{{hasPrivilege}}" bindtap="onReleaseUserRole">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-release"></view>
           <text class="item-text danger-text">切换身份 / 退出当前绑定</text>
@@ -585,8 +590,8 @@
          🐛 家人（服务对象）越权 BUG：!hasPrivilege 对家人账号也成立（家人本就没有
          店长/财务特权），导致"激活店长/财务特权"入口误漏到家人视角——家人是服务
          对象，不存在"激活管理特权"的场景，必须强制排除 -->
-    <view class="action-list-container subtle-group" wx:if="{{!isFamily && !hasPrivilege}}">
-      <view class="action-item-cell subtle-cell" bindtap="onTriggerActivate">
+    <view class="ui-card-wrapper action-list-container subtle-group" wx:if="{{!isFamily && !hasPrivilege}}">
+      <view class="action-item-cell subtle-cell" hover-class="ui-hover" bindtap="onTriggerActivate">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key subtle-icon"></view>
           <text class="item-text subtle-text">激活店长 / 财务特权</text>
@@ -596,10 +601,10 @@
     </view>
 
     <!-- 分组五：系统/管理权限 —— 仅超级管理员可见的开发者工具箱 -->
-    <view class="admin-developer-section" wx:if="{{isSuperAdmin}}">
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isSuperAdmin}}">
       <view class="admin-divider">开发者与超管工具箱</view>
 
-      <view class="action-item-cell" bindtap="onTriggerGenCode">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerGenCode">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key"></view>
           <text class="item-text">生成特权邀请码</text>
@@ -607,7 +612,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" bindtap="onTriggerClearCache">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerClearCache">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-clear"></view>
           <text class="item-text">一键清洗系统测试缓存</text>
@@ -615,7 +620,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" bindtap="onGoToStatistics">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStatistics">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-screen"></view>
           <text class="item-text">全国多店大屏 (超管)</text>
@@ -631,7 +636,7 @@
        其他身份（纯客户端展示态切换，不改动服务端数据）+ 底部"退出当前门店
        绑定"入口（转入下面的卸任确认弹窗，走真正的服务端卸任）。只有单一
        身份时 onReleaseUserRole 会跳过本面板，直接打开卸任确认弹窗 -->
-  <view class="switch-identity-modal-mask {{showSwitchIdentityModal ? 'show' : ''}}" bindtap="onCloseSwitchIdentityModal">
+  <view class="switch-identity-modal-mask {{showSwitchIdentityModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseSwitchIdentityModal">
     <view class="switch-identity-card" catchtap="stopPropagation">
       <view class="switch-identity-header">
         <text class="switch-identity-title">切换身份</text>
@@ -659,7 +664,7 @@
   </view>
 
   <!-- 卸任特权 Warning 弹窗 -->
-  <view class="release-modal-mask {{showReleaseModal ? 'show' : ''}}" bindtap="onCancelReleaseModal">
+  <view class="release-modal-mask {{showReleaseModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCancelReleaseModal">
     <view class="release-modal-card" catchtap="stopPropagation">
       <view class="release-warning-icon">⚠️</view>
 
@@ -700,7 +705,7 @@
 
   <!-- 🎖️ 徽章详情 Modal：点击核心荣誉墙任一枚徽章展示名称/图标/解锁条件/进度条，
        复用 certificate-modal-* 同一套弹窗壳视觉规范 -->
-  <view class="certificate-modal-mask" wx:if="{{showBadgeDetailModal}}" bindtap="onCloseBadgeDetailModal">
+  <view class="certificate-modal-mask" wx:if="{{showBadgeDetailModal}}" catchtouchmove="stopPropagation" bindtap="onCloseBadgeDetailModal">
     <view class="certificate-modal-card badge-detail-card" catchtap="stopPropagation">
       <view class="certificate-modal-header">
         <view class="certificate-modal-close" bindtap="onCloseBadgeDetailModal">✕</view>
@@ -736,7 +741,7 @@
        🐛 此前家人版是独立的一份"爱心感谢卡"弹窗（.gratitude-modal-*），与本证书
        弹窗视觉高度相似，两套并存容易让人以为"重复渲染了两张证书卡片"——现在合并
        为一个弹窗，彻底消除这种重叠观感 -->
-  <view class="certificate-modal-mask" wx:if="{{showCertificateModal}}" bindtap="onCloseCertificateModal">
+  <view class="certificate-modal-mask" wx:if="{{showCertificateModal}}" catchtouchmove="stopPropagation" bindtap="onCloseCertificateModal">
     <view class="certificate-modal-card" catchtap="stopPropagation">
       <!-- 标题文字已删除：义工版标题直接画在证书图片本体里，家人版正文自带称谓，
            这里再放一遍"爱心护持荣誉证书"文字反而是重复表述，只保留关闭按钮 -->
@@ -788,7 +793,7 @@
                保证画面上任何时刻都只有一张完整证书可见 -->
           <canvas wx:if="{{!certificateTempFilePath}}" type="2d" id="certificateCanvas" class="certificate-canvas" style="width: 340px; height: 480px;"></canvas>
           <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" bindtap="onPreviewCertificateImage" />
-          <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}">
+          <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}" catchtouchmove="stopPropagation">
             <text>正在生成证书…</text>
           </view>
         </view>
@@ -804,7 +809,7 @@
        内容的地方是各门店的日志（activity_logs，见 activity-log.wxml 里同款
        placeholder 文案），这里不重新做一套独立的故事内容库，而是给一段引导语
        + 直达入口，复用 onGoToActivityLog 已有的跳转逻辑，不重复实现 -->
-  <view class="warm-story-modal-mask" wx:if="{{showWarmStoryModal}}" bindtap="onCloseWarmStory">
+  <view class="warm-story-modal-mask" wx:if="{{showWarmStoryModal}}" catchtouchmove="stopPropagation" bindtap="onCloseWarmStory">
     <view class="warm-story-modal-card" catchtap="stopPropagation">
       <view class="warm-story-modal-header">
         <text class="warm-story-modal-title">🌸 雨花温情故事</text>
@@ -823,7 +828,7 @@
 
   <!-- 📮 爱心意见箱：小程序原生半屏弹窗，替代微信官方 open-type="feedback"，
        提交内容落在本项目自己的 feedback_submissions 集合，店长/运营可查阅 -->
-  <view class="feedback-sheet-backdrop {{showFeedbackModal ? 'show' : ''}}" wx:if="{{showFeedbackModal}}" bindtap="onCloseFeedbackModal">
+  <view class="feedback-sheet-backdrop {{showFeedbackModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showFeedbackModal}}" bindtap="onCloseFeedbackModal">
     <view class="feedback-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
@@ -903,7 +908,7 @@
   </view>
 
   <!-- 📮 爱心意见箱管理：店长/家长/超管审阅入口，与提交侧共用同一套半屏弹窗视觉语言 -->
-  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showFeedbackAdminModal ? 'show' : ''}}" wx:if="{{showFeedbackAdminModal}}" bindtap="onCloseFeedbackAdminModal">
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showFeedbackAdminModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showFeedbackAdminModal}}" bindtap="onCloseFeedbackAdminModal">
     <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
@@ -998,7 +1003,7 @@
 
   <!-- 📄 义工版【我的餐报提交记录】：volunteer_submissions 里"我自己"的菜单/物资
        原始记录，与店长/财务在 history 页看到的正式台账历史彻底隔离 -->
-  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMyVolunteerSubmissionsModal ? 'show' : ''}}" wx:if="{{showMyVolunteerSubmissionsModal}}" bindtap="onCloseMyVolunteerSubmissionsModal">
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMyVolunteerSubmissionsModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showMyVolunteerSubmissionsModal}}" bindtap="onCloseMyVolunteerSubmissionsModal">
     <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
@@ -1082,7 +1087,7 @@
 
   <!-- 📥 待审核的义工餐报与物资：店长/家长/超管审阅入口，与爱心意见箱管理同一套
        半屏弹窗视觉语言 -->
-  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showVolunteerSubmissionAdminModal ? 'show' : ''}}" wx:if="{{showVolunteerSubmissionAdminModal}}" bindtap="onCloseVolunteerSubmissionAdminModal">
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showVolunteerSubmissionAdminModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showVolunteerSubmissionAdminModal}}" bindtap="onCloseVolunteerSubmissionAdminModal">
     <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
@@ -1142,7 +1147,7 @@
   </view>
 
   <!-- ❌ 驳回原因弹窗：与证书/温情故事等说明弹窗共用 certificate-modal-* 视觉规范 -->
-  <view class="certificate-modal-mask" wx:if="{{showRejectSubmissionModal}}" bindtap="onCloseRejectModal">
+  <view class="certificate-modal-mask" wx:if="{{showRejectSubmissionModal}}" catchtouchmove="stopPropagation" bindtap="onCloseRejectModal">
     <view class="certificate-modal-card" catchtap="stopPropagation">
       <view class="certificate-modal-header">
         <view class="certificate-modal-close" bindtap="onCloseRejectModal">✕</view>
@@ -1183,7 +1188,7 @@
 
   <!-- 👥 待审批的本店成员申请：店长/家长入口，义工/财务两类，与「爱心意见箱管理」/
        「待审核的义工餐报」同一套半屏弹窗视觉语言 -->
-  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMemberApplicationModal ? 'show' : ''}}" wx:if="{{showMemberApplicationModal}}" bindtap="onCloseMemberApplicationModal">
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMemberApplicationModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showMemberApplicationModal}}" bindtap="onCloseMemberApplicationModal">
     <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
@@ -1232,7 +1237,7 @@
   </view>
 
   <!-- 🏛️ 待审批的高级角色与新店申请：仅超管入口，附带门店档案预览 -->
-  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showElevatedApplicationModal ? 'show' : ''}}" wx:if="{{showElevatedApplicationModal}}" bindtap="onCloseElevatedApplicationModal">
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showElevatedApplicationModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showElevatedApplicationModal}}" bindtap="onCloseElevatedApplicationModal">
     <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
@@ -1302,7 +1307,7 @@
 
   <!-- ❌ 拒绝申请原因弹窗：member/elevated 两个队列共用，与义工投稿驳回同一套
        certificate-modal-* 视觉规范 -->
-  <view class="certificate-modal-mask" wx:if="{{showRejectApplicationModal}}" bindtap="onCloseRejectApplicationModal">
+  <view class="certificate-modal-mask" wx:if="{{showRejectApplicationModal}}" catchtouchmove="stopPropagation" bindtap="onCloseRejectApplicationModal">
     <view class="certificate-modal-card" catchtap="stopPropagation">
       <view class="certificate-modal-header">
         <view class="certificate-modal-close" bindtap="onCloseRejectApplicationModal">✕</view>
@@ -1330,7 +1335,7 @@
 
   <!-- 🍚 门店餐饮与物资统计：即时查询 volunteer_submissions/material_logs，
        不新建汇总表，与 warm-story-modal-* 共用弹窗视觉规范 -->
-  <view class="warm-story-modal-mask" wx:if="{{showStoreStatsModal}}" bindtap="onCloseStoreStatsModal">
+  <view class="warm-story-modal-mask" wx:if="{{showStoreStatsModal}}" catchtouchmove="stopPropagation" bindtap="onCloseStoreStatsModal">
     <view class="warm-story-modal-card store-stats-modal-card" catchtap="stopPropagation">
       <view class="warm-story-modal-header">
         <text class="warm-story-modal-title">📊 门店餐饮与物资统计</text>
