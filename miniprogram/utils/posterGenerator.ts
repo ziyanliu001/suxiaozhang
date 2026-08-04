@@ -427,6 +427,14 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
 
         (async () => {
         try {
+          // 🐛 圆角裁剪：与 drawVolunteerHonorCard 同一处根因——预览层 .poster-canvas
+          // 靠 CSS border-radius 伪装圆角，wx.saveImageToPhotosAlbum/转发保存的却是
+          // canvas 导出的原始像素，四角其实是直角。这里在整张海报最外层先 clip 成
+          // 圆角矩形，之后所有绘制都天然被裁在圆角范围内
+          ctx.save();
+          drawRoundedRectPath(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
+          ctx.clip();
+
           ctx.fillStyle = BG_COLOR;
           ctx.fillRect(0, 0, width, height);
 
@@ -771,6 +779,8 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           const qrY = qrAreaTop;
           await drawVerifyQRArea(ctx, canvas, qrX, qrY, qrSize, '微信扫码·查看原始发票凭证', width, data.verifyQrLocalPath);
 
+          ctx.restore(); // 对应开头的圆角裁剪 save/clip
+
           wx.canvasToTempFilePath({
             canvas: canvas,
             x: 0,
@@ -892,6 +902,11 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
 
         (async () => {
           try {
+            // 🐛 圆角裁剪：与 drawMeritPoster/drawVolunteerHonorCard 同一处根因修复
+            ctx.save();
+            drawRoundedRectPath(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
+            ctx.clip();
+
             // 暖色渐变底：与财务公示版的米白纸感刻意区分开，突出"温馨故事"调性
             const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
             bgGradient.addColorStop(0, '#FFF8F0');
@@ -1025,6 +1040,8 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
             // drawVerifyQRPlaceholder 内部的文字宽度夹取，双重保证不再溢出
             const qrX = width - 30 - STORY_QR_SIZE;
             await drawVerifyQRArea(ctx, canvas, qrX, qrY, STORY_QR_SIZE, '微信扫码·查看此报表原始发票凭证', width, data.verifyQrLocalPath);
+
+            ctx.restore(); // 对应开头的圆角裁剪 save/clip
 
             wx.canvasToTempFilePath({
               canvas,

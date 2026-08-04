@@ -516,6 +516,7 @@ Page({
     noticesLoading: true,
     currentNoticeIndex: 0,
     isNoticeBarHiddenToday: false,
+    isNoticeBarClosing: false,
     // 🌸 每日修身卡片：跑马灯下方的非宗教化传统文化/正能量微卡片，纯静态内容，
     // 不查云端；cultureQuote 由 onLoad/onShow 调 getDailyCultureQuote() 按自然日选取
     cultureQuote: { text: '', source: '' } as { text: string; source: string },
@@ -7813,10 +7814,18 @@ Page({
 
   // 关闭通知栏：写入"今天"这个日期，整条隐藏不留空白；到了新的一天这个判断
   // 自然失效，不需要额外的清理逻辑
+  // 🌟 优雅收起 + 防抖：先切到 closing 态播放收起动效（max-height/opacity 过渡，
+  // 见 index.scss .announce-bar-closing），动效播完再真正移出 wx:if；
+  // isNoticeBarClosing 守卫防止动效播放期间连续点击 X 反复触发/写入
   onCloseNoticeBar() {
-    const todayStr = new Date().toISOString().split('T')[0];
-    wx.setStorageSync('notice_bar_hidden_date', todayStr);
-    this.setData({ isNoticeBarHiddenToday: true });
+    if (this.data.isNoticeBarClosing) return;
+    this.setData({ isNoticeBarClosing: true });
+
+    setTimeout(() => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      wx.setStorageSync('notice_bar_hidden_date', todayStr);
+      this.setData({ isNoticeBarHiddenToday: true, isNoticeBarClosing: false });
+    }, 280);
   },
 
   openAnnouncement() {
@@ -8154,7 +8163,24 @@ Page({
   // （daily-menu-modal/material-usage-modal），原地直弹，不再跨 Tab 跳转到
   // 个人页。打开前调用组件暴露的 resetForm() 清空表单（对齐此前 profile.ts
   // onOpenDailyMenuModal 的"每次打开都是全新登记"行为）
+  // 🛡️ 现场服务工具三个入口共用的门店绑定校验：超管在"全国总览"虚拟视角下，或
+  // 账号异常缺失 storeId 时，直接拦在打开表单之前，用优雅 Toast 引导去先选定具体
+  // 门店——而不是让用户填完整张表单后才在提交那一刻收到服务端"未识别到您所在的
+  // 门店"报错。这三个工具（登记菜单人数/登记物资消耗/记录护持动态）背后的
+  // manageVolunteerSubmission/activity-log 都需要一个真实门店作为归属，虚拟的
+  // "全国总览" ID 不对应任何真实门店文档
+  ensureStoreBoundForTool(): boolean {
+    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
+    const storeId = this.data.currentStoreId;
+    if (!storeId || NATIONAL_IDS.includes(storeId)) {
+      wx.showToast({ title: '请先在顶部选择具体门店，再使用该功能', icon: 'none', duration: 2500 });
+      return false;
+    }
+    return true;
+  },
+
   onTapToolDailyMenu() {
+    if (!this.ensureStoreBoundForTool()) return;
     const modal = this.selectComponent('#dailyMenuModal') as any;
     if (modal) modal.resetForm();
     this.setData({ showDailyMenuModal: true });
@@ -8165,6 +8191,7 @@ Page({
   },
 
   onTapToolMaterialUsage() {
+    if (!this.ensureStoreBoundForTool()) return;
     const modal = this.selectComponent('#materialUsageModal') as any;
     if (modal) modal.resetForm();
     this.setData({ showMaterialUsageModal: true });
@@ -8178,6 +8205,7 @@ Page({
   // （onOpenVolunteerJournalModal）也是直接 navigateTo 过去，这里跳同一个
   // 目标页面即可，不需要交接标记
   onTapToolVolunteerJournal() {
+    if (!this.ensureStoreBoundForTool()) return;
     if (this.isNavigating) return;
     this.isNavigating = true;
 

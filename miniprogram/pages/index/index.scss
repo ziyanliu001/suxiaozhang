@@ -46,6 +46,13 @@ page {
   box-sizing: border-box;
 }
 
+/* 🌟 统一点击态反馈：打卡大按钮/服务工具卡片/生成海报按钮等可点击区共用，
+   与页面其余按钮各自定制的 hover-class（btn-hover/capsule-hover 等）并存不冲突 */
+.ui-hover {
+  opacity: 0.85;
+  transform: scale(0.98);
+}
+
 .main-title-header-box {
   position: relative;
   text-align: center;
@@ -2409,6 +2416,22 @@ page {
   border-radius: 12rpx;
   padding: 14rpx 20rpx;
   margin: 12rpx 24rpx 0;
+  max-height: 100rpx;
+  opacity: 1;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease, margin 0.28s ease;
+}
+
+/* 🌟 点击 X 后优雅收起：先淡出+高度塌陷，动效播完（见 index.ts onCloseNoticeBar
+   的 280ms setTimeout）才真正从 wx:if 移出，而不是瞬间消失 */
+.announce-bar.announce-bar-closing {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .announce-bar-icon {
@@ -5726,10 +5749,22 @@ page {
   transform: scale(0.98);
 }
 
-/* 未打卡：金色描边 + 更强阴影，作为页面最醒目的行动点 */
+/* 未打卡：金色描边 + 渐变质感 + 柔和呼吸灯动效，作为页面最醒目的行动点——
+   呼吸动效只加在这个"待处理"态上，已打卡/部分完成态不需要再抢视觉焦点 */
 .volunteer-hero-card .btn-volunteer-checkin.state-pending {
+  background: linear-gradient(135deg, #A8281F 0%, #8C1D18 60%, #6D1410 100%);
   border: 2rpx solid #F5A623;
   box-shadow: 0 8rpx 24rpx rgba(245, 166, 35, 0.4);
+  animation: checkin-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes checkin-breathe {
+  0%, 100% {
+    box-shadow: 0 8rpx 24rpx rgba(245, 166, 35, 0.4);
+  }
+  50% {
+    box-shadow: 0 8rpx 30rpx rgba(245, 166, 35, 0.65), 0 0 20rpx rgba(245, 166, 35, 0.3);
+  }
 }
 
 /* 已打卡部分班次：正常品牌色，鼓励继续 */
@@ -5805,8 +5840,10 @@ page {
 }
 
 .omni-checkin-btn.state-pending {
+  background: linear-gradient(135deg, #A8281F 0%, #8C1D18 60%, #6D1410 100%);
   border: 2rpx solid #F5A623;
   box-shadow: 0 8rpx 24rpx rgba(245, 166, 35, 0.4);
+  animation: checkin-breathe 2.4s ease-in-out infinite;
 }
 
 .omni-checkin-btn.state-partial {

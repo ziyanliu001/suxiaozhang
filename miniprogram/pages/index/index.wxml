@@ -150,7 +150,7 @@
        🐛 精简重复：家人首页自己的第一模块【☀️ 阳光账本核心大盘】已经是这张卡片
        的放大版（同一套数据管线 + 同一个点击入口），这里加 !isFamily 排除，
        避免家人视角下同一个功能重复出现两次 -->
-  <view class="sunshine-ledger-entry" wx:if="{{!isFamily}}" bindtap="onOpenSunshineLedger">
+  <view class="ui-card-wrapper sunshine-ledger-entry" wx:if="{{!isFamily}}" bindtap="onOpenSunshineLedger">
     <view class="sunshine-ledger-icon">☀️</view>
     <view class="sunshine-ledger-text-group">
       <text class="sunshine-ledger-title">阳光账本</text>
@@ -167,7 +167,7 @@
 
   <!-- 🌟 C位核心：欢迎语 + 护持统计 + 打卡 CTA，志工视角下置于胶囊下方最顶部，
        作为页面第一视觉焦点，不再被公告栏/食谱大事记预览卡挤到后面 -->
-  <view class="volunteer-hero-card" wx:if="{{isVolunteer}}">
+  <view class="ui-card-wrapper volunteer-hero-card" wx:if="{{isVolunteer}}">
     <view class="v-header">
       <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{isAllStoresView ? '雨花大家庭' : (currentStoreName || shopName || '海沧区雨花斋')}}</view>
       <text class="v-sub">端上一碗热饭，温暖世间一颗心</text>
@@ -203,6 +203,7 @@
     <view class="v-action-box {{highlightCheckInCard ? 'highlight-pulse' : ''}}" id="checkInCard">
       <button
         class="btn-volunteer-checkin {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
+        hover-class="ui-hover"
         bindtap="onVolunteerCheckIn"
       >
         <view class="idx-icon-sm idx-icon-handshake"></view>
@@ -220,13 +221,14 @@
        不改动 volunteer-hero-card 本身，避免给已经跑得好好的义工端引入回归风险。
        🐛 精简重复：家人（服务对象）不是来"到岗服务"的角色，打卡卡片对他们没有意义——
        此前条件只排除了 isVolunteer，没排除 isFamily，加 !isFamily 彻底屏蔽 -->
-  <view class="omni-checkin-card" wx:if="{{!isVolunteer && !isFamily}}">
+  <view class="ui-card-wrapper omni-checkin-card" wx:if="{{!isVolunteer && !isFamily}}">
     <view class="omni-checkin-header">
       <text class="omni-checkin-title">🙋 服务打卡</text>
       <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
     </view>
     <button
       class="btn-volunteer-checkin omni-checkin-btn {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
+      hover-class="ui-hover"
       bindtap="onVolunteerCheckIn"
     >
       <view class="idx-icon-sm idx-icon-handshake"></view>
@@ -264,7 +266,7 @@
        兜底 min-width:0/word-break 等防溢出细节，见该文件注释），但视觉呈现的
        核心样式直接写进 style，不依赖任何 wxss 规则匹配是否生效 -->
   <view
-    class="home-vt-card"
+    class="ui-card-wrapper home-vt-card"
     style="margin: 20rpx 28rpx; padding: 24rpx; background: #ffffff; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06);"
     wx:if="{{isVolunteer || isManager}}"
   >
@@ -274,19 +276,19 @@
     <view class="home-vt-grid" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
 
       <!-- 1. 登记菜单人数 -->
-      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="none" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
         <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">🍱</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记菜单人数</text>
       </view>
 
       <!-- 2. 登记物资消耗 -->
-      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="none" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
         <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">🌾</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记物资消耗</text>
       </view>
 
       <!-- 3. 记录护持动态 -->
-      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="none" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
         <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">📷</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">记录护持动态</text>
       </view>
@@ -296,7 +298,7 @@
 
   <!-- 📢 门店公告：按当前视角（总览级/具体门店，严格互斥）从云端拉取的通知列表。
        多条时垂直轮播；单条超长标题用水平跑马灯；没有任何有效通知时整块不占位。 -->
-  <view class="announce-bar" wx:if="{{noticeList.length > 0 && !isNoticeBarHiddenToday}}">
+  <view class="announce-bar {{isNoticeBarClosing ? 'announce-bar-closing' : ''}}" wx:if="{{noticeList.length > 0 && !isNoticeBarHiddenToday}}">
     <text class="announce-bar-icon">📢</text>
 
     <view class="announce-bar-viewport" wx:if="{{noticeList.length === 1}}" bindtap="openAnnouncement">
@@ -318,7 +320,7 @@
 
   <!-- 🌟 兜底温馨提示：云端确认当前视角暂无有效通知时展示，避免跑马灯整块消失留白；
        noticesLoading 期间不展示，防止请求还没返回就先闪一下"暂无通知" -->
-  <view class="announce-bar announce-bar-fallback" wx:if="{{noticeList.length === 0 && !noticesLoading && !isNoticeBarHiddenToday}}">
+  <view class="announce-bar announce-bar-fallback {{isNoticeBarClosing ? 'announce-bar-closing' : ''}}" wx:if="{{noticeList.length === 0 && !noticesLoading && !isNoticeBarHiddenToday}}">
     <text class="announce-bar-icon">📢</text>
     <view class="announce-bar-viewport">
       <text class="announce-bar-text">欢迎使用素小账，今日公益服务正常进行中</text>
@@ -2651,7 +2653,7 @@
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text>生成餐报文本
     </button>
-    <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
+    <button class="btn-main-action poster-gen-btn" hover-class="ui-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
       <text class="btn-emoji-icon">🎨</text>生成公示海报
     </button>
   </view>
