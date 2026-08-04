@@ -1821,8 +1821,10 @@ Page({
   // 🐛 超时阈值：callFunction 内部要串行跑「查 user_roles 鉴权 → 调用微信
   // openapi wxacode.getUnlimited 生成码 → cloud.uploadFile 上传」，其中
   // wxacode.getUnlimited 是跨公众平台服务器的调用，真机移动网络下叠加云函数
-  // 冷启动，10s+ 都是正常范围，单次超时给 15s，downloadFile 只是拉一张几十 KB
-  // 的图片，6s 足够；保留 2 次重试，每次尝试的真实耗时打进日志
+  // 冷启动，10s+ 都是正常范围，单次超时给 15s；downloadFile 原先只给 6s，
+  // 实测开发者工具模拟器 + 弱网真机下云存储文件下载偶尔要到 8~10s 才回调，
+  // 6s 经常被误判成超时，提到 12s 留足余量；保留 2 次重试，每次尝试的真实
+  // 耗时打进日志
   //
   // 🐛 Cache-First：门店二维码内容固定不变，没必要每次打开海报都重新走一遍
   // 最贵的"云函数鉴权 + openapi 生成码 + 上传"全链路。优先读本地缓存的
@@ -1836,7 +1838,10 @@ Page({
 
     const MAX_ATTEMPTS = 2;
     const CALL_FUNCTION_TIMEOUT_MS = 15000;
-    const DOWNLOAD_FILE_TIMEOUT_MS = 6000;
+    // 🐛 6s 对开发者工具模拟器 + 弱网真机不够用：downloadFile 报过
+    // "downloadFile 超时（>6000ms）"，云存储文件下载在这些环境下偶尔要
+    // 到 8~10s 才回调，提到 12s 留足余量
+    const DOWNLOAD_FILE_TIMEOUT_MS = 12000;
     const cachedRoleInfo = AuthService.getCachedRoleInfo();
     const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
 
