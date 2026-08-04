@@ -2592,7 +2592,9 @@
              品牌色 Loading 遮罩，避免用户看到的是一块空白区域 -->
         <view class="poster-canvas-loading-mask" wx:if="{{isStorePosterDrawing || !storePosterTempFilePath}}">
           <view class="poster-canvas-spinner"></view>
-          <text class="poster-canvas-loading-text">正在合成精美海报...</text>
+          <!-- 🐛 长等待体感修复：二维码首次拉取失败进入重试时切换文案，
+               避免用户在提高后的超时窗口内误以为页面卡死 -->
+          <text class="poster-canvas-loading-text">{{storePosterQrRetrying ? '网络较慢，正在重试...' : '正在合成精美海报...'}}</text>
         </view>
         <!-- 🐛 二维码重试兜底：多次拉取失败后海报仍正常生成（画面里是圆角占位卡），
              这里在预览区底部叠一条可点击的提示条，让用户不用读懂占位卡里的小字，

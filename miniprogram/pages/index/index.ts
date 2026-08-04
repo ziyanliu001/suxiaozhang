@@ -687,6 +687,10 @@ Page({
     // 占位卡正常生成（不阻断），但此时应该让用户能一键只重新拉二维码，而不是
     // 教他们去读那张卡片上的"请稍后重试"小字——这个标记驱动预览区底部的重试提示条
     storePosterQrFailed: false,
+    // 🐛 长等待体感修复：callFunction 超时从 8s 提到 18s 后，第二次尝试最长可能
+    // 要再等 18s——用户如果全程只看到一句不变的"正在合成精美海报..."，很容易
+    // 以为卡死了。第一次尝试失败进入重试时置 true，切换文案告诉用户"确实在重试"
+    storePosterQrRetrying: false,
     currentSponsorInfo: null as any,
     todayDateStr: '',
     // 🍱 今日食谱首页预览卡（只读展示，编辑/发布已合并至【食谱管理中心】pages/daily-menu 页面）
@@ -1739,43 +1743,59 @@ Page({
   // 🐛 真机 Bug 修复 + 重试兜底：getStoreQRCode 云函数返回的 fileID 是 cloud://
   // 路径，必须走 wx.cloud.downloadFile 换成本地 tempFilePath 才能喂给离屏 canvas
   // 的 createImage()——开发者工具模拟器对 cloud:// 有一定兼容降级容易掩盖问题，
-  // 真机上 downloadFile 缺失/网络抖动会直接导致二维码区域空白。单次失败不该让
-  // 用户直接看到"生成中，请稍后重试"占位卡，这里加 8s 超时 + 最多 2 次尝试，
-  // 绝大多数真机弱网场景能在弹窗内无感自愈；tenantId 一并带上供云函数侧日志与
-  // 未来的机构级校验使用（当前鉴权仍以云函数内部按 _openid 反查的 tenantId 为准，
-  // 不会信任客户端传参做权限判断）
+  // 真机上 downloadFile 缺失/网络抖动会直接导致二维码区域空白。
+  //
+  // 🐛 超时阈值根因修正：最初给两步各自套了同一个 8s 超时，实测（见线上日志
+  // "二维码请求超时"两次都精确卡在 8000ms）8s 对 callFunction 这一步完全不够——
+  // getStoreQRCode 内部要串行跑「查 user_roles 鉴权 → 调用微信 openapi
+  // wxacode.getUnlimited 生成码 → cloud.uploadFile 上传」，其中 wxacode.getUnlimited
+  // 是跨公众平台服务器的调用，云函数冷启动叠加上这条链路，正常情况就可能到
+  // 5~10s，8s 超时下极易把"还在正常处理中"误判成"卡死"，重试两次也只是把
+  // 同一个不够用的等待窗口又跑了一遍，结果必然还是超时。现在两步分开设置超时：
+  // callFunction 给足 18s（覆盖冷启动 + openapi + 上传全链路），downloadFile
+  // 只是拉一张几十 KB 的图片，6s 绰绰有余；同时把每次尝试的真实耗时打进日志，
+  // 方便后续区分"just slow"还是"真的卡死不返回"
   async _fetchStoreQrLocalPath(storeId: string, storeName: string): Promise<string> {
     const MAX_ATTEMPTS = 2;
-    const ATTEMPT_TIMEOUT_MS = 8000;
+    const CALL_FUNCTION_TIMEOUT_MS = 18000;
+    const DOWNLOAD_FILE_TIMEOUT_MS = 6000;
     const cachedRoleInfo = AuthService.getCachedRoleInfo();
     const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
 
-    const withTimeout = <T>(p: Promise<T>): Promise<T> => {
+    const withTimeout = <T>(p: Promise<T>, ms: number, timeoutMsg: string): Promise<T> => {
       return Promise.race([
         p,
-        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('二维码请求超时')), ATTEMPT_TIMEOUT_MS))
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(timeoutMsg)), ms))
       ]);
     };
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const attemptStartedAt = Date.now();
       try {
         if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-        const qrRes: any = await withTimeout(wx.cloud.callFunction({
-          name: 'getStoreQRCode',
-          data: { storeId, storeName, tenantId }
-        }));
+        const qrRes: any = await withTimeout(
+          wx.cloud.callFunction({ name: 'getStoreQRCode', data: { storeId, storeName, tenantId } }),
+          CALL_FUNCTION_TIMEOUT_MS,
+          `getStoreQRCode 调用超时（>${CALL_FUNCTION_TIMEOUT_MS}ms）`
+        );
         const qrResult = qrRes && qrRes.result;
         if (!qrResult || !qrResult.success || !qrResult.fileID) {
           throw new Error((qrResult && qrResult.error) || 'getStoreQRCode 未返回有效 fileID');
         }
-        const downRes: any = await withTimeout(wx.cloud.downloadFile({ fileID: qrResult.fileID }));
+        const downRes: any = await withTimeout(
+          wx.cloud.downloadFile({ fileID: qrResult.fileID }),
+          DOWNLOAD_FILE_TIMEOUT_MS,
+          `downloadFile 超时（>${DOWNLOAD_FILE_TIMEOUT_MS}ms）`
+        );
         if (!downRes || !downRes.tempFilePath) {
           throw new Error('downloadFile 未返回 tempFilePath');
         }
         return downRes.tempFilePath;
       } catch (err) {
-        console.warn(`[onGenerateStorePoster] 二维码获取失败（第${attempt}/${MAX_ATTEMPTS}次）:`, err);
+        const elapsedMs = Date.now() - attemptStartedAt;
+        console.warn(`[onGenerateStorePoster] 二维码获取失败（第${attempt}/${MAX_ATTEMPTS}次，耗时${elapsedMs}ms）:`, err);
         if (attempt < MAX_ATTEMPTS) {
+          this.setData({ storePosterQrRetrying: true });
           await new Promise(resolve => setTimeout(resolve, 600 * attempt));
         }
       }
@@ -1811,7 +1831,7 @@ Page({
     // 转圈看好几秒（叠加新增的重试逻辑，最长可能到十几秒），看不出到底在做什么。
     // 现在弹窗立即打开，isStorePosterDrawing 驱动的品牌色 Loading 遮罩（同时覆盖
     // 二维码拉取 + Canvas 绘制两个阶段）取代全局 loading
-    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '', storePosterQrFailed: false });
+    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '', storePosterQrFailed: false, storePosterQrRetrying: false });
 
     // 🐛 根因修复：此前 loading/isStorePosterDrawing 复位分散写在四五个成功/失败
     // 分支里，只要漏掉一条新增的失败路径就会导致 loading 卡死。统一收口到这一个
