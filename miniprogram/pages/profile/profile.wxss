@@ -2291,6 +2291,9 @@
   gap: 12rpx;
 }
 
+/* 🎨 圆角微渐变 Pill 按钮：与 .fa-reply-submit-btn/.feedback-submit-btn 的实心
+   品牌渐变不同——这两个是列表项内的次级操作，逐条滚动时若每条都是高饱和实心
+   渐变会显得视觉噪音很重，改用同色系浅→浅的柔和微渐变，质感升级但不抢主按钮的焦点 */
 .fa-item-handle-btn {
   flex: 1;
   height: 64rpx;
@@ -2298,7 +2301,7 @@
   font-size: 24rpx;
   font-weight: bold;
   color: #2B8A3E;
-  background: #EBFBEE;
+  background: linear-gradient(135deg, #EBFBEE 0%, #D3F9D8 100%);
   border: 1rpx solid #B2F2BB;
   border-radius: 32rpx;
   transition: transform 0.1s ease, opacity 0.1s ease;
@@ -2324,7 +2327,7 @@
   font-size: 24rpx;
   font-weight: bold;
   color: #B8860B;
-  background: #FFF9E6;
+  background: linear-gradient(135deg, #FFF9E6 0%, #FFF0C2 100%);
   border: 1rpx solid #F0DFA6;
   border-radius: 32rpx;
   transition: transform 0.1s ease, opacity 0.1s ease;

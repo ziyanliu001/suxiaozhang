@@ -90,6 +90,20 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'report_logs', index: 'tenantId_auditedBy', status: 'success' });
 
+    // 🛡️ profile.ts fetchMeritStats 的"已稽核"荣誉墙统计实际查询条件是
+    // {tenantId, storeId, auditedBy: exists(true)}（见该函数注释），比上面的
+    // tenantId_auditedBy 两字段索引多一层 storeId 收窄——两字段索引虽然能用上
+    // tenantId 前缀，但 storeId 过滤仍落不到索引里，控制台会持续弹【索引建议】。
+    // 补一条完全匹配查询形状的三字段复合索引；与 submittedCount 那条查询对应的
+    // tenantId_storeId_openid 索引（已存在，见下方，最初为 saveReport 查重新增）
+    // 字段顺序同构，一并覆盖 profile.ts 这两条统计查询
+    await db.collection('report_logs').createIndex({
+      name: 'tenantId_storeId_auditedBy',
+      keys: [{ tenantId: 1 }, { storeId: 1 }, { auditedBy: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'report_logs', index: 'tenantId_storeId_auditedBy', status: 'success' });
+
     await db.collection('tenant_subscriptions').createIndex({
       name: 'tenantId',
       keys: [{ tenantId: 1 }],
