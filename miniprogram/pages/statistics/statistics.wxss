@@ -8,6 +8,26 @@ page {
   height: 100vh;
 }
 
+/* 🌟 全站统一的卡片基础层与点击态：与 index/journey/profile/notice 等页面的
+   .ui-card-wrapper/.ui-hover 同一套数值规范（WXSS 页面级作用域不跨页共享样式，
+   这里本地复刻一份）。具体卡片自己的 border-radius/padding/box-shadow 定义在
+   本文件更靠后的位置，按 CSS 层叠顺序正常覆盖这里的基础值 */
+.ui-card-wrapper {
+  width: 100%;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  border: 1rpx solid #F1F3F5;
+  box-sizing: border-box;
+}
+
+.ui-hover {
+  opacity: 0.85;
+  transform: scale(0.98);
+}
+
 .custom-nav {
   position: fixed;
   top: 0;

@@ -5,7 +5,7 @@
   <view class="custom-nav" style="padding-top: {{navTop}}px; padding-right: {{windowWidth - capsuleLeft + 10}}px;">
     <view class="nav-back-arrow" hover-class="nav-back-arrow-hover" bindtap="goBackHome">←</view>
     <text class="nav-title">统计分析</text>
-    <view class="nav-refresh-btn" bindtap="onRefreshData">
+    <view class="nav-refresh-btn" hover-class="ui-hover" bindtap="onRefreshData">
       <text class="refresh-icon">🔄</text>
       <text class="refresh-text">刷新数据</text>
     </view>
@@ -18,7 +18,7 @@
   </view>
 
   <view class="content-area" style="padding-top: {{contentTop}}px;">
-    <view class="period-control-card">
+    <view class="ui-card-wrapper period-control-card">
       <view class="store-select-header-row">
         <view class="store-label">
           <text class="pin-icon">📍</text>
@@ -122,10 +122,10 @@
     </view>
     <view class="national-dashboard-error" wx:elif="{{nationalDashboardError}}">
       <text class="error-text">{{nationalDashboardError}}</text>
-      <button class="btn-empty-action" bindtap="loadNationalDashboard">重试</button>
+      <button class="btn-empty-action" hover-class="ui-hover" bindtap="loadNationalDashboard">重试</button>
     </view>
     <block wx:elif="{{nationalData.nationalTotalDiners !== undefined}}">
-    <view class="national-hero-card">
+    <view class="ui-card-wrapper national-hero-card">
       <view class="hero-header">
         <text class="hero-title">{{dashboardTitle}}<text class="hero-role-tag" wx:if="{{dashboardRoleTag}}">{{dashboardRoleTag}}</text></text>
         <text class="hero-badge">已覆盖 {{nationalData.totalStores}} 家门店</text>
@@ -412,7 +412,7 @@
   <!-- 🆕 个人视角：非管理角色（普通义工/无角色账号）专属，与「全国大屏」/「单店明细」
        完全独立——不展示任何跨门店治理/运营敏感数据，只有属于自己的护持数据 -->
   <view class="personal-dashboard-container" wx:if="{{showPersonalView}}">
-    <view class="personal-hero-card">
+    <view class="ui-card-wrapper personal-hero-card">
       <view class="hero-header">
         <text class="hero-title">💛 我的雨花爱心微数据</text>
       </view>
@@ -467,7 +467,7 @@
     </view>
 
     <view class="bottom-sticky-bar">
-      <button class="btn-primary-poster" bindtap="onGeneratePersonalPoster">
+      <button class="btn-primary-poster" hover-class="ui-hover" bindtap="onGeneratePersonalPoster">
         🖼️ 生成我的个人爱心海报
       </button>
     </view>
@@ -516,7 +516,7 @@
     <!-- 🆕 核心经营指标骨架卡：独立于下方 statistics.recordCount>0 才渲染的
          stats-content，无论当期是否有数据都固定展示这 2x2 网格结构，避免
          "无数据=页面直接塌陷成空状态卡"——无数据时四格显示 "--"，同比徽标一并隐藏 -->
-    <view class="core-metrics-card">
+    <view class="ui-card-wrapper core-metrics-card">
       <view class="card-header">
         <text class="card-title">📌 核心经营指标</text>
       </view>
@@ -650,7 +650,7 @@
         <view class="health-tip">{{statistics.healthStatusText}}</view>
       </view>
 
-      <view class="income-expense-card">
+      <view class="ui-card-wrapper income-expense-card">
         <view class="card-header">
           <text class="card-title">收支透明账本</text>
         </view>
@@ -744,7 +744,7 @@
         </view>
       </view>
 
-      <view class="achievement-card">
+      <view class="ui-card-wrapper achievement-card">
         <view class="card-header">
           <text class="card-title">爱心成果与义工奉献</text>
         </view>
@@ -842,7 +842,7 @@
             <button class="tool-btn thanks" bindtap="onGenerateGratitudeReport">
               📝 生成感恩汇报
             </button>
-            <button class="tool-btn export" bindtap="exportToExcel">
+            <button class="tool-btn export" hover-class="ui-hover" bindtap="exportToExcel">
               📊 导出表格
             </button>
           </view>
@@ -1055,10 +1055,10 @@
        exportToExcel() 拉起"先预览核对、再确认导出"弹窗，免去用户还要滚动到
        每日明细区去找那个「导出表格」按钮 -->
   <view class="bottom-sticky-bar" wx:if="{{!showNationalDashboard && !showPersonalView}}">
-    <button class="btn-primary-poster" wx:if="{{statistics && statistics.recordCount > 0}}" bindtap="onGeneratePoster">
+    <button class="btn-primary-poster" hover-class="ui-hover" wx:if="{{statistics && statistics.recordCount > 0}}" bindtap="onGeneratePoster">
       🖼️ {{isFinance ? '生成门店财务月报海报' : (isPatriarch ? '生成门店续航/爱心公示海报' : '生成本店营运月报海报')}}
     </button>
-    <button class="btn-export-shortcut" bindtap="exportToExcel">
+    <button class="btn-export-shortcut" hover-class="ui-hover" bindtap="exportToExcel">
       📊 导出当前周期 Excel 账本
     </button>
   </view>

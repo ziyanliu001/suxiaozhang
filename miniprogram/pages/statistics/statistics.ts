@@ -428,6 +428,9 @@ Page({
     showPersonalPosterModal: false,
     personalPosterImage: '',
     isSavingPersonalPoster: false,
+    // 🛡️ 防抖：刷新数据与导出预览此前均无重入守卫
+    isRefreshingData: false,
+    isExportPreviewLoading: false,
     viewMode: 'all' as 'all' | 'personal',
     // 🛡️ 预默认必须是 false：这是页面刚加载、角色尚未解析完成前的初始值，若默认
     // true，非超管账号会在 initUserRole()/reloadShopListAndStats() 并行请求的
@@ -2748,7 +2751,13 @@ Page({
     };
   },
 
+  // 🛡️ 防抖：两个入口（tool-btn export / btn-export-shortcut）都可能绑同一个
+  // exportToExcel，双击/连点会并发打出两个 previewOnly 云函数请求，晚到的结果
+  // 覆盖先到的没什么害处，但重复请求本身是浪费，且与 onRefreshData 同款
+  // wx.showLoading 全局单例问题——先加个守卫
   async exportToExcel() {
+    if (this.data.isExportPreviewLoading) return;
+
     const { statistics } = this.data;
 
     if (!statistics || !statistics.dailyRecords || statistics.dailyRecords.length === 0) {
@@ -2756,6 +2765,7 @@ Page({
       return;
     }
 
+    this.setData({ isExportPreviewLoading: true });
     wx.showLoading({ title: '正在核对数据...', mask: true });
 
     try {
@@ -2779,6 +2789,8 @@ Page({
       wx.hideLoading();
       console.error('[exportToExcel] 核对数据加载失败:', err);
       wx.showToast({ title: '核对数据加载失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ isExportPreviewLoading: false });
     }
   },
 
@@ -3981,7 +3993,12 @@ Page({
     return csv;
   },
 
+  // 🛡️ 防抖：wx.showLoading/hideLoading 是全局单例，不是按调用配对——重复点击会
+  // 打出两轮并发的 loading 序列，先完成的那次 hideLoading 会把还没跑完的第二轮
+  // loading 蒙层一并关掉，出现"看起来刷新完了其实还在跑"的错觉
   onRefreshData() {
+    if (this.data.isRefreshingData) return;
+    this.setData({ isRefreshingData: true });
     wx.showLoading({ title: '刷新中...' });
     DataService.syncLocalDataToCloud().then(() => {
       this.loadShopList();
@@ -3991,6 +4008,8 @@ Page({
     }).catch(() => {
       wx.hideLoading();
       wx.showToast({ title: '刷新失败', icon: 'none' });
+    }).finally(() => {
+      this.setData({ isRefreshingData: false });
     });
   },
 
