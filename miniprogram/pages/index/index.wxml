@@ -2557,6 +2557,20 @@
   </view>
 
   <!-- 门店邀请海报预览 Modal -->
+  <!-- 🐛 布局重构：绘制用 canvas 挪到屏幕外离屏渲染（与 statistics.wxml
+       posterCanvas 同一套做法），弹窗里实际展示的是 canvasToTempFilePath 导出的
+       静态图片——canvas 是原生组件，尺寸固定死在 wxml style 里（此前 320px/500px
+       是写死的绝对像素），在小屏手机上完全不参与弹窗的 flex 收缩，海报下半截连同
+       底部分享按钮一起被 max-height:85vh 硬裁掉；改成 <image mode="widthFix">
+       后就是普通文档流元素，能跟着 .poster-preview-wrapper 的 flex:1+滚动兜底
+       正常收缩，分享按钮固定在弹窗底部永远可见 -->
+  <canvas
+    type="2d"
+    id="storePosterCanvas"
+    class="store-poster-canvas-offscreen"
+    style="width: 320px; height: 500px;"
+  ></canvas>
+
   <view class="store-poster-mask" wx:if="{{showStorePosterModal}}" catchtap="onCloseStorePosterModal">
     <view class="store-poster-box" catchtap="stopPropagation">
       <view class="modal-header-row">
@@ -2566,16 +2580,17 @@
         </view>
       </view>
 
-      <view class="poster-canvas-wrapper">
-        <canvas
-          type="2d"
-          id="storePosterCanvas"
-          class="poster-canvas"
-          style="width: 320px; height: 500px;"
-        ></canvas>
+      <view class="poster-preview-wrapper">
+        <image
+          wx:if="{{storePosterTempFilePath}}"
+          class="poster-preview-img"
+          mode="widthFix"
+          show-menu-by-longpress
+          src="{{storePosterTempFilePath}}"
+        />
         <!-- 🛡️ Canvas 白屏修复：绘制耗时期间（云端二维码下载+本地作图）盖一层
-             与画布同尺寸的品牌色 Loading 遮罩，避免用户看到的是一块空白画布 -->
-        <view class="poster-canvas-loading-mask" wx:if="{{isStorePosterDrawing}}">
+             品牌色 Loading 遮罩，避免用户看到的是一块空白区域 -->
+        <view class="poster-canvas-loading-mask" wx:if="{{isStorePosterDrawing || !storePosterTempFilePath}}">
           <view class="poster-canvas-spinner"></view>
           <text class="poster-canvas-loading-text">正在合成精美海报...</text>
         </view>

@@ -255,7 +255,9 @@ page {
   max-height: 85vh;
   background: #FFFFFF;
   border-radius: 24rpx;
-  padding: 32rpx 28rpx;
+  /* 🎨 收紧上下留白：32rpx 28rpx → 32rpx 24rpx，二维码卡片与弹窗边框的留白
+     比例更紧凑精致 */
+  padding: 32rpx 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -304,28 +306,42 @@ page {
   background-color: #E9ECEF;
   transform: scale(0.9);
 }
-.poster-canvas-wrapper {
+
+/* 🐛 离屏绘制：canvas 是原生组件，尺寸在 wxml 里写死成绝对像素，一旦出现在
+   弹窗的 flex 布局里就完全不参与收缩计算——小屏手机上会把海报下半截和分享
+   按钮一起挤出可视区。挪到屏幕外离屏渲染，弹窗内实际显示的是导出的静态图 */
+.store-poster-canvas-offscreen {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+}
+
+/* 🐛 布局重构：flex: 1 + min-height: 0 允许这个区域在弹窗高度不够时主动收缩，
+   收缩到 max-height 上限后仍装不下整张海报就靠 overflow-y: auto 内部滚动——
+   两道保险叠加，保证下方 .poster-actions-bar 分享按钮永远留在可视区内，
+   不会被裁切或推出弹窗底部 */
+.poster-preview-wrapper {
   position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   width: 100%;
+  flex: 1;
+  min-height: 240rpx;
+  max-height: 58vh;
   margin-top: 0;
   margin-bottom: 24rpx;
   border-radius: 20rpx;
-  overflow: hidden;
+  overflow-y: auto;
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.08);
-  flex-shrink: 0;
 }
 
-.poster-canvas {
-  border-radius: 20rpx;
+.poster-preview-img {
+  width: 100%;
   display: block;
+  border-radius: 20rpx;
 }
 
-/* 🛡️ Canvas 白屏修复：绘制期间盖住画布区域的品牌色 Loading 遮罩，与画布本身
-   同圆角同尺寸，绘制完成/失败后随 isStorePosterDrawing 一起隐藏，不会露出
-   任何一帧未绘制完成的空白画布 */
+/* 🛡️ Canvas 白屏修复：绘制期间盖住预览区域的品牌色 Loading 遮罩，与预览区
+   同圆角同尺寸，绘制完成/失败后随 isStorePosterDrawing/storePosterTempFilePath
+   一起隐藏，不会露出任何一帧未绘制完成的空白区域 */
 .poster-canvas-loading-mask {
   position: absolute;
   top: 0;
