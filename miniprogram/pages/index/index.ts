@@ -1698,14 +1698,9 @@ Page({
     }
   },
 
-  // 🛡️ 义工绑定审核弹窗的空状态入口专用：全国总览视角下，海报若仍按 storeId='all' 生成，
-  // 招募到的义工无法归属到具体门店，与"审核该门店义工绑定"的场景语义冲突，故此入口
-  // 要求先切到具体门店。首页其余入口（qa-promo-item 通用邀请海报）保留原有全国海报能力，不受影响。
+  // 🛡️ 义工绑定审核弹窗的空状态入口专用：全国总览视角下不允许生成海报（见
+  // onGenerateStorePoster 内的统一拦截），这里单纯是个语义化别名，不用重复判断
   onGenerateStorePosterFromAudit() {
-    if (this.isNationalOverviewSelected()) {
-      wx.showToast({ title: '请先选择具体的门店，再生成该门店的专属海报', icon: 'none', duration: 2500 });
-      return;
-    }
     this.onGenerateStorePoster();
   },
 
@@ -1737,65 +1732,97 @@ Page({
     }
   },
 
+  // 🐛 真机 Bug 修复 + 重试兜底：getStoreQRCode 云函数返回的 fileID 是 cloud://
+  // 路径，必须走 wx.cloud.downloadFile 换成本地 tempFilePath 才能喂给离屏 canvas
+  // 的 createImage()——开发者工具模拟器对 cloud:// 有一定兼容降级容易掩盖问题，
+  // 真机上 downloadFile 缺失/网络抖动会直接导致二维码区域空白。单次失败不该让
+  // 用户直接看到"生成中，请稍后重试"占位卡，这里加 8s 超时 + 最多 2 次尝试，
+  // 绝大多数真机弱网场景能在弹窗内无感自愈；tenantId 一并带上供云函数侧日志与
+  // 未来的机构级校验使用（当前鉴权仍以云函数内部按 _openid 反查的 tenantId 为准，
+  // 不会信任客户端传参做权限判断）
+  async _fetchStoreQrLocalPath(storeId: string, storeName: string): Promise<string> {
+    const MAX_ATTEMPTS = 2;
+    const ATTEMPT_TIMEOUT_MS = 8000;
+    const cachedRoleInfo = AuthService.getCachedRoleInfo();
+    const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
+
+    const withTimeout = <T>(p: Promise<T>): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('二维码请求超时')), ATTEMPT_TIMEOUT_MS))
+      ]);
+    };
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+        const qrRes: any = await withTimeout(wx.cloud.callFunction({
+          name: 'getStoreQRCode',
+          data: { storeId, storeName, tenantId }
+        }));
+        const qrResult = qrRes && qrRes.result;
+        if (!qrResult || !qrResult.success || !qrResult.fileID) {
+          throw new Error((qrResult && qrResult.error) || 'getStoreQRCode 未返回有效 fileID');
+        }
+        const downRes: any = await withTimeout(wx.cloud.downloadFile({ fileID: qrResult.fileID }));
+        if (!downRes || !downRes.tempFilePath) {
+          throw new Error('downloadFile 未返回 tempFilePath');
+        }
+        return downRes.tempFilePath;
+      } catch (err) {
+        console.warn(`[onGenerateStorePoster] 二维码获取失败（第${attempt}/${MAX_ATTEMPTS}次）:`, err);
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(resolve => setTimeout(resolve, 600 * attempt));
+        }
+      }
+    }
+    // 🛡️ 重试耗尽后返回空字符串，交由 drawStoreInvitationPoster 的圆角占位卡
+    // 兜底，不阻断海报其余内容的生成
+    return '';
+  },
+
   async onGenerateStorePoster() {
     if (!this.data.permissions.canAuditUser) {
       wx.showToast({ title: '仅店长/管理员可生成', icon: 'none' });
       return;
     }
-    // 🛡️ 防抖：入口按钮无重入守卫时，快速连点会并发跑多份 wx.showLoading +
-    // canvas 绘制，后一次的 hideLoading 会把前一次还没画完的 loading 提前关掉，
+    // 🔒 全国总览视角下禁止生成海报：早期版本这里允许生成一张 storeId='all' 的
+    // "全国雨花爱心团队邀请"海报，但招募到的义工/财务实际绑定审核时必须落到
+    // 具体门店，全国海报在业务上从未真正可用——现在所有入口统一拦截，弹 Toast
+    // 引导先切到具体门店，不再生成这种无效海报
+    if (this.isNationalOverviewSelected()) {
+      wx.showToast({ title: '请先选择具体门店后再生成邀请海报', icon: 'none', duration: 2500 });
+      return;
+    }
+    // 🛡️ 防抖：入口按钮无重入守卫时，快速连点会并发跑多份绘制流程，
+    // 后一次的 finishDrawing 会把前一次还没画完的状态提前复位，
     // 界面就停在半张画布的"白屏"状态
     if (this.data.isStorePosterDrawing) return;
-    this.setData({ isStorePosterDrawing: true });
 
-    wx.showLoading({ title: '正在合成精美海报...', mask: true });
+    const storeId = this.data.currentStoreId || 'store_haicang_001';
+    const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
 
-    // 🐛 根因修复：此前 wx.hideLoading() 分散写在四五个成功/失败分支里，只要漏掉
-    // 一条新增的失败路径就会导致 loading 卡死或重复隐藏（触发开发者工具报警）。
-    // 统一收口到这一个 finishDrawing 里，所有分支只负责调用它 + return，
-    // 不用各自记得关 loading / 复位 isStorePosterDrawing
+    // 🐛 体验修复：此前用全局 wx.showLoading 盖住"二维码拉取 + Canvas 绘制"整个
+    // 耗时过程，弹窗本身要等二维码拉取完才打开——真机网络慢时用户盯着一个通用
+    // 转圈看好几秒（叠加新增的重试逻辑，最长可能到十几秒），看不出到底在做什么。
+    // 现在弹窗立即打开，isStorePosterDrawing 驱动的品牌色 Loading 遮罩（同时覆盖
+    // 二维码拉取 + Canvas 绘制两个阶段）取代全局 loading
+    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '' });
+
+    // 🐛 根因修复：此前 loading/isStorePosterDrawing 复位分散写在四五个成功/失败
+    // 分支里，只要漏掉一条新增的失败路径就会导致 loading 卡死。统一收口到这一个
+    // finishDrawing 里，所有分支只负责调用它 + return
     const finishDrawing = (failToastTitle?: string) => {
-      wx.hideLoading();
       this.setData({ isStorePosterDrawing: false });
       if (failToastTitle) {
-        // 生成失败时收起弹窗，不留一块空白画布杵在屏幕中间
+        // 生成失败时收起弹窗，不留一块空白区域杵在屏幕中间
         this.setData({ showStorePosterModal: false, storePosterTempFilePath: '' });
         wx.showToast({ title: failToastTitle, icon: 'none' });
       }
     };
 
     try {
-      // 🌐 全国总览视角：二维码扫码参数统一编码为规范化的 storeId=all（而非
-      // 'national_overview'/'ALL_STORES' 等内部各处不一致的哨兵值），配合
-      // fetchStoreInfoAndPromptApply 对 'all' 的专门识别逻辑；海报标题也改为
-      // "全国雨花爱心团队邀请"，不再显示具体门店名
-      const isNationalContext = this.isNationalOverviewSelected();
-      const storeId = isNationalContext ? 'all' : (this.data.currentStoreId || 'store_haicang_001');
-      const storeName = isNationalContext
-        ? '全国雨花爱心团队邀请'
-        : (this.data.currentStoreName || this.data.shopName || '海沧区雨花斋');
-
-      let qrCodeLocalPath = '';
-      try {
-        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-        const qrRes = await wx.cloud.callFunction({
-          name: 'getStoreQRCode',
-          data: { storeId, storeName }
-        });
-        const qrResult = qrRes.result as any;
-        if (qrResult && qrResult.success && qrResult.fileID) {
-          const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
-          qrCodeLocalPath = downRes.tempFilePath;
-        }
-      } catch (qrErr) {
-        // 🛡️ 二维码拉取失败（云函数异常/downloadFile 网络失败/fileID 缺失）不再
-        // 视为致命错误——qrCodeLocalPath 留空，drawStoreInvitationPoster 会画
-        // 一块"二维码生成中，请稍后重试"占位卡，海报其余内容照常展示，而不是
-        // 直接白屏中断整个生成流程
-        console.warn('[onGenerateStorePoster] 二维码获取失败，使用占位:', qrErr);
-      }
-
-      this.setData({ showStorePosterModal: true, storePosterTempFilePath: '' });
+      const qrCodeLocalPath = await this._fetchStoreQrLocalPath(storeId, storeName);
 
       setTimeout(() => {
         const query = wx.createSelectorQuery();
