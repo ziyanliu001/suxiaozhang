@@ -3477,6 +3477,19 @@ page {
   line-height: 1.5;
 }
 
+/* 🏛️ 大家长授权说明：沿用 .role-tag-badge.store_patriarch 同一套紫色系
+   （见本文件 role-tag-badge），与"限制提示"的暖黄警示色区分开——这是一句
+   正向的授权说明，不是限制 */
+.gencode-role-empower-tip {
+  margin-top: 16rpx;
+  font-size: 20rpx;
+  color: #5F3DC4;
+  background: #F3F0FF;
+  border-radius: 10rpx;
+  padding: 12rpx 16rpx;
+  line-height: 1.5;
+}
+
 /* 未选中态进一步弱化：边框变浅灰虚线、文字降低对比度，与选中态形成更强烈的视觉落差 */
 .gencode-role-item.inactive {
   border-style: dashed;

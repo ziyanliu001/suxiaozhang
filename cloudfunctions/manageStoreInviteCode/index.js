@@ -60,10 +60,13 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
-// 🛡️ 越权前置阻断：服务端强制校验调用者身份，任何客户端传参都不可信。
-// - 非 super_admin 且尝试生成 STORE_PATRIARCH/FINANCE 或跨店 STORE_MANAGER：直接拒绝
-// - 只有 super_admin / store_manager / store_patriarch 三种角色允许发码，
-//   finance/volunteer/family 一律无权限（不在权限阶梯里，不能自我复制/越级授权）
+// 🏛️ 权限层级重构：大家长（store_patriarch）确立为门店最高负责人——与
+// super_admin 一样解锁全部五档身份的生成权限（含继任大家长/门店店长），不再
+// 卡在"仅超级管理员可授权"这道关卡；店长（store_manager）次一级，可任命
+// 门店财务/家人/志愿者，但不能任命大家长/门店店长——这两档与店长自身同级
+// 或更高，只有大家长本人或超管能任命。
+// 只有 super_admin / store_manager / store_patriarch 三种角色允许发码，
+// finance/volunteer/family 一律无权限（不在权限阶梯里，不能自我复制/越级授权）
 function checkGeneratePermission(caller, storeId, targetRole) {
   if (!caller || caller.status !== 'approved') {
     return '无权限：账号尚未通过审核，不能生成邀请码';
@@ -78,11 +81,14 @@ function checkGeneratePermission(caller, storeId, targetRole) {
   if (!caller.storeId || caller.storeId !== storeId) {
     return '无权限：不能为其他门店生成邀请码';
   }
-  // 严格禁止越权生成"大家长"/"门店财务"/"门店店长"——这三档与调用者自身同级或更高
-  // （store_patriarch 与 store_manager 互为平级监督关系，不是上下级），只放开
-  // 低于自身权限的 [家人, 志愿者]
-  if (targetRole === 'STORE_PATRIARCH' || targetRole === 'FINANCE' || targetRole === 'STORE_MANAGER') {
-    return '无权限：店长/大家长不能生成"大家长"/"门店财务"/"门店店长"邀请码，请联系超级管理员';
+  // 大家长是门店最高负责人：全部五档身份放行，含继任大家长/门店店长
+  if (caller.role === 'store_patriarch') {
+    return null;
+  }
+  // 店长次一级：不能任命大家长/门店店长——这两档与店长自身同级或更高，
+  // 只有大家长本人或超管能任命
+  if (targetRole === 'STORE_PATRIARCH' || targetRole === 'STORE_MANAGER') {
+    return '无权限：店长不能生成"大家长"/"门店店长"邀请码，请联系大家长或超级管理员';
   }
   return null;
 }

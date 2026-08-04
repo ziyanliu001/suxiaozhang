@@ -1766,14 +1766,13 @@ Page({
 
   // 🌟 财务视角的场景化邀请入口：复用同一套 generateInviteCode 弹窗（无需新建任何生成逻辑），
   // 但跳过"生成门店邀请海报"这个偏对外宣传的选项——直接打开邀请码弹窗。
-  // 🛡️ 身份阶梯权限过滤：只有 super_admin 才允许生成"门店财务"邀请码——纯财务角色
-  // 本身已被 onOpenGenCodeModal 的权限阶梯挡在门外（financer 不在
-  // [super_admin, store_manager, store_patriarch] 名单内），能走到这里说明当前
-  // 是店长/大家长/超管本人在用这个场景化入口；只有超管才把默认身份预填为 FINANCE，
-  // 店长/大家长的可选身份里根本没有 FINANCE 这一档，不能无条件覆盖选中它
+  // 🏛️ 权限层级重构后，超管/大家长/店长三档都能生成"门店财务"邀请码了（见
+  // onOpenGenCodeModal 的 genAvailableRoles），不再是超管专属——这里直接按
+  // onOpenGenCodeModal 刚算出来的 genAvailableRoles 判断能不能预填 FINANCE，
+  // 而不是写死只认 isSuperAdmin，避免权限模型改了这里忘记同步
   onOpenFinanceInviteMenu() {
     this.onOpenGenCodeModal();
-    if (this.data.isSuperAdmin) {
+    if (this.data.genAvailableRoles.includes('FINANCE')) {
       this.setData({ genTargetRole: 'FINANCE' });
     }
   },
@@ -3104,12 +3103,14 @@ Page({
       defaultStore = storeOptions[0] || null;
     }
 
-    // 🛡️ 身份阶梯权限过滤：超管可选五种；店长/大家长严格禁止生成"大家长"/
-    // "门店财务"/"门店店长"（均与自身同级或更高），只放开低于自身权限的
-    // [家人, 志愿者]，与云函数 checkGeneratePermission 的口径完全一致
-    const genAvailableRoles = isSuperAdmin
+    // 🏛️ 权限层级重构：大家长确立为门店最高负责人，与超管一样解锁全部五种
+    // 身份（含继任大家长/门店店长），不再需要"超级管理员授权"这道额外关卡；
+    // 店长次一级，可任命门店财务/家人/志愿者，但不能任命大家长/门店店长——
+    // 这两档与店长自身同级或更高，只有大家长本人或超管能任命。
+    // 与云函数 checkGeneratePermission 的口径完全一致
+    const genAvailableRoles = (isSuperAdmin || this.data.isPatriarch)
       ? ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER']
-      : ['FAMILY', 'VOLUNTEER'];
+      : ['FINANCE', 'FAMILY', 'VOLUNTEER'];
 
     this.setData({
       showGenCodeModal: true,
