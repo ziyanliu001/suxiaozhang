@@ -2561,7 +2561,7 @@
     <view class="store-poster-box" catchtap="stopPropagation">
       <view class="modal-header-row">
         <view class="modal-title"><view class="idx-icon-sm idx-icon-image" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>门店邀请绑定海报</view>
-        <view class="btn-close-modal-circle" bindtap="onCloseStorePosterModal">
+        <view class="btn-close-modal-circle" hover-class="ui-hover" bindtap="onCloseStorePosterModal">
           ✕
         </view>
       </view>
@@ -2573,10 +2573,16 @@
           class="poster-canvas"
           style="width: 320px; height: 500px;"
         ></canvas>
+        <!-- 🛡️ Canvas 白屏修复：绘制耗时期间（云端二维码下载+本地作图）盖一层
+             与画布同尺寸的品牌色 Loading 遮罩，避免用户看到的是一块空白画布 -->
+        <view class="poster-canvas-loading-mask" wx:if="{{isStorePosterDrawing}}">
+          <view class="poster-canvas-spinner"></view>
+          <text class="poster-canvas-loading-text">正在合成精美海报...</text>
+        </view>
       </view>
 
       <view class="poster-actions-bar">
-        <button class="btn-share-single-line" open-type="share" bindtap="onSharePosterToFriends">
+        <button class="btn-share-single-line" hover-class="ui-hover" open-type="share" bindtap="onSharePosterToFriends">
           <view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>分享给微信群和朋友
         </button>
       </view>

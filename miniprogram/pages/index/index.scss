@@ -254,7 +254,7 @@ page {
   max-width: 680rpx;
   max-height: 85vh;
   background: #FFFFFF;
-  border-radius: 32rpx;
+  border-radius: 24rpx;
   padding: 32rpx 28rpx;
   display: flex;
   flex-direction: column;
@@ -262,6 +262,9 @@ page {
   box-sizing: border-box;
   overflow: hidden;
   margin-top: 160rpx;
+  /* 🎨 极简质感重构：容器补一层微阴影，与遮罩层的纯黑半透明背景拉开层次，
+     避免弹窗看起来"贴"在遮罩上 */
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.16);
 }
 .modal-header-row {
   width: 100%;
@@ -302,6 +305,7 @@ page {
   transform: scale(0.9);
 }
 .poster-canvas-wrapper {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -319,6 +323,44 @@ page {
   display: block;
 }
 
+/* 🛡️ Canvas 白屏修复：绘制期间盖住画布区域的品牌色 Loading 遮罩，与画布本身
+   同圆角同尺寸，绘制完成/失败后随 isStorePosterDrawing 一起隐藏，不会露出
+   任何一帧未绘制完成的空白画布 */
+.poster-canvas-loading-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 20rpx;
+}
+
+.poster-canvas-spinner {
+  width: 56rpx;
+  height: 56rpx;
+  border: 5rpx solid #FFE8CC;
+  border-top-color: #D9480E;
+  border-radius: 50%;
+  animation: poster-canvas-spin 0.8s linear infinite;
+  margin-bottom: 16rpx;
+}
+
+@keyframes poster-canvas-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.poster-canvas-loading-text {
+  font-size: 24rpx;
+  color: #D9480E;
+  font-weight: 500;
+}
+
 .poster-actions-bar {
   width: 100%;
   padding: 0 12rpx;
@@ -326,14 +368,17 @@ page {
   flex-shrink: 0;
 }
 
+/* 🎨 Pill 胶囊按钮：radius = height / 2，与全局 .btn-primary-poster 同一套
+   胶囊比例规范（见 pages/statistics/statistics.wxss），保留邀请场景专属的
+   橙色暖色渐变 */
 .btn-share-single-line {
   width: 100% !important;
-  height: 84rpx;
+  height: 88rpx;
   background: linear-gradient(135deg, #E65100 0%, #D9480E 100%);
   color: #FFFFFF;
   font-size: 26rpx;
   font-weight: bold;
-  border-radius: 42rpx;
+  border-radius: 44rpx;
   display: flex;
   align-items: center;
   justify-content: center;

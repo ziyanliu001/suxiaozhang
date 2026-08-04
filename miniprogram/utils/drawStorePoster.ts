@@ -23,11 +23,27 @@ export interface DrawPosterOptions {
 export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promise<void> {
   const { canvas, storeName, sponsorInfo, qrCodeTempPath, width, height } = opts;
   const ctx = canvas.getContext('2d');
+  // 🐛 白屏根因之一：极少数模拟器/低版本基础库下 canvas.getContext('2d') 会
+  // 返回 null 而不是抛异常，后续 ctx.scale/fillRect 等调用会直接因
+  // "Cannot read property of null" 中断整个绘制——调用方的 try/catch 虽然能
+  // 兜住不崩溃，但报错信息完全看不出是 ctx 拿不到，这里提前给一个明确的错误
+  if (!ctx) {
+    throw new Error('CANVAS_CONTEXT_UNAVAILABLE: canvas.getContext(2d) 返回空');
+  }
   const dpr = (wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2) || 2;
 
   canvas.width = width * dpr;
   canvas.height = height * dpr;
   ctx.scale(dpr, dpr);
+
+  // 🎨 统一高质感圆角：与 posterGenerator.ts drawMeritPoster/drawStoryPoster
+  // 同款修复——预览层 .poster-canvas 靠 CSS border-radius 伪装圆角，但
+  // wx.canvasToTempFilePath 导出/分享/保存到相册的是画布原始像素，四角其实
+  // 是直角。这里在最外层先 clip 成圆角矩形，之后所有绘制天然被裁在圆角范围内，
+  // 结尾 ctx.restore() 收回裁剪区，不影响这个 canvas 之后可能的其他绘制
+  ctx.save();
+  safeRoundRect(ctx, 0, 0, width, height, 24);
+  ctx.clip();
 
   // 1. 白色底板
   ctx.fillStyle = '#FFFFFF';
@@ -86,21 +102,54 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   ctx.stroke();
 
   // 5. 绘制小程序码
+  // 🐛 白屏根因之二：此前仅当 qrCodeTempPath 非空时才进入绘制分支，调用方
+  // getStoreQRCode 云函数失败/downloadFile 网络异常时 qrCodeTempPath 会是
+  // 空字符串——原逻辑对这种情况什么都不画，卡片中间就是一块彻底的留白，观感
+  // 上跟"白屏"没有区别。现在无论是路径为空还是图片异步加载失败/超时，
+  // 都统一落到同一个 drawQrPlaceholder 兜底分支，保证卡片区域一定有内容
+  const qrSize = 180;
+  const qrX = (width - qrSize) / 2;
+  const qrY = cardY + 30;
+  const drawQrPlaceholder = () => {
+    ctx.fillStyle = '#F1F3F5';
+    safeRoundRect(ctx, qrX, qrY, qrSize, qrSize, 12);
+    ctx.fill();
+    ctx.fillStyle = '#ADB5BD';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('二维码生成中', qrX + qrSize / 2, qrY + qrSize / 2 - 8);
+    ctx.fillText('请稍后重试', qrX + qrSize / 2, qrY + qrSize / 2 + 14);
+  };
+
   if (qrCodeTempPath) {
     try {
       const qrImage = canvas.createImage();
       qrImage.src = qrCodeTempPath;
+      // 🛡️ onload/onerror 在个别环境下可能都不触发（例如临时文件已被系统清理），
+      // 不加超时会导致整个海报绘制流程永久挂起，外层 wx.showLoading 转圈转到
+      // 天荒地老——3s 后仍未回调则视为加载失败，走占位分支
       await new Promise<void>((resolve, reject) => {
-        qrImage.onload = () => resolve();
-        qrImage.onerror = () => reject(new Error('qr load failed'));
+        const timer = setTimeout(() => reject(new Error('qr load timeout')), 3000);
+        qrImage.onload = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        qrImage.onerror = () => {
+          clearTimeout(timer);
+          reject(new Error('qr load failed'));
+        };
       });
-      const qrSize = 180;
-      ctx.drawImage(qrImage, (width - qrSize) / 2, cardY + 30, qrSize, qrSize);
+      safeRoundRect(ctx, qrX, qrY, qrSize, qrSize, 12);
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+      ctx.restore();
     } catch (e) {
       console.warn('[drawPoster] 二维码加载失败，使用占位:', e);
-      ctx.fillStyle = '#E9ECEF';
-      ctx.fillRect((width - 180) / 2, cardY + 30, 180, 180);
+      drawQrPlaceholder();
     }
+  } else {
+    drawQrPlaceholder();
   }
 
   ctx.fillStyle = '#495057';
@@ -135,4 +184,7 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('—  雨花斋餐报助手 · 让爱心收支 100% 公开透明  —', width / 2, height - 24);
+
+  // 对应函数开头的外层圆角裁剪 save/clip
+  ctx.restore();
 }

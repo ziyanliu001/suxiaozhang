@@ -679,6 +679,10 @@ Page({
     allStoresList: [] as any[],
     showStorePosterModal: false,
     storePosterTempFilePath: '',
+    // 🛡️ Canvas 白屏修复：绘制过程中盖一层 Loading 遮罩，避免绘制耗时期间用户
+    // 看到的是一块空白画布（此前 wx.showLoading 只在全局顶层转圈，不覆盖弹窗内
+    // 画布区域本身，观感上就是"白屏"）；生成失败时同样兜底收起弹窗，不留白屏残影
+    isStorePosterDrawing: false,
     currentSponsorInfo: null as any,
     todayDateStr: '',
     // 🍱 今日食谱首页预览卡（只读展示，编辑/发布已合并至【食谱管理中心】pages/daily-menu 页面）
@@ -1738,8 +1742,27 @@ Page({
       wx.showToast({ title: '仅店长/管理员可生成', icon: 'none' });
       return;
     }
+    // 🛡️ 防抖：入口按钮无重入守卫时，快速连点会并发跑多份 wx.showLoading +
+    // canvas 绘制，后一次的 hideLoading 会把前一次还没画完的 loading 提前关掉，
+    // 界面就停在半张画布的"白屏"状态
+    if (this.data.isStorePosterDrawing) return;
+    this.setData({ isStorePosterDrawing: true });
 
     wx.showLoading({ title: '正在合成精美海报...', mask: true });
+
+    // 🐛 根因修复：此前 wx.hideLoading() 分散写在四五个成功/失败分支里，只要漏掉
+    // 一条新增的失败路径就会导致 loading 卡死或重复隐藏（触发开发者工具报警）。
+    // 统一收口到这一个 finishDrawing 里，所有分支只负责调用它 + return，
+    // 不用各自记得关 loading / 复位 isStorePosterDrawing
+    const finishDrawing = (failToastTitle?: string) => {
+      wx.hideLoading();
+      this.setData({ isStorePosterDrawing: false });
+      if (failToastTitle) {
+        // 生成失败时收起弹窗，不留一块空白画布杵在屏幕中间
+        this.setData({ showStorePosterModal: false, storePosterTempFilePath: '' });
+        wx.showToast({ title: failToastTitle, icon: 'none' });
+      }
+    };
 
     try {
       // 🌐 全国总览视角：二维码扫码参数统一编码为规范化的 storeId=all（而非
@@ -1765,6 +1788,10 @@ Page({
           qrCodeLocalPath = downRes.tempFilePath;
         }
       } catch (qrErr) {
+        // 🛡️ 二维码拉取失败（云函数异常/downloadFile 网络失败/fileID 缺失）不再
+        // 视为致命错误——qrCodeLocalPath 留空，drawStoreInvitationPoster 会画
+        // 一块"二维码生成中，请稍后重试"占位卡，海报其余内容照常展示，而不是
+        // 直接白屏中断整个生成流程
         console.warn('[onGenerateStorePoster] 二维码获取失败，使用占位:', qrErr);
       }
 
@@ -1776,11 +1803,15 @@ Page({
           .fields({ node: true, size: true })
           .exec(async (res) => {
             if (!res[0] || !res[0].node) {
-              wx.hideLoading();
-              wx.showToast({ title: 'Canvas 初始化失败', icon: 'none' });
+              finishDrawing('Canvas 初始化失败，请重试');
               return;
             }
             const canvas = res[0].node;
+            const ctx = canvas.getContext && canvas.getContext('2d');
+            if (!ctx) {
+              finishDrawing('当前环境不支持海报绘制');
+              return;
+            }
 
             try {
               const sponsorInfo = this.data.currentSponsorInfo;
@@ -1797,30 +1828,46 @@ Page({
                 canvas,
                 success: (tempRes) => {
                   this.setData({ storePosterTempFilePath: tempRes.tempFilePath });
-                  wx.hideLoading();
+                  finishDrawing();
                 },
                 fail: (err) => {
-                  wx.hideLoading();
                   console.error('[onGenerateStorePoster] canvasToTempFilePath 失败:', err);
-                  wx.showToast({ title: '海报生成失败', icon: 'none' });
+                  finishDrawing('海报生成失败，请重试');
                 }
               });
             } catch (drawErr) {
-              wx.hideLoading();
               console.error('[onGenerateStorePoster] 绘制失败:', drawErr);
-              wx.showToast({ title: '海报绘制失败', icon: 'none' });
+              finishDrawing('海报绘制失败，请重试');
             }
           });
       }, 300);
     } catch (e) {
-      wx.hideLoading();
       console.error('[onGenerateStorePoster] 异常:', e);
-      wx.showToast({ title: '海报生成失败', icon: 'none' });
+      finishDrawing('海报生成失败，请重试');
     }
   },
 
+  // 🛡️ 防抖：关闭动作本身不发起网络请求，但弹窗关闭瞬间会与仍在进行中的绘制/
+  // canvasToTempFilePath 竞态——连续快点关闭按钮可能在 setData 尚未生效前重复
+  // 触发，这里用 isStorePosterDrawing 之外单独的时间戳兜底，避免动效重叠
+  _lastCloseStorePosterModalAt: 0,
   onCloseStorePosterModal() {
+    const now = Date.now();
+    if (now - (this._lastCloseStorePosterModalAt || 0) < 400) return;
+    this._lastCloseStorePosterModalAt = now;
     this.setData({ showStorePosterModal: false });
+  },
+
+  // 🆕 分享给微信群和朋友：按钮本身已声明 open-type="share"，点击时小程序会
+  // 自动调起 onShareAppMessage 生成转发卡片（见该函数对 showStorePosterModal
+  // 场景的专门分支，转发封面直接用刚生成的 storePosterTempFilePath，而不是通用
+  // 的 share_cover.png）。这里只做轻量防抖 + 埋点占位，避免快速连点在
+  // onShareAppMessage 尚未返回前重复弹出系统转发面板
+  _lastSharePosterTapAt: 0,
+  onSharePosterToFriends() {
+    const now = Date.now();
+    if (now - (this._lastSharePosterTapAt || 0) < 800) return;
+    this._lastSharePosterTapAt = now;
   },
 
   async loadLastBalance() {
@@ -8997,6 +9044,19 @@ Page({
   onShareAppMessage() {
     const store = this.data.currentStoreName || this.data.shopName || '雨花斋';
     const date = this.data.reportDate || this.data.reportDateValue || '今日';
+
+    // 🐛 根因修复：门店邀请海报弹窗打开时点"分享给微信群和朋友"，此前无条件
+    // 分享的是通用 share_cover.png 封面图，用户刚生成的那张带门店二维码的海报
+    // （storePosterTempFilePath）压根没被用上——收到分享的人看到的只是一张普通
+    // 应用卡片，扫不到任何码。这里在弹窗开启且海报已生成完成时，转发卡片封面
+    // 优先换成刚生成的海报图，标题也改为邀请语境
+    if (this.data.showStorePosterModal && this.data.storePosterTempFilePath) {
+      return {
+        title: `🌸【${store}】诚邀您加入义工/护持团队，扫码即可申请`,
+        path: `/pages/index/index?storeName=${encodeURIComponent(store)}`,
+        imageUrl: this.data.storePosterTempFilePath
+      };
+    }
 
     return {
       title: `🌸【${store}】${date}爱心餐报公示，请家人阅览！`,
