@@ -2202,10 +2202,10 @@
 .feedback-admin-item {
   background: #FFFFFF;
   border: 1rpx solid #EFE6D8;
-  border-radius: 16rpx;
-  padding: 20rpx;
-  margin-bottom: 16rpx;
-  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.04);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 14rpx rgba(0, 0, 0, 0.06);
   transition: opacity 0.15s ease;
 }
 
@@ -2288,23 +2288,37 @@
 /* 待处理行动区：标记为已处理 / 回复家人 并排两个按钮 */
 .fa-item-actions {
   display: flex;
-  gap: 12rpx;
+  gap: 16rpx;
+  margin-top: 20rpx;
 }
 
 /* 🎨 圆角微渐变 Pill 按钮：与 .fa-reply-submit-btn/.feedback-submit-btn 的实心
    品牌渐变不同——这两个是列表项内的次级操作，逐条滚动时若每条都是高饱和实心
-   渐变会显得视觉噪音很重，改用同色系浅→浅的柔和微渐变，质感升级但不抢主按钮的焦点 */
+   渐变会显得视觉噪音很重，改用同色系浅→浅的柔和微渐变，质感升级但不抢主按钮的焦点
+   🐛 根因修复：原来只靠 height === line-height 让文字垂直居中——微信原生 <button>
+   自带默认内边距（左右 ~30rpx）与基线度量，emoji（✅/❌）与中文混排时行高基线
+   本就和纯文本不一致，两者叠加导致按钮内文字/图标肉眼可见地偏左上或偏斜。
+   显式 flex 居中 + box-sizing/padding/margin 归零，彻底不依赖 line-height 这条
+   脆弱的隐式规则 */
 .fa-item-handle-btn {
   flex: 1;
-  height: 64rpx;
-  line-height: 64rpx;
-  font-size: 24rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 25rpx;
   font-weight: bold;
-  color: #2B8A3E;
-  background: linear-gradient(135deg, #EBFBEE 0%, #D3F9D8 100%);
-  border: 1rpx solid #B2F2BB;
-  border-radius: 32rpx;
-  transition: transform 0.1s ease, opacity 0.1s ease;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #40C057 0%, #2B8A3E 100%);
+  border: none;
+  border-radius: 36rpx;
+  box-shadow: 0 4rpx 10rpx rgba(43, 138, 62, 0.3);
+  transition: transform 0.1s ease, opacity 0.1s ease, box-shadow 0.1s ease;
 }
 
 .fa-item-handle-btn::after {
@@ -2312,25 +2326,36 @@
 }
 
 .fa-item-handle-btn:active {
-  transform: scale(0.97);
-  opacity: 0.8;
+  transform: scale(0.96);
+  opacity: 0.88;
+  box-shadow: none;
 }
 
 .fa-item-handle-btn[disabled] {
-  opacity: 0.6;
+  opacity: 0.5;
+  box-shadow: none;
 }
 
+/* ⚠️ 驳回：浅红警告色，与"一键采纳入库"的绿色主色形成明确的语义对比——
+   一个是不可逆的正向确认操作，一个是需要用户三思的否定操作 */
 .fa-item-reply-btn {
   flex: 1;
-  height: 64rpx;
-  line-height: 64rpx;
-  font-size: 24rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 25rpx;
   font-weight: bold;
-  color: #B8860B;
-  background: linear-gradient(135deg, #FFF9E6 0%, #FFF0C2 100%);
-  border: 1rpx solid #F0DFA6;
-  border-radius: 32rpx;
-  transition: transform 0.1s ease, opacity 0.1s ease;
+  color: #E03131;
+  background: linear-gradient(135deg, #FFF5F5 0%, #FFE3E3 100%);
+  border: 2rpx solid #FFA8A8;
+  border-radius: 36rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease, background-color 0.1s ease;
 }
 
 .fa-item-reply-btn::after {
@@ -2338,8 +2363,13 @@
 }
 
 .fa-item-reply-btn:active {
-  transform: scale(0.97);
-  opacity: 0.8;
+  transform: scale(0.96);
+  opacity: 0.85;
+  background: #FFE3E3;
+}
+
+.fa-item-reply-btn[disabled] {
+  opacity: 0.5;
 }
 
 .fa-item-handled-tag {

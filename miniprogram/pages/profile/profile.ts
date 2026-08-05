@@ -124,6 +124,15 @@ Page({
   lastConfirmedAvatarFileId: '',
   lastConfirmedAvatarAt: 0,
 
+  // 🐛 防抖锁：onShow 每次切回本 Tab（tabBar 页面反复切入切出，不会重新 onLoad）
+  // 都会调用 initMinePage()/loadUserProfile()，两者各自级联一整批云函数请求
+  // （护持统计/护持榜/意见箱角标/义工投稿角标/成员申请角标/头像昵称...）。手快
+  // 连续切换 Tab 时，上一轮请求还没返回，onShow 又把整批重新触发一次，与
+  // statistics.ts fetchStatistics() 曾经的问题同一根因。这两个是纯运行时状态，
+  // 不需要触发 setData，与上面 isNavigating 同样挂在实例上
+  _initMinePageInFlight: false,
+  _loadUserProfileInFlight: false,
+
   data: {
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -403,6 +412,29 @@ Page({
     }
   },
 
+  // 🛡️ 内存泄漏防护：profile 是 tabBar 页面，正常使用中几乎不会真正走到 onUnload
+  // （切 Tab 只触发 onHide，实例常驻到小程序退出），但页面存活期间持有的
+  // _leaderboardFetchTimer 是一个尚未触发的 setTimeout 防抖计时器
+  // （fetchLeaderboard 里创建）——用户切走后如果不清掉，它仍会在背景按原计划
+  // 触发一次不再需要展示的 setData。onHide/onUnload 都清一次，避免计时器悬空。
+  // 两个 InFlight 锁不在这里复位：它们各自的 try/finally 或 .finally() 已经能
+  // 保证请求无论成功/失败/页面是否可见都会在自己的异步链路末尾正确清零，这里
+  // 提前清零反而会在用户快速切回本 Tab 时，跟仍在途的上一轮请求形成新的并发
+  onHide() {
+    this.clearPendingLeaderboardTimer();
+  },
+
+  onUnload() {
+    this.clearPendingLeaderboardTimer();
+  },
+
+  clearPendingLeaderboardTimer() {
+    if (this._leaderboardFetchTimer) {
+      clearTimeout(this._leaderboardFetchTimer);
+      this._leaderboardFetchTimer = null;
+    }
+  },
+
   calculateNavBarHeight() {
     try {
       const sysInfo = getSafeSystemInfo();
@@ -522,38 +554,59 @@ Page({
 
     // fetchMeritStats 按真实角色查询（super_admin 本就同时满足 store_manager/finance 两类统计条件，
     // 预览视角切换时无需重新查询，WXML 侧的显隐已经按 currentUserRole 展示角色自动收敛）
-    this.fetchMeritStats(role);
     this.loadVolunteerStats();
     // ❤️ 爱心护持榜：家人视角没有护持数据，不加载；命中 10 分钟本地缓存时不打云函数
+    // （fetchLeaderboard 自带 ViewModel 缓存 + 连点防抖，不需要下面这道锁）
     if (!isFamily) {
       this.fetchLeaderboard();
     }
 
+    // 🐛 防抖锁：下面这一批才是 initMinePage() 里真正的网络开销所在（护持统计/
+    // 家长大盘/意见箱角标/义工投稿角标/成员申请角标/未读回复角标）。tabBar 页面
+    // 反复切入切出时，onShow 可能在上一轮这批请求还没返回就又触发一次
+    // initMinePage()——已有一轮在途时直接跳过本轮，等它自己 finally 解锁，而不是
+    // 让两轮并发叠加产生重复请求。上面已经落地的角色/门店名等同步展示态完全不受
+    // 这道锁影响，任何调用方（含"切换预览视角"等需要立即刷新展示的场景）都始终
+    // 能拿到最新值，只有这条尾巴上的后台数据刷新会被去重
+    if (this._initMinePageInFlight) {
+      console.log('[profile][initMinePage] 已有一轮后台数据刷新在途，跳过本次重复触发');
+      return;
+    }
+    this._initMinePageInFlight = true;
+
+    const pendingFetches: Promise<any>[] = [this.fetchMeritStats(role)];
+
     // 🏛️ 家长管理 / 资源兜底：仅家长本人或超管（含预览降级后的超管，与卡片
     // wx:if 口径保持一致）才需要加载，避免给普通义工/店长/财务发多余的云函数请求
     if (isPatriarch || overridden.isSuperAdmin) {
-      this.fetchPatriarchDashboardData();
+      pendingFetches.push(this.fetchPatriarchDashboardData());
     }
 
     // 📮 爱心意见箱管理入口的可见范围比家长大盘更宽（含店长），角标需要独立
     // 判断加载时机，不能只挂在上面 isPatriarch || isSuperAdmin 这个条件下
     if (displayRole === 'store_manager' || isPatriarch || overridden.isSuperAdmin) {
-      this.fetchPendingFeedbackCount();
-      this.fetchPendingVolunteerSubmissions();
-      this.fetchPendingApplications();
+      pendingFetches.push(this.fetchPendingFeedbackCount());
+      pendingFetches.push(this.fetchPendingVolunteerSubmissions());
+      pendingFetches.push(this.fetchPendingApplications());
     }
 
     // 💌 家人端未读回复红点：与上面管理端角标是两套完全独立的计数
     // （一个数"店里有几条没处理"，一个数"我提交的意见有几条被回复了没看"）
     if (isFamily) {
-      this.fetchUnreadReplyCount();
+      pendingFetches.push(this.fetchUnreadReplyCount());
     }
 
     // 🔴 义工端"我的餐报提交记录"入口角标：提前查一次自己的提交列表算出
     // rejectedCount，让红点在打开半屏弹窗之前就能在入口上看到，与上面
     // fetchPendingVolunteerSubmissions() 给店长端角标提前预取的做法保持一致
     if (isVolunteer && !isFamily) {
-      this.fetchMyVolunteerSubmissions(true);
+      pendingFetches.push(this.fetchMyVolunteerSubmissions(true));
+    }
+
+    try {
+      await Promise.allSettled(pendingFetches);
+    } finally {
+      this._initMinePageInFlight = false;
     }
   },
 
@@ -875,6 +928,17 @@ Page({
       this.setData({ userNickName: cached.nickName || '' });
     }
 
+    // 🐛 防抖锁：seq 号机制（见下方）已经能保证"后发起的结果不会被先发起、但后
+    // resolve 的旧结果覆盖"，但没能阻止 tabBar 页面反复切入切出时 onShow 一次次
+    // 并发发起全新的 fetchUserRole() 请求本身——每一次都是一趟完整的
+    // checkUserRole 云函数往返，属于纯粹浪费。已有一轮在途时直接跳过本轮，
+    // 等它自己 finally 解锁后，下一次真正的 onShow 自然会重新触发
+    if (this._loadUserProfileInFlight) {
+      console.log('[profile][loadUserProfile] 已有一轮刷新在途，跳过本次重复触发');
+      return;
+    }
+    this._loadUserProfileInFlight = true;
+
     // 🐛 关键修复：seq 号必须在发起 fetchUserRole 请求的这一刻就同步占好，不能等
     // checkUserRole 网络请求真正 resolve 之后才在 .then 回调里临时取号——原来的写法
     // 会导致"发起得早、但这一轮网络恰好慢"的请求，仅仅因为"resolve 得晚"就被误判成
@@ -905,6 +969,8 @@ Page({
       }
     }).catch(err => {
       console.warn('[profile] loadUserProfile 刷新失败:', err);
+    }).finally(() => {
+      this._loadUserProfileInFlight = false;
     });
   },
 
@@ -1237,6 +1303,17 @@ Page({
     const storeId = (activeStore && activeStore.storeId) || '';
     if (!storeId) return;
 
+    // 🐛 崩溃修复：_leaderboardCache 是挂在页面实例上的纯运行时对象，不经过
+    // data，框架不负责初始化/合并它——开发工具热重载等边界场景下曾观察到它
+    // 读到 undefined（TypeError: Cannot read property 'xxx_month' of
+    // undefined），且这段代码在 setTimeout 之外、没有 try/catch 包裹，抛出的
+    // 异常会直接阻断 initMinePage() 级联调用链、打断页面渲染。这里无条件先
+    // 兜底重建成空对象，保证下面这次读取与稍后 setTimeout 回调里的写入
+    // （同一个对象引用）任何时候都不会再抛出
+    if (!this._leaderboardCache) {
+      this._leaderboardCache = {};
+    }
+
     const cacheKey = `${storeId}_${targetRange}`;
     if (!forceRefresh) {
       const cached = this._leaderboardCache[cacheKey];
@@ -1258,8 +1335,13 @@ Page({
           name: 'manageVolunteerCheckIn',
           data: { action: 'leaderboard', range: targetRange, storeId }
         });
-        const result = res.result;
+        // 🛡️ res.result 在个别基础库/网络异常场景下可能整个是 undefined，
+        // 兜底成 null 再判断，不直接解构/取属性
+        const result = (res && res.result) || null;
         if (result && result.success) {
+          if (!this._leaderboardCache) {
+            this._leaderboardCache = {};
+          }
           this._leaderboardCache[cacheKey] = { time: Date.now(), data: result };
           this.applyLeaderboardResult(result);
         } else {

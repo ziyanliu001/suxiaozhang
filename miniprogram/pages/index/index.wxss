@@ -3375,6 +3375,9 @@ textarea, .textarea {
   z-index: 90;
 }
 
+/* 🐛 加固：display:flex 居中此前已生效，这里补上 box-sizing/padding/margin/
+   line-height 显式归零——消除微信原生 <button> 默认内边距与行高对 emoji 图标 +
+   文字组合可能造成的视觉干扰，不再依赖任何隐式默认值 */
 .btn-main-action {
   flex: 1;
   height: 88rpx;
@@ -3384,6 +3387,11 @@ textarea, .textarea {
   display: flex;
   align-items: center;
   justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
   box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
   transition: all 0.15s ease;
   border: none;
@@ -3401,8 +3409,10 @@ textarea, .textarea {
 .btn-emoji-icon {
   font-size: 28rpx;
   margin-right: 8rpx;
+  line-height: 1;
   /* emoji 字符自带色彩，不受按钮 color 影响，天然清晰可辨，
-     用它代替之前 stroke 写死为白色、在白底/浅色底上完全隐形的 SVG 图标 */
+     用它代替之前 stroke 写死为白色、在白底/浅色底上完全隐形的 SVG 图标；
+     line-height:1 避免 emoji 字形自身的行高与按钮文字基线产生视觉错位 */
 }
 
 /* 🌟 左右两个按钮做主次区分：生成餐报文本是流程首步、可反复重新生成校对，用白底红描边，
@@ -3442,7 +3452,11 @@ button.poster-gen-btn[disabled] {
   box-shadow: 0 2rpx 6rpx rgba(198, 40, 40, 0.2) !important;
 }
 
-/* ================= 🔑 生成邀请码弹窗 ================= */
+/* ================= 🔑 生成邀请码弹窗 =================
+   🎨 UI/UX 重构：卡片内边距从 32rpx/24rpx 提升到 40rpx/32rpx，标题字号与
+   操作按钮对比度同步加强，弹窗层级统一收敛到 2100——与站内其余全屏弹窗
+   （announcement/finance/compliance 等，z-index 1000~2000 不等）相比更高，
+   保证这两个弹窗打开时不会被任何其它页面浮层意外压住关键操作区 */
 .gencode-modal-mask {
   position: fixed;
   top: 0;
@@ -3453,28 +3467,32 @@ button.poster-gen-btn[disabled] {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2100;
 }
 
 .gencode-modal-card {
   width: 85%;
   max-width: 620rpx;
+  max-height: 80vh;
   background: #FFFFFF;
-  border-radius: 28rpx;
-  padding: 32rpx 24rpx;
+  border-radius: 32rpx;
+  padding: 40rpx 32rpx;
+  box-sizing: border-box;
+  box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.28);
+  overflow-y: auto;
 }
 
 .gencode-header-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 32rpx;
 }
 
 .gencode-title-text {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: bold;
-  color: #222222;
+  color: #1A1A1A;
 }
 
 .gencode-close-btn {
@@ -3487,6 +3505,12 @@ button.poster-gen-btn[disabled] {
   justify-content: center;
   font-size: 28rpx;
   color: #6B7280;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.gencode-close-btn:active {
+  background: #E3E6E9;
+  transform: scale(0.92);
 }
 
 /* 🌟 选择常客弹窗：视觉上与邀请码弹窗同一套底色/圆角/关闭按钮规范，保持整站弹窗风格统一 */
@@ -3700,7 +3724,7 @@ button.poster-gen-btn[disabled] {
   padding: 0 8rpx;
 }
 .form-item-row {
-  margin-bottom: 30rpx;
+  margin-bottom: 36rpx;
 }
 
 .form-label {
@@ -3708,16 +3732,53 @@ button.poster-gen-btn[disabled] {
   color: #666666;
   font-weight: bold;
   display: block;
-  margin-bottom: 12rpx;
+  margin-bottom: 14rpx;
 }
 
 .form-picker-selector {
   background: #FAF8F5;
   border: 1.5rpx solid #EFE6D8;
   border-radius: 16rpx;
-  padding: 18rpx 24rpx;
-  font-size: 24rpx;
+  padding: 22rpx 24rpx;
+  font-size: 26rpx;
   color: #333333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background-color 0.15s ease;
+}
+
+.form-picker-selector:active {
+  background: #F1EBE0;
+}
+
+/* 🔒 非超管（店长/大家长）锁定授权门店：与可点击态形成明确的视觉区隔——
+   灰底 + 虚线边框传达"这里不可交互"，配合右侧 picker-locked-tag 文案说明原因 */
+.form-picker-locked {
+  background: #F5F5F5;
+  border-style: dashed;
+  border-color: #DEE2E6;
+  color: #6B7280;
+}
+
+.picker-locked-tag {
+  font-size: 20rpx;
+  color: #ADB5BD;
+  background: #ECECEC;
+  border-radius: 10rpx;
+  padding: 4rpx 12rpx;
+  flex-shrink: 0;
+}
+
+/* ⚠️ 本机构暂无门店引导：黄色警示底色，与"缺权限/需前置操作"类提示统一色系 */
+.gencode-no-store-tip {
+  background: #FFF8E1;
+  border: 1.5rpx dashed #FFD54F;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  font-size: 24rpx;
+  color: #8C5A00;
+  line-height: 1.6;
 }
 
 /* 🌟 自定义门店输入框的"向下展开"动画：常驻 DOM，用 max-height + opacity 过渡
@@ -3773,10 +3834,14 @@ button.poster-gen-btn[disabled] {
   background: #F8F9FA;
   border: 2rpx solid #DEE2E6;
   border-radius: 18rpx;
-  padding: 16rpx 0;
+  padding: 18rpx 0;
   font-size: 24rpx;
   color: #495057;
   transition: all 0.2s ease;
+}
+
+.gencode-role-item:active {
+  transform: scale(0.96);
 }
 
 /* 未选中态进一步弱化：边框变浅灰虚线、文字降低对比度，与选中态形成更强烈的视觉落差 */
@@ -3795,6 +3860,13 @@ button.poster-gen-btn[disabled] {
   box-shadow: 0 4rpx 12rpx rgba(184, 134, 11, 0.2);
 }
 
+/* 🔒 权限阶梯里禁选的身份（如店长视角下的大家长/门店店长）：进一步压低透明度、
+   取消点击态形变，与"仅是未选中"的 inactive 明确区分——这里是真的点不动 */
+.gencode-role-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .gencode-role-item .role-check-badge {
   position: absolute;
   top: -14rpx;
@@ -3808,6 +3880,29 @@ button.poster-gen-btn[disabled] {
   font-size: 22rpx;
   font-weight: bold;
   box-shadow: 0 2rpx 6rpx rgba(184, 134, 11, 0.4);
+}
+
+/* 👑 大家长/超管授权说明：正向语气，绿系底色区别于下面的限制提示 */
+.gencode-role-empower-tip {
+  margin-top: 16rpx;
+  font-size: 22rpx;
+  color: #137333;
+  background: #E6F4EA;
+  border-radius: 12rpx;
+  padding: 14rpx 18rpx;
+  line-height: 1.6;
+}
+
+/* 🔒 店长权限受限说明：与 gencode-no-store-tip 同一套警示色系，保持弹窗内
+   提示信息的视觉语言统一 */
+.gencode-role-restrict-tip {
+  margin-top: 16rpx;
+  font-size: 22rpx;
+  color: #8C5A00;
+  background: #FFF8E1;
+  border-radius: 12rpx;
+  padding: 14rpx 18rpx;
+  line-height: 1.6;
 }
 
 .gen-result-box {
@@ -3843,38 +3938,167 @@ button.poster-gen-btn[disabled] {
 
 .gen-code-footer {
   display: flex;
-  gap: 16rpx;
-  margin-top: 24rpx;
+  gap: 20rpx;
+  margin-top: 32rpx;
 }
 
 .btn-cancel {
   flex: 1;
   background: #F1F3F5;
-  color: #6B7280;
-  border-radius: 40rpx;
-  font-size: 26rpx;
+  color: #495057;
+  border-radius: 44rpx;
+  font-size: 27rpx;
   font-weight: bold;
   border: none;
-  height: 80rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
 .btn-cancel::after {
   border: none;
 }
 
+.btn-cancel:active {
+  background: #E3E6E9;
+  transform: scale(0.98);
+}
+
 .btn-primary-gen {
   flex: 1.5;
   background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
   color: #FFFFFF;
-  border-radius: 40rpx;
-  font-size: 26rpx;
+  border-radius: 44rpx;
+  font-size: 27rpx;
   font-weight: bold;
   border: none;
-  height: 80rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 20rpx rgba(178, 34, 34, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn-primary-gen::after {
   border: none;
+}
+
+.btn-primary-gen:active {
+  transform: scale(0.98);
+  box-shadow: 0 4rpx 10rpx rgba(178, 34, 34, 0.3);
+}
+
+/* ================= 🔑 邀请码生成结果弹窗 =================
+   🐛 根因修复：这一族 .invite-result-* class 此前在整个 wxss 里完全没有任何
+   样式定义（生成成功后弹窗只是作为普通文档流内容渲染，没有全屏遮罩/居中卡片/
+   层级），现在补齐——视觉上与上面的 .gencode-modal-* 同一套卡片骨架，突出结果
+   区（邀请码）沿用站内既有的琥珀色"结果揭示"配色语言（同 .gen-result-box），
+   z-index 与生成弹窗保持同一档 2100（两者互斥展示，不存在同时争层级的场景） */
+.invite-result-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+}
+
+.invite-result-modal-card {
+  width: 85%;
+  max-width: 620rpx;
+  max-height: 85vh;
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  padding: 40rpx 32rpx;
+  box-sizing: border-box;
+  box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.28);
+  overflow-y: auto;
+}
+
+.invite-result-summary {
+  font-size: 26rpx;
+  color: #6B5B45;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.invite-result-code-box {
+  background: #FFF3E0;
+  border: 1.5rpx dashed #FFB74D;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+
+.invite-result-code {
+  display: block;
+  font-size: 56rpx;
+  font-weight: bold;
+  color: #E65100;
+  letter-spacing: 6rpx;
+  font-family: monospace;
+  margin-bottom: 20rpx;
+}
+
+.invite-result-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  background: #FFFFFF;
+  border: 1.5rpx solid #FFB74D;
+  border-radius: 32rpx;
+  padding: 12rpx 28rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #B8860B;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.invite-result-copy-btn:active {
+  background: #FFF3E0;
+  transform: scale(0.96);
+}
+
+.invite-result-qr-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.invite-result-qr-img {
+  width: 320rpx;
+  height: 320rpx;
+  border-radius: 16rpx;
+  border: 1.5rpx solid #EFE6D8;
+  background: #FAF8F5;
+}
+
+.invite-result-qr-hint {
+  font-size: 22rpx;
+  color: #A08A6A;
+  margin-top: 12rpx;
+}
+
+.invite-result-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6rpx;
+  background: #FFF8E1;
+  border-radius: 12rpx;
+  padding: 16rpx 18rpx;
+  font-size: 22rpx;
+  color: #8C5A00;
+  line-height: 1.6;
 }
 .add-icon {
   font-size: 48rpx;

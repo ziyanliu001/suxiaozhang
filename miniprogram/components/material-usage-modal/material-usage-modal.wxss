@@ -205,7 +205,7 @@
   opacity: 0.85;
 }
 
-.feedback-submit-btn[disabled] {
+.feedback-submit-btn.btn-is-disabled {
   opacity: 0.5;
   box-shadow: none;
 }

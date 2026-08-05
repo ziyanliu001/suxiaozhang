@@ -37,6 +37,15 @@ const TEMPLATE_COLLECTION = 'notice_templates';
 const MAX_LIST_LIMIT = 20;
 const OVERVIEW_SENTINELS = ['national_overview', 'ALL_STORES'];
 
+// 🛡️ -502005 DATABASE_COLLECTION_NOT_EXIST：notices 集合可能在这套环境里还没
+// 被写入过（新机构/新部署），与 submitFeedback/manageStoreInviteCode 同一套
+// 自愈口径——list/listPaged 都是只读查询，命中时直接降级为空列表/count:0，
+// 不需要 createCollection（读路径没有数据可写），也严禁把裸的 -502005 抛给
+// 首页跑马灯，导致渲染被未处理的错误打断
+function isCollectionNotExistError(err) {
+  return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -203,11 +212,17 @@ exports.main = async (event) => {
         // 时全部视为未读——与下面单条 data.unread 的判定口径保持一致
         const unreadWhere = readAt ? { ...where, createdAt: _.gt(readAt) } : where;
 
-        const [countRes, listRes, unreadRes] = await Promise.all([
-          db.collection(COLLECTION).where(where).count(),
-          db.collection(COLLECTION).where(where).orderBy('createdAt', 'desc').skip((pageNum - 1) * size).limit(size).get(),
-          db.collection(COLLECTION).where(unreadWhere).count()
-        ]);
+        let countRes, listRes, unreadRes;
+        try {
+          [countRes, listRes, unreadRes] = await Promise.all([
+            db.collection(COLLECTION).where(where).count(),
+            db.collection(COLLECTION).where(where).orderBy('createdAt', 'desc').skip((pageNum - 1) * size).limit(size).get(),
+            db.collection(COLLECTION).where(unreadWhere).count()
+          ]);
+        } catch (err) {
+          if (!isCollectionNotExistError(err)) throw err;
+          return { success: true, data: [], hasMore: false, unreadCount: 0 };
+        }
 
         const total = countRes.total || 0;
         const hasMore = pageNum * size < total;
@@ -258,11 +273,17 @@ exports.main = async (event) => {
         where.effectiveDate = _.or([_.eq(''), _.lte(today)]);
         where.expireDate = _.or([_.eq(''), _.gte(today)]);
 
-        const listRes = await db.collection(COLLECTION)
-          .where(where)
-          .orderBy('createdAt', 'desc')
-          .limit(MAX_LIST_LIMIT)
-          .get();
+        let listRes;
+        try {
+          listRes = await db.collection(COLLECTION)
+            .where(where)
+            .orderBy('createdAt', 'desc')
+            .limit(MAX_LIST_LIMIT)
+            .get();
+        } catch (err) {
+          if (!isCollectionNotExistError(err)) throw err;
+          return { success: true, data: [] };
+        }
 
         return { success: true, data: listRes.data || [] };
       }

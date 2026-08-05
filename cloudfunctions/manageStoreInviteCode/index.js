@@ -22,6 +22,16 @@ const VALID_TARGET_ROLES = ['STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'FAMI
 // 不会悄悄生成一个注定触发 errCode 40169 的太阳码
 const MAX_SCENE_LENGTH = 32;
 
+// 🛡️ -502005 DATABASE_COLLECTION_NOT_EXIST：store_invite_codes 是本次新增的集合，
+// 云环境里可能还没人手动建过表——与 submitFeedback/manageVolunteerSubmission 同一套
+// 自愈口径：写路径捕获后显式 createCollection 再重试一次，读路径捕获后建表 + 按
+// "确实没有匹配数据"回退，任何一路都不能把裸的服务端 DB 报错抛给小程序端 Toast
+function isCollectionNotExistError(err) {
+  return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
+}
+
+const INVITE_CODES_COLLECTION = 'store_invite_codes';
+
 // 🛡️ 身份阶梯权限：数值越大权限越高，用于 redeem 时判断"是否需要提升调用者的主角色"，
 // 与 authService.ts 的 UserRole 体系对齐——FAMILY 不是一个正式 role（家人/服务对象
 // 是 role==='volunteer' 且 status!=='approved' 的默认态，见 checkUserRole 云函数），
@@ -155,27 +165,48 @@ async function handleGenerate(event, OPENID) {
     }
   }
 
-  await db.collection('store_invite_codes').add({
-    data: {
-      code,
-      codeNormalized,
-      storeId,
-      storeName,
-      tenantId: store.tenantId || caller.tenantId || '',
-      targetRole,
-      createdBy: OPENID,
-      createdAt: now,
-      expiresAt,
-      status: 'UNUSED',
-      redeemedBy: null,
-      redeemedAt: null
-    }
-  });
+  const invitePayload = {
+    code,
+    codeNormalized,
+    storeId,
+    storeName,
+    tenantId: store.tenantId || caller.tenantId || '',
+    targetRole,
+    createdBy: OPENID,
+    createdAt: now,
+    expiresAt,
+    status: 'UNUSED',
+    redeemedBy: null,
+    redeemedAt: null
+  };
+  try {
+    await db.collection(INVITE_CODES_COLLECTION).add({ data: invitePayload });
+  } catch (err) {
+    // .add() 通常会在集合不存在时自动建表，这里兜底：万一这次环境没有自动建表，
+    // 显式建一次再重试一次写入，而不是让邀请码生成直接失败
+    if (!isCollectionNotExistError(err)) throw err;
+    await db.createCollection(INVITE_CODES_COLLECTION).catch(() => {});
+    await db.collection(INVITE_CODES_COLLECTION).add({ data: invitePayload });
+  }
 
   return {
     success: true,
     data: { code, storeId, storeName, targetRole, expiresAt, qrFileID }
   };
+}
+
+// 🛡️ 读路径自愈：与写路径同一套 isCollectionNotExistError 兜底——集合尚未建表时，
+// 任何邀请码都必然查不到，语义上等价于"邀请码不存在"，这里顺手把表建上，
+// 不把裸的 -502005 抛给调用方（redeem/peek 共用，查找逻辑完全一致）
+async function findInviteByCode(codeNormalized) {
+  try {
+    const res = await db.collection(INVITE_CODES_COLLECTION).where({ codeNormalized }).limit(1).get();
+    return res.data && res.data[0];
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+    await db.createCollection(INVITE_CODES_COLLECTION).catch(() => {});
+    return null;
+  }
 }
 
 async function handleRedeem(event, OPENID) {
@@ -184,11 +215,7 @@ async function handleRedeem(event, OPENID) {
     return { success: false, error: '请输入有效的邀请码' };
   }
 
-  const inviteRes = await db.collection('store_invite_codes')
-    .where({ codeNormalized })
-    .limit(1)
-    .get();
-  const invite = inviteRes.data && inviteRes.data[0];
+  const invite = await findInviteByCode(codeNormalized);
   if (!invite) {
     return { success: false, error: '邀请码不存在或输入有误' };
   }
@@ -196,7 +223,7 @@ async function handleRedeem(event, OPENID) {
     return { success: false, error: '该邀请码已被核销，一次性口令不可重复使用' };
   }
   if (invite.expiresAt && Date.now() > invite.expiresAt) {
-    await db.collection('store_invite_codes').doc(invite._id).update({
+    await db.collection(INVITE_CODES_COLLECTION).doc(invite._id).update({
       data: { status: 'EXPIRED' }
     });
     return { success: false, error: '邀请码已过期（有效期 24 小时），请联系发码人重新生成' };
@@ -247,7 +274,7 @@ async function handleRedeem(event, OPENID) {
     });
   }
 
-  await db.collection('store_invite_codes').doc(invite._id).update({
+  await db.collection(INVITE_CODES_COLLECTION).doc(invite._id).update({
     data: {
       status: 'USED',
       redeemedBy: OPENID,
@@ -271,11 +298,7 @@ async function handlePeek(event) {
     return { success: false, error: '请输入有效的邀请码' };
   }
 
-  const inviteRes = await db.collection('store_invite_codes')
-    .where({ codeNormalized })
-    .limit(1)
-    .get();
-  const invite = inviteRes.data && inviteRes.data[0];
+  const invite = await findInviteByCode(codeNormalized);
   if (!invite) {
     return { success: false, error: '邀请码不存在或输入有误' };
   }
@@ -313,6 +336,13 @@ exports.main = async (event) => {
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {
     console.error('[manageStoreInviteCode] 异常:', err);
+    // 🛡️ 严禁把裸的数据库报错（如 -502005 DATABASE_COLLECTION_NOT_EXIST）暴露给
+    // 终端用户——三条写/读路径（handleGenerate/handleRedeem/handlePeek）已经各自
+    // 做了自愈重试，这里是兜底防线：万一自愈本身也失败（如建表瞬间的并发竞态），
+    // 也只回一句友好提示，详细报错只留在服务端 console.error 供排查
+    if (isCollectionNotExistError(err)) {
+      return { success: false, error: '系统配置维护中，请联系管理员' };
+    }
     return { success: false, error: err.message || '操作失败' };
   }
 };

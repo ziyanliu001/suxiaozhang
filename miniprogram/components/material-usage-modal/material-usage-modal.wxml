@@ -65,6 +65,6 @@
       auto-height
     ></textarea>
 
-    <button class="feedback-submit-btn" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">📮 提交登记</button>
+    <button class="feedback-submit-btn {{submitting ? 'btn-is-disabled' : ''}}" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">📮 提交登记</button>
   </view>
 </view>

@@ -150,7 +150,7 @@
 }
 
 /* 🚫 休餐状态下人数输入框禁用态：与休餐胶囊同一套灰调，明确传达"当前不可填" */
-.vt-count-input[disabled] {
+.vt-count-input.input-is-disabled {
   background: #F1EBE0;
   color: #B4A88E;
 }
@@ -223,7 +223,7 @@
   opacity: 0.85;
 }
 
-.feedback-submit-btn[disabled] {
+.feedback-submit-btn.btn-is-disabled {
   opacity: 0.5;
   box-shadow: none;
 }

@@ -253,6 +253,16 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'volunteer_duty_logs', index: 'tenantId_storeId_status_dateString', status: 'success' });
 
+    // 🔑 特权邀请码（manageStoreInviteCode）：redeem/peek 都是按 codeNormalized
+    // 精确查找一次性口令，8 位随机码理论上不会重复，这里用 unique 索引把"不重复"
+    // 这条约束也落到数据库层，而不是只靠业务代码里"随机生成不去重"的乐观假设
+    await db.collection('store_invite_codes').createIndex({
+      name: 'codeNormalized_unique',
+      keys: [{ codeNormalized: 1 }],
+      unique: true
+    });
+    results.push({ collection: 'store_invite_codes', index: 'codeNormalized_unique', status: 'success' });
+
     return {
       success: true,
       message: '索引创建完成',

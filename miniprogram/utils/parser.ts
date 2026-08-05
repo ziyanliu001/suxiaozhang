@@ -18,40 +18,56 @@ const TITLE_KEYWORDS = [
   '今日', '昨日', '结余', '余额'
 ];
 
-const END_AMOUNT_REGEX = /(\d+(?:\.\d+)?)\s*(?:元|块|个)?\s*$/;
+// 🐛 根因修复：原 END_AMOUNT_REGEX 只在整行末尾找一个数字，隐含假设"一行 = 一条
+// 捐赠记录"；当用户一次粘贴多人一行（逗号/空格分隔，如 "李海10, 张燕90 李堂80"）时，
+// 最后一个数字之前的所有文本会被整段当成一个人名，前面几个人的姓名和金额全部丢失。
+// 改为全局扫描"姓名+金额"重复片段，一行可以解析出任意多条记录；姓名字符集刻意
+// 不包含数字/常见项目符号（•-·*、() 等），扫描引擎会自然跳过它们去找下一个有效
+// 姓名起点，行首编号"1. 张三 100"、"• 李四 50" 不需要额外清洗就已经是干净姓名。
+const NAME_AMOUNT_REGEX = /([一-龥a-zA-Z][一-龥a-zA-Z·]{0,19})\s*[:：=]?\s*[,，、\s]*\s*(\d+(?:\.\d{1,2})?)\s*(?:元|块|个)?/g;
 
 function isTitleLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  
+
   const hasDigit = /\d/.test(trimmed);
   if (hasDigit) return false;
-  
+
   return TITLE_KEYWORDS.some(keyword => trimmed.includes(keyword));
 }
 
-function parseLine(line: string): DonorItem | null {
+// 🌟 一行可能塞了多个人（逗号/空格/顿号分隔），返回该行解析出的全部条目，
+// 而不再是"至多一条"；调用方通过返回数组是否为空判断这一行是否可识别。
+function parseLine(line: string): DonorItem[] {
   const trimmed = line.trim();
-  if (!trimmed) return null;
-  
-  const match = trimmed.match(END_AMOUNT_REGEX);
-  if (!match) return null;
-  
-  const amountStr = match[1];
-  const amount = parseFloat(amountStr);
-  
-  if (isNaN(amount) || amount <= 0) return null;
-  
-  const namePart = trimmed.substring(0, match.index).trim();
-  
-  const cleanedName = namePart
-    .replace(/^[•\-·\*\d\.\)、\s]+/, '')
-    .replace(/[：:]+$/, '')
-    .trim();
-  
-  if (!cleanedName) return null;
-  
-  return { name: cleanedName, amount };
+  if (!trimmed) return [];
+
+  const results: DonorItem[] = [];
+
+  // 🛡️ NAME_AMOUNT_REGEX 带 g 标志、是模块级共享对象，lastIndex 会在多次 exec()
+  // 调用之间保留状态。exec() 正常耗尽返回 null 时引擎会自动把 lastIndex 归零，
+  // 这里仍显式重置一次，防止未来任何提前 return/break 导致下一行从错误的中间
+  // 位置开始扫描，静默漏掉本该匹配到的前几条记录。
+  NAME_AMOUNT_REGEX.lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+  while ((match = NAME_AMOUNT_REGEX.exec(trimmed)) !== null) {
+    const amount = parseFloat(match[2]);
+    if (isNaN(amount) || amount <= 0) continue;
+
+    // 姓名字符集已天然排除数字/项目符号/冒号，这两条 replace 目前基本是防御性
+    // 冗余（成本极低，作为双保险继续留着），详见函数上方注释。
+    const cleanedName = match[1]
+      .replace(/^[•\-·\*\d\.\)、\s]+/, '')
+      .replace(/[：:]+$/, '')
+      .trim();
+
+    if (!cleanedName) continue;
+
+    results.push({ name: cleanedName, amount });
+  }
+
+  return results;
 }
 
 export function parseDonorText(rawText: string): ParseResult {
@@ -70,9 +86,11 @@ export function parseDonorText(rawText: string): ParseResult {
     }
 
     const parsed = parseLine(trimmedLine);
-    if (parsed && parsed.name && parsed.amount > 0) {
-      items.push(parsed);
-      totalAmount += parsed.amount;
+    if (parsed.length > 0) {
+      parsed.forEach(item => {
+        items.push(item);
+        totalAmount += item.amount;
+      });
     } else {
       unrecognizedLines.push(`第 ${index + 1} 行: "${trimmedLine}"`);
     }

@@ -23,15 +23,15 @@
     <view class="vt-count-row vt-count-row-3">
       <view class="vt-count-cell">
         <text class="vt-form-label">早餐人数</text>
-        <input class="vt-count-input" type="number" placeholder="0" value="{{form.breakfastCount}}" bindinput="onBreakfastCountInput" disabled="{{form.mealStatus === 'closed'}}" />
+        <input class="vt-count-input {{form.mealStatus === 'closed' ? 'input-is-disabled' : ''}}" type="number" placeholder="0" value="{{form.breakfastCount}}" bindinput="onBreakfastCountInput" disabled="{{form.mealStatus === 'closed'}}" />
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">午餐人数</text>
-        <input class="vt-count-input" type="number" placeholder="0" value="{{form.lunchCount}}" bindinput="onLunchCountInput" disabled="{{form.mealStatus === 'closed'}}" />
+        <input class="vt-count-input {{form.mealStatus === 'closed' ? 'input-is-disabled' : ''}}" type="number" placeholder="0" value="{{form.lunchCount}}" bindinput="onLunchCountInput" disabled="{{form.mealStatus === 'closed'}}" />
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">晚餐人数</text>
-        <input class="vt-count-input" type="number" placeholder="0" value="{{form.dinnerCount}}" bindinput="onDinnerCountInput" disabled="{{form.mealStatus === 'closed'}}" />
+        <input class="vt-count-input {{form.mealStatus === 'closed' ? 'input-is-disabled' : ''}}" type="number" placeholder="0" value="{{form.dinnerCount}}" bindinput="onDinnerCountInput" disabled="{{form.mealStatus === 'closed'}}" />
       </view>
     </view>
 
@@ -50,6 +50,6 @@
       auto-height
     ></textarea>
 
-    <button class="feedback-submit-btn" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">{{form.mealStatus === 'closed' ? '📮 提交休餐登记' : '📮 提交登记'}}</button>
+    <button class="feedback-submit-btn {{submitting ? 'btn-is-disabled' : ''}}" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">{{form.mealStatus === 'closed' ? '📮 提交休餐登记' : '📮 提交登记'}}</button>
   </view>
 </view>
