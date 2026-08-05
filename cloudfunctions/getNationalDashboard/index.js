@@ -29,6 +29,15 @@ function daysBetween(dateStr, todayStr) {
   return Math.floor((b - a) / (24 * 60 * 60 * 1000));
 }
 
+// 🆕 按地区筛选：province/city 是门店档案里的自由文本字段（见 manageStoreProfile
+// TEXT_PROFILE_FIELDS），实际录入可能带"省/市"后缀也可能不带（如"福建省"/"福建"，
+// "厦门市"/"厦门"）。只做末尾后缀剥离 + 去空白的轻量归一化，与前端 statistics.ts
+// normalizeStoreName（剥离"区市省店"等字符）是同一类防御性容错思路，不引入分词
+// /行政区划字典等重量级方案
+function normalizeRegionText(str) {
+  return String(str || '').trim().replace(/(省|市|自治区|特别行政区|地区)$/, '');
+}
+
 // 🛡️ 统一数据脱敏处理函数：分层开放、数据脱敏
 // 志工（VOLUNTEER）只应看到"集体荣誉"类服务成果（服务人次、开餐天数、续航状态标签），
 // 单餐成本、收支金额、结余、精确续航天数等运营/财务隐私字段一律在服务端就地清除，
@@ -146,6 +155,46 @@ exports.main = async (event, context) => {
     const storesRes = await db.collection('stores').where(storesQuery).get();
     const allStores = storesRes.data || [];
 
+    // 🆕 全国大屏门店选择范围：filterMode 决定本次聚合的门店集合，默认 'national'
+    // （本机构全量门店，与升级前行为完全一致，老调用方不传该参数不受影响）。
+    // 'region' 按 province/city 分组筛选；'custom' 按调用方勾选的 storeIds 精确聚合。
+    // 🛡️ 与前面 tenantId 硬隔离是两层独立卡口：这里的筛选只在"已确认属于本机构"的
+    // allStores 范围内做子集收窄，绝不会扩大到其他机构的门店
+    const filterMode = (event && (event.filterMode === 'region' || event.filterMode === 'custom'))
+      ? event.filterMode
+      : 'national';
+    let targetStores = allStores;
+    // 🛡️ 只有"确实收窄了门店范围"才需要在下面丢弃无法归属的兜底日志——
+    // 'region' 模式下省份/城市都留空（前端文案"留空表示不限地区"）时，效果必须
+    // 与 'national' 完全一致，包括历史遗留、未在 stores 集合注册的兜底门店数据
+    // 也要计入，不能因为选了"按地区筛选"入口就悄悄比"全国总览"少算一部分数据
+    let isScopedFilter = false;
+    if (filterMode === 'region') {
+      const provinceFilter = normalizeRegionText(event && event.province);
+      const cityFilter = normalizeRegionText(event && event.city);
+      if (provinceFilter || cityFilter) {
+        targetStores = allStores.filter((s) => {
+          if (provinceFilter && normalizeRegionText(s.province) !== provinceFilter) return false;
+          if (cityFilter && normalizeRegionText(s.city) !== cityFilter) return false;
+          return true;
+        });
+        isScopedFilter = true;
+      }
+    } else if (filterMode === 'custom') {
+      const requestedIds = Array.isArray(event && event.storeIds)
+        ? event.storeIds.map(String).filter(Boolean)
+        : [];
+      // 未勾选任何门店时聚合范围就是空集，不回退到全量门店——防止前端传参异常
+      // （如误传空数组）时意外把"自定义"悄悄扩大成"全部门店"
+      const idSet = new Set(requestedIds);
+      targetStores = allStores.filter((s) => idSet.has(s._id));
+      isScopedFilter = true;
+    }
+    // 🛡️ 筛选态下，report_logs 里无法归属到 targetStores 任何一家的记录（storeId
+    // 与门店名均未命中）一律视为"不在本次聚合范围内"直接丢弃，而不是像 'national'
+    // 模式那样退回创建兜底门店条目——否则筛选范围外的门店数据会通过兜底分支泄漏
+    // 回聚合结果
+
     // 2. 抓取本机构餐报日志（分页累加）
     let allLogs = [];
     const batchLimit = 100;
@@ -190,6 +239,14 @@ exports.main = async (event, context) => {
       if (rangeStartDate) {
         materialConditions.push({ dateString: _.gte(rangeStartDate) });
       }
+      // 🆕 按地区/自定义门店筛选时，物资消耗总量也要收窄到同一个门店范围，不能
+      // 一边门店矩阵/餐次汇总已经按筛选范围收窄、一边物资总量仍是全机构口径。
+      // material_logs 是全新集合（见 manageVolunteerSubmission materialDoc），
+      // 写入时必定带 storeId，可直接下推到查询条件，无需像 report_logs 那样
+      // 再做门店名兜底匹配
+      if (isScopedFilter) {
+        materialConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
+      }
       let allMaterialLogs = [];
       let materialSkip = 0;
       while (true) {
@@ -229,11 +286,12 @@ exports.main = async (event, context) => {
 
     const storeStatsMap = {};
 
-    allStores.forEach(s => {
+    targetStores.forEach(s => {
       storeStatsMap[s._id] = {
         storeId: s._id,
         storeName: s.storeName || '未命名门店',
         city: s.city || '未知',
+        province: s.province || '',
         totalDiners: 0,
         totalIncome: 0,
         totalExpense: 0,
@@ -268,6 +326,9 @@ exports.main = async (event, context) => {
 
       // 若未匹配到门店，创建兜底条目
       if (!matchedKey) {
+        if (isScopedFilter) {
+          return;
+        }
         if (!fallbackStoreMap[sId]) {
           fallbackStoreMap[sId] = {
             storeId: sId,
@@ -365,6 +426,7 @@ exports.main = async (event, context) => {
         storeId: s.storeId,
         storeName: s.storeName,
         city: s.city,
+        province: s.province || '',
         totalDiners: s.totalDiners,
         openDays: s.openDays,
         // 无数据时 runwayDays 给 null 而不是 0，前端据此判断"有没有具体天数可展示"，
@@ -403,7 +465,10 @@ exports.main = async (event, context) => {
     storeMatrix.sort((a, b) => b.totalDiners - a.totalDiners);
 
     const nationalSummary = {
-      totalStores: allStores.length || Object.keys(storeStatsMap).length,
+      // 🆕 筛选态下，覆盖门店总数应反映当前筛选范围（targetStores），而不是本机构
+      // 全量门店数——否则"按地区筛选"选中一个只有 2 家门店的城市，KPI 卡却仍显示
+      // 全机构 20 家门店，数字与实际聚合范围自相矛盾
+      totalStores: targetStores.length || Object.keys(storeStatsMap).length,
       nationalTotalDiners,
       nationalTotalIncome: nationalTotalIncome.toFixed(2),
       nationalTotalExpense: nationalTotalExpense.toFixed(2),
@@ -429,7 +494,7 @@ exports.main = async (event, context) => {
       storeMatrix.forEach(s => {
         if (s.isOffline || s.hasRiskFlag) riskStoreIds.add(s.storeId);
       });
-      const totalStoreCount = allStores.length || Object.keys(storeStatsMap).length;
+      const totalStoreCount = targetStores.length || Object.keys(storeStatsMap).length;
 
       superAdminInsights = {
         rangeType,

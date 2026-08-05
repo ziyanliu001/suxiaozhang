@@ -500,6 +500,28 @@ Page({
     nationalDashboardLoading: false,
     nationalDashboardError: '',
 
+    // 🆕 全国大屏门店选择范围：'national' 全国总览（默认，向后兼容旧行为）/
+    // 'region' 按省份·城市分组筛选/'custom' 自定义勾选多家门店对比。三者互斥，
+    // 由 onSuperAdminSelectStore 的 storePickerArray 三个固定入口驱动切换，
+    // 见 loadNationalDashboard() 里据此拼装 getNationalDashboard 的筛选传参
+    nationalFilterMode: 'national' as 'national' | 'region' | 'custom',
+    // 🆕 门店目录：{storeId,storeName,province,city}[]，来自 getStoreList 云函数
+    // （本就按 tenantId 隔离，见该云函数注释），供下面"按地区筛选"的省市级联
+    // picker 与"自定义门店对比"勾选列表共用同一份数据源，避免重复查询
+    storeDirectory: [] as any[],
+    provincePickerOptions: ['全部省份'] as string[],
+    cityPickerOptions: ['全部城市'] as string[],
+    selectedProvinceIndex: 0,
+    selectedCityIndex: 0,
+    selectedProvince: '',
+    selectedCity: '',
+    showRegionFilterModal: false,
+    showCustomStoreModal: false,
+    // 已确认生效的自定义门店勾选结果；customStoreDraftSelection 是弹窗内勾选、
+    // 尚未点击"确定"前的草稿态，两者分离避免用户勾选一半又取消时污染已生效的选择
+    customStoreSelection: [] as string[],
+    customStoreDraftSelection: [] as string[],
+
     // 🌟 超管专属高阶治理看板：核心指标/时间切片/离线门店预警/CSV 报表导出，见 getNationalDashboard
     // 云函数 superAdminInsights（服务端已按 role==='super_admin' 二次校验，非超管拿到的字段恒为 null）
     superAdminInsights: null as any,
@@ -1170,6 +1192,7 @@ Page({
       this.setData({
         isAllStoresMode: false,
         showNationalDashboard: false,
+        nationalFilterMode: 'national',
         shopName: ownStoreName,
         currentUserStoreName: ownStoreName,
         currentUserStoreId: ownStoreId
@@ -1185,7 +1208,17 @@ Page({
     try {
       // 🛡️ rangeType 仅超管高阶面板使用；云函数侧会再次校验调用者角色，非 super_admin
       // 传了也会被服务端忽略，这里传参不代表前端信任该参数会生效
-      const callParams = { rangeType: this.data.nationalRangeType };
+      // 🆕 filterMode/province/city/storeIds：按地区筛选/自定义门店对比的聚合范围
+      // 传参，服务端 getNationalDashboard 会在"已确认属于本机构"的门店集合内做
+      // 子集收窄，不传或 filterMode='national' 时行为与升级前完全一致
+      const filterMode = this.data.nationalFilterMode || 'national';
+      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode };
+      if (filterMode === 'region') {
+        callParams.province = this.data.selectedProvince || '';
+        callParams.city = this.data.selectedCity || '';
+      } else if (filterMode === 'custom') {
+        callParams.storeIds = this.data.customStoreSelection || [];
+      }
       console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
       const result = await wx.cloud.callFunction({
@@ -1241,6 +1274,149 @@ Page({
       wx.showToast({ title: errMsg, icon: 'none', duration: 4000 });
     } finally {
       this.setData({ nationalDashboardLoading: false });
+    }
+  },
+
+  // 🆕 门店目录懒加载：地区筛选的省市级联 picker、自定义门店勾选列表都依赖这份
+  // {storeId,storeName,province,city}[] 数据，复用已有的 getStoreList 云函数
+  // （本就按 tenantId 隔离，见该云函数注释），只在首次用到时才请求一次，之后
+  // 两个筛选入口共用同一份缓存，不重复查询。返回 false 代表加载失败，调用方
+  // 应放弃本次打开弹窗的操作
+  async ensureStoreDirectory(): Promise<boolean> {
+    if (this.data.storeDirectory.length > 0) return true;
+    try {
+      const res: any = await wx.cloud.callFunction({ name: 'getStoreList', data: {} });
+      const result = res.result;
+      if (!result || !result.success || !Array.isArray(result.list)) {
+        wx.showToast({ title: '门店目录加载失败，请重试', icon: 'none' });
+        return false;
+      }
+      const storeDirectory = result.list.map((s: any) => ({
+        storeId: s.storeId,
+        storeName: s.storeName,
+        province: s.province || '',
+        city: s.city || ''
+      }));
+      const provincePickerOptions = ['全部省份'].concat(
+        Array.from(new Set(storeDirectory.map((s: any) => s.province).filter(Boolean))) as string[]
+      );
+      const cityPickerOptions = ['全部城市'].concat(
+        Array.from(new Set(storeDirectory.map((s: any) => s.city).filter(Boolean))) as string[]
+      );
+      this.setData({ storeDirectory, provincePickerOptions, cityPickerOptions });
+      return true;
+    } catch (err) {
+      console.error('[ensureStoreDirectory] 门店目录加载异常:', err);
+      wx.showToast({ title: '网络异常，门店目录加载失败', icon: 'none' });
+      return false;
+    }
+  },
+
+  async openRegionFilterModal() {
+    const ok = await this.ensureStoreDirectory();
+    if (!ok) return;
+    this.setData({ showRegionFilterModal: true });
+  },
+
+  onCancelRegionFilter() {
+    this.setData({ showRegionFilterModal: false });
+  },
+
+  // 省份 picker 切换：联动收窄城市 picker 的可选项——只保留该省份下 storeDirectory
+  // 里真实存在的城市，不重新发起查询
+  onRegionProvinceChange(e: any) {
+    const idx = parseInt(e.detail.value, 10);
+    const options = this.data.provincePickerOptions;
+    const province = idx === 0 ? '' : options[idx];
+    const cityPickerOptions = ['全部城市'].concat(
+      Array.from(new Set(
+        this.data.storeDirectory
+          .filter((s: any) => !province || s.province === province)
+          .map((s: any) => s.city)
+          .filter(Boolean)
+      )) as string[]
+    );
+    this.setData({
+      selectedProvinceIndex: idx,
+      selectedProvince: province,
+      cityPickerOptions,
+      selectedCityIndex: 0,
+      selectedCity: ''
+    });
+  },
+
+  onRegionCityChange(e: any) {
+    const idx = parseInt(e.detail.value, 10);
+    const options = this.data.cityPickerOptions;
+    const city = idx === 0 ? '' : options[idx];
+    this.setData({ selectedCityIndex: idx, selectedCity: city });
+  },
+
+  onConfirmRegionFilter() {
+    const { selectedProvince, selectedCity } = this.data;
+    const label = (selectedProvince || selectedCity)
+      ? `📍 ${[selectedProvince, selectedCity].filter(Boolean).join('·')}`
+      : '📍 全部地区';
+    this.setData({
+      nationalFilterMode: 'region',
+      isAllStoresMode: true,
+      showNationalDashboard: true,
+      showRegionFilterModal: false,
+      shopName: '全部门店',
+      currentUserStoreName: label
+    });
+    this.loadNationalDashboard();
+  },
+
+  async openCustomStoreModal() {
+    const ok = await this.ensureStoreDirectory();
+    if (!ok) return;
+    this.setData({
+      customStoreDraftSelection: this.data.customStoreSelection.slice(),
+      showCustomStoreModal: true
+    });
+  },
+
+  onCancelCustomStores() {
+    this.setData({ showCustomStoreModal: false });
+  },
+
+  // checkbox-group 的 bindchange 直接回传"当前所有已勾选项 value 数组"，
+  // 不需要自己再手动维护每一项的开关状态
+  onCustomStoreDraftChange(e: any) {
+    this.setData({ customStoreDraftSelection: e.detail.value || [] });
+  },
+
+  onConfirmCustomStores() {
+    const selection = this.data.customStoreDraftSelection;
+    if (!selection || selection.length === 0) {
+      wx.showToast({ title: '请至少勾选一家门店', icon: 'none' });
+      return;
+    }
+    const selectedNames = this.data.storeDirectory
+      .filter((s: any) => selection.includes(s.storeId))
+      .map((s: any) => s.storeName);
+    const label = selectedNames.length === 1
+      ? `🏬 ${selectedNames[0]}`
+      : `🏬 自定义(${selectedNames.length}家门店)`;
+    this.setData({
+      customStoreSelection: selection.slice(),
+      nationalFilterMode: 'custom',
+      isAllStoresMode: true,
+      showNationalDashboard: true,
+      showCustomStoreModal: false,
+      shopName: '全部门店',
+      currentUserStoreName: label
+    });
+    this.loadNationalDashboard();
+  },
+
+  // 全国大屏顶部"更改筛选"入口：按当前生效的 nationalFilterMode 重新打开对应弹窗
+  onChangeNationalFilter() {
+    if (this.data.nationalFilterMode === 'region') {
+      this.openRegionFilterModal();
+    } else if (this.data.nationalFilterMode === 'custom') {
+      this.openCustomStoreModal();
     }
   },
 
@@ -1459,71 +1635,108 @@ Page({
         }
       }
 
-      if (allRecords.length > 0) {
-        const shopCountMap = new Map<string, number>();
-        allRecords.forEach((item: any) => {
-          if (item.shopName && item.shopName.trim()) {
-            const name = item.shopName.trim();
-            shopCountMap.set(name, (shopCountMap.get(name) || 0) + 1);
-          }
-        });
+      const shopCountMap = new Map<string, number>();
+      allRecords.forEach((item: any) => {
+        if (item.shopName && item.shopName.trim()) {
+          const name = item.shopName.trim();
+          shopCountMap.set(name, (shopCountMap.get(name) || 0) + 1);
+        }
+      });
 
-        // 🛡️ 门店隔离：仅 super_admin 才允许在下拉里看到/选到"全部门店"聚合选项，
-        // 与 canViewAllStoresDropdown（严格收窄到 super_admin）保持同一条权限口径。
-        // 非超管的 shopNames 强制收窄为自己绑定的门店——不信任 allRecords 里可能
-        // 混进来的其他门店名（哪怕 getReports 云函数已经做了服务端强隔离，本地缓存
-        // local_report_logs 仍可能是共享设备上残留的旧数据），只用 applyRolePermissions
-        // 已经从服务端角色信息里解析出的 currentUserStoreName 作为唯一权威来源
-        const isSuperAdmin = this.data.canViewAllStoresDropdown;
-        let shopNames = Array.from(shopCountMap.keys());
-        if (!isSuperAdmin) {
-          const ownStoreName = this.data.currentUserStoreName || this.data.shopName || '';
-          shopNames = ownStoreName ? [ownStoreName] : [];
+      // 🛡️ 门店隔离：仅 super_admin 才允许在下拉里看到/选到"全部门店"聚合选项，
+      // 与 canViewAllStoresDropdown（严格收窄到 super_admin）保持同一条权限口径。
+      const isSuperAdmin = this.data.canViewAllStoresDropdown;
+
+      if (isSuperAdmin) {
+        // 🐛 根因修复："全国总览"胶囊点击无反应：此前 storePickerArray 完全依赖
+        // allRecords（report_logs 已核对记录）是否非空才会被构建——全新租户/
+        // 门店尚未产生任何已核对记录时 allRecords 为空，storePickerArray 永远
+        // 停留在初始值 []，wxml 的 picker 渲染条件
+        // canViewAllStoresDropdown && storePickerArray.length > 0 恒为 false，
+        // 页面只能落到 wx:else 的纯展示"锁定态"分支——那根本不是可点击的
+        // picker（没有 bindtap/bindchange），点击自然毫无反应，视觉上只是恰好
+        // 紧挨着一个 role-tag-badge，容易被误判成"被角标挡住了"。改为超管的
+        // 门店选择器改从权威的 stores 目录（getStoreList 云函数，本就按
+        // tenantId 隔离）构建，不再要求"至少有一条已核对报表"这个前提条件
+        // 复用 ensureStoreDirectory() 同一份门店目录缓存（也是"按地区筛选"/
+        // "自定义门店对比"两个弹窗依赖的数据源），避免与它们各自发起一次
+        // 重复的 getStoreList 云调用
+        await this.ensureStoreDirectory();
+        const storeDirectoryList = this.data.storeDirectory;
+
+        // 以 stores 目录里的真实门店名为主（覆盖"零报表"新门店）；同时并入
+        // report_logs 里出现过、但目录中找不到的门店名（历史遗留/未在 stores
+        // 集合正式注册的门店，见 getNationalDashboard 的 fallbackStoreMap 兜底
+        // 同款场景），两者取并集，避免这批"有数据但没档案"的门店从列表里消失
+        const directoryNames = storeDirectoryList.map((s: any) => s.storeName).filter(Boolean);
+        const recordOnlyNames = Array.from(shopCountMap.keys()).filter(
+          (name: string) => !directoryNames.includes(name)
+        );
+        const shopNames = directoryNames.concat(recordOnlyNames);
+
+        const shopList = ['全部门店'].concat(
+          shopNames.map((name: string) => {
+            const count = shopCountMap.get(name) || 0;
+            return count > 0 ? `${name} (${count}条记录)` : name;
+          })
+        );
+
+        // 🆕 "📍 按地区筛选"/"🏬 自定义门店对比" 是两个入口占位项（storeId 用
+        // 专属哨兵值标记，仅供 onSuperAdminSelectStore 内部判断选中项类型用），
+        // 选中后不直接切店，而是弹出对应筛选弹窗，见该方法
+        const storePickerArray = [
+          { shopName: '🌐 全国总览', storeId: 'ALL' },
+          { shopName: '📍 按地区筛选', storeId: 'REGION_FILTER' },
+          { shopName: '🏬 自定义门店对比', storeId: 'CUSTOM_STORES' }
+        ].concat(
+          shopNames.map((name: string) => {
+            const matched = storeDirectoryList.find((s: any) => s.storeName === name);
+            return { shopName: name, storeId: (matched && matched.storeId) || '', recordCount: shopCountMap.get(name) || 0 };
+          })
+        );
+
+        const currentShopName = this.data.shopName;
+        let selectedIndex = 0;
+        if (currentShopName) {
+          const exactIdx = shopList.findIndex(shop => {
+            const cleanName = shop.replace(/\s*\(\d+条记录\)$/, '');
+            return cleanName === currentShopName;
+          });
+          if (exactIdx !== -1) {
+            selectedIndex = exactIdx;
+          } else {
+            const fuzzyIdx = shopList.findIndex(shop =>
+              shop !== '全部门店' && isStoreNameFuzzyMatch(shop.replace(/\s*\(\d+条记录\)$/, ''), currentShopName)
+            );
+            if (fuzzyIdx !== -1) selectedIndex = fuzzyIdx;
+          }
         }
 
-        let shopList = shopNames.map(name => {
+        this.setData({
+          shopList,
+          selectedShopIndex: selectedIndex,
+          shopName: selectedIndex === 0 ? '全部门店' : shopList[selectedIndex].replace(/\s*\(\d+条记录\)$/, ''),
+          showAllStoresOption: shopList.length > 1,
+          storePickerArray
+        });
+      } else if (allRecords.length > 0) {
+        // 非超管：维持原有口径不变——不信任 allRecords 里可能混进来的其他门店名
+        // （哪怕 getReports 云函数已经做了服务端强隔离，本地缓存 local_report_logs
+        // 仍可能是共享设备上残留的旧数据），只用 applyRolePermissions 已经从服务端
+        // 角色信息里解析出的 currentUserStoreName 作为唯一权威来源。storePickerArray
+        // 保持默认空值——非超管的门店选择器渲染分支（wxml）本就不会读取它
+        const ownStoreName = this.data.currentUserStoreName || this.data.shopName || '';
+        const shopNames = ownStoreName ? [ownStoreName] : [];
+        const shopList = shopNames.map(name => {
           const count = shopCountMap.get(name) || 0;
           return count > 0 ? `${name} (${count}条记录)` : name;
         });
-
         if (shopList.length > 0) {
-          if (isSuperAdmin) {
-            shopList.unshift('全部门店');
-          }
-
-          // 同时构建 storePickerArray（用于超级管理员门店切换 picker），非超管不含
-          // "🌐 全国总览"聚合项
-          const storePickerArray = (isSuperAdmin ? [{ shopName: '🌐 全国总览', storeId: 'ALL' }] : []).concat(
-            shopNames.map(name => ({ shopName: name, storeId: '', recordCount: shopCountMap.get(name) || 0 }))
-          );
-
-          const currentShopName = this.data.shopName;
-          let selectedIndex = 0;
-          if (isSuperAdmin && currentShopName) {
-            const exactIdx = shopList.findIndex(shop => {
-              const cleanName = shop.replace(/\s*\(\d+条记录\)$/, '');
-              return cleanName === currentShopName;
-            });
-            if (exactIdx !== -1) {
-              selectedIndex = exactIdx;
-            } else {
-              const fuzzyIdx = shopList.findIndex(shop =>
-                shop !== '全部门店' && isStoreNameFuzzyMatch(shop.replace(/\s*\(\d+条记录\)$/, ''), currentShopName)
-              );
-              if (fuzzyIdx !== -1) selectedIndex = fuzzyIdx;
-            }
-          }
-          // 🛡️ 非超管强制锁定选中自己的门店：shopList 此时只包含这一项（index 0），
-          // 不走上面的"全部门店"匹配逻辑，永远不会误选到聚合视图
-          if (!isSuperAdmin) {
-            selectedIndex = 0;
-          }
           this.setData({
             shopList,
-            selectedShopIndex: selectedIndex,
-            shopName: (isSuperAdmin && selectedIndex === 0) ? '全部门店' : shopList[selectedIndex].replace(/\s*\(\d+条记录\)$/, ''),
-            showAllStoresOption: isSuperAdmin && shopList.length > 1,
-            storePickerArray
+            selectedShopIndex: 0,
+            shopName: shopList[0].replace(/\s*\(\d+条记录\)$/, ''),
+            showAllStoresOption: false
           });
         }
       }
@@ -1552,6 +1765,18 @@ Page({
     const selected = storePickerArray[index];
     if (!selected) return;
 
+    // 🆕 "按地区筛选"/"自定义门店对比" 是两个入口占位项，选中后不直接当成门店
+    // 切换处理——弹出对应筛选弹窗，等用户在弹窗内确认选择后才真正触发
+    // loadNationalDashboard()，这里先不动 shopName/showNationalDashboard 等状态
+    if (selected.storeId === 'REGION_FILTER') {
+      this.openRegionFilterModal();
+      return;
+    }
+    if (selected.storeId === 'CUSTOM_STORES') {
+      this.openCustomStoreModal();
+      return;
+    }
+
     // 🛡️ 'ALL' 只是 storePickerArray 条目自带的哨兵值，用于判断本次选中的是否为
     // "🌐 全国总览"聚合项——this.data.shopName 一旦真正切到聚合视图，仍必须落回
     // '全部门店' 这个字面量（getStatisticsData 云函数的 wantsAllStores 判断认的
@@ -1563,6 +1788,9 @@ Page({
       currentUserStoreName: isAll ? '🌐 全国总览' : selected.shopName,
       currentUserStoreId: isAll ? '' : (selected.storeId || ''),
       isAllStoresMode: isAll,
+      // 🆕 切回"全国总览"或选中具体单店时，清空此前可能残留的地区/自定义筛选态，
+      // 避免下次再点开"全部门店"聚合视图时误用上一次的筛选范围
+      nationalFilterMode: 'national',
       hasOtherStoreData: false,
       statistics: null,
       showNationalDashboard: isAll

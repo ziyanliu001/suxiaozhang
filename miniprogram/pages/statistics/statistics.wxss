@@ -2034,6 +2034,33 @@ button.btn-primary-poster {
 
 /* ===== 🆕 全国多店大屏专属宏观 KPI 卡：黄金/暖白风，与蓝色 national-hero-card
    区分开的"第一屏摘要"，只放三个体量指标 ===== */
+.national-filter-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF3E0;
+  border: 1rpx solid #FFCC80;
+  border-radius: 16rpx;
+  padding: 14rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.filter-status-text {
+  font-size: 24rpx;
+  color: #7A4D00;
+  flex: 1;
+  margin-right: 12rpx;
+}
+
+.filter-status-btn {
+  font-size: 22rpx;
+  color: #FFFFFF;
+  background: #D9480E;
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
+  white-space: nowrap;
+}
+
 .national-macro-kpi-card {
   background: linear-gradient(135deg, #FFF8E8 0%, #FDF0D5 100%);
   border: 1.5rpx solid #E6C87A;

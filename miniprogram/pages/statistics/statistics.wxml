@@ -125,6 +125,14 @@
       <button class="btn-empty-action" hover-class="ui-hover" bindtap="loadNationalDashboard">重试</button>
     </view>
     <block wx:elif="{{nationalData.nationalTotalDiners !== undefined}}">
+    <!-- 🆕 当前筛选范围提示条：仅超管（拥有门店切换权限）可见，非"全国总览"（即
+         按地区/自定义门店筛选）时展示当前范围文案 + "更改筛选"快捷入口，不必
+         退回顶部门店选择器重新点一次 -->
+    <view class="national-filter-status-bar" wx:if="{{canViewAllStoresDropdown && nationalFilterMode !== 'national'}}">
+      <text class="filter-status-text">{{nationalFilterMode === 'region' ? '📍 当前按地区筛选：' : '🏬 当前自定义门店：'}}{{currentUserStoreName}}</text>
+      <view class="filter-status-btn" bindtap="onChangeNationalFilter">更改筛选</view>
+    </view>
+
     <!-- 🆕 全国多店大屏专属宏观 KPI 卡：黄金/暖白风，与下方蓝色 national-hero-card
          是两张不同定位的卡片——这张只放三个一眼就能看懂的"体量"指标（覆盖门店/
          累计服务人次/总餐食支出），置顶做第一屏摘要；national-hero-card 保留原有
@@ -469,6 +477,66 @@
       <view class="modal-footer">
         <button class="btn-modal-cancel" bindtap="onExportPreviewGoFix">发现异常，前去核对</button>
         <button class="btn-modal-submit" bindtap="onExportPreviewConfirm">数据无误，确认并导出</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🆕 全国大屏"按地区筛选"弹窗：省份→城市级联选择，两者都留空表示不限地区
+       （效果等同"全国总览"，只是走的是这套地区筛选入口） -->
+  <view class="patch-modal-mask" wx:if="{{showRegionFilterModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">📍 按地区筛选</text>
+        <text class="btn-close" bindtap="onCancelRegionFilter">✕</text>
+      </view>
+      <text class="modal-tip">选择省份/城市后，将只汇总该地区门店的数据；留空表示不限地区</text>
+
+      <view class="date-picker-subrow">
+        <picker mode="selector" range="{{provincePickerOptions}}" value="{{selectedProvinceIndex}}" bindchange="onRegionProvinceChange">
+          <view class="picker-pill-btn">
+            <text class="lbl">{{provincePickerOptions[selectedProvinceIndex] || '全部省份'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+        <picker mode="selector" range="{{cityPickerOptions}}" value="{{selectedCityIndex}}" bindchange="onRegionCityChange">
+          <view class="picker-pill-btn">
+            <text class="lbl">{{cityPickerOptions[selectedCityIndex] || '全部城市'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCancelRegionFilter">取消</button>
+        <button class="btn-modal-submit" bindtap="onConfirmRegionFilter">确定</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🆕 全国大屏"自定义门店对比"弹窗：勾选多家门店聚合查看，只勾一家即等同"单店视角" -->
+  <view class="patch-modal-mask" wx:if="{{showCustomStoreModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">🏬 自定义门店对比</text>
+        <text class="btn-close" bindtap="onCancelCustomStores">✕</text>
+      </view>
+      <text class="modal-tip">勾选需要对比/合并统计的门店（可多选，至少选择一家）</text>
+
+      <checkbox-group bindchange="onCustomStoreDraftChange">
+        <scroll-view scroll-y class="modal-scroll-list">
+          <label class="report-check-item" wx:for="{{storeDirectory}}" wx:key="storeId" wx:for-item="store">
+            <checkbox value="{{store.storeId}}" checked="{{customStoreDraftSelection.includes(store.storeId)}}" color="#8C1D18" />
+            <text>{{store.storeName}}<text wx:if="{{store.province || store.city}}"> ({{store.province}}{{store.city}})</text></text>
+          </label>
+        </scroll-view>
+      </checkbox-group>
+      <view class="empty-box" wx:if="{{storeDirectory.length === 0}}">
+        <text class="empty-tip">暂无可选门店</text>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCancelCustomStores">取消</button>
+        <button class="btn-modal-submit" bindtap="onConfirmCustomStores">确定（已选{{customStoreDraftSelection.length}}家）</button>
       </view>
     </view>
   </view>
