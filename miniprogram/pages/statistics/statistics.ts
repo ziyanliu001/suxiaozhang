@@ -1156,13 +1156,23 @@ Page({
     // 而不是留一块空白
     const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
     if (!permission.allowed) {
-      const ownStore = getSelectedStore();
+      // 🐛 根因修复（模拟器实测发现）：getSelectedStore() 兜底读到的可能正是刚
+      // 触发本次全国总览请求前残留的虚拟聚合值（storeId:'national_overview'/
+      // storeName:'全国总览'，例如用户此前在首页 store-picker 选过全国总览、
+      // 全局缓存尚未被其他地方清洗）——不过滤直接当"用户自己的真实门店"落地，
+      // 会把"全国总览"当成一个字面店名传给 getStatisticsData/getReports 查询，
+      // 查不到任何数据，空状态卡片还会显示"暂无【全国总览】在选定周期的统计
+      // 数据"这种自相矛盾的文案。命中虚拟聚合名时一律视为"没有可回退的具体门店"
+      const rawOwnStore = getSelectedStore();
+      const ownStoreIsVirtual = isVirtualStoreName(rawOwnStore.storeName) || NATIONAL_STORE_ID_SENTINELS.includes(rawOwnStore.storeId || '');
+      const ownStoreName = ownStoreIsVirtual ? '' : (rawOwnStore.storeName || '');
+      const ownStoreId = ownStoreIsVirtual ? '' : (rawOwnStore.storeId || '');
       this.setData({
         isAllStoresMode: false,
         showNationalDashboard: false,
-        shopName: ownStore.storeName || '',
-        currentUserStoreName: ownStore.storeName || '',
-        currentUserStoreId: ownStore.storeId || ''
+        shopName: ownStoreName,
+        currentUserStoreName: ownStoreName,
+        currentUserStoreId: ownStoreId
       });
       this.onOpenPlanUpgradeModal();
       this.calculateStats();
