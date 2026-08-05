@@ -496,6 +496,17 @@ Page({
       storeName = cachedRoleInfo.storeName || '';
     }
 
+    // 🐛 根因修复："已选超级管理员，个人页却仍按店长渲染"：trueServerRole 是
+    // checkUserRole 云函数下发、AuthService 缓存的服务端真实角色快照，在下面
+    // storageRole 覆盖 role 之前先留一份。此前 isRealSuperAdmin/isPlatformAdmin
+    // 直接用 role 计算，而 role 会被 storageRole（store-picker 角色胶囊"手动切换
+    // 身份"写入的 current_user_role）无条件覆盖——超管只要曾经切换到过任意一个
+    // 门店角色视角，role 就永久变成那个角色，isRealSuperAdmin 也随之被错误拉低
+    // 为 false，连累"开发者与超管工具箱"消失、"视角切换预览"入口本身也一起消失
+    // （下面 applyRoleViewOverride 的 realRole 参数同样吃了这个污染）。这两个
+    // "真身份"标志位必须锚定在 trueServerRole 上，永远不受 storageRole 影响。
+    const trueServerRole = (cachedRoleInfo && cachedRoleInfo.role) || 'volunteer';
+
     // 🌟 家人（服务对象）默认判定：新用户/未审核用户在 checkUserRole 云函数里
     // role 恒为 'volunteer' 且 status !== 'approved'，用这个组合区分"真实义工"
     // 与"默认家人视角"，不会误伤已审核通过的真实义工（那时 status === 'approved'）。
@@ -532,15 +543,21 @@ Page({
       }
     }
 
-    const isRealSuperAdmin = role === 'super_admin';
+    // 🐛 用 trueServerRole（服务端真实角色快照），不用可能已被 storageRole
+    // 覆盖的 role——这两个是"真身份"标志位，任何本地切换视角/预览都不该动摇
+    const isRealSuperAdmin = trueServerRole === 'super_admin';
     // 🏢 平台管理员：与业务角色是两个独立维度，platform_admin 不会经过下面的
     // applyRoleViewOverride 预览覆盖（那套只针对 super_admin），直接按真实角色判定
-    const isPlatformAdmin = role === 'platform_admin';
+    const isPlatformAdmin = trueServerRole === 'platform_admin';
 
     // 🌟 视角切换预览：仅真实身份为 super_admin 时才可能生效，展示层降级模拟
     // 店长/财务视角；hasPrivilege 随预览角色一并变化（volunteer 视角下应隐藏管理入口）
     // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
-    const overridden = applyRoleViewOverride(role, {
+    // 🐛 realRole 参数必须传 trueServerRole，不能传 role——否则超管一旦切换过
+    // 门店角色视角，这里的 realRole !== 'super_admin' 会直接短路返回，"视角切换
+    // 预览"这张卡片本身（WXML 用 isRealSuperAdmin 控制显隐）和降级模拟功能
+    // 会一起失效
+    const overridden = applyRoleViewOverride(trueServerRole, {
       currentUserRole: role, isVolunteer: role === 'volunteer',
       isManager: role === 'store_manager' || role === 'store_patriarch',
       isFinance: role === 'finance' || role === 'store_patriarch',

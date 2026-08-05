@@ -591,11 +591,16 @@
     <!-- 分组五：系统/管理权限 —— 超级管理员 + 家长 + 平台管理员（SaaS 运维方）
          可见的开发者工具箱。前三项仍是 super_admin 专属操作，各自补上独立的
          wx:if；最后一项"会员开通/续费管理"三种身份都可见——容器本身的显隐条件
-         相应放宽，否则家长/平台管理员永远走不到这个入口 -->
-    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isSuperAdmin || isPlatformAdmin || isPatriarch}}">
+         相应放宽，否则家长/平台管理员永远走不到这个入口。
+         🐛 根因修复：这里全部改用 isRealSuperAdmin（服务端真实角色，见
+         initMinePage 的 trueServerRole），不再用 isSuperAdmin（会被"视角切换
+         预览"降级、也会被 store-picker 角色胶囊的手动切换覆盖）——工具箱是
+         超管自己的管理工具，不是"正在预览的内容"，不该因为切换视角/切换过
+         门店角色就消失 -->
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}">
       <view class="admin-divider">开发者与超管工具箱</view>
 
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onTriggerGenCode">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerGenCode">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key"></view>
           <text class="item-text">生成特权邀请码</text>
@@ -603,7 +608,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onTriggerClearCache">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerClearCache">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-clear"></view>
           <text class="item-text">一键清洗系统测试缓存</text>
@@ -611,7 +616,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onGoToStatistics">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onGoToStatistics">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-screen"></view>
           <text class="item-text">全国多店大屏 (超管)</text>
@@ -624,7 +629,7 @@
            super_admin/store_patriarch（某个机构自己的最高权限角色，与"平台运维
            方"是两个完全不同的维度）改为唤起本页自己的"套餐升级/续费"半屏卡片，
            不再跳转到那个服务端只认 platform_admin、点进去必然"无权限访问"的页面 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin || isPlatformAdmin || isPatriarch}}" bindtap="onGoToPlatformAdminTenants">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}" bindtap="onGoToPlatformAdminTenants">
         <view class="item-left">
           <text class="manager-only-emoji">💳</text>
           <text class="item-text">会员开通/续费管理</text>
