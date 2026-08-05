@@ -962,26 +962,12 @@ Page({
     // （store-picker 手动切换身份后写入 current_user_role 的生效角色）冲突时，此前
     // 这里完全没读过 current_user_role，永远以 cachedRole 为准——一旦用户手动切换
     // 视角（如 super_admin 切到 store_manager），刷新/重进首页时 initCurrentUserRole
-    // 又会用服务端缓存把生效角色悄悄改回 super_admin，切换如同白切。与 profile.ts
-    // initMinePage()/statistics.ts/store-management.ts 等页面同一口径：storageRole
-    // 一旦存在就必须无条件优先生效，并立即用 overwriteCachedRole 写回持久化缓存，
-    // 避免其他页面直接读 getCachedRoleInfo() 时撞见这个窗口期的残留旧角色
-    const storageRole = wx.getStorageSync('current_user_role');
-    // 入参 persistedRole 是这一刻持久化缓存里实际存的角色（cached.role / info.role），
-    // 用来判断是否需要覆盖回写——不一致才写，避免每次 initCurrentUserRole 都触发一次
-    // 不必要的 setStorageSync
-    const resolveEffectiveRole = (persistedRole: string) => {
-      if (!storageRole) return persistedRole;
-      const roleForCache = storageRole === 'store_family' ? 'volunteer' : storageRole;
-      if (persistedRole !== roleForCache) {
-        AuthService.overwriteCachedRole(roleForCache as any);
-      }
-      return storageRole;
-    };
-
+    // 又会用服务端缓存把生效角色悄悄改回 super_admin，切换如同白切。现在收敛调用
+    // AuthService.resolveEffectiveRole——与 profile.ts initMinePage() 共用同一份
+    // 集中实现，不再各自维护一份几乎一样的判断逻辑（详见该方法定义处注释）
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
-      const effectiveRawRole = resolveEffectiveRole(cached.role);
+      const effectiveRawRole = AuthService.resolveEffectiveRole(cached.role);
       const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
       const storeName = cached.storeName || this.data.shopName;
       const storeId = cached.storeId || '';
@@ -1020,7 +1006,7 @@ Page({
       // storageRole 冲掉——否则冷启动时先用 cachedRole 正确渲染了 store_manager 视角，
       // 几百毫秒后这个异步 fetchUserRole 结果一落地又会用服务端主角色把它悄悄改回
       // super_admin，形成竞态：谁最后 setData 谁说了算，而不是谁应该说了算
-      const effectiveRawRole = resolveEffectiveRole(info.role);
+      const effectiveRawRole = AuthService.resolveEffectiveRole(info.role);
       const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
       const storeName = info.storeName || this.data.shopName;
       const storeId = info.storeId || '';

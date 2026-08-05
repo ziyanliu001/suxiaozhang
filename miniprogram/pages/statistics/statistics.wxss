@@ -3263,3 +3263,97 @@ button.btn-export-shortcut {
 .btn-export-shortcut:active {
   opacity: 0.85;
 }
+
+/* ================= 🔐 专业版功能拦截弹窗 =================
+   替代原生 wx.showModal——原生弹窗按钮无法用 WXSS 定制样式，这里是本页唯一
+   真正能控制按钮布局的实现。"知道了"/"去反馈"两个按钮强制 flex 居中，显式
+   归零 box-sizing/padding/margin/line-height，彻底消除微信原生 <button>
+   默认内边距与行高造成的文字/图标偏斜 */
+.plan-upgrade-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.plan-upgrade-modal-card {
+  width: 80%;
+  max-width: 560rpx;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 40rpx 32rpx 32rpx;
+  box-sizing: border-box;
+  box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.28);
+}
+
+.plan-upgrade-modal-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1A1A1A;
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.plan-upgrade-modal-content {
+  font-size: 27rpx;
+  color: #495057;
+  line-height: 1.6;
+  text-align: center;
+  margin-bottom: 32rpx;
+}
+
+.plan-upgrade-modal-footer {
+  display: flex;
+  gap: 20rpx;
+}
+
+.plan-upgrade-btn-cancel,
+.plan-upgrade-btn-confirm {
+  flex: 1;
+  height: 84rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  border-radius: 42rpx;
+  font-size: 27rpx;
+  font-weight: bold;
+  border: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.plan-upgrade-btn-cancel::after,
+.plan-upgrade-btn-confirm::after {
+  border: none;
+}
+
+.plan-upgrade-btn-cancel {
+  background: #F1F3F5;
+  color: #495057;
+}
+
+.plan-upgrade-btn-cancel:active {
+  background: #E3E6E9;
+  transform: scale(0.97);
+}
+
+.plan-upgrade-btn-confirm {
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+}
+
+.plan-upgrade-btn-confirm:active {
+  opacity: 0.88;
+  transform: scale(0.97);
+}

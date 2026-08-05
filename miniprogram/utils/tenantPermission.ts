@@ -4,7 +4,10 @@
 // manageTenantSubscription 云函数 + pages/platform-admin 页面维护，字段是
 // planType/serviceExpireDate/cloudQuota），不在这里另外维护一份影子数据——
 // 本模块只是 cloudfunctions/checkTenantPermission 的一层前端封装：加缓存，
-// 加"查询失败/云不可用时保守放行"的兜底，加统一的升级引导弹窗。
+// 加"查询失败/云不可用时保守放行"的兜底，加 platform_admin 豁免。升级引导弹窗
+// 不在这里——原生 wx.showModal 按钮无法用 WXSS 定制样式，改由各调用页面自己
+// 用一个半屏卡片弹窗承接（见 pages/statistics/statistics.ts
+// onOpenPlanUpgradeModal），本模块只负责回答"允不允许"。
 //
 // 🛡️ 这里的检查是"体验层拦截"，防止用户点完操作才被拒绝；真正不可绕过的硬
 // 校验在服务端——多门店汇总看板对应的 getNationalDashboard 云函数内部有一份
@@ -12,6 +15,7 @@
 // Excel 导出目前是纯客户端拼表操作，没有可拦截的云调用，这层前端检查就是
 // 唯一的把关点。
 import { isCloudAvailable } from './cloudGuard';
+import { AuthService } from './authService';
 
 export const FEATURE_KEYS = {
   MULTI_STORE_DASHBOARD: 'multiStoreDashboard',
@@ -44,10 +48,31 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
 const CACHE_TTL_MS = 60000;
 const _cache: Partial<Record<FeatureKey, { result: TenantPermissionResult; expiresAt: number }>> = {};
 
+// 🛡️ 平台管理员豁免：platform_admin（SaaS 平台运维方，见 authService.ts
+// UserRole 定义处注释）与业务角色/租户套餐彻底隔离——这堵付费墙是针对
+// "某个机构自己的 super_admin"设计的，防止免费版租户靠自己的超管账号绕过
+// pro/enterprise 专属功能（每个机构都有自己的 super_admin，若对它放行等于
+// 付费墙对所有租户失效）。platform_admin 不属于任何机构的付费主体，不该被
+// 这堵墙拦下——但这只解除"多门店看板/Excel 导出"这一层套餐拦截，
+// getNationalDashboard 云函数自身的 ALLOWED_ROLES 仍把 platform_admin 排除
+// 在外（机构财务数据对平台运维方本就不该可见，是另一层更基础、彼此独立的
+// 隐私边界，不受本次改动影响，platform_admin 依然看不到大屏具体内容）
+const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
+  allowed: true,
+  planType: 'enterprise',
+  isExpired: false,
+  storeLimit: Number.MAX_SAFE_INTEGER,
+  reason: ''
+};
+
 export async function checkTenantPermission(
   featureKey: FeatureKey,
   opts?: { skipCache?: boolean }
 ): Promise<TenantPermissionResult> {
+  if (AuthService.isPlatformAdmin()) {
+    return PLATFORM_ADMIN_ALLOWED;
+  }
+
   const cached = _cache[featureKey];
   if (!opts?.skipCache && cached && cached.expiresAt > Date.now()) {
     return cached.result;
@@ -78,22 +103,4 @@ export async function checkTenantPermission(
     console.warn('[tenantPermission] checkTenantPermission 调用异常，保守放行:', err);
     return FALLBACK_ALLOWED;
   }
-}
-
-// 🎨 高级功能卡口提示：不做任何虚构的"自助订阅/付款页"跳转——目前订阅完全
-// 由 platform_admin 通过 pages/platform-admin 后台管理，普通租户用户没有
-// 自助升级入口，"确认"按钮引导去 pages/profile（tabBar 页）联系客服/反馈，
-// 而不是链到一个并不存在的收银台
-export function promptTenantUpgrade(): void {
-  wx.showModal({
-    title: '功能受限',
-    content: '该功能为专业版专属，请联系大家长升级套餐',
-    confirmText: '去反馈',
-    cancelText: '知道了',
-    success: (res) => {
-      if (res.confirm) {
-        wx.switchTab({ url: '/pages/profile/profile' });
-      }
-    }
-  });
 }

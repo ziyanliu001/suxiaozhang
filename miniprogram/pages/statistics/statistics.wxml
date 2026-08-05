@@ -1241,4 +1241,18 @@
       </view>
     </view>
   </view>
+
+  <!-- 🔐 专业版功能拦截弹窗：多门店汇总看板/Excel导出触发的套餐升级引导。
+       替代原生 wx.showModal——原生弹窗按钮完全在 WXML/WXSS 控制范围之外，
+       无法定制样式，改用自有的半屏卡片弹窗承接 -->
+  <view class="plan-upgrade-modal-mask" wx:if="{{showPlanUpgradeModal}}" bindtap="onClosePlanUpgradeModal">
+    <view class="plan-upgrade-modal-card" catchtap="stopPropagation">
+      <view class="plan-upgrade-modal-title">🔒 功能受限</view>
+      <view class="plan-upgrade-modal-content">该功能为专业版专属，请联系大家长升级套餐</view>
+      <view class="plan-upgrade-modal-footer">
+        <button class="plan-upgrade-btn-cancel" bindtap="onClosePlanUpgradeModal">知道了</button>
+        <button class="plan-upgrade-btn-confirm" bindtap="onGoFeedbackFromPlanUpgrade">去反馈</button>
+      </view>
+    </view>
+  </view>
 </view>

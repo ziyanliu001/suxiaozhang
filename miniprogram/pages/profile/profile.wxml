@@ -475,28 +475,16 @@
 
       <!-- 🌟 管理入口：与普通义工个人页形成权限层级的视觉区隔，复用首页已有的
            统计页（onGoToStoreOverview → pages/statistics/statistics），不新开一套
-           统计逻辑。两个身份跳的是同一个页面：statistics.ts 自己的 applyRolePermissions
-           已经按角色分流——super_admin/hq_finance 等 canViewAllStoresDropdown 角色
-           一律展示"全国总览"大屏，store_manager/finance 则被强制锁定在自己门店，
-           与传入的 shopName 无关，因此这里只需要按角色区分入口文案，不需要区分跳转参数。 -->
-      <view class="action-item-cell manager-only-cell" hover-class="ui-hover" wx:if="{{currentUserRole === 'super_admin'}}" bindtap="onGoToStoreOverview">
-        <view class="item-left">
-          <text class="manager-only-emoji">🌐</text>
-          <text class="item-text">超级管理员全景</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <!-- 🛡️ 视觉统一：不再用 .manager-only-cell 的暖金/桃色高亮背景——保留
-           .manager-only-emoji 让📊图标尺寸与相邻项一致，外层容器改回纯 .action-item-cell，
-           背景/圆角/内边距/hover 全部与"我的护持足迹"等相邻项统一为纯白。
-           🐛 权限判断修复：此前硬编码只认 currentUserRole === 'store_manager'，
-           与上面注释"store_manager/finance 则被强制锁定在自己门店"的设计意图不符——
-           财务/大家长切到自己身份后完全看不到这个入口。改用 hasPrivilege（已在
-           initMinePage 里统一算好：store_manager/finance/store_patriarch/super_admin
-           均为 true），管理层角色都能看到；super_admin 命中上面的 wx:if 分支，
-           不会重复展示这一项 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:elif="{{hasPrivilege}}" bindtap="onGoToStoreOverview">
+           统计逻辑。
+           🐛 入口去重：此前这里还有一个仅 super_admin 可见的"超级管理员全景"
+           分支，与"开发者与超管工具箱"里的"全国多店大屏 (超管)"跳的是完全相同的
+           全国总览大屏（statistics.ts 的 applyRolePermissions 对 super_admin 一律
+           强制展示"全国总览"，与这里传的 shopName 无关，两个入口 100% 同归宿）
+           ——已移除，全景/大屏类入口现在只保留工具箱里那一个唯一入口。
+           super_admin 与 store_manager/finance/store_patriarch 现在共用同一个
+           "本店数据明细"分支：hasPrivilege 已在 initMinePage 里统一算好这四种
+           角色均为 true，管理层角色都能看到 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">本店数据明细</text>
@@ -506,11 +494,11 @@
 
       <!-- 🏠 门店档案：门店人员与服务人群画像（中共党员/社会工作者/志愿者/堂食老人等 7 项人数指标），
            店长/超管可编辑维护，财务/义工只读查看。
-           🛡️ 视觉统一：不再复用 .manager-only-cell 的暖金/桃色高亮背景——那套"强化行"
-           语言现在只留给"超级管理员全景"这一个真正的跨店管理大屏入口，门店档案/本店数据
-           明细都只是普通的资料查看/编辑入口，套上同款高亮反而显得比"我的护持足迹"等
-           相邻项更突兀刺眼。保留 .manager-only-emoji 让🏠图标尺寸与上面管理入口的图标
-           一致，但外层容器改回纯 .action-item-cell，背景/圆角/内边距/hover 全部与相邻项统一。
+           🛡️ 视觉统一：不再复用 .manager-only-cell 的暖金/桃色高亮背景——门店档案/
+           本店数据明细都只是普通的资料查看/编辑入口，套上高亮反而显得比"我的护持
+           足迹"等相邻项更突兀刺眼。保留 .manager-only-emoji 让🏠图标尺寸与上面管理
+           入口的图标一致，但外层容器改回纯 .action-item-cell，背景/圆角/内边距/
+           hover 全部与相邻项统一。
            🐛 权限修复：此前用 wx:if="{{!isVolunteer}}" 把义工排除在外，与义工日常记录
            清单本应包含"门店档案"的设计意图不符——这里改为无条件展示（本区块外层已经
            被 !isFamily 挡住，只有义工/管理层能走到这里，义工也该看到） -->
@@ -600,11 +588,15 @@
       </view>
     </view>
 
-    <!-- 分组五：系统/管理权限 —— 仅超级管理员可见的开发者工具箱 -->
-    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isSuperAdmin}}">
+    <!-- 分组五：系统/管理权限 —— 超级管理员 + 平台管理员（SaaS 运维方）可见的
+         开发者工具箱。前三项仍是 super_admin 专属操作，各自补上独立的 wx:if；
+         最后一项"会员开通/续费管理"两种身份都可见——platform_admin 之前在本页
+         完全没有任何可见入口，容器本身的显隐条件也要相应放宽，否则平台管理员
+         永远走不到这个新入口 -->
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isSuperAdmin || isPlatformAdmin}}">
       <view class="admin-divider">开发者与超管工具箱</view>
 
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerGenCode">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onTriggerGenCode">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key"></view>
           <text class="item-text">生成特权邀请码</text>
@@ -612,7 +604,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerClearCache">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onTriggerClearCache">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-clear"></view>
           <text class="item-text">一键清洗系统测试缓存</text>
@@ -620,10 +612,22 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStatistics">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onGoToStatistics">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-screen"></view>
           <text class="item-text">全国多店大屏 (超管)</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <!-- 🏢 会员开通/续费管理：跳转既有 pages/platform-admin（SaaS 租户订阅管理页）。
+           该页服务端权限（requirePlatformAdmin）只认 platform_admin——super_admin
+           点进去会看到那个页面自己的"无权限访问"提示，这是刻意保留的租户/平台
+           两级权限边界，本入口不改动那边的判定，只是把两种身份都引导过去 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin || isPlatformAdmin}}" bindtap="onGoToPlatformAdminTenants">
+        <view class="item-left">
+          <text class="manager-only-emoji">💳</text>
+          <text class="item-text">会员开通/续费管理</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>

@@ -161,6 +161,10 @@ Page({
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，用于切换入口自身的显隐判断；
     // currentViewMode 与选项文案，供页面内的切换 Picker 使用
     isRealSuperAdmin: false,
+    // 🏢 平台管理员（SaaS 运维方）：与业务角色 isSuperAdmin 彻底独立的另一个维度
+    // （详见 authService.ts UserRole 定义处注释），仅用于"开发者与超管工具箱"里
+    // "会员开通/续费管理"这一项的显隐判断，不参与任何业务权限计算
+    isPlatformAdmin: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     viewModeOptionLabels: VIEW_MODE_OPTIONS.map((m) => PREVIEW_VIEW_MODE_LABELS[m]),
     viewModeOptionIndex: 0,
@@ -479,27 +483,17 @@ Page({
     // 切身份/切店（首页的全局 storePicker、本页嵌入的 patriarchStorePicker 都共用
     // 同一套 _applyRoleSwitch 持久化逻辑）会同步写入这个 key——只要它存在，就必须
     // 无条件以它为准，完全不再理会上面基于 cachedRoleInfo 算出的默认值/isFamily
-    // 兜底判断，否则"选了家长/家人但刷新后又被服务端缓存的 volunteer 打回原形"
+    // 兜底判断，否则"选了家长/家人但刷新后又被服务端缓存的 volunteer 打回原形"。
+    // 收敛调用 AuthService.resolveEffectiveRole——与 index.ts initCurrentUserRole
+    // 共用同一份集中实现（含"生效角色与持久化缓存不一致时自动回写"），不再各自
+    // 维护一份几乎一样的判断逻辑
     const storageRole = wx.getStorageSync('current_user_role');
     if (storageRole) {
-      role = storageRole.toLowerCase();
+      const persistedRole = (cachedRoleInfo && cachedRoleInfo.role) || 'volunteer';
+      role = AuthService.resolveEffectiveRole(persistedRole).toLowerCase();
       // 手动切换的具体身份说了算：选家人就是家人，选除家人外的任何身份
       // （含义工/家长/店长/财务/超管）都不再是"默认未审核家人"视角
       isFamily = role === 'store_family';
-
-      // 🐛 根因修复：cachedRoleInfo（服务端角色的本地持久化缓存）与这里刚解析出的
-      // 生效role 不一致时（典型场景：曾是 super_admin、后来被切换/降级为
-      // store_manager，但 auth_user_role 缓存从没人主动更新过），必须立即把生效
-      // role 覆盖写回持久化缓存——否则统计页等其他页面直接调用
-      // AuthService.getCachedRoleInfo() 时，在它们自己的 fetchUserRole() 异步
-      // 校验落地前，读到的仍是这份没被覆盖、残留的旧 super_admin，从而把"全部
-      // 门店"等超管专属能力错误地放给已经不是超管的账号
-      // store_family 是本页面用于区分"家人视角"的展示态、不在 UserRole 枚举里，
-      // 它对应的真实底层角色就是 volunteer，写回缓存时要按真实角色归一化
-      const roleForCache = role === 'store_family' ? 'volunteer' : role;
-      if (!cachedRoleInfo || cachedRoleInfo.role !== roleForCache) {
-        AuthService.overwriteCachedRole(roleForCache as any);
-      }
     }
     console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, '-> 生效role=', role);
 
@@ -516,6 +510,9 @@ Page({
     }
 
     const isRealSuperAdmin = role === 'super_admin';
+    // 🏢 平台管理员：与业务角色是两个独立维度，platform_admin 不会经过下面的
+    // applyRoleViewOverride 预览覆盖（那套只针对 super_admin），直接按真实角色判定
+    const isPlatformAdmin = role === 'platform_admin';
 
     // 🌟 视角切换预览：仅真实身份为 super_admin 时才可能生效，展示层降级模拟
     // 店长/财务视角；hasPrivilege 随预览角色一并变化（volunteer 视角下应隐藏管理入口）
@@ -544,6 +541,7 @@ Page({
       hasPrivilege,
       isSuperAdmin: overridden.isSuperAdmin,
       isRealSuperAdmin,
+      isPlatformAdmin,
       isPatriarch,
       isVolunteer,
       isFamily,
@@ -2788,6 +2786,24 @@ Page({
 
     wx.navigateTo({
       url: '/pages/statistics/statistics',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 🏢 会员开通/续费管理：跳转到既有的 pages/platform-admin（SaaS 租户订阅管理页，
+  // 由 manageTenantSubscription 云函数支撑）。该页面自己的 checkAccess() 只认
+  // platform_admin，super_admin 点进去会看到该页原生的"无权限访问"提示——这是
+  // 刻意保留的边界（详见 manageTenantSubscription 的 requirePlatformAdmin：
+  // 租户订阅是平台运维方的职责，与某个机构自己的 super_admin 彻底隔离），本入口
+  // 只是把两种身份都引导到同一个既有页面，不越权改动那边的服务端权限判定
+  onGoToPlatformAdminTenants() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/platform-admin/platform-admin',
       fail: () => {
         this.isNavigating = false;
       }

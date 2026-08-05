@@ -10,6 +10,33 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// 🛡️ -502005 DATABASE_COLLECTION_NOT_EXIST：tenant_subscriptions 可能在这套
+// 环境里还没被写入过（全新机构，从未开通过订阅），与 submitFeedback/
+// manageStoreInviteCode/manageNotice 同一套自愈口径——只读查询命中时直接降级
+// 为"暂无订阅记录"，写路径（createOrRenewSubscription 的新建分支）命中时
+// 显式建表再重试一次，任何一路都不能把裸的数据库报错抛给平台管理员控制台
+function isCollectionNotExistError(err) {
+  return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
+}
+
+const TENANT_SUB_COLLECTION = 'tenant_subscriptions';
+
+// 只读查询自愈：命中集合不存在时返回 null（语义等价于"这家机构还没有任何订阅
+// 记录"），其余错误原样抛出给调用方处理
+async function safeGetLatestSubscription(tenantId) {
+  try {
+    const subRes = await db.collection(TENANT_SUB_COLLECTION)
+      .where({ tenantId })
+      .orderBy('lastRenewedAt', 'desc')
+      .limit(1)
+      .get();
+    return (subRes.data && subRes.data[0]) || null;
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+    return null;
+  }
+}
+
 async function requirePlatformAdmin() {
   const { OPENID } = cloud.getWXContext();
   if (!OPENID) return { allowed: false, openid: '' };
@@ -59,12 +86,7 @@ exports.main = async (event) => {
 
         // 逐一附带最新的订阅状态，供平台管理员在同一览表中查看服务到期时间
         const withSubs = await Promise.all(tenants.map(async t => {
-          const subRes = await db.collection('tenant_subscriptions')
-            .where({ tenantId: t._id })
-            .orderBy('lastRenewedAt', 'desc')
-            .limit(1)
-            .get();
-          const sub = (subRes.data && subRes.data[0]) || null;
+          const sub = await safeGetLatestSubscription(t._id);
           return { ...t, subscription: sub };
         }));
 
@@ -76,18 +98,14 @@ exports.main = async (event) => {
         if (!tenantId) return { success: false, error: '缺少 tenantId' };
 
         const tenantRes = await db.collection('tenants').doc(tenantId).get();
-        const subRes = await db.collection('tenant_subscriptions')
-          .where({ tenantId })
-          .orderBy('lastRenewedAt', 'desc')
-          .limit(1)
-          .get();
+        const subscription = await safeGetLatestSubscription(tenantId);
         // 仅统计门店/账号数量，不读取任何门店财务字段
         const storeCountRes = await db.collection('stores').where({ tenantId }).count();
 
         return {
           success: true,
           tenant: tenantRes.data,
-          subscription: (subRes.data && subRes.data[0]) || null,
+          subscription,
           storeCount: storeCountRes.total
         };
       }
@@ -124,12 +142,7 @@ exports.main = async (event) => {
           return { success: false, error: '请填写开通/续费原因，便于后续对账审计' };
         }
 
-        const existingRes = await db.collection('tenant_subscriptions')
-          .where({ tenantId })
-          .orderBy('lastRenewedAt', 'desc')
-          .limit(1)
-          .get();
-        const existing = existingRes.data && existingRes.data[0];
+        const existing = await safeGetLatestSubscription(tenantId);
 
         const renewalEntry = {
           operatorId: openid,
@@ -140,7 +153,7 @@ exports.main = async (event) => {
         };
 
         if (existing) {
-          await db.collection('tenant_subscriptions').doc(existing._id).update({
+          await db.collection(TENANT_SUB_COLLECTION).doc(existing._id).update({
             data: {
               planType,
               serviceStartDate,
@@ -154,18 +167,26 @@ exports.main = async (event) => {
           return { success: true, subscriptionId: existing._id };
         }
 
-        const createRes = await db.collection('tenant_subscriptions').add({
-          data: {
-            tenantId,
-            planType,
-            serviceStartDate,
-            serviceExpireDate,
-            cloudQuota: cloudQuota || {},
-            status: 'active',
-            lastRenewedAt: db.serverDate(),
-            renewalHistory: [renewalEntry]
-          }
-        });
+        const newSubData = {
+          tenantId,
+          planType,
+          serviceStartDate,
+          serviceExpireDate,
+          cloudQuota: cloudQuota || {},
+          status: 'active',
+          lastRenewedAt: db.serverDate(),
+          renewalHistory: [renewalEntry]
+        };
+        let createRes;
+        try {
+          createRes = await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+        } catch (err) {
+          // .add() 通常会在集合不存在时自动建表，这里兜底：万一这次环境没有自动建表，
+          // 显式建一次再重试一次写入，而不是让机构首次开通订阅直接失败
+          if (!isCollectionNotExistError(err)) throw err;
+          await db.createCollection(TENANT_SUB_COLLECTION).catch(() => {});
+          createRes = await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+        }
 
         // 首次开通订阅时，机构状态从 trial 转为 active
         await db.collection('tenants').doc(tenantId).update({
@@ -180,6 +201,12 @@ exports.main = async (event) => {
     }
   } catch (err) {
     console.error('[manageTenantSubscription] 异常:', err);
+    // 🛡️ 严禁把裸的数据库报错（如 -502005 DATABASE_COLLECTION_NOT_EXIST）暴露给
+    // 平台管理员控制台——上面各分支已经各自做了自愈/降级，这里是兜底防线：万一
+    // 自愈本身也失败（如建表瞬间的并发竞态），也只回一句友好提示
+    if (isCollectionNotExistError(err)) {
+      return { success: false, error: '系统配置维护中，请联系技术支持' };
+    }
     return { success: false, error: err.message || '租户管理操作失败' };
   }
 };

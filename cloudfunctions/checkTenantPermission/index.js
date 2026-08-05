@@ -75,7 +75,26 @@ exports.main = async (event) => {
       .where({ _openid: OPENID })
       .limit(1)
       .get();
+    const callerRole = (roleRes.data && roleRes.data[0] && roleRes.data[0].role) || '';
     const tenantId = (roleRes.data && roleRes.data[0] && roleRes.data[0].tenantId) || '';
+
+    // 🛡️ 平台管理员豁免：platform_admin（SaaS 平台运维方）与业务角色/租户套餐
+    // 彻底隔离——这堵付费墙是针对"某个机构自己的 super_admin"设计的，防止免费版
+    // 租户靠自己的超管账号绕过 pro/enterprise 专属功能（每个机构都有自己的
+    // super_admin，若对它放行等于付费墙对所有租户失效）。platform_admin 不属于
+    // 任何机构的付费主体，不该被这堵墙拦下——但这只解除这一层套餐拦截，
+    // getNationalDashboard 云函数自身的 ALLOWED_ROLES 仍把 platform_admin 排除
+    // 在外，机构财务数据对平台运维方依旧不可见，是另一层独立的隐私边界
+    if (callerRole === 'platform_admin') {
+      return {
+        success: true,
+        allowed: true,
+        planType: 'enterprise',
+        isExpired: false,
+        storeLimit: Number.MAX_SAFE_INTEGER,
+        reason: ''
+      };
+    }
 
     const result = await checkTenantPermission(tenantId, featureKey);
     return { success: true, ...result };

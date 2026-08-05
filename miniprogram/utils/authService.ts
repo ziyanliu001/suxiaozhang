@@ -54,6 +54,24 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   platform_admin: '平台管理员（开发者）'
 };
 
+// 🏛️ 三级权限分层：L3 全网级（仅超级管理员——跨机构查看/租户续费/风控），
+// L2 门店管理级（家长/店长——本店业务管理、邀请码生成），L1 日常执行级
+// （义工/财务——日常打卡与报表填写）。"family"（家人/服务对象）不是一个独立
+// 的服务端角色，它是 role==='volunteer' 且 status!=='approved' 的默认展示态
+// （见各页面 isFamily 判定），底层同样归入 L1。platform_admin 是与业务角色
+// 完全独立的运维维度（详见 UserRole 定义处注释），不参与这套业务分层，
+// 这里仅为类型完整性给一个占位值，任何业务权限判断都不应依赖它。
+export type RoleTier = 'L1' | 'L2' | 'L3';
+
+export const ROLE_TIER: Record<UserRole, RoleTier> = {
+  super_admin: 'L3',
+  store_patriarch: 'L2',
+  store_manager: 'L2',
+  finance: 'L1',
+  volunteer: 'L1',
+  platform_admin: 'L1'
+};
+
 export interface PermissionFlags {
   canSwitchStore: boolean;
   canAuditUser: boolean;
@@ -301,6 +319,42 @@ export const AuthService = {
   getRole(): string {
     const roleInfo = this.getCachedRoleInfo();
     return (roleInfo && roleInfo.role) || 'volunteer';
+  },
+
+  // 🏛️ 三级权限分层查询：供云函数调用前的前端提前拦截、或页面按层级显隐入口
+  // 使用，与 getPermissionFlags 的细粒度能力位互补——这里只回答"大致在哪一层"
+  getRoleTier(): RoleTier {
+    const role = this.getRole() as UserRole;
+    return ROLE_TIER[role] || 'L1';
+  },
+
+  // 🐛 根因修复的集中版：cachedRole（AuthService 本地持久化的服务端角色缓存）与
+  // storageRole（store-picker 手动切换身份后写入 current_user_role 的生效角色）
+  // 冲突时，storageRole 必须无条件优先生效，并立即写回持久化缓存，避免其他页面
+  // 直接调用 getCachedRoleInfo() 时撞见这个窗口期的残留旧角色（典型场景：曾经是
+  // super_admin、后来被切换/降级为 store_manager，但缓存没人主动更新过）。
+  // 此前 index.ts/profile.ts/statistics.ts/daily-menu.ts/store-management.ts/
+  // activity-log.ts 等多个页面各自拷贝了一份几乎一样的判断逻辑，任何一次修复
+  // 都要同步改好几遍——收敛成这一个方法，页面直接调用即可，不再各自维护副本。
+  //
+  // @param persistedRole 当前已持久化的角色（一般传 cached.role/info.role），
+  //   用来判断是否需要触发一次 overwriteCachedRole 回写——不一致才写，避免
+  //   每次调用都触发不必要的 setStorageSync
+  // @returns 生效角色的原始 token：storageRole 存在则原样返回它（可能是
+  //   'store_family' 这个仅用于展示分流的伪角色，调用方自行按需归一化展示），
+  //   否则原样返回 persistedRole
+  resolveEffectiveRole(persistedRole: string): string {
+    const storageRole = wx.getStorageSync('current_user_role');
+    if (!storageRole) return persistedRole;
+
+    // store_family 是页面展示层用来区分"家人视角"的伪角色，不在 UserRole 枚举里，
+    // 它对应的真实底层角色就是 volunteer，写回缓存时要按真实角色归一化，
+    // 否则 overwriteCachedRole 会把一个非法的 role 值落进持久化缓存
+    const roleForCache = storageRole === 'store_family' ? 'volunteer' : storageRole;
+    if (persistedRole !== roleForCache) {
+      this.overwriteCachedRole(roleForCache as UserRole);
+    }
+    return storageRole;
   },
 
   // 🐛 根因修复：cachedRole（本地持久化的服务端角色缓存）与 storageRole（手动

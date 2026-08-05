@@ -8,7 +8,7 @@ import { recordRecentVisit } from '../../utils/recentPages';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
 import { getSafeSystemInfo } from '../../utils/util';
 import { isVirtualStoreName, resolveHonorCardStoreName } from '../../utils/storeIdentity';
-import { checkTenantPermission, promptTenantUpgrade, FEATURE_KEYS } from '../../utils/tenantPermission';
+import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 
 // 🌾 大米/食用油库存状态展示口径：与"爱心续航看板"健康卡片、material-usage-modal
 // 组件的三档选择器共用同一套 sufficient/normal/urgent 语义，提炼成模块级常量供
@@ -526,7 +526,10 @@ Page({
     // 🌟「先核对、再确认、后导出」导出预览核对弹窗
     showExportPreviewModal: false,
     exportPreviewSummary: {} as any,
-    exportPreviewRecords: [] as any[]
+    exportPreviewRecords: [] as any[],
+    // 🔐 专业版功能拦截弹窗：替代原生 wx.showModal（原生弹窗按钮无法用 WXSS
+    // 定制样式，见 onOpenPlanUpgradeModal 处注释）
+    showPlanUpgradeModal: false
   },
 
   onLoad(options: any) {
@@ -1121,7 +1124,7 @@ Page({
         currentUserStoreName: ownStore.storeName || '',
         currentUserStoreId: ownStore.storeId || ''
       });
-      promptTenantUpgrade();
+      this.onOpenPlanUpgradeModal();
       this.calculateStats();
       this.fetchStatistics();
       return;
@@ -1180,6 +1183,25 @@ Page({
     } finally {
       this.setData({ nationalDashboardLoading: false });
     }
+  },
+
+  // 🔐 专业版功能拦截弹窗：utils/tenantPermission.ts 原来的 promptTenantUpgrade()
+  // 用的是原生 wx.showModal——原生弹窗按钮完全渲染在 webview/WXML 之外，没有
+  // 任何 class/id 可挂，WXSS 对它的按钮布局零控制力。这里改为页面自有的自定义
+  // 半屏卡片弹窗，"知道了"/"去反馈"两个按钮才能真正用 flex 强制居中重构样式
+  onOpenPlanUpgradeModal() {
+    this.setData({ showPlanUpgradeModal: true });
+  },
+
+  onClosePlanUpgradeModal() {
+    this.setData({ showPlanUpgradeModal: false });
+  },
+
+  // ✅ 与原生弹窗的"确认"分支保持一致的引导行为：跳去个人中心联系客服/反馈，
+  // 而不是链到一个并不存在的自助收银台
+  onGoFeedbackFromPlanUpgrade() {
+    this.setData({ showPlanUpgradeModal: false });
+    wx.switchTab({ url: '/pages/profile/profile' });
   },
 
   // 🐛 修复"全国平均单餐成本"异常金额：云函数已按 nationalTotalDiners>0 兜底过一次，
@@ -2799,7 +2821,7 @@ Page({
     // 拦截是当前唯一的把关点
     const permission = await checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT);
     if (!permission.allowed) {
-      promptTenantUpgrade();
+      this.onOpenPlanUpgradeModal();
       return;
     }
 
