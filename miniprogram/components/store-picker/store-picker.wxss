@@ -306,7 +306,10 @@
   gap: 16rpx;
 }
 
-/* 身份可点击胶囊 */
+/* 身份可点击胶囊
+   🐛 加固：此前只有 transition，没有任何 :active 规则——点击热区虽然整个
+   pill 都能响应 bindtap，但视觉上完全没有按压反馈，手感生硬，用户容易怀疑
+   "有没有点中"。补一条与本页其余可点击元素同风格的轻微缩放+透明度反馈 */
 .role-choice-pill {
   display: inline-flex;
   align-items: center;
@@ -315,7 +318,12 @@
   background: #F8F9FA;
   border: 1rpx solid #E9ECEF;
   box-sizing: border-box;
-  transition: all 0.2s ease;
+  transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.role-choice-pill:active {
+  transform: scale(0.95);
+  opacity: 0.85;
 }
 
 .role-choice-pill .role-icon {
@@ -381,11 +389,17 @@
   font-weight: 500;
 }
 
-/* ===== ➕ 新建门店入口按钮：吸底高亮 CTA，视觉权重与"确认激活"按钮一致 ===== */
+/* ===== ➕ 新建门店入口按钮：吸底高亮 CTA，视觉权重与"确认激活"按钮一致
+   🐛 加固：显式 flex 居中，不再单靠 text-align + 对称 padding 隐式凑出居中
+   效果——与本项目其余按钮统一走 flex 居中这一套，文本/图标垂直水平都居中 ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  box-sizing: border-box;
   padding: 22rpx 0;
   border-radius: 40rpx;
   color: #FFFFFF;
@@ -397,6 +411,7 @@
 
 .new-store-entry-btn:active {
   opacity: 0.85;
+  transform: scale(0.98);
 }
 
 /* ===== 新建门店申请表单 ===== */

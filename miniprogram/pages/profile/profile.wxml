@@ -1442,7 +1442,14 @@
        糟糕体验。展示本机构当前套餐 Tag、到期时间与专业版权益对比，"复制续费
        申请信息"是当前架构下唯一诚实可交付的操作（本项目没有自助续费/工单
        系统，见 onCopyRenewalRequest 注释） -->
-  <view class="subscription-modal-mask" wx:if="{{showSubscriptionModal}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
+  <!-- 🐛 布局修复：底部按钮被裁切——此前 mask 用 wx:if 整体挂载/卸载，卡片没有
+       max-height/滚动区，内容一多（标签行+两条信息行+权益框）就可能把 footer
+       推到可视区域之外，且没有任何进入/退出过渡，开合都是硬切。改为与本页
+       switch-identity-modal-mask 同一套"常驻 DOM + show 类切换"方案：mask 永远
+       挂载，opacity/pointer-events 控制显隐，才能让开合都有平滑过渡；卡片拆成
+       header（固定）/body（可滚动，max-height 兜底超长内容）/footer（固定，
+       独立带 safe-area 底部内边距）三段，footer 永远不会被内容挤出视口 -->
+  <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
     <view class="subscription-modal-card" catchtap="stopPropagation">
       <view class="subscription-modal-header">
         <text class="subscription-modal-title">💳 会员套餐</text>
@@ -1454,26 +1461,28 @@
       </view>
 
       <block wx:else>
-        <view class="subscription-plan-row">
-          <text class="subscription-plan-tag plan-tag-{{subscriptionInfo.planType}}">{{subscriptionInfo.planLabel}}</text>
-          <text class="subscription-plan-tag plan-tag-expiring" wx:if="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期</text>
-          <text class="subscription-plan-tag plan-tag-expired" wx:if="{{subscriptionInfo.isExpired}}">已到期</text>
-        </view>
+        <scroll-view scroll-y class="subscription-modal-body">
+          <view class="subscription-plan-row">
+            <text class="subscription-plan-tag plan-tag-{{subscriptionInfo.planType}}">{{subscriptionInfo.planLabel}}</text>
+            <text class="subscription-plan-tag plan-tag-expiring" wx:if="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期</text>
+            <text class="subscription-plan-tag plan-tag-expired" wx:if="{{subscriptionInfo.isExpired}}">已到期</text>
+          </view>
 
-        <view class="subscription-info-row">
-          <text class="subscription-info-label">门店：</text>
-          <text class="subscription-info-value">{{currentStoreName || '未绑定'}}</text>
-        </view>
-        <view class="subscription-info-row">
-          <text class="subscription-info-label">到期时间：</text>
-          <text class="subscription-info-value">{{subscriptionInfo.expireDateStr}}</text>
-        </view>
+          <view class="subscription-info-row">
+            <text class="subscription-info-label">门店：</text>
+            <text class="subscription-info-value">{{currentStoreName || '未绑定'}}</text>
+          </view>
+          <view class="subscription-info-row">
+            <text class="subscription-info-label">到期时间：</text>
+            <text class="subscription-info-value">{{subscriptionInfo.expireDateStr}}</text>
+          </view>
 
-        <view class="subscription-benefit-box">
-          <view class="subscription-benefit-title">专业版权益</view>
-          <view class="subscription-benefit-item">✅ 多门店汇总看板（跨店经营数据一屏总览）</view>
-          <view class="subscription-benefit-item">✅ Excel 批量导出（账目明细一键导表）</view>
-        </view>
+          <view class="subscription-benefit-box">
+            <view class="subscription-benefit-title">专业版权益</view>
+            <view class="subscription-benefit-item">✅ 多门店汇总看板（跨店经营数据一屏总览）</view>
+            <view class="subscription-benefit-item">✅ Excel 批量导出（账目明细一键导表）</view>
+          </view>
+        </scroll-view>
 
         <view class="subscription-modal-footer">
           <button class="subscription-btn-cancel" bindtap="onCloseSubscriptionModal">知道了</button>

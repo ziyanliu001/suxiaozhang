@@ -511,20 +511,25 @@ Component({
         return;
       }
 
-      // 已授权：顺畅切换。家长身份额外导向个人中心的【家长管理/资源兜底】卡片
-      // （原独立页面 pages/patriarch-dashboard 已废弃并入个人中心），不只是切换
-      // "当前预览身份"就结束——这是家长角色的主入口，与店长/财务/义工纯粹的
-      // "切视角"语义不同。若当前就已经在个人中心（例如从该页自己内嵌的
-      // store-picker 发起切换），不重复跳转——_applyRoleSwitch 触发的
-      // storechange 事件会由该页自己的处理函数刷新面板数据
+      // 已授权：顺畅切换——本地存储 + _applyRoleSwitch 内部触发的 storechange
+      // 事件负责通知宿主页面刷新数据，本方法自身绝不发起任何页面跳转
       this._applyRoleSwitch(storeId, storeName, role);
-      if (role === 'PATRIARCH') {
-        const pages = getCurrentPages();
-        const currentPage = pages[pages.length - 1];
-        const currentRoute = currentPage ? '/' + currentPage.route : '';
-        if (currentRoute !== '/pages/profile/profile') {
-          wx.navigateTo({ url: '/pages/profile/profile' });
-        }
+
+      // 🛡️ 显式白名单，而不是"其余角色隐式地什么都不做"：只有家长（PATRIARCH）
+      // 才需要导向个人中心的【家长管理/资源兜底】卡片（原独立页面
+      // pages/patriarch-dashboard 已废弃并入个人中心，家长切身份不只是"切视角"，
+      // 这是家长角色的主入口）——店长/财务/义工/家人/全国总览-管理员这几个纯粹
+      // "切视角"的身份，严禁触发 wx.switchTab/wx.navigateTo 跳去个人页，
+      // 只留在当前页（首页/历史记录页等）即时刷新数据。若当前就已经在个人中心
+      // （例如从该页自己内嵌的 store-picker 发起切换），也不重复跳转
+      if (role !== 'PATRIARCH') {
+        return;
+      }
+      const pages = getCurrentPages();
+      const currentPage = pages[pages.length - 1];
+      const currentRoute = currentPage ? '/' + currentPage.route : '';
+      if (currentRoute !== '/pages/profile/profile') {
+        wx.navigateTo({ url: '/pages/profile/profile' });
       }
     },
 

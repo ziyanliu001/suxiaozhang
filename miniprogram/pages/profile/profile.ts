@@ -2906,7 +2906,7 @@ Page({
     const text = `【续费申请】${storeName}\n当前套餐：${planLabel}\n到期时间：${expireDateStr}\n申请：希望升级/续费专业版套餐，请协助处理，感谢！`;
     wx.setClipboardData({
       data: text,
-      success: () => wx.showToast({ title: '续费申请信息已复制，请粘贴发送给项目管理员', icon: 'none', duration: 2500 })
+      success: () => wx.showToast({ title: '已复制续费信息，请发送给平台客服', icon: 'none', duration: 2500 })
     });
   }
 });

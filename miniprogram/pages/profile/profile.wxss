@@ -2757,9 +2757,12 @@
 }
 
 /* ================= 🔐 套餐升级/续费半屏卡片 =================
-   "知道了"/"复制续费申请信息"两个按钮强制 flex 居中，显式归零
-   box-sizing/padding/margin/line-height，消除微信原生 <button> 默认内边距/
-   行高造成的文字偏斜 */
+   🐛 布局修复：常驻 DOM + .show 类切换开合（与 .switch-identity-modal-mask
+   同一套方案），mask/card 各自带 opacity/transform 过渡，开合都平滑；卡片拆成
+   header/body（可滚动）/footer 三段，footer 独立带 safe-area 底部内边距，
+   不再随内容多少被挤出可视区域。"知道了"/"复制续费申请信息"两个按钮强制
+   flex 居中，显式归零 box-sizing/padding/margin/line-height，消除微信原生
+   <button> 默认内边距/行高造成的文字偏斜 */
 .subscription-modal-mask {
   position: fixed;
   top: 0;
@@ -2770,15 +2773,32 @@
   display: flex;
   align-items: flex-end;
   z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.subscription-modal-mask.show {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .subscription-modal-card {
   width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
   background: #FFFFFF;
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
-  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 32rpx 0;
   box-sizing: border-box;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.subscription-modal-mask.show .subscription-modal-card {
+  transform: translateY(0);
 }
 
 .subscription-modal-header {
@@ -2786,6 +2806,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 28rpx;
+  flex-shrink: 0;
 }
 
 .subscription-modal-title {
@@ -2811,6 +2832,15 @@
   text-align: center;
   color: #ADB5BD;
   font-size: 26rpx;
+}
+
+/* 🐛 body 独立成可滚动区域，与固定的 header/footer 分离——内容（标签行/
+   信息行/权益框）再多也只在这个区域内部滚动，footer 按钮永远完整可见，
+   不会被挤出屏幕 */
+.subscription-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .subscription-plan-row {
@@ -2877,6 +2907,7 @@
 
 .subscription-benefit-box {
   margin-top: 20rpx;
+  margin-bottom: 24rpx;
   background: #FAF8F5;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
@@ -2895,16 +2926,19 @@
   line-height: 1.8;
 }
 
+/* 🐛 footer 是卡片的固定尾段（flex-shrink:0，不参与 body 的滚动），底部内边距
+   独立带 safe-area，保证按钮完整露出、不被机型底部手势条/自定义 tabBar 遮挡 */
 .subscription-modal-footer {
+  flex-shrink: 0;
   display: flex;
-  gap: 20rpx;
-  margin-top: 32rpx;
+  gap: 16rpx;
+  padding: 16rpx 0 calc(24rpx + env(safe-area-inset-bottom));
 }
 
 .subscription-btn-cancel,
 .subscription-btn-confirm {
   flex: 1;
-  height: 84rpx;
+  height: 80rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2913,7 +2947,7 @@
   padding: 0;
   margin: 0;
   line-height: 1;
-  border-radius: 42rpx;
+  border-radius: 40rpx;
   font-size: 27rpx;
   font-weight: bold;
   border: none;
