@@ -14,6 +14,7 @@ import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
 import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
 import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
+import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
 
@@ -88,6 +89,15 @@ function normalizeStoreStats(raw: any) {
 // 🏛️ 家长管理 / 资源兜底：门店人员画像 7 项字段名，与 manageStoreProfile 云函数一致——
 // 迁移自已废弃的 pages/patriarch-dashboard，用于展示 pendingProfileUpdate 里
 // "店长本次提交了什么"的明细列表
+// 🔐 套餐档位文案：与 pages/platform-admin/platform-admin.ts 的 PLAN_LABELS
+// 保持同一套措辞，两处独立部署（云函数/页面各自没有共享模块机制），文案硬编码
+// 一致即可，不需要额外抽取共享常量
+const PLAN_LABELS: Record<string, string> = {
+  basic: '基础版',
+  pro: '专业版',
+  enterprise: '旗舰版'
+};
+
 const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
   partyMembers: '中共党员',
   socialWorkers: '社会工作者',
@@ -165,6 +175,19 @@ Page({
     // （详见 authService.ts UserRole 定义处注释），仅用于"开发者与超管工具箱"里
     // "会员开通/续费管理"这一项的显隐判断，不参与任何业务权限计算
     isPlatformAdmin: false,
+    // 🔐 套餐升级/续费半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
+    // 管理"时唤起，展示本机构当前套餐/到期时间，而不是像 platform_admin 那样
+    // 跳转 pages/platform-admin（那个页面服务端只认 platform_admin，租户自己的
+    // super_admin/家长点进去只会撞见硬拦截的"无权限访问"，体验很差）
+    showSubscriptionModal: false,
+    subscriptionLoading: false,
+    subscriptionInfo: {
+      planType: 'basic',
+      planLabel: '基础版',
+      isExpired: false,
+      isExpiringSoon: false,
+      expireDateStr: ''
+    },
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     viewModeOptionLabels: VIEW_MODE_OPTIONS.map((m) => PREVIEW_VIEW_MODE_LABELS[m]),
     viewModeOptionIndex: 0,
@@ -2792,21 +2815,81 @@ Page({
     });
   },
 
-  // 🏢 会员开通/续费管理：跳转到既有的 pages/platform-admin（SaaS 租户订阅管理页，
-  // 由 manageTenantSubscription 云函数支撑）。该页面自己的 checkAccess() 只认
-  // platform_admin，super_admin 点进去会看到该页原生的"无权限访问"提示——这是
-  // 刻意保留的边界（详见 manageTenantSubscription 的 requirePlatformAdmin：
-  // 租户订阅是平台运维方的职责，与某个机构自己的 super_admin 彻底隔离），本入口
-  // 只是把两种身份都引导到同一个既有页面，不越权改动那边的服务端权限判定
+  // 🏢 会员开通/续费管理：按真实角色分流，不再无差别硬跳 pages/platform-admin。
+  // 🐛 体验修复：此前不分角色一律跳转，该页面服务端权限（requirePlatformAdmin）
+  // 只认 platform_admin——super_admin/store_patriarch（某个机构自己的最高权限
+  // 角色，与"平台运维方"是两个完全不同的维度，详见 authService.ts UserRole
+  // 定义处注释）点进去只会撞见硬拦截的"无权限访问"，体验极其突兀
   onGoToPlatformAdminTenants() {
     if (this.isNavigating) return;
-    this.isNavigating = true;
 
-    wx.navigateTo({
-      url: '/pages/platform-admin/platform-admin',
-      fail: () => {
-        this.isNavigating = false;
-      }
+    // 🏢 平台管理员：真正的租户管理职责在 pages/platform-admin，平滑跳转过去
+    if (AuthService.isPlatformAdmin()) {
+      this.isNavigating = true;
+      wx.navigateTo({
+        url: '/pages/platform-admin/platform-admin',
+        fail: () => {
+          this.isNavigating = false;
+        }
+      });
+      return;
+    }
+
+    // super_admin / store_patriarch：不跳转硬拦截页面，直接在本页唤起自己的
+    // "套餐升级/续费"半屏卡片
+    this.onOpenSubscriptionModal();
+  },
+
+  // 🔐 套餐升级/续费半屏卡片：复用 checkTenantPermission（与首页/统计页同一套
+  // 租户订阅鉴权入口），拿到的 planType/isExpired/serviceExpireDate 就是本机构
+  // 当前生效的套餐状态——传哪个 featureKey 不影响这几个字段的取值，任选一个即可。
+  // 🐛 防重锁：与 statistics.ts fetchStatistics 同一套 isLoading 式防抖，避免用户
+  // 手快连点"会员开通/续费管理"打出重复的鉴权云调用
+  async onOpenSubscriptionModal() {
+    if (this.data.subscriptionLoading) return;
+    this.setData({ showSubscriptionModal: true, subscriptionLoading: true });
+
+    try {
+      const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, { skipCache: true });
+      const expireDateStr = result.serviceExpireDate || '';
+      // 🌟 7 天内到期同样标红提醒——与 pages/platform-admin 大盘"7 天内到期机构"
+      // 预警口径保持一致（见 getPlatformOverview 的 soonExpiringTenants）
+      const EXPIRING_SOON_MS = 7 * 24 * 3600 * 1000;
+      const expireTime = expireDateStr ? new Date(expireDateStr).getTime() : NaN;
+      const isExpiringSoon = !result.isExpired && !Number.isNaN(expireTime) && (expireTime - Date.now()) <= EXPIRING_SOON_MS;
+
+      this.setData({
+        subscriptionInfo: {
+          planType: result.planType,
+          planLabel: PLAN_LABELS[result.planType] || result.planType,
+          isExpired: result.isExpired,
+          isExpiringSoon,
+          expireDateStr: expireDateStr || '尚未开通'
+        }
+      });
+    } catch (err) {
+      console.warn('[onOpenSubscriptionModal] 加载套餐信息失败:', err);
+    } finally {
+      this.setData({ subscriptionLoading: false });
+    }
+  },
+
+  onCloseSubscriptionModal() {
+    this.setData({ showSubscriptionModal: false });
+  },
+
+  // 🎨 "复制续费申请信息"：本项目没有自助续费/工单系统——tenant_subscriptions
+  // 完全由 platform_admin 通过 pages/platform-admin 单方发起管理（见
+  // manageTenantSubscription 的 5 个 action，没有一个是"租户提交申请"），这里
+  // 不假装存在一个能提交到的后端队列，复制一段结构化文案由店长/大家长自己
+  // 粘贴发给项目管理员，是当前架构下唯一诚实、可交付的"提交续费需求"实现
+  onCopyRenewalRequest() {
+    const { planLabel, expireDateStr } = this.data.subscriptionInfo;
+    const storeName = this.data.currentStoreName || '本机构';
+    const text = `【续费申请】${storeName}\n当前套餐：${planLabel}\n到期时间：${expireDateStr}\n申请：希望升级/续费专业版套餐，请协助处理，感谢！`;
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: '续费申请信息已复制，请粘贴发送给项目管理员', icon: 'none', duration: 2500 })
     });
   }
 });

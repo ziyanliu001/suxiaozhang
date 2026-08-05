@@ -95,7 +95,15 @@ Page({
     }
   },
 
+  // 🐛 防抖锁：复用既有的 loading 字段做 in-flight guard——此前无任何拦截，
+  // 创建机构/开通续费/暂停恢复服务成功后都会各自触发一次 loadTenants()，手快
+  // 连续操作或网络慢时会并发打出多个重复的机构列表请求，返回顺序还可能互相
+  // 覆盖。已有一轮在途时直接跳过本轮，等它自己 finally 解锁
   async loadTenants() {
+    if (this.data.loading) {
+      console.log('[platform-admin][loadTenants] 已有请求在途，跳过本次重复调用');
+      return;
+    }
     this.setData({ loading: true });
     try {
       const res = await wx.cloud.callFunction({
@@ -104,8 +112,22 @@ Page({
       });
       const result = res.result as any;
       if (result && result.success) {
-        this.setData({ tenants: result.tenants || [] });
+        // 🌟 7 天内到期标记：与 getPlatformOverview 大盘"7 天内到期机构"预警
+        // 同一口径，供列表里每张机构卡片自己的到期 Tag 显示橙色警告
+        const EXPIRING_SOON_MS = 7 * 24 * 3600 * 1000;
+        const tenants = (result.tenants || []).map((t: any) => {
+          const sub = t.subscription;
+          const expireTime = (sub && sub.serviceExpireDate) ? new Date(sub.serviceExpireDate).getTime() : NaN;
+          const isExpiringSoon = !Number.isNaN(expireTime) && (expireTime - Date.now()) > 0 && (expireTime - Date.now()) <= EXPIRING_SOON_MS;
+          return { ...t, isExpiringSoon };
+        });
+        this.setData({ tenants });
       } else {
+        // 🛡️ -502005 等数据库层报错：manageTenantSubscription 云函数内部已经对
+        // tenant_subscriptions 做了自愈降级（见该云函数 safeGetLatestSubscription），
+        // 这里的 result.error 已经是友好文案（如"系统配置维护中，请联系技术支持"），
+        // 不会是裸的数据库报错。这里只提示，不清空 this.data.tenants——一次网络
+        // 抖动不该把已经成功加载过、正展示给用户的列表突然清空成空状态
         wx.showToast({ title: (result && result.error) || '机构列表加载失败', icon: 'none' });
       }
     } catch (err) {

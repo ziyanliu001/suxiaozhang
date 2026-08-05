@@ -29,6 +29,9 @@ export interface TenantPermissionResult {
   planType: string;
   isExpired: boolean;
   storeLimit: number;
+  // 🌟 原始到期日期字符串（YYYY-MM-DD），从未订阅过/查询失败时为 null——
+  // 供"套餐升级/续费"卡片展示真实到期日，而不只是一个 isExpired 布尔值
+  serviceExpireDate: string | null;
   reason: string;
 }
 
@@ -40,6 +43,7 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
   planType: 'basic',
   isExpired: false,
   storeLimit: 1,
+  serviceExpireDate: null,
   reason: ''
 };
 
@@ -62,6 +66,7 @@ const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
   planType: 'enterprise',
   isExpired: false,
   storeLimit: Number.MAX_SAFE_INTEGER,
+  serviceExpireDate: null,
   reason: ''
 };
 
@@ -95,6 +100,7 @@ export async function checkTenantPermission(
       planType: r.planType || 'basic',
       isExpired: !!r.isExpired,
       storeLimit: r.storeLimit || 1,
+      serviceExpireDate: r.serviceExpireDate || null,
       reason: r.reason || ''
     };
     _cache[featureKey] = { result, expiresAt: Date.now() + CACHE_TTL_MS };

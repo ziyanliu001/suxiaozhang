@@ -20,6 +20,14 @@ const FEATURE_PLAN_REQUIREMENTS = {
   excelExport: ['pro', 'enterprise']
 };
 
+// 🛡️ -502005 DATABASE_COLLECTION_NOT_EXIST：tenant_subscriptions 可能在这套
+// 环境里还没被写入过，与 submitFeedback/manageStoreInviteCode/manageNotice/
+// manageTenantSubscription 同一套自愈口径——只读查询命中时按"从未订阅过"降级
+// 处理（basic 版），不把裸的数据库报错抛给调用方
+function isCollectionNotExistError(err) {
+  return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
+}
+
 // 🏛️ 通用鉴权 Helper（与云函数入口分离，方便未来其它云函数直接复制这一小段
 // 逻辑做服务端硬校验——项目里各云函数独立部署，没有跨函数共享模块的机制，
 // 这是本仓库一贯的做法，见各处重复出现的 DEFAULT_TENANT_ID 常量）。
@@ -28,24 +36,35 @@ const FEATURE_PLAN_REQUIREMENTS = {
 // basic 处理；storeLimit 取 cloudQuota.storeLimit，缺省 1（免费版门店数上限）
 async function checkTenantPermission(tenantId, featureKey) {
   if (!tenantId) {
-    return { allowed: false, planType: 'basic', isExpired: false, storeLimit: 1, reason: '无法确认所属机构' };
+    return { allowed: false, planType: 'basic', isExpired: false, storeLimit: 1, serviceExpireDate: null, reason: '无法确认所属机构' };
   }
 
-  const subRes = await db.collection('tenant_subscriptions')
-    .where({ tenantId })
-    .orderBy('lastRenewedAt', 'desc')
-    .limit(1)
-    .get();
-  const sub = subRes.data && subRes.data[0];
+  let sub = null;
+  try {
+    const subRes = await db.collection('tenant_subscriptions')
+      .where({ tenantId })
+      .orderBy('lastRenewedAt', 'desc')
+      .limit(1)
+      .get();
+    sub = subRes.data && subRes.data[0];
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+    sub = null;
+  }
 
   let planType = 'basic';
   let isExpired = false;
   let storeLimit = 1;
+  let serviceExpireDate = null;
   if (sub) {
     const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
     isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
     planType = isExpired ? 'basic' : (sub.planType || 'basic');
     storeLimit = (sub.cloudQuota && sub.cloudQuota.storeLimit) || 1;
+    // 🌟 到期日期原样透传（哪怕已过期也保留原值）——前端"套餐升级/续费"卡片需要
+    // 展示真实到期日，而不只是一个 isExpired 布尔值，"7月1日已到期"比"已过期"
+    // 对续费决策更有信息量
+    serviceExpireDate = sub.serviceExpireDate || null;
   }
 
   const requiredPlans = FEATURE_PLAN_REQUIREMENTS[featureKey];
@@ -56,6 +75,7 @@ async function checkTenantPermission(tenantId, featureKey) {
     planType,
     isExpired,
     storeLimit,
+    serviceExpireDate,
     requiredPlans: requiredPlans || null,
     reason: allowed ? '' : '该功能为专业版专属，请联系大家长升级套餐'
   };
@@ -92,6 +112,7 @@ exports.main = async (event) => {
         planType: 'enterprise',
         isExpired: false,
         storeLimit: Number.MAX_SAFE_INTEGER,
+        serviceExpireDate: null,
         reason: ''
       };
     }
@@ -100,6 +121,11 @@ exports.main = async (event) => {
     return { success: true, ...result };
   } catch (err) {
     console.error('[checkTenantPermission] 异常:', err);
+    // 🛡️ 严禁把裸的数据库报错暴露给调用方——checkTenantPermission() 内部已经
+    // 对 tenant_subscriptions 查询做了自愈，这里是兜底防线
+    if (isCollectionNotExistError(err)) {
+      return { success: false, error: '系统配置维护中，请联系技术支持' };
+    }
     return { success: false, error: err.message || '权限校验失败' };
   }
 };

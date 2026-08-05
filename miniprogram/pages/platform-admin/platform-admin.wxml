@@ -14,7 +14,7 @@
     <text class="pa-denied-icon">🚫</text>
     <text class="pa-denied-title">无权限访问</text>
     <text class="pa-denied-sub">本页面仅限 SaaS 平台管理员（开发者）使用，且不会显示任何门店财务明细。</text>
-    <button class="pa-denied-btn" bindtap="onGoBack">返回首页</button>
+    <button class="pa-denied-btn" hover-class="btn-hover" bindtap="onGoBack">返回首页</button>
   </view>
 
   <scroll-view scroll-y class="pa-content" wx:if="{{checkedAccess && isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
@@ -47,16 +47,19 @@
 
     <view class="pa-section-header">
       <text class="pa-section-title">机构列表</text>
-      <button class="pa-btn-create" bindtap="onToggleCreateForm">{{showCreateForm ? '取消' : '+ 新建机构'}}</button>
+      <button class="pa-btn-create" hover-class="btn-hover" bindtap="onToggleCreateForm">{{showCreateForm ? '取消' : '+ 新建机构'}}</button>
     </view>
 
     <view class="pa-create-form" wx:if="{{showCreateForm}}">
       <input class="pa-input" placeholder="机构名称（必填）" value="{{createForm.name}}" bindinput="onCreateFormInput" data-field="name" />
       <input class="pa-input" placeholder="联系人姓名" value="{{createForm.contactName}}" bindinput="onCreateFormInput" data-field="contactName" />
       <input class="pa-input" placeholder="联系电话" value="{{createForm.contactPhone}}" bindinput="onCreateFormInput" data-field="contactPhone" />
-      <button class="pa-btn-submit" bindtap="onSubmitCreateTenant">创建机构</button>
+      <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitCreateTenant">创建机构</button>
     </view>
 
+    <!-- 🛡️ 空状态：loadTenants() 已经把 -502005 等数据库层报错自愈成正常的空列表
+         （见 manageTenantSubscription 云函数），这里与"真的还没有任何机构"共用
+         同一个友好空态，不会抛出未处理异常阻断渲染 -->
     <view class="pa-tenant-empty" wx:if="{{!loading && tenants.length === 0}}">
       <text>暂无机构，点击上方"+ 新建机构"创建第一个</text>
     </view>
@@ -67,15 +70,17 @@
         <text class="pa-tenant-status pa-status-{{item.status}}">{{item.status}}</text>
       </view>
       <view class="pa-tenant-body">
-        <text class="pa-tenant-row" wx:if="{{item.subscription}}">
-          套餐：{{planLabels[item.subscription.planType] || item.subscription.planType}} · 到期：{{item.subscription.serviceExpireDate}}
-        </text>
+        <view class="pa-tenant-plan-row" wx:if="{{item.subscription}}">
+          <text class="pa-plan-badge pa-plan-badge-{{item.subscription.planType}}">{{planLabels[item.subscription.planType] || item.subscription.planType}}</text>
+          <text class="pa-plan-badge pa-plan-badge-expiring" wx:if="{{item.isExpiringSoon}}">⚠️ 即将到期</text>
+          <text class="pa-tenant-row pa-expire-text">到期：{{item.subscription.serviceExpireDate}}</text>
+        </view>
         <text class="pa-tenant-row" wx:else>尚未开通订阅</text>
         <text class="pa-tenant-row pa-tenant-id">机构 ID：{{item._id}}</text>
       </view>
       <view class="pa-tenant-actions">
-        <button class="pa-btn-small" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">开通/续费</button>
-        <button class="pa-btn-small pa-btn-warn" data-tenantid="{{item._id}}" data-currentstatus="{{item.status}}" bindtap="onToggleTenantStatus">
+        <button class="pa-btn-small" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">开通/续费</button>
+        <button class="pa-btn-small pa-btn-warn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-currentstatus="{{item.status}}" bindtap="onToggleTenantStatus">
           {{item.status === 'suspended' ? '恢复服务' : '暂停服务'}}
         </button>
       </view>
@@ -88,9 +93,9 @@
       <text class="pa-modal-title">为【{{renewForm.tenantName}}】开通/续费</text>
 
       <view class="pa-plan-row">
-        <view class="pa-plan-tag {{renewForm.planType === 'basic' ? 'active' : ''}}" data-plan="basic" bindtap="onSelectPlan">基础版</view>
-        <view class="pa-plan-tag {{renewForm.planType === 'pro' ? 'active' : ''}}" data-plan="pro" bindtap="onSelectPlan">专业版</view>
-        <view class="pa-plan-tag {{renewForm.planType === 'enterprise' ? 'active' : ''}}" data-plan="enterprise" bindtap="onSelectPlan">旗舰版</view>
+        <view class="pa-plan-tag {{renewForm.planType === 'basic' ? 'active' : ''}}" hover-class="btn-hover" data-plan="basic" bindtap="onSelectPlan">基础版</view>
+        <view class="pa-plan-tag {{renewForm.planType === 'pro' ? 'active' : ''}}" hover-class="btn-hover" data-plan="pro" bindtap="onSelectPlan">专业版</view>
+        <view class="pa-plan-tag {{renewForm.planType === 'enterprise' ? 'active' : ''}}" hover-class="btn-hover" data-plan="enterprise" bindtap="onSelectPlan">旗舰版</view>
       </view>
 
       <text class="pa-field-label">服务开始日期</text>
@@ -106,8 +111,8 @@
       <textarea class="pa-textarea" placeholder="如：新机构首次开通 / 年度续费" value="{{renewForm.reason}}" bindinput="onRenewFormInput" data-field="reason" />
 
       <view class="pa-modal-actions">
-        <button class="pa-btn-cancel" bindtap="onCloseRenewForm">取消</button>
-        <button class="pa-btn-submit" bindtap="onSubmitRenew">确认提交</button>
+        <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseRenewForm">取消</button>
+        <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitRenew">确认提交</button>
       </view>
     </view>
   </view>
