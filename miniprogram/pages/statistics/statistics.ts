@@ -104,7 +104,7 @@ function isAllStoresMode(storeName: string): boolean {
 // cloudfunctions/getReports 的 wantsAllStores 判断、history.ts 的
 // NATIONAL_STORE_IDS），本地 Storage 里的 current_store_id/active_store_id
 // 兜底读取时同样要排除，不能当真实门店 id 使用
-const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL', 'yuhuazhai_national'];
 
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
@@ -484,6 +484,11 @@ Page({
     storePickerArray: [] as any[],
     nationalData: {} as any,
     nationalMatrixList: [] as any[],
+    // 🆕 多店排行榜：全国各门店"报表活跃度"（openDays 降序）与"餐饮服务人次"
+    // （totalDiners 降序）Top 5，纯客户端从 nationalMatrixList 派生，见
+    // loadNationalDashboard() 末尾计算
+    nationalTopDinersStores: [] as any[],
+    nationalTopActiveStores: [] as any[],
     showNationalDashboard: false,
     // 🐛 根因修复：wxml 容器此前用 nationalData.nationalTotalDiners !== undefined
     // 作为"是否已加载好"的隐式判据——loadNationalDashboard() 云调用还在飞行中，
@@ -713,6 +718,31 @@ Page({
   // 🛡️ 三级角色权限卡口：单店财务 / 总部财务 / 超级管理员 / 志工（只读全国大屏）
   applyRolePermissions(role: string, storeName: string, storeId: string = '') {
     const isSuperAdmin = role === 'super_admin';
+
+    // 🐛 根因修复："超级管理员看全国大屏却渲染单店界面"，日志显示
+    // showNationalDashboard 状态：false：入参 storeName/storeId 来自
+    // resolveEffectiveStoreIdentity(roleInfo)，其优先级是"角色文档里持久化的
+    // storeName/storeId 字段"——这只是账号创建/最近一次核验时的历史快照（例如
+    // 该超管账号曾是某具体门店的店长后被提权，user_roles.storeName 遗留着旧
+    // 门店名），完全可能与超管当前在店铺选择器里实际选中的门店不一致。此前一旦
+    // 这个历史快照非空，就会被当成"当前正在浏览某具体门店"直接采用，完全不会去看
+    // getSelectedStore()（全局态，反映用户最近一次真实的门店切换操作，例如已经在
+    // 首页手动切到了"全国总览"）——最终表现就是超管明明选的是全国总览，这里却把
+    // showNationalDashboard 算成 false，渲染出一个跟当前操作脱节的单店界面。
+    // 🛡️ 只对 super_admin 生效：一旦当前全局选中态（storeId 或 storeName）命中
+    // 全国总览哨兵值，视为"用户当前明确处于全国总览"，让入参 storeName/storeId
+    // 失效（清空），交由下方既有的 shouldDefaultToNational 走向全国大屏分支——
+    // 不改变非超管、以及超管已经真实选中某个具体门店时的既有行为
+    if (isSuperAdmin) {
+      const liveSelected = getSelectedStore();
+      const liveStoreId = (liveSelected && liveSelected.storeId) || '';
+      const liveStoreName = (liveSelected && liveSelected.storeName) || '';
+      if (NATIONAL_STORE_ID_SENTINELS.includes(liveStoreId) || isVirtualStoreName(liveStoreName)) {
+        storeName = '';
+        storeId = '';
+      }
+    }
+
     const isHQFinance = role === 'hq_finance' || role === 'regional_finance';
     const isVolunteer = role === 'volunteer';
     // 精细化管理视角：店长/财务/大家长/超管（非志工）均属于"管理者"，用于 wx:if="{{isManager}}"
@@ -819,8 +849,14 @@ Page({
       // 导致下面 shouldDefaultToNational 被误判为 false，showNationalDashboard
       // 也就永远不会被置为 true，单店查询又查不到名叫"全国总览"的门店，最终两边
       // 都没有数据可展示。这里补上与本文件其余各处一致的 isVirtualStoreName 过滤
-      const rawSelectedStoreName = (getSelectedStore().storeName) || '';
-      const cleanSelectedStoreName = isVirtualStoreName(rawSelectedStoreName) ? '' : rawSelectedStoreName;
+      const rawSelectedStore = getSelectedStore();
+      const rawSelectedStoreName = (rawSelectedStore && rawSelectedStore.storeName) || '';
+      const rawSelectedStoreId = (rawSelectedStore && rawSelectedStore.storeId) || '';
+      // 🐛 补上 storeId 哨兵值判断：不能只看店名——'all'/'ALL_STORES'/
+      // 'national_overview'/'yuhuazhai_national' 这类聚合 storeId 哪怕店名字段
+      // 因为某种原因缺失/未同步，只要 storeId 命中就必须视为"当前选中全国总览"
+      const rawSelectedIsNational = isVirtualStoreName(rawSelectedStoreName) || NATIONAL_STORE_ID_SENTINELS.includes(rawSelectedStoreId);
+      const cleanSelectedStoreName = rawSelectedIsNational ? '' : rawSelectedStoreName;
       const finalShopName = isSuperAdmin
         ? (effectiveStoreName || cleanSelectedStoreName)
         : effectiveStoreName;
@@ -830,8 +866,12 @@ Page({
       // "全部门店"这类虚拟聚合名（现已在上面被过滤成空）——finalShopName 会是
       // 空字符串。只在这种"压根没有可展示的具体门店"时才回退到全国总览，不会
       // 重新引入此前"无条件默认全国大屏"的旧 Bug——那个 Bug 是不看实际选择、
-      // 永远默认全国；这里只在无从选择时才兜底
-      const shouldDefaultToNational = isSuperAdmin && !finalShopName;
+      // 永远默认全国；这里只在无从选择时才兜底。
+      // 🐛 显式全国总览信号：storeId 为空≠明确选了全国总览，也可能只是压根没
+      // 选过任何门店——但 rawSelectedIsNational 为 true 时是用户/店铺选择器
+      // 明确写入的聚合哨兵值，必须强制兜底为全国大屏，即便 finalShopName 因为
+      // 上面某个环节还残留着旧值也不能让它逃逸成单店界面
+      const shouldDefaultToNational = isSuperAdmin && (!finalShopName || rawSelectedIsNational);
 
       this.setData({
         shopName: shouldDefaultToNational ? '全部门店' : finalShopName,
@@ -1161,9 +1201,18 @@ Page({
         const sanitizedSummary = sanitizeReportForVolunteer(r.nationalSummary || {}, role);
         const sanitizedMatrix = sanitizeReportForVolunteer(r.storeMatrix || [], role);
         const cleanedMatrix = this.formatNationalMatrixData(sanitizedMatrix);
+        // 🆕 多店排行榜：storeMatrix 服务端已按 totalDiners 降序返回（见
+        // getNationalDashboard），这里再显式排一次序（不依赖调用方约定不变）+
+        // 按 openDays（本次统计窗口内实际提交过餐报的天数，即"报表活跃度"）
+        // 单独排一份——两份榜单都是纯客户端对已拿到手的同一份 matrix 数据重新
+        // 排序取 Top 5，不需要为此再发一次云函数请求
+        const topDinersStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.totalDiners || 0) - (a.totalDiners || 0)).slice(0, 5);
+        const topActiveStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.openDays || 0) - (a.openDays || 0)).slice(0, 5);
         this.setData({
           nationalData: sanitizedSummary,
           nationalMatrixList: cleanedMatrix,
+          nationalTopDinersStores: topDinersStores,
+          nationalTopActiveStores: topActiveStores,
           // 非超管时云函数恒返回 null，这里原样落地，高阶面板 wx:if 会自动不渲染
           superAdminInsights: this.formatSuperAdminInsights(r.superAdminInsights, sanitizedSummary)
         });
@@ -1541,6 +1590,18 @@ Page({
   // 无 statistics.* 兜底，见 wxml finance-metric-cell）在"全国总览"下永远停留
   // 在初始占位值，哪怕数据库里其实有数据
   async fetchStatistics() {
+    // 🐛 根因修复：全国总览大屏（showNationalDashboard=true）有自己专属、已经
+    // 按全租户聚合好的 getNationalDashboard 云函数数据源（nationalData/
+    // nationalMatrixList），不该也不需要再叠加一次 getStatisticsData 单店口径
+    // 的调用——万一本方法在这个状态下被意外触发（例如某个旧的直接调用点未经过
+    // calculateStats() 的 showNationalDashboard 守卫），必须重新导向全局聚合
+    // 入口，而不是拿着可能残留的单店 shopName 悄悄查出一份"看似全局、实则被
+    // 收窄到某一家门店"的假数据
+    if (this.data.showNationalDashboard) {
+      console.log('[Statistics][fetchStatistics] 当前处于全国总览大屏，改为触发 loadNationalDashboard()');
+      this.loadNationalDashboard();
+      return;
+    }
     // 🐛 根因修复：onLoad/onShow 前后脚各触发一次 reloadShopListAndStats()（或
     // 用户手快连点 Tab/年月切换）会让本方法在上一次云调用还没返回时又并发发起
     // 一次，同一屏 statsData 被 2~4 个并发请求的返回顺序竞争覆盖。isLoading 式
@@ -1549,15 +1610,23 @@ Page({
       console.log('[Statistics][fetchStatistics] 已有请求在途，跳过本次重复调用');
       return;
     }
-    const { currentTab, shopName, selectedYear, selectedMonth, customStartDate, customEndDate } = this.data;
+    const { currentTab, selectedYear, selectedMonth, customStartDate, customEndDate } = this.data;
     const tabMap: Record<string, string> = { week: 'week', month: 'month', year: 'year', custom: 'custom' };
     const tabType = tabMap[currentTab] || 'week';
+
+    // 🐛 全局维度参数：isAllStoresMode（"全店汇总"聚合视图，与 showNationalDashboard
+    // 是两套并行但都可能生效的聚合态）下必须显式传 '全部门店' 字面量 + viewMode:'all'，
+    // 不能信任 this.data.shopName 当时是否已经同步——getStatisticsData 的
+    // wantsAllStores 判断认的就是 shopName 空值/'全部门店' 这两种取值，这里补一层
+    // 显式兜底，避免时序问题下把聚合请求误发成单店查询
+    const shopName = this.data.isAllStoresMode ? '全部门店' : this.data.shopName;
 
     const statisticsCallData = {
       shopName: shopName || 'default',
       tabType,
       selectedYear: String(selectedYear),
       selectedMonth: String(selectedMonth).padStart(2, '0'),
+      viewMode: this.data.isAllStoresMode ? 'all' : undefined,
       startDate: customStartDate,
       endDate: customEndDate
     };
@@ -1812,6 +1881,14 @@ Page({
   },
 
   async loadStatistics(startDate: string, endDate: string) {
+    // 🐛 根因修复：与 fetchStatistics() 同一条口径——全国总览大屏有自己专属的
+    // getNationalDashboard 全局聚合数据源，本方法（getReports 单店/全店口径）
+    // 不该在这个状态下被触发，意外触发时重新导向全局聚合入口
+    if (this.data.showNationalDashboard) {
+      console.log('[Statistics][loadStatistics] 当前处于全国总览大屏，改为触发 loadNationalDashboard()');
+      this.loadNationalDashboard();
+      return;
+    }
     // 🐛 防抖锁：onLoad/onShow 前后脚并发触发时，先返回的那次调用 wx.hideLoading()
     // 后，后返回的那次仍会再调用一次 wx.hideLoading()——此时已无对应的 showLoading
     // 在途，触发开发者工具"showLoading、hideLoading 必须配对使用"告警。早退发生
@@ -1848,7 +1925,12 @@ Page({
     // 切页面里"全店汇总/个人统计"这个开关本身也只对 super_admin 渲染（wx:if=
     // "{{canViewAllStoresDropdown}}"），非超管永远不会主动把它切到 'personal'，
     // 所以这里不传等价于原先的"全店"语义，行为不变
-    const reportsViewMode = isSuperAdmin ? this.data.viewMode : undefined;
+    // 🐛 全局维度参数：isAll（"全部门店"聚合视图）下必须强制传 'all'，不能沿用
+    // this.data.viewMode 当前的取值——超管此前若曾把「查看模式」切到"个人统计"
+    // （viewMode==='personal'），一旦紧接着又切到"全部门店"，viewMode 不会自动
+    // 复位，会把本该聚合全店的查询悄悄收窄成"仅超管自己提交的记录"，与"全部门店"
+    // 这个选择的语义完全不符
+    const reportsViewMode = isSuperAdmin ? (isAll ? 'all' : this.data.viewMode) : undefined;
     if (!isSuperAdmin && !shopStoreId) {
       console.warn('[Statistics][loadStatistics] 非超管账号 storeId 仍未解析出来，本次查询将退回服务端按 openid 兜底收敛，请检查该账号 user_roles.storeId 是否缺失');
     }
@@ -2281,6 +2363,27 @@ Page({
       });
       this.calculateStats();
     }
+  },
+
+  // 🆕 空状态防呆引导："切回全国总览大屏"——与 onSwitchToAllStores 不同，那个
+  // 方法只是把本店切到 getStatisticsData/getReports 口径的"全部门店"聚合视图
+  // （仍留在单店风格的 stats-content 里），这里要跳的是真正的 national-dashboard-
+  // container 大屏，与 onSuperAdminSelectStore 选中"🌐 全国总览"时完全同一套
+  // 状态变更（含刻意不调用 setSelectedStore()——'全国总览'是仅供本页内部判断用
+  // 的虚拟聚合项，不能写进其他页面也会读取的全局门店缓存，否则会把"全国总览"
+  // 污染成好像是一个真实门店），直接触发 loadNationalDashboard() 拉取全租户聚合数据
+  onGoToNationalDashboard() {
+    if (!this.data.canViewAllStoresDropdown) return;
+    this.setData({
+      shopName: '全部门店',
+      currentUserStoreName: '🌐 全国总览',
+      currentUserStoreId: '',
+      isAllStoresMode: true,
+      hasOtherStoreData: false,
+      statistics: null,
+      showNationalDashboard: true
+    });
+    this.loadNationalDashboard();
   },
 
   onShowAllStoreRecords() {
@@ -4061,8 +4164,16 @@ Page({
     this.setData({ isRefreshingData: true });
     wx.showLoading({ title: '刷新中...' });
     DataService.syncLocalDataToCloud().then(() => {
-      this.loadShopList();
-      this.calculateStats();
+      // 🐛 根因修复：导航栏"刷新数据"此前无条件调用 calculateStats()——该方法
+      // 一旦发现 showNationalDashboard 为 true 会直接 return（单店查询结果不会
+      // 被渲染，见 calculateStats 注释），全国总览大屏点"刷新数据"实际上什么都
+      // 没有刷新。现在按当前所处的大屏模式分别路由到各自真正的数据源
+      if (this.data.showNationalDashboard) {
+        this.loadNationalDashboard();
+      } else {
+        this.loadShopList();
+        this.calculateStats();
+      }
       wx.hideLoading();
       wx.showToast({ title: '数据已刷新', icon: 'success' });
     }).catch(() => {

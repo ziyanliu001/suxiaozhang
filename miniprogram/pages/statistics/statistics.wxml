@@ -125,6 +125,33 @@
       <button class="btn-empty-action" hover-class="ui-hover" bindtap="loadNationalDashboard">重试</button>
     </view>
     <block wx:elif="{{nationalData.nationalTotalDiners !== undefined}}">
+    <!-- 🆕 全国多店大屏专属宏观 KPI 卡：黄金/暖白风，与下方蓝色 national-hero-card
+         是两张不同定位的卡片——这张只放三个一眼就能看懂的"体量"指标（覆盖门店/
+         累计服务人次/总餐食支出），置顶做第一屏摘要；national-hero-card 保留原有
+         更完整的收支/志愿/物资明细。总餐食支出对志工视角同样脱敏，与下方 hero-grid-4
+         的 isManager 分支保持同一条口径 -->
+    <view class="ui-card-wrapper national-macro-kpi-card">
+      <text class="macro-kpi-title">🏆 全国多店大屏 · 核心体量</text>
+      <view class="macro-kpi-grid">
+        <view class="macro-kpi-cell">
+          <text class="macro-kpi-val">{{nationalData.totalStores}}</text>
+          <text class="macro-kpi-lbl">覆盖门店总数</text>
+        </view>
+        <view class="macro-kpi-cell">
+          <text class="macro-kpi-val">{{nationalData.nationalTotalDiners}}</text>
+          <text class="macro-kpi-lbl">全国累计服务人次</text>
+        </view>
+        <view class="macro-kpi-cell" wx:if="{{isManager}}">
+          <text class="macro-kpi-val">¥{{nationalData.nationalTotalExpense}}</text>
+          <text class="macro-kpi-lbl">全国总餐食支出</text>
+        </view>
+        <view class="macro-kpi-cell" wx:else>
+          <text class="macro-kpi-val macro-kpi-masked">***</text>
+          <text class="macro-kpi-lbl">全国总餐食支出</text>
+        </view>
+      </view>
+    </view>
+
     <view class="ui-card-wrapper national-hero-card">
       <view class="hero-header">
         <text class="hero-title">{{dashboardTitle}}<text class="hero-role-tag" wx:if="{{dashboardRoleTag}}">{{dashboardRoleTag}}</text></text>
@@ -247,6 +274,43 @@
 
           <view class="matrix-filter-empty" wx:if="{{isAdmin && storeMatrixFilter === 'risk' && superAdminInsights.riskStoreCount === 0}}">
             <text>🎉 暂无需要关注的预警门店，各门店运营正常</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🆕 多店排行榜/对比模块：超管专属，纯客户端从 nationalMatrixList 派生出的
+         Top 5——"报表活跃度"按 openDays（本次统计窗口内实际提交过餐报的天数）
+         降序，"餐饮服务人次"按 totalDiners 降序，让全景界面具备真正的跨店透视 -->
+    <view class="national-ranking-card" wx:if="{{isAdmin}}">
+      <view class="matrix-header">
+        <text class="matrix-title">🏅 全国门店排行榜</text>
+      </view>
+
+      <view class="ranking-group">
+        <text class="ranking-group-title">📋 爱心餐报表活跃度 Top 5</text>
+        <view class="ranking-list">
+          <view class="ranking-item" wx:for="{{nationalTopActiveStores}}" wx:key="storeId" wx:for-index="rankIdx">
+            <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
+            <text class="ranking-name">{{item.storeName}}</text>
+            <text class="ranking-value">{{item.openDays}} 天</text>
+          </view>
+          <view class="ranking-empty" wx:if="{{nationalTopActiveStores.length === 0}}">
+            <text>暂无门店报表数据</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="ranking-group">
+        <text class="ranking-group-title">🍚 餐饮服务人次 Top 5</text>
+        <view class="ranking-list">
+          <view class="ranking-item" wx:for="{{nationalTopDinersStores}}" wx:key="storeId" wx:for-index="rankIdx">
+            <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
+            <text class="ranking-name">{{item.storeName}}</text>
+            <text class="ranking-value">{{item.totalDiners}} 人次</text>
+          </view>
+          <view class="ranking-empty" wx:if="{{nationalTopDinersStores.length === 0}}">
+            <text>暂无门店服务数据</text>
           </view>
         </view>
       </view>
@@ -1025,6 +1089,10 @@
     <view class="smart-empty-card" wx:if="{{!statistics || statistics.recordCount === 0}}">
       <text class="empty-icon">📊</text>
       <text class="empty-title">暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
+
+      <!-- 🆕 空状态防呆：超管专属"一键切换至全国总览"，不必先猜到底是哪个分支
+           文案、点哪个按钮才能跳出这家门店——直接跳全局大屏最快 -->
+      <button class="btn-empty-national" wx:if="{{canViewAllStoresDropdown}}" bindtap="onGoToNationalDashboard">🌐 一键切换至全国总览</button>
 
       <block wx:if="{{currentStoreTotalCount > 0}}">
         <text class="empty-suggest-text">该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
