@@ -268,20 +268,21 @@
       </view>
     </view>
 
-    <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色 -->
+    <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色。
+         🐛 原生 picker 会弹出微信绿色系统选择器，与本页暖白/金色调不搭——改为
+         点击触发下方自定义半屏 role-switch-modal，风格与 switch-identity-modal/
+         subscription-modal 统一 -->
     <view class="view-mode-switch-card" wx:if="{{isRealSuperAdmin}}">
-      <picker mode="selector" range="{{viewModeOptionLabels}}" value="{{viewModeOptionIndex}}" bindchange="onSwitchViewMode">
-        <view class="view-mode-switch-row">
-          <view class="item-left">
-            <view class="item-icon-svg icon-svg-key"></view>
-            <text class="item-text">管理视角切换</text>
-          </view>
-          <view class="view-mode-current-value">
-            <text class="view-mode-current-label">{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
-            <view class="item-arrow">❯</view>
-          </view>
+      <view class="view-mode-switch-row" bindtap="onOpenViewModeModal">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-key"></view>
+          <text class="item-text">管理视角切换</text>
         </view>
-      </picker>
+        <view class="view-mode-current-value">
+          <text class="view-mode-current-label">{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
       <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
     </view>
 
@@ -669,6 +670,42 @@
       <view class="switch-identity-divider"></view>
 
       <button class="btn-exit-binding" bindtap="onOpenReleaseConfirmModal">退出当前门店绑定</button>
+    </view>
+  </view>
+
+  <!-- 🌟 管理视角切换半屏弹窗：替换原生 picker 绿色系统弹窗，卡片式六选一
+       （全景/大家长/店长/财务/义工/家人），当前选中项主题金色高亮 + Check 图标。
+       点击卡片仅暂存 viewModeModalPendingMode，须点"确认切换"才真正生效——与
+       switch-identity-modal-mask 同一套"常驻 DOM + show 类切换"方案 -->
+  <view class="role-switch-modal-mask {{showViewModeModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCancelViewModeModal">
+    <view class="role-switch-modal-card" catchtap="stopPropagation">
+      <view class="role-switch-modal-header">
+        <text class="role-switch-modal-title">管理视角切换</text>
+        <text class="role-switch-modal-close" bindtap="onCancelViewModeModal">✕</text>
+      </view>
+      <text class="role-switch-modal-desc">预览超级管理员在各角色下看到的界面与操作入口，仅展示层模拟，不改变云端真实角色</text>
+
+      <scroll-view scroll-y class="role-switch-modal-body">
+        <view
+          class="role-switch-option-card {{item.mode === viewModeModalPendingMode ? 'active' : ''}}"
+          wx:for="{{viewModeCards}}"
+          wx:key="mode"
+          bindtap="onSelectViewModeCard"
+          data-mode="{{item.mode}}"
+        >
+          <view class="role-switch-option-icon">{{item.icon}}</view>
+          <view class="role-switch-option-info">
+            <text class="role-switch-option-label">{{item.label}}</text>
+            <text class="role-switch-option-desc">{{item.desc}}</text>
+          </view>
+          <view class="role-switch-option-check" wx:if="{{item.mode === viewModeModalPendingMode}}">✓</view>
+        </view>
+      </scroll-view>
+
+      <view class="role-switch-modal-footer">
+        <button class="role-switch-btn-cancel" bindtap="onCancelViewModeModal">取消</button>
+        <button class="role-switch-btn-confirm" bindtap="onConfirmViewModeModal">确认切换</button>
+      </view>
     </view>
   </view>
 

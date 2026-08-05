@@ -622,6 +622,233 @@
   padding: 0 32rpx 20rpx;
 }
 
+/* ================= 🌟 管理视角切换半屏弹窗 =================
+   与 .switch-identity-modal-mask / .subscription-modal-mask 同一套"常驻 DOM +
+   .show 类切换"开合方案：mask/card 各自带 opacity/transform 过渡；卡片拆成
+   header（固定）/body（可滚动，六张角色 Card）/footer（固定，取消/确认切换）
+   三段，footer 永远不会被卡片列表挤出视口。整体延续暖白底 + 金色边框/高亮的
+   本页统一配色，替换掉原生 picker 的微信绿色系统弹窗 */
+.role-switch-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.role-switch-modal-mask.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.role-switch-modal-card {
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  padding-top: 32rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.role-switch-modal-mask.show .role-switch-modal-card {
+  transform: translateY(0);
+}
+
+.role-switch-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 32rpx;
+  flex-shrink: 0;
+}
+
+.role-switch-modal-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1A1A1A;
+}
+
+.role-switch-modal-close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 28rpx;
+}
+
+.role-switch-modal-desc {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  line-height: 1.6;
+  padding: 16rpx 32rpx 20rpx;
+  flex-shrink: 0;
+}
+
+.role-switch-modal-body {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+}
+
+/* 🎴 视角选项 Card：默认暖灰底，选中态施加主题金色边框 + 浅金底高亮，
+   与本页 .view-mode-switch-card 的金棕配色（#B57C1E / #E6D0A0）呼应 */
+.role-switch-option-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 20rpx;
+  margin-bottom: 16rpx;
+  background: #FAFAFA;
+  border: 2rpx solid transparent;
+  border-radius: 20rpx;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.role-switch-option-card:active {
+  opacity: 0.85;
+}
+
+.role-switch-option-card.active {
+  background: #FFFBF0;
+  border-color: #DAA520;
+}
+
+.role-switch-option-icon {
+  width: 72rpx;
+  height: 72rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  background: #FFFFFF;
+  border-radius: 50%;
+}
+
+.role-switch-option-card.active .role-switch-option-icon {
+  background: #FFF3D6;
+}
+
+.role-switch-option-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.role-switch-option-label {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #1A1A1A;
+}
+
+.role-switch-option-card.active .role-switch-option-label {
+  color: #B57C1E;
+}
+
+.role-switch-option-desc {
+  font-size: 22rpx;
+  color: #999999;
+  line-height: 1.4;
+}
+
+.role-switch-option-check {
+  width: 40rpx;
+  height: 40rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+/* 🐛 footer 是卡片的固定尾段（flex-shrink:0，不参与 body 的滚动），独立带
+   safe-area 底部内边距，不被机型手势条/自定义 tabBar 遮挡 */
+.role-switch-modal-footer {
+  flex-shrink: 0;
+  display: flex;
+  gap: 16rpx;
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+/* 🐛 按钮 Flex 强制居中：消除微信原生 <button> 默认内边距/line-height 导致的
+   文字偏斜，height 显式撑满、line-height 归一、box-sizing border-box */
+.role-switch-modal-footer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 80rpx;
+  line-height: 1;
+  border-radius: 40rpx;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.role-switch-btn-cancel,
+.role-switch-btn-confirm {
+  flex: 1;
+  text-align: center;
+  padding: 0;
+  font-size: 28rpx;
+  font-weight: bold;
+  border: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.role-switch-btn-cancel::after,
+.role-switch-btn-confirm::after {
+  border: none;
+}
+
+.role-switch-btn-cancel {
+  background: #F1F3F5;
+  color: #495057;
+}
+
+.role-switch-btn-cancel:active {
+  background: #E3E6E9;
+  transform: scale(0.97);
+}
+
+.role-switch-btn-confirm {
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+}
+
+.role-switch-btn-confirm:active {
+  opacity: 0.88;
+  transform: scale(0.97);
+}
+
 /* ===== 🏛️ 家长管理 / 资源兜底：内嵌自原 pages/patriarch-dashboard，样式沿用
    该页原有的 pd-* 命名，外层包一层与本页其余卡片一致的金边容器 ===== */
 .patriarch-panel-card {
@@ -2783,6 +3010,12 @@
   pointer-events: auto;
 }
 
+/* 🐛 彻底修复：card 本身不再统一持有左右 32rpx 内边距——此前 header/body/footer
+   三段共用 card 的 padding box，footer 只补了纵向 padding；现在按你的最新要求
+   把 footer 的横向 32rpx 也补齐后，若还依赖 card 的外层 32rpx，footer 两侧会
+   变成 32+32=64rpx，比 header/body 更窄，看起来错位。改为 card 只留
+   padding-top（纵向起点），横向 32rpx 内边距下放到 header/body/footer 各自
+   独立持有，三段左右缘对齐、互不冲突 */
 .subscription-modal-card {
   width: 100%;
   max-height: 80vh;
@@ -2791,8 +3024,9 @@
   background: #FFFFFF;
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
-  padding: 32rpx 32rpx 0;
+  padding-top: 32rpx;
   box-sizing: border-box;
+  overflow: hidden;
   transform: translateY(100%);
   transition: transform 0.25s ease;
 }
@@ -2806,6 +3040,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 28rpx;
+  padding: 0 32rpx;
   flex-shrink: 0;
 }
 
@@ -2828,7 +3063,7 @@
 }
 
 .subscription-loading {
-  padding: 60rpx 0;
+  padding: 60rpx 32rpx;
   text-align: center;
   color: #ADB5BD;
   font-size: 26rpx;
@@ -2836,11 +3071,18 @@
 
 /* 🐛 body 独立成可滚动区域，与固定的 header/footer 分离——内容（标签行/
    信息行/权益框）再多也只在这个区域内部滚动，footer 按钮永远完整可见，
-   不会被挤出屏幕 */
+   不会被挤出屏幕。
+   🛡️ height: 0 是 <scroll-view> 在 flex 纵向布局里的关键兜底：它是原生组件，
+   个别基础库版本下光靠 flex:1 + min-height:0 不够可靠，还是会按内容撑高、
+   把 footer 挤出可视区——flex:1 配合 height:0 强制让 flex-grow 完全决定实际
+   高度，这是社区里 scroll-view 嵌 flex 布局的标准写法 */
 .subscription-modal-body {
   flex: 1;
+  height: 0;
   min-height: 0;
   overflow-y: auto;
+  padding: 0 32rpx;
+  box-sizing: border-box;
 }
 
 .subscription-plan-row {
@@ -2926,19 +3168,22 @@
   line-height: 1.8;
 }
 
-/* 🐛 footer 是卡片的固定尾段（flex-shrink:0，不参与 body 的滚动），底部内边距
-   独立带 safe-area，保证按钮完整露出、不被机型底部手势条/自定义 tabBar 遮挡 */
+/* 🐛 footer 是卡片的固定尾段（flex-shrink:0，不参与 body 的滚动），独立持有
+   完整的横向 32rpx + 纵向 safe-area 底部内边距，与 header/body 各自对齐、
+   不依赖 card 外层 padding，保证按钮完整露出、不被机型底部手势条/自定义
+   tabBar 遮挡 */
 .subscription-modal-footer {
   flex-shrink: 0;
   display: flex;
   gap: 16rpx;
-  padding: 16rpx 0 calc(24rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .subscription-btn-cancel,
 .subscription-btn-confirm {
   flex: 1;
-  height: 80rpx;
+  height: 84rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2947,8 +3192,8 @@
   padding: 0;
   margin: 0;
   line-height: 1;
-  border-radius: 40rpx;
-  font-size: 27rpx;
+  border-radius: 42rpx;
+  font-size: 28rpx;
   font-weight: bold;
   border: none;
   transition: transform 0.12s ease, opacity 0.12s ease;

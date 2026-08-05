@@ -16,7 +16,17 @@ import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 
-const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_MANAGER', 'FINANCE'];
+const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
+
+// 🌟 视角切换半屏弹窗：卡片式选项文案，与 VIEW_MODE_OPTIONS 顺序一一对应
+const VIEW_MODE_CARDS: Array<{ mode: PreviewViewMode; label: string; icon: string; desc: string }> = [
+  { mode: 'SUPER_ADMIN', label: '超级管理员全景', icon: '👑', desc: '查看全部管理入口与跨店数据，真实操作权限' },
+  { mode: 'STORE_PATRIARCH', label: '大家长视角', icon: '🏡', desc: '门店最高管理位，兼具店长与财务全部权限' },
+  { mode: 'STORE_MANAGER', label: '店长视角', icon: '🗂️', desc: '门店日常运营与义工管理入口' },
+  { mode: 'FINANCE', label: '财务视角', icon: '💰', desc: '账目审核与门店财务统计入口' },
+  { mode: 'VOLUNTEER', label: '义工视角', icon: '🤝', desc: '护持打卡、提交餐报等义工专属入口' },
+  { mode: 'FAMILY', label: '家人视角', icon: '❤️', desc: '服务对象默认版面，最简洁的关怀视图' }
+];
 
 // 🏛️ 多角色兼任"切换身份"面板：roles 数组里的大写 token（与 manageStoreInviteCode/
 // processRoleAudit releaseSelf 同一份词汇）<-> 本模块展示用的 label/snake_case 值。
@@ -191,6 +201,12 @@ Page({
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     viewModeOptionLabels: VIEW_MODE_OPTIONS.map((m) => PREVIEW_VIEW_MODE_LABELS[m]),
     viewModeOptionIndex: 0,
+    // 🌟 视角切换半屏弹窗：常驻卡片列表数据 + 弹窗开关 + 待确认中的选择（点击卡片
+    // 只是高亮暂存，点击"确认切换"才真正生效，与 switch-identity/subscription
+    // 半屏弹窗同一套交互范式）
+    viewModeCards: VIEW_MODE_CARDS,
+    showViewModeModal: false,
+    viewModeModalPendingMode: 'SUPER_ADMIN' as PreviewViewMode,
     stats: {
       volunteerDays: 0,
       volunteerHours: 0,
@@ -561,18 +577,21 @@ Page({
       currentUserRole: role, isVolunteer: role === 'volunteer',
       isManager: role === 'store_manager' || role === 'store_patriarch',
       isFinance: role === 'finance' || role === 'store_patriarch',
-      isSuperAdmin: isRealSuperAdmin
+      isSuperAdmin: isRealSuperAdmin,
+      isFamily
     });
     const displayRole = overridden.currentUserRole;
     const hasPrivilege = displayRole === 'store_manager' || displayRole === 'finance' || displayRole === 'store_patriarch' || displayRole === 'super_admin';
     const currentViewMode = getPreviewViewMode();
-    // 🏛️ 家长管理卡片显隐：预览模式的可选项里没有"家长"这一档（VIEW_MODE_OPTIONS
-    // 只有 SUPER_ADMIN/STORE_MANAGER/FINANCE），displayRole 能等于 store_patriarch
-    // 只可能是真实角色本身就是家长，不受超管预览切换影响
+    // 🏛️ 家长管理卡片显隐：VIEW_MODE_OPTIONS 现已补齐 STORE_PATRIARCH 档位，
+    // displayRole === 'store_patriarch' 既可能是真实角色本身就是家长，也可能是
+    // 超管切到了"大家长视角"预览——两种情况都应该展示家长管理卡片，口径不变
     const isPatriarch = displayRole === 'store_patriarch';
-    // 🌟 isVolunteer 严格指"真实义工"，与 isFamily 互斥——两者底层 currentUserRole
-    // 都是 'volunteer'，靠 isFamily 区分展示哪一套版面
-    const isVolunteer = displayRole === 'volunteer' && !isFamily;
+    // 🌟 isVolunteer/isFamily 均已随 applyRoleViewOverride 一起降级模拟：真实
+    // 义工视角下 isVolunteer=true、isFamily=false；家人视角下相反。两者底层
+    // currentUserRole 都是 'volunteer'，靠 isFamily 区分展示哪一套版面
+    isFamily = overridden.isFamily;
+    const isVolunteer = overridden.isVolunteer;
     console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
 
     this.setData({
@@ -1165,16 +1184,32 @@ Page({
     }
   },
 
-  // 🌟 超级管理员视角切换：仅纯前端展示层预览，绝不改写云端真实角色。
-  // 仅在 isRealSuperAdmin 为真时才会被 WXML 渲染出这个入口，此处再做一次二次校验兜底。
-  onSwitchViewMode(e: any) {
+  // 🌟 超级管理员视角切换：半屏卡片弹窗，替换原生 picker 绿色弹窗。
+  // 仅在 isRealSuperAdmin 为真时才会被 WXML 渲染出触发入口，各处理函数再做二次校验兜底。
+  onOpenViewModeModal() {
+    if (!this.data.isRealSuperAdmin) return;
+    this.setData({ showViewModeModal: true, viewModeModalPendingMode: this.data.currentViewMode });
+  },
+
+  onCancelViewModeModal() {
+    this.setData({ showViewModeModal: false });
+  },
+
+  // 点击卡片仅暂存待选视角、高亮对应 Card，不立即生效——须点击"确认切换"才真正生效
+  onSelectViewModeCard(e: any) {
+    const mode = e.currentTarget.dataset.mode as PreviewViewMode;
+    if (!mode) return;
+    this.setData({ viewModeModalPendingMode: mode });
+  },
+
+  onConfirmViewModeModal() {
     if (!this.data.isRealSuperAdmin) return;
 
-    const index = parseInt(e.detail.value, 10);
-    const mode = VIEW_MODE_OPTIONS[index];
+    const mode = this.data.viewModeModalPendingMode as PreviewViewMode;
     if (!mode) return;
 
     setPreviewViewMode(mode);
+    this.setData({ showViewModeModal: false });
     wx.showToast({
       title: mode === 'SUPER_ADMIN' ? '已切回超级管理员全景' : `已切换为${PREVIEW_VIEW_MODE_LABELS[mode]}预览`,
       icon: 'none'

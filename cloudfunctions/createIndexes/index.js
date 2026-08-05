@@ -230,6 +230,28 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'report_logs', index: 'tenantId_storeId_openid', status: 'success' });
 
+    // 📊 getStatisticsData（pages/statistics 统计大盘，专业版付费墙背后的主查询）
+    // 单店视角分支：{tenantId, storeId, dateString 区间} 是最高频的查询形状，
+    // 此前完全没有覆盖这个组合的复合索引——tenantId_storeId_openid/
+    // tenantId_storeId_auditedBy 虽然前两个字段一致，但都不含 dateString，
+    // 无法为这里的日期区间过滤/排序命中索引，云开发控制台会持续弹出索引建议告警
+    await db.collection('report_logs').createIndex({
+      name: 'tenantId_storeId_dateString',
+      keys: [{ tenantId: 1 }, { storeId: 1 }, { dateString: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'report_logs', index: 'tenantId_storeId_dateString', status: 'success' });
+
+    // 📊 getNationalDashboard（全国总览大屏）机构总览视角：{tenantId,
+    // approvalStatus, dateString 区间}——与上面单店视角字段形状不同（不带
+    // storeId，多一层 approvalStatus 过滤 PENDING 草稿），单独补一条索引
+    await db.collection('report_logs').createIndex({
+      name: 'tenantId_approvalStatus_dateString',
+      keys: [{ tenantId: 1 }, { approvalStatus: 1 }, { dateString: 1 }],
+      unique: false
+    });
+    results.push({ collection: 'report_logs', index: 'tenantId_approvalStatus_dateString', status: 'success' });
+
     // 🙋 护持岗位班次打卡云端台账（manageVolunteerCheckIn，volunteer_duty_logs 集合）：
     // checkin 时按 {tenantId, storeId, _openid, dateString, status} 现查"今日已打卡记录"
     // 重算工时上限与同工种去重，高频命中，补一条对齐查询形状的复合索引；status 单独放在

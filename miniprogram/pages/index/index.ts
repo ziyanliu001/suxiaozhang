@@ -917,28 +917,28 @@ Page({
       const flags = getPermissionFlags({ role: normalizedRole });
 
       // 🌟 视角切换预览：真实角色是 super_admin 且已选择非全景视角时，展示层降级模拟
-      // 店长/财务视角；isRealSuperAdmin 保留真实值，供切换入口自身显隐判断
+      // 大家长/店长/财务/义工/家人视角；isRealSuperAdmin 保留真实值，供切换入口自身显隐判断
       const isRealSuperAdmin = isSuperAdmin;
-      const overridden = applyRoleViewOverride(normalizedRole, {
-        currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin
-      });
-
       // ❤️ 家人（服务对象）：normalizedRole 显式为 store_family 时直接判定；新用户/
       // 未审核通过的默认 volunteer 账号也按家人视角展示——与 profile.ts isFamily
-      // 判定口径一致，避免未审核用户在首页看到打卡/计算工具等管理类模块。
-      // 用未经 applyRoleViewOverride 覆盖的原始 isVolunteer，不受超管预览视角影响
-      // （预览视角只在 SUPER_ADMIN/STORE_MANAGER/FINANCE 之间切换，不涉及家人）
-      const isFamily = normalizedRole === 'store_family' || (isVolunteer && status !== 'approved');
+      // 判定口径一致，避免未审核用户在首页看到打卡/计算工具等管理类模块。这是
+      // 预览覆盖前的"真实"家人判定，作为 applyRoleViewOverride 的入参之一
+      const rawIsFamily = normalizedRole === 'store_family' || (isVolunteer && status !== 'approved');
+      const overridden = applyRoleViewOverride(normalizedRole, {
+        currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isFamily: rawIsFamily
+      });
+      // 🌟 家人视角现已补齐进预览选项：非 super_admin 时 applyRoleViewOverride 原样
+      // 透传 rawIsFamily；super_admin 预览为 FAMILY 档位时降级模拟为 isFamily=true
+      const isFamily = overridden.isFamily;
       // 🏛️ 大家长：不受 applyRoleViewOverride 预览覆盖影响（预览仅针对 super_admin 本人），
       // 直接取规范化角色判定，供「解封/反封账」等大家长专属操作的权限校验使用
       const isPatriarch = normalizedRole === 'store_patriarch';
 
       return {
         rawRole, normalizedRole, flags,
-        // 🛡️ isVolunteer/isFamily 互斥：与 profile.ts 同一口径——未审核默认账号
-        // 两者按原始规则都会算出 true，这里显式排除，避免首页 wx:if/wx:elif
-        // 角色分流链（!isFamily / isVolunteer / isFamily）同时命中两个分支
-        isVolunteer: overridden.isVolunteer && !isFamily,
+        // 🛡️ isVolunteer/isFamily 互斥：与 profile.ts 同一口径，均已由
+        // applyRoleViewOverride 统一降级模拟，无需再手动排除
+        isVolunteer: overridden.isVolunteer,
         isManager: overridden.isManager,
         isFinance: overridden.isFinance,
         isSuperAdmin: overridden.isSuperAdmin,
@@ -1602,7 +1602,7 @@ Page({
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
     const isRealSuperAdmin = isSuperAdmin;
     const overridden = applyRoleViewOverride(normalizedRole, {
-      currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin
+      currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isFamily
     });
 
     this.setData({
@@ -1620,7 +1620,7 @@ Page({
       isFinance: overridden.isFinance,
       isSuperAdmin: overridden.isSuperAdmin,
       isPatriarch: isPatriarch,
-      isFamily: isFamily,
+      isFamily: overridden.isFamily,
       permissions: flags
     }, () => {
 
@@ -7115,7 +7115,7 @@ Page({
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
     const isRealSuperAdmin = isSuperAdmin;
     const overridden = applyRoleViewOverride(role, {
-      currentUserRole: role, isVolunteer, isManager, isFinance, isSuperAdmin
+      currentUserRole: role, isVolunteer, isManager, isFinance, isSuperAdmin, isFamily
     });
 
     this.setData({
@@ -7131,7 +7131,7 @@ Page({
       isFinance: overridden.isFinance,
       isSuperAdmin: overridden.isSuperAdmin,
       isPatriarch: isPatriarch,
-      isFamily: isFamily,
+      isFamily: overridden.isFamily,
       permissions: getPermissionFlags({ role })
     });
 
