@@ -108,6 +108,14 @@
             <text class="form-label">申请身份</text>
             <radio-group class="new-store-role-group" bindchange="onSelectNewStoreRole">
               <label class="new-store-role-item">
+                <radio value="store_family" checked="{{newStoreForm.applyRole === 'store_family'}}" color="#8C1D18"/>
+                <text>🏠 家人</text>
+              </label>
+              <label class="new-store-role-item">
+                <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
+                <text>🌸 义工</text>
+              </label>
+              <label class="new-store-role-item">
                 <radio value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}" color="#8C1D18"/>
                 <text>👑 大家长</text>
               </label>
@@ -118,10 +126,6 @@
               <label class="new-store-role-item">
                 <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
                 <text>🔒 财务</text>
-              </label>
-              <label class="new-store-role-item">
-                <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
-                <text>🌸 义工</text>
               </label>
             </radio-group>
 
@@ -169,7 +173,7 @@
       <!-- Footer：提交按钮固定置底，永不被键盘或内容遮挡 -->
       <view class="sheet-footer">
         <button class="new-store-submit-btn" bindtap="onSubmitNewStoreApply" loading="{{isSubmittingNewStore}}" disabled="{{isSubmittingNewStore}}">
-          {{currentStore.role === 'ADMIN' ? '立即创建门店' : '提交申请，等待超管审批'}}
+          {{currentStore.role === 'ADMIN' ? '立即创建门店' : (newStoreForm.applyRole === 'volunteer' || newStoreForm.applyRole === 'store_family' ? '提交申请，立即加入' : '提交申请，由店长审核')}}
         </button>
       </view>
     </block>

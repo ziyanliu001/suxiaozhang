@@ -40,7 +40,7 @@ Component({
     showNewStoreForm: false,
     newStoreForm: {
       customStoreName: '',
-      applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer',
+      applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer' | 'store_family',
       // 🙋 申请人本人信息：processRoleAudit submitRoleApply 必填，与门店联系电话
       // （contactPhone，门店对外公示的号码）是两个不同的号码，不能互相顶替
       realName: '',
@@ -1037,6 +1037,9 @@ Component({
         return;
       }
 
+      // 🤝 家人/义工属于自治角色：服务端直接 status:'approved' 写入，无需人工审批
+      const isAutoApproveRole = applyRole === 'volunteer' || applyRole === 'store_family';
+
       this.setData({ isSubmittingNewStore: true });
       wx.showLoading({ title: '提交申请中...', mask: true });
 
@@ -1058,7 +1061,8 @@ Component({
             tenantId,
             requestedRole: applyRole,
             realName,
-            phone
+            phone,
+            autoApprove: isAutoApproveRole
           }
         });
         const result = res.result as any;
@@ -1070,7 +1074,10 @@ Component({
         }
 
         this.setData({ showNewStoreForm: false, showPickerSheet: false });
-        wx.showToast({ title: '申请已提交，请等待超级管理员审批开通！', icon: 'none', duration: 2500 });
+        const successMsg = isAutoApproveRole
+          ? '已成功加入！欢迎来到雨花斋大家庭 🌸'
+          : '申请已提交，请等待管理者审批！';
+        wx.showToast({ title: successMsg, icon: 'success', duration: 2500 });
         this.fetchMyApplicationStatus();
       } catch (err) {
         wx.hideLoading();
