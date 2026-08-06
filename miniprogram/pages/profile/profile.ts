@@ -3078,9 +3078,83 @@ Page({
     }
   },
 
-  // 🚧 在线订购占位：项目尚未接入微信支付商户号，先用一个明确的维护中提示
-  // 代替，不假装存在一个能真正下单的支付通道——比放一个点了没反应的按钮更诚实
-  onOrderOnline() {
-    wx.showToast({ title: '线上支付通道维护中，请使用授权码激活', icon: 'none', duration: 2500 });
+  // 🌟 在线订购：接入微信云开发原生支付（方案 B 终极形态）。
+  // 完整流程：createSubscriptionOrder 云函数统一下单 → wx.requestPayment 拉起
+  // 微信支付界面 → 支付成功后 payCallback 云函数自动更新 tenant_subscriptions
+  // 与 tenants 集合（100% 自动无感，无需用户手动输入任何授权码）→ 前端清除
+  // 权限缓存并刷新套餐展示状态。
+  // 授权码/卡号输入框保留为备用/赠送激活入口（见上方 onRedeemActivationCode）。
+  async onSubscribeAdvancedFeature() {
+    if (this.data.subscriptionLoading) return;
+    this.setData({ subscriptionLoading: true });
+    wx.showLoading({ title: '正在生成订单...', mask: true });
+
+    try {
+      // Step 1: 调用云函数统一下单，获取支付参数
+      const orderRes = await wx.cloud.callFunction({
+        name: 'createSubscriptionOrder',
+        data: { planType: 'ADVANCED_YEARLY' }
+      });
+      const orderResult = orderRes.result as any;
+      wx.hideLoading();
+
+      if (!orderResult || !orderResult.success || !orderResult.payment) {
+        wx.showToast({
+          title: (orderResult && orderResult.error) || '生成订单失败，请重试',
+          icon: 'none',
+          duration: 2500
+        });
+        return;
+      }
+
+      // Step 2: 拉起微信原生支付界面
+      const payParams = orderResult.payment as {
+        timeStamp: string;
+        nonceStr: string;
+        package: string;
+        signType: string;
+        paySign: string;
+      };
+      await new Promise<void>((resolve, reject) => {
+        wx.requestPayment({
+          timeStamp: payParams.timeStamp,
+          nonceStr: payParams.nonceStr,
+          package: payParams.package,
+          signType: (payParams.signType || 'MD5') as 'MD5' | 'HMAC-SHA256' | 'RSA',
+          paySign: payParams.paySign,
+          success: () => resolve(),
+          fail: (err) => reject(err)
+        });
+      });
+
+      // Step 3: 支付成功 —— 清除权限缓存，刷新套餐展示
+      // payCallback 云函数已在服务端自动更新 tenant_subscriptions，
+      // clearTenantPermissionCache() 清除 60s 内存缓存，fetchSubscriptionInfo()
+      // 强制重新从云端读取最新状态，两步合用保证前端立即看到解锁结果
+      clearTenantPermissionCache();
+      wx.showLoading({ title: '正在激活...', mask: true });
+      try {
+        await this.fetchSubscriptionInfo();
+      } finally {
+        wx.hideLoading();
+      }
+
+      wx.showToast({
+        title: '激活成功！已为您开通专业版跨店大屏与数据导出权限',
+        icon: 'success',
+        duration: 3000
+      });
+    } catch (err: any) {
+      wx.hideLoading();
+      // wx.requestPayment 用户主动取消时 errMsg 包含 'cancel'
+      if (err && typeof err.errMsg === 'string' && err.errMsg.indexOf('cancel') !== -1) {
+        wx.showToast({ title: '已取消支付', icon: 'none' });
+      } else {
+        console.error('[onSubscribeAdvancedFeature] 支付异常:', err);
+        wx.showToast({ title: '支付失败，请重试', icon: 'none' });
+      }
+    } finally {
+      this.setData({ subscriptionLoading: false });
+    }
   }
 });

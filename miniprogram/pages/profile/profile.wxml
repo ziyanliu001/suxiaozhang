@@ -1571,7 +1571,7 @@
 
         <view class="subscription-modal-footer">
           <button class="subscription-btn-cancel" bindtap="onCloseSubscriptionModal">知道了</button>
-          <button class="subscription-btn-confirm" bindtap="onOrderOnline">在线订购</button>
+          <button class="subscription-btn-confirm" bindtap="onSubscribeAdvancedFeature">在线订购</button>
         </view>
       </block>
     </view>
