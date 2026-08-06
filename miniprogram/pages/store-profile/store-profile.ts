@@ -77,6 +77,8 @@ Page({
     currentStoreId: '',
     currentStoreName: '',
     canManage: false,
+    // 🔐 仅大家长/超管可设置密钥（店长只读，不能修改）
+    canSetAdminKey: false,
     loading: true,
 
     // 📊 门店动态健康看板：今日开餐 / 物资健康度 / 今日护持 / 今日服务，见
@@ -179,7 +181,14 @@ Page({
       storefrontPhotos: [] as string[],
       civilAffairsPhotos: [] as string[],
       foodSafetyPledgePhotos: [] as string[]
-    }
+    },
+
+    // 🔐 管理员密钥设置弹窗（仅大家长/超管可操作）
+    adminKeySet: false,
+    adminKeyCurrentVal: '',   // 仅大家长/超管可见的当前值（get 时服务端按权限返回）
+    showAdminKeyModal: false,
+    adminKeySaving: false,
+    adminKeyInput: ''
   },
 
   async onLoad() {
@@ -254,8 +263,9 @@ Page({
     // 管理权限，与云函数 manageStoreProfile 的 resolveWriteTarget 写权限口径对齐——
     // 真正的写操作授权仍然完全由服务端独立校验，这里只决定按钮是否渲染
     const canManage = effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin';
+    const canSetAdminKey = effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin';
 
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage });
+    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey });
     console.log('[verify] store-profile rendered, canManage:', canManage);
   },
 
@@ -302,6 +312,8 @@ Page({
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
       PHOTO_FIELDS.forEach((f) => { update[f] = Array.isArray(data[f]) ? data[f] : []; });
+      update.adminKeySet = !!data.adminKeySet;
+      update.adminKeyCurrentVal = data.adminKey || '';
       this.setData(update);
       // 🛡️ canManage 不在这份 update 里——它自始至终只由 initRoleAndStore() 的
       // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
@@ -715,6 +727,56 @@ Page({
     } finally {
       wx.hideLoading();
       this.setData({ qualificationSaving: false });
+    }
+  },
+
+  // ============ 🔐 管理员密钥设置弹窗 ============
+
+  onOpenAdminKeyModal() {
+    if (!this.data.canSetAdminKey) {
+      wx.showToast({ title: '仅大家长/超管可设置管理员密钥', icon: 'none' });
+      return;
+    }
+    // 预填当前值（大家长/超管通过 get 拿到原文，店长看不到）供修改时参考
+    this.setData({ showAdminKeyModal: true, adminKeyInput: this.data.adminKeyCurrentVal });
+  },
+
+  onCloseAdminKeyModal() {
+    if (this.data.adminKeySaving) return;
+    this.setData({ showAdminKeyModal: false, adminKeyInput: '' });
+  },
+
+  onAdminKeyInputChange(e: any) {
+    this.setData({ adminKeyInput: e.detail.value });
+  },
+
+  async onSaveAdminKey() {
+    if (this.data.adminKeySaving) return;
+    const newKey = (this.data.adminKeyInput || '').trim();
+    this.setData({ adminKeySaving: true });
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'update', storeId: this.data.currentStoreId, adminKey: newKey }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+        return;
+      }
+      this.setData({
+        showAdminKeyModal: false,
+        adminKeyInput: '',
+        adminKeySet: newKey.length > 0,
+        adminKeyCurrentVal: newKey
+      });
+      wx.showToast({ title: newKey ? '密钥已更新' : '密钥已清除', icon: 'success' });
+    } catch (err) {
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ adminKeySaving: false });
     }
   },
 

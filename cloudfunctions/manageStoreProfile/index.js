@@ -207,6 +207,11 @@ exports.main = async (event, context) => {
           longitude: typeof store.longitude === 'number' ? store.longitude : undefined,
           // 待审批的画像变更（若有）：供 store-profile 页展示"有一份更新正在等待审批"提示
           pendingProfileUpdate: store.pendingProfileUpdate || null,
+          // 🔐 管理员密钥：非授权角色只知道"是否已设置"，不暴露原文；
+          // 大家长/超管可读取以便核查/重置
+          adminKeySet: !!(store.adminKey && String(store.adminKey).trim()),
+          adminKey: (caller && (caller.role === 'store_patriarch' || caller.role === 'super_admin'))
+            ? (store.adminKey || '') : undefined,
           ...profile
         }
       };
@@ -243,6 +248,15 @@ exports.main = async (event, context) => {
       if (lat !== undefined && lng !== undefined) {
         updateFields.latitude = lat;
         updateFields.longitude = lng;
+      }
+
+      // 🔐 管理员密钥：安全敏感字段，仅大家长/超管可设置/清空，店长无权限。
+      // 直接写库，不经过家长风控锁（该字段本身就是大家长/超管级操作）
+      if (event.adminKey !== undefined) {
+        if (caller.role !== 'store_patriarch' && caller.role !== 'super_admin') {
+          return { success: false, error: '无权限：仅大家长或超级管理员可设置/修改管理员密钥' };
+        }
+        updateFields.adminKey = sanitizeText(event.adminKey).slice(0, 50);
       }
 
       // 🆕 保存时省市智能回填：调用方这次没有主动修改 province/city（未传这两个
