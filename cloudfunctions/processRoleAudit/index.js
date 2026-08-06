@@ -276,6 +276,68 @@ async function submitRoleApply(event, OPENID) {
     docData.approveTime = db.serverDate();
   }
 
+  // 🏛️ 新建门店一键自审：具备门店管理权限（大家长/店长）的用户新建门店时免审自治，
+  // 直接建店并同时兼任大家长与店长，实现零等待建店。超管走上方快速通道，此处只处理
+  // 已有管理角色的普通用户，保持配额校验（resolveOrCreateStore 内部已处理）。
+  if (isCustom) {
+    const callerRes = await db.collection('user_roles')
+      .where({ _openid: OPENID, status: 'approved' })
+      .limit(1)
+      .get();
+    const callerRec = callerRes.data && callerRes.data[0];
+    const callerRole = callerRec && callerRec.role;
+
+    if (callerRole === 'store_patriarch' || callerRole === 'store_manager') {
+      const resolvedTenantId = (callerRec && callerRec.tenantId) || tenantId || DEFAULT_TENANT_ID;
+      const newStoreName = String(customStoreName).trim();
+
+      let resolved;
+      try {
+        resolved = await resolveOrCreateStore(resolvedTenantId, newStoreName, OPENID);
+      } catch (quotaErr) {
+        return { success: false, error: quotaErr.message || '建店失败' };
+      }
+
+      const now = db.serverDate();
+      const baseDoc = {
+        ...docData,
+        storeId: resolved.storeId,
+        storeName: resolved.storeName,
+        tenantId: resolvedTenantId,
+        status: 'approved',
+        approveTime: now
+      };
+
+      // 同时写入大家长与店长两条记录，实现兼任效果
+      await Promise.all([
+        db.collection('user_roles').add({ data: { ...baseDoc, role: 'store_patriarch', requestedRole: 'store_patriarch' } }),
+        db.collection('user_roles').add({ data: { ...baseDoc, role: 'store_manager', requestedRole: 'store_manager' } }),
+        db.collection('stores').doc(resolved.storeId).update({
+          data: {
+            patriarch: docData.realName || '',
+            patriarchOpenId: OPENID,
+            manager: docData.realName || '',
+            managerOpenId: OPENID,
+            address: docData.address || '',
+            contactPhone: docData.contactPhone || '',
+            storePhotos: Array.isArray(docData.storePhotos) ? docData.storePhotos : [],
+            province: docData.province || '',
+            city: docData.city || '',
+            district: docData.district || ''
+          }
+        }).catch(err => console.warn('[processRoleAudit] 回写新店档案失败（不影响建店）:', err))
+      ]);
+
+      return {
+        success: true,
+        autoApproved: true,
+        storeId: resolved.storeId,
+        storeName: resolved.storeName,
+        message: '已自动建店，您已成为大家长兼店长'
+      };
+    }
+  }
+
   const addRes = await db.collection('user_roles').add({ data: docData });
 
   return {
@@ -307,8 +369,9 @@ async function listPendingApplications(OPENID) {
     if (!caller.storeId) {
       return { success: true, queueType: 'member', data: [] };
     }
+    // 🏛️ 大家长与店长同一人兼任场景：并集权限判定，两者均可审核本门店义工/财务/店长申请
     const res = await db.collection('user_roles')
-      .where({ storeId: caller.storeId, status: 'pending', requestedRole: _.in(['volunteer', 'finance']) })
+      .where({ storeId: caller.storeId, status: 'pending', requestedRole: _.in(['volunteer', 'finance', 'store_manager']) })
       .orderBy('applyTime', 'desc')
       .limit(50)
       .get();
@@ -766,19 +829,13 @@ exports.main = async (event, context) => {
       } catch (storeErr) {
         return { success: false, error: storeErr.message || '建店失败' };
       }
-    } else if (applyData.requestedRole === 'store_manager') {
-      // 🛡️ 收敛为与家长任命同一档：店长任命仅限超级管理员审批。此前允许同店的
-      // 另一位店长审批同店的店长申请，与"店长/家长=超管专属"的两层权限模型不一致
-      if (auditor.role !== 'super_admin') {
-        return { success: false, error: '无权限：店长任命仅限超级管理员审批' };
-      }
     } else {
-      // 已有门店的义工/财务申请：本店店长/本店大家长/本机构超级管理员均可审核
+      // 🏛️ 已有门店的义工/财务/店长申请：大家长与店长兼任并集逻辑——
+      // 本门店大家长、本门店店长、超级管理员均可审核；大家长与店长为同一人时天然具备双重权限
       const isAuditorAllowed = auditor.role === 'super_admin' ||
-        (auditor.role === 'store_manager' && auditor.storeId === targetStoreId) ||
-        (auditor.role === 'store_patriarch' && auditor.storeId === targetStoreId);
+        ((auditor.role === 'store_patriarch' || auditor.role === 'store_manager') && auditor.storeId === targetStoreId);
       if (!isAuditorAllowed) {
-        return { success: false, error: '无权限：仅本门店店长/大家长或超级管理员可审核角色申请' };
+        return { success: false, error: '无权限：仅本门店大家长/店长或超级管理员可审核角色申请' };
       }
     }
 

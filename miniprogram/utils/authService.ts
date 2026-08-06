@@ -176,6 +176,15 @@ export function getPermissionFlags(roleInfo: { role?: string } | null | undefine
   }
 }
 
+/**
+ * 门店管理权限判定：大家长、店长、超级管理员均具备门店审批权。
+ * 采用并集逻辑，任意一项满足即视为具备门店管理员特权，可审核本门店内
+ * 义工、财务、店长的角色申请。
+ */
+export function hasStoreAdminPrivilege(role: string | undefined | null): boolean {
+  return role === 'store_patriarch' || role === 'store_manager' || role === 'super_admin';
+}
+
 export const AuthService = {
   async ensureLogin(): Promise<{ success: boolean; openid?: string; error?: string; isTemp?: boolean }> {
     const cached = this.getOpenid();

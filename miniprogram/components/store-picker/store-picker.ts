@@ -1090,6 +1090,29 @@ Component({
           return;
         }
 
+        // 🏛️ 大家长/店长新建门店一键自审：云函数直接建店并授权，前端立即切换到新门店
+        if (result.autoApproved && result.storeId) {
+          const newStoreId = result.storeId;
+          const newStoreName = result.storeName || customStoreName;
+          this.setData({
+            currentStore: { storeId: newStoreId, storeName: newStoreName, role: 'PATRIARCH' },
+            showNewStoreForm: false,
+            showPickerSheet: false
+          });
+          const app = getApp() as any;
+          if (app && app.switchStore) {
+            app.switchStore(newStoreId, newStoreName, 'PATRIARCH');
+          } else if (app && app.globalData) {
+            app.globalData.currentStore = { storeId: newStoreId, storeName: newStoreName, role: 'PATRIARCH' };
+          }
+          wx.setStorageSync('active_store_id', newStoreId);
+          wx.setStorageSync('active_role', 'PATRIARCH');
+          wx.showToast({ title: '新门店已建好，您已自动成为大家长兼店长！', icon: 'success', duration: 3000 });
+          this.triggerEvent('storechange', { storeId: newStoreId, storeName: newStoreName, role: 'PATRIARCH', currentRole: 'PATRIARCH' });
+          this.triggerEvent('storelistchange', {});
+          return;
+        }
+
         this.setData({ showNewStoreForm: false, showPickerSheet: false });
         const successMsg = isAutoApproveRole
           ? '已成功加入！欢迎来到雨花斋大家庭 🌸'
