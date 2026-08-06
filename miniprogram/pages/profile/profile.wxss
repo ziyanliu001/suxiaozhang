@@ -637,12 +637,12 @@
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: flex-end;
-  /* 🐛 根因修复：自定义 tabBar（custom-tab-bar，z-index: 998）与本弹窗此前
-     虽然数字上 2000 > 998，但两者分别嵌在各自的祖先层叠上下文里，数字比较
-     并不天然保证跨层叠上下文的绘制顺序——实测会被 tabBar 盖住。压到 1000
-     （仍明确高于 tabBar 的 998）+ 下面 card 改成自己独立 position: fixed
-     直接贴底（不再依赖 mask 的 flex 布局定位），双重保证不会被 tabBar 遮挡 */
-  z-index: 1000;
+  /* 🐛 根因修复：自定义 tabBar（custom-tab-bar，z-index: 998）与本弹窗分别
+     嵌在各自的祖先层叠上下文里，数字比较并不天然保证跨层叠上下文的绘制顺序
+     ——哪怕之前已经调到明确更大的数字仍会被 tabBar 盖住。进一步拉开到 9998
+     （下面 card 用 9999），留足够大的差值 + card 改成自己独立 position: fixed
+     直接贴底（不再依赖 mask 的 flex 布局定位），确保不会被 tabBar 遮挡 */
+  z-index: 9998;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s ease;
@@ -658,9 +658,9 @@
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 2000;
+  z-index: 9999;
   width: 100%;
-  max-height: 65vh;
+  max-height: 60vh;
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -668,13 +668,11 @@
   overflow: hidden;
   /* 🐛 根因修复：env(safe-area-inset-bottom) 只补偿手机物理层面的 Home 指示条/
      刘海，跟本项目自绘的 custom-tab-bar 完全是两回事——后者是页面自己画出来的
-     一块有真实高度的内容，不在这个安全区变量的补偿范围内。footer 自身的
-     padding-bottom 只顶到了安全区，卡片整体仍可能贴得比 tabBar 顶部还低，
-     视觉上按钮被压在 tabBar 后面/边缘。这里在卡片最外层再叠一层
-     30rpx + 安全区的底部内边距，把整张卡片（含 footer）额外顶高一截，
-     确保确认按钮怎么样都完全浮在 tabBar 上方，而不是刚好卡在临界位置
-     只够遮住不够露出 */
-  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
+     一块有真实高度的内容，不在这个安全区变量的补偿范围内。之前只留 30rpx
+     余量仍不够压过 tabBar 的实际高度，这里直接留出 120rpx（明确大于
+     custom-tab-bar 自身高度）+ 安全区，确保确认按钮怎么样都完全浮在
+     tabBar 上方 */
+  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   transform: translateY(100%);
   transition: transform 0.25s ease;
@@ -740,7 +738,7 @@
 .role-switch-modal-body {
   flex: 1;
   min-height: 0;
-  max-height: 45vh;
+  max-height: 40vh;
   padding: 0 30rpx;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -838,23 +836,20 @@
   border-top: 1rpx solid #f0f0f0;
 }
 
+/* 改用 <view> 而非原生 <button>，不再需要 button 专属的 ::after 伪装边框
+   清除规则——纯 flex 布局自己居中文字，样式表现在各机型上完全可控可预期 */
 .role-switch-btn-confirm {
-  display: block;
-  width: 100% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   height: 88rpx;
-  line-height: 88rpx;
   background: #c60000;
   color: #ffffff;
-  text-align: center;
   font-size: 30rpx;
   font-weight: bold;
   border-radius: 44rpx;
-  border: none;
   box-sizing: border-box;
-}
-
-.role-switch-btn-confirm::after {
-  border: none;
 }
 
 .role-switch-btn-confirm:active {
