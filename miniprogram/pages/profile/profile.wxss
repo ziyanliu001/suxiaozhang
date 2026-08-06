@@ -726,14 +726,17 @@
   opacity: 0.7;
 }
 
-/* 🐛 底部按钮被挤出屏幕修复：card 固定 max-height: 75vh，body 必须同时持有
-   flex: 1 + min-height: 0（height: 0 兜底，见下方 scroll-view 说明）才能让
-   六张视角 Card 在超出可视高度时自己滚动，而不是把 header 已定的 flex 容器
-   撑爆、连带把 footer 推出可视区外 */
+/* 🐛 底部确认按钮被挤出/遮挡修复（真机复现，模拟器里看不出来）：此前这里靠
+   flex: 1 + height: 0 让 <scroll-view> 撑满 flex 父容器的剩余空间——这个写法
+   在 DevTools 模拟器里渲染正常，但 <scroll-view> 是原生组件，不少真机基础库
+   版本并不会可靠地按 flex-basis 结算它的高度，导致 body 实际撑满/超出了卡片，
+   把 flex-shrink: 0 的 footer 挤到可视区之外，看起来就是"确认按钮被遮挡"。
+   改为直接给 scroll-view 一个明确的 max-height（vh 单位，不依赖 flex 计算），
+   card 本身仍有 max-height: 75vh 兜底，两层高度都是显式数值，不再依赖真机对
+   flex 子项自动结算高度的支持程度 */
 .role-switch-modal-body {
-  flex: 1;
-  height: 0;
-  min-height: 0;
+  flex-shrink: 0;
+  max-height: 48vh;
   overflow-y: auto;
   padding: 10rpx 24rpx;
   box-sizing: border-box;

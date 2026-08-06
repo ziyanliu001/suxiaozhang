@@ -1615,6 +1615,15 @@ Page({
     this.setData({ showPlanUpgradeModal: false });
   },
 
+  // 🐛 根因修复：statistics.wxml 里 honor-modal-box/plan-upgrade-modal-card 两处
+  // catchtap="stopPropagation"（阻止点击卡片内部时冒泡到外层 mask 触发关闭）一直
+  // 引用着这个方法名，但本页此前从未定义过它——每次点击都会在开发者工具触发一次
+  // "does not have a method 'stopPropagation'" 的控制台告警（catch 绑定即使方法
+  // 不存在也照样会阻止冒泡，所以功能表现正常，只是控制台一直在报噪音）。项目里
+  // 其余页面（profile/index/history 等）都已经各自定义了这个同名空方法，这里补齐，
+  // 不改变任何交互行为，只是让绑定真正解析到一个存在的函数，消除告警
+  stopPropagation() {},
+
   // ✅ 与原生弹窗的"确认"分支保持一致的引导行为：跳去个人中心联系客服/反馈，
   // 而不是链到一个并不存在的自助收银台
   onGoFeedbackFromPlanUpgrade() {

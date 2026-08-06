@@ -678,7 +678,10 @@
        点击卡片仅暂存 viewModeModalPendingMode，须点"确认切换"才真正生效——与
        switch-identity-modal-mask 同一套"常驻 DOM + show 类切换"方案 -->
   <view class="role-switch-modal-mask {{showViewModeModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCancelViewModeModal">
+    <!-- card 本身 max-height: 75vh 兜底；内部固定拆成 a) Header / b) Body（可滚动）
+         / c) Footer 三段，Footer 用 flex-shrink: 0 保证永远不参与 Body 的滚动/挤压 -->
     <view class="role-switch-modal-card" catchtap="stopPropagation">
+      <!-- a) Header：标题 + 恢复默认视角 -->
       <view class="role-switch-modal-header">
         <text class="role-switch-modal-title">管理视角切换</text>
         <text class="role-switch-modal-close" bindtap="onCancelViewModeModal">✕</text>
@@ -690,6 +693,8 @@
         <text class="role-switch-reset-link" bindtap="onResetToDefaultViewMode">恢复默认视角</text>
       </view>
 
+      <!-- b) Body：六选一视角卡片列表，max-height 由 .role-switch-modal-body 显式
+           指定（不依赖 flex-basis 结算，见该样式规则注释），超出高度自行滚动 -->
       <scroll-view scroll-y class="role-switch-modal-body">
         <view
           class="role-switch-option-card {{item.mode === viewModeModalPendingMode ? 'active' : ''}}"
@@ -707,6 +712,8 @@
         </view>
       </scroll-view>
 
+      <!-- c) Footer：固定尾段（flex-shrink: 0），确认按钮文案动态显示当前暂存的
+           待确认视角；safe-area 适配见 .role-switch-modal-footer padding-bottom -->
       <view class="role-switch-modal-footer">
         <button class="role-switch-btn-cancel" bindtap="onCancelViewModeModal">取消</button>
         <button class="role-switch-btn-confirm" bindtap="onConfirmViewModeModal">确认切换至{{viewModeModalPendingLabel}}</button>
