@@ -159,11 +159,13 @@
             <text class="form-label">手机号</text>
             <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput"/>
 
-            <!-- 🔐 管理岗位密钥：大家长/店长/财务申请时展开，义工/家人隐藏 -->
+            <!-- 🔐 新建门店初始密钥：建店成功后其他人申请管理岗位时需提供此密钥。
+                 留空则自动使用建店人手机号后 6 位作为初始密钥（服务端兜底）。
+                 仅大家长/店长/财务角色展开此项；义工/家人无需设置密钥 -->
             <block wx:if="{{newStoreForm.applyRole === 'store_patriarch' || newStoreForm.applyRole === 'store_manager' || newStoreForm.applyRole === 'finance'}}">
-              <text class="form-label">管理员密钥</text>
-              <input class="new-store-input" type="text" password placeholder="请输入门店管理员密钥/暗号" value="{{newStoreForm.adminKey}}" bindinput="onAdminKeyInput"/>
-              <text class="form-hint">管理岗位需凭密钥申请，密钥由大家长/店长在门店设置中配置，如不知请向现任管理员索取</text>
+              <text class="form-label">设置门店管理员密钥（可选）</text>
+              <input class="new-store-input" type="text" password placeholder="留空则默认使用手机号后 6 位" value="{{newStoreForm.adminKey}}" bindinput="onAdminKeyInput"/>
+              <text class="form-hint">建店成功后，其他人申请管理岗位时须提供此密钥方可提交申请，可在门店设置中随时修改</text>
             </block>
 
             <!-- 义工/家人身份无需填写门店档案（加入现有门店申请） -->

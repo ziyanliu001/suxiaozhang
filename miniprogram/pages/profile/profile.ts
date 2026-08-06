@@ -403,6 +403,15 @@ Page({
       role: string; roleLabel: string; timeStr: string;
     }>,
 
+    // 🔐 门店管理员密钥：店长/大家长/超管均可查看已设置状态；大家长/超管额外
+    // 可读取明文（服务端按权限决定返回 adminKey 原文还是仅返回 adminKeySet 布尔值）
+    storeAdminKey: '',         // 明文，仅大家长/超管可见（服务端控制返回）
+    storeAdminKeySet: false,   // 是否已设置（全管理岗位可见）
+    storeAdminKeyVisible: false,
+    showAdminKeyModal: false,
+    adminKeyModalInput: '',
+    adminKeyModalSaving: false,
+
     // 🍚 门店餐饮与物资统计：不新建汇总表，即时查询 volunteer_submissions/
     // material_logs（见 manageVolunteerSubmission 的 statsSummary 动作），
     // 义工/店长/家长/超管共用同一个入口和同一份数据
@@ -728,6 +737,8 @@ Page({
       pendingFetches.push(this.fetchPendingFeedbackCount());
       pendingFetches.push(this.fetchPendingVolunteerSubmissions());
       pendingFetches.push(this.fetchPendingApplications());
+      // 🔐 管理员密钥状态：在管理面板里展示，与其他管理数据同一批并发加载
+      pendingFetches.push(this.loadStoreAdminKey());
     }
 
     // 💌 家人端未读回复红点：与上面管理端角标是两套完全独立的计数
@@ -2348,6 +2359,95 @@ Page({
       wx.showToast({ title: '操作失败，请重试', icon: 'none' });
     } finally {
       this.setData({ memberManageOperating: false });
+    }
+  },
+
+  // ============ 🔐 管理员密钥查看 / 修改（profile 页内联弹窗） ============
+
+  async loadStoreAdminKey() {
+    if (!isCloudAvailable()) return;
+    try {
+      const roleInfo = AuthService.getCachedRoleInfo();
+      const store = getSelectedStore();
+      const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
+      if (!storeId) return;
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get', storeId }
+      });
+      const data = res.result && res.result.data;
+      if (data) {
+        this.setData({
+          storeAdminKeySet: !!data.adminKeySet,
+          storeAdminKey: data.adminKey || ''   // 仅大家长/超管返回明文，其余为 ''
+        });
+      }
+    } catch (err) {
+      console.warn('[profile] loadStoreAdminKey 失败:', err);
+    }
+  },
+
+  onToggleAdminKeyVisible() {
+    this.setData({ storeAdminKeyVisible: !this.data.storeAdminKeyVisible });
+  },
+
+  onOpenAdminKeyModal() {
+    if (this.data.adminKeyModalSaving) return;
+    const { isPatriarch, isSuperAdmin } = this.data;
+    if (!isPatriarch && !isSuperAdmin) {
+      wx.showToast({ title: '仅大家长/超管可修改密钥', icon: 'none' });
+      return;
+    }
+    this.setData({
+      showAdminKeyModal: true,
+      adminKeyModalInput: this.data.storeAdminKey   // 预填当前明文（大家长/超管已持有）
+    });
+  },
+
+  onCloseAdminKeyModal() {
+    if (this.data.adminKeyModalSaving) return;
+    this.setData({ showAdminKeyModal: false, adminKeyModalInput: '' });
+  },
+
+  onAdminKeyModalInput(e: any) {
+    this.setData({ adminKeyModalInput: e.detail.value });
+  },
+
+  async onSaveAdminKeyFromProfile() {
+    if (this.data.adminKeyModalSaving) return;
+    const newKey = (this.data.adminKeyModalInput || '').trim();
+    const roleInfo = AuthService.getCachedRoleInfo();
+    const store = getSelectedStore();
+    const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
+    if (!storeId) {
+      wx.showToast({ title: '无法获取门店信息', icon: 'none' });
+      return;
+    }
+    this.setData({ adminKeyModalSaving: true });
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'update', storeId, adminKey: newKey }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+        return;
+      }
+      this.setData({
+        showAdminKeyModal: false,
+        adminKeyModalInput: '',
+        storeAdminKeySet: newKey.length > 0,
+        storeAdminKey: newKey,
+        storeAdminKeyVisible: false
+      });
+      wx.showToast({ title: newKey ? '密钥已更新' : '密钥已清除', icon: 'success' });
+    } catch (err) {
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ adminKeyModalSaving: false });
     }
   },
 

@@ -422,6 +422,23 @@
           <view class="item-arrow">❯</view>
         </view>
       </view>
+
+      <!-- 🔐 门店安全设置：大家长可查看明文密钥 + 显示/隐藏切换 + 修改按钮 -->
+      <view class="pd-section-title pd-feedback-entry-title">
+        <text class="pd-section-icon">🔐</text>
+        <text class="pd-section-txt">门店安全设置</text>
+      </view>
+      <view class="action-item-cell pd-feedback-entry-cell admin-key-entry-cell">
+        <view class="item-left">
+          <text class="manager-only-emoji">🔑</text>
+          <text class="item-text">管理员密钥</text>
+        </view>
+        <view class="admin-key-inline-right">
+          <text class="admin-key-inline-val">{{storeAdminKeySet ? (storeAdminKeyVisible ? (storeAdminKey || '（已设置）') : '●●●●●●') : '未设置'}}</text>
+          <view class="admin-key-btn admin-key-toggle-btn" bindtap="onToggleAdminKeyVisible" wx:if="{{storeAdminKeySet}}">{{storeAdminKeyVisible ? '隐藏' : '查看'}}</view>
+          <view class="admin-key-btn admin-key-modify-btn" bindtap="onOpenAdminKeyModal">修改</view>
+        </view>
+      </view>
     </view>
 
     <!-- 🗂️ 店长日常管理面板：仅 store_manager 角色可见，与大家长管理面板彻底分离。
@@ -473,6 +490,24 @@
         <view class="pd-feedback-entry-right">
           <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
           <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 🔐 门店安全设置：店长可见已设置/未设置状态，仅大家长/超管可修改 -->
+      <view class="pd-section-title pd-feedback-entry-title">
+        <text class="pd-section-icon">🔐</text>
+        <text class="pd-section-txt">门店安全设置</text>
+      </view>
+      <view class="action-item-cell pd-feedback-entry-cell admin-key-entry-cell">
+        <view class="item-left">
+          <text class="manager-only-emoji">🔑</text>
+          <text class="item-text">管理员密钥</text>
+        </view>
+        <view class="admin-key-inline-right">
+          <view class="admin-key-status-badge {{storeAdminKeySet ? 'set' : 'unset'}}">
+            {{storeAdminKeySet ? '✅ 已设置' : '⚪ 未设置'}}
+          </view>
+          <text class="admin-key-note">（大家长可修改）</text>
         </view>
       </view>
     </view>
@@ -1693,5 +1728,28 @@
   </view>
 
   <mine-quick-sheet id="mineQuickSheet" />
+
+  <!-- 🔐 管理员密钥修改弹窗：仅大家长/超管可触发，复用 certificate-modal 弹窗壳 -->
+  <view class="certificate-modal-mask" wx:if="{{showAdminKeyModal}}" catchtouchmove="stopPropagation" bindtap="onCloseAdminKeyModal">
+    <view class="certificate-modal-card admin-key-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header admin-key-modal-header">
+        <text class="admin-key-modal-title">🔐 {{storeAdminKeySet ? '修改' : '设置'}}管理员密钥</text>
+        <view class="certificate-modal-close" bindtap="onCloseAdminKeyModal">✕</view>
+      </view>
+      <text class="vt-form-label">新密钥（留空则清除密钥）</text>
+      <input class="admin-key-modal-input"
+             type="text"
+             password
+             value="{{adminKeyModalInput}}"
+             bindinput="onAdminKeyModalInput"
+             placeholder="请输入密钥，最多 50 字"
+             maxlength="50" />
+      <text class="admin-key-modal-desc">设置后，申请大家长/店长/财务角色时须提供此密钥。留空保存则清除密钥（允许所有人自由申请）。</text>
+      <button class="feedback-submit-btn"
+              bindtap="onSaveAdminKeyFromProfile"
+              loading="{{adminKeyModalSaving}}"
+              disabled="{{adminKeyModalSaving}}">保存密钥</button>
+    </view>
+  </view>
 
 </view>

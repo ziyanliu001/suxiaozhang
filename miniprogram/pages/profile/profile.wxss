@@ -3396,3 +3396,120 @@
   transform: scale(0.97);
 }
 
+/* ================= 🔐 管理员密钥行 & 修改弹窗 ================= */
+
+/* action-item-cell 覆盖：密钥行不需要整行可点击态，避免与内部按钮冲突 */
+.admin-key-entry-cell {
+  cursor: default;
+  align-items: center;
+}
+
+/* 右侧密钥值 + 操作按钮横排 */
+.admin-key-inline-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.admin-key-inline-val {
+  font-size: 24rpx;
+  color: #4A4A4A;
+  font-family: monospace;
+  letter-spacing: 4rpx;
+  flex-shrink: 1;
+}
+
+/* 查看 / 隐藏 / 修改 小胶囊按钮 */
+.admin-key-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx 18rpx;
+  border-radius: 24rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  line-height: 1.4;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.admin-key-toggle-btn {
+  background: #F5F5F0;
+  color: #666666;
+}
+
+.admin-key-modify-btn {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+/* 店长只读态：已设置/未设置状态徽章 */
+.admin-key-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  border-radius: 24rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.admin-key-status-badge.set {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.admin-key-status-badge.unset {
+  background: #F5F5F0;
+  color: #9E9E9E;
+}
+
+.admin-key-note {
+  font-size: 20rpx;
+  color: #BBBBBB;
+  flex-shrink: 0;
+}
+
+/* 修改弹窗：在 certificate-modal-card 基础上覆盖 header 布局 */
+.admin-key-modal-card {
+  padding-bottom: 36rpx;
+}
+
+.admin-key-modal-header {
+  justify-content: space-between !important;
+  margin-bottom: 28rpx;
+}
+
+.admin-key-modal-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #2C2C2C;
+  flex: 1;
+}
+
+.admin-key-modal-input {
+  display: block;
+  width: 100%;
+  height: 88rpx;
+  background: #F8F5F0;
+  border: 1rpx solid #E0D8CF;
+  border-radius: 16rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  color: #2C2C2C;
+  box-sizing: border-box;
+  margin-top: 12rpx;
+  margin-bottom: 16rpx;
+  letter-spacing: 2rpx;
+}
+
+.admin-key-modal-desc {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  line-height: 1.6;
+  margin-bottom: 32rpx;
+  padding: 0 4rpx;
+}
+

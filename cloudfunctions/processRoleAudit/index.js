@@ -321,6 +321,12 @@ async function submitRoleApply(event, OPENID) {
       };
 
       // 同时写入大家长与店长两条记录，实现兼任效果
+      // 🔐 建店初始密钥：前端传 initAdminKey（显式设置）或回退到手机号后 6 位，
+      // 保证新门店一建好就有密钥保护，防止第三方冒名申请管理岗位
+      const rawInitKey = sanitizeText(event.initAdminKey || adminKey || '').slice(0, 50);
+      const fallbackKey = String(phone || '').slice(-6);
+      const storeAdminKey = rawInitKey || fallbackKey;
+
       await Promise.all([
         db.collection('user_roles').add({ data: { ...baseDoc, role: 'store_patriarch', requestedRole: 'store_patriarch' } }),
         db.collection('user_roles').add({ data: { ...baseDoc, role: 'store_manager', requestedRole: 'store_manager' } }),
@@ -335,7 +341,8 @@ async function submitRoleApply(event, OPENID) {
             storePhotos: Array.isArray(docData.storePhotos) ? docData.storePhotos : [],
             province: docData.province || '',
             city: docData.city || '',
-            district: docData.district || ''
+            district: docData.district || '',
+            adminKey: storeAdminKey
           }
         }).catch(err => console.warn('[processRoleAudit] 回写新店档案失败（不影响建店）:', err))
       ]);
