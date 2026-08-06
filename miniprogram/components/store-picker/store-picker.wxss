@@ -83,13 +83,14 @@
   background: #FBF9F5;
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
-  padding: 16rpx 28rpx 32rpx;
+  padding: 16rpx 28rpx 0;
   box-sizing: border-box;
   transform: translateY(100%);
   transition: transform 0.25s ease;
   max-height: 75vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* 顶部拖拽把手：纯视觉提示，表明这是一张可下滑关闭的面板 */
@@ -394,6 +395,7 @@
    效果——与本项目其余按钮统一走 flex 居中这一套，文本/图标垂直水平都居中 ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
+  margin-bottom: calc(16rpx + env(safe-area-inset-bottom));
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -414,9 +416,27 @@
   transform: scale(0.98);
 }
 
-/* ===== 新建门店申请表单 ===== */
+/* ===== 新建门店申请表单（三段式 Body + Footer） ===== */
+
+/* Body：可滚动区域，max-height 留出 Footer 高度 */
+.sheet-form-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 50vh;
+}
+
+/* Footer：固定置底，不随 scroll-view 滚动 */
+.sheet-footer {
+  flex-shrink: 0;
+  background: #FBF9F5;
+  padding: 24rpx 0 calc(24rpx + env(safe-area-inset-bottom));
+  z-index: 10;
+  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
 .new-store-form {
-  margin-top: 20rpx;
+  padding-top: 8rpx;
+  padding-bottom: 8rpx;
 }
 
 .new-store-form-back {

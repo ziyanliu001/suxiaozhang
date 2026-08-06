@@ -59,6 +59,7 @@ Component({
       district: ''
     },
     newStorePhotoUploading: false,
+    isSubmittingNewStore: false,
 
     // 🔒 申请人本人是否有正在 pending 的申请：用来在角色胶囊上锁定"⏳ 待审核"状态，
     // 防止重复提交。见 getMyApplicationStatus（processRoleAudit 新增 action）
@@ -978,6 +979,8 @@ Component({
     //   🛡️ 根因修复：此前这里客户端直接 db.collection('user_roles').add(...)，绕过服务端校验，
     //   与项目其余"服务端为唯一权威"的加固方向相悖，也导致这类申请无法被"申请中锁定"识别到。
     async onSubmitNewStoreApply() {
+      if (this.data.isSubmittingNewStore) return;
+
       const customStoreName = (this.data.newStoreForm.customStoreName || '').trim();
       const applyRole = this.data.newStoreForm.applyRole;
       const realName = (this.data.newStoreForm.realName || '').trim();
@@ -1011,9 +1014,9 @@ Component({
         return;
       }
 
-      // 🛡️ 申请高阶角色/新建门店需先补全门店档案：门店此刻还不存在，字段就收在
-      // 这张申请表单里，与首页 onSubmitRoleApply 同款拦截 + processRoleAudit 服务端兜底
-      if (!address || !contactPhone || storePhotos.length === 0) {
+      // 🛡️ 申请高阶角色（店长/财务/大家长）需先补全门店档案；义工直接加入无需补档案
+      const needsStoreDetails = applyRole !== 'volunteer' && applyRole !== 'store_family';
+      if (needsStoreDetails && (!address || !contactPhone || storePhotos.length === 0)) {
         wx.showModal({
           title: '门店档案未补全',
           content: '申请新建门店需先补全门店档案（地址、联系电话、门店照片）',
@@ -1034,6 +1037,7 @@ Component({
         return;
       }
 
+      this.setData({ isSubmittingNewStore: true });
       wx.showLoading({ title: '提交申请中...', mask: true });
 
       try {
@@ -1072,6 +1076,8 @@ Component({
         wx.hideLoading();
         console.error('[store-picker] onSubmitNewStoreApply 提交失败:', err);
         wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+      } finally {
+        this.setData({ isSubmittingNewStore: false });
       }
     },
 

@@ -90,80 +90,89 @@
       <text>➕ 找不到您的门店？申请新建/加入新门店</text>
     </view>
 
-    <!-- 申请新门店表单 -->
-    <view class="new-store-form" wx:if="{{showNewStoreForm}}">
-      <view class="new-store-form-back" bindtap="onToggleNewStoreForm">‹ 返回门店列表</view>
+    <!-- 申请新门店表单（三段式：Header 已在上方 sheet-header，Body 可滚动，Footer 固定） -->
+    <block wx:if="{{showNewStoreForm}}">
+      <!-- Body：所有表单字段放入 scroll-view，防止内容过多被底部按钮遮挡 -->
+      <scroll-view scroll-y class="sheet-form-scroll">
+        <view class="new-store-form">
+          <view class="new-store-form-back" bindtap="onToggleNewStoreForm">‹ 返回门店列表</view>
 
-      <text class="form-label">新门店名称</text>
-      <input class="new-store-input"
-             type="text"
-             placeholder="如：雨花斋集美区店"
-             value="{{newStoreForm.customStoreName}}"
-             bindinput="onNewStoreNameInput"/>
+          <text class="form-label">新门店名称</text>
+          <input class="new-store-input"
+                 type="text"
+                 placeholder="如：雨花斋集美区店"
+                 value="{{newStoreForm.customStoreName}}"
+                 bindinput="onNewStoreNameInput"/>
 
-      <block wx:if="{{currentStore.role !== 'ADMIN'}}">
-        <text class="form-label">申请身份</text>
-        <radio-group class="new-store-role-group" bindchange="onSelectNewStoreRole">
-          <label class="new-store-role-item">
-            <radio value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}" color="#8C1D18"/>
-            <text>👑 大家长</text>
-          </label>
-          <label class="new-store-role-item">
-            <radio value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}" color="#8C1D18"/>
-            <text>👑 店长</text>
-          </label>
-          <label class="new-store-role-item">
-            <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
-            <text>🔒 财务</text>
-          </label>
-          <label class="new-store-role-item">
-            <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
-            <text>🌸 义工</text>
-          </label>
-        </radio-group>
+          <block wx:if="{{currentStore.role !== 'ADMIN'}}">
+            <text class="form-label">申请身份</text>
+            <radio-group class="new-store-role-group" bindchange="onSelectNewStoreRole">
+              <label class="new-store-role-item">
+                <radio value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}" color="#8C1D18"/>
+                <text>👑 大家长</text>
+              </label>
+              <label class="new-store-role-item">
+                <radio value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}" color="#8C1D18"/>
+                <text>👑 店长</text>
+              </label>
+              <label class="new-store-role-item">
+                <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
+                <text>🔒 财务</text>
+              </label>
+              <label class="new-store-role-item">
+                <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
+                <text>🌸 义工</text>
+              </label>
+            </radio-group>
 
-        <text class="form-label">真实姓名</text>
-        <input class="new-store-input" type="text" placeholder="请输入真实姓名" value="{{newStoreForm.realName}}" bindinput="onNewStoreRealNameInput"/>
+            <text class="form-label">真实姓名</text>
+            <input class="new-store-input" type="text" placeholder="请输入真实姓名" value="{{newStoreForm.realName}}" bindinput="onNewStoreRealNameInput"/>
 
-        <text class="form-label">手机号</text>
-        <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput"/>
+            <text class="form-label">手机号</text>
+            <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput"/>
 
-        <!-- 🏪 新建门店档案补全：门店此刻还不存在，先随申请一并提交，
-             超管审核通过后自动写入新建门店的档案。
-             🆕 所属地区：原生 <picker mode="region"> 省-市-区级联选择，随申请一并
-             提交 province/city/district，供全国大屏"按地区筛选"使用——不必等
-             门店建好后再去门店档案页补填 -->
-        <text class="form-label">选择所属地区</text>
-        <picker mode="region" bindchange="onNewStoreRegionChange" value="{{newStoreForm.regionArray}}">
-          <view class="new-store-input region-picker-display">
-            <text class="{{newStoreForm.regionArray.length === 0 ? 'region-placeholder' : ''}}">{{newStoreForm.regionArray.length > 0 ? newStoreForm.regionArray[0] + ' ' + newStoreForm.regionArray[1] + ' ' + newStoreForm.regionArray[2] : '请选择省/市/区'}}</text>
-          </view>
-        </picker>
+            <!-- 义工/家人身份无需填写门店档案（加入现有门店申请） -->
+            <block wx:if="{{newStoreForm.applyRole !== 'volunteer' && newStoreForm.applyRole !== 'store_family'}}">
+              <!-- 🏪 新建门店档案补全：门店此刻还不存在，先随申请一并提交，
+                   超管审核通过后自动写入新建门店的档案。
+                   🆕 所属地区：原生 <picker mode="region"> 省-市-区级联选择 -->
+              <text class="form-label">选择所属地区</text>
+              <picker mode="region" bindchange="onNewStoreRegionChange" value="{{newStoreForm.regionArray}}">
+                <view class="new-store-input region-picker-display">
+                  <text class="{{newStoreForm.regionArray.length === 0 ? 'region-placeholder' : ''}}">{{newStoreForm.regionArray.length > 0 ? newStoreForm.regionArray[0] + ' ' + newStoreForm.regionArray[1] + ' ' + newStoreForm.regionArray[2] : '请选择省/市/区'}}</text>
+                </view>
+              </picker>
 
-        <text class="form-label">门店地址</text>
-        <input class="new-store-input" type="text" placeholder="请输入门店详细地址" value="{{newStoreForm.address}}" bindinput="onNewStoreAddressInput"/>
+              <text class="form-label">门店地址</text>
+              <input class="new-store-input" type="text" placeholder="请输入门店详细地址" value="{{newStoreForm.address}}" bindinput="onNewStoreAddressInput"/>
 
-        <text class="form-label">联系电话</text>
-        <input class="new-store-input" type="number" placeholder="请输入门店联系电话" value="{{newStoreForm.contactPhone}}" bindinput="onNewStoreContactPhoneInput"/>
+              <text class="form-label">联系电话</text>
+              <input class="new-store-input" type="number" placeholder="请输入门店联系电话" value="{{newStoreForm.contactPhone}}" bindinput="onNewStoreContactPhoneInput"/>
 
-        <text class="form-label">门店照片</text>
-        <view class="receipt-grid-container">
-          <view class="grid-image-item" wx:for="{{newStoreForm.storePhotos}}" wx:key="*this">
-            <image class="grid-img" src="{{item}}" mode="aspectFill" />
-            <view class="img-delete-badge" catchtap="onDeleteNewStorePhoto" data-index="{{index}}">✕</view>
-          </view>
-          <view class="grid-add-btn" bindtap="onChooseNewStorePhoto" wx:if="{{newStoreForm.storePhotos.length < 9}}">
-            <text class="add-icon">{{newStorePhotoUploading ? '…' : '+'}}</text>
-            <text class="add-txt">{{newStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
-          </view>
+              <text class="form-label">门店照片</text>
+              <view class="receipt-grid-container">
+                <view class="grid-image-item" wx:for="{{newStoreForm.storePhotos}}" wx:key="*this">
+                  <image class="grid-img" src="{{item}}" mode="aspectFill" />
+                  <view class="img-delete-badge" catchtap="onDeleteNewStorePhoto" data-index="{{index}}">✕</view>
+                </view>
+                <view class="grid-add-btn" bindtap="onChooseNewStorePhoto" wx:if="{{newStoreForm.storePhotos.length < 9}}">
+                  <text class="add-icon">{{newStorePhotoUploading ? '…' : '+'}}</text>
+                  <text class="add-txt">{{newStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
+                </view>
+              </view>
+            </block>
+          </block>
+          <view class="form-hint" wx:else>👑 您是超级管理员，提交后将直接建店并自动获得该店管理权限，无需审批</view>
         </view>
-      </block>
-      <view class="form-hint" wx:else>👑 您是超级管理员，提交后将直接建店并自动获得该店管理权限，无需审批</view>
+      </scroll-view>
 
-      <button class="new-store-submit-btn" bindtap="onSubmitNewStoreApply">
-        {{currentStore.role === 'ADMIN' ? '立即创建门店' : '提交申请，等待超管审批'}}
-      </button>
-    </view>
+      <!-- Footer：提交按钮固定置底，永不被键盘或内容遮挡 -->
+      <view class="sheet-footer">
+        <button class="new-store-submit-btn" bindtap="onSubmitNewStoreApply" loading="{{isSubmittingNewStore}}" disabled="{{isSubmittingNewStore}}">
+          {{currentStore.role === 'ADMIN' ? '立即创建门店' : '提交申请，等待超管审批'}}
+        </button>
+      </view>
+    </block>
 
   </view>
 </view>
