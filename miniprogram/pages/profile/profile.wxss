@@ -2606,6 +2606,51 @@
   opacity: 0.5;
 }
 
+/* 🔑 人员权限管理：降级为义工 — 琥珀/警告色，区别于绿色"通过"和红色"移出" */
+.fa-item-demote-btn {
+  flex: 1;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 25rpx;
+  font-weight: bold;
+  color: #7B4F00;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFE082 100%);
+  border: 2rpx solid #F0C36D;
+  border-radius: 36rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.fa-item-demote-btn::after {
+  border: none;
+}
+
+.fa-item-demote-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+.fa-item-demote-btn[disabled] {
+  opacity: 0.4;
+}
+
+/* 大家长撤销权限受限提示（非超管场景） */
+.mm-patriarch-hint {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #B8860B;
+  background: #FFF8E1;
+  border-radius: 8rpx;
+  padding: 6rpx 14rpx;
+}
+
 .fa-item-handled-tag {
   display: inline-block;
   margin-top: 4rpx;

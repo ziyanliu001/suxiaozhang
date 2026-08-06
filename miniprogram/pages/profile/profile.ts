@@ -394,6 +394,15 @@ Page({
     rejectApplicationReason: '',
     rejectApplicationSubmitting: false,
 
+    // 👥 人员权限管理（已授权成员降级/移出）：店长/大家长/超管可操作
+    showMemberManageModal: false,
+    memberManageLoading: false,
+    memberManageOperating: false,
+    memberManageList: [] as Array<{
+      applyId: string; realName: string; phone: string;
+      role: string; roleLabel: string; timeStr: string;
+    }>,
+
     // 🍚 门店餐饮与物资统计：不新建汇总表，即时查询 volunteer_submissions/
     // material_logs（见 manageVolunteerSubmission 的 statsSummary 动作），
     // 义工/店长/家长/超管共用同一个入口和同一份数据
@@ -2251,6 +2260,95 @@ Page({
 
   onCloseElevatedApplicationModal() {
     this.setData({ showElevatedApplicationModal: false });
+  },
+
+  // 👥 人员权限管理：展示本店已授权的管理岗位成员（财务/店长/大家长），提供降级/移出操作
+  async onOpenMemberManageModal() {
+    if (!isCloudAvailable()) return;
+    this.setData({ showMemberManageModal: true, memberManageLoading: true, memberManageList: [] });
+    try {
+      const roleInfo = AuthService.getCachedRoleInfo();
+      const storeId = roleInfo && roleInfo.storeId;
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { action: 'listAuditQueue', tab: 'approved', storeId }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        // 仅展示管理岗位成员（财务/店长/大家长），义工/家人不在此列表管理
+        const ELEVATED = ['finance', 'store_manager', 'store_patriarch'];
+        const list = (result.data || []).filter((m: any) => ELEVATED.includes(m.role));
+        this.setData({ memberManageList: list });
+      }
+    } catch (err) {
+      console.warn('[profile] onOpenMemberManageModal 加载失败:', err);
+    } finally {
+      this.setData({ memberManageLoading: false });
+    }
+  },
+
+  onCloseMemberManageModal() {
+    this.setData({ showMemberManageModal: false });
+  },
+
+  async onDemoteToVolunteer(e: any) {
+    const { id } = e.currentTarget.dataset;
+    if (!id || this.data.memberManageOperating) return;
+    const { confirm } = await wx.showModal({
+      title: '确认降级',
+      content: '将该成员降级为义工后，其管理权限立即撤销，不可撤回，确认操作吗？',
+      confirmText: '确认降级',
+      confirmColor: '#E03131'
+    });
+    if (!confirm) return;
+    this.setData({ memberManageOperating: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerBinding',
+        data: { targetId: id, action: 'changeRole', newRole: 'volunteer' }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: result?.error || '操作失败', icon: 'none', duration: 2500 });
+        return;
+      }
+      wx.showToast({ title: '已降级为义工', icon: 'success' });
+      this.setData({ memberManageList: this.data.memberManageList.filter((m) => m.applyId !== id) });
+    } catch (err) {
+      wx.showToast({ title: '操作失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ memberManageOperating: false });
+    }
+  },
+
+  async onRemoveFromStore(e: any) {
+    const { id } = e.currentTarget.dataset;
+    if (!id || this.data.memberManageOperating) return;
+    const { confirm } = await wx.showModal({
+      title: '确认移出',
+      content: '将该成员移出门店后，权限立即撤销，对方需重新申请才能加入，确认操作吗？',
+      confirmText: '确认移出',
+      confirmColor: '#E03131'
+    });
+    if (!confirm) return;
+    this.setData({ memberManageOperating: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerBinding',
+        data: { targetId: id, action: 'unbind' }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: result?.error || '操作失败', icon: 'none', duration: 2500 });
+        return;
+      }
+      wx.showToast({ title: '已移出门店', icon: 'success' });
+      this.setData({ memberManageList: this.data.memberManageList.filter((m) => m.applyId !== id) });
+    } catch (err) {
+      wx.showToast({ title: '操作失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ memberManageOperating: false });
+    }
   },
 
   _removeApplicationFromQueue(id: string, queue: 'member' | 'elevated') {

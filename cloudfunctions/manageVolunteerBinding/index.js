@@ -10,7 +10,10 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
-const MANAGEABLE_ROLES = ['finance', 'volunteer'];
+// 所有可被管理的角色（含管理岗位）；大家长任命由超管发起，此处仍可被超管撤销
+const MANAGEABLE_ROLES = ['finance', 'volunteer', 'store_manager', 'store_patriarch'];
+// 大家长/店长为"提升类"角色，撤销时有额外权限限制：大家长只能由超管撤销
+const ELEVATED_ROLES = ['store_manager', 'store_patriarch'];
 
 exports.main = async (event) => {
   const { targetId, action, newRole } = event;
@@ -26,27 +29,33 @@ exports.main = async (event) => {
   try {
     const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
     const caller = callerRes.data && callerRes.data[0];
-    // 🏛️ 权限向下继承：大家长天然拥有店长的全套日常管理权限
+    // 🏛️ 大家长/店长/超管并集：与 hasStoreAdminPrivilege 同一口径
     if (!caller || !['store_manager', 'store_patriarch', 'super_admin'].includes(caller.role)) {
-      return { success: false, error: '无权限：仅店长/大家长/超级管理员可管理义工绑定' };
+      return { success: false, error: '无权限：仅大家长/店长/超级管理员可管理成员权限' };
     }
 
     const targetRes = await db.collection('user_roles').doc(targetId).get().catch(() => null);
     const target = targetRes && targetRes.data;
     if (!target) {
-      return { success: false, error: '目标绑定记录不存在' };
+      return { success: false, error: '目标成员记录不存在' };
     }
     if (target.status !== 'approved') {
-      return { success: false, error: '仅可管理已绑定的义工' };
+      return { success: false, error: '仅可管理已授权的成员' };
     }
     if (!MANAGEABLE_ROLES.includes(target.role)) {
-      return { success: false, error: '无权限：不能通过此入口调整店长权限' };
+      return { success: false, error: '无效的目标成员角色' };
     }
 
+    // 🛡️ 门店隔离：非超管只能操作本门店成员
     const isAllowed = caller.role === 'super_admin' ||
       ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && caller.storeId === target.storeId);
     if (!isAllowed) {
-      return { success: false, error: '无权限：不能管理其他门店的义工绑定' };
+      return { success: false, error: '无权限：不能管理其他门店的成员' };
+    }
+
+    // 🏛️ 大家长撤销/降级仅限超管：大家长由超管任命，相应地只有超管可以撤销
+    if (ELEVATED_ROLES.includes(target.role) && target.role === 'store_patriarch' && caller.role !== 'super_admin') {
+      return { success: false, error: '无权限：大家长的撤销/降级仅限超级管理员操作' };
     }
 
     if (action === 'unbind') {
@@ -57,12 +66,13 @@ exports.main = async (event) => {
           revokedBy: OPENID
         }
       });
-      return { success: true, message: '已解除绑定' };
+      return { success: true, message: '已移出门店' };
     }
 
     if (action === 'changeRole') {
-      if (!MANAGEABLE_ROLES.includes(newRole)) {
-        return { success: false, error: '无效的目标角色' };
+      // 降级只能降到 volunteer 或平级切换 finance/volunteer；不允许通过此接口提权
+      if (!['volunteer', 'finance'].includes(newRole)) {
+        return { success: false, error: '降级目标角色无效（仅可降级为义工或切换财务/义工）' };
       }
       await db.collection('user_roles').doc(targetId).update({
         data: { role: newRole }

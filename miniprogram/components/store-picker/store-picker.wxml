@@ -159,6 +159,13 @@
             <text class="form-label">手机号</text>
             <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput"/>
 
+            <!-- 🔐 管理岗位密钥：大家长/店长/财务申请时展开，义工/家人隐藏 -->
+            <block wx:if="{{newStoreForm.applyRole === 'store_patriarch' || newStoreForm.applyRole === 'store_manager' || newStoreForm.applyRole === 'finance'}}">
+              <text class="form-label">管理员密钥</text>
+              <input class="new-store-input" type="text" password placeholder="请输入门店管理员密钥/暗号" value="{{newStoreForm.adminKey}}" bindinput="onAdminKeyInput"/>
+              <text class="form-hint">管理岗位需凭密钥申请，密钥由大家长/店长在门店设置中配置，如不知请向现任管理员索取</text>
+            </block>
+
             <!-- 义工/家人身份无需填写门店档案（加入现有门店申请） -->
             <block wx:if="{{newStoreForm.applyRole !== 'volunteer' && newStoreForm.applyRole !== 'store_family'}}">
               <!-- 🏪 新建门店档案补全：门店此刻还不存在，先随申请一并提交，

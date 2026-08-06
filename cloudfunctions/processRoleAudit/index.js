@@ -191,7 +191,7 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
 // 义工加入已有门店：免审核即刻生效（提升义工体验）；其余场景（管理身份 / 新建门店）
 // 一律进入 pending，交由 approve/reject 分支按权限分级处理。
 async function submitRoleApply(event, OPENID) {
-  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos, province, city, district } = event;
+  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos, province, city, district, adminKey } = event;
 
   if (!realName || !String(realName).trim()) return { success: false, error: '请填写真实姓名' };
   if (!phone || !String(phone).trim()) return { success: false, error: '请填写手机号' };
@@ -228,6 +228,18 @@ async function submitRoleApply(event, OPENID) {
       const hasContactPhone = !!(store.contactPhone && String(store.contactPhone).trim());
       if (!hasAddress || !hasContactPhone || !hasPhotos) {
         return { success: false, error: '该门店档案尚未补全（地址/联系电话/门店照片），请先联系现任店长在【门店档案】页补全后再申请' };
+      }
+    }
+  }
+
+  // 🔐 管理员密钥校验：已有门店的管理岗位申请（大家长/店长/财务）须通过密钥验证。
+  // 新建门店（isCustom）此时门店尚未存在，跳过；门店未设 adminKey 时也跳过（向后兼容）。
+  if (!isCustom && storeId && ['store_patriarch', 'store_manager', 'finance'].includes(requestedRole)) {
+    const keyRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+    const storedKey = keyRes && keyRes.data && keyRes.data.adminKey;
+    if (storedKey && String(storedKey).trim()) {
+      if (sanitizeText(adminKey || '') !== String(storedKey).trim()) {
+        return { success: false, error: '管理员密钥错误，请向现任大家长/店长索取' };
       }
     }
   }

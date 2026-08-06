@@ -45,6 +45,8 @@ Component({
       // （contactPhone，门店对外公示的号码）是两个不同的号码，不能互相顶替
       realName: '',
       phone: '',
+      // 🔐 管理员密钥：大家长/店长/财务申请时由用户输入，提交后在服务端与 stores.adminKey 校验
+      adminKey: '',
       // 🏪 新建门店档案补全：门店此刻还不存在，字段先收进申请表单本身，见
       // onSubmitNewStoreApply / processRoleAudit submitRoleApply 的完整性校验
       address: '',
@@ -886,8 +888,8 @@ Component({
       this.setData({
         showNewStoreForm: !this.data.showNewStoreForm,
         newStoreForm: {
-          customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', address: '', contactPhone: '', storePhotos: [],
-          regionArray: [], province: '', city: '', district: ''
+          customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', adminKey: '',
+          address: '', contactPhone: '', storePhotos: [], regionArray: [], province: '', city: '', district: ''
         }
       });
     },
@@ -905,7 +907,12 @@ Component({
     },
 
     onSelectNewStoreRole(e: any) {
-      this.setData({ 'newStoreForm.applyRole': e.detail.value });
+      // 切换角色时清空密钥，避免上一次输入的值残留给不同岗位
+      this.setData({ 'newStoreForm.applyRole': e.detail.value, 'newStoreForm.adminKey': '' });
+    },
+
+    onAdminKeyInput(e: any) {
+      this.setData({ 'newStoreForm.adminKey': e.detail.value });
     },
 
     onNewStoreAddressInput(e: any) {
@@ -1002,6 +1009,7 @@ Component({
       const applyRole = this.data.newStoreForm.applyRole;
       const realName = (this.data.newStoreForm.realName || '').trim();
       const phone = (this.data.newStoreForm.phone || '').trim();
+      const adminKey = (this.data.newStoreForm.adminKey || '').trim();
       const address = (this.data.newStoreForm.address || '').trim();
       const contactPhone = (this.data.newStoreForm.contactPhone || '').trim();
       const storePhotos = this.data.newStoreForm.storePhotos || [];
@@ -1079,6 +1087,7 @@ Component({
             requestedRole: applyRole,
             realName,
             phone,
+            adminKey,
             autoApprove: isAutoApproveRole
           }
         });
