@@ -247,6 +247,24 @@
   font-weight: bold;
 }
 
+/* ===== 🛡️ 超级管理员专属置顶卡片 ===== */
+.superadmin-pinned-card {
+  flex-shrink: 0;
+  margin-top: 20rpx;
+  background: linear-gradient(135deg, #FFF5F0 0%, #FFF0EC 100%);
+  border: 2rpx solid #8C1D18;
+  border-left: 8rpx solid #8C1D18;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  box-sizing: border-box;
+  box-shadow: 0 6rpx 20rpx rgba(140, 29, 24, 0.12);
+}
+
+.superadmin-name {
+  color: #8C1D18 !important;
+  font-weight: bold;
+}
+
 /* ===== 滚动列表 ===== */
 .sheet-scroll-list {
   max-height: 55vh;

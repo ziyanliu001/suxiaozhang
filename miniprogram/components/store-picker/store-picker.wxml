@@ -40,6 +40,30 @@
       </view>
     </view>
 
+    <!-- 🛡️ 超级管理员专属置顶卡片：固定在筛选栏下方，不随门店列表滚动 -->
+    <view class="superadmin-pinned-card" wx:if="{{!showNewStoreForm && isSuperAdmin}}">
+      <view class="store-card-header">
+        <text class="store-icon">🛡️</text>
+        <text class="store-name-text superadmin-name">超级管理员 / 全国总览</text>
+      </view>
+      <view class="role-selector-row">
+        <view class="role-choice-pill ADMIN {{currentStore.storeId === 'national_overview' && currentStore.role === 'ADMIN' ? 'selected' : ''}}"
+              bindtap="onSuperAdminRoleTap"
+              data-role="ADMIN">
+          <text class="role-icon">🛡️</text>
+          <text class="role-label">系统超管</text>
+          <text class="check-mark" wx:if="{{currentStore.storeId === 'national_overview' && currentStore.role === 'ADMIN'}}">✔</text>
+        </view>
+        <view class="role-choice-pill VOLUNTEER {{currentStore.storeId === 'national_overview' && currentStore.role === 'VOLUNTEER' ? 'selected' : ''}}"
+              bindtap="onSuperAdminRoleTap"
+              data-role="VOLUNTEER">
+          <text class="role-icon">🌸</text>
+          <text class="role-label">义工</text>
+          <text class="check-mark" wx:if="{{currentStore.storeId === 'national_overview' && currentStore.role === 'VOLUNTEER'}}">✔</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 按门店分组列表 / 新建门店申请表单 二选一展示 -->
     <scroll-view scroll-y class="sheet-scroll-list" wx:if="{{!showNewStoreForm}}">
       <view class="store-list-loading-tip" wx:if="{{storeListLoading}}">

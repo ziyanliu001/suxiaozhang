@@ -344,7 +344,9 @@ Component({
         filtered = [...filtered].sort((a: any, b: any) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
       }
 
-      const groupedStoreList = nationalOverviewEntry ? [nationalOverviewEntry, ...filtered] : filtered;
+      // 🛡️ "全国总览"虚拟条目不再混入滚动列表——改由置顶固定卡片（superadmin-pinned-card）
+      // 专门承载超管身份切换，视觉上始终置顶且不随普通门店一起被搜索/筛选过滤
+      const groupedStoreList = filtered;
       this.setData({ groupedStoreList });
     },
 
@@ -615,6 +617,12 @@ Component({
       } finally {
         this.setData({ patriarchApplySubmitting: false });
       }
+    },
+
+    // 🛡️ 超管置顶卡片：点击【系统超管】或【义工】身份胶囊时直接切换至 national_overview 视角
+    onSuperAdminRoleTap(e: any) {
+      const role = (e.currentTarget.dataset.role as string) || 'ADMIN';
+      this._applyRoleSwitch('national_overview', '全国总览', role);
     },
 
     // 内部：执行角色切换 (公共逻辑)
