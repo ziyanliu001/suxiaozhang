@@ -49,7 +49,7 @@ App({
     currentStore: {
       storeId: 'store_haicang_001',
       storeName: '海沧区雨花斋',
-      role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER'
+      role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'PATRIARCH' | 'STORE_PATRIARCH' | 'FAMILY' | 'STORE_FAMILY' | 'ADMIN' | 'SUPER_ADMIN'
     },
     userStoresList: [] as StorePermission[],
     // 🏪 门店运营状态全局态：与 current_store_status 本地存储双写同步，

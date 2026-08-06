@@ -599,6 +599,11 @@ Page({
       // 身份、但 current_user_role 尚未落地（极少数情况），用 globalData 补全
       role = globalRoleLower;
       isFamily = role === 'store_family';
+    } else {
+      // 🛡️ 三路信号都缺失时：兜底仍用 cachedRoleInfo 的服务端快照，但此时必须
+      // 重新判定 isFamily——服务端值恒为 'volunteer'，不能区分"真实义工"与
+      // "默认家人视角"，需用 status !== 'approved' 再做一次精确区分
+      isFamily = role === 'volunteer' && (!cachedRoleInfo || cachedRoleInfo.status !== 'approved');
     }
     console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, 'globalRole=', globalRoleLower, '-> 生效role=', role);
 

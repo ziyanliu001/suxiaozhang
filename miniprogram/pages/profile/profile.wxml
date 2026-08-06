@@ -75,7 +75,7 @@
               currentUserRole === 'store_manager' ? '店长' :
               currentUserRole === 'finance' ? '财务' :
               currentUserRole === 'store_patriarch' ? '大家长' :
-              isFamily ? '家人' :
+              (isFamily || currentUserRole === 'store_family') ? '家人' :
               '义工'}}</text>
           </view>
         </view>
