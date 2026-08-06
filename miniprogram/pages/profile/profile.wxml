@@ -117,11 +117,11 @@
       </view>
 
       <view class="merit-sub-row" wx:if="{{hasPrivilege}}">
-        <view class="merit-sub-cell" wx:if="{{currentUserRole === 'store_manager' || currentUserRole === 'super_admin'}}">
+        <view class="merit-sub-cell" wx:if="{{isManager || isPatriarch || isSuperAdmin}}">
           <text class="merit-sub-num">{{stats.submittedReports || 0}}</text>
           <text class="merit-sub-label">登记餐报</text>
         </view>
-        <view class="merit-sub-cell" wx:if="{{currentUserRole === 'finance' || currentUserRole === 'super_admin'}}">
+        <view class="merit-sub-cell" wx:if="{{isFinance || isPatriarch || isSuperAdmin}}">
           <text class="merit-sub-num">{{stats.auditedReports || 0}}</text>
           <text class="merit-sub-label">稽核账本</text>
         </view>
@@ -289,102 +289,86 @@
       <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
     </view>
 
-    <!-- 🏛️ 家长管理 / 资源兜底：原独立页面 pages/patriarch-dashboard 已废弃，
-         全部内嵌到个人中心。仅家长/督导本人或超级管理员可见——家长锁定本店，
-         超管跟随全局门店切换器（fetchPatriarchDashboardData 内部与原页面
-         initStore 同一套口径） -->
-    <!-- 🐛 卡片可见范围扩大到店长：原本只有 isPatriarch || isSuperAdmin 能看到这张卡片，
-         店长完全没有管理面板。但卡片里"作废申请/门店画像变更/店长财务申请"这几个审批
-         队列服务端只认家长/超管（processRoleAudit 等云函数的权限口径不含 store_manager），
-         直接把整张卡片对店长开放会让店长看到一堆点了也会被服务端拒绝的按钮——因此内部
-         再拆一层 wx:if，店长只看得到下面新增的"爱心意见箱管理"，家长/超管才看得到
-         原有的审批队列 -->
-    <view class="patriarch-panel-card" wx:if="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}">
-      <block wx:if="{{isPatriarch || isSuperAdmin}}">
-        <view class="patriarch-panel-header">
-          <text class="patriarch-panel-title">🏛️ 家长管理</text>
-        </view>
-
-        <!-- 极简门店健康大盘：本月服务人次 + 收支总览 + 验真状态 -->
-        <view class="pd-health-card">
-          <view class="pd-health-title">📊 {{patriarchData.monthLabel}}门店健康大盘</view>
-          <view class="pd-health-grid">
-            <view class="pd-health-cell">
-              <text class="pd-health-lbl">本月服务人次</text>
-              <text class="pd-health-val">{{patriarchData.monthDiners}} 人次</text>
-            </view>
-            <view class="pd-health-cell">
-              <text class="pd-health-lbl">本月收入</text>
-              <text class="pd-health-val green">¥{{patriarchData.monthIncome}}</text>
-            </view>
-            <view class="pd-health-cell">
-              <text class="pd-health-lbl">本月支出</text>
-              <text class="pd-health-val red">¥{{patriarchData.monthExpense}}</text>
-            </view>
-            <view class="pd-health-cell">
-              <text class="pd-health-lbl">本月净额</text>
-              <text class="pd-health-val {{patriarchData.monthNetPositive ? 'green' : 'red'}}">{{patriarchData.monthNetPositive ? '+' : '-'}}¥{{patriarchData.monthNet}}</text>
-            </view>
-          </view>
-          <view class="pd-verify-row">
-            <text class="pd-verify-icon">🛡️</text>
-            <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
-          </view>
-        </view>
-
-        <!-- 待确认队列：作废申请 -->
-        <view class="pd-section-title" wx:if="{{patriarchData.pendingVoidList.length > 0}}">
-          <text class="pd-section-icon">⏳</text>
-          <text class="pd-section-txt">待确认的作废申请（{{patriarchData.pendingVoidList.length}}）</text>
-        </view>
-        <view class="pd-void-card" wx:for="{{patriarchData.pendingVoidList}}" wx:key="docId">
-          <view class="pd-void-info">
-            <text class="pd-void-date">{{item.dateString}}</text>
-            <text class="pd-void-amount">今日结余 ¥{{item.todayBalance}} · 支出 ¥{{item.expenseAmount}}</text>
-          </view>
-          <view class="pd-void-actions">
-            <button class="pd-btn-reject" data-id="{{item.docId}}" data-action="reject" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">驳回</button>
-            <button class="pd-btn-approve" data-id="{{item.docId}}" data-action="approve" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">确认作废</button>
-          </view>
-        </view>
-
-        <!-- 待确认队列：门店画像变更 -->
-        <view class="pd-section-title" wx:if="{{patriarchData.pendingProfileUpdate}}">
-          <text class="pd-section-icon">⏳</text>
-          <text class="pd-section-txt">待确认的门店画像变更</text>
-        </view>
-        <view class="pd-profile-card" wx:if="{{patriarchData.pendingProfileUpdate}}">
-          <view class="pd-profile-items">
-            <text class="pd-profile-item" wx:for="{{patriarchData.pendingProfileItems}}" wx:for-item="pf" wx:key="label">{{pf.label}}：{{pf.value}}</text>
-          </view>
-          <view class="pd-void-actions">
-            <button class="pd-btn-reject" data-action="reject" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">驳回</button>
-            <button class="pd-btn-approve" data-action="approve" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">确认变更</button>
-          </view>
-        </view>
-
-        <!-- 待审核的店长/财务/家长/新店申请已迁移到下方门店管理分区的独立弹窗入口
-             （「👥 待审批的本店成员申请」/「🏛️ 待审批的高级角色与新店申请」），
-             不再占用这张大盘卡片的位置，同一份数据只保留一套 UI -->
-        <view class="pd-empty-tip" wx:if="{{patriarchData.pendingVoidList.length === 0 && !patriarchData.pendingProfileUpdate && !patriarchData.loading}}">
-          <text>✅ 当前没有待确认的高风险操作</text>
-        </view>
-
-        <view class="pd-loading-box" wx:if="{{patriarchData.loading}}">
-          <text>加载中...</text>
-        </view>
-      </block>
-
-      <!-- 📮 爱心意见箱管理：店长/家长/超管三方共有，唯一不受上面 block 限制的入口 -->
-      <view class="pd-section-title pd-feedback-entry-title" wx:if="{{!isPatriarch && !isSuperAdmin}}">
-        <text class="pd-section-icon">⚙️</text>
-        <text class="pd-section-txt">门店管理</text>
+    <!-- 🏛️ 大家长管理面板：仅大家长本人或超级管理员可见——家长锁定本店，
+         超管跟随全局门店切换器（fetchPatriarchDashboardData 与原 patriarch-dashboard
+         页面同一套口径）。store_manager（店长）有独立的"门店日常管理"卡片，不再混入这里。 -->
+    <view class="patriarch-panel-card" wx:if="{{isPatriarch || isSuperAdmin}}">
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">🏛️ 家长管理</text>
       </view>
 
-      <!-- 👥 待审批的本店成员申请：店长/家长可见，义工/财务两类申请，与超管的
-           高级角色/新店申请队列彻底分开（见 processRoleAudit listPendingApplications
-           按 caller 角色分流） -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{currentUserRole === 'store_manager' || isPatriarch}}" bindtap="onOpenMemberApplicationModal">
+      <!-- 极简门店健康大盘：本月服务人次 + 收支总览 + 验真状态 -->
+      <view class="pd-health-card">
+        <view class="pd-health-title">📊 {{patriarchData.monthLabel}}门店健康大盘</view>
+        <view class="pd-health-grid">
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月服务人次</text>
+            <text class="pd-health-val">{{patriarchData.monthDiners}} 人次</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月收入</text>
+            <text class="pd-health-val green">¥{{patriarchData.monthIncome}}</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月支出</text>
+            <text class="pd-health-val red">¥{{patriarchData.monthExpense}}</text>
+          </view>
+          <view class="pd-health-cell">
+            <text class="pd-health-lbl">本月净额</text>
+            <text class="pd-health-val {{patriarchData.monthNetPositive ? 'green' : 'red'}}">{{patriarchData.monthNetPositive ? '+' : '-'}}¥{{patriarchData.monthNet}}</text>
+          </view>
+        </view>
+        <view class="pd-verify-row">
+          <text class="pd-verify-icon">🛡️</text>
+          <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
+        </view>
+      </view>
+
+      <!-- 待确认队列：作废申请 -->
+      <view class="pd-section-title" wx:if="{{patriarchData.pendingVoidList.length > 0}}">
+        <text class="pd-section-icon">⏳</text>
+        <text class="pd-section-txt">待确认的作废申请（{{patriarchData.pendingVoidList.length}}）</text>
+      </view>
+      <view class="pd-void-card" wx:for="{{patriarchData.pendingVoidList}}" wx:key="docId">
+        <view class="pd-void-info">
+          <text class="pd-void-date">{{item.dateString}}</text>
+          <text class="pd-void-amount">今日结余 ¥{{item.todayBalance}} · 支出 ¥{{item.expenseAmount}}</text>
+        </view>
+        <view class="pd-void-actions">
+          <button class="pd-btn-reject" data-id="{{item.docId}}" data-action="reject" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">驳回</button>
+          <button class="pd-btn-approve" data-id="{{item.docId}}" data-action="approve" bindtap="onDecideVoid" disabled="{{patriarchData.voidActionInFlight}}">确认作废</button>
+        </view>
+      </view>
+
+      <!-- 待确认队列：门店画像变更 -->
+      <view class="pd-section-title" wx:if="{{patriarchData.pendingProfileUpdate}}">
+        <text class="pd-section-icon">⏳</text>
+        <text class="pd-section-txt">待确认的门店画像变更</text>
+      </view>
+      <view class="pd-profile-card" wx:if="{{patriarchData.pendingProfileUpdate}}">
+        <view class="pd-profile-items">
+          <text class="pd-profile-item" wx:for="{{patriarchData.pendingProfileItems}}" wx:for-item="pf" wx:key="label">{{pf.label}}：{{pf.value}}</text>
+        </view>
+        <view class="pd-void-actions">
+          <button class="pd-btn-reject" data-action="reject" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">驳回</button>
+          <button class="pd-btn-approve" data-action="approve" bindtap="onDecideProfileUpdate" disabled="{{patriarchData.profileActionInFlight}}">确认变更</button>
+        </view>
+      </view>
+
+      <view class="pd-empty-tip" wx:if="{{patriarchData.pendingVoidList.length === 0 && !patriarchData.pendingProfileUpdate && !patriarchData.loading}}">
+        <text>✅ 当前没有待确认的高风险操作</text>
+      </view>
+      <view class="pd-loading-box" wx:if="{{patriarchData.loading}}">
+        <text>加载中...</text>
+      </view>
+
+      <!-- 大家长的全套日常管理入口（含成员审批 / 意见箱 / 餐报审核） -->
+      <view class="pd-section-title pd-feedback-entry-title">
+        <text class="pd-section-icon">⚙️</text>
+        <text class="pd-section-txt">门店日常管理</text>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">👥</text>
           <text class="item-text">待审批的本店成员申请</text>
@@ -395,8 +379,7 @@
         </view>
       </view>
 
-      <!-- 🏛️ 待审批的高级角色与新店申请：仅超管可见（店长/家长任命 + 新建门店，
-           见 processRoleAudit approve() 的权限分级——这三类都只能超管批） -->
+      <!-- 🏛️ 待审批的高级角色与新店申请：仅超管可见 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onOpenElevatedApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">🏛️</text>
@@ -419,7 +402,6 @@
         </view>
       </view>
 
-      <!-- 📥 待审核的义工餐报与物资：与爱心意见箱管理同一组，一键采纳/驳回 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📥</text>
@@ -430,7 +412,81 @@
           <view class="item-arrow">❯</view>
         </view>
       </view>
+    </view>
 
+    <!-- 🗂️ 店长日常管理面板：仅 store_manager 角色可见，与大家长管理面板彻底分离。
+         此前混在 patriarch-panel-card 里导致家长专属操作（审批/作废/画像变更）
+         对店长可见，服务端实际拒绝后体验很差；现在店长只看到自己能操作的入口 -->
+    <view class="patriarch-panel-card" wx:if="{{isManager}}">
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">⚙️ 门店日常管理</text>
+      </view>
+
+      <!-- 店长：成员申请审批 + 意见箱管理 + 餐报审核 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">👥</text>
+          <text class="item-text">待审批的本店成员申请</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📮</text>
+          <text class="item-text">爱心意见箱管理</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingFeedbackCount > 0}}">{{pendingFeedbackCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📥</text>
+          <text class="item-text">待审核的义工餐报与物资</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 💰 财务稽核专区：仅 finance 角色可见（大家长通过 isPatriarch 面板获取同等入口，
+         不在此重复）。财务义工的核心工作：账目核对、门店数据稽核、阳光账本核查 -->
+    <view class="patriarch-panel-card" wx:if="{{isFinance}}">
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">💰 财务稽核专区</text>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenStoreStatsModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">门店餐饮与物资统计</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
+        <view class="item-left">
+          <text class="manager-only-emoji">📋</text>
+          <text class="item-text">本店数据明细（账目稽核）</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToSunshineLedger">
+        <view class="item-left">
+          <text class="manager-only-emoji">☀️</text>
+          <text class="item-text">阳光账本核查</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
     </view>
 
     <!-- 分组二：日常记录 —— 原【我的餐报提交记录】+【我的统计数据】两个入口
@@ -464,12 +520,10 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🍚 门店餐饮与物资统计：此前分散成两份（义工版在已删除的"义工现场服务
-           工具"卡片里，管理版在"门店管理"面板里，且后者的外层 patriarch-panel-card
-           只认 store_manager/isPatriarch/isSuperAdmin，纯财务角色其实完全看不到）。
-           合并成这一处，用 hasPrivilege（store_manager/finance/store_patriarch/
-           super_admin 均为 true）统一收口，财务角色也能看到 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege}}" bindtap="onOpenStoreStatsModal">
+      <!-- 🍚 门店餐饮与物资统计：财务用 isFinance 面板、店长用 isManager 面板，各自已有独立入口；
+           这里仅为大家长 / 超管补齐（isPatriarch || isSuperAdmin 且 hasPrivilege），
+           避免在其他角色的日常记录分区重复展示 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege && !isFinance && !isManager}}" bindtap="onOpenStoreStatsModal">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">门店餐饮与物资统计</text>
@@ -477,18 +531,8 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🌟 管理入口：与普通义工个人页形成权限层级的视觉区隔，复用首页已有的
-           统计页（onGoToStoreOverview → pages/statistics/statistics），不新开一套
-           统计逻辑。
-           🐛 入口去重：此前这里还有一个仅 super_admin 可见的"超级管理员全景"
-           分支，与"开发者与超管工具箱"里的"全国多店大屏 (超管)"跳的是完全相同的
-           全国总览大屏（statistics.ts 的 applyRolePermissions 对 super_admin 一律
-           强制展示"全国总览"，与这里传的 shopName 无关，两个入口 100% 同归宿）
-           ——已移除，全景/大屏类入口现在只保留工具箱里那一个唯一入口。
-           super_admin 与 store_manager/finance/store_patriarch 现在共用同一个
-           "本店数据明细"分支：hasPrivilege 已在 initMinePage 里统一算好这四种
-           角色均为 true，管理层角色都能看到 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege}}" bindtap="onGoToStoreOverview">
+      <!-- 🌟 本店数据明细：同上，仅为大家长 / 超管在日常记录里保留，其余角色已在各自专属面板查看 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege && !isFinance && !isManager}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
           <text class="manager-only-emoji">📊</text>
           <text class="item-text">本店数据明细</text>
@@ -1053,13 +1097,13 @@
   <daily-menu-modal
     id="dailyMenuModal"
     visible="{{showDailyMenuModal}}"
-    isAutoApproveRole="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}"
+    isAutoApproveRole="{{isManager || isPatriarch || isSuperAdmin}}"
     bind:close="onCloseDailyMenuModal"
   />
   <material-usage-modal
     id="materialUsageModal"
     visible="{{showMaterialUsageModal}}"
-    isAutoApproveRole="{{currentUserRole === 'store_manager' || isPatriarch || isSuperAdmin}}"
+    isAutoApproveRole="{{isManager || isPatriarch || isSuperAdmin}}"
     bind:close="onCloseMaterialUsageModal"
   />
 

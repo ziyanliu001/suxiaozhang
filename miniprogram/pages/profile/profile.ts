@@ -178,6 +178,10 @@ Page({
     isServiceUser: false,
     // 🏛️ 家长管理 / 资源兜底卡片的显隐开关：家长本人或超管可见
     isPatriarch: false,
+    // 💰 财务专属视图开关：严格等于 'finance' 角色（大家长虽含财务权限但用 isPatriarch 分流）
+    isFinance: false,
+    // 🗂️ 店长专属：精确区分 store_manager（不含家长/超管），驱动店长专属 WXML 分支
+    isManager: false,
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，用于切换入口自身的显隐判断；
     // currentViewMode 与选项文案，供页面内的切换 Picker 使用
     isRealSuperAdmin: false,
@@ -551,7 +555,29 @@ Page({
     // 收敛调用 AuthService.resolveEffectiveRole——与 index.ts initCurrentUserRole
     // 共用同一份集中实现（含"生效角色与持久化缓存不一致时自动回写"），不再各自
     // 维护一份几乎一样的判断逻辑
+    // 🛡️ 多信号融合：依次尝试三个来源，取最新、最精确的生效角色
+    // 1) current_user_role（手动切换身份写入，最高优先级）
+    // 2) app.globalData.currentStore.role（store-picker storechange 事件后立即同步，
+    //    可能比 current_user_role 更晚落地，适合作为 Storage 为空时的补充信号）
+    // 3) cachedRoleInfo.role（服务端真实角色快照，兜底默认）
     const storageRole = wx.getStorageSync('current_user_role');
+
+    // 🌟 globalData 补充信号：store-picker 触发的 _applyRoleSwitch 会同时写
+    // current_user_role 与 app.globalData.currentStore，两者理论上同步落地；
+    // 但在极端情况（Storage 写失败或时序差异）下，globalData 可以作为一致性兜底
+    const app = getApp() as any;
+    const globalStoreRole = (app && app.globalData && app.globalData.currentStore && app.globalData.currentStore.role) || '';
+    // globalStoreRole 是大写 token（如 'VOLUNTEER'/'MANAGER'/'PATRIARCH'），需要映射到 snake_case
+    const globalRoleMap: Record<string, string> = {
+      MANAGER: 'store_manager', STORE_MANAGER: 'store_manager',
+      FINANCE: 'finance',
+      PATRIARCH: 'store_patriarch', STORE_PATRIARCH: 'store_patriarch',
+      ADMIN: 'super_admin', SUPER_ADMIN: 'super_admin',
+      VOLUNTEER: 'volunteer',
+      FAMILY: 'store_family', STORE_FAMILY: 'store_family'
+    };
+    const globalRoleLower = globalStoreRole ? (globalRoleMap[globalStoreRole.toUpperCase()] || '') : '';
+
     if (storageRole) {
       const persistedRole = (cachedRoleInfo && cachedRoleInfo.role) || 'volunteer';
       // 🐛 超级管理员专属豁免：current_user_role 对超管只是展示层的视角切换预览
@@ -568,8 +594,13 @@ Page({
       // 手动切换的具体身份说了算：选家人就是家人，选除家人外的任何身份
       // （含义工/家长/店长/财务/超管）都不再是"默认未审核家人"视角
       isFamily = role === 'store_family';
+    } else if (globalRoleLower && globalRoleLower !== role) {
+      // 🌟 Storage 无明确记录时，globalData 是第二信号：首页 store-picker 刚切换过
+      // 身份、但 current_user_role 尚未落地（极少数情况），用 globalData 补全
+      role = globalRoleLower;
+      isFamily = role === 'store_family';
     }
-    console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, '-> 生效role=', role);
+    console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, 'globalRole=', globalRoleLower, '-> 生效role=', role);
 
     const storageStoreName = wx.getStorageSync('current_store_name');
     if (storageStoreName) {
@@ -611,12 +642,17 @@ Page({
     // displayRole === 'store_patriarch' 既可能是真实角色本身就是家长，也可能是
     // 超管切到了"大家长视角"预览——两种情况都应该展示家长管理卡片，口径不变
     const isPatriarch = displayRole === 'store_patriarch';
+    // 💰 财务专属：严格等于 finance 角色本身（大家长虽继承财务权限，但用 isPatriarch
+    // 分流自己的视图，不在这里与 isFinance 混用，避免财务板块重复出现）
+    const isFinance = displayRole === 'finance';
+    // 🗂️ 店长专属：用于在 WXML 里精确区分"只有店长才看到"的内容，不包括家长/超管
+    const isManager = displayRole === 'store_manager';
     // 🌟 isVolunteer/isFamily 均已随 applyRoleViewOverride 一起降级模拟：真实
     // 义工视角下 isVolunteer=true、isFamily=false；家人视角下相反。两者底层
     // currentUserRole 都是 'volunteer'，靠 isFamily 区分展示哪一套版面
     isFamily = overridden.isFamily;
     const isVolunteer = overridden.isVolunteer;
-    console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
+    console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFinance=', isFinance, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
 
     this.setData({
       currentUserRole: displayRole as any,
@@ -626,6 +662,8 @@ Page({
       isRealSuperAdmin,
       isPlatformAdmin,
       isPatriarch,
+      isFinance,
+      isManager,
       isVolunteer,
       isFamily,
       isServiceUser: isFamily,
@@ -663,9 +701,9 @@ Page({
       pendingFetches.push(this.fetchPatriarchDashboardData());
     }
 
-    // 📮 爱心意见箱管理入口的可见范围比家长大盘更宽（含店长），角标需要独立
-    // 判断加载时机，不能只挂在上面 isPatriarch || isSuperAdmin 这个条件下
-    if (displayRole === 'store_manager' || isPatriarch || overridden.isSuperAdmin) {
+    // 📮 爱心意见箱管理入口的可见范围：店长 / 大家长 / 超管（财务义工无管理面板）
+    // 与 WXML patriarch-panel-card(isManager) + patriarch-panel-card(isPatriarch||isSuperAdmin) 口径一致
+    if (isManager || isPatriarch || overridden.isSuperAdmin) {
       pendingFetches.push(this.fetchPendingFeedbackCount());
       pendingFetches.push(this.fetchPendingVolunteerSubmissions());
       pendingFetches.push(this.fetchPendingApplications());
@@ -1377,8 +1415,8 @@ Page({
           volunteerDays: scopedStats.days,
           volunteerHours: scopedStats.hours,
           volunteerCheckInCount: scopedStats.count,
-          submittedReports: submittedCount || (role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin' ? 14 : 0),
-          auditedReports: auditedCount || (role === 'finance' || role === 'store_patriarch' || role === 'super_admin' ? 8 : 0)
+          submittedReports: submittedCount,
+          auditedReports: auditedCount
         }
       });
       this.computeBadgeList();
@@ -1395,8 +1433,8 @@ Page({
           volunteerDays: fallbackStats.days,
           volunteerHours: fallbackStats.hours,
           volunteerCheckInCount: fallbackStats.count,
-          submittedReports: role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin' ? 14 : 0,
-          auditedReports: role === 'finance' || role === 'store_patriarch' || role === 'super_admin' ? 8 : 0
+          submittedReports: 0,
+          auditedReports: 0
         }
       });
       this.computeBadgeList();
