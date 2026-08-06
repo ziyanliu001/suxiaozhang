@@ -650,7 +650,7 @@
 
 .role-switch-modal-card {
   width: 100%;
-  max-height: 75vh;
+  max-height: 70vh;
   display: flex;
   flex-direction: column;
   background: #FFFFFF;
@@ -726,17 +726,16 @@
   opacity: 0.7;
 }
 
-/* 🐛 底部确认按钮被挤出/遮挡修复（真机复现，模拟器里看不出来）：此前这里靠
-   flex: 1 + height: 0 让 <scroll-view> 撑满 flex 父容器的剩余空间——这个写法
-   在 DevTools 模拟器里渲染正常，但 <scroll-view> 是原生组件，不少真机基础库
-   版本并不会可靠地按 flex-basis 结算它的高度，导致 body 实际撑满/超出了卡片，
-   把 flex-shrink: 0 的 footer 挤到可视区之外，看起来就是"确认按钮被遮挡"。
-   改为直接给 scroll-view 一个明确的 max-height（vh 单位，不依赖 flex 计算），
-   card 本身仍有 max-height: 75vh 兜底，两层高度都是显式数值，不再依赖真机对
-   flex 子项自动结算高度的支持程度 */
+/* 🐛 底部确认按钮被挤出/遮挡修复（真机复现，模拟器里看不出来）：flex: 1 +
+   height: 0 让 <scroll-view> 撑满 flex 父容器剩余空间的写法，在 DevTools
+   模拟器里渲染正常，但 <scroll-view> 是原生组件，不少真机基础库版本并不会
+   可靠地按 flex-basis 结算它的高度，导致 body 实际撑满/超出了卡片，把
+   flex-shrink: 0 的 footer 挤到可视区之外。改为直接给 scroll-view 一个明确的
+   max-height（vh 单位，不依赖 flex 计算），card 本身仍有 max-height: 70vh
+   兜底，两层高度都是显式数值，不再依赖真机对 flex 子项自动结算高度的支持程度 */
 .role-switch-modal-body {
   flex-shrink: 0;
-  max-height: 48vh;
+  max-height: 45vh;
   overflow-y: auto;
   padding: 10rpx 24rpx;
   box-sizing: border-box;
@@ -826,7 +825,7 @@
   flex-shrink: 0;
   display: flex;
   gap: 16rpx;
-  padding: 20rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 

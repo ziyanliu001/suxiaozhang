@@ -678,7 +678,7 @@
        点击卡片仅暂存 viewModeModalPendingMode，须点"确认切换"才真正生效——与
        switch-identity-modal-mask 同一套"常驻 DOM + show 类切换"方案 -->
   <view class="role-switch-modal-mask {{showViewModeModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCancelViewModeModal">
-    <!-- card 本身 max-height: 75vh 兜底；内部固定拆成 a) Header / b) Body（可滚动）
+    <!-- card 本身 max-height: 70vh 兜底；内部固定拆成 a) Header / b) Body（可滚动）
          / c) Footer 三段，Footer 用 flex-shrink: 0 保证永远不参与 Body 的滚动/挤压 -->
     <view class="role-switch-modal-card" catchtap="stopPropagation">
       <!-- a) Header：标题 + 恢复默认视角 -->
