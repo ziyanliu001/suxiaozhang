@@ -616,3 +616,48 @@
   color: #8C1D18;
   margin-top: 4rpx;
 }
+
+/* 🔐 门店安全设置 — 管理员密钥状态徽章与说明文字 */
+.sp-admin-key-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+.sp-admin-key-status-badge.set {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+.sp-admin-key-status-badge.unset {
+  background: #F5F5F5;
+  color: #757575;
+}
+.sp-admin-key-hint {
+  font-size: 22rpx;
+  color: #9E9E9E;
+  margin-left: 12rpx;
+}
+.sp-admin-key-val {
+  font-family: monospace;
+  letter-spacing: 2rpx;
+  color: #4A4A4A;
+}
+.sp-admin-key-desc {
+  font-size: 24rpx;
+  color: #8C8C8C;
+  line-height: 1.6;
+  padding: 0;
+}
+.sp-admin-key-modal-hint {
+  padding: 16rpx 8rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+.sp-admin-key-modal-hint text {
+  font-size: 24rpx;
+  color: #8C8C8C;
+  line-height: 1.6;
+}

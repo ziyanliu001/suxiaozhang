@@ -199,6 +199,32 @@
       </view>
     </view>
 
+    <!-- 🔐 门店安全设置：管理员密钥仅大家长/超管可见并编辑；店长只读状态 -->
+    <view class="sp-section-title sp-profile-title-row" wx:if="{{canManage && !editing}}">
+      <text class="sp-section-icon">🔐</text>
+      <text class="sp-section-txt">门店安全设置</text>
+      <text class="sp-btn-edit-profile-count" wx:if="{{canSetAdminKey}}" bindtap="onOpenAdminKeyModal">✏️ 修改</text>
+    </view>
+
+    <view class="sp-archive-card" wx:if="{{canManage && !editing}}">
+      <view class="sp-archive-row">
+        <text class="sp-archive-lbl">管理员密钥</text>
+        <view class="sp-archive-val-with-action">
+          <view class="sp-admin-key-status-badge {{adminKeySet ? 'set' : 'unset'}}">
+            <text>{{adminKeySet ? '✅ 已设置' : '⚪ 未设置'}}</text>
+          </view>
+          <text class="sp-admin-key-hint" wx:if="{{!canSetAdminKey}}">（仅大家长/超管可配置）</text>
+        </view>
+      </view>
+      <view class="sp-archive-row" wx:if="{{adminKeySet && canSetAdminKey && adminKeyCurrentVal}}">
+        <text class="sp-archive-lbl">当前密钥</text>
+        <text class="sp-archive-val sp-admin-key-val">{{adminKeyCurrentVal}}</text>
+      </view>
+      <view class="sp-archive-row vertical" wx:if="{{canSetAdminKey}}">
+        <text class="sp-archive-val-block sp-admin-key-desc">申请管理岗位（大家长/店长/财务）时需提供此密钥。设置后，无密钥者将无法提交高权限申请。</text>
+      </view>
+    </view>
+
     <view class="sp-section-title sp-profile-title-row">
       <text class="sp-section-icon">👥</text>
       <text class="sp-section-txt">门店人员与服务人群画像</text>
@@ -386,4 +412,36 @@
   </view>
 
   <canvas type="2d" id="storeProfileImgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
+
+  <!-- 🔐 管理员密钥 · 设置/修改弹窗：仅大家长/超管可触发 -->
+  <view class="sp-modal-backdrop" wx:if="{{showAdminKeyModal}}" bindtap="onCloseAdminKeyModal">
+    <view class="sp-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">{{adminKeySet ? '修改管理员密钥' : '设置管理员密钥'}}</text>
+        <text class="sp-modal-close" bindtap="onCloseAdminKeyModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">新密钥（留空则清除）</text>
+          <input
+            class="sp-edit-input full"
+            type="text"
+            password
+            value="{{adminKeyInput}}"
+            bindinput="onAdminKeyInputChange"
+            placeholder="请输入密钥/暗号，最多 50 字"
+            maxlength="50"
+          />
+        </view>
+        <view class="sp-admin-key-modal-hint">
+          <text>设置后，申请大家长/店长/财务角色时必须输入此密钥才能提交申请。</text>
+          <text>若要清除密钥（允许所有人自由申请），请将输入框留空后保存。</text>
+        </view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseAdminKeyModal">取消</button>
+        <button class="sp-btn-save" bindtap="onSaveAdminKey" loading="{{adminKeySaving}}" disabled="{{adminKeySaving}}">保存</button>
+      </view>
+    </view>
+  </view>
 </view>
