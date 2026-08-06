@@ -1,0 +1,9 @@
+{
+  "name": "activateTenantSubscription",
+  "version": "1.0.0",
+  "description": "激活码/授权码自助兑换：机构自己的 super_admin/store_patriarch 免人工审批直接解锁 ADVANCED 套餐（多店汇总大屏 + Excel 导出），写入既有 tenant_subscriptions 集合，不另开一份影子字段",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

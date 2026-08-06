@@ -1,8 +1,8 @@
 export function getSafeSystemInfo() {
   try {
     const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : {};
-    const deviceInfo = wx.getDeviceInfo ? wx.getDeviceInfo() : {};
-    const appBaseInfo = wx.getAppBaseInfo ? wx.getAppBaseInfo() : {};
+    const deviceInfo = (wx as any).getDeviceInfo ? (wx as any).getDeviceInfo() : {};
+    const appBaseInfo = (wx as any).getAppBaseInfo ? (wx as any).getAppBaseInfo() : {};
 
     return {
       pixelRatio: windowInfo.pixelRatio || 2,

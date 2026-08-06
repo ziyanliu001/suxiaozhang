@@ -3006,7 +3006,11 @@
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: flex-end;
-  z-index: 2000;
+  /* 🐛 根因修复：与 role-switch-modal 同一个坑——自定义 tabBar 有自己的层叠
+     上下文，数字上"更大的 z-index"不保证跨层叠上下文的绘制顺序。card 现在
+     改成自己独立 position: fixed 贴底（见下面），不再依赖这个 mask 的 flex
+     布局定位，这里只需要保证遮罩本身盖住页面内容即可 */
+  z-index: 9998;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s ease;
@@ -3017,21 +3021,27 @@
   pointer-events: auto;
 }
 
-/* 🐛 彻底修复：card 本身不再统一持有左右 32rpx 内边距——此前 header/body/footer
-   三段共用 card 的 padding box，footer 只补了纵向 padding；现在按你的最新要求
-   把 footer 的横向 32rpx 也补齐后，若还依赖 card 的外层 32rpx，footer 两侧会
-   变成 32+32=64rpx，比 header/body 更窄，看起来错位。改为 card 只留
-   padding-top（纵向起点），横向 32rpx 内边距下放到 header/body/footer 各自
-   独立持有，三段左右缘对齐、互不冲突 */
+/* 🐛 彻底修复弹窗被自定义 tabBar 遮挡：card 不再依赖 mask 的 flex 布局来定位，
+   改成自己独立 position: fixed; bottom: 0 贴底 + 更高的 z-index，并且额外
+   预留 120rpx（明确大于 custom-tab-bar 实际高度）+ 安全区的 padding-bottom——
+   env(safe-area-inset-bottom) 只补偿手机物理层面的 Home 指示条，跟本项目
+   自绘的 tabBar 完全是两回事，必须单独留出这块余量，footer 才能完整浮在
+   tabBar 上方而不是卡在临界位置 */
 .subscription-modal-card {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
   width: 100%;
-  max-height: 80vh;
+  max-height: 65vh;
   display: flex;
   flex-direction: column;
   background: #FFFFFF;
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
   padding-top: 32rpx;
+  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow: hidden;
   transform: translateY(100%);
@@ -3175,15 +3185,124 @@
   line-height: 1.8;
 }
 
-/* 🐛 footer 是卡片的固定尾段（flex-shrink:0，不参与 body 的滚动），独立持有
-   完整的横向 32rpx + 纵向 safe-area 底部内边距，与 header/body 各自对齐、
-   不依赖 card 外层 padding，保证按钮完整露出、不被机型底部手势条/自定义
-   tabBar 遮挡 */
+/* 🎉 已开通/专业版已激活：暖金渐变高亮横幅，与套餐 Tag 的金色系呼应，一眼
+   就能看出"这项功能已经生效"，不必细读到期时间才能确认状态 */
+.subscription-active-banner {
+  margin-top: 20rpx;
+  margin-bottom: 16rpx;
+  background: linear-gradient(135deg, #FFF8E8 0%, #FDF0D5 100%);
+  border: 1.5rpx solid #E6C87A;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+}
+
+.subscription-active-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #B8860B;
+  margin-bottom: 8rpx;
+}
+
+.subscription-active-expiry {
+  display: block;
+  font-size: 24rpx;
+  color: #6B5B45;
+}
+
+.subscription-renew-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 4rpx;
+  margin-bottom: 8rpx;
+  font-size: 26rpx;
+  color: #495057;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+/* 🎫 激活码兑换区：未开通时始终展示；已开通时通过"续费/输入新授权码"展开 */
+.subscription-activation-box {
+  margin-top: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.subscription-activation-label {
+  font-size: 24rpx;
+  color: #868E96;
+  margin-bottom: 12rpx;
+}
+
+.subscription-activation-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.subscription-activation-input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  background: #F8F9FA;
+  border: 1.5rpx solid #E9ECEF;
+  border-radius: 16rpx;
+  padding: 0 20rpx;
+  font-size: 26rpx;
+  color: #212529;
+  box-sizing: border-box;
+}
+
+.subscription-paste-btn {
+  flex-shrink: 0;
+  height: 72rpx;
+  line-height: 72rpx;
+  padding: 0 24rpx;
+  background: #F1F3F5;
+  color: #495057;
+  font-size: 24rpx;
+  font-weight: bold;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.subscription-paste-btn:active {
+  background: #E3E6E9;
+}
+
+.subscription-btn-redeem {
+  width: 100%;
+  height: 80rpx;
+  line-height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 40rpx;
+  border: none;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.subscription-btn-redeem::after {
+  border: none;
+}
+
+.subscription-btn-redeem:active {
+  opacity: 0.88;
+}
+
+/* safe-area/tabBar 留白已经在 .subscription-modal-card 的 padding-bottom
+   统一兜底，footer 这里只留常规的横纵内边距 + 顶部分隔线 */
 .subscription-modal-footer {
   flex-shrink: 0;
   display: flex;
   gap: 16rpx;
-  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  padding: 20rpx 32rpx;
+  border-top: 1rpx solid #F1F3F5;
   box-sizing: border-box;
 }
 

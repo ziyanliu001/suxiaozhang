@@ -24,6 +24,30 @@ export const FEATURE_KEYS = {
 
 export type FeatureKey = typeof FEATURE_KEYS[keyof typeof FEATURE_KEYS];
 
+// 🆕 权限与功能映射重构：把服务端 planType（'basic'/'pro'/'enterprise' 三档，
+// 底层数据模型不变，仍是 tenant_subscriptions 唯一真源）在前端归纳成更好理解
+// 的两档概念，仅供 UI 展示/文档使用，不引入新的数据字段：
+//   - BASIC（基础功能）：单店日常管理、义工打卡、基础统计——全员默认免费自动
+//     开通，压根不经过本模块的鉴权检查（这些功能的调用点从来不 import 本文件）。
+//   - ADVANCED（高级功能）：即 FEATURE_KEYS 里登记的这两项（全国/跨店汇总大屏、
+//     Excel 批量导出），要求 tenant_subscriptions.planType 为 pro/enterprise
+//     且未到期，由 resolveTier() 从 checkTenantPermission() 已经算好的
+//     planType/isExpired 结果派生，不重复实现一遍到期判断逻辑
+export const PERMISSION_TIER = {
+  BASIC: 'BASIC',
+  ADVANCED: 'ADVANCED'
+} as const;
+
+export type PermissionTier = typeof PERMISSION_TIER[keyof typeof PERMISSION_TIER];
+
+// 从一次 checkTenantPermission() 的结果推导出简化的 BASIC/ADVANCED 展示档位——
+// isExpired 已经把"到期即降级"这条规则包含在 planType 里了（见 checkTenantPermission
+// 云函数：isExpired 时 planType 会被服务端提前改写回 'basic'），这里直接读
+// planType 即可，不需要再单独判断 isExpired
+export function resolveTier(planType: string): PermissionTier {
+  return (planType === 'pro' || planType === 'enterprise') ? PERMISSION_TIER.ADVANCED : PERMISSION_TIER.BASIC;
+}
+
 export interface TenantPermissionResult {
   allowed: boolean;
   planType: string;
@@ -51,6 +75,16 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
 // 全国总览/导出按钮上多次点击时打出去一串重复的鉴权请求
 const CACHE_TTL_MS = 60000;
 const _cache: Partial<Record<FeatureKey, { result: TenantPermissionResult; expiresAt: number }>> = {};
+
+// 🆕 激活码自助兑换成功后，立即清空这份内存缓存——否则用户兑换完当场跳转去
+// 统计页/导出功能，最多还要再等到 60s 缓存自然过期才会看到解锁生效，体验上
+// 像是"兑换了但没生效"。调用方（profile.ts 兑换成功回调）应在这里清一次，
+// 保证下一次 checkTenantPermission() 一定重新发起云调用拿到最新套餐状态
+export function clearTenantPermissionCache() {
+  (Object.keys(_cache) as FeatureKey[]).forEach((key) => {
+    delete _cache[key];
+  });
+}
 
 // 🛡️ 平台管理员豁免：platform_admin（SaaS 平台运维方，见 authService.ts
 // UserRole 定义处注释）与业务角色/租户套餐彻底隔离——这堵付费墙是针对

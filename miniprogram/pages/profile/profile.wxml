@@ -62,18 +62,21 @@
           </view>
         </view>
 
-        <!-- 🛡️ 身份胶囊文案清理：不在文字前拼接角色专属 emoji（🙏/❤️/🌸 等）——
-             胶囊本身已有统一的 .badge-icon-svg 装饰图标作为唯一视觉标记，文字区
-             只保留门店名称 · 角色的纯文字结构，避免图标与文字里的 emoji 重复堆叠 -->
+        <!-- 🛡️ 身份胶囊解耦：只展示当前业务角色名称本身，不再拼接 currentStoreName——
+             该字段在超管场景下可能是"全国总览"这类虚拟聚合名（见 statistics.ts
+             VIRTUAL_STORE_NAMES 同款概念），把它和角色名拼在一起会显示成"全国总览 ·
+             家长"这种把"数据权限范围"和"业务身份"硬缝合的双重语义文案，界面上第一眼
+             看不出这到底是店名还是模式。门店归属信息本就在订阅信息卡片等处单独展示
+             （见 subscription-info-value），胶囊本身只需要回答"我现在是什么角色" -->
         <view class="role-badge-row">
           <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
             <view class="badge-icon-svg icon-svg-flower"></view>
-            <text>{{currentUserRole === 'super_admin' ? '全局超级管理员' :
-              currentUserRole === 'store_manager' ? currentStoreName + ' · 店长' :
-              currentUserRole === 'finance' ? currentStoreName + ' · 财务' :
-              currentUserRole === 'store_patriarch' ? currentStoreName + ' · 家长' :
-              isFamily ? (currentStoreName ? (currentStoreName + ' · 家人') : '请选择门店 · 家人') :
-              (currentStoreName ? (currentStoreName + ' · 义工') : '请选择门店 · 义工')}}</text>
+            <text>{{currentUserRole === 'super_admin' ? '超级管理员' :
+              currentUserRole === 'store_manager' ? '店长' :
+              currentUserRole === 'finance' ? '财务' :
+              currentUserRole === 'store_patriarch' ? '大家长' :
+              isFamily ? '家人' :
+              '义工'}}</text>
           </view>
         </view>
       </view>
@@ -1487,18 +1490,20 @@
     </view>
   </view>
 
-  <!-- 🔐 套餐升级/续费半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
+  <!-- 🔐 高级功能授权半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
        管理"时唤起，替代此前直接硬跳 pages/platform-admin 撞见"无权限访问"的
-       糟糕体验。展示本机构当前套餐 Tag、到期时间与专业版权益对比，"复制续费
-       申请信息"是当前架构下唯一诚实可交付的操作（本项目没有自助续费/工单
-       系统，见 onCopyRenewalRequest 注释） -->
-  <!-- 🐛 布局修复：底部按钮被裁切——此前 mask 用 wx:if 整体挂载/卸载，卡片没有
-       max-height/滚动区，内容一多（标签行+两条信息行+权益框）就可能把 footer
-       推到可视区域之外，且没有任何进入/退出过渡，开合都是硬切。改为与本页
-       switch-identity-modal-mask 同一套"常驻 DOM + show 类切换"方案：mask 永远
-       挂载，opacity/pointer-events 控制显隐，才能让开合都有平滑过渡；卡片拆成
+       糟糕体验。展示本机构当前套餐 Tag、到期时间与高级功能权益对比。
+       🌸 完全自动化授权：项目尚未接入微信支付商户号前，用【激活码/授权码
+       自助兑换】代替人工审批——校验通过立即生效（见
+       cloudfunctions/activateTenantSubscription redeem action），不再需要
+       "复制续费申请信息发给管理员"这种人工中转流程；【在线订购】按钮是支付
+       通道接入前的占位入口 -->
+  <!-- 🐛 布局修复：底部按钮被自定义 tabBar 遮挡——card 改成自己独立
+       position: fixed; bottom: 0 贴底 + z-index: 9999（不再依赖 mask 的 flex
+       布局定位），并预留 120rpx + 安全区的 padding-bottom（tabBar 有真实渲染
+       高度，不在 env(safe-area-inset-bottom) 的补偿范围内）。卡片仍拆成
        header（固定）/body（可滚动，max-height 兜底超长内容）/footer（固定，
-       独立带 safe-area 底部内边距）三段，footer 永远不会被内容挤出视口 -->
+       顶部分隔线）三段，footer 永远不会被内容挤出视口 -->
   <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
     <view class="subscription-modal-card" catchtap="stopPropagation">
       <view class="subscription-modal-header">
@@ -1522,21 +1527,51 @@
             <text class="subscription-info-label">门店：</text>
             <text class="subscription-info-value">{{currentStoreName || '未绑定'}}</text>
           </view>
-          <view class="subscription-info-row">
-            <text class="subscription-info-label">到期时间：</text>
-            <text class="subscription-info-value">{{subscriptionInfo.expireDateStr}}</text>
+
+          <!-- a) 已开通/专业版状态：高亮激活态 + 到期时间，"续费/输入新授权码"
+               默认收起激活码输入区，点击才展开 -->
+          <block wx:if="{{subscriptionInfo.isActive}}">
+            <view class="subscription-active-banner">
+              <text class="subscription-active-title">🎉 专业版已激活</text>
+              <text class="subscription-active-expiry">有效期至：{{subscriptionInfo.expireDateStr}}</text>
+            </view>
+            <view class="subscription-renew-link" bindtap="onToggleActivationForm" wx:if="{{!showActivationForm}}">
+              <text>续费 / 输入新授权码</text>
+              <view class="item-arrow">❯</view>
+            </view>
+          </block>
+
+          <!-- b) 未开通状态：直接展示高级功能权益 + 激活码输入区（无需先点开） -->
+          <view class="subscription-benefit-box" wx:else>
+            <view class="subscription-benefit-title">高级功能权益</view>
+            <view class="subscription-benefit-item">✅ 全国/跨店汇总大屏（跨店经营数据一屏总览）</view>
+            <view class="subscription-benefit-item">✅ Excel 批量导出（账目明细一键导表）</view>
           </view>
 
-          <view class="subscription-benefit-box">
-            <view class="subscription-benefit-title">专业版权益</view>
-            <view class="subscription-benefit-item">✅ 多门店汇总看板（跨店经营数据一屏总览）</view>
-            <view class="subscription-benefit-item">✅ Excel 批量导出（账目明细一键导表）</view>
+          <!-- 激活码兑换区：未开通时始终展示；已开通时通过上面的"续费"链接展开 -->
+          <view class="subscription-activation-box" wx:if="{{!subscriptionInfo.isActive || showActivationForm}}">
+            <view class="subscription-activation-label">授权码 / 卡号</view>
+            <view class="subscription-activation-input-row">
+              <input
+                class="subscription-activation-input"
+                placeholder="请输入授权码"
+                value="{{activationCodeInput}}"
+                bindinput="onActivationCodeInput"
+              />
+              <view class="subscription-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+            </view>
+            <button
+              class="subscription-btn-redeem"
+              bindtap="onRedeemActivationCode"
+              disabled="{{activationSubmitting}}"
+              loading="{{activationSubmitting}}"
+            >立即兑换</button>
           </view>
         </scroll-view>
 
         <view class="subscription-modal-footer">
           <button class="subscription-btn-cancel" bindtap="onCloseSubscriptionModal">知道了</button>
-          <button class="subscription-btn-confirm" bindtap="onCopyRenewalRequest">复制续费申请信息</button>
+          <button class="subscription-btn-confirm" bindtap="onOrderOnline">在线订购</button>
         </view>
       </block>
     </view>

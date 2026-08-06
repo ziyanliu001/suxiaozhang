@@ -285,6 +285,16 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'store_invite_codes', index: 'codeNormalized_unique', status: 'success' });
 
+    // 🎫 租户激活码（activateTenantSubscription）：与特权邀请码同一条理由——
+    // redeem 按 codeNormalized 精确查找一次性口令，unique 索引把"不重复"这条
+    // 约束落到数据库层
+    await db.collection('tenant_activation_codes').createIndex({
+      name: 'codeNormalized_unique',
+      keys: [{ codeNormalized: 1 }],
+      unique: true
+    });
+    results.push({ collection: 'tenant_activation_codes', index: 'codeNormalized_unique', status: 'success' });
+
     return {
       success: true,
       message: '索引创建完成',

@@ -14,7 +14,7 @@ import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
 import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
 import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
-import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
+import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolveTier, PERMISSION_TIER } from '../../utils/tenantPermission';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -196,8 +196,19 @@ Page({
       planLabel: '基础版',
       isExpired: false,
       isExpiringSoon: false,
+      // 🆕 isActive：ADVANCED 档位（pro/enterprise）且未到期——用这一个布尔值
+      // 驱动弹窗"已开通/未开通"两种状态渲染，而不是在 WXML 里重复拼一遍
+      // planType/isExpired 的判断表达式
+      isActive: false,
       expireDateStr: ''
     },
+    // 🆕 激活码自助兑换：无需人工审批，校验通过立即生效（见
+    // cloudfunctions/activateTenantSubscription 的 redeem action）。
+    // showActivationForm 仅在"已开通"状态下使用——点击"续费/输入新授权码"
+    // 才展开输入区；"未开通"状态下输入区始终直接展示，不受这个开关影响
+    activationCodeInput: '',
+    showActivationForm: false,
+    activationSubmitting: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     viewModeOptionLabels: VIEW_MODE_OPTIONS.map((m) => PREVIEW_VIEW_MODE_LABELS[m]),
     viewModeOptionIndex: 0,
@@ -2920,30 +2931,52 @@ Page({
   // 🔐 套餐升级/续费半屏卡片：复用 checkTenantPermission（与首页/统计页同一套
   // 租户订阅鉴权入口），拿到的 planType/isExpired/serviceExpireDate 就是本机构
   // 当前生效的套餐状态——传哪个 featureKey 不影响这几个字段的取值，任选一个即可。
+  // 抽成独立方法是因为激活码兑换成功后也要重新拉一遍最新状态刷新这张卡片，
+  // 与"打开弹窗时首次加载"共用同一段逻辑，不重复维护两份
+  async fetchSubscriptionInfo() {
+    // 🌟 checkTenantPermission 内部按调用者自己的 _openid 反查 user_roles.tenantId
+    // 再查 tenant_subscriptions（云端数据库，唯一真源）——不读取任何本地
+    // Storage 缓存的授权标记。这意味着换一台手机用同一个微信账号登录，这里
+    // 依然会查到同一个 tenantId 名下云端保存的真实套餐状态，专业版权益天然
+    // 跨设备保持有效，不需要额外做"迁移本地授权状态"这类操作
+    const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, { skipCache: true });
+    const expireDateStr = result.serviceExpireDate || '';
+    // 🌟 7 天内到期同样标红提醒——与 pages/platform-admin 大盘"7 天内到期机构"
+    // 预警口径保持一致（见 getPlatformOverview 的 soonExpiringTenants）
+    const EXPIRING_SOON_MS = 7 * 24 * 3600 * 1000;
+    const expireTime = expireDateStr ? new Date(expireDateStr).getTime() : NaN;
+    const isExpiringSoon = !result.isExpired && !Number.isNaN(expireTime) && (expireTime - Date.now()) <= EXPIRING_SOON_MS;
+    // 🆕 isActive：与 tenantPermission.ts 的 BASIC/ADVANCED 两档概念对齐——
+    // ADVANCED 且未到期才算"已开通"。到期的 pro/enterprise 服务端本就会把
+    // planType 提前改写回 basic（见 checkTenantPermission 云函数），这里再
+    // 显式判一次 isExpired 是双重保险，不是重复逻辑
+    const isActive = resolveTier(result.planType) === PERMISSION_TIER.ADVANCED && !result.isExpired;
+
+    this.setData({
+      subscriptionInfo: {
+        planType: result.planType,
+        planLabel: PLAN_LABELS[result.planType] || result.planType,
+        isExpired: result.isExpired,
+        isExpiringSoon,
+        isActive,
+        expireDateStr
+      }
+    });
+  },
+
   // 🐛 防重锁：与 statistics.ts fetchStatistics 同一套 isLoading 式防抖，避免用户
   // 手快连点"会员开通/续费管理"打出重复的鉴权云调用
   async onOpenSubscriptionModal() {
     if (this.data.subscriptionLoading) return;
-    this.setData({ showSubscriptionModal: true, subscriptionLoading: true });
+    this.setData({
+      showSubscriptionModal: true,
+      subscriptionLoading: true,
+      activationCodeInput: '',
+      showActivationForm: false
+    });
 
     try {
-      const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, { skipCache: true });
-      const expireDateStr = result.serviceExpireDate || '';
-      // 🌟 7 天内到期同样标红提醒——与 pages/platform-admin 大盘"7 天内到期机构"
-      // 预警口径保持一致（见 getPlatformOverview 的 soonExpiringTenants）
-      const EXPIRING_SOON_MS = 7 * 24 * 3600 * 1000;
-      const expireTime = expireDateStr ? new Date(expireDateStr).getTime() : NaN;
-      const isExpiringSoon = !result.isExpired && !Number.isNaN(expireTime) && (expireTime - Date.now()) <= EXPIRING_SOON_MS;
-
-      this.setData({
-        subscriptionInfo: {
-          planType: result.planType,
-          planLabel: PLAN_LABELS[result.planType] || result.planType,
-          isExpired: result.isExpired,
-          isExpiringSoon,
-          expireDateStr: expireDateStr || '尚未开通'
-        }
-      });
+      await this.fetchSubscriptionInfo();
     } catch (err) {
       console.warn('[onOpenSubscriptionModal] 加载套餐信息失败:', err);
     } finally {
@@ -2955,18 +2988,89 @@ Page({
     this.setData({ showSubscriptionModal: false });
   },
 
-  // 🎨 "复制续费申请信息"：本项目没有自助续费/工单系统——tenant_subscriptions
-  // 完全由 platform_admin 通过 pages/platform-admin 单方发起管理（见
-  // manageTenantSubscription 的 5 个 action，没有一个是"租户提交申请"），这里
-  // 不假装存在一个能提交到的后端队列，复制一段结构化文案由店长/大家长自己
-  // 粘贴发给项目管理员，是当前架构下唯一诚实、可交付的"提交续费需求"实现
-  onCopyRenewalRequest() {
-    const { planLabel, expireDateStr } = this.data.subscriptionInfo;
-    const storeName = this.data.currentStoreName || '本机构';
-    const text = `【续费申请】${storeName}\n当前套餐：${planLabel}\n到期时间：${expireDateStr}\n申请：希望升级/续费专业版套餐，请协助处理，感谢！`;
-    wx.setClipboardData({
-      data: text,
-      success: () => wx.showToast({ title: '已复制续费信息，请发送给平台客服', icon: 'none', duration: 2500 })
+  onActivationCodeInput(e: any) {
+    // 🆕 自动去除前后空格：授权码通常是从聊天记录/短信里复制来的，前后经常
+    // 带着换行/空格，这里在每次输入变化时就地清理，兑换时不会因为多余空白
+    // 字符导致校验失败
+    this.setData({ activationCodeInput: (e.detail.value || '').trim() });
+  },
+
+  // 🆕 已开通状态下默认收起激活码输入区，点击"续费/输入新授权码"才展开
+  onToggleActivationForm() {
+    this.setData({ showActivationForm: !this.data.showActivationForm });
+  },
+
+  // 🆕 粘贴：直接读取剪贴板填入输入框（并去除前后空格），授权码通常是从
+  // 客服/购买渠道的聊天记录里复制来的，比手动长按输入框选择粘贴更省事
+  onPasteActivationCode() {
+    wx.getClipboardData({
+      success: (res) => {
+        const text = (res.data || '').trim();
+        if (!text) {
+          wx.showToast({ title: '剪贴板为空', icon: 'none' });
+          return;
+        }
+        this.setData({ activationCodeInput: text });
+      },
+      fail: () => {
+        wx.showToast({ title: '读取剪贴板失败', icon: 'none' });
+      }
     });
+  },
+
+  // 🌸 激活码/授权码自助兑换：完全自动化，校验通过立即生效，全程无需联系
+  // 管理员或等待人工审批——对接 cloudfunctions/activateTenantSubscription 的
+  // redeem action，那边会直接写入 tenant_subscriptions（与 platform_admin 后台
+  // 手工续费同一张表），本页只是多了一个自助入口
+  async onRedeemActivationCode() {
+    if (this.data.activationSubmitting) return;
+    const code = (this.data.activationCodeInput || '').trim();
+    if (!code) {
+      wx.showToast({ title: '请输入激活码', icon: 'none' });
+      return;
+    }
+
+    this.setData({ activationSubmitting: true });
+    wx.showLoading({ title: '正在兑换...', mask: true });
+
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'activateTenantSubscription',
+        data: { action: 'redeem', activationCode: code }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '兑换失败，请重试', icon: 'none', duration: 2500 });
+        return;
+      }
+
+      // 🆕 兑换成功：清空 tenantPermission.ts 的 60s 内存缓存，避免用户兑换完
+      // 当场跳去统计页/导出功能，还要再等缓存自然过期才看到解锁生效；同时
+      // 收起激活码输入区，让弹窗自动回到"已开通"的高亮展示状态
+      clearTenantPermissionCache();
+      this.setData({ activationCodeInput: '', showActivationForm: false });
+      await this.fetchSubscriptionInfo();
+
+      const planLabel = PLAN_LABELS[result.data.planType] || result.data.planType;
+      wx.showToast({
+        title: `兑换成功！已升级至${planLabel}，有效期至 ${result.data.serviceExpireDate}`,
+        icon: 'none',
+        duration: 3000
+      });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onRedeemActivationCode] 兑换异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ activationSubmitting: false });
+    }
+  },
+
+  // 🚧 在线订购占位：项目尚未接入微信支付商户号，先用一个明确的维护中提示
+  // 代替，不假装存在一个能真正下单的支付通道——比放一个点了没反应的按钮更诚实
+  onOrderOnline() {
+    wx.showToast({ title: '线上支付通道维护中，请使用授权码激活', icon: 'none', duration: 2500 });
   }
 });
