@@ -678,9 +678,12 @@
        点击卡片仅暂存 viewModeModalPendingMode，须点"确认切换"才真正生效——与
        switch-identity-modal-mask 同一套"常驻 DOM + show 类切换"方案 -->
   <view class="role-switch-modal-mask {{showViewModeModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseViewModeModal">
-    <!-- 标准三段式弹窗结构：card 只负责 max-height 兜底 + flex 列布局，
-         Header/Footer 各自 flex-shrink: 0 固定占位，Body 是唯一的可滚动区
-         （flex: 1 + height: 0），确认按钮因此永远不会被卡片列表挤出可视区 -->
+    <!-- 标准三段式弹窗结构：card 自身 position: fixed; bottom: 0 独立贴底 +
+         z-index: 1001（高于自定义 tabBar 的 998，见 .role-switch-modal-card
+         注释），不再依赖 mask 的 flex 布局来定位，避免被 tabBar 盖住。
+         内部仍是 max-height 兜底 + flex 列布局：Header/Footer 各自
+         flex-shrink: 0 固定占位，Body 是唯一的可滚动区（flex: 1 + height: 0），
+         确认按钮永远不会被卡片列表挤出可视区 -->
     <view class="role-switch-modal-card" catchtap="stopPropagation">
       <!-- 1. Header (固定) -->
       <view class="role-switch-modal-header">

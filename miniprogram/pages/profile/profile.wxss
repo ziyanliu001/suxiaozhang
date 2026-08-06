@@ -637,7 +637,12 @@
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: flex-end;
-  z-index: 2000;
+  /* 🐛 根因修复：自定义 tabBar（custom-tab-bar，z-index: 998）与本弹窗此前
+     虽然数字上 2000 > 998，但两者分别嵌在各自的祖先层叠上下文里，数字比较
+     并不天然保证跨层叠上下文的绘制顺序——实测会被 tabBar 盖住。压到 1000
+     （仍明确高于 tabBar 的 998）+ 下面 card 改成自己独立 position: fixed
+     直接贴底（不再依赖 mask 的 flex 布局定位），双重保证不会被 tabBar 遮挡 */
+  z-index: 1000;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s ease;
@@ -649,14 +654,28 @@
 }
 
 .role-switch-modal-card {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
   width: 100%;
-  max-height: 70vh;
+  max-height: 65vh;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: #ffffff;
   border-radius: 24rpx 24rpx 0 0;
-  box-sizing: border-box;
   overflow: hidden;
+  /* 🐛 根因修复：env(safe-area-inset-bottom) 只补偿手机物理层面的 Home 指示条/
+     刘海，跟本项目自绘的 custom-tab-bar 完全是两回事——后者是页面自己画出来的
+     一块有真实高度的内容，不在这个安全区变量的补偿范围内。footer 自身的
+     padding-bottom 只顶到了安全区，卡片整体仍可能贴得比 tabBar 顶部还低，
+     视觉上按钮被压在 tabBar 后面/边缘。这里在卡片最外层再叠一层
+     30rpx + 安全区的底部内边距，把整张卡片（含 footer）额外顶高一截，
+     确保确认按钮怎么样都完全浮在 tabBar 上方，而不是刚好卡在临界位置
+     只够遮住不够露出 */
+  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
   transform: translateY(100%);
   transition: transform 0.25s ease;
 }
@@ -720,9 +739,11 @@
    Header/Footer 挤出卡片 */
 .role-switch-modal-body {
   flex: 1;
-  height: 0;
+  min-height: 0;
+  max-height: 45vh;
   padding: 0 30rpx;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
 }
 
@@ -804,25 +825,30 @@
   font-weight: bold;
 }
 
-/* 3. Footer (绝对固定在底部)：flex-shrink: 0 保证不参与 Body 的滚动/挤压，
-   独立带 safe-area 底部内边距 + 顶部分隔线，不被机型手势条/自定义 tabBar 遮挡 */
+/* 3. Footer (绝对固定在底部)：flex-shrink: 0 保证不参与 Body 的滚动/挤压。
+   safe-area 底部留白改由外层 .role-switch-modal-card 的 padding-bottom 统一
+   兜底（一并覆盖 custom-tab-bar 的真实高度，不只是物理安全区），这里只留
+   顶部分隔线 + 常规内边距 */
 .role-switch-modal-footer {
   flex-shrink: 0;
-  padding: 20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom));
-  background: #fff;
-  border-top: 1rpx solid #eee;
+  width: 100%;
+  padding: 20rpx 30rpx;
+  background: #ffffff;
   box-sizing: border-box;
+  border-top: 1rpx solid #f0f0f0;
 }
 
 .role-switch-btn-confirm {
-  width: 100%;
+  display: block;
+  width: 100% !important;
   height: 88rpx;
   line-height: 88rpx;
   background: #c60000;
-  color: #fff;
-  border-radius: 44rpx;
+  color: #ffffff;
   text-align: center;
+  font-size: 30rpx;
   font-weight: bold;
+  border-radius: 44rpx;
   border: none;
   box-sizing: border-box;
 }
