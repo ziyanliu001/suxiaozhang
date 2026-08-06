@@ -598,6 +598,7 @@ Page({
       storePhotos: [] as string[]
     } as any,
     applyStorePhotoUploading: false,
+    isSubmittingApply: false,
     applyRoleTipText: '✅ 即刻生效，开始护持',
     applyRoleTipVariant: 'auto' as 'auto' | 'patriarch' | 'pending',
     showAuditModal: false,
@@ -2957,6 +2958,8 @@ Page({
   },
 
   async onSubmitRoleApply() {
+    if (this.data.isSubmittingApply) return;
+
     const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, address, contactPhone, storePhotos } = this.data.applyForm;
 
     if (!realName || !realName.trim()) {
@@ -2987,6 +2990,7 @@ Page({
       return;
     }
 
+    this.setData({ isSubmittingApply: true });
     wx.showLoading({ title: '提交申请中...', mask: true });
 
     try {
@@ -3046,6 +3050,8 @@ Page({
       wx.hideLoading();
       console.error('[onSubmitRoleApply] 提交失败:', e);
       wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ isSubmittingApply: false });
     }
   },
 

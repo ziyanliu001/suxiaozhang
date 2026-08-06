@@ -2016,14 +2016,23 @@
   </view>
 
   <!-- 扫码绑定义工申请 Modal -->
+  <!-- 🌟 门店申请弹窗：三段式布局（Header 固定 / Body 可滚动 / Footer 固定置底）
+       彻底解决表单内容多时底部提交按钮被遮挡的问题。
+       Body 用 scroll-view 包裹，max-height: 50vh 保证内部滚动不挤压 Footer。 -->
   <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal">
-    <view class="apply-modal-box" catchtap="stopPropagation">
-      <view class="modal-header">
-        <view class="modal-title"><view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店')}}</view>
-        <text class="btn-close" bindtap="onCloseApplyModal">✕</text>
+    <view class="apply-modal-card" catchtap="stopPropagation">
+
+      <!-- 1. Header（固定） -->
+      <view class="apply-modal-header">
+        <text class="apply-modal-title">
+          <view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店')}}
+        </text>
+        <text class="apply-modal-close" bindtap="onCloseApplyModal">✕</text>
       </view>
 
-      <view class="apply-form-body">
+      <!-- 2. Body（可滚动，max-height: 50vh 保证内容多时内部滚动） -->
+      <scroll-view scroll-y class="apply-modal-body" style="max-height: 50vh;">
+
         <view class="form-item">
           <text class="form-label">门店</text>
           <view class="store-mode-tabs">
@@ -2065,43 +2074,50 @@
         </block>
 
         <view class="form-item">
-          <text class="form-label">真实姓名</text>
+          <text class="form-label">真实姓名 <text class="form-required">*</text></text>
           <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
         </view>
         <view class="form-item">
-          <text class="form-label">手机号</text>
+          <text class="form-label">手机号 <text class="form-required">*</text></text>
           <input class="form-input" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
         </view>
         <view class="form-item">
           <text class="form-label">申请岗位</text>
+          <!-- 🌟 动态联动：切换岗位时 applyRoleTipText 与 applyRequiredHint 随之更新，
+               大家长需额外补全门店档案（新建门店时）；义工免审即时生效 -->
           <radio-group class="role-radio-group" bindchange="onApplyRoleChange">
             <label class="role-radio-item">
               <radio value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
-              <text>👑 大家长（对外关系与文化督导，仅超管可审核）</text>
+              <text>👑 大家长</text>
             </label>
             <label class="role-radio-item">
               <radio value="store_manager" checked="{{applyForm.requestedRole === 'store_manager'}}" />
-              <text>👑 店长</text>
+              <text>🗂️ 店长</text>
             </label>
             <label class="role-radio-item">
               <radio value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
-              <text><view class="idx-icon-sm idx-icon-key" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>财务义工</text>
+              <text>💰 财务义工</text>
             </label>
             <label class="role-radio-item">
               <radio value="volunteer" checked="{{applyForm.requestedRole === 'volunteer'}}" />
-              <text><view class="idx-icon-sm idx-icon-heart" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>现场义工</text>
+              <text>🤝 现场义工</text>
             </label>
           </radio-group>
-          <!-- 🌟 动态提示：义工免审即时生效；大家长天然包含店长+财务全套权限（如当前
-               已是店长则提示"正在申请升级为大家长"）；店长/财务走常规待审批提示 -->
           <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
         </view>
+
+      </scroll-view>
+
+      <!-- 3. Footer（固定置底，不随 Body 滚动） -->
+      <view class="apply-modal-footer">
+        <button
+          class="btn-submit-apply"
+          bindtap="onSubmitRoleApply"
+          disabled="{{isSubmittingApply}}"
+          loading="{{isSubmittingApply}}"
+        >提交申请</button>
       </view>
 
-      <view class="apply-modal-footer">
-        <button class="btn-modal-cancel" bindtap="onCloseApplyModal">取消</button>
-        <button class="btn-modal-submit" bindtap="onSubmitRoleApply">提交申请</button>
-      </view>
     </view>
   </view>
 

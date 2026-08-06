@@ -5300,13 +5300,10 @@ button.poster-gen-btn[disabled] {
   border-top: 1rpx solid #F1F3F5;
 }
 
-/* 扫码绑定申请 Modal */
+/* ── 门店申请弹窗（三段式：Header 固定 / Body 滚动 / Footer 固定置底） ── */
 .apply-modal-mask {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
@@ -5314,39 +5311,80 @@ button.poster-gen-btn[disabled] {
   z-index: 1000;
 }
 
-.apply-modal-box {
-  width: 85%;
+/* 卡片：flex 列，max-height 限制总高，超出由 Body scroll-view 内部滚动消化 */
+.apply-modal-card {
+  width: 88%;
+  max-height: 85vh;
   background: #FFFFFF;
   border-radius: 24rpx;
-  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.apply-modal-box .modal-header {
+/* 1. Header — flex-shrink:0 永远占位，不被 Body 挤压 */
+.apply-modal-header {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 20rpx;
+  padding: 28rpx 32rpx 24rpx;
   border-bottom: 1rpx solid #F1F3F5;
-  margin-bottom: 24rpx;
 }
 
-.apply-modal-box .modal-title {
+.apply-modal-title {
+  flex: 1;
   font-size: 30rpx;
   font-weight: bold;
   color: #212529;
+  display: flex;
+  align-items: center;
 }
 
-.apply-modal-box .btn-close {
+.apply-modal-close {
   font-size: 36rpx;
   color: #ADB5BD;
   padding: 8rpx;
   line-height: 1;
 }
 
-.apply-form-body {
-  margin-bottom: 20rpx;
+/* 2. Body — 内部可滚动，flex:1 吃光 Header 与 Footer 剩余高度 */
+.apply-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 24rpx 32rpx 8rpx;
+  box-sizing: border-box;
 }
 
+/* 3. Footer — sticky 置底，不随 Body 内容滚动，带顶部分隔阴影 */
+.apply-modal-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  z-index: 10;
+  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.btn-submit-apply {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  font-weight: bold;
+  border: none;
+  letter-spacing: 2rpx;
+}
+
+.btn-submit-apply[disabled] {
+  opacity: 0.55;
+}
+
+/* ── 弹窗内表单通用样式 ── */
 .form-item {
   margin-bottom: 24rpx;
 }
@@ -5355,8 +5393,16 @@ button.poster-gen-btn[disabled] {
   font-size: 26rpx;
   color: #495057;
   font-weight: 500;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
   margin-bottom: 10rpx;
+}
+
+.form-required {
+  color: #D32F2F;
+  font-size: 26rpx;
+  line-height: 1;
 }
 
 .form-input {
@@ -5401,9 +5447,11 @@ button.poster-gen-btn[disabled] {
   margin-top: 10rpx;
 }
 
+/* 岗位单选：2×2 换行布局，在窄卡片内不溢出 */
 .role-radio-group {
   display: flex;
-  gap: 32rpx;
+  flex-wrap: wrap;
+  gap: 16rpx 24rpx;
   padding: 12rpx 0;
 }
 
@@ -5413,34 +5461,7 @@ button.poster-gen-btn[disabled] {
   gap: 8rpx;
   font-size: 26rpx;
   color: #495057;
-}
-
-.apply-modal-footer {
-  display: flex;
-  gap: 20rpx;
-  margin-top: 12rpx;
-}
-
-.apply-modal-footer .btn-modal-cancel {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: #F1F3F5;
-  color: #495057;
-  border-radius: 12rpx;
-  font-size: 28rpx;
-  border: none;
-}
-
-.apply-modal-footer .btn-modal-submit {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: #1C7ED6;
-  color: #FFFFFF;
-  border-radius: 12rpx;
-  font-size: 28rpx;
-  border: none;
+  min-width: 40%;
 }
 
 /* 店长审核抽屉 Modal */
