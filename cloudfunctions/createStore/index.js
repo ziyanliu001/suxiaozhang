@@ -41,6 +41,36 @@ const TRIAL_DEFAULT_STORE_LIMIT = 3;
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
 
+// 🆕 轻量省市提取：超管快速建店（store-picker「新建门店」超管分支）目前只填
+// 门店名称，不收集省市——province/city 缺失时尝试从门店名称/地址文本里猜一猜。
+// 不追求覆盖全国行政区划，只覆盖本项目门店实际集中分布的常见地区；猜不出来
+// 就返回空字符串，调用方自行决定兜底展示（如"未分类地区"），不编造数据
+const REGION_CITY_TO_PROVINCE = {
+  '厦门': '福建省', '漳州': '福建省', '泉州': '福建省', '福州': '福建省', '莆田': '福建省',
+  '三明': '福建省', '南平': '福建省', '龙岩': '福建省', '宁德': '福建省'
+};
+const REGION_DISTRICT_TO_CITY = {
+  '海沧': '厦门', '思明': '厦门', '湖里': '厦门', '集美': '厦门', '同安': '厦门', '翔安': '厦门',
+  '芗城': '漳州', '龙文': '漳州', '龙海': '漳州',
+  '鲤城': '泉州', '丰泽': '泉州', '洛江': '泉州', '泉港': '泉州', '晋江': '泉州', '石狮': '泉州', '南安': '泉州'
+};
+function extractRegionFromText(text) {
+  const str = String(text || '');
+  if (!str) return { province: '', city: '' };
+  for (const cityBase of Object.keys(REGION_CITY_TO_PROVINCE)) {
+    if (str.includes(cityBase)) {
+      return { province: REGION_CITY_TO_PROVINCE[cityBase], city: `${cityBase}市` };
+    }
+  }
+  for (const districtBase of Object.keys(REGION_DISTRICT_TO_CITY)) {
+    if (str.includes(districtBase)) {
+      const cityBase = REGION_DISTRICT_TO_CITY[districtBase];
+      return { province: REGION_CITY_TO_PROVINCE[cityBase] || '', city: `${cityBase}市` };
+    }
+  }
+  return { province: '', city: '' };
+}
+
 const DEFAULT_EXPENSE_TEMPLATES = [
   { category: 'daily', itemName: '青菜' },
   { category: 'daily', itemName: '豆腐' },
@@ -181,13 +211,23 @@ exports.main = async (event) => {
 
     // 4-6. 建店 + bindAsManager 回写 + 默认账目模板预装，三步一个事务，失败整体回滚
     const trimmedName = String(storeName).trim();
+    // 🆕 超管快速建店分支目前只填门店名称，不收集省市——province/city 都没传时，
+    // 尝试从门店名称/地址文本里轻量提取兜底（"漳州XX雨花斋"→漳州市/福建省），
+    // 猜不出来就留空，交给 getStoreList/getNationalDashboard 读取时兜底展示
+    let finalProvince = province || '';
+    let finalCity = city || '';
+    if (!finalProvince && !finalCity) {
+      const guessed = extractRegionFromText(`${trimmedName} ${address || ''}`);
+      finalProvince = guessed.province;
+      finalCity = guessed.city;
+    }
     const transaction = await db.startTransaction();
     let newStoreId;
     try {
       const createRes = await transaction.collection('stores').add({
         data: {
           storeName: trimmedName,
-          city: city || '',
+          city: finalCity,
           // 🌟 address 独立于 city 存储：city 已被 getNationalDashboard 当作城市聚合维度使用，
           // 塞入完整地址会污染那个看板；initialAnnouncement 仅落库存证，公告系统本身
           // 目前是纯本机 wx.setStorageSync（见 index.ts onSaveNotice），前端建店成功后
@@ -199,7 +239,7 @@ exports.main = async (event) => {
           // 🌐 门店选择器：运营状态（与上面 status 是两个不同维度，见 getStoreList 同款注释）
           // + 省份（城市已有 city 字段）+ 经纬度（供"附近门店"距离排序，可选，未提供时省略字段）
           operatingStatus: finalOperatingStatus,
-          province: province || '',
+          province: finalProvince,
           ...(typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : {}),
           createdBy: OPENID,
           createdAt: db.serverDate()

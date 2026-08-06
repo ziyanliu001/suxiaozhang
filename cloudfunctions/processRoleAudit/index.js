@@ -36,6 +36,37 @@ function sanitizePhotos(v) {
   return v.filter((item) => typeof item === 'string' && item.trim()).slice(0, MAX_STORE_PHOTOS);
 }
 
+// 🆕 轻量省市提取：申请人没有手动选省市（如老流程/客户端未升级）时，尝试从
+// 门店名称/地址文本里猜一猜。不追求覆盖全国行政区划，只覆盖本项目门店实际
+// 集中分布的常见地区（门店名常见"漳州XX雨花斋"这类省略"市"字的写法，或
+// "海沧区雨花斋"这类只写了区名的写法）；猜不出来就返回空字符串，调用方自行
+// 决定兜底展示（如"未分类地区"），不编造数据
+const REGION_CITY_TO_PROVINCE = {
+  '厦门': '福建省', '漳州': '福建省', '泉州': '福建省', '福州': '福建省', '莆田': '福建省',
+  '三明': '福建省', '南平': '福建省', '龙岩': '福建省', '宁德': '福建省'
+};
+const REGION_DISTRICT_TO_CITY = {
+  '海沧': '厦门', '思明': '厦门', '湖里': '厦门', '集美': '厦门', '同安': '厦门', '翔安': '厦门',
+  '芗城': '漳州', '龙文': '漳州', '龙海': '漳州',
+  '鲤城': '泉州', '丰泽': '泉州', '洛江': '泉州', '泉港': '泉州', '晋江': '泉州', '石狮': '泉州', '南安': '泉州'
+};
+function extractRegionFromText(text) {
+  const str = String(text || '');
+  if (!str) return { province: '', city: '' };
+  for (const cityBase of Object.keys(REGION_CITY_TO_PROVINCE)) {
+    if (str.includes(cityBase)) {
+      return { province: REGION_CITY_TO_PROVINCE[cityBase], city: `${cityBase}市` };
+    }
+  }
+  for (const districtBase of Object.keys(REGION_DISTRICT_TO_CITY)) {
+    if (str.includes(districtBase)) {
+      const cityBase = REGION_DISTRICT_TO_CITY[districtBase];
+      return { province: REGION_CITY_TO_PROVINCE[cityBase] || '', city: `${cityBase}市` };
+    }
+  }
+  return { province: '', city: '' };
+}
+
 // 🐛 云函数容器时区固定为 UTC，与 submitFeedback/index.js 同一套换算，避免申请
 // 时间字符串比北京时间少 8 小时（这个坑在项目里已经踩过不止一次）
 function formatCreateTime(createTime) {
@@ -160,7 +191,7 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
 // 义工加入已有门店：免审核即刻生效（提升义工体验）；其余场景（管理身份 / 新建门店）
 // 一律进入 pending，交由 approve/reject 分支按权限分级处理。
 async function submitRoleApply(event, OPENID) {
-  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos } = event;
+  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos, province, city, district } = event;
 
   if (!realName || !String(realName).trim()) return { success: false, error: '请填写真实姓名' };
   if (!phone || !String(phone).trim()) return { success: false, error: '请填写手机号' };
@@ -226,6 +257,20 @@ async function submitRoleApply(event, OPENID) {
     docData.address = sanitizeText(address);
     docData.contactPhone = sanitizeText(contactPhone);
     docData.storePhotos = sanitizePhotos(storePhotos);
+    // 🆕 所属地区：优先用申请人在 <picker mode="region"> 里手动选择的省市区；
+    // 客户端未传（如老版本小程序）时，尝试从门店名称/地址文本里轻量提取兜底
+    const submittedProvince = sanitizeText(province);
+    const submittedCity = sanitizeText(city);
+    if (submittedProvince || submittedCity) {
+      docData.province = submittedProvince;
+      docData.city = submittedCity;
+      docData.district = sanitizeText(district);
+    } else {
+      const guessed = extractRegionFromText(`${docData.storeName} ${address || ''}`);
+      docData.province = guessed.province;
+      docData.city = guessed.city;
+      docData.district = '';
+    }
   }
   if (autoApprove) {
     docData.approveTime = db.serverDate();
@@ -705,12 +750,17 @@ exports.main = async (event, context) => {
         targetStoreName = resolved.storeName;
 
         // 🏪 把申请阶段收集的门店档案（补全校验已在 submitRoleApply 里强制要求）
-        // 一并写入新建/复用的门店文档，避免新店档案永远空白
+        // 一并写入新建/复用的门店文档，避免新店档案永远空白。🆕 province/city/
+        // district 已在 submitRoleApply 里落地到 applyData（申请人手选或已做过
+        // 一次文本提取兜底），这里原样带过去，不重复猜测
         await db.collection('stores').doc(targetStoreId).update({
           data: {
             address: applyData.address || '',
             contactPhone: applyData.contactPhone || '',
-            storePhotos: Array.isArray(applyData.storePhotos) ? applyData.storePhotos : []
+            storePhotos: Array.isArray(applyData.storePhotos) ? applyData.storePhotos : [],
+            province: applyData.province || '',
+            city: applyData.city || '',
+            district: applyData.district || ''
           }
         }).catch((err) => console.warn('[processRoleAudit] 回写新店档案失败（不影响审批本身）:', err));
       } catch (storeErr) {

@@ -49,6 +49,51 @@ function computePctChange(curr: number, prev: number): number | null {
   return Math.round(((curr - prev) / prev) * 1000) / 10;
 }
 
+// 🆕 "按地区筛选"省市下拉的轻量方案：不维护全国行政区划静态数据字典（体积大、
+// 门店铺开到新省市还要跟着改），province/city 全部动态从 storeDirectory
+// （getStoreList 云函数返回的真实门店数据）里提取。真实数据里"福建"/"福建省"
+// 这类带不带后缀的写法都可能出现，只做末尾后缀剥离做比较基准，避免被当成
+// 两个不同的省份重复列出
+function stripRegionSuffix(str: string): string {
+  return String(str || '').trim().replace(/(省|市|自治区|特别行政区|地区)$/, '');
+}
+
+// 按去后缀的"基准名"去重：同一个基准名如果同时出现带后缀/不带后缀两种写法，
+// 优先保留带后缀的完整写法（如"福建省"优于"福建"）作为下拉里展示的那一项
+function dedupeRegionNames(rawValues: string[]): string[] {
+  const baseToDisplay = new Map<string, string>();
+  rawValues.forEach((raw) => {
+    const value = String(raw || '').trim();
+    if (!value) return;
+    const base = stripRegionSuffix(value);
+    const existing = baseToDisplay.get(base);
+    if (!existing || value.length > existing.length) {
+      baseToDisplay.set(base, value);
+    }
+  });
+  return Array.from(baseToDisplay.values());
+}
+
+// 🆕 兜底基础省份：仅在当前机构一个门店都还没填过省份时才会用到（storeDirectory
+// 里提取不出任何省份选项），避免下拉栏空空如也无从选起；只是个"先能选、后续
+// 铺店会自动被真实数据覆盖"的轻量兜底，不追求覆盖全国 34 个省级行政区
+const FALLBACK_BASE_PROVINCES = ['福建省', '广东省', '浙江省', '江苏省', '北京', '上海'];
+
+// 🆕 大额数值紧凑展示：全国大屏的人次/金额一旦破万，蓝色 hero 卡片、暖金 KPI
+// 卡片这类固定宽度的小格子很容易被撑爆换行、挤压布局，超过一万时转换成
+// "x.x万"。income/expense 字段本身是后端 toFixed(2) 出来的字符串，diners 是
+// 原始 number，两种入参都要能处理；非有限数值（如被脱敏成 null 的字段）原样
+// 透传，不强行转成 '0' 误导成"确实是零"
+function formatCompactNumber(value: number | string | null): string | null {
+  if (value === null || value === undefined) return value as any;
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  if (!isFinite(n)) return typeof value === 'string' ? value : null;
+  if (Math.abs(n) >= 10000) {
+    return `${(n / 10000).toFixed(1).replace(/\.0$/, '')}万`;
+  }
+  return typeof value === 'string' ? value : String(n);
+}
+
 // 🆕 2x2 核心指标摘要区无数据兜底态：与 data.coreMetrics 初始值同一份形状，
 // loadStatistics() 里查无当期记录/云端调用失败两个分支复用，保持结构不塌陷
 const EMPTY_CORE_METRICS = {
@@ -516,21 +561,42 @@ Page({
     selectedProvince: '',
     selectedCity: '',
     showRegionFilterModal: false,
+    // 🐛 省份/城市改为弹窗内嵌式下拉列表（而非原生 <picker>）后，这两个字段
+    // 分别控制各自选项面板的展开/收起——同一时间只允许一个展开，见
+    // onToggleProvinceDropdown/onToggleCityDropdown 的互斥逻辑
+    showProvinceDropdown: false,
+    showCityDropdown: false,
     showCustomStoreModal: false,
-    // 已确认生效的自定义门店勾选结果；customStoreDraftSelection 是弹窗内勾选、
-    // 尚未点击"确定"前的草稿态，两者分离避免用户勾选一半又取消时污染已生效的选择
+    // 已确认生效的自定义门店勾选结果（storeId 数组）
     customStoreSelection: [] as string[],
-    customStoreDraftSelection: [] as string[],
+    // 🐛 弹窗内勾选的草稿态：每个门店项在自己身上直接带一个 checked 布尔字段，
+    // 而不是另外维护一个"已勾选 storeId 列表"再靠 array.includes() 反推每一行
+    // 是否勾选——后者是"顶层数组 + wx:for 循环变量"混合表达式，WXML 对这类跨
+    // 作用域计算表达式的重渲染依赖追踪并不可靠，setData 更新那个顶层数组后
+    // checkbox 的 checked 属性不一定会跟着刷新，导致勾选图标和真实选中状态脱节。
+    // customStoreDraftList[i].checked 是 wx:for 列表单项状态更新的标准写法（用
+    // 精确下标路径 setData），能可靠触发对应那一行的重渲染
+    // 🆕 matchesSearch：门店名称搜索框的过滤结果落在这个同作用域字段上（wx:if
+    // 直接判断，而不是在 wx:for 表达式里对顶层 keyword 变量和循环变量 store 做
+    // 混合计算——同样是为了避开上面 checked 那类跨作用域表达式的重渲染追踪问题），
+    // 搜索框内容变化时对整个列表重新 map 一遍、一次性 setData
+    customStoreDraftList: [] as Array<{ storeId: string; storeName: string; province: string; city: string; checked: boolean; matchesSearch: boolean }>,
+    customStoreDraftCheckedCount: 0,
+    customStoreSearchKeyword: '',
+    // 🆕 "按省份一键全选"筛选条：从 customStoreDraftList 派生的去重省份列表，
+    // 供顶部快捷芯片使用，点击后把该省份下所有门店一次性勾选
+    customStoreProvinceChips: [] as string[],
 
     // 🌟 超管专属高阶治理看板：核心指标/时间切片/离线门店预警/CSV 报表导出，见 getNationalDashboard
     // 云函数 superAdminInsights（服务端已按 role==='super_admin' 二次校验，非超管拿到的字段恒为 null）
     superAdminInsights: null as any,
-    nationalRangeType: 'all' as 'all' | '7d' | 'month' | 'quarter',
+    nationalRangeType: 'all' as 'all' | '7d' | 'month' | 'quarter' | 'year',
     nationalRangeOptions: [
-      { value: 'all', label: '全部时间' },
       { value: '7d', label: '近7天' },
       { value: 'month', label: '本月' },
-      { value: 'quarter', label: '本季度' }
+      { value: 'quarter', label: '本季度' },
+      { value: 'year', label: '本年' },
+      { value: 'all', label: '全部时间' }
     ],
     // 一键快筛：门店矩阵表按"正常运营/需关注预警"二选一展示，见 nationalMatrixList wx:if
     storeMatrixFilter: 'normal' as 'normal' | 'risk',
@@ -1242,6 +1308,15 @@ Page({
         // 这里对拿到的数据再跑一遍同名 sanitizeReportForVolunteer，双重兜底
         const role = this.data.currentUserRole;
         const sanitizedSummary = sanitizeReportForVolunteer(r.nationalSummary || {}, role);
+        // 🆕 大额数值紧凑展示：只新增 *Display 展示字段，不覆盖原始数值——
+        // nationalTotalDiners 等原始字段仍保留（wxml 的"是否已加载完成"判据、
+        // formatSuperAdminInsights 内部计算都还依赖它们的原始数值语义）
+        const displaySummary = {
+          ...sanitizedSummary,
+          nationalTotalDinersDisplay: formatCompactNumber(sanitizedSummary.nationalTotalDiners),
+          nationalTotalIncomeDisplay: formatCompactNumber(sanitizedSummary.nationalTotalIncome),
+          nationalTotalExpenseDisplay: formatCompactNumber(sanitizedSummary.nationalTotalExpense)
+        };
         const sanitizedMatrix = sanitizeReportForVolunteer(r.storeMatrix || [], role);
         const cleanedMatrix = this.formatNationalMatrixData(sanitizedMatrix);
         // 🆕 多店排行榜：storeMatrix 服务端已按 totalDiners 降序返回（见
@@ -1252,7 +1327,7 @@ Page({
         const topDinersStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.totalDiners || 0) - (a.totalDiners || 0)).slice(0, 5);
         const topActiveStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.openDays || 0) - (a.openDays || 0)).slice(0, 5);
         this.setData({
-          nationalData: sanitizedSummary,
+          nationalData: displaySummary,
           nationalMatrixList: cleanedMatrix,
           nationalTopDinersStores: topDinersStores,
           nationalTopActiveStores: topActiveStores,
@@ -1297,11 +1372,18 @@ Page({
         province: s.province || '',
         city: s.city || ''
       }));
+      // 🐛 根因修复：下拉只有"全部省份"——此前 province 选项直接对原始字符串去重，
+      // 门店档案 province/city 是自由文本（见 manageStoreProfile），真实数据经常
+      // 缺失/写法不一致，一旦所有门店都还没填这两个字段，Set 去重后就是空数组，
+      // 下拉自然只剩兜底占位项。现在有实际门店省份时优先展示（真实数据源），
+      // 完全没有时才退回 FALLBACK_BASE_PROVINCES 这份轻量基础名单，保证下拉
+      // 至少有得选；一旦有门店真正填了省份，这份兜底名单会被真实数据自然取代
+      const storeProvinces = dedupeRegionNames(storeDirectory.map((s: any) => s.province));
       const provincePickerOptions = ['全部省份'].concat(
-        Array.from(new Set(storeDirectory.map((s: any) => s.province).filter(Boolean))) as string[]
+        storeProvinces.length > 0 ? storeProvinces : FALLBACK_BASE_PROVINCES
       );
       const cityPickerOptions = ['全部城市'].concat(
-        Array.from(new Set(storeDirectory.map((s: any) => s.city).filter(Boolean))) as string[]
+        dedupeRegionNames(storeDirectory.map((s: any) => s.city))
       );
       this.setData({ storeDirectory, provincePickerOptions, cityPickerOptions });
       return true;
@@ -1315,41 +1397,64 @@ Page({
   async openRegionFilterModal() {
     const ok = await this.ensureStoreDirectory();
     if (!ok) return;
-    this.setData({ showRegionFilterModal: true });
+    this.setData({
+      showRegionFilterModal: true,
+      // 每次重新打开都先收起两个下拉面板，不携带上一次关闭前可能残留的展开态
+      showProvinceDropdown: false,
+      showCityDropdown: false
+    });
   },
 
   onCancelRegionFilter() {
-    this.setData({ showRegionFilterModal: false });
+    this.setData({ showRegionFilterModal: false, showProvinceDropdown: false, showCityDropdown: false });
   },
 
-  // 省份 picker 切换：联动收窄城市 picker 的可选项——只保留该省份下 storeDirectory
-  // 里真实存在的城市，不重新发起查询
-  onRegionProvinceChange(e: any) {
-    const idx = parseInt(e.detail.value, 10);
+  // 🐛 根因修复：双重弹窗冲突——此前省份/城市用原生 <picker mode="selector">，
+  // 点击后会在已经打开的半屏自定义弹窗（.patch-modal-mask）之上再叠加一层系统
+  // 原生底部选择器，两层弹层互相遮挡/抢占焦点，交互体验混乱。改为弹窗内部的
+  // 内嵌式下拉列表——点击触发器只在同一个弹窗内展开/收起一个绝对定位的选项
+  // 面板（见 wxml .region-dropdown-list 与其 position:absolute 样式），不再
+  // 调用任何原生弹层。两个下拉互斥：展开一个时自动收起另一个
+  onToggleProvinceDropdown() {
+    this.setData({ showProvinceDropdown: !this.data.showProvinceDropdown, showCityDropdown: false });
+  },
+
+  onToggleCityDropdown() {
+    this.setData({ showCityDropdown: !this.data.showCityDropdown, showProvinceDropdown: false });
+  },
+
+  // 省份选项点击：联动收窄城市下拉的可选项——只保留该省份下 storeDirectory
+  // 里真实存在的城市，不重新发起查询。与原 onRegionProvinceChange（原生 picker
+  // 版）同一套收窄逻辑，只是触发来源从 picker 的 bindchange 换成列表项的 bindtap。
+  // 🐛 按去后缀的基准名比较（而非严格 === ），门店档案里"福建"/"福建省"这类
+  // 写法差异也能正确匹配到同一个选中的省份，不会因为后缀不一致而查出 0 家门店
+  onSelectProvinceOption(e: any) {
+    const idx = e.currentTarget.dataset.index;
     const options = this.data.provincePickerOptions;
     const province = idx === 0 ? '' : options[idx];
+    const provinceBase = stripRegionSuffix(province);
     const cityPickerOptions = ['全部城市'].concat(
-      Array.from(new Set(
+      dedupeRegionNames(
         this.data.storeDirectory
-          .filter((s: any) => !province || s.province === province)
+          .filter((s: any) => !province || stripRegionSuffix(s.province) === provinceBase)
           .map((s: any) => s.city)
-          .filter(Boolean)
-      )) as string[]
+      )
     );
     this.setData({
       selectedProvinceIndex: idx,
       selectedProvince: province,
       cityPickerOptions,
       selectedCityIndex: 0,
-      selectedCity: ''
+      selectedCity: '',
+      showProvinceDropdown: false
     });
   },
 
-  onRegionCityChange(e: any) {
-    const idx = parseInt(e.detail.value, 10);
+  onSelectCityOption(e: any) {
+    const idx = e.currentTarget.dataset.index;
     const options = this.data.cityPickerOptions;
     const city = idx === 0 ? '' : options[idx];
-    this.setData({ selectedCityIndex: idx, selectedCity: city });
+    this.setData({ selectedCityIndex: idx, selectedCity: city, showCityDropdown: false });
   },
 
   onConfirmRegionFilter() {
@@ -1362,17 +1467,41 @@ Page({
       isAllStoresMode: true,
       showNationalDashboard: true,
       showRegionFilterModal: false,
+      showProvinceDropdown: false,
+      showCityDropdown: false,
       shopName: '全部门店',
       currentUserStoreName: label
     });
+    // 🛡️ filterMode:'region' 下，loadNationalDashboard() 会从 this.data.selectedProvince/
+    // selectedCity 拼装 { filterMode:'region', province, city } 传给 getNationalDashboard
+    // 云函数（见该方法内 callParams 构建逻辑），这里的 setData 已经落好这两个字段，
+    // 无需在这里重复传参
     this.loadNationalDashboard();
   },
 
   async openCustomStoreModal() {
     const ok = await this.ensureStoreDirectory();
     if (!ok) return;
+    // 每次打开都从 storeDirectory 重建草稿列表，把上一次已确认的
+    // customStoreSelection 回填成对应项的 checked:true，避免重开弹窗时丢失
+    // 上次的选择；搜索框每次重开都清空，matchesSearch 全部重置为可见
+    const selectedSet = new Set(this.data.customStoreSelection);
+    const customStoreDraftList = this.data.storeDirectory.map((s: any) => ({
+      storeId: s.storeId,
+      storeName: s.storeName,
+      province: s.province || '',
+      city: s.city || '',
+      checked: selectedSet.has(s.storeId),
+      matchesSearch: true
+    }));
+    const customStoreProvinceChips = Array.from(
+      new Set(customStoreDraftList.map(s => s.province).filter(Boolean))
+    );
     this.setData({
-      customStoreDraftSelection: this.data.customStoreSelection.slice(),
+      customStoreDraftList,
+      customStoreDraftCheckedCount: customStoreDraftList.filter(s => s.checked).length,
+      customStoreSearchKeyword: '',
+      customStoreProvinceChips,
       showCustomStoreModal: true
     });
   },
@@ -1381,26 +1510,69 @@ Page({
     this.setData({ showCustomStoreModal: false });
   },
 
-  // checkbox-group 的 bindchange 直接回传"当前所有已勾选项 value 数组"，
-  // 不需要自己再手动维护每一项的开关状态
-  onCustomStoreDraftChange(e: any) {
-    this.setData({ customStoreDraftSelection: e.detail.value || [] });
+  // 🆕 门店名称搜索框：按关键字重新计算每一项的 matchesSearch（同作用域字段，
+  // wx:if 直接读取），而不是在 wx:for 表达式里对"顶层 keyword + 循环变量"做
+  // 混合字符串匹配——避免重蹈 checked 状态那类跨作用域表达式的重渲染追踪问题
+  onCustomStoreSearchInput(e: any) {
+    const keyword = String(e.detail.value || '').trim().toLowerCase();
+    const customStoreDraftList = this.data.customStoreDraftList.map(s => ({
+      ...s,
+      matchesSearch: !keyword || s.storeName.toLowerCase().includes(keyword)
+    }));
+    this.setData({ customStoreSearchKeyword: keyword, customStoreDraftList });
+  },
+
+  // 🆕 按省份一键全选：把该省份下所有门店的 checked 置为 true（不清空其他
+  // 省份已勾选的门店），供跨店对比时快速圈定"整个省份"这一常见场景
+  onSelectAllByProvince(e: any) {
+    const province = e.currentTarget.dataset.province;
+    if (!province) return;
+    let addedCount = 0;
+    const customStoreDraftList = this.data.customStoreDraftList.map(s => {
+      if (s.province === province && !s.checked) {
+        addedCount++;
+        return { ...s, checked: true };
+      }
+      return s;
+    });
+    if (addedCount === 0) return;
+    this.setData({
+      customStoreDraftList,
+      customStoreDraftCheckedCount: this.data.customStoreDraftCheckedCount + addedCount
+    });
+  },
+
+  // 🐛 根因修复：勾选框状态不同步——此前 checked 靠
+  // customStoreDraftSelection.includes(store.storeId) 这个跨作用域计算表达式
+  // 驱动，checkbox-group 的聚合 bindchange 回传"当前所有已勾选项 value 数组"后
+  // 反推每一行是否命中，WXML 对这类表达式的重渲染依赖追踪不可靠，容易出现勾选
+  // 图标与真实选中状态脱节。改为点击整行时，只更新这一项自己身上的 checked
+  // 字段——用精确下标路径 setData（wx:for 列表单项更新的标准写法），并同步更新
+  // 已选计数，确保图标与数据状态始终一致
+  onToggleCustomStoreDraft(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const list = this.data.customStoreDraftList;
+    const target = list[index];
+    if (!target) return;
+    const nextChecked = !target.checked;
+    this.setData({
+      [`customStoreDraftList[${index}].checked`]: nextChecked,
+      customStoreDraftCheckedCount: this.data.customStoreDraftCheckedCount + (nextChecked ? 1 : -1)
+    });
   },
 
   onConfirmCustomStores() {
-    const selection = this.data.customStoreDraftSelection;
-    if (!selection || selection.length === 0) {
+    const checkedStores = this.data.customStoreDraftList.filter(s => s.checked);
+    if (checkedStores.length === 0) {
       wx.showToast({ title: '请至少勾选一家门店', icon: 'none' });
       return;
     }
-    const selectedNames = this.data.storeDirectory
-      .filter((s: any) => selection.includes(s.storeId))
-      .map((s: any) => s.storeName);
-    const label = selectedNames.length === 1
-      ? `🏬 ${selectedNames[0]}`
-      : `🏬 自定义(${selectedNames.length}家门店)`;
+    const selection = checkedStores.map(s => s.storeId);
+    const label = checkedStores.length === 1
+      ? `🏬 ${checkedStores[0].storeName}`
+      : `🏬 自定义(${checkedStores.length}家门店)`;
     this.setData({
-      customStoreSelection: selection.slice(),
+      customStoreSelection: selection,
       nationalFilterMode: 'custom',
       isAllStoresMode: true,
       showNationalDashboard: true,
@@ -4106,7 +4278,46 @@ Page({
           const dpr = getSafeSystemInfo().pixelRatio || 2;
 
           const W = 600;
-          const H = 820;
+
+          // 🐛 根因修复：此前 H 是拍脑袋写死的 820，与实际绘制内容的真实高度经常
+          // 对不上——数据卡片区固定只有 4 格（2 行），画完后白色卡片内部与画布
+          // 底部各留出一大截不自然的空白，长图比例显得头重脚轻。改为先把要展示
+          // 的卡片数据组装成数组（并追加此前完全没在海报里出现过的义工到岗
+          // 人次/工时、物资消耗——这些数据 nationalData 里本就有，只是海报没画），
+          // 再按数组长度动态换算白色卡片与整张画布的高度，画多少内容就撑多高
+          const dataCards: Array<{ label: string; value: string; color: string }> = [
+            { label: '全国服务汇入', value: `+¥${nationalData.nationalTotalIncome}`, color: '#2B8A3E' },
+            { label: '全国开餐总支出', value: `-¥${nationalData.nationalTotalExpense}`, color: '#C62828' },
+            { label: '全国累计开餐天数', value: `${nationalData.nationalOpenDays} 天`, color: '#8C1D18' },
+            { label: '覆盖门店数量', value: `${nationalData.totalStores || 0} 家`, color: '#8C1D18' }
+          ];
+          // 🆕 全国义工到岗人次/工时：此前海报完全没有呈现志愿服务成果，只有财务
+          // 数字——补上这两项与"全国累计服务用餐人次"呼应的服务成果类指标
+          if (nationalData.nationalTotalVolunteers > 0 || nationalData.nationalTotalVolunteerHours > 0) {
+            dataCards.push(
+              { label: '全国义工到岗人次', value: `${nationalData.nationalTotalVolunteers} 人次`, color: '#1C7ED6' },
+              { label: '全国义工服务工时', value: `${nationalData.nationalTotalVolunteerHours} 小时`, color: '#1C7ED6' }
+            );
+          }
+          // 🆕 核心物资消耗：只在确实有数据的品类里各占一格，不拼出"大米 0斤"
+          // 这种没有意义的空数据卡片
+          if (nationalData.nationalRiceTotal > 0) dataCards.push({ label: '全国大米消耗', value: `${nationalData.nationalRiceTotal} 斤`, color: '#F08C00' });
+          if (nationalData.nationalFlourTotal > 0) dataCards.push({ label: '全国面粉消耗', value: `${nationalData.nationalFlourTotal} 斤`, color: '#F08C00' });
+          if (nationalData.nationalOilTotal > 0) dataCards.push({ label: '全国食用油消耗', value: `${nationalData.nationalOilTotal} 斤`, color: '#F08C00' });
+          if (nationalData.nationalVegetableTotal > 0) dataCards.push({ label: '全国蔬菜消耗', value: `${nationalData.nationalVegetableTotal} 斤`, color: '#F08C00' });
+
+          const cardStartY = 320;
+          const cardW = (W - 100) / 2;
+          const cardH = 90;
+          const cardGapX = 20;
+          const cardGapY = 16;
+          const cardRows = Math.ceil(dataCards.length / 2);
+          const cardsEndY = cardStartY + cardRows * cardH + (cardRows - 1) * cardGapY;
+          const footerY = cardsEndY + 40;
+          const cardBottomPadding = 30;
+          const whiteCardH = (footerY + 24 + cardBottomPadding) - 160;
+          const H = 160 + whiteCardH + 40;
+
           canvas.width = W * dpr;
           canvas.height = H * dpr;
           ctx.scale(dpr, dpr);
@@ -4126,7 +4337,7 @@ Page({
           ctx.fillStyle = '#FFFFFF';
           ctx.shadowColor = 'rgba(0, 0, 0, 0.05)';
           ctx.shadowBlur = 10;
-          ctx.fillRect(30, 160, 540, 540);
+          ctx.fillRect(30, 160, 540, whiteCardH);
           ctx.shadowBlur = 0;
 
           ctx.fillStyle = '#212529';
@@ -4139,21 +4350,11 @@ Page({
           ctx.fillStyle = '#868E96';
           ctx.fillText('人次', 60 + ctx.measureText(`${nationalData.nationalTotalDiners}`).width + 12, 262);
 
-          const cardStartY = 320;
-          const cardW = (W - 100) / 2;
-          const cardH = 90;
-          const cardGapX = 20;
-          const dataCards = [
-            { label: '全国服务汇入', value: `+¥${nationalData.nationalTotalIncome}`, color: '#2B8A3E' },
-            { label: '全国开餐总支出', value: `-¥${nationalData.nationalTotalExpense}`, color: '#C62828' },
-            { label: '全国累计开餐天数', value: `${nationalData.nationalOpenDays} 天`, color: '#8C1D18' },
-            { label: '覆盖门店数量', value: `${nationalData.totalStores || 0} 家`, color: '#8C1D18' }
-          ];
           dataCards.forEach((card, index) => {
             const col = index % 2;
             const row = Math.floor(index / 2);
             const x = 40 + col * (cardW + cardGapX);
-            const y = cardStartY + row * (cardH + 16);
+            const y = cardStartY + row * (cardH + cardGapY);
 
             ctx.fillStyle = '#F8F9FA';
             this.roundRect(ctx, x, y, cardW, cardH, 10, true);
@@ -4169,7 +4370,6 @@ Page({
           });
           ctx.textAlign = 'left';
 
-          const footerY = cardStartY + 2 * (cardH + 16) + 30;
           ctx.fillStyle = '#8C7355';
           ctx.font = '14px sans-serif';
           ctx.textAlign = 'center';

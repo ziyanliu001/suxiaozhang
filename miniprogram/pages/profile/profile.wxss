@@ -693,13 +693,37 @@
   font-size: 28rpx;
 }
 
+.role-switch-modal-desc-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 24rpx 20rpx;
+  flex-shrink: 0;
+}
+
 .role-switch-modal-desc {
   display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 22rpx;
   color: #999999;
   line-height: 1.6;
-  padding: 16rpx 24rpx 20rpx;
+}
+
+/* 🆕 恢复默认视角：一键切回超级管理员全景的快捷入口，放在说明文案右侧，
+   不占用额外一整行 */
+.role-switch-reset-link {
   flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #B57C1E;
+  white-space: nowrap;
+  padding: 4rpx 0;
+}
+
+.role-switch-reset-link:active {
+  opacity: 0.7;
 }
 
 /* 🐛 底部按钮被挤出屏幕修复：card 固定 max-height: 75vh，body 必须同时持有
@@ -846,6 +870,11 @@
   background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
   color: #FFFFFF;
   box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
+  /* 🆕 按钮文案改为动态"确认切换至 XX视角"后变长（如"确认切换至超级管理员全景"），
+     略微调小字号 + 收紧左右内边距，避免撑破 flex:1 的按钮宽度 */
+  font-size: 24rpx;
+  padding: 0 8rpx;
+  white-space: nowrap;
 }
 
 .role-switch-btn-confirm:active {

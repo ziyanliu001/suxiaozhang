@@ -129,7 +129,17 @@
         <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput"/>
 
         <!-- 🏪 新建门店档案补全：门店此刻还不存在，先随申请一并提交，
-             超管审核通过后自动写入新建门店的档案 -->
+             超管审核通过后自动写入新建门店的档案。
+             🆕 所属地区：原生 <picker mode="region"> 省-市-区级联选择，随申请一并
+             提交 province/city/district，供全国大屏"按地区筛选"使用——不必等
+             门店建好后再去门店档案页补填 -->
+        <text class="form-label">选择所属地区</text>
+        <picker mode="region" bindchange="onNewStoreRegionChange" value="{{newStoreForm.regionArray}}">
+          <view class="new-store-input region-picker-display">
+            <text class="{{newStoreForm.regionArray.length === 0 ? 'region-placeholder' : ''}}">{{newStoreForm.regionArray.length > 0 ? newStoreForm.regionArray[0] + ' ' + newStoreForm.regionArray[1] + ' ' + newStoreForm.regionArray[2] : '请选择省/市/区'}}</text>
+          </view>
+        </picker>
+
         <text class="form-label">门店地址</text>
         <input class="new-store-input" type="text" placeholder="请输入门店详细地址" value="{{newStoreForm.address}}" bindinput="onNewStoreAddressInput"/>
 

@@ -207,6 +207,9 @@ Page({
     viewModeCards: VIEW_MODE_CARDS,
     showViewModeModal: false,
     viewModeModalPendingMode: 'SUPER_ADMIN' as PreviewViewMode,
+    // 🆕 确认按钮文案"确认切换至 [XX视角]"绑定这个字段，随 viewModeModalPendingMode
+    // 同步更新（打开弹窗/点选卡片时一起写，避免 WXML 里再去反查 PREVIEW_VIEW_MODE_LABELS）
+    viewModeModalPendingLabel: '超级管理员全景',
     stats: {
       volunteerDays: 0,
       volunteerHours: 0,
@@ -1188,31 +1191,53 @@ Page({
   // 仅在 isRealSuperAdmin 为真时才会被 WXML 渲染出触发入口，各处理函数再做二次校验兜底。
   onOpenViewModeModal() {
     if (!this.data.isRealSuperAdmin) return;
-    this.setData({ showViewModeModal: true, viewModeModalPendingMode: this.data.currentViewMode });
+    const mode = this.data.currentViewMode;
+    this.setData({
+      showViewModeModal: true,
+      viewModeModalPendingMode: mode,
+      viewModeModalPendingLabel: PREVIEW_VIEW_MODE_LABELS[mode] || ''
+    });
   },
 
   onCancelViewModeModal() {
     this.setData({ showViewModeModal: false });
   },
 
-  // 点击卡片仅暂存待选视角、高亮对应 Card，不立即生效——须点击"确认切换"才真正生效
+  // 点击卡片仅暂存待选视角（连同展示用的 label）、高亮对应 Card，不立即生效——
+  // 须点击"确认切换"才真正落地 currentViewMode/触发页面刷新，交互解耦：draft
+  // 暂存与真正生效是两个独立步骤，与 switch-identity 半屏弹窗同一套范式
   onSelectViewModeCard(e: any) {
     const mode = e.currentTarget.dataset.mode as PreviewViewMode;
     if (!mode) return;
-    this.setData({ viewModeModalPendingMode: mode });
+    this.setData({
+      viewModeModalPendingMode: mode,
+      viewModeModalPendingLabel: PREVIEW_VIEW_MODE_LABELS[mode] || ''
+    });
   },
 
   onConfirmViewModeModal() {
     if (!this.data.isRealSuperAdmin) return;
-
     const mode = this.data.viewModeModalPendingMode as PreviewViewMode;
     if (!mode) return;
+    this.applyViewModeSwitch(mode);
+  },
 
+  // 🆕 恢复默认视角：跳过"选卡片→点确认"两步，一键直接切回超级管理员全景，
+  // 与 onConfirmViewModeModal 共用同一套应用+反馈逻辑
+  onResetToDefaultViewMode() {
+    if (!this.data.isRealSuperAdmin) return;
+    this.applyViewModeSwitch('SUPER_ADMIN');
+  },
+
+  // 🆕 真正落地一次视角切换：写入本地预览态（setPreviewViewMode）、关闭弹窗、
+  // toast 反馈、刷新本页展示——onConfirmViewModeModal/onResetToDefaultViewMode
+  // 两个入口共用，避免重复维护同一段逻辑
+  applyViewModeSwitch(mode: PreviewViewMode) {
     setPreviewViewMode(mode);
     this.setData({ showViewModeModal: false });
     wx.showToast({
-      title: mode === 'SUPER_ADMIN' ? '已切回超级管理员全景' : `已切换为${PREVIEW_VIEW_MODE_LABELS[mode]}预览`,
-      icon: 'none'
+      title: `已切换至${PREVIEW_VIEW_MODE_LABELS[mode]}`,
+      icon: 'success'
     });
 
     // 立即刷新本页展示；首页会在下次 onShow（切换 Tab）时自动应用同一预览角色

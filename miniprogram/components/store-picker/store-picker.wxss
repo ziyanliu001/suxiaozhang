@@ -456,6 +456,17 @@
   margin-bottom: 24rpx;
 }
 
+/* 🆕 所属地区 picker 的展示行——套用 <input> 同款外观，用 flex 让文字垂直居中
+   （<input> 本身自带垂直居中，换成 <view> 包 <text> 需要手动补上） */
+.region-picker-display {
+  display: flex;
+  align-items: center;
+}
+
+.region-placeholder {
+  color: #ADB5BD;
+}
+
 .new-store-role-group {
   display: flex;
   gap: 24rpx;

@@ -8,8 +8,8 @@ const _ = db.command;
 const MASK_TEXT = '***（仅店长可见）';
 
 // 🌟 超管专属高阶治理看板：时间维度切片 + 离线门店预警阈值
-const RANGE_DAYS = { '7d': 7, 'month': 30, 'quarter': 90 };
-const RANGE_LABELS = { '7d': '近7天', 'month': '本月', 'quarter': '本季度', 'all': '全部时间' };
+const RANGE_DAYS = { '7d': 7, 'month': 30, 'quarter': 90, 'year': 365 };
+const RANGE_LABELS = { '7d': '近7天', 'month': '本月', 'quarter': '本季度', 'year': '本年', 'all': '全部时间' };
 const OFFLINE_ALERT_DAYS = 3;
 
 function isoDateNDaysAgo(n) {
@@ -38,6 +38,63 @@ function normalizeRegionText(str) {
   return String(str || '').trim().replace(/(省|市|自治区|特别行政区|地区)$/, '');
 }
 
+const UNCLASSIFIED_REGION_LABEL = '未分类地区';
+
+// 🆕 轻量省市提取 + 兜底标签：历史门店（province/city 字段上线前建的店）读出来
+// 可能仍是空字符串。先尝试从门店名称/地址文本里轻量提取（不追求覆盖全国行政
+// 区划，只覆盖本项目门店实际集中分布的常见地区），提取也失败时打上"未分类
+// 地区"标签——确保这批门店在"按地区筛选"/门店矩阵里依然可见、可被选中，
+// 而不是从统计里静默消失
+const REGION_CITY_TO_PROVINCE = {
+  '厦门': '福建省', '漳州': '福建省', '泉州': '福建省', '福州': '福建省', '莆田': '福建省',
+  '三明': '福建省', '南平': '福建省', '龙岩': '福建省', '宁德': '福建省'
+};
+const REGION_DISTRICT_TO_CITY = {
+  '海沧': '厦门', '思明': '厦门', '湖里': '厦门', '集美': '厦门', '同安': '厦门', '翔安': '厦门',
+  '芗城': '漳州', '龙文': '漳州', '龙海': '漳州',
+  '鲤城': '泉州', '丰泽': '泉州', '洛江': '泉州', '泉港': '泉州', '晋江': '泉州', '石狮': '泉州', '南安': '泉州'
+};
+function extractRegionFromText(text) {
+  const str = String(text || '');
+  if (!str) return { province: '', city: '' };
+  for (const cityBase of Object.keys(REGION_CITY_TO_PROVINCE)) {
+    if (str.includes(cityBase)) {
+      return { province: REGION_CITY_TO_PROVINCE[cityBase], city: `${cityBase}市` };
+    }
+  }
+  for (const districtBase of Object.keys(REGION_DISTRICT_TO_CITY)) {
+    if (str.includes(districtBase)) {
+      const cityBase = REGION_DISTRICT_TO_CITY[districtBase];
+      return { province: REGION_CITY_TO_PROVINCE[cityBase] || '', city: `${cityBase}市` };
+    }
+  }
+  return { province: '', city: '' };
+}
+
+// 门店记录已有的 province/city 优先；都缺失时先猜，猜不出来才打兜底标签。
+// 传入的 s 只要求有 storeName/address/province/city 字段，report_logs 的兜底
+// 门店（无 address）与 stores 集合的正式门店都能直接复用
+function resolveStoreRegion(s) {
+  const rawProvince = (s && s.province) || '';
+  const rawCity = (s && s.city) || '';
+  if (rawProvince || rawCity) {
+    return { province: rawProvince || UNCLASSIFIED_REGION_LABEL, city: rawCity || UNCLASSIFIED_REGION_LABEL };
+  }
+  const guessed = extractRegionFromText(`${(s && s.storeName) || ''} ${(s && s.address) || ''}`);
+  return {
+    province: guessed.province || UNCLASSIFIED_REGION_LABEL,
+    city: guessed.city || UNCLASSIFIED_REGION_LABEL
+  };
+}
+
+// 🆕 环比趋势百分比：prev 为 0/缺失时视为"无可比基数"，返回 null 让前端隐藏徽标，
+// 而不是误导性地显示 "+∞%"/"+100%"——与前端 statistics.ts 的 computePctChange
+// 是同一条口径（服务端/客户端各自独立实现，本项目各云函数间无共享运行时模块）
+function computePctChange(curr, prev) {
+  if (!prev) return null;
+  return Math.round(((curr - prev) / prev) * 1000) / 10;
+}
+
 // 🛡️ 统一数据脱敏处理函数：分层开放、数据脱敏
 // 志工（VOLUNTEER）只应看到"集体荣誉"类服务成果（服务人次、开餐天数、续航状态标签），
 // 单餐成本、收支金额、结余、精确续航天数等运营/财务隐私字段一律在服务端就地清除，
@@ -54,7 +111,10 @@ function sanitizeReportForVolunteer(data, userRole) {
     'nationalTotalIncome', 'nationalTotalExpense', 'nationalNetAccumulation',
     'latestBalance', 'balance', 'todayBalance', 'yesterdayBalance',
     // 精确续航天数属于可反推资金余额的财务隐私，志工只保留 healthStatus 状态标签
-    'runwayDays'
+    'runwayDays',
+    // 🆕 支出环比趋势会暴露"运营规模是在扩张还是收缩"这类财务动向，与它所描述的
+    // 原始支出金额同一档隐私级别，一并脱敏；服务人次环比不涉及财务，不需要遮罩
+    'nationalTotalExpenseTrend'
   ];
 
   const maskOne = (item) => {
@@ -173,9 +233,13 @@ exports.main = async (event, context) => {
       const provinceFilter = normalizeRegionText(event && event.province);
       const cityFilter = normalizeRegionText(event && event.city);
       if (provinceFilter || cityFilter) {
+        // 🆕 按解析后的地区（resolveStoreRegion，含"未分类地区"兜底/文本提取猜测）
+        // 匹配，而不是只认门店文档里的原始 province/city 字段——否则历史门店
+        // 永远无法通过地区筛选被选中，只能困在"全国总览"里
         targetStores = allStores.filter((s) => {
-          if (provinceFilter && normalizeRegionText(s.province) !== provinceFilter) return false;
-          if (cityFilter && normalizeRegionText(s.city) !== cityFilter) return false;
+          const region = resolveStoreRegion(s);
+          if (provinceFilter && normalizeRegionText(region.province) !== provinceFilter) return false;
+          if (cityFilter && normalizeRegionText(region.city) !== cityFilter) return false;
           return true;
         });
         isScopedFilter = true;
@@ -224,6 +288,56 @@ exports.main = async (event, context) => {
       if (batch.data.length < batchLimit) break;
       skip += batchLimit;
       if (skip >= 1000) break;
+    }
+
+    // 🆕 核心 KPI 环比趋势：只在选择了具体时间粒度（非"全部时间"）时才有自然的
+    // "上一个同长度周期"可比较——'all' 没有可比周期，prevTotalDiners/prevTotalExpense
+    // 保持默认值 0，下面 computePctChange 遇到 prev=0 会自动返回 null，前端据此
+    // 隐藏趋势徽标，不会显示误导性的 "+∞%"。与主查询共用同一套 tenantId/isVoid/
+    // approvalStatus 过滤条件，并套用同一个 isScopedFilter/targetStores 范围
+    // （按地区/自定义门店筛选时，环比也必须收窄到同一个门店集合，否则趋势对比的
+    // 是两个不同范围的数字，没有意义）
+    let prevTotalDiners = 0;
+    let prevTotalExpense = 0;
+    if (rangeStartDate && RANGE_DAYS[rangeType]) {
+      const prevRangeStartDate = isoDateNDaysAgo(RANGE_DAYS[rangeType] * 2);
+      const targetStoreIdSet = new Set(targetStores.map(s => s._id));
+      const targetStoreNameSet = new Set(targetStores.map(s => s.storeName));
+      try {
+        let allPrevLogs = [];
+        let prevSkip = 0;
+        const prevLogsQueryWhere = _.and([
+          _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]),
+          { isVoid: _.neq(true) },
+          { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) },
+          { dateString: _.gte(prevRangeStartDate) },
+          { dateString: _.lt(rangeStartDate) }
+        ]);
+        while (true) {
+          const batch = await db.collection('report_logs')
+            .where(prevLogsQueryWhere)
+            .skip(prevSkip)
+            .limit(batchLimit)
+            .get();
+          if (!batch.data || batch.data.length === 0) break;
+          allPrevLogs = allPrevLogs.concat(batch.data);
+          if (batch.data.length < batchLimit) break;
+          prevSkip += batchLimit;
+          if (prevSkip >= 1000) break;
+        }
+        allPrevLogs.forEach((log) => {
+          if (isScopedFilter) {
+            const matched = (log.storeId && targetStoreIdSet.has(log.storeId)) ||
+              (log.shopName && targetStoreNameSet.has(log.shopName));
+            if (!matched) return;
+          }
+          prevTotalDiners += parseInt(log.diningCount || log.diners || 0, 10) || 0;
+          prevTotalExpense += parseFloat(log.expense || log.todayExpense || log.expenseAmount || 0) || 0;
+        });
+      } catch (err) {
+        // 环比查询失败不影响主统计，趋势字段按 0 基数处理，computePctChange 自动
+        // 返回 null，前端隐藏徽标即可，不抛出影响整个大屏加载
+      }
     }
 
     // 🌾 全国核心物资消耗总量：大米/面粉/食用油/蔬菜累计斤数，来自 material_logs——
@@ -287,11 +401,12 @@ exports.main = async (event, context) => {
     const storeStatsMap = {};
 
     targetStores.forEach(s => {
+      const region = resolveStoreRegion(s);
       storeStatsMap[s._id] = {
         storeId: s._id,
         storeName: s.storeName || '未命名门店',
-        city: s.city || '未知',
-        province: s.province || '',
+        city: region.city,
+        province: region.province,
         totalDiners: 0,
         totalIncome: 0,
         totalExpense: 0,
@@ -330,10 +445,12 @@ exports.main = async (event, context) => {
           return;
         }
         if (!fallbackStoreMap[sId]) {
+          const fallbackRegion = resolveStoreRegion({ storeName: logStoreName });
           fallbackStoreMap[sId] = {
             storeId: sId,
             storeName: logStoreName || '未分类门店',
-            city: '未知',
+            city: fallbackRegion.city,
+            province: fallbackRegion.province,
             totalDiners: 0,
             totalIncome: 0,
             totalExpense: 0,
@@ -425,8 +542,10 @@ exports.main = async (event, context) => {
       const item = {
         storeId: s.storeId,
         storeName: s.storeName,
+        // s.city/s.province 已在 storeStatsMap/fallbackStoreMap 构建阶段经过
+        // resolveStoreRegion 解析（含"未分类地区"兜底），此处直接透传
         city: s.city,
-        province: s.province || '',
+        province: s.province,
         totalDiners: s.totalDiners,
         openDays: s.openDays,
         // 无数据时 runwayDays 给 null 而不是 0，前端据此判断"有没有具体天数可展示"，
@@ -479,7 +598,11 @@ exports.main = async (event, context) => {
       nationalRiceTotal: Math.round(nationalRiceTotal * 10) / 10,
       nationalFlourTotal: Math.round(nationalFlourTotal * 10) / 10,
       nationalOilTotal: Math.round(nationalOilTotal * 10) / 10,
-      nationalVegetableTotal: Math.round(nationalVegetableTotal * 10) / 10
+      nationalVegetableTotal: Math.round(nationalVegetableTotal * 10) / 10,
+      // 🆕 核心 KPI 环比趋势（vs 上一个同长度周期）：rangeType='all' 或查无
+      // 可比基数时 prevTotal*=0，computePctChange 自动返回 null，前端隐藏徽标
+      nationalTotalDinersTrend: computePctChange(nationalTotalDiners, prevTotalDiners),
+      nationalTotalExpenseTrend: computePctChange(nationalTotalExpense, prevTotalExpense)
     };
 
     // 🌟 超管专属高阶治理看板：核心指标 + 时间切片 + 离线门店预警，见需求2/3

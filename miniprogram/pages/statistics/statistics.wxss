@@ -272,6 +272,85 @@ page {
   color: #868E96;
 }
 
+/* 🆕 "按地区筛选"弹窗内嵌式下拉：替代原生 <picker>，避免半屏弹窗之上再叠加
+   一层系统底部选择器。触发器点击展开一个绝对定位在其正下方的选项面板，不
+   影响同排另一个字段（省份/城市）的布局宽度 */
+.region-select-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.region-select-field {
+  flex: 1;
+  position: relative;
+}
+
+.region-select-trigger {
+  background: #FFF9DB;
+  border: 1rpx solid #FFE066;
+  padding: 12rpx 24rpx;
+  border-radius: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.region-select-trigger.active {
+  border-color: #D9480E;
+  background: #FFF3E0;
+}
+
+.region-select-trigger .lbl {
+  font-size: 24rpx;
+  color: #7A4D00;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.region-select-trigger .arrow {
+  font-size: 20rpx;
+  color: #D9480E;
+  margin-left: 8rpx;
+  flex-shrink: 0;
+}
+
+.region-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8rpx);
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border: 1rpx solid #E9ECEF;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.16);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.region-dropdown-scroll {
+  max-height: 320rpx;
+}
+
+.region-dropdown-item {
+  padding: 18rpx 24rpx;
+  font-size: 26rpx;
+  color: #333333;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+.region-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.region-dropdown-item.active {
+  color: #D9480E;
+  font-weight: bold;
+  background: #FFF9DB;
+}
+
 .btn-custom-query {
   margin-top: 16rpx;
   background: linear-gradient(135deg, #FFE066 0%, #FCC419 100%);
@@ -330,8 +409,8 @@ page {
 }
 
 .warning-pill.urgent {
-  background: #FFF5F5;
-  color: #E03131;
+  background: #E03131;
+  color: #FFFFFF;
 }
 
 /* 🐛 "告急(0天)"误报修复配套样式：无数据时用中性灰徽章，不落入红/绿强色调 */
@@ -2368,6 +2447,33 @@ button.btn-primary-poster {
   border-bottom: 1rpx solid #F1F3F5;
 }
 
+.custom-store-search-input {
+  background: #F8F9FA;
+  border: 1rpx solid #E9ECEF;
+  border-radius: 16rpx;
+  padding: 14rpx 20rpx;
+  font-size: 26rpx;
+  color: #212529;
+  margin-bottom: 16rpx;
+}
+
+.custom-store-province-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.custom-store-province-chip {
+  background: #FFF3E0;
+  border: 1rpx solid #FFCC80;
+  color: #D9480E;
+  font-size: 22rpx;
+  font-weight: bold;
+  padding: 8rpx 18rpx;
+  border-radius: 20rpx;
+}
+
 .matrix-table {
   margin-top: 12rpx;
 }
@@ -2388,6 +2494,16 @@ button.btn-primary-poster {
   border-bottom: 1rpx solid #F1F3F5;
   font-size: 24rpx;
   align-items: center;
+}
+
+/* 🆕 门店存量资金/续航低于预警线（statusLevel === 'urgent'）时整行红色高亮，
+   而不是只靠右侧一枚小徽章——运营健康度概览需要一眼扫到"这家店需要立刻关注"，
+   不该依赖用户逐行读小字判断 */
+.table-tr.risk-row {
+  background: #FFF5F5;
+  border-left: 6rpx solid #E03131;
+  border-radius: 0 8rpx 8rpx 0;
+  padding-left: 6rpx;
 }
 
 .col-store {
@@ -3434,6 +3550,7 @@ button.btn-empty-national {
 .core-metrics-yoy {
   font-size: 20rpx;
   font-weight: bold;
+  margin-top: 4rpx;
 }
 
 .core-metrics-yoy.up {

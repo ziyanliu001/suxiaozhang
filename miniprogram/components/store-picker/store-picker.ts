@@ -49,7 +49,14 @@ Component({
       // onSubmitNewStoreApply / processRoleAudit submitRoleApply 的完整性校验
       address: '',
       contactPhone: '',
-      storePhotos: [] as string[]
+      storePhotos: [] as string[],
+      // 🆕 所属地区：<picker mode="region"> 原生省市区级联选择，regionArray 是
+      // picker 本身要求的 [province, city, district] 数组绑定值，province/city/
+      // district 是拆开后单独提交给 processRoleAudit 的字段（与 address 平级）
+      regionArray: [] as string[],
+      province: '',
+      city: '',
+      district: ''
     },
     newStorePhotoUploading: false,
 
@@ -869,7 +876,10 @@ Component({
     onToggleNewStoreForm() {
       this.setData({
         showNewStoreForm: !this.data.showNewStoreForm,
-        newStoreForm: { customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', address: '', contactPhone: '', storePhotos: [] }
+        newStoreForm: {
+          customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', address: '', contactPhone: '', storePhotos: [],
+          regionArray: [], province: '', city: '', district: ''
+        }
       });
     },
 
@@ -891,6 +901,18 @@ Component({
 
     onNewStoreAddressInput(e: any) {
       this.setData({ 'newStoreForm.address': e.detail.value });
+    },
+
+    // 🆕 原生省市区级联选择：e.detail.value 固定是 [province, city, district]
+    // 三元字符串数组，随申请一并提交给 processRoleAudit，供全国大屏"按地区筛选"使用
+    onNewStoreRegionChange(e: any) {
+      const [province, city, district] = e.detail.value || [];
+      this.setData({
+        'newStoreForm.regionArray': e.detail.value || [],
+        'newStoreForm.province': province || '',
+        'newStoreForm.city': city || '',
+        'newStoreForm.district': district || ''
+      });
     },
 
     onNewStoreContactPhoneInput(e: any) {
@@ -963,6 +985,9 @@ Component({
       const address = (this.data.newStoreForm.address || '').trim();
       const contactPhone = (this.data.newStoreForm.contactPhone || '').trim();
       const storePhotos = this.data.newStoreForm.storePhotos || [];
+      const province = this.data.newStoreForm.province || '';
+      const city = this.data.newStoreForm.city || '';
+      const district = this.data.newStoreForm.district || '';
 
       if (!customStoreName) {
         wx.showToast({ title: '请输入新门店名称', icon: 'none' });
@@ -1023,6 +1048,9 @@ Component({
             address,
             contactPhone,
             storePhotos,
+            province,
+            city,
+            district,
             tenantId,
             requestedRole: applyRole,
             realName,

@@ -683,7 +683,12 @@
         <text class="role-switch-modal-title">管理视角切换</text>
         <text class="role-switch-modal-close" bindtap="onCancelViewModeModal">✕</text>
       </view>
-      <text class="role-switch-modal-desc">预览超级管理员在各角色下看到的界面与操作入口，仅展示层模拟，不改变云端真实角色</text>
+      <view class="role-switch-modal-desc-row">
+        <text class="role-switch-modal-desc">预览超级管理员在各角色下看到的界面与操作入口，仅展示层模拟，不改变云端真实角色</text>
+        <!-- 🆕 恢复默认视角：一键直接切回超级管理员全景，不必先在卡片列表里找到
+             对应选项再点确认 -->
+        <text class="role-switch-reset-link" bindtap="onResetToDefaultViewMode">恢复默认视角</text>
+      </view>
 
       <scroll-view scroll-y class="role-switch-modal-body">
         <view
@@ -704,7 +709,7 @@
 
       <view class="role-switch-modal-footer">
         <button class="role-switch-btn-cancel" bindtap="onCancelViewModeModal">取消</button>
-        <button class="role-switch-btn-confirm" bindtap="onConfirmViewModeModal">确认切换</button>
+        <button class="role-switch-btn-confirm" bindtap="onConfirmViewModeModal">确认切换至{{viewModeModalPendingLabel}}</button>
       </view>
     </view>
   </view>

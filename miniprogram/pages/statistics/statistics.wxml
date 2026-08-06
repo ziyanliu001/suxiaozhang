@@ -133,6 +133,21 @@
       <view class="filter-status-btn" bindtap="onChangeNationalFilter">更改筛选</view>
     </view>
 
+    <!-- 🆕 时间范围选择器：从原先深埋在超管高阶治理面板里挪到页面顶部——切换
+         时间粒度是最高频操作之一，此前要滚动过 KPI 卡/门店矩阵/排行榜才能看到，
+         现置顶方便随时切换。rangeType 只对 super_admin 生效（云函数侧会再次
+         校验角色，见 getNationalDashboard），非超管切了也不影响任何数据，故仍按
+         isAdmin 收窄展示，不展示无效入口 -->
+    <view class="range-tab-row" wx:if="{{isAdmin}}">
+      <view
+        wx:for="{{nationalRangeOptions}}"
+        wx:key="value"
+        class="range-tab-item {{nationalRangeType === item.value ? 'active' : ''}}"
+        data-range="{{item.value}}"
+        bindtap="onSwitchNationalRange"
+      >{{item.label}}</view>
+    </view>
+
     <!-- 🆕 全国多店大屏专属宏观 KPI 卡：黄金/暖白风，与下方蓝色 national-hero-card
          是两张不同定位的卡片——这张只放三个一眼就能看懂的"体量"指标（覆盖门店/
          累计服务人次/总餐食支出），置顶做第一屏摘要；national-hero-card 保留原有
@@ -146,12 +161,20 @@
           <text class="macro-kpi-lbl">覆盖门店总数</text>
         </view>
         <view class="macro-kpi-cell">
-          <text class="macro-kpi-val">{{nationalData.nationalTotalDiners}}</text>
+          <text class="macro-kpi-val">{{nationalData.nationalTotalDinersDisplay}}</text>
           <text class="macro-kpi-lbl">全国累计服务人次</text>
+          <!-- 🆕 环比趋势：与当前 nationalRangeType 选定的时间粒度对比上一个同长度
+               周期，rangeType='all' 或查无可比基数时服务端返回 null，隐藏徽标 -->
+          <view class="core-metrics-yoy {{nationalData.nationalTotalDinersTrend > 0 ? 'up' : (nationalData.nationalTotalDinersTrend < 0 ? 'down' : 'flat')}}" wx:if="{{nationalData.nationalTotalDinersTrend !== null && nationalData.nationalTotalDinersTrend !== undefined}}">
+            <text>{{nationalData.nationalTotalDinersTrend > 0 ? '▲' : (nationalData.nationalTotalDinersTrend < 0 ? '▼' : '—')}} {{nationalData.nationalTotalDinersTrend}}% 环比</text>
+          </view>
         </view>
         <view class="macro-kpi-cell" wx:if="{{isManager}}">
-          <text class="macro-kpi-val">¥{{nationalData.nationalTotalExpense}}</text>
+          <text class="macro-kpi-val">¥{{nationalData.nationalTotalExpenseDisplay}}</text>
           <text class="macro-kpi-lbl">全国总餐食支出</text>
+          <view class="core-metrics-yoy {{nationalData.nationalTotalExpenseTrend > 0 ? 'up' : (nationalData.nationalTotalExpenseTrend < 0 ? 'down' : 'flat')}}" wx:if="{{nationalData.nationalTotalExpenseTrend !== null && nationalData.nationalTotalExpenseTrend !== undefined}}">
+            <text>{{nationalData.nationalTotalExpenseTrend > 0 ? '▲' : (nationalData.nationalTotalExpenseTrend < 0 ? '▼' : '—')}} {{nationalData.nationalTotalExpenseTrend}}% 环比</text>
+          </view>
         </view>
         <view class="macro-kpi-cell" wx:else>
           <text class="macro-kpi-val macro-kpi-masked">***</text>
@@ -168,17 +191,17 @@
 
       <view class="hero-main-num">
         <text class="num-lbl">全国累计服务用餐人次</text>
-        <text class="num-val">{{nationalData.nationalTotalDiners}} <text class="unit">人次</text></text>
+        <text class="num-val">{{nationalData.nationalTotalDinersDisplay}} <text class="unit">人次</text></text>
       </view>
 
       <!-- 🌟 志工视角：隐藏具体资金汇入/支出数额，仅保留服务成果类指标（开餐天数） -->
       <view class="hero-grid-4" wx:if="{{isManager}}">
         <view class="h-cell">
-          <text class="h-val">+¥{{nationalData.nationalTotalIncome}}</text>
+          <text class="h-val">+¥{{nationalData.nationalTotalIncomeDisplay}}</text>
           <text class="h-lbl">全国服务汇入</text>
         </view>
         <view class="h-cell">
-          <text class="h-val">-¥{{nationalData.nationalTotalExpense}}</text>
+          <text class="h-val">-¥{{nationalData.nationalTotalExpenseDisplay}}</text>
           <text class="h-lbl">全国开餐总支出</text>
         </view>
         <view class="h-cell">
@@ -261,7 +284,7 @@
 
         <view class="table-tbody">
           <view
-            class="table-tr"
+            class="table-tr {{item.statusLevel === 'urgent' ? 'risk-row' : ''}}"
             wx:for="{{nationalMatrixList}}"
             wx:key="storeId"
             wx:if="{{!isAdmin || (storeMatrixFilter === 'risk' ? (item.isOffline || item.hasRiskFlag) : !(item.isOffline || item.hasRiskFlag))}}"
@@ -332,24 +355,14 @@
         <text class="matrix-title">🛡️ 超管高阶治理面板</text>
       </view>
 
-      <view class="range-tab-row">
-        <view
-          wx:for="{{nationalRangeOptions}}"
-          wx:key="value"
-          class="range-tab-item {{nationalRangeType === item.value ? 'active' : ''}}"
-          data-range="{{item.value}}"
-          bindtap="onSwitchNationalRange"
-        >{{item.label}}</view>
-      </view>
-
       <!-- 高对比度核心数据卡：总累计服务餐次/总爱心支出/活跃门店数量/今日预警门店数 -->
       <view class="insights-metric-grid hero-contrast">
         <view class="insights-metric-cell hero-contrast-cell">
-          <text class="insights-metric-val">{{nationalData.nationalTotalDiners}}</text>
+          <text class="insights-metric-val">{{nationalData.nationalTotalDinersDisplay}}</text>
           <text class="insights-metric-lbl">总累计服务餐次</text>
         </view>
         <view class="insights-metric-cell hero-contrast-cell">
-          <text class="insights-metric-val">¥{{nationalData.nationalTotalExpense}}</text>
+          <text class="insights-metric-val">¥{{nationalData.nationalTotalExpenseDisplay}}</text>
           <text class="insights-metric-lbl">总爱心支出金额</text>
         </view>
         <view class="insights-metric-cell hero-contrast-cell">
@@ -491,19 +504,48 @@
       </view>
       <text class="modal-tip">选择省份/城市后，将只汇总该地区门店的数据；留空表示不限地区</text>
 
-      <view class="date-picker-subrow">
-        <picker mode="selector" range="{{provincePickerOptions}}" value="{{selectedProvinceIndex}}" bindchange="onRegionProvinceChange">
-          <view class="picker-pill-btn">
-            <text class="lbl">{{provincePickerOptions[selectedProvinceIndex] || '全部省份'}}</text>
-            <text class="arrow">▼</text>
+      <!-- 🐛 根因修复：不再使用原生 <picker mode="selector">（点击会在本弹窗之上
+           再叠加一层系统底部选择器，两层弹层冲突）。改为弹窗内嵌式下拉——点击
+           触发器展开/收起一个绝对定位在触发器正下方的选项面板，全程只有这一个
+           半屏弹窗，没有第二层原生弹层 -->
+      <view class="region-select-row">
+        <view class="region-select-field">
+          <view class="region-select-trigger {{showProvinceDropdown ? 'active' : ''}}" bindtap="onToggleProvinceDropdown">
+            <text class="lbl">{{selectedProvince || '全部省份'}}</text>
+            <text class="arrow">{{showProvinceDropdown ? '▲' : '▼'}}</text>
           </view>
-        </picker>
-        <picker mode="selector" range="{{cityPickerOptions}}" value="{{selectedCityIndex}}" bindchange="onRegionCityChange">
-          <view class="picker-pill-btn">
-            <text class="lbl">{{cityPickerOptions[selectedCityIndex] || '全部城市'}}</text>
-            <text class="arrow">▼</text>
+          <view class="region-dropdown-panel" wx:if="{{showProvinceDropdown}}">
+            <scroll-view scroll-y class="region-dropdown-scroll">
+              <view
+                class="region-dropdown-item {{selectedProvinceIndex === idx ? 'active' : ''}}"
+                wx:for="{{provincePickerOptions}}"
+                wx:key="*this"
+                wx:for-index="idx"
+                data-index="{{idx}}"
+                bindtap="onSelectProvinceOption"
+              >{{item}}</view>
+            </scroll-view>
           </view>
-        </picker>
+        </view>
+
+        <view class="region-select-field">
+          <view class="region-select-trigger {{showCityDropdown ? 'active' : ''}}" bindtap="onToggleCityDropdown">
+            <text class="lbl">{{selectedCity || '全部城市'}}</text>
+            <text class="arrow">{{showCityDropdown ? '▲' : '▼'}}</text>
+          </view>
+          <view class="region-dropdown-panel" wx:if="{{showCityDropdown}}">
+            <scroll-view scroll-y class="region-dropdown-scroll">
+              <view
+                class="region-dropdown-item {{selectedCityIndex === idx ? 'active' : ''}}"
+                wx:for="{{cityPickerOptions}}"
+                wx:key="*this"
+                wx:for-index="idx"
+                data-index="{{idx}}"
+                bindtap="onSelectCityOption"
+              >{{item}}</view>
+            </scroll-view>
+          </view>
+        </view>
       </view>
 
       <view class="modal-footer">
@@ -522,21 +564,55 @@
       </view>
       <text class="modal-tip">勾选需要对比/合并统计的门店（可多选，至少选择一家）</text>
 
-      <checkbox-group bindchange="onCustomStoreDraftChange">
-        <scroll-view scroll-y class="modal-scroll-list">
-          <label class="report-check-item" wx:for="{{storeDirectory}}" wx:key="storeId" wx:for-item="store">
-            <checkbox value="{{store.storeId}}" checked="{{customStoreDraftSelection.includes(store.storeId)}}" color="#8C1D18" />
-            <text>{{store.storeName}}<text wx:if="{{store.province || store.city}}"> ({{store.province}}{{store.city}})</text></text>
-          </label>
-        </scroll-view>
-      </checkbox-group>
-      <view class="empty-box" wx:if="{{storeDirectory.length === 0}}">
+      <!-- 🆕 门店名称搜索框：input 直接触发 onCustomStoreSearchInput 重算每一项
+           的 matchesSearch 字段，下面 wx:if 只读这个同作用域字段 -->
+      <input
+        class="custom-store-search-input"
+        placeholder="🔍 搜索门店名称"
+        value="{{customStoreSearchKeyword}}"
+        bindinput="onCustomStoreSearchInput"
+        confirm-type="search"
+      />
+
+      <!-- 🆕 按省份一键全选：每个芯片点击后把该省份下所有门店勾选为 true -->
+      <view class="custom-store-province-chips" wx:if="{{customStoreProvinceChips.length > 0}}">
+        <view
+          class="custom-store-province-chip"
+          wx:for="{{customStoreProvinceChips}}"
+          wx:key="*this"
+          wx:for-item="province"
+          data-province="{{province}}"
+          bindtap="onSelectAllByProvince"
+        >{{province}} 全选</view>
+      </view>
+
+      <!-- 🐛 每一行的勾选状态直接绑定这一项自己的 store.checked 字段（wx:for
+           列表单项状态的标准写法），不再靠 checkbox-group 聚合 bindchange 反推
+           membership——整行 bindtap 触发 onToggleCustomStoreDraft，用精确下标
+           路径 setData 只更新这一项，勾选图标与数据状态可靠同步。搜索过滤同理，
+           用同作用域的 store.matchesSearch 字段做 wx:if，而不是跨作用域表达式 -->
+      <scroll-view scroll-y class="modal-scroll-list">
+        <view
+          class="report-check-item"
+          wx:for="{{customStoreDraftList}}"
+          wx:key="storeId"
+          wx:for-item="store"
+          wx:for-index="idx"
+          wx:if="{{store.matchesSearch}}"
+          bindtap="onToggleCustomStoreDraft"
+          data-index="{{idx}}"
+        >
+          <checkbox value="{{store.storeId}}" checked="{{store.checked}}" color="#8C1D18" />
+          <text>{{store.storeName}}<text wx:if="{{store.province || store.city}}"> ({{store.province}}{{store.city}})</text></text>
+        </view>
+      </scroll-view>
+      <view class="empty-box" wx:if="{{customStoreDraftList.length === 0}}">
         <text class="empty-tip">暂无可选门店</text>
       </view>
 
       <view class="modal-footer">
         <button class="btn-modal-cancel" bindtap="onCancelCustomStores">取消</button>
-        <button class="btn-modal-submit" bindtap="onConfirmCustomStores">确定（已选{{customStoreDraftSelection.length}}家）</button>
+        <button class="btn-modal-submit" bindtap="onConfirmCustomStores">确定（已选{{customStoreDraftCheckedCount}}家）</button>
       </view>
     </view>
   </view>

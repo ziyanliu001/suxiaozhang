@@ -67,6 +67,35 @@ function sanitizeCoord(v) {
   return isFinite(n) ? n : undefined;
 }
 
+// 🆕 轻量省市提取：门店档案编辑时若 province/city 仍留空，尝试从门店名称/地址
+// 文本里猜一猜。不追求覆盖全国行政区划，只覆盖本项目门店实际集中分布的常见
+// 地区；猜不出来就返回空字符串，不编造数据
+const REGION_CITY_TO_PROVINCE = {
+  '厦门': '福建省', '漳州': '福建省', '泉州': '福建省', '福州': '福建省', '莆田': '福建省',
+  '三明': '福建省', '南平': '福建省', '龙岩': '福建省', '宁德': '福建省'
+};
+const REGION_DISTRICT_TO_CITY = {
+  '海沧': '厦门', '思明': '厦门', '湖里': '厦门', '集美': '厦门', '同安': '厦门', '翔安': '厦门',
+  '芗城': '漳州', '龙文': '漳州', '龙海': '漳州',
+  '鲤城': '泉州', '丰泽': '泉州', '洛江': '泉州', '泉港': '泉州', '晋江': '泉州', '石狮': '泉州', '南安': '泉州'
+};
+function extractRegionFromText(text) {
+  const str = String(text || '');
+  if (!str) return { province: '', city: '' };
+  for (const cityBase of Object.keys(REGION_CITY_TO_PROVINCE)) {
+    if (str.includes(cityBase)) {
+      return { province: REGION_CITY_TO_PROVINCE[cityBase], city: `${cityBase}市` };
+    }
+  }
+  for (const districtBase of Object.keys(REGION_DISTRICT_TO_CITY)) {
+    if (str.includes(districtBase)) {
+      const cityBase = REGION_DISTRICT_TO_CITY[districtBase];
+      return { province: REGION_CITY_TO_PROVINCE[cityBase] || '', city: `${cityBase}市` };
+    }
+  }
+  return { province: '', city: '' };
+}
+
 // 允许跨店查看（不限于自己绑定门店）的角色：与 getStatisticsData/getNationalDashboard
 // 里"总部级只读汇总"的角色口径一致，仅用于本函数的 get（只读），不影响 update 权限
 const CROSS_STORE_VIEW_ROLES = ['super_admin', 'hq_finance', 'regional_finance'];
@@ -214,6 +243,23 @@ exports.main = async (event, context) => {
       if (lat !== undefined && lng !== undefined) {
         updateFields.latitude = lat;
         updateFields.longitude = lng;
+      }
+
+      // 🆕 保存时省市智能回填：调用方这次没有主动修改 province/city（未传这两个
+      // 字段），且门店档案里目前这两项都还是空的，才尝试从门店名称/地址文本里
+      // 轻量提取兜底——调用方明确改动这两个字段时（哪怕改成空值）不做任何猜测
+      // 覆盖，只补"确实还没填过"的历史/新建门店
+      if (updateFields.province === undefined && updateFields.city === undefined) {
+        const storeRes = await db.collection('stores').doc(target.storeId).get().catch(() => null);
+        const store = storeRes && storeRes.data;
+        if (store && !store.province && !store.city) {
+          const addressForGuess = updateFields.address !== undefined ? updateFields.address : (store.address || '');
+          const guessed = extractRegionFromText(`${store.storeName || ''} ${addressForGuess}`);
+          if (guessed.province || guessed.city) {
+            updateFields.province = guessed.province;
+            updateFields.city = guessed.city;
+          }
+        }
       }
 
       // 🏛️ 家长风控锁：店长发起且本店已绑定家长/督导时，不直接生效，改为存入
