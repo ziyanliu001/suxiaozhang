@@ -1199,7 +1199,7 @@ Page({
     });
   },
 
-  onCancelViewModeModal() {
+  onCloseViewModeModal() {
     this.setData({ showViewModeModal: false });
   },
 
