@@ -30,7 +30,7 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   if (!ctx) {
     throw new Error('CANVAS_CONTEXT_UNAVAILABLE: canvas.getContext(2d) 返回空');
   }
-  const dpr = (wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2) || 2;
+  const dpr = ((wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2) || 2;
 
   canvas.width = width * dpr;
   canvas.height = height * dpr;

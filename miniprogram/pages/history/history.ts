@@ -1437,8 +1437,8 @@ Page({
         wx.hideLoading();
         const filePath = downloadRes.tempFilePath;
 
-        if (wx.shareFileMessage) {
-          wx.shareFileMessage({
+        if ((wx as any).shareFileMessage) {
+          (wx as any).shareFileMessage({
             filePath,
             fileName: auditExportFileName,
             success: () => {
@@ -1935,14 +1935,15 @@ Page({
 
       wx.hideLoading();
 
-      if (res.result && res.result.success) {
-        this.setData({ 
+      const r1 = res.result as any;
+      if (r1 && r1.success) {
+        this.setData({
           showEditModal: false,
           editingRecord: null
         });
 
         wx.showToast({
-          title: `已成功校正 ${res.result.updatedCount || 1} 天账目`,
+          title: `已成功校正 ${r1.updatedCount || 1} 天账目`,
           icon: 'success',
           duration: 2000
         });
@@ -1951,7 +1952,7 @@ Page({
       } else {
         wx.showModal({
           title: '重算失败',
-          content: res.result ? res.result.errMsg : '云函数未返回正确结果',
+          content: r1 ? r1.errMsg : '云函数未返回正确结果',
           showCancel: false
         });
       }
@@ -2076,8 +2077,9 @@ Page({
 
       wx.hideLoading();
 
-      if (res.result && res.result.success) {
-        const alerts = (res.result as any).integrityAlerts || [];
+      const r2 = res.result as any;
+      if (r2 && r2.success) {
+        const alerts = r2.integrityAlerts || [];
         if (alerts.length > 0) {
           wx.showModal({
             title: '🚨 检测到资金流水异常',
@@ -2088,7 +2090,7 @@ Page({
         }
 
         wx.showToast({
-          title: `已成功校正 ${res.result.updatedCount || 1} 天数据`,
+          title: `已成功校正 ${r2.updatedCount || 1} 天数据`,
           icon: 'success',
           duration: 2000
         });
@@ -2097,7 +2099,7 @@ Page({
       } else {
         wx.showModal({
           title: '云函数返回错误',
-          content: res.result ? res.result.errMsg : '未知错误',
+          content: r2 ? r2.errMsg : '未知错误',
           showCancel: false
         });
       }

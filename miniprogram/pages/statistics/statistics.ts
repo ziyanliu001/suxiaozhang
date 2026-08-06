@@ -3465,8 +3465,8 @@ Page({
         const filePath = downloadRes.tempFilePath;
 
         // 优先使用 shareFileMessage 发送给文件
-        if (wx.shareFileMessage) {
-          wx.shareFileMessage({
+        if ((wx as any).shareFileMessage) {
+          (wx as any).shareFileMessage({
             filePath: filePath,
             fileName: fileName,
             success: () => {
@@ -3535,8 +3535,8 @@ Page({
       fs.writeFileSync(filePath, csvContent, 'utf8');
       wx.hideLoading();
 
-      if (wx.shareFileMessage) {
-        wx.shareFileMessage({
+      if ((wx as any).shareFileMessage) {
+        (wx as any).shareFileMessage({
           filePath: filePath,
           fileName: fileName,
           success: () => {
@@ -3562,7 +3562,7 @@ Page({
   tryOpenDocumentFallback(filePath: string) {
     wx.openDocument({
       filePath: filePath,
-      fileType: 'csv',
+      fileType: 'csv' as any,
       showMenu: true,
       fail: () => {
         wx.showModal({
@@ -3687,8 +3687,8 @@ Page({
       wx.hideLoading();
       this.setData({ generatingNationalReport: false, showNationalReportModal: false });
 
-      if (wx.shareFileMessage) {
-        wx.shareFileMessage({
+      if ((wx as any).shareFileMessage) {
+        (wx as any).shareFileMessage({
           filePath: filePath,
           fileName: fileName,
           success: () => {
@@ -3807,7 +3807,7 @@ Page({
 
         const canvas = res[0].node;
         const ctx = canvas.getContext('2d');
-        const dpr = wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2;
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
 
         const w = 320;
         const h = 605;
@@ -4086,8 +4086,8 @@ Page({
           wx.previewImage({ current: path, urls: [path] });
         }
       });
-    } else if (wx.shareFileMessage) {
-      wx.shareFileMessage({
+    } else if ((wx as any).shareFileMessage) {
+      (wx as any).shareFileMessage({
         filePath: path,
         fileName: `${storeName}_感恩汇报.png`,
         success: () => {
@@ -4130,7 +4130,7 @@ Page({
 
           const canvas = res[0].node;
           const ctx = canvas.getContext('2d');
-          const dpr = (wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2) || 2;
+          const dpr = ((wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2) || 2;
 
           const W = 600;
           const H = 1030;

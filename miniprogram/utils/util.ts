@@ -1,6 +1,6 @@
 export function getSafeSystemInfo() {
   try {
-    const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : {};
+    const windowInfo = (wx as any).getWindowInfo ? (wx as any).getWindowInfo() : {};
     const deviceInfo = (wx as any).getDeviceInfo ? (wx as any).getDeviceInfo() : {};
     const appBaseInfo = (wx as any).getAppBaseInfo ? (wx as any).getAppBaseInfo() : {};
 

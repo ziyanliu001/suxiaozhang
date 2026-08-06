@@ -382,7 +382,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
 
         const canvas = res[0].node;
         const ctx = canvas.getContext('2d');
-        const dpr = wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2;
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
 
         const width = CANVAS_WIDTH;
         const itemCount = data.items.length;
@@ -892,7 +892,7 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
 
         const canvas = res[0].node;
         const ctx = canvas.getContext('2d');
-        const dpr = wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2;
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
 
         const width = STORY_CANVAS_WIDTH;
         const height = STORY_CANVAS_HEIGHT;
@@ -1118,7 +1118,7 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
 
         const canvas = res[0].node;
         const ctx = canvas.getContext('2d');
-        const dpr = wx.getWindowInfo ? wx.getWindowInfo().pixelRatio : 2;
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
 
         const width = HONOR_CANVAS_WIDTH;
         const height = HONOR_CANVAS_HEIGHT;

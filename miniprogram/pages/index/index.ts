@@ -1515,7 +1515,7 @@ Page({
               reportDate: reportDate
             }
           });
-          if (result.result && result.result.success) {
+          if ((result.result as any) && (result.result as any).success) {
             wx.showToast({ title: '已强制解锁', icon: 'success' });
             this.checkAndAcquireLock(storeId, reportDate);
           } else {
@@ -7273,7 +7273,7 @@ Page({
       return;
     }
 
-    const networkInfo = wx.getNetworkTypeSync();
+    const networkInfo = (wx as any).getNetworkTypeSync ? (wx as any).getNetworkTypeSync() : { networkType: 'wifi' };
     if (networkInfo.networkType === 'none') {
       return;
     }

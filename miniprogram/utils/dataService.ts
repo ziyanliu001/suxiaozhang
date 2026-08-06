@@ -70,7 +70,7 @@ function formatDateToISO(dateObj: { year: number; month: number; day: number }):
 }
 
 function formatNumber(value: number): string {
-  const num = parseFloat(value) || 0;
+  const num = parseFloat(String(value)) || 0;
   return num === 0 ? "0.00" : num.toFixed(2);
 }
 
@@ -359,7 +359,7 @@ export const DataService = {
         }
 
         // 步骤 2b: 不存在 - 新增
-        formattedData.createTime = db.serverDate();
+        (formattedData as any).createTime = db.serverDate();
         cloudResult = await db.collection('report_logs').add({
           data: formattedData
         });
@@ -377,7 +377,7 @@ export const DataService = {
 
       // 步骤 3: 同步本地缓存
       formattedData.isSynced = true;
-      formattedData._id = cloudResult._id;
+      (formattedData as any)._id = cloudResult._id;
 
       const localReports = getLocalReports();
       const localIdx = localReports.findIndex(r =>
@@ -416,8 +416,8 @@ export const DataService = {
       // 尝试本地兜底
       try {
         formattedData.isSynced = false;
-        formattedData._localId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-        formattedData.localCreateTime = Date.now();
+        (formattedData as any)._localId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+        (formattedData as any).localCreateTime = Date.now();
 
         const localReports = getLocalReports();
         const localIdx = localReports.findIndex(r =>
@@ -684,13 +684,13 @@ export const DataService = {
           await db.collection('report_logs').doc(existingId).update({
             data: dataToSync
           });
-          cloudId = existingId;
+          cloudId = String(existingId);
         } else {
           dataToSync.createTime = db.serverDate();
           const result = await db.collection('report_logs').add({
             data: dataToSync
           });
-          cloudId = result._id;
+          cloudId = String(result._id);
         }
 
         // 🛡️ 资金流水防篡改：离线草稿补同步后同样需要服务端补盖 HMAC 校验码
