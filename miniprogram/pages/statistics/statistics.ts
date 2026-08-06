@@ -386,6 +386,17 @@ Page({
   // 免去用户落地后还要再手动点一次「导出表格」；消费一次后立即清零，不随
   // onShow/切 Tab 反复重放
   _autoShowExportPending: false,
+  // 🐛 根因修复：fetchStatistics()/loadStatistics() 此前的防抖锁是"已有请求
+  // 在途就直接丢弃这次调用"——用户快速连续切换 Tab/年月/自定义日期时，最后一次
+  // （真正想看的那次）选择很可能就在某次请求还没返回时被发起，直接被丢弃，
+  // 等在途请求返回后页面停留在一个"不是用户最终选择"的旧结果上，且没有任何
+  // 后续动作会自动补发。改为"pending 缓冲"：请求被锁挡下时不再直接丢弃，而是
+  // 记一笔待办（loadStatistics 还要记下最新的 startDate/endDate，因为它俩是
+  // 显式传参、不能像 fetchStatistics 那样单纯重新读 this.data 就能拿到最新值），
+  // 等在途请求的 finally 结束、锁释放后自动补发一次——补发时读到的都是彼时最新的
+  // 筛选状态，天然实现"最新参数覆盖"，不需要维护请求版本号/取消令牌这类更重的方案
+  _pendingStatsFetch: false,
+  _pendingStatsLoadArgs: null as [string, string] | null,
 
   data: {
     watermarkIdentity: '',
@@ -2015,9 +2026,12 @@ Page({
     // 🐛 根因修复：onLoad/onShow 前后脚各触发一次 reloadShopListAndStats()（或
     // 用户手快连点 Tab/年月切换）会让本方法在上一次云调用还没返回时又并发发起
     // 一次，同一屏 statsData 被 2~4 个并发请求的返回顺序竞争覆盖。isLoading 式
-    // 防抖锁：已有请求在途时直接跳过，等它自己的 finally 解锁后由触发方自然收敛
+    // 防抖锁：已有请求在途时不再直接丢弃这次调用（那样会丢掉用户最后一次真正
+    // 想看的选择），改为记一笔 pending，等在途请求的 finally 解锁后自动补发一次——
+    // 补发时会重新从 this.data 读取彼时最新的筛选状态，天然实现"最新参数覆盖"
     if (this.data.statisticsFetchLoading) {
-      console.log('[Statistics][fetchStatistics] 已有请求在途，跳过本次重复调用');
+      console.log('[Statistics][fetchStatistics] 已有请求在途，记为待补发');
+      this._pendingStatsFetch = true;
       return;
     }
     const { currentTab, selectedYear, selectedMonth, customStartDate, customEndDate } = this.data;
@@ -2031,12 +2045,17 @@ Page({
     // 显式兜底，避免时序问题下把聚合请求误发成单店查询
     const shopName = this.data.isAllStoresMode ? '全部门店' : this.data.shopName;
 
+    // 🐛 根因修复：viewMode 此前非"全部门店"聚合态时被显式置为 undefined，
+    // 传给 getStatisticsData 后在调试日志/请求负载里都是一个裸的 undefined，
+    // 排查问题时容易被误判成"参数没传上"。这里统一兜底到 this.data.viewMode
+    // （页面自身的"全店汇总/个人统计"开关，默认值就是 'all'）——保证这个字段
+    // 任何时候都有一个明确、可预期的取值，不再出现 undefined
     const statisticsCallData = {
       shopName: shopName || 'default',
       tabType,
       selectedYear: String(selectedYear),
       selectedMonth: String(selectedMonth).padStart(2, '0'),
-      viewMode: this.data.isAllStoresMode ? 'all' : undefined,
+      viewMode: this.data.isAllStoresMode ? 'all' : (this.data.viewMode || 'all'),
       startDate: customStartDate,
       endDate: customEndDate
     };
@@ -2066,6 +2085,13 @@ Page({
       console.error('[fetchStatistics] 调用失败:', err);
     } finally {
       this.setData({ statisticsFetchLoading: false });
+      // 🆕 Pending Query Buffer：锁在途期间被记下的待补发请求，在这里统一收尾时
+      // 触发一次——用最新的 this.data 状态重新发起，覆盖掉本次已经完成、可能
+      // 已经过时的结果
+      if (this._pendingStatsFetch) {
+        this._pendingStatsFetch = false;
+        this.fetchStatistics();
+      }
     }
   },
 
@@ -2302,9 +2328,14 @@ Page({
     // 🐛 防抖锁：onLoad/onShow 前后脚并发触发时，先返回的那次调用 wx.hideLoading()
     // 后，后返回的那次仍会再调用一次 wx.hideLoading()——此时已无对应的 showLoading
     // 在途，触发开发者工具"showLoading、hideLoading 必须配对使用"告警。早退发生
-    // 在 wx.showLoading() 之前，不会留下未关闭的 loading
+    // 在 wx.showLoading() 之前，不会留下未关闭的 loading。
+    // 🆕 Pending Query Buffer：不再直接丢弃这次调用——startDate/endDate 是显式
+    // 传参（不像 fetchStatistics 能单纯重读 this.data 就拿到最新值），锁在途时
+    // 把这次的 (startDate, endDate) 记下来（覆盖上一次记的，只保留最新一次），
+    // 等在途请求的 finally 解锁后用这份最新参数自动补发一次
     if (this.data.statisticsLoadLoading) {
-      console.log('[Statistics][loadStatistics] 已有请求在途，跳过本次重复调用');
+      console.log('[Statistics][loadStatistics] 已有请求在途，记为待补发（最新参数）:', startDate, endDate);
+      this._pendingStatsLoadArgs = [startDate, endDate];
       return;
     }
     this.setData({ statisticsLoadLoading: true });
@@ -2626,6 +2657,13 @@ Page({
       // 无论正常返回还是抛出异常都统一在这里收尾，不再在 try 中段提前 hide
       wx.hideLoading();
       this.setData({ statisticsLoadLoading: false });
+      // 🆕 Pending Query Buffer：锁在途期间被记下的最新 (startDate, endDate)，
+      // 在这里统一收尾时补发一次——确保用户最后一次真正想看的选择不会被静默丢弃
+      if (this._pendingStatsLoadArgs) {
+        const [pendingStart, pendingEnd] = this._pendingStatsLoadArgs;
+        this._pendingStatsLoadArgs = null;
+        this.loadStatistics(pendingStart, pendingEnd);
+      }
     }
 
     // 🌟 首页「Excel 账本导出」带 ?autoShowExport=true 跳转过来时，本函数是
