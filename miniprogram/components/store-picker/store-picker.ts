@@ -955,7 +955,16 @@ Component({
         });
 
         try {
-          const uploaded = await compressAndUploadImages(CANVAS_ID, paths, 'store_apply_photos/' + Date.now());
+          let uploaded: { url: string; thumbUrl: string }[];
+          try {
+            uploaded = await compressAndUploadImages(CANVAS_ID, paths, 'store_apply_photos/' + Date.now());
+          } catch (canvasErr) {
+            // Canvas 节点不可用时降级：直接上传原图（无缩略图压缩），避免整体失败
+            console.warn('[store-picker] canvas 压缩失败，降级为直传原图:', canvasErr);
+            const { compressAndUploadScaledImage } = await import('../../utils/imageCompress');
+            const prefix = 'store_apply_photos/' + Date.now();
+            uploaded = await Promise.all(paths.map(p => compressAndUploadScaledImage(p, prefix)));
+          }
           const finalPhotos = [...this.data.newStoreForm.storePhotos];
           uploaded.forEach((u, i) => { finalPhotos[insertStart + i] = u.url; });
           this.setData({ 'newStoreForm.storePhotos': finalPhotos });

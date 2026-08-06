@@ -593,8 +593,15 @@
   background: #8C1D18;
   color: #FFFFFF;
   border-radius: 40rpx;
-  font-size: 28rpx;
+  font-size: 30rpx;
   font-weight: bold;
+  padding: 20rpx 40rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .new-store-submit-btn::after {
