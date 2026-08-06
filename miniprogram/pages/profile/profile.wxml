@@ -117,7 +117,7 @@
       </view>
 
       <view class="merit-sub-row" wx:if="{{hasPrivilege}}">
-        <view class="merit-sub-cell" wx:if="{{isManager || isPatriarch || isSuperAdmin}}">
+        <view class="merit-sub-cell" wx:if="{{isStoreAdmin}}">
           <text class="merit-sub-num">{{stats.submittedReports || 0}}</text>
           <text class="merit-sub-label">登记餐报</text>
         </view>
@@ -1097,13 +1097,13 @@
   <daily-menu-modal
     id="dailyMenuModal"
     visible="{{showDailyMenuModal}}"
-    isAutoApproveRole="{{isManager || isPatriarch || isSuperAdmin}}"
+    isAutoApproveRole="{{isStoreAdmin}}"
     bind:close="onCloseDailyMenuModal"
   />
   <material-usage-modal
     id="materialUsageModal"
     visible="{{showMaterialUsageModal}}"
-    isAutoApproveRole="{{isManager || isPatriarch || isSuperAdmin}}"
+    isAutoApproveRole="{{isStoreAdmin}}"
     bind:close="onCloseMaterialUsageModal"
   />
 

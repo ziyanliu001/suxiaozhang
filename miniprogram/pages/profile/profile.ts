@@ -1,4 +1,4 @@
-import { AuthService } from '../../utils/authService';
+import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
 import { getSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
@@ -168,6 +168,10 @@ Page({
     currentStoreStatus: '',
     // 🛡️ 语义化权限状态：避免模板里反复重复 role 字符串比较
     hasPrivilege: false,
+    // 🏛️ 门店管理权限并集：store_patriarch | store_manager | super_admin 任一满足即为 true，
+    // 与 utils/authService.ts hasStoreAdminPrivilege() 口径完全一致，用于统一控制
+    // 待审批入口显隐、成员申请角标预取等逻辑，避免各处重复枚举三个角色
+    isStoreAdmin: false,
     isSuperAdmin: false,
     // 🌟 isVolunteer 严格指"已审核通过的真实义工"，用于和 isFamily 互斥区分；
     // isFamily/isServiceUser：新用户/未审核用户的默认身份（家人 · 服务对象），
@@ -642,6 +646,8 @@ Page({
     });
     const displayRole = overridden.currentUserRole;
     const hasPrivilege = displayRole === 'store_manager' || displayRole === 'finance' || displayRole === 'store_patriarch' || displayRole === 'super_admin';
+    // 🏛️ 门店审批权限并集：统一走 hasStoreAdminPrivilege()，与云函数口径保持一致
+    const isStoreAdmin = hasStoreAdminPrivilege(displayRole);
     const currentViewMode = getPreviewViewMode();
     // 🏛️ 家长管理卡片显隐：VIEW_MODE_OPTIONS 现已补齐 STORE_PATRIARCH 档位，
     // displayRole === 'store_patriarch' 既可能是真实角色本身就是家长，也可能是
@@ -663,6 +669,7 @@ Page({
       currentUserRole: displayRole as any,
       currentStoreName: storeName,
       hasPrivilege,
+      isStoreAdmin,
       isSuperAdmin: overridden.isSuperAdmin,
       isRealSuperAdmin,
       isPlatformAdmin,
@@ -706,9 +713,9 @@ Page({
       pendingFetches.push(this.fetchPatriarchDashboardData());
     }
 
-    // 📮 爱心意见箱管理入口的可见范围：店长 / 大家长 / 超管（财务义工无管理面板）
-    // 与 WXML patriarch-panel-card(isManager) + patriarch-panel-card(isPatriarch||isSuperAdmin) 口径一致
-    if (isManager || isPatriarch || overridden.isSuperAdmin) {
+    // 📮 爱心意见箱管理入口的可见范围：大家长/店长/超管（财务义工无管理面板）
+    // 口径与 hasStoreAdminPrivilege() 完全一致，不再各处重复枚举三个角色
+    if (isStoreAdmin) {
       pendingFetches.push(this.fetchPendingFeedbackCount());
       pendingFetches.push(this.fetchPendingVolunteerSubmissions());
       pendingFetches.push(this.fetchPendingApplications());
