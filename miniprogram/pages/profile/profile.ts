@@ -554,7 +554,17 @@ Page({
     const storageRole = wx.getStorageSync('current_user_role');
     if (storageRole) {
       const persistedRole = (cachedRoleInfo && cachedRoleInfo.role) || 'volunteer';
-      role = AuthService.resolveEffectiveRole(persistedRole).toLowerCase();
+      // 🐛 超级管理员专属豁免：current_user_role 对超管只是展示层的视角切换预览
+      // 或 store-picker 切门店时的角色模拟，并不代表真实角色发生了变更——不能走
+      // resolveEffectiveRole → overwriteCachedRole 把 auth_user_role 持久化缓存
+      // 覆写成被预览的非超管角色。否则下次 initMinePage()（如切换视角后立即刷新）
+      // 时 getCachedRoleInfo().role 会返回已被污染的角色而不是 'super_admin'，
+      // 导致 isRealSuperAdmin 被错误拉低为 false，"管理视角切换"卡片随之消失。
+      if (trueServerRole === 'super_admin') {
+        role = storageRole.toLowerCase();
+      } else {
+        role = AuthService.resolveEffectiveRole(persistedRole).toLowerCase();
+      }
       // 手动切换的具体身份说了算：选家人就是家人，选除家人外的任何身份
       // （含义工/家长/店长/财务/超管）都不再是"默认未审核家人"视角
       isFamily = role === 'store_family';
