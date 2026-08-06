@@ -501,12 +501,25 @@ async function listAuditQueue(event, OPENID) {
       query = db.collection('user_roles').where({ status, tenantId });
     }
   } else if (caller.role === 'store_manager' || caller.role === 'store_patriarch') {
+    // 🏛️ 大家长与店长兼任并集逻辑：两者审核权限对等，与 listPendingApplications /
+    // approve 分支口径完全一致。
     // 🛡️ 严格门店隔离：非超管无论客户端传了什么 storeId，一律强制收敛到调用者
     // 自己服务端记录的 storeId，绝不可能跨店拉取/审核他店的申请记录
     if (!caller.storeId) {
       return { success: true, data: [] };
     }
-    query = db.collection('user_roles').where({ storeId: caller.storeId, status });
+    if (status === 'pending') {
+      // pending 队列仅展示大家长/店长实际有权审批的角色（义工/财务/店长）；
+      // 大家长任命与新建门店申请仍限超管审批，不应出现在本店管理员的待审列表里
+      query = db.collection('user_roles').where({
+        storeId: caller.storeId,
+        status,
+        requestedRole: _.in(['volunteer', 'finance', 'store_manager'])
+      });
+    } else {
+      // approved 队列：展示门店全量已授权成员，不限角色
+      query = db.collection('user_roles').where({ storeId: caller.storeId, status });
+    }
   } else {
     // finance/volunteer/family 等角色本就无审核权限，不返回任何数据
     return { success: true, data: [] };
