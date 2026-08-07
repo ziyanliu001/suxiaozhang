@@ -332,10 +332,10 @@ Page({
     singleName: '',
     singleAmount: '',
     allDonations: '',
-    // 🌸🌿 了凡四训·阳善与阴德：发心选择，false=公示姓名（阳善），true=积阴德（匿名）
-    // 阳善：直接公示真实姓名，长养公信，感召更多善念
-    // 积阴德：姓名统一展示为"爱心善士"，隐名护持，涵养深厚阴德，天报之
-    reportIsAnonymous: false,
+    // 🌸🌿 了凡四训·阳善与阴德：发心选择
+    // 'yang'（阳善）：直接公示真实姓名，长养公信，感召更多善念
+    // 'yin' （积阴德）：姓名统一展示为"爱心善士"，隐名护持，涵养深厚阴德，天报之
+    meritType: 'yang' as 'yang' | 'yin',
     otherDonation: '',
     expenses: '',
     dailyExpenseText: '',
@@ -2401,14 +2401,14 @@ Page({
   },
 
   saveDraft() {
-    const { reportDate, reportDateValue, yesterdayBalance, allDonations, reportIsAnonymous, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+    const { reportDate, reportDateValue, yesterdayBalance, allDonations, meritType, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
 
     const draftData = {
       reportDate,
       reportDateValue,
       yesterdayBalance,
       allDonations,
-      reportIsAnonymous,
+      meritType,
       otherDonation,
       expenses,
       dailyExpenseText,
@@ -2487,7 +2487,7 @@ Page({
         dineInVolunteers: draftData.dineInVolunteers || '',
         deliveryVolunteers: draftData.deliveryVolunteers || '',
         takeawayCount: draftData.takeawayCount || '',
-        reportIsAnonymous: !!(draftData.reportIsAnonymous),
+        meritType: ((draftData.meritType || (draftData.reportIsAnonymous ? 'yin' : 'yang')) as 'yang' | 'yin'),
         hasDraft: true
       });
 
@@ -2560,7 +2560,7 @@ Page({
         dineInVolunteers: draftData.dineInVolunteers || '',
         deliveryVolunteers: draftData.deliveryVolunteers || '',
         takeawayCount: draftData.takeawayCount || '',
-        reportIsAnonymous: !!(draftData.reportIsAnonymous),
+        meritType: ((draftData.meritType || (draftData.reportIsAnonymous ? 'yin' : 'yang')) as 'yang' | 'yin'),
         hasDraft: true
       });
 
@@ -4735,9 +4735,10 @@ Page({
   },
 
   // 🌸🌿 了凡四训·阳善与阴德：发心选择切换
-  // data-anon="{{false}}" → 阳善（公示真实姓名）；data-anon="{{true}}" → 积阴德（匿名）
-  onChangeMeritType(e: any) {
-    this.setData({ reportIsAnonymous: !!e.currentTarget.dataset.anon });
+  // data-type="yang" → 阳善（公示真实姓名）；data-type="yin" → 积阴德（匿名）
+  onSelectMerit(e: any) {
+    const t = e.currentTarget.dataset.type;
+    this.setData({ meritType: t === 'yin' ? 'yin' : 'yang' });
   },
 
   onInputSingleName(e: any) {
@@ -6057,7 +6058,8 @@ Page({
 
       try {
         // ====== 第一步：纯前端生成文本（不依赖云端，绝不阻塞） ======
-        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, totalDineCount, totalVolunteers, reportIsAnonymous: isAnonymous } = this.data;
+        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, totalDineCount, totalVolunteers, meritType } = this.data;
+        const isAnonymous = meritType === 'yin';
         const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
         const b4_total = parseFloat(otherDonation) || 0;
 
@@ -7444,7 +7446,7 @@ Page({
       patriarchName: this.data.storePatriarchName,
       managerName: this.data.storeManagerName,
       showPeopleSignature: this.data.posterShowPeopleSignature,
-      isAnonymous: this.data.reportIsAnonymous
+      isAnonymous: this.data.meritType === 'yin'
     };
   },
 
