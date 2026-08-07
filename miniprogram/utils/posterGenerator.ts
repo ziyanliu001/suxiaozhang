@@ -1,4 +1,4 @@
-import { maskName } from './privacy';
+import { maskName, formatDisplayName } from './privacy';
 import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 import { drawStaticWxacodeFallback } from './staticWxacode';
 import { computeHonorProgress, drawMedalBadge } from './honorLevels';
@@ -50,6 +50,8 @@ export interface PosterData {
   patriarchName?: string;
   managerName?: string;
   showPeopleSignature?: boolean;
+  // 🌿 了凡四训·积阴德：匿名护持模式，true 时海报中所有捐款人姓名展示为"爱心善士"
+  isAnonymous?: boolean;
 }
 
 // 🆕 9:16 竖屏「温馨故事版」海报数据：只收调用方已经准备好的展示值（与 PosterData
@@ -390,7 +392,8 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
         // 🐛 与实际绘制口径对齐：formatMaterialsToText 同款单行文案的字符数换算行数，
         // 保守估计（向上取整），确保预估高度不小于真实绘制高度
         const materialsLineCount = materialsList.reduce((sum, m) => {
-          const text = `${maskName(m.donor || '匿名爱心人士')}：赞助 ${m.item || ''} ${m.quantity || ''}${m.unit || ''}`;
+          const donorLabel = data.isAnonymous ? '爱心善士' : maskName(m.donor || '匿名爱心人士');
+          const text = `${donorLabel}：赞助 ${m.item || ''} ${m.quantity || ''}${m.unit || ''}`;
           return sum + Math.max(1, Math.ceil(text.length / MATERIALS_CHARS_PER_LINE));
         }, 0);
         const hasVolunteer = (data.volunteerCount && data.volunteerCount > 0) || (data.volunteerHours && data.volunteerHours > 0);
@@ -554,7 +557,8 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
             ctx.font = '13px sans-serif';
             ctx.textAlign = 'left';
             data.materials.forEach((m) => {
-              const rowText = `• ${maskName(m.donor || '匿名爱心人士')}：赞助 ${m.item || ''} ${m.quantity || ''}${m.unit || ''}`;
+              const donorLabel = data.isAnonymous ? '爱心善士' : maskName(m.donor || '匿名爱心人士');
+              const rowText = `• ${donorLabel}：赞助 ${m.item || ''} ${m.quantity || ''}${m.unit || ''}`;
               matY = drawMultiLineText(ctx, rowText, 35, matY, width - 70, MATERIALS_ROW_HEIGHT);
             });
             materialsEndY = matY + 8;
@@ -665,7 +669,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
               const amountWidth = ctx.measureText(amountStr).width;
               const nameStartX = x + prefixWidth;
               const nameMaxWidth = colAmountRightX[colIndex] - nameStartX - amountWidth - 12;
-              const truncatedName = truncateText(ctx, maskName(item.name), Math.max(nameMaxWidth, 20));
+              const truncatedName = truncateText(ctx, formatDisplayName(item.name, !!(data.isAnonymous)), Math.max(nameMaxWidth, 20));
               ctx.fillText(prefix + truncatedName, x, y);
 
               ctx.fillStyle = '#E53935';
@@ -690,7 +694,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
               const amountStr = `¥${item.amount.toFixed(2)}`;
               const amountWidth = ctx.measureText(amountStr).width;
               const nameMaxWidth = amountRightX - nameStartOffset - amountWidth - 10;
-              const truncatedName = truncateText(ctx, maskName(item.name), Math.max(nameMaxWidth, 20));
+              const truncatedName = truncateText(ctx, formatDisplayName(item.name, !!(data.isAnonymous)), Math.max(nameMaxWidth, 20));
               ctx.fillText(prefix + truncatedName, nameStartX, itemY);
 
               ctx.fillStyle = '#E53935';

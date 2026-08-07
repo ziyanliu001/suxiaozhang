@@ -12,6 +12,16 @@ export function maskName(name: string): string {
   return str.charAt(0) + '*' + str.charAt(str.length - 1);
 }
 
+/**
+ * 了凡四训·隐名集阴德：公开展示时的姓名格式化。
+ * - isAnonymous=true：统一展示为"爱心善士"，完全隐去真实姓名
+ * - isAnonymous=false：走普通脱敏（maskName），保留首尾字符
+ */
+export function formatDisplayName(name: string, isAnonymous: boolean): string {
+  if (isAnonymous) return '爱心善士';
+  return maskName(name);
+}
+
 export function maskPhone(phone: string): string {
   if (!phone) return '';
   const str = String(phone).replace(/\D/g, '');

@@ -1,4 +1,4 @@
-import { maskName } from './privacy';
+import { maskName, formatDisplayName } from './privacy';
 
 const YUHUA_GOLDEN_QUOTES = [
   "用一餐饭的温度，传递温暖与关爱。",
@@ -51,6 +51,8 @@ export interface ReportData {
   noticeContent?: string;
   mergeToReportText?: boolean;
   reportMode?: 'group' | 'moments';
+  // 🌿 了凡四训·积阴德：匿名护持模式，true 时报告文本中所有捐款人姓名替换为"爱心善士"
+  isAnonymous?: boolean;
 }
 
 export function formatMoney(value: number): string {
@@ -58,7 +60,7 @@ export function formatMoney(value: number): string {
 }
 
 export function generateReportText(data: ReportData): string {
-  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode } = data;
+  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode, isAnonymous } = data;
 
   const defaultThankText = '感谢大家的自愿赞助\n与默默付出的义工！';
   const defaultSlogan1 = '吃 素 一 日   健 康 一 天';
@@ -201,9 +203,9 @@ export function generateReportText(data: ReportData): string {
       for (let i = 0; i < items.length; i += 2) {
         const left = items[i];
         const right = items[i + 1];
-        const leftStr = `${i + 1}.${maskName(left.name)} ¥${formatMoney(left.amount)}`;
+        const leftStr = `${i + 1}.${formatDisplayName(left.name, !!isAnonymous)} ¥${formatMoney(left.amount)}`;
         if (right) {
-          const rightStr = `${i + 2}.${maskName(right.name)} ¥${formatMoney(right.amount)}`;
+          const rightStr = `${i + 2}.${formatDisplayName(right.name, !!isAnonymous)} ¥${formatMoney(right.amount)}`;
           textArray.push(`${leftStr.padEnd(16, ' ')} | ${rightStr}`);
         } else {
           textArray.push(`${leftStr}`);
@@ -211,7 +213,7 @@ export function generateReportText(data: ReportData): string {
       }
     } else {
       items.forEach((item, index) => {
-        textArray.push(`${index + 1}. ${maskName(item.name)}：¥${formatMoney(item.amount)}`);
+        textArray.push(`${index + 1}. ${formatDisplayName(item.name, !!isAnonymous)}：¥${formatMoney(item.amount)}`);
       });
     }
     textArray.push(`📊 总人数：${items.length}人 | 总金额：¥${formatMoney(totalAmount)}`);

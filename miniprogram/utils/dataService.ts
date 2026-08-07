@@ -200,6 +200,8 @@ export const DataService = {
       totalVolunteers: parseFloat(reportData.totalVolunteers) || 0,
       stapleRiceStatus: reportData.stapleRiceStatus || 'normal',
       stapleOilStatus: reportData.stapleOilStatus || 'sufficient',
+      // 🌿 了凡四训·积阴德：匿名护持标记，true 表示本条餐报所有捐款人姓名在公开展示时脱敏为"爱心善士"
+      isAnonymous: !!(reportData.isAnonymous),
       updateTime: db ? db.serverDate() : Date.now(),
       isSynced: false,
       // 🛡️ 六大角色餐报提交对齐：无论提交者角色是什么，新记录一律从 PENDING 起步，

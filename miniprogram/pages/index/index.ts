@@ -332,6 +332,8 @@ Page({
     singleName: '',
     singleAmount: '',
     allDonations: '',
+    // 🌿 了凡四训·积阴德：匿名护持开关，开启后捐款人姓名在报告文本、海报、预览中均脱敏为"爱心善士"
+    reportIsAnonymous: false,
     otherDonation: '',
     expenses: '',
     dailyExpenseText: '',
@@ -2397,13 +2399,14 @@ Page({
   },
 
   saveDraft() {
-    const { reportDate, reportDateValue, yesterdayBalance, allDonations, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+    const { reportDate, reportDateValue, yesterdayBalance, allDonations, reportIsAnonymous, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
 
     const draftData = {
       reportDate,
       reportDateValue,
       yesterdayBalance,
       allDonations,
+      reportIsAnonymous,
       otherDonation,
       expenses,
       dailyExpenseText,
@@ -2482,6 +2485,7 @@ Page({
         dineInVolunteers: draftData.dineInVolunteers || '',
         deliveryVolunteers: draftData.deliveryVolunteers || '',
         takeawayCount: draftData.takeawayCount || '',
+        reportIsAnonymous: !!(draftData.reportIsAnonymous),
         hasDraft: true
       });
 
@@ -2554,6 +2558,7 @@ Page({
         dineInVolunteers: draftData.dineInVolunteers || '',
         deliveryVolunteers: draftData.deliveryVolunteers || '',
         takeawayCount: draftData.takeawayCount || '',
+        reportIsAnonymous: !!(draftData.reportIsAnonymous),
         hasDraft: true
       });
 
@@ -4727,6 +4732,11 @@ Page({
     this.setData({ singleAmount: String(amount) });
   },
 
+  // 🌿 了凡四训·积阴德：匿名护持开关切换
+  onToggleAnonymous(e: any) {
+    this.setData({ reportIsAnonymous: !!e.detail.value });
+  },
+
   onInputSingleName(e: any) {
     this.setData({ singleName: e.detail.value });
   },
@@ -6044,7 +6054,7 @@ Page({
 
       try {
         // ====== 第一步：纯前端生成文本（不依赖云端，绝不阻塞） ======
-        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, totalDineCount, totalVolunteers } = this.data;
+        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, totalDineCount, totalVolunteers, reportIsAnonymous: isAnonymous } = this.data;
         const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
         const b4_total = parseFloat(otherDonation) || 0;
 
@@ -6086,7 +6096,8 @@ Page({
           noticeTag: announcement && announcement.tag,
           noticeTitle: announcement && announcement.title,
           noticeContent: announcement && announcement.content,
-          mergeToReportText: mergeToReportText
+          mergeToReportText: mergeToReportText,
+          isAnonymous: isAnonymous
         });
 
         // 内容安全检测 - 设置超时保护
@@ -6182,7 +6193,8 @@ Page({
           totalDineCount: parseFloat(totalDineCount) || 0,
           totalVolunteers: parseFloat(totalVolunteers) || 0,
           stapleRiceStatus: stapleRiceStatus,
-          stapleOilStatus: stapleOilStatus
+          stapleOilStatus: stapleOilStatus,
+          isAnonymous: isAnonymous
         };
 
         let guardPassed = true;
@@ -7428,7 +7440,8 @@ Page({
       showGratitudeFooter: this.data.posterShowGratitudeFooter,
       patriarchName: this.data.storePatriarchName,
       managerName: this.data.storeManagerName,
-      showPeopleSignature: this.data.posterShowPeopleSignature
+      showPeopleSignature: this.data.posterShowPeopleSignature,
+      isAnonymous: this.data.reportIsAnonymous
     };
   },
 

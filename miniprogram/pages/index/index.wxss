@@ -2296,6 +2296,56 @@ page {
   flex-shrink: 0;
 }
 
+/* 🌿 了凡四训·积阴德：匿名护持开关行 */
+.anonymous-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx;
+  margin-top: 16rpx;
+  background: linear-gradient(135deg, #FFFBF0 0%, #FFF8E6 100%);
+  border: 1rpx solid #F0E6C8;
+  border-radius: 20rpx;
+}
+
+.anonymous-toggle-label {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  margin-right: 24rpx;
+}
+
+.anonymous-toggle-icon {
+  font-size: 32rpx;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.anonymous-toggle-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.anonymous-toggle-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #7A5C00;
+  line-height: 1.5;
+}
+
+.anonymous-toggle-desc {
+  font-size: 22rpx;
+  color: #A08040;
+  line-height: 1.5;
+  margin-top: 4rpx;
+}
+
+.anonymous-toggle-switch {
+  flex-shrink: 0;
+  transform: scale(0.85);
+}
+
 .text-format-tip {
   font-size: 22rpx;
   color: #868E96;

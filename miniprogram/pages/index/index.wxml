@@ -780,7 +780,7 @@
             <scroll-view scroll-y class="list-scroll-box">
               <view class="support-item-cell" wx:for="{{parseResult.items}}" wx:key="index">
                 <text class="item-idx">{{index + 1}}.</text>
-                <text class="item-name">{{item.name}}</text>
+                <text class="item-name">{{reportIsAnonymous ? '爱心善士' : item.name}}</text>
                 <text class="item-amount">¥{{item.amount}}</text>
                 <text class="btn-del" bindtap="onDeleteSupportItem" data-index="{{index}}">✕</text>
               </view>
@@ -815,7 +815,7 @@
             
             <view class="preview-list">
               <view class="preview-item" wx:for="{{parseResult.items}}" wx:key="name">
-                <text class="item-name">{{item.name}}</text>
+                <text class="item-name">{{reportIsAnonymous ? '爱心善士' : item.name}}</text>
                 <text class="item-amount">¥{{item.amount}}</text>
               </view>
             </view>
@@ -828,6 +828,18 @@
             </view>
           </view>
         </block>
+
+        <!-- 🌿 了凡四训·积阴德：匿名护持开关 -->
+        <view class="anonymous-toggle-row">
+          <view class="anonymous-toggle-label">
+            <text class="anonymous-toggle-icon">🌿</text>
+            <view class="anonymous-toggle-text">
+              <text class="anonymous-toggle-title">积阴德·匿名护持</text>
+              <text class="anonymous-toggle-desc">开启后姓名在报告文本与海报中统一展示为「爱心善士」</text>
+            </view>
+          </view>
+          <switch class="anonymous-toggle-switch" checked="{{reportIsAnonymous}}" bindchange="onToggleAnonymous" color="#B8860B" />
+        </view>
       </view>
 
     </view>
