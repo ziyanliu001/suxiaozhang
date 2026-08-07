@@ -3590,11 +3590,26 @@
   width: 640rpx;
 }
 
-/* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表 */
+/* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表。
+   🐛 Notch 遮挡修复：弹窗 max-height: 88vh 时，顶部可能进入刘海/状态栏区域；
+   padding-top: safe-area-inset-top 确保拖拽条和标题始终在安全区以下。
+   🐛 底部冗余空白修复：基类 .feedback-sheet-panel 的 140rpx padding-bottom 是为
+   "底部固定提交按钮须浮在 TabBar 上方"设计的——但本弹窗 z-index:999998 完全盖住了
+   TabBar（z-index:998），140rpx 会制造无效白空间；用 !important 覆盖为
+   calc(20rpx + safe-area-inset-bottom)，保留 home-indicator 安全留白即可。
+   🎨 圆角与阴影：border-radius 已由基类 32rpx 保证；补充顶部柔和阴影提升高级感。 */
 .sa-unbind-sheet-panel {
   max-height: 88vh;
   display: flex;
   flex-direction: column;
+  /* 顶部安全区：防止刘海/胶囊遮挡拖拽条和标题 */
+  padding-top: constant(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top);
+  /* 底部安全区：覆盖基类 140rpx，仅保留 home-indicator 留白 */
+  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom)) !important;
+  /* 顶部柔和阴影：深度感提升 */
+  box-shadow: 0 -8rpx 40rpx rgba(0, 0, 0, 0.14), 0 -2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
 /* 搜索栏 */
