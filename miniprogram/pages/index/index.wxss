@@ -2658,13 +2658,6 @@ textarea, .textarea {
   padding: 4rpx 8rpx;
 }
 
-.announce-bar-close {
-  flex-shrink: 0;
-  font-size: 22rpx;
-  color: #C9A876;
-  padding: 4rpx 8rpx;
-}
-
 /* 兜底温馨提示：视觉上比真实通知更柔和，避免用户误以为是一条待处理的正式公告 */
 .announce-bar-fallback {
   background: #F7F8FA;

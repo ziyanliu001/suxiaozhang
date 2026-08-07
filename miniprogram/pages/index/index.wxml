@@ -313,7 +313,6 @@
 
     <text class="announce-bar-edit" wx:if="{{(isManager || isFinance || isSuperAdmin) && noticeList.length > 0}}" catchtap="openNoticeEdit">✏️</text>
     <text class="announce-bar-add" wx:if="{{isManager || isFinance || isSuperAdmin}}" catchtap="openNoticeCreate">＋</text>
-    <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
   </view>
 
   <!-- 🌟 兜底温馨提示：云端确认当前视角暂无有效通知时展示，避免跑马灯整块消失留白；
@@ -323,7 +322,6 @@
     <view class="announce-bar-viewport">
       <text class="announce-bar-text">欢迎使用素小账，今日公益服务正常进行中</text>
     </view>
-    <text class="announce-bar-close" catchtap="onCloseNoticeBar">✕</text>
   </view>
 
   <!-- 🌸 每日修身卡片：非宗教化的传统文化/正能量宣导，纯本地静态内容，
