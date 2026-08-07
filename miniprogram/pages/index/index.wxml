@@ -37,6 +37,7 @@
           <view class="compliance-section-title">四、信息安全声明</view>
           <view class="compliance-section-text">程序中涉及的姓名等个人信息，已按照相关法律法规要求进行必要的脱敏处理，仅用于门店内部核账与公示用途，不作其他用途使用。</view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="compliance-modal-footer">
@@ -111,6 +112,7 @@
             <text class="sunshine-tip-text">所有数据均经店长/财务双重核销后展示，实时公开、接受全民监督</text>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
@@ -788,6 +790,7 @@
                 <text class="item-amount">¥{{item.amount}}</text>
                 <text class="btn-del" bindtap="onDeleteSupportItem" data-index="{{index}}">✕</text>
               </view>
+              <view class="fa-safe-area-spacer"></view>
             </scroll-view>
           </view>
         </block>
@@ -1578,6 +1581,7 @@
           </view>
 
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="poster-modal-footer">
@@ -1618,6 +1622,7 @@
           <view class="section-title">第四条 举报与处理机制</view>
           <view class="section-text">用户有权举报违规内容，我们将在 24 小时内核实并处理。</view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="agreement-footer">
         <button class="confirm-btn" bindtap="closeAgreement">我知道了</button>
@@ -1824,6 +1829,7 @@
             </view>
           </view>
         </block>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="ocr-modal-footer">
@@ -1847,6 +1853,7 @@
         <text class="announcement-modal-title">{{announcement.title}}</text>
         <text class="announcement-modal-date">{{announcement.create_time}}</text>
         <text class="announcement-modal-text">{{announcement.content}}</text>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="announcement-modal-footer">
         <button class="announcement-modal-btn edit-btn" bindtap="openNoticeEdit"><view class="idx-icon-sm idx-icon-edit" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>修改</button>
@@ -1962,6 +1969,7 @@
             color="#FF922B"
           />
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="notice-edit-footer">
@@ -2007,6 +2015,7 @@
         <view class="empty-history-tip" wx:if="{{recentBalanceHistoryList.length === 0}}">
           暂无近期历史结余记录
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="modal-bottom-tip">
@@ -2105,7 +2114,7 @@
           </radio-group>
           <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
         </view>
-
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <!-- 3. Footer（固定置底，不随 Body 滚动） -->
@@ -2278,6 +2287,7 @@
           <text class="donor-name">{{item.name}}</text>
           <text class="donor-count">出现 {{item.count}} 次</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
@@ -2331,6 +2341,7 @@
             <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
             <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
           </view>
+          <view class="fa-safe-area-spacer"></view>
         </scroll-view>
       </block>
       <block wx:else>
@@ -2350,6 +2361,7 @@
             <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
             <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
           </view>
+          <view class="fa-safe-area-spacer"></view>
         </scroll-view>
       </block>
     </view>
@@ -2683,6 +2695,7 @@
             <text class="btn-revoke" bindtap="onRevokeTodayCheckIn" data-timestamp="{{item.timestamp}}" data-hours="{{item.hours}}" data-cloud-log-id="{{item.cloudLogId}}">撤销此班次</text>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="meal-reserve-row" bindtap="onToggleMealReserve">
@@ -2859,6 +2872,7 @@
         <view class="risk-alert-empty" wx:if="{{riskAlertsFilteredList.length === 0 && riskAlertsFilterType}}">
           <text>该类型暂无明细</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
