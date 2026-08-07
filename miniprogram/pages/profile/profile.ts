@@ -642,8 +642,10 @@ Page({
     }
 
     // 🐛 用 trueServerRole（服务端真实角色快照），不用可能已被 storageRole
-    // 覆盖的 role——这两个是"真身份"标志位，任何本地切换视角/预览都不该动摇
-    const isRealSuperAdmin = trueServerRole === 'super_admin';
+    // 覆盖的 role——这两个是"真身份"标志位，任何本地切换视角/预览都不该动摇。
+    // 🛡️ 双信号兜底：当 cachedRoleInfo 尚未刷新（极端冷启动/缓存清除场景）时，
+    // globalRoleLower === 'super_admin' 作为补充信号，避免"管理视角切换"卡片消失
+    const isRealSuperAdmin = trueServerRole === 'super_admin' || globalRoleLower === 'super_admin';
     // 🏢 平台管理员：与业务角色是两个独立维度，platform_admin 不会经过下面的
     // applyRoleViewOverride 预览覆盖（那套只针对 super_admin），直接按真实角色判定
     const isPlatformAdmin = trueServerRole === 'platform_admin';
@@ -869,7 +871,7 @@ Page({
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
         return;
       }
-      this.setData({ feedbackAdminList: result.data.list || [] });
+      this.setData({ feedbackAdminList: (result.data && result.data.list) || [] });
     } catch (err) {
       console.error('[onOpenFeedbackAdminModal] 加载意见列表异常:', err);
       // 🛡️ 云端 submitFeedback 已经把 -502005（意见箱集合尚未初始化）当作"空列表"
@@ -2157,7 +2159,7 @@ Page({
         }
         return;
       }
-      const list = result.data.list || [];
+      const list = (result.data && result.data.list) || [];
       // 🔴 我的餐报提交记录入口角标：与 wxml 里 rejectedCount > 0 时展示的
       // unread-badge 对应，统计有几条已被店长驳回、还没重新修改提交
       const rejectedCount = list.filter((item: any) => item && item.status === 'rejected').length;
@@ -2205,7 +2207,7 @@ Page({
       });
       const result = res.result;
       if (result && result.success) {
-        const list = result.data.list || [];
+        const list = (result.data && result.data.list) || [];
         this.setData({ volunteerSubmissionAdminList: list, pendingVolunteerSubmissionCount: list.length });
       }
     } catch (err) {
