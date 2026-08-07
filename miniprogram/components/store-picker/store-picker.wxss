@@ -447,6 +447,7 @@
 .sheet-footer {
   flex-shrink: 0;
   background: #FBF9F5;
+  padding: 24rpx 0 calc(24rpx + constant(safe-area-inset-bottom));
   padding: 24rpx 0 calc(24rpx + env(safe-area-inset-bottom));
   z-index: 10;
   box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
@@ -590,6 +591,8 @@
 }
 
 .new-store-submit-btn {
+  width: 100%;
+  box-sizing: border-box;
   background: #8C1D18;
   color: #FFFFFF;
   border-radius: 40rpx;

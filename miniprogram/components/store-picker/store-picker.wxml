@@ -107,6 +107,7 @@
         </view>
 
       </block>
+      <view class="fa-safe-area-spacer"></view>
     </scroll-view>
 
     <!-- ➕ 找不到门店？申请新建/加入新门店 -->
@@ -201,6 +202,7 @@
           </block>
           <view class="form-hint" wx:else>👑 您是超级管理员，提交后将直接建店并自动获得该店管理权限，无需审批</view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <!-- Footer：提交按钮固定置底，永不被键盘或内容遮挡 -->
