@@ -576,7 +576,7 @@
   font-weight: bold;
   color: #A08A6A;
   padding: 0 12rpx;
-  margin: 8rpx 0 14rpx;
+  margin: 24rpx 0 14rpx;
 }
 
 /* 🌟 超级管理员视角切换卡片：此前 #F1C40F 是高饱和度亮黄，和整卡"预览/管理"的克制调性
@@ -1046,13 +1046,19 @@
 
 /* 📮 爱心意见箱管理入口：店长/家长/超管共用的 patriarch-panel-card 内新增区块 */
 .pd-feedback-entry-title {
-  margin-top: 8rpx;
+  margin-top: 16rpx;
 }
 
 .pd-feedback-entry-cell {
   background: #FAF8F5;
   border-radius: 16rpx;
   margin: 0;
+}
+
+/* patriarch-panel-card 内连续的 pd-feedback-entry-cell 之间留细缝，
+   让每个 16rpx 圆角"药片行"彼此分开，不粘连在一起 */
+.pd-feedback-entry-cell + .pd-feedback-entry-cell {
+  margin-top: 4rpx;
 }
 
 .pd-feedback-entry-right {
@@ -1078,6 +1084,7 @@
   font-weight: bold;
   text-align: center;
   box-sizing: border-box;
+  vertical-align: middle;
 }
 
 .action-list-container {
@@ -1587,6 +1594,13 @@
   gap: 4rpx;
   font-size: 22rpx;
   color: #8C1D18;
+  padding: 8rpx 12rpx;
+  border-radius: 20rpx;
+  margin-right: -12rpx;
+}
+
+.honor-wall-cert-link:active {
+  background: #F5E8E8;
 }
 
 .honor-badge-scroll {

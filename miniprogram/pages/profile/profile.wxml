@@ -599,7 +599,7 @@
       <!-- 🌟 本店数据明细：同上，仅为大家长 / 超管在日常记录里保留，其余角色已在各自专属面板查看 -->
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege && !isFinance && !isManager}}" bindtap="onGoToStoreOverview">
         <view class="item-left">
-          <text class="manager-only-emoji">📊</text>
+          <text class="manager-only-emoji">📋</text>
           <text class="item-text">本店数据明细</text>
         </view>
         <view class="item-arrow">❯</view>
