@@ -1,6 +1,6 @@
 import { AuthService } from '../../utils/authService';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
-import { compressAndUploadImages } from '../../utils/imageCompress';
+import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -963,14 +963,26 @@ Component({
 
         try {
           let uploaded: { url: string; thumbUrl: string }[];
+          const prefix = 'store_apply_photos/' + Date.now();
           try {
-            uploaded = await compressAndUploadImages(CANVAS_ID, paths, 'store_apply_photos/' + Date.now());
+            // 优先走 Canvas 批量压缩上传（质量最优）
+            uploaded = await compressAndUploadImages(CANVAS_ID, paths, prefix);
           } catch (canvasErr) {
-            // Canvas 节点不可用时降级：直接上传原图（无缩略图压缩），避免整体失败
-            console.warn('[store-picker] canvas 压缩失败，降级为直传原图:', canvasErr);
-            const { compressAndUploadScaledImage } = await import('../../utils/imageCompress');
-            const prefix = 'store_apply_photos/' + Date.now();
-            uploaded = await Promise.all(paths.map(p => compressAndUploadScaledImage(p, prefix)));
+            // Canvas 节点不可用时降级：用静态导入的 compressAndUploadScaledImage 直传原图，
+            // 避免整体失败（注意：不使用 dynamic import()，小程序编译环境不支持）
+            console.warn('[store-picker] canvas 批量压缩失败，降级为逐图直传:', canvasErr);
+            try {
+              uploaded = await Promise.all(paths.map(p => compressAndUploadScaledImage(p, prefix)));
+            } catch (scaleErr) {
+              // 两级压缩均失败时，直接将原图 tempFilePath 占位（仅供本次表单展示，
+              // 不上传云存储），并 toast 提示，绝不崩溃
+              console.warn('[store-picker] 图片上传失败，保留原图预览:', scaleErr);
+              const finalPhotos = [...this.data.newStoreForm.storePhotos];
+              // 原图 tempFilePath 已在 insertStart 处写入（前面 setData），保持不变
+              this.setData({ 'newStoreForm.storePhotos': finalPhotos, newStorePhotoUploading: false });
+              wx.showToast({ title: '图片上传失败，可继续填写其他信息后重试', icon: 'none', duration: 2500 });
+              return;
+            }
           }
           const finalPhotos = [...this.data.newStoreForm.storePhotos];
           uploaded.forEach((u, i) => { finalPhotos[insertStart + i] = u.url; });
