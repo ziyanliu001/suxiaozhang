@@ -3825,6 +3825,10 @@
 /* 📢 公告管理半屏弹窗 */
 .notice-mgmt-sheet-panel {
   max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  /* 覆盖基类 140rpx padding-bottom：footer 自己处理安全区，无需面板层再叠加 */
+  padding-bottom: 0 !important;
 }
 
 .notice-mgmt-scroll {

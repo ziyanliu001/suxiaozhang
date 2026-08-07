@@ -1922,10 +1922,9 @@
   </view>
 
   <!-- 📢 公告管理半屏弹窗 -->
-  <view class="feedback-sheet-backdrop" wx:if="{{showNoticeManagementModal}}" catchtouchmove="stopPropagation" bindtap="onCloseNoticeManagementModal">
-  </view>
-  <view class="feedback-sheet-panel notice-mgmt-sheet-panel {{showNoticeManagementModal ? 'feedback-sheet-panel--open' : ''}}" catchtouchmove="stopPropagation">
-    <view class="feedback-sheet-drag-bar"></view>
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showNoticeManagementModal ? 'show' : ''}}" wx:if="{{showNoticeManagementModal}}" catchtouchmove="stopPropagation" bindtap="onCloseNoticeManagementModal">
+    <view class="feedback-sheet-panel notice-mgmt-sheet-panel" catchtap="stopPropagation">
+    <view class="feedback-sheet-drag-handle"></view>
 
     <!-- 列表视图 -->
     <block wx:if="{{noticeManagementView === 'list'}}">
@@ -2004,6 +2003,7 @@
                 disabled="{{noticeMgmtSaving}}">保存发布</button>
       </view>
     </block>
+    </view>
   </view>
 
 </view>
