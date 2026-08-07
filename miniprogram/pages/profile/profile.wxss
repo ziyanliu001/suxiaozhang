@@ -3590,6 +3590,36 @@
   width: 640rpx;
 }
 
+/* 🔑 重置密钥弹窗：门店选择器行 */
+.reset-key-store-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 88rpx;
+  background: #F8F5F0;
+  border: 1rpx solid #E0D8CF;
+  border-radius: 16rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  color: #999999;
+  margin-top: 12rpx;
+}
+.reset-key-store-picker.selected {
+  color: #2C2C2C;
+}
+.reset-key-store-picker.loading-placeholder {
+  color: #BBBBBB;
+  font-size: 26rpx;
+}
+.reset-key-picker-arrow {
+  font-size: 26rpx;
+  color: #BBBBBB;
+  margin-left: 8rpx;
+  flex-shrink: 0;
+}
+
 /* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表。
    🐛 Notch/胶囊遮挡根因修复：
       基类 .feedback-sheet-panel 的 padding shorthand 带 !important，导致

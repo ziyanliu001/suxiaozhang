@@ -441,9 +441,12 @@ Page({
     forceUnbindInput: '',   // 手动粘贴 openId（兜底）
     forceUnbindSaving: false,
     forceUnbindResult: '',  // 操作结果描述，成功后展示
-    // 🔑 超管重置门店密钥：输入 storeId 和新密钥
+    // 🔑 超管重置门店密钥：下拉选择门店 + 新密钥输入
     showResetStoreKeyModal: false,
     resetStoreKeyStoreId: '',
+    resetStoreKeyStoreName: '',       // 选中门店的显示名
+    resetStoreKeyStoreList: [] as Array<{ storeId: string; storeName: string }>,
+    resetStoreKeyStoreListLoading: false,
     resetStoreKeyInput: '',
     resetStoreKeySaving: false,
 
@@ -3388,21 +3391,51 @@ Page({
   // ──────────────────────────────────────────────────────────────────────────
   // 🔑 超管重置门店密钥：直接覆写指定门店的 adminKey，阻断恶意二次申请
   // ──────────────────────────────────────────────────────────────────────────
-  onOpenResetStoreKeyModal() {
+  async onOpenResetStoreKeyModal() {
     if (!this.data.isRealSuperAdmin) return;
-    // 预填当前用户自己绑定的门店（若有），方便常见场景快速操作
-    const roleInfo = AuthService.getCachedRoleInfo();
-    const prefilledStoreId = (roleInfo && roleInfo.storeId) || '';
-    this.setData({ showResetStoreKeyModal: true, resetStoreKeyStoreId: prefilledStoreId, resetStoreKeyInput: '' });
+    this.setData({
+      showResetStoreKeyModal: true,
+      resetStoreKeyStoreId: '',
+      resetStoreKeyStoreName: '',
+      resetStoreKeyInput: '',
+      resetStoreKeyStoreList: [],
+      resetStoreKeyStoreListLoading: true
+    });
+    try {
+      const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
+      const list: Array<{ storeId: string; storeName: string }> =
+        (res.result && res.result.stores) || [];
+      this.setData({ resetStoreKeyStoreList: list });
+    } catch (err) {
+      console.warn('[onOpenResetStoreKeyModal] 加载门店列表失败:', err);
+    } finally {
+      this.setData({ resetStoreKeyStoreListLoading: false });
+    }
   },
 
   onCloseResetStoreKeyModal() {
     if (this.data.resetStoreKeySaving) return;
-    this.setData({ showResetStoreKeyModal: false, resetStoreKeyStoreId: '', resetStoreKeyInput: '' });
+    this.setData({
+      showResetStoreKeyModal: false,
+      resetStoreKeyStoreId: '',
+      resetStoreKeyStoreName: '',
+      resetStoreKeyInput: ''
+    });
+  },
+
+  onResetStoreKeyPickerChange(e: any) {
+    const idx = Number(e.detail.value);
+    const list = this.data.resetStoreKeyStoreList;
+    if (idx >= 0 && idx < list.length) {
+      this.setData({
+        resetStoreKeyStoreId: list[idx].storeId,
+        resetStoreKeyStoreName: list[idx].storeName
+      });
+    }
   },
 
   onResetStoreKeyStoreIdInput(e: any) {
-    this.setData({ resetStoreKeyStoreId: e.detail.value });
+    this.setData({ resetStoreKeyStoreId: e.detail.value, resetStoreKeyStoreName: '' });
   },
 
   onResetStoreKeyInput(e: any) {
@@ -3413,7 +3446,7 @@ Page({
     if (!this.data.isRealSuperAdmin || this.data.resetStoreKeySaving) return;
     const storeId = (this.data.resetStoreKeyStoreId || '').trim();
     if (!storeId) {
-      wx.showToast({ title: '请输入目标门店 ID', icon: 'none' });
+      wx.showToast({ title: '请选择或输入目标门店', icon: 'none' });
       return;
     }
     const newKey = (this.data.resetStoreKeyInput || '').trim();
@@ -3430,7 +3463,7 @@ Page({
         wx.showToast({ title: (result && result.error) || '重置失败', icon: 'none' });
         return;
       }
-      this.setData({ showResetStoreKeyModal: false, resetStoreKeyStoreId: '', resetStoreKeyInput: '' });
+      this.setData({ showResetStoreKeyModal: false, resetStoreKeyStoreId: '', resetStoreKeyStoreName: '', resetStoreKeyInput: '' });
       wx.showToast({ title: newKey ? '密钥已重置' : '密钥已清除（无门槛申请）', icon: 'success', duration: 2500 });
     } catch (err) {
       console.error('[onConfirmResetStoreKey] 异常:', err);

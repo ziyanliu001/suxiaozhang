@@ -1880,13 +1880,31 @@
         <text class="admin-key-modal-title">🔑 重置门店管理员密钥</text>
         <view class="certificate-modal-close" bindtap="onCloseResetStoreKeyModal">✕</view>
       </view>
-      <text class="vt-form-label">目标门店 ID (storeId)</text>
+
+      <text class="vt-form-label">目标门店</text>
+      <!-- 门店下拉选择器 -->
+      <picker wx:if="{{resetStoreKeyStoreList.length > 0}}"
+              mode="selector"
+              range="{{resetStoreKeyStoreList}}"
+              range-key="storeName"
+              bindchange="onResetStoreKeyPickerChange">
+        <view class="reset-key-store-picker {{resetStoreKeyStoreName ? 'selected' : ''}}">
+          <text>{{resetStoreKeyStoreName || '请选择目标门店'}}</text>
+          <text class="reset-key-picker-arrow">▾</text>
+        </view>
+      </picker>
+      <view wx:elif="{{resetStoreKeyStoreListLoading}}" class="reset-key-store-picker loading-placeholder">
+        <text>加载门店列表中…</text>
+      </view>
+      <!-- 兜底：手动输入 storeId -->
       <input class="admin-key-modal-input"
+             style="margin-top:12rpx;"
              type="text"
              value="{{resetStoreKeyStoreId}}"
              bindinput="onResetStoreKeyStoreIdInput"
-             placeholder="请粘贴目标门店的 storeId"
+             placeholder="或手动粘贴 storeId"
              maxlength="100" />
+
       <text class="vt-form-label" style="margin-top:16rpx;">新密钥（留空则清除密钥）</text>
       <input class="admin-key-modal-input"
              type="text"
@@ -1899,7 +1917,7 @@
       <button class="feedback-submit-btn"
               bindtap="onConfirmResetStoreKey"
               loading="{{resetStoreKeySaving}}"
-              disabled="{{resetStoreKeySaving}}">确认重置</button>
+              disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId}}">确认重置</button>
     </view>
   </view>
 
