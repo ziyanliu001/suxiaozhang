@@ -2415,14 +2415,62 @@
 /* 📮 爱心意见箱管理弹窗：复用 .feedback-sheet-backdrop/.feedback-sheet-panel 的
    遮罩+滑出动效，这里只补充"列表可滚动、限制最大高度"这类管理弹窗特有的样式 */
 .feedback-admin-sheet-panel {
-  max-height: 80vh;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
+}
+
+/* ⏳✅ 待处理 / 已处理 Tab 切换栏 */
+.fa-tab-bar {
+  display: flex;
+  border-bottom: 2rpx solid #EFE6D8;
+  padding: 0 32rpx;
+  flex-shrink: 0;
+}
+
+.fa-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 20rpx 0;
+  font-size: 26rpx;
+  color: #ADB5BD;
+  font-weight: 500;
+  border-bottom: 4rpx solid transparent;
+  margin-bottom: -2rpx;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.fa-tab.active {
+  color: #E75B3E;
+  border-bottom-color: #E75B3E;
+  font-weight: bold;
+}
+
+.fa-tab-badge {
+  font-size: 20rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #E75B3E;
+  border-radius: 20rpx;
+  padding: 2rpx 10rpx;
+  min-width: 32rpx;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .feedback-admin-list-scroll {
   flex: 1;
   min-height: 0;
+  max-height: 55vh;
+}
+
+/* 安全区底部留白 */
+.fa-safe-area-spacer {
+  height: calc(20rpx + constant(safe-area-inset-bottom));
+  height: calc(20rpx + env(safe-area-inset-bottom));
 }
 
 .feedback-admin-loading,
@@ -2750,6 +2798,20 @@
   font-size: 24rpx;
   color: #6B5B45;
   line-height: 1.6;
+}
+
+.fa-reply-display-meta {
+  display: block;
+  font-size: 20rpx;
+  color: #B8860B;
+  margin-top: 6rpx;
+}
+
+/* 💬 回复家人按钮：品牌暖橙色 Outline，与驳回/移出的红色警告色区分 */
+.fa-feedback-reply-btn {
+  color: #D9480E !important;
+  background: linear-gradient(135deg, #FFF8F3 0%, #FFEDE0 100%) !important;
+  border-color: #F4A57A !important;
 }
 
 /* 🍱🌾 义工现场服务工具表单：与 feedback-sheet-* 共用弹窗壳，这里只补充

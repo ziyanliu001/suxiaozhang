@@ -295,6 +295,17 @@ exports.main = async (event, context) => {
     });
     results.push({ collection: 'tenant_activation_codes', index: 'codeNormalized_unique', status: 'success' });
 
+    // 📮 爱心意见箱（submitFeedback 云函数）：
+    //   - list 动作按 {storeId} + orderBy(createTime desc) 查询全部意见
+    //   - count 动作按 {storeId, status:'new'} 统计待处理数量
+    //   - 补一条覆盖两种查询的三字段复合索引（status 低基数放后，createTime 排序放末位）
+    await db.collection('feedback_submissions').createIndex({
+      name: 'storeId_status_createTime',
+      keys: [{ storeId: 1 }, { status: 1 }, { createTime: -1 }],
+      unique: false
+    });
+    results.push({ collection: 'feedback_submissions', index: 'storeId_status_createTime', status: 'success' });
+
     return {
       success: true,
       message: '索引创建完成',

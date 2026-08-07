@@ -335,7 +335,18 @@ Page({
     pendingFeedbackCount: 0,
     showFeedbackAdminModal: false,
     feedbackAdminLoading: false,
+    feedbackAdminTab: 'pending' as string, // ⏳ 当前选中 Tab：'pending' | 'handled'
     feedbackAdminList: [] as Array<{
+      _id: string; nickName: string; type: string; typeLabel: string;
+      content: string; status: string; createTimeStr: string; handling?: boolean;
+      replyContent?: string; replyByName?: string; replyTimeStr?: string;
+    }>,
+    feedbackAdminPendingList: [] as Array<{
+      _id: string; nickName: string; type: string; typeLabel: string;
+      content: string; status: string; createTimeStr: string; handling?: boolean;
+      replyContent?: string; replyByName?: string; replyTimeStr?: string;
+    }>,
+    feedbackAdminHandledList: [] as Array<{
       _id: string; nickName: string; type: string; typeLabel: string;
       content: string; status: string; createTimeStr: string; handling?: boolean;
       replyContent?: string; replyByName?: string; replyTimeStr?: string;
@@ -858,7 +869,12 @@ Page({
   // 连续点击——此前无任何拦截，手速快或网络慢时会并发打出多个重复的云函数请求
   async onOpenFeedbackAdminModal() {
     if (this.data.feedbackAdminLoading) return;
-    this.setData({ showFeedbackAdminModal: true, feedbackAdminLoading: true, feedbackAdminList: [] });
+    this.setData({
+      showFeedbackAdminModal: true, feedbackAdminLoading: true,
+      feedbackAdminTab: 'pending', feedbackAdminList: [],
+      feedbackAdminPendingList: [], feedbackAdminHandledList: [],
+      feedbackReplyingId: '', feedbackReplyContent: ''
+    });
 
     try {
       const storeId = await this.resolveManageStoreId();
@@ -871,7 +887,9 @@ Page({
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
         return;
       }
-      this.setData({ feedbackAdminList: (result.data && result.data.list) || [] });
+      const list = (result.data && result.data.list) || [];
+      this.setData({ feedbackAdminList: list });
+      this._rebuildFeedbackTabLists();
     } catch (err) {
       console.error('[onOpenFeedbackAdminModal] 加载意见列表异常:', err);
       // 🛡️ 云端 submitFeedback 已经把 -502005（意见箱集合尚未初始化）当作"空列表"
@@ -895,6 +913,21 @@ Page({
 
   onCloseFeedbackAdminModal() {
     this.setData({ showFeedbackAdminModal: false });
+  },
+
+  // 重新计算 pending/handled 两个衍生列表（每次 feedbackAdminList 变更后调用）
+  _rebuildFeedbackTabLists() {
+    const all = this.data.feedbackAdminList;
+    this.setData({
+      feedbackAdminPendingList: all.filter((i) => i.status !== 'handled'),
+      feedbackAdminHandledList: all.filter((i) => i.status === 'handled')
+    });
+  },
+
+  onSwitchFeedbackAdminTab(e: any) {
+    const tab = e.currentTarget.dataset.tab as string;
+    if (!tab || tab === this.data.feedbackAdminTab) return;
+    this.setData({ feedbackAdminTab: tab, feedbackReplyingId: '', feedbackReplyContent: '' });
   },
 
   async onMarkFeedbackHandled(e: any) {
@@ -924,6 +957,7 @@ Page({
         [`feedbackAdminList[${idx}].handling`]: false,
         pendingFeedbackCount: Math.max(0, this.data.pendingFeedbackCount - 1)
       });
+      this._rebuildFeedbackTabLists();
       wx.showToast({ title: '已标记为处理', icon: 'success' });
     } catch (err) {
       console.error('[onMarkFeedbackHandled] 操作异常:', err);
@@ -983,6 +1017,7 @@ Page({
         feedbackReplyContent: '',
         pendingFeedbackCount: wasUnhandled ? Math.max(0, this.data.pendingFeedbackCount - 1) : this.data.pendingFeedbackCount
       });
+      this._rebuildFeedbackTabLists();
       wx.showToast({ title: '回复成功', icon: 'success' });
     } catch (err) {
       console.error('[onSubmitFeedbackReply] 回复异常:', err);
