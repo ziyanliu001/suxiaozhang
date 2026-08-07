@@ -303,7 +303,7 @@
             </view>
           </view>
 
-          <view class="matrix-filter-empty" wx:if="{{isAdmin && storeMatrixFilter === 'risk' && superAdminInsights.riskStoreCount === 0}}">
+          <view class="matrix-filter-empty" wx:if="{{isAdmin && storeMatrixFilter === 'risk' && superAdminInsights && superAdminInsights.riskStoreCount === 0}}">
             <text>🎉 暂无需要关注的预警门店，各门店运营正常</text>
           </view>
         </view>
