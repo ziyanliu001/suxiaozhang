@@ -1794,7 +1794,7 @@
       <!-- ① 成员列表选择区 -->
       <view class="sa-member-search-bar">
         <input class="sa-member-search-input"
-               placeholder="搜索姓名 / 门店名..."
+               placeholder="搜索姓名 / 门店 / 角色..."
                value="{{forceUnbindSearchQuery}}"
                bindinput="onForceUnbindSearch" />
       </view>
