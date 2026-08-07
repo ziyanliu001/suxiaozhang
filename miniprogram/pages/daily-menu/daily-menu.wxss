@@ -493,6 +493,12 @@
   border-top-left-radius: 28rpx;
   border-top-right-radius: 28rpx;
   padding: 28rpx;
+  /* 底部安全区：防止操作按钮贴近 Home Indicator */
+  padding-bottom: calc(28rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
+  /* 顶部安全区：85vh 时顶部可能进入刘海区 */
+  padding-top: calc(28rpx + constant(safe-area-inset-top));
+  padding-top: calc(28rpx + env(safe-area-inset-top));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -700,7 +706,7 @@
   margin-top: 24rpx;
 }
 
-/* 📤 页面底部固定栏：生成食谱宣传海报，safe-area 适配见内联 style */
+/* 📤 页面底部固定栏：生成食谱宣传海报，补充 safe-area 底部适配 */
 .dm-bottom-bar {
   position: fixed;
   bottom: 0;
@@ -709,6 +715,8 @@
   width: 100%;
   box-sizing: border-box;
   padding: 20rpx 24rpx;
+  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   background: #FFFFFF;
   box-shadow: 0 -6rpx 20rpx rgba(0, 0, 0, 0.06);
   z-index: 99;
@@ -733,6 +741,12 @@
   border-top-left-radius: 28rpx;
   border-top-right-radius: 28rpx;
   padding: 28rpx;
+  /* 底部安全区：防止保存/分享按钮贴近 Home Indicator */
+  padding-bottom: calc(28rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
+  /* 顶部安全区：85vh 时顶部可能进入刘海区 */
+  padding-top: calc(28rpx + constant(safe-area-inset-top));
+  padding-top: calc(28rpx + env(safe-area-inset-top));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

@@ -19,3 +19,19 @@
   height: calc(20rpx + env(safe-area-inset-bottom));
   flex-shrink: 0;
 }
+
+/* 🛡️ 半屏弹窗顶部安全区：max-height 贴近 100vh 时，拖拽条/标题会进入刘海/
+   状态栏区域；加此 class 在面板内容上方留出安全区高度，确保关闭按钮和
+   标题始终在安全区以下。constant() 在前兼容 iOS 11.0。*/
+.fa-sheet-top-safe {
+  padding-top: calc(20rpx + constant(safe-area-inset-top)) !important;
+  padding-top: calc(20rpx + env(safe-area-inset-top)) !important;
+}
+
+/* 🛡️ 半屏弹窗底部安全区：防止确认/提交按钮贴近 Home Indicator 被遮挡；
+   比 fa-safe-area-spacer 多 10rpx 额外缓冲（30rpx vs 20rpx），留给按钮
+   足够的可点击区域。用 !important 保证覆盖行内或更低优先级的 padding-bottom。*/
+.fa-sheet-bottom-safe {
+  padding-bottom: calc(30rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(30rpx + env(safe-area-inset-bottom)) !important;
+}
