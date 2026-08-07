@@ -3836,6 +3836,31 @@
   box-sizing: border-box;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   公告管理弹窗专属标题栏：feedback-sheet-title-row / feedback-sheet-close-btn
+   这两个 class 仅在公告弹窗中使用，此前未在 wxss 中定义，导致标题与关闭按钮
+   垂直堆叠而非水平对齐——这里补齐定义。
+   ───────────────────────────────────────────────────────────── */
+.feedback-sheet-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  flex-shrink: 0;
+}
+
+.feedback-sheet-close-btn {
+  width: 52rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
 /* 📢 公告管理半屏弹窗 */
 .notice-mgmt-sheet-panel {
   max-height: 75vh;
@@ -3941,15 +3966,37 @@
 }
 
 .notice-mgmt-footer {
-  padding: 20rpx 28rpx;
-  padding-bottom: calc(30rpx + constant(safe-area-inset-bottom)) !important;
-  padding-bottom: calc(30rpx + env(safe-area-inset-bottom)) !important;
+  padding: 16rpx 28rpx;
+  padding-bottom: calc(24rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom)) !important;
   border-top: 1rpx solid #F0EDE8;
   flex-shrink: 0;
 }
 
+/* 双按钮并排底栏（编辑视图专用） */
+.notice-mgmt-footer-dual {
+  display: flex;
+  gap: 16rpx;
+}
+
+.notice-mgmt-cancel-btn {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: #F0EDE8;
+  color: #666666;
+  border-radius: 44rpx;
+  font-size: 28rpx;
+  border: none;
+  font-weight: 500;
+  margin: 0;
+}
+
 .notice-mgmt-save-btn {
-  width: 100%;
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
   margin-top: 0 !important;
 }
 
@@ -4007,15 +4054,4 @@
   margin-bottom: 8rpx;
 }
 
-/* 返回链接（编辑视图内，在正文下方，低调展示） */
-.notice-mgmt-back-row {
-  display: flex;
-  align-items: center;
-  padding: 20rpx 0 8rpx;
-}
-
-.notice-mgmt-back-link {
-  font-size: 26rpx;
-  color: #C8A97E;
-}
 

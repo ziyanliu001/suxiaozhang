@@ -1990,15 +1990,14 @@
                     maxlength="500"
                     auto-height />
           <text class="notice-mgmt-char-count">{{noticeMgmtEditContent.length || 0}}/500</text>
-
-          <view class="notice-mgmt-back-row" bindtap="onNoticeManagementBackToList">
-            <text class="notice-mgmt-back-link">‹ 返回公告列表</text>
-          </view>
         </view>
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
-      <view class="notice-mgmt-footer">
+      <view class="notice-mgmt-footer notice-mgmt-footer-dual">
+        <button class="notice-mgmt-cancel-btn"
+                bindtap="onNoticeManagementBackToList"
+                disabled="{{noticeMgmtSaving}}">取消</button>
         <button class="feedback-submit-btn notice-mgmt-save-btn"
                 bindtap="onNoticeManagementSave"
                 loading="{{noticeMgmtSaving}}"
