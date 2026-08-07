@@ -3591,20 +3591,24 @@
 }
 
 /* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表。
-   🐛 Notch 遮挡修复：弹窗 max-height: 88vh 时，顶部可能进入刘海/状态栏区域；
-   padding-top: safe-area-inset-top 确保拖拽条和标题始终在安全区以下。
-   🐛 底部冗余空白修复：基类 .feedback-sheet-panel 的 140rpx padding-bottom 是为
-   "底部固定提交按钮须浮在 TabBar 上方"设计的——但本弹窗 z-index:999998 完全盖住了
-   TabBar（z-index:998），140rpx 会制造无效白空间；用 !important 覆盖为
-   calc(20rpx + safe-area-inset-bottom)，保留 home-indicator 安全留白即可。
-   🎨 圆角与阴影：border-radius 已由基类 32rpx 保证；补充顶部柔和阴影提升高级感。 */
+   🐛 Notch/胶囊遮挡根因修复：
+      基类 .feedback-sheet-panel 的 padding shorthand 带 !important，导致
+      前一版本的 padding-top: env(...) 无 !important 被完全覆盖，顶部间距
+      实际没有生效。这里改用 !important 并增大到 calc(120rpx + ...)，确保
+      拖拽条距胶囊按钮至少 40rpx 明显间距，彻底脱离刘海/胶囊遮挡区域。
+      同时收紧 max-height：calc(85vh - env(safe-area-inset-top)) 防止面板
+      在超长内容时伸到屏幕顶部区域。
+   🐛 底部冗余空白：覆盖基类 140rpx，仅保留 home-indicator 安全留白。
+   🎨 圆角与阴影：border-radius 32rpx 已由基类保证；柔和阴影保留。 */
 .sa-unbind-sheet-panel {
-  max-height: 88vh;
+  /* 限制最大高度，留出顶部胶囊区域 */
+  max-height: calc(85vh - constant(safe-area-inset-top));
+  max-height: calc(85vh - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
-  /* 顶部安全区：防止刘海/胶囊遮挡拖拽条和标题 */
-  padding-top: constant(safe-area-inset-top);
-  padding-top: env(safe-area-inset-top);
+  /* 顶部安全区：!important 覆盖基类 padding shorthand，给胶囊下方留出 120rpx 缓冲 */
+  padding-top: calc(120rpx + constant(safe-area-inset-top)) !important;
+  padding-top: calc(120rpx + env(safe-area-inset-top)) !important;
   /* 底部安全区：覆盖基类 140rpx，仅保留 home-indicator 留白 */
   padding-bottom: calc(20rpx + constant(safe-area-inset-bottom)) !important;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom)) !important;
@@ -3620,7 +3624,10 @@
 .sa-member-search-input {
   background: #F5F3F0;
   border-radius: 20rpx;
-  padding: 16rpx 24rpx;
+  /* 固定高度 + line-height 居中，确保 placeholder 上下完整显示不被裁剪 */
+  height: 80rpx;
+  line-height: 80rpx;
+  padding: 0 24rpx;
   font-size: 26rpx;
   color: #333;
   width: 100%;
