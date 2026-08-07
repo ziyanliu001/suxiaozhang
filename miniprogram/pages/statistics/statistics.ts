@@ -1245,15 +1245,17 @@ Page({
     if (!this.data.isAllStoresMode) return;
 
     // 🔐 多门店汇总看板为专业版专属功能：与角色卡口（canViewNationalDashboard，
-    // 严格收窄到 super_admin 等）是两条独立的准入条件——免费版租户即使账号是
-    // super_admin 也拦在这里。服务端 getNationalDashboard 云函数内部有一份
-    // 完全相同的判断兜底，这里只是提前拦截，避免真发起云调用才被拒绝。
+    // 严格收窄到 super_admin 等）是两条独立的准入条件——免费版租户的普通管理员
+    // 拦在这里。
+    // 🛡️ 超级管理员豁免：super_admin 是平台级运营账号，必须能无条件查看全国大屏，
+    // 不受租户套餐限制——弹"请升级专业版"对超管完全没有意义，且会误导其操作。
     // 🐛 调用方 onSuperAdminSelectStore 在触发本函数前已经把 isAllStoresMode/
     // shopName 切到"全部门店"聚合态——被拦截时如果只 return，页面会卡在一个
     // 已经切换成聚合视图、却永远没有数据回来的空白状态（与海报生成白屏是同一
     // 类根因）。这里把状态退回到用户自己的实际门店，并重新拉一遍单店数据，
     // 而不是留一块空白
-    const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
+    const isSuperAdminUser = this.data.isAdmin === true;
+    const permission = isSuperAdminUser ? { allowed: true } : await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
     if (!permission.allowed) {
       // 🐛 根因修复（模拟器实测发现）：getSelectedStore() 兜底读到的可能正是刚
       // 触发本次全国总览请求前残留的虚拟聚合值（storeId:'national_overview'/
