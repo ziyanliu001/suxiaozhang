@@ -2406,9 +2406,15 @@ Page({
       });
       const result = res.result;
       if (result && result.success) {
-        wx.showToast({ title: id ? '公告已更新' : '公告已发布', icon: 'success' });
-        this.setData({ noticeManagementView: 'list' });
-        await this.fetchNoticeManagementList();
+        wx.showToast({ title: id ? '公告已更新' : '公告发布成功', icon: 'success', duration: 2000 });
+        // 平滑关闭弹窗，并在后台刷新列表以便下次打开时数据是最新的
+        this.setData({ showNoticeManagementModal: false, noticeManagementView: 'list' });
+        this.fetchNoticeManagementList();
+        // 通知首页走马灯在下次 onShow 时刷新公告数据
+        try {
+          const app = getApp() as any;
+          if (app && app.globalData) app.globalData.noticesDirty = true;
+        } catch (_) { /* ignore */ }
       } else {
         wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
       }

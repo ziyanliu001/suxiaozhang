@@ -1968,22 +1968,21 @@
     <!-- 编辑/新建视图 -->
     <block wx:elif="{{noticeManagementView === 'edit'}}">
       <view class="feedback-sheet-title-row">
-        <view class="notice-mgmt-back-btn" bindtap="onNoticeManagementBackToList">‹ 返回</view>
-        <text class="feedback-sheet-title">{{noticeMgmtEditId ? '编辑公告' : '发布新公告'}}</text>
+        <text class="feedback-sheet-title notice-mgmt-edit-title">{{noticeMgmtEditId ? '编辑公告' : '发布新公告'}}</text>
         <view class="feedback-sheet-close-btn" bindtap="onCloseNoticeManagementModal">✕</view>
       </view>
 
       <scroll-view scroll-y class="notice-mgmt-scroll">
         <view class="notice-mgmt-form">
           <text class="vt-form-label">公告标题</text>
-          <input class="admin-key-modal-input"
+          <input class="notice-mgmt-input"
                  type="text"
                  value="{{noticeMgmtEditTitle}}"
                  bindinput="onNoticeMgmtTitleInput"
                  placeholder="请输入公告标题（将显示在走马灯）"
                  maxlength="50" />
 
-          <text class="vt-form-label" style="margin-top:16rpx;">公告正文</text>
+          <text class="vt-form-label" style="margin-top:24rpx;">公告正文</text>
           <textarea class="notice-mgmt-textarea"
                     value="{{noticeMgmtEditContent}}"
                     bindinput="onNoticeMgmtContentInput"
@@ -1991,16 +1990,19 @@
                     maxlength="500"
                     auto-height />
           <text class="notice-mgmt-char-count">{{noticeMgmtEditContent.length || 0}}/500</text>
+
+          <view class="notice-mgmt-back-row" bindtap="onNoticeManagementBackToList">
+            <text class="notice-mgmt-back-link">‹ 返回公告列表</text>
+          </view>
         </view>
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="notice-mgmt-footer">
-        <button class="notice-mgmt-cancel-btn" bindtap="onNoticeManagementBackToList" disabled="{{noticeMgmtSaving}}">取消</button>
         <button class="feedback-submit-btn notice-mgmt-save-btn"
                 bindtap="onNoticeManagementSave"
                 loading="{{noticeMgmtSaving}}"
-                disabled="{{noticeMgmtSaving}}">保存发布</button>
+                disabled="{{noticeMgmtSaving || !noticeMgmtEditTitle || !noticeMgmtEditContent}}">保存发布</button>
       </view>
     </block>
     </view>
