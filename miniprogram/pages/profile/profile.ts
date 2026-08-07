@@ -108,6 +108,39 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: '旗舰版'
 };
 
+// 🏷️ 公告管理弹窗：内置 7 条常用场景预设文案，与首页「编辑通报内容」弹窗中的
+// PRESET_NOTICES 同步，让店长/财务可在两处弹窗快速套用同一套模板
+const NOTICE_MGMT_PRESETS: Record<string, { title: string; content: string }> = {
+  opening: {
+    title: '三源弘雨花敬老家园试营业',
+    content: '三源弘雨花敬老家园，14号正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！'
+  },
+  volunteer: {
+    title: '爱心义工招募',
+    content: '【爱心义工招募】雨花斋的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️'
+  },
+  supplies: {
+    title: '爱心物资接力',
+    content: '【爱心物资接力】感恩各位爱心人士的护持！当前小店大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️'
+  },
+  weather_closure: {
+    title: '恶劣天气暂停开餐告示',
+    content: '【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，本斋将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️'
+  },
+  renovation_closure: {
+    title: '内部整修/例行消杀停业通知',
+    content: '【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，本斋将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！❤️'
+  },
+  festival: {
+    title: '节日特别结缘活动通知',
+    content: '【节日欢聚通知】值此佳节到来之际，本斋将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜回家用餐！祝大家吉祥安康！🏮'
+  },
+  thanks: {
+    title: '专项爱心致谢',
+    content: '【感恩致谢】特别感谢爱心企业/爱心人士对本斋的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️'
+  }
+};
+
 const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
   partyMembers: '中共党员',
   socialWorkers: '社会工作者',
@@ -2364,6 +2397,19 @@ Page({
 
   onNoticeManagementBackToList() {
     this.setData({ noticeManagementView: 'list' });
+  },
+
+  // 🏷️ 公告编辑弹窗：一键套用内置预设文案（与首页通报弹窗 onApplyPreset 同款逻辑）
+  onNoticeMgmtApplyPreset(e: any) {
+    const key = e.currentTarget.dataset.key;
+    const preset = NOTICE_MGMT_PRESETS[key];
+    if (preset) {
+      this.setData({
+        noticeMgmtEditTitle: preset.title,
+        noticeMgmtEditContent: preset.content
+      });
+      wx.showToast({ title: '已导入预设文案', icon: 'success', duration: 1500 });
+    }
   },
 
   onNoticeMgmtTitleInput(e: any) {

@@ -1947,7 +1947,7 @@
               <text class="notice-mgmt-item-title">{{item.title}}</text>
               <text class="notice-mgmt-item-status">{{item.is_active ? '展示中' : '已隐藏'}}</text>
             </view>
-            <text class="notice-mgmt-item-content">{{item.content}}</text>
+            <text class="notice-mgmt-item-content" user-select>{{item.content}}</text>
             <view class="notice-mgmt-item-actions">
               <view class="notice-mgmt-action-btn toggle-btn" bindtap="onNoticeManagementToggleActive" data-id="{{item._id}}">
                 {{item.is_active ? '隐藏' : '显示'}}
@@ -1974,6 +1974,20 @@
 
       <scroll-view scroll-y class="notice-mgmt-scroll">
         <view class="notice-mgmt-form">
+          <!-- 🏷️ 常用场景一键套用 -->
+          <view class="notice-preset-section">
+            <view class="notice-preset-label">⚡ 常用场景一键套用（点击自动填入标题与正文）</view>
+            <view class="notice-preset-tags">
+              <view class="notice-preset-tag" bindtap="onNoticeMgmtApplyPreset" data-key="opening">🌟 试营业喜讯</view>
+              <view class="notice-preset-tag notice-preset-tag-warning" bindtap="onNoticeMgmtApplyPreset" data-key="weather_closure">⛅ 天气暂休</view>
+              <view class="notice-preset-tag" bindtap="onNoticeMgmtApplyPreset" data-key="renovation_closure">🔧 整修暂休</view>
+              <view class="notice-preset-tag" bindtap="onNoticeMgmtApplyPreset" data-key="volunteer">❤️ 义工招募</view>
+              <view class="notice-preset-tag" bindtap="onNoticeMgmtApplyPreset" data-key="supplies">📦 物资告急</view>
+              <view class="notice-preset-tag" bindtap="onNoticeMgmtApplyPreset" data-key="festival">🏮 节日活动</view>
+              <view class="notice-preset-tag" bindtap="onNoticeMgmtApplyPreset" data-key="thanks">🤝 专项致谢</view>
+            </view>
+          </view>
+
           <text class="vt-form-label">公告标题</text>
           <input class="notice-mgmt-input"
                  type="text"

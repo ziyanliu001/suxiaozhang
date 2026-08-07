@@ -47,16 +47,16 @@
 .tab-badge {
   position: absolute;
   top: -6rpx;
-  right: -8rpx;
-  min-width: 28rpx;
-  height: 28rpx;
-  padding: 0 6rpx;
-  border-radius: 14rpx;
+  right: 0;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 16rpx;
   background: #E03131;
   color: #FFFFFF;
   font-size: 18rpx;
   font-weight: bold;
-  line-height: 28rpx;
+  line-height: 32rpx;
   text-align: center;
   box-sizing: border-box;
   border: 2rpx solid #FFFFFF;

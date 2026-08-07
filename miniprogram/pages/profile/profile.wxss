@@ -1085,6 +1085,7 @@
   text-align: center;
   box-sizing: border-box;
   vertical-align: middle;
+  margin-right: 8rpx;
 }
 
 .action-list-container {
@@ -3888,6 +3889,44 @@
   color: #AAAAAA;
 }
 
+/* 🏷️ 公告编辑弹窗：常用场景一键套用标签区 */
+.notice-preset-section {
+  margin-bottom: 24rpx;
+}
+
+.notice-preset-label {
+  font-size: 22rpx;
+  color: #A08A6A;
+  margin-bottom: 16rpx;
+  line-height: 1.4;
+}
+
+.notice-preset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.notice-preset-tag {
+  padding: 14rpx 22rpx;
+  font-size: 24rpx;
+  color: #D9480E;
+  background-color: #FFF9DB;
+  border-radius: 28rpx;
+  border: 2rpx solid #FFE066;
+}
+
+.notice-preset-tag-warning {
+  color: #E03131;
+  background-color: #FFF5F5;
+  border-color: #FFC9C9;
+}
+
+.notice-preset-tag:active {
+  background-color: #FFEBE0;
+  opacity: 0.85;
+}
+
 .notice-mgmt-item {
   background: #F8F5F0;
   border-radius: 16rpx;
@@ -3967,8 +4006,8 @@
 
 .notice-mgmt-footer {
   padding: 16rpx 28rpx;
-  padding-bottom: calc(24rpx + constant(safe-area-inset-bottom)) !important;
-  padding-bottom: calc(24rpx + env(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(40rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom)) !important;
   border-top: 1rpx solid #F0EDE8;
   flex-shrink: 0;
 }
