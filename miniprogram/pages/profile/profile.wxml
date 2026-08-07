@@ -1082,6 +1082,7 @@
           </view>
           <text class="my-feedback-pending-tag" wx:else>⏳ 团队审阅中</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
