@@ -1921,4 +1921,89 @@
     </view>
   </view>
 
+  <!-- 📢 公告管理半屏弹窗 -->
+  <view class="feedback-sheet-backdrop" wx:if="{{showNoticeManagementModal}}" catchtouchmove="stopPropagation" bindtap="onCloseNoticeManagementModal">
+  </view>
+  <view class="feedback-sheet-panel notice-mgmt-sheet-panel {{showNoticeManagementModal ? 'feedback-sheet-panel--open' : ''}}" catchtouchmove="stopPropagation">
+    <view class="feedback-sheet-drag-bar"></view>
+
+    <!-- 列表视图 -->
+    <block wx:if="{{noticeManagementView === 'list'}}">
+      <view class="feedback-sheet-title-row">
+        <text class="feedback-sheet-title">📢 门店公告管理</text>
+        <view class="feedback-sheet-close-btn" bindtap="onCloseNoticeManagementModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="notice-mgmt-scroll">
+        <view wx:if="{{noticeManagementLoading}}" class="notice-mgmt-empty">
+          <text class="notice-mgmt-empty-text">加载中…</text>
+        </view>
+        <view wx:elif="{{noticeManagementList.length === 0}}" class="notice-mgmt-empty">
+          <text class="notice-mgmt-empty-text">暂无公告，点击下方按钮发布第一条</text>
+        </view>
+        <view wx:else>
+          <view class="notice-mgmt-item" wx:for="{{noticeManagementList}}" wx:key="_id">
+            <view class="notice-mgmt-item-header">
+              <view class="notice-mgmt-status-dot {{item.is_active ? 'active' : 'inactive'}}"></view>
+              <text class="notice-mgmt-item-title">{{item.title}}</text>
+              <text class="notice-mgmt-item-status">{{item.is_active ? '展示中' : '已隐藏'}}</text>
+            </view>
+            <text class="notice-mgmt-item-content">{{item.content}}</text>
+            <view class="notice-mgmt-item-actions">
+              <view class="notice-mgmt-action-btn toggle-btn" bindtap="onNoticeManagementToggleActive" data-id="{{item._id}}">
+                {{item.is_active ? '隐藏' : '显示'}}
+              </view>
+              <view class="notice-mgmt-action-btn edit-btn" bindtap="onNoticeManagementEdit" data-id="{{item._id}}">编辑</view>
+              <view class="notice-mgmt-action-btn delete-btn" bindtap="onNoticeManagementDelete" data-id="{{item._id}}">删除</view>
+            </view>
+          </view>
+        </view>
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+
+      <view class="notice-mgmt-footer">
+        <button class="feedback-submit-btn" bindtap="onNoticeManagementCreate">＋ 发布新公告</button>
+      </view>
+    </block>
+
+    <!-- 编辑/新建视图 -->
+    <block wx:elif="{{noticeManagementView === 'edit'}}">
+      <view class="feedback-sheet-title-row">
+        <view class="notice-mgmt-back-btn" bindtap="onNoticeManagementBackToList">‹ 返回</view>
+        <text class="feedback-sheet-title">{{noticeMgmtEditId ? '编辑公告' : '发布新公告'}}</text>
+        <view class="feedback-sheet-close-btn" bindtap="onCloseNoticeManagementModal">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="notice-mgmt-scroll">
+        <view class="notice-mgmt-form">
+          <text class="vt-form-label">公告标题</text>
+          <input class="admin-key-modal-input"
+                 type="text"
+                 value="{{noticeMgmtEditTitle}}"
+                 bindinput="onNoticeMgmtTitleInput"
+                 placeholder="请输入公告标题（将显示在走马灯）"
+                 maxlength="50" />
+
+          <text class="vt-form-label" style="margin-top:16rpx;">公告正文</text>
+          <textarea class="notice-mgmt-textarea"
+                    value="{{noticeMgmtEditContent}}"
+                    bindinput="onNoticeMgmtContentInput"
+                    placeholder="请输入公告详细内容..."
+                    maxlength="500"
+                    auto-height />
+          <text class="notice-mgmt-char-count">{{noticeMgmtEditContent.length || 0}}/500</text>
+        </view>
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+
+      <view class="notice-mgmt-footer">
+        <button class="notice-mgmt-cancel-btn" bindtap="onNoticeManagementBackToList" disabled="{{noticeMgmtSaving}}">取消</button>
+        <button class="feedback-submit-btn notice-mgmt-save-btn"
+                bindtap="onNoticeManagementSave"
+                loading="{{noticeMgmtSaving}}"
+                disabled="{{noticeMgmtSaving}}">保存发布</button>
+      </view>
+    </block>
+  </view>
+
 </view>

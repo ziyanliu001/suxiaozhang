@@ -3822,3 +3822,163 @@
   box-sizing: border-box;
 }
 
+/* 📢 公告管理半屏弹窗 */
+.notice-mgmt-sheet-panel {
+  max-height: 75vh;
+}
+
+.notice-mgmt-scroll {
+  flex: 1;
+  overflow: hidden;
+  padding: 0 28rpx;
+}
+
+.notice-mgmt-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60rpx 0;
+}
+
+.notice-mgmt-empty-text {
+  font-size: 26rpx;
+  color: #AAAAAA;
+}
+
+.notice-mgmt-item {
+  background: #F8F5F0;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.notice-mgmt-item-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.notice-mgmt-status-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+}
+
+.notice-mgmt-status-dot.active {
+  background: #48BB78;
+}
+
+.notice-mgmt-status-dot.inactive {
+  background: #CCCCCC;
+}
+
+.notice-mgmt-item-title {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.notice-mgmt-item-status {
+  font-size: 22rpx;
+  color: #AAAAAA;
+  margin-left: 8rpx;
+}
+
+.notice-mgmt-item-content {
+  display: block;
+  font-size: 24rpx;
+  color: #666666;
+  line-height: 1.5;
+  margin-bottom: 16rpx;
+}
+
+.notice-mgmt-item-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.notice-mgmt-action-btn {
+  padding: 8rpx 24rpx;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.toggle-btn {
+  background: #EBF8FF;
+  color: #3182CE;
+}
+
+.edit-btn {
+  background: #FFF8E6;
+  color: #D97706;
+}
+
+.delete-btn {
+  background: #FFF5F5;
+  color: #E53E3E;
+}
+
+.notice-mgmt-footer {
+  display: flex;
+  gap: 20rpx;
+  padding: 20rpx 28rpx;
+  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  border-top: 1rpx solid #F0EDE8;
+}
+
+.notice-mgmt-cancel-btn {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: #F0EDE8;
+  color: #666666;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  border: none;
+}
+
+.notice-mgmt-save-btn {
+  flex: 2;
+  margin-top: 0 !important;
+}
+
+.notice-mgmt-back-btn {
+  font-size: 28rpx;
+  color: #C8A97E;
+  padding: 8rpx 0;
+  margin-right: 16rpx;
+}
+
+.notice-mgmt-form {
+  padding: 8rpx 0;
+}
+
+.notice-mgmt-textarea {
+  display: block;
+  width: 100%;
+  min-height: 200rpx;
+  background: #F8F5F0;
+  border: 1rpx solid #E0D8CF;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  font-size: 28rpx;
+  color: #2C2C2C;
+  box-sizing: border-box;
+  margin-top: 12rpx;
+  line-height: 1.6;
+}
+
+.notice-mgmt-char-count {
+  display: block;
+  text-align: right;
+  font-size: 22rpx;
+  color: #AAAAAA;
+  margin-top: 8rpx;
+  margin-bottom: 16rpx;
+}
+

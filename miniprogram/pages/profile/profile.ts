@@ -450,6 +450,18 @@ Page({
     resetStoreKeyInput: '',
     resetStoreKeySaving: false,
 
+    // 📢 公告管理半屏弹窗
+    showNoticeManagementModal: false,
+    noticeManagementList: [] as any[],
+    noticeManagementLoading: false,
+    noticeManagementView: 'list' as 'list' | 'edit',
+    noticeMgmtEditId: '',
+    noticeMgmtEditTitle: '',
+    noticeMgmtEditContent: '',
+    noticeMgmtEditTag: '',
+    noticeMgmtSaving: false,
+    noticeMgmtDeletingId: '',
+
     // 🍚 门店餐饮与物资统计：不新建汇总表，即时查询 volunteer_submissions/
     // material_logs（见 manageVolunteerSubmission 的 statsSummary 动作），
     // 义工/店长/家长/超管共用同一个入口和同一份数据
@@ -2289,8 +2301,196 @@ Page({
     this.setData({ showVolunteerSubmissionAdminModal: false });
   },
 
-  onOpenNoticeManagement() {
-    wx.switchTab({ url: '/pages/index/index' });
+  async onOpenNoticeManagement() {
+    this.setData({
+      showNoticeManagementModal: true,
+      noticeManagementView: 'list',
+      noticeManagementList: [],
+      noticeManagementLoading: true
+    });
+    await this.fetchNoticeManagementList();
+  },
+
+  onCloseNoticeManagementModal() {
+    if (this.data.noticeMgmtSaving) return;
+    this.setData({ showNoticeManagementModal: false });
+  },
+
+  async fetchNoticeManagementList() {
+    if (!isCloudAvailable()) {
+      this.setData({ noticeManagementLoading: false });
+      return;
+    }
+    this.setData({ noticeManagementLoading: true });
+    try {
+      const storeId = await this.resolveManageStoreId();
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: { action: 'list', storeId }
+      });
+      const result = res.result;
+      const list = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+      this.setData({ noticeManagementList: list });
+    } catch (err) {
+      console.error('[fetchNoticeManagementList] 失败:', err);
+      wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ noticeManagementLoading: false });
+    }
+  },
+
+  onNoticeManagementCreate() {
+    this.setData({
+      noticeManagementView: 'edit',
+      noticeMgmtEditId: '',
+      noticeMgmtEditTitle: '',
+      noticeMgmtEditContent: '',
+      noticeMgmtEditTag: '喜讯通报'
+    });
+  },
+
+  onNoticeManagementEdit(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const item = (this.data.noticeManagementList as any[]).find((n: any) => n._id === id);
+    if (!item) return;
+    this.setData({
+      noticeManagementView: 'edit',
+      noticeMgmtEditId: item._id,
+      noticeMgmtEditTitle: item.title || '',
+      noticeMgmtEditContent: item.content || '',
+      noticeMgmtEditTag: item.tag || '喜讯通报'
+    });
+  },
+
+  onNoticeManagementBackToList() {
+    this.setData({ noticeManagementView: 'list' });
+  },
+
+  onNoticeMgmtTitleInput(e: any) {
+    this.setData({ noticeMgmtEditTitle: e.detail.value });
+  },
+
+  onNoticeMgmtContentInput(e: any) {
+    this.setData({ noticeMgmtEditContent: e.detail.value });
+  },
+
+  async onNoticeManagementSave() {
+    if (this.data.noticeMgmtSaving) return;
+    const title = (this.data.noticeMgmtEditTitle || '').trim();
+    const content = (this.data.noticeMgmtEditContent || '').trim();
+    if (!title) {
+      wx.showToast({ title: '请填写公告标题', icon: 'none' });
+      return;
+    }
+    if (!content) {
+      wx.showToast({ title: '请填写公告正文', icon: 'none' });
+      return;
+    }
+    if (!isCloudAvailable()) return;
+    this.setData({ noticeMgmtSaving: true });
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      const storeId = await this.resolveManageStoreId();
+      const id = this.data.noticeMgmtEditId;
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: {
+          action: id ? 'update' : 'create',
+          id: id || undefined,
+          storeId,
+          tag: this.data.noticeMgmtEditTag || '喜讯通报',
+          title,
+          content,
+          isActive: true
+        }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        wx.showToast({ title: id ? '公告已更新' : '公告已发布', icon: 'success' });
+        this.setData({ noticeManagementView: 'list' });
+        await this.fetchNoticeManagementList();
+      } else {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[onNoticeManagementSave] 失败:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ noticeMgmtSaving: false });
+    }
+  },
+
+  async onNoticeManagementDelete(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || this.data.noticeMgmtDeletingId) return;
+    const confirmed = await new Promise<boolean>(resolve => {
+      wx.showModal({
+        title: '确认删除',
+        content: '删除后公告将立即从走马灯中移除，确认删除？',
+        confirmText: '删除',
+        confirmColor: '#E53E3E',
+        success: (res) => resolve(res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+    if (!isCloudAvailable()) return;
+    this.setData({ noticeMgmtDeletingId: id });
+    wx.showLoading({ title: '删除中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: { action: 'delete', id }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        wx.showToast({ title: '公告已删除', icon: 'success' });
+        await this.fetchNoticeManagementList();
+      } else {
+        wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[onNoticeManagementDelete] 失败:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ noticeMgmtDeletingId: '' });
+    }
+  },
+
+  async onNoticeManagementToggleActive(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const item = (this.data.noticeManagementList as any[]).find((n: any) => n._id === id);
+    if (!item || this.data.noticeMgmtDeletingId) return;
+    if (!isCloudAvailable()) return;
+    this.setData({ noticeMgmtDeletingId: id });
+    try {
+      const storeId = await this.resolveManageStoreId();
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageNotice',
+        data: {
+          action: 'update',
+          id,
+          storeId,
+          tag: item.tag || '喜讯通报',
+          title: item.title,
+          content: item.content,
+          isActive: !item.is_active
+        }
+      });
+      const result = res.result;
+      if (result && result.success) {
+        await this.fetchNoticeManagementList();
+      } else {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[onNoticeManagementToggleActive] 失败:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ noticeMgmtDeletingId: '' });
+    }
   },
 
   // 👥🏛️ 待审批的成员/高级角色申请：服务端已按 caller 角色分流（店长/家长只拿本店
