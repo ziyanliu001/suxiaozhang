@@ -1773,27 +1773,89 @@
   </view>
 
   <!-- 🛡️ 超管强制解绑弹窗 -->
-  <view class="certificate-modal-mask" wx:if="{{showForceUnbindModal}}" catchtouchmove="stopPropagation" bindtap="onCloseForceUnbindModal">
-    <view class="certificate-modal-card sa-tool-modal-card" catchtap="stopPropagation">
-      <view class="certificate-modal-header admin-key-modal-header">
-        <text class="admin-key-modal-title">🚫 强制解绑恶意角色</text>
-        <view class="certificate-modal-close" bindtap="onCloseForceUnbindModal">✕</view>
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showForceUnbindModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showForceUnbindModal}}" bindtap="onCloseForceUnbindModal">
+    <view class="feedback-sheet-panel sa-unbind-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">🚫 强制解绑恶意角色</text>
+          <text class="feedback-sheet-subtitle">将指定管理成员角色重置为义工并撤销其管理权限</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseForceUnbindModal">✕</view>
       </view>
-      <text class="vt-form-label">目标用户 openId</text>
-      <input class="admin-key-modal-input"
-             type="text"
-             value="{{forceUnbindInput}}"
-             bindinput="onForceUnbindInput"
-             placeholder="请粘贴目标用户的 openId"
-             maxlength="100" />
-      <text class="admin-key-modal-desc">确认后，该用户的门店角色（大家长/店长/财务）将被强制重置为义工，并写入操作审计日志，不可撤销。</text>
+
+      <!-- ① 成员列表选择区 -->
+      <view class="sa-member-search-bar">
+        <input class="sa-member-search-input"
+               placeholder="搜索姓名 / 门店名..."
+               value="{{forceUnbindSearchQuery}}"
+               bindinput="onForceUnbindSearch" />
+      </view>
+
+      <view class="sa-member-loading" wx:if="{{forceUnbindMemberLoading}}">
+        <text>加载成员列表中...</text>
+      </view>
+      <scroll-view scroll-y class="sa-member-list-scroll" wx:elif="{{forceUnbindFilteredList.length > 0}}">
+        <view
+          class="sa-member-item {{forceUnbindSelectedMember && forceUnbindSelectedMember.applyId === item.applyId ? 'selected' : ''}}"
+          wx:for="{{forceUnbindFilteredList}}"
+          wx:key="applyId"
+          bindtap="onSelectForceUnbindMember"
+          data-member="{{item}}"
+        >
+          <view class="sa-member-info">
+            <text class="sa-member-name">{{item.realName || '未知姓名'}}</text>
+            <text class="sa-member-meta">{{item.roleLabel}} · {{item.storeName || '未知门店'}}</text>
+          </view>
+          <view class="sa-member-check" wx:if="{{forceUnbindSelectedMember && forceUnbindSelectedMember.applyId === item.applyId}}">✓</view>
+        </view>
+      </scroll-view>
+      <view class="sa-member-empty" wx:elif="{{!forceUnbindMemberLoading}}">
+        <text>{{forceUnbindSearchQuery ? '未找到匹配成员' : '暂无管理岗位成员'}}</text>
+      </view>
+
+      <!-- ② 已选中成员信息卡片 -->
+      <view class="sa-selected-card" wx:if="{{forceUnbindSelectedMember}}">
+        <view class="sa-selected-card-left">
+          <text class="sa-selected-name">{{forceUnbindSelectedMember.realName}}</text>
+          <text class="sa-selected-meta">{{forceUnbindSelectedMember.roleLabel}} · {{forceUnbindSelectedMember.storeName}}</text>
+          <text class="sa-selected-notice">即将强行将该用户的角色重置为【义工】，并作废其现有管理权限</text>
+        </view>
+        <view class="sa-selected-actions">
+          <view class="sa-copy-btn" bindtap="onCopySelectedOpenId" wx:if="{{forceUnbindSelectedMember.openId}}">复制 ID</view>
+          <view class="sa-clear-btn" bindtap="onClearForceUnbindSelection">取消</view>
+        </view>
+      </view>
+
+      <!-- ③ 兜底：手动输入 openId -->
+      <view class="sa-manual-section">
+        <text class="vt-form-label">或手动粘贴 openId（兜底）</text>
+        <view class="sa-manual-row">
+          <input class="sa-manual-input"
+                 type="text"
+                 value="{{forceUnbindInput}}"
+                 bindinput="onForceUnbindInput"
+                 placeholder="粘贴目标用户 openId"
+                 maxlength="100" />
+          <view class="sa-copy-btn" bindtap="onCopySelectedOpenId" wx:if="{{forceUnbindInput}}">复制</view>
+        </view>
+      </view>
+
+      <!-- ④ 操作结果 -->
       <view class="sa-tool-result" wx:if="{{forceUnbindResult}}">
         <text>{{forceUnbindResult}}</text>
       </view>
+
+      <!-- ⑤ 确认按钮 -->
       <button class="feedback-submit-btn sa-danger-btn"
               bindtap="onConfirmForceUnbind"
               loading="{{forceUnbindSaving}}"
-              disabled="{{forceUnbindSaving}}">确认强制解绑</button>
+              disabled="{{forceUnbindSaving || (!forceUnbindSelectedMember && !forceUnbindInput)}}">
+        {{forceUnbindSelectedMember ? '强制解绑：' + forceUnbindSelectedMember.realName : '强制解绑'}}
+      </button>
+
+      <view class="fa-safe-area-spacer"></view>
     </view>
   </view>
 

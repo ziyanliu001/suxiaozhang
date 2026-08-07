@@ -423,9 +423,22 @@ Page({
     adminKeyModalInput: '',
     adminKeyModalSaving: false,
 
-    // 🔐 超管强制解绑：输入目标 openId 并确认后，将其门店角色重置为 volunteer
+    // 🔐 超管强制解绑：从成员列表选择，或手动粘贴 openId（兜底）
     showForceUnbindModal: false,
-    forceUnbindInput: '',   // 目标 openId
+    forceUnbindMemberLoading: false,
+    forceUnbindMemberList: [] as Array<{
+      applyId: string; realName: string; phone: string; role: string;
+      roleLabel: string; storeName: string; openId?: string;
+    }>,
+    forceUnbindFilteredList: [] as Array<{
+      applyId: string; realName: string; phone: string; role: string;
+      roleLabel: string; storeName: string; openId?: string;
+    }>,
+    forceUnbindSearchQuery: '',
+    forceUnbindSelectedMember: null as null | {
+      applyId: string; realName: string; roleLabel: string; storeName: string; openId?: string;
+    },
+    forceUnbindInput: '',   // 手动粘贴 openId（兜底）
     forceUnbindSaving: false,
     forceUnbindResult: '',  // 操作结果描述，成功后展示
     // 🔑 超管重置门店密钥：输入 storeId 和新密钥
@@ -3235,34 +3248,93 @@ Page({
   },
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 🛡️ 超管强制解绑：将恶意角色用户重置为 volunteer
+  // 🛡️ 超管强制解绑：从成员列表选择或手动粘贴 openId，将其角色重置为 volunteer
   // ──────────────────────────────────────────────────────────────────────────
-  onOpenForceUnbindModal() {
+  async onOpenForceUnbindModal() {
     if (!this.data.isRealSuperAdmin) return;
-    this.setData({ showForceUnbindModal: true, forceUnbindInput: '', forceUnbindResult: '' });
+    this.setData({
+      showForceUnbindModal: true,
+      forceUnbindInput: '', forceUnbindResult: '',
+      forceUnbindSearchQuery: '', forceUnbindSelectedMember: null,
+      forceUnbindMemberList: [], forceUnbindFilteredList: [],
+      forceUnbindMemberLoading: true
+    });
+    // 加载跨门店已授权成员（超管视角不传 storeId → 全机构）
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { action: 'listAuditQueue', tab: 'approved' }
+      });
+      const result = res.result;
+      const ELEVATED = ['finance', 'store_manager', 'store_patriarch'];
+      const all = result && result.success
+        ? (result.data || []).filter((m: any) => ELEVATED.includes(m.role))
+        : [];
+      this.setData({ forceUnbindMemberList: all, forceUnbindFilteredList: all });
+    } catch (err) {
+      console.warn('[onOpenForceUnbindModal] 加载成员列表失败:', err);
+    } finally {
+      this.setData({ forceUnbindMemberLoading: false });
+    }
   },
 
   onCloseForceUnbindModal() {
     if (this.data.forceUnbindSaving) return;
-    this.setData({ showForceUnbindModal: false, forceUnbindInput: '', forceUnbindResult: '' });
+    this.setData({
+      showForceUnbindModal: false, forceUnbindInput: '', forceUnbindResult: '',
+      forceUnbindSearchQuery: '', forceUnbindSelectedMember: null,
+      forceUnbindMemberList: [], forceUnbindFilteredList: []
+    });
+  },
+
+  onForceUnbindSearch(e: any) {
+    const q = (e.detail.value || '').trim().toLowerCase();
+    const all = this.data.forceUnbindMemberList;
+    const filtered = q
+      ? all.filter((m) =>
+          (m.realName || '').toLowerCase().includes(q) ||
+          (m.storeName || '').toLowerCase().includes(q) ||
+          (m.roleLabel || '').includes(q))
+      : all;
+    this.setData({ forceUnbindSearchQuery: e.detail.value, forceUnbindFilteredList: filtered });
+  },
+
+  onSelectForceUnbindMember(e: any) {
+    const member = e.currentTarget.dataset.member;
+    if (!member) return;
+    this.setData({ forceUnbindSelectedMember: member, forceUnbindInput: member.openId || '' });
+  },
+
+  onClearForceUnbindSelection() {
+    this.setData({ forceUnbindSelectedMember: null, forceUnbindInput: '' });
   },
 
   onForceUnbindInput(e: any) {
-    this.setData({ forceUnbindInput: e.detail.value });
+    this.setData({ forceUnbindInput: e.detail.value, forceUnbindSelectedMember: null });
+  },
+
+  onCopySelectedOpenId() {
+    const openId = (this.data.forceUnbindSelectedMember && this.data.forceUnbindSelectedMember.openId)
+      || this.data.forceUnbindInput || '';
+    if (!openId) { wx.showToast({ title: '暂无 openId 可复制', icon: 'none' }); return; }
+    wx.setClipboardData({ data: openId, success: () => wx.showToast({ title: '已复制 openId', icon: 'success' }) });
   },
 
   async onConfirmForceUnbind() {
     if (!this.data.isRealSuperAdmin || this.data.forceUnbindSaving) return;
-    const targetOpenId = (this.data.forceUnbindInput || '').trim();
-    if (!targetOpenId) {
-      wx.showToast({ title: '请输入目标用户 openId', icon: 'none' });
+    const selected = this.data.forceUnbindSelectedMember;
+    const manualOpenId = (this.data.forceUnbindInput || '').trim();
+
+    if (!selected && !manualOpenId) {
+      wx.showToast({ title: '请先选择或输入目标用户', icon: 'none' });
       return;
     }
 
+    const displayName = selected ? `【${selected.realName}】（${selected.roleLabel} · ${selected.storeName}）` : `openId：${manualOpenId.slice(0, 16)}...`;
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
         title: '⚠️ 确认强制解绑',
-        content: `即将将用户 ${targetOpenId.slice(0, 12)}... 的门店角色强制重置为义工（volunteer），此操作不可撤销，请确认。`,
+        content: `即将强行将用户 ${displayName} 的角色重置为【义工】，并作废其现有管理权限。此操作不可撤销，请确认。`,
         confirmText: '确认解绑',
         confirmColor: '#C0392B',
         success: (res) => resolve(!!res.confirm),
@@ -3274,18 +3346,30 @@ Page({
     this.setData({ forceUnbindSaving: true });
     wx.showLoading({ title: '处理中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
-        name: 'processRoleAudit',
-        data: { action: 'superAdminForceUnbind', targetOpenId }
-      });
+      const callData: any = { action: 'superAdminForceUnbind' };
+      if (selected && selected.applyId) {
+        callData.targetDocId = selected.applyId;
+      } else {
+        callData.targetOpenId = manualOpenId;
+      }
+      const res: any = await wx.cloud.callFunction({ name: 'processRoleAudit', data: callData });
       const result = res.result;
       if (!result || !result.success) {
         wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
         return;
       }
+      const resultMsg = `✅ 解绑成功 — 原角色：${result.prevRole || ''}，门店：${result.prevStoreName || '无'}`;
       this.setData({
-        forceUnbindResult: `✅ ${result.message || '解绑成功'}（原角色：${result.prevRole || ''}，门店：${result.prevStoreName || '无'}）`,
-        forceUnbindInput: ''
+        forceUnbindResult: resultMsg,
+        forceUnbindSelectedMember: null,
+        forceUnbindInput: '',
+        // 从列表移除已解绑的成员
+        forceUnbindMemberList: this.data.forceUnbindMemberList.filter(
+          (m) => !(selected ? m.applyId === selected.applyId : m.openId === manualOpenId)
+        ),
+        forceUnbindFilteredList: this.data.forceUnbindFilteredList.filter(
+          (m) => !(selected ? m.applyId === selected.applyId : m.openId === manualOpenId)
+        )
       });
       wx.showToast({ title: '强制解绑成功', icon: 'success' });
     } catch (err) {

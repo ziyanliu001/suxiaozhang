@@ -3575,26 +3575,188 @@
   padding: 0 4rpx;
 }
 
-/* 🛡️ 超管应急工具弹窗：与 admin-key-modal-card 相同宽度，稍高以容纳结果展示区 */
+/* 🛡️ 超管应急工具弹窗（重置密钥等小型弹窗复用） */
 .sa-tool-modal-card {
   width: 640rpx;
 }
 
-/* 操作结果展示区：成功/失败文案 */
+/* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表 */
+.sa-unbind-sheet-panel {
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 搜索栏 */
+.sa-member-search-bar {
+  padding: 0 32rpx 16rpx;
+  flex-shrink: 0;
+}
+.sa-member-search-input {
+  background: #F5F3F0;
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+  font-size: 26rpx;
+  color: #333;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 成员列表 */
+.sa-member-loading,
+.sa-member-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #ADB5BD;
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+.sa-member-list-scroll {
+  max-height: 280rpx;
+  flex-shrink: 0;
+  padding: 0 32rpx;
+}
+.sa-member-item {
+  display: flex;
+  align-items: center;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  margin-bottom: 10rpx;
+  background: #FAFAFA;
+  border: 2rpx solid #EFE6D8;
+  transition: background 0.12s;
+}
+.sa-member-item.selected {
+  background: #FFF3EB;
+  border-color: #E75B3E;
+}
+.sa-member-info {
+  flex: 1;
+  min-width: 0;
+}
+.sa-member-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+.sa-member-meta {
+  display: block;
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 4rpx;
+}
+.sa-member-check {
+  font-size: 32rpx;
+  color: #E75B3E;
+  font-weight: bold;
+  margin-left: 16rpx;
+  flex-shrink: 0;
+}
+
+/* 已选中成员卡片 */
+.sa-selected-card {
+  margin: 16rpx 32rpx;
+  background: #FFF3EB;
+  border: 2rpx solid #E75B3E;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  display: flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+.sa-selected-card-left {
+  flex: 1;
+  min-width: 0;
+}
+.sa-selected-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #C0392B;
+}
+.sa-selected-meta {
+  display: block;
+  font-size: 22rpx;
+  color: #666;
+  margin-top: 4rpx;
+}
+.sa-selected-notice {
+  display: block;
+  font-size: 20rpx;
+  color: #C0392B;
+  margin-top: 8rpx;
+  line-height: 1.5;
+}
+.sa-selected-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+.sa-copy-btn,
+.sa-clear-btn {
+  font-size: 22rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 20rpx;
+  text-align: center;
+  white-space: nowrap;
+}
+.sa-copy-btn {
+  background: #FFF;
+  color: #E75B3E;
+  border: 1rpx solid #E75B3E;
+}
+.sa-clear-btn {
+  background: #F5F3F0;
+  color: #666;
+  border: 1rpx solid #DDD;
+}
+
+/* 手动输入区 */
+.sa-manual-section {
+  padding: 0 32rpx 8rpx;
+  flex-shrink: 0;
+}
+.sa-manual-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.sa-manual-input {
+  flex: 1;
+  background: #F5F3F0;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  font-size: 24rpx;
+  color: #333;
+  min-width: 0;
+}
+
+/* 操作结果展示区 */
 .sa-tool-result {
   background: #F0FFF4;
   border: 1rpx solid #52C41A;
   border-radius: 12rpx;
-  padding: 16rpx;
-  margin-bottom: 20rpx;
+  padding: 16rpx 20rpx;
+  margin: 0 32rpx 16rpx;
   font-size: 24rpx;
   color: #135200;
   line-height: 1.6;
+  flex-shrink: 0;
 }
 
-/* 危险操作按钮：红色渐变，区别于绿色的"保存"按钮 */
+/* 危险操作按钮：红色渐变 */
 .sa-danger-btn {
   background: linear-gradient(135deg, #FF4D4F 0%, #C0392B 100%) !important;
   box-shadow: 0 4rpx 14rpx rgba(192, 57, 43, 0.35) !important;
+}
+
+/* 解绑面板内确认按钮：全宽但两侧有边距 */
+.sa-unbind-sheet-panel .feedback-submit-btn {
+  margin: 16rpx 32rpx 0;
+  width: calc(100% - 64rpx);
+  box-sizing: border-box;
 }
 

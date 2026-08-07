@@ -546,10 +546,11 @@ async function listAuditQueue(event, OPENID) {
 
   const res = await query.orderBy(timeField, 'desc').limit(50).get();
 
+  const isSuperAdminCaller = caller.role === 'super_admin';
   const data = (res.data || []).map((r) => {
     const role = status === 'approved' ? (r.role || '') : (r.requestedRole || '');
     const isCustomStore = status === 'pending' && (r.storeSelectionType === 'custom' || !r.storeId);
-    return {
+    const item = {
       applyId: r._id,
       realName: r.realName || '',
       phone: r.phone || '',
@@ -561,6 +562,12 @@ async function listAuditQueue(event, OPENID) {
       isCustomStore,
       timeStr: formatCreateTime(status === 'approved' ? r.approveTime : r.applyTime)
     };
+    // 🛡️ 超管专属：强制解绑操作需要知道目标 openId 或通过 applyId(=doc._id) 定位文档。
+    // 普通管理员不应拿到其他成员的 openId，这里按调用者角色分层返回。
+    if (isSuperAdminCaller) {
+      item.openId = r._openid || '';
+    }
+    return item;
   });
 
   return { success: true, data };
