@@ -1262,6 +1262,7 @@
             </view>
           </block>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
@@ -1323,6 +1324,7 @@
             >{{item.type === 'menu' ? '✅ 确认采纳' : '✅ 一键采纳入库'}}</button>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
@@ -1414,6 +1416,7 @@
           </view>
           <text class="mm-patriarch-hint" wx:if="{{item.role === 'store_patriarch' && !isSuperAdmin}}">大家长撤销仅限超级管理员操作</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
@@ -1464,6 +1467,7 @@
             >✅ 通过</button>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>
@@ -1533,6 +1537,7 @@
             >✅ 通过</button>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>
   </view>

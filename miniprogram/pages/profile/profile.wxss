@@ -2413,11 +2413,20 @@
 }
 
 /* 📮 爱心意见箱管理弹窗：复用 .feedback-sheet-backdrop/.feedback-sheet-panel 的
-   遮罩+滑出动效，这里只补充"列表可滚动、限制最大高度"这类管理弹窗特有的样式 */
+   遮罩+滑出动效，这里只补充"列表可滚动、限制最大高度"这类管理弹窗特有的样式。
+   🐛 根因修复：基类 .feedback-sheet-panel 的 padding-bottom 是为"面板底部有固
+   定提交按钮"这一场景设计的（140rpx 预留 TabBar 遮挡缓冲）。所有使用本类的弹窗
+   （意见箱管理/餐报提交/成员管理/申请审批等）操作按钮均在 scroll-view 内的列表
+   项里，底部没有固定按钮，继承 140rpx 底部内边距只会制造一大块死白空间，同时挤
+   压了 scroll-view 的可用高度（原 max-height: 55vh 与 140rpx 夹攻）。这里用
+   !important 覆盖，改为仅保留安全区留白，列表内最后一项已有 fa-safe-area-spacer
+   兜底，不再需要外层内边距重复处理安全区 */
 .feedback-admin-sheet-panel {
   max-height: 85vh;
   display: flex;
   flex-direction: column;
+  padding-bottom: constant(safe-area-inset-bottom) !important;
+  padding-bottom: env(safe-area-inset-bottom) !important;
 }
 
 /* ⏳✅ 待处理 / 已处理 Tab 切换栏 */
@@ -2464,7 +2473,8 @@
 .feedback-admin-list-scroll {
   flex: 1;
   min-height: 0;
-  max-height: 55vh;
+  /* max-height: 55vh 已移除：配合上方 padding-bottom 修复，scroll-view 现在靠
+     flex: 1 自然填满 85vh 面板内的剩余空间，不再需要人工上限截断 */
 }
 
 /* 安全区底部留白 */
