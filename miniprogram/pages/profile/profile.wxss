@@ -3575,3 +3575,26 @@
   padding: 0 4rpx;
 }
 
+/* 🛡️ 超管应急工具弹窗：与 admin-key-modal-card 相同宽度，稍高以容纳结果展示区 */
+.sa-tool-modal-card {
+  width: 640rpx;
+}
+
+/* 操作结果展示区：成功/失败文案 */
+.sa-tool-result {
+  background: #F0FFF4;
+  border: 1rpx solid #52C41A;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  margin-bottom: 20rpx;
+  font-size: 24rpx;
+  color: #135200;
+  line-height: 1.6;
+}
+
+/* 危险操作按钮：红色渐变，区别于绿色的"保存"按钮 */
+.sa-danger-btn {
+  background: linear-gradient(135deg, #FF4D4F 0%, #C0392B 100%) !important;
+  box-shadow: 0 4rpx 14rpx rgba(192, 57, 43, 0.35) !important;
+}
+

@@ -713,6 +713,92 @@ async function releaseSelf(event, OPENID) {
   };
 }
 
+// 🛡️ 超级管理员强制解绑：将指定用户的门店角色（store_patriarch/store_manager/finance）
+// 强制重置为 volunteer，并清除 storeId/storeName 绑定，阻断其继续以该门店身份操作。
+// 仅限 super_admin 调用；被操作者是 super_admin 时拒绝（防止超管互相降级）。
+// 工时/打卡数据按"最小破坏"原则完全保留，与 releaseSelf 一致。
+async function superAdminForceUnbind(event, OPENID) {
+  // 1. 校验操作者是 super_admin
+  const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+  const caller = callerRes.data && callerRes.data[0];
+  if (!caller || caller.role !== 'super_admin') {
+    return { success: false, error: '无权限：仅超级管理员可执行强制解绑' };
+  }
+
+  // 2. 解析目标用户标识：优先用 targetDocId（直接定位文档），否则按 targetOpenId 查
+  const targetOpenId = String(event.targetOpenId || '').trim();
+  const targetDocId = String(event.targetDocId || '').trim();
+
+  if (!targetOpenId && !targetDocId) {
+    return { success: false, error: '请提供目标用户的 openId 或文档 ID' };
+  }
+
+  let target;
+  if (targetDocId) {
+    const docRes = await db.collection('user_roles').doc(targetDocId).get().catch(() => null);
+    target = docRes && docRes.data;
+  } else {
+    const res = await db.collection('user_roles').where({ _openid: targetOpenId }).limit(1).get();
+    target = res.data && res.data[0];
+  }
+
+  if (!target) {
+    return { success: false, error: '未找到目标用户的角色记录' };
+  }
+
+  // 3. 防止降级另一位 super_admin
+  if (target.role === 'super_admin') {
+    return { success: false, error: '不可强制解绑超级管理员身份' };
+  }
+
+  // 4. 若当前已是 volunteer/无门店绑定，认为已是干净状态
+  const isBoundRole = ['store_patriarch', 'store_manager', 'finance'].includes(target.role);
+  if (!isBoundRole) {
+    return { success: false, error: `该用户当前角色为 ${target.role || 'volunteer'}，无需强制解绑` };
+  }
+
+  const prevRole = target.role;
+  const prevStoreId = target.storeId || '';
+  const prevStoreName = target.storeName || '';
+
+  // 5. 重置为 volunteer（保留 volunteer_hours / my_checkin_* 等工时字段）
+  await db.collection('user_roles').doc(target._id).update({
+    data: {
+      role: 'volunteer',
+      status: 'approved',
+      storeId: '',
+      storeName: '',
+      roles: [],
+      revokedAt: db.serverDate(),
+      revokedBy: OPENID,
+      forceUnbindBy: OPENID,
+      forceUnbindAt: db.serverDate()
+    }
+  });
+
+  // 6. 审计留痕
+  await db.collection('audit_logs').add({
+    data: {
+      operator_id: OPENID,
+      action: 'super_admin_force_unbind',
+      target_openid: target._openid || targetOpenId,
+      target_doc_id: target._id,
+      prev_role: prevRole,
+      prev_store_id: prevStoreId,
+      prev_store_name: prevStoreName,
+      operate_time: db.serverDate()
+    }
+  }).catch((err) => console.warn('[processRoleAudit] 写入强制解绑审计日志失败（不影响解绑本身）:', err));
+
+  return {
+    success: true,
+    message: `已将 ${prevRole} 强制解绑，用户角色已重置为 volunteer`,
+    prevRole,
+    prevStoreId,
+    prevStoreName
+  };
+}
+
 exports.main = async (event, context) => {
   const { applyId, action } = event;
   const { OPENID } = cloud.getWXContext();
@@ -763,6 +849,15 @@ exports.main = async (event, context) => {
     } catch (err) {
       console.error('processRoleAudit releaseSelf error:', err);
       return { success: false, error: err.message || '卸任失败' };
+    }
+  }
+
+  if (action === 'superAdminForceUnbind') {
+    try {
+      return await superAdminForceUnbind(event, OPENID);
+    } catch (err) {
+      console.error('processRoleAudit superAdminForceUnbind error:', err);
+      return { success: false, error: err.message || '强制解绑失败' };
     }
   }
 

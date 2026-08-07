@@ -739,6 +739,24 @@
         </view>
         <view class="item-arrow">❯</view>
       </view>
+
+      <!-- 🛡️ 超管应急兜底：强制解绑恶意角色 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onOpenForceUnbindModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🚫</text>
+          <text class="item-text">强制解绑恶意角色</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <!-- 🔑 超管应急兜底：重置任意门店密钥 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onOpenResetStoreKeyModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🔑</text>
+          <text class="item-text">重置门店管理员密钥</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
     </view>
 
   </view>
@@ -1751,6 +1769,61 @@
               bindtap="onSaveAdminKeyFromProfile"
               loading="{{adminKeyModalSaving}}"
               disabled="{{adminKeyModalSaving}}">保存密钥</button>
+    </view>
+  </view>
+
+  <!-- 🛡️ 超管强制解绑弹窗 -->
+  <view class="certificate-modal-mask" wx:if="{{showForceUnbindModal}}" catchtouchmove="stopPropagation" bindtap="onCloseForceUnbindModal">
+    <view class="certificate-modal-card sa-tool-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header admin-key-modal-header">
+        <text class="admin-key-modal-title">🚫 强制解绑恶意角色</text>
+        <view class="certificate-modal-close" bindtap="onCloseForceUnbindModal">✕</view>
+      </view>
+      <text class="vt-form-label">目标用户 openId</text>
+      <input class="admin-key-modal-input"
+             type="text"
+             value="{{forceUnbindInput}}"
+             bindinput="onForceUnbindInput"
+             placeholder="请粘贴目标用户的 openId"
+             maxlength="100" />
+      <text class="admin-key-modal-desc">确认后，该用户的门店角色（大家长/店长/财务）将被强制重置为义工，并写入操作审计日志，不可撤销。</text>
+      <view class="sa-tool-result" wx:if="{{forceUnbindResult}}">
+        <text>{{forceUnbindResult}}</text>
+      </view>
+      <button class="feedback-submit-btn sa-danger-btn"
+              bindtap="onConfirmForceUnbind"
+              loading="{{forceUnbindSaving}}"
+              disabled="{{forceUnbindSaving}}">确认强制解绑</button>
+    </view>
+  </view>
+
+  <!-- 🔑 超管重置门店密钥弹窗 -->
+  <view class="certificate-modal-mask" wx:if="{{showResetStoreKeyModal}}" catchtouchmove="stopPropagation" bindtap="onCloseResetStoreKeyModal">
+    <view class="certificate-modal-card sa-tool-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header admin-key-modal-header">
+        <text class="admin-key-modal-title">🔑 重置门店管理员密钥</text>
+        <view class="certificate-modal-close" bindtap="onCloseResetStoreKeyModal">✕</view>
+      </view>
+      <text class="vt-form-label">目标门店 ID (storeId)</text>
+      <input class="admin-key-modal-input"
+             type="text"
+             value="{{resetStoreKeyStoreId}}"
+             bindinput="onResetStoreKeyStoreIdInput"
+             placeholder="请粘贴目标门店的 storeId"
+             maxlength="100" />
+      <text class="vt-form-label" style="margin-top:16rpx;">新密钥（留空则清除密钥）</text>
+      <input class="admin-key-modal-input"
+             type="text"
+             password
+             value="{{resetStoreKeyInput}}"
+             bindinput="onResetStoreKeyInput"
+             placeholder="新密钥，最多 50 字；留空则清除"
+             maxlength="50" />
+      <text class="admin-key-modal-desc">清除密钥后任何人均可直接提交管理角色申请，无需密钥校验。</text>
+      <button class="feedback-submit-btn"
+              bindtap="onConfirmResetStoreKey"
+              loading="{{resetStoreKeySaving}}"
+              disabled="{{resetStoreKeySaving}}">确认重置</button>
     </view>
   </view>
 

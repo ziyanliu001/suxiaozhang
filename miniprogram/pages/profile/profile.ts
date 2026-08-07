@@ -423,6 +423,17 @@ Page({
     adminKeyModalInput: '',
     adminKeyModalSaving: false,
 
+    // 🔐 超管强制解绑：输入目标 openId 并确认后，将其门店角色重置为 volunteer
+    showForceUnbindModal: false,
+    forceUnbindInput: '',   // 目标 openId
+    forceUnbindSaving: false,
+    forceUnbindResult: '',  // 操作结果描述，成功后展示
+    // 🔑 超管重置门店密钥：输入 storeId 和新密钥
+    showResetStoreKeyModal: false,
+    resetStoreKeyStoreId: '',
+    resetStoreKeyInput: '',
+    resetStoreKeySaving: false,
+
     // 🍚 门店餐饮与物资统计：不新建汇总表，即时查询 volunteer_submissions/
     // material_logs（见 manageVolunteerSubmission 的 statsSummary 动作），
     // 义工/店长/家长/超管共用同一个入口和同一份数据
@@ -3221,6 +3232,125 @@ Page({
     // super_admin / store_patriarch：不跳转硬拦截页面，直接在本页唤起自己的
     // "套餐升级/续费"半屏卡片
     this.onOpenSubscriptionModal();
+  },
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 🛡️ 超管强制解绑：将恶意角色用户重置为 volunteer
+  // ──────────────────────────────────────────────────────────────────────────
+  onOpenForceUnbindModal() {
+    if (!this.data.isRealSuperAdmin) return;
+    this.setData({ showForceUnbindModal: true, forceUnbindInput: '', forceUnbindResult: '' });
+  },
+
+  onCloseForceUnbindModal() {
+    if (this.data.forceUnbindSaving) return;
+    this.setData({ showForceUnbindModal: false, forceUnbindInput: '', forceUnbindResult: '' });
+  },
+
+  onForceUnbindInput(e: any) {
+    this.setData({ forceUnbindInput: e.detail.value });
+  },
+
+  async onConfirmForceUnbind() {
+    if (!this.data.isRealSuperAdmin || this.data.forceUnbindSaving) return;
+    const targetOpenId = (this.data.forceUnbindInput || '').trim();
+    if (!targetOpenId) {
+      wx.showToast({ title: '请输入目标用户 openId', icon: 'none' });
+      return;
+    }
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '⚠️ 确认强制解绑',
+        content: `即将将用户 ${targetOpenId.slice(0, 12)}... 的门店角色强制重置为义工（volunteer），此操作不可撤销，请确认。`,
+        confirmText: '确认解绑',
+        confirmColor: '#C0392B',
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
+    this.setData({ forceUnbindSaving: true });
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'processRoleAudit',
+        data: { action: 'superAdminForceUnbind', targetOpenId }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+        return;
+      }
+      this.setData({
+        forceUnbindResult: `✅ ${result.message || '解绑成功'}（原角色：${result.prevRole || ''}，门店：${result.prevStoreName || '无'}）`,
+        forceUnbindInput: ''
+      });
+      wx.showToast({ title: '强制解绑成功', icon: 'success' });
+    } catch (err) {
+      console.error('[onConfirmForceUnbind] 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ forceUnbindSaving: false });
+    }
+  },
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 🔑 超管重置门店密钥：直接覆写指定门店的 adminKey，阻断恶意二次申请
+  // ──────────────────────────────────────────────────────────────────────────
+  onOpenResetStoreKeyModal() {
+    if (!this.data.isRealSuperAdmin) return;
+    // 预填当前用户自己绑定的门店（若有），方便常见场景快速操作
+    const roleInfo = AuthService.getCachedRoleInfo();
+    const prefilledStoreId = (roleInfo && roleInfo.storeId) || '';
+    this.setData({ showResetStoreKeyModal: true, resetStoreKeyStoreId: prefilledStoreId, resetStoreKeyInput: '' });
+  },
+
+  onCloseResetStoreKeyModal() {
+    if (this.data.resetStoreKeySaving) return;
+    this.setData({ showResetStoreKeyModal: false, resetStoreKeyStoreId: '', resetStoreKeyInput: '' });
+  },
+
+  onResetStoreKeyStoreIdInput(e: any) {
+    this.setData({ resetStoreKeyStoreId: e.detail.value });
+  },
+
+  onResetStoreKeyInput(e: any) {
+    this.setData({ resetStoreKeyInput: e.detail.value });
+  },
+
+  async onConfirmResetStoreKey() {
+    if (!this.data.isRealSuperAdmin || this.data.resetStoreKeySaving) return;
+    const storeId = (this.data.resetStoreKeyStoreId || '').trim();
+    if (!storeId) {
+      wx.showToast({ title: '请输入目标门店 ID', icon: 'none' });
+      return;
+    }
+    const newKey = (this.data.resetStoreKeyInput || '').trim();
+
+    this.setData({ resetStoreKeySaving: true });
+    wx.showLoading({ title: '重置中...', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'update', storeId, adminKey: newKey }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '重置失败', icon: 'none' });
+        return;
+      }
+      this.setData({ showResetStoreKeyModal: false, resetStoreKeyStoreId: '', resetStoreKeyInput: '' });
+      wx.showToast({ title: newKey ? '密钥已重置' : '密钥已清除（无门槛申请）', icon: 'success', duration: 2500 });
+    } catch (err) {
+      console.error('[onConfirmResetStoreKey] 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ resetStoreKeySaving: false });
+    }
   },
 
   // 🔐 套餐升级/续费半屏卡片：复用 checkTenantPermission（与首页/统计页同一套
