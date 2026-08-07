@@ -15,6 +15,15 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// -502005: 集合不存在（volunteer_duty_logs 尚未写入任何打卡记录时会触发）
+// 与 manageNotice/submitFeedback 同一套自愈口径：降级为空数据，不让 -502005 穿透到前端
+function isCollectionNotExistError(err) {
+  return !!err && (
+    err.errCode === -502005 ||
+    /database collection not exists/i.test(String(err.errMsg || err.message || ''))
+  );
+}
+
 async function handlePersonalStats(OPENID) {
   let reportCount = 0;
   let diningCount = 0;
@@ -69,13 +78,21 @@ async function handleNetworkSummary(OPENID) {
   const volunteerDays = new Set();
   let totalHours = 0;
   let skip = 0;
-  while (true) {
-    const batch = await db.collection('volunteer_duty_logs')
-      .where({ tenantId, status: 'active' })
-      .field({ _openid: true, hours: true, dateString: true })
-      .skip(skip)
-      .limit(batchLimit)
-      .get();
+  // 🛡️ volunteer_duty_logs 在没有任何云端打卡记录时不存在，-502005 降级为空集合
+  let dutyLogsAvailable = true;
+  while (dutyLogsAvailable) {
+    let batch;
+    try {
+      batch = await db.collection('volunteer_duty_logs')
+        .where({ tenantId, status: 'active' })
+        .field({ _openid: true, hours: true, dateString: true })
+        .skip(skip)
+        .limit(batchLimit)
+        .get();
+    } catch (err) {
+      if (isCollectionNotExistError(err)) { dutyLogsAvailable = false; break; }
+      throw err;
+    }
     if (!batch.data || batch.data.length === 0) break;
     batch.data.forEach((item) => {
       volunteerOpenids.add(item._openid);
@@ -92,12 +109,18 @@ async function handleNetworkSummary(OPENID) {
   const activeStoreIds = new Set();
   skip = 0;
   while (true) {
-    const batch = await db.collection('report_logs')
-      .where({ tenantId, isVoid: _.neq(true) })
-      .field({ diningCount: true, diners: true, storeId: true })
-      .skip(skip)
-      .limit(batchLimit)
-      .get();
+    let batch;
+    try {
+      batch = await db.collection('report_logs')
+        .where({ tenantId, isVoid: _.neq(true) })
+        .field({ diningCount: true, diners: true, storeId: true })
+        .skip(skip)
+        .limit(batchLimit)
+        .get();
+    } catch (err) {
+      if (isCollectionNotExistError(err)) break;
+      throw err;
+    }
     if (!batch.data || batch.data.length === 0) break;
     batch.data.forEach((item) => {
       reportCount++;
