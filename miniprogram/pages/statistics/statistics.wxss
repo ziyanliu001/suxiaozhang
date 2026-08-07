@@ -1308,7 +1308,7 @@ page {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 64rpx 40rpx 48rpx;
+  padding: 72rpx 40rpx 56rpx;
   margin: 32rpx 24rpx;
   background: #FFFFFF;
   border-radius: 24rpx;
@@ -1334,7 +1334,7 @@ page {
   color: #495057;
   font-weight: 500;
   text-align: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 32rpx;
 }
 
 /* 🌟 精简空状态文案与按钮：不再用黄色卡片框包裹建议文本，扁平直陈即可 */
@@ -1633,7 +1633,8 @@ page {
   width: 100%;
   background: #FFFFFF;
   padding: 20rpx 32rpx;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(32rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
   box-shadow: 0 -6rpx 20rpx rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
   z-index: 99;
@@ -3458,20 +3459,59 @@ button.btn-primary-poster {
   justify-content: center;
 }
 
-/* ===== 🆕 引导型空状态：快捷补报餐报 / 查看有数据月份 ===== */
-.empty-state-guide-actions {
-  width: 100%;
+/* ===== 🆕 引导型空状态：快捷操作胶囊组（重构自原先的垂直大按钮堆叠） ===== */
+
+/* 水平并排胶囊组：次要操作（切换全国总览 / 切换全部门店 / 查看有数据月份） */
+.empty-quick-pill-row {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 8rpx;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  justify-content: center;
+  width: 100%;
+  margin: 0 0 24rpx;
 }
 
-/* 🐛 按钮 Flex 强制居中："快捷补报报表"入口——原先只靠 padding 撑高度、依赖
-   <button> 默认的文字水平居中，未显式 flex 布局，emoji + 文字组合在个别机型上
-   会有肉眼可见的基线偏斜。改为与 role-switch-modal-footer 同款规范：
-   display:flex + height:84rpx + line-height:1 + border-radius:42rpx +
-   box-sizing:border-box，彻底消除偏移 */
+/* 胶囊基础样式：轻量灰底圆角，不与主按钮抢视觉权重 */
+.btn-quick-pill,
+button.btn-quick-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64rpx;
+  padding: 0 28rpx;
+  background: #F7F8FA;
+  color: #495057;
+  font-size: 24rpx;
+  font-weight: 500;
+  border-radius: 32rpx;
+  border: 1rpx solid #E9ECEF;
+  box-sizing: border-box;
+  margin: 0;
+  line-height: 1;
+}
+
+.btn-quick-pill::after {
+  border: none;
+}
+
+.btn-quick-pill:active {
+  background: #E9ECEF;
+  opacity: 0.85;
+}
+
+/* 金色变体：超管专属「切换全国总览」 */
+.btn-quick-pill-gold,
+button.btn-quick-pill-gold {
+  background: #FFF8E8;
+  color: #B8860B;
+  border-color: #FFE082;
+}
+
+.btn-quick-pill-gold:active {
+  background: #FFE9A0;
+}
+
+/* 主操作按钮：快捷补报餐报（全宽红色主 CTA，置于胶囊组下方） */
 .btn-empty-primary,
 button.btn-empty-primary {
   width: 100%;
@@ -3488,7 +3528,7 @@ button.btn-empty-primary {
   padding: 0;
   border: none;
   box-sizing: border-box;
-  margin: 0 0 16rpx;
+  margin: 8rpx 0 0;
   box-shadow: 0 6rpx 16rpx rgba(198, 40, 40, 0.25);
 }
 
@@ -3496,33 +3536,7 @@ button.btn-empty-primary {
   border: none;
 }
 
-/* 🆕 空状态防呆引导："一键切换至全国总览"——金色系强调按钮，与本页新确立的
-   黄金/暖白主题（national-macro-kpi-card）呼应，同样走 flex 强制居中规范 */
-.btn-empty-national,
-button.btn-empty-national {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 84rpx;
-  line-height: 1;
-  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
-  color: #FFFFFF;
-  font-size: 28rpx;
-  font-weight: bold;
-  border-radius: 42rpx;
-  padding: 0;
-  border: none;
-  box-sizing: border-box;
-  margin: 0 0 20rpx;
-  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.3);
-}
-
-.btn-empty-national::after {
-  border: none;
-}
-
-.btn-empty-national:active {
+.btn-empty-primary:active {
   opacity: 0.88;
   transform: scale(0.98);
 }

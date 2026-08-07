@@ -1236,28 +1236,29 @@
       <text class="empty-icon">📊</text>
       <text class="empty-title">暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
 
-      <!-- 🆕 空状态防呆：超管专属"一键切换至全国总览"，不必先猜到底是哪个分支
-           文案、点哪个按钮才能跳出这家门店——直接跳全局大屏最快 -->
-      <button class="btn-empty-national" wx:if="{{canViewAllStoresDropdown}}" bindtap="onGoToNationalDashboard">🌐 一键切换至全国总览</button>
+      <!-- 🏷️ 快捷操作胶囊组：所有次要引导操作并排展示，取代原先垂直堆叠的大按钮 -->
+      <view class="empty-quick-pill-row">
+        <button class="btn-quick-pill btn-quick-pill-gold" wx:if="{{canViewAllStoresDropdown}}" bindtap="onGoToNationalDashboard">🌐 切换全国总览</button>
 
-      <block wx:if="{{currentStoreTotalCount > 0}}">
-        <text class="empty-suggest-text">该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
-        <button class="btn-empty-action" bindtap="onShowAllStoreRecords">显示【{{currentUserStoreName || shopName}}】全部 {{currentStoreTotalCount}} 条记录</button>
-      </block>
+        <block wx:if="{{currentStoreTotalCount > 0}}">
+          <button class="btn-quick-pill" bindtap="onShowAllStoreRecords">📋 全部 {{currentStoreTotalCount}} 条记录</button>
+        </block>
+        <block wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">
+          <button class="btn-quick-pill" bindtap="onSwitchToAllStores">🔄 切换全部门店</button>
+        </block>
+        <block wx:elif="{{showAllStoresOption && !isAllStoresMode}}">
+          <button class="btn-quick-pill" bindtap="onSwitchToAllStores">🏪 全部门店汇总</button>
+        </block>
 
-      <block wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">
-        <text class="empty-suggest-text">该周期内其他门店存在餐报记录</text>
-        <button class="btn-empty-action" bindtap="onSwitchToAllStores">切换为【全部门店】查看</button>
-      </block>
-
-      <block wx:elif="{{showAllStoresOption && !isAllStoresMode}}">
-        <button class="btn-empty-action" bindtap="onSwitchToAllStores">查看全部门店汇总</button>
-      </block>
-
-      <view class="empty-state-guide-actions">
-        <button class="btn-empty-primary" hover-class="btn-hover" bindtap="goBackHome">📝 快捷补报餐报</button>
-        <button class="btn-empty-action" wx:if="{{latestDataLabel}}" bindtap="onJumpToLatestDataPeriod">📅 查看有数据月份（{{latestDataLabel}}）</button>
+        <button class="btn-quick-pill" wx:if="{{latestDataLabel}}" bindtap="onJumpToLatestDataPeriod">📅 {{latestDataLabel}}</button>
       </view>
+
+      <!-- 条件说明文字 -->
+      <text class="empty-suggest-text" wx:if="{{currentStoreTotalCount > 0}}">该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
+      <text class="empty-suggest-text" wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">该周期内其他门店存在餐报记录</text>
+
+      <!-- 主操作：快捷补报（保持全宽红色主按钮） -->
+      <button class="btn-empty-primary" hover-class="btn-hover" bindtap="goBackHome">📝 快捷补报餐报</button>
     </view>
 
     <view class="compliance-disclaimer" wx:if="{{statistics && statistics.recordCount > 0}}">
