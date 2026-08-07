@@ -147,16 +147,26 @@ exports.main = async (event) => {
           return { success: true, id, message: '通知已更新' };
         }
 
-        const createRes = await db.collection(COLLECTION).add({
-          data: {
-            tenantId: target.tenantId,
-            storeId: target.storeId,
-            storeName: target.storeName,
-            createdBy: OPENID,
-            createdAt: db.serverDate(),
-            ...data
+        const newDoc = {
+          tenantId: target.tenantId,
+          storeId: target.storeId,
+          storeName: target.storeName,
+          createdBy: OPENID,
+          createdAt: db.serverDate(),
+          ...data
+        };
+        let createRes;
+        try {
+          createRes = await db.collection(COLLECTION).add({ data: newDoc });
+        } catch (err) {
+          if (isCollectionNotExistError(err)) {
+            // notices 集合尚不存在，自动创建后重试一次
+            await db.createCollection(COLLECTION).catch(() => {});
+            createRes = await db.collection(COLLECTION).add({ data: newDoc });
+          } else {
+            throw err;
           }
-        });
+        }
 
         return { success: true, id: createRes._id, message: '通知已发布' };
       }

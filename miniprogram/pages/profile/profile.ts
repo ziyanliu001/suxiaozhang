@@ -2416,7 +2416,15 @@ Page({
           if (app && app.globalData) app.globalData.noticesDirty = true;
         } catch (_) { /* ignore */ }
       } else {
-        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+        const errMsg: string = (result && result.error) || '保存失败';
+        const isCollectionMissing = /collection not exist|502005/i.test(errMsg);
+        wx.showToast({
+          title: isCollectionMissing
+            ? '数据库初始化中，请先在云开发控制台创建 notices 集合'
+            : errMsg,
+          icon: 'none',
+          duration: isCollectionMissing ? 3000 : 2000
+        });
       }
     } catch (err) {
       console.error('[onNoticeManagementSave] 失败:', err);
