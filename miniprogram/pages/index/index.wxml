@@ -303,14 +303,10 @@
   <view class="announce-bar {{isNoticeBarClosing ? 'announce-bar-closing' : ''}}" wx:if="{{noticeList.length > 0 && !isNoticeBarHiddenToday}}">
     <text class="announce-bar-icon">📢</text>
 
-    <view class="announce-bar-viewport" wx:if="{{noticeList.length === 1}}" bindtap="openAnnouncement">
-      <text class="announce-bar-text {{noticeList[0].title.length > 14 ? 'marquee' : ''}}">{{noticeList[0].title}}<block wx:if="{{noticeList[0].title.length > 14}}">　　{{noticeList[0].title}}</block></text>
-    </view>
-
-    <swiper wx:if="{{noticeList.length > 1}}" class="announce-bar-swiper" vertical autoplay circular interval="3000" duration="500" bindchange="onSwiperNoticeChange">
+    <swiper class="announce-bar-swiper" vertical autoplay circular interval="4000" duration="500" bindchange="onSwiperNoticeChange">
       <swiper-item wx:for="{{noticeList}}" wx:key="id">
         <view class="announce-bar-viewport" bindtap="openAnnouncement">
-          <text class="announce-bar-text {{item.title.length > 14 ? 'marquee' : ''}}">{{item.title}}<block wx:if="{{item.title.length > 14}}">　　{{item.title}}</block></text>
+          <text class="announce-bar-text">{{item.title}}</text>
         </view>
       </swiper-item>
     </swiper>

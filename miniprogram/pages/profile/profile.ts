@@ -2286,6 +2286,10 @@ Page({
     this.setData({ showVolunteerSubmissionAdminModal: false });
   },
 
+  onOpenNoticeManagement() {
+    wx.switchTab({ url: '/pages/index/index' });
+  },
+
   // 👥🏛️ 待审批的成员/高级角色申请：服务端已按 caller 角色分流（店长/家长只拿本店
   // 义工/财务申请，超管拿全机构店长/家长/新店申请），客户端只需按返回的 queueType
   // 落到对应的列表 + 角标，不需要分开发两次请求

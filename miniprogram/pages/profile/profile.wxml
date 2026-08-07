@@ -493,6 +493,16 @@
         </view>
       </view>
 
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenNoticeManagement">
+        <view class="item-left">
+          <text class="manager-only-emoji">📢</text>
+          <text class="item-text">门店公告/通知管理</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
       <!-- 🔐 门店安全设置：店长可见已设置/未设置状态，仅大家长/超管可修改 -->
       <view class="pd-section-title pd-feedback-entry-title">
         <text class="pd-section-icon">🔐</text>
