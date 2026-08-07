@@ -328,6 +328,7 @@
     <view class="compliance-disclaimer" wx:if="{{!loading && filteredReports.length > 0}}">
       <text class="compliance-disclaimer-text">本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐；如涉及个人信息，已在前端做脱敏展示处理。</text>
     </view>
+    <view class="fa-safe-area-spacer"></view>
   </scroll-view>
 
   <view class="modal-backdrop" wx:if="{{showEditModal}}" bindtap="onCancelEdit">

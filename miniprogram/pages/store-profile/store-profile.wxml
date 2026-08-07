@@ -304,6 +304,7 @@
     <view class="sp-loading-box" wx:if="{{loading}}">
       <text>加载中...</text>
     </view>
+    <view class="fa-safe-area-spacer"></view>
 
   </scroll-view>
 
@@ -346,6 +347,7 @@
             <input class="sp-edit-input" type="number" value="{{profileCountForm.otherCount}}" bindinput="onProfileCountInput" data-field="otherCount" />
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseProfileCountModal">取消</button>
@@ -403,6 +405,7 @@
             </view>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseQualificationModal">取消</button>
@@ -437,6 +440,7 @@
           <text>设置后，申请大家长/店长/财务角色时必须输入此密钥才能提交申请。</text>
           <text>若要清除密钥（允许所有人自由申请），请将输入框留空后保存。</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseAdminKeyModal">取消</button>

@@ -143,6 +143,7 @@
       <text class="pv-footer-brand">素小账 · 公益透明支持</text>
       <text class="pv-footer-note">本页数据来自门店实时录入，如有疑问请联系门店义工团队</text>
     </view>
+    <view class="fa-safe-area-spacer"></view>
 
   </scroll-view>
 

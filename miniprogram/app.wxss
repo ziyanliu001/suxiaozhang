@@ -8,3 +8,14 @@
   padding: 200rpx 0;
   box-sizing: border-box;
 }
+
+/* 🛡️ 全局：scroll-view 内末尾留白占位
+   置于每个 scroll-view 的最后一个子元素之后，防止列表末项贴边
+   或被物理安全区（Home 指示条）遮住。在无刘海机型上退化为 20rpx 间距。
+   profile / statistics / statistics / index 页面内已有本地同名定义；
+   放入 app.wxss 后所有页面均可直接使用，无需在每页 WXSS 中重复声明。*/
+.fa-safe-area-spacer {
+  height: calc(20rpx + constant(safe-area-inset-bottom));
+  height: calc(20rpx + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+}

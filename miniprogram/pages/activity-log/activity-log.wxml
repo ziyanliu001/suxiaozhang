@@ -193,6 +193,7 @@
     <view class="al-no-more" wx:if="{{!hasMore && historyList.length > 0}}">
       <text>—— 已加载全部历史记录 ——</text>
     </view>
+    <view class="fa-safe-area-spacer"></view>
 
   </scroll-view>
 
@@ -221,6 +222,7 @@
           />
         </view>
         <text class="al-detail-content">{{detailItem.content}}</text>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="al-detail-actions" wx:if="{{canManage || detailItem.createdBy === currentUserOpenid}}">
@@ -281,6 +283,7 @@
             <text>{{uploading ? '压缩中...' : '+ 添加'}}</text>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <button class="al-submit-btn" bindtap="onSubmitEdit" disabled="{{uploading}}">提交</button>

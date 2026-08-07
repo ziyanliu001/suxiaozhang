@@ -161,6 +161,7 @@
     <view class="help-footer">
       <text class="footer-text">❤️ 感恩您的爱心护持，愿平安喜乐、幸福安康</text>
     </view>
+    <view class="fa-safe-area-spacer"></view>
 
   </scroll-view>
 

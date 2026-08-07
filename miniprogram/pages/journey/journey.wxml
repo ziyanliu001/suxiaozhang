@@ -208,6 +208,7 @@
         </block>
       </view>
     </view>
+    <view class="fa-safe-area-spacer"></view>
   </scroll-view>
 
   <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: 600px;"></canvas>
@@ -234,6 +235,7 @@
           mode="widthFix"
           show-menu-by-longpress="{{true}}"
         />
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <text class="honor-modal-hint">💡 保存图片后可发送至朋友圈或微信群</text>

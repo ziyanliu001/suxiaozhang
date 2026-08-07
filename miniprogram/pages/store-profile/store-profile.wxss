@@ -46,7 +46,9 @@
 .sp-scroll {
   height: calc(100vh - 88rpx);
   box-sizing: border-box;
-  padding: 20rpx 24rpx 60rpx;
+  padding: 20rpx 24rpx;
+  padding-bottom: calc(60rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(60rpx + env(safe-area-inset-bottom));
 }
 
 /* 🏛️ 家长风控锁：待审批提示条 */
@@ -527,6 +529,7 @@
 
 .sp-modal-scroll {
   max-height: 60vh;
+  min-height: 0;
 }
 .sp-modal-footer {
   display: flex;

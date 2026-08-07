@@ -35,6 +35,7 @@
         </view>
       </view>
     </view>
+    <view class="fa-safe-area-spacer"></view>
   </scroll-view>
 
 </view>

@@ -7,7 +7,9 @@
 
 .journey-scroll {
   box-sizing: border-box;
-  padding: 24rpx 24rpx 60rpx 24rpx;
+  padding: 24rpx;
+  padding-bottom: calc(60rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(60rpx + env(safe-area-inset-bottom));
 }
 
 /* 🌟 全站统一的卡片基础层：圆角柔和阴影，与 index.wxss 的 .ui-card-wrapper 同一套

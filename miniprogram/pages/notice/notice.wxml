@@ -109,6 +109,7 @@
       </view>
 
     </block>
+    <view class="fa-safe-area-spacer"></view>
 
   </scroll-view>
 

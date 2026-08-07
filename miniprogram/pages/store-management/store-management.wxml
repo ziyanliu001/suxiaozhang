@@ -93,6 +93,7 @@
           </button>
         </view>
       </view>
+      <view class="fa-safe-area-spacer"></view>
 
     </scroll-view>
 
@@ -121,6 +122,7 @@
           ✅ 一键通过审核
         </button>
       </view>
+      <view class="fa-safe-area-spacer"></view>
 
     </scroll-view>
 
@@ -195,6 +197,7 @@
           <text class="sm-staff-role-tag">{{item.roleLabel}}</text>
           <text class="sm-staff-name">{{item.applicantName || item.nickName || '未填写姓名'}}</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="sm-modal-actions">
