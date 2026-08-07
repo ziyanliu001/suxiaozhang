@@ -4,6 +4,7 @@ const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
 const USER_ROLE_CACHE_KEY = 'auth_user_role';
 const LOGIN_TIMEOUT_MS = 5000;
+const ROLE_QUERY_TIMEOUT_MS = 10000;
 const TEMP_OPENID_PREFIX = 'local_';
 
 // 🏢 platform_admin：SaaS 平台超级管理员（开发者/运维方），仅管理租户生命周期与云资源，
@@ -269,7 +270,7 @@ export const AuthService = {
 
       const result = await withTimeout(
         wx.cloud.callFunction({ name: 'checkUserRole' }),
-        LOGIN_TIMEOUT_MS,
+        ROLE_QUERY_TIMEOUT_MS,
         '角色查询超时'
       );
 
@@ -289,6 +290,12 @@ export const AuthService = {
         return { success: true, roleInfo };
       }
 
+      // 云函数返回业务失败（非网络异常），尝试降级到本地缓存
+      const cached = this.getCachedRoleInfo();
+      if (cached) {
+        console.warn('[AuthService] 角色查询业务失败，已降级为本地缓存角色:', cached.role);
+        return { success: true, roleInfo: cached };
+      }
       return { success: false, error: (r && r.error) || '角色查询失败' };
     } catch (err: any) {
       const isCloudDown = !!(err && err.message && err.message.includes('CLOUD_SDK_UNAVAILABLE'));
@@ -298,6 +305,12 @@ export const AuthService = {
           : '[AuthService] fetchUserRole 异常:',
         isCloudDown ? '' : err
       );
+      // 网络异常 / SDK 不可用 / 超时：降级到本地缓存，避免打断页面加载
+      const cached = this.getCachedRoleInfo();
+      if (cached) {
+        console.warn('[AuthService] fetchUserRole 降级为缓存角色:', cached.role);
+        return { success: true, roleInfo: cached };
+      }
       return { success: false, error: err.message || '角色查询异常' };
     }
   },
