@@ -13,13 +13,13 @@ export function maskName(name: string): string {
 }
 
 /**
- * 了凡四训·隐名集阴德：公开展示时的姓名格式化。
- * - isAnonymous=true：统一展示为"爱心善士"，完全隐去真实姓名
- * - isAnonymous=false：走普通脱敏（maskName），保留首尾字符
+ * 了凡四训·阳善与阴德：公开展示时的姓名渲染。
+ * - isAnonymous=false（阳善）：公开真实姓名，长养公信，感召更多善念
+ * - isAnonymous=true （积阴德）：统一展示为"爱心善士"，完全隐去真实姓名，天报之
  */
 export function formatDisplayName(name: string, isAnonymous: boolean): string {
   if (isAnonymous) return '爱心善士';
-  return maskName(name);
+  return name || '';
 }
 
 export function maskPhone(phone: string): string {

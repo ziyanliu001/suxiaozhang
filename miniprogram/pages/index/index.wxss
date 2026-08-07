@@ -2296,54 +2296,137 @@ page {
   flex-shrink: 0;
 }
 
-/* 🌿 了凡四训·积阴德：匿名护持开关行 */
-.anonymous-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 24rpx;
+/* 🌸🌿 了凡四训·阳善与阴德：发心选择器 */
+.intention-selector {
   margin-top: 16rpx;
-  background: linear-gradient(135deg, #FFFBF0 0%, #FFF8E6 100%);
-  border: 1rpx solid #F0E6C8;
-  border-radius: 20rpx;
 }
 
-.anonymous-toggle-label {
+.intention-selector-title {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 12rpx;
+  padding: 0 4rpx;
+}
+
+.intention-segment-row {
   display: flex;
-  align-items: flex-start;
-  flex: 1;
-  margin-right: 24rpx;
+  gap: 16rpx;
 }
 
-.anonymous-toggle-icon {
-  font-size: 32rpx;
-  margin-right: 12rpx;
-  flex-shrink: 0;
+.intention-opt {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 16rpx 18rpx;
+  border-radius: 20rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.2s;
+  /* 点击反馈 */
+  active-opacity: 0.8;
+}
+
+/* 阳善：金莲暖白 */
+.intention-opt-yangshan {
+  background: linear-gradient(145deg, #FFFCF2 0%, #FFF5D6 100%);
+  border-color: #D4A017;
+  box-shadow: 0 4rpx 16rpx rgba(212, 160, 23, 0.18);
+}
+
+/* 积阴德：禅意墨绿 */
+.intention-opt-yinde {
+  background: linear-gradient(145deg, #F4FBF4 0%, #E8F5E8 100%);
+  border-color: #5A8A5A;
+  box-shadow: 0 4rpx 16rpx rgba(90, 138, 90, 0.15);
+}
+
+/* 未选中：低调灰白 */
+.intention-opt-inactive {
+  background: #F8F8F8;
+  border-color: #E8E8E8;
+  opacity: 0.65;
+}
+
+.intention-opt-icon {
+  font-size: 40rpx;
+  line-height: 1;
+  margin-bottom: 10rpx;
+}
+
+.intention-opt-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #2C2C2C;
+  margin-bottom: 8rpx;
+  text-align: center;
   line-height: 1.4;
 }
 
-.anonymous-toggle-text {
-  display: flex;
-  flex-direction: column;
+.intention-opt-yangshan .intention-opt-name {
+  color: #7A5200;
 }
 
-.anonymous-toggle-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #7A5C00;
-  line-height: 1.5;
+.intention-opt-yinde .intention-opt-name {
+  color: #2E5A2E;
 }
 
-.anonymous-toggle-desc {
-  font-size: 22rpx;
-  color: #A08040;
-  line-height: 1.5;
-  margin-top: 4rpx;
+.intention-opt-inactive .intention-opt-name {
+  color: #999;
 }
 
-.anonymous-toggle-switch {
-  flex-shrink: 0;
-  transform: scale(0.85);
+.intention-opt-desc {
+  font-size: 21rpx;
+  color: #999;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.intention-opt-yangshan .intention-opt-desc {
+  color: #A07800;
+}
+
+.intention-opt-yinde .intention-opt-desc {
+  color: #4A7A4A;
+}
+
+/* 🌸🌿 解析预览区：发心标识胶囊 */
+.intention-badge {
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  font-weight: 500;
+}
+
+.intention-badge-yangshan {
+  background: #FFF0C0;
+  color: #7A5200;
+  border: 1rpx solid #D4A017;
+}
+
+.intention-badge-yinde {
+  background: #E8F5E8;
+  color: #2E5A2E;
+  border: 1rpx solid #5A8A5A;
+}
+
+/* 🌸🌿 生成结果卡片：发心标识胶囊（稍小，嵌在标题行内） */
+.result-intention-badge {
+  font-size: 20rpx;
+  padding: 3rpx 10rpx;
+  border-radius: 16rpx;
+  margin-left: 10rpx;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.result-intention-yangshan {
+  background: #FFF0C0;
+  color: #7A5200;
+}
+
+.result-intention-yinde {
+  background: #E8F5E8;
+  color: #2E5A2E;
 }
 
 .text-format-tip {

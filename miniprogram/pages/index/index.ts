@@ -332,7 +332,9 @@ Page({
     singleName: '',
     singleAmount: '',
     allDonations: '',
-    // 🌿 了凡四训·积阴德：匿名护持开关，开启后捐款人姓名在报告文本、海报、预览中均脱敏为"爱心善士"
+    // 🌸🌿 了凡四训·阳善与阴德：发心选择，false=公示姓名（阳善），true=积阴德（匿名）
+    // 阳善：直接公示真实姓名，长养公信，感召更多善念
+    // 积阴德：姓名统一展示为"爱心善士"，隐名护持，涵养深厚阴德，天报之
     reportIsAnonymous: false,
     otherDonation: '',
     expenses: '',
@@ -4732,9 +4734,10 @@ Page({
     this.setData({ singleAmount: String(amount) });
   },
 
-  // 🌿 了凡四训·积阴德：匿名护持开关切换
-  onToggleAnonymous(e: any) {
-    this.setData({ reportIsAnonymous: !!e.detail.value });
+  // 🌸🌿 了凡四训·阳善与阴德：发心选择切换
+  // data-anon="{{false}}" → 阳善（公示真实姓名）；data-anon="{{true}}" → 积阴德（匿名）
+  onSelectIntention(e: any) {
+    this.setData({ reportIsAnonymous: !!e.currentTarget.dataset.anon });
   },
 
   onInputSingleName(e: any) {

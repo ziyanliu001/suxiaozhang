@@ -810,6 +810,8 @@
               <view class="preview-summary">
                 <text class="summary-item">人数：{{parseResult.totalCount}}</text>
                 <text class="summary-item summary-highlight">金额：¥{{totalParsedAmount}}</text>
+                <text class="intention-badge intention-badge-yangshan" wx:if="{{!reportIsAnonymous}}">🌸 阳善</text>
+                <text class="intention-badge intention-badge-yinde" wx:else>🌿 积阴德</text>
               </view>
             </view>
             
@@ -829,16 +831,23 @@
           </view>
         </block>
 
-        <!-- 🌿 了凡四训·积阴德：匿名护持开关 -->
-        <view class="anonymous-toggle-row">
-          <view class="anonymous-toggle-label">
-            <text class="anonymous-toggle-icon">🌿</text>
-            <view class="anonymous-toggle-text">
-              <text class="anonymous-toggle-title">积阴德·匿名护持</text>
-              <text class="anonymous-toggle-desc">开启后姓名在报告文本与海报中统一展示为「爱心善士」</text>
+        <!-- 🌸🌿 了凡四训·阳善与阴德：发心选择器 -->
+        <view class="intention-selector">
+          <view class="intention-selector-title">✨ 发心选择（影响姓名在报告文本与海报中的公示方式）</view>
+          <view class="intention-segment-row">
+            <view class="intention-opt {{!reportIsAnonymous ? 'intention-opt-yangshan' : 'intention-opt-inactive'}}"
+                  bindtap="onSelectIntention" data-anon="{{false}}">
+              <text class="intention-opt-icon">🌸</text>
+              <text class="intention-opt-name">公示姓名（阳善）</text>
+              <text class="intention-opt-desc">公开姓名，长养公信，感召更多善念。</text>
+            </view>
+            <view class="intention-opt {{reportIsAnonymous ? 'intention-opt-yinde' : 'intention-opt-inactive'}}"
+                  bindtap="onSelectIntention" data-anon="{{true}}">
+              <text class="intention-opt-icon">🌿</text>
+              <text class="intention-opt-name">积阴德（匿名）</text>
+              <text class="intention-opt-desc">隐名护持，涵养深厚阴德，天报之。</text>
             </view>
           </view>
-          <switch class="anonymous-toggle-switch" checked="{{reportIsAnonymous}}" bindchange="onToggleAnonymous" color="#B8860B" />
         </view>
       </view>
 
@@ -1208,7 +1217,11 @@
     <block wx:if="{{showResult}}">
       <view class="report-result-card {{isResultExpanded ? 'expanded' : 'collapsed'}}">
         <view class="result-card-header" bindtap="onToggleResultExpand">
-          <view class="title"><view class="idx-icon-sm idx-icon-note"></view> 生成结果预览</view>
+          <view class="title">
+            <view class="idx-icon-sm idx-icon-note"></view> 生成结果预览
+            <text class="result-intention-badge result-intention-yangshan" wx:if="{{!reportIsAnonymous}}">🌸 阳善公示</text>
+            <text class="result-intention-badge result-intention-yinde" wx:else>🌿 积阴德</text>
+          </view>
           <text class="toggle-icon">{{isResultExpanded ? '▲ 收起' : '▼ 展开预览'}}</text>
         </view>
         <view class="result-card-body" wx:if="{{isResultExpanded}}">
