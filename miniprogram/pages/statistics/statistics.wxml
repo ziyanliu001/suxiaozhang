@@ -485,6 +485,7 @@
         <view class="empty-box" wx:if="{{exportPreviewRecords.length === 0}}">
           <text class="empty-tip">该周期内暂无明细数据</text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="modal-footer">
@@ -605,6 +606,7 @@
           <checkbox value="{{store.storeId}}" checked="{{store.checked}}" color="#8C1D18" />
           <text>{{store.storeName}}<text wx:if="{{store.province || store.city}}"> ({{store.province}}{{store.city}})</text></text>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="empty-box" wx:if="{{customStoreDraftList.length === 0}}">
         <text class="empty-tip">暂无可选门店</text>
@@ -1328,6 +1330,7 @@
             data-index="{{index}}"
           />
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="modal-footer">
@@ -1438,6 +1441,7 @@
             </view>
           </view>
         </view>
+        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
       <view class="gratitude-modal-footer">

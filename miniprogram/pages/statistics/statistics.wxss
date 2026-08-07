@@ -1637,6 +1637,10 @@ page {
   box-shadow: 0 -6rpx 20rpx rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
   z-index: 99;
+  /* 🆕 两个并排按钮（生成海报 + 导出 Excel）时的 flex 布局，
+     单按钮时 flex 同样适用——子项自动撑满整行 */
+  display: flex;
+  gap: 16rpx;
 }
 
 .btn-primary-poster,
@@ -1866,6 +1870,13 @@ button.btn-primary-poster {
   font-size: 22rpx;
   color: #868E96;
   margin-bottom: 20rpx;
+}
+
+/* 🛡️ scroll-view 内末尾留白占位：防止列表最后一项在滚动到底部时贴边——
+   与 profile 页同名类一致；高度包含物理安全区，在无刘海机型上退化为 20rpx */
+.fa-safe-area-spacer {
+  height: calc(20rpx + constant(safe-area-inset-bottom));
+  height: calc(20rpx + env(safe-area-inset-bottom));
 }
 
 .modal-scroll-list {
@@ -3148,7 +3159,12 @@ button.btn-primary-poster {
 
 /* ===== 🆕 个人视角：非管理角色专属护持数据面板 ===== */
 .personal-dashboard-container {
-  padding: 0 24rpx 160rpx;
+  padding: 0 24rpx;
+  /* 🐛 修复：原 160rpx 缺失 env(safe-area-inset-bottom)——全面屏设备的
+     底部手势条会让最后一张卡被固定吸底的「生成海报」按钮遮住；
+     160rpx = 按钮高度(88) + 上下各20内边距 + 约 32rpx 缓冲 */
+  padding-bottom: calc(160rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
 }
 
 /* 暖金渐变，与全国大屏的蓝色刻意区分——一眼认出"这是我自己的数据"而不是治理大屏 */
@@ -3565,13 +3581,6 @@ button.btn-empty-national {
   color: #868E96;
 }
 
-/* ===== 🆕 底部固定导出账本快捷入口：与生成海报按钮同排 flex 布局，
-   单独出现时自动撑满整行，不影响 .content-section 已按 128rpx 单行高度
-   预留的 padding-bottom ===== */
-.bottom-sticky-bar {
-  display: flex;
-  gap: 16rpx;
-}
 
 .btn-primary-poster,
 button.btn-primary-poster {
