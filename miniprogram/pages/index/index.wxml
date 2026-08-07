@@ -810,8 +810,8 @@
               <view class="preview-summary">
                 <text class="summary-item">人数：{{parseResult.totalCount}}</text>
                 <text class="summary-item summary-highlight">金额：¥{{totalParsedAmount}}</text>
-                <text class="intention-badge intention-badge-yangshan" wx:if="{{!reportIsAnonymous}}">🌸 阳善</text>
-                <text class="intention-badge intention-badge-yinde" wx:else>🌿 积阴德</text>
+                <view class="intention-badge intention-badge-yangshan" wx:if="{{!reportIsAnonymous}}"><text>🌸 阳善</text></view>
+                <view class="intention-badge intention-badge-yinde" wx:else><text>🌿 积阴德</text></view>
               </view>
             </view>
             
@@ -831,22 +831,35 @@
           </view>
         </block>
 
-        <!-- 🌸🌿 了凡四训·阳善与阴德：发心选择器 -->
-        <view class="intention-selector">
+        <!-- 🌸🌿 了凡四训·阳善与阴德：发心选择器（双卡片单选 Radio Cards） -->
+        <view class="merit-selector-wrap">
           <view class="intention-selector-title">✨ 发心选择（影响姓名在报告文本与海报中的公示方式）</view>
           <view class="intention-segment-row">
+
+            <!-- 卡片 1：公示姓名（阳善） -->
             <view class="intention-opt {{!reportIsAnonymous ? 'intention-opt-yangshan' : 'intention-opt-inactive'}}"
-                  bindtap="onSelectIntention" data-anon="{{false}}">
-              <text class="intention-opt-icon">🌸</text>
-              <text class="intention-opt-name">公示姓名（阳善）</text>
-              <text class="intention-opt-desc">公开姓名，长养公信，感召更多善念。</text>
+                  bindtap="onChangeMeritType" data-anon="{{false}}">
+              <view class="intention-opt-header">
+                <text class="intention-opt-icon">🌸</text>
+                <text class="intention-opt-name">公示姓名</text>
+                <view class="intention-radio {{!reportIsAnonymous ? 'intention-radio-on intention-radio-yangshan' : ''}}"></view>
+              </view>
+              <text class="intention-opt-tag">阳善</text>
+              <text class="intention-opt-desc">公开姓名，长养公信</text>
             </view>
+
+            <!-- 卡片 2：积阴德（匿名） -->
             <view class="intention-opt {{reportIsAnonymous ? 'intention-opt-yinde' : 'intention-opt-inactive'}}"
-                  bindtap="onSelectIntention" data-anon="{{true}}">
-              <text class="intention-opt-icon">🌿</text>
-              <text class="intention-opt-name">积阴德（匿名）</text>
-              <text class="intention-opt-desc">隐名护持，涵养深厚阴德，天报之。</text>
+                  bindtap="onChangeMeritType" data-anon="{{true}}">
+              <view class="intention-opt-header">
+                <text class="intention-opt-icon">🌿</text>
+                <text class="intention-opt-name">积阴德</text>
+                <view class="intention-radio {{reportIsAnonymous ? 'intention-radio-on intention-radio-yinde' : ''}}"></view>
+              </view>
+              <text class="intention-opt-tag">匿名护持</text>
+              <text class="intention-opt-desc">隐名护持，涵养阴德</text>
             </view>
+
           </view>
         </view>
       </view>

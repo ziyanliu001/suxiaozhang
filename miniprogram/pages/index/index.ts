@@ -4736,7 +4736,7 @@ Page({
 
   // 🌸🌿 了凡四训·阳善与阴德：发心选择切换
   // data-anon="{{false}}" → 阳善（公示真实姓名）；data-anon="{{true}}" → 积阴德（匿名）
-  onSelectIntention(e: any) {
+  onChangeMeritType(e: any) {
     this.setData({ reportIsAnonymous: !!e.currentTarget.dataset.anon });
   },
 
