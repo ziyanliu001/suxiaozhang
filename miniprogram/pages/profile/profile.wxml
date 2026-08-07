@@ -1828,8 +1828,8 @@
         </view>
       </view>
 
-      <!-- ③ 兜底：手动输入 openId -->
-      <view class="sa-manual-section">
+      <!-- ③ 兜底：手动输入 openId（仅未从列表选中成员时展示） -->
+      <view class="sa-manual-section" wx:if="{{!forceUnbindSelectedMember}}">
         <text class="vt-form-label">或手动粘贴 openId（兜底）</text>
         <view class="sa-manual-row">
           <input class="sa-manual-input"
@@ -1854,8 +1854,6 @@
               disabled="{{forceUnbindSaving || (!forceUnbindSelectedMember && !forceUnbindInput)}}">
         {{forceUnbindSelectedMember ? '强制解绑：' + forceUnbindSelectedMember.realName : '强制解绑'}}
       </button>
-
-      <view class="fa-safe-area-spacer"></view>
     </view>
   </view>
 
