@@ -2298,9 +2298,10 @@ page {
 
 /* ============================================================
    🌸🌿 了凡四训·阳善与阴德：发心选择器 (Radio Cards)
+   Bug fix: gap不兼容微信flex / <text>无block display / 胶囊换行
    ============================================================ */
 
-/* 外层卡片容器：层次感与呼吸感 */
+/* 外层容器 */
 .merit-selector-wrap {
   background: #FAFAFA;
   border-radius: 16rpx;
@@ -2313,178 +2314,164 @@ page {
   font-size: 22rpx;
   color: #AAAAAA;
   margin-bottom: 16rpx;
-  letter-spacing: 0.5rpx;
 }
 
-/* 双卡片行 */
+/* 双卡片行 — 使用 margin-right 代替 gap（微信 flex gap 兼容性差） */
 .intention-segment-row {
   display: flex;
-  gap: 16rpx;
+  flex-direction: row;
 }
 
-/* 公共卡片基础样式 */
+/* 公共卡片 */
 .intention-opt {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: 18rpx 16rpx 16rpx;
-  border-radius: 18rpx;
+  min-width: 0;           /* 防止 flex 子项溢出 */
+  padding: 16rpx 14rpx 14rpx;
+  border-radius: 16rpx;
   border: 2rpx solid #E8E8E8;
+  background-color: #F9F9F9;
+  margin-right: 14rpx;
 }
 
-/* 卡片顶行：emoji + 标题 + 单选圆 */
-.intention-opt-header {
+.intention-opt:last-child {
+  margin-right: 0;
+}
+
+/* 顶行：emoji 左，radio 右 */
+.intention-opt-top-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  margin-bottom: 8rpx;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
 }
 
 .intention-opt-icon {
   font-size: 34rpx;
   line-height: 1;
-  margin-right: 8rpx;
-  flex-shrink: 0;
 }
 
+/* 名称行（<view> 天然块级） */
 .intention-opt-name {
-  flex: 1;
-  font-size: 26rpx;
+  font-size: 25rpx;
   font-weight: 700;
-  color: #BBBBBB;
-  line-height: 1.3;
-}
-
-/* 小角标：阳善 / 匿名护持 */
-.intention-opt-tag {
-  font-size: 20rpx;
-  font-weight: 600;
-  color: #BBBBBB;
+  color: #CCCCCC;
   margin-bottom: 6rpx;
+  line-height: 1.35;
 }
 
+/* 描述行（<view> 天然块级） */
 .intention-opt-desc {
-  font-size: 21rpx;
+  font-size: 20rpx;
   color: #CCCCCC;
   line-height: 1.55;
 }
 
-/* 单选圆指示器（inactive 状态） */
-.intention-radio {
+/* 单选圆 — inactive */
+.radio-off {
   width: 28rpx;
   height: 28rpx;
   border-radius: 50%;
   border: 2rpx solid #DDDDDD;
-  background: #FFF;
+  background-color: #FFF;
   flex-shrink: 0;
 }
 
-/* 选中状态：填充色 + 白心 */
-.intention-radio-on {
-  border-width: 5rpx;
-  background: #FFF;
+/* 单选圆 — active 基础：白色内环 + 品牌色填充，外加品牌色外圈 */
+.radio-on {
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  border: 5rpx solid #FFF;
+  flex-shrink: 0;
 }
 
-/* ── 阳善 激活态 ───────────────────────── */
+.radio-yangshan {
+  background-color: #D4A017;
+  box-shadow: 0 0 0 2rpx #D4A017;
+}
+
+.radio-yinde {
+  background-color: #5A8A5A;
+  box-shadow: 0 0 0 2rpx #5A8A5A;
+}
+
+/* ── 阳善 激活态 */
 .intention-opt-yangshan {
-  background: linear-gradient(145deg, #FFFCF2 0%, #FFF6D8 100%);
+  background-color: #FFFCF0;
   border-color: #D4A017;
-  box-shadow: 0 2rpx 12rpx rgba(212, 160, 23, 0.20),
-              0 0 0 1rpx rgba(212, 160, 23, 0.12);
+  box-shadow: 0 2rpx 10rpx rgba(212, 160, 23, 0.20);
 }
 
-.intention-opt-yangshan .intention-opt-name {
-  color: #7A5200;
-}
+.intention-opt-yangshan .intention-opt-name { color: #7A5200; }
+.intention-opt-yangshan .intention-opt-desc { color: #A07800; }
 
-.intention-opt-yangshan .intention-opt-tag {
-  color: #B8860B;
-}
-
-.intention-opt-yangshan .intention-opt-desc {
-  color: #A07800;
-}
-
-.intention-radio-yangshan {
-  border-color: #D4A017;
-  background: #D4A017;
-  /* inner white dot simulated via border trick */
-  box-shadow: inset 0 0 0 4rpx #FFF;
-}
-
-/* ── 积阴德 激活态 ─────────────────────── */
+/* ── 积阴德 激活态 */
 .intention-opt-yinde {
-  background: linear-gradient(145deg, #F4FBF4 0%, #E6F4E6 100%);
+  background-color: #F4FBF4;
   border-color: #5A8A5A;
-  box-shadow: 0 2rpx 12rpx rgba(90, 138, 90, 0.18),
-              0 0 0 1rpx rgba(90, 138, 90, 0.10);
+  box-shadow: 0 2rpx 10rpx rgba(90, 138, 90, 0.18);
 }
 
-.intention-opt-yinde .intention-opt-name {
-  color: #2E5A2E;
-}
+.intention-opt-yinde .intention-opt-name { color: #2E5A2E; }
+.intention-opt-yinde .intention-opt-desc { color: #4A7A4A; }
 
-.intention-opt-yinde .intention-opt-tag {
-  color: #3D7A3D;
-}
-
-.intention-opt-yinde .intention-opt-desc {
-  color: #4A7A4A;
-}
-
-.intention-radio-yinde {
-  border-color: #5A8A5A;
-  background: #5A8A5A;
-  box-shadow: inset 0 0 0 4rpx #FFF;
-}
-
-/* ── 未选中 ────────────────────────────── */
+/* ── 未选中 */
 .intention-opt-inactive {
-  background: #F9F9F9;
+  background-color: #F9F9F9;
   border-color: #E8E8E8;
-  opacity: 0.60;
+  opacity: 0.55;
 }
 
 /* ============================================================
    🌸🌿 解析预览区：发心标识胶囊 Tag
    ============================================================ */
 
-/* 修正 preview-summary：flex-wrap 防止标签与金额重叠 */
+/* preview-summary：flex-wrap 防止胶囊与金额重叠 */
 .preview-summary {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8rpx 12rpx;
+  row-gap: 6rpx;
+  column-gap: 10rpx;
 }
 
+/* 胶囊：white-space:nowrap 防止"阳善"拆成两行 */
 .intention-badge {
-  display: inline-flex;
+  display: flex;
+  flex-direction: row;
   align-items: center;
+  white-space: nowrap;
   font-size: 20rpx;
   padding: 4rpx 16rpx;
   border-radius: 20rpx;
   font-weight: 500;
-  line-height: 1.5;
+}
+
+.intention-badge text {
+  white-space: nowrap;
 }
 
 .intention-badge-yangshan {
-  background: #FFF8DC;
+  background-color: #FFF8DC;
   color: #7A5200;
   border: 1rpx solid #D4A017;
 }
 
 .intention-badge-yinde {
-  background: #E6F4E6;
+  background-color: #E6F4E6;
   color: #2E5A2E;
   border: 1rpx solid #5A8A5A;
 }
 
 /* ============================================================
-   🌸🌿 生成结果卡片：发心标识胶囊（嵌在标题行内）
+   🌸🌿 生成结果卡片：发心标识胶囊（标题行内嵌）
    ============================================================ */
 .result-intention-badge {
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
   font-size: 20rpx;
   padding: 3rpx 12rpx;
   border-radius: 16rpx;
@@ -2494,15 +2481,15 @@ page {
 }
 
 .result-intention-yangshan {
-  background: #FFF8DC;
+  background-color: #FFF8DC;
   color: #7A5200;
-  border: 1rpx solid rgba(212, 160, 23, 0.4);
+  border: 1rpx solid rgba(212, 160, 23, 0.5);
 }
 
 .result-intention-yinde {
-  background: #E6F4E6;
+  background-color: #E6F4E6;
   color: #2E5A2E;
-  border: 1rpx solid rgba(90, 138, 90, 0.35);
+  border: 1rpx solid rgba(90, 138, 90, 0.4);
 }
 
 .text-format-tip {

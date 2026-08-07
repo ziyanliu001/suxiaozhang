@@ -839,25 +839,23 @@
             <!-- 卡片 1：公示姓名（阳善） -->
             <view class="intention-opt {{!reportIsAnonymous ? 'intention-opt-yangshan' : 'intention-opt-inactive'}}"
                   bindtap="onChangeMeritType" data-anon="{{false}}">
-              <view class="intention-opt-header">
+              <view class="intention-opt-top-row">
                 <text class="intention-opt-icon">🌸</text>
-                <text class="intention-opt-name">公示姓名</text>
-                <view class="intention-radio {{!reportIsAnonymous ? 'intention-radio-on intention-radio-yangshan' : ''}}"></view>
+                <view class="intention-radio {{!reportIsAnonymous ? 'radio-on radio-yangshan' : 'radio-off'}}"></view>
               </view>
-              <text class="intention-opt-tag">阳善</text>
-              <text class="intention-opt-desc">公开姓名，长养公信</text>
+              <view class="intention-opt-name">公示姓名（阳善）</view>
+              <view class="intention-opt-desc">公开姓名，长养公信，感召更多善念。</view>
             </view>
 
             <!-- 卡片 2：积阴德（匿名） -->
             <view class="intention-opt {{reportIsAnonymous ? 'intention-opt-yinde' : 'intention-opt-inactive'}}"
                   bindtap="onChangeMeritType" data-anon="{{true}}">
-              <view class="intention-opt-header">
+              <view class="intention-opt-top-row">
                 <text class="intention-opt-icon">🌿</text>
-                <text class="intention-opt-name">积阴德</text>
-                <view class="intention-radio {{reportIsAnonymous ? 'intention-radio-on intention-radio-yinde' : ''}}"></view>
+                <view class="intention-radio {{reportIsAnonymous ? 'radio-on radio-yinde' : 'radio-off'}}"></view>
               </view>
-              <text class="intention-opt-tag">匿名护持</text>
-              <text class="intention-opt-desc">隐名护持，涵养阴德</text>
+              <view class="intention-opt-name">积阴德（匿名）</view>
+              <view class="intention-opt-desc">隐名护持，涵养阴德，天报之。</view>
             </view>
 
           </view>
