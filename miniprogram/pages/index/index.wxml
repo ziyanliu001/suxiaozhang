@@ -334,24 +334,24 @@
        不依赖门店/角色，无需等云端数据即可展示（有兜底金句，不会有短暂空白）。
        金句全量覆盖十大文化模块轮流抽取（见 onRefreshCultureQuote/getDailyCultureQuote/
        DAILY_CULTURE_QUOTES），标题随 cultureQuote.source 动态显示所属模块 -->
-  <view class="culture-motto-card motto-card-wrapper" style="margin: 20rpx 24rpx !important; padding: 24rpx !important; background: #FFFDF8 !important; border: 1rpx solid #F2E8D8 !important; border-radius: 16rpx !important; box-shadow: 0 4rpx 12rpx rgba(212, 160, 89, 0.08) !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
-    <view class="motto-header" style="display: flex !important; flex-direction: row !important; align-items: center !important; margin-bottom: 16rpx !important;">
-      <text class="motto-title-icon" style="font-size: 26rpx !important; margin-right: 8rpx !important;">🌸</text>
-      <text class="motto-title-text" style="font-size: 26rpx !important; font-weight: bold !important; color: #8C6A3C !important;">每日修身 · {{cultureQuote.source || '雨花家训'}}</text>
+  <view class="culture-motto-card motto-card-wrapper">
+    <view class="motto-header">
+      <text class="motto-title-icon">🌸</text>
+      <text class="motto-title-text">每日修身 · {{cultureQuote.source || '雨花家训'}}</text>
     </view>
 
-    <view class="motto-content" style="display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; text-align: center !important; padding: 12rpx 0 20rpx 0 !important;">
-      <text class="motto-quote" style="font-size: 30rpx !important; color: #D4A059 !important; font-weight: bold !important; margin-right: 6rpx !important;">"</text>
-      <text class="motto-text" style="font-size: 30rpx !important; font-weight: 600 !important; color: #333333 !important; letter-spacing: 2rpx !important;">{{cultureQuote.text || '常生惭愧，常怀忏悔。'}}</text>
-      <text class="motto-quote" style="font-size: 30rpx !important; color: #D4A059 !important; font-weight: bold !important; margin-left: 6rpx !important;">"</text>
+    <view class="motto-content">
+      <text class="motto-quote motto-quote-open">"</text>
+      <text class="motto-text">{{cultureQuote.text || '常生惭愧，常怀忏悔。'}}</text>
+      <text class="motto-quote motto-quote-close">"</text>
     </view>
 
-    <view class="motto-actions" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; gap: 16rpx !important; width: 100% !important; border-top: 1rpx dashed #EFE5D5 !important; padding-top: 16rpx !important; box-sizing: border-box !important;">
-      <view class="motto-btn" catchtap="onRefreshCultureQuote" style="flex: 1 !important; height: 56rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1rpx solid #E0D0B8 !important; border-radius: 28rpx !important; box-sizing: border-box !important;">
-        <text style="font-size: 24rpx !important; color: #666666 !important;">🔄 换一换</text>
+    <view class="motto-actions">
+      <view class="motto-btn" catchtap="onRefreshCultureQuote">
+        <text class="motto-btn-text">🔄 换一换</text>
       </view>
-      <view class="motto-btn" catchtap="onShowFamilyMottoModal" style="flex: 1 !important; height: 56rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; background: #FFFFFF !important; border: 1rpx solid #E0D0B8 !important; border-radius: 28rpx !important; box-sizing: border-box !important;">
-        <text style="font-size: 24rpx !important; color: #666666 !important;">📖 文化全集</text>
+      <view class="motto-btn" catchtap="onShowFamilyMottoModal">
+        <text class="motto-btn-text">📖 文化全集</text>
       </view>
     </view>
   </view>

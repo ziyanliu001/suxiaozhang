@@ -8466,21 +8466,34 @@ Page({
   // 门店"报错。这三个工具（登记菜单人数/登记物资消耗/记录护持动态）背后的
   // manageVolunteerSubmission/activity-log 都需要一个真实门店作为归属，虚拟的
   // "全国总览" ID 不对应任何真实门店文档
-  ensureStoreBoundForTool(): boolean {
+  ensureStoreBoundForTool(resumeAction?: () => void): boolean {
     const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
     const storeId = this.data.currentStoreId;
     if (!storeId || NATIONAL_IDS.includes(storeId)) {
-      wx.showToast({ title: '请先在顶部选择具体门店，再使用该功能', icon: 'none', duration: 2500 });
+      wx.showToast({ title: '全国总览模式，请先选择具体门店', icon: 'none', duration: 2000 });
+      if (resumeAction) {
+        this._pendingStoreSelectAction = resumeAction;
+      }
+      // 延迟 300ms 让 Toast 先显示，再唤起门店选择器
+      setTimeout(() => {
+        const picker = this.selectComponent('#storePicker');
+        if (picker && typeof picker.onOpenSheet === 'function') {
+          picker.onOpenSheet();
+        }
+      }, 300);
       return false;
     }
     return true;
   },
 
   onTapToolDailyMenu() {
-    if (!this.ensureStoreBoundForTool()) return;
-    const modal = this.selectComponent('#dailyMenuModal') as any;
-    if (modal) modal.resetForm();
-    this.setData({ showDailyMenuModal: true });
+    const open = () => {
+      const modal = this.selectComponent('#dailyMenuModal') as any;
+      if (modal) modal.resetForm();
+      this.setData({ showDailyMenuModal: true });
+    };
+    if (!this.ensureStoreBoundForTool(open)) return;
+    open();
   },
 
   onCloseDailyMenuModal() {
@@ -8488,10 +8501,13 @@ Page({
   },
 
   onTapToolMaterialUsage() {
-    if (!this.ensureStoreBoundForTool()) return;
-    const modal = this.selectComponent('#materialUsageModal') as any;
-    if (modal) modal.resetForm();
-    this.setData({ showMaterialUsageModal: true });
+    const open = () => {
+      const modal = this.selectComponent('#materialUsageModal') as any;
+      if (modal) modal.resetForm();
+      this.setData({ showMaterialUsageModal: true });
+    };
+    if (!this.ensureStoreBoundForTool(open)) return;
+    open();
   },
 
   onCloseMaterialUsageModal() {
@@ -8502,16 +8518,16 @@ Page({
   // （onOpenVolunteerJournalModal）也是直接 navigateTo 过去，这里跳同一个
   // 目标页面即可，不需要交接标记
   onTapToolVolunteerJournal() {
-    if (!this.ensureStoreBoundForTool()) return;
-    if (this.isNavigating) return;
-    this.isNavigating = true;
-
-    wx.navigateTo({
-      url: '/pages/activity-log/activity-log',
-      fail: () => {
-        this.isNavigating = false;
-      }
-    });
+    const open = () => {
+      if (this.isNavigating) return;
+      this.isNavigating = true;
+      wx.navigateTo({
+        url: '/pages/activity-log/activity-log',
+        fail: () => { this.isNavigating = false; }
+      });
+    };
+    if (!this.ensureStoreBoundForTool(open)) return;
+    open();
   },
 
   refreshTodayShiftStatus() {

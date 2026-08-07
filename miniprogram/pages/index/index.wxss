@@ -2702,44 +2702,51 @@ textarea, .textarea {
 }
 
 .motto-header {
-  display: flex !important;
-  flex-direction: row !important;
+  display: flex;
+  flex-direction: row;
   align-items: center;
   margin-bottom: 16rpx;
 }
 
 .motto-title-icon {
   font-size: 26rpx;
+  line-height: 1;
   margin-right: 8rpx;
+  flex-shrink: 0;
 }
 
 .motto-title-text {
   font-size: 26rpx;
   font-weight: bold;
   color: #8C6A3C;
+  flex: 1;
 }
 
 .motto-content {
-  display: flex !important;
-  flex-direction: row !important;
+  display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
   text-align: center;
   padding: 12rpx 0 20rpx 0;
+  flex-wrap: wrap;
+  gap: 4rpx;
 }
 
 .motto-quote {
   font-size: 30rpx;
   font-weight: bold;
   color: #D4A059;
+  line-height: 1.4;
 }
 
-.motto-quote:first-child {
-  margin-right: 6rpx;
+/* 替代 :first-child/:last-child（WXSS 伪类在 text 兄弟节点上兼容性差） */
+.motto-quote-open {
+  margin-right: 4rpx;
 }
 
-.motto-quote:last-child {
-  margin-left: 6rpx;
+.motto-quote-close {
+  margin-left: 4rpx;
 }
 
 .motto-text {
@@ -2747,34 +2754,38 @@ textarea, .textarea {
   font-weight: 600;
   color: #333333;
   letter-spacing: 2rpx;
+  line-height: 1.5;
 }
 
 .motto-actions {
-  display: flex !important;
-  flex-direction: row !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 16rpx !important;
-  width: 100% !important;
-  margin-top: 4rpx;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+  width: 100%;
   padding-top: 16rpx;
+  margin-top: 4rpx;
   border-top: 1rpx dashed #EFE5D5;
-  box-sizing: border-box !important;
+  box-sizing: border-box;
 }
 
 .motto-btn {
-  flex: 1 !important;
-  height: 56rpx !important;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: center !important;
+  flex: 1;
+  height: 56rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  border: 1rpx solid #E0D0B8;
+  border-radius: 28rpx;
+  box-sizing: border-box;
+}
+
+.motto-btn-text {
   font-size: 24rpx;
   color: #666666;
-  background: #FFFFFF !important;
-  border: 1rpx solid #E0D0B8 !important;
-  border-radius: 28rpx !important;
-  box-sizing: border-box !important;
 }
 
 /* 🌸 家训弹窗头部：单独加顶部内边距，避免关闭按钮与右上角胶囊（如切店胶囊）重叠——
