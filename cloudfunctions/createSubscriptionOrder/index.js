@@ -104,6 +104,26 @@ exports.main = async (event) => {
   // 4. 调用微信云开发统一下单接口
   // 🔧 subMchId：商户号需在微信开发者工具→云开发控制台→微信支付中绑定并确认，
   //    云环境绑定后通常无需在代码里显式传入，保留空串以兼容子商户模式
+  // 🛡️ 防御：cloud.pay 仅在云环境已绑定微信支付时才存在；未配置时直接返回
+  //    友好错误，避免 TypeError 穿透到前端显示为乱码
+  if (!cloud.pay || typeof cloud.pay.unifiedorder !== 'function') {
+    await db.collection(ORDERS_COLLECTION)
+      .where({ outTradeNo })
+      .update({
+        data: {
+          status: 'failed',
+          failedAt: db.serverDate(),
+          failReason: '微信支付服务未在当前云环境开通'
+        }
+      })
+      .catch(() => {});
+    return {
+      success: false,
+      error: '当前环境暂未开通微信支付，请使用授权码兑换或联系大家长',
+      paymentNotConfigured: true
+    };
+  }
+
   try {
     const orderResult = await cloud.pay.unifiedorder({
       body: planCfg.body,

@@ -3598,10 +3598,20 @@ Page({
       wx.hideLoading();
 
       if (!orderResult || !orderResult.success || !orderResult.payment) {
+        // 微信支付未配置时给出引导文案，其余错误原文展示
+        const rawErr: string = (orderResult && orderResult.error) || '';
+        const isPaymentUnconfigured =
+          orderResult?.paymentNotConfigured ||
+          rawErr.includes('未在云端开通') ||
+          rawErr.includes('未开通微信支付') ||
+          rawErr.includes('unifiedorder') ||
+          rawErr.includes('payment');
         wx.showToast({
-          title: (orderResult && orderResult.error) || '生成订单失败，请重试',
+          title: isPaymentUnconfigured
+            ? '当前环境暂未开通微信支付，请使用授权码兑换或联系大家长'
+            : (rawErr || '生成订单失败，请重试'),
           icon: 'none',
-          duration: 2500
+          duration: 3000
         });
         return;
       }
