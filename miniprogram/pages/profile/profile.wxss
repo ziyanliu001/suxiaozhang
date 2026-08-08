@@ -4626,3 +4626,180 @@
 }
 
 
+
+/* ===== 🎫 生成本店邀请码弹窗 ===== */
+.invite-modal-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.invite-modal-panel {
+  background: #FFFFFF;
+  border-radius: 32rpx 32rpx 0 0;
+  width: 100%;
+  padding: 32rpx 32rpx 60rpx;
+  box-sizing: border-box;
+}
+
+.invite-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.invite-modal-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1A1A1A;
+}
+
+.invite-modal-close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  color: #888;
+  border-radius: 50%;
+  background: #F5F5F5;
+}
+
+.invite-modal-tip {
+  font-size: 24rpx;
+  color: #E05C1A;
+  background: #FFF8F0;
+  border-radius: 12rpx;
+  padding: 14rpx 18rpx;
+  margin-bottom: 28rpx;
+  line-height: 1.6;
+}
+
+.invite-modal-label {
+  font-size: 26rpx;
+  color: #555;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+
+.invite-role-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.invite-role-item {
+  flex: 1 1 calc(50% - 8rpx);
+  min-width: calc(50% - 8rpx);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 24rpx 16rpx;
+  border-radius: 20rpx;
+  border: 2rpx solid #E8E8E8;
+  background: #FAFAFA;
+  box-sizing: border-box;
+}
+
+.invite-role-item.selected {
+  border-color: #3B6FE8;
+  background: #EEF3FF;
+}
+
+.invite-role-icon {
+  font-size: 36rpx;
+}
+
+.invite-role-name {
+  font-size: 26rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.invite-role-item.selected .invite-role-name {
+  color: #3B6FE8;
+  font-weight: bold;
+}
+
+.invite-gen-btn {
+  width: 100%;
+  height: 88rpx;
+  background: linear-gradient(135deg, #3B6FE8, #1E40AF);
+  color: #FFFFFF;
+  font-size: 30rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.3;
+}
+
+.invite-gen-btn-loading {
+  opacity: 0.7;
+}
+
+/* 结果弹窗 */
+.invite-result-store {
+  font-size: 26rpx;
+  color: #666;
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.invite-result-code-box {
+  background: #F0F4FF;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  text-align: center;
+  margin-bottom: 20rpx;
+  border: 2rpx dashed #3B6FE8;
+}
+
+.invite-result-code {
+  font-size: 52rpx;
+  font-weight: bold;
+  color: #1E3A8A;
+  letter-spacing: 4rpx;
+}
+
+.invite-result-qr {
+  width: 240rpx;
+  height: 240rpx;
+  display: block;
+  margin: 0 auto 20rpx;
+  border-radius: 12rpx;
+}
+
+.invite-copy-btn {
+  width: 100%;
+  height: 88rpx;
+  background: linear-gradient(135deg, #3B6FE8, #1E40AF);
+  color: #FFFFFF;
+  font-size: 30rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.3;
+  margin-bottom: 20rpx;
+}
+
+.invite-result-warning {
+  font-size: 22rpx;
+  color: #999;
+  text-align: center;
+  line-height: 1.6;
+}

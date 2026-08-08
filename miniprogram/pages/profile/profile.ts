@@ -467,6 +467,16 @@ Page({
     adminKeyModalInput: '',
     adminKeyModalSaving: false,
 
+    // 🎫 大家长生成本店邀请码：角色选择弹窗 + 结果展示弹窗
+    showInviteModal: false,
+    inviteTargetRole: 'VOLUNTEER' as string,
+    inviteGenerating: false,
+    showInviteResultModal: false,
+    inviteResultCode: '',
+    inviteResultQrFileId: '',
+    inviteResultStoreName: '',
+    inviteResultExpiresAt: 0,
+
     // 🛡️ 超管撤销管理权限：从成员卡片列表选择，或手动输入账号编号（兜底）
     showForceUnbindModal: false,
     forceUnbindMemberLoading: false,
@@ -3532,24 +3542,65 @@ Page({
   },
 
   onPatriarchGenCode() {
-    const storeName = this.data.currentStoreName || '本店';
-    wx.showModal({
-      title: '🎫 生成本店邀请码',
-      content: `提示：您正在为「${storeName}」生成管理邀请码，请仅发放给信任的本店成员，切勿对外传播。`,
-      confirmText: '我知道了，去生成',
-      confirmColor: '#3B6FE8',
-      cancelText: '取消',
-      success: (res) => {
-        if (!res.confirm) return;
-        if (this.isNavigating) return;
-        this.isNavigating = true;
-        wx.switchTab({
-          url: '/pages/index/index',
-          fail: () => {
-            this.isNavigating = false;
-          }
-        });
+    this.setData({ showInviteModal: true, inviteTargetRole: 'VOLUNTEER', inviteResultCode: '', inviteResultQrFileId: '' });
+  },
+
+  onCloseInviteModal() {
+    this.setData({ showInviteModal: false });
+  },
+
+  onSelectInviteRole(e: any) {
+    this.setData({ inviteTargetRole: e.currentTarget.dataset.role });
+  },
+
+  async onGeneratePatriarchInviteCode() {
+    if (this.data.inviteGenerating) return;
+    if (!isCloudAvailable()) return;
+    const roleInfo = AuthService.getCachedRoleInfo();
+    const storeId = roleInfo && roleInfo.storeId;
+    if (!storeId) {
+      wx.showToast({ title: '无法获取门店信息，请重新进入', icon: 'none' });
+      return;
+    }
+    const targetRole = this.data.inviteTargetRole || 'VOLUNTEER';
+    this.setData({ inviteGenerating: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreInviteCode',
+        data: { action: 'generate', storeId, targetRole }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: result?.error || '生成失败，请重试', icon: 'none', duration: 2500 });
+        return;
       }
+      const { code, storeName, qrFileID, expiresAt } = result.data;
+      this.setData({
+        showInviteModal: false,
+        showInviteResultModal: true,
+        inviteResultCode: code || '',
+        inviteResultQrFileId: qrFileID || '',
+        inviteResultStoreName: storeName || this.data.currentStoreName || '',
+        inviteResultExpiresAt: expiresAt || 0
+      });
+    } catch (err) {
+      console.error('[onGeneratePatriarchInviteCode]', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ inviteGenerating: false });
+    }
+  },
+
+  onCloseInviteResultModal() {
+    this.setData({ showInviteResultModal: false });
+  },
+
+  onCopyPatriarchInviteCode() {
+    const code = this.data.inviteResultCode;
+    if (!code) return;
+    wx.setClipboardData({
+      data: code,
+      success: () => wx.showToast({ title: '已复制邀请码', icon: 'success' })
     });
   },
 

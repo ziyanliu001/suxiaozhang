@@ -159,12 +159,10 @@ exports.main = async (event, context) => {
       }
     }
 
-    // 🛡️ 权限卡口：超管 / 总部财务 / 志工均可访问本机构大屏（志工侧为只读、脱敏视图，
-    // 由前端强制锁定为"全部门店"且禁止切换门店，本函数末尾统一调用 sanitizeReportForVolunteer
-    // 对返回数据做服务端脱敏，避免仅靠前端隐藏导致抓包/调试仍可看到真实运营成本数据）。
-    // 🏢 platform_admin（SaaS 平台管理员）不在允许名单中 —— 大屏聚合的是门店财务数据，
-    // 属于机构内部业务信息，平台运维方不应也无需访问，这里显式排除而非遗漏。
-    const ALLOWED_ROLES = ['super_admin', 'hq_finance', 'regional_finance', 'volunteer'];
+    // 🛡️ 权限卡口：超管 / 大家长 / 总部财务 / 志工均可访问本机构大屏。
+    // 大家长已是门店自治最高负责人，有权查看全机构汇总大盘（订阅套餐检查在下方）。
+    // 志工侧为只读脱敏视图；platform_admin 不在名单——大屏是机构内部财务数据，平台运维方无需访问。
+    const ALLOWED_ROLES = ['super_admin', 'store_patriarch', 'hq_finance', 'regional_finance', 'volunteer'];
     if (!ALLOWED_ROLES.includes(userRole)) {
       return { success: false, error: '无权限访问本机构数据大屏' };
     }
@@ -427,7 +425,7 @@ exports.main = async (event, context) => {
 
     allLogs.forEach(log => {
       const logStoreName = log.shopName || '';
-      const sId = log.storeId || logStoreName || 'store_haicang_001';
+      const sId = log.storeId || logStoreName || '_unclassified_store_';
 
       // 尝试匹配 storeStatsMap
       let matchedKey = null;
