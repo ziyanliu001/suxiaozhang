@@ -35,6 +35,18 @@
             <text class="arrow">▼</text>
           </view>
         </picker>
+        <view wx:elif="{{isPatriarch && showNationalDashboardEntry && !showNationalDashboard}}" class="patriarch-store-row">
+          <view class="store-picker-pill locked">
+            <text class="name">{{currentUserStoreName || shopName}}</text>
+            <text class="lock-icon">🔒</text>
+            <text class="role-tag-badge" wx:if="{{currentUserRole}}">{{roleLabelMap[currentUserRole]}}</text>
+          </view>
+          <view class="national-entry-btn" hover-class="national-entry-btn-hover" bindtap="onPatriarchGoNational">
+            <text class="national-entry-icon">🌐</text>
+            <text class="national-entry-text">全国看板</text>
+            <text class="national-entry-arrow">↗</text>
+          </view>
+        </view>
         <view wx:else class="store-picker-pill locked">
           <text class="name">{{currentUserStoreName || shopName}}</text>
           <text class="lock-icon">🔒</text>

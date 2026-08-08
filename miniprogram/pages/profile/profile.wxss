@@ -1154,6 +1154,18 @@
   text-align: center;
 }
 
+.item-premium-tag {
+  font-size: 18rpx;
+  font-weight: bold;
+  color: #92400E;
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border: 1rpx solid #F59E0B;
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
+  margin-left: 10rpx;
+  flex-shrink: 0;
+}
+
 /* 关于与帮助分组内的"切换身份"行：保留列表统一样式，仅文字提示危险语义 */
 .danger-cell:active {
   background: #FFF5F5;
@@ -2729,15 +2741,240 @@
   opacity: 0.4;
 }
 
-/* 大家长撤销权限受限提示（非超管场景） */
-.mm-patriarch-hint {
-  display: block;
-  margin-top: 8rpx;
+/* ═══════════════════════════════════════════════════
+   🔑 成员权限管理弹窗（member-manage-modal）新样式
+   ══════════════════════════════════════════════════ */
+
+/* 搜索框容器 */
+.mm-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  background: #F8F9FA;
+  border: 1rpx solid #DEE2E6;
+  border-radius: 24rpx;
+  padding: 0 24rpx;
+  margin: 0 32rpx 24rpx;
+  height: 80rpx;
+  flex-shrink: 0;
+}
+
+.mm-search-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+}
+
+.mm-search-input {
+  flex: 1;
+  font-size: 26rpx;
+  color: #333333;
+  height: 80rpx;
+  line-height: 80rpx;
+}
+
+.mm-search-placeholder {
+  color: #ADB5BD;
+  font-size: 26rpx;
+}
+
+/* 成员卡片 */
+.mm-member-card {
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 14rpx rgba(0, 0, 0, 0.05);
+}
+
+/* 卡片上半行：头像 + 信息 + 角色 Tag 横向排列 */
+.mm-card-top {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+/* 头像 */
+.mm-avatar-wrap {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mm-avatar-img {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+}
+
+.mm-avatar-fallback {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #74C0FC 0%, #4C6EF5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+/* 成员信息区（姓名 + 手机 + 时间） */
+.mm-member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.mm-member-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mm-member-phone {
+  font-size: 24rpx;
+  color: #495057;
+}
+
+.mm-member-time {
   font-size: 22rpx;
-  color: #B8860B;
-  background: #FFF8E1;
-  border-radius: 8rpx;
-  padding: 6rpx 14rpx;
+  color: #ADB5BD;
+}
+
+/* 角色标签（橙 / 蓝 / 紫，靠右对齐） */
+.mm-role-tag {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: bold;
+  padding: 6rpx 18rpx;
+  border-radius: 20rpx;
+  text-align: center;
+}
+
+.mm-role-tag-orange {
+  color: #92400E;
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border: 1rpx solid #F59E0B;
+}
+
+.mm-role-tag-blue {
+  color: #1D4ED8;
+  background: #EFF6FF;
+  border: 1rpx solid #93C5FD;
+}
+
+.mm-role-tag-purple {
+  color: #6B21A8;
+  background: #FAF5FF;
+  border: 1rpx solid #C084FC;
+}
+
+.mm-role-tag-default {
+  color: #495057;
+  background: #F1F3F5;
+  border: 1rpx solid #DEE2E6;
+}
+
+/* 锁态提示（同级大家长不可操作） */
+.mm-locked-notice {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: #F8F9FA;
+  border: 1rpx solid #DEE2E6;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+}
+
+.mm-locked-icon {
+  font-size: 26rpx;
+  flex-shrink: 0;
+}
+
+.mm-locked-text {
+  font-size: 24rpx;
+  color: #6C757D;
+  line-height: 1.5;
+}
+
+/* 操作按钮行 */
+.mm-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+/* 降级为义工：琥珀/橙警告色 */
+.mm-demote-btn {
+  flex: 1;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 25rpx;
+  font-weight: bold;
+  color: #7B4F00;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFE082 100%);
+  border: 2rpx solid #F0C36D;
+  border-radius: 36rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.mm-demote-btn::after { border: none; }
+
+.mm-demote-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+.mm-demote-btn[disabled] {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+/* 移出本店：红警告色 */
+.mm-remove-btn {
+  flex: 1;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 25rpx;
+  font-weight: bold;
+  color: #C92A2A;
+  background: linear-gradient(135deg, #FFF5F5 0%, #FFE3E3 100%);
+  border: 2rpx solid #FFA8A8;
+  border-radius: 36rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.mm-remove-btn::after { border: none; }
+
+.mm-remove-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+.mm-remove-btn[disabled] {
+  opacity: 0.45;
+  box-shadow: none;
 }
 
 .fa-item-handled-tag {

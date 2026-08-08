@@ -449,6 +449,8 @@ Page({
     isStoreAdmin: false,
     isFinance: false,
     isPatriarch: false,
+    // 大家长快捷入口：统计页头部的"全国数据看板 ↗"按钮可见性
+    showNationalDashboardEntry: false,
     dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
     dashboardRoleTag: '',
 
@@ -643,6 +645,10 @@ Page({
     }
     if (options && options.autoShowExport === 'true') {
       this._autoShowExportPending = true;
+    }
+    // 大家长从"全国数据看板"入口跳转而来，角色落地后自动切入全国视图
+    if (options && options.view === 'national') {
+      (this as any)._autoNationalIntent = true;
     }
 
     this.sanitizeDateVariables();
@@ -860,7 +866,8 @@ Page({
     // 🆕 志工/无角色个人不再放行"全国数据大屏"（哪怕是脱敏只读版）——改为下方
     // showPersonalView 分支的专属个人视角，数据范围收窄到"只有我自己的"，
     // 既满足阳光账本的知情诉求，又不再让个人账号看到任何跨门店/治理类信息
-    const canViewNationalDashboard = isSuperAdmin;
+    // 🆕 大家长可见全国数据看板（高级版专属，内部再做订阅二次校验）
+    const canViewNationalDashboard = isSuperAdmin || isPatriarch;
     const canViewCrossStoreCost = isSuperAdmin;
     const canViewAllStoresDropdown = isSuperAdmin;
     const isVolunteerNationalView = isVolunteer;
@@ -903,6 +910,8 @@ Page({
       canViewAllStoresDropdown,
       isVolunteerNationalView,
       showPersonalView,
+      // 大家长快捷入口可见（在单店视图时显示"全国数据看板 ↗"浮动按钮）
+      showNationalDashboardEntry: isPatriarch,
       dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
       dashboardRoleTag: ''
     });
@@ -984,6 +993,12 @@ Page({
       }
       if (shouldDefaultToNational) {
         this.setData({ showNationalDashboard: true });
+        this.loadNationalDashboard();
+      } else if (isPatriarch && (this as any)._autoNationalIntent) {
+        // 大家长从 profile 点击"全国数据看板"跳转而来（view=national），
+        // 权限已在 profile 侧验证通过，这里直接触发全国视图加载
+        (this as any)._autoNationalIntent = false;
+        this.setData({ isAllStoresMode: true });
         this.loadNationalDashboard();
       }
     }
@@ -1609,6 +1624,15 @@ Page({
   // 用的是原生 wx.showModal——原生弹窗按钮完全渲染在 webview/WXML 之外，没有
   // 任何 class/id 可挂，WXSS 对它的按钮布局零控制力。这里改为页面自有的自定义
   // 半屏卡片弹窗，"知道了"/"去反馈"两个按钮才能真正用 flex 强制居中重构样式
+  // 大家长快捷入口：统计页内一键切换到全国数据看板
+  // loadNationalDashboard() 内部已含订阅校验 + 未授权时弹升级弹窗 + 状态回退，
+  // 这里只负责把 isAllStoresMode 切到全国聚合态再交给它处理
+  async onPatriarchGoNational() {
+    if (!this.data.isPatriarch) return;
+    this.setData({ isAllStoresMode: true });
+    await this.loadNationalDashboard();
+  },
+
   onOpenPlanUpgradeModal() {
     this.setData({ showPlanUpgradeModal: true });
   },

@@ -714,10 +714,18 @@
          ║  工具箱（超管：3 分区完整版 / 大家长：仅会员管理）             ║
          ╚══════════════════════════════════════════════════════════════╝ -->
 
-    <!-- ▸ 大家长专属精简版：只展示"会员开通/续费"，不显示任何开发工具 -->
+    <!-- ▸ 大家长专属精简版：全国数据看板 + 会员开通/续费 -->
     <view class="ui-card-wrapper admin-developer-section"
           wx:if="{{(isPatriarch || isPlatformAdmin) && !isRealSuperAdmin}}">
       <view class="admin-divider">门店管理</view>
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onPatriarchGoToNationalDashboard" wx:if="{{isPatriarch}}">
+        <view class="item-left">
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">全国数据看板</text>
+          <text class="item-premium-tag">高级</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
         <view class="item-left">
           <text class="manager-only-emoji">💳</text>
@@ -745,7 +753,7 @@
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStatistics">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-screen"></view>
-          <text class="item-text">查看全国数据大屏</text>
+          <text class="item-text">全国数据看板</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -1418,9 +1426,19 @@
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
           <text class="feedback-sheet-title">🔑 成员权限管理</text>
-          <text class="feedback-sheet-subtitle">对已授权的财务/店长/大家长进行降级或移出操作</text>
+          <text class="feedback-sheet-subtitle">已授权管理成员 · 点击卡片操作降级或移出</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseMemberManageModal">✕</view>
+      </view>
+
+      <!-- 搜索框 -->
+      <view class="mm-search-bar">
+        <text class="mm-search-icon">🔍</text>
+        <input class="mm-search-input"
+               placeholder="搜索成员姓名或手机号..."
+               placeholder-class="mm-search-placeholder"
+               value="{{memberManageSearch}}"
+               bindinput="onMemberManageSearch" />
       </view>
 
       <scroll-view scroll-y class="feedback-admin-list-scroll">
@@ -1428,35 +1446,50 @@
           <text>加载中...</text>
         </view>
 
-        <view class="feedback-admin-empty" wx:if="{{!memberManageLoading && memberManageList.length === 0}}">
-          <text>暂无可管理的授权成员</text>
+        <view class="feedback-admin-empty" wx:elif="{{!memberManageLoading && memberManageFilteredList.length === 0}}">
+          <text wx:if="{{memberManageSearch}}">未找到匹配的成员</text>
+          <text wx:else>暂无可管理的授权成员</text>
         </view>
 
-        <view class="feedback-admin-item" wx:for="{{memberManageList}}" wx:key="applyId">
-          <view class="fa-item-header">
-            <text class="fa-item-nickname">{{item.realName}}</text>
-            <text class="fa-item-type-tag">{{item.roleLabel}}</text>
-          </view>
-          <text class="fa-item-content">手机号：{{item.phone}}</text>
-          <text class="fa-item-time">🗓️ 授权于 {{item.timeStr}}</text>
+        <!-- 成员卡片列表 -->
+        <view class="mm-member-card" wx:for="{{memberManageFilteredList}}" wx:key="applyId">
 
-          <view class="fa-item-actions">
-            <!-- 大家长撤销仅限超管；店长/财务大家长/店长均可操作 -->
-            <button
-              class="fa-item-demote-btn"
-              bindtap="onDemoteToVolunteer"
-              data-id="{{item.applyId}}"
-              disabled="{{memberManageOperating || (item.role === 'store_patriarch' && !isSuperAdmin)}}"
-            >⬇ 降级为义工</button>
-            <button
-              class="fa-item-reply-btn"
-              bindtap="onRemoveFromStore"
-              data-id="{{item.applyId}}"
-              disabled="{{memberManageOperating || (item.role === 'store_patriarch' && !isSuperAdmin)}}"
-            >✕ 移出门店</button>
+          <!-- 上半区：头像 + 姓名/手机/时间 + 角色 Tag -->
+          <view class="mm-card-top">
+            <view class="mm-avatar-wrap">
+              <image wx:if="{{item.avatarUrl}}" class="mm-avatar-img" src="{{item.avatarUrl}}" mode="aspectFill" />
+              <view wx:else class="mm-avatar-fallback">{{item.realName[0] || '?'}}</view>
+            </view>
+            <view class="mm-member-info">
+              <text class="mm-member-name">{{item.realName}}</text>
+              <text class="mm-member-phone">📱 {{item.phoneMasked}}</text>
+              <text class="mm-member-time">🗓️ {{item.timeStr}}</text>
+            </view>
+            <view class="mm-role-tag mm-role-tag-{{item.roleClass}}">{{item.roleLabel}}</view>
           </view>
-          <text class="mm-patriarch-hint" wx:if="{{item.role === 'store_patriarch' && !isSuperAdmin}}">大家长撤销仅限超级管理员操作</text>
+
+          <!-- 下半区操作 ── 情形 A：大家长操作同级大家长 → 锁态提示 -->
+          <view class="mm-locked-notice" wx:if="{{item.role === 'store_patriarch' && !isSuperAdmin}}">
+            <text class="mm-locked-icon">🔒</text>
+            <text class="mm-locked-text">同级大家长权限调整需联系超级管理员</text>
+          </view>
+
+          <!-- 下半区操作 ── 情形 B：可正常操作 -->
+          <view class="mm-actions" wx:else>
+            <button class="mm-demote-btn"
+                    bindtap="onDemoteToVolunteer"
+                    data-id="{{item.applyId}}"
+                    data-name="{{item.realName}}"
+                    disabled="{{memberManageOperating}}">⬇ 降级为义工</button>
+            <button class="mm-remove-btn"
+                    bindtap="onRemoveFromStore"
+                    data-id="{{item.applyId}}"
+                    data-name="{{item.realName}}"
+                    disabled="{{memberManageOperating}}">✕ 移出本店</button>
+          </view>
+
         </view>
+
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
     </view>

@@ -210,6 +210,42 @@ page {
   font-weight: bold;
 }
 
+/* 大家长：门店胶囊 + 全国看板快捷入口并排布局 */
+.patriarch-store-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.national-entry-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: linear-gradient(135deg, #1A56DB 0%, #1E40AF 100%);
+  padding: 8rpx 18rpx;
+  border-radius: 30rpx;
+  flex-shrink: 0;
+}
+
+.national-entry-btn-hover {
+  opacity: 0.8;
+}
+
+.national-entry-icon {
+  font-size: 22rpx;
+}
+
+.national-entry-text {
+  font-size: 22rpx;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.national-entry-arrow {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 .period-tabs-segment {
   display: flex;
   background: #F1F3F5;

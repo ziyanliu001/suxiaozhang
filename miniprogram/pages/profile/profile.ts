@@ -448,9 +448,14 @@ Page({
     showMemberManageModal: false,
     memberManageLoading: false,
     memberManageOperating: false,
+    memberManageSearch: '',
     memberManageList: [] as Array<{
-      applyId: string; realName: string; phone: string;
-      role: string; roleLabel: string; timeStr: string;
+      applyId: string; realName: string; phone: string; phoneMasked: string;
+      role: string; roleLabel: string; roleClass: string; timeStr: string; avatarUrl?: string;
+    }>,
+    memberManageFilteredList: [] as Array<{
+      applyId: string; realName: string; phone: string; phoneMasked: string;
+      role: string; roleLabel: string; roleClass: string; timeStr: string; avatarUrl?: string;
     }>,
 
     // 🔐 门店管理员密钥：店长/大家长/超管均可查看已设置状态；大家长/超管额外
@@ -2619,7 +2624,13 @@ Page({
   // 👥 人员权限管理：展示本店已授权的管理岗位成员（财务/店长/大家长），提供降级/移出操作
   async onOpenMemberManageModal() {
     if (!isCloudAvailable()) return;
-    this.setData({ showMemberManageModal: true, memberManageLoading: true, memberManageList: [] });
+    this.setData({
+      showMemberManageModal: true,
+      memberManageLoading: true,
+      memberManageList: [],
+      memberManageFilteredList: [],
+      memberManageSearch: ''
+    });
     try {
       const roleInfo = AuthService.getCachedRoleInfo();
       const storeId = roleInfo && roleInfo.storeId;
@@ -2629,10 +2640,24 @@ Page({
       });
       const result = res.result;
       if (result && result.success) {
-        // 仅展示管理岗位成员（财务/店长/大家长），义工/家人不在此列表管理
         const ELEVATED = ['finance', 'store_manager', 'store_patriarch'];
-        const list = (result.data || []).filter((m: any) => ELEVATED.includes(m.role));
-        this.setData({ memberManageList: list });
+        const roleClassMap: Record<string, string> = {
+          store_patriarch: 'orange',
+          finance: 'blue',
+          store_manager: 'purple'
+        };
+        const maskPhone = (p: string) => {
+          if (!p || p.length < 7) return p || '';
+          return p.slice(0, 3) + '****' + p.slice(-4);
+        };
+        const list = (result.data || [])
+          .filter((m: any) => ELEVATED.includes(m.role))
+          .map((m: any) => ({
+            ...m,
+            phoneMasked: maskPhone(m.phone || ''),
+            roleClass: roleClassMap[m.role] || 'default'
+          }));
+        this.setData({ memberManageList: list, memberManageFilteredList: list });
       }
     } catch (err) {
       console.warn('[profile] onOpenMemberManageModal 加载失败:', err);
@@ -2642,15 +2667,32 @@ Page({
   },
 
   onCloseMemberManageModal() {
-    this.setData({ showMemberManageModal: false });
+    this.setData({ showMemberManageModal: false, memberManageSearch: '' });
+  },
+
+  onMemberManageSearch(e: any) {
+    const query = (e.detail.value || '').trim();
+    this.setData({ memberManageSearch: query });
+    const list = this.data.memberManageList;
+    if (!query) {
+      this.setData({ memberManageFilteredList: list });
+      return;
+    }
+    const lower = query.toLowerCase();
+    const filtered = list.filter((m) =>
+      (m.realName && m.realName.toLowerCase().includes(lower)) ||
+      (m.phone && m.phone.includes(query))
+    );
+    this.setData({ memberManageFilteredList: filtered });
   },
 
   async onDemoteToVolunteer(e: any) {
-    const { id } = e.currentTarget.dataset;
+    const { id, name } = e.currentTarget.dataset;
     if (!id || this.data.memberManageOperating) return;
+    const displayName = name || '该成员';
     const { confirm } = await wx.showModal({
       title: '确认降级',
-      content: '将该成员降级为义工后，其管理权限立即撤销，不可撤回，确认操作吗？',
+      content: `确定将【${displayName}】降级为普通义工吗？降级后其将失去门店日常管理权限，且不可撤回。`,
       confirmText: '确认降级',
       confirmColor: '#E03131'
     });
@@ -2667,7 +2709,16 @@ Page({
         return;
       }
       wx.showToast({ title: '已降级为义工', icon: 'success' });
-      this.setData({ memberManageList: this.data.memberManageList.filter((m) => m.applyId !== id) });
+      const newList = this.data.memberManageList.filter((m) => m.applyId !== id);
+      const newQuery = this.data.memberManageSearch;
+      const lower = newQuery.toLowerCase();
+      const newFiltered = newQuery
+        ? newList.filter((m) =>
+            (m.realName && m.realName.toLowerCase().includes(lower)) ||
+            (m.phone && m.phone.includes(newQuery))
+          )
+        : newList;
+      this.setData({ memberManageList: newList, memberManageFilteredList: newFiltered });
     } catch (err) {
       wx.showToast({ title: '操作失败，请重试', icon: 'none' });
     } finally {
@@ -2676,11 +2727,12 @@ Page({
   },
 
   async onRemoveFromStore(e: any) {
-    const { id } = e.currentTarget.dataset;
+    const { id, name } = e.currentTarget.dataset;
     if (!id || this.data.memberManageOperating) return;
+    const displayName = name || '该成员';
     const { confirm } = await wx.showModal({
       title: '确认移出',
-      content: '将该成员移出门店后，权限立即撤销，对方需重新申请才能加入，确认操作吗？',
+      content: `确定将【${displayName}】移出本店吗？移出后权限立即撤销，对方需重新申请才能加入。`,
       confirmText: '确认移出',
       confirmColor: '#E03131'
     });
@@ -2697,7 +2749,16 @@ Page({
         return;
       }
       wx.showToast({ title: '已移出门店', icon: 'success' });
-      this.setData({ memberManageList: this.data.memberManageList.filter((m) => m.applyId !== id) });
+      const newList = this.data.memberManageList.filter((m) => m.applyId !== id);
+      const newQuery = this.data.memberManageSearch;
+      const lower = newQuery.toLowerCase();
+      const newFiltered = newQuery
+        ? newList.filter((m) =>
+            (m.realName && m.realName.toLowerCase().includes(lower)) ||
+            (m.phone && m.phone.includes(newQuery))
+          )
+        : newList;
+      this.setData({ memberManageList: newList, memberManageFilteredList: newFiltered });
     } catch (err) {
       wx.showToast({ title: '操作失败，请重试', icon: 'none' });
     } finally {
@@ -3541,6 +3602,25 @@ Page({
 
     wx.navigateTo({
       url: '/pages/statistics/statistics',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 大家长专属：全国数据看板入口——先校验租户订阅权限，未订阅直接唤起
+  // 套餐升级弹窗，已订阅再跳转统计页并携带 view=national 参数让统计页
+  // 自动切入全国视图，避免到达后还要再手动点一次"全国数据看板 ↗"按钮
+  async onPatriarchGoToNationalDashboard() {
+    if (this.isNavigating) return;
+    const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
+    if (!permission.allowed) {
+      this.onOpenSubscriptionModal();
+      return;
+    }
+    this.isNavigating = true;
+    wx.navigateTo({
+      url: '/pages/statistics/statistics?view=national',
       fail: () => {
         this.isNavigating = false;
       }
