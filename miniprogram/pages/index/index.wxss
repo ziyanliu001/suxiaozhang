@@ -8156,3 +8156,30 @@ button.poster-gen-btn[disabled] {
   color: #9CA3AF;
   line-height: 1.6;
 }
+
+/* ==================== 📋 表单折叠手风琴 ==================== */
+
+.form-accordion-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  margin: 16rpx 28rpx;
+  padding: 20rpx 32rpx;
+  background: #F8FAFF;
+  border: 1rpx dashed #BFDBFE;
+  border-radius: 16rpx;
+}
+
+.accordion-label {
+  font-size: 26rpx;
+  color: #2563EB;
+  font-weight: 500;
+}
+
+.accordion-count {
+  font-size: 18rpx;
+  color: #EF4444;
+  line-height: 1;
+}

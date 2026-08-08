@@ -648,6 +648,10 @@ Page({
     isFamily: false,
     // 🌐 多租户：新用户（isFamily + 无门店）引导卡，代替表单/家人视图展示创建/加入入口
     showNewUserGuide: false,
+    // 🌐 多租户：组织类型，yuhuazhai 时显示文化卡片，其余通用
+    orgType: '' as string,
+    // 📋 表单折叠：默认收起次要录入项（支出/凭证/照片/日志），首屏聚焦核心字段
+    showFormExtra: false,
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
     // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
     isRealSuperAdmin: false,
@@ -978,6 +982,8 @@ Page({
       const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
       const storeName = cached.storeName || '';
       const storeId = cached.storeId || '';
+      const tenantId = (cached as any).tenantId || '';
+      const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
 
       this.setData({
         currentUserRole: displayRole,
@@ -991,6 +997,7 @@ Page({
         isRealSuperAdmin: isRealSuperAdmin,
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
+        orgType: orgType,
         currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
@@ -1018,6 +1025,8 @@ Page({
       const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
       const storeName = info.storeName || '';
       const storeId = info.storeId || '';
+      const tenantId = (info as any).tenantId || '';
+      const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
 
       this.setData({
         currentUserRole: displayRole,
@@ -1031,6 +1040,7 @@ Page({
         isRealSuperAdmin: isRealSuperAdmin,
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
+        orgType: orgType,
         currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
@@ -1742,6 +1752,11 @@ Page({
   },
   onNewUserGoJoin() {
     wx.switchTab({ url: '/pages/profile/profile' });
+  },
+
+  // 📋 表单折叠：展开/收起次要录入项（支出/凭证/食谱照片/门店日志）
+  onToggleFormExtra() {
+    this.setData({ showFormExtra: !this.data.showFormExtra });
   },
 
   // 左侧功能导航抽屉：打开
