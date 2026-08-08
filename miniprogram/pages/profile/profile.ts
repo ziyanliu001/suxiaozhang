@@ -485,7 +485,8 @@ Page({
       applyId: string; realName: string; phone?: string; phoneMasked?: string;
       roleLabel: string; storeName: string; avatarUrl?: string; openId?: string;
     },
-    forceUnbindInput: '',   // 手动输入账号编号（兜底，无法从列表找到时使用）
+    forceUnbindInput: '',              // 手动输入账号编号（兜底，无法从列表找到时使用）
+    showForceUnbindManualInput: false, // 手动输入区折叠状态：默认收起，点击"找不到？"后展开
     forceUnbindSaving: false,
     forceUnbindResult: '',  // 操作结果描述，成功后展示
     // 🔑 超管重置门店密钥：门店选择卡片 + 新密钥输入
@@ -3694,8 +3695,13 @@ Page({
     this.setData({
       showForceUnbindModal: false, forceUnbindInput: '', forceUnbindResult: '',
       forceUnbindSearchQuery: '', forceUnbindSelectedMember: null,
-      forceUnbindMemberList: [], forceUnbindFilteredList: []
+      forceUnbindMemberList: [], forceUnbindFilteredList: [],
+      showForceUnbindManualInput: false
     });
+  },
+
+  onToggleForceUnbindManualInput() {
+    this.setData({ showForceUnbindManualInput: !this.data.showForceUnbindManualInput });
   },
 
   onForceUnbindSearch(e: any) {
@@ -3714,7 +3720,8 @@ Page({
   onSelectForceUnbindMember(e: any) {
     const member = e.currentTarget.dataset.member;
     if (!member) return;
-    this.setData({ forceUnbindSelectedMember: member, forceUnbindInput: '' });
+    // 从列表选中后收起手动输入兜底区
+    this.setData({ forceUnbindSelectedMember: member, forceUnbindInput: '', showForceUnbindManualInput: false });
   },
 
   onClearForceUnbindSelection() {

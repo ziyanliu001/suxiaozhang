@@ -4133,13 +4133,13 @@
   margin-top: 4rpx;
 }
 
-/* 右侧：遮敏手机号 + 选中勾 */
+/* 右侧：遮敏手机号 + 选中徽标 */
 .sa-member-right {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6rpx;
+  gap: 8rpx;
   margin-left: 12rpx;
 }
 .sa-member-phone {
@@ -4147,10 +4147,25 @@
   color: #9CA3AF;
   font-family: monospace;
 }
-.sa-member-check {
-  font-size: 34rpx;
-  color: #DC2626;
+/* "✔ 已选中"红色胶囊徽标 */
+.sa-member-selected-badge {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  background: #DC2626;
+  border-radius: 20rpx;
+  padding: 4rpx 14rpx;
+}
+.sa-member-selected-check {
+  font-size: 22rpx;
+  color: #FFFFFF;
   font-weight: 900;
+  line-height: 1;
+}
+.sa-member-selected-label {
+  font-size: 20rpx;
+  color: #FFFFFF;
+  font-weight: bold;
   line-height: 1;
 }
 
@@ -4224,11 +4239,35 @@
   border: 1rpx solid #DDD;
 }
 
-/* 手动输入兜底区 */
+/* 手动输入兜底区（折叠/展开） */
 .sa-manual-section {
   padding: 0 32rpx 12rpx;
   flex-shrink: 0;
 }
+
+/* 折叠触发行：纯文本风格链接，不像按钮 */
+.sa-manual-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8rpx;
+  padding: 8rpx 0 4rpx;
+}
+.sa-manual-toggle-text {
+  font-size: 22rpx;
+  color: #6B7280;
+  text-decoration: underline;
+}
+.sa-manual-toggle-arrow {
+  font-size: 18rpx;
+  color: #9CA3AF;
+}
+
+/* 展开后的输入框容器（轻淡出动效用 opacity 模拟） */
+.sa-manual-input-wrap {
+  margin-top: 10rpx;
+}
+
 .sa-manual-input {
   width: 100%;
   /* height + line-height 双保险：WeChat <input> 用 padding 无法垂直居中文字/
@@ -4256,29 +4295,56 @@
   flex-shrink: 0;
 }
 
-/* 危险操作按钮：激活红，有选中成员时使用 */
+/* ── 撤销权限确认按钮（独立样式，不继承 feedback-submit-btn 金色基类）── */
+.sa-confirm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 20rpx 32rpx 0;
+  width: calc(100% - 64rpx);
+  box-sizing: border-box;
+  height: 88rpx;
+  border-radius: 44rpx;
+  border: none;
+  font-size: 28rpx;
+  font-weight: bold;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.1s ease, box-shadow 0.1s ease;
+}
+.sa-confirm-btn::after { border: none; }
+
+/* 激活态：醒目警示红 */
+.sa-confirm-btn-active {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  color: #FFFFFF;
+  box-shadow: 0 8rpx 20rpx rgba(220, 38, 38, 0.28);
+}
+.sa-confirm-btn-active:active {
+  opacity: 0.88;
+  box-shadow: none;
+}
+
+/* 灰色提示态：不 disabled，避免 [disabled] 的 opacity:0.5 叠加造成"灰到看不见"的文本感 */
+.sa-confirm-btn-inactive {
+  background: #F3F4F6;
+  color: #9CA3AF;
+  box-shadow: none;
+}
+
+/* 旧的独立类保留兼容（其他地方可能引用） */
 .sa-danger-btn {
   background: linear-gradient(135deg, #FF4D4F 0%, #DC2626 100%) !important;
   color: #FFFFFF !important;
   box-shadow: 0 4rpx 14rpx rgba(220, 38, 38, 0.35) !important;
 }
-
-/* 灰色禁态按钮：无选中成员时使用（比原生 disabled 颜色更明确） */
 .sa-inactive-btn {
   background: #F3F4F6 !important;
   color: #9CA3AF !important;
   box-shadow: none !important;
-}
-
-/* 解绑面板内确认按钮：全宽但两侧有边距，拉开与上方内容的间距 */
-.sa-unbind-sheet-panel .feedback-submit-btn {
-  margin: 20rpx 32rpx 0;
-  width: calc(100% - 64rpx);
-  box-sizing: border-box;
-  /* 防止长姓名文字被压缩：确保 flex 居中生效 */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  opacity: 1 !important;
 }
 
 /* ─────────────────────────────────────────────────────────────

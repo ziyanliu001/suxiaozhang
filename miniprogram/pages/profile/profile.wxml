@@ -1898,10 +1898,13 @@
             <text class="sa-member-name">{{item.realName || '未知姓名'}}</text>
             <text class="sa-member-meta">{{item.roleLabel}} · {{item.storeName || '未知门店'}}</text>
           </view>
-          <!-- 右：遮敏手机号 + 选中勾 -->
+          <!-- 右：遮敏手机号 + 选中徽标 -->
           <view class="sa-member-right">
             <text class="sa-member-phone" wx:if="{{item.phoneMasked}}">{{item.phoneMasked}}</text>
-            <text class="sa-member-check" wx:if="{{forceUnbindSelectedMember && forceUnbindSelectedMember.applyId === item.applyId}}">✓</text>
+            <view class="sa-member-selected-badge" wx:if="{{forceUnbindSelectedMember && forceUnbindSelectedMember.applyId === item.applyId}}">
+              <text class="sa-member-selected-check">✔</text>
+              <text class="sa-member-selected-label">已选中</text>
+            </view>
           </view>
         </view>
       </scroll-view>
@@ -1926,15 +1929,22 @@
         <view class="sa-clear-btn" bindtap="onClearForceUnbindSelection">取消</view>
       </view>
 
-      <!-- ③ 兜底：手动输入账号编号（仅未从列表选中时展示） -->
+      <!-- ③ 兜底：手动输入账号编号（折叠态，点击"找不到？"后展开） -->
       <view class="sa-manual-section" wx:if="{{!forceUnbindSelectedMember}}">
-        <text class="vt-form-label">找不到该成员？</text>
-        <input class="sa-manual-input"
-               type="text"
-               value="{{forceUnbindInput}}"
-               bindinput="onForceUnbindInput"
-               placeholder="输入用户专有账号编号（如无法搜到时使用）"
-               maxlength="100" />
+        <!-- 折叠触发行 -->
+        <view class="sa-manual-toggle-row" bindtap="onToggleForceUnbindManualInput">
+          <text class="sa-manual-toggle-text">找不到该成员？使用编号搜索</text>
+          <text class="sa-manual-toggle-arrow">{{showForceUnbindManualInput ? '▲' : '▼'}}</text>
+        </view>
+        <!-- 展开内容 -->
+        <view class="sa-manual-input-wrap" wx:if="{{showForceUnbindManualInput}}">
+          <input class="sa-manual-input"
+                 type="text"
+                 value="{{forceUnbindInput}}"
+                 bindinput="onForceUnbindInput"
+                 placeholder="输入用户专有账号编号（如无法搜到时使用）"
+                 maxlength="100" />
+        </view>
       </view>
 
       <!-- ④ 操作结果 -->
@@ -1942,12 +1952,12 @@
         <text>{{forceUnbindResult}}</text>
       </view>
 
-      <!-- ⑤ 撤销按钮：无选中灰色禁态，有选中激活红 -->
-      <button class="feedback-submit-btn {{forceUnbindSelectedMember || forceUnbindInput ? 'sa-danger-btn' : 'sa-inactive-btn'}}"
+      <!-- ⑤ 撤销按钮：无选中灰色提示态（不 disabled，避免 opacity 0.5 叠加），有选中激活红 -->
+      <button class="sa-confirm-btn {{forceUnbindSelectedMember || forceUnbindInput ? 'sa-confirm-btn-active' : 'sa-confirm-btn-inactive'}}"
               bindtap="onConfirmForceUnbind"
               loading="{{forceUnbindSaving}}"
-              disabled="{{forceUnbindSaving || (!forceUnbindSelectedMember && !forceUnbindInput)}}">
-        {{forceUnbindSelectedMember ? '撤销 ' + forceUnbindSelectedMember.realName + ' 的管理权限' : (forceUnbindInput ? '撤销管理权限' : '请先选择要撤销的成员')}}
+              disabled="{{forceUnbindSaving}}">
+        {{forceUnbindSelectedMember ? '确认撤销 ' + forceUnbindSelectedMember.realName + ' 的管理权限' : (forceUnbindInput ? '确认撤销管理权限' : '请先选择要撤销的成员')}}
       </button>
     </view>
   </view>
