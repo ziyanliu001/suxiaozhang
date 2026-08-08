@@ -1920,12 +1920,9 @@
       <view wx:if="{{resetStoreKeyStoreId && !resetStoreKeyShowList}}" class="reset-key-selected-card">
         <view class="reset-key-selected-info">
           <text class="reset-key-selected-name">{{resetStoreKeyStoreName || resetStoreKeyStoreId}}</text>
-          <text class="reset-key-selected-id-badge">ID: {{resetStoreKeyStoreId}}</text>
         </view>
-        <!-- 多门店时显示切换按钮；单门店则固定，无需切换 -->
-        <view wx:if="{{resetStoreKeyStoreList.length > 1 || !resetStoreKeyStoreId}}"
-              class="reset-key-switch-btn" bindtap="onToggleResetKeyStoreList">
-          <text>切换 ▾</text>
+        <view class="reset-key-switch-btn" bindtap="onToggleResetKeyStoreList">
+          <text>搜索/切换</text>
         </view>
       </view>
 
@@ -1960,7 +1957,6 @@
                   data-store-name="{{item.storeName}}">
               <view class="reset-key-item-main">
                 <text class="reset-key-item-name">{{item.storeName}}</text>
-                <text class="reset-key-item-id">{{item.storeId}}</text>
               </view>
               <text wx:if="{{item.storeId === resetStoreKeyStoreId}}" class="reset-key-item-check">✓</text>
             </view>
@@ -1972,28 +1968,26 @@
       </view>
 
       <!-- ③ 新密钥输入 ─────────────────────────────── -->
-      <text class="vt-form-label" style="margin-top:24rpx;">新密钥（留空则清除密钥）</text>
+      <text class="vt-form-label" style="margin-top:24rpx;">新密钥</text>
       <input class="admin-key-modal-input"
              type="text"
              password
              value="{{resetStoreKeyInput}}"
              bindinput="onResetStoreKeyInput"
-             placeholder="新密钥，最多 50 字；留空则清除"
+             placeholder="请输入新密钥（留空则不设密码）"
              maxlength="50" />
 
-      <!-- ④ 动态风险提示 ────────────────────────────── -->
-      <view class="reset-key-danger-tip" wx:if="{{resetStoreKeyIsClearMode && resetStoreKeyStoreId}}">
-        <text class="reset-key-danger-icon">⚠️</text>
-        <text class="reset-key-danger-text">清除密钥后任何人均可免密提交管理角色申请，操作不可逆，请谨慎！</text>
-      </view>
-      <text class="admin-key-modal-desc" wx:else>设置新密钥后原密钥立即失效；留空将移除密钥校验。</text>
+      <!-- ④ 软提示：留空 = 清空密钥；有内容 = 设置新密钥 -->
+      <text class="reset-key-soft-note" wx:if="{{resetStoreKeyStoreId}}">
+        {{resetStoreKeyIsClearMode ? '⚠️ 留空将清空密钥，义工申请管理身份时无需验证密码。' : '✅ 设置后，义工申请管理身份时需输入此密钥才能通过。'}}
+      </text>
 
-      <!-- ⑤ 提交按钮（清除模式呈警示红） -->
-      <button class="feedback-submit-btn {{resetStoreKeyIsClearMode ? 'reset-key-danger-btn' : ''}}"
+      <!-- ⑤ 提交按钮 -->
+      <button class="feedback-submit-btn {{resetStoreKeyIsClearMode ? 'reset-key-btn-clear' : 'reset-key-btn-set'}}"
               bindtap="onConfirmResetStoreKey"
               loading="{{resetStoreKeySaving}}"
               disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId || resetStoreKeyShowList}}">
-        {{resetStoreKeyIsClearMode ? '⚠️ 确认清空密钥' : '确认重置密钥'}}
+        {{resetStoreKeyIsClearMode ? '清空现有密钥' : '设置新密钥'}}
       </button>
     </view>
   </view>

@@ -3680,13 +3680,6 @@
   color: #1A1A2E;
   line-height: 1.4;
 }
-.reset-key-selected-id-badge {
-  font-size: 20rpx;
-  color: #8899BB;
-  margin-top: 4rpx;
-  font-family: monospace;
-  letter-spacing: 1rpx;
-}
 .reset-key-switch-btn {
   flex-shrink: 0;
   margin-left: 16rpx;
@@ -3778,13 +3771,6 @@
   color: #1A1A2E;
   line-height: 1.4;
 }
-.reset-key-item-id {
-  font-size: 19rpx;
-  color: #AAAABC;
-  margin-top: 3rpx;
-  font-family: monospace;
-  letter-spacing: 0.5rpx;
-}
 .reset-key-item-check {
   color: #3B6FE8;
   font-size: 28rpx;
@@ -3799,34 +3785,31 @@
   color: #BBBBBB;
 }
 
-/* 🚨 危险操作警示区：清除密钥时高亮显示 */
-.reset-key-danger-tip {
-  display: flex;
-  align-items: flex-start;
-  gap: 8rpx;
-  background: #FFF3F3;
-  border: 1rpx solid #FFBDBD;
-  border-radius: 12rpx;
-  padding: 16rpx 18rpx;
-  margin-bottom: 20rpx;
-}
-.reset-key-danger-icon {
-  font-size: 24rpx;
-  flex-shrink: 0;
-  margin-top: 2rpx;
-}
-.reset-key-danger-text {
+/* 💡 软提示：清空密钥模式下的温和说明 */
+.reset-key-soft-note {
   font-size: 22rpx;
-  color: #C0392B;
+  color: #8B6914;
+  background: #FFFBEB;
+  border: 1rpx solid #F5D76E;
+  border-radius: 10rpx;
+  padding: 14rpx 16rpx;
+  margin-bottom: 20rpx;
   line-height: 1.6;
-  flex: 1;
+  display: block;
 }
 
-/* 🔴 清除密钥时按钮变为警示红 */
-.reset-key-danger-btn {
-  background: #E64340 !important;
+/* 🟢 设置新密钥按钮（有内容时） */
+.reset-key-btn-set {
+  background: #2A7EDA !important;
   color: #FFFFFF !important;
-  border-color: #E64340 !important;
+  border-color: #2A7EDA !important;
+}
+
+/* 🟡 清空密钥按钮（留空时），非警示红，使用琥珀黄 */
+.reset-key-btn-clear {
+  background: #F0A500 !important;
+  color: #FFFFFF !important;
+  border-color: #F0A500 !important;
 }
 
 /* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表。

@@ -3712,19 +3712,27 @@ Page({
   async onOpenResetStoreKeyModal() {
     if (!this.data.isRealSuperAdmin) return;
 
-    // 🏪 自动填入当前门店：优先读服务端缓存角色（最权威），降级到 getSelectedStore()
-    // 超管通常只管理自己所属的那家旗舰店，免去每次手动复制 storeId 的操作
-    const cachedRole = AuthService.getCachedRoleInfo();
+    // 🏪 自动填入当前门店：优先读服务端缓存角色（最权威），降级到 getSelectedStore()。
+    // 关键：必须过滤虚拟聚合门店名（"全国总览"/"全部门店"）——超管的 user_roles 文档
+    // 里 storeName 可能残留 '全国总览' 历史脏值，直接拿来用会让选择框默认显示一个
+    // 毫无意义的兜底文案，大家长完全不知道在操作哪家门店。
+    const cachedRole  = AuthService.getCachedRoleInfo();
     const activeStore = getSelectedStore();
-    const autoStoreId   = (cachedRole && cachedRole.storeId)   || (activeStore && activeStore.storeId)   || '';
-    const autoStoreName = (cachedRole && cachedRole.storeName)  || (activeStore && activeStore.storeName) || '';
+
+    const cacheIdOk   = !!(cachedRole && cachedRole.storeId && !isVirtualStoreName(cachedRole.storeName));
+    const autoStoreId   = cacheIdOk
+      ? cachedRole!.storeId
+      : (activeStore && activeStore.storeId && !isVirtualStoreName(activeStore.storeName) ? activeStore.storeId : '');
+    const autoStoreName = cacheIdOk
+      ? (cachedRole!.storeName || '')
+      : (activeStore && !isVirtualStoreName(activeStore.storeName) ? (activeStore.storeName || '') : '');
 
     this.setData({
       showResetStoreKeyModal: true,
       resetStoreKeyStoreId: autoStoreId,
       resetStoreKeyStoreName: autoStoreName,
       resetStoreKeyInput: '',
-      resetStoreKeyIsClearMode: !!autoStoreId,
+      resetStoreKeyIsClearMode: true,
       resetStoreKeyStoreList: [],
       resetStoreKeyStoreListLoading: true,
       resetStoreKeyShowList: false,
@@ -3733,10 +3741,13 @@ Page({
     });
     try {
       const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
+      // 过滤掉虚拟聚合门店（"全国总览"/"全部门店"），列表里只保留真实具体门店
       const list: Array<{ storeId: string; storeName: string }> =
-        (res.result && res.result.stores) || [];
+        ((res.result && res.result.stores) || []).filter(
+          (s: any) => s && s.storeId && !isVirtualStoreName(s.storeName)
+        );
 
-      // 如果当前 storeId 仅填了 ID 但缺中文名，尝试从门店列表补全 storeName
+      // 如果当前 storeId 仅填了 ID 但缺中文名，从列表补全 storeName
       const curId = this.data.resetStoreKeyStoreId;
       let resolvedName = this.data.resetStoreKeyStoreName;
       if (curId && !resolvedName) {
@@ -3748,7 +3759,7 @@ Page({
         resetStoreKeyStoreList: list,
         resetStoreKeyFilteredList: list,
         resetStoreKeyStoreName: resolvedName,
-        // 单门店超管：若尚未选门店，自动选中列表第一项
+        // 单门店超管：若尚未选门店，自动选中列表唯一项
         ...((!curId && list.length === 1) ? {
           resetStoreKeyStoreId: list[0].storeId,
           resetStoreKeyStoreName: list[0].storeName,
@@ -3787,15 +3798,12 @@ Page({
     });
   },
 
-  // 🔍 门店模糊搜索（中文名 or storeId 双路匹配）
+  // 🔍 门店模糊搜索（仅按中文门店名匹配，storeId 不对用户可见）
   onResetStoreKeySearch(e: any) {
     const q = (e.detail.value || '').trim().toLowerCase();
     const all = this.data.resetStoreKeyStoreList;
     const filtered = q
-      ? all.filter(s =>
-          s.storeName.toLowerCase().includes(q) ||
-          s.storeId.toLowerCase().includes(q)
-        )
+      ? all.filter(s => s.storeName.toLowerCase().includes(q))
       : all;
     this.setData({ resetStoreKeySearchText: e.detail.value || '', resetStoreKeyFilteredList: filtered });
   },
@@ -3828,15 +3836,16 @@ Page({
     }
     const newKey = (this.data.resetStoreKeyInput || '').trim();
 
-    // 🚨 清除密钥二次确认：留空会让任何人免密申请管理岗位，需明确用户认知
+    // 🟡 清空密钥二次确认：留空会让任何人免密申请管理岗位，需明确用户认知
     if (!newKey) {
+      const storeName = this.data.resetStoreKeyStoreName || storeId;
       const confirmed = await new Promise<boolean>((resolve) => {
         wx.showModal({
-          title: '⚠️ 危险操作确认',
-          content: `确认清除「${this.data.resetStoreKeyStoreName || storeId}」的管理员密钥？\n\n清除后任何人均可直接提交管理角色申请，无需密钥校验。`,
-          confirmText: '确认清除',
-          confirmColor: '#E64340',
-          cancelText: '取消',
+          title: '清空密钥确认',
+          content: `确认清空「${storeName}」的管理员密钥吗？\n\n清空后，其他义工申请管理身份时将无需输入密码。如不确定，建议先设置一个新密钥。`,
+          confirmText: '确认清空',
+          confirmColor: '#F0A500',
+          cancelText: '我再想想',
           success: (res) => resolve(res.confirm),
           fail: () => resolve(false)
         });
