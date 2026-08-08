@@ -2296,7 +2296,7 @@
 
           <view class="onb-field">
             <text class="onb-label">组织名称 <text class="onb-required">*</text></text>
-            <input class="onb-input" placeholder="例：厦门海沧雨花斋"
+            <input class="onb-input" placeholder="例：厦门海沧爱心食堂"
                    value="{{onboardingOrgName}}"
                    bindinput="onOnboardingOrgNameInput" maxlength="30" />
           </view>

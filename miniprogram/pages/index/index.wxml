@@ -1524,7 +1524,7 @@
     <view class="poster-modal-card">
 
       <view class="modal-header-bar">
-        <view class="modal-title-text"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>雨花爱心餐报海报</view>
+        <view class="modal-title-text"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{currentStoreName || shopName || '公益爱心'}}餐报海报</view>
         <text class="modal-close-btn" bindtap="onClosePosterModal">✕</text>
       </view>
 
@@ -1532,7 +1532,7 @@
         <view class="poster-canvas-box">
 
           <view class="p-header-section">
-            <view class="p-brand-tag">雨花斋 · 阳光透明账本</view>
+            <view class="p-brand-tag">{{currentStoreName || shopName || '公益爱心站'}} · 阳光透明账本</view>
             <text class="p-main-title">吃素一日 · 健康一天</text>
             <view class="p-date-sub"><view class="idx-icon-sm idx-icon-calendar" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>汇报日期：{{reportDate || '2026年07月14日'}}</view>
           </view>
@@ -1540,7 +1540,7 @@
           <view class="p-section-card">
             <view class="p-card-title-row">
               <view class="icon idx-icon-sm idx-icon-wallet"></view>
-              <text class="title">【{{currentStoreName || shopName || '海沧区雨花斋'}}】今日收支明细</text>
+              <text class="title">【{{currentStoreName || shopName || '本门店'}}】今日收支明细</text>
             </view>
 
             <view class="p-grid-2x2">
@@ -1610,7 +1610,7 @@
               </view>
             </view>
             <view class="qr-right-text">
-              <text class="p-app-name">【素小账】雨花爱心餐报助手</text>
+              <text class="p-app-name">【素小账】公益爱心助手</text>
               <text class="p-qr-tip">点击二维码放大 / 长按识别查看透明账本 ›</text>
             </view>
           </view>
@@ -2087,7 +2087,7 @@
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
             <view class="form-picker-selector">{{applyForm.storeName || '请选择门店'}}</view>
           </picker>
-          <input wx:else class="form-input" placeholder="请输入新门店名称，如：雨花斋厦门海沧店" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <input wx:else class="form-input" placeholder="请输入门店/站点名称，如：厦门海沧爱心食堂" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">新门店需待超级管理员审核通过后自动建立</text>
         </view>
 

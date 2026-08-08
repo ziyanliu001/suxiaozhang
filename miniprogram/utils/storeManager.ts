@@ -25,7 +25,7 @@ export function getSelectedStore(): StoreInfo {
     return { ...cached, role: 'VOLUNTEER' };
   }
   
-  return { storeId: 'store_haicang_001', storeName: '海沧区雨花斋', role: 'VOLUNTEER' };
+  return { storeId: '', storeName: '', role: 'VOLUNTEER' };
 }
 
 export function setSelectedStore(storeInfo: StoreInfo): void {

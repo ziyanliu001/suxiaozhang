@@ -69,7 +69,7 @@ const PRESET_NOTICES = {
   volunteer: {
     tag: '义工招募',
     title: '爱心义工招募',
-    content: '【爱心义工招募】雨花斋的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️'
+    content: '【爱心义工招募】本站的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️'
   },
   supplies: {
     tag: '物资呼吁',
@@ -2015,8 +2015,8 @@ Page({
     // currentStoreId 是个 truthy 的非法对象，会绕过上面的拦截把对象原样传下去
     // （拼进云函数 data、拼进本地缓存 key 都会变成 "[object Object]"）。
     // 改用上面已经强制转成字符串、且已确认不是全国总览的 normalizedStoreId
-    const storeId = normalizedStoreId || 'store_haicang_001';
-    const storeName = normalizedStoreName || '海沧区雨花斋';
+    const storeId = normalizedStoreId || '';
+    const storeName = normalizedStoreName || this.data.currentStoreName || this.data.shopName || '';
 
     // 🐛 体验修复：此前用全局 wx.showLoading 盖住"二维码拉取 + Canvas 绘制"整个
     // 耗时过程，弹窗本身要等二维码拉取完才打开——真机网络慢时用户盯着一个通用
@@ -2825,10 +2825,8 @@ Page({
 
     wx.showLoading({ title: '正在获取门店信息...' });
 
-    const storeNameMap: Record<string, string> = {
-      'store_haicang': '海沧区雨花斋',
-      'store_haicang_001': '海沧区雨花斋'
-    };
+    // 🌐 多租户：storeId → storeName 静态映射已移除，云端始终有最新数据
+    const storeNameMap: Record<string, string> = {};
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
@@ -2851,7 +2849,7 @@ Page({
       }
     } catch (e) {
       wx.hideLoading();
-      const fallbackName = storeNameMap[storeId] || '雨花斋';
+      const fallbackName = storeNameMap[storeId] || this.data.currentStoreName || this.data.shopName || '';
       this.setData({
         'applyForm.storeId': storeId,
         'applyForm.storeName': fallbackName,
@@ -3310,7 +3308,8 @@ Page({
 
   onShareInviteResultCode() {
     const roleLabel = this.data.inviteResultRoleLabel;
-    const copyText = `🌸【雨花爱心餐报助手】\n诚邀您加入【${this.data.inviteResultStoreName || '雨花斋'}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
+    const storeName = this.data.inviteResultStoreName || this.data.currentStoreName || this.data.shopName || '本门店';
+    const copyText = `【素小账】公益爱心助手\n诚邀您加入【${storeName}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
     wx.setClipboardData({
       data: copyText,
       success: () => wx.showToast({ title: '邀请文案已复制，快发送给TA吧', icon: 'none', duration: 2500 })
@@ -7144,11 +7143,11 @@ Page({
     if (cached && !isVerifiedSuperAdminAccount) {
       // 🔒 真实非超管账号：强制锁定为服务端下发的真实绑定门店
       role = cached.role;
-      storeName = cached.storeName || this.data.shopName || '海沧区雨花斋';
+      storeName = cached.storeName || this.data.shopName || '';
       storeId = cached.storeId || '';
     } else {
       role = wx.getStorageSync('current_user_role') || DEV_FALLBACK_ROLE;
-      storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '海沧区雨花斋';
+      storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '';
       storeId = wx.getStorageSync('current_store_id') || '';
     }
 
@@ -7790,8 +7789,8 @@ Page({
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
 
-      const storeId = this.data.currentStoreId || 'store_haicang_001';
-      const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
+      const storeId = this.data.currentStoreId || '';
+      const storeName = this.data.currentStoreName || this.data.shopName || '';
 
       const qrRes = await wx.cloud.callFunction({
         name: 'getStoreQRCode',
@@ -7825,8 +7824,8 @@ Page({
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
 
-      const storeId = this.data.currentStoreId || 'store_haicang_001';
-      const storeName = this.data.currentStoreName || this.data.shopName || '海沧区雨花斋';
+      const storeId = this.data.currentStoreId || '';
+      const storeName = this.data.currentStoreName || this.data.shopName || '';
       const dateString = deriveDateString(this.data.reportDateValue, this.data.reportDate);
 
       const qrRes = await wx.cloud.callFunction({
@@ -8761,7 +8760,7 @@ Page({
     const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === selectedShift);
     const shiftLabel = shiftObj ? shiftObj.name : '爱心护持班';
     const currentStoreId = this.data.currentStoreId || '';
-    const currentStoreName = this.data.currentStoreName || '海沧区雨花斋';
+    const currentStoreName = this.data.currentStoreName || this.data.shopName || '';
     const reservedMeals = this.data.willEatLunch ? this.data.reservedMeals.slice() : [];
 
     // ⚡️ 云端台账：manageVolunteerCheckIn 尽力而为同步一份到 volunteer_duty_logs
@@ -9362,7 +9361,7 @@ Page({
   },
 
   onShareAppMessage() {
-    const store = this.data.currentStoreName || this.data.shopName || '雨花斋';
+    const store = this.data.currentStoreName || this.data.shopName || '';
     const date = this.data.reportDate || this.data.reportDateValue || '今日';
 
     // 🐛 根因修复：门店邀请海报弹窗打开时点"分享给微信群和朋友"，此前无条件

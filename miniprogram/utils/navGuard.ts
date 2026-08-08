@@ -45,7 +45,7 @@ export function createNavGuard(options: NavGuardOptions = {}): NavGuardInstance 
   const {
     homePath = '/pages/index/index',
     enableAlertBeforeUnload = true,
-    alertMessage = '即将退出雨花爱心餐报助手，是否返回首页继续使用？',
+    alertMessage = '即将退出素小账，是否返回首页继续使用？',
     homeQuery = ''
   } = options
 
