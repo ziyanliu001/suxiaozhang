@@ -324,28 +324,6 @@
     </view>
   </view>
 
-  <!-- 🌸 每日一思：仅当组织类型为 yuhuazhai 时展示文化金句，其余通用组织不展示，
-       避免将特定文化内容强加给其他类型的公益爱心站 -->
-  <view class="culture-motto-card motto-card-wrapper" wx:if="{{orgType === 'yuhuazhai'}}">
-    <view class="motto-header">
-      <text class="motto-title-icon">🌸</text>
-      <text class="motto-title-text">每日一思 · {{cultureQuote.source || '公益精神'}}</text>
-    </view>
-    <view class="motto-content">
-      <text class="motto-quote motto-quote-open">"</text>
-      <text class="motto-text">{{cultureQuote.text || '常生惭愧，常怀忏悔。'}}</text>
-      <text class="motto-quote motto-quote-close">"</text>
-    </view>
-    <view class="motto-actions">
-      <view class="motto-btn" catchtap="onRefreshCultureQuote">
-        <text class="motto-btn-text">🔄 换一换</text>
-      </view>
-      <view class="motto-btn" catchtap="onShowFamilyMottoModal">
-        <text class="motto-btn-text">📖 文化全集</text>
-      </view>
-    </view>
-  </view>
-
   <!-- 🍱 今日食谱预览卡：全国总览视图不展示（无具体门店）；志工视角已合并进下方"今日餐况"单行摘要，此处不再重复展示。
        🛡️ 权限隔离：仅店长/超管可跳转至发布/管理页。
        🐛 精简重复：此前只排除了 isVolunteer，没排除 isFamily——这张简陋预览卡

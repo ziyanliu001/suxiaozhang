@@ -249,6 +249,8 @@ Page({
     // 待审批入口显隐、成员申请角标预取等逻辑，避免各处重复枚举三个角色
     isStoreAdmin: false,
     isSuperAdmin: false,
+    // 🌸 雨花斋专属功能开关：tenantId.startsWith('yuhuazhai') 为 true 时展示文化/家训配置入口
+    isYuhuazhai: false,
     // 🌟 isVolunteer 严格指"已审核通过的真实义工"，用于和 isFamily 互斥区分；
     // isFamily/isServiceUser：新用户/未审核用户的默认身份（家人 · 服务对象），
     // 底层 role 与真实义工共用同一个 'volunteer' 值，只能靠 status !== 'approved'
@@ -823,6 +825,9 @@ Page({
     const isVolunteer = overridden.isVolunteer;
     console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFinance=', isFinance, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
 
+    const tenantId = (cachedRoleInfo && (cachedRoleInfo as any).tenantId) || '';
+    const isYuhuazhai = tenantId.startsWith('yuhuazhai');
+
     this.setData({
       currentUserRole: displayRole as any,
       currentStoreName: storeName,
@@ -837,6 +842,7 @@ Page({
       isVolunteer,
       isFamily,
       isServiceUser: isFamily,
+      isYuhuazhai,
       currentViewMode,
       viewModeOptionIndex: VIEW_MODE_OPTIONS.indexOf(currentViewMode)
     });

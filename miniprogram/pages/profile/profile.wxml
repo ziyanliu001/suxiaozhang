@@ -428,6 +428,17 @@
         </view>
       </view>
 
+      <!-- 🌸 雨花斋大家长专属：文化与每日家训配置中心 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{(isPatriarch || isSuperAdmin) && isYuhuazhai}}" bindtap="onGoToCultureFull">
+        <view class="item-left">
+          <text class="manager-only-emoji">🌸</text>
+          <text class="item-text">雨花文化与每日家训</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
       <!-- 大家长专属：组织信息配置 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isPatriarch || isSuperAdmin}}" bindtap="onOpenOrgConfigModal">
         <view class="item-left">

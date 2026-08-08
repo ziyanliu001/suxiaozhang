@@ -21,7 +21,7 @@ import { takeOpenSunshineLedgerRequest } from '../../utils/sunshineLedgerHandoff
 import { takeOpenCultureFullRequest } from '../../utils/cultureFullHandoff';
 import { takeOpenStorePickerRequest } from '../../utils/storePickerHandoff';
 import {
-  getDailyCultureQuote, getRandomCultureQuote, FAMILY_MOTTO, SENIORS_CARE,
+  getDailyCultureQuote, FAMILY_MOTTO, SENIORS_CARE,
   CORE_VALUES, FAMOUS_QUOTES, RAIN_FLOWER_HOME, SIXTEEN_BESTS, GRATITUDE_TEXT, DAILY_SUMMARY, FAMILY_STYLE
 } from '../../utils/cultureData';
 import { computeMyCheckInStats } from '../../utils/checkinStats';
@@ -8069,12 +8069,6 @@ Page({
   // 通知，具体门店视角只拿该店专属通知，两者不叠加展示（见 manageNotice 云函数）。
   // 关闭状态（notice_bar_hidden_date）与查询结果分开判断：即使当天已关闭，也要
   // 先把数据拉回来存好，下一次视角切换/新的一天自然又能正常展示。
-  // 🌸 每日修身卡片【换一换】：随机换一条，不查云端，纯本地静态内容
-  onRefreshCultureQuote() {
-    const current = this.data.cultureQuote && this.data.cultureQuote.text;
-    this.setData({ cultureQuote: getRandomCultureQuote(current) });
-  },
-
   // 📖 雨花文化全集：一次性把十大模块数据摆进 data，弹窗内 scroll-view 结构化分层
   // 展示全貌——module 7（雨花家训）沿用既有三个字段，不重复赋值
   onShowFamilyMottoModal() {
