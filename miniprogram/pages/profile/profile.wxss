@@ -3616,6 +3616,42 @@
 }
 
 /* 🔑 重置密钥弹窗：门店选择器行 */
+/* 重置密钥弹窗遮罩：加深并模糊背景，降低误触底层内容风险 */
+.reset-key-modal-mask {
+  background: rgba(0, 0, 0, 0.65) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* storeId 输入行：输入框 + 粘贴按钮横排 */
+.reset-key-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.reset-key-id-input {
+  flex: 1;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.reset-key-paste-btn {
+  flex-shrink: 0;
+  height: 88rpx;
+  padding: 0 24rpx;
+  background: #F0F4FF;
+  border: 1rpx solid #C8D8FF;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #3B6FE8;
+  white-space: nowrap;
+}
+
 .reset-key-store-picker {
   display: flex;
   align-items: center;
@@ -3643,6 +3679,36 @@
   color: #BBBBBB;
   margin-left: 8rpx;
   flex-shrink: 0;
+}
+
+/* 🚨 危险操作警示区：清除密钥时高亮显示 */
+.reset-key-danger-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+  background: #FFF3F3;
+  border: 1rpx solid #FFBDBD;
+  border-radius: 12rpx;
+  padding: 16rpx 18rpx;
+  margin-bottom: 20rpx;
+}
+.reset-key-danger-icon {
+  font-size: 24rpx;
+  flex-shrink: 0;
+  margin-top: 2rpx;
+}
+.reset-key-danger-text {
+  font-size: 22rpx;
+  color: #C0392B;
+  line-height: 1.6;
+  flex: 1;
+}
+
+/* 🔴 清除密钥时按钮变为警示红 */
+.reset-key-danger-btn {
+  background: #E64340 !important;
+  color: #FFFFFF !important;
+  border-color: #E64340 !important;
 }
 
 /* 强制解绑半屏面板：比普通 feedback-sheet-panel 稍高，容纳成员列表。

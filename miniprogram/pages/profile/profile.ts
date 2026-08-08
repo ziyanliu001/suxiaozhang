@@ -482,6 +482,7 @@ Page({
     resetStoreKeyStoreListLoading: false,
     resetStoreKeyInput: '',
     resetStoreKeySaving: false,
+    resetStoreKeyIsClearMode: false,  // true = 留空清除密钥，触发二次警示
 
     // 📢 公告管理半屏弹窗
     showNoticeManagementModal: false,
@@ -3679,7 +3680,8 @@ Page({
       showResetStoreKeyModal: false,
       resetStoreKeyStoreId: '',
       resetStoreKeyStoreName: '',
-      resetStoreKeyInput: ''
+      resetStoreKeyInput: '',
+      resetStoreKeyIsClearMode: false
     });
   },
 
@@ -3698,8 +3700,27 @@ Page({
     this.setData({ resetStoreKeyStoreId: e.detail.value, resetStoreKeyStoreName: '' });
   },
 
+  // 📋 一键粘贴剪贴板内容到 storeId 输入框
+  onPasteStoreId() {
+    wx.getClipboardData({
+      success: (res) => {
+        const text = (res.data || '').trim();
+        if (!text) {
+          wx.showToast({ title: '剪贴板为空', icon: 'none' });
+          return;
+        }
+        this.setData({ resetStoreKeyStoreId: text, resetStoreKeyStoreName: '' });
+        wx.showToast({ title: '已粘贴', icon: 'success', duration: 1200 });
+      },
+      fail: () => {
+        wx.showToast({ title: '无法读取剪贴板', icon: 'none' });
+      }
+    });
+  },
+
   onResetStoreKeyInput(e: any) {
-    this.setData({ resetStoreKeyInput: e.detail.value });
+    const val = e.detail.value || '';
+    this.setData({ resetStoreKeyInput: val, resetStoreKeyIsClearMode: val.trim() === '' });
   },
 
   async onConfirmResetStoreKey() {
@@ -3710,6 +3731,22 @@ Page({
       return;
     }
     const newKey = (this.data.resetStoreKeyInput || '').trim();
+
+    // 🚨 清除密钥二次确认：留空会让任何人免密申请管理岗位，需明确用户认知
+    if (!newKey) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        wx.showModal({
+          title: '⚠️ 危险操作确认',
+          content: `确认清除「${this.data.resetStoreKeyStoreName || storeId}」的管理员密钥？\n\n清除后任何人均可直接提交管理角色申请，无需密钥校验。`,
+          confirmText: '确认清除',
+          confirmColor: '#E64340',
+          cancelText: '取消',
+          success: (res) => resolve(res.confirm),
+          fail: () => resolve(false)
+        });
+      });
+      if (!confirmed) return;
+    }
 
     this.setData({ resetStoreKeySaving: true });
     wx.showLoading({ title: '重置中...', mask: true });
@@ -3723,7 +3760,13 @@ Page({
         wx.showToast({ title: (result && result.error) || '重置失败', icon: 'none' });
         return;
       }
-      this.setData({ showResetStoreKeyModal: false, resetStoreKeyStoreId: '', resetStoreKeyStoreName: '', resetStoreKeyInput: '' });
+      this.setData({
+        showResetStoreKeyModal: false,
+        resetStoreKeyStoreId: '',
+        resetStoreKeyStoreName: '',
+        resetStoreKeyInput: '',
+        resetStoreKeyIsClearMode: false
+      });
       wx.showToast({ title: newKey ? '密钥已重置' : '密钥已清除（无门槛申请）', icon: 'success', duration: 2500 });
     } catch (err) {
       console.error('[onConfirmResetStoreKey] 异常:', err);

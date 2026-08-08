@@ -1874,15 +1874,16 @@
   </view>
 
   <!-- 🔑 超管重置门店密钥弹窗 -->
-  <view class="certificate-modal-mask" wx:if="{{showResetStoreKeyModal}}" catchtouchmove="stopPropagation" bindtap="onCloseResetStoreKeyModal">
-    <view class="certificate-modal-card sa-tool-modal-card" catchtap="stopPropagation">
+  <view class="certificate-modal-mask reset-key-modal-mask" wx:if="{{showResetStoreKeyModal}}" catchtouchmove="stopPropagation" bindtap="onCloseResetStoreKeyModal">
+    <view class="certificate-modal-card sa-tool-modal-card admin-key-modal-card" catchtap="stopPropagation">
+      <!-- 标题行 -->
       <view class="certificate-modal-header admin-key-modal-header">
         <text class="admin-key-modal-title">🔑 重置门店管理员密钥</text>
         <view class="certificate-modal-close" bindtap="onCloseResetStoreKeyModal">✕</view>
       </view>
 
+      <!-- 目标门店 -->
       <text class="vt-form-label">目标门店</text>
-      <!-- 门店下拉选择器 -->
       <picker wx:if="{{resetStoreKeyStoreList.length > 0}}"
               mode="selector"
               range="{{resetStoreKeyStoreList}}"
@@ -1896,16 +1897,22 @@
       <view wx:elif="{{resetStoreKeyStoreListLoading}}" class="reset-key-store-picker loading-placeholder">
         <text>加载门店列表中…</text>
       </view>
-      <!-- 兜底：手动输入 storeId -->
-      <input class="admin-key-modal-input"
-             style="margin-top:12rpx;"
-             type="text"
-             value="{{resetStoreKeyStoreId}}"
-             bindinput="onResetStoreKeyStoreIdInput"
-             placeholder="或手动粘贴 storeId"
-             maxlength="100" />
 
-      <text class="vt-form-label" style="margin-top:16rpx;">新密钥（留空则清除密钥）</text>
+      <!-- storeId 手动输入 + 一键粘贴 -->
+      <view class="reset-key-input-row">
+        <input class="admin-key-modal-input reset-key-id-input"
+               type="text"
+               value="{{resetStoreKeyStoreId}}"
+               bindinput="onResetStoreKeyStoreIdInput"
+               placeholder="或手动粘贴 storeId"
+               maxlength="100" />
+        <view class="reset-key-paste-btn" bindtap="onPasteStoreId">
+          <text>📋 粘贴</text>
+        </view>
+      </view>
+
+      <!-- 新密钥 -->
+      <text class="vt-form-label" style="margin-top:20rpx;">新密钥（留空则清除密钥）</text>
       <input class="admin-key-modal-input"
              type="text"
              password
@@ -1913,11 +1920,21 @@
              bindinput="onResetStoreKeyInput"
              placeholder="新密钥，最多 50 字；留空则清除"
              maxlength="50" />
-      <text class="admin-key-modal-desc">清除密钥后任何人均可直接提交管理角色申请，无需密钥校验。</text>
-      <button class="feedback-submit-btn"
+
+      <!-- 动态风险提示：仅当密钥框为空时显示警示 -->
+      <view class="reset-key-danger-tip" wx:if="{{resetStoreKeyIsClearMode && resetStoreKeyStoreId}}">
+        <text class="reset-key-danger-icon">⚠️</text>
+        <text class="reset-key-danger-text">清除密钥后任何人均可免密提交管理角色申请，操作不可逆，请谨慎！</text>
+      </view>
+      <text class="admin-key-modal-desc" wx:else>设置新密钥后原密钥立即失效；留空将移除密钥校验。</text>
+
+      <!-- 提交按钮：清除模式时呈警示红 -->
+      <button class="feedback-submit-btn {{resetStoreKeyIsClearMode ? 'reset-key-danger-btn' : ''}}"
               bindtap="onConfirmResetStoreKey"
               loading="{{resetStoreKeySaving}}"
-              disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId}}">确认重置</button>
+              disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId}}">
+        {{resetStoreKeyIsClearMode ? '⚠️ 确认清空密钥' : '确认重置密钥'}}
+      </button>
     </view>
   </view>
 
