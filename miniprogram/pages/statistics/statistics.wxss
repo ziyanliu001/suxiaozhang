@@ -3762,3 +3762,150 @@ button.btn-export-shortcut {
   opacity: 0.88;
   transform: scale(0.97);
 }
+
+/* ── 👑 大家长全国数据看板升级引导 Modal ──────────────────────────── */
+/* 毛玻璃蒙层：覆盖全屏，不破坏下层单店统计页排版 */
+.ntm-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx 40rpx;
+  box-sizing: border-box;
+}
+
+/* 居中卡片 */
+.ntm-card {
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  width: 100%;
+  max-width: 680rpx;
+  padding: 48rpx 40rpx 40rpx;
+  box-shadow: 0 32rpx 80rpx rgba(0, 0, 0, 0.20);
+}
+
+/* 标题行 */
+.ntm-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 32rpx;
+}
+
+.ntm-icon {
+  font-size: 48rpx;
+  margin-right: 12rpx;
+  line-height: 1;
+}
+
+.ntm-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #111827;
+  flex: 1;
+}
+
+.ntm-badge {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #92400E;
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+  border: 1rpx solid #F59E0B;
+  border-radius: 20rpx;
+  padding: 4rpx 18rpx;
+  margin-right: 20rpx;
+}
+
+.ntm-close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42rpx;
+  color: #9CA3AF;
+  background: #F3F4F6;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 门店计数区 */
+.ntm-count-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8rpx;
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 28rpx;
+}
+
+.ntm-count-pre,
+.ntm-count-suf {
+  font-size: 26rpx;
+  color: #3B82F6;
+}
+
+.ntm-count {
+  font-size: 72rpx;
+  font-weight: 800;
+  color: #1D4ED8;
+  line-height: 1;
+}
+
+/* 特权说明 */
+.ntm-desc {
+  font-size: 27rpx;
+  color: #4B5563;
+  line-height: 1.75;
+  text-align: center;
+  margin-bottom: 36rpx;
+}
+
+/* 操作按钮区 */
+.ntm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+/* 主按钮：用 line-height 垂直居中（WeChat button 不认 flex align-items） */
+.ntm-upgrade-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%);
+  color: #FFFFFF;
+  font-size: 30rpx;
+  font-weight: 700;
+  border-radius: 44rpx;
+  border: none;
+  text-align: center;
+  padding: 0;
+  margin: 0;
+  box-shadow: 0 8rpx 24rpx rgba(29, 78, 216, 0.32);
+}
+
+.ntm-upgrade-btn::after {
+  border: none;
+}
+
+/* 辅助关闭按钮（view，不用 button） */
+.ntm-cancel-btn {
+  height: 80rpx;
+  line-height: 80rpx;
+  background: #F3F4F6;
+  color: #6B7280;
+  font-size: 28rpx;
+  border-radius: 40rpx;
+  text-align: center;
+}
+
+.ntm-cancel-btn-hover {
+  background: #E5E7EB;
+}

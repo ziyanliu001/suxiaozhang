@@ -159,6 +159,17 @@ exports.main = async (event, context) => {
       }
     }
 
+    // 🆕 轻量级门店计数接口：大家长免费版专用，仅返回全机构门店总数（不含任何财务数据）。
+    // 用于在未订阅专业版时展示"全国已有X家门店，升级查看完整大屏"引导卡片，
+    // 无需订阅校验——计数本身不涉及财务隐私，属于激励性公开信息。
+    if (event.action === 'storeCount') {
+      const storeCountAllowed = ['super_admin', 'store_patriarch', 'store_manager'].includes(userRole);
+      if (!storeCountAllowed) return { success: false, error: '无权限' };
+      if (!tenantId) return { success: true, storeCount: 0 };
+      const countRes = await db.collection('stores').where({ tenantId }).count();
+      return { success: true, storeCount: countRes.total || 0 };
+    }
+
     // 🛡️ 权限卡口：超管 / 大家长 / 总部财务 / 志工均可访问本机构大屏。
     // 大家长已是门店自治最高负责人，有权查看全机构汇总大盘（订阅套餐检查在下方）。
     // 志工侧为只读脱敏视图；platform_admin 不在名单——大屏是机构内部财务数据，平台运维方无需访问。

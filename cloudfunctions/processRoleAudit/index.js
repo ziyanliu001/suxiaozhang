@@ -288,9 +288,12 @@ async function submitRoleApply(event, OPENID) {
     docData.approveTime = db.serverDate();
   }
 
-  // 🏛️ 新建门店一键自审：具备门店管理权限（大家长/店长）的用户新建门店时免审自治，
-  // 直接建店并同时兼任大家长与店长，实现零等待建店。超管走上方快速通道，此处只处理
-  // 已有管理角色的普通用户，保持配额校验（resolveOrCreateStore 内部已处理）。
+  // 🏛️ 新建门店一键自审：
+  // ① 已有大家长/店长权限的用户新建门店——门店自治，免审直接建店兼任大家长与店长
+  // ② 全新用户申请成为新门店首任大家长（requestedRole === 'store_patriarch'）——
+  //    自裂变架构核心：无需超管审批，任何人都可以创建新门店并成为首任大家长，
+  //    彻底废除"需要超管手动添加门店/大家长"的旧瓶颈，实现自下而上自裂变
+  // 超管走上方快速通道，此处只处理普通用户，配额校验在 resolveOrCreateStore 内部
   if (isCustom) {
     const callerRes = await db.collection('user_roles')
       .where({ _openid: OPENID, status: 'approved' })
@@ -299,7 +302,7 @@ async function submitRoleApply(event, OPENID) {
     const callerRec = callerRes.data && callerRes.data[0];
     const callerRole = callerRec && callerRec.role;
 
-    if (callerRole === 'store_patriarch' || callerRole === 'store_manager') {
+    if (requestedRole === 'store_patriarch' || callerRole === 'store_patriarch' || callerRole === 'store_manager') {
       const resolvedTenantId = (callerRec && callerRec.tenantId) || tenantId || DEFAULT_TENANT_ID;
       const newStoreName = String(customStoreName).trim();
 

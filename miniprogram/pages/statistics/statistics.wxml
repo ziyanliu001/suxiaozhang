@@ -1484,4 +1484,35 @@
       </view>
     </view>
   </view>
+
+  <!-- 👑 大家长全国数据看板升级引导 Modal（居中悬浮，不破坏单店统计页排版）
+       触发时机：大家长点击"全国看板 ↗"但尚未订阅专业版
+       关闭后：单店统计页面原封不动，体验无干扰 -->
+  <view class="ntm-mask" wx:if="{{showNationalTeaser}}" catchtouchmove="stopPropagation" bindtap="onCloseNationalTeaser">
+    <view class="ntm-card" catchtap="stopPropagation">
+      <!-- 标题行 -->
+      <view class="ntm-header">
+        <text class="ntm-icon">👑</text>
+        <text class="ntm-title">全国数据看板</text>
+        <text class="ntm-badge">专业版</text>
+        <view class="ntm-close" bindtap="onCloseNationalTeaser">×</view>
+      </view>
+
+      <!-- 门店接入数动态数字 -->
+      <view class="ntm-count-row">
+        <text class="ntm-count-pre">您所在机构全国已有</text>
+        <text class="ntm-count">{{nationalStoreCountForTeaser > 0 ? nationalStoreCountForTeaser : '--'}}</text>
+        <text class="ntm-count-suf">家门店接入</text>
+      </view>
+
+      <!-- 特权说明 -->
+      <view class="ntm-desc">📊 升级专业版，解锁全国汇总大屏：各门店报餐、服务人次、收支明细一览无余。</view>
+
+      <!-- 操作按钮 -->
+      <view class="ntm-actions">
+        <button class="ntm-upgrade-btn" bindtap="onOpenPlanUpgradeModal">立即升级 / 在线开通</button>
+        <view class="ntm-cancel-btn" hover-class="ntm-cancel-btn-hover" bindtap="onCloseNationalTeaser">返回单店报表</view>
+      </view>
+    </view>
+  </view>
 </view>

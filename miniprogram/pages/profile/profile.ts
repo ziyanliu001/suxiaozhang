@@ -3692,16 +3692,11 @@ Page({
     });
   },
 
-  // 大家长专属：全国数据看板入口——先校验租户订阅权限，未订阅直接唤起
-  // 套餐升级弹窗，已订阅再跳转统计页并携带 view=national 参数让统计页
-  // 自动切入全国视图，避免到达后还要再手动点一次"全国数据看板 ↗"按钮
+  // 大家长专属：全国数据看板入口——直接跳转统计页并携带 view=national 参数。
+  // 订阅校验移到统计页内部：未订阅时统计页展示"引导升级"预告卡片（含全机构门店总数），
+  // 已订阅时直接展示完整大屏。前端不再提前拦截，让统计页按实际权限决定展示内容。
   async onPatriarchGoToNationalDashboard() {
     if (this.isNavigating) return;
-    const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
-    if (!permission.allowed) {
-      this.onOpenSubscriptionModal();
-      return;
-    }
     this.isNavigating = true;
     wx.navigateTo({
       url: '/pages/statistics/statistics?view=national',

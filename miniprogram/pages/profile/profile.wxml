@@ -2154,11 +2154,15 @@
   <!-- ===== 🎫 生成本店邀请码 — 角色选择弹窗 ===== -->
   <view class="invite-modal-mask" wx:if="{{showInviteModal}}" catchtouchmove="stopPropagation" bindtap="onCloseInviteModal">
     <view class="invite-modal-panel" catchtap="stopPropagation">
+      <!-- 拖动指示条 -->
+      <view class="invite-drag-bar"></view>
       <view class="invite-modal-header">
         <text class="invite-modal-title">🎫 生成本店邀请码</text>
         <view class="invite-modal-close" bindtap="onCloseInviteModal">×</view>
       </view>
-      <view class="invite-modal-tip">邀请码为一次性有效，24小时后自动作废，请仅发放给信任的本店成员。</view>
+      <view class="invite-modal-tip">
+        💡 提示：生成的邀请码 24 小时内有效，请直接发送给信任的本店成员。
+      </view>
 
       <view class="invite-modal-label">选择邀请身份</view>
       <view class="invite-role-grid">
@@ -2184,28 +2188,37 @@
         </view>
       </view>
 
-      <button class="invite-gen-btn {{inviteGenerating ? 'invite-gen-btn-loading' : ''}}"
-              bindtap="onGeneratePatriarchInviteCode"
-              loading="{{inviteGenerating}}"
-              disabled="{{inviteGenerating}}">
-        {{inviteGenerating ? '生成中...' : '生成邀请码'}}
-      </button>
+      <view class="invite-gen-btn-wrap">
+        <button class="invite-gen-btn {{inviteGenerating ? 'invite-gen-btn-loading' : ''}}"
+                bindtap="onGeneratePatriarchInviteCode"
+                loading="{{inviteGenerating}}"
+                disabled="{{inviteGenerating}}">{{inviteGenerating ? '生成中...' : '生成邀请码'}}</button>
+      </view>
     </view>
   </view>
 
   <!-- ===== 🎫 生成本店邀请码 — 结果展示弹窗 ===== -->
   <view class="invite-modal-mask" wx:if="{{showInviteResultModal}}" catchtouchmove="stopPropagation" bindtap="onCloseInviteResultModal">
     <view class="invite-modal-panel" catchtap="stopPropagation">
+      <!-- 拖动指示条 -->
+      <view class="invite-drag-bar"></view>
       <view class="invite-modal-header">
         <text class="invite-modal-title">✅ 邀请码生成成功</text>
         <view class="invite-modal-close" bindtap="onCloseInviteResultModal">×</view>
       </view>
 
-      <view class="invite-result-store">为【{{inviteResultStoreName}}】生成的邀请码</view>
-
-      <view class="invite-result-code-box">
-        <text class="invite-result-code">{{inviteResultCode}}</text>
+      <view class="invite-result-store">
+        为 <text class="invite-result-store-name">{{inviteResultStoreName}}</text> 生成的邀请码
       </view>
+
+      <!-- 大号邀请码展示区 -->
+      <view class="invite-result-code-box" bindtap="onCopyPatriarchInviteCode">
+        <text class="invite-result-code">{{inviteResultCode}}</text>
+        <text class="invite-result-tap-hint">点击复制</text>
+      </view>
+
+      <!-- 有效期倒计时提示 -->
+      <view class="invite-result-validity">⏰ 24 小时内有效，过期自动失效</view>
 
       <image wx:if="{{inviteResultQrFileId}}"
              class="invite-result-qr"
@@ -2213,12 +2226,12 @@
              mode="aspectFit"
              show-menu-by-longpress />
 
-      <button class="invite-copy-btn" bindtap="onCopyPatriarchInviteCode">
-        📋 一键复制邀请码
-      </button>
+      <view class="invite-result-actions">
+        <button class="invite-copy-btn" bindtap="onCopyPatriarchInviteCode">📋 复制邀请码</button>
+      </view>
 
       <view class="invite-result-warning">
-        ⚠️ 该邀请码为一次性特权码，有效期 24 小时，核销后自动作废。
+        ⚠️ 一次性特权码，核销后自动作废，请勿公开传播
       </view>
     </view>
   </view>

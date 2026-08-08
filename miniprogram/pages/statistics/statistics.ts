@@ -548,6 +548,9 @@ Page({
     nationalTopDinersStores: [] as any[],
     nationalTopActiveStores: [] as any[],
     showNationalDashboard: false,
+    // 🆕 大家长免费版引导卡片：未订阅专业版时展示门店总数 + 升级 CTA，订阅后消失
+    showNationalTeaser: false,
+    nationalStoreCountForTeaser: 0,
     // 🐛 根因修复：wxml 容器此前用 nationalData.nationalTotalDiners !== undefined
     // 作为"是否已加载好"的隐式判据——loadNationalDashboard() 云调用还在飞行中，
     // 或者失败/报错时，这个字段永远是 undefined，容器就一直不渲染。而此时
@@ -996,10 +999,9 @@ Page({
         this.loadNationalDashboard();
       } else if (isPatriarch && (this as any)._autoNationalIntent) {
         // 大家长从 profile 点击"全国数据看板"跳转而来（view=national），
-        // 权限已在 profile 侧验证通过，这里直接触发全国视图加载
+        // 在这里做订阅校验：未订阅弹 Modal 引导升级，订阅后进入全国视图
         (this as any)._autoNationalIntent = false;
-        this.setData({ isAllStoresMode: true });
-        this.loadNationalDashboard();
+        this._triggerPatriarchNationalView();
       }
     }
 
@@ -1272,6 +1274,14 @@ Page({
     const isSuperAdminUser = this.data.isAdmin === true;
     const permission = isSuperAdminUser ? { allowed: true } : await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
     if (!permission.allowed) {
+      // 🆕 大家长免费版安全兜底：正常路径已在 _triggerPatriarchNationalView() 提前
+      // 拦截，不会走到这里。极端情况（例如订阅在本次会话内过期）下仍能正确弹出 Modal
+      // 引导升级，且不破坏单店页面排版——isAllStoresMode 保持当前值，不额外修改。
+      if (this.data.isPatriarch) {
+        this.setData({ showNationalDashboard: false, showNationalTeaser: true });
+        this._fetchNationalStoreCount();
+        return;
+      }
       // 🐛 根因修复（模拟器实测发现）：getSelectedStore() 兜底读到的可能正是刚
       // 触发本次全国总览请求前残留的虚拟聚合值（storeId:'national_overview'/
       // storeName:'全国总览'，例如用户此前在首页 store-picker 选过全国总览、
@@ -1624,13 +1634,46 @@ Page({
   // 用的是原生 wx.showModal——原生弹窗按钮完全渲染在 webview/WXML 之外，没有
   // 任何 class/id 可挂，WXSS 对它的按钮布局零控制力。这里改为页面自有的自定义
   // 半屏卡片弹窗，"知道了"/"去反馈"两个按钮才能真正用 flex 强制居中重构样式
-  // 大家长快捷入口：统计页内一键切换到全国数据看板
-  // loadNationalDashboard() 内部已含订阅校验 + 未授权时弹升级弹窗 + 状态回退，
-  // 这里只负责把 isAllStoresMode 切到全国聚合态再交给它处理
-  async onPatriarchGoNational() {
+  // 大家长快捷入口：统计页右上角"全国看板 ↗"按钮
+  // 先做订阅校验，未订阅只弹 Modal（不动页面状态），已订阅再进入全国视图
+  onPatriarchGoNational() {
     if (!this.data.isPatriarch) return;
-    this.setData({ isAllStoresMode: true });
+    this._triggerPatriarchNationalView();
+  },
+
+  // 大家长全国看板统一触发入口（onPatriarchGoNational + _autoNationalIntent 共用）：
+  // ① 未订阅 → 弹升级引导 Modal，页面停留在单店统计，排版零干扰
+  // ② 已订阅 → 设 isAllStoresMode:true 后进入全国大屏
+  async _triggerPatriarchNationalView() {
+    const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
+    if (!permission.allowed) {
+      this.setData({ showNationalTeaser: true });
+      this._fetchNationalStoreCount();
+      return;
+    }
+    this.setData({ isAllStoresMode: true, showNationalTeaser: false });
     await this.loadNationalDashboard();
+  },
+
+  // 大家长免费版引导：静默拉取全机构门店总数（不含财务数据），展示在升级引导 Modal 中
+  async _fetchNationalStoreCount() {
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'getNationalDashboard',
+        data: { action: 'storeCount' }
+      }) as any;
+      const count = res && res.result && res.result.storeCount;
+      if (typeof count === 'number') {
+        this.setData({ nationalStoreCountForTeaser: count });
+      }
+    } catch (e) {
+      console.warn('[statistics] _fetchNationalStoreCount 失败（忽略）:', e);
+    }
+  },
+
+  // 关闭升级引导 Modal：仅隐藏弹窗，单店统计页面状态原封不动
+  onCloseNationalTeaser() {
+    this.setData({ showNationalTeaser: false });
   },
 
   onOpenPlanUpgradeModal() {
