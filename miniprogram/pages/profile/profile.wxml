@@ -1707,88 +1707,93 @@
   </view>
 
   <!-- 🔐 高级功能授权半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
-       管理"时唤起，替代此前直接硬跳 pages/platform-admin 撞见"无权限访问"的
-       糟糕体验。展示本机构当前套餐 Tag、到期时间与高级功能权益对比。
-       🌸 完全自动化授权：项目尚未接入微信支付商户号前，用【激活码/授权码
-       自助兑换】代替人工审批——校验通过立即生效（见
-       cloudfunctions/activateTenantSubscription redeem action），不再需要
-       "复制续费申请信息发给管理员"这种人工中转流程；【在线订购】按钮是支付
-       通道接入前的占位入口 -->
-  <!-- 🐛 布局修复：底部按钮被自定义 tabBar 遮挡——card 改成自己独立
-       position: fixed; bottom: 0 贴底 + z-index: 9999（不再依赖 mask 的 flex
-       布局定位），并预留 120rpx + 安全区的 padding-bottom（tabBar 有真实渲染
-       高度，不在 env(safe-area-inset-bottom) 的补偿范围内）。卡片仍拆成
-       header（固定）/body（可滚动，max-height 兜底超长内容）/footer（固定，
-       顶部分隔线）三段，footer 永远不会被内容挤出视口 -->
+       管理"时唤起。卡片分为：① 黑钻身份卡（门店 + 套餐状态）② 高级权益对比
+       ③ 授权码自助兑换 ④ 底部金色主按钮（在线订购/续费）。
+       card 自独立 position:fixed 贴底 + z-index:9999，避免被自定义 tabBar 遮挡。-->
   <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
     <view class="subscription-modal-card" catchtap="stopPropagation">
-      <view class="subscription-modal-header">
-        <text class="subscription-modal-title">💳 会员套餐</text>
-        <text class="subscription-modal-close" bindtap="onCloseSubscriptionModal">✕</text>
+
+      <!-- 右上角关闭 -->
+      <view class="sub-close-row">
+        <view class="sub-close-btn" bindtap="onCloseSubscriptionModal">✕</view>
       </view>
 
+      <!-- 加载中骨架 -->
       <view class="subscription-loading" wx:if="{{subscriptionLoading}}">
-        <text>加载套餐信息中...</text>
+        <text>加载套餐信息中…</text>
       </view>
 
       <block wx:else>
+
+        <!-- ① 黑钻身份卡 ──────────────────────────────────── -->
+        <view class="sub-identity-card sub-identity-card-{{subscriptionInfo.planType}}">
+          <view class="sub-identity-top">
+            <text class="sub-store-name">{{currentStoreName || '我的门店'}}</text>
+            <view class="sub-plan-badge sub-plan-badge-{{subscriptionInfo.planType}}">
+              {{subscriptionInfo.planLabel}}
+            </view>
+          </view>
+          <view class="sub-identity-bottom">
+            <text class="sub-expiry-warn" wx:if="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期：{{subscriptionInfo.expireDateStr}}</text>
+            <text class="sub-expiry-expired" wx:elif="{{subscriptionInfo.isExpired}}">套餐已到期，续费后恢复权益</text>
+            <text class="sub-expiry-active" wx:elif="{{subscriptionInfo.isActive}}">有效期至 {{subscriptionInfo.expireDateStr}}</text>
+            <text class="sub-expiry-free" wx:else>当前为免费基础版，升级解锁更多权益</text>
+          </view>
+        </view>
+
+        <!-- 可滚动内容区 -->
         <scroll-view scroll-y class="subscription-modal-body">
-          <view class="subscription-plan-row">
-            <text class="subscription-plan-tag plan-tag-{{subscriptionInfo.planType}}">{{subscriptionInfo.planLabel}}</text>
-            <text class="subscription-plan-tag plan-tag-expiring" wx:if="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期</text>
-            <text class="subscription-plan-tag plan-tag-expired" wx:if="{{subscriptionInfo.isExpired}}">已到期</text>
-          </view>
 
-          <view class="subscription-info-row">
-            <text class="subscription-info-label">门店：</text>
-            <text class="subscription-info-value">{{currentStoreName || '未绑定'}}</text>
-          </view>
-
-          <!-- a) 已开通/专业版状态：高亮激活态 + 到期时间，"续费/输入新授权码"
-               默认收起激活码输入区，点击才展开 -->
-          <block wx:if="{{subscriptionInfo.isActive}}">
-            <view class="subscription-active-banner">
-              <text class="subscription-active-title">🎉 专业版已激活</text>
-              <text class="subscription-active-expiry">有效期至：{{subscriptionInfo.expireDateStr}}</text>
+          <!-- ② 高级权益卡片组 ──────────────────────────────── -->
+          <view class="sub-section">
+            <text class="sub-section-title">{{subscriptionInfo.isActive ? '✦ 当前权益' : '✦ 升级后解锁'}}</text>
+            <view class="sub-benefit-grid">
+              <view class="sub-benefit-card {{subscriptionInfo.isActive ? 'sub-benefit-active' : ''}}">
+                <text class="sub-benefit-icon">📊</text>
+                <text class="sub-benefit-name">全国汇总大屏</text>
+                <text class="sub-benefit-desc">跨店数据一屏掌握</text>
+              </view>
+              <view class="sub-benefit-card {{subscriptionInfo.isActive ? 'sub-benefit-active' : ''}}">
+                <text class="sub-benefit-icon">📑</text>
+                <text class="sub-benefit-name">Excel 批量导出</text>
+                <text class="sub-benefit-desc">账目明细一键导表</text>
+              </view>
+              <view class="sub-benefit-card {{subscriptionInfo.isActive ? 'sub-benefit-active' : ''}}">
+                <text class="sub-benefit-icon">⚡</text>
+                <text class="sub-benefit-name">高级权限管理</text>
+                <text class="sub-benefit-desc">多财务/多大家长并行</text>
+              </view>
             </view>
-            <view class="subscription-renew-link" bindtap="onToggleActivationForm" wx:if="{{!showActivationForm}}">
-              <text>续费 / 输入新授权码</text>
-              <view class="item-arrow">❯</view>
-            </view>
-          </block>
-
-          <!-- b) 未开通状态：直接展示高级功能权益 + 激活码输入区（无需先点开） -->
-          <view class="subscription-benefit-box" wx:else>
-            <view class="subscription-benefit-title">高级功能权益</view>
-            <view class="subscription-benefit-item">✅ 全国/跨店汇总大屏（跨店经营数据一屏总览）</view>
-            <view class="subscription-benefit-item">✅ Excel 批量导出（账目明细一键导表）</view>
           </view>
 
-          <!-- 激活码兑换区：未开通时始终展示；已开通时通过上面的"续费"链接展开 -->
-          <view class="subscription-activation-box" wx:if="{{!subscriptionInfo.isActive || showActivationForm}}">
-            <view class="subscription-activation-label">授权码 / 卡号</view>
-            <view class="subscription-activation-input-row">
-              <input
-                class="subscription-activation-input"
-                placeholder="请输入授权码"
-                value="{{activationCodeInput}}"
-                bindinput="onActivationCodeInput"
-              />
-              <view class="subscription-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+          <!-- ③ 授权码兑换区 ────────────────────────────────── -->
+          <view class="sub-section sub-redeem-section">
+            <text class="sub-section-title">✦ 授权码兑换</text>
+            <view class="sub-redeem-input-row">
+              <input class="sub-redeem-input"
+                     placeholder="请输入或粘贴授权码 / 兑换卡号"
+                     value="{{activationCodeInput}}"
+                     bindinput="onActivationCodeInput" />
+              <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
             </view>
-            <button
-              class="subscription-btn-redeem"
-              bindtap="onRedeemActivationCode"
-              disabled="{{activationSubmitting}}"
-              loading="{{activationSubmitting}}"
-            >立即兑换</button>
+            <button class="sub-btn-activate"
+                    bindtap="onRedeemActivationCode"
+                    disabled="{{activationSubmitting || !activationCodeInput}}"
+                    loading="{{activationSubmitting}}">激活授权码</button>
           </view>
+
         </scroll-view>
 
-        <view class="subscription-modal-footer">
-          <button class="subscription-btn-cancel" bindtap="onCloseSubscriptionModal">知道了</button>
-          <button class="subscription-btn-confirm" bindtap="onSubscribeAdvancedFeature">在线订购</button>
+        <!-- ④ 底部主操作区 ────────────────────────────────── -->
+        <view class="sub-footer">
+          <button class="sub-btn-purchase"
+                  bindtap="onSubscribeAdvancedFeature"
+                  loading="{{subscriptionLoading}}">
+            {{subscriptionInfo.isActive ? '续费 / 延长有效期' : '在线订购 / 立即升级'}}
+          </button>
+          <text class="sub-btn-dismiss" bindtap="onCloseSubscriptionModal">暂不升级</text>
         </view>
+
       </block>
     </view>
   </view>

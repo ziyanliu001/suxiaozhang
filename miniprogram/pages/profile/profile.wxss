@@ -3138,270 +3138,255 @@
   color: #FFFFFF;
 }
 
-/* ================= 🔐 套餐升级/续费半屏卡片 =================
-   🐛 布局修复：常驻 DOM + .show 类切换开合（与 .switch-identity-modal-mask
-   同一套方案），mask/card 各自带 opacity/transform 过渡，开合都平滑；卡片拆成
-   header/body（可滚动）/footer 三段，footer 独立带 safe-area 底部内边距，
-   不再随内容多少被挤出可视区域。"知道了"/"复制续费申请信息"两个按钮强制
-   flex 居中，显式归零 box-sizing/padding/margin/line-height，消除微信原生
-   <button> 默认内边距/行高造成的文字偏斜 */
+/* ═══════════════════════════════════════════════════════════════
+   🔐 套餐升级/续费半屏卡片 —— 轻奢极简重构版
+   布局：mask 遮罩（毛玻璃）/ card（固定贴底）→ 黑钻身份卡 / scroll-view
+   内容区（权益 + 兑换）/ footer（金色主 CTA + ghost 次按钮）
+   card 自独立 position:fixed 贴底，z-index:9999，规避自定义 tabBar 遮挡
+   ═══════════════════════════════════════════════════════════════ */
+
 .subscription-modal-mask {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: flex-end;
-  /* 🐛 根因修复：与 role-switch-modal 同一个坑——自定义 tabBar 有自己的层叠
-     上下文，数字上"更大的 z-index"不保证跨层叠上下文的绘制顺序。card 现在
-     改成自己独立 position: fixed 贴底（见下面），不再依赖这个 mask 的 flex
-     布局定位，这里只需要保证遮罩本身盖住页面内容即可 */
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(10, 12, 18, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 9998;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.28s ease;
 }
-
 .subscription-modal-mask.show {
   opacity: 1;
   pointer-events: auto;
 }
 
-/* 🐛 彻底修复弹窗被自定义 tabBar 遮挡：card 不再依赖 mask 的 flex 布局来定位，
-   改成自己独立 position: fixed; bottom: 0 贴底 + 更高的 z-index，并且额外
-   预留 120rpx（明确大于 custom-tab-bar 实际高度）+ 安全区的 padding-bottom——
-   env(safe-area-inset-bottom) 只补偿手机物理层面的 Home 指示条，跟本项目
-   自绘的 tabBar 完全是两回事，必须单独留出这块余量，footer 才能完整浮在
-   tabBar 上方而不是卡在临界位置 */
 .subscription-modal-card {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   z-index: 9999;
   width: 100%;
-  max-height: 65vh;
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
-  background: #FFFFFF;
-  border-top-left-radius: 32rpx;
-  border-top-right-radius: 32rpx;
-  padding-top: 32rpx;
+  background: #F7F8FA;
+  border-top-left-radius: 36rpx;
+  border-top-right-radius: 36rpx;
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow: hidden;
   transform: translateY(100%);
-  transition: transform 0.25s ease;
+  transition: transform 0.3s cubic-bezier(0.34, 1.1, 0.64, 1);
 }
-
 .subscription-modal-mask.show .subscription-modal-card {
   transform: translateY(0);
 }
 
-.subscription-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 28rpx;
-  padding: 0 32rpx;
+/* 关闭按钮行 */
+.sub-close-row {
   flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 20rpx 28rpx 0;
 }
-
-.subscription-modal-title {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #1A1A1A;
-}
-
-.subscription-modal-close {
+.sub-close-btn {
   width: 56rpx;
   height: 56rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #F1F3F5;
+  background: rgba(0,0,0,0.06);
   color: #6B7280;
   font-size: 28rpx;
 }
+.sub-close-btn:active { background: rgba(0,0,0,0.12); }
 
+/* 加载骨架 */
 .subscription-loading {
-  padding: 60rpx 32rpx;
+  padding: 80rpx 32rpx;
   text-align: center;
   color: #ADB5BD;
   font-size: 26rpx;
+  flex: 1;
 }
 
-/* 🐛 body 独立成可滚动区域，与固定的 header/footer 分离——内容（标签行/
-   信息行/权益框）再多也只在这个区域内部滚动，footer 按钮永远完整可见，
-   不会被挤出屏幕。
-   🛡️ height: 0 是 <scroll-view> 在 flex 纵向布局里的关键兜底：它是原生组件，
-   个别基础库版本下光靠 flex:1 + min-height:0 不够可靠，还是会按内容撑高、
-   把 footer 挤出可视区——flex:1 配合 height:0 强制让 flex-grow 完全决定实际
-   高度，这是社区里 scroll-view 嵌 flex 布局的标准写法 */
+/* ── ① 黑钻身份卡 ───────────────────────────────────────────── */
+.sub-identity-card {
+  flex-shrink: 0;
+  margin: 8rpx 28rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx 32rpx 28rpx;
+  background: linear-gradient(135deg, #1C2530 0%, #2D3A4A 60%, #1A2035 100%);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.28);
+  position: relative;
+  overflow: hidden;
+}
+/* 装饰光晕 */
+.sub-identity-card::before {
+  content: '';
+  position: absolute;
+  top: -40rpx; right: -40rpx;
+  width: 200rpx; height: 200rpx;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.08);
+}
+/* 专业版/旗舰版身份卡微调色调 */
+.sub-identity-card-pro {
+  background: linear-gradient(135deg, #20200A 0%, #2E2A0E 55%, #1C1C08 100%);
+}
+.sub-identity-card-enterprise {
+  background: linear-gradient(135deg, #0D0D0D 0%, #1A1A1A 55%, #0A0A0A 100%);
+}
+
+.sub-identity-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18rpx;
+}
+.sub-store-name {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  flex: 1;
+  margin-right: 16rpx;
+}
+.sub-plan-badge {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 700;
+  padding: 6rpx 20rpx;
+  border-radius: 30rpx;
+  letter-spacing: 1rpx;
+}
+.sub-plan-badge-basic {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.70);
+  border: 1rpx solid rgba(255,255,255,0.18);
+}
+.sub-plan-badge-pro {
+  background: linear-gradient(90deg, #C9941A 0%, #E8C548 100%);
+  color: #1C1200;
+}
+.sub-plan-badge-enterprise {
+  background: linear-gradient(90deg, #FFD700 0%, #FFA500 100%);
+  color: #1C1200;
+}
+
+.sub-identity-bottom { }
+.sub-expiry-active {
+  font-size: 23rpx;
+  color: rgba(255,255,255,0.62);
+}
+.sub-expiry-free {
+  font-size: 23rpx;
+  color: rgba(255,255,255,0.50);
+}
+.sub-expiry-warn {
+  font-size: 23rpx;
+  color: #FFB347;
+}
+.sub-expiry-expired {
+  font-size: 23rpx;
+  color: #FF7B72;
+}
+
+/* ── scroll-view 内容区 ──────────────────────────────────────── */
 .subscription-modal-body {
   flex: 1;
   height: 0;
   min-height: 0;
-  overflow-y: auto;
-  padding: 0 32rpx;
   box-sizing: border-box;
 }
 
-.subscription-plan-row {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 24rpx;
+/* 通用 section 容器 */
+.sub-section {
+  margin: 0 28rpx 28rpx;
 }
-
-/* 🎨 套餐 Tag：免费版灰色/专业版金色/旗舰版深色，即将到期橙色警告/已到期红色警告，
-   与 pages/platform-admin 的 .pa-tenant-status 状态色系呼应但独立定义 */
-.subscription-plan-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6rpx 20rpx;
-  border-radius: 20rpx;
+.sub-section-title {
+  display: block;
   font-size: 22rpx;
-  font-weight: bold;
-}
-
-.plan-tag-basic {
-  background: #F1F3F5;
-  color: #6B7280;
-}
-
-.plan-tag-pro {
-  background: #FFF3E0;
-  color: #B8860B;
-}
-
-.plan-tag-enterprise {
-  background: #1C2530;
-  color: #FFD700;
-}
-
-.plan-tag-expiring {
-  background: #FFF3E0;
-  color: #E8590C;
-}
-
-.plan-tag-expired {
-  background: #FFF2F0;
-  color: #E03131;
-}
-
-.subscription-info-row {
-  display: flex;
-  margin-bottom: 12rpx;
-}
-
-.subscription-info-label {
-  font-size: 26rpx;
-  color: #868E96;
-  width: 150rpx;
-  flex-shrink: 0;
-}
-
-.subscription-info-value {
-  font-size: 26rpx;
-  color: #333333;
-  font-weight: 500;
-}
-
-.subscription-benefit-box {
-  margin-top: 20rpx;
-  margin-bottom: 24rpx;
-  background: #FAF8F5;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-}
-
-.subscription-benefit-title {
-  font-size: 24rpx;
-  font-weight: bold;
-  color: #6B5B45;
-  margin-bottom: 12rpx;
-}
-
-.subscription-benefit-item {
-  font-size: 24rpx;
-  color: #495057;
-  line-height: 1.8;
-}
-
-/* 🎉 已开通/专业版已激活：暖金渐变高亮横幅，与套餐 Tag 的金色系呼应，一眼
-   就能看出"这项功能已经生效"，不必细读到期时间才能确认状态 */
-.subscription-active-banner {
-  margin-top: 20rpx;
+  font-weight: 700;
+  color: #9CA3AF;
+  letter-spacing: 2rpx;
   margin-bottom: 16rpx;
-  background: linear-gradient(135deg, #FFF8E8 0%, #FDF0D5 100%);
-  border: 1.5rpx solid #E6C87A;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
 }
 
-.subscription-active-title {
-  display: block;
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #B8860B;
-  margin-bottom: 8rpx;
-}
-
-.subscription-active-expiry {
-  display: block;
-  font-size: 24rpx;
-  color: #6B5B45;
-}
-
-.subscription-renew-link {
+/* ── ② 高级权益卡片组 ────────────────────────────────────────── */
+.sub-benefit-grid {
   display: flex;
+  gap: 16rpx;
+}
+.sub-benefit-card {
+  flex: 1;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 20rpx 14rpx 18rpx;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 4rpx;
+  text-align: center;
+  border: 1.5rpx solid #EDEFF2;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+  opacity: 0.52;
+  transition: opacity 0.2s;
+}
+/* 已开通态：高亮激活 */
+.sub-benefit-card.sub-benefit-active {
+  opacity: 1;
+  border-color: #E8C548;
+  background: linear-gradient(160deg, #FFFCF0 0%, #FFF8E1 100%);
+  box-shadow: 0 4rpx 12rpx rgba(212,175,55,0.14);
+}
+.sub-benefit-icon {
+  font-size: 40rpx;
+  margin-bottom: 10rpx;
+  display: block;
+}
+.sub-benefit-name {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #1A1A2E;
+  margin-bottom: 6rpx;
+  display: block;
+  line-height: 1.3;
+}
+.sub-benefit-desc {
+  font-size: 19rpx;
+  color: #8B909A;
+  line-height: 1.4;
+  display: block;
+}
+
+/* ── ③ 授权码兑换区 ──────────────────────────────────────────── */
+.sub-redeem-section {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx 24rpx 20rpx;
+  border: 1.5rpx solid #EDEFF2;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
   margin-bottom: 8rpx;
-  font-size: 26rpx;
-  color: #495057;
-  border-bottom: 1rpx solid #F1F3F5;
 }
-
-/* 🎫 激活码兑换区：未开通时始终展示；已开通时通过"续费/输入新授权码"展开 */
-.subscription-activation-box {
-  margin-top: 12rpx;
-  margin-bottom: 20rpx;
-}
-
-.subscription-activation-label {
-  font-size: 24rpx;
-  color: #868E96;
-  margin-bottom: 12rpx;
-}
-
-.subscription-activation-input-row {
+.sub-redeem-input-row {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 16rpx;
 }
-
-.subscription-activation-input {
+.sub-redeem-input {
   flex: 1;
   min-width: 0;
   height: 72rpx;
   background: #F8F9FA;
   border: 1.5rpx solid #E9ECEF;
-  border-radius: 16rpx;
+  border-radius: 14rpx;
   padding: 0 20rpx;
-  font-size: 26rpx;
+  font-size: 25rpx;
   color: #212529;
   box-sizing: border-box;
 }
-
-.subscription-paste-btn {
+.sub-paste-btn {
   flex-shrink: 0;
   height: 72rpx;
   line-height: 72rpx;
@@ -3409,94 +3394,71 @@
   background: #F1F3F5;
   color: #495057;
   font-size: 24rpx;
-  font-weight: bold;
-  border-radius: 16rpx;
+  font-weight: 700;
+  border-radius: 14rpx;
   box-sizing: border-box;
 }
+.sub-paste-btn:active { background: #E3E6E9; }
 
-.subscription-paste-btn:active {
-  background: #E3E6E9;
-}
-
-.subscription-btn-redeem {
+.sub-btn-activate {
   width: 100%;
-  height: 80rpx;
-  line-height: 80rpx;
+  height: 72rpx;
+  line-height: 72rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
-  color: #FFFFFF;
-  font-size: 28rpx;
-  font-weight: bold;
-  border-radius: 40rpx;
+  background: #F1F3F5;
+  color: #374151;
+  font-size: 26rpx;
+  font-weight: 700;
+  border-radius: 14rpx;
   border: none;
   box-sizing: border-box;
   margin: 0;
+  transition: background 0.15s;
 }
+.sub-btn-activate::after { border: none; }
+.sub-btn-activate:active { background: #E3E6E9; }
+/* 有内容时过渡为金色激活感（靠 disabled 属性控制，enabled 态更显眼） */
+.sub-btn-activate[disabled] { opacity: 0.45; }
 
-.subscription-btn-redeem::after {
-  border: none;
-}
-
-.subscription-btn-redeem:active {
-  opacity: 0.88;
-}
-
-/* safe-area/tabBar 留白已经在 .subscription-modal-card 的 padding-bottom
-   统一兜底，footer 这里只留常规的横纵内边距 + 顶部分隔线 */
-.subscription-modal-footer {
+/* ── ④ 底部主操作区 ──────────────────────────────────────────── */
+.sub-footer {
   flex-shrink: 0;
+  padding: 16rpx 28rpx 0;
   display: flex;
-  gap: 16rpx;
-  padding: 20rpx 32rpx;
-  border-top: 1rpx solid #F1F3F5;
-  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  border-top: 1rpx solid #EDEFF2;
+  background: #F7F8FA;
 }
-
-.subscription-btn-cancel,
-.subscription-btn-confirm {
-  flex: 1;
-  height: 84rpx;
+.sub-btn-purchase {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  border-radius: 42rpx;
-  font-size: 28rpx;
-  font-weight: bold;
+  background: linear-gradient(90deg, #C9941A 0%, #E8C548 55%, #D4A017 100%);
+  color: #1C1200;
+  font-size: 30rpx;
+  font-weight: 700;
+  border-radius: 44rpx;
   border: none;
+  box-sizing: border-box;
+  margin: 0;
+  letter-spacing: 1rpx;
+  box-shadow: 0 6rpx 20rpx rgba(201, 148, 26, 0.38);
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
+.sub-btn-purchase::after { border: none; }
+.sub-btn-purchase:active { transform: scale(0.97); opacity: 0.9; }
 
-.subscription-btn-cancel::after,
-.subscription-btn-confirm::after {
-  border: none;
-}
-
-.subscription-btn-cancel {
-  background: #F1F3F5;
-  color: #495057;
-}
-
-.subscription-btn-cancel:active {
-  background: #E3E6E9;
-  transform: scale(0.97);
-}
-
-.subscription-btn-confirm {
-  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
-  color: #FFFFFF;
-  box-shadow: 0 6rpx 16rpx rgba(184, 134, 11, 0.35);
-}
-
-.subscription-btn-confirm:active {
-  opacity: 0.88;
-  transform: scale(0.97);
+.sub-btn-dismiss {
+  font-size: 24rpx;
+  color: #9CA3AF;
+  padding: 4rpx 24rpx 8rpx;
 }
 
 /* ================= 🔐 管理员密钥行 & 修改弹窗 ================= */

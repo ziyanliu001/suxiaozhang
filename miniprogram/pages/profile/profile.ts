@@ -252,12 +252,9 @@ Page({
       isActive: false,
       expireDateStr: ''
     },
-    // 🆕 激活码自助兑换：无需人工审批，校验通过立即生效（见
-    // cloudfunctions/activateTenantSubscription 的 redeem action）。
-    // showActivationForm 仅在"已开通"状态下使用——点击"续费/输入新授权码"
-    // 才展开输入区；"未开通"状态下输入区始终直接展示，不受这个开关影响
+    // 🆕 激活码自助兑换：无需人工审批，校验通过立即生效
+    // 授权码输入区在新版 UI 中始终展示，无需 showActivationForm 开关
     activationCodeInput: '',
-    showActivationForm: false,
     activationSubmitting: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     viewModeOptionLabels: VIEW_MODE_OPTIONS.map((m) => PREVIEW_VIEW_MODE_LABELS[m]),
@@ -3928,8 +3925,7 @@ Page({
     this.setData({
       showSubscriptionModal: true,
       subscriptionLoading: true,
-      activationCodeInput: '',
-      showActivationForm: false
+      activationCodeInput: ''
     });
 
     try {
@@ -3952,10 +3948,6 @@ Page({
     this.setData({ activationCodeInput: (e.detail.value || '').trim() });
   },
 
-  // 🆕 已开通状态下默认收起激活码输入区，点击"续费/输入新授权码"才展开
-  onToggleActivationForm() {
-    this.setData({ showActivationForm: !this.data.showActivationForm });
-  },
 
   // 🆕 粘贴：直接读取剪贴板填入输入框（并去除前后空格），授权码通常是从
   // 客服/购买渠道的聊天记录里复制来的，比手动长按输入框选择粘贴更省事
@@ -4005,9 +3997,8 @@ Page({
 
       // 🆕 兑换成功：清空 tenantPermission.ts 的 60s 内存缓存，避免用户兑换完
       // 当场跳去统计页/导出功能，还要再等缓存自然过期才看到解锁生效；同时
-      // 收起激活码输入区，让弹窗自动回到"已开通"的高亮展示状态
       clearTenantPermissionCache();
-      this.setData({ activationCodeInput: '', showActivationForm: false });
+      this.setData({ activationCodeInput: '' });
       await this.fetchSubscriptionInfo();
 
       const planLabel = PLAN_LABELS[result.data.planType] || result.data.planType;
