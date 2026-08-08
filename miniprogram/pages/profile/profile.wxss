@@ -4883,3 +4883,224 @@
   text-align: center;
   box-shadow: 0 6rpx 16rpx rgba(37, 99, 235, 0.25);
 }
+
+/* ==================== 新用户入驻引导弹窗 ==================== */
+
+.onb-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.onb-panel {
+  width: 100%;
+  background: #FFFFFF;
+  border-radius: 32rpx 32rpx 0 0;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- 头部（固定） ---- */
+.onb-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36rpx 36rpx 20rpx;
+  position: relative;
+  border-bottom: 1rpx solid #F3F4F6;
+}
+
+.onb-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.onb-close {
+  position: absolute;
+  right: 32rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 44rpx;
+  color: #9CA3AF;
+  line-height: 1;
+  padding: 8rpx 12rpx;
+}
+
+.onb-back {
+  position: absolute;
+  left: 32rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 28rpx;
+  color: #2563EB;
+  padding: 8rpx 12rpx;
+}
+
+/* ---- 选择路径内容区（无滚动，内容简短） ---- */
+.onb-body {
+  flex: 1;
+  min-height: 0;
+  padding: 36rpx 40rpx calc(40rpx + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.onb-desc {
+  font-size: 28rpx;
+  color: #6B7280;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.onb-choice-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 24rpx;
+  border-radius: 20rpx;
+  padding: 28rpx 32rpx;
+}
+
+.onb-choice-primary {
+  background: #EFF6FF;
+  border: 2rpx solid #BFDBFE;
+}
+
+.onb-choice-secondary {
+  background: #F9FAFB;
+  border: 2rpx solid #E5E7EB;
+}
+
+.onb-choice-icon {
+  font-size: 52rpx;
+  flex-shrink: 0;
+}
+
+.onb-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.onb-choice-main {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1D4ED8;
+}
+
+.onb-choice-main--dark {
+  color: #374151;
+}
+
+.onb-choice-sub {
+  font-size: 24rpx;
+  color: #6B7280;
+}
+
+.onb-dismiss-hint {
+  text-align: center;
+  font-size: 24rpx;
+  color: #9CA3AF;
+  margin-top: 8rpx;
+}
+
+/* ---- 创建表单滚动区 ---- */
+.onb-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 0 40rpx;
+}
+
+.onb-form-hint {
+  display: block;
+  font-size: 26rpx;
+  color: #6B7280;
+  line-height: 1.6;
+  padding: 24rpx 0 16rpx;
+}
+
+.onb-field {
+  margin-bottom: 28rpx;
+}
+
+.onb-label {
+  font-size: 26rpx;
+  color: #374151;
+  font-weight: 500;
+  margin-bottom: 10rpx;
+  display: block;
+}
+
+.onb-required {
+  color: #EF4444;
+}
+
+.onb-input {
+  width: 100%;
+  height: 80rpx;
+  border: 1rpx solid #D1D5DB;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  color: #111827;
+  background: #FAFAFA;
+  box-sizing: border-box;
+}
+
+.onb-field-hint {
+  font-size: 22rpx;
+  color: #9CA3AF;
+  margin-top: 8rpx;
+  display: block;
+}
+
+.onb-picker {
+  height: 80rpx;
+  border: 1rpx solid #D1D5DB;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  color: #111827;
+  background: #FAFAFA;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.onb-picker-arrow {
+  color: #9CA3AF;
+  font-size: 32rpx;
+}
+
+/* ---- 固定底部提交按钮 ---- */
+.onb-footer {
+  flex-shrink: 0;
+  padding: 20rpx 40rpx calc(36rpx + env(safe-area-inset-bottom, 0px));
+  border-top: 1rpx solid #F3F4F6;
+}
+
+.onb-submit-btn {
+  height: 88rpx;
+  line-height: 88rpx;
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: 30rpx;
+  font-weight: 700;
+  border-radius: 44rpx;
+  text-align: center;
+  box-shadow: 0 6rpx 16rpx rgba(37, 99, 235, 0.25);
+}
+
+.onb-submit-btn--loading {
+  background: #93C5FD;
+  box-shadow: none;
+}

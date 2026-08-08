@@ -1,6 +1,8 @@
 /**
  * 门店预设映射配置
- * 用于首页店铺名称选择、公众号自动联动、标语致谢词自动填充
+ * 🌐 多租户说明：这些预设仅供"雨花斋原始账套"内已有门店的快捷匹配使用
+ * （如海报生成时自动填充公众号名称/标语），不作为新用户的默认门店。
+ * 新机构/门店通过 createTenant 云函数自助创建，所有字段动态从云数据库读取。
  */
 export interface StorePreset {
   storeName: string;
@@ -35,12 +37,21 @@ export const STORE_PRESETS: StorePreset[] = [
 ];
 
 /**
+ * 通用兜底标语：新机构在门店档案未配置自定义标语时使用
+ */
+export const DEFAULT_SLOGAN: Pick<StorePreset, 'thanksWord' | 'slogan1' | 'slogan2'> = {
+  thanksWord: '感谢各位爱心人士的鼎力支持，感恩默默付出的义工团队！',
+  slogan1:    '用心服务 传递温暖',
+  slogan2:    '清晰记账 透明运行'
+};
+
+/**
  * 自定义门店选项标识
  */
 export const CUSTOM_STORE_LABEL = '➕ 自定义新门店';
 
 /**
- * 门店选择器显示的完整列表
+ * 门店选择器显示的完整列表（仅雨花斋账套内使用，新机构动态从云端拉取）
  */
 export const STORE_PICKER_LIST: string[] = [
   ...STORE_PRESETS.map(item => item.storeName),

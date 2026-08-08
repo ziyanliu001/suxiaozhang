@@ -303,7 +303,19 @@ async function submitRoleApply(event, OPENID) {
     const callerRole = callerRec && callerRec.role;
 
     if (requestedRole === 'store_patriarch' || callerRole === 'store_patriarch' || callerRole === 'store_manager') {
-      const resolvedTenantId = (callerRec && callerRec.tenantId) || tenantId || DEFAULT_TENANT_ID;
+      // 🌐 多租户安全：tenantId 必须来自调用方已有角色记录（已属于某机构）或前端显式传入。
+      // 全新用户（callerRec 为空）且未传 tenantId 时，拒绝兜底到 DEFAULT_TENANT_ID——
+      // 那会把所有新建组织都归并进雨花斋账套，破坏多租户隔离。
+      // 正确路径：前端引导用户先调用 createTenant 云函数创建新机构（携带 tenantId 返回），
+      // 再加入时传递该 tenantId；或通过大家长发放的邀请码（已绑定 tenantId）加入现有机构。
+      const resolvedTenantId = (callerRec && callerRec.tenantId) || tenantId;
+      if (!resolvedTenantId) {
+        return {
+          success: false,
+          error: '请先创建您的组织（使用"创建新组织"入口），或通过大家长提供的邀请码加入现有门店',
+          needsOnboarding: true
+        };
+      }
       const newStoreName = String(customStoreName).trim();
 
       let resolved;

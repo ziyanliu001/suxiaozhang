@@ -203,6 +203,31 @@ Page({
     // 不同机型胶囊按钮的实际左边距不同，硬编码在部分机型上会被胶囊直接盖住/裁切
     windowWidth: 0,
     capsuleLeft: 0,
+
+    // ── 🌐 新用户引导入驻 Modal ────────────────────────────────────────
+    // 触发条件：用户无任何已审批角色（真正的全新用户），且未曾主动关闭过引导
+    // 两条路径：① 创建新组织/门店  ② 通过邀请码加入现有门店
+    showOnboardingModal: false,
+    onboardingStep: 'choice' as 'choice' | 'create',
+    // 创建新组织表单字段
+    onboardingOrgName:   '',
+    onboardingOrgType:   'charity' as string,
+    onboardingStoreName: '',
+    onboardingRealName:  '',
+    onboardingPhone:     '',
+    onboardingCreating:  false,
+    // 组织类型选项（UI 选择器用）
+    orgTypeOptions: [
+      { value: 'charity',     label: '公益慈善' },
+      { value: 'elderly_care',label: '助老食堂' },
+      { value: 'community',   label: '社区义工站' },
+      { value: 'vegetarian',  label: '素食餐厅' },
+      { value: 'rescue',      label: '公益救援队' },
+      { value: 'other',       label: '其他公益组织' }
+    ],
+    orgTypeIndex: 0,
+    // ────────────────────────────────────────────────────────────────────
+
     currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer' | 'store_family',
     currentStoreName: '',
     // 🏪 门店运营状态：见 utils/storeManager.ts fetchAndSyncStoreStatus/getCachedStoreStatus，
@@ -875,7 +900,127 @@ Page({
     } finally {
       this._initMinePageInFlight = false;
     }
+
+    // 🌐 新用户引导：全新未归属用户（无门店/角色）且本会话尚未触发过引导时弹出
+    // isFamily 为 true 代表"无已审批角色"（见 line 684 逻辑），同时要求未主动关闭过引导
+    if (isFamily && !(this as any)._onboardingShown && !wx.getStorageSync('onboarding_dismissed')) {
+      (this as any)._onboardingShown = true;
+      this.setData({ showOnboardingModal: true });
+    }
   },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 🌐 新用户引导入驻：创建新组织 / 通过邀请码加入
+  // ─────────────────────────────────────────────────────────────────────
+
+  onDismissOnboarding() {
+    // 用户主动关闭引导，记录到 Storage，下次不再自动弹出
+    wx.setStorageSync('onboarding_dismissed', true);
+    this.setData({ showOnboardingModal: false, onboardingStep: 'choice' });
+  },
+
+  onOnboardingChooseCreate() {
+    this.setData({ onboardingStep: 'create' });
+  },
+
+  onOnboardingChooseJoin() {
+    // 引导用户输入邀请码——复用现有的邀请码核销弹窗
+    this.setData({ showOnboardingModal: false, onboardingStep: 'choice' });
+    wx.setStorageSync('onboarding_dismissed', true);
+    // 打开邀请码核销入口（复用义工申请流程里的 input invite code 路径）
+    wx.navigateTo({ url: '/pages/join-store/join-store' }).catch(() => {
+      // 如果页面不存在，退回到通知页提示用户向大家长索取邀请码
+      wx.showModal({
+        title: '如何加入门店',
+        content: '请向所在门店的大家长索取 6 位邀请码，在首页"加入门店"处输入即可自动绑定。',
+        showCancel: false,
+        confirmText: '知道了'
+      });
+    });
+  },
+
+  onOnboardingOrgNameInput(e: any) {
+    const orgName = (e.detail.value || '').trim();
+    // 门店名若未单独填写，与组织名联动
+    if (!this.data.onboardingStoreName || this.data.onboardingStoreName === (this.data.onboardingOrgName)) {
+      this.setData({ onboardingOrgName: orgName, onboardingStoreName: orgName });
+    } else {
+      this.setData({ onboardingOrgName: orgName });
+    }
+  },
+
+  onOnboardingStoreNameInput(e: any) {
+    this.setData({ onboardingStoreName: (e.detail.value || '').trim() });
+  },
+
+  onOnboardingRealNameInput(e: any) {
+    this.setData({ onboardingRealName: (e.detail.value || '').trim() });
+  },
+
+  onOnboardingPhoneInput(e: any) {
+    this.setData({ onboardingPhone: (e.detail.value || '').trim() });
+  },
+
+  onOnboardingOrgTypeChange(e: any) {
+    const idx = Number(e.detail.value);
+    const options = this.data.orgTypeOptions as any[];
+    this.setData({
+      orgTypeIndex: idx,
+      onboardingOrgType: (options[idx] && options[idx].value) || 'charity'
+    });
+  },
+
+  onOnboardingBackToChoice() {
+    this.setData({ onboardingStep: 'choice' });
+  },
+
+  async onSubmitCreateOrg() {
+    if (this.data.onboardingCreating) return;
+    const { onboardingOrgName: orgName, onboardingStoreName: storeName,
+            onboardingRealName: realName, onboardingPhone: phone,
+            onboardingOrgType: orgType } = this.data;
+
+    if (!orgName) { wx.showToast({ title: '请填写组织名称', icon: 'none' }); return; }
+    if (!storeName) { wx.showToast({ title: '请填写门店/站点名称', icon: 'none' }); return; }
+    if (!realName) { wx.showToast({ title: '请填写您的姓名', icon: 'none' }); return; }
+
+    this.setData({ onboardingCreating: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'createTenant',
+        data: { orgName, storeName, realName, phone, orgType }
+      }) as any;
+      const result = res && res.result;
+
+      if (!result || !result.success) {
+        wx.showToast({ title: result.error || '创建失败，请重试', icon: 'none', duration: 3000 });
+        return;
+      }
+
+      // 创建成功：刷新角色缓存并关闭引导
+      wx.setStorageSync('onboarding_dismissed', true);
+      this.setData({
+        showOnboardingModal: false,
+        onboardingStep: 'choice',
+        onboardingCreating: false
+      });
+      wx.showToast({ title: result.message || '创建成功！', icon: 'success', duration: 3000 });
+
+      // 短暂延迟后刷新角色（云函数已写入 user_roles，最终一致性延迟 ~300ms）
+      setTimeout(() => {
+        AuthService.refreshRoleFromServer && AuthService.refreshRoleFromServer();
+        this.initMinePage();
+      }, 800);
+
+    } catch (err: any) {
+      console.error('[onSubmitCreateOrg]', err);
+      wx.showToast({ title: err.message || '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ onboardingCreating: false });
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
 
   // 🏛️ 家长管理 / 资源兜底：迁移自已废弃的 pages/patriarch-dashboard，
   // 合并了原页面 initStore() + fetchDashboard() 两步——家长/督导锁定本店，

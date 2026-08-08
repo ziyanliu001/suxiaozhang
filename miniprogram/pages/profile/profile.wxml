@@ -2248,4 +2248,100 @@
     </view>
   </view>
 
+  <!-- ===================== 新用户入驻引导弹窗 ===================== -->
+  <view wx:if="{{showOnboardingModal}}" class="onb-mask">
+    <view class="onb-panel">
+
+      <!-- Step 1：选择路径 -->
+      <block wx:if="{{onboardingStep === 'choice'}}">
+        <!-- 头部 -->
+        <view class="onb-head">
+          <text class="onb-title">欢迎使用素小账 👋</text>
+          <view class="onb-close" bindtap="onDismissOnboarding">×</view>
+        </view>
+        <!-- 内容 -->
+        <view class="onb-body">
+          <text class="onb-desc">您目前还未关联任何门店。请选择接下来要做的事：</text>
+          <view class="onb-choice-btn onb-choice-primary" bindtap="onOnboardingChooseCreate">
+            <text class="onb-choice-icon">🏠</text>
+            <view class="onb-choice-text">
+              <text class="onb-choice-main">创建新组织 / 门店</text>
+              <text class="onb-choice-sub">成为大家长，自主管理账目</text>
+            </view>
+          </view>
+          <view class="onb-choice-btn onb-choice-secondary" bindtap="onOnboardingChooseJoin">
+            <text class="onb-choice-icon">🔑</text>
+            <view class="onb-choice-text">
+              <text class="onb-choice-main onb-choice-main--dark">通过邀请码加入</text>
+              <text class="onb-choice-sub">已有大家长给您发了邀请码</text>
+            </view>
+          </view>
+          <text class="onb-dismiss-hint" bindtap="onDismissOnboarding">以后再说</text>
+        </view>
+      </block>
+
+      <!-- Step 2：填写创建信息 -->
+      <block wx:if="{{onboardingStep === 'create'}}">
+        <!-- 固定头部 -->
+        <view class="onb-head">
+          <view class="onb-back" bindtap="onOnboardingBackToChoice">‹ 返回</view>
+          <text class="onb-title">创建您的组织</text>
+          <view class="onb-close" bindtap="onDismissOnboarding">×</view>
+        </view>
+        <!-- 中间滚动区 -->
+        <scroll-view scroll-y class="onb-scroll">
+          <text class="onb-form-hint">填写后您将成为该组织的大家长，可管理门店账目与成员。</text>
+
+          <view class="onb-field">
+            <text class="onb-label">组织名称 <text class="onb-required">*</text></text>
+            <input class="onb-input" placeholder="例：厦门海沧雨花斋"
+                   value="{{onboardingOrgName}}"
+                   bindinput="onOnboardingOrgNameInput" maxlength="30" />
+          </view>
+
+          <view class="onb-field">
+            <text class="onb-label">首个门店名称 <text class="onb-required">*</text></text>
+            <input class="onb-input" placeholder="同组织名或具体门店名"
+                   value="{{onboardingStoreName}}"
+                   bindinput="onOnboardingStoreNameInput" maxlength="30" />
+            <text class="onb-field-hint">默认与组织名相同，可单独修改</text>
+          </view>
+
+          <view class="onb-field">
+            <text class="onb-label">您的真实姓名 <text class="onb-required">*</text></text>
+            <input class="onb-input" placeholder="用于身份核验"
+                   value="{{onboardingRealName}}"
+                   bindinput="onOnboardingRealNameInput" maxlength="20" />
+          </view>
+
+          <view class="onb-field">
+            <text class="onb-label">联系电话（选填）</text>
+            <input class="onb-input" placeholder="方便运营联系"
+                   type="number" value="{{onboardingPhone}}"
+                   bindinput="onOnboardingPhoneInput" maxlength="11" />
+          </view>
+
+          <view class="onb-field">
+            <text class="onb-label">组织类型</text>
+            <picker mode="selector" range="{{orgTypeOptions}}" range-key="label"
+                    value="{{orgTypeIndex}}" bindchange="onOnboardingOrgTypeChange">
+              <view class="onb-picker">
+                <text>{{orgTypeOptions[orgTypeIndex].label}}</text>
+                <text class="onb-picker-arrow">›</text>
+              </view>
+            </picker>
+          </view>
+        </scroll-view>
+        <!-- 固定底部按钮 -->
+        <view class="onb-footer">
+          <view class="onb-submit-btn {{onboardingCreating ? 'onb-submit-btn--loading' : ''}}"
+                bindtap="onSubmitCreateOrg">
+            {{onboardingCreating ? '创建中…' : '立即创建'}}
+          </view>
+        </view>
+      </block>
+
+    </view>
+  </view>
+
 </view>

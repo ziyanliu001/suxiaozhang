@@ -46,9 +46,10 @@ App({
   globalData: {
     onNetworkReconnected: null as (() => void) | null,
     selectedStore: null as { storeId: string; storeName: string } | null,
+    // 🌐 多租户：不再预设任何具体门店，等用户登录后由 checkUserRole/store-picker 动态写入
     currentStore: {
-      storeId: 'store_haicang_001',
-      storeName: '海沧区雨花斋',
+      storeId: '',
+      storeName: '',
       role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'PATRIARCH' | 'STORE_PATRIARCH' | 'FAMILY' | 'STORE_FAMILY' | 'ADMIN' | 'SUPER_ADMIN'
     },
     userStoresList: [] as StorePermission[],

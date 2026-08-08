@@ -7,6 +7,22 @@ const _ = db.command;
 
 const MASK_TEXT = '***（仅店长可见）';
 
+// 🌐 多租户默认账套：仅雨花斋历史数据的遗留兜底标识，新机构不使用此值。
+// 在查询中用于区分"是否需要兼容无 tenantId 字段的旧数据"（见 makeTenantFilter）。
+const LEGACY_TENANT_ID = 'yuhuazhai_national';
+
+// 🛡️ 租户感知查询条件构建器：
+//   - 原始账套（yuhuazhai_national）：多租户改造前的历史记录可能无 tenantId 字段，
+//     查询时兼容"tenantId 存在且匹配"与"tenantId 字段不存在"两种情况，避免历史数据丢失。
+//   - 新机构账套：严格等值匹配，绝不返回其他机构（包括雨花斋历史遗留）数据，
+//     100% 隔离，防止跨租户数据污染。
+function makeTenantFilter(tenantId) {
+  if (tenantId === LEGACY_TENANT_ID) {
+    return _.or([{ tenantId }, { tenantId: _.exists(false) }]);
+  }
+  return { tenantId };
+}
+
 // 🌟 超管专属高阶治理看板：时间维度切片 + 离线门店预警阈值
 const RANGE_DAYS = { '7d': 7, 'month': 30, 'quarter': 90, 'year': 365 };
 const RANGE_LABELS = { '7d': '近7天', 'month': '本月', 'quarter': '本季度', 'year': '本年', 'all': '全部时间' };
@@ -219,11 +235,10 @@ exports.main = async (event, context) => {
     const rangeStartDate = RANGE_DAYS[rangeType] ? isoDateNDaysAgo(RANGE_DAYS[rangeType]) : null;
     const todayStr = isoDateNDaysAgo(0);
 
-    // 1. 获取本机构下的门店列表（🏢 多租户：绝不跨机构聚合，"全国大屏"实为"本机构大屏"）
-    // 🛡️ 修复"统计数据全为 0"根因：多租户改造上线前的历史 stores/report_logs 记录可能
-    // 完全没有 tenantId 字段；严格相等匹配 { tenantId } 会把这些历史数据整体过滤掉，
-    // 造成大屏明明有数据却全部显示 0 的假象。改为"匹配当前机构 tenantId 或字段本身不存在"均放行。
-    const storesQuery = _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]);
+    // 1. 获取本机构下的门店列表（🏢 多租户严格隔离：仅返回本机构门店，绝不跨机构聚合）
+    // 🛡️ makeTenantFilter 处理历史兼容：原始账套（yuhuazhai_national）兼容无 tenantId 字段
+    // 的旧记录；新机构账套严格等值匹配，100% 隔离，杜绝跨租户数据污染（见函数注释）
+    const storesQuery = makeTenantFilter(tenantId);
     const storesRes = await db.collection('stores').where(storesQuery).get();
     const allStores = storesRes.data || [];
 
@@ -276,7 +291,7 @@ exports.main = async (event, context) => {
     const batchLimit = 100;
     let skip = 0;
     const logsQueryConditions = [
-      _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]),
+      makeTenantFilter(tenantId),
       { isVoid: _.neq(true) },
       // 🐛 二级审核门槛缺失：本函数此前唯独没有套用 getReports(approvedOnly)/
       // getStatisticsData 全站统一的 approvalStatus 过滤，义工/店长刚提交、店长
@@ -319,7 +334,7 @@ exports.main = async (event, context) => {
         let allPrevLogs = [];
         let prevSkip = 0;
         const prevLogsQueryWhere = _.and([
-          _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]),
+          makeTenantFilter(tenantId),
           { isVoid: _.neq(true) },
           { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) },
           { dateString: _.gte(prevRangeStartDate) },
@@ -361,7 +376,7 @@ exports.main = async (event, context) => {
     let nationalOilTotal = 0;
     let nationalVegetableTotal = 0;
     try {
-      const materialConditions = [_.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }])];
+      const materialConditions = [makeTenantFilter(tenantId)];
       if (rangeStartDate) {
         materialConditions.push({ dateString: _.gte(rangeStartDate) });
       }
