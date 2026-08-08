@@ -2115,8 +2115,8 @@
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
             <view class="form-picker-selector">{{applyForm.storeName || '请选择门店'}}</view>
           </picker>
-          <input wx:else class="form-input" placeholder="例：福建省厦门市海沧区雨花斋（或 关爱助老食堂）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
-          <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 请按【省/市/区县 + 门店名称】格式填写，方便全国/区域数据精准汇总</text>
+          <input wx:else class="form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
         <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进

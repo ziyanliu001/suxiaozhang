@@ -2214,8 +2214,8 @@
           <!-- 组织/门店名称 -->
           <view class="onb-field-group">
             <text class="onb-field-label">门店名称</text>
-            <input class="onb-field-input" placeholder="例：福建省厦门市海沧区雨花斋" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
-            <text class="onb-field-hint">💡 建议补充省/市/区县前缀，方便平台数据汇总与定位</text>
+            <input class="onb-field-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
+            <text class="onb-field-hint">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
           </view>
 
           <!-- 文化寄语第一句 -->
@@ -2364,11 +2364,11 @@
           class="esn-input"
           value="{{tempStoreName}}"
           bindinput="onTempStoreNameInput"
-          placeholder="例：福建省厦门市海沧区雨花斋"
+          placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）"
           maxlength="60"
           focus="{{showEditStoreNameModal}}"
         />
-        <text class="esn-hint">💡 请保持【省/市/区县 + 门店名称】规范，方便平台数据汇总</text>
+        <text class="esn-hint">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
       </view>
       <view class="esn-footer">
         <view class="esn-btn esn-btn-cancel" bindtap="onCloseEditStoreNameModal">取消</view>
