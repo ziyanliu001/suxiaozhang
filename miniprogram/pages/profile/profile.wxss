@@ -881,6 +881,7 @@
 .pd-mgmt-center-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin: 20rpx 0 12rpx;
 }
 
@@ -889,6 +890,135 @@
   font-weight: bold;
   color: #495057;
   letter-spacing: 0.5rpx;
+  flex-shrink: 0;
+}
+
+/* 门店名 + ✏️ 修改 行：右侧紧凑展示，点击唤起快捷改名弹窗 */
+.pd-store-name-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #F3F4F6;
+  border-radius: 20rpx;
+  padding: 6rpx 14rpx;
+  max-width: 400rpx;
+}
+
+.pd-store-name-text {
+  font-size: 22rpx;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280rpx;
+}
+
+.pd-store-edit-btn {
+  font-size: 22rpx;
+  color: #6B7280;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── ✏️ 快捷修改门店名称 Mini-Modal ──────────────────────────────── */
+.esn-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.esn-card {
+  width: 86%;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.12);
+}
+
+.esn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx 36rpx 20rpx;
+  border-bottom: 1rpx solid #F3F4F6;
+}
+
+.esn-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.esn-close {
+  width: 44rpx;
+  height: 44rpx;
+  line-height: 44rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 22rpx;
+}
+
+.esn-body {
+  padding: 28rpx 36rpx 20rpx;
+}
+
+.esn-input {
+  width: 100%;
+  height: 80rpx;
+  border: 1rpx solid #D1D5DB;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  color: #111827;
+  background: #FAFAFA;
+  box-sizing: border-box;
+}
+
+.esn-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #9CA3AF;
+  margin-top: 12rpx;
+  line-height: 1.6;
+}
+
+.esn-footer {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+  padding: 16rpx 36rpx 36rpx;
+}
+
+.esn-btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.esn-btn-cancel {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+.esn-btn-confirm {
+  background: #2563EB;
+  color: #FFFFFF;
+  box-shadow: 0 4rpx 12rpx rgba(37, 99, 235, 0.25);
+}
+
+.esn-btn-loading {
+  background: #93C5FD;
+  box-shadow: none;
 }
 
 /* 管理中心内细分隔线（密钥行 / 工具行 之前） */
@@ -4893,7 +5023,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 1200;
+  z-index: 9999;
 }
 
 .onb-panel {
@@ -5084,7 +5214,9 @@
 /* ---- 固定底部提交按钮 ---- */
 .onb-footer {
   flex-shrink: 0;
-  padding: 20rpx 40rpx calc(36rpx + env(safe-area-inset-bottom, 0px));
+  /* 120rpx = 100rpx TabBar 高度 + 20rpx 视觉间距，确保按钮在任何设备（含无底部 Home 条）
+     都不被自定义 TabBar 遮挡；env(safe-area-inset-bottom) 另行叠加处理 iPhone 刘海 */
+  padding: 20rpx 40rpx calc(120rpx + env(safe-area-inset-bottom));
   border-top: 1rpx solid #F3F4F6;
 }
 

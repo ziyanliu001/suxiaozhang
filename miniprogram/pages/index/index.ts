@@ -7950,15 +7950,17 @@ Page({
         operatingDays: result.operatingDays || 0,
         ledgerPublicRate: result.ledgerPublicRate || null
       };
+      const isYuhuazhai = this.data.orgType === 'yuhuazhai';
       this.setData({
         sunshineLedgerData: ledgerData,
-        // 📊 完美 4x2 网格：固定 8 项，缺数据时展示"暂无数据"而不是编造出的百分比
+        // 📊 完美 4x2 网格：固定 8 项，缺数据时展示"暂无数据"而不是编造出的百分比；
+        // 工时/志愿人次标签随 orgType 动态切换：雨花斋用"护持"，其他组织用"服务/志愿"
         sunshineStatCards: [
           { label: '累计就餐人次', value: String(ledgerData.totalDiners) },
           { label: '当月就餐人次', value: String(ledgerData.monthlyDiners) },
           { label: '爱心送餐份数', value: String(ledgerData.takeawayMeals) },
-          { label: '累计护持工时', value: String(ledgerData.totalHours) },
-          { label: '参与护持总人次', value: String(ledgerData.volunteerCount) },
+          { label: isYuhuazhai ? '累计护持工时' : '累计服务工时', value: String(ledgerData.totalHours) },
+          { label: isYuhuazhai ? '参与护持总人次' : '参与志愿总人次', value: String(ledgerData.volunteerCount) },
           { label: '已核销餐报篇数', value: String(ledgerData.auditedReportsCount) },
           { label: '安全营运天数', value: String(ledgerData.operatingDays) },
           { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }

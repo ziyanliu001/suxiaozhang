@@ -365,6 +365,11 @@
       <!-- ─── 门店管理中心 ─────────────────────────────── -->
       <view class="pd-mgmt-center-header">
         <text class="pd-mgmt-center-title">🏢 门店管理中心</text>
+        <!-- ✏️ 快捷修改门店名称：仅大家长/超管可见，catchtap 防止冒泡触发外层事件 -->
+        <view class="pd-store-name-edit-row" wx:if="{{isPatriarch || isSuperAdmin}}" catchtap="onQuickEditStoreName">
+          <text class="pd-store-name-text">{{currentStoreName || '未命名门店'}}</text>
+          <text class="pd-store-edit-btn">✏️ 修改</text>
+        </view>
       </view>
 
       <!-- 成员管理 -->
@@ -2208,8 +2213,9 @@
 
           <!-- 组织/门店名称 -->
           <view class="onb-field-group">
-            <text class="onb-field-label">组织名称</text>
-            <input class="onb-field-input" placeholder="您的组织或门店名称" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="40" />
+            <text class="onb-field-label">门店名称</text>
+            <input class="onb-field-input" placeholder="例：福建省厦门市海沧区雨花斋" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
+            <text class="onb-field-hint">💡 建议补充省/市/区县前缀，方便平台数据汇总与定位</text>
           </view>
 
           <!-- 文化寄语第一句 -->
@@ -2343,6 +2349,33 @@
         </view>
       </block>
 
+    </view>
+  </view>
+
+  <!-- ✏️ 快捷修改门店名称 Mini-Modal（大家长/超管专属） -->
+  <view class="esn-mask" wx:if="{{showEditStoreNameModal}}" bindtap="onCloseEditStoreNameModal">
+    <view class="esn-card" catchtap="stopPropagation">
+      <view class="esn-header">
+        <text class="esn-title">✏️ 修改门店名称</text>
+        <view class="esn-close" bindtap="onCloseEditStoreNameModal">✕</view>
+      </view>
+      <view class="esn-body">
+        <input
+          class="esn-input"
+          value="{{tempStoreName}}"
+          bindinput="onTempStoreNameInput"
+          placeholder="例：福建省厦门市海沧区雨花斋"
+          maxlength="60"
+          focus="{{showEditStoreNameModal}}"
+        />
+        <text class="esn-hint">💡 请保持【省/市/区县 + 门店名称】规范，方便平台数据汇总</text>
+      </view>
+      <view class="esn-footer">
+        <view class="esn-btn esn-btn-cancel" bindtap="onCloseEditStoreNameModal">取消</view>
+        <view class="esn-btn esn-btn-confirm {{editStoreNameSaving ? 'esn-btn-loading' : ''}}" bindtap="onConfirmEditStoreName">
+          {{editStoreNameSaving ? '保存中…' : '确认修改'}}
+        </view>
+      </view>
     </view>
   </view>
 

@@ -125,9 +125,10 @@
           <text class="form-label">新门店名称</text>
           <input class="new-store-input"
                  type="text"
-                 placeholder="如：雨花斋集美区店"
+                 placeholder="例：福建省厦门市海沧区雨花斋（或 关爱助老食堂）"
                  value="{{newStoreForm.customStoreName}}"
                  bindinput="onNewStoreNameInput"/>
+          <text class="form-hint">💡 请按【省/市/区县 + 门店名称】格式填写，方便数据汇总</text>
 
           <block wx:if="{{currentStore.role !== 'ADMIN'}}">
             <text class="form-label">申请身份</text>

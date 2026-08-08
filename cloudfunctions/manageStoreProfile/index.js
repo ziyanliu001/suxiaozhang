@@ -250,6 +250,20 @@ exports.main = async (event, context) => {
         updateFields.longitude = lng;
       }
 
+      // 🏷️ 门店主名称（storeName）：仅大家长/超管可直接修改，店长改名须经大家长审批走
+      // pendingProfileUpdate 流程（由下面的风控锁处理）。清洗后限 60 字，空值不写入。
+      if (event.storeName !== undefined) {
+        if (caller.role === 'store_patriarch' || caller.role === 'super_admin') {
+          const cleanedName = sanitizeText(event.storeName).slice(0, 60);
+          if (cleanedName) {
+            updateFields.storeName = cleanedName;
+            // registeredName 同步保持一致，避免两个字段出现分叉
+            updateFields.registeredName = updateFields.registeredName || cleanedName;
+          }
+        }
+        // 店长传了 storeName 但本身无权直接改→静默忽略，让 registeredName 走审批流
+      }
+
       // 🔐 管理员密钥：安全敏感字段，仅大家长/超管可设置/清空，店长无权限。
       // 直接写库，不经过家长风控锁（该字段本身就是大家长/超管级操作）
       if (event.adminKey !== undefined) {

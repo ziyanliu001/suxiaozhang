@@ -1413,11 +1413,12 @@ page {
   min-width: 0 !important;
   background: #FFFDF7 !important;
   border: 1rpx solid #F5E6CD !important;
-  border-radius: 12rpx !important;
-  padding: 12rpx 4rpx !important;
+  border-radius: 16rpx !important;
+  padding: 16rpx 4rpx !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
+  gap: 4rpx !important;
 }
 
 .stats-item-label {
@@ -7945,12 +7946,13 @@ button.poster-gen-btn[disabled] {
 .nug-wrapper {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   padding: 48rpx 32rpx;
   background: #F8FAFF;
   box-sizing: border-box;
+  z-index: 10;
 }
 
 .nug-card {
@@ -7958,11 +7960,13 @@ button.poster-gen-btn[disabled] {
   background: #FFFFFF;
   border-radius: 28rpx;
   padding: 56rpx 40rpx 44rpx;
-  box-shadow: 0 8rpx 32rpx rgba(37, 99, 235, 0.08);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.05);
+  border: 1rpx solid #F3F4F6;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
   gap: 20rpx;
+  box-sizing: border-box;
 }
 
 .nug-emoji {
@@ -7987,9 +7991,9 @@ button.poster-gen-btn[disabled] {
 
 .nug-btn {
   width: 100%;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
   gap: 20rpx;
   border-radius: 20rpx;
   padding: 28rpx 32rpx;

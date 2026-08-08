@@ -413,7 +413,8 @@
    效果——与本项目其余按钮统一走 flex 居中这一套，文本/图标垂直水平都居中 ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
-  margin-bottom: calc(16rpx + env(safe-area-inset-bottom));
+  /* 120rpx = 100rpx TabBar + 20rpx 间距，防止"加入/创建新门店"按钮被 TabBar 遮挡 */
+  margin-bottom: calc(120rpx + env(safe-area-inset-bottom));
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -447,8 +448,8 @@
 .sheet-footer {
   flex-shrink: 0;
   background: #FBF9F5;
-  padding: 24rpx 0 calc(24rpx + constant(safe-area-inset-bottom));
-  padding: 24rpx 0 calc(24rpx + env(safe-area-inset-bottom));
+  /* 120rpx = 100rpx TabBar + 20rpx 间距，防止新门店申请提交按钮被 TabBar 遮挡 */
+  padding: 24rpx 0 calc(120rpx + env(safe-area-inset-bottom));
   z-index: 10;
   box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
 }

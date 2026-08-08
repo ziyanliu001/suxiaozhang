@@ -211,6 +211,11 @@ Page({
     orgConfigSlogan2:      '',   // 文化寄语 · 第二句
     orgConfigLogoUrl:      '',   // 门店 Logo（云文件 ID 或临时 URL）
     orgConfigSaving:       false,
+    // ── ✏️ 快捷修改门店名称 Mini-Modal ───────────────────────────────────
+    showEditStoreNameModal: false,
+    tempStoreName:          '',   // 编辑中的临时名称
+    editingStoreId:         '',   // 弹窗打开时锁定的目标 storeId（super_admin 必须传）
+    editStoreNameSaving:    false,
     // ────────────────────────────────────────────────────────────────────
 
     // ── 🌐 新用户引导入驻 Modal ────────────────────────────────────────
@@ -4402,16 +4407,93 @@ Page({
   // 🎨 组织信息配置（大家长专属）
   // ─────────────────────────────────────────────────────────────────────
 
+  // ── ✏️ 快捷修改门店名称 ────────────────────────────────────────────────
+  onQuickEditStoreName() {
+    // 解析目标 storeId：patriarch 在云函数侧自动取 caller.storeId，无需传；
+    // super_admin 调用 resolveWriteTarget 时必须传 requestedStoreId，否则报
+    // "请指定目标门店"。这里统一取一次，传参时两者都传，云函数自行按角色取舍。
+    const storeId = (this.data.patriarchData && (this.data.patriarchData as any).currentStoreId as string)
+      || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
+      || '';
+    this.setData({
+      showEditStoreNameModal: true,
+      tempStoreName: this.data.currentStoreName || '',
+      editingStoreId: storeId,
+      editStoreNameSaving: false
+    });
+  },
+
+  onCloseEditStoreNameModal() {
+    this.setData({ showEditStoreNameModal: false });
+  },
+
+  onTempStoreNameInput(e: any) {
+    this.setData({ tempStoreName: e.detail.value || '' });
+  },
+
+  async onConfirmEditStoreName() {
+    if (this.data.editStoreNameSaving) return;
+    const newName = (this.data.tempStoreName || '').trim();
+    if (!newName) {
+      wx.showToast({ title: '门店名称不能为空', icon: 'none' });
+      return;
+    }
+    if (newName === this.data.currentStoreName) {
+      this.setData({ showEditStoreNameModal: false });
+      return;
+    }
+    this.setData({ editStoreNameSaving: true });
+    try {
+      // storeId 兜底：patriarch 不需要传（云函数取 caller.storeId），但 super_admin
+      // 必须传，否则 resolveWriteTarget 返回"请指定目标门店"。两者都传安全，云函数
+      // 对 patriarch 只读 caller.storeId，传多了不影响
+      const storeId = (this.data.editingStoreId as string)
+        || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
+        || '';
+      const callData: Record<string, any> = { action: 'update', storeName: newName, registeredName: newName };
+      if (storeId) callData.storeId = storeId;
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: callData
+      });
+      const result = res && res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: result && result.error || '保存失败，请重试', icon: 'none', duration: 3000 });
+        return;
+      }
+      wx.showToast({ title: '门店名称修改成功', icon: 'success' });
+      this.setData({ showEditStoreNameModal: false, currentStoreName: newName });
+      // 同步本地缓存：auth_user_role + current_store_name，确保首页胶囊立即刷新
+      try {
+        const cached = wx.getStorageSync('auth_user_role');
+        if (cached) {
+          const roleInfo = JSON.parse(cached);
+          roleInfo.storeName = newName;
+          wx.setStorageSync('auth_user_role', JSON.stringify(roleInfo));
+        }
+        wx.setStorageSync('current_store_name', newName);
+      } catch (e) { /* ignore */ }
+    } catch (err: any) {
+      console.error('[onConfirmEditStoreName]', err);
+      wx.showToast({ title: err.message || '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ editStoreNameSaving: false });
+    }
+  },
+  // ─────────────────────────────────────────────────────────────────────
+
   async onOpenOrgConfigModal() {
-    // 先打开弹窗（空表单），后台拉取现有配置预填
+    // 立即用本地缓存名称预填，避免用户看到空白输入框等待网络
+    const cachedName = this.data.currentStoreName || '';
     this.setData({
       showOrgConfigModal: true,
-      orgConfigName:      '',
-      orgConfigSlogan1:   '',
-      orgConfigSlogan2:   '',
-      orgConfigLogoUrl:   '',
-      orgConfigSaving:    false
+      orgConfigName:    cachedName,
+      orgConfigSlogan1: '',
+      orgConfigSlogan2: '',
+      orgConfigLogoUrl: '',
+      orgConfigSaving:  false
     });
+    // 后台拉取最新配置覆盖（slogan / logo 等本地缓存没有的字段）
     try {
       const res: any = await wx.cloud.callFunction({
         name: 'manageStoreProfile',
@@ -4420,14 +4502,15 @@ Page({
       const d = res && res.result && res.result.data;
       if (d) {
         this.setData({
-          orgConfigName:    d.registeredName || d.storeName || '',
+          // 优先取 storeName（权威字段），回退 registeredName，再回退已预填的缓存值
+          orgConfigName:    d.storeName || d.registeredName || cachedName,
           orgConfigSlogan1: d.slogan1 || '',
           orgConfigSlogan2: d.slogan2 || '',
           orgConfigLogoUrl: (Array.isArray(d.storefrontPhotos) && d.storefrontPhotos[0]) || ''
         });
       }
     } catch (err) {
-      // 预填失败不阻断用户操作，静默忽略
+      // 预填失败不阻断用户操作，当前已有缓存名称，静默忽略
     }
   },
 
@@ -4477,14 +4560,23 @@ Page({
     }
     this.setData({ orgConfigSaving: true });
     try {
+      const newName = orgConfigName.trim();
       const updateData: Record<string, any> = {
-        registeredName: orgConfigName.trim(),
+        // storeName 写入权限见云函数 manageStoreProfile：大家长/超管直接生效，
+        // 店长传此字段会被静默忽略（仍走 registeredName → pendingProfileUpdate 审批流）
+        storeName: newName,
+        registeredName: newName,
         slogan1: orgConfigSlogan1,
         slogan2: orgConfigSlogan2
       };
       if (orgConfigLogoUrl) {
         updateData.storefrontPhotos = [orgConfigLogoUrl];
       }
+      // super_admin 必须传 storeId，patriarch 传了也无害（云函数对 patriarch 忽略此参数）
+      const orgCfgStoreId = ((this.data.patriarchData as any)?.currentStoreId as string)
+        || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
+        || '';
+      if (orgCfgStoreId) updateData.storeId = orgCfgStoreId;
       const res = await wx.cloud.callFunction({
         name: 'manageStoreProfile',
         data: { action: 'update', ...updateData }
@@ -4496,6 +4588,21 @@ Page({
       }
       wx.showToast({ title: '组织信息已更新', icon: 'success' });
       this.setData({ showOrgConfigModal: false });
+
+      // 🔄 同步本地缓存：更新 auth_user_role 中的 storeName 与 current_store_name，
+      // 确保返回首页后 store-picker 胶囊与导航栏名称立即生效，无需重新登录
+      try {
+        const cached = wx.getStorageSync('auth_user_role');
+        if (cached) {
+          const roleInfo = JSON.parse(cached);
+          roleInfo.storeName = newName;
+          wx.setStorageSync('auth_user_role', JSON.stringify(roleInfo));
+        }
+        wx.setStorageSync('current_store_name', newName);
+      } catch (cacheErr) {
+        console.warn('[onSaveOrgConfig] 缓存更新失败，不影响主流程:', cacheErr);
+      }
+
       // 刷新门店状态缓存（取 patriarchData.currentStoreId，因为本弹窗仅大家长可见）
       const storeId = (this.data.patriarchData && this.data.patriarchData.currentStoreId) as string;
       if (storeId) setTimeout(() => fetchAndSyncStoreStatus(storeId), 600);
