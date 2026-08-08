@@ -763,8 +763,8 @@
 
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenForceUnbindModal">
         <view class="item-left">
-          <text class="manager-only-emoji">🚫</text>
-          <text class="item-text">移除异常管理员权限</text>
+          <text class="manager-only-emoji">🛡️</text>
+          <text class="item-text">撤销违规管理权限</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -1823,23 +1823,23 @@
     </view>
   </view>
 
-  <!-- 🛡️ 超管强制解绑弹窗 -->
+  <!-- 🛡️ 超管撤销管理权限弹窗 -->
   <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showForceUnbindModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showForceUnbindModal}}" bindtap="onCloseForceUnbindModal">
     <view class="feedback-sheet-panel sa-unbind-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
 
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
-          <text class="feedback-sheet-title">🚫 强制解绑恶意角色</text>
-          <text class="feedback-sheet-subtitle">将指定管理成员角色重置为义工并撤销其管理权限</text>
+          <text class="feedback-sheet-title">🛡️ 撤销管理权限</text>
+          <text class="feedback-sheet-subtitle">将违规管理成员降级为义工，操作立即生效</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseForceUnbindModal">✕</view>
       </view>
 
-      <!-- ① 成员列表选择区 -->
+      <!-- ① 搜索栏 -->
       <view class="sa-member-search-bar">
         <input class="sa-member-search-input"
-               placeholder="搜索姓名 / 门店 / 角色..."
+               placeholder="搜索成员姓名、手机号或门店..."
                value="{{forceUnbindSearchQuery}}"
                bindinput="onForceUnbindSearch" />
       </view>
@@ -1855,42 +1855,53 @@
           bindtap="onSelectForceUnbindMember"
           data-member="{{item}}"
         >
+          <!-- 左：头像 -->
+          <view class="sa-member-avatar-wrap">
+            <image wx:if="{{item.avatarUrl}}" class="sa-member-avatar" src="{{item.avatarUrl}}" mode="aspectFill" />
+            <view wx:else class="sa-member-avatar-fallback">{{item.realName ? item.realName[0] : '?'}}</view>
+          </view>
+          <!-- 中：姓名 + 当前角色·门店 -->
           <view class="sa-member-info">
             <text class="sa-member-name">{{item.realName || '未知姓名'}}</text>
             <text class="sa-member-meta">{{item.roleLabel}} · {{item.storeName || '未知门店'}}</text>
           </view>
-          <view class="sa-member-check" wx:if="{{forceUnbindSelectedMember && forceUnbindSelectedMember.applyId === item.applyId}}">✓</view>
+          <!-- 右：遮敏手机号 + 选中勾 -->
+          <view class="sa-member-right">
+            <text class="sa-member-phone" wx:if="{{item.phoneMasked}}">{{item.phoneMasked}}</text>
+            <text class="sa-member-check" wx:if="{{forceUnbindSelectedMember && forceUnbindSelectedMember.applyId === item.applyId}}">✓</text>
+          </view>
         </view>
       </scroll-view>
       <view class="sa-member-empty" wx:elif="{{!forceUnbindMemberLoading}}">
         <text>{{forceUnbindSearchQuery ? '未找到匹配成员' : '暂无管理岗位成员'}}</text>
       </view>
 
-      <!-- ② 已选中成员信息卡片 -->
+      <!-- ② 已选中成员确认卡片 -->
       <view class="sa-selected-card" wx:if="{{forceUnbindSelectedMember}}">
+        <!-- 头像 -->
+        <view class="sa-selected-avatar-wrap">
+          <image wx:if="{{forceUnbindSelectedMember.avatarUrl}}" class="sa-selected-avatar" src="{{forceUnbindSelectedMember.avatarUrl}}" mode="aspectFill" />
+          <view wx:else class="sa-selected-avatar-fallback">{{forceUnbindSelectedMember.realName ? forceUnbindSelectedMember.realName[0] : '?'}}</view>
+        </view>
+        <!-- 信息 -->
         <view class="sa-selected-card-left">
           <text class="sa-selected-name">{{forceUnbindSelectedMember.realName}}</text>
           <text class="sa-selected-meta">{{forceUnbindSelectedMember.roleLabel}} · {{forceUnbindSelectedMember.storeName}}</text>
-          <text class="sa-selected-notice">即将强行将该用户的角色重置为【义工】，并作废其现有管理权限</text>
+          <text class="sa-selected-phone" wx:if="{{forceUnbindSelectedMember.phoneMasked}}">📱 {{forceUnbindSelectedMember.phoneMasked}}</text>
         </view>
-        <view class="sa-selected-actions">
-          <view class="sa-copy-btn" bindtap="onCopySelectedOpenId" wx:if="{{forceUnbindSelectedMember.openId}}">复制 ID</view>
-          <view class="sa-clear-btn" bindtap="onClearForceUnbindSelection">取消</view>
-        </view>
+        <!-- 取消 -->
+        <view class="sa-clear-btn" bindtap="onClearForceUnbindSelection">取消</view>
       </view>
 
-      <!-- ③ 兜底：手动输入 openId（仅未从列表选中成员时展示） -->
+      <!-- ③ 兜底：手动输入账号编号（仅未从列表选中时展示） -->
       <view class="sa-manual-section" wx:if="{{!forceUnbindSelectedMember}}">
-        <text class="vt-form-label">或手动粘贴 openId（兜底）</text>
-        <view class="sa-manual-row">
-          <input class="sa-manual-input"
-                 type="text"
-                 value="{{forceUnbindInput}}"
-                 bindinput="onForceUnbindInput"
-                 placeholder="粘贴目标用户 openId"
-                 maxlength="100" />
-          <view class="sa-copy-btn" bindtap="onCopySelectedOpenId" wx:if="{{forceUnbindInput}}">复制</view>
-        </view>
+        <text class="vt-form-label">找不到该成员？</text>
+        <input class="sa-manual-input"
+               type="text"
+               value="{{forceUnbindInput}}"
+               bindinput="onForceUnbindInput"
+               placeholder="输入用户专有账号编号（如无法搜到时使用）"
+               maxlength="100" />
       </view>
 
       <!-- ④ 操作结果 -->
@@ -1898,12 +1909,12 @@
         <text>{{forceUnbindResult}}</text>
       </view>
 
-      <!-- ⑤ 确认按钮 -->
+      <!-- ⑤ 撤销按钮 -->
       <button class="feedback-submit-btn sa-danger-btn"
               bindtap="onConfirmForceUnbind"
               loading="{{forceUnbindSaving}}"
               disabled="{{forceUnbindSaving || (!forceUnbindSelectedMember && !forceUnbindInput)}}">
-        {{forceUnbindSelectedMember ? '强制解绑：' + forceUnbindSelectedMember.realName : '强制解绑'}}
+        {{forceUnbindSelectedMember ? '撤销管理权限：' + forceUnbindSelectedMember.realName : '撤销管理权限'}}
       </button>
     </view>
   </view>

@@ -3828,14 +3828,14 @@
   flex-shrink: 0;
 }
 .sa-member-list-scroll {
-  max-height: 280rpx;
+  max-height: 320rpx;
   flex-shrink: 0;
   padding: 0 32rpx;
 }
 .sa-member-item {
   display: flex;
   align-items: center;
-  padding: 18rpx 20rpx;
+  padding: 16rpx 18rpx;
   border-radius: 16rpx;
   margin-bottom: 10rpx;
   background: #FAFAFA;
@@ -3846,6 +3846,31 @@
   background: #FFF3EB;
   border-color: #E75B3E;
 }
+
+/* 成员头像 */
+.sa-member-avatar-wrap {
+  flex-shrink: 0;
+  margin-right: 18rpx;
+}
+.sa-member-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  display: block;
+}
+.sa-member-avatar-fallback {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E75B3E 0%, #C0392B 100%);
+  color: #FFF;
+  font-size: 28rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .sa-member-info {
   flex: 1;
   min-width: 0;
@@ -3854,32 +3879,70 @@
   display: block;
   font-size: 28rpx;
   font-weight: bold;
-  color: #333;
+  color: #1A1A2E;
 }
 .sa-member-meta {
   display: block;
   font-size: 22rpx;
-  color: #999;
+  color: #8B909A;
   margin-top: 4rpx;
 }
+
+/* 右侧：遮敏手机号 + 选中勾 */
+.sa-member-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
+  margin-left: 12rpx;
+}
+.sa-member-phone {
+  font-size: 21rpx;
+  color: #9CA3AF;
+  font-family: monospace;
+}
 .sa-member-check {
-  font-size: 32rpx;
+  font-size: 30rpx;
   color: #E75B3E;
   font-weight: bold;
-  margin-left: 16rpx;
-  flex-shrink: 0;
 }
 
-/* 已选中成员卡片 */
+/* 已选中成员确认卡片 */
 .sa-selected-card {
-  margin: 16rpx 32rpx;
+  margin: 12rpx 32rpx 8rpx;
   background: #FFF3EB;
   border: 2rpx solid #E75B3E;
-  border-radius: 16rpx;
-  padding: 20rpx;
+  border-radius: 18rpx;
+  padding: 18rpx 20rpx;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   flex-shrink: 0;
+  gap: 16rpx;
+}
+/* 已选中头像 */
+.sa-selected-avatar-wrap {
+  flex-shrink: 0;
+}
+.sa-selected-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  display: block;
+  border: 3rpx solid #E75B3E;
+}
+.sa-selected-avatar-fallback {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E75B3E 0%, #C0392B 100%);
+  color: #FFF;
+  font-size: 32rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3rpx solid #C0392B;
 }
 .sa-selected-card-left {
   flex: 1;
@@ -3897,57 +3960,37 @@
   color: #666;
   margin-top: 4rpx;
 }
-.sa-selected-notice {
+.sa-selected-phone {
   display: block;
-  font-size: 20rpx;
-  color: #C0392B;
-  margin-top: 8rpx;
-  line-height: 1.5;
-}
-.sa-selected-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-  flex-shrink: 0;
-  margin-left: 16rpx;
-}
-.sa-copy-btn,
-.sa-clear-btn {
   font-size: 22rpx;
-  padding: 8rpx 18rpx;
+  color: #8B909A;
+  margin-top: 6rpx;
+}
+.sa-clear-btn {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  padding: 8rpx 20rpx;
   border-radius: 20rpx;
   text-align: center;
   white-space: nowrap;
-}
-.sa-copy-btn {
-  background: #FFF;
-  color: #E75B3E;
-  border: 1rpx solid #E75B3E;
-}
-.sa-clear-btn {
   background: #F5F3F0;
   color: #666;
   border: 1rpx solid #DDD;
 }
 
-/* 手动输入区 */
+/* 手动输入兜底区 */
 .sa-manual-section {
   padding: 0 32rpx 8rpx;
   flex-shrink: 0;
 }
-.sa-manual-row {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
 .sa-manual-input {
-  flex: 1;
+  width: 100%;
   background: #F5F3F0;
   border-radius: 16rpx;
   padding: 16rpx 20rpx;
   font-size: 24rpx;
   color: #333;
-  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* 操作结果展示区 */

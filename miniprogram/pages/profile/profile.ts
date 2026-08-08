@@ -462,22 +462,25 @@ Page({
     adminKeyModalInput: '',
     adminKeyModalSaving: false,
 
-    // 🔐 超管强制解绑：从成员列表选择，或手动粘贴 openId（兜底）
+    // 🛡️ 超管撤销管理权限：从成员卡片列表选择，或手动输入账号编号（兜底）
     showForceUnbindModal: false,
     forceUnbindMemberLoading: false,
     forceUnbindMemberList: [] as Array<{
-      applyId: string; realName: string; phone: string; role: string;
-      roleLabel: string; storeName: string; openId?: string;
+      applyId: string; realName: string; phone: string; phoneMasked: string;
+      role: string; roleLabel: string; storeName: string;
+      avatarUrl?: string; openId?: string;
     }>,
     forceUnbindFilteredList: [] as Array<{
-      applyId: string; realName: string; phone: string; role: string;
-      roleLabel: string; storeName: string; openId?: string;
+      applyId: string; realName: string; phone: string; phoneMasked: string;
+      role: string; roleLabel: string; storeName: string;
+      avatarUrl?: string; openId?: string;
     }>,
     forceUnbindSearchQuery: '',
     forceUnbindSelectedMember: null as null | {
-      applyId: string; realName: string; roleLabel: string; storeName: string; openId?: string;
+      applyId: string; realName: string; phone?: string; phoneMasked?: string;
+      roleLabel: string; storeName: string; avatarUrl?: string; openId?: string;
     },
-    forceUnbindInput: '',   // 手动粘贴 openId（兜底）
+    forceUnbindInput: '',   // 手动输入账号编号（兜底，无法从列表找到时使用）
     forceUnbindSaving: false,
     forceUnbindResult: '',  // 操作结果描述，成功后展示
     // 🔑 超管重置门店密钥：门店选择卡片 + 新密钥输入
@@ -3589,8 +3592,14 @@ Page({
       });
       const result = res.result;
       const ELEVATED = ['finance', 'store_manager', 'store_patriarch'];
+      const maskPhone = (p: string) => {
+        if (!p || p.length < 7) return p || '';
+        return p.slice(0, 3) + '****' + p.slice(-4);
+      };
       const all = result && result.success
-        ? (result.data || []).filter((m: any) => ELEVATED.includes(m.role))
+        ? (result.data || [])
+            .filter((m: any) => ELEVATED.includes(m.role))
+            .map((m: any) => ({ ...m, phoneMasked: maskPhone(m.phone || '') }))
         : [];
       this.setData({ forceUnbindMemberList: all, forceUnbindFilteredList: all });
     } catch (err) {
@@ -3615,6 +3624,7 @@ Page({
     const filtered = q
       ? all.filter((m) =>
           (m.realName || '').toLowerCase().includes(q) ||
+          (m.phone || '').includes(q) ||
           (m.storeName || '').toLowerCase().includes(q) ||
           (m.roleLabel || '').includes(q))
       : all;
@@ -3624,7 +3634,7 @@ Page({
   onSelectForceUnbindMember(e: any) {
     const member = e.currentTarget.dataset.member;
     if (!member) return;
-    this.setData({ forceUnbindSelectedMember: member, forceUnbindInput: member.openId || '' });
+    this.setData({ forceUnbindSelectedMember: member, forceUnbindInput: '' });
   },
 
   onClearForceUnbindSelection() {
@@ -3652,13 +3662,16 @@ Page({
       return;
     }
 
-    const displayName = selected ? `【${selected.realName}】（${selected.roleLabel} · ${selected.storeName}）` : `openId：${manualOpenId.slice(0, 16)}...`;
+    const displayName = selected
+      ? `${selected.storeName}-${selected.realName}`
+      : `账号编号 ${manualOpenId.slice(0, 8)}...`;
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
-        title: '⚠️ 确认强制解绑',
-        content: `即将强行将用户 ${displayName} 的角色重置为【义工】，并作废其现有管理权限。此操作不可撤销，请确认。`,
-        confirmText: '确认解绑',
+        title: '撤销管理权限确认',
+        content: `⚠️ 确定要将 [${displayName}] 的管理权限撤销并降级为普通义工吗？撤销后该用户将立即失去管理权限，此操作无法撤回。`,
+        confirmText: '确认撤销',
         confirmColor: '#C0392B',
+        cancelText: '我再想想',
         success: (res) => resolve(!!res.confirm),
         fail: () => resolve(false)
       });
@@ -3680,7 +3693,7 @@ Page({
         wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
         return;
       }
-      const resultMsg = `✅ 解绑成功 — 原角色：${result.prevRole || ''}，门店：${result.prevStoreName || '无'}`;
+      const resultMsg = `✅ 权限已撤销 — 原角色：${result.prevRole || ''}，门店：${result.prevStoreName || '无'}`;
       this.setData({
         forceUnbindResult: resultMsg,
         forceUnbindSelectedMember: null,
@@ -3693,7 +3706,7 @@ Page({
           (m) => !(selected ? m.applyId === selected.applyId : m.openId === manualOpenId)
         )
       });
-      wx.showToast({ title: '强制解绑成功', icon: 'success' });
+      wx.showToast({ title: '管理权限已撤销', icon: 'success' });
     } catch (err) {
       console.error('[onConfirmForceUnbind] 异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
