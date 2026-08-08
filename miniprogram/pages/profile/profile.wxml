@@ -767,6 +767,18 @@
         </view>
         <view class="item-arrow">❯</view>
       </view>
+
+      <!-- 🗂️ 超管运维：一键同步云数据库所有复合索引（消除控制台索引缺失告警） -->
+      <view class="action-item-cell {{createIndexesRunning ? 'action-item-disabled' : ''}}"
+            hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
+            wx:if="{{isRealSuperAdmin}}"
+            bindtap="onTriggerCreateIndexes">
+        <view class="item-left">
+          <text class="manager-only-emoji">🗂️</text>
+          <text class="item-text">刷新数据库索引{{createIndexesRunning ? '（运行中…）' : ''}}</text>
+        </view>
+        <view class="item-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
+      </view>
     </view>
 
   </view>

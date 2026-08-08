@@ -483,6 +483,7 @@ Page({
     resetStoreKeyInput: '',
     resetStoreKeySaving: false,
     resetStoreKeyIsClearMode: false,  // true = 留空清除密钥，触发二次警示
+    createIndexesRunning: false,      // 🗂️ 刷新数据库索引运行态锁
 
     // 📢 公告管理半屏弹窗
     showNoticeManagementModal: false,
@@ -3476,6 +3477,55 @@ Page({
         }
       }
     });
+  },
+
+  // 🗂️ 一键同步云数据库复合索引：解决控制台「数据库索引建议」告警
+  // 幂等安全：每条索引独立 try-catch，已存在则跳过；适合随版本迭代反复调用
+  async onTriggerCreateIndexes() {
+    if (!this.data.isRealSuperAdmin || this.data.createIndexesRunning) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '🗂️ 刷新数据库索引',
+        content: '将调用 createIndexes 云函数同步所有复合索引定义。已存在的索引会自动跳过，无副作用。确认执行？',
+        confirmText: '确认执行',
+        cancelText: '取消',
+        success: (res) => resolve(res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
+    this.setData({ createIndexesRunning: true });
+    wx.showLoading({ title: '索引同步中…', mask: true });
+    try {
+      const res: any = await wx.cloud.callFunction({ name: 'createIndexes' });
+      const result = res.result;
+      wx.hideLoading();
+      if (result && result.success) {
+        wx.showModal({
+          title: '✅ 索引同步完成',
+          content: result.summary || '所有索引已同步',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      } else {
+        const failList = ((result && result.failures) || [])
+          .map((f: any) => `${f.collection}/${f.index}: ${f.error}`)
+          .join('\n');
+        wx.showModal({
+          title: '⚠️ 部分索引失败',
+          content: (result && result.summary) + (failList ? '\n\n' + failList : ''),
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onTriggerCreateIndexes]', err);
+      wx.showToast({ title: '云函数调用失败', icon: 'none' });
+    } finally {
+      this.setData({ createIndexesRunning: false });
+    }
   },
 
   onGoToStatistics() {
