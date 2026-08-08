@@ -151,6 +151,15 @@ const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
   otherCount: '其他'
 };
 
+// 从 createIndexes 云函数返回的摘要字符串（"新建 N 条，已存在跳过 M 条，失败 0 条"）
+// 提取数字，供口语化结果展示使用
+function parseIndexSummary(summary: string): { created: number; skipped: number; failed: number } {
+  const created = parseInt((summary.match(/新建\s*(\d+)\s*条/) || ['', '0'])[1], 10) || 0;
+  const skipped = parseInt((summary.match(/跳过\s*(\d+)\s*条/) || ['', '0'])[1], 10) || 0;
+  const failed  = parseInt((summary.match(/失败\s*(\d+)\s*条/) || ['', '0'])[1], 10) || 0;
+  return { created, skipped, failed };
+}
+
 Page({
   isNavigating: false,
   // ❤️ 爱心护持榜：ViewModel 本地缓存（10 分钟失效）+ 切换 Segment 防抖计时器，
@@ -3456,43 +3465,40 @@ Page({
 
   onTriggerClearCache() {
     wx.showModal({
-      title: '🧹 确认清洗测试缓存？',
-      content: '此操作将清理本地所有测试缓存数据。云端正式数据不会受影响。确认继续？',
-      confirmText: '确认清洗',
-      confirmColor: '#8C1D18',
+      title: '🗑️ 清理本地占用缓存',
+      content: '这会清除手机上暂存的临时数据，释放存储空间、解决偶发的显示异常。云端数据和历史记录完全不受影响。',
+      confirmText: '立即清理',
+      confirmColor: '#3B6FE8',
+      cancelText: '再想想',
       success: (res) => {
         if (res.confirm) {
           try {
             wx.clearStorageSync();
-            wx.showToast({ title: '测试缓存已清除', icon: 'success' });
-            
+            wx.showToast({ title: '缓存已清理', icon: 'success' });
             setTimeout(() => {
               this.isNavigating = true;
               wx.reLaunch({
                 url: '/pages/index/index',
-                fail: () => {
-                  this.isNavigating = false;
-                }
+                fail: () => { this.isNavigating = false; }
               });
             }, 800);
           } catch (err) {
-            wx.showToast({ title: '清理失败', icon: 'none' });
+            wx.showToast({ title: '清理失败，请重试', icon: 'none' });
           }
         }
       }
     });
   },
 
-  // 🗂️ 一键同步云数据库复合索引：解决控制台「数据库索引建议」告警
-  // 幂等安全：每条索引独立 try-catch，已存在则跳过；适合随版本迭代反复调用
+  // ⚡ 一键加速系统：后台同步数据库查询优化配置（对用户完全无感知，仅超管可触发）
   async onTriggerCreateIndexes() {
     if (!this.data.isRealSuperAdmin || this.data.createIndexesRunning) return;
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
-        title: '🗂️ 刷新数据库索引',
-        content: '将调用 createIndexes 云函数同步所有复合索引定义。已存在的索引会自动跳过，无副作用。确认执行？',
-        confirmText: '确认执行',
-        cancelText: '取消',
+        title: '⚡ 一键加速系统',
+        content: '系统将在后台自动整理数据、优化查询速度，帮助小程序运行更流畅。\n\n此操作不影响任何数据安全，大约需要几秒钟。',
+        confirmText: '开始加速',
+        cancelText: '暂不优化',
         success: (res) => resolve(res.confirm),
         fail: () => resolve(false)
       });
@@ -3500,33 +3506,30 @@ Page({
     if (!confirmed) return;
 
     this.setData({ createIndexesRunning: true });
-    wx.showLoading({ title: '索引同步中…', mask: true });
+    wx.showLoading({ title: '加速优化中…', mask: true });
     try {
       const res: any = await wx.cloud.callFunction({ name: 'createIndexes' });
       const result = res.result;
       wx.hideLoading();
       if (result && result.success) {
+        // 将技术摘要转换为对用户友好的措辞
+        const { created = 0, skipped = 0 } = parseIndexSummary(result.summary || '');
+        const msg = created > 0
+          ? `已新增 ${created} 项速度优化配置，系统加载会更流畅！`
+          : '系统已处于最佳状态，无需重复优化。';
         wx.showModal({
-          title: '✅ 索引同步完成',
-          content: result.summary || '所有索引已同步',
+          title: '✅ 加速完成',
+          content: msg,
           showCancel: false,
-          confirmText: '知道了'
+          confirmText: '太好了'
         });
       } else {
-        const failList = ((result && result.failures) || [])
-          .map((f: any) => `${f.collection}/${f.index}: ${f.error}`)
-          .join('\n');
-        wx.showModal({
-          title: '⚠️ 部分索引失败',
-          content: (result && result.summary) + (failList ? '\n\n' + failList : ''),
-          showCancel: false,
-          confirmText: '知道了'
-        });
+        wx.showToast({ title: '本次优化未完全成功，可稍后重试', icon: 'none', duration: 3000 });
       }
     } catch (err) {
       wx.hideLoading();
       console.error('[onTriggerCreateIndexes]', err);
-      wx.showToast({ title: '云函数调用失败', icon: 'none' });
+      wx.showToast({ title: '网络不稳定，请稍后重试', icon: 'none' });
     } finally {
       this.setData({ createIndexesRunning: false });
     }

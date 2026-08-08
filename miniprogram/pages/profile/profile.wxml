@@ -711,78 +711,89 @@
          超管自己的管理工具，不是"正在预览的内容"，不该因为切换视角/切换过
          门店角色就消失 -->
     <!-- ╔══════════════════════════════════════════════════════════════╗
-         ║  开发者与超管工具箱（三分区：运营 / 应急 / 系统）              ║
+         ║  工具箱（超管：3 分区完整版 / 大家长：仅会员管理）             ║
          ╚══════════════════════════════════════════════════════════════╝ -->
-    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}">
-      <view class="admin-divider">开发者与超管工具箱</view>
 
-      <!-- ── 分区 1：运营管理 ──────────────────────────── -->
-      <view class="sa-sub-divider" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}">📊 运营管理</view>
-
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerGenCode">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-key"></view>
-          <text class="item-text">生成特权邀请码</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onGoToStatistics">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-screen"></view>
-          <text class="item-text">全国多店大屏 (超管)</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <!-- 🏢 会员开通/续费管理：按角色分流（见 onGoToPlatformAdminTenants）——
-           platform_admin 跳转既有 pages/platform-admin 真正管理租户；
-           super_admin/store_patriarch 改为唤起本页"套餐升级/续费"半屏卡片 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}" bindtap="onGoToPlatformAdminTenants">
+    <!-- ▸ 大家长专属精简版：只展示"会员开通/续费"，不显示任何开发工具 -->
+    <view class="ui-card-wrapper admin-developer-section"
+          wx:if="{{(isPatriarch || isPlatformAdmin) && !isRealSuperAdmin}}">
+      <view class="admin-divider">门店管理</view>
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
         <view class="item-left">
           <text class="manager-only-emoji">💳</text>
-          <text class="item-text">会员开通/续费管理</text>
+          <text class="item-text">会员开通 / 续费管理</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- ▸ 超管完整工具箱（三分区） -->
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isRealSuperAdmin}}">
+      <view class="admin-divider">超管工具箱</view>
+
+      <!-- ── 分区 1：运营管理 ──────────────────────────── -->
+      <view class="sa-sub-divider">📊 运营管理</view>
+
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerGenCode">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-key"></view>
+          <text class="item-text">生成门店邀请码</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- ── 分区 2：应急操作 ──────────────────────────── -->
-      <view class="sa-sub-divider sa-sub-divider-danger" wx:if="{{isRealSuperAdmin}}">🛡️ 应急操作</view>
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStatistics">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-screen"></view>
+          <text class="item-text">查看全国数据大屏</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onOpenForceUnbindModal">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
+        <view class="item-left">
+          <text class="manager-only-emoji">💳</text>
+          <text class="item-text">会员开通 / 续费管理</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <!-- ── 分区 2：应急处理 ──────────────────────────── -->
+      <view class="sa-sub-divider sa-sub-divider-danger">🛡️ 应急处理</view>
+
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenForceUnbindModal">
         <view class="item-left">
           <text class="manager-only-emoji">🚫</text>
-          <text class="item-text">强制解绑恶意角色</text>
+          <text class="item-text">移除异常管理员权限</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onOpenResetStoreKeyModal">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenResetStoreKeyModal">
         <view class="item-left">
           <text class="manager-only-emoji">🔑</text>
-          <text class="item-text">重置门店管理员密钥</text>
+          <text class="item-text">重置门店申请密钥</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- ── 分区 3：系统维护 ──────────────────────────── -->
-      <view class="sa-sub-divider" wx:if="{{isRealSuperAdmin}}">🔧 系统维护</view>
+      <!-- ── 分区 3：系统优化 ──────────────────────────── -->
+      <view class="sa-sub-divider">⚙️ 系统优化</view>
 
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerClearCache">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerClearCache">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-clear"></view>
-          <text class="item-text">一键清洗系统测试缓存</text>
+          <text class="item-text">清理本地占用缓存</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
       <view class="action-item-cell {{createIndexesRunning ? 'action-item-disabled' : ''}}"
             hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
-            wx:if="{{isRealSuperAdmin}}"
             bindtap="onTriggerCreateIndexes">
         <view class="item-left">
-          <text class="manager-only-emoji">🗂️</text>
-          <text class="item-text">刷新数据库索引{{createIndexesRunning ? '（运行中…）' : ''}}</text>
+          <text class="manager-only-emoji">⚡</text>
+          <text class="item-text">{{createIndexesRunning ? '系统加速中，请稍候…' : '一键加速系统'}}</text>
         </view>
         <view class="item-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
       </view>
