@@ -2152,87 +2152,99 @@
   </view>
 
   <!-- ===== 🎫 生成本店邀请码 — 角色选择弹窗 ===== -->
+  <!--
+    三段式 Flex 布局（彻底解决底部按钮截断）：
+    ① invite-modal-head  — flex-shrink:0，固定不滚动
+    ② invite-modal-scroll — flex:1 + scroll-view，中间区域独立滚动
+    ③ invite-modal-footer — flex-shrink:0，固定在底部永不压缩
+  -->
   <view class="invite-modal-mask" wx:if="{{showInviteModal}}" catchtouchmove="stopPropagation" bindtap="onCloseInviteModal">
     <view class="invite-modal-panel" catchtap="stopPropagation">
-      <!-- 拖动指示条 -->
-      <view class="invite-drag-bar"></view>
-      <view class="invite-modal-header">
-        <text class="invite-modal-title">🎫 生成本店邀请码</text>
-        <view class="invite-modal-close" bindtap="onCloseInviteModal">×</view>
-      </view>
-      <view class="invite-modal-tip">
-        💡 提示：生成的邀请码 24 小时内有效，请直接发送给信任的本店成员。
+
+      <!-- ① 固定头部：拖动条 + 标题行 + 提示卡片 + 副标题 -->
+      <view class="invite-modal-head">
+        <view class="invite-drag-bar"></view>
+        <view class="invite-modal-header">
+          <text class="invite-modal-title">🎫 生成本店邀请码</text>
+          <view class="invite-modal-close" bindtap="onCloseInviteModal">×</view>
+        </view>
+        <view class="invite-modal-tip">💡 生成的邀请码 24 小时内有效，请直接发送给信任的本店成员。</view>
+        <view class="invite-modal-label">选择邀请身份</view>
       </view>
 
-      <view class="invite-modal-label">选择邀请身份</view>
-      <view class="invite-role-grid">
-        <view class="invite-role-item {{inviteTargetRole === 'STORE_PATRIARCH' ? 'selected' : ''}}"
-              data-role="STORE_PATRIARCH" bindtap="onSelectInviteRole">
-          <text class="invite-role-icon">🏛️</text>
-          <text class="invite-role-name">大家长</text>
+      <!-- ② 中间独立滚动区：仅身份卡片参与滚动 -->
+      <scroll-view scroll-y class="invite-modal-scroll">
+        <view class="invite-role-grid">
+          <view class="invite-role-item {{inviteTargetRole === 'STORE_PATRIARCH' ? 'selected' : ''}}"
+                data-role="STORE_PATRIARCH" bindtap="onSelectInviteRole">
+            <text class="invite-role-icon">🏛️</text>
+            <text class="invite-role-name">大家长</text>
+          </view>
+          <view class="invite-role-item {{inviteTargetRole === 'STORE_MANAGER' ? 'selected' : ''}}"
+                data-role="STORE_MANAGER" bindtap="onSelectInviteRole">
+            <text class="invite-role-icon">⚙️</text>
+            <text class="invite-role-name">门店店长</text>
+          </view>
+          <view class="invite-role-item {{inviteTargetRole === 'FINANCE' ? 'selected' : ''}}"
+                data-role="FINANCE" bindtap="onSelectInviteRole">
+            <text class="invite-role-icon">💰</text>
+            <text class="invite-role-name">财务记账</text>
+          </view>
+          <view class="invite-role-item {{inviteTargetRole === 'VOLUNTEER' ? 'selected' : ''}}"
+                data-role="VOLUNTEER" bindtap="onSelectInviteRole">
+            <text class="invite-role-icon">🙏</text>
+            <text class="invite-role-name">普通义工</text>
+          </view>
         </view>
-        <view class="invite-role-item {{inviteTargetRole === 'STORE_MANAGER' ? 'selected' : ''}}"
-              data-role="STORE_MANAGER" bindtap="onSelectInviteRole">
-          <text class="invite-role-icon">⚙️</text>
-          <text class="invite-role-name">门店店长</text>
-        </view>
-        <view class="invite-role-item {{inviteTargetRole === 'FINANCE' ? 'selected' : ''}}"
-              data-role="FINANCE" bindtap="onSelectInviteRole">
-          <text class="invite-role-icon">💰</text>
-          <text class="invite-role-name">财务记账</text>
-        </view>
-        <view class="invite-role-item {{inviteTargetRole === 'VOLUNTEER' ? 'selected' : ''}}"
-              data-role="VOLUNTEER" bindtap="onSelectInviteRole">
-          <text class="invite-role-icon">🙏</text>
-          <text class="invite-role-name">普通义工</text>
+      </scroll-view>
+
+      <!-- ③ 固定底部：flex-shrink:0 保证任何情况下都完整可见 -->
+      <view class="invite-modal-footer">
+        <view class="invite-gen-btn {{inviteGenerating ? 'invite-gen-btn-loading' : ''}}"
+              bindtap="onGeneratePatriarchInviteCode">
+          {{inviteGenerating ? '生成中...' : '生成邀请码'}}
         </view>
       </view>
 
-      <view class="invite-gen-btn-wrap">
-        <button class="invite-gen-btn {{inviteGenerating ? 'invite-gen-btn-loading' : ''}}"
-                bindtap="onGeneratePatriarchInviteCode"
-                loading="{{inviteGenerating}}"
-                disabled="{{inviteGenerating}}">{{inviteGenerating ? '生成中...' : '生成邀请码'}}</button>
-      </view>
     </view>
   </view>
 
   <!-- ===== 🎫 生成本店邀请码 — 结果展示弹窗 ===== -->
   <view class="invite-modal-mask" wx:if="{{showInviteResultModal}}" catchtouchmove="stopPropagation" bindtap="onCloseInviteResultModal">
     <view class="invite-modal-panel" catchtap="stopPropagation">
-      <!-- 拖动指示条 -->
-      <view class="invite-drag-bar"></view>
-      <view class="invite-modal-header">
-        <text class="invite-modal-title">✅ 邀请码生成成功</text>
-        <view class="invite-modal-close" bindtap="onCloseInviteResultModal">×</view>
+
+      <!-- ① 固定头部 -->
+      <view class="invite-modal-head">
+        <view class="invite-drag-bar"></view>
+        <view class="invite-modal-header">
+          <text class="invite-modal-title">✅ 邀请码生成成功</text>
+          <view class="invite-modal-close" bindtap="onCloseInviteResultModal">×</view>
+        </view>
       </view>
 
-      <view class="invite-result-store">
-        为 <text class="invite-result-store-name">{{inviteResultStoreName}}</text> 生成的邀请码
+      <!-- ② 中间滚动区：邀请码卡片 + 有效期 + 二维码 + 警告 -->
+      <scroll-view scroll-y class="invite-modal-scroll">
+        <view class="invite-result-store">
+          为 <text class="invite-result-store-name">{{inviteResultStoreName}}</text> 生成的邀请码
+        </view>
+        <view class="invite-result-code-box" bindtap="onCopyPatriarchInviteCode">
+          <text class="invite-result-code">{{inviteResultCode}}</text>
+          <text class="invite-result-tap-hint">点击复制</text>
+        </view>
+        <view class="invite-result-validity">⏰ 24 小时内有效，过期自动失效</view>
+        <image wx:if="{{inviteResultQrFileId}}"
+               class="invite-result-qr"
+               src="{{inviteResultQrFileId}}"
+               mode="aspectFit"
+               show-menu-by-longpress />
+        <view class="invite-result-warning">⚠️ 一次性特权码，核销后自动作废，请勿公开传播</view>
+      </scroll-view>
+
+      <!-- ③ 固定底部复制按钮 -->
+      <view class="invite-modal-footer">
+        <view class="invite-copy-btn" bindtap="onCopyPatriarchInviteCode">📋 复制邀请码</view>
       </view>
 
-      <!-- 大号邀请码展示区 -->
-      <view class="invite-result-code-box" bindtap="onCopyPatriarchInviteCode">
-        <text class="invite-result-code">{{inviteResultCode}}</text>
-        <text class="invite-result-tap-hint">点击复制</text>
-      </view>
-
-      <!-- 有效期倒计时提示 -->
-      <view class="invite-result-validity">⏰ 24 小时内有效，过期自动失效</view>
-
-      <image wx:if="{{inviteResultQrFileId}}"
-             class="invite-result-qr"
-             src="{{inviteResultQrFileId}}"
-             mode="aspectFit"
-             show-menu-by-longpress />
-
-      <view class="invite-result-actions">
-        <button class="invite-copy-btn" bindtap="onCopyPatriarchInviteCode">📋 复制邀请码</button>
-      </view>
-
-      <view class="invite-result-warning">
-        ⚠️ 一次性特权码，核销后自动作废，请勿公开传播
-      </view>
     </view>
   </view>
 

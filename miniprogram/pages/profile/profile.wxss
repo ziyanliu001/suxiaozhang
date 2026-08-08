@@ -4628,6 +4628,8 @@
 
 
 /* ===== 🎫 生成本店邀请码弹窗 ===== */
+
+/* 半透明遮罩：底部抽屉定位 */
 .invite-modal-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -4638,19 +4640,35 @@
   justify-content: center;
 }
 
-/* 底部抽屉面板：限高 + 滚动，确保小屏手机按钮不被截断 */
+/*
+ * 三段式 Flex 容器（根本修复：彻底杜绝底部按钮截断）
+ * ─────────────────────────────────────────────────
+ * 关键设计：
+ *   • overflow: hidden — 容器本身不滚动，滚动完全交给内部 scroll-view
+ *   • display: flex + flex-direction: column — 三段垂直排列
+ *   • max-height: 86vh — 限制总高度，防止面板超出屏幕
+ * 三个子区域：
+ *   ① invite-modal-head  (flex-shrink: 0) — 固定头部，绝不压缩
+ *   ② invite-modal-scroll (flex: 1; min-height: 0) — 弹性中间区，独立滚动
+ *   ③ invite-modal-footer (flex-shrink: 0) — 固定底部，绝不压缩
+ */
 .invite-modal-panel {
   background: #FFFFFF;
   border-radius: 32rpx 32rpx 0 0;
   width: 100%;
-  max-height: 88vh;
-  overflow-y: auto;
-  /* 内容区留白：顶部给拖动条+标题，底部加 safe-area 兜底 */
-  padding: 12rpx 36rpx 0;
-  box-sizing: border-box;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-/* 顶部拖动指示条 */
+/* ① 固定头部：包含拖动条、标题行、提示卡片、副标题 */
+.invite-modal-head {
+  flex-shrink: 0;
+  padding: 12rpx 36rpx 0;
+}
+
+/* 拖动指示条 */
 .invite-drag-bar {
   width: 72rpx;
   height: 8rpx;
@@ -4682,9 +4700,10 @@
   color: #888;
   border-radius: 50%;
   background: #F5F5F5;
+  flex-shrink: 0;
 }
 
-/* 橙色提示卡片 */
+/* 黄色提示卡片 */
 .invite-modal-tip {
   font-size: 25rpx;
   color: #B45309;
@@ -4692,7 +4711,7 @@
   border: 1rpx solid #FDE68A;
   border-radius: 16rpx;
   padding: 16rpx 20rpx;
-  margin-bottom: 32rpx;
+  margin-bottom: 28rpx;
   line-height: 1.7;
 }
 
@@ -4700,7 +4719,14 @@
   font-size: 27rpx;
   color: #374151;
   font-weight: 600;
-  margin-bottom: 18rpx;
+  margin-bottom: 16rpx;
+}
+
+/* ② 弹性中间区：scroll-view 独立滚动，min-height:0 是 Flex 子元素收缩的关键 */
+.invite-modal-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 0 36rpx;
 }
 
 /* 2×2 身份卡片网格 */
@@ -4708,7 +4734,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 16rpx;
-  margin-bottom: 36rpx;
+  padding-bottom: 8rpx;
 }
 
 .invite-role-item {
@@ -4724,7 +4750,6 @@
   border: 2rpx solid #E5E7EB;
   background: #F9FAFB;
   box-sizing: border-box;
-  transition: border-color 0.15s, background 0.15s;
 }
 
 .invite-role-item.selected {
@@ -4747,14 +4772,20 @@
   font-weight: 700;
 }
 
-/* 生成按钮包裹层：提供底部 safe-area 留白 */
-.invite-gen-btn-wrap {
-  padding-bottom: calc(40rpx + env(safe-area-inset-bottom, 0px));
+/* ③ 固定底部：flex-shrink:0 是核心，保证任何情况下按钮完整可见 */
+.invite-modal-footer {
+  flex-shrink: 0;
+  padding: 20rpx 36rpx calc(36rpx + env(safe-area-inset-bottom, 0px));
+  background: #FFFFFF;
+  border-top: 1rpx solid #F3F4F6;
 }
 
-/* 主按钮：用 line-height 垂直居中（WeChat button 不识别 flex align-items） */
+/*
+ * 主按钮用 <view> 而非 <button>，彻底规避微信 button 的默认
+ * margin / ::after 边框 / padding 等不可控样式干扰。
+ * line-height 垂直居中（view 内 text 节点继承 line-height）。
+ */
 .invite-gen-btn {
-  width: 100%;
   height: 88rpx;
   line-height: 88rpx;
   background: #2563EB;
@@ -4762,15 +4793,8 @@
   font-size: 30rpx;
   font-weight: 700;
   border-radius: 44rpx;
-  border: none;
   text-align: center;
-  padding: 0;
-  margin: 0;
-  box-shadow: 0 8rpx 20rpx rgba(37, 99, 235, 0.30);
-}
-
-.invite-gen-btn::after {
-  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(37, 99, 235, 0.25);
 }
 
 .invite-gen-btn-loading {
@@ -4778,10 +4802,13 @@
 }
 
 /* ── 结果展示弹窗 ── */
+
+/* 滚动区内各元素 */
 .invite-result-store {
   font-size: 26rpx;
   color: #6B7280;
   text-align: center;
+  padding-top: 8rpx;
   margin-bottom: 24rpx;
 }
 
@@ -4798,7 +4825,6 @@
   text-align: center;
   margin-bottom: 16rpx;
   border: 2rpx dashed #93C5FD;
-  position: relative;
 }
 
 .invite-result-code {
@@ -4817,7 +4843,7 @@
   margin-top: 10rpx;
 }
 
-/* 有效期倒计时提示 */
+/* 有效期提示 */
 .invite-result-validity {
   font-size: 24rpx;
   color: #D97706;
@@ -4837,13 +4863,16 @@
   border-radius: 16rpx;
 }
 
-/* 操作按钮区 */
-.invite-result-actions {
-  padding-bottom: calc(32rpx + env(safe-area-inset-bottom, 0px));
+.invite-result-warning {
+  font-size: 22rpx;
+  color: #9CA3AF;
+  text-align: center;
+  line-height: 1.6;
+  padding-bottom: 8rpx;
 }
 
+/* 复制按钮（同主按钮，用 <view> 避免 button 样式干扰） */
 .invite-copy-btn {
-  width: 100%;
   height: 88rpx;
   line-height: 88rpx;
   background: #2563EB;
@@ -4851,21 +4880,6 @@
   font-size: 30rpx;
   font-weight: 700;
   border-radius: 44rpx;
-  border: none;
   text-align: center;
-  padding: 0;
-  margin: 0 0 20rpx;
-  box-shadow: 0 8rpx 20rpx rgba(37, 99, 235, 0.30);
-}
-
-.invite-copy-btn::after {
-  border: none;
-}
-
-.invite-result-warning {
-  font-size: 22rpx;
-  color: #9CA3AF;
-  text-align: center;
-  line-height: 1.6;
-  padding-bottom: 8rpx;
+  box-shadow: 0 6rpx 16rpx rgba(37, 99, 235, 0.25);
 }
