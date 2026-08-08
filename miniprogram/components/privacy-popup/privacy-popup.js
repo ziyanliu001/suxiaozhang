@@ -69,15 +69,31 @@ Component({
             }
             try {
                 if (typeof wxAny.onNeedPrivacyAuthorization === 'function') {
-                    wxAny.onNeedPrivacyAuthorization((resolve) => {
+                    const privacyHandler = (resolve) => {
                         this._pendingResolve = resolve;
                         this.setData({ visible: true });
-                    });
+                    };
+                    this._privacyHandler = privacyHandler;
+                    wxAny.onNeedPrivacyAuthorization(privacyHandler);
                 }
             }
             catch (e) {
                 console.error('[privacy-popup] onNeedPrivacyAuthorization 注册异常:', e);
             }
+        },
+        // 🛡️ 内存泄漏防护：配套 off，消除 onBeforeUnloadPage 监听器告警
+        detached() {
+            const wxAny = wx;
+            try {
+                const handler = this._privacyHandler;
+                if (handler && typeof wxAny.offNeedPrivacyAuthorization === 'function') {
+                    wxAny.offNeedPrivacyAuthorization(handler);
+                }
+            }
+            catch (e) { /* 旧基础库无此 API，静默跳过 */ }
+            this._privacyHandler = null;
+            this._pendingResolve = null;
+            this._attachedOnce = false;
         }
     },
     methods: {

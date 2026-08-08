@@ -3704,11 +3704,23 @@ Page({
   // ──────────────────────────────────────────────────────────────────────────
   async onOpenResetStoreKeyModal() {
     if (!this.data.isRealSuperAdmin) return;
+
+    // 🏪 自动填入当前门店：优先读服务端缓存角色（最权威），降级到 getSelectedStore()
+    // 超管通常只管理自己所属的那家旗舰店，免去每次手动复制 storeId 的操作
+    const cachedRole = AuthService.getCachedRoleInfo();
+    const activeStore = getSelectedStore();
+    const autoStoreId   = (cachedRole && cachedRole.storeId)   || (activeStore && activeStore.storeId)   || '';
+    const autoStoreName = (cachedRole && cachedRole.storeName)  || (activeStore && activeStore.storeName) || '';
+
     this.setData({
       showResetStoreKeyModal: true,
-      resetStoreKeyStoreId: '',
-      resetStoreKeyStoreName: '',
+      // 自动预填当前门店；多门店超管可通过下方选择器或手动覆盖
+      resetStoreKeyStoreId: autoStoreId,
+      resetStoreKeyStoreName: autoStoreName,
       resetStoreKeyInput: '',
+      // 打开时密钥框为空 → 此时若 storeId 有值，立即进入清除模式警示态，
+      // 提醒用户"当前状态等同于清除密钥"，避免误操作
+      resetStoreKeyIsClearMode: !!autoStoreId,
       resetStoreKeyStoreList: [],
       resetStoreKeyStoreListLoading: true
     });

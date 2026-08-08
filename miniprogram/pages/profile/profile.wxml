@@ -710,21 +710,19 @@
          预览"降级、也会被 store-picker 角色胶囊的手动切换覆盖）——工具箱是
          超管自己的管理工具，不是"正在预览的内容"，不该因为切换视角/切换过
          门店角色就消失 -->
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║  开发者与超管工具箱（三分区：运营 / 应急 / 系统）              ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
     <view class="ui-card-wrapper admin-developer-section" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}">
       <view class="admin-divider">开发者与超管工具箱</view>
+
+      <!-- ── 分区 1：运营管理 ──────────────────────────── -->
+      <view class="sa-sub-divider" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}">📊 运营管理</view>
 
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerGenCode">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key"></view>
           <text class="item-text">生成特权邀请码</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerClearCache">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-clear"></view>
-          <text class="item-text">一键清洗系统测试缓存</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -739,9 +737,7 @@
 
       <!-- 🏢 会员开通/续费管理：按角色分流（见 onGoToPlatformAdminTenants）——
            platform_admin 跳转既有 pages/platform-admin 真正管理租户；
-           super_admin/store_patriarch（某个机构自己的最高权限角色，与"平台运维
-           方"是两个完全不同的维度）改为唤起本页自己的"套餐升级/续费"半屏卡片，
-           不再跳转到那个服务端只认 platform_admin、点进去必然"无权限访问"的页面 -->
+           super_admin/store_patriarch 改为唤起本页"套餐升级/续费"半屏卡片 -->
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin || isPlatformAdmin || isPatriarch}}" bindtap="onGoToPlatformAdminTenants">
         <view class="item-left">
           <text class="manager-only-emoji">💳</text>
@@ -750,7 +746,9 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🛡️ 超管应急兜底：强制解绑恶意角色 -->
+      <!-- ── 分区 2：应急操作 ──────────────────────────── -->
+      <view class="sa-sub-divider sa-sub-divider-danger" wx:if="{{isRealSuperAdmin}}">🛡️ 应急操作</view>
+
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onOpenForceUnbindModal">
         <view class="item-left">
           <text class="manager-only-emoji">🚫</text>
@@ -759,7 +757,6 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🔑 超管应急兜底：重置任意门店密钥 -->
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onOpenResetStoreKeyModal">
         <view class="item-left">
           <text class="manager-only-emoji">🔑</text>
@@ -768,7 +765,17 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🗂️ 超管运维：一键同步云数据库所有复合索引（消除控制台索引缺失告警） -->
+      <!-- ── 分区 3：系统维护 ──────────────────────────── -->
+      <view class="sa-sub-divider" wx:if="{{isRealSuperAdmin}}">🔧 系统维护</view>
+
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{isRealSuperAdmin}}" bindtap="onTriggerClearCache">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-clear"></view>
+          <text class="item-text">一键清洗系统测试缓存</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
       <view class="action-item-cell {{createIndexesRunning ? 'action-item-disabled' : ''}}"
             hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
             wx:if="{{isRealSuperAdmin}}"

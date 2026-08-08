@@ -72,14 +72,37 @@ Component({
 
       try {
         if (typeof wxAny.onNeedPrivacyAuthorization === 'function') {
-          wxAny.onNeedPrivacyAuthorization((resolve: (res: { event: 'agree' | 'disagree' }) => void) => {
+          // 把 handler 存到实例上，以便 detached 时精准 off，避免误清其他监听者
+          const privacyHandler = (resolve: (res: { event: 'agree' | 'disagree' }) => void) => {
             (this as any)._pendingResolve = resolve;
             this.setData({ visible: true });
-          });
+          };
+          (this as any)._privacyHandler = privacyHandler;
+          wxAny.onNeedPrivacyAuthorization(privacyHandler);
         }
       } catch (e) {
         console.error('[privacy-popup] onNeedPrivacyAuthorization 注册异常:', e);
       }
+    },
+
+    // 🛡️ 内存泄漏防护：wx.onNeedPrivacyAuthorization 是全局累加式监听器，
+    // 组件卸载时若不对消，每次页面加载都会新增一个监听器，最终触发
+    // "onBeforeUnloadPage_N 多监听器"类告警（profile 是 tabBar 页，
+    // onHide/onUnload 都不会触发页面销毁，但子组件 detached 在 setData
+    // 导致组件树重绘时仍会触发）。此处配套调用 off 消除泄露。
+    detached() {
+      const wxAny = wx as any;
+      try {
+        const handler = (this as any)._privacyHandler;
+        if (handler && typeof wxAny.offNeedPrivacyAuthorization === 'function') {
+          wxAny.offNeedPrivacyAuthorization(handler);
+        }
+      } catch (e) {
+        // offNeedPrivacyAuthorization 在旧基础库版本中不存在，静默跳过
+      }
+      (this as any)._privacyHandler = null;
+      (this as any)._pendingResolve = null;
+      (this as any)._attachedOnce = false;
     }
   },
 
