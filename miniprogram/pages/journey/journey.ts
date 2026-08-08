@@ -29,6 +29,13 @@ interface CheckInLog {
   serviceType?: 'reception' | 'kitchen' | 'finance' | 'other';
 }
 
+interface StoreStatItem {
+  storeName: string;
+  days: number;
+  hours: number;
+  count: number;
+}
+
 interface HeatCell {
   date: string;
   dayLabel: string;
@@ -60,14 +67,29 @@ Page({
     // 页面元数据（由 navigation-bar 组件 bind:layout 上报，见 onNavLayout）
     navBarTotalHeight: 0,
 
+    // ✨ 动态称谓：由 resolveOrgLabels() 根据 tenantId 派生，默认通用文案
+    isYuhuazhai: false,
+    pageTitle: '我的志愿历程',
+    pageTitleIcon: '🤝',
+    pageSubtitle: '每一份付出，都是爱的印记',
+    dayLabel: '服务天数',
+    hoursLabel: '志愿工时(h)',
+    mealsLabel: '服务人次',
+    heatmapTip: '金色越亮、图标越满，代表当日志愿工时越长',
+    emptyStateTitle: '开启您的第一次爱心志愿之旅',
+    emptyStateDesc: '一份关爱，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！',
+
     // 热力图数据
-    heatmapTitle: '近 30 天护持足迹',
+    heatmapTitle: '近 30 天服务足迹',
     heatmapCells: [] as HeatCell[],
     maxHeatHours: 1,
 
     // 时间轴数据
     timelineGroups: [] as TimelineGroup[],
     allExpanded: true,
+
+    // 📍 多站点足迹汇总（同一志愿者在多个门店有打卡记录时展示）
+    storeStats: [] as StoreStatItem[],
 
     // 页面状态
     isLoading: true,
@@ -101,7 +123,9 @@ Page({
   },
 
   onLoad(options: any) {
-    recordRecentVisit('/pages/journey/journey', '暖心历程');
+    recordRecentVisit('/pages/journey/journey', '志愿历程');
+    // 🌟 称谓自适应：先同步解析角色缓存，再异步加载数据，两者互不阻塞
+    this.resolveOrgLabels();
     this.loadStats();
     this.loadHeatmapData();
     this.loadTimelineData();
@@ -111,8 +135,7 @@ Page({
     this.loadNationalSummary();
 
     this._navGuard = createNavGuard({
-      homePath: '/pages/index/index',
-      alertMessage: '即将退出雨花爱心餐报助手，是否返回首页继续使用？'
+      homePath: '/pages/index/index'
     });
     this._navGuard.setupOnLoad();
 
@@ -142,6 +165,45 @@ Page({
     this.setData({ navBarTotalHeight: e.detail.totalHeight });
   },
 
+  // ✨ 称谓自适应：读取 tenantId → 判断是否雨花斋 → 派生全部展示文案。
+  // 优先同步读缓存（零延迟，页面首帧即正确）；缓存未命中时静默异步补充，
+  // 两路都拿不到角色信息时保持通用文案，绝不影响后续数据加载流程。
+  resolveOrgLabels() {
+    const applyLabels = (tenantId: string) => {
+      const isYuhuazhai = String(tenantId || '').startsWith('yuhuazhai');
+      if (isYuhuazhai) {
+        this.setData({
+          isYuhuazhai: true,
+          pageTitle: '我的护持历程',
+          pageTitleIcon: '🌸',
+          pageSubtitle: '每一滴汗水，都是爱的印记',
+          dayLabel: '护持天数',
+          hoursLabel: '护持工时(h)',
+          mealsLabel: '护持餐数',
+          heatmapTitle: '近 30 天护持足迹',
+          heatmapTip: '金色越亮、图标越满，代表当日护持工时越长',
+          emptyStateTitle: '开启您的第一次雨花护持之旅',
+          emptyStateDesc: '一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！'
+        });
+      }
+      // 通用标签已是 data 默认值，非雨花斋无需再次 setData
+    };
+
+    try {
+      const cached = AuthService.getCachedRoleInfo();
+      if (cached) {
+        applyLabels((cached as any).tenantId || '');
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    // 缓存缺失：静默异步补充，不阻塞页面其余加载
+    AuthService.fetchUserRole().then((res) => {
+      const tenantId = (res && res.roleInfo && (res.roleInfo as any).tenantId) || '';
+      applyLabels(tenantId);
+    }).catch(() => { /* keep generic labels */ });
+  },
+
   // 🐛 数据硬核对齐：此前直接读全局递增计数器（my_checkin_days 等），与首页/个人页
   // 早已迁移到的 computeMyCheckInStats（按 my_checkin_logs 流水动态重算）口径不一致，
   // 同一个人在不同页面可能看到不同的护持天数/工时。改为统一走同一份计算逻辑——
@@ -156,15 +218,16 @@ Page({
       this.animateCountUp('totalDays', stats.days);
       this.animateCountUp('totalCount', stats.count);
       this.animateCountUp('totalHours', stats.hours);
-      this.computeBadgeList(stats.days, stats.hours, streak);
+      const verb = this.data.isYuhuazhai ? '护持' : '服务';
+      this.computeBadgeList(stats.days, stats.hours, streak, verb);
     } catch (e) {
       console.warn('[journey] loadStats failed:', e);
     }
   },
 
-  // 🍚 护持餐数（雨花敬老餐/素食餐）：与荣誉卡使用同一个云函数的个人统计动作，
-  // 按 _openid 服务端真实统计，不在前端编造估算数字；独立于生成荣誉卡的流程，
-  // 页面一进来就展示，不用等用户点开荣誉卡弹窗才看到这个数字
+  // 🍱 服务人次（餐饮类=护持餐数，通用类=协助服务人次）：与荣誉卡使用同一个云函数的
+  // 个人统计动作，按 _openid 服务端真实统计，不在前端编造估算数字；独立于生成荣誉卡
+  // 的流程，页面一进来就展示，不用等用户点开荣誉卡弹窗才看到这个数字
   async loadMealStat() {
     try {
       if (!isCloudAvailable()) return;
@@ -180,8 +243,8 @@ Page({
 
   // 🎖️ 3 列勋章墙：解锁规则与 profile.ts 共享（见 utils/badgeWall.ts），
   // current >= threshold 即视为解锁，不会出现"已达成条件仍显示锁定"的问题
-  computeBadgeList(volunteerDays: number, volunteerHours: number, volunteerStreak: number = 0) {
-    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours, volunteerStreak) });
+  computeBadgeList(volunteerDays: number, volunteerHours: number, volunteerStreak: number = 0, verb: string = '服务') {
+    this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours, volunteerStreak, verb) });
   },
 
   onTapBadge(e: any) {
@@ -300,7 +363,7 @@ Page({
   },
 
   /**
-   * 按月份分组加载时间轴数据
+   * 按月份分组加载时间轴数据，同时计算多站点足迹汇总（storeStats）
    */
   loadTimelineData() {
     const logs: CheckInLog[] = wx.getStorageSync('my_checkin_logs') || [];
@@ -313,6 +376,9 @@ Page({
     });
 
     const groupMap = new Map<string, TimelineGroup>();
+    // 📍 多站点足迹汇总：按 storeName 聚合天数/工时/次数
+    const storeMap = new Map<string, { days: Set<string>; hours: number; count: number }>();
+
     sortedLogs.forEach((log) => {
       // 🐛 修复 NaN年NaN月：优先用 log.date（"YYYY-MM-DD"）做兼容解析，
       // timestamp 缺失/损坏时也不会再渲染出 Invalid Date
@@ -328,10 +394,24 @@ Page({
       const serviceType = SERVICE_TYPE_MAP[log.shiftKey] || 'other';
       const enrichedLog: CheckInLog = { ...log, serviceType };
       groupMap.get(monthKey)!.logs.push(enrichedLog);
+
+      // 按门店聚合（storeName 空值统一归入"未知站点"）
+      const sName = (log.storeName || '').trim() || '未知站点';
+      if (!storeMap.has(sName)) {
+        storeMap.set(sName, { days: new Set(), hours: 0, count: 0 });
+      }
+      const entry = storeMap.get(sName)!;
+      if (log.date) entry.days.add(log.date);
+      entry.hours = parseFloat((entry.hours + (log.hours || 0)).toFixed(1));
+      entry.count++;
     });
 
+    const storeStats: StoreStatItem[] = Array.from(storeMap.entries())
+      .map(([storeName, s]) => ({ storeName, days: s.days.size, hours: s.hours, count: s.count }))
+      .sort((a, b) => b.days - a.days); // 按天数降序
+
     const timelineGroups = Array.from(groupMap.values());
-    this.setData({ timelineGroups });
+    this.setData({ timelineGroups, storeStats });
   },
 
   /**
@@ -424,6 +504,15 @@ Page({
         }
       }
 
+      // 🌟 荣誉卡感谢文案：雨花斋用"护持"专属文案，其他平台用通用感谢语
+      const tenantId = (roleInfo && (roleInfo as any).tenantId) || '';
+      const isYuhuazhai = tenantId.startsWith('yuhuazhai');
+      const honorDesc = isYuhuazhai
+        ? '感谢您在雨花斋的无私护持与付出'
+        : storeName && storeName !== '全国总览'
+          ? `感谢您在${storeName}的无私奉献与志愿服务`
+          : '感谢您用爱心温暖这座城市';
+
       const honorData: VolunteerHonorData = {
         storeName,
         nickName,
@@ -432,7 +521,8 @@ Page({
         reportCount,
         diningCount,
         totalHours: this.data.totalHours,
-        qrLocalPath
+        qrLocalPath,
+        honorDesc
       };
 
       const honorCardImage = await drawVolunteerHonorCard(this, honorData);

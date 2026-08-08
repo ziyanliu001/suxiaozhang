@@ -423,3 +423,145 @@ page {
   color: #AAAAAA;
   text-align: center;
 }
+
+/* ===== 善行汇聚平台级横幅 ===== */
+.pv-platform-banner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  background: linear-gradient(135deg, #FFF8E7 0%, #FEF3C7 100%);
+  border: 1rpx solid #F6D860;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.pv-platform-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.pv-platform-num {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #92400E;
+}
+
+.pv-platform-label {
+  font-size: 20rpx;
+  color: #B45309;
+}
+
+.pv-platform-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: #F6D860;
+  margin: 0 16rpx;
+}
+
+.pv-platform-slogan {
+  font-size: 20rpx;
+  color: #D97706;
+  font-weight: 500;
+  margin-left: 8rpx;
+}
+
+/* ===== 🔒 封账公信力勋章（替代原有普通状态胶囊） ===== */
+.pv-locked-badge {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #E6F4EA;
+  border: 1.5rpx solid #B7E4C7;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+}
+
+.pv-locked-icon {
+  font-size: 26rpx;
+}
+
+.pv-locked-text {
+  font-size: 22rpx;
+  color: #137333;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* ===== 服务指标网格（自适应列数） ===== */
+.pv-service-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 4rpx;
+}
+
+.pv-service-cell {
+  flex: 1;
+  min-width: 120rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #FAFAFA;
+  border-radius: 12rpx;
+  padding: 16rpx 8rpx;
+}
+
+.pv-service-num {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333333;
+  line-height: 1.2;
+}
+
+.pv-service-num--highlight {
+  color: #C62828;
+}
+
+.pv-service-label {
+  font-size: 20rpx;
+  color: #888888;
+  margin-top: 4rpx;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ===== 社会监督分享按钮 ===== */
+.pv-share-section {
+  margin: 4rpx 0 24rpx;
+}
+
+.pv-share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  background: #FFF8E7;
+  border: 1.5rpx solid #F6D860;
+  border-radius: 20rpx;
+  padding: 24rpx 0;
+}
+
+.pv-share-icon {
+  font-size: 32rpx;
+}
+
+.pv-share-text {
+  font-size: 28rpx;
+  color: #92400E;
+  font-weight: 600;
+}
+
+/* ===== 页脚更新 ===== */
+.pv-footer-declaration {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  margin-bottom: 4rpx;
+}

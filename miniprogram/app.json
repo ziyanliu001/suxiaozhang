@@ -24,7 +24,7 @@
   },
   "permission": {
     "scope.userLocation": {
-      "desc": "用于计算附近门店的距离，方便您快速找到最近的雨花斋"
+      "desc": "用于计算附近门店的距离，方便您快速找到最近的爱心站点"
     }
   },
   "requiredPrivateInfos": ["getLocation"],

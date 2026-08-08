@@ -15,14 +15,14 @@
     <view class="ui-card-wrapper journey-header-card">
       <view class="journey-title-row">
         <view class="title-icon lotus-icon"></view>
-        <text class="journey-title">我的雨花护持历程</text>
+        <text class="journey-title">{{pageTitle}}</text>
       </view>
-      <view class="journey-subtitle">每一滴汗水，都是爱的印记</view>
+      <view class="journey-subtitle">{{pageSubtitle}}</view>
 
       <view class="summary-stats">
         <view class="summary-cell">
           <text class="summary-num">{{totalDays}}</text>
-          <text class="summary-label">护持天数</text>
+          <text class="summary-label">{{dayLabel}}</text>
         </view>
         <view class="summary-cell">
           <text class="summary-num">{{totalCount}}</text>
@@ -30,15 +30,48 @@
         </view>
         <view class="summary-cell">
           <text class="summary-num">{{totalHours}}</text>
-          <text class="summary-label">贡献工时(h)</text>
+          <text class="summary-label">{{hoursLabel}}</text>
         </view>
         <view class="summary-cell">
           <text class="summary-num">{{totalMeals}}</text>
-          <text class="summary-label">护持餐数</text>
+          <text class="summary-label">{{mealsLabel}}</text>
         </view>
       </view>
 
       <button class="btn-gen-honor-card" bindtap="onGenerateHonorCard" loading="{{isGeneratingHonorCard}}" disabled="{{isGeneratingHonorCard}}">🎖️ 生成我的爱心荣誉卡</button>
+    </view>
+
+    <!-- 📍 多站点足迹汇总：仅在志愿者参与了 2 个及以上门店时展示，单站点不冗余显示 -->
+    <view class="ui-card-wrapper store-stats-card" wx:if="{{storeStats.length > 1}}">
+      <view class="card-header">
+        <view class="card-header-left">
+          <view class="header-icon map-icon"></view>
+          <text class="card-title">多站点爱心足迹</text>
+        </view>
+        <text class="store-stats-badge">{{storeStats.length}} 个站点</text>
+      </view>
+      <view class="store-stats-list">
+        <view class="store-stats-row" wx:for="{{storeStats}}" wx:key="storeName">
+          <view class="store-stats-name-col">
+            <text class="store-stats-dot">●</text>
+            <text class="store-stats-name">{{item.storeName}}</text>
+          </view>
+          <view class="store-stats-nums">
+            <view class="store-stats-cell">
+              <text class="store-stats-num">{{item.days}}</text>
+              <text class="store-stats-unit">天</text>
+            </view>
+            <view class="store-stats-cell">
+              <text class="store-stats-num">{{item.hours}}</text>
+              <text class="store-stats-unit">h</text>
+            </view>
+            <view class="store-stats-cell">
+              <text class="store-stats-num">{{item.count}}</text>
+              <text class="store-stats-unit">次</text>
+            </view>
+          </view>
+        </view>
+      </view>
     </view>
 
     <!-- 🔒 全国纵览：数据硬卡口——只有 isSuperAdmin === true 才渲染这张卡片，
@@ -72,7 +105,7 @@
         </view>
         <view class="national-cell">
           <text class="national-num">{{nationalSummary.totalServiceDays}}</text>
-          <text class="national-label">总护持天数</text>
+          <text class="national-label">总服务天数</text>
         </view>
         <view class="national-cell">
           <text class="national-num">{{nationalSummary.totalDiningCount}}</text>
@@ -147,7 +180,7 @@
 
       <view class="heatmap-tip">
         <view class="tip-icon bulb-icon"></view>
-        <text class="tip-text">金色越亮、图标越满，代表当日护持工时越长</text>
+        <text class="tip-text">{{heatmapTip}}</text>
       </view>
     </view>
 
@@ -167,8 +200,8 @@
       <view class="timeline-empty" wx:if="{{timelineGroups.length === 0}}">
         <view class="empty-day-badge">Day 1</view>
         <view class="empty-icon flower-icon"></view>
-        <text class="empty-title">开启您的第一次雨花护持之旅</text>
-        <text class="empty-desc">一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！</text>
+        <text class="empty-title">{{emptyStateTitle}}</text>
+        <text class="empty-desc">{{emptyStateDesc}}</text>
         <view class="empty-cta-btn" bindtap="onGoCheckIn">
           <text class="empty-cta-text">去首页打卡</text>
         </view>
@@ -193,12 +226,11 @@
                   </view>
                   <view class="item-body">
                     <view class="item-title-row">
-                      <text class="item-shift">{{log.shiftName}}</text>
+                      <text class="item-shift">{{log.storeName ? log.storeName + ' · ' : ''}}{{log.shiftName || '志愿服务'}}</text>
                       <text class="item-hours">+{{log.hours}}h</text>
                     </view>
                     <view class="item-meta">
                       <text class="item-date">{{log.date}} {{log.time}}</text>
-                      <text class="item-store">{{log.storeName}}</text>
                     </view>
                   </view>
                 </view>

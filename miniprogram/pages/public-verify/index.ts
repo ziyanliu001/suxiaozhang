@@ -32,9 +32,11 @@ const APPROVAL_STATUS_LABELS: Record<string, string> = {
 // 记的门店日志（activity_logs.content）本身就常常是这一类记录（如谁说了什么、
 // 今天菜品的反响），直接复用同一份数据展示，不新增字段/表。当天没有日志时，
 // 优雅降级为固定的温馨感言，而不是让感言墙空白
-const DEFAULT_TESTIMONIAL = '今天的白菜豆腐很软糯，美味又健康，感谢各位爱心人士的无私付出！';
+const DEFAULT_TESTIMONIAL = '感恩每一位爱心志愿者的无私付出，你们的善行温暖了每一颗心！';
 
 Page({
+  _storeId: '' as string,
+
   data: {
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -48,9 +50,13 @@ Page({
     approvalStatusLabel: '',
     auditedBy: '',
     auditTime: '',
-    // 🏛️ 护持家长/日常店长：体现雨花斋人文双署名文化，无绑定时不展示
+    // 🏛️ 护持家长/日常店长：体现人文双署名文化，无绑定时不展示
     patriarch: '',
     manager: '',
+
+    // 机构类型
+    orgType: 'dining' as string, // 'dining' | 'service' | other
+    isDiningOrg: true, // derived from orgType: dining/canteen → true, service → false
 
     yesterdayBalance: '0.00',
     otherDonation: '0.00',
@@ -71,7 +77,22 @@ Page({
 
     // 🌟 爱心感言墙：见 DEFAULT_TESTIMONIAL 注释
     testimonialText: DEFAULT_TESTIMONIAL,
-    testimonialIsDefault: true
+    testimonialIsDefault: true,
+
+    // 服务指标
+    dineInSeniors: 0,
+    deliverySeniors: 0,
+    dineInVolunteers: 0,
+    deliveryVolunteers: 0,
+    takeawayCount: 0,
+    listeningSeniors: 0,
+    totalDineCount: 0,
+    totalVolunteers: 0,
+    volunteerHours: 0,
+
+    // 善行汇聚平台级公开统计
+    platformStoreCount: 0,
+    platformReportCount: 0
   },
 
   onLoad(options: Record<string, string>) {
@@ -82,6 +103,7 @@ Page({
       this.setData({ loading: false, errorMsg: '二维码信息不完整，无法查询该笔账目' });
       return;
     }
+    this._storeId = target.storeId;
     this.fetchReport(target.storeId, target.date);
   },
 
@@ -164,6 +186,8 @@ Page({
         auditTime: d.auditTime || '',
         patriarch: d.patriarch || '',
         manager: d.manager || '',
+        orgType: d.orgType || 'dining',
+        isDiningOrg: (d.orgType || 'dining') !== 'service',
         yesterdayBalance: Number(d.yesterdayBalance || 0).toFixed(2),
         otherDonation: Number(d.otherDonation || 0).toFixed(2),
         listDonationTotal: Number(d.listDonationTotal || 0).toFixed(2),
@@ -175,6 +199,17 @@ Page({
         materials: d.materials || [],
         stapleRiceStatusLabel: d.stapleRiceStatusLabel || '',
         stapleOilStatusLabel: d.stapleOilStatusLabel || '',
+        dineInSeniors: d.dineInSeniors || 0,
+        deliverySeniors: d.deliverySeniors || 0,
+        dineInVolunteers: d.dineInVolunteers || 0,
+        deliveryVolunteers: d.deliveryVolunteers || 0,
+        takeawayCount: d.takeawayCount || 0,
+        listeningSeniors: d.listeningSeniors || 0,
+        totalDineCount: d.totalDineCount || 0,
+        totalVolunteers: d.totalVolunteers || 0,
+        volunteerHours: d.volunteerHours || 0,
+        platformStoreCount: (result as any).platformStats?.storeCount || 0,
+        platformReportCount: (result as any).platformStats?.auditedReportCount || 0,
         activity: d.activity || null,
         testimonialText: (d.activity && d.activity.content) ? d.activity.content : DEFAULT_TESTIMONIAL,
         testimonialIsDefault: !(d.activity && d.activity.content)
@@ -196,5 +231,18 @@ Page({
     if (!url || !this.data.activity) return;
     const urls = this.data.activity.images.map((img) => img.url);
     wx.previewImage({ current: url, urls });
+  },
+
+  onShareAppMessage() {
+    const { storeName, dateString } = this.data;
+    return {
+      title: `${storeName || '爱心站点'} · 阳光账本 · ${dateString}`,
+      path: `/pages/public-verify/index?storeId=${this._storeId || ''}&date=${dateString}`,
+      imageUrl: ''
+    };
+  },
+
+  onShowShareOptions() {
+    wx.showShareMenu({ withShareTicket: false, menus: ['shareAppMessage'] });
   }
 });

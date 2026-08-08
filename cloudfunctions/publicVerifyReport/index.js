@@ -63,16 +63,27 @@ exports.main = async (event) => {
       return { success: true, found: false };
     }
 
+    // 平台级公开统计（爱心站点数 + 已审核账本数），与主查询并行，失败不影响主流程
+    const [platformStoreRes, platformReportRes] = await Promise.all([
+      db.collection('stores').count().catch(() => ({ total: 0 })),
+      db.collection('report_logs')
+        .where({ approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']), isVoid: _.neq(true) })
+        .count()
+        .catch(() => ({ total: 0 }))
+    ]);
+
     // 🏛️ 护持家长/日常店长姓名：与海报落款同一份数据来源（stores 文档缓存字段），
     // 体现雨花斋人文双署名文化；查询失败不影响主流程（验真的核心是账目）
     let patriarch = '';
     let manager = '';
+    let orgType = 'dining';
     try {
       const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
       const store = storeRes && storeRes.data;
       if (store) {
         patriarch = store.patriarch || '';
         manager = store.manager || '';
+        orgType = store.orgType || 'dining';
       }
     } catch (storeErr) {
       console.warn('[publicVerifyReport] 门店姓名查询失败（不影响主流程）:', storeErr);
@@ -117,10 +128,15 @@ exports.main = async (event) => {
     return {
       success: true,
       found: true,
+      platformStats: {
+        storeCount: platformStoreRes.total || 0,
+        auditedReportCount: platformReportRes.total || 0
+      },
       data: {
         storeName: report.shopName || '',
         patriarch,
         manager,
+        orgType,
         dateString: report.dateString || date,
         approvalStatus: report.approvalStatus || 'PENDING_APPROVAL',
         auditedBy: report.auditedBy || '',
@@ -136,6 +152,15 @@ exports.main = async (event) => {
         materials,
         stapleRiceStatusLabel: stapleStatusLabel(report.stapleRiceStatus),
         stapleOilStatusLabel: stapleStatusLabel(report.stapleOilStatus),
+        dineInSeniors: parseFloat(report.dineInSeniors) || 0,
+        deliverySeniors: parseFloat(report.deliverySeniors) || 0,
+        dineInVolunteers: parseFloat(report.dineInVolunteers) || 0,
+        deliveryVolunteers: parseFloat(report.deliveryVolunteers) || 0,
+        takeawayCount: parseFloat(report.takeawayCount) || 0,
+        listeningSeniors: parseFloat(report.listeningSeniors) || 0,
+        totalDineCount: parseFloat(report.totalDineCount || report.diningCount) || 0,
+        totalVolunteers: parseFloat(report.totalVolunteers || report.volunteerCount) || 0,
+        volunteerHours: parseFloat(report.volunteerHours) || 0,
         activity: activityItem
           ? {
               title: activityItem.title || '',

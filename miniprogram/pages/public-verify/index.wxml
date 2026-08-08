@@ -2,11 +2,12 @@
 
   <view class="pv-status-bar" style="height: {{statusBarHeight}}px;"></view>
   <view class="pv-nav-bar" style="height: {{navBarHeight}}px;">
-    <text class="pv-nav-title">账目透明看板</text>
+    <text class="pv-nav-title">阳光账本 · 公开监督</text>
   </view>
 
   <view class="pv-loading" wx:if="{{loading}}">
-    <text>正在查询存证账目...</text>
+    <text class="pv-error-icon">☀️</text>
+    <text class="pv-error-text">正在查询账目数据...</text>
   </view>
 
   <view class="pv-error" wx:if="{{!loading && errorMsg}}">
@@ -22,20 +23,36 @@
 
   <scroll-view scroll-y class="pv-content" wx:if="{{!loading && found}}">
 
+    <!-- ☀️ 善行汇聚：平台公开统计（激励性数据，无需鉴权） -->
+    <view class="pv-platform-banner" wx:if="{{platformStoreCount > 0}}">
+      <view class="pv-platform-stat">
+        <text class="pv-platform-num">{{platformStoreCount}}</text>
+        <text class="pv-platform-label">爱心站点</text>
+      </view>
+      <view class="pv-platform-divider"></view>
+      <view class="pv-platform-stat">
+        <text class="pv-platform-num">{{platformReportCount}}</text>
+        <text class="pv-platform-label">份透明账本</text>
+      </view>
+      <text class="pv-platform-slogan">众善奉行 · 全民可见</text>
+    </view>
+
     <!-- 顶部：存证标签 + 门店/日期 -->
     <view class="pv-verified-badge">
       <text class="pv-verified-star">★</text>
       <text class="pv-verified-text">数据已存证·账目100%透明</text>
     </view>
-    <!-- 🛡️ 合规措辞：本项目基于微信云开发数据库，并非区块链/链上存证，此处不使用
-         "上链"/"区块链校验"等失实表述——用"实时查询机构云端数据库、非静态截图"
-         传达同样的"数据未经人工篡改、当场可核验"信任信号，但表述必须真实准确 -->
     <text class="pv-verified-sub">数据实时查询自机构云端数据库，非人工截图，可与海报信息逐项比对核验</text>
+
     <view class="pv-header-card">
-      <text class="pv-store-name">{{storeName}}</text>
+      <text class="pv-store-name">{{storeName}} · 阳光账本</text>
       <text class="pv-date">{{dateString}}</text>
       <view class="pv-status-row">
-        <text class="pv-status-pill {{approvalStatusLabel === '已稽核封账' ? 'locked' : ''}}">{{approvalStatusLabel}}</text>
+        <view wx:if="{{approvalStatusLabel === '已稽核封账'}}" class="pv-locked-badge">
+          <text class="pv-locked-icon">🔒</text>
+          <text class="pv-locked-text">本期账目已由财务稽核锁定，数据不可篡改</text>
+        </view>
+        <text wx:else class="pv-status-pill">{{approvalStatusLabel}}</text>
         <text class="pv-audit-meta" wx:if="{{auditedBy}}">稽核人：{{auditedBy}} · {{auditTime}}</text>
       </view>
       <view class="pv-people-row" wx:if="{{patriarch || manager}}">
@@ -44,7 +61,7 @@
       </view>
     </view>
 
-    <!-- 中部：收支摘要 -->
+    <!-- 收支摘要 -->
     <view class="pv-card">
       <text class="pv-card-title">💰 收支摘要</text>
       <view class="pv-summary-row">
@@ -69,7 +86,7 @@
       </view>
     </view>
 
-    <!-- 支出明细文字 -->
+    <!-- 支出明细 -->
     <view class="pv-card" wx:if="{{expenses}}">
       <text class="pv-card-title">🧾 支出明细</text>
       <text class="pv-expenses-text">{{expenses}}</text>
@@ -94,11 +111,80 @@
       </view>
     </view>
 
-    <!-- 爱心物资捐赠与消耗墙 -->
-    <view class="pv-card" wx:if="{{materials.length > 0 || stapleRiceStatusLabel || stapleOilStatusLabel}}">
-      <text class="pv-card-title">📦 爱心物资捐赠与消耗墙</text>
+    <!-- 服务指标卡：餐饮/食堂类（orgType = dining 或默认） -->
+    <view class="pv-card" wx:if="{{isDiningOrg && (totalDineCount > 0 || dineInSeniors > 0 || deliverySeniors > 0)}}">
+      <text class="pv-card-title">🍱 今日服务指标</text>
+      <view class="pv-service-grid">
+        <view class="pv-service-cell" wx:if="{{dineInSeniors > 0}}">
+          <text class="pv-service-num">{{dineInSeniors}}</text>
+          <text class="pv-service-label">堂食长者</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{deliverySeniors > 0}}">
+          <text class="pv-service-num">{{deliverySeniors}}</text>
+          <text class="pv-service-label">送餐长者</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{takeawayCount > 0}}">
+          <text class="pv-service-num">{{takeawayCount}}</text>
+          <text class="pv-service-label">打包份数</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{dineInVolunteers > 0}}">
+          <text class="pv-service-num">{{dineInVolunteers}}</text>
+          <text class="pv-service-label">到岗志愿者</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{deliveryVolunteers > 0}}">
+          <text class="pv-service-num">{{deliveryVolunteers}}</text>
+          <text class="pv-service-label">送餐志愿者</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{totalDineCount > 0}}">
+          <text class="pv-service-num pv-service-num--highlight">{{totalDineCount}}</text>
+          <text class="pv-service-label">服务总人次</text>
+        </view>
+      </view>
+    </view>
 
-      <view class="pv-materials-status-row" wx:if="{{stapleRiceStatusLabel || stapleOilStatusLabel}}">
+    <!-- 服务指标卡：服务/义工类（orgType = service） -->
+    <view class="pv-card" wx:if="{{!isDiningOrg && (totalVolunteers > 0 || volunteerHours > 0 || listeningSeniors > 0)}}">
+      <text class="pv-card-title">🤝 今日服务指标</text>
+      <view class="pv-service-grid">
+        <view class="pv-service-cell" wx:if="{{totalVolunteers > 0}}">
+          <text class="pv-service-num pv-service-num--highlight">{{totalVolunteers}}</text>
+          <text class="pv-service-label">志愿服务人次</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{volunteerHours > 0}}">
+          <text class="pv-service-num">{{volunteerHours}}</text>
+          <text class="pv-service-label">服务总工时(h)</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{listeningSeniors > 0}}">
+          <text class="pv-service-num">{{listeningSeniors}}</text>
+          <text class="pv-service-label">陪伴长者人次</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 志愿工时 + 倾听长者（餐饮类也展示） -->
+    <view class="pv-card" wx:if="{{isDiningOrg && (volunteerHours > 0 || listeningSeniors > 0)}}">
+      <text class="pv-card-title">🙌 志愿服务摘要</text>
+      <view class="pv-service-grid">
+        <view class="pv-service-cell" wx:if="{{totalVolunteers > 0}}">
+          <text class="pv-service-num">{{totalVolunteers}}</text>
+          <text class="pv-service-label">志愿者总人次</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{volunteerHours > 0}}">
+          <text class="pv-service-num">{{volunteerHours}}</text>
+          <text class="pv-service-label">服务总工时(h)</text>
+        </view>
+        <view class="pv-service-cell" wx:if="{{listeningSeniors > 0}}">
+          <text class="pv-service-num">{{listeningSeniors}}</text>
+          <text class="pv-service-label">🎧 倾听长者</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 爱心物资捐赠与消耗墙（餐饮类显示米油库存；服务类只显示捐赠明细） -->
+    <view class="pv-card" wx:if="{{materials.length > 0 || (isDiningOrg && (stapleRiceStatusLabel || stapleOilStatusLabel))}}">
+      <text class="pv-card-title">📦 爱心物资捐赠与消耗</text>
+      <!-- 米油库存状态：仅餐饮类展示 -->
+      <view class="pv-materials-status-row" wx:if="{{isDiningOrg && (stapleRiceStatusLabel || stapleOilStatusLabel)}}">
         <view class="pv-materials-status-chip" wx:if="{{stapleRiceStatusLabel}}">
           <text class="pv-materials-status-label">大米/面粉</text>
           <text class="pv-materials-status-badge {{stapleRiceStatusLabel === '告急' ? 'urgent' : (stapleRiceStatusLabel === '充足' ? 'sufficient' : 'normal')}}">{{stapleRiceStatusLabel}}</text>
@@ -108,7 +194,6 @@
           <text class="pv-materials-status-badge {{stapleOilStatusLabel === '告急' ? 'urgent' : (stapleOilStatusLabel === '充足' ? 'sufficient' : 'normal')}}">{{stapleOilStatusLabel}}</text>
         </view>
       </view>
-
       <view class="pv-materials-list" wx:if="{{materials.length > 0}}">
         <view class="pv-materials-row" wx:for="{{materials}}" wx:key="index">
           <text class="pv-materials-donor">{{item.donor}}</text>
@@ -117,9 +202,9 @@
       </view>
     </view>
 
-    <!-- 底部：门店日志 -->
+    <!-- 门店今日动态 -->
     <view class="pv-card" wx:if="{{activity}}">
-      <text class="pv-card-title">📌 门店今日动态</text>
+      <text class="pv-card-title">📌 今日动态</text>
       <text class="pv-activity-title" wx:if="{{activity.title}}">{{activity.title}}</text>
       <text class="pv-activity-content" wx:if="{{activity.content}}">{{activity.content}}</text>
       <view class="pv-activity-grid" wx:if="{{activity.images.length > 0}}">
@@ -129,9 +214,9 @@
       </view>
     </view>
 
-    <!-- 爱心感言墙：优先展示当天志愿者记录的门店日志内容，没有时降级为固定温馨感言 -->
+    <!-- 感言墙 -->
     <view class="pv-testimonial-card">
-      <text class="pv-testimonial-title">❤️ 来自用餐老人的温暖感言</text>
+      <text class="pv-testimonial-title">❤️ 来自服务对象的温暖感言</text>
       <view class="pv-testimonial-body">
         <text class="pv-testimonial-mark">"</text>
         <text class="pv-testimonial-text">{{testimonialText}}</text>
@@ -139,12 +224,20 @@
       <text class="pv-testimonial-hint" wx:if="{{testimonialIsDefault}}">（当天暂无具体记录，展示常规温馨寄语）</text>
     </view>
 
+    <!-- 社会监督分享按钮 -->
+    <view class="pv-share-section">
+      <view class="pv-share-btn" open-type="share">
+        <text class="pv-share-icon">📲</text>
+        <text class="pv-share-text">分享此账本 · 邀请公众监督</text>
+      </view>
+    </view>
+
     <view class="pv-footer">
-      <text class="pv-footer-brand">素小账 · 公益透明支持</text>
-      <text class="pv-footer-note">本页数据来自门店实时录入，如有疑问请联系门店义工团队</text>
+      <text class="pv-footer-brand">素小账 · 公益透明账本</text>
+      <text class="pv-footer-declaration">公开透明 · 全民监督</text>
+      <text class="pv-footer-note">素小账公益平台提供技术支持</text>
     </view>
     <view class="fa-safe-area-spacer"></view>
 
   </scroll-view>
-
 </view>

@@ -8060,23 +8060,69 @@ button.poster-gen-btn[disabled] {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 10rpx;
+  gap: 14rpx;
   margin: 16rpx 28rpx;
-  padding: 20rpx 32rpx;
-  background: #F8FAFF;
-  border: 1rpx dashed #BFDBFE;
+  padding: 22rpx 28rpx;
+  background: #F0F4FF;
+  border: 1rpx solid #C7D7FF;
   border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(37, 99, 235, 0.08);
+}
+
+.form-accordion-toggle--open {
+  background: #EEF2FF;
+  border-color: #A5B4FC;
+  box-shadow: 0 2rpx 10rpx rgba(37, 99, 235, 0.12);
+}
+
+.accordion-icon {
+  font-size: 32rpx;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.accordion-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
 }
 
 .accordion-label {
-  font-size: 26rpx;
-  color: #2563EB;
+  font-size: 27rpx;
+  color: #1D4ED8;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.accordion-sub {
+  font-size: 21rpx;
+  color: #6B7280;
+  line-height: 1.3;
+}
+
+.accordion-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.accordion-badge {
+  font-size: 20rpx;
+  color: #EA580C;
+  background: #FFF7ED;
+  border: 1rpx solid #FDBA74;
+  border-radius: 20rpx;
+  padding: 2rpx 10rpx;
+  line-height: 1.4;
   font-weight: 500;
 }
 
-.accordion-count {
-  font-size: 18rpx;
-  color: #EF4444;
+.accordion-arrow {
+  font-size: 24rpx;
+  color: #2563EB;
+  font-weight: 700;
   line-height: 1;
 }

@@ -950,6 +950,16 @@
           </view>
         </view>
 
+        <!-- 🎧 倾听/陪伴长者（独立关怀指标，不计入用餐总数）-->
+        <view style="display: flex !important; flex-direction: row !important; align-items: center !important; background: #F0FDF4 !important; border: 1rpx solid #BBF7D0 !important; border-radius: 12rpx !important; padding: 16rpx 20rpx !important; margin-top: 12rpx !important; gap: 16rpx !important;">
+          <text style="font-size: 20rpx !important; color: #15803D !important; white-space: nowrap !important; flex-shrink: 0 !important;">🎧 倾听长者（人次）</text>
+          <view style="flex: 1 !important; display: flex !important; align-items: baseline !important; justify-content: flex-end !important; gap: 6rpx !important;">
+            <input type="number" value="{{listeningSeniors}}" placeholder="0" bindinput="onInput" data-field="listeningSeniors" style="width: 80rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #15803D !important; border-bottom: 2rpx solid #86EFAC !important;" />
+            <text style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
+          </view>
+          <text style="font-size: 20rpx !important; color: #86EFAC !important; flex-shrink: 0 !important; max-width: 200rpx !important; line-height: 1.4 !important;">陪伴/沟通长者</text>
+        </view>
+
         <view class="stats-summary-card" style="display: flex !important; justify-content: space-between !important; gap: 16rpx !important; margin-top: 20rpx !important; padding: 16rpx 20rpx !important; background: #FAFAFA !important; border-radius: 12rpx !important; border: 1rpx solid #F0F0F0 !important;">
           <view class="summary-item" style="flex: 1 !important; display: flex !important; flex-direction: column !important; align-items: center !important;">
             <text style="font-size: 22rpx !important; color: #666666 !important;">用餐总数 (堂食+送餐+打包)</text>
@@ -980,9 +990,16 @@
          "今日餐况"卡片/报告文案/海报继续读同一套字段，无需改动 -->
 
     <!-- ⬇️ 折叠触发器：默认收起支出/凭证/照片/日志等次要录入项，首屏聚焦核心字段 -->
-    <view class="form-accordion-toggle" bindtap="onToggleFormExtra">
-      <text class="accordion-label">{{showFormExtra ? '收起次要录入项 ∧' : '展开更多录入项（支出/凭证/照片/日志）∨'}}</text>
-      <text class="accordion-count" wx:if="{{!showFormExtra && (dailyExpenseText || fixedExpenseItems.length > 0 || recipeImages.length > 0 || activityImages.length > 0 || activityText)}}">●</text>
+    <view class="form-accordion-toggle {{showFormExtra ? 'form-accordion-toggle--open' : ''}}" bindtap="onToggleFormExtra">
+      <text class="accordion-icon">{{showFormExtra ? '📂' : '📁'}}</text>
+      <view class="accordion-body">
+        <text class="accordion-label">{{showFormExtra ? '收起次要录入项' : '展开更多录入项'}}</text>
+        <text class="accordion-sub">支出 · 凭证 · 照片 · 日志</text>
+      </view>
+      <view class="accordion-right">
+        <view wx:if="{{!showFormExtra && (dailyExpenseText || fixedExpenseItems.length > 0 || recipeImages.length > 0 || activityImages.length > 0 || activityText)}}" class="accordion-badge">已录入</view>
+        <text class="accordion-arrow">{{showFormExtra ? '∧' : '∨'}}</text>
+      </view>
     </view>
 
     <!-- Card D: 今日支出明细录入与凭证上传卡片（默认折叠） -->

@@ -420,6 +420,7 @@ Page({
     dineInVolunteers: '', // 堂食/到岗志愿者数
     deliveryVolunteers: '', // 送餐志愿者数
     takeawayCount: '', // 打包份数
+    listeningSeniors: '', // 倾听/陪伴长者人次（独立关怀指标，不计入用餐总数）
     totalDineCount: '0', // 用餐总数（自动计算：堂食长者+送餐长者+打包+堂食志愿者）
     totalVolunteers: '0', // 志愿者总人次（自动计算：送餐志愿者+堂食志愿者）
     // 📋 【一键复用昨日数据】：loadBalanceForDate 查昨日结余时顺手带出的细分统计快照，
@@ -427,6 +428,7 @@ Page({
     yesterdayStatsSnapshot: null as null | {
       dineInSeniors: number; deliverySeniors: number; takeawayCount: number;
       dineInVolunteers: number; deliveryVolunteers: number; volunteerHours: number;
+      listeningSeniors: number;
     },
     hasYesterdayStats: false,
     // 主食物资储备状态
@@ -2429,7 +2431,7 @@ Page({
   },
 
   saveDraft() {
-    const { reportDate, reportDateValue, yesterdayBalance, allDonations, meritType, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+    const { reportDate, reportDateValue, yesterdayBalance, allDonations, meritType, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, listeningSeniors } = this.data;
 
     const draftData = {
       reportDate,
@@ -2459,6 +2461,7 @@ Page({
       dineInVolunteers,
       deliveryVolunteers,
       takeawayCount,
+      listeningSeniors,
       saveTime: Date.now()
     };
 
@@ -2515,6 +2518,7 @@ Page({
         dineInVolunteers: draftData.dineInVolunteers || '',
         deliveryVolunteers: draftData.deliveryVolunteers || '',
         takeawayCount: draftData.takeawayCount || '',
+        listeningSeniors: draftData.listeningSeniors || '',
         meritType: ((draftData.meritType || (draftData.reportIsAnonymous ? 'yin' : 'yang')) as 'yang' | 'yin'),
         hasDraft: true
       });
@@ -2588,6 +2592,7 @@ Page({
         dineInVolunteers: draftData.dineInVolunteers || '',
         deliveryVolunteers: draftData.deliveryVolunteers || '',
         takeawayCount: draftData.takeawayCount || '',
+        listeningSeniors: draftData.listeningSeniors || '',
         meritType: ((draftData.meritType || (draftData.reportIsAnonymous ? 'yin' : 'yang')) as 'yang' | 'yin'),
         hasDraft: true
       });
@@ -4019,7 +4024,8 @@ Page({
           takeawayCount: parseFloat(result.data.takeawayCount) || 0,
           dineInVolunteers: parseFloat(result.data.dineInVolunteers) || 0,
           deliveryVolunteers: parseFloat(result.data.deliveryVolunteers) || 0,
-          volunteerHours: parseFloat(result.data.volunteerHours) || 0
+          volunteerHours: parseFloat(result.data.volunteerHours) || 0,
+          listeningSeniors: parseFloat(result.data.listeningSeniors) || 0
         };
         const hasYesterdayStats = Object.values(snapshot).some((v) => v > 0);
 
@@ -4078,6 +4084,7 @@ Page({
       dineInVolunteers: record.dineInVolunteers != null ? String(record.dineInVolunteers) : '',
       deliveryVolunteers: record.deliveryVolunteers != null ? String(record.deliveryVolunteers) : '',
       takeawayCount: record.takeawayCount != null ? String(record.takeawayCount) : '',
+      listeningSeniors: record.listeningSeniors != null ? String(record.listeningSeniors) : '',
       materialsInput: record.materialsInput || '',
       balanceMatchTip: '已载入历史记录'
     });
@@ -4291,7 +4298,8 @@ Page({
       takeawayCount: String(snapshot.takeawayCount),
       dineInVolunteers: String(snapshot.dineInVolunteers),
       deliveryVolunteers: String(snapshot.deliveryVolunteers),
-      volunteerHours: String(snapshot.volunteerHours)
+      volunteerHours: String(snapshot.volunteerHours),
+      listeningSeniors: String(snapshot.listeningSeniors || 0)
     });
     this.recalcDiningStats();
     this.debouncedSaveDraft();
@@ -6085,7 +6093,7 @@ Page({
 
       try {
         // ====== 第一步：纯前端生成文本（不依赖云端，绝不阻塞） ======
-        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, totalDineCount, totalVolunteers, meritType } = this.data;
+        const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, listeningSeniors, totalDineCount, totalVolunteers, meritType } = this.data;
         const isAnonymous = meritType === 'yin';
         const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
         const b4_total = parseFloat(otherDonation) || 0;
@@ -6222,6 +6230,7 @@ Page({
           dineInVolunteers: parseFloat(dineInVolunteers) || 0,
           deliveryVolunteers: parseFloat(deliveryVolunteers) || 0,
           takeawayCount: parseFloat(takeawayCount) || 0,
+          listeningSeniors: parseFloat(listeningSeniors) || 0,
           totalDineCount: parseFloat(totalDineCount) || 0,
           totalVolunteers: parseFloat(totalVolunteers) || 0,
           stapleRiceStatus: stapleRiceStatus,
@@ -7281,6 +7290,7 @@ Page({
       dineInVolunteers: report.dineInVolunteers != null ? String(report.dineInVolunteers) : '',
       deliveryVolunteers: report.deliveryVolunteers != null ? String(report.deliveryVolunteers) : '',
       takeawayCount: report.takeawayCount != null ? String(report.takeawayCount) : '',
+      listeningSeniors: report.listeningSeniors != null ? String(report.listeningSeniors) : '',
       shopName: report.shopName || this.data.shopName,
       mpAccount: report.mpAccount || this.data.mpAccount,
       receiptImages: report.receiptImages || [],

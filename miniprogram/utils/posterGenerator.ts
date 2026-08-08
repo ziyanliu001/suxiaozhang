@@ -88,6 +88,11 @@ export interface VolunteerHonorData {
   // 邀请二维码本地临时路径（getStoreQRCode 默认用途，非 purpose:'verify'），
   // 语义与 verifyQrLocalPath 一致：有值画真图，未提供/失败时降级为占位框
   qrLocalPath?: string;
+  // 荣誉卡底部感谢文案（动态化）：
+  //   雨花斋 → "感谢您在雨花斋的无私护持与付出"
+  //   其他   → "感谢您在 {{tenantName}} 的无私奉献与志愿服务"
+  // 未提供时退回通用文案
+  honorDesc?: string;
 }
 
 const BG_COLOR = '#FAF7F2';
@@ -1189,7 +1194,7 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
 
             ctx.fillStyle = SECONDARY_COLOR;
             ctx.font = 'italic 13px sans-serif';
-            ctx.fillText('感谢您用爱心温暖这座城市', width / 2, avatarCy + HONOR_AVATAR_RADIUS + 58);
+            ctx.fillText(data.honorDesc || '感谢您用爱心温暖这座城市', width / 2, avatarCy + HONOR_AVATAR_RADIUS + 58);
 
             // Impact Data：三宫格数据大字框
             const statsTop = avatarCy + HONOR_AVATAR_RADIUS + 84;
