@@ -1909,12 +1909,12 @@
         <text>{{forceUnbindResult}}</text>
       </view>
 
-      <!-- ⑤ 撤销按钮 -->
-      <button class="feedback-submit-btn sa-danger-btn"
+      <!-- ⑤ 撤销按钮：无选中灰色禁态，有选中激活红 -->
+      <button class="feedback-submit-btn {{forceUnbindSelectedMember || forceUnbindInput ? 'sa-danger-btn' : 'sa-inactive-btn'}}"
               bindtap="onConfirmForceUnbind"
               loading="{{forceUnbindSaving}}"
               disabled="{{forceUnbindSaving || (!forceUnbindSelectedMember && !forceUnbindInput)}}">
-        {{forceUnbindSelectedMember ? '撤销管理权限：' + forceUnbindSelectedMember.realName : '撤销管理权限'}}
+        {{forceUnbindSelectedMember ? '撤销 ' + forceUnbindSelectedMember.realName + ' 的管理权限' : (forceUnbindInput ? '撤销管理权限' : '请先选择要撤销的成员')}}
       </button>
     </view>
   </view>

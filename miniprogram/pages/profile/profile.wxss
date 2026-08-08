@@ -3809,7 +3809,7 @@
 
 /* 搜索栏 */
 .sa-member-search-bar {
-  padding: 0 32rpx 16rpx;
+  padding: 0 32rpx 20rpx;
   flex-shrink: 0;
 }
 .sa-member-search-input {
@@ -3835,23 +3835,24 @@
   flex-shrink: 0;
 }
 .sa-member-list-scroll {
-  max-height: 320rpx;
+  max-height: 340rpx;
   flex-shrink: 0;
-  padding: 0 32rpx;
+  padding: 0 32rpx 4rpx;
 }
 .sa-member-item {
   display: flex;
   align-items: center;
   padding: 16rpx 18rpx;
   border-radius: 16rpx;
-  margin-bottom: 10rpx;
+  margin-bottom: 12rpx;
   background: #FAFAFA;
   border: 2rpx solid #EFE6D8;
-  transition: background 0.12s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .sa-member-item.selected {
-  background: #FFF3EB;
-  border-color: #E75B3E;
+  background: #FEF2F2;
+  border-color: #DC2626;
+  box-shadow: 0 0 0 2rpx rgba(220, 38, 38, 0.18);
 }
 
 /* 成员头像 */
@@ -3910,9 +3911,10 @@
   font-family: monospace;
 }
 .sa-member-check {
-  font-size: 30rpx;
-  color: #E75B3E;
-  font-weight: bold;
+  font-size: 34rpx;
+  color: #DC2626;
+  font-weight: 900;
+  line-height: 1;
 }
 
 /* 已选中成员确认卡片 */
@@ -3987,14 +3989,18 @@
 
 /* 手动输入兜底区 */
 .sa-manual-section {
-  padding: 0 32rpx 8rpx;
+  padding: 0 32rpx 12rpx;
   flex-shrink: 0;
 }
 .sa-manual-input {
   width: 100%;
+  /* height + line-height 双保险：WeChat <input> 用 padding 无法垂直居中文字/
+     placeholder，必须用固定高度 + 等值 line-height 才能让文本完整居中显示 */
+  height: 84rpx;
+  line-height: 84rpx;
   background: #F5F3F0;
   border-radius: 16rpx;
-  padding: 16rpx 20rpx;
+  padding: 0 24rpx;
   font-size: 24rpx;
   color: #333;
   box-sizing: border-box;
@@ -4013,17 +4019,29 @@
   flex-shrink: 0;
 }
 
-/* 危险操作按钮：红色渐变 */
+/* 危险操作按钮：激活红，有选中成员时使用 */
 .sa-danger-btn {
-  background: linear-gradient(135deg, #FF4D4F 0%, #C0392B 100%) !important;
-  box-shadow: 0 4rpx 14rpx rgba(192, 57, 43, 0.35) !important;
+  background: linear-gradient(135deg, #FF4D4F 0%, #DC2626 100%) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 4rpx 14rpx rgba(220, 38, 38, 0.35) !important;
 }
 
-/* 解绑面板内确认按钮：全宽但两侧有边距 */
+/* 灰色禁态按钮：无选中成员时使用（比原生 disabled 颜色更明确） */
+.sa-inactive-btn {
+  background: #F3F4F6 !important;
+  color: #9CA3AF !important;
+  box-shadow: none !important;
+}
+
+/* 解绑面板内确认按钮：全宽但两侧有边距，拉开与上方内容的间距 */
 .sa-unbind-sheet-panel .feedback-submit-btn {
-  margin: 16rpx 32rpx 0;
+  margin: 20rpx 32rpx 0;
   width: calc(100% - 64rpx);
   box-sizing: border-box;
+  /* 防止长姓名文字被压缩：确保 flex 居中生效 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ─────────────────────────────────────────────────────────────
