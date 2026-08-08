@@ -388,9 +388,13 @@ async function listPendingApplications(OPENID) {
     if (!caller.storeId) {
       return { success: true, queueType: 'member', data: [] };
     }
-    // 🏛️ 大家长与店长同一人兼任场景：并集权限判定，两者均可审核本门店义工/财务/店长申请
+    // 🏛️ 门店自治：大家长可见并有权审批本店全角色申请（含大家长任命）；
+    // 店长仅可见/审批义工/财务/店长——大家长任命不由店长决定，防利益冲突
+    const pendingRoles = caller.role === 'store_patriarch'
+      ? ['volunteer', 'finance', 'store_manager', 'store_patriarch']
+      : ['volunteer', 'finance', 'store_manager'];
     const res = await db.collection('user_roles')
-      .where({ storeId: caller.storeId, status: 'pending', requestedRole: _.in(['volunteer', 'finance', 'store_manager']) })
+      .where({ storeId: caller.storeId, status: 'pending', requestedRole: _.in(pendingRoles) })
       .orderBy('applyTime', 'desc')
       .limit(50)
       .get();
@@ -528,12 +532,15 @@ async function listAuditQueue(event, OPENID) {
       return { success: true, data: [] };
     }
     if (status === 'pending') {
-      // pending 队列仅展示大家长/店长实际有权审批的角色（义工/财务/店长）；
-      // 大家长任命与新建门店申请仍限超管审批，不应出现在本店管理员的待审列表里
+      // 门店自治：大家长可见/审批本店全角色申请（含大家长任命）；
+      // 店长仅可见/审批义工/财务/店长，大家长任命不由店长决定
+      const pendingRoles = caller.role === 'store_patriarch'
+        ? ['volunteer', 'finance', 'store_manager', 'store_patriarch']
+        : ['volunteer', 'finance', 'store_manager'];
       query = db.collection('user_roles').where({
         storeId: caller.storeId,
         status,
-        requestedRole: _.in(['volunteer', 'finance', 'store_manager'])
+        requestedRole: _.in(pendingRoles)
       });
     } else {
       // approved 队列：展示门店全量已授权成员，不限角色
@@ -916,10 +923,13 @@ exports.main = async (event, context) => {
       return { success: false, error: '无效操作' };
     }
 
-    // 🏛️ 家长/督导任命仅限超级管理员审批：家长是监督店长的角色，店长本人（哪怕正是
-    // 本店店长）不能审批自己门店的督导人选，无论是已有门店还是新建门店分支
-    if (applyData.requestedRole === 'store_patriarch' && auditor.role !== 'super_admin') {
-      return { success: false, error: '无权限：家长任命仅限超级管理员审批' };
+    // 🏛️ 门店自治：大家长任命由本店现任大家长或超管审批（"谁管这家店，谁决定新家长"）；
+    // 店长不得审批大家长——家长本是监督店长的角色，反向任命存在明显利益冲突；
+    // 新建门店的大家长申请始终仅限超管（isCustomStore 分支在下方另行把关）
+    const canApprovePatriarch = auditor.role === 'super_admin' ||
+      (auditor.role === 'store_patriarch' && auditor.storeId === applyData.storeId);
+    if (applyData.requestedRole === 'store_patriarch' && !canApprovePatriarch) {
+      return { success: false, error: '无权限：大家长任命仅限本店现任大家长或超级管理员审批' };
     }
 
     const isCustomStore = applyData.storeSelectionType === 'custom' || !applyData.storeId;

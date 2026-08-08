@@ -2880,17 +2880,23 @@ Page({
     const list = queue === 'elevated' ? this.data.elevatedApplicationList : this.data.memberApplicationList;
     const item = (list as any[]).find((r) => r.applyId === id);
 
-    // elevated 队列（店长/家长任命、新建门店）恒为高权限；member 队列仅 finance 敏感，
-    // volunteer 维持原有一键通过的轻量体验
-    const isSensitive = queue === 'elevated' || (item && item.requestedRole === 'finance');
+    // elevated 队列（新建门店）恒为高权限；member 队列中 finance/store_manager/store_patriarch
+    // 也是高权限角色，大家长审批前需二次确认；volunteer 维持一键通过的轻量体验
+    const isSensitive = queue === 'elevated' ||
+      (item && ['finance', 'store_manager', 'store_patriarch'].includes(item.requestedRole));
 
     if (isSensitive && item) {
       const displayName = item.realName || '该申请人';
+      const roleLabel = item.requestedRoleLabel || item.requestedRole;
       const content = queue === 'elevated'
         ? (item.isCustomStore
           ? `通过后将自动创建新门店【${item.storeProfile ? item.storeProfile.storeName : ''}】并授予「${displayName}」对应管理权限，确认通过吗？`
-          : `授权后「${displayName}」将以【${item.requestedRoleLabel}】身份管理门店账本与人员，确认通过吗？`)
-        : `授权后「${displayName}」将以【财务】身份操作/查看门店账本，确认通过吗？`;
+          : `授权后「${displayName}」将以【${roleLabel}】身份管理门店账本与人员，确认通过吗？`)
+        : item.requestedRole === 'store_patriarch'
+          ? `授权后「${displayName}」将成为本店大家长，获得全店成员管理权限，请确认您信任该成员。`
+          : item.requestedRole === 'store_manager'
+            ? `授权后「${displayName}」将以【店长】身份管理门店日常事务，确认通过吗？`
+            : `授权后「${displayName}」将以【财务】身份操作/查看门店账本，确认通过吗？`;
 
       const confirmed = await new Promise<boolean>((resolve) => {
         wx.showModal({
