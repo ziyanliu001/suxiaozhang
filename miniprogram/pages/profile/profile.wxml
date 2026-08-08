@@ -1895,43 +1895,73 @@
   <!-- 🔑 超管重置门店密钥弹窗 -->
   <view class="certificate-modal-mask reset-key-modal-mask" wx:if="{{showResetStoreKeyModal}}" catchtouchmove="stopPropagation" bindtap="onCloseResetStoreKeyModal">
     <view class="certificate-modal-card sa-tool-modal-card admin-key-modal-card" catchtap="stopPropagation">
-      <!-- 标题行 -->
+
+      <!-- ① 标题行 -->
       <view class="certificate-modal-header admin-key-modal-header">
         <text class="admin-key-modal-title">🔑 重置门店管理员密钥</text>
         <view class="certificate-modal-close" bindtap="onCloseResetStoreKeyModal">✕</view>
       </view>
 
-      <!-- 目标门店 -->
+      <!-- ② 目标门店选择区 ─────────────────────────── -->
       <text class="vt-form-label">目标门店</text>
-      <picker wx:if="{{resetStoreKeyStoreList.length > 0}}"
-              mode="selector"
-              range="{{resetStoreKeyStoreList}}"
-              range-key="storeName"
-              bindchange="onResetStoreKeyPickerChange">
-        <view class="reset-key-store-picker {{resetStoreKeyStoreName ? 'selected' : ''}}">
-          <text>{{resetStoreKeyStoreName || '请选择目标门店'}}</text>
-          <text class="reset-key-picker-arrow">▾</text>
+
+      <!-- 已选中：展示门店名称卡片 -->
+      <view wx:if="{{resetStoreKeyStoreId && !resetStoreKeyShowList}}" class="reset-key-selected-card">
+        <view class="reset-key-selected-info">
+          <text class="reset-key-selected-name">{{resetStoreKeyStoreName || resetStoreKeyStoreId}}</text>
+          <text class="reset-key-selected-id-badge">ID: {{resetStoreKeyStoreId}}</text>
         </view>
-      </picker>
+        <!-- 多门店时显示切换按钮；单门店则固定，无需切换 -->
+        <view wx:if="{{resetStoreKeyStoreList.length > 1 || !resetStoreKeyStoreId}}"
+              class="reset-key-switch-btn" bindtap="onToggleResetKeyStoreList">
+          <text>切换 ▾</text>
+        </view>
+      </view>
+
+      <!-- 加载中 -->
       <view wx:elif="{{resetStoreKeyStoreListLoading}}" class="reset-key-store-picker loading-placeholder">
         <text>加载门店列表中…</text>
       </view>
 
-      <!-- storeId 手动输入 + 一键粘贴 -->
-      <view class="reset-key-input-row">
-        <input class="admin-key-modal-input reset-key-id-input"
-               type="text"
-               value="{{resetStoreKeyStoreId}}"
-               bindinput="onResetStoreKeyStoreIdInput"
-               placeholder="或手动粘贴 storeId"
-               maxlength="100" />
-        <view class="reset-key-paste-btn" bindtap="onPasteStoreId">
-          <text>📋 粘贴</text>
-        </view>
+      <!-- 未选中（多门店场景、列表加载完但尚未选）：点击展开列表 -->
+      <view wx:elif="{{!resetStoreKeyStoreId && !resetStoreKeyShowList}}"
+            class="reset-key-unselected-btn" bindtap="onToggleResetKeyStoreList">
+        <text class="reset-key-unselected-text">点击选择目标门店</text>
+        <text class="reset-key-picker-arrow">▾</text>
       </view>
 
-      <!-- 新密钥 -->
-      <text class="vt-form-label" style="margin-top:20rpx;">新密钥（留空则清除密钥）</text>
+      <!-- 展开的搜索 + 门店列表 -->
+      <view wx:if="{{resetStoreKeyShowList}}" class="reset-key-list-panel">
+        <view class="reset-key-search-bar">
+          <input class="reset-key-search-input"
+                 value="{{resetStoreKeySearchText}}"
+                 bindinput="onResetStoreKeySearch"
+                 placeholder="搜索门店名称…"
+                 focus="{{true}}"
+                 maxlength="50" />
+          <view class="reset-key-search-cancel" bindtap="onToggleResetKeyStoreList">取消</view>
+        </view>
+        <scroll-view scroll-y class="reset-key-store-scroll">
+          <block wx:for="{{resetStoreKeyFilteredList}}" wx:key="storeId">
+            <view class="reset-key-store-item {{item.storeId === resetStoreKeyStoreId ? 'active' : ''}}"
+                  bindtap="onSelectResetKeyStore"
+                  data-store-id="{{item.storeId}}"
+                  data-store-name="{{item.storeName}}">
+              <view class="reset-key-item-main">
+                <text class="reset-key-item-name">{{item.storeName}}</text>
+                <text class="reset-key-item-id">{{item.storeId}}</text>
+              </view>
+              <text wx:if="{{item.storeId === resetStoreKeyStoreId}}" class="reset-key-item-check">✓</text>
+            </view>
+          </block>
+          <view wx:if="{{resetStoreKeyFilteredList.length === 0}}" class="reset-key-no-result">
+            <text>未找到匹配门店</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <!-- ③ 新密钥输入 ─────────────────────────────── -->
+      <text class="vt-form-label" style="margin-top:24rpx;">新密钥（留空则清除密钥）</text>
       <input class="admin-key-modal-input"
              type="text"
              password
@@ -1940,18 +1970,18 @@
              placeholder="新密钥，最多 50 字；留空则清除"
              maxlength="50" />
 
-      <!-- 动态风险提示：仅当密钥框为空时显示警示 -->
+      <!-- ④ 动态风险提示 ────────────────────────────── -->
       <view class="reset-key-danger-tip" wx:if="{{resetStoreKeyIsClearMode && resetStoreKeyStoreId}}">
         <text class="reset-key-danger-icon">⚠️</text>
         <text class="reset-key-danger-text">清除密钥后任何人均可免密提交管理角色申请，操作不可逆，请谨慎！</text>
       </view>
       <text class="admin-key-modal-desc" wx:else>设置新密钥后原密钥立即失效；留空将移除密钥校验。</text>
 
-      <!-- 提交按钮：清除模式时呈警示红 -->
+      <!-- ⑤ 提交按钮（清除模式呈警示红） -->
       <button class="feedback-submit-btn {{resetStoreKeyIsClearMode ? 'reset-key-danger-btn' : ''}}"
               bindtap="onConfirmResetStoreKey"
               loading="{{resetStoreKeySaving}}"
-              disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId}}">
+              disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId || resetStoreKeyShowList}}">
         {{resetStoreKeyIsClearMode ? '⚠️ 确认清空密钥' : '确认重置密钥'}}
       </button>
     </view>

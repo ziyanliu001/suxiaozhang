@@ -474,15 +474,19 @@ Page({
     forceUnbindInput: '',   // 手动粘贴 openId（兜底）
     forceUnbindSaving: false,
     forceUnbindResult: '',  // 操作结果描述，成功后展示
-    // 🔑 超管重置门店密钥：下拉选择门店 + 新密钥输入
+    // 🔑 超管重置门店密钥：门店选择卡片 + 新密钥输入
     showResetStoreKeyModal: false,
     resetStoreKeyStoreId: '',
-    resetStoreKeyStoreName: '',       // 选中门店的显示名
+    resetStoreKeyStoreName: '',
     resetStoreKeyStoreList: [] as Array<{ storeId: string; storeName: string }>,
     resetStoreKeyStoreListLoading: false,
     resetStoreKeyInput: '',
     resetStoreKeySaving: false,
-    resetStoreKeyIsClearMode: false,  // true = 留空清除密钥，触发二次警示
+    resetStoreKeyIsClearMode: false,
+    // 门店搜索列表交互状态
+    resetStoreKeyShowList: false,             // 是否展开门店选择列表
+    resetStoreKeySearchText: '',              // 搜索框输入
+    resetStoreKeyFilteredList: [] as Array<{ storeId: string; storeName: string }>,
     createIndexesRunning: false,      // 🗂️ 刷新数据库索引运行态锁
 
     // 📢 公告管理半屏弹窗
@@ -3714,21 +3718,40 @@ Page({
 
     this.setData({
       showResetStoreKeyModal: true,
-      // 自动预填当前门店；多门店超管可通过下方选择器或手动覆盖
       resetStoreKeyStoreId: autoStoreId,
       resetStoreKeyStoreName: autoStoreName,
       resetStoreKeyInput: '',
-      // 打开时密钥框为空 → 此时若 storeId 有值，立即进入清除模式警示态，
-      // 提醒用户"当前状态等同于清除密钥"，避免误操作
       resetStoreKeyIsClearMode: !!autoStoreId,
       resetStoreKeyStoreList: [],
-      resetStoreKeyStoreListLoading: true
+      resetStoreKeyStoreListLoading: true,
+      resetStoreKeyShowList: false,
+      resetStoreKeySearchText: '',
+      resetStoreKeyFilteredList: []
     });
     try {
       const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
       const list: Array<{ storeId: string; storeName: string }> =
         (res.result && res.result.stores) || [];
-      this.setData({ resetStoreKeyStoreList: list });
+
+      // 如果当前 storeId 仅填了 ID 但缺中文名，尝试从门店列表补全 storeName
+      const curId = this.data.resetStoreKeyStoreId;
+      let resolvedName = this.data.resetStoreKeyStoreName;
+      if (curId && !resolvedName) {
+        const match = list.find(s => s.storeId === curId);
+        if (match) resolvedName = match.storeName;
+      }
+
+      this.setData({
+        resetStoreKeyStoreList: list,
+        resetStoreKeyFilteredList: list,
+        resetStoreKeyStoreName: resolvedName,
+        // 单门店超管：若尚未选门店，自动选中列表第一项
+        ...((!curId && list.length === 1) ? {
+          resetStoreKeyStoreId: list[0].storeId,
+          resetStoreKeyStoreName: list[0].storeName,
+          resetStoreKeyIsClearMode: true
+        } : {})
+      });
     } catch (err) {
       console.warn('[onOpenResetStoreKeyModal] 加载门店列表失败:', err);
     } finally {
@@ -3743,40 +3766,48 @@ Page({
       resetStoreKeyStoreId: '',
       resetStoreKeyStoreName: '',
       resetStoreKeyInput: '',
-      resetStoreKeyIsClearMode: false
+      resetStoreKeyIsClearMode: false,
+      resetStoreKeyShowList: false,
+      resetStoreKeySearchText: '',
+      resetStoreKeyFilteredList: []
     });
   },
 
-  onResetStoreKeyPickerChange(e: any) {
-    const idx = Number(e.detail.value);
-    const list = this.data.resetStoreKeyStoreList;
-    if (idx >= 0 && idx < list.length) {
-      this.setData({
-        resetStoreKeyStoreId: list[idx].storeId,
-        resetStoreKeyStoreName: list[idx].storeName
-      });
-    }
+  // 🏪 展开/收起门店选择列表
+  onToggleResetKeyStoreList() {
+    if (this.data.resetStoreKeySaving) return;
+    const show = !this.data.resetStoreKeyShowList;
+    this.setData({
+      resetStoreKeyShowList: show,
+      resetStoreKeySearchText: '',
+      resetStoreKeyFilteredList: show ? this.data.resetStoreKeyStoreList : []
+    });
   },
 
-  onResetStoreKeyStoreIdInput(e: any) {
-    this.setData({ resetStoreKeyStoreId: e.detail.value, resetStoreKeyStoreName: '' });
+  // 🔍 门店模糊搜索（中文名 or storeId 双路匹配）
+  onResetStoreKeySearch(e: any) {
+    const q = (e.detail.value || '').trim().toLowerCase();
+    const all = this.data.resetStoreKeyStoreList;
+    const filtered = q
+      ? all.filter(s =>
+          s.storeName.toLowerCase().includes(q) ||
+          s.storeId.toLowerCase().includes(q)
+        )
+      : all;
+    this.setData({ resetStoreKeySearchText: e.detail.value || '', resetStoreKeyFilteredList: filtered });
   },
 
-  // 📋 一键粘贴剪贴板内容到 storeId 输入框
-  onPasteStoreId() {
-    wx.getClipboardData({
-      success: (res) => {
-        const text = (res.data || '').trim();
-        if (!text) {
-          wx.showToast({ title: '剪贴板为空', icon: 'none' });
-          return;
-        }
-        this.setData({ resetStoreKeyStoreId: text, resetStoreKeyStoreName: '' });
-        wx.showToast({ title: '已粘贴', icon: 'success', duration: 1200 });
-      },
-      fail: () => {
-        wx.showToast({ title: '无法读取剪贴板', icon: 'none' });
-      }
+  // ✅ 从列表选择目标门店
+  onSelectResetKeyStore(e: any) {
+    const { storeId, storeName } = e.currentTarget.dataset;
+    const isClearMode = (this.data.resetStoreKeyInput || '').trim() === '';
+    this.setData({
+      resetStoreKeyStoreId: storeId,
+      resetStoreKeyStoreName: storeName,
+      resetStoreKeyShowList: false,
+      resetStoreKeySearchText: '',
+      resetStoreKeyFilteredList: [],
+      resetStoreKeyIsClearMode: isClearMode
     });
   },
 
@@ -3827,7 +3858,10 @@ Page({
         resetStoreKeyStoreId: '',
         resetStoreKeyStoreName: '',
         resetStoreKeyInput: '',
-        resetStoreKeyIsClearMode: false
+        resetStoreKeyIsClearMode: false,
+        resetStoreKeyShowList: false,
+        resetStoreKeySearchText: '',
+        resetStoreKeyFilteredList: []
       });
       wx.showToast({ title: newKey ? '密钥已重置' : '密钥已清除（无门槛申请）', icon: 'success', duration: 2500 });
     } catch (err) {
