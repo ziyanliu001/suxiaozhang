@@ -204,6 +204,15 @@ Page({
     windowWidth: 0,
     capsuleLeft: 0,
 
+    // ── 🎨 组织信息配置 Modal（大家长专属） ──────────────────────────────
+    showOrgConfigModal:    false,
+    orgConfigName:         '',   // 注册/显示名称
+    orgConfigSlogan1:      '',   // 文化寄语 · 第一句
+    orgConfigSlogan2:      '',   // 文化寄语 · 第二句
+    orgConfigLogoUrl:      '',   // 门店 Logo（云文件 ID 或临时 URL）
+    orgConfigSaving:       false,
+    // ────────────────────────────────────────────────────────────────────
+
     // ── 🌐 新用户引导入驻 Modal ────────────────────────────────────────
     // 触发条件：用户无任何已审批角色（真正的全新用户），且未曾主动关闭过引导
     // 两条路径：① 创建新组织/门店  ② 通过邀请码加入现有门店
@@ -4426,6 +4435,115 @@ Page({
       }
     } finally {
       this.setData({ subscriptionLoading: false });
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 🎨 组织信息配置（大家长专属）
+  // ─────────────────────────────────────────────────────────────────────
+
+  async onOpenOrgConfigModal() {
+    // 先打开弹窗（空表单），后台拉取现有配置预填
+    this.setData({
+      showOrgConfigModal: true,
+      orgConfigName:      '',
+      orgConfigSlogan1:   '',
+      orgConfigSlogan2:   '',
+      orgConfigLogoUrl:   '',
+      orgConfigSaving:    false
+    });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get' }
+      });
+      const d = res && res.result && res.result.data;
+      if (d) {
+        this.setData({
+          orgConfigName:    d.registeredName || d.storeName || '',
+          orgConfigSlogan1: d.slogan1 || '',
+          orgConfigSlogan2: d.slogan2 || '',
+          orgConfigLogoUrl: (Array.isArray(d.storefrontPhotos) && d.storefrontPhotos[0]) || ''
+        });
+      }
+    } catch (err) {
+      // 预填失败不阻断用户操作，静默忽略
+    }
+  },
+
+  onCloseOrgConfigModal() {
+    this.setData({ showOrgConfigModal: false });
+  },
+
+  onOrgConfigNameInput(e: any) {
+    this.setData({ orgConfigName: (e.detail.value || '').trim() });
+  },
+
+  onOrgConfigSlogan1Input(e: any) {
+    this.setData({ orgConfigSlogan1: e.detail.value || '' });
+  },
+
+  onOrgConfigSlogan2Input(e: any) {
+    this.setData({ orgConfigSlogan2: e.detail.value || '' });
+  },
+
+  async onUploadOrgLogo() {
+    try {
+      const chooseRes = await wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      });
+      const tempPath = chooseRes.tempFiles[0].tempFilePath;
+      wx.showLoading({ title: '上传中…', mask: true });
+      const cloudPath = `org-logos/${Date.now()}_logo.jpg`;
+      const uploadRes = await wx.cloud.uploadFile({ cloudPath, filePath: tempPath });
+      wx.hideLoading();
+      this.setData({ orgConfigLogoUrl: uploadRes.fileID });
+    } catch (err: any) {
+      wx.hideLoading();
+      if (err && typeof err.errMsg === 'string' && err.errMsg.indexOf('cancel') !== -1) return;
+      wx.showToast({ title: '上传失败，请重试', icon: 'none' });
+    }
+  },
+
+  async onSaveOrgConfig() {
+    if (this.data.orgConfigSaving) return;
+    const { orgConfigName, orgConfigSlogan1, orgConfigSlogan2, orgConfigLogoUrl } = this.data;
+    if (!orgConfigName.trim()) {
+      wx.showToast({ title: '组织名称不能为空', icon: 'none' });
+      return;
+    }
+    this.setData({ orgConfigSaving: true });
+    try {
+      const updateData: Record<string, any> = {
+        registeredName: orgConfigName.trim(),
+        slogan1: orgConfigSlogan1,
+        slogan2: orgConfigSlogan2
+      };
+      if (orgConfigLogoUrl) {
+        updateData.storefrontPhotos = [orgConfigLogoUrl];
+      }
+      const res = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'update', ...updateData }
+      }) as any;
+      const result = res && res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: result && result.error || '保存失败，请重试', icon: 'none', duration: 3000 });
+        return;
+      }
+      wx.showToast({ title: '组织信息已更新', icon: 'success' });
+      this.setData({ showOrgConfigModal: false });
+      // 刷新门店状态缓存（取 patriarchData.currentStoreId，因为本弹窗仅大家长可见）
+      const storeId = (this.data.patriarchData && this.data.patriarchData.currentStoreId) as string;
+      if (storeId) setTimeout(() => fetchAndSyncStoreStatus(storeId), 600);
+    } catch (err: any) {
+      console.error('[onSaveOrgConfig]', err);
+      wx.showToast({ title: err.message || '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ orgConfigSaving: false });
     }
   }
 });

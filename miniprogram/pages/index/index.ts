@@ -7299,7 +7299,25 @@ Page({
     }
   },
 
+  /** 判断当前表单是否有有意义的未保存数据 */
+  _hasFormDirtyData(): boolean {
+    const { allDonations, dailyExpenseText, fixedExpenseItems, materialsInput, activityText, recipeImages, activityImages } = this.data;
+    return !!(
+      (allDonations && allDonations.trim()) ||
+      (dailyExpenseText && dailyExpenseText.trim()) ||
+      (fixedExpenseItems && fixedExpenseItems.length > 0) ||
+      (materialsInput && materialsInput.trim()) ||
+      (activityText && activityText.trim()) ||
+      (recipeImages && recipeImages.length > 0) ||
+      (activityImages && activityImages.length > 0)
+    );
+  },
+
   onUnload() {
+    // 🛡️ 页面卸载前，若有未保存数据则静默写入草稿，防止意外退出导致数据丢失
+    if (this._hasFormDirtyData()) {
+      this.saveDraft();
+    }
     this.releaseDraftLock();
     // 🛡️ 与 onHide 同款清理：页面卸载时也要清掉全局单槽回调，避免已销毁页面的闭包
     // 继续被 app.ts 的网络恢复监听持有
@@ -7312,6 +7330,11 @@ Page({
   onHide() {
     // 页面隐藏时解开路由锁，防止影响后续返回后的操作
     this.isNavigating = false;
+
+    // 🛡️ 页面切走前，若有未保存数据则静默写入草稿
+    if (this._hasFormDirtyData()) {
+      this.saveDraft();
+    }
 
     const app = getApp();
     app.globalData.onNetworkReconnected = null;

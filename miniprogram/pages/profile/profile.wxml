@@ -438,6 +438,17 @@
         </view>
       </view>
 
+      <!-- 大家长专属：组织信息配置 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isPatriarch || isSuperAdmin}}" bindtap="onOpenOrgConfigModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🎨</text>
+          <text class="item-text">组织信息配置</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
       <!-- 大家长专属：邀请码 + 全国数据看板（合并自底部工具箱，避免反复滚动） -->
       <block wx:if="{{isPatriarch && !isSuperAdmin}}">
         <view class="pd-mgmt-divider"></view>
@@ -2249,6 +2260,66 @@
   </view>
 
   <!-- ===================== 新用户入驻引导弹窗 ===================== -->
+  <!-- ── 🎨 组织信息配置弹窗（大家长专属） ──────────────────────────── -->
+  <view wx:if="{{showOrgConfigModal}}" class="onb-mask">
+    <view class="onb-panel">
+
+      <!-- 标题栏 -->
+      <view class="onb-head">
+        <view class="onb-back-btn" bindtap="onCloseOrgConfigModal">✕</view>
+        <text class="onb-head-title">🎨 组织信息配置</text>
+        <view class="onb-head-placeholder"></view>
+      </view>
+
+      <!-- 表单区 -->
+      <scroll-view scroll-y class="onb-scroll">
+        <view class="onb-form-body">
+
+          <!-- 组织/门店名称 -->
+          <view class="onb-field-group">
+            <text class="onb-field-label">组织名称</text>
+            <input class="onb-field-input" placeholder="您的组织或门店名称" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="40" />
+          </view>
+
+          <!-- 文化寄语第一句 -->
+          <view class="onb-field-group">
+            <text class="onb-field-label">文化寄语 · 第一句</text>
+            <input class="onb-field-input" placeholder="如：善心汇聚暖人间" value="{{orgConfigSlogan1}}" bindinput="onOrgConfigSlogan1Input" maxlength="30" />
+          </view>
+
+          <!-- 文化寄语第二句 -->
+          <view class="onb-field-group">
+            <text class="onb-field-label">文化寄语 · 第二句</text>
+            <input class="onb-field-input" placeholder="如：爱心传递每一天" value="{{orgConfigSlogan2}}" bindinput="onOrgConfigSlogan2Input" maxlength="30" />
+          </view>
+
+          <!-- 组织 Logo -->
+          <view class="onb-field-group">
+            <text class="onb-field-label">组织 Logo</text>
+            <view class="orgcfg-logo-row" bindtap="onUploadOrgLogo">
+              <image wx:if="{{orgConfigLogoUrl}}" class="orgcfg-logo-preview" src="{{orgConfigLogoUrl}}" mode="aspectFill" />
+              <view wx:else class="orgcfg-logo-placeholder">
+                <text class="orgcfg-logo-icon">📷</text>
+                <text class="orgcfg-logo-hint">点击上传</text>
+              </view>
+              <text class="orgcfg-logo-change" wx:if="{{orgConfigLogoUrl}}">更换</text>
+            </view>
+          </view>
+
+        </view>
+      </scroll-view>
+
+      <!-- 底部保存按钮 -->
+      <view class="onb-footer">
+        <view class="onb-submit-btn {{orgConfigSaving ? 'onb-submit-btn--loading' : ''}}"
+              bindtap="onSaveOrgConfig">
+          {{orgConfigSaving ? '保存中…' : '保存配置'}}
+        </view>
+      </view>
+
+    </view>
+  </view>
+
   <view wx:if="{{showOnboardingModal}}" class="onb-mask">
     <view class="onb-panel">
 
