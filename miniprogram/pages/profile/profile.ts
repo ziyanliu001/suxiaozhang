@@ -3525,6 +3525,32 @@ Page({
     });
   },
 
+  onPatriarchGenCode() {
+    const storeName = this.data.currentStoreName || '本店';
+    wx.showModal({
+      title: '🎫 生成本店邀请码',
+      content: `提示：您正在为「${storeName}」生成管理邀请码，请仅发放给信任的本店成员，切勿对外传播。`,
+      confirmText: '我知道了，去生成',
+      confirmColor: '#3B6FE8',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return;
+        if (this.isNavigating) return;
+        this.isNavigating = true;
+        wx.switchTab({
+          url: '/pages/index/index',
+          fail: () => {
+            this.isNavigating = false;
+          }
+        });
+      }
+    });
+  },
+
+  onOpenSecurityLogModal() {
+    wx.showToast({ title: '安全日志功能即将上线', icon: 'none', duration: 2000 });
+  },
+
   onTriggerClearCache() {
     wx.showModal({
       title: '🗑️ 清理本地占用缓存',

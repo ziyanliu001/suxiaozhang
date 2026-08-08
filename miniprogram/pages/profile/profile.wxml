@@ -362,16 +362,16 @@
         <text>加载中...</text>
       </view>
 
-      <!-- 大家长的全套日常管理入口（含成员审批 / 意见箱 / 餐报审核） -->
-      <view class="pd-section-title pd-feedback-entry-title">
-        <text class="pd-section-icon">⚙️</text>
-        <text class="pd-section-txt">门店日常管理</text>
+      <!-- ─── 门店管理中心 ─────────────────────────────── -->
+      <view class="pd-mgmt-center-header">
+        <text class="pd-mgmt-center-title">🏢 门店管理中心</text>
       </view>
 
+      <!-- 成员管理 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
         <view class="item-left">
-          <text class="manager-only-emoji">🔑</text>
-          <text class="item-text">成员权限管理（降级/移出）</text>
+          <text class="manager-only-emoji">⚙️</text>
+          <text class="item-text">成员权限管理</text>
         </view>
         <view class="pd-feedback-entry-right">
           <view class="item-arrow">❯</view>
@@ -381,7 +381,7 @@
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">👥</text>
-          <text class="item-text">待审批的本店成员申请</text>
+          <text class="item-text">待审批的成员申请</text>
         </view>
         <view class="pd-feedback-entry-right">
           <view class="badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
@@ -389,11 +389,11 @@
         </view>
       </view>
 
-      <!-- 🏛️ 待审批的高级角色与新店申请：仅超管可见 -->
+      <!-- 超管专属：高级角色/新店申请 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onOpenElevatedApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">🏛️</text>
-          <text class="item-text">待审批的高级角色与新店申请</text>
+          <text class="item-text">高级角色与新店申请</text>
         </view>
         <view class="pd-feedback-entry-right">
           <view class="badge" wx:if="{{pendingElevatedApplicationCount > 0}}">{{pendingElevatedApplicationCount}}</view>
@@ -401,6 +401,7 @@
         </view>
       </view>
 
+      <!-- 内容与审核 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📮</text>
@@ -415,7 +416,7 @@
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📥</text>
-          <text class="item-text">待审核的义工餐报与物资</text>
+          <text class="item-text">义工餐报与物资审核</text>
         </view>
         <view class="pd-feedback-entry-right">
           <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
@@ -423,14 +424,11 @@
         </view>
       </view>
 
-      <!-- 🔐 门店安全设置：大家长可查看明文密钥 + 显示/隐藏切换 + 修改按钮 -->
-      <view class="pd-section-title pd-feedback-entry-title">
-        <text class="pd-section-icon">🔐</text>
-        <text class="pd-section-txt">门店安全设置</text>
-      </view>
+      <!-- 安全设置（细分隔线 + 密钥行） -->
+      <view class="pd-mgmt-divider"></view>
       <view class="action-item-cell pd-feedback-entry-cell admin-key-entry-cell">
         <view class="item-left">
-          <text class="manager-only-emoji">🔑</text>
+          <text class="manager-only-emoji">🔐</text>
           <text class="item-text">管理员密钥</text>
         </view>
         <view class="admin-key-inline-right">
@@ -439,6 +437,33 @@
           <view class="admin-key-btn admin-key-modify-btn" bindtap="onOpenAdminKeyModal">修改</view>
         </view>
       </view>
+
+      <!-- 大家长专属：邀请码 + 全国数据看板（合并自底部工具箱，避免反复滚动） -->
+      <block wx:if="{{isPatriarch && !isSuperAdmin}}">
+        <view class="pd-mgmt-divider"></view>
+        <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onPatriarchGenCode">
+          <view class="item-left">
+            <text class="manager-only-emoji">🎫</text>
+            <text class="item-text">生成本店邀请码</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+        <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onPatriarchGoToNationalDashboard">
+          <view class="item-left">
+            <text class="manager-only-emoji">📊</text>
+            <text class="item-text">全国数据看板</text>
+            <text class="item-premium-tag">高级</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+        <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
+          <view class="item-left">
+            <text class="manager-only-emoji">💳</text>
+            <text class="item-text">会员开通 / 续费管理</text>
+          </view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </block>
     </view>
 
     <!-- 🗂️ 店长日常管理面板：仅 store_manager 角色可见，与大家长管理面板彻底分离。
@@ -714,18 +739,10 @@
          ║  工具箱（超管：3 分区完整版 / 大家长：仅会员管理）             ║
          ╚══════════════════════════════════════════════════════════════╝ -->
 
-    <!-- ▸ 大家长专属精简版：全国数据看板 + 会员开通/续费 -->
+    <!-- ▸ 平台管理员精简版（大家长的同类入口已合并至 patriarch-panel-card 管理中心末尾） -->
     <view class="ui-card-wrapper admin-developer-section"
-          wx:if="{{(isPatriarch || isPlatformAdmin) && !isRealSuperAdmin}}">
-      <view class="admin-divider">门店管理</view>
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onPatriarchGoToNationalDashboard" wx:if="{{isPatriarch}}">
-        <view class="item-left">
-          <text class="manager-only-emoji">📊</text>
-          <text class="item-text">全国数据看板</text>
-          <text class="item-premium-tag">高级</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
+          wx:if="{{isPlatformAdmin && !isRealSuperAdmin && !isPatriarch}}">
+      <view class="admin-divider">平台工具</view>
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
         <view class="item-left">
           <text class="manager-only-emoji">💳</text>
@@ -739,17 +756,7 @@
     <view class="ui-card-wrapper admin-developer-section" wx:if="{{isRealSuperAdmin}}">
       <view class="admin-divider">超管工具箱</view>
 
-      <!-- ── 分区 1：运营管理 ──────────────────────────── -->
-      <view class="sa-sub-divider">📊 运营管理</view>
-
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerGenCode">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-key"></view>
-          <text class="item-text">生成门店邀请码</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
+      <!-- ── 全国数据看板（单项，无需分区标题） ────────── -->
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStatistics">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-screen"></view>
@@ -758,15 +765,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
-        <view class="item-left">
-          <text class="manager-only-emoji">💳</text>
-          <text class="item-text">会员开通 / 续费管理</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <!-- ── 分区 2：应急处理 ──────────────────────────── -->
+      <!-- ── 分区：应急处理 ───────────────────────────── -->
       <view class="sa-sub-divider sa-sub-divider-danger">🛡️ 应急处理</view>
 
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenForceUnbindModal">
@@ -781,6 +780,14 @@
         <view class="item-left">
           <text class="manager-only-emoji">🔑</text>
           <text class="item-text">重置门店申请密钥</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenSecurityLogModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📋</text>
+          <text class="item-text">安全操作日志</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>

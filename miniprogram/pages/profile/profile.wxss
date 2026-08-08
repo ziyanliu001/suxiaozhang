@@ -863,7 +863,7 @@
   border: 1rpx solid #E6D0A0;
   border-radius: 28rpx;
   padding: 24rpx;
-  margin-bottom: 30rpx;
+  margin-bottom: 24rpx;
   box-sizing: border-box;
 }
 
@@ -875,6 +875,27 @@
   font-size: 30rpx;
   font-weight: bold;
   color: #8C1D18;
+}
+
+/* 门店管理中心：单一区块标题，替代原来两个零散的 pd-section-title 分隔标签 */
+.pd-mgmt-center-header {
+  display: flex;
+  align-items: center;
+  margin: 20rpx 0 12rpx;
+}
+
+.pd-mgmt-center-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #495057;
+  letter-spacing: 0.5rpx;
+}
+
+/* 管理中心内细分隔线（密钥行 / 工具行 之前） */
+.pd-mgmt-divider {
+  height: 1rpx;
+  background: linear-gradient(90deg, transparent 0%, #E6D0A0 30%, #E6D0A0 70%, transparent 100%);
+  margin: 12rpx 0;
 }
 
 .pd-health-card {
@@ -957,13 +978,14 @@
 }
 
 .pd-section-icon {
-  font-size: 24rpx;
+  font-size: 22rpx;
 }
 
 .pd-section-txt {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #D48806;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #868E96;
+  letter-spacing: 0.5rpx;
 }
 
 .pd-void-card,
@@ -1093,7 +1115,7 @@
   border: 1rpx solid #EFE6D8;
   border-radius: 28rpx;
   padding: 10rpx 0;
-  margin-bottom: 30rpx;
+  margin-bottom: 24rpx;
   overflow: hidden;
 }
 
