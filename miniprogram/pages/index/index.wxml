@@ -171,7 +171,7 @@
        作为页面第一视觉焦点，不再被公告栏/食谱大事记预览卡挤到后面 -->
   <view class="ui-card-wrapper volunteer-hero-card" wx:if="{{isVolunteer}}">
     <view class="v-header">
-      <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{isAllStoresView ? '雨花大家庭' : (currentStoreName || shopName || '海沧区雨花斋')}}</view>
+      <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{isAllStoresView ? '爱心大家庭' : (currentStoreName || '公益爱心站')}}</view>
       <text class="v-sub">端上一碗热饭，温暖世间一颗心</text>
     </view>
 
@@ -331,7 +331,7 @@
   <view class="culture-motto-card motto-card-wrapper">
     <view class="motto-header">
       <text class="motto-title-icon">🌸</text>
-      <text class="motto-title-text">每日修身 · {{cultureQuote.source || '雨花家训'}}</text>
+      <text class="motto-title-text">每日一思 · {{cultureQuote.source || '公益精神'}}</text>
     </view>
 
     <view class="motto-content">
@@ -432,7 +432,7 @@
       <view class="card-header-welcome">
         <view class="welcome-icon idx-icon-svg idx-icon-crown"></view>
         <view class="welcome-text-box">
-          <text class="welcome-title">{{currentStoreName || '海沧店'}} · 店长工作台</text>
+          <text class="welcome-title">{{currentStoreName || '本门店'}} · 店长工作台</text>
           <text class="welcome-sub">掌管门店日常运营、小票记账与餐报发布</text>
         </view>
       </view>
@@ -459,7 +459,7 @@
       <view class="card-header-welcome">
         <view class="welcome-icon idx-icon-svg idx-icon-lock"></view>
         <view class="welcome-text-box">
-          <text class="welcome-title">{{currentStoreName || '海沧店'}} · 财务稽核台</text>
+          <text class="welcome-title">{{currentStoreName || '本门店'}} · 财务稽核台</text>
           <text class="welcome-sub">账本防篡改稽核、资金安全与数据导出</text>
         </view>
       </view>
@@ -1365,17 +1365,51 @@
     </scroll-view>
   </block>
 
-  <!-- ❤️ 家人（服务对象）「透明监督版」首页：不填报表、不需要计算工具，
-       专注三件事——阳光账本大盘、今日菜谱、雨花大事记与护持剪影 -->
+  <!-- ❤️ 家人（服务对象）分流：
+       • 新用户（showNewUserGuide=true）：全屏引导卡，引导创建组织或加入现有门店
+       • 已绑定门店的家人：透明监督版首页（阳光账本 / 今日菜谱 / 护持剪影） -->
   <block wx:elif="{{isFamily}}">
-    <scroll-view scroll-y class="page-body-scroll">
+
+    <!-- ======= 新用户零门槛引导卡 ======= -->
+    <view class="nug-wrapper" wx:if="{{showNewUserGuide}}">
+      <view class="nug-card">
+        <text class="nug-emoji">🌱</text>
+        <text class="nug-title">欢迎加入素小账</text>
+        <text class="nug-desc">您目前还未关联任何爱心站点。选择一种方式快速起步：</text>
+
+        <view class="nug-btn nug-btn-primary" bindtap="onNewUserGoCreate">
+          <text class="nug-btn-icon">🏠</text>
+          <view class="nug-btn-text">
+            <text class="nug-btn-main">创建我的爱心站点</text>
+            <text class="nug-btn-sub">成为大家长，管理您的公益组织</text>
+          </view>
+          <text class="nug-btn-arrow">›</text>
+        </view>
+
+        <view class="nug-btn nug-btn-secondary" bindtap="onNewUserGoJoin">
+          <text class="nug-btn-icon">🔑</text>
+          <view class="nug-btn-text">
+            <text class="nug-btn-main nug-btn-main--dark">通过邀请码加入</text>
+            <text class="nug-btn-sub">已收到大家长的邀请码</text>
+          </view>
+          <text class="nug-btn-arrow">›</text>
+        </view>
+
+        <view class="nug-footer">
+          <text class="nug-footer-text">支持公益食堂、义工站、救援队等各类公益组织接入</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- ======= 已绑定门店的家人监督版首页 ======= -->
+    <scroll-view scroll-y class="page-body-scroll" wx:else>
       <view class="family-home-container">
 
         <!-- 模块一：阳光账本核心大盘——复用弹窗那套 sunshineLedgerData/sunshineStatCards
              数据管线（见 onShow 里的自动拉取），点击整卡打开既有的 8 项详情弹窗 -->
         <view class="family-sunshine-hero-card" bindtap="onOpenSunshineLedger">
           <view class="fsh-badge">☀️ 公开透明 · 全民监督</view>
-          <text class="fsh-store-name">{{sunshineLedgerData.storeName || currentStoreName || shopName || '本门店'}}</text>
+          <text class="fsh-store-name">{{sunshineLedgerData.storeName || currentStoreName || '本门店'}}</text>
           <text class="fsh-period">{{sunshineLedgerData.periodLabel || ''}}阳光账本</text>
 
           <view class="fsh-hero-row">
@@ -1428,7 +1462,7 @@
         <!-- 模块三：雨花大事记与护持剪影 -->
         <view class="family-activity-card">
           <view class="fa-header">
-            <text class="fa-title">📌 雨花大事记与护持剪影</text>
+            <text class="fa-title">📌 今日动态与护持剪影</text>
           </view>
           <view class="fa-body" wx:if="{{todayActivity}}">
             <view class="fa-9grid" wx:if="{{todayActivity.images.length > 0}}">

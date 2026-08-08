@@ -365,8 +365,8 @@ Page({
     isSavingTemplate: false,
     templateStorePickerIndex: 0,
     templateFocusField: '',
-    shopName: '海沧区雨花斋',
-    mpAccount: '厦门海沧雨花斋！',
+    shopName: '',
+    mpAccount: '',
     thankText: '感谢各位爱心人士的鼎力支持，感恩默默付出的义工团队！',
     slogan1: '吃素一日  健康一天',
     slogan2: '清晰记账  透明运行',
@@ -646,6 +646,8 @@ Page({
     // 未审核通过的默认 volunteer 账号（与 profile.ts isFamily 判定口径一致）。
     // 默认 false，避免角色数据到位前首页先闪一下"家人版"布局
     isFamily: false,
+    // 🌐 多租户：新用户（isFamily + 无门店）引导卡，代替表单/家人视图展示创建/加入入口
+    showNewUserGuide: false,
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
     // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
     isRealSuperAdmin: false,
@@ -865,7 +867,7 @@ Page({
     DataService.syncLocalDataToCloud();
     await this.initCurrentUserRole();
 
-    const storeId = this.data.currentStoreId || 'store_haicang_001';
+    const storeId = this.data.currentStoreId || '';
     this.fetchStoreSponsor(storeId);
     // 🌟 店铺模板自定义（致谢词/宣传标语/公众号名称）：非阻塞式预取该门店云端最新保存值，
     // 确保当日餐报文本/公示海报生成时优先使用云端模板，而不是本地缓存或硬编码默认值
@@ -974,7 +976,7 @@ Page({
     if (cached) {
       const effectiveRawRole = AuthService.resolveEffectiveRole(cached.role);
       const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
-      const storeName = cached.storeName || this.data.shopName;
+      const storeName = cached.storeName || '';
       const storeId = cached.storeId || '';
 
       this.setData({
@@ -988,6 +990,7 @@ Page({
         isPatriarch: isPatriarch,
         isRealSuperAdmin: isRealSuperAdmin,
         isFamily: isFamily,
+        showNewUserGuide: isFamily && !storeId,
         currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
@@ -1013,7 +1016,7 @@ Page({
       // super_admin，形成竞态：谁最后 setData 谁说了算，而不是谁应该说了算
       const effectiveRawRole = AuthService.resolveEffectiveRole(info.role);
       const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
-      const storeName = info.storeName || this.data.shopName;
+      const storeName = info.storeName || '';
       const storeId = info.storeId || '';
 
       this.setData({
@@ -1027,6 +1030,7 @@ Page({
         isPatriarch: isPatriarch,
         isRealSuperAdmin: isRealSuperAdmin,
         isFamily: isFamily,
+        showNewUserGuide: isFamily && !storeId,
         currentViewMode: getPreviewViewMode(),
         currentStoreName: storeName,
         currentStoreId: storeId
@@ -1551,7 +1555,7 @@ Page({
   onStoreChanged(e: any) {
     const detail = e.detail || {};
     const rawRole = (detail.role || detail.currentRole || wx.getStorageSync('active_role') || 'VOLUNTEER').toUpperCase();
-    const storeName = detail.storeName || detail.name || this.data.currentStoreName || '海沧区雨花斋';
+    const storeName = detail.storeName || detail.name || this.data.currentStoreName || '';
     const storeId = detail.storeId || detail.id || this.data.currentStoreId || '';
 
     // 防循环：门店和角色均未改变则直接中断
@@ -1728,6 +1732,15 @@ Page({
 
   // 🌟 视角切换预览提示条的快捷入口：跳转个人中心切回超级管理员全景
   onNavigateToProfile() {
+    wx.switchTab({ url: '/pages/profile/profile' });
+  },
+
+  // 🌐 新用户引导：点击"创建组织"或"通过邀请码加入"均跳到个人页，
+  // profile.ts 的 initMinePage 会检测到 isFamily+无门店状态并自动弹出入驻弹窗
+  onNewUserGoCreate() {
+    wx.switchTab({ url: '/pages/profile/profile' });
+  },
+  onNewUserGoJoin() {
     wx.switchTab({ url: '/pages/profile/profile' });
   },
 
