@@ -378,25 +378,14 @@
         </view>
       </view>
 
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
+      <!-- 待审批成员申请：仅门店大家长/店长可见，超管不介入事前审批 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{!isSuperAdmin}}" bindtap="onOpenMemberApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">👥</text>
           <text class="item-text">待审批的成员申请</text>
         </view>
         <view class="pd-feedback-entry-right">
           <view class="badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <!-- 超管专属：高级角色/新店申请 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isSuperAdmin}}" bindtap="onOpenElevatedApplicationModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">🏛️</text>
-          <text class="item-text">高级角色与新店申请</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingElevatedApplicationCount > 0}}">{{pendingElevatedApplicationCount}}</view>
           <view class="item-arrow">❯</view>
         </view>
       </view>
@@ -413,7 +402,8 @@
         </view>
       </view>
 
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
+      <!-- 义工餐报/物资审核：门店自治，仅大家长/店长可见，超管不介入事前审批 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{!isSuperAdmin}}" bindtap="onOpenVolunteerSubmissionAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📥</text>
           <text class="item-text">义工餐报与物资审核</text>
@@ -1557,77 +1547,7 @@
     </view>
   </view>
 
-  <!-- 🏛️ 待审批的高级角色与新店申请：仅超管入口，附带门店档案预览 -->
-  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showElevatedApplicationModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showElevatedApplicationModal}}" bindtap="onCloseElevatedApplicationModal">
-    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
-      <view class="feedback-sheet-drag-handle"></view>
-
-      <view class="feedback-sheet-header">
-        <view class="feedback-sheet-header-text">
-          <text class="feedback-sheet-title">🏛️ 待审批的高级角色与新店申请</text>
-          <text class="feedback-sheet-subtitle">店长/家长任命与新建门店，拒绝需填写原因</text>
-        </view>
-        <view class="feedback-sheet-close" bindtap="onCloseElevatedApplicationModal">✕</view>
-      </view>
-
-      <scroll-view scroll-y class="feedback-admin-list-scroll">
-        <view class="feedback-admin-loading" wx:if="{{elevatedApplicationLoading}}">
-          <text>加载中...</text>
-        </view>
-
-        <view class="feedback-admin-empty" wx:if="{{!elevatedApplicationLoading && elevatedApplicationList.length === 0}}">
-          <text>暂无待审批的高级角色/新店申请</text>
-        </view>
-
-        <view class="feedback-admin-item" wx:for="{{elevatedApplicationList}}" wx:key="applyId">
-          <view class="fa-item-header">
-            <text class="fa-item-nickname">{{item.realName}}</text>
-            <text class="fa-item-type-tag">{{item.isCustomStore ? '🆕 新建门店' : ''}}{{item.requestedRoleLabel}}</text>
-          </view>
-          <text class="fa-item-time">🗓️ {{item.applyTimeStr}}</text>
-          <text class="fa-item-content">手机号：{{item.phone}}</text>
-
-          <!-- 🏪 门店档案预览：新建门店用申请表单自带的字段，已有门店用其当前档案 -->
-          <view class="ea-store-profile-card">
-            <text class="fa-item-content">门店：{{item.storeProfile.storeName}}</text>
-            <text class="fa-item-content">地址：{{item.storeProfile.address || '未填写'}}</text>
-            <text class="fa-item-content">联系电话：{{item.storeProfile.contactPhone || '未填写'}}</text>
-            <scroll-view scroll-x class="ea-store-photo-row" wx:if="{{item.storeProfile.storePhotos.length > 0}}">
-              <image
-                wx:for="{{item.storeProfile.storePhotos}}"
-                wx:for-item="photo"
-                wx:key="*this"
-                class="ea-store-photo-thumb"
-                src="{{photo}}"
-                mode="aspectFill"
-                bindtap="onPreviewApplicationStorePhoto"
-                data-url="{{photo}}"
-                data-urls="{{item.storeProfile.storePhotos}}"
-              />
-            </scroll-view>
-          </view>
-
-          <view class="fa-item-actions">
-            <button
-              class="fa-item-reply-btn"
-              bindtap="onOpenRejectApplicationModal"
-              data-id="{{item.applyId}}"
-              data-queue="elevated"
-            >❌ 拒绝</button>
-            <button
-              class="fa-item-handle-btn"
-              bindtap="onApproveApplication"
-              data-id="{{item.applyId}}"
-              data-queue="elevated"
-            >✅ 通过</button>
-          </view>
-        </view>
-        <view class="fa-safe-area-spacer"></view>
-      </scroll-view>
-    </view>
-  </view>
-
-  <!-- ❌ 拒绝申请原因弹窗：member/elevated 两个队列共用，与义工投稿驳回同一套
+  <!-- ❌ 拒绝申请原因弹窗：成员申请驳回，与义工投稿驳回同一套
        certificate-modal-* 视觉规范 -->
   <view class="certificate-modal-mask" wx:if="{{showRejectApplicationModal}}" catchtouchmove="stopPropagation" bindtap="onCloseRejectApplicationModal">
     <view class="certificate-modal-card" catchtap="stopPropagation">

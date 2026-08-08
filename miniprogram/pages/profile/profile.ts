@@ -461,20 +461,10 @@ Page({
       applyId: string; realName: string; phone: string; requestedRole: string;
       requestedRoleLabel: string; applyTimeStr: string;
     }>,
-    pendingElevatedApplicationCount: 0,
-    showElevatedApplicationModal: false,
-    elevatedApplicationLoading: false,
-    elevatedApplicationList: [] as Array<{
-      applyId: string; realName: string; phone: string; requestedRole: string;
-      requestedRoleLabel: string; applyTimeStr: string; isCustomStore: boolean;
-      storeProfile: { storeName: string; address: string; contactPhone: string; storePhotos: string[] };
-    }>,
-    // ❌ 驳回申请原因弹窗：member/elevated 两个队列共用同一套输入框，
-    // rejectApplicationQueue 记住当前驳回的是哪一个队列的申请，便于处理完后
-    // 更新对应的列表与角标
+    // ❌ 驳回申请原因弹窗：成员申请队列专用
     showRejectApplicationModal: false,
     rejectApplicationId: '',
-    rejectApplicationQueue: 'member' as 'member' | 'elevated',
+    rejectApplicationQueue: 'member' as 'member',
     rejectApplicationReason: '',
     rejectApplicationSubmitting: false,
 
@@ -2738,9 +2728,8 @@ Page({
     }
   },
 
-  // 👥🏛️ 待审批的成员/高级角色申请：服务端已按 caller 角色分流（店长/家长只拿本店
-  // 义工/财务申请，超管拿全机构店长/家长/新店申请），客户端只需按返回的 queueType
-  // 落到对应的列表 + 角标，不需要分开发两次请求
+  // 👥 待审批的成员申请：门店自治架构，仅大家长/店长拉取本店成员（义工/财务/店长）
+  // 的申请队列；超管已从事前审批中彻底剥离，不再消费此接口的 elevated 队列
   async fetchPendingApplications() {
     if (!isCloudAvailable()) return;
     try {
@@ -2754,9 +2743,8 @@ Page({
       const list = result.data || [];
       if (result.queueType === 'member') {
         this.setData({ memberApplicationList: list, pendingMemberApplicationCount: list.length });
-      } else if (result.queueType === 'elevated') {
-        this.setData({ elevatedApplicationList: list, pendingElevatedApplicationCount: list.length });
       }
+      // elevated 队列（超管专属）不再在客户端展示——超管已彻底退出事前审批流
     } catch (err) {
       console.warn('[fetchPendingApplications] 加载失败:', err);
     }
@@ -2772,18 +2760,6 @@ Page({
 
   onCloseMemberApplicationModal() {
     this.setData({ showMemberApplicationModal: false });
-  },
-
-  onOpenElevatedApplicationModal() {
-    if (this.data.elevatedApplicationLoading) return;
-    this.setData({ showElevatedApplicationModal: true, elevatedApplicationLoading: true });
-    this.fetchPendingApplications().finally(() => {
-      this.setData({ elevatedApplicationLoading: false });
-    });
-  },
-
-  onCloseElevatedApplicationModal() {
-    this.setData({ showElevatedApplicationModal: false });
   },
 
   // 👥 人员权限管理：展示本店已授权的管理岗位成员（财务/店长/大家长），提供降级/移出操作
@@ -3020,47 +2996,32 @@ Page({
     }
   },
 
-  _removeApplicationFromQueue(id: string, queue: 'member' | 'elevated') {
-    if (queue === 'elevated') {
-      const next = this.data.elevatedApplicationList.filter((item) => item.applyId !== id);
-      this.setData({ elevatedApplicationList: next, pendingElevatedApplicationCount: next.length });
-    } else {
-      const next = this.data.memberApplicationList.filter((item) => item.applyId !== id);
-      this.setData({ memberApplicationList: next, pendingMemberApplicationCount: next.length });
-    }
+  _removeApplicationFromQueue(id: string, queue: 'member') {
+    const next = this.data.memberApplicationList.filter((item) => item.applyId !== id);
+    this.setData({ memberApplicationList: next, pendingMemberApplicationCount: next.length });
   },
 
-  // 🛡️ 高权限角色审批前强确认：与首页工作台的门店审核弹窗（index.ts onProcessAudit）
-  // 走的是同一个 processRoleAudit 云函数、同一套权限敏感度，此前这里两个队列
-  // （member 里的义工/财务申请、elevated 里的店长/家长/新建门店申请）通过按钮一律
-  // 无确认直接批准——elevated 队列清一色是高权限授权，member 队列里的"财务"申请
-  // 同样能看到/操作门店账本，都应该在授权前弹一次强确认，而不是只有首页那份入口
-  // 才有这层保护，本页留了个能一键提权的缺口
+  // 🛡️ 高权限角色审批前强确认：member 队列里的财务/店长/大家长申请在授权前弹一次
+  // 强确认，volunteer 维持一键通过的轻量体验
   async onApproveApplication(e: any) {
     const id = e.currentTarget.dataset.id;
-    const queue = e.currentTarget.dataset.queue as 'member' | 'elevated';
+    const queue = e.currentTarget.dataset.queue as 'member';
     if (!id) return;
 
-    const list = queue === 'elevated' ? this.data.elevatedApplicationList : this.data.memberApplicationList;
+    const list = this.data.memberApplicationList;
     const item = (list as any[]).find((r) => r.applyId === id);
 
-    // elevated 队列（新建门店）恒为高权限；member 队列中 finance/store_manager/store_patriarch
-    // 也是高权限角色，大家长审批前需二次确认；volunteer 维持一键通过的轻量体验
-    const isSensitive = queue === 'elevated' ||
-      (item && ['finance', 'store_manager', 'store_patriarch'].includes(item.requestedRole));
+    // member 队列中 finance/store_manager/store_patriarch 是高权限角色，需二次确认；
+    // volunteer 维持一键通过的轻量体验
+    const isSensitive = item && ['finance', 'store_manager', 'store_patriarch'].includes(item.requestedRole);
 
     if (isSensitive && item) {
       const displayName = item.realName || '该申请人';
-      const roleLabel = item.requestedRoleLabel || item.requestedRole;
-      const content = queue === 'elevated'
-        ? (item.isCustomStore
-          ? `通过后将自动创建新门店【${item.storeProfile ? item.storeProfile.storeName : ''}】并授予「${displayName}」对应管理权限，确认通过吗？`
-          : `授权后「${displayName}」将以【${roleLabel}】身份管理门店账本与人员，确认通过吗？`)
-        : item.requestedRole === 'store_patriarch'
-          ? `授权后「${displayName}」将成为本店大家长，获得全店成员管理权限，请确认您信任该成员。`
-          : item.requestedRole === 'store_manager'
-            ? `授权后「${displayName}」将以【店长】身份管理门店日常事务，确认通过吗？`
-            : `授权后「${displayName}」将以【财务】身份操作/查看门店账本，确认通过吗？`;
+      const content = item.requestedRole === 'store_patriarch'
+        ? `授权后「${displayName}」将成为本店大家长，获得全店成员管理权限，请确认您信任该成员。`
+        : item.requestedRole === 'store_manager'
+          ? `授权后「${displayName}」将以【店长】身份管理门店日常事务，确认通过吗？`
+          : `授权后「${displayName}」将以【财务】身份操作/查看门店账本，确认通过吗？`;
 
       const confirmed = await new Promise<boolean>((resolve) => {
         wx.showModal({
@@ -3100,15 +3061,8 @@ Page({
 
   onOpenRejectApplicationModal(e: any) {
     const id = e.currentTarget.dataset.id;
-    const queue = e.currentTarget.dataset.queue as 'member' | 'elevated';
     if (!id) return;
-    this.setData({ showRejectApplicationModal: true, rejectApplicationId: id, rejectApplicationQueue: queue, rejectApplicationReason: '' });
-  },
-
-  onPreviewApplicationStorePhoto(e: any) {
-    const { url, urls } = e.currentTarget.dataset;
-    if (!url) return;
-    wx.previewImage({ current: url, urls: urls || [url] });
+    this.setData({ showRejectApplicationModal: true, rejectApplicationId: id, rejectApplicationQueue: 'member', rejectApplicationReason: '' });
   },
 
   onCloseRejectApplicationModal() {
