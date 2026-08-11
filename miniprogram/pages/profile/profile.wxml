@@ -72,14 +72,87 @@
           <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
             <view class="badge-icon-svg icon-svg-flower"></view>
             <text>{{currentUserRole === 'super_admin' ? '超级管理员' :
-              currentUserRole === 'store_manager' ? '店长' :
+              currentUserRole === 'store_manager' ? '👑 店长' :
               currentUserRole === 'finance' ? '财务' :
               currentUserRole === 'store_patriarch' ? '大家长' :
               (isFamily || currentUserRole === 'store_family') ? '家人' :
               '义工'}}</text>
           </view>
         </view>
+
+        <!-- 🆕 显式呈现归属机构/平台：与角色胶囊分离展示，避免"全国总览 · 家长"
+             这类把数据权限范围和业务身份硬缝合的双重语义文案（见上方 role-badge-row
+             旁的历史注释） -->
+        <view class="belong-store-tag">
+          <text class="store-icon">📍</text>
+          <text class="store-label">归属机构：</text>
+          <text class="store-name">{{currentStoreName || '未绑定机构'}}</text>
+          <text class="org-type-badge" wx:if="{{orgTypeBadge}}">{{orgTypeBadge}}</text>
+        </view>
+
+        <!-- 🌐 超管专属：当前巡检门店指示器，点击唤起【门店选择与搜索】弹窗。
+             默认展示"📍 全国总览"，选中具体门店后切换为该门店名称 -->
+        <view class="sa-store-indicator" wx:if="{{isSuperAdmin}}" hover-class="ui-hover" bindtap="onOpenStorePickerModal">
+          <text class="sa-store-indicator-icon">📍</text>
+          <text class="sa-store-indicator-text">{{currentInspectStoreId ? currentInspectStoreName : '全国总览'}}</text>
+          <text class="sa-store-indicator-arrow">❯</text>
+        </view>
       </view>
+    </view>
+
+    <!-- 🐛 合并重构："超管巡检门店"（currentInspectStoreId）与"管理视角模拟"
+         （isImpersonating）此前是两条独立的黄色提示条，判断口径又都依赖
+         isSuperAdmin/isImpersonating 这类会随手动切换角色一起变化的展示态标志——
+         一旦两者恰好同时激活（超管巡检某家门店的同时还在模拟店长/财务等视角），
+         就会一起渲染，堆成两个提示框。现改为同一个容器、按实际激活的临时视角
+         组合展示文案，只保留一个重置入口，点击按当前激活的组合一次性清空 -->
+    <view class="sa-status-bar" wx:if="{{isRealSuperAdmin && (currentInspectStoreId || isImpersonating)}}">
+      <view class="sa-status-left">
+        <text class="sa-status-icon">{{isImpersonating ? '⚠️' : '🔍'}}</text>
+        <view class="sa-status-text-col">
+          <text class="sa-status-text" wx:if="{{currentInspectStoreId && isImpersonating}}">🔍 巡检中：{{currentInspectStoreName}} · 当前模拟为：{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
+          <text class="sa-status-text" wx:elif="{{currentInspectStoreId}}">当前正以超级管理员身份巡检：{{currentInspectStoreName}}</text>
+          <text class="sa-status-text" wx:else>正在以「{{viewModeOptionLabels[viewModeOptionIndex]}}」预览页面，管理操作已按该视角降级</text>
+        </view>
+      </view>
+      <view class="sa-status-restore-btn" bindtap="onResetSuperAdminTempViews">{{currentInspectStoreId && isImpersonating ? '重置视角' : (isImpersonating ? '还原超管视角' : '恢复全国总览')}}</view>
+    </view>
+
+    <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色。
+         🆕 放到顶部通用区：需求要求超管视角切换在顶部显著位置展示 -->
+    <view class="view-mode-switch-card" wx:if="{{isRealSuperAdmin}}">
+      <view class="view-mode-switch-row" bindtap="onOpenViewModeModal">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-key"></view>
+          <text class="item-text">管理视角切换</text>
+        </view>
+        <view class="view-mode-current-value">
+          <text class="view-mode-current-label">{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+      <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
+    </view>
+
+    <!-- 📸 阳光温情图册与爱心故事：从首页迁移至个人中心，路由（history 页图册模式）
+         与数据加载逻辑（getPhotoArchive 云函数）与原首页入口卡完全一致。
+         🆕 全角色通用头部入口：wx:if 去掉了原先的 !isVolunteer && !isFamily 限制，
+         义工/家人现在也能看到（呼应 initMinePage 里 loadRecentPhotos 放宽后的
+         触发条件）；全国总览视角下 getPhotoArchive 仍会正常聚合返回，不特殊排除。
+         🆕 合并原【爱心温情故事】独立入口：getPhotoArchive 本就聚合 activity_logs
+         （门店日志/温情故事图片）与 report_logs/daily_menus（阳光凭证）三类图片，
+         history 图册页也已有"📸 活动日志"筛选 Tab——点击本卡片即可同时查阅温情
+         故事与阳光凭证，不再需要旧版"温情故事"弹窗的二次跳转，标题/文案统一不
+         再按 isYuhuazhai 分裂措辞 -->
+    <view class="photo-archive-mine-entry" wx:if="{{recentPhotosLoaded}}" hover-class="ui-hover" bindtap="onGoToPhotoArchive">
+      <view class="pame-icon-wrap">
+        <text class="pame-icon">🏡</text>
+      </view>
+      <view class="pame-text">
+        <text class="pame-title">阳光温情图册与爱心故事</text>
+        <text class="pame-subtitle">查看爱心图册、温情故事与阳光凭证{{recentPhotosTotal > 0 ? '（' + recentPhotosTotal + '张）' : ''}}</text>
+      </view>
+      <view class="pame-arrow">›</view>
     </view>
 
     <!-- 🌟 家人骨干版护持榜：与流动义工共用同一套统计结构（护持天数/累计工时），
@@ -88,88 +161,13 @@
          🔀 排在「日常护持」前面：个人信息卡片下方第一优先展示护持榜 -->
     <!-- 🐛 家人（服务对象）没有打卡/护持数据可展示——护持榜对他们没有意义，
          完全隐藏（原先只是换个标题文案展示 0 数据，现在直接不渲染） -->
-    <view class="merit-board-card" wx:if="{{!isFamily}}">
-      <view class="board-header">
-        <view class="header-icon-svg icon-svg-flower"></view>
-        <text class="header-title">爱心护持榜</text>
-        <view class="header-icon-svg icon-svg-flower flip-x"></view>
-      </view>
-
-      <!-- 🌟 核心荣誉数据：护持天数 / 累计工时，暖金渐变底 + 微阴影提升仪式感，
-           大号加粗突出，与次要统计做视觉分层 -->
-      <view class="merit-hero-row">
-        <view class="merit-hero-cell">
-          <text class="merit-hero-num">{{stats.volunteerDays || 0}}</text>
-          <text class="merit-hero-label">护持天数</text>
-        </view>
-        <view class="merit-hero-divider"></view>
-        <view class="merit-hero-cell">
-          <text class="merit-hero-num">{{stats.volunteerHours || 0}}</text>
-          <text class="merit-hero-label">累计工时</text>
-        </view>
-      </view>
-
-      <!-- 🎖️ 义工电子证书快捷入口：与 honor-wall-header 里的"义工证书"共用
-           同一个 onGoToBadges，方便义工在护持榜顶部就能直接查看/分享荣誉证书 -->
-      <view class="merit-cert-entry" bindtap="onGoToBadges">
-        <text class="merit-cert-entry-text">🎖️ 义工电子证书</text>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="merit-sub-row" wx:if="{{hasPrivilege}}">
-        <view class="merit-sub-cell" wx:if="{{isStoreAdmin}}">
-          <text class="merit-sub-num">{{stats.submittedReports || 0}}</text>
-          <text class="merit-sub-label">登记餐报</text>
-        </view>
-        <view class="merit-sub-cell" wx:if="{{isFinance || isPatriarch || isSuperAdmin}}">
-          <text class="merit-sub-num">{{stats.auditedReports || 0}}</text>
-          <text class="merit-sub-label">稽核账本</text>
-        </view>
-      </view>
-
-      <!-- ❤️ 爱心护持榜：本月/年度/总贡献三档，前 20 名 + 前三名奖牌 + 当前登录用户
-           自己的排名与距上一名差距，姓名统一脱敏展示 -->
-      <view class="leaderboard-divider"></view>
-      <view class="leaderboard-section">
-        <view class="leaderboard-tab-row">
-          <view class="leaderboard-tab {{leaderboardRange === 'month' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="month">本月榜</view>
-          <view class="leaderboard-tab {{leaderboardRange === 'year' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="year">年度榜</view>
-          <view class="leaderboard-tab {{leaderboardRange === 'total' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="total">总贡献榜</view>
-        </view>
-
-        <view class="leaderboard-loading" wx:if="{{leaderboardLoading}}">加载中…</view>
-        <block wx:elif="{{leaderboardList.length > 0}}">
-          <view class="leaderboard-row {{item.isSelf ? 'is-self' : ''}}" wx:for="{{leaderboardList}}" wx:key="rank">
-            <view class="leaderboard-rank {{item.rank <= 3 ? 'top3' : ''}}">
-              <text wx:if="{{item.rank === 1}}">🥇</text>
-              <text wx:elif="{{item.rank === 2}}">🥈</text>
-              <text wx:elif="{{item.rank === 3}}">🥉</text>
-              <text wx:else>{{item.rank}}</text>
-            </view>
-            <text class="leaderboard-name">{{item.displayName}}</text>
-            <text class="leaderboard-hours">{{item.hours}}h</text>
-          </view>
-        </block>
-        <view class="leaderboard-empty" wx:else>暂无护持记录，快去打卡吧～</view>
-
-        <view class="leaderboard-self-footer" wx:if="{{leaderboardSelfRank > 0}}">
-          <text>当前排名：第 {{leaderboardSelfRank}} 名</text>
-          <text wx:if="{{leaderboardGapToNext > 0}}"> · 距上一名还差 {{leaderboardGapToNext}} 工时</text>
-          <text wx:else> · 🎉 您已是本榜第一名</text>
-        </view>
-        <view class="leaderboard-self-footer unranked" wx:elif="{{!leaderboardLoading}}">
-          <text>您暂未上榜，打卡即可参与排名</text>
-        </view>
-      </view>
-    </view>
-
     <!-- ❤️ 家人（服务对象）版面：新用户/未审核用户的默认身份视角。原"极简关怀"版面
          精简版：护持榜/核心荣誉模块对家人完全隐藏（见上方 merit-board-card/
          honor-wall-card 的 wx:if="{{!isFamily}}"），这张卡片专注日常护持向导 -->
     <view class="family-care-card" wx:if="{{isFamily}}">
       <view class="board-header">
         <view class="header-icon-svg icon-svg-flower"></view>
-        <text class="header-title">雨花家园</text>
+        <text class="header-title">{{isYuhuazhai ? '雨花家园' : '爱心家园'}}</text>
         <view class="header-icon-svg icon-svg-flower flip-x"></view>
       </view>
 
@@ -195,8 +193,10 @@
         </view>
       </view>
 
-      <!-- 🏡 雨花家园：门店整体视角——档案 + 日志 + 关注门店 + 温情故事 + 建议反馈 -->
-      <text class="list-group-label family-care-list-label">🏡 雨花家园</text>
+      <!-- 🏡 站点家园/雨花家园：门店整体视角——档案 + 日志 + 关注门店 + 建议反馈。
+           原"温情故事"独立入口已合并进顶部通栏卡片"阳光温情图册与爱心故事"
+           （见上方 photo-archive-mine-entry，getPhotoArchive 已聚合门店日志图片） -->
+      <text class="list-group-label family-care-list-label">🏡 {{isYuhuazhai ? '雨花家园' : '爱心家园'}}</text>
       <view class="ui-card-wrapper action-list-container family-care-list">
         <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStoreProfile">
           <view class="item-left">
@@ -219,15 +219,7 @@
         <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStorePicker">
           <view class="item-left">
             <text class="manager-only-emoji">🤝</text>
-            <text class="item-text">我关注的雨花门店</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
-        <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenWarmStory">
-          <view class="item-left">
-            <text class="manager-only-emoji">🌸</text>
-            <text class="item-text">雨花温情故事</text>
+            <text class="item-text">{{isYuhuazhai ? '我关注的雨花门店' : '我关注的爱心站点'}}</text>
           </view>
           <view class="item-arrow">❯</view>
         </view>
@@ -247,20 +239,10 @@
         </view>
       </view>
 
-      <!-- 📚 文化与帮助：家训文化 + 使用帮助。
-           🐛 原本这里还有一个"切换关注门店"，与上方"雨花家园"分组新增的
-           "我关注的雨花门店"（onGoToStorePicker）是完全同一个动作，两个入口
-           重复——按要求物理删除这里的重复项，只保留雨花家园分组那一个 -->
-      <text class="list-group-label family-care-list-label">📚 文化与帮助</text>
+      <!-- 📚 帮助：家训文化入口已收编进页面底部全角色共用的"文化与平台监督"
+           列表组（与其他角色不再重复维护一份），这里只保留"使用帮助" -->
+      <text class="list-group-label family-care-list-label">📚 帮助</text>
       <view class="ui-card-wrapper action-list-container family-care-list">
-        <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToCultureFull">
-          <view class="item-left">
-            <text class="manager-only-emoji">📖</text>
-            <text class="item-text">雨花家训与文化全集</text>
-          </view>
-          <view class="item-arrow">❯</view>
-        </view>
-
         <navigator class="action-item-cell" hover-class="ui-hover" url="/pages/help/help">
           <view class="item-left">
             <text class="manager-only-emoji">❓</text>
@@ -271,35 +253,91 @@
       </view>
     </view>
 
-    <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色。
-         🐛 原生 picker 会弹出微信绿色系统选择器，与本页暖白/金色调不搭——改为
-         点击触发下方自定义半屏 role-switch-modal，风格与 switch-identity-modal/
-         subscription-modal 统一 -->
-    <view class="view-mode-switch-card" wx:if="{{isRealSuperAdmin}}">
-      <view class="view-mode-switch-row" bindtap="onOpenViewModeModal">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-key"></view>
-          <text class="item-text">管理视角切换</text>
-        </view>
-        <view class="view-mode-current-value">
-          <text class="view-mode-current-label">{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
-          <view class="item-arrow">❯</view>
-        </view>
+    <!-- 🏛️🆕 放权自治重构：大家长视角原先是一整张混合卡片（健康大盘 + 专业版状态 +
+         门店管理中心，且用 isPatriarch || isSuperAdmin 与超管共用），现拆分为：
+         ① 独立的 .pro-service-card（订阅是机构/租户维度的权益，超管与大家长按各自
+            身份都可能需要管理，保持 isPatriarch || isSuperAdmin 共用不变）；
+         ② 两张严格仅 isPatriarch && !isSuperAdmin 可见的自治卡片——【本店经营健康
+            大盘】【大家长自治管理中心】。超管即便去掉视角切换预览、以自己真实身份
+            浏览时，也绝不会看到这两张店级日常运营卡片；要看某店的这两张卡片，
+            走"视角切换"预览成该店大家长身份即可（预览态下 isSuperAdmin 会降级为
+            false，isPatriarch 命中，两张卡片自然显示）。
+         store_manager（店长）有自己独立的"门店管理中心"卡片（见下方），不再混入
+         这里 -->
+    <!-- 🆕 加入 isFinance：财务角色的"👑 专业版服务"卡片组第一项——财务本就
+         最关心订阅权益是否覆盖多账本稽核/无限制通知数，与大家长共用同一张卡。
+         🛡️ 超管视角下彻底隐藏：套餐订阅是租户/门店维度的权益，超管作为平台方本人
+         无需（也不该）看到"立即开通专业版"这类面向租户的推销卡片——此前误与
+         isPatriarch/isFinance 共用同一张卡片，现显式排除 isSuperAdmin -->
+    <!-- 🆕 大家长不再展示这张整行大卡片：专业版服务状态对大家长而言收纳进
+         下方「区块三：高级数据与服务」的并排轻量入口卡片，与全国数据看板
+         并列展示，不再单独占用一整行——财务角色需求不变，仍显示完整版 -->
+    <view class="pro-service-card" wx:if="{{isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch}}">
+      <view class="pro-card-header">
+        <text class="pro-title">👑 专业版服务状态</text>
+        <text class="pro-status-badge {{subscriptionInfo.isActive ? 'active' : 'inactive'}}">
+          {{subscriptionInfo.isActive ? '已生效（专业版）' : '未开通'}}
+        </text>
       </view>
-      <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
+      <view class="pro-card-body">
+        <text class="pro-desc">解锁全国数据大屏、跨店数据导出、多账本稽核与无限制通知数。</text>
+        <button class="pro-action-btn" bindtap="onOpenProSubscriptionModal">
+          {{subscriptionInfo.isActive ? '管理续费套餐' : '立即开通 / 升级专业版'}}
+        </button>
+      </view>
+      <!-- 超管一键模拟开通入口已迁移至「系统运维与性能」模块的 Dev/Debug 专区
+           （见 sa-dev-tool-row），与真实订阅管理操作解耦，避免重复入口 -->
     </view>
 
-    <!-- 🏛️ 大家长管理面板：仅大家长本人或超级管理员可见——家长锁定本店，
-         超管跟随全局门店切换器（fetchPatriarchDashboardData 与原 patriarch-dashboard
-         页面同一套口径）。store_manager（店长）有独立的"门店日常管理"卡片，不再混入这里。 -->
-    <view class="patriarch-panel-card" wx:if="{{isPatriarch || isSuperAdmin}}">
+    <!-- 💰 财务角色卡片组第二部分：门店餐饮与物资统计 / 本店数据明细——原"财务稽核
+         专区"卡片内容原样保留，只是与上面的专业版服务状态卡片相邻组成同一个
+         "财务角色"功能区。isFinance 严格等于 displayRole === 'finance'（不含大家长/
+         超管/店长），不需要额外排除条件 -->
+    <view class="patriarch-panel-card" wx:if="{{isFinance}}">
       <view class="patriarch-panel-header">
-        <text class="patriarch-panel-title">🏛️ 家长管理</text>
+        <text class="patriarch-panel-title">💰 财务稽核专区</text>
       </view>
 
-      <!-- 极简门店健康大盘：本月服务人次 + 收支总览 + 验真状态 -->
-      <view class="pd-health-card">
-        <view class="pd-health-title">📊 {{patriarchData.monthLabel}}门店健康大盘</view>
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenStoreStatsModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">门店餐饮与物资统计</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
+        <view class="item-left">
+          <text class="manager-only-emoji">📑</text>
+          <text class="item-text">本店数据明细（账目核对）</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToSunshineLedger">
+        <view class="item-left">
+          <text class="manager-only-emoji">☀️</text>
+          <text class="item-text">阳光账本核查</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- 🆕 区块一：本店经营健康大盘——服务人次/收支/净额 + 验真状态 + 高风险
+         待确认队列（作废申请/门店画像变更）。仅真实大家长本人可见，超管不再
+         直接经手单店日常运营数据 -->
+    <view class="patriarch-panel-card" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}">
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">📊 本店经营健康大盘</text>
+      </view>
+
+      <!-- 🆕 点击整卡跳转到本店统计明细页（复用店长同款 onGoToStoreOverview，
+           携带 shopName 预选中本店），大盘只做摘要，明细收敛到统计页 -->
+      <view class="pd-health-card pd-health-card--clickable" hover-class="ui-hover" bindtap="onGoToStoreOverview">
+        <view class="pd-health-title-row">
+          <text class="pd-health-title">{{patriarchData.monthLabel}}经营概况</text>
+          <text class="pd-health-more">查看明细 ❯</text>
+        </view>
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">本月服务人次</text>
@@ -361,18 +399,134 @@
       <view class="pd-loading-box" wx:if="{{patriarchData.loading}}">
         <text>加载中...</text>
       </view>
+    </view>
 
-      <!-- ─── 门店管理中心 ─────────────────────────────── -->
-      <view class="pd-mgmt-center-header">
-        <text class="pd-mgmt-center-title">🏢 门店管理中心</text>
-        <!-- ✏️ 快捷修改门店名称：仅大家长/超管可见，catchtap 防止冒泡触发外层事件 -->
-        <view class="pd-store-name-edit-row" wx:if="{{isPatriarch || isSuperAdmin}}" catchtap="onQuickEditStoreName">
-          <text class="pd-store-name-text">{{currentStoreName || '未命名门店'}}</text>
-          <text class="pd-store-edit-btn">✏️ 修改</text>
+    <!-- 🆕 区块二：门店管理中心（大家长专属·分组网格化）——【日常审批与安全】
+         用 2x2 宫格突出高频操作与待办 Badge（一眼扫清有几件事要处理），
+         【门店运营配置】维持列表形式（低频公示/配置类操作，不需要抢视觉优先级），
+         两种信息密度物理分组，管理任务轻重缓急一目了然。此卡片严格仅
+         isPatriarch 专属——原合并卡片（下方 patriarch-panel-card，isManager 专属）
+         保留给店长继续使用旧的列表式布局，互不影响 -->
+    <view class="patriarch-panel-card" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}">
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">⚙️ 门店管理中心</text>
+        <view class="pd-store-name-pill" catchtap="onEditStoreInfo">
+          <text class="pd-store-name-pill-text">{{currentStoreName || '未命名门店'}}</text>
+          <text class="pd-store-name-pill-edit">✏️</text>
         </view>
       </view>
 
-      <!-- 成员管理 -->
+      <!-- 🗂️ 【日常审批与安全】：成员管理 + 待审批申请(Badge) + 待审核餐报(Badge) +
+           安全密钥/邀请码，四项高频/高敏操作用宫格突出，带待办数量的红点角标 -->
+      <text class="pd-mgmt-section-title">日常审批与安全</text>
+      <view class="pd-mgmt-grid">
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
+          <text class="pd-mgmt-grid-icon">⚙️</text>
+          <text class="pd-mgmt-grid-label">成员管理</text>
+        </view>
+
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
+          <view class="pd-mgmt-grid-badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
+          <text class="pd-mgmt-grid-icon">🙋</text>
+          <text class="pd-mgmt-grid-label">待审批申请</text>
+        </view>
+
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
+          <view class="pd-mgmt-grid-badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
+          <text class="pd-mgmt-grid-icon">📝</text>
+          <text class="pd-mgmt-grid-label">待审核餐报</text>
+        </view>
+
+        <!-- 🔐 安全密钥 / 🎫 邀请码：两项操作合并进同一格子，上下两个可各自独立
+             点击的子行，避免为两个低频但敏感的操作各占一整格 -->
+        <view class="pd-mgmt-grid-cell pd-mgmt-grid-cell--split">
+          <view class="pd-mgmt-grid-subrow" hover-class="ui-hover" catchtap="onOpenAdminKeyModal">
+            <text class="pd-mgmt-grid-subicon">🔐</text>
+            <text class="pd-mgmt-grid-sublabel">安全密钥</text>
+          </view>
+          <view class="pd-mgmt-grid-subdivider"></view>
+          <view class="pd-mgmt-grid-subrow" hover-class="ui-hover" catchtap="onPatriarchGenCode">
+            <text class="pd-mgmt-grid-subicon">🎫</text>
+            <text class="pd-mgmt-grid-sublabel">邀请码</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="pd-mgmt-divider"></view>
+
+      <!-- 🗂️ 【门店运营配置】：组织信息配置 / 门店公告通知 / 爱心意见箱，
+           低频公示与配置类操作，保留列表形式，不与上方高频宫格抢视觉焦点 -->
+      <text class="pd-mgmt-section-title">门店运营配置</text>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenOrgConfigModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🎨</text>
+          <text class="item-text">组织信息配置</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenNoticeManagement">
+        <view class="item-left">
+          <text class="manager-only-emoji">📢</text>
+          <text class="item-text">门店公告/通知</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📮</text>
+          <text class="item-text">爱心意见箱</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingFeedbackCount > 0}}">{{pendingFeedbackCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🆕 区块三：高级数据与服务——专业版服务状态 + 全国数据看板收纳为并排的
+         轻量入口卡片，不再各自占用一整行巨型卡片；两者都属于"低频但重要"的
+         高级功能，物理并排也暗示二者同一层级（增值服务 / 数据） -->
+    <view class="pd-advanced-row" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}">
+      <view class="pd-advanced-card" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
+        <text class="pd-advanced-icon">👑</text>
+        <text class="pd-advanced-title">专业版服务</text>
+        <text class="pd-advanced-sub {{subscriptionInfo.isActive ? 'active' : ''}}">{{subscriptionInfo.isActive ? '已生效' : '未开通'}}</text>
+      </view>
+      <view class="pd-advanced-card" hover-class="ui-hover" bindtap="onPatriarchGoToNationalDashboard">
+        <text class="pd-advanced-icon">📊</text>
+        <text class="pd-advanced-title">全国数据看板</text>
+        <text class="pd-advanced-sub pd-advanced-tag">高级</text>
+      </view>
+    </view>
+
+    <!-- 🏪 【店长专属】⚙️ 门店管理中心：与上方大家长专属的宫格化卡片同名，
+         但沿用旧版列表式布局——大家长已改用新版宫格卡片（isManager 已从
+         wx:if 中移除），这里严格只服务 isManager，二者互不重叠 -->
+    <view class="patriarch-panel-card" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch}}">
+      <!-- 🐛 层级瘦身：此前标题行"⚙️ 门店管理中心"与紧接着第二行的"🏢 门店管理
+           中心 [门店名] ✏️修改"重复堆叠了两遍"门店管理中心"文案——合并为一行，
+           门店名改用轻量 Pill 标签收纳在大标题右侧，点击直接唤起【组织信息配置】
+           （onEditStoreInfo），不再单独起一整行 -->
+      <view class="patriarch-panel-header">
+        <text class="patriarch-panel-title">⚙️ 门店管理中心</text>
+        <view class="pd-store-name-pill" catchtap="onEditStoreInfo">
+          <text class="pd-store-name-pill-text">{{currentStoreName || '未命名门店'}}</text>
+          <text class="pd-store-name-pill-edit">✏️</text>
+        </view>
+      </view>
+
+      <!-- 🗂️ 分组一：核心日常审批——成员权限管理 + 待审批成员申请 + 待审核餐报
+           物资，三项都是高频日常运维操作，带待办数量 Badge 提醒 -->
+      <text class="pd-mgmt-section-title">核心日常审批</text>
+
+      <!-- 👥 成员权限管理 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
         <view class="item-left">
           <text class="manager-only-emoji">⚙️</text>
@@ -383,8 +537,8 @@
         </view>
       </view>
 
-      <!-- 待审批成员申请：仅门店大家长/店长可见，超管不介入事前审批 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{!isSuperAdmin}}" bindtap="onOpenMemberApplicationModal">
+      <!-- 🙋 待审批的成员申请 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
         <view class="item-left">
           <text class="manager-only-emoji">👥</text>
           <text class="item-text">待审批的成员申请</text>
@@ -395,7 +549,38 @@
         </view>
       </view>
 
-      <!-- 内容与审核 -->
+      <!-- 📝 待审核的义工餐报与物资 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📝</text>
+          <text class="item-text">待审核的义工餐报与物资</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="pd-mgmt-divider"></view>
+
+      <!-- 🗂️ 分组二：门店运营公告——对外公示/沟通类，与上面"审批处理"类操作
+           物理分组，避免高频待办事项和低频公告项混排在一起 -->
+      <text class="pd-mgmt-section-title">门店运营公告</text>
+
+      <!-- 📢 门店公告/通知管理：此前只有店长的门店管理中心有这个入口，大家长自己的
+           面板一直没有，这里补齐 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenNoticeManagement">
+        <view class="item-left">
+          <text class="manager-only-emoji">📢</text>
+          <text class="item-text">门店公告/通知管理</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 📮 爱心意见箱管理：不在最初的精简清单里，但这是目前全站唯一剩下的入口——
+           删掉会导致这项功能对所有角色（含超管）都不可用，保留 -->
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📮</text>
@@ -407,45 +592,25 @@
         </view>
       </view>
 
-      <!-- 义工餐报/物资审核：门店自治，仅大家长/店长可见，超管不介入事前审批 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{!isSuperAdmin}}" bindtap="onOpenVolunteerSubmissionAdminModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📥</text>
-          <text class="item-text">义工餐报与物资审核</text>
+      <!-- 🔑 门店安全密钥设置：仅大家长可见（可编辑）——店长不再展示只读版，
+           按需求"大家长额外显示"字面执行 -->
+      <block wx:if="{{isPatriarch}}">
+        <view class="pd-mgmt-divider"></view>
+        <view class="action-item-cell pd-feedback-entry-cell admin-key-entry-cell">
+          <view class="item-left">
+            <text class="manager-only-emoji">🔐</text>
+            <text class="item-text">门店安全密钥设置</text>
+          </view>
+          <view class="admin-key-inline-right">
+            <text class="admin-key-inline-val">{{storeAdminKeySet ? (storeAdminKeyVisible ? (storeAdminKey || '（已设置）') : '●●●●●●') : '未设置'}}</text>
+            <view class="admin-key-btn admin-key-toggle-btn" bindtap="onToggleAdminKeyVisible" wx:if="{{storeAdminKeySet}}">{{storeAdminKeyVisible ? '隐藏' : '查看'}}</view>
+            <view class="admin-key-btn admin-key-modify-btn" bindtap="onOpenAdminKeyModal">修改</view>
+          </view>
         </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
+      </block>
 
-      <!-- 安全设置（细分隔线 + 密钥行） -->
-      <view class="pd-mgmt-divider"></view>
-      <view class="action-item-cell pd-feedback-entry-cell admin-key-entry-cell">
-        <view class="item-left">
-          <text class="manager-only-emoji">🔐</text>
-          <text class="item-text">管理员密钥</text>
-        </view>
-        <view class="admin-key-inline-right">
-          <text class="admin-key-inline-val">{{storeAdminKeySet ? (storeAdminKeyVisible ? (storeAdminKey || '（已设置）') : '●●●●●●') : '未设置'}}</text>
-          <view class="admin-key-btn admin-key-toggle-btn" bindtap="onToggleAdminKeyVisible" wx:if="{{storeAdminKeySet}}">{{storeAdminKeyVisible ? '隐藏' : '查看'}}</view>
-          <view class="admin-key-btn admin-key-modify-btn" bindtap="onOpenAdminKeyModal">修改</view>
-        </view>
-      </view>
-
-      <!-- 🌸 雨花斋大家长专属：文化与每日家训配置中心 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{(isPatriarch || isSuperAdmin) && isYuhuazhai}}" bindtap="onGoToCultureFull">
-        <view class="item-left">
-          <text class="manager-only-emoji">🌸</text>
-          <text class="item-text">雨花文化与每日家训</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <!-- 大家长专属：组织信息配置 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{isPatriarch || isSuperAdmin}}" bindtap="onOpenOrgConfigModal">
+      <!-- 🎨 组织文化配置（二）：机构名称/寄语/Logo/机构类型编辑——店长/大家长共有 -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenOrgConfigModal">
         <view class="item-left">
           <text class="manager-only-emoji">🎨</text>
           <text class="item-text">组织信息配置</text>
@@ -456,7 +621,7 @@
       </view>
 
       <!-- 大家长专属：邀请码 + 全国数据看板（合并自底部工具箱，避免反复滚动） -->
-      <block wx:if="{{isPatriarch && !isSuperAdmin}}">
+      <block wx:if="{{isPatriarch}}">
         <view class="pd-mgmt-divider"></view>
         <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onPatriarchGenCode">
           <view class="item-left">
@@ -476,119 +641,6 @@
       </block>
     </view>
 
-    <!-- 🗂️ 店长日常管理面板：仅 store_manager 角色可见，与大家长管理面板彻底分离。
-         此前混在 patriarch-panel-card 里导致家长专属操作（审批/作废/画像变更）
-         对店长可见，服务端实际拒绝后体验很差；现在店长只看到自己能操作的入口 -->
-    <view class="patriarch-panel-card" wx:if="{{isManager}}">
-      <view class="patriarch-panel-header">
-        <text class="patriarch-panel-title">⚙️ 门店日常管理</text>
-      </view>
-
-      <!-- 店长：成员权限管理 + 申请审批 + 意见箱管理 + 餐报审核 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">🔑</text>
-          <text class="item-text">成员权限管理（降级/移出）</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">👥</text>
-          <text class="item-text">待审批的本店成员申请</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📮</text>
-          <text class="item-text">爱心意见箱管理</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingFeedbackCount > 0}}">{{pendingFeedbackCount}}</view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📥</text>
-          <text class="item-text">待审核的义工餐报与物资</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenNoticeManagement">
-        <view class="item-left">
-          <text class="manager-only-emoji">📢</text>
-          <text class="item-text">门店公告/通知管理</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-
-      <!-- 🔐 门店安全设置：店长可见已设置/未设置状态，仅大家长/超管可修改 -->
-      <view class="pd-section-title pd-feedback-entry-title">
-        <text class="pd-section-icon">🔐</text>
-        <text class="pd-section-txt">门店安全设置</text>
-      </view>
-      <view class="action-item-cell pd-feedback-entry-cell admin-key-entry-cell">
-        <view class="item-left">
-          <text class="manager-only-emoji">🔑</text>
-          <text class="item-text">管理员密钥</text>
-        </view>
-        <view class="admin-key-inline-right">
-          <view class="admin-key-status-badge {{storeAdminKeySet ? 'set' : 'unset'}}">
-            {{storeAdminKeySet ? '✅ 已设置' : '⚪ 未设置'}}
-          </view>
-          <text class="admin-key-note">（大家长可修改）</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- 💰 财务稽核专区：仅 finance 角色可见（大家长通过 isPatriarch 面板获取同等入口，
-         不在此重复）。财务义工的核心工作：账目核对、门店数据稽核、阳光账本核查 -->
-    <view class="patriarch-panel-card" wx:if="{{isFinance}}">
-      <view class="patriarch-panel-header">
-        <text class="patriarch-panel-title">💰 财务稽核专区</text>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenStoreStatsModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📊</text>
-          <text class="item-text">门店餐饮与物资统计</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
-        <view class="item-left">
-          <text class="manager-only-emoji">📋</text>
-          <text class="item-text">本店数据明细（账目稽核）</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToSunshineLedger">
-        <view class="item-left">
-          <text class="manager-only-emoji">☀️</text>
-          <text class="item-text">阳光账本核查</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-    </view>
-
     <!-- 分组二：日常记录 —— 原【我的餐报提交记录】+【我的统计数据】两个入口
          合并重构为两个更清晰的入口：「我的护持历程」（个人打卡/参与日志，即原
          "服务历程"改名）与「我的提交与数据」（餐报+物资提交历史，弹窗内新增
@@ -606,7 +658,7 @@
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onTapServiceHistory">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
-          <text class="item-text">我的护持历程</text>
+          <text class="item-text">{{isYuhuazhai ? '我的护持历程' : '我的志愿历程'}}</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -658,13 +710,170 @@
         <view class="item-arrow">❯</view>
       </view>
 
+      <!-- 📮 爱心建议箱：义工此前在个人页没有"提交建议"入口，复用家人卡片同款
+           onOpenFeedbackModal（小程序原生半屏弹窗，落在本项目自己的数据里，
+           店长/大家长能在各自管理中心的"爱心意见箱管理"里看到并回复） -->
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenFeedbackModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">📮</text>
+          <text class="item-text">爱心建议箱</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{unreadReplyCount > 0}}">{{unreadReplyCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 激活店长 / 财务特权：从原独立置底卡片移入本组末尾，刻意保留 subtle 弱化
+           视觉（.subtle-cell），不与上面的核心日常操作抢焦点。只在完全没有特权的
+           普通义工账号显示，家人（isFamily）已被本区块外层排除 -->
+      <view class="action-item-cell subtle-cell" hover-class="ui-hover" wx:if="{{!hasPrivilege}}" bindtap="onTriggerActivate">
+        <view class="item-left">
+          <view class="item-icon-svg icon-svg-key subtle-icon"></view>
+          <text class="item-text subtle-text">激活店长 / 财务特权</text>
+        </view>
+        <view class="item-arrow subtle-icon">❯</view>
+      </view>
     </view>
 
-    <!-- 分组一：核心荣誉 —— 数字荣誉墙（横向滚动徽章展架），替换原来的单薄列表项。
-         🐛 家人（服务对象）没有打卡/护持记录，也就没有徽章/证书可展示——完全隐藏，
-         不再展示"家人荣誉"这个 0 数据的空壳版本 -->
-    <view class="list-group-label" wx:if="{{!isFamily}}">核心荣誉</view>
-    <view class="honor-wall-card" wx:if="{{!isFamily}}">
+    <!-- 🌐 全国纵览卡片：精准权限与视角隔离——严格仅超级管理员 + 全国视角（未在
+         【门店选择与搜索】弹窗里巡检某一家具体门店，currentInspectStoreId 为空）
+         才展示。普通义工/家人/店长/财务，以及超管切到"巡检某家门店"视角时，
+         彻底不渲染，让上面「我的护持历程」紧接下方「爱心护持榜/核心荣誉」
+         （若可见）连贯展示，不被一张与己无关的全网卡片打断视觉流。
+         🐛 currentInspectStoreId 的"全国"档位实际存的是空字符串，不是字面量
+         'ALL'（见该字段声明处注释与 sa-status-bar 的 wx:if 反向用法），这里
+         按真实数据语义取反判断 -->
+    <view class="national-overview-card" wx:if="{{isSuperAdmin && !currentInspectStoreId}}" hover-class="ui-hover" bindtap="onGoToNationalDashboard">
+      <view class="no-card-header">
+        <text class="no-card-title">🌐 全国纵览</text>
+        <view class="no-card-link">
+          <text>全国数据大屏</text>
+          <text class="no-card-link-arrow">＞</text>
+        </view>
+      </view>
+
+      <view class="no-stat-grid">
+        <view class="no-stat-cell">
+          <text class="no-stat-val">{{nationalOverviewStats.totalStores}}</text>
+          <text class="no-stat-lbl">门店总数</text>
+        </view>
+        <view class="no-stat-cell">
+          <text class="no-stat-val">{{nationalOverviewStats.activeStoreCount}}</text>
+          <text class="no-stat-lbl">活跃门店</text>
+        </view>
+        <view class="no-stat-cell">
+          <text class="no-stat-val">{{nationalOverviewStats.totalDiners}}</text>
+          <text class="no-stat-lbl">服务人次</text>
+        </view>
+        <view class="no-stat-cell">
+          <text class="no-stat-val">{{nationalOverviewStats.totalVolunteers}}</text>
+          <text class="no-stat-lbl">义工人数</text>
+        </view>
+        <view class="no-stat-cell">
+          <text class="no-stat-val">{{nationalOverviewStats.totalVolunteerHours}}</text>
+          <text class="no-stat-lbl">义工工时</text>
+        </view>
+        <view class="no-stat-cell">
+          <text class="no-stat-val">¥{{nationalOverviewStats.netAccumulation}}</text>
+          <text class="no-stat-lbl">净结余</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🆕 大家长视角·个人荣誉模块折叠入口：管理任务优先，爱心护持榜/核心荣誉
+         对大家长而言是次要的个人向信息，默认收起只留一条摘要 + 展开按钮，避免
+         管理向页面被这两张较长的卡片拖得下滑过长。其余角色（义工/店长/财务）
+         不受影响，始终直接展示完整内容——仅 isPatriarch 命中折叠逻辑 -->
+    <view class="pd-honor-collapsed-bar" wx:if="{{isPatriarch && !isSuperAdmin && !patriarchHonorExpanded}}" hover-class="ui-hover" bindtap="onTogglePatriarchHonor">
+      <text class="pd-honor-collapsed-icon">🌸</text>
+      <text class="pd-honor-collapsed-text">展开我的个人义工荣誉</text>
+      <text class="pd-honor-collapsed-arrow">∨</text>
+    </view>
+
+    <!-- 🌸 爱心护持榜 + 🏅 核心荣誉徽章墙：从页面靠前位置搬入【义工角色】日常记录
+         区块内，物理相邻展示。可见范围保持原样不变（!isFamily && !isSuperAdmin，
+         即家人和纯超管视角看不到，其余角色——义工/店长/财务/大家长——都能看到，
+         这组内容并非严格 isVolunteer 专属，缩窄会让其他角色丢失现有功能）。
+         🆕 大家长视角额外叠加折叠态判断（!isPatriarch || patriarchHonorExpanded）：
+         非大家长角色恒为 true，行为不变；大家长仅在点击展开后才渲染 -->
+    <view class="merit-board-card" wx:if="{{!isFamily && !isSuperAdmin && (!isPatriarch || patriarchHonorExpanded)}}">
+      <view class="board-header">
+        <view class="header-icon-svg icon-svg-flower"></view>
+        <text class="header-title">爱心护持榜</text>
+        <view class="header-icon-svg icon-svg-flower flip-x"></view>
+      </view>
+
+      <!-- 🌟 核心荣誉数据：护持天数 / 累计工时，暖金渐变底 + 微阴影提升仪式感，
+           大号加粗突出，与次要统计做视觉分层 -->
+      <view class="merit-hero-row">
+        <view class="merit-hero-cell">
+          <text class="merit-hero-num">{{stats.volunteerDays || 0}}</text>
+          <text class="merit-hero-label">{{isYuhuazhai ? '护持天数' : '服务天数'}}</text>
+        </view>
+        <view class="merit-hero-divider"></view>
+        <view class="merit-hero-cell">
+          <text class="merit-hero-num">{{stats.volunteerHours || 0}}</text>
+          <text class="merit-hero-label">累计工时</text>
+        </view>
+      </view>
+
+      <!-- 🎖️ 义工电子证书快捷入口：与 honor-wall-header 里的"义工证书"共用
+           同一个 onGoToBadges，方便义工在护持榜顶部就能直接查看/分享荣誉证书 -->
+      <view class="merit-cert-entry" bindtap="onGoToBadges">
+        <text class="merit-cert-entry-text">🎖️ 义工电子证书</text>
+        <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="merit-sub-row" wx:if="{{hasPrivilege}}">
+        <view class="merit-sub-cell" wx:if="{{isStoreAdmin}}">
+          <text class="merit-sub-num">{{stats.submittedReports || 0}}</text>
+          <text class="merit-sub-label">登记餐报</text>
+        </view>
+        <view class="merit-sub-cell" wx:if="{{isFinance || isPatriarch || isSuperAdmin}}">
+          <text class="merit-sub-num">{{stats.auditedReports || 0}}</text>
+          <text class="merit-sub-label">稽核账本</text>
+        </view>
+      </view>
+
+      <!-- ❤️ 爱心护持榜：本月/年度/总贡献三档，前 20 名 + 前三名奖牌 + 当前登录用户
+           自己的排名与距上一名差距，姓名统一脱敏展示 -->
+      <view class="leaderboard-divider"></view>
+      <view class="leaderboard-section">
+        <view class="leaderboard-tab-row">
+          <view class="leaderboard-tab {{leaderboardRange === 'month' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="month">本月榜</view>
+          <view class="leaderboard-tab {{leaderboardRange === 'year' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="year">年度榜</view>
+          <view class="leaderboard-tab {{leaderboardRange === 'total' ? 'active' : ''}}" bindtap="onSwitchLeaderboardRange" data-range="total">总贡献榜</view>
+        </view>
+
+        <view class="leaderboard-loading" wx:if="{{leaderboardLoading}}">加载中…</view>
+        <block wx:elif="{{leaderboardList.length > 0}}">
+          <view class="leaderboard-row {{item.isSelf ? 'is-self' : ''}}" wx:for="{{leaderboardList}}" wx:key="rank">
+            <view class="leaderboard-rank {{item.rank <= 3 ? 'top3' : ''}}">
+              <text wx:if="{{item.rank === 1}}">🥇</text>
+              <text wx:elif="{{item.rank === 2}}">🥈</text>
+              <text wx:elif="{{item.rank === 3}}">🥉</text>
+              <text wx:else>{{item.rank}}</text>
+            </view>
+            <text class="leaderboard-name">{{item.displayName}}</text>
+            <text class="leaderboard-hours">{{item.hours}}h</text>
+          </view>
+        </block>
+        <view class="leaderboard-empty" wx:else>暂无{{isYuhuazhai ? '护持' : '服务'}}记录，快去打卡吧～</view>
+
+        <view class="leaderboard-self-footer" wx:if="{{leaderboardSelfRank > 0}}">
+          <text>当前排名：第 {{leaderboardSelfRank}} 名</text>
+          <text wx:if="{{leaderboardGapToNext > 0}}"> · 距上一名还差 {{leaderboardGapToNext}} 工时</text>
+          <text wx:else> · 🎉 您已是本榜第一名</text>
+        </view>
+        <view class="leaderboard-self-footer unranked" wx:elif="{{!leaderboardLoading}}">
+          <text>您暂未上榜，打卡即可参与排名</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="list-group-label" wx:if="{{!isFamily && !isSuperAdmin && (!isPatriarch || patriarchHonorExpanded)}}">核心荣誉</view>
+    <view class="honor-wall-card" wx:if="{{!isFamily && !isSuperAdmin && (!isPatriarch || patriarchHonorExpanded)}}">
       <view class="honor-wall-header">
         <text class="honor-wall-title">🏅 我的核心荣誉</text>
         <view class="honor-wall-cert-link" bindtap="onGoToBadges">
@@ -693,27 +902,199 @@
       </scroll-view>
     </view>
 
-    <!-- 🛠️ 义工现场服务工具：已平铺内嵌到 Tab1 首页「义工现场服务工具」金刚区
-         （index.wxml home-vt-* 系列 + daily-menu-modal/material-usage-modal 组件），
-         个人页不再重复展示这一组入口，避免功能冗余。daily-menu-modal/
-         material-usage-modal 组件仍挂载在本页（见下方），供「我的提交与数据」里
-         "重新修改并提交"通过 selectComponent 调用 presetForm() 复用 -->
+    <!-- 🆕 大家长专属：展开态下的收起按钮，与顶部折叠摘要条呼应，随时可收回 -->
+    <view class="pd-honor-collapse-btn" wx:if="{{isPatriarch && !isSuperAdmin && patriarchHonorExpanded}}" hover-class="ui-hover" bindtap="onTogglePatriarchHonor">
+      <text>收起</text>
+      <text class="pd-honor-collapsed-arrow">∧</text>
+    </view>
 
-    <!-- 分组三：关于与帮助 —— 身份切换收纳进列表，替代此前独立的大留白危险区。
-         🐛 家人（服务对象）整组隐藏：唯一内容"关于雨花斋与阳光账本"已经在上方
-         family-care-card 自己的"日常记录"列表里出现过，家人版不再重复展示；
-         "切换身份"本就靠 hasPrivilege 对家人隐藏，整组隐藏不影响任何其他角色 -->
-    <view class="list-group-label" wx:if="{{!isFamily}}">关于与帮助</view>
-    <view class="ui-card-wrapper action-list-container" wx:if="{{!isFamily}}">
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToAbout">
+    <!-- 👑 超级管理员工具箱：两张外层卡片——① 全局控制台（深色，全网数据与决策）
+         ② 系统管理面板（浅色，内部再分风控与安全 / 视角与租户管理 / 系统运维与
+         性能三个分组，原先是三张各自独立的卡片，已合并瘦身，见下方 admin-dashboard-card）。
+         🆕 挪位：整组从"角色差异化功能区"之前移到之后——先看完家人/义工/店长-
+         大家长/财务各自的功能区，再是纯超管本人视角才会命中的工具箱，符合
+         "顶部通用区 → 角色差异化功能区 → 超管工具箱 → 文化与平台监督底座 →
+         底部账号操作"的整体信息架构顺序。
+         整组统一挂 isSuperAdmin：处于"模拟视角"预览时 isSuperAdmin 会降级为 false，
+         两张卡片随之一起隐藏，改由顶部 sa-status-bar 接管展示——避免深色
+         指挥卡与浅色列表在预览态下同时刷屏、语义打架。真正的"超管专属操作"权限
+         仍由各 on* 处理函数内部用 isRealSuperAdmin 二次校验，与卡片显隐是两回事。 -->
+
+    <!-- 模块一：全局控制台（深色，全网数据与决策入口）
+         🛡️ 加固：显式排除 isVolunteer/isFamily/isManager/isPatriarch/isFinance，
+         多重兜底——即便未来角色计算逻辑出现回归导致 isSuperAdmin 与其他角色标志
+         同时为 true，店长/义工/家人/大家长/财务视角也绝不会渲染这张超管专属卡片。
+         isSuperAdmin 本身已与其余角色互斥，这里是防御性冗余，不是当前已知的漏洞修复 -->
+    <view class="sa-command-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}">
+      <view class="sa-command-header">
+        <view class="sa-command-badge-row">
+          <text class="sa-command-crown">👑</text>
+          <view class="sa-command-title-col">
+            <text class="sa-command-title">超级管理员</text>
+            <text class="sa-command-sub">全局控制台</text>
+          </view>
+        </view>
+        <view class="sa-command-store-tag">
+          <text class="sa-command-store-name">{{currentStoreName || '全国总览'}}</text>
+        </view>
+      </view>
+
+      <view class="sa-action-row" bindtap="onGoToStatistics" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">🚀</text>
+          <view class="sa-action-text-col">
+            <text class="sa-action-title">全国数据看板</text>
+            <text class="sa-action-desc">全网餐次 · 义工工时 · 财务健康度</text>
+          </view>
+        </view>
+        <view class="sa-action-arrow">❯</view>
+      </view>
+      <view class="sa-action-row" bindtap="onGoToPlatformAdminTenants" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">🏬</text>
+          <view class="sa-action-text-col">
+            <text class="sa-action-title">全国站点与机构管理</text>
+            <text class="sa-action-desc">门店列表 · 租户开通 · 订阅管理</text>
+          </view>
+        </view>
+        <view class="sa-action-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- 🆕 结构瘦身：风控与安全 / 视角与租户管理 / 系统运维与性能，原先是三张
+         各自独立的 .sa-light-card 外层卡片，现合并进同一张 .admin-dashboard-card，
+         内部按 .admin-dashboard-section-title 分组、.admin-dashboard-divider 分隔——
+         页面外层卡片数量减少 2 张，各分组内部的 action-row 绑定与交互逻辑完全不变 -->
+    <!-- 🛡️ 加固：同 sa-command-card，显式排除 isVolunteer/isFamily/isManager/isPatriarch/
+         isFinance 作防御性冗余——"撤销违规管理权限"/"重置门店申请密钥"/"系统运维与性能"
+         这类平台全局工具收在这张卡片内，大家长/财务（放权自治后）绝不应该看到 -->
+    <view class="admin-dashboard-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}">
+      <view class="admin-dashboard-header">
+        <text class="admin-dashboard-title">🛡️ 系统管理面板</text>
+      </view>
+
+      <!-- 风控与安全：顶部风险预警条复用 patriarchData（fetchPatriarchDashboardData
+           已按当前选中门店加载，超管与家长共用同一份数据），不新增云函数调用；
+           仅当有待确认的作废/画像变更时才显示 -->
+      <text class="admin-dashboard-section-title">🛡️ 风控与安全</text>
+      <view class="sa-risk-banner" wx:if="{{patriarchData.pendingVoidList.length > 0 || patriarchData.pendingProfileUpdate}}">
+        <text class="sa-risk-banner-dot"></text>
+        <text class="sa-risk-banner-text">{{currentStoreName || '当前门店'}} 有 {{patriarchData.pendingVoidList.length + (patriarchData.pendingProfileUpdate ? 1 : 0)}} 项待确认的高风险操作</text>
+      </view>
+      <view class="sa-light-action-row" bindtap="onOpenForceUnbindModal" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">🛡️</text>
+          <text class="sa-light-action-title">撤销违规管理权限</text>
+        </view>
+        <view class="sa-light-action-arrow">❯</view>
+      </view>
+      <view class="sa-light-action-row" bindtap="onOpenResetStoreKeyModal" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">🔑</text>
+          <text class="sa-light-action-title">重置门店申请密钥</text>
+        </view>
+        <view class="sa-light-action-arrow">❯</view>
+      </view>
+      <view class="sa-light-action-row" bindtap="onOpenSecurityLogModal" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">📋</text>
+          <text class="sa-light-action-title">安全操作日志</text>
+        </view>
+        <view class="sa-light-action-arrow">❯</view>
+      </view>
+
+      <view class="admin-dashboard-divider"></view>
+
+      <!-- 视角与租户管理：门店/家长管理下钻见下方 patriarch-panel-card 管理中心，
+           isSuperAdmin 同样命中该卡片，不重复建入口 -->
+      <text class="admin-dashboard-section-title">🎭 视角与租户管理</text>
+      <view class="sa-light-action-row" bindtap="onOpenViewModeModal" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">🎭</text>
+          <view class="sa-action-text-col">
+            <text class="sa-light-action-title">管理视角切换</text>
+            <text class="sa-action-desc sa-light-desc">当前：{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
+          </view>
+        </view>
+        <view class="sa-light-action-arrow">❯</view>
+      </view>
+
+      <view class="admin-dashboard-divider"></view>
+
+      <!-- 系统运维与性能：清理缓存是高频操作，直接展示；一键加速系统/DEV 模拟开通
+           是低频运维项，折叠进"更多系统工具"，点击展开，避免零散提示块常驻占地方 -->
+      <text class="admin-dashboard-section-title">⚙️ 系统运维与性能</text>
+      <view class="sa-light-action-row" bindtap="onTriggerClearCache" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">🧹</text>
+          <view class="sa-action-text-col">
+            <text class="sa-light-action-title">清理缓存</text>
+            <text class="sa-action-desc sa-light-desc" wx:if="{{cacheSizeText}}">当前已用 {{cacheSizeText}}</text>
+          </view>
+        </view>
+        <view class="sa-light-action-arrow">❯</view>
+      </view>
+
+      <view class="sa-light-action-row" bindtap="onToggleAdminMoreTools" hover-class="ui-hover">
+        <view class="sa-action-left">
+          <text class="sa-action-icon">⋯</text>
+          <text class="sa-light-action-title">更多系统工具</text>
+        </view>
+        <view class="sa-light-action-arrow">{{showAdminMoreTools ? '︿' : '﹀'}}</view>
+      </view>
+
+      <block wx:if="{{showAdminMoreTools}}">
+        <view class="sa-light-action-row {{createIndexesRunning ? 'sa-light-action-disabled' : ''}}"
+              hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
+              bindtap="onTriggerCreateIndexes">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">⚡</text>
+            <text class="sa-light-action-title">{{createIndexesRunning ? '系统加速中，请稍候…' : '一键加速系统'}}</text>
+          </view>
+          <view class="sa-light-action-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
+        </view>
+
+        <!-- 🧪 Dev/Debug 专用：模拟开通专业版，仅供功能自测，不接入真实支付/计费流程 -->
+        <view class="sa-dev-tool-row" wx:if="{{!subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
+          <text class="sa-dev-tool-tag">DEV</text>
+          <text class="sa-dev-tool-text">体验 / 模拟开通专业版（测试用）</text>
+        </view>
+      </block>
+    </view>
+
+    <!-- 🌸☀️ 文化与平台监督底座：全角色统一入口，替代此前分散在家人/店长/大家长
+         各自卡片里的重复文化入口，与"关于本站/阳光账本"合并成同一组列表行——
+         复用现有 .list-group-label/.ui-card-wrapper.action-list-container/
+         .action-item-cell 视觉样式，不新增类。cultureTitle/aboutTitle 由
+         initMinePage 内 computeOrgDisplayCopy() 按门店真实 orgType 计算，
+         已经是雨花斋/社区助餐/通用机构三档区分文案，比单纯 isYuhuazhai 二选一
+         更贴合当前多租户去品牌化方向，两个入口本身对角色无感知，全角色可见 -->
+    <view class="list-group-label">文化与平台监督</view>
+    <view class="ui-card-wrapper action-list-container">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToCultureFull">
         <view class="item-left">
-          <text class="manager-only-emoji">☀️</text>
-          <text class="item-text">关于雨花斋与阳光账本</text>
+          <text class="manager-only-emoji">🌸</text>
+          <text class="item-text">{{cultureTitle}}</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell danger-cell" hover-class="ui-hover" wx:if="{{hasPrivilege}}" bindtap="onReleaseUserRole">
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToAbout">
+        <view class="item-left">
+          <text class="manager-only-emoji">☀️</text>
+          <text class="item-text">{{aboutTitle}}</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- 🏛️ 底部账号操作：全角色可见，去掉原 hasPrivilege 限制——家人/纯义工
+         之前完全看不到这个入口，现在也能点开；processRoleAudit 云函数
+         releaseSelf 在调用者没有任何已持有角色时会优雅返回"当前身份无需卸任"
+         提示，不会崩溃，服务端已确认安全 -->
+    <view class="list-group-label">账号</view>
+    <view class="ui-card-wrapper action-list-container">
+      <view class="action-item-cell danger-cell" hover-class="ui-hover" bindtap="onReleaseUserRole">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-release"></view>
           <text class="item-text danger-text">切换身份 / 退出当前绑定</text>
@@ -722,19 +1103,11 @@
       </view>
     </view>
 
-    <!-- 分组四：低权限自助入口 —— 刻意置底、弱化视觉，避免与核心操作抢焦点。
-         🐛 家人（服务对象）越权 BUG：!hasPrivilege 对家人账号也成立（家人本就没有
-         店长/财务特权），导致"激活店长/财务特权"入口误漏到家人视角——家人是服务
-         对象，不存在"激活管理特权"的场景，必须强制排除 -->
-    <view class="ui-card-wrapper action-list-container subtle-group" wx:if="{{!isFamily && !hasPrivilege}}">
-      <view class="action-item-cell subtle-cell" hover-class="ui-hover" bindtap="onTriggerActivate">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-key subtle-icon"></view>
-          <text class="item-text subtle-text">激活店长 / 财务特权</text>
-        </view>
-        <view class="item-arrow subtle-icon">❯</view>
-      </view>
-    </view>
+    <!-- 🛠️ 义工现场服务工具：已平铺内嵌到 Tab1 首页「义工现场服务工具」金刚区
+         （index.wxml home-vt-* 系列 + daily-menu-modal/material-usage-modal 组件），
+         个人页不再重复展示这一组入口，避免功能冗余。daily-menu-modal/
+         material-usage-modal 组件仍挂载在本页（见下方），供「我的提交与数据」里
+         "重新修改并提交"通过 selectComponent 调用 presetForm() 复用 -->
 
     <!-- 分组五：系统/管理权限 —— 超级管理员 + 家长 + 平台管理员（SaaS 运维方）
          可见的开发者工具箱。前三项仍是 super_admin 专属操作，各自补上独立的
@@ -746,7 +1119,9 @@
          超管自己的管理工具，不是"正在预览的内容"，不该因为切换视角/切换过
          门店角色就消失 -->
     <!-- ╔══════════════════════════════════════════════════════════════╗
-         ║  工具箱（超管：3 分区完整版 / 大家长：仅会员管理）             ║
+         ║  工具箱（大家长：仅会员管理 / 超管专属操作见上方的                ║
+         ║  sa-command-card + admin-dashboard-card「超级管理员工具箱」，    ║
+         ║  不在此重复）                                                   ║
          ╚══════════════════════════════════════════════════════════════╝ -->
 
     <!-- ▸ 平台管理员精简版（大家长的同类入口已合并至 patriarch-panel-card 管理中心末尾） -->
@@ -759,68 +1134,6 @@
           <text class="item-text">会员开通 / 续费管理</text>
         </view>
         <view class="item-arrow">❯</view>
-      </view>
-    </view>
-
-    <!-- ▸ 超管完整工具箱（三分区） -->
-    <view class="ui-card-wrapper admin-developer-section" wx:if="{{isRealSuperAdmin}}">
-      <view class="admin-divider">超管工具箱</view>
-
-      <!-- ── 全国数据看板（单项，无需分区标题） ────────── -->
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStatistics">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-screen"></view>
-          <text class="item-text">全国数据看板</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <!-- ── 分区：应急处理 ───────────────────────────── -->
-      <view class="sa-sub-divider sa-sub-divider-danger">🛡️ 应急处理</view>
-
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenForceUnbindModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">🛡️</text>
-          <text class="item-text">撤销违规管理权限</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenResetStoreKeyModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">🔑</text>
-          <text class="item-text">重置门店申请密钥</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenSecurityLogModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📋</text>
-          <text class="item-text">安全操作日志</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <!-- ── 分区 3：系统优化 ──────────────────────────── -->
-      <view class="sa-sub-divider">⚙️ 系统优化</view>
-
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTriggerClearCache">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-clear"></view>
-          <text class="item-text">清理本地占用缓存</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <view class="action-item-cell {{createIndexesRunning ? 'action-item-disabled' : ''}}"
-            hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
-            bindtap="onTriggerCreateIndexes">
-        <view class="item-left">
-          <text class="manager-only-emoji">⚡</text>
-          <text class="item-text">{{createIndexesRunning ? '系统加速中，请稍候…' : '一键加速系统'}}</text>
-        </view>
-        <view class="item-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
       </view>
     </view>
 
@@ -844,7 +1157,7 @@
           class="switch-identity-option"
           wx:for="{{switchableRoleOptions}}"
           wx:key="role"
-          bindtap="onSwitchToRole"
+          catchtap="onSwitchToRole"
           data-role="{{item.role}}"
         >
           <text class="option-text">切换至 {{item.label}}</text>
@@ -947,6 +1260,67 @@
     </view>
   </view>
 
+  <!-- 🌐 超管专属【门店选择与搜索】弹窗：实时搜索框（名称/拼音/城市）+ 固定首项
+       【全国总览】+ 全国活跃门店列表，复用 feedback-sheet-* 半屏抽屉视觉规范 -->
+  <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showStorePickerModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showStorePickerModal}}" bindtap="onCloseStorePickerModal">
+    <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
+      <view class="feedback-sheet-drag-handle"></view>
+
+      <view class="feedback-sheet-header">
+        <view class="feedback-sheet-header-text">
+          <text class="feedback-sheet-title">📍 门店选择与搜索</text>
+          <text class="feedback-sheet-subtitle">选择具体门店进入单店巡检视角</text>
+        </view>
+        <view class="feedback-sheet-close" bindtap="onCloseStorePickerModal">✕</view>
+      </view>
+
+      <!-- 实时搜索框：支持按名称/拼音/城市搜索，见 matchStoreSearchKeyword -->
+      <view class="mm-search-bar">
+        <text class="mm-search-icon">🔍</text>
+        <input class="mm-search-input"
+               placeholder="搜索门店名称、拼音或城市..."
+               placeholder-class="mm-search-placeholder"
+               value="{{storePickerSearchText}}"
+               bindinput="onStorePickerSearchInput" />
+      </view>
+
+      <scroll-view scroll-y class="feedback-admin-list-scroll">
+        <!-- 🌐 固定首项：全国总览，不参与搜索过滤，始终展示在列表最顶端 -->
+        <view class="sp-store-item sp-national-item {{!currentInspectStoreId ? 'active' : ''}}" bindtap="onSelectNationalOverview">
+          <view class="sp-item-main">
+            <text class="sp-item-name">🌐 全国总览</text>
+            <text class="sp-item-sub">聚合全国门店数据</text>
+          </view>
+          <text wx:if="{{!currentInspectStoreId}}" class="sp-item-check">✓</text>
+        </view>
+
+        <view class="feedback-admin-loading" wx:if="{{storePickerLoading}}">
+          <text>加载门店列表中…</text>
+        </view>
+        <view class="feedback-admin-empty" wx:elif="{{storePickerFilteredStores.length === 0}}">
+          <text wx:if="{{storePickerSearchText}}">未找到匹配门店</text>
+          <text wx:else>暂无活跃门店</text>
+        </view>
+        <block wx:else>
+          <view class="sp-store-item {{item.storeId === currentInspectStoreId ? 'active' : ''}}"
+                wx:for="{{storePickerFilteredStores}}"
+                wx:key="storeId"
+                bindtap="onSelectInspectStore"
+                data-store-id="{{item.storeId}}"
+                data-store-name="{{item.storeName}}">
+            <view class="sp-item-main">
+              <text class="sp-item-name">{{item.storeName}}</text>
+              <text class="sp-item-sub" wx:if="{{item.province || item.city}}">{{item.province}}{{item.city}}</text>
+            </view>
+            <text wx:if="{{item.storeId === currentInspectStoreId}}" class="sp-item-check">✓</text>
+          </view>
+        </block>
+
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+    </view>
+  </view>
+
   <!-- 🎖️ 徽章详情 Modal：点击核心荣誉墙任一枚徽章展示名称/图标/解锁条件/进度条，
        复用 certificate-modal-* 同一套弹窗壳视觉规范 -->
   <view class="certificate-modal-mask" wx:if="{{showBadgeDetailModal}}" catchtouchmove="stopPropagation" bindtap="onCloseBadgeDetailModal">
@@ -1006,16 +1380,16 @@
           <text class="certificate-family-icon">🌸</text>
 
           <view class="cert-salutation">尊敬的家人【{{userNickName}}】：</view>
-          <view class="cert-paragraph">感谢您对雨花斋公益事业的倾心关怀与倾心护持。一碗热饭，温暖世间。雨花斋因您的守护而更具温情！</view>
+          <view class="cert-paragraph">{{isYuhuazhai ? '感谢您对雨花斋公益事业的倾心关怀与倾心护持。一碗热饭，温暖世间。雨花斋因您的守护而更具温情！' : '感谢您对公益事业的倾心关怀与护持。一碗热饭，温暖世间。您的守护让这个大家庭更有力量！'}}</view>
           <view class="cert-paragraph">特发此证，以兹感谢。</view>
 
           <view class="cf-signature-row">
             <view class="cf-seal">
-              <text class="cf-seal-line">雨花</text>
+              <text class="cf-seal-line">{{isYuhuazhai ? '雨花' : '公益'}}</text>
               <text class="cf-seal-line">爱心</text>
             </view>
             <view class="cf-signature-text">
-              <text class="cf-sign-line">雨花斋公益团队</text>
+              <text class="cf-sign-line">{{isYuhuazhai ? '雨花斋公益团队' : (currentStoreName || '公益志愿团队')}}</text>
               <text class="cf-sign-line">{{certificateIssueDate}}</text>
             </view>
           </view>
@@ -1036,7 +1410,7 @@
                像素，观感上像"叠了两张证书"——图片就绪后直接把 canvas 从渲染树里摘掉，
                保证画面上任何时刻都只有一张完整证书可见 -->
           <canvas wx:if="{{!certificateTempFilePath}}" type="2d" id="certificateCanvas" class="certificate-canvas" style="width: 340px; height: 480px;"></canvas>
-          <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" bindtap="onPreviewCertificateImage" />
+          <image wx:if="{{certificateTempFilePath}}" class="certificate-preview-img" src="{{certificateTempFilePath}}" mode="widthFix" show-menu-by-longpress="{{true}}" bindtap="onPreviewCertificateImage" binderror="onCertificateLoadError" />
           <view class="certificate-loading-mask" wx:if="{{certificateGenerating}}" catchtouchmove="stopPropagation">
             <text>正在生成证书…</text>
           </view>
@@ -1049,27 +1423,6 @@
     </view>
   </view>
 
-  <!-- 🌸 家人专属【雨花温情故事】说明弹窗：项目里真正沉淀"温馨故事、活动花絮"
-       内容的地方是各门店的日志（activity_logs，见 activity-log.wxml 里同款
-       placeholder 文案），这里不重新做一套独立的故事内容库，而是给一段引导语
-       + 直达入口，复用 onGoToActivityLog 已有的跳转逻辑，不重复实现 -->
-  <view class="warm-story-modal-mask" wx:if="{{showWarmStoryModal}}" catchtouchmove="stopPropagation" bindtap="onCloseWarmStory">
-    <view class="warm-story-modal-card" catchtap="stopPropagation">
-      <view class="warm-story-modal-header">
-        <text class="warm-story-modal-title">🌸 雨花温情故事</text>
-        <view class="warm-story-modal-close" bindtap="onCloseWarmStory">✕</view>
-      </view>
-
-      <view class="warm-story-modal-body">
-        <text class="warm-story-modal-icon">🌸</text>
-        <text class="warm-story-modal-text">每一段温情故事，都记录在门店的日常日志里——义工的忙碌身影、家人的温暖笑脸、护持路上的点点滴滴。</text>
-        <text class="warm-story-modal-text">欢迎前往门店日志，看看雨花斋这个大家庭最新的动人瞬间。</text>
-
-        <button class="warm-story-view-log-btn" bindtap="onViewActivityLogFromWarmStory">查看门店日志 ›</button>
-      </view>
-    </view>
-  </view>
-
   <!-- 📮 爱心意见箱：小程序原生半屏弹窗，替代微信官方 open-type="feedback"，
        提交内容落在本项目自己的 feedback_submissions 集合，店长/运营可查阅 -->
   <view class="feedback-sheet-backdrop {{showFeedbackModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showFeedbackModal}}" bindtap="onCloseFeedbackModal">
@@ -1079,7 +1432,7 @@
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
           <text class="feedback-sheet-title">📮 爱心意见箱</text>
-          <text class="feedback-sheet-subtitle">感恩您的倾心护持，共同守护雨花温情</text>
+          <text class="feedback-sheet-subtitle">感恩您的倾心护持，共同守护{{isYuhuazhai ? '雨花温情' : '公益温情'}}</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseFeedbackModal">✕</view>
       </view>
@@ -1474,7 +1827,7 @@
           <!-- 上半区：头像 + 姓名/手机/时间 + 角色 Tag -->
           <view class="mm-card-top">
             <view class="mm-avatar-wrap">
-              <image wx:if="{{item.avatarUrl}}" class="mm-avatar-img" src="{{item.avatarUrl}}" mode="aspectFill" />
+              <image wx:if="{{item.avatarUrl && !memberAvatarFailedMap[item.avatarUrl]}}" class="mm-avatar-img" src="{{item.avatarUrl}}" mode="aspectFill" binderror="onMemberAvatarError" data-url="{{item.avatarUrl}}" />
               <view wx:else class="mm-avatar-fallback">{{item.realName[0] || '?'}}</view>
             </view>
             <view class="mm-member-info">
@@ -1485,10 +1838,11 @@
             <view class="mm-role-tag mm-role-tag-{{item.roleClass}}">{{item.roleLabel}}</view>
           </view>
 
-          <!-- 下半区操作 ── 情形 A：大家长操作同级大家长 → 锁态提示 -->
+          <!-- 下半区操作 ── 情形 A：大家长操作同级大家长 → 锁态提示（超管本人不受此限制，见下方 wx:else 分支） -->
           <view class="mm-locked-notice" wx:if="{{item.role === 'store_patriarch' && !isSuperAdmin}}">
             <text class="mm-locked-icon">🔒</text>
             <text class="mm-locked-text">同级大家长权限调整需联系超级管理员</text>
+            <button class="mm-contact-admin-btn" bindtap="onContactAdmin">联系超管</button>
           </view>
 
           <!-- 下半区操作 ── 情形 B：可正常操作 -->
@@ -1509,6 +1863,34 @@
 
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
+    </view>
+  </view>
+
+  <!-- 📞 联系超管：同级大家长锁态提示旁「联系超管」按钮触发，展示电话/微信号，
+       复用 .certificate-modal-mask/.certificate-modal-card 居中弹窗视觉语言 -->
+  <view class="certificate-modal-mask" wx:if="{{showContactAdminModal}}" catchtouchmove="stopPropagation" bindtap="onCloseContactAdminModal">
+    <view class="certificate-modal-card contact-admin-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header contact-admin-modal-header">
+        <text class="admin-key-modal-title">📞 联系超级管理员</text>
+        <view class="certificate-modal-close" bindtap="onCloseContactAdminModal">✕</view>
+      </view>
+      <text class="contact-admin-modal-desc">同级大家长的权限调整需超级管理员协助处理，可通过以下方式联系：</text>
+
+      <view class="contact-admin-row">
+        <view class="contact-admin-row-info">
+          <text class="contact-admin-row-label">☎️ 客服电话</text>
+          <text class="contact-admin-row-value">{{superAdminContactPhone}}</text>
+        </view>
+        <button class="contact-admin-action-btn" bindtap="onCallSuperAdmin">拨打</button>
+      </view>
+
+      <view class="contact-admin-row">
+        <view class="contact-admin-row-info">
+          <text class="contact-admin-row-label">💬 超管微信号</text>
+          <text class="contact-admin-row-value">{{superAdminContactWechat}}</text>
+        </view>
+        <button class="contact-admin-action-btn" bindtap="onCopySuperAdminWechat">复制</button>
+      </view>
     </view>
   </view>
 
@@ -1837,7 +2219,7 @@
         >
           <!-- 左：头像 -->
           <view class="sa-member-avatar-wrap">
-            <image wx:if="{{item.avatarUrl}}" class="sa-member-avatar" src="{{item.avatarUrl}}" mode="aspectFill" />
+            <image wx:if="{{item.avatarUrl && !memberAvatarFailedMap[item.avatarUrl]}}" class="sa-member-avatar" src="{{item.avatarUrl}}" mode="aspectFill" binderror="onMemberAvatarError" data-url="{{item.avatarUrl}}" />
             <view wx:else class="sa-member-avatar-fallback">{{item.realName ? item.realName[0] : '?'}}</view>
           </view>
           <!-- 中：姓名 + 当前角色·门店 -->
@@ -1863,7 +2245,7 @@
       <view class="sa-selected-card" wx:if="{{forceUnbindSelectedMember}}">
         <!-- 头像 -->
         <view class="sa-selected-avatar-wrap">
-          <image wx:if="{{forceUnbindSelectedMember.avatarUrl}}" class="sa-selected-avatar" src="{{forceUnbindSelectedMember.avatarUrl}}" mode="aspectFill" />
+          <image wx:if="{{forceUnbindSelectedMember.avatarUrl && !memberAvatarFailedMap[forceUnbindSelectedMember.avatarUrl]}}" class="sa-selected-avatar" src="{{forceUnbindSelectedMember.avatarUrl}}" mode="aspectFill" binderror="onMemberAvatarError" data-url="{{forceUnbindSelectedMember.avatarUrl}}" />
           <view wx:else class="sa-selected-avatar-fallback">{{forceUnbindSelectedMember.realName ? forceUnbindSelectedMember.realName[0] : '?'}}</view>
         </view>
         <!-- 信息 -->
@@ -2179,11 +2561,15 @@
           <text class="invite-result-tap-hint">点击复制</text>
         </view>
         <view class="invite-result-validity">⏰ 24 小时内有效，过期自动失效</view>
-        <image wx:if="{{inviteResultQrFileId}}"
+        <image wx:if="{{inviteResultQrFileId && !inviteQrLoadFailed}}"
                class="invite-result-qr"
                src="{{inviteResultQrFileId}}"
                mode="aspectFit"
+               binderror="onInviteQrLoadError"
                show-menu-by-longpress />
+        <view class="invite-result-qr-failed" wx:elif="{{inviteResultQrFileId && inviteQrLoadFailed}}">
+          <text>二维码加载失败，可复制邀请码分享</text>
+        </view>
         <view class="invite-result-warning">⚠️ 一次性特权码，核销后自动作废，请勿公开传播</view>
       </scroll-view>
 
@@ -2213,42 +2599,96 @@
 
           <!-- 组织/门店名称 -->
           <view class="onb-field-group">
-            <text class="onb-field-label">门店名称</text>
-            <input class="onb-field-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
-            <text class="onb-field-hint">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
+            <!-- 🆕 提示文案改为挂在标签右侧的细小灰字（.onb-field-label-row +
+                 .onb-field-label-hint），不再单独占一整行大块文字 -->
+            <view style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; margin-bottom: 8rpx;">
+              <text class="onb-field-label org-field-label">门店名称</text>
+              <text style="font-size: 22rpx; color: #999999; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">简短即可，将结合所属地区汇总</text>
+            </view>
+            <input class="onb-field-input org-form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
           </view>
 
-          <!-- 文化寄语第一句 -->
+          <!-- 🆕 机构/平台类型：驱动全局品牌/文化文案（归属徽标/文化配置入口标题/
+               关于页标题），保存后立即生效，不用等下次进页面 -->
           <view class="onb-field-group">
-            <text class="onb-field-label">文化寄语 · 第一句</text>
-            <input class="onb-field-input" placeholder="如：善心汇聚暖人间" value="{{orgConfigSlogan1}}" bindinput="onOrgConfigSlogan1Input" maxlength="30" />
+            <view style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; margin-bottom: 8rpx;">
+              <text class="onb-field-label org-field-label">机构类型</text>
+              <text style="font-size: 22rpx; color: #999999; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">决定首页与个人中心的文化文案风格</text>
+            </view>
+            <picker mode="selector" range="{{orgConfigTypeOptions}}" range-key="label"
+                    value="{{orgConfigOrgTypeIndex}}" bindchange="onOrgConfigOrgTypeChange">
+              <view style="width: 100%; box-sizing: border-box; background-color: #F8F9FA; border-radius: 16rpx; padding: 20rpx 24rpx; display: flex; justify-content: space-between; align-items: center;">
+                <text>{{orgConfigOrgTypeIndex >= 0 ? orgConfigTypeOptions[orgConfigOrgTypeIndex].label : '请选择机构类型'}}</text>
+                <text style="color: #999999;">▼</text>
+              </view>
+            </picker>
           </view>
 
-          <!-- 文化寄语第二句 -->
-          <view class="onb-field-group">
-            <text class="onb-field-label">文化寄语 · 第二句</text>
-            <input class="onb-field-input" placeholder="如：爱心传递每一天" value="{{orgConfigSlogan2}}" bindinput="onOrgConfigSlogan2Input" maxlength="30" />
+          <!-- 🆕 文化寄语纵向上下分布，每句独立占满一行，避免文字被裁剪截断 -->
+          <view class="onb-field-group culture-slogan-group">
+            <view style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; margin-bottom: 8rpx;">
+              <text class="onb-field-label org-field-label">文化寄语 / 家训配置</text>
+              <text style="font-size: 22rpx; color: #999999; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">展示于首页顶栏及每日餐报海报</text>
+            </view>
+            <view style="display: flex; flex-direction: column; width: 100%; gap: 16rpx;">
+              <view class="culture-slogan-col">
+                <text class="culture-slogan-sub-label">第一句</text>
+                <input
+                  class="onb-field-input org-form-input culture-slogan-input"
+                  style="width: 100%; box-sizing: border-box; background: #F8F9FA; padding: 16rpx 20rpx; border-radius: 12rpx; font-size: 28rpx;"
+                  placeholder="{{orgConfigOrgType === 'yuhuazhai' ? '如：长者先饭，幼者后饭' : '如：节约粮食，温暖同行'}}"
+                  value="{{orgConfigSlogan1}}"
+                  bindinput="onOrgConfigSlogan1Input"
+                  maxlength="30"
+                />
+              </view>
+              <view class="culture-slogan-col">
+                <text class="culture-slogan-sub-label">第二句</text>
+                <input
+                  class="onb-field-input org-form-input culture-slogan-input"
+                  style="width: 100%; box-sizing: border-box; background: #F8F9FA; padding: 16rpx 20rpx; border-radius: 12rpx; font-size: 28rpx;"
+                  placeholder="{{orgConfigOrgType === 'yuhuazhai' ? '如：一粥一饭，当思来处不易' : '如：爱心传递每一天'}}"
+                  value="{{orgConfigSlogan2}}"
+                  bindinput="onOrgConfigSlogan2Input"
+                  maxlength="30"
+                />
+              </view>
+            </view>
           </view>
 
           <!-- 组织 Logo -->
           <view class="onb-field-group">
             <text class="onb-field-label">组织 Logo</text>
-            <view class="orgcfg-logo-row" bindtap="onUploadOrgLogo">
-              <image wx:if="{{orgConfigLogoUrl}}" class="orgcfg-logo-preview" src="{{orgConfigLogoUrl}}" mode="aspectFill" />
-              <view wx:else class="orgcfg-logo-placeholder">
-                <text class="orgcfg-logo-icon">📷</text>
-                <text class="orgcfg-logo-hint">点击上传</text>
+            <view class="orgcfg-logo-row">
+              <!-- 🆕 预览态：图片包一层 wrap 承载右上角悬浮的"清空"按钮；
+                   点击图片本身仍走 onUploadOrgLogo 重新选图 -->
+              <view wx:if="{{orgConfigLogoUrl && !orgLogoLoadFailed}}" class="orgcfg-logo-preview-wrap">
+                <image class="orgcfg-logo-preview" src="{{orgConfigLogoUrl}}" mode="aspectFill" bindtap="onUploadOrgLogo" binderror="onOrgLogoLoadError" />
+                <!-- 🆕 悬浮微型操作按钮：↻ 更换 / ✕ 删除，替代原先并排的「重新上传」文字链接 -->
+                <view class="orgcfg-logo-actions">
+                  <view class="orgcfg-logo-action-btn" catchtap="onUploadOrgLogo">↻</view>
+                  <view class="orgcfg-logo-action-btn orgcfg-logo-action-btn--danger" catchtap="onClearOrgLogo">✕</view>
+                </view>
               </view>
-              <text class="orgcfg-logo-change" wx:if="{{orgConfigLogoUrl}}">更换</text>
+              <view wx:else class="orgcfg-logo-placeholder" bindtap="onUploadOrgLogo">
+                <view class="orgcfg-logo-icon-wrap">
+                  <text class="orgcfg-logo-icon">📷</text>
+                </view>
+                <text class="orgcfg-logo-hint">{{orgConfigLogoUrl && orgLogoLoadFailed ? '加载失败，点击重新上传' : '点击上传'}}</text>
+              </view>
             </view>
           </view>
 
         </view>
       </scroll-view>
 
-      <!-- 底部保存按钮 -->
+      <!-- 底部保存按钮：暖色品牌主按钮，与「新建组织」引导弹窗的蓝色按钮
+           （同样复用 .onb-submit-btn，但走的是另一条入驻流程）区分开——
+           org-config-submit-btn 是仅本弹窗生效的修饰类，不影响 onb-submit-btn
+           的共享基础样式 -->
       <view class="onb-footer">
-        <view class="onb-submit-btn {{orgConfigSaving ? 'onb-submit-btn--loading' : ''}}"
+        <view class="onb-submit-btn org-config-submit-btn {{orgConfigSaving ? 'onb-submit-btn--loading' : ''}}"
+              hover-class="org-config-submit-btn-hover"
               bindtap="onSaveOrgConfig">
           {{orgConfigSaving ? '保存中…' : '保存配置'}}
         </view>
