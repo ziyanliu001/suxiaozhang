@@ -29,11 +29,14 @@ function formatBeijingDateString(date) {
   }).format(date instanceof Date ? date : new Date(date));
 }
 
-// 权限：家长/督导锁定本店；超管可指定本机构内任意门店
+// 权限：家长/督导锁定本店；财务锁定本店（🆕 财务个人页【财务稽核专区】KPI
+// 看板复用本聚合——本月服务人次/收支/验真进度对财务而言同样是稽核职责范围内
+// 的数据，与家长完全相同的"只读、锁定本人绑定门店"口径，不额外放宽）；
+// 超管可指定本机构内任意门店
 async function resolveTarget(caller, requestedStoreId) {
   if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
 
-  if (caller.role === 'store_patriarch') {
+  if (caller.role === 'store_patriarch' || caller.role === 'finance') {
     if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店' };
     return { allowed: true, storeId: caller.storeId };
   }

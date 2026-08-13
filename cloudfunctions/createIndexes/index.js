@@ -43,6 +43,12 @@ exports.main = async (event, context) => {
     ['report_logs', { name: 'tenantId_storeId_openid',         keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }],    unique: false }],
     ['report_logs', { name: 'tenantId_storeId_dateString',     keys: [{ tenantId: 1 }, { storeId: 1 }, { dateString: 1 }], unique: false }],
     ['report_logs', { name: 'tenantId_approvalStatus_dateString', keys: [{ tenantId: 1 }, { approvalStatus: 1 }, { dateString: 1 }], unique: false }],
+    // 🔑 getPatriarchDashboard 的两条真实查询：都只按 storeId 起头（不带 tenantId
+    // 前缀），tenantId_storeId_dateString 用不上——tenantId 作为复合索引首列时，
+    // 只有查询同时带 tenantId 精确匹配才能命中该索引前缀，这两条查询压根没传
+    // tenantId，需要各自专属、以 storeId 起头的索引
+    ['report_logs', { name: 'storeId_dateString',               keys: [{ storeId: 1 }, { dateString: 1 }],   unique: false }],
+    ['report_logs', { name: 'storeId_voidPending',               keys: [{ storeId: 1 }, { voidPending: 1 }],  unique: false }],
 
     // ─── user_roles ────────────────────────────────────────────────────
     ['user_roles', { name: 'openid',                      keys: [{ _openid: 1 }],                                               unique: false }],
