@@ -51,10 +51,55 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  /* 🌟 标题单行不换行：长标题（如"雨花温情图册与阳光凭证"）与两侧图标/返回箭头
+     绝对定位互不影响，靠 max-width 约束在两侧控件之间，超出时省略号截断，
+     而不是自动换行撑高导航栏 */
+  max-width: 420rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
 }
 
 .nav-right-placeholder {
   width: 64rpx;
+}
+
+/* 右上角操作区：图册切换 + 设置齿轮 */
+.nav-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.btn-photo-archive-toggle {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  border-radius: 30rpx;
+}
+
+.btn-photo-archive-toggle-hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* 📄 导出财务审计表：原先是横跨一整行的文字按钮，下沉为与 📸/⚙️ 同尺寸的
+   图标按钮，收进右上角次要操作区，不再单独占一整行 */
+.btn-export-audit-icon {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  border-radius: 30rpx;
+}
+
+.btn-export-audit-loading {
+  font-size: 26rpx;
 }
 
 /* 🛡️ 一键校准入口降级：右上角"⚙️ 设置"图标承载二次菜单，替代原先常驻的显眼大按钮 */
@@ -71,76 +116,135 @@
   opacity: 0.6;
 }
 
-.mode-switch-row {
+/* 🌟 统一筛选栏：查看视角 / 站点选择 / 月份选择三列等宽，统一浅灰底 + 深灰字的
+   极简下拉选择器观感，取消原先"查看视角"maroon 实心胶囊、月份胶囊白底描边、
+   导出按钮金色描边各自不同配色的"花哨拼盘"，三列视觉统一 */
+.unified-filter-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12rpx;
+  padding: 12rpx 24rpx 16rpx;
+}
+
+.filter-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* store-picker 是独立自定义组件，样式作用域不共享，这里只负责给它在三列布局里
+   分配等宽空间，组件内部观感维持原样（不在本次改动范围内） */
+.filter-col store-picker {
+  display: block;
+  width: 100%;
+}
+
+.filter-col-pill {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12rpx 32rpx 16rpx 32rpx;
-  background: linear-gradient(90deg, #f7f8fa 0%, #fff 20%, #fff 80%, #f7f8fa 100%);
+  height: 64rpx;
+  background: #F5F5F5;
+  border-radius: 32rpx;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+  gap: 4rpx;
 }
 
-.mode-label {
-  font-size: 24rpx;
-  color: #999;
-  margin-right: 12rpx;
-}
-
-.mode-switch-pill {
-  display: flex;
-  background: #F8F9FA;
-  border: 1rpx solid #E9ECEF;
-  border-radius: 30rpx;
-  padding: 4rpx;
-}
-
-.mode-switch-pill .tab {
-  padding: 8rpx 24rpx;
+.filter-col-seg {
+  flex: 1;
+  text-align: center;
   font-size: 22rpx;
   color: #666;
+  padding: 10rpx 0;
   border-radius: 26rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: all 0.2s ease;
 }
 
-.mode-switch-pill .tab.active {
-  background: #8C1D18;
-  color: #fff;
+.filter-col-seg.active {
+  background: #FFFFFF;
+  color: #C2185B;
   font-weight: bold;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
-.month-pill .lbl {
-  font-size: 22rpx;
-  color: #444;
-}
-
-.filter-pills-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12rpx 24rpx 16rpx 24rpx;
-}
-
-.filter-controls-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.btn-export-audit {
-  display: flex;
-  align-items: center;
-  background: #FFF3E0;
-  border: 1rpx solid #F0C878;
-  color: #B8860B;
-  font-size: 22rpx;
-  font-weight: bold;
-  padding: 8rpx 20rpx;
-  border-radius: 30rpx;
+.filter-col-lbl {
+  font-size: 24rpx;
+  color: #343A40;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.btn-export-audit:active {
-  opacity: 0.8;
+.filter-col-pill.month-pill.has-value .filter-col-lbl {
+  color: #8C1D18;
+  font-weight: bold;
+}
+
+.filter-col-arrow {
+  font-size: 18rpx;
+  color: #868E96;
+  flex-shrink: 0;
+}
+
+.filter-col-clear {
+  width: 32rpx;
+  height: 32rpx;
+  flex-shrink: 0;
+  background: #E9ECEF;
+  color: #6C757D;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18rpx;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.filter-col-clear:active {
+  background: #D32F2F;
+  color: #FFFFFF;
+}
+
+/* ===== 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回 =====
+   放在 .fixed-top-header 内部（与筛选栏同级），随头部一起测高、一起固定，
+   不需要额外的 sticky/滚动偏移计算 */
+.status-tab-row {
+  display: flex;
+  padding: 0 24rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.status-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  color: #868E96;
+  padding: 16rpx 0;
+  position: relative;
+}
+
+.status-tab.active {
+  color: #8C1D18;
+  font-weight: bold;
+}
+
+.status-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 40rpx;
+  height: 5rpx;
+  border-radius: 3rpx;
+  background: #8C1D18;
 }
 
 /* ===== 月度财务审计表导出结果弹窗 ===== */
@@ -311,64 +415,6 @@
   color: #999999;
 }
 
-.filter-pill {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  background: #FFFFFF;
-  border: 1rpx solid #CED4DA;
-  padding: 8rpx 20rpx;
-  border-radius: 30rpx;
-}
-
-.filter-pill .lbl {
-  font-size: 24rpx;
-  color: #343A40;
-  font-weight: bold;
-  max-width: 180rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.month-filter-capsule-box {
-  display: flex;
-  align-items: center;
-  background: #FFFFFF;
-  border: 1rpx solid #CED4DA;
-  border-radius: 30rpx;
-  padding: 2rpx 6rpx;
-  overflow: hidden;
-}
-
-.filter-pill.month-pill.has-value .lbl {
-  color: #8C1D18;
-}
-
-.btn-clear-month {
-  width: 36rpx;
-  height: 36rpx;
-  background: #E9ECEF;
-  color: #6C757D;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18rpx;
-  font-weight: bold;
-  margin-right: 10rpx;
-  transition: all 0.2s ease;
-}
-
-.btn-clear-month:active {
-  background: #D32F2F;
-  color: #FFFFFF;
-}
-
-.filter-pill .arrow {
-  font-size: 20rpx;
-  color: #868E96;
-}
 
 .anomaly-filter-banner {
   display: flex;
@@ -876,6 +922,32 @@
 .empty-text {
   font-size: 26rpx;
   color: #ADB5BD;
+}
+
+/* 🆕 空状态一键提交入口 */
+.btn-empty-upload {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 28rpx;
+  padding: 14rpx 32rpx;
+  border-radius: 32rpx;
+  background: #8C1D18;
+  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.2);
+}
+
+.btn-empty-upload-hover {
+  opacity: 0.85;
+}
+
+.btn-empty-upload .icon {
+  font-size: 24rpx;
+}
+
+.btn-empty-upload .lbl {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #FFFFFF;
 }
 
 .loading-state {
@@ -1663,18 +1735,22 @@
 }
 
 /* 待店长确认：醒目黄橙实色背景，与其余淡色胶囊拉开视觉差距，第一时间抓住店长注意力 */
+/* 🆕 待审核（黄色）：与全站其余"待处理"轻提示条同一套暖黄色语汇
+   （如 org-config 弹窗机构类型 Tag、anomaly-filter-banner） */
 .status-flow-tag.st-manager {
-  background: linear-gradient(135deg, #FFA726 0%, #FB8C00 100%);
-  color: #FFFFFF;
-  border: none;
-  box-shadow: 0 4rpx 10rpx rgba(251, 140, 0, 0.3);
+  background: #FFF7E6;
+  color: #D46B08;
+  border: 1.5rpx solid #FFE1A8;
 }
 
 /* 待财务稽核 (庄严淡红) */
+/* 🆕 已通过（绿色）：此前用红/粉色（#FFEBEE / #C62828），与"待财务稽核"这一已经
+   通过店长确认的正向状态语义相反，容易被误读成"有问题/被驳回"——红色现在专门
+   留给真正的驳回/作废状态（见下方 void-seal-box），这里改为绿色系 */
 .status-flow-tag.st-finance {
-  background: #FFEBEE;
-  color: #C62828;
-  border: 1.5rpx solid #FFCDD2;
+  background: #E6F7EE;
+  color: #2B8A3E;
+  border: 1.5rpx solid #B7EACB;
 }
 
 /* 已锁定 (烫金高级感) */
@@ -2113,50 +2189,60 @@
   text-align: center;
 }
 
-.today-action-row {
-  margin-top: 16rpx;
+/* 🆕 快捷上传凭证 FAB：替代此前嵌在今日卡片里的强色通栏大按钮
+   （.btn-today-action/.btn-today-upload/.today-action-row 已随之整体移除，
+   不再挤占卡片/列表内容区）。悬浮于右下角，任意滚动位置都可快速唤起 */
+.fab-upload-receipt {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(48rpx + env(safe-area-inset-bottom));
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8C1D18 0%, #6B1512 100%);
+  box-shadow: 0 8rpx 20rpx rgba(140, 29, 24, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
 }
 
-/* 🌟 合并入口后仅剩一枚高亮通栏主按钮，取代此前"拍照识别OCR + 快捷补传凭证"两枚并排按钮 */
-.btn-today-action {
-  width: 100%;
-  font-size: 28rpx;
-  font-weight: bold;
-  border-radius: 40rpx;
-  padding: 18rpx 0;
-  line-height: 1.4;
-}
-
-.btn-today-upload {
-  background: #8C1D18;
-  color: #FFFFFF;
-  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.2);
-}
-
-.btn-today-upload:active {
+.fab-upload-receipt-hover {
   opacity: 0.85;
+  transform: scale(0.96);
 }
 
-/* 🌟 今日未录入餐报时的空状态卡：圆角与阴影统一为 16rpx / 0 4rpx 16rpx rgba(0,0,0,0.04)，
-   边距整体提升，OCR / 快捷补传凭证双入口不变 */
+.fab-upload-icon {
+  font-size: 44rpx;
+}
+
+/* 🆕 今日未录入餐报：改为轻量 Alert 提示条（暖黄色，与全站其余轻提示条同一套
+   视觉语言），替代此前一整张带虚线边框、内含大按钮的空状态卡片 */
 .today-ledger-empty {
-  background: #FAF8F5;
-  border: 1.5rpx dashed #E0D5C5;
-  border-radius: 16rpx;
-  padding: 28rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  background: #FFF7E6;
+  border: 1rpx solid #FFE1A8;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
 }
 
 .today-empty-top-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16rpx;
+  gap: 8rpx;
+}
+
+.today-empty-top-row .alert-icon {
+  font-size: 24rpx;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .today-empty-top-row .empty-tip {
   font-size: 24rpx;
-  color: #999999;
+  color: #B45309;
+  flex: 1;
 }
 
 .btn-go-fill-today-mini {
@@ -2167,6 +2253,7 @@
 }
 
 .staged-receipt-block {
+  margin-top: 12rpx;
   margin-bottom: 8rpx;
 }
 
@@ -2291,4 +2378,151 @@
   color: #E65100;
   line-height: 1.4;
   flex: 1;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+/* 📸 图册模式 */
+/* ──────────────────────────────────────────────────────────────────────────── */
+
+.photo-archive-container {
+  padding: 0 0 40rpx;
+}
+
+/* 照片类型过滤标签栏：统一分段控件（Segmented Control）——只有 4 个固定选项，
+   改为等宽平分而不是可横向滚动的散装胶囊，激活态用浅底+暖色文字区分，
+   替换掉原先的实心蓝色块（与页面其余暖色调不搭） */
+.photo-type-tabs {
+  display: flex;
+  background: #F5F5F5;
+  border-radius: 16rpx;
+  padding: 6rpx;
+  margin: 16rpx 24rpx;
+}
+
+.photo-type-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  color: #666;
+  padding: 12rpx 0;
+  border-radius: 12rpx;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.photo-type-tab.active {
+  background: #FFFFFF;
+  color: #C2185B;
+  font-weight: bold;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+
+/* 统计行 */
+.photo-archive-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28rpx 16rpx;
+}
+
+.photo-archive-count {
+  font-size: 24rpx;
+  color: #888;
+}
+
+.photo-archive-range {
+  font-size: 24rpx;
+  color: #888;
+}
+
+/* 加载中 */
+.photo-archive-loading {
+  text-align: center;
+  padding: 60rpx 0;
+  color: #aaa;
+  font-size: 26rpx;
+}
+
+/* 瀑布流网格：flexbox 自动换行，3 列均分，列间距 4rpx */
+/* 🌟 改用真正的 CSS Grid：此前用 flex-wrap + padding-top 百分比模拟正方形网格，
+   圆角只有 4rpx、几乎无间距，视觉比较原始。改为 3 列定高网格（200rpx），不再依赖
+   padding-top 撑高的 hack，.photo-grid-tags 的 absolute 叠层定位不受影响
+   （.photo-grid-item 仍是 position:relative 的定位上下文） */
+.photo-waterfall-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  padding: 12rpx 0;
+}
+
+.photo-grid-item {
+  position: relative;
+  height: 200rpx;
+  overflow: hidden;
+  border-radius: 12rpx;
+  background: #E8E8E8;
+}
+
+.photo-grid-img {
+  display: block;
+  width: 100%;
+  height: 200rpx;
+  border-radius: 12rpx;
+}
+
+/* 日期 + 类型标签叠加在图片底部 */
+.photo-grid-tags {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 4rpx 8rpx;
+  background: linear-gradient(transparent, rgba(0,0,0,0.42));
+}
+
+.photo-tag-date {
+  font-size: 18rpx;
+  color: rgba(255,255,255,0.88);
+  line-height: 1.3;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-tag-type {
+  font-size: 18rpx;
+  color: rgba(255,255,255,0.9);
+  flex-shrink: 0;
+  margin-left: 4rpx;
+}
+
+/* 空状态 */
+.photo-archive-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 40rpx 40rpx;
+  gap: 16rpx;
+}
+
+.photo-archive-empty-icon {
+  font-size: 64rpx;
+}
+
+.photo-archive-empty-tip {
+  font-size: 28rpx;
+  color: #555;
+  font-weight: 600;
+}
+
+.photo-archive-empty-sub {
+  font-size: 24rpx;
+  color: #aaa;
+  text-align: center;
 }

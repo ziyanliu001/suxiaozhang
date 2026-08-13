@@ -7,52 +7,70 @@
 
     <view class="nav-title-bar" style="height: {{navBarHeight}}px;">
       <view class="btn-back-arrow" hover-class="btn-back-arrow-hover" bindtap="goBack">←</view>
-      <text class="page-title-txt">🧾 凭证与账本</text>
-      <!-- 🛡️ 一键校准入口降级：从顶部常驻按钮收进这里的"⚙️ 设置"二次菜单，降低误触概率 -->
-      <view class="btn-settings-gear" wx:if="{{isManagerRole || isFinanceRole || isSuperAdmin}}" bindtap="onOpenHistorySettingsMenu">⚙️</view>
-      <view class="nav-right-placeholder" wx:else></view>
-    </view>
-
-    <view class="mode-switch-row">
-      <text class="mode-label">查看视角：</text>
-      <view class="mode-switch-pill">
-        <!-- 🛡️ 越权兜底：即使 isAllStoresView 因某种异常状态被误置为 true，
-             这里再叠加一层 isSuperAdmin 校验，非超管永远只能看到"🏪 门店完整账本"，
-             绝不渲染"🌐 全国汇总账本"文案——与 resolveIsAllStoresView()/loadReports()
-             的角色校验口径保持一致，双保险 -->
-        <view class="tab {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">
-          <block wx:if="{{isSuperAdmin}}">{{isAllStoresView ? '🌐 全国汇总账本' : '🏪 门店完整账本'}}</block>
-          <block wx:else>🏪 门店完整账本</block>
+      <text class="page-title-txt">{{pageTitle || '🧾 凭证与账本'}}</text>
+      <view class="nav-right-actions">
+        <!-- 📄 导出财务审计表：从原先横跨一整行的文字按钮下沉为图标，仅账本模式展示 -->
+        <view class="btn-export-audit-icon" hover-class="btn-photo-archive-toggle-hover" wx:if="{{!photoArchiveMode && (isManagerOrAdmin || isFinanceOrAdmin)}}" bindtap="onExportMonthlyAudit">
+          <text wx:if="{{!exportingAudit}}">📄</text>
+          <text wx:else class="btn-export-audit-loading">⏳</text>
         </view>
-        <view class="tab {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">
-          👤 我的提交记录
+        <!-- 📸 图册/账本模式切换 -->
+        <view class="btn-photo-archive-toggle" hover-class="btn-photo-archive-toggle-hover" bindtap="onTogglePhotoArchive">
+          <text>{{photoArchiveMode ? '📒' : '📸'}}</text>
         </view>
+        <!-- 🛡️ 一键校准入口降级：从顶部常驻按钮收进这里的"⚙️ 设置"二次菜单，降低误触概率 -->
+        <view class="btn-settings-gear" wx:if="{{!photoArchiveMode && (isManagerRole || isFinanceRole || isSuperAdmin)}}" bindtap="onOpenHistorySettingsMenu">⚙️</view>
       </view>
     </view>
 
-    <view class="filter-pills-bar">
-      <view class="filter-controls-group">
+    <!-- 🌟 统一筛选栏：查看视角 / 站点选择 / 月份选择合并为一行三列极简选择器。
+         🐛 根因修复：此前这一整块没有 photoArchiveMode 判断，切到图册模式后，
+         账本专属的这一整套筛选栏（查看视角 + 站点 + 月份 + 导出审计表按钮）
+         仍会和下方图册自己的 photo-type-tabs 同屏堆叠——两套毫不相关的筛选控件
+         叠在一起，才是"控件过多、视觉杂乱"的真正根因。现在加上 wx:if 严格
+         互斥：账本模式显示这一栏，图册模式显示 photo-type-tabs，绝不同屏 -->
+    <!-- 🆕 个人视角入口（mineEntryMode，见 history.ts onLoad）：隐去"门店/我的"
+         切换栏与门店选择下拉框，专注展示个人提交记录，避免非管理员用户面对一堆
+         与自己无关的门店管理向控件；月份筛选仍保留，翻查自己历史记录时依然有用 -->
+    <view class="unified-filter-row" wx:if="{{!photoArchiveMode}}">
+      <view class="filter-col" wx:if="{{!mineEntryMode}}">
+        <view class="filter-col-pill">
+          <!-- 🛡️ 越权兜底：即使 isAllStoresView 因某种异常状态被误置为 true，
+               这里再叠加一层 isSuperAdmin 校验，非超管永远只能看到"🏪 门店账本"，
+               绝不渲染"🌐 全国汇总"文案——与 resolveIsAllStoresView()/loadReports()
+               的角色校验口径保持一致，双保险 -->
+          <text class="filter-col-seg {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">
+            <block wx:if="{{isSuperAdmin}}">{{isAllStoresView ? '🌐 全国' : '🏪 门店'}}</block>
+            <block wx:else>🏪 门店</block>
+          </text>
+          <text class="filter-col-seg {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">👤 我的</text>
+        </view>
+      </view>
+
+      <view class="filter-col" wx:if="{{!mineEntryMode}}">
         <store-picker id="historyStorePicker" bind:storechange="onStorePickerChange"></store-picker>
-
-        <view class="month-filter-capsule-box">
-          <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
-            <view class="filter-pill month-pill {{selectedMonthStr ? 'has-value' : ''}}">
-              <text class="lbl">📅 {{selectedMonthDisplay || '全部月份'}}</text>
-              <text class="arrow" wx:if="{{!selectedMonthStr}}">▼</text>
-            </view>
-          </picker>
-          <view class="btn-clear-month" wx:if="{{selectedMonthStr}}" catchtap="onClearMonthFilter">✕</view>
-        </view>
-
-        <view
-          class="btn-export-audit"
-          wx:if="{{isManagerOrAdmin || isFinanceOrAdmin}}"
-          bindtap="onExportMonthlyAudit"
-        >
-          <text wx:if="{{!exportingAudit}}">📄 导出{{selectedMonthDisplay || '本月'}}财务审计表</text>
-          <text wx:else>生成中...</text>
-        </view>
       </view>
+
+      <view class="filter-col">
+        <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
+          <view class="filter-col-pill month-pill {{selectedMonthStr ? 'has-value' : ''}}">
+            <text class="filter-col-lbl">📅 {{selectedMonthDisplay || '全部月份'}}</text>
+            <text class="filter-col-arrow" wx:if="{{!selectedMonthStr}}">▾</text>
+            <view class="filter-col-clear" wx:if="{{selectedMonthStr}}" catchtap="onClearMonthFilter">✕</view>
+          </view>
+        </picker>
+      </view>
+    </view>
+
+    <!-- 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，与月份/门店筛选可叠加，
+         纯客户端过滤（见 history.ts applyFilters）。放在固定头部内，
+         measureActualHeaderHeight() 会自动把它的高度并入 totalHeaderHeight，
+         滚动列表的 padding-top 自动跟着让位，不需要额外手算偏移 -->
+    <view class="status-tab-row" wx:if="{{!photoArchiveMode}}">
+      <view class="status-tab {{statusTab === 'all' ? 'active' : ''}}" data-tab="all" bindtap="onSwitchStatusTab">全部</view>
+      <view class="status-tab {{statusTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onSwitchStatusTab">待审核</view>
+      <view class="status-tab {{statusTab === 'approved' ? 'active' : ''}}" data-tab="approved" bindtap="onSwitchStatusTab">已通过</view>
+      <view class="status-tab {{statusTab === 'rejected' ? 'active' : ''}}" data-tab="rejected" bindtap="onSwitchStatusTab">已驳回</view>
     </view>
 
     <!-- 🌟 从首页「风控预警日志」弹窗点击卡片跳转过来时的精准追溯筛选提示 -->
@@ -66,15 +84,73 @@
   <scroll-view scroll-y class="history-scroll-list" style="padding-top: {{totalHeaderHeight}}px;">
 
     <!-- 🛡️ 超管预览模式提示 Banner：仅展示，不影响本页任何权限判断——本页操作始终按
-         真实身份（超级管理员）执行，与个人中心/首页的"视角切换"展示层完全无关 -->
-    <view class="preview-mode-banner" wx:if="{{showPreviewBanner}}">
+         真实身份（超级管理员）执行，与个人中心/首页的"视角切换"展示层完全无关。
+         🆕 个人视角入口（mineEntryMode）强制隐藏：这条 Banner 是管理向的角色预览
+         提示，与"专注展示个人提交记录"的诉求无关，展示出来只会造成困惑 -->
+    <view class="preview-mode-banner" wx:if="{{showPreviewBanner && !mineEntryMode}}">
       <text class="preview-mode-banner-icon">👁️</text>
       <text class="preview-mode-banner-text">{{previewBannerText}}</text>
     </view>
 
+    <!-- 📸 图册模式：照片类型过滤 + 瀑布流网格，账本内容同时隐藏 -->
+    <view class="photo-archive-container" wx:if="{{photoArchiveMode}}">
+
+      <!-- 照片类型过滤标签栏 -->
+      <view class="photo-type-tabs">
+        <view
+          wx:for="{{[{label:'🖼️ 全部照片',value:'all'},{label:'🧾 报销凭证',value:'receipt'},{label:'🍱 每日食谱',value:'menu'},{label:'📸 活动日志',value:'log'}]}}"
+          wx:key="value"
+          class="photo-type-tab {{photoTypeFilter === item.value ? 'active' : ''}}"
+          data-type="{{item.value}}"
+          bindtap="onPhotoTypeTabChange"
+        >{{item.label}}</view>
+      </view>
+
+      <!-- 统计 + 加载状态 -->
+      <view class="photo-archive-meta" wx:if="{{!photoArchiveLoading}}">
+        <text class="photo-archive-count">共 {{photoArchiveTotal}} 张照片</text>
+        <text class="photo-archive-range">{{selectedMonthDisplay ? selectedMonthDisplay : '近 3 个月'}}</text>
+      </view>
+      <view class="photo-archive-loading" wx:if="{{photoArchiveLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <!-- 瀑布流照片网格 -->
+      <view class="photo-waterfall-grid" wx:if="{{!photoArchiveLoading && photoArchiveList.length > 0}}">
+        <view
+          class="photo-grid-item"
+          wx:for="{{photoArchiveList}}"
+          wx:key="url"
+          data-index="{{index}}"
+          bindtap="onPreviewPhotoItem"
+        >
+          <image
+            class="photo-grid-img"
+            src="{{item.url}}"
+            mode="aspectFill"
+            lazy-load="{{true}}"
+          />
+          <view class="photo-grid-tags">
+            <text class="photo-tag-date">{{item.date}}</text>
+            <text class="photo-tag-type {{item.type}}">
+              {{item.type === 'receipt' ? '🧾 凭证' : item.type === 'menu' ? '🍱 食谱' : '📸 日志'}}
+            </text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 空状态 -->
+      <view class="photo-archive-empty" wx:if="{{!photoArchiveLoading && photoArchiveList.length === 0}}">
+        <text class="photo-archive-empty-icon">📷</text>
+        <text class="photo-archive-empty-tip">{{selectedMonthDisplay ? selectedMonthDisplay + '暂无照片' : '近期暂无照片'}}</text>
+        <text class="photo-archive-empty-sub">可通过月份筛选器查看历史期间</text>
+      </view>
+
+    </view>
+
     <!-- 🧾 今日凭证与记账：当日+历史一体化，置顶高亮展示当天已录入的支出与小票，对齐食谱/大事记模块交互
          全国总览/多店汇总视角下无具体单店可挂载今日凭证，整块隐藏，直接展示历史账本列表，提升信息密度 -->
-    <view class="today-ledger-section" wx:if="{{!isAllStoresView}}">
+    <view class="today-ledger-section" wx:if="{{!isAllStoresView && !photoArchiveMode}}">
       <view class="section-divider-label">
         <text class="divider-icon">🔴</text>
         <text class="divider-txt">今日凭证与记账</text>
@@ -105,18 +181,18 @@
         <view class="today-receipt-empty" wx:else>
           <text class="empty-tip">📷 今日暂无小票凭证</text>
         </view>
-
-        <!-- 🌟 合并入口：拍照识别 OCR 与快捷补传凭证合二为一，统一走拍照/选图 -> 自动 OCR 识别填单，
-             OCR 识别失败时该流程本身已有兜底（仅追加凭证图片），无需再保留第二个按钮 -->
-        <view class="today-action-row">
-          <button class="btn-today-action btn-today-upload" bindtap="onTodayOcrScan">📷 快捷上传凭证</button>
-        </view>
+        <!-- 🆕 拍照识别 OCR / 快捷补传凭证入口已收编为全局悬浮按钮（见页面末尾
+             .fab-upload-receipt），不再以强色大按钮的形式挤占卡片内容区 -->
       </view>
 
+      <!-- 🆕 "今日未录入餐报"改为轻量 Alert 提示条（暖黄色，与全站其余轻提示条
+           如 .anomaly-filter-banner 同一套视觉语言），替代此前一整张带虚线边框、
+           内含大按钮的空状态卡片——降低视觉重量，只保留必要信息 + 引导链接 -->
       <view class="today-ledger-empty" wx:else>
         <view class="today-empty-top-row">
+          <text class="alert-icon">💡</text>
           <text class="empty-tip">今日尚未录入餐报</text>
-          <text class="btn-go-fill-today-mini" bindtap="goToHome">去首页录入餐报 ›</text>
+          <text class="btn-go-fill-today-mini" bindtap="goToHome">去录入 ›</text>
         </view>
 
         <view class="staged-receipt-block" wx:if="{{stagedReceiptImages.length > 0}}">
@@ -127,21 +203,15 @@
           </view>
           <text class="staged-tip">📥 已暂存 {{stagedReceiptImages.length}} 张，提交今日餐报时自动带入</text>
         </view>
-
-        <!-- 🌟 合并入口：拍照识别 OCR 与快捷补传凭证合二为一，统一走拍照/选图 -> 自动 OCR 识别填单，
-             OCR 识别失败时该流程本身已有兜底（仅追加凭证图片），无需再保留第二个按钮 -->
-        <view class="today-action-row">
-          <button class="btn-today-action btn-today-upload" bindtap="onTodayOcrScan">📷 快捷上传凭证</button>
-        </view>
       </view>
     </view>
 
-    <view class="section-divider-label history-ledger-divider" wx:if="{{!loading && filteredReports.length > 0}}">
+    <view class="section-divider-label history-ledger-divider" wx:if="{{!photoArchiveMode && !loading && filteredReports.length > 0}}">
       <text class="divider-icon">📚</text>
       <text class="divider-txt">历史账本与凭证</text>
     </view>
 
-    <view class="history-list-box" wx:if="{{!loading && filteredReports.length > 0}}">
+    <view class="history-list-box" wx:if="{{!photoArchiveMode && !loading && filteredReports.length > 0}}">
       <view wx:for="{{filteredReports}}" wx:key="rowKey" class="history-card {{item.isLocked ? 'locked-card state-locked' : ''}} {{item.isVoid ? 'state-voided' : ''}} {{item.approvalStatus === 'AUDITED_LOCKED' ? 'state-locked' : ''}}" data-index="{{index}}" wx:if="{{item.dateString}}">
 
         <!-- 🌟 作废印章 -->
@@ -316,20 +386,36 @@
       </view>
     </view>
 
-    <view class="history-empty-box" wx:if="{{!loading && filteredReports.length === 0}}">
+    <!-- 🆕 空状态附带一键提交入口：筛选条件下没有任何记录时，与其让用户自己
+         去找入口，不如顺手给一个"立即提交/上传凭证"按钮——复用今日凭证卡片
+         同款 onTodayOcrScan（拍照 -> 自动 OCR 识别填单），不新增一套流程 -->
+    <view class="history-empty-box" wx:if="{{!photoArchiveMode && !loading && filteredReports.length === 0}}">
       <text class="empty-icon">🍃</text>
-      <text class="empty-text">该筛选条件下暂无历史餐报记录</text>
+      <text class="empty-text">暂无相关提交记录</text>
+      <view class="btn-empty-upload" hover-class="btn-empty-upload-hover" bindtap="onTodayOcrScan">
+        <text class="icon">📷</text>
+        <text class="lbl">立即提交 / 上传凭证</text>
+      </view>
     </view>
 
-    <view class="loading-state" wx:if="{{loading}}">
+    <view class="loading-state" wx:if="{{loading && !photoArchiveMode}}">
       <text class="loading-text">加载中...</text>
     </view>
 
-    <view class="compliance-disclaimer" wx:if="{{!loading && filteredReports.length > 0}}">
+    <view class="compliance-disclaimer" wx:if="{{!photoArchiveMode && !loading && filteredReports.length > 0}}">
       <text class="compliance-disclaimer-text">本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐；如涉及个人信息，已在前端做脱敏展示处理。</text>
     </view>
     <view class="fa-safe-area-spacer"></view>
   </scroll-view>
+
+  <!-- 🆕 快捷上传凭证 FAB：从今日卡片内嵌的强色大按钮改为悬浮按钮，任何滚动
+       位置都能快速唤起拍照 OCR，不再挤占卡片/列表内容区的视觉焦点。与
+       .fixed-top-header 同样作为 scroll-view 的兄弟节点脱离滚动内容，可见范围
+       与原按钮所在的 today-ledger-section 一致（需要具体单店上下文，全国总览/
+       图册模式下隐藏） -->
+  <view class="fab-upload-receipt" wx:if="{{!isAllStoresView && !photoArchiveMode}}" hover-class="fab-upload-receipt-hover" bindtap="onTodayOcrScan">
+    <text class="fab-upload-icon">📷</text>
+  </view>
 
   <view class="modal-backdrop" wx:if="{{showEditModal}}" bindtap="onCancelEdit">
     <view class="modal-card edit-report-card" catchtap="stopPropagation">

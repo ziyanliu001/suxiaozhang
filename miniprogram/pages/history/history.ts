@@ -89,6 +89,12 @@ Page({
     navBarHeight: 44,
     totalHeaderHeight: 150,
     isAdmin: false,
+    // 🆕 个人视角入口标记：仅当从「我的提交与数据」(?view=mine) 进入时为 true，
+    // 用于收敛页面为"专注展示个人提交记录"——隐藏超管视角切换预览 Banner 与
+    // 门店切换下拉框/门店-我的 切换栏，避免非管理员用户被一堆管理向控件干扰。
+    // 与 viewMode（服务端查询是否按 _openid 收敛）是两个独立维度：viewMode 只
+    // 决定查到谁的数据，mineEntryMode 只决定这些管理向 UI 元素是否展示
+    mineEntryMode: false,
     viewMode: 'all' as 'all' | 'personal',
     storeFilterOptions: ['全部门店'],
     storeFilterIndex: 0,
@@ -101,6 +107,12 @@ Page({
     // 'void'=红字冲销 / 'missing_receipt'=小票缺失 / 'balance'=余额异常（含链路断裂+单日净变动过大）
     anomalyFilterType: '' as '' | 'void' | 'missing_receipt' | 'balance',
     anomalyFilterLabel: '',
+    // 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，纯客户端过滤（与 anomalyFilterType
+    // 同一层级，两者可叠加）。"已驳回"映射到 isVoid===true（红字冲销作废）——
+    // report_logs 的审核流转本身只有 PENDING_APPROVAL/APPROVED/AUDITED_LOCKED
+    // 三态，没有独立的"驳回"状态字段，isVoid 是这份数据模型里唯一"未能通过、
+    // 已被撤销"的语义，是最贴近的既有信号，不新造一个服务端并不产生的状态值
+    statusTab: 'all' as 'all' | 'pending' | 'approved' | 'rejected',
     permissions: {} as PermissionFlags,
     showEditModal: false,
     editingRecord: null as any,
@@ -126,7 +138,19 @@ Page({
     auditExportPeriodLabel: '',
     auditExportText: '',
     auditExportFileURL: '',
-    auditExportFileName: ''
+    auditExportFileName: '',
+
+    // 📸 图册模式：切换至照片归档浏览，隐藏账本内容
+    photoArchiveMode: false,
+    // 照片类型过滤：'all' | 'receipt' | 'menu' | 'log'
+    photoTypeFilter: 'all' as string,
+    photoArchiveList: [] as Array<{ url: string; type: string; date: string; storeName: string }>,
+    photoArchiveLoading: false,
+    photoArchiveTotal: 0,
+    // 页面标题随模式 + orgType 动态切换
+    pageTitle: '🧾 凭证与账本',
+    // 机构类型：从 tenantId 派生（与 index.ts 同款逻辑），驱动图册页面标题文案
+    orgType: '' as string
   },
 
   onLoad(options: any) {
@@ -137,7 +161,11 @@ Page({
     // 用户自己。getReports 云函数早就支持 viewMode==='personal' 时按 _openid 收敛
     // （见该函数 shouldFilterByOpenid 判断），只是客户端这里从未真正传过这个值
     if (options && options.view === 'mine') {
-      this.setData({ viewMode: 'personal' });
+      this.setData({ viewMode: 'personal', mineEntryMode: true });
+    }
+    // 📸 首页图册入口卡跳转：?mode=photo 直接打开图册模式
+    if (options && options.mode === 'photo') {
+      this.setData({ photoArchiveMode: true, pageTitle: '🏡 雨花温情图册与阳光凭证' });
     }
     // 🌟 首页「风控预警日志」弹窗点击卡片"查看账本明细"跳转过来（携带 anomalyType
     // 查询参数）时，进页面即自动按同一类型精准筛选，不需要用户再手动翻找
@@ -152,10 +180,20 @@ Page({
         anomalyFilterLabel: anomalyLabelMap[options.anomalyType]
       });
     }
+    // 🌟 财务个人页「凭证快速复核」入口跳转过来（?statusTab=pending）时，直接
+    // 落在"待审批"筛选 Tab 上，不需要财务再自己点一次筛选——与上面 view=mine/
+    // mode=photo/anomalyType 同一套"带参进页直接命中目标筛选"的入口设计
+    if (options && options.statusTab && ['all', 'pending', 'approved', 'rejected'].includes(options.statusTab)) {
+      this.setData({ statusTab: options.statusTab });
+    }
     this.calculateNavBarHeight();
     this.checkAdminStatus();
     this.initPermissions();
     this.loadReports();
+    // 若从首页图册入口直接进入图册模式，立即加载图片档案
+    if (options && options.mode === 'photo') {
+      this.loadPhotoArchive();
+    }
     this.initShareMenu();
     this.initWatermarkIdentity();
 
@@ -262,8 +300,14 @@ Page({
       isAllStoresView: isAllStores
     });
 
-    // 重新拉取新门店的历史餐报列表
-    this.loadReports();
+    if (this.data.photoArchiveMode) {
+      // 图册模式下切店：重新加载图册
+      this.setData({ photoArchiveList: [], photoArchiveTotal: 0 });
+      this.loadPhotoArchive();
+    } else {
+      // 重新拉取新门店的历史餐报列表
+      this.loadReports();
+    }
   },
 
   // store-picker 组件绑定的事件
@@ -482,6 +526,10 @@ Page({
 
       if (result && result.success && result.roleInfo && result.roleInfo.role) {
         applyRoleFlags(result.roleInfo.role);
+        // 派生 orgType：tenantId 以 'yuhuazhai' 开头视为雨花斋机构，否则 generic
+        const tenantId: string = result.roleInfo.tenantId || '';
+        const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
+        if (orgType !== this.data.orgType) this.setData({ orgType });
       }
     } catch (err: any) {
       console.warn('⚠️ [history] 云端鉴权超时或异常，启动本地缓存兜底:', err.message);
@@ -508,6 +556,15 @@ Page({
     const mode = e.currentTarget.dataset.mode as 'all' | 'personal';
     this.setData({ viewMode: mode });
     this.loadReports();
+  },
+
+  // 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，纯客户端过滤，已加载的
+  // reports 里直接筛，不重新请求云函数
+  onSwitchStatusTab(e: any) {
+    const tab = e.currentTarget.dataset.tab as 'all' | 'pending' | 'approved' | 'rejected';
+    if (tab === this.data.statusTab) return;
+    this.setData({ statusTab: tab });
+    this.applyFilters();
   },
 
   calculateNavBarHeight() {
@@ -1217,13 +1274,22 @@ Page({
   },
 
   applyFilters() {
-    const { reports, selectedStoreName, selectedMonthStr, anomalyFilterType } = this.data;
+    const { reports, selectedStoreName, selectedMonthStr, anomalyFilterType, statusTab } = this.data;
 
     let filtered = [...reports];
 
     // 🌟 Bug 修复：全国总览/全部门店时不按具体门店名过滤
     if (selectedStoreName && selectedStoreName !== '全部门店' && selectedStoreName !== '全国总览') {
       filtered = filtered.filter((item: any) => item.shopName === selectedStoreName);
+    }
+
+    // 🆕 状态筛选 Tab：见 data.statusTab 注释——"已驳回"映射到 isVoid
+    if (statusTab === 'pending') {
+      filtered = filtered.filter((item: any) => !item.isVoid && item.approvalStatus === 'PENDING_APPROVAL');
+    } else if (statusTab === 'approved') {
+      filtered = filtered.filter((item: any) => !item.isVoid && (item.approvalStatus === 'APPROVED' || item.approvalStatus === 'AUDITED_LOCKED'));
+    } else if (statusTab === 'rejected') {
+      filtered = filtered.filter((item: any) => !!item.isVoid);
     }
 
     if (selectedMonthStr) {
@@ -1273,13 +1339,24 @@ Page({
       selectedMonthStr: monthStr,
       selectedMonthDisplay: monthDisplay
     }, () => {
-      this.applyFilters();
+      if (this.data.photoArchiveMode) {
+        // 图册模式下月份变更：重新加载图册
+        this.setData({ photoArchiveList: [], photoArchiveTotal: 0 });
+        this.loadPhotoArchive();
+      } else {
+        this.applyFilters();
+      }
     });
   },
 
   onClearMonthFilter() {
     this.setData({ selectedMonthStr: '', selectedMonthDisplay: '' });
-    this.applyFilters();
+    if (this.data.photoArchiveMode) {
+      this.setData({ photoArchiveList: [], photoArchiveTotal: 0 });
+      this.loadPhotoArchive();
+    } else {
+      this.applyFilters();
+    }
     wx.showToast({ title: '已展示全部月份', icon: 'none' });
   },
 
@@ -2718,6 +2795,88 @@ Page({
       urls: validUrls
     });
   },
+
+  // ─── 图册模式 ────────────────────────────────────────────────────────────────
+
+  // 切换"账本 ⟺ 图册"模式；图册首次进入时自动加载
+  onTogglePhotoArchive() {
+    const next = !this.data.photoArchiveMode;
+    const newTitle = next ? this.computePhotoArchiveTitle() : '🧾 凭证与账本';
+    this.setData({ photoArchiveMode: next, pageTitle: newTitle }, () => {
+      if (next && this.data.photoArchiveList.length === 0) {
+        this.loadPhotoArchive();
+      }
+    });
+  },
+
+  // 派生图册页标题：与 index.ts computePhotoArchiveTitle() 同一套口径——雨花斋 →
+  // 🏡 雨花温情图册与阳光凭证，社区助餐/其余机构 → 🌸 阳光温情图册与凭证。
+  // 🐛 根因修复：orgType 为空时此前用 `|| !this.data.orgType` 兜底当作"雨花斋"，
+  // 与 profile.ts 修过的"严禁在非雨花斋机构展示雨花斋品牌"同一类问题——orgType
+  // 尚未解析出来的窗口期应展示中性文案，不能提前假定是雨花斋
+  computePhotoArchiveTitle(): string {
+    const isYuhuazhai = this.data.orgType === 'yuhuazhai';
+    return isYuhuazhai ? '🏡 雨花温情图册与阳光凭证' : '🌸 阳光温情图册与凭证';
+  },
+
+  // 切换照片类型过滤标签；重新从云端加载
+  onPhotoTypeTabChange(e: any) {
+    const filter = e.currentTarget.dataset.type as string;
+    this.setData({ photoTypeFilter: filter, photoArchiveList: [], photoArchiveTotal: 0 }, () => {
+      this.loadPhotoArchive();
+    });
+  },
+
+  async loadPhotoArchive() {
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '云服务暂不可用', icon: 'none' });
+      return;
+    }
+    this.setData({ photoArchiveLoading: true });
+
+    const { currentStoreId, photoTypeFilter, selectedMonthStr } = this.data;
+    const isAllStores = this.resolveIsAllStoresView(currentStoreId);
+    const queryStoreId = isAllStores ? '' : (currentStoreId || '');
+
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'getPhotoArchive',
+        data: {
+          storeId: queryStoreId,
+          photoType: photoTypeFilter || 'all',
+          month: selectedMonthStr || '',
+          limit: 60
+        }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({
+          photoArchiveList: result.photos || [],
+          photoArchiveTotal: result.total || 0
+        });
+      } else {
+        wx.showToast({ title: '加载图册失败', icon: 'none' });
+      }
+    } catch (err: any) {
+      console.error('[loadPhotoArchive] 异常:', err);
+      wx.showToast({ title: '加载图册失败', icon: 'none' });
+    } finally {
+      this.setData({ photoArchiveLoading: false });
+    }
+  },
+
+  // 预览单张照片（支持当前集合内左右滑动）
+  onPreviewPhotoItem(e: any) {
+    const index = e.currentTarget.dataset.index as number;
+    const list = this.data.photoArchiveList;
+    if (!list || list.length === 0) return;
+    const urls = list.map(p => p.url).filter(u => u && typeof u === 'string');
+    const current = urls[index] || urls[0];
+    if (!current) return;
+    wx.previewImage({ current, urls });
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   goToHome() {
     if (this.isNavigating) return;
