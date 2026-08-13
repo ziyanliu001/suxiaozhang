@@ -41,7 +41,7 @@
       </scroll-view>
 
       <view class="compliance-modal-footer">
-        <button wx:if="{{complianceModalScene !== 'review'}}" class="compliance-confirm-btn" bindtap="onAcknowledgeCompliance">我已阅读并知悉其非官方属性</button>
+        <button wx:if="{{complianceModalScene !== 'review'}}" class="compliance-confirm-btn" bindtap="onAcknowledgeYuhuaDisclaimer">我已阅读并知悉其非官方属性</button>
         <button wx:else class="compliance-confirm-btn compliance-confirm-btn-review" bindtap="onCloseComplianceReview">关闭</button>
       </view>
     </view>
@@ -54,23 +54,19 @@
   <view class="sunshine-modal-mask" wx:if="{{showSunshineLedgerModal}}" bindtap="onCloseSunshineLedgerModal">
     <view class="sunshine-modal-card" catchtap="stopPropagation">
       <view class="sunshine-modal-header">
-        <text class="sunshine-modal-title">{{orgType === 'yuhuazhai' ? '☀️ 阳光账本与雨花理念' : '☀️ 阳光账本与公益宣言'}}</text>
+        <text class="sunshine-modal-title">{{conceptTitle}}</text>
         <view class="sunshine-modal-close" bindtap="onCloseSunshineLedgerModal">✕</view>
       </view>
 
       <scroll-view scroll-y class="sunshine-modal-scroll">
-        <!-- 📖 理念介绍卡片：雨花斋展示雨花精神，其他公益组织展示通用公益宗旨。
+        <!-- 📖 理念介绍卡片：conceptLabel/conceptContent 由 computeConceptCopy 按
+             getSunshineLedger 返回的门店真实 orgType 计算（雨花斋/助老食堂/其他
+             机构三档兜底），不再是 WXML 里硬编码的雨花斋专属文案。
              阳光宣言为所有组织共用，始终展示 -->
         <view class="sunshine-intro-card">
-          <!-- 🌸 雨花斋专属：雨花精神理念 -->
-          <view class="sunshine-intro-block" wx:if="{{orgType === 'yuhuazhai'}}">
-            <text class="sunshine-intro-label">雨花精神</text>
-            <text class="sunshine-intro-text">雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与公益互助。</text>
-          </view>
-          <!-- 🤝 通用公益组织：公益宗旨 -->
-          <view class="sunshine-intro-block" wx:else>
-            <text class="sunshine-intro-label">公益宗旨</text>
-            <text class="sunshine-intro-text">老有所养，爱心同行。{{sunshineLedgerData.storeName || currentStoreName || '本站点'}}坚持以公益之心服务社区，守护每一位需要关爱的长者。</text>
+          <view class="sunshine-intro-block">
+            <text class="sunshine-intro-label">{{conceptLabel}}</text>
+            <text class="sunshine-intro-text">{{conceptContent}}</text>
           </view>
           <!-- ☀️ 通用阳光宣言：所有组织均展示 -->
           <view class="sunshine-intro-block">
@@ -122,6 +118,10 @@
     </view>
   </view>
 
+  <!-- 🏢 平台/工作台内容：只有已选定 currentPlatformMode（雨花或通用）才渲染，
+       未选定时（冷启动默认态）走下面 wx:else 的工作空间选择首页。选定后的内容
+       完全是原有首页逻辑，未做任何删改——只是包了一层可见性开关 -->
+  <block wx:if="{{currentPlatformMode}}">
   <view class="app-header-section" style="padding-top: {{headerSafeTop}}px;">
     <view class="main-title-header-box">
       <view class="hamburger-menu-btn" bindtap="onOpenSideDrawer" hover-class="capsule-hover">
@@ -166,9 +166,20 @@
     <view class="sunshine-ledger-arrow">❯</view>
   </view>
 
-  <!-- 🌟 视角切换预览提示条：仅超级管理员在非全景视角下可见，避免误以为真的丢失了管理权限 -->
+  <!-- 🌸 阳善公开滚动墙：紧跟阳光账本入口，展示本店最新已公示（阳善/非匿名）
+       随喜支持——全角色可见（含家人，不受上面 !isFamily 限制），数据源
+       getSunshineLedger 无权限门槛，只按 storeId 严格收窄到本店 -->
+  <yangshan-wall storeId="{{currentStoreId}}" />
+
+  <!-- 🌟 视角切换预览提示条：仅超级管理员在非全景视角下可见，避免误以为真的丢失了管理权限。
+       🐛 根因修复：原先是 currentViewMode === 'STORE_MANAGER' ? '店长视角' : '财务视角'
+       这个只覆盖 2 种取值的三元表达式——PreviewViewMode 实际有 6 种取值
+       （SUPER_ADMIN/STORE_PATRIARCH/STORE_MANAGER/FINANCE/VOLUNTEER/FAMILY），
+       只要不是 STORE_MANAGER，不管真实是大家长/义工/家人视角，一律被误判显示成
+       "财务视角"。改为 TS 侧用 PREVIEW_VIEW_MODE_LABELS 这个完整映射表算好的
+       currentViewModeLabel，WXML 只做纯变量输出，不再写容易漏分支的三元表达式 -->
   <view class="preview-mode-banner" wx:if="{{isRealSuperAdmin && currentViewMode !== 'SUPER_ADMIN'}}" bindtap="onNavigateToProfile">
-    <text class="preview-mode-text">👁️ 正在预览【{{currentViewMode === 'STORE_MANAGER' ? '店长视角' : '财务视角'}}】，实际操作仍以超级管理员权限执行</text>
+    <text class="preview-mode-text">👁️ 正在预览【{{currentViewModeLabel}}】，实际操作仍以超级管理员权限执行</text>
     <text class="preview-mode-link">去切回 ›</text>
   </view>
 
@@ -304,26 +315,44 @@
   </view>
 
   <!-- 📢 门店公告：按当前视角（总览级/具体门店，严格互斥）从云端拉取的通知列表。
-       多条时垂直轮播；单条超长标题用水平跑马灯；没有任何有效通知时整块不占位。 -->
+       单行垂直无缝轮播（swiper vertical + autoplay + circular），每条标题超长时
+       用 ellipsis 省略号截断而不是横向跑马灯滚动——marquee 曾是为了不截断长文案
+       特意做的双份文本+translateX 方案，但其代价是文字持续移动、必须靠肉眼追着看，
+       现在整条本就 bindtap 可打开详情弹窗看全文，ellipsis 更安静、也彻底杜绝了
+       长文案把胶囊撑破/溢出的排版问题。没有任何有效通知时整块不占位。 -->
   <view class="announce-bar {{isNoticeBarClosing ? 'announce-bar-closing' : ''}}" wx:if="{{noticeList.length > 0 && !isNoticeBarHiddenToday}}">
-    <text class="announce-bar-icon">📢</text>
+    <view class="announce-bar-tab">
+      <text class="announce-bar-icon">📢</text>
+      <text class="announce-bar-tab-label">公告</text>
+    </view>
+    <view class="announce-bar-divider"></view>
 
-    <swiper class="announce-bar-swiper" vertical autoplay circular interval="4000" duration="500" bindchange="onSwiperNoticeChange">
+    <swiper class="announce-bar-swiper" vertical autoplay circular interval="3000" duration="500" bindchange="onSwiperNoticeChange">
       <swiper-item wx:for="{{noticeList}}" wx:key="id">
         <view class="announce-bar-viewport" bindtap="openAnnouncement">
-          <text class="announce-bar-text">{{item.title}}</text>
+          <text class="announce-bar-text">{{item.typeIcon}} {{item.title}}</text>
         </view>
       </swiper-item>
     </swiper>
 
-    <text class="announce-bar-edit" wx:if="{{(isManager || isFinance || isSuperAdmin) && noticeList.length > 0}}" catchtap="openNoticeEdit">✏️</text>
-    <text class="announce-bar-add" wx:if="{{isManager || isFinance || isSuperAdmin}}" catchtap="openNoticeCreate">＋</text>
+    <!-- 🌟 右侧操作入口精简为唯一一个：原先"✏️ 编辑当前条 + ＋ 新建"两个图标紧挨在
+         40rpx 高的窄行里，视觉拥挤。"编辑当前条"其实是冗余入口——点通知本身已能
+         打开详情弹窗，弹窗底部本就有"修改"按钮（见 announcement-modal-footer），
+         两步可达，不丢功能。右侧只保留发布权限方唯一需要、且详情弹窗替代不了的
+         "＋ 新建通知"入口 -->
+    <view class="announce-bar-add" wx:if="{{isManager || isFinance || isSuperAdmin}}" catchtap="openNoticeCreate">
+      <text class="announce-bar-add-icon">＋</text>
+    </view>
   </view>
 
-  <!-- 🌟 兜底温馨提示：云端确认当前视角暂无有效通知时展示，避免跑马灯整块消失留白；
+  <!-- 🌟 兜底温馨提示：云端确认当前视角暂无有效通知时展示，避免整块消失留白；
        noticesLoading 期间不展示，防止请求还没返回就先闪一下"暂无通知" -->
   <view class="announce-bar announce-bar-fallback {{isNoticeBarClosing ? 'announce-bar-closing' : ''}}" wx:if="{{noticeList.length === 0 && !noticesLoading && !isNoticeBarHiddenToday}}">
-    <text class="announce-bar-icon">📢</text>
+    <view class="announce-bar-tab">
+      <text class="announce-bar-icon">📢</text>
+      <text class="announce-bar-tab-label">公告</text>
+    </view>
+    <view class="announce-bar-divider"></view>
     <view class="announce-bar-viewport">
       <text class="announce-bar-text">欢迎使用素小账，今日公益服务正常进行中</text>
     </view>
@@ -901,73 +930,85 @@
           </view>
         </view>
 
-        <!-- 🛡️ 6 宫格布局保险：真机上出现过单列拉通崩溃（疑似构建缓存导致 class 样式未生效），
-             这里在关键容器上叠加行内 style + !important 兜底，双保险不依赖 WXSS 是否命中 -->
-        <!-- 🛡️ 3×3 宫格布局：7 格输入 + 2 透明占位，保证第三行不因单孤格而视觉失衡 -->
-        <view class="stats-grid-container" style="display: flex !important; flex-direction: column !important; gap: 16rpx !important; width: 100% !important; margin: 16rpx 0 24rpx !important;">
-          <!-- 第一行：用餐 3 宫格 -->
+        <!-- 🛡️ 2×4 对称宫格：3 行双列宫格 + 1 行全宽工时横条，消除孤格视觉失衡
+             真机布局保险：关键容器叠加行内 style + !important，不依赖 WXSS 命中 -->
+        <view class="stats-grid-container" style="display: flex !important; flex-direction: column !important; gap: 12rpx !important; width: 100% !important; margin: 16rpx 0 24rpx !important;">
+          <!-- 第一行：堂食/用餐 | 送餐/外送（标签由 storeTargetLabels 动态配置） -->
           <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFDF7 !important; border: 1rpx solid #F5E6CD !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #7A6343 !important; white-space: nowrap !important;">堂食长者</text>
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.dineInLabel}}</text>
               <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{dineInSeniors}}" placeholder="0" bindinput="onInput" data-field="dineInSeniors" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                <input class="stats-input" type="number" value="{{dineInSeniors}}" placeholder="0" bindinput="onInput" data-field="dineInSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                 <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
               </view>
             </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFDF7 !important; border: 1rpx solid #F5E6CD !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #7A6343 !important; white-space: nowrap !important;">送餐长者</text>
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.deliveryLabel}}</text>
               <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{deliverySeniors}}" placeholder="0" bindinput="onInput" data-field="deliverySeniors" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                <input class="stats-input" type="number" value="{{deliverySeniors}}" placeholder="0" bindinput="onInput" data-field="deliverySeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                 <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
               </view>
             </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFDF7 !important; border: 1rpx solid #F5E6CD !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #7A6343 !important; white-space: nowrap !important;">打包份数</text>
+          </view>
+
+          <!-- 第二行：打包/物资 | 到岗志愿者 -->
+          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.takeoutLabel}}</text>
               <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{takeawayCount}}" placeholder="0" bindinput="onInput" data-field="takeawayCount" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                <input class="stats-input" type="number" value="{{takeawayCount}}" placeholder="0" bindinput="onInput" data-field="takeawayCount" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                 <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">份</text>
               </view>
             </view>
-          </view>
-
-          <!-- 第二行：志愿者 3 宫格 -->
-          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFDF7 !important; border: 1rpx solid #F5E6CD !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #7A6343 !important; white-space: nowrap !important;">到岗志愿者</text>
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">到岗志愿者</text>
               <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{dineInVolunteers}}" placeholder="0" bindinput="onInput" data-field="dineInVolunteers" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                <input class="stats-input" type="number" value="{{dineInVolunteers}}" placeholder="0" bindinput="onInput" data-field="dineInVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                 <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
-              </view>
-            </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFDF7 !important; border: 1rpx solid #F5E6CD !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #7A6343 !important; white-space: nowrap !important;">送餐志愿者</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{deliveryVolunteers}}" placeholder="0" bindinput="onInput" data-field="deliveryVolunteers" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
-              </view>
-            </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFDF7 !important; border: 1rpx solid #F5E6CD !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #7A6343 !important; white-space: nowrap !important;">服务总工时</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="digit" value="{{volunteerHours}}" placeholder="0" bindinput="onInput" data-field="volunteerHours" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">小时</text>
               </view>
             </view>
           </view>
 
-          <!-- 第三行：🎧 倾听陪伴（绿色主题宫格，独立关怀指标）+ 2 透明占位格保持三列对齐 -->
+          <!-- 第三行：送餐志愿者 | 🎧 倾听陪伴（绿色主题） -->
           <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <view class="stats-card-item" style="flex: 1 !important; background: #F0FDF4 !important; border: 1rpx solid #BBF7D0 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 20rpx !important; color: #15803D !important; white-space: nowrap !important;">🎧 倾听陪伴</text>
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">送餐志愿者</text>
               <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{listeningSeniors}}" placeholder="0" bindinput="onInput" data-field="listeningSeniors" style="width: 60rpx !important; height: 44rpx !important; text-align: center !important; font-size: 28rpx !important; font-weight: bold !important; color: #15803D !important;" />
+                <input class="stats-input" type="number" value="{{deliveryVolunteers}}" placeholder="0" bindinput="onInput" data-field="deliveryVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+              </view>
+            </view>
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #BBF7D0 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #15803D !important; white-space: nowrap !important;">🎧 {{storeTargetLabels.listenLabel}}</text>
+              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                <input class="stats-input" type="number" value="{{listeningSeniors}}" placeholder="0" bindinput="onInput" data-field="listeningSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #15803D !important;" />
                 <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
               </view>
-              <text style="font-size: 18rpx !important; color: #86EFAC !important; white-space: nowrap !important;">陪伴/沟通</text>
+              <text style="font-size: 18rpx !important; color: #475569 !important; white-space: nowrap !important;">陪伴/关怀</text>
             </view>
-            <!-- 透明占位格：撑满三列，不渲染任何视觉内容 -->
-            <view style="flex: 1 !important; visibility: hidden !important;"></view>
-            <view style="flex: 1 !important; visibility: hidden !important;"></view>
+          </view>
+
+          <!-- 第四行：⏱️ 服务总工时（可输入）| 🤝 志愿者总人次（自动汇总） -->
+          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
+            <!-- 服务总工时：手动可调，支持打卡数据自动联动 -->
+            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">⏱️ 服务工时</text>
+              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                <input class="stats-input" type="digit" value="{{volunteerHours}}" placeholder="0" bindinput="onInput" data-field="volunteerHours" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">小时</text>
+              </view>
+              <!-- 🔗 打卡工时联动提示（云端汇总时显示） -->
+              <text wx:if="{{checkInHoursTip}}" style="font-size: 18rpx !important; color: #059669 !important; text-align: center !important; line-height: 1.4 !important; padding: 0 6rpx !important;">{{checkInHoursTip}}</text>
+            </view>
+            <!-- 志愿者总人次：只读展示，由到岗+送餐志愿者自动汇总 -->
+            <view class="stats-card-item" style="flex: 1 !important; background: #F8F9FA !important; border: 1rpx solid #E9ECEF !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+              <text class="stats-item-label" style="font-size: 22rpx !important; color: #6B7280 !important; white-space: nowrap !important;">🤝 总人次</text>
+              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                <text style="font-size: 32rpx !important; font-weight: bold !important; color: #374151 !important; min-width: 72rpx !important; text-align: center !important; line-height: 48rpx !important;">{{totalVolunteers}}</text>
+                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
+              </view>
+              <text style="font-size: 18rpx !important; color: #94A3B8 !important; white-space: nowrap !important;">自动汇总</text>
+            </view>
           </view>
         </view>
 
@@ -1001,15 +1042,24 @@
          "今日餐况"卡片/报告文案/海报继续读同一套字段，无需改动 -->
 
     <!-- ⬇️ 折叠触发器：默认收起支出/凭证/照片/日志等次要录入项，首屏聚焦核心字段 -->
-    <view class="form-accordion-toggle {{showFormExtra ? 'form-accordion-toggle--open' : ''}}" bindtap="onToggleFormExtra">
-      <text class="accordion-icon">{{showFormExtra ? '📂' : '📁'}}</text>
-      <view class="accordion-body">
-        <text class="accordion-label">{{showFormExtra ? '收起次要录入项' : '展开更多录入项'}}</text>
-        <text class="accordion-sub">支出 · 凭证 · 照片 · 日志</text>
+    <view bindtap="onToggleFormExtra"
+          style="display:flex !important; flex-direction:row !important; align-items:center !important; justify-content:space-between !important; margin:24rpx 28rpx 32rpx !important; padding:24rpx 32rpx !important; background:{{showFormExtra ? '#f1f5f9' : '#f8fafc'}} !important; border:1rpx solid {{showFormExtra ? '#cbd5e1' : '#e2e8f0'}} !important; border-radius:20rpx !important; box-shadow:0 2rpx 6rpx rgba(0,0,0,0.03) !important; box-sizing:border-box !important;">
+
+      <!-- 左侧：图标 + 文字纵向列 -->
+      <view style="display:flex !important; flex-direction:row !important; align-items:center !important; gap:16rpx !important; flex:1 !important;">
+        <text style="font-size:32rpx !important; flex-shrink:0 !important; line-height:1 !important;">{{showFormExtra ? '📂' : '📁'}}</text>
+        <view style="display:flex !important; flex-direction:column !important; gap:4rpx !important;">
+          <text style="font-size:28rpx !important; font-weight:600 !important; color:#334155 !important; line-height:1.3 !important;">{{showFormExtra ? '收起次要录入项' : '展开更多录入项'}}</text>
+          <text wx:if="{{!showFormExtra}}" style="font-size:21rpx !important; color:#94a3b8 !important; line-height:1.3 !important;">支出 · 凭证 · 照片 · 日志</text>
+        </view>
       </view>
-      <view class="accordion-right">
-        <view wx:if="{{!showFormExtra && (dailyExpenseText || fixedExpenseItems.length > 0 || recipeImages.length > 0 || activityImages.length > 0 || activityText)}}" class="accordion-badge">已录入</view>
-        <text class="accordion-arrow">{{showFormExtra ? '∧' : '∨'}}</text>
+
+      <!-- 右侧：已录入徽章 + 旋转箭头（CSS 类负责 transition） -->
+      <view style="display:flex !important; flex-direction:row !important; align-items:center !important; gap:10rpx !important; flex-shrink:0 !important;">
+        <view wx:if="{{!showFormExtra && (dailyExpenseText || fixedExpenseItems.length > 0 || recipeImages.length > 0 || activityImages.length > 0 || activityText)}}"
+              style="font-size:20rpx !important; color:#EA580C !important; background:#FFF7ED !important; border:1rpx solid #FDBA74 !important; border-radius:20rpx !important; padding:2rpx 10rpx !important; line-height:1.4 !important; font-weight:500 !important;">已录入</view>
+        <text class="collapse-trigger-arrow {{showFormExtra ? 'expanded' : ''}}"
+              style="font-size:24rpx !important; color:#94a3b8 !important; font-weight:700 !important; line-height:1 !important; display:inline-block !important;">∨</text>
       </view>
     </view>
 
@@ -1380,34 +1430,43 @@
        • 已绑定门店的家人：透明监督版首页（阳光账本 / 今日菜谱 / 护持剪影） -->
   <block wx:elif="{{isFamily}}">
 
-    <!-- ======= 新用户零门槛引导卡 ======= -->
-    <view class="nug-wrapper" wx:if="{{showNewUserGuide}}">
-      <view class="nug-card">
-        <text class="nug-emoji">🌱</text>
-        <text class="nug-title">欢迎加入素小账</text>
-        <text class="nug-desc">您目前还未关联任何爱心站点。选择一种方式快速起步：</text>
+    <!-- ======= 新用户零门槛引导卡（inline 样式保证渲染，不依赖 WXSS 类） ======= -->
+    <view wx:if="{{showNewUserGuide}}" style="display:block !important; margin: 32rpx 24rpx 120rpx; padding: 48rpx 36rpx 40rpx; background: #ffffff; border-radius: 28rpx; box-shadow: 0 10rpx 30rpx rgba(0,0,0,0.06); border: 1rpx solid #e2e8f0; box-sizing: border-box;">
 
-        <view class="nug-btn nug-btn-primary" bindtap="onNewUserGoCreate">
-          <text class="nug-btn-icon">🏠</text>
-          <view class="nug-btn-text">
-            <text class="nug-btn-main">创建我的爱心站点</text>
-            <text class="nug-btn-sub">成为大家长，管理您的公益组织</text>
+      <!-- 顶部图标 + 标题 -->
+      <view style="text-align: center; margin-bottom: 24rpx;">
+        <text style="font-size: 72rpx; line-height: 1;">🌱</text>
+      </view>
+      <view style="font-size: 36rpx; font-weight: 700; color: #1e293b; text-align: center; margin-bottom: 16rpx;">欢迎加入素小账</view>
+      <view style="font-size: 26rpx; color: #64748b; text-align: center; line-height: 1.6; margin-bottom: 40rpx; padding: 0 8rpx;">您目前尚未关联任何爱心站点，请选择一种方式快速起步：</view>
+
+      <!-- 主按钮：创建站点 -->
+      <view bindtap="onNewUserGoCreate" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important; border-radius: 20rpx !important; padding: 28rpx 32rpx !important; margin-bottom: 20rpx !important; box-shadow: 0 6rpx 16rpx rgba(37,99,235,0.25) !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important;">
+        <view style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 16rpx !important;">
+          <text style="font-size: 40rpx; line-height: 1;">🏠</text>
+          <view>
+            <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #ffffff !important; line-height: 1.3 !important;">创建我的爱心站点</view>
+            <view style="font-size: 22rpx !important; color: rgba(255,255,255,0.75) !important; margin-top: 6rpx !important;">成为大家长，管理您的公益组织</view>
           </view>
-          <text class="nug-btn-arrow">›</text>
         </view>
+        <text style="font-size: 32rpx; color: rgba(255,255,255,0.8); font-weight: 300;">›</text>
+      </view>
 
-        <view class="nug-btn nug-btn-secondary" bindtap="onNewUserGoJoin">
-          <text class="nug-btn-icon">🔑</text>
-          <view class="nug-btn-text">
-            <text class="nug-btn-main nug-btn-main--dark">通过邀请码加入</text>
-            <text class="nug-btn-sub">已收到大家长的邀请码</text>
+      <!-- 次按钮：邀请码加入 -->
+      <view bindtap="onNewUserGoJoin" style="background: #f8fafc !important; border: 1rpx solid #cbd5e1 !important; border-radius: 20rpx !important; padding: 26rpx 32rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important;">
+        <view style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 16rpx !important;">
+          <text style="font-size: 40rpx; line-height: 1;">🔑</text>
+          <view>
+            <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #334155 !important; line-height: 1.3 !important;">通过邀请码加入</view>
+            <view style="font-size: 22rpx !important; color: #94a3b8 !important; margin-top: 6rpx !important;">已收到大家长的邀请码</view>
           </view>
-          <text class="nug-btn-arrow">›</text>
         </view>
+        <text style="font-size: 32rpx; color: #94a3b8; font-weight: 300;">›</text>
+      </view>
 
-        <view class="nug-footer">
-          <text class="nug-footer-text">支持公益食堂、义工站、救援队等各类公益组织接入</text>
-        </view>
+      <!-- 底部说明 -->
+      <view style="text-align: center; font-size: 22rpx; color: #94a3b8; margin-top: 36rpx; line-height: 1.6; padding: 0 8rpx;">
+        支持公益食堂、社区义工站、救援队等各类公益组织无缝接入
       </view>
     </view>
 
@@ -1538,7 +1597,7 @@
         <view class="poster-switching-mask" wx:if="{{isSwitchingPosterType}}">
           <text>生成中...</text>
         </view>
-        <image class="poster-image" src="{{posterImage}}" mode="widthFix" />
+        <image wx:if="{{posterImage}}" class="poster-image" src="{{posterImage}}" mode="widthFix" binderror="onPosterImageLoadError" />
       </view>
       <view class="modal-footer">
         <button class="btn-close" bindtap="closePoster">关闭</button>
@@ -1808,9 +1867,13 @@
         <block wx:for="{{ocrReceiptList}}" wx:key="index">
           <view class="ocr-receipt-block {{item.showWarning ? 'has-warning' : ''}}">
             <!-- 🌟 图文同屏对比：上方小票原图（点击放大），下方识别金额与明细，一屏内完成核对 -->
-            <view class="ocr-receipt-image-wrap" wx:if="{{item.fileID}}" bindtap="onPreviewOcrReceiptImage" data-url="{{item.fileID}}">
-              <image class="ocr-receipt-image" src="{{item.fileID}}" mode="widthFix" lazy-load="{{true}}" />
+            <view class="ocr-receipt-image-wrap" wx:if="{{item.fileID && !imageLoadFailedMap[item.fileID]}}" bindtap="onPreviewOcrReceiptImage" data-url="{{item.fileID}}">
+              <image class="ocr-receipt-image" src="{{item.fileID}}" mode="widthFix" lazy-load="{{true}}" binderror="onImageLoadError" data-url="{{item.fileID}}" />
               <text class="ocr-receipt-image-hint">点击查看原图</text>
+            </view>
+            <view class="ocr-receipt-image-wrap" wx:elif="{{item.fileID}}" bindtap="onRetryImage" data-url="{{item.fileID}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="ocr-receipt-image-hint">原图加载失败，点击重试</text>
             </view>
 
             <view class="ocr-receipt-title">
@@ -1906,8 +1969,8 @@
   <view class="announcement-modal" wx:if="{{showAnnouncementModal}}" bindtap="closeAnnouncement">
     <view class="announcement-mask"></view>
     <view class="announcement-modal-content" catchtap="stopPropagation">
-      <view class="announcement-modal-header">
-        <view class="announcement-modal-tag"><view class="idx-icon-sm idx-icon-megaphone" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>【{{announcement.tag || '通报'}}】</view>
+      <view class="announcement-modal-header {{announcement.modalThemeClass || 'type-general'}}">
+        <view class="announcement-modal-tag">{{announcement.modalHeaderTitle || '📌【门店公告】'}}</view>
         <view class="announcement-modal-close" bindtap="closeAnnouncement">
           <text class="close-icon">×</text>
         </view>
@@ -1919,8 +1982,12 @@
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
       <view class="announcement-modal-footer">
-        <button class="announcement-modal-btn edit-btn" bindtap="openNoticeEdit"><view class="idx-icon-sm idx-icon-edit" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>修改</button>
-        <button class="announcement-modal-btn copy-btn" bindtap="copyAnnouncement"><view class="idx-icon-sm idx-icon-clipboard" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>复制全文</button>
+        <button class="announcement-modal-btn edit-btn" wx:if="{{isManager || isPatriarch || isSuperAdmin || isFinance}}" bindtap="openNoticeEdit"><view class="idx-icon-sm idx-icon-edit" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>修改</button>
+        <button class="announcement-modal-btn copy-btn" bindtap="copyAnnouncement">
+          <view class="idx-icon-sm idx-icon-clipboard" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
+          <block wx:if="{{announcement.noticeType === 'urgent'}}">📋 复制呼吁文案</block>
+          <block wx:else>复制全文</block>
+        </button>
         <button class="announcement-modal-btn close-btn" bindtap="closeAnnouncement">关闭</button>
       </view>
     </view>
@@ -1937,91 +2004,94 @@
       </view>
 
       <scroll-view scroll-y class="notice-edit-body">
+        <!-- 常用场景一键套用：固定 7 条内置文案，改为规整的 3 列网格 + 标签式
+             小圆角卡片，套用前若标题/正文已有内容会先弹二次确认（见 onApplyPreset） -->
         <view class="notice-edit-section">
-          <view class="notice-edit-label"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>常用场景一键套用（自动填入标题与正文）</view>
-          <view class="preset-tags">
+          <view class="notice-edit-label">常用场景一键套用</view>
+          <text class="notice-edit-label-sub">自动填入标题与正文，会替换当前已填写内容</text>
+          <view class="preset-grid">
             <view class="preset-tag" bindtap="onApplyPreset" data-key="opening">
-              <view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>试营业喜讯
+              <view class="idx-icon-sm idx-icon-sparkle"></view>
+              <text>试营业喜讯</text>
             </view>
             <view class="preset-tag warning" bindtap="onApplyPreset" data-key="weather_closure">
-              <view class="idx-icon-sm idx-icon-warning" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>天气暂休
+              <view class="idx-icon-sm idx-icon-warning"></view>
+              <text>天气暂休</text>
             </view>
             <view class="preset-tag" bindtap="onApplyPreset" data-key="renovation_closure">
-              <view class="idx-icon-sm idx-icon-settings" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>整修暂休
+              <view class="idx-icon-sm idx-icon-settings"></view>
+              <text>整修暂休</text>
             </view>
             <view class="preset-tag" bindtap="onApplyPreset" data-key="volunteer">
-              <view class="idx-icon-sm idx-icon-heart" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>义工招募
+              <view class="idx-icon-sm idx-icon-heart"></view>
+              <text>义工招募</text>
             </view>
             <view class="preset-tag" bindtap="onApplyPreset" data-key="supplies">
-              <view class="idx-icon-sm idx-icon-box" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>物资告急呼吁
+              <view class="idx-icon-sm idx-icon-box"></view>
+              <text>物资告急呼吁</text>
             </view>
             <view class="preset-tag" bindtap="onApplyPreset" data-key="festival">
-              <view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>节日活动
+              <view class="idx-icon-sm idx-icon-flower"></view>
+              <text>节日活动</text>
             </view>
             <view class="preset-tag" bindtap="onApplyPreset" data-key="thanks">
-              <view class="idx-icon-sm idx-icon-handshake" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>专项致谢
+              <view class="idx-icon-sm idx-icon-handshake"></view>
+              <text>专项致谢</text>
             </view>
           </view>
         </view>
 
         <!-- 🌟 公告模板库：与上面固定的 7 条内置文案不同，这里是云端拉取的
-             全域公共模板 + 本店私有模板，用【公共】/【本店】标签区分来源 -->
+             全域公共模板 + 本店私有模板，用【公共】/【本店】标签区分来源。
+             条数不固定、标题长短不一，改用横向滚动标签栏比固定列网格更合适——
+             不会因为某一条标题特别长而把整组网格撑乱。套用同样先走二次确认。 -->
         <view class="notice-edit-section" wx:if="{{noticeTemplates.length > 0}}">
-          <view class="notice-edit-label"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>我的模板库（点击套用）</view>
-          <view class="preset-tags">
+          <view class="notice-edit-label">我的模板库</view>
+          <text class="notice-edit-label-sub">点击套用，会替换当前已填写内容</text>
+          <scroll-view scroll-x class="preset-scroll-row" enable-flex>
             <view class="preset-tag template-tag" wx:for="{{noticeTemplates}}" wx:key="_id" bindtap="onApplyCloudTemplate" data-id="{{item._id}}">
               <text class="template-badge {{item.isSystem ? 'badge-system' : 'badge-store'}}">{{item.isSystem ? '公共' : '本店'}}</text>
               <text>{{item.title}}</text>
             </view>
-          </view>
+          </scroll-view>
         </view>
 
         <view class="notice-edit-section">
-          <text class="notice-edit-label">通报标题</text>
-          <input 
-            class="notice-edit-input" 
-            placeholder="请输入通报标题" 
-            value="{{noticeEditTitle}}" 
-            bindinput="onNoticeTitleInput" 
+          <text class="notice-edit-label">✍️ 标题</text>
+          <input
+            class="notice-edit-input"
+            placeholder="请输入通报标题"
+            value="{{noticeEditTitle}}"
+            bindinput="onNoticeTitleInput"
           />
         </view>
 
         <view class="notice-edit-section">
-          <view class="field-title-left-row">
-            <text class="field-title-text">通报正文</text>
-            <view class="clear-btn-inline" bindtap="clearNoticeContent" wx:if="{{noticeEditContent}}">
-              <view class="clear-btn-text"><view class="idx-icon-sm idx-icon-trash" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>清空正文</view>
-            </view>
-          </view>
+          <text class="notice-edit-label">📝 正文</text>
           <view class="textarea-box-container">
-            <textarea 
-              class="notice-edit-textarea" 
-              placeholder="请输入通报正文内容..." 
-              value="{{noticeEditContent}}" 
+            <textarea
+              class="notice-edit-textarea"
+              placeholder="请输入通报正文内容..."
+              value="{{noticeEditContent}}"
               bindinput="onNoticeContentInput"
               auto-height
               maxlength="500"
             />
-            <text class="char-count-tag">{{noticeEditContent.length || 0}}/500</text>
+            <view class="textarea-toolbar">
+              <view class="clear-btn-inline" bindtap="clearNoticeContent" wx:if="{{noticeEditContent}}">
+                <view class="idx-icon-sm idx-icon-trash"></view>
+                <text>清空</text>
+              </view>
+              <view class="textarea-toolbar-spacer" wx:else></view>
+              <text class="char-count-tag">{{noticeEditContent.length || 0}}/500</text>
+            </view>
           </view>
-        </view>
-
-        <view class="merge-option-bar">
-          <view class="merge-info">
-            <view class="merge-title"><view class="idx-icon-sm idx-icon-link" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>合并到每日汇报文本</view>
-            <text class="merge-desc">开启后，点击【生成文本】将自动在日报开头附带此通报</text>
-          </view>
-          <switch
-            checked="{{mergeToReportText}}"
-            bindchange="onToggleMergeToReport"
-            color="#FF922B"
-          />
         </view>
 
         <!-- 🌟 仅超级管理员可见：勾选后"存为模板"会把这条模板设为全域公共，
              本机构任意门店都能在自己的编辑弹窗里看到并套用；不勾选则只存为
              当前门店的私有模板。店长/财务看不到这个开关，存的永远是本店模板 -->
-        <view class="merge-option-bar" wx:if="{{isSuperAdmin}}">
+        <view class="notice-edit-section merge-option-bar" wx:if="{{isSuperAdmin}}">
           <view class="merge-info">
             <view class="merge-title"><view class="idx-icon-sm idx-icon-sparkle" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>设为全域公共模板</view>
             <text class="merge-desc">开启后"存为模板"将对本机构所有门店可见和可用</text>
@@ -2032,13 +2102,28 @@
             color="#FF922B"
           />
         </view>
-        <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
+      <!-- 🆕 底部固定操作卡片：原先「合并到每日汇报」开关条在可滚动区域里、
+           保存/发布按钮在下方另一个条形区域，两者分离容易被滚动隐藏、也不成
+           一个整体。现在合并进同一张带阴影的白色卡片，始终固定在弹窗底部，
+           操作顺序（开关 → 存模板/发布）也更符合从上到下的阅读习惯 -->
       <view class="notice-edit-footer">
-        <button class="notice-edit-btn cancel-btn" bindtap="closeNoticeEdit">取消</button>
-        <button class="notice-edit-btn template-btn" bindtap="onSaveAsTemplate">存为模板</button>
-        <button class="notice-edit-btn save-btn" bindtap="onSaveNotice">保存并应用</button>
+        <view class="footer-merge-row">
+          <view class="merge-info">
+            <view class="merge-title"><view class="idx-icon-sm idx-icon-link" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>合并到每日汇报文本</view>
+            <text class="merge-desc">开启后，点击【生成文本】将自动在日报开头附带此通报</text>
+          </view>
+          <switch
+            checked="{{mergeToReportText}}"
+            bindchange="onToggleMergeToReport"
+            color="#FF922B"
+          />
+        </view>
+        <view class="footer-btn-row">
+          <button class="notice-edit-btn template-btn" bindtap="onSaveAsTemplate">存为模板</button>
+          <button class="notice-edit-btn save-btn" bindtap="onSaveNotice">立即发布</button>
+        </view>
       </view>
     </view>
   </view>
@@ -2106,7 +2191,9 @@
       <scroll-view scroll-y class="apply-modal-body" style="max-height: 50vh;">
 
         <view class="form-item">
-          <text class="form-label">门店</text>
+          <!-- 标签随模式切换：新建门店时显示必填红星 -->
+          <text class="form-label" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text class="form-required">*</text> 新门店名称</text>
+          <text class="form-label" wx:else>门店</text>
           <view class="store-mode-tabs">
             <view class="store-mode-tab {{applyForm.storeSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
             <view class="store-mode-tab {{applyForm.storeSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
@@ -2123,18 +2210,27 @@
              申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案 -->
         <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
           <view class="form-item">
-            <text class="form-label">门店地址</text>
+            <text class="form-label"><text class="form-required">*</text> 选择所属地区</text>
+            <picker mode="region" value="{{applyForm.region}}" bindchange="onApplyRegionChange">
+              <view class="form-picker-selector">{{applyForm.region.length ? applyForm.region.join(' / ') : '请选择省 / 市 / 区 ▼'}}</view>
+            </picker>
+          </view>
+          <view class="form-item">
+            <text class="form-label">门店地址（可选）</text>
             <input class="form-input" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
           </view>
           <view class="form-item">
-            <text class="form-label">联系电话</text>
+            <text class="form-label">联系电话（可选）</text>
             <input class="form-input" type="number" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
           </view>
           <view class="form-item">
-            <text class="form-label">门店照片</text>
+            <text class="form-label">门店照片（可选）</text>
             <view class="receipt-grid-container">
               <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
-                <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" />
+                <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" binderror="onImageLoadError" />
+                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                </view>
                 <view class="img-delete-badge" catchtap="onDeleteApplyStorePhoto" data-index="{{index}}">✕</view>
               </view>
               <view class="grid-add-btn" bindtap="onChooseApplyStorePhoto" wx:if="{{applyForm.storePhotos.length < 9}}">
@@ -2146,17 +2242,8 @@
         </block>
 
         <view class="form-item">
-          <text class="form-label">真实姓名 <text class="form-required">*</text></text>
-          <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">手机号 <text class="form-required">*</text></text>
-          <input class="form-input" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">申请岗位</text>
-          <!-- 🌟 动态联动：切换岗位时 applyRoleTipText 与 applyRequiredHint 随之更新，
-               大家长需额外补全门店档案（新建门店时）；义工免审即时生效 -->
+          <text class="form-label"><text class="form-required">*</text> 申请身份</text>
+          <!-- 🌟 动态联动：切换身份时 applyRoleTipText 与 applyRequiredHint 随之更新；义工免审即时生效 -->
           <radio-group class="role-radio-group" bindchange="onApplyRoleChange">
             <label class="role-radio-item">
               <radio value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
@@ -2176,6 +2263,14 @@
             </label>
           </radio-group>
           <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
+        </view>
+        <view class="form-item">
+          <text class="form-label"><text class="form-required">*</text> 真实姓名</text>
+          <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
+        </view>
+        <view class="form-item">
+          <text class="form-label"><text class="form-required">*</text> 手机号</text>
+          <input class="form-input" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
         </view>
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
@@ -2313,7 +2408,7 @@
       </view>
 
       <view class="invite-result-qr-box" wx:if="{{inviteResultQrPath}}">
-        <image class="invite-result-qr-img" src="{{inviteResultQrPath}}" mode="aspectFit" show-menu-by-longpress bindtap="onSaveInviteResultQr" />
+        <image class="invite-result-qr-img" src="{{inviteResultQrPath}}" mode="aspectFit" show-menu-by-longpress bindtap="onSaveInviteResultQr" binderror="onInviteResultQrLoadError" />
         <text class="invite-result-qr-hint">长按或点击太阳码保存到相册</text>
       </view>
 
@@ -2541,7 +2636,7 @@
           <view class="audit-applicant-card" wx:for="{{filteredPendingList}}" wx:key="applyId">
             <view class="card-top-info">
               <view class="applicant-avatar-wrap">
-                <image class="applicant-avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
+                <image class="applicant-avatar" wx:if="{{item.avatarUrl && !imageLoadFailedMap[item.avatarUrl]}}" src="{{item.avatarUrl}}" mode="aspectFill" binderror="onImageLoadError" data-url="{{item.avatarUrl}}" />
                 <view class="applicant-avatar-placeholder" wx:else>👤</view>
               </view>
               <view class="applicant-main">
@@ -2601,7 +2696,7 @@
           <view class="audit-applicant-card approved-card" wx:for="{{filteredApprovedList}}" wx:key="applyId">
             <view class="card-top-info">
               <view class="applicant-avatar-wrap">
-                <image class="applicant-avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
+                <image class="applicant-avatar" wx:if="{{item.avatarUrl && !imageLoadFailedMap[item.avatarUrl]}}" src="{{item.avatarUrl}}" mode="aspectFill" binderror="onImageLoadError" data-url="{{item.avatarUrl}}" />
                 <view class="applicant-avatar-placeholder" wx:else>👤</view>
               </view>
               <view class="applicant-main">
@@ -2686,6 +2781,7 @@
           mode="widthFix"
           show-menu-by-longpress
           src="{{storePosterTempFilePath}}"
+          binderror="onStorePosterLoadError"
         />
         <!-- 🛡️ Canvas 白屏修复：绘制耗时期间（云端二维码下载+本地作图）盖一层
              品牌色 Loading 遮罩，避免用户看到的是一块空白区域 -->
@@ -2951,9 +3047,15 @@
     <view class="modal-card family-motto-card" catchtap="stopPropagation" style="max-height: 78vh !important; margin-top: 60rpx !important; position: relative !important; display: flex !important; flex-direction: column !important; box-sizing: border-box !important;">
       <view class="motto-modal-close" bindtap="onCloseFamilyMottoModal" style="position: absolute !important; right: 24rpx !important; top: 24rpx !important; width: 60rpx !important; height: 60rpx !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 36rpx !important; color: #999999 !important; z-index: 10 !important;">✕</view>
       <view class="modal-header-bar family-motto-header" style="justify-content: center !important; padding-right: 60rpx !important; flex-shrink: 0 !important;">
-        <text class="modal-title-text">📖 雨花文化全集</text>
+        <text class="modal-title-text">📖 {{cultureModalTitle || '机构文化与每日家训'}}</text>
       </view>
       <scroll-view scroll-y class="family-motto-scroll" style="max-height: 62vh !important; flex: 1 !important;">
+
+        <!-- 🐛 重大 Bug 修复：此前无论 orgType 是什么，弹窗都固定展示下方雨花斋
+             十大模块原文——那是机构提供的权威培训素材，专属雨花斋，不能套给
+             其它机构。现按真实 orgType 二选一：雨花斋走原有全文，其余机构
+             （社区助餐/敬老中心、通用公益等）走下方 wx:else 的通用占位分支 -->
+        <block wx:if="{{orgType === 'yuhuazhai'}}">
 
         <!-- 一、社会主义核心价值观：12 个词汇统一收进 4 列 x 3 行的胶囊网格，
              三个数组按国家/社会/个人层面依次排布，网格按文档流自动分行 -->
@@ -3065,6 +3167,31 @@
         <!-- 十、雨花家风 -->
         <text class="motto-section-title">十、雨花家风</text>
         <text class="motto-section-text">{{cultureFullData.familyStyleText}}</text>
+        </block>
+
+        <!-- 🆕 非雨花斋机构（社区助餐/敬老中心、通用公益等）：目前没有可对应展示的
+             权威文化素材，诚实地只展示门店自己在【组织信息配置】里填写的真实文化
+             寄语，外加一段明确标注为通用占位、而非机构官方公约的公益精神简述。
+             如需完整的机构专属文化内容（对应雨花斋那十个模块的深度），请联系开发者
+             补充真实素材，这里不会替机构编造一份"权威家训" -->
+        <block wx:else>
+          <view class="culture-generic-slogan-block" wx:if="{{cultureStoreSlogan1 || cultureStoreSlogan2}}">
+            <text class="motto-section-title">本站文化寄语</text>
+            <text class="motto-section-text culture-quote-line" wx:if="{{cultureStoreSlogan1}}">{{cultureStoreSlogan1}}</text>
+            <text class="motto-section-text culture-quote-line" wx:if="{{cultureStoreSlogan2}}">{{cultureStoreSlogan2}}</text>
+          </view>
+
+          <text class="motto-section-title">{{orgType === 'elderly_canteen' ? '敬老助餐精神' : '公益服务精神'}}</text>
+          <text class="culture-sub-title">—— 通用占位内容，欢迎联系开发者补充机构专属素材 ——</text>
+          <view class="culture-list-single-column">
+            <text class="culture-list-line" wx:if="{{orgType === 'elderly_canteen'}}">敬老爱老，一餐一饭见真心。</text>
+            <text class="culture-list-line" wx:if="{{orgType === 'elderly_canteen'}}">用心备餐，用情陪伴，让长者吃得放心、暖心。</text>
+            <text class="culture-list-line" wx:else>心怀善意，服务社区，用行动传递温暖。</text>
+            <text class="culture-list-line">公开透明，诚信为本，每一份善意都清晰可查。</text>
+            <text class="culture-list-line">团结协作，互帮互助，人人都是志愿的一份子。</text>
+            <text class="culture-list-line">感恩每一位参与者的付出，感恩每一份信任与支持。</text>
+          </view>
+        </block>
       </scroll-view>
     </view>
   </view>
@@ -3076,4 +3203,51 @@
     is-finance="{{isFinance}}"
     is-super-admin="{{isSuperAdmin}}"
     bind:action="onSideDrawerAction" />
+  </block>
+
+  <!-- 🏢 工作空间选择首页：currentPlatformMode 为空时的默认落地页——标准 SaaS
+       多平台门户入口，平铺展示各平台/工作台卡片，点击哪张卡片才会真正进入对应
+       的工作空间（雨花卡片额外叠加声明校验，见 onSelectYuhuaPlatform）。
+       与原有首页业务内容（上面 wx:if 分支）完全隔离，不共享任何状态判断 -->
+  <block wx:else>
+    <view class="platform-select-page" style="padding-top: {{headerSafeTop}}px;">
+      <view class="platform-select-header">
+        <text class="platform-select-title">选择工作空间</text>
+        <text class="platform-select-subtitle">请选择您要进入的平台 / 记账工作台</text>
+      </view>
+
+      <view class="platform-card platform-card-yuhua" bindtap="onSelectYuhuaPlatform" hover-class="platform-card-hover">
+        <view class="platform-card-badge">公益专属 · 受托记账</view>
+        <view class="platform-card-body">
+          <text class="platform-card-icon">🌸</text>
+          <view class="platform-card-text">
+            <text class="platform-card-title">雨花公益食堂专区</text>
+            <text class="platform-card-desc">面向雨花斋公益食堂的餐报记录、义工工时与阳光账本</text>
+          </view>
+        </view>
+        <view class="platform-card-arrow">进入 ›</view>
+      </view>
+
+      <view class="platform-card platform-card-general" bindtap="onSelectGeneralPlatform" hover-class="platform-card-hover">
+        <view class="platform-card-body">
+          <text class="platform-card-icon">🍽️</text>
+          <view class="platform-card-text">
+            <text class="platform-card-title">通用素食/门店记账</text>
+            <text class="platform-card-desc">适用于普通商户、独立食堂或通用多租户门店的日常记账</text>
+          </view>
+        </view>
+        <view class="platform-card-arrow">进入 ›</view>
+      </view>
+
+      <view class="platform-card platform-card-reserved">
+        <view class="platform-card-body">
+          <text class="platform-card-icon">➕</text>
+          <view class="platform-card-text">
+            <text class="platform-card-title">更多平台</text>
+            <text class="platform-card-desc">敬请期待</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
 </view>

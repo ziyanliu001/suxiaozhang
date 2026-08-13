@@ -8,6 +8,7 @@
     "privacy-popup": "../../components/privacy-popup/privacy-popup",
     "side-drawer": "../../components/side-drawer/side-drawer",
     "daily-menu-modal": "../../components/daily-menu-modal/daily-menu-modal",
-    "material-usage-modal": "../../components/material-usage-modal/material-usage-modal"
+    "material-usage-modal": "../../components/material-usage-modal/material-usage-modal",
+    "yangshan-wall": "../../components/yangshan-wall/yangshan-wall"
   }
 }

@@ -2515,12 +2515,30 @@ page {
   border: none;
   border-radius: 12rpx;
   padding: 14rpx 20rpx;
-  margin: 12rpx 24rpx 0;
+  margin: 12rpx 24rpx 24rpx;
   max-height: 100rpx;
   opacity: 1;
   overflow: hidden;
   box-sizing: border-box;
   transition: max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease, margin 0.28s ease;
+}
+
+/* 📢 左侧固定"公告"标签：常驻的"选中态 Tab"——加粗品牌色 + 底部下划线 Indicator，
+   与右侧轮播正文（次级灰字）拉开层级；图标与文字用 margin 撑开间距，避免紧挨裁切感 */
+.announce-bar-tab {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-bottom: 4rpx;
+  margin-right: 16rpx;
+  border-bottom: 4rpx solid #8C1D18;
+}
+
+.announce-bar-tab-label {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  white-space: nowrap;
 }
 
 /* 🌟 点击 X 后优雅收起：先淡出+高度塌陷，动效播完（见 index.ts onCloseNoticeBar
@@ -2536,6 +2554,7 @@ page {
 
 .announce-bar-icon {
   font-size: 24rpx;
+  margin-right: 8rpx;
   flex-shrink: 0;
 }
 
@@ -2562,7 +2581,7 @@ page {
   display: block;
   font-size: 24rpx;
   font-weight: 500;
-  color: #B5650A;
+  color: #888888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2628,16 +2647,12 @@ page {
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🪶 空状态改为轻量淡灰卡片：此前的虚线橙边 + 呼吸灯动画在"今日食谱尚未发布"
+   这种平常状态下过于突兀，像在报警；改为柔和的浅灰底，安静地提示"还没有内容" */
 .today-menu-preview-card.is-empty {
-  background: #FFFDFB;
-  border: 2rpx dashed #FFCCA8;
+  background: #FAFBFC;
+  border: 1rpx solid #EDEFF2;
   box-shadow: none;
-  animation: tmp-shimmer 2.4s ease-in-out infinite;
-}
-
-@keyframes tmp-shimmer {
-  0%, 100% { box-shadow: 0 0 0 rgba(255, 152, 0, 0); }
-  50% { box-shadow: 0 0 16rpx rgba(255, 152, 0, 0.18); }
 }
 
 /* ❤️ 家人（服务对象）「透明监督版」首页三模块：不填报表、不需要计算工具，
@@ -2883,9 +2898,14 @@ page {
 }
 
 .tmp-empty-text {
-  display: block;
+  display: inline-block;
+  max-width: 100%;
   font-size: 24rpx;
-  color: #B08968;
+  color: #999999;
+  background: #F1F3F5;
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+  box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2895,16 +2915,16 @@ page {
   flex-shrink: 0;
 }
 
-/* 🌟 由深红实心胶囊改为轻量级 Outline 按钮，避免在首页抢走核心工作台宫格的视觉重心 */
+/* 🌟 轻量级 Outline 胶囊按钮，避免在首页抢走核心工作台宫格的视觉重心 */
 .tmp-side-btn {
   display: block;
-  font-size: 22rpx;
+  font-size: 24rpx;
   font-weight: bold;
   color: #8C1D18;
   background: #FFF5F0;
   border: 1.5rpx solid #E8C4B8;
-  border-radius: 30rpx;
-  padding: 12rpx 20rpx;
+  border-radius: 24rpx;
+  padding: 10rpx 20rpx;
   white-space: nowrap;
 }
 
@@ -7230,6 +7250,120 @@ page {
 
 /* 📱 手机 */
 .idx-icon-phone { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODY4RTk2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iNSIgeT0iMiIgd2lkdGg9IjE0IiBoZWlnaHQ9IjIwIiByeD0iMiIgcnk9IjIiPjwvcmVjdD48bGluZSB4MT0iMTIiIHkxPSIxOCIgeDI9IjEyLjAxIiB5Mj0iMTgiPjwvbGluZT48L3N2Zz4='); }
+/* 🏢 工作空间选择首页：currentPlatformMode 为空时的默认落地页，标准 SaaS 多平台
+   门户入口——纵向平铺展示平台卡片，与页面其余内容（app-header-section 等）互斥展示 */
+.platform-select-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 48rpx 32rpx;
+  box-sizing: border-box;
+}
+
+.platform-select-header {
+  margin-bottom: 40rpx;
+}
+
+.platform-select-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #222222;
+  margin-bottom: 12rpx;
+}
+
+.platform-select-subtitle {
+  display: block;
+  font-size: 26rpx;
+  color: #868E96;
+}
+
+.platform-card {
+  position: relative;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 32rpx 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+}
+
+.platform-card-hover {
+  opacity: 0.85;
+  transform: scale(0.99);
+}
+
+.platform-card-body {
+  display: flex;
+  align-items: center;
+}
+
+.platform-card-icon {
+  font-size: 56rpx;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.platform-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.platform-card-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #222222;
+  margin-bottom: 8rpx;
+}
+
+.platform-card-desc {
+  font-size: 24rpx;
+  color: #868E96;
+  line-height: 1.5;
+}
+
+.platform-card-arrow {
+  margin-top: 20rpx;
+  text-align: right;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.platform-card-yuhua {
+  border: 2rpx solid rgba(140, 29, 24, 0.15);
+}
+
+.platform-card-badge {
+  position: absolute;
+  top: -16rpx;
+  right: 24rpx;
+  background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
+  color: #FFFFFF;
+  font-size: 20rpx;
+  font-weight: bold;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 10rpx rgba(140, 29, 24, 0.3);
+}
+
+.platform-card-general .platform-card-arrow {
+  color: #495057;
+}
+
+.platform-card-reserved {
+  background: #F1F3F5;
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+.platform-card-reserved .platform-card-title,
+.platform-card-reserved .platform-card-desc {
+  color: #ADB5BD;
+}
+
 /* 🌟 合规授权须知弹窗（组件一）：首次进入 / 首次切换到财务/店长视角强制阅读，
    与站内其它弹窗一致的白卡片圆角风格，仅在内容与关闭规则上更严格——
    'general'/'privileged' 场景下没有关闭按钮、mask 不响应 tap，只能读完点底部按钮 */

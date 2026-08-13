@@ -10,12 +10,18 @@ import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoSt
 import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
-import { isCloudAvailable } from '../../utils/cloudGuard';
+import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { maskName } from '../../utils/privacy';
 import { md5 } from '../../utils/md5';
-import { applyRoleViewOverride, getPreviewViewMode, PreviewViewMode } from '../../utils/viewModePreview';
+import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, PreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
+import {
+  hasAgreedYuhuaGeneralDisclaimer,
+  acknowledgeYuhuaGeneralDisclaimer,
+  hasAgreedYuhuaPrivilegedDisclaimer,
+  acknowledgeYuhuaPrivilegedDisclaimer
+} from '../../utils/yuhuaDisclaimer';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
 import { takeOpenSunshineLedgerRequest } from '../../utils/sunshineLedgerHandoff';
 import { takeOpenCultureFullRequest } from '../../utils/cultureFullHandoff';
@@ -29,6 +35,21 @@ import { computeMyCheckInStats } from '../../utils/checkinStats';
 const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
 const DAILY_HOURS_CAP = 12.0;
+
+// 🏷️ 各业态默认服务受众标签：未配置自定义 serviceTargetConfig 时的兜底文案，
+// 与 store-profile.ts 的 ORG_TYPE_DEFAULT_TARGET_LABELS 保持同一套语义，
+// 独立定义避免跨页面模块导入循环依赖
+const ORG_TYPE_DEFAULT_TARGET_LABELS: Record<string, {
+  dineInLabel: string; deliveryLabel: string; listenLabel: string; takeoutLabel: string;
+}> = {
+  yuhuazhai:         { dineInLabel: '堂食长者',     deliveryLabel: '送餐长者',     listenLabel: '倾听陪伴',      takeoutLabel: '打包份数'   },
+  elderly_canteen:   { dineInLabel: '堂食老人',     deliveryLabel: '送餐老人',     listenLabel: '倾听陪伴',      takeoutLabel: '打包份数'   },
+  volunteer_station: { dineInLabel: '服务人次',     deliveryLabel: '上门服务',     listenLabel: '陪伴关怀',      takeoutLabel: '物资包'     },
+  rescue_team:       { dineInLabel: '现场救援人次', deliveryLabel: '外出救援',     listenLabel: '心理疏导',      takeoutLabel: '物资包'     },
+  tongxin_children:  { dineInLabel: '院内儿童用餐', deliveryLabel: '外送关爱儿童', listenLabel: '心理疏导/陪伴', takeoutLabel: '打包爱心餐' },
+  other:             { dineInLabel: '堂食服务',     deliveryLabel: '送餐服务',     listenLabel: '关爱陪伴',      takeoutLabel: '打包份数'   },
+};
+const FALLBACK_TARGET_LABELS = { dineInLabel: '堂食服务人次', deliveryLabel: '送餐服务', listenLabel: '关爱陪伴', takeoutLabel: '打包份数' };
 
 // 🔑 特权邀请码身份词汇映射：本组件的本地胶囊角色词汇（PATRIARCH/MANAGER/FINANCE/
 // FAMILY/VOLUNTEER）<-> cloudfunctions/manageStoreInviteCode 的服务端角色词汇
@@ -58,45 +79,173 @@ const EXPENSE_TEMPLATE_PRESETS: Record<'daily' | 'fixed', string[]> = {
   fixed: ['水电燃气', '厨房维修']
 };
 
-// 🐛 修复"喜讯通报：喜讯通报：..."套娃重复：title/content 本身不应再嵌入 tag 前缀，
-// tag 已经在展示时单独加上【】/📢，重复嵌入会导致视觉上连续出现两次"喜讯通报"
-const PRESET_NOTICES = {
-  opening: {
-    tag: '喜讯通报',
-    title: '三源弘雨花敬老家园试营业',
-    content: '三源弘雨花敬老家园，14号正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！'
-  },
-  volunteer: {
-    tag: '义工招募',
-    title: '爱心义工招募',
-    content: '【爱心义工招募】本站的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️'
-  },
-  supplies: {
-    tag: '物资呼吁',
-    title: '爱心物资接力',
-    content: '【爱心物资接力】感恩各位爱心人士的护持！当前小店大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️'
-  },
-  weather_closure: {
-    tag: '暂停营业',
-    title: '恶劣天气暂停开餐告示',
-    content: '【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，本斋将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️'
-  },
-  renovation_closure: {
-    tag: '暂停营业',
-    title: '内部整修/例行消杀停业通知',
-    content: '【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，本斋将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！❤️'
-  },
-  festival: {
-    tag: '日常温馨提醒',
-    title: '节日特别结缘活动通知',
-    content: '【节日欢聚通知】值此佳节到来之际，本斋将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜回家用餐！祝大家吉祥安康！🏮'
-  },
-  thanks: {
-    tag: '感恩致谢',
-    title: '专项爱心致谢',
-    content: '【感恩致谢】特别感谢爱心企业/爱心人士对本斋的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️'
+// 🐛 重大隔离漏洞修复：这 7 条"常用场景一键套用"预设文案此前是写死的静态对象，
+// opening 那条甚至直接硬编码了一个具体的雨花斋示例门店名"三源弘雨花敬老家园"——
+// 不管当前门店真实 orgType 是什么，点一键套用永远塞进雨花斋专属文案（"本斋"/
+// "义工家人"这类雨花斋专属称谓、乃至虚构的示例店名）。现改为按真实 orgType
+// （yuhuazhai / elderly_canteen / 其余通用公益）+ 当前门店名动态生成，
+// tag 分类本身与机构类型无关，不随 orgType 变化（喜讯通报/义工招募等仍是同一批
+// tag，只是 title/content 的措辞与称谓随机构类型走）
+type NoticePresetType = 'opening' | 'volunteer' | 'supplies' | 'weather_closure' | 'renovation_closure' | 'festival' | 'thanks';
+
+function getNoticeTemplate(type: NoticePresetType, orgType: string, storeName: string): { tag: string; title: string; content: string } {
+  const isYuhuazhai = orgType === 'yuhuazhai';
+  const isElderlyCanteen = orgType === 'elderly_canteen';
+  // 三档兜底称谓：yuhuazhai 沿用"雨花斋"，elderly_canteen 用"社区助餐点"，
+  // 其余通用公益机构用"本公益服务站"——storeName 有值时优先用真实门店名
+  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本公益服务站';
+  const name = storeName || fallbackName;
+
+  switch (type) {
+    case 'opening':
+      if (isYuhuazhai) {
+        return {
+          tag: '喜讯通报',
+          title: `${name}试营业`,
+          content: `${name}正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '喜讯通报',
+          title: `${name}试营业喜讯`,
+          content: `${name}正式开启试营业啦！用心为社区长者提供健康、卫生、实惠的助餐服务。欢迎长辈们前来用餐，也欢迎爱心义工加入我们，一起守护社区里的老人家❤️。感恩大家的支持！`
+        };
+      }
+      return {
+        tag: '喜讯通报',
+        title: `${name}试营业喜讯`,
+        content: `${name}正式开启试营业啦！我们将用心为社区提供公益服务。欢迎大家前来了解，也欢迎爱心志愿者加入我们，一起传递温暖❤️。感恩大家的支持！`
+      };
+
+    case 'volunteer':
+      if (isYuhuazhai) {
+        return {
+          tag: '义工招募',
+          title: '爱心义工招募',
+          content: `【爱心义工招募】${name}的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '义工招募',
+          title: '爱心义工招募',
+          content: `【爱心义工招募】${name}的运转离不开爱心义工的无私奉献！急需择菜、洗碗、分餐义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️`
+        };
+      }
+      return {
+        tag: '志愿招募',
+        title: '爱心志愿招募',
+        content: `【爱心志愿招募】${name}的运转离不开志愿者的无私奉献！急需多名志愿者协助日常事务，具体服务时间可与我们联系沟通。期待您的加入，一起传递温暖！❤️`
+      };
+
+    case 'supplies':
+      if (isYuhuazhai) {
+        return {
+          tag: '物资呼吁',
+          title: '爱心物资接力',
+          content: `【爱心物资接力】感恩各位爱心人士的护持！当前${name}大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '物资呼吁',
+          title: '爱心物资接力',
+          content: `【爱心物资接力】感恩各位爱心人士的关心与支持！当前${name}大米/食用油储备临界，特向社会呼吁爱心物资接力，助力长者们吃上热乎饭。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️`
+        };
+      }
+      return {
+        tag: '物资呼吁',
+        title: '爱心物资接力',
+        content: `【爱心物资接力】感恩各位爱心人士的关心与支持！当前${name}物资储备临界，特向社会呼吁爱心物资接力。每一份物资都饱含满满的心意。衷心感谢您的倾心付出！❤️`
+      };
+
+    case 'weather_closure':
+      if (isYuhuazhai) {
+        return {
+          tag: '暂停营业',
+          title: '恶劣天气暂停开餐告示',
+          content: `【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，${name}将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '暂停营业',
+          title: '恶劣天气暂停开餐告示',
+          content: `【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工的出行安全，${name}将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️`
+        };
+      }
+      return {
+        tag: '暂停营业',
+        title: '恶劣天气暂停服务告示',
+        content: `【暂停服务通知】受恶劣天气影响，为保障大家的出行安全，${name}将于明日暂停服务一天。请大家互相转告，切勿空跑。待天气好转后恢复正常服务。衷心感谢大家的理解与支持！❤️`
+      };
+
+    case 'renovation_closure':
+      if (isYuhuazhai) {
+        return {
+          tag: '暂停营业',
+          title: '内部整修/例行消杀停业通知',
+          content: `【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，${name}将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！❤️`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '暂停营业',
+          title: '内部整修/例行消杀停业通知',
+          content: `【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，${name}将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们前来用餐。感恩大家的体谅与支持！❤️`
+        };
+      }
+      return {
+        tag: '暂停营业',
+        title: '内部整修/例行消杀停业通知',
+        content: `【例行维护通知】为给大家提供更加干净、卫生的服务环境，${name}将于近期进行环境清洁与设施整修，期间暂停服务一天。恢复服务后欢迎大家继续前来。感恩大家的体谅与支持！❤️`
+      };
+
+    case 'festival':
+      if (isYuhuazhai) {
+        return {
+          tag: '日常温馨提醒',
+          title: '节日特别结缘活动通知',
+          content: `【节日欢聚通知】值此佳节到来之际，${name}将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜回家用餐！祝大家吉祥安康！🏮`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '日常温馨提醒',
+          title: '节日特别活动通知',
+          content: `【节日欢聚通知】值此佳节到来之际，${name}将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜前来用餐！祝大家节日快乐、身体健康！🏮`
+        };
+      }
+      return {
+        tag: '日常温馨提醒',
+        title: '节日特别活动通知',
+        content: `【节日活动通知】值此佳节到来之际，${name}将于明天举办节日特别活动。欢迎大家互相转告、欢喜参与！祝大家节日快乐！🏮`
+      };
+
+    case 'thanks':
+    default:
+      if (isYuhuazhai) {
+        return {
+          tag: '感恩致谢',
+          title: '专项爱心致谢',
+          content: `【感恩致谢】特别感谢爱心企业/爱心人士对${name}的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️`
+        };
+      }
+      if (isElderlyCanteen) {
+        return {
+          tag: '感恩致谢',
+          title: '专项爱心致谢',
+          content: `【感恩致谢】特别感谢爱心企业/爱心人士对${name}的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️`
+        };
+      }
+      return {
+        tag: '感恩致谢',
+        title: '专项爱心致谢',
+        content: `【感恩致谢】特别感谢爱心企业/爱心人士对${name}的慷慨支持，您的善举让更多人感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️`
+      };
   }
-};
+}
 
 // 🐛 防御性去重：无论是预置文案还是店长自行编辑保存的通报，只要 title/content 开头
 // 恰好又重复带了一遍 tag 前缀（如"喜讯通报：喜讯通报：..."），一律在这里剥离干净再落库/展示
@@ -120,6 +269,32 @@ function stripTagPrefix(text: string, tag: string): string {
 // 🔗 跑马灯通知云端化：把 manageNotice 云函数返回的原始记录（tenantId/storeId/
 // createdAt 等审计字段）映射成前端一直在用的展示形状（id/tag/title/content/
 // create_time），公告详情弹窗/复制文案等既有逻辑完全不用改
+
+// 🐛 严重逻辑矛盾修复：弹窗标题此前固定死显示"喜讯通报"，与"物资告急/呼吁接力"
+// 这类告急内容语义完全脱节。改为按标签+标题+正文的真实语义特征逐条匹配，
+// 弹窗标题/主题色/复制按钮文案都跟着内容语义走，而不是死绑一个通用外壳。
+// 规则按优先级从上到下匹配，命中第一条即停止，未命中任何规则时落到默认"门店公告"。
+const NOTICE_CLASSIFY_RULES: Array<{
+  noticeType: string;
+  test: RegExp;
+  headerTitle: string;
+  themeClass: string;
+  typeIcon: string;
+  typeLabel: string;
+}> = [
+  { noticeType: 'closure', test: /停业|维护|暂停|关闭/,               headerTitle: '⚠️【停业公告】',   themeClass: 'type-closure',   typeIcon: '⚠️', typeLabel: '停业公告' },
+  { noticeType: 'urgent',  test: /物资|库存|大米|食用油|储备临界/,     headerTitle: '🚨【物资告急】',   themeClass: 'type-urgent',    typeIcon: '🚨', typeLabel: '物资告急' },
+  { noticeType: 'urgent',  test: /呼吁|招募|急需|求助|紧急/,           headerTitle: '📢【爱心呼吁】',   themeClass: 'type-urgent',    typeIcon: '📢', typeLabel: '爱心呼吁' },
+  { noticeType: 'good_news', test: /喜讯|试营业|开业|喜报/,            headerTitle: '🎉【喜讯通报】',   themeClass: 'type-good_news', typeIcon: '🎉', typeLabel: '喜讯通报' },
+  { noticeType: 'thanks', test: /感恩|致谢|鸣谢|感谢/,                 headerTitle: '❤️【感恩鸣谢】',   themeClass: 'type-thanks',    typeIcon: '❤️', typeLabel: '感恩鸣谢' },
+];
+const NOTICE_CLASSIFY_DEFAULT = { noticeType: 'general', headerTitle: '📌【门店公告】', themeClass: 'type-general', typeIcon: '📌', typeLabel: '门店公告' };
+
+function classifyNotice(tag: string, title: string, content: string) {
+  const text = `${tag || ''} ${title || ''} ${content || ''}`;
+  return NOTICE_CLASSIFY_RULES.find(rule => rule.test.test(text)) || NOTICE_CLASSIFY_DEFAULT;
+}
+
 function mapNoticeRecord(raw: any): any {
   let createTime = '';
   try {
@@ -127,13 +302,22 @@ function mapNoticeRecord(raw: any): any {
   } catch (e) {
     createTime = '';
   }
+  const tag = raw.tag || '';
+  const title = raw.title || '';
+  const content = raw.content || '';
+  const classified = classifyNotice(tag, title, content);
   return {
     id: raw._id,
-    tag: raw.tag || '',
-    title: raw.title || '',
-    content: raw.content || '',
+    tag,
+    title,
+    content,
     is_top: true,
-    create_time: createTime
+    create_time: createTime,
+    noticeType: classified.noticeType,
+    typeIcon: classified.typeIcon,
+    typeLabel: classified.typeLabel,
+    modalHeaderTitle: classified.headerTitle,
+    modalThemeClass: classified.themeClass
   };
 }
 
@@ -156,6 +340,47 @@ function getDraftKeyForDate(dateStr: string, shopName: string): string {
 // 统一的两位小数四舍五入，避免浮点误差在多次加减后累积出细微偏差
 function round2(num: number): number {
   return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+// ☀️ 阳光账本理念弹窗文案：按门店真实 orgType（getSunshineLedger 返回，来自
+// stores.orgType 字段本身，不是靠 tenantId 前缀猜的那套粗粒度信号）区分——
+// 雨花斋展示雨花精神，助老食堂展示助老理念，其余机构类型（义工服务站/救援队/
+// 儿童院等）一律落到中性的通用公益宗旨兜底，绝不把雨花文案强加给非雨花机构
+function computeConceptCopy(orgType: string, storeName: string): { title: string; label: string; content: string } {
+  const displayStoreName = storeName || '本站点';
+  if (orgType === 'yuhuazhai') {
+    return {
+      title: '☀️ 阳光账本与雨花理念',
+      label: '雨花精神',
+      content: '雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与公益互助。'
+    };
+  }
+  if (orgType === 'elderly_canteen') {
+    return {
+      title: '☀️ 阳光账本与助老理念',
+      label: '助老理念',
+      content: '爱心助餐，敬老护生。致力于为社区长者提供公开透明、温暖放心的助餐服务。'
+    };
+  }
+  return {
+    title: '☀️ 阳光账本与公益宣言',
+    label: '公益宗旨',
+    content: `阳光笃行，爱心同行。${displayStoreName}坚持以公益之心服务社区，守护每一份需要关爱的心意。`
+  };
+}
+
+
+// 🐛 重大 Bug 修复：【机构文化与每日家训】弹窗此前无论 orgType 是什么都固定展示
+// utils/cultureData.ts 里的雨花斋十大模块原文（该文件明确注明"内容来源：机构提供的
+// 权威培训原文"，是雨花斋专属的授权素材，不能套用给其他机构）。现按真实 orgType
+// 三档分流标题；elderly_canteen（社区助餐/敬老中心）与其余通用公益机构不再展示
+// 雨花斋专属内容，改为展示门店自己配置的文化寄语（cultureStoreSlogan1/2，来自
+// 「组织信息配置」弹窗，真实数据）+ 一段明确标注为通用占位的公益精神简述——
+// 没有真实的机构专属文化全集素材前，绝不虚构一套看起来"权威"的十模块内容
+function computeCultureModalTitle(orgType: string): string {
+  if (orgType === 'yuhuazhai') return '雨花文化与每日家训';
+  if (orgType === 'elderly_canteen') return '社区敬老文化与每日家训';
+  return '公益文化与团队公约';
 }
 
 // 📖 雨花文化全集【十个有没有/祈盼排比句】：把"只有他人，没有自己。"
@@ -243,6 +468,8 @@ Page({
   _balanceReqSeq: 0,
   isNavigating: false,
   _checkInSubmitting: false,
+  // 🔗 打卡工时联动：同日内只拉取一次云端数据（force=true 时跳过缓存）
+  _checkInHoursCachedDate: '' as string,
   // 任务C：待执行的锚点滚动目标（onLoad 解析后暂存，onShow 中触发滚动）
   _pendingScrollTarget: '' as string,
   _highlightTimer: null as any,
@@ -300,7 +527,11 @@ Page({
     showQuickAmountModal: false,
     quickAmountItemName: '',
     quickAmountValue: '',
-    // 🌟 合规授权须知弹窗，见 checkComplianceNotice
+    // 🏢 平台/工作空间选择：首页默认落地在"工作空间选择"首页（两张平台卡片），
+    // 只有用户主动点击某张卡片进入后，才会切到该模式下的原有工作台内容——
+    // 与 onLoad/onShow 生命周期完全解耦，冷启动/onShow 都不会自动带入任何模式。
+    // 'yuhua' 档在此基础上还叠加雨花专属合规声明的两级校验，见 enterYuhuaWorkspaceFlow
+    currentPlatformMode: '' as '' | 'yuhua' | 'general',
     showComplianceModal: false,
     complianceModalScene: 'general' as 'general' | 'privileged' | 'review',
     // ☀️ 阳光账本轻量弹窗：见 onOpenSunshineLedger/fetchSunshineLedgerData，
@@ -325,6 +556,11 @@ Page({
     // 渲染，避免 8 个统计格子手写重复结构；value 统一存字符串（账本公开率是
     // "100%"/"暂无数据"这类文本，与其余数字指标共用同一套渲染逻辑更简单）
     sunshineStatCards: [] as { label: string; value: string }[],
+    // 🆕 理念弹窗文案：按 getSunshineLedger 返回的真实门店 orgType 计算（见
+    // computeConceptCopy），不再是 WXML 里硬编码的雨花斋专属文案 + 兜底二选一
+    conceptTitle: '☀️ 阳光账本与公益宣言',
+    conceptLabel: '公益宗旨',
+    conceptContent: '',
     yesterdayBalDisplay: '0.00',
     totalIncomeDisplay: '0.00',
     totalExpenseDisplay: '0.00',
@@ -410,6 +646,9 @@ Page({
     // 义工时间统计
     volunteerCount: '', // 今日到岗义工人数（自 dineInVolunteers+deliveryVolunteers 自动镜像，兼容统计大屏/海报/导出等下游）
     volunteerHours: '', // 今日义工总工时
+    // 🔗 打卡工时联动：自动汇总云端打卡数据预填工时，大家长手动修改后切换为 manual 模式
+    isManualHours: false,
+    checkInHoursTip: '' as string,
     // 用餐人次
     diningCount: '', // 今日用餐人次（自 totalDineCount 自动镜像，同上）
     // 🍱 用餐/义工细分统计（堂食/送餐/打包场景区分）：totalDineCount/totalVolunteers
@@ -572,6 +811,11 @@ Page({
       content: string;
       is_top: boolean;
       create_time: string;
+      noticeType: string;
+      typeIcon: string;
+      typeLabel: string;
+      modalHeaderTitle: string;
+      modalThemeClass: string;
     } | null,
     showAnnouncementModal: false,
     showNoticeEditModal: false,
@@ -579,9 +823,10 @@ Page({
     noticeEditTag: '喜讯通报',
     noticeEditTitle: '',
     noticeEditContent: '',
-    // 🌟 公告模板库：与静态的 PRESET_NOTICES（本机内置 7 条示例文案）并列展示，
-    // 云端拉取——isSystem:true 为全域公共模板（本机构任意门店可用），其余为
-    // 当前门店自己保存的私有模板，两者互不越界（见 manageNotice getTemplates）
+    // 🌟 公告模板库：与本机内置的 7 条按 orgType 动态生成的预设文案（见
+    // getNoticeTemplate）并列展示，云端拉取——isSystem:true 为全域公共模板
+    // （本机构任意门店可用），其余为当前门店自己保存的私有模板，两者互不越界
+    // （见 manageNotice getTemplates）
     noticeTemplates: [] as any[],
     noticeTemplatesLoading: false,
     // 仅超级管理员在"存为模板"时可勾选，决定新模板是私有（本店）还是全域公共
@@ -599,6 +844,7 @@ Page({
       customStoreName: '',
       // 🏪 新建门店档案补全：门店此刻还不存在，只能先收进申请表单本身，approve
       // 时由 processRoleAudit 一并写入新建的 stores 文档，见 submitRoleApply
+      region: [] as string[],
       address: '',
       contactPhone: '',
       storePhotos: [] as string[]
@@ -650,14 +896,28 @@ Page({
     isFamily: false,
     // 🌐 多租户：新用户（isFamily + 无门店）引导卡，代替表单/家人视图展示创建/加入入口
     showNewUserGuide: false,
-    // 🌐 多租户：组织类型，yuhuazhai 时显示文化卡片，其余通用
+    // 🌐 多租户：组织类型，yuhuazhai 时显示文化卡片，其余通用。初始为 tenantId 前缀
+    // 猜出的粗粒度值，loadStoreTargetConfig() 里会用 stores.orgType 真实值覆盖
     orgType: '' as string,
+    // 🌟 机构类型短标签：与 profile.ts computeOrgDisplayCopy 同一套措辞口径
+    // （雨花斋/社区助餐/其余机构留空），由 loadStoreTargetConfig() 按真实 orgType 计算
+    orgTypeBadge: '' as string,
+    // 🆕【机构文化与每日家训】弹窗：标题按真实 orgType 三档计算（见
+    // computeCultureModalTitle），非雨花斋分支展示门店自己配置的文化寄语——
+    // 中性默认，不臆造具体机构品牌
+    cultureModalTitle: '公益文化与团队公约',
+    cultureStoreSlogan1: '',
+    cultureStoreSlogan2: '',
+    // 🏷️ 服务受众标签：驱动首页填报表单文案自适应渲染，来自 serviceTargetConfig 自定义配置
+    // 或 ORG_TYPE_DEFAULT_TARGET_LABELS 默认值，由 loadStoreTargetConfig() 在角色解析后更新
+    storeTargetLabels: FALLBACK_TARGET_LABELS as { dineInLabel: string; deliveryLabel: string; listenLabel: string; takeoutLabel: string },
     // 📋 表单折叠：默认收起次要录入项（支出/凭证/照片/日志），首屏聚焦核心字段
     showFormExtra: false,
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
     // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
     isRealSuperAdmin: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
+    currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS.SUPER_ADMIN as string,
     currentRole: 'VOLUNTEER' as 'VOLUNTEER' | 'MANAGER' | 'FINANCE',
     pendingAuditCount: 0,
     roleLabelMap: ROLE_LABELS,
@@ -981,11 +1241,15 @@ Page({
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
       const effectiveRawRole = AuthService.resolveEffectiveRole(cached.role);
-      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
+      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
       const storeName = cached.storeName || '';
       const storeId = cached.storeId || '';
       const tenantId = (cached as any).tenantId || '';
       const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
+      // 🐛 根因修复：见 utils/viewModePreview.ts resolveDisplayViewMode 注释——
+      // normalizedRole 是已经过 storageRole 融合后的最终生效角色，不是 getPreviewViewMode()
+      // 那份独立、可能过期的预览态，两者对不上时 Banner/切换卡片会显示错误的视角文案
+      const currentViewMode = resolveDisplayViewMode(normalizedRole);
 
       this.setData({
         currentUserRole: displayRole,
@@ -1000,11 +1264,13 @@ Page({
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
         orgType: orgType,
-        currentViewMode: getPreviewViewMode(),
+        currentViewMode,
+        currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
         currentStoreName: storeName,
         currentStoreId: storeId
       });
-      this.checkComplianceNotice();
+      // 🏷️ 按 orgType 立即更新默认标签（无需等待云函数，让表单文案秒显）
+      this.loadStoreTargetConfig();
 
       syncStorePicker(storeId, storeName, rawRole);
 
@@ -1024,11 +1290,13 @@ Page({
       // 几百毫秒后这个异步 fetchUserRole 结果一落地又会用服务端主角色把它悄悄改回
       // super_admin，形成竞态：谁最后 setData 谁说了算，而不是谁应该说了算
       const effectiveRawRole = AuthService.resolveEffectiveRole(info.role);
-      const { rawRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
+      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
       const storeName = info.storeName || '';
       const storeId = info.storeId || '';
       const tenantId = (info as any).tenantId || '';
       const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
+      // 🐛 根因修复：同上一处 cached 分支，见 resolveDisplayViewMode 注释
+      const currentViewMode = resolveDisplayViewMode(normalizedRole);
 
       this.setData({
         currentUserRole: displayRole,
@@ -1043,11 +1311,13 @@ Page({
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
         orgType: orgType,
-        currentViewMode: getPreviewViewMode(),
+        currentViewMode,
+        currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
         currentStoreName: storeName,
         currentStoreId: storeId
       });
-      this.checkComplianceNotice();
+      // 🏷️ 服务端权威角色落地后重新加载标签（含自定义 serviceTargetConfig 覆盖）
+      this.loadStoreTargetConfig();
 
       syncStorePicker(storeId, storeName, rawRole);
 
@@ -1099,11 +1369,25 @@ Page({
   async fetchAllStoresList() {
     try {
       // 优先读取本地缓存（有效期5分钟）
+      // 🐛 修复 WXML 层 "Cannot read property '0' of undefined" 崩溃根因：
+      // allStoresList 直接绑定 <picker range="{{allStoresList}}">（超管切店下拉框），
+      // 此前这里对本地缓存 JSON.parse 的结果没做 Array.isArray 校验就直接 setData——
+      // 一旦缓存内容损坏/被旧版本写成非数组（如意外存成 "{}"/"null"），parse 本身
+      // 不报错，但 picker 拿到非数组 range 就会在原生渲染层踩空索引崩溃。缓存非法时
+      // 不 return，直接落到下面走云端查询重新校准
       const cached = wx.getStorageSync('all_stores_list_cache');
       const cacheTime = wx.getStorageSync('all_stores_list_cache_time');
       if (cached && cacheTime && (Date.now() - cacheTime) < 300000) {
-        this.setData({ allStoresList: JSON.parse(cached) });
-        return;
+        try {
+          const parsedCache = JSON.parse(cached);
+          if (Array.isArray(parsedCache)) {
+            this.setData({ allStoresList: parsedCache });
+            return;
+          }
+          console.warn('[fetchAllStoresList] 本地缓存内容不是数组，丢弃并改走云端查询');
+        } catch (parseErr) {
+          console.warn('[fetchAllStoresList] 本地缓存解析失败，丢弃并改走云端查询:', parseErr);
+        }
       }
 
       // 🏢 多租户边界：门店列表通过云函数按调用者所属机构过滤后返回，
@@ -1167,6 +1451,7 @@ Page({
       });
     } catch (e) {
       console.error('[fetchTodayMenu] 查询失败:', e);
+      reportCloudSdkErrorIfCorrupted(e);
       this.setData({ todayMenu: null, todayMenuDishes: [], todayMenuLoaded: true });
     }
   },
@@ -1214,7 +1499,68 @@ Page({
       }
     } catch (e) {
       console.error('[fetchTodayActivity] 查询失败:', e);
+      reportCloudSdkErrorIfCorrupted(e);
       this.setData({ todayActivity: null, todayActivityLoaded: true, todayActivitySourceId: '' });
+    }
+  },
+
+  // 🏷️ 服务受众标签：在角色与 storeId 解析完成后，从 manageStoreProfile 加载
+  // serviceTargetConfig.targetLabels，用于驱动首页填报表单的文案自适应。
+  // 优先使用 DB 中保存的自定义标签，退回 ORG_TYPE_DEFAULT_TARGET_LABELS 默认值，
+  // 最终退回 FALLBACK_TARGET_LABELS 通用兜底，三层降级均在本地完成、不影响主流程
+  async loadStoreTargetConfig() {
+    const storeId = this.data.currentStoreId;
+    const orgType = this.data.orgType;
+    // 先用 orgType 默认值立即渲染（无需等待云函数）
+    const defaultLabels = ORG_TYPE_DEFAULT_TARGET_LABELS[orgType] || FALLBACK_TARGET_LABELS;
+    this.setData({ storeTargetLabels: defaultLabels });
+
+    if (!storeId || !isCloudAvailable()) return;
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get', storeId }
+      });
+      const result = res.result as any;
+      if (!result || !result.success) return;
+
+      // 🌟 真实机构类型覆盖：initCurrentUserRole() 里只能靠 tenantId 前缀猜出粗粒度的
+      // 'yuhuazhai'/'generic' 兜底值（见该方法内两处 orgType 赋值），这里复用同一次
+      // manageStoreProfile 查询（不新增网络请求）拿到 stores.orgType 真实值后立即覆盖，
+      // 才能精确识别 elderly_canteen（社区助餐）等具体机构类型，而不是笼统的"generic"。
+      // orgTypeBadge 与 profile.ts computeOrgDisplayCopy 同一套措辞口径，不臆造新类型
+      const realOrgType = result.data && result.data.orgType;
+      if (realOrgType) {
+        this.setData({
+          orgType: realOrgType,
+          orgTypeBadge: realOrgType === 'yuhuazhai' ? '雨花斋' : realOrgType === 'elderly_canteen' ? '社区助餐' : '',
+          cultureModalTitle: computeCultureModalTitle(realOrgType)
+        });
+      }
+
+      // 🆕 门店自定义文化寄语：与「组织信息配置」弹窗（profile.ts orgConfigSlogan1/2）
+      // 写入的是同一对字段，供"机构文化与每日家训"弹窗在非雨花斋分支置顶展示——
+      // 这是门店自己真实配置的内容，不是编造的通用文案
+      this.setData({
+        cultureStoreSlogan1: (result.data && result.data.slogan1) || '',
+        cultureStoreSlogan2: (result.data && result.data.slogan2) || ''
+      });
+
+      const stc = result.data && result.data.serviceTargetConfig;
+      if (stc && stc.targetLabels) {
+        // 自定义标签与默认值合并：只覆盖非空项
+        const tl = stc.targetLabels;
+        this.setData({
+          storeTargetLabels: {
+            dineInLabel:   (tl.dineInLabel   && tl.dineInLabel.trim())   || defaultLabels.dineInLabel,
+            deliveryLabel: (tl.deliveryLabel && tl.deliveryLabel.trim()) || defaultLabels.deliveryLabel,
+            listenLabel:   (tl.listenLabel   && tl.listenLabel.trim())   || defaultLabels.listenLabel,
+            takeoutLabel:  (tl.takeoutLabel  && tl.takeoutLabel.trim())  || defaultLabels.takeoutLabel
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[loadStoreTargetConfig] 加载服务受众标签失败，使用默认值:', e);
     }
   },
 
@@ -1245,6 +1591,7 @@ Page({
       }
     } catch (e) {
       console.warn('[fetchLatestMaterialStatus] 查询最新物资库存状态失败，保留上次已知状态:', e);
+      reportCloudSdkErrorIfCorrupted(e);
     }
   },
 
@@ -1621,10 +1968,20 @@ Page({
     wx.setStorageSync('active_role', normalizedRole);
 
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
-    const isRealSuperAdmin = isSuperAdmin;
+    // 🐛 根因修复：与 refreshUserRoleView 同一个坑——isSuperAdmin 这里是从"切换/预览
+    // 目标角色"（store-picker 胶囊点击传来的 rawRole）算出来的，超管切到店长/义工
+    // 视角时会被降级为 false，不能直接拿来当"真实身份"用。改用服务端已核验角色缓存
+    // 直接判断，不受本次切店/切视角动作影响
+    const cachedRoleForRealAdmin = AuthService.getCachedRoleInfo();
+    const isRealSuperAdmin = !!(cachedRoleForRealAdmin && cachedRoleForRealAdmin.role === 'super_admin' && cachedRoleForRealAdmin.status === 'approved');
     const overridden = applyRoleViewOverride(normalizedRole, {
       currentUserRole: normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isFamily
     });
+    // 🐛 根因修复：见 utils/viewModePreview.ts resolveDisplayViewMode 注释——本次是
+    // store-picker 手动切换身份（normalizedRole 就是这次切换的目标角色），Banner/
+    // 管理视角切换卡片的文案必须跟着这次切换走，而不是继续读一份跟这次操作无关的
+    // 独立预览态
+    const currentViewMode = resolveDisplayViewMode(normalizedRole);
 
     this.setData({
       currentStoreId: storeId,
@@ -1634,7 +1991,8 @@ Page({
       currentRole: rawRole,
       currentUserRole: overridden.currentUserRole,
       isRealSuperAdmin: isRealSuperAdmin,
-      currentViewMode: getPreviewViewMode(),
+      currentViewMode,
+      currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
       isAllStoresView: isAllStoresView,
       isVolunteer: overridden.isVolunteer,
       isManager: overridden.isManager,
@@ -1665,6 +2023,11 @@ Page({
     this.fetchNotices();
     // 🌟 切店后同步刷新该门店云端保存的模板自定义内容，避免沿用切店前门店的致谢词/标语
     this.loadStoreTemplateFromCloud(storeId);
+    // 🌸 切店后同步刷新真实 orgType（此前 onStoreChanged 完全没有重新解析这个字段，
+    // 切店后 orgType/orgTypeBadge 会一直沿用切店前的旧值）；解析完成后顺带校准
+    // currentPlatformMode——切店有可能跨平台（如超管从社区食堂门店切到雨花斋门店），
+    // 避免"人已经在雨花门店里，模式牌子却还挂着通用"的错乱状态
+    this.loadStoreTargetConfig().then(() => this.reconcilePlatformModeWithOrgType());
 
     // 🏪 切店后同步刷新门店运营状态徽标；"全国总览"等虚拟门店 ID 不对应真实门店记录，跳过
     if (!isAllStoresView) {
@@ -2112,6 +2475,14 @@ Page({
     if (now - (this._lastCloseStorePosterModalAt || 0) < 400) return;
     this._lastCloseStorePosterModalAt = now;
     this.setData({ showStorePosterModal: false });
+  },
+
+  // 🛡️ 门店邀请海报加载失败兜底：storePosterTempFilePath 是本地临时文件路径，
+  // 清空后退回 Loading 遮罩态，提示用户重新生成
+  onStorePosterLoadError(e: any) {
+    console.warn('[onStorePosterLoadError] 门店邀请海报加载失败:', e && e.detail);
+    this.setData({ storePosterTempFilePath: '' });
+    wx.showToast({ title: '海报加载失败，请重新生成', icon: 'none' });
   },
 
   // 🆕 分享给微信群和朋友：按钮本身已声明 open-type="share"，点击时小程序会
@@ -2875,6 +3246,10 @@ Page({
     this.setData({ 'applyForm.phone': e.detail.value });
   },
 
+  onApplyRegionChange(e: any) {
+    this.setData({ 'applyForm.region': e.detail.value });
+  },
+
   // 🏛️ 大家长/店长/财务/义工四种身份提交后的提示文案与视觉变体：
   // - 义工：免审即时生效
   // - 大家长：天然包含店长+财务全套权限，无需重复申请（若当前已是店长，
@@ -2998,35 +3373,37 @@ Page({
   async onSubmitRoleApply() {
     if (this.data.isSubmittingApply) return;
 
-    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, address, contactPhone, storePhotos } = this.data.applyForm;
+    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos } = this.data.applyForm;
 
-    if (!realName || !realName.trim()) {
-      wx.showToast({ title: '请填写真实姓名', icon: 'none' });
-      return;
-    }
-    if (!phone || !phone.trim()) {
-      wx.showToast({ title: '请填写手机号', icon: 'none' });
-      return;
-    }
+    // ——— 必填校验（按展示顺序逐项拦截）———
     if (storeSelectionType === 'custom') {
       if (!customStoreName || !customStoreName.trim()) {
-        wx.showToast({ title: '请填写新门店名称', icon: 'none' });
+        wx.showToast({ title: '请输入门店名称', icon: 'none' });
         return;
       }
-      // 🛡️ 申请高阶角色/新建门店需先补全门店档案：新门店此刻还不存在，档案
-      // 就收在这张申请表单里（与客户端拦截配套的服务端兜底见 processRoleAudit）
-      if (!address || !address.trim() || !contactPhone || !contactPhone.trim() || !storePhotos || storePhotos.length === 0) {
-        wx.showModal({
-          title: '门店档案未补全',
-          content: '申请高阶角色/新建门店需先补全门店档案（地址、联系电话、门店照片）',
-          showCancel: false
-        });
+      if (!region || !region.length) {
+        wx.showToast({ title: '请选择所属地区', icon: 'none' });
         return;
       }
     } else if (!storeId) {
       wx.showToast({ title: '请选择一个门店', icon: 'none' });
       return;
     }
+    if (!requestedRole) {
+      wx.showToast({ title: '请选择申请身份', icon: 'none' });
+      return;
+    }
+    if (!realName || !realName.trim()) {
+      wx.showToast({ title: '请输入真实姓名', icon: 'none' });
+      return;
+    }
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      wx.showToast({ title: '请输入正确的手机号', icon: 'none' });
+      return;
+    }
+
+    // 🔑 未显式设置密钥时，默认取手机号后 6 位作为门店管理员密钥
+    const adminKey = phone.slice(-6);
 
     this.setData({ isSubmittingApply: true });
     wx.showLoading({ title: '提交申请中...', mask: true });
@@ -3049,9 +3426,11 @@ Page({
           storeName: displayStoreName,
           storeSelectionType,
           customStoreName: storeSelectionType === 'custom' ? customStoreName.trim() : '',
+          region: storeSelectionType === 'custom' ? region : [],
           address: storeSelectionType === 'custom' ? address.trim() : '',
           contactPhone: storeSelectionType === 'custom' ? contactPhone.trim() : '',
           storePhotos: storeSelectionType === 'custom' ? storePhotos : [],
+          adminKey: storeSelectionType === 'custom' ? adminKey : '',
           tenantId,
           requestedRole,
           realName: realName.trim(),
@@ -3073,7 +3452,8 @@ Page({
       if (result.autoApproved) {
         content = `您已成功加入【${displayStoreName}】，义工身份即刻生效，可以开始护持啦！`;
       } else if (storeSelectionType === 'custom') {
-        content = `您已成功申请加入新门店【${displayStoreName}】，待超级管理员审核通过后将自动建店并完成身份审核！`;
+        const adminKeyHint = requestedRole === 'store_patriarch' ? `\n\n🔑 您的门店管理密钥默认为手机号后6位：${adminKey}，请妥善保管。` : '';
+        content = `您已成功申请加入新门店【${displayStoreName}】，待超级管理员审核通过后将自动建店并完成身份审核！${adminKeyHint}`;
       } else {
         content = `您已成功申请加入【${displayStoreName}】，请联系店长/大家长或超级管理员完成身份审核！`;
       }
@@ -3284,6 +3664,14 @@ Page({
       data: this.data.inviteResultCode,
       success: () => wx.showToast({ title: '邀请码已复制', icon: 'success' })
     });
+  },
+
+  // 🛡️ 邀请太阳码加载失败兜底：inviteResultQrPath 是本地临时文件路径，加载失败时
+  // 清空并提示重新生成——邀请码文本本身仍可通过上方"一键复制邀请码"正常分享
+  onInviteResultQrLoadError(e: any) {
+    console.warn('[onInviteResultQrLoadError] 邀请太阳码加载失败:', e && e.detail);
+    this.setData({ inviteResultQrPath: '' });
+    wx.showToast({ title: '太阳码加载失败，可先复制邀请码', icon: 'none' });
   },
 
   // 📥 保存太阳码图片到相册，便于直接发到朋友圈/群聊而不需要额外截图
@@ -4229,7 +4617,12 @@ Page({
     const { field } = e.currentTarget.dataset;
     const value = e.detail.value;
     this.setData({ [field]: value });
-    
+
+    // 🔗 大家长手动修改服务总工时 → 标记为手动模式，后续自动汇总不再覆盖
+    if (field === 'volunteerHours') {
+      this.setData({ isManualHours: true, checkInHoursTip: '' });
+    }
+
     if (field === 'allDonations') {
       this.updateParseResult(value);
     }
@@ -4263,9 +4656,10 @@ Page({
 
   // 🍱 用餐/义工细分统计实时计算：用餐总数 = 堂食长者+送餐长者+打包+堂食志愿者；
   // 志愿者总人次 = 送餐志愿者+堂食志愿者。计算结果同时镜像进 diningCount/volunteerCount，
-  // 使统计大屏、海报生成、Excel 导出、风控校验等一切既有下游无需感知本次细分字段改造
+  // 使统计大屏、海报生成、Excel 导出、风控校验等一切既有下游无需感知本次细分字段改造。
+  // 🔗 自动计算服务总工时：志愿者总人次 × 4h（默认每人4小时），仅当 !isManualHours 时生效
   recalcDiningStats() {
-    const { dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount } = this.data;
+    const { dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, isManualHours } = this.data;
     const nDineInSeniors = parseFloat(dineInSeniors) || 0;
     const nDeliverySeniors = parseFloat(deliverySeniors) || 0;
     const nDineInVolunteers = parseFloat(dineInVolunteers) || 0;
@@ -4275,12 +4669,19 @@ Page({
     const totalDineCount = nDineInSeniors + nDeliverySeniors + nTakeaway + nDineInVolunteers;
     const totalVolunteers = nDeliveryVolunteers + nDineInVolunteers;
 
-    this.setData({
+    const patch: Record<string, any> = {
       totalDineCount: String(totalDineCount),
       totalVolunteers: String(totalVolunteers),
       diningCount: String(totalDineCount),
       volunteerCount: String(totalVolunteers)
-    });
+    };
+
+    // 自动估算服务工时：未手动覆盖 且 有志愿者人次时才计算
+    if (!isManualHours && totalVolunteers > 0) {
+      patch.volunteerHours = String(parseFloat((totalVolunteers * 4).toFixed(1)));
+    }
+
+    this.setData(patch);
   },
 
   // 📋 【一键复用昨日数据】：把 loadBalanceForDate 时顺手带出的昨日细分统计快照
@@ -4298,8 +4699,9 @@ Page({
       takeawayCount: String(snapshot.takeawayCount),
       dineInVolunteers: String(snapshot.dineInVolunteers),
       deliveryVolunteers: String(snapshot.deliveryVolunteers),
-      volunteerHours: String(snapshot.volunteerHours),
-      listeningSeniors: String(snapshot.listeningSeniors || 0)
+      listeningSeniors: String(snapshot.listeningSeniors || 0),
+      isManualHours: false,
+      checkInHoursTip: ''
     });
     this.recalcDiningStats();
     this.debouncedSaveDraft();
@@ -5613,7 +6015,10 @@ Page({
         });
         const checkResult = checkRes.result as any;
         if (checkResult && !checkResult.isSafe) {
-          wx.hideLoading();
+          // 🐛 showLoading/hideLoading 配对修复：这里曾经额外调用过一次 wx.hideLoading()，
+          // 但函数末尾的外层 finally（见下方）已经保证无论走哪条分支都会且只会隐藏一次
+          // loading——这里再调一次会导致 hideLoading 调用次数多于 showLoading，触发调试器
+          // "showLoading 与 hideLoading 必须配对使用"的告警。统一收口到外层 finally。
           wx.showModal({
             title: '⚠️ 违规内容拦截',
             content: checkResult.reason || '图片内容未通过安全校验，请更换图片',
@@ -5632,8 +6037,6 @@ Page({
           name: 'ocrDonationList',
           data: { fileID: uploadedFileId }
         });
-
-        wx.hideLoading();
 
         const result = ocrRes.result as any;
         if (result && result.success && result.formattedText) {
@@ -5682,7 +6085,6 @@ Page({
         }
       }
     } catch (e: any) {
-      wx.hideLoading();
       const errMsg = e.errMsg || e.message || '';
       console.warn('[onScanDonorScreenshot] 捕获到异常:', e);
       if (errMsg.includes('cancel')) {
@@ -5692,6 +6094,8 @@ Page({
       }
       wx.showToast({ title: '识别失败：' + (e.message || errMsg || '未知错误'), icon: 'none' });
     } finally {
+      // 🐛 唯一的 hideLoading 出口：无论成功/提前 return/异常，finally 都保证恰好
+      // 执行一次，与函数内唯一一次进入循环前的 wx.showLoading() 严格配对
       wx.hideLoading();
       this.setData({ isScanningDonorList: false });
     }
@@ -6723,6 +7127,13 @@ Page({
     ]).finally(() => {
       this._homeDataFetchInFlight = false;
     });
+
+    // 🔗 管理岗位：非阻塞式预取今日打卡工时，自动预填【服务总工时】字段
+    // isManager/isPatriarch 在 initCurrentUserRole() 就绪后才有值，
+    // loadHomeDynamicData 每次都在角色解析完成后调用，此处可安全读取
+    if (this.data.isManager || this.data.isPatriarch) {
+      this.syncCheckInHoursToForm();
+    }
   },
 
   onShow() {
@@ -7172,18 +7583,30 @@ Page({
     const isFamily = rawRole === 'STORE_FAMILY';
     const isPatriarch = rawRole === 'STORE_PATRIARCH';
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
-    const isRealSuperAdmin = isSuperAdmin;
+    // 🐛 根因修复：这里原来写的是 `const isRealSuperAdmin = isSuperAdmin`，而这个
+    // isSuperAdmin 是从上面被 current_user_role 存储值（可能是超管之前预览/切换过的
+    // 店长/义工等角色）替换过的 rawRole 算出来的——超管只要用过一次"视角切换"或
+    // store-picker 预览成别的角色，这里就会被污染成 false，之后即便回到超管本人
+    // 视角，isRealSuperAdmin 也会一直错误地是 false（因为 rawRole 读的是那个残留的
+    // storage 值）。真正"不受预览覆盖影响"的真实身份，是本函数开头已经算好的
+    // isVerifiedSuperAdminAccount（直接来自服务端已核验角色缓存，不经过 storage
+    // 预览态中转），这里改用它，而不是被 rawRole 污染过的局部变量
     const overridden = applyRoleViewOverride(role, {
       currentUserRole: role, isVolunteer, isManager, isFinance, isSuperAdmin, isFamily
     });
+    // 🐛 根因修复：见 utils/viewModePreview.ts resolveDisplayViewMode 注释。role 这里
+    // 大小写不统一（正常路径是 setStorageSync 写入的小写值，DEV_FALLBACK_ROLE 兜底是
+    // 大写 'SUPER_ADMIN'），resolveDisplayViewMode 的映射表按小写 key，显式 toLowerCase()
+    const currentViewMode = resolveDisplayViewMode(role.toLowerCase());
 
     this.setData({
       currentUserRole: overridden.currentUserRole,
       currentRole: rawRole,
       currentStoreName: storeName,
       currentStoreId: storeId,
-      isRealSuperAdmin: isRealSuperAdmin,
-      currentViewMode: getPreviewViewMode(),
+      isRealSuperAdmin: isVerifiedSuperAdminAccount,
+      currentViewMode,
+      currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
       isAllStoresView: isAllStoresView,
       isVolunteer: overridden.isVolunteer,
       isManager: overridden.isManager,
@@ -7193,38 +7616,121 @@ Page({
       isFamily: overridden.isFamily,
       permissions: getPermissionFlags({ role })
     });
-
-    this.checkComplianceNotice();
   },
 
-  // 🌟 合规授权须知：分两档独立记忆，互不覆盖——
-  // 'general' 档：任何角色首次进入小程序都必须阅读一次「非官方属性 + 不提供募捐」声明；
-  // 'privileged' 档：即使已经读过 general 版，一旦这个设备上的账号第一次具备财务/店长/
-  // 超管权限（能看到/操作账目数据的角色），必须再单独确认一次——这类角色看到的是
-  // 具体金额与账本，合规风险高于普通义工视角，需要更明确地二次确认知悉其非官方属性。
+  // 🐛 根因排查记录：之前超管点【通用素食/门店记账】仍被拦"暂不支持"，真正原因不是
+  // 这里的判断条件写少了字段，而是 refreshUserRoleView()/onStoreChanged() 里
+  // isRealSuperAdmin 被"当前预览/切换到的角色"污染——超管只要用过一次视角切换或
+  // store-picker 预览成店长/义工，isRealSuperAdmin 就会被错误算成 false，且此后
+  // 一直带着这个错误值，与本函数里判断条件本身无关。已在那两处改为直接读服务端
+  // 已核验角色缓存（不经过会被预览态覆盖的 storage 中转）来修复根因。
+  // 这里保留一层兜底：isCurrentAccountSuperAdmin() 在 this.data 两个标记都不可信时
+  // 再直接查一次 AuthService 缓存，双保险
+  //
+  // 🏢 工作空间选择首页：点击【雨花公益食堂专区】卡片。模式与账号真实绑定门店的
+  // orgType 强绑定（见需求确认）——账号真实 orgType 不是 'yuhuazhai' 时，这张卡片
+  // 点了也不会进去，只友好提示，不额外引入"同一账号跨平台绑店"这套新流程。
+  // 🛡️ 超级管理员无条件放行：入口处优先判断，两张卡片都直接放行，绝不弹"暂不支持"。
+  // 雨花声明仍照走（见 enterYuhuaWorkspaceFlow 内 isPrivilegedView 已含 isSuperAdmin），
+  // 不会绕过合规弹窗，只是不再被"账号绑定的是不是雨花斋门店"这条判断拦截
+  onSelectYuhuaPlatform() {
+    console.log('[PlatformSelect] onSelectYuhuaPlatform this.data:', this.data);
+    const isSuperAdminAccount = this.isCurrentAccountSuperAdmin();
+    console.log('[PlatformSelect] onSelectYuhuaPlatform isSuperAdminAccount:', isSuperAdminAccount, 'orgType:', this.data.orgType);
+    if (!isSuperAdminAccount && this.data.orgType !== 'yuhuazhai') {
+      wx.showModal({
+        title: '暂不支持',
+        content: '您的账号当前绑定的门店不是雨花斋类型，暂时无法进入雨花公益食堂专区。',
+        showCancel: false
+      });
+      return;
+    }
+    this.enterYuhuaWorkspaceFlow();
+  },
+
+  // 🏢 工作空间选择首页：点击【通用素食/门店记账】卡片。不涉及雨花声明，orgType
+  // 只要不是 'yuhuazhai' 就直接放行——elderly_canteen/volunteer_station/rescue_team/
+  // tongxin_children/other 等其余机构类型统一归入这张"通用"卡片。
+  // 🛡️ 超级管理员无条件放行：同上，确保绑定了雨花斋门店的超管账号（或正预览雨花斋
+  // 店内某角色的超管）不会被误判成"普通雨花门店用户"而拦在通用卡片外
+  onSelectGeneralPlatform() {
+    console.log('[PlatformSelect] onSelectGeneralPlatform this.data:', this.data);
+    const isSuperAdminAccount = this.isCurrentAccountSuperAdmin();
+    console.log('[PlatformSelect] onSelectGeneralPlatform isSuperAdminAccount:', isSuperAdminAccount, 'orgType:', this.data.orgType);
+    if (!isSuperAdminAccount && this.data.orgType === 'yuhuazhai') {
+      wx.showModal({
+        title: '暂不支持',
+        content: '您的账号当前绑定的是雨花斋门店，请从「雨花公益食堂专区」进入。',
+        showCancel: false
+      });
+      return;
+    }
+    this.setData({ currentPlatformMode: 'general' });
+  },
+
+  // 🛡️ 超管判定：优先信任 this.data 上已经算好的 isRealSuperAdmin（真实身份，见
+  // refreshUserRoleView/onStoreChanged 根因修复）或 isSuperAdmin（当前展示态）；
+  // 两者都不可信时，直接查一次 AuthService 已核验角色缓存兜底，不依赖任何
+  // 本页面未定义过的字段（globalRole/cachedRole/userRole 等在这个文件里都不存在，
+  // 不要照抄别处模板里的字段名，会变成永远判不中的死代码）
+  isCurrentAccountSuperAdmin(): boolean {
+    if (this.data.isRealSuperAdmin || this.data.isSuperAdmin) return true;
+    const cached = AuthService.getCachedRoleInfo();
+    return !!(cached && cached.role === 'super_admin' && cached.status === 'approved');
+  },
+
+  // 🌸 雨花工作空间进入流程：分两档独立记忆声明确认，互不覆盖——
+  // 'general' 档：任何角色首次进入雨花平台都必须阅读一次「非官方属性 + 不提供募捐」声明；
+  // 'privileged' 档：即使已经读过 general 版，一旦这个设备上的账号第一次以财务/店长/
+  // 超管权限进入雨花平台（能看到/操作账目数据的角色），必须再单独确认一次——这类角色
+  // 看到的是具体金额与账本，合规风险高于普通义工视角，需要更明确地二次确认知悉其非官方属性。
   // 两档各自的确认状态分别持久化在本地 storage，只弹一次，不会每次进入都打扰用户。
-  checkComplianceNotice() {
+  enterYuhuaWorkspaceFlow() {
     if (this.data.showComplianceModal) return;
 
-    const generalAck = wx.getStorageSync('complianceNoticeAck_general');
-    if (!generalAck) {
+    if (!hasAgreedYuhuaGeneralDisclaimer()) {
       this.setData({ showComplianceModal: true, complianceModalScene: 'general' });
       return;
     }
 
     const isPrivilegedView = this.data.isManager || this.data.isFinance || this.data.isSuperAdmin;
-    const privilegedAck = wx.getStorageSync('complianceNoticeAck_privileged');
-    if (isPrivilegedView && !privilegedAck) {
+    if (isPrivilegedView && !hasAgreedYuhuaPrivilegedDisclaimer()) {
       this.setData({ showComplianceModal: true, complianceModalScene: 'privileged' });
+      return;
+    }
+
+    // 两档均已确认（或本档不适用）：放行，切到雨花工作空间内容
+    this.setData({ currentPlatformMode: 'yuhua' });
+  },
+
+  onAcknowledgeYuhuaDisclaimer() {
+    if (this.data.complianceModalScene === 'general') {
+      acknowledgeYuhuaGeneralDisclaimer();
+      this.setData({ showComplianceModal: false });
+      // general 确认后立即续跑一次入口校验，若当前视角还需要 privileged 档二次确认，
+      // 会紧接着弹出该档弹窗；否则直接放行，无需用户再点一次卡片
+      this.enterYuhuaWorkspaceFlow();
+      return;
+    }
+    if (this.data.complianceModalScene === 'privileged') {
+      acknowledgeYuhuaPrivilegedDisclaimer();
+      this.setData({ showComplianceModal: false, currentPlatformMode: 'yuhua' });
     }
   },
 
-  onAcknowledgeCompliance() {
-    wx.setStorageSync('complianceNoticeAck_general', true);
-    if (this.data.complianceModalScene === 'privileged') {
-      wx.setStorageSync('complianceNoticeAck_privileged', true);
+  // 🏢 切店后校准平台模式：切店有可能跨平台边界（如超管从社区食堂门店切到雨花斋门店），
+  // 避免"人已经在新门店的数据里，模式牌子却还挂着旧的"这种错乱状态。这里是被动校准，
+  // 不是用户主动点卡片，所以不做 orgType 不匹配的拦截提示，只按新 orgType 静默纠正；
+  // 纠正到 'yuhua' 且尚未同意声明时，仍会走完整的声明校验（不会绕过合规弹窗）
+  reconcilePlatformModeWithOrgType() {
+    if (!this.data.currentPlatformMode) return; // 还停留在工作空间选择首页，无需校准
+    if (this.data.orgType === 'yuhuazhai') {
+      if (this.data.currentPlatformMode !== 'yuhua') {
+        this.enterYuhuaWorkspaceFlow();
+      }
+    } else if (this.data.currentPlatformMode !== 'general') {
+      this.setData({ currentPlatformMode: 'general' });
     }
-    this.setData({ showComplianceModal: false });
   },
 
   onCloseComplianceReview() {
@@ -7776,6 +8282,14 @@ Page({
     this.setData({ showPoster: false });
   },
 
+  // 🛡️ 海报图片加载失败兜底：posterImage 是 Canvas 生成的本地临时文件，小概率
+  // 在渲染前被系统清理——清空该字段退回空白，提示用户重新生成，而不是留一块裂图
+  onPosterImageLoadError(e: any) {
+    console.warn('[onPosterImageLoadError] 海报图片加载失败:', e && e.detail);
+    this.setData({ posterImage: '' });
+    wx.showToast({ title: '海报加载失败，请重新生成', icon: 'none' });
+  },
+
   onClosePosterModal() {
     this.setData({ showPosterModal: false });
   },
@@ -7951,8 +8465,14 @@ Page({
         ledgerPublicRate: result.ledgerPublicRate || null
       };
       const isYuhuazhai = this.data.orgType === 'yuhuazhai';
+      // 🆕 理念弹窗文案：result.orgType 是这次调用刚拿到的门店真实业态类型，
+      // 优先于 this.data.orgType（那个字段只区分"是否雨花斋"，颗粒度不够）
+      const conceptCopy = computeConceptCopy(result.orgType || '', ledgerData.storeName || this.data.currentStoreName);
       this.setData({
         sunshineLedgerData: ledgerData,
+        conceptTitle: conceptCopy.title,
+        conceptLabel: conceptCopy.label,
+        conceptContent: conceptCopy.content,
         // 📊 完美 4x2 网格：固定 8 项，缺数据时展示"暂无数据"而不是编造出的百分比；
         // 工时/志愿人次标签随 orgType 动态切换：雨花斋用"护持"，其他组织用"服务/志愿"
         sunshineStatCards: [
@@ -8080,9 +8600,20 @@ Page({
   // 通知，具体门店视角只拿该店专属通知，两者不叠加展示（见 manageNotice 云函数）。
   // 关闭状态（notice_bar_hidden_date）与查询结果分开判断：即使当天已关闭，也要
   // 先把数据拉回来存好，下一次视角切换/新的一天自然又能正常展示。
-  // 📖 雨花文化全集：一次性把十大模块数据摆进 data，弹窗内 scroll-view 结构化分层
-  // 展示全貌——module 7（雨花家训）沿用既有三个字段，不重复赋值
+  // 📖 【机构文化与每日家训】弹窗：先按真实 orgType 定标题；只有 yuhuazhai 才
+  // 装配 utils/cultureData.ts 那套雨花斋专属十大模块原文（module 7/雨花家训
+  // 沿用既有三个字段，不重复赋值）。其余机构（elderly_canteen 社区助餐/敬老
+  // 中心、以及未设置 orgType 的通用公益门店）没有对应的权威素材，一律走通用
+  // 分支——WXML 侧按 orgType 二选一渲染，不把雨花斋内容套到其他机构头上
   onShowFamilyMottoModal() {
+    const orgType = this.data.orgType;
+    this.setData({ cultureModalTitle: computeCultureModalTitle(orgType) });
+
+    if (orgType !== 'yuhuazhai') {
+      this.setData({ showFamilyMottoModal: true });
+      return;
+    }
+
     this.setData({
       showFamilyMottoModal: true,
       familyMottoMindFormula: FAMILY_MOTTO.mindFormula,
@@ -8285,17 +8816,35 @@ Page({
   },
 
   // 套用云端模板（区别于 onApplyPreset 套用本机内置的 7 条示例文案）
+  // 🆕 高危操作二次确认：标题/正文任一已有内容时，套用会整体覆盖当前已填内容，
+  // 弹窗二次确认避免误触丢失编辑中的文字；内容为空时直接套用，不额外打断操作
   onApplyCloudTemplate(e: any) {
     const id = e.currentTarget.dataset.id;
     const tpl = this.data.noticeTemplates.find((t: any) => t._id === id);
     if (!tpl) return;
 
-    this.setData({
-      noticeEditTag: tpl.tag || '',
-      noticeEditTitle: tpl.title || '',
-      noticeEditContent: tpl.content || ''
-    });
-    wx.showToast({ title: '已导入模板', icon: 'success', duration: 1500 });
+    const applyTemplate = () => {
+      this.setData({
+        noticeEditTag: tpl.tag || '',
+        noticeEditTitle: tpl.title || '',
+        noticeEditContent: tpl.content || ''
+      });
+      wx.showToast({ title: '已导入模板', icon: 'success', duration: 1500 });
+    };
+
+    if (this.data.noticeEditTitle.trim() || this.data.noticeEditContent.trim()) {
+      wx.showModal({
+        title: '确认替换内容？',
+        content: `套用「${tpl.title}」将替换当前已填写的标题与正文，且无法撤销`,
+        confirmText: '确认替换',
+        confirmColor: '#E03131',
+        success: (res) => {
+          if (res.confirm) applyTemplate();
+        }
+      });
+      return;
+    }
+    applyTemplate();
   },
 
   onToggleSaveAsSystemTemplate(e: any) {
@@ -8417,11 +8966,19 @@ Page({
     this.onTapMaterialStatus(e);
   },
 
+  // 🆕 高危操作二次确认：标题/正文任一已有内容时，套用预设会整体覆盖当前已填
+  // 内容，弹窗二次确认避免误触丢失编辑中的文字；内容为空时直接套用，不额外打断
   onApplyPreset(e: any) {
-    const key = e.currentTarget.dataset.key;
-    const preset = PRESET_NOTICES[key as keyof typeof PRESET_NOTICES];
-    
-    if (preset) {
+    const key = e.currentTarget.dataset.key as NoticePresetType;
+    // 🛡️ 全国总览视角下 currentStoreName 是"全国总览"这类虚拟聚合名，不是真实
+    // 门店名，不能塞进通报正文——让 getNoticeTemplate 自己的兜底称谓接管
+    const rawStoreName = this.data.currentStoreName || '';
+    const isVirtualStoreName = rawStoreName === '全国总览' || rawStoreName === 'ALL_STORES';
+    const storeName = isVirtualStoreName ? '' : rawStoreName;
+    const preset = getNoticeTemplate(key, this.data.orgType, storeName);
+    if (!preset) return;
+
+    const applyPreset = () => {
       this.setData({
         noticeEditTag: preset.tag,
         noticeEditTitle: preset.title,
@@ -8432,7 +8989,21 @@ Page({
         icon: 'success',
         duration: 1500
       });
+    };
+
+    if (this.data.noticeEditTitle.trim() || this.data.noticeEditContent.trim()) {
+      wx.showModal({
+        title: '确认替换内容？',
+        content: `套用「${preset.title}」将替换当前已填写的标题与正文，且无法撤销`,
+        confirmText: '确认替换',
+        confirmColor: '#E03131',
+        success: (res) => {
+          if (res.confirm) applyPreset();
+        }
+      });
+      return;
     }
+    applyPreset();
   },
 
   // 🔗 通知云端化：不再写本机 custom_notice，改成呼叫 manageNotice 云函数落库。
@@ -8602,6 +9173,51 @@ Page({
     };
     if (!this.ensureStoreBoundForTool(open)) return;
     open();
+  },
+
+  // 🔗 打卡工时自动联动：拉取今日门店所有打卡工时并预填【服务总工时】字段。
+  // force=true  → 忽略手动覆盖标记（check-in/revoke 成功后强制刷新）
+  // force=false → 若用户已手动改过数值则跳过，避免覆盖大家长的手工修正
+  async syncCheckInHoursToForm(force = false) {
+    // 仅管理岗位有权限查询全店打卡数据
+    if (!this.data.isManager && !this.data.isPatriarch) return;
+    // 非强制模式下尊重手动输入
+    if (!force && this.data.isManualHours) return;
+
+    const reportDateValue = this.data.reportDateValue;
+    // 北京时间今日日期字符串
+    const todayStr = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // 历史记录编辑时不自动覆盖
+    if (reportDateValue && reportDateValue !== todayStr) return;
+    const dateString = reportDateValue || todayStr;
+
+    const currentStoreId = this.data.currentStoreId || '';
+    if (!currentStoreId || !isCloudAvailable()) return;
+
+    // 同日防重复拉取（force=true 时跳过缓存，例如打卡刚完成）
+    if (!force && this._checkInHoursCachedDate === dateString) return;
+
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageVolunteerCheckIn',
+        data: { action: 'queryStoreHours', storeId: currentStoreId, dateString }
+      });
+      const result = res.result;
+      this._checkInHoursCachedDate = dateString;
+
+      if (result && result.success && result.totalHours > 0) {
+        // force 时重置 isManualHours，确保本次打卡数据能写入
+        this.setData({
+          volunteerHours: String(result.totalHours),
+          checkInHoursTip: `💡 ${result.uniqueVolunteers}人次打卡`,
+          isManualHours: false
+        });
+      } else {
+        this.setData({ checkInHoursTip: '' });
+      }
+    } catch (err) {
+      console.warn('[syncCheckInHoursToForm] 打卡工时同步失败:', err);
+    }
   },
 
   refreshTodayShiftStatus() {
@@ -8868,6 +9484,9 @@ Page({
     } else {
       wx.showToast({ title: `打卡成功！+${addHours}h`, icon: 'success' });
     }
+
+    // 🔗 打卡成功 → 强制刷新服务总工时联动（忽略 isManualHours，以最新云端汇总为准）
+    this.syncCheckInHoursToForm(true);
   },
 
   // 🔒 撤销打卡：限当天（today-checked-section 本就只渲染 todayLogs，天然满足"限当天"）
@@ -8964,6 +9583,8 @@ Page({
 
           this.refreshTodayShiftStatus();
           wx.showToast({ title: '已成功撤销该笔记录', icon: 'none' });
+          // 🔗 撤销后强制刷新服务总工时联动
+          this.syncCheckInHoursToForm(true);
         }
       }
     });
