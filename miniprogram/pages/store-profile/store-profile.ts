@@ -26,6 +26,43 @@ type ProfileField = typeof PROFILE_FIELDS[number];
 const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'] as const;
 type TextProfileField = typeof TEXT_PROFILE_FIELDS[number];
 
+// 🏢 平台类型：与 store-picker、getNationalDashboard 大屏筛选共用同一套 value 字面量
+const ORG_TYPE_OPTIONS = [
+  { name: '🌸 雨花斋', value: 'yuhuazhai' },
+  { name: '👵👴 社区助老食堂/敬老家园', value: 'elderly_canteen' },
+  { name: '🤝 社区义工服务站', value: 'volunteer_station' },
+  { name: '🛟 应急救援队', value: 'rescue_team' },
+  { name: '🧒 同心儿童院/青少年关爱', value: 'tongxin_children' },
+  { name: '🎗️ 同心癌友关怀会', value: 'tongxin_cancer_care' },
+  { name: '💫 其他爱心组织', value: 'other' }
+];
+
+// 🏮 品牌矩阵归属：将多个 orgType 的站点归并到同一品牌，
+// 用于全国大屏"同心慈善会矩阵 / 雨花矩阵"聚合筛选
+const PLATFORM_FAMILY_OPTIONS = [
+  { name: '不设（独立站点）', value: '' },
+  { name: '🏮 同心慈善会', value: 'tongxin' },
+  { name: '🌸 雨花品牌', value: 'yuhuazhai' }
+];
+const PLATFORM_FAMILY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  PLATFORM_FAMILY_OPTIONS.filter(o => o.value).map(o => [o.value, o.name])
+);
+
+// 🏷️ 各业态默认服务受众标签：未配置自定义 serviceTargetConfig 时的兜底文案
+export const ORG_TYPE_DEFAULT_TARGET_LABELS: Record<string, {
+  dineInLabel: string; deliveryLabel: string; listenLabel: string; takeoutLabel: string;
+}> = {
+  yuhuazhai:        { dineInLabel: '堂食长者',     deliveryLabel: '送餐长者',     listenLabel: '倾听陪伴',      takeoutLabel: '打包份数'     },
+  elderly_canteen:  { dineInLabel: '堂食老人',     deliveryLabel: '送餐老人',     listenLabel: '倾听陪伴',      takeoutLabel: '打包份数'     },
+  volunteer_station:{ dineInLabel: '服务人次',     deliveryLabel: '上门服务',     listenLabel: '陪伴关怀',      takeoutLabel: '物资包'       },
+  rescue_team:      { dineInLabel: '现场救援人次', deliveryLabel: '外出救援',     listenLabel: '心理疏导',      takeoutLabel: '物资包'       },
+  tongxin_children:     { dineInLabel: '院内儿童用餐',   deliveryLabel: '外送关爱儿童',    listenLabel: '心理疏导/陪伴',  takeoutLabel: '打包爱心餐'   },
+  tongxin_cancer_care:  { dineInLabel: '探访关怀人次',   deliveryLabel: '营养膳食/抗癌物资', listenLabel: '心理疏导人次',   takeoutLabel: '社工陪伴工时'  },
+  other:                { dineInLabel: '堂食服务',       deliveryLabel: '送餐服务',        listenLabel: '关爱陪伴',       takeoutLabel: '打包份数'     },
+};
+const DEFAULT_TARGET_LABELS = { dineInLabel: '堂食服务人次', deliveryLabel: '送餐服务', listenLabel: '关爱陪伴', takeoutLabel: '打包份数' };
+const ORG_TYPE_LABEL_MAP: Record<string, string> = Object.fromEntries(ORG_TYPE_OPTIONS.map(o => [o.value, o.name]));
+
 const TEXT_PROFILE_FIELD_LABELS: Record<TextProfileField, string> = {
   address: '详细地址',
   contactPhone: '联系电话',
@@ -109,6 +146,21 @@ Page({
     characteristics: '',
     province: '',
     city: '',
+    // 🏢 平台类型：存储 value 字面量（如 'yuhuazhai'）+ 展示用标签（含 emoji）。
+    // 已改为进入首页时的工作空间选择一次性确定，本页只读展示，不再提供编辑 picker
+    orgType: '',
+    orgTypeLabel: '',
+    // 🏮 品牌矩阵归属：'tongxin'/'yuhuazhai'/''
+    platformFamily: '',
+    platformFamilyLabel: '',
+    platformFamilyPickerIndex: 0,
+    platformFamilyOptions: PLATFORM_FAMILY_OPTIONS,
+    // 🏷️ 服务受众标签配置：platformBrand（品牌名）+ targetLabels（填报表单自适应文案）
+    serviceTargetConfig: null as null | {
+      platformBrand?: string;
+      targetLabels?: { dineInLabel?: string; deliveryLabel?: string; listenLabel?: string; takeoutLabel?: string };
+      enabledFeatures?: string[];
+    },
     operatingStatus: 'operating',
     operatingStatusLabel: '运营中',
     latitude: null as number | null,
@@ -148,6 +200,14 @@ Page({
       characteristics: '',
       province: '',
       city: '',
+      orgType: '',
+      platformFamily: '',
+      // 🏷️ 服务受众标签配置：与展示态同步，编辑时直接修改这四项文案
+      platformBrand: '',
+      dineInLabel: '',
+      deliveryLabel: '',
+      listenLabel: '',
+      takeoutLabel: '',
       operatingStatus: 'operating' as 'operating' | 'preparing' | 'paused',
       latitude: undefined as number | undefined,
       longitude: undefined as number | undefined,
@@ -312,8 +372,19 @@ Page({
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
       PHOTO_FIELDS.forEach((f) => { update[f] = Array.isArray(data[f]) ? data[f] : []; });
+      const loadedOrgType = data.orgType || '';
+      update.orgType = loadedOrgType;
+      update.orgTypeLabel = ORG_TYPE_LABEL_MAP[loadedOrgType] || '';
       update.adminKeySet = !!data.adminKeySet;
       update.adminKeyCurrentVal = data.adminKey || '';
+      // 🏷️ 服务受众标签配置：从云端加载，无配置时退回当前 orgType 的默认值
+      const stc = data.serviceTargetConfig || null;
+      update.serviceTargetConfig = stc;
+      // 🏮 品牌矩阵归属
+      const loadedPlatformFamily = data.platformFamily || '';
+      update.platformFamily = loadedPlatformFamily;
+      update.platformFamilyLabel = PLATFORM_FAMILY_LABEL_MAP[loadedPlatformFamily] || '';
+      update.platformFamilyPickerIndex = Math.max(0, PLATFORM_FAMILY_OPTIONS.findIndex(o => o.value === loadedPlatformFamily));
       this.setData(update);
       // 🛡️ canManage 不在这份 update 里——它自始至终只由 initRoleAndStore() 的
       // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
@@ -386,6 +457,15 @@ Page({
     const editForm: any = {};
     PROFILE_FIELDS.forEach((f) => { editForm[f] = String((this.data as any)[f] || 0); });
     TEXT_PROFILE_FIELDS.forEach((f) => { editForm[f] = (this.data as any)[f] || ''; });
+    editForm.platformFamily = this.data.platformFamily || '';
+    // 🏷️ 服务受众标签配置：编辑时预填当前配置（若无则用 orgType 默认值）
+    const stc = this.data.serviceTargetConfig;
+    const defLabels = (ORG_TYPE_DEFAULT_TARGET_LABELS as any)[this.data.orgType] || DEFAULT_TARGET_LABELS;
+    editForm.platformBrand = (stc && stc.platformBrand) || '';
+    editForm.dineInLabel   = (stc && stc.targetLabels && stc.targetLabels.dineInLabel)   || defLabels.dineInLabel   || '';
+    editForm.deliveryLabel = (stc && stc.targetLabels && stc.targetLabels.deliveryLabel) || defLabels.deliveryLabel || '';
+    editForm.listenLabel   = (stc && stc.targetLabels && stc.targetLabels.listenLabel)   || defLabels.listenLabel   || '';
+    editForm.takeoutLabel  = (stc && stc.targetLabels && stc.targetLabels.takeoutLabel)  || defLabels.takeoutLabel  || '';
     editForm.operatingStatus = this.data.operatingStatus || 'operating';
     editForm.latitude = this.data.latitude;
     editForm.longitude = this.data.longitude;
@@ -539,6 +619,19 @@ Page({
       const payload: any = { action: 'update', storeId: this.data.currentStoreId };
       PROFILE_FIELDS.forEach((f) => { payload[f] = parseInt(this.data.editForm[f], 10) || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { payload[f] = this.data.editForm[f] || ''; });
+      // 🏢 平台类型：已改为进入首页时的工作空间选择一次性确定，本页只读展示，
+      // 不再随整页编辑表单一并提交，避免覆盖首页选定的真实值
+      // 🏷️ 服务受众标签配置：将 editForm 中的 4 个标签字段打包成 serviceTargetConfig 提交
+      const ef = this.data.editForm as any;
+      payload.serviceTargetConfig = {
+        platformBrand: ef.platformBrand || '',
+        targetLabels: {
+          dineInLabel: ef.dineInLabel || '',
+          deliveryLabel: ef.deliveryLabel || '',
+          listenLabel: ef.listenLabel || '',
+          takeoutLabel: ef.takeoutLabel || ''
+        }
+      };
       payload.operatingStatus = this.data.editForm.operatingStatus;
       // 🏅 只提交 storePhotos——门头照/民政备案复印件/食品安全承诺走各自独立的
       // "门店资质与实景公示"弹窗（onSaveQualification），不在这份整页提交里，
@@ -578,6 +671,7 @@ Page({
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = payload[f]; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = payload[f]; });
+      update.serviceTargetConfig = payload.serviceTargetConfig || null;
       update.storePhotos = payload.storePhotos;
       if (payload.latitude !== undefined) {
         update.latitude = payload.latitude;

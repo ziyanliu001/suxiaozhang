@@ -72,6 +72,20 @@
         <text class="sp-archive-val">{{registeredName || '未填写'}}</text>
       </view>
       <view class="sp-archive-row">
+        <text class="sp-archive-lbl">所属平台类型</text>
+        <text class="sp-archive-val">{{orgTypeLabel || (orgType ? orgType : '未设置')}}</text>
+      </view>
+      <view class="sp-archive-row" wx:if="{{serviceTargetConfig && serviceTargetConfig.platformBrand}}">
+        <text class="sp-archive-lbl">品牌名称</text>
+        <text class="sp-archive-val">{{serviceTargetConfig.platformBrand}}</text>
+      </view>
+      <view class="sp-archive-row" wx:if="{{serviceTargetConfig && serviceTargetConfig.targetLabels}}">
+        <text class="sp-archive-lbl">填报标签配置</text>
+        <text class="sp-archive-val sp-target-labels">
+          {{serviceTargetConfig.targetLabels.dineInLabel || '—'}} · {{serviceTargetConfig.targetLabels.deliveryLabel || '—'}} · {{serviceTargetConfig.targetLabels.listenLabel || '—'}} · {{serviceTargetConfig.targetLabels.takeoutLabel || '—'}}
+        </text>
+      </view>
+      <view class="sp-archive-row">
         <text class="sp-archive-lbl">所在省市</text>
         <text class="sp-archive-val">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
       </view>
@@ -136,6 +150,40 @@
     </view>
 
     <view class="sp-archive-edit-card" wx:if="{{editing}}">
+      <!-- 🏢 平台类型：已改为进入首页时的工作空间选择一次性确定，档案编辑页仅只读展示，
+           不再提供二次修改入口 -->
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">所属平台类型</text>
+        <view class="sp-edit-input full sp-edit-input-readonly">{{orgTypeLabel || '未设置'}}</view>
+      </view>
+
+      <!-- 🏷️ 服务受众标签配置：大家长可一键修改填报表单文案，支持同心儿童院/雨花斋/助老食堂等多业态 -->
+      <view class="sp-edit-section-hint">🏷️ 服务受众标签配置（自定义首页填报表单文案，留空时自动按平台类型填写）</view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">品牌名称</text>
+        <input class="sp-edit-input full" value="{{editForm.platformBrand}}" bindinput="onEditInput" data-field="platformBrand" placeholder="如：同心慈善会 / 雨花斋" />
+      </view>
+      <view class="sp-edit-row-2col">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">堂食/用餐标签</text>
+          <input class="sp-edit-input full" value="{{editForm.dineInLabel}}" bindinput="onEditInput" data-field="dineInLabel" placeholder="如：院内儿童用餐" />
+        </view>
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">送餐/外送标签</text>
+          <input class="sp-edit-input full" value="{{editForm.deliveryLabel}}" bindinput="onEditInput" data-field="deliveryLabel" placeholder="如：外送关爱儿童" />
+        </view>
+      </view>
+      <view class="sp-edit-row-2col">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">倾听/关爱标签</text>
+          <input class="sp-edit-input full" value="{{editForm.listenLabel}}" bindinput="onEditInput" data-field="listenLabel" placeholder="如：心理疏导/陪伴" />
+        </view>
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">打包/物资标签</text>
+          <input class="sp-edit-input full" value="{{editForm.takeoutLabel}}" bindinput="onEditInput" data-field="takeoutLabel" placeholder="如：打包爱心餐" />
+        </view>
+      </view>
+
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">详细地址</text>
         <input class="sp-edit-input full" value="{{editForm.address}}" bindinput="onEditInput" data-field="address" placeholder="请输入门店详细地址" />

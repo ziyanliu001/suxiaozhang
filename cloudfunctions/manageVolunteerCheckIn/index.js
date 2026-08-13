@@ -253,6 +253,53 @@ async function handleLeaderboard(event, OPENID) {
   };
 }
 
+// 📊 查询当日门店所有志愿者的累计打卡工时（供大家长/店长预填"服务总工时"字段）
+// 管理岗位专属：store_patriarch / store_manager / finance / super_admin 可调用
+const MGMT_ROLES = ['store_patriarch', 'store_manager', 'finance', 'super_admin'];
+
+async function handleQueryStoreHours(event, OPENID) {
+  const caller = await resolveCaller(OPENID);
+  if (!caller) return { success: false, error: '无权限：未找到您的角色信息' };
+  if (!MGMT_ROLES.includes(caller.role)) {
+    return { success: false, error: '无管理权限' };
+  }
+
+  const storeId = event.storeId || caller.storeId || '';
+  if (!storeId) return { success: false, error: '未指定门店' };
+
+  let tenantId = caller.tenantId || '';
+  if (!tenantId) {
+    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+    tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
+  }
+
+  const dateString = event.dateString || todayStr();
+
+  // 拉取当日所有 active 打卡记录（单店单日通常不超 200 条，单批次足够覆盖）
+  const res = await db.collection(COLLECTION)
+    .where({ tenantId, storeId, dateString, status: 'active' })
+    .field({ _openid: true, hours: true })
+    .limit(200)
+    .get();
+
+  const logs = res.data || [];
+
+  // 🛡️ 防呆：单笔工时超过 12h 视为忘记签退的挂单记录，按默认 4h 结算
+  const HANGUP_CAP = 12.0;
+  const DEFAULT_HANGUP_HOURS = 4.0;
+  const totalHours = parseFloat(
+    logs
+      .reduce((sum, l) => {
+        const h = parseFloat(l.hours) || 0;
+        return sum + (h > HANGUP_CAP ? DEFAULT_HANGUP_HOURS : h);
+      }, 0)
+      .toFixed(1)
+  );
+  const uniqueVolunteers = new Set(logs.map((l) => l._openid)).size;
+
+  return { success: true, totalHours, checkInCount: logs.length, uniqueVolunteers, dateString };
+}
+
 exports.main = async (event, context) => {
   const { action } = event;
   const { OPENID } = cloud.getWXContext();
@@ -265,6 +312,7 @@ exports.main = async (event, context) => {
     if (action === 'checkin') return await handleCheckin(event, OPENID);
     if (action === 'revoke') return await handleRevoke(event, OPENID);
     if (action === 'leaderboard') return await handleLeaderboard(event, OPENID);
+    if (action === 'queryStoreHours') return await handleQueryStoreHours(event, OPENID);
     return { success: false, error: '无效操作' };
   } catch (err) {
     console.error('[manageVolunteerCheckIn] 异常:', err);

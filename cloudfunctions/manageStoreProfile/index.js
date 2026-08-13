@@ -33,6 +33,42 @@ const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredN
 const MAX_TEXT_FIELD_LENGTH = 500;
 const MAX_STORE_PHOTOS = 9;
 const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
+// 🏢 平台类型允许值白名单：防止客户端写入任意字符串
+// tongxin_children:     厦门同心慈善会儿童院（青少年/儿童关爱业态）
+// tongxin_cancer_care:  厦门同心癌友关怀会（重疾/癌症患者关怀业态）
+const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
+
+// 🏮 品牌矩阵归属：一个机构可同时拥有多种 orgType 的站点，通过 platformFamily 将其
+// 归并到同一品牌矩阵，用于全国大屏的"同心慈善会矩阵 / 雨花矩阵"聚合筛选
+const VALID_PLATFORM_FAMILIES = ['tongxin', 'yuhuazhai', ''];
+
+// 🏷️ 服务受众标签配置（serviceTargetConfig）：允许各机构自定义首页填报表单的文案标签，
+// 实现"零代码适配同心儿童院"等新业态。targetLabels 中的字段名与首页表单字段一一对应。
+const VALID_TARGET_LABEL_KEYS = ['dineInLabel', 'deliveryLabel', 'listenLabel', 'takeoutLabel'];
+const MAX_TARGET_LABEL_LENGTH = 20;
+const VALID_ENABLED_FEATURES = ['meals', 'education_care', 'volunteer_checkin', 'donations', 'activity_log'];
+
+function sanitizeServiceTargetConfig(v) {
+  if (!v || typeof v !== 'object') return null;
+  const result = {};
+  if (typeof v.platformBrand === 'string') {
+    result.platformBrand = v.platformBrand.trim().slice(0, 50);
+  }
+  if (v.targetLabels && typeof v.targetLabels === 'object') {
+    const labels = {};
+    VALID_TARGET_LABEL_KEYS.forEach(key => {
+      if (typeof v.targetLabels[key] === 'string') {
+        const cleaned = v.targetLabels[key].trim().slice(0, MAX_TARGET_LABEL_LENGTH);
+        if (cleaned) labels[key] = cleaned;
+      }
+    });
+    if (Object.keys(labels).length > 0) result.targetLabels = labels;
+  }
+  if (Array.isArray(v.enabledFeatures)) {
+    result.enabledFeatures = v.enabledFeatures.filter(f => VALID_ENABLED_FEATURES.includes(f));
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
 
 // 🏪 店铺模板自定义（首页"店铺模板自定义"卡片）：致谢词/宣传标语/公众号名称，
 // 与人员画像字段一样落在 stores 集合，各自长度上限对齐前端 wxml 的 maxlength，
@@ -212,6 +248,13 @@ exports.main = async (event, context) => {
           adminKeySet: !!(store.adminKey && String(store.adminKey).trim()),
           adminKey: (caller && (caller.role === 'store_patriarch' || caller.role === 'super_admin'))
             ? (store.adminKey || '') : undefined,
+          // 🏷️ 服务受众标签配置：自定义填报表单文案，按需返回（无配置时为 null）
+          serviceTargetConfig: store.serviceTargetConfig || null,
+          // 🏮 品牌矩阵归属（'tongxin'/'yuhuazhai'/''）
+          platformFamily: store.platformFamily || '',
+          // 🌟 真实机构业态类型（VALID_ORG_TYPES 之一，见文件头），供前端驱动机构
+          // 归属徽标/文化入口文案等展示，替代此前只能靠 tenantId 前缀粗猜的口径
+          orgType: store.orgType || '',
           ...profile
         }
       };
@@ -234,6 +277,20 @@ exports.main = async (event, context) => {
       // 无条件塞 sanitizeText(undefined) === ''，会把没在本次请求里出现的字段
       // 静默清空，等于每次局部更新都顺带抹掉其余档案信息
       TEXT_PROFILE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f]); });
+      // 🏢 平台类型：白名单校验后写入，防止客户端传入任意字符串
+      if (event.orgType !== undefined) {
+        updateFields.orgType = VALID_ORG_TYPES.includes(event.orgType) ? event.orgType : '';
+      }
+      // 🏷️ 服务受众标签配置：自定义填报表单文案（platformBrand/targetLabels/enabledFeatures）
+      // sanitizeServiceTargetConfig 返回 null 时表示无有效数据，写 null 清除旧配置
+      if (event.serviceTargetConfig !== undefined) {
+        updateFields.serviceTargetConfig = sanitizeServiceTargetConfig(event.serviceTargetConfig);
+      }
+      // 🏮 品牌矩阵归属：白名单校验，空字符串表示无归属
+      if (event.platformFamily !== undefined) {
+        const pf = String(event.platformFamily || '').trim();
+        updateFields.platformFamily = VALID_PLATFORM_FAMILIES.includes(pf) ? pf : '';
+      }
       // 🌟 店铺模板自定义字段：同样"只在调用方真的传了才写入"，只提交部分字段（如只改
       // 致谢词）时不会把没提交的宣传标语静默清空
       TEMPLATE_FIELDS.forEach((f) => { if (event[f] !== undefined) updateFields[f] = sanitizeText(event[f], TEMPLATE_FIELD_LIMITS[f]); });
@@ -356,6 +413,16 @@ exports.main = async (event, context) => {
       PHOTO_FIELDS.forEach((f) => {
         if (pending[f] !== undefined) updateData[f] = sanitizePhotos(pending[f], f === 'storePhotos' ? MAX_STORE_PHOTOS : CATEGORY_PHOTOS_MAX);
       });
+      if (VALID_ORG_TYPES.includes(pending.orgType)) {
+        updateData.orgType = pending.orgType;
+      }
+      if (pending.serviceTargetConfig !== undefined) {
+        updateData.serviceTargetConfig = sanitizeServiceTargetConfig(pending.serviceTargetConfig);
+      }
+      if (pending.platformFamily !== undefined) {
+        const pf = String(pending.platformFamily || '').trim();
+        updateData.platformFamily = VALID_PLATFORM_FAMILIES.includes(pf) ? pf : '';
+      }
       if (VALID_OPERATING_STATUSES.includes(pending.operatingStatus)) {
         updateData.operatingStatus = pending.operatingStatus;
       }

@@ -431,6 +431,13 @@
   font-weight: normal;
 }
 
+.sp-edit-input-readonly {
+  display: flex;
+  align-items: center;
+  color: #999999;
+  background: #F1F1EE;
+}
+
 .sp-date-picker-value {
   display: flex;
   align-items: center;
@@ -662,5 +669,23 @@
 .sp-admin-key-modal-hint text {
   font-size: 24rpx;
   color: #8C8C8C;
+  line-height: 1.6;
+}
+
+/* 🏷️ 服务受众标签配置区块分隔提示 */
+.sp-edit-section-hint {
+  font-size: 24rpx;
+  color: #5C6BC0;
+  background: #EEF2FF;
+  border-radius: 8rpx;
+  padding: 10rpx 16rpx;
+  margin: 8rpx 0 4rpx;
+  line-height: 1.5;
+}
+
+/* 目标标签展示（归档卡片，单行 · 分隔） */
+.sp-target-labels {
+  font-size: 26rpx;
+  color: #5C6BC0;
   line-height: 1.6;
 }
