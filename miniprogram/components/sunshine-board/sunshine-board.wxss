@@ -1,0 +1,83 @@
+/* 🌸 近7日阳善榜：暖色/公开视觉语言——横向布局，左侧固定标签 + 右侧垂直
+   无缝滚动内容，浅粉渐变底与 yangshan-wall（全历史阳善墙）的玫瑰金主题
+   呼应但更浅淡，适合嵌在门店卡片这种信息密度已经较高的小空间里 */
+.sb-board {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #fff5f5 0%, #fff9f9 100%);
+  border: 1.5rpx solid #ffe3e3;
+  border-radius: 12rpx;
+  padding: 10rpx 16rpx;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.sb-label {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex-shrink: 0;
+}
+
+.sb-label-icon {
+  font-size: 22rpx;
+  line-height: 1;
+}
+
+.sb-label-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #e03131;
+  white-space: nowrap;
+}
+
+.sb-divider {
+  width: 1.5rpx;
+  height: 22rpx;
+  background: #ffe3e3;
+  flex-shrink: 0;
+}
+
+.sb-swiper {
+  flex: 1;
+  min-width: 0;
+  height: 36rpx;
+}
+
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  height: 36rpx;
+  overflow: hidden;
+}
+
+.sb-name {
+  flex-shrink: 0;
+  max-width: 140rpx;
+  font-size: 23rpx;
+  font-weight: 600;
+  color: #c92a2a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-deed {
+  flex: 1;
+  min-width: 0;
+  font-size: 21rpx;
+  color: #495057;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-time {
+  flex-shrink: 0;
+  font-size: 19rpx;
+  color: #adb5bd;
+  white-space: nowrap;
+}

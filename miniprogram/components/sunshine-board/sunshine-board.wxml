@@ -1,0 +1,17 @@
+<!-- 🌸 近7日阳善榜：无数据时整块不渲染，不占用门店卡片的高度 -->
+<view class="sb-board" wx:if="{{entries.length > 0}}">
+  <view class="sb-label">
+    <text class="sb-label-icon">🌸</text>
+    <text class="sb-label-text">近7日阳善榜</text>
+  </view>
+  <view class="sb-divider"></view>
+  <swiper class="sb-swiper" vertical autoplay circular interval="2600" duration="400">
+    <swiper-item wx:for="{{entries}}" wx:for-index="entryIdx" wx:key="entryIdx">
+      <view class="sb-item">
+        <text class="sb-name">{{item.name}}</text>
+        <text class="sb-deed">{{item.deedText}}</text>
+        <text class="sb-time" wx:if="{{item.timeLabel}}">{{item.timeLabel}}</text>
+      </view>
+    </swiper-item>
+  </swiper>
+</view>
