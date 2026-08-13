@@ -15,7 +15,7 @@ page {
 .ui-card-wrapper {
   width: 100%;
   background: #FFFFFF;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   padding: 28rpx;
   margin-bottom: 24rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
@@ -176,10 +176,11 @@ page {
   font-size: 24rpx;
   color: #1C7ED6;
   font-weight: bold;
-  max-width: 240rpx;
+  max-width: 280rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 1;
 }
 
 .store-picker-pill.locked .name {
@@ -208,6 +209,8 @@ page {
   border-radius: 8rpx;
   margin-left: 6rpx;
   font-weight: bold;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* 大家长：门店胶囊 + 全国看板快捷入口并排布局 */
@@ -1491,8 +1494,26 @@ page {
 .store-people-grid-4col .grid-cell {
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  align-items: flex-start;
+  gap: 6rpx;
 }
+
+/* 🆕 色彩 Badge：真正的背景色胶囊（不再只是一个小圆点），三大分组配色——
+   党员=红、志愿者体系(社工+志愿者)=绿、长者服务对象(堂食/送餐/倾听老人)=蓝，
+   "其他"维持中性灰。同一分组内的 badge 文案相同（如"志愿"），靠颜色+文字
+   双重信号确认归属，比单一小圆点更醒目 */
+.store-people-grid-4col .cell-badge {
+  font-size: 18rpx;
+  font-weight: bold;
+  padding: 2rpx 10rpx;
+  border-radius: 100rpx;
+  line-height: 1.6;
+}
+
+.store-people-grid-4col .cell-badge.badge-party     { background: #FFE3E3; color: #D9363E; }
+.store-people-grid-4col .cell-badge.badge-volunteer { background: #D3F9D8; color: #2B8A3E; }
+.store-people-grid-4col .cell-badge.badge-elderly   { background: #D0EBFF; color: #1971C2; }
+.store-people-grid-4col .cell-badge.badge-other     { background: #F1F3F5; color: #868E96; }
 
 .store-people-grid-4col .cell-lbl {
   font-size: 22rpx;
@@ -1509,13 +1530,69 @@ page {
   color: #D9363E;
 }
 
-.store-people-grid-4col .cell-val.orange {
-  color: #D2691E;
+.store-people-grid-4col .cell-val.volunteer {
+  color: #2B8A3E;
+}
+
+.store-people-grid-4col .cell-val.elderly {
+  color: #1971C2;
 }
 
 .store-people-grid-4col .cell-val.grey {
   color: #495057;
 }
+
+/* 人群构成进度比例条：与「义工与用餐服务数据看板」的长者服务结构比例条同一套
+   纯 CSS 分段条手法，不依赖 ECharts */
+.people-ratio-section {
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F1F3F5;
+}
+
+.people-ratio-title {
+  font-size: 22rpx;
+  color: #868E96;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.people-ratio-bar-wrap {
+  display: flex;
+  height: 16rpx;
+  border-radius: 100rpx;
+  overflow: hidden;
+  background: #F1F3F5;
+  margin-bottom: 10rpx;
+}
+
+.people-ratio-seg {
+  height: 100%;
+  min-width: 2rpx;
+  transition: width 0.4s ease;
+}
+
+.people-ratio-seg.seg-party     { background: #D9363E; }
+.people-ratio-seg.seg-volunteer { background: #2B8A3E; }
+.people-ratio-seg.seg-elderly   { background: #1971C2; }
+.people-ratio-seg.seg-other     { background: #ADB5BD; }
+
+.people-ratio-legend {
+  display: flex;
+  gap: 20rpx;
+  flex-wrap: wrap;
+}
+
+.people-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.dot-legend-party     { background: #D9363E; }
+.dot-legend-volunteer { background: #2B8A3E; }
+.dot-legend-elderly   { background: #1971C2; }
+.dot-legend-other     { background: #ADB5BD; }
 
 .detail-items-list {
   display: flex;
@@ -2009,13 +2086,126 @@ button.btn-primary-poster {
   color: #9a9a9a;
 }
 
-.national-hero-card {
-  background: linear-gradient(135deg, #1C7ED6 0%, #1971C2 100%);
-  border-radius: 28rpx;
-  padding: 32rpx;
-  color: #FFFFFF;
+/* ═══ 🌐 全国爱心网络数据总览：统一白底卡片，替代此前并列的暖黄
+   national-macro-kpi-card + 深蓝 national-hero-card 两张视觉不一致的卡片 ═══ */
+.national-overview-card {
+  padding: 28rpx 24rpx;
+}
+
+.overview-header {
   margin-bottom: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(28, 126, 214, 0.25);
+}
+
+.overview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.overview-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.overview-role-tag {
+  font-size: 20rpx;
+  font-weight: 500;
+  color: #B8860B;
+  background: rgba(184, 134, 11, 0.10);
+  padding: 3rpx 14rpx;
+  border-radius: 20rpx;
+}
+
+/* 顶部 4 大核心指标：大字号数字，一眼可读 */
+.overview-kpi-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.overview-kpi-cell {
+  flex: 1 1 50%;
+  min-width: 50%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 16rpx 8rpx;
+}
+
+.overview-kpi-val {
+  display: block;
+  font-size: 44rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  line-height: 1.2;
+}
+
+.overview-kpi-masked {
+  color: #C9A9A7;
+  letter-spacing: 4rpx;
+}
+
+.overview-kpi-lbl {
+  display: block;
+  font-size: 22rpx;
+  color: #495057;
+  margin-top: 4rpx;
+}
+
+/* 次级指标行：收支细分/开餐天数/义工到岗——小字号，视觉权重明显低于顶部核心指标 */
+.overview-secondary-row {
+  display: flex;
+  border-top: 1rpx solid #F1F3F5;
+  margin-top: 8rpx;
+  padding-top: 20rpx;
+}
+
+.overview-sec-cell {
+  flex: 1;
+  text-align: center;
+}
+
+.overview-sec-val {
+  display: block;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #495057;
+}
+
+.overview-sec-masked .overview-sec-val {
+  color: #CED4DA;
+  letter-spacing: 4rpx;
+}
+
+.overview-sec-lbl {
+  font-size: 20rpx;
+  color: #969799;
+}
+
+/* 物资消耗：轻量级 4 列小字号微卡片，收拢在底部，不与核心指标抢视觉焦点 */
+.overview-materials-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 20rpx;
+}
+
+.overview-material-cell {
+  flex: 1;
+  text-align: center;
+  background: #F7F8FA;
+  border-radius: 14rpx;
+  padding: 12rpx 4rpx;
+}
+
+.overview-material-cell .material-val {
+  display: block;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #495057;
+}
+
+.overview-material-cell .material-lbl {
+  font-size: 18rpx;
+  color: #969799;
 }
 
 .hero-header {
@@ -2028,21 +2218,6 @@ button.btn-primary-poster {
 .hero-title {
   font-size: 28rpx;
   font-weight: bold;
-}
-
-.hero-badge {
-  font-size: 20rpx;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 4rpx 14rpx;
-  border-radius: 20rpx;
-}
-
-/* 🌟 志工荣誉版标识：与标题同行展示，突出"这是属于我的共享荣誉大屏" */
-.hero-role-tag {
-  font-size: 22rpx;
-  font-weight: normal;
-  color: #FFE066;
-  margin-left: 8rpx;
 }
 
 .hero-main-num {
@@ -2089,17 +2264,8 @@ button.btn-primary-poster {
   opacity: 0.8;
 }
 
-/* 🌟 志工视角：资金汇入/支出数额脱敏遮罩样式，弱化显示避免误导为"没有数据" */
-.masked-cell {
-  opacity: 0.6;
-}
-
-.masked-val {
-  color: rgba(255, 255, 255, 0.7) !important;
-  letter-spacing: 4rpx;
-}
-
-/* 🌟 志工荣誉版温馨提示条 */
+/* 🌟 志工荣誉版温馨提示条：默认沿用深色卡片（personal-hero-card）配色，
+   .national-overview-card 白底场景下的浅色变体在下方单独覆盖 */
 .volunteer-warm-tip {
   margin-top: 24rpx;
   padding-top: 20rpx;
@@ -2113,9 +2279,17 @@ button.btn-primary-poster {
   line-height: 1.6;
 }
 
+.national-overview-card .volunteer-warm-tip {
+  border-top-color: #F1F3F5;
+}
+
+.national-overview-card .volunteer-warm-tip .tip-text {
+  color: #B8860B;
+}
+
 .national-matrix-card {
   background: #FFFFFF;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   padding: 24rpx;
   margin-bottom: 24rpx;
 }
@@ -2159,8 +2333,6 @@ button.btn-primary-poster {
   color: #212529;
 }
 
-/* ===== 🆕 全国多店大屏专属宏观 KPI 卡：黄金/暖白风，与蓝色 national-hero-card
-   区分开的"第一屏摘要"，只放三个体量指标 ===== */
 .national-filter-status-bar {
   display: flex;
   align-items: center;
@@ -2188,78 +2360,37 @@ button.btn-primary-poster {
   white-space: nowrap;
 }
 
-.national-macro-kpi-card {
-  background: linear-gradient(135deg, #FFF8E8 0%, #FDF0D5 100%);
-  border: 1.5rpx solid #E6C87A;
-  border-radius: 28rpx;
-  padding: 28rpx 24rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 6rpx 18rpx rgba(184, 134, 11, 0.12);
-}
-
-.macro-kpi-title {
-  display: block;
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #9C6B0A;
-  margin-bottom: 20rpx;
-}
-
-.macro-kpi-grid {
-  display: flex;
-}
-
-.macro-kpi-cell {
-  flex: 1;
-  text-align: center;
-  border-right: 1rpx solid rgba(184, 134, 11, 0.2);
-}
-
-.macro-kpi-cell:last-child {
-  border-right: none;
-}
-
-.macro-kpi-val {
-  display: block;
-  font-size: 38rpx;
-  font-weight: bold;
-  color: #B8860B;
-  margin-bottom: 6rpx;
-}
-
-.macro-kpi-masked {
-  color: rgba(184, 134, 11, 0.5);
-  letter-spacing: 4rpx;
-}
-
-.macro-kpi-lbl {
-  font-size: 20rpx;
-  color: #A0793A;
-}
-
 /* ===== 🆕 多店排行榜/对比模块：与 national-matrix-card 同色系白卡，
-   榜单前三名用金/银/铜三色徽标，与全站已确立的暖金主题呼应 ===== */
+   Tab 切换替代此前纵向堆叠的两份榜单，前三名用金/银/铜三色徽标，
+   与全站已确立的暖金主题呼应 ===== */
 .national-ranking-card {
   background: #FFFFFF;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   padding: 24rpx;
   margin-bottom: 24rpx;
 }
 
-.ranking-group {
-  margin-top: 20rpx;
+.ranking-tab-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
 }
 
-.ranking-group:first-of-type {
-  margin-top: 0;
-}
-
-.ranking-group-title {
-  display: block;
+.ranking-tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 10rpx 0;
   font-size: 24rpx;
+  color: #666666;
+  background: #F8F9FA;
+  border-radius: 30rpx;
+  font-weight: 500;
+}
+
+.ranking-tab-item.active {
+  background: #8C1D18;
+  color: #FFFFFF;
   font-weight: bold;
-  color: #495057;
-  margin-bottom: 12rpx;
 }
 
 .ranking-list {
@@ -2292,15 +2423,18 @@ button.btn-primary-poster {
 }
 
 .ranking-badge.rank-1 {
-  background: linear-gradient(135deg, #FFD700 0%, #E6B800 100%);
+  background: #FFD700;
+  color: #7A5A00;
 }
 
 .ranking-badge.rank-2 {
-  background: linear-gradient(135deg, #D9D9D9 0%, #B0B0B0 100%);
+  background: #C0C0C0;
+  color: #4A4A4A;
 }
 
 .ranking-badge.rank-3 {
-  background: linear-gradient(135deg, #E3A05E 0%, #C97F3B 100%);
+  background: #B87333;
+  color: #FFFFFF;
 }
 
 .ranking-name {
@@ -2311,6 +2445,17 @@ button.btn-primary-poster {
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 🆕 平台徽章：仅"全部平台"视角下渲染，排行榜行内空间有限，用小号胶囊不换行 */
+.ranking-org-tag {
+  font-size: 18rpx;
+  color: #B8860B;
+  background: rgba(184, 134, 11, 0.10);
+  padding: 2rpx 10rpx;
+  border-radius: 100rpx;
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
@@ -2329,18 +2474,825 @@ button.btn-primary-poster {
 }
 
 /* ===== 🌟 超管专属高阶治理面板 ===== */
-.super-admin-insights-card {
-  background: #FFFFFF;
+/* ─── 👵 义工与用餐服务数据看板（原"全国长者关怀总力场"）──────────────
+   深色科技 Hero Banner + 浅色分组网格两段式结构。Hero 用深蓝渐变+极简
+   SVG 图标做出"数据大屏聚光灯"质感，分组网格延续页面其余卡片的浅色语言，
+   两段之间用统一圆角/间距过渡，避免深浅切换显得突兀 ────────────────── */
+.care-board {
   border-radius: 24rpx;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 28rpx rgba(15, 23, 42, 0.10);
+}
+
+/* Hero Banner：深蓝渐变底 + 细网格纹理，两大核心 KPI 高亮展示 */
+.cb-hero {
+  position: relative;
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 60%, #0C4A6E 100%);
+  padding: 28rpx 24rpx 24rpx;
+  overflow: hidden;
+}
+
+/* 极轻的科技网格纹理，纯 CSS 渐变实现，不引入任何图片资源 */
+.cb-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.05) 1rpx, transparent 1rpx),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1rpx, transparent 1rpx);
+  background-size: 48rpx 48rpx;
+  pointer-events: none;
+}
+
+.cb-hero-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22rpx;
+}
+
+.cb-hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.cb-hero-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #F1F5F9;
+  letter-spacing: 0.5rpx;
+}
+
+/* "数据自动计算"状态提示：替代原编辑表单里的"复用昨日"按钮——本卡片是
+   全国口径只读汇总，没有可编辑的"昨日数据"可复用，用状态徽标说明这些
+   数字是系统自动算出来的，不是任何人手填的 */
+.cb-hero-badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1rpx solid rgba(56, 189, 248, 0.30);
+  border-radius: 100rpx;
+  padding: 6rpx 16rpx 6rpx 12rpx;
+}
+
+.cb-hero-badge-text {
+  font-size: 20rpx;
+  color: #7DD3FC;
+  font-weight: 500;
+}
+
+.cb-hero-kpis {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 18rpx;
+}
+
+.cb-hero-kpi {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.cb-hero-kpi-val {
+  font-size: 56rpx;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-hero-kpi-hot .cb-hero-kpi-val {
+  color: #FB7185;
+  text-shadow: 0 0 24rpx rgba(251, 113, 133, 0.45);
+}
+
+.cb-hero-kpi-warm .cb-hero-kpi-val {
+  color: #FB923C;
+  text-shadow: 0 0 24rpx rgba(251, 146, 60, 0.45);
+}
+
+.cb-hero-kpi-lbl {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #E2E8F0;
+}
+
+.cb-hero-kpi-formula {
+  font-size: 20rpx;
+  color: #94A3B8;
+}
+
+.cb-hero-kpi-divider {
+  width: 1.5rpx;
+  height: 76rpx;
+  background: rgba(148, 163, 184, 0.25);
+  flex-shrink: 0;
+}
+
+.cb-hero-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1rpx solid rgba(148, 163, 184, 0.18);
+  padding-top: 16rpx;
+}
+
+.cb-hero-foot-text {
+  font-size: 22rpx;
+  color: #94A3B8;
+}
+
+.cb-hero-foot-val {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #7DD3FC;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分组网格：浅色卡片，延续页面其余区域的视觉语言 */
+.cb-group {
+  background: #FFFFFF;
+  padding: 20rpx 20rpx 4rpx;
+}
+
+.cb-group-title {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 14rpx;
+}
+
+.cb-group-grid {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.cb-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  background: #F8FAFC;
+  border: 1.5rpx solid #EEF2F7;
+  border-radius: 16rpx;
+  padding: 18rpx 6rpx 14rpx;
+}
+
+/* 倾听陪伴单独强调：与关怀/温度主题呼应的青色高亮卡片 */
+.cb-cell-accent {
+  background: #F0FDFA;
+  border-color: #CCFBF1;
+}
+
+.cb-cell-val {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: #1E293B;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-cell-lbl {
+  font-size: 20rpx;
+  color: #64748B;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.cb-cell-unit {
+  font-size: 18rpx;
+  color: #94A3B8;
+}
+
+/* 比例条（替代饼图，纯 CSS，不依赖 ECharts） */
+.cb-ratio-section {
+  background: #FFFFFF;
+  border-top: 1rpx solid #f1f5f9;
+  padding: 16rpx 20rpx 20rpx;
+}
+
+.cb-ratio-title {
+  font-size: 22rpx;
+  color: #64748b;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.cb-ratio-bar-wrap {
+  display: flex;
+  height: 16rpx;
+  border-radius: 100rpx;
+  overflow: hidden;
+  background: #f1f5f9;
+  margin-bottom: 10rpx;
+}
+
+.cb-ratio-seg {
+  height: 100%;
+  min-width: 2rpx;
+  transition: width 0.4s ease;
+}
+
+.seg-dine-in  { background: #22c55e; }
+.seg-delivery { background: #3b82f6; }
+.seg-listen   { background: #06b6d4; }
+
+.cb-ratio-legend {
+  display: flex;
+  gap: 20rpx;
+  flex-wrap: wrap;
+}
+
+.cb-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.legend-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-dine-in  { background: #22c55e; }
+.dot-delivery { background: #3b82f6; }
+.dot-listen   { background: #06b6d4; }
+
+.legend-text {
+  font-size: 20rpx;
+  color: #64748b;
+}
+
+/* 空状态：全国范围各细分维度均为 0 时的兜底展示，与 Hero 卡片同宽同位 */
+.cb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #FFFFFF;
+  border: 1.5rpx dashed #E2E8F0;
+  border-radius: 24rpx;
+  padding: 40rpx 24rpx 32rpx;
+  margin-bottom: 24rpx;
+}
+
+/* 🐛 用 .cb-svg-icon.cb-empty-icon 复合选择器而非单独 .cb-empty-icon——
+   下方 .cb-svg-icon 在样式表里定义在后面，若单独选择器与它同等特异度，
+   源码顺序会让 36rpx 的默认尺寸盖掉这里的 64rpx，复合选择器把特异度
+   提高一级，不管两条规则谁写在前面都能稳定生效 */
+.cb-svg-icon.cb-empty-icon {
+  width: 64rpx;
+  height: 64rpx;
+  opacity: 0.35;
+  margin-bottom: 14rpx;
+}
+
+.cb-empty-text {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #64748B;
+  margin-bottom: 6rpx;
+}
+
+.cb-empty-sub {
+  font-size: 22rpx;
+  color: #94A3B8;
+}
+
+/* ── 极简线性 SVG 图标：用 background-image data URI 内联，不引入任何
+     图片资源/图标字体，颜色已按各自使用场景预烘焙进 SVG 里 ── */
+.cb-svg-icon {
+  width: 36rpx;
+  height: 36rpx;
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.cb-icon-heart {
+  width: 28rpx;
+  height: 28rpx;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23FB7185' d='M12 21s-6.7-4.3-9.3-8.2C1 10 1.6 6.6 4.4 5c2.2-1.2 4.7-.6 6.1 1.2l1.5 1.9 1.5-1.9c1.4-1.8 3.9-2.4 6.1-1.2 2.8 1.6 3.4 5 1.7 7.8C18.7 16.7 12 21 12 21Z'/%3E%3C/svg%3E");
+}
+
+.cb-icon-sparkle {
+  width: 22rpx;
+  height: 22rpx;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237DD3FC' d='M12 2l1.8 5.6L19 9l-5.2 1.4L12 16l-1.8-5.6L5 9l5.2-1.4L12 2Z'/%3E%3Ccircle fill='%237DD3FC' cx='19' cy='17' r='1.6'/%3E%3Ccircle fill='%237DD3FC' cx='5' cy='5' r='1.2'/%3E%3C/svg%3E");
+}
+
+.cb-icon-bowl {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316A34A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 2v20'/%3E%3Cpath d='M4 2v6a3 3 0 0 0 3 3a3 3 0 0 0 3-3V2'/%3E%3Cpath d='M17 2a5 5 0 0 0-5 5v6h4v9'/%3E%3Cpath d='M16 13V2'/%3E%3C/svg%3E");
+}
+
+.cb-icon-truck {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233B82F6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='1' y='7' width='13' height='10' rx='1'/%3E%3Cpath d='M14 10h4l3 3v4h-7z'/%3E%3Ccircle cx='5.5' cy='18.5' r='1.5'/%3E%3Ccircle cx='17.5' cy='18.5' r='1.5'/%3E%3C/svg%3E");
+}
+
+.cb-icon-package {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23F97316' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8 12 3 3 8l9 5 9-5Z'/%3E%3Cpath d='M3 8v9l9 5 9-5V8'/%3E%3Cpath d='M12 13v9'/%3E%3C/svg%3E");
+}
+
+.cb-icon-users {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238B5CF6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
+}
+
+.cb-icon-headphones {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306B6D4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 14v-3a9 9 0 0 1 18 0v3'/%3E%3Cpath d='M21 15a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h3v4Z'/%3E%3Cpath d='M3 15a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2H3v4Z'/%3E%3C/svg%3E");
+}
+
+.cb-icon-clock {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310B981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+}
+
+/* ─── 💖 全网爱心支持与善缘墙卡片 ──────────────────────────────────── */
+.love-wall-card {
+  background: #ffffff;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx 20rpx;
+  margin-bottom: 24rpx;
+  border: 1.5rpx solid #fce7f3;
+  box-shadow: 0 4rpx 16rpx rgba(236, 72, 153, 0.06);
+}
+
+.love-wall-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.love-wall-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #831843;
+  letter-spacing: 0.5rpx;
+}
+
+.love-wall-sub {
+  font-size: 20rpx;
+  color: #d1d5db;
+  font-style: italic;
+}
+
+/* KPI 行 */
+.love-kpi-row {
+  display: flex;
+  align-items: center;
+  background: #fff1f2;
+  border-radius: 16rpx;
+  padding: 16rpx 0;
+  margin-bottom: 20rpx;
+}
+
+.love-kpi-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.love-kpi-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: #fecdd3;
+  flex-shrink: 0;
+}
+
+.love-kpi-val {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #be185d;
+}
+
+.love-kpi-lbl {
+  font-size: 20rpx;
+  color: #9ca3af;
+}
+
+.masked-love {
+  color: #d1d5db !important;
+  font-size: 28rpx !important;
+}
+
+/* 🆕 阳善 / 阴德细分：两张并排小卡片，人次 + 金额（金额对志工遮罩） */
+.love-merit-split-row {
+  display: flex;
+  gap: 16rpx;
+  border-top: 1rpx solid #fce7f3;
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+}
+
+.love-merit-split-cell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  border-radius: 16rpx;
+  padding: 14rpx 16rpx;
+}
+
+.love-merit-split-cell.yang {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.love-merit-split-cell.yin {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.love-merit-split-icon {
+  font-size: 32rpx;
+  flex-shrink: 0;
+}
+
+.love-merit-split-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+  min-width: 0;
+}
+
+.love-merit-split-val {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.love-merit-split-amount {
+  font-size: 22rpx;
+  color: #92400e;
+}
+
+.love-merit-split-cell.yin .love-merit-split-amount {
+  color: #4338ca;
+}
+
+.love-merit-split-amount.masked {
+  color: #d1d5db;
+  letter-spacing: 2rpx;
+}
+
+.love-merit-split-lbl {
+  font-size: 20rpx;
+  color: #9ca3af;
+}
+
+/* 🆕 最新爱心支持滚动墙：全国大屏版，多店聚合所以带 [门店名称] 前缀，
+   与个人页单店版（components/yangshan-wall，无需门店前缀）视觉语言一致 */
+.love-scroll-section {
+  border-top: 1rpx solid #fce7f3;
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+}
+
+.love-scroll-title {
+  font-size: 22rpx;
+  color: #6b7280;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.love-scroll-swiper {
+  height: 52rpx;
+}
+
+.love-scroll-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  height: 52rpx;
+}
+
+.love-scroll-store {
+  font-size: 22rpx;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.love-scroll-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #be185d;
+  flex-shrink: 0;
+}
+
+.love-scroll-amount {
+  font-size: 24rpx;
+  color: #374151;
+  flex-shrink: 0;
+}
+
+.love-scroll-time {
+  font-size: 20rpx;
+  color: #9ca3af;
+}
+
+/* ─── 🚨 门店健康度告警中心：合并原「待支援站点预警」+「离线门店预警」───── */
+.health-alert-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx 24rpx 16rpx;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+}
+
+.health-alert-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.health-alert-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 呼吸灯：始终用 critical 红色脉冲，三档卡片共用同一个标题灯 */
+.health-alert-pulse {
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-alert-pulse.critical {
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+  animation: pulse-critical 2s ease-out infinite;
+}
+
+/* 🆕 空状态（无待支援站点）：绿色静态圆点，不做呼吸动画，避免"正常"状态还在
+   视觉上抢眼地闪烁，与预警态的红色脉冲形成明确的冷静/紧急对比 */
+.health-alert-pulse.normal {
+  background: #2f9e44;
+}
+
+@keyframes pulse-critical {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  60%  { box-shadow: 0 0 0 12rpx rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.health-alert-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #b91c1c;
+  letter-spacing: 0.5rpx;
+}
+
+.health-alert-count {
+  font-size: 22rpx;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.10);
+  padding: 4rpx 16rpx;
+  border-radius: 100rpx;
+  font-weight: 600;
+}
+
+/* 列表容器 */
+.health-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+/* 🆕 空状态：与 .matrix-filter-empty/.ranking-empty 同一套弱化居中文案规范 */
+.health-alert-empty {
+  text-align: center;
+  padding: 24rpx 0;
+}
+
+.health-alert-empty-text {
+  font-size: 24rpx;
+  color: #2f9e44;
+}
+
+/* 单条告警行：左侧门店名称/位置，右侧危险红/警示橙圆角 Tag */
+.health-alert-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-radius: 16rpx;
+  padding: 16rpx 18rpx;
+  gap: 12rpx;
+}
+
+.health-alert-item.severity-critical {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1rpx solid rgba(239, 68, 68, 0.20);
+}
+
+.health-alert-item.severity-high {
+  background: rgba(249, 115, 22, 0.06);
+  border: 1rpx solid rgba(249, 115, 22, 0.20);
+}
+
+.health-alert-item.severity-medium {
+  background: rgba(234, 179, 8, 0.06);
+  border: 1rpx solid rgba(234, 179, 8, 0.22);
+}
+
+/* 左侧布局：门店名称与省市位置 */
+.hai-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 严重程度指示圆点（带呼吸动画） */
+.hai-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6rpx;
+}
+
+.hai-dot.severity-dot-critical {
+  background: #ef4444;
+  animation: pulse-critical 1.8s ease-out infinite;
+}
+
+.hai-dot.severity-dot-high {
+  background: #f97316;
+  box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.5);
+  animation: pulse-high 2.2s ease-out infinite;
+}
+
+.hai-dot.severity-dot-medium {
+  background: #eab308;
+  box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.5);
+  animation: pulse-medium 2.8s ease-out infinite;
+}
+
+@keyframes pulse-high {
+  0%   { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.55); }
+  60%  { box-shadow: 0 0 0 12rpx rgba(249, 115, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+}
+
+@keyframes pulse-medium {
+  0%   { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.55); }
+  60%  { box-shadow: 0 0 0 12rpx rgba(234, 179, 8, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+}
+
+.hai-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.hai-name-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4rpx;
+}
+
+.hai-location {
+  font-size: 22rpx;
+  color: #6b7280;
+}
+
+.hai-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* 🆕 平台徽章：仅"全部平台"视角下渲染，用中性灰，避免和右侧按严重程度着色的
+   原因标签混淆语义 */
+.hai-org-tag {
+  font-size: 18rpx;
+  color: #6b7280;
+  background: rgba(107, 114, 128, 0.10);
+  padding: 2rpx 10rpx;
+  border-radius: 100rpx;
+}
+
+/* 🆕 风险分改为随 severity 着色的小徽标（原为纯灰字），与左侧指示点/边框
+   的红橙黄配色呼应，一眼就能把"风险分数"和"严重程度"对上号 */
+.hai-score {
+  align-self: flex-start;
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 2rpx 12rpx;
+  border-radius: 100rpx;
+}
+
+.hai-score.hai-score-critical {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.10);
+}
+
+.hai-score.hai-score-high {
+  color: #c2410c;
+  background: rgba(249, 115, 22, 0.10);
+}
+
+.hai-score.hai-score-medium {
+  color: #92400e;
+  background: rgba(234, 179, 8, 0.12);
+}
+
+/* 右侧：危险红/警示橙圆角 Tag 组，靠右对齐，排查一眼可见 */
+.hai-right {
+  flex-shrink: 0;
+  max-width: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
+}
+
+.hai-tag {
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 100rpx;
+  line-height: 1.4;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hai-tag.hai-tag-critical {
+  background: #FEE2E2;
+  color: #b91c1c;
+}
+
+.hai-tag.hai-tag-high {
+  background: #FFEDD5;
+  color: #c2410c;
+}
+
+.hai-tag.hai-tag-medium {
+  background: #FEF3C7;
+  color: #92400e;
+}
+
+/* 🆕 超过 2 条原因标签时的折叠徽标：中性灰，弱化于上方两条主标签，
+   不再抢视觉重点，只提示"还有更多原因"而非重复展示完整文案 */
+.hai-tag-more {
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 100rpx;
+  background: rgba(107, 114, 128, 0.10);
+  color: #6b7280;
+}
+
+/* 底部得分说明 */
+.health-alert-footer {
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid rgba(239, 68, 68, 0.12);
+}
+
+.health-alert-tip {
+  font-size: 20rpx;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* ─── end 门店健康度告警中心 ───────────────────────────────────────── */
+
+/* 🆕 黑金配色治理区块：与页面其余白底卡片明确区隔，标示这是超管权限专区 */
+.super-admin-insights-card {
+  background: linear-gradient(135deg, #2B1D10 0%, #17110A 100%);
+  border-radius: 20rpx;
   padding: 24rpx;
   margin-bottom: 24rpx;
-  border: 1.5rpx dashed #E8D5B5;
+  border: 1.5rpx solid #B8860B;
+}
+
+.super-admin-insights-card .matrix-title {
+  color: #FFD966;
 }
 
 .range-tab-row {
   display: flex;
   gap: 12rpx;
-  margin: 16rpx 0;
+  margin: 16rpx 0 24rpx;
 }
 
 .range-tab-item {
@@ -2359,6 +3311,36 @@ button.btn-primary-poster {
   font-weight: bold;
 }
 
+/* 🏢 全国大屏平台类型筛选器：解耦雨花斋等平台硬编码。
+   🐛 修复胶囊被硬边裁切的遮挡问题：此前是横向单行滚动（overflow-x: auto），
+   实测（见调试截图）行数较多时最后一枚胶囊会卡在卡片圆角边界上，只露出
+   半个 emoji，看起来像是被硬生生切掉，而不是"可以滑动查看更多"的正常
+   滚动态。7 个平台类型选项换成 flex-wrap: wrap 自动换行，彻底不需要横向
+   滚动——所有胶囊必定完整可见，不存在任何被裁切的可能 */
+.org-type-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx 16rpx;
+  margin: 0 0 16rpx;
+}
+
+.org-type-pill {
+  padding: 10rpx 22rpx;
+  border-radius: 30rpx;
+  font-size: 22rpx;
+  color: #666666;
+  background: #F5F0EB;
+  border: 1.5rpx solid #E8D5B5;
+  white-space: nowrap;
+}
+
+.org-type-pill.active {
+  background: #1565C0;
+  color: #FFFFFF;
+  border-color: #1565C0;
+  font-weight: bold;
+}
+
 .insights-metric-grid {
   display: flex;
   gap: 16rpx;
@@ -2368,20 +3350,20 @@ button.btn-primary-poster {
 .insights-metric-cell {
   flex: 1;
   text-align: center;
-  background: #F8F9FA;
+  background: rgba(255, 255, 255, 0.07);
   border-radius: 16rpx;
   padding: 20rpx 8rpx;
 }
 
 .insights-metric-cell.warn {
-  background: #FFF5F5;
+  background: rgba(255, 135, 135, 0.12);
 }
 
 .insights-metric-val {
   display: block;
   font-size: 30rpx;
   font-weight: bold;
-  color: #212529;
+  color: #F1D9A0;
   margin-bottom: 6rpx;
   /* 🐛 防止金额文本（如 ¥10230.00）在小屏手机上折行溢出撑破卡片，单行裁切显示 */
   white-space: nowrap;
@@ -2390,13 +3372,13 @@ button.btn-primary-poster {
 }
 
 .insights-metric-cell.warn .insights-metric-val {
-  color: #E03131;
+  color: #FF8787;
 }
 
 .insights-metric-lbl {
   display: block;
   font-size: 20rpx;
-  color: #999999;
+  color: #C9B18A;
 }
 
 /* 高对比度核心数据卡：深色底 + 白字，2x2 四宫格，与下方浅灰底的次要指标区隔出主次。
@@ -2436,53 +3418,56 @@ button.btn-primary-poster {
   color: #FF8787;
 }
 
-.offline-store-list {
-  background: #FFF5F5;
-  border-radius: 16rpx;
-  padding: 16rpx 20rpx;
-  margin-bottom: 20rpx;
+/* 🆕 悬浮质感：轻微半透明毛玻璃背景 + 更柔和的顶部阴影，让悬浮栏与下方
+   内容之间是自然过渡而不是一条硬边界。只加在 .national-bottom-bar 这个
+   修饰类上，不影响单店视角共用的 .bottom-sticky-bar 纯白底样式 */
+.bottom-sticky-bar.national-bottom-bar {
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
 }
 
-.offline-store-list-title {
-  display: block;
-  font-size: 24rpx;
-  font-weight: bold;
-  color: #E03131;
-  margin-bottom: 12rpx;
+/* 🆕 底部固定操作栏（国家看板专属）：与非全国视角共用的 .bottom-sticky-bar
+   基础定位/阴影/安全区规则，这里只补两个按钮各占一半宽度——.btn-primary-poster
+   基础规则里 width:100% !important 是给单按钮场景设计的，双按钮并排时改用
+   flex:1 让两者各自撑满一半，不再依赖 flex-shrink 的隐式换算 */
+.national-bottom-bar .btn-primary-poster,
+.national-bottom-bar button.btn-primary-poster,
+.national-bottom-bar .btn-national-report {
+  flex: 1;
+  width: auto !important;
 }
 
-.offline-store-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8rpx 0;
-  font-size: 24rpx;
-  color: #495057;
-}
-
-.offline-store-days {
-  color: #E03131;
-}
-
-/* 🐛 修复"生成全国运营/财务报表"按钮文字被切断折行成"表 / 报表"：此前用固定
-   line-height:44px 撑高度、且没有显式水平内边距，在安卓机型上按钮默认内边距/字体
-   度量与 iOS 不一致，文案实际可用宽度不够，触发强制折行。改为 height:auto + padding
-   撑开尺寸、white-space:nowrap 禁止折行，跨端表现统一为单行 */
-.btn-generate-national-report {
-  width: 100%;
-  height: auto;
-  min-height: 88rpx;
-  padding: 20rpx 32rpx;
-  line-height: 1.4;
+/* 报表按钮：黑金配色，呼应上方「超管高阶治理面板」，与主按钮（海报，红色渐变）
+   形成主次分明的视觉层级 */
+.btn-national-report,
+button.btn-national-report {
+  height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 12rpx;
   white-space: nowrap;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #8C1D18;
-  color: #FFFFFF;
+  background: linear-gradient(135deg, #3D2416 0%, #1F1209 100%);
+  color: #FFD966;
   font-size: 28rpx;
   font-weight: bold;
-  border-radius: 40rpx;
+  border-radius: 44rpx;
+  border: 1rpx solid #B8860B;
+}
+
+/* 🐛 修复吸底操作栏遮挡"超管高阶治理面板"与合规声明文案的问题：
+   .national-bottom-bar 是 position:fixed，脱离文档流不会自动撑开滚动区域，
+   页面滚到底时它会直接盖在最后一张卡片/说明文案上方。这里在文档流末尾
+   补一个等高留白占位，让原生页面滚动到底部时，真实内容已经完全露出在
+   悬浮栏上方，不被遮挡；140rpx→160rpx 与悬浮栏自身高度（88rpx 按钮 +
+   20+20rpx 上下 padding≈128rpx）留出更充分的余量 */
+.national-bottom-bar-spacer {
+  height: calc(160rpx + constant(safe-area-inset-bottom));
+  height: calc(160rpx + env(safe-area-inset-bottom));
 }
 
 .report-check-item {
@@ -3164,7 +4149,12 @@ button.btn-primary-poster {
   gap: 16rpx;
 }
 
-.gratitude-modal-footer button {
+/* 🐛 改用具名 class 选择器代替标签选择器（原 .gratitude-modal-footer button），
+   三个按钮各自的类名（.btn-copy-text/.btn-share-wx/.btn-save-card）已在 WXML
+   里存在，直接列出即可，不需要依赖标签名 */
+.btn-copy-text,
+.btn-share-wx,
+.btn-save-card {
   flex: 1;
   height: 76rpx;
   line-height: 76rpx;
@@ -3175,7 +4165,9 @@ button.btn-primary-poster {
   margin: 0;
 }
 
-.gratitude-modal-footer button::after {
+.btn-copy-text::after,
+.btn-share-wx::after,
+.btn-save-card::after {
   border: none;
 }
 
@@ -3400,7 +4392,10 @@ button.btn-primary-poster {
   border: none;
 }
 
-.honor-btn-save[disabled] {
+/* 🐛 改用 class 选择器代替 [disabled] 属性选择器——button 的 disabled 状态
+   同时驱动 WXML 里的 honor-btn-save-disabled 类名，纯 class 选择器风格与
+   本文件其余样式保持一致 */
+.honor-btn-save.honor-btn-save-disabled {
   opacity: 0.5;
   box-shadow: none;
 }
@@ -3469,6 +4464,12 @@ button.btn-primary-poster {
 
 .national-poster-btn {
   margin-top: 24rpx;
+}
+
+/* 🆕 底部固定操作栏内不再需要这份外边距——按钮已由 .bottom-sticky-bar 的
+   flex 布局与 gap 统一对齐，多余的 margin-top 会让海报按钮比报表按钮低一截 */
+.national-bottom-bar .national-poster-btn {
+  margin-top: 0;
 }
 
 /* ===== 🆕 时间周期「◀ 上一期/下一期 ▶」快捷翻页 ===== */
@@ -3586,31 +4587,83 @@ button.btn-empty-primary {
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🆕 3x2 网格：新增「阳光凭证数」「凭证合规率」两格后从 2 列改为 3 列，
+   6 格排成 3 列 2 行，比原来 2 列 4 行更紧凑，不会把卡片拉得过高 */
 .core-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
   margin-top: 16rpx;
 }
 
 .core-metrics-cell {
   background: #F8F9FA;
   border-radius: 12rpx;
-  padding: 20rpx;
+  padding: 16rpx 12rpx;
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+/* 🆕 数值 + 单位后缀同一行：总餐次数/服务人次原先是裸数字，加上"次/人次"
+   后缀，读数时不必再回看下方标签才知道单位是什么 */
+.core-metrics-val-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
 }
 
 .core-metrics-val {
   font-size: 34rpx;
-  font-weight: bold;
+  font-weight: 800;
   color: #212529;
+  line-height: 1.15;
+}
+
+.core-metrics-unit {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #868E96;
 }
 
 .core-metrics-lbl {
   font-size: 22rpx;
   color: #868E96;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   🦴 骨架屏：核心经营指标 / 门店人员画像首次加载态共用
+   ═══════════════════════════════════════════════════════════════ */
+.skel-cell {
+  gap: 10rpx !important;
+}
+
+.skel-bar {
+  border-radius: 8rpx;
+  background: linear-gradient(90deg, #EEF0F2 25%, #E4E7EB 37%, #EEF0F2 63%);
+  background-size: 400% 100%;
+  animation: stat-skel-shimmer 1.6s ease-in-out infinite;
+}
+
+.skel-bar-lg {
+  width: 64rpx;
+  height: 32rpx;
+}
+
+.skel-bar-sm {
+  width: 96rpx;
+  height: 20rpx;
+}
+
+.skel-bar-xs {
+  width: 72rpx;
+  height: 18rpx;
+}
+
+@keyframes stat-skel-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 
 .core-metrics-yoy {
@@ -3908,4 +4961,236 @@ button.btn-export-shortcut {
 
 .ntm-cancel-btn-hover {
   background: #E5E7EB;
+}
+
+/* ───────────────────────────────────────────
+   📸 全网影像卷宗与阳光凭证面板
+   ─────────────────────────────────────────── */
+.national-media-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  margin: 0 24rpx 24rpx;
+  padding: 28rpx 24rpx 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+}
+
+.nm-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  margin-bottom: 20rpx;
+}
+
+.nm-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1A237E;
+}
+
+.nm-sub {
+  font-size: 24rpx;
+  color: #90A4AE;
+}
+
+/* 🆕 横向独立卡片组：原先是一整条带竖线分隔的 KPI 行，现改为三张独立小卡片，
+   数据分组更清晰，也不必再依赖 .nm-kpi-divider 精确对位 */
+.nm-kpi-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.nm-kpi-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  background: #F5F7FF;
+  border: 1.5rpx solid #E8ECFB;
+  border-radius: 14rpx;
+  padding: 20rpx 8rpx 16rpx;
+}
+
+.nm-kpi-icon {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.nm-kpi-val {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1565C0;
+  line-height: 1.1;
+}
+
+.nm-kpi-lbl {
+  font-size: 20rpx;
+  color: #78909C;
+}
+
+/* 底部「档案合计」：暖色胶囊底，优雅收束整块面板 */
+.nm-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #FFF8E8;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+  margin-bottom: 8rpx;
+}
+
+.nm-total-label {
+  font-size: 24rpx;
+  color: #9C6B0A;
+}
+
+.nm-total-val {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #B8860B;
+}
+
+.nm-gallery-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.nm-gallery-title {
+  font-size: 26rpx;
+  color: #78909C;
+}
+
+.nm-gallery-count {
+  font-size: 20rpx;
+  color: #B0BEC5;
+}
+
+.nm-gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -2rpx;
+}
+
+.nm-gallery-item {
+  position: relative;
+  width: calc(33.333% - 4rpx);
+  margin: 2rpx;
+  padding-top: calc(33.333% - 4rpx);
+  overflow: hidden;
+  border-radius: 8rpx;
+  /* 🆕 shimmer 底色：图片是网络加载的云存储图，加载完成前用扫光动画占位，
+     比原来纯灰色块更能提示"正在加载"而非"这里没有内容" */
+  background: linear-gradient(90deg, #ECEFF1 25%, #E1E5E8 37%, #ECEFF1 63%);
+  background-size: 400% 100%;
+  animation: nm-gallery-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes nm-gallery-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* 🆕 触摸反馈：hover-class 在小程序里对应触摸按下态，轻微下沉+提亮，
+   让影像墙的可点击性更明确 */
+.nm-gallery-item-hover {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+.nm-gallery-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8rpx;
+}
+
+.nm-gallery-img-fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ECEFF1;
+  animation: none;
+}
+
+.nm-fallback-icon {
+  font-size: 32rpx;
+  opacity: 0.5;
+}
+
+.nm-gallery-tag-row {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 4rpx 6rpx;
+  background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%);
+}
+
+.nm-tag {
+  font-size: 20rpx;
+  flex-shrink: 0;
+}
+
+.nm-tag-store {
+  font-size: 18rpx;
+  color: rgba(255,255,255,0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* 🆕 平台徽章：仅"全部平台"视角下渲染，缩略图底部空间很紧，用极小字号+不换行 */
+.nm-tag-org {
+  font-size: 16rpx;
+  color: rgba(255,255,255,0.65);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.nm-gallery-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 36rpx 0 28rpx;
+  text-align: center;
+}
+
+.nm-empty-icon {
+  display: block;
+  width: 80rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  font-size: 40rpx;
+  text-align: center;
+  background: #F5F7FF;
+  border-radius: 50%;
+  margin-bottom: 16rpx;
+}
+
+.nm-empty-text {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #78909C;
+  margin-bottom: 8rpx;
+}
+
+.nm-empty-sub {
+  display: block;
+  font-size: 22rpx;
+  color: #B0BEC5;
 }

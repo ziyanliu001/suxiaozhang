@@ -9,6 +9,29 @@ import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGe
 import { getSafeSystemInfo } from '../../utils/util';
 import { isVirtualStoreName, resolveHonorCardStoreName } from '../../utils/storeIdentity';
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
+import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
+import { reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
+
+// 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致
+// shortName 用于动态拼装大屏标题；label 是筛选胶囊展示文案
+const ORG_TYPE_FILTER_OPTIONS = [
+  { label: '全部平台', value: 'all', shortName: '全网' },
+  { label: '🌸 雨花斋', value: 'yuhuazhai', shortName: '雨花斋' },
+  { label: '👵 助老食堂', value: 'elderly_canteen', shortName: '社区助老食堂' },
+  { label: '🤝 义工服务站', value: 'volunteer_station', shortName: '义工服务站' },
+  { label: '🛟 救援队', value: 'rescue_team', shortName: '应急救援队' },
+  { label: '🧒 同心儿童院', value: 'tongxin_children', shortName: '同心儿童院' },
+  { label: '💫 其他组织', value: 'other', shortName: '其他爱心组织' }
+];
+
+// 🆕 平台类型徽章文案：与 dashboardTitle 复用同一份 shortName 映射，避免另起一套命名。
+// getNationalDashboard 现已在 storeMatrix/nationalMediaGallery 两处各自的 item 上
+// 都透传了 orgType 原始值，这里统一转成"全部平台"视角下渲染徽章用的短文案
+// （latestPublicDonors 滚动善缘墙已迁移至个人中心页，不再需要这份映射）
+function orgTypeShortName(orgType: string): string {
+  const opt = ORG_TYPE_FILTER_OPTIONS.find(o => o.value === orgType);
+  return (opt && opt.shortName) || '其他爱心组织';
+}
 
 // 🌾 大米/食用油库存状态展示口径：与"爱心续航看板"健康卡片、material-usage-modal
 // 组件的三档选择器共用同一套 sufficient/normal/urgent 语义，提炼成模块级常量供
@@ -378,6 +401,16 @@ function filterRecordsByPeriodAndStore(
 
 Page({
   _navGuard: null as NavGuardInstance | null,
+  // 🔢 义工与用餐服务数据看板·数字滚动动画计时器，onUnload 统一清理
+  _careCountUpTimer: null as any,
+  // 🐛 根因修复：onLoad 与紧随其后的 onShow（小程序冷启动时两者背靠背触发，
+  // 中间几乎没有间隔）都会各自调用一次 reloadShopListAndStats()——这两次调用
+  // 命中的是同一份角色/门店状态，属于纯重复请求，此前只能靠 statisticsLoadLoading
+  // 的"待补发"机制事后合并（先发出去一次真实请求，第二次撞锁再排队补发一次），
+  // 实际还是发生了 2 次云调用，控制台也会打印一次"已有请求在途，记为待补发"。
+  // scheduleReloadStats() 把触发动作本身做 150ms 防抖：短时间内的多次触发只保留
+  // 最后一次真正执行，从源头把两次触发合并成一次，不再依赖"发出去再补救"
+  _reloadStatsDebounceTimer: null as any,
   // 🐛 见 data.roleReady 注释：reloadShopListAndStats() 在角色尚未就绪时把这次
   // 请求记成待办，不放进 data（不需要驱动渲染），applyRolePermissions() 落地后读取
   _pendingStatsReload: false,
@@ -451,8 +484,11 @@ Page({
     isPatriarch: false,
     // 大家长快捷入口：统计页头部的"全国数据看板 ↗"按钮可见性
     showNationalDashboardEntry: false,
-    dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
+    dashboardTitle: '🌐 全网爱心矩阵数据大屏',
     dashboardRoleTag: '',
+    // 🏢 全国大屏平台类型筛选器：'all' = 不限类型（默认），其他值对应 stores.orgType
+    nationalOrgTypeFilter: 'all',
+    orgTypeFilterOptions: ORG_TYPE_FILTER_OPTIONS,
 
     // 🆕 家长专属：资源储备/资金物资兜底/续航预警，复用 getPatriarchDashboard
     // 云函数（该函数早已对 store_patriarch 做 storeId 硬隔离，见该云函数
@@ -499,6 +535,10 @@ Page({
     isAllStoresMode: false,
     // 🏠 门店人员与服务人群画像：仅单店视角下有值，来自 manageStoreProfile 云函数
     storeProfile: null as any,
+    // 🆕 骨架屏判据：仅在"首次请求还在飞、且还没有任何数据可展示"时才展示骨架屏，
+    // 与 storeProfile===null 区分开——storeProfile 为 null 也可能是"已加载完成、
+    // 确认没有画像数据"，不能仅凭它是否为空来判断是否该显示骨架屏
+    storeProfileLoading: false,
     hasOtherStoreData: false,
     showAllStoresOption: false,
     currentStoreTotalCount: 0,
@@ -547,6 +587,12 @@ Page({
     // loadNationalDashboard() 末尾计算
     nationalTopDinersStores: [] as any[],
     nationalTopActiveStores: [] as any[],
+    // 🆕 排行榜 Tab 切换：合并原先纵向堆叠的「餐报活跃度」「服务人次」两个榜单，
+    // 改为单一列表 + Tab 切换，纯客户端状态，不触发重新请求
+    rankingTab: 'active' as 'active' | 'diners',
+    // 🆘 支援预警队列：由 formatNationalMatrixData 派生，按风险得分降序，
+    // 只含得分 > 0 的门店。纯前端计算，不需要额外云函数请求
+    supportNeededStores: [] as any[],
     showNationalDashboard: false,
     // 🆕 大家长免费版引导卡片：未订阅专业版时展示门店总数 + 升级 CTA，订阅后消失
     showNationalTeaser: false,
@@ -560,6 +606,24 @@ Page({
     // 状态显式区分"正在加载"与"加载失败"，不再用数据字段反推加载状态
     nationalDashboardLoading: false,
     nationalDashboardError: '',
+    // 📸 全网影像卷宗：来自 superAdminInsights，超管专属
+    nationalMediaGallery: [] as Array<{ url: string; type: string; date: string; storeName: string; orgTypeLabel?: string; loadError?: boolean }>,
+
+    // 🔢 义工与用餐服务数据看板·动画展示值：与 nationalData 里的原始数值分离，
+    // 独立由 animateCareCountUp 逐帧驱动 0 → 目标值缓动，nationalData 本身
+    // 不参与动画（避免其他读取 nationalData 原始字段的地方被中间态数值污染）
+    careDisplay: {
+      dineIn: 0,
+      delivery: 0,
+      takeaway: 0,
+      listen: 0,
+      onDutyVolunteers: 0,
+      deliveryVolunteers: 0,
+      volunteerHours: 0,
+      totalDiningCount: 0,
+      totalVolunteerPersonTimes: 0,
+      totalServicePersonTimes: 0
+    } as Record<string, number>,
 
     // 🆕 全国大屏门店选择范围：'national' 全国总览（默认，向后兼容旧行为）/
     // 'region' 按省份·城市分组筛选/'custom' 自定义勾选多家门店对比。三者互斥，
@@ -658,7 +722,7 @@ Page({
     this.calculateNavBarHeight();
     this.initCustomDates();
     this.initUserRole();
-    this.reloadShopListAndStats();
+    this.scheduleReloadStats();
     this.initWatermarkIdentity();
 
     // 🐛 DEBUG：initUserRole() 是异步的，onLoad 执行到这里时角色信息大概率还没解析
@@ -680,6 +744,14 @@ Page({
     if (this._navGuard) {
       this._navGuard.teardown();
       this._navGuard = null;
+    }
+    if (this._careCountUpTimer) {
+      clearInterval(this._careCountUpTimer);
+      this._careCountUpTimer = null;
+    }
+    if (this._reloadStatsDebounceTimer) {
+      clearTimeout(this._reloadStatsDebounceTimer);
+      this._reloadStatsDebounceTimer = null;
     }
   },
 
@@ -706,7 +778,7 @@ Page({
     }
     this.sanitizeDateVariables();
     DataService.syncLocalDataToCloud();
-    this.reloadShopListAndStats();
+    this.scheduleReloadStats();
   },
 
   sanitizeDateVariables() {
@@ -915,7 +987,7 @@ Page({
       showPersonalView,
       // 大家长快捷入口可见（在单店视图时显示"全国数据看板 ↗"浮动按钮）
       showNationalDashboardEntry: isPatriarch,
-      dashboardTitle: '🌐 雨花斋全国爱心矩阵数据大屏',
+      dashboardTitle: '🌐 全网爱心矩阵数据大屏',
       dashboardRoleTag: ''
     });
 
@@ -1055,6 +1127,7 @@ Page({
       });
     } catch (err) {
       console.error('[loadPatriarchResourceStats] 加载家长资源续航数据异常:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ patriarchStatsLoading: false });
@@ -1083,6 +1156,7 @@ Page({
         }
       } catch (statsErr) {
         console.warn('[loadPersonalDashboard] 个人荣誉数据查询失败，展示为 0:', statsErr);
+        reportCloudSdkErrorIfCorrupted(statsErr);
       }
 
       // 近 6 个月护持频次趋势：按月分组统计打卡次数，月份分组口径与
@@ -1185,6 +1259,7 @@ Page({
       this.setData({ personalPosterImage });
     } catch (err: any) {
       console.error('[onGeneratePersonalPoster] 生成失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       wx.showToast({ title: err.message || '海报生成失败，请重试', icon: 'none' });
       this.setData({ showPersonalPosterModal: false });
     } finally {
@@ -1236,23 +1311,47 @@ Page({
   // super_admin/hq_finance/regional_finance 才会真正用 storeName 反查门店
   async fetchStoreProfile() {
     if (this.data.isAllStoresMode || !this.data.shopName) {
-      this.setData({ storeProfile: null });
+      this.setData({ storeProfile: null, storeProfileLoading: false });
       return;
     }
+    this.setData({ storeProfileLoading: true });
     try {
       const res: any = await wx.cloud.callFunction({
         name: 'manageStoreProfile',
         data: { action: 'get', storeName: this.data.shopName }
       });
-      const result = res.result;
-      if (result && result.success) {
-        this.setData({ storeProfile: result.data });
+      const result = res?.result;
+      if (result?.success && result.data) {
+        // 🆕 人群画像进度比例条：把 7 个原始计数归并成 4 个可视化分组
+        // （党员/志愿者体系=社工+志愿者/长者服务对象=堂食+送餐+倾听/其他），
+        // 算出各自占总人数的百分比，供 WXML 的分段比例条 + 图例使用。
+        // 这里只做一次算术派生，不额外发起云调用
+        const data = result.data;
+        const party = Number(data.partyMembers) || 0;
+        const volunteers = (Number(data.socialWorkers) || 0) + (Number(data.volunteersCount) || 0);
+        const elderly = (Number(data.dineInSeniorsCount) || 0) + (Number(data.deliverySeniorsCount) || 0) + (Number(data.listeningSeniorsCount) || 0);
+        const other = Number(data.otherCount) || 0;
+        const profileTotal = party + volunteers + elderly + other;
+        const pct = (n: number) => profileTotal > 0 ? Math.round((n / profileTotal) * 1000) / 10 : 0;
+        this.setData({
+          storeProfile: {
+            ...data,
+            profileTotal,
+            partyRatioPct: pct(party),
+            volunteerRatioPct: pct(volunteers),
+            elderlyRatioPct: pct(elderly),
+            otherRatioPct: pct(other)
+          }
+        });
       } else {
         this.setData({ storeProfile: null });
       }
     } catch (err) {
       console.error('[fetchStoreProfile] 获取门店人员画像失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       this.setData({ storeProfile: null });
+    } finally {
+      this.setData({ storeProfileLoading: false });
     }
   },
 
@@ -1316,13 +1415,18 @@ Page({
       // 传参，服务端 getNationalDashboard 会在"已确认属于本机构"的门店集合内做
       // 子集收窄，不传或 filterMode='national' 时行为与升级前完全一致
       const filterMode = this.data.nationalFilterMode || 'national';
-      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode };
+      const orgTypeFilter = this.data.nationalOrgTypeFilter || 'all';
+      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode, orgType: orgTypeFilter };
       if (filterMode === 'region') {
         callParams.province = this.data.selectedProvince || '';
         callParams.city = this.data.selectedCity || '';
       } else if (filterMode === 'custom') {
         callParams.storeIds = this.data.customStoreSelection || [];
       }
+      // 🏢 按当前 orgTypeFilter 动态计算大屏标题
+      const orgTypeOpt = ORG_TYPE_FILTER_OPTIONS.find(o => o.value === orgTypeFilter);
+      const dashboardTitle = `🌐 ${(orgTypeOpt && orgTypeOpt.shortName) || '全网'}爱心矩阵数据大屏`;
+      this.setData({ dashboardTitle });
       console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
       const result = await wx.cloud.callFunction({
@@ -1349,11 +1453,48 @@ Page({
         // 🆕 大额数值紧凑展示：只新增 *Display 展示字段，不覆盖原始数值——
         // nationalTotalDiners 等原始字段仍保留（wxml 的"是否已加载完成"判据、
         // formatSuperAdminInsights 内部计算都还依赖它们的原始数值语义）
+        // 📊 长者服务结构比例条：堂食/送餐/倾听三维度各自占比（保留一位小数，四舍五入，
+        // 三项之和因取整可能差 ±1%，属正常现象，不影响阅读）。
+        // 任一维度都没有数据时，比例条不渲染（WXML 侧已有 > 0 的 wx:if 保护）
+        const dineIn   = sanitizedSummary.nationalDineInSeniors   || 0;
+        const delivery = sanitizedSummary.nationalDeliverySeniors || 0;
+        const listen   = sanitizedSummary.nationalListeningSeniors || 0;
+        const careTotal = dineIn + delivery + listen;
+        const dineInRatioPct   = careTotal > 0 ? Math.round(dineIn   / careTotal * 1000) / 10 : 0;
+        const deliveryRatioPct = careTotal > 0 ? Math.round(delivery / careTotal * 1000) / 10 : 0;
+        const listenRatioPct   = careTotal > 0 ? Math.round(listen   / careTotal * 1000) / 10 : 0;
+
+        // 🆕 义工与用餐统计·底栏自动汇总：8 项基础指标里的前 7 项（堂食/送餐长者、
+        // 打包份数、到岗/送餐义工、倾听陪伴、服务工时）云函数早已聚合好
+        // （nationalDineInSeniors 等字段），这里只补 3 个纯客户端算术派生值：
+        //   用餐总数           = 堂食长者 + 送餐长者 + 打包份数（不含服务工时，单位不同）
+        //   志愿者总人次       = 到岗义工 + 送餐义工
+        //   总人次自动汇总     = 用餐总数 + 志愿者总人次 + 倾听陪伴长者
+        //   （六项"人次"类指标的总和；服务工时单位是"小时"，不计入这个人次汇总）
+        const takeaway = sanitizedSummary.nationalTakeawayCount || 0;
+        const onDutyVolunteers = sanitizedSummary.nationalTotalVolunteers || 0;
+        const deliveryVolunteers = sanitizedSummary.nationalDeliveryVolunteers || 0;
+        const totalDiningCount = dineIn + delivery + takeaway;
+        const totalVolunteerPersonTimes = onDutyVolunteers + deliveryVolunteers;
+        const totalServicePersonTimes = totalDiningCount + totalVolunteerPersonTimes + listen;
+
+        // 🌸 全网爱心支持与善缘墙（超管 & 专业版全国大屏专属）：与个人页「发心分布」
+        // 比例条（profile.ts fetchStoreLoveWallSummary，单店口径）是两套独立计算。
+        // 这里直接展示云函数已聚合好的 totalSupportCount/yangshanCount/yindeCount/
+        // yangshanAmount/yindeAmount（全租户全门店口径，通过上面 ...sanitizedSummary
+        // 展开带出，金额已 toFixed(2) 处理好），不需要在客户端再额外计算占比
+
         const displaySummary = {
           ...sanitizedSummary,
           nationalTotalDinersDisplay: formatCompactNumber(sanitizedSummary.nationalTotalDiners),
           nationalTotalIncomeDisplay: formatCompactNumber(sanitizedSummary.nationalTotalIncome),
-          nationalTotalExpenseDisplay: formatCompactNumber(sanitizedSummary.nationalTotalExpense)
+          nationalTotalExpenseDisplay: formatCompactNumber(sanitizedSummary.nationalTotalExpense),
+          totalDiningCount,
+          totalVolunteerPersonTimes,
+          totalServicePersonTimes,
+          dineInRatioPct,
+          deliveryRatioPct,
+          listenRatioPct
         };
         const sanitizedMatrix = sanitizeReportForVolunteer(r.storeMatrix || [], role);
         const cleanedMatrix = this.formatNationalMatrixData(sanitizedMatrix);
@@ -1364,13 +1505,33 @@ Page({
         // 排序取 Top 5，不需要为此再发一次云函数请求
         const topDinersStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.totalDiners || 0) - (a.totalDiners || 0)).slice(0, 5);
         const topActiveStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.openDays || 0) - (a.openDays || 0)).slice(0, 5);
+        const supportNeededStores = this.deriveSupportNeededStores(cleanedMatrix);
         this.setData({
           nationalData: displaySummary,
           nationalMatrixList: cleanedMatrix,
           nationalTopDinersStores: topDinersStores,
           nationalTopActiveStores: topActiveStores,
+          supportNeededStores,
           // 非超管时云函数恒返回 null，这里原样落地，高阶面板 wx:if 会自动不渲染
-          superAdminInsights: this.formatSuperAdminInsights(r.superAdminInsights, sanitizedSummary)
+          superAdminInsights: this.formatSuperAdminInsights(r.superAdminInsights, sanitizedSummary),
+          // 🆕 影像墙平台徽章：每张图云函数已带上 orgType 原始值，转成短文案
+          nationalMediaGallery: (r.superAdminInsights && Array.isArray(r.superAdminInsights.nationalMediaGallery))
+            ? r.superAdminInsights.nationalMediaGallery.map((g: any) => ({ ...g, orgTypeLabel: orgTypeShortName(g.orgType) }))
+            : []
+        });
+
+        // 🔢 义工与用餐服务数据看板：数据落地后驱动一次 0 → 目标值的滚动动画
+        this.animateCareCountUp({
+          dineIn,
+          delivery,
+          takeaway,
+          listen,
+          onDutyVolunteers,
+          deliveryVolunteers,
+          volunteerHours: sanitizedSummary.nationalTotalVolunteerHours || 0,
+          totalDiningCount,
+          totalVolunteerPersonTimes,
+          totalServicePersonTimes
         });
       } else {
         // 🐛 根因修复：此前云函数返回 success:false（例如账号缺 tenantId、无权限）
@@ -1382,6 +1543,7 @@ Page({
       }
     } catch (err: any) {
       console.error('[loadNationalDashboard] 加载失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       const errMsg = (err && err.errMsg) || '网络异常，全国总览加载失败';
       this.setData({ nationalDashboardError: errMsg });
       wx.showToast({ title: errMsg, icon: 'none', duration: 4000 });
@@ -1427,6 +1589,7 @@ Page({
       return true;
     } catch (err) {
       console.error('[ensureStoreDirectory] 门店目录加载异常:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       wx.showToast({ title: '网络异常，门店目录加载失败', icon: 'none' });
       return false;
     }
@@ -1668,6 +1831,7 @@ Page({
       }
     } catch (e) {
       console.warn('[statistics] _fetchNationalStoreCount 失败（忽略）:', e);
+      reportCloudSdkErrorIfCorrupted(e);
     }
   },
 
@@ -1677,11 +1841,25 @@ Page({
   },
 
   onOpenPlanUpgradeModal() {
-    this.setData({ showPlanUpgradeModal: true });
+    if (this.data.isPatriarch || this.data.isAdmin) {
+      // 大家长/超管本身就有权限开通套餐：设交接标记后跳个人中心，
+      // profile.onShow 检测到标记会自动唤起套餐订购弹窗，不再出现死循环 Toast
+      this.setData({ showNationalTeaser: false });
+      requestOpenSubscription();
+      wx.switchTab({ url: '/pages/profile/profile' });
+    } else {
+      this.setData({ showPlanUpgradeModal: true });
+    }
   },
 
   onClosePlanUpgradeModal() {
     this.setData({ showPlanUpgradeModal: false });
+  },
+
+  onGoProfileFromPlanUpgrade() {
+    this.setData({ showPlanUpgradeModal: false });
+    requestOpenSubscription();
+    wx.switchTab({ url: '/pages/profile/profile' });
   },
 
   // 🐛 根因修复：statistics.wxml 里 honor-modal-box/plan-upgrade-modal-card 两处
@@ -1715,9 +1893,15 @@ Page({
       ? '—'
       : formatMoney(rawAvgCost);
 
+    // 🆕 离线门店预警平台徽章：insights.offlineStores 每项已由云函数带上 orgType 原始值
+    const offlineStores = Array.isArray(insights.offlineStores)
+      ? insights.offlineStores.map((s: any) => ({ ...s, orgTypeLabel: orgTypeShortName(s.orgType) }))
+      : insights.offlineStores;
+
     return {
       ...insights,
-      avgCostPerMealStr
+      avgCostPerMealStr,
+      offlineStores
     };
   },
 
@@ -1729,11 +1913,84 @@ Page({
     this.loadNationalDashboard();
   },
 
+  // 🏢 全国大屏平台类型筛选器：切换后重新聚合
+  onOrgTypeFilterChange(e: any) {
+    const orgType = e.currentTarget.dataset.orgtype;
+    if (!orgType || orgType === this.data.nationalOrgTypeFilter) return;
+    this.setData({ nationalOrgTypeFilter: orgType });
+    this.loadNationalDashboard();
+  },
+
   // 一键快筛：正常运营门店 / 需关注预警门店——纯本地过滤 wx:if，数据已在 nationalMatrixList 里，不重新请求
   onSwitchMatrixFilter(e: any) {
     const filter = e.currentTarget.dataset.filter;
     if (!filter || filter === this.data.storeMatrixFilter) return;
     this.setData({ storeMatrixFilter: filter });
+  },
+
+  // 排行榜 Tab 切换：餐报活跃度 / 服务人次——两份榜单已在 loadNationalDashboard 里
+  // 一次性算好（nationalTopActiveStores/nationalTopDinersStores），这里只切换展示
+  onSwitchRankingTab(e: any) {
+    const tab = e.currentTarget.dataset.tab;
+    if (!tab || tab === this.data.rankingTab) return;
+    this.setData({ rankingTab: tab });
+  },
+
+  // 🆘 支援预警队列：遍历已格式化的 storeMatrix，对每家门店计算综合风险得分，
+  // 筛出得分 > 0 的门店并按分值降序返回，供 WXML 渲染「待支援站点预警」面板。
+  //
+  // 得分维度（使用服务端已下发的字段，不新增云调用）：
+  //   +40  isOffline：超过 3 天未提交餐报（运营中断风险最高）
+  //   +35  statusLevel === 'urgent' / healthStatus === 'danger'：续航 < 10 天（资金见底）
+  //   +15  statusLevel === 'warning' / healthStatus === 'warning'：续航 10~30 天（资金告警）
+  //   +20  latestBalance < 0：账面已出现赤字
+  //   +10  hasRiskFlag：凭证合规率 < 100%（仅超管视角下发此字段）
+  //
+  // 同时生成人类可读的 reasonTags 数组（例如 ['资金告急', '离线未记账']）供卡片展示。
+  deriveSupportNeededStores(stores: any[]): any[] {
+    const result: any[] = [];
+
+    for (const s of stores) {
+      let score = 0;
+      const reasons: string[] = [];
+
+      if (s.isOffline) {
+        score += 40;
+        const days = s.daysSinceLastReport;
+        reasons.push(days ? `离线 ${days} 天未记账` : '离线未记账');
+      }
+      if (s.statusLevel === 'urgent' || s.healthStatus === 'danger') {
+        score += 35;
+        const days = typeof s.runwayDays === 'number' ? s.runwayDays : null;
+        reasons.push(days !== null ? `资金告急（仅剩 ${days} 天续航）` : '资金告急');
+      } else if (s.statusLevel === 'warning' || s.healthStatus === 'warning') {
+        score += 15;
+        const days = typeof s.runwayDays === 'number' ? s.runwayDays : null;
+        reasons.push(days !== null ? `资金预警（${days} 天续航）` : '资金预警');
+      }
+      const balance = parseFloat(s.latestBalance ?? s.balance ?? 'NaN');
+      if (!isNaN(balance) && balance < 0) {
+        score += 20;
+        reasons.push(`账面赤字（¥${Math.abs(balance).toFixed(0)}）`);
+      }
+      if (s.hasRiskFlag) {
+        score += 10;
+        reasons.push('凭证合规率不足');
+      }
+
+      if (score === 0) continue;
+
+      // 严重程度标签：用于 WXML 选择呼吸灯颜色
+      const severity: 'critical' | 'high' | 'medium' =
+        score >= 55 ? 'critical' : score >= 35 ? 'high' : 'medium';
+
+      const location = [s.province, s.city].filter(Boolean).join('·');
+
+      result.push({ ...s, supportScore: score, severity, reasonTags: reasons, location });
+    }
+
+    // 按得分降序，最多展示 10 条（防止全国性事件时卡片无限膨胀）
+    return result.sort((a: any, b: any) => b.supportScore - a.supportScore).slice(0, 10);
   },
 
   formatNationalMatrixData(rawStores: any[]): any[] {
@@ -1826,7 +2083,11 @@ Page({
         costPerMealStr,
         isCostValid,
         statusLevel,
-        statusText
+        statusText,
+        // 🆕 平台徽章文案：topDinersStores/topActiveStores/supportNeededStores 均由
+        // cleanedMatrix（本函数的返回值）派生 slice/sort/spread 得来，这里加一次
+        // 即可让排行榜、待支援预警列表同时拿到，无需在三处各自重复映射
+        orgTypeLabel: orgTypeShortName(store.orgType)
       };
     });
   },
@@ -2006,6 +2267,19 @@ Page({
     }
   },
 
+  // 150ms 防抖调度：onLoad/onShow 冷启动背靠背触发时，只让最后一次真正执行，
+  // 见 Page() 顶部 _reloadStatsDebounceTimer 注释。只用于这两个生命周期入口——
+  // 其余任何用户主动触发的刷新（切 Tab/选门店/改年月）都应该立即响应，不套防抖
+  scheduleReloadStats() {
+    if (this._reloadStatsDebounceTimer) {
+      clearTimeout(this._reloadStatsDebounceTimer);
+    }
+    this._reloadStatsDebounceTimer = setTimeout(() => {
+      this._reloadStatsDebounceTimer = null;
+      this.reloadShopListAndStats();
+    }, 150);
+  },
+
   async reloadShopListAndStats() {
     // 🐛 根因修复：角色/storeId 还没解析出来时（见上面 roleReady 字段注释），
     // 先记一笔"待办"就返回，不发起任何请求；applyRolePermissions() 落地后会
@@ -2161,6 +2435,7 @@ Page({
       }
     } catch (err) {
       console.error('[fetchStatistics] 调用失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
     } finally {
       this.setData({ statisticsFetchLoading: false });
       // 🆕 Pending Query Buffer：锁在途期间被记下的待补发请求，在这里统一收尾时
@@ -2783,6 +3058,7 @@ Page({
       });
     } catch (err) {
       console.warn('[fetchLatestMaterialStockStatus] 查询最新物资库存状态失败，保留历史兜底值:', err);
+      reportCloudSdkErrorIfCorrupted(err);
     }
   },
 
@@ -3477,6 +3753,7 @@ Page({
     } catch (err: any) {
       wx.hideLoading();
       console.error('[exportToExcel] 核对数据加载失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       wx.showToast({ title: '核对数据加载失败，请重试', icon: 'none' });
     } finally {
       this.setData({ isExportPreviewLoading: false });
@@ -3519,6 +3796,7 @@ Page({
       }
     } catch (cloudErr: any) {
       console.warn('[Export] 云函数导出失败，降级为本地 CSV:', cloudErr.errMsg || cloudErr.message);
+      reportCloudSdkErrorIfCorrupted(cloudErr);
       // 降级：本地生成 CSV
       this.exportLocalCSV();
     }
@@ -3673,6 +3951,56 @@ Page({
     this.setData({ [`nationalReportSelection.${key}`]: !this.data.nationalReportSelection[key] });
   },
 
+  // 🔢 义工与用餐服务数据看板·数字滚动动画：ease-out 缓动，单个定时器同时驱动
+  // 看板内全部数值（而非每个格子各开一个 setInterval），减少 setData 调用次数。
+  // 参考 pages/journey/journey.ts 的 animateCountUp 同一套 ease-out 三次方缓动
+  animateCareCountUp(targets: Record<string, number>, duration: number = 700) {
+    if (this._careCountUpTimer) {
+      clearInterval(this._careCountUpTimer);
+      this._careCountUpTimer = null;
+    }
+
+    const steps = 24;
+    const stepTime = Math.max(16, Math.round(duration / steps));
+    let currentStep = 0;
+
+    this._careCountUpTimer = setInterval(() => {
+      currentStep++;
+      const progress = Math.min(1, currentStep / steps);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next: Record<string, number> = {};
+      Object.keys(targets).forEach((key) => {
+        const val = (targets[key] || 0) * eased;
+        // 服务工时允许一位小数（与 nationalTotalVolunteerHours 的展示口径一致），其余取整
+        next[key] = key === 'volunteerHours' ? parseFloat(val.toFixed(1)) : Math.round(val);
+      });
+      this.setData({ careDisplay: next });
+
+      if (progress >= 1) {
+        clearInterval(this._careCountUpTimer);
+        this._careCountUpTimer = null;
+        // 收尾强制对齐目标值，避免缓动舍入误差停留在肉眼可辨的偏差上
+        this.setData({ careDisplay: { ...targets } });
+      }
+    }, stepTime);
+  },
+
+  onPreviewNationalPhoto(e: any) {
+    const index = e.currentTarget.dataset.index as number;
+    const gallery = this.data.nationalMediaGallery || [];
+    const urls = gallery.map((p: any) => p.url).filter(Boolean);
+    if (!urls.length) return;
+    wx.previewImage({ current: urls[index] || urls[0], urls });
+  },
+
+  // 🆕 影像墙缩略图加载失败兜底（临时链接过期等场景），标记该项改渲染占位图标，
+  // 避免网格里露出微信默认的裂图图标
+  onNationalPhotoError(e: any) {
+    const index = e.currentTarget.dataset.index;
+    if (index === undefined || index === null) return;
+    this.setData({ [`nationalMediaGallery[${index}].loadError`]: true });
+  },
+
   // 《全国门店运营汇总表》：服务人次/开餐天数/单餐成本/续航与离线预警，取自已加载的 nationalMatrixList
   buildNationalOperationsCSV(): string {
     let csv = '门店名称,城市,服务人次,开餐天数,单餐成本,续航预警,是否离线,最近记账日期\n';
@@ -3703,6 +4031,14 @@ Page({
       csv += `全国平均单餐成本(元),${insights.avgCostPerMealStr || '—'}\n`;
       csv += `全国凭证合规率,${insights.complianceRate === null ? '' : insights.complianceRate + '%'}\n`;
       csv += `超过${insights.offlineAlertThresholdDays}天未记账门店数,${insights.offlineStoreCount}\n`;
+      // 📸 影像卷宗附录
+      if (insights.nationalTotalPhotos !== undefined) {
+        csv += `\n【影像卷宗与凭证档案】\n`;
+        csv += `全网凭证照片总张数,${insights.totalReceiptPhotos || 0}\n`;
+        csv += `全网食谱照片总张数,${insights.totalMenuPhotos || 0}\n`;
+        csv += `全网日志照片总张数,${insights.totalLogPhotos || 0}\n`;
+        csv += `全网影像档案合计张数,${insights.nationalTotalPhotos || 0}\n`;
+      }
     }
     return csv;
   },

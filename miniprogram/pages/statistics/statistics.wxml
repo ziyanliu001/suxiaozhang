@@ -160,117 +160,474 @@
       >{{item.label}}</view>
     </view>
 
-    <!-- 🆕 全国多店大屏专属宏观 KPI 卡：黄金/暖白风，与下方蓝色 national-hero-card
-         是两张不同定位的卡片——这张只放三个一眼就能看懂的"体量"指标（覆盖门店/
-         累计服务人次/总餐食支出），置顶做第一屏摘要；national-hero-card 保留原有
-         更完整的收支/志愿/物资明细。总餐食支出对志工视角同样脱敏，与下方 hero-grid-4
-         的 isManager 分支保持同一条口径 -->
-    <view class="ui-card-wrapper national-macro-kpi-card">
-      <text class="macro-kpi-title">🏆 全国多店大屏 · 核心体量</text>
-      <view class="macro-kpi-grid">
-        <view class="macro-kpi-cell">
-          <text class="macro-kpi-val">{{nationalData.totalStores}}</text>
-          <text class="macro-kpi-lbl">覆盖门店总数</text>
+    <!-- 🏢 平台类型筛选器：超管可见，切换后重新按 orgType 聚合全国大屏数据，
+         彻底解耦"雨花斋"等平台硬编码。与上方时间范围 Tab 并排为两行独立控件 -->
+    <view class="org-type-filter-row" wx:if="{{isAdmin || isPatriarch}}">
+      <view
+        wx:for="{{orgTypeFilterOptions}}"
+        wx:key="value"
+        class="org-type-pill {{nationalOrgTypeFilter === item.value ? 'active' : ''}}"
+        data-orgtype="{{item.value}}"
+        bindtap="onOrgTypeFilterChange"
+      >{{item.label}}</view>
+    </view>
+
+    <!-- 🆕 全国爱心网络数据总览：原先并列的「全国多店大屏」（暖黄渐变）与
+         「应急救援队数据大屏」口径完全融合为一张白底卡片——两者本就是同一份
+         nationalData 数据源，只是 orgTypeFilter 切到 rescue_team 时的同一套卡片，
+         此前拆成两张视觉不一致的卡片纯属历史遗留。现在统一为一张卡：顶部 4 大
+         核心指标用大字号数字置顶，收支细分/开餐天数/义工到岗降为次级小字号行，
+         物资消耗（大米/面粉/油/蔬菜）收拢到底部轻量 4 列微卡片，不再挤占首屏 -->
+    <view class="ui-card-wrapper national-overview-card">
+      <!-- 🐛 修复标题重复：此前标题下方还挂了一行 {{dashboardTitle}}（默认文案
+           "全网爱心矩阵数据大屏"），与主标题"全国爱心网络数据总览"语义完全重复，
+           两行连读像是同一句话被拆成两行（见调试截图）。dashboardTitle 真正携带
+           的信息——当前是"全网"还是筛到某个具体平台——上方 org-type-filter-row
+           的高亮胶囊本身就已经表达了，这里不再重复展示，只保留一个主标题 -->
+      <view class="overview-header">
+        <view class="overview-title-row">
+          <text class="overview-title">🌐 全国爱心网络数据总览</text>
+          <text class="overview-role-tag" wx:if="{{dashboardRoleTag}}">{{dashboardRoleTag}}</text>
         </view>
-        <view class="macro-kpi-cell">
-          <text class="macro-kpi-val">{{nationalData.nationalTotalDinersDisplay}}</text>
-          <text class="macro-kpi-lbl">全国累计服务人次</text>
+      </view>
+
+      <!-- 顶部 4 大核心指标：覆盖门店数 / 全国累计服务人次 / 总餐食支出 / 总志愿工时 -->
+      <view class="overview-kpi-grid">
+        <view class="overview-kpi-cell">
+          <text class="overview-kpi-val">{{nationalData.totalStores}}</text>
+          <text class="overview-kpi-lbl">覆盖门店数</text>
+        </view>
+        <view class="overview-kpi-cell">
+          <text class="overview-kpi-val">{{nationalData.nationalTotalDinersDisplay}}</text>
+          <text class="overview-kpi-lbl">全国累计服务人次</text>
           <!-- 🆕 环比趋势：与当前 nationalRangeType 选定的时间粒度对比上一个同长度
                周期，rangeType='all' 或查无可比基数时服务端返回 null，隐藏徽标 -->
           <view class="core-metrics-yoy {{nationalData.nationalTotalDinersTrend > 0 ? 'up' : (nationalData.nationalTotalDinersTrend < 0 ? 'down' : 'flat')}}" wx:if="{{nationalData.nationalTotalDinersTrend !== null && nationalData.nationalTotalDinersTrend !== undefined}}">
             <text>{{nationalData.nationalTotalDinersTrend > 0 ? '▲' : (nationalData.nationalTotalDinersTrend < 0 ? '▼' : '—')}} {{nationalData.nationalTotalDinersTrend}}% 环比</text>
           </view>
         </view>
-        <view class="macro-kpi-cell" wx:if="{{isManager}}">
-          <text class="macro-kpi-val">¥{{nationalData.nationalTotalExpenseDisplay}}</text>
-          <text class="macro-kpi-lbl">全国总餐食支出</text>
+        <!-- 🌟 志工视角：总餐食支出属运营敏感数据，与下方次级行的收支脱敏口径一致 -->
+        <view class="overview-kpi-cell" wx:if="{{isManager}}">
+          <text class="overview-kpi-val">¥{{nationalData.nationalTotalExpenseDisplay}}</text>
+          <text class="overview-kpi-lbl">总餐食支出</text>
           <view class="core-metrics-yoy {{nationalData.nationalTotalExpenseTrend > 0 ? 'up' : (nationalData.nationalTotalExpenseTrend < 0 ? 'down' : 'flat')}}" wx:if="{{nationalData.nationalTotalExpenseTrend !== null && nationalData.nationalTotalExpenseTrend !== undefined}}">
             <text>{{nationalData.nationalTotalExpenseTrend > 0 ? '▲' : (nationalData.nationalTotalExpenseTrend < 0 ? '▼' : '—')}} {{nationalData.nationalTotalExpenseTrend}}% 环比</text>
           </view>
         </view>
-        <view class="macro-kpi-cell" wx:else>
-          <text class="macro-kpi-val macro-kpi-masked">***</text>
-          <text class="macro-kpi-lbl">全国总餐食支出</text>
+        <view class="overview-kpi-cell" wx:else>
+          <text class="overview-kpi-val overview-kpi-masked">***</text>
+          <text class="overview-kpi-lbl">总餐食支出</text>
         </view>
-      </view>
-    </view>
-
-    <view class="ui-card-wrapper national-hero-card">
-      <view class="hero-header">
-        <text class="hero-title">{{dashboardTitle}}<text class="hero-role-tag" wx:if="{{dashboardRoleTag}}">{{dashboardRoleTag}}</text></text>
-        <text class="hero-badge">已覆盖 {{nationalData.totalStores}} 家门店</text>
-      </view>
-
-      <view class="hero-main-num">
-        <text class="num-lbl">全国累计服务用餐人次</text>
-        <text class="num-val">{{nationalData.nationalTotalDinersDisplay}} <text class="unit">人次</text></text>
-      </view>
-
-      <!-- 🌟 志工视角：隐藏具体资金汇入/支出数额，仅保留服务成果类指标（开餐天数） -->
-      <view class="hero-grid-4" wx:if="{{isManager}}">
-        <view class="h-cell">
-          <text class="h-val">+¥{{nationalData.nationalTotalIncomeDisplay}}</text>
-          <text class="h-lbl">全国服务汇入</text>
-        </view>
-        <view class="h-cell">
-          <text class="h-val">-¥{{nationalData.nationalTotalExpenseDisplay}}</text>
-          <text class="h-lbl">全国开餐总支出</text>
-        </view>
-        <view class="h-cell">
-          <text class="h-val">{{nationalData.nationalOpenDays}} 天</text>
-          <text class="h-lbl">全国累计开餐天数</text>
-        </view>
-      </view>
-      <view class="hero-grid-4" wx:else>
-        <view class="h-cell masked-cell">
-          <text class="h-val masked-val">***</text>
-          <text class="h-lbl">全国服务汇入</text>
-        </view>
-        <view class="h-cell masked-cell">
-          <text class="h-val masked-val">***</text>
-          <text class="h-lbl">全国开餐总支出</text>
-        </view>
-        <view class="h-cell">
-          <text class="h-val">{{nationalData.nationalOpenDays}} 天</text>
-          <text class="h-lbl">全国累计开餐天数</text>
+        <!-- 全国义工服务工时：服务成果类指标，非财务数据，全角色可见 -->
+        <view class="overview-kpi-cell">
+          <text class="overview-kpi-val">{{nationalData.nationalTotalVolunteerHours}}</text>
+          <text class="overview-kpi-lbl">总志愿工时（小时）</text>
         </view>
       </view>
 
-      <!-- 🌟 全国志愿服务与物资消耗：非财务数据（志愿工时/人次、物资消耗斤数），
-           所有角色（含志工）都可见，不走 isManager 脱敏分支——与全国开餐天数
-           同一档"服务成果类"指标，不是运营/财务隐私 -->
-      <view class="hero-grid-4">
-        <view class="h-cell">
-          <text class="h-val">{{nationalData.nationalTotalVolunteers}} 人次</text>
-          <text class="h-lbl">全国义工到岗人次</text>
+      <!-- 次级指标行：收支细分/开餐天数/义工到岗——降为小字号，不再抢占首屏视觉焦点 -->
+      <view class="overview-secondary-row">
+        <view class="overview-sec-cell" wx:if="{{isManager}}">
+          <text class="overview-sec-val">+¥{{nationalData.nationalTotalIncomeDisplay}}</text>
+          <text class="overview-sec-lbl">全国服务汇入</text>
         </view>
-        <view class="h-cell">
-          <text class="h-val">{{nationalData.nationalTotalVolunteerHours}} 小时</text>
-          <text class="h-lbl">全国义工服务工时</text>
+        <view class="overview-sec-cell overview-sec-masked" wx:else>
+          <text class="overview-sec-val">***</text>
+          <text class="overview-sec-lbl">全国服务汇入</text>
+        </view>
+        <view class="overview-sec-cell">
+          <text class="overview-sec-val">{{nationalData.nationalOpenDays}} 天</text>
+          <text class="overview-sec-lbl">累计开餐天数</text>
+        </view>
+        <view class="overview-sec-cell">
+          <text class="overview-sec-val">{{nationalData.nationalTotalVolunteers}} 人次</text>
+          <text class="overview-sec-lbl">义工到岗人次</text>
         </view>
       </view>
-      <view class="hero-grid-4" wx:if="{{nationalData.nationalRiceTotal > 0 || nationalData.nationalFlourTotal > 0 || nationalData.nationalOilTotal > 0 || nationalData.nationalVegetableTotal > 0}}">
-        <view class="h-cell" wx:if="{{nationalData.nationalRiceTotal > 0}}">
-          <text class="h-val">{{nationalData.nationalRiceTotal}} 斤</text>
-          <text class="h-lbl">全国大米消耗</text>
+
+      <!-- 物资消耗：轻量级 4 列小字号微卡片，避免挤占首屏空间 -->
+      <view class="overview-materials-row" wx:if="{{nationalData.nationalRiceTotal > 0 || nationalData.nationalFlourTotal > 0 || nationalData.nationalOilTotal > 0 || nationalData.nationalVegetableTotal > 0}}">
+        <view class="overview-material-cell" wx:if="{{nationalData.nationalRiceTotal > 0}}">
+          <text class="material-val">{{nationalData.nationalRiceTotal}}斤</text>
+          <text class="material-lbl">🌾 大米</text>
         </view>
-        <view class="h-cell" wx:if="{{nationalData.nationalFlourTotal > 0}}">
-          <text class="h-val">{{nationalData.nationalFlourTotal}} 斤</text>
-          <text class="h-lbl">全国面粉消耗</text>
+        <view class="overview-material-cell" wx:if="{{nationalData.nationalFlourTotal > 0}}">
+          <text class="material-val">{{nationalData.nationalFlourTotal}}斤</text>
+          <text class="material-lbl">🌽 面粉</text>
         </view>
-        <view class="h-cell" wx:if="{{nationalData.nationalOilTotal > 0}}">
-          <text class="h-val">{{nationalData.nationalOilTotal}} 斤</text>
-          <text class="h-lbl">全国食用油消耗</text>
+        <view class="overview-material-cell" wx:if="{{nationalData.nationalOilTotal > 0}}">
+          <text class="material-val">{{nationalData.nationalOilTotal}}斤</text>
+          <text class="material-lbl">🫗 食用油</text>
         </view>
-        <view class="h-cell" wx:if="{{nationalData.nationalVegetableTotal > 0}}">
-          <text class="h-val">{{nationalData.nationalVegetableTotal}} 斤</text>
-          <text class="h-lbl">全国蔬菜消耗</text>
+        <view class="overview-material-cell" wx:if="{{nationalData.nationalVegetableTotal > 0}}">
+          <text class="material-val">{{nationalData.nationalVegetableTotal}}斤</text>
+          <text class="material-lbl">🥬 蔬菜</text>
         </view>
       </view>
 
       <!-- 志工荣誉版温馨提示 -->
       <view class="volunteer-warm-tip" wx:if="{{isVolunteerNationalView}}">
         <text class="tip-text">用一餐饭的温度，传递温暖与关爱。每一餐，都有您的爱心护持。</text>
+      </view>
+    </view>
+
+    <!-- 👵 义工与用餐服务数据看板：全国长者关怀总力场。
+         数据来自 getNationalDashboard 新增的 nationalDineInSeniors 等字段，
+         totalDiningCount/totalVolunteerPersonTimes/totalServicePersonTimes 由
+         loadNationalDashboard 客户端算术派生（不额外发起云调用）。
+         所有指标均为服务成果类（非财务），全角色可见，不走脱敏分支。
+         仅当至少一个细分维度有数据时才展示，防止老数据时代全0卡片占位。
+         🆕 结构重排：原 2x4 均质方格改为「深色科技 Hero Banner（用餐总数/
+         志愿者总人次两大核心 KPI）+ 助餐服务/义工力量两组浅色网格 + 结构比例条」
+         三段式，信息层级从"九个数字并排"变成"总览 → 分组明细"。深色底色是
+         本卡片专属处理，与页面其余浅色卡片形成有意的视觉分层——全国大屏里
+         信息密度最高、最具展示性的旗舰指标区，值得单独做"聚光灯"式呈现。
+         看板内数值全部走 careDisplay.*（由 animateCareCountUp 驱动 0 → 目标值
+         的滚动动画），wx:if 可见性判断仍读原始 nationalData.* 字段，不受动画
+         中间态影响。 -->
+    <view class="care-board" wx:if="{{nationalData.nationalDineInSeniors > 0 || nationalData.nationalDeliverySeniors > 0 || nationalData.nationalListeningSeniors > 0 || nationalData.nationalTakeawayCount > 0 || nationalData.nationalDeliveryVolunteers > 0}}">
+
+      <!-- Hero Banner：两大核心 KPI + 自动计算状态提示 -->
+      <view class="cb-hero">
+        <view class="cb-hero-top">
+          <view class="cb-hero-title-row">
+            <view class="cb-svg-icon cb-icon-heart"></view>
+            <text class="cb-hero-title">义工与用餐服务</text>
+          </view>
+          <view class="cb-hero-badge">
+            <view class="cb-svg-icon cb-icon-sparkle"></view>
+            <text class="cb-hero-badge-text">数据自动计算</text>
+          </view>
+        </view>
+        <view class="cb-hero-kpis">
+          <view class="cb-hero-kpi cb-hero-kpi-hot">
+            <text class="cb-hero-kpi-val">{{careDisplay.totalDiningCount}}</text>
+            <text class="cb-hero-kpi-lbl">用餐总数（人/份）</text>
+            <text class="cb-hero-kpi-formula">堂食 + 送餐 + 打包</text>
+          </view>
+          <view class="cb-hero-kpi-divider"></view>
+          <view class="cb-hero-kpi cb-hero-kpi-warm">
+            <text class="cb-hero-kpi-val">{{careDisplay.totalVolunteerPersonTimes}}</text>
+            <text class="cb-hero-kpi-lbl">志愿者总人次</text>
+            <text class="cb-hero-kpi-formula">到岗 + 送餐</text>
+          </view>
+        </view>
+        <view class="cb-hero-foot">
+          <text class="cb-hero-foot-text">六项人次汇总（含倾听陪伴）</text>
+          <text class="cb-hero-foot-val">{{careDisplay.totalServicePersonTimes}} 人次</text>
+        </view>
+      </view>
+
+      <!-- 助餐服务统计组 -->
+      <view class="cb-group">
+        <text class="cb-group-title">助餐服务统计</text>
+        <view class="cb-group-grid cols-3">
+          <view class="cb-cell" wx:if="{{nationalData.nationalDineInSeniors >= 0}}">
+            <view class="cb-svg-icon cb-icon-bowl"></view>
+            <text class="cb-cell-val">{{careDisplay.dineIn}}</text>
+            <text class="cb-cell-lbl">堂食长者</text>
+            <text class="cb-cell-unit">人</text>
+          </view>
+          <view class="cb-cell" wx:if="{{nationalData.nationalDeliverySeniors >= 0}}">
+            <view class="cb-svg-icon cb-icon-truck"></view>
+            <text class="cb-cell-val">{{careDisplay.delivery}}</text>
+            <text class="cb-cell-lbl">送餐长者</text>
+            <text class="cb-cell-unit">人</text>
+          </view>
+          <view class="cb-cell" wx:if="{{nationalData.nationalTakeawayCount >= 0}}">
+            <view class="cb-svg-icon cb-icon-package"></view>
+            <text class="cb-cell-val">{{careDisplay.takeaway}}</text>
+            <text class="cb-cell-lbl">打包份数</text>
+            <text class="cb-cell-unit">份</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 义工力量与服务关怀组 -->
+      <view class="cb-group">
+        <text class="cb-group-title">义工力量与服务关怀</text>
+        <view class="cb-group-grid cols-4">
+          <view class="cb-cell">
+            <view class="cb-svg-icon cb-icon-users"></view>
+            <text class="cb-cell-val">{{careDisplay.onDutyVolunteers}}</text>
+            <text class="cb-cell-lbl">到岗志愿者</text>
+            <text class="cb-cell-unit">人</text>
+          </view>
+          <view class="cb-cell">
+            <view class="cb-svg-icon cb-icon-truck"></view>
+            <text class="cb-cell-val">{{careDisplay.deliveryVolunteers}}</text>
+            <text class="cb-cell-lbl">送餐志愿者</text>
+            <text class="cb-cell-unit">人</text>
+          </view>
+          <view class="cb-cell cb-cell-accent">
+            <view class="cb-svg-icon cb-icon-headphones"></view>
+            <text class="cb-cell-val">{{careDisplay.listen}}</text>
+            <text class="cb-cell-lbl">倾听陪伴</text>
+            <text class="cb-cell-unit">人次</text>
+          </view>
+          <view class="cb-cell">
+            <view class="cb-svg-icon cb-icon-clock"></view>
+            <text class="cb-cell-val">{{careDisplay.volunteerHours}}</text>
+            <text class="cb-cell-lbl">累计服务工时</text>
+            <text class="cb-cell-unit">小时</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 服务结构比例条：堂食 vs 送餐 vs 倾听（替代饼图，纯 CSS，不需要 ECharts） -->
+      <view class="cb-ratio-section" wx:if="{{nationalData.nationalDineInSeniors > 0 || nationalData.nationalDeliverySeniors > 0 || nationalData.nationalListeningSeniors > 0}}">
+        <text class="cb-ratio-title">长者服务结构分布</text>
+        <view class="cb-ratio-bar-wrap">
+          <!-- 各段宽度由 nationalData.*RatioPct 驱动，TS 侧在 loadNationalDashboard 计算 -->
+          <view class="cb-ratio-seg seg-dine-in"  style="width:{{nationalData.dineInRatioPct}}%"  wx:if="{{nationalData.dineInRatioPct > 0}}"></view>
+          <view class="cb-ratio-seg seg-delivery" style="width:{{nationalData.deliveryRatioPct}}%" wx:if="{{nationalData.deliveryRatioPct > 0}}"></view>
+          <view class="cb-ratio-seg seg-listen"   style="width:{{nationalData.listenRatioPct}}%"  wx:if="{{nationalData.listenRatioPct > 0}}"></view>
+        </view>
+        <view class="cb-ratio-legend">
+          <view class="cb-legend-item" wx:if="{{nationalData.dineInRatioPct > 0}}">
+            <view class="legend-dot dot-dine-in"></view>
+            <text class="legend-text">堂食 {{nationalData.dineInRatioPct}}%</text>
+          </view>
+          <view class="cb-legend-item" wx:if="{{nationalData.deliveryRatioPct > 0}}">
+            <view class="legend-dot dot-delivery"></view>
+            <text class="legend-text">送餐 {{nationalData.deliveryRatioPct}}%</text>
+          </view>
+          <view class="cb-legend-item" wx:if="{{nationalData.listenRatioPct > 0}}">
+            <view class="legend-dot dot-listen"></view>
+            <text class="legend-text">倾听 {{nationalData.listenRatioPct}}%</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🆕 义工与用餐服务数据看板·空状态：全国范围内所有细分维度都是 0（老
+         数据时代或刚接入的新平台）。与上方深色 Hero 卡片同宽同位，避免整块
+         区域直接消失让人以为功能缺失 -->
+    <view class="cb-empty" wx:elif="{{nationalData.nationalDineInSeniors !== undefined}}">
+      <view class="cb-svg-icon cb-icon-bowl cb-empty-icon"></view>
+      <text class="cb-empty-text">暂无义工与用餐服务数据</text>
+      <text class="cb-empty-sub">各站点提交每日报表后，这里会自动汇总全国数据</text>
+    </view>
+
+    <!-- 💖 全网爱心支持与善缘墙：完整面板——支持总人次 + 阳善/阴德细分（人次+
+         金额）+ 最新公开（阳善）支持滚动墙。
+         🐛 修复：此前只有一枚"总人次"KPI，阳善/阴德细分与滚动墙都被误移去了
+         个人中心页——但那边是单店口径（getSunshineLedger），这里的全国大屏
+         需要的是跨店聚合视角（含 [门店名称]），两者是不同场景，不能互相替代。
+         个人中心页保留它自己单店口径的版本，这里恢复全国口径的完整版。
+         nationalOfflineIncome/yangshanAmount/yindeAmount 属财务数据，对志工脱敏
+         （云函数出口 + utils/dataService.ts 双层遮罩）；总人次/阳善阴德人次为
+         服务成果类公开数据，全角色可见。 -->
+    <view class="love-wall-card" wx:if="{{nationalData.nationalSponsorCount > 0 || nationalData.nationalOfflineIncome > 0}}">
+      <view class="love-wall-header">
+        <text class="love-wall-title">💖 全网爱心支持与善缘墙</text>
+        <text class="love-wall-sub">了凡四训 · 阳善积德</text>
+      </view>
+
+      <!-- KPI 行：支持人次 + 现场随喜总额（随喜总额对志工脱敏） -->
+      <view class="love-kpi-row">
+        <view class="love-kpi-cell">
+          <text class="love-kpi-val">{{nationalData.totalSupportCount}}</text>
+          <text class="love-kpi-lbl">全网爱心支持总人次</text>
+        </view>
+        <view class="love-kpi-divider"></view>
+        <view class="love-kpi-cell" wx:if="{{isManager && nationalData.nationalOfflineIncome > 0}}">
+          <text class="love-kpi-val">¥{{nationalData.nationalOfflineIncome}}</text>
+          <text class="love-kpi-lbl">全网现场随喜总额</text>
+        </view>
+        <view class="love-kpi-cell" wx:elif="{{!isManager}}">
+          <text class="love-kpi-val masked-love">***</text>
+          <text class="love-kpi-lbl">全网现场随喜总额</text>
+        </view>
+      </view>
+
+      <!-- 🆕 阳善 / 阴德细分：人次 + 金额，金额对志工脱敏。yangshanCount+yindeCount
+           恒等于上方 totalSupportCount（同一份 donationItems 明细的两个子集） -->
+      <view class="love-merit-split-row">
+        <view class="love-merit-split-cell yang">
+          <text class="love-merit-split-icon">🌟</text>
+          <view class="love-merit-split-info">
+            <text class="love-merit-split-val">{{nationalData.yangshanCount}} 人次</text>
+            <text class="love-merit-split-amount" wx:if="{{isManager}}">¥{{nationalData.yangshanAmount}}</text>
+            <text class="love-merit-split-amount masked" wx:else>¥***</text>
+            <text class="love-merit-split-lbl">阳善（公开）</text>
+          </view>
+        </view>
+        <view class="love-merit-split-cell yin">
+          <text class="love-merit-split-icon">🌙</text>
+          <view class="love-merit-split-info">
+            <text class="love-merit-split-val">{{nationalData.yindeCount}} 人次</text>
+            <text class="love-merit-split-amount" wx:if="{{isManager}}">¥{{nationalData.yindeAmount}}</text>
+            <text class="love-merit-split-amount masked" wx:else>¥***</text>
+            <text class="love-merit-split-lbl">积阴德（匿名）</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 公开爱心支持滚动墙：仅阳善（公开姓名）条目，垂直 swiper -->
+      <view class="love-scroll-section" wx:if="{{nationalData.latestPublicDonors && nationalData.latestPublicDonors.length > 0}}">
+        <text class="love-scroll-title">✨ 最新爱心支持（阳善公开）</text>
+        <swiper class="love-scroll-swiper" vertical autoplay circular interval="2800" duration="400">
+          <!-- 🐛 latestPublicDonors 每一项是对象（{name, amount, storeName, timeLabel}），
+               wx:key="*this" 会把整个对象字面转成字符串当 key，多条记录会撞 key，
+               改用 wx:for-index 提供的下标作为 key -->
+          <swiper-item wx:for="{{nationalData.latestPublicDonors}}" wx:for-index="donorIdx" wx:key="donorIdx">
+            <view class="love-scroll-item">
+              <text class="love-scroll-store">[{{item.storeName}}]</text>
+              <text class="love-scroll-name">{{item.name}}</text>
+              <text class="love-scroll-amount">支持 ¥{{item.amount}}</text>
+              <text class="love-scroll-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
+            </view>
+          </swiper-item>
+        </swiper>
+      </view>
+    </view>
+
+    <!-- 📸 全网影像卷宗与凭证审计：超管专属，展示三类照片总量 KPI + 最新 12 张影像墙 -->
+    <view class="national-media-card" wx:if="{{superAdminInsights && superAdminInsights.nationalTotalPhotos !== undefined}}">
+      <!-- 🆕 标题区改为纵向堆叠：原横向 flex + baseline 对齐在标题较长时会与
+           副标题挤在同一行造成折行错位（见截图反馈），纵向布局不受标题长度影响 -->
+      <view class="nm-header">
+        <text class="nm-title">📸 全网影像卷宗与阳光凭证</text>
+        <text class="nm-sub">凭证 · 食谱 · 活动日志</text>
+      </view>
+
+      <!-- 🆕 KPI 小卡片补充图标圆徽，emoji 从文字标签里独立出来，数值/图标/文案
+           三级视觉层次更清晰，也便于图标与数值分别做样式微调 -->
+      <view class="nm-kpi-row">
+        <view class="nm-kpi-card">
+          <text class="nm-kpi-icon">🧾</text>
+          <text class="nm-kpi-val">{{superAdminInsights.totalReceiptPhotos || 0}}</text>
+          <text class="nm-kpi-lbl">凭证照片</text>
+        </view>
+        <view class="nm-kpi-card">
+          <text class="nm-kpi-icon">🍱</text>
+          <text class="nm-kpi-val">{{superAdminInsights.totalMenuPhotos || 0}}</text>
+          <text class="nm-kpi-lbl">食谱照片</text>
+        </view>
+        <view class="nm-kpi-card">
+          <text class="nm-kpi-icon">📷</text>
+          <text class="nm-kpi-val">{{superAdminInsights.totalLogPhotos || 0}}</text>
+          <text class="nm-kpi-lbl">日志照片</text>
+        </view>
+      </view>
+      <view class="nm-total-row">
+        <text class="nm-total-label">📁 档案合计</text>
+        <text class="nm-total-val">{{superAdminInsights.nationalTotalPhotos || 0}} 张</text>
+      </view>
+
+      <!-- 最新影像墙：3 列网格，lazy-load，点击全屏预览。
+           🆕 头部补充"已展示 X/共 Y 张"，让超管知道这只是最新一批而非全量 -->
+      <view class="nm-gallery-header" wx:if="{{nationalMediaGallery.length > 0}}">
+        <text class="nm-gallery-title">最新上传影像</text>
+        <text class="nm-gallery-count" wx:if="{{(superAdminInsights.nationalTotalPhotos || 0) > nationalMediaGallery.length}}">
+          已展示 {{nationalMediaGallery.length}}/{{superAdminInsights.nationalTotalPhotos}} 张
+        </text>
+      </view>
+      <view class="nm-gallery-grid" wx:if="{{nationalMediaGallery.length > 0}}">
+        <view
+          class="nm-gallery-item"
+          hover-class="nm-gallery-item-hover"
+          hover-stay-time="80"
+          wx:for="{{nationalMediaGallery}}"
+          wx:key="url"
+          data-index="{{index}}"
+          bindtap="onPreviewNationalPhoto"
+        >
+          <!-- 🆕 图片加载失败时（临时链接过期等）用占位图标兜底，避免网格里露出
+               微信默认的裂图图标 -->
+          <view class="nm-gallery-img-fallback" wx:if="{{item.loadError}}">
+            <text class="nm-fallback-icon">🖼️</text>
+          </view>
+          <image
+            wx:else
+            class="nm-gallery-img"
+            src="{{item.url}}"
+            mode="aspectFill"
+            lazy-load="{{true}}"
+            data-index="{{index}}"
+            binderror="onNationalPhotoError"
+          />
+          <view class="nm-gallery-tag-row">
+            <text class="nm-tag nm-tag-{{item.type}}">
+              {{item.type === 'receipt' ? '🧾' : item.type === 'menu' ? '🍱' : '📷'}}
+            </text>
+            <text class="nm-tag-store">{{item.storeName}}</text>
+            <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分影像来源属于哪一类业态站点 -->
+            <text class="nm-tag-org" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+          </view>
+        </view>
+      </view>
+      <!-- 🆕 空状态改为图标 + 主文案 + 引导副文案三段式，替换原先单行灰字 -->
+      <view class="nm-gallery-empty" wx:elif="{{nationalMediaGallery.length === 0}}">
+        <text class="nm-empty-icon">🗂️</text>
+        <text class="nm-empty-text">暂无影像档案</text>
+        <text class="nm-empty-sub">请先上传凭证或食谱照片，影像会自动汇总到这里</text>
+      </view>
+    </view>
+
+    <!-- 🚨 门店健康度告警中心：由 deriveSupportNeededStores 在客户端从 storeMatrix
+         派生，仅当存在风险得分 > 0 的门店时渲染列表；severity 三档 → 危险红/警示橙/
+         提示黄。原「待支援爱心站点预警」与超管治理面板里的「离线门店预警」两块
+         卡片已合并——deriveSupportNeededStores 的评分维度本就把"离线未记账"计入
+         +40 分并生成"离线 X 天未记账"原因标签（见该函数注释），离线站点必然已经
+         出现在这份列表里，原来的 offline-store-list 只是同一份数据的窄化重复展示，
+         合并后不丢任何信息，还消除了两张卡片间的数据/视觉不一致。
+         🆕 卡片本身不再受 supportNeededStores.length 门槛限制：即便当前 0 家待支援，
+         也常驻渲染卡片本身并切换为"运行正常"空状态，而不是整块消失——让大家长/超管
+         明确知道"系统检查过、结果是没有风险"，而非"这块功能暂时看不到" -->
+    <view class="health-alert-card" wx:if="{{isPatriarch || isAdmin}}">
+      <view class="health-alert-header">
+        <view class="health-alert-title-row">
+          <view class="health-alert-pulse {{supportNeededStores.length > 0 ? 'critical' : 'normal'}}"></view>
+          <text class="health-alert-title">{{supportNeededStores.length > 0 ? '🚨 门店健康度告警中心' : '✅ 全网站点运行正常'}}</text>
+        </view>
+        <text class="health-alert-count" wx:if="{{supportNeededStores.length > 0}}">{{supportNeededStores.length}} 家需关注</text>
+      </view>
+
+      <view class="health-alert-list" wx:if="{{supportNeededStores.length > 0}}">
+        <view
+          class="health-alert-item severity-{{item.severity}}"
+          wx:for="{{supportNeededStores}}"
+          wx:key="storeId"
+        >
+          <!-- 左侧：严重程度指示点 + 门店名称与省市位置 -->
+          <view class="hai-left">
+            <view class="hai-dot severity-dot-{{item.severity}}"></view>
+            <view class="hai-info">
+              <view class="hai-name-row">
+                <text class="hai-location" wx:if="{{item.location}}">【{{item.location}}】</text>
+                <text class="hai-name">{{item.storeName}}</text>
+                <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分待支援站点所属业态 -->
+                <text class="hai-org-tag" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+              </view>
+              <text class="hai-score hai-score-{{item.severity}}">风险分 {{item.supportScore}}</text>
+            </view>
+          </view>
+          <!-- 右侧：危险红/警示橙圆角 Tag，靠右对齐展示，排查一眼可见。
+               🆕 原因标签最多展示 2 条（reasonTags 已按扣分权重降序排列，见
+               deriveSupportNeededStores），超过部分折叠成"+N"徽标——此前风险因素
+               多的门店（如同时离线+资金告急+合规不足）会堆出 3~4 个满宽度胶囊，
+               把整行撑得很高，与旁边只有 1 条标签的门店行高差异悬殊 -->
+          <view class="hai-right">
+            <text
+              class="hai-tag hai-tag-{{item.severity}}"
+              wx:for="{{item.reasonTags}}"
+              wx:key="*this"
+              wx:for-item="tag"
+              wx:if="{{index < 2}}"
+            >{{tag}}</text>
+            <text class="hai-tag-more" wx:if="{{item.reasonTags.length > 2}}">+{{item.reasonTags.length - 2}}</text>
+          </view>
+        </view>
+      </view>
+      <!-- 🆕 空状态兜底 -->
+      <view class="health-alert-empty" wx:else>
+        <text class="health-alert-empty-text">各站点资金、记账与合规状态均正常，暂无需要支援的站点</text>
+      </view>
+
+      <view class="health-alert-footer" wx:if="{{supportNeededStores.length > 0}}">
+        <text class="health-alert-tip">💡 风险分 = 离线(+40) · 资金告急(+35) · 预警(+15) · 赤字(+20) · 合规(+10)</text>
       </view>
     </view>
 
@@ -324,44 +681,55 @@
 
     <!-- 🆕 多店排行榜/对比模块：超管专属，纯客户端从 nationalMatrixList 派生出的
          Top 5——"报表活跃度"按 openDays（本次统计窗口内实际提交过餐报的天数）
-         降序，"餐饮服务人次"按 totalDiners 降序，让全景界面具备真正的跨店透视 -->
+         降序，"餐饮服务人次"按 totalDiners 降序，让全景界面具备真正的跨店透视。
+         🆕 原先纵向堆叠的两份榜单改为 Tab 切换单一列表，压缩垂直高度；前三名
+         使用金/银/铜三色数字徽章（.ranking-badge.rank-1/2/3），一眼可辨名次 -->
     <view class="national-ranking-card" wx:if="{{isAdmin}}">
       <view class="matrix-header">
         <text class="matrix-title">🏅 全国门店排行榜</text>
       </view>
 
-      <view class="ranking-group">
-        <text class="ranking-group-title">📋 爱心餐报表活跃度 Top 5</text>
-        <view class="ranking-list">
-          <view class="ranking-item" wx:for="{{nationalTopActiveStores}}" wx:key="storeId" wx:for-index="rankIdx">
-            <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
-            <text class="ranking-name">{{item.storeName}}</text>
-            <text class="ranking-value">{{item.openDays}} 天</text>
-          </view>
-          <view class="ranking-empty" wx:if="{{nationalTopActiveStores.length === 0}}">
-            <text>暂无门店报表数据</text>
-          </view>
+      <view class="ranking-tab-row">
+        <view class="ranking-tab-item {{rankingTab === 'active' ? 'active' : ''}}" data-tab="active" bindtap="onSwitchRankingTab">📋 餐报活跃度</view>
+        <view class="ranking-tab-item {{rankingTab === 'diners' ? 'active' : ''}}" data-tab="diners" bindtap="onSwitchRankingTab">🍚 服务人次</view>
+      </view>
+
+      <view class="ranking-list" wx:if="{{rankingTab === 'active'}}">
+        <view class="ranking-item" wx:for="{{nationalTopActiveStores}}" wx:key="storeId" wx:for-index="rankIdx">
+          <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
+          <text class="ranking-name">{{item.storeName}}</text>
+          <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分排行榜条目所属业态 -->
+          <text class="ranking-org-tag" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+          <text class="ranking-value">{{item.openDays}} 天</text>
+        </view>
+        <view class="ranking-empty" wx:if="{{nationalTopActiveStores.length === 0}}">
+          <text>暂无门店报表数据</text>
         </view>
       </view>
 
-      <view class="ranking-group">
-        <text class="ranking-group-title">🍚 餐饮服务人次 Top 5</text>
-        <view class="ranking-list">
-          <view class="ranking-item" wx:for="{{nationalTopDinersStores}}" wx:key="storeId" wx:for-index="rankIdx">
-            <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
-            <text class="ranking-name">{{item.storeName}}</text>
-            <text class="ranking-value">{{item.totalDiners}} 人次</text>
-          </view>
-          <view class="ranking-empty" wx:if="{{nationalTopDinersStores.length === 0}}">
-            <text>暂无门店服务数据</text>
-          </view>
+      <view class="ranking-list" wx:if="{{rankingTab === 'diners'}}">
+        <view class="ranking-item" wx:for="{{nationalTopDinersStores}}" wx:key="storeId" wx:for-index="rankIdx">
+          <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
+          <text class="ranking-name">{{item.storeName}}</text>
+          <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分排行榜条目所属业态 -->
+          <text class="ranking-org-tag" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+          <text class="ranking-value">{{item.totalDiners}} 人次</text>
+        </view>
+        <view class="ranking-empty" wx:if="{{nationalTopDinersStores.length === 0}}">
+          <text>暂无门店服务数据</text>
         </view>
       </view>
     </view>
 
-    <!-- 🌟 超管专属高阶治理面板：核心指标/时间切片/离线门店预警/CSV 报表导出。
+    <!-- 🌟 超管专属高阶治理面板：核心指标/时间切片/CSV 报表导出。黑金配色区别于
+         页面其余白底卡片，标示这是超管权限专区。
          superAdminInsights 由 getNationalDashboard 云函数在二次校验 role==='super_admin'
-         后才下发，非超管账号该字段恒为 null，wx:if 双重把关（isAdmin + 数据本身存在） -->
+         后才下发，非超管账号该字段恒为 null，wx:if 双重把关（isAdmin + 数据本身存在）。
+         🆕 原先内嵌的「离线门店预警」清单已并入上方「门店健康度告警中心」（同一份
+         风险评分数据源，见该卡片注释），此处不再重复渲染；"超X天未记账门店数"
+         汇总指标仍保留在下方次级指标行，作为治理面板自己的统计摘要。
+         🆕 报表导出按钮移至页面底部固定操作栏，与"生成全国公示海报"并排，
+         不再作为卡片内嵌按钮 -->
     <view class="super-admin-insights-card" wx:if="{{isAdmin && superAdminInsights}}">
       <view class="matrix-header">
         <text class="matrix-title">🛡️ 超管高阶治理面板</text>
@@ -401,27 +769,22 @@
           <text class="insights-metric-lbl">超{{superAdminInsights.offlineAlertThresholdDays}}天未记账门店</text>
         </view>
       </view>
-
-      <view class="offline-store-list" wx:if="{{superAdminInsights.offlineStoreCount > 0}}">
-        <text class="offline-store-list-title">⚠️ 离线门店预警</text>
-        <view class="offline-store-item" wx:for="{{superAdminInsights.offlineStores}}" wx:key="storeId" wx:for-item="os">
-          <text class="offline-store-name">{{os.storeName}}</text>
-          <text class="offline-store-days">{{os.lastReportDate ? (os.daysSinceLastReport + ' 天未记账') : '从未记账'}}</text>
-        </view>
-      </view>
-
-      <button class="btn-generate-national-report" bindtap="onOpenNationalReportModal">📄 生成全国运营/财务报表</button>
     </view>
 
     <view class="compliance-disclaimer">
       <text class="compliance-disclaimer-text">本平台仅用于爱心餐报与志愿服务记录，不直接面向公众发起公开募捐；如涉及个人信息，已在前端做脱敏展示处理。</text>
     </view>
 
-    <!-- 🆕 超管专属：全国公示海报——与全国运营/财务报表（文字导出）是两种不同产物，
-         这里生成的是可直接分享/张贴的图片海报 -->
-    <button class="btn-primary-poster national-poster-btn" bindtap="onGenerateNationalPoster" wx:if="{{isAdmin}}">
-      🖼️ 生成全国公示海报
-    </button>
+    <!-- 🆕 底部固定操作栏：原先分散在治理面板内（报表）与卡片外（海报）的两个
+         独立按钮，合并为吸底双按钮组合。海报为主按钮（红色渐变高亮），报表为
+         次按钮（黑金配色，呼应上方治理面板），与非全国视角的 .bottom-sticky-bar
+         同一套吸底规范，靠 padding-bottom 在 .national-dashboard-container 里
+         预留出安全间距，不遮挡最后一张卡片 -->
+    <view class="bottom-sticky-bar national-bottom-bar" wx:if="{{isAdmin}}">
+      <button class="btn-national-report" hover-class="ui-hover" bindtap="onOpenNationalReportModal">📄 生成运营/财务报表</button>
+      <button class="btn-primary-poster national-poster-btn" hover-class="ui-hover" bindtap="onGenerateNationalPoster">🖼️ 生成全国公示海报</button>
+    </view>
+    <view class="national-bottom-bar-spacer" wx:if="{{isAdmin}}"></view>
     </block>
   </view>
 
@@ -723,7 +1086,7 @@
       <text class="honor-modal-hint">💡 保存图片后可发送至朋友圈或微信群</text>
 
       <button
-        class="honor-btn-save"
+        class="honor-btn-save {{(isGeneratingPersonalPoster || isSavingPersonalPoster || !personalPosterImage) ? 'honor-btn-save-disabled' : ''}}"
         bindtap="onSavePersonalPoster"
         loading="{{isSavingPersonalPoster}}"
         disabled="{{isGeneratingPersonalPoster || isSavingPersonalPoster || !personalPosterImage}}"
@@ -736,22 +1099,37 @@
   <scroll-view class="content-section" scroll-y wx:if="{{!showNationalDashboard && !showPersonalView}}">
 
     <!-- 🆕 核心经营指标骨架卡：独立于下方 statistics.recordCount>0 才渲染的
-         stats-content，无论当期是否有数据都固定展示这 2x2 网格结构，避免
-         "无数据=页面直接塌陷成空状态卡"——无数据时四格显示 "--"，同比徽标一并隐藏 -->
+         stats-content，无论当期是否有数据都固定展示这 3x2 网格结构，避免
+         "无数据=页面直接塌陷成空状态卡"——无数据时格子显示 "--"，同比徽标一并隐藏。
+         🆕 首次请求还在飞、且还没有任何数据可展示时（statisticsLoadLoading &&
+         !coreMetrics.hasData），改用骨架屏占位而不是直接展示 "--"——"--" 应该只
+         代表"确认过、这期真的没数据"，不该在请求结果还没回来前就先亮出来，
+         那会让用户误以为已经查完了。
+         🆕 新增「阳光凭证数」「凭证合规率」两格：数据源是 statsData（fetchStatistics
+         →getStatisticsData 云函数结果，与前 4 格的 coreMetrics 来自 loadStatistics
+         是两条独立并行的数据管线，见 calculateStats() 同时触发两者）。两条管线
+         正常情况下几乎同时返回，这两格用各自的 ?? 兜底即可，不需要为此新增一套
+         独立的 loading 状态机 -->
     <view class="ui-card-wrapper core-metrics-card">
       <view class="card-header">
         <text class="card-title">📌 核心经营指标</text>
       </view>
-      <view class="core-metrics-grid">
+      <view class="core-metrics-grid" wx:if="{{!(statisticsLoadLoading && !coreMetrics.hasData)}}">
         <view class="core-metrics-cell">
-          <text class="core-metrics-val">{{coreMetrics.hasData ? coreMetrics.diningCount : '--'}}</text>
+          <view class="core-metrics-val-row">
+            <text class="core-metrics-val">{{coreMetrics.hasData ? coreMetrics.diningCount : '--'}}</text>
+            <text class="core-metrics-unit" wx:if="{{coreMetrics.hasData}}">次</text>
+          </view>
           <text class="core-metrics-lbl">总餐次数</text>
           <view class="core-metrics-yoy {{coreMetrics.diningCountYoy > 0 ? 'up' : (coreMetrics.diningCountYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.diningCountYoy !== null}}">
             <text>{{coreMetrics.diningCountYoy > 0 ? '▲' : (coreMetrics.diningCountYoy < 0 ? '▼' : '—')}} {{coreMetrics.diningCountYoy}}%</text>
           </view>
         </view>
         <view class="core-metrics-cell">
-          <text class="core-metrics-val">{{coreMetrics.hasData ? coreMetrics.volunteerCount : '--'}}</text>
+          <view class="core-metrics-val-row">
+            <text class="core-metrics-val">{{coreMetrics.hasData ? coreMetrics.volunteerCount : '--'}}</text>
+            <text class="core-metrics-unit" wx:if="{{coreMetrics.hasData}}">人次</text>
+          </view>
           <text class="core-metrics-lbl">服务人次</text>
           <view class="core-metrics-yoy {{coreMetrics.volunteerCountYoy > 0 ? 'up' : (coreMetrics.volunteerCountYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.volunteerCountYoy !== null}}">
             <text>{{coreMetrics.volunteerCountYoy > 0 ? '▲' : (coreMetrics.volunteerCountYoy < 0 ? '▼' : '—')}} {{coreMetrics.volunteerCountYoy}}%</text>
@@ -770,6 +1148,30 @@
           <view class="core-metrics-yoy {{coreMetrics.perMealCostYoy > 0 ? 'up' : (coreMetrics.perMealCostYoy < 0 ? 'down' : 'flat')}}" wx:if="{{coreMetrics.perMealCostYoy !== null}}">
             <text>{{coreMetrics.perMealCostYoy > 0 ? '▲' : (coreMetrics.perMealCostYoy < 0 ? '▼' : '—')}} {{coreMetrics.perMealCostYoy}}%</text>
           </view>
+        </view>
+        <view class="core-metrics-cell">
+          <view class="core-metrics-val-row">
+            <!-- 🐛 WXML 表达式引擎不保证支持 ?? 空值合并运算符（这份代码库其余
+                 任何 wxml 文件里都找不到一处已验证可用的先例），用 || 0 兜底——
+                 recordCount 语义上不会是负数，0 本身也是合法值，|| 在这里与 ??
+                 效果完全等价，不会误伤"确实是 0"的情况 -->
+            <text class="core-metrics-val">{{statsData.recordCount || 0}}</text>
+            <text class="core-metrics-unit">张</text>
+          </view>
+          <text class="core-metrics-lbl">阳光凭证数</text>
+        </view>
+        <view class="core-metrics-cell">
+          <view class="core-metrics-val-row">
+            <text class="core-metrics-val">{{statsData.complianceRate === null || statsData.complianceRate === undefined ? '--' : statsData.complianceRate}}</text>
+            <text class="core-metrics-unit" wx:if="{{statsData.complianceRate !== null && statsData.complianceRate !== undefined}}">%</text>
+          </view>
+          <text class="core-metrics-lbl">凭证合规率</text>
+        </view>
+      </view>
+      <view class="core-metrics-grid" wx:else>
+        <view class="core-metrics-cell skel-cell" wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-lg"></view>
+          <view class="skel-bar skel-bar-sm"></view>
         </view>
       </view>
     </view>
@@ -1199,7 +1601,13 @@
       </view>
     </view>
 
-    <!-- 🏠 门店人员与服务人群画像：独立于本期是否有餐报记录展示，仅在单店视角下出现 -->
+    <!-- 🏠 门店人员与服务人群画像：独立于本期是否有餐报记录展示，仅在单店视角下出现。
+         🆕 从"色彩指示点+灰字标签"升级为真正的色彩 Badge（背景色胶囊，不只是
+         一个小圆点），三大分组配色：党员=红、志愿者体系(社工+志愿者)=绿、
+         长者服务对象(堂食+送餐+倾听老人)=蓝，"其他"保持中性灰。
+         底部新增进度比例条：把 7 个原始计数按上述 4 组归并算出占比
+         （见 fetchStoreProfile 里的 partyRatioPct 等派生字段），一眼看出
+         门店人员构成，不必逐格默数 -->
     <view class="store-people-card" wx:if="{{!isAllStoresMode && storeProfile}}">
       <view class="card-header">
         <view class="header-title-box">
@@ -1209,32 +1617,85 @@
       </view>
       <view class="store-people-grid-4col">
         <view class="grid-cell">
+          <view class="cell-badge badge-party">党员</view>
           <text class="cell-lbl">中共党员</text>
           <text class="cell-val party-highlight">{{storeProfile.partyMembers}}</text>
         </view>
         <view class="grid-cell">
+          <view class="cell-badge badge-volunteer">志愿</view>
           <text class="cell-lbl">社会工作者</text>
-          <text class="cell-val orange">{{storeProfile.socialWorkers}}</text>
+          <text class="cell-val volunteer">{{storeProfile.socialWorkers}}</text>
         </view>
         <view class="grid-cell">
+          <view class="cell-badge badge-volunteer">志愿</view>
           <text class="cell-lbl">志愿者</text>
-          <text class="cell-val orange">{{storeProfile.volunteersCount}}</text>
+          <text class="cell-val volunteer">{{storeProfile.volunteersCount}}</text>
         </view>
         <view class="grid-cell">
+          <view class="cell-badge badge-elderly">长者</view>
           <text class="cell-lbl">堂食老人</text>
-          <text class="cell-val orange">{{storeProfile.dineInSeniorsCount}}</text>
+          <text class="cell-val elderly">{{storeProfile.dineInSeniorsCount}}</text>
         </view>
         <view class="grid-cell">
+          <view class="cell-badge badge-elderly">长者</view>
           <text class="cell-lbl">送餐老人</text>
-          <text class="cell-val orange">{{storeProfile.deliverySeniorsCount}}</text>
+          <text class="cell-val elderly">{{storeProfile.deliverySeniorsCount}}</text>
         </view>
         <view class="grid-cell">
+          <view class="cell-badge badge-elderly">长者</view>
           <text class="cell-lbl">倾听陪伴老人</text>
-          <text class="cell-val orange">{{storeProfile.listeningSeniorsCount}}</text>
+          <text class="cell-val elderly">{{storeProfile.listeningSeniorsCount}}</text>
         </view>
         <view class="grid-cell">
+          <view class="cell-badge badge-other">其他</view>
           <text class="cell-lbl">其他</text>
           <text class="cell-val grey">{{storeProfile.otherCount}}</text>
+        </view>
+      </view>
+
+      <!-- 人群构成进度比例条：无人员数据时（profileTotal===0）不渲染，避免展示一条空比例条 -->
+      <view class="people-ratio-section" wx:if="{{storeProfile.profileTotal > 0}}">
+        <text class="people-ratio-title">人群构成占比</text>
+        <view class="people-ratio-bar-wrap">
+          <view class="people-ratio-seg seg-party"     style="width:{{storeProfile.partyRatioPct}}%"     wx:if="{{storeProfile.partyRatioPct > 0}}"></view>
+          <view class="people-ratio-seg seg-volunteer" style="width:{{storeProfile.volunteerRatioPct}}%" wx:if="{{storeProfile.volunteerRatioPct > 0}}"></view>
+          <view class="people-ratio-seg seg-elderly"   style="width:{{storeProfile.elderlyRatioPct}}%"   wx:if="{{storeProfile.elderlyRatioPct > 0}}"></view>
+          <view class="people-ratio-seg seg-other"     style="width:{{storeProfile.otherRatioPct}}%"     wx:if="{{storeProfile.otherRatioPct > 0}}"></view>
+        </view>
+        <view class="people-ratio-legend">
+          <view class="people-legend-item" wx:if="{{storeProfile.partyRatioPct > 0}}">
+            <view class="legend-dot dot-legend-party"></view>
+            <text class="legend-text">党员 {{storeProfile.partyRatioPct}}%</text>
+          </view>
+          <view class="people-legend-item" wx:if="{{storeProfile.volunteerRatioPct > 0}}">
+            <view class="legend-dot dot-legend-volunteer"></view>
+            <text class="legend-text">志愿 {{storeProfile.volunteerRatioPct}}%</text>
+          </view>
+          <view class="people-legend-item" wx:if="{{storeProfile.elderlyRatioPct > 0}}">
+            <view class="legend-dot dot-legend-elderly"></view>
+            <text class="legend-text">长者 {{storeProfile.elderlyRatioPct}}%</text>
+          </view>
+          <view class="people-legend-item" wx:if="{{storeProfile.otherRatioPct > 0}}">
+            <view class="legend-dot dot-legend-other"></view>
+            <text class="legend-text">其他 {{storeProfile.otherRatioPct}}%</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🆕 门店人员画像骨架屏：首次请求还在飞、还没有 storeProfile 数据时展示，
+         与上面的真实卡片互斥（wx:elif），加载完成后若确认无画像数据则两者都不渲染 -->
+    <view class="store-people-card" wx:elif="{{!isAllStoresMode && storeProfileLoading}}">
+      <view class="card-header">
+        <view class="header-title-box">
+          <text class="card-icon">👥</text>
+          <text class="card-title">门店人员与服务人群画像</text>
+        </view>
+      </view>
+      <view class="store-people-grid-4col">
+        <view class="grid-cell skel-cell" wx:for="{{[1,2,3,4,5,6,7]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-xs"></view>
+          <view class="skel-bar skel-bar-sm"></view>
         </view>
       </view>
     </view>
@@ -1477,10 +1938,10 @@
   <view class="plan-upgrade-modal-mask" wx:if="{{showPlanUpgradeModal}}" bindtap="onClosePlanUpgradeModal">
     <view class="plan-upgrade-modal-card" catchtap="stopPropagation">
       <view class="plan-upgrade-modal-title">🔒 功能受限</view>
-      <view class="plan-upgrade-modal-content">该功能为专业版专属，请联系大家长升级套餐</view>
+      <view class="plan-upgrade-modal-content">{{isPatriarch ? '该功能为专业版专属。作为大家长，您可前往个人中心直接开通专业版。' : '该功能为专业版专属，请联系您所在站点的大家长在线开通。'}}</view>
       <view class="plan-upgrade-modal-footer">
-        <button class="plan-upgrade-btn-cancel" bindtap="onClosePlanUpgradeModal">知道了</button>
-        <button class="plan-upgrade-btn-confirm" bindtap="onGoFeedbackFromPlanUpgrade">去反馈</button>
+        <button class="plan-upgrade-btn-cancel" bindtap="onClosePlanUpgradeModal">{{isPatriarch ? '稍后再说' : '知道了'}}</button>
+        <button class="plan-upgrade-btn-confirm" bindtap="{{isPatriarch ? 'onGoProfileFromPlanUpgrade' : 'onGoFeedbackFromPlanUpgrade'}}">{{isPatriarch ? '立即前往' : '去反馈'}}</button>
       </view>
     </view>
   </view>
@@ -1510,7 +1971,7 @@
 
       <!-- 操作按钮 -->
       <view class="ntm-actions">
-        <button class="ntm-upgrade-btn" bindtap="onOpenPlanUpgradeModal">立即升级 / 在线开通</button>
+        <button class="ntm-upgrade-btn" bindtap="onOpenPlanUpgradeModal">{{isPatriarch ? '立即开通专业版' : '立即升级 / 在线开通'}}</button>
         <view class="ntm-cancel-btn" hover-class="ntm-cancel-btn-hover" bindtap="onCloseNationalTeaser">返回单店报表</view>
       </view>
     </view>
