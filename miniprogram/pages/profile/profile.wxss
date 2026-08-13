@@ -65,7 +65,9 @@
 }
 
 .user-profile-card {
-  background: #FFFFFF;
+  /* 🆕 微暖发光调：极浅暖黄到白的渐变，提升个人信息卡片（含机构归属展示）的
+     视觉层级与高级感，与头像金边渐变（.avatar-ring）呼应，不引入新的主色调 */
+  background: linear-gradient(135deg, #FFFDF5 0%, #FFFFFF 100%);
   border-radius: 28rpx;
   padding: 36rpx 24rpx;
   display: flex;
@@ -73,7 +75,8 @@
   gap: 24rpx;
   border: 1rpx solid #EFE6D8;
   box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
-  margin-bottom: 30rpx;
+  /* 🆕 结构瘦身：与其余各管理卡片统一收窄为 16rpx，缩短卡片间的堆叠缝隙 */
+  margin-bottom: 16rpx;
 }
 
 /* 🐛 头像"严重放大只看到局部色块"根因排查：交叉测试确认同一张照片走食谱照片的普通
@@ -220,6 +223,23 @@
   opacity: 0.6;
 }
 
+/* 🆕 身份 Banner 容器：默认无样式（其余角色沿用原本紧凑展示），
+   .identity-banner-patriarch 修饰类才套用高质感暖金渐变条带 */
+.identity-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.identity-banner-patriarch {
+  background: linear-gradient(135deg, #FFF9E6 0%, #FFF3D6 60%, #FFEAC2 100%);
+  border: 1rpx solid #F0D28A;
+  border-radius: 20rpx;
+  padding: 16rpx 20rpx;
+  margin-top: 6rpx;
+  box-shadow: 0 4rpx 14rpx rgba(181, 124, 30, 0.14);
+}
+
 .role-badge-row {
   display: flex;
 }
@@ -255,11 +275,13 @@
   border-color: #A5D6A7;
 }
 
-/* 🏛️ 雨花家长：与超管/店长/财务视觉区隔的暖金棕色系，呼应家长管理卡片的配色 */
+/* 🏛️ 雨花家长：加粗为真正的暖金渐变实底徽章（不再是浅底细边框），
+   与超管/店长/财务的浅色胶囊拉开分量差，凸显"大家长"这一专属身份的分量 */
 .badge-tag.store_patriarch {
-  background: #FFFBF0;
-  color: #8C1D18;
-  border-color: #E6D0A0;
+  background: linear-gradient(135deg, #F0C36A 0%, #D9A441 100%);
+  color: #6B3E00;
+  border-color: #C88F2E;
+  box-shadow: 0 3rpx 10rpx rgba(191, 140, 40, 0.35);
 }
 
 /* 🌟 提升荣誉感：淡金色底 + 深棕色文字，志工身份也拥有仪式感的专属配色 */
@@ -276,6 +298,206 @@
   border-color: #FFCDD2;
 }
 
+/* 🆕 归属机构/平台标签：与角色胶囊分离展示，回答"我在哪个机构"而不是"我是什么角色"。
+   🐛 长机构名不截断：此前 .store-name 强制单行 + ellipsis，"嵩屿街道敬老中心助餐点"
+   这类较长的门店全称会被裁成"嵩屿街道敬老…"看不全——改为允许整行 flex-wrap，
+   文字撑不下时自然换到第二行，而不是丢字 */
+.belong-store-tag {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4rpx;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.belong-store-tag .store-icon {
+  font-size: 22rpx;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.belong-store-tag .store-label {
+  font-size: 24rpx;
+  color: #ADB5BD;
+  flex-shrink: 0;
+}
+
+.belong-store-tag .store-name {
+  font-size: 24rpx;
+  color: #868E96;
+  font-weight: 500;
+  white-space: normal;
+  word-break: break-all;
+  min-width: 0;
+}
+
+/* 🆕 机构类型徽标：略微加粗字重 + 字距，强化"这是一个经过归类的正式机构属性"
+   的权威感，与 .badge-tag 角色胶囊的视觉语言呼应但配色区分（暖金色系） */
+.belong-store-tag .org-type-badge {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+  color: #B57C1E;
+  background: #FFF9E6;
+  border: 1rpx solid #FFE082;
+  border-radius: 18rpx;
+  padding: 2rpx 16rpx;
+  line-height: 1.6;
+  box-shadow: 0 2rpx 6rpx rgba(181, 124, 30, 0.12);
+}
+
+/* 🌐 超管专属：当前巡检门店指示器，点击唤起【门店选择与搜索】弹窗。
+   与 .belong-store-tag 视觉呼应但用胶囊底色区分"这是一个可点击的切换入口" */
+.sa-store-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  margin-top: 4rpx;
+  padding: 8rpx 18rpx;
+  background: #FFF9E6;
+  border: 1rpx solid #FFE082;
+  border-radius: 100rpx;
+  align-self: flex-start;
+}
+
+.sa-store-indicator-icon {
+  font-size: 20rpx;
+  line-height: 1;
+}
+
+.sa-store-indicator-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #B57C1E;
+}
+
+.sa-store-indicator-arrow {
+  font-size: 20rpx;
+  color: #D9A441;
+  margin-left: 2rpx;
+}
+
+/* 🐛 合并重构：原 .sa-inspect-bar（巡检门店）+ .sa-impersonation-bar（模拟视角）
+   两条几乎同款配色/结构的顶部黄色提示条，合并为一条 .sa-status-bar——按当前
+   实际激活的临时视角组合展示文案，避免两者同时激活时堆成两个提示框 */
+.sa-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  background: linear-gradient(135deg, #fff7e6 0%, #fff1d6 100%);
+  border: 1rpx solid #f5c26b;
+  border-radius: 20rpx;
+  padding: 20rpx 22rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(217, 155, 33, 0.12);
+}
+
+.sa-status-left {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.sa-status-icon {
+  font-size: 30rpx;
+  flex-shrink: 0;
+}
+
+.sa-status-text-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sa-status-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #8a5a00;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sa-status-restore-btn {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #ffffff;
+  background: #d99b21;
+  padding: 12rpx 22rpx;
+  border-radius: 100rpx;
+  white-space: nowrap;
+}
+
+.sa-status-restore-btn:active {
+  opacity: 0.85;
+}
+
+/* 📸 雨花温情图册与阳光凭证入口：从首页迁移至个人中心，与页面其余白底卡片
+   同一套圆角+阴影语言，图标/标题/副标题/箭头四段式列表入口 */
+.photo-archive-mine-entry {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin: 0 24rpx 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.pame-icon-wrap {
+  flex-shrink: 0;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #FFF5F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+}
+
+.pame-icon {
+  font-size: 36rpx;
+}
+
+.pame-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pame-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #222222;
+  margin-bottom: 6rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pame-subtitle {
+  font-size: 24rpx;
+  color: #999999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pame-arrow {
+  flex-shrink: 0;
+  font-size: 32rpx;
+  color: #C1C7CD;
+  margin-left: 12rpx;
+}
+
 /* ❤️ 家人（服务对象）极简关怀版面：与 merit-board-card 同款卡片骨架，
    暖红色系与志工的金色系区分开，突出"关怀"而非"荣誉" */
 .family-care-card {
@@ -286,7 +508,7 @@
   border-radius: 28rpx;
   padding: 32rpx 20rpx 28rpx;
   box-shadow: 0 6rpx 20rpx rgba(255, 224, 219, 0.3);
-  margin-bottom: 30rpx;
+  margin-bottom: 16rpx;
 }
 
 .family-care-card .header-title {
@@ -324,6 +546,258 @@
   margin-top: 0;
 }
 
+/* ─── 👑 超级管理员·全网指挥中心卡片 ───────────────────────────────── */
+/* 🆕 卡片瘦身：margin-bottom 统一收窄为 16rpx，与下方合并后的 .admin-dashboard-card
+   （原三张 .sa-light-card）保持一致的堆叠节奏，缓解拥挤感，不改变信息密度本身 */
+.sa-command-card {
+  background: linear-gradient(150deg, #0f2744 0%, #1e3a5f 60%, #0c3060 100%);
+  border-radius: 28rpx;
+  padding: 0 0 6rpx;
+  margin-bottom: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 32rpx rgba(15, 39, 68, 0.28);
+}
+
+.sa-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22rpx 28rpx 16rpx;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.10);
+  margin-bottom: 4rpx;
+}
+
+.sa-command-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.sa-command-crown {
+  font-size: 40rpx;
+  line-height: 1;
+}
+
+.sa-command-title-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.sa-command-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #e2c97e;
+  letter-spacing: 1rpx;
+}
+
+.sa-command-sub {
+  font-size: 20rpx;
+  color: rgba(226, 232, 240, 0.60);
+  letter-spacing: 0.5rpx;
+}
+
+.sa-command-store-tag {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
+  border-radius: 100rpx;
+  padding: 6rpx 18rpx;
+}
+
+.sa-command-store-name {
+  font-size: 20rpx;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+/* 操作行 */
+.sa-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 28rpx;
+  gap: 12rpx;
+}
+
+.sa-action-row:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sa-action-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.sa-action-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+  width: 40rpx;
+  text-align: center;
+}
+
+.sa-action-text-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.sa-action-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.sa-action-desc {
+  font-size: 20rpx;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.sa-action-desc.sa-sub-status.active {
+  color: #34d399;
+}
+
+.sa-action-desc.sa-sub-status.inactive {
+  color: #fbbf24;
+}
+
+.sa-action-arrow {
+  font-size: 24rpx;
+  color: rgba(148, 163, 184, 0.60);
+  flex-shrink: 0;
+}
+
+/* ─── end 超管指挥中心卡片 ──────────────────────────────────────────── */
+
+/* ─── 🛡️/🎭/⚙️ 系统管理面板（风控与安全 / 视角与租户管理 / 系统运维三个分组合并
+   进同一张卡片，见 profile.wxml admin-dashboard-card）───────────────────── */
+.admin-dashboard-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  border: 1rpx solid #F1F3F5;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  padding: 8rpx 0 16rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.admin-dashboard-header {
+  padding: 16rpx 28rpx 10rpx;
+}
+
+.admin-dashboard-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #212529;
+}
+
+/* 分组小标题：比原先独立卡片的 header 更轻量，仅作组内区隔，不再是一张独立卡片
+   的视觉重量级标题 */
+.admin-dashboard-section-title {
+  display: block;
+  padding: 12rpx 28rpx 6rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #868E96;
+}
+
+.admin-dashboard-divider {
+  height: 1rpx;
+  margin: 8rpx 28rpx;
+  background: #F1F3F5;
+}
+
+.sa-risk-banner {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin: 0 24rpx 12rpx;
+  padding: 14rpx 18rpx;
+  background: #FFF1F0;
+  border: 1rpx solid #FFCCC7;
+  border-radius: 14rpx;
+}
+
+.sa-risk-banner-dot {
+  width: 12rpx;
+  height: 12rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #E5484D;
+}
+
+.sa-risk-banner-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #C4291C;
+}
+
+.sa-light-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 28rpx;
+  gap: 12rpx;
+}
+
+.sa-light-action-row:active {
+  background: #F8F9FA;
+}
+
+.sa-light-action-disabled {
+  opacity: 0.5;
+}
+
+.sa-light-action-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #343A40;
+}
+
+.sa-light-desc {
+  font-size: 20rpx;
+  color: #868E96;
+}
+
+.sa-light-action-arrow {
+  font-size: 24rpx;
+  color: #ADB5BD;
+  flex-shrink: 0;
+}
+
+/* 🧪 Dev/Debug 专用工具行：与真实操作行拉开视觉差异（虚线边框 + 醒目 DEV 角标），
+   避免测试用的"模拟开通"和真实的订阅/安全操作混为一谈 */
+.sa-dev-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin: 4rpx 24rpx 16rpx;
+  padding: 14rpx 18rpx;
+  background: #F8F9FA;
+  border: 1rpx dashed #CED4DA;
+  border-radius: 14rpx;
+}
+
+.sa-dev-tool-tag {
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #ffffff;
+  background: #868E96;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  letter-spacing: 0.5rpx;
+  flex-shrink: 0;
+}
+
+.sa-dev-tool-text {
+  font-size: 22rpx;
+  color: #495057;
+}
+/* ─── end 浅色板块通用样式 ──────────────────────────────────────────── */
+
 .merit-board-card {
   position: relative;
   overflow: hidden;
@@ -334,7 +808,7 @@
   border-radius: 28rpx;
   padding: 32rpx 20rpx 28rpx;
   box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
-  margin-bottom: 30rpx;
+  margin-bottom: 16rpx;
 }
 
 .merit-board-card::after {
@@ -863,11 +1337,15 @@
   border: 1rpx solid #E6D0A0;
   border-radius: 28rpx;
   padding: 24rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
   box-sizing: border-box;
 }
 
 .patriarch-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
   margin-bottom: 16rpx;
 }
 
@@ -877,24 +1355,224 @@
   color: #8C1D18;
 }
 
-/* 门店管理中心：单一区块标题，替代原来两个零散的 pd-section-title 分隔标签 */
-.pd-mgmt-center-header {
+/* ═══════════════════════════════════════════════════════════════
+   💰 财务稽核专区：沉稳专业的翡翠绿/金色双色切边，与其余角色卡片的
+   纯金边区隔开——顶部翡翠绿细线强调"稽核/合规"的专业属性，
+   卡片主体沿用金色边框保持与家长/店长卡片同一视觉家族
+   ═══════════════════════════════════════════════════════════════ */
+.finance-audit-card {
+  border-color: #E6D0A0;
+  border-top: 4rpx solid #0B815A;
+}
+
+.fa-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.fa-kpi-cell {
+  background: #F8FCFA;
+  border: 1rpx solid #D3F0E4;
+  border-radius: 14rpx;
+  padding: 18rpx 10rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.fa-kpi-val {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: #0B815A;
+  line-height: 1.15;
+}
+
+.fa-kpi-val.fa-bold {
+  font-size: 30rpx;
+  color: #B57C1E;
+}
+
+.fa-kpi-val.fa-warn {
+  color: #E8590C;
+}
+
+.fa-kpi-val.fa-danger {
+  color: #E03131;
+}
+
+.fa-kpi-lbl {
+  font-size: 20rpx;
+  color: #868E96;
+  text-align: center;
+}
+
+.fa-divider {
+  height: 1rpx;
+  background: linear-gradient(90deg, transparent 0%, #D3F0E4 30%, #D3F0E4 70%, transparent 100%);
+  margin: 4rpx 0 16rpx;
+}
+
+/* 🦴 KPI 骨架屏：数据看板首次加载态占位，shimmer 扫光动画 */
+.skel-cell {
+  gap: 10rpx !important;
+}
+
+.skel-bar {
+  border-radius: 8rpx;
+  background: linear-gradient(90deg, #EEF0F2 25%, #E4E7EB 37%, #EEF0F2 63%);
+  background-size: 400% 100%;
+  animation: fa-skel-shimmer 1.6s ease-in-out infinite;
+}
+
+.skel-bar-lg {
+  width: 56rpx;
+  height: 28rpx;
+}
+
+.skel-bar-sm {
+  width: 88rpx;
+  height: 18rpx;
+}
+
+@keyframes fa-skel-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* ===== 🆕 店长专属【本店数据概览】2x2 卡片：位于【门店管理中心】正上方，
+   与 patriarch-panel-card 同款金边卡片外观保持视觉一致，内部换成 2x2 数值宫格 ===== */
+.mgr-snapshot-card {
+  background: #FFFBF0;
+  border: 1rpx solid #E6D0A0;
+  border-radius: 28rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.mgr-snapshot-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.mgr-snapshot-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.mgr-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.mgr-snapshot-cell {
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.mgr-snapshot-val {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #212529;
+  line-height: 1.2;
+}
+
+/* 待审批事项数字 > 0 时高亮，提示店长需要实时处理 */
+.mgr-snapshot-val.highlight {
+  color: #E03131;
+}
+
+.mgr-snapshot-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+/* ─── 专业版服务状态卡片（大家长/超管专属，位于管理面板内门店管理中心上方） ─── */
+.pro-service-card {
+  margin: 12rpx 0 20rpx;
+  padding: 28rpx 28rpx 20rpx;
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%);
+  border-radius: 20rpx;
+  box-shadow: 0 6rpx 24rpx rgba(15, 39, 68, 0.30);
+}
+
+.pro-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 20rpx 0 12rpx;
+  margin-bottom: 16rpx;
 }
 
-.pd-mgmt-center-title {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #495057;
+.pro-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #e2c97e;
   letter-spacing: 0.5rpx;
-  flex-shrink: 0;
 }
 
-/* 门店名 + ✏️ 修改 行：右侧紧凑展示，点击唤起快捷改名弹窗 */
-.pd-store-name-edit-row {
+.pro-status-badge {
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 4rpx 16rpx;
+  border-radius: 100rpx;
+}
+
+.pro-status-badge.active {
+  background: rgba(52, 211, 153, 0.20);
+  color: #34d399;
+  border: 1rpx solid rgba(52, 211, 153, 0.40);
+}
+
+.pro-status-badge.inactive {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+  border: 1rpx solid rgba(251, 191, 36, 0.35);
+}
+
+.pro-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.pro-desc {
+  font-size: 24rpx;
+  color: rgba(226, 232, 240, 0.75);
+  line-height: 1.6;
+}
+
+.pro-action-btn {
+  all: unset;
+  display: block;
+  text-align: center;
+  padding: 20rpx 0;
+  background: linear-gradient(135deg, #e2c97e 0%, #c9a227 100%);
+  color: #1e3a5f;
+  font-size: 28rpx;
+  font-weight: 700;
+  border-radius: 12rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.pro-action-btn::after {
+  border: none;
+}
+
+/* 🆕 门店名 Pill：收纳进 .patriarch-panel-header 大标题右侧，取代原先独占一行、
+   与"⚙️ 门店管理中心"标题重复堆叠的第二行"🏢 门店管理中心 [门店名] ✏️修改" */
+.pd-store-name-pill {
   display: flex;
   align-items: center;
   gap: 8rpx;
@@ -902,22 +1580,32 @@
   border-radius: 20rpx;
   padding: 6rpx 14rpx;
   max-width: 400rpx;
+  flex-shrink: 0;
 }
 
-.pd-store-name-text {
+.pd-store-name-pill-text {
   font-size: 22rpx;
   color: #374151;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 280rpx;
+  max-width: 260rpx;
 }
 
-.pd-store-edit-btn {
-  font-size: 22rpx;
-  color: #6B7280;
-  white-space: nowrap;
+.pd-store-name-pill-edit {
+  font-size: 20rpx;
   flex-shrink: 0;
+}
+
+/* 🆕 卡片内分组小标题：核心日常审批 / 门店运营公告，物理区分高频待办审批
+   与低频公告类操作，字号/字重弱于卡片大标题，仅起分隔提示作用 */
+.pd-mgmt-section-title {
+  display: block;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #9CA3AF;
+  letter-spacing: 0.5rpx;
+  margin: 4rpx 0 10rpx;
 }
 
 /* ── ✏️ 快捷修改门店名称 Mini-Modal ──────────────────────────────── */
@@ -1083,21 +1771,345 @@
   font-weight: normal;
 }
 
+.pd-verify-section {
+  padding-top: 12rpx;
+  border-top: 1rpx dashed #F1F3F5;
+}
+
 .pd-verify-row {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  padding-top: 12rpx;
-  border-top: 1rpx dashed #F1F3F5;
 }
 
 .pd-verify-icon {
   font-size: 24rpx;
 }
 
+/* 🆕 进度条：轨道+渐变填充，与荣誉勋章详情弹窗的 .badge-detail-progress-*
+   同一套手法，用绿色系区别于勋章的金色系——防伪验真是"信任/核验"语义，
+   与"荣誉成就"是两种不同的心理暗示，配色也应区分开 */
+.pd-verify-progress-track {
+  width: 100%;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: #F1F3F5;
+  overflow: hidden;
+  margin-top: 10rpx;
+}
+
+.pd-verify-progress-fill {
+  height: 100%;
+  border-radius: 6rpx;
+  background: linear-gradient(135deg, #63E6BE 0%, #0CA678 100%);
+  transition: width 0.3s ease;
+}
+
 .pd-verify-text {
   font-size: 24rpx;
   color: #495057;
+}
+
+/* 🆕 健康大盘整卡可点击跳转统计明细页：标题行右侧补一个"查看明细 ❯"文字提示，
+   让用户知道点击整张卡片有响应，而不是误以为只是静态摘要展示 */
+.pd-health-card--clickable {
+  cursor: pointer;
+}
+
+.pd-health-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.pd-health-title-row .pd-health-title {
+  margin-bottom: 0;
+}
+
+.pd-health-more {
+  font-size: 22rpx;
+  color: #D97706;
+  flex-shrink: 0;
+}
+
+/* 🆕 门店管理中心·【日常审批与安全】2x2 宫格：高频操作 + 待办 Badge，
+   与下方【门店运营配置】的列表形式做信息密度区分 */
+.pd-mgmt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.pd-mgmt-grid-cell {
+  position: relative;
+  background: #F8F9FA;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 24rpx 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+  box-sizing: border-box;
+}
+
+.pd-mgmt-grid-icon {
+  font-size: 40rpx;
+  line-height: 1;
+}
+
+.pd-mgmt-grid-label {
+  font-size: 24rpx;
+  color: #495057;
+  font-weight: 600;
+}
+
+/* 🔴 待办数量红点角标：叠在宫格右上角，与列表里的 .badge 同一套醒目红色，
+   仅数字大于 0 时渲染，动态提示"有几件事要处理" */
+.pd-mgmt-grid-badge {
+  position: absolute;
+  top: -10rpx;
+  right: -10rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 16rpx;
+  background: #E03131;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  font-weight: bold;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 2rpx 6rpx rgba(224, 49, 49, 0.35);
+}
+
+/* ===== 🆕 顶部卡片区（数据与高级功能）：左侧全国数据看板作为最高层级的
+   全局数据视图，加粗放大突出展示；右侧专业服务弱化为轻量 Banner/Tag，
+   只标明开通状态，不与左侧核心数据入口抢视觉焦点。配色与 .national-overview-card
+   （超管的全国纵览卡片）同一套绿色系呼应，全站统一"全国/全局数据=绿色调"的
+   视觉语言。取代原先并排的 .pd-advanced-row（专业版+全国数据看板同权重展示） ===== */
+.top-advanced-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.top-advanced-primary {
+  flex: 1.6;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
+  border-radius: 20rpx;
+  padding: 24rpx 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6rpx;
+  position: relative;
+  box-shadow: 0 4rpx 16rpx rgba(16, 185, 129, 0.10);
+  box-sizing: border-box;
+}
+
+.top-advanced-primary-icon {
+  font-size: 36rpx;
+  line-height: 1;
+}
+
+.top-advanced-primary-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1F2937;
+}
+
+.top-advanced-primary-sub {
+  font-size: 20rpx;
+  color: #6B7280;
+}
+
+.top-advanced-primary-arrow {
+  position: absolute;
+  right: 20rpx;
+  bottom: 22rpx;
+  color: #10B981;
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+.top-advanced-secondary {
+  flex: 1;
+  background: #F8F9FA;
+  border: 1rpx solid #E9ECEF;
+  border-radius: 20rpx;
+  padding: 18rpx 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6rpx;
+  box-sizing: border-box;
+}
+
+.top-advanced-secondary-icon {
+  font-size: 26rpx;
+  line-height: 1;
+}
+
+.top-advanced-secondary-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #495057;
+}
+
+.top-advanced-secondary-tag {
+  font-size: 20rpx;
+  color: #9CA3AF;
+}
+
+.top-advanced-secondary.active .top-advanced-secondary-tag {
+  color: #2B8A3E;
+  font-weight: 600;
+}
+
+/* 🆕 大家长视角·个人荣誉模块折叠摘要条 + 展开/收起按钮：与「更多系统工具」
+   （.sa-light-action-row/showAdminMoreTools）同一套折叠交互语言，用 ﹀/︿ 同源的
+   ∨/∧ 符号提示可展开收起 */
+.pd-honor-collapsed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.pd-honor-collapsed-icon {
+  font-size: 26rpx;
+}
+
+.pd-honor-collapsed-text {
+  font-size: 26rpx;
+  color: #495057;
+  font-weight: 600;
+}
+
+.pd-honor-collapsed-arrow {
+  font-size: 22rpx;
+  color: #9CA3AF;
+}
+
+.pd-honor-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+  font-size: 24rpx;
+  color: #868E96;
+}
+
+/* ── 💖 全网爱心支持卡片：个人页公开展示区，不含门店总数/服务人次等运营数据
+   （那些留在统计页专属大屏），只保留发心分布比例条 + 最新爱心支持善缘墙 ── */
+.national-overview-card {
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(16, 185, 129, 0.08);
+}
+
+/* 发心分布：阳善 vs 积阴德——迁移自统计页全国大屏，配色（金/靛蓝）原样保留 */
+.no-merit-section {
+  border-top: 1rpx solid #F3F4F6;
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+}
+
+/* 卡片内第一块内容时去掉顶部分隔线——不再有 KPI 网格/卡片标题挡在它前面 */
+.no-merit-section--first {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.no-merit-title {
+  font-size: 22rpx;
+  color: #6B7280;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.no-merit-bar-wrap {
+  display: flex;
+  height: 16rpx;
+  border-radius: 100rpx;
+  overflow: hidden;
+  background: #F3F4F6;
+  margin-bottom: 10rpx;
+}
+
+.no-merit-seg {
+  height: 100%;
+  min-width: 2rpx;
+}
+
+.no-merit-seg.seg-yang { background: linear-gradient(90deg, #F59E0B, #FBBF24); }
+.no-merit-seg.seg-yin  { background: linear-gradient(90deg, #6366F1, #818CF8); }
+
+.no-merit-legend {
+  display: flex;
+  gap: 24rpx;
+  flex-wrap: wrap;
+}
+
+.no-merit-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+}
+
+.no-merit-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* 图例现在是两行文字（百分比 + 说明文案），圆点与首行文字对齐，而不是整块居中 */
+  margin-top: 6rpx;
+}
+
+.no-merit-dot.dot-yang { background: #F59E0B; }
+.no-merit-dot.dot-yin  { background: #6366F1; }
+
+.no-merit-legend-text-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.no-merit-legend-text {
+  font-size: 20rpx;
+  color: #6B7280;
+}
+
+/* 🆕 解释性提示文案：与首页「发心选择」卡片同一套措辞/字号层级——说明文案
+   比百分比更弱化一档 */
+.no-merit-legend-caption {
+  font-size: 18rpx;
+  color: #9CA3AF;
+}
+
+/* ✨ 最新爱心支持（阳善公开）善缘墙已抽成独立组件 <yangshan-wall/>（见
+   components/yangshan-wall），自带面板样式；这里只需要给它跟上面比例条
+   留一点间距，不必再维护一整套 .no-donor-* 滚动墙样式 */
+.no-yangshan-wall-slot {
+  margin-top: 20rpx;
 }
 
 .pd-section-title {
@@ -1245,7 +2257,7 @@
   border: 1rpx solid #EFE6D8;
   border-radius: 28rpx;
   padding: 10rpx 0;
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
   overflow: hidden;
 }
 
@@ -1364,22 +2376,6 @@
   padding: 10rpx 32rpx;
 }
 
-/* 工具箱内分区子标题 */
-.sa-sub-divider {
-  font-size: 19rpx;
-  font-weight: 600;
-  color: #A0A0A8;
-  background: #F8F8FA;
-  padding: 8rpx 32rpx;
-  border-top: 1rpx solid #F0F0F5;
-  letter-spacing: 1rpx;
-}
-.sa-sub-divider-danger {
-  color: #C0392B;
-  background: #FFF8F8;
-  border-top-color: #FADADD;
-}
-
 /* ==========================================
    🌟 核心修复：高兼容性 SVG 矢量背景图注入
    ========================================== */
@@ -1435,6 +2431,16 @@
 .icon-svg-edit { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE3IDNhMi44MjggMi44MjggMCAxIDEgNCA0TDcuNSAyMC41IDIgMjJsMS41LTUuNVoiPjwvcGF0aD48L3N2Zz4='); }
 
 .icon-svg-release { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDMyRjJGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+IDxwYXRoIGQ9Ik05IDIxSDVhMiAyIDAgMCAxLTItMlY1YTIgMiAwIDAgMSAyLTJoNCI+PC9wYXRoPiA8cG9seWxpbmUgcG9pbnRzPSIxNiAxNyAyMSAxMiAxNiA3Ij48L3BvbHlsaW5lPiA8bGluZSB4MT0iMjEiIHkxPSIxMiIgeDI9IjkiIHkyPSIxMiI+PC9saW5lPiA8L3N2Zz4='); }
+
+/* 🆕 日常记录列表图标统一：本店数据看板 / 门店档案 / 爱心建议箱三项此前用手打
+   emoji（📊📋🏠📮），与同组「我的护持历程」「我的提交与数据」的 SVG 矢量图标
+   风格不一致——补齐三枚同款 Feather 风格线性图标（bar-chart-2 / home / mail），
+   笔触色沿用统一的深古铜色 #8B6F47，全组图标风格归一 */
+.icon-svg-bar-chart { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGxpbmUgeDE9IjE4IiB5MT0iMjAiIHgyPSIxOCIgeTI9IjEwIj48L2xpbmU+PGxpbmUgeDE9IjEyIiB5MT0iMjAiIHgyPSIxMiIgeTI9IjQiPjwvbGluZT48bGluZSB4MT0iNiIgeTE9IjIwIiB4Mj0iNiIgeTI9IjE0Ij48L2xpbmU+PC9zdmc+'); }
+
+.icon-svg-home { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgOWw5LTcgOSA3djExYTIgMiAwIDAgMS0yIDJINWEyIDIgMCAwIDEtMi0yeiI+PC9wYXRoPjxwb2x5bGluZSBwb2ludHM9IjkgMjIgOSAxMiAxNSAxMiAxNSAyMiI+PC9wb2x5bGluZT48L3N2Zz4='); }
+
+.icon-svg-mail { background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEI2RjQ3IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQgNGgxNmMxLjEgMCAyIC45IDIgMnYxMmMwIDEuMS0uOSAyLTIgMkg0Yy0xLjEgMC0yLS45LTItMlY2YzAtMS4xLjktMiAyLTJ6Ij48L3BhdGg+PHBvbHlsaW5lIHBvaW50cz0iMjIsNiAxMiwxMyAyLDYiPjwvcG9seWxpbmU+PC9zdmc+'); }
 
 /* ==========================================
    🚪 卸任特权 Warning 弹窗
@@ -1752,7 +2758,7 @@
   border: 1rpx solid #EFE6D8;
   border-radius: 28rpx;
   padding: 24rpx 28rpx 28rpx;
-  margin-bottom: 30rpx;
+  margin-bottom: 16rpx;
   box-shadow: 0 6rpx 20rpx rgba(239, 230, 216, 0.3);
 }
 
@@ -2929,6 +3935,63 @@
   font-size: 26rpx;
 }
 
+/* ══════════════════════════════════════════════════
+   🌐 超管【门店选择与搜索】弹窗 · 列表项样式
+   ══════════════════════════════════════════════════ */
+.sp-store-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 20rpx;
+  margin: 0 32rpx;
+  border-bottom: 1rpx solid #F1EEE6;
+  box-sizing: border-box;
+}
+
+.sp-store-item:last-child {
+  border-bottom: none;
+}
+
+.sp-store-item.active {
+  background: #FFFBF0;
+  border-radius: 16rpx;
+}
+
+.sp-national-item {
+  border-bottom: 2rpx dashed #E6D0A0;
+  margin-bottom: 8rpx;
+}
+
+.sp-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-item-name {
+  font-size: 27rpx;
+  font-weight: 600;
+  color: #333333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-item-sub {
+  font-size: 22rpx;
+  color: #A08A6A;
+}
+
+.sp-item-check {
+  flex-shrink: 0;
+  color: #B57C1E;
+  font-size: 28rpx;
+  font-weight: bold;
+  margin-left: 12rpx;
+}
+
 /* 成员卡片 */
 .mm-member-card {
   background: #FFFFFF;
@@ -3054,9 +4117,37 @@
 }
 
 .mm-locked-text {
+  flex: 1;
   font-size: 24rpx;
   color: #6C757D;
   line-height: 1.5;
+}
+
+/* 锁态提示旁的「联系超管」快捷按钮 */
+.mm-contact-admin-btn {
+  flex-shrink: 0;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 22rpx;
+  margin: 0;
+  line-height: 1;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #74C0FC 0%, #4C6EF5 100%);
+  border: none;
+  border-radius: 28rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.mm-contact-admin-btn::after { border: none; }
+
+.mm-contact-admin-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
 }
 
 /* 操作按钮行 */
@@ -3906,32 +4997,6 @@
   color: #E65100;
 }
 
-/* 店长只读态：已设置/未设置状态徽章 */
-.admin-key-status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4rpx 16rpx;
-  border-radius: 24rpx;
-  font-size: 22rpx;
-  font-weight: 500;
-}
-
-.admin-key-status-badge.set {
-  background: #E8F5E9;
-  color: #2E7D32;
-}
-
-.admin-key-status-badge.unset {
-  background: #F5F5F0;
-  color: #9E9E9E;
-}
-
-.admin-key-note {
-  font-size: 20rpx;
-  color: #BBBBBB;
-  flex-shrink: 0;
-}
-
 /* 修改弹窗：在 certificate-modal-card 基础上覆盖 header 布局 */
 .admin-key-modal-card {
   padding-bottom: calc(36rpx + constant(safe-area-inset-bottom));
@@ -3982,6 +5047,81 @@
   line-height: 1.6;
   margin-bottom: 32rpx;
   padding: 0 4rpx;
+}
+
+/* 📞 联系超管弹窗 */
+.contact-admin-modal-header {
+  justify-content: space-between !important;
+  margin-bottom: 20rpx;
+}
+
+.contact-admin-modal-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #6C757D;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.contact-admin-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: #F8F9FA;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.contact-admin-row:last-child { margin-bottom: 0; }
+
+.contact-admin-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.contact-admin-row-label {
+  font-size: 22rpx;
+  color: #ADB5BD;
+}
+
+.contact-admin-row-value {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contact-admin-action-btn {
+  flex-shrink: 0;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 28rpx;
+  margin: 0;
+  line-height: 1;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #74C0FC 0%, #4C6EF5 100%);
+  border: none;
+  border-radius: 30rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.contact-admin-action-btn::after { border: none; }
+
+.contact-admin-action-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
 }
 
 /* 🛡️ 超管应急工具弹窗（重置密钥等小型弹窗复用） */
@@ -5074,6 +6214,65 @@
   padding: 8rpx 12rpx;
 }
 
+/* 🆕 组织信息配置弹窗标题栏（.org-config-head）：.onb-back-btn/.onb-head-title
+   此前完全没有样式定义（靠 .onb-head 的 justify-content: center 硬凑），✕按钮
+   与占位 view 宽度不对称，导致标题不居中、✕也没有稳定的点击热区。现改为标题
+   独占一行真正居中（复用 .onb-head 自带的 position: relative 作为定位上下文），
+   ✕按钮绝对定位到右上角，提供充足的点击热区 */
+.onb-head-title {
+  font-weight: bold;
+  font-size: 32rpx;
+  color: #111827;
+}
+
+.onb-back-btn {
+  position: absolute;
+  right: 32rpx;
+  top: 32rpx;
+  font-size: 36rpx;
+  color: #999999;
+  padding: 10rpx;
+  line-height: 1;
+}
+
+/* 🆕 机构类型只读展示：轻量 Tag 标签，替代原先一整行大面积灰底伪输入框
+   （#F1F1EE 满宽容器，视觉上像可点的输入框，实际不可编辑，容易造成"点了没
+   反应"的误会，且比其余表单项占用更高的卡片空间） */
+.org-type-tag-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.org-type-field-label {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.org-type-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+  background: #FFF7E6;
+}
+
+.org-type-tag-text {
+  font-size: 24rpx;
+  font-weight: 500;
+  color: #D46B08;
+}
+
+.org-type-field-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  font-weight: normal;
+  margin-top: 4rpx;
+}
+
 /* ---- 选择路径内容区（无滚动，内容简短） ---- */
 .onb-body {
   flex: 1;
@@ -5211,6 +6410,112 @@
   font-size: 32rpx;
 }
 
+/* 🆕 组织信息配置弹窗·输入框规范化：门店名称/机构类型/文化寄语两句共用的
+   标准微卡片外框，.onb-field-group 本身没有定义任何样式（此前这几个控件
+   完全靠 .onb-field-input 的裸样式撑场面），统一叠加这层视觉框架。
+   !important：与本文件其余强约束单行/表单样式同一套约定，确保不被
+   .onb-field-input/.onb-picker 等基础规则的后续调整意外覆盖 */
+.org-form-input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: #F9FAFB !important;
+  border: 1rpx solid #E5E7EB !important;
+  border-radius: 12rpx !important;
+  padding: 20rpx 24rpx !important;
+  font-size: 28rpx !important;
+  color: #1F2937 !important;
+  margin-top: 10rpx !important;
+  margin-bottom: 20rpx !important;
+}
+
+.org-form-input:focus {
+  border-color: #D97706 !important;
+  background: #FFFFFF !important;
+}
+
+/* 🆕 表单辅助说明：改为挂在标签右侧的细小灰字，替代原先输入框下方独占一行的
+   长段提示文字块——视线不再被大段说明打断，只在本弹窗内使用。Label 与提示文案
+   横向 inline 排布，两端对齐；提示文案单行截断，不再折行挤压表单纵向空间 */
+.onb-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 🆕 本弹窗规范类名：Label 主标题，居左，与提示文案（.onb-field-label-hint）
+   形成粗体深色 / 细体浅色的明显字重对比，只挂在组织信息配置弹窗内的三个
+   Label 上（.onb-field-label 共享基类本身仍保持零样式，不影响入驻引导弹窗） */
+.org-field-label {
+  font-size: 28rpx; /* 14px */
+  font-weight: bold;
+  color: #333333;
+}
+
+.onb-field-label-hint {
+  font-size: 22rpx; /* 11px */
+  color: #999999;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 🆕 机构类型选择器：浅灰卡片背景 + 细边框，叠加在 .onb-picker/.org-form-input
+   之上，!important 与本文件其余强约束单行/表单样式同一套约定。height 改为 auto + padding
+   精确控制卡片尺寸（垂直 10px / 水平 12px），不再依赖固定 80rpx 高度撑开 */
+.org-type-picker {
+  height: auto !important;
+  min-height: 80rpx;
+  background: #F8F9FA !important;
+  border: 1rpx solid #E9ECEF !important;
+  border-radius: 16rpx !important;
+  padding: 20rpx 24rpx !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.org-type-picker-arrow {
+  transform: rotate(0deg);
+  font-size: 22rpx !important;
+  color: #ADB5BD !important;
+}
+
+/* 🆕 本弹窗规范类名：浅灰下拉箭头，叠加在 .org-type-picker-arrow 之上，
+   同一颜色/字号，仅作为对外可寻址的规范类名 */
+.picker-arrow {
+  color: #ADB5BD;
+  font-size: 22rpx;
+}
+
+/* 🆕 文化寄语 / 家训配置：改回纵向上下分布，每句独立占满一行，
+   避免像并排双列那样把文字挤压裁剪截断 */
+.culture-slogan-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 12rpx;
+}
+
+.culture-slogan-col {
+  width: 100%;
+}
+
+.culture-slogan-sub-label {
+  display: block;
+  font-size: 22rpx;
+  color: #9CA3AF;
+  margin-top: 12rpx;
+  margin-bottom: 4rpx;
+}
+
+.culture-slogan-input {
+  width: 100% !important;
+  margin-top: 0 !important;
+  margin-bottom: 16rpx !important; /* 8px */
+}
+
 /* ---- 固定底部提交按钮 ---- */
 .onb-footer {
   flex-shrink: 0;
@@ -5237,6 +6542,31 @@
   box-shadow: none;
 }
 
+/* 🆕 组织信息配置弹窗·暖色品牌主按钮：与首页/个人页其余暖金色系（.user-profile-card
+   渐变、.org-type-badge 等）保持一致，替换掉与「新建组织」引导弹窗共用的默认蓝色。
+   .org-config-submit-btn 只加在这一个弹窗的按钮上，.onb-submit-btn 的蓝色基础样式
+   对引导弹窗保持不变 */
+.org-config-submit-btn {
+  background: linear-gradient(135deg, #D97706 0%, #B45309 100%);
+  box-shadow: 0 6rpx 16rpx rgba(180, 83, 9, 0.25);
+  /* 🆕 独立的底部安全外边距：即便日后 .onb-footer 的公共 padding 调整，
+     本弹窗的保存按钮也始终与安全区/Home 条保持至少 40rpx 间距 */
+  margin-bottom: calc(40rpx + constant(safe-area-inset-bottom));
+  margin-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.org-config-submit-btn.onb-submit-btn--loading {
+  background: #FBBF7D;
+  box-shadow: none;
+}
+
+/* 🆕 保存按钮点击态微交互：只挂在本弹窗按钮的 hover-class 上，
+   入驻引导弹窗的按钮没有加这个 hover-class，互不影响 */
+.org-config-submit-btn-hover {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
 /* ── 🎨 组织信息配置 Modal — Logo 上传区 ──────────────────────────── */
 .orgcfg-logo-row {
   display: flex;
@@ -5246,19 +6576,51 @@
   margin-top: 12rpx;
 }
 
+.orgcfg-logo-preview-wrap {
+  position: relative;
+  width: 160rpx; /* 80px */
+  height: 160rpx; /* 80px */
+  flex-shrink: 0;
+}
+
 .orgcfg-logo-preview {
-  width: 120rpx;
-  height: 120rpx;
+  width: 160rpx; /* 80px */
+  height: 160rpx; /* 80px */
   border-radius: 16rpx;
   border: 2rpx solid #E5E7EB;
   flex-shrink: 0;
 }
 
+/* 🆕 悬浮操作按钮组：预览图右上角 ↻ 更换 / ✕ 删除两枚微型圆按钮，
+   替代原先并排的「重新上传」文字链接，见 onUploadOrgLogo / onClearOrgLogo */
+.orgcfg-logo-actions {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  display: flex;
+  gap: 8rpx;
+}
+
+.orgcfg-logo-action-btn {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: rgba(31, 41, 55, 0.75);
+  color: #FFFFFF;
+  font-size: 20rpx;
+  line-height: 36rpx;
+  text-align: center;
+}
+
+.orgcfg-logo-action-btn--danger {
+  background: rgba(220, 38, 38, 0.85);
+}
+
 .orgcfg-logo-placeholder {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: 16rpx;
-  border: 2rpx dashed #D1D5DB;
+  width: 160rpx; /* 80px */
+  height: 160rpx; /* 80px */
+  border-radius: 8px;
+  border: 1px dashed #DCDFE6;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5267,8 +6629,20 @@
   flex-shrink: 0;
 }
 
+/* 🆕 相机图标外面加一层淡色圆形底，提升"带背景的图标"质感 */
+.orgcfg-logo-icon-wrap {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #FFF5F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4rpx;
+}
+
 .orgcfg-logo-icon {
-  font-size: 40rpx;
+  font-size: 32rpx;
   line-height: 1;
 }
 
@@ -5278,7 +6652,42 @@
   margin-top: 6rpx;
 }
 
-.orgcfg-logo-change {
-  font-size: 26rpx;
-  color: #2563EB;
+/* 组织信息配置弹窗高权重覆盖样式 */
+.onb-panel .onb-field-label-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 6rpx !important;
+}
+
+.onb-panel .onb-field-label-hint {
+  font-size: 22rpx !important;
+  color: #999999 !important;
+  font-weight: normal !important;
+  white-space: nowrap !important;
+}
+
+.onb-panel .org-type-picker {
+  background-color: #F8F9FA !important;
+  border-radius: 16rpx !important;
+  padding: 20rpx 24rpx !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+.onb-panel .culture-slogan-row {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  gap: 16rpx !important;
+}
+
+.onb-panel .culture-slogan-input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.onb-panel .org-config-submit-btn {
+  margin-bottom: calc(40rpx + env(safe-area-inset-bottom)) !important;
 }

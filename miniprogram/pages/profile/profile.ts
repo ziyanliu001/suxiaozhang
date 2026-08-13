@@ -1,9 +1,10 @@
 import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
-import { getSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
+import { DataService } from '../../utils/dataService';
+import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
-import { isCloudAvailable } from '../../utils/cloudGuard';
+import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { drawVolunteerCertificate } from '../../utils/drawVolunteerCertificate';
 import {
   applyRoleViewOverride, getPreviewViewMode, setPreviewViewMode,
@@ -12,11 +13,19 @@ import {
 import { requestOpenSunshineLedger } from '../../utils/sunshineLedgerHandoff';
 import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
 import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
+import { takeOpenSubscriptionRequest } from '../../utils/subscriptionHandoff';
 import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
 import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolveTier, PERMISSION_TIER } from '../../utils/tenantPermission';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
+
+// 🛡️ 超级管理员联系方式：普通大家长对同级大家长的权限调整无权直接操作，需线下联系超管处理，
+// 客服电话用于紧急联系、微信号用于日常沟通；如后续接入云端配置可改为运行时拉取
+const SUPER_ADMIN_CONTACT = {
+  phone: '15859242258',
+  wechat: 'renfei1888'
+};
 
 // 🌟 视角切换半屏弹窗：卡片式选项文案，与 VIEW_MODE_OPTIONS 顺序一一对应
 const VIEW_MODE_CARDS: Array<{ mode: PreviewViewMode; label: string; icon: string; desc: string }> = [
@@ -110,36 +119,115 @@ const PLAN_LABELS: Record<string, string> = {
 
 // 🏷️ 公告管理弹窗：内置 7 条常用场景预设文案，与首页「编辑通报内容」弹窗中的
 // PRESET_NOTICES 同步，让店长/财务可在两处弹窗快速套用同一套模板
-const NOTICE_MGMT_PRESETS: Record<string, { title: string; content: string }> = {
-  opening: {
-    title: '三源弘雨花敬老家园试营业',
-    content: '三源弘雨花敬老家园，14号正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！'
-  },
-  volunteer: {
-    title: '爱心义工招募',
-    content: '【爱心义工招募】雨花斋的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️'
-  },
-  supplies: {
-    title: '爱心物资接力',
-    content: '【爱心物资接力】感恩各位爱心人士的护持！当前小店大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️'
-  },
-  weather_closure: {
-    title: '恶劣天气暂停开餐告示',
-    content: '【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，本斋将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️'
-  },
-  renovation_closure: {
-    title: '内部整修/例行消杀停业通知',
-    content: '【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，本斋将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！❤️'
-  },
-  festival: {
-    title: '节日特别结缘活动通知',
-    content: '【节日欢聚通知】值此佳节到来之际，本斋将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜回家用餐！祝大家吉祥安康！🏮'
-  },
-  thanks: {
-    title: '专项爱心致谢',
-    content: '【感恩致谢】特别感谢爱心企业/爱心人士对本斋的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️'
+// 🐛 重大隔离漏洞修复：与 index.ts getNoticeTemplate 同一个根因——这份预设文案
+// 此前是写死的静态对象（volunteer 甚至直接硬编码"雨花斋的运转离不开..."字样），
+// 不管当前门店真实 orgType 是什么，门店管理中心的公告一键套用永远塞进雨花斋
+// 专属文案。现改为按真实 orgType 动态生成，措辞口径与 index.ts 完全一致
+// （同一批 7 条预设，两个入口理应产出相同结果，不应该因为走的是哪个页面的
+// 弹窗而文案不同）
+function getNoticeMgmtTemplate(type: string, orgType: string, storeName: string): { tag: string; title: string; content: string } {
+  const isYuhuazhai = orgType === 'yuhuazhai';
+  const isElderlyCanteen = orgType === 'elderly_canteen';
+  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本公益服务站';
+  const name = storeName || fallbackName;
+
+  switch (type) {
+    case 'opening':
+      if (isYuhuazhai) {
+        return { tag: '喜讯通报', title: `${name}试营业`, content: `${name}正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！` };
+      }
+      if (isElderlyCanteen) {
+        return { tag: '喜讯通报', title: `${name}试营业喜讯`, content: `${name}正式开启试营业啦！用心为社区长者提供健康、卫生、实惠的助餐服务。欢迎长辈们前来用餐，也欢迎爱心义工加入我们，一起守护社区里的老人家❤️。感恩大家的支持！` };
+      }
+      return { tag: '喜讯通报', title: `${name}试营业喜讯`, content: `${name}正式开启试营业啦！我们将用心为社区提供公益服务。欢迎大家前来了解，也欢迎爱心志愿者加入我们，一起传递温暖❤️。感恩大家的支持！` };
+
+    case 'volunteer':
+      if (isYuhuazhai) {
+        return { tag: '义工招募', title: '爱心义工招募', content: `【爱心义工招募】${name}的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️` };
+      }
+      if (isElderlyCanteen) {
+        return { tag: '义工招募', title: '爱心义工招募', content: `【爱心义工招募】${name}的运转离不开爱心义工的无私奉献！急需择菜、洗碗、分餐义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️` };
+      }
+      return { tag: '志愿招募', title: '爱心志愿招募', content: `【爱心志愿招募】${name}的运转离不开志愿者的无私奉献！急需多名志愿者协助日常事务，具体服务时间可与我们联系沟通。期待您的加入，一起传递温暖！❤️` };
+
+    case 'supplies':
+      if (isYuhuazhai) {
+        return { tag: '物资呼吁', title: '爱心物资接力', content: `【爱心物资接力】感恩各位爱心人士的护持！当前${name}大米/食用油储备临界，特向社会呼吁爱心物资接力。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️` };
+      }
+      if (isElderlyCanteen) {
+        return { tag: '物资呼吁', title: '爱心物资接力', content: `【爱心物资接力】感恩各位爱心人士的关心与支持！当前${name}大米/食用油储备临界，特向社会呼吁爱心物资接力，助力长者们吃上热乎饭。每一粒米、每一滴油都饱含满满的心意。衷心感谢您的倾心付出！❤️` };
+      }
+      return { tag: '物资呼吁', title: '爱心物资接力', content: `【爱心物资接力】感恩各位爱心人士的关心与支持！当前${name}物资储备临界，特向社会呼吁爱心物资接力。每一份物资都饱含满满的心意。衷心感谢您的倾心付出！❤️` };
+
+    case 'weather_closure':
+      if (isYuhuazhai) {
+        return { tag: '暂停营业', title: '恶劣天气暂停开餐告示', content: `【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工家人的出行安全，${name}将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️` };
+      }
+      if (isElderlyCanteen) {
+        return { tag: '暂停营业', title: '恶劣天气暂停开餐告示', content: `【暂停开餐通知】受恶劣天气影响，为保障各位长者及义工的出行安全，${name}将于明日暂停开餐一天。请大家互相转告，切勿空跑。待天气好转后恢复正常开餐。衷心感谢大家的理解与支持！❤️` };
+      }
+      return { tag: '暂停营业', title: '恶劣天气暂停服务告示', content: `【暂停服务通知】受恶劣天气影响，为保障大家的出行安全，${name}将于明日暂停服务一天。请大家互相转告，切勿空跑。待天气好转后恢复正常服务。衷心感谢大家的理解与支持！❤️` };
+
+    case 'renovation_closure':
+      if (isYuhuazhai) {
+        return { tag: '暂停营业', title: '内部整修/例行消杀停业通知', content: `【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，${name}将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们回家用餐。感恩大家的体谅与护持！❤️` };
+      }
+      if (isElderlyCanteen) {
+        return { tag: '暂停营业', title: '内部整修/例行消杀停业通知', content: `【例行维护通知】为给长者们提供更加干净、卫生的用餐环境，${name}将于近期进行全店深度清洁消杀与设备整修，期间暂停开餐一天。恢复供餐后欢迎长辈们前来用餐。感恩大家的体谅与支持！❤️` };
+      }
+      return { tag: '暂停营业', title: '内部整修/例行消杀停业通知', content: `【例行维护通知】为给大家提供更加干净、卫生的服务环境，${name}将于近期进行环境清洁与设施整修，期间暂停服务一天。恢复服务后欢迎大家继续前来。感恩大家的体谅与支持！❤️` };
+
+    case 'festival':
+      if (isYuhuazhai) {
+        return { tag: '日常温馨提醒', title: '节日特别结缘活动通知', content: `【节日欢聚通知】值此佳节到来之际，${name}将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜回家用餐！祝大家吉祥安康！🏮` };
+      }
+      if (isElderlyCanteen) {
+        return { tag: '日常温馨提醒', title: '节日特别活动通知', content: `【节日欢聚通知】值此佳节到来之际，${name}将于明天中午举办节日特别供餐活动，并为到店用餐的长者准备了一份心意。欢迎长辈们互相转告、欢喜前来用餐！祝大家节日快乐、身体健康！🏮` };
+      }
+      return { tag: '日常温馨提醒', title: '节日特别活动通知', content: `【节日活动通知】值此佳节到来之际，${name}将于明天举办节日特别活动。欢迎大家互相转告、欢喜参与！祝大家节日快乐！🏮` };
+
+    case 'thanks':
+    default:
+      if (isYuhuazhai) {
+        return { tag: '感恩致谢', title: '专项爱心致谢', content: `【感恩致谢】特别感谢爱心企业/爱心人士对${name}的慷慨支持，您的善举让更多长者感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️` };
+      }
+      return { tag: '感恩致谢', title: '专项爱心致谢', content: `【感恩致谢】特别感谢爱心企业/爱心人士对${name}的慷慨支持，您的善举让更多${isElderlyCanteen ? '长者' : '人'}感受到了社会的温暖。衷心感谢您的无私奉献，祝愿平安喜乐、好人一生平安！❤️` };
   }
+}
+
+// 🈁 轻量拼音首字母对照表：仅覆盖门店名称/地名场景中常见的高频汉字（不追求全字库
+// 覆盖，本项目未引入任何第三方拼音转换库）。未收录的字符在拼音匹配阶段会被跳过，
+// 不影响基础的中文子串匹配能力——两种匹配方式任一命中即视为搜索命中
+const PINYIN_INITIAL_MAP: Record<string, string> = {
+  '雨': 'y', '花': 'h', '斋': 'z', '社': 's', '区': 'q', '助': 'z', '餐': 'c', '敬': 'j', '老': 'l', '家': 'j', '园': 'y',
+  '义': 'y', '工': 'g', '服': 'f', '务': 'w', '站': 'z', '爱': 'a', '心': 'x', '驿': 'y', '全': 'q', '国': 'g', '总': 'z', '览': 'l',
+  '省': 's', '市': 's', '县': 'x', '镇': 'z', '村': 'c', '街': 'j', '道': 'd',
+  '厦': 'x', '门': 'm', '漳': 'z', '州': 'z', '泉': 'q', '福': 'f', '莆': 'p', '田': 't', '三': 's', '明': 'm',
+  '南': 'n', '平': 'p', '龙': 'l', '岩': 'y', '宁': 'n', '德': 'd', '海': 'h', '沧': 'c', '思': 's', '湖': 'h',
+  '里': 'l', '集': 'j', '同': 't', '安': 'a', '翔': 'x', '芗': 'x', '城': 'c', '文': 'w', '鲤': 'l', '丰': 'f',
+  '泽': 'z', '洛': 'l', '江': 'j', '港': 'g', '晋': 'j', '石': 's', '狮': 's',
+  '东': 'd', '西': 'x', '北': 'b', '中': 'z', '新': 'x', '大': 'd', '小': 'x', '店': 'd', '馆': 'g', '院': 'y'
 };
+
+function toPinyinInitials(text: string): string {
+  return (text || '').split('').map((ch) => PINYIN_INITIAL_MAP[ch] || '').join('');
+}
+
+// 🔍 超管门店选择弹窗的搜索匹配：名称/城市/省份直接中文子串匹配；当搜索词为
+// 纯字母时，额外用上面的拼音首字母表做一次匹配，两者任一命中即可
+function matchStoreSearchKeyword(store: { storeName: string; city?: string; province?: string }, keyword: string): boolean {
+  const name = (store.storeName || '').toLowerCase();
+  const city = (store.city || '').toLowerCase();
+  const province = (store.province || '').toLowerCase();
+  if (name.includes(keyword) || city.includes(keyword) || province.includes(keyword)) return true;
+
+  if (/^[a-z]+$/.test(keyword)) {
+    const nameInitials = toPinyinInitials(store.storeName || '');
+    const cityInitials = toPinyinInitials(store.city || '');
+    if (nameInitials.includes(keyword) || cityInitials.includes(keyword)) return true;
+  }
+  return false;
+}
 
 const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
   partyMembers: '中共党员',
@@ -159,6 +247,38 @@ function parseIndexSummary(summary: string): { created: number; skipped: number;
   const failed  = parseInt((summary.match(/失败\s*(\d+)\s*条/) || ['', '0'])[1], 10) || 0;
   return { created, skipped, failed };
 }
+
+// 🌟 机构类型展示文案：按门店真实 orgType（manageStoreProfile 云函数 get 动作
+// 返回，来自 stores.orgType 字段本身）区分归属徽标/文化入口/关于页标题——不靠
+// 猜测店名文本、也不靠 tenantId 前缀。orgType 为空（历史门店未补录）时落到
+// isSuperAdminView 决定的通用兜底文案，与 index.ts computeConceptCopy 同一套
+// 三档（雨花斋/助老食堂-社区助餐/其余机构通用）区分口径，只是措辞按本页语境调整
+function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
+  orgTypeBadge: string; cultureTitle: string; aboutTitle: string;
+} {
+  if (orgType === 'yuhuazhai') {
+    return { orgTypeBadge: '雨花斋', cultureTitle: '雨花文化与每日家训', aboutTitle: '关于雨花斋与阳光账本' };
+  }
+  if (orgType === 'elderly_canteen') {
+    return { orgTypeBadge: '社区助餐', cultureTitle: '敬老助餐文化与每日家训', aboutTitle: '关于社区公益平台与阳光账本' };
+  }
+  return {
+    orgTypeBadge: '',
+    cultureTitle: '机构文化与每日家训',
+    aboutTitle: isSuperAdminView ? '关于平台与阳光账本' : '关于本站与阳光账本'
+  };
+}
+
+// 🎨 组织信息配置弹窗·机构类型选项：直接用 manageStoreProfile 云函数的
+// VALID_ORG_TYPES 真实取值（不是 onboarding「新建组织」弹窗那份措辞/取值都对不上
+// 后端的 orgTypeOptions/onboardingOrgType，两者是完全独立的两套字段，互不影响）。
+// 选中后立即持久化写回 stores.orgType，全局品牌/文化文案（computeOrgDisplayCopy）
+// 随之自动切换
+const ORG_CONFIG_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'elderly_canteen',   label: '社区助餐 / 敬老家园' },
+  { value: 'yuhuazhai',         label: '雨花斋' },
+  { value: 'volunteer_station', label: '义工服务站 / 公益团队' }
+];
 
 Page({
   isNavigating: false,
@@ -204,13 +324,20 @@ Page({
     windowWidth: 0,
     capsuleLeft: 0,
 
-    // ── 🎨 组织信息配置 Modal（大家长专属） ──────────────────────────────
+    // ── 🎨 组织信息配置 Modal（大家长/店长/超管） ──────────────────────────────
     showOrgConfigModal:    false,
     orgConfigName:         '',   // 注册/显示名称
     orgConfigSlogan1:      '',   // 文化寄语 · 第一句
     orgConfigSlogan2:      '',   // 文化寄语 · 第二句
     orgConfigLogoUrl:      '',   // 门店 Logo（云文件 ID 或临时 URL）
     orgConfigSaving:       false,
+    orgLogoLoadFailed:     false,   // 🛡️ Logo <image> 加载失败兜底，见 onOrgLogoLoadError
+    // 🆕 机构/平台类型：真实 stores.orgType 字段，驱动全局品牌/文化文案。
+    // index 供 picker 的 value 绑定，orgConfigOrgType 是实际要提交的 value token——
+    // 与 onOnboardingOrgTypeChange/orgTypeIndex 同一套"index + value 双字段"约定
+    orgConfigTypeOptions:  ORG_CONFIG_TYPE_OPTIONS,
+    orgConfigOrgTypeIndex: 0,
+    orgConfigOrgType:      'elderly_canteen',
     // ── ✏️ 快捷修改门店名称 Mini-Modal ───────────────────────────────────
     showEditStoreNameModal: false,
     tempStoreName:          '',   // 编辑中的临时名称
@@ -254,8 +381,30 @@ Page({
     // 待审批入口显隐、成员申请角标预取等逻辑，避免各处重复枚举三个角色
     isStoreAdmin: false,
     isSuperAdmin: false,
-    // 🌸 雨花斋专属功能开关：tenantId.startsWith('yuhuazhai') 为 true 时展示文化/家训配置入口
+    // 🌸 雨花斋专属功能开关：只由 fetchStoreOrgType() 查到的真实 stores.orgType === 'yuhuazhai'
+    // 才置为 true——严禁用 tenantId 前缀猜测（见 initMinePage 根因修复注释：同一 tenantId
+    // 前缀下完全可能挂着 elderly_canteen 等非雨花斋门店），初始值给最保守的 false
     isYuhuazhai: false,
+    // 🆕 真实机构类型原始值（stores.orgType），供公告一键套用预设文案（见
+    // getNoticeMgmtTemplate）等需要区分 elderly_canteen 的场景使用——isYuhuazhai
+    // 只是个二值信号，不够精确
+    orgType: '' as string,
+    // 🆕 "关于与帮助"条目标题：initMinePage 里先给中性默认，fetchStoreOrgType() 拿到
+    // 真实 orgType 后用 computeOrgDisplayCopy 覆盖，绝不在真实类型确认前展示任何
+    // 具体机构品牌（雨花斋/社区助餐等），避免"社区助餐点被短暂/永久标成雨花斋"
+    aboutTitle: '关于平台与阳光账本',
+    // 🆕 顶部个人信息卡片的机构/平台归属短标签：同上，中性默认为空（不渲染徽标），
+    // 由 fetchStoreOrgType() 按真实 orgType 计算后回填，不臆造未经验证的机构类型
+    orgTypeBadge: '',
+    // 📸 雨花温情图册与阳光凭证入口：从首页迁移至个人中心，见 loadRecentPhotos()。
+    // recentPhotosLoaded 兼做"是否展示该入口"的总闸——义工/家人不加载、全国总览
+    // 视角下也不加载（与原首页版本可见范围完全一致），未加载完成前入口不闪现
+    recentPhotosTotal: 0,
+    recentPhotosLoaded: false,
+    // 🌸 门店管理中心「文化配置中心」入口标题：与 aboutTitle 同一套中性默认 + 真实
+    // orgType 覆盖的两段式加载，原先是 WXML 里 isYuhuazhai 的内联三元表达式，
+    // 收敛到 TS 集中计算
+    cultureTitle: '机构文化与每日家训',
     // 🌟 isVolunteer 严格指"已审核通过的真实义工"，用于和 isFamily 互斥区分；
     // isFamily/isServiceUser：新用户/未审核用户的默认身份（家人 · 服务对象），
     // 底层 role 与真实义工共用同一个 'volunteer' 值，只能靠 status !== 'approved'
@@ -276,6 +425,33 @@ Page({
     // （详见 authService.ts UserRole 定义处注释），仅用于"开发者与超管工具箱"里
     // "会员开通/续费管理"这一项的显隐判断，不参与任何业务权限计算
     isPlatformAdmin: false,
+
+    // 🌐 超管【门店选择与搜索】弹窗：默认"全国总览"（currentInspectStoreId 为空），
+    // 选中具体门店后进入单店巡检视角。这里的字段只在页面运行期间由本弹窗自己的
+    // on* 处理函数写入（initMinePage 不会重置它们），与 currentStoreName/currentViewMode
+    // 等"预览态"字段是两个独立维度——巡检只影响【门店档案】【门店日志】【门店餐饮与
+    // 物资统计】这三张卡片展示的是哪家门店的数据，不改变超管本身的真实身份
+    currentInspectStoreId: '',
+    currentInspectStoreName: '',
+    // 💖 全网爱心支持卡片：从统计页「全国数据看板」迁移过来——那里是数据密集的
+    // 运营/财务分析场景，这类温情、鼓励性质的公开展示放在那儿意义不大；这里才是
+    // 人人都会打开的个人中心，更适合公开展示。
+    // 🐛 数据源已从"全租户所有门店"聚合改为调用与首页"阳光账本"同一个公开只读
+    // 云函数 getSunshineLedger（见 fetchStoreLoveWallSummary），只查询用户自己
+    // 归属门店的数据——此前借道 getNationalDashboard 会把其他门店的捐赠记录也
+    // 一起带出来，不符合"只显示相应归属机构数据"的要求。getSunshineLedger 本身
+    // 不做任何角色权限校验（首页阳光账本入口同款设计），家人/义工/财务/店长/
+    // 大家长/超管等全部角色都能看到自己门店的这份公开数据
+    storeLoveWallLoading: false,
+    // 🆕 供 <yangshan-wall storeId="{{myStoreId}}"/> 组件绑定——组件自己拉取
+    // 阳善公开名单，这里只需要保存解析出来的门店 ID
+    myStoreId: '',
+    storeLoveWallMeritRatio: { yangRatioPct: 0, yinRatioPct: 0 },
+    showStorePickerModal: false,
+    storePickerLoading: false,
+    storePickerSearchText: '',
+    storePickerAllStores: [] as Array<{ storeId: string; storeName: string; city: string; province: string }>,
+    storePickerFilteredStores: [] as Array<{ storeId: string; storeName: string; city: string; province: string }>,
     // 🔐 套餐升级/续费半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
     // 管理"时唤起，展示本机构当前套餐/到期时间，而不是像 platform_admin 那样
     // 跳转 pages/platform-admin（那个页面服务端只认 platform_admin，租户自己的
@@ -309,6 +485,13 @@ Page({
     // 🆕 确认按钮文案"确认切换至 [XX视角]"绑定这个字段，随 viewModeModalPendingMode
     // 同步更新（打开弹窗/点选卡片时一起写，避免 WXML 里再去反查 PREVIEW_VIEW_MODE_LABELS）
     viewModeModalPendingLabel: '超级管理员全景',
+    // 🆕 模拟视角顶部 Warning 提示条：isRealSuperAdmin 为真且 currentViewMode 不是
+    // 'SUPER_ADMIN' 本档时才为 true——与 isSuperAdmin（预览态会随之降级为 false）
+    // 是两个独立信号，专门驱动页面顶部的"当前处于模拟视角"提示条 + 一键还原按钮
+    isImpersonating: false,
+    // 🆕 系统运维模块「清理缓存」动态体积展示：wx.getStorageInfoSync 同步读取，
+    // 格式化为形如 "3.2MB" 的展示文案；取不到值时留空，WXML 侧不渲染该行
+    cacheSizeText: '',
     stats: {
       volunteerDays: 0,
       volunteerHours: 0,
@@ -341,12 +524,29 @@ Page({
       monthNetPositive: true,
       auditedCount: 0,
       totalCount: 0,
+      verifyProgressPercent: 0,
       pendingVoidList: [] as any[],
       pendingProfileUpdate: null as any,
       pendingProfileItems: [] as { label: string; value: number }[],
       voidActionInFlight: false,
       profileActionInFlight: false
     },
+
+    // 💰 财务稽核专区·数据看板：3 个 KPI 复用 getPatriarchDashboard（本月收支/
+    // 稽核笔数，该云函数已放行 finance 角色查自己绑定门店）+ getRiskAlerts
+    // （合规预警，此前在客户端从未被调用过的一个已就绪但闲置的云函数）两路数据，
+    // 不新增云函数。见 fetchFinanceAuditData()
+    financeAuditData: {
+      loading: true,
+      pendingReviewCount: 0,  // 待复核凭证 = 本月总笔数 - 已稽核笔数
+      monthAuditTotal: '0.00', // 本月稽核总额 = 本月收入 + 本月支出（稽核职责覆盖的总流水规模）
+      anomalyCount: 0          // 合规预警/异常 = getRiskAlerts 四类异常计数之和
+    },
+
+    // 🆕 大家长视角·底部个人荣誉模块折叠态：爱心护持榜 + 核心荣誉对大家长而言是
+    // 次要信息（管理任务优先），默认收起只留一条摘要 + 展开按钮，避免管理向的
+    // 大家长页面被拉得过长；其余角色（义工/店长/财务）保持一直展开，不受此字段影响
+    patriarchHonorExpanded: false,
 
     showReleaseModal: false,
     releaseRoleLabel: '',
@@ -370,6 +570,9 @@ Page({
     // 单靠 wx:if="{{userAvatarUrl}}" 无法感知加载失败，必须由 <image> 的 binderror 显式上报，
     // 失败后降级展示 👤 占位图，而不是让用户看到一块空白
     avatarLoadFailed: false,
+    // 🛡️ 成员头像加载失败兜底：按 avatarUrl 记录，成员管理列表/跨店成员列表/
+    // 已选中成员卡片三处共用（见 onMemberAvatarError）
+    memberAvatarFailedMap: {} as Record<string, boolean>,
     userNickName: '',
     avatarUploading: false,
 
@@ -392,10 +595,6 @@ Page({
     // 家人版纯文本证书的落款日期："{{年}}年{{月}}月"，在 onOpenCertificateModal 里
     // 按打开时的实际日期动态生成，不硬编码具体年月避免几个月后文案过期失真
     certificateIssueDate: '',
-
-    // 🌸 家人专属【雨花温情故事】说明弹窗：引导 + 直达门店日志，不重新做一套独立
-    // 的故事内容库（真正的故事内容沉淀在 activity_logs 门店日志里）
-    showWarmStoryModal: false,
 
     // 📮 爱心意见箱：小程序原生半屏弹窗，替代微信官方 open-type="feedback"——
     // 提交内容落进本项目自己的 feedback_submissions 集合，店长/运营才看得到
@@ -489,6 +688,11 @@ Page({
       role: string; roleLabel: string; roleClass: string; timeStr: string; avatarUrl?: string;
     }>,
 
+    // 📞 联系超管：普通大家长遇到同级大家长锁态提示时，一键弹出超管联系电话/微信号
+    showContactAdminModal: false,
+    superAdminContactPhone: SUPER_ADMIN_CONTACT.phone,
+    superAdminContactWechat: SUPER_ADMIN_CONTACT.wechat,
+
     // 🔐 门店管理员密钥：店长/大家长/超管均可查看已设置状态；大家长/超管额外
     // 可读取明文（服务端按权限决定返回 adminKey 原文还是仅返回 adminKeySet 布尔值）
     storeAdminKey: '',         // 明文，仅大家长/超管可见（服务端控制返回）
@@ -507,6 +711,7 @@ Page({
     inviteResultQrFileId: '',
     inviteResultStoreName: '',
     inviteResultExpiresAt: 0,
+    inviteQrLoadFailed: false,   // 🛡️ 邀请二维码 <image> 加载失败兜底，见 onInviteQrLoadError
 
     // 🛡️ 超管撤销管理权限：从成员卡片列表选择，或手动输入账号编号（兜底）
     showForceUnbindModal: false,
@@ -544,6 +749,9 @@ Page({
     resetStoreKeySearchText: '',              // 搜索框输入
     resetStoreKeyFilteredList: [] as Array<{ storeId: string; storeName: string }>,
     createIndexesRunning: false,      // 🗂️ 刷新数据库索引运行态锁
+    // 🆕 系统管理面板「更多系统工具」折叠区展开态：一键加速系统/DEV 模拟开通是
+    // 低频运维项，默认折叠收起，减少常驻占地方的零散提示块
+    showAdminMoreTools: false,
 
     // 📢 公告管理半屏弹窗
     showNoticeManagementModal: false,
@@ -571,6 +779,17 @@ Page({
     // 🌱 今日三餐人数 + 今日物资消耗是否全为 0——用于弹窗底部"今日暂无录入数据"
     // 空状态引导的显隐判断，见 onOpenStoreStatsModal
     storeStatsAllZero: false,
+
+    // 🆕 店长视角【本店数据概览】2x2 核心指标卡片：今日用餐人次/今日义工打卡
+    // 直接复用 manageVolunteerSubmission 的 statsSummary 聚合结果（该云函数
+    // 早已为「门店餐饮与物资统计」弹窗算好 mealTotals.totalCount 与
+    // todayVolunteerCount，这里只是额外取用同一份数据，不新增云函数）；
+    // 待审批事项无需单独字段，直接在 WXML 里对 pendingMemberApplicationCount/
+    // pendingVolunteerSubmissionCount/pendingFeedbackCount 三个已加载的角标求和；
+    // 结余概览见 fetchManagerTodaySnapshot 注释
+    todayMealsCount: 0,
+    todayVolunteersCount: 0,
+    storeNetBalance: '0.00',
 
     // 💌 家人端【我的反馈与回复】：与提交共用同一个半屏弹窗，靠 feedbackModalTab
     // 切换两块内容；unreadReplyCount 只对家人身份加载（initMinePage 里 isFamily 时触发）
@@ -630,13 +849,30 @@ Page({
   onShow() {
     console.log('[verify] profile.onShow 已触发, 当前 userAvatarUrl=', this.data.userAvatarUrl);
     this.isNavigating = false;
-    this.initMinePage();
-    this.loadUserProfile();
-    this.refreshStoreStatus();
+
+    // 🐛 性能修复（Page.onShow took 67ms 警告）：initMinePage() 在真正发起网络
+    // 请求之前，有一大段纯同步的角色/门店展示态计算（storageRole/globalData 融合、
+    // applyRoleViewOverride 等），loadUserProfile()/refreshStoreStatus() 各自也有
+    // 一小段同步的"先读缓存 setData 一次"逻辑——这些同步开销此前直接算在 onShow
+    // 本次调用栈里，onShow 本身要等这些计算全部跑完才能 return。用 wx.nextTick
+    // 把这三个调用挪到下一个任务队列，onShow 自身几乎立即返回；三者内部原有的
+    // _initMinePageInFlight/_loadUserProfileInFlight 防抖锁不受影响，视觉上
+    // 仍是同一帧内完成，用户感知不到延迟，只是不再计入 onShow 本身的耗时
+    wx.nextTick(() => {
+      this.initMinePage();
+      this.loadUserProfile();
+      this.refreshStoreStatus();
+    });
 
     // 🌟 同步自定义 TabBar 高亮态（见 index.ts onShow 中的说明）
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({ selected: 2 });
+    }
+
+    // 📦 统计页/其他页跳转过来后自动唤起套餐订购弹窗（避免"请在个人中心开通"死循环）
+    if (takeOpenSubscriptionRequest()) {
+      // initMinePage 是异步的，稍等一帧确保角色数据已就绪再唤起弹窗
+      setTimeout(() => this.onOpenSubscriptionModal(), 300);
     }
   },
 
@@ -802,18 +1038,77 @@ Page({
     // 门店角色视角，这里的 realRole !== 'super_admin' 会直接短路返回，"视角切换
     // 预览"这张卡片本身（WXML 用 isRealSuperAdmin 控制显隐）和降级模拟功能
     // 会一起失效
-    const overridden = applyRoleViewOverride(trueServerRole, {
-      currentUserRole: role, isVolunteer: role === 'volunteer',
-      isManager: role === 'store_manager' || role === 'store_patriarch',
-      isFinance: role === 'finance' || role === 'store_patriarch',
-      isSuperAdmin: isRealSuperAdmin,
-      isFamily
-    });
+    //
+    // 🐛 核心 Bug 修复："选择服务站点与身份"弹窗切换身份后，个人中心角色被覆盖
+    // 还原：storageRole（手动切换，上面已解析进 role）与"管理视角切换"预览
+    // （super_admin_preview_view_mode，applyRoleViewOverride 内部读取）是两套
+    // 完全独立的本地覆盖机制。此前不论 storageRole 是否存在，都无条件跑一遍
+    // applyRoleViewOverride——如果超管此前用过"管理视角切换"预览过任意非默认
+    // 角色（哪怕是很久以前、且从未点过"还原超管视角"清空这份预览态），这份陈旧
+    // 的预览选择就会在每次 initMinePage()（含每次 onShow）时把刚刚手动切换好的
+    // storageRole 结果直接覆盖回预览角色，表现为"明明刚在门店选择器/切换身份
+    // 弹窗里选了身份，一进个人中心又变回另一个角色"。
+    // 手动切换是用户在【选择服务站点与身份】/【切换身份】弹窗里的显式、最新操作，
+    // 必须无条件优先于可能陈旧的视角预览——只有完全没有手动切换记录
+    // （storageRole 为空）时，才轮到 applyRoleViewOverride 的预览覆盖生效。
+    // isRealSuperAdmin 不受这里影响，"管理视角切换"卡片本身依旧正常展示；
+    // 该卡片自己的 onConfirmViewModeModal/onResetToDefaultViewMode（见下方
+    // applyViewModeSwitch）会在用户显式选择/还原视角时清空 storageRole，让预览
+    // 重新拿回控制权——这就是需求里"除非用户主动点击了还原按钮"的落地方式
+    // 🐛 门店管理中心卡片消失的根因：这里的 isSuperAdmin 是"当前展示角色是否为
+    // 超管"的展示态标志（WXML 全站都拿它当"只有超管本人视角才显示"的互斥开关），
+    // 不是"真实身份是否为超管"——那是 isRealSuperAdmin 的职责。手动切换成
+    // store_manager/finance/store_patriarch/volunteer/store_family 后，role 已经
+    // 不是 'super_admin' 了，这里却仍然把 isSuperAdmin 恒等于 isRealSuperAdmin
+    // （true），导致【门店管理中心】等一堆 wx:if="{{isManager && !isSuperAdmin}}"
+    // 的角色专属卡片，在"超管手动切到店长视角"这个组合状态下被误判为"仍是超管
+    // 视角"而集体消失，同时还错误触发了【巡检提示条】等只该在真正超管视角出现
+    // 的顶部提示条一起堆叠。改为与 applyRoleViewOverride 内部 switch 分支完全
+    // 一致的口径：只有手动选择的展示角色本身就是 'super_admin' 时才为 true
+    const overridden = storageRole
+      ? {
+          currentUserRole: role, isVolunteer: role === 'volunteer',
+          isManager: role === 'store_manager' || role === 'store_patriarch',
+          isFinance: role === 'finance' || role === 'store_patriarch',
+          isSuperAdmin: role === 'super_admin',
+          isFamily
+        }
+      : applyRoleViewOverride(trueServerRole, {
+          currentUserRole: role, isVolunteer: role === 'volunteer',
+          isManager: role === 'store_manager' || role === 'store_patriarch',
+          isFinance: role === 'finance' || role === 'store_patriarch',
+          isSuperAdmin: isRealSuperAdmin,
+          isFamily
+        });
     const displayRole = overridden.currentUserRole;
     const hasPrivilege = displayRole === 'store_manager' || displayRole === 'finance' || displayRole === 'store_patriarch' || displayRole === 'super_admin';
     // 🏛️ 门店审批权限并集：统一走 hasStoreAdminPrivilege()，与云函数口径保持一致
     const isStoreAdmin = hasStoreAdminPrivilege(displayRole);
-    const currentViewMode = getPreviewViewMode();
+    // 🐛 根因修复（第二版）：视角提示 Banner（sa-status-bar）与"管理视角切换"卡片
+    // （view-mode-switch-card）都读同一个 currentViewMode/viewModeOptionIndex，
+    // 但 storageRole（store-picker 手动切换身份，最高优先级）与"视角切换预览"
+    // 是两套完全独立的本地存储。上一版修复把 storageRole 命中时的 currentViewMode
+    // 硬编码为 'SUPER_ADMIN'，确实修好了 Banner（不再显示过期的预览文案），却
+    // 引入新问题：view-mode-switch-card 没有 isImpersonating 这层门槛、只要
+    // isRealSuperAdmin 就常驻显示，于是不管手动切到哪个角色，它都会一直显示
+    // "超级管理员全景"这个写死的默认值——超管手动切到店长后，页面明明整屏都是
+    // 店长内容，这张卡片却继续大喇喇写着"超级管理员全景"，文不对题。
+    // 根本问题不是"要不要显示预览态"，而是"预览态的取值必须真实反映当前正在
+    // 展示的角色"——手动切换本质上也是一种"当前正在以 XX 视角浏览"，只是触发
+    // 方式（store-picker）与视角切换弹窗不同，二者的展示结果理应统一。这里改为
+    // 把 storageRole 对应的 role 映射到同一套 PreviewViewMode 枚举，Banner 和
+    // 卡片这下读到的都是与页面实际内容一致的值，不再需要靠"强制清零"掩盖错位
+    const roleToViewMode: Record<string, PreviewViewMode> = {
+      super_admin: 'SUPER_ADMIN',
+      store_patriarch: 'STORE_PATRIARCH',
+      store_manager: 'STORE_MANAGER',
+      finance: 'FINANCE',
+      volunteer: 'VOLUNTEER',
+      store_family: 'FAMILY'
+    };
+    const currentViewMode = storageRole
+      ? (roleToViewMode[role] || 'SUPER_ADMIN')
+      : getPreviewViewMode();
     // 🏛️ 家长管理卡片显隐：VIEW_MODE_OPTIONS 现已补齐 STORE_PATRIARCH 档位，
     // displayRole === 'store_patriarch' 既可能是真实角色本身就是家长，也可能是
     // 超管切到了"大家长视角"预览——两种情况都应该展示家长管理卡片，口径不变
@@ -830,8 +1125,30 @@ Page({
     const isVolunteer = overridden.isVolunteer;
     console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFinance=', isFinance, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
 
-    const tenantId = (cachedRoleInfo && (cachedRoleInfo as any).tenantId) || '';
-    const isYuhuazhai = tenantId.startsWith('yuhuazhai');
+    // 🐛 根因修复："社区助餐点被标成雨花斋"：此前这里用 tenantId.startsWith('yuhuazhai')
+    // 当"是否雨花斋"的信号——但 tenantId 只是历史租户/建店命名空间，同一个 tenantId
+    // 前缀下完全可能挂着 elderly_canteen（社区助餐点）等非雨花斋门店，这个猜测口径
+    // 从根上就不可靠，绝不能拿来驱动品牌/机构类型展示。isYuhuazhai 与 orgTypeBadge/
+    // cultureTitle/aboutTitle 现在统一先用中性默认（"未知机构"既不猜雨花斋也不猜
+    // 社区助餐），下方 fetchStoreOrgType() 查到 stores.orgType 真实值后立即用它覆盖
+    // ——宁可首屏短暂显示通用文案，也绝不允许把错误的品牌标签展示给用户
+    const isYuhuazhai = false;
+    const orgCopy = computeOrgDisplayCopy('', overridden.isSuperAdmin);
+    const aboutTitle = orgCopy.aboutTitle;
+    const orgTypeBadge = orgCopy.orgTypeBadge;
+    const cultureTitle = orgCopy.cultureTitle;
+
+    // 🐛 顶部"归属机构"与巡检门店脱节的根因：onSelectInspectStore 只在触发那一刻
+    // 单独 setData 过一次 currentStoreName，是个"一次性"展示态；但 initMinePage()
+    // 在每次 onShow（切 Tab 回来）都会重新跑到这里，用 current_store_name 本地缓存/
+    // getSelectedStore() 重新算一遍 storeName 并整体覆盖 currentStoreName，把刚才
+    // 巡检门店时写入的展示值悄悄冲掉，变回超管自己绑定的门店（或空）——与下方
+    // sa-store-indicator Pill 展示的巡检门店对不上。这里显式接管：真超管处于巡检
+    // 具体门店（currentInspectStoreId 非空，即非"全国总览"）时，"归属机构"必须
+    // 跟随巡检目标，而不是走通用的本地缓存/全局已选门店兜底路径
+    if (isRealSuperAdmin && this.data.currentInspectStoreId) {
+      storeName = this.data.currentInspectStoreName || storeName;
+    }
 
     this.setData({
       currentUserRole: displayRole as any,
@@ -848,9 +1165,18 @@ Page({
       isFamily,
       isServiceUser: isFamily,
       isYuhuazhai,
+      aboutTitle,
+      orgTypeBadge,
+      cultureTitle,
       currentViewMode,
-      viewModeOptionIndex: VIEW_MODE_OPTIONS.indexOf(currentViewMode)
+      viewModeOptionIndex: VIEW_MODE_OPTIONS.indexOf(currentViewMode),
+      isImpersonating: isRealSuperAdmin && currentViewMode !== 'SUPER_ADMIN'
     });
+
+    // 🆕 系统运维模块的缓存体积展示仅超管工具箱可见，非超管账号跳过这次同步读取
+    if (isRealSuperAdmin) {
+      this.refreshCacheSize();
+    }
 
     // fetchMeritStats 按真实角色查询（super_admin 本就同时满足 store_manager/finance 两类统计条件，
     // 预览视角切换时无需重新查询，WXML 侧的显隐已经按 currentUserRole 展示角色自动收敛）
@@ -874,12 +1200,18 @@ Page({
     }
     this._initMinePageInFlight = true;
 
-    const pendingFetches: Promise<any>[] = [this.fetchMeritStats(role)];
+    const pendingFetches: Promise<any>[] = [this.fetchMeritStats(role), this.fetchStoreOrgType(), this.loadRecentPhotos()];
 
     // 🏛️ 家长管理 / 资源兜底：仅家长本人或超管（含预览降级后的超管，与卡片
     // wx:if 口径保持一致）才需要加载，避免给普通义工/店长/财务发多余的云函数请求
     if (isPatriarch || overridden.isSuperAdmin) {
       pendingFetches.push(this.fetchPatriarchDashboardData());
+    }
+
+    // 💰 财务稽核专区【数据看板】：仅 isFinance（严格等于 finance 角色本身，
+    // 不含继承了财务权限的大家长——大家长有自己的家长大盘卡片）
+    if (isFinance) {
+      pendingFetches.push(this.fetchFinanceAuditData());
     }
 
     // 📮 爱心意见箱管理入口的可见范围：大家长/店长/超管（财务义工无管理面板）
@@ -890,6 +1222,12 @@ Page({
       pendingFetches.push(this.fetchPendingApplications());
       // 🔐 管理员密钥状态：在管理面板里展示，与其他管理数据同一批并发加载
       pendingFetches.push(this.loadStoreAdminKey());
+    }
+
+    // 🆕 店长专属【本店数据概览】2x2 卡片：仅 isManager（不含大家长/超管，两者
+    // 各有自己的大盘卡片）时拉取今日用餐人次/今日义工打卡/结余概览
+    if (isManager) {
+      pendingFetches.push(this.fetchManagerTodaySnapshot());
     }
 
     // 💌 家人端未读回复红点：与上面管理端角标是两套完全独立的计数
@@ -905,6 +1243,13 @@ Page({
       pendingFetches.push(this.fetchMyVolunteerSubmissions(true));
     }
 
+    // 💖 全网爱心支持卡片数据：改走公开只读云函数 getSunshineLedger（不做任何
+    // 角色权限校验，与首页阳光账本入口同款），全部角色都可以发起这次查询，
+    // 不再像 getNationalDashboard 那样需要跟后端 ALLOWED_ROLES 白名单对齐——
+    // fetchStoreLoveWallSummary 内部会先解析用户自己归属的门店 storeId，
+    // 解析不到（无绑定门店的新用户）时函数自己直接跳过，不发起无效请求
+    pendingFetches.push(this.fetchStoreLoveWallSummary());
+
     try {
       await Promise.allSettled(pendingFetches);
     } finally {
@@ -917,6 +1262,67 @@ Page({
       (this as any)._onboardingShown = true;
       this.setData({ showOnboardingModal: true });
     }
+  },
+
+  // 🌟 拉取当前绑定门店的真实 orgType（stores.orgType，见 manageStoreProfile
+  // 云函数 get 动作），用它覆盖 initMinePage 里先起的中性默认文案——只有这一步
+  // 才能精确区分 yuhuazhai / elderly_canteen（社区助餐）/ 其余机构类型，同时
+  // 一并回填 isYuhuazhai（此前由不可靠的 tenantId 前缀猜测驱动，会导致
+  // "社区助餐点被标成雨花斋"这类误判——见 initMinePage 里的根因修复注释），
+  // 让门店文化/温情故事/证书落款等一整批 isYuhuazhai 三元表达式都跟着一起归正。
+  // 超管在"全国总览"视角下没有绑定具体门店，云函数会返回"您尚未绑定门店"，
+  // 属于预期内的空结果，静默跳过即可，不影响其余展示
+  async fetchStoreOrgType() {
+    if (!isCloudAvailable()) return;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get' }
+      });
+      const orgType = (res && res.result && res.result.data && res.result.data.orgType) || '';
+      if (!orgType) return;
+      this.setData({
+        orgType,
+        isYuhuazhai: orgType === 'yuhuazhai',
+        ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin)
+      });
+    } catch (err) {
+      // 静默失败：已有中性兜底文案在展示，不会误显示任何机构品牌标签
+      console.warn('[profile][fetchStoreOrgType] 查询真实机构类型失败:', err);
+    }
+  },
+
+  // 📸 雨花温情图册与阳光凭证：原首页入口卡的数据加载逻辑原样迁移到个人中心——
+  // 只取总张数用于入口角标展示（不需要缩略图数组），云函数与跳转目标
+  // （getPhotoArchive / onGoToPhotoArchive 均未变），可见范围口径与原首页版本一致：
+  // 全国总览视角不展示该入口，这里直接让 recentPhotosLoaded 保持 false 达到同等效果
+  // （本页顶层 data.currentStoreId 从未被真正赋值过，改用 getSelectedStore() 现取，
+  // 与本文件其余读取当前生效门店的写法保持一致）
+  async loadRecentPhotos() {
+    if (!isCloudAvailable()) return;
+    const activeStore = getSelectedStore();
+    const storeId = activeStore.storeId || '';
+    if (storeId === 'national_overview' || storeId === 'ALL_STORES') return;
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'getPhotoArchive',
+        data: { storeId, photoType: 'all', limit: 1 }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({
+          recentPhotosTotal: result.total || 0,
+          recentPhotosLoaded: true
+        });
+      }
+    } catch (e) {
+      console.warn('[profile][loadRecentPhotos] 加载失败:', e);
+    }
+  },
+
+  // 点击图册入口卡，导航到 history 页图册模式——与原首页入口跳转目标完全一致
+  onGoToPhotoArchive() {
+    wx.navigateTo({ url: '/pages/history/history?mode=photo' });
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1018,8 +1424,7 @@ Page({
 
       // 短暂延迟后刷新角色（云函数已写入 user_roles，最终一致性延迟 ~300ms）
       setTimeout(() => {
-        AuthService.refreshRoleFromServer && AuthService.refreshRoleFromServer();
-        this.initMinePage();
+        AuthService.fetchUserRole().finally(() => this.initMinePage());
       }, 800);
 
     } catch (err: any) {
@@ -1064,6 +1469,12 @@ Page({
             .map((f) => ({ label: PATRIARCH_PROFILE_FIELD_LABELS[f], value: data.pendingProfileUpdate[f] }))
         : [];
 
+      // 🆕 防伪验真进度条百分比：在这里算好一个 0-100 的整数，WXML 只做
+      // style="width: {{...}}%" 纯变量输出，不在模板里写除法/取整表达式
+      const auditedCount = data.auditedCount || 0;
+      const totalCount = data.totalCount || 0;
+      const verifyProgressPercent = totalCount > 0 ? Math.round((auditedCount / totalCount) * 100) : 0;
+
       this.setData({
         patriarchData: {
           ...this.data.patriarchData,
@@ -1077,8 +1488,9 @@ Page({
           monthExpense: (data.monthExpense || 0).toFixed(2),
           monthNet: Math.abs(data.monthNet || 0).toFixed(2),
           monthNetPositive: (data.monthNet || 0) >= 0,
-          auditedCount: data.auditedCount || 0,
-          totalCount: data.totalCount || 0,
+          auditedCount,
+          totalCount,
+          verifyProgressPercent,
           pendingVoidList: data.pendingVoidList || [],
           pendingProfileUpdate: data.pendingProfileUpdate || null,
           pendingProfileItems
@@ -1086,9 +1498,161 @@ Page({
       });
     } catch (err) {
       console.error('[fetchPatriarchDashboardData] 加载家长大盘异常:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ 'patriarchData.loading': false });
+    }
+  },
+
+  // 💰 财务稽核专区【数据看板】3 项 KPI：
+  // ① 待复核凭证 = 本月总笔数 - 已稽核（AUDITED_LOCKED）笔数——复用
+  //    getPatriarchDashboard（已放行 finance 角色查自己绑定门店，见该云函数
+  //    resolveTarget 的调整），不新增云函数。
+  // ② 本月稽核总额 = 本月收入 + 本月支出——同一次 getPatriarchDashboard 调用
+  //    附带算出，反映财务本月责任范围内的总流水规模。
+  // ③ 合规预警/异常 = getRiskAlerts 四类异常计数之和（红字冲销/小票缺失/
+  //    余额异常/算术复核不一致）——这个云函数此前在客户端从未被调用过，
+  //    本就是为财务准备的只读风控扫描，这里首次真正接上前端
+  async fetchFinanceAuditData() {
+    if (!isCloudAvailable()) return;
+
+    let roleInfo = AuthService.getCachedRoleInfo();
+    if (!roleInfo) {
+      const result = await AuthService.fetchUserRole();
+      roleInfo = result.roleInfo || null;
+    }
+    const store = getSelectedStore();
+    const storeId = (roleInfo && roleInfo.role === 'finance' && roleInfo.storeId) || store.storeId || '';
+    if (!storeId) {
+      this.setData({ 'financeAuditData.loading': false });
+      return;
+    }
+
+    this.setData({ 'financeAuditData.loading': true });
+    try {
+      const [dashboardRes, riskRes] = await Promise.all([
+        wx.cloud.callFunction({ name: 'getPatriarchDashboard', data: { storeId } }),
+        wx.cloud.callFunction({ name: 'getRiskAlerts', data: { storeId } })
+      ]);
+
+      const dashboardResult: any = dashboardRes.result;
+      const dashboardData = (dashboardResult && dashboardResult.success && dashboardResult.data) || null;
+      const totalCount = (dashboardData && dashboardData.totalCount) || 0;
+      const auditedCount = (dashboardData && dashboardData.auditedCount) || 0;
+      const monthIncome = (dashboardData && dashboardData.monthIncome) || 0;
+      const monthExpense = (dashboardData && dashboardData.monthExpense) || 0;
+
+      const riskResult: any = riskRes.result;
+      const summary = (riskResult && riskResult.success && riskResult.summary) || {};
+      const anomalyCount = (summary.voidCount || 0) + (summary.missingReceiptCount || 0)
+        + (summary.balanceAnomalyCount || 0) + (summary.arithmeticMismatchCount || 0);
+
+      this.setData({
+        financeAuditData: {
+          loading: false,
+          pendingReviewCount: Math.max(0, totalCount - auditedCount),
+          monthAuditTotal: (monthIncome + monthExpense).toFixed(2),
+          anomalyCount
+        }
+      });
+    } catch (err) {
+      console.error('[fetchFinanceAuditData] 加载财务稽核数据异常:', err);
+      reportCloudSdkErrorIfCorrupted(err);
+      this.setData({ 'financeAuditData.loading': false });
+    }
+  },
+
+  // 🆕 店长视角【本店数据概览】2x2 卡片数据源：
+  // ① 今日用餐人次 / 今日义工打卡——直接复用 manageVolunteerSubmission 的
+  //    statsSummary 聚合（与「门店餐饮与物资统计」弹窗、store-profile 的
+  //    "今日护持"同源，todayVolunteerCount 是当天已采纳提交里的去重提交人数，
+  //    没有编造一个假的打卡系统），不新增云函数。
+  // ② 爱心积攒/结余——复用 getPreviousBalance（本用于"新建报告时预填昨日结余"）：
+  //    传入"明天"作为 targetDateString，其内部按【明天的前一天】即今天去查
+  //    report_logs，天然拿到本店最新一次已知结余（当天尚未提交时会按其自带的
+  //    降级逻辑回落到最近一次历史记录，不会显示为空/0 误导店长）。两路请求
+  //    互相独立、互不阻塞，任一失败都静默保留默认展示值
+  async fetchManagerTodaySnapshot() {
+    if (!isCloudAvailable()) return;
+
+    const fetchTodayCounts = (async () => {
+      try {
+        const res: any = await wx.cloud.callFunction({
+          name: 'manageVolunteerSubmission',
+          data: { action: 'statsSummary' }
+        });
+        const result = res.result;
+        if (result && result.success) {
+          const data = result.data || {};
+          this.setData({
+            todayMealsCount: (data.mealTotals && data.mealTotals.totalCount) || 0,
+            todayVolunteersCount: data.todayVolunteerCount || 0
+          });
+        }
+      } catch (err) {
+        console.warn('[fetchManagerTodaySnapshot] 加载今日用餐/打卡统计失败:', err);
+      }
+    })();
+
+    const fetchBalance = (async () => {
+      const store = getSelectedStore();
+      const storeName = store.storeName || this.data.currentStoreName;
+      if (!storeName) return;
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+      try {
+        const result = await DataService.getPreviousBalance(storeName, '', tomorrowStr, store.storeId);
+        if (result.success && result.data && result.data.balance != null) {
+          this.setData({ storeNetBalance: (parseFloat(result.data.balance) || 0).toFixed(2) });
+        }
+      } catch (err) {
+        console.warn('[fetchManagerTodaySnapshot] 加载结余概览失败:', err);
+      }
+    })();
+
+    await Promise.allSettled([fetchTodayCounts, fetchBalance]);
+  },
+
+  // 💖 全网爱心支持卡片：调用与首页「☀️ 阳光账本」入口同一个公开只读云函数
+  // getSunshineLedger，只查询用户自己归属门店的「发心分布比例」这块温情、
+  // 非运营数据——门店总数/服务人次/义工工时等跨店经营数据不在个人页展示，
+  // 那些留给统计页专属大屏。
+  // 🐛 此前借道 getNationalDashboard（rangeType='all' + filterMode='national'）
+  // 会把全租户所有门店的捐赠记录都聚合进来，用户看到的可能是别的门店的数据，
+  // 不符合"只显示相应归属机构数据"的要求；getSunshineLedger 本身按 storeId
+  // 严格收窄、且不做任何角色权限校验，天然适合"全员可见、仅本店数据"的场景
+  // 🆕 最新公开随喜名单已抽成独立的 <yangshan-wall storeId="{{myStoreId}}"/>
+  // 组件自行拉取（同一个 storeId、同一个云函数，组件内部再发一次请求），
+  // 这里只需要把解析出的 storeId 存进 myStoreId 供 WXML 绑定，不再重复
+  // 保留 donors 列表这份数据
+  async fetchStoreLoveWallSummary() {
+    if (!isCloudAvailable()) return;
+    const storeId = await this.resolveManageStoreId();
+    if (!storeId) return;
+    this.setData({ myStoreId: storeId });
+
+    this.setData({ storeLoveWallLoading: true });
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'getSunshineLedger',
+        data: { storeId }
+      });
+      const result = res.result;
+      if (!result || !result.success) return;
+
+      this.setData({
+        storeLoveWallMeritRatio: {
+          yangRatioPct: result.yangRatioPct || 0,
+          yinRatioPct: result.yinRatioPct || 0
+        }
+      });
+    } catch (err) {
+      console.error('[fetchStoreLoveWallSummary] 加载本店爱心支持摘要异常:', err);
+    } finally {
+      this.setData({ storeLoveWallLoading: false });
     }
   },
 
@@ -1462,6 +2026,16 @@ Page({
     this.setData({ avatarLoadFailed: true });
   },
 
+  // 🛡️ 成员头像 <image> 加载失败兜底：成员管理列表/跨店成员列表/已选中成员卡片
+  // 三处共用同一个 memberAvatarFailedMap（按 avatarUrl 记录），命中后各自的
+  // wx:else 分支会自动切换成已有的姓氏首字占位圆圈，不留裂图
+  onMemberAvatarError(e: any) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    console.warn('[onMemberAvatarError] 成员头像加载失败:', url);
+    this.setData({ memberAvatarFailedMap: { ...this.data.memberAvatarFailedMap, [url]: true } });
+  },
+
   // 选择微信头像（官方 chooseAvatar 能力）：拿到本地临时文件后压缩上传至云存储，再落库。
   // 依赖手机微信客户端基础库 >= 2.21.2；版本过低时该回调不会触发，属已知限制。
   async onChooseAvatar(e: any) {
@@ -1620,6 +2194,25 @@ Page({
   // 两个入口共用，避免重复维护同一段逻辑
   applyViewModeSwitch(mode: PreviewViewMode) {
     setPreviewViewMode(mode);
+    // 🐛 核心修复配套："选择服务站点与身份"/"切换身份"弹窗手动切换后写入的
+    // current_user_role 现在对 initMinePage() 拥有最高优先级（见该方法内
+    // applyRoleViewOverride 调用处的注释），如果这里不清空它，用户在本弹窗
+    // 显式选择的预览视角/点击"还原超管视角"都会被那份手动切换记录盖回去，
+    // 形同虚设。这里正是需求里"除非用户主动点击了还原按钮"允许覆盖手动切换的
+    // 唯一入口——onConfirmViewModeModal（确认切换到任意视角）与
+    // onResetToDefaultViewMode（还原超管视角）都共用这个方法
+    //
+    // 🐛 光清 current_user_role 还不够：initMinePage() 的第二优先级信号
+    // app.globalData.currentStore.role 也会被同一次手动切换写入（store-picker
+    // _applyRoleSwitch），且不会随 current_user_role 一起被上面这行清空——如果
+    // 留着不管，storageRole 一清空，globalRoleLower 这个兜底信号立刻带着同一个
+    // 陈旧角色重新顶上来，等于换了个路径把刚清掉的 bug 又变出来一次。这里一并
+    // 归位为当前真实身份（超管），两个信号才能保持一致
+    wx.removeStorageSync('current_user_role');
+    const app = getApp() as any;
+    if (app && app.globalData && app.globalData.currentStore) {
+      app.globalData.currentStore.role = 'ADMIN';
+    }
     this.setData({ showViewModeModal: false });
     wx.showToast({
       title: `已切换至${PREVIEW_VIEW_MODE_LABELS[mode]}`,
@@ -1916,9 +2509,17 @@ Page({
       app.globalData.currentStore = { storeId, storeName, role };
     }
 
-    this.setData({ showSwitchIdentityModal: false });
-    wx.showToast({ title: `已切换至${ROLE_TOKEN_LABELS[role] || role}视角`, icon: 'none' });
+    // 🆕 状态落地后立即重新计算 isVolunteer/isFinance/isPatriarch 等标记位，
+    // 不等弹窗关闭动画结束——initMinePage 内部自行走一遍 storageRole 优先的
+    // 角色解析（见该方法注释），与这里刚写入的 current_user_role 保持一致
     this.initMinePage();
+
+    // 🆕 延迟 200ms 关闭弹窗 + 成功态 Toast，让用户先看清楚是切到了哪个身份，
+    // 与 store-picker.ts _applyRoleSwitch 同一套节奏
+    setTimeout(() => {
+      this.setData({ showSwitchIdentityModal: false });
+      wx.showToast({ title: '已切换身份', icon: 'success' });
+    }, 200);
   },
 
   // 🚪 从"切换身份"面板转入退出确认弹窗：退出的目标固定为当前正在查看的这一档身份
@@ -2223,6 +2824,15 @@ Page({
     const filePath = this.data.certificateTempFilePath;
     if (!filePath) return;
     wx.previewImage({ current: filePath, urls: [filePath] });
+  },
+
+  // 🛡️ 证书图片加载失败兜底：certificateTempFilePath 是本地临时文件路径，
+  // 小概率会在渲染前被系统清理掉——加载失败时清空该字段，退回展示 Canvas
+  // （wx:if="{{!certificateTempFilePath}}" 会重新接管），并提示用户重新生成
+  onCertificateLoadError(e: any) {
+    console.warn('[onCertificateLoadError] 证书图片加载失败:', e && e.detail);
+    this.setData({ certificateTempFilePath: '' });
+    wx.showToast({ title: '证书图片加载失败，请重新生成', icon: 'none' });
   },
 
   onSaveCertificateToAlbum() {
@@ -2588,9 +3198,15 @@ Page({
   // 🏷️ 公告编辑弹窗：一键套用内置预设文案（与首页通报弹窗 onApplyPreset 同款逻辑）
   onNoticeMgmtApplyPreset(e: any) {
     const key = e.currentTarget.dataset.key;
-    const preset = NOTICE_MGMT_PRESETS[key];
+    // 🛡️ 与 index.ts onApplyPreset 同一套防护：currentStoreName 在全国总览视角下
+    // 是"全国总览"虚拟聚合名，不能塞进通报正文，让模板自己的兜底称谓接管
+    const rawStoreName = this.data.currentStoreName || '';
+    const isVirtualStoreName = rawStoreName === '全国总览' || rawStoreName === 'ALL_STORES';
+    const storeName = isVirtualStoreName ? '' : rawStoreName;
+    const preset = getNoticeMgmtTemplate(key, this.data.orgType, storeName);
     if (preset) {
       this.setData({
+        noticeMgmtEditTag: preset.tag,
         noticeMgmtEditTitle: preset.title,
         noticeMgmtEditContent: preset.content
       });
@@ -2836,6 +3452,30 @@ Page({
       (m.phone && m.phone.includes(query))
     );
     this.setData({ memberManageFilteredList: filtered });
+  },
+
+  // 📞 联系超管：同级大家长锁态提示旁的快捷入口，弹窗展示超管电话与微信号
+  onContactAdmin() {
+    this.setData({ showContactAdminModal: true });
+  },
+
+  onCloseContactAdminModal() {
+    this.setData({ showContactAdminModal: false });
+  },
+
+  onCallSuperAdmin() {
+    const phone = this.data.superAdminContactPhone;
+    if (!phone) return;
+    wx.makePhoneCall({ phoneNumber: phone });
+  },
+
+  onCopySuperAdminWechat() {
+    const wechat = this.data.superAdminContactWechat;
+    if (!wechat) return;
+    wx.setClipboardData({
+      data: wechat,
+      success: () => wx.showToast({ title: '已复制超管微信号', icon: 'success' })
+    });
   },
 
   async onDemoteToVolunteer(e: any) {
@@ -3221,14 +3861,27 @@ Page({
     }
   },
 
-  // 🍚 门店餐饮与物资统计：即时查询，不缓存不预加载，每次打开都拿最新数字
+  // 🍚 门店餐饮与物资统计：即时查询，不缓存不预加载，每次打开都拿最新数字。
+  // 🐛 超管专属：云函数 resolveReadStoreId 对 super_admin 强制要求显式传入
+  // storeId（自身没有绑定门店，无法像店长/家长/义工那样落到 caller.storeId），
+  // 这里按当前巡检门店（见 onSelectInspectStore）补上；全国总览态下尚未选定
+  // 具体门店，直接引导先选店，不再对云函数发起注定失败的请求
   onOpenStoreStatsModal() {
     if (this.data.storeStatsLoading) return;
+    if (this.data.isSuperAdmin && !this.data.currentInspectStoreId) {
+      wx.showToast({ title: '请先选择巡检门店', icon: 'none' });
+      return;
+    }
     this.setData({ showStoreStatsModal: true, storeStatsLoading: true });
+
+    const data: any = { action: 'statsSummary' };
+    if (this.data.isSuperAdmin && this.data.currentInspectStoreId) {
+      data.storeId = this.data.currentInspectStoreId;
+    }
 
     wx.cloud.callFunction({
       name: 'manageVolunteerSubmission',
-      data: { action: 'statsSummary' }
+      data
     }).then((res: any) => {
       const result = res.result;
       if (!result || !result.success) {
@@ -3298,6 +3951,36 @@ Page({
 
     wx.navigateTo({
       url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`,
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 💰 财务专属【凭证快速复核】：跳去台账历史页并直接落在"待审批"筛选 Tab
+  // （?statusTab=pending，见 history.ts onLoad 新增的这个查询参数），财务不用
+  // 进页面后再自己点一次筛选，一步到位看到本店所有待复核的记录
+  onGoToVoucherReview() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/history/history?statusTab=pending',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 💰 财务专属【Excel 财务报表导出】：跳去统计页并携带 ?autoShowExport=true，
+  // 复用首页"Excel 账本导出"跳转已有的同一套自动唤起核对弹窗逻辑
+  // （见 statistics.ts onLoad 的 _autoShowExportPending），不新建导出入口
+  onExportFinanceExcel() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&autoShowExport=true`,
       fail: () => {
         this.isNavigating = false;
       }
@@ -3586,22 +4269,6 @@ Page({
     this.onOpenFamilyStorePicker();
   },
 
-  // 🌸 家人专属【雨花家园】· 雨花温情故事：项目里没有独立的"故事内容库"，
-  // 真正沉淀温馨故事/活动花絮的地方是门店日志（activity_logs）——这里展示一段
-  // 引导语，不编造一份假的故事列表，点击直达已有的门店日志入口
-  onOpenWarmStory() {
-    this.setData({ showWarmStoryModal: true });
-  },
-
-  onCloseWarmStory() {
-    this.setData({ showWarmStoryModal: false });
-  },
-
-  onViewActivityLogFromWarmStory() {
-    this.setData({ showWarmStoryModal: false });
-    this.onGoToActivityLog();
-  },
-
   // 📖 家人专属【文化与帮助】· 雨花家训与文化全集：唯一实现在首页 index.ts
   // （onShowFamilyMottoModal，十大模块完整原文），本页不重复一套内容——写交接
   // 标记后跳首页 tabBar，首页 onShow 的 checkPendingHandoffs 据此自动打开弹窗
@@ -3661,7 +4328,7 @@ Page({
   },
 
   onPatriarchGenCode() {
-    this.setData({ showInviteModal: true, inviteTargetRole: 'VOLUNTEER', inviteResultCode: '', inviteResultQrFileId: '' });
+    this.setData({ showInviteModal: true, inviteTargetRole: 'VOLUNTEER', inviteResultCode: '', inviteResultQrFileId: '', inviteQrLoadFailed: false });
   },
 
   onCloseInviteModal() {
@@ -3670,6 +4337,13 @@ Page({
 
   onSelectInviteRole(e: any) {
     this.setData({ inviteTargetRole: e.currentTarget.dataset.role });
+  },
+
+  // 🐛 邀请二维码加载失败兜底：cloud fileID 拉取异常（如 500）时降级为文字提示，
+  // 邀请码本身仍可通过下方"复制邀请码"按钮正常分享，不阻断核心流程
+  onInviteQrLoadError(e: any) {
+    console.warn('[onInviteQrLoadError] 邀请二维码加载失败:', e && e.detail);
+    this.setData({ inviteQrLoadFailed: true });
   },
 
   async onGeneratePatriarchInviteCode() {
@@ -3700,7 +4374,8 @@ Page({
         inviteResultCode: code || '',
         inviteResultQrFileId: qrFileID || '',
         inviteResultStoreName: storeName || this.data.currentStoreName || '',
-        inviteResultExpiresAt: expiresAt || 0
+        inviteResultExpiresAt: expiresAt || 0,
+        inviteQrLoadFailed: false
       });
     } catch (err) {
       console.error('[onGeneratePatriarchInviteCode]', err);
@@ -3727,10 +4402,37 @@ Page({
     wx.showToast({ title: '安全日志功能即将上线', icon: 'none', duration: 2000 });
   },
 
+  // 🆕 同步读取本地缓存占用，格式化为 "3.2MB" 供系统运维模块展示；wx.getStorageInfoSync
+  // 是纯本地同步调用（无网络往返），initMinePage 与清理弹窗打开前各调用一次即可保持数值新鲜
+  refreshCacheSize() {
+    try {
+      const info = wx.getStorageInfoSync();
+      const mb = (info.currentSize || 0) / 1024;
+      this.setData({ cacheSizeText: mb < 0.1 ? '<0.1MB' : `${mb.toFixed(1)}MB` });
+    } catch (err) {
+      this.setData({ cacheSizeText: '' });
+    }
+  },
+
+  // 🆕 系统管理面板「更多系统工具」展开/收起：折叠一键加速系统/DEV 模拟开通
+  // 这类低频运维项，默认不占地方
+  onToggleAdminMoreTools() {
+    this.setData({ showAdminMoreTools: !this.data.showAdminMoreTools });
+  },
+
+  // 🆕 大家长视角·爱心护持榜/核心荣誉折叠区展开/收起：管理任务优先，个人荣誉
+  // 默认收起，按需展开查看
+  onTogglePatriarchHonor() {
+    this.setData({ patriarchHonorExpanded: !this.data.patriarchHonorExpanded });
+  },
+
   onTriggerClearCache() {
+    // 打开确认弹窗前重新读一次，避免展示上次 initMinePage 时留下的旧数值
+    this.refreshCacheSize();
+    const sizeLabel = this.data.cacheSizeText ? `（当前占用 ${this.data.cacheSizeText}）` : '';
     wx.showModal({
       title: '🗑️ 清理本地占用缓存',
-      content: '这会清除手机上暂存的临时数据，释放存储空间、解决偶发的显示异常。云端数据和历史记录完全不受影响。',
+      content: `这会清除手机上暂存的临时数据${sizeLabel}，释放存储空间、解决偶发的显示异常。云端数据和历史记录完全不受影响。`,
       confirmText: '立即清理',
       confirmColor: '#3B6FE8',
       cancelText: '再想想',
@@ -3814,11 +4516,24 @@ Page({
   // 大家长专属：全国数据看板入口——直接跳转统计页并携带 view=national 参数。
   // 订阅校验移到统计页内部：未订阅时统计页展示"引导升级"预告卡片（含全机构门店总数），
   // 已订阅时直接展示完整大屏。前端不再提前拦截，让统计页按实际权限决定展示内容。
+  // 🐛 根因修复：本方法同时服务 isPatriarch（顶部卡片 + 底部"全国数据看板"入口）
+  // 与 isManager（顶部卡片，文案已改为"所在店铺历史数据看板"，见 WXML）——此前
+  // 不分角色一律带 ?view=national 跳转，statistics.ts 只有 isPatriarch 才会真正
+  // 触发 _triggerPatriarchNationalView() 切到全国聚合视图，isManager 点进去这个
+  // 参数其实是死代码，落地页仍是自己门店的常规统计（这本身没错，店长不该有跨店
+  // 权限），但显式带着一个对他们不生效的意图参数容易在排查问题时误导。这里按
+  // 角色分流：大家长保留原有 ?view=national 跳转；店长改为与 onGoToStoreOverview
+  // 一致的方式，直接带自己门店名跳转，不携带任何"全国"相关的意图参数
   async onPatriarchGoToNationalDashboard() {
     if (this.isNavigating) return;
     this.isNavigating = true;
+
+    const url = this.data.isPatriarch
+      ? '/pages/statistics/statistics?view=national'
+      : `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`;
+
     wx.navigateTo({
-      url: '/pages/statistics/statistics?view=national',
+      url,
       fail: () => {
         this.isNavigating = false;
       }
@@ -3998,6 +4713,126 @@ Page({
       wx.hideLoading();
       this.setData({ forceUnbindSaving: false });
     }
+  },
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 🌐 超管【门店选择与搜索】弹窗：与 activity-log.ts fetchSuperAdminStoreOptions
+  // 复用同一个 getStoreList 云函数（已按 tenantId 收敛，不新建查询逻辑）。选中
+  // 具体门店后调用 setSelectedStore() 写入全局已选门店——与 store-picker 组件/
+  // activity-log.ts 超管切店同一套持久化机制，确保【门店档案】【门店日志】等
+  // 二级页面（各自已有 getSelectedStore() 兜底解析）跳转过去后自动展示该门店数据，
+  // 不需要额外改动那两个页面。
+  // ──────────────────────────────────────────────────────────────────────────
+  async onOpenStorePickerModal() {
+    if (!this.data.isSuperAdmin) return;
+    this.setData({
+      showStorePickerModal: true,
+      storePickerSearchText: '',
+      storePickerLoading: true,
+      storePickerAllStores: [],
+      storePickerFilteredStores: []
+    });
+
+    try {
+      const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
+      const result = res.result;
+      const list = (result && result.success) ? (result.list || []) : [];
+      const stores = list
+        .filter((s: any) => s && s.storeId && !isVirtualStoreName(s.storeName) && (s.status || 'active') !== 'inactive')
+        .map((s: any) => ({
+          storeId: s.storeId,
+          storeName: s.storeName || '未命名门店',
+          city: s.city || '',
+          province: s.province || ''
+        }));
+      this.setData({ storePickerAllStores: stores, storePickerFilteredStores: stores });
+    } catch (err) {
+      console.warn('[onOpenStorePickerModal] 加载门店列表失败:', err);
+      wx.showToast({ title: '门店列表加载失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ storePickerLoading: false });
+    }
+  },
+
+  onCloseStorePickerModal() {
+    this.setData({ showStorePickerModal: false, storePickerSearchText: '' });
+  },
+
+  // 🔍 实时搜索：支持按门店名称/拼音（见 matchStoreSearchKeyword）/城市匹配，
+  // 全部在已拉取到的本地列表上过滤，不再重复打云函数
+  onStorePickerSearchInput(e: any) {
+    const raw = e.detail.value || '';
+    const keyword = raw.trim().toLowerCase();
+    const all = this.data.storePickerAllStores;
+    const filtered = keyword ? all.filter((s) => matchStoreSearchKeyword(s, keyword)) : all;
+    this.setData({ storePickerSearchText: raw, storePickerFilteredStores: filtered });
+  },
+
+  // ✅ 选择固定首项【🌐 全国总览】：清空巡检门店，恢复全局聚合视角。
+  // 与 activity-log.ts onSuperAdminStoreChange 切到全国总览同一口径——不改动
+  // 全局已选门店的持久化记录，只重置本页展示态
+  onSelectNationalOverview() {
+    this.setData({
+      currentInspectStoreId: '',
+      currentInspectStoreName: '',
+      currentStoreName: '',
+      showStorePickerModal: false,
+      storePickerSearchText: ''
+    });
+    wx.showToast({ title: '已恢复全国总览', icon: 'none' });
+  },
+
+  // ✅ 选择具体门店，进入单店巡检视角
+  onSelectInspectStore(e: any) {
+    const { storeId, storeName } = e.currentTarget.dataset;
+    if (!storeId) return;
+
+    setSelectedStore({ storeId, storeName });
+    this.setData({
+      currentInspectStoreId: storeId,
+      currentInspectStoreName: storeName,
+      currentStoreName: storeName,
+      showStorePickerModal: false,
+      storePickerSearchText: ''
+    });
+    wx.showToast({ title: `已切换至「${storeName}」巡检视角`, icon: 'none' });
+    this.refreshStoreStatus();
+  },
+
+  // 🔙 顶部合并提示条（.sa-status-bar）的唯一重置按钮：巡检门店
+  // （currentInspectStoreId）与视角模拟（isImpersonating）是两套独立状态，
+  // 可能同时激活，也可能只激活一个——这里各自按需重置，只展示一条汇总 Toast，
+  // 不直接复用 onSelectNationalOverview()/applyViewModeSwitch()，避免两者
+  // 同时激活时各自弹一次 Toast、重复触发两次 initMinePage()
+  onResetSuperAdminTempViews() {
+    const hadInspect = !!this.data.currentInspectStoreId;
+    const hadImpersonation = this.data.isImpersonating;
+    if (!hadInspect && !hadImpersonation) return;
+
+    if (hadInspect) {
+      this.setData({
+        currentInspectStoreId: '',
+        currentInspectStoreName: '',
+        showStorePickerModal: false,
+        storePickerSearchText: ''
+      });
+    }
+    if (hadImpersonation) {
+      setPreviewViewMode('SUPER_ADMIN');
+      // 与 applyViewModeSwitch 同一套"清空手动切换记录，让预览重新拿回控制权"
+      // 逻辑，见该方法处的详细注释
+      wx.removeStorageSync('current_user_role');
+      const app = getApp() as any;
+      if (app && app.globalData && app.globalData.currentStore) {
+        app.globalData.currentStore.role = 'ADMIN';
+      }
+    }
+
+    wx.showToast({
+      title: hadInspect && hadImpersonation ? '已重置巡检与模拟视角' : (hadInspect ? '已恢复全国总览' : '已还原超管视角'),
+      icon: 'success'
+    });
+    this.initMinePage();
   },
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -4232,6 +5067,11 @@ Page({
     } finally {
       this.setData({ subscriptionLoading: false });
     }
+  },
+
+  // WXML 中 pro-service-card 按钮绑定此方法（与 onOpenSubscriptionModal 同义）
+  onOpenProSubscriptionModal() {
+    return this.onOpenSubscriptionModal();
   },
 
   onCloseSubscriptionModal() {
@@ -4482,16 +5322,31 @@ Page({
   },
   // ─────────────────────────────────────────────────────────────────────
 
+  // 🆕 门店管理中心卡片头部的门店名 Pill 点击入口：与原先"✏️ 修改"单独占一整行、
+  // 唤起快捷改名 Mini-Modal（onQuickEditStoreName/esn-mask，仅改门店名一个字段）
+  // 不同——这里合并进大标题右侧后改走【组织信息配置】完整弹窗（门店名/机构类型/
+  // 文化寄语/Logo 一次性维护），避免同一张卡片里出现两套"改门店信息"入口
+  onEditStoreInfo() {
+    this.onOpenOrgConfigModal();
+  },
+
   async onOpenOrgConfigModal() {
     // 立即用本地缓存名称预填，避免用户看到空白输入框等待网络
     const cachedName = this.data.currentStoreName || '';
+    // 🆕 机构类型：先用页面已有的 isYuhuazhai 信号起一个粗粒度 seed（避免打开弹窗
+    // 瞬间选择器空白/闪烁），下方后台拉取到真实 orgType 后会立即覆盖为精确值
+    const seedOrgType = this.data.isYuhuazhai ? 'yuhuazhai' : '';
+    const seedIdx = ORG_CONFIG_TYPE_OPTIONS.findIndex(o => o.value === seedOrgType);
     this.setData({
       showOrgConfigModal: true,
       orgConfigName:    cachedName,
       orgConfigSlogan1: '',
       orgConfigSlogan2: '',
       orgConfigLogoUrl: '',
-      orgConfigSaving:  false
+      orgConfigSaving:  false,
+      orgLogoLoadFailed: false,
+      orgConfigOrgTypeIndex: seedIdx,
+      orgConfigOrgType: seedOrgType
     });
     // 后台拉取最新配置覆盖（slogan / logo 等本地缓存没有的字段）
     try {
@@ -4501,12 +5356,19 @@ Page({
       });
       const d = res && res.result && res.result.data;
       if (d) {
+        // 🆕 机构类型：找不到匹配项（历史门店未设置/取值不在这 3 档内）时，index
+        // 兜底为 -1（picker 展示待选提示，不会误显示成列表第一项"社区助餐"）
+        const fetchedOrgType = d.orgType || '';
+        const matchedIdx = ORG_CONFIG_TYPE_OPTIONS.findIndex(o => o.value === fetchedOrgType);
         this.setData({
           // 优先取 storeName（权威字段），回退 registeredName，再回退已预填的缓存值
           orgConfigName:    d.storeName || d.registeredName || cachedName,
           orgConfigSlogan1: d.slogan1 || '',
           orgConfigSlogan2: d.slogan2 || '',
-          orgConfigLogoUrl: (Array.isArray(d.storefrontPhotos) && d.storefrontPhotos[0]) || ''
+          orgConfigLogoUrl: (Array.isArray(d.storefrontPhotos) && d.storefrontPhotos[0]) || '',
+          orgLogoLoadFailed: false,
+          orgConfigOrgTypeIndex: matchedIdx,
+          orgConfigOrgType: fetchedOrgType
         });
       }
     } catch (err) {
@@ -4543,7 +5405,7 @@ Page({
       const cloudPath = `org-logos/${Date.now()}_logo.jpg`;
       const uploadRes = await wx.cloud.uploadFile({ cloudPath, filePath: tempPath });
       wx.hideLoading();
-      this.setData({ orgConfigLogoUrl: uploadRes.fileID });
+      this.setData({ orgConfigLogoUrl: uploadRes.fileID, orgLogoLoadFailed: false });
     } catch (err: any) {
       wx.hideLoading();
       if (err && typeof err.errMsg === 'string' && err.errMsg.indexOf('cancel') !== -1) return;
@@ -4551,11 +5413,38 @@ Page({
     }
   },
 
+  // 🐛 组织 Logo 加载失败兜底：cloud fileID 可能因为文件被删除/权限变更等原因
+  // 404/500，binderror 触发后降级回"点击上传"占位态，而不是留一个裂图
+  onOrgLogoLoadError(e: any) {
+    console.warn('[onOrgLogoLoadError] 组织 Logo 加载失败:', e && e.detail);
+    this.setData({ orgLogoLoadFailed: true });
+  },
+
+  // 🆕 悬浮"清空"按钮：只清空本次表单里的预览态，退回"点击上传"占位——不主动
+  // 调用任何删除云存储文件的接口（避免误删已被其它记录引用的历史图片），真正
+  // 生效仍要点【保存配置】把 storefrontPhotos 落库覆盖
+  onClearOrgLogo() {
+    this.setData({ orgConfigLogoUrl: '', orgLogoLoadFailed: false });
+  },
+
   async onSaveOrgConfig() {
     if (this.data.orgConfigSaving) return;
     const { orgConfigName, orgConfigSlogan1, orgConfigSlogan2, orgConfigLogoUrl } = this.data;
     if (!orgConfigName.trim()) {
       wx.showToast({ title: '组织名称不能为空', icon: 'none' });
+      return;
+    }
+    // super_admin 没有自己绑定的门店（云函数 resolveWriteTarget 对 super_admin
+    // 强制要求显式 storeId，见 manageStoreProfile 里"请指定目标门店"报错），必须
+    // 先选定巡检门店才能保存——与 onOpenStoreStatsModal 同一套超管选店前置校验，
+    // 不再对云函数发起注定失败的请求
+    const orgCfgStoreId = ((this.data.patriarchData as any)?.currentStoreId as string)
+      || this.data.currentInspectStoreId
+      || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
+      || (getSelectedStore() && getSelectedStore().storeId)
+      || '';
+    if (this.data.isSuperAdmin && !orgCfgStoreId) {
+      wx.showToast({ title: '请先选择巡检门店', icon: 'none' });
       return;
     }
     this.setData({ orgConfigSaving: true });
@@ -4572,10 +5461,9 @@ Page({
       if (orgConfigLogoUrl) {
         updateData.storefrontPhotos = [orgConfigLogoUrl];
       }
-      // super_admin 必须传 storeId，patriarch 传了也无害（云函数对 patriarch 忽略此参数）
-      const orgCfgStoreId = ((this.data.patriarchData as any)?.currentStoreId as string)
-        || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
-        || '';
+      // 🆕 机构类型：不再由本弹窗写入——已改为进入首页时的工作空间选择一次性确定，
+      // 此处只读展示（见 WXML），不下发 orgType 更新，避免覆盖首页选定的真实值
+      // super_admin 必须传 storeId，patriarch/manager 传了也无害（云函数对非超管忽略此参数）
       if (orgCfgStoreId) updateData.storeId = orgCfgStoreId;
       const res = await wx.cloud.callFunction({
         name: 'manageStoreProfile',
@@ -4603,9 +5491,11 @@ Page({
         console.warn('[onSaveOrgConfig] 缓存更新失败，不影响主流程:', cacheErr);
       }
 
-      // 刷新门店状态缓存（取 patriarchData.currentStoreId，因为本弹窗仅大家长可见）
-      const storeId = (this.data.patriarchData && this.data.patriarchData.currentStoreId) as string;
-      if (storeId) setTimeout(() => fetchAndSyncStoreStatus(storeId), 600);
+      // 🐛 刷新门店状态缓存：此前只取 patriarchData.currentStoreId，注释称"本弹窗仅
+      // 大家长可见"——但店长现在也能打开这个弹窗（见门店管理中心新增的组织信息配置
+      // 入口），店长的 patriarchData 从不加载、永远是初始空值，导致这里静默失效。
+      // 改用与上面 orgCfgStoreId 一致的口径，三种角色都能正确刷新
+      if (orgCfgStoreId) setTimeout(() => fetchAndSyncStoreStatus(orgCfgStoreId), 600);
     } catch (err: any) {
       console.error('[onSaveOrgConfig]', err);
       wx.showToast({ title: err.message || '网络异常，请重试', icon: 'none' });

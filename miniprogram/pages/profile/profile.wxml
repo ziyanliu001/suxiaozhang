@@ -68,26 +68,34 @@
              家长"这种把"数据权限范围"和"业务身份"硬缝合的双重语义文案，界面上第一眼
              看不出这到底是店名还是模式。门店归属信息本就在订阅信息卡片等处单独展示
              （见 subscription-info-value），胶囊本身只需要回答"我现在是什么角色" -->
-        <view class="role-badge-row">
-          <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
-            <view class="badge-icon-svg icon-svg-flower"></view>
-            <text>{{currentUserRole === 'super_admin' ? '超级管理员' :
-              currentUserRole === 'store_manager' ? '👑 店长' :
-              currentUserRole === 'finance' ? '财务' :
-              currentUserRole === 'store_patriarch' ? '大家长' :
-              (isFamily || currentUserRole === 'store_family') ? '家人' :
-              '义工'}}</text>
+        <!-- 🆕 大家长身份 Banner：把角色胶囊 + 归属机构合并进同一张高质感条带，
+             仅 isPatriarch 时套用暖金渐变底（.identity-banner-patriarch），
+             其余角色沿用原本各自独立展示、无背景条的样式，不影响既有布局。
+             注：大家长本身没有"视角切换"功能——那是仅 isRealSuperAdmin 才有的
+             预览层能力（见下方 view-mode-switch-card），这里不为真实大家长
+             伪造一个不存在的切换入口，只做视觉整合 -->
+        <view class="identity-banner {{isPatriarch ? 'identity-banner-patriarch' : ''}}">
+          <view class="role-badge-row">
+            <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
+              <view class="badge-icon-svg icon-svg-flower"></view>
+              <text>{{currentUserRole === 'super_admin' ? '超级管理员' :
+                currentUserRole === 'store_manager' ? '👑 店长' :
+                currentUserRole === 'finance' ? '财务' :
+                currentUserRole === 'store_patriarch' ? '🏛️ 大家长' :
+                (isFamily || currentUserRole === 'store_family') ? '家人' :
+                '义工'}}</text>
+            </view>
           </view>
-        </view>
 
-        <!-- 🆕 显式呈现归属机构/平台：与角色胶囊分离展示，避免"全国总览 · 家长"
-             这类把数据权限范围和业务身份硬缝合的双重语义文案（见上方 role-badge-row
-             旁的历史注释） -->
-        <view class="belong-store-tag">
-          <text class="store-icon">📍</text>
-          <text class="store-label">归属机构：</text>
-          <text class="store-name">{{currentStoreName || '未绑定机构'}}</text>
-          <text class="org-type-badge" wx:if="{{orgTypeBadge}}">{{orgTypeBadge}}</text>
+          <!-- 🆕 显式呈现归属机构/平台：与角色胶囊分离展示，避免"全国总览 · 家长"
+               这类把数据权限范围和业务身份硬缝合的双重语义文案（见上方 role-badge-row
+               旁的历史注释） -->
+          <view class="belong-store-tag">
+            <text class="store-icon">📍</text>
+            <text class="store-label">归属机构：</text>
+            <text class="store-name">{{currentStoreName || '未绑定机构'}}</text>
+            <text class="org-type-badge" wx:if="{{orgTypeBadge}}">{{orgTypeBadge}}</text>
+          </view>
         </view>
 
         <!-- 🌐 超管专属：当前巡检门店指示器，点击唤起【门店选择与搜索】弹窗。
@@ -191,6 +199,10 @@
           </view>
           <view class="item-arrow">❯</view>
         </view>
+
+        <!-- 「我的提交与数据」已解除 isFamily 限制，全员统一走下方共享的
+             「日常记录」分组展示（该分组的 wx:if 已改为逐项按角色控制，
+             不再整组屏蔽家人），此处不再重复渲染，避免家人看到两份入口 -->
       </view>
 
       <!-- 🏡 站点家园/雨花家园：门店整体视角——档案 + 日志 + 关注门店 + 建议反馈。
@@ -224,13 +236,16 @@
           <view class="item-arrow">❯</view>
         </view>
 
-        <!-- 爱心建议箱：改为小程序原生半屏弹窗（见底部 feedback-sheet-*），
-             不再用微信官方 open-type="feedback" 原生反馈页——那个入口去到的是
-             微信平台通用反馈通道，不落在本项目自己的数据里，店长/运营看不到 -->
+        <!-- 🐛 命名统一："爱心建议箱"改为"爱心意见箱"——原文案与它实际打开的
+             半屏弹窗标题（见下方 feedback-sheet-title "📮 爱心意见箱"）对不上，
+             点进去发现标题跟入口文案不一致，容易让人怀疑点错了地方。改为小程序
+             原生半屏弹窗（见底部 feedback-sheet-*），不再用微信官方
+             open-type="feedback" 原生反馈页——那个入口去到的是微信平台通用
+             反馈通道，不落在本项目自己的数据里，店长/运营看不到 -->
         <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenFeedbackModal">
           <view class="item-left">
             <text class="manager-only-emoji">📮</text>
-            <text class="item-text">爱心建议箱</text>
+            <text class="item-text">爱心意见箱</text>
           </view>
           <view class="pd-feedback-entry-right">
             <view class="badge" wx:if="{{unreadReplyCount > 0}}">{{unreadReplyCount}}</view>
@@ -269,9 +284,9 @@
          🛡️ 超管视角下彻底隐藏：套餐订阅是租户/门店维度的权益，超管作为平台方本人
          无需（也不该）看到"立即开通专业版"这类面向租户的推销卡片——此前误与
          isPatriarch/isFinance 共用同一张卡片，现显式排除 isSuperAdmin -->
-    <!-- 🆕 大家长不再展示这张整行大卡片：专业版服务状态对大家长而言收纳进
-         下方「区块三：高级数据与服务」的并排轻量入口卡片，与全国数据看板
-         并列展示，不再单独占用一整行——财务角色需求不变，仍显示完整版 -->
+    <!-- 🆕 大家长（及店长）不再展示这张整行大卡片：专业版服务状态收纳进上方
+         「顶部卡片区」.top-advanced-secondary 弱化辅助卡片，与全国数据看板
+         并排展示，不再单独占用一整行——财务角色需求不变，仍显示完整版 -->
     <view class="pro-service-card" wx:if="{{isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch}}">
       <view class="pro-card-header">
         <text class="pro-title">👑 专业版服务状态</text>
@@ -289,27 +304,56 @@
            （见 sa-dev-tool-row），与真实订阅管理操作解耦，避免重复入口 -->
     </view>
 
-    <!-- 💰 财务角色卡片组第二部分：门店餐饮与物资统计 / 本店数据明细——原"财务稽核
-         专区"卡片内容原样保留，只是与上面的专业版服务状态卡片相邻组成同一个
-         "财务角色"功能区。isFinance 严格等于 displayRole === 'finance'（不含大家长/
-         超管/店长），不需要额外排除条件 -->
-    <view class="patriarch-panel-card" wx:if="{{isFinance}}">
+    <!-- 💰 财务角色卡片组第二部分：财务稽核专区——isFinance 严格等于
+         displayRole === 'finance'（不含大家长/超管/店长），不需要额外排除条件。
+         🆕 深度重构：新增 3 列 KPI 数据看板（待复核凭证/本月稽核总额/合规预警，
+         见 fetchFinanceAuditData），下方 4 个操作入口重新梳理为财务核心工作流：
+         凭证快速复核 → 门店账目明细 → 阳光账本核查 → Excel 财务报表导出 -->
+    <view class="patriarch-panel-card finance-audit-card" wx:if="{{isFinance}}">
       <view class="patriarch-panel-header">
         <text class="patriarch-panel-title">💰 财务稽核专区</text>
       </view>
 
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenStoreStatsModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📊</text>
-          <text class="item-text">门店餐饮与物资统计</text>
+      <!-- 3 列 KPI 数据看板：待复核凭证 >0 橙色高亮，本月稽核总额加粗金额，
+           合规预警/异常 >0 红色警示 -->
+      <view class="fa-kpi-grid" wx:if="{{!financeAuditData.loading}}">
+        <view class="fa-kpi-cell">
+          <text class="fa-kpi-val {{financeAuditData.pendingReviewCount > 0 ? 'fa-warn' : ''}}">{{financeAuditData.pendingReviewCount}}</text>
+          <text class="fa-kpi-lbl">待复核凭证</text>
         </view>
-        <view class="item-arrow">❯</view>
+        <view class="fa-kpi-cell">
+          <text class="fa-kpi-val fa-bold">¥{{financeAuditData.monthAuditTotal}}</text>
+          <text class="fa-kpi-lbl">本月稽核总额</text>
+        </view>
+        <view class="fa-kpi-cell">
+          <text class="fa-kpi-val {{financeAuditData.anomalyCount > 0 ? 'fa-danger' : ''}}">{{financeAuditData.anomalyCount}}</text>
+          <text class="fa-kpi-lbl">合规预警/异常</text>
+        </view>
+      </view>
+      <view class="fa-kpi-grid" wx:else>
+        <view class="fa-kpi-cell skel-cell" wx:for="{{[1,2,3]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-lg"></view>
+          <view class="skel-bar skel-bar-sm"></view>
+        </view>
+      </view>
+
+      <view class="fa-divider"></view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToVoucherReview">
+        <view class="item-left">
+          <text class="manager-only-emoji">🧾</text>
+          <text class="item-text">凭证快速复核</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="badge" wx:if="{{financeAuditData.pendingReviewCount > 0}}">{{financeAuditData.pendingReviewCount}}</view>
+          <view class="item-arrow">❯</view>
+        </view>
       </view>
 
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
         <view class="item-left">
-          <text class="manager-only-emoji">📑</text>
-          <text class="item-text">本店数据明细（账目核对）</text>
+          <view class="item-icon-svg icon-svg-bar-chart"></view>
+          <text class="item-text">门店账目明细</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
@@ -320,6 +364,40 @@
           <text class="item-text">阳光账本核查</text>
         </view>
         <view class="item-arrow">❯</view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onExportFinanceExcel">
+        <view class="item-left">
+          <text class="manager-only-emoji">📊</text>
+          <text class="item-text">Excel 财务报表导出</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
+    <!-- 🆕 顶部卡片区（数据与高级功能）：左侧主卡片加粗突出展示；专业服务弱化为
+         右侧轻量 Banner/Tag，只标明开通状态，不与核心数据入口抢视觉焦点——两者
+         物理并排，暗示"核心数据"与"增值服务"同一层级但主次分明。店长与家长
+         视角共用同一套顶部卡片外壳，但文案按角色区分：
+         🐛 根因修复：此前不分角色一律显示"全国数据看板/查看全平台"，但
+         onPatriarchGoToNationalDashboard 跳转到 statistics.wxml 后，只有
+         isPatriarch 才会触发 _triggerPatriarchNationalView() 真正切到全国聚合视图
+         （见 statistics.ts onLoad 对 _autoNationalIntent 的判断），isManager 点进去
+         只是落在自己门店的常规历史统计页——按设计店长本就不该有跨店数据权限，
+         这是正确的行为，但顶部卡片文案"全国数据看板/查看全平台"完全说错了，
+         点进去发现根本不是全国数据，容易被当成 bug 反馈。现在按角色分文案，
+         店长看到的是与实际落地页一致的"所在店铺历史数据看板" -->
+    <view class="top-advanced-row" wx:if="{{(isPatriarch || isManager) && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance}}">
+      <view class="top-advanced-primary" hover-class="ui-hover" bindtap="onPatriarchGoToNationalDashboard">
+        <text class="top-advanced-primary-icon">{{isPatriarch ? '🌐' : '📊'}}</text>
+        <text class="top-advanced-primary-title">{{isPatriarch ? '全国数据看板' : '所在店铺历史数据看板'}}</text>
+        <text class="top-advanced-primary-sub">{{isPatriarch ? '查看全平台 / 全国统计数据' : '查看本店历史经营数据'}}</text>
+        <text class="top-advanced-primary-arrow">❯</text>
+      </view>
+      <view class="top-advanced-secondary {{subscriptionInfo.isActive ? 'active' : ''}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
+        <text class="top-advanced-secondary-icon">👑</text>
+        <text class="top-advanced-secondary-title">专业服务</text>
+        <text class="top-advanced-secondary-tag">{{subscriptionInfo.isActive ? '已开通' : '未开通 · 点击了解'}}</text>
       </view>
     </view>
 
@@ -356,9 +434,18 @@
             <text class="pd-health-val {{patriarchData.monthNetPositive ? 'green' : 'red'}}">{{patriarchData.monthNetPositive ? '+' : '-'}}¥{{patriarchData.monthNet}}</text>
           </view>
         </view>
-        <view class="pd-verify-row">
-          <text class="pd-verify-icon">🛡️</text>
-          <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
+        <!-- 🆕 防伪验真进度条：原来只有一行纯文字"已验真 X / 共 Y 条"，看不出
+             进度快慢；现补上分段进度条，与荣誉勋章详情弹窗的 .badge-detail-progress-*
+             同一套视觉手法（轨道+渐变填充），百分比由 fetchPatriarchDashboardData()
+             算好，WXML 只做纯变量输出 -->
+        <view class="pd-verify-section">
+          <view class="pd-verify-row">
+            <text class="pd-verify-icon">🛡️</text>
+            <text class="pd-verify-text">防伪验真：已验真 {{patriarchData.auditedCount}} / 共 {{patriarchData.totalCount}} 条</text>
+          </view>
+          <view class="pd-verify-progress-track" wx:if="{{patriarchData.totalCount > 0}}">
+            <view class="pd-verify-progress-fill" style="width: {{patriarchData.verifyProgressPercent}}%;"></view>
+          </view>
         </view>
       </view>
 
@@ -416,9 +503,12 @@
         </view>
       </view>
 
-      <!-- 🗂️ 【日常审批与安全】：成员管理 + 待审批申请(Badge) + 待审核餐报(Badge) +
-           安全密钥/邀请码，四项高频/高敏操作用宫格突出，带待办数量的红点角标 -->
-      <text class="pd-mgmt-section-title">日常审批与安全</text>
+      <!-- 🗂️ 【门店管理中心】：成员/审批/账目——四项最高频的门店管理动作用 2x2
+           宫格突出，带待办数量的红点角标。🆕 原第 4 格"安全密钥/邀请码"迁到下方
+           【文化与平台监管】组，腾出的位置换成"门店账目与凭证管理"（原本在
+           下面的列表里）——三组划分严格对齐"成员/审批/账目"|"组织/公告"|
+           "文化与平台监管"这三条业务边界，而不是按"操作频率"这种此前的口径分组 -->
+      <text class="pd-mgmt-section-title">门店管理中心</text>
       <view class="pd-mgmt-grid">
         <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
           <text class="pd-mgmt-grid-icon">⚙️</text>
@@ -437,25 +527,19 @@
           <text class="pd-mgmt-grid-label">待审核餐报</text>
         </view>
 
-        <!-- 🔐 安全密钥 / 🎫 邀请码：两项操作合并进同一格子，上下两个可各自独立
-             点击的子行，避免为两个低频但敏感的操作各占一整格 -->
-        <view class="pd-mgmt-grid-cell pd-mgmt-grid-cell--split">
-          <view class="pd-mgmt-grid-subrow" hover-class="ui-hover" catchtap="onOpenAdminKeyModal">
-            <text class="pd-mgmt-grid-subicon">🔐</text>
-            <text class="pd-mgmt-grid-sublabel">安全密钥</text>
-          </view>
-          <view class="pd-mgmt-grid-subdivider"></view>
-          <view class="pd-mgmt-grid-subrow" hover-class="ui-hover" catchtap="onPatriarchGenCode">
-            <text class="pd-mgmt-grid-subicon">🎫</text>
-            <text class="pd-mgmt-grid-sublabel">邀请码</text>
-          </view>
+        <!-- 🆕 门店账目与凭证管理：原【本店数据看板】（合并自【门店餐饮与物资统计】+
+             【本店数据明细】），从下方"运营配置"列表移入本宫格，与 isManager/
+             isFinance 的同款入口保持命名/跳转目标一致 -->
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
+          <text class="pd-mgmt-grid-icon">📊</text>
+          <text class="pd-mgmt-grid-label">账目与凭证</text>
         </view>
       </view>
 
       <view class="pd-mgmt-divider"></view>
 
-      <!-- 🗂️ 【门店运营配置】：组织信息配置 / 门店公告通知 / 爱心意见箱，
-           低频公示与配置类操作，保留列表形式，不与上方高频宫格抢视觉焦点 -->
+      <!-- 🗂️ 【门店运营配置】：组织信息配置 + 门店公告/通知——低频公示与配置类
+           操作，保留列表形式，不与上方高频宫格抢视觉焦点 -->
       <text class="pd-mgmt-section-title">门店运营配置</text>
 
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenOrgConfigModal">
@@ -478,6 +562,13 @@
         </view>
       </view>
 
+      <view class="pd-mgmt-divider"></view>
+
+      <!-- 🗂️ 【文化与平台监管】：爱心意见箱（社区文化/心声反馈）+ 安全密钥 +
+           邀请码（门店准入与治理相关的监管类操作），与上面两组的"日常运营"
+           性质不同，单独归为第三组 -->
+      <text class="pd-mgmt-section-title">文化与平台监管</text>
+
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
         <view class="item-left">
           <text class="manager-only-emoji">📮</text>
@@ -488,21 +579,54 @@
           <view class="item-arrow">❯</view>
         </view>
       </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenAdminKeyModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🔐</text>
+          <text class="item-text">安全密钥</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onPatriarchGenCode">
+        <view class="item-left">
+          <text class="manager-only-emoji">🎫</text>
+          <text class="item-text">邀请码</text>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
     </view>
 
-    <!-- 🆕 区块三：高级数据与服务——专业版服务状态 + 全国数据看板收纳为并排的
-         轻量入口卡片，不再各自占用一整行巨型卡片；两者都属于"低频但重要"的
-         高级功能，物理并排也暗示二者同一层级（增值服务 / 数据） -->
-    <view class="pd-advanced-row" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}">
-      <view class="pd-advanced-card" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
-        <text class="pd-advanced-icon">👑</text>
-        <text class="pd-advanced-title">专业版服务</text>
-        <text class="pd-advanced-sub {{subscriptionInfo.isActive ? 'active' : ''}}">{{subscriptionInfo.isActive ? '已生效' : '未开通'}}</text>
+    <!-- 🆕 【店长专属】📊 本店数据概览：2x2 核心指标卡片，放在【门店管理中心】
+         正上方——店长打开个人中心第一眼就能扫到今日运营核心数字，不用逐个点开
+         管理弹窗才能看到。今日用餐人次/今日义工打卡/结余概览见
+         fetchManagerTodaySnapshot；待审批事项直接对三路已在 initMinePage 里
+         proactively 拉取好的角标计数求和展示，不发起额外请求 -->
+    <view class="mgr-snapshot-card" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch}}">
+      <view class="mgr-snapshot-header">
+        <text class="mgr-snapshot-title">📊 本店数据概览</text>
       </view>
-      <view class="pd-advanced-card" hover-class="ui-hover" bindtap="onPatriarchGoToNationalDashboard">
-        <text class="pd-advanced-icon">📊</text>
-        <text class="pd-advanced-title">全国数据看板</text>
-        <text class="pd-advanced-sub pd-advanced-tag">高级</text>
+      <view class="mgr-snapshot-grid">
+        <view class="mgr-snapshot-cell">
+          <text class="mgr-snapshot-val">{{todayMealsCount}}</text>
+          <text class="mgr-snapshot-lbl">今日用餐人次</text>
+        </view>
+        <view class="mgr-snapshot-cell">
+          <text class="mgr-snapshot-val">{{todayVolunteersCount}}</text>
+          <text class="mgr-snapshot-lbl">今日义工打卡</text>
+        </view>
+        <view class="mgr-snapshot-cell">
+          <text class="mgr-snapshot-val {{(pendingMemberApplicationCount + pendingVolunteerSubmissionCount + pendingFeedbackCount) > 0 ? 'highlight' : ''}}">{{pendingMemberApplicationCount + pendingVolunteerSubmissionCount + pendingFeedbackCount}}</text>
+          <text class="mgr-snapshot-lbl">待审批事项</text>
+        </view>
+        <view class="mgr-snapshot-cell">
+          <text class="mgr-snapshot-val">¥{{storeNetBalance}}</text>
+          <text class="mgr-snapshot-lbl">爱心积攒 / 结余</text>
+        </view>
       </view>
     </view>
 
@@ -522,42 +646,36 @@
         </view>
       </view>
 
-      <!-- 🗂️ 分组一：核心日常审批——成员权限管理 + 待审批成员申请 + 待审核餐报
-           物资，三项都是高频日常运维操作，带待办数量 Badge 提醒 -->
+      <!-- 🗂️ 分组一：核心日常审批——2x2 宫格，与大家长专属的门店管理中心
+           （见上方 isPatriarch 卡片）同一套 .pd-mgmt-grid 视觉语言，两个角色的
+           管理中心不再一个是宫格一个是纯列表。四项都是高频日常运维操作，
+           带待办数量 Badge 提醒 -->
       <text class="pd-mgmt-section-title">核心日常审批</text>
+      <view class="pd-mgmt-grid">
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
+          <text class="pd-mgmt-grid-icon">⚙️</text>
+          <text class="pd-mgmt-grid-label">成员权限管理</text>
+        </view>
 
-      <!-- 👥 成员权限管理 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">⚙️</text>
-          <text class="item-text">成员权限管理</text>
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
+          <view class="pd-mgmt-grid-badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
+          <text class="pd-mgmt-grid-icon">🙋</text>
+          <text class="pd-mgmt-grid-label">待审批申请</text>
         </view>
-        <view class="pd-feedback-entry-right">
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
 
-      <!-- 🙋 待审批的成员申请 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenMemberApplicationModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">👥</text>
-          <text class="item-text">待审批的成员申请</text>
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
+          <view class="pd-mgmt-grid-badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
+          <text class="pd-mgmt-grid-icon">📝</text>
+          <text class="pd-mgmt-grid-label">待审核餐报</text>
         </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingMemberApplicationCount > 0}}">{{pendingMemberApplicationCount}}</view>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
 
-      <!-- 📝 待审核的义工餐报与物资 -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenVolunteerSubmissionAdminModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📝</text>
-          <text class="item-text">待审核的义工餐报与物资</text>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <view class="badge" wx:if="{{pendingVolunteerSubmissionCount > 0}}">{{pendingVolunteerSubmissionCount}}</view>
-          <view class="item-arrow">❯</view>
+        <!-- 🆕 门店账目与凭证管理：原【本店数据看板】（合并自【门店餐饮与物资统计】+
+             【本店数据明细】），门店维度的账目/凭证管理是门店管理职责，不该混在
+             个人提交流水清单里，与 isFinance「财务稽核专区」的同款入口保持
+             命名/跳转目标一致 -->
+        <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
+          <text class="pd-mgmt-grid-icon">📊</text>
+          <text class="pd-mgmt-grid-label">账目与凭证</text>
         </view>
       </view>
 
@@ -645,17 +763,19 @@
          合并重构为两个更清晰的入口：「我的护持历程」（个人打卡/参与日志，即原
          "服务历程"改名）与「我的提交与数据」（餐报+物资提交历史，弹窗内新增
          月度统计摘要 + 跳转完整统计的入口，见下方 my-vs-monthly-stats）。
-         家人（服务对象）没有打卡/护持记录，整组隐藏；家人版"服务历程"已迁移到
-         上方 family-care-card 自己的"日常记录"列表首位，不在这里重复展示。
+         🆕 「我的提交与数据」已解除 isFamily 限制，全员统一可见（原先整组连同
+         该入口一起对家人隐藏，家人只能通过 family-care-card 里的重复入口查看，
+         现改为整组容器不再按角色隐藏，组内其余"打卡/管理"类入口改为逐项加
+         wx:if="{{!isFamily}}"，只有「我的提交与数据」保持无条件展示）。
          🔀 排在「核心荣誉」前面：日常操作类入口优先于荣誉展示 -->
-    <view class="list-group-label" wx:if="{{!isFamily}}">日常记录</view>
-    <view class="ui-card-wrapper action-list-container" wx:if="{{!isFamily}}">
+    <view class="list-group-label">日常记录</view>
+    <view class="ui-card-wrapper action-list-container">
       <!-- 🐛 双重图标修复：此前左侧 .item-icon-svg（SVG 矢量图标）与文案里手打的
            emoji（📜/📝）同时存在，等于同一个入口画了两枚图标，且 emoji 字形的行高
            与相邻纯文字菜单项不一致，会导致这两行看起来比其他行更高/字体更跳。
            统一改为与全页其余 .item-icon-svg 菜单项完全一致的单图标 + 纯文字模式
            （如"门店日志""管理视角切换"），字体大小/字重/颜色/行高全部复用 .item-text -->
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onTapServiceHistory">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{!isFamily}}" bindtap="onTapServiceHistory">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-flower"></view>
           <text class="item-text">{{isYuhuazhai ? '我的护持历程' : '我的志愿历程'}}</text>
@@ -672,51 +792,36 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 🍚 门店餐饮与物资统计：财务用 isFinance 面板、店长用 isManager 面板，各自已有独立入口；
-           这里仅为大家长 / 超管补齐（isPatriarch || isSuperAdmin 且 hasPrivilege），
-           避免在其他角色的日常记录分区重复展示 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege && !isFinance && !isManager}}" bindtap="onOpenStoreStatsModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">📊</text>
-          <text class="item-text">门店餐饮与物资统计</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
-
-      <!-- 🌟 本店数据明细：同上，仅为大家长 / 超管在日常记录里保留，其余角色已在各自专属面板查看 -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasPrivilege && !isFinance && !isManager}}" bindtap="onGoToStoreOverview">
-        <view class="item-left">
-          <text class="manager-only-emoji">📋</text>
-          <text class="item-text">本店数据明细</text>
-        </view>
-        <view class="item-arrow">❯</view>
-      </view>
+      <!-- 🆕 本店数据看板（原【门店餐饮与物资统计】+【本店数据明细】合并入口）
+           已从这个"个人日常记录"清单移出，改为收纳进各管理角色自己的【门店管理
+           中心】卡片（isManager/isPatriarch 的 patriarch-panel-card）及财务的
+           「💰 财务稽核专区」卡片内——这个清单现在严格只展示"个人提交流水"，
+           不再混入门店维度的管理/账目功能，避免个人视角与门店管理视角混淆 -->
 
       <!-- 🏠 门店档案：门店人员与服务人群画像（中共党员/社会工作者/志愿者/堂食老人等 7 项人数指标），
            店长/超管可编辑维护，财务/义工只读查看。
-           🛡️ 视觉统一：不再复用 .manager-only-cell 的暖金/桃色高亮背景——门店档案/
-           本店数据明细都只是普通的资料查看/编辑入口，套上高亮反而显得比"我的护持
-           足迹"等相邻项更突兀刺眼。保留 .manager-only-emoji 让🏠图标尺寸与上面管理
-           入口的图标一致，但外层容器改回纯 .action-item-cell，背景/圆角/内边距/
-           hover 全部与相邻项统一。
            🐛 权限修复：此前用 wx:if="{{!isVolunteer}}" 把义工排除在外，与义工日常记录
-           清单本应包含"门店档案"的设计意图不符——这里改为无条件展示（本区块外层已经
-           被 !isFamily 挡住，只有义工/管理层能走到这里，义工也该看到） -->
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStoreProfile">
+           清单本应包含"门店档案"的设计意图不符——这里改为按 !isFamily 展示（本区块
+           外层不再整体屏蔽家人后，门店档案对家人无意义，逐项补上 !isFamily）。
+           🆕 图标统一：与本组其余入口一样改用 item-icon-svg 图标库，不再用手打 emoji -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{!isFamily}}" bindtap="onGoToStoreProfile">
         <view class="item-left">
-          <text class="manager-only-emoji">🏠</text>
+          <view class="item-icon-svg icon-svg-home"></view>
           <text class="item-text">门店档案</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>
 
-      <!-- 📮 爱心建议箱：义工此前在个人页没有"提交建议"入口，复用家人卡片同款
-           onOpenFeedbackModal（小程序原生半屏弹窗，落在本项目自己的数据里，
-           店长/大家长能在各自管理中心的"爱心意见箱管理"里看到并回复） -->
-      <view class="action-item-cell" hover-class="ui-hover" bindtap="onOpenFeedbackModal">
+      <!-- 🐛 命名统一（与上方 245 行同一处修复）："爱心建议箱"改为"爱心意见箱"，
+           与它实际打开的半屏弹窗标题一致。义工此前在个人页没有"提交建议"入口，
+           复用家人卡片同款 onOpenFeedbackModal（小程序原生半屏弹窗，落在本项目
+           自己的数据里，店长/大家长能在各自管理中心的"爱心意见箱管理"里看到并
+           回复）。家人本就有自己卡片里的意见箱入口，这里逐项加 !isFamily 避免重复。
+           🆕 图标统一：改用 item-icon-svg 图标库 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{!isFamily}}" bindtap="onOpenFeedbackModal">
         <view class="item-left">
-          <text class="manager-only-emoji">📮</text>
-          <text class="item-text">爱心建议箱</text>
+          <view class="item-icon-svg icon-svg-mail"></view>
+          <text class="item-text">爱心意见箱</text>
         </view>
         <view class="pd-feedback-entry-right">
           <view class="badge" wx:if="{{unreadReplyCount > 0}}">{{unreadReplyCount}}</view>
@@ -726,8 +831,8 @@
 
       <!-- 激活店长 / 财务特权：从原独立置底卡片移入本组末尾，刻意保留 subtle 弱化
            视觉（.subtle-cell），不与上面的核心日常操作抢焦点。只在完全没有特权的
-           普通义工账号显示，家人（isFamily）已被本区块外层排除 -->
-      <view class="action-item-cell subtle-cell" hover-class="ui-hover" wx:if="{{!hasPrivilege}}" bindtap="onTriggerActivate">
+           普通义工账号显示，家人（isFamily）逐项加 !isFamily 排除 -->
+      <view class="action-item-cell subtle-cell" hover-class="ui-hover" wx:if="{{!hasPrivilege && !isFamily}}" bindtap="onTriggerActivate">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-key subtle-icon"></view>
           <text class="item-text subtle-text">激活店长 / 财务特权</text>
@@ -736,48 +841,51 @@
       </view>
     </view>
 
-    <!-- 🌐 全国纵览卡片：精准权限与视角隔离——严格仅超级管理员 + 全国视角（未在
-         【门店选择与搜索】弹窗里巡检某一家具体门店，currentInspectStoreId 为空）
-         才展示。普通义工/家人/店长/财务，以及超管切到"巡检某家门店"视角时，
-         彻底不渲染，让上面「我的护持历程」紧接下方「爱心护持榜/核心荣誉」
-         （若可见）连贯展示，不被一张与己无关的全网卡片打断视觉流。
-         🐛 currentInspectStoreId 的"全国"档位实际存的是空字符串，不是字面量
-         'ALL'（见该字段声明处注释与 sa-status-bar 的 wx:if 反向用法），这里
-         按真实数据语义取反判断 -->
-    <view class="national-overview-card" wx:if="{{isSuperAdmin && !currentInspectStoreId}}" hover-class="ui-hover" bindtap="onGoToNationalDashboard">
-      <view class="no-card-header">
-        <text class="no-card-title">🌐 全国纵览</text>
-        <view class="no-card-link">
-          <text>全国数据大屏</text>
-          <text class="no-card-link-arrow">＞</text>
+    <!-- 💖 全网爱心支持卡片：不展示门店总数/活跃门店/服务人次等运营数据网格，
+         也没有跳转数据大屏的卡片标题/入口——只保留「发心分布：阳善 vs 积阴德」
+         比例条这块公开、温情性质的内容；「最新爱心支持」滚动善缘墙已抽成独立
+         可复用组件 <yangshan-wall/>（与首页同款，见 components/yangshan-wall），
+         组件自行按 storeId 拉取数据，不需要本卡片再传一份 donors 列表进去。
+         🆕 数据源是公开只读云函数 getSunshineLedger（与首页「☀️ 阳光账本」入口
+         同款，见 fetchStoreLoveWallSummary），严格按调用方自己归属的 storeId
+         查询，不做任何角色权限校验——家人/义工/财务/店长/大家长/超管全部角色
+         都能看到，且只会看到自己所属门店的数据，不会带出其他门店的信息。
+         比例条 wx:if 与 <yangshan-wall/> 各自独立判空，不需要卡片外层再做
+         一次联合判断——donors 非空必然意味着 yangRatioPct>0（donors 只会来自
+         阳善报表），不存在"比例条为空但善缘墙有数据"的情况 -->
+    <view class="national-overview-card" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
+      <!-- 发心分布：阳善 vs 积阴德——从统计页「全国数据看板」迁移至此，原位置是
+           数据密集的运营/财务分析场景，这类温情公开展示放在那里既不醒目也不合
+           场景；个人中心是人人都会打开的页面，更适合公开展示 -->
+      <view class="no-merit-section no-merit-section--first">
+        <text class="no-merit-title">发心分布：阳善 vs 积阴德</text>
+        <view class="no-merit-bar-wrap">
+          <view class="no-merit-seg seg-yang" style="width:{{storeLoveWallMeritRatio.yangRatioPct}}%" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0}}"></view>
+          <view class="no-merit-seg seg-yin" style="width:{{storeLoveWallMeritRatio.yinRatioPct}}%" wx:if="{{storeLoveWallMeritRatio.yinRatioPct > 0}}"></view>
+        </view>
+        <view class="no-merit-legend">
+          <!-- 🆕 解释性提示文案：与首页提交报表时的「发心选择」卡片（onSelectMerit，
+               data-type="yang"/"yin"）用同一套措辞，帮用户看懂比例条到底在说什么——
+               选公示姓名(阳善)的会进下方善缘墙，选积阴德(匿名)的只计入比例不露名 -->
+          <view class="no-merit-legend-item" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0}}">
+            <view class="no-merit-dot dot-yang"></view>
+            <view class="no-merit-legend-text-col">
+              <text class="no-merit-legend-text">🌟 阳善（公开）{{storeLoveWallMeritRatio.yangRatioPct}}%</text>
+              <text class="no-merit-legend-caption">公开姓名，长养公信</text>
+            </view>
+          </view>
+          <view class="no-merit-legend-item" wx:if="{{storeLoveWallMeritRatio.yinRatioPct > 0}}">
+            <view class="no-merit-dot dot-yin"></view>
+            <view class="no-merit-legend-text-col">
+              <text class="no-merit-legend-text">🌙 积阴德（匿名）{{storeLoveWallMeritRatio.yinRatioPct}}%</text>
+              <text class="no-merit-legend-caption">隐名护持，涵养阴德</text>
+            </view>
+          </view>
         </view>
       </view>
 
-      <view class="no-stat-grid">
-        <view class="no-stat-cell">
-          <text class="no-stat-val">{{nationalOverviewStats.totalStores}}</text>
-          <text class="no-stat-lbl">门店总数</text>
-        </view>
-        <view class="no-stat-cell">
-          <text class="no-stat-val">{{nationalOverviewStats.activeStoreCount}}</text>
-          <text class="no-stat-lbl">活跃门店</text>
-        </view>
-        <view class="no-stat-cell">
-          <text class="no-stat-val">{{nationalOverviewStats.totalDiners}}</text>
-          <text class="no-stat-lbl">服务人次</text>
-        </view>
-        <view class="no-stat-cell">
-          <text class="no-stat-val">{{nationalOverviewStats.totalVolunteers}}</text>
-          <text class="no-stat-lbl">义工人数</text>
-        </view>
-        <view class="no-stat-cell">
-          <text class="no-stat-val">{{nationalOverviewStats.totalVolunteerHours}}</text>
-          <text class="no-stat-lbl">义工工时</text>
-        </view>
-        <view class="no-stat-cell">
-          <text class="no-stat-val">¥{{nationalOverviewStats.netAccumulation}}</text>
-          <text class="no-stat-lbl">净结余</text>
-        </view>
+      <view class="no-yangshan-wall-slot">
+        <yangshan-wall storeId="{{myStoreId}}" />
       </view>
     </view>
 
@@ -792,12 +900,15 @@
     </view>
 
     <!-- 🌸 爱心护持榜 + 🏅 核心荣誉徽章墙：从页面靠前位置搬入【义工角色】日常记录
-         区块内，物理相邻展示。可见范围保持原样不变（!isFamily && !isSuperAdmin，
-         即家人和纯超管视角看不到，其余角色——义工/店长/财务/大家长——都能看到，
+         区块内，物理相邻展示。可见范围（!isFamily && !isSuperAdmin && !isFinance，
+         家人/纯超管/财务视角均看不到，其余角色——义工/店长/大家长——都能看到，
          这组内容并非严格 isVolunteer 专属，缩窄会让其他角色丢失现有功能）。
+         🆕 财务角色排除：护持天数/累计工时/义工电子证书/服务榜单都是义工向的
+         个人荣誉展示，与财务的稽核职责无关，容易造成角色混淆——财务已有专属的
+         【财务稽核专区】数据看板（见 finance-audit-card），不再需要这组卡片
          🆕 大家长视角额外叠加折叠态判断（!isPatriarch || patriarchHonorExpanded）：
          非大家长角色恒为 true，行为不变；大家长仅在点击展开后才渲染 -->
-    <view class="merit-board-card" wx:if="{{!isFamily && !isSuperAdmin && (!isPatriarch || patriarchHonorExpanded)}}">
+    <view class="merit-board-card" wx:if="{{!isFamily && !isSuperAdmin && !isFinance && (!isPatriarch || patriarchHonorExpanded)}}">
       <view class="board-header">
         <view class="header-icon-svg icon-svg-flower"></view>
         <text class="header-title">爱心护持榜</text>
@@ -872,8 +983,8 @@
       </view>
     </view>
 
-    <view class="list-group-label" wx:if="{{!isFamily && !isSuperAdmin && (!isPatriarch || patriarchHonorExpanded)}}">核心荣誉</view>
-    <view class="honor-wall-card" wx:if="{{!isFamily && !isSuperAdmin && (!isPatriarch || patriarchHonorExpanded)}}">
+    <view class="list-group-label" wx:if="{{!isFamily && !isSuperAdmin && !isFinance && (!isPatriarch || patriarchHonorExpanded)}}">核心荣誉</view>
+    <view class="honor-wall-card" wx:if="{{!isFamily && !isSuperAdmin && !isFinance && (!isPatriarch || patriarchHonorExpanded)}}">
       <view class="honor-wall-header">
         <text class="honor-wall-title">🏅 我的核心荣誉</text>
         <view class="honor-wall-cert-link" bindtap="onGoToBadges">
@@ -2586,56 +2697,59 @@
   <view wx:if="{{showOrgConfigModal}}" class="onb-mask">
     <view class="onb-panel">
 
-      <!-- 标题栏 -->
-      <view class="onb-head">
-        <view class="onb-back-btn" bindtap="onCloseOrgConfigModal">✕</view>
+      <!-- 标题栏：Flex 居中标题 + 绝对定位关闭按钮——此前用"左侧✕ + 标题 + 右侧
+           等宽占位 view"三段式模拟两端对齐，但占位 view 与✕按钮实际渲染宽度
+           不对称（✕按钮没有固定尺寸，占位 view 又是空的 0 宽度），导致标题
+           视觉上并不居中、✕也不在真正的右上角。现改为标题独占一行居中，
+           关闭按钮脱离文档流绝对定位到右上角，两者互不干扰 -->
+      <view class="onb-head org-config-head">
         <text class="onb-head-title">🎨 组织信息配置</text>
-        <view class="onb-head-placeholder"></view>
+        <view class="onb-back-btn" bindtap="onCloseOrgConfigModal">✕</view>
       </view>
 
       <!-- 表单区 -->
       <scroll-view scroll-y class="onb-scroll">
-        <view class="onb-form-body">
+        <view class="onb-form-body" style="padding-top: 32rpx !important; padding-bottom: 32rpx !important; padding-left: 36rpx !important; padding-right: 36rpx !important; box-sizing: border-box !important; width: 100% !important; overflow: hidden !important;">
 
           <!-- 组织/门店名称 -->
           <view class="onb-field-group">
             <!-- 🆕 提示文案改为挂在标签右侧的细小灰字（.onb-field-label-row +
                  .onb-field-label-hint），不再单独占一整行大块文字 -->
-            <view style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; margin-bottom: 8rpx;">
-              <text class="onb-field-label org-field-label">门店名称</text>
-              <text style="font-size: 22rpx; color: #999999; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">简短即可，将结合所属地区汇总</text>
+            <view style="display: flex !important; flex-direction: column !important; align-items: flex-start !important; width: 100% !important; box-sizing: border-box !important; margin-bottom: 12rpx !important;">
+              <text style="font-size: 30rpx !important; font-weight: bold !important; color: #333333 !important;">门店名称</text>
+              <text style="font-size: 22rpx !important; color: #999999 !important; font-weight: normal !important; margin-top: 4rpx !important; text-align: left !important;">简短即可，将结合所属地区汇总</text>
             </view>
-            <input class="onb-field-input org-form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
+            <input class="onb-field-input org-form-input" style="width: 100% !important; box-sizing: border-box !important; background: #F8F9FA !important; padding: 16rpx 20rpx !important; border-radius: 12rpx !important; font-size: 28rpx !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; margin-top: 12rpx !important;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
           </view>
 
-          <!-- 🆕 机构/平台类型：驱动全局品牌/文化文案（归属徽标/文化配置入口标题/
-               关于页标题），保存后立即生效，不用等下次进页面 -->
+          <!-- 🆕 机构/平台类型：已改为进入首页时的工作空间选择一次性确定，此处仅只读展示，
+               不再提供二次选择入口，避免与首页选择产生歧义。
+               🎨 精简为轻量 Tag 标签 + 小字提示，替代原先大面积灰底伪输入框
+               （一整行 #F1F1EE 灰底容器，视觉上像个能点的输入框，实际不可编辑，
+               容易让人误以为交互失效；且占用一整行高度，与"仅供查看"的低优先级
+               信息不匹配） -->
           <view class="onb-field-group">
-            <view style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; margin-bottom: 8rpx;">
-              <text class="onb-field-label org-field-label">机构类型</text>
-              <text style="font-size: 22rpx; color: #999999; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">决定首页与个人中心的文化文案风格</text>
-            </view>
-            <picker mode="selector" range="{{orgConfigTypeOptions}}" range-key="label"
-                    value="{{orgConfigOrgTypeIndex}}" bindchange="onOrgConfigOrgTypeChange">
-              <view style="width: 100%; box-sizing: border-box; background-color: #F8F9FA; border-radius: 16rpx; padding: 20rpx 24rpx; display: flex; justify-content: space-between; align-items: center;">
-                <text>{{orgConfigOrgTypeIndex >= 0 ? orgConfigTypeOptions[orgConfigOrgTypeIndex].label : '请选择机构类型'}}</text>
-                <text style="color: #999999;">▼</text>
+            <view class="org-type-tag-row">
+              <text class="org-type-field-label">机构类型</text>
+              <view class="org-type-tag">
+                <text class="org-type-tag-text">{{orgConfigOrgTypeIndex >= 0 ? orgConfigTypeOptions[orgConfigOrgTypeIndex].label : '标准模式 / 默认'}}</text>
               </view>
-            </picker>
+            </view>
+            <text class="org-type-field-hint">进入首页时已选定，决定首页与个人中心的文化文案风格</text>
           </view>
 
           <!-- 🆕 文化寄语纵向上下分布，每句独立占满一行，避免文字被裁剪截断 -->
           <view class="onb-field-group culture-slogan-group">
-            <view style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; margin-bottom: 8rpx;">
-              <text class="onb-field-label org-field-label">文化寄语 / 家训配置</text>
-              <text style="font-size: 22rpx; color: #999999; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">展示于首页顶栏及每日餐报海报</text>
+            <view style="display: flex !important; flex-direction: column !important; align-items: flex-start !important; width: 100% !important; box-sizing: border-box !important; margin-bottom: 12rpx !important;">
+              <text style="font-size: 30rpx !important; font-weight: bold !important; color: #333333 !important;">文化寄语 / 家训配置</text>
+              <text style="font-size: 22rpx !important; color: #999999 !important; font-weight: normal !important; margin-top: 4rpx !important; text-align: left !important;">展示于首页顶栏及每日餐报海报</text>
             </view>
-            <view style="display: flex; flex-direction: column; width: 100%; gap: 16rpx;">
+            <view style="display: flex !important; flex-direction: column !important; width: 100% !important; gap: 16rpx !important;">
               <view class="culture-slogan-col">
                 <text class="culture-slogan-sub-label">第一句</text>
                 <input
                   class="onb-field-input org-form-input culture-slogan-input"
-                  style="width: 100%; box-sizing: border-box; background: #F8F9FA; padding: 16rpx 20rpx; border-radius: 12rpx; font-size: 28rpx;"
+                  style="width: 100% !important; box-sizing: border-box !important; background: #F8F9FA !important; padding: 16rpx 20rpx !important; border-radius: 12rpx !important; font-size: 28rpx !important; height: auto !important; min-height: 70rpx !important;"
                   placeholder="{{orgConfigOrgType === 'yuhuazhai' ? '如：长者先饭，幼者后饭' : '如：节约粮食，温暖同行'}}"
                   value="{{orgConfigSlogan1}}"
                   bindinput="onOrgConfigSlogan1Input"
@@ -2646,7 +2760,7 @@
                 <text class="culture-slogan-sub-label">第二句</text>
                 <input
                   class="onb-field-input org-form-input culture-slogan-input"
-                  style="width: 100%; box-sizing: border-box; background: #F8F9FA; padding: 16rpx 20rpx; border-radius: 12rpx; font-size: 28rpx;"
+                  style="width: 100% !important; box-sizing: border-box !important; background: #F8F9FA !important; padding: 16rpx 20rpx !important; border-radius: 12rpx !important; font-size: 28rpx !important; height: auto !important; min-height: 70rpx !important;"
                   placeholder="{{orgConfigOrgType === 'yuhuazhai' ? '如：一粥一饭，当思来处不易' : '如：爱心传递每一天'}}"
                   value="{{orgConfigSlogan2}}"
                   bindinput="onOrgConfigSlogan2Input"
