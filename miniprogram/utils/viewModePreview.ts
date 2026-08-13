@@ -37,6 +37,38 @@ export function setPreviewViewMode(mode: PreviewViewMode) {
   wx.setStorageSync(STORAGE_KEY, mode);
 }
 
+// 🐛 根因修复：currentViewMode（驱动 Banner"正在预览【XX视角】"文案与"管理视角
+// 切换"卡片当前选中项）此前在 index.ts/profile.ts 里都是无条件 getPreviewViewMode()——
+// 但这个函数只读独立的 STORAGE_KEY，跟 store-picker 手动切换身份（写入
+// current_user_role，即 resolveEffectiveRole 读的那个 key）完全是两套本地存储。
+// 一旦手动切换生效（如切到 volunteer），角色相关的 isVolunteer/isManager 等标志位
+// 已经正确更新，但 currentViewMode 依然读着那份可能早已过期、从未被这次切换touch过
+// 的旧值，导致 Banner/切换卡片显示的"视角"文案跟页面实际渲染的角色对不上。
+// resolveDisplayViewMode 统一收敛这条判断：effective role（已经过 resolveEffectiveRole
+// 融合过 storageRole 的最终角色）不是 super_admin 时，直接从这个角色反推视角枚举，
+// 不再看那份独立、可能过期的预览态；effective role 仍是 super_admin 时（真正的
+// "视角切换"预览场景，或压根没有任何手动切换），才读 getPreviewViewMode()——与
+// applyRoleViewOverride() 自身"realRole !== 'super_admin' 时原样返回"的分支口径
+// 完全一致，不是另起一套新规则
+const NORMALIZED_ROLE_TO_VIEW_MODE: Record<string, PreviewViewMode> = {
+  super_admin: 'SUPER_ADMIN',
+  store_patriarch: 'STORE_PATRIARCH',
+  store_manager: 'STORE_MANAGER',
+  finance: 'FINANCE',
+  volunteer: 'VOLUNTEER',
+  store_family: 'FAMILY'
+};
+
+/**
+ * 计算当前应展示的视角模式（PreviewViewMode），供 Banner 文案 / "管理视角切换"卡片
+ * 当前选中项使用。normalizedRole 传已经过 AuthService.resolveEffectiveRole 融合过
+ * storageRole 的最终生效角色（如 'volunteer'/'store_manager'），不是原始服务端角色。
+ */
+export function resolveDisplayViewMode(normalizedRole: string): PreviewViewMode {
+  if (normalizedRole === 'super_admin') return getPreviewViewMode();
+  return NORMALIZED_ROLE_TO_VIEW_MODE[normalizedRole] || 'SUPER_ADMIN';
+}
+
 export interface RoleDisplayFlags {
   currentUserRole: string;
   isVolunteer: boolean;
