@@ -2,7 +2,7 @@ import { AuthService } from './authService';
 import { generateReportText } from './reportGenerator';
 import { isStoreNameFuzzyMatch } from './constants';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate } from './dateUtils';
-import { isCloudAvailable } from './cloudGuard';
+import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from './cloudGuard';
 
 const STORAGE_KEY = 'local_report_logs';
 
@@ -92,8 +92,13 @@ const SENSITIVE_FIELD_KEYS = [
   'singleMealCost', 'costPerMeal',
   'totalIncome', 'totalExpense', 'ingredientExpense',
   'nationalTotalIncome', 'nationalTotalExpense', 'nationalNetAccumulation',
-  'listDonationTotal', 'otherDonation', 'expenseAmount',
+  'listDonationTotal', 'otherDonation', 'expenseAmount', 'nationalOfflineIncome',
   'dailyExpenseTotal', 'fixedExpenseTotal',
+  // 🆕 阳善/阴德统计看板：金额维度与 nationalOfflineIncome 同一档财务隐私，
+  // 志工脱敏（云函数出口处已同步脱敏，这里是第二层防线）；人次/占比
+  // （yangshanCount/yindeCount/totalSupportCount/yangshanRatioPct/yindeRatioPct）
+  // 不涉及绝对金额，不在此黑名单内，志工也能看到
+  'yangshanAmount', 'yindeAmount',
   'latestBalance', 'balance', 'todayBalance', 'yesterdayBalance',
   'systemBalance', 'adjustedBalance', 'balanceDiff',
   // 精确续航天数可反推资金余额，属于财务隐私，志工只保留 healthStatus 状态标签
@@ -541,6 +546,10 @@ export const DataService = {
         isCloudDown ? '[DataService] 云开发 SDK 不可用，getReports 已降级为本地缓存' : '[DataService] 云端查询失败，使用本地缓存:',
         isCloudDown ? '' : error
       );
+      // 🛡️ 已经稳妥地降级到本地缓存（不影响这次调用的结果），但如果是 SDK 损坏
+      // 特征错误，仍要顺手标记 isCloudReady=false，避免本次会话后续每一次
+      // getReports 调用都要重新撞一次同一个已知崩溃、白白多等一轮超时
+      reportCloudSdkErrorIfCorrupted(error);
 
       const openid = AuthService.getOpenid();
       let localReports = getLocalReports();

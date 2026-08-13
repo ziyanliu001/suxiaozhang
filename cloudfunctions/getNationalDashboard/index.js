@@ -130,7 +130,11 @@ function sanitizeReportForVolunteer(data, userRole) {
     'runwayDays',
     // 🆕 支出环比趋势会暴露"运营规模是在扩张还是收缩"这类财务动向，与它所描述的
     // 原始支出金额同一档隐私级别，一并脱敏；服务人次环比不涉及财务，不需要遮罩
-    'nationalTotalExpenseTrend'
+    'nationalTotalExpenseTrend',
+    // 🆕 阳善/阴德总金额：与 nationalTotalIncome 同一档财务隐私，服务端直接脱敏
+    // （而不是只靠客户端 dataService.ts 的第二层防线）；人次字段（yangshanCount/
+    // yindeCount/totalSupportCount）不涉及绝对金额，不在此黑名单内
+    'yangshanAmount', 'yindeAmount'
   ];
 
   const maskOne = (item) => {
@@ -240,7 +244,31 @@ exports.main = async (event, context) => {
     // 的旧记录；新机构账套严格等值匹配，100% 隔离，杜绝跨租户数据污染（见函数注释）
     const storesQuery = makeTenantFilter(tenantId);
     const storesRes = await db.collection('stores').where(storesQuery).get();
-    const allStores = storesRes.data || [];
+    let allStores = storesRes.data || [];
+
+    // 🏢 平台类型筛选（orgType）：在 tenantId 隔离之后、filterMode 收窄之前做第一层过滤，
+    // 两者可独立叠加——例如"雨花斋 + 按地区筛选"同时生效。
+    // 没有 orgType 字段的历史门店（建站前录入）在"全部平台"模式下正常计入；选定具体类型
+    // 后，历史门店因 orgType 字段缺失而被排除——预期行为，驱动门店完善档案录入。
+    const requestedOrgType = (event && event.orgType && event.orgType !== 'all') ? String(event.orgType) : null;
+    if (requestedOrgType) {
+      allStores = allStores.filter(s => s.orgType === requestedOrgType);
+    }
+
+    // 🏮 品牌矩阵筛选（platformFamily）：与 orgType 筛选互斥——选了矩阵就按 platformFamily
+    // 过滤，覆盖旗下所有 orgType（如"同心慈善会矩阵"涵盖 tongxin_children + tongxin_cancer_care）。
+    // orgType 已经过滤过则跳过（两者不叠加，避免结果集为空）。
+    const requestedPlatformFamily = (event && event.platformFamily && event.platformFamily !== 'all')
+      ? String(event.platformFamily) : null;
+    if (requestedPlatformFamily && !requestedOrgType) {
+      allStores = allStores.filter(s => s.platformFamily === requestedPlatformFamily);
+    }
+
+    // 品牌矩阵标签：用于 nationalSummary 回传，供前端计算大屏标题
+    const PLATFORM_FAMILY_LABELS = { tongxin: '同心慈善会矩阵', yuhuazhai: '雨花矩阵' };
+    const brandMatrixLabel = requestedPlatformFamily
+      ? (PLATFORM_FAMILY_LABELS[requestedPlatformFamily] || requestedPlatformFamily)
+      : null;
 
     // 🆕 全国大屏门店选择范围：filterMode 决定本次聚合的门店集合，默认 'national'
     // （本机构全量门店，与升级前行为完全一致，老调用方不传该参数不受影响）。
@@ -421,9 +449,47 @@ exports.main = async (event, context) => {
     // report_logs.volunteerCount/volunteerHours 字段来源
     let nationalTotalVolunteers = 0;
     let nationalTotalVolunteerHours = 0;
+    // 👵 全国长者关怀细分维度：与首页填报字段一一对应
+    //   dineInSeniors   → 堂食长者人次
+    //   deliverySeniors → 送餐长者人次
+    //   listeningSeniors→ 倾听陪伴长者人次（独立关怀指标，不计入用餐总数）
+    //   takeawayCount   → 打包份数
+    //   deliveryVolunteers → 送餐志愿者人次
+    // 缺失字段（早期数据未填报）一律兜底 0，不影响聚合结果
+    let nationalDineInSeniors = 0;
+    let nationalDeliverySeniors = 0;
+    let nationalListeningSeniors = 0;
+    let nationalTakeawayCount = 0;
+    let nationalDeliveryVolunteers = 0;
+    // 💖 全网爱心支持与善缘统计：
+    //   nationalOfflineIncome   → 全网"现场爱心随喜"总额（report_logs.otherDonation 之和）
+    //   nationalSponsorCount / totalSupportCount → 全网爱心支持总人次
+    //     （所有 donationItems 条目数量之和，两个字段同值，totalSupportCount
+    //     是给"全网爱心支持与善缘墙"面板用的统一命名）
+    //   yangshanCount / yangshanAmount → 阳善（公开姓名）支持人次与金额
+    //   yindeCount / yindeAmount       → 积阴德（匿名）支持人次与金额
+    //   🐛 统计口径修正：yangshanCount/yindeCount 必须与 totalSupportCount 同一个
+    //   计量单位——按"每一条 donationItems 明细"计数（一份报表可能有多条支持
+    //   记录），而不是按"报表份数"计数（一份报表无论有几条明细都只算一次）。
+    //   此前误用了报表份数口径，会导致 yangshanCount + yindeCount ≠
+    //   totalSupportCount，两组数字对不上
+    //   publicDonorEntries → 最新 20 条公开（阳善）捐赠记录，供爱心滚动墙展示
+    let nationalOfflineIncome = 0;
+    let nationalSponsorCount = 0;
+    let yangshanCount = 0;
+    let yindeCount = 0;
+    let yangshanAmount = 0;
+    let yindeAmount = 0;
+    const publicDonorEntries = [];   // 积累后取最多 40 条，最终截取 20 条返回
+
     // 🌟 全国凭证合规率：有支出金额的记录中，附带小票/发票凭证图片的占比
     let nationalExpenseRecordCount = 0;
     let nationalReceiptRecordCount = 0;
+    // 📸 全国影像卷宗：来自 report_logs 的凭证图片张数（来自 daily_menus/activity_logs 在 forEach 后并行查询）
+    let totalReceiptPhotos = 0;
+    // 🌍 多业态受众统计：按门店 orgType 汇聚用餐/送餐人次，用于大屏"全网受助群体人次"分维度展示
+    const dineInByOrgType = {};   // { [orgType]: totalDineIn }
+    const deliveryByOrgType = {}; // { [orgType]: totalDelivery }
 
     const storeStatsMap = {};
 
@@ -432,6 +498,8 @@ exports.main = async (event, context) => {
       storeStatsMap[s._id] = {
         storeId: s._id,
         storeName: s.storeName || '未命名门店',
+        // 🏢 orgType 落入统计结构，供多业态受众分维度累加使用
+        orgType: s.orgType || 'other',
         city: region.city,
         province: region.province,
         totalDiners: 0,
@@ -505,17 +573,79 @@ exports.main = async (event, context) => {
       nationalTotalExpense += expense;
       nationalTotalVolunteers += parseFloat(log.volunteerCount) || 0;
       nationalTotalVolunteerHours += parseFloat(log.volunteerHours) || 0;
+      // 👵 长者关怀细分维度累加（缺失字段兜底 0）
+      nationalDineInSeniors    += parseInt(log.dineInSeniors, 10)     || 0;
+      nationalDeliverySeniors  += parseInt(log.deliverySeniors, 10)   || 0;
+      nationalListeningSeniors += parseInt(log.listeningSeniors, 10)  || 0;
+      nationalTakeawayCount    += parseInt(log.takeawayCount, 10)     || 0;
+      nationalDeliveryVolunteers += parseInt(log.deliveryVolunteers, 10) || 0;
       if (diners > 0 || dailyExpense > 0) nationalOpenDays++;
+
+      // 💖 爱心支持明细汇总：现场随喜总额 + 支持人次 + 阳善/积阴德分布 + 爱心滚动墙
+      nationalOfflineIncome += parseFloat(log.otherDonation) || 0;
+      const donationItems = Array.isArray(log.donationItems) ? log.donationItems : [];
+      nationalSponsorCount += donationItems.length;
+      // 🆕 阳善/阴德人次与金额分流：按明细条目（donationItems，每条=一位支持者）
+      // 计数与求和，不受 publicDonorEntries 40 条展示缓冲上限影响——总量统计
+      // 必须覆盖全部记录，展示列表只是"最新几条"的截断快照。两组累加完全
+      // 覆盖 nationalSponsorCount 的全集，故 yangshanCount + yindeCount 恒等于
+      // nationalSponsorCount（totalSupportCount）
+      const logDonationAmount = donationItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+      if (log.isAnonymous) {
+        yindeCount += donationItems.length;
+        yindeAmount += logDonationAmount;
+      } else {
+        yangshanCount += donationItems.length;
+        yangshanAmount += logDonationAmount;
+      }
+      // 收集公开（阳善）捐赠条目：logs 已按 dateString 降序取，所以最先遇到的就是最新的
+      // isAnonymous:false 且有明细条目时才入列；整份匿名报表(isAnonymous:true)统一跳过，
+      // 不再逐条检查 item 级别（item 本身没有独立的匿名标记）
+      if (!log.isAnonymous && donationItems.length > 0 && publicDonorEntries.length < 40) {
+        const entryStoreName = (storeStatsMap[matchedKey] && storeStatsMap[matchedKey].storeName)
+          || log.shopName || '爱心站点';
+        // 🆕 平台类型透传：与下方 logOrgType（698行左右）同一个 matchedKey 查法，
+        // 只是那里算得晚——爱心滚动墙需要在这里（比 logOrgType 早）就用上，
+        // 不改变任何已有统计口径，纯新增字段供前端"全部平台"视角渲染来源徽章
+        const entryOrgType = (storeStatsMap[matchedKey] && storeStatsMap[matchedKey].orgType) || 'other';
+        const dayDiff = log.dateString ? daysBetween(log.dateString, todayStr) : null;
+        const timeLabel = dayDiff === null ? ''
+          : dayDiff === 0 ? '今天'
+          : dayDiff === 1 ? '昨天'
+          : dayDiff < 7  ? dayDiff + '天前'
+          : dayDiff < 30 ? Math.floor(dayDiff / 7) + '周前'
+          : Math.floor(dayDiff / 30) + '个月前';
+        donationItems.forEach(item => {
+          if (publicDonorEntries.length >= 40) return;
+          publicDonorEntries.push({
+            name:      (item.name  || '爱心人士').trim(),
+            amount:    parseFloat(item.amount) || 0,
+            storeName: entryStoreName,
+            orgType:   entryOrgType,
+            timeLabel
+          });
+        });
+      }
 
       // 🌟 凭证合规率统计：与 getRiskAlerts 同款判定口径（expenseAmount>0 且无
       // receiptImages/receiptImageList 视为缺失凭证），这里只做计数不生成明细告警
       const expenseAmount = parseFloat(log.expenseAmount || 0) || 0;
-      const hasReceipt = (Array.isArray(log.receiptImages) && log.receiptImages.length > 0) ||
-        (Array.isArray(log.receiptImageList) && log.receiptImageList.length > 0);
+      const receiptImagesArr = Array.isArray(log.receiptImages) ? log.receiptImages : [];
+      const receiptImageListArr = Array.isArray(log.receiptImageList) ? log.receiptImageList : [];
+      const hasReceipt = receiptImagesArr.length > 0 || receiptImageListArr.length > 0;
       if (expenseAmount > 0) {
         nationalExpenseRecordCount++;
         if (hasReceipt) nationalReceiptRecordCount++;
       }
+      // 📸 累计凭证图片总张数（无论是否有支出金额，只要有图就计入）
+      totalReceiptPhotos += receiptImagesArr.length + receiptImageListArr.length;
+
+      // 🌍 多业态受众分维度累加：读 storeStatsMap 里已记录的 orgType
+      const logOrgType = (storeStatsMap[matchedKey] && storeStatsMap[matchedKey].orgType) || 'other';
+      const logDineIn = parseInt(log.dineInSeniors, 10) || 0;
+      const logDelivery = parseInt(log.deliverySeniors, 10) || 0;
+      dineInByOrgType[logOrgType] = (dineInByOrgType[logOrgType] || 0) + logDineIn;
+      deliveryByOrgType[logOrgType] = (deliveryByOrgType[logOrgType] || 0) + logDelivery;
 
       const entry = storeStatsMap[matchedKey];
       if (entry) {
@@ -535,6 +665,86 @@ exports.main = async (event, context) => {
         if (bal > 0) entry.latestBalance = bal;
       }
     });
+
+    // 📸 全国影像卷宗：并行查询 daily_menus / activity_logs，统计图片总张数并汇聚最新 12 张图
+    // 只有 isSuperAdmin 才需要构建 nationalMediaGallery，普通角色跳过额外 DB 查询
+    let totalMenuPhotos = 0;
+    let totalLogPhotos = 0;
+    const nationalMediaGallery = []; // 最多 12 条，供大屏影像墙展示
+
+    if (isSuperAdmin) {
+      const [menuRes, logRes] = await Promise.all([
+        db.collection('daily_menus')
+          .where(makeTenantFilter(tenantId))
+          .orderBy('date', 'desc')
+          .limit(200)
+          .field({ _id: true, date: true, storeName: true, storeId: true, images: true })
+          .get()
+          .catch(() => ({ data: [] })),
+        db.collection('activity_logs')
+          .where(makeTenantFilter(tenantId))
+          .orderBy('date', 'desc')
+          .limit(200)
+          .field({ _id: true, date: true, storeName: true, storeId: true, images: true })
+          .get()
+          .catch(() => ({ data: [] }))
+      ]);
+
+      // 🆕 平台类型透传：影像墙每张图各自挂上来源门店的 orgType，供前端"全部平台"
+      // 视角渲染徽章。storeStatsMap 此时已由上面 allLogs.forEach 完整建好（含
+      // fallback 兜底条目），这里只做只读查找，不影响任何已有聚合计算
+      const lookupOrgType = (storeId) =>
+        (storeId && storeStatsMap[storeId] && storeStatsMap[storeId].orgType) || 'other';
+
+      // 统计 daily_menus 图片总数，收集带 URL 的条目
+      const menuPhotoEntries = [];
+      (menuRes.data || []).forEach(doc => {
+        const imgs = Array.isArray(doc.images) ? doc.images : [];
+        totalMenuPhotos += imgs.length;
+        imgs.forEach(img => {
+          const url = (img && (img.url || img.thumbUrl)) || (typeof img === 'string' ? img : null);
+          if (url) {
+            menuPhotoEntries.push({ url, type: 'menu', date: doc.date || '', storeName: doc.storeName || '', orgType: lookupOrgType(doc.storeId) });
+          }
+        });
+      });
+
+      // 统计 activity_logs 图片总数，收集带 URL 的条目
+      const logPhotoEntries = [];
+      (logRes.data || []).forEach(doc => {
+        const imgs = Array.isArray(doc.images) ? doc.images : [];
+        totalLogPhotos += imgs.length;
+        imgs.forEach(img => {
+          const url = (img && (img.url || img.thumbUrl)) || (typeof img === 'string' ? img : null);
+          if (url) {
+            logPhotoEntries.push({ url, type: 'log', date: doc.date || '', storeName: doc.storeName || '', orgType: lookupOrgType(doc.storeId) });
+          }
+        });
+      });
+
+      // 从 allLogs 中抽取最新凭证图片（已按 dateString desc 取）
+      const receiptPhotoEntries = [];
+      for (const log of allLogs) {
+        if (receiptPhotoEntries.length >= 50) break;
+        const imgs = [...(Array.isArray(log.receiptImages) ? log.receiptImages : []),
+                      ...(Array.isArray(log.receiptImageList) ? log.receiptImageList : [])];
+        for (const img of imgs) {
+          const url = (img && (img.url || img.fileID || img.thumbUrl)) || (typeof img === 'string' ? img : null);
+          if (url) {
+            receiptPhotoEntries.push({ url, type: 'receipt', date: log.dateString || '', storeName: log.shopName || '', orgType: lookupOrgType(log.storeId) });
+          }
+        }
+      }
+
+      // 合并三类图片，按 date 降序排列，取最新 12 张
+      const allPhotoEntries = [...receiptPhotoEntries, ...menuPhotoEntries, ...logPhotoEntries];
+      allPhotoEntries.sort((a, b) => {
+        if (a.date > b.date) return -1;
+        if (a.date < b.date) return 1;
+        return 0;
+      });
+      nationalMediaGallery.push(...allPhotoEntries.slice(0, 12));
+    }
 
     // 计算各店单餐成本与续航预警
     const storeMatrix = Object.values(storeStatsMap).map(s => {
@@ -569,6 +779,9 @@ exports.main = async (event, context) => {
       const item = {
         storeId: s.storeId,
         storeName: s.storeName,
+        // 🆕 平台类型透传：与门店矩阵表/排行榜/待支援预警共用同一份 item，前端
+        // formatNationalMatrixData 直接 {...store} 透传，"全部平台"视角下据此渲染徽章
+        orgType: s.orgType || 'other',
         // s.city/s.province 已在 storeStatsMap/fallbackStoreMap 构建阶段经过
         // resolveStoreRegion 解析（含"未分类地区"兜底），此处直接透传
         city: s.city,
@@ -622,6 +835,12 @@ exports.main = async (event, context) => {
       nationalOpenDays,
       nationalTotalVolunteers,
       nationalTotalVolunteerHours: Math.round(nationalTotalVolunteerHours * 10) / 10,
+      // 👵 长者关怀细分维度
+      nationalDineInSeniors,
+      nationalDeliverySeniors,
+      nationalListeningSeniors,
+      nationalTakeawayCount,
+      nationalDeliveryVolunteers,
       nationalRiceTotal: Math.round(nationalRiceTotal * 10) / 10,
       nationalFlourTotal: Math.round(nationalFlourTotal * 10) / 10,
       nationalOilTotal: Math.round(nationalOilTotal * 10) / 10,
@@ -629,7 +848,32 @@ exports.main = async (event, context) => {
       // 🆕 核心 KPI 环比趋势（vs 上一个同长度周期）：rangeType='all' 或查无
       // 可比基数时 prevTotal*=0，computePctChange 自动返回 null，前端隐藏徽标
       nationalTotalDinersTrend: computePctChange(nationalTotalDiners, prevTotalDiners),
-      nationalTotalExpenseTrend: computePctChange(nationalTotalExpense, prevTotalExpense)
+      nationalTotalExpenseTrend: computePctChange(nationalTotalExpense, prevTotalExpense),
+      // 💖 全网爱心支持与善缘墙：totalSupportCount 与 nationalSponsorCount 同值
+      // （后者是历史字段名，前者是本面板统一使用的命名），yangshanCount +
+      // yindeCount 恒等于 totalSupportCount
+      nationalOfflineIncome: parseFloat(nationalOfflineIncome.toFixed(2)),
+      nationalSponsorCount,
+      totalSupportCount: nationalSponsorCount,
+      yangshanCount,
+      yindeCount,
+      yangshanAmount: parseFloat(yangshanAmount.toFixed(2)),
+      yindeAmount: parseFloat(yindeAmount.toFixed(2)),
+      // 公开爱心支持墙：最多 20 条阳善（公开姓名）记录，logs 已降序所以就是最新的
+      latestPublicDonors: publicDonorEntries.slice(0, 20),
+      // 🏮 品牌矩阵标签：非 null 时大屏标题应使用此标签（如"同心慈善会矩阵"）
+      brandMatrixLabel,
+      // 🌍 多业态受助群体人次分维度：{ [orgType]: { dineIn, delivery, total } }[]
+      // 用于全国大屏展示"长者 X 人 / 儿童 Y 人"等多受众维度数据
+      targetAudienceBreakdown: Object.keys(dineInByOrgType).concat(
+        Object.keys(deliveryByOrgType).filter(k => !dineInByOrgType[k])
+      ).map(orgType => ({
+        orgType,
+        dineIn: dineInByOrgType[orgType] || 0,
+        delivery: deliveryByOrgType[orgType] || 0,
+        total: (dineInByOrgType[orgType] || 0) + (deliveryByOrgType[orgType] || 0)
+      })).filter(item => item.total > 0)
+        .sort((a, b) => b.total - a.total)
     };
 
     // 🌟 超管专属高阶治理看板：核心指标 + 时间切片 + 离线门店预警，见需求2/3
@@ -637,7 +881,9 @@ exports.main = async (event, context) => {
     if (isSuperAdmin) {
       const offlineStores = storeMatrix
         .filter(s => s.isOffline)
-        .map(s => ({ storeId: s.storeId, storeName: s.storeName, lastReportDate: s.lastReportDate, daysSinceLastReport: s.daysSinceLastReport }));
+        // 🆕 orgType 随 storeMatrix 一起透传（见 item.orgType 赋值处），供"全部平台"
+        // 视角下离线门店预警列表渲染平台徽章
+        .map(s => ({ storeId: s.storeId, storeName: s.storeName, lastReportDate: s.lastReportDate, daysSinceLastReport: s.daysSinceLastReport, orgType: s.orgType }));
 
       // 🌟 全局数据大屏：活跃门店数（未离线） + 今日预警门店数（离线 或 凭证合规率不满 100%）
       const riskStoreIds = new Set();
@@ -661,7 +907,13 @@ exports.main = async (event, context) => {
         offlineStoreCount: offlineStores.length,
         offlineStores,
         activeStoreCount: Math.max(0, totalStoreCount - offlineStores.length),
-        riskStoreCount: riskStoreIds.size
+        riskStoreCount: riskStoreIds.size,
+        // 📸 全国影像卷宗统计
+        totalReceiptPhotos,
+        totalMenuPhotos,
+        totalLogPhotos,
+        nationalTotalPhotos: totalReceiptPhotos + totalMenuPhotos + totalLogPhotos,
+        nationalMediaGallery
       };
     }
 
