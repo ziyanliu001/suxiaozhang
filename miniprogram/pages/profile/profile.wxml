@@ -205,10 +205,15 @@
              不再整组屏蔽家人），此处不再重复渲染，避免家人看到两份入口 -->
       </view>
 
-      <!-- 🏡 站点家园/雨花家园：门店整体视角——档案 + 日志 + 关注门店 + 建议反馈。
-           原"温情故事"独立入口已合并进顶部通栏卡片"阳光温情图册与爱心故事"
-           （见上方 photo-archive-mine-entry，getPhotoArchive 已聚合门店日志图片） -->
-      <text class="list-group-label family-care-list-label">🏡 {{isYuhuazhai ? '雨花家园' : '爱心家园'}}</text>
+      <!-- 🐛 命名去重：原文案与本卡片外层标题（第 178 行 header-title，同样是
+           {{isYuhuazhai ? '雨花家园' : '爱心家园'}}）完全相同——用户从上往下看会先
+           看到大标题"爱心家园"，往下滑几屏又看到一个一模一样的"爱心家园"子标题，
+           以为是重复渲染/滚动出了问题。这里改成描述本组实际内容（门店档案 + 日志 +
+           关注门店 + 意见箱，都是"门店"维度信息，不是"我的爱心"这类个人维度贡献）
+           的独立文案，不再跟外层大标题撞名。原"温情故事"独立入口已合并进顶部通栏
+           卡片"阳光温情图册与爱心故事"（见上方 photo-archive-mine-entry，
+           getPhotoArchive 已聚合门店日志图片） -->
+      <text class="list-group-label family-care-list-label">🏡 门店信息</text>
       <view class="ui-card-wrapper action-list-container family-care-list">
         <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStoreProfile">
           <view class="item-left">
