@@ -433,17 +433,23 @@ Page({
   },
 
   // 「历史大事记」区域按 _id 排除顶部已展示的那一条，保留同一天的其余记录（活动大事记支持同日多条）
-  recomputeHistoryList() {
+  // extra：额外要合并进同一次 setData 的字段（如 loading:false）——fetchList 成功回来后
+  // 靠这个参数把"算好的新 historyList"和"loading 状态解除"合并成一次渲染，不拆两步
+  recomputeHistoryList(extra: Record<string, any> = {}) {
     const todayId = this.data.todayItem ? this.data.todayItem._id : null;
     const historyList = todayId ? this.data.list.filter((item: any) => item._id !== todayId) : this.data.list;
-    this.setData({ historyList });
+    this.setData({ historyList, ...extra });
   },
 
   // 📅 历史动态支持按 historyFilterDate 精确筛选某一天：为空时是原有全量分页
   // 时光轴，有值时 startDate/endDate 都传这一天，服务端按 eventTime 区间过滤
   async fetchList(reset: boolean) {
     if (reset) {
-      this.setData({ page: 1, list: [], hasMore: true, loading: true });
+      // 🐛 修复"切换日期/网络慢时，旧图片列表还留在视图上"：historyList 才是真正驱动
+      // WXML wx:for 和空状态判断的字段，此前这里只清了 list（原始分页缓存），
+      // historyList 要等云函数返回、recomputeHistoryList() 跑完才会跟着清空——
+      // 这段等待期里用户仍看着上一个日期/上一轮的旧卡片。这里与 list 同步清空
+      this.setData({ page: 1, list: [], historyList: [], hasMore: true, loading: true });
     } else {
       if (!this.data.hasMore || this.data.loadingMore) return;
       this.setData({ loadingMore: true });
@@ -484,14 +490,16 @@ Page({
           total: result.total || 0,
           hasMore: !!result.hasMore
         });
-        this.recomputeHistoryList();
+        // 🐛 与上面的清空首尾呼应：新 historyList 算好后，和 loading:false 合并进
+        // 同一次 setData 一起渲染，不再是"新列表已落地但 loading 还没解除"两步走
+        this.recomputeHistoryList({ loading: false, loadingMore: false });
       } else {
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+        this.setData({ loading: false, loadingMore: false });
       }
     } catch (err) {
       console.error('[activity-log] fetchList 异常:', err);
       wx.showToast({ title: '加载失败，请重试', icon: 'none' });
-    } finally {
       this.setData({ loading: false, loadingMore: false });
     }
   },
