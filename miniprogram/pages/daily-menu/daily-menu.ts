@@ -189,20 +189,14 @@ Page({
     });
   },
 
-  // 🐛 根因修复：cachedRole/服务端下发的角色只是"最近一次校验/查询到的角色"，
-  // 手动切换身份时写入的 current_user_role 才是真正的生效角色（同一套口径见
-  // profile.ts initMinePage、statistics.ts resolveEffectiveRole）——一旦存在就必须
-  // 以它为准，否则残留的旧 super_admin 缓存会让本页误判成超管
-  resolveEffectiveRole(cachedRole: string): string {
-    const storageRole = wx.getStorageSync('current_user_role');
-    if (storageRole) {
-      const normalized = String(storageRole).toLowerCase();
-      // store_family 只是个人中心用来区分"家人视角"的展示态，不在真实角色枚举里，
-      // 对应的真实底层角色就是 volunteer
-      return normalized === 'store_family' ? 'volunteer' : normalized;
-    }
-    return cachedRole;
-  },
+  // 🐛 去重合并：本地曾维护过一份手写的 resolveEffectiveRole（cachedRole/服务端
+  // 下发的角色只是"最近一次校验/查询到的角色"，手动切换身份时写入的
+  // current_user_role 才是真正的生效角色），与 AuthService.resolveEffectiveRole
+  // 几乎一样，只是多做了一步"store_family 归一化成 volunteer"——但本页唯一的
+  // 用法只判断 effectiveRole === 'super_admin'/'store_manager'/'store_patriarch'，
+  // 从不关心 volunteer 和 store_family 的区别，归一化与否结果一致，可以安全收敛成
+  // 共享实现。改用 AuthService.resolveEffectiveRole 还多了一个好处：命中手动切换
+  // 时会顺带把持久化缓存同步更新，其余直接读缓存的调用点不会再撞见残留旧角色
 
   // 🐛 核心权限 Bug 修复：此前直接拿 roleInfo.storeName 当门店名用，完全没有过滤
   // "全国总览/全部门店"这类仅超管可用的虚拟聚合名——user_roles 文档一旦曾经是
@@ -220,7 +214,7 @@ Page({
       roleInfo = result.roleInfo || null;
     }
 
-    const effectiveRole = this.resolveEffectiveRole(roleInfo ? roleInfo.role : 'volunteer');
+    const effectiveRole = AuthService.resolveEffectiveRole(roleInfo ? roleInfo.role : 'volunteer');
     const isSuperAdmin = effectiveRole === 'super_admin';
 
     let storeId = (roleInfo && roleInfo.storeId) || '';

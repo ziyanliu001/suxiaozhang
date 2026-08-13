@@ -178,17 +178,12 @@ Page({
     });
   },
 
-  // ❤️ 'store_family' 是本地切身份体系的产物（store-picker _applyRoleSwitch 写入
-  // current_user_role），不在服务端 checkUserRole 返回的 UserRole 联合类型里
-  // （比较 roleInfo.role === 'store_family' 连 tsc 都过不了），必须读 storage
-  // 里的规范化值判断，与 index.ts/profile.ts/statistics.ts resolveEffectiveRole
-  // 读同一个 key、同一套优先级：storage 一旦有值就整体作为生效角色，不再理会
-  // 服务端角色——否则真实身份是 super_admin 的账号切到"义工"预览视角后，
-  // isSuperAdmin 仍会继续为 true，"全国总览"标签/管理类按钮越权冒出来
-  resolveEffectiveRole(cachedRole: string): string {
-    const storageRole = (wx.getStorageSync('current_user_role') || '').toLowerCase();
-    return storageRole || cachedRole || '';
-  },
+  // 🐛 去重合并：本地手写的 resolveEffectiveRole 与 AuthService.resolveEffectiveRole
+  // 行为已经一致——都是"storage 一旦有 current_user_role 就整体作为生效角色原样
+  // 返回（含 'store_family' 这个不在服务端 UserRole 枚举里的本地展示态伪角色），
+  // 不再理会服务端角色"，本页下方 applyRolePermissions 依赖的正是这份未被归一化
+  // 的原始值来判断 isFamily。改用共享实现还多了一个好处：手动切换命中时会顺带
+  // 同步持久化缓存，见 authService.ts resolveEffectiveRole 注释
 
   // 🐛 核心权限 Bug 修复：此前直接拿 roleInfo.storeName 当门店名用，完全没有过滤
   // "全国总览/全部门店"这类仅超管可用的虚拟聚合名——user_roles 文档一旦曾经是
@@ -273,7 +268,7 @@ Page({
       roleInfo = result.roleInfo || null;
     }
 
-    const effectiveRole = this.resolveEffectiveRole(roleInfo ? roleInfo.role : '');
+    const effectiveRole = AuthService.resolveEffectiveRole(roleInfo ? roleInfo.role : '');
     const isSuperAdmin = effectiveRole === 'super_admin';
     const identity = this.resolveEffectiveStoreIdentity(roleInfo, isSuperAdmin);
     this.applyRolePermissions(effectiveRole, identity.storeName, identity.storeId);
