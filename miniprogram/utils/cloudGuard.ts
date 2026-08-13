@@ -47,3 +47,40 @@ export function assertCloudAvailable(): void {
     throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用（可能是 wx.cloud.init 初始化失败），已降级本地模式');
   }
 }
+
+// 🛡️ 自愈防护：isCloudAvailable() 的方法表探测（typeof xxx === 'function'）拦不住
+// 本文件顶部注释里那种"半初始化/损坏"状态——wx.cloud.database/callFunction 作为
+// 属性确实存在、类型确实是 function，isCloudReady 因此被判定为 true，但真正发起
+// 调用时，WeChat 内部 WASubContext.js 的递归遍历逻辑会抛出 TypeError（典型信息
+// "Cannot read property 'xxx' of undefined"），且这个 TypeError 是直接从
+// wx.cloud.callFunction()/wx.cloud.database() 调用本身抛出的（不是业务代码自己
+// 处理 res.result 时因字段缺失产生的），是本地开发者工具在 Linux 环境下已知的
+// loadSdkSubPackage 后遗症（见 app.ts _attemptCloudInit 注释）。
+// 命中这个特征后应把 isCloudReady 标回 false，让本次会话后续云调用直接走本地
+// 兜底，不再对同一处已损坏的 SDK 状态重复发起、重复崩溃。
+
+/** 识别"wx.cloud 半初始化/损坏"这一特征错误，供 reportCloudSdkErrorIfCorrupted 内部使用，也可单独判断 */
+export function isCloudSdkCorruptionError(err: any): boolean {
+  return !!(
+    err &&
+    err instanceof TypeError &&
+    /Cannot read propert(y|ies) '.*' of undefined/i.test(err.message || '')
+  );
+}
+
+// 各云调用 catch 块里统一调用：命中损坏特征时把 isCloudReady 标回 false 并打印一次
+// 明确提示；调用方自身已有的本地兜底逻辑（result=null 等）继续照常执行，不需要
+// 额外改动——这个函数只负责"止血"标记，不接管错误处理流程，也不会对普通的网络
+// 超时/权限拒绝等正常业务错误误判（那些不是 TypeError，不会命中这个特征）
+export function reportCloudSdkErrorIfCorrupted(err: any): void {
+  if (!isCloudSdkCorruptionError(err)) return;
+  try {
+    const app = getApp() as any;
+    if (app && app.globalData && app.globalData.isCloudReady) {
+      app.globalData.isCloudReady = false;
+      console.error('[cloudGuard] 检测到 wx.cloud SDK 损坏特征错误（疑似本地开发者工具 loadSdkSubPackage 残留问题），本次会话已降级本地模式，后续云调用将直接跳过:', err);
+    }
+  } catch (guardErr) {
+    console.warn('[cloudGuard] 自愈标记 isCloudReady 时异常:', guardErr);
+  }
+}

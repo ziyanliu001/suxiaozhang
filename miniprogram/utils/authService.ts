@@ -4,7 +4,10 @@ const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
 const USER_ROLE_CACHE_KEY = 'auth_user_role';
 const LOGIN_TIMEOUT_MS = 5000;
-const ROLE_QUERY_TIMEOUT_MS = 10000;
+// 🐛 角色查询超时放宽：开发者工具网络波动 / 云函数冷启动偶尔会超过之前的阈值，
+// 8s 足够覆盖冷启动场景，配合 fetchUserRole 内的"超时自动重试 1 次"，两道
+// 保险叠加后才会真正落到本地缓存兜底
+const ROLE_QUERY_TIMEOUT_MS = 8000;
 const TEMP_OPENID_PREFIX = 'local_';
 
 // 🏢 platform_admin：SaaS 平台超级管理员（开发者/运维方），仅管理租户生命周期与云资源，
@@ -268,11 +271,26 @@ export const AuthService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过角色查询');
       }
 
-      const result = await withTimeout(
-        wx.cloud.callFunction({ name: 'checkUserRole' }),
-        ROLE_QUERY_TIMEOUT_MS,
-        '角色查询超时'
-      );
+      let result;
+      try {
+        result = await withTimeout(
+          wx.cloud.callFunction({ name: 'checkUserRole' }),
+          ROLE_QUERY_TIMEOUT_MS,
+          '角色查询超时'
+        );
+      } catch (firstErr: any) {
+        // 🔁 只对"角色查询超时"自动重试 1 次（云函数冷启动/开发者工具网络波动很容易
+        // 偶发命中一次），SDK 不可用等其它异常没有重试的意义，直接抛给外层走缓存兜底
+        if (!(firstErr && firstErr.message === '角色查询超时')) {
+          throw firstErr;
+        }
+        console.warn('[AuthService] 角色查询首次超时，自动重试 1 次...');
+        result = await withTimeout(
+          wx.cloud.callFunction({ name: 'checkUserRole' }),
+          ROLE_QUERY_TIMEOUT_MS,
+          '角色查询超时'
+        );
+      }
 
       const r = result.result as any;
       if (r && r.success) {
@@ -299,16 +317,22 @@ export const AuthService = {
       return { success: false, error: (r && r.error) || '角色查询失败' };
     } catch (err: any) {
       const isCloudDown = !!(err && err.message && err.message.includes('CLOUD_SDK_UNAVAILABLE'));
+      const isTimeout = !!(err && err.message === '角色查询超时');
       console.error(
         isCloudDown
           ? '[AuthService] 云开发 SDK 不可用，角色查询已降级为本地缓存兜底'
           : '[AuthService] fetchUserRole 异常:',
         isCloudDown ? '' : err
       );
-      // 网络异常 / SDK 不可用 / 超时：降级到本地缓存，避免打断页面加载
+      // 网络异常 / SDK 不可用 / 重试后仍超时：降级到本地缓存，绝不向调用方抛出
+      // 未捕获异常，避免阻塞页面 onShow 生命周期
       const cached = this.getCachedRoleInfo();
       if (cached) {
-        console.warn('[AuthService] fetchUserRole 降级为缓存角色:', cached.role);
+        if (isTimeout) {
+          console.warn('[AuthService] 角色查询超时，已自动降级使用本地角色缓存');
+        } else {
+          console.warn('[AuthService] fetchUserRole 降级为缓存角色:', cached.role);
+        }
         return { success: true, roleInfo: cached };
       }
       return { success: false, error: err.message || '角色查询异常' };
