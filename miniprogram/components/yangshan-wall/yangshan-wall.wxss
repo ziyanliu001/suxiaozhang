@@ -1,0 +1,51 @@
+/* 🌸 阳善公开滚动墙：柔和玫瑰金主题，与全站已确立的"阳善=暖色/公开"视觉语言一致 */
+.yangshan-wall-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #FFF7FB 0%, #FFFFFF 100%);
+  border: 1.5rpx solid #FCE7F3;
+  border-radius: 20rpx;
+  padding: 22rpx 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(190, 24, 93, 0.06);
+}
+
+.yangshan-wall-title {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #BE185D;
+  margin-bottom: 14rpx;
+}
+
+.yangshan-wall-swiper {
+  height: 56rpx;
+}
+
+.yangshan-wall-item {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  height: 56rpx;
+}
+
+.yangshan-wall-name {
+  font-size: 27rpx;
+  font-weight: 600;
+  color: #BE185D;
+  flex-shrink: 0;
+  max-width: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yangshan-wall-amount {
+  font-size: 25rpx;
+  color: #374151;
+  flex-shrink: 0;
+}
+
+.yangshan-wall-time {
+  font-size: 21rpx;
+  color: #9CA3AF;
+}

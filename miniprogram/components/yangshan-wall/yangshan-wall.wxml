@@ -1,0 +1,12 @@
+<view class="yangshan-wall-card" wx:if="{{donors.length > 0}}">
+  <text class="yangshan-wall-title">{{title}}</text>
+  <swiper class="yangshan-wall-swiper" vertical autoplay circular interval="2800" duration="400">
+    <swiper-item wx:for="{{donors}}" wx:for-index="donorIdx" wx:key="donorIdx">
+      <view class="yangshan-wall-item">
+        <text class="yangshan-wall-name">{{item.name}}</text>
+        <text class="yangshan-wall-amount">支持 ¥{{item.amount}}</text>
+        <text class="yangshan-wall-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
+      </view>
+    </swiper-item>
+  </swiper>
+</view>
