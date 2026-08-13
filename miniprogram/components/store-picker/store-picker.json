@@ -1,4 +1,6 @@
 {
   "component": true,
-  "usingComponents": {}
+  "usingComponents": {
+    "sunshine-board": "../sunshine-board/sunshine-board"
+  }
 }

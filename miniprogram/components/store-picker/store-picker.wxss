@@ -114,6 +114,7 @@
   align-items: flex-start;
   padding-bottom: 20rpx;
   border-bottom: 1rpx solid #EFE6D8;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -147,6 +148,7 @@
 /* ===== 🌐 全国家园网络：搜索 + 省市筛选 + 附近门店 ===== */
 .store-filter-bar {
   margin-top: 20rpx;
+  flex-shrink: 0;
 }
 
 .filter-search-box {
@@ -224,10 +226,12 @@
 .store-operating-badge {
   font-size: 20rpx;
   padding: 2rpx 12rpx;
-  border-radius: 10rpx;
-  margin-left: 12rpx;
-  background: #E8F5E9;
-  color: #2E7D32;
+  border-radius: 20rpx;
+  margin-left: 10rpx;
+  background: #e6f4ea;
+  color: #137333;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .store-operating-badge.preparing {
@@ -240,11 +244,41 @@
   color: #868E96;
 }
 
+/* 门店名称纵向列：名称行 + 地域/距离行 */
+.store-name-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.store-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.store-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 地域微徽章：轻量灰底圆角胶囊 */
+.store-region-tag {
+  font-size: 20rpx;
+  color: #6B7280;
+  background: #F3F4F6;
+  border-radius: 20rpx;
+  padding: 2rpx 12rpx;
+  line-height: 1.4;
+}
+
 .store-distance-label {
-  margin-left: auto;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #B45309;
-  font-weight: bold;
+  font-weight: 500;
 }
 
 /* ===== 🛡️ 超级管理员专属置顶卡片 ===== */
@@ -265,10 +299,13 @@
   font-weight: bold;
 }
 
-/* ===== 滚动列表 ===== */
+/* ===== 滚动列表：flex: 1 + height: 0 强制占满面板剩余高度，使其在 flex 列中
+   真正独立滚动，顶部固定区与底部按钮永不被内容撑出视口 ===== */
 .sheet-scroll-list {
-  max-height: 55vh;
+  flex: 1;
+  height: 0;
   margin-top: 20rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
 }
 
 .store-list-loading-tip {
@@ -332,7 +369,7 @@
 .role-choice-pill {
   display: inline-flex;
   align-items: center;
-  padding: 10rpx 22rpx;
+  padding: 12rpx 20rpx;
   border-radius: 32rpx;
   background: #F8F9FA;
   border: 1rpx solid #E9ECEF;
@@ -373,10 +410,11 @@
   margin-left: 10rpx;
 }
 
-/* 选中高亮状态 (朱红浅底) */
+/* 选中高亮状态：朱红浅底 + 微阴影，当前激活身份一目了然 */
 .role-choice-pill.selected {
   border-color: #8C1D18 !important;
   background: #FFEBEE !important;
+  box-shadow: 0 2rpx 8rpx rgba(140, 29, 24, 0.15) !important;
 }
 
 .role-choice-pill.selected .role-label {
@@ -413,8 +451,9 @@
    效果——与本项目其余按钮统一走 flex 居中这一套，文本/图标垂直水平都居中 ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
-  /* 120rpx = 100rpx TabBar + 20rpx 间距，防止"加入/创建新门店"按钮被 TabBar 遮挡 */
-  margin-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  /* 面板本身在 z-index:99999 遮罩层内，无需为 TabBar 留出 120rpx；
+     仅需 safe-area-inset-bottom 保障 iOS 全面屏底部不被黑条遮挡 */
+  margin-bottom: calc(24rpx + env(safe-area-inset-bottom));
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -505,6 +544,24 @@
 
 .region-placeholder {
   color: #ADB5BD;
+}
+
+/* 🏢 平台类型 picker 展示行 */
+.picker-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.picker-arrow {
+  color: #ADB5BD;
+  font-size: 28rpx;
+}
+
+/* 必填星号 */
+.form-label-required {
+  color: #E53935;
+  margin-right: 4rpx;
 }
 
 .new-store-role-group {

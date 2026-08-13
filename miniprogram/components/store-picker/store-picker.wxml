@@ -1,7 +1,7 @@
 <!-- 顶部门店选择胶囊 (极简清爽版) -->
 <view class="store-picker-capsule" bindtap="onOpenSheet" hover-class="capsule-hover">
   <view class="capsule-avatar">{{storeInitial}}</view>
-  <text class="store-name">{{currentStore.storeName || '海沧区雨花斋'}}</text>
+  <text class="store-name">{{currentStore.storeName || '请选择站点'}}</text>
   <text class="arrow">▼</text>
 </view>
 
@@ -14,9 +14,9 @@
     <!-- 头部栏 -->
     <view class="sheet-header">
       <view class="header-left">
-        <text class="sheet-title">📍 选择服务的雨花斋门店与身份</text>
+        <text class="sheet-title">📍 选择服务站点与身份</text>
         <!-- 当前生效身份小贴士 -->
-        <text class="current-active-tip">当前生效：{{currentStore.storeName || '海沧区雨花斋'}} · {{currentStore.role === 'FINANCE' ? '🔒 财务' : (currentStore.role === 'MANAGER' ? '👑 店长' : (currentStore.role === 'PATRIARCH' ? '🙏 大家长' : (currentStore.role === 'ADMIN' ? '🔒 管理员' : (currentStore.role === 'FAMILY' ? '❤️ 家人' : '🌸 义工'))))}}</text>
+        <text class="current-active-tip">当前生效：{{currentStore.storeName || '未选择站点'}} · {{currentStore.role === 'FINANCE' ? '🔒 财务' : (currentStore.role === 'MANAGER' ? '👑 店长' : (currentStore.role === 'PATRIARCH' ? '🙏 大家长' : (currentStore.role === 'ADMIN' ? '🔒 管理员' : (currentStore.role === 'FAMILY' ? '❤️ 家人' : '🌸 义工'))))}}</text>
       </view>
       <text class="sheet-close-btn" bindtap="onCloseSheet">✕</text>
     </view>
@@ -47,19 +47,15 @@
         <text class="store-name-text superadmin-name">超级管理员 / 全国总览</text>
       </view>
       <view class="role-selector-row">
+        <!-- 🛡️ 权限修复：超级管理员/全国总览是纯全局管理视角，不参与具体门店的
+             义工现场服务，此前误挂了一个"义工"身份胶囊——彻底删除，这里只保留
+             唯一合法身份【系统超管】 -->
         <view class="role-choice-pill ADMIN {{currentStore.storeId === 'national_overview' && currentStore.role === 'ADMIN' ? 'selected' : ''}}"
-              bindtap="onSuperAdminRoleTap"
+              catchtap="onSuperAdminRoleTap"
               data-role="ADMIN">
           <text class="role-icon">🛡️</text>
           <text class="role-label">系统超管</text>
           <text class="check-mark" wx:if="{{currentStore.storeId === 'national_overview' && currentStore.role === 'ADMIN'}}">✔</text>
-        </view>
-        <view class="role-choice-pill VOLUNTEER {{currentStore.storeId === 'national_overview' && currentStore.role === 'VOLUNTEER' ? 'selected' : ''}}"
-              bindtap="onSuperAdminRoleTap"
-              data-role="VOLUNTEER">
-          <text class="role-icon">🌸</text>
-          <text class="role-label">义工</text>
-          <text class="check-mark" wx:if="{{currentStore.storeId === 'national_overview' && currentStore.role === 'VOLUNTEER'}}">✔</text>
         </view>
       </view>
     </view>
@@ -75,23 +71,42 @@
       </view>
       <block wx:for="{{groupedStoreList}}" wx:key="storeId">
 
-        <view class="store-group-card {{item.storeName === currentStore.storeName ? 'active-store' : ''}}">
+        <!-- 🐛 高亮/选中态改用 storeId 精确匹配，不再用 storeName 比对——门店名
+             理论上可能重复，storeName 匹配会让"同名门店"互相错误共享高亮/选中态 -->
+        <view class="store-group-card {{item.storeId === currentStore.storeId ? 'active-store' : ''}}">
 
-          <!-- 门店名称栏 (去掉了重复标签，保持简洁) -->
+          <!-- 门店名称栏 -->
           <view class="store-card-header">
             <text class="store-icon">🏪</text>
-            <text class="store-name-text">{{item.storeId === 'national_overview' ? '管理员' : item.storeName}}</text>
-            <text class="store-operating-badge {{item.operatingStatus}}" wx:if="{{item.operatingStatusLabel}}">{{item.operatingStatusLabel}}</text>
-            <text class="store-distance-label" wx:if="{{item.distanceLabel}}">{{item.distanceLabel}}</text>
+            <view class="store-name-col">
+              <view class="store-name-row">
+                <text class="store-name-text">{{item.storeId === 'national_overview' ? '管理员' : item.storeName}}</text>
+                <text class="store-operating-badge {{item.operatingStatus}}" wx:if="{{item.operatingStatusLabel}}">{{item.operatingStatusLabel}}</text>
+              </view>
+              <view class="store-meta-row" wx:if="{{item.city || item.province || item.distanceLabel}}">
+                <text class="store-region-tag" wx:if="{{item.city || item.province}}">📍 {{item.city || item.province}}</text>
+                <text class="store-distance-label" wx:if="{{item.distanceLabel}}">{{item.distanceLabel}}</text>
+              </view>
+            </view>
           </view>
+
+          <!-- 🌸 近7日阳善榜：每张门店卡片独立拉取，'national_overview' 是超管的
+               虚拟聚合项、不是真实门店，不传给这个组件——公开只读，无需鉴权 -->
+          <sunshine-board wx:if="{{item.storeId !== 'national_overview'}}" storeId="{{item.storeId}}" />
 
           <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定) -->
           <view class="role-selector-row">
+            <!-- 🐛 核心 Bug 修复：身份 tag 必须用 catchtap 阻止冒泡，严禁 bindtap——
+                 身份胶囊嵌套在 .store-group-card 卡片内，一旦卡片本身或更外层
+                 未来挂上点击处理（比如"整卡展开/收起"之类的交互），bindtap 会让
+                 点击事件继续向上冒泡触发外层逻辑，与这里的角色切换互相打架，
+                 导致"点了身份 tag 却没真正切换成功/又被外层重置"。
+                 高亮/选中态同步改用 storeId 精确匹配，不再用 storeName 比对 -->
             <view wx:for="{{item.roles}}"
                   wx:for-item="roleObj"
                   wx:key="role"
-                  class="role-choice-pill {{roleObj.role}} {{item.storeName === currentStore.storeName && roleObj.role === currentStore.role ? 'selected' : ''}} {{!roleObj.isAuthorized ? 'locked' : ''}} {{roleObj.isPending ? 'pending' : ''}}"
-                  bindtap="onRolePillClick"
+                  class="role-choice-pill {{roleObj.role}} {{item.storeId === currentStore.storeId && roleObj.role === currentStore.role ? 'selected' : ''}} {{!roleObj.isAuthorized ? 'locked' : ''}} {{roleObj.isPending ? 'pending' : ''}}"
+                  catchtap="onRolePillClick"
                   data-store-id="{{item.storeId}}"
                   data-store-name="{{item.storeName}}"
                   data-role="{{roleObj.role}}"
@@ -100,7 +115,7 @@
 
               <text class="role-icon" wx:if="{{!roleObj.isPending}}">{{!roleObj.isAuthorized ? '🔒' : (roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'PATRIARCH' ? '🙏' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🔒' : (roleObj.role === 'FAMILY' ? '❤️' : '🌸')))))}}</text>
               <text class="role-label">{{roleObj.isPending ? roleObj.pendingLabel : roleObj.label}}</text>
-              <text class="check-mark" wx:if="{{item.storeName === currentStore.storeName && roleObj.role === currentStore.role}}">✔</text>
+              <text class="check-mark" wx:if="{{item.storeId === currentStore.storeId && roleObj.role === currentStore.role}}">✔</text>
             </view>
           </view>
 
@@ -173,8 +188,19 @@
             <!-- 义工/家人身份无需填写门店档案（加入现有门店申请） -->
             <block wx:if="{{newStoreForm.applyRole !== 'volunteer' && newStoreForm.applyRole !== 'store_family'}}">
               <!-- 🏪 新建门店档案补全：门店此刻还不存在，先随申请一并提交，
-                   超管审核通过后自动写入新建门店的档案。
-                   🆕 所属地区：原生 <picker mode="region"> 省-市-区级联选择 -->
+                   超管审核通过后自动写入新建门店的档案。 -->
+
+              <!-- 🏢 所属平台类型：必填，存入 stores.orgType 字段；全国大屏按此字段动态
+                   聚合与筛选，解耦"雨花斋"等平台硬编码 -->
+              <text class="form-label"><text class="form-label-required">*</text> 所属平台类型</text>
+              <picker bindchange="onOrgTypeChange" value="{{orgTypeIndex}}" range="{{orgTypeOptions}}" range-key="name">
+                <view class="new-store-input picker-selector">
+                  <text>{{orgTypeOptions[orgTypeIndex].name}}</text>
+                  <text class="picker-arrow">▾</text>
+                </view>
+              </picker>
+
+              <!-- 🆕 所属地区：原生 <picker mode="region"> 省-市-区级联选择 -->
               <text class="form-label">选择所属地区</text>
               <picker mode="region" bindchange="onNewStoreRegionChange" value="{{newStoreForm.regionArray}}">
                 <view class="new-store-input region-picker-display">

@@ -10,6 +10,17 @@ const OPERATING_STATUS_LABELS: Record<string, string> = {
 
 const CANVAS_ID = 'storePickerImgCompressCanvas';
 
+// 🏢 平台类型选项：与 store-profile、statistics 大屏筛选器共用同一套 value 字面量，
+// 存入 stores.orgType 字段；name 是前端展示文案
+const ORG_TYPE_OPTIONS = [
+  { name: '🌸 雨花斋', value: 'yuhuazhai' },
+  { name: '👵👴 社区助老食堂/敬老家园', value: 'elderly_canteen' },
+  { name: '🤝 社区义工服务站', value: 'volunteer_station' },
+  { name: '🛟 应急救援队', value: 'rescue_team' },
+  { name: '🧒 同心儿童院/青少年关爱', value: 'tongxin_children' },
+  { name: '💫 其他爱心组织', value: 'other' }
+];
+
 // 🛡️ 与 processRoleAudit approve() 的权限分级口径对齐：店长/财长任命 + 新建门店
 // 仅超管可批，义工/财务本店店长/家长即可批——用来决定"待审核"锁定文案该显示哪一档
 const ELEVATED_REQUESTED_ROLES = new Set(['store_manager', 'store_patriarch']);
@@ -38,6 +49,9 @@ Component({
     targetAuthRoleLabel: '',
     // ➕ "找不到门店？申请新建/加入新门店" 入口表单状态
     showNewStoreForm: false,
+    // 🏢 平台类型 picker 的绑定索引（与 orgTypeOptions 数组下标对应）
+    orgTypeIndex: 0,
+    orgTypeOptions: ORG_TYPE_OPTIONS,
     newStoreForm: {
       customStoreName: '',
       applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer' | 'store_family',
@@ -621,7 +635,9 @@ Component({
       }
     },
 
-    // 🛡️ 超管置顶卡片：点击【系统超管】或【义工】身份胶囊时直接切换至 national_overview 视角
+    // 🛡️ 超管置顶卡片：点击【系统超管】身份胶囊时直接切换至 national_overview 视角。
+    // 全国总览是纯全局管理视角，不参与具体门店的义工现场服务，唯一合法身份即 ADMIN——
+    // WXML 侧也已彻底删除"义工"胶囊，这里的 dataset.role 现在恒为 'ADMIN'
     onSuperAdminRoleTap(e: any) {
       const role = (e.currentTarget.dataset.role as string) || 'ADMIN';
       this._applyRoleSwitch('national_overview', '全国总览', role);
@@ -638,13 +654,15 @@ Component({
     // 重新计算角色时读到的都是这个滞留的旧值——现在这里也补上同一份持久化，
     // 与 index.ts onStoreChanged 的 roleMap 保持同一套映射口径
     _applyRoleSwitch(storeId: string, storeName: string, role: string) {
+      // 🆕 先只更新选中态，不立即收起面板——让用户先看到身份 tag 上的高亮边框/
+      // ✔ 勾选反馈落地，200ms 后再自动关闭弹窗，体验上更接近"确认已生效"而不是
+      // 点击瞬间面板突然消失
       this.setData({
         currentStore: {
           storeId,
           storeName,
           role: role as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
-        },
-        showPickerSheet: false
+        }
       });
 
       const app = getApp() as any;
@@ -674,18 +692,20 @@ Component({
       wx.setStorageSync('current_user_role', roleStorageMap[role] || 'volunteer');
       wx.setStorageSync('current_store_name', storeName);
 
-      const roleText = role === 'FINANCE' ? '财务' : (role === 'MANAGER' ? '店长' : (role === 'PATRIARCH' ? '大家长' : (role === 'ADMIN' ? '管理员' : (role === 'FAMILY' ? '家人' : '义工'))));
-      wx.showToast({
-        title: `已切至 ${storeName} (${roleText})`,
-        icon: 'none'
-      });
-
       this.triggerEvent('storechange', {
         storeId,
         storeName,
         role,
         currentRole: role
       });
+
+      // 🆕 延迟 200ms 关闭选择弹窗 + 成功态 Toast，与上面"先展示选中态"的延迟
+      // 关闭配合；宿主页面（index.ts onStoreChanged）已经在 triggerEvent 同步
+      // 触发时完成角色标记位重算，这里的延迟只影响本组件自身面板的关闭时机
+      setTimeout(() => {
+        this.setData({ showPickerSheet: false });
+        wx.showToast({ title: '已切换身份', icon: 'success' });
+      }, 200);
     },
 
     // 激活弹窗：输入口令
@@ -883,10 +903,16 @@ Component({
       }
     },
 
+    // 🏢 平台类型下拉 picker 切换
+    onOrgTypeChange(e: any) {
+      this.setData({ orgTypeIndex: parseInt(e.detail.value, 10) || 0 });
+    },
+
     // ➕ 切换"门店列表" / "申请新门店表单"
     onToggleNewStoreForm() {
       this.setData({
         showNewStoreForm: !this.data.showNewStoreForm,
+        orgTypeIndex: 0,
         newStoreForm: {
           customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', adminKey: '',
           address: '', contactPhone: '', storePhotos: [], regionArray: [], province: '', city: '', district: ''
@@ -1081,6 +1107,7 @@ Component({
       wx.showLoading({ title: '提交申请中...', mask: true });
 
       try {
+        const orgType = ORG_TYPE_OPTIONS[this.data.orgTypeIndex]?.value || 'other';
         const res = await wx.cloud.callFunction({
           name: 'processRoleAudit',
           data: {
@@ -1095,6 +1122,7 @@ Component({
             province,
             city,
             district,
+            orgType,
             tenantId,
             requestedRole: applyRole,
             realName,
@@ -1156,9 +1184,10 @@ Component({
       wx.showLoading({ title: '新建门店中...', mask: true });
 
       try {
+        const orgType = ORG_TYPE_OPTIONS[this.data.orgTypeIndex]?.value || 'other';
         const res = await wx.cloud.callFunction({
           name: 'createStore',
-          data: { storeName: customStoreName, bindAsManager: true }
+          data: { storeName: customStoreName, bindAsManager: true, orgType }
         });
         const result = res.result as any;
 
