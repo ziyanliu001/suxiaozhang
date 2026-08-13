@@ -200,7 +200,7 @@
       <view class="timeline-empty" wx:if="{{timelineGroups.length === 0}}">
         <view class="empty-day-badge">Day 1</view>
         <view class="empty-icon flower-icon"></view>
-        <text class="empty-title">{{emptyStateTitle}}</text>
+        <text class="empty-title">{{emptyStateTitle || '开启您的第一次爱心志愿之旅'}}</text>
         <text class="empty-desc">{{emptyStateDesc}}</text>
         <view class="empty-cta-btn" bindtap="onGoCheckIn">
           <text class="empty-cta-text">去首页打卡</text>

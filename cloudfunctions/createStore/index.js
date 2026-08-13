@@ -144,8 +144,10 @@ async function resolveCallerTenantId(caller) {
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
-  const { storeName, city, address, initialAnnouncement, bindAsManager, province, operatingStatus, latitude, longitude } = event;
+  const { storeName, city, address, initialAnnouncement, bindAsManager, province, operatingStatus, latitude, longitude, orgType } = event;
   const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
+  const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'other'];
+  const finalOrgType = VALID_ORG_TYPES.includes(orgType) ? orgType : '';
   const finalOperatingStatus = VALID_OPERATING_STATUSES.includes(operatingStatus) ? operatingStatus : 'operating';
 
   if (!OPENID) {
@@ -240,6 +242,7 @@ exports.main = async (event) => {
           // + 省份（城市已有 city 字段）+ 经纬度（供"附近门店"距离排序，可选，未提供时省略字段）
           operatingStatus: finalOperatingStatus,
           province: finalProvince,
+          ...(finalOrgType ? { orgType: finalOrgType } : {}),
           ...(typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : {}),
           createdBy: OPENID,
           createdAt: db.serverDate()

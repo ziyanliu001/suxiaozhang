@@ -191,7 +191,7 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
 // 义工加入已有门店：免审核即刻生效（提升义工体验）；其余场景（管理身份 / 新建门店）
 // 一律进入 pending，交由 approve/reject 分支按权限分级处理。
 async function submitRoleApply(event, OPENID) {
-  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos, province, city, district, adminKey } = event;
+  const { storeId, storeName, storeSelectionType, customStoreName, realName, phone, requestedRole, tenantId, address, contactPhone, storePhotos, province, city, district, adminKey, orgType } = event;
 
   if (!realName || !String(realName).trim()) return { success: false, error: '请填写真实姓名' };
   if (!phone || !String(phone).trim()) return { success: false, error: '请填写手机号' };
@@ -269,6 +269,9 @@ async function submitRoleApply(event, OPENID) {
     docData.address = sanitizeText(address);
     docData.contactPhone = sanitizeText(contactPhone);
     docData.storePhotos = sanitizePhotos(storePhotos);
+    // 🏢 平台类型：写入门店档案，供全国大屏按 orgType 筛选聚合
+    const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'other'];
+    docData.orgType = VALID_ORG_TYPES.includes(orgType) ? orgType : 'other';
     // 🆕 所属地区：优先用申请人在 <picker mode="region"> 里手动选择的省市区；
     // 客户端未传（如老版本小程序）时，尝试从门店名称/地址文本里轻量提取兜底
     const submittedProvince = sanitizeText(province);
@@ -357,6 +360,7 @@ async function submitRoleApply(event, OPENID) {
             province: docData.province || '',
             city: docData.city || '',
             district: docData.district || '',
+            orgType: docData.orgType || 'other',
             adminKey: storeAdminKey
           }
         }).catch(err => console.warn('[processRoleAudit] 回写新店档案失败（不影响建店）:', err))

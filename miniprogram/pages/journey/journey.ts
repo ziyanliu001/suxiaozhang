@@ -72,7 +72,7 @@ Page({
     pageTitle: '我的志愿历程',
     pageTitleIcon: '🤝',
     pageSubtitle: '每一份付出，都是爱的印记',
-    dayLabel: '服务天数',
+    dayLabel: '志愿天数',
     hoursLabel: '志愿工时(h)',
     mealsLabel: '服务人次',
     heatmapTip: '金色越亮、图标越满，代表当日志愿工时越长',
@@ -168,40 +168,87 @@ Page({
   // ✨ 称谓自适应：读取 tenantId → 判断是否雨花斋 → 派生全部展示文案。
   // 优先同步读缓存（零延迟，页面首帧即正确）；缓存未命中时静默异步补充，
   // 两路都拿不到角色信息时保持通用文案，绝不影响后续数据加载流程。
+  // 🐛 根因修复：tenantId 前缀只是历史租户/建店命名空间，同一 tenantId 前缀下
+  // 完全可能挂着 elderly_canteen（社区助餐点）等非雨花斋门店——与 profile.ts
+  // fetchStoreOrgType() 同一类问题（详见该方法的根因修复注释）。这里先用
+  // tenantId 前缀起一个 seed（避免首帧文案空白/闪烁），随后用 fetchRealOrgType()
+  // 查到的 stores.orgType 真实值覆盖，避免把社区助餐点误标成"雨花护持"
   resolveOrgLabels() {
-    const applyLabels = (tenantId: string) => {
-      const isYuhuazhai = String(tenantId || '').startsWith('yuhuazhai');
-      if (isYuhuazhai) {
-        this.setData({
-          isYuhuazhai: true,
-          pageTitle: '我的护持历程',
-          pageTitleIcon: '🌸',
-          pageSubtitle: '每一滴汗水，都是爱的印记',
-          dayLabel: '护持天数',
-          hoursLabel: '护持工时(h)',
-          mealsLabel: '护持餐数',
-          heatmapTitle: '近 30 天护持足迹',
-          heatmapTip: '金色越亮、图标越满，代表当日护持工时越长',
-          emptyStateTitle: '开启您的第一次雨花护持之旅',
-          emptyStateDesc: '一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！'
-        });
-      }
-      // 通用标签已是 data 默认值，非雨花斋无需再次 setData
+    const seedFromTenantId = (tenantId: string) => {
+      this.applyOrgLabels(String(tenantId || '').startsWith('yuhuazhai'));
     };
 
     try {
       const cached = AuthService.getCachedRoleInfo();
       if (cached) {
-        applyLabels((cached as any).tenantId || '');
-        return;
+        seedFromTenantId((cached as any).tenantId || '');
+      } else {
+        // 缓存缺失：静默异步补充 seed，不阻塞页面其余加载
+        AuthService.fetchUserRole().then((res) => {
+          const tenantId = (res && res.roleInfo && (res.roleInfo as any).tenantId) || '';
+          seedFromTenantId(tenantId);
+        }).catch(() => { /* keep generic labels */ });
       }
     } catch (e) { /* ignore */ }
 
-    // 缓存缺失：静默异步补充，不阻塞页面其余加载
-    AuthService.fetchUserRole().then((res) => {
-      const tenantId = (res && res.roleInfo && (res.roleInfo as any).tenantId) || '';
-      applyLabels(tenantId);
-    }).catch(() => { /* keep generic labels */ });
+    // 精确覆盖：查真实 stores.orgType，只有它才能分清雨花斋 / elderly_canteen
+    // 等具体机构类型，不用 tenantId 前缀猜测兜底
+    this.fetchRealOrgType();
+  },
+
+  // 派生全部展示文案：雨花斋一套护持向措辞，其余机构（含 elderly_canteen 社区
+  // 助餐点）统一走通用志愿向措辞——resolveOrgLabels() 里的 seed 与
+  // fetchRealOrgType() 里的精确覆盖共用同一份计算，避免两处文案对不上
+  applyOrgLabels(isYuhuazhai: boolean) {
+    if (isYuhuazhai) {
+      this.setData({
+        isYuhuazhai: true,
+        pageTitle: '我的护持历程',
+        pageTitleIcon: '🌸',
+        pageSubtitle: '每一滴汗水，都是爱的印记',
+        dayLabel: '护持天数',
+        hoursLabel: '护持工时(h)',
+        mealsLabel: '护持餐数',
+        heatmapTitle: '近 30 天护持足迹',
+        heatmapTip: '金色越亮、图标越满，代表当日护持工时越长',
+        emptyStateTitle: '开启您的第一次雨花护持之旅',
+        emptyStateDesc: '一碗热饭，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！'
+      });
+      return;
+    }
+    // 通用标签：从雨花斋态切回来时需要显式还原（真实 orgType 覆盖 seed 猜测时
+    // 可能发生这种情况），不能假设"非雨花斋就什么都不用做"
+    this.setData({
+      isYuhuazhai: false,
+      pageTitle: '我的志愿历程',
+      pageTitleIcon: '🤝',
+      pageSubtitle: '每一份付出，都是爱的印记',
+      dayLabel: '志愿天数',
+      hoursLabel: '志愿工时(h)',
+      mealsLabel: '服务人次',
+      heatmapTitle: '近 30 天服务足迹',
+      heatmapTip: '金色越亮、图标越满，代表当日志愿工时越长',
+      emptyStateTitle: '开启您的第一次爱心志愿之旅',
+      emptyStateDesc: '一份关爱，一份温情。前往首页完成首次签到打卡，点亮您的第一枚爱心足迹吧！'
+    });
+  },
+
+  // 🌟 拉取当前绑定门店的真实 orgType（stores.orgType，见 manageStoreProfile
+  // 云函数 get 动作），用它覆盖上面 tenantId 前缀猜出来的 seed 文案。查询失败或
+  // 未设置 orgType（历史门店）时静默保留 seed 结果，不阻断页面其余加载
+  async fetchRealOrgType() {
+    if (!isCloudAvailable()) return;
+    try {
+      const res: any = await wx.cloud.callFunction({
+        name: 'manageStoreProfile',
+        data: { action: 'get' }
+      });
+      const orgType = res && res.result && res.result.data && res.result.data.orgType;
+      if (!orgType) return;
+      this.applyOrgLabels(orgType === 'yuhuazhai');
+    } catch (err) {
+      console.warn('[journey][fetchRealOrgType] 查询真实机构类型失败:', err);
+    }
   },
 
   // 🐛 数据硬核对齐：此前直接读全局递增计数器（my_checkin_days 等），与首页/个人页
@@ -303,7 +350,20 @@ Page({
         const roleResult = await AuthService.fetchUserRole();
         roleInfo = roleResult.roleInfo || null;
       }
-      const isSuperAdmin = !!roleInfo && roleInfo.role === 'super_admin';
+      const trueServerRole = (roleInfo && roleInfo.role) || 'volunteer';
+
+      // 🐛 核心修复：与 profile.ts initMinePage() 同一套"手动切换角色优先"口径——
+      // 此前这里只看 checkUserRole 缓存的服务端角色快照（roleInfo.role），完全
+      // 不理会「选择服务站点与身份」/「切换身份」弹窗手动切换后写入的
+      // current_user_role。真超管手动切到店长/义工等展示视角后，本页依旧会把
+      // 【全国纵览】这张"超管专属"绿色卡片渲染出来，与个人中心等其它页面的
+      // 展示态互相矛盾——表现为"明明当前显示的是普通角色，护持历程页却还挂着
+      // 超管专属卡片"。只要 current_user_role 存在就必须以它为准
+      const storageRole = wx.getStorageSync('current_user_role');
+      const effectiveRole = storageRole
+        ? (trueServerRole === 'super_admin' ? storageRole : AuthService.resolveEffectiveRole(trueServerRole))
+        : trueServerRole;
+      const isSuperAdmin = (effectiveRole || '').toLowerCase() === 'super_admin';
       this.setData({ isSuperAdmin });
       if (!isSuperAdmin) return;
 
