@@ -430,14 +430,21 @@ Page({
   _navGuard: null as NavGuardInstance | null,
   // 🔢 义工与用餐服务数据看板·数字滚动动画计时器，onUnload 统一清理
   _careCountUpTimer: null as any,
-  // 🐛 根因修复：onLoad 与紧随其后的 onShow（小程序冷启动时两者背靠背触发，
-  // 中间几乎没有间隔）都会各自调用一次 reloadShopListAndStats()——这两次调用
-  // 命中的是同一份角色/门店状态，属于纯重复请求，此前只能靠 statisticsLoadLoading
-  // 的"待补发"机制事后合并（先发出去一次真实请求，第二次撞锁再排队补发一次），
-  // 实际还是发生了 2 次云调用，控制台也会打印一次"已有请求在途，记为待补发"。
-  // scheduleReloadStats() 把触发动作本身做 150ms 防抖：短时间内的多次触发只保留
-  // 最后一次真正执行，从源头把两次触发合并成一次，不再依赖"发出去再补救"
+  // 🐛 根因修复：onLoad 与紧随其后的 onShow 都会各自调用一次
+  // reloadShopListAndStats()——这两次调用命中的是同一份角色/门店状态，属于纯
+  // 重复请求。scheduleReloadStats() 曾尝试靠 150ms 防抖从源头合并，但 onLoad/
+  // onShow 之间的真实间隔在弱网/真机/开发者工具下并不保证 <150ms（例如
+  // initUserRole() 的角色解析、loadShopList() 的云调用耗时都会把 onShow 实际
+  // 触发的时间点顺延），间隔一旦超过 150ms，两次触发各自独立命中一次
+  // reloadShopListAndStats()，控制台仍会打出"已有请求在途，记为待补发"、
+  // getStatisticsData 被完整调用两次。真正根治见 _skipNextShowReload：只在
+  // onLoad 已经调度过一次的这一次 onShow（冷启动背靠背的那次）跳过重复调度，
+  // 之后任何"用户切走再切回来"的正常 onShow 不受影响，仍会正常刷新
   _reloadStatsDebounceTimer: null as any,
+  // 🐛 见上面 _reloadStatsDebounceTimer 注释：冷启动时 onLoad 已经调度过一次
+  // reloadShopListAndStats()，紧随其后的第一次 onShow 不需要再调度一次——
+  // onLoad 末尾置位，onShow 消费一次后立即清零，不影响后续真正的"返回本页"场景
+  _skipNextShowReload: false,
   // 🐛 见 data.roleReady 注释：reloadShopListAndStats() 在角色尚未就绪时把这次
   // 请求记成待办，不放进 data（不需要驱动渲染），applyRolePermissions() 落地后读取
   _pendingStatsReload: false,
@@ -896,6 +903,9 @@ Page({
     this.initCustomDates();
     this.initUserRole();
     this.scheduleReloadStats();
+    // 🐛 见 _skipNextShowReload 声明处注释：冷启动紧随其后的第一次 onShow 不用
+    // 再重复调度一次 reloadShopListAndStats()，这里已经调度过了
+    this._skipNextShowReload = true;
     this.initWatermarkIdentity();
 
     // 🐛 DEBUG：initUserRole() 是异步的，onLoad 执行到这里时角色信息大概率还没解析
@@ -951,7 +961,15 @@ Page({
     }
     this.sanitizeDateVariables();
     DataService.syncLocalDataToCloud();
-    this.scheduleReloadStats();
+    // 🐛 根因修复：冷启动时 onLoad 已经调度过一次 reloadShopListAndStats()，
+    // 紧随其后的这第一次 onShow 不需要再调度第二次——见 _skipNextShowReload
+    // 声明处注释。只跳过这一次，之后任何"用户切走再切回本页"的正常 onShow
+    // 依然会照常刷新，不受影响
+    if (this._skipNextShowReload) {
+      this._skipNextShowReload = false;
+    } else {
+      this.scheduleReloadStats();
+    }
   },
 
   sanitizeDateVariables() {
