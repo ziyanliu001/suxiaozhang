@@ -45,6 +45,62 @@
       </view>
     </view>
 
+    <!-- 🌸 授权码生成/分发：微信支付商户号配好之前的过渡收入手段。铸造 + 台账
+         查看都只在本页完成——兑换是机构侧自己的操作（个人页「开通/续费专业版
+         套餐」弹窗），平台管理员没有所属机构，本页不做兑换 -->
+    <view class="pa-section-header">
+      <text class="pa-section-title">授权码生成 / 分发</text>
+      <button class="pa-btn-create" hover-class="btn-hover" bindtap="onToggleGenerateCodesForm">{{showGenerateCodesForm ? '取消' : '+ 生成授权码'}}</button>
+    </view>
+
+    <view class="pa-create-form" wx:if="{{showGenerateCodesForm}}">
+      <text class="pa-field-label">套餐档位</text>
+      <view class="pa-plan-row">
+        <view class="pa-plan-tag {{generateCodesForm.planType === 'pro' ? 'active' : ''}}" hover-class="btn-hover" data-plan="pro" bindtap="onSelectCodePlan">专业版</view>
+        <view class="pa-plan-tag {{generateCodesForm.planType === 'enterprise' ? 'active' : ''}}" hover-class="btn-hover" data-plan="enterprise" bindtap="onSelectCodePlan">旗舰版</view>
+      </view>
+      <text class="pa-field-label">有效期（天）</text>
+      <input class="pa-input" type="number" placeholder="如：365" value="{{generateCodesForm.durationDays}}" bindinput="onGenerateCodesFormInput" data-field="durationDays" />
+      <text class="pa-field-label">生成数量（单次最多 50 张）</text>
+      <input class="pa-input" type="number" placeholder="如：1" value="{{generateCodesForm.quantity}}" bindinput="onGenerateCodesFormInput" data-field="quantity" />
+      <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitGenerateCodes" loading="{{generatingCodes}}" disabled="{{generatingCodes}}">铸造授权码</button>
+    </view>
+
+    <!-- 刚生成的这一批：置顶展示 + 一键复制，不用去下面台账列表里翻找 -->
+    <view class="pa-generated-box" wx:if="{{lastGeneratedCodes.length > 0}}">
+      <view class="pa-generated-header">
+        <text class="pa-generated-title">✅ 刚生成 {{lastGeneratedCodes.length}} 张授权码</text>
+        <view class="pa-generated-copy-all" hover-class="btn-hover" bindtap="onCopyAllGeneratedCodes">复制全部</view>
+      </view>
+      <view class="pa-generated-row" wx:for="{{lastGeneratedCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
+        <text class="pa-generated-code">{{item.code}}</text>
+        <text class="pa-generated-meta">{{planLabels[item.planType] || item.planType}} · {{item.durationDays}}天</text>
+      </view>
+    </view>
+
+    <view class="pa-codes-filter-row">
+      <view class="pa-codes-filter-tab {{activationCodesFilter === 'UNUSED' ? 'active' : ''}}" data-filter="UNUSED" bindtap="onSwitchActivationCodesFilter">未使用</view>
+      <view class="pa-codes-filter-tab {{activationCodesFilter === 'USED' ? 'active' : ''}}" data-filter="USED" bindtap="onSwitchActivationCodesFilter">已核销</view>
+      <view class="pa-codes-filter-tab {{activationCodesFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesFilter">全部</view>
+    </view>
+
+    <view class="pa-tenant-empty" wx:if="{{!activationCodesLoading && activationCodes.length === 0}}">
+      <text>暂无{{activationCodesFilter === 'UNUSED' ? '未使用' : (activationCodesFilter === 'USED' ? '已核销' : '')}}授权码</text>
+    </view>
+
+    <view class="pa-code-card" wx:for="{{activationCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
+      <view class="pa-code-row-top">
+        <text class="pa-code-text">{{item.code}}</text>
+        <text class="pa-code-status pa-code-status-{{item.status}}">{{item.status === 'UNUSED' ? '未使用' : '已核销'}}</text>
+      </view>
+      <view class="pa-code-row-bottom">
+        <text class="pa-plan-badge pa-plan-badge-{{item.planType}}">{{planLabels[item.planType] || item.planType}}</text>
+        <text class="pa-tenant-row pa-code-inline-row">{{item.durationDays}}天</text>
+        <text class="pa-tenant-row pa-code-inline-row" wx:if="{{item.redeemedByTenantName}}">→ {{item.redeemedByTenantName}}</text>
+      </view>
+    </view>
+    <view class="fa-safe-area-spacer"></view>
+
     <view class="pa-section-header">
       <text class="pa-section-title">机构列表</text>
       <button class="pa-btn-create" hover-class="btn-hover" bindtap="onToggleCreateForm">{{showCreateForm ? '取消' : '+ 新建机构'}}</button>

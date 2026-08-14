@@ -370,6 +370,137 @@
   color: #C62828;
 }
 
+/* 🌸 授权码生成/分发：过渡收入手段——见 platform-admin.ts data 声明处注释 */
+.pa-generated-box {
+  background: #FFF8E1;
+  border: 2rpx solid #FFD54F;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-generated-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.pa-generated-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #8D6E00;
+}
+
+.pa-generated-copy-all {
+  height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20rpx;
+  border-radius: 26rpx;
+  background: #1C2530;
+  color: #FFFFFF;
+  font-size: 22rpx;
+}
+
+.pa-generated-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFFFF;
+  border-radius: 10rpx;
+  padding: 14rpx 16rpx;
+  margin-bottom: 10rpx;
+}
+
+.pa-generated-row:last-child {
+  margin-bottom: 0;
+}
+
+.pa-generated-code {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #333333;
+  letter-spacing: 1rpx;
+}
+
+.pa-generated-meta {
+  font-size: 20rpx;
+  color: #999999;
+}
+
+.pa-codes-filter-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.pa-codes-filter-tab {
+  flex: 1;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28rpx;
+  font-size: 24rpx;
+  background: #EDEFF2;
+  color: #666666;
+}
+
+.pa-codes-filter-tab.active {
+  background: #1C2530;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.pa-code-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.pa-code-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+
+.pa-code-text {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  letter-spacing: 1rpx;
+}
+
+.pa-code-status {
+  font-size: 20rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  color: #FFFFFF;
+}
+
+.pa-code-status-UNUSED {
+  background: #2E7D32;
+}
+
+.pa-code-status-USED {
+  background: #999999;
+}
+
+.pa-code-row-bottom {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.pa-code-inline-row {
+  margin-bottom: 0;
+}
+
 .pa-modal-mask {
   position: fixed;
   inset: 0;

@@ -17,6 +17,10 @@
 //                        的实体卡号/授权码来兑换）
 // action: 'redeem'   —— 机构自己的 super_admin/store_patriarch 自助兑换，
 //                        一次性核销，立即延长/开通 tenant_subscriptions
+// action: 'list'     —— 平台管理员查看已铸造的激活码台账（按状态筛选/翻页），
+//                        铸造与分发管理页依赖这个动作回看历史批次、核对哪些
+//                        已经被兑换、卖给了哪家机构，不是本次自动化范围但同样
+//                        只对平台管理员开放
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -138,6 +142,61 @@ async function handleGenerate(event, OPENID) {
   }
 
   return { success: true, codes };
+}
+
+// 📋 铸造历史台账：仅平台管理员可查看，按状态筛选（不传/'all' 时不过滤）。
+// 已兑换的码额外反查一次 tenants 集合把 redeemedByTenantId 换成机构名——
+// 管理页不需要自己再记一遍每个 tenantId 对应哪家机构
+async function handleList(event, OPENID) {
+  const caller = await resolveCaller(OPENID);
+  if (!caller || caller.role !== 'platform_admin') {
+    return { success: false, error: '无权限：仅平台管理员可查看激活码台账' };
+  }
+
+  await ensureActivationCodesCollection();
+
+  const where = {};
+  if (event.status === 'UNUSED' || event.status === 'USED') {
+    where.status = event.status;
+  }
+
+  const LIST_LIMIT = 100;
+  let codes = [];
+  try {
+    const res = await db.collection(ACTIVATION_CODES_COLLECTION)
+      .where(where)
+      .orderBy('createdAt', 'desc')
+      .limit(LIST_LIMIT)
+      .get();
+    codes = res.data || [];
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+    codes = [];
+  }
+
+  const tenantIds = Array.from(new Set(codes.filter((c) => c.redeemedByTenantId).map((c) => c.redeemedByTenantId)));
+  const tenantNameMap = {};
+  if (tenantIds.length > 0) {
+    try {
+      const tenantsRes = await db.collection('tenants').where({ _id: _.in(tenantIds) }).field({ name: true }).get();
+      (tenantsRes.data || []).forEach((t) => { tenantNameMap[t._id] = t.name || t._id; });
+    } catch (err) {
+      // 机构名查询失败不影响主列表展示，静默降级为展示原始 tenantId
+    }
+  }
+
+  return {
+    success: true,
+    codes: codes.map((c) => ({
+      code: c.code,
+      planType: c.planType,
+      durationDays: c.durationDays,
+      status: c.status,
+      createdAt: c.createdAt,
+      redeemedAt: c.redeemedAt,
+      redeemedByTenantName: c.redeemedByTenantId ? (tenantNameMap[c.redeemedByTenantId] || c.redeemedByTenantId) : ''
+    }))
+  };
 }
 
 // 🌸 自助兑换：机构自己的 super_admin/store_patriarch 输入激活码即时生效，
@@ -279,6 +338,9 @@ exports.main = async (event) => {
     }
     if (action === 'redeem') {
       return await handleRedeem(event, OPENID);
+    }
+    if (action === 'list') {
+      return await handleList(event, OPENID);
     }
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {
