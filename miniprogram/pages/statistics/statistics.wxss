@@ -4674,6 +4674,103 @@ button.btn-empty-primary {
   100% { background-position: 0 50%; }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ☀️ 阳光大盘：Profile「阳光账本核查」/首页「阳光账本」的落地卡片，
+   管理视图/个人视图共用同一套样式
+   ═══════════════════════════════════════════════════════════════ */
+.sunshine-board-card {
+  background: linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 120rpx);
+  border: 1rpx solid #FFE9A8;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.sunshine-board-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sunshine-info-icon {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: rgba(217, 72, 14, 0.08);
+  color: #D9480E;
+  font-size: 24rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sunshine-board-sub {
+  display: block;
+  font-size: 22rpx;
+  color: #868E96;
+  margin-top: 6rpx;
+}
+
+.sunshine-board-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.sunshine-board-cell {
+  background: #FFFFFF;
+  border: 1rpx solid #FFF3CD;
+  border-radius: 12rpx;
+  padding: 16rpx 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.sunshine-board-val {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #D9480E;
+  line-height: 1.15;
+}
+
+.sunshine-board-lbl {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.sunshine-concept-modal-box {
+  width: 640rpx;
+}
+
+.sunshine-concept-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+
+.sunshine-concept-block:last-child {
+  border-bottom: none;
+}
+
+.sunshine-concept-label {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #D9480E;
+}
+
+.sunshine-concept-text {
+  font-size: 26rpx;
+  color: #495057;
+  line-height: 1.6;
+}
+
 .core-metrics-yoy {
   font-size: 20rpx;
   font-weight: bold;

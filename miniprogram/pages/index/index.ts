@@ -8376,6 +8376,23 @@ Page({
 
   stopPropagation() {},
 
+  // ☀️ 阳光账本入口（首页顶部卡片）：跳转统计页 ?tab=sunshine，落地到该页
+  // 新增的「☀️ 阳光大盘」真实数据区块，取代此前 onOpenSunshineLedger 只弹一个
+  // 理念/宣言 Modal、弹完无处可去的死胡同。onOpenSunshineLedger 本体保留不动——
+  // 家人首页大卡片的"查看完整账本"、以及 Profile「关于雨花斋与阳光账本」的
+  // 跨页交接（见 checkPendingHandoffs/requestOpenSunshineLedger）仍在用它
+  onGoToSunshineBoard() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: '/pages/statistics/statistics?tab=sunshine',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
   // ☀️ 阳光账本：全角色/无登录门槛可查看，数据来自 getSunshineLedger 云函数
   // （不做任何 user_roles/OPENID 权限校验，与扫码验真 publicVerifyReport 同一套
   // 设计哲学——只接受调用方明确指定的当前门店 storeId，不支持跨店/全部门店聚合）

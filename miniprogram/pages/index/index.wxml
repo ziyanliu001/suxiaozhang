@@ -151,13 +151,17 @@
     </view>
   </view>
 
-  <!-- ☀️ 阳光账本入口：标题正下方、位置最优先——公开透明数据入口，点击触发
-       onOpenSunshineLedger，拉取 getSunshineLedger 云函数（无需登录/无权限门槛，
-       与扫码验真同一套设计）。
+  <!-- ☀️ 阳光账本入口：标题正下方、位置最优先——公开透明数据入口。
+       🐛 根因修复：此前点击 onOpenSunshineLedger 只拉起一个理念/宣言 Modal，
+       弹完无处可去，是"只弹窗不跳页面"的交互死胡同。改为直接跳转统计页
+       ?tab=sunshine，落地到 statistics.wxml 新增的「☀️ 阳光大盘」真实数据区块
+       （管理视图/个人视图都有渲染，见该页 fetchSunshineBoardData），不再是
+       停留在首页的一次性弹窗。
        🐛 精简重复：家人首页自己的第一模块【☀️ 阳光账本核心大盘】已经是这张卡片
-       的放大版（同一套数据管线 + 同一个点击入口），这里加 !isFamily 排除，
-       避免家人视角下同一个功能重复出现两次 -->
-  <view class="ui-card-wrapper sunshine-ledger-entry" wx:if="{{!isFamily}}" bindtap="onOpenSunshineLedger">
+       的放大版（同一套数据管线 + 点开「查看完整账本」仍是 onOpenSunshineLedger
+       弹窗——家人视角的用意本就是"不记名护持"的轻量展示，不涉及门店治理数据，
+       维持原样），这里加 !isFamily 排除，避免家人视角下同一个功能重复出现两次 -->
+  <view class="ui-card-wrapper sunshine-ledger-entry" wx:if="{{!isFamily}}" bindtap="onGoToSunshineBoard">
     <view class="sunshine-ledger-icon">☀️</view>
     <view class="sunshine-ledger-text-group">
       <text class="sunshine-ledger-title">阳光账本</text>

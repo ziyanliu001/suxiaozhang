@@ -3990,6 +3990,24 @@ Page({
     });
   },
 
+  // 💰 财务专属【阳光账本核查】：此前复用 onGoToSunshineLedger（写交接标记 +
+  // switchTab 到首页 tabBar，靠首页 onShow 自动弹出阳光账本理念/宣言 Modal）——
+  // 财务点进来是要"核查"账目，不是看一段公益宣言文案，弹窗弹完无处可去，是典型
+  // 的"只弹窗不落地"死胡同。改为直接跳转统计页并携带 tab=sunshine&viewMode=finance，
+  // 落地到 statistics.wxml 新增的「☀️ 阳光大盘」真实数据区块（见该页
+  // fetchSunshineBoardData），不再复用家人视角那个纯展示性质的 onGoToSunshineLedger
+  onGoToSunshineLedgerAudit() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=sunshine&viewMode=finance`,
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
   // 💰 财务专属【Excel 财务报表导出】：跳去统计页并携带 action=export&viewMode=finance，
   // statistics.ts onLoad 据此拉起与首页"Excel 账本导出"同一套自动唤起核对弹窗逻辑
   // （见 statistics.ts onLoad/_autoShowExportPending），不新建导出入口

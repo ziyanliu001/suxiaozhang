@@ -33,6 +33,33 @@ function orgTypeShortName(orgType: string): string {
   return (opt && opt.shortName) || '其他爱心组织';
 }
 
+// ☀️ 阳光账本理念弹窗文案：与 pages/index/index.ts 的 computeConceptCopy 是
+// 同一份内容（按 getSunshineLedger 返回的真实 orgType 三档区分），未提炼成共享
+// utils——这份纯文案函数很小，两个页面各自的阳光账本卡片/弹窗展示时机、周边
+// 状态完全不同，硬拆共享模块换不来实际收益
+function computeSunshineConceptCopy(orgType: string, storeName: string): { title: string; label: string; content: string } {
+  const displayStoreName = storeName || '本站点';
+  if (orgType === 'yuhuazhai') {
+    return {
+      title: '☀️ 阳光账本与雨花理念',
+      label: '雨花精神',
+      content: '雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与公益互助。'
+    };
+  }
+  if (orgType === 'elderly_canteen') {
+    return {
+      title: '☀️ 阳光账本与助老理念',
+      label: '助老理念',
+      content: '爱心助餐，敬老护生。致力于为社区长者提供公开透明、温暖放心的助餐服务。'
+    };
+  }
+  return {
+    title: '☀️ 阳光账本与公益宣言',
+    label: '公益宗旨',
+    content: `阳光笃行，爱心同行。${displayStoreName}坚持以公益之心服务社区，守护每一份需要关爱的心意。`
+  };
+}
+
 // 🌾 大米/食用油库存状态展示口径：与"爱心续航看板"健康卡片、material-usage-modal
 // 组件的三档选择器共用同一套 sufficient/normal/urgent 语义，提炼成模块级常量供
 // calculateStatistics（历史 report_logs 兜底）与 fetchLatestMaterialStockStatus
@@ -490,6 +517,33 @@ Page({
     // 视觉跳变。isFinance 落地后两者语义等价，wxml 判断统一写
     // isFinance || financeEntryMode
     financeEntryMode: false,
+    // ☀️ 阳光大盘：Profile「阳光账本核查」/首页「阳光账本」跳转的真正落地区块，
+    // 取代此前"点了只弹一个理念宣言 Modal、不落到任何数据页面"的交互死胡同。
+    // 数据源与首页阳光账本弹窗同一个公开只读云函数 getSunshineLedger（见
+    // fetchSunshineBoardData），管理视图/个人视图两个分支都会渲染，只要能拿到
+    // storeId 就与角色无关——该云函数本身就是"全角色/免登录门槛"的公开数据
+    sunshineBoardLoading: false,
+    sunshineBoardData: {
+      storeName: '',
+      periodLabel: '',
+      auditedReportsCount: 0,
+      totalDiners: 0,
+      monthlyDiners: 0,
+      takeawayMeals: 0,
+      totalHours: 0,
+      volunteerCount: 0,
+      operatingDays: 0,
+      ledgerPublicRate: null as string | null
+    },
+    sunshineBoardCards: [] as { label: string; value: string }[],
+    // 🆕 阳光宣言辅助弹窗：由阳光大盘标题旁的 ⓘ 图标触发，只做理念说明，不再是
+    // 进页面就顶在最前面的"点了只弹窗"入口——见 onOpenSunshineConceptModal
+    showSunshineConceptModal: false,
+    sunshineConceptTitle: '☀️ 阳光账本与公益宣言',
+    sunshineConceptLabel: '',
+    sunshineConceptContent: '',
+    // 🆕 ?tab=sunshine 跳转锚点：management 视图的主滚动区据此自动滚到阳光大盘卡片
+    scrollIntoViewId: '',
     // 大家长快捷入口：统计页头部的"全国数据看板 ↗"按钮可见性
     showNationalDashboardEntry: false,
     dashboardTitle: '🌐 全网爱心矩阵数据大屏',
@@ -767,11 +821,18 @@ Page({
       });
     }
 
-    // 🗂️ tab=ledger：财务专区「门店账目明细」的落地锚点。统计页本身没有独立的
-    // "账目列表" Tab，最贴近"账目明细"语义的落地态是「月报」（逐日摊开的收支
-    // 流水，见下方 daily-list-card），故把 ledger 映射到 month；其余合法周期
-    // 字面量（week/month/year/custom）原样透传，非法值一律忽略、保留默认 tab
-    if (tabParam) {
+    // ☀️ tab=sunshine：Profile「阳光账本核查」/首页「阳光账本」的落地锚点。
+    // 阳光大盘不是 week/month/year/custom 那套"周期 Tab"的一员（它展示的是
+    // getSunshineLedger 的独立公开数据管线，不受周期切换影响），这里只记一个
+    // 滚动锚点 id，交给下面渲染完成后的 scroll-into-view 把它带入可视区域，
+    // 不改写 currentTab
+    if (tabParam === 'sunshine') {
+      this.setData({ scrollIntoViewId: 'sunshineBoardAnchor' });
+    } else if (tabParam) {
+      // 🗂️ tab=ledger：财务专区「门店账目明细」的落地锚点。统计页本身没有独立的
+      // "账目列表" Tab，最贴近"账目明细"语义的落地态是「月报」（逐日摊开的收支
+      // 流水，见下方 daily-list-card），故把 ledger 映射到 month；其余合法周期
+      // 字面量（week/month/year/custom）原样透传，非法值一律忽略、保留默认 tab
       const resolvedTab = tabParam === 'ledger' ? 'month' : tabParam;
       if (['week', 'month', 'year', 'custom'].indexOf(resolvedTab) !== -1) {
         this.setData({ currentTab: resolvedTab });
@@ -1073,6 +1134,11 @@ Page({
       dashboardRoleTag: ''
     });
 
+    // ☀️ 阳光大盘：与角色是否为"管理者"无关（getSunshineLedger 本身不做权限
+    // 校验），管理视图/个人视图都渲染这张卡片，这里统一在角色（含 storeId）
+    // 落地后触发一次，不放进下面 showPersonalView/else 各自的分支里重复触发
+    this.fetchSunshineBoardData();
+
     // 🛡️ 双保险：生效role 一旦不是 super_admin，强制清空/重置"全部门店"权限位与
     // 当前视图模式，不依赖下面 showPersonalView/else 分支各自都覆盖到——例如
     // showPersonalView 分支完全不触碰 isAllStoresMode，一个账号从 super_admin
@@ -1173,6 +1239,78 @@ Page({
     // currentUserRole，见上面 setData 里的 currentUserRole: role）
     console.log('[DEBUG] applyRolePermissions 结束时 currentUserRole 权限数据：', this.data.currentUserRole);
     console.log('[DEBUG] applyRolePermissions 结束时 showNationalDashboard 状态：', this.data.showNationalDashboard);
+  },
+
+  // ☀️ 阳光大盘：数据源与首页阳光账本弹窗同一个公开只读云函数 getSunshineLedger
+  // （见 pages/index/index.ts fetchSunshineLedgerData），这里独立实现一份而不是
+  // 跨页面复用状态——两个页面的加载时机/周边状态完全不同，共享一份 setData 反而
+  // 会把两边的生命周期耦合在一起
+  async fetchSunshineBoardData(yearMonth?: string) {
+    if (this.data.sunshineBoardLoading) return;
+    const storeId = this.data.currentUserStoreId;
+    // 🛡️ 超管处于"全部门店"聚合视图、或角色/门店尚未解析出来时，压根没有单一
+    // storeId 可查——阳光账本口径与 getSunshineLedger 云函数一致，不支持跨店
+    // 聚合，静默跳过即可，不额外弹 Toast 打扰
+    if (!storeId) return;
+
+    this.setData({ sunshineBoardLoading: true });
+    try {
+      const now = new Date();
+      const targetYearMonth = yearMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const res: any = await wx.cloud.callFunction({
+        name: 'getSunshineLedger',
+        data: { storeId, yearMonth: targetYearMonth }
+      });
+      const result = res.result;
+      if (!result || !result.success) {
+        console.warn('[fetchSunshineBoardData] 加载阳光账本失败:', result && result.error);
+        return;
+      }
+
+      const ledgerData = {
+        storeName: result.storeName || '',
+        periodLabel: result.periodLabel || '',
+        auditedReportsCount: result.auditedReportsCount || 0,
+        totalDiners: result.totalDiners || 0,
+        monthlyDiners: result.monthlyDiners || 0,
+        takeawayMeals: result.takeawayMeals || 0,
+        totalHours: result.totalHours || 0,
+        volunteerCount: result.volunteerCount || 0,
+        operatingDays: result.operatingDays || 0,
+        ledgerPublicRate: result.ledgerPublicRate || null
+      };
+      const concept = computeSunshineConceptCopy(result.orgType || '', ledgerData.storeName || this.data.currentUserStoreName);
+
+      this.setData({
+        sunshineBoardData: ledgerData,
+        sunshineConceptTitle: concept.title,
+        sunshineConceptLabel: concept.label,
+        sunshineConceptContent: concept.content,
+        sunshineBoardCards: [
+          { label: '累计就餐人次', value: String(ledgerData.totalDiners) },
+          { label: '当月就餐人次', value: String(ledgerData.monthlyDiners) },
+          { label: '已核销餐报篇数', value: String(ledgerData.auditedReportsCount) },
+          { label: '爱心送餐份数', value: String(ledgerData.takeawayMeals) },
+          { label: '安全营运天数', value: String(ledgerData.operatingDays) },
+          { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }
+        ]
+      });
+    } catch (err) {
+      console.error('[fetchSunshineBoardData] 加载阳光账本异常:', err);
+      reportCloudSdkErrorIfCorrupted(err);
+    } finally {
+      this.setData({ sunshineBoardLoading: false });
+    }
+  },
+
+  // ⓘ 阳光大盘标题旁的说明图标：只做理念/宣言说明，与数据大盘解耦——用户点开
+  // 统计页时看到的第一屏是真实数据，不是一个必须先关掉才能看数据的宣言弹窗
+  onOpenSunshineConceptModal() {
+    this.setData({ showSunshineConceptModal: true });
+  },
+
+  onCloseSunshineConceptModal() {
+    this.setData({ showSunshineConceptModal: false });
   },
 
   // 🆕 家长专属资源续航看板：复用 getPatriarchDashboard 云函数（该函数早已把

@@ -1043,6 +1043,30 @@
   <!-- 🆕 个人视角：非管理角色（普通义工/无角色账号）专属，与「全国大屏」/「单店明细」
        完全独立——不展示任何跨门店治理/运营敏感数据，只有属于自己的护持数据 -->
   <view class="personal-dashboard-container" wx:if="{{showPersonalView}}">
+    <!-- ☀️ 阳光大盘：首页「阳光账本」跳转（?tab=sunshine）落地的第一屏，个人
+         视角下与管理视角共用同一套 fetchSunshineBoardData 数据管线/卡片结构，
+         只是排在个人护持数据之前——阳光账本是公开数据，与角色无关 -->
+    <view class="ui-card-wrapper sunshine-board-card" id="sunshineBoardAnchor">
+      <view class="card-header sunshine-board-header">
+        <text class="card-title">☀️ 阳光大盘</text>
+        <view class="sunshine-info-icon" bindtap="onOpenSunshineConceptModal">ⓘ</view>
+      </view>
+      <text class="sunshine-board-sub">{{sunshineBoardData.storeName || currentUserStoreName || '本门店'}} · {{sunshineBoardData.periodLabel || '本月'}} · 公开透明 · 全民监督</text>
+
+      <view class="sunshine-board-grid" wx:if="{{!sunshineBoardLoading}}">
+        <view class="sunshine-board-cell" wx:for="{{sunshineBoardCards}}" wx:key="label">
+          <text class="sunshine-board-val">{{item.value}}</text>
+          <text class="sunshine-board-lbl">{{item.label}}</text>
+        </view>
+      </view>
+      <view class="sunshine-board-grid" wx:else>
+        <view class="sunshine-board-cell skel-cell" wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-lg"></view>
+          <view class="skel-bar skel-bar-sm"></view>
+        </view>
+      </view>
+    </view>
+
     <view class="ui-card-wrapper personal-hero-card">
       <view class="hero-header">
         <text class="hero-title">💛 我的雨花爱心微数据</text>
@@ -1142,7 +1166,35 @@
     </view>
   </view>
 
-  <scroll-view class="content-section" scroll-y wx:if="{{!showNationalDashboard && !showPersonalView}}">
+  <scroll-view class="content-section" scroll-y scroll-into-view="{{scrollIntoViewId}}" wx:if="{{!showNationalDashboard && !showPersonalView}}">
+
+    <!-- ☀️ 阳光大盘：Profile「阳光账本核查」/首页「阳光账本」跳转的真正落地区块
+         （?tab=sunshine 时 scrollIntoViewId 会自动把它带入可视区域），取代此前
+         "点了只弹一个理念宣言 Modal、不落到任何数据页面"的交互死胡同。独立于
+         statistics.recordCount>0（下方 stats-content）之外——阳光账本是与周期
+         无关的独立公开数据管线，见 fetchSunshineBoardData -->
+    <view class="ui-card-wrapper sunshine-board-card" id="sunshineBoardAnchor">
+      <view class="card-header sunshine-board-header">
+        <text class="card-title">☀️ 阳光大盘</text>
+        <!-- ⓘ 说明图标：点击才拉起阳光宣言/理念说明弹窗，与数据大盘解耦——用户
+             一进页面看到的是真实数据，不是一个必须先关掉才能看数据的宣言弹窗 -->
+        <view class="sunshine-info-icon" bindtap="onOpenSunshineConceptModal">ⓘ</view>
+      </view>
+      <text class="sunshine-board-sub">{{sunshineBoardData.storeName || currentUserStoreName || shopName}} · {{sunshineBoardData.periodLabel || '本月'}} · 公开透明 · 全民监督</text>
+
+      <view class="sunshine-board-grid" wx:if="{{!sunshineBoardLoading}}">
+        <view class="sunshine-board-cell" wx:for="{{sunshineBoardCards}}" wx:key="label">
+          <text class="sunshine-board-val">{{item.value}}</text>
+          <text class="sunshine-board-lbl">{{item.label}}</text>
+        </view>
+      </view>
+      <view class="sunshine-board-grid" wx:else>
+        <view class="sunshine-board-cell skel-cell" wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-lg"></view>
+          <view class="skel-bar skel-bar-sm"></view>
+        </view>
+      </view>
+    </view>
 
     <!-- 🆕 核心经营指标骨架卡：独立于下方 statistics.recordCount>0 才渲染的
          stats-content，无论当期是否有数据都固定展示这 3x2 网格结构，避免
@@ -1981,6 +2033,27 @@
         <button class="btn-save-card" bindtap="onSaveGratitudeCardToAlbum">
           <text>📥 保存卡片</text>
         </button>
+      </view>
+    </view>
+  </view>
+
+  <!-- ☀️ 阳光宣言辅助弹窗：由阳光大盘标题旁的 ⓘ 图标触发，只做理念/宣言说明，
+       不再是进页面就顶在最前面必须先关掉才能看数据的强制弹窗 -->
+  <view class="honor-modal-mask" wx:if="{{showSunshineConceptModal}}" bindtap="onCloseSunshineConceptModal">
+    <view class="honor-modal-box sunshine-concept-modal-box" catchtap="stopPropagation">
+      <view class="honor-modal-header">
+        <text class="honor-modal-title">{{sunshineConceptTitle}}</text>
+        <view class="honor-modal-close" bindtap="onCloseSunshineConceptModal">
+          <text class="close-x-text">✕</text>
+        </view>
+      </view>
+      <view class="sunshine-concept-block">
+        <text class="sunshine-concept-label">{{sunshineConceptLabel}}</text>
+        <text class="sunshine-concept-text">{{sunshineConceptContent}}</text>
+      </view>
+      <view class="sunshine-concept-block">
+        <text class="sunshine-concept-label">阳光宣言</text>
+        <text class="sunshine-concept-text">阳光账本坚持公开透明、全民监督，所有账目与服务数据均经双重核销实时公示。</text>
       </view>
     </view>
   </view>

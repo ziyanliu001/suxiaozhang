@@ -363,7 +363,7 @@
         <view class="item-arrow">❯</view>
       </view>
 
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToSunshineLedger">
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToSunshineLedgerAudit">
         <view class="item-left">
           <text class="manager-only-emoji">☀️</text>
           <text class="item-text">阳光账本核查</text>
