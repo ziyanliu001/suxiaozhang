@@ -46,7 +46,10 @@ Page({
     overview: null as any,
     // 🐛 初始值就是 true（不是 false）：pa-content 一旦可见就意味着 checkAccess()
     // 马上会同步调用 loadOverview()，默认 false 会让 KPI 卡片在第一帧短暂
-    // 显示"0"而不是骨架屏——语义上"0"应该只代表"确认过、真的是 0"
+    // 显示"0"而不是骨架屏——语义上"0"应该只代表"确认过、真的是 0"。
+    // 🛡️ 这个初始值技巧在这里是安全的，因为 loadOverview() 本身没有"防重入锁"
+    // （不检查 this.data.overviewLoading 就直接往下走）——activationCodesLoading/
+    // tenantsLoading 不能照搬同一个技巧，见它们各自声明处的教训
     overviewLoading: true,
     // 🌟 下拉刷新态：onPullDownRefresh 触发时置位，两个 Tab 各自的列表 + 概览
     // 一起刷新完才收起（wx.stopPullDownRefresh）
@@ -64,9 +67,16 @@ Page({
     // 🌟 刚生成的这一批：单独存一份，生成成功后置顶展示 + 一键复制，不用去
     // 下面的台账列表里翻找刚铸造出来的这几个码
     lastGeneratedCodes: [] as Array<{ code: string; planType: string; durationDays: number }>,
-    // 🐛 初始值就是 true：同 overviewLoading 处注释，避免首帧短暂闪出"暂无
-    // 授权码"空状态，再被 checkAccess() 里马上发起的 loadActivationCodes() 覆盖
-    activationCodesLoading: true,
+    // 🐛 根因修复：这里此前也照搬 overviewLoading 的"初始值设 true 防闪烁"套路，
+    // 但 loadActivationCodes() 自己开头有一道 `if (this.data.activationCodesLoading)
+    // return` 的防重入锁——loadOverview() 没有这道锁，套用同一个技巧是安全的，
+    // 这里却直接把"防重入锁"锁死在"已加载"状态：checkAccess() 里第一次调用
+    // loadActivationCodes() 时，这道锁看到的就是这个初始 true，直接原地返回，
+    // 云函数请求根本没发出去，且函数在锁检查处提前 return，永远走不到 finally
+    // 去把它重置为 false——授权码列表因此永久卡在骨架屏，控制台狂刷"已有请求
+    // 在途，跳过本次重复调用"。这个字段的语义是"当前是否有请求在途"，初始值
+    // 必须是 false（真的没有请求在途）
+    activationCodesLoading: false,
     activationCodesLoadingMore: false,
     activationCodesFilter: 'UNUSED' as 'UNUSED' | 'USED' | 'all',
     activationCodes: [] as Array<{
@@ -94,8 +104,11 @@ Page({
     creatingTenant: false,
 
     tenants: [] as any[],
-    // 🐛 初始值就是 true：同 overviewLoading 处注释
-    tenantsLoading: true,
+    // 🐛 根因修复：同 activationCodesLoading 处注释——loadTenants() 自己开头
+    // 也有一道 `if (this.data.tenantsLoading) return` 的防重入锁，初始值不能
+    // 是 true，否则 checkAccess() 里第一次调用就被自己的锁原地挡回去，机构
+    // 列表永久卡在骨架屏
+    tenantsLoading: false,
     tenantsLoadingMore: false,
     tenantsSkip: 0,
     tenantsHasMore: false,
