@@ -55,6 +55,12 @@ const ROLE_TOKEN_TO_LOWER: Record<string, 'store_patriarch' | 'store_manager' | 
 };
 
 const CERTIFICATE_CANVAS_ID = 'certificateCanvas';
+// 🛡️ "全国总览"/"全部门店" 虚拟聚合门店的 storeId 哨兵值：与 statistics.ts/
+// activity-log.ts/daily-menu.ts 的 NATIONAL_STORE_ID_SENTINELS 同一份定义——
+// super_admin 在全局门店选择器里选中"全国总览"时，getSelectedStore() 返回的
+// storeId 就是这几个字面量之一，不是任何真实门店，绝不能被当成 report_logs.storeId
+// 查询条件直接传下去（见 fetchMeritStats 的用法）
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL', 'yuhuazhai_national'];
 // ⚡️ 爱心护持榜 ViewModel 本地缓存失效期：切换 Segment 来回点、频繁 onShow 都不必
 // 每次都重新打云函数，10 分钟内命中缓存直接复用——护持榜数据本就不要求逐秒实时
 const LEADERBOARD_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -2287,8 +2293,17 @@ Page({
       // patriarchData.currentStoreId 这个同名但不同用途的嵌套字段），这里直接现取
       // 当前生效门店，确保"登记餐报/稽核账本"只统计当前门店，不会把用户在别的门店
       // 的历史记录也计进来
+      // 🐛 根因修复：super_admin 在门店选择器里选中"全国总览"时，getSelectedStore()
+      // 返回的 storeId 是 NATIONAL_STORE_ID_SENTINELS 里的字面量哨兵值（如
+      // 'national_overview'），不是任何真实门店——此前直接把这个哨兵值当门店 id
+      // 传给 report_logs.storeId 查询条件，注定查不到任何匹配记录（"登记餐报"/
+      // "已稽核账本"荣誉墙数字对超管永远显示 0），还会打出云开发数据库索引建议
+      // 告警（查询条件带着这类脏值触发扫描提示）。命中哨兵值时统一归空，让下面
+      // `tenantId && storeId` 的判断自然跳过这两条查询，不再发出这种注定无意义
+      // 的请求
       const activeStore = getSelectedStore();
-      const storeId = (activeStore && activeStore.storeId) || '';
+      const rawStoreId = (activeStore && activeStore.storeId) || '';
+      const storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
 
       let submittedCount = 0;
       let auditedCount = 0;

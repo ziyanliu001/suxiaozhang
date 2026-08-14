@@ -1069,12 +1069,20 @@
         </view>
         <view class="sa-action-arrow">❯</view>
       </view>
+      <!-- 🐛 根因修复：这一行此前无论角色都固定展示"全国站点与机构管理/门店
+           列表·租户开通·订阅管理"这套文案，但 onGoToPlatformAdminTenants() 只有
+           真正的 platform_admin 才会跳到那个管理页——super_admin/store_patriarch
+           点进去实际触发的是"套餐升级"半屏卡片（见该函数注释：目标页服务端
+           requirePlatformAdmin 硬拦截 super_admin，为避免生硬的"无权限访问"改为
+           就地弹订阅卡），文案却完全没提"套餐"两个字，用户点进去只会觉得"说好的
+           管理页呢，怎么弹了个升级弹窗"。这里按 isPlatformAdmin 分流文案，让
+           每种角色看到的标题/描述与真实点击后果一致 -->
       <view class="sa-action-row" bindtap="onGoToPlatformAdminTenants" hover-class="ui-hover">
         <view class="sa-action-left">
-          <text class="sa-action-icon">🏬</text>
+          <text class="sa-action-icon">{{isPlatformAdmin ? '🏬' : '💎'}}</text>
           <view class="sa-action-text-col">
-            <text class="sa-action-title">全国站点与机构管理</text>
-            <text class="sa-action-desc">门店列表 · 租户开通 · 订阅管理</text>
+            <text class="sa-action-title">{{isPlatformAdmin ? '全国站点与机构管理' : '开通 / 续费专业版套餐'}}</text>
+            <text class="sa-action-desc">{{isPlatformAdmin ? '门店列表 · 租户开通 · 订阅管理' : '全国汇总大屏 · 批量导出 · 高级权限'}}</text>
           </view>
         </view>
         <view class="sa-action-arrow">❯</view>
