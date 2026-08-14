@@ -4795,15 +4795,40 @@ button.btn-empty-primary {
   gap: 16rpx;
 }
 
+/* 🎨 精致化空状态：圆形图标底 + 主/副两级文案，与 .smart-empty-card 同一套
+   视觉语言的缩小版（本卡片内嵌，不需要整页那么大的留白） */
 .ledger-empty-box {
-  margin-top: 24rpx;
-  padding: 40rpx 0;
-  text-align: center;
+  margin-top: 16rpx;
+  padding: 48rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.ledger-empty-text {
-  font-size: 24rpx;
+.ledger-empty-icon {
+  display: block;
+  width: 96rpx;
+  height: 96rpx;
+  line-height: 96rpx;
+  font-size: 44rpx;
+  text-align: center;
+  background: #F8F9FA;
+  border-radius: 50%;
+  margin-bottom: 16rpx;
+}
+
+.ledger-empty-main {
+  font-size: 26rpx;
+  color: #495057;
+  font-weight: 500;
+  text-align: center;
+  margin-bottom: 8rpx;
+}
+
+.ledger-empty-sub {
+  font-size: 22rpx;
   color: #ADB5BD;
+  text-align: center;
 }
 
 .ledger-list-row {
@@ -4821,10 +4846,45 @@ button.btn-empty-primary {
   justify-content: space-between;
 }
 
+.ledger-row-top-left {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
 .ledger-row-date {
   font-size: 26rpx;
   font-weight: 700;
   color: #212529;
+}
+
+/* 🏷️ 分类 Tag：见 buildLedgerRecords 里的 classifyCategory，按当天收支构成
+   推断出的展示分类（不是逐笔交易的精确分类） */
+.ledger-row-category {
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 2rpx 12rpx;
+  border-radius: 16rpx;
+}
+
+.ledger-category-meal {
+  background: rgba(255, 152, 0, 0.12);
+  color: #E67700;
+}
+
+.ledger-category-material {
+  background: rgba(121, 85, 72, 0.12);
+  color: #6D4C41;
+}
+
+.ledger-category-donation {
+  background: rgba(233, 30, 99, 0.1);
+  color: #C2185B;
+}
+
+.ledger-category-ops {
+  background: rgba(120, 144, 156, 0.12);
+  color: #546E7A;
 }
 
 .ledger-row-status {
@@ -4832,6 +4892,7 @@ button.btn-empty-primary {
   font-weight: 600;
   padding: 4rpx 14rpx;
   border-radius: 20rpx;
+  flex-shrink: 0;
 }
 
 .ledger-status-pending {
@@ -4852,8 +4913,67 @@ button.btn-empty-primary {
 .ledger-row-mid {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.ledger-row-source-group {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.ledger-row-source {
+  font-size: 22rpx;
+  color: #868E96;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160rpx;
+}
+
+/* 🧾 凭证 Hook 图标：可点击，见 onPreviewLedgerReceipt——有凭证时唤起大图
+   预览，无凭证时给明确提示，不是纯展示性的文字 */
+.ledger-row-receipt {
+  font-size: 20rpx;
+  flex-shrink: 0;
+  padding: 4rpx 10rpx;
+  border-radius: 10rpx;
+}
+
+.ledger-row-receipt.has-receipt {
+  color: #495057;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.ledger-row-receipt.no-receipt {
+  color: #E03131;
+  background: rgba(224, 49, 49, 0.08);
+}
+
+/* 💰 金额大字高亮：净额是这一行视觉上最重的元素，独占右侧 */
+.ledger-row-amount {
+  font-size: 32rpx;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.ledger-row-amount.plus {
+  color: #2E7D32;
+}
+
+.ledger-row-amount.minus {
+  color: #C62828;
+}
+
+.ledger-row-bottom {
+  display: flex;
+  align-items: center;
   gap: 20rpx;
-  font-size: 24rpx;
+  font-size: 22rpx;
+  padding-top: 6rpx;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.04);
 }
 
 .ledger-row-income {
@@ -4862,35 +4982,6 @@ button.btn-empty-primary {
 
 .ledger-row-expense {
   color: #C62828;
-}
-
-.ledger-row-net {
-  margin-left: auto;
-  font-weight: 700;
-}
-
-.ledger-row-net.plus {
-  color: #2E7D32;
-}
-
-.ledger-row-net.minus {
-  color: #C62828;
-}
-
-.ledger-row-bottom {
-  display: flex;
-}
-
-.ledger-row-receipt {
-  font-size: 20rpx;
-}
-
-.ledger-row-receipt.has-receipt {
-  color: #495057;
-}
-
-.ledger-row-receipt.no-receipt {
-  color: #E03131;
 }
 
 .core-metrics-yoy {

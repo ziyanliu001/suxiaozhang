@@ -566,9 +566,18 @@ Page({
       netPositive: boolean;
       hasReceipt: boolean;
       receiptCount: number;
+      receiptImages: string[];
       statusLabel: string;
       statusClass: string;
+      categoryLabel: string;
+      categoryClass: string;
+      sourceLabel: string;
     }>,
+    // 📋 账目流水明细空状态/卡片副标题联动文案：与当前 currentTab/selectedYear/
+    // selectedMonth（或自定义区间）保持一致，随 loadStatistics() 重新计算，见
+    // buildLedgerPeriodLabel——修复此前"选中 2026年8月，空状态提示却跟当前
+    // 选中月份对不上"的文案错位
+    ledgerPeriodText: '',
     // 大家长快捷入口：统计页头部的"全国数据看板 ↗"按钮可见性
     showNationalDashboardEntry: false,
     dashboardTitle: '🌐 全网爱心矩阵数据大屏',
@@ -2592,6 +2601,13 @@ Page({
     this.fetchStoreProfile();
   },
 
+  // 🔗 数据联动：切 Tab/翻页/年月选择器/刷新数据这些入口都统一走
+  // calculateStats() → loadWeekStatistics()/loadMonthStatistics()/
+  // loadYearStatistics() → loadStatistics()，而 ledgerRecords（账目流水明细）
+  // 正是在 loadStatistics() 里与 statistics/coreMetrics 同一次 setData 写入
+  // 的——两者天生同源同步，不需要再单独维护一个 fetchLedgerDetails()
+  // 与 fetchStatistics() 手动配对触发，也不会出现"统计数字刷新了、流水明细
+  // 还是上一个周期"的不一致
   switchTab(e: any) {
     const tab = e.currentTarget.dataset.tab;
     this.setData({
@@ -2917,6 +2933,18 @@ Page({
     this.fetchStatistics();
   },
 
+  // 📋 账目流水明细的周期文案：与 core-metrics-card 头部展示的周期口径保持
+  // 一致——currentTab==='month' 时用"YYYY年M月"（tab=ledger 落地默认就是这个
+  // 分支），year 用"YYYY年"，week/custom 用实际拿到的起止日期区间。
+  // 🐛 根因修复：此前空状态提示是写死的"该周期内暂无账目流水记录"，与用户当前
+  // 选中的年月完全没有联动，选中"2026年8月"时提示文案也看不出跟 8 月有关系
+  buildLedgerPeriodLabel(startDate: string, endDate: string): string {
+    const { currentTab, selectedYear, selectedMonth } = this.data;
+    if (currentTab === 'month') return `${selectedYear}年${selectedMonth}月`;
+    if (currentTab === 'year') return `${selectedYear}年`;
+    return `${startDate} 至 ${endDate}`;
+  },
+
   async loadStatistics(startDate: string, endDate: string) {
     // 🐛 根因修复：与 fetchStatistics() 同一条口径——全国总览大屏有自己专属的
     // getNationalDashboard 全局聚合数据源，本方法（getReports 单店/全店口径）
@@ -3228,7 +3256,8 @@ Page({
           // 记录，calculateStatistics() 只用它算汇总/日历式 dailyRecords，逐条明细
           // 此前直接丢弃——ledger-list-container（tab=ledger 落地区块）需要的正是
           // 这份逐条原始数据，不是汇总
-          ledgerRecords: this.buildLedgerRecords(filteredData)
+          ledgerRecords: this.buildLedgerRecords(filteredData),
+          ledgerPeriodText: this.buildLedgerPeriodLabel(startDate, endDate)
         });
 
         // 🌟 单轨制：上面 riceStatus/oilStatus 是从历史 report_logs.stapleRiceStatus
@@ -3250,7 +3279,8 @@ Page({
           latestDataYear,
           latestDataMonth,
           latestDataLabel,
-          ledgerRecords: []
+          ledgerRecords: [],
+          ledgerPeriodText: this.buildLedgerPeriodLabel(startDate, endDate)
         });
       }
     } catch (error) {
@@ -3261,7 +3291,8 @@ Page({
         hasOtherStoreData: false,
         currentStoreTotalCount: 0,
         coreMetrics: EMPTY_CORE_METRICS,
-        ledgerRecords: []
+        ledgerRecords: [],
+        ledgerPeriodText: this.buildLedgerPeriodLabel(startDate, endDate)
       });
     } finally {
       // 🐛 与函数开头的防抖锁配套：wx.showLoading/wx.hideLoading 严格一对一，
@@ -3563,33 +3594,92 @@ Page({
       AUDITED_LOCKED: { label: '已核销封账', className: 'locked' }
     };
 
+    // 🏷️ 分类 Tag：report_logs 一条记录是"一天的完整报告"（收入+支出混合），
+    // 不是单笔交易，天然没有现成的分类字段——复用 calculateStatistics() 同一条
+    // "日常食材 vs 专项大额"拆分口径（dailyExpenseTotal/fixedExpenseTotal 字段
+    // 优先，缺失时按 FIXED_EXPENSE_KEYWORDS 关键词兜底），按当天实际发生的收支
+    // 构成推断出最贴切的展示分类，不臆造一个数据库里不存在的精确分类
+    const FIXED_KEYWORDS = ['租金', '房租', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置', '大额', '专项'];
+    const splitExpense = (item: any, expenseAmount: number): { dailyExpense: number; fixedExpense: number } => {
+      const dailyExpenseText = item.dailyExpenseText || item.dailyIngredientText || '';
+      const fixedExpenseText = item.fixedExpenseText || item.fixedMajorText || item.remark || '';
+      let dailyExpense = parseFloat(item.dailyExpenseTotal) || 0;
+      let fixedExpense = parseFloat(item.fixedExpenseTotal) || 0;
+      if (dailyExpense === 0 && dailyExpenseText) {
+        dailyExpense = this.parseAmountFromText(dailyExpenseText);
+      }
+      if (fixedExpense === 0 && fixedExpenseText) {
+        fixedExpense = this.parseAmountFromText(fixedExpenseText);
+      }
+      if (dailyExpense === 0 && fixedExpense === 0 && expenseAmount > 0) {
+        const textContext = fixedExpenseText || item.expenses || item.remark || '';
+        if (FIXED_KEYWORDS.some((kw) => String(textContext).includes(kw))) {
+          fixedExpense = expenseAmount;
+        } else {
+          dailyExpense = expenseAmount;
+        }
+      }
+      return { dailyExpense, fixedExpense };
+    };
+    const classifyCategory = (income: number, dailyExpense: number, fixedExpense: number): { label: string; className: string } => {
+      if (fixedExpense > 0) return { label: '物资采购', className: 'material' };
+      if (dailyExpense > 0) return { label: '爱心餐饮', className: 'meal' };
+      if (income > 0) return { label: '爱心捐赠', className: 'donation' };
+      return { label: '日常运营', className: 'ops' };
+    };
+
     return records
       .map((item: any) => {
         const income = (parseFloat(item.listDonationTotal) || 0) + (parseFloat(item.otherDonation) || 0);
         const expense = parseFloat(item.expenseAmount) || 0;
+        const { dailyExpense, fixedExpense } = splitExpense(item, expense);
         const net = income - expense;
         // 🛡️ 凭证图片字段历史上有 receiptImages/receiptImageList 两种叫法并存
         // （见 utils/dataService.ts saveReport 双写说明），两个都要兜底读取
-        const receiptCount = (Array.isArray(item.receiptImages) ? item.receiptImages.length : 0) ||
-          (Array.isArray(item.receiptImageList) ? item.receiptImageList.length : 0);
+        const receiptImages: string[] = Array.isArray(item.receiptImages) ? item.receiptImages
+          : (Array.isArray(item.receiptImageList) ? item.receiptImageList : []);
         const statusInfo = STATUS_MAP[item.approvalStatus] || STATUS_MAP.APPROVED;
         const dateStr = item.dateString || item.reportDate || item.date || '';
+        const category = classifyCategory(income, dailyExpense, fixedExpense);
 
         return {
           id: item._id || `${item.shopName || item.storeId || ''}_${dateStr}`,
           date: dateStr,
           shopName: item.shopName || item.storeName || '',
+          // 📡 来源：mpAccount 是提交这份报告时填的"公众号名称"（门店模板自动
+          // 填充），report_logs 没有另存一份真人经办人姓名字段——诚实展示实际
+          // 存在的数据来源，不为了凑"经办人"栏位而虚构一个不存在的字段
+          sourceLabel: item.mpAccount || item.shopName || item.storeName || '本店提交',
           incomeStr: formatMoney(income),
           expenseStr: formatMoney(expense),
           netStr: formatMoney(Math.abs(net)),
           netPositive: net >= 0,
-          hasReceipt: receiptCount > 0,
-          receiptCount,
+          hasReceipt: receiptImages.length > 0,
+          receiptCount: receiptImages.length,
+          receiptImages,
           statusLabel: statusInfo.label,
-          statusClass: statusInfo.className
+          statusClass: statusInfo.className,
+          categoryLabel: category.label,
+          categoryClass: category.className
         };
       })
       .sort((a, b) => (a.date < b.date ? 1 : (a.date > b.date ? -1 : 0)));
+  },
+
+  // 🧾 点击「凭证」图标：有凭证图片时唤起系统原生大图预览（复用微信内置
+  // wx.previewImage，不重复实现一套图片查看器）；没有凭证时给个明确提示，
+  // 而不是点了没反应
+  onPreviewLedgerReceipt(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const item = this.data.ledgerRecords[index];
+    if (!item || !item.hasReceipt || !item.receiptImages.length) {
+      wx.showToast({ title: '该笔记录未上传凭证', icon: 'none' });
+      return;
+    }
+    wx.previewImage({
+      urls: item.receiptImages,
+      current: item.receiptImages[0]
+    });
   },
 
   calculateStatistics(records: any[], startDate: string, endDate: string): any {

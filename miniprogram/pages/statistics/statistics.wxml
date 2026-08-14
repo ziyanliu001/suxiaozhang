@@ -1210,7 +1210,12 @@
     <view class="ui-card-wrapper ledger-list-container" id="ledgerListAnchor" wx:if="{{entryFocus !== 'sunshine'}}">
       <view class="card-header">
         <text class="card-title">📋 账目流水明细</text>
-        <text class="ledger-list-sub">{{currentUserStoreName || shopName}} · {{selectedYear}}年{{selectedMonth}}月</text>
+        <!-- 🐛 根因修复：此前副标题写死拼 selectedYear/selectedMonth，年报/周报/
+             自定义区间下会显示一个跟实际查询范围对不上的"年-月"；改用
+             ledgerPeriodText（loadStatistics() 按 currentTab 口径统一算好，
+             见 buildLedgerPeriodLabel），与下方空状态提示同一个数据源，两处
+             永远一致 -->
+        <text class="ledger-list-sub">{{currentUserStoreName || shopName}} · {{ledgerPeriodText}}</text>
       </view>
 
       <view class="ledger-list-loading" wx:if="{{statisticsLoadLoading && ledgerRecords.length === 0}}">
@@ -1220,23 +1225,37 @@
         </view>
       </view>
 
+      <!-- 🎨 精致化空状态：图标 + 主文案（联动当前选中周期，不再是写死文案）+
+           副文案引导下一步操作 -->
       <view class="ledger-empty-box" wx:elif="{{ledgerRecords.length === 0}}">
-        <text class="ledger-empty-text">该周期内暂无账目流水记录</text>
+        <text class="ledger-empty-icon">🗂️</text>
+        <text class="ledger-empty-main">{{ledgerPeriodText}}暂无账目流水记录</text>
+        <text class="ledger-empty-sub">建议切换上方"周/月/年"或选择其他历史月份核查</text>
       </view>
 
       <view class="ledger-list-body" wx:else>
         <view class="ledger-list-row" wx:for="{{ledgerRecords}}" wx:key="id">
+          <!-- 左：日期 + 分类 Tag；右：核销状态 Tag -->
           <view class="ledger-row-top">
-            <text class="ledger-row-date">{{item.date}}</text>
+            <view class="ledger-row-top-left">
+              <text class="ledger-row-date">{{item.date}}</text>
+              <text class="ledger-row-category ledger-category-{{item.categoryClass}}">{{item.categoryLabel}}</text>
+            </view>
             <text class="ledger-row-status ledger-status-{{item.statusClass}}">{{item.statusLabel}}</text>
           </view>
+          <!-- 中：来源 + 凭证图标（可点开大图预览）；右：金额大字高亮 -->
           <view class="ledger-row-mid">
-            <text class="ledger-row-income">收 +¥{{item.incomeStr}}</text>
-            <text class="ledger-row-expense">支 -¥{{item.expenseStr}}</text>
-            <text class="ledger-row-net {{item.netPositive ? 'plus' : 'minus'}}">净{{item.netPositive ? '+' : '-'}}¥{{item.netStr}}</text>
+            <view class="ledger-row-source-group">
+              <text class="ledger-row-source">{{item.sourceLabel}}</text>
+              <view class="ledger-row-receipt {{item.hasReceipt ? 'has-receipt' : 'no-receipt'}}" bindtap="onPreviewLedgerReceipt" data-index="{{index}}">
+                <text>{{item.hasReceipt ? '🧾 凭证 ' + item.receiptCount + ' 张' : '⚠️ 无凭证'}}</text>
+              </view>
+            </view>
+            <text class="ledger-row-amount {{item.netPositive ? 'plus' : 'minus'}}">{{item.netPositive ? '+' : '-'}}¥{{item.netStr}}</text>
           </view>
           <view class="ledger-row-bottom">
-            <text class="ledger-row-receipt {{item.hasReceipt ? 'has-receipt' : 'no-receipt'}}">{{item.hasReceipt ? '🧾 凭证 ' + item.receiptCount + ' 张' : '⚠️ 无凭证'}}</text>
+            <text class="ledger-row-income">收 +¥{{item.incomeStr}}</text>
+            <text class="ledger-row-expense">支 -¥{{item.expenseStr}}</text>
           </view>
         </view>
       </view>
