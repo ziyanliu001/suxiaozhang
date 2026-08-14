@@ -160,15 +160,23 @@ async function handleList(event, OPENID) {
     where.status = event.status;
   }
 
-  const LIST_LIMIT = 100;
+  // 📄 分页：台账会随着一批批铸造持续增长，不能无限期一次性拉全量。skip 由
+  // 客户端"触底加载更多"累加传入；多查一条（PAGE_SIZE + 1）用来判断 hasMore，
+  // 不需要额外一次 count() 查询总数
+  const PAGE_SIZE = 20;
+  const skip = Math.max(parseInt(event.skip, 10) || 0, 0);
   let codes = [];
+  let hasMore = false;
   try {
     const res = await db.collection(ACTIVATION_CODES_COLLECTION)
       .where(where)
       .orderBy('createdAt', 'desc')
-      .limit(LIST_LIMIT)
+      .skip(skip)
+      .limit(PAGE_SIZE + 1)
       .get();
-    codes = res.data || [];
+    const rows = res.data || [];
+    hasMore = rows.length > PAGE_SIZE;
+    codes = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
   } catch (err) {
     if (!isCollectionNotExistError(err)) throw err;
     codes = [];
@@ -187,6 +195,8 @@ async function handleList(event, OPENID) {
 
   return {
     success: true,
+    hasMore,
+    nextSkip: skip + codes.length,
     codes: codes.map((c) => ({
       code: c.code,
       planType: c.planType,

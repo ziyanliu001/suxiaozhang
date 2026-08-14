@@ -102,69 +102,101 @@
   border: none;
 }
 
+/* 🐛 根因修复：此前 .pa-content 是 scroll-view 且高度写死 calc(100vh - 88rpx)，
+   页面内容在一个独立的滚动容器里，与小程序原生的 onPullDownRefresh/
+   onReachBottom 生命周期完全不搭边（那两个钩子只对"页面自身的原生滚动"生效）。
+   改成普通 view + 让页面本身原生滚动，下拉刷新和触底加载更多才能真正工作 */
 .pa-content {
-  height: calc(100vh - 88rpx);
   box-sizing: border-box;
-  padding: 24rpx;
+  padding-left: 24rpx;
+  padding-right: 24rpx;
   padding-bottom: calc(24rpx + constant(safe-area-inset-bottom));
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
 }
 
-.pa-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+/* ═══════════════════════════════════════════════════════════════
+   📊 KPI 总览卡片：两个 Tab 共用的顶部数据看板
+   ═══════════════════════════════════════════════════════════════ */
+.pa-kpi-row {
+  display: flex;
   gap: 16rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
 }
 
-.pa-overview-card {
+.pa-kpi-card {
+  flex: 1;
   background: #FFFFFF;
   border-radius: 16rpx;
-  padding: 28rpx;
+  padding: 20rpx 12rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
 }
 
-.pa-ov-num {
+.pa-kpi-num {
   font-size: 40rpx;
-  font-weight: bold;
+  font-weight: 800;
   color: #1C2530;
+  line-height: 1.3;
 }
 
-.pa-ov-label {
+.pa-kpi-num-warn {
+  color: #E8590C;
+}
+
+.pa-kpi-skel {
+  width: 60rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  background: linear-gradient(90deg, #EEF0F2 25%, #E4E7EB 37%, #EEF0F2 63%);
+  background-size: 400% 100%;
+  animation: pa-skel-shimmer 1.6s ease-in-out infinite;
+}
+
+.pa-kpi-label {
   font-size: 22rpx;
   color: #999999;
-  margin-top: 8rpx;
+  margin-top: 6rpx;
 }
 
-.pa-soon-expire-box {
-  background: #FFF3E0;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  margin-bottom: 24rpx;
-}
-
-.pa-soon-title {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #E65100;
+/* ═══════════════════════════════════════════════════════════════
+   🗂️ 顶层 Tab 分流：吸顶切换栏
+   ═══════════════════════════════════════════════════════════════ */
+.pa-tab-switcher {
+  position: sticky;
+  z-index: 60;
+  display: flex;
+  gap: 12rpx;
+  background: #F4F5F7;
+  padding: 12rpx 0;
   margin-bottom: 8rpx;
-  display: block;
 }
 
-.pa-soon-item {
-  font-size: 24rpx;
-  color: #BF6000;
-  display: block;
-  padding: 4rpx 0;
+.pa-tab-item {
+  flex: 1;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  background: #FFFFFF;
+  color: #666666;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.pa-tab-item.active {
+  background: #1C2530;
+  color: #FFD700;
 }
 
 .pa-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16rpx;
+  margin: 12rpx 0 16rpx;
 }
 
 .pa-section-title {
@@ -193,20 +225,25 @@
   border: none;
 }
 
-.pa-create-form,
-.pa-tenant-card {
-  background: #FFFFFF;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
-}
-
 .pa-input {
   background: #F4F5F7;
   border-radius: 10rpx;
   padding: 20rpx;
   font-size: 26rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 8rpx;
+  border: 2rpx solid transparent;
+}
+
+.pa-input-error {
+  border-color: #E8590C;
+  background: #FFF5F0;
+}
+
+.pa-field-error {
+  display: block;
+  font-size: 22rpx;
+  color: #E8590C;
+  margin-bottom: 12rpx;
 }
 
 .pa-textarea {
@@ -217,27 +254,15 @@
   width: 100%;
   box-sizing: border-box;
   min-height: 120rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 8rpx;
+  border: 2rpx solid transparent;
 }
 
-.pa-btn-submit {
-  height: 76rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  border-radius: 38rpx;
-  background: #1C2530;
-  color: #FFFFFF;
-  font-size: 28rpx;
-}
-
-.pa-btn-submit::after {
-  border: none;
+.pa-tenant-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .pa-tenant-empty {
@@ -370,7 +395,30 @@
   color: #C62828;
 }
 
-/* 🌸 授权码生成/分发：过渡收入手段——见 platform-admin.ts data 声明处注释 */
+.pa-soon-expire-box {
+  background: #FFF3E0;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-soon-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #B8860B;
+  margin-bottom: 8rpx;
+  display: block;
+}
+
+.pa-soon-item {
+  font-size: 22rpx;
+  color: #8D6E00;
+  margin-bottom: 4rpx;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   🌸 授权码生成/分发：过渡收入手段——见 platform-admin.ts data 声明处注释
+   ═══════════════════════════════════════════════════════════════ */
 .pa-generated-box {
   background: #FFF8E1;
   border: 2rpx solid #FFD54F;
@@ -419,6 +467,7 @@
 }
 
 .pa-generated-code {
+  font-family: 'Courier New', Courier, monospace;
   font-size: 26rpx;
   font-weight: bold;
   color: #333333;
@@ -457,29 +506,35 @@
 .pa-code-card {
   background: #FFFFFF;
   border-radius: 16rpx;
-  padding: 20rpx 24rpx;
+  padding: 24rpx;
   margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
 }
 
 .pa-code-row-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10rpx;
+  margin-bottom: 14rpx;
 }
 
+/* 🎨 等宽字体 + 更大字号：授权码是本页最核心的"要复制去卖给客户"的内容，
+   视觉上必须第一时间跳出来，且等宽字体让字符对齐、不容易看错/抄错 */
 .pa-code-text {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #333333;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #1C2530;
   letter-spacing: 1rpx;
 }
 
 .pa-code-status {
   font-size: 20rpx;
+  font-weight: 600;
   padding: 4rpx 16rpx;
   border-radius: 20rpx;
   color: #FFFFFF;
+  flex-shrink: 0;
 }
 
 .pa-code-status-UNUSED {
@@ -487,77 +542,197 @@
 }
 
 .pa-code-status-USED {
-  background: #999999;
+  background: #9E9E9E;
 }
 
 .pa-code-row-bottom {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 10rpx;
 }
 
-.pa-code-inline-row {
-  margin-bottom: 0;
+/* 🎨 有效期天数徽章：与套餐 Tag 并排，颜色区分开——套餐是"哪个档位"，
+   这个是"多久"，两者信息维度不同，不能用同一套配色混在一起看 */
+.pa-duration-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  font-weight: bold;
+  background: #E3F2FD;
+  color: #1565C0;
 }
 
-.pa-modal-mask {
+.pa-code-redeemed-box {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed #E0E0E0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.pa-code-redeemed-row {
+  font-size: 22rpx;
+  color: #666666;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   🦴 骨架屏 / 空状态 / 加载更多：授权码台账、机构列表共用
+   ═══════════════════════════════════════════════════════════════ */
+.pa-skel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.pa-skel-bar {
+  border-radius: 8rpx;
+  background: linear-gradient(90deg, #EEF0F2 25%, #E4E7EB 37%, #EEF0F2 63%);
+  background-size: 400% 100%;
+  animation: pa-skel-shimmer 1.6s ease-in-out infinite;
+}
+
+.pa-skel-bar-lg {
+  width: 60%;
+  height: 34rpx;
+}
+
+.pa-skel-bar-sm {
+  width: 30%;
+  height: 22rpx;
+}
+
+@keyframes pa-skel-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.pa-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 72rpx 40rpx;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-empty-icon {
+  display: block;
+  width: 100rpx;
+  height: 100rpx;
+  line-height: 100rpx;
+  font-size: 48rpx;
+  text-align: center;
+  background: #F4F5F7;
+  border-radius: 50%;
+  margin-bottom: 20rpx;
+}
+
+.pa-empty-title {
+  font-size: 28rpx;
+  color: #495057;
+  font-weight: 500;
+  margin-bottom: 8rpx;
+}
+
+.pa-empty-sub {
+  font-size: 24rpx;
+  color: #ADB5BD;
+}
+
+.pa-load-more-row {
+  text-align: center;
+  padding: 20rpx 0;
+  font-size: 22rpx;
+  color: #ADB5BD;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   🌸 底部抽屉（Bottom Sheet）：生成授权码 / 新建机构 / 开通续费三个表单
+   共用同一套壳，从底部滑入 + 遮罩淡入，取代此前"内联折叠框硬挤在页面里"
+   ═══════════════════════════════════════════════════════════════ */
+.pa-sheet-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
   z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-end;
+  animation: pa-sheet-fade-in 0.2s ease-out;
 }
 
-.pa-modal-box {
-  width: 600rpx;
-  max-height: 80vh;
-  overflow-y: auto;
-  background: #FFFFFF;
-  border-radius: 20rpx;
-  padding: 32rpx;
+@keyframes pa-sheet-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pa-sheet-box {
+  width: 100%;
+  max-height: 85vh;
   box-sizing: border-box;
+  background: #FFFFFF;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 16rpx 32rpx 32rpx;
+  overflow-y: auto;
+  animation: pa-sheet-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.pa-modal-title {
+@keyframes pa-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.pa-sheet-handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #E0E0E0;
+  margin: 0 auto 24rpx;
+}
+
+.pa-sheet-title {
   display: block;
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: bold;
-  color: #333333;
+  color: #1C2530;
   margin-bottom: 24rpx;
 }
 
 .pa-plan-row {
   display: flex;
-  gap: 12rpx;
+  gap: 16rpx;
   margin-bottom: 20rpx;
 }
 
 .pa-plan-tag {
   flex: 1;
-  text-align: center;
-  font-size: 24rpx;
-  padding: 16rpx 0;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  font-size: 26rpx;
   background: #F4F5F7;
-  border-radius: 10rpx;
   color: #666666;
 }
 
 .pa-plan-tag.active {
   background: #1C2530;
-  color: #FFFFFF;
+  color: #FFD700;
+  font-weight: bold;
 }
 
 .pa-field-label {
   display: block;
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #999999;
-  margin-bottom: 8rpx;
+  margin-bottom: 10rpx;
 }
 
-.pa-modal-actions {
+.pa-sheet-actions {
   display: flex;
   gap: 16rpx;
   margin-top: 16rpx;
@@ -575,15 +750,37 @@
   margin: 0;
   line-height: 1;
   border-radius: 38rpx;
-  font-size: 28rpx;
   background: #EDEFF2;
   color: #333333;
+  font-size: 28rpx;
 }
 
 .pa-btn-cancel::after {
   border: none;
 }
 
-.pa-modal-actions .pa-btn-submit {
+.pa-btn-submit {
   flex: 1;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  border-radius: 38rpx;
+  background: #1C2530;
+  color: #FFFFFF;
+  font-size: 28rpx;
+}
+
+.pa-btn-submit::after {
+  border: none;
+}
+
+.pa-safe-area-spacer {
+  height: constant(safe-area-inset-bottom);
+  height: env(safe-area-inset-bottom);
 }

@@ -10,145 +10,238 @@
     <text>校验身份中...</text>
   </view>
 
-  <view class="pa-denied-state" wx:if="{{checkedAccess && !isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 根因修复：身份校验本身失败（网络异常/云函数未部署）时的独立错误态，
+       与"确认有身份、但不是平台管理员"的拒绝态区分开——前者可以重试，后者不该
+       给一个"重试"按钮误导用户以为多点几次就能有权限 -->
+  <view class="pa-denied-state" wx:if="{{checkedAccess && accessError}}" style="margin-top: {{contentTop}}px;">
+    <text class="pa-denied-icon">⚠️</text>
+    <text class="pa-denied-title">身份校验失败</text>
+    <text class="pa-denied-sub">{{accessError}}</text>
+    <button class="pa-denied-btn" hover-class="btn-hover" bindtap="onRetryCheckAccess">重新校验</button>
+  </view>
+
+  <view class="pa-denied-state" wx:if="{{checkedAccess && !accessError && !isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
     <text class="pa-denied-icon">🚫</text>
     <text class="pa-denied-title">无权限访问</text>
     <text class="pa-denied-sub">本页面仅限 SaaS 平台管理员（开发者）使用，且不会显示任何门店财务明细。</text>
     <button class="pa-denied-btn" hover-class="btn-hover" bindtap="onGoBack">返回首页</button>
   </view>
 
-  <scroll-view scroll-y class="pa-content" wx:if="{{checkedAccess && isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
+  <view class="pa-content" wx:if="{{checkedAccess && !accessError && isPlatformAdmin}}" style="padding-top: {{contentTop}}px;">
 
-    <view class="pa-overview-grid" wx:if="{{overview}}">
-      <view class="pa-overview-card">
-        <text class="pa-ov-num">{{overview.totals.tenantCount}}</text>
-        <text class="pa-ov-label">机构总数</text>
+    <!-- 📊 统计总览看板：三张轻量 KPI 卡片，横跨两个 Tab 共用，随时能看到
+         "有多少码等着卖出去 / 有多少机构在真实付费 / 有几家快到期该跟进续费" -->
+    <view class="pa-kpi-row">
+      <view class="pa-kpi-card">
+        <text class="pa-kpi-num" wx:if="{{!overviewLoading}}">{{overview.totals.unusedActivationCodeCount || 0}}</text>
+        <view class="pa-kpi-skel" wx:else></view>
+        <text class="pa-kpi-label">待核销码</text>
       </view>
-      <view class="pa-overview-card">
-        <text class="pa-ov-num">{{overview.totals.activeSubscriptionCount}}</text>
-        <text class="pa-ov-label">有效订阅</text>
+      <view class="pa-kpi-card">
+        <text class="pa-kpi-num" wx:if="{{!overviewLoading}}">{{overview.totals.activeSubscriptionCount || 0}}</text>
+        <view class="pa-kpi-skel" wx:else></view>
+        <text class="pa-kpi-label">已激活机构</text>
       </view>
-      <view class="pa-overview-card">
-        <text class="pa-ov-num">{{overview.totals.storeCount}}</text>
-        <text class="pa-ov-label">门店总数</text>
-      </view>
-      <view class="pa-overview-card">
-        <text class="pa-ov-num">{{overview.totals.reportLogCount}}</text>
-        <text class="pa-ov-label">餐报记录数</text>
+      <view class="pa-kpi-card">
+        <text class="pa-kpi-num {{overview.soonExpiringTenants.length > 0 ? 'pa-kpi-num-warn' : ''}}" wx:if="{{!overviewLoading}}">{{overview.soonExpiringTenants.length || 0}}</text>
+        <view class="pa-kpi-skel" wx:else></view>
+        <text class="pa-kpi-label">7天内到期</text>
       </view>
     </view>
 
-    <view class="pa-soon-expire-box" wx:if="{{overview.soonExpiringTenants.length > 0}}">
-      <text class="pa-soon-title">⚠️ 7 天内到期机构</text>
-      <view class="pa-soon-item" wx:for="{{overview.soonExpiringTenants}}" wx:key="_id">
-        <text>{{item.tenantId}} · {{planLabels[item.planType] || item.planType}} · 到期 {{item.serviceExpireDate}}</text>
+    <!-- 🗂️ 顶层 Tab 分流：吸顶切换栏，滚动时始终停在导航栏正下方 -->
+    <view class="pa-tab-switcher" style="top: {{contentTop}}px;">
+      <view class="pa-tab-item {{activeTab === 'codes' ? 'active' : ''}}" data-tab="codes" bindtap="onSwitchTab">🔑 授权码管理</view>
+      <view class="pa-tab-item {{activeTab === 'tenants' ? 'active' : ''}}" data-tab="tenants" bindtap="onSwitchTab">🏢 机构管理</view>
+    </view>
+
+    <!-- ═══════════════════════ 🔑 授权码管理 ═══════════════════════ -->
+    <block wx:if="{{activeTab === 'codes'}}">
+
+      <view class="pa-section-header">
+        <text class="pa-section-title">授权码台账</text>
+        <button class="pa-btn-create" hover-class="btn-hover" bindtap="onOpenGenerateCodesSheet">+ 生成授权码</button>
       </view>
-    </view>
 
-    <!-- 🌸 授权码生成/分发：微信支付商户号配好之前的过渡收入手段。铸造 + 台账
-         查看都只在本页完成——兑换是机构侧自己的操作（个人页「开通/续费专业版
-         套餐」弹窗），平台管理员没有所属机构，本页不做兑换 -->
-    <view class="pa-section-header">
-      <text class="pa-section-title">授权码生成 / 分发</text>
-      <button class="pa-btn-create" hover-class="btn-hover" bindtap="onToggleGenerateCodesForm">{{showGenerateCodesForm ? '取消' : '+ 生成授权码'}}</button>
-    </view>
+      <!-- 刚生成的这一批：置顶展示 + 一键复制，不用去下面台账列表里翻找 -->
+      <view class="pa-generated-box" wx:if="{{lastGeneratedCodes.length > 0}}">
+        <view class="pa-generated-header">
+          <text class="pa-generated-title">✅ 刚生成 {{lastGeneratedCodes.length}} 张授权码</text>
+          <view class="pa-generated-copy-all" hover-class="btn-hover" bindtap="onCopyAllGeneratedCodes">复制全部</view>
+        </view>
+        <view class="pa-generated-row" wx:for="{{lastGeneratedCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
+          <text class="pa-generated-code">{{item.code}}</text>
+          <text class="pa-generated-meta">{{planLabels[item.planType] || item.planType}} · {{item.durationDays}}天</text>
+        </view>
+      </view>
 
-    <view class="pa-create-form" wx:if="{{showGenerateCodesForm}}">
+      <view class="pa-codes-filter-row">
+        <view class="pa-codes-filter-tab {{activationCodesFilter === 'UNUSED' ? 'active' : ''}}" data-filter="UNUSED" bindtap="onSwitchActivationCodesFilter">未使用</view>
+        <view class="pa-codes-filter-tab {{activationCodesFilter === 'USED' ? 'active' : ''}}" data-filter="USED" bindtap="onSwitchActivationCodesFilter">已核销</view>
+        <view class="pa-codes-filter-tab {{activationCodesFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesFilter">全部</view>
+      </view>
+
+      <!-- 首屏骨架屏：区分"正在加载"与"确认加载完、真的没有数据"两种状态，
+           不会在请求还没回来前就先亮出"暂无数据"误导用户 -->
+      <view class="pa-code-card pa-skel-card" wx:if="{{activationCodesLoading && activationCodes.length === 0}}">
+        <view class="pa-skel-bar pa-skel-bar-lg"></view>
+        <view class="pa-skel-bar pa-skel-bar-sm"></view>
+      </view>
+
+      <view class="pa-empty-state" wx:elif="{{!activationCodesLoading && activationCodes.length === 0}}">
+        <text class="pa-empty-icon">🗂️</text>
+        <text class="pa-empty-title">暂无{{activationCodesFilter === 'UNUSED' ? '未使用' : (activationCodesFilter === 'USED' ? '已核销' : '')}}授权码</text>
+        <text class="pa-empty-sub">点击上方"+ 生成授权码"铸造第一批</text>
+      </view>
+
+      <block wx:else>
+        <view class="pa-code-card" wx:for="{{activationCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
+          <view class="pa-code-row-top">
+            <text class="pa-code-text">{{item.code}}</text>
+            <text class="pa-code-status pa-code-status-{{item.status}}">{{item.status === 'UNUSED' ? '未使用' : '已核销'}}</text>
+          </view>
+          <view class="pa-code-row-bottom">
+            <text class="pa-plan-badge pa-plan-badge-{{item.planType}}">{{planLabels[item.planType] || item.planType}}</text>
+            <text class="pa-duration-badge">{{item.durationDays}}天</text>
+          </view>
+          <!-- 已核销：明确展示核销机构名称 + 核销时间，不是只有一个状态 Tag -->
+          <view class="pa-code-redeemed-box" wx:if="{{item.status === 'USED'}}">
+            <text class="pa-code-redeemed-row">🏢 {{item.redeemedByTenantName || '未知机构'}}</text>
+            <text class="pa-code-redeemed-row" wx:if="{{item.redeemedAtLabel}}">🕐 {{item.redeemedAtLabel}}</text>
+          </view>
+        </view>
+
+        <view class="pa-load-more-row" wx:if="{{activationCodesLoadingMore}}">
+          <text>加载中...</text>
+        </view>
+        <view class="pa-load-more-row" wx:elif="{{!activationCodesHasMore}}">
+          <text>没有更多了</text>
+        </view>
+      </block>
+
+    </block>
+
+    <!-- ═══════════════════════ 🏢 机构管理 ═══════════════════════ -->
+    <block wx:else>
+
+      <view class="pa-soon-expire-box" wx:if="{{overview.soonExpiringTenants.length > 0}}">
+        <text class="pa-soon-title">⚠️ 7 天内到期机构</text>
+        <view class="pa-soon-item" wx:for="{{overview.soonExpiringTenants}}" wx:key="_id">
+          <text>{{item.tenantId}} · {{planLabels[item.planType] || item.planType}} · 到期 {{item.serviceExpireDate}}</text>
+        </view>
+      </view>
+
+      <view class="pa-section-header">
+        <text class="pa-section-title">机构列表</text>
+        <button class="pa-btn-create" hover-class="btn-hover" bindtap="onOpenCreateTenantSheet">+ 新建机构</button>
+      </view>
+
+      <view class="pa-tenant-card pa-skel-card" wx:if="{{tenantsLoading && tenants.length === 0}}">
+        <view class="pa-skel-bar pa-skel-bar-lg"></view>
+        <view class="pa-skel-bar pa-skel-bar-sm"></view>
+      </view>
+
+      <view class="pa-empty-state" wx:elif="{{!tenantsLoading && tenants.length === 0}}">
+        <text class="pa-empty-icon">🏢</text>
+        <text class="pa-empty-title">暂无机构</text>
+        <text class="pa-empty-sub">点击上方"+ 新建机构"创建第一个</text>
+      </view>
+
+      <block wx:else>
+        <view class="pa-tenant-card" wx:for="{{tenants}}" wx:key="_id">
+          <view class="pa-tenant-header">
+            <text class="pa-tenant-name">{{item.name}}</text>
+            <text class="pa-tenant-status pa-status-{{item.status}}">{{item.status}}</text>
+          </view>
+          <view class="pa-tenant-body">
+            <view class="pa-tenant-plan-row" wx:if="{{item.subscription}}">
+              <text class="pa-plan-badge pa-plan-badge-{{item.subscription.planType}}">{{planLabels[item.subscription.planType] || item.subscription.planType}}</text>
+              <text class="pa-plan-badge pa-plan-badge-expiring" wx:if="{{item.isExpiringSoon}}">⚠️ 即将到期</text>
+              <text class="pa-tenant-row pa-expire-text">到期：{{item.subscription.serviceExpireDate}}</text>
+            </view>
+            <text class="pa-tenant-row" wx:else>尚未开通订阅</text>
+            <text class="pa-tenant-row pa-tenant-id">机构 ID：{{item._id}}</text>
+          </view>
+          <view class="pa-tenant-actions">
+            <button class="pa-btn-small" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">开通/续费</button>
+            <button class="pa-btn-small pa-btn-warn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-currentstatus="{{item.status}}" bindtap="onToggleTenantStatus">
+              {{item.status === 'suspended' ? '恢复服务' : '暂停服务'}}
+            </button>
+          </view>
+        </view>
+
+        <view class="pa-load-more-row" wx:if="{{tenantsLoadingMore}}">
+          <text>加载中...</text>
+        </view>
+        <view class="pa-load-more-row" wx:elif="{{!tenantsHasMore}}">
+          <text>没有更多了</text>
+        </view>
+      </block>
+
+    </block>
+
+    <view class="fa-safe-area-spacer"></view>
+  </view>
+
+  <!-- 🌸 底部抽屉：生成授权码 -->
+  <view class="pa-sheet-mask" wx:if="{{showGenerateCodesSheet}}" bindtap="onCloseGenerateCodesSheet">
+    <view class="pa-sheet-box" catchtap="noop">
+      <view class="pa-sheet-handle"></view>
+      <text class="pa-sheet-title">生成授权码</text>
+
       <text class="pa-field-label">套餐档位</text>
       <view class="pa-plan-row">
         <view class="pa-plan-tag {{generateCodesForm.planType === 'pro' ? 'active' : ''}}" hover-class="btn-hover" data-plan="pro" bindtap="onSelectCodePlan">专业版</view>
         <view class="pa-plan-tag {{generateCodesForm.planType === 'enterprise' ? 'active' : ''}}" hover-class="btn-hover" data-plan="enterprise" bindtap="onSelectCodePlan">旗舰版</view>
       </view>
+
       <text class="pa-field-label">有效期（天）</text>
-      <input class="pa-input" type="number" placeholder="如：365" value="{{generateCodesForm.durationDays}}" bindinput="onGenerateCodesFormInput" data-field="durationDays" />
+      <input class="pa-input {{generateCodesErrors.durationDays ? 'pa-input-error' : ''}}" type="number" placeholder="如：365" value="{{generateCodesForm.durationDays}}" bindinput="onGenerateCodesFormInput" data-field="durationDays" />
+      <text class="pa-field-error" wx:if="{{generateCodesErrors.durationDays}}">{{generateCodesErrors.durationDays}}</text>
+
       <text class="pa-field-label">生成数量（单次最多 50 张）</text>
-      <input class="pa-input" type="number" placeholder="如：1" value="{{generateCodesForm.quantity}}" bindinput="onGenerateCodesFormInput" data-field="quantity" />
-      <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitGenerateCodes" loading="{{generatingCodes}}" disabled="{{generatingCodes}}">铸造授权码</button>
-    </view>
+      <input class="pa-input {{generateCodesErrors.quantity ? 'pa-input-error' : ''}}" type="number" placeholder="如：1" value="{{generateCodesForm.quantity}}" bindinput="onGenerateCodesFormInput" data-field="quantity" />
+      <text class="pa-field-error" wx:if="{{generateCodesErrors.quantity}}">{{generateCodesErrors.quantity}}</text>
 
-    <!-- 刚生成的这一批：置顶展示 + 一键复制，不用去下面台账列表里翻找 -->
-    <view class="pa-generated-box" wx:if="{{lastGeneratedCodes.length > 0}}">
-      <view class="pa-generated-header">
-        <text class="pa-generated-title">✅ 刚生成 {{lastGeneratedCodes.length}} 张授权码</text>
-        <view class="pa-generated-copy-all" hover-class="btn-hover" bindtap="onCopyAllGeneratedCodes">复制全部</view>
+      <view class="pa-sheet-actions">
+        <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseGenerateCodesSheet" disabled="{{generatingCodes}}">取消</button>
+        <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitGenerateCodes" loading="{{generatingCodes}}" disabled="{{generatingCodes}}">铸造授权码</button>
       </view>
-      <view class="pa-generated-row" wx:for="{{lastGeneratedCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
-        <text class="pa-generated-code">{{item.code}}</text>
-        <text class="pa-generated-meta">{{planLabels[item.planType] || item.planType}} · {{item.durationDays}}天</text>
+      <view class="pa-safe-area-spacer"></view>
+    </view>
+  </view>
+
+  <!-- 🌸 底部抽屉：新建机构 -->
+  <view class="pa-sheet-mask" wx:if="{{showCreateTenantSheet}}" bindtap="onCloseCreateTenantSheet">
+    <view class="pa-sheet-box" catchtap="noop">
+      <view class="pa-sheet-handle"></view>
+      <text class="pa-sheet-title">新建机构</text>
+
+      <text class="pa-field-label">机构名称</text>
+      <input class="pa-input {{createFormErrors.name ? 'pa-input-error' : ''}}" placeholder="必填" value="{{createForm.name}}" bindinput="onCreateFormInput" data-field="name" />
+      <text class="pa-field-error" wx:if="{{createFormErrors.name}}">{{createFormErrors.name}}</text>
+
+      <text class="pa-field-label">联系人姓名</text>
+      <input class="pa-input" placeholder="选填" value="{{createForm.contactName}}" bindinput="onCreateFormInput" data-field="contactName" />
+
+      <text class="pa-field-label">联系电话</text>
+      <input class="pa-input" placeholder="选填" value="{{createForm.contactPhone}}" bindinput="onCreateFormInput" data-field="contactPhone" />
+
+      <view class="pa-sheet-actions">
+        <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseCreateTenantSheet" disabled="{{creatingTenant}}">取消</button>
+        <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitCreateTenant" loading="{{creatingTenant}}" disabled="{{creatingTenant}}">创建机构</button>
       </view>
+      <view class="pa-safe-area-spacer"></view>
     </view>
+  </view>
 
-    <view class="pa-codes-filter-row">
-      <view class="pa-codes-filter-tab {{activationCodesFilter === 'UNUSED' ? 'active' : ''}}" data-filter="UNUSED" bindtap="onSwitchActivationCodesFilter">未使用</view>
-      <view class="pa-codes-filter-tab {{activationCodesFilter === 'USED' ? 'active' : ''}}" data-filter="USED" bindtap="onSwitchActivationCodesFilter">已核销</view>
-      <view class="pa-codes-filter-tab {{activationCodesFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesFilter">全部</view>
-    </view>
+  <!-- 🌸 底部抽屉：开通/续费 -->
+  <view class="pa-sheet-mask" wx:if="{{showRenewSheet}}" bindtap="onCloseRenewForm">
+    <view class="pa-sheet-box" catchtap="noop">
+      <view class="pa-sheet-handle"></view>
+      <text class="pa-sheet-title">为【{{renewForm.tenantName}}】开通/续费</text>
 
-    <view class="pa-tenant-empty" wx:if="{{!activationCodesLoading && activationCodes.length === 0}}">
-      <text>暂无{{activationCodesFilter === 'UNUSED' ? '未使用' : (activationCodesFilter === 'USED' ? '已核销' : '')}}授权码</text>
-    </view>
-
-    <view class="pa-code-card" wx:for="{{activationCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
-      <view class="pa-code-row-top">
-        <text class="pa-code-text">{{item.code}}</text>
-        <text class="pa-code-status pa-code-status-{{item.status}}">{{item.status === 'UNUSED' ? '未使用' : '已核销'}}</text>
-      </view>
-      <view class="pa-code-row-bottom">
-        <text class="pa-plan-badge pa-plan-badge-{{item.planType}}">{{planLabels[item.planType] || item.planType}}</text>
-        <text class="pa-tenant-row pa-code-inline-row">{{item.durationDays}}天</text>
-        <text class="pa-tenant-row pa-code-inline-row" wx:if="{{item.redeemedByTenantName}}">→ {{item.redeemedByTenantName}}</text>
-      </view>
-    </view>
-    <view class="fa-safe-area-spacer"></view>
-
-    <view class="pa-section-header">
-      <text class="pa-section-title">机构列表</text>
-      <button class="pa-btn-create" hover-class="btn-hover" bindtap="onToggleCreateForm">{{showCreateForm ? '取消' : '+ 新建机构'}}</button>
-    </view>
-
-    <view class="pa-create-form" wx:if="{{showCreateForm}}">
-      <input class="pa-input" placeholder="机构名称（必填）" value="{{createForm.name}}" bindinput="onCreateFormInput" data-field="name" />
-      <input class="pa-input" placeholder="联系人姓名" value="{{createForm.contactName}}" bindinput="onCreateFormInput" data-field="contactName" />
-      <input class="pa-input" placeholder="联系电话" value="{{createForm.contactPhone}}" bindinput="onCreateFormInput" data-field="contactPhone" />
-      <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitCreateTenant">创建机构</button>
-    </view>
-
-    <!-- 🛡️ 空状态：loadTenants() 已经把 -502005 等数据库层报错自愈成正常的空列表
-         （见 manageTenantSubscription 云函数），这里与"真的还没有任何机构"共用
-         同一个友好空态，不会抛出未处理异常阻断渲染 -->
-    <view class="pa-tenant-empty" wx:if="{{!loading && tenants.length === 0}}">
-      <text>暂无机构，点击上方"+ 新建机构"创建第一个</text>
-    </view>
-
-    <view class="pa-tenant-card" wx:for="{{tenants}}" wx:key="_id">
-      <view class="pa-tenant-header">
-        <text class="pa-tenant-name">{{item.name}}</text>
-        <text class="pa-tenant-status pa-status-{{item.status}}">{{item.status}}</text>
-      </view>
-      <view class="pa-tenant-body">
-        <view class="pa-tenant-plan-row" wx:if="{{item.subscription}}">
-          <text class="pa-plan-badge pa-plan-badge-{{item.subscription.planType}}">{{planLabels[item.subscription.planType] || item.subscription.planType}}</text>
-          <text class="pa-plan-badge pa-plan-badge-expiring" wx:if="{{item.isExpiringSoon}}">⚠️ 即将到期</text>
-          <text class="pa-tenant-row pa-expire-text">到期：{{item.subscription.serviceExpireDate}}</text>
-        </view>
-        <text class="pa-tenant-row" wx:else>尚未开通订阅</text>
-        <text class="pa-tenant-row pa-tenant-id">机构 ID：{{item._id}}</text>
-      </view>
-      <view class="pa-tenant-actions">
-        <button class="pa-btn-small" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">开通/续费</button>
-        <button class="pa-btn-small pa-btn-warn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-currentstatus="{{item.status}}" bindtap="onToggleTenantStatus">
-          {{item.status === 'suspended' ? '恢复服务' : '暂停服务'}}
-        </button>
-      </view>
-    </view>
-    <view class="fa-safe-area-spacer"></view>
-
-  </scroll-view>
-
-  <view class="pa-modal-mask" wx:if="{{showRenewForm}}" bindtap="onCloseRenewForm">
-    <view class="pa-modal-box" catchtap="noop">
-      <text class="pa-modal-title">为【{{renewForm.tenantName}}】开通/续费</text>
-
+      <text class="pa-field-label">套餐档位</text>
       <view class="pa-plan-row">
         <view class="pa-plan-tag {{renewForm.planType === 'basic' ? 'active' : ''}}" hover-class="btn-hover" data-plan="basic" bindtap="onSelectPlan">基础版</view>
         <view class="pa-plan-tag {{renewForm.planType === 'pro' ? 'active' : ''}}" hover-class="btn-hover" data-plan="pro" bindtap="onSelectPlan">专业版</view>
@@ -156,21 +249,25 @@
       </view>
 
       <text class="pa-field-label">服务开始日期</text>
-      <input class="pa-input" placeholder="YYYY-MM-DD" value="{{renewForm.serviceStartDate}}" bindinput="onRenewFormInput" data-field="serviceStartDate" />
+      <input class="pa-input {{renewFormErrors.serviceStartDate ? 'pa-input-error' : ''}}" placeholder="YYYY-MM-DD" value="{{renewForm.serviceStartDate}}" bindinput="onRenewFormInput" data-field="serviceStartDate" />
+      <text class="pa-field-error" wx:if="{{renewFormErrors.serviceStartDate}}">{{renewFormErrors.serviceStartDate}}</text>
 
       <text class="pa-field-label">服务到期日期</text>
-      <input class="pa-input" placeholder="YYYY-MM-DD" value="{{renewForm.serviceExpireDate}}" bindinput="onRenewFormInput" data-field="serviceExpireDate" />
+      <input class="pa-input {{renewFormErrors.serviceExpireDate ? 'pa-input-error' : ''}}" placeholder="YYYY-MM-DD" value="{{renewForm.serviceExpireDate}}" bindinput="onRenewFormInput" data-field="serviceExpireDate" />
+      <text class="pa-field-error" wx:if="{{renewFormErrors.serviceExpireDate}}">{{renewFormErrors.serviceExpireDate}}</text>
 
       <text class="pa-field-label">门店数量配额</text>
       <input class="pa-input" type="number" placeholder="如：5" value="{{renewForm.storeLimit}}" bindinput="onRenewFormInput" data-field="storeLimit" />
 
       <text class="pa-field-label">开通/续费原因（必填，留痕审计）</text>
-      <textarea class="pa-textarea" placeholder="如：新机构首次开通 / 年度续费" value="{{renewForm.reason}}" bindinput="onRenewFormInput" data-field="reason" />
+      <textarea class="pa-textarea {{renewFormErrors.reason ? 'pa-input-error' : ''}}" placeholder="如：新机构首次开通 / 年度续费" value="{{renewForm.reason}}" bindinput="onRenewFormInput" data-field="reason" />
+      <text class="pa-field-error" wx:if="{{renewFormErrors.reason}}">{{renewFormErrors.reason}}</text>
 
-      <view class="pa-modal-actions">
-        <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseRenewForm">取消</button>
-        <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitRenew">确认提交</button>
+      <view class="pa-sheet-actions">
+        <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseRenewForm" disabled="{{renewSubmitting}}">取消</button>
+        <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitRenew" loading="{{renewSubmitting}}" disabled="{{renewSubmitting}}">确认提交</button>
       </view>
+      <view class="pa-safe-area-spacer"></view>
     </view>
   </view>
 

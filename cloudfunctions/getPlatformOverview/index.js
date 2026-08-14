@@ -28,15 +28,28 @@ exports.main = async () => {
     return { success: false, error: '无权限：仅平台管理员（开发者）可查看平台运行概览' };
   }
 
+  // 🛡️ tenant_activation_codes 是较新的集合，个别环境可能还没建过表——count() 命中
+  // -502005 时静默降级为 0，不能让这一项失败拖垮整个概览接口
+  async function safeCountUnusedCodes() {
+    try {
+      const res = await db.collection('tenant_activation_codes').where({ status: 'UNUSED' }).count();
+      return res.total;
+    } catch (err) {
+      return 0;
+    }
+  }
+
   try {
-    const [tenantTotal, activeSubTotal, expiredSubTotal, storeTotal, reportLogTotal, volunteerTotal] = await Promise.all([
+    const [tenantTotal, activeSubTotal, expiredSubTotal, storeTotal, reportLogTotal, volunteerTotal, unusedCodeTotal] = await Promise.all([
       db.collection('tenants').count(),
       db.collection('tenant_subscriptions').where({ status: 'active' }).count(),
       db.collection('tenant_subscriptions').where({ status: _.in(['expired', 'suspended']) }).count(),
       db.collection('stores').count(),
       // 仅统计记录条数（云资源/DB 读写用量参考），不读取具体记录内容
       db.collection('report_logs').count(),
-      db.collection('user_roles').count()
+      db.collection('user_roles').count(),
+      // 🌸 待核销授权码数量：授权码管理 Tab 顶部 KPI 卡片用，见 platform-admin.wxml
+      safeCountUnusedCodes()
     ]);
 
     // 服务即将到期（7 天内）的租户清单：仅暴露 tenantId + 到期日，不涉及门店业务数据
@@ -61,7 +74,8 @@ exports.main = async () => {
         expiredOrSuspendedSubscriptionCount: expiredSubTotal.total,
         storeCount: storeTotal.total,
         reportLogCount: reportLogTotal.total,
-        userAccountCount: volunteerTotal.total
+        userAccountCount: volunteerTotal.total,
+        unusedActivationCodeCount: unusedCodeTotal
       },
       soonExpiringTenants: soonExpiringRes.data || []
     };

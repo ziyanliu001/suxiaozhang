@@ -81,8 +81,18 @@ exports.main = async (event) => {
       }
 
       case 'listTenants': {
-        const tenantsRes = await db.collection('tenants').orderBy('createdAt', 'desc').get();
-        const tenants = tenantsRes.data || [];
+        // 📄 分页：机构数量会随平台增长持续变多，不能一次性拉全量——skip 由
+        // 客户端"触底加载更多"累加传入，多查一条判断 hasMore，不额外发 count()
+        const PAGE_SIZE = 20;
+        const skip = Math.max(parseInt(event.skip, 10) || 0, 0);
+        const tenantsRes = await db.collection('tenants')
+          .orderBy('createdAt', 'desc')
+          .skip(skip)
+          .limit(PAGE_SIZE + 1)
+          .get();
+        const rows = tenantsRes.data || [];
+        const hasMore = rows.length > PAGE_SIZE;
+        const tenants = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
 
         // 逐一附带最新的订阅状态，供平台管理员在同一览表中查看服务到期时间
         const withSubs = await Promise.all(tenants.map(async t => {
@@ -90,7 +100,7 @@ exports.main = async (event) => {
           return { ...t, subscription: sub };
         }));
 
-        return { success: true, tenants: withSubs };
+        return { success: true, tenants: withSubs, hasMore, nextSkip: skip + tenants.length };
       }
 
       case 'getTenantDetail': {
