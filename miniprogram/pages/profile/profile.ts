@@ -479,6 +479,15 @@ Page({
     // 授权码输入区在新版 UI 中始终展示，无需 showActivationForm 开关
     activationCodeInput: '',
     activationSubmitting: false,
+    // 🆕 套餐对比 Tab：纯浏览态，与"当前实际持有的套餐"（subscriptionInfo.planType）
+    // 无关——用户可以在弹窗里自由切换查看两档功能/价格对比，不会影响任何已生效
+    // 的订阅状态。旗舰版价格尚未在 createSubscriptionOrder 里配置（当前只支持
+    // 'ADVANCED_YEARLY' 一个 SKU，见该云函数 PLAN_CONFIG），底部主按钮据此在
+    // 两档之间切换成完全不同的两个行为（在线订购 vs 联系客服），而不是硬发起
+    // 一个服务端根本不认识的套餐类型、只换来一句"不支持的套餐类型"报错
+    comparePlanTab: 'pro' as 'pro' | 'enterprise',
+    // 🆕 微信支付未开通引导弹窗：替代此前的纯 Toast 提示，见 onSubscribeAdvancedFeature
+    showPaymentPendingModal: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     viewModeOptionLabels: VIEW_MODE_OPTIONS.map((m) => PREVIEW_VIEW_MODE_LABELS[m]),
     viewModeOptionIndex: 0,
@@ -5201,15 +5210,23 @@ Page({
       }
 
       // 🆕 兑换成功：清空 tenantPermission.ts 的 60s 内存缓存，避免用户兑换完
-      // 当场跳去统计页/导出功能，还要再等缓存自然过期才看到解锁生效；同时
+      // 当场跳去统计页/导出功能，还要再等缓存自然过期才看到解锁生效；
+      // fetchSubscriptionInfo() 顺带把本页 subscriptionInfo 刷新成最新套餐状态
       clearTenantPermissionCache();
-      this.setData({ activationCodeInput: '' });
       await this.fetchSubscriptionInfo();
 
+      // 🐛 根因修复：此前兑换成功后弹窗不会关闭，用户还得自己再点一次关闭——
+      // 兑换是"一次性口令、立即生效"的动作，成功后应该直接把半屏卡片收起来，
+      // 而不是停留在原地等用户手动退出
       const planLabel = PLAN_LABELS[result.data.planType] || result.data.planType;
+      this.setData({
+        activationCodeInput: '',
+        showPaymentPendingModal: false,
+        showSubscriptionModal: false
+      });
       wx.showToast({
-        title: `兑换成功！已升级至${planLabel}，有效期至 ${result.data.serviceExpireDate}`,
-        icon: 'none',
+        title: `已成功激活【${planLabel}】，有效期至 ${result.data.serviceExpireDate}`,
+        icon: 'success',
         duration: 3000
       });
     } catch (err) {
@@ -5221,20 +5238,39 @@ Page({
     }
   },
 
-  // 🐛 根因修复："微信支付未配置"降级提示此前无差别写死"联系大家长"——这句话
-  // 只对财务/店长/义工这类"店内需要向店主求助"的角色成立。大家长本人点这个
-  // 按钮时，"联系大家长"等于让他联系自己；超管/平台管理员是比大家长更高一级
-  // 的权限主体（见文件头部 L3/L2/L1 权限分层注释），被建议去联系某个具体门店
-  // 的大家长更是本末倒置。按当前生效角色（尊重"视角切换预览"，与页面其余
-  // 角色相关文案同一套口径）分流出三种得体的求助对象
-  buildPaymentFallbackContact(): string {
-    if (this.data.isPatriarch) {
-      return '，或联系平台客服协助开通';
+  // 🆕 套餐对比 Tab 切换：纯浏览态，见 data.comparePlanTab 声明处注释
+  onSwitchComparePlanTab(e: any) {
+    this.setData({ comparePlanTab: e.currentTarget.dataset.plan });
+  },
+
+  // 🆕 底部主操作按钮的统一入口：按当前正在浏览（comparePlanTab）的套餐分流
+  // 成两个完全不同的动作——专业版走真实的在线订购流程；旗舰版目前没有配置
+  // 价格/支付 SKU（见 createSubscriptionOrder PLAN_CONFIG 只有 ADVANCED_YEARLY
+  // 一项），点了不该发起一个注定失败的支付请求，直接引导联系客服定制开通
+  onPrimaryPlanAction() {
+    if (this.data.comparePlanTab === 'enterprise') {
+      this.onCopyPlatformSupportWechat();
+      return;
     }
-    if (this.data.isSuperAdmin || this.data.isPlatformAdmin) {
-      return '，或联系平台方处理';
-    }
-    return '，或联系大家长';
+    this.onSubscribeAdvancedFeature();
+  },
+
+  onClosePaymentPendingModal() {
+    this.setData({ showPaymentPendingModal: false });
+  },
+
+  // 🆕 一键复制客服微信号：与"联系超级管理员"弹窗（onContactAdmin）背后是
+  // 同一个真实联系方式，但语义场景不同——那个是"同级大家长权限调整需要超管
+  // 协助"，这里是"支付/套餐咨询找平台客服"，文案对不上号，不能直接复用同一个
+  // 弹窗标题，改成一次性 Toast 反馈的一键复制，更贴合"一键复制客服微信"这个
+  // 具体交互诉求
+  onCopyPlatformSupportWechat() {
+    const wechat = this.data.superAdminContactWechat;
+    if (!wechat) return;
+    wx.setClipboardData({
+      data: wechat,
+      success: () => wx.showToast({ title: `已复制客服微信号：${wechat}，请在微信添加好友咨询`, icon: 'none', duration: 3000 })
+    });
   },
 
   // 🌟 在线订购：接入微信云开发原生支付（方案 B 终极形态）。
@@ -5258,7 +5294,10 @@ Page({
       wx.hideLoading();
 
       if (!orderResult || !orderResult.success || !orderResult.payment) {
-        // 微信支付未配置时给出引导文案，其余错误原文展示
+        // 🆕 微信支付未配置时改用弹窗承接（见 showPaymentPendingModal），不再是
+        // 一晃而过的 Toast——弹窗里同时给了"授权码兑换"（就在这同一个半屏卡片
+        // 下方，关掉弹窗即可看到）与"一键复制客服微信"两条出路，其余错误仍走
+        // 原有的 Toast 原文展示
         const rawErr: string = (orderResult && orderResult.error) || '';
         const isPaymentUnconfigured =
           orderResult?.paymentNotConfigured ||
@@ -5266,13 +5305,11 @@ Page({
           rawErr.includes('未开通微信支付') ||
           rawErr.includes('unifiedorder') ||
           rawErr.includes('payment');
-        wx.showToast({
-          title: isPaymentUnconfigured
-            ? `当前环境暂未开通微信支付，请使用授权码兑换${this.buildPaymentFallbackContact()}`
-            : (rawErr || '生成订单失败，请重试'),
-          icon: 'none',
-          duration: 3000
-        });
+        if (isPaymentUnconfigured) {
+          this.setData({ showPaymentPendingModal: true });
+        } else {
+          wx.showToast({ title: rawErr || '生成订单失败，请重试', icon: 'none', duration: 3000 });
+        }
         return;
       }
 

@@ -2256,6 +2256,60 @@
             </view>
           </view>
 
+          <!-- ②.5 套餐对比：专业版 / 旗舰版 Tab 切换，明确列出定价与核心功能——
+               与上面的"当前权益"摘要不同，这里是给用户"看清楚两档具体差在哪、
+               该选哪个"用的完整对比，纯浏览态，不影响任何已生效的订阅状态 -->
+          <view class="sub-section">
+            <text class="sub-section-title">✦ 套餐对比</text>
+            <view class="sub-plan-compare-tabs">
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'pro' ? 'active' : ''}}" data-plan="pro" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">🌟</text>
+                <text>专业版</text>
+              </view>
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'enterprise' ? 'active' : ''}}" data-plan="enterprise" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">👑</text>
+                <text>旗舰版</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:if="{{comparePlanTab === 'pro'}}">
+              <view class="sub-plan-compare-price-row">
+                <text class="sub-plan-compare-price">¥298</text>
+                <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>单店精细化运营</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>Excel 账目与收支报表导出</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>独立财务 / 店长权限</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:else>
+              <view class="sub-plan-compare-price-row">
+                <text class="sub-plan-compare-price-custom">联系客服定制报价</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>多门店连锁 / 全国总览</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>跨门店合并报表导出</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>多级人员调度与审计</text>
+              </view>
+            </view>
+          </view>
+
           <!-- ③ 授权码兑换区 ────────────────────────────────── -->
           <view class="sub-section sub-redeem-section">
             <text class="sub-section-title">✦ 授权码兑换</text>
@@ -2274,17 +2328,46 @@
 
         </scroll-view>
 
-        <!-- ④ 底部主操作区 ────────────────────────────────── -->
+        <!-- ④ 底部主操作区：按 comparePlanTab 分流成两种完全不同的行为，
+             见 onPrimaryPlanAction 注释 -->
         <view class="sub-footer">
           <button class="sub-btn-purchase"
-                  bindtap="onSubscribeAdvancedFeature"
-                  loading="{{subscriptionLoading}}">
-            {{subscriptionInfo.isActive ? '续费 / 延长有效期' : '在线订购 / 立即升级'}}
+                  bindtap="onPrimaryPlanAction"
+                  loading="{{subscriptionLoading}}"
+                  wx:if="{{comparePlanTab === 'pro'}}">
+            {{subscriptionInfo.isActive ? '续费 / 延长有效期' : '💳 微信支付开通'}}
+          </button>
+          <button class="sub-btn-purchase sub-btn-purchase-enterprise"
+                  bindtap="onPrimaryPlanAction"
+                  wx:else>
+            👑 联系客服定制开通
           </button>
           <text class="sub-btn-dismiss" bindtap="onCloseSubscriptionModal">暂不升级</text>
         </view>
 
       </block>
+    </view>
+  </view>
+
+  <!-- 💳 微信支付资质申请中兜底弹窗：点击"微信支付开通"但支付未配置时展示，
+       引导走授权码兑换或联系客服，文案为需求方指定的固定措辞，不可改写 -->
+  <view class="payment-pending-modal-mask" wx:if="{{showPaymentPendingModal}}" catchtouchmove="stopPropagation" bindtap="onClosePaymentPendingModal">
+    <view class="payment-pending-modal-card" catchtap="stopPropagation">
+      <view class="payment-pending-modal-header">
+        <text class="payment-pending-modal-title">💳 微信支付开通中</text>
+        <view class="payment-pending-modal-close" bindtap="onClosePaymentPendingModal">✕</view>
+      </view>
+      <text class="payment-pending-modal-desc">微信在线支付正在开通中，当前支持使用授权码直接激活。如需开通请联系平台开发者。</text>
+
+      <view class="payment-pending-modal-contact-row">
+        <view class="payment-pending-modal-contact-info">
+          <text class="payment-pending-modal-contact-label">💬 平台客服微信号</text>
+          <text class="payment-pending-modal-contact-value">{{superAdminContactWechat}}</text>
+        </view>
+        <button class="payment-pending-modal-contact-btn" bindtap="onCopyPlatformSupportWechat">复制</button>
+      </view>
+
+      <button class="payment-pending-modal-ok-btn" bindtap="onClosePaymentPendingModal">🔑 我知道了，去输入授权码</button>
     </view>
   </view>
 

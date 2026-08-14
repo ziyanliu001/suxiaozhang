@@ -4948,6 +4948,94 @@
   padding: 2rpx 24rpx 12rpx;
 }
 
+/* ── ②.5 套餐对比 Tab ────────────────────────────────────────── */
+.sub-plan-compare-tabs {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+.sub-plan-compare-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  height: 68rpx;
+  background: #FFFFFF;
+  border: 1.5rpx solid #EDEFF2;
+  border-radius: 16rpx;
+  font-size: 25rpx;
+  font-weight: 700;
+  color: #8B909A;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.sub-plan-compare-tab-icon {
+  font-size: 26rpx;
+}
+.sub-plan-compare-tab.active {
+  color: #1C1200;
+  border-color: #E8C548;
+  background: linear-gradient(160deg, #FFFCF0 0%, #FFF8E1 100%);
+  box-shadow: 0 4rpx 12rpx rgba(212,175,55,0.14);
+}
+.sub-plan-compare-panel {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  border: 1.5rpx solid #EDEFF2;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+.sub-plan-compare-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+  margin-bottom: 18rpx;
+  padding-bottom: 18rpx;
+  border-bottom: 1rpx solid #F1F3F5;
+}
+.sub-plan-compare-price {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #C9941A;
+}
+.sub-plan-compare-price-unit {
+  font-size: 22rpx;
+  color: #9CA3AF;
+}
+.sub-plan-compare-price-custom {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #6B5B45;
+}
+.sub-plan-compare-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 25rpx;
+  color: #374151;
+  margin-bottom: 14rpx;
+}
+.sub-plan-compare-feature-row:last-child { margin-bottom: 0; }
+.sub-plan-compare-feature-icon {
+  flex-shrink: 0;
+  width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #FFF8E1;
+  color: #C9941A;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+/* 旗舰版联系客服态：金色改为沉稳的深色渐变，与"微信支付开通"区分开 */
+.sub-btn-purchase-enterprise {
+  background: linear-gradient(90deg, #2B2B3D 0%, #4A4A63 100%);
+  color: #FFFFFF;
+  box-shadow: 0 6rpx 20rpx rgba(43, 43, 61, 0.3);
+}
+
 /* ================= 🔐 管理员密钥行 & 修改弹窗 ================= */
 
 /* action-item-cell 覆盖：密钥行不需要整行可点击态，避免与内部按钮冲突 */
@@ -5123,6 +5211,129 @@
   transform: scale(0.96);
   opacity: 0.85;
 }
+
+/* 💳 微信支付资质申请中兜底弹窗 */
+.payment-pending-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999999 !important;
+}
+.payment-pending-modal-card {
+  width: 88%;
+  max-width: 660rpx;
+  background: #FFFFFF;
+  border-radius: 28rpx;
+  padding: 28rpx 24rpx 32rpx;
+  box-sizing: border-box;
+}
+.payment-pending-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18rpx;
+}
+.payment-pending-modal-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #1A1A2E;
+}
+.payment-pending-modal-close {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #6B7280;
+  font-size: 24rpx;
+}
+.payment-pending-modal-desc {
+  display: block;
+  font-size: 25rpx;
+  color: #6C757D;
+  line-height: 1.7;
+  margin-bottom: 24rpx;
+}
+.payment-pending-modal-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: #F8F9FA;
+  border: 1rpx solid #EFE6D8;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 24rpx;
+}
+.payment-pending-modal-contact-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.payment-pending-modal-contact-label {
+  font-size: 22rpx;
+  color: #ADB5BD;
+}
+.payment-pending-modal-contact-value {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #212529;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.payment-pending-modal-contact-btn {
+  flex-shrink: 0;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 28rpx;
+  margin: 0;
+  line-height: 1;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #74C0FC 0%, #4C6EF5 100%);
+  border: none;
+  border-radius: 30rpx;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+.payment-pending-modal-contact-btn::after { border: none; }
+.payment-pending-modal-contact-btn:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+.payment-pending-modal-ok-btn {
+  width: 100%;
+  min-height: 88rpx;
+  height: auto;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
+  background: #F1F3F5;
+  color: #374151;
+  font-size: 27rpx;
+  font-weight: 700;
+  border-radius: 44rpx;
+  border: none;
+  box-sizing: border-box;
+  margin: 0;
+  transition: background 0.15s;
+}
+.payment-pending-modal-ok-btn::after { border: none; }
+.payment-pending-modal-ok-btn:active { background: #E3E6E9; }
 
 /* 🛡️ 超管应急工具弹窗（重置密钥等小型弹窗复用） */
 .sa-tool-modal-card {
