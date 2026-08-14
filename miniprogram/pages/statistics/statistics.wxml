@@ -1172,8 +1172,11 @@
          （?tab=sunshine 时 scrollIntoViewId 会自动把它带入可视区域），取代此前
          "点了只弹一个理念宣言 Modal、不落到任何数据页面"的交互死胡同。独立于
          statistics.recordCount>0（下方 stats-content）之外——阳光账本是与周期
-         无关的独立公开数据管线，见 fetchSunshineBoardData -->
-    <view class="ui-card-wrapper sunshine-board-card" id="sunshineBoardAnchor">
+         无关的独立公开数据管线，见 fetchSunshineBoardData。
+         🐛 根因修复：entryFocus==='ledger'（?tab=ledger 落地）时收起本卡——
+         此前阳光大盘/账目流水明细无论从哪个入口进来都同时展示，两个入口点进来
+         的页面长得一模一样。普通访问（entryFocus===''）不受影响，两块都保留 -->
+    <view class="ui-card-wrapper sunshine-board-card" id="sunshineBoardAnchor" wx:if="{{entryFocus !== 'ledger'}}">
       <view class="card-header sunshine-board-header">
         <text class="card-title">☀️ 阳光大盘</text>
         <!-- ⓘ 说明图标：点击才拉起阳光宣言/理念说明弹窗，与数据大盘解耦——用户
@@ -1192,6 +1195,49 @@
         <view class="sunshine-board-cell skel-cell" wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this">
           <view class="skel-bar skel-bar-lg"></view>
           <view class="skel-bar skel-bar-sm"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 📋 账目流水明细：Profile「门店账目明细」跳转（?tab=ledger）的真正落地
+         区块——此前 tab=ledger 落地后除了把 currentTab 切到"月报"之外，看到的
+         卡片跟 tab=sunshine 完全一样，只有几个汇总数字，没有任何逐笔流水。
+         数据源是 loadStatistics() 里已经拉到手的当期原始 report_logs 记录
+         （见 buildLedgerRecords），每条精确到日期/收支金额/凭证关联状态/核销
+         状态，与 statistics.recordCount 无关、不依赖数据是否已加载完成即可
+         稳定存在于 DOM 中，保证 onLoad 阶段设置的 scroll-into-view 生效。
+         entryFocus==='sunshine' 时收起本卡，把版面让给阳光大盘 -->
+    <view class="ui-card-wrapper ledger-list-container" id="ledgerListAnchor" wx:if="{{entryFocus !== 'sunshine'}}">
+      <view class="card-header">
+        <text class="card-title">📋 账目流水明细</text>
+        <text class="ledger-list-sub">{{currentUserStoreName || shopName}} · {{selectedYear}}年{{selectedMonth}}月</text>
+      </view>
+
+      <view class="ledger-list-loading" wx:if="{{statisticsLoadLoading && ledgerRecords.length === 0}}">
+        <view class="ledger-list-row skel-cell" wx:for="{{[1,2,3]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-lg"></view>
+          <view class="skel-bar skel-bar-sm"></view>
+        </view>
+      </view>
+
+      <view class="ledger-empty-box" wx:elif="{{ledgerRecords.length === 0}}">
+        <text class="ledger-empty-text">该周期内暂无账目流水记录</text>
+      </view>
+
+      <view class="ledger-list-body" wx:else>
+        <view class="ledger-list-row" wx:for="{{ledgerRecords}}" wx:key="id">
+          <view class="ledger-row-top">
+            <text class="ledger-row-date">{{item.date}}</text>
+            <text class="ledger-row-status ledger-status-{{item.statusClass}}">{{item.statusLabel}}</text>
+          </view>
+          <view class="ledger-row-mid">
+            <text class="ledger-row-income">收 +¥{{item.incomeStr}}</text>
+            <text class="ledger-row-expense">支 -¥{{item.expenseStr}}</text>
+            <text class="ledger-row-net {{item.netPositive ? 'plus' : 'minus'}}">净{{item.netPositive ? '+' : '-'}}¥{{item.netStr}}</text>
+          </view>
+          <view class="ledger-row-bottom">
+            <text class="ledger-row-receipt {{item.hasReceipt ? 'has-receipt' : 'no-receipt'}}">{{item.hasReceipt ? '🧾 凭证 ' + item.receiptCount + ' 张' : '⚠️ 无凭证'}}</text>
+          </view>
         </view>
       </view>
     </view>

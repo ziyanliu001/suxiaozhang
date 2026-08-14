@@ -4771,6 +4771,128 @@ button.btn-empty-primary {
   line-height: 1.6;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   📋 账目流水明细：Profile「门店账目明细」（?tab=ledger）的落地区块
+   ═══════════════════════════════════════════════════════════════ */
+.ledger-list-container {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.ledger-list-sub {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+.ledger-list-loading,
+.ledger-list-body {
+  margin-top: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.ledger-empty-box {
+  margin-top: 24rpx;
+  padding: 40rpx 0;
+  text-align: center;
+}
+
+.ledger-empty-text {
+  font-size: 24rpx;
+  color: #ADB5BD;
+}
+
+.ledger-list-row {
+  background: #F8F9FA;
+  border-radius: 16rpx;
+  padding: 18rpx 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.ledger-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ledger-row-date {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #212529;
+}
+
+.ledger-row-status {
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 4rpx 14rpx;
+  border-radius: 20rpx;
+}
+
+.ledger-status-pending {
+  background: rgba(255, 152, 0, 0.12);
+  color: #E67700;
+}
+
+.ledger-status-approved {
+  background: rgba(33, 150, 243, 0.12);
+  color: #1971C2;
+}
+
+.ledger-status-locked {
+  background: rgba(46, 125, 50, 0.12);
+  color: #2E7D32;
+}
+
+.ledger-row-mid {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  font-size: 24rpx;
+}
+
+.ledger-row-income {
+  color: #2E7D32;
+}
+
+.ledger-row-expense {
+  color: #C62828;
+}
+
+.ledger-row-net {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+.ledger-row-net.plus {
+  color: #2E7D32;
+}
+
+.ledger-row-net.minus {
+  color: #C62828;
+}
+
+.ledger-row-bottom {
+  display: flex;
+}
+
+.ledger-row-receipt {
+  font-size: 20rpx;
+}
+
+.ledger-row-receipt.has-receipt {
+  color: #495057;
+}
+
+.ledger-row-receipt.no-receipt {
+  color: #E03131;
+}
+
 .core-metrics-yoy {
   font-size: 20rpx;
   font-weight: bold;

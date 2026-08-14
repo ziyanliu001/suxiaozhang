@@ -542,8 +542,33 @@ Page({
     sunshineConceptTitle: '☀️ 阳光账本与公益宣言',
     sunshineConceptLabel: '',
     sunshineConceptContent: '',
-    // 🆕 ?tab=sunshine 跳转锚点：management 视图的主滚动区据此自动滚到阳光大盘卡片
+    // 🆕 ?tab=sunshine / ?tab=ledger 跳转锚点：management 视图的主滚动区据此自动
+    // 滚到阳光大盘 / 账目流水明细卡片
     scrollIntoViewId: '',
+    // 🐛 根因修复：此前 tab=sunshine 与 tab=ledger 落地后除了滚动位置/月报默认
+    // 选中之外，页面主体结构完全没有随 tab 分化——两个入口点进来看到的卡片、
+    // 数据毫无差别。entryFocus 是真正的差异化开关：'sunshine' 收起下方的账目
+    // 流水明细区块、只留阳光大盘；'ledger' 反过来收起阳光大盘、把视觉重心让给
+    // 账目流水明细；'' 是普通访问（无 tab 参数），两块都保留，不改变原有行为
+    entryFocus: '' as '' | 'sunshine' | 'ledger',
+    // 📋 账目流水明细：与 core-metrics/finance-compliance 那套"周期汇总"口径不同，
+    // 这是 loadStatistics() 里已经拉到手、此前只用来算汇总就丢弃的逐条原始
+    // report_logs 记录（见 buildLedgerRecords），每条精确到"日期/收支金额/凭证
+    // 关联状态/核销状态"，供 tab=ledger 落地时展示成流水列表，不再是只有几个
+    // 汇总数字的空壳
+    ledgerRecords: [] as Array<{
+      id: string;
+      date: string;
+      shopName: string;
+      incomeStr: string;
+      expenseStr: string;
+      netStr: string;
+      netPositive: boolean;
+      hasReceipt: boolean;
+      receiptCount: number;
+      statusLabel: string;
+      statusClass: string;
+    }>,
     // 大家长快捷入口：统计页头部的"全国数据看板 ↗"按钮可见性
     showNationalDashboardEntry: false,
     dashboardTitle: '🌐 全网爱心矩阵数据大屏',
@@ -821,21 +846,24 @@ Page({
       });
     }
 
-    // ☀️ tab=sunshine：Profile「阳光账本核查」/首页「阳光账本」的落地锚点。
-    // 阳光大盘不是 week/month/year/custom 那套"周期 Tab"的一员（它展示的是
-    // getSunshineLedger 的独立公开数据管线，不受周期切换影响），这里只记一个
-    // 滚动锚点 id，交给下面渲染完成后的 scroll-into-view 把它带入可视区域，
-    // 不改写 currentTab
+    // 🎯 tab 驱动的落地焦点：☀️ 阳光大盘 / 📋 账目流水明细此前无论从哪个入口
+    // 进来都同时展示、毫无差别——entryFocus 才是真正的差异化开关（见 wxml
+    // sunshine-board-card / ledger-list-container 各自的 wx:if），这里只负责
+    // 解析意图 + 记一个滚动锚点 id，两块卡片本身与 statistics.recordCount 无关、
+    // 渲染时机不依赖数据是否已加载完成，scroll-into-view 在 onLoad 这一刻设置
+    // 即可稳定生效，不需要等 loadStatistics() 回来
     if (tabParam === 'sunshine') {
-      this.setData({ scrollIntoViewId: 'sunshineBoardAnchor' });
+      // 阳光大盘不是 week/month/year/custom 那套"周期 Tab"的一员（它展示的是
+      // getSunshineLedger 的独立公开数据管线，不受周期切换影响），不改写 currentTab
+      this.setData({ entryFocus: 'sunshine', scrollIntoViewId: 'sunshineBoardAnchor' });
+    } else if (tabParam === 'ledger') {
+      // 🗂️ 财务专区「门店账目明细」的落地锚点：账目流水明细按当前 currentTab
+      // 周期口径取数（见 buildLedgerRecords 的调用点），"月报"（逐日摊开）是
+      // 最贴近"账目明细"语义的默认周期
+      this.setData({ entryFocus: 'ledger', currentTab: 'month', scrollIntoViewId: 'ledgerListAnchor' });
     } else if (tabParam) {
-      // 🗂️ tab=ledger：财务专区「门店账目明细」的落地锚点。统计页本身没有独立的
-      // "账目列表" Tab，最贴近"账目明细"语义的落地态是「月报」（逐日摊开的收支
-      // 流水，见下方 daily-list-card），故把 ledger 映射到 month；其余合法周期
-      // 字面量（week/month/year/custom）原样透传，非法值一律忽略、保留默认 tab
-      const resolvedTab = tabParam === 'ledger' ? 'month' : tabParam;
-      if (['week', 'month', 'year', 'custom'].indexOf(resolvedTab) !== -1) {
-        this.setData({ currentTab: resolvedTab });
+      if (['week', 'month', 'year', 'custom'].indexOf(tabParam) !== -1) {
+        this.setData({ currentTab: tabParam });
       }
     }
 
@@ -3195,7 +3223,12 @@ Page({
           coreMetrics,
           latestDataYear,
           latestDataMonth,
-          latestDataLabel
+          latestDataLabel,
+          // 📋 账目流水明细：filteredData 是本次已经拉到手的当期原始 report_logs
+          // 记录，calculateStatistics() 只用它算汇总/日历式 dailyRecords，逐条明细
+          // 此前直接丢弃——ledger-list-container（tab=ledger 落地区块）需要的正是
+          // 这份逐条原始数据，不是汇总
+          ledgerRecords: this.buildLedgerRecords(filteredData)
         });
 
         // 🌟 单轨制：上面 riceStatus/oilStatus 是从历史 report_logs.stapleRiceStatus
@@ -3216,7 +3249,8 @@ Page({
           coreMetrics: EMPTY_CORE_METRICS,
           latestDataYear,
           latestDataMonth,
-          latestDataLabel
+          latestDataLabel,
+          ledgerRecords: []
         });
       }
     } catch (error) {
@@ -3226,7 +3260,8 @@ Page({
         isAllStoresMode: isAll,
         hasOtherStoreData: false,
         currentStoreTotalCount: 0,
-        coreMetrics: EMPTY_CORE_METRICS
+        coreMetrics: EMPTY_CORE_METRICS,
+        ledgerRecords: []
       });
     } finally {
       // 🐛 与函数开头的防抖锁配套：wx.showLoading/wx.hideLoading 严格一对一，
@@ -3511,6 +3546,50 @@ Page({
     }
 
     return parsedResults;
+  },
+
+  // 📋 账目流水明细：逐条映射 getReports 返回的原始 report_logs 记录（不做
+  // calculateStatistics() 那种按"门店+日期"去重合并的日历式汇总），每条精确到
+  // 日期/收支金额/凭证关联状态/核销状态，供 ledger-list-container 渲染成
+  // 银行流水式列表——这是 tab=ledger 落地时用户真正想看的"账目明细"，不是
+  // 已经在 core-metrics/finance-compliance 卡片里出现过的那几个汇总数字。
+  // 按日期倒序（最新的在最上面），符合"流水"的浏览习惯
+  buildLedgerRecords(records: any[]) {
+    if (!Array.isArray(records)) return [];
+
+    const STATUS_MAP: Record<string, { label: string; className: string }> = {
+      PENDING: { label: '待审核', className: 'pending' },
+      APPROVED: { label: '已审核', className: 'approved' },
+      AUDITED_LOCKED: { label: '已核销封账', className: 'locked' }
+    };
+
+    return records
+      .map((item: any) => {
+        const income = (parseFloat(item.listDonationTotal) || 0) + (parseFloat(item.otherDonation) || 0);
+        const expense = parseFloat(item.expenseAmount) || 0;
+        const net = income - expense;
+        // 🛡️ 凭证图片字段历史上有 receiptImages/receiptImageList 两种叫法并存
+        // （见 utils/dataService.ts saveReport 双写说明），两个都要兜底读取
+        const receiptCount = (Array.isArray(item.receiptImages) ? item.receiptImages.length : 0) ||
+          (Array.isArray(item.receiptImageList) ? item.receiptImageList.length : 0);
+        const statusInfo = STATUS_MAP[item.approvalStatus] || STATUS_MAP.APPROVED;
+        const dateStr = item.dateString || item.reportDate || item.date || '';
+
+        return {
+          id: item._id || `${item.shopName || item.storeId || ''}_${dateStr}`,
+          date: dateStr,
+          shopName: item.shopName || item.storeName || '',
+          incomeStr: formatMoney(income),
+          expenseStr: formatMoney(expense),
+          netStr: formatMoney(Math.abs(net)),
+          netPositive: net >= 0,
+          hasReceipt: receiptCount > 0,
+          receiptCount,
+          statusLabel: statusInfo.label,
+          statusClass: statusInfo.className
+        };
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : (a.date > b.date ? -1 : 0)));
   },
 
   calculateStatistics(records: any[], startDate: string, endDate: string): any {
