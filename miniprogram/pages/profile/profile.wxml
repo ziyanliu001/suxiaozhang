@@ -355,7 +355,7 @@
         </view>
       </view>
 
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToStoreOverview">
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onGoToFinanceLedger">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-bar-chart"></view>
           <text class="item-text">门店账目明细</text>
@@ -510,9 +510,9 @@
 
       <!-- 🗂️ 【门店管理中心】：成员/审批/账目——四项最高频的门店管理动作用 2x2
            宫格突出，带待办数量的红点角标。🆕 原第 4 格"安全密钥/邀请码"迁到下方
-           【文化与平台监管】组，腾出的位置换成"门店账目与凭证管理"（原本在
+           【治理与安全】组，腾出的位置换成"门店账目与凭证管理"（原本在
            下面的列表里）——三组划分严格对齐"成员/审批/账目"|"组织/公告"|
-           "文化与平台监管"这三条业务边界，而不是按"操作频率"这种此前的口径分组 -->
+           "治理与安全"这三条业务边界，而不是按"操作频率"这种此前的口径分组 -->
       <text class="pd-mgmt-section-title">门店管理中心</text>
       <view class="pd-mgmt-grid">
         <view class="pd-mgmt-grid-cell" hover-class="ui-hover" bindtap="onOpenMemberManageModal">
@@ -569,10 +569,14 @@
 
       <view class="pd-mgmt-divider"></view>
 
-      <!-- 🗂️ 【文化与平台监管】：爱心意见箱（社区文化/心声反馈）+ 安全密钥 +
-           邀请码（门店准入与治理相关的监管类操作），与上面两组的"日常运营"
-           性质不同，单独归为第三组 -->
-      <text class="pd-mgmt-section-title">文化与平台监管</text>
+      <!-- 🐛 命名去重：原名"文化与平台监管"与页面底部全角色共用的"文化与平台
+           监督"底座（见 list-group-label，line ~1188）只差一个字，大家长这个角色
+           会同时看到"文化与平台监管"（本组）和"文化与平台监督"（页面底部），两个
+           名字长得几乎一样但内容完全不同，容易误以为是重复入口。改名为【治理与
+           安全】，准确描述本组实际内容——爱心意见箱（社区心声反馈）+ 安全密钥 +
+           邀请码（门店准入与访问控制），与上面两组的"日常运营"性质不同，
+           单独归为第三组 -->
+      <text class="pd-mgmt-section-title">治理与安全</text>
 
       <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" bindtap="onOpenFeedbackAdminModal">
         <view class="item-left">

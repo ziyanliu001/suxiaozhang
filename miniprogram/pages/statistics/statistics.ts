@@ -414,10 +414,12 @@ Page({
   // 🐛 见 data.roleReady 注释：reloadShopListAndStats() 在角色尚未就绪时把这次
   // 请求记成待办，不放进 data（不需要驱动渲染），applyRolePermissions() 落地后读取
   _pendingStatsReload: false,
-  // 🌟 首页「Excel 账本导出」带 ?autoShowExport=true 跳转过来时置位，等
-  // loadStatistics() 首次把 statistics 灌好后自动触发一次 exportToExcel()，
-  // 免去用户落地后还要再手动点一次「导出表格」；消费一次后立即清零，不随
-  // onShow/切 Tab 反复重放
+  // 🌟 导出配置弹窗「确认导出」（onConfirmExportConfig）置位，等选定周期的
+  // loadStatistics() 重新把 statistics 灌好后自动触发一次 exportToExcel()。
+  // 🐛 不再由 onLoad 的 ?autoShowExport=true/?action=export 直接置位——那两个
+  // 入口现在改为无条件拉起导出配置弹窗（见 openExportConfigModal），空值校验
+  // 只应该针对用户在弹窗里选定的周期，而不是页面刚打开时的默认周期。
+  // 消费一次后立即清零，不随 onShow/切 Tab 反复重放
   _autoShowExportPending: false,
   // 🐛 根因修复：fetchStatistics()/loadStatistics() 此前的防抖锁是"已有请求
   // 在途就直接丢弃这次调用"——用户快速连续切换 Tab/年月/自定义日期时，最后一次
@@ -482,6 +484,12 @@ Page({
     isStoreAdmin: false,
     isFinance: false,
     isPatriarch: false,
+    // 🆕 Profile「财务稽核专区」跳转带来的 ?viewMode=finance 标记：角色解析
+    // （initUserRole 是异步的）真正完成、isFinance 落地前的这段窗口期，先靠
+    // 这个同步写入的标记提前收起营销 Banner，避免"先闪一下 Banner 再收起"的
+    // 视觉跳变。isFinance 落地后两者语义等价，wxml 判断统一写
+    // isFinance || financeEntryMode
+    financeEntryMode: false,
     // 大家长快捷入口：统计页头部的"全国数据看板 ↗"按钮可见性
     showNationalDashboardEntry: false,
     dashboardTitle: '🌐 全网爱心矩阵数据大屏',
@@ -526,7 +534,16 @@ Page({
     // 🛡️ 防抖：刷新数据与导出预览此前均无重入守卫
     isRefreshingData: false,
     isExportPreviewLoading: false,
-    viewMode: 'all' as 'all' | 'personal',
+    // 🐛 根因修复：默认值此前硬编码 'all'——对 super_admin 这是"全店汇总/个人
+    // 统计"开关的合理默认，但同一个字段现在也承载 Profile「财务稽核专区」
+    // 跳转带来的 ?viewMode=finance（见 onLoad），非超管角色的 this.data.viewMode
+    // 必须能保持"未设置"这个明确可辨识的状态，才能在 loadStatistics()/
+    // fetchStatistics() 里安全地统一读取（'' 是 falsy，兜底逻辑不受影响；若
+    // 硬编码成 'all'，非超管会在没有任何 URL 参数时也把字面量 'all' 传给
+    // getReports，见 loadStatistics 里已作废的 isSuperAdmin 硬编码分支曾经
+    // 专门防的那个问题）。super_admin 的 'all' 默认改由 applyRolePermissions()
+    // 落地角色后按需补一次（见该方法内 viewMode 赋值），不影响原有 UX
+    viewMode: '' as string,
     // 🛡️ 预默认必须是 false：这是页面刚加载、角色尚未解析完成前的初始值，若默认
     // true，非超管账号会在 initUserRole()/reloadShopListAndStats() 并行请求的
     // 窗口期内短暂（甚至持续，如果角色解析本身就慢）处于"全部门店"聚合状态——
@@ -700,6 +717,14 @@ Page({
     showExportPreviewModal: false,
     exportPreviewSummary: {} as any,
     exportPreviewRecords: [] as any[],
+    // 🆕 导出配置弹窗：底部「导出当前周期 Excel 账本」快捷入口此前直接导出
+    // "当前正在看的周期"，用户点完不清楚会导出哪段数据——现在先弹这一步，
+    // 显式选定周期类型 + 年/月，再复用已有的 exportToExcel()（核对 → 确认 →
+    // 生成 → 下载）走完整链路
+    showExportConfigModal: false,
+    exportConfigTab: 'month' as 'week' | 'month' | 'year',
+    exportConfigYear: new Date().getFullYear(),
+    exportConfigMonth: new Date().getMonth() + 1,
     // 🔐 专业版功能拦截弹窗：替代原生 wx.showModal（原生弹窗按钮无法用 WXSS
     // 定制样式，见 onOpenPlanUpgradeModal 处注释）
     showPlanUpgradeModal: false
@@ -707,18 +732,68 @@ Page({
 
   onLoad(options: any) {
     recordRecentVisit('/pages/statistics/statistics', '统计分析');
+
+    // 🐛 根因修复：此前只解构 shopName/autoShowExport/view 三个参数，Profile
+    // 「财务稽核专区」新增携带的 viewMode/tab/action 完全没人读，日志里才会打出
+    // "{ viewMode: undefined }"——不是参数没传，是 onLoad 压根没解构它们。这里
+    // 统一补齐，每个参数都做合法值校验，非法/缺失值一律走各自默认分支，不把
+    // undefined 原样写进 setData
+    const viewModeParam = options && options.viewMode;
+    const tabParam = options && options.tab;
+    const actionParam = options && options.action;
+    console.log('[Statistics][onLoad] 入参解构结果：', {
+      shopName: (options && options.shopName) || undefined,
+      viewMode: viewModeParam || undefined,
+      tab: tabParam || undefined,
+      action: actionParam || undefined,
+      autoShowExport: (options && options.autoShowExport) || undefined
+    });
+
     if (options && options.shopName) {
       this.setData({ shopName: options.shopName });
     }
-    if (options && options.autoShowExport === 'true') {
-      this._autoShowExportPending = true;
+
+    // 💰 Profile「财务稽核专区」跳转标记：viewMode 是页面既有的"全店汇总/个人
+    // 统计"（super_admin 专属开关）字段，这里统一持久化落进同一个字段，而不是
+    // 另开一个——loadStatistics()/fetchStatistics() 已经在读 this.data.viewMode，
+    // 不持久化的话下游统一读取到的永远是 undefined（此前的根因）。
+    // financeEntryMode 只认字面量 'finance'，其余取值（含 undefined）一律按
+    // 普通入口处理，不额外收窄任何数据权限——它只影响 UI 层的 Banner 收起/
+    // 核心指标优先展示，真正的角色权限仍以 initUserRole() 解析出的 isFinance 为准
+    if (viewModeParam) {
+      this.setData({
+        viewMode: viewModeParam,
+        financeEntryMode: viewModeParam === 'finance'
+      });
     }
+
+    // 🗂️ tab=ledger：财务专区「门店账目明细」的落地锚点。统计页本身没有独立的
+    // "账目列表" Tab，最贴近"账目明细"语义的落地态是「月报」（逐日摊开的收支
+    // 流水，见下方 daily-list-card），故把 ledger 映射到 month；其余合法周期
+    // 字面量（week/month/year/custom）原样透传，非法值一律忽略、保留默认 tab
+    if (tabParam) {
+      const resolvedTab = tabParam === 'ledger' ? 'month' : tabParam;
+      if (['week', 'month', 'year', 'custom'].indexOf(resolvedTab) !== -1) {
+        this.setData({ currentTab: resolvedTab });
+      }
+    }
+
+    // 🐛 根因修复：兼容旧的 autoShowExport=true 与新的 action=export 两种写法，
+    // 语义完全相同——但不再直接置位 _autoShowExportPending 让首次数据灌好后
+    // 自动跑 exportToExcel()（该方法会用当前默认周期的数据做空值校验，默认
+    // 周期大概率没数据，会被 Toast 拦截、配置弹窗永远弹不出来）。改为无条件
+    // 直接拉起导出配置弹窗（见 openExportConfigModal），让用户自主选定年/月，
+    // 空值校验交给用户确认选择之后
+    const autoOpenExportConfig = (options && options.autoShowExport === 'true') || actionParam === 'export';
     // 大家长从"全国数据看板"入口跳转而来，角色落地后自动切入全国视图
     if (options && options.view === 'national') {
       (this as any)._autoNationalIntent = true;
     }
 
     this.sanitizeDateVariables();
+    if (autoOpenExportConfig) {
+      this.openExportConfigModal('month');
+    }
     this.calculateNavBarHeight();
     this.initCustomDates();
     this.initUserRole();
@@ -971,6 +1046,13 @@ Page({
       isFinance,
       isPatriarch,
       currentUserRole: role,
+      // 🐛 super_admin 专属默认值补位：viewMode 的 data 初始值已改为 ''（见该
+      // 字段声明处注释），这里只在"确实还没有任何取值"时才补一次 'all'——
+      // 保留原有 UX（超管首次看到统计页时"全店汇总"默认高亮），同时不覆盖
+      // 用户已经手动切过的 'personal'（onShow/角色刷新会重复调用本方法）。
+      // 非超管分支原样透传 this.data.viewMode，不做任何改写——它可能是初始的
+      // ''，也可能是 onLoad 解析 ?viewMode=finance 后已经写入的 'finance'
+      viewMode: isSuperAdmin ? (this.data.viewMode || 'all') : this.data.viewMode,
       // 🛡️ 硬性回退文字：非超管账号真实门店名确实解析不出来时（本地/服务端都
       // 没有任何来源能提供），展示层只允许回退成中性占位文案"当前门店"，绝不
       // 允许是空字符串继续在 UI 上裸露、更绝不允许是任何"全部门店/全国总览"
@@ -2711,20 +2793,23 @@ Page({
     // 查询条件传下去——这里只可能是空字符串或账号真实绑定的 storeId，两者都是
     // 安全值；super_admin 需要跨店浏览整个机构数据集用于客户端筛选，不传 storeId
     const shopStoreId = isSuperAdmin ? '' : (this.data.currentUserStoreId || '');
-    // 🐛 硬性根治：非超管绝不能把 this.data.viewMode 的默认值 'all' 原样传给
-    // getReports——viewMode==='all' 这个字面量容易被误解成"查全部门店"（实际
-    // 云函数里 viewMode 只用来决定是否额外收窄到"仅我自己提交的记录"，真正的
-    // 门店隔离始终由 storeId 驱动），但字面上包含"all"就是这个 BUG 反复出现的
-    // 根源之一，索性非超管一律不传这个字段，只让 storeId 决定查询范围；
-    // 切页面里"全店汇总/个人统计"这个开关本身也只对 super_admin 渲染（wx:if=
-    // "{{canViewAllStoresDropdown}}"），非超管永远不会主动把它切到 'personal'，
-    // 所以这里不传等价于原先的"全店"语义，行为不变
+    // 🐛 根因修复：此前非超管一律硬编码传 undefined，不管 this.data.viewMode
+    // 实际取值是什么——Profile「财务稽核专区」跳转带来的 ?viewMode=finance 在
+    // onLoad 已经持久化进 this.data.viewMode（见该字段声明处注释），却在这里
+    // 被无条件抹掉，日志里才会出现"onLoad 解析到 finance，loadStatistics 打印
+    // 却是 undefined"的落差。现在统一改为直接读 this.data.viewMode——门店隔离
+    // 始终由 storeId 驱动（getReports 服务端只在 viewMode==='personal' 时才会
+    // 额外收窄到"仅我自己提交的记录"，其余任何取值含 'finance'/''/undefined
+    // 效果等价），这里传什么字符串都不影响实际查询范围，只是让调试日志如实反映
+    // 页面当前状态。data 初始默认值已改为 ''（非 'all'，见字段声明处注释），非
+    // 超管、且没有任何 URL 覆盖时 this.data.viewMode 仍是 ''，'' || undefined
+    // 求值为 undefined，与此前的硬编码行为完全一致，不会给其余角色引入回归
     // 🐛 全局维度参数：isAll（"全部门店"聚合视图）下必须强制传 'all'，不能沿用
     // this.data.viewMode 当前的取值——超管此前若曾把「查看模式」切到"个人统计"
     // （viewMode==='personal'），一旦紧接着又切到"全部门店"，viewMode 不会自动
     // 复位，会把本该聚合全店的查询悄悄收窄成"仅超管自己提交的记录"，与"全部门店"
     // 这个选择的语义完全不符
-    const reportsViewMode = isSuperAdmin ? (isAll ? 'all' : this.data.viewMode) : undefined;
+    const reportsViewMode = isAll ? 'all' : (this.data.viewMode || undefined);
     if (!isSuperAdmin && !shopStoreId) {
       console.warn('[Statistics][loadStatistics] 非超管账号 storeId 仍未解析出来，本次查询将退回服务端按 openid 兜底收敛，请检查该账号 user_roles.storeId 是否缺失');
     }
@@ -3019,9 +3104,9 @@ Page({
       }
     }
 
-    // 🌟 首页「Excel 账本导出」带 ?autoShowExport=true 跳转过来时，本函数是
-    // statistics 首次被真正灌好数据的地方——消费一次待办标记后立即清零，避免
-    // onShow/切换 Tab/年月再次触发本函数时重复弹出核对弹窗
+    // 🌟 导出配置弹窗「确认导出」（onConfirmExportConfig）置位后，本函数是选定
+    // 周期被重新灌好数据的地方——消费一次待办标记后立即清零，避免 onShow/切换
+    // Tab/年月再次触发本函数时重复弹出核对弹窗
     if (this._autoShowExportPending) {
       this._autoShowExportPending = false;
       this.exportToExcel();
@@ -3686,6 +3771,75 @@ Page({
     });
 
     return statistics;
+  },
+
+  // 🆕 底部「导出当前周期 Excel 账本」快捷入口：此前直接导出"当前正在看的
+  // 周期"，点完用户不清楚导的是哪段数据，也没有任何中间反馈。现在先弹一个轻量
+  // 配置弹窗，显式选定周期类型 + 年/月，确认后把选择写回 currentTab/
+  // selectedYear/selectedMonth（与 switchTab()/onMonthChange() 是同一份状态），
+  // 再借用已有的 _autoShowExportPending 机制——数据重新灌好后自动接上
+  // exportToExcel() 的「核对 → 确认 → 生成 → 下载」全流程，不重复实现一套
+  onOpenExportConfigModal() {
+    const { currentTab } = this.data;
+    // custom（自定义区间）没有对应的"月/年"输入项，弹窗里退回月报作为默认选项
+    this.openExportConfigModal(currentTab === 'custom' ? 'month' : currentTab);
+  },
+
+  // 🐛 根因修复：Profile「Excel 财务报表导出」携带 action=export 跳转进来时，
+  // 此前直接置位 _autoShowExportPending，等首次 loadStatistics()（默认周期是
+  // "周报"，绝大多数场景下当周无数据）灌完数据后自动调用 exportToExcel()——
+  // 该方法一进来就检查 statistics.dailyRecords 是否为空，为空直接弹 Toast 拦截
+  // 返回，导出配置弹窗根本没机会弹出。现在改为无条件直接拉起配置弹窗，让用户
+  // 自主选定年/月，数据是否为空的校验只在用户选完、点击"确认导出"后针对
+  // 那个选定周期发生（见 onConfirmExportConfig → exportToExcel）
+  openExportConfigModal(defaultTab: 'week' | 'month' | 'year') {
+    const { selectedYear, selectedMonth } = this.data;
+    this.setData({
+      showExportConfigModal: true,
+      exportConfigTab: defaultTab,
+      exportConfigYear: selectedYear,
+      exportConfigMonth: selectedMonth
+    });
+  },
+
+  onCloseExportConfigModal() {
+    this.setData({ showExportConfigModal: false });
+  },
+
+  onSelectExportConfigTab(e: any) {
+    const tab = e.currentTarget.dataset.tab;
+    if (['week', 'month', 'year'].indexOf(tab) === -1) return;
+    this.setData({ exportConfigTab: tab });
+  },
+
+  onExportConfigMonthChange(e: any) {
+    const rawValue = (e.detail && e.detail.value) || '';
+    const parts = String(rawValue).split('-');
+    const yearVal = parseInt(parts[0], 10);
+    const monthVal = parseInt(parts[1], 10);
+    this.setData({
+      exportConfigYear: isNaN(yearVal) ? this.data.exportConfigYear : yearVal,
+      exportConfigMonth: isNaN(monthVal) ? this.data.exportConfigMonth : monthVal
+    });
+  },
+
+  onExportConfigYearChange(e: any) {
+    const yearVal = parseInt((e.detail && e.detail.value) || '', 10);
+    if (isNaN(yearVal)) return;
+    this.setData({ exportConfigYear: yearVal });
+  },
+
+  onConfirmExportConfig() {
+    const { exportConfigTab, exportConfigYear, exportConfigMonth } = this.data;
+    this.setData({
+      showExportConfigModal: false,
+      currentTab: exportConfigTab,
+      selectedYear: exportConfigYear,
+      selectedMonth: exportConfigMonth,
+      statistics: null
+    });
+    this._autoShowExportPending = true;
+    this.calculateStats();
   },
 
   // 🌟「先核对、再确认、后导出」安全闭环：点击「导出表格」不再直接生成文件，

@@ -3815,6 +3815,14 @@ button.btn-national-report {
   padding: 32rpx;
 }
 
+.export-config-type-row {
+  margin: 24rpx 0 16rpx;
+}
+
+.export-config-picker-row {
+  margin-bottom: 8rpx;
+}
+
 .export-preview-summary-grid {
   display: flex;
   flex-wrap: wrap;

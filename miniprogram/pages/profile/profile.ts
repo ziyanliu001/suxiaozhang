@@ -3972,15 +3972,33 @@ Page({
     });
   },
 
-  // 💰 财务专属【Excel 财务报表导出】：跳去统计页并携带 ?autoShowExport=true，
-  // 复用首页"Excel 账本导出"跳转已有的同一套自动唤起核对弹窗逻辑
-  // （见 statistics.ts onLoad 的 _autoShowExportPending），不新建导出入口
+  // 💰 财务专属【门店账目明细】：与 onGoToStoreOverview 是同一个落地页，但这里
+  // 额外携带 tab=ledger&viewMode=finance——statistics.ts onLoad 据此把 tab=ledger
+  // 映射到"月报"（对财务而言最贴近"账目明细"的落地态：一天天摊开的收支流水），
+  // viewMode=finance 标记financeEntryMode，收起营销 Banner、突出核心经营指标与
+  // 账本稽核工具。不复用 onGoToStoreOverview 本体，因为那个方法同时也服务于
+  // 店长「账目与凭证」等其他非财务入口，不该被这里的财务专属参数污染
+  onGoToFinanceLedger() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    wx.navigateTo({
+      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=ledger&viewMode=finance`,
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 💰 财务专属【Excel 财务报表导出】：跳去统计页并携带 action=export&viewMode=finance，
+  // statistics.ts onLoad 据此拉起与首页"Excel 账本导出"同一套自动唤起核对弹窗逻辑
+  // （见 statistics.ts onLoad/_autoShowExportPending），不新建导出入口
   onExportFinanceExcel() {
     if (this.isNavigating) return;
     this.isNavigating = true;
 
     wx.navigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&autoShowExport=true`,
+      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&action=export&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
       }

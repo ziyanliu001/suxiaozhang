@@ -812,6 +812,52 @@
     </view>
   </view>
 
+  <!-- 🆕 导出配置弹窗：底部「导出当前周期 Excel 账本」快捷入口的落地点，显式
+       选定"导出哪段数据"（周期类型 + 年/月），确认后走已有的核对/确认/生成/
+       下载全流程（见 onConfirmExportConfig 复用 _autoShowExportPending 机制） -->
+  <view class="patch-modal-mask" wx:if="{{showExportConfigModal}}" bindtap="onCloseExportConfigModal">
+    <view class="patch-modal-box" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">📊 导出 Excel 账本</text>
+        <text class="btn-close" bindtap="onCloseExportConfigModal">✕</text>
+      </view>
+      <text class="modal-tip">选择要导出的账本周期，确认后自动核对数据并生成表格</text>
+
+      <view class="period-tabs-segment export-config-type-row">
+        <view class="tab-item {{exportConfigTab === 'week' ? 'active' : ''}}" data-tab="week" bindtap="onSelectExportConfigTab">周报</view>
+        <view class="tab-item {{exportConfigTab === 'month' ? 'active' : ''}}" data-tab="month" bindtap="onSelectExportConfigTab">月报</view>
+        <view class="tab-item {{exportConfigTab === 'year' ? 'active' : ''}}" data-tab="year" bindtap="onSelectExportConfigTab">年报</view>
+      </view>
+
+      <view class="export-config-picker-row" wx:if="{{exportConfigTab === 'month'}}">
+        <picker mode="date" fields="month" value="{{exportConfigYear}}-{{String(exportConfigMonth).padStart(2, '0')}}-01" bindchange="onExportConfigMonthChange">
+          <view class="picker-pill-btn">
+            <text class="lbl">🗓️ {{exportConfigYear}}年{{exportConfigMonth}}月</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+      <view class="export-config-picker-row" wx:elif="{{exportConfigTab === 'year'}}">
+        <picker mode="date" fields="year" value="{{exportConfigYear}}-01-01" bindchange="onExportConfigYearChange">
+          <view class="picker-pill-btn">
+            <text class="lbl">🗓️ {{exportConfigYear}}年</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+      <view class="export-config-picker-row" wx:else>
+        <view class="picker-pill-btn">
+          <text class="lbl">🗓️ 本周（{{weekRangeLabel}}）</text>
+        </view>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCloseExportConfigModal">取消</button>
+        <button class="btn-modal-submit" bindtap="onConfirmExportConfig">生成并下载</button>
+      </view>
+    </view>
+  </view>
+
   <!-- 🌟「先核对、再确认、后导出」导出预览核对弹窗：exportToExcel 只发起 previewOnly
        查询，真正生成 xlsx 必须等用户在这里点击「确认并导出」 -->
   <view class="patch-modal-mask" wx:if="{{showExportPreviewModal}}">
@@ -1178,8 +1224,12 @@
 
     <view class="stats-content" wx:if="{{statistics && statistics.recordCount > 0}}">
 
-      <!-- 🆕 财务专属：门店财务与凭证合规大屏——突出单餐成本/记账笔数/凭证合规率 -->
-      <view class="finance-compliance-card" wx:if="{{isFinance}}">
+      <!-- 🆕 财务专属：门店财务与凭证合规大屏——突出单餐成本/记账笔数/凭证合规率。
+           🐛 补上 financeEntryMode：Profile「财务稽核专区」跳转带来的 ?viewMode=finance
+           标记在 onLoad 就同步写入，而 isFinance 要等 initUserRole() 这个异步请求
+           回来才会变 true——纯 isFinance 判断会让财务专区从 Profile 跳过来的这一屏
+           先空一下再补出这张卡，financeEntryMode || isFinance 消除这个视觉跳变 -->
+      <view class="finance-compliance-card" wx:if="{{isFinance || financeEntryMode}}">
         <view class="card-header">
           <text class="card-title">💳 门店财务与凭证合规大屏</text>
         </view>
@@ -1739,14 +1789,17 @@
     </view>
   </scroll-view>
 
-  <!-- 🆕 底部固定导出入口：无论当期是否有数据都常驻展示，点击直接复用
-       exportToExcel() 拉起"先预览核对、再确认导出"弹窗，免去用户还要滚动到
-       每日明细区去找那个「导出表格」按钮 -->
+  <!-- 🆕 底部固定导出入口：无论当期是否有数据都常驻展示。
+       🐛 UX 重构：此前点击直接复用 exportToExcel() 导出"当前正在看的周期"，
+       用户点完既不清楚会导出哪段数据，当期恰好无数据时又只弹一个 Toast 就
+       停在原地，没有下一步可做——现在先弹 onOpenExportConfigModal 的周期选择
+       配置弹窗，显式选完周期类型 + 年/月再进入已有的"核对 → 确认 → 生成 →
+       下载"全流程 -->
   <view class="bottom-sticky-bar" wx:if="{{!showNationalDashboard && !showPersonalView}}">
     <button class="btn-primary-poster" hover-class="ui-hover" wx:if="{{statistics && statistics.recordCount > 0}}" bindtap="onGeneratePoster">
       🖼️ {{isFinance ? '生成门店财务月报海报' : (isPatriarch ? '生成门店续航/爱心公示海报' : '生成本店营运月报海报')}}
     </button>
-    <button class="btn-export-shortcut" hover-class="ui-hover" bindtap="exportToExcel">
+    <button class="btn-export-shortcut" hover-class="ui-hover" bindtap="onOpenExportConfigModal">
       📊 导出当前周期 Excel 账本
     </button>
   </view>
