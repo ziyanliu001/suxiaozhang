@@ -38,6 +38,8 @@ exports.main = async (event, context) => {
     ['report_logs', { name: 'tenantId_date',                   keys: [{ tenantId: 1 }, { dateString: 1 }],                  unique: false }],
     ['report_logs', { name: 'auditedBy_asc',                   keys: [{ auditedBy: 1 }],                                    unique: false }],
     ['report_logs', { name: 'tenantId_auditedBy',              keys: [{ tenantId: 1 }, { auditedBy: 1 }],                   unique: false }],
+    // 🔑 pages/index/index.ts fetchFinanceLedgerStatus 的"账本锁定状态"查询：
+    // {tenantId, storeId, auditedBy: _.exists(true)}.count()
     ['report_logs', { name: 'tenantId_storeId_auditedBy',      keys: [{ tenantId: 1 }, { storeId: 1 }, { auditedBy: 1 }],   unique: false }],
     // 🔑 profile.ts fetchMeritStats 的提交人统计：{tenantId, storeId, _openid}.count()
     ['report_logs', { name: 'tenantId_storeId_openid',         keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }],    unique: false }],

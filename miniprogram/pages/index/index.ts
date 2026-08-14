@@ -947,6 +947,16 @@ Page({
     riskAlertsHasAnomaly: false,
     // 🌟 统计区间文案，例如"近 60 天：2026-06-02 至 2026-08-01"
     riskAlertsRangeLabel: '',
+    // 🐛 财务首页瘦身：默认收起"请填写当日明细"整条录入表单流水线（含爱心支持/
+    // 物资明细、义工与用餐统计、生成结果预览、底部吸底生成按钮），首屏聚焦
+    // 【财务稽核台】。财务仍保留亲自代填当日餐报的能力（见 onScrollToFinanceConsole
+    // 旁的"临时代为填报"链接切换本字段），只是不再是默认呈现内容——不影响大家长/
+    // 超管（他们靠角色继承拿到 isFinance，但 currentUserRole 不等于 'finance'）
+    showFinanceFormOverride: false,
+    // 🌟 账本锁定状态：finance-home-card 顶部指标，真实数据见 fetchFinanceLedgerStatus
+    // （此前是写死的 "100%" 占位文案，未绑定任何数据源）
+    financeLedgerStatusLoading: false,
+    financeLedgerAuditedRate: null as number | null,
     currentStoreId: '' as string,
     isAllStoresView: false,
     allStoresList: [] as any[],
@@ -7209,6 +7219,9 @@ Page({
     // 🌟 财务视角首页角标：预先拉取一次风控预警数量，避免用户必须先点开弹窗才知道有没有异常
     if ((this.data.isFinance || this.data.isSuperAdmin) && this.data.currentStoreId && !this.isNationalOverviewSelected()) {
       this.fetchRiskAlerts();
+      // ☀️ 账本锁定状态：与风控预警同一时机拉取，替换 finance-home-card 顶部
+      // 此前写死的 "100%" 占位文案
+      this.fetchFinanceLedgerStatus();
     }
 
     const activeStore = getSelectedStore();
@@ -9697,6 +9710,48 @@ Page({
     });
   },
 
+  // 🐛 财务首页瘦身：「请填写当日明细」整条录入表单流水线默认对纯财务角色收起
+  // （见 wxml form-main-card 前的 wx:if），这里提供唯一的展开入口——财务仍需保留
+  // 亲自代填当日餐报的能力，不是彻底砍掉这条路径
+  onToggleFinanceFormOverride() {
+    this.setData({ showFinanceFormOverride: !this.data.showFinanceFormOverride });
+  },
+
+  // ☀️ 账本锁定状态：finance-home-card 顶部指标，此前是写死的 "100%" 占位文案。
+  // 真实口径 = 本店累计已稽核签核笔数 / 本店累计总笔数（tenantId+storeId 精确
+  // 匹配，count() 均能命中 createIndexes 里已声明的复合索引——总数命中
+  // tenantId_storeId_dateString 的前两列前缀，已稽核数精确命中
+  // tenantId_storeId_auditedBy 三列全匹配，两条 count() 都不会触发云开发的
+  // "建议添加索引"控制台告警）
+  async fetchFinanceLedgerStatus() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || !isCloudAvailable()) return;
+
+    this.setData({ financeLedgerStatusLoading: true });
+    try {
+      const db = wx.cloud.database();
+      const cachedRoleInfo = AuthService.getCachedRoleInfo();
+      const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
+      const baseWhere: any = { storeId };
+      if (tenantId) baseWhere.tenantId = tenantId;
+
+      const [totalRes, auditedRes] = await Promise.all([
+        db.collection('report_logs').where(baseWhere).count(),
+        db.collection('report_logs').where({ ...baseWhere, auditedBy: db.command.exists(true) }).count()
+      ]);
+
+      const total = totalRes.total || 0;
+      const audited = auditedRes.total || 0;
+      this.setData({
+        financeLedgerAuditedRate: total > 0 ? Math.round((audited / total) * 100) : null
+      });
+    } catch (err) {
+      console.error('[fetchFinanceLedgerStatus] 查询失败:', err);
+    } finally {
+      this.setData({ financeLedgerStatusLoading: false });
+    }
+  },
+
   // 🐛 修复"假导出"：此前无论选哪个选项都只弹一个"导出指令已发送"的成功提示，
   // 没有调用任何真实导出逻辑（其中"区块链存证日志"更是纯虚构文案，项目里从未有过相关实现）。
   // 统计分析页（pages/statistics）已有基于 exportAccountExcel 云函数的完整可用导出流程
@@ -9818,7 +9873,10 @@ Page({
 
     wx.showModal({
       title: '🔒 确认稽核封账？',
-      content: `确定要封账【${storeLabel}】${startDate} 至 ${endDate} 的账目吗？锁定后店长将无法修改。`,
+      // 🐛 数字指纹 Hash：manageFinanceLock 的 lockRange 会对本次锁定的全部记录
+      // 生成一份 SHA-256 摘要（见该云函数 computeLockFingerprint），确认文案
+      // 提前告知用户这个动作会留下可事后核对的完整性凭证，不只是"锁定"两个字
+      content: `确定要封账【${storeLabel}】${startDate} 至 ${endDate} 的账目吗？锁定后店长将无法修改，系统将为本次封账生成数字指纹 Hash 作为完整性凭证。`,
       confirmText: '确认封账',
       confirmColor: '#D32F2F',
       cancelText: '我再想想',
@@ -9835,12 +9893,16 @@ Page({
           const res2 = result.result as any;
           wx.hideLoading();
           if (res2 && res2.success) {
+            const fingerprintTip = res2.lockFingerprint ? `\n数字指纹：${res2.lockFingerprint}` : '';
             wx.showModal({
               title: '封账完成',
-              content: res2.message || `已成功封账 ${res2.lockedCount || 0} 条记录`,
+              content: (res2.message || `已成功封账 ${res2.lockedCount || 0} 条记录`) + fingerprintTip,
               showCancel: false
             });
             this.checkRangeLockStatus();
+            // 🐛 封账动作会改变"已稽核笔数"，同步刷新账本锁定状态百分比，不用等
+            // 用户离开首页再回来才看到最新值
+            this.fetchFinanceLedgerStatus();
           } else if (res2 && res2.error === 'SELECTED_RANGE_HAS_PENDING_REPORTS') {
             wx.showModal({ title: '无法封账', content: res2.message || '选中区间内存在待审核数据，请全部审核或作废后再封账！', showCancel: false });
           } else {

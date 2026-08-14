@@ -14,9 +14,21 @@
 // super_admin 限本机构内任意门店；解封仅 store_patriarch / super_admin。
 
 const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
+
+// 🔐 数字指纹 Hash：封账即"账本不可篡改"的承诺，给这次批量封账操作生成一份可
+// 事后核对的摘要——对本次锁定的全部记录 _id（排序后拼接，与写入顺序无关）+
+// 门店 + 区间 + 操作时间做 SHA-256，取前 16 位十六进制大写展示。不是密码学
+// 意义上的防伪签名（没有私钥参与），而是给财务/大家长一个"如果这批记录事后被
+// 篡改，重新按同一批 _id 计算出的指纹会对不上"的轻量完整性校验凭证
+function computeLockFingerprint(storeId, startDate, endDate, ids, nowStr) {
+  const sortedIds = [...ids].sort();
+  const payload = `${storeId}|${startDate}|${endDate}|${nowStr}|${sortedIds.join(',')}`;
+  return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16).toUpperCase();
+}
 
 // 🐛 云函数容器时区固定为 UTC，new Date().toLocaleString() 不传 timeZone 会
 // 直接按 UTC 渲染，导致落库的稽核时间字符串比北京时间少 8 小时
@@ -117,6 +129,7 @@ async function handleLockRange(where, caller, startDate, endDate) {
 
   const userName = caller.role === 'finance' ? '财务稽核员' : (caller.role === 'store_patriarch' ? '大家长' : '超级管理员');
   const nowStr = formatBeijingTimeString(new Date());
+  const lockFingerprint = computeLockFingerprint(where.storeId, startDate, endDate, targets.map((item) => item._id), nowStr);
 
   let lockedCount = 0;
   const results = await Promise.allSettled(targets.map((item) =>
@@ -129,11 +142,15 @@ async function handleLockRange(where, caller, startDate, endDate) {
         approvalStatus: 'AUDITED_LOCKED',
         auditedBy: userName,
         auditTime: nowStr,
+        // 🔐 同一批次封账共用同一份数字指纹——不是逐条独立生成，指纹本身就是
+        // "这一整批记录在这一刻被谁、以什么范围锁定"的批次级凭证
+        auditFingerprint: lockFingerprint,
         auditLogs: _.push({
           operator: userName,
           action: 'AUDIT_LOCK_BATCH',
           timestamp: nowStr,
-          reason: `财务批量封账（${startDate} 至 ${endDate}）`
+          reason: `财务批量封账（${startDate} 至 ${endDate}）`,
+          fingerprint: lockFingerprint
         })
       }
     })
@@ -147,6 +164,7 @@ async function handleLockRange(where, caller, startDate, endDate) {
     success: true,
     lockedCount,
     totalMatched: targets.length,
+    lockFingerprint,
     message: `已成功封账 ${startDate} 至 ${endDate} 共 ${lockedCount} 条记录`
   };
 }

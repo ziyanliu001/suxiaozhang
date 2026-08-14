@@ -242,8 +242,12 @@
        打卡卡片，只在非义工视角下渲染，复用同一套 onVolunteerCheckIn 逻辑与打卡按钮样式，
        不改动 volunteer-hero-card 本身，避免给已经跑得好好的义工端引入回归风险。
        🐛 精简重复：家人（服务对象）不是来"到岗服务"的角色，打卡卡片对他们没有意义——
-       此前条件只排除了 isVolunteer，没排除 isFamily，加 !isFamily 彻底屏蔽 -->
-  <view class="ui-card-wrapper omni-checkin-card" wx:if="{{!isVolunteer && !isFamily}}">
+       此前条件只排除了 isVolunteer，没排除 isFamily，加 !isFamily 彻底屏蔽。
+       🐛 财务首页瘦身：纯财务角色（currentUserRole==='finance'，不含靠角色继承
+       拿到 isFinance 的大家长/超管）不承担"到岗服务"职责，这张巨型打卡卡片对
+       他们是纯粹的视觉噪音——严格用 currentUserRole 而非 isFinance 判断，
+       大家长/超管仍然保留打卡入口，不受影响 -->
+  <view class="ui-card-wrapper omni-checkin-card" wx:if="{{!isVolunteer && !isFamily && currentUserRole !== 'finance'}}">
     <view class="omni-checkin-header">
       <text class="omni-checkin-title">🙋 服务打卡</text>
       <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
@@ -476,9 +480,14 @@
         </view>
       </view>
 
+      <!-- 🐛 「账本锁定状态」此前是写死的 "100%" 占位文案，未绑定任何数据源，
+           也没有点击事件。现改为真实口径（本店累计已稽核签核笔数占比，见
+           fetchFinanceLedgerStatus）+ 点击可直接唤起"稽核与封账"操作面板，
+           与另外两格保持一致的"指标可点击穿透"体验 -->
       <view class="role-stats-banner finance-bg">
-        <view class="stat-item">
-          <text class="stat-num green-text">100%</text>
+        <view class="stat-item" bindtap="onOpenFinanceLockModal">
+          <text class="stat-num green-text" wx:if="{{!financeLedgerStatusLoading}}">{{financeLedgerAuditedRate === null ? '--' : financeLedgerAuditedRate + '%'}}</text>
+          <text class="stat-num green-text" wx:else>…</text>
           <text class="stat-label">账本锁定状态</text>
         </view>
         <view class="stat-divider"></view>
@@ -511,6 +520,14 @@
           <view class="icon idx-icon-svg idx-icon-settings"></view>
           <text class="txt">店铺模板自定义</text>
         </view>
+      </view>
+
+      <!-- 🐛 财务首页瘦身后的唯一展开口子：「请填写当日明细」整条录入表单流水线
+           默认对纯财务角色收起（见下方 form-main-card 前的 wx:if），这里给一个
+           不起眼但找得到的入口，财务确需亲自代填当日餐报时点击展开，不是彻底
+           砍掉这条能力 -->
+      <view class="finance-form-override-link" wx:if="{{currentUserRole === 'finance'}}" bindtap="onToggleFinanceFormOverride">
+        <text>{{showFinanceFormOverride ? '收起代填表单 ▲' : '临时代为填报当日明细 ▾'}}</text>
       </view>
     </view>
 
@@ -641,12 +658,17 @@
       </button>
     </view>
 
-    <!-- 🌟 职责隔离策略已按需求调整：财务义工每天稽核完账目、确认算式无误后，
-         需要亲自生成/提交当日餐报并公示，因此当日明细录入表单不再对纯财务角色隐藏——
-         纯财务与店长现在走完全相同的一套录入 + 提交 + 级联重算流程，不再区分。
-         真正的重复录入防护在 saveReportAsync -> DataService.saveReport 的
-         duplicate_date_blocked 校验里：当天若已有店长提交的记录，财务这里生成时
-         会被拦截并引导去历史记录编辑，不会产生重复/冲突的账本条目。 -->
+    <!-- 🐛 财务首页瘦身：录入表单默认对纯财务角色（currentUserRole==='finance'，
+         严格排除靠角色继承拿到 isFinance 的大家长/超管——他们本就承担更宽泛的
+         门店经营职责，不受此收敛影响）收起，避免把义工/店长的日常填报流程强加
+         给只需要「稽核」而不需要「录入」的财务岗位，首屏优先展示上方的
+         【财务稽核台】。
+         🛡️ 不是彻底砍掉：上一版"职责隔离"决策明确要求财务仍需保留生成/提交
+         当日餐报的能力（重复录入防护见 saveReportAsync 的 duplicate_date_blocked
+         校验），这里用 showFinanceFormOverride 保留这条口子——财务点击稽核台
+         旁边的"临时代为填报"链接（见 onToggleFinanceFormOverride）即可展开完整
+         表单，行为与店长完全一致，只是不再是财务首页默认呈现的内容 -->
+    <block wx:if="{{currentUserRole !== 'finance' || showFinanceFormOverride}}">
     <view class="ui-card-wrapper form-main-card">
       <view class="form-card-header">
         <view class="title-group">
@@ -1353,6 +1375,7 @@
         </view>
       </view>
     </block>
+    </block><!-- /currentUserRole !== 'finance' || showFinanceFormOverride -->
 
     <!-- 主生成按钮已迁移至底部固定吸底的 .bottom-action-floating-bar，这里仅保留精简的反馈/协议链接 -->
     <view class="bottom-links-card">
@@ -2891,7 +2914,7 @@
        白色图标直接和白色背景融为一体（看起来像"没有图标"）；金色底的右按钮上白色图标也和金黄背景
        低对比度重叠。SVG 图标系统这里没法简单换色，改用原生 emoji 字符作为图标（用户自身颜色不受
        按钮 color 影响，天然清晰可辨，也是需求里给出的示例做法），一步到位解决对比度问题。 -->
-  <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer && !showNewUserGuide}}">
+  <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="ui-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text>生成餐报文本
     </button>

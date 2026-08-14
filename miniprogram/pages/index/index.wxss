@@ -2831,16 +2831,23 @@ textarea, .textarea {
 }
 
 /* 👁️ 视角切换预览提示条：金色主题呼应个人中心的切换入口，明确告知"这只是展示预览" */
+/* 🐛 玻璃拟态：此前不透明 #FFFDF5 实底 + 财务稽核台紧随其后的不透明白底卡片，
+   两块颜色区域贴得很近，读起来像"色块硬堆叠"。改为半透明 + backdrop-filter
+   模糊底层内容，视觉上退让为一条"浮在页面上的提示"，不再和下方卡片抢层级；
+   底部 margin 从 0 加到 20rpx，与下一张卡片之间留出呼吸空间 */
 .preview-mode-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10rpx;
-  background: #FFFDF5;
-  border: 1rpx solid #F1C40F;
-  border-radius: 12rpx;
+  background: rgba(255, 253, 245, 0.72);
+  backdrop-filter: blur(12rpx);
+  -webkit-backdrop-filter: blur(12rpx);
+  border: 1rpx solid rgba(241, 196, 15, 0.45);
+  border-radius: 16rpx;
   padding: 14rpx 20rpx;
-  margin: 12rpx 24rpx 0;
+  margin: 16rpx 24rpx 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(181, 124, 30, 0.08);
 }
 
 .preview-mode-text {
@@ -6471,6 +6478,17 @@ button.poster-gen-btn[disabled] {
   margin-bottom: 20rpx;
 }
 
+/* 🐛 玻璃拟态：财务稽核台 Header 单独抬一层半透明磨砂底，与卡片本身的纯白底
+   拉开一点层次，不再是"标题文字直接摆在实色卡片上"的单调堆叠 */
+.finance-home-card .card-header-welcome {
+  background: rgba(255, 235, 238, 0.5);
+  backdrop-filter: blur(10rpx);
+  -webkit-backdrop-filter: blur(10rpx);
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  margin: -4rpx -4rpx 20rpx;
+}
+
 .manager-home-card .welcome-icon,
 .finance-home-card .welcome-icon {
   font-size: 40rpx;
@@ -6563,6 +6581,16 @@ button.poster-gen-btn[disabled] {
   margin-top: 20rpx;
 }
 
+/* 🐛 财务首页瘦身：录入表单默认收起后的唯一展开口子，刻意做成不起眼的文字链接
+   （而不是又一张卡片/大按钮）——找得到，但不与上方稽核台抢视觉焦点 */
+.finance-form-override-link {
+  margin-top: 20rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: #B71C1C;
+  padding: 8rpx 0;
+}
+
 /* ================= 财务专属功能区：稽核封账 / 风控预警弹窗 ================= */
 .finance-modal-mask {
   position: fixed;
@@ -6575,6 +6603,12 @@ button.poster-gen-btn[disabled] {
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: finance-modal-fade-in 0.18s ease-out;
+}
+
+@keyframes finance-modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .finance-modal-card {
@@ -6587,6 +6621,17 @@ button.poster-gen-btn[disabled] {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+}
+
+/* 🐛「风控预警日志」平滑拉起：从下方轻微位移 + 淡入，而不是硬切出现，
+   呼应"拉起面板"这个交互动词，与稽核封账那个纯居中弹窗的观感区分开 */
+.risk-modal-card {
+  animation: risk-modal-slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes risk-modal-slide-up {
+  from { opacity: 0; transform: translateY(48rpx); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .finance-modal-header {
