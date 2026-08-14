@@ -5221,6 +5221,22 @@ Page({
     }
   },
 
+  // 🐛 根因修复："微信支付未配置"降级提示此前无差别写死"联系大家长"——这句话
+  // 只对财务/店长/义工这类"店内需要向店主求助"的角色成立。大家长本人点这个
+  // 按钮时，"联系大家长"等于让他联系自己；超管/平台管理员是比大家长更高一级
+  // 的权限主体（见文件头部 L3/L2/L1 权限分层注释），被建议去联系某个具体门店
+  // 的大家长更是本末倒置。按当前生效角色（尊重"视角切换预览"，与页面其余
+  // 角色相关文案同一套口径）分流出三种得体的求助对象
+  buildPaymentFallbackContact(): string {
+    if (this.data.isPatriarch) {
+      return '，或联系平台客服协助开通';
+    }
+    if (this.data.isSuperAdmin || this.data.isPlatformAdmin) {
+      return '，或联系平台方处理';
+    }
+    return '，或联系大家长';
+  },
+
   // 🌟 在线订购：接入微信云开发原生支付（方案 B 终极形态）。
   // 完整流程：createSubscriptionOrder 云函数统一下单 → wx.requestPayment 拉起
   // 微信支付界面 → 支付成功后 payCallback 云函数自动更新 tenant_subscriptions
@@ -5252,7 +5268,7 @@ Page({
           rawErr.includes('payment');
         wx.showToast({
           title: isPaymentUnconfigured
-            ? '当前环境暂未开通微信支付，请使用授权码兑换或联系大家长'
+            ? `当前环境暂未开通微信支付，请使用授权码兑换${this.buildPaymentFallbackContact()}`
             : (rawErr || '生成订单失败，请重试'),
           icon: 'none',
           duration: 3000
