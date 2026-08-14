@@ -1462,7 +1462,11 @@ Page({
         return;
       }
 
-      const data = result.data;
+      // 🛡️ 崩溃修复：result.success 为 true 不保证 result.data 一定存在（服务端
+      // 异常分支可能只置了 success 却漏填 data）——此前直接 `result.data` 解构，
+      // data 一旦是 undefined，下面 data.pendingProfileUpdate 立刻抛出
+      // "Cannot read property 'pendingProfileUpdate' of undefined"
+      const data = result.data || {};
       const pendingProfileItems = data.pendingProfileUpdate
         ? Object.keys(PATRIARCH_PROFILE_FIELD_LABELS)
             .filter((f) => data.pendingProfileUpdate[f] !== undefined)
@@ -1491,7 +1495,7 @@ Page({
           auditedCount,
           totalCount,
           verifyProgressPercent,
-          pendingVoidList: data.pendingVoidList || [],
+          pendingVoidList: Array.isArray(data.pendingVoidList) ? data.pendingVoidList : [],
           pendingProfileUpdate: data.pendingProfileUpdate || null,
           pendingProfileItems
         }
@@ -1709,7 +1713,7 @@ Page({
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
         return;
       }
-      const list = (result.data && result.data.list) || [];
+      const list = Array.isArray(result.data?.list) ? result.data.list : [];
       this.setData({ feedbackAdminList: list });
       this._rebuildFeedbackTabLists();
     } catch (err) {
@@ -1738,8 +1742,11 @@ Page({
   },
 
   // 重新计算 pending/handled 两个衍生列表（每次 feedbackAdminList 变更后调用）
+  // 🛡️ 崩溃修复：this.data.feedbackAdminList 理论上恒为数组（data 声明 + 写入点
+  // 均已加固），这里再兜底一层 Array.isArray——避免未来任何新写入点遗漏防护时，
+  // 本方法直接对非数组调用 .filter() 崩溃
   _rebuildFeedbackTabLists() {
-    const all = this.data.feedbackAdminList;
+    const all = Array.isArray(this.data.feedbackAdminList) ? this.data.feedbackAdminList : [];
     this.setData({
       feedbackAdminPendingList: all.filter((i) => i.status !== 'handled'),
       feedbackAdminHandledList: all.filter((i) => i.status === 'handled')
@@ -2431,13 +2438,20 @@ Page({
     }, LEADERBOARD_FETCH_DEBOUNCE_MS);
   },
 
+  // 🛡️ 崩溃修复：result.list 此前只用 `|| []` 兜底假值（undefined/null/0/''），
+  // 云函数一旦因为异常分支返回了非数组的真值（例如误把单个对象当列表塞进
+  // 字段），`|| []` 完全挡不住——这个非数组值会原样写进 leaderboardList，
+  // wxml 里的 leaderboardList.length / wx:for 立刻抛出 "Cannot read property
+  // 'length' of undefined"（WASubContext.js）级别的渲染层崩溃。改用
+  // Array.isArray 严格校验，任何非数组取值一律兜底成空数组
   applyLeaderboardResult(result: any) {
+    const safeList = Array.isArray(result?.list) ? result.list : [];
     this.setData({
-      leaderboardList: result.list || [],
-      leaderboardSelfRank: result.selfRank || 0,
-      leaderboardSelfHours: result.selfHours || 0,
-      leaderboardGapToNext: result.gapToNext || 0,
-      leaderboardTotalRanked: result.totalRanked || 0,
+      leaderboardList: safeList,
+      leaderboardSelfRank: result?.selfRank || 0,
+      leaderboardSelfHours: result?.selfHours || 0,
+      leaderboardGapToNext: result?.gapToNext || 0,
+      leaderboardTotalRanked: result?.totalRanked || 0,
       leaderboardLoading: false
     });
   },
@@ -3062,7 +3076,7 @@ Page({
         }
         return;
       }
-      const list = (result.data && result.data.list) || [];
+      const list = Array.isArray(result.data?.list) ? result.data.list : [];
       // 🔴 我的餐报提交记录入口角标：与 wxml 里 rejectedCount > 0 时展示的
       // unread-badge 对应，统计有几条已被店长驳回、还没重新修改提交
       const rejectedCount = list.filter((item: any) => item && item.status === 'rejected').length;
@@ -3110,7 +3124,7 @@ Page({
       });
       const result = res.result;
       if (result && result.success) {
-        const list = (result.data && result.data.list) || [];
+        const list = Array.isArray(result.data?.list) ? result.data.list : [];
         this.setData({ volunteerSubmissionAdminList: list, pendingVolunteerSubmissionCount: list.length });
       }
     } catch (err) {
@@ -3367,7 +3381,7 @@ Page({
       const result = res.result;
       if (!result || !result.success) return;
 
-      const list = result.data || [];
+      const list = Array.isArray(result.data) ? result.data : [];
       if (result.queueType === 'member') {
         this.setData({ memberApplicationList: list, pendingMemberApplicationCount: list.length });
       }
@@ -3418,7 +3432,7 @@ Page({
           if (!p || p.length < 7) return p || '';
           return p.slice(0, 3) + '****' + p.slice(-4);
         };
-        const list = (result.data || [])
+        const list = (Array.isArray(result.data) ? result.data : [])
           .filter((m: any) => ELEVATED.includes(m.role))
           .map((m: any) => ({
             ...m,
@@ -4130,7 +4144,10 @@ Page({
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
         return;
       }
-      this.setData({ myFeedbackList: result.data.list || [] });
+      // 🛡️ 崩溃修复：此前 `result.data.list` 没有先判空就直接解构 result.data——
+      // success 为 true 不保证 data 一定存在，data 为 undefined 时会直接抛出
+      // "Cannot read property 'list' of undefined"，而不是走到 `|| []` 兜底
+      this.setData({ myFeedbackList: Array.isArray(result.data?.list) ? result.data.list : [] });
     } catch (err) {
       console.error('[fetchMySubmissions] 加载我的反馈异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
@@ -4625,8 +4642,8 @@ Page({
         if (!p || p.length < 7) return p || '';
         return p.slice(0, 3) + '****' + p.slice(-4);
       };
-      const all = result && result.success
-        ? (result.data || [])
+      const all = (result && result.success && Array.isArray(result.data))
+        ? result.data
             .filter((m: any) => ELEVATED.includes(m.role))
             .map((m: any) => ({ ...m, phoneMasked: maskPhone(m.phone || '') }))
         : [];
@@ -4772,7 +4789,7 @@ Page({
     try {
       const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
       const result = res.result;
-      const list = (result && result.success) ? (result.list || []) : [];
+      const list = (result && result.success && Array.isArray(result.list)) ? result.list : [];
       const stores = list
         .filter((s: any) => s && s.storeId && !isVirtualStoreName(s.storeName) && (s.status || 'active') !== 'inactive')
         .map((s: any) => ({
@@ -4908,7 +4925,7 @@ Page({
       const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
       // 过滤掉虚拟聚合门店（"全国总览"/"全部门店"），列表里只保留真实具体门店
       const list: Array<{ storeId: string; storeName: string }> =
-        ((res.result && res.result.stores) || []).filter(
+        (Array.isArray(res.result?.stores) ? res.result.stores : []).filter(
           (s: any) => s && s.storeId && !isVirtualStoreName(s.storeName)
         );
 
