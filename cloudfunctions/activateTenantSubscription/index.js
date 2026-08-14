@@ -360,6 +360,9 @@ exports.main = async (event) => {
     if (isCollectionNotExistError(err)) {
       return { success: false, error: '系统配置维护中，请联系技术支持' };
     }
-    return { success: false, error: err.message || '操作失败' };
+    // 🐛 根因修复：兜底文案此前是 `err.message || '操作失败'`，err.message
+    // 可能是任意底层异常的原始措辞，不该原样展示给用户。统一改为固定友好
+    // 文案，详细堆栈已经在上面 console.error 里，便于开发者排查
+    return { success: false, error: '操作失败，请重试' };
   }
 };

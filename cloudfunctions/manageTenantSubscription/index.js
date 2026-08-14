@@ -66,16 +66,27 @@ exports.main = async (event) => {
           return { success: false, error: '机构名称不能为空' };
         }
 
-        const tenantRes = await db.collection('tenants').add({
-          data: {
-            name: String(name).trim(),
-            contactName: contactName || '',
-            contactPhone: contactPhone || '',
-            status: 'trial',
-            createdAt: db.serverDate(),
-            createdBy: openid
-          }
-        });
+        const tenantData = {
+          name: String(name).trim(),
+          contactName: contactName || '',
+          contactPhone: contactPhone || '',
+          status: 'trial',
+          createdAt: db.serverDate(),
+          createdBy: openid
+        };
+
+        let tenantRes;
+        try {
+          tenantRes = await db.collection('tenants').add({ data: tenantData });
+        } catch (err) {
+          // 🐛 根因修复：全新环境下 tenants 集合可能从未被写入过任何一条数据，
+          // .add() 通常会在集合不存在时自动建表，这里兜底：万一这次环境没有
+          // 自动建表，显式建一次再重试一次写入——不能让平台管理员创建的
+          // 第一家机构直接失败
+          if (!isCollectionNotExistError(err)) throw err;
+          await db.createCollection('tenants').catch(() => {});
+          tenantRes = await db.collection('tenants').add({ data: tenantData });
+        }
 
         return { success: true, tenantId: tenantRes._id };
       }
@@ -85,12 +96,24 @@ exports.main = async (event) => {
         // 客户端"触底加载更多"累加传入，多查一条判断 hasMore，不额外发 count()
         const PAGE_SIZE = 20;
         const skip = Math.max(parseInt(event.skip, 10) || 0, 0);
-        const tenantsRes = await db.collection('tenants')
-          .orderBy('createdAt', 'desc')
-          .skip(skip)
-          .limit(PAGE_SIZE + 1)
-          .get();
-        const rows = tenantsRes.data || [];
+
+        // 🐛 根因修复：全新环境（从未创建过任何机构）里 tenants 集合可能从未
+        // 存在过，直接 .get() 会抛 -502005。"一家机构都还没有"是完全正常、
+        // 该展示空状态的场景，不是错误——这里单独 try/catch 命中时直接返回
+        // 空列表 + success:true，不让它冒泡到外层被判定成一次失败请求（那样
+        // 客户端会弹一条不必要的错误提示，而不是安安静静展示空状态）
+        let rows = [];
+        try {
+          const tenantsRes = await db.collection('tenants')
+            .orderBy('createdAt', 'desc')
+            .skip(skip)
+            .limit(PAGE_SIZE + 1)
+            .get();
+          rows = tenantsRes.data || [];
+        } catch (err) {
+          if (!isCollectionNotExistError(err)) throw err;
+          rows = [];
+        }
         const hasMore = rows.length > PAGE_SIZE;
         const tenants = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
 
@@ -217,6 +240,9 @@ exports.main = async (event) => {
     if (isCollectionNotExistError(err)) {
       return { success: false, error: '系统配置维护中，请联系技术支持' };
     }
-    return { success: false, error: err.message || '租户管理操作失败' };
+    // 🐛 根因修复：此前兜底文案是 `err.message || '租户管理操作失败'`——
+    // err.message 可能是任意底层异常的原始英文/数据库措辞，不该被平台管理员
+    // 控制台原样展示。统一改为固定友好文案，详细堆栈已经在上面 console.error
+    return { success: false, error: '租户管理操作失败，请重试' };
   }
 };

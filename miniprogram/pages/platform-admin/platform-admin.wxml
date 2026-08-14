@@ -89,7 +89,7 @@
       </view>
 
       <view class="pa-empty-state" wx:elif="{{!activationCodesLoading && activationCodes.length === 0}}">
-        <text class="pa-empty-icon">🗂️</text>
+        <text class="pa-empty-icon">📭</text>
         <text class="pa-empty-title">暂无{{activationCodesFilter === 'UNUSED' ? '未使用' : (activationCodesFilter === 'USED' ? '已核销' : '')}}授权码</text>
         <text class="pa-empty-sub">点击上方"+ 生成授权码"铸造第一批</text>
       </view>
