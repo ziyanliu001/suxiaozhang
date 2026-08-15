@@ -8,7 +8,7 @@ import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../uti
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
-import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
+import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -1445,6 +1445,14 @@ Page({
 
   async fetchAllStoresList() {
     try {
+      // 🐛 Bug 修复：缓存 key 按当前专区（currentPlatformMode）区分——此前是
+      // 一把全局共享的缓存，超管在雨花专区拉取过一次列表后，5 分钟内切到通用
+      // 专区会直接复用这份缓存，展示的仍是雨花专区的门店（或反之）。现在两个
+      // 专区各自独立缓存，互不覆盖，也就不存在"缓存跨专区污染"的窗口期
+      const zoneKey = this.data.currentPlatformMode || 'default';
+      const cacheKey = `all_stores_list_cache_${zoneKey}`;
+      const cacheTimeKey = `all_stores_list_cache_time_${zoneKey}`;
+
       // 优先读取本地缓存（有效期5分钟）
       // 🐛 修复 WXML 层 "Cannot read property '0' of undefined" 崩溃根因：
       // allStoresList 直接绑定 <picker range="{{allStoresList}}">（超管切店下拉框），
@@ -1452,8 +1460,8 @@ Page({
       // 一旦缓存内容损坏/被旧版本写成非数组（如意外存成 "{}"/"null"），parse 本身
       // 不报错，但 picker 拿到非数组 range 就会在原生渲染层踩空索引崩溃。缓存非法时
       // 不 return，直接落到下面走云端查询重新校准
-      const cached = wx.getStorageSync('all_stores_list_cache');
-      const cacheTime = wx.getStorageSync('all_stores_list_cache_time');
+      const cached = wx.getStorageSync(cacheKey);
+      const cacheTime = wx.getStorageSync(cacheTimeKey);
       if (cached && cacheTime && (Date.now() - cacheTime) < 300000) {
         try {
           const parsedCache = JSON.parse(cached);
@@ -1468,16 +1476,23 @@ Page({
       }
 
       // 🏢 多租户边界：门店列表通过云函数按调用者所属机构过滤后返回，
-      // 不再由前端直接全表查询 stores 集合（避免跨机构看到彼此的门店名单）
+      // 不再由前端直接全表查询 stores 集合（避免跨机构看到彼此的门店名单）。
+      // 🐛 Bug 修复：按当前专区透传 orgType——在 tenantId 过滤基础上叠加
+      // orgType 精确匹配，防止 tenantId 名下混入的跨专区历史脏数据（如
+      // "嵩屿街道敬老中心助餐点"挂在雨花斋默认全国机构下）一起被带出来
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const cloudRes = await wx.cloud.callFunction({ name: 'getStoreList' });
+      const orgTypeFilter = this.data.currentPlatformMode === 'yuhua' ? 'yuhuazhai' : (this.data.currentPlatformMode === 'general' ? 'general' : '');
+      const cloudRes = await wx.cloud.callFunction({
+        name: 'getStoreList',
+        data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
+      });
       const cloudResult = cloudRes.result as any;
       const list = (cloudResult && cloudResult.success) ? (cloudResult.list || []) : [];
       this.setData({ allStoresList: list });
 
-      // 缓存到本地
-      wx.setStorageSync('all_stores_list_cache', JSON.stringify(list));
-      wx.setStorageSync('all_stores_list_cache_time', Date.now());
+      // 缓存到本地（按专区区分的 key）
+      wx.setStorageSync(cacheKey, JSON.stringify(list));
+      wx.setStorageSync(cacheTimeKey, Date.now());
     } catch (e) {
       console.error('[fetchAllStoresList] 查询失败:', e);
     }
@@ -1999,8 +2014,7 @@ Page({
 
   // 门店列表变更（如超管刚新建了一家门店）：清缓存后重新拉取，确保列表包含新店
   onStoreListChanged() {
-    wx.removeStorageSync('all_stores_list_cache');
-    wx.removeStorageSync('all_stores_list_cache_time');
+    clearAllStoresListCache();
     this.fetchAllStoresList();
   },
 
@@ -7825,7 +7839,11 @@ Page({
     });
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { orgType: orgTypeFilter } });
+      // 🛡️ crossTenant:true 显式声明这是一次跨机构发现请求（getStoreList 云函数
+      // 现在要求显式声明才会跨机构查询，不再仅凭传了 orgType 就自动判定，见该
+      // 云函数注释）——这里调用者可能已经归属其他机构（如社区食堂义工点了雨花
+      // 专区卡片想额外找一家雨花斋加入），必须显式声明才能跨出自己的 tenantId
+      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { orgType: orgTypeFilter, crossTenant: true } });
       const result = res.result as any;
       this.setData({ allStoresList: (result && result.success) ? (result.list || []) : [] });
     } catch (e) {

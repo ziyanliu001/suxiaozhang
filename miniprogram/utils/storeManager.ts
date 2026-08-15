@@ -42,6 +42,21 @@ export function setSelectedStore(storeInfo: StoreInfo): void {
   }
 }
 
+// 🐛 Bug 修复配套：index.ts fetchAllStoresList() 的本地缓存改为按专区
+// （currentPlatformMode：'yuhua'/'general'/未选定时的 'default'）分开存储，
+// 避免超管在雨花专区拉取过列表后，5 分钟内切到通用专区又直接复用同一份缓存、
+// 展示出上一个专区的门店。这里统一列出全部可能的 key 组合，供
+// store-management.ts（新建/移出门店后）与 index.ts（切店后）失效缓存时
+// 一次性清空，不需要调用方各自猜测"当前该清哪个专区的 key"
+const ALL_STORES_LIST_CACHE_ZONES = ['yuhua', 'general', 'default'];
+
+export function clearAllStoresListCache(): void {
+  ALL_STORES_LIST_CACHE_ZONES.forEach((zone) => {
+    wx.removeStorageSync(`all_stores_list_cache_${zone}`);
+    wx.removeStorageSync(`all_stores_list_cache_time_${zone}`);
+  });
+}
+
 export function getUserStoresList(): StoreInfo[] {
   const app = getApp() as any;
   if (app && app.globalData && app.globalData.userStoresList) {

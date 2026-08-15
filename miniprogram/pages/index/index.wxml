@@ -133,7 +133,12 @@
     </view>
 
     <view class="capsule-bar-row">
-      <store-picker id="storePicker" bind:storechange="onStoreChanged" bind:storelistchange="onStoreListChanged" />
+      <!-- 🐛 Bug 修复：orgTypeFilter 把当前所在专区透传给 store-picker，组件内
+           fetchStoreListFromCloud() 据此在 tenantId 过滤基础上叠加 orgType 收窄，
+           防止"雨花专区"选择服务站点时混入通用/社区长者食堂门店（如嵩屿）。
+           currentPlatformMode 为空（工作空间选择首页阶段）时传空字符串，
+           组件内按"不过滤"处理，与此前行为一致 -->
+      <store-picker id="storePicker" orgTypeFilter="{{currentPlatformMode === 'yuhua' ? 'yuhuazhai' : (currentPlatformMode === 'general' ? 'general' : '')}}" bind:storechange="onStoreChanged" bind:storelistchange="onStoreListChanged" />
       <!-- 🏪 门店运营状态徽标：紧贴 store-picker 胶囊右侧，不侵入该共享组件自身
            （被 profile/history 等页面共用，改动它的 wxml 影响面更大）。"全国总览"等
            虚拟门店场景下 currentStoreStatus 会被清空（见 onStoreChanged），此时不渲染 -->

@@ -84,22 +84,26 @@ function toStoreListItem(s) {
   };
 }
 
-// 🆕 发现模式：【选择工作空间】页专用——用户点击"雨花公益食堂专区"/"通用素食·
-// 社区长者食堂专区"卡片时，挑选一个具体站点以家人/义工身份参与（Bug 1）。这里
-// 天然需要跨机构可见性（帮用户从全平台范围内找到目标站点，不是"查看我自己机构
-// 的门店"），与"已归属机构后必须严格按 tenantId 隔离"是两条独立边界，互不冲突：
-// 只在调用方显式传入 orgType 时才触发（见下方主流程注释），不传 orgType 的既有
-// 调用方（切店下拉框/邀请码申请等）行为完全不变，永远走 tenantId 过滤。只返回
-// 基础展示字段（不含 tenantId/经纬度等），门店名称/地址本就是招募海报上会公开
-// 分发的信息，不算敏感数据
+// 🐛 Bug 修复根因：门店区分专区的权威字段是 stores.orgType（'yuhuazhai' vs
+// 其余类型），不是 tenantId——tenantId 只是机构/账套边界，同一个机构（尤其是
+// 历史遗留的默认全国机构 yuhuazhai_national）完全可能因为历史脏数据/迁移未
+// 执行而混入了 orgType 不属于该专区的门店（如"嵩屿街道敬老中心助餐点"）。
+// 这里统一成一个 helper：orgType==='yuhuazhai' 精确匹配；其余任何取值
+// （'general'/'elderly_canteen'/...）一律按"非雨花斋"处理——$ne 天然匹配
+// 字段缺失的历史门店，视为"通用"，与 fixTenantHierarchy 的迁移口径一致
+function buildOrgTypeCondition(orgType) {
+  const _ = db.command;
+  return orgType === 'yuhuazhai' ? orgType : _.neq('yuhuazhai');
+}
+
+// 🆕 跨机构发现模式：【选择工作空间】页新用户挑选要加入的具体站点场景专用
+// （Bug 1）——调用者尚未归属任何机构，或显式要求跨机构浏览（crossTenant:true），
+// 天然需要跨机构可见性，与"已归属机构后必须严格按 tenantId 隔离"是两条独立
+// 边界，互不冲突（见下方主流程注释）。只返回基础展示字段（不含 tenantId/
+// 经纬度等），门店名称/地址本就是招募海报上会公开分发的信息，不算敏感数据
 async function handleDiscoverByOrgType(orgType) {
   const _ = db.command;
-  // 🌐 通用素食/社区长者食堂专区：排除雨花斋门店即可覆盖 elderly_canteen/
-  // volunteer_station/rescue_team/other 等其余全部机构类型，以及历史上从未
-  // 设置过 orgType 字段的门店（$ne 天然匹配字段缺失的历史门店，视为"通用"）
-  const where = orgType === 'yuhuazhai'
-    ? { orgType: 'yuhuazhai', status: _.neq('inactive') }
-    : { orgType: _.neq('yuhuazhai'), status: _.neq('inactive') };
+  const where = { orgType: buildOrgTypeCondition(orgType), status: _.neq('inactive') };
 
   const storesRes = await db.collection('stores')
     .where(where)
@@ -117,6 +121,11 @@ exports.main = async (event) => {
   // 仅门店管理页自己需要连"已停用"门店一起看（以便重新启用），显式传 includeInactive:true
   const includeInactive = !!(event && event.includeInactive);
   const requestedOrgType = (event && event.orgType) || '';
+  // 🆕 跨机构发现模式显式开关：必须显式传 true（或调用者压根没有 tenantId）
+  // 才会触发跨机构查询——不再仅凭"传了 orgType"就自动判定，避免与下面"已归属
+  // 机构账号（含超管）在自己机构范围内按 orgType 收窄浏览"这个完全不同的语义
+  // 混淆到一起
+  const crossTenantDiscover = !!(event && event.crossTenant);
 
   try {
     let tenantId = '';
@@ -133,14 +142,10 @@ exports.main = async (event) => {
       return { success: true, list: [] };
     }
 
-    // 🛡️ 多租户边界：发现模式只在调用方【显式传入 orgType】时才触发——不传
-    // orgType 的既有调用方（切店下拉框/邀请码申请预填等）无论是否已归属机构，
-    // 行为完全不变，永远走下面的 tenantId 过滤，不会意外看到跨机构门店。
-    // 显式传了 orgType 才代表这是一次"选择工作空间"式的主动跨机构发现请求
-    // （见 handleDiscoverByOrgType 注释），已归属机构的账号也允许使用——
-    // 单账号目前只能绑定一个机构/门店，这类账号触发发现模式后即便选中了另一家
-    // 机构的门店，走的也是 processRoleAudit 正常申请流程，不会绕过审批直接生效
-    if (requestedOrgType) {
+    // 🛡️ 多租户边界：跨机构发现模式只在【显式要求跨机构浏览】或【调用者压根
+    // 没有 tenantId】时才触发——已归属机构的账号（含超管）默认仍然严格按自己
+    // 的 tenantId 过滤，不会意外看到跨机构门店
+    if (requestedOrgType && (crossTenantDiscover || !tenantId)) {
       return await handleDiscoverByOrgType(requestedOrgType);
     }
 
@@ -148,9 +153,19 @@ exports.main = async (event) => {
       return { success: true, list: [] };
     }
 
-    const where = includeInactive
-      ? { tenantId }
-      : { tenantId, status: db.command.neq('inactive') };
+    // 🐛 核心 Bug 修复："超管进雨花专区，选择服务站点却混入嵩屿（通用/社区
+    // 长者食堂门店）"——根因是超管浏览的是【自己所属机构】下的门店列表，此前
+    // 这里只按 tenantId 过滤，从不看 orgType；而"嵩屿街道敬老中心助餐点"这类
+    // 历史脏数据即便 orgType 不是 yuhuazhai，只要 tenantId 恰好挂在超管所属的
+    // 默认全国机构 yuhuazhai_national 下，就会被 tenantId 过滤直接放行。
+    // 现在只要调用方（当前专区）显式传了 orgType，就在 tenantId 之上叠加
+    // orgType 精确匹配作为第二层收窄——即使 fixTenantHierarchy 数据清洗还没
+    // 执行到位，这里也能在查询层面兜底拦下混入的跨专区门店
+    const where = {
+      tenantId,
+      ...(includeInactive ? {} : { status: db.command.neq('inactive') }),
+      ...(requestedOrgType ? { orgType: buildOrgTypeCondition(requestedOrgType) } : {})
+    };
 
     const storesRes = await db.collection('stores')
       .where(where)

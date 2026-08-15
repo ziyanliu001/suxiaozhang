@@ -1,6 +1,6 @@
 import { AuthService } from '../../utils/authService';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { setSelectedStore } from '../../utils/storeManager';
+import { setSelectedStore, clearAllStoresListCache } from '../../utils/storeManager';
 import { setGenCodeHandoff } from '../../utils/genCodeHandoff';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { drawStoreInvitationPoster, SponsorInfo } from '../../utils/drawStorePoster';
@@ -271,8 +271,7 @@ Page({
         this.setData({ pendingList: this.data.pendingList.filter((r: any) => r._id !== id) });
 
         // 审核通过会新建一条 stores 记录，存在与「门店管理」建店同样的跨页面缓存陈旧问题
-        wx.removeStorageSync('all_stores_list_cache');
-        wx.removeStorageSync('all_stores_list_cache_time');
+        clearAllStoresListCache();
 
         this.loadStoreList();
       } else {
@@ -622,8 +621,7 @@ Page({
         wx.showToast({ title: targetStatus === 'inactive' ? '门店已停用' : '门店已重新启用', icon: 'success' });
 
         // 停用/启用会改变门店在"选择服务门店"/邀请码弹窗里的可见性，同样需要清缓存
-        wx.removeStorageSync('all_stores_list_cache');
-        wx.removeStorageSync('all_stores_list_cache_time');
+        clearAllStoresListCache();
       } else {
         wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
       }
@@ -815,8 +813,7 @@ Page({
         // storelistchange 事件时才会清（见 index.ts onStoreListChanged）——从这里建店
         // 完全触发不到那个事件，缓存不清就会让首页门店选择器/邀请码弹窗看不到新店
         // 长达 5 分钟。与 onStoreListChanged 用完全一致的清理方式，保持约定统一。
-        wx.removeStorageSync('all_stores_list_cache');
-        wx.removeStorageSync('all_stores_list_cache_time');
+        clearAllStoresListCache();
 
         this.setData({ showCreateModal: false });
         wx.showToast({ title: '门店创建成功', icon: 'success' });

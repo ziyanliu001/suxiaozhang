@@ -35,7 +35,16 @@ function isVerifiedSuperAdmin(roleInfo: { role?: string; status?: string } | nul
 }
 
 Component({
-  properties: {},
+  // 🐛 Bug 修复：超管进入"雨花公益食堂专区"后打开本组件的【选择服务站点与身份】
+  // 弹窗，此前 fetchStoreListFromCloud() 调用 getStoreList 云函数时完全没有
+  // 传 orgType，只靠调用者自己的 tenantId 过滤——而"嵩屿街道敬老中心助餐点"
+  // 这类历史脏数据即便不属于雨花斋（orgType 非 'yuhuazhai'），只要 tenantId
+  // 恰好挂在超管所属的默认全国机构 yuhuazhai_national 下就会被一并放行，
+  // 导致通用/社区长者食堂门店混进雨花专区的站点列表。宿主页面（index.ts）
+  // 通过这个 property 把"当前所在专区"透传进来，组件按此收窄查询
+  properties: {
+    orgTypeFilter: { type: String, value: '' }
+  },
 
   data: {
     showPickerSheet: false,
@@ -213,7 +222,15 @@ Component({
         }
         const isSuperAdmin = isVerifiedSuperAdmin(roleInfo);
 
-        const res = await wx.cloud.callFunction({ name: 'getStoreList' });
+        // 🐛 Bug 修复：按宿主页面透传的当前专区（orgTypeFilter）收窄查询——
+        // 在调用者自己 tenantId 过滤的基础上叠加 orgType 精确匹配，即使
+        // tenantId 名下混入了跨专区的历史脏数据（如"嵩屿街道敬老中心助餐点"
+        // 挂在雨花斋默认全国机构 yuhuazhai_national 下）也不会显示出来。
+        // orgTypeFilter 为空（宿主未处于任何专区）时不传，行为与此前一致
+        const res = await wx.cloud.callFunction({
+          name: 'getStoreList',
+          data: this.properties.orgTypeFilter ? { orgType: this.properties.orgTypeFilter } : {}
+        });
         const result = res.result as any;
         const list = (result && result.success) ? (result.list || []) : [];
 
