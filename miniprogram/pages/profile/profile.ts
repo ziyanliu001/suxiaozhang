@@ -1,6 +1,6 @@
 import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
 import { DataService } from '../../utils/dataService';
-import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
+import { getSelectedStore, setSelectedStore, getCurrentActiveStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
@@ -1038,16 +1038,16 @@ Page({
     }
     console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, 'globalRole=', globalRoleLower, '-> 生效role=', role);
 
-    const storageStoreName = wx.getStorageSync('current_store_name');
-    if (storageStoreName) {
-      storeName = storageStoreName;
-    }
-
-    if (!storeName) {
-      const activeStore = getSelectedStore();
-      if (activeStore && activeStore.storeName) {
-        storeName = activeStore.storeName;
-      }
+    // 🐛 根因修复配套：统一改读 storeManager.ts 的 getCurrentActiveStore()——它
+    // 内部已经把 current_store_name（canonical key）与 legacy 的 selectedStore
+    // key 按优先级归并成一次读取，不用再在这里手写"先读 canonical key，缺失再
+    // 退回 getSelectedStore()"这两步兜底。所有"切店"入口现在也统一改调用
+    // setCurrentActiveStore() 写入（见 index.ts switchStoreTarget/onStoreChanged、
+    // store-picker.ts _persistStoreSelection），读写两端口径完全对齐，不会再出现
+    // 首页切了店、这里却读到旧门店名的跨页面不同步
+    const activeStore = getCurrentActiveStore();
+    if (activeStore.storeName) {
+      storeName = activeStore.storeName;
     }
 
     // 🐛 用 trueServerRole（服务端真实角色快照），不用可能已被 storageRole

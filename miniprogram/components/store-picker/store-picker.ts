@@ -2,6 +2,7 @@ import { AuthService } from '../../utils/authService';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
+import { setCurrentActiveStore } from '../../utils/storeManager';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -673,7 +674,11 @@ Component({
     // 日志错误地挂到旧门店名下，是"全局 storeId 与页面上下文不同步"的根因。
     // 收敛成一个统一的持久化方法，三处调用点都改走这里，一次性写全 5 个
     // canonical key（与 index.ts onStoreChanged 的既有持久化口径完全对齐），
-    // 不再各自维护一份不完整的 key 清单
+    // 不再各自维护一份不完整的 key 清单。
+    // 🐛 二次收敛：canonical key 的实际写入现在下沉到 storeManager.ts 的
+    // setCurrentActiveStore()——index.ts 的 onStoreChanged/switchStoreTarget 与
+    // 本方法三处都改调用同一个函数，彻底消灭"各自手写、各自漏 key"的重复实现，
+    // 也是"首页/个人中心门店显示不一致"这类跨页面状态不同步 Bug 的根治点
     _persistStoreSelection(storeId: string, storeName: string, role: string) {
       const app = getApp() as any;
       if (app && app.switchStore) {
@@ -682,26 +687,10 @@ Component({
         app.globalData.currentStore = { storeId, storeName, role };
       }
 
-      // 🛡️ 全局排查修复：role 入参在实践中恒为本组件胶囊裸值（PATRIARCH/FAMILY 等），
-      // 但仍额外补上 STORE_ 前缀键做防御性冗余——万一将来有调用方直接传入服务端
-      // snake_case 值转大写后的形式，也不会静默落进下面的 || 'volunteer' 兜底
-      const roleStorageMap: Record<string, string> = {
-        MANAGER: 'store_manager',
-        STORE_MANAGER: 'store_manager',
-        FINANCE: 'finance',
-        VOLUNTEER: 'volunteer',
-        PATRIARCH: 'store_patriarch',
-        STORE_PATRIARCH: 'store_patriarch',
-        ADMIN: 'super_admin',
-        FAMILY: 'store_family',
-        STORE_FAMILY: 'store_family'
-      };
-
-      wx.setStorageSync('current_store_id', storeId);
-      wx.setStorageSync('current_store_name', storeName);
-      wx.setStorageSync('current_user_role', roleStorageMap[role] || 'volunteer');
-      wx.setStorageSync('active_store_id', storeId);
-      wx.setStorageSync('active_role', role);
+      // 🛡️ role 入参在实践中恒为本组件胶囊裸值（PATRIARCH/FAMILY 等），
+      // setCurrentActiveStore() 内部的归一化表已覆盖裸值与 STORE_ 前缀两种写法，
+      // 不会静默落进它自己的 'volunteer' 兜底
+      setCurrentActiveStore(storeId, storeName, role);
     },
 
     // 内部：执行角色切换 (公共逻辑)

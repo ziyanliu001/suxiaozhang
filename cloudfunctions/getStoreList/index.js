@@ -132,6 +132,33 @@ async function handleDiscoverByOrgType(orgType) {
   return { success: true, list: (storesRes.data || []).map(toStoreListItem) };
 }
 
+// 🆕 门店名称反查模式：notice.ts【待处理提醒】列表专用——report_logs.shopName
+// 是提交当时快照的静态文本，门店后续改名（如"嵩屿街道敬老中心助餐点"改成
+// "厦门海沧三泓愿"）不会回填历史记录，导致提醒列表长期展示过期店名。这里按
+// storeId 批量反查 stores 集合当前的真实 storeName，只返回 storeId/storeName
+// 两个非敏感展示字段，不透传经纬度/tenantId 等信息
+async function handleResolveStoreNames(storeIds, tenantId) {
+  const uniqueIds = Array.from(new Set((storeIds || []).filter(Boolean))).slice(0, 100);
+  if (uniqueIds.length === 0) return { success: true, list: [] };
+
+  const where = { _id: db.command.in(uniqueIds) };
+  // 🛡️ 有 tenantId 时按机构再收窄一层做防御性纵深；storeIds 本身已经是调用者
+  // 自己能看到的 report_logs 记录带出来的，不构成新的越权面，tenantId 缺失时
+  // （理论上不会发生）直接放行也不会泄露超出调用者原本可见范围的信息
+  if (tenantId) where.tenantId = tenantId;
+
+  const storesRes = await db.collection('stores')
+    .where(where)
+    .field({ storeName: 1 })
+    .get()
+    .catch(() => ({ data: [] }));
+
+  return {
+    success: true,
+    list: (storesRes.data || []).map((s) => ({ storeId: s._id, storeName: s.storeName || '' }))
+  };
+}
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   // 🛡️ 默认只返回 status==='active' 的门店（切店/邀请码等场景不该选到已停用门店）；
@@ -143,6 +170,9 @@ exports.main = async (event) => {
   // 机构账号（含超管）在自己机构范围内按 orgType 收窄浏览"这个完全不同的语义
   // 混淆到一起
   const crossTenantDiscover = !!(event && event.crossTenant);
+  // 🆕 门店名称反查模式显式开关：传了 storeIds 数组即视为一次批量反查请求，
+  // 与下面"按 orgType 收窄浏览门店列表"是完全不同的语义，互不干扰
+  const resolveStoreIds = Array.isArray(event && event.storeIds) ? event.storeIds : null;
 
   try {
     let tenantId = '';
@@ -157,6 +187,10 @@ exports.main = async (event) => {
 
     if (role === 'platform_admin') {
       return { success: true, list: [] };
+    }
+
+    if (resolveStoreIds) {
+      return await handleResolveStoreNames(resolveStoreIds, tenantId);
     }
 
     // 🛡️ 多租户边界：跨机构发现模式只在【显式要求跨机构浏览】或【调用者压根

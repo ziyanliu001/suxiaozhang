@@ -110,8 +110,15 @@ Page({
       const result = await DataService.getReports({ viewMode: 'all', limit: 50 });
       const list = (result.data || []).filter((item: any) => !item.isVoid);
 
+      // 🐛 根因修复：item.shopName 是提交当时快照进 report_logs 的静态文本，
+      // 门店后续改名（如"嵩屿街道敬老中心助餐点"改成"厦门海沧三泓愿"）不会回填
+      // 历史记录，导致提醒列表长期展示过期店名。这里按 storeId 批量反查门店
+      // 当前的真实名称，buildReminderItem() 优先用这份最新名称，反查失败/无
+      // storeId（历史遗留记录）时向下兼容回退到静态的 item.shopName
+      const storeNameMap = await this.resolveLatestStoreNames(list);
+
       const reminders = list
-        .map((item: any) => this.buildReminderItem(item))
+        .map((item: any) => this.buildReminderItem(item, storeNameMap))
         .sort((a: any, b: any) => {
           if (a.actionable !== b.actionable) return a.actionable ? -1 : 1;
           return (b.dateString || '').localeCompare(a.dateString || '');
@@ -124,7 +131,32 @@ Page({
     }
   },
 
-  buildReminderItem(item: any) {
+  // 🐛 配套：批量反查 report_logs 列表里出现过的 storeId 对应的最新门店名称，
+  // 失败（网络异常/云函数异常）时静默返回空 Map，调用方自然回退到静态文本，
+  // 不影响提醒列表本身的展示
+  async resolveLatestStoreNames(list: any[]): Promise<Record<string, string>> {
+    const storeIds = Array.from(new Set(list.map((item: any) => item.storeId).filter(Boolean)));
+    if (storeIds.length === 0 || !isCloudAvailable()) return {};
+
+    try {
+      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { storeIds } });
+      const result = res.result as any;
+      if (!result || !result.success) return {};
+
+      const map: Record<string, string> = {};
+      (result.list || []).forEach((s: any) => {
+        if (s && s.storeId && s.storeName) {
+          map[s.storeId] = s.storeName;
+        }
+      });
+      return map;
+    } catch (err) {
+      console.warn('[notice] 反查门店最新名称失败，回退历史静态文本:', err);
+      return {};
+    }
+  },
+
+  buildReminderItem(item: any, storeNameMap?: Record<string, string>) {
     const { isManagerRole, isFinanceRole, isSuperAdmin } = this.data;
     const { status, isMismatch, actionable } = evaluateReportStatus(item, { isManagerRole, isFinanceRole, isSuperAdmin });
 
@@ -158,10 +190,14 @@ Page({
     const dateStr = item.dateString || item.reportDate || '';
     const timeMs = dateStr ? new Date(dateStr.replace(/-/g, '/')).getTime() : 0;
 
+    // 🐛 门店名称优先取 storeId 动态反查到的最新值，反查未命中（历史遗留记录
+    // 没有 storeId、门店已被删除、或本次反查请求失败）时向下兼容静态快照文本
+    const resolvedStoreName = (item.storeId && storeNameMap && storeNameMap[item.storeId]) || '';
+
     return {
       id: item._id || item._localId || `${item.shopName}_${dateStr}`,
       dateString: dateStr,
-      shopName: item.shopName || '未命名门店',
+      shopName: resolvedStoreName || item.shopName || '未命名门店',
       icon,
       tag,
       desc,

@@ -8,7 +8,7 @@ import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../uti
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
-import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache } from '../../utils/storeManager';
+import { getSelectedStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -1516,17 +1516,39 @@ Page({
   // （前提是它仍在本次列表里，避免选中已被停用/跨专区的旧门店），否则退化为列表
   // 第一家。仅当账号尚未绑定具体门店（currentStoreId 为空）且视角是店长/超管
   // （isManager || isSuperAdmin，义工/家人的"全部门店"虚拟视图不受影响）时才生效，
-  // 与手动点击"选择门店"复用同一条 switchStoreTarget 落地逻辑，不重复实现一遍
+  // 与手动点击"选择门店"复用同一条 switchStoreTarget 落地逻辑，不重复实现一遍。
+  // 🐛 二次修复："启动自动弹 Toast 遮挡"+"专区选择状态污染"：
+  // - 超管账号 autoResumeWorkspaceMode() 会显式跳过自动进专区（见该方法注释），
+  //   刻意停留在中立的【选择工作空间】首页等用户手选雨花/通用专区——但此前这里
+  //   不看 currentPlatformMode，一旦 fetchAllStoresList() 早于选专区触发（超管
+  //   canSwitchStore 恒为 true），就会用尚未按专区收窄的全量跨专区门店列表
+  //   （orgTypeFilter 此时是空字符串）自动选中第一家/上次访问门店（如"嵩屿"这类
+  //   历史脏数据），在工作空间选择页正中央弹出阻塞式 Toast，还把不属于任何专区的
+  //   门店提前污染进 currentStoreId。现在必须已经落地到具体专区
+  //  （currentPlatformMode 非空）才允许自动选店。
+  // - switchStoreTarget 改为静默调用（不弹全局 Toast）——当前选中站点名称本就会
+  //   实时展示在工作台顶部 store-picker 胶囊里，不需要额外的阻塞式提示打断视线。
   maybeAutoSelectStore(list: any[]) {
-    const { currentStoreId, isVolunteer, isFamily, isManager, isSuperAdmin } = this.data;
+    const { currentPlatformMode, currentStoreId, isVolunteer, isFamily, isManager, isSuperAdmin } = this.data;
+    // 🛡️ 仍在【选择工作空间】中立首页（尚未点雨花/通用专区卡片）时，绝不自动
+    // 选店/弹提示——门店激活必须下沉到用户实际进入的具体专区内才发生
+    if (!currentPlatformMode) return;
     if (currentStoreId || isVolunteer || isFamily || !(isManager || isSuperAdmin)) return;
     if (!Array.isArray(list) || list.length === 0) return;
 
     const lastSelected = getSelectedStore();
     const lastStoreId = lastSelected && lastSelected.storeId;
-    const target = (lastStoreId && list.find((s: any) => s.storeId === lastStoreId)) || list[0];
+    const matched = lastStoreId ? list.find((s: any) => s.storeId === lastStoreId) : null;
+    // 🐛 专区状态污染清理：本地缓存的"上次访问门店"如果不在当前专区收窄后的
+    // 列表里，说明它是切专区前（或旧版本遗留）的跨专区脏缓存，直接清掉，避免
+    // 之后其它读取 getSelectedStore() 的地方继续展示这个已经不属于当前专区的
+    // 门店名，而不是放任它悬在本地存储里"看似有效"
+    if (lastStoreId && !matched) {
+      clearSelectedStoreCache();
+    }
+    const target = matched || list[0];
     if (target && target.storeId) {
-      this.switchStoreTarget(target.storeId, target.storeName);
+      this.switchStoreTarget(target.storeId, target.storeName, { silent: true });
     }
   },
 
@@ -2120,14 +2142,13 @@ Page({
     const isFamily = normalizedRole === 'store_family';
     const isPatriarch = normalizedRole === 'store_patriarch';
 
-    // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储。
+    // 🌟 切店全局持久化：同步 storeId / storeName / role 到本地存储，统一走
+    // storeManager.ts 的 setCurrentActiveStore()——与 switchStoreTarget()/
+    // store-picker.ts _persistStoreSelection 共用同一份 canonical key 写入逻辑，
+    // 不再各自维护一份可能遗漏 key 的实现（见该函数注释）。
     // 🛡️ 这里必须持久化真实的 normalizedRole，绝不能写入视角切换预览后的展示角色，
     // 否则下次启动会把"店长视角预览"误当成真实身份，永久丢失超管权限。
-    wx.setStorageSync('current_store_id', storeId);
-    wx.setStorageSync('current_store_name', storeName);
-    wx.setStorageSync('current_user_role', normalizedRole);
-    wx.setStorageSync('active_store_id', storeId);
-    wx.setStorageSync('active_role', normalizedRole);
+    setCurrentActiveStore(storeId, storeName, normalizedRole);
 
     const isAllStoresView = storeId === 'national_overview' || storeId === 'ALL_STORES';
     // 🐛 根因修复：与 refreshUserRoleView 同一个坑——isSuperAdmin 这里是从"切换/预览
@@ -2216,7 +2237,11 @@ Page({
     }
   },
 
-  switchStoreTarget(storeId: string, storeName: string) {
+  // 🐛 新增 silent 选项：maybeAutoSelectStore() 的自动选店不是用户主动点击的操作，
+  // 不该弹全局 Toast 打断视线（当前选中站点本就会实时展示在工作台顶部 store-picker
+  // 胶囊里）——手动切店（如 onTemplateStorePickerChange 里的用户下拉选择）仍保留
+  // Toast 反馈
+  switchStoreTarget(storeId: string, storeName: string, options?: { silent?: boolean }) {
     this.setData({
       currentStoreId: storeId,
       currentStoreName: storeName,
@@ -2225,7 +2250,15 @@ Page({
       shopName: storeName
     });
 
-    setSelectedStore({ storeId, storeName });
+    // 🐛 根因修复："首页显示门店 A，切到个人中心却显示门店 B"：此前这里只调用
+    // setSelectedStore()，只写了 legacy 的 selectedStore key，没写
+    // current_store_id/current_store_name/active_store_id 这三个 profile.ts
+    // initMinePage() 真正按最高优先级读取的 canonical key——门店名 Storage 停留
+    // 在上一次真正走过 onStoreChanged 的旧值，两个 Tab 各显示各的。改调用
+    // setCurrentActiveStore()（不传 role，不动当前生效身份），一次性写全 canonical
+    // key，与 onStoreChanged/store-picker.ts _persistStoreSelection 共用同一份
+    // 持久化逻辑，见 storeManager.ts 注释
+    setCurrentActiveStore(storeId, storeName);
 
     if (typeof this.autoFetchPreviousBalance === 'function') {
       this.autoFetchPreviousBalance(this.data.reportDateRaw);
@@ -2242,10 +2275,12 @@ Page({
     // 🌟 同步刷新该门店云端保存的模板自定义内容（致谢词/宣传标语/公众号名称）
     this.loadStoreTemplateFromCloud(storeId);
 
-    wx.showToast({
-      title: `当前门店：${storeName}`,
-      icon: 'success'
-    });
+    if (!options || !options.silent) {
+      wx.showToast({
+        title: `当前门店：${storeName}`,
+        icon: 'success'
+      });
+    }
   },
 
   onNavigateToHelp() {
@@ -7924,6 +7959,22 @@ Page({
       return;
     }
     this.setData({ currentPlatformMode: 'general' });
+    this.syncStoresForZoneEntry();
+  },
+
+  // 🐛 任务 B 配套：门店激活/自动选店必须下沉到"用户已经点了具体专区卡片之后"，
+  // 不能提前发生在中立的【选择工作空间】首页——但 fetchAllStoresList() 在冷启动
+  // 阶段（currentPlatformMode 还是空字符串）就可能已经跑过一次，取回的是未按
+  // 专区收窄的全量跨专区列表（orgTypeFilter 为空）。currentPlatformMode 刚被
+  // setData 成 'yuhua'/'general' 后，这里补一次刷新，让 fetchAllStoresList()
+  // 用已经落地的新专区重新按 orgType 收窄查询，再交给 maybeAutoSelectStore()
+  // 做静默默认选中——确保"先过滤专区门店列表，再在工作台展示选中站点"这个顺序，
+  // 不是拿着进专区前的脏列表乱选。已绑定具体门店（currentStoreId 非空）时无需
+  // 这一步，直接跳过
+  syncStoresForZoneEntry() {
+    if (!this.data.currentStoreId) {
+      this.fetchAllStoresList();
+    }
   },
 
   // 🛡️ 超管判定：优先信任 this.data 上已经算好的 isRealSuperAdmin（真实身份，见
@@ -7968,6 +8019,7 @@ Page({
 
     // 两档均已确认（或本档不适用）：放行，切到雨花工作空间内容
     this.setData({ currentPlatformMode: 'yuhua' });
+    this.syncStoresForZoneEntry();
   },
 
   onAcknowledgeYuhuaDisclaimer() {
@@ -7982,6 +8034,7 @@ Page({
     if (this.data.complianceModalScene === 'privileged') {
       acknowledgeYuhuaPrivilegedDisclaimer();
       this.setData({ showComplianceModal: false, currentPlatformMode: 'yuhua' });
+      this.syncStoresForZoneEntry();
     }
   },
 

@@ -41,6 +41,15 @@ exports.main = async (event, context) => {
     // 🔑 pages/index/index.ts fetchFinanceLedgerStatus 的"账本锁定状态"查询：
     // {tenantId, storeId, auditedBy: _.exists(true)}.count()
     ['report_logs', { name: 'tenantId_storeId_auditedBy',      keys: [{ tenantId: 1 }, { storeId: 1 }, { auditedBy: 1 }],   unique: false }],
+    // 🐛 索引方向补充：fetchFinanceLedgerStatus 实际的查询构造是
+    // `const baseWhere = { storeId }; if (tenantId) baseWhere.tenantId = tenantId;`——
+    // storeId 才是这两条并发 count() 查询（baseWhere 本身 / baseWhere + auditedBy
+    // exists）字段顺序上真正领头的主控字段，数据库控制台的索引推荐正是按这个顺序
+    // 报的缺失索引。上面 tenantId_storeId_auditedBy/tenantId_auditedBy 领头字段是
+    // tenantId，服务的是"先按机构、再按门店"这类不同查询路径的索引前缀匹配，
+    // 不能互相替代同一个查询计划——同一组字段、不同领头顺序需要各自建一条复合索引
+    ['report_logs', { name: 'storeId_tenantId_auditedBy',      keys: [{ storeId: 1 }, { tenantId: 1 }, { auditedBy: 1 }],   unique: false }],
+    ['report_logs', { name: 'storeId_tenantId',                keys: [{ storeId: 1 }, { tenantId: 1 }],                     unique: false }],
     // 🔑 profile.ts fetchMeritStats 的提交人统计：{tenantId, storeId, _openid}.count()
     ['report_logs', { name: 'tenantId_storeId_openid',         keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }],    unique: false }],
     ['report_logs', { name: 'tenantId_storeId_dateString',     keys: [{ tenantId: 1 }, { storeId: 1 }, { dateString: 1 }], unique: false }],
