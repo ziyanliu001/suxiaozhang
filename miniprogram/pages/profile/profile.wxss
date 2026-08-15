@@ -348,6 +348,25 @@
   box-shadow: 0 2rpx 6rpx rgba(181, 124, 30, 0.12);
 }
 
+/* 🛡️ 超管顶部高亮标识："超级管理员 · 全局总览"——与普通角色的归属机构行区分开，
+   暖金实底 + 加粗，强调这是跨机构的全局视角，不是某一家具体机构的成员 */
+.belong-store-tag.super-admin-highlight {
+  background: linear-gradient(135deg, #F0C36A 0%, #D9A441 100%);
+  border-radius: 16rpx;
+  padding: 6rpx 18rpx;
+  box-shadow: 0 3rpx 10rpx rgba(191, 140, 40, 0.3);
+}
+
+.belong-store-tag.super-admin-highlight .store-icon {
+  font-size: 24rpx;
+}
+
+.belong-store-tag.super-admin-highlight .store-name {
+  color: #6B3E00;
+  font-weight: 700;
+  font-size: 24rpx;
+}
+
 /* 🌐 超管专属：当前巡检门店指示器，点击唤起【门店选择与搜索】弹窗。
    与 .belong-store-tag 视觉呼应但用胶囊底色区分"这是一个可点击的切换入口" */
 .sa-store-indicator {
@@ -4652,7 +4671,16 @@
   background: #F7F8FA;
   border-top-left-radius: 36rpx;
   border-top-right-radius: 36rpx;
-  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  /* 🐛 安全区适配补全：此前只声明了 env()，是本文件里唯一一处底部贴边弹窗
+     没有同时声明 constant() 兼容写法的地方（对照 .payment-pending-modal-ok-btn/
+     .sp-sheet-box 等同类底部安全区规则，均为 constant()+env() 双声明——iOS 11.2
+     以下 WKWebView 只认 constant()，不认 env()，单声明 env() 在这批老版本上会
+     直接退化成 0，底部安全区距离形同虚设）。同时把安全余量从 120rpx 提到
+     140rpx，与本文件其余"底部贴边操作区"规则（如 .sp-sheet-box）保持一致的
+     缓冲量，确保「微信支付开通」「授权码兑换」按钮在全面屏/刘海屏机型上
+     不贴底、不被系统 Home 指示条遮挡 */
+  padding-bottom: calc(140rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow: hidden;
   transform: translateY(100%);

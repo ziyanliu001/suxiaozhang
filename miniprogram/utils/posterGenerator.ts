@@ -37,6 +37,10 @@ export interface PosterData {
   activityText?: string;
   volunteerCount?: number;
   volunteerHours?: number;
+  // 🍚 按门店开启餐次动态生成的供餐人数细分（仅门店开放不止一个餐次时才有值，
+  // 见 index.ts buildMealBreakdown）——不查库、不算业务口径，调用方按真实数据
+  // 拼好再传入，与本文件其余字段同一设计原则
+  mealBreakdown?: Array<{ label: string; count: number }>;
   // 🆕 验真二维码本地临时路径（getStoreQRCode 下载后的 wxfile:// 路径）：
   // 有值时画真实可扫码的小程序码，未提供/生成失败时优雅降级为占位框
   verifyQrLocalPath?: string;
@@ -170,7 +174,10 @@ const SINGLE_COL_NAME_MAX = 200;
 const DOUBLE_COL_NAME_MAX = 110;
 const ELLIPSIS = '...';
 
-function calculateCanvasHeight(itemCount: number, materialsLineCount: number = 0, hasVolunteer: boolean = false, activityLineCount: number = 0, cultureFooterHeight: number = 0): number {
+// 🍚 volunteerLineCount：义工感恩奉献区域实际会画出的行数（到岗义工/服务时长/
+// 各餐次留餐人数，每项 0 或 1 行，与 drawMeritPoster 里真实绘制的条件分支一一对应），
+// 取代此前的 hasVolunteer 布尔值——固定按 2 行估高在接入 mealBreakdown 后不再准确
+function calculateCanvasHeight(itemCount: number, materialsLineCount: number = 0, volunteerLineCount: number = 0, activityLineCount: number = 0, cultureFooterHeight: number = 0): number {
   const useTwoColumns = itemCount > TWO_COLUMN_THRESHOLD;
   const itemsPerColumn = useTwoColumns ? Math.ceil(itemCount / 2) : itemCount;
   const listContentHeight = itemsPerColumn * ITEM_ROW_HEIGHT;
@@ -181,8 +188,8 @@ function calculateCanvasHeight(itemCount: number, materialsLineCount: number = 0
     ? MATERIALS_TITLE_HEIGHT + materialsLineCount * MATERIALS_ROW_HEIGHT + 20
     : 0;
 
-  const volunteerHeight = hasVolunteer
-    ? VOLUNTEER_TITLE_HEIGHT + 2 * VOLUNTEER_ROW_HEIGHT + 20
+  const volunteerHeight = volunteerLineCount > 0
+    ? VOLUNTEER_TITLE_HEIGHT + volunteerLineCount * VOLUNTEER_ROW_HEIGHT + 20
     : 0;
 
   // 🔗 门店日志联动：activityLineCount 是按保守字数估出的行数上界，
@@ -401,7 +408,14 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           const text = `${donorLabel}：赞助 ${m.item || ''} ${m.quantity || ''}${m.unit || ''}`;
           return sum + Math.max(1, Math.ceil(text.length / MATERIALS_CHARS_PER_LINE));
         }, 0);
-        const hasVolunteer = (data.volunteerCount && data.volunteerCount > 0) || (data.volunteerHours && data.volunteerHours > 0);
+        // 🍚 mealBreakdownRows：只保留有意义展示的餐次条目（调用方 buildMealBreakdown
+        // 已按 supportedMeals 过滤好，这里不再重复业务判断），行数直接决定"义工感恩
+        // 奉献"区域会多画几行，volunteerLineCount 必须与下方真实绘制的条件分支一致
+        const mealBreakdownRows = data.mealBreakdown || [];
+        const volunteerLineCount = (data.volunteerCount && data.volunteerCount > 0 ? 1 : 0)
+          + (data.volunteerHours && data.volunteerHours > 0 ? 1 : 0)
+          + mealBreakdownRows.length;
+        const hasVolunteer = volunteerLineCount > 0;
         const useTwoColumns = itemCount > TWO_COLUMN_THRESHOLD;
         const itemsPerColumn = useTwoColumns ? Math.ceil(itemCount / 2) : itemCount;
 
@@ -427,7 +441,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           ? 14 + familyStyleLineCount * CULTURE_FOOTER_LINE_HEIGHT + gratitudeLineCount * CULTURE_FOOTER_LINE_HEIGHT + peopleSignatureLineCount * CULTURE_FOOTER_LINE_HEIGHT
           : 0;
 
-        const height = calculateCanvasHeight(itemCount, materialsLineCount, hasVolunteer, activityLineCount, cultureFooterHeight);
+        const height = calculateCanvasHeight(itemCount, materialsLineCount, volunteerLineCount, activityLineCount, cultureFooterHeight);
 
         canvas.width = width * dpr;
         canvas.height = height * dpr;
@@ -571,7 +585,11 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
 
           // 义工感恩奉献区域
           let volunteerEndY = materialsEndY;
-          const hasVolunteer = (data.volunteerCount && data.volunteerCount > 0) || (data.volunteerHours && data.volunteerHours > 0);
+          // 🍚 与外层预估高度的 mealBreakdownRows/volunteerLineCount 同一份数据，
+          // hasVolunteer 判断口径也要跟着改，否则门店只配置了 mealBreakdown（无
+          // volunteerCount/Hours）时，这个区域会被预估阶段算了高度却完全不绘制
+          const mealBreakdownRows = data.mealBreakdown || [];
+          const hasVolunteer = (data.volunteerCount && data.volunteerCount > 0) || (data.volunteerHours && data.volunteerHours > 0) || mealBreakdownRows.length > 0;
           if (hasVolunteer) {
             const volunteerTitleY = materialsEndY + 10;
             ctx.fillStyle = '#D2691E';
@@ -610,6 +628,20 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
               ctx.fillText(`${data.volunteerHours} 小时`, 35 + labelWidth2, volY);
               volY += 26;
             }
+
+            // 🍚 按门店开启餐次动态生成的供餐人数细分：与 volunteerCount/Hours
+            // 同一套行样式，逐段列出各餐次的留餐人数（只在门店开放不止一个餐次时
+            // 才有数据，见 index.ts buildMealBreakdown）
+            mealBreakdownRows.forEach((row) => {
+              ctx.fillStyle = LIGHT_TEXT;
+              ctx.font = '14px sans-serif';
+              ctx.fillText(`• ${row.label}：`, 35, volY);
+              ctx.fillStyle = '#D2691E';
+              ctx.font = 'bold 14px sans-serif';
+              const labelWidth3 = ctx.measureText(`• ${row.label}：`).width;
+              ctx.fillText(`${row.count} 人`, 35 + labelWidth3, volY);
+              volY += 26;
+            });
 
             volunteerEndY = volY + 8;
           }

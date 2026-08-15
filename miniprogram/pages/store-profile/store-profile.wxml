@@ -75,6 +75,10 @@
         <text class="sp-archive-lbl">所属平台类型</text>
         <text class="sp-archive-val">{{orgTypeLabel || (orgType ? orgType : '未设置')}}</text>
       </view>
+      <view class="sp-archive-row">
+        <text class="sp-archive-lbl">供餐餐次</text>
+        <text class="sp-archive-val">{{supportedMeals.includes('breakfast') ? '早餐 ' : ''}}{{supportedMeals.includes('lunch') ? '午餐 ' : ''}}{{supportedMeals.includes('dinner') ? '晚餐' : ''}}</text>
+      </view>
       <view class="sp-archive-row" wx:if="{{serviceTargetConfig && serviceTargetConfig.platformBrand}}">
         <text class="sp-archive-lbl">品牌名称</text>
         <text class="sp-archive-val">{{serviceTargetConfig.platformBrand}}</text>
@@ -155,6 +159,17 @@
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">所属平台类型</text>
         <view class="sp-edit-input full sp-edit-input-readonly">{{orgTypeLabel || '未设置'}}</view>
+      </view>
+
+      <!-- 🍚 供餐餐次配置：可任意组合勾选，至少保留一个——打卡弹窗"今日留店用餐"
+           选项、岗位班次列表、餐报文本/公示海报的供餐人数汇总均按这里配置动态适配 -->
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">供餐餐次</text>
+        <view class="sp-status-pill-row">
+          <view class="sp-status-pill {{editForm.supportedMeals.includes('breakfast') ? 'active' : ''}}" bindtap="onToggleEditSupportedMeal" data-meal="breakfast">早餐</view>
+          <view class="sp-status-pill {{editForm.supportedMeals.includes('lunch') ? 'active' : ''}}" bindtap="onToggleEditSupportedMeal" data-meal="lunch">午餐</view>
+          <view class="sp-status-pill {{editForm.supportedMeals.includes('dinner') ? 'active' : ''}}" bindtap="onToggleEditSupportedMeal" data-meal="dinner">晚餐</view>
+        </view>
       </view>
 
       <!-- 🏷️ 服务受众标签配置：大家长可一键修改填报表单文案，支持同心儿童院/雨花斋/助老食堂等多业态 -->

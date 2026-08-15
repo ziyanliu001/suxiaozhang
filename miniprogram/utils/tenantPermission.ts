@@ -57,6 +57,10 @@ export interface TenantPermissionResult {
   // 供"套餐升级/续费"卡片展示真实到期日，而不只是一个 isExpired 布尔值
   serviceExpireDate: string | null;
   reason: string;
+  // 🏢 机构名称：供个人中心页顶部"归属机构"展示，不是门店名（那是 currentStoreName，
+  // 两者是两个不同层级，见 profile.ts fetchCurrentTenantName 注释）。platform_admin/
+  // 未归属任何机构/查询失败时为空字符串
+  tenantName: string;
 }
 
 // 保守放行的默认结果：查询失败/云不可用/未命中缓存前的兜底值。宁可放行一次
@@ -68,7 +72,8 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
   isExpired: false,
   storeLimit: 1,
   serviceExpireDate: null,
-  reason: ''
+  reason: '',
+  tenantName: ''
 };
 
 // 🛡️ 轻量内存缓存：同一 featureKey 60s 内不重复发起云调用，避免用户在
@@ -101,7 +106,8 @@ const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
   isExpired: false,
   storeLimit: Number.MAX_SAFE_INTEGER,
   serviceExpireDate: null,
-  reason: ''
+  reason: '',
+  tenantName: ''
 };
 
 export async function checkTenantPermission(
@@ -135,7 +141,8 @@ export async function checkTenantPermission(
       isExpired: !!r.isExpired,
       storeLimit: r.storeLimit || 1,
       serviceExpireDate: r.serviceExpireDate || null,
-      reason: r.reason || ''
+      reason: r.reason || '',
+      tenantName: r.tenantName || ''
     };
     _cache[featureKey] = { result, expiresAt: Date.now() + CACHE_TTL_MS };
     return result;

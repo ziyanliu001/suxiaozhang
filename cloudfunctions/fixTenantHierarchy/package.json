@@ -1,0 +1,9 @@
+{
+  "name": "fixTenantHierarchy",
+  "version": "1.0.0",
+  "description": "云函数：一次性数据迁移——修正「厦门海沧三泓愿」「嵩屿街道敬老中心助餐点」历史归属错误，并回填 tenants.currentStoreCount",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

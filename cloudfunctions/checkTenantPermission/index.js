@@ -20,6 +20,15 @@ const FEATURE_PLAN_REQUIREMENTS = {
   excelExport: ['pro', 'enterprise']
 };
 
+// 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——三档套餐的门店配额口径。
+// 各云函数独立部署、没有跨函数共享模块机制（本仓库一贯做法，见 DEFAULT_TENANT_ID
+// 等常量的重复定义），这份常量在 createStore/activateTenantSubscription/
+// manageTenantSubscription 四处各自保有一份完全一致的拷贝，任何一档配额调整
+// 需要同步改这四个文件。basic（含到期自动降级为 basic 的情形）固定为该值，
+// pro/enterprise 是"缺省建议值"——平台管理员仍可在开通/续费弹窗里为单个机构
+// 手动调高（如购买扩容包），服务端只保证"不低于当前套餐档位的默认配额"
+const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
+
 // 🛡️ -502005 DATABASE_COLLECTION_NOT_EXIST：tenant_subscriptions 可能在这套
 // 环境里还没被写入过，与 submitFeedback/manageStoreInviteCode/manageNotice/
 // manageTenantSubscription 同一套自愈口径——只读查询命中时按"从未订阅过"降级
@@ -54,13 +63,20 @@ async function checkTenantPermission(tenantId, featureKey) {
 
   let planType = 'basic';
   let isExpired = false;
-  let storeLimit = 1;
+  let storeLimit = PLAN_STORE_LIMITS.basic;
   let serviceExpireDate = null;
   if (sub) {
     const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
     isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
     planType = isExpired ? 'basic' : (sub.planType || 'basic');
-    storeLimit = (sub.cloudQuota && sub.cloudQuota.storeLimit) || 1;
+    storeLimit = (sub.cloudQuota && sub.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[planType] || PLAN_STORE_LIMITS.basic;
+    // 🛡️ 服务端硬校验：basic（含到期自动降级为 basic 的情形）固定套餐门店配额，
+    // 不管 tenant_subscriptions.cloudQuota.storeLimit 里存的是什么历史/脏数据
+    // （如平台管理员绕开小程序前端直接调用 manageTenantSubscription 云函数写入
+    // 的旧记录），一律强制收敛为 basic 档配额，不信任已落库的数值
+    if (planType === 'basic') {
+      storeLimit = PLAN_STORE_LIMITS.basic;
+    }
     // 🌟 到期日期原样透传（哪怕已过期也保留原值）——前端"套餐升级/续费"卡片需要
     // 展示真实到期日，而不只是一个 isExpired 布尔值，"7月1日已到期"比"已过期"
     // 对续费决策更有信息量
@@ -113,12 +129,26 @@ exports.main = async (event) => {
         isExpired: false,
         storeLimit: Number.MAX_SAFE_INTEGER,
         serviceExpireDate: null,
-        reason: ''
+        reason: '',
+        // 🏢 platform_admin 不隶属任何机构（见 authService.ts UserRole 注释），
+        // 空字符串即语义正确，不需要伪造一个"平台方"机构名
+        tenantName: ''
       };
     }
 
     const result = await checkTenantPermission(tenantId, featureKey);
-    return { success: true, ...result };
+
+    // 🏢 机构名称：与 planType/storeLimit 同一次调用一并下发，供个人中心页顶部
+    // "归属机构"展示使用（不再把门店名误当机构名展示，见 profile.ts/profile.wxml
+    // 的 belong-store-tag 修复）。只读 name 字段，不新增权限面——tenantId 本就
+    // 只从调用者自己的 user_roles 记录反查，与上面套餐查询同一条安全边界
+    let tenantName = '';
+    if (tenantId) {
+      const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true }).get().catch(() => null);
+      tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
+    }
+
+    return { success: true, ...result, tenantName };
   } catch (err) {
     console.error('[checkTenantPermission] 异常:', err);
     // 🛡️ 严禁把裸的数据库报错暴露给调用方——checkTenantPermission() 内部已经

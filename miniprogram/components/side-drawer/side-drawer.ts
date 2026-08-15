@@ -2,6 +2,7 @@
 // 具体动作（记账/审核/统计/门店管理等）全部由宿主页面（index.ts）已有方法执行，
 // 本组件只负责 UI 呈现与"用户点了哪一项"的事件转发，避免和 index.ts 产生逻辑重复。
 import { getSafeSystemInfo } from '../../utils/util';
+import { safeNavigateTo } from '../../utils/navHelper';
 
 const RECENT_PAGES_KEY = 'recent_visited_pages';
 
@@ -90,7 +91,7 @@ Component({
       const path = e.currentTarget.dataset.path;
       this.setData({ show: false });
       if (!path) return;
-      wx.navigateTo({
+      safeNavigateTo({
         url: path,
         fail: (err) => {
           console.warn('[side-drawer] 跳转最近访问页面失败:', err);

@@ -4,6 +4,7 @@ import { setSelectedStore } from '../../utils/storeManager';
 import { setGenCodeHandoff } from '../../utils/genCodeHandoff';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { drawStoreInvitationPoster, SponsorInfo } from '../../utils/drawStorePoster';
+import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
 
 Page({
   _navGuard: null as NavGuardInstance | null,
@@ -825,6 +826,25 @@ Page({
         setTimeout(() => {
           this.onLoad();
         }, 1500);
+      } else if (result && result.errorCode === 'STORE_LIMIT_REACHED') {
+        // 🔐 校验新建门店的 storeLimit 限制：createStore 云函数已在服务端硬校验
+        // 配额（见该云函数 errorCode: 'STORE_LIMIT_REACHED'），这里不再用一条
+        // 转瞬即逝的 Toast 把用户晾在原地——本页只有 super_admin 能进（见
+        // checkAccess），本就有权自助开通/升级套餐，直接给一个可操作的确认框，
+        // 同意后跳个人中心自动唤起套餐订购弹窗；取消则留在原页面，已填的
+        // createForm 表单内容不受影响，可以先去精简门店规划再回来重试
+        wx.showModal({
+          title: '已达门店数量上限',
+          content: `${result.error || ''}\n\n是否现在前往个人中心开通/升级套餐？`,
+          confirmText: '去升级',
+          cancelText: '再想想',
+          success: (res) => {
+            if (res.confirm) {
+              requestOpenSubscription();
+              wx.switchTab({ url: '/pages/profile/profile' });
+            }
+          }
+        });
       } else {
         wx.showToast({ title: (result && result.error) || '创建失败', icon: 'none' });
       }

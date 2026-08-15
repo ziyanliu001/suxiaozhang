@@ -23,6 +23,21 @@ exports.main = async (event, context) => {
 
     if (roleRes.data && roleRes.data.length > 0) {
       const user = roleRes.data[0];
+
+      // 🏢 工作空间过滤的权威口径：orgType 必须来自 stores.orgType 这个真实字段
+      // （门店档案上真正维护的值，manageStoreProfile 编辑后即时生效），而不是
+      // 用 tenantId 前缀去猜（'yuhuazhai_national'.startsWith('yuhuazhai') 这种
+      // 字符串匹配，命中同一个机构下混有非雨花斋门店、或未来出现前缀不是
+      // 'yuhuazhai' 的第二个雨花斋机构时都会判错）。此前 pages/index/index.ts 的
+      // initCurrentUserRole 就是这么猜的，猜完还要再等 loadStoreTargetConfig()
+      // 异步查一次 stores.orgType 才纠正回来——这里把权威值提前到 checkUserRole
+      // 一次性下发，从首屏起就不需要"先猜后纠正"这个中间态
+      let orgType = '';
+      if (user.storeId) {
+        const storeRes = await db.collection('stores').doc(user.storeId).field({ orgType: true }).get().catch(() => null);
+        orgType = (storeRes && storeRes.data && storeRes.data.orgType) || '';
+      }
+
       return {
         success: true,
         openid: OPENID,
@@ -32,6 +47,7 @@ exports.main = async (event, context) => {
         status: user.status || 'approved',
         // 🏢 多租户：随身份一并下发所属机构 ID；platform_admin 账号本身不挂在任何 tenantId 下
         tenantId: user.tenantId || '',
+        orgType,
         // 🙋 头像昵称填写规范：随角色信息一并下发，个人中心页面无需再单独查询
         avatarUrl: user.avatarUrl || '',
         nickName: user.nickName || '',
@@ -67,6 +83,7 @@ exports.main = async (event, context) => {
         status: 'approved',
         avatarUrl: user.avatarUrl || '',
         nickName: user.nickName || '',
+        orgType: '',
         roles: []
       };
     }
@@ -81,6 +98,7 @@ exports.main = async (event, context) => {
       status: 'guest',
       avatarUrl: '',
       nickName: '',
+      orgType: '',
       roles: []
     };
   } catch (err) {

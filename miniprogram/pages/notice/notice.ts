@@ -4,6 +4,7 @@ import { getSafeSystemInfo } from '../../utils/util';
 import { evaluateReportStatus } from '../../utils/approvalBadge';
 import { formatRelativeTime } from '../../utils/dateUtils';
 import { isCloudAvailable } from '../../utils/cloudGuard';
+import { safeNavigateTo } from '../../utils/navHelper';
 
 const ANNOUNCE_PAGE_SIZE = 15;
 
@@ -303,7 +304,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/history/history',
       fail: () => {
         this.isNavigating = false;

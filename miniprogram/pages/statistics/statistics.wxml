@@ -2124,18 +2124,14 @@
   </view>
 
   <!-- 🔐 专业版功能拦截弹窗：多门店汇总看板/Excel导出触发的套餐升级引导。
-       替代原生 wx.showModal——原生弹窗按钮完全在 WXML/WXSS 控制范围之外，
-       无法定制样式，改用自有的半屏卡片弹窗承接 -->
-  <view class="plan-upgrade-modal-mask" wx:if="{{showPlanUpgradeModal}}" bindtap="onClosePlanUpgradeModal">
-    <view class="plan-upgrade-modal-card" catchtap="stopPropagation">
-      <view class="plan-upgrade-modal-title">🔒 功能受限</view>
-      <view class="plan-upgrade-modal-content">{{isPatriarch ? '该功能为专业版专属。作为大家长，您可前往个人中心直接开通专业版。' : '该功能为专业版专属，请联系您所在站点的大家长在线开通。'}}</view>
-      <view class="plan-upgrade-modal-footer">
-        <button class="plan-upgrade-btn-cancel" bindtap="onClosePlanUpgradeModal">{{isPatriarch ? '稍后再说' : '知道了'}}</button>
-        <button class="plan-upgrade-btn-confirm" bindtap="{{isPatriarch ? 'onGoProfileFromPlanUpgrade' : 'onGoFeedbackFromPlanUpgrade'}}">{{isPatriarch ? '立即前往' : '去反馈'}}</button>
-      </view>
-    </view>
-  </view>
+       已收敛为跨页面共用组件（见 components/feature-locked-modal），不再
+       各页面各自维护一份同款 WXML/WXSS -->
+  <feature-locked-modal
+    visible="{{showPlanUpgradeModal}}"
+    feature-name="{{planUpgradeFeatureName}}"
+    can-self-upgrade="{{isPatriarch}}"
+    bind:close="onClosePlanUpgradeModal"
+  />
 
   <!-- 👑 大家长全国数据看板升级引导 Modal（居中悬浮，不破坏单店统计页排版）
        触发时机：大家长点击"全国看板 ↗"但尚未订阅专业版

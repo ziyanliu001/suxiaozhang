@@ -36,10 +36,17 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
 
-const TRIAL_DEFAULT_STORE_LIMIT = 3;
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
+
+// 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——与 checkTenantPermission/
+// activateTenantSubscription/manageTenantSubscription 四处完全同一份拷贝（本
+// 仓库一贯做法：各云函数独立部署，没有跨函数共享模块机制）。没有任何生效中
+// 订阅记录（全新机构，tenant_subscriptions 尚未初始化）时同样按 basic 档配额
+// 兜底，不再单独维护一份更宽松的"试用配额"——basic 本身就是免费默认档
+const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
 // 🆕 轻量省市提取：超管快速建店（store-picker「新建门店」超管分支）目前只填
 // 门店名称，不收集省市——province/city 缺失时尝试从门店名称/地址文本里猜一猜。
@@ -130,6 +137,46 @@ async function ensureNationalTenant() {
   }
 }
 
+// 🔒 并发安全的门店配额占用：CAS（条件自增）+ 惰性迁移初始化，返回 true 代表
+// 本次调用成功占用了一个配额名额（调用方后续必须真正建店；若建店失败务必调用
+// releaseStoreQuota 归还），返回 false 代表配额已满
+async function reserveStoreQuota(tenantId, storeLimit) {
+  // 1) 常规路径：tenants.currentStoreCount 字段已存在，原子条件自增
+  const casRes = await db.collection('tenants').where({
+    _id: tenantId,
+    currentStoreCount: _.lt(storeLimit)
+  }).update({ data: { currentStoreCount: _.inc(1) } });
+  if (casRes.stats.updated === 1) return true;
+
+  // 2) 惰性迁移路径：currentStoreCount 在这条机构记录里可能还从未被写入过
+  // （老机构，在"配额计数器"上线之前就已存在）。用 stores 集合的真实计数
+  // 做一次性初始化——同样带 currentStoreCount 不存在 的 where 条件原子写入，
+  // 若这期间另一个并发请求已经抢先完成了初始化，这次写入会 0 匹配落空，
+  // 回落到步骤 3 按常规路径重试一次，不会出现"两次初始化互相覆盖导致计数
+  // 偏小、变相放大配额"的问题
+  const actualCountRes = await db.collection('stores').where({ tenantId }).count();
+  await db.collection('tenants').where({
+    _id: tenantId,
+    currentStoreCount: _.exists(false)
+  }).update({ data: { currentStoreCount: actualCountRes.total } }).catch(() => {});
+
+  // 3) 兜底重试一次条件自增（覆盖"刚完成惰性初始化"或"字段已被并发请求初始化
+  // 完毕"两种情形，是同一次条件自增，天然幂等安全）
+  const retryRes = await db.collection('tenants').where({
+    _id: tenantId,
+    currentStoreCount: _.lt(storeLimit)
+  }).update({ data: { currentStoreCount: _.inc(1) } });
+  return retryRes.stats.updated === 1;
+}
+
+// 归还一次已占用但最终未能真正建店成功的配额名额（如建店事务本身失败），
+// 避免"占用了名额、门店却没建成"导致配额被永久性泄漏、越占越少
+async function releaseStoreQuota(tenantId) {
+  await db.collection('tenants').doc(tenantId).update({
+    data: { currentStoreCount: _.inc(-1) }
+  }).catch((err) => console.error('[createStore] 配额归还失败（需要人工核对 tenants.currentStoreCount）:', tenantId, err));
+}
+
 // super_admin 缺失 tenantId 时的兜底 + 自愈回写
 async function resolveCallerTenantId(caller) {
   if (caller.tenantId) return caller.tenantId;
@@ -144,11 +191,18 @@ async function resolveCallerTenantId(caller) {
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
-  const { storeName, city, address, initialAnnouncement, bindAsManager, province, operatingStatus, latitude, longitude, orgType } = event;
+  const { storeName, city, address, initialAnnouncement, bindAsManager, province, operatingStatus, latitude, longitude, orgType, supportedMeals } = event;
   const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
   const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'other'];
   const finalOrgType = VALID_ORG_TYPES.includes(orgType) ? orgType : '';
   const finalOperatingStatus = VALID_OPERATING_STATUSES.includes(operatingStatus) ? operatingStatus : 'operating';
+  // 🍚 供餐餐次配置：绝大多数雨花斋只供午餐，默认单餐次——与 manageStoreProfile
+  // 同一份 MEAL_TYPES/DEFAULT_SUPPORTED_MEALS 口径（各云函数独立部署，没有跨函数
+  // 共享模块机制，只能保持常量一致）。建店时未显式传入或传入非法值时回退默认档
+  const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
+  const finalSupportedMeals = Array.isArray(supportedMeals)
+    ? Array.from(new Set(supportedMeals.filter((m) => MEAL_TYPES.includes(m))))
+    : [];
 
   if (!OPENID) {
     return { success: false, error: '无法获取用户身份' };
@@ -190,7 +244,7 @@ exports.main = async (event) => {
     }
     const subscription = subRes && subRes.data && subRes.data[0];
 
-    let storeLimit = TRIAL_DEFAULT_STORE_LIMIT;
+    let storeLimit = PLAN_STORE_LIMITS.basic;
     if (subscription) {
       if (subscription.status === 'suspended' || subscription.status === 'expired') {
         return { success: false, error: '订阅服务已暂停/过期，无法新建门店，请联系平台管理员续费' };
@@ -199,15 +253,33 @@ exports.main = async (event) => {
       if (subscription.serviceExpireDate && subscription.serviceExpireDate < todayStr) {
         return { success: false, error: '服务已过期，无法新建门店，请联系平台管理员续费' };
       }
-      storeLimit = (subscription.cloudQuota && subscription.cloudQuota.storeLimit) || TRIAL_DEFAULT_STORE_LIMIT;
+      storeLimit = (subscription.cloudQuota && subscription.cloudQuota.storeLimit)
+        || PLAN_STORE_LIMITS[subscription.planType]
+        || PLAN_STORE_LIMITS.basic;
+      // 🛡️ 服务端硬校验：basic（免费版）固定套餐门店配额，不信任 cloudQuota.storeLimit
+      // 里可能存在的历史/脏数据（如绕开小程序前端直接调用 manageTenantSubscription
+      // 云函数写入的旧记录），一律强制收敛为 basic 档配额
+      if (subscription.planType === 'basic') {
+        storeLimit = PLAN_STORE_LIMITS.basic;
+      }
     }
 
-    // 3. 校验当前门店数量是否已达配额上限
-    const currentCountRes = await db.collection('stores').where({ tenantId }).count();
-    if (currentCountRes.total >= storeLimit) {
+    // 3. 并发安全的配额占用：用 tenants.currentStoreCount 做原子条件自增（CAS）
+    // 而不是"先 count() 查询、再单独 insert"——后者存在 TOCTOU 竞态，两个并发
+    // 建店请求都读到"未满配额"就都会通过校验，最终双双插入导致超额。
+    // where 条件（currentStoreCount < storeLimit）与 inc(1) 操作在同一次
+    // update() 里原子执行，是 MongoDB 单文档写操作天然具备的原子性保证，不需要
+    // 额外的分布式锁；若这次 update 因为条件不满足而 0 匹配，代表配额确实已满。
+    const reserved = await reserveStoreQuota(tenantId, storeLimit);
+    if (!reserved) {
+      // 🆕 errorCode：与 checkTenantPermission/getNationalDashboard 的
+      // PLAN_UPGRADE_REQUIRED 同一套约定，供前端精确识别"这次失败是套餐配额
+      // 问题"，从而弹出可操作的升级引导弹窗，而不是把这条 error 文案当成普通
+      // 建店失败原样吐司了事
       return {
         success: false,
-        error: `已达当前套餐门店数量上限（${storeLimit} 家），如需新增门店请联系平台管理员升级套餐`
+        error: `当前机构套餐门店配额已满（上限 ${storeLimit} 家），请升级套餐或购买扩容包`,
+        errorCode: 'STORE_LIMIT_REACHED'
       };
     }
 
@@ -242,6 +314,7 @@ exports.main = async (event) => {
           // + 省份（城市已有 city 字段）+ 经纬度（供"附近门店"距离排序，可选，未提供时省略字段）
           operatingStatus: finalOperatingStatus,
           province: finalProvince,
+          mealConfig: { supportedMeals: finalSupportedMeals.length > 0 ? finalSupportedMeals : ['lunch'] },
           ...(finalOrgType ? { orgType: finalOrgType } : {}),
           ...(typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : {}),
           createdBy: OPENID,
@@ -281,15 +354,21 @@ exports.main = async (event) => {
       await transaction.commit();
     } catch (txErr) {
       await transaction.rollback();
+      // 🛡️ 门店没能真正建成，归还上面已经原子占用的一个配额名额，避免配额
+      // 被永久性泄漏（占了名额、门店却没建出来）
+      await releaseStoreQuota(tenantId);
       throw txErr;
     }
+
+    const tenantAfterRes = await db.collection('tenants').doc(tenantId).field({ currentStoreCount: true }).get().catch(() => null);
+    const currentStoreCount = (tenantAfterRes && tenantAfterRes.data && tenantAfterRes.data.currentStoreCount) || 0;
 
     return {
       success: true,
       storeId: newStoreId,
       storeName: trimmedName,
       tenantId,
-      remainingQuota: storeLimit - currentCountRes.total - 1
+      remainingQuota: Math.max(storeLimit - currentStoreCount, 0)
     };
   } catch (err) {
     console.error('[createStore] 异常:', err);

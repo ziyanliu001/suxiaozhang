@@ -13,6 +13,7 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
 
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
@@ -126,12 +127,21 @@ exports.main = async (event) => {
     }
 
     // 仅更新 stores 表本身，不回溯 report_logs / user_roles 中的历史冗余门店名
+    // 🛡️ 操作日志留痕：与 updateStoreStatus 云函数同一套 operationLog 追加式
+    // 数组约定，lastRenamedFrom/By/At 仍保留作为"最近一次变更"的快照兜底
     await db.collection('stores').doc(storeId).update({
       data: {
         storeName: trimmedName,
         lastRenamedFrom: store.storeName || '',
         lastRenamedBy: OPENID,
-        lastRenamedAt: db.serverDate()
+        lastRenamedAt: db.serverDate(),
+        operationLog: _.push({
+          action: 'rename',
+          operatorId: OPENID,
+          operateTime: db.serverDate(),
+          before: store.storeName || '',
+          after: trimmedName
+        })
       }
     });
 

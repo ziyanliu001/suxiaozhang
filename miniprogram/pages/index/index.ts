@@ -6,6 +6,7 @@ import { drawMeritPoster, drawStoryPoster, PosterData, StoryPosterData } from '.
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
 import { getSafeSystemInfo } from '../../utils/util';
+import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
@@ -340,6 +341,21 @@ function getDraftKeyForDate(dateStr: string, shopName: string): string {
 // 统一的两位小数四舍五入，避免浮点误差在多次加减后累积出细微偏差
 function round2(num: number): number {
   return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+// 🐛 根因修复：autoSyncOfflineQueue/syncOfflineQueueManually 此前对
+// DataService.saveReport() 的返回值完全不检查 success 字段——saveReport 对
+// "全0跳过/重复日期/记录已锁定/门店已停用"这类业务规则拒绝走的是正常 resolve
+// （success:false，不是 reject），队列循环的 try/catch 只拦得住真正抛异常的
+// 情况（如图片上传失败），于是这几类被明确拒绝的提交也会被当成"已同步成功"
+// 直接移出队列、计入成功数——数据其实根本没有写进云端，用户却看到"已同步"
+// 的提示，且以后再也没有机会重新提交这条数据。这些失败原因都是规则性拒绝，
+// 不是网络抖动，重试也不会变成功，所以仍应清出队列（留着只会一直卡住后面的
+// 正常项），但不能计入成功数——与 saveReportAsync 里已经识别的这几类
+// errorDetail 保持同一份清单
+const NON_RETRYABLE_SAVE_ERROR_DETAILS = ['all_zero_skipped', 'duplicate_date_blocked', 'record_locked_for_upsert', 'store_inactive'];
+function isNonRetryableSaveError(errorDetail: string | undefined): boolean {
+  return !!errorDetail && NON_RETRYABLE_SAVE_ERROR_DETAILS.includes(errorDetail);
 }
 
 // ☀️ 阳光账本理念弹窗文案：按门店真实 orgType（getSunshineLedger 返回，来自
@@ -833,6 +849,10 @@ Page({
     saveAsSystemTemplate: false,
     mergeToReportText: false,
     showApplyModal: false,
+    // 🌸 弹窗标题覆盖：从【选择工作空间】页雨花/通用卡片、或空状态"加入现有爱心
+    // 站点"引导卡唤起时，标题固定为"选择 XX 服务站点"（见 openStorePickerForJoin），
+    // 优先于 WXML 原有的"申请加入门店/加入【XX】"动态标题；空字符串时不覆盖
+    applyModalTitleOverride: '',
     applyForm: {
       storeId: '',
       storeName: '',
@@ -847,7 +867,12 @@ Page({
       region: [] as string[],
       address: '',
       contactPhone: '',
-      storePhotos: [] as string[]
+      storePhotos: [] as string[],
+      // 🌸 新建门店时的机构类型提示：从 openStorePickerForJoin 唤起时按当前专区
+      // 预填（雨花专区='yuhuazhai'，通用专区留空退回服务端默认 'other'），确保
+      // Bug 1 里"新建雨花门店"真的会给新店打上 orgType:'yuhuazhai' 标签，而不是
+      // 静默落到 processRoleAudit 的 'other' 兜底值
+      orgTypeHint: ''
     } as any,
     applyStorePhotoUploading: false,
     isSubmittingApply: false,
@@ -916,6 +941,9 @@ Page({
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
     // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
     isRealSuperAdmin: false,
+    // 🏢 平台管理员（platform_admin）：与 isSuperAdmin/isRealSuperAdmin 是独立维度，
+    // 仅供 isCurrentAccountSuperAdmin() 判断"是否可绕过工作空间选择页 orgType 校验"使用
+    isPlatformAdmin: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
     currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS.SUPER_ADMIN as string,
     currentRole: 'VOLUNTEER' as 'VOLUNTEER' | 'MANAGER' | 'FINANCE',
@@ -1003,6 +1031,14 @@ Page({
     // 🍚 留店用餐细分餐别：勾选"今日留店用餐"后展开的早/午/晚 Chip 多选态，
     // 提交打卡时随 reservedMeals 一并写入后厨预留量数据（见 onConfirmShiftCheckIn）
     reservedMeals: ['lunch'] as string[],
+    // 🍚 按门店配置供餐餐次：从 manageStoreProfile 的 mealConfig.supportedMeals 拉取
+    // （见 loadStoreTargetConfig），默认单午餐档——打卡弹窗"今日留店用餐"Chip 行、
+    // 岗位班次列表（availableShifts 按 shiftDefinitions[].relatedMeal 关联过滤）、
+    // 餐报文本/公示海报的供餐人数汇总，均以这份数组为准动态适配
+    supportedMeals: ['lunch'] as string[],
+    // 🍚 后厨预留量统计：manageVolunteerCheckIn queryStoreHours 按餐别聚合的今日
+    // 留店用餐人数（见 syncCheckInHoursToForm），供餐报/海报的"供餐人数汇总"引用
+    mealReserveCounts: { breakfast: 0, lunch: 0, dinner: 0 } as Record<string, number>,
     checkInLogs: [] as any[],
     todayAccumulatedHours: 0,
     // 🌟 打卡弹窗实时工时预览：勾选班次后即时预估"若提交这一笔，今日总工时会变成多少"，
@@ -1015,12 +1051,15 @@ Page({
     myCheckInDays: 0,
     myCheckInCount: 0,
     myServiceHours: 0,
+    // 🍚 relatedMeal：每个班次关联的餐次，供 refreshTodayShiftStatus() 按当前门店
+    // supportedMeals 过滤展示——只供午餐的门店（多数雨花斋）只会看到 MORNING/LUNCH/
+    // CLEAN 三个班次，EARLY_MORNING（早餐备餐）/NIGHT（晚餐相关）自动隐藏
     shiftDefinitions: [
-      { shiftKey: 'EARLY_MORNING', name: '🌌 凌晨熬粥与备菜班', hours: 4.0, timeDesc: '04:00 - 08:00 · 蒸饭煲汤' },
-      { shiftKey: 'MORNING', name: '🥗 早间准备与洗切班', hours: 2.5, timeDesc: '08:00 - 10:30 · 洗菜配菜' },
-      { shiftKey: 'LUNCH', name: '🍲 午餐打饭与引导班', hours: 3.0, timeDesc: '10:30 - 13:30 · 堂食引导' },
-      { shiftKey: 'CLEAN', name: '🧹 后厨洗碗与收尾班', hours: 1.5, timeDesc: '13:30 - 15:00 · 消毒整理' },
-      { shiftKey: 'NIGHT', name: '🌙 夜间整理与盘点班', hours: 3.0, timeDesc: '18:00 - 21:00 · 物资盘点' }
+      { shiftKey: 'EARLY_MORNING', name: '🌌 凌晨熬粥与备菜班', hours: 4.0, timeDesc: '04:00 - 08:00 · 蒸饭煲汤', relatedMeal: 'breakfast' },
+      { shiftKey: 'MORNING', name: '🥗 早间准备与洗切班', hours: 2.5, timeDesc: '08:00 - 10:30 · 洗菜配菜', relatedMeal: 'lunch' },
+      { shiftKey: 'LUNCH', name: '🍲 午餐打饭与引导班', hours: 3.0, timeDesc: '10:30 - 13:30 · 堂食引导', relatedMeal: 'lunch' },
+      { shiftKey: 'CLEAN', name: '🧹 后厨洗碗与收尾班', hours: 1.5, timeDesc: '13:30 - 15:00 · 消毒整理', relatedMeal: 'lunch' },
+      { shiftKey: 'NIGHT', name: '🌙 夜间整理与盘点班', hours: 3.0, timeDesc: '18:00 - 21:00 · 物资盘点', relatedMeal: 'dinner' }
     ] as any[],
     availableShifts: [] as any[],
     showGenCodeModal: false,
@@ -1194,10 +1233,20 @@ Page({
         'ADMIN': 'super_admin',
         'SUPER_ADMIN': 'super_admin',
         'FAMILY': 'store_family',
-        'STORE_FAMILY': 'store_family'
+        'STORE_FAMILY': 'store_family',
+        // 🐛 根因修复：此前 roleMap 没有 PLATFORM_ADMIN 分支，缺失的键会落到
+        // 下面 `roleMap[rawRole] || 'volunteer'` 的默认兜底，把平台管理员静默
+        // 降级显示成义工（isSuperAdminAccount 判定也随之失真）。platform_admin
+        // 与业务角色是独立维度（不参与 isManager/isFinance/isSuperAdmin 的
+        // 业务权限分层，见 authService.ts UserRole 注释），这里只补齐"角色字面量
+        // 不能被悄悄丢弃"，不改变它与业务角色互不提升的既有约束
+        'PLATFORM_ADMIN': 'platform_admin'
       };
       const normalizedRole = roleMap[rawRole] || 'volunteer';
       const flags = getPermissionFlags({ role: normalizedRole });
+      // 🏢 平台管理员标志位：与 isSuperAdmin 是两个独立维度（互不包含），供
+      // isCurrentAccountSuperAdmin() 等"是否可绕过门店类型限制"的 UI 判定使用
+      const isPlatformAdmin = normalizedRole === 'platform_admin';
 
       // 🌟 视角切换预览：真实角色是 super_admin 且已选择非全景视角时，展示层降级模拟
       // 大家长/店长/财务/义工/家人视角；isRealSuperAdmin 保留真实值，供切换入口自身显隐判断
@@ -1228,6 +1277,7 @@ Page({
         isPatriarch,
         displayRole: overridden.currentUserRole,
         isRealSuperAdmin,
+        isPlatformAdmin,
         isFamily
       };
     };
@@ -1251,11 +1301,17 @@ Page({
     const cached = AuthService.getCachedRoleInfo();
     if (cached) {
       const effectiveRawRole = AuthService.resolveEffectiveRole(cached.role);
-      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
+      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isPlatformAdmin, isFamily } = computeRoleState(effectiveRawRole, cached.status);
       const storeName = cached.storeName || '';
       const storeId = cached.storeId || '';
       const tenantId = (cached as any).tenantId || '';
-      const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
+      // 🌸 工作空间过滤权威口径：orgType 直接取 checkUserRole 随身份下发的
+      // stores.orgType 真实值（见该云函数同名字段注释），不再用 tenantId 前缀猜——
+      // 猜测口径在"同一机构下混有非雨花斋门店"或"未来出现前缀不是 yuhuazhai 的
+      // 第二个雨花斋机构"时会判错。loadStoreTargetConfig() 仍会在其后再查一次
+      // manageStoreProfile 兜底纠正（如缓存的 orgType 尚未跟上门店最新编辑），
+      // 但首屏这里已经是权威值，不再是"先猜后纠正"的临时态
+      const orgType = (cached as any).orgType || '';
       // 🐛 根因修复：见 utils/viewModePreview.ts resolveDisplayViewMode 注释——
       // normalizedRole 是已经过 storageRole 融合后的最终生效角色，不是 getPreviewViewMode()
       // 那份独立、可能过期的预览态，两者对不上时 Banner/切换卡片会显示错误的视角文案
@@ -1271,6 +1327,7 @@ Page({
         isSuperAdmin: isSuperAdmin,
         isPatriarch: isPatriarch,
         isRealSuperAdmin: isRealSuperAdmin,
+        isPlatformAdmin: isPlatformAdmin,
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
         orgType: orgType,
@@ -1300,11 +1357,13 @@ Page({
       // 几百毫秒后这个异步 fetchUserRole 结果一落地又会用服务端主角色把它悄悄改回
       // super_admin，形成竞态：谁最后 setData 谁说了算，而不是谁应该说了算
       const effectiveRawRole = AuthService.resolveEffectiveRole(info.role);
-      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
+      const { rawRole, normalizedRole, isVolunteer, isManager, isFinance, isSuperAdmin, isPatriarch, flags, displayRole, isRealSuperAdmin, isPlatformAdmin, isFamily } = computeRoleState(effectiveRawRole, info.status);
       const storeName = info.storeName || '';
       const storeId = info.storeId || '';
       const tenantId = (info as any).tenantId || '';
-      const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
+      // 🌸 同上一处 cached 分支注释：orgType 权威口径来自 checkUserRole 下发的
+      // stores.orgType 真实值，不再用 tenantId 前缀猜
+      const orgType = (info as any).orgType || '';
       // 🐛 根因修复：同上一处 cached 分支，见 resolveDisplayViewMode 注释
       const currentViewMode = resolveDisplayViewMode(normalizedRole);
 
@@ -1318,6 +1377,7 @@ Page({
         isSuperAdmin: isSuperAdmin,
         isPatriarch: isPatriarch,
         isRealSuperAdmin: isRealSuperAdmin,
+        isPlatformAdmin: isPlatformAdmin,
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
         orgType: orgType,
@@ -1556,6 +1616,22 @@ Page({
         cultureStoreSlogan2: (result.data && result.data.slogan2) || ''
       });
 
+      // 🍚 按门店配置供餐餐次：复用同一次 manageStoreProfile 查询（不新增网络请求）
+      // 拿到 mealConfig.supportedMeals 真实值，驱动打卡弹窗"今日留店用餐"Chip 行、
+      // 岗位班次列表的动态适配。已勾选但不再受支持的餐别（如门店从"早午晚"改配置为
+      // 仅"午"）要同步从 reservedMeals 里摘掉，避免提交一条门店当前并不支持的留餐记录
+      const rawSupportedMeals = result.data && result.data.mealConfig && result.data.mealConfig.supportedMeals;
+      const supportedMeals = Array.isArray(rawSupportedMeals) && rawSupportedMeals.length > 0
+        ? rawSupportedMeals
+        : ['lunch'];
+      const reconciledReservedMeals = (this.data.reservedMeals || []).filter((m: string) => supportedMeals.includes(m));
+      this.setData({
+        supportedMeals,
+        reservedMeals: reconciledReservedMeals
+      });
+      // 门店班次列表按新的 supportedMeals 重新过滤
+      this.refreshTodayShiftStatus();
+
       const stc = result.data && result.data.serviceTargetConfig;
       if (stc && stc.targetLabels) {
         // 自定义标签与默认值合并：只覆盖非空项
@@ -1606,15 +1682,15 @@ Page({
   },
 
   onGotoDailyMenu() {
-    wx.navigateTo({ url: '/pages/daily-menu/daily-menu' });
+    safeNavigateTo({ url: '/pages/daily-menu/daily-menu' });
   },
 
   onGotoActivityLog() {
-    wx.navigateTo({ url: '/pages/activity-log/activity-log' });
+    safeNavigateTo({ url: '/pages/activity-log/activity-log' });
   },
 
   onGotoStoreManagement() {
-    wx.navigateTo({ url: '/pages/store-management/store-management' });
+    safeNavigateTo({ url: '/pages/store-management/store-management' });
   },
 
   // ================= 🍽️ 首页快捷发布：今日菜单 =================
@@ -2107,7 +2183,7 @@ Page({
     } else if (role === 'finance') {
       targetTab = 'finance';
     }
-    wx.navigateTo({
+    safeNavigateTo({
       url: `/pages/help/help?tab=${targetTab}`,
       fail: () => {
         this.isNavigating = false;
@@ -2120,13 +2196,22 @@ Page({
     wx.switchTab({ url: '/pages/profile/profile' });
   },
 
-  // 🌐 新用户引导：点击"创建组织"或"通过邀请码加入"均跳到个人页，
-  // profile.ts 的 initMinePage 会检测到 isFamily+无门店状态并自动弹出入驻弹窗
+  // 🌐 新用户引导：点击"创建组织"跳到个人页——profile.ts 的 initMinePage 会检测到
+  // isFamily+无门店状态并自动弹出入驻弹窗（真正调用 createTenant 云函数创建全新
+  // 机构的地方，与 showApplyModal 的"新建门店"Tab 是两回事：后者要求申请人已归属
+  // 某个既有机构，全新用户走这条会被 submitRoleApply 拒绝并提示 needsOnboarding，
+  // 见该云函数 isCustom 分支注释），本入口维持原有跳转，不接入 openStorePickerForJoin
   onNewUserGoCreate() {
     wx.switchTab({ url: '/pages/profile/profile' });
   },
+  // 🐛 UX 重构：「加入现有爱心站点」此前只是跳个人页等着 profile.ts 弹出邀请码
+  // 输入框，用户没法直接从列表里挑选站点。现改为直接在首页唤起"选择服务站点"
+  // 弹窗（与 Bug 1 的 onSelectYuhuaPlatform 共用 openStorePickerForJoin），按当前
+  // 所在工作空间过滤门店范围——雨花专区内只看雨花斋门店，通用专区内只看非雨花
+  // 斋门店，选中后走既有"选择已有门店"申请路径（以家人/义工身份打卡）
   onNewUserGoJoin() {
-    wx.switchTab({ url: '/pages/profile/profile' });
+    const isYuhua = this.data.currentPlatformMode === 'yuhua';
+    this.openStorePickerForJoin(isYuhua ? 'yuhuazhai' : 'general', isYuhua ? '选择雨花斋服务站点' : '选择服务站点');
   },
 
   // 📋 表单折叠：展开/收起次要录入项（支出/凭证/食谱照片/门店日志）
@@ -3183,6 +3268,9 @@ Page({
   // === 扫码绑定与义工审核 ===
 
   async fetchStoreInfoAndPromptApply(storeId: string) {
+    // 🌸 扫码/邀请码这条路径走的是常规"申请加入门店"标题逻辑，清掉可能残留自
+    // openStorePickerForJoin（雨花/通用专区选站点）的标题覆盖与 orgType 提示，避免串场
+    this.setData({ applyModalTitleOverride: '', 'applyForm.orgTypeHint': '' });
     // 🐛 修复：扫描"全国总览"邀请码（scene=s=all）时，此前会去查 stores 表里
     // 一个根本不存在的 _id='all' 文档，查询必然失败落入 catch，再把"全国总览"
     // 当成一个真实门店预填进申请表单——用户可以直接提交一条 storeId='all' 的
@@ -3377,13 +3465,13 @@ Page({
   },
 
   onCloseApplyModal() {
-    this.setData({ showApplyModal: false });
+    this.setData({ showApplyModal: false, applyModalTitleOverride: '' });
   },
 
   async onSubmitRoleApply() {
     if (this.data.isSubmittingApply) return;
 
-    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos } = this.data.applyForm;
+    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos, orgTypeHint } = this.data.applyForm;
 
     // ——— 必填校验（按展示顺序逐项拦截）———
     if (storeSelectionType === 'custom') {
@@ -3441,6 +3529,7 @@ Page({
           contactPhone: storeSelectionType === 'custom' ? contactPhone.trim() : '',
           storePhotos: storeSelectionType === 'custom' ? storePhotos : [],
           adminKey: storeSelectionType === 'custom' ? adminKey : '',
+          orgType: storeSelectionType === 'custom' ? (orgTypeHint || '') : '',
           tenantId,
           requestedRole,
           realName: realName.trim(),
@@ -3456,7 +3545,7 @@ Page({
         return;
       }
 
-      this.setData({ showApplyModal: false });
+      this.setData({ showApplyModal: false, applyModalTitleOverride: '' });
 
       let content: string;
       if (result.autoApproved) {
@@ -4354,7 +4443,7 @@ Page({
           cancelText: '我知道了',
           success: (res) => {
             if (res.confirm) {
-              wx.navigateTo({ url: '/pages/history/history' });
+              safeNavigateTo({ url: '/pages/history/history' });
             }
           }
         });
@@ -6545,6 +6634,7 @@ Page({
           volunteerCount: parseFloat(volunteerCount) || 0,
           volunteerHours: parseFloat(volunteerHours) || 0,
           diningCount: parseFloat(diningCount) || 0,
+          mealBreakdown: this.buildMealBreakdown(),
           stapleRiceStatus: stapleRiceStatus,
           stapleOilStatus: stapleOilStatus,
           noticeTag: announcement && announcement.tag,
@@ -6708,8 +6798,20 @@ Page({
         const isCollectionMissing = errDetail.includes('-501000') || errDetail.includes('resource') || errDetail.includes('not exist');
         const isAllZero = errDetail === 'all_zero_skipped';
         const isDuplicateDate = errDetail === 'duplicate_date_blocked';
+        const isStoreInactive = errDetail === 'store_inactive';
 
-        if (isDuplicateDate) {
+        if (isStoreInactive) {
+          // 🔐 停用门店禁止新增记账：这是明确的业务规则拒绝，不是网络/云端故障——
+          // 不能像下面通用分支那样 saveToQueue() 塞进离线重试队列，否则会在门店
+          // 重新启用后的某个不确定时间点，静默把这条早已过期的旧提交重新写进去，
+          // 与用户当时的真实操作意图脱节
+          wx.showModal({
+            title: '门店已停用',
+            content: saveResult.message || '该门店已被停用，暂不支持提交新的记账数据，请联系超级管理员重新启用',
+            showCancel: false,
+            confirmText: '我知道了'
+          });
+        } else if (isDuplicateDate) {
           // 🌟 重复录入拦截：不能走离线队列重试（会一直被拦截，甚至在极端时序下仍可能造成重复），
           // 直接引导用户去历史记录编辑/修改已存在的当日记录
           wx.showModal({
@@ -6719,7 +6821,7 @@ Page({
             cancelText: '我知道了',
             success: (res) => {
               if (res.confirm) {
-                wx.navigateTo({ url: '/pages/history/history' });
+                safeNavigateTo({ url: '/pages/history/history' });
               }
             }
           });
@@ -7640,25 +7742,56 @@ Page({
   // 这里保留一层兜底：isCurrentAccountSuperAdmin() 在 this.data 两个标记都不可信时
   // 再直接查一次 AuthService 缓存，双保险
   //
-  // 🏢 工作空间选择首页：点击【雨花公益食堂专区】卡片。模式与账号真实绑定门店的
-  // orgType 强绑定（见需求确认）——账号真实 orgType 不是 'yuhuazhai' 时，这张卡片
-  // 点了也不会进去，只友好提示，不额外引入"同一账号跨平台绑店"这套新流程。
-  // 🛡️ 超级管理员无条件放行：入口处优先判断，两张卡片都直接放行，绝不弹"暂不支持"。
-  // 雨花声明仍照走（见 enterYuhuaWorkspaceFlow 内 isPrivilegedView 已含 isSuperAdmin），
-  // 不会绕过合规弹窗，只是不再被"账号绑定的是不是雨花斋门店"这条判断拦截
+  // 🏢 工作空间选择首页：点击【雨花公益食堂专区】卡片。
+  // 🐛 Bug 1 修复：此前账号真实 orgType 不是 'yuhuazhai' 时会被"暂不支持"弹窗
+  // 死锁拦截，新用户/义工/其余机构账号永远进不了雨花专区——但这张卡片本就是
+  // 给"还没绑定雨花门店、想加入一家雨花斋"的人准备的入口，拦住他们等于自我
+  // 矛盾。现在改为：已绑定雨花门店（或超管）直接进入工作台；否则唤起"选择雨花
+  // 斋服务站点"弹窗（复用申请加入门店的 showApplyModal，见 openStorePickerForJoin），
+  // 允许其选择要服务的雨花斋门店（以家人/义工身份打卡）或申请加入/新建雨花门店
+  // （新建走 storeSelectionType==='custom' 分支，弹窗内自带切换 Tab）。
+  // 🛡️ 超级管理员无条件放行：入口处优先判断，直接进入，绝不弹选站点弹窗。
+  // 雨花声明仍照走（见 enterYuhuaWorkspaceFlow 内 isPrivilegedView 已含 isSuperAdmin）
   onSelectYuhuaPlatform() {
-    console.log('[PlatformSelect] onSelectYuhuaPlatform this.data:', this.data);
     const isSuperAdminAccount = this.isCurrentAccountSuperAdmin();
-    console.log('[PlatformSelect] onSelectYuhuaPlatform isSuperAdminAccount:', isSuperAdminAccount, 'orgType:', this.data.orgType);
-    if (!isSuperAdminAccount && this.data.orgType !== 'yuhuazhai') {
-      wx.showModal({
-        title: '暂不支持',
-        content: '您的账号当前绑定的门店不是雨花斋类型，暂时无法进入雨花公益食堂专区。',
-        showCancel: false
-      });
+    if (isSuperAdminAccount || this.data.orgType === 'yuhuazhai') {
+      this.enterYuhuaWorkspaceFlow();
       return;
     }
-    this.enterYuhuaWorkspaceFlow();
+    this.openStorePickerForJoin('yuhuazhai', '选择雨花斋服务站点');
+  },
+
+  // 🌸 唤起"选择服务站点"弹窗：复用既有的 showApplyModal（申请加入门店），
+  // 与 fetchStoreInfoAndPromptApply 等场景的区别只是门店列表的拉取方式——这里
+  // 调用者尚未归属任何机构（或归属的机构类型不匹配），改走 getStoreList 的
+  // 发现模式（显式传 orgType，见该云函数注释），跨机构拉取指定专区下的门店，
+  // 而不是 fetchAllStoresList() 那套按调用者自身 tenantId 过滤的"我的门店"列表。
+  // 供 Bug 1（工作空间选择页点雨花专区未绑店时）与空状态"加入现有爱心站点"
+  // 引导卡（onNewUserGoJoin）共用
+  async openStorePickerForJoin(orgTypeFilter: string, title: string) {
+    const volunteerTip = this.computeApplyRoleTip('volunteer');
+    this.setData({
+      applyModalTitleOverride: title,
+      'applyForm.storeSelectionType': 'existing',
+      'applyForm.storeId': '',
+      'applyForm.storeName': '',
+      'applyForm.requestedRole': 'volunteer',
+      // 🌸 仅雨花专区有明确的 orgType 取值可预填；通用专区涵盖多种机构类型，
+      // 留空退回 processRoleAudit 的 'other' 默认值，不能替用户瞎猜
+      'applyForm.orgTypeHint': orgTypeFilter === 'yuhuazhai' ? 'yuhuazhai' : '',
+      applyRoleTipText: volunteerTip.text,
+      applyRoleTipVariant: volunteerTip.variant,
+      allStoresList: [],
+      showApplyModal: true
+    });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { orgType: orgTypeFilter } });
+      const result = res.result as any;
+      this.setData({ allStoresList: (result && result.success) ? (result.list || []) : [] });
+    } catch (e) {
+      console.warn('[openStorePickerForJoin] 站点列表加载失败:', e);
+    }
   },
 
   // 🏢 工作空间选择首页：点击【通用素食/门店记账】卡片。不涉及雨花声明，orgType
@@ -7686,10 +7819,19 @@ Page({
   // 两者都不可信时，直接查一次 AuthService 已核验角色缓存兜底，不依赖任何
   // 本页面未定义过的字段（globalRole/cachedRole/userRole 等在这个文件里都不存在，
   // 不要照抄别处模板里的字段名，会变成永远判不中的死代码）
+  //
+  // 🐛 根因修复：这里判定的是"能否绕过工作空间选择页的 orgType 门店类型校验"，
+  // 不是业务权限分层意义上的"超管"。platform_admin（SaaS 平台管理员）与
+  // super_admin 是两个完全独立的维度（互不包含，见 authService.ts UserRole 注释），
+  // 但 platform_admin 账号同样不隶属任何门店/租户，orgType 恒为空字符串——用
+  // "orgType 必须等于 yuhuazhai" 这条面向业务角色门店归属的规则去卡它，只会永远
+  // 命中"暂不支持"分支。这里补上 isPlatformAdmin 分支，仅用于放行这个入口判定，
+  // 不会连带把 isRealSuperAdmin/isSuperAdmin 本身变成 true（那两个标志位仍严格
+  // 只在真正的 super_admin 业务角色下为 true，financial 相关权限判定不受影响）
   isCurrentAccountSuperAdmin(): boolean {
-    if (this.data.isRealSuperAdmin || this.data.isSuperAdmin) return true;
+    if (this.data.isRealSuperAdmin || this.data.isSuperAdmin || this.data.isPlatformAdmin) return true;
     const cached = AuthService.getCachedRoleInfo();
-    return !!(cached && cached.role === 'super_admin' && cached.status === 'approved');
+    return !!(cached && (cached.role === 'super_admin' || cached.role === 'platform_admin') && cached.status === 'approved');
   },
 
   // 🌸 雨花工作空间进入流程：分两档独立记忆声明确认，互不覆盖——
@@ -7886,17 +8028,18 @@ Page({
     }
 
     let successCount = 0;
+    let rejectedCount = 0;
     for (const item of queue) {
       try {
         const uploadResults: string[] = [];
-        
+
         for (let i = 0; i < item.receiptImages.length; i++) {
           const tempFilePath = item.receiptImages[i];
           const now = new Date();
           const dateFolder = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
           const fileName = `${Date.now()}_${i}.jpg`;
           const cloudPath = `expenses/${dateFolder}/${fileName}`;
-          
+
           const uploadResult = await wx.cloud.uploadFile({
             cloudPath: cloudPath,
             filePath: tempFilePath
@@ -7906,25 +8049,46 @@ Page({
 
         // 剔除系统保留字段 _openid（任务3修复）
         const { id, timestamp, _openid, ...restItem } = item as any;
-        await DataService.saveReport({
+        const saveResult = await DataService.saveReport({
           ...restItem,
           receiptImages: uploadResults
         });
 
-        removeFromQueue(item.id);
-        successCount++;
+        if (saveResult.success) {
+          removeFromQueue(item.id);
+          successCount++;
+        } else if (isNonRetryableSaveError(saveResult.errorDetail)) {
+          console.warn('[autoSyncOfflineQueue] 离线记录被规则拒绝，已从队列清除但不计入成功:', saveResult.errorDetail, saveResult.message);
+          removeFromQueue(item.id);
+          rejectedCount++;
+        } else {
+          // 未识别的失败原因（如云端临时故障）：保留在队列里，交给下一轮自动/手动同步重试
+          console.warn('[autoSyncOfflineQueue] 离线记录同步失败，保留待重试:', saveResult.message);
+        }
       } catch (error) {
         console.error('[autoSyncOfflineQueue] 同步失败:', error);
         break;
       }
     }
 
-    if (successCount > 0) {
+    if (successCount > 0 || rejectedCount > 0) {
       this.updateOfflineQueueCount();
+    }
+    if (successCount > 0 && rejectedCount === 0) {
       wx.showToast({
         title: `已为您自动同步 ${successCount} 条离线保存的账目汇报！🎉`,
         icon: 'none',
         duration: 3000
+      });
+    } else if (rejectedCount > 0) {
+      // 🐛 根因修复：见上方 isNonRetryableSaveError 注释——这几条不是同步成功，
+      // 必须明确告知用户去核对，不能被"已同步"的正向文案掩盖掉
+      wx.showModal({
+        title: '部分离线记录未能同步',
+        content: successCount > 0
+          ? `已同步 ${successCount} 条，另有 ${rejectedCount} 条因日期重复/门店已停用等原因被拒绝，未能保存，请前往历史记录核对。`
+          : `${rejectedCount} 条离线记录因日期重复/门店已停用等原因被拒绝，未能保存，请前往历史记录核对。`,
+        showCancel: false
       });
     }
   },
@@ -7944,17 +8108,18 @@ Page({
     wx.showLoading({ title: '正在同步...' });
 
     let successCount = 0;
+    let rejectedCount = 0;
     for (const item of queue) {
       try {
         const uploadResults: string[] = [];
-        
+
         for (let i = 0; i < item.receiptImages.length; i++) {
           const tempFilePath = item.receiptImages[i];
           const now = new Date();
           const dateFolder = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
           const fileName = `${Date.now()}_${i}.jpg`;
           const cloudPath = `expenses/${dateFolder}/${fileName}`;
-          
+
           const uploadResult = await wx.cloud.uploadFile({
             cloudPath: cloudPath,
             filePath: tempFilePath
@@ -7964,13 +8129,22 @@ Page({
 
         // 剔除系统保留字段 _openid（任务3修复）
         const { id, timestamp, _openid, ...restItem } = item as any;
-        await DataService.saveReport({
+        const saveResult = await DataService.saveReport({
           ...restItem,
           receiptImages: uploadResults
         });
 
-        removeFromQueue(item.id);
-        successCount++;
+        if (saveResult.success) {
+          removeFromQueue(item.id);
+          successCount++;
+        } else if (isNonRetryableSaveError(saveResult.errorDetail)) {
+          console.warn('[syncOfflineQueueManually] 离线记录被规则拒绝，已从队列清除但不计入成功:', saveResult.errorDetail, saveResult.message);
+          removeFromQueue(item.id);
+          rejectedCount++;
+        } else {
+          // 未识别的失败原因（如云端临时故障）：保留在队列里，交给下一次手动/自动同步重试
+          console.warn('[syncOfflineQueueManually] 离线记录同步失败，保留待重试:', saveResult.message);
+        }
       } catch (error) {
         console.error('[syncOfflineQueueManually] 同步失败:', error);
         break;
@@ -7979,16 +8153,42 @@ Page({
 
     wx.hideLoading();
     this.updateOfflineQueueCount();
-    
-    if (successCount > 0) {
-      wx.showToast({ 
-        title: `已成功同步 ${successCount} 条账目汇报！🎉`, 
+
+    if (successCount > 0 && rejectedCount === 0) {
+      wx.showToast({
+        title: `已成功同步 ${successCount} 条账目汇报！🎉`,
         icon: 'success',
         duration: 3000
+      });
+    } else if (rejectedCount > 0) {
+      // 🐛 根因修复：见 isNonRetryableSaveError 处注释——这几条不是同步成功，
+      // 必须明确告知用户去核对，不能被"同步成功"的正向文案掩盖掉
+      wx.showModal({
+        title: '部分离线记录未能同步',
+        content: successCount > 0
+          ? `已同步 ${successCount} 条，另有 ${rejectedCount} 条因日期重复/门店已停用等原因被拒绝，未能保存，请前往历史记录核对。`
+          : `${rejectedCount} 条离线记录因日期重复/门店已停用等原因被拒绝，未能保存，请前往历史记录核对。`,
+        showCancel: false
       });
     } else {
       wx.showToast({ title: '同步失败，请检查网络', icon: 'none' });
     }
+  },
+
+  // 🍚 按门店开启的餐次动态生成供餐人数汇总：数据源是 mealReserveCounts（后厨
+  // 预留量统计，见 syncCheckInHoursToForm），只保留当前门店 supportedMeals 里的
+  // 餐别。仅在门店开放不止一个餐次时才需要这份细分——只供一种餐次的门店（多数
+  // 雨花斋）本就只有一个数字，与既有的 diningCount/volunteerCount 汇总重复，
+  // 不额外占用餐报/海报的篇幅
+  buildMealBreakdown(): Array<{ label: string; count: number }> {
+    const supportedMeals = this.data.supportedMeals || ['lunch'];
+    if (supportedMeals.length <= 1) return [];
+
+    const counts = this.data.mealReserveCounts || { breakfast: 0, lunch: 0, dinner: 0 };
+    const MEAL_LABELS: Record<string, string> = { breakfast: '早餐留餐', lunch: '午餐留餐', dinner: '晚餐留餐' };
+    return supportedMeals
+      .filter((m: string) => MEAL_LABELS[m])
+      .map((m: string) => ({ label: MEAL_LABELS[m], count: counts[m] || 0 }));
   },
 
   // 🆕 财务公示版 (4:3) PosterData 组装：从 onGeneratePoster 内联代码抽出来，
@@ -8019,6 +8219,7 @@ Page({
       activityText: this.data.activityText,
       volunteerCount: parseFloat(this.data.volunteerCount) || 0,
       volunteerHours: parseFloat(this.data.volunteerHours) || 0,
+      mealBreakdown: this.buildMealBreakdown(),
       verifyQrLocalPath: this.data.verifyQrLocalPath,
       showFamilyStyleFooter: this.data.posterShowFamilyStyleFooter,
       showGratitudeFooter: this.data.posterShowGratitudeFooter,
@@ -8212,6 +8413,7 @@ Page({
         volunteerCount: parseFloat(this.data.volunteerCount) || 0,
         volunteerHours: parseFloat(this.data.volunteerHours) || 0,
         diningCount: parseFloat(this.data.diningCount) || 0,
+        mealBreakdown: this.buildMealBreakdown(),
         stapleRiceStatus: this.data.stapleRiceStatus,
         stapleOilStatus: this.data.stapleOilStatus,
         noticeTag: this.data.announcement && this.data.announcement.tag,
@@ -8398,7 +8600,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/statistics/statistics?tab=sunshine',
       fail: () => {
         this.isNavigating = false;
@@ -9095,7 +9297,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/history/history',
       fail: () => {
         this.isNavigating = false;
@@ -9107,7 +9309,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.shopName)}`,
       fail: () => {
         this.isNavigating = false;
@@ -9196,7 +9398,7 @@ Page({
     const open = () => {
       if (this.isNavigating) return;
       this.isNavigating = true;
-      wx.navigateTo({
+      safeNavigateTo({
         url: '/pages/activity-log/activity-log',
         fail: () => { this.isNavigating = false; }
       });
@@ -9235,6 +9437,14 @@ Page({
       const result = res.result;
       this._checkInHoursCachedDate = dateString;
 
+      if (result && result.success) {
+        // 🍚 后厨预留量统计：无论今日是否已有打卡工时都同步一次，供餐报文本/公示
+        // 海报的"供餐人数汇总"引用（见 buildMealBreakdown）
+        this.setData({
+          mealReserveCounts: result.mealCounts || { breakfast: 0, lunch: 0, dinner: 0 }
+        });
+      }
+
       if (result && result.success && result.totalHours > 0) {
         // force 时重置 isManualHours，确保本次打卡数据能写入
         this.setData({
@@ -9259,10 +9469,20 @@ Page({
     const todayHours = todayLogs.reduce((sum: number, log: any) => sum + (parseFloat(log.hours) || 0), 0);
     const todayAccumulatedHours = parseFloat(todayHours.toFixed(1));
 
+    // 🍚 岗位班次按门店开放餐次关联联动：只保留 relatedMeal 命中当前门店
+    // supportedMeals 的班次——只供午餐的门店（多数雨花斋）自动隐藏 EARLY_MORNING/
+    // NIGHT 这类早/晚餐相关班次，不需要用户自己甄别哪些班次跟本店没关系
+    const supportedMeals = this.data.supportedMeals && this.data.supportedMeals.length > 0
+      ? this.data.supportedMeals
+      : ['lunch'];
+    const mealFilteredShifts = this.data.shiftDefinitions.filter((item: any) =>
+      !item.relatedMeal || supportedMeals.includes(item.relatedMeal)
+    );
+
     // ⏱️ 动态工时上限：勾选前就按"已录入工时 + 该班次工时"逐一算好是否会超过 12h 上限，
     // 供 WXML 单独禁用会超限的班次选项（而不是等选完了才在按钮上统一拦截）
     let firstAvailableShift = '';
-    const updatedShifts = this.data.shiftDefinitions.map((item: any) => {
+    const updatedShifts = mealFilteredShifts.map((item: any) => {
       const isCompleted = completedShiftKeys.has(item.shiftKey);
       const wouldExceedCap = !isCompleted && parseFloat((todayAccumulatedHours + item.hours).toFixed(1)) > DAILY_HOURS_CAP;
       if (!isCompleted && !wouldExceedCap && !firstAvailableShift) {
@@ -9330,13 +9550,22 @@ Page({
     this.updateHoursPreview(undefined, selectedShiftHours);
   },
 
+  // 🍚 默认留餐时段：优先午餐（多数门店的唯一/主餐次），门店未开放午餐（如仅供
+  // 早/晚餐的门店）时退回 supportedMeals 里的第一个餐次
+  getDefaultReservedMeal(): string {
+    const supportedMeals = this.data.supportedMeals && this.data.supportedMeals.length > 0
+      ? this.data.supportedMeals
+      : ['lunch'];
+    return supportedMeals.includes('lunch') ? 'lunch' : supportedMeals[0];
+  },
+
   onToggleMealReserve() {
     const next = !this.data.willEatLunch;
-    // 🍚 关闭"留店用餐"时同步清空已选餐别；重新打开时默认勾选午餐（与此前
+    // 🍚 关闭"留店用餐"时同步清空已选餐别；重新打开时默认勾选门店默认餐次（与此前
     // willEatLunch 单一开关的语义保持一致，避免用户还要多点一次）
     this.setData({
       willEatLunch: next,
-      reservedMeals: next ? (this.data.reservedMeals.length ? this.data.reservedMeals : ['lunch']) : []
+      reservedMeals: next ? (this.data.reservedMeals.length ? this.data.reservedMeals : [this.getDefaultReservedMeal()]) : []
     });
   },
 
@@ -9693,7 +9922,7 @@ Page({
     this.setData({ showArchiveModal: false });
     // 延迟 200ms 等弹窗关闭动画完成再跳转
     setTimeout(() => {
-      wx.navigateTo({
+      safeNavigateTo({
         url: '/pages/journey/journey'
       });
     }, 200);
@@ -9764,7 +9993,7 @@ Page({
   onOpenFinanceExportMenu() {
     if (this.isNavigating) return;
     this.isNavigating = true;
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/statistics/statistics?autoShowExport=true',
       fail: () => {
         this.isNavigating = false;
@@ -10028,7 +10257,7 @@ Page({
   onGoToHistoryAnomalyDetail() {
     const type = this.data.riskAlertsFilterType;
     if (!type) return;
-    wx.navigateTo({ url: `/pages/history/history?anomalyType=${type}` });
+    safeNavigateTo({ url: `/pages/history/history?anomalyType=${type}` });
   },
 
   onRefreshRiskAlerts() {

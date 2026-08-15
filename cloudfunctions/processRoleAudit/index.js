@@ -18,11 +18,18 @@ const db = cloud.database();
 
 const _ = db.command;
 
-const TRIAL_DEFAULT_STORE_LIMIT = 3;
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
 const MAX_STORE_PHOTOS = 9;
 const MAX_TEXT_FIELD_LENGTH = 500;
+
+// 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——与 checkTenantPermission/
+// createStore/activateTenantSubscription/manageTenantSubscription 四处完全
+// 同一份拷贝（本仓库一贯做法：各云函数独立部署，没有跨函数共享模块机制）。
+// resolveOrCreateStore 是"自助新建门店成为首任大家长"这条自裂变路径实际建店
+// 的地方，必须与 createStore 云函数走同一套配额规则/同一个 currentStoreCount
+// 计数器，否则会成为配额限制的绕行口子（见文件头注释）
+const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
 function sanitizeText(v) {
   if (v === undefined || v === null) return '';
@@ -132,6 +139,38 @@ async function resolveAuditorTenantId(auditor) {
 }
 
 // 按 {tenantId, storeName} 查重复用或新建门店，返回 { storeId, storeName }
+// 🔒 并发安全的门店配额占用：与 createStore 云函数 reserveStoreQuota 完全
+// 同一份实现（同一个 tenants.currentStoreCount 计数器，两条建店路径必须共用
+// 同一套 CAS 逻辑才不会互相绕过对方的配额校验）。CAS（条件自增）+ 惰性迁移
+// 初始化，返回 true 代表本次调用成功占用了一个配额名额（调用方后续必须真正
+// 建店；若建店失败务必调用 releaseStoreQuota 归还），返回 false 代表配额已满
+async function reserveStoreQuota(tenantId, storeLimit) {
+  const casRes = await db.collection('tenants').where({
+    _id: tenantId,
+    currentStoreCount: _.lt(storeLimit)
+  }).update({ data: { currentStoreCount: _.inc(1) } });
+  if (casRes.stats.updated === 1) return true;
+
+  const actualCountRes = await db.collection('stores').where({ tenantId }).count();
+  await db.collection('tenants').where({
+    _id: tenantId,
+    currentStoreCount: _.exists(false)
+  }).update({ data: { currentStoreCount: actualCountRes.total } }).catch(() => {});
+
+  const retryRes = await db.collection('tenants').where({
+    _id: tenantId,
+    currentStoreCount: _.lt(storeLimit)
+  }).update({ data: { currentStoreCount: _.inc(1) } });
+  return retryRes.stats.updated === 1;
+}
+
+// 归还一次已占用但最终未能真正建店成功的配额名额，避免配额被永久性泄漏
+async function releaseStoreQuota(tenantId) {
+  await db.collection('tenants').doc(tenantId).update({
+    data: { currentStoreCount: _.inc(-1) }
+  }).catch((err) => console.error('[processRoleAudit] 配额归还失败（需要人工核对 tenants.currentStoreCount）:', tenantId, err));
+}
+
 async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
   const existingRes = await db.collection('stores').where({ tenantId, storeName }).limit(1).get();
   if (existingRes.data && existingRes.data.length > 0) {
@@ -154,7 +193,7 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
     .get();
   const subscription = subRes.data && subRes.data[0];
 
-  let storeLimit = TRIAL_DEFAULT_STORE_LIMIT;
+  let storeLimit = PLAN_STORE_LIMITS.basic;
   if (subscription) {
     if (subscription.status === 'suspended' || subscription.status === 'expired') {
       throw new Error('订阅服务已暂停/过期，无法新建门店，请联系平台管理员续费');
@@ -163,23 +202,41 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
     if (subscription.serviceExpireDate && subscription.serviceExpireDate < todayStr) {
       throw new Error('服务已过期，无法新建门店，请联系平台管理员续费');
     }
-    storeLimit = (subscription.cloudQuota && subscription.cloudQuota.storeLimit) || TRIAL_DEFAULT_STORE_LIMIT;
-  }
-
-  const currentCountRes = await db.collection('stores').where({ tenantId }).count();
-  if (currentCountRes.total >= storeLimit) {
-    throw new Error(`已达当前套餐门店数量上限（${storeLimit} 家），如需新增门店请联系平台管理员升级套餐`);
-  }
-
-  const createRes = await db.collection('stores').add({
-    data: {
-      storeName,
-      tenantId,
-      status: 'active',
-      createdBy: operatorOpenId,
-      createdAt: db.serverDate()
+    storeLimit = (subscription.cloudQuota && subscription.cloudQuota.storeLimit)
+      || PLAN_STORE_LIMITS[subscription.planType]
+      || PLAN_STORE_LIMITS.basic;
+    // 🛡️ 服务端硬校验：与 createStore 云函数保持一致——basic（免费版）固定
+    // 套餐门店配额，不信任 cloudQuota.storeLimit 里可能存在的历史/脏数据，
+    // 一律强制收敛为 basic 档配额
+    if (subscription.planType === 'basic') {
+      storeLimit = PLAN_STORE_LIMITS.basic;
     }
-  });
+  }
+
+  // 🔒 并发安全的配额占用：与 createStore 云函数同一套 CAS 计数器（见文件头
+  // reserveStoreQuota 注释），不再用"先 count() 查询、再单独 insert"这种存在
+  // TOCTOU 竞态的写法
+  const reserved = await reserveStoreQuota(tenantId, storeLimit);
+  if (!reserved) {
+    throw new Error(`当前机构套餐门店配额已满（上限 ${storeLimit} 家），请升级套餐或购买扩容包`);
+  }
+
+  let createRes;
+  try {
+    createRes = await db.collection('stores').add({
+      data: {
+        storeName,
+        tenantId,
+        status: 'active',
+        createdBy: operatorOpenId,
+        createdAt: db.serverDate()
+      }
+    });
+  } catch (err) {
+    // 🛡️ 门店没能真正建成，归还上面已经原子占用的一个配额名额
+    await releaseStoreQuota(tenantId);
+    throw err;
+  }
 
   return { storeId: createRes._id, storeName };
 }
@@ -209,10 +266,27 @@ async function submitRoleApply(event, OPENID) {
     if (!address || !String(address).trim() || !contactPhone || !String(contactPhone).trim() || !Array.isArray(storePhotos) || sanitizePhotos(storePhotos).length === 0) {
       return { success: false, error: '申请新建门店需先补全门店档案（地址/联系电话/门店照片）' };
     }
-  } else {
+  }
+
+  // 🛡️ 已有门店（!isCustom）路径统一在这里查一次目标门店文档，供下面档案完整性/
+  // 管理员密钥/自动过审三处校验共用（此前各自独立 doc(storeId).get()，同一次请求
+  // 打三次几乎一样的查询）。更关键的是：existingStoreDoc.tenantId 才是本次申请
+  // 真正归属的机构——不再信任客户端传入的 tenantId 字段（与本项目一贯的"tenantId
+  // 只从服务端已存数据反查"安全模型对齐，见 checkTenantPermission/createStore 等
+  // 处同款注释）。这在"选择工作空间"新用户跨机构挑选站点加入的场景下是必需的：
+  // 该场景下前端出于隐私边界压根不知道目标门店的 tenantId（见 getStoreList 发现
+  // 模式不透出 tenantId），客户端传参这里恒为空，只能靠服务端反查
+  let existingStoreDoc = null;
+  if (!isCustom) {
     if (!storeId) {
       return { success: false, error: '请选择一个门店' };
     }
+    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+    existingStoreDoc = storeRes && storeRes.data;
+    if (!existingStoreDoc) {
+      return { success: false, error: '目标门店不存在' };
+    }
+
     // 🛡️ 新店长/新家长任命申请（已有门店）：此前这里的门店档案完整性校验只挂在
     // isCustom 分支下，"高阶角色申请"其实从未真正被拦截过——只要选的是已有门店，
     // 申请店长/家长完全不检查该店档案是否补全。校验对象是目标门店【已存的】
@@ -220,12 +294,9 @@ async function submitRoleApply(event, OPENID) {
     // 还没有编辑门店档案的权限，见 manageStoreProfile resolveWriteTarget），
     // 避免一家档案空白的门店被批出店长/家长
     if (isElevatedRole) {
-      const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-      const store = storeRes && storeRes.data;
-      if (!store) return { success: false, error: '目标门店不存在' };
-      const hasPhotos = Array.isArray(store.storePhotos) && store.storePhotos.length > 0;
-      const hasAddress = !!(store.address && String(store.address).trim());
-      const hasContactPhone = !!(store.contactPhone && String(store.contactPhone).trim());
+      const hasPhotos = Array.isArray(existingStoreDoc.storePhotos) && existingStoreDoc.storePhotos.length > 0;
+      const hasAddress = !!(existingStoreDoc.address && String(existingStoreDoc.address).trim());
+      const hasContactPhone = !!(existingStoreDoc.contactPhone && String(existingStoreDoc.contactPhone).trim());
       if (!hasAddress || !hasContactPhone || !hasPhotos) {
         return { success: false, error: '该门店档案尚未补全（地址/联系电话/门店照片），请先联系现任店长在【门店档案】页补全后再申请' };
       }
@@ -234,9 +305,8 @@ async function submitRoleApply(event, OPENID) {
 
   // 🔐 管理员密钥校验：已有门店的管理岗位申请（大家长/店长/财务）须通过密钥验证。
   // 新建门店（isCustom）此时门店尚未存在，跳过；门店未设 adminKey 时也跳过（向后兼容）。
-  if (!isCustom && storeId && ['store_patriarch', 'store_manager', 'finance'].includes(requestedRole)) {
-    const keyRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-    const storedKey = keyRes && keyRes.data && keyRes.data.adminKey;
+  if (existingStoreDoc && ['store_patriarch', 'store_manager', 'finance'].includes(requestedRole)) {
+    const storedKey = existingStoreDoc.adminKey;
     if (storedKey && String(storedKey).trim()) {
       if (sanitizeText(adminKey || '') !== String(storedKey).trim()) {
         return { success: false, error: '管理员密钥错误，请向现任大家长/店长索取' };
@@ -245,20 +315,22 @@ async function submitRoleApply(event, OPENID) {
   }
 
   // 义工 + 已有门店：门店必须真实存在才允许免审即时生效，避免伪造/过期 storeId 也能自动过审
-  let autoApprove = false;
-  if (requestedRole === 'volunteer' && !isCustom) {
-    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-    autoApprove = !!(storeRes && storeRes.data);
-  }
+  const autoApprove = requestedRole === 'volunteer' && !isCustom && !!existingStoreDoc;
 
   const docData = {
     realName: String(realName).trim(),
     phone: String(phone).trim(),
     storeId: isCustom ? '' : storeId,
-    storeName: isCustom ? String(customStoreName).trim() : storeName,
+    // 🛡️ 已有门店路径的 storeName 也改用服务端反查到的真实值，不信任客户端传参
+    // （与下面 tenantId 同一处修复，见 existingStoreDoc 注释）
+    storeName: isCustom ? String(customStoreName).trim() : (existingStoreDoc.storeName || storeName || ''),
     storeSelectionType: storeSelectionType || 'existing',
     customStoreName: isCustom ? String(customStoreName).trim() : '',
-    tenantId: tenantId || '',
+    // 🛡️ 已有门店路径：tenantId 必须是目标门店真实归属的机构（existingStoreDoc.tenantId），
+    // 不信任客户端传参——见上方 existingStoreDoc 注释。新建门店路径（isCustom）不受影响，
+    // 仍沿用客户端传入的 tenantId（该场景下 tenantId 来自申请人自己刚调用 createTenant
+    // 拿到的真实返回值，属于合法的客户端可信输入）
+    tenantId: isCustom ? (tenantId || '') : (existingStoreDoc.tenantId || ''),
     requestedRole,
     role: 'volunteer',
     status: autoApprove ? 'approved' : 'pending',

@@ -278,7 +278,7 @@ async function handleQueryStoreHours(event, OPENID) {
   // 拉取当日所有 active 打卡记录（单店单日通常不超 200 条，单批次足够覆盖）
   const res = await db.collection(COLLECTION)
     .where({ tenantId, storeId, dateString, status: 'active' })
-    .field({ _openid: true, hours: true })
+    .field({ _openid: true, hours: true, reservedMeals: true })
     .limit(200)
     .get();
 
@@ -297,7 +297,23 @@ async function handleQueryStoreHours(event, OPENID) {
   );
   const uniqueVolunteers = new Set(logs.map((l) => l._openid)).size;
 
-  return { success: true, totalHours, checkInCount: logs.length, uniqueVolunteers, dateString };
+  // 🍚 后厨预留量统计：按餐别聚合"今日留店用餐"人数——同一人当天可能打了多个
+  // 班次的卡，每个班次各自都带一份 reservedMeals，这里按 _openid 去重后再计入
+  // 对应餐别的 Set，避免同一人被重复计数（与 uniqueVolunteers 同一套去重口径）
+  const mealVolunteerSets = { breakfast: new Set(), lunch: new Set(), dinner: new Set() };
+  logs.forEach((l) => {
+    const meals = Array.isArray(l.reservedMeals) ? l.reservedMeals : [];
+    meals.forEach((m) => {
+      if (mealVolunteerSets[m]) mealVolunteerSets[m].add(l._openid);
+    });
+  });
+  const mealCounts = {
+    breakfast: mealVolunteerSets.breakfast.size,
+    lunch: mealVolunteerSets.lunch.size,
+    dinner: mealVolunteerSets.dinner.size
+  };
+
+  return { success: true, totalHours, checkInCount: logs.length, uniqueVolunteers, mealCounts, dateString };
 }
 
 exports.main = async (event, context) => {

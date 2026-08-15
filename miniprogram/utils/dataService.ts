@@ -253,6 +253,24 @@ export const DataService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，saveReport 降级为本地缓存模式');
       }
 
+      // 🔐 停用门店禁止新增记账：门店被机构管理员停用（stores.status === 'inactive'，
+      // 见 pages/store-management + updateStoreStatus 云函数）后不应再产生新的
+      // 记账数据。停用只在 getStoreList 的"选择服务门店"列表里把它过滤掉，拦不住
+      // 已经选中该门店、本地会话尚未刷新的用户继续提交——这里在真正写库前补一道
+      // 硬校验。saveReport 是客户端直连数据库写入（没有云函数中转），这是当前唯一
+      // 能拦住这条写路径的地方
+      if (formattedData.storeId) {
+        const storeStatusRes = await db.collection('stores').doc(formattedData.storeId).get().catch(() => null);
+        const storeDoc = storeStatusRes && storeStatusRes.data;
+        if (storeDoc && storeDoc.status === 'inactive') {
+          return {
+            success: false,
+            message: '该门店已被停用，暂不支持提交新的记账数据，请联系超级管理员重新启用',
+            errorDetail: 'store_inactive'
+          };
+        }
+      }
+
       // 步骤 1: 查询同日期同门店是否已有记录（Upsert 查重，强带 storeId/tenantId 隔离，
       // 与 createIndexes 里新增的 {tenantId, storeId, _openid} 复合索引对齐，避免
       // 控制台弹出【索引建议】警告，也比纯 shopName 字符串匹配更抗门店改名/重名）

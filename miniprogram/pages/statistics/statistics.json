@@ -2,6 +2,7 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "store-picker": "../../components/store-picker/store-picker",
-    "watermark": "../../components/watermark/watermark"
+    "watermark": "../../components/watermark/watermark",
+    "feature-locked-modal": "../../components/feature-locked-modal/feature-locked-modal"
   }
 }

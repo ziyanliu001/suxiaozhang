@@ -7,6 +7,12 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: '旗舰版'
 };
 
+const CODE_STATUS_LABELS: Record<string, string> = {
+  UNUSED: '未使用',
+  USED: '已核销',
+  REVOKED: '已作废'
+};
+
 // 🌟 与云函数 PAGE_SIZE 保持一致（activateTenantSubscription/manageTenantSubscription
 // 的 listTenants 都是 20），仅用于客户端判断"这一页拿到的条数是否等于整页"这类
 // 展示逻辑，不参与任何鉴权/查询条件
@@ -15,6 +21,42 @@ const PAGE_SIZE = 20;
 // 🌸 到期预警窗口：与 getPlatformOverview「7 天内到期」大盘同一口径，机构卡片
 // 自己的橙色到期 Tag 复用这个阈值
 const EXPIRING_SOON_MS = 7 * 24 * 3600 * 1000;
+
+// 🆓 基础版是面向基础机构的免费版，固定单门店配额，没有"到期续费"这个概念——
+// 但 manageTenantSubscription 云函数的 createOrRenewSubscription 分支仍然把
+// serviceExpireDate 当必填参数硬校验（见该云函数 event 解构后的非空判断），
+// 这里用一个足够遥远的哨兵日期代表"永久有效"，避免为了这一个免费档位单独
+// 改动服务端契约；到期日期本身在基础版弹窗上是隐藏/置灰的，用户完全无感知
+const PERMANENT_EXPIRE_DATE = '2099-12-31';
+
+// 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——三档套餐的门店配额，
+// 与 checkTenantPermission/createStore/activateTenantSubscription/
+// manageTenantSubscription 四个云函数里完全同一份 PLAN_STORE_LIMITS 拷贝保持
+// 一致（本仓库一贯做法：各云函数独立部署，没有跨函数共享模块机制）。basic
+// 由 manageTenantSubscription.createOrRenewSubscription 服务端强制收敛，
+// 不信任本地这份值；pro/enterprise 是"缺省建议值"，平台管理员仍可在弹窗里
+// 手动调高（如购买扩容包），服务端未收到显式 storeLimit 时才回落到这里
+const PLAN_STORE_LIMIT_DEFAULTS: Record<string, string> = {
+  basic: '2',
+  pro: '10',
+  enterprise: '30'
+};
+
+// 🌟 套餐档位切换联动：basic 固定为「1 家门店 + 永久有效」，不再需要选服务
+// 到期日期；pro/enterprise 恢复成"以开始日期为基准往后一年"的到期日建议值 +
+// 该档位的默认门店配额，两者都还可以在弹窗里手动改
+function getPlanQuotaDefaults(planType: string, serviceStartDate: string): { storeLimit: string; serviceExpireDate: string } {
+  if (planType === 'basic') {
+    return { storeLimit: PLAN_STORE_LIMIT_DEFAULTS.basic, serviceExpireDate: PERMANENT_EXPIRE_DATE };
+  }
+  const start = serviceStartDate ? new Date(serviceStartDate) : new Date();
+  const nextYear = new Date(start);
+  nextYear.setFullYear(nextYear.getFullYear() + 1);
+  return {
+    storeLimit: PLAN_STORE_LIMIT_DEFAULTS[planType] || PLAN_STORE_LIMIT_DEFAULTS.pro,
+    serviceExpireDate: nextYear.toISOString().slice(0, 10)
+  };
+}
 
 function safeVibrate() {
   // 🛡️ 部分机型/开发者工具不支持震动反馈，wx.vibrateShort 会抛错——纯"锦上添花"
@@ -42,6 +84,7 @@ Page({
     // 单屏里的混乱体验
     activeTab: 'codes' as 'codes' | 'tenants',
     planLabels: PLAN_LABELS,
+    codeStatusLabels: CODE_STATUS_LABELS,
 
     overview: null as any,
     // 🐛 初始值就是 true（不是 false）：pa-content 一旦可见就意味着 checkAccess()
@@ -78,8 +121,9 @@ Page({
     // 必须是 false（真的没有请求在途）
     activationCodesLoading: false,
     activationCodesLoadingMore: false,
-    activationCodesFilter: 'UNUSED' as 'UNUSED' | 'USED' | 'all',
+    activationCodesFilter: 'UNUSED' as 'UNUSED' | 'USED' | 'REVOKED' | 'all',
     activationCodes: [] as Array<{
+      _id: string;
       code: string;
       planType: string;
       durationDays: number;
@@ -87,13 +131,18 @@ Page({
       createdAt: string;
       redeemedAt: string;
       redeemedByTenantName: string;
+      revokedAt: string;
+      revokeReason: string;
       createdAtLabel: string;
       redeemedAtLabel: string;
+      revokedAtLabel: string;
     }>,
     // 📄 分页游标：下一页从这个 skip 开始拉，hasMore=false 时列表尾部不再展示
     // "加载更多"，触底也不会再发请求
     activationCodesSkip: 0,
     activationCodesHasMore: false,
+    // 🗑️ 作废激活码防抖锁：值为正在作废中的 codeId，空字符串表示当前无操作在途
+    revokingCodeId: '',
 
     // ─────────────────────────────────────────────────────────────────
     // 🏢 机构管理 Tab
@@ -112,6 +161,20 @@ Page({
     tenantsLoadingMore: false,
     tenantsSkip: 0,
     tenantsHasMore: false,
+    // 🔒 终止订阅防抖锁：值为正在处理中的 tenantId，空字符串表示当前无操作在途
+    terminatingTenantId: '',
+
+    // 🏪 机构下挂门店抽屉：点击机构卡片"查看门店"时唤起，见 onOpenTenantStores——
+    // 这是"机构列表看不到测试1"这类问题的排查入口：门店本身不会在机构列表里
+    // 单独占一行（门店是挂在 tenantId 下的子资源），要看某个具体门店在不在，
+    // 得点进它所属机构这里来看
+    showTenantStoresSheet: false,
+    tenantStoresLoading: false,
+    tenantStoresTenantId: '',
+    tenantStoresTenantName: '',
+    tenantStores: [] as any[],
+    // 🔒 门店行内操作防抖锁：值为正在处理中的 storeId，空字符串表示当前无操作在途
+    storeActionInFlightId: '',
 
     showRenewSheet: false,
     renewForm: {
@@ -324,7 +387,30 @@ Page({
       const sub = t.subscription;
       const expireTime = (sub && sub.serviceExpireDate) ? new Date(sub.serviceExpireDate).getTime() : NaN;
       const isExpiringSoon = !Number.isNaN(expireTime) && (expireTime - Date.now()) > 0 && (expireTime - Date.now()) <= EXPIRING_SOON_MS;
-      return { ...t, isExpiringSoon };
+      // 🛑 是否存在可终止的生效付费订阅：basic（免费版）或已到期都不需要
+      // 展示"终止订阅"按钮——与 terminateTenantSubscription 云函数里
+      // "已是免费版或已到期，无需终止"的校验口径保持一致，前端提前收起
+      // 这个入口，避免点了却直接被服务端拒绝
+      const isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+      const isActivePaidPlan = !!sub && sub.planType !== 'basic' && !isExpired;
+
+      // 🏪 门店容量进度：到期/从未开通订阅一律按 basic 档配额计算——与
+      // checkTenantPermission/createStore 服务端实际生效的降级口径保持一致，
+      // 卡片上看到的配额数字才不会和真正建店时校验的上限对不上
+      const effectivePlanType = (sub && !isExpired) ? (sub.planType || 'basic') : 'basic';
+      const storeLimit = (sub && !isExpired && sub.cloudQuota && sub.cloudQuota.storeLimit)
+        || Number(PLAN_STORE_LIMIT_DEFAULTS[effectivePlanType] || PLAN_STORE_LIMIT_DEFAULTS.basic);
+      const storeCount = t.storeCount || 0;
+      const storeQuotaPercent = storeLimit > 0 ? Math.min(100, Math.round((storeCount / storeLimit) * 100)) : 100;
+
+      return {
+        ...t,
+        isExpiringSoon,
+        isActivePaidPlan,
+        storeLimit,
+        storeQuotaPercent,
+        isStoreQuotaFull: storeCount >= storeLimit
+      };
     });
   },
 
@@ -476,8 +562,60 @@ Page({
     return codes.map((c: any) => ({
       ...c,
       createdAtLabel: this.formatDateLabel(c.createdAt),
-      redeemedAtLabel: this.formatDateLabel(c.redeemedAt)
+      redeemedAtLabel: this.formatDateLabel(c.redeemedAt),
+      revokedAtLabel: this.formatDateLabel(c.revokedAt)
     }));
+  },
+
+  // 🗑️ 作废激活码：仅对台账里 status === 'UNUSED' 的码展示这个按钮（wxml 侧
+  // 已用 wx:if 收敛），这里再兜底拦一次，防止极端时序下（如两个管理员标签页
+  // 同时操作同一批码）对已核销/已作废的码重复发起请求。作废原因走原生弹窗
+  // editable 输入框，与本页 onToggleTenantStatus 停用/恢复机构服务同一套
+  // "留痕审计"交互习惯保持一致
+  onRevokeActivationCode(e: any) {
+    const { codeid, code, status } = e.currentTarget.dataset;
+    if (!codeid || status !== 'UNUSED') return;
+    if (this.data.revokingCodeId) return;
+
+    wx.showModal({
+      title: `确认作废激活码 ${code}？`,
+      content: '作废后该码将无法再被兑换，此操作不可撤销',
+      editable: true,
+      placeholderText: '请填写作废原因',
+      confirmText: '确认作废',
+      confirmColor: '#E03131',
+      success: async (res) => {
+        if (!res.confirm) return;
+        const reason = (res.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请填写作废原因', icon: 'none' });
+          return;
+        }
+        this.setData({ revokingCodeId: codeid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cloudRes = await wx.cloud.callFunction({
+            name: 'activateTenantSubscription',
+            data: { action: 'revoke', codeId: codeid, reason }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '已作废', icon: 'success' });
+            safeVibrate();
+            this.loadActivationCodes(true);
+          } else {
+            wx.showToast({ title: (result && result.error) || '作废失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onRevokeActivationCode 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 activateTenantSubscription 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ revokingCodeId: '' });
+        }
+      }
+    });
   },
 
   // reset=true：筛选切换/下拉刷新/生成成功后——清空分页状态重新拉第一页
@@ -602,17 +740,19 @@ Page({
   onOpenRenewForm(e: any) {
     const { tenantid, tenantname } = e.currentTarget.dataset;
     const todayStr = new Date().toISOString().slice(0, 10);
-    const nextYear = new Date();
-    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    // 🌟 默认档位是基础版（免费版）：与业务规则一致——机构默认就是基础版，
+    // 需要平台管理员主动升级才会进入专业版/旗舰版这条"多门店 + 到期续费"路径
+    const planType = 'basic';
+    const defaults = getPlanQuotaDefaults(planType, todayStr);
     this.setData({
       showRenewSheet: true,
       renewForm: {
         tenantId: tenantid,
         tenantName: tenantname,
-        planType: 'basic',
+        planType,
         serviceStartDate: todayStr,
-        serviceExpireDate: nextYear.toISOString().slice(0, 10),
-        storeLimit: '5',
+        serviceExpireDate: defaults.serviceExpireDate,
+        storeLimit: defaults.storeLimit,
         reason: ''
       },
       renewFormErrors: { serviceStartDate: '', serviceExpireDate: '', reason: '' }
@@ -634,7 +774,17 @@ Page({
 
   onSelectPlan(e: any) {
     const plan = e.currentTarget.dataset.plan;
-    this.setData({ 'renewForm.planType': plan });
+    if (plan === this.data.renewForm.planType) return;
+    // 🌟 档位联动：基础版自动锁定为单门店 + 永久有效，切到专业版/旗舰版时
+    // 恢复"可编辑的到期日期 + 该档位默认门店配额"，与 WXML 里日期输入框/门店
+    // 配额输入框按 planType 切换只读态是同一套判断依据（renewForm.planType）
+    const defaults = getPlanQuotaDefaults(plan, this.data.renewForm.serviceStartDate);
+    this.setData({
+      'renewForm.planType': plan,
+      'renewForm.storeLimit': defaults.storeLimit,
+      'renewForm.serviceExpireDate': defaults.serviceExpireDate,
+      'renewFormErrors.serviceExpireDate': ''
+    });
   },
 
   validateRenewForm(): boolean {
@@ -678,7 +828,7 @@ Page({
           planType,
           serviceStartDate,
           serviceExpireDate,
-          cloudQuota: { storeLimit: parseInt(storeLimit, 10) || 5 },
+          cloudQuota: { storeLimit: parseInt(storeLimit, 10) || Number(PLAN_STORE_LIMIT_DEFAULTS[planType] || PLAN_STORE_LIMIT_DEFAULTS.pro) },
           reason
         }
       });
@@ -699,6 +849,243 @@ Page({
     } finally {
       this.setData({ renewSubmitting: false });
     }
+  },
+
+  // 🏪 机构下挂门店抽屉：点击机构卡片"查看门店"唤起，调用 getTenantDetail
+  // 拿到 storeList（门店名称/状态/城市/创建时间）——这是"机构列表看不到某个
+  // 门店"这类问题的排查入口，门店本身不会在机构列表里单独占一行
+  async onOpenTenantStores(e: any) {
+    const { tenantid, tenantname } = e.currentTarget.dataset;
+    this.setData({
+      showTenantStoresSheet: true,
+      tenantStoresTenantId: tenantid,
+      tenantStoresTenantName: tenantname
+    });
+    await this.loadTenantStores(tenantid);
+  },
+
+  // 抽出来供"移出机构/停用门店"操作成功后刷新同一个抽屉用，避免重复维护
+  // 一份几乎一样的请求+decorate逻辑
+  async loadTenantStores(tenantId: string) {
+    this.setData({ tenantStoresLoading: true, tenantStores: [] });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'manageTenantSubscription',
+        data: { action: 'getTenantDetail', tenantId }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({
+          tenantStores: (result.storeList || []).map((s: any) => ({
+            ...s,
+            createdAtLabel: this.formatDateLabel(s.createdAt)
+          }))
+        });
+      } else {
+        wx.showToast({ title: (result && result.error) || '门店列表加载失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[platform-admin] loadTenantStores 异常:', err);
+      wx.showToast({ title: '门店列表加载异常', icon: 'none' });
+    } finally {
+      this.setData({ tenantStoresLoading: false });
+    }
+  },
+
+  onCloseTenantStores() {
+    this.setData({ showTenantStoresSheet: false });
+  },
+
+  // 🚪 移出机构：清空该门店的 tenantId，使其脱离当前机构（变为待关联的孤儿
+  // 门店，需要另外走一次关联才能重新挂到某个机构下）。这是纯平台管理员操作，
+  // 与门店自己所属机构的 super_admin 无关，所以没有走 updateStoreStatus/
+  // updateStoreName 那套"调用者必须是本机构 super_admin"的鉴权模型，而是
+  // 新增 manageTenantSubscription 的 removeStoreFromTenant action（platform_admin
+  // 专属，可跨机构操作任意门店）
+  onRemoveStoreFromTenant(e: any) {
+    const { storeid, storename } = e.currentTarget.dataset;
+    if (!storeid || this.data.storeActionInFlightId) return;
+
+    wx.showModal({
+      title: `确认将「${storename}」移出机构？`,
+      content: '移出后该门店将失去机构归属（tenantId 清空），需要重新关联才能出现在任何机构的门店清单里，历史账目数据不受影响。',
+      confirmText: '确认移出',
+      confirmColor: '#E03131',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.setData({ storeActionInFlightId: storeid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cloudRes = await wx.cloud.callFunction({
+            name: 'manageTenantSubscription',
+            data: { action: 'removeStoreFromTenant', storeId: storeid }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '已移出机构', icon: 'success' });
+            safeVibrate();
+            await this.afterTenantStoreMutation();
+          } else {
+            wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onRemoveStoreFromTenant 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ storeActionInFlightId: '' });
+        }
+      }
+    });
+  },
+
+  // 🚪 加入机构：与 onRemoveStoreFromTenant 对称，把一家孤儿门店（或需要改挂
+  // 归属的门店）关联到指定机构——对接 manageTenantSubscription 的
+  // assignStoreToTenant action（platform_admin 专属，服务端会做目标机构配额
+  // CAS 校验，配额已满时返回 STORE_LIMIT_REACHED，这里直接把 error 文案吐司
+  // 出来，不需要额外分支处理）。v1 用 wx.showModal 的可编辑输入框收目标机构 ID，
+  // 暂不做搜索选择器，保持轻量
+  onAssignStoreToTenant(e: any) {
+    const { storeid, storename } = e.currentTarget.dataset;
+    if (!storeid || this.data.storeActionInFlightId) return;
+
+    wx.showModal({
+      title: `将「${storename}」加入机构`,
+      editable: true,
+      placeholderText: '请输入目标机构 ID（见机构卡片"机构 ID"）',
+      confirmText: '确认加入',
+      success: async (res) => {
+        if (!res.confirm) return;
+        const targetTenantId = (res.content || '').trim();
+        if (!targetTenantId) {
+          wx.showToast({ title: '请输入目标机构 ID', icon: 'none' });
+          return;
+        }
+        this.setData({ storeActionInFlightId: storeid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cloudRes = await wx.cloud.callFunction({
+            name: 'manageTenantSubscription',
+            data: { action: 'assignStoreToTenant', storeId: storeid, targetTenantId }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '已加入机构', icon: 'success' });
+            safeVibrate();
+            await this.afterTenantStoreMutation();
+          } else {
+            wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none', duration: 2500 });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onAssignStoreToTenant 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ storeActionInFlightId: '' });
+        }
+      }
+    });
+  },
+
+  // 🛑 停用/启用门店：与 store-management.ts 里超管本人操作走的是同一份业务
+  // 语义（stores.status active/inactive，停用后禁止新增记账，见
+  // utils/dataService.ts saveReport 的硬校验），但调用者是平台管理员而非该
+  // 机构自己的 super_admin，同样走 manageTenantSubscription 新增的
+  // setStoreStatus action（platform_admin 专属，跨机构生效）
+  onSetStoreStatus(e: any) {
+    const { storeid, storename, status } = e.currentTarget.dataset;
+    if (!storeid || this.data.storeActionInFlightId) return;
+    const targetStatus = status === 'inactive' ? 'active' : 'inactive';
+    const actionLabel = targetStatus === 'inactive' ? '停用' : '启用';
+
+    wx.showModal({
+      title: `确认${actionLabel}「${storename}」？`,
+      content: targetStatus === 'inactive'
+        ? '停用后该门店将无法再提交新的记账数据，历史数据不受影响，可随时重新启用。'
+        : '重新启用后该门店可继续正常提交记账数据。',
+      confirmColor: targetStatus === 'inactive' ? '#E03131' : '#8C1D18',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.setData({ storeActionInFlightId: storeid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cloudRes = await wx.cloud.callFunction({
+            name: 'manageTenantSubscription',
+            data: { action: 'setStoreStatus', storeId: storeid, status: targetStatus }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: targetStatus === 'inactive' ? '门店已停用' : '门店已重新启用', icon: 'success' });
+            safeVibrate();
+            await this.afterTenantStoreMutation();
+          } else {
+            wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onSetStoreStatus 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ storeActionInFlightId: '' });
+        }
+      }
+    });
+  },
+
+  // 👪 解除家长/退出授权：清空该门店的家长绑定（stores.patriarch/
+  // patriarchOpenId）并摘除对应用户的 STORE_PATRIARCH 身份，供家长失联/
+  // 申请错误/机构要求更换家长等场景使用。与 onSetStoreStatus 同一套鉴权
+  // 模型——platform_admin 专属，跨机构对任意门店生效
+  onUnbindStorePatriarch(e: any) {
+    const { storeid, storename, patriarch } = e.currentTarget.dataset;
+    if (!storeid || this.data.storeActionInFlightId) return;
+
+    wx.showModal({
+      title: `确认解除「${storename}」的家长绑定？`,
+      content: `当前家长：${patriarch || '未知'}。解除后该用户将立即失去家长身份（若还兼任其他身份则平滑降级，不受影响），此操作不可撤销。`,
+      confirmText: '确认解除',
+      confirmColor: '#E03131',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.setData({ storeActionInFlightId: storeid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cloudRes = await wx.cloud.callFunction({
+            name: 'manageTenantSubscription',
+            data: { action: 'unbindStorePatriarch', storeId: storeid }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '已解除家长绑定', icon: 'success' });
+            safeVibrate();
+            await this.afterTenantStoreMutation();
+          } else {
+            wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onUnbindStorePatriarch 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ storeActionInFlightId: '' });
+        }
+      }
+    });
+  },
+
+  // 🔄 门店行内操作成功后的统一刷新：抽屉里的门店清单（当前机构可能已经不再
+  // 包含刚移出的那家）+ 机构列表卡片上的 storeCount 数字，两处口径都来自
+  // 服务端重新查询，不在前端本地估算/自减，避免 count 漂移
+  async afterTenantStoreMutation() {
+    const tasks: Promise<any>[] = [this.loadTenants(true)];
+    if (this.data.tenantStoresTenantId) {
+      tasks.push(this.loadTenantStores(this.data.tenantStoresTenantId));
+    }
+    await Promise.all(tasks);
   },
 
   onToggleTenantStatus(e: any) {
@@ -737,6 +1124,48 @@ Page({
           wx.hideLoading();
           console.error('[platform-admin] updateTenantStatus 异常:', err);
           wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        }
+      }
+    });
+  },
+
+  // 🛑 终止订阅：误操作/退款/提前解约场景下，收回机构当前生效的付费套餐，
+  // 立即降级为免费版。与 onToggleTenantStatus（暂停/恢复整个机构服务）是
+  // 两个独立操作——这里只动套餐，不影响机构本身能不能正常使用免费版功能
+  onTerminateSubscription(e: any) {
+    const { tenantid, tenantname, plantype } = e.currentTarget.dataset;
+    if (!tenantid || this.data.terminatingTenantId) return;
+    const planLabel = PLAN_LABELS[plantype] || plantype;
+
+    wx.showModal({
+      title: '终止订阅',
+      content: `确定要终止「${tenantname}」的${planLabel}权益吗？终止后该机构及下属门店将立即失去${planLabel}功能。`,
+      confirmText: '确认终止',
+      confirmColor: '#E03131',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.setData({ terminatingTenantId: tenantid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cbRes = await wx.cloud.callFunction({
+            name: 'manageTenantSubscription',
+            data: { action: 'terminateTenantSubscription', tenantId: tenantid }
+          });
+          wx.hideLoading();
+          const result = cbRes.result as any;
+          if (result && result.success) {
+            wx.showToast({ title: result.message || '订阅已成功终止', icon: 'success' });
+            safeVibrate();
+            this.loadTenants(true);
+          } else {
+            wx.showModal({ title: '操作失败', content: (result && result.error) || '未知错误', showCancel: false });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onTerminateSubscription 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ terminatingTenantId: '' });
         }
       }
     });

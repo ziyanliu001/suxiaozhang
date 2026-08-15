@@ -3,6 +3,7 @@
   "usingComponents": {
     "store-picker": "../../components/store-picker/store-picker",
     "watermark": "../../components/watermark/watermark",
-    "privacy-popup": "../../components/privacy-popup/privacy-popup"
+    "privacy-popup": "../../components/privacy-popup/privacy-popup",
+    "feature-locked-modal": "../../components/feature-locked-modal/feature-locked-modal"
   }
 }

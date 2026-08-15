@@ -89,13 +89,31 @@
 
           <!-- 🆕 显式呈现归属机构/平台：与角色胶囊分离展示，避免"全国总览 · 家长"
                这类把数据权限范围和业务身份硬缝合的双重语义文案（见上方 role-badge-row
-               旁的历史注释） -->
-          <view class="belong-store-tag">
-            <text class="store-icon">📍</text>
-            <text class="store-label">归属机构：</text>
-            <text class="store-name">{{currentStoreName || '未绑定机构'}}</text>
-            <text class="org-type-badge" wx:if="{{orgTypeBadge}}">{{orgTypeBadge}}</text>
+               旁的历史注释）。
+               🐛 归属机构与当前门店分层修复：此前这里把 currentStoreName（门店名，
+               如"嵩屿街道敬老中心助餐点"）直接当"归属机构"展示——机构是门店上层的
+               账套，两者不是同一层级，混用会让"机构"这个概念名不副实。现拆成两行：
+               超管/平台管理员顶部改展示统一的"超级管理员 · 全局总览"高亮标识，
+               不展示具体机构名（避免与巡检门店/全局视角产生混淆）；其余角色展示
+               真实机构名（currentTenantName，见 fetchCurrentTenantName），选定了
+               具体门店时下面再单独一行"当前门店" -->
+          <view class="belong-store-tag super-admin-highlight" wx:if="{{isSuperAdmin}}">
+            <text class="store-icon">🛡️</text>
+            <text class="store-name">超级管理员 · 全局总览</text>
           </view>
+          <block wx:else>
+            <view class="belong-store-tag">
+              <text class="store-icon">🏢</text>
+              <text class="store-label">归属机构：</text>
+              <text class="store-name">{{currentTenantName || '未绑定机构'}}</text>
+              <text class="org-type-badge" wx:if="{{orgTypeBadge}}">{{orgTypeBadge}}</text>
+            </view>
+            <view class="belong-store-tag" wx:if="{{currentStoreName}}">
+              <text class="store-icon">📍</text>
+              <text class="store-label">当前门店：</text>
+              <text class="store-name">{{currentStoreName}}</text>
+            </view>
+          </block>
         </view>
 
         <!-- 🌐 超管专属：当前巡检门店指示器，点击唤起【门店选择与搜索】弹窗。
@@ -126,21 +144,17 @@
       <view class="sa-status-restore-btn" bindtap="onResetSuperAdminTempViews">{{currentInspectStoreId && isImpersonating ? '重置视角' : (isImpersonating ? '还原超管视角' : '恢复全国总览')}}</view>
     </view>
 
-    <!-- 🌟 超级管理员专属：视角切换预览，纯前端展示层模拟，不改变云端真实角色。
-         🆕 放到顶部通用区：需求要求超管视角切换在顶部显著位置展示 -->
-    <view class="view-mode-switch-card" wx:if="{{isRealSuperAdmin}}">
-      <view class="view-mode-switch-row" bindtap="onOpenViewModeModal">
-        <view class="item-left">
-          <view class="item-icon-svg icon-svg-key"></view>
-          <text class="item-text">管理视角切换</text>
-        </view>
-        <view class="view-mode-current-value">
-          <text class="view-mode-current-label">{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
-      <text class="view-mode-hint" wx:if="{{currentViewMode !== 'SUPER_ADMIN'}}">当前为预览模式，仅展示样式变化，实际操作仍以超级管理员权限执行</text>
-    </view>
+    <!-- 🐛 UI/UX 去重：此前顶部通用区常驻一张独立的"管理视角切换"卡片
+         （view-mode-switch-card，wx:if="{{isRealSuperAdmin}}"），与下方
+         admin-dashboard-card「🎭 视角与租户管理」分组里的同名入口（同样绑定
+         onOpenViewModeModal，展示同一个 viewModeOptionIndex）在默认态（未预览
+         任何角色时 isSuperAdmin 同时为 true）会同屏出现两次，只是位置不同——
+         纯粹的重复入口，已移除这张顶部卡片，只保留卡片内的单一入口。
+         🛡️ 不影响"预览中如何切回"：预览态下 admin-dashboard-card 因 isSuperAdmin
+         降级而隐藏，但顶部 sa-status-bar（wx:if 用的是不受预览影响的
+         isRealSuperAdmin）仍会展示"还原超管视角"按钮（onResetSuperAdminTempViews），
+         点击即可退出预览、admin-dashboard-card 随之重新出现，再从卡片内入口切换
+         到另一个角色——不会出现"卡在预览态里出不来"的死路 -->
 
     <!-- 📸 阳光温情图册与爱心故事：从首页迁移至个人中心，路由（history 页图册模式）
          与数据加载逻辑（getPhotoArchive 云函数）与原首页入口卡完全一致。
@@ -1069,20 +1083,23 @@
         </view>
         <view class="sa-action-arrow">❯</view>
       </view>
-      <!-- 🐛 根因修复：这一行此前无论角色都固定展示"全国站点与机构管理/门店
-           列表·租户开通·订阅管理"这套文案，但 onGoToPlatformAdminTenants() 只有
-           真正的 platform_admin 才会跳到那个管理页——super_admin/store_patriarch
-           点进去实际触发的是"套餐升级"半屏卡片（见该函数注释：目标页服务端
-           requirePlatformAdmin 硬拦截 super_admin，为避免生硬的"无权限访问"改为
-           就地弹订阅卡），文案却完全没提"套餐"两个字，用户点进去只会觉得"说好的
-           管理页呢，怎么弹了个升级弹窗"。这里按 isPlatformAdmin 分流文案，让
-           每种角色看到的标题/描述与真实点击后果一致 -->
+      <!-- 🐛 死代码清理：这一行此前按 isPlatformAdmin 分流文案，但本卡片整体的
+           wx:if 已要求 isSuperAdmin===true（见上方 sa-command-card），而
+           isPlatformAdmin===true 时 isSuperAdmin 恒为 false（platform_admin 与
+           super_admin 是两个完全独立的角色维度，前者的 trueServerRole 永远不会
+           等于 'super_admin'，见 authService.ts UserRole 定义处注释）——这张卡片
+           对 platform_admin 账号根本不会渲染，isPlatformAdmin 分支永远走不到。
+           platform_admin 的入口在下方 admin-developer-section（会员开通/续费
+           管理），本行固定展示 super_admin/store_patriarch 唯一会看到的文案：
+           点击后由 onGoToPlatformAdminTenants() 就地弹出本机构的"套餐升级/续费"
+           半屏卡片，不跳转 pages/platform-admin（该页面服务端 requirePlatformAdmin
+           只认 platform_admin，super_admin 进去只会撞见硬拦截） -->
       <view class="sa-action-row" bindtap="onGoToPlatformAdminTenants" hover-class="ui-hover">
         <view class="sa-action-left">
-          <text class="sa-action-icon">{{isPlatformAdmin ? '🏬' : '💎'}}</text>
+          <text class="sa-action-icon">💎</text>
           <view class="sa-action-text-col">
-            <text class="sa-action-title">{{isPlatformAdmin ? '全国站点与机构管理' : '开通 / 续费专业版套餐'}}</text>
-            <text class="sa-action-desc">{{isPlatformAdmin ? '门店列表 · 租户开通 · 订阅管理' : '全国汇总大屏 · 批量导出 · 高级权限'}}</text>
+            <text class="sa-action-title">开通 / 续费专业版套餐</text>
+            <text class="sa-action-desc">全国汇总大屏 · 批量导出 · 高级权限</text>
           </view>
         </view>
         <view class="sa-action-arrow">❯</view>
@@ -2217,8 +2234,11 @@
 
         <!-- ① 黑钻身份卡 ──────────────────────────────────── -->
         <view class="sub-identity-card sub-identity-card-{{subscriptionInfo.planType}}">
+          <!-- 🐛 归属层级修复：套餐是按机构（tenantId）生效的，不是按单店——同一机构
+               多家门店共享这一份套餐权益（见 checkTenantPermission 云函数），这里改
+               展示机构名而不是当前门店名，避免"续费的到底是这家店还是整个机构"的误解 -->
           <view class="sub-identity-top">
-            <text class="sub-store-name">{{currentStoreName || '我的门店'}}</text>
+            <text class="sub-store-name">{{currentTenantName || currentStoreName || '我的机构'}}</text>
             <view class="sub-plan-badge sub-plan-badge-{{subscriptionInfo.planType}}">
               {{subscriptionInfo.planLabel}}
             </view>

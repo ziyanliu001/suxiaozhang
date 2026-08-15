@@ -3,6 +3,7 @@ import { DataService } from '../../utils/dataService';
 import { getSelectedStore, setSelectedStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
+import { safeNavigateTo } from '../../utils/navHelper';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { drawVolunteerCertificate } from '../../utils/drawVolunteerCertificate';
@@ -377,6 +378,11 @@ Page({
 
     currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer' | 'store_family',
     currentStoreName: '',
+    // 🏢 归属机构名称（tenants.name，经 checkTenantPermission 云函数按调用者自己的
+    // tenantId 反查得到）——与 currentStoreName 是两个不同层级："机构"是上层账套，
+    // "门店"是机构名下的具体服务点，此前顶部 belong-store-tag 误把 currentStoreName
+    // 当机构名展示，见 fetchCurrentTenantName / profile.wxml 修复
+    currentTenantName: '',
     // 🏪 门店运营状态：见 utils/storeManager.ts fetchAndSyncStoreStatus/getCachedStoreStatus，
     // 全局态与 Storage 双写同步，"查看店铺状态"菜单标题据此动态渲染
     currentStoreStatus: '',
@@ -1012,9 +1018,16 @@ Page({
       // 手动切换的具体身份说了算：选家人就是家人，选除家人外的任何身份
       // （含义工/家长/店长/财务/超管）都不再是"默认未审核家人"视角
       isFamily = role === 'store_family';
-    } else if (globalRoleLower && globalRoleLower !== role) {
+    } else if (trueServerRole !== 'platform_admin' && globalRoleLower && globalRoleLower !== role) {
       // 🌟 Storage 无明确记录时，globalData 是第二信号：首页 store-picker 刚切换过
       // 身份、但 current_user_role 尚未落地（极少数情况），用 globalData 补全
+      // 🐛 根因修复：platform_admin（SaaS 平台管理员）不隶属任何门店，
+      // app.globalData.currentStore.role 永远停留在 app.ts 里的硬编码默认值
+      // 'VOLUNTEER'（从未被 _loadUserStorePermissions/switchStore 写入过其他值），
+      // 这不是"补充信号"而是无意义的默认残留——一旦把它当成真实信号用来覆盖
+      // 已经从服务端正确取回的 cachedRoleInfo.role === 'platform_admin'，
+      // 平台管理员登录后会被错误降级展示成 volunteer。因此 trueServerRole 本身
+      // 就是 platform_admin 时，globalData 这路信号必须整体跳过
       role = globalRoleLower;
       isFamily = role === 'store_family';
     } else {
@@ -1217,6 +1230,12 @@ Page({
 
     const pendingFetches: Promise<any>[] = [this.fetchMeritStats(role), this.fetchStoreOrgType(), this.loadRecentPhotos()];
 
+    // 🏢 归属机构名称：超管/平台管理员顶部改展示"超级管理员 · 全局总览"高亮标识
+    // （见 profile.wxml），不属于任何单一机构的语境，不需要查这个
+    if (!overridden.isSuperAdmin && !isPlatformAdmin) {
+      pendingFetches.push(this.fetchCurrentTenantName());
+    }
+
     // 🏛️ 家长管理 / 资源兜底：仅家长本人或超管（含预览降级后的超管，与卡片
     // wx:if 口径保持一致）才需要加载，避免给普通义工/店长/财务发多余的云函数请求
     if (isPatriarch || overridden.isSuperAdmin) {
@@ -1337,7 +1356,7 @@ Page({
 
   // 点击图册入口卡，导航到 history 页图册模式——与原首页入口跳转目标完全一致
   onGoToPhotoArchive() {
-    wx.navigateTo({ url: '/pages/history/history?mode=photo' });
+    safeNavigateTo({ url: '/pages/history/history?mode=photo' });
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1359,7 +1378,7 @@ Page({
     this.setData({ showOnboardingModal: false, onboardingStep: 'choice' });
     wx.setStorageSync('onboarding_dismissed', true);
     // 打开邀请码核销入口（复用义工申请流程里的 input invite code 路径）
-    wx.navigateTo({ url: '/pages/join-store/join-store' }).catch(() => {
+    safeNavigateTo({ url: '/pages/join-store/join-store' }).catch(() => {
       // 如果页面不存在，退回到通知页提示用户向大家长索取邀请码
       wx.showModal({
         title: '如何加入门店',
@@ -2672,7 +2691,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/journey/journey',
       fail: () => {
         this.isNavigating = false;
@@ -2928,7 +2947,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/history/history?view=mine',
       fail: () => {
         this.isNavigating = false;
@@ -3952,7 +3971,7 @@ Page({
     this.isNavigating = true;
 
     this.setData({ showStoreStatsModal: false });
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/history/history',
       fail: () => {
         this.isNavigating = false;
@@ -3987,7 +4006,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`,
       fail: () => {
         this.isNavigating = false;
@@ -4002,7 +4021,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/history/history?statusTab=pending',
       fail: () => {
         this.isNavigating = false;
@@ -4020,7 +4039,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=ledger&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
@@ -4038,7 +4057,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=sunshine&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
@@ -4053,7 +4072,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&action=export&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
@@ -4065,7 +4084,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/store-profile/store-profile',
       fail: () => {
         this.isNavigating = false;
@@ -4331,7 +4350,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/activity-log/activity-log',
       fail: () => {
         this.isNavigating = false;
@@ -4582,7 +4601,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/statistics/statistics',
       fail: () => {
         this.isNavigating = false;
@@ -4609,7 +4628,7 @@ Page({
       ? '/pages/statistics/statistics?view=national'
       : `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`;
 
-    wx.navigateTo({
+    safeNavigateTo({
       url,
       fail: () => {
         this.isNavigating = false;
@@ -4628,7 +4647,7 @@ Page({
     // 🏢 平台管理员：真正的租户管理职责在 pages/platform-admin，平滑跳转过去
     if (AuthService.isPlatformAdmin()) {
       this.isNavigating = true;
-      wx.navigateTo({
+      safeNavigateTo({
         url: '/pages/platform-admin/platform-admin',
         fail: () => {
           this.isNavigating = false;
@@ -5091,6 +5110,21 @@ Page({
     }
   },
 
+  // 🏢 归属机构名称：顶部 belong-store-tag 展示用，与 fetchSubscriptionInfo 共用
+  // 同一个 checkTenantPermission 云函数（该函数已按调用者自己的 tenantId 反查
+  // tenant_subscriptions，这次顺带把 tenants.name 也带出来，不新增云函数）。
+  // 走 60s 内存缓存的 checkTenantPermission() 封装，initMinePage 每次 onShow
+  // 都会调用一次也不会真的每次都发云请求。超管/平台管理员不调用本方法——顶部
+  // 改为展示"超级管理员 · 全局总览"高亮标识，见 profile.wxml isSuperAdmin 分支
+  async fetchCurrentTenantName() {
+    try {
+      const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
+      this.setData({ currentTenantName: result.tenantName || '' });
+    } catch (err) {
+      console.warn('[fetchCurrentTenantName] 查询失败:', err);
+    }
+  },
+
   // 🔐 套餐升级/续费半屏卡片：复用 checkTenantPermission（与首页/统计页同一套
   // 租户订阅鉴权入口），拿到的 planType/isExpired/serviceExpireDate 就是本机构
   // 当前生效的套餐状态——传哪个 featureKey 不影响这几个字段的取值，任选一个即可。
@@ -5190,6 +5224,15 @@ Page({
     const code = (this.data.activationCodeInput || '').trim();
     if (!code) {
       wx.showToast({ title: '请输入激活码', icon: 'none' });
+      return;
+    }
+    // 🆕 前端轻量格式校验：激活码固定 12 位字符（见 activateTenantSubscription
+    // 云函数 generateRandomCode，展示态用短横线分隔成 4-4-4 段），去掉分隔符/
+    // 空白后长度不对基本就是抄漏/抄错，不必真的发起一次网络请求才告知用户，
+    // 真正的存在性/状态校验仍完全交给服务端，这里只拦明显不合法的输入
+    const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (normalized.length !== 12) {
+      wx.showToast({ title: '激活码格式不正确，请核对后重新输入', icon: 'none' });
       return;
     }
 

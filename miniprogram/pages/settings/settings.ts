@@ -1,6 +1,7 @@
 import { AuthService } from '../../utils/authService';
 import { requestComplianceReview } from '../../utils/complianceHandoff';
 import { getSafeSystemInfo } from '../../utils/util';
+import { safeNavigateTo } from '../../utils/navHelper';
 
 Page({
   data: {
@@ -146,7 +147,7 @@ Page({
   },
 
   onTapAbout() {
-    wx.navigateTo({
+    safeNavigateTo({
       url: '/pages/help/help',
       fail: (err) => {
         console.warn('[settings] 跳转帮助页失败:', err);

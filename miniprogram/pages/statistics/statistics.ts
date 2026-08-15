@@ -4,6 +4,7 @@ import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { formatGratitudeReportText, GratitudeReportData } from '../../utils/reportFormatter';
 import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
+import { safeNavigateTo } from '../../utils/navHelper';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
 import { getSafeSystemInfo } from '../../utils/util';
@@ -820,9 +821,10 @@ Page({
     exportConfigTab: 'month' as 'week' | 'month' | 'year',
     exportConfigYear: new Date().getFullYear(),
     exportConfigMonth: new Date().getMonth() + 1,
-    // 🔐 专业版功能拦截弹窗：替代原生 wx.showModal（原生弹窗按钮无法用 WXSS
-    // 定制样式，见 onOpenPlanUpgradeModal 处注释）
-    showPlanUpgradeModal: false
+    // 🔐 专业版功能拦截弹窗：见 components/feature-locked-modal，
+    // planUpgradeFeatureName 是具体触发这次拦截的功能名，拼进弹窗文案
+    showPlanUpgradeModal: false,
+    planUpgradeFeatureName: '',
   },
 
   onLoad(options: any) {
@@ -1675,7 +1677,7 @@ Page({
         currentUserStoreName: ownStoreName,
         currentUserStoreId: ownStoreId
       });
-      this.onOpenPlanUpgradeModal();
+      this.onOpenPlanUpgradeModal('多门店聚合看板');
       this.calculateStats();
       this.fetchStatistics();
       return;
@@ -2115,15 +2117,19 @@ Page({
     this.setData({ showNationalTeaser: false });
   },
 
-  onOpenPlanUpgradeModal() {
+  // 🌟 featureName：具体触发这次拦截的功能名（如"多门店聚合看板"/"Excel 报表
+  // 导出"），拼进 feature-locked-modal 组件的提示文案；不传时组件自己兜底成
+  // "该功能"。大家长/超管分支不弹这个轻量拦截弹窗——直接设交接标记后跳个人
+  // 中心，profile.onShow 检测到标记会自动唤起详细的套餐订购/权益对比弹窗
+  // （唯一维护权益文案的地方，见 profile.ts showSubscriptionModal），不再
+  // 出现死循环 Toast
+  onOpenPlanUpgradeModal(featureName?: string) {
     if (this.data.isPatriarch || this.data.isAdmin) {
-      // 大家长/超管本身就有权限开通套餐：设交接标记后跳个人中心，
-      // profile.onShow 检测到标记会自动唤起套餐订购弹窗，不再出现死循环 Toast
       this.setData({ showNationalTeaser: false });
       requestOpenSubscription();
       wx.switchTab({ url: '/pages/profile/profile' });
     } else {
-      this.setData({ showPlanUpgradeModal: true });
+      this.setData({ showPlanUpgradeModal: true, planUpgradeFeatureName: featureName || '该功能' });
     }
   },
 
@@ -2131,27 +2137,14 @@ Page({
     this.setData({ showPlanUpgradeModal: false });
   },
 
-  onGoProfileFromPlanUpgrade() {
-    this.setData({ showPlanUpgradeModal: false });
-    requestOpenSubscription();
-    wx.switchTab({ url: '/pages/profile/profile' });
-  },
-
-  // 🐛 根因修复：statistics.wxml 里 honor-modal-box/plan-upgrade-modal-card 两处
-  // catchtap="stopPropagation"（阻止点击卡片内部时冒泡到外层 mask 触发关闭）一直
-  // 引用着这个方法名，但本页此前从未定义过它——每次点击都会在开发者工具触发一次
-  // "does not have a method 'stopPropagation'" 的控制台告警（catch 绑定即使方法
-  // 不存在也照样会阻止冒泡，所以功能表现正常，只是控制台一直在报噪音）。项目里
-  // 其余页面（profile/index/history 等）都已经各自定义了这个同名空方法，这里补齐，
-  // 不改变任何交互行为，只是让绑定真正解析到一个存在的函数，消除告警
+  // 🐛 根因修复：statistics.wxml 里 honor-modal-box 的 catchtap="stopPropagation"
+  // （阻止点击卡片内部时冒泡到外层 mask 触发关闭）一直引用着这个方法名，但本页
+  // 此前从未定义过它——每次点击都会在开发者工具触发一次 "does not have a method
+  // 'stopPropagation'" 的控制台告警（catch 绑定即使方法不存在也照样会阻止冒泡，
+  // 所以功能表现正常，只是控制台一直在报噪音）。项目里其余页面（profile/index/
+  // history 等）都已经各自定义了这个同名空方法，这里补齐，不改变任何交互行为，
+  // 只是让绑定真正解析到一个存在的函数，消除告警
   stopPropagation() {},
-
-  // ✅ 与原生弹窗的"确认"分支保持一致的引导行为：跳去个人中心联系客服/反馈，
-  // 而不是链到一个并不存在的自助收银台
-  onGoFeedbackFromPlanUpgrade() {
-    this.setData({ showPlanUpgradeModal: false });
-    wx.switchTab({ url: '/pages/profile/profile' });
-  },
 
   // 🐛 修复"全国平均单餐成本"异常金额：云函数已按 nationalTotalDiners>0 兜底过一次，
   // 但活跃门店数为 0（例如切到"近7天"等窄区间恰好全员离线）时同样不该展示一个具体金额——
@@ -4205,7 +4198,7 @@ Page({
     // 拦截是当前唯一的把关点
     const permission = await checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT);
     if (!permission.allowed) {
-      this.onOpenPlanUpgradeModal();
+      this.onOpenPlanUpgradeModal('Excel 报表导出');
       return;
     }
 
@@ -4246,7 +4239,7 @@ Page({
   // 「发现异常，前去处理」：关闭预览弹窗，跳转账本页核实/处理
   onExportPreviewGoFix() {
     this.setData({ showExportPreviewModal: false });
-    wx.navigateTo({ url: '/pages/history/history' });
+    safeNavigateTo({ url: '/pages/history/history' });
   },
 
   // 「数据无误，确认并导出」：关闭预览弹窗，发起真正的 xlsx 生成

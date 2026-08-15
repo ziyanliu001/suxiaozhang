@@ -430,10 +430,33 @@
     <view class="lock-force-btn" wx:if="{{currentUserRole === 'super_admin' || currentUserRole === 'store_manager'}}" bindtap="onForceUnlock">强制解锁</view>
   </view>
 
+  <!-- 🏢 空机构建店引导：账号已关联机构（isManager/isSuperAdmin，含大家长——大家长
+       天然拥有店长权限）但机构下尚无门店（currentStoreId 为空，"全部门店/全国总览"
+       这类虚拟视图用的是非空哨兵字符串，不会误触发这里）。原有工作台卡片此前会用
+       "本店"占位文案 + monthlyReportCount||14、activeVolunteersCount||28 这类硬编码
+       示例数字，渲染出一个看似正常实则完全不真实的空壳——这里改为拦截，给一个清晰的
+       "创建首家门店"入口，而不是让用户对着假数据摸不着头脑 -->
+  <block wx:if="{{!isVolunteer && !isFamily && !currentStoreId && (isManager || isSuperAdmin)}}">
+    <view style="margin: 32rpx 24rpx 120rpx; padding: 48rpx 36rpx 40rpx; background: #ffffff; border-radius: 28rpx; box-shadow: 0 10rpx 30rpx rgba(0,0,0,0.06); border: 1rpx solid #e2e8f0; box-sizing: border-box;">
+      <view style="text-align: center; margin-bottom: 24rpx;">
+        <text style="font-size: 72rpx; line-height: 1;">🏪</text>
+      </view>
+      <view style="font-size: 36rpx; font-weight: 700; color: #1e293b; text-align: center; margin-bottom: 16rpx;">您的机构还没有门店</view>
+      <view style="font-size: 26rpx; color: #64748b; text-align: center; line-height: 1.6; margin-bottom: 40rpx; padding: 0 8rpx;">创建首家门店后即可开始记账、发布菜单与管理义工团队</view>
+      <view bindtap="onGotoStoreManagement" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important; border-radius: 20rpx !important; padding: 28rpx 32rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important;">
+        <view style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 16rpx !important;">
+          <text style="font-size: 40rpx; line-height: 1;">🏪</text>
+          <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #ffffff !important; line-height: 1.3 !important;">创建首家门店</view>
+        </view>
+        <text style="font-size: 32rpx; color: rgba(255,255,255,0.8); font-weight: 300;">›</text>
+      </view>
+    </view>
+  </block>
+
   <!-- 🛡️ 家人（服务对象）不填报表、不需要计算工具——整段日报填写表单（含算式
        预览/物资登记/支出登记等十几张卡片）改为 !isVolunteer && !isFamily 才展示，
        家人走下方新增的 wx:elif="{{isFamily}}" 透明监督版分支 -->
-  <block wx:if="{{!isVolunteer && !isFamily}}">
+  <block wx:elif="{{!isVolunteer && !isFamily}}">
     <view class="sponsor-brand-banner" wx:if="{{currentSponsorInfo}}">
       <view class="sponsor-left">
         <view class="sparkle idx-icon-sm idx-icon-sparkle"></view>
@@ -1472,20 +1495,21 @@
         <view style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 16rpx !important;">
           <text style="font-size: 40rpx; line-height: 1;">🏠</text>
           <view>
-            <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #ffffff !important; line-height: 1.3 !important;">创建我的爱心站点</view>
-            <view style="font-size: 22rpx !important; color: rgba(255,255,255,0.75) !important; margin-top: 6rpx !important;">成为大家长，管理您的公益组织</view>
+            <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #ffffff !important; line-height: 1.3 !important;">创建新的爱心站点</view>
+            <view style="font-size: 22rpx !important; color: rgba(255,255,255,0.75) !important; margin-top: 6rpx !important;">以大家长身份新建并提交认证</view>
           </view>
         </view>
         <text style="font-size: 32rpx; color: rgba(255,255,255,0.8); font-weight: 300;">›</text>
       </view>
 
-      <!-- 次按钮：邀请码加入 -->
+      <!-- 次按钮：加入现有站点——onNewUserGoJoin 现已改为直接唤起"选择服务站点"弹窗
+           （见 index.ts openStorePickerForJoin），不再要求用户必须先拿到邀请码 -->
       <view bindtap="onNewUserGoJoin" style="background: #f8fafc !important; border: 1rpx solid #cbd5e1 !important; border-radius: 20rpx !important; padding: 26rpx 32rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important;">
         <view style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 16rpx !important;">
-          <text style="font-size: 40rpx; line-height: 1;">🔑</text>
+          <text style="font-size: 40rpx; line-height: 1;">🔍</text>
           <view>
-            <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #334155 !important; line-height: 1.3 !important;">通过邀请码加入</view>
-            <view style="font-size: 22rpx !important; color: #94a3b8 !important; margin-top: 6rpx !important;">已收到大家长的邀请码</view>
+            <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #334155 !important; line-height: 1.3 !important;">加入现有爱心站点</view>
+            <view style="font-size: 22rpx !important; color: #94a3b8 !important; margin-top: 6rpx !important;">扫码或从列表中选择已有站点参与</view>
           </view>
         </view>
         <text style="font-size: 32rpx; color: #94a3b8; font-weight: 300;">›</text>
@@ -2209,7 +2233,7 @@
       <!-- 1. Header（固定） -->
       <view class="apply-modal-header">
         <text class="apply-modal-title">
-          <view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店')}}
+          <view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyModalTitleOverride || (applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店'))}}
         </text>
         <text class="apply-modal-close" bindtap="onCloseApplyModal">✕</text>
       </view>
@@ -2889,11 +2913,13 @@
         <text class="meal-tip">☑️ 今日留店用餐 (方便后厨预留餐量)</text>
       </view>
 
-      <!-- 🍚 留店用餐细分餐别：勾选后展开早/午/晚 Chip 多选，精确到具体餐别方便后厨备餐 -->
+      <!-- 🍚 留店用餐细分餐别：勾选后展开门店当前开放餐次的 Chip 多选，精确到具体
+           餐别方便后厨备餐。三个 Chip 各自按 supportedMeals 是否包含对应餐次动态
+           显隐——只供午餐的门店（多数雨花斋）只会看到"午餐"一个选项 -->
       <view class="meal-type-chip-row" wx:if="{{willEatLunch}}">
-        <view class="meal-type-chip {{reservedMeals.includes('breakfast') ? 'active' : ''}}" catchtap="onToggleReservedMeal" data-meal="breakfast">早餐</view>
-        <view class="meal-type-chip {{reservedMeals.includes('lunch') ? 'active' : ''}}" catchtap="onToggleReservedMeal" data-meal="lunch">午餐</view>
-        <view class="meal-type-chip {{reservedMeals.includes('dinner') ? 'active' : ''}}" catchtap="onToggleReservedMeal" data-meal="dinner">晚餐</view>
+        <view class="meal-type-chip {{reservedMeals.includes('breakfast') ? 'active' : ''}}" wx:if="{{supportedMeals.includes('breakfast')}}" catchtap="onToggleReservedMeal" data-meal="breakfast">早餐</view>
+        <view class="meal-type-chip {{reservedMeals.includes('lunch') ? 'active' : ''}}" wx:if="{{supportedMeals.includes('lunch')}}" catchtap="onToggleReservedMeal" data-meal="lunch">午餐</view>
+        <view class="meal-type-chip {{reservedMeals.includes('dinner') ? 'active' : ''}}" wx:if="{{supportedMeals.includes('dinner')}}" catchtap="onToggleReservedMeal" data-meal="dinner">晚餐</view>
       </view>
 
       <button class="btn-confirm-checkin {{(allShiftsCompleted || isOverHoursLimit) ? 'btn-disabled' : ''}}"

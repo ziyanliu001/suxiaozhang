@@ -7,6 +7,8 @@ import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMateri
 import { getTodayIsoString } from '../../utils/dateUtils';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
+import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
+import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
 
 // 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
 // （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
@@ -139,6 +141,11 @@ Page({
     auditExportText: '',
     auditExportFileURL: '',
     auditExportFileName: '',
+    // 🔐 专业版功能拦截弹窗（见 components/feature-locked-modal）：月度财务
+    // 审计表导出与 statistics.ts 的 Excel 导出复用同一个 exportAccountExcel
+    // 云函数、同一档 FEATURE_KEYS.EXCEL_EXPORT 权限，触发拦截时用这两个字段
+    showFeatureLockedModal: false,
+    featureLockedCanSelfUpgrade: false,
 
     // 📸 图册模式：切换至照片归档浏览，隐藏账本内容
     photoArchiveMode: false,
@@ -1377,6 +1384,28 @@ Page({
   async onExportMonthlyAudit() {
     if (this.data.exportingAudit) return;
 
+    // 🔐 根因修复：月度财务审计表导出复用 exportAccountExcel 云函数（仅
+    // tabType 传 'month'），与 statistics.ts exportToExcel() 是同一档
+    // FEATURE_KEYS.EXCEL_EXPORT 专业版专属能力，但本页此前从未接入过这层
+    // 前端权限判定——免费版租户的店长/财务可以无限制生成"审计表"，与统计页
+    // 的既有拦截口径不一致，等于给同一个付费功能开了一条后门。这里补齐同款
+    // 拦截：不通过时按大家长/超管可自助开通、其余角色需联系大家长两条路径
+    // 分流，与 statistics.ts onOpenPlanUpgradeModal() 的既有分流逻辑一致
+    const permission = await checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT);
+    if (!permission.allowed) {
+      const cachedRole = AuthService.getCachedRoleInfo();
+      const canSelfUpgrade = this.data.isSuperAdmin || !!(cachedRole && cachedRole.role === 'store_patriarch');
+      if (canSelfUpgrade) {
+        // 设交接标记后跳个人中心，profile.onShow 检测到标记会自动唤起
+        // 详细的套餐订购/权益对比弹窗，不再弹这个轻量拦截提示
+        requestOpenSubscription();
+        wx.switchTab({ url: '/pages/profile/profile' });
+        return;
+      }
+      this.setData({ showFeatureLockedModal: true, featureLockedCanSelfUpgrade: false });
+      return;
+    }
+
     let yearMonth = this.data.selectedMonthStr;
     if (!yearMonth) {
       const now = new Date();
@@ -1481,6 +1510,10 @@ Page({
 
   onCloseAuditExportModal() {
     this.setData({ showAuditExportModal: false });
+  },
+
+  onCloseFeatureLockedModal() {
+    this.setData({ showFeatureLockedModal: false });
   },
 
   onCopyAuditText() {

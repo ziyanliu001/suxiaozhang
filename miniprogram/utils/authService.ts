@@ -26,6 +26,10 @@ interface RoleInfo {
   status: string;
   // 🏢 多租户：所属机构 ID（一个机构下辖多个门店），platform_admin 无归属租户
   tenantId?: string;
+  // 🏢 工作空间过滤权威口径：随身份绑定门店（stores.orgType）一并下发，供
+  // pages/index/index.ts 的雨花/通用工作空间路由使用——不再用 tenantId 前缀猜，
+  // 详见 checkUserRole 云函数同名字段注释。未绑定门店时为空字符串
+  orgType?: string;
   // 🙋 头像昵称填写规范
   avatarUrl?: string;
   nickName?: string;
@@ -300,6 +304,7 @@ export const AuthService = {
           storeName: r.storeName || '',
           status: r.status || 'guest',
           tenantId: r.tenantId || '',
+          orgType: r.orgType || '',
           avatarUrl: r.avatarUrl || '',
           nickName: r.nickName || '',
           roles: Array.isArray(r.roles) ? r.roles : []
@@ -419,6 +424,7 @@ export const AuthService = {
         storeName: (cached && cached.storeName) || '',
         status: (cached && cached.status) || 'guest',
         tenantId: (cached && cached.tenantId) || '',
+        orgType: (cached && cached.orgType) || '',
         avatarUrl: (cached && cached.avatarUrl) || '',
         nickName: (cached && cached.nickName) || '',
         roles: (cached && cached.roles) || []
@@ -467,6 +473,7 @@ export const AuthService = {
           storeName: (cached && cached.storeName) || '',
           status: (cached && cached.status) || 'guest',
           tenantId: (cached && cached.tenantId) || '',
+          orgType: (cached && cached.orgType) || '',
           avatarUrl: fields.avatarUrl !== undefined ? fields.avatarUrl : ((cached && cached.avatarUrl) || ''),
           nickName: fields.nickName !== undefined ? fields.nickName : ((cached && cached.nickName) || ''),
           roles: (cached && cached.roles) || []

@@ -155,6 +155,10 @@ Page({
     platformFamilyLabel: '',
     platformFamilyPickerIndex: 0,
     platformFamilyOptions: PLATFORM_FAMILY_OPTIONS,
+    // 🍚 供餐餐次配置：绝大多数雨花斋只供午餐，默认单餐次。打卡弹窗"今日留店用餐"
+    // Chip 行、岗位班次列表、餐报文本/公示海报的供餐人数汇总均按这里读取的真实值
+    // 动态适配（见 index.ts loadStoreTargetConfig/buildMealBreakdown）
+    supportedMeals: ['lunch'] as string[],
     // 🏷️ 服务受众标签配置：platformBrand（品牌名）+ targetLabels（填报表单自适应文案）
     serviceTargetConfig: null as null | {
       platformBrand?: string;
@@ -202,6 +206,8 @@ Page({
       city: '',
       orgType: '',
       platformFamily: '',
+      // 🍚 供餐餐次配置：与展示态同步，编辑态用 Checkbox 多选
+      supportedMeals: ['lunch'] as string[],
       // 🏷️ 服务受众标签配置：与展示态同步，编辑时直接修改这四项文案
       platformBrand: '',
       dineInLabel: '',
@@ -375,6 +381,12 @@ Page({
       const loadedOrgType = data.orgType || '';
       update.orgType = loadedOrgType;
       update.orgTypeLabel = ORG_TYPE_LABEL_MAP[loadedOrgType] || '';
+      // 🍚 供餐餐次配置：云端未配置过（历史门店）时回退默认单午餐档，与
+      // manageStoreProfile 云函数 get 分支的兜底口径一致
+      const loadedSupportedMeals = data.mealConfig && Array.isArray(data.mealConfig.supportedMeals) && data.mealConfig.supportedMeals.length > 0
+        ? data.mealConfig.supportedMeals
+        : ['lunch'];
+      update.supportedMeals = loadedSupportedMeals;
       update.adminKeySet = !!data.adminKeySet;
       update.adminKeyCurrentVal = data.adminKey || '';
       // 🏷️ 服务受众标签配置：从云端加载，无配置时退回当前 orgType 的默认值
@@ -458,6 +470,8 @@ Page({
     PROFILE_FIELDS.forEach((f) => { editForm[f] = String((this.data as any)[f] || 0); });
     TEXT_PROFILE_FIELDS.forEach((f) => { editForm[f] = (this.data as any)[f] || ''; });
     editForm.platformFamily = this.data.platformFamily || '';
+    // 🍚 供餐餐次配置：编辑时预填当前配置，slice() 避免编辑态直接引用展示态数组
+    editForm.supportedMeals = (this.data.supportedMeals || ['lunch']).slice();
     // 🏷️ 服务受众标签配置：编辑时预填当前配置（若无则用 orgType 默认值）
     const stc = this.data.serviceTargetConfig;
     const defLabels = (ORG_TYPE_DEFAULT_TARGET_LABELS as any)[this.data.orgType] || DEFAULT_TARGET_LABELS;
@@ -489,6 +503,21 @@ Page({
 
   onSelectOperatingStatus(e: any) {
     this.setData({ 'editForm.operatingStatus': e.currentTarget.dataset.value });
+  },
+
+  // 🍚 供餐餐次 Chip 多选：早餐/午餐/晚餐可任意组合勾选，与首页打卡弹窗的
+  // onToggleReservedMeal 同一套交互习惯。至少保留一个餐次——取消勾选会导致
+  // 只剩 0 个餐次时直接吞掉这次点击并提示，不允许保存出"什么都不供"的门店配置
+  onToggleEditSupportedMeal(e: any) {
+    const meal = e.currentTarget.dataset.meal;
+    if (!meal) return;
+    const current = this.data.editForm.supportedMeals || [];
+    if (current.includes(meal) && current.length <= 1) {
+      wx.showToast({ title: '至少保留一个供餐餐次', icon: 'none' });
+      return;
+    }
+    const next = current.includes(meal) ? current.filter((m: string) => m !== meal) : [...current, meal];
+    this.setData({ 'editForm.supportedMeals': next });
   },
 
   onEditOpenDateChange(e: any) {
@@ -633,6 +662,8 @@ Page({
         }
       };
       payload.operatingStatus = this.data.editForm.operatingStatus;
+      // 🍚 供餐餐次配置：服务端会做白名单校验 + 空数组兜底默认单午餐档
+      payload.supportedMeals = this.data.editForm.supportedMeals || ['lunch'];
       // 🏅 只提交 storePhotos——门头照/民政备案复印件/食品安全承诺走各自独立的
       // "门店资质与实景公示"弹窗（onSaveQualification），不在这份整页提交里，
       // 避免把 payload 里不存在的字段用 undefined 覆盖回本地展示态（见下方两处
@@ -658,6 +689,7 @@ Page({
         PROFILE_FIELDS.forEach((f) => { pendingProfileUpdate[f] = payload[f]; });
         TEXT_PROFILE_FIELDS.forEach((f) => { pendingProfileUpdate[f] = payload[f]; });
         pendingProfileUpdate.storePhotos = payload.storePhotos;
+        pendingProfileUpdate.supportedMeals = payload.supportedMeals;
         this.setData({ editing: false, pendingProfileUpdate });
         wx.showModal({ title: '已提交审批', content: result.message || '已提交家长/超管审批，确认后生效', showCancel: false });
         return;
@@ -673,6 +705,7 @@ Page({
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = payload[f]; });
       update.serviceTargetConfig = payload.serviceTargetConfig || null;
       update.storePhotos = payload.storePhotos;
+      update.supportedMeals = payload.supportedMeals;
       if (payload.latitude !== undefined) {
         update.latitude = payload.latitude;
         update.longitude = payload.longitude;

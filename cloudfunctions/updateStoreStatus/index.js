@@ -11,6 +11,7 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
 
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
@@ -106,11 +107,22 @@ exports.main = async (event) => {
       return { success: true, message: '状态未变化', storeId, status };
     }
 
+    // 🛡️ 操作日志留痕：lastStatusChangedBy/At 只是"最近一次变更"的快照，无法
+    // 回答"这家门店历史上被谁停用/启用过几次"。operationLog 是追加式数组，
+    // 与 manageTenantSubscription 云函数 renewalHistory 的留痕方式保持同一
+    // 套约定，供门店管理页后续展示完整变更时间线
     await db.collection('stores').doc(storeId).update({
       data: {
         status,
         lastStatusChangedBy: OPENID,
-        lastStatusChangedAt: db.serverDate()
+        lastStatusChangedAt: db.serverDate(),
+        operationLog: _.push({
+          action: 'status_change',
+          operatorId: OPENID,
+          operateTime: db.serverDate(),
+          before: store.status || '',
+          after: status
+        })
       }
     });
 

@@ -1,4 +1,5 @@
 import { AuthService } from '../../utils/authService';
+import { safeNavigateTo } from '../../utils/navHelper';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
 
@@ -555,7 +556,7 @@ Component({
       const currentPage = pages[pages.length - 1];
       const currentRoute = currentPage ? '/' + currentPage.route : '';
       if (currentRoute !== '/pages/profile/profile') {
-        wx.navigateTo({ url: '/pages/profile/profile' });
+        safeNavigateTo({ url: '/pages/profile/profile' });
       }
     },
 
@@ -643,37 +644,26 @@ Component({
       this._applyRoleSwitch('national_overview', '全国总览', role);
     },
 
-    // 内部：执行角色切换 (公共逻辑)
-    //
-    // 🐛 根因修复："切到家长身份后个人中心仍显示志工"：本方法此前只写了
-    // active_store_id/active_role 两个 key，从没写过 current_user_role/
-    // current_store_name——而 profile.ts 的 initMinePage() 恰恰优先读
-    // current_user_role（有值就用它覆盖 AuthService 缓存里的真实角色），这个
-    // key 此前只有 index.ts 自己的 onStoreChanged 会写。于是任何"只经过
-    // store-picker、没有先在首页触发过 onStoreChanged"的角色切换，profile.ts
-    // 重新计算角色时读到的都是这个滞留的旧值——现在这里也补上同一份持久化，
-    // 与 index.ts onStoreChanged 的 roleMap 保持同一套映射口径
-    _applyRoleSwitch(storeId: string, storeName: string, role: string) {
-      // 🆕 先只更新选中态，不立即收起面板——让用户先看到身份 tag 上的高亮边框/
-      // ✔ 勾选反馈落地，200ms 后再自动关闭弹窗，体验上更接近"确认已生效"而不是
-      // 点击瞬间面板突然消失
-      this.setData({
-        currentStore: {
-          storeId,
-          storeName,
-          role: role as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
-        }
-      });
-
+    // 🐛 根因修复："切到全国总览/新建门店后，记账/公告/活动日志仍读到旧门店"：
+    // 本组件此前有三处（本方法 _applyRoleSwitch、新建门店自动审批分支、超管
+    // 直接建店 directCreateStoreAsSuperAdmin）各自手写 Storage 持久化，且各自
+    // 遗漏的 key 都不一样——最典型的是全都漏写了 current_store_id（只写了
+    // active_store_id）。dataService.ts saveReport() 兜底取 storeId、以及
+    // daily-menu.ts/notice.ts/activity-log.ts 这三个页面读取"当前门店"时都
+    // 只认 current_store_id 且没有任何 fallback（不像 history.ts/index.ts 那样
+    // 还会兜底读 active_store_id 或调用 getSelectedStore()）——一旦经由本组件
+    // 切换门店/角色，这几处会继续读到切换前的旧 storeId，把新记账/公告/活动
+    // 日志错误地挂到旧门店名下，是"全局 storeId 与页面上下文不同步"的根因。
+    // 收敛成一个统一的持久化方法，三处调用点都改走这里，一次性写全 5 个
+    // canonical key（与 index.ts onStoreChanged 的既有持久化口径完全对齐），
+    // 不再各自维护一份不完整的 key 清单
+    _persistStoreSelection(storeId: string, storeName: string, role: string) {
       const app = getApp() as any;
       if (app && app.switchStore) {
         app.switchStore(storeId, storeName, role);
       } else if (app && app.globalData) {
         app.globalData.currentStore = { storeId, storeName, role };
       }
-
-      wx.setStorageSync('active_store_id', storeId);
-      wx.setStorageSync('active_role', role);
 
       // 🛡️ 全局排查修复：role 入参在实践中恒为本组件胶囊裸值（PATRIARCH/FAMILY 等），
       // 但仍额外补上 STORE_ 前缀键做防御性冗余——万一将来有调用方直接传入服务端
@@ -689,8 +679,28 @@ Component({
         FAMILY: 'store_family',
         STORE_FAMILY: 'store_family'
       };
-      wx.setStorageSync('current_user_role', roleStorageMap[role] || 'volunteer');
+
+      wx.setStorageSync('current_store_id', storeId);
       wx.setStorageSync('current_store_name', storeName);
+      wx.setStorageSync('current_user_role', roleStorageMap[role] || 'volunteer');
+      wx.setStorageSync('active_store_id', storeId);
+      wx.setStorageSync('active_role', role);
+    },
+
+    // 内部：执行角色切换 (公共逻辑)
+    _applyRoleSwitch(storeId: string, storeName: string, role: string) {
+      // 🆕 先只更新选中态，不立即收起面板——让用户先看到身份 tag 上的高亮边框/
+      // ✔ 勾选反馈落地，200ms 后再自动关闭弹窗，体验上更接近"确认已生效"而不是
+      // 点击瞬间面板突然消失
+      this.setData({
+        currentStore: {
+          storeId,
+          storeName,
+          role: role as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
+        }
+      });
+
+      this._persistStoreSelection(storeId, storeName, role);
 
       this.triggerEvent('storechange', {
         storeId,
@@ -1148,14 +1158,7 @@ Component({
             showNewStoreForm: false,
             showPickerSheet: false
           });
-          const app = getApp() as any;
-          if (app && app.switchStore) {
-            app.switchStore(newStoreId, newStoreName, 'PATRIARCH');
-          } else if (app && app.globalData) {
-            app.globalData.currentStore = { storeId: newStoreId, storeName: newStoreName, role: 'PATRIARCH' };
-          }
-          wx.setStorageSync('active_store_id', newStoreId);
-          wx.setStorageSync('active_role', 'PATRIARCH');
+          this._persistStoreSelection(newStoreId, newStoreName, 'PATRIARCH');
           wx.showToast({ title: '新门店已建好，您已自动成为大家长兼店长！', icon: 'success', duration: 3000 });
           this.triggerEvent('storechange', { storeId: newStoreId, storeName: newStoreName, role: 'PATRIARCH', currentRole: 'PATRIARCH' });
           this.triggerEvent('storelistchange', {});
@@ -1208,14 +1211,7 @@ Component({
           showPickerSheet: false
         });
 
-        const app = getApp() as any;
-        if (app && app.switchStore) {
-          app.switchStore(newStoreId, newStoreName, 'ADMIN');
-        } else if (app && app.globalData) {
-          app.globalData.currentStore = { storeId: newStoreId, storeName: newStoreName, role: 'ADMIN' };
-        }
-        wx.setStorageSync('active_store_id', newStoreId);
-        wx.setStorageSync('active_role', 'ADMIN');
+        this._persistStoreSelection(newStoreId, newStoreName, 'ADMIN');
 
         wx.showToast({ title: '新门店已创建成功，您已自动获得该店店长管理权限！', icon: 'none', duration: 3000 });
 

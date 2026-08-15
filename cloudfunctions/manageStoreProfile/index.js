@@ -42,6 +42,21 @@ const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'r
 // 归并到同一品牌矩阵，用于全国大屏的"同心慈善会矩阵 / 雨花矩阵"聚合筛选
 const VALID_PLATFORM_FAMILIES = ['tongxin', 'yuhuazhai', ''];
 
+// 🍚 供餐餐次配置（meal_config.supported_meals）：绝大多数雨花斋只供午餐，默认单餐次；
+// 部分社区助餐点/长者食堂会额外供应早餐或晚餐——打卡弹窗的"留店用餐"选项与岗位班次
+// 列表、餐报文本/公示海报的供餐人数汇总，均按这里配置的餐次动态适配（见 index.ts
+// loadStoreTargetConfig/refreshTodayShiftStatus 与 reportGenerator.ts/posterGenerator.ts）
+const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
+const DEFAULT_SUPPORTED_MEALS = ['lunch'];
+
+// 白名单过滤 + 去重 + 兜底默认值：清洗后为空（未传/全部非法值）时回退单午餐默认档，
+// 不允许写出"一个餐次都不支持"这种无意义的门店配置
+function sanitizeSupportedMeals(v) {
+  if (!Array.isArray(v)) return DEFAULT_SUPPORTED_MEALS.slice();
+  const cleaned = Array.from(new Set(v.filter((m) => MEAL_TYPES.includes(m))));
+  return cleaned.length > 0 ? cleaned : DEFAULT_SUPPORTED_MEALS.slice();
+}
+
 // 🏷️ 服务受众标签配置（serviceTargetConfig）：允许各机构自定义首页填报表单的文案标签，
 // 实现"零代码适配同心儿童院"等新业态。targetLabels 中的字段名与首页表单字段一一对应。
 const VALID_TARGET_LABEL_KEYS = ['dineInLabel', 'deliveryLabel', 'listenLabel', 'takeoutLabel'];
@@ -255,6 +270,8 @@ exports.main = async (event, context) => {
           // 🌟 真实机构业态类型（VALID_ORG_TYPES 之一，见文件头），供前端驱动机构
           // 归属徽标/文化入口文案等展示，替代此前只能靠 tenantId 前缀粗猜的口径
           orgType: store.orgType || '',
+          // 🍚 供餐餐次配置：未配置过（历史门店/新建门店尚未显式设置）时回退默认单午餐档
+          mealConfig: { supportedMeals: sanitizeSupportedMeals(store.mealConfig && store.mealConfig.supportedMeals) },
           ...profile
         }
       };
@@ -290,6 +307,10 @@ exports.main = async (event, context) => {
       if (event.platformFamily !== undefined) {
         const pf = String(event.platformFamily || '').trim();
         updateFields.platformFamily = VALID_PLATFORM_FAMILIES.includes(pf) ? pf : '';
+      }
+      // 🍚 供餐餐次配置：白名单校验 + 兜底默认单午餐档，不允许写出空数组
+      if (event.supportedMeals !== undefined) {
+        updateFields.mealConfig = { supportedMeals: sanitizeSupportedMeals(event.supportedMeals) };
       }
       // 🌟 店铺模板自定义字段：同样"只在调用方真的传了才写入"，只提交部分字段（如只改
       // 致谢词）时不会把没提交的宣传标语静默清空
@@ -422,6 +443,9 @@ exports.main = async (event, context) => {
       if (pending.platformFamily !== undefined) {
         const pf = String(pending.platformFamily || '').trim();
         updateData.platformFamily = VALID_PLATFORM_FAMILIES.includes(pf) ? pf : '';
+      }
+      if (pending.mealConfig && pending.mealConfig.supportedMeals !== undefined) {
+        updateData.mealConfig = { supportedMeals: sanitizeSupportedMeals(pending.mealConfig.supportedMeals) };
       }
       if (VALID_OPERATING_STATUSES.includes(pending.operatingStatus)) {
         updateData.operatingStatus = pending.operatingStatus;

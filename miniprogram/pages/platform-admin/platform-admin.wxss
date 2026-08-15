@@ -239,11 +239,38 @@
   background: #FFF5F0;
 }
 
+/* 🆓 基础版门店配额锁定态：与 .pa-input 保持同样的尺寸/圆角，只是置灰+不可点，
+   让用户一眼看出"这个字段现在不可编辑"而不是"这个字段坏了" */
+.pa-input-disabled {
+  background: #EBEDF0;
+  color: #999999;
+}
+
 .pa-field-error {
   display: block;
   font-size: 22rpx;
   color: #E8590C;
   margin-bottom: 12rpx;
+}
+
+.pa-field-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  margin-bottom: 12rpx;
+}
+
+/* 🌿 基础版"永久有效"提示条：替代到期日期输入框的位置，视觉上与 .pa-input
+   同高但用绿色系区分"这是一条状态说明，不是待填写的表单项" */
+.pa-permanent-badge {
+  display: flex;
+  align-items: center;
+  background: #F0F9F0;
+  color: #2B8A3E;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  font-size: 26rpx;
+  margin-bottom: 20rpx;
 }
 
 .pa-textarea {
@@ -318,6 +345,75 @@
   font-size: 20rpx;
 }
 
+.pa-tenant-store-count {
+  color: #495057;
+  font-weight: 600;
+}
+
+/* 🏪 门店容量进度条：配额未满是绿色，配额已满（isStoreQuotaFull）变红，
+   与「已达配额上限」的建店拦截提示保持同一套视觉语义 */
+.pa-store-quota-row {
+  margin-bottom: 10rpx;
+}
+
+.pa-store-quota-bar {
+  margin-top: 6rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #E9ECEF;
+  overflow: hidden;
+}
+
+.pa-store-quota-bar-fill {
+  height: 100%;
+  border-radius: 4rpx;
+  background: #4CAF50;
+  transition: width 0.2s ease;
+}
+
+.pa-store-quota-bar-fill.pa-store-quota-bar-full {
+  background: #C62828;
+}
+
+/* 🏪 机构下挂门店抽屉：与授权码台账卡片（.pa-code-card）同一套滚动/间距习惯 */
+.pa-tenant-store-list {
+  max-height: 720rpx;
+}
+
+.pa-tenant-store-row {
+  background: #F8F9FA;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.pa-tenant-store-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.pa-tenant-store-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #1C2530;
+}
+
+.pa-tenant-store-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
+/* 最多三个按钮同时出现（停用/启用 + 解除家长 + 移出机构）时，每个至少占约
+   半行宽度再换行，避免三个 flex:1 挤在一行导致文字被压得太窄 */
+.pa-tenant-store-actions .pa-btn-small {
+  flex: 1 1 auto;
+  min-width: 160rpx;
+}
+
 /* 🎨 套餐 Tag：免费版灰色/专业版金色/旗舰版深色，即将到期橙色警告——
    与机构自身运营状态的 .pa-status-* 色系区分开，这是订阅套餐维度的标签 */
 .pa-tenant-plan-row {
@@ -365,8 +461,17 @@
 
 .pa-tenant-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 16rpx;
   margin-top: 16rpx;
+}
+
+/* 最多四个按钮同时出现（查看门店/开通续费/终止订阅/暂停服务）时允许换行，
+   避免四个 flex:1 挤在一行导致文字被压得太窄，与 .pa-tenant-store-actions
+   同一套处理方式 */
+.pa-tenant-actions .pa-btn-small {
+  flex: 1 1 auto;
+  min-width: 160rpx;
 }
 
 .pa-btn-small {
@@ -393,6 +498,13 @@
 .pa-btn-warn {
   background: #FBE9E7;
   color: #C62828;
+}
+
+/* 🚪 移出机构：比 .pa-btn-warn（停用，尚可恢复）更强烈的警示色——清空
+   tenantId 意味着门店直接脱离机构归属，是这一排操作里最"重"的一个 */
+.pa-btn-danger {
+  background: #C92A2A;
+  color: #FFFFFF;
 }
 
 .pa-soon-expire-box {
@@ -545,10 +657,26 @@
   background: #9E9E9E;
 }
 
+.pa-code-status-REVOKED {
+  background: #C92A2A;
+}
+
 .pa-code-row-bottom {
   display: flex;
   align-items: center;
   gap: 10rpx;
+}
+
+/* 🗑️ 作废按钮：与门店管理页停用按钮同一套警示红色系，靠 margin-left: auto
+   贴右对齐，与前面的套餐/有效期徽章保持左对齐的同一行 */
+.pa-code-revoke-btn {
+  margin-left: auto;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #C92A2A;
+  border: 2rpx solid #C92A2A;
+  border-radius: 20rpx;
+  padding: 4rpx 20rpx;
 }
 
 /* 🎨 有效期天数徽章：与套餐 Tag 并排，颜色区分开——套餐是"哪个档位"，
@@ -576,6 +704,12 @@
 .pa-code-redeemed-row {
   font-size: 22rpx;
   color: #666666;
+}
+
+/* 🗑️ 已作废信息盒子：复用 .pa-code-redeemed-box 的布局，仅分隔线换成警示色，
+   与上面 .pa-code-status-REVOKED 的红色系呼应 */
+.pa-code-revoked-box {
+  border-top-color: #FFC9C9;
 }
 
 /* ═══════════════════════════════════════════════════════════════

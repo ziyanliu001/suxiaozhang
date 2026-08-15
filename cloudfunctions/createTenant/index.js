@@ -98,6 +98,9 @@ exports.main = async (event, context) => {
           contactPhone:   phone   || '',
           province:       province || '',
           city:           city     || '',
+          // 🍚 供餐餐次配置：绝大多数雨花斋只供午餐，默认单餐次——与
+          // manageStoreProfile/createStore 同一份默认档口径
+          mealConfig: { supportedMeals: ['lunch'] },
           createdBy: OPENID,
           createdAt: now
         }

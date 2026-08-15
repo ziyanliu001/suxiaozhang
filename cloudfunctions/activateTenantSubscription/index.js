@@ -21,6 +21,10 @@
 //                        铸造与分发管理页依赖这个动作回看历史批次、核对哪些
 //                        已经被兑换、卖给了哪家机构，不是本次自动化范围但同样
 //                        只对平台管理员开放
+// action: 'revoke'   —— 平台管理员作废一张尚未核销的激活码（如铸造错档位/
+//                        打印出错/联系人取消订单），仅对 status === 'UNUSED'
+//                        的码生效——已核销的码代表机构已经拿到了实打实的套餐
+//                        权益，作废它不会、也不该收回已生效的 tenant_subscriptions
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -35,6 +39,13 @@ const DEFAULT_PLAN_TYPE = 'pro';
 const VALID_PLAN_TYPES = ['pro', 'enterprise'];
 const PLAN_RANK = { basic: 0, pro: 1, enterprise: 2 };
 const MAX_BATCH_QUANTITY = 50;
+
+// 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——与 checkTenantPermission/
+// createStore/manageTenantSubscription 三处完全同一份拷贝（本仓库一贯做法：
+// 各云函数独立部署，没有跨函数共享模块机制）。兑换激活码时按码上标注的套餐
+// 档位自动同步门店上限（见 handleRedeem），不需要平台管理员再手动补一次
+// createOrRenewSubscription 才能把门店配额调对
+const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
 // 🌟 高对比度字符集：剔除 0/O、1/I 这类肉眼易混淆字符，与 manageStoreInviteCode
 // 同一套生成规则，人工朗读/誊抄卡号不容易抄错
@@ -156,7 +167,7 @@ async function handleList(event, OPENID) {
   await ensureActivationCodesCollection();
 
   const where = {};
-  if (event.status === 'UNUSED' || event.status === 'USED') {
+  if (event.status === 'UNUSED' || event.status === 'USED' || event.status === 'REVOKED') {
     where.status = event.status;
   }
 
@@ -198,13 +209,16 @@ async function handleList(event, OPENID) {
     hasMore,
     nextSkip: skip + codes.length,
     codes: codes.map((c) => ({
+      _id: c._id,
       code: c.code,
       planType: c.planType,
       durationDays: c.durationDays,
       status: c.status,
       createdAt: c.createdAt,
       redeemedAt: c.redeemedAt,
-      redeemedByTenantName: c.redeemedByTenantId ? (tenantNameMap[c.redeemedByTenantId] || c.redeemedByTenantId) : ''
+      redeemedByTenantName: c.redeemedByTenantId ? (tenantNameMap[c.redeemedByTenantId] || c.redeemedByTenantId) : '',
+      revokedAt: c.revokedAt,
+      revokeReason: c.revokeReason || ''
     }))
   };
 }
@@ -271,6 +285,15 @@ async function handleRedeem(event, OPENID) {
   const codePlanRank = PLAN_RANK[planType] || 0;
   const finalPlanType = codePlanRank >= existingPlanRank ? planType : existing.planType;
 
+  // 🏢 任务 A：核销成功后同步更新最大允许门店数（cloudQuota.storeLimit）。
+  // 同样"只升不降"——取"该档位的默认配额"与"机构此前已有的配额"两者较大值，
+  // 而不是无条件覆盖：避免抹掉平台管理员此前手动为该机构额外购买的扩容包
+  // 配额（如 enterprise 默认 30 家，但这家机构谈了个 50 家的定制合同），
+  // 兑换一张不影响档位的低阶码也不应该把扩容包配额打回默认值
+  const existingStoreLimit = (existing && existing.cloudQuota && existing.cloudQuota.storeLimit) || 0;
+  const planDefaultStoreLimit = PLAN_STORE_LIMITS[finalPlanType] || PLAN_STORE_LIMITS[DEFAULT_PLAN_TYPE];
+  const finalStoreLimit = Math.max(existingStoreLimit, planDefaultStoreLimit);
+
   const renewalEntry = {
     operatorId: OPENID,
     operateTime: db.serverDate(),
@@ -287,7 +310,8 @@ async function handleRedeem(event, OPENID) {
         serviceStartDate: existing.serviceStartDate || today,
         status: 'active',
         lastRenewedAt: db.serverDate(),
-        renewalHistory: _.push(renewalEntry)
+        renewalHistory: _.push(renewalEntry),
+        cloudQuota: { ...(existing.cloudQuota || {}), storeLimit: finalStoreLimit }
       }
     });
   } else {
@@ -296,7 +320,7 @@ async function handleRedeem(event, OPENID) {
       planType: finalPlanType,
       serviceStartDate: today,
       serviceExpireDate: newExpireDate,
-      cloudQuota: {},
+      cloudQuota: { storeLimit: finalStoreLimit },
       status: 'active',
       lastRenewedAt: db.serverDate(),
       renewalHistory: [renewalEntry]
@@ -329,9 +353,53 @@ async function handleRedeem(event, OPENID) {
     success: true,
     data: {
       planType: finalPlanType,
-      serviceExpireDate: newExpireDate
+      serviceExpireDate: newExpireDate,
+      storeLimit: finalStoreLimit
     }
   };
+}
+
+// 🗑️ 作废激活码：仅平台管理员可执行，且只对 status === 'UNUSED' 的码生效。
+// 按 _id 精确定位（而不是重新解析用户输入的卡号文本）——本函数只在平台管理员
+// 自己的台账列表里调用，doc._id 早已由 handleList 原样透传给前端，不存在
+// "作废别人猜出来的码" 这类越权场景，不需要走 handleRedeem 那套输入校验/
+// 归一化逻辑
+async function handleRevoke(event, OPENID) {
+  const caller = await resolveCaller(OPENID);
+  if (!caller || caller.role !== 'platform_admin') {
+    return { success: false, error: '无权限：仅平台管理员可作废激活码' };
+  }
+
+  const codeId = event.codeId;
+  if (!codeId) {
+    return { success: false, error: '缺少 codeId 参数' };
+  }
+  const reason = String(event.reason || '').trim();
+  if (!reason) {
+    return { success: false, error: '请填写作废原因，便于后续对账审计' };
+  }
+
+  const codeRes = await db.collection(ACTIVATION_CODES_COLLECTION).doc(codeId).get().catch(() => null);
+  const codeDoc = codeRes && codeRes.data;
+  if (!codeDoc) {
+    return { success: false, error: '激活码不存在' };
+  }
+  if (codeDoc.status !== 'UNUSED') {
+    // 🛡️ 已核销的码代表机构已经拿到了实打实的套餐权益，作废它不会、也不该
+    // 收回已生效的 tenant_subscriptions——只有还没被兑换掉的码才能作废
+    return { success: false, error: codeDoc.status === 'REVOKED' ? '该激活码已作废，无需重复操作' : '该激活码已被核销，无法作废' };
+  }
+
+  await db.collection(ACTIVATION_CODES_COLLECTION).doc(codeId).update({
+    data: {
+      status: 'REVOKED',
+      revokedBy: OPENID,
+      revokedAt: db.serverDate(),
+      revokeReason: reason
+    }
+  });
+
+  return { success: true };
 }
 
 exports.main = async (event) => {
@@ -348,6 +416,9 @@ exports.main = async (event) => {
     }
     if (action === 'redeem') {
       return await handleRedeem(event, OPENID);
+    }
+    if (action === 'revoke') {
+      return await handleRevoke(event, OPENID);
     }
     if (action === 'list') {
       return await handleList(event, OPENID);

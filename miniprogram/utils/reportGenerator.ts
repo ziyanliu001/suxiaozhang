@@ -44,6 +44,10 @@ export interface ReportData {
   volunteerCount?: number;
   volunteerHours?: number;
   diningCount?: number;
+  // 🍚 按门店开启餐次动态生成的供餐人数细分（仅门店开放不止一个餐次时才有值，
+  // 见 index.ts buildMealBreakdown）——只供一种餐次的门店不需要这份细分，
+  // 与 diningCount 汇总数字重复
+  mealBreakdown?: Array<{ label: string; count: number }>;
   stapleRiceStatus?: string;
   stapleOilStatus?: string;
   noticeTag?: string;
@@ -60,7 +64,7 @@ export function formatMoney(value: number): string {
 }
 
 export function generateReportText(data: ReportData): string {
-  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode, isAnonymous } = data;
+  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, mealBreakdown, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode, isAnonymous } = data;
 
   const defaultThankText = '感谢大家的自愿赞助\n与默默付出的义工！';
   const defaultSlogan1 = '吃 素 一 日   健 康 一 天';
@@ -144,14 +148,22 @@ export function generateReportText(data: ReportData): string {
   if (reportDate) textArray.push(`📅 汇报日期：${reportDate}`);
   textArray.push('');
 
-  const hasDiningStats = (volunteerCount && volunteerCount > 0) || (volunteerHours && volunteerHours > 0) || (diningCount && diningCount > 0);
-  
+  const hasMealBreakdown = !!(mealBreakdown && mealBreakdown.length > 0);
+  const hasDiningStats = (volunteerCount && volunteerCount > 0) || (volunteerHours && volunteerHours > 0) || (diningCount && diningCount > 0) || hasMealBreakdown;
+
   if (hasDiningStats) {
     textArray.push(`🤝【义工与结缘成果】`);
     if (diningCount && diningCount > 0) {
       textArray.push(`• 今日结缘用餐：${diningCount} 人次`);
     } else {
       textArray.push(`• 运营状态：休餐筹措期 (未正式开餐)`);
+    }
+    // 🍚 按门店开启餐次动态生成的供餐人数细分：只在门店配置了不止一个餐次时
+    // 才有数据（见 index.ts buildMealBreakdown），逐段列出各餐次的留餐人数
+    if (hasMealBreakdown) {
+      mealBreakdown!.forEach((row) => {
+        textArray.push(`• ${row.label}：${row.count} 人`);
+      });
     }
     if (volunteerCount && volunteerCount > 0) {
       textArray.push(`• 到岗护持义工：${volunteerCount} 人 (服务总时长 ${volunteerHours || 0} 小时)`);

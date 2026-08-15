@@ -733,4 +733,12 @@
       </view>
     </view>
   </view>
+
+  <!-- 🔐 专业版功能拦截弹窗：月度财务审计表导出为专业版专属，见 onExportMonthlyAudit -->
+  <feature-locked-modal
+    visible="{{showFeatureLockedModal}}"
+    feature-name="月度财务审计表导出"
+    can-self-upgrade="{{featureLockedCanSelfUpgrade}}"
+    bind:close="onCloseFeatureLockedModal"
+  />
 </view>

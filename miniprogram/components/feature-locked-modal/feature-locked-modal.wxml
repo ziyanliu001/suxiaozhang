@@ -1,0 +1,11 @@
+<view class="flm-mask" wx:if="{{visible}}" bindtap="onClose">
+  <view class="flm-card" catchtap="noop">
+    <view class="flm-title">🔒 功能受限</view>
+    <view class="flm-content" wx:if="{{canSelfUpgrade}}">{{featureName}}为专业版/旗舰版专属。作为大家长，您可前往个人中心直接开通，解锁全部高级权益。</view>
+    <view class="flm-content" wx:else>{{featureName}}为专业版/旗舰版专属，请联系您所在站点的大家长在线开通。</view>
+    <view class="flm-footer">
+      <button class="flm-btn-cancel" bindtap="onClose">{{canSelfUpgrade ? '稍后再说' : '知道了'}}</button>
+      <button class="flm-btn-confirm" bindtap="onConfirm">{{canSelfUpgrade ? '立即前往' : '去了解'}}</button>
+    </view>
+  </view>
+</view>
