@@ -1347,7 +1347,13 @@ Page({
       if (flags.canAuditUser && cached.storeId) {
         this.fetchPendingAuditCount(cached.storeId);
       }
-      if (flags.canSwitchStore) {
+      // 🐛 二次修复：canSwitchStore 只对 super_admin 为 true，此前普通店长
+      // （isManager 但不是 isSuperAdmin）尚未绑定具体门店时，"该机构已有 N 家门店"
+      // 空态卡片依赖的 allStoresList 永远不会被拉取（一直是空数组），导致哪怕机构下
+      // 其实已有门店，卡片也误判成"机构一家门店都没有"，错误引导去创建新店而不是
+      // 选择已有门店。这里额外补上"isManager 且尚未绑定门店"这条路径，与
+      // canSwitchStore 并列，确保空态卡片能看到真实的机构门店列表
+      if (flags.canSwitchStore || (isManager && !storeId)) {
         this.fetchAllStoresList();
       }
     }
@@ -1401,7 +1407,10 @@ Page({
       if (flags.canAuditUser && info.storeId) {
         this.fetchPendingAuditCount(info.storeId);
       }
-      if (flags.canSwitchStore) {
+      // 🐛 同上一处 cached 分支注释：服务端权威角色落地后同样要按这条并列条件补拉
+      // allStoresList，否则店长账号首次冷启动（无本地 cached 角色，只有这条权威路径
+      // 会执行）依旧看不到机构已有门店列表
+      if (flags.canSwitchStore || (isManager && !storeId)) {
         this.fetchAllStoresList();
       }
     }
@@ -1467,6 +1476,7 @@ Page({
           const parsedCache = JSON.parse(cached);
           if (Array.isArray(parsedCache)) {
             this.setData({ allStoresList: parsedCache });
+            this.maybeAutoSelectStore(parsedCache);
             return;
           }
           console.warn('[fetchAllStoresList] 本地缓存内容不是数组，丢弃并改走云端查询');
@@ -1489,12 +1499,34 @@ Page({
       const cloudResult = cloudRes.result as any;
       const list = (cloudResult && cloudResult.success) ? (cloudResult.list || []) : [];
       this.setData({ allStoresList: list });
+      this.maybeAutoSelectStore(list);
 
       // 缓存到本地（按专区区分的 key）
       wx.setStorageSync(cacheKey, JSON.stringify(list));
       wx.setStorageSync(cacheTimeKey, Date.now());
     } catch (e) {
       console.error('[fetchAllStoresList] 查询失败:', e);
+    }
+  },
+
+  // 🐛 根因修复："机构已有门店，账号自己没绑定"场景下，此前工作台会一直卡在
+  // "该机构已有 N 家门店"空态卡片，必须用户手动点开选择器才能进入——机构下明明
+  // 已有门店（甚至只有一家）时，这一步手动确认几乎总是多余的。这里在 allStoresList
+  // 每次刷新后自动补一次默认选中：优先复用 getSelectedStore() 记录的"上次访问门店"
+  // （前提是它仍在本次列表里，避免选中已被停用/跨专区的旧门店），否则退化为列表
+  // 第一家。仅当账号尚未绑定具体门店（currentStoreId 为空）且视角是店长/超管
+  // （isManager || isSuperAdmin，义工/家人的"全部门店"虚拟视图不受影响）时才生效，
+  // 与手动点击"选择门店"复用同一条 switchStoreTarget 落地逻辑，不重复实现一遍
+  maybeAutoSelectStore(list: any[]) {
+    const { currentStoreId, isVolunteer, isFamily, isManager, isSuperAdmin } = this.data;
+    if (currentStoreId || isVolunteer || isFamily || !(isManager || isSuperAdmin)) return;
+    if (!Array.isArray(list) || list.length === 0) return;
+
+    const lastSelected = getSelectedStore();
+    const lastStoreId = lastSelected && lastSelected.storeId;
+    const target = (lastStoreId && list.find((s: any) => s.storeId === lastStoreId)) || list[0];
+    if (target && target.storeId) {
+      this.switchStoreTarget(target.storeId, target.storeName);
     }
   },
 
@@ -1713,6 +1745,29 @@ Page({
 
   onGotoStoreManagement() {
     safeNavigateTo({ url: '/pages/store-management/store-management' });
+  },
+
+  // 🏢 空状态引导升级：机构其实已有门店（allStoresList.length > 0，只是当前
+  // 账号自己还没绑定/选定其中一家）时，"创建首家门店"这个文案与操作都文不对
+  // 题——用户要做的不是新建一家，而是从已有门店里挑一家。直接唤起 store-picker
+  // 组件自带的选择弹窗，复用同一套"选择服务站点与身份"流程，不新增页面
+  onOpenStorePickerFromEmptyState() {
+    const picker = this.selectComponent('#storePicker');
+    if (picker && typeof picker.onOpenSheet === 'function') {
+      picker.onOpenSheet();
+    }
+  },
+
+  // 🏢 空状态引导升级：机构确实一家门店都没有时，除了"创建首家门店"，也可能是
+  // 用户点错了专区卡片（如以为自己是雨花斋，其实账号归属通用商户体系）——补上
+  // "切换其它专区"按钮，一步直接跳到另一个专区（复用两张工作空间卡片各自
+  // 已有的入口方法，超管无条件放行，不会被拦），而不是被晾在一个死胡同状态里
+  onSwitchToOtherZoneFromEmptyState() {
+    if (this.data.currentPlatformMode === 'yuhua') {
+      this.onSelectGeneralPlatform();
+    } else {
+      this.onSelectYuhuaPlatform();
+    }
   },
 
   // ================= 🍽️ 首页快捷发布：今日菜单 =================

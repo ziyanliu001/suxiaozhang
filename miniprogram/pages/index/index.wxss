@@ -17,10 +17,15 @@ page {
      确保首屏渲染早于 JS 测算完成时内容也不会被遮挡 */
   padding-top: calc(env(safe-area-inset-top) + 80rpx) !important;
   /* 🛡️ 非义工视角（店长/财务/超管）在 .page-body-scroll 之外还叠了打卡卡片/店长工作台/
-     财务稽核台/管理宫格等一整段非滚动区内容，矮屏设备上这段总高度可能超出 100vh，
-     导致页面本体（而非内部 page-body-scroll）整体上滚，此时底部固定吸底双按钮栏仍会
-     盖住刚露出的这段内容——额外预留 160rpx 占位，确保滑到底时数据不被遮挡 */
-  padding-bottom: 180rpx !important;
+     财务稽核台/管理宫格/空机构建店引导卡（"该机构已有 N 家门店"）等一整段非滚动区
+     内容，矮屏设备上这段总高度可能超出 100vh，导致页面本体（而非内部 page-body-scroll）
+     整体上滚，此时底部固定吸底双按钮栏仍会盖住刚露出的这段内容。
+     🐛 之前这里写死 180rpx，比 .bottom-action-floating-bar 注释里算好的
+     "三段式 TabBar（100rpx）+ 吸底双按钮组（136rpx）= 236rpx" 还少 56rpx，且完全没算
+     底部安全区，iPhone 类全面屏机型上"该机构已有 N 家门店"卡片的按钮实测仍被压住——
+     改为与 .page-body-scroll 同一份 236rpx + 安全区计算，两处不再各算一套 */
+  padding-bottom: calc(236rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(236rpx + env(safe-area-inset-bottom)) !important;
 }
 
 .app-header-section {

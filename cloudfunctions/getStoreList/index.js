@@ -84,16 +84,33 @@ function toStoreListItem(s) {
   };
 }
 
-// 🐛 Bug 修复根因：门店区分专区的权威字段是 stores.orgType（'yuhuazhai' vs
-// 其余类型），不是 tenantId——tenantId 只是机构/账套边界，同一个机构（尤其是
-// 历史遗留的默认全国机构 yuhuazhai_national）完全可能因为历史脏数据/迁移未
-// 执行而混入了 orgType 不属于该专区的门店（如"嵩屿街道敬老中心助餐点"）。
-// 这里统一成一个 helper：orgType==='yuhuazhai' 精确匹配；其余任何取值
-// （'general'/'elderly_canteen'/...）一律按"非雨花斋"处理——$ne 天然匹配
-// 字段缺失的历史门店，视为"通用"，与 fixTenantHierarchy 的迁移口径一致
+// 🐛 二次根因修复：上一版把雨花专区精确收窄成 orgType==='yuhuazhai' 相等匹配，
+// 结果把大批历史门店（"厦门海沧三泓愿""漳州白礁保生雨花斋""测试1"——本项目
+// 最早就是纯雨花斋起步，orgType 这个字段是后来扩展"通用/社区食堂"品类时才加
+// 的，createStore 云函数只在调用方显式传入合法值时才会写这个字段）一起排除
+// 在外，因为它们的 orgType 压根没被打过标（字段缺失，不是等于别的值）。
+// 严格相等匹配导致雨花专区查询整个返回空列表，主工作台直接卡死在"机构还没有
+// 门店"——这比"极少数尚未执行 fixTenantHierarchy 数据清洗迁移、因而混入的
+// 脏数据门店"要严重得多，是当前阶段两害相权取其轻：
+// - 雨花专区（orgType==='yuhuazhai'）：精确匹配 'yuhuazhai'，或 orgType 字段
+//   缺失/空字符串（历史未打标数据，按当时"雨花斋是唯一品类"的默认背景兼容
+//   为雨花斋）。
+// - 其余专区：只要不是精确等于 'yuhuazhai' 就算，缺失/空字符串同样兼容匹配
+//   （这条分支本来就是这个语义，未改变）。
+// ⚠️ 这只是过渡期的兼容判定，不是长久之计——一旦 fixTenantHierarchy 迁移
+// 正式对存量门店回填好准确的 orgType，"缺失/空字符串"这个兼容分支就不会再
+// 命中任何真实数据（新建门店从一开始就会有明确的 orgType），届时可以放心收紧
+// 回严格相等匹配，彻底堵死"脏数据也被兼容进来"这个口子
 function buildOrgTypeCondition(orgType) {
   const _ = db.command;
-  return orgType === 'yuhuazhai' ? orgType : _.neq('yuhuazhai');
+  // 🛡️ 字段级 OR：必须用 Command.or() 链式写法组合同一字段的多个条件（与
+  // manageDailyMenu 云函数 _.eq(DEFAULT_MEAL_TYPE).or(_.exists(false)) 同一种
+  // 用法），不能写成 _.or([{orgType:'yuhuazhai'}, {orgType:_.exists(false)}])
+  // 再整体塞进 {orgType: ...} ——那种数组形式的 _.or 是给 .where() 顶层多字段
+  // 条件用的，嵌套进单个字段值里不会按预期匹配
+  return orgType === 'yuhuazhai'
+    ? _.eq('yuhuazhai').or(_.exists(false)).or(_.eq(''))
+    : _.neq('yuhuazhai');
 }
 
 // 🆕 跨机构发现模式：【选择工作空间】页新用户挑选要加入的具体站点场景专用

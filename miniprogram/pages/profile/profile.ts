@@ -2017,6 +2017,20 @@ Page({
           this.applyAvatarUrl(fetchedAvatarUrl, fetchSeq);
         }
         this.setData({ userNickName: result.roleInfo.nickName || '' });
+
+        // 🐛 根因修复："super_admin 被 volunteer 覆盖"：onShow() 里 initMinePage()
+        // 是纯同步函数，只读 AuthService.getCachedRoleInfo() 当下已有的本地缓存
+        // 就直接渲染角色徽章/权限——它自己从不发起网络请求。真正会刷新这份缓存的
+        // 只有这里的 AuthService.fetchUserRole()（本函数 loadUserProfile 触发），
+        // 但这个回调此前只把结果用来更新头像/昵称，从未把最新角色喂回
+        // initMinePage() 的角色计算逻辑。结果是：如果本地缓存里存的是账号被提权
+        // 为超管【之前】的旧角色快照（如 'volunteer'），无论用户进出个人中心多少
+        // 次，角色徽章/权限入口都会一直卡在旧角色——因为唯一的"更新点"根本没人
+        // 通知它。现在这次请求成功后无条件重跑一次 initMinePage()，让它用刚刚
+        // 落地的最新缓存重新计算角色展示层级；initMinePage() 自身的同步计算部分
+        // 无网络开销，尾部真正的重量级请求批次已有 _initMinePageInFlight 防抖锁
+        // 兜底，不会因为这次重复调用而多打一轮云函数
+        this.initMinePage();
       }
     }).catch(err => {
       console.warn('[profile] loadUserProfile 刷新失败:', err);
@@ -4830,7 +4844,17 @@ Page({
     });
 
     try {
-      const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
+      // 🐛 Bug 修复：与 index.ts store-picker 组件同一个根因——此前这里调用
+      // getStoreList 完全没有传 orgType，只按超管自己的 tenantId 过滤，"嵩屿
+      // 街道敬老中心助餐点"这类历史脏数据（tenantId 挂在雨花斋默认全国机构下，
+      // 但业务上并不属于雨花斋）就会混进超管的"门店选择与搜索"弹窗。这里按
+      // 超管自己真实绑定门店的 orgType（this.data.orgType，由 fetchStoreOrgType
+      // 查到的权威值）传给云函数做第二层收窄，与 index.ts 传法一致
+      const orgTypeFilter = this.data.orgType === 'yuhuazhai' ? 'yuhuazhai' : (this.data.orgType ? 'general' : '');
+      const res: any = await wx.cloud.callFunction({
+        name: 'getStoreList',
+        data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
+      });
       const result = res.result;
       const list = (result && result.success && Array.isArray(result.list)) ? result.list : [];
       const stores = list
@@ -4965,10 +4989,13 @@ Page({
       resetStoreKeyFilteredList: []
     });
     try {
+      // 🐛 顺手修复：getStoreList 云函数实际返回字段是 `list`，不是 `stores`——
+      // 这里读错了字段名，此前无论门店数据本身如何都恒为空数组，"重置门店申请
+      // 密钥"弹窗的门店搜索列表功能等于完全失效
       const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
       // 过滤掉虚拟聚合门店（"全国总览"/"全部门店"），列表里只保留真实具体门店
       const list: Array<{ storeId: string; storeName: string }> =
-        (Array.isArray(res.result?.stores) ? res.result.stores : []).filter(
+        (Array.isArray(res.result?.list) ? res.result.list : []).filter(
           (s: any) => s && s.storeId && !isVirtualStoreName(s.storeName)
         );
 
