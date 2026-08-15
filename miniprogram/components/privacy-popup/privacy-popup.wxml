@@ -5,10 +5,15 @@
      用户同意后放行那次被拦截的调用。 -->
 <view class="privacy-popup-mask" wx:if="{{visible}}">
   <view class="privacy-popup-card">
-    <view class="privacy-popup-title">雨花爱心餐报助手隐私保护指引</view>
+    <!-- 🐛 文案一致性修复：此前标题硬编码"雨花爱心餐报助手隐私保护指引"，与正文链接
+         动态展示的真实协议名（wx.getPrivacySetting 返回的 privacyContractName，即
+         mp 后台实际配置的《素小账公益助手小程序隐私保护指引》）不一致——标题与正文
+         各自一套名称，用户点开一看对不上号。现改为标题与正文统一读同一个
+         privacyContractName，只有一处兜底默认值，不会再出现两个不同的产品名 -->
+    <view class="privacy-popup-title">{{privacyContractName || '素小账公益助手小程序隐私保护指引'}}</view>
     <view class="privacy-popup-body">
       为了向您提供小票识别、拍照记账及保存荣誉证书功能，我们需要申请您的相册与相机权限。我们承诺严格保护您的数据安全，不作他用。详见
-      <text class="privacy-popup-link" bindtap="onOpenPrivacyContract">《{{privacyContractName || '用户隐私保护指引'}}》</text>
+      <text class="privacy-popup-link" bindtap="onOpenPrivacyContract">《{{privacyContractName || '素小账公益助手小程序隐私保护指引'}}》</text>
       。
     </view>
     <view class="privacy-popup-footer">

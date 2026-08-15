@@ -40,16 +40,17 @@ Component({
 
       const wxAny = wx as any;
 
-      // 🌟 双保险：主动检测 + 被动拦截兜底，两者不冲突——
-      // ① 主动检测（本次新增）：组件一挂载（也就是页面 onLoad 附近）就调用
-      //   wx.getPrivacySetting 查一次 needAuthorization，如果用户还没同意，直接把弹窗
-      //   提前弹出来，让用户在真正点【图片识别】【头像】之前就把授权走完，
-      //   避免"点了半天没反应"的困惑体验——这正是需求里要求的"第一步"。
-      // ② 被动兜底（原有逻辑）：万一主动检测这次调用失败/漏判，wx.onNeedPrivacyAuthorization
-      //   仍然会在平台真正拦截某次隐私接口调用时兜底弹出，双重保证不会出现"死锁"。
-      //
-      // 两处都包了 try/catch：如果当前 DevTools 模拟器对这两个 API 的实现有 bug、
-      // 调用时同步抛异常，至少不会让整个组件 attached() 直接崩溃导致页面渲染中断。
+      // 🐛 合规重构：移除了此前"组件一挂载就主动弹窗"的检测逻辑——本组件挂载在
+      // index/history/daily-menu/activity-log/profile 等页面的最外层，attached()
+      // 在页面 onLoad 时就会触发，此前那段"needAuthorization 就直接 visible:true"
+      // 的主动检测会导致首页一进来就整屏弹出隐私授权框，遮住工作空间选择主界面，
+      // 且用户此时还没做任何需要相册/相机权限的操作——不符合微信"隐私接口按需
+      // 弹窗"的合规要求（微信官方按需模型：只在用户真正触发 chooseMedia/
+      // chooseImage/saveImageToPhotosAlbum 等隐私接口、平台即将拦截该调用时，
+      // 才通过 wx.onNeedPrivacyAuthorization 回调弹出确认框）。
+      // 现在只保留下面的 getPrivacySetting 调用来预取 privacyContractName（用于
+      // 弹窗标题/正文动态展示真实协议名，不因此触发弹窗本身），真正的弹出时机
+      // 完全交给下方 onNeedPrivacyAuthorization 被动监听器按需触发
       try {
         if (typeof wxAny.getPrivacySetting === 'function') {
           wxAny.getPrivacySetting({
@@ -57,12 +58,9 @@ Component({
               if (res && res.privacyContractName) {
                 this.setData({ privacyContractName: res.privacyContractName });
               }
-              if (res && res.needAuthorization) {
-                this.setData({ visible: true });
-              }
             },
             fail: () => {
-              // 取不到隐私配置时静默跳过——不影响下面 onNeedPrivacyAuthorization 的被动兜底
+              // 取不到隐私配置时静默跳过，不影响下面 onNeedPrivacyAuthorization 的按需弹出
             }
           });
         }

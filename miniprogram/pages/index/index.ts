@@ -1336,6 +1336,9 @@ Page({
         currentStoreName: storeName,
         currentStoreId: storeId
       });
+      // 🌐 自动续接工作空间：账号已有明确归属（真实门店 orgType）时，跳过"工作
+      // 空间选择"首页，直接落地到对应专区——见 autoResumeWorkspaceMode 注释
+      this.autoResumeWorkspaceMode(orgType, isSuperAdmin, isPlatformAdmin);
       // 🏷️ 按 orgType 立即更新默认标签（无需等待云函数，让表单文案秒显）
       this.loadStoreTargetConfig();
 
@@ -1386,6 +1389,10 @@ Page({
         currentStoreName: storeName,
         currentStoreId: storeId
       });
+      // 🌐 自动续接工作空间：服务端权威角色落地后再校正一次——万一上面 cached
+      // 分支用的是过期的本地角色缓存（orgType 与服务端最新值不一致），这里用
+      // 权威值重新判定/纠正，见 autoResumeWorkspaceMode 注释
+      this.autoResumeWorkspaceMode(orgType, isSuperAdmin, isPlatformAdmin);
       // 🏷️ 服务端权威角色落地后重新加载标签（含自定义 serviceTargetConfig 覆盖）
       this.loadStoreTargetConfig();
 
@@ -7742,6 +7749,38 @@ Page({
   // 这里保留一层兜底：isCurrentAccountSuperAdmin() 在 this.data 两个标记都不可信时
   // 再直接查一次 AuthService 缓存，双保险
   //
+  // 🌐 自动续接工作空间：账号已有明确归属（真实门店 orgType）时，跳过"工作空间
+  // 选择"首页，直接落地到对应专区，不需要用户在每次冷启动时都手动点一次卡片。
+  //
+  // 🛡️ 不引入任何持久化缓存（不写 wx.setStorageSync，"lastSelectedPlatform"
+  // 这类 key 在本项目里从未存在过）——currentPlatformMode 本身只是页面内存态，
+  // 每次调用本方法都用【当次从服务端/缓存角色现算出的 orgType】直接决定落地
+  // 专区，天然不存在"缓存了上次选择、但账号真实归属已经变了"这种跨专区污染
+  // 风险。initCurrentUserRole() 的 cached 分支（本地缓存，可能过期）与
+  // fetchUserRole 分支（服务端权威）都会各调用一次本方法：前者先落地一个初步
+  // 专区，后者若发现权威 orgType 与之前不一致会立即纠正，不会停留在错误专区。
+  //
+  // 🛡️ 超管/平台管理员：orgType 对他们没有确定性意义（不隶属单一门店/机构，
+  // 或需要自由预览两个专区），不做自动跳转，保留工作空间选择首页作为固定入口，
+  // 与 onSelectYuhuaPlatform/onSelectGeneralPlatform 里"超级管理员无条件放行"
+  // 的既有设计保持一致。
+  //
+  // 🛡️ 全新未绑定账号（orgType===''）：没有可依据的归属信息，同样留在选择首页，
+  // 引导其通过下方 showNewUserGuide（进入某个专区后）创建/加入站点。
+  autoResumeWorkspaceMode(orgType: string, isSuperAdminAccount: boolean, isPlatformAdminAccount: boolean) {
+    if (isSuperAdminAccount || isPlatformAdminAccount || !orgType) return;
+
+    const targetMode = orgType === 'yuhuazhai' ? 'yuhua' : 'general';
+    if (this.data.currentPlatformMode === targetMode) return;
+
+    if (targetMode === 'yuhua') {
+      // 内部含合规声明校验：未同意过声明时只会先弹声明弹窗，不会绕过
+      this.enterYuhuaWorkspaceFlow();
+    } else {
+      this.setData({ currentPlatformMode: 'general' });
+    }
+  },
+
   // 🏢 工作空间选择首页：点击【雨花公益食堂专区】卡片。
   // 🐛 Bug 1 修复：此前账号真实 orgType 不是 'yuhuazhai' 时会被"暂不支持"弹窗
   // 死锁拦截，新用户/义工/其余机构账号永远进不了雨花专区——但这张卡片本就是
