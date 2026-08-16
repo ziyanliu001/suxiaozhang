@@ -1,4 +1,4 @@
-<view class="app-tab-bar">
+<view class="app-tab-bar" wx:if="{{!hide}}">
   <view class="app-tab-bar-inner">
     <view
       wx:for="{{tabs}}"

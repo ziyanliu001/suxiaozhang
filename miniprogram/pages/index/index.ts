@@ -33,6 +33,7 @@ import {
   CORE_VALUES, FAMOUS_QUOTES, RAIN_FLOWER_HOME, SIXTEEN_BESTS, GRATITUDE_TEXT, DAILY_SUMMARY, FAMILY_STYLE
 } from '../../utils/cultureData';
 import { computeMyCheckInStats } from '../../utils/checkinStats';
+import { setTabBarHidden } from '../../utils/tabBarVisibility';
 
 const HOME_COMPRESS_CANVAS_ID = 'imgCompressCanvas';
 // 🌟 单日护持工时上限：打卡弹窗的实时预览与提交时的截断保护共用同一个值，避免两处写死后走偏
@@ -3394,6 +3395,11 @@ Page({
     // 🌸 扫码/邀请码这条路径走的是常规"申请加入门店"标题逻辑，清掉可能残留自
     // openStorePickerForJoin（雨花/通用专区选站点）的标题覆盖与 orgType 提示，避免串场
     this.setData({ applyModalTitleOverride: '', 'applyForm.orgTypeHint': '' });
+    // 🐛 根因修复：本方法下面三个分支（全国总览哨兵值 / 查询成功 / 查询失败
+    // 兜底）殊途同归都会把 showApplyModal 置为 true，统一在分支之前隐藏一次
+    // 自定义 tabBar（见 utils/tabBarVisibility.ts 头部注释），不需要在每个
+    // setData({showApplyModal:true}) 前各自重复调用
+    setTabBarHidden(this, true);
     // 🐛 修复：扫描"全国总览"邀请码（scene=s=all）时，此前会去查 stores 表里
     // 一个根本不存在的 _id='all' 文档，查询必然失败落入 catch，再把"全国总览"
     // 当成一个真实门店预填进申请表单——用户可以直接提交一条 storeId='all' 的
@@ -3589,6 +3595,7 @@ Page({
 
   onCloseApplyModal() {
     this.setData({ showApplyModal: false, applyModalTitleOverride: '' });
+    setTabBarHidden(this, false);
   },
 
   async onSubmitRoleApply() {
@@ -3669,6 +3676,7 @@ Page({
       }
 
       this.setData({ showApplyModal: false, applyModalTitleOverride: '' });
+      setTabBarHidden(this, false);
 
       let content: string;
       if (result.autoApproved) {
@@ -7944,6 +7952,10 @@ Page({
       allStoresList: [],
       showApplyModal: true
     });
+    // 🐛 根因修复：见 utils/tabBarVisibility.ts 头部注释——自定义 tabBar 是
+    // 框架自动挂载的原生层组件，本弹窗的 z-index 再高也盖不住它，必须显式
+    // 隐藏；onCloseApplyModal / 提交成功分支会负责恢复
+    setTabBarHidden(this, true);
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       // 🛡️ crossTenant:true 显式声明这是一次跨机构发现请求（getStoreList 云函数

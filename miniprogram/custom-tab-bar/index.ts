@@ -14,6 +14,14 @@ const BADGE_FETCH_THROTTLE_MS = 60000;
 Component({
   data: {
     selected: 0,
+    // 🐛 根因修复：全屏/半屏弹窗（套餐升级卡片、加入门店申请表单等）此前
+    // 无论把自己的 z-index 调多高都盖不住这个自定义 tabBar——它是微信客户端
+    // 框架在 tabBar.custom=true 时自动挂载到 tabBar.list 声明页面上的原生层
+    // 组件，不在页面自己的 WXML 树/层叠上下文里，纯 CSS z-index 天然覆盖不到
+    // （微信官方确认过的平台限制，不是本项目样式写错）。宿主页面唤起这类
+    // 弹窗时改为显式调用 utils/tabBarVisibility.ts 的
+    // setTabBarHidden(this, true) 隐藏本组件，关闭弹窗时再恢复
+    hide: false,
     tabs: [
       { key: 'home', pagePath: '/pages/index/index', text: '主页' },
       { key: 'inbox', pagePath: '/pages/notice/notice', text: '通知' },

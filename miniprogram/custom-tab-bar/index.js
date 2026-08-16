@@ -4,6 +4,12 @@
 Component({
     data: {
         selected: 0,
+        // 🐛 根因修复：全屏/半屏弹窗（套餐升级卡片、加入门店申请表单等）此前
+        // 无论把自己的 z-index 调多高都盖不住这个自定义 tabBar——因为它是框架
+        // 自动挂载的原生层组件，不受页面自身层叠上下文约束，纯 CSS 层面无法
+        // 覆盖。宿主页面唤起这类弹窗时改为显式调用 utils/tabBarVisibility.ts
+        // 的 setTabBarHidden(this, true) 隐藏本组件，关闭弹窗时再恢复
+        hide: false,
         tabs: [
             { key: 'home', pagePath: '/pages/index/index', text: '主页' },
             { key: 'inbox', pagePath: '/pages/notice/notice', text: '通知' },

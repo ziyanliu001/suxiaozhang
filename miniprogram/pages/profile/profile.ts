@@ -18,6 +18,7 @@ import { takeOpenSubscriptionRequest } from '../../utils/subscriptionHandoff';
 import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
 import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolveTier, PERMISSION_TIER } from '../../utils/tenantPermission';
+import { setTabBarHidden } from '../../utils/tabBarVisibility';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -5217,6 +5218,10 @@ Page({
       // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态
       showRedeemSection: false
     });
+    // 🐛 根因修复：自定义 tabBar 是框架自动挂载的原生层组件，本卡片的
+    // z-index 再高也盖不住它（见 utils/tabBarVisibility.ts 头部注释），
+    // 显式隐藏，关闭时（下方 onCloseSubscriptionModal）再恢复
+    setTabBarHidden(this, true);
 
     try {
       await this.fetchSubscriptionInfo();
@@ -5234,6 +5239,7 @@ Page({
 
   onCloseSubscriptionModal() {
     this.setData({ showSubscriptionModal: false });
+    setTabBarHidden(this, false);
   },
 
   // 🎫 授权码折叠区展开/收起：见 data.showRedeemSection 声明处注释
@@ -5319,6 +5325,7 @@ Page({
         showPaymentPendingModal: false,
         showSubscriptionModal: false
       });
+      setTabBarHidden(this, false);
       wx.showToast({
         title: `已成功激活【${planLabel}】，有效期至 ${result.data.serviceExpireDate}`,
         icon: 'success',
