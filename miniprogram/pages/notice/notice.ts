@@ -5,6 +5,7 @@ import { evaluateReportStatus } from '../../utils/approvalBadge';
 import { formatRelativeTime } from '../../utils/dateUtils';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { safeNavigateTo } from '../../utils/navHelper';
+import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeDisplay';
 
 const ANNOUNCE_PAGE_SIZE = 15;
 
@@ -260,14 +261,33 @@ Page({
 
   buildAnnouncementItem(n: any) {
     const createdAtMs = n.createdAt ? new Date(n.createdAt).getTime() : 0;
-    const content = String(n.content || '');
+    const rawContent = String(n.content || '');
+    const title = n.title || '';
+
+    // 🐛 根因修复："物资接力/物资储备临界告急"类通知被错误打上"喜讯通报"标签：
+    // 不再无条件信任库里存的 tag 原文（发布/编辑通知时 tag 字段可能沿用了与
+    // 实际内容无关的默认值）。改按标题+正文的关键词语义优先判定：命中具体分类
+    // （物资接力/求助通报/喜讯通报/停业公告/感恩鸣谢）时，用这份更准确的展示
+    // 标签覆盖库里存的原始 tag；内容本身没有强分类信号（落到默认的"系统公告"）
+    // 时，才回退到原有的"门店公告/全域公告"范围提示，不丢失这项信息
+    const classified = classifyNotice(n.tag || '', title, rawContent);
+    const tag = classified.noticeType !== 'general'
+      ? classified.typeLabel
+      : (n.tag || (n.storeId ? (n.storeName || '门店公告') : '全域公告'));
+    const tagColorClass = classified.noticeType !== 'general' ? classified.tagColorClass : 'system';
+
+    // 🐛 正文展示去重：正文开头若带有与标题完全一致的"【标题】"前缀，剥离后
+    // 再展示，避免与卡片标题重复
+    const content = stripTitlePrefixFromContent(rawContent, title);
+
     return {
       id: n._id,
       category: 'system',
       categoryLabel: '系统通知',
-      tag: n.tag || (n.storeId ? (n.storeName || '门店公告') : '全域公告'),
+      tag,
+      tagColorClass,
       icon: '📢',
-      title: n.title || '',
+      title,
       desc: content,
       timeLabel: createdAtMs ? formatRelativeTime(createdAtMs) : '',
       unread: !!n.unread,

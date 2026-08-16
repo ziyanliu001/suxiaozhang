@@ -165,6 +165,21 @@
   background: #EDF2FF;
 }
 
+/* 🎨 物资告急/求助接力：暖色橙调，与 approval（待处理提醒的"待确认/待稽核"）
+   区分开——那类是"需要你操作"的流程状态色，这里是"内容语义"分类色，两者
+   语义不同，不能共用同一个 class，避免样式改动互相牵连 */
+.cat-tag-urgent {
+  color: #FF6B00;
+  background: #FFF1E6;
+}
+
+/* 🎨 喜讯通报/感恩鸣谢：绿色调，与蓝色的 system（系统公告/一般消息）区分，
+   一眼区分"好消息"与"日常通知" */
+.cat-tag-good_news {
+  color: #2B8A3E;
+  background: #EBFBEE;
+}
+
 .card-desc {
   display: block;
   font-size: 22rpx;

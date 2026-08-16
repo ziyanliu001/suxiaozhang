@@ -82,7 +82,7 @@
           <view class="card-main">
             <view class="card-title-row">
               <text class="card-title">{{item.title}}</text>
-              <text class="cat-tag cat-tag-system" wx:if="{{item.tag}}">{{item.tag}}</text>
+              <text class="cat-tag cat-tag-{{item.tagColorClass}}" wx:if="{{item.tag}}">{{item.tag}}</text>
             </view>
             <text class="card-desc {{item.expandable && !item.expanded ? 'is-clamped' : ''}}">{{item.desc}}</text>
             <view class="card-footer-row">
