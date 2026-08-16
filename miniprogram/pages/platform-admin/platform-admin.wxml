@@ -71,7 +71,8 @@
         </view>
         <view class="pa-generated-row" wx:for="{{lastGeneratedCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
           <text class="pa-generated-code">{{item.code}}</text>
-          <text class="pa-generated-meta">{{planLabels[item.planType] || item.planType}} · {{item.durationDays}}天</text>
+          <text class="pa-generated-meta" wx:if="{{item.codeType === 'add_on'}}">扩容门店包 · +{{item.extraStores}}家</text>
+          <text class="pa-generated-meta" wx:else>{{planLabels[item.planType] || item.planType}} · {{item.durationDays}}天</text>
         </view>
       </view>
 
@@ -102,8 +103,14 @@
             <text class="pa-code-status pa-code-status-{{item.status}}">{{codeStatusLabels[item.status] || item.status}}</text>
           </view>
           <view class="pa-code-row-bottom">
-            <text class="pa-plan-badge pa-plan-badge-{{item.planType}}">{{planLabels[item.planType] || item.planType}}</text>
-            <text class="pa-duration-badge">{{item.durationDays}}天</text>
+            <block wx:if="{{item.codeType === 'add_on'}}">
+              <text class="pa-plan-badge pa-plan-badge-addon">扩容门店包</text>
+              <text class="pa-duration-badge">+{{item.extraStores}}家</text>
+            </block>
+            <block wx:else>
+              <text class="pa-plan-badge pa-plan-badge-{{item.planType}}">{{planLabels[item.planType] || item.planType}}</text>
+              <text class="pa-duration-badge">{{item.durationDays}}天</text>
+            </block>
             <!-- 🗑️ 仅未使用的码可作废：catchtap 阻止冒泡到卡片本身的复制 bindtap，
                  避免点"作废"顺带又触发一次复制 Toast -->
             <view class="pa-code-revoke-btn" wx:if="{{item.status === 'UNUSED'}}" hover-class="btn-hover" catchtap="onRevokeActivationCode" data-codeid="{{item._id}}" data-code="{{item.code}}" data-status="{{item.status}}">作废</view>
@@ -222,15 +229,28 @@
       <view class="pa-sheet-handle"></view>
       <text class="pa-sheet-title">生成授权码</text>
 
-      <text class="pa-field-label">套餐档位</text>
+      <text class="pa-field-label">授权码类型</text>
       <view class="pa-plan-row">
-        <view class="pa-plan-tag {{generateCodesForm.planType === 'pro' ? 'active' : ''}}" hover-class="btn-hover" data-plan="pro" bindtap="onSelectCodePlan">专业版</view>
-        <view class="pa-plan-tag {{generateCodesForm.planType === 'enterprise' ? 'active' : ''}}" hover-class="btn-hover" data-plan="enterprise" bindtap="onSelectCodePlan">旗舰版</view>
+        <view class="pa-plan-tag {{generateCodesForm.codeType === 'package' ? 'active' : ''}}" hover-class="btn-hover" data-type="package" bindtap="onSelectCodeType">套餐码</view>
+        <view class="pa-plan-tag {{generateCodesForm.codeType === 'add_on' ? 'active' : ''}}" hover-class="btn-hover" data-type="add_on" bindtap="onSelectCodeType">扩容门店包（¥200/店/年）</view>
       </view>
 
-      <text class="pa-field-label">有效期（天）</text>
-      <input class="pa-input {{generateCodesErrors.durationDays ? 'pa-input-error' : ''}}" type="number" placeholder="如：365" value="{{generateCodesForm.durationDays}}" bindinput="onGenerateCodesFormInput" data-field="durationDays" />
-      <text class="pa-field-error" wx:if="{{generateCodesErrors.durationDays}}">{{generateCodesErrors.durationDays}}</text>
+      <block wx:if="{{generateCodesForm.codeType === 'add_on'}}">
+        <text class="pa-field-label">单张码扩容门店数（最多 20 家）</text>
+        <input class="pa-input {{generateCodesErrors.extraStores ? 'pa-input-error' : ''}}" type="number" placeholder="如：1" value="{{generateCodesForm.extraStores}}" bindinput="onGenerateCodesFormInput" data-field="extraStores" />
+        <text class="pa-field-error" wx:if="{{generateCodesErrors.extraStores}}">{{generateCodesErrors.extraStores}}</text>
+      </block>
+      <block wx:else>
+        <text class="pa-field-label">套餐档位</text>
+        <view class="pa-plan-row">
+          <view class="pa-plan-tag {{generateCodesForm.planType === 'pro' ? 'active' : ''}}" hover-class="btn-hover" data-plan="pro" bindtap="onSelectCodePlan">专业版（¥1688/年）</view>
+          <view class="pa-plan-tag {{generateCodesForm.planType === 'enterprise' ? 'active' : ''}}" hover-class="btn-hover" data-plan="enterprise" bindtap="onSelectCodePlan">旗舰版（¥3688/年）</view>
+        </view>
+
+        <text class="pa-field-label">有效期（天）</text>
+        <input class="pa-input {{generateCodesErrors.durationDays ? 'pa-input-error' : ''}}" type="number" placeholder="如：365" value="{{generateCodesForm.durationDays}}" bindinput="onGenerateCodesFormInput" data-field="durationDays" />
+        <text class="pa-field-error" wx:if="{{generateCodesErrors.durationDays}}">{{generateCodesErrors.durationDays}}</text>
+      </block>
 
       <text class="pa-field-label">生成数量（单次最多 50 张）</text>
       <input class="pa-input {{generateCodesErrors.quantity ? 'pa-input-error' : ''}}" type="number" placeholder="如：1" value="{{generateCodesForm.quantity}}" bindinput="onGenerateCodesFormInput" data-field="quantity" />

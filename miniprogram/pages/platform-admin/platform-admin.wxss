@@ -449,6 +449,11 @@
   color: #FFD700;
 }
 
+.pa-plan-badge-addon {
+  background: #E6F4EA;
+  color: #2E7D32;
+}
+
 .pa-plan-badge-expiring {
   background: #FFF3E0;
   color: #E8590C;

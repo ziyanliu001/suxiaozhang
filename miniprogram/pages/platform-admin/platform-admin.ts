@@ -102,14 +102,17 @@ Page({
     // 🔑 授权码管理 Tab
     // ─────────────────────────────────────────────────────────────────
     showGenerateCodesSheet: false,
-    generateCodesForm: { planType: 'pro', durationDays: '365', quantity: '1' },
+    // 🏢 codeType：'package'（常规套餐码，走 planType/durationDays）/ 'add_on'
+    // （扩容门店包码，走 extraStores）——与 activateTenantSubscription 云函数
+    // generate action 的 codeType 分支一一对应
+    generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1' },
     // 🆕 前端基础校验：输入框失焦/提交时填充，非空即代表校验不通过，wxml 据此
     // 显示红色错误提示，不用等点了提交按钮才用 Toast 告知
-    generateCodesErrors: { durationDays: '', quantity: '' },
+    generateCodesErrors: { durationDays: '', quantity: '', extraStores: '' },
     generatingCodes: false,
     // 🌟 刚生成的这一批：单独存一份，生成成功后置顶展示 + 一键复制，不用去
     // 下面的台账列表里翻找刚铸造出来的这几个码
-    lastGeneratedCodes: [] as Array<{ code: string; planType: string; durationDays: number }>,
+    lastGeneratedCodes: [] as Array<{ code: string; codeType?: string; planType?: string; durationDays?: number; extraStores?: number }>,
     // 🐛 根因修复：这里此前也照搬 overviewLoading 的"初始值设 true 防闪烁"套路，
     // 但 loadActivationCodes() 自己开头有一道 `if (this.data.activationCodesLoading)
     // return` 的防重入锁——loadOverview() 没有这道锁，套用同一个技巧是安全的，
@@ -441,6 +444,15 @@ Page({
     this.setData({ 'generateCodesForm.planType': e.currentTarget.dataset.plan });
   },
 
+  // 🏢 codeType 切换：常规套餐码 / 扩容门店包码，两种码在 wxml 里各自展示
+  // 不同的表单字段（见 generateCodesForm 声明处注释）
+  onSelectCodeType(e: any) {
+    this.setData({
+      'generateCodesForm.codeType': e.currentTarget.dataset.type,
+      generateCodesErrors: { durationDays: '', quantity: '', extraStores: '' }
+    });
+  },
+
   onGenerateCodesFormInput(e: any) {
     const field = e.currentTarget.dataset.field;
     this.setData({
@@ -453,15 +465,26 @@ Page({
   // generateCodesErrors，由 wxml 在对应输入框下方展示红字，不再是提交后才
   // 弹一个笼统的 Toast
   validateGenerateCodesForm(): boolean {
-    const { durationDays, quantity } = this.data.generateCodesForm;
-    const durationDaysNum = parseInt(durationDays, 10);
+    const { codeType, durationDays, quantity, extraStores } = this.data.generateCodesForm;
     const quantityNum = parseInt(quantity, 10);
-    const errors = { durationDays: '', quantity: '' };
+    const errors = { durationDays: '', quantity: '', extraStores: '' };
     let ok = true;
 
-    if (!durationDaysNum || durationDaysNum <= 0) {
-      errors.durationDays = '请填写有效的有效期天数';
-      ok = false;
+    if (codeType === 'add_on') {
+      const extraStoresNum = parseInt(extraStores, 10);
+      if (!extraStoresNum || extraStoresNum <= 0) {
+        errors.extraStores = '请填写有效的扩容门店数';
+        ok = false;
+      } else if (extraStoresNum > 20) {
+        errors.extraStores = '单张码最多扩容 20 家门店';
+        ok = false;
+      }
+    } else {
+      const durationDaysNum = parseInt(durationDays, 10);
+      if (!durationDaysNum || durationDaysNum <= 0) {
+        errors.durationDays = '请填写有效的有效期天数';
+        ok = false;
+      }
     }
     if (!quantityNum || quantityNum <= 0) {
       errors.quantity = '请填写有效的生成数量';
@@ -480,18 +503,15 @@ Page({
     if (this.data.generatingCodes) return;
     if (!this.validateGenerateCodesForm()) return;
 
-    const { planType, durationDays, quantity } = this.data.generateCodesForm;
+    const { codeType, planType, durationDays, quantity, extraStores } = this.data.generateCodesForm;
     this.setData({ generatingCodes: true });
     wx.showLoading({ title: '铸造中...', mask: true });
     try {
       const res = await wx.cloud.callFunction({
         name: 'activateTenantSubscription',
-        data: {
-          action: 'generate',
-          planType,
-          durationDays: parseInt(durationDays, 10),
-          quantity: parseInt(quantity, 10)
-        }
+        data: codeType === 'add_on'
+          ? { action: 'generate', codeType: 'add_on', extraStores: parseInt(extraStores, 10), quantity: parseInt(quantity, 10) }
+          : { action: 'generate', codeType: 'package', planType, durationDays: parseInt(durationDays, 10), quantity: parseInt(quantity, 10) }
       });
       wx.hideLoading();
       const result = res.result as any;
@@ -502,7 +522,7 @@ Page({
           lastGeneratedCodes: result.codes,
           showGenerateCodesSheet: false,
           // 🌟 成功后清空表单残留，下次打开是干净的默认值，不会看到上一批填的数量
-          generateCodesForm: { planType: 'pro', durationDays: '365', quantity: '1' }
+          generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1' }
         });
         this.loadActivationCodes(true);
         this.loadOverview();

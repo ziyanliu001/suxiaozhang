@@ -12,6 +12,12 @@
 // 重蹈覆辙）。写入这张表后，checkTenantPermission/getNationalDashboard 等
 // 既有鉴权链路无需任何改动就能立即认到新的套餐状态。
 //
+// 🆕 codeType 维度：一张激活码要么是 'package'（常规套餐码，兑换后累加
+//    plan_expire_at 有效期 + 更新 plan_type/max_stores_limit），要么是
+//    'add_on'（扩容门店包码，兑换后只在当前 max_stores_limit 基础上累加
+//    extraStores 家门店名额，不触碰 plan_type/plan_expire_at）——两者互不
+//    影响，机构可以先兑换扩容包把门店上限拉高，再单独续费套餐年限，反之亦然
+//
 // action: 'generate' —— 平台管理员批量铸造激活码（不对外自助开放，机构自己
 //                        无法凭空生成激活码兑换给自己，只能拿到已购买/已分发
 //                        的实体卡号/授权码来兑换）
@@ -46,6 +52,11 @@ const MAX_BATCH_QUANTITY = 50;
 // 档位自动同步门店上限（见 handleRedeem），不需要平台管理员再手动补一次
 // createOrRenewSubscription 才能把门店配额调对
 const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
+// 🏢 扩容门店包：单码默认加 1 家门店（generate 时可传 extraStores 铸造"加 N 家"
+// 的批量装），上限 20 家/张，防止误操作铸造出一张能把配额拉到离谱数值的码
+const DEFAULT_ADD_ON_EXTRA_STORES = 1;
+const MAX_ADD_ON_EXTRA_STORES = 20;
+const CODE_TYPES = ['package', 'add_on'];
 
 // 🌟 高对比度字符集：剔除 0/O、1/I 这类肉眼易混淆字符，与 manageStoreInviteCode
 // 同一套生成规则，人工朗读/誊抄卡号不容易抄错
@@ -125,20 +136,51 @@ async function handleGenerate(event, OPENID) {
     return { success: false, error: '无权限：仅平台管理员可铸造激活码' };
   }
 
-  const planType = VALID_PLAN_TYPES.includes(event.planType) ? event.planType : DEFAULT_PLAN_TYPE;
-  const durationDays = Number.isFinite(event.durationDays) && event.durationDays > 0
-    ? Math.floor(event.durationDays)
-    : DEFAULT_DURATION_DAYS;
+  const codeType = CODE_TYPES.includes(event.codeType) ? event.codeType : 'package';
   const quantity = Math.min(Math.max(parseInt(event.quantity, 10) || 1, 1), MAX_BATCH_QUANTITY);
 
   await ensureActivationCodesCollection();
 
   const codes = [];
+
+  if (codeType === 'add_on') {
+    // 🏢 扩容门店包码：不带 planType/durationDays，只带 extraStores（本张码
+    // 兑换后为机构额外增加的门店名额）
+    const extraStores = Math.min(
+      Math.max(parseInt(event.extraStores, 10) || DEFAULT_ADD_ON_EXTRA_STORES, 1),
+      MAX_ADD_ON_EXTRA_STORES
+    );
+    for (let i = 0; i < quantity; i++) {
+      const { display, normalized } = generateRandomCode();
+      const codeData = {
+        code: display,
+        codeNormalized: normalized,
+        codeType: 'add_on',
+        extraStores,
+        status: 'UNUSED',
+        createdBy: OPENID,
+        createdAt: db.serverDate(),
+        redeemedBy: null,
+        redeemedByTenantId: null,
+        redeemedAt: null
+      };
+      await db.collection(ACTIVATION_CODES_COLLECTION).add({ data: codeData });
+      codes.push({ code: display, codeType: 'add_on', extraStores });
+    }
+    return { success: true, codes };
+  }
+
+  const planType = VALID_PLAN_TYPES.includes(event.planType) ? event.planType : DEFAULT_PLAN_TYPE;
+  const durationDays = Number.isFinite(event.durationDays) && event.durationDays > 0
+    ? Math.floor(event.durationDays)
+    : DEFAULT_DURATION_DAYS;
+
   for (let i = 0; i < quantity; i++) {
     const { display, normalized } = generateRandomCode();
     const codeData = {
       code: display,
       codeNormalized: normalized,
+      codeType: 'package',
       planType,
       durationDays,
       status: 'UNUSED',
@@ -149,7 +191,7 @@ async function handleGenerate(event, OPENID) {
       redeemedAt: null
     };
     await db.collection(ACTIVATION_CODES_COLLECTION).add({ data: codeData });
-    codes.push({ code: display, planType, durationDays });
+    codes.push({ code: display, codeType: 'package', planType, durationDays });
   }
 
   return { success: true, codes };
@@ -211,8 +253,10 @@ async function handleList(event, OPENID) {
     codes: codes.map((c) => ({
       _id: c._id,
       code: c.code,
+      codeType: c.codeType || 'package',
       planType: c.planType,
       durationDays: c.durationDays,
+      extraStores: c.extraStores,
       status: c.status,
       createdAt: c.createdAt,
       redeemedAt: c.redeemedAt,
@@ -256,9 +300,6 @@ async function handleRedeem(event, OPENID) {
     return { success: false, error: '该激活码已被使用，一次性口令不可重复兑换' };
   }
 
-  const planType = VALID_PLAN_TYPES.includes(codeDoc.planType) ? codeDoc.planType : DEFAULT_PLAN_TYPE;
-  const durationDays = codeDoc.durationDays > 0 ? codeDoc.durationDays : DEFAULT_DURATION_DAYS;
-
   let existing = null;
   try {
     const subRes = await db.collection(TENANT_SUB_COLLECTION)
@@ -273,6 +314,83 @@ async function handleRedeem(event, OPENID) {
   }
 
   const today = todayStr();
+
+  // 🏢 扩容门店包码：只累加 max_stores_limit（cloudQuota.storeLimit），完全
+  // 不碰 plan_type/plan_expire_at——与常规套餐码是两条独立的兑换路径
+  if (codeDoc.codeType === 'add_on') {
+    const extraStores = codeDoc.extraStores > 0 ? codeDoc.extraStores : DEFAULT_ADD_ON_EXTRA_STORES;
+    // 基准配额：机构此前已有订阅记录时取其"当前生效配额"（显式存储值优先，
+    // 否则回落到该套餐档位的默认值）；从未订阅过（纯 basic 机构首次兑换扩容包）
+    // 时以 basic 默认配额为基准——扩容包叠加的是"门店数"这个独立维度，不应该
+    // 因为兑换了一张扩容包就意外把机构从 basic 拔高成付费套餐
+    const baseStoreLimit = existing
+      ? ((existing.cloudQuota && existing.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[existing.planType] || PLAN_STORE_LIMITS.basic)
+      : PLAN_STORE_LIMITS.basic;
+    const finalStoreLimit = baseStoreLimit + extraStores;
+
+    const addOnEntry = {
+      operatorId: OPENID,
+      operateTime: db.serverDate(),
+      fromExpireDate: existing ? existing.serviceExpireDate : null,
+      toExpireDate: existing ? existing.serviceExpireDate : null,
+      reason: `扩容门店包自助兑换：${codeDoc.code}（+${extraStores} 家门店）`
+    };
+
+    if (existing) {
+      await db.collection(TENANT_SUB_COLLECTION).doc(existing._id).update({
+        data: {
+          status: 'active',
+          lastRenewedAt: db.serverDate(),
+          renewalHistory: _.push(addOnEntry),
+          cloudQuota: { ...(existing.cloudQuota || {}), storeLimit: finalStoreLimit }
+        }
+      });
+    } else {
+      const newSubData = {
+        tenantId,
+        planType: 'basic',
+        serviceStartDate: today,
+        // basic 版本身没有到期概念，扩容包同样不赋予有效期——门店名额长期有效，
+        // 直到机构自己升级/续费付费套餐才会引入真正的到期日
+        serviceExpireDate: null,
+        cloudQuota: { storeLimit: finalStoreLimit },
+        status: 'active',
+        lastRenewedAt: db.serverDate(),
+        renewalHistory: [addOnEntry]
+      };
+      try {
+        await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+      } catch (err) {
+        if (!isCollectionNotExistError(err)) throw err;
+        await db.createCollection(TENANT_SUB_COLLECTION).catch(() => {});
+        await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+      }
+    }
+
+    await db.collection(ACTIVATION_CODES_COLLECTION).doc(codeDoc._id).update({
+      data: {
+        status: 'USED',
+        redeemedBy: OPENID,
+        redeemedByTenantId: tenantId,
+        redeemedAt: db.serverDate()
+      }
+    });
+
+    return {
+      success: true,
+      data: {
+        codeType: 'add_on',
+        extraStores,
+        storeLimit: finalStoreLimit,
+        planType: existing ? existing.planType : 'basic',
+        serviceExpireDate: existing ? existing.serviceExpireDate : null
+      }
+    };
+  }
+
+  const planType = VALID_PLAN_TYPES.includes(codeDoc.planType) ? codeDoc.planType : DEFAULT_PLAN_TYPE;
+  const durationDays = codeDoc.durationDays > 0 ? codeDoc.durationDays : DEFAULT_DURATION_DAYS;
+
   // 🌟 续期不清零：已生效套餐且尚未到期时，从"现有到期日"往后顺延，而不是从
   // 今天重新起算——提前兑换续费码不会白白损失剩余天数
   const existingExpire = existing && existing.serviceExpireDate;
@@ -352,6 +470,7 @@ async function handleRedeem(event, OPENID) {
   return {
     success: true,
     data: {
+      codeType: 'package',
       planType: finalPlanType,
       serviceExpireDate: newExpireDate,
       storeLimit: finalStoreLimit

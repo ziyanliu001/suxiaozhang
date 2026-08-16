@@ -48,6 +48,11 @@ const DEFAULT_TENANT_STORE_LIMIT = 999;
 // 兜底，不再单独维护一份更宽松的"试用配额"——basic 本身就是免费默认档
 const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
+// 🕊️ 到期宽限期（Grace Period）：与 checkTenantPermission 完全同一份拷贝（各
+// 云函数独立部署，没有跨函数共享模块机制）。到期后 7 天内仍按原套餐配额放行
+// 建店，不因为财务同事没来得及续费就立即把机构摁死在 basic 单店配额上
+const GRACE_PERIOD_DAYS = 7;
+
 // 🆕 轻量省市提取：超管快速建店（store-picker「新建门店」超管分支）目前只填
 // 门店名称，不收集省市——province/city 缺失时尝试从门店名称/地址文本里猜一猜。
 // 不追求覆盖全国行政区划，只覆盖本项目门店实际集中分布的常见地区；猜不出来
@@ -246,12 +251,18 @@ exports.main = async (event) => {
 
     let storeLimit = PLAN_STORE_LIMITS.basic;
     if (subscription) {
-      if (subscription.status === 'suspended' || subscription.status === 'expired') {
-        return { success: false, error: '订阅服务已暂停/过期，无法新建门店，请联系平台管理员续费' };
+      if (subscription.status === 'suspended') {
+        return { success: false, error: '订阅服务已暂停，无法新建门店，请联系平台管理员续费' };
       }
-      const todayStr = new Date().toISOString().slice(0, 10);
-      if (subscription.serviceExpireDate && subscription.serviceExpireDate < todayStr) {
-        return { success: false, error: '服务已过期，无法新建门店，请联系平台管理员续费' };
+      // 🕊️ 宽限期：到期后 7 天内仍放行建店（按到期前的套餐配额），超出宽限期
+      // 才真正拒绝——与 checkTenantPermission 的 isInGracePeriod 判断同一条口径
+      const expireTime = subscription.serviceExpireDate ? new Date(subscription.serviceExpireDate).getTime() : NaN;
+      const rawExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+      if (rawExpired) {
+        const graceDeadline = expireTime + GRACE_PERIOD_DAYS * 24 * 3600 * 1000;
+        if (graceDeadline < Date.now()) {
+          return { success: false, error: '服务已过期（含 7 天宽限期），无法新建门店，请联系平台管理员续费' };
+        }
       }
       storeLimit = (subscription.cloudQuota && subscription.cloudQuota.storeLimit)
         || PLAN_STORE_LIMITS[subscription.planType]
@@ -276,9 +287,11 @@ exports.main = async (event) => {
       // PLAN_UPGRADE_REQUIRED 同一套约定，供前端精确识别"这次失败是套餐配额
       // 问题"，从而弹出可操作的升级引导弹窗，而不是把这条 error 文案当成普通
       // 建店失败原样吐司了事
+      const currentCountRes = await db.collection('tenants').doc(tenantId).field({ currentStoreCount: true }).get().catch(() => null);
+      const currentCount = (currentCountRes && currentCountRes.data && currentCountRes.data.currentStoreCount) || storeLimit;
       return {
         success: false,
-        error: `当前机构套餐门店配额已满（上限 ${storeLimit} 家），请升级套餐或购买扩容包`,
+        error: `当前机构套餐门店额度已满(${currentCount}/${storeLimit})，请扩容或升级`,
         errorCode: 'STORE_LIMIT_REACHED'
       };
     }

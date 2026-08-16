@@ -29,6 +29,12 @@ const FEATURE_PLAN_REQUIREMENTS = {
 // 手动调高（如购买扩容包），服务端只保证"不低于当前套餐档位的默认配额"
 const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
+// 🕊️ 到期宽限期（Grace Period）：与 createStore 完全同一份拷贝（各云函数独立
+// 部署，没有跨函数共享模块机制）。套餐到期后 7 天内，机构仍按到期前的档位
+// 正常使用——一线公益门店的记账/日常流水不能因为财务同事没来得及续费就立即
+// 中断。超出宽限期才真正降级为 basic 并收紧高级功能
+const GRACE_PERIOD_DAYS = 7;
+
 // 🛡️ -502005 DATABASE_COLLECTION_NOT_EXIST：tenant_subscriptions 可能在这套
 // 环境里还没被写入过，与 submitFeedback/manageStoreInviteCode/manageNotice/
 // manageTenantSubscription 同一套自愈口径——只读查询命中时按"从未订阅过"降级
@@ -45,7 +51,11 @@ function isCollectionNotExistError(err) {
 // basic 处理；storeLimit 取 cloudQuota.storeLimit，缺省 1（免费版门店数上限）
 async function checkTenantPermission(tenantId, featureKey) {
   if (!tenantId) {
-    return { allowed: false, planType: 'basic', isExpired: false, storeLimit: 1, serviceExpireDate: null, reason: '无法确认所属机构' };
+    return {
+      allowed: false, planType: 'basic', isExpired: false, isInGracePeriod: false,
+      graceExpireDate: null, coreReadOnly: false, storeLimit: 1, serviceExpireDate: null,
+      reason: '无法确认所属机构'
+    };
   }
 
   let sub = null;
@@ -63,11 +73,28 @@ async function checkTenantPermission(tenantId, featureKey) {
 
   let planType = 'basic';
   let isExpired = false;
+  let isInGracePeriod = false;
+  let graceExpireDate = null;
+  // 🕊️ 核心记账（记账/日常流水/历史查看等未登记进 FEATURE_PLAN_REQUIREMENTS 的
+  // 基础功能）在宽限期内、乃至宽限期结束后都不整个拦死——只读/基础可用，
+  // 由调用方（如 saveReport 等写路径）自行读取这个信号决定是否拒绝写操作，
+  // 本函数只负责把"是否已经超出宽限期"这一权威判断透传出去
+  let coreReadOnly = false;
   let storeLimit = PLAN_STORE_LIMITS.basic;
   let serviceExpireDate = null;
   if (sub) {
     const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
-    isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+    const rawExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+    if (rawExpired) {
+      const graceDeadline = expireTime + GRACE_PERIOD_DAYS * 24 * 3600 * 1000;
+      graceExpireDate = new Date(graceDeadline).toISOString().slice(0, 10);
+      isInGracePeriod = graceDeadline >= Date.now();
+      // 🌟 只有真正超出宽限期才降级为 basic + 收紧高级功能；宽限期内仍按到期前
+      // 的档位放行，给机构留出续费缓冲时间，不因为财务同事晚了几天续费就让
+      // 已经在用的跨店大屏/导出功能当场失效
+      isExpired = !isInGracePeriod;
+      coreReadOnly = !isInGracePeriod;
+    }
     planType = isExpired ? 'basic' : (sub.planType || 'basic');
     storeLimit = (sub.cloudQuota && sub.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[planType] || PLAN_STORE_LIMITS.basic;
     // 🛡️ 服务端硬校验：basic（含到期自动降级为 basic 的情形）固定套餐门店配额，
@@ -84,16 +111,22 @@ async function checkTenantPermission(tenantId, featureKey) {
   }
 
   const requiredPlans = FEATURE_PLAN_REQUIREMENTS[featureKey];
+  // 🕊️ 宽限期内高级功能仍放行（与上面 planType 未被降级为 basic 是同一条判断
+  // 结果，这里不重复判一遍到期），超出宽限期后 planType 已收敛为 basic，
+  // 自然被下面这条“套餐矩阵”规则拦下
   const allowed = !requiredPlans || requiredPlans.includes(planType);
 
   return {
     allowed,
     planType,
     isExpired,
+    isInGracePeriod,
+    graceExpireDate,
+    coreReadOnly,
     storeLimit,
     serviceExpireDate,
     requiredPlans: requiredPlans || null,
-    reason: allowed ? '' : '该功能为专业版专属，请联系大家长升级套餐'
+    reason: allowed ? '' : '该功能为付费套餐专属，请联系大家长升级套餐或购买/兑换授权'
   };
 }
 
@@ -127,6 +160,9 @@ exports.main = async (event) => {
         allowed: true,
         planType: 'enterprise',
         isExpired: false,
+        isInGracePeriod: false,
+        graceExpireDate: null,
+        coreReadOnly: false,
         storeLimit: Number.MAX_SAFE_INTEGER,
         serviceExpireDate: null,
         reason: '',

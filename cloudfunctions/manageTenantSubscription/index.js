@@ -387,9 +387,11 @@ exports.main = async (event) => {
         }
 
         if (!reserved) {
+          const currentCountRes = await db.collection('tenants').doc(targetTenantId).field({ currentStoreCount: true }).get().catch(() => null);
+          const currentCount = (currentCountRes && currentCountRes.data && currentCountRes.data.currentStoreCount) || storeLimit;
           return {
             success: false,
-            error: `目标机构套餐门店配额已满（上限 ${storeLimit} 家），请先为目标机构升级套餐或购买扩容包`,
+            error: `当前机构套餐门店额度已满(${currentCount}/${storeLimit})，请扩容或升级`,
             errorCode: 'STORE_LIMIT_REACHED'
           };
         }

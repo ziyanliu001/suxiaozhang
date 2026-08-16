@@ -3,7 +3,10 @@
 // 拉起 wx.requestPayment 所需的 payment 参数对象。
 //
 // 入参（event）：
-//   planType: string  套餐类型，目前支持 'ADVANCED_YEARLY'（专业版年度订阅）
+//   planType: string  套餐类型，支持 'PRO_YEARLY'（专业版年度订阅）/
+//                      'FLAGSHIP_YEARLY'（旗舰版年度订阅）/ 'ADD_ON_STORE'
+//                      （扩容门店包，按 quantity 家/年计费）
+//   quantity: number  仅 ADD_ON_STORE 生效，购买的扩容门店数量，默认 1
 //
 // 安全边界：tenantId 从服务端 OPENID 反查 user_roles 获取，不信任客户端传参
 // （与 activateTenantSubscription 同一防线）；权限校验仅允许 super_admin /
@@ -14,15 +17,34 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 // ── 套餐价格与元数据 ────────────────────────────────────────────────────────
-// totalFee 单位：分（人民币）；planType 对应 tenant_subscriptions 集合的字段值
+// totalFee/unitFee 单位：分（人民币）；planType 对应 tenant_subscriptions
+// 集合的字段值。三档套餐定价与门店配额（方案一：以机构为核心计费主体）：
+//   基础版 basic    ¥0     / 门店上限 2  家（免费默认档，无需下单，不在此登记）
+//   专业版 pro      ¥1,688 / 年，门店上限 10 家
+//   旗舰版 enterprise ¥3,688 / 年，门店上限 30 家
+//   扩容门店包 add_on ¥200 / 店 / 年，按需叠加最大门店配额，不改变 planType
 const PLAN_CONFIG = {
-  ADVANCED_YEARLY: {
-    totalFee: 29800,           // 298.00 元
+  PRO_YEARLY: {
+    totalFee: 168800,          // 1688.00 元
     planType: 'pro',
     durationDays: 365,
     body: '雨花助手专业版年度订阅'
+  },
+  FLAGSHIP_YEARLY: {
+    totalFee: 368800,          // 3688.00 元
+    planType: 'enterprise',
+    durationDays: 365,
+    body: '雨花助手旗舰版年度订阅'
   }
 };
+// 扩容门店包：不是"套餐"，是独立的门店配额加购项——unitFee 为单店/年单价，
+// 下单时按 quantity 叠加总价，payCallback 那边据此只增配额、不动 planType/到期日
+const ADD_ON_STORE_CONFIG = {
+  unitFee: 20000,              // 200.00 元 / 店 / 年
+  durationDays: 365,
+  bodyPrefix: '雨花助手门店扩容包'
+};
+const MAX_ADD_ON_QUANTITY = 20;
 
 // 订单暂存集合：payCallback 通过 outTradeNo 反查此集合以获取 tenantId / planType
 const ORDERS_COLLECTION = 'subscription_orders';
@@ -48,9 +70,22 @@ exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   if (!OPENID) return { success: false, error: '无法获取用户身份' };
 
-  // 1. 校验套餐类型
-  const planKey = event.planType || 'ADVANCED_YEARLY';
-  const planCfg = PLAN_CONFIG[planKey];
+  // 1. 校验套餐类型：ADD_ON_STORE 走独立分支（不在 PLAN_CONFIG 里，元数据/
+  // 总价计算方式与常规套餐订单不同——按 quantity 家门店 × 单价计费）
+  const planKey = event.planType || 'PRO_YEARLY';
+  const isAddOn = planKey === 'ADD_ON_STORE';
+  let planCfg = null;
+  let addOnQuantity = 0;
+  if (isAddOn) {
+    addOnQuantity = Math.min(Math.max(parseInt(event.quantity, 10) || 1, 1), MAX_ADD_ON_QUANTITY);
+    planCfg = {
+      totalFee: ADD_ON_STORE_CONFIG.unitFee * addOnQuantity,
+      durationDays: ADD_ON_STORE_CONFIG.durationDays,
+      body: `${ADD_ON_STORE_CONFIG.bodyPrefix} × ${addOnQuantity} 家/年`
+    };
+  } else {
+    planCfg = PLAN_CONFIG[planKey];
+  }
   if (!planCfg) {
     return { success: false, error: `不支持的套餐类型：${planKey}` };
   }
@@ -81,7 +116,9 @@ exports.main = async (event) => {
   const orderData = {
     outTradeNo,
     tenantId,
-    planType: planCfg.planType,
+    // 🏢 扩容门店包订单不带 planType（payCallback 据此分流：isAddOn 时只加
+    // 门店配额，不触碰 tenant_subscriptions.planType/serviceExpireDate）
+    ...(isAddOn ? { isAddOn: true, extraStores: addOnQuantity } : { planType: planCfg.planType }),
     durationDays: planCfg.durationDays,
     totalFee: planCfg.totalFee,
     status: 'pending',

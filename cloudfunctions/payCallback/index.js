@@ -46,6 +46,9 @@ function addDaysToDateStr(dateStr, days) {
 
 // 套餐档位排序：只升不降（已是 enterprise 的租户用 pro 订单续费时保持 enterprise）
 const PLAN_RANK = { basic: 0, pro: 1, enterprise: 2 };
+// 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——与 checkTenantPermission/
+// createStore/activateTenantSubscription/manageTenantSubscription 同一份拷贝
+const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
 // ── 主函数 ────────────────────────────────────────────────────────────────────
 exports.main = async (event) => {
@@ -93,9 +96,9 @@ exports.main = async (event) => {
     return { errcode: 0, errmsg: 'ok' };
   }
 
-  const { tenantId, planType, durationDays } = order;
-  if (!tenantId || !planType) {
-    console.error('[payCallback] 订单数据不完整:', { tenantId, planType, OutTradeNo });
+  const { tenantId, planType, durationDays, isAddOn, extraStores } = order;
+  if (!tenantId || (!planType && !isAddOn)) {
+    console.error('[payCallback] 订单数据不完整:', { tenantId, planType, isAddOn, OutTradeNo });
     return { errcode: 0, errmsg: 'ok' };
   }
 
@@ -116,61 +119,126 @@ exports.main = async (event) => {
     // existing 为 null 则后续走新增分支
   }
 
-  // 续期不清零：未到期时从现有到期日顺延，避免提前续费白白损失剩余天数
-  const existingExpire = existing && existing.serviceExpireDate;
-  const existingStillValid = !!existingExpire && new Date(existingExpire).getTime() > Date.now();
-  const baseDate = existingStillValid ? existingExpire : today;
-  const safeDurationDays = (Number.isFinite(durationDays) && durationDays > 0) ? durationDays : 365;
-  const newExpireDate = addDaysToDateStr(baseDate, safeDurationDays);
+  // 🏢 扩容门店包订单：只累加 max_stores_limit（cloudQuota.storeLimit），
+  // 完全不碰 planType/serviceExpireDate——与 activateTenantSubscription 的
+  // add_on 兑换分支同一条业务逻辑，两条入口（微信支付 / 授权码）殊途同归
+  let finalPlanType;
+  let newExpireDate;
+  if (isAddOn) {
+    const safeExtraStores = (Number.isFinite(extraStores) && extraStores > 0) ? extraStores : 1;
+    const baseStoreLimit = existing
+      ? ((existing.cloudQuota && existing.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[existing.planType] || PLAN_STORE_LIMITS.basic)
+      : PLAN_STORE_LIMITS.basic;
+    const finalStoreLimit = baseStoreLimit + safeExtraStores;
+    finalPlanType = existing ? existing.planType : 'basic';
+    newExpireDate = existing ? existing.serviceExpireDate : null;
 
-  // 只升不降：已是 enterprise 时用 pro 续费仍保持 enterprise
-  const existingPlanRank = existing ? (PLAN_RANK[existing.planType] || 0) : 0;
-  const incomingPlanRank = PLAN_RANK[planType] || 0;
-  const finalPlanType = incomingPlanRank >= existingPlanRank ? planType : (existing.planType || planType);
+    const addOnEntry = {
+      operatorId: 'WX_PAY',
+      operateTime: db.serverDate(),
+      fromExpireDate: existing ? (existing.serviceExpireDate || null) : null,
+      toExpireDate: newExpireDate,
+      reason: `微信支付成功激活扩容门店包（+${safeExtraStores} 家），订单号：${OutTradeNo}`
+    };
 
-  const renewalEntry = {
-    operatorId: 'WX_PAY',
-    operateTime: db.serverDate(),
-    fromExpireDate: existing ? (existing.serviceExpireDate || null) : null,
-    toExpireDate: newExpireDate,
-    reason: `微信支付成功激活，订单号：${OutTradeNo}`
-  };
-
-  try {
-    if (existing) {
-      await db.collection(TENANT_SUB_COLLECTION).doc(existing._id).update({
-        data: {
-          planType: finalPlanType,
-          serviceExpireDate: newExpireDate,
-          serviceStartDate: existing.serviceStartDate || today,
+    try {
+      if (existing) {
+        await db.collection(TENANT_SUB_COLLECTION).doc(existing._id).update({
+          data: {
+            status: 'active',
+            lastRenewedAt: db.serverDate(),
+            renewalHistory: _.push(addOnEntry),
+            cloudQuota: { ...(existing.cloudQuota || {}), storeLimit: finalStoreLimit }
+          }
+        });
+      } else {
+        const newSubData = {
+          tenantId,
+          planType: 'basic',
+          serviceStartDate: today,
+          serviceExpireDate: null,
+          cloudQuota: { storeLimit: finalStoreLimit },
           status: 'active',
           lastRenewedAt: db.serverDate(),
-          renewalHistory: _.push(renewalEntry)
+          renewalHistory: [addOnEntry]
+        };
+        try {
+          await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+        } catch (err) {
+          if (!isCollectionNotExistError(err)) throw err;
+          await db.createCollection(TENANT_SUB_COLLECTION).catch(() => {});
+          await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
         }
-      });
-    } else {
-      const newSubData = {
-        tenantId,
-        planType: finalPlanType,
-        serviceStartDate: today,
-        serviceExpireDate: newExpireDate,
-        cloudQuota: {},
-        status: 'active',
-        lastRenewedAt: db.serverDate(),
-        renewalHistory: [renewalEntry]
-      };
-      try {
-        await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
-      } catch (err) {
-        if (!isCollectionNotExistError(err)) throw err;
-        await db.createCollection(TENANT_SUB_COLLECTION).catch(() => {});
-        await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
       }
+    } catch (err) {
+      console.error('[payCallback] 更新 tenant_subscriptions（扩容包）失败:', err);
+      return { errcode: 0, errmsg: 'ok' };
     }
-  } catch (err) {
-    console.error('[payCallback] 更新 tenant_subscriptions 失败:', err);
-    // 记录失败但仍返回 ok，避免微信无限重试；告警应通过日志监控触达
-    return { errcode: 0, errmsg: 'ok' };
+  } else {
+    // 续期不清零：未到期时从现有到期日顺延，避免提前续费白白损失剩余天数
+    const existingExpire = existing && existing.serviceExpireDate;
+    const existingStillValid = !!existingExpire && new Date(existingExpire).getTime() > Date.now();
+    const baseDate = existingStillValid ? existingExpire : today;
+    const safeDurationDays = (Number.isFinite(durationDays) && durationDays > 0) ? durationDays : 365;
+    newExpireDate = addDaysToDateStr(baseDate, safeDurationDays);
+
+    // 只升不降：已是 enterprise 时用 pro 续费仍保持 enterprise
+    const existingPlanRank = existing ? (PLAN_RANK[existing.planType] || 0) : 0;
+    const incomingPlanRank = PLAN_RANK[planType] || 0;
+    finalPlanType = incomingPlanRank >= existingPlanRank ? planType : (existing.planType || planType);
+
+    // 🐛 同步收敛门店配额：与 activateTenantSubscription 的 handleRedeem 同一条
+    // "只升不降"口径——取"该档位的默认配额"与"机构此前已有的配额"两者较大值，
+    // 不能无条件按套餐默认值覆盖，否则会抹掉此前通过扩容包购买的额外门店名额
+    const existingStoreLimit = (existing && existing.cloudQuota && existing.cloudQuota.storeLimit) || 0;
+    const planDefaultStoreLimit = PLAN_STORE_LIMITS[finalPlanType] || PLAN_STORE_LIMITS.basic;
+    const finalStoreLimit = Math.max(existingStoreLimit, planDefaultStoreLimit);
+
+    const renewalEntry = {
+      operatorId: 'WX_PAY',
+      operateTime: db.serverDate(),
+      fromExpireDate: existing ? (existing.serviceExpireDate || null) : null,
+      toExpireDate: newExpireDate,
+      reason: `微信支付成功激活，订单号：${OutTradeNo}`
+    };
+
+    try {
+      if (existing) {
+        await db.collection(TENANT_SUB_COLLECTION).doc(existing._id).update({
+          data: {
+            planType: finalPlanType,
+            serviceExpireDate: newExpireDate,
+            serviceStartDate: existing.serviceStartDate || today,
+            status: 'active',
+            lastRenewedAt: db.serverDate(),
+            renewalHistory: _.push(renewalEntry),
+            cloudQuota: { ...(existing.cloudQuota || {}), storeLimit: finalStoreLimit }
+          }
+        });
+      } else {
+        const newSubData = {
+          tenantId,
+          planType: finalPlanType,
+          serviceStartDate: today,
+          serviceExpireDate: newExpireDate,
+          cloudQuota: { storeLimit: finalStoreLimit },
+          status: 'active',
+          lastRenewedAt: db.serverDate(),
+          renewalHistory: [renewalEntry]
+        };
+        try {
+          await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+        } catch (err) {
+          if (!isCollectionNotExistError(err)) throw err;
+          await db.createCollection(TENANT_SUB_COLLECTION).catch(() => {});
+          await db.collection(TENANT_SUB_COLLECTION).add({ data: newSubData });
+        }
+      }
+    } catch (err) {
+      console.error('[payCallback] 更新 tenant_subscriptions 失败:', err);
+      // 记录失败但仍返回 ok，避免微信无限重试；告警应通过日志监控触达
+      return { errcode: 0, errmsg: 'ok' };
+    }
   }
 
   // ── Step 3：同步更新 tenants 集合 ─────────────────────────────────────────
