@@ -64,15 +64,41 @@ Page({
     wx.navigateBack({ delta: 1 });
   },
 
+  // 🐛 阻塞点修复：此前用 wx.getStorageInfoSync() 枚举全部本地存储 key，再对
+  // 每一个 DRAFT_ 前缀的 key 逐个同步 wx.getStorageSync() 读取——每次 wx.xxxSync
+  // 调用都是一次同步 JSBridge 往返（不是白拿的纯内存读取），草稿积累到几十/
+  // 上百条时（长期使用、忘记清理的账号很常见），这一整串同步调用会连续占用
+  // JS 主线程数百毫秒甚至更久。这段时间里主线程被占满，任何跳转到本页面的
+  // wx.navigateTo 原生回调都可能排不上号，是 "navigateTo:fail timeout" 这类
+  // 问题的典型阻塞点之一。改为：① 枚举 key 换成 wx.getStorageInfo 异步版本，
+  // 不再同步阻塞；② 逐个 key 的读取按批次穿插 setTimeout(0) 让出主线程，
+  // 避免成百上千次同步调用挤在同一个 JS 执行帧里
   loadDraftList() {
     this.setData({ loading: true });
 
-    try {
-      const info = wx.getStorageInfoSync();
-      const keys = (info.keys || []).filter((k) => k.startsWith(DRAFT_KEY_PREFIX));
+    wx.getStorageInfo({
+      success: (info) => {
+        const keys = (info.keys || []).filter((k) => k.startsWith(DRAFT_KEY_PREFIX));
+        this.readDraftsInBatches(keys, []);
+      },
+      fail: (err) => {
+        console.error('[draft-box] 读取本地存储信息失败:', err);
+        this.setData({ draftList: [], loading: false });
+      }
+    });
+  },
 
-      const draftList: DraftSummary[] = keys
-        .map((key) => {
+  // 分批读取草稿：每批最多 BATCH_SIZE 个 key，批次之间用 setTimeout(0) 让出
+  // 主线程一次，避免一长串同步 wx.getStorageSync 挤占单帧、阻塞其它交互
+  // （包括别的页面正在等待完成的 navigateTo 跳转回调）
+  readDraftsInBatches(keys: string[], accumulated: DraftSummary[]) {
+    const BATCH_SIZE = 20;
+    const batch = keys.slice(0, BATCH_SIZE);
+    const rest = keys.slice(BATCH_SIZE);
+
+    const parsed = batch
+      .map((key) => {
+        try {
           const draftData = wx.getStorageSync(key);
           if (!draftData) return null;
 
@@ -91,15 +117,22 @@ Page({
             saveTimeLabel: formatSaveTime(draftData.saveTime || 0),
             hasContent: true
           } as DraftSummary;
-        })
-        .filter((item): item is DraftSummary => !!item && !!item.dateValue)
-        .sort((a, b) => b.saveTime - a.saveTime);
+        } catch (err) {
+          console.warn('[draft-box] 读取单条草稿失败，跳过:', key, err);
+          return null;
+        }
+      })
+      .filter((item): item is DraftSummary => !!item && !!item.dateValue);
 
-      this.setData({ draftList, loading: false });
-    } catch (err) {
-      console.error('[draft-box] 读取草稿列表失败:', err);
-      this.setData({ draftList: [], loading: false });
+    const nextAccumulated = accumulated.concat(parsed);
+
+    if (rest.length === 0) {
+      nextAccumulated.sort((a, b) => b.saveTime - a.saveTime);
+      this.setData({ draftList: nextAccumulated, loading: false });
+      return;
     }
+
+    setTimeout(() => this.readDraftsInBatches(rest, nextAccumulated), 0);
   },
 
   onTapResume(e: any) {
