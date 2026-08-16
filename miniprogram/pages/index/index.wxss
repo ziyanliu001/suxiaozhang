@@ -5539,7 +5539,14 @@ button.poster-gen-btn[disabled] {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* 🛡️ 本弹窗现已移到 index-page-container 根级（见 index.wxml 同一处
+     🐛 层级遮挡修复注释），不再嵌套在 currentPlatformMode 的 wx:if 分支内，
+     理论上随时可能与本页任何其它弹窗同框。z-index 原先只有 1000，明显低于
+     本文件业务弹窗最高档的 99999（.modal-backdrop）——那时不构成问题是因为
+     两者此前受同一个 wx:if 互斥，不可能真的同时出现；现在挪到根级后不能再
+     依赖这层偶然的互斥关系，显式提到与 .compliance-modal-mask 同一档，
+     确保始终浮在最上层、不被任何其它遮罩压住 */
+  z-index: 100000;
 }
 
 /* 卡片：flex 列，max-height 限制总高，超出由 Body scroll-view 内部滚动消化 */
@@ -7729,7 +7736,12 @@ button.poster-gen-btn[disabled] {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  /* 🛡️ 强制最上层：本页其余弹窗最高到 .modal-backdrop 的 99999（业务功能弹窗，
+     只在已进入工作台后才可能出现，理论上不会与这张"进入前置校验"弹窗同框），
+     这里显式设到比它们都高，确保只要 showComplianceModal 为 true，声明弹窗
+     一定能盖住页面上任何其它遮罩/内容，不会出现"弹窗其实弹出来了，但被别的
+     遮罩挡住看不见、点不到"的情况 */
+  z-index: 100000;
 }
 
 .compliance-modal-card {

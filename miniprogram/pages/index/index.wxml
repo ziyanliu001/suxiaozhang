@@ -2260,121 +2260,16 @@
     </view>
   </view>
 
-  <!-- 扫码绑定义工申请 Modal -->
-  <!-- 🌟 门店申请弹窗：三段式布局（Header 固定 / Body 可滚动 / Footer 固定置底）
-       彻底解决表单内容多时底部提交按钮被遮挡的问题。
-       Body 用 scroll-view 包裹，max-height: 50vh 保证内部滚动不挤压 Footer。 -->
-  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal">
-    <view class="apply-modal-card" catchtap="stopPropagation">
-
-      <!-- 1. Header（固定） -->
-      <view class="apply-modal-header">
-        <text class="apply-modal-title">
-          <view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyModalTitleOverride || (applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店'))}}
-        </text>
-        <text class="apply-modal-close" bindtap="onCloseApplyModal">✕</text>
-      </view>
-
-      <!-- 2. Body（可滚动，max-height: 50vh 保证内容多时内部滚动） -->
-      <scroll-view scroll-y class="apply-modal-body" style="max-height: 50vh;">
-
-        <view class="form-item">
-          <!-- 标签随模式切换：新建门店时显示必填红星 -->
-          <text class="form-label" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text class="form-required">*</text> 新门店名称</text>
-          <text class="form-label" wx:else>门店</text>
-          <view class="store-mode-tabs">
-            <view class="store-mode-tab {{applyForm.storeSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
-            <view class="store-mode-tab {{applyForm.storeSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
-          </view>
-
-          <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
-            <view class="form-picker-selector">{{applyForm.storeName || '请选择门店'}}</view>
-          </picker>
-          <input wx:else class="form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
-          <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
-        </view>
-
-        <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进
-             申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案 -->
-        <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
-          <view class="form-item">
-            <text class="form-label"><text class="form-required">*</text> 选择所属地区</text>
-            <picker mode="region" value="{{applyForm.region}}" bindchange="onApplyRegionChange">
-              <view class="form-picker-selector">{{applyForm.region.length ? applyForm.region.join(' / ') : '请选择省 / 市 / 区 ▼'}}</view>
-            </picker>
-          </view>
-          <view class="form-item">
-            <text class="form-label">门店地址（可选）</text>
-            <input class="form-input" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
-          </view>
-          <view class="form-item">
-            <text class="form-label">联系电话（可选）</text>
-            <input class="form-input" type="number" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
-          </view>
-          <view class="form-item">
-            <text class="form-label">门店照片（可选）</text>
-            <view class="receipt-grid-container">
-              <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
-                <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" binderror="onImageLoadError" />
-                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
-                  <text class="thumb-load-failed-icon">⚠️</text>
-                </view>
-                <view class="img-delete-badge" catchtap="onDeleteApplyStorePhoto" data-index="{{index}}">✕</view>
-              </view>
-              <view class="grid-add-btn" bindtap="onChooseApplyStorePhoto" wx:if="{{applyForm.storePhotos.length < 9}}">
-                <text class="add-icon">{{applyStorePhotoUploading ? '…' : '+'}}</text>
-                <text class="add-txt">{{applyStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
-              </view>
-            </view>
-          </view>
-        </block>
-
-        <view class="form-item">
-          <text class="form-label"><text class="form-required">*</text> 申请身份</text>
-          <!-- 🌟 动态联动：切换身份时 applyRoleTipText 与 applyRequiredHint 随之更新；义工免审即时生效 -->
-          <radio-group class="role-radio-group" bindchange="onApplyRoleChange">
-            <label class="role-radio-item">
-              <radio value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
-              <text>👑 大家长</text>
-            </label>
-            <label class="role-radio-item">
-              <radio value="store_manager" checked="{{applyForm.requestedRole === 'store_manager'}}" />
-              <text>🗂️ 店长</text>
-            </label>
-            <label class="role-radio-item">
-              <radio value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
-              <text>💰 财务义工</text>
-            </label>
-            <label class="role-radio-item">
-              <radio value="volunteer" checked="{{applyForm.requestedRole === 'volunteer'}}" />
-              <text>🤝 现场义工</text>
-            </label>
-          </radio-group>
-          <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
-        </view>
-        <view class="form-item">
-          <text class="form-label"><text class="form-required">*</text> 真实姓名</text>
-          <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
-        </view>
-        <view class="form-item">
-          <text class="form-label"><text class="form-required">*</text> 手机号</text>
-          <input class="form-input" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
-        </view>
-        <view class="fa-safe-area-spacer"></view>
-      </scroll-view>
-
-      <!-- 3. Footer（固定置底，不随 Body 滚动） -->
-      <view class="apply-modal-footer">
-        <button
-          class="btn-submit-apply"
-          bindtap="onSubmitRoleApply"
-          disabled="{{isSubmittingApply}}"
-          loading="{{isSubmittingApply}}"
-        >提交申请</button>
-      </view>
-
-    </view>
-  </view>
+  <!-- 🐛 层级遮挡修复：门店申请弹窗（showApplyModal）原先就地嵌套在这里——
+       而这整段都在文件顶部 `<block wx:if="{{currentPlatformMode}}">` 分支内
+       （见该 wx:if 与工作空间选择页 `<block wx:else>` 互斥）。openStorePickerForJoin
+       唤起本弹窗的唯一入口场景恰恰是"用户还停留在工作空间选择页、
+       currentPlatformMode 还是空字符串"——此时这整个 wx:if 分支根本没有被
+       创建到 DOM 里，setData({ showApplyModal: true }) 因此完全没有对应的
+       节点可以显示，云函数明明成功返回了门店列表，界面却什么都不出现。
+       不是 z-index 层级问题（弹窗压根没被渲染，无从谈层级），已把弹窗整体
+       移到页面根节点下（与 .compliance-modal-mask 同级，见文件末尾），
+       使其不受 currentPlatformMode 是否为空影响，任何时候都能正常显示 -->
 
   <!-- ================= 🔑 生成邀请码弹窗 (仅限超级管理员/店长/大家长，见 onOpenGenCodeModal 权限阶梯) ================= -->
   <view class="gencode-modal-mask" wx:if="{{showGenCodeModal}}" bindtap="onCloseGenCodeModal">
@@ -3340,4 +3235,126 @@
       </view>
     </view>
   </block>
+
+  <!-- 扫码绑定义工申请 Modal（根级弹窗）──────────────────────────────
+       🐛 层级遮挡修复：本弹窗从原先嵌套在 `<block wx:if="{{currentPlatformMode}}">`
+       分支内的位置移到这里——作为 index-page-container 的根级直接子节点，
+       与上面 wx:if/wx:else 两个互斥分支平级，不受 currentPlatformMode 是否为空
+       影响。openStorePickerForJoin（工作空间选择页点【雨花公益食堂专区】卡片，
+       账号尚未绑定门店时触发）恰恰是在 currentPlatformMode 仍为空字符串的
+       场景下唤起本弹窗，移到根级后才能在这个场景下正常显示。
+       三段式布局（Header 固定 / Body 可滚动 / Footer 固定置底）彻底解决表单
+       内容多时底部提交按钮被遮挡的问题；Body 用 scroll-view 包裹，
+       max-height: 50vh 保证内部滚动不挤压 Footer。 -->
+  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal">
+    <view class="apply-modal-card" catchtap="stopPropagation">
+
+      <!-- 1. Header（固定） -->
+      <view class="apply-modal-header">
+        <text class="apply-modal-title">
+          <view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyModalTitleOverride || (applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店'))}}
+        </text>
+        <text class="apply-modal-close" bindtap="onCloseApplyModal">✕</text>
+      </view>
+
+      <!-- 2. Body（可滚动，max-height: 50vh 保证内容多时内部滚动） -->
+      <scroll-view scroll-y class="apply-modal-body" style="max-height: 50vh;">
+
+        <view class="form-item">
+          <!-- 标签随模式切换：新建门店时显示必填红星 -->
+          <text class="form-label" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text class="form-required">*</text> 新门店名称</text>
+          <text class="form-label" wx:else>门店</text>
+          <view class="store-mode-tabs">
+            <view class="store-mode-tab {{applyForm.storeSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
+            <view class="store-mode-tab {{applyForm.storeSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
+          </view>
+
+          <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
+            <view class="form-picker-selector">{{applyForm.storeName || '请选择门店'}}</view>
+          </picker>
+          <input wx:else class="form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
+        </view>
+
+        <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进
+             申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案 -->
+        <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
+          <view class="form-item">
+            <text class="form-label"><text class="form-required">*</text> 选择所属地区</text>
+            <picker mode="region" value="{{applyForm.region}}" bindchange="onApplyRegionChange">
+              <view class="form-picker-selector">{{applyForm.region.length ? applyForm.region.join(' / ') : '请选择省 / 市 / 区 ▼'}}</view>
+            </picker>
+          </view>
+          <view class="form-item">
+            <text class="form-label">门店地址（可选）</text>
+            <input class="form-input" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
+          </view>
+          <view class="form-item">
+            <text class="form-label">联系电话（可选）</text>
+            <input class="form-input" type="number" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
+          </view>
+          <view class="form-item">
+            <text class="form-label">门店照片（可选）</text>
+            <view class="receipt-grid-container">
+              <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
+                <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" binderror="onImageLoadError" />
+                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+                  <text class="thumb-load-failed-icon">⚠️</text>
+                </view>
+                <view class="img-delete-badge" catchtap="onDeleteApplyStorePhoto" data-index="{{index}}">✕</view>
+              </view>
+              <view class="grid-add-btn" bindtap="onChooseApplyStorePhoto" wx:if="{{applyForm.storePhotos.length < 9}}">
+                <text class="add-icon">{{applyStorePhotoUploading ? '…' : '+'}}</text>
+                <text class="add-txt">{{applyStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
+              </view>
+            </view>
+          </view>
+        </block>
+
+        <view class="form-item">
+          <text class="form-label"><text class="form-required">*</text> 申请身份</text>
+          <!-- 🌟 动态联动：切换身份时 applyRoleTipText 与 applyRequiredHint 随之更新；义工免审即时生效 -->
+          <radio-group class="role-radio-group" bindchange="onApplyRoleChange">
+            <label class="role-radio-item">
+              <radio value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
+              <text>👑 大家长</text>
+            </label>
+            <label class="role-radio-item">
+              <radio value="store_manager" checked="{{applyForm.requestedRole === 'store_manager'}}" />
+              <text>🗂️ 店长</text>
+            </label>
+            <label class="role-radio-item">
+              <radio value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
+              <text>💰 财务义工</text>
+            </label>
+            <label class="role-radio-item">
+              <radio value="volunteer" checked="{{applyForm.requestedRole === 'volunteer'}}" />
+              <text>🤝 现场义工</text>
+            </label>
+          </radio-group>
+          <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
+        </view>
+        <view class="form-item">
+          <text class="form-label"><text class="form-required">*</text> 真实姓名</text>
+          <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
+        </view>
+        <view class="form-item">
+          <text class="form-label"><text class="form-required">*</text> 手机号</text>
+          <input class="form-input" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
+        </view>
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+
+      <!-- 3. Footer（固定置底，不随 Body 滚动） -->
+      <view class="apply-modal-footer">
+        <button
+          class="btn-submit-apply"
+          bindtap="onSubmitRoleApply"
+          disabled="{{isSubmittingApply}}"
+          loading="{{isSubmittingApply}}"
+        >提交申请</button>
+      </view>
+
+    </view>
+  </view>
 </view>
