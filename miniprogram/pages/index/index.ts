@@ -13,6 +13,7 @@ import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, reco
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { maskName } from '../../utils/privacy';
+import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeDisplay';
 import { md5 } from '../../utils/md5';
 import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, PreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
@@ -270,31 +271,10 @@ function stripTagPrefix(text: string, tag: string): string {
 // 🔗 跑马灯通知云端化：把 manageNotice 云函数返回的原始记录（tenantId/storeId/
 // createdAt 等审计字段）映射成前端一直在用的展示形状（id/tag/title/content/
 // create_time），公告详情弹窗/复制文案等既有逻辑完全不用改
-
-// 🐛 严重逻辑矛盾修复：弹窗标题此前固定死显示"喜讯通报"，与"物资告急/呼吁接力"
-// 这类告急内容语义完全脱节。改为按标签+标题+正文的真实语义特征逐条匹配，
-// 弹窗标题/主题色/复制按钮文案都跟着内容语义走，而不是死绑一个通用外壳。
-// 规则按优先级从上到下匹配，命中第一条即停止，未命中任何规则时落到默认"门店公告"。
-const NOTICE_CLASSIFY_RULES: Array<{
-  noticeType: string;
-  test: RegExp;
-  headerTitle: string;
-  themeClass: string;
-  typeIcon: string;
-  typeLabel: string;
-}> = [
-  { noticeType: 'closure', test: /停业|维护|暂停|关闭/,               headerTitle: '⚠️【停业公告】',   themeClass: 'type-closure',   typeIcon: '⚠️', typeLabel: '停业公告' },
-  { noticeType: 'urgent',  test: /物资|库存|大米|食用油|储备临界/,     headerTitle: '🚨【物资告急】',   themeClass: 'type-urgent',    typeIcon: '🚨', typeLabel: '物资告急' },
-  { noticeType: 'urgent',  test: /呼吁|招募|急需|求助|紧急/,           headerTitle: '📢【爱心呼吁】',   themeClass: 'type-urgent',    typeIcon: '📢', typeLabel: '爱心呼吁' },
-  { noticeType: 'good_news', test: /喜讯|试营业|开业|喜报/,            headerTitle: '🎉【喜讯通报】',   themeClass: 'type-good_news', typeIcon: '🎉', typeLabel: '喜讯通报' },
-  { noticeType: 'thanks', test: /感恩|致谢|鸣谢|感谢/,                 headerTitle: '❤️【感恩鸣谢】',   themeClass: 'type-thanks',    typeIcon: '❤️', typeLabel: '感恩鸣谢' },
-];
-const NOTICE_CLASSIFY_DEFAULT = { noticeType: 'general', headerTitle: '📌【门店公告】', themeClass: 'type-general', typeIcon: '📌', typeLabel: '门店公告' };
-
-function classifyNotice(tag: string, title: string, content: string) {
-  const text = `${tag || ''} ${title || ''} ${content || ''}`;
-  return NOTICE_CLASSIFY_RULES.find(rule => rule.test.test(text)) || NOTICE_CLASSIFY_DEFAULT;
-}
+//
+// 🐛 分类规则/正文去重已收敛进 utils/noticeDisplay.ts 统一维护，与 notice.ts
+// （通知页"系统通知"列表徽标）共用同一份数据字典，不再各自维护一份可能不一致
+// 的分类逻辑（详见该文件顶部注释）
 
 function mapNoticeRecord(raw: any): any {
   let createTime = '';
@@ -311,7 +291,10 @@ function mapNoticeRecord(raw: any): any {
     id: raw._id,
     tag,
     title,
-    content,
+    // 🐛 正文展示去重：预置文案/店长自行编辑保存的通报，正文开头习惯性带一份
+    // 与标题完全一致的"【标题】"前缀，弹窗已在标题位置单独展示过一次，这里
+    // 渲染取值时剥离，避免"标题与正文首行重复"
+    content: stripTitlePrefixFromContent(content, title),
     is_top: true,
     create_time: createTime,
     noticeType: classified.noticeType,
@@ -836,7 +819,10 @@ Page({
     showAnnouncementModal: false,
     showNoticeEditModal: false,
     noticeEditId: '',
-    noticeEditTag: '喜讯通报',
+    // 🐛 不再硬编码"喜讯通报"占位——openNoticeEdit/openNoticeCreate 打开弹窗时
+    // 会各自算出正确的默认值（沿用已有 tag，或按标题+正文语义建议），这里只是
+    // 弹窗展示前的初始态，留空即可，避免与真实分类语义无关的固定值有机可乘
+    noticeEditTag: '',
     noticeEditTitle: '',
     noticeEditContent: '',
     // 🌟 公告模板库：与本机内置的 7 条按 orgType 动态生成的预设文案（见
@@ -1025,15 +1011,28 @@ Page({
     _lockActiveKey: '',
     _heartbeatRetryCount: 0,
     showShiftSelectModal: false,
-    selectedShift: 'LUNCH',
-    selectedShiftHours: 3.0,
+    // 🏛️ 业务模型重构："服务餐次（时段）+ 护持岗位（工种）"组合选择，取代此前
+    // shiftDefinitions 里"一个班次名字里死绑一个固定工时"的单选列表（如
+    // "🍲 午餐打饭与引导班"=固定 3.0h，选了这一条就没法反映"我这次其实主要在
+    // 洗菜、顺便打饭"这种真实的混合工种场景）。selectedShift 字段名保留不变
+    // （仍然承担 shiftKey 语义，供 onConfirmShiftCheckIn/manageVolunteerCheckIn
+    // 云函数/my_checkin_logs 本地台账三处沿用），取值从旧的 5 个固定班次 key
+    // 改为 mealSlotDefinitions 里的时段 key（morning/lunch/dinner）——云函数与
+    // 本地台账都只把 shiftKey 当不透明字符串做"当日+同 key 去重"，不做枚举校验，
+    // 换取值域是安全的，不需要连带改动 cloudfunctions/manageVolunteerCheckIn
+    selectedShift: 'lunch',
+    // 工时不再从选中班次的固定值直接取，改由 recomputeShiftHours() 按
+    // "selectedJobTypes 工种建议工时之和 + manualHoursAdjust 微调" 实时算出，
+    // 这里只是初始占位值，真正生效值在 refreshTodayShiftStatus/onToggleJobType/
+    // onAdjustShiftHours 里持续刷新
+    selectedShiftHours: 0,
     willEatLunch: true,
     // 🍚 留店用餐细分餐别：勾选"今日留店用餐"后展开的早/午/晚 Chip 多选态，
     // 提交打卡时随 reservedMeals 一并写入后厨预留量数据（见 onConfirmShiftCheckIn）
     reservedMeals: ['lunch'] as string[],
     // 🍚 按门店配置供餐餐次：从 manageStoreProfile 的 mealConfig.supportedMeals 拉取
     // （见 loadStoreTargetConfig），默认单午餐档——打卡弹窗"今日留店用餐"Chip 行、
-    // 岗位班次列表（availableShifts 按 shiftDefinitions[].relatedMeal 关联过滤）、
+    // 供餐时段列表（availableMealSlots 按 mealSlotDefinitions[].relatedMeal 关联过滤）、
     // 餐报文本/公示海报的供餐人数汇总，均以这份数组为准动态适配
     supportedMeals: ['lunch'] as string[],
     // 🍚 后厨预留量统计：manageVolunteerCheckIn queryStoreHours 按餐别聚合的今日
@@ -1051,17 +1050,30 @@ Page({
     myCheckInDays: 0,
     myCheckInCount: 0,
     myServiceHours: 0,
-    // 🍚 relatedMeal：每个班次关联的餐次，供 refreshTodayShiftStatus() 按当前门店
-    // supportedMeals 过滤展示——只供午餐的门店（多数雨花斋）只会看到 MORNING/LUNCH/
-    // CLEAN 三个班次，EARLY_MORNING（早餐备餐）/NIGHT（晚餐相关）自动隐藏
-    shiftDefinitions: [
-      { shiftKey: 'EARLY_MORNING', name: '🌌 凌晨熬粥与备菜班', hours: 4.0, timeDesc: '04:00 - 08:00 · 蒸饭煲汤', relatedMeal: 'breakfast' },
-      { shiftKey: 'MORNING', name: '🥗 早间准备与洗切班', hours: 2.5, timeDesc: '08:00 - 10:30 · 洗菜配菜', relatedMeal: 'lunch' },
-      { shiftKey: 'LUNCH', name: '🍲 午餐打饭与引导班', hours: 3.0, timeDesc: '10:30 - 13:30 · 堂食引导', relatedMeal: 'lunch' },
-      { shiftKey: 'CLEAN', name: '🧹 后厨洗碗与收尾班', hours: 1.5, timeDesc: '13:30 - 15:00 · 消毒整理', relatedMeal: 'lunch' },
-      { shiftKey: 'NIGHT', name: '🌙 夜间整理与盘点班', hours: 3.0, timeDesc: '18:00 - 21:00 · 物资盘点', relatedMeal: 'dinner' }
+    // 🍚 供餐时段（第一维）：relatedMeal 供 refreshTodayShiftStatus() 按当前门店
+    // supportedMeals 过滤展示——只供午餐的门店（多数雨花斋）只会看到"午市班次"
+    // 一个时段，早市/晚市自动隐藏。单选（一次打卡对应一次实际到店服务的时间
+    // 窗口，不支持同时勾选多个时段）；午市为默认核心时段，见 getDefaultMealSlot()
+    mealSlotDefinitions: [
+      { slotKey: 'morning', name: '早市班次', timeDesc: '06:30 - 08:30', relatedMeal: 'breakfast' },
+      { slotKey: 'lunch', name: '午市班次', timeDesc: '09:00 - 13:30', relatedMeal: 'lunch' },
+      { slotKey: 'dinner', name: '晚市班次', timeDesc: '16:30 - 19:30', relatedMeal: 'dinner' }
     ] as any[],
-    availableShifts: [] as any[],
+    availableMealSlots: [] as any[],
+    // 🍳 护持岗位/工种分类（第二维）：多选，每项自带"建议预估工时"，选中态由
+    // selectedJobTypes 驱动，实际提交工时 = 选中工种建议工时之和 + manualHoursAdjust
+    // 微调量（见 recomputeShiftHours）
+    jobTypeDefinitions: [
+      { jobKey: 'chef', icon: '👨‍🍳', name: '主厨/面点', desc: '掌勺烹饪、面点制作、后厨统筹', hours: 3.5 },
+      { jobKey: 'prep', icon: '🥬', name: '洗菜/切配', desc: '食材挑选、清洗去杂、切配备料', hours: 2.5 },
+      { jobKey: 'serve', icon: '🤝', name: '堂食/引导', desc: '行仪引导、打饭分餐、维持秩序', hours: 2.0 },
+      { jobKey: 'clean', icon: '🧹', name: '保洁/洗消', desc: '洗碗消毒、餐桌擦拭、拖地清洁', hours: 2.0 }
+    ] as any[],
+    selectedJobTypes: [] as string[],
+    // 🎚️ 工时微调：在"选中工种建议工时之和"基础上做 ±0.5h 的轻量调整（如实际
+    // 比预估多干了半小时），范围裁剪在 recomputeShiftHours 里统一做，不单独立
+    // 上下限校验分支
+    manualHoursAdjust: 0,
     showGenCodeModal: false,
     isGeneratingInviteCode: false,
     genTargetRole: 'MANAGER' as 'PATRIARCH' | 'MANAGER' | 'FINANCE' | 'FAMILY' | 'VOLUNTEER',
@@ -7896,11 +7908,15 @@ Page({
   // 🛡️ 超级管理员无条件放行：入口处优先判断，直接进入，绝不弹选站点弹窗。
   // 雨花声明仍照走（见 enterYuhuaWorkspaceFlow 内 isPrivilegedView 已含 isSuperAdmin）
   onSelectYuhuaPlatform() {
+    console.log('[YuhuaPlatform] onSelectYuhuaPlatform 点击雨花公益食堂专区，orgType:', this.data.orgType);
     const isSuperAdminAccount = this.isCurrentAccountSuperAdmin();
+    console.log('[YuhuaPlatform] 权限检查结果，isSuperAdminAccount:', isSuperAdminAccount, 'orgType===yuhuazhai:', this.data.orgType === 'yuhuazhai');
     if (isSuperAdminAccount || this.data.orgType === 'yuhuazhai') {
+      console.log('[YuhuaPlatform] 已绑定雨花门店/超管，进入 enterYuhuaWorkspaceFlow');
       this.enterYuhuaWorkspaceFlow();
       return;
     }
+    console.log('[YuhuaPlatform] 尚未绑定雨花门店，唤起选择服务站点弹窗');
     this.openStorePickerForJoin('yuhuazhai', '选择雨花斋服务站点');
   },
 
@@ -7912,6 +7928,7 @@ Page({
   // 供 Bug 1（工作空间选择页点雨花专区未绑店时）与空状态"加入现有爱心站点"
   // 引导卡（onNewUserGoJoin）共用
   async openStorePickerForJoin(orgTypeFilter: string, title: string) {
+    console.log('[openStorePickerForJoin] 唤起站点选择弹窗，orgTypeFilter:', orgTypeFilter, 'title:', title);
     const volunteerTip = this.computeApplyRoleTip('volunteer');
     this.setData({
       applyModalTitleOverride: title,
@@ -7935,9 +7952,12 @@ Page({
       // 专区卡片想额外找一家雨花斋加入），必须显式声明才能跨出自己的 tenantId
       const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { orgType: orgTypeFilter, crossTenant: true } });
       const result = res.result as any;
-      this.setData({ allStoresList: (result && result.success) ? (result.list || []) : [] });
+      const list = (result && result.success) ? (result.list || []) : [];
+      console.log('[openStorePickerForJoin] 站点列表加载完成，success:', !!(result && result.success), '数量:', list.length);
+      this.setData({ allStoresList: list });
     } catch (e) {
-      console.warn('[openStorePickerForJoin] 站点列表加载失败:', e);
+      console.error('[openStorePickerForJoin] 站点列表加载失败:', e);
+      wx.showToast({ title: '站点列表加载失败，请重试', icon: 'none' });
     }
   },
 
@@ -8003,29 +8023,63 @@ Page({
   // 超管权限进入雨花平台（能看到/操作账目数据的角色），必须再单独确认一次——这类角色
   // 看到的是具体金额与账本，合规风险高于普通义工视角，需要更明确地二次确认知悉其非官方属性。
   // 两档各自的确认状态分别持久化在本地 storage，只弹一次，不会每次进入都打扰用户。
+  // 🛡️ 容错重构：此前第一行 `if (this.data.showComplianceModal) return;` 是一个
+  // 无日志、无条件的静默 return——只要 showComplianceModal 这个标志位当下是
+  // true（哪怕是别的入口，如底部 Footer「查看完整声明」的 'review' 档，遗留
+  // 下来没关干净），点【雨花公益食堂专区】卡片就会看起来毫无反应，且现场完全
+  // 无法诊断。改为：① 两档声明是否需要展示，先各自算出结果并打印，不再依赖
+  // 提前 return 去"顺便"跳过计算；② 只有两档都不需要展示时才是真正的"放行"
+  // 出口，这个出口不再受 showComplianceModal 历史值影响，直接强制 setData
+  // 切换 currentPlatformMode 并触发门店同步，杜绝任何条件把用户卡在选择页
+  // 出不去；③ 弹窗当前若确实在展示"本次需要的这一档"（general/privileged）
+  // 才跳过重复 setData（避免连点造成弹窗内容被自己打断重置），展示的若是无关
+  // 场景（如 'review'）则不拿它当挡箭牌，照常继续走该走的分支
   enterYuhuaWorkspaceFlow() {
-    if (this.data.showComplianceModal) return;
+    console.log('[YuhuaPlatform] enterYuhuaWorkspaceFlow 开始，showComplianceModal:', this.data.showComplianceModal, 'complianceModalScene:', this.data.complianceModalScene);
 
-    if (!hasAgreedYuhuaGeneralDisclaimer()) {
+    const needsGeneralDisclaimer = !hasAgreedYuhuaGeneralDisclaimer();
+    console.log('[YuhuaPlatform] 合规缓存读取（general 档），needsGeneralDisclaimer:', needsGeneralDisclaimer);
+
+    const isPrivilegedView = !!(this.data.isManager || this.data.isFinance || this.data.isSuperAdmin);
+    const needsPrivilegedDisclaimer = isPrivilegedView && !hasAgreedYuhuaPrivilegedDisclaimer();
+    console.log('[YuhuaPlatform] 权限检查（privileged 档），isManager:', this.data.isManager, 'isFinance:', this.data.isFinance, 'isSuperAdmin:', this.data.isSuperAdmin, 'isPrivilegedView:', isPrivilegedView, 'needsPrivilegedDisclaimer:', needsPrivilegedDisclaimer);
+
+    // ✅ 强制进入出口：两档均已同意（或本档不适用），无论 showComplianceModal
+    // 此刻是什么历史值，都立即放行——同时顺手把它清成 false，避免脏值继续
+    // 污染下一次判断
+    if (!needsGeneralDisclaimer && !needsPrivilegedDisclaimer) {
+      console.log('[YuhuaPlatform] 声明均已确认（或不适用），立即 setData currentPlatformMode=yuhua 并触发工作区初始化');
+      this.setData({ currentPlatformMode: 'yuhua', showComplianceModal: false });
+      this.syncStoresForZoneEntry();
+      return;
+    }
+
+    // 🐛 防重复：仅当弹窗当前展示的正是本次需要的这一档场景时才跳过，避免
+    // 连点导致 setData 被自己反复打断；无关场景（如 'review'）不算数
+    const currentSceneMatchesNeed =
+      (needsGeneralDisclaimer && this.data.complianceModalScene === 'general') ||
+      (!needsGeneralDisclaimer && needsPrivilegedDisclaimer && this.data.complianceModalScene === 'privileged');
+    if (this.data.showComplianceModal && currentSceneMatchesNeed) {
+      console.log('[YuhuaPlatform] 合规弹窗已在展示同一场景，跳过重复 setData:', this.data.complianceModalScene);
+      return;
+    }
+
+    if (needsGeneralDisclaimer) {
+      console.log('[YuhuaPlatform] 尚未同意 general 档声明，setData 弹出 general 弹窗');
       this.setData({ showComplianceModal: true, complianceModalScene: 'general' });
       return;
     }
 
-    const isPrivilegedView = this.data.isManager || this.data.isFinance || this.data.isSuperAdmin;
-    if (isPrivilegedView && !hasAgreedYuhuaPrivilegedDisclaimer()) {
-      this.setData({ showComplianceModal: true, complianceModalScene: 'privileged' });
-      return;
-    }
-
-    // 两档均已确认（或本档不适用）：放行，切到雨花工作空间内容
-    this.setData({ currentPlatformMode: 'yuhua' });
-    this.syncStoresForZoneEntry();
+    console.log('[YuhuaPlatform] 尚未同意 privileged 档声明，setData 弹出 privileged 弹窗');
+    this.setData({ showComplianceModal: true, complianceModalScene: 'privileged' });
   },
 
   onAcknowledgeYuhuaDisclaimer() {
+    console.log('[YuhuaPlatform] onAcknowledgeYuhuaDisclaimer 确认声明，complianceModalScene:', this.data.complianceModalScene);
     if (this.data.complianceModalScene === 'general') {
       acknowledgeYuhuaGeneralDisclaimer();
       this.setData({ showComplianceModal: false });
+      console.log('[YuhuaPlatform] general 档已写入本地确认标记，续跑 enterYuhuaWorkspaceFlow');
       // general 确认后立即续跑一次入口校验，若当前视角还需要 privileged 档二次确认，
       // 会紧接着弹出该档弹窗；否则直接放行，无需用户再点一次卡片
       this.enterYuhuaWorkspaceFlow();
@@ -8033,6 +8087,7 @@ Page({
     }
     if (this.data.complianceModalScene === 'privileged') {
       acknowledgeYuhuaPrivilegedDisclaimer();
+      console.log('[YuhuaPlatform] privileged 档已写入本地确认标记，setData currentPlatformMode=yuhua 并触发工作区初始化');
       this.setData({ showComplianceModal: false, currentPlatformMode: 'yuhua' });
       this.syncStoresForZoneEntry();
     }
@@ -9144,7 +9199,10 @@ Page({
     const { announcement } = this.data;
     if (!announcement) return;
 
-    const text = `${announcement.tag || '喜讯通报'}：${announcement.title}\n\n${announcement.content}\n\n发布时间：${announcement.create_time}`;
+    // 🐛 同一处根因修复：tag 为空时不再硬编码回退成"喜讯通报"，改用
+    // mapNoticeRecord 已经按标题+正文语义算好的 typeLabel（如"物资接力"/
+    // "系统公告"），避免复制出去的分享文案标签与内容本身语义矛盾
+    const text = `${announcement.tag || announcement.typeLabel || '系统公告'}：${announcement.title}\n\n${announcement.content}\n\n发布时间：${announcement.create_time}`;
     
     wx.setClipboardData({
       data: text,
@@ -9158,15 +9216,22 @@ Page({
   },
 
   // 编辑当前正在看的这一条（更新）
+  // 🐛 根因修复："物资告急类通知被打上喜讯通报标签"的源头之一：此前 tag 输入框
+  // 缺省值硬编码死"喜讯通报"，与本条通知标题/正文实际语义无关——编辑时如果没
+  // 注意到去手动改，保存后就会把这个跟内容语义矛盾的标签写回数据库。改为已有
+  // tag 优先沿用，缺失时按标题+正文关键词自动建议（classifyNotice），而不是
+  // 无脑塞一个固定分类
   openNoticeEdit() {
     const { announcement, mergeToReportText } = this.data;
     if (!announcement) return;
+
+    const suggestedTag = announcement.tag || classifyNotice('', announcement.title, announcement.content).typeLabel;
 
     this.setData({
       showAnnouncementModal: false,
       showNoticeEditModal: true,
       noticeEditId: announcement.id || '',
-      noticeEditTag: announcement.tag || '喜讯通报',
+      noticeEditTag: suggestedTag,
       noticeEditTitle: announcement.title || '',
       noticeEditContent: announcement.content || '',
       mergeToReportText: mergeToReportText,
@@ -9176,11 +9241,14 @@ Page({
   },
 
   // 新建一条通知（同一个编辑弹窗，只是清空并且不带 id）
+  // 🐛 同上一处 openNoticeEdit 注释：新建时还没有任何标题/正文可供判断语义，
+  // 不再硬编码"喜讯通报"这个具体分类，留空强制发布方按实际内容主动选择/填写
+  // （下方"一键套用预设文案"选中任一预设时，tag 会随该预设一起正确带入）
   openNoticeCreate() {
     this.setData({
       showNoticeEditModal: true,
       noticeEditId: '',
-      noticeEditTag: '喜讯通报',
+      noticeEditTag: '',
       noticeEditTitle: '',
       noticeEditContent: '',
       saveAsSystemTemplate: false
@@ -9625,62 +9693,86 @@ Page({
     }
   },
 
+  // 🏛️ 业务模型重构入口：本方法此前只负责"按门店开放餐次过滤 shiftDefinitions
+  // + 标记哪些班次今日已完成"，现在拆成两件独立的事——① 过滤/标记 availableMealSlots
+  // （时段维度，逻辑与此前一致，只是数据源从 shiftDefinitions 换成
+  // mealSlotDefinitions）② 每次唤起弹窗都重置 selectedJobTypes/manualHoursAdjust
+  // （工种维度是"这一次打卡具体干了什么"的临时选择，不应该带着上一次打卡的
+  // 残留状态）。选中工时不再从某个固定班次直接取值，改由 recomputeShiftHours()
+  // 统一计算
   refreshTodayShiftStatus() {
     const todayStr = new Date().toISOString().split('T')[0];
     const logs = wx.getStorageSync('my_checkin_logs') || [];
 
     const todayLogs = logs.filter((log: any) => log.date === todayStr);
-    const completedShiftKeys = new Set(todayLogs.map((log: any) => log.shiftKey));
+    const completedSlotKeys = new Set(todayLogs.map((log: any) => log.shiftKey));
     const todayHours = todayLogs.reduce((sum: number, log: any) => sum + (parseFloat(log.hours) || 0), 0);
     const todayAccumulatedHours = parseFloat(todayHours.toFixed(1));
 
-    // 🍚 岗位班次按门店开放餐次关联联动：只保留 relatedMeal 命中当前门店
-    // supportedMeals 的班次——只供午餐的门店（多数雨花斋）自动隐藏 EARLY_MORNING/
-    // NIGHT 这类早/晚餐相关班次，不需要用户自己甄别哪些班次跟本店没关系
+    // 🍚 供餐时段按门店开放餐次关联联动：只保留 relatedMeal 命中当前门店
+    // supportedMeals 的时段——只供午餐的门店（多数雨花斋）自动只显示"午市班次"
+    // 一档，不需要用户自己甄别哪些时段跟本店没关系
     const supportedMeals = this.data.supportedMeals && this.data.supportedMeals.length > 0
       ? this.data.supportedMeals
       : ['lunch'];
-    const mealFilteredShifts = this.data.shiftDefinitions.filter((item: any) =>
+    const mealFilteredSlots = this.data.mealSlotDefinitions.filter((item: any) =>
       !item.relatedMeal || supportedMeals.includes(item.relatedMeal)
     );
 
-    // ⏱️ 动态工时上限：勾选前就按"已录入工时 + 该班次工时"逐一算好是否会超过 12h 上限，
-    // 供 WXML 单独禁用会超限的班次选项（而不是等选完了才在按钮上统一拦截）
-    let firstAvailableShift = '';
-    const updatedShifts = mealFilteredShifts.map((item: any) => {
-      const isCompleted = completedShiftKeys.has(item.shiftKey);
-      const wouldExceedCap = !isCompleted && parseFloat((todayAccumulatedHours + item.hours).toFixed(1)) > DAILY_HOURS_CAP;
-      if (!isCompleted && !wouldExceedCap && !firstAvailableShift) {
-        firstAvailableShift = item.shiftKey;
+    let firstAvailableSlot = '';
+    const updatedSlots = mealFilteredSlots.map((item: any) => {
+      const isCompleted = completedSlotKeys.has(item.slotKey);
+      if (!isCompleted && !firstAvailableSlot) {
+        firstAvailableSlot = item.slotKey;
       }
-      return {
-        ...item,
-        isCompleted: isCompleted,
-        wouldExceedCap: wouldExceedCap
-      };
+      return { ...item, isCompleted };
     });
 
-    const allCompleted = updatedShifts.every((item: any) => item.isCompleted);
-    const matchedShift = firstAvailableShift
-      ? updatedShifts.find((s: any) => s.shiftKey === firstAvailableShift)
-      : null;
+    // 🌟 默认时段：优先午市（多数门店的核心时段），当天午市已打卡过则顺延到
+    // 下一个尚未完成的时段；若门店当前开放的时段今天已全部打卡完，退回午市
+    // 本身仅作占位展示（对应的行会显示"今日已打卡"，不可再选）
+    const lunchSlot = updatedSlots.find((s: any) => s.slotKey === 'lunch');
+    const defaultSlot = (lunchSlot && !lunchSlot.isCompleted)
+      ? 'lunch'
+      : (firstAvailableSlot || 'lunch');
 
-    const selectedShiftHours = firstAvailableShift
-      ? ((matchedShift && matchedShift.hours) || 3.0)
-      : 0;
+    const allCompleted = updatedSlots.length > 0 && updatedSlots.every((item: any) => item.isCompleted);
 
     this.setData({
-      todayLogs: todayLogs,
-      todayAccumulatedHours: todayAccumulatedHours,
-      availableShifts: updatedShifts,
+      todayLogs,
+      todayAccumulatedHours,
+      availableMealSlots: updatedSlots,
       allShiftsCompleted: allCompleted,
-      selectedShift: firstAvailableShift || 'LUNCH',
-      selectedShiftHours: selectedShiftHours
+      selectedShift: defaultSlot,
+      // 🎫 每次重新唤起打卡弹窗都清空上一次的工种选择/微调量，这次到底做了
+      // 哪些工种由用户当场重新勾选，不沿用历史残留
+      selectedJobTypes: [],
+      manualHoursAdjust: 0
     });
-    this.updateHoursPreview(todayAccumulatedHours, selectedShiftHours);
+    this.recomputeShiftHours();
   },
 
-  // 🌟 实时预览：勾选班次后即时算出"若提交这一笔，今日总工时会变成多少"，
+  // 🍳 工种建议工时之和：selectedJobTypes 命中 jobTypeDefinitions 的 hours 累加，
+  // 供 recomputeShiftHours 与 WXML 展示"预估合计"复用同一份口径
+  computeJobTypeHoursSum(jobKeys: string[]): number {
+    return this.data.jobTypeDefinitions
+      .filter((j: any) => jobKeys.includes(j.jobKey))
+      .reduce((sum: number, j: any) => sum + (j.hours || 0), 0);
+  },
+
+  // 🎚️ 统一工时计算入口：selectedShiftHours = clamp(工种建议工时之和 + 微调量, 0, 12)——
+  // 工种切换（onToggleJobType）与工时微调（onAdjustShiftHours）都只改各自的原始
+  // 输入（selectedJobTypes/manualHoursAdjust），最终值一律回到这里统一算，避免
+  // 两处各自维护一份工时公式后来对不上
+  recomputeShiftHours() {
+    const jobSum = this.computeJobTypeHoursSum(this.data.selectedJobTypes);
+    const total = Math.max(0, Math.min(12, parseFloat((jobSum + this.data.manualHoursAdjust).toFixed(1))));
+    this.setData({ selectedShiftHours: total });
+    this.updateHoursPreview(undefined, total);
+    return total;
+  },
+
+  // 🌟 实时预览：选择工种/时段/微调后即时算出"若提交这一笔，今日总工时会变成多少"，
   // 超过 DAILY_HOURS_CAP 就标红并让确认按钮直接禁用，而不是等提交后才截断
   updateHoursPreview(todayAccumulatedHours?: number, selectedShiftHours?: number) {
     const baseHours = todayAccumulatedHours != null ? todayAccumulatedHours : this.data.todayAccumulatedHours;
@@ -9699,20 +9791,42 @@ Page({
     });
   },
 
-  // ⏱️ 勾选会导致超出单日 12h 上限的班次：WXML 已按 item.wouldExceedCap 禁用其 tap
-  // 路由到本方法而非 onSelectShift，这里只负责给出明确的提示文案，不做任何状态变更
+  // ⏱️ 今日已完成的时段不可重复选择：WXML 按 item.isCompleted 路由到本方法而非
+  // onSelectMealSlot，这里只负责给出明确的提示文案，不做任何状态变更
   onSelectShiftBlocked() {
-    wx.showToast({ title: '单日护持工时已达 12h 上限，请核对班次', icon: 'none', duration: 2500 });
+    wx.showToast({ title: '该时段今日已打卡，请选择其它时段', icon: 'none', duration: 2500 });
   },
 
-  onSelectShift(e: any) {
-    const { shift, hours } = e.currentTarget.dataset;
-    const selectedShiftHours = parseFloat(hours || '3.0');
-    this.setData({
-      selectedShift: shift,
-      selectedShiftHours: selectedShiftHours
-    });
-    this.updateHoursPreview(undefined, selectedShiftHours);
+  // 🕐 供餐时段单选：一次打卡对应一次实际到店服务的时间窗口，只切换 selectedShift
+  // 本身，不影响 selectedJobTypes/工时——时段与工种是两个独立维度，互不清空对方
+  onSelectMealSlot(e: any) {
+    const { slot } = e.currentTarget.dataset;
+    if (!slot) return;
+    this.setData({ selectedShift: slot });
+  },
+
+  // 🍳 护持工种多选：卡片式勾选，命中的每一项都会计入建议工时之和（见
+  // computeJobTypeHoursSum/recomputeShiftHours）。允许多选是本次重构的核心
+  // 诉求——同一次打卡里"主要洗菜、顺便帮忙打饭"这类混合工种场景，此前的固定
+  // 班次单选模型完全无法表达
+  onToggleJobType(e: any) {
+    const { job } = e.currentTarget.dataset;
+    if (!job) return;
+    const current = this.data.selectedJobTypes || [];
+    const next = current.includes(job) ? current.filter((k: string) => k !== job) : [...current, job];
+    this.setData({ selectedJobTypes: next });
+    this.recomputeShiftHours();
+  },
+
+  // 🎚️ 工时微调步进器：在工种建议工时之和基础上 ±0.5h，供实际用时与建议值有
+  // 出入时手动修正——最终值裁剪范围在 recomputeShiftHours 里统一处理，这里
+  // 只负责改变量本身，不重复实现上下限逻辑
+  onAdjustShiftHours(e: any) {
+    const { dir } = e.currentTarget.dataset;
+    const delta = dir === 'dec' ? -0.5 : 0.5;
+    const next = parseFloat((this.data.manualHoursAdjust + delta).toFixed(1));
+    this.setData({ manualHoursAdjust: next });
+    this.recomputeShiftHours();
   },
 
   // 🍚 默认留餐时段：优先午餐（多数门店的唯一/主餐次），门店未开放午餐（如仅供
@@ -9767,6 +9881,13 @@ Page({
       return;
     }
 
+    // 🍳 业务模型重构后的必填校验：至少选一个护持工种，系统才知道这次打卡
+    // 到底做了什么、该按什么口径统计工时——没有工种就没有可提交的工时依据
+    if (!this.data.selectedJobTypes || this.data.selectedJobTypes.length === 0) {
+      wx.showToast({ title: '请至少选择一项护持工种', icon: 'none' });
+      return;
+    }
+
     const todayStr = new Date().toISOString().split('T')[0];
     const logs = wx.getStorageSync('my_checkin_logs') || [];
     const selectedShift = this.data.selectedShift;
@@ -9789,8 +9910,10 @@ Page({
     }
 
     // 🌟 单日工时上限：正常流程下前端已按 isOverHoursLimit 禁用按钮拦在前面，
-    // 这里的截断逻辑作为服务端/极端时序下的兜底防线保留，不依赖前端状态
-    const requestedHours = this.data.selectedShiftHours || 3.0;
+    // 这里的截断逻辑作为服务端/极端时序下的兜底防线保留，不依赖前端状态。
+    // 不再兜底 || 3.0——selectedShiftHours 由 recomputeShiftHours 按已选工种
+    // 实时算出，走到这一步前已经过"至少选一项工种"的校验，理应始终 > 0
+    const requestedHours = this.data.selectedShiftHours;
     const remainingAllowance = parseFloat((DAILY_HOURS_CAP - this.data.todayAccumulatedHours).toFixed(1));
 
     if (remainingAllowance <= 0) {
@@ -9809,8 +9932,14 @@ Page({
 
     this.setData({ checkInSubmitting: true });
 
-    const shiftObj = this.data.shiftDefinitions.find((s: any) => s.shiftKey === selectedShift);
-    const shiftLabel = shiftObj ? shiftObj.name : '爱心护持班';
+    // 🏛️ 业务模型重构：提交记录的展示名不再是某个固定班次自带的名字，改为
+    // "时段 · 工种1、工种2"这样的组合描述（如"午市班次 · 洗菜/切配、保洁/洗消"），
+    // 如实反映这次打卡实际选择的时段与工种组合，而不是一个笼统的固定班次名
+    const slotObj = this.data.mealSlotDefinitions.find((s: any) => s.slotKey === selectedShift);
+    const jobLabels = this.data.jobTypeDefinitions
+      .filter((j: any) => this.data.selectedJobTypes.includes(j.jobKey))
+      .map((j: any) => j.name);
+    const shiftLabel = `${(slotObj && slotObj.name) || '爱心护持班'}${jobLabels.length ? ' · ' + jobLabels.join('、') : ''}`;
     const currentStoreId = this.data.currentStoreId || '';
     const currentStoreName = this.data.currentStoreName || this.data.shopName || '';
     const reservedMeals = this.data.willEatLunch ? this.data.reservedMeals.slice() : [];

@@ -5532,6 +5532,11 @@ button.poster-gen-btn[disabled] {
 }
 
 /* ── 门店申请弹窗（三段式：Header 固定 / Body 滚动 / Footer 固定置底） ── */
+/* 🐛 背景穿透修复：遮罩用标准半透明深色（rgba(0,0,0,0.6)），弹窗卡片自身
+   用纯白实色背景（见 .apply-modal-card）——两者叠在一起才是"底板实体化"，
+   任何一层漏声明背景色都会让底下的 platform-select-page 文字/卡片透出来。
+   catchtouchmove（见 index.wxml 同一元素）额外挡住手指在遮罩区域拖动时
+   触发的背景页面滚动穿透，这是纯 CSS 半透明层管不到的另一半问题 */
 .apply-modal-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -5539,17 +5544,16 @@ button.poster-gen-btn[disabled] {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 🛡️ 本弹窗现已移到 index-page-container 根级（见 index.wxml 同一处
-     🐛 层级遮挡修复注释），不再嵌套在 currentPlatformMode 的 wx:if 分支内，
-     理论上随时可能与本页任何其它弹窗同框。z-index 原先只有 1000，明显低于
-     本文件业务弹窗最高档的 99999（.modal-backdrop）——那时不构成问题是因为
-     两者此前受同一个 wx:if 互斥，不可能真的同时出现；现在挪到根级后不能再
-     依赖这层偶然的互斥关系，显式提到与 .compliance-modal-mask 同一档，
-     确保始终浮在最上层、不被任何其它遮罩压住 */
+  /* 🛡️ 本弹窗现已移到 index-page-container 根级，不再嵌套在
+     currentPlatformMode 的 wx:if 分支内，理论上随时可能与本页任何其它弹窗
+     同框，显式提到与 .compliance-modal-mask 同一档最高层级，确保始终浮在
+     最上层、不被任何其它遮罩压住 */
   z-index: 100000;
 }
 
-/* 卡片：flex 列，max-height 限制总高，超出由 Body scroll-view 内部滚动消化 */
+/* 卡片：flex 列，max-height 限制总高，超出由 Body scroll-view 内部滚动消化。
+   纯白不透明背景是杜绝"背景文字穿透"的关键一环——上面遮罩只负责半透明调暗
+   背景，真正承载表单内容的这张卡片必须是完全不透明的实色底板 */
 .apply-modal-card {
   width: 88%;
   max-height: 85vh;
@@ -5558,6 +5562,7 @@ button.poster-gen-btn[disabled] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.24);
 }
 
 /* 1. Header — flex-shrink:0 永远占位，不被 Body 挤压 */
@@ -5605,18 +5610,29 @@ button.poster-gen-btn[disabled] {
   box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
 }
 
+/* 🐛 按钮规范化：大圆角（44rpx，接近胶囊）+ 指定主题色 + flex 居中，
+   与本 session 其它弹窗底部主按钮同一套"防折行/防溢出"写法——
+   height/line-height 双保险撑高度，display:flex 居中兜底文本渲染位置，
+   避免出现按钮内文字偏上/偏左这类细节瑕疵 */
 .btn-submit-apply {
   width: 100%;
   height: 88rpx;
   line-height: 88rpx;
-  background: #8C1D18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: #C0392B;
   color: #FFFFFF;
-  border-radius: 16rpx;
-  font-size: 30rpx;
-  font-weight: bold;
+  border-radius: 44rpx;
+  font-size: 32rpx;
+  font-weight: 600;
   border: none;
-  letter-spacing: 2rpx;
+  margin-top: 30rpx;
+  white-space: nowrap;
 }
+
+.btn-submit-apply::after { border: none; }
 
 .btn-submit-apply[disabled] {
   opacity: 0.55;
@@ -5645,19 +5661,25 @@ button.poster-gen-btn[disabled] {
 
 .form-input {
   width: 100%;
-  height: 72rpx;
-  background: #F8F9FA;
-  border: 1rpx solid #DEE2E6;
+  background: #F7F8FA;
   border-radius: 12rpx;
-  padding: 0 20rpx;
+  padding: 22rpx 24rpx;
   font-size: 28rpx;
   box-sizing: border-box;
 }
 
+/* 🐛 UX 重构：门店模式切换从"两个独立描边方块"改为标准胶囊式分段控制器
+   （segmented control）——外层浅灰胶囊容器 + 内层选中态高亮胶囊，是这类
+   二选一切换器的通用视觉语言，比两个各自描边的方块更轻量、更容易一眼看出
+   "这是一组互斥选项" */
 .store-mode-tabs {
   display: flex;
-  gap: 16rpx;
+  gap: 6rpx;
   margin-bottom: 12rpx;
+  background: #F1F3F5;
+  border-radius: 999rpx;
+  padding: 6rpx;
+  box-sizing: border-box;
 }
 
 .store-mode-tab {
@@ -5665,17 +5687,56 @@ button.poster-gen-btn[disabled] {
   text-align: center;
   font-size: 24rpx;
   color: #666666;
-  background: #F8F9FA;
-  border: 1rpx solid #DEE2E6;
-  border-radius: 12rpx;
+  background: transparent;
+  border: none;
+  border-radius: 999rpx;
   padding: 14rpx 0;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .store-mode-tab.active {
-  background: #8C1D18;
-  border-color: #8C1D18;
+  /* 🎨 品牌高亮统一：与本弹窗内身份卡片选中态 (#C0392B)、提交按钮同一色号，
+     整个弹窗的"选中/主操作"强调色只有一处定义分散在多个规则里，不再是
+     这里单独一份 #8C1D18 深红 */
+  background: #C0392B;
   color: #FFFFFF;
   font-weight: bold;
+  box-shadow: 0 4rpx 10rpx rgba(192, 57, 43, 0.28);
+}
+
+/* 🐛 命名空间冲突修复：此前这里直接复用裸类名 .form-picker-selector 改样式，
+   而这个类名同时也被"生成邀请码"弹窗的门店选择器（见 index.wxml 约第 2294/
+   2298 行，genStoreOptions/genStoreSelectorDisabled 那一块，与本申请加入
+   弹窗完全是两个不相关的功能）在用——CSS 里同名选择器按源码顺序层叠，这里
+   声明在后，等于悄悄把邀请码弹窗那个选择器的背景色/边框/内边距全部覆盖掉了，
+   而那边的开发者可能完全不知道自己的样式被这边的改动影响。改用
+   .apply-form-picker-selector 专属类名，只作用于本申请弹窗内的两个 picker
+   （选择已有门店 / 选择所属地区），.form-picker-selector 原有的裸类名规则
+   保留给邀请码弹窗单独使用，两边彻底解耦 */
+.apply-form-picker-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  padding: 22rpx 24rpx;
+  font-size: 28rpx;
+  color: #212529;
+  box-sizing: border-box;
+}
+.apply-form-picker-selector-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.apply-form-picker-arrow {
+  flex-shrink: 0;
+  margin-left: 12rpx;
+  font-size: 22rpx;
+  color: #ADB5BD;
 }
 
 .form-hint {
@@ -5685,21 +5746,87 @@ button.poster-gen-btn[disabled] {
   margin-top: 10rpx;
 }
 
-/* 岗位单选：2×2 换行布局，在窄卡片内不溢出 */
-.role-radio-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx 24rpx;
-  padding: 12rpx 0;
+/* ── 申请身份：2×2 网格卡片式单选（重构版）──────────────────────────
+   🐛 UX 重构根因：原来的 .role-radio-group 是 flex-wrap + min-width:40% 的
+   "单选圆点 + Emoji + 文字" 同行布局，四个选项在窄弹窗卡片里经常被挤到
+   换行错位、圆点/图标/文字三者对不齐。改为固定 2 列网格，每张卡片图标独占
+   一行在上、文字在下，选中态靠整卡描边高亮 + 右上角对勾角标表达，视觉上
+   清晰、不依赖原生 <radio> 那个容易被压扁的小圆点 */
+/* 🐛 3 列网格：4 个身份选项在 3 列下最后一行会剩 1 个孤项，用
+   :last-child { grid-column: 2 } 把它居中挂在第 2 列，避免贴左孤零零一个的
+   视觉失衡——网格列数按需求锁定为 3，不因为数据条数不整除就改列数 */
+.apply-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin: 16rpx 0 24rpx;
+}
+.apply-role-grid .apply-role-card:last-child:nth-child(3n + 1) {
+  grid-column: 2;
 }
 
-.role-radio-item {
+.apply-role-card {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8rpx;
+  justify-content: center;
+  padding: 20rpx 0;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  border: 2rpx solid transparent;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+/* 原生 <radio> 保留在 DOM 里维持 radio-group 的单选语义与可访问性，
+   只是把它自己的圆点视觉压缩到近乎不可见——label 包裹整张卡片，点击卡片
+   任意位置依然会命中这颗 radio（WXML label-for-control 的标准行为），
+   不需要额外绑 bindtap 去手动 setData */
+.apply-role-card-radio {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1rpx;
+  height: 1rpx;
+  opacity: 0;
+}
+
+.apply-role-card-icon {
+  font-size: 38rpx;
+  line-height: 1.2;
+  margin-bottom: 8rpx;
+}
+
+.apply-role-card-label {
   font-size: 26rpx;
-  color: #495057;
-  min-width: 40%;
+  color: #333333;
+  font-weight: 500;
+}
+
+.apply-role-card-active {
+  background: #FFF5F2;
+  border-color: #C0392B;
+}
+.apply-role-card-active .apply-role-card-label {
+  color: #C0392B;
+  font-weight: 600;
+}
+
+/* 右上角对勾角标：选中态专属，替代原生 radio 圆点作为"已选中"的视觉锚点 */
+.apply-role-card-check {
+  position: absolute;
+  top: -1rpx;
+  right: -1rpx;
+  width: 36rpx;
+  height: 36rpx;
+  line-height: 36rpx;
+  text-align: center;
+  font-size: 20rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #C0392B;
+  border-radius: 0 18rpx 0 18rpx;
 }
 
 /* 店长审核抽屉 Modal */
@@ -6837,82 +6964,196 @@ button.poster-gen-btn[disabled] {
   padding: 8rpx;
 }
 
-.shift-option-list {
+/* ── 打卡弹窗业务模型重构：供餐时段（第一维）─────────────────────────── */
+.checkin-section-title {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #8D6E63;
+  margin: 20rpx 0 12rpx;
+}
+.checkin-section-title:first-child {
+  margin-top: 0;
+}
+
+.meal-slot-row {
+  display: flex;
+  gap: 12rpx;
+}
+
+.meal-slot-chip {
+  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 18rpx 8rpx;
+  background: #FFFFFF;
+  border: 2rpx solid #F2F4F7;
+  border-radius: 16rpx;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  box-sizing: border-box;
+}
+.meal-slot-chip:active {
+  transform: scale(0.97);
+}
+
+.meal-slot-chip-name {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #2D2D2D;
+}
+
+.meal-slot-chip-time {
+  font-size: 20rpx;
+  color: #8D6E63;
+}
+
+.meal-slot-chip-active {
+  background: #FFF8F2;
+  border-color: #F97316;
+  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, 0.15);
+}
+.meal-slot-chip-active .meal-slot-chip-name {
+  color: #C0392B;
+}
+
+.meal-slot-chip-completed {
+  background: #F2F4F7;
+  border-color: #E2E8F0;
+  opacity: 0.6;
+}
+
+.meal-slot-chip-completed-tag {
+  font-size: 18rpx;
+  color: #2E7D32;
+  font-weight: bold;
+}
+
+/* ── 护持工种（第二维）：2×2 网格卡片，多选 ─────────────────────────── */
+.job-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 16rpx;
 }
 
-.shift-item {
+.job-type-card {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 28rpx;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 22rpx 12rpx;
   background: #FFFFFF;
   border: 2rpx solid #F2F4F7;
   border-radius: 20rpx;
-  transition: all 0.2s ease;
+  box-sizing: border-box;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.job-type-card:active {
+  transform: scale(0.97);
 }
 
-.shift-item.active {
-  background: #FFF8F2;
-  border: 2rpx solid #F97316;
-  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, 0.15);
+.job-type-card-icon {
+  font-size: 44rpx;
+  line-height: 1.2;
 }
 
-.shift-check-badge {
-  position: absolute;
-  top: -10rpx;
-  right: -10rpx;
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 50%;
-  background: #F97316;
-  color: #FFFFFF;
-  font-size: 24rpx;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4rpx 10rpx rgba(249, 115, 22, 0.35);
-  z-index: 2;
-}
-
-.shift-item:active {
-  transform: scale(0.98);
-  opacity: 0.9;
-}
-
-.shift-left {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  margin-right: 16rpx;
-}
-
-.shift-name {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #2D2D2D;
-  line-height: 1.4;
-}
-
-.shift-time {
-  font-size: 22rpx;
-  color: #8D6E63;
-  margin-top: 6rpx;
-  line-height: 1.4;
-}
-
-.shift-hours {
+.job-type-card-name {
   font-size: 26rpx;
   font-weight: bold;
-  color: #8C1D18;
-  flex-shrink: 0;
-  white-space: nowrap;
+  color: #2D2D2D;
 }
+
+.job-type-card-hours {
+  font-size: 20rpx;
+  color: #8D6E63;
+}
+
+.job-type-card-active {
+  background: #FFF8F2;
+  border-color: #F97316;
+  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, 0.18);
+}
+.job-type-card-active .job-type-card-name {
+  color: #C0392B;
+}
+
+/* 右上角对勾角标：与个人页申请身份卡片同一套视觉语言 */
+.job-type-card-check {
+  position: absolute;
+  top: -1rpx;
+  right: -1rpx;
+  width: 36rpx;
+  height: 36rpx;
+  line-height: 36rpx;
+  text-align: center;
+  font-size: 20rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #F97316;
+  border-radius: 0 18rpx 0 18rpx;
+}
+
+/* ── 工时联动预览 + 微调步进器 ──────────────────────────────────────── */
+.hours-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  background: #FFF8F2;
+  border-radius: 16rpx;
+}
+
+.hours-preview-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #2D2D2D;
+}
+
+.hours-preview-hint {
+  font-size: 20rpx;
+  font-weight: normal;
+  color: #D92D20;
+}
+
+.hours-stepper {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.hours-stepper-btn {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2rpx solid #F97316;
+  color: #F97316;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+.hours-stepper-btn:active {
+  transform: scale(0.9);
+  background: #FFF3E8;
+}
+
+.hours-stepper-value {
+  min-width: 64rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #C0392B;
+}
+
 .meal-reserve-row {
   display: flex;
   align-items: center;
@@ -6992,30 +7233,6 @@ button.poster-gen-btn[disabled] {
 .today-hours-tip .highlight {
   color: #8C1D18;
   font-weight: bold;
-}
-
-.shift-name-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.shift-item.disabled-completed {
-  background: #F2F4F7 !important;
-  border-color: #E2E8F0 !important;
-  opacity: 0.65;
-  pointer-events: none;
-}
-
-.completed-tag {
-  font-size: 20rpx;
-  color: #2E7D32;
-  background: #E8F5E9;
-  padding: 2rpx 10rpx;
-  border-radius: 10rpx;
-  margin-left: 10rpx;
-  font-weight: normal;
-  white-space: nowrap;
 }
 
 .today-checked-section {

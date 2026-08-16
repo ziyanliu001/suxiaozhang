@@ -2798,11 +2798,11 @@
     </view>
   </view>
 
-  <view class="modal-backdrop" wx:if="{{showShiftSelectModal}}">
+  <view class="modal-backdrop" wx:if="{{showShiftSelectModal}}" catchtouchmove="stopPropagation">
     <view class="modal-card shift-card">
       <view class="modal-header">
         <view class="header-titles">
-          <view class="modal-title"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>请选择今日护持岗位班次</view>
+          <view class="modal-title"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>请选择今日护持时段与工种</view>
           <text class="today-hours-tip {{isOverHoursLimit ? 'over-limit' : ''}}">今日已记录工时：<text class="highlight {{isOverHoursLimit ? 'danger' : ''}}">{{previewTotalHours}}h</text> / 上限 12h</text>
           <text class="over-limit-warning" wx:if="{{isOverHoursLimit}}">⚠️ 工时超出每日上限</text>
         </view>
@@ -2810,24 +2810,49 @@
       </view>
 
       <scroll-view scroll-y class="shift-scroll-area">
-        <view class="shift-option-list">
-          <block wx:for="{{availableShifts}}" wx:key="shiftKey">
-            <view class="shift-item {{item.isCompleted ? 'disabled-completed' : (item.wouldExceedCap ? 'disabled-exceed' : (selectedShift === item.shiftKey ? 'active' : ''))}}"
-                  bindtap="{{item.isCompleted ? '' : (item.wouldExceedCap ? 'onSelectShiftBlocked' : 'onSelectShift')}}"
-                  data-shift="{{item.shiftKey}}"
-                  data-hours="{{item.hours}}">
-              <view class="shift-check-badge" wx:if="{{!item.isCompleted && selectedShift === item.shiftKey}}">✓</view>
-              <view class="shift-left">
-                <view class="shift-name-row">
-                  <text class="shift-name">{{item.name}}</text>
-                  <text class="completed-tag" wx:if="{{item.isCompleted}}">✔ 今日已打卡</text>
-                  <text class="exceed-tag" wx:elif="{{item.wouldExceedCap}}">⚠️ 超出12h上限</text>
-                </view>
-                <text class="shift-time">{{item.timeDesc}}</text>
-              </view>
-              <text class="shift-hours">+{{item.hours}}h</text>
+
+        <!-- 🕐 第一维：供餐时段（单选）——一次打卡对应一次实际到店服务的时间窗口 -->
+        <view class="checkin-section-title">供餐时段</view>
+        <view class="meal-slot-row">
+          <block wx:for="{{availableMealSlots}}" wx:key="slotKey" wx:for-item="slot">
+            <view class="meal-slot-chip {{slot.isCompleted ? 'meal-slot-chip-completed' : (selectedShift === slot.slotKey ? 'meal-slot-chip-active' : '')}}"
+                  bindtap="{{slot.isCompleted ? 'onSelectShiftBlocked' : 'onSelectMealSlot'}}"
+                  data-slot="{{slot.slotKey}}">
+              <text class="meal-slot-chip-name">{{slot.name}}</text>
+              <text class="meal-slot-chip-time">{{slot.timeDesc}}</text>
+              <text class="meal-slot-chip-completed-tag" wx:if="{{slot.isCompleted}}">✔ 今日已打卡</text>
             </view>
           </block>
+        </view>
+
+        <!-- 🍳 第二维：护持工种（多选，2×2 网格卡片）——图标 + 名称 + 建议工时，
+             选中态描边高亮 + 右上角对勾角标，与个人页申请身份卡片同一套视觉语言 -->
+        <view class="checkin-section-title">护持工种（可多选）</view>
+        <view class="job-type-grid">
+          <block wx:for="{{jobTypeDefinitions}}" wx:key="jobKey" wx:for-item="job">
+            <view class="job-type-card {{selectedJobTypes.includes(job.jobKey) ? 'job-type-card-active' : ''}}"
+                  bindtap="onToggleJobType"
+                  data-job="{{job.jobKey}}">
+              <text class="job-type-card-icon">{{job.icon}}</text>
+              <text class="job-type-card-name">{{job.name}}</text>
+              <text class="job-type-card-hours">预估 {{job.hours}}h</text>
+              <view class="job-type-card-check" wx:if="{{selectedJobTypes.includes(job.jobKey)}}">✓</view>
+            </view>
+          </block>
+        </view>
+
+        <!-- 🎚️ 工时联动预览 + 微调步进器：工种建议工时之和自动累加展示，
+             同时保留 ±0.5h 的轻量微调入口（上限裁剪在 recomputeShiftHours 里统一处理） -->
+        <view class="hours-preview-row">
+          <view class="hours-preview-label">
+            <text>本次预估工时</text>
+            <text class="hours-preview-hint" wx:if="{{selectedJobTypes.length === 0}}">请先选择护持工种</text>
+          </view>
+          <view class="hours-stepper">
+            <view class="hours-stepper-btn" catchtap="onAdjustShiftHours" data-dir="dec">－</view>
+            <text class="hours-stepper-value">{{selectedShiftHours}}h</text>
+            <view class="hours-stepper-btn" catchtap="onAdjustShiftHours" data-dir="inc">＋</view>
+          </view>
         </view>
 
         <view class="today-checked-section" wx:if="{{todayLogs.length > 0}}">
@@ -2840,9 +2865,13 @@
         <view class="fa-safe-area-spacer"></view>
       </scroll-view>
 
+      <!-- 🐛 复选框重叠 Bug 修复：此前 .meal-tip 文本自带一个"☑️"emoji 前缀，与
+           右侧原生 <checkbox> 组件叠在一起，视觉上是两个方框挨在一起，容易被
+           误认成"复选框渲染了两次"。这里只保留单层原生 checkbox，文本不再
+           自带任何勾选图形字符 -->
       <view class="meal-reserve-row" bindtap="onToggleMealReserve">
-        <checkbox checked="{{willEatLunch}}" color="#8C1D18"/>
-        <text class="meal-tip">☑️ 今日留店用餐 (方便后厨预留餐量)</text>
+        <checkbox checked="{{willEatLunch}}" color="#FF6B35"/>
+        <text class="meal-tip">今日留店用餐 (方便后厨预留餐量)</text>
       </view>
 
       <!-- 🍚 留店用餐细分餐别：勾选后展开门店当前开放餐次的 Chip 多选，精确到具体
@@ -2854,11 +2883,11 @@
         <view class="meal-type-chip {{reservedMeals.includes('dinner') ? 'active' : ''}}" wx:if="{{supportedMeals.includes('dinner')}}" catchtap="onToggleReservedMeal" data-meal="dinner">晚餐</view>
       </view>
 
-      <button class="btn-confirm-checkin {{(allShiftsCompleted || isOverHoursLimit) ? 'btn-disabled' : ''}}"
+      <button class="btn-confirm-checkin {{(allShiftsCompleted || isOverHoursLimit || selectedJobTypes.length === 0) ? 'btn-disabled' : ''}}"
               loading="{{checkInSubmitting}}"
-              disabled="{{allShiftsCompleted || isOverHoursLimit || checkInSubmitting}}"
+              disabled="{{allShiftsCompleted || isOverHoursLimit || selectedJobTypes.length === 0 || checkInSubmitting}}"
               bindtap="onConfirmShiftCheckIn">
-        {{allShiftsCompleted ? '今日班次已全部完成' : (isOverHoursLimit ? '工时超出每日上限' : '确认打卡')}}
+        {{allShiftsCompleted ? '今日时段已全部完成' : (isOverHoursLimit ? '工时超出每日上限' : (selectedJobTypes.length === 0 ? '请先选择护持工种' : '确认打卡'))}}
       </button>
     </view>
   </view>
@@ -3246,7 +3275,7 @@
        三段式布局（Header 固定 / Body 可滚动 / Footer 固定置底）彻底解决表单
        内容多时底部提交按钮被遮挡的问题；Body 用 scroll-view 包裹，
        max-height: 50vh 保证内部滚动不挤压 Footer。 -->
-  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal">
+  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal" catchtouchmove="stopPropagation">
     <view class="apply-modal-card" catchtap="stopPropagation">
 
       <!-- 1. Header（固定） -->
@@ -3270,7 +3299,10 @@
           </view>
 
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
-            <view class="form-picker-selector">{{applyForm.storeName || '请选择门店'}}</view>
+            <view class="apply-form-picker-selector">
+              <text class="apply-form-picker-selector-text">{{applyForm.storeName || '请选择门店'}}</text>
+              <text class="apply-form-picker-arrow">▾</text>
+            </view>
           </picker>
           <input wx:else class="form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
@@ -3282,7 +3314,7 @@
           <view class="form-item">
             <text class="form-label"><text class="form-required">*</text> 选择所属地区</text>
             <picker mode="region" value="{{applyForm.region}}" bindchange="onApplyRegionChange">
-              <view class="form-picker-selector">{{applyForm.region.length ? applyForm.region.join(' / ') : '请选择省 / 市 / 区 ▼'}}</view>
+              <view class="apply-form-picker-selector">{{applyForm.region.length ? applyForm.region.join(' / ') : '请选择省 / 市 / 区 ▼'}}</view>
             </picker>
           </view>
           <view class="form-item">
@@ -3313,23 +3345,37 @@
 
         <view class="form-item">
           <text class="form-label"><text class="form-required">*</text> 申请身份</text>
-          <!-- 🌟 动态联动：切换身份时 applyRoleTipText 与 applyRequiredHint 随之更新；义工免审即时生效 -->
-          <radio-group class="role-radio-group" bindchange="onApplyRoleChange">
-            <label class="role-radio-item">
-              <radio value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
-              <text>👑 大家长</text>
+          <!-- 🌟 动态联动：切换身份时 applyRoleTipText 与 applyRequiredHint 随之更新；义工免审即时生效。
+               🐛 UX 重构：此前单选圆圈 + Emoji + 文字挤在同一行（role-radio-item，min-width:40% 的
+               flex-wrap 布局），在弹窗卡片这种窄容器里 4 个选项极易换行错位、视觉拥挤。
+               改为 2×2 网格卡片式单选：图标独占一行在上、身份名称在下，选中态用边框高亮 +
+               右上角对勾角标表达，不再依赖原生 <radio> 那个小圆点的选中态视觉（<radio> 组件
+               本身仍然保留，只是整体透明度压到 0、绝对定位叠在卡片上——不丢失 radio-group
+               原生的单选语义/无障碍能力，只是不再露出它自己的圆点外观） -->
+          <radio-group class="apply-role-grid" bindchange="onApplyRoleChange">
+            <label class="apply-role-card {{applyForm.requestedRole === 'store_patriarch' ? 'apply-role-card-active' : ''}}">
+              <radio class="apply-role-card-radio" value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
+              <text class="apply-role-card-icon">👑</text>
+              <text class="apply-role-card-label">大家长</text>
+              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'store_patriarch'}}">✓</view>
             </label>
-            <label class="role-radio-item">
-              <radio value="store_manager" checked="{{applyForm.requestedRole === 'store_manager'}}" />
-              <text>🗂️ 店长</text>
+            <label class="apply-role-card {{applyForm.requestedRole === 'store_manager' ? 'apply-role-card-active' : ''}}">
+              <radio class="apply-role-card-radio" value="store_manager" checked="{{applyForm.requestedRole === 'store_manager'}}" />
+              <text class="apply-role-card-icon">🗂️</text>
+              <text class="apply-role-card-label">店长</text>
+              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'store_manager'}}">✓</view>
             </label>
-            <label class="role-radio-item">
-              <radio value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
-              <text>💰 财务义工</text>
+            <label class="apply-role-card {{applyForm.requestedRole === 'finance' ? 'apply-role-card-active' : ''}}">
+              <radio class="apply-role-card-radio" value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
+              <text class="apply-role-card-icon">💰</text>
+              <text class="apply-role-card-label">财务义工</text>
+              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'finance'}}">✓</view>
             </label>
-            <label class="role-radio-item">
-              <radio value="volunteer" checked="{{applyForm.requestedRole === 'volunteer'}}" />
-              <text>🤝 现场义工</text>
+            <label class="apply-role-card {{applyForm.requestedRole === 'volunteer' ? 'apply-role-card-active' : ''}}">
+              <radio class="apply-role-card-radio" value="volunteer" checked="{{applyForm.requestedRole === 'volunteer'}}" />
+              <text class="apply-role-card-icon">🤝</text>
+              <text class="apply-role-card-label">现场义工</text>
+              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'volunteer'}}">✓</view>
             </label>
           </radio-group>
           <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
