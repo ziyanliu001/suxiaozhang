@@ -35,6 +35,29 @@ const MAX_PAGE_STACK = 10;
 // 两眼一抹黑
 const DIAGNOSTIC_TIMEOUT_MS = 2500;
 
+// 🛡️ TabBar 页面清单：与 app.json 的 tabBar.list 一一对应（该文件独立部署/
+// 没有跨文件读取 app.json 的机制，只能手动保持一致，改 tabBar 时记得同步这
+// 里）。wx.navigateTo 对这几个页面一律直接 fail（errMsg 固定是
+// "navigateTo:fail can not navigateTo a tabbar page"），且这条限制与页面栈
+// 深度/是否已经打开过该页完全无关——不是"栈满再兜底重试"能解决的问题，
+// 必须在发起跳转前就识别出目标是 tabBar 页面，改走 wx.switchTab
+const TABBAR_PAGES = [
+  '/pages/index/index',
+  '/pages/notice/notice',
+  '/pages/profile/profile'
+];
+
+// 跳转参数里的 url 可能带查询串（如 '/pages/profile/profile?foo=1'），
+// TabBar 页面清单只登记不带查询串的纯路径，这里剥离后再比对
+function stripQuery(url: string): string {
+  const idx = url.indexOf('?');
+  return idx >= 0 ? url.slice(0, idx) : url;
+}
+
+function isTabBarPage(url: string): boolean {
+  return TABBAR_PAGES.includes(stripQuery(url || ''));
+}
+
 let navigating = false;
 let lastNavigateAt = 0;
 
@@ -53,6 +76,32 @@ export function safeNavigateTo(
 
   navigating = true;
   lastNavigateAt = now;
+
+  // 🛡️ TabBar 页面自动分流：见 TABBAR_PAGES 声明处注释。必须排在栈深度检查
+  // 之前——目标是 tabBar 页面时，无论当前栈多深，wx.navigateTo 都只会是这
+  // 一种确定性失败，不存在"栈没满就能 navigateTo 成功"的侥幸；switchTab
+  // 本身会把页面栈收敛回只剩这一个 tab 页，也不需要叠加 MAX_PAGE_STACK 判断
+  if (isTabBarPage(options.url)) {
+    console.warn('[safeNavigateTo] 目标是 TabBar 页面，自动切换为 wx.switchTab:', options.url);
+    return new Promise((resolve, reject) => {
+      wx.switchTab({
+        url: options.url,
+        success: (res) => {
+          options.success && options.success(res as unknown as WechatMiniprogram.NavigateToSuccessCallbackResult);
+          resolve(res as unknown as WechatMiniprogram.GeneralCallbackResult);
+        },
+        fail: (err) => {
+          console.error('[safeNavigateTo] switchTab 失败:', options.url, err);
+          options.fail && options.fail(err as WechatMiniprogram.GeneralCallbackResult);
+          reject(err);
+        },
+        complete: (res) => {
+          navigating = false;
+          options.complete && options.complete(res);
+        }
+      });
+    });
+  }
 
   const stackDepth = getCurrentPages().length;
 
