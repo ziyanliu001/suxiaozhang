@@ -52,6 +52,14 @@ export interface TenantPermissionResult {
   allowed: boolean;
   planType: string;
   isExpired: boolean;
+  // 🕊️ 到期宽限期（7 天，GRACE_PERIOD_DAYS，见 checkTenantPermission 云函数）：
+  // 到期后仍在宽限期内时 isExpired 为 true 但 isInGracePeriod 也为 true，
+  // planType/高级功能仍保持到期前的档位不降级；coreReadOnly 只在真正超出
+  // 宽限期后才为 true，供核心记账相关的写路径（如 saveReport）判断是否需要
+  // 收紧为只读——本模块只透传服务端算好的结果，不重复实现判断逻辑
+  isInGracePeriod: boolean;
+  graceExpireDate: string | null;
+  coreReadOnly: boolean;
   storeLimit: number;
   // 🌟 原始到期日期字符串（YYYY-MM-DD），从未订阅过/查询失败时为 null——
   // 供"套餐升级/续费"卡片展示真实到期日，而不只是一个 isExpired 布尔值
@@ -70,6 +78,9 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
   allowed: true,
   planType: 'basic',
   isExpired: false,
+  isInGracePeriod: false,
+  graceExpireDate: null,
+  coreReadOnly: false,
   storeLimit: 1,
   serviceExpireDate: null,
   reason: '',
@@ -104,6 +115,9 @@ const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
   allowed: true,
   planType: 'enterprise',
   isExpired: false,
+  isInGracePeriod: false,
+  graceExpireDate: null,
+  coreReadOnly: false,
   storeLimit: Number.MAX_SAFE_INTEGER,
   serviceExpireDate: null,
   reason: '',
@@ -139,6 +153,9 @@ export async function checkTenantPermission(
       allowed: !!r.allowed,
       planType: r.planType || 'basic',
       isExpired: !!r.isExpired,
+      isInGracePeriod: !!r.isInGracePeriod,
+      graceExpireDate: r.graceExpireDate || null,
+      coreReadOnly: !!r.coreReadOnly,
       storeLimit: r.storeLimit || 1,
       serviceExpireDate: r.serviceExpireDate || null,
       reason: r.reason || '',

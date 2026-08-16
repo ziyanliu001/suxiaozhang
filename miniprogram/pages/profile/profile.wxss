@@ -3158,7 +3158,11 @@
   box-shadow: 0 2rpx 6rpx rgba(184, 134, 11, 0.2);
 }
 
-.certificate-save-btn[disabled] {
+/* 🐛 WXSS 非法选择器修复：[disabled] 属性选择器不在 WXSS 官方支持的选择器
+   列表内（.class/#id/element/后代选择器/::before/::after），改由 WXML 侧
+   按各按钮自己的禁用条件显式切换同名 -disabled 类，样式判断收归纯 class
+   选择器——本文件内所有 [xxx-btn][disabled] 规则均按此思路统一改写 */
+.certificate-save-btn-disabled {
   opacity: 0.5;
   box-shadow: none;
 }
@@ -3627,7 +3631,7 @@
   opacity: 0.85;
 }
 
-.feedback-submit-btn[disabled] {
+.feedback-submit-btn-disabled {
   opacity: 0.5;
   box-shadow: none;
 }
@@ -3843,7 +3847,7 @@
   box-shadow: none;
 }
 
-.fa-item-handle-btn[disabled] {
+.fa-item-handle-btn-disabled {
   opacity: 0.5;
   box-shadow: none;
 }
@@ -3880,42 +3884,8 @@
   background: #FFE3E3;
 }
 
-.fa-item-reply-btn[disabled] {
+.fa-item-reply-btn-disabled {
   opacity: 0.5;
-}
-
-/* 🔑 人员权限管理：降级为义工 — 琥珀/警告色，区别于绿色"通过"和红色"移出" */
-.fa-item-demote-btn {
-  flex: 1;
-  height: 72rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  font-size: 25rpx;
-  font-weight: bold;
-  color: #7B4F00;
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFE082 100%);
-  border: 2rpx solid #F0C36D;
-  border-radius: 36rpx;
-  transition: transform 0.1s ease, opacity 0.1s ease;
-}
-
-.fa-item-demote-btn::after {
-  border: none;
-}
-
-.fa-item-demote-btn:active {
-  transform: scale(0.96);
-  opacity: 0.85;
-}
-
-.fa-item-demote-btn[disabled] {
-  opacity: 0.4;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -4202,7 +4172,7 @@
   opacity: 0.85;
 }
 
-.mm-demote-btn[disabled] {
+.mm-demote-btn-disabled {
   opacity: 0.45;
   box-shadow: none;
 }
@@ -4234,7 +4204,7 @@
   opacity: 0.85;
 }
 
-.mm-remove-btn[disabled] {
+.mm-remove-btn-disabled {
   opacity: 0.45;
   box-shadow: none;
 }
@@ -4285,7 +4255,7 @@
   border: none;
 }
 
-.fa-reply-submit-btn[disabled] {
+.fa-reply-submit-btn-disabled {
   opacity: 0.6;
 }
 
@@ -4660,33 +4630,40 @@
   pointer-events: auto;
 }
 
-.subscription-modal-card {
+/* 🏛️ Flex 垂直三段式骨架（重构版）：height:80vh + max-height:1200rpx 双声明——
+   height 给出首选高度，max-height 在大屏设备上封顶，两者共同保证这是一个
+   "确定高度"的盒子，而不是此前 max-height 单独出现时那种"内容多高、盒子跟着
+   多高（封顶到 82vh 为止）"的内容驱动型尺寸。确定高度是下面 flex 三段式能够
+   稳定工作的前提：① 关闭行 + 身份卡（flex-shrink:0，固定在顶部）② .sub-modal-body
+   （flex:1，唯一会跟着内容增减、内部自行滚动的区域）③ .sub-modal-footer
+   （flex-shrink:0，固定在底部）——三者高度之和恒等于容器总高度，操作按钮
+   永远有稳定落脚空间，不会被套餐对比/权益卡片的内容量撑出屏幕可视区之外 */
+.sub-modal-container {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  z-index: 9999;
+  z-index: 10000;
   width: 100%;
-  max-height: 82vh;
+  /* 📐 排版锁死：height 与 max-height 锁定为同一个 84vh 值——不再用
+     "height:80vh 起步 + max-height:1200rpx 封顶"这种双阈值组合（那种写法在
+     超宽/超高机型上会出现 max-height 先于 height 生效、实际渲染高度反而
+     小于 80vh 的反直觉情况）。单一固定值确保这个 flex 列容器在任何机型上
+     都有完全确定、可预测的总高度，三段式布局（① 顶部固定 ② .sub-modal-body
+     flex:1 承接滚动 ③ .sub-modal-footer flex-shrink:0 固定底部）的高度分配
+     结果因此也是确定的，不会出现"内容一多，底部按钮就被顶出/沉出可视区"
+     这类因容器高度本身不确定而连带触发的问题 */
+  height: 84vh;
+  max-height: 84vh;
   display: flex;
   flex-direction: column;
   background: #F7F8FA;
   border-top-left-radius: 36rpx;
   border-top-right-radius: 36rpx;
-  /* 🐛 安全区适配补全：此前只声明了 env()，是本文件里唯一一处底部贴边弹窗
-     没有同时声明 constant() 兼容写法的地方（对照 .payment-pending-modal-ok-btn/
-     .sp-sheet-box 等同类底部安全区规则，均为 constant()+env() 双声明——iOS 11.2
-     以下 WKWebView 只认 constant()，不认 env()，单声明 env() 在这批老版本上会
-     直接退化成 0，底部安全区距离形同虚设）。同时把安全余量从 120rpx 提到
-     140rpx，与本文件其余"底部贴边操作区"规则（如 .sp-sheet-box）保持一致的
-     缓冲量，确保「微信支付开通」「授权码兑换」按钮在全面屏/刘海屏机型上
-     不贴底、不被系统 Home 指示条遮挡 */
-  padding-bottom: calc(140rpx + constant(safe-area-inset-bottom));
-  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow: hidden;
   transform: translateY(100%);
   transition: transform 0.3s cubic-bezier(0.34, 1.1, 0.64, 1);
 }
-.subscription-modal-mask.show .subscription-modal-card {
+.subscription-modal-mask.show .sub-modal-container {
   transform: translateY(0);
 }
 
@@ -4719,12 +4696,14 @@
   flex: 1;
 }
 
-/* ── ① 黑钻身份卡 ───────────────────────────────────────────── */
+/* ── ① 黑钻身份卡 ─────────────────────────────────────────────
+   📐 紧凑化：margin/padding 在原值基础上收窄约 18%~20%，为中间滚动区腾出更多
+   可视高度——顶部身份卡是"一眼扫过"的信息条，不需要像底部权益卡片那样宽松 */
 .sub-identity-card {
   flex-shrink: 0;
-  margin: 8rpx 28rpx 24rpx;
+  margin: 8rpx 24rpx 20rpx;
   border-radius: 24rpx;
-  padding: 32rpx 32rpx 28rpx;
+  padding: 26rpx 26rpx 22rpx;
   background: linear-gradient(135deg, #1C2530 0%, #2D3A4A 60%, #1A2035 100%);
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.28);
   position: relative;
@@ -4799,19 +4778,27 @@
   font-size: 23rpx;
   color: #FF7B72;
 }
+.sub-expiry-grace {
+  font-size: 23rpx;
+  color: #FFD27A;
+}
 
-/* ── scroll-view 内容区 ──────────────────────────────────────── */
-.subscription-modal-body {
+/* ── ② 中间滚动区：.sub-modal-body / .sub-scroll-body（同一元素双类名）──
+   flex:1 + min-height:0 + overflow-y:auto 是让"确定高度的 flex 父容器"里
+   唯一一段可以内部滚动的标准写法——min-height:0 覆盖 flex item 默认的
+   min-height:auto（否则子内容会撑破 flex:1 的收缩约束，导致底部操作区被
+   顶出容器外，这正是重构前"内容一多，底部按钮就被挤没"的根因） */
+.sub-modal-body {
   flex: 1;
-  height: 0;
   min-height: 0;
+  overflow-y: auto;
   box-sizing: border-box;
   padding-bottom: 8rpx;
 }
 
-/* 通用 section 容器 */
+/* 通用 section 容器：📐 紧凑化，左右边距/底部间距均收窄约 15%~20% */
 .sub-section {
-  margin: 0 28rpx 28rpx;
+  margin: 0 24rpx 22rpx;
 }
 .sub-section-title {
   display: block;
@@ -4819,19 +4806,19 @@
   font-weight: 700;
   color: #9CA3AF;
   letter-spacing: 2rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 14rpx;
 }
 
-/* ── ② 高级权益卡片组 ────────────────────────────────────────── */
+/* ── ②.1 高级权益卡片组 ──────────────────────────────────────── */
 .sub-benefit-grid {
   display: flex;
-  gap: 16rpx;
+  gap: 14rpx;
 }
 .sub-benefit-card {
   flex: 1;
   background: #FFFFFF;
   border-radius: 20rpx;
-  padding: 20rpx 14rpx 18rpx;
+  padding: 16rpx 12rpx 14rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4868,20 +4855,52 @@
   display: block;
 }
 
-/* ── ③ 授权码兑换区 ──────────────────────────────────────────── */
-.sub-redeem-section {
+/* ── ②.3 授权码兑换区：折叠式次级入口 ──────────────────────────
+   🐛 层级冲突修复：不再是一张与套餐对比同权重的常驻展开卡片，改为默认收起、
+   点击才展开的轻量条目——折叠态只有一行（图标+文案+箭头），视觉权重明显低于
+   上方的套餐对比/购买路径，不会跟主线的"微信支付开通"抢注意力 */
+.sub-redeem-collapse {
   background: #FFFFFF;
-  border-radius: 20rpx;
-  padding: 24rpx 24rpx 24rpx;
+  border-radius: 16rpx;
   border: 1.5rpx solid #EDEFF2;
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
-  margin-bottom: 20rpx;
+  overflow: hidden;
+}
+.sub-redeem-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 20rpx 22rpx;
+}
+.sub-redeem-toggle-icon {
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+.sub-redeem-toggle-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 25rpx;
+  font-weight: 600;
+  color: #6B7280;
+}
+.sub-redeem-toggle-arrow {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #ADB5BD;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+}
+.sub-redeem-toggle-arrow.sub-redeem-toggle-arrow-expanded {
+  transform: rotate(90deg);
+}
+.sub-redeem-panel {
+  padding: 0 22rpx 20rpx;
 }
 .sub-redeem-input-row {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 14rpx;
 }
 .sub-redeem-input {
   flex: 1;
@@ -4928,88 +4947,159 @@
 }
 .sub-btn-activate::after { border: none; }
 .sub-btn-activate:active { background: #E3E6E9; }
-/* 有内容时过渡为金色激活感（靠 disabled 属性控制，enabled 态更显眼） */
-.sub-btn-activate[disabled] { opacity: 0.45; }
+/* 🐛 WXSS 非法选择器修复：`[disabled]` 是属性选择器，不在 WXSS 官方支持的
+   选择器列表内（.class / #id / element / 并集/后代选择器 / ::before /
+   ::after），开发者工具会对它报"非法选择器"编译警告，即使实际渲染多数情况下
+   仍生效也不该继续依赖这个未被文档承诺的行为。改为由 WXML 侧
+   （onActivationCodeInput/activationSubmitting 变化时）显式切换
+   .sub-btn-activate-disabled 类名，样式判断收归纯 class 选择器 */
+.sub-btn-activate-disabled { opacity: 0.45; }
 
-/* ── ④ 底部主操作区 ──────────────────────────────────────────── */
-.sub-footer {
+/* ── ③ 底部固定操作区：.sub-modal-footer ─────────────────────────
+   与 .sub-modal-container 的 flex 三段结构对应：① 关闭行 + 身份卡
+   （顶部固定）② .sub-modal-body scroll-view（中间滚动：权益卡片/套餐对比/
+   扩容包步进器/授权码折叠区）③ 本区块（底部固定）。flex-shrink:0 保证
+   .sub-modal-container 现在是确定高度（80vh，封顶 1200rpx），滚动区内容
+   再多也只在自己内部滚动，绝不会把本区块挤出可视区；safe-area 内边距直接
+   加在本区块自身，让"按钮不被 Home 指示条遮挡"这件事的责任边界清晰落在
+   底部操作区自己身上，不与卡片外层或其它规则重复计算 */
+.sub-modal-footer {
   flex-shrink: 0;
-  padding: 24rpx 28rpx 0;
+  padding: 8rpx 28rpx 0;
+  /* 🐛 底部安全区彻底修复：双声明 constant()（iOS ≤11.2 WKWebView 专用写法）
+     + env()（iOS ≥11.2 及主流机型），任何一处漏掉单侧写法都会在对应版本上
+     退化成 0、按钮贴底被 Home 指示条/虚拟导航栏遮挡）。20rpx 基础呼吸间距 +
+     真实上报的 safe-area-inset-bottom，是"按钮不被遮挡"这件事在本区块内
+     唯一、单一的真源 */
+  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16rpx;
   border-top: 1rpx solid #EDEFF2;
   background: #F7F8FA;
+  box-sizing: border-box;
 }
-.sub-btn-purchase {
-  width: 100%;
-  /* 高度足够容纳单行文本，不用 line-height 撑高（line-height 在 flex 按钮上会
-     导致多行文字行距等于按钮高度，造成文字重叠；改用 min-height + flex 居中） */
-  min-height: 96rpx;
-  height: auto;
-  line-height: 1.3;
+
+/* ── 底部主操作按钮：.btn-pay-action ─────────────────────────────
+   🐛 折行截断修复：此前的按钮文案带有"（当前选中：XXX）"括注，在窄屏 + 加粗
+   30rpx 字号下极易超宽；配合 white-space:nowrap 又会让超出部分被裁切、看起来
+   像"字被吃掉了一半"。根因分两层解决：① 文案本身已精简为
+   "立即开通专业版 · ¥1,688/年" 这类更短的行动导向文案（见 profile.wxml），
+   正常情况下在 90% 宽度、30rpx 字号下都能单行放下；② 样式层严格按
+   white-space:nowrap + overflow:hidden 兜底——万一未来文案又变长（如
+   扩容包合计单价上探到 4 位数），也只会优雅裁切文字尾部，不会出现折行导致
+   的高度错位/文字重叠，这是"严禁折行"这条硬性要求在样式层的实现方式 */
+.btn-pay-action {
+  width: 90%;
+  height: 88rpx;
+  line-height: 88rpx;
+  margin: 20rpx auto 12rpx;
+  border-radius: 44rpx;
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
+  font-size: 30rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
+  box-sizing: border-box;
   padding: 0 32rpx;
+  border: none;
+  letter-spacing: 1rpx;
   background: linear-gradient(90deg, #C9941A 0%, #E8C548 55%, #D4A017 100%);
   color: #1C1200;
-  font-size: 30rpx;
-  font-weight: 700;
-  border-radius: 48rpx;
-  border: none;
-  box-sizing: border-box;
-  margin: 0;
-  letter-spacing: 1rpx;
   box-shadow: 0 6rpx 20rpx rgba(201, 148, 26, 0.38);
   transition: transform 0.12s ease, opacity 0.12s ease;
-  white-space: nowrap;
 }
-.sub-btn-purchase::after { border: none; }
-.sub-btn-purchase:active { transform: scale(0.97); opacity: 0.9; }
+.btn-pay-action::after { border: none; }
+.btn-pay-action:active { transform: scale(0.97); opacity: 0.9; }
+
+/* 旗舰版：金色改为沉稳的深色渐变，与专业版按钮做视觉档位区分 */
+.btn-pay-action-enterprise {
+  background: linear-gradient(90deg, #2B2B3D 0%, #4A4A63 100%);
+  color: #FFFFFF;
+  box-shadow: 0 6rpx 20rpx rgba(43, 43, 61, 0.3);
+}
+/* 🏪 扩容门店包：绿色系，与"新增配额"这个动作的语义呼应 */
+.btn-pay-action-addon {
+  background: linear-gradient(90deg, #2E7D32 0%, #4CAF50 100%);
+  color: #FFFFFF;
+  box-shadow: 0 6rpx 20rpx rgba(46, 125, 50, 0.25);
+}
+/* 🌱 基础版：免费默认档位，无需下单，换成置灰提示条（沿用 .btn-pay-action
+   的尺寸/圆角/flex 布局，只覆盖配色，与其余三个可购买档位保持同一尺寸） */
+.btn-pay-action-disabled {
+  background: #F1F3F5;
+  color: #9CA3AF;
+  font-size: 27rpx;
+  font-weight: 600;
+  box-shadow: none;
+}
 
 .sub-btn-dismiss {
   font-size: 24rpx;
   color: #9CA3AF;
-  padding: 2rpx 24rpx 12rpx;
+  padding: 2rpx 24rpx 4rpx;
 }
 
 /* ── ②.5 套餐对比 Tab ────────────────────────────────────────── */
 .sub-plan-compare-tabs {
   display: flex;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
+  gap: 10rpx;
+  margin-bottom: 14rpx;
 }
 .sub-plan-compare-tab {
-  flex: 1;
+  /* 🐛 挤压换行修复：此前固定 height:68rpx + 25rpx 字号，"扩容门店包"四个
+     Tab 均分后单个 Tab 可用宽度不足以容纳图标+文字，文字被迫换成两行却仍被
+     裁在 68rpx 定高盒子里，视觉上就是"挤压/错位"。改为 min-height 弹性高度
+     + 更紧凑的字号/间距/内边距，四个 Tab 才能在一行内稳定等宽平铺；
+     min-width:0 允许 flex 子项收缩到小于内容宽度，配合 white-space:nowrap
+     + text-overflow:ellipsis 兜底极端窄屏（如 iPhone SE）下的溢出场景 */
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
-  height: 68rpx;
+  gap: 4rpx;
+  min-height: 64rpx;
+  padding: 10rpx 6rpx;
   background: #FFFFFF;
   border: 1.5rpx solid #EDEFF2;
   border-radius: 16rpx;
-  font-size: 25rpx;
+  font-size: 23rpx;
   font-weight: 700;
   color: #8B909A;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  box-sizing: border-box;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.sub-plan-compare-tab text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sub-plan-compare-tab-icon {
-  font-size: 26rpx;
+  font-size: 22rpx;
+  flex-shrink: 0;
 }
 .sub-plan-compare-tab.active {
   color: #1C1200;
   border-color: #E8C548;
   background: linear-gradient(160deg, #FFFCF0 0%, #FFF8E1 100%);
   box-shadow: 0 4rpx 12rpx rgba(212,175,55,0.14);
+  transform: translateY(-1rpx);
+}
+.sub-plan-compare-tab:active {
+  transform: scale(0.96);
 }
 .sub-plan-compare-panel {
   background: #FFFFFF;
   border-radius: 20rpx;
-  padding: 24rpx;
+  padding: 20rpx;
   border: 1.5rpx solid #EDEFF2;
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
 }
@@ -5017,8 +5107,8 @@
   display: flex;
   align-items: baseline;
   gap: 6rpx;
-  margin-bottom: 18rpx;
-  padding-bottom: 18rpx;
+  margin-bottom: 14rpx;
+  padding-bottom: 14rpx;
   border-bottom: 1rpx solid #F1F3F5;
 }
 .sub-plan-compare-price {
@@ -5041,7 +5131,7 @@
   gap: 12rpx;
   font-size: 25rpx;
   color: #374151;
-  margin-bottom: 14rpx;
+  margin-bottom: 12rpx;
 }
 .sub-plan-compare-feature-row:last-child { margin-bottom: 0; }
 .sub-plan-compare-feature-icon {
@@ -5057,11 +5147,74 @@
   font-weight: 700;
 }
 
-/* 旗舰版联系客服态：金色改为沉稳的深色渐变，与"微信支付开通"区分开 */
-.sub-btn-purchase-enterprise {
-  background: linear-gradient(90deg, #2B2B3D 0%, #4A4A63 100%);
-  color: #FFFFFF;
-  box-shadow: 0 6rpx 20rpx rgba(43, 43, 61, 0.3);
+/* 📦 门店配额标签：紧跟在每档价格下方，清晰标注"包含机构门店上限：X 家" */
+.sub-plan-quota-tag {
+  display: inline-block;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #8A6D1F;
+  background: #FFF8E1;
+  border-radius: 10rpx;
+  padding: 7rpx 14rpx;
+  margin-bottom: 14rpx;
+}
+
+/* 🏪 扩容门店包：数量步进器 + 合计价格 */
+.sub-plan-addon-stepper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #F1F3F5;
+}
+.sub-plan-addon-stepper-label {
+  font-size: 25rpx;
+  color: #374151;
+}
+.sub-plan-addon-stepper {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+.sub-plan-addon-stepper-btn {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #FFF8E1;
+  color: #C9941A;
+  font-size: 28rpx;
+  font-weight: 700;
+  transition: transform 0.1s ease, background 0.1s ease;
+}
+/* 🎛️ 步进器按压反馈：与底部主按钮/Tab 同一套"轻缩放"微交互语言，数量变化
+   由 onIncreaseAddOnQuantity/onDecreaseAddOnQuantity 实时联动 addOnTotalPrice，
+   这里只负责点按的视觉反馈，不涉及计算逻辑 */
+.sub-plan-addon-stepper-btn:active {
+  transform: scale(0.88);
+  background: #FFEFC2;
+}
+.sub-plan-addon-stepper-value {
+  min-width: 40rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1C1200;
+}
+.sub-plan-addon-total-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+  margin-top: 16rpx;
+  font-size: 23rpx;
+  color: #6B7280;
+}
+.sub-plan-addon-total-price {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #C9941A;
 }
 
 /* ================= 🔐 管理员密钥行 & 修改弹窗 ================= */
@@ -6080,7 +6233,7 @@
   margin-top: 0 !important;
 }
 
-.notice-mgmt-save-btn[disabled] {
+.notice-mgmt-save-btn-disabled {
   opacity: 0.45;
 }
 

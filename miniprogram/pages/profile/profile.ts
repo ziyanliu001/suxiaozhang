@@ -475,6 +475,12 @@ Page({
       planLabel: '基础版',
       isExpired: false,
       isExpiringSoon: false,
+      // 🕊️ 到期宽限期（7 天）：与 checkTenantPermission 云函数的 isInGracePeriod/
+      // graceExpireDate/coreReadOnly 三个字段一一对应——宽限期内高级功能仍可用，
+      // 只是明确提醒续费；超出宽限期才真正降级为 basic 并收紧高级功能/核心记账
+      isInGracePeriod: false,
+      graceExpireDate: '',
+      coreReadOnly: false,
       // 🆕 isActive：ADVANCED 档位（pro/enterprise）且未到期——用这一个布尔值
       // 驱动弹窗"已开通/未开通"两种状态渲染，而不是在 WXML 里重复拼一遍
       // planType/isExpired 的判断表达式
@@ -482,16 +488,23 @@ Page({
       expireDateStr: ''
     },
     // 🆕 激活码自助兑换：无需人工审批，校验通过立即生效
-    // 授权码输入区在新版 UI 中始终展示，无需 showActivationForm 开关
+    // 🐛 层级冲突修复：授权码输入区改为折叠式次级入口（默认收起），不再与
+    // 套餐对比/微信支付购买路径同权重常驻展开——绝大多数用户走微信支付，
+    // 只有极少数拿到卡号的用户才需要点开这块，见 onToggleRedeemSection
+    showRedeemSection: false,
     activationCodeInput: '',
     activationSubmitting: false,
     // 🆕 套餐对比 Tab：纯浏览态，与"当前实际持有的套餐"（subscriptionInfo.planType）
-    // 无关——用户可以在弹窗里自由切换查看两档功能/价格对比，不会影响任何已生效
-    // 的订阅状态。旗舰版价格尚未在 createSubscriptionOrder 里配置（当前只支持
-    // 'ADVANCED_YEARLY' 一个 SKU，见该云函数 PLAN_CONFIG），底部主按钮据此在
-    // 两档之间切换成完全不同的两个行为（在线订购 vs 联系客服），而不是硬发起
-    // 一个服务端根本不认识的套餐类型、只换来一句"不支持的套餐类型"报错
-    comparePlanTab: 'pro' as 'pro' | 'enterprise',
+    // 无关——用户可以在弹窗里自由切换查看四档定价/门店配额对比，不会影响任何已
+    // 生效的订阅状态。三个付费 SKU（专业版/旗舰版/扩容门店包）均已在
+    // createSubscriptionOrder 云函数里登记真实价格，底部主按钮按 Tab 分流成
+    // 三种真实的微信支付下单动作；basic 是免费默认档，不对应任何下单动作
+    comparePlanTab: 'pro' as 'basic' | 'pro' | 'enterprise' | 'add_on',
+    // 🏪 扩容门店包购买数量（家/年），¥200/店/年，与后端 activateTenantSubscription
+    // MAX_ADD_ON_EXTRA_STORES / createSubscriptionOrder MAX_ADD_ON_QUANTITY 同一档上限
+    addOnQuantity: 1,
+    addOnUnitPrice: 200,
+    addOnTotalPrice: 200,
     // 🆕 微信支付未开通引导弹窗：替代此前的纯 Toast 提示，见 onSubscribeAdvancedFeature
     showPaymentPendingModal: false,
     currentViewMode: 'SUPER_ADMIN' as PreviewViewMode,
@@ -5182,6 +5195,11 @@ Page({
         planLabel: PLAN_LABELS[result.planType] || result.planType,
         isExpired: result.isExpired,
         isExpiringSoon,
+        // 🕊️ 宽限期字段：checkTenantPermission 云函数已算好，前端只透传展示，
+        // 不重复实现一遍到期/宽限期判断逻辑
+        isInGracePeriod: result.isInGracePeriod,
+        graceExpireDate: result.graceExpireDate || '',
+        coreReadOnly: result.coreReadOnly,
         isActive,
         expireDateStr
       }
@@ -5195,7 +5213,9 @@ Page({
     this.setData({
       showSubscriptionModal: true,
       subscriptionLoading: true,
-      activationCodeInput: ''
+      activationCodeInput: '',
+      // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态
+      showRedeemSection: false
     });
 
     try {
@@ -5214,6 +5234,11 @@ Page({
 
   onCloseSubscriptionModal() {
     this.setData({ showSubscriptionModal: false });
+  },
+
+  // 🎫 授权码折叠区展开/收起：见 data.showRedeemSection 声明处注释
+  onToggleRedeemSection() {
+    this.setData({ showRedeemSection: !this.data.showRedeemSection });
   },
 
   onActivationCodeInput(e: any) {
@@ -5313,16 +5338,32 @@ Page({
     this.setData({ comparePlanTab: e.currentTarget.dataset.plan });
   },
 
+  // 🏪 扩容门店包数量步进：¥200/店/年，1~20 家区间（与 createSubscriptionOrder
+  // MAX_ADD_ON_QUANTITY 同一档上限），每次变化同步重算合计价格展示
+  onIncreaseAddOnQuantity() {
+    const next = Math.min(this.data.addOnQuantity + 1, 20);
+    this.setData({ addOnQuantity: next, addOnTotalPrice: next * this.data.addOnUnitPrice });
+  },
+  onDecreaseAddOnQuantity() {
+    const next = Math.max(this.data.addOnQuantity - 1, 1);
+    this.setData({ addOnQuantity: next, addOnTotalPrice: next * this.data.addOnUnitPrice });
+  },
+
   // 🆕 底部主操作按钮的统一入口：按当前正在浏览（comparePlanTab）的套餐分流
-  // 成两个完全不同的动作——专业版走真实的在线订购流程；旗舰版目前没有配置
-  // 价格/支付 SKU（见 createSubscriptionOrder PLAN_CONFIG 只有 ADVANCED_YEARLY
-  // 一项），点了不该发起一个注定失败的支付请求，直接引导联系客服定制开通
+  // 成三种真实的在线支付下单动作——专业版/旗舰版/扩容门店包均已在
+  // createSubscriptionOrder 云函数登记真实价格与 SKU（PRO_YEARLY/FLAGSHIP_YEARLY/
+  // ADD_ON_STORE），不再有"联系客服定制开通"这条兜底路径。basic 是免费默认档，
+  // 对应的按钮在 wxml 里就是一条不可点击的置灰提示条，不会触发本方法
   onPrimaryPlanAction() {
-    if (this.data.comparePlanTab === 'enterprise') {
-      this.onCopyPlatformSupportWechat();
+    if (this.data.comparePlanTab === 'add_on') {
+      this.onSubscribeAdvancedFeature('ADD_ON_STORE', this.data.addOnQuantity);
       return;
     }
-    this.onSubscribeAdvancedFeature();
+    if (this.data.comparePlanTab === 'enterprise') {
+      this.onSubscribeAdvancedFeature('FLAGSHIP_YEARLY');
+      return;
+    }
+    this.onSubscribeAdvancedFeature('PRO_YEARLY');
   },
 
   onClosePaymentPendingModal() {
@@ -5349,7 +5390,11 @@ Page({
   // 与 tenants 集合（100% 自动无感，无需用户手动输入任何授权码）→ 前端清除
   // 权限缓存并刷新套餐展示状态。
   // 授权码/卡号输入框保留为备用/赠送激活入口（见上方 onRedeemActivationCode）。
-  async onSubscribeAdvancedFeature() {
+  //
+  // planKey：'PRO_YEARLY' / 'FLAGSHIP_YEARLY' / 'ADD_ON_STORE'，与
+  // createSubscriptionOrder 云函数 PLAN_CONFIG / ADD_ON_STORE_CONFIG 一一对应；
+  // quantity 仅 ADD_ON_STORE 生效（购买的扩容门店数量）
+  async onSubscribeAdvancedFeature(planKey: 'PRO_YEARLY' | 'FLAGSHIP_YEARLY' | 'ADD_ON_STORE', quantity?: number) {
     if (this.data.subscriptionLoading) return;
     this.setData({ subscriptionLoading: true });
     wx.showLoading({ title: '正在生成订单...', mask: true });
@@ -5358,7 +5403,9 @@ Page({
       // Step 1: 调用云函数统一下单，获取支付参数
       const orderRes = await wx.cloud.callFunction({
         name: 'createSubscriptionOrder',
-        data: { planType: 'ADVANCED_YEARLY' }
+        data: planKey === 'ADD_ON_STORE'
+          ? { planType: planKey, quantity: quantity || 1 }
+          : { planType: planKey }
       });
       const orderResult = orderRes.result as any;
       wx.hideLoading();
@@ -5415,8 +5462,15 @@ Page({
         wx.hideLoading();
       }
 
+      // 🆕 按下单的 SKU 分别展示对应的成功文案，不再写死"专业版"——旗舰版/
+      // 扩容门店包走同一条支付流程，成功提示也应该对得上用户实际购买的东西
+      const successTitleMap: Record<string, string> = {
+        PRO_YEARLY: '激活成功！已为您开通专业版跨店汇总、进销存与 Excel 导出权限',
+        FLAGSHIP_YEARLY: '激活成功！已为您开通旗舰版数据大屏、财务凭证导出与数据备份权限',
+        ADD_ON_STORE: `购买成功！已为您的机构追加 ${quantity || 1} 家门店配额`
+      };
       wx.showToast({
-        title: '激活成功！已为您开通专业版跨店大屏与数据导出权限',
+        title: successTitleMap[planKey] || '激活成功！',
         icon: 'success',
         duration: 3000
       });

@@ -1561,7 +1561,7 @@
           </view>
         </view>
 
-        <button class="certificate-save-btn" bindtap="onSaveCertificateToAlbum" disabled="{{certificateGenerating || !certificateTempFilePath}}">
+        <button class="certificate-save-btn {{(certificateGenerating || !certificateTempFilePath) ? 'certificate-save-btn-disabled' : ''}}" bindtap="onSaveCertificateToAlbum" disabled="{{certificateGenerating || !certificateTempFilePath}}">
           💾 保存证书分享朋友圈
         </button>
       </block>
@@ -1619,7 +1619,7 @@
           auto-height
         ></textarea>
 
-        <button class="feedback-submit-btn" bindtap="onSubmitFeedback" loading="{{feedbackSubmitting}}" disabled="{{feedbackSubmitting}}">📮 提交宝贵意见</button>
+        <button class="feedback-submit-btn {{feedbackSubmitting ? 'feedback-submit-btn-disabled' : ''}}" bindtap="onSubmitFeedback" loading="{{feedbackSubmitting}}" disabled="{{feedbackSubmitting}}">📮 提交宝贵意见</button>
       </block>
 
       <!-- 💌 我的反馈与回复：家人自己的历史提交 + 团队回复，Tab 内自成一个可滚动列表 -->
@@ -1692,12 +1692,12 @@
             <text class="fa-item-time">🗓️ {{item.createTimeStr}}</text>
             <text class="fa-item-content">{{item.content}}</text>
             <view class="fa-item-actions">
-              <button class="fa-item-handle-btn" bindtap="onMarkFeedbackHandled" data-id="{{item._id}}" disabled="{{item.handling}}">✅ 标记已处理</button>
+              <button class="fa-item-handle-btn {{item.handling ? 'fa-item-handle-btn-disabled' : ''}}" bindtap="onMarkFeedbackHandled" data-id="{{item._id}}" disabled="{{item.handling}}">✅ 标记已处理</button>
               <button class="fa-item-reply-btn fa-feedback-reply-btn" bindtap="onToggleFeedbackReplyBox" data-id="{{item._id}}">{{feedbackReplyingId === item._id ? '收起' : '💬 回复家人'}}</button>
             </view>
             <view class="fa-reply-box" wx:if="{{feedbackReplyingId === item._id}}">
               <textarea class="fa-reply-textarea" placeholder="输入给这位家人的回复..." value="{{feedbackReplyContent}}" bindinput="onFeedbackReplyInput" maxlength="500" auto-height></textarea>
-              <button class="fa-reply-submit-btn" bindtap="onSubmitFeedbackReply" loading="{{feedbackReplySubmitting}}" disabled="{{feedbackReplySubmitting}}">发送回复</button>
+              <button class="fa-reply-submit-btn {{feedbackReplySubmitting ? 'fa-reply-submit-btn-disabled' : ''}}" bindtap="onSubmitFeedbackReply" loading="{{feedbackReplySubmitting}}" disabled="{{feedbackReplySubmitting}}">发送回复</button>
             </view>
           </view>
         </block>
@@ -1875,13 +1875,13 @@
 
           <view class="fa-item-actions">
             <button
-              class="fa-item-reply-btn"
+              class="fa-item-reply-btn {{item.processing ? 'fa-item-reply-btn-disabled' : ''}}"
               bindtap="onOpenRejectModal"
               data-id="{{item._id}}"
               disabled="{{item.processing}}"
             >❌ 驳回</button>
             <button
-              class="fa-item-handle-btn"
+              class="fa-item-handle-btn {{item.processing ? 'fa-item-handle-btn-disabled' : ''}}"
               bindtap="onApproveSubmission"
               data-id="{{item._id}}"
               disabled="{{item.processing}}"
@@ -1925,7 +1925,7 @@
       ></textarea>
 
       <button
-        class="feedback-submit-btn"
+        class="feedback-submit-btn {{rejectSubmissionSubmitting ? 'feedback-submit-btn-disabled' : ''}}"
         bindtap="onSubmitRejectSubmission"
         loading="{{rejectSubmissionSubmitting}}"
         disabled="{{rejectSubmissionSubmitting}}"
@@ -1992,12 +1992,12 @@
 
           <!-- 下半区操作 ── 情形 B：可正常操作 -->
           <view class="mm-actions" wx:else>
-            <button class="mm-demote-btn"
+            <button class="mm-demote-btn {{memberManageOperating ? 'mm-demote-btn-disabled' : ''}}"
                     bindtap="onDemoteToVolunteer"
                     data-id="{{item.applyId}}"
                     data-name="{{item.realName}}"
                     disabled="{{memberManageOperating}}">⬇ 降级为义工</button>
-            <button class="mm-remove-btn"
+            <button class="mm-remove-btn {{memberManageOperating ? 'mm-remove-btn-disabled' : ''}}"
                     bindtap="onRemoveFromStore"
                     data-id="{{item.applyId}}"
                     data-name="{{item.realName}}"
@@ -2110,7 +2110,7 @@
       ></textarea>
 
       <button
-        class="feedback-submit-btn"
+        class="feedback-submit-btn {{rejectApplicationSubmitting ? 'feedback-submit-btn-disabled' : ''}}"
         bindtap="onSubmitRejectApplication"
         loading="{{rejectApplicationSubmitting}}"
         disabled="{{rejectApplicationSubmitting}}"
@@ -2218,7 +2218,11 @@
        ③ 授权码自助兑换 ④ 底部金色主按钮（在线订购/续费）。
        card 自独立 position:fixed 贴底 + z-index:9999，避免被自定义 tabBar 遮挡。-->
   <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
-    <view class="subscription-modal-card" catchtap="stopPropagation">
+    <!-- 🏛️ Flex 垂直三段式骨架：.sub-modal-container 固定 height:80vh（封顶
+         1200rpx），不再是"内容多高、卡片多高"的 max-height 内容驱动型盒子——
+         无论中间套餐对比/权益卡片内容有多少，这个盒子的总高度都是确定值，
+         底部操作区（flex-shrink:0）永远有稳定的落脚空间，不会被顶出可视区 -->
+    <view class="sub-modal-container" catchtap="stopPropagation">
 
       <!-- 右上角关闭 -->
       <view class="sub-close-row">
@@ -2232,7 +2236,7 @@
 
       <block wx:else>
 
-        <!-- ① 黑钻身份卡 ──────────────────────────────────── -->
+        <!-- ① 顶部固定：黑钻身份卡（机构信息） ──────────────────────── -->
         <view class="sub-identity-card sub-identity-card-{{subscriptionInfo.planType}}">
           <!-- 🐛 归属层级修复：套餐是按机构（tenantId）生效的，不是按单店——同一机构
                多家门店共享这一份套餐权益（见 checkTenantPermission 云函数），这里改
@@ -2244,17 +2248,23 @@
             </view>
           </view>
           <view class="sub-identity-bottom">
-            <text class="sub-expiry-warn" wx:if="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期：{{subscriptionInfo.expireDateStr}}</text>
-            <text class="sub-expiry-expired" wx:elif="{{subscriptionInfo.isExpired}}">套餐已到期，续费后恢复权益</text>
+            <!-- 🕊️ 宽限期：套餐已过到期日但仍在 7 天宽限期内，高级功能照常可用，
+                 只是明确提醒"快去续费"，与彻底降级为 basic 的 isExpired 分开展示 -->
+            <text class="sub-expiry-grace" wx:if="{{subscriptionInfo.isInGracePeriod}}">⏳ 已到期，宽限期至 {{subscriptionInfo.graceExpireDate}}（宽限期内权益不受影响），请尽快续费</text>
+            <text class="sub-expiry-warn" wx:elif="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期：{{subscriptionInfo.expireDateStr}}</text>
+            <text class="sub-expiry-expired" wx:elif="{{subscriptionInfo.isExpired}}">套餐已到期（超出 7 天宽限期），续费后恢复高级权益</text>
             <text class="sub-expiry-active" wx:elif="{{subscriptionInfo.isActive}}">有效期至 {{subscriptionInfo.expireDateStr}}</text>
             <text class="sub-expiry-free" wx:else>当前为免费基础版，升级解锁更多权益</text>
           </view>
         </view>
 
-        <!-- 可滚动内容区 -->
-        <scroll-view scroll-y class="subscription-modal-body">
+        <!-- ② 中间滚动区：.sub-modal-body（flex:1，唯一会滚动的区域）——
+             机构信息卡片已固定在上方，这里只承载"可以变长"的内容：升级权益
+             卡片组、套餐对比 Tab、价格/配额卡片、扩容包 Stepper、授权码
+             折叠区，内容再多也只在这一个区域内部滚动，不影响上下两段固定区 -->
+        <scroll-view scroll-y="true" class="sub-modal-body sub-scroll-body">
 
-          <!-- ② 高级权益卡片组 ──────────────────────────────── -->
+          <!-- ②.1 高级权益卡片组 ──────────────────────────────── -->
           <view class="sub-section">
             <text class="sub-section-title">{{subscriptionInfo.isActive ? '✦ 当前权益' : '✦ 升级后解锁'}}</text>
             <view class="sub-benefit-grid">
@@ -2276,12 +2286,19 @@
             </view>
           </view>
 
-          <!-- ②.5 套餐对比：专业版 / 旗舰版 Tab 切换，明确列出定价与核心功能——
-               与上面的"当前权益"摘要不同，这里是给用户"看清楚两档具体差在哪、
-               该选哪个"用的完整对比，纯浏览态，不影响任何已生效的订阅状态 -->
+          <!-- ②.2 套餐对比：基础版 / 专业版 / 旗舰版 / 扩容门店包 四个 Tab
+               切换，明确列出定价与门店配额——与上面的"当前权益"摘要不同，这里是
+               给用户"看清楚每档具体差在哪、该选哪个"用的完整对比，纯浏览态，
+               不影响任何已生效的订阅状态。门店配额口径与 checkTenantPermission/
+               createStore 等云函数的 PLAN_STORE_LIMITS 完全一致：
+               basic 2 家 / pro 10 家 / enterprise（旗舰版）30 家 -->
           <view class="sub-section">
             <text class="sub-section-title">✦ 套餐对比</text>
             <view class="sub-plan-compare-tabs">
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'basic' ? 'active' : ''}}" data-plan="basic" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">🌱</text>
+                <text>基础版</text>
+              </view>
               <view class="sub-plan-compare-tab {{comparePlanTab === 'pro' ? 'active' : ''}}" data-plan="pro" bindtap="onSwitchComparePlanTab">
                 <text class="sub-plan-compare-tab-icon">🌟</text>
                 <text>专业版</text>
@@ -2290,16 +2307,45 @@
                 <text class="sub-plan-compare-tab-icon">👑</text>
                 <text>旗舰版</text>
               </view>
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'add_on' ? 'active' : ''}}" data-plan="add_on" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">🏪</text>
+                <text>扩容包</text>
+              </view>
             </view>
 
-            <view class="sub-plan-compare-panel" wx:if="{{comparePlanTab === 'pro'}}">
+            <view class="sub-plan-compare-panel" wx:if="{{comparePlanTab === 'basic'}}">
               <view class="sub-plan-compare-price-row">
-                <text class="sub-plan-compare-price">¥298</text>
-                <text class="sub-plan-compare-price-unit">/ 年</text>
+                <text class="sub-plan-compare-price">¥0</text>
+                <text class="sub-plan-compare-price-unit">永久免费</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：2 家</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>基础收支记账</text>
               </view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
-                <text>单店精细化运营</text>
+                <text>日常流水查看</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>简单日报</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:elif="{{comparePlanTab === 'pro'}}">
+              <view class="sub-plan-compare-price-row">
+                <text class="sub-plan-compare-price">¥1,688</text>
+                <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：10 家</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>跨店汇总统计</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>进销存 / 物资管理</text>
               </view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
@@ -2307,61 +2353,107 @@
               </view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
-                <text>独立财务 / 店长权限</text>
+                <text>角色权限精细化</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:elif="{{comparePlanTab === 'enterprise'}}">
+              <view class="sub-plan-compare-price-row">
+                <text class="sub-plan-compare-price">¥3,688</text>
+                <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：30 家</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>数据大屏看板</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>专属财务凭证导出</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>数据备份</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>多级人员调度与优先客服</text>
               </view>
             </view>
 
             <view class="sub-plan-compare-panel" wx:else>
               <view class="sub-plan-compare-price-row">
-                <text class="sub-plan-compare-price-custom">联系客服定制报价</text>
+                <text class="sub-plan-compare-price">¥200</text>
+                <text class="sub-plan-compare-price-unit">/ 店 / 年</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 在当前机构门店上限基础上按需叠加</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>不改变套餐档位，仅追加门店名额</text>
               </view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
-                <text>多门店连锁 / 全国总览</text>
+                <text>基础版机构同样可购买</text>
               </view>
-              <view class="sub-plan-compare-feature-row">
-                <text class="sub-plan-compare-feature-icon">✓</text>
-                <text>跨门店合并报表导出</text>
+              <view class="sub-plan-addon-stepper-row">
+                <text class="sub-plan-addon-stepper-label">购买数量（家/年）</text>
+                <view class="sub-plan-addon-stepper">
+                  <view class="sub-plan-addon-stepper-btn" bindtap="onDecreaseAddOnQuantity">－</view>
+                  <text class="sub-plan-addon-stepper-value">{{addOnQuantity}}</text>
+                  <view class="sub-plan-addon-stepper-btn" bindtap="onIncreaseAddOnQuantity">＋</view>
+                </view>
               </view>
-              <view class="sub-plan-compare-feature-row">
-                <text class="sub-plan-compare-feature-icon">✓</text>
-                <text>多级人员调度与审计</text>
+              <view class="sub-plan-addon-total-row">
+                <text>合计：</text>
+                <text class="sub-plan-addon-total-price">¥{{addOnTotalPrice}}</text>
               </view>
             </view>
           </view>
 
-          <!-- ③ 授权码兑换区 ────────────────────────────────── -->
-          <view class="sub-section sub-redeem-section">
-            <text class="sub-section-title">✦ 授权码兑换</text>
-            <view class="sub-redeem-input-row">
-              <input class="sub-redeem-input"
-                     placeholder="请输入或粘贴授权码 / 兑换卡号"
-                     value="{{activationCodeInput}}"
-                     bindinput="onActivationCodeInput" />
-              <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+          <!-- ②.3 授权码兑换区：折叠式次级入口 ──────────────────────
+               🐛 层级冲突修复：此前是一张与"套餐对比"同权重的常驻展开卡片
+               （标题+输入框+按钮全部常驻可见），与主线"微信支付开通"抢视觉
+               焦点，容易让用户误以为"这两条路都得走一遍"。改为默认折叠的
+               轻量入口——只有极少数拿到卡号/授权码的用户才会点开，绝大多数
+               走微信支付的用户完全不会被这块内容分散注意力 -->
+          <view class="sub-section sub-redeem-collapse">
+            <view class="sub-redeem-toggle" bindtap="onToggleRedeemSection">
+              <text class="sub-redeem-toggle-icon">🎫</text>
+              <text class="sub-redeem-toggle-text">使用授权码 / 兑换卡号</text>
+              <text class="sub-redeem-toggle-arrow {{showRedeemSection ? 'sub-redeem-toggle-arrow-expanded' : ''}}">›</text>
             </view>
-            <button class="sub-btn-activate"
-                    bindtap="onRedeemActivationCode"
-                    disabled="{{activationSubmitting || !activationCodeInput}}"
-                    loading="{{activationSubmitting}}">激活授权码</button>
+            <view class="sub-redeem-panel" wx:if="{{showRedeemSection}}">
+              <view class="sub-redeem-input-row">
+                <input class="sub-redeem-input"
+                       placeholder="请输入或粘贴授权码 / 兑换卡号"
+                       value="{{activationCodeInput}}"
+                       bindinput="onActivationCodeInput" />
+                <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+              </view>
+              <button class="sub-btn-activate {{(activationSubmitting || !activationCodeInput) ? 'sub-btn-activate-disabled' : ''}}"
+                      bindtap="onRedeemActivationCode"
+                      disabled="{{activationSubmitting || !activationCodeInput}}"
+                      loading="{{activationSubmitting}}">激活授权码</button>
+            </view>
           </view>
 
         </scroll-view>
 
-        <!-- ④ 底部主操作区：按 comparePlanTab 分流成两种完全不同的行为，
-             见 onPrimaryPlanAction 注释 -->
-        <view class="sub-footer">
-          <button class="sub-btn-purchase"
-                  bindtap="onPrimaryPlanAction"
-                  loading="{{subscriptionLoading}}"
-                  wx:if="{{comparePlanTab === 'pro'}}">
-            {{subscriptionInfo.isActive ? '续费 / 延长有效期' : '💳 微信支付开通'}}
-          </button>
-          <button class="sub-btn-purchase sub-btn-purchase-enterprise"
-                  bindtap="onPrimaryPlanAction"
-                  wx:else>
-            👑 联系客服定制开通
-          </button>
+        <!-- ③ 底部固定操作区：.sub-modal-footer（flex-shrink:0，不随
+             .sub-modal-body 滚动），按 comparePlanTab 分流成三种真实的微信
+             支付下单动作（专业版/旗舰版/扩容门店包，均已在
+             createSubscriptionOrder 云函数登记真实价格与 SKU），基础版本身
+             免费无需下单——见 onPrimaryPlanAction 注释。
+             🐛 折行截断修复：文案精简为更短的行动导向文案（价格信息通过 " · "
+             紧凑呈现），且必须在按钮内单行水平居中展示——按钮文本直接写在
+             同一行源码里，不留换行/多余空白，配合 .btn-pay-action 的
+             white-space:nowrap + overflow:hidden + text-overflow:ellipsis，
+             双重保险确保严禁出现折行 -->
+        <view class="sub-modal-footer">
+          <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:if="{{comparePlanTab === 'pro'}}">💳 立即开通专业版 · ¥1,688/年</button>
+          <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">👑 立即开通旗舰版 · ¥3,688/年</button>
+          <button class="btn-pay-action btn-pay-action-addon" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'add_on'}}">🏪 确认购买扩容包 · ¥{{addOnTotalPrice}}/年</button>
+          <view class="btn-pay-action btn-pay-action-disabled" wx:else>当前为默认免费档位</view>
           <text class="sub-btn-dismiss" bindtap="onCloseSubscriptionModal">暂不升级</text>
         </view>
 
@@ -2409,7 +2501,7 @@
              placeholder="请输入密钥，最多 50 字"
              maxlength="50" />
       <text class="admin-key-modal-desc">设置后，申请大家长/店长/财务角色时须提供此密钥。留空保存则清除密钥（允许所有人自由申请）。</text>
-      <button class="feedback-submit-btn"
+      <button class="feedback-submit-btn {{adminKeyModalSaving ? 'feedback-submit-btn-disabled' : ''}}"
               bindtap="onSaveAdminKeyFromProfile"
               loading="{{adminKeyModalSaving}}"
               disabled="{{adminKeyModalSaving}}">保存密钥</button>
@@ -2602,7 +2694,7 @@
       </text>
 
       <!-- ⑤ 提交按钮 -->
-      <button class="feedback-submit-btn {{resetStoreKeyIsClearMode ? 'reset-key-btn-clear' : 'reset-key-btn-set'}}"
+      <button class="feedback-submit-btn {{resetStoreKeyIsClearMode ? 'reset-key-btn-clear' : 'reset-key-btn-set'}} {{(resetStoreKeySaving || !resetStoreKeyStoreId || resetStoreKeyShowList) ? 'feedback-submit-btn-disabled' : ''}}"
               bindtap="onConfirmResetStoreKey"
               loading="{{resetStoreKeySaving}}"
               disabled="{{resetStoreKeySaving || !resetStoreKeyStoreId || resetStoreKeyShowList}}">
@@ -2702,7 +2794,7 @@
         <button class="notice-mgmt-cancel-btn"
                 bindtap="onNoticeManagementBackToList"
                 disabled="{{noticeMgmtSaving}}">取消</button>
-        <button class="feedback-submit-btn notice-mgmt-save-btn"
+        <button class="feedback-submit-btn notice-mgmt-save-btn {{(noticeMgmtSaving || !noticeMgmtEditTitle || !noticeMgmtEditContent) ? 'feedback-submit-btn-disabled notice-mgmt-save-btn-disabled' : ''}}"
                 bindtap="onNoticeManagementSave"
                 loading="{{noticeMgmtSaving}}"
                 disabled="{{noticeMgmtSaving || !noticeMgmtEditTitle || !noticeMgmtEditContent}}">保存发布</button>
