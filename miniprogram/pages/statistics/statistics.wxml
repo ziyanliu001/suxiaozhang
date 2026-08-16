@@ -1208,7 +1208,13 @@
          稳定存在于 DOM 中，保证 onLoad 阶段设置的 scroll-into-view 生效。
          entryFocus==='sunshine' 时收起本卡，把版面让给阳光大盘 -->
     <view class="ui-card-wrapper ledger-list-container" id="ledgerListAnchor" wx:if="{{entryFocus !== 'sunshine'}}">
-      <view class="card-header">
+      <!-- 🐛 折行截断修复：.card-header 是本文件 9 张卡片共用的裸类名，只有
+           margin-bottom，没有任何 flex 布局——标题与副标题两个 <text> 兄弟节点
+           因此按纯行内流排版，宽度不够时副标题会在任意字符处断行，日期区间
+           末尾的"16"这类数字就会被硬生生挤到下一行。加一个只作用于本卡片的
+           ledger-card-header 类做左右两端对齐，不去动其余 8 处共用 .card-header
+           的布局 -->
+      <view class="card-header ledger-card-header">
         <text class="card-title">📋 账目流水明细</text>
         <!-- 🐛 根因修复：此前副标题写死拼 selectedYear/selectedMonth，年报/周报/
              自定义区间下会显示一个跟实际查询范围对不上的"年-月"；改用

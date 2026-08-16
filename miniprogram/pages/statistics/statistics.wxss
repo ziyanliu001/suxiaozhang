@@ -4782,9 +4782,29 @@ button.btn-empty-primary {
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🐛 折行截断修复：与 .ledger-card-header 配套（见 statistics.wxml 同处注释）——
+   标题 flex-shrink:0 占住自己的宽度，副标题占满剩余空间并单行省略，宽度不够时
+   截断成"...16"这类省略号收尾，而不是把最后几个字符硬挤到下一行 */
+.ledger-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+.ledger-card-header .card-title {
+  flex-shrink: 0;
+  font-size: 30rpx;
+}
+
 .ledger-list-sub {
+  flex: 1;
+  min-width: 0;
   font-size: 22rpx;
   color: #868E96;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ledger-list-loading,
@@ -4814,7 +4834,7 @@ button.btn-empty-primary {
   text-align: center;
   background: #F8F9FA;
   border-radius: 50%;
-  margin-bottom: 16rpx;
+  margin: 16rpx 0 12rpx;
 }
 
 .ledger-empty-main {
