@@ -9120,6 +9120,16 @@ Page({
     const orgType = this.data.orgType || (this.data.currentPlatformMode === 'yuhua' ? 'yuhuazhai' : '');
     this.setData({ cultureModalTitle: computeCultureModalTitle(orgType) });
 
+    // 🐛 根因修复：this.data.orgType 只有 onLoad 里 await initCurrentUserRole()
+    // 才会用服务端最新值刷新一次；本页在 tab 间切换回来时只走
+    // refreshUserRoleView()（纯本地缓存/storage，不发请求），如果用户是在个人
+    // 页【组织信息配置】里刚把门店 orgType 改成 yuhuazhai、再切回首页直接点
+    // 这个入口，用到的还是切页前缓存的旧值，弹窗会误走非雨花斋的占位分支。
+    // 先用旧值秒开弹窗（不为了这次校验让用户等一次网络请求），再异步拿一次
+    // 服务端权威值，真的对不上时才用新值重新装配一遍——多数情况下 orgType
+    // 没变，这次异步刷新不会有任何可感知的界面变化
+    this.refreshCultureModalOrgTypeIfStale();
+
     if (orgType !== 'yuhuazhai') {
       this.setData({ showFamilyMottoModal: true });
       return;
@@ -9175,6 +9185,24 @@ Page({
 
   onCloseFamilyMottoModal() {
     this.setData({ showFamilyMottoModal: false });
+  },
+
+  // 🐛 见 onShowFamilyMottoModal 同处注释：异步向服务端要一次最新 orgType，
+  // 如果确实跟弹窗打开时用的缓存值不一样（且弹窗此刻还开着，没被关掉），
+  // 用新值重新调用一次 onShowFamilyMottoModal 重新装配标题与内容——该方法
+  // 本身是幂等的（每次都是按当前 this.data.orgType 重新算一遍），可以安全
+  // 再调一次，不会有累积状态的副作用
+  async refreshCultureModalOrgTypeIfStale() {
+    try {
+      const fresh = await AuthService.fetchUserRole();
+      const freshOrgType = (fresh.success && fresh.roleInfo && (fresh.roleInfo as any).orgType) || '';
+      if (freshOrgType && freshOrgType !== this.data.orgType && this.data.showFamilyMottoModal) {
+        this.setData({ orgType: freshOrgType });
+        this.onShowFamilyMottoModal();
+      }
+    } catch (err) {
+      console.warn('[refreshCultureModalOrgTypeIfStale] 刷新 orgType 失败:', err);
+    }
   },
 
   async fetchNotices() {
