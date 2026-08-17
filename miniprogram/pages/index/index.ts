@@ -378,7 +378,7 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
 // 「组织信息配置」弹窗，真实数据）+ 一段明确标注为通用占位的公益精神简述——
 // 没有真实的机构专属文化全集素材前，绝不虚构一套看起来"权威"的十模块内容
 function computeCultureModalTitle(orgType: string): string {
-  if (orgType === 'yuhuazhai') return '雨花文化与每日家训';
+  if (orgType === 'yuhuazhai') return '雨花和每日诵读';
   if (orgType === 'elderly_canteen') return '社区敬老文化与每日家训';
   return '公益文化与团队公约';
 }

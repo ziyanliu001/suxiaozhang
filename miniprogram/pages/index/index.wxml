@@ -3100,7 +3100,7 @@
 
         <!-- 三、雨花家道 -->
         <text class="motto-section-title">三、雨花家道</text>
-        <text class="culture-sub-title">—— 雨花核心精神 ——</text>
+        <text class="culture-sub-title">—— 雨花三绝 ——</text>
         <text class="motto-section-text culture-core-spirit-text">{{cultureFullData.homeCoreSpirit}}</text>
         <text class="culture-sub-title">—— {{cultureFullData.homeSanYouTitle}} ——</text>
         <!-- 🌸 三由/六同：短句对仗型内容，用 flex-wrap 居中网格包裹，
