@@ -5586,12 +5586,12 @@ button.poster-gen-btn[disabled] {
   border-top: 1rpx solid #F1F3F5;
 }
 
-/* ── 门店申请弹窗（三段式：Header 固定 / Body 滚动 / Footer 固定置底） ── */
-/* 🐛 背景穿透修复：遮罩用标准半透明深色（rgba(0,0,0,0.6)），弹窗卡片自身
-   用纯白实色背景（见 .apply-modal-card）——两者叠在一起才是"底板实体化"，
-   任何一层漏声明背景色都会让底下的 platform-select-page 文字/卡片透出来。
-   catchtouchmove（见 index.wxml 同一元素）额外挡住手指在遮罩区域拖动时
-   触发的背景页面滚动穿透，这是纯 CSS 半透明层管不到的另一半问题 */
+/* ── 门店申请弹窗 ──────────────────────────────────────────────────
+   弹窗卡片本身及内部结构（Header/Tab/身份卡/姓名手机号输入框/提交按钮）已
+   改为自包含内联样式，见 index.wxml 同处大段说明（多轮真机测试确认部分
+   class 规则在特定客户端环境下未生效，作为独立不共享的弹窗改用内联样式
+   止损）。.apply-modal-mask 仍是 wxml 上真实挂着的 class，保留其规则；
+   inline style 是叠加的冗余保险，两者数值保持一致 */
 .apply-modal-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -5606,119 +5606,8 @@ button.poster-gen-btn[disabled] {
   z-index: 100000;
 }
 
-/* 卡片：flex 列，max-height 限制总高，超出由 Body scroll-view 内部滚动消化。
-   纯白不透明背景是杜绝"背景文字穿透"的关键一环——上面遮罩只负责半透明调暗
-   背景，真正承载表单内容的这张卡片必须是完全不透明的实色底板 */
-.apply-modal-card {
-  width: 88%;
-  max-height: 85vh;
-  background: #FFFFFF;
-  border-radius: 24rpx;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.24);
-}
-
-/* 1. Header — flex-shrink:0 永远占位，不被 Body 挤压 */
-.apply-modal-header {
-  width: 100%;
-  box-sizing: border-box;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding: 28rpx 32rpx 24rpx;
-  border-bottom: 1rpx solid #F1F3F5;
-}
-
-.apply-modal-title {
-  flex: 1;
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #212529;
-  display: flex;
-  align-items: center;
-}
-
-.apply-modal-close {
-  flex-shrink: 0;
-  font-size: 36rpx;
-  color: #ADB5BD;
-  padding: 8rpx;
-  line-height: 1;
-}
-
-/* 2. Body — 内部可滚动，flex:1 吃光 Header 与 Footer 剩余高度 */
-.apply-modal-body {
-  flex: 1;
-  min-height: 0;
-  padding: 24rpx 32rpx 8rpx;
-  box-sizing: border-box;
-}
-
-/* 3. Footer — sticky 置底，不随 Body 内容滚动，带顶部分隔阴影 */
-.apply-modal-footer {
-  flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
-  background: #fff;
-  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-  z-index: 10;
-  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
-}
-
-/* 🐛 按钮规范化：大圆角（44rpx，接近胶囊）+ 指定主题色 + flex 居中，
-   与本 session 其它弹窗底部主按钮同一套"防折行/防溢出"写法——
-   height/line-height 双保险撑高度，display:flex 居中兜底文本渲染位置，
-   避免出现按钮内文字偏上/偏左这类细节瑕疵 */
-.btn-submit-apply {
-  width: 100%;
-  height: 88rpx;
-  line-height: 88rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  background: #C0392B;
-  color: #FFFFFF;
-  border-radius: 44rpx;
-  font-size: 32rpx;
-  font-weight: 600;
-  border: none;
-  margin-top: 30rpx;
-  white-space: nowrap;
-}
-
-.btn-submit-apply::after { border: none; }
-
-.btn-submit-apply[disabled] {
-  opacity: 0.55;
-}
-
-/* 🐛 真机加固：微信原生 <button> 自带一套基础库默认样式（含默认背景/内边距/
-   ::after 边框伪元素），在部分客户端上这份默认样式的优先级足以盖过一个普通
-   的 bare class 选择器。button.btn-submit-apply（元素+类的组合选择器，
-   specificity 比单独一个类选择器更高）+ !important 双重加固，确保红底白字
-   一定能盖过平台默认样式；不删除上面原有的 .btn-submit-apply 规则，两者共存 */
-button.btn-submit-apply {
-  width: 100% !important;
-  height: 88rpx !important;
-  line-height: 88rpx !important;
-  background-color: #C0392B !important;
-  color: #FFFFFF !important;
-  border-radius: 44rpx !important;
-  font-size: 30rpx !important;
-  font-weight: 600 !important;
-  padding: 0 !important;
-  margin: 24rpx 0 0 0 !important;
-}
-button.btn-submit-apply::after {
-  border: none !important;
-}
-
-/* ── 弹窗内表单通用样式 ── */
+/* ── 弹窗内表单通用样式：仅供"新建门店"档案补全子块（地区/地址/电话/照片）
+   使用，其余表单项已改为内联样式，不再依赖这里的 class ── */
 .form-item {
   margin-bottom: 24rpx;
 }
@@ -5748,51 +5637,15 @@ button.btn-submit-apply::after {
   box-sizing: border-box;
 }
 
-/* 🐛 UX 重构：门店模式切换从"两个独立描边方块"改为标准胶囊式分段控制器
-   （segmented control）——外层浅灰胶囊容器 + 内层选中态高亮胶囊，是这类
-   二选一切换器的通用视觉语言，比两个各自描边的方块更轻量、更容易一眼看出
-   "这是一组互斥选项" */
-.store-mode-tabs {
-  display: flex;
-  gap: 6rpx;
-  margin-bottom: 12rpx;
-  background: #F1F3F5;
-  border-radius: 999rpx;
-  padding: 6rpx;
-  box-sizing: border-box;
-}
-
-.store-mode-tab {
-  flex: 1;
-  text-align: center;
-  font-size: 24rpx;
-  color: #666666;
-  background: transparent;
-  border: none;
-  border-radius: 999rpx;
-  padding: 14rpx 0;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-}
-
-.store-mode-tab.active {
-  /* 🎨 品牌高亮统一：与本弹窗内身份卡片选中态 (#C0392B)、提交按钮同一色号，
-     整个弹窗的"选中/主操作"强调色只有一处定义分散在多个规则里，不再是
-     这里单独一份 #8C1D18 深红 */
-  background: #C0392B;
-  color: #FFFFFF;
-  font-weight: bold;
-  box-shadow: 0 4rpx 10rpx rgba(192, 57, 43, 0.28);
-}
-
 /* 🐛 命名空间冲突修复：此前这里直接复用裸类名 .form-picker-selector 改样式，
    而这个类名同时也被"生成邀请码"弹窗的门店选择器（见 index.wxml 约第 2294/
    2298 行，genStoreOptions/genStoreSelectorDisabled 那一块，与本申请加入
    弹窗完全是两个不相关的功能）在用——CSS 里同名选择器按源码顺序层叠，这里
    声明在后，等于悄悄把邀请码弹窗那个选择器的背景色/边框/内边距全部覆盖掉了，
    而那边的开发者可能完全不知道自己的样式被这边的改动影响。改用
-   .apply-form-picker-selector 专属类名，只作用于本申请弹窗内的两个 picker
-   （选择已有门店 / 选择所属地区），.form-picker-selector 原有的裸类名规则
-   保留给邀请码弹窗单独使用，两边彻底解耦 */
+   .apply-form-picker-selector 专属类名解耦；本弹窗内原本还有"选择已有门店"
+   一处 picker 也用过这个类，现已改为内联样式，目前只剩"选择所属地区"
+   （新建门店档案补全子块）还在用 */
 .apply-form-picker-selector {
   display: flex;
   align-items: center;
@@ -5804,111 +5657,6 @@ button.btn-submit-apply::after {
   font-size: 28rpx;
   color: #212529;
   box-sizing: border-box;
-}
-.apply-form-picker-selector-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.apply-form-picker-arrow {
-  flex-shrink: 0;
-  margin-left: 12rpx;
-  font-size: 22rpx;
-  color: #ADB5BD;
-}
-
-.form-hint {
-  display: block;
-  font-size: 22rpx;
-  color: #C97B3D;
-  margin-top: 10rpx;
-}
-
-/* ── 申请身份：2×2 网格卡片式单选（重构版）──────────────────────────
-   🐛 UX 重构根因：原来的 .role-radio-group 是 flex-wrap + min-width:40% 的
-   "单选圆点 + Emoji + 文字" 同行布局，四个选项在窄弹窗卡片里经常被挤到
-   换行错位、圆点/图标/文字三者对不齐。改为固定 2 列网格，每张卡片图标独占
-   一行在上、文字在下，选中态靠整卡描边高亮 + 右上角对勾角标表达，视觉上
-   清晰、不依赖原生 <radio> 那个容易被压扁的小圆点 */
-/* 🐛 真机验证：部分 Android 机型的微信客户端（老版本 X5 内核）对 display:grid
-   支持不完整，子项会直接退化成默认块级纵向堆叠——实测截图证实。改用兼容性
-   好得多的 Flexbox + flex-wrap 复刻同样的"3 列，4 个选项最后一个居中"效果：
-   flex: 0 0 31% 撑出 3 列（3×31%=93%，配合 justify-content:space-between 让
-   两条列间距各分到约 3.5%，视觉上与原来 16rpx gap 接近但不追求像素级一致）；
-   第 4 项（固定就是这 4 张卡片列表的最后一张）单独用 margin:0 auto 在它自己
-   那一整行里居中，等价于原来 Grid 版本 :last-child:nth-child(3n+1) 的效果。
-   不用 flex 的 gap 属性——gap 用在 flex 容器上是比 grid-gap 更晚才被各引擎
-   支持的特性，同样可能在老内核上失效，这里改用 margin-bottom 做行间距，
-   兼容性更保守 */
-.apply-role-grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  margin: 16rpx 0 24rpx;
-}
-.apply-role-card {
-  flex: 0 0 31%;
-  margin-bottom: 16rpx;
-}
-.apply-role-card:nth-child(4) {
-  margin: 0 auto 16rpx;
-}
-
-.apply-role-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 20rpx 0;
-  background: #F7F8FA;
-  border-radius: 12rpx;
-  border: 2rpx solid transparent;
-  box-sizing: border-box;
-  transition: all 0.2s ease;
-}
-
-/* 原生 <radio> 保留在 DOM 里维持 radio-group 的单选语义与可访问性，
-   只是把它自己的圆点视觉压缩到近乎不可见——label 包裹整张卡片，点击卡片
-   任意位置依然会命中这颗 radio（WXML label-for-control 的标准行为），
-   不需要额外绑 bindtap 去手动 setData */
-.apply-role-card-icon {
-  font-size: 38rpx;
-  line-height: 1.2;
-  margin-bottom: 8rpx;
-}
-
-.apply-role-card-label {
-  font-size: 26rpx;
-  color: #333333;
-  font-weight: 500;
-}
-
-.apply-role-card-active {
-  background: #FFF5F2;
-  border-color: #C0392B;
-}
-.apply-role-card-active .apply-role-card-label {
-  color: #C0392B;
-  font-weight: 600;
-}
-
-/* 右上角对勾角标：选中态专属，替代原生 radio 圆点作为"已选中"的视觉锚点 */
-.apply-role-card-check {
-  position: absolute;
-  top: -1rpx;
-  right: -1rpx;
-  width: 36rpx;
-  height: 36rpx;
-  line-height: 36rpx;
-  text-align: center;
-  font-size: 20rpx;
-  font-weight: bold;
-  color: #FFFFFF;
-  background: #C0392B;
-  border-radius: 0 18rpx 0 18rpx;
 }
 
 /* 店长审核抽屉 Modal */
