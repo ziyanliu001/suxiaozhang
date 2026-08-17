@@ -151,6 +151,13 @@ exports.main = async (event) => {
     const sevenDaysAgoStr = new Date(sevenDaysAgoMs).toISOString().slice(0, 10);
     const latestDonorsWeekly = [];
 
+    // 🌸 近3日阳善榜：与 latestDonorsWeekly 同款窗口判断逻辑，只是把窗口收窄到
+    // 真实 3×24 小时，供个人页阳善纵向"冒出"轮播使用——该场景要的是"最近这几天
+    // 谁随喜了"，7 天窗口太宽，容易把上周的记录也混进来
+    const threeDaysAgoMs = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    const threeDaysAgoStr = new Date(threeDaysAgoMs).toISOString().slice(0, 10);
+    const latestDonorsThreeDay = [];
+
     records.forEach((r) => {
       const dining = parseFloat(r.totalDineCount || r.diningCount) || 0;
       totalDiners += dining;
@@ -223,6 +230,34 @@ exports.main = async (event) => {
           });
         }
       }
+
+      // 🌸 近3日阳善榜：与上面 latestDonorsWeekly 完全同款逻辑，只是窗口换成
+      // threeDaysAgoMs/threeDaysAgoStr，同样允许与 latestDonors/latestDonorsWeekly
+      // 重复处理同一条记录
+      if (!r.isAnonymous && donationItems.length > 0 && latestDonorsThreeDay.length < 30) {
+        const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
+        const inThreeDayWindow = !Number.isNaN(recordMs)
+          ? recordMs >= threeDaysAgoMs
+          : !!(r.dateString && r.dateString >= threeDaysAgoStr);
+        if (inThreeDayWindow) {
+          const threeDayTimeLabel = !Number.isNaN(recordMs)
+            ? formatRelativeTime(r.createTime)
+            : (() => {
+                const dayDiff = r.dateString ? daysBetween(r.dateString, todayStr) : null;
+                return dayDiff === null ? '' : dayDiff === 0 ? '今天' : dayDiff === 1 ? '昨天' : `${dayDiff}天前`;
+              })();
+          donationItems.forEach((item) => {
+            if (latestDonorsThreeDay.length >= 30) return;
+            const amount = parseFloat(item.amount) || 0;
+            latestDonorsThreeDay.push({
+              name: (item.name || '爱心人士').trim(),
+              amount,
+              deedText: `随喜 ¥${amount}`,
+              timeLabel: threeDayTimeLabel
+            });
+          });
+        }
+      }
     });
 
     const meritTotal = yangCount + yinCount;
@@ -254,7 +289,8 @@ exports.main = async (event) => {
       yangRatioPct,
       yinRatioPct,
       latestDonors,
-      latestDonorsWeekly
+      latestDonorsWeekly,
+      latestDonorsThreeDay
     };
   } catch (err) {
     console.error('[getSunshineLedger] 查询异常:', err);

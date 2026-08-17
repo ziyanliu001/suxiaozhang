@@ -128,23 +128,35 @@
       </view>
     </view>
 
-    <!-- 🌸 阳善动态跑马灯：紧邻身份 Banner 下方，展示本店最新公开随喜捐赠记录。
-         数据源固定为 getSunshineLedger 的 latestDonorsWeekly——与本页下方
-         <yangshan-wall>/sunshine-board 同一份公开只读查询，不另起一套云函数
-         调用（见 profile.ts fetchSunshineMarqueeText）。义工工时/今日供餐份数
-         暂无对应数据源，本期先只做捐赠随喜；currentSunshineText 无数据时由
-         fetchSunshineMarqueeText 兜底填入默认祝福文案，因此本节点始终有内容
-         可展示，wx:if 只用来在极端情况下（如两个字段都还没 setData 过）避免
-         渲染一个空壳 -->
-    <view class="sunshine-marquee-bar" wx:if="{{currentSunshineText}}">
+    <!-- 🌸 阳善纵向"冒出"轮播：紧邻身份 Banner 下方，展示本店近 3 天公开随喜
+         捐赠记录。数据源固定为 getSunshineLedger 的 latestDonorsThreeDay——与
+         本页下方 <yangshan-wall>/sunshine-board 同一份公开只读查询，不另起
+         一套云函数调用（见 profile.ts fetchStoreLoveWallSummary）。义工工时/
+         今日供餐份数暂无对应数据源，本期先只做捐赠随喜；yangShanList 为空时
+         wx:else 展示默认祝福文案兜底，本节点始终有内容可展示 -->
+    <view class="sunshine-marquee-bar">
       <view class="sunshine-tag">
         <text class="sunshine-icon">🏵️</text>
         <text class="sunshine-tag-title">阳善</text>
       </view>
-      <view class="sunshine-marquee-track">
-        <view class="sunshine-marquee-content">
-          <text class="sunshine-text">{{currentSunshineText}}</text>
-        </view>
+      <swiper
+        wx:if="{{yangShanList && yangShanList.length > 0}}"
+        class="sunshine-swiper"
+        vertical
+        autoplay
+        circular
+        interval="3000"
+        duration="600"
+      >
+        <swiper-item wx:for="{{yangShanList}}" wx:key="index">
+          <view class="sunshine-swiper-item">
+            <text class="sunshine-swiper-name">{{item.name}}</text>
+            <text class="sunshine-swiper-amount">随喜 ¥{{item.amount}}</text>
+          </view>
+        </swiper-item>
+      </swiper>
+      <view class="sunshine-swiper-fallback" wx:else>
+        <text class="sunshine-text">行善积德，福慧双增 · 愿一切善行皆得圆满</text>
       </view>
     </view>
 

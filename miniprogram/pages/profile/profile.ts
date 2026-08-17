@@ -460,11 +460,10 @@ Page({
     // 阳善公开名单，这里只需要保存解析出来的门店 ID
     myStoreId: '',
     storeLoveWallMeritRatio: { yangRatioPct: 0, yinRatioPct: 0 },
-    // 🌸 阳善动态跑马灯文案：由 fetchStoreLoveWallSummary 用同一次
-    // getSunshineLedger 响应里的 latestDonorsWeekly 拼装，无数据时兜底为默认
-    // 祝福文案（见该方法内注释），因此该字段不会是空字符串——WXML 的 wx:if
-    // 只是防两个字段都还没 setData 时的极端空壳
-    currentSunshineText: '',
+    // 🌸 阳善纵向"冒出"轮播名单：由 fetchStoreLoveWallSummary 用同一次
+    // getSunshineLedger 响应里的 latestDonorsThreeDay（近 3 天窗口）拼装，
+    // 空数组时 WXML 用 wx:else 展示默认祝福文案兜底
+    yangShanList: [] as Array<{ name: string; amount: number }>,
     showStorePickerModal: false,
     storePickerLoading: false,
     storePickerSearchText: '',
@@ -1700,34 +1699,25 @@ Page({
       const result = res.result;
       if (!result || !result.success) return;
 
+      const list = Array.isArray(result.latestDonorsThreeDay)
+        ? result.latestDonorsThreeDay.slice(0, 20).map((item: any) => ({
+            name: item.name || '爱心人士',
+            amount: item.amount || 0
+          }))
+        : [];
+
       this.setData({
         storeLoveWallMeritRatio: {
           yangRatioPct: result.yangRatioPct || 0,
           yinRatioPct: result.yinRatioPct || 0
         },
-        currentSunshineText: this.composeSunshineMarqueeText(result.latestDonorsWeekly)
+        yangShanList: list
       });
     } catch (err) {
       console.error('[fetchStoreLoveWallSummary] 加载本店爱心支持摘要异常:', err);
     } finally {
       this.setData({ storeLoveWallLoading: false });
     }
-  },
-
-  // 🌸 阳善动态跑马灯文案拼装：复用同一次 getSunshineLedger 响应里的
-  // latestDonorsWeekly（近 7 天窗口内的公开随喜记录），不另发云函数请求。
-  // 目前只有捐赠随喜这一种善举记录（deedText 服务端固定为"随喜 ¥X"，见
-  // cloudfunctions/getSunshineLedger），义工工时/今日供餐份数暂无对应数据源，
-  // 后续如需接入需在云函数侧先补齐；最多取最近 8 条拼接，避免文案过长导致
-  // 单轮跑马灯滚动时间过久
-  composeSunshineMarqueeText(latestDonorsWeekly: any): string {
-    const list = Array.isArray(latestDonorsWeekly) ? latestDonorsWeekly.slice(0, 8) : [];
-    if (list.length === 0) {
-      return '行善积德，福慧双增 · 愿一切善行皆得圆满';
-    }
-    return list
-      .map((item: any) => `感谢 ${item.name || '爱心人士'} 善士随喜爱心善款 ¥${item.amount || 0}`)
-      .join(' · ');
   },
 
   // 📮 爱心意见箱管理：门店 ID 解析口径与 fetchPatriarchDashboardData 一致——

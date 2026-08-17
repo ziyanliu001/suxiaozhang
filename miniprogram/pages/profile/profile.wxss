@@ -242,8 +242,8 @@
   box-shadow: 0 4rpx 14rpx rgba(181, 124, 30, 0.14);
 }
 
-/* 🌸 阳善动态跑马灯：暖色卡片，与页面其余暖色调（identity-banner-card 等）
-   协调；左侧"阳善"标签固定不动，右侧文案横向滚动 */
+/* 🌸 阳善纵向"冒出"轮播：暖色卡片，与页面其余暖色调（identity-banner-card 等）
+   协调；左侧"阳善"标签固定不动，右侧 swiper 纵向轮播每条近 3 天随喜记录 */
 .sunshine-marquee-bar {
   display: flex;
   align-items: center;
@@ -275,44 +275,48 @@
   color: #D35400;
 }
 
-.sunshine-marquee-track {
+.sunshine-swiper {
   flex: 1;
   min-width: 0;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
+  height: 64rpx;
 }
 
-.sunshine-marquee-content {
-  display: inline-flex;
+.sunshine-swiper-item {
+  display: flex;
   align-items: center;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sunshine-swiper-name {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #D35400;
+  margin-right: 12rpx;
+}
+
+.sunshine-swiper-amount {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  animation: sunshine-marquee-cycle 12s linear infinite;
-  will-change: transform;
+  font-size: 24rpx;
+  color: #C0392B;
+  font-weight: bold;
+}
+
+.sunshine-swiper-fallback {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .sunshine-text {
   font-size: 24rpx;
   color: #7D6608;
-}
-
-/* 🐛 复用 index 页 announce-marquee-cycle 的"瞬时重置"写法（见
-   pages/index/index.wxss 同名注释）：95%→95.01% 从 -100% 跳到 +100%，间隔
-   仅 12s 的 0.01%（约 1.2ms），比一帧渲染间隔还短，视觉上等同瞬间闪现；
-   95.01%→100% 维持在 +100%（继续停在屏幕外），真正的"回到起点"发生在
-   animation-iteration 循环边界那一刻的离散时间重置，不会被插值出一段从右侧
-   滑入的多余动效 */
-@keyframes sunshine-marquee-cycle {
-  0%, 25% {
-    transform: translateX(0);
-  }
-  95% {
-    transform: translateX(-100%);
-  }
-  95.01%, 100% {
-    transform: translateX(100%);
-  }
 }
 
 .role-badge-row {
