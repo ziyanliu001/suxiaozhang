@@ -135,7 +135,7 @@ export const DAILY_SUMMARY = {
 // 十、雨花家风
 export const FAMILY_STYLE = {
   title: '雨花家风',
-  text: '仁 · 中 · 和'
+  text: '仁、中、和'
 };
 
 // ============ 派生数据：首页【每日修身】卡片轮播用 ============

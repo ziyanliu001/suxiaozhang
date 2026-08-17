@@ -265,7 +265,7 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
   orgTypeBadge: string; cultureTitle: string; aboutTitle: string;
 } {
   if (orgType === 'yuhuazhai') {
-    return { orgTypeBadge: '雨花斋', cultureTitle: '雨花和每日诵读', aboutTitle: '关于雨花斋与阳光账本' };
+    return { orgTypeBadge: '雨花斋', cultureTitle: '机构文化和每日诵读', aboutTitle: '关于雨花斋与阳光账本' };
   }
   if (orgType === 'elderly_canteen') {
     return { orgTypeBadge: '社区助餐', cultureTitle: '敬老助餐文化与每日家训', aboutTitle: '关于社区公益平台与阳光账本' };

@@ -378,7 +378,7 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
 // 「组织信息配置」弹窗，真实数据）+ 一段明确标注为通用占位的公益精神简述——
 // 没有真实的机构专属文化全集素材前，绝不虚构一套看起来"权威"的十模块内容
 function computeCultureModalTitle(orgType: string): string {
-  if (orgType === 'yuhuazhai') return '雨花和每日诵读';
+  if (orgType === 'yuhuazhai') return '机构文化和每日诵读';
   if (orgType === 'elderly_canteen') return '社区敬老文化与每日家训';
   return '公益文化与团队公约';
 }
@@ -9112,7 +9112,12 @@ Page({
   // 中心、以及未设置 orgType 的通用公益门店）没有对应的权威素材，一律走通用
   // 分支——WXML 侧按 orgType 二选一渲染，不把雨花斋内容套到其他机构头上
   onShowFamilyMottoModal() {
-    const orgType = this.data.orgType;
+    // 🐛 防呆兜底：orgType 是服务端已存的门店归属值，账号尚未绑定具体门店时
+    // 恒为空字符串——但用户当下明明正停留在雨花工作空间（currentPlatformMode
+    // === 'yuhua'，如通过 openStorePickerForJoin 选站点前的过渡态），此时弹出
+    // 面向其它机构的通用占位文案会显得文不对题。只要当前处在雨花专区，即使
+    // orgType 还没落地，也按 yuhuazhai 处理，展示真正的十篇章内容
+    const orgType = this.data.orgType || (this.data.currentPlatformMode === 'yuhua' ? 'yuhuazhai' : '');
     this.setData({ cultureModalTitle: computeCultureModalTitle(orgType) });
 
     if (orgType !== 'yuhuazhai') {
