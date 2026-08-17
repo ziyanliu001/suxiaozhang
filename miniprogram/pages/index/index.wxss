@@ -2980,16 +2980,25 @@ textarea, .textarea {
   will-change: transform;
 }
 
-/* 🐛 "瞬时重置"的正确写法：95%→95.01% 从 -100% 跳到 +100%，间隔只有 12s 的
-   0.01%（约 1.2ms），比一帧的渲染间隔还短，浏览器/webview 实际上不会画出这
-   中间过程，视觉上等同瞬间闪现到屏幕外右侧；95.01%→100% 维持在 +100% 不做
-   任何位移（继续停在屏幕外），避免从右侧滑入的多余动效。真正"回到起点"发生
-   在这一轮 animation-iteration 结束、下一轮从 0% 重新开始的那一刻——
-   animation 在两次循环之间是离散的时间重置，不会被插值补间，因此观感上就是
-   瞬间复位，不会看到从右往左滑回来的痕迹 */
+/* 🎬 精细停顿跑马灯时间轴（总周期 12s，与 animation duration 对齐）：
+   0%      起点：文本完全在可视区右侧外部（translateX(100%)）
+   0%→5%   0.6s 内平滑滑入居中（translateX(0%)）
+   5%→30%  居中停顿 3s（25% × 12s = 3s），供用户完整读完
+   30%→95% 停顿结束后向左匀速滑出视口，直到完全移出（translateX(-100%)），
+           这段占 65% × 12s = 7.8s
+   95.01%→100% 瞬间跳回右侧起点（translateX(100%)）并一直停在屏幕外，直到这
+           一轮 animation-iteration 结束——下一轮又从 0% 的 translateX(100%)
+           重新开始，两次迭代之间是离散的时间重置，不会被插值补间，因此看不到
+           任何"回跳"的痕迹，衔接上正好是下一轮的滑入起点 */
 @keyframes announce-marquee-cycle {
-  0%, 25% {
-    transform: translateX(0);
+  0% {
+    transform: translateX(100%);
+  }
+  5% {
+    transform: translateX(0%);
+  }
+  30% {
+    transform: translateX(0%);
   }
   95% {
     transform: translateX(-100%);
