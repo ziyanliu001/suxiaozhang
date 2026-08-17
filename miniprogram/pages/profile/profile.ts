@@ -706,6 +706,11 @@ Page({
       applyId: string; realName: string; phone: string; requestedRole: string;
       requestedRoleLabel: string; applyTimeStr: string;
     }>,
+    // 🩺 空态区分：超管未选中巡检门店时会拿到 queueType==='elevated' 的空数组
+    // （按设计只含店长/大家长任命与新建门店申请，不含 finance/volunteer），
+    // 这跟"这家店真的没有待审批申请"是两种不同的空，此前 UI 上完全分不清，
+    // 超管反复误以为是 bug——用这个字段驱动 WXML 展示不同的空态提示
+    memberApplicationQueueType: '',
     // ❌ 驳回申请原因弹窗：成员申请队列专用
     showRejectApplicationModal: false,
     rejectApplicationId: '',
@@ -3487,13 +3492,26 @@ Page({
       if (!result || !result.success) return;
 
       const list = Array.isArray(result.data) ? result.data : [];
+      // 🩺 无论哪种 queueType 都记下来，供 WXML 区分"这家店真没有待审批申请"
+      // 和"超管还没选中巡检门店，走的是不含 finance/volunteer 的 elevated 队列"
+      // 这两种性质完全不同的空态
+      this.setData({ memberApplicationQueueType: result.queueType || '' });
       if (result.queueType === 'member') {
         this.setData({ memberApplicationList: list, pendingMemberApplicationCount: list.length });
+      } else {
+        // elevated/none 队列：清空列表，不把上一次门店穿透查看的残留数据继续展示
+        this.setData({ memberApplicationList: [], pendingMemberApplicationCount: 0 });
       }
-      // elevated 队列（超管专属）不再在客户端展示——超管已彻底退出事前审批流
     } catch (err) {
       console.warn('[fetchPendingApplications] 加载失败:', err);
     }
+  },
+
+  // 🩺 待审批弹窗空态提示里的"去选择门店"入口：先关掉本弹窗再开店铺选择器，
+  // 避免两个全屏浮层叠在一起
+  onGoSelectStoreFromEmptyHint() {
+    this.setData({ showMemberApplicationModal: false });
+    this.onOpenStorePickerModal();
   },
 
   onOpenMemberApplicationModal() {

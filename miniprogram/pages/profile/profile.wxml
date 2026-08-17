@@ -2128,7 +2128,16 @@
           <text>加载中...</text>
         </view>
 
-        <view class="feedback-admin-empty" wx:if="{{!memberApplicationLoading && memberApplicationList.length === 0}}">
+        <!-- 🩺 空态区分：超管未选中巡检门店时走的是不含 finance/volunteer 的
+             elevated 队列，这跟"这家店真没有待审批申请"是两种不同的空——此前
+             UI 上完全分不清，超管反复误以为查询逻辑有 bug。这里给出明确的
+             下一步指引（去选门店），而不是同一句不带信息量的"暂无" -->
+        <view class="feedback-admin-empty" wx:if="{{!memberApplicationLoading && memberApplicationList.length === 0 && memberApplicationQueueType === 'elevated'}}">
+          <text>当前是"店长/大家长任命与新建门店"队列，不含义工/财务申请</text>
+          <text class="feedback-admin-empty-hint">请先在【门店选择与搜索】里选中要巡检的门店，再打开本弹窗查看该店的义工/财务待审批申请</text>
+          <view class="feedback-admin-empty-action" bindtap="onGoSelectStoreFromEmptyHint">📍 去选择门店</view>
+        </view>
+        <view class="feedback-admin-empty" wx:elif="{{!memberApplicationLoading && memberApplicationList.length === 0}}">
           <text>暂无待审批的成员申请</text>
         </view>
 

@@ -3794,6 +3794,26 @@
   font-size: 24rpx;
 }
 
+.feedback-admin-empty-hint {
+  display: block;
+  margin-top: 12rpx;
+  padding: 0 48rpx;
+  font-size: 22rpx;
+  color: #ADB5BD;
+  line-height: 1.6;
+}
+
+.feedback-admin-empty-action {
+  display: inline-block;
+  margin-top: 24rpx;
+  padding: 14rpx 32rpx;
+  background: #FFF5F2;
+  color: #C0392B;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
 .feedback-admin-item {
   background: #FFFFFF;
   border: 1rpx solid #EFE6D8;
