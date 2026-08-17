@@ -2976,34 +2976,35 @@ textarea, .textarea {
   width: auto;
   overflow: visible;
   text-overflow: clip;
-  animation: announce-marquee-cycle 12s linear infinite;
+  animation: announce-marquee-cycle 14s linear infinite;
   will-change: transform;
 }
 
-/* 🎬 精细停顿跑马灯时间轴（总周期 12s，与 animation duration 对齐）：
-   0%      起点：文本完全在可视区右侧外部（translateX(100%)）
-   0%→5%   0.6s 内平滑滑入居中（translateX(0%)）
-   5%→30%  居中停顿 3s（25% × 12s = 3s），供用户完整读完
-   30%→95% 停顿结束后向左匀速滑出视口，直到完全移出（translateX(-100%)），
-           这段占 65% × 12s = 7.8s
-   95.01%→100% 瞬间跳回右侧起点（translateX(100%)）并一直停在屏幕外，直到这
-           一轮 animation-iteration 结束——下一轮又从 0% 的 translateX(100%)
-           重新开始，两次迭代之间是离散的时间重置，不会被插值补间，因此看不到
-           任何"回跳"的痕迹，衔接上正好是下一轮的滑入起点 */
+/* 🎬 首尾双停顿跑马灯时间轴（总周期 14s，与 animation duration 对齐）：
+   0%→21.5%    起点：文字开头紧贴"📢 公告"标签、起始对齐（translateX(0)），
+               停顿 3s（21.5% × 14s ≈ 3s）供用户看清标题开头
+   21.5%→64.5% 停顿结束后向左匀速滚动，直到 translateX(-100%)——这个自身宽度
+               的 -100% 是相对文字元素自身宽度的位移，不管文案多长都精确对应
+               "整句话完整滚过一遍、尾部刚好抵达可视区左边缘、即将滑出"这一刻，
+               不需要按每条通知的实际字数/像素宽度单独计算这个停顿点
+   64.5%→86%   尾部停顿 3s（21.5% × 14s ≈ 3s），供用户读完结尾
+   86%→93%     停顿结束后继续向左滑出（translateX(-120%)），确保文字哪怕只是
+               略长于可视区宽度也能彻底划出，不会残留可见的尾巴
+   93.01%→100% 瞬间跳回右侧起点（translateX(100%)）并一直停在屏幕外，直到这
+               一轮 animation-iteration 结束——下一轮又从 0% 的 translateX(0)
+               重新开始，两次迭代之间是离散的时间重置，不会被插值补间，因此
+               看不到任何"回跳"的痕迹 */
 @keyframes announce-marquee-cycle {
-  0% {
-    transform: translateX(100%);
+  0%, 21.5% {
+    transform: translateX(0);
   }
-  5% {
-    transform: translateX(0%);
-  }
-  30% {
-    transform: translateX(0%);
-  }
-  95% {
+  64.5%, 86% {
     transform: translateX(-100%);
   }
-  95.01%, 100% {
+  93% {
+    transform: translateX(-120%);
+  }
+  93.01%, 100% {
     transform: translateX(100%);
   }
 }
