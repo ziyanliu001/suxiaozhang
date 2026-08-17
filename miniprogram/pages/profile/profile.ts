@@ -1699,12 +1699,21 @@ Page({
       const result = res.result;
       if (!result || !result.success) return;
 
-      const list = Array.isArray(result.latestDonorsThreeDay)
+      let list = Array.isArray(result.latestDonorsThreeDay)
         ? result.latestDonorsThreeDay.slice(0, 20).map((item: any) => ({
             name: item.name || '爱心人士',
             amount: item.amount || 0
           }))
         : [];
+
+      // 🐛 只有 1 条记录时 swiper 没有第二个 item 可以切换，autoplay 形同虚设，
+      // 观感上和完全静止没区别；复制成 2 条让它能真正滚动起来。0 条时维持现有
+      // 的空态兜底文案（wx:else 的祝福语），不在这里编造看起来像真实姓名的
+      // 假数据混进同一份列表——阳善公示的是真实随喜记录，伪造"善心家人"这类
+      // 假名字/假金额会让用户误以为是真实公开记录，这是诚信问题，不是纯 UI 问题
+      if (list.length === 1) {
+        list = [...list, ...list];
+      }
 
       this.setData({
         storeLoveWallMeritRatio: {
