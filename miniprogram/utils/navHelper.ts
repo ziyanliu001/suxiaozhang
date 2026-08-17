@@ -131,11 +131,21 @@ export function safeNavigateTo(
   }
 
   return new Promise((resolve, reject) => {
+    // 🛡️ 兜底安全阀：诊断计时器到点时，跳转流程如果连 fail 都还没来（比如某些
+    // 移植版开发者工具在路由管道上偶发彻底卡死、原生回调再也不会触发），锁就
+    // 会一直是 true，导致用户后续点其它任何入口都被开头的防抖拦截误伤锁死。
+    // 这里到点强制先放锁，让应用至少能继续响应后续点击；如果原生回调之后终
+    // 究还是姗姗来迟，靠 settled 标记避免它再重复走一遍收尾逻辑
+    let settled = false;
+    let fallbackAttempted = false;
     const diagnosticTimer = setTimeout(() => {
       console.error(
-        '[safeNavigateTo] ⚠️ 跳转 2.5s 仍未完成，疑似当前页 JS 主线程被同步代码阻塞（大循环 / 密集 wx.xxxSync 调用）:',
+        '[safeNavigateTo] ⚠️ 跳转 2.5s 仍未完成，疑似当前页 JS 主线程被同步代码阻塞（大循环 / 密集 wx.xxxSync 调用），或开发者工具路由管道卡死:',
         options.url, '发起跳转时页面栈深度:', stackDepth
       );
+      if (!settled) {
+        navigating = false;
+      }
     }, DIAGNOSTIC_TIMEOUT_MS);
 
     wx.navigateTo({
@@ -145,13 +155,45 @@ export function safeNavigateTo(
         resolve(res);
       },
       fail: (err) => {
+        // 🐛 超时自动降级：navigateTo:fail timeout 意味着原生跳转管道卡住了，
+        // 原页面大概率还停留在当前这个 webview 上（不是白屏就是卡在原地）。
+        // 与其把这个失败原样抛给调用方、让用户卡在半死不活的页面上，不如自动
+        // 补一次 redirectTo——直接替换当前页完成跳转，用户体感上仍然到达了
+        // 目标页，只是没有保留返回栈上的原页面（等价于降级重试一次）
+        const isTimeout = typeof err.errMsg === 'string' && err.errMsg.indexOf('fail timeout') >= 0;
+        if (isTimeout) {
+          fallbackAttempted = true;
+          console.warn('[safeNavigateTo] navigateTo 超时失败，自动降级为 redirectTo 重试一次:', options.url, err);
+          wx.redirectTo({
+            url: options.url,
+            success: (res2) => {
+              options.success && options.success(res2 as unknown as WechatMiniprogram.NavigateToSuccessCallbackResult);
+              resolve(res2 as unknown as WechatMiniprogram.GeneralCallbackResult);
+            },
+            fail: (err2) => {
+              console.error('[safeNavigateTo] 降级 redirectTo 仍然失败:', options.url, err2);
+              options.fail && options.fail(err2 as WechatMiniprogram.GeneralCallbackResult);
+              reject(err2);
+            },
+            complete: (res2) => {
+              settled = true;
+              clearTimeout(diagnosticTimer);
+              navigating = false;
+              options.complete && options.complete(res2);
+            }
+          });
+          return;
+        }
         console.error('[safeNavigateTo] 跳转失败:', options.url, err);
         options.fail && options.fail(err);
         reject(err);
       },
       complete: (res) => {
-        // 跳转流程结束（无论成败）才释放锁，允许下一次跳转；诊断计时器同样
-        // 无条件清除，避免"跳转其实已经完成，但计时器还在后台空转"的误报
+        // fallbackAttempted 为 true 时，收尾职责已经转交给上面 redirectTo 自己
+        // 的 complete，这里直接跳过，避免 options.complete 被调用两次、锁被
+        // 提前误放（此时 redirectTo 可能还没跑完）
+        if (fallbackAttempted) return;
+        settled = true;
         clearTimeout(diagnosticTimer);
         navigating = false;
         options.complete && options.complete(res);
