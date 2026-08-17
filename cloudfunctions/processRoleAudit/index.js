@@ -448,6 +448,18 @@ async function submitRoleApply(event, OPENID) {
     }
   }
 
+  // 🩺 诊断日志：待审批列表"提交后查不到"这类问题，根因几乎总是这里写入的
+  // storeId 与审核者自己 user_roles 记录里的 storeId 值不完全相等（常见于测试
+  // 环境里同名门店存在多条 stores 文档）——打出实际落库的 storeId/status/
+  // requestedRole，配合 listPendingApplications 那侧打的 caller.storeId，
+  // 云函数日志里直接比对两个 storeId 字符串是否一致，比靠猜快得多
+  console.log('[submitRoleApply] 写入 user_roles:', {
+    storeId: docData.storeId,
+    storeName: docData.storeName,
+    requestedRole: docData.requestedRole,
+    status: docData.status,
+    tenantId: docData.tenantId
+  });
   const addRes = await db.collection('user_roles').add({ data: docData });
 
   return {
@@ -468,7 +480,32 @@ const REQUESTED_ROLE_LABELS = {
 // 🏛️ 分角色列出待审批申请：店长/家长只看本店的普通成员申请（义工/财务），
 // 超管看全机构范围内的高阶角色（店长/家长）与新建门店申请——与 approve() 里
 // isAuditorAllowed / isCustomStore 的权限判定口径完全对齐，谁能审谁就能看
-async function listPendingApplications(OPENID) {
+// 🏛️ 门店全角色待审批查询：store_patriarch/store_manager 查自己门店时用，
+// 现在超管指定 storeId 穿透查看某家门店时也复用同一份逻辑，两处结果结构
+// 完全一致（queueType 统一为 'member'），避免前端为超管的门店穿透视图再
+// 单独适配一套数据结构
+async function queryStoreMemberQueue(storeId, pendingRoles) {
+  console.log('[listPendingApplications] 查询参数:', { storeId, pendingRoles });
+  const res = await db.collection('user_roles')
+    .where({ storeId, status: 'pending', requestedRole: _.in(pendingRoles) })
+    .orderBy('applyTime', 'desc')
+    .limit(50)
+    .get();
+  console.log('[listPendingApplications] 查询结果条数:', (res.data || []).length);
+
+  const data = (res.data || []).map((r) => ({
+    applyId: r._id,
+    realName: r.realName || '',
+    phone: r.phone || '',
+    requestedRole: r.requestedRole || '',
+    requestedRoleLabel: REQUESTED_ROLE_LABELS[r.requestedRole] || r.requestedRole,
+    applyTimeStr: formatCreateTime(r.applyTime)
+  }));
+
+  return { success: true, queueType: 'member', data };
+}
+
+async function listPendingApplications(event, OPENID) {
   const callerRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
   const caller = callerRes.data && callerRes.data[0];
   if (!caller) {
@@ -484,25 +521,29 @@ async function listPendingApplications(OPENID) {
     const pendingRoles = caller.role === 'store_patriarch'
       ? ['volunteer', 'finance', 'store_manager', 'store_patriarch']
       : ['volunteer', 'finance', 'store_manager'];
-    const res = await db.collection('user_roles')
-      .where({ storeId: caller.storeId, status: 'pending', requestedRole: _.in(pendingRoles) })
-      .orderBy('applyTime', 'desc')
-      .limit(50)
-      .get();
-
-    const data = (res.data || []).map((r) => ({
-      applyId: r._id,
-      realName: r.realName || '',
-      phone: r.phone || '',
-      requestedRole: r.requestedRole || '',
-      requestedRoleLabel: REQUESTED_ROLE_LABELS[r.requestedRole] || r.requestedRole,
-      applyTimeStr: formatCreateTime(r.applyTime)
-    }));
-
-    return { success: true, queueType: 'member', data };
+    return await queryStoreMemberQueue(caller.storeId, pendingRoles);
   }
 
   if (caller.role === 'super_admin') {
+    // 🆕 超管指定门店穿透查看：与 listAuditQueue 的 approved 分支对超管选中
+    // 具体门店（scopeStoreId）时的处理方式保持一致——选中门店时视同该店的
+    // 大家长视角，能看到全角色（含 finance/volunteer）待审批申请；未选中
+    // 具体门店（全局大盘视角）时才走下面仅含店长/大家长任命与新建门店申请
+    // 的 elevated 队列，不然超管一进来就是全租户所有门店的 finance/volunteer
+    // 混在一起，反而没法用
+    const scopeStoreId = (event && event.storeId) || '';
+    if (scopeStoreId) {
+      console.log('[listPendingApplications] 超管指定门店穿透查看:', scopeStoreId);
+      return await queryStoreMemberQueue(scopeStoreId, ['volunteer', 'finance', 'store_manager', 'store_patriarch']);
+    }
+
+    // 🩺 诊断日志：与上面 member 分支同一个诉求——之前只有 member 分支打了
+    // 日志，导致"用超管账号点开待审批弹窗查不到 finance/volunteer 申请"这类
+    // 情况完全没有日志可查（超管走的是这条 elevated 分支，按设计本就不返回
+    // finance/volunteer，见下方 isCustomStore || requestedRole==='store_manager'
+    // || 'store_patriarch' 过滤），这里补上，一眼就能看出当前调用者其实是
+    // 超管而不是店长/大家长
+    console.log('[listPendingApplications] 走 super_admin 分支（elevated 队列，按设计只含店长/大家长任命与新建门店申请，不含 finance/volunteer）');
     const tenantId = await resolveAuditorTenantId(caller);
     // 🐛 修复"待审核列表漏单"：此前这里严格按 { tenantId, status: 'pending' } 精确匹配，
     // 但 submitRoleApply 落库的 tenantId 来自申请人客户端缓存的角色信息，账号从未
@@ -943,7 +984,7 @@ exports.main = async (event, context) => {
 
   if (action === 'listPendingApplications') {
     try {
-      return await listPendingApplications(OPENID);
+      return await listPendingApplications(event, OPENID);
     } catch (err) {
       console.error('processRoleAudit listPendingApplications error:', err);
       return { success: false, error: err.message || '查询失败' };
@@ -1005,6 +1046,37 @@ exports.main = async (event, context) => {
       return { success: false, error: '无权限：该申请不属于您所在的机构' };
     }
 
+    // 🛡️ 权限统一前置：同意与驳回本质都是"对这条待审批记录下裁决"，必须用同一套
+    // 授权判断——此前这套检查只挂在 approve 分支，reject 分支完全没做任何门店/
+    // 角色归属校验，只要跟申请人同一个机构（雨花斋这类共享 tenantId 的场景下
+    // 几乎等于"全体成员"）任何账号都能驳回其它门店的待审批申请，是一个真实的
+    // 越权漏洞，这里把检查收拢到 reject/approve 分支之前，两个动作共用同一份
+    // 结果，不再各走各的
+    // 🏛️ 门店自治：大家长任命由本店现任大家长或超管审批（"谁管这家店，谁决定新家长"）；
+    // 店长不得审批大家长——家长本是监督店长的角色，反向任命存在明显利益冲突；
+    // 新建门店的大家长申请始终仅限超管（isCustomStore 分支在下方另行把关）
+    const canApprovePatriarch = auditor.role === 'super_admin' ||
+      (auditor.role === 'store_patriarch' && auditor.storeId === applyData.storeId);
+    if (applyData.requestedRole === 'store_patriarch' && !canApprovePatriarch) {
+      return { success: false, error: '无权限：大家长任命仅限本店现任大家长或超级管理员审批' };
+    }
+
+    const isCustomStore = applyData.storeSelectionType === 'custom' || !applyData.storeId;
+    if (isCustomStore) {
+      // 🛡️ 新建门店的申请仅限超级管理员审批/驳回：新门店尚无店长人选，店长权限无从谈起
+      if (auditor.role !== 'super_admin') {
+        return { success: false, error: '无权限：新建门店的申请仅限超级管理员审批' };
+      }
+    } else {
+      // 🏛️ 已有门店的义工/财务/店长申请：大家长与店长兼任并集逻辑——
+      // 本门店大家长、本门店店长、超级管理员均可审核；大家长与店长为同一人时天然具备双重权限
+      const isAuditorAllowed = auditor.role === 'super_admin' ||
+        ((auditor.role === 'store_patriarch' || auditor.role === 'store_manager') && auditor.storeId === applyData.storeId);
+      if (!isAuditorAllowed) {
+        return { success: false, error: '无权限：仅本门店大家长/店长或超级管理员可审核角色申请' };
+      }
+    }
+
     if (action === 'reject') {
       // 🛡️ 驳回必须说明原因：申请人才知道下次该补什么材料，也避免审核人随手一点就拒绝
       const rejectReason = sanitizeText(event.rejectReason);
@@ -1025,26 +1097,11 @@ exports.main = async (event, context) => {
       return { success: false, error: '无效操作' };
     }
 
-    // 🏛️ 门店自治：大家长任命由本店现任大家长或超管审批（"谁管这家店，谁决定新家长"）；
-    // 店长不得审批大家长——家长本是监督店长的角色，反向任命存在明显利益冲突；
-    // 新建门店的大家长申请始终仅限超管（isCustomStore 分支在下方另行把关）
-    const canApprovePatriarch = auditor.role === 'super_admin' ||
-      (auditor.role === 'store_patriarch' && auditor.storeId === applyData.storeId);
-    if (applyData.requestedRole === 'store_patriarch' && !canApprovePatriarch) {
-      return { success: false, error: '无权限：大家长任命仅限本店现任大家长或超级管理员审批' };
-    }
-
-    const isCustomStore = applyData.storeSelectionType === 'custom' || !applyData.storeId;
     let targetStoreId = applyData.storeId;
     let targetStoreName = applyData.storeName;
     let resolvedTenantId = applyData.tenantId || auditor.tenantId || '';
 
     if (isCustomStore) {
-      // 🛡️ 新建门店的申请仅限超级管理员审批：新门店尚无店长人选，店长权限无从谈起
-      if (auditor.role !== 'super_admin') {
-        return { success: false, error: '无权限：新建门店的申请仅限超级管理员审批' };
-      }
-
       const auditorTenantId = await resolveAuditorTenantId(auditor);
       resolvedTenantId = applyData.tenantId || auditorTenantId;
 
@@ -1075,15 +1132,9 @@ exports.main = async (event, context) => {
       } catch (storeErr) {
         return { success: false, error: storeErr.message || '建店失败' };
       }
-    } else {
-      // 🏛️ 已有门店的义工/财务/店长申请：大家长与店长兼任并集逻辑——
-      // 本门店大家长、本门店店长、超级管理员均可审核；大家长与店长为同一人时天然具备双重权限
-      const isAuditorAllowed = auditor.role === 'super_admin' ||
-        ((auditor.role === 'store_patriarch' || auditor.role === 'store_manager') && auditor.storeId === targetStoreId);
-      if (!isAuditorAllowed) {
-        return { success: false, error: '无权限：仅本门店大家长/店长或超级管理员可审核角色申请' };
-      }
     }
+    // 已有门店分支的 isAuditorAllowed 校验已在上面（reject/approve 分支之前）
+    // 统一做过，这里不再重复判断
 
     // 3. 写入权限表：openid（申请记录本身即绑定 _openid）、role、tenantId、storeId 一并落地
     await db.collection('user_roles').doc(applyId).update({
