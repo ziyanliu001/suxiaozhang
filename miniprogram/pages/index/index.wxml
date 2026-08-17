@@ -3309,7 +3309,11 @@
        止损方案改造这一段；"新建门店"档案补全子块（地区/地址/电话/门店照片，
        复用 receipt-grid-container 等在全文件广泛共用的重量级组件样式）未出现
        在任何一次问题截图里，且改动风险远高于收益，予以保留原 class 结构不动 -->
-  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal" catchtouchmove="stopPropagation" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.65); z-index: 100000; display: flex; align-items: center; justify-content: center;">
+  <!-- 🐛 移除本节点上的 catchtouchmove：mask 本身已是 position:fixed 铺满全屏，
+       背后的页面在触摸命中测试里根本摸不到（fixed 全覆盖层已经天然隔绝），
+       这层 catchtouchmove 是多余的历史防御代码；在部分客户端上它反而会连带
+       拦截内部 scroll-view 自己的原生滚动手势，导致弹窗内容完全无法上下滑动 -->
+  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.65); z-index: 100000; display: flex; align-items: center; justify-content: center;">
     <view catchtap="stopPropagation" style="width: 88%; max-height: 85vh; background: #FFFFFF; border-radius: 24rpx; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.24); box-sizing: border-box; z-index: 100001;">
 
       <!-- 1. Header（固定） -->
@@ -3321,16 +3325,20 @@
       </view>
 
       <!-- 2. Body（可滚动，flex:1 吃光 Header/Footer 剩余高度） -->
-      <scroll-view scroll-y style="flex: 1; min-height: 0; padding: 24rpx 32rpx 8rpx; box-sizing: border-box;">
+      <scroll-view scroll-y enhanced="true" show-scrollbar="true" style="height: 52vh; width: 100%; padding: 24rpx 32rpx 8rpx; box-sizing: border-box;">
 
         <view style="margin-bottom: 24rpx;">
-          <!-- 标签随模式切换：新建门店时显示必填红星 -->
-          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text style="color: #D32F2F;">*</text> 新门店名称</text>
-          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:else>门店</text>
+          <!-- 🐛 顺序修复：Tab 切换器决定"新建/已有"这个模式，理应排在最前面；
+               此前先渲染随模式变化的标签文字（如"新门店名称"），再渲染决定这个
+               模式的 Tab，视觉/逻辑顺序倒置 -->
           <view style="display: flex; flex-direction: row; gap: 6rpx; margin-bottom: 12rpx; background: #F1F3F5; border-radius: 999rpx; padding: 6rpx; box-sizing: border-box;">
             <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; {{applyForm.storeSelectionType === 'existing' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold;' : 'color: #666666;'}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
             <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; {{applyForm.storeSelectionType === 'custom' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold;' : 'color: #666666;'}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
           </view>
+
+          <!-- 标签随模式切换：新建门店时显示必填红星 -->
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text style="color: #D32F2F;">*</text> 新门店名称</text>
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:else>门店</text>
 
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
             <view style="background: #FAF8F5; border: 1.5rpx solid #EFE6D8; border-radius: 16rpx; padding: 22rpx 24rpx; box-sizing: border-box; display: flex; flex-direction: row; align-items: center;">
@@ -3338,7 +3346,7 @@
               <text style="flex-shrink: 0; margin-left: 12rpx; font-size: 22rpx; color: #ADB5BD;">▾</text>
             </view>
           </picker>
-          <input wx:else style="width: 100%; background: #F7F8FA; border-radius: 12rpx; padding: 22rpx 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <input wx:else style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F8F9FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; border: 1rpx solid #EAEAEA; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
@@ -3418,7 +3426,9 @@
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 手机号</text>
           <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
         </view>
-        <view style="height: calc(20rpx + constant(safe-area-inset-bottom)); height: calc(20rpx + env(safe-area-inset-bottom));"></view>
+        <!-- 🛡️ 额外滚动安全边距：在原有 safe-area 占位基础上再加 40rpx 固定间距，
+             确保表单滚到底部时最后一个输入框不贴着底部固定的提交按钮 -->
+        <view style="height: calc(40rpx + constant(safe-area-inset-bottom)); height: calc(40rpx + env(safe-area-inset-bottom));"></view>
       </scroll-view>
 
       <!-- 3. Footer（固定置底，不随 Body 滚动） -->
