@@ -169,14 +169,26 @@ export async function compressAndUploadImage(canvasId: string, src: string, clou
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
 
-  const canvas = await getCanvasNode(canvasId);
-  const thumbSize = await loadImageOntoCanvasScaled(canvas, src, THUMB_LONG_EDGE);
-  const thumbPath = await exportCanvas(canvas, thumbSize.width, thumbSize.height, 0.6);
+  const mainUploadPromise = wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}.jpg`, filePath: src });
 
-  const [mainRes, thumbRes] = await Promise.all([
-    wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}.jpg`, filePath: src }),
-    wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}_thumb.jpg`, filePath: thumbPath })
-  ]);
+  // 🛡️ 缩略图生成非致命化：缩略图只是列表懒加载用的附属产物，不该因为它失败
+  // （画布节点未找到/图片解码失败/canvasToTempFilePath 失败等，成因很多，不只
+  // 是本文件某一次已知的挂载位置问题）拖累本该独立成功的主图上传——原先两者
+  // 串行/耦合在一起，缩略图这步一 throw，主图上传甚至都还没发起。降级策略：
+  // 缩略图生成失败就直接复用主图 fileID 当 thumbUrl（牺牲一点列表加载体积，
+  // 换取"选完图片就是能传上去"这个更基本的可用性）
+  let thumbUploadPromise: Promise<{ fileID: string }>;
+  try {
+    const canvas = await getCanvasNode(canvasId);
+    const thumbSize = await loadImageOntoCanvasScaled(canvas, src, THUMB_LONG_EDGE);
+    const thumbPath = await exportCanvas(canvas, thumbSize.width, thumbSize.height, 0.6);
+    thumbUploadPromise = wx.cloud.uploadFile({ cloudPath: `${safePrefix}/${ts}_${rand}_thumb.jpg`, filePath: thumbPath });
+  } catch (thumbErr) {
+    console.warn('[compressAndUploadImage] 缩略图生成失败，降级复用主图:', thumbErr);
+    thumbUploadPromise = mainUploadPromise;
+  }
+
+  const [mainRes, thumbRes] = await Promise.all([mainUploadPromise, thumbUploadPromise]);
 
   return { url: mainRes.fileID, thumbUrl: thumbRes.fileID };
 }

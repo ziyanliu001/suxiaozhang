@@ -2550,9 +2550,6 @@
     </view>
   </view>
 
-  <!-- 图片压缩用离屏画布：餐报表单内"今日食谱照片"/"今日大事记照片"上传区共用 -->
-  <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
-
   <!-- 店长审核义工绑定抽屉 Modal -->
   <view class="audit-drawer-mask" wx:if="{{showAuditModal}}" bindtap="onCloseAuditModal">
     <view class="audit-drawer-box" catchtap="stopPropagation">
@@ -3281,6 +3278,16 @@
       </view>
     </view>
   </block>
+
+  <!-- 🐛 根因修复："新建门店"照片上传报"图片处理失败，请重试"：本 canvas 此前
+       挂在 `<block wx:if="{{currentPlatformMode}}">` 分支内（与下方申请 Modal
+       移到根级前是同一处历史遗留问题，见 onChooseApplyStorePhoto →
+       compressAndUploadImage → getCanvasNode 的调用链）。openStorePickerForJoin
+       唤起本 Modal 时 currentPlatformMode 恰恰是空字符串，那个分支根本没有被
+       渲染，画布节点自然查不到，getCanvasNode 直接 reject，缩略图生成这一步
+       失败就连带整个上传（含本该独立成功的主图）一起被 throw 出去。挪到根级，
+       与下方申请 Modal 一样不再受 currentPlatformMode 是否为空影响 -->
+  <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
   <!-- 扫码绑定义工申请 Modal（根级弹窗）──────────────────────────────
        🐛 层级遮挡修复：本弹窗从原先嵌套在 `<block wx:if="{{currentPlatformMode}}">`
