@@ -3,8 +3,10 @@ import { isCloudAvailable } from './cloudGuard';
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
 const USER_ROLE_CACHE_KEY = 'auth_user_role';
-const LOGIN_TIMEOUT_MS = 5000;
-// 🐛 角色查询超时放宽：开发者工具网络波动 / 云函数冷启动偶尔会超过之前的阈值，
+// 🐛 与下面 ROLE_QUERY_TIMEOUT_MS 同一处根因：开发者工具网络波动 / 云函数
+// 冷启动偶尔会超过原先 5s 的阈值，实测复现频率不低。8s 起步 + ensureLogin 内
+// 新增的"超时自动重试 1 次"，两道保险叠加后才会真正落到临时 openid 兜底
+const LOGIN_TIMEOUT_MS = 8000;
 // 8s 足够覆盖冷启动场景，配合 fetchUserRole 内的"超时自动重试 1 次"，两道
 // 保险叠加后才会真正落到本地缓存兜底
 const ROLE_QUERY_TIMEOUT_MS = 8000;
@@ -208,11 +210,27 @@ export const AuthService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端登录');
       }
 
-      const result = await withTimeout(
-        wx.cloud.callFunction({ name: 'login' }),
-        LOGIN_TIMEOUT_MS,
-        '登录超时，请检查网络后重试'
-      );
+      let result;
+      try {
+        result = await withTimeout(
+          wx.cloud.callFunction({ name: 'login' }),
+          LOGIN_TIMEOUT_MS,
+          '登录超时，请检查网络后重试'
+        );
+      } catch (firstErr: any) {
+        // 🔁 只对"登录超时"自动重试 1 次（云函数冷启动/开发者工具网络波动很容易
+        // 偶发命中一次，与 fetchUserRole 同款套路），SDK 不可用等其它异常没有
+        // 重试的意义，直接抛给外层走临时 openid 兜底
+        if (!(firstErr && firstErr.message === '登录超时，请检查网络后重试')) {
+          throw firstErr;
+        }
+        console.warn('[AuthService] 登录首次超时，自动重试 1 次...');
+        result = await withTimeout(
+          wx.cloud.callFunction({ name: 'login' }),
+          LOGIN_TIMEOUT_MS,
+          '登录超时，请检查网络后重试'
+        );
+      }
 
       const r = result.result as any;
       if (r && r.success && r.openid) {
