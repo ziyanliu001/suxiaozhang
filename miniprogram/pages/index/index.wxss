@@ -2954,6 +2954,51 @@ textarea, .textarea {
   height: 40rpx;
 }
 
+/* 🌟 隐形测量探针：字号/字重与 .announce-bar-text 保持一致（量出来的宽度才
+   准），display:inline-block 不设宽度，让它按内容自然撑开；挪到屏幕外
+   （position:fixed + 负坐标）不占布局、不可见 */
+.announce-bar-marquee-probe {
+  position: fixed;
+  left: -9999rpx;
+  top: -9999rpx;
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 24rpx;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+/* 🌟 跑马灯激活态：覆盖 .announce-bar-text 静态态的 width:100%/ellipsis，改回
+   内容自然宽度，让 transform: translateX(±100%) 精确按"文字自身宽度"位移，
+   不需要额外算像素距离；父级 .announce-bar-viewport 的 overflow:hidden 负责
+   裁掉超出可视区的部分 */
+.announce-bar-text-marquee {
+  width: auto;
+  overflow: visible;
+  text-overflow: clip;
+  animation: announce-marquee-cycle 12s linear infinite;
+  will-change: transform;
+}
+
+/* 🐛 "瞬时重置"的正确写法：95%→95.01% 从 -100% 跳到 +100%，间隔只有 12s 的
+   0.01%（约 1.2ms），比一帧的渲染间隔还短，浏览器/webview 实际上不会画出这
+   中间过程，视觉上等同瞬间闪现到屏幕外右侧；95.01%→100% 维持在 +100% 不做
+   任何位移（继续停在屏幕外），避免从右侧滑入的多余动效。真正"回到起点"发生
+   在这一轮 animation-iteration 结束、下一轮从 0% 重新开始的那一刻——
+   animation 在两次循环之间是离散的时间重置，不会被插值补间，因此观感上就是
+   瞬间复位，不会看到从右往左滑回来的痕迹 */
+@keyframes announce-marquee-cycle {
+  0%, 25% {
+    transform: translateX(0);
+  }
+  95% {
+    transform: translateX(-100%);
+  }
+  95.01%, 100% {
+    transform: translateX(100%);
+  }
+}
+
 /* 🌟 右侧唯一操作入口：小圆形按钮，暖色底 + 深色描边，比裸文本更有"可点击"的
    质感，也不会再和别的图标挤在一起（此前的 ✏️ 编辑入口已合并进详情弹窗的
    "修改"按钮，右侧只留这一个） */
@@ -5567,8 +5612,11 @@ button.poster-gen-btn[disabled] {
 
 /* 1. Header — flex-shrink:0 永远占位，不被 Body 挤压 */
 .apply-modal-header {
+  width: 100%;
+  box-sizing: border-box;
   flex-shrink: 0;
   display: flex;
+  flex-direction: row;
   justify-content: space-between;
   align-items: center;
   padding: 28rpx 32rpx 24rpx;
@@ -5585,6 +5633,7 @@ button.poster-gen-btn[disabled] {
 }
 
 .apply-modal-close {
+  flex-shrink: 0;
   font-size: 36rpx;
   color: #ADB5BD;
   padding: 8rpx;
@@ -5636,6 +5685,27 @@ button.poster-gen-btn[disabled] {
 
 .btn-submit-apply[disabled] {
   opacity: 0.55;
+}
+
+/* 🐛 真机加固：微信原生 <button> 自带一套基础库默认样式（含默认背景/内边距/
+   ::after 边框伪元素），在部分客户端上这份默认样式的优先级足以盖过一个普通
+   的 bare class 选择器。button.btn-submit-apply（元素+类的组合选择器，
+   specificity 比单独一个类选择器更高）+ !important 双重加固，确保红底白字
+   一定能盖过平台默认样式；不删除上面原有的 .btn-submit-apply 规则，两者共存 */
+button.btn-submit-apply {
+  width: 100% !important;
+  height: 88rpx !important;
+  line-height: 88rpx !important;
+  background-color: #C0392B !important;
+  color: #FFFFFF !important;
+  border-radius: 44rpx !important;
+  font-size: 30rpx !important;
+  font-weight: 600 !important;
+  padding: 0 !important;
+  margin: 24rpx 0 0 0 !important;
+}
+button.btn-submit-apply::after {
+  border: none !important;
 }
 
 /* ── 弹窗内表单通用样式 ── */
@@ -5752,17 +5822,28 @@ button.poster-gen-btn[disabled] {
    换行错位、圆点/图标/文字三者对不齐。改为固定 2 列网格，每张卡片图标独占
    一行在上、文字在下，选中态靠整卡描边高亮 + 右上角对勾角标表达，视觉上
    清晰、不依赖原生 <radio> 那个容易被压扁的小圆点 */
-/* 🐛 3 列网格：4 个身份选项在 3 列下最后一行会剩 1 个孤项，用
-   :last-child { grid-column: 2 } 把它居中挂在第 2 列，避免贴左孤零零一个的
-   视觉失衡——网格列数按需求锁定为 3，不因为数据条数不整除就改列数 */
+/* 🐛 真机验证：部分 Android 机型的微信客户端（老版本 X5 内核）对 display:grid
+   支持不完整，子项会直接退化成默认块级纵向堆叠——实测截图证实。改用兼容性
+   好得多的 Flexbox + flex-wrap 复刻同样的"3 列，4 个选项最后一个居中"效果：
+   flex: 0 0 31% 撑出 3 列（3×31%=93%，配合 justify-content:space-between 让
+   两条列间距各分到约 3.5%，视觉上与原来 16rpx gap 接近但不追求像素级一致）；
+   第 4 项（固定就是这 4 张卡片列表的最后一张）单独用 margin:0 auto 在它自己
+   那一整行里居中，等价于原来 Grid 版本 :last-child:nth-child(3n+1) 的效果。
+   不用 flex 的 gap 属性——gap 用在 flex 容器上是比 grid-gap 更晚才被各引擎
+   支持的特性，同样可能在老内核上失效，这里改用 margin-bottom 做行间距，
+   兼容性更保守 */
 .apply-role-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   margin: 16rpx 0 24rpx;
 }
-.apply-role-grid .apply-role-card:last-child:nth-child(3n + 1) {
-  grid-column: 2;
+.apply-role-card {
+  flex: 0 0 31%;
+  margin-bottom: 16rpx;
+}
+.apply-role-card:nth-child(4) {
+  margin: 0 auto 16rpx;
 }
 
 .apply-role-card {
@@ -5783,15 +5864,6 @@ button.poster-gen-btn[disabled] {
    只是把它自己的圆点视觉压缩到近乎不可见——label 包裹整张卡片，点击卡片
    任意位置依然会命中这颗 radio（WXML label-for-control 的标准行为），
    不需要额外绑 bindtap 去手动 setData */
-.apply-role-card-radio {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1rpx;
-  height: 1rpx;
-  opacity: 0;
-}
-
 .apply-role-card-icon {
   font-size: 38rpx;
   line-height: 1.2;

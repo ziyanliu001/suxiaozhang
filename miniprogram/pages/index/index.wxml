@@ -340,13 +340,30 @@
     </view>
     <view class="announce-bar-divider"></view>
 
-    <swiper class="announce-bar-swiper" vertical autoplay circular interval="3000" duration="500" bindchange="onSwiperNoticeChange">
+    <!-- 🌟 混合跑马灯：默认与此前一致——静止展示 + ellipsis 兜底；只有测量到
+         当前标题在 .announce-bar-viewport 里放不下时才切成跑马灯滚动，短标题
+         保持安静不动。跑马灯激活期间联动暂停 swiper 的垂直自动轮播（autoplay
+         绑定 noticeSwiperAutoplay），否则固定 3s 的轮播间隔会在标题还没滚完
+         就把它切走，滚了等于白滚；一个完整跑马灯周期（见
+         .announce-bar-text-marquee 的 animation，12s 一轮）结束后由
+         onNoticeMarqueeCycle 显式推进到下一条，再恢复正常轮播节奏 -->
+    <swiper class="announce-bar-swiper" vertical autoplay="{{noticeSwiperAutoplay}}" current="{{noticeSwiperCurrent}}" circular interval="3000" duration="500" bindchange="onSwiperNoticeChange">
       <swiper-item wx:for="{{noticeList}}" wx:key="id">
         <view class="announce-bar-viewport" bindtap="openAnnouncement">
-          <text class="announce-bar-text">{{item.typeIcon}} {{item.title}}</text>
+          <text
+            class="announce-bar-text {{noticeMarqueeActive && index === currentNoticeIndex ? 'announce-bar-text-marquee' : ''}}"
+            bindanimationiteration="onNoticeMarqueeCycle"
+          >{{item.typeIcon}} {{item.title}}</text>
         </view>
       </swiper-item>
     </swiper>
+
+    <!-- 🌟 隐形测量探针：内容与当前展示的 announcement 保持一致，但脱离文档流
+         （position:fixed 挪到屏幕外）且不设宽度约束，用来量出标题的自然宽度，
+         与 .announce-bar-viewport 的可视宽度比较，决定要不要激活跑马灯——
+         .announce-bar-text 本身 width:100% 被容器撑满，直接测它量不出"文字
+         到底有多长" -->
+    <text class="announce-bar-marquee-probe" id="noticeMarqueeProbe" wx:if="{{announcement}}">{{announcement.typeIcon}} {{announcement.title}}</text>
 
     <!-- 🌟 右侧操作入口精简为唯一一个：原先"✏️ 编辑当前条 + ＋ 新建"两个图标紧挨在
          40rpx 高的窄行里，视觉拥挤。"编辑当前条"其实是冗余入口——点通知本身已能
@@ -3275,41 +3292,61 @@
        三段式布局（Header 固定 / Body 可滚动 / Footer 固定置底）彻底解决表单
        内容多时底部提交按钮被遮挡的问题；Body 用 scroll-view 包裹，
        max-height: 50vh 保证内部滚动不挤压 Footer。 -->
-  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal" catchtouchmove="stopPropagation">
-    <view class="apply-modal-card" catchtap="stopPropagation">
+  <!-- 🛡️ Linux 移植版 DevTools 偶发对外部 WXSS 类名增量更新失效兜底：以下两处
+       style 内联值与 .apply-modal-mask / .apply-modal-card 的 class 规则完全
+       一致，只是把同一份声明再用内联样式复写一遍——内联样式优先级最高，不依赖
+       外部样式表的增量编译是否生效即可保证遮罩不透明、卡片不透视；正常环境
+       （官方 DevTools/真机）下两者数值相同，不会产生任何视觉差异，也不影响
+       class 规则本身，后续维护改 class 即可，两处保持同步 -->
+  <!-- 🛡️ 本弹窗内部结构（Header/Tab/身份卡/输入框/提交按钮）改为自包含内联样式：
+       历经多轮真机 + 模拟器截图核实，.apply-modal-header/.apply-role-grid/
+       .apply-role-card/.btn-submit-apply 这几条 WXSS 类规则在特定客户端环境下
+       未生效（子元素退化成默认块级纵向堆叠），而同一份文件里紧邻的
+       .store-mode-tabs/.form-input 等规则却能正常生效——排查过语法截断/
+       选择器冲突/同名重复定义/CSS Grid 兼容性/button 原生样式覆盖等多种假设，
+       均未能完全解释这个选择性失效现象。鉴于这是一个独立、不与其它页面共享
+       的弹窗，内联样式的可靠性不依赖外部样式表是否被该客户端正确解析，作为
+       止损方案改造这一段；"新建门店"档案补全子块（地区/地址/电话/门店照片，
+       复用 receipt-grid-container 等在全文件广泛共用的重量级组件样式）未出现
+       在任何一次问题截图里，且改动风险远高于收益，予以保留原 class 结构不动 -->
+  <view class="apply-modal-mask" wx:if="{{showApplyModal}}" bindtap="onCloseApplyModal" catchtouchmove="stopPropagation" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.65); z-index: 100000; display: flex; align-items: center; justify-content: center;">
+    <view catchtap="stopPropagation" style="width: 88%; max-height: 85vh; background: #FFFFFF; border-radius: 24rpx; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.24); box-sizing: border-box; z-index: 100001;">
 
       <!-- 1. Header（固定） -->
-      <view class="apply-modal-header">
-        <text class="apply-modal-title">
+      <view style="flex-shrink: 0; width: 100%; box-sizing: border-box; display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 28rpx 32rpx 24rpx; border-bottom: 1rpx solid #F1F3F5;">
+        <text style="flex: 1; font-size: 30rpx; font-weight: bold; color: #212529; display: flex; align-items: center;">
           <view class="idx-icon-sm idx-icon-note" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{applyModalTitleOverride || (applyForm.storeSelectionType === 'custom' ? '申请加入新门店' : (applyForm.storeName ? '加入【' + applyForm.storeName + '】' : '申请加入门店'))}}
         </text>
-        <text class="apply-modal-close" bindtap="onCloseApplyModal">✕</text>
+        <text bindtap="onCloseApplyModal" style="flex-shrink: 0; font-size: 36rpx; color: #ADB5BD; padding: 8rpx; line-height: 1;">✕</text>
       </view>
 
-      <!-- 2. Body（可滚动，max-height: 50vh 保证内容多时内部滚动） -->
-      <scroll-view scroll-y class="apply-modal-body" style="max-height: 50vh;">
+      <!-- 2. Body（可滚动，flex:1 吃光 Header/Footer 剩余高度） -->
+      <scroll-view scroll-y style="flex: 1; min-height: 0; padding: 24rpx 32rpx 8rpx; box-sizing: border-box;">
 
-        <view class="form-item">
+        <view style="margin-bottom: 24rpx;">
           <!-- 标签随模式切换：新建门店时显示必填红星 -->
-          <text class="form-label" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text class="form-required">*</text> 新门店名称</text>
-          <text class="form-label" wx:else>门店</text>
-          <view class="store-mode-tabs">
-            <view class="store-mode-tab {{applyForm.storeSelectionType === 'existing' ? 'active' : ''}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
-            <view class="store-mode-tab {{applyForm.storeSelectionType === 'custom' ? 'active' : ''}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text style="color: #D32F2F;">*</text> 新门店名称</text>
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:else>门店</text>
+          <view style="display: flex; flex-direction: row; gap: 6rpx; margin-bottom: 12rpx; background: #F1F3F5; border-radius: 999rpx; padding: 6rpx; box-sizing: border-box;">
+            <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; {{applyForm.storeSelectionType === 'existing' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold;' : 'color: #666666;'}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
+            <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; {{applyForm.storeSelectionType === 'custom' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold;' : 'color: #666666;'}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
           </view>
 
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
-            <view class="apply-form-picker-selector">
-              <text class="apply-form-picker-selector-text">{{applyForm.storeName || '请选择门店'}}</text>
-              <text class="apply-form-picker-arrow">▾</text>
+            <view style="background: #FAF8F5; border: 1.5rpx solid #EFE6D8; border-radius: 16rpx; padding: 22rpx 24rpx; box-sizing: border-box; display: flex; flex-direction: row; align-items: center;">
+              <text style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 28rpx;">{{applyForm.storeName || '请选择门店'}}</text>
+              <text style="flex-shrink: 0; margin-left: 12rpx; font-size: 22rpx; color: #ADB5BD;">▾</text>
             </view>
           </picker>
-          <input wx:else class="form-input" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
-          <text class="form-hint" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
+          <input wx:else style="width: 100%; background: #F7F8FA; border-radius: 12rpx; padding: 22rpx 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
         <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进
-             申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案 -->
+             申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案。
+             继续沿用原 class 结构（未在任何一次问题截图中出现，且门店照片
+             上传格子复用全文件共用的 receipt-grid-container 组件样式，不值得
+             为此改造） -->
         <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
           <view class="form-item">
             <text class="form-label"><text class="form-required">*</text> 选择所属地区</text>
@@ -3343,58 +3380,51 @@
           </view>
         </block>
 
-        <view class="form-item">
-          <text class="form-label"><text class="form-required">*</text> 申请身份</text>
+        <view style="margin-bottom: 24rpx;">
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 申请身份</text>
           <!-- 🌟 动态联动：切换身份时 applyRoleTipText 与 applyRequiredHint 随之更新；义工免审即时生效。
-               🐛 UX 重构：此前单选圆圈 + Emoji + 文字挤在同一行（role-radio-item，min-width:40% 的
-               flex-wrap 布局），在弹窗卡片这种窄容器里 4 个选项极易换行错位、视觉拥挤。
-               改为 2×2 网格卡片式单选：图标独占一行在上、身份名称在下，选中态用边框高亮 +
-               右上角对勾角标表达，不再依赖原生 <radio> 那个小圆点的选中态视觉（<radio> 组件
-               本身仍然保留，只是整体透明度压到 0、绝对定位叠在卡片上——不丢失 radio-group
-               原生的单选语义/无障碍能力，只是不再露出它自己的圆点外观） -->
-          <radio-group class="apply-role-grid" bindchange="onApplyRoleChange">
-            <label class="apply-role-card {{applyForm.requestedRole === 'store_patriarch' ? 'apply-role-card-active' : ''}}">
-              <radio class="apply-role-card-radio" value="store_patriarch" checked="{{applyForm.requestedRole === 'store_patriarch'}}" />
-              <text class="apply-role-card-icon">👑</text>
-              <text class="apply-role-card-label">大家长</text>
-              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'store_patriarch'}}">✓</view>
-            </label>
-            <label class="apply-role-card {{applyForm.requestedRole === 'store_manager' ? 'apply-role-card-active' : ''}}">
-              <radio class="apply-role-card-radio" value="store_manager" checked="{{applyForm.requestedRole === 'store_manager'}}" />
-              <text class="apply-role-card-icon">🗂️</text>
-              <text class="apply-role-card-label">店长</text>
-              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'store_manager'}}">✓</view>
-            </label>
-            <label class="apply-role-card {{applyForm.requestedRole === 'finance' ? 'apply-role-card-active' : ''}}">
-              <radio class="apply-role-card-radio" value="finance" checked="{{applyForm.requestedRole === 'finance'}}" />
-              <text class="apply-role-card-icon">💰</text>
-              <text class="apply-role-card-label">财务义工</text>
-              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'finance'}}">✓</view>
-            </label>
-            <label class="apply-role-card {{applyForm.requestedRole === 'volunteer' ? 'apply-role-card-active' : ''}}">
-              <radio class="apply-role-card-radio" value="volunteer" checked="{{applyForm.requestedRole === 'volunteer'}}" />
-              <text class="apply-role-card-icon">🤝</text>
-              <text class="apply-role-card-label">现场义工</text>
-              <view class="apply-role-card-check" wx:if="{{applyForm.requestedRole === 'volunteer'}}">✓</view>
-            </label>
-          </radio-group>
-          <text class="form-hint apply-role-tip apply-role-tip-{{applyRoleTipVariant}}">{{applyRoleTipText}}</text>
+               改用纯 view + bindtap（不再用 radio-group/label/radio），失去的是
+               radio-group 自带的单选表单语义，用 aria-role/aria-selected 手动补回
+               基本的无障碍语义 -->
+          <view style="display: flex; flex-direction: row; flex-wrap: wrap; justify-content: space-between;" role="radiogroup">
+            <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'store_patriarch' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="store_patriarch" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'store_patriarch'}}">
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">👑</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : '#333333'}};">大家长</text>
+              <view wx:if="{{applyForm.requestedRole === 'store_patriarch'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
+            </view>
+            <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'store_manager' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="store_manager" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'store_manager'}}">
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">🗂️</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : '#333333'}};">店长</text>
+              <view wx:if="{{applyForm.requestedRole === 'store_manager'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
+            </view>
+            <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'finance' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'finance' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="finance" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'finance'}}">
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">💰</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'finance' ? '#C0392B' : '#333333'}};">财务义工</text>
+              <view wx:if="{{applyForm.requestedRole === 'finance'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
+            </view>
+            <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'volunteer' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'volunteer' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="volunteer" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'volunteer'}}">
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">🤝</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'volunteer' ? '#C0392B' : '#333333'}};">现场义工</text>
+              <view wx:if="{{applyForm.requestedRole === 'volunteer'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
+            </view>
+          </view>
+          <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;">{{applyRoleTipText}}</text>
         </view>
-        <view class="form-item">
-          <text class="form-label"><text class="form-required">*</text> 真实姓名</text>
-          <input class="form-input" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
+        <view style="margin-bottom: 24rpx;">
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 真实姓名</text>
+          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
         </view>
-        <view class="form-item">
-          <text class="form-label"><text class="form-required">*</text> 手机号</text>
-          <input class="form-input" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
+        <view style="margin-bottom: 24rpx;">
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 手机号</text>
+          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
         </view>
-        <view class="fa-safe-area-spacer"></view>
+        <view style="height: calc(20rpx + constant(safe-area-inset-bottom)); height: calc(20rpx + env(safe-area-inset-bottom));"></view>
       </scroll-view>
 
       <!-- 3. Footer（固定置底，不随 Body 滚动） -->
-      <view class="apply-modal-footer">
+      <view style="flex-shrink: 0; position: sticky; bottom: 0; background: #FFFFFF; padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom)); box-sizing: border-box; z-index: 10;">
         <button
-          class="btn-submit-apply"
+          style="width: 100%; height: 88rpx; line-height: 88rpx; display: flex; align-items: center; justify-content: center; text-align: center; background: #C0392B; color: #FFFFFF; border-radius: 44rpx; font-size: 32rpx; font-weight: 600; border: none; white-space: nowrap; box-sizing: border-box; {{isSubmittingApply ? 'opacity: 0.55;' : ''}}"
           bindtap="onSubmitRoleApply"
           disabled="{{isSubmittingApply}}"
           loading="{{isSubmittingApply}}"

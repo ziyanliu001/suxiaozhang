@@ -762,6 +762,15 @@ Page({
     currentNoticeIndex: 0,
     isNoticeBarHiddenToday: false,
     isNoticeBarClosing: false,
+    // 🌟 混合跑马灯状态：noticeMarqueeActive 由 measureNoticeMarquee() 量出当前
+    // 标题是否超出可视宽度决定，短标题恒为 false（保持静止展示）；激活期间
+    // noticeSwiperAutoplay 联动置 false 暂停垂直轮播，避免标题还没滚完就被切
+    // 走；noticeSwiperCurrent 绑定 swiper 的 current，供 onNoticeMarqueeCycle
+    // 在一个跑马灯周期结束后主动推进到下一条，再交还给 measureNoticeMarquee
+    // 判断是否恢复正常轮播
+    noticeMarqueeActive: false,
+    noticeSwiperAutoplay: true,
+    noticeSwiperCurrent: 0,
     // 🌸 每日修身卡片：跑马灯下方的非宗教化传统文化/正能量微卡片，纯静态内容，
     // 不查云端；cultureQuote 由 onLoad/onShow 调 getDailyCultureQuote() 按自然日选取
     cultureQuote: { text: '', source: '' } as { text: string; source: string },
@@ -3495,8 +3504,12 @@ Page({
     return { text: '⏳ 提交申请，等待超管/大家长审批', variant: 'pending' };
   },
 
-  onApplyRoleChange(e: any) {
-    const requestedRole = e.detail.value;
+  // 身份卡片点击（apply-role-grid 已从 radio-group/label/radio 改为纯
+  // view + bindtap，见 index.wxml 同处注释），从 dataset 读角色而不是
+  // e.detail.value
+  onApplyRoleCardTap(e: any) {
+    const requestedRole = e.currentTarget.dataset.role;
+    if (!requestedRole) return;
     const tip = this.computeApplyRoleTip(requestedRole);
     this.setData({
       'applyForm.requestedRole': requestedRole,
@@ -9155,27 +9168,72 @@ Page({
       this.setData({
         noticeList,
         currentNoticeIndex: 0,
+        noticeSwiperCurrent: 0,
         announcement: noticeList.length > 0 ? noticeList[0] : null,
         isNoticeBarHiddenToday: isHiddenToday,
         noticesLoading: false
       });
+      this.measureNoticeMarquee();
     } catch (e) {
       console.error('[fetchNotices] 查询失败:', e);
       this.setData({
         noticeList: [],
         currentNoticeIndex: 0,
+        noticeSwiperCurrent: 0,
         announcement: null,
         isNoticeBarHiddenToday: isHiddenToday,
-        noticesLoading: false
+        noticesLoading: false,
+        noticeMarqueeActive: false,
+        noticeSwiperAutoplay: true
       });
     }
   },
 
-  // 轮播切换：记下当前滚动到第几条，点击时才知道该打开详情弹窗里的哪一条
+  // 轮播切换：记下当前滚动到第几条，点击时才知道该打开详情弹窗里的哪一条；
+  // 每次换条都要重新量一遍新标题是否需要跑马灯（见 measureNoticeMarquee）
   onSwiperNoticeChange(e: any) {
     const idx = e.detail.current;
     const item = this.data.noticeList[idx] || null;
-    this.setData({ currentNoticeIndex: idx, announcement: item });
+    this.setData({ currentNoticeIndex: idx, noticeSwiperCurrent: idx, announcement: item });
+    this.measureNoticeMarquee();
+  },
+
+  // 🌟 量出当前 announcement 标题的自然宽度（靠隐形探针 #noticeMarqueeProbe），
+  // 与 .announce-bar-viewport 的可视宽度比较：放得下就保持静止（ellipsis 兜
+  // 底，行为与此前一致）；放不下才激活跑马灯，并暂停 swiper 自动轮播——不然
+  // 3s 一次的轮播间隔会在标题还没滚完时就把它切走
+  measureNoticeMarquee() {
+    if (!this.data.announcement) {
+      this.setData({ noticeMarqueeActive: false, noticeSwiperAutoplay: true });
+      return;
+    }
+    wx.nextTick(() => {
+      const query = wx.createSelectorQuery().in(this);
+      query.select('#noticeMarqueeProbe').boundingClientRect();
+      query.select('.announce-bar-viewport').boundingClientRect();
+      query.exec((res: any[]) => {
+        const probeRect = res && res[0];
+        const viewportRect = res && res[1];
+        if (!probeRect || !viewportRect) return;
+        const overflow = probeRect.width > viewportRect.width;
+        this.setData({
+          noticeMarqueeActive: overflow,
+          noticeSwiperAutoplay: !overflow
+        });
+      });
+    });
+  },
+
+  // 跑马灯一轮完整周期（12s：停留 3s + 滚动 + 瞬时重置，见 index.wxss
+  // @keyframes announce-marquee-cycle）跑完后触发——bindanimationiteration 对
+  // infinite 动画每轮循环都会触发一次，借这个时机主动把 swiper 切到下一条，
+  // 而不是让它无限滚同一条；切换后交给 onSwiperNoticeChange →
+  // measureNoticeMarquee 重新判断新的一条是否还需要跑马灯
+  onNoticeMarqueeCycle() {
+    const { noticeList, currentNoticeIndex } = this.data;
+    if (!noticeList || noticeList.length <= 1) return;
+    const nextIdx = (currentNoticeIndex + 1) % noticeList.length;
+    this.setData({ noticeSwiperCurrent: nextIdx });
   },
 
   // 关闭通知栏：写入"今天"这个日期，整条隐藏不留空白；到了新的一天这个判断
