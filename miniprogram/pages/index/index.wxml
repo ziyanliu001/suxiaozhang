@@ -3425,6 +3425,17 @@
           </view>
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;">{{applyRoleTipText}}</text>
         </view>
+        <!-- 🐛 根因修复：已有门店 + 大家长/店长/财务这类管理岗位申请，服务端
+             processRoleAudit 会校验目标门店是否设置了安全密钥（大家长在【门店
+             安全密钥设置】里配置）——此前表单完全没有这个输入框，existing 路径
+             永远传空 adminKey，只要目标门店真的配了密钥，提交必然报"管理员
+             密钥错误"且用户无从填写。是否必填由服务端按目标门店是否设了 key
+             决定，这里不做客户端必填校验（没配置密钥的门店留空也能通过） -->
+        <view style="margin-bottom: 24rpx;" wx:if="{{applyForm.storeSelectionType === 'existing' && (applyForm.requestedRole === 'store_patriarch' || applyForm.requestedRole === 'store_manager' || applyForm.requestedRole === 'finance')}}">
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;">管理员密钥（如目标门店已设置，请填写）</text>
+          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="未设置密钥的门店可留空" value="{{applyForm.adminKeyInput}}" bindinput="onApplyAdminKeyInput" />
+          <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;">💡 密钥由该门店现任大家长设置，向其索取；若该门店从未设置过密钥，留空也能提交</text>
+        </view>
         <view style="margin-bottom: 24rpx;">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 真实姓名</text>
           <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />

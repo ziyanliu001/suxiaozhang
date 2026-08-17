@@ -864,6 +864,14 @@ Page({
       address: '',
       contactPhone: '',
       storePhotos: [] as string[],
+      // 🔐 已有门店 + 申请大家长/店长/财务这类管理岗位时，服务端
+      // processRoleAudit 会校验目标门店是否设置了 adminKey（大家长在【门店安全
+      // 密钥设置】里配置，见 profile.ts）；此前本表单完全没有这个输入框，
+      // existing 路径永远把 adminKey 传空字符串，导致但凡目标门店真的配置了
+      // 密钥，申请必然报"管理员密钥错误"且用户无从填写。是否必填由服务端按
+      // 目标门店是否设了 key 决定——没设 key 的门店留空也能通过，这里不做
+      // 客户端必填校验，只负责把用户填的值原样带上
+      adminKeyInput: '',
       // 🌸 新建门店时的机构类型提示：从 openStorePickerForJoin 唤起时按当前专区
       // 预填（雨花专区='yuhuazhai'，通用专区留空退回服务端默认 'other'），确保
       // Bug 1 里"新建雨花门店"真的会给新店打上 orgType:'yuhuazhai' 标签，而不是
@@ -3482,6 +3490,10 @@ Page({
     this.setData({ 'applyForm.phone': e.detail.value });
   },
 
+  onApplyAdminKeyInput(e: any) {
+    this.setData({ 'applyForm.adminKeyInput': e.detail.value });
+  },
+
   onApplyRegionChange(e: any) {
     this.setData({ 'applyForm.region': e.detail.value });
   },
@@ -3614,7 +3626,7 @@ Page({
   async onSubmitRoleApply() {
     if (this.data.isSubmittingApply) return;
 
-    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos, orgTypeHint } = this.data.applyForm;
+    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos, orgTypeHint, adminKeyInput } = this.data.applyForm;
 
     // ——— 必填校验（按展示顺序逐项拦截）———
     if (storeSelectionType === 'custom') {
@@ -3671,7 +3683,11 @@ Page({
           address: storeSelectionType === 'custom' ? address.trim() : '',
           contactPhone: storeSelectionType === 'custom' ? contactPhone.trim() : '',
           storePhotos: storeSelectionType === 'custom' ? storePhotos : [],
-          adminKey: storeSelectionType === 'custom' ? adminKey : '',
+          // 🔐 custom（新建门店）路径沿用手机号后6位自动生成的 adminKey（成为
+          // 新店的初始管理密钥）；existing（已有门店）路径改传用户在
+          // adminKeyInput 里填的值——目标门店若配置了安全密钥，服务端会据此
+          // 校验；未配置则服务端直接跳过校验，空字符串也能通过
+          adminKey: storeSelectionType === 'custom' ? adminKey : String(adminKeyInput || '').trim(),
           orgType: storeSelectionType === 'custom' ? (orgTypeHint || '') : '',
           tenantId,
           requestedRole,
