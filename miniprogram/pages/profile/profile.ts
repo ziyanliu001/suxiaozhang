@@ -3495,7 +3495,11 @@ Page({
     this.setData({ showMemberApplicationModal: false });
   },
 
-  // 👥 人员权限管理：展示本店已授权的管理岗位成员（财务/店长/大家长），提供降级/移出操作
+  // 👥 人员权限管理：展示本店全量已授权成员（含义工），支持角色互转/移出。
+  // 🐛 此前这里客户端额外拼了一层 ELEVATED（finance/store_manager/store_patriarch）
+  // 过滤，把服务端明明已经返回的义工记录又扔掉了——服务端 listAuditQueue 的
+  // approved 队列本就是"门店全量已授权成员，不限角色"（见 processRoleAudit
+  // 云函数同处注释），根因只在这一行客户端过滤，不需要改云函数
   async onOpenMemberManageModal() {
     if (!isCloudAvailable()) return;
     this.setData({
@@ -3514,7 +3518,6 @@ Page({
       });
       const result = res.result;
       if (result && result.success) {
-        const ELEVATED = ['finance', 'store_manager', 'store_patriarch'];
         const roleClassMap: Record<string, string> = {
           store_patriarch: 'orange',
           finance: 'blue',
@@ -3524,8 +3527,11 @@ Page({
           if (!p || p.length < 7) return p || '';
           return p.slice(0, 3) + '****' + p.slice(-4);
         };
+        // 🛡️ 前端兜底过滤：服务端 listAuditQueue 的 approved 查询已经排除了
+        // role==='super_admin'（见 processRoleAudit 云函数同处注释），这里
+        // 再加一层客户端过滤，双重保险，不依赖单一环节
         const list = (Array.isArray(result.data) ? result.data : [])
-          .filter((m: any) => ELEVATED.includes(m.role))
+          .filter((m: any) => m.role !== 'super_admin')
           .map((m: any) => ({
             ...m,
             phoneMasked: maskPhone(m.phone || ''),
@@ -3584,14 +3590,34 @@ Page({
     });
   },
 
-  async onDemoteToVolunteer(e: any) {
-    const { id, name } = e.currentTarget.dataset;
-    if (!id || this.data.memberManageOperating) return;
+  // 🔀 成员角色互转：降级为义工 / 设为店长 / 设为财务 共用同一个处理器，
+  // data-new-role 决定目标角色。🐛 与旧版 onDemoteToVolunteer 的关键差异——
+  // 旧版把操作成功的成员直接从列表里移除（当时列表只展示"已授权管理成员"，
+  // 降级后确实不再属于这个集合）；现在列表已经展示全量成员（含义工），角色
+  // 变化后这个人依然是本店成员，只是标签/可操作按钮变了，应该原地更新那一条
+  // 记录，而不是把它从列表里删掉
+  async onChangeMemberRole(e: any) {
+    const { id, name, newRole } = e.currentTarget.dataset;
+    if (!id || !newRole || this.data.memberManageOperating) return;
     const displayName = name || '该成员';
+    const roleLabelMap: Record<string, string> = {
+      volunteer: '普通义工',
+      store_manager: '店长',
+      finance: '财务'
+    };
+    const roleClassMap: Record<string, string> = {
+      store_patriarch: 'orange',
+      finance: 'blue',
+      store_manager: 'purple'
+    };
+    const targetLabel = roleLabelMap[newRole] || newRole;
+    const isDemote = newRole === 'volunteer';
     const { confirm } = await wx.showModal({
-      title: '确认降级',
-      content: `确定将【${displayName}】降级为普通义工吗？降级后其将失去门店日常管理权限，且不可撤回。`,
-      confirmText: '确认降级',
+      title: isDemote ? '确认降级' : '确认设置',
+      content: isDemote
+        ? `确定将【${displayName}】降级为普通义工吗？降级后其将失去门店日常管理权限，且不可撤回。`
+        : `确定将【${displayName}】设为${targetLabel}吗？对方将立即获得${targetLabel}权限。`,
+      confirmText: isDemote ? '确认降级' : '确认设置',
       confirmColor: '#E03131'
     });
     if (!confirm) return;
@@ -3599,15 +3625,17 @@ Page({
     try {
       const res: any = await wx.cloud.callFunction({
         name: 'manageVolunteerBinding',
-        data: { targetId: id, action: 'changeRole', newRole: 'volunteer' }
+        data: { targetId: id, action: 'changeRole', newRole }
       });
       const result = res.result;
       if (!result || !result.success) {
         wx.showToast({ title: result?.error || '操作失败', icon: 'none', duration: 2500 });
         return;
       }
-      wx.showToast({ title: '已降级为义工', icon: 'success' });
-      const newList = this.data.memberManageList.filter((m) => m.applyId !== id);
+      wx.showToast({ title: isDemote ? '已降级为义工' : `已设为${targetLabel}`, icon: 'success' });
+      const updateInPlace = (m: any) =>
+        m.applyId === id ? { ...m, role: newRole, roleLabel: targetLabel, roleClass: roleClassMap[newRole] || 'default' } : m;
+      const newList = this.data.memberManageList.map(updateInPlace);
       const newQuery = this.data.memberManageSearch;
       const lower = newQuery.toLowerCase();
       const newFiltered = newQuery

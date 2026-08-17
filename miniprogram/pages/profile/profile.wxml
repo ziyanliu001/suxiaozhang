@@ -1967,7 +1967,7 @@
     </view>
   </view>
 
-  <!-- 🔑 人员权限管理：已授权的财务/店长/大家长降级或移出，店长/大家长/超管可操作 -->
+  <!-- 🔑 人员权限管理：本店全部已授权成员（含义工），支持角色互转/移出，店长/大家长/超管可操作 -->
   <view class="feedback-sheet-backdrop feedback-admin-sheet-backdrop {{showMemberManageModal ? 'show' : ''}}" catchtouchmove="stopPropagation" wx:if="{{showMemberManageModal}}" bindtap="onCloseMemberManageModal">
     <view class="feedback-sheet-panel feedback-admin-sheet-panel" catchtap="stopPropagation">
       <view class="feedback-sheet-drag-handle"></view>
@@ -1975,7 +1975,7 @@
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
           <text class="feedback-sheet-title">🔑 成员权限管理</text>
-          <text class="feedback-sheet-subtitle">已授权管理成员 · 点击卡片操作降级或移出</text>
+          <text class="feedback-sheet-subtitle">本店全部已授权成员 · 点击卡片操作角色调整或移出</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseMemberManageModal">✕</view>
       </view>
@@ -2017,19 +2017,55 @@
             <view class="mm-role-tag mm-role-tag-{{item.roleClass}}">{{item.roleLabel}}</view>
           </view>
 
-          <!-- 下半区操作 ── 情形 A：大家长操作同级大家长 → 锁态提示（超管本人不受此限制，见下方 wx:else 分支） -->
-          <view class="mm-locked-notice" wx:if="{{item.role === 'store_patriarch' && !isSuperAdmin}}">
+          <!-- 下半区操作 ── 情形 A0：目标是超级管理员 → 恒定锁态，任何调用者都不可操作。
+               🛡️ 服务端 manageVolunteerBinding 的 MANAGEABLE_ROLES 本就不含
+               super_admin（操作会被云函数拒绝），这里只是让 UI 提前如实反映
+               这一点，不再展示点了也会失败的按钮 -->
+          <view class="mm-locked-notice" wx:if="{{item.role === 'super_admin'}}">
+            <text class="mm-locked-icon">👑</text>
+            <text class="mm-locked-text">最高管理权限，不可在此调整</text>
+          </view>
+
+          <!-- 下半区操作 ── 情形 A1：这一条是当前登录者本人 → 禁止对自己降级/移出，
+               避免误操作把自己踢出本店 -->
+          <view class="mm-locked-notice" wx:elif="{{item.isSelf}}">
+            <text class="mm-locked-icon">🙋</text>
+            <text class="mm-locked-text">这是你自己，无法对自己执行此操作</text>
+          </view>
+
+          <!-- 下半区操作 ── 情形 A2：大家长操作同级大家长 → 锁态提示（超管本人不受此限制，见下方 wx:else 分支） -->
+          <view class="mm-locked-notice" wx:elif="{{item.role === 'store_patriarch' && !isSuperAdmin}}">
             <text class="mm-locked-icon">🔒</text>
             <text class="mm-locked-text">同级大家长权限调整需联系超级管理员</text>
             <button class="mm-contact-admin-btn" bindtap="onContactAdmin">联系超管</button>
           </view>
 
-          <!-- 下半区操作 ── 情形 B：可正常操作 -->
-          <view class="mm-actions" wx:else>
+          <!-- 下半区操作 ── 情形 B：可正常操作
+               🐛 义工没有更低一级的角色可降级，改为展示【设为财务】这个正向
+               入口；财务/店长保留原有的【降级为义工】。
+               🛡️ 不提供"设为店长"：manageVolunteerBinding 云函数的
+               changeRole 明确只允许 volunteer/finance 互转，禁止通过此入口
+               提权到 store_manager（见该云函数文件头注释），店长任命走邀请码
+               这条更审慎的既有路径，这里不越权放开 -->
+          <view class="mm-actions" wx:elif="{{item.role === 'volunteer'}}">
             <button class="mm-demote-btn {{memberManageOperating ? 'mm-demote-btn-disabled' : ''}}"
-                    bindtap="onDemoteToVolunteer"
+                    bindtap="onChangeMemberRole"
                     data-id="{{item.applyId}}"
                     data-name="{{item.realName}}"
+                    data-new-role="finance"
+                    disabled="{{memberManageOperating}}">⬆ 设为财务</button>
+            <button class="mm-remove-btn {{memberManageOperating ? 'mm-remove-btn-disabled' : ''}}"
+                    bindtap="onRemoveFromStore"
+                    data-id="{{item.applyId}}"
+                    data-name="{{item.realName}}"
+                    disabled="{{memberManageOperating}}">✕ 移出本店</button>
+          </view>
+          <view class="mm-actions" wx:else>
+            <button class="mm-demote-btn {{memberManageOperating ? 'mm-demote-btn-disabled' : ''}}"
+                    bindtap="onChangeMemberRole"
+                    data-id="{{item.applyId}}"
+                    data-name="{{item.realName}}"
+                    data-new-role="volunteer"
                     disabled="{{memberManageOperating}}">⬇ 降级为义工</button>
             <button class="mm-remove-btn {{memberManageOperating ? 'mm-remove-btn-disabled' : ''}}"
                     bindtap="onRemoveFromStore"

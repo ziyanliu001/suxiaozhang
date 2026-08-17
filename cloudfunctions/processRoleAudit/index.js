@@ -634,8 +634,15 @@ async function listAuditQueue(event, OPENID) {
         requestedRole: _.in(pendingRoles)
       });
     } else {
-      // approved 队列：展示门店全量已授权成员，不限角色
-      query = db.collection('user_roles').where({ storeId: caller.storeId, status });
+      // approved 队列：展示门店全量已授权成员（含义工），但排除 super_admin——
+      // 超管是平台全局角色，不是某家门店的驻店成员，理论上其 user_roles 记录
+      // 不该带 storeId，但历史脏数据/账号变更路径不排除这种可能，这里显式
+      // 收窄，不依赖"数据本就不会命中"这个假设
+      query = db.collection('user_roles').where({
+        storeId: caller.storeId,
+        status,
+        role: _.neq('super_admin')
+      });
     }
   } else {
     // finance/volunteer/family 等角色本就无审核权限，不返回任何数据
@@ -658,7 +665,11 @@ async function listAuditQueue(event, OPENID) {
       storeId: r.storeId || '',
       storeName: r.storeName || r.customStoreName || '',
       isCustomStore,
-      timeStr: formatCreateTime(status === 'approved' ? r.approveTime : r.applyTime)
+      timeStr: formatCreateTime(status === 'approved' ? r.approveTime : r.applyTime),
+      // 🛡️ 供成员权限管理弹窗判断"这一行是不是我自己"，从而隐藏对自己的
+      // 降级/移出按钮——只回传一个布尔值，不把 _openid 本身透出给普通管理员
+      // （见下方 isSuperAdminCaller 分支同一处隐私边界注释）
+      isSelf: r._openid === OPENID
     };
     // 🛡️ 超管专属：强制解绑操作需要知道目标 openId 或通过 applyId(=doc._id) 定位文档。
     // 普通管理员不应拿到其他成员的 openId，这里按调用者角色分层返回。
