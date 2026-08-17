@@ -2563,13 +2563,16 @@
         <view class="certificate-modal-close" bindtap="onCloseAdminKeyModal">✕</view>
       </view>
       <text class="vt-form-label">新密钥（留空则清除密钥）</text>
-      <input class="admin-key-modal-input"
-             type="text"
-             password
-             value="{{adminKeyModalInput}}"
-             bindinput="onAdminKeyModalInput"
-             placeholder="请输入密钥，最多 50 字"
-             maxlength="50" />
+      <view class="admin-key-input-wrapper">
+        <input class="admin-key-modal-input"
+               type="text"
+               password="{{!adminKeyModalInputVisible}}"
+               value="{{adminKeyModalInput}}"
+               bindinput="onAdminKeyModalInput"
+               placeholder="请输入密钥，最多 50 字"
+               maxlength="50" />
+        <view class="admin-key-input-eye" bindtap="onToggleAdminKeyModalInputVisible">{{adminKeyModalInputVisible ? '👁' : '🙈'}}</view>
+      </view>
       <text class="admin-key-modal-desc">设置后，申请大家长/店长/财务角色时须提供此密钥。留空保存则清除密钥（允许所有人自由申请）。</text>
       <button class="feedback-submit-btn {{adminKeyModalSaving ? 'feedback-submit-btn-disabled' : ''}}"
               bindtap="onSaveAdminKeyFromProfile"

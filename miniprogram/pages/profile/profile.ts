@@ -740,6 +740,9 @@ Page({
     showAdminKeyModal: false,
     adminKeyModalInput: '',
     adminKeyModalSaving: false,
+    // 🔐 修改密钥弹窗内输入框自己的明文/密文切换，与下方 storeAdminKeyVisible
+    // （门店安全密钥设置行的只读展示）是两个独立状态，互不影响
+    adminKeyModalInputVisible: false,
 
     // 🎫 大家长生成本店邀请码：角色选择弹窗 + 结果展示弹窗
     showInviteModal: false,
@@ -3461,16 +3464,26 @@ Page({
     }
   },
 
-  // 👥 待审批的成员申请：门店自治架构，仅大家长/店长拉取本店成员（义工/财务/店长）
-  // 的申请队列；超管已从事前审批中彻底剥离，不再消费此接口的 elevated 队列
+  // 👥 待审批的成员申请：门店自治架构，大家长/店长拉取本店成员（义工/财务/店长）
+  // 的申请队列；超管默认走事前审批彻底剥离的 elevated 队列（仅店长/大家长任命
+  // 与新建门店申请），但选中具体巡检门店（currentInspectStoreId）时改为穿透
+  // 查看该店的全角色待审批队列——与 onOpenMemberManageModal/listAuditQueue
+  // 的 approved 队列对超管 scopeStoreId 的处理方式保持一致
   async fetchPendingApplications() {
     if (!isCloudAvailable()) return;
     try {
+      // 🩺 诊断日志：storeId 与云函数端 caller.storeId（或超管穿透时的
+      // scopeStoreId）是否一致，是"提交成功但列表看不到"这类问题最常见的
+      // 根因；云函数侧 submitRoleApply/listPendingApplications 也各打了一份，
+      // 两边日志一起看能直接定位到底哪个环节的 storeId 对不上
+      const storeId = this.data.currentInspectStoreId || '';
+      console.log('[fetchPendingApplications] 拉取待审批参数:', { storeId, cachedStoreId: AuthService.getCachedRoleInfo()?.storeId });
       const res: any = await wx.cloud.callFunction({
         name: 'processRoleAudit',
-        data: { action: 'listPendingApplications' }
+        data: { action: 'listPendingApplications', storeId }
       });
       const result = res.result;
+      console.log('[fetchPendingApplications] 拉取结果:', result);
       if (!result || !result.success) return;
 
       const list = Array.isArray(result.data) ? result.data : [];
@@ -3730,17 +3743,22 @@ Page({
     }
     this.setData({
       showAdminKeyModal: true,
-      adminKeyModalInput: this.data.storeAdminKey   // 预填当前明文（大家长/超管已持有）
+      adminKeyModalInput: this.data.storeAdminKey,   // 预填当前明文（大家长/超管已持有）
+      adminKeyModalInputVisible: false
     });
   },
 
   onCloseAdminKeyModal() {
     if (this.data.adminKeyModalSaving) return;
-    this.setData({ showAdminKeyModal: false, adminKeyModalInput: '' });
+    this.setData({ showAdminKeyModal: false, adminKeyModalInput: '', adminKeyModalInputVisible: false });
   },
 
   onAdminKeyModalInput(e: any) {
     this.setData({ adminKeyModalInput: e.detail.value });
+  },
+
+  onToggleAdminKeyModalInputVisible() {
+    this.setData({ adminKeyModalInputVisible: !this.data.adminKeyModalInputVisible });
   },
 
   async onSaveAdminKeyFromProfile() {
