@@ -3707,6 +3707,19 @@ Page({
       this.setData({ showApplyModal: false, applyModalTitleOverride: '' });
       setTabBarHidden(this, false);
 
+      // 🐛 根因修复：义工免审即时生效（result.autoApproved）后，服务端角色/
+      // orgType 已经变了，但 this.data.orgType 仍是提交前那份旧值（首屏
+      // initCurrentUserRole() 之后再没人刷新过）——onSelectYuhuaPlatform 等
+      // 入口只认 this.data.orgType，不认何 wx.setStorageSync 的缓存 key，
+      // 用户提交成功后原地再点一次"雨花公益食堂专区"会因为这份过期数据被
+      // 误判成"尚未绑定"，重复弹出选站点/申请弹窗。这里复用页面已有的
+      // initCurrentUserRole()（内部会先落一次本地缓存、再 await 服务端权威
+      // fetchUserRole 校正 orgType 并联动 autoResumeWorkspaceMode），不需要
+      // 额外发新的云函数请求或手搓一套本地缓存
+      if (result.autoApproved) {
+        this.initCurrentUserRole();
+      }
+
       let content: string;
       if (result.autoApproved) {
         content = `您已成功加入【${displayStoreName}】，义工身份即刻生效，可以开始护持啦！`;
