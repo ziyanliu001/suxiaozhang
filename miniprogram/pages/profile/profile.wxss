@@ -6780,6 +6780,19 @@
   margin-top: 4rpx;
 }
 
+.org-type-tag-editable {
+  margin-top: 8rpx;
+  gap: 8rpx;
+  background: #FFF1D6;
+  border: 1rpx solid #FFD591;
+}
+
+.org-type-tag-arrow {
+  font-size: 26rpx;
+  color: #D46B08;
+  transform: rotate(90deg);
+}
+
 /* ---- 选择路径内容区（无滚动，内容简短） ---- */
 .onb-body {
   flex: 1;

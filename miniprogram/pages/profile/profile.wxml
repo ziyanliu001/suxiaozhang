@@ -3016,20 +3016,31 @@
             <input class="onb-field-input org-form-input" style="width: 100% !important; box-sizing: border-box !important; background: #F8F9FA !important; padding: 16rpx 20rpx !important; border-radius: 12rpx !important; font-size: 28rpx !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; margin-top: 12rpx !important;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{orgConfigName}}" bindinput="onOrgConfigNameInput" maxlength="60" />
           </view>
 
-          <!-- 🆕 机构/平台类型：已改为进入首页时的工作空间选择一次性确定，此处仅只读展示，
-               不再提供二次选择入口，避免与首页选择产生歧义。
-               🎨 精简为轻量 Tag 标签 + 小字提示，替代原先大面积灰底伪输入框
+          <!-- 🆕 机构/平台类型：已设置过的门店（orgConfigOrgTypeIndex >= 0）固定只读展示，
+               避免二次误改引发文化文案风格漂移；仅当门店从未设置过（历史遗留/未走过
+               首页工作空间选择）时才渲染下方 wx:else 的可点击 picker，一次性补录。
+               🎨 只读态精简为轻量 Tag 标签 + 小字提示，替代原先大面积灰底伪输入框
                （一整行 #F1F1EE 灰底容器，视觉上像个能点的输入框，实际不可编辑，
                容易让人误以为交互失效；且占用一整行高度，与"仅供查看"的低优先级
                信息不匹配） -->
-          <view class="onb-field-group">
+          <view class="onb-field-group" wx:if="{{orgConfigOrgTypeIndex >= 0}}">
             <view class="org-type-tag-row">
               <text class="org-type-field-label">机构类型</text>
               <view class="org-type-tag">
-                <text class="org-type-tag-text">{{orgConfigOrgTypeIndex >= 0 ? orgConfigTypeOptions[orgConfigOrgTypeIndex].label : '标准模式 / 默认'}}</text>
+                <text class="org-type-tag-text">{{orgConfigTypeOptions[orgConfigOrgTypeIndex].label}}</text>
               </view>
             </view>
             <text class="org-type-field-hint">进入首页时已选定，决定首页与个人中心的文化文案风格</text>
+          </view>
+          <view class="onb-field-group" wx:else>
+            <text class="org-type-field-label">机构类型</text>
+            <picker mode="selector" range="{{orgConfigTypeOptions}}" range-key="label" value="{{orgConfigOrgTypeIndex}}" bindchange="onOrgConfigOrgTypeChange">
+              <view class="org-type-tag org-type-tag-editable">
+                <text class="org-type-tag-text">{{orgConfigOrgType ? orgConfigTypeOptions[orgConfigOrgTypeIndex] && orgConfigTypeOptions[orgConfigOrgTypeIndex].label : '请选择机构类型'}}</text>
+                <text class="org-type-tag-arrow">›</text>
+              </view>
+            </picker>
+            <text class="org-type-field-hint">该门店尚未设置机构类型，点击选择后将决定首页与个人中心的文化文案风格</text>
           </view>
 
           <!-- 🆕 文化寄语纵向上下分布，每句独立占满一行，避免文字被裁剪截断 -->

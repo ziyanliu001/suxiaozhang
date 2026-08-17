@@ -5729,6 +5729,16 @@ Page({
     this.setData({ orgConfigSlogan2: e.detail.value || '' });
   },
 
+  // 🆕 机构类型选择：仅在门店尚未设置过 orgType（打开弹窗时 orgConfigOrgTypeIndex
+  // 为 -1，见 onOpenOrgConfigModal/WXML 的 wx:else 分支）时才会渲染出这个可点击
+  // picker——已设置过的门店固定走只读展示，避免误触二次改动引发文化文案风格漂移
+  onOrgConfigOrgTypeChange(e: any) {
+    const idx = Number(e.detail.value);
+    const option = ORG_CONFIG_TYPE_OPTIONS[idx];
+    if (!option) return;
+    this.setData({ orgConfigOrgTypeIndex: idx, orgConfigOrgType: option.value });
+  },
+
   async onUploadOrgLogo() {
     try {
       const chooseRes = await wx.chooseMedia({
@@ -5766,7 +5776,7 @@ Page({
 
   async onSaveOrgConfig() {
     if (this.data.orgConfigSaving) return;
-    const { orgConfigName, orgConfigSlogan1, orgConfigSlogan2, orgConfigLogoUrl } = this.data;
+    const { orgConfigName, orgConfigSlogan1, orgConfigSlogan2, orgConfigLogoUrl, orgConfigOrgType } = this.data;
     if (!orgConfigName.trim()) {
       wx.showToast({ title: '组织名称不能为空', icon: 'none' });
       return;
@@ -5798,8 +5808,11 @@ Page({
       if (orgConfigLogoUrl) {
         updateData.storefrontPhotos = [orgConfigLogoUrl];
       }
-      // 🆕 机构类型：不再由本弹窗写入——已改为进入首页时的工作空间选择一次性确定，
-      // 此处只读展示（见 WXML），不下发 orgType 更新，避免覆盖首页选定的真实值
+      // 🆕 机构类型：仅当门店已有明确的 orgType（含本次刚从"未设置"状态选定）时才
+      // 下发——orgConfigOrgType 为空说明打开弹窗时是"未设置"态且用户未做选择，此时
+      // 不传该字段，避免把云端已有值意外清空；已设置过的门店走只读展示（见 WXML），
+      // 这里原样回传同一个值，云函数按 storeId 覆盖写入，属于无变化的空操作
+      if (orgConfigOrgType) updateData.orgType = orgConfigOrgType;
       // super_admin 必须传 storeId，patriarch/manager 传了也无害（云函数对非超管忽略此参数）
       if (orgCfgStoreId) updateData.storeId = orgCfgStoreId;
       const res = await wx.cloud.callFunction({
@@ -5833,6 +5846,9 @@ Page({
       // 入口），店长的 patriarchData 从不加载、永远是初始空值，导致这里静默失效。
       // 改用与上面 orgCfgStoreId 一致的口径，三种角色都能正确刷新
       if (orgCfgStoreId) setTimeout(() => fetchAndSyncStoreStatus(orgCfgStoreId), 600);
+      // 🆕 机构类型可能刚被首次设置，立即重新拉取覆盖 orgType/isYuhuazhai/文化文案，
+      // 不必等下次 onShow/initMinePage 才刷新——否则用户点保存后还得手动切页才看到生效
+      this.fetchStoreOrgType();
     } catch (err: any) {
       console.error('[onSaveOrgConfig]', err);
       wx.showToast({ title: err.message || '网络异常，请重试', icon: 'none' });
