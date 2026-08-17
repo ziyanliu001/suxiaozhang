@@ -68,13 +68,15 @@
              家长"这种把"数据权限范围"和"业务身份"硬缝合的双重语义文案，界面上第一眼
              看不出这到底是店名还是模式。门店归属信息本就在订阅信息卡片等处单独展示
              （见 subscription-info-value），胶囊本身只需要回答"我现在是什么角色" -->
-        <!-- 🆕 大家长身份 Banner：把角色胶囊 + 归属机构合并进同一张高质感条带，
-             仅 isPatriarch 时套用暖金渐变底（.identity-banner-patriarch），
-             其余角色沿用原本各自独立展示、无背景条的样式，不影响既有布局。
+        <!-- 🆕 身份 Banner：把角色胶囊 + 归属机构合并进同一张高质感条带，全角色
+             （大家长/店长/财务/义工/家人）统一套用暖金渐变卡片底
+             （.identity-banner-card）——此前仅 isPatriarch 才有这层卡片质感，
+             其余角色是无背景条的裸文本展示，视觉不统一；现改为不分角色一律套用
+             同一套双层卡片容器。
              注：大家长本身没有"视角切换"功能——那是仅 isRealSuperAdmin 才有的
              预览层能力（见下方 view-mode-switch-card），这里不为真实大家长
              伪造一个不存在的切换入口，只做视觉整合 -->
-        <view class="identity-banner {{isPatriarch ? 'identity-banner-patriarch' : ''}}">
+        <view class="identity-banner identity-banner-card">
           <view class="role-badge-row">
             <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
               <view class="badge-icon-svg icon-svg-flower"></view>
@@ -122,6 +124,26 @@
           <text class="sa-store-indicator-icon">📍</text>
           <text class="sa-store-indicator-text">{{currentInspectStoreId ? currentInspectStoreName : '全国总览'}}</text>
           <text class="sa-store-indicator-arrow">❯</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🌸 阳善动态跑马灯：紧邻身份 Banner 下方，展示本店最新公开随喜捐赠记录。
+         数据源固定为 getSunshineLedger 的 latestDonorsWeekly——与本页下方
+         <yangshan-wall>/sunshine-board 同一份公开只读查询，不另起一套云函数
+         调用（见 profile.ts fetchSunshineMarqueeText）。义工工时/今日供餐份数
+         暂无对应数据源，本期先只做捐赠随喜；currentSunshineText 无数据时由
+         fetchSunshineMarqueeText 兜底填入默认祝福文案，因此本节点始终有内容
+         可展示，wx:if 只用来在极端情况下（如两个字段都还没 setData 过）避免
+         渲染一个空壳 -->
+    <view class="sunshine-marquee-bar" wx:if="{{currentSunshineText}}">
+      <view class="sunshine-tag">
+        <text class="sunshine-icon">🏵️</text>
+        <text class="sunshine-tag-title">阳善</text>
+      </view>
+      <view class="sunshine-marquee-track">
+        <view class="sunshine-marquee-content">
+          <text class="sunshine-text">{{currentSunshineText}}</text>
         </view>
       </view>
     </view>

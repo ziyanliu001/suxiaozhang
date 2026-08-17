@@ -223,21 +223,96 @@
   opacity: 0.6;
 }
 
-/* 🆕 身份 Banner 容器：默认无样式（其余角色沿用原本紧凑展示），
-   .identity-banner-patriarch 修饰类才套用高质感暖金渐变条带 */
+/* 🆕 身份 Banner 容器：布局壳，视觉（暖金渐变卡片底）统一收在
+   .identity-banner-card 里，全角色一致套用——此前只有 isPatriarch 套这层
+   卡片质感，其余角色（财务/店长/义工/家人）是无背景条的裸文本，视觉割裂；
+   现在不再按角色区分，所有身份都是同一套双层卡片容器 */
 .identity-banner {
   display: flex;
   flex-direction: column;
   gap: 10rpx;
 }
 
-.identity-banner-patriarch {
+.identity-banner-card {
   background: linear-gradient(135deg, #FFF9E6 0%, #FFF3D6 60%, #FFEAC2 100%);
   border: 1rpx solid #F0D28A;
   border-radius: 20rpx;
   padding: 16rpx 20rpx;
   margin-top: 6rpx;
   box-shadow: 0 4rpx 14rpx rgba(181, 124, 30, 0.14);
+}
+
+/* 🌸 阳善动态跑马灯：暖色卡片，与页面其余暖色调（identity-banner-card 等）
+   协调；左侧"阳善"标签固定不动，右侧文案横向滚动 */
+.sunshine-marquee-bar {
+  display: flex;
+  align-items: center;
+  height: 64rpx;
+  background: #FFFDF5;
+  border: 2rpx solid #FFE8B8;
+  border-radius: 12rpx;
+  padding: 0 20rpx;
+  margin: 12rpx 0 16rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sunshine-tag {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+
+.sunshine-icon {
+  font-size: 26rpx;
+  margin-right: 6rpx;
+}
+
+.sunshine-tag-title {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #D35400;
+}
+
+.sunshine-marquee-track {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.sunshine-marquee-content {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: sunshine-marquee-cycle 12s linear infinite;
+  will-change: transform;
+}
+
+.sunshine-text {
+  font-size: 24rpx;
+  color: #7D6608;
+}
+
+/* 🐛 复用 index 页 announce-marquee-cycle 的"瞬时重置"写法（见
+   pages/index/index.wxss 同名注释）：95%→95.01% 从 -100% 跳到 +100%，间隔
+   仅 12s 的 0.01%（约 1.2ms），比一帧渲染间隔还短，视觉上等同瞬间闪现；
+   95.01%→100% 维持在 +100%（继续停在屏幕外），真正的"回到起点"发生在
+   animation-iteration 循环边界那一刻的离散时间重置，不会被插值出一段从右侧
+   滑入的多余动效 */
+@keyframes sunshine-marquee-cycle {
+  0%, 25% {
+    transform: translateX(0);
+  }
+  95% {
+    transform: translateX(-100%);
+  }
+  95.01%, 100% {
+    transform: translateX(100%);
+  }
 }
 
 .role-badge-row {
