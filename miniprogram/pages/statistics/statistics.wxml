@@ -2165,6 +2165,12 @@
       <!-- 操作按钮 -->
       <view class="ntm-actions">
         <button class="ntm-upgrade-btn" bindtap="onOpenPlanUpgradeModal">{{isPatriarch ? '立即开通专业版' : '立即升级 / 在线开通'}}</button>
+        <!-- 🌟 多版本入口：与主按钮的"智能推荐直达专业版"不同，这里是给想先
+             货比三家（基础版/专业版/旗舰版/扩容包）的用户的平权入口——点击后
+             同样关闭本引导弹窗、跳转个人中心，但目的地是完整的套餐对比弹窗
+             （见 profile.ts showSubscriptionModal），用户可在那边自由切换
+             comparePlanTab，不会被强推专业版 -->
+        <text class="ntm-view-all-link" bindtap="onOpenPlanUpgradeModal">查看全部套餐与权益 ›</text>
         <view class="ntm-cancel-btn" hover-class="ntm-cancel-btn-hover" bindtap="onCloseNationalTeaser">返回单店报表</view>
       </view>
     </view>

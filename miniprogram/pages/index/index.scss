@@ -2505,17 +2505,20 @@ page {
 }
 
 /* 📢 门店公告：轻量单行通告条，Header 下方 / 工作台上方，替代原先夹在工具区与表单中间的大卡片 */
-/* 🌟 简洁无边框卡片 + marquee 横向滚动：长公告（如"三源弘雨花..."）不再被省略号截断，
-   同时保持单行固定高度，不会随文字长度撑高，避免挤压下方核心打卡区空间 */
+/* 🌟 暖色圆角胶囊：浅橙红底 + 30rpx 全圆角，比原来的 16rpx 直角卡片更符合
+   "提醒条"的视觉语言。左侧标头与右侧轮播内容严格分区（.announce-bar-tab
+   flex-shrink:0 固定宽度，.announce-bar-swiper flex:1 吃满剩余空间），
+   长标题一律 ellipsis 省略号截断，不会再把胶囊撑破/文字溢出到容器外 */
 .announce-bar {
   display: flex;
   align-items: center;
   gap: 10rpx;
-  background: #FFF8ED;
-  border: none;
-  border-radius: 12rpx;
-  padding: 14rpx 20rpx;
-  margin: 12rpx 24rpx 24rpx;
+  background: #fff8f6;
+  border: 1rpx solid #ffe3e3;
+  border-radius: 30rpx;
+  padding: 16rpx 24rpx;
+  margin: 16rpx 24rpx 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(245, 158, 11, 0.08);
   max-height: 100rpx;
   opacity: 1;
   overflow: hidden;
@@ -2523,15 +2526,14 @@ page {
   transition: max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease, margin 0.28s ease;
 }
 
-/* 📢 左侧固定"公告"标签：常驻的"选中态 Tab"——加粗品牌色 + 底部下划线 Indicator，
-   与右侧轮播正文（次级灰字）拉开层级；图标与文字用 margin 撑开间距，避免紧挨裁切感 */
+/* 📢 左侧固定"公告"标头：flex-shrink:0 保证无论右侧内容多长都不会被压缩换行。
+   图标与文字之间用 margin 而非纯 flex gap 撑开间距，避免 emoji 字形本身的视觉
+   留白不均导致紧挨的下一个字符看起来像被裁切（此前 "📢 营业通知" 会被看成
+   "📢 业通知"） */
 .announce-bar-tab {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  padding-bottom: 4rpx;
-  margin-right: 16rpx;
-  border-bottom: 4rpx solid #8C1D18;
 }
 
 .announce-bar-tab-label {
@@ -2541,8 +2543,7 @@ page {
   white-space: nowrap;
 }
 
-/* 🌟 点击 X 后优雅收起：先淡出+高度塌陷，动效播完（见 index.ts onCloseNoticeBar
-   的 280ms setTimeout）才真正从 wx:if 移出，而不是瞬间消失 */
+/* 🌟 点击 X 后优雅收起：先淡出+高度塌陷，动效播完才真正从 wx:if 移出，而不是瞬间消失 */
 .announce-bar.announce-bar-closing {
   max-height: 0;
   opacity: 0;
@@ -2553,20 +2554,20 @@ page {
 }
 
 .announce-bar-icon {
-  font-size: 24rpx;
+  font-size: 26rpx;
   margin-right: 8rpx;
   flex-shrink: 0;
 }
 
-/* 🐛 历史踩坑记录：.announce-bar-text 曾用 padding-left:100% + translateX(-100%) 做过一次
-   跑马灯动画，percentage padding 是相对"包含块宽度"计算的，跟元素自身内容长度无关，这套
-   技巧在微信小程序 WXSS 渲染引擎里对不同长度的动态文案非常不稳定——短标题可能大半个动画
-   周期都停在可视区域外（看起来"文字缺失"），长标题换行/裁切位置也可能算错，露出不该出现
-   的字符，因此当时改成了纯省略号截断（不滚动）。
-   这次换一种不依赖百分比换算的稳定技巧：WXML 侧把超长标题渲染成"原文 + 全角空格 + 原文"
-   两份首尾相接（见 .marquee 判断），这里只需要把这段固定的双倍内容整体向左平移自身宽度的
-   50%，正好停在第二份原文的起始位置，循环时视觉上无缝衔接，跟文案长度、容器宽度都无关，
-   不会重蹈覆辙。 */
+/* 竖线分割线：把左侧固定标头与右侧轮播内容隔开，同样 flex-shrink:0 防止被压缩消失 */
+.announce-bar-divider {
+  flex-shrink: 0;
+  width: 1.5rpx;
+  height: 24rpx;
+  background: #ffcdc2;
+  margin: 0 4rpx;
+}
+
 .announce-bar-viewport {
   flex: 1;
   min-width: 0;
@@ -2577,8 +2578,17 @@ page {
   align-items: center;
 }
 
+/* 🐛 根因修复：此前用双份文本 + translateX(-50%) 做横向跑马灯，长标题永远不会
+   被截断，但代价是文字持续移动、容器必须严格 overflow:hidden 才不会视觉溢出——
+   一旦父级 flex 布局的 flex-shrink/min-width 没配置到位（如超长标题撑开了
+   viewport 的实际宽度），移动中的文字就会露出到胶囊外面，出现"内容被截断
+   溢出、排版崩溃"的现象。现在改回静态单行 + ellipsis：容器不再需要跟着文字
+   宽度博弈，标题多长都只占固定一行，右侧最多显示到"…"，点击整条仍可在详情
+   弹窗里看全文（bindtap="openAnnouncement"），不丢失信息，只是不需要动画就
+   能保证排版稳定 */
 .announce-bar-text {
   display: block;
+  width: 100%;
   font-size: 24rpx;
   font-weight: 500;
   color: #888888;
@@ -2587,46 +2597,102 @@ page {
   text-overflow: ellipsis;
 }
 
-.announce-bar-text.marquee {
-  text-overflow: clip;
-  animation: announce-marquee 10s linear infinite;
-}
-
-@keyframes announce-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
 .announce-bar-swiper {
   flex: 1;
   min-width: 0;
-  height: 36rpx;
+  height: 40rpx;
 }
 
-.announce-bar-edit {
-  flex-shrink: 0;
-  font-size: 20rpx;
-  padding: 4rpx 8rpx;
+/* 🌟 隐形测量探针：字号/字重与 .announce-bar-text 保持一致（量出来的宽度才
+   准），display:inline-block 不设宽度，让它按内容自然撑开；挪到屏幕外
+   （position:fixed + 负坐标）不占布局、不可见——🐛 根因修复：此前这条规则整个
+   缺失，探针元素直接以默认 flex-item 身份原样出现在 .announce-bar 里，渲染出
+   一份完整未截断的标题文字，正是"长标题挤压/撑破右侧 + 按钮"这个布局 Bug 的
+   真正成因，不是 .announce-bar-text 的 ellipsis 没生效 */
+.announce-bar-marquee-probe {
+  position: fixed;
+  left: -9999rpx;
+  top: -9999rpx;
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 24rpx;
+  font-weight: 500;
+  pointer-events: none;
 }
 
+/* 🌟 跑马灯激活态：覆盖 .announce-bar-text 静态态的 width:100%/ellipsis，改回
+   内容自然宽度，让 transform: translateX(±100%) 精确按"文字自身宽度"位移，
+   不需要额外算像素距离；父级 .announce-bar-viewport 的 overflow:hidden 负责
+   裁掉超出可视区的部分 */
+.announce-bar-text-marquee {
+  width: auto;
+  overflow: visible;
+  text-overflow: clip;
+  animation: announce-marquee-cycle 14s linear infinite;
+  will-change: transform;
+}
+
+/* 🎬 首尾双停顿跑马灯时间轴（总周期 14s，与 animation duration 对齐）：
+   0%→21.5%    起点：文字开头紧贴"📢 公告"标签、起始对齐（translateX(0)），
+               停顿 3s（21.5% × 14s ≈ 3s）供用户看清标题开头
+   21.5%→64.5% 停顿结束后向左匀速滚动，直到 translateX(-100%)——这个自身宽度
+               的 -100% 是相对文字元素自身宽度的位移，不管文案多长都精确对应
+               "整句话完整滚过一遍、尾部刚好抵达可视区左边缘、即将滑出"这一刻，
+               不需要按每条通知的实际字数/像素宽度单独计算这个停顿点
+   64.5%→86%   尾部停顿 3s（21.5% × 14s ≈ 3s），供用户读完结尾
+   86%→93%     停顿结束后继续向左滑出（translateX(-120%)），确保文字哪怕只是
+               略长于可视区宽度也能彻底划出，不会残留可见的尾巴
+   93.01%→100% 瞬间跳回右侧起点（translateX(100%)）并一直停在屏幕外，直到这
+               一轮 animation-iteration 结束——下一轮又从 0% 的 translateX(0)
+               重新开始，两次迭代之间是离散的时间重置，不会被插值补间，因此
+               看不到任何"回跳"的痕迹 */
+@keyframes announce-marquee-cycle {
+  0%, 21.5% {
+    transform: translateX(0);
+  }
+  64.5%, 86% {
+    transform: translateX(-100%);
+  }
+  93% {
+    transform: translateX(-120%);
+  }
+  93.01%, 100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 🌟 右侧唯一操作入口：小圆形按钮，暖色底 + 深色描边，比裸文本更有"可点击"的
+   质感，也不会再和别的图标挤在一起（此前的 ✏️ 编辑入口已合并进详情弹窗的
+   "修改"按钮，右侧只留这一个） */
 .announce-bar-add {
   flex-shrink: 0;
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #B5650A;
-  padding: 4rpx 8rpx;
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fde68a;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 
-.announce-bar-close {
-  flex-shrink: 0;
-  font-size: 22rpx;
-  color: #C9A876;
-  padding: 4rpx 8rpx;
+.announce-bar-add:active {
+  background: #fcd34d;
+  transform: scale(0.88);
+}
+
+.announce-bar-add-icon {
+  font-size: 26rpx;
+  font-weight: bold;
+  line-height: 1;
+  color: #92400e;
 }
 
 /* 兜底温馨提示：视觉上比真实通知更柔和，避免用户误以为是一条待处理的正式公告 */
 .announce-bar-fallback {
-  background: #F7F8FA;
+  background: #f7f8fa;
+  border-color: #e9eaec;
+  box-shadow: none;
 }
 
 .announce-bar-fallback .announce-bar-text {

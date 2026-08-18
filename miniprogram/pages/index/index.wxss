@@ -2885,6 +2885,11 @@ textarea, .textarea {
   padding: 16rpx 24rpx;
   margin: 16rpx 24rpx 24rpx;
   box-shadow: 0 2rpx 8rpx rgba(245, 158, 11, 0.08);
+  max-height: 100rpx;
+  opacity: 1;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease, margin 0.28s ease;
 }
 
 /* 📢 左侧固定"公告"标头：flex-shrink:0 保证无论右侧内容多长都不会被压缩换行。
@@ -2897,17 +2902,27 @@ textarea, .textarea {
   flex-shrink: 0;
 }
 
-.announce-bar-icon {
-  font-size: 26rpx;
-  margin-right: 8rpx;
-  flex-shrink: 0;
-}
-
 .announce-bar-tab-label {
   font-size: 24rpx;
   font-weight: bold;
   color: #8C1D18;
   white-space: nowrap;
+}
+
+/* 🌟 点击 X 后优雅收起：先淡出+高度塌陷，动效播完才真正从 wx:if 移出，而不是瞬间消失 */
+.announce-bar.announce-bar-closing {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.announce-bar-icon {
+  font-size: 26rpx;
+  margin-right: 8rpx;
+  flex-shrink: 0;
 }
 
 /* 竖线分割线：把左侧固定标头与右侧轮播内容隔开，同样 flex-shrink:0 防止被压缩消失 */
@@ -2932,7 +2947,7 @@ textarea, .textarea {
 /* 🐛 根因修复：此前用双份文本 + translateX(-50%) 做横向跑马灯，长标题永远不会
    被截断，但代价是文字持续移动、容器必须严格 overflow:hidden 才不会视觉溢出——
    一旦父级 flex 布局的 flex-shrink/min-width 没配置到位（如超长标题撑开了
-   viewport 的实际宽度），移动中的文字就会露出到胶囊外面，出现"内部整...被截断
+   viewport 的实际宽度），移动中的文字就会露出到胶囊外面，出现"内容被截断
    溢出、排版崩溃"的现象。现在改回静态单行 + ellipsis：容器不再需要跟着文字
    宽度博弈，标题多长都只占固定一行，右侧最多显示到"…"，点击整条仍可在详情
    弹窗里看全文（bindtap="openAnnouncement"），不丢失信息，只是不需要动画就
@@ -2956,7 +2971,10 @@ textarea, .textarea {
 
 /* 🌟 隐形测量探针：字号/字重与 .announce-bar-text 保持一致（量出来的宽度才
    准），display:inline-block 不设宽度，让它按内容自然撑开；挪到屏幕外
-   （position:fixed + 负坐标）不占布局、不可见 */
+   （position:fixed + 负坐标）不占布局、不可见——🐛 根因修复：此前这条规则整个
+   缺失，探针元素直接以默认 flex-item 身份原样出现在 .announce-bar 里，渲染出
+   一份完整未截断的标题文字，正是"长标题挤压/撑破右侧 + 按钮"这个布局 Bug 的
+   真正成因，不是 .announce-bar-text 的 ellipsis 没生效 */
 .announce-bar-marquee-probe {
   position: fixed;
   left: -9999rpx;

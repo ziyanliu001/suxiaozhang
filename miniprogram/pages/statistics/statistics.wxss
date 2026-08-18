@@ -5076,6 +5076,10 @@ button.btn-export-shortcut {
   align-items: center;
   justify-content: center;
   padding: 48rpx 40rpx;
+  /* 卡片新增"查看全部套餐与权益"这一行后略高一些，居中弹窗在竖屏较矮的机型上
+     可能更贴近 Home 指示条——用 max() 保证不小于原有 48rpx 呼吸间距的前提下，
+     安全区更大时优先让位给安全区，两者取更大值 */
+  padding-bottom: max(48rpx, env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -5193,6 +5197,20 @@ button.btn-export-shortcut {
 
 .ntm-upgrade-btn::after {
   border: none;
+}
+
+/* 🌟 多版本入口链接：夹在主按钮与"返回单店报表"之间，纯文字、弱化视觉权重，
+   不与主按钮抢焦点。.ntm-actions 本身是 flex 列 + gap:16rpx，插入这一行会
+   自动在它上下两侧各获得 16rpx 间距，不需要再单独声明 margin 去凑 */
+.ntm-view-all-link {
+  display: block;
+  text-align: center;
+  font-size: 26rpx;
+  color: #3B82F6;
+  padding: 4rpx 0;
+}
+.ntm-view-all-link:active {
+  opacity: 0.6;
 }
 
 /* 辅助关闭按钮（view，不用 button） */

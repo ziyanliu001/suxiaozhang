@@ -4742,7 +4742,7 @@
   bottom: 0; left: 0; right: 0;
   z-index: 10000;
   width: 100%;
-  /* 📐 排版锁死：height 与 max-height 锁定为同一个 84vh 值——不再用
+  /* 📐 排版锁死：height 与 max-height 锁定为同一个 85vh 值——不再用
      "height:80vh 起步 + max-height:1200rpx 封顶"这种双阈值组合（那种写法在
      超宽/超高机型上会出现 max-height 先于 height 生效、实际渲染高度反而
      小于 80vh 的反直觉情况）。单一固定值确保这个 flex 列容器在任何机型上
@@ -4750,8 +4750,8 @@
      flex:1 承接滚动 ③ .sub-modal-footer flex-shrink:0 固定底部）的高度分配
      结果因此也是确定的，不会出现"内容一多，底部按钮就被顶出/沉出可视区"
      这类因容器高度本身不确定而连带触发的问题 */
-  height: 84vh;
-  max-height: 84vh;
+  height: 85vh;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   background: #F7F8FA;
@@ -4890,7 +4890,15 @@
 .sub-modal-body {
   flex: 1;
   min-height: 0;
+  /* 🐛 底部截断修复：flex:1 + min-height:0 在常规 <view> 上足够让子内容自行
+     滚动，但 <scroll-view>（原生混合组件）在部分机型/基础库版本上不总能
+     从 flex-grow 正确算出高度——高度计算时机比 flex 布局晚一拍时，
+     scroll-view 会按内容撑到的高度渲染，把底部操作区顶出 85vh 容器之外。
+     显式 max-height:55vh 兜底给出一个不依赖 flex 计算结果的硬上限，双重
+     保险确保滚动区永远不会挤占底部操作区的空间 */
+  max-height: 55vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
   padding-bottom: 8rpx;
 }
@@ -5058,20 +5066,21 @@
    与 .sub-modal-container 的 flex 三段结构对应：① 关闭行 + 身份卡
    （顶部固定）② .sub-modal-body scroll-view（中间滚动：权益卡片/套餐对比/
    扩容包步进器/授权码折叠区）③ 本区块（底部固定）。flex-shrink:0 保证
-   .sub-modal-container 现在是确定高度（80vh，封顶 1200rpx），滚动区内容
-   再多也只在自己内部滚动，绝不会把本区块挤出可视区；safe-area 内边距直接
-   加在本区块自身，让"按钮不被 Home 指示条遮挡"这件事的责任边界清晰落在
-   底部操作区自己身上，不与卡片外层或其它规则重复计算 */
+   .sub-modal-container 现在是确定高度（85vh），滚动区内容再多也只在自己
+   内部滚动（且额外有 max-height:55vh 硬上限兜底 scroll-view 的 flex 高度
+   计算时序问题，见 .sub-modal-body 注释），绝不会把本区块挤出可视区；
+   safe-area 内边距直接加在本区块自身，让"按钮不被 Home 指示条遮挡"这件事
+   的责任边界清晰落在底部操作区自己身上，不与卡片外层或其它规则重复计算 */
 .sub-modal-footer {
   flex-shrink: 0;
   padding: 8rpx 28rpx 0;
   /* 🐛 底部安全区彻底修复：双声明 constant()（iOS ≤11.2 WKWebView 专用写法）
      + env()（iOS ≥11.2 及主流机型），任何一处漏掉单侧写法都会在对应版本上
-     退化成 0、按钮贴底被 Home 指示条/虚拟导航栏遮挡）。20rpx 基础呼吸间距 +
+     退化成 0、按钮贴底被 Home 指示条/虚拟导航栏遮挡）。24rpx 基础呼吸间距 +
      真实上报的 safe-area-inset-bottom，是"按钮不被遮挡"这件事在本区块内
      唯一、单一的真源 */
-  padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(24rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5084,7 +5093,8 @@
    🐛 折行截断修复：此前的按钮文案带有"（当前选中：XXX）"括注，在窄屏 + 加粗
    30rpx 字号下极易超宽；配合 white-space:nowrap 又会让超出部分被裁切、看起来
    像"字被吃掉了一半"。根因分两层解决：① 文案本身已精简为
-   "立即开通专业版 · ¥1,688/年" 这类更短的行动导向文案（见 profile.wxml），
+   "立即开通专业版" 这类更短的行动导向文案（具体价格已在上方套餐对比卡片里
+   展示，按钮不重复拼接金额，见 profile.wxml），
    正常情况下在 90% 宽度、30rpx 字号下都能单行放下；② 样式层严格按
    white-space:nowrap + overflow:hidden 兜底——万一未来文案又变长（如
    扩容包合计单价上探到 4 位数），也只会优雅裁切文字尾部，不会出现折行导致
@@ -5093,7 +5103,9 @@
   width: 90%;
   height: 88rpx;
   line-height: 88rpx;
-  margin: 20rpx auto 12rpx;
+  /* 底部间距只由 .sub-btn-dismiss 的 margin-top 单一负责（见下方），这里不再
+     兼职留白，避免两处各留一点、间距忽大忽小、全靠凑 */
+  margin: 20rpx auto 0;
   border-radius: 44rpx;
   display: flex;
   flex-direction: row;
@@ -5142,6 +5154,7 @@
 .sub-btn-dismiss {
   font-size: 24rpx;
   color: #9CA3AF;
+  margin-top: 16rpx;
   padding: 2rpx 24rpx 4rpx;
 }
 
