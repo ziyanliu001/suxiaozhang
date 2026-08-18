@@ -5259,16 +5259,24 @@
   font-weight: 700;
 }
 
-/* 📦 门店配额标签：紧跟在每档价格下方，清晰标注"包含机构门店上限：X 家" */
+/* 📦 门店配额标签：紧跟在每档价格下方，清晰标注"包含机构门店上限：X 家"。
+   数字部分单独用 .sub-plan-quota-num 包裹并放大加粗突出，是用户扫一眼最想
+   确认的具体数值，与前后说明文字拉开一档视觉权重 */
 .sub-plan-quota-tag {
   display: inline-block;
-  font-size: 22rpx;
+  font-size: 26rpx;
   font-weight: 600;
+  line-height: 1.5;
   color: #8A6D1F;
   background: #FFF8E1;
   border-radius: 10rpx;
-  padding: 7rpx 14rpx;
+  padding: 12rpx 20rpx;
   margin-bottom: 14rpx;
+}
+.sub-plan-quota-num {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #6B4E0A;
 }
 
 /* 🏪 扩容门店包：数量步进器 + 合计价格 */

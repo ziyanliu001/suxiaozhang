@@ -2397,7 +2397,7 @@
                 <text class="sub-plan-compare-price">¥0</text>
                 <text class="sub-plan-compare-price-unit">永久免费</text>
               </view>
-              <view class="sub-plan-quota-tag">📦 包含机构门店上限：2 家</view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">2</text> 家</view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
                 <text>基础收支记账</text>
@@ -2417,7 +2417,7 @@
                 <text class="sub-plan-compare-price">¥1,688</text>
                 <text class="sub-plan-compare-price-unit">/ 年</text>
               </view>
-              <view class="sub-plan-quota-tag">📦 包含机构门店上限：10 家</view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">10</text> 家</view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
                 <text>跨店汇总统计</text>
@@ -2441,7 +2441,7 @@
                 <text class="sub-plan-compare-price">¥3,688</text>
                 <text class="sub-plan-compare-price-unit">/ 年</text>
               </view>
-              <view class="sub-plan-quota-tag">📦 包含机构门店上限：30 家</view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">30</text> 家</view>
               <view class="sub-plan-compare-feature-row">
                 <text class="sub-plan-compare-feature-icon">✓</text>
                 <text>数据大屏看板</text>
