@@ -19,6 +19,7 @@ import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
 import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolveTier, PERMISSION_TIER } from '../../utils/tenantPermission';
 import { setTabBarHidden } from '../../utils/tabBarVisibility';
+import { payForOrder, CreateOrderResponse } from '../../utils/wxPayCore';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -5476,11 +5477,14 @@ Page({
     });
   },
 
-  // 🌟 在线订购：接入微信云开发原生支付（方案 B 终极形态）。
-  // 完整流程：createSubscriptionOrder 云函数统一下单 → wx.requestPayment 拉起
-  // 微信支付界面 → 支付成功后 payCallback 云函数自动更新 tenant_subscriptions
-  // 与 tenants 集合（100% 自动无感，无需用户手动输入任何授权码）→ 前端清除
-  // 权限缓存并刷新套餐展示状态。
+  // 🌟 在线订购：接入 wxPayCore 支付基础设施（APIv3 + Mock 开关，详见
+  // cloudfunctions/wxPayCore 头部注释）。
+  // 完整流程：createSubscriptionOrder 云函数算价/写业务台账 → 转发 wxPayCore
+  // 统一下单 → payForOrder() 拉起支付（真实模式 wx.requestPayment / Mock 模式
+  // 模拟支付确认弹窗，见 utils/wxPayCore.ts）→ wxPayCore 订单转 PAID 后自动
+  // 回调 createSubscriptionOrder 更新 tenant_subscriptions 与 tenants 集合
+  // （100% 自动无感，无需用户手动输入任何授权码）→ 前端清除权限缓存并刷新
+  // 套餐展示状态。
   // 授权码/卡号输入框保留为备用/赠送激活入口（见上方 onRedeemActivationCode）。
   //
   // planKey：'PRO_YEARLY' / 'FLAGSHIP_YEARLY' / 'ADD_ON_STORE'，与
@@ -5492,60 +5496,51 @@ Page({
     wx.showLoading({ title: '正在生成订单...', mask: true });
 
     try {
-      // Step 1: 调用云函数统一下单，获取支付参数
+      // Step 1: 调用云函数统一下单（内部已转发 wxPayCore，见 createSubscriptionOrder
+      // 文件头注释），获取支付参数——mockMode 时是 Mock 拉起参数，真实模式时是
+      // 已用商户私钥签好的真实 paySign，业务侧完全无感
       const orderRes = await wx.cloud.callFunction({
         name: 'createSubscriptionOrder',
         data: planKey === 'ADD_ON_STORE'
           ? { planType: planKey, quantity: quantity || 1 }
           : { planType: planKey }
       });
-      const orderResult = orderRes.result as any;
+      const orderResult = orderRes.result as CreateOrderResponse;
       wx.hideLoading();
 
       if (!orderResult || !orderResult.success || !orderResult.payment) {
         // 🆕 微信支付未配置时改用弹窗承接（见 showPaymentPendingModal），不再是
         // 一晃而过的 Toast——弹窗里同时给了"授权码兑换"（就在这同一个半屏卡片
         // 下方，关掉弹窗即可看到）与"一键复制客服微信"两条出路，其余错误仍走
-        // 原有的 Toast 原文展示
-        const rawErr: string = (orderResult && orderResult.error) || '';
-        const isPaymentUnconfigured =
-          orderResult?.paymentNotConfigured ||
-          rawErr.includes('未在云端开通') ||
-          rawErr.includes('未开通微信支付') ||
-          rawErr.includes('unifiedorder') ||
-          rawErr.includes('payment');
-        if (isPaymentUnconfigured) {
+        // 原有的 Toast 原文展示。paymentNotConfigured 由 wxPayCore 显式打标
+        // （见 wxPayCore/index.js handleCreateOrder），不再靠猜错误文案关键词
+        if (orderResult?.paymentNotConfigured) {
           this.setData({ showPaymentPendingModal: true });
         } else {
-          wx.showToast({ title: rawErr || '生成订单失败，请重试', icon: 'none', duration: 3000 });
+          wx.showToast({ title: (orderResult && orderResult.error) || '生成订单失败，请重试', icon: 'none', duration: 3000 });
         }
         return;
       }
 
-      // Step 2: 拉起微信原生支付界面
-      const payParams = orderResult.payment as {
-        timeStamp: string;
-        nonceStr: string;
-        package: string;
-        signType: string;
-        paySign: string;
-      };
-      await new Promise<void>((resolve, reject) => {
-        wx.requestPayment({
-          timeStamp: payParams.timeStamp,
-          nonceStr: payParams.nonceStr,
-          package: payParams.package,
-          signType: (payParams.signType || 'MD5') as 'MD5' | 'HMAC-SHA256' | 'RSA',
-          paySign: payParams.paySign,
-          success: () => resolve(),
-          fail: (err) => reject(err)
-        });
-      });
+      // Step 2: 拉起支付——真实模式走 wx.requestPayment，Mock 模式走模拟支付
+      // 确认弹窗，两条路径由 payForOrder 内部依据 orderResult.mockMode 分流
+      // （见 utils/wxPayCore.ts），本页不需要关心当前处于哪种模式
+      const outcome = await payForOrder(orderResult);
+      if (!outcome.ok) {
+        if (!outcome.cancelled) {
+          console.error('[onSubscribeAdvancedFeature] 支付失败:', outcome.message);
+          wx.showToast({ title: outcome.message || '支付失败，请重试', icon: 'none' });
+        } else {
+          wx.showToast({ title: outcome.message || '已取消支付', icon: 'none' });
+        }
+        return;
+      }
 
       // Step 3: 支付成功 —— 清除权限缓存，刷新套餐展示
-      // payCallback 云函数已在服务端自动更新 tenant_subscriptions，
-      // clearTenantPermissionCache() 清除 60s 内存缓存，fetchSubscriptionInfo()
-      // 强制重新从云端读取最新状态，两步合用保证前端立即看到解锁结果
+      // wxPayCore 在订单转为 PAID 后已通过 notifyFn 回调 createSubscriptionOrder
+      // 自动更新 tenant_subscriptions，clearTenantPermissionCache() 清除 60s
+      // 内存缓存，fetchSubscriptionInfo() 强制重新从云端读取最新状态，两步合用
+      // 保证前端立即看到解锁结果
       clearTenantPermissionCache();
       wx.showLoading({ title: '正在激活...', mask: true });
       try {
@@ -5568,13 +5563,8 @@ Page({
       });
     } catch (err: any) {
       wx.hideLoading();
-      // wx.requestPayment 用户主动取消时 errMsg 包含 'cancel'
-      if (err && typeof err.errMsg === 'string' && err.errMsg.indexOf('cancel') !== -1) {
-        wx.showToast({ title: '已取消支付', icon: 'none' });
-      } else {
-        console.error('[onSubscribeAdvancedFeature] 支付异常:', err);
-        wx.showToast({ title: '支付失败，请重试', icon: 'none' });
-      }
+      console.error('[onSubscribeAdvancedFeature] 异常:', err);
+      wx.showToast({ title: err?.errMsg || '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ subscriptionLoading: false });
     }

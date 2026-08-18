@@ -1,3 +1,97 @@
 page {
   background-color: #F8F9FA;
 }
+
+.test-page {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.test-section {
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.test-section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.test-section-title-mt {
+  margin-top: 32rpx;
+}
+
+.test-section-desc {
+  font-size: 24rpx;
+  color: #888;
+  margin-bottom: 16rpx;
+}
+
+.test-btn {
+  margin: 12rpx 0;
+  background: #8C1D18;
+  color: #fff;
+}
+
+.test-btn-secondary {
+  background: #B5650A;
+}
+
+.test-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8rpx 12rpx;
+}
+
+.test-log-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.test-log-clear {
+  font-size: 24rpx;
+  color: #B5650A;
+}
+
+.test-log-list {
+  height: 700rpx;
+  background: #1e1e1e;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
+}
+
+.test-log-empty {
+  color: #888;
+  font-size: 24rpx;
+  text-align: center;
+  padding: 40rpx 0;
+}
+
+.test-log-item {
+  display: flex;
+  padding: 6rpx 0;
+  font-size: 22rpx;
+  line-height: 1.5;
+  border-bottom: 1rpx solid #333;
+}
+
+.test-log-time {
+  flex-shrink: 0;
+  color: #6b9955;
+  margin-right: 12rpx;
+  font-family: monospace;
+}
+
+.test-log-text {
+  flex: 1;
+  min-width: 0;
+  color: #d4d4d4;
+  word-break: break-all;
+}

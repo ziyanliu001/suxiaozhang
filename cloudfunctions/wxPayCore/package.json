@@ -1,0 +1,9 @@
+{
+  "name": "wxPayCore",
+  "version": "1.0.0",
+  "description": "微信支付 APIv3 核心服务：统一下单/查单/关单/回调验签解密，支持 PAYMENT_MOCK_MODE 与真实支付无缝切换",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

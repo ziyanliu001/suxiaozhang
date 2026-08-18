@@ -1,7 +1,7 @@
 {
   "name": "createSubscriptionOrder",
   "version": "1.0.0",
-  "description": "微信云开发原生支付统一下单，创建租户订阅订单并返回支付参数",
+  "description": "创建租户订阅订单：校验权限/算价后转发 wxPayCore 云函数完成下单，并处理支付成功回调",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "~2.6.3"

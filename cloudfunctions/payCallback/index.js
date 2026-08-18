@@ -1,4 +1,18 @@
-// 云函数：payCallback
+// 云函数：payCallback  ⚠️ 已停用（legacy，不再被新订单触发）
+//
+// 🏛️ 迁移说明（2026-08）：createSubscriptionOrder 已从微信云开发原生支付
+// （cloud.pay.unifiedorder，本函数就是它的回调目标）迁移到 wxPayCore（直接
+// 对接 APIv3，带 PAYMENT_MOCK_MODE 开关）。新架构下支付成功回调的业务逻辑
+// 已原样迁移到 cloudfunctions/createSubscriptionOrder/lib/applyPayment.js，
+// 由 wxPayCore 在订单转为 PAID 后通过 action:'paymentSucceeded' 触发，不再
+// 经过本函数。
+//
+// 本函数按兵不动、代码原样保留，唯一作用是给"切换瞬间那一小批已经在旧
+// cloud.pay 流程里创建、支付成功回调尚未落地"的存量订单兜底——一旦这批
+// 订单陆续支付完成（或超时关闭），本函数会彻底停止被调用，届时可以安全删除。
+// 不要往这里加新逻辑，新的支付成功处理一律改 applyPayment.js。
+//
+// 以下是原始文件头注释，保留供理解历史行为：
 // 微信支付异步通知回调——支付成功后由微信平台主动 POST 至此函数，
 // 签名验证由云开发统一处理，本函数只需处理业务层逻辑：
 //

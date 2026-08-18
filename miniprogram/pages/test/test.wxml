@@ -1,3 +1,34 @@
-<view style="padding: 100rpx; text-align: center;">
-  <text style="font-size: 40rpx; color: #B22222;">{{msg}}</text>
+<view class="test-page">
+  <view class="test-section">
+    <view class="test-section-title">支付 Mock 联调</view>
+    <view class="test-section-desc">跑通 createSubscriptionOrder → wxPayCore 的完整下单/支付/回调闭环</view>
+
+    <button class="test-btn" size="mini" loading="{{submitting}}" disabled="{{submitting}}" data-plan="PRO_YEARLY" bindtap="onTestSubscribe">
+      下单并模拟支付：专业版年度
+    </button>
+    <button class="test-btn" size="mini" loading="{{submitting}}" disabled="{{submitting}}" data-plan="FLAGSHIP_YEARLY" bindtap="onTestSubscribe">
+      下单并模拟支付：旗舰版年度
+    </button>
+    <button class="test-btn" size="mini" loading="{{submitting}}" disabled="{{submitting}}" data-plan="ADD_ON_STORE" bindtap="onTestSubscribe">
+      下单并模拟支付：门店扩容包 ×2
+    </button>
+
+    <view class="test-section-title test-section-title-mt">幂等性验证</view>
+    <view class="test-section-desc">下单后连续两次触发 mockPaySuccess，第二次应 transitioned:false</view>
+    <button class="test-btn test-btn-secondary" size="mini" loading="{{submitting}}" disabled="{{submitting}}" data-plan="PRO_YEARLY" bindtap="onCreateThenReplay">
+      下单 + 连续两次模拟支付
+    </button>
+  </view>
+
+  <view class="test-log-header">
+    <text class="test-log-title">调用日志</text>
+    <text class="test-log-clear" bindtap="onClearLogs">清空</text>
+  </view>
+  <scroll-view scroll-y class="test-log-list">
+    <view class="test-log-empty" wx:if="{{logs.length === 0}}">暂无日志，点击上方按钮开始测试</view>
+    <view class="test-log-item" wx:for="{{logs}}" wx:key="index">
+      <text class="test-log-time">{{item.time}}</text>
+      <text class="test-log-text">{{item.text}}</text>
+    </view>
+  </scroll-view>
 </view>
