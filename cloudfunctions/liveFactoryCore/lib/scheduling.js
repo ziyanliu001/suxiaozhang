@@ -22,6 +22,15 @@ function addDays(base, days) {
   return d;
 }
 
+function parseDateStr(dateStr) {
+  const [y, m, d] = String(dateStr || '').split('-').map((n) => parseInt(n, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function isValidDateStr(dateStr) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''));
+}
+
 // SHIP_BUFFER_DAYS：生产批次日 → 预计发货日的固定备货/打包天数。当前所有素食
 // 手作场景默认"当日成品次日发货"，与门店记账模块的 mealConfig 一样不做成按品类
 // 可配置——真到有商家需要"当日直发"时再加字段，不提前造一个没人用的配置项
@@ -35,9 +44,14 @@ const SHIP_BUFFER_DAYS = 1;
  * @param {Date}   params.orderCreateTime     下单时刻（用于推算最早可排日）
  * @param {(dateStr: string, quantity: number, limit: number) => Promise<boolean>} params.reserveFn
  *        对指定日期原子预占 quantity 份产能，成功返回 true，容量不足返回 false
+ * @param {string} [params.preferredDate]     买家在预售日历上选中的具体批次日
+ *        （'YYYY-MM-DD'）。留空时走原来的"自动找最早可用日"逻辑；传了就只
+ *        试这一天——买家是照着日历上"仅剩 X 份"选的，选中的这天如果订满就
+ *        老实告诉他"这天约满了"，不能悄悄给他派到别的日期去（那样买家看到
+ *        的批次日会和自己选的对不上，等于产品在骗他）。
  * @returns {Promise<{success: true, batchDate: string, estimatedShippingDate: string} | {success: false, error: string}>}
  */
-async function assignProductionBatch({ dailyCapacityLimit, leadTimeDays, quantity, orderCreateTime, reserveFn }) {
+async function assignProductionBatch({ dailyCapacityLimit, leadTimeDays, quantity, orderCreateTime, reserveFn, preferredDate }) {
   if (quantity <= 0) {
     return { success: false, error: '下单数量必须大于 0' };
   }
@@ -47,7 +61,28 @@ async function assignProductionBatch({ dailyCapacityLimit, leadTimeDays, quantit
     return { success: false, error: '单次下单数量超过该商品单日产能上限，请分批下单' };
   }
 
-  let candidate = addDays(orderCreateTime, leadTimeDays);
+  const earliestDate = addDays(orderCreateTime, leadTimeDays);
+
+  if (preferredDate) {
+    if (!isValidDateStr(preferredDate)) {
+      return { success: false, error: '批次日期格式不正确' };
+    }
+    const earliestDateStr = toDateStr(earliestDate);
+    if (preferredDate < earliestDateStr) {
+      return { success: false, error: `该商品最早可选 ${earliestDateStr} 起的批次，请重新选择日期` };
+    }
+    const reserved = await reserveFn(preferredDate, quantity, dailyCapacityLimit);
+    if (!reserved) {
+      return { success: false, error: '该批次已约满，请选择其他日期' };
+    }
+    return {
+      success: true,
+      batchDate: preferredDate,
+      estimatedShippingDate: toDateStr(addDays(parseDateStr(preferredDate), SHIP_BUFFER_DAYS))
+    };
+  }
+
+  let candidate = earliestDate;
   for (let i = 0; i < MAX_LOOKAHEAD_DAYS; i++) {
     const batchDate = toDateStr(candidate);
     const reserved = await reserveFn(batchDate, quantity, dailyCapacityLimit);

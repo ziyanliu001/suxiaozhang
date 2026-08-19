@@ -86,6 +86,10 @@ async function handleCreateOrder(event) {
   const productId = String(event.productId || '');
   const quantity = Number(event.quantity);
   const promoterOpenId = event.promoterOpenId ? String(event.promoterOpenId) : '';
+  // 买家在预售日历上选中的具体批次日（'YYYY-MM-DD'，选填）：转发给
+  // liveFactoryCore.assignBatch，格式/前置天数/容量的校验都在那一层做，
+  // 这里不重复校验
+  const preferredDate = event.preferredDate ? String(event.preferredDate) : '';
   if (!tenantId || !productId || !(quantity > 0)) {
     return { success: false, error: '参数缺失: tenantId/productId/quantity' };
   }
@@ -110,7 +114,8 @@ async function handleCreateOrder(event) {
       tenantId, productId,
       dailyCapacityLimit: product.dailyCapacityLimit,
       leadTimeDays: product.leadTimeDays || 0,
-      quantity
+      quantity,
+      preferredDate
     }
   }).catch((err) => ({ result: { success: false, error: String(err.errMsg || err.message || '排产服务异常') } }));
 

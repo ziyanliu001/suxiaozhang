@@ -8036,6 +8036,55 @@ Page({
     this.syncStoresForZoneEntry();
   },
 
+  // 🧺 素食直播产销工坊卡片：与上面两张"记账工作台"卡片架构上不是同一类东西——
+  // 雨花/通用两张卡片是同一个首页内容区的两种 currentPlatformMode，工坊卡片
+  // 点击后是真正 navigateTo 到 live_factory 自己独立的页面树（tenant_members
+  // 角色体系，与本页 orgType/currentPlatformMode 判断完全无关，见
+  // createProductionSpace/index.js 头部注释），所以不复用 setData
+  // currentPlatformMode 那套模式切换写法。
+  //
+  // "是否已有所属工坊"这里选择在点击时现查（getMyProductionSpaces），而不是
+  // 像 orgType 那样在页面初始化阶段预先算好缓存——一是这张卡片、这套角色体系
+  // 与本页其余大量 onLoad/onShow 初始化逻辑完全无关联，不想为了这一张新卡片
+  // 往那段已经踩过不少坑的初始化流程里插东西（见 autoResumeWorkspaceMode 附近
+  // 的历史 bug 注释）；二是点击后有一次简短 loading 是完全可接受的成本，不值得
+  // 为了省这一次云函数调用去冒改动初始化时序的风险。
+  async onSelectFactoryPlatform() {
+    wx.showLoading({ title: '加载中...', mask: true });
+    let spaces: Array<{ tenantId: string; tenantName: string; role: string }> = [];
+    try {
+      const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
+      const result = res.result as any;
+      spaces = (result && result.success && result.spaces) || [];
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[index] onSelectFactoryPlatform 查询工坊列表异常:', err);
+      wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+      return;
+    }
+    wx.hideLoading();
+
+    if (spaces.length === 0) {
+      wx.navigateTo({ url: '/pages/workspace-join/workspace-join' });
+      return;
+    }
+    if (spaces.length === 1) {
+      wx.navigateTo({ url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + spaces[0].tenantId });
+      return;
+    }
+    // 同时归属多个工坊（如既是自己工坊的负责人，又被别的工坊邀请当制作方）：
+    // 与 profile.ts onGoToProductionFulfillment 同一套多空间选择写法
+    wx.showActionSheet({
+      itemList: spaces.map((s) => s.tenantName || '未命名工坊'),
+      success: (r) => {
+        const chosen = spaces[r.tapIndex];
+        if (chosen) {
+          wx.navigateTo({ url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + chosen.tenantId });
+        }
+      }
+    });
+  },
+
   // 🐛 任务 B 配套：门店激活/自动选店必须下沉到"用户已经点了具体专区卡片之后"，
   // 不能提前发生在中立的【选择工作空间】首页——但 fetchAllStoresList() 在冷启动
   // 阶段（currentPlatformMode 还是空字符串）就可能已经跑过一次，取回的是未按

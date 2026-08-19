@@ -28,13 +28,19 @@
       </view>
 
       <view class="sf-calendar-card" wx:if="{{calendar.length > 0}}">
-        <text class="sf-section-title">预售日历</text>
+        <view class="sf-calendar-header">
+          <text class="sf-section-title">预售日历</text>
+          <text class="sf-calendar-hint">{{selectedBatchDate ? '已选 ' + selectedBatchDate + '，再点一次可取消' : '点选日期可指定批次，不选则自动排最早可用批次'}}</text>
+        </view>
         <scroll-view class="sf-calendar-scroll" scroll-x>
           <view
-            class="sf-calendar-item {{item.soldOut ? 'sf-sold-out' : 'sf-selectable'}} {{!item.soldOut && item.remaining <= 3 ? 'sf-low-stock' : ''}}"
+            class="sf-calendar-item {{item.soldOut ? 'sf-sold-out' : 'sf-selectable'}} {{!item.soldOut && item.remaining <= 3 ? 'sf-low-stock' : ''}} {{selectedBatchDate === item.batchDate ? 'sf-selected' : ''}}"
             wx:for="{{calendar}}"
             wx:key="batchDate"
+            data-date="{{item.batchDate}}"
+            bindtap="onSelectBatchDate"
           >
+            <text class="sf-calendar-check" wx:if="{{selectedBatchDate === item.batchDate}}">✓</text>
             <text class="sf-calendar-date">{{item.batchDate}}</text>
             <text class="sf-calendar-remaining" wx:if="{{item.soldOut}}">已约满</text>
             <text class="sf-calendar-remaining" wx:else>仅剩 {{item.remaining}} 份</text>

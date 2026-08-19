@@ -27,7 +27,7 @@ function requireInternalCaller(event) {
 
 // ── action: assignBatch ──────────────────────────────────────────────────
 async function handleAssignBatch(event) {
-  const { tenantId, productId, dailyCapacityLimit, leadTimeDays, quantity } = event;
+  const { tenantId, productId, dailyCapacityLimit, leadTimeDays, quantity, preferredDate } = event;
   if (!tenantId || !productId || !(dailyCapacityLimit > 0) || !(quantity > 0)) {
     return { success: false, error: '参数缺失: tenantId/productId/dailyCapacityLimit/quantity' };
   }
@@ -37,7 +37,8 @@ async function handleAssignBatch(event) {
     leadTimeDays: Number.isFinite(leadTimeDays) ? leadTimeDays : 0,
     quantity,
     orderCreateTime: new Date(),
-    reserveFn
+    reserveFn,
+    preferredDate: preferredDate ? String(preferredDate) : undefined
   });
   return result;
 }

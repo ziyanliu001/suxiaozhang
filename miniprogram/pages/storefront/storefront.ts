@@ -40,6 +40,9 @@ Page({
 
     product: null as { name: string; priceYuan: string; dailyCapacityLimit: number; leadTimeDays: number; description: string } | null,
     calendar: [] as CalendarEntry[],
+    // 🎯 买家在预售日历上选中的具体批次日：留空 = 沿用原来的"自动找最早
+    // 可用日"行为（向后兼容，选期是可选的轻量交互，不是强制流程）
+    selectedBatchDate: '',
     quantity: 1,
 
     otherProducts: [] as OtherProduct[],
@@ -176,6 +179,16 @@ Page({
     });
   },
 
+  // 轻量选期：点已选中的日期再点一次取消选择，点已约满的日期不响应
+  // （wxml 上已约满的项没有绑定这个 handler，这里的 soldOut 判断是双重保险）
+  onSelectBatchDate(e: any) {
+    const date = e.currentTarget.dataset.date;
+    if (!date) return;
+    const entry = this.data.calendar.find((c) => c.batchDate === date);
+    if (!entry || entry.soldOut) return;
+    this.setData({ selectedBatchDate: this.data.selectedBatchDate === date ? '' : date });
+  },
+
   onDecreaseQty() {
     if (this.data.quantity > 1) this.setData({ quantity: this.data.quantity - 1 });
   },
@@ -205,7 +218,8 @@ Page({
           tenantId: this.data.tenantId,
           productId: this.data.productId,
           quantity: this.data.quantity,
-          promoterOpenId: this.data.effectivePromoterOpenId
+          promoterOpenId: this.data.effectivePromoterOpenId,
+          preferredDate: this.data.selectedBatchDate
         }
       });
       orderResult = res.result;
@@ -228,6 +242,7 @@ Page({
 
     if (outcome.ok) {
       this.showOrderSuccessModal(orderResult.batchDate, orderResult.estimatedShippingDate);
+      this.setData({ selectedBatchDate: '' }); // 下单完成，清空选期，避免下一笔订单误用旧选择
       this.loadAll(); // 刷新预售日历余量
     } else if (!outcome.cancelled) {
       wx.showToast({ title: outcome.message, icon: 'none' });

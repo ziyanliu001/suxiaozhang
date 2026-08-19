@@ -3267,14 +3267,21 @@
         <view class="platform-card-arrow">进入 ›</view>
       </view>
 
-      <view class="platform-card platform-card-reserved">
+      <!-- 🧺 素食直播产销工坊：live_factory 空间体系，与上面雨花/通用记账两张卡片
+           完全独立的一套角色/数据模型（tenant_members，见 createProductionSpace/
+           index.js 头部注释）。这张卡片点击后不走 currentPlatformMode 模式切换
+           （那是雨花/通用两种"记账工作台"共用同一个首页内容区的切法），而是真正
+           navigateTo 到 live_factory 自己独立的页面树——两者架构上本来就不是
+           同一类东西，见 onSelectFactoryPlatform 注释 -->
+      <view class="platform-card platform-card-factory" bindtap="onSelectFactoryPlatform" hover-class="platform-card-hover">
         <view class="platform-card-body">
-          <text class="platform-card-icon">➕</text>
+          <text class="platform-card-icon">🧺</text>
           <view class="platform-card-text">
-            <text class="platform-card-title">更多平台</text>
-            <text class="platform-card-desc">敬请期待</text>
+            <text class="platform-card-title">素食直播产销工坊</text>
+            <text class="platform-card-desc">面向素食工坊的日产能排单、预售直播带货、制作履约与分账管理</text>
           </view>
         </view>
+        <view class="platform-card-arrow">进入 ›</view>
       </view>
     </view>
   </block>

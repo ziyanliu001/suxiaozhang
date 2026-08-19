@@ -78,6 +78,85 @@ test('前置天数被正确应用：即使更早的日期有空余也不会提�
   assert.equal(res.batchDate, '2026-08-24');
 });
 
+// ── preferredDate：买家在预售日历上选定具体批次日 ──────────────────────────
+
+test('preferredDate：买家选中的日期有余量时精确命中该日，不做顺延', async () => {
+  const state = { '2026-08-21': 5 }; // 首选日已占用一部分但没满
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 2, quantity: 3,
+    orderCreateTime: ORDER_TIME, reserveFn: inMemoryReserveFn(state),
+    preferredDate: '2026-08-25'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.batchDate, '2026-08-25');
+  assert.equal(res.estimatedShippingDate, '2026-08-26');
+});
+
+test('preferredDate：选中日期已约满时明确拒绝，不静默改派到别的日期', async () => {
+  const state = { '2026-08-25': 10 };
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 2, quantity: 1,
+    orderCreateTime: ORDER_TIME, reserveFn: inMemoryReserveFn(state),
+    preferredDate: '2026-08-25'
+  });
+  assert.equal(res.success, false);
+  assert.match(res.error, /已约满/);
+  // 关键：没有被改派到别的日期——state 里除了 2026-08-25 以外都不应该被占用
+  assert.equal(state['2026-08-26'], undefined);
+});
+
+test('preferredDate：早于最短前置天数允许的最早日期时拒绝', async () => {
+  const state = {};
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 5, quantity: 1,
+    orderCreateTime: ORDER_TIME, reserveFn: inMemoryReserveFn(state),
+    preferredDate: '2026-08-20' // 最早只能选 2026-08-24（leadTimeDays=5）
+  });
+  assert.equal(res.success, false);
+  assert.match(res.error, /最早可选/);
+});
+
+test('preferredDate：恰好等于最早可选日期时允许（边界值）', async () => {
+  const state = {};
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 2, quantity: 1,
+    orderCreateTime: ORDER_TIME, reserveFn: inMemoryReserveFn(state),
+    preferredDate: '2026-08-21'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.batchDate, '2026-08-21');
+});
+
+test('preferredDate：格式非法时拒绝', async () => {
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 2, quantity: 1,
+    orderCreateTime: ORDER_TIME, reserveFn: async () => true,
+    preferredDate: '08/21/2026'
+  });
+  assert.equal(res.success, false);
+  assert.match(res.error, /格式不正确/);
+});
+
+test('preferredDate：单次下单量超过单日产能上限时优先拒绝，不进入日期校验', async () => {
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 2, quantity: 11,
+    orderCreateTime: ORDER_TIME, reserveFn: async () => true,
+    preferredDate: '2026-08-25'
+  });
+  assert.equal(res.success, false);
+  assert.match(res.error, /超过该商品单日产能上限/);
+});
+
+test('未传 preferredDate 时行为与此前完全一致（自动找最早可用日）', async () => {
+  const state = { '2026-08-21': 10 };
+  const res = await assignProductionBatch({
+    dailyCapacityLimit: 10, leadTimeDays: 2, quantity: 1,
+    orderCreateTime: ORDER_TIME, reserveFn: inMemoryReserveFn(state)
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.batchDate, '2026-08-22');
+});
+
 // ── CAS 适配层（makeDbReserveFn / makeDbReleaseFn）：验证并发安全逻辑本身 ──
 
 test('makeDbReserveFn：容量充足时原子占用成功', async () => {
