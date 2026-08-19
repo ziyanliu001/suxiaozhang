@@ -10,7 +10,15 @@
 // 这个窗口——虽然发货后仍可能发生售后退款（processProductionRefund 里已经
 // 标注了这个残余风险，见该文件注释），但概率和紧迫性都远低于"付款秒退"。
 //
-// 🔧 部署要求：环境变量需配置 WXPAY_INTERNAL_TOKEN（与 wxPayCore 一致）。
+// 🔧 部署要求：
+//   - 环境变量 WXPAY_INTERNAL_TOKEN（与 wxPayCore 一致）
+//   - 环境变量 SHIPPING_NOTICE_TEMPLATE_ID（微信订阅消息"发货提醒"类模板
+//     ID，未配置时静默跳过推送，不影响标记发货本身）
+//   - config.json 的 openapi 权限需包含 subscribeMessage.send
+//
+// 📦 物流信息：expressCompany（六家常用快递 + "其他"，见 lib/validateShipment.js）
+// 与 trackingNumber 是选填字段，两者必须同时提供或同时不提供；已发货订单
+// 重复调用本函数可以用来补录/更正快递单号（幂等，不会重复触发分账/通知）。
 'use strict';
 
 const cloud = require('wx-server-sdk');
@@ -18,6 +26,46 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 const { buildProfitSharingReceivers } = require('./lib/buildReceivers');
+const { canMarkShipped } = require('./lib/orderStatusMachine');
+const { validateShipment } = require('./lib/validateShipment');
+const { buildShippingNoticePayload } = require('./lib/buildSubscribeMessagePayload');
+
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// 🔔 发货通知：仅在"这次调用真正把订单从非 shipped 状态转到 shipped"时才发
+// （由调用方传入 wasAlreadyShipped 判断，同一订单重复标记/补录快递单号不会
+// 重复推送）。任何环节失败都只 console.warn，不重新抛出——买家有没有订阅、
+// 模板配额是否用尽、openid 是否已取消关注，都不能影响"订单已经成功标记
+// 发货"这个已经落库的事实。
+async function sendShippingNotice(order) {
+  const templateId = process.env.SHIPPING_NOTICE_TEMPLATE_ID || '';
+  if (!templateId) {
+    console.warn('[completeProductionOrder] SHIPPING_NOTICE_TEMPLATE_ID 未配置，跳过发货通知推送');
+    return;
+  }
+  try {
+    const productRes = await db.collection('products').doc(order.productId).get().catch(() => null);
+    const product = productRes && productRes.data;
+    const payload = buildShippingNoticePayload({
+      buyerOpenId: order.buyerOpenId,
+      templateId,
+      productName: product ? product.name : '',
+      expressCompany: order.expressCompany || '',
+      trackingNumber: order.trackingNumber || '',
+      shippedAtStr: todayStr()
+    });
+    if (!payload) return;
+    await cloud.openapi.subscribeMessage.send(payload);
+  } catch (err) {
+    console.warn('[completeProductionOrder] 发货通知推送失败（不阻断主流程）:', err);
+  }
+}
 
 // 🚨 查 tenant_members 而不是 user_roles：见 createProductionSpace/index.js
 // 头部注释——live_factory 成员记录绝不能混进雨花公益专区依赖的 user_roles。
@@ -107,19 +155,47 @@ exports.main = async (event, context) => {
   const order = orderRes && orderRes.data;
   if (!order || order.tenantId !== tenantId) return { success: false, error: '订单不存在' };
 
-  if (!['paid', 'in_production', 'shipped'].includes(order.orderStatus)) {
-    return { success: false, error: `订单当前状态为 ${order.orderStatus}，无法标记发货` };
+  const statusCheck = canMarkShipped(order.orderStatus);
+  if (!statusCheck.allowed) return { success: false, error: statusCheck.error };
+
+  const shipment = validateShipment({ expressCompany: event.expressCompany, trackingNumber: event.trackingNumber });
+  if (!shipment.valid) return { success: false, error: shipment.error };
+
+  const updateData = {};
+  if (!statusCheck.alreadyShipped) {
+    updateData.orderStatus = 'shipped';
+    updateData.shippedAt = db.serverDate();
+    updateData.shippedBy = OPENID;
+  }
+  if (shipment.provided) {
+    updateData.expressCompany = shipment.expressCompany;
+    updateData.trackingNumber = shipment.trackingNumber;
+  }
+  if (Object.keys(updateData).length > 0) {
+    await db.collection('production_orders').doc(orderId).update({ data: updateData });
   }
 
-  if (order.orderStatus !== 'shipped') {
-    await db.collection('production_orders').doc(orderId).update({
-      data: { orderStatus: 'shipped', shippedAt: db.serverDate(), shippedBy: OPENID }
-    });
+  // 重新读取，保证后续分账逻辑/发货通知用到的 order 字段是最新值
+  const freshOrder = {
+    ...order,
+    orderStatus: 'shipped',
+    expressCompany: shipment.provided ? shipment.expressCompany : (order.expressCompany || ''),
+    trackingNumber: shipment.provided ? shipment.trackingNumber : (order.trackingNumber || '')
+  };
+
+  // 只在这次调用真正完成"未发货 -> 已发货"这次状态迁移时才推送通知，重复
+  // 标记/补录快递单号不会重复打扰买家
+  if (!statusCheck.alreadyShipped) {
+    await sendShippingNotice(freshOrder);
   }
-  // 重新读取，保证后续分账逻辑用到的 order.orderStatus/其他字段是最新值
-  const freshOrder = { ...order, orderStatus: 'shipped' };
 
   const profitSharing = await tryAutoProfitSharing({ tenantId, order: freshOrder });
 
-  return { success: true, orderStatus: 'shipped', profitSharing };
+  return {
+    success: true,
+    orderStatus: 'shipped',
+    expressCompany: freshOrder.expressCompany,
+    trackingNumber: freshOrder.trackingNumber,
+    profitSharing
+  };
 };

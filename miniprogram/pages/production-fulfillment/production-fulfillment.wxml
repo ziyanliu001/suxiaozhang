@@ -47,6 +47,32 @@
       </view>
     </view>
 
+    <!-- 去发货 / 录入单号弹窗 -->
+    <view class="pf-modal-mask" wx:if="{{showShipModal}}" bindtap="onCloseShipModal">
+      <view class="pf-modal-card" catchtap="noop">
+        <text class="pf-modal-title">去发货 · 录入快递单号</text>
+
+        <text class="pf-field-label">快递公司</text>
+        <picker mode="selector" range="{{expressCompanyOptions}}" value="{{shipExpressCompanyIndex}}" bindchange="onExpressCompanyChange">
+          <view class="pf-picker-value {{shipExpressCompanyIndex === -1 ? 'pf-picker-placeholder' : ''}}">
+            {{shipExpressCompanyIndex === -1 ? '请选择快递公司' : expressCompanyOptions[shipExpressCompanyIndex]}}
+          </view>
+        </picker>
+
+        <text class="pf-field-label">快递单号</text>
+        <input
+          class="pf-input"
+          placeholder-class="pf-input-placeholder"
+          placeholder="请输入快递单号"
+          value="{{shipTrackingNumber}}"
+          bindinput="onTrackingNumberInput"
+        />
+
+        <button class="pf-primary-btn" loading="{{shipSubmitting}}" disabled="{{shipSubmitting}}" bindtap="onConfirmShip">确认发货</button>
+        <button class="pf-secondary-btn" bindtap="onCloseShipModal">取消</button>
+      </view>
+    </view>
+
     <view class="pf-loading-state" wx:if="{{loading && orders.length === 0}}">
       <text>加载中...</text>
     </view>
@@ -90,7 +116,7 @@
           data-id="{{item._id}}"
           bindtap="onTapMarkShipped"
         >
-          {{markingId === item._id ? '处理中...' : '标记发货'}}
+          {{markingId === item._id ? '处理中...' : '去发货 / 录入单号'}}
         </button>
       </view>
     </scroll-view>

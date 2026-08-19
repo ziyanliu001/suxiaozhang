@@ -43,6 +43,12 @@ interface FulfillmentOrder {
 
 const INVITE_ROLE_LABEL: Record<string, string> = { producer: '制作方', promoter: '推广员' };
 
+// 与 cloudfunctions/completeProductionOrder/lib/validateShipment.js 的
+// EXPRESS_COMPANIES 保持一致——前端选项和后端白名单分别维护是这个仓库一贯
+// 的做法（各云函数/页面独立部署，没有跨端共享常量的机制），改动任一边记得
+// 同步另一边
+const EXPRESS_COMPANY_OPTIONS = ['顺丰', '中通', '圆通', '韵达', '极兔', '邮政', '其他'];
+
 Page({
   data: {
     navTop: 0,
@@ -54,6 +60,14 @@ Page({
     orders: [] as FulfillmentOrder[],
 
     markingId: '', // 正在标记发货的订单 id，用于禁用对应按钮防止重复点击
+
+    // 📦 去发货/录入快递单号弹窗
+    expressCompanyOptions: EXPRESS_COMPANY_OPTIONS,
+    showShipModal: false,
+    shipOrderId: '',
+    shipExpressCompanyIndex: -1,
+    shipTrackingNumber: '',
+    shipSubmitting: false,
 
     // 🧺 商品管理/邀请成员只对 space_owner/space_admin 开放，producer 能看
     // 发货看板但不能改商品/发邀请——resolveMyRole() 通过 getMyProductionSpaces
@@ -208,29 +222,56 @@ Page({
     }
   },
 
+  // 点"标记发货"不再直接弹确认框，改为打开"去发货/录入单号"弹窗——快递公司
+  // + 单号是这次改造新增的必填项，见 completeProductionOrder 的
+  // lib/validateShipment.js（两者必须同时填写，服务端会再校验一遍，这里的
+  // 前端校验只是省一趟网络往返）
   onTapMarkShipped(e: any) {
     const orderId = e.currentTarget.dataset.id;
     if (!orderId || this.data.markingId) return;
-
-    wx.showModal({
-      title: '确认标记发货？',
-      content: '标记后将视为该订单已完成制作/发货，符合条件时会触发自动分账，此操作不可撤销。',
-      confirmText: '确认发货',
-      confirmColor: '#8C1D18',
-      success: (res) => {
-        if (res.confirm) this.markShipped(orderId);
-      }
+    this.setData({
+      showShipModal: true,
+      shipOrderId: orderId,
+      shipExpressCompanyIndex: -1,
+      shipTrackingNumber: ''
     });
   },
 
-  async markShipped(orderId: string) {
-    this.setData({ markingId: orderId });
-    wx.showLoading({ title: '正在标记发货...', mask: true });
+  onCloseShipModal() {
+    if (this.data.shipSubmitting) return; // 提交中不允许关闭，避免用户以为取消了、实际请求仍在飞
+    this.setData({ showShipModal: false });
+  },
+
+  onExpressCompanyChange(e: any) {
+    this.setData({ shipExpressCompanyIndex: Number(e.detail.value) });
+  },
+
+  onTrackingNumberInput(e: any) {
+    this.setData({ shipTrackingNumber: e.detail.value });
+  },
+
+  async onConfirmShip() {
+    if (this.data.shipSubmitting || this.data.markingId) return;
+
+    const orderId = this.data.shipOrderId;
+    const expressCompany = this.data.expressCompanyOptions[this.data.shipExpressCompanyIndex] || '';
+    const trackingNumber = (this.data.shipTrackingNumber || '').trim();
+    if (!expressCompany) {
+      wx.showToast({ title: '请选择快递公司', icon: 'none' });
+      return;
+    }
+    if (!trackingNumber) {
+      wx.showToast({ title: '请填写快递单号', icon: 'none' });
+      return;
+    }
+
+    this.setData({ shipSubmitting: true, markingId: orderId });
+    wx.showLoading({ title: '正在提交...', mask: true });
 
     try {
       const res = await wx.cloud.callFunction({
         name: 'completeProductionOrder',
-        data: { tenantId: this.data.tenantId, orderId }
+        data: { tenantId: this.data.tenantId, orderId, expressCompany, trackingNumber }
       });
       const result = res.result as any;
       wx.hideLoading();
@@ -239,6 +280,8 @@ Page({
         wx.showToast({ title: (result && result.error) || '标记发货失败，请重试', icon: 'none' });
         return;
       }
+
+      this.setData({ showShipModal: false });
 
       const profitSharing = result.profitSharing || {};
       if (profitSharing.attempted && !profitSharing.success) {
@@ -258,10 +301,10 @@ Page({
       this.loadOrders();
     } catch (err) {
       wx.hideLoading();
-      console.error('[production-fulfillment] markShipped 异常:', err);
+      console.error('[production-fulfillment] onConfirmShip 异常:', err);
       wx.showToast({ title: '标记发货失败，请重试', icon: 'none' });
     } finally {
-      this.setData({ markingId: '' });
+      this.setData({ shipSubmitting: false, markingId: '' });
     }
   }
 });

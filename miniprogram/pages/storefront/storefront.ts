@@ -9,6 +9,7 @@
 // 无效则静默丢弃）——本页只负责"尽量把正确的 promoterOpenId 带上"，不代表
 // 传了就一定生效，也不需要在这里重复校验。
 import { payForOrder } from '../../utils/wxPayCore';
+import { requestShippingNoticeSubscription } from '../../utils/subscribeMessage';
 
 interface CalendarEntry {
   batchDate: string;
@@ -241,6 +242,10 @@ Page({
     this.setData({ placing: false });
 
     if (outcome.ok) {
+      // 先唤起"订单发货通知"订阅授权（wx.requestSubscribeMessage 必须由用户
+      // 手势直接触发的调用链里发起，紧跟在支付成功之后是最自然的时机），
+      // 授权与否都会 resolve，不影响后面成功弹窗正常展示
+      await requestShippingNoticeSubscription();
       this.showOrderSuccessModal(orderResult.batchDate, orderResult.estimatedShippingDate);
       this.setData({ selectedBatchDate: '' }); // 下单完成，清空选期，避免下一笔订单误用旧选择
       this.loadAll(); // 刷新预售日历余量
