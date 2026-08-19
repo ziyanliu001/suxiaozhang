@@ -1,29 +1,68 @@
+// 云函数：createIndexes
+//
+// ⚠️ 2026-08 修复：本函数原先假设 `db.collection(name).createIndex(spec)` 是
+// 一个可用的服务端 API，实测在 wx-server-sdk 下调用会直接报错
+// "db.collection(...).createIndex is not a function"——这不是这次改造引入的
+// 回归，是 wx-server-sdk 服务端 SDK 本身从未提供 collection 级别的索引管理
+// 方法（客户端 SDK `wx.cloud.database()` 同样没有）。微信云开发的索引管理
+// 只有两条真正可用的路径，都不是"云函数里调一个方法"：
+//
+//   路径 A（推荐，标准做法）：云开发控制台手动创建
+//     微信开发者工具 → 云开发 → 数据库 → 选中目标集合 → 「索引管理」Tab →
+//     「新建索引」，按下方 exports.main 返回结果里的 indexGuide 清单逐条填写
+//     （索引名 / 字段名 / 排序方向 / 是否唯一）。这是官方文档明确支持、长期
+//     稳定的方式，不依赖任何未公开或易变的接口。
+//
+//   路径 B（进阶，未在本函数中实现）：微信云开发 HTTP API
+//     文档中存在管理端接口 `POST https://api.weixin.qq.com/tcb/updateIndex`
+//     （需要小程序 access_token，通过 appid+secret 换取），可用于脚本化批量
+//     建索引。⚠️ 本次未接入：其请求体字段细节依赖当时最新官方文档，且
+//     access_token 的获取/缓存需要额外的凭证管理，贸然写一份没有真实环境
+//     验证过的实现风险比价值大（与本仓库 wxPayCore 分账相关注释里"未经真实
+//     商户号验证"是同一个谨慎原则）。如需要把索引创建纳入自动化部署流程，
+//     建议后续单独排期，用真实环境跑通这条 HTTP API 后再落地。
+//
+// 本函数现在只做两件"确定安全、确定有效"的事：
+//   1. 确保下方涉及的所有集合都存在（db.createCollection 是 wx-server-sdk
+//      真实支持的方法，本仓库 wxPayCore/orderService.js 等处已在用同一模式）。
+//   2. 把需要的索引整理成人类可读清单返回，供照着在控制台手动创建——不再
+//      假装能自动建完。
+'use strict';
+
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
-// 🛡️ 每条索引独立 try-catch：已存在的索引 createIndex 会 throw "index already exists"，
-// 不能让单条失败中断后续所有索引的创建。succeeded/skipped/failed 三分类让调用方
-// 能清楚看到本次执行哪些是新建的，哪些是已有索引跳过的，哪些是真正失败的。
-async function ensureIndex(collection, spec) {
+function isCollectionExistsError(err) {
+  const msg = ((err && (err.message || err.errMsg)) || '').toLowerCase();
+  return msg.includes('already exist') || msg.includes('database collection exist');
+}
+
+async function ensureCollectionExists(name) {
   try {
-    await db.collection(collection).createIndex(spec);
-    return { collection, index: spec.name, status: 'created' };
+    await db.createCollection(name);
+    return { collection: name, status: 'created' };
   } catch (err) {
-    // 索引已存在时微信 SDK 抛出 "index already exists" 类消息，视为正常
-    const alreadyExists =
-      (err.message || '').toLowerCase().includes('already') ||
-      (err.errMsg || '').toLowerCase().includes('already');
-    return {
-      collection,
-      index: spec.name,
-      status: alreadyExists ? 'skipped (already exists)' : 'failed',
-      error: alreadyExists ? undefined : (err.message || err.errMsg)
-    };
+    if (isCollectionExistsError(err)) {
+      return { collection: name, status: 'already_exists' };
+    }
+    return { collection: name, status: 'failed', error: err.message || err.errMsg };
   }
 }
 
+function describeKeys(keys) {
+  return keys
+    .map((k) => {
+      const [field, direction] = Object.entries(k)[0];
+      return `${field}(${direction === -1 ? '降序' : '升序'})`;
+    })
+    .join(' + ');
+}
+
 exports.main = async (event, context) => {
+  // 索引规划的唯一真源：collection 名 + 索引 spec（name/keys/unique）。
+  // 只用来 (a) 推导需要确保存在的集合列表 (b) 生成控制台手动建索引的清单，
+  // 不再被传给任何 createIndex 调用。
   const tasks = [
     // ─── stores ────────────────────────────────────────────────────────
     ['stores', { name: 'storeName_asc',  keys: [{ storeName: 1 }],  unique: false }],
@@ -117,16 +156,30 @@ exports.main = async (event, context) => {
     ['profit_sharing_orders',          { name: 'outTradeNo_status',          keys: [{ outTradeNo: 1 }, { status: 1 }],                        unique: false }],
   ];
 
-  const results = await Promise.all(tasks.map(([col, spec]) => ensureIndex(col, spec)));
+  // 1. 确保所有涉及的集合存在（真实支持的 API，与索引管理无关，先做完不受影响）
+  const collections = [...new Set(tasks.map(([col]) => col))];
+  const collectionResults = await Promise.all(collections.map(ensureCollectionExists));
+  const collectionFailures = collectionResults.filter((r) => r.status === 'failed');
 
-  const created = results.filter(r => r.status === 'created').length;
-  const skipped = results.filter(r => r.status.startsWith('skipped')).length;
-  const failed  = results.filter(r => r.status === 'failed');
+  // 2. 生成控制台手动建索引清单：按集合分组，每条给出索引名/字段/排序/唯一性
+  const indexGuide = collections.map((collection) => ({
+    collection,
+    indexes: tasks
+      .filter(([col]) => col === collection)
+      .map(([, spec]) => ({
+        indexName: spec.name,
+        fields: describeKeys(spec.keys),
+        unique: spec.unique
+      }))
+  }));
 
   return {
-    success: failed.length === 0,
-    summary: `新建 ${created} 条，已存在跳过 ${skipped} 条，失败 ${failed.length} 条`,
-    results,
-    failures: failed
+    success: collectionFailures.length === 0,
+    message:
+      'wx-server-sdk 不支持在云函数里自动创建索引（db.collection().createIndex 不是有效方法），' +
+      '已改为只确保集合存在；索引请照 indexGuide 清单在「云开发控制台 → 数据库 → 对应集合 → 索引管理 → 新建索引」中手动创建。',
+    collections: collectionResults,
+    collectionFailures,
+    indexGuide
   };
 };
