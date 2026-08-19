@@ -26,7 +26,12 @@ Page({
 
     realName: '',
     phone: '',
-    submitting: false
+    submitting: false,
+
+    // 🎨 纯交互态，不影响 peek/redeem 业务逻辑：当前聚焦的输入框 field 名
+    // （'code'/'realName'/'phone'），驱动高亮边框；清空按钮复用同一个
+    // data-field 约定
+    focusedField: ''
   },
 
   onLoad(options: Record<string, string>) {
@@ -76,7 +81,31 @@ Page({
     this.setData({ code: String(e.detail.value || '').toUpperCase(), peekResult: null, peekError: '' });
   },
 
+  // 🎨 聚焦高亮边框：纯展示态，data-field 与 wxml 里三个 input 的
+  // data-field="code"/"realName"/"phone" 一一对应
+  onFieldFocus(e: any) {
+    this.setData({ focusedField: e.currentTarget.dataset.field || '' });
+  },
+
+  onFieldBlur() {
+    this.setData({ focusedField: '' });
+  },
+
+  // 🎨 一键清空：只清空对应字段本身，code 字段额外清掉上一次查询结果，
+  // 避免清空后残留一份"对不上当前输入"的邀请码预览
+  onClearField(e: any) {
+    const field = e.currentTarget.dataset.field;
+    if (field === 'code') {
+      this.setData({ code: '', peekResult: null, peekError: '' });
+    } else if (field === 'realName') {
+      this.setData({ realName: '' });
+    } else if (field === 'phone') {
+      this.setData({ phone: '' });
+    }
+  },
+
   onTapPeek() {
+    if (this.data.peeking) return; // 防重复点击：查询进行中再次点击直接忽略
     const code = (this.data.code || '').trim();
     if (!code) {
       wx.showToast({ title: '请输入邀请码', icon: 'none' });

@@ -7,41 +7,85 @@
   </view>
 
   <view class="wj-body" style="margin-top: {{contentTop}}px;">
+    <view class="wj-center-wrap">
 
-    <view class="wj-input-card" wx:if="{{!peekResult}}">
-      <text class="wj-input-label">工坊邀请码</text>
-      <input
-        class="wj-input"
-        placeholder="请输入 6 位邀请码"
-        value="{{code}}"
-        bindinput="onCodeInput"
-        maxlength="6"
-      />
-      <button class="wj-primary-btn" loading="{{peeking}}" bindtap="onTapPeek">查询邀请码</button>
-      <text class="wj-error-text" wx:if="{{peekError}}">{{peekError}}</text>
+      <view class="wj-intro" wx:if="{{!peekResult}}">
+        <text class="wj-intro-icon">🤝</text>
+        <text class="wj-intro-text">请输入工坊主理人分享的专属邀请码，加入后即可开启制作协同或推广带货</text>
+      </view>
+
+      <view class="wj-card" wx:if="{{!peekResult}}">
+        <text class="wj-input-label">工坊邀请码</text>
+        <view class="wj-input-wrap">
+          <input
+            class="wj-input {{focusedField === 'code' ? 'wj-input-focused' : ''}}"
+            placeholder-class="wj-input-placeholder"
+            placeholder="请输入 6 位邀请码"
+            value="{{code}}"
+            bindinput="onCodeInput"
+            bindfocus="onFieldFocus"
+            bindblur="onFieldBlur"
+            data-field="code"
+            maxlength="6"
+          />
+          <view class="wj-input-clear" wx:if="{{code}}" catchtap="onClearField" data-field="code">✕</view>
+        </view>
+        <button class="wj-primary-btn" disabled="{{!code || peeking}}" loading="{{peeking}}" bindtap="onTapPeek">查询邀请码</button>
+        <text class="wj-error-text" wx:if="{{peekError}}">{{peekError}}</text>
+      </view>
+
+      <view class="wj-tips" wx:if="{{!peekResult}}">
+        <text class="wj-tips-icon">💡</text>
+        <text class="wj-tips-text">找不到邀请码？请联系工坊负责人获取</text>
+      </view>
+
+      <view class="wj-card" wx:if="{{peekResult}}">
+        <view class="wj-confirm-summary">
+          <text class="wj-confirm-icon">📦</text>
+          <text class="wj-confirm-title">即将加入</text>
+          <text class="wj-confirm-tenant">{{peekResult.tenantName}}</text>
+          <text class="wj-confirm-role">担任「{{peekResult.roleLabel}}」</text>
+        </view>
+
+        <view class="wj-form-row">
+          <text class="wj-input-label">真实姓名</text>
+          <view class="wj-input-wrap">
+            <input
+              class="wj-input {{focusedField === 'realName' ? 'wj-input-focused' : ''}}"
+              placeholder-class="wj-input-placeholder"
+              placeholder="用于档案备注"
+              value="{{realName}}"
+              bindinput="onRealNameInput"
+              bindfocus="onFieldFocus"
+              bindblur="onFieldBlur"
+              data-field="realName"
+            />
+            <view class="wj-input-clear" wx:if="{{realName}}" catchtap="onClearField" data-field="realName">✕</view>
+          </view>
+        </view>
+        <view class="wj-form-row">
+          <text class="wj-input-label">联系电话（选填）</text>
+          <view class="wj-input-wrap">
+            <input
+              class="wj-input {{focusedField === 'phone' ? 'wj-input-focused' : ''}}"
+              placeholder-class="wj-input-placeholder"
+              placeholder="选填"
+              value="{{phone}}"
+              bindinput="onPhoneInput"
+              bindfocus="onFieldFocus"
+              bindblur="onFieldBlur"
+              data-field="phone"
+              type="number"
+            />
+            <view class="wj-input-clear" wx:if="{{phone}}" catchtap="onClearField" data-field="phone">✕</view>
+          </view>
+        </view>
+
+        <button class="wj-primary-btn" disabled="{{!realName || submitting}}" loading="{{submitting}}" bindtap="onConfirmJoin">确认加入</button>
+        <button class="wj-secondary-btn" bindtap="goBack">取消</button>
+      </view>
+
     </view>
-
-    <view class="wj-confirm-card" wx:else>
-      <view class="wj-confirm-summary">
-        <text class="wj-confirm-icon">📦</text>
-        <text class="wj-confirm-title">即将加入</text>
-        <text class="wj-confirm-tenant">{{peekResult.tenantName}}</text>
-        <text class="wj-confirm-role">担任「{{peekResult.roleLabel}}」</text>
-      </view>
-
-      <view class="wj-form-row">
-        <text class="wj-input-label">真实姓名</text>
-        <input class="wj-input" placeholder="用于档案备注" value="{{realName}}" bindinput="onRealNameInput" />
-      </view>
-      <view class="wj-form-row">
-        <text class="wj-input-label">联系电话（选填）</text>
-        <input class="wj-input" placeholder="选填" value="{{phone}}" bindinput="onPhoneInput" type="number" />
-      </view>
-
-      <button class="wj-primary-btn" loading="{{submitting}}" bindtap="onConfirmJoin">确认加入</button>
-      <button class="wj-secondary-btn" bindtap="goBack">取消</button>
-    </view>
-
   </view>
 
 </view>

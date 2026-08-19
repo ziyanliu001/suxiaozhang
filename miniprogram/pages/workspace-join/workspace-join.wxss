@@ -49,12 +49,42 @@
   box-sizing: border-box;
 }
 
-.wj-input-card,
-.wj-confirm-card {
+/* 🎨 居中卡片布局：内容整体在可视区域内垂直居中，而不是贴在导航栏正下方，
+   卡片本身左右留出页面底色余量，视觉上是"浮在页面上的卡片"而非通栏铺满 */
+.wj-center-wrap {
+  min-height: calc(100vh - 200rpx);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8rpx;
+  box-sizing: border-box;
+}
+
+.wj-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 24rpx;
+  margin-bottom: 32rpx;
+}
+
+.wj-intro-icon {
+  font-size: 56rpx;
+  margin-bottom: 16rpx;
+}
+
+.wj-intro-text {
+  font-size: 26rpx;
+  line-height: 40rpx;
+  color: #6B6B70;
+}
+
+.wj-card {
   background: #FFFFFF;
   border-radius: 16rpx;
-  padding: 32rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  padding: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
 }
 
 .wj-input-label {
@@ -64,15 +94,60 @@
   margin-bottom: 12rpx;
 }
 
+/* 🎨 输入框容器：input 与清空按钮叠放，清空按钮绝对定位在右侧，input 右内
+   边距预留出清空按钮的空间，避免文字被按钮遮住 */
+.wj-input-wrap {
+  position: relative;
+  margin-bottom: 24rpx;
+}
+
+/* 🐛 修复样式 Bug：此前只设了 padding、没设 height/line-height，input 内文字
+   与 placeholder 在不同机型上会出现垂直方向偏上/偏下、甚至被输入框边框遮住
+   一部分的问题——显式把 height 与 line-height 设成同一个值，文字就稳定
+   垂直居中，不再依赖 padding 上下值去"凑"居中效果 */
 .wj-input {
   width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
   box-sizing: border-box;
   border: 2rpx solid #E5DED4;
   border-radius: 12rpx;
-  padding: 20rpx;
-  font-size: 32rpx;
+  padding: 0 68rpx 0 24rpx;
+  font-size: 30rpx;
+  color: #1C1C1E;
   letter-spacing: 4rpx;
-  margin-bottom: 24rpx;
+  background: #FFFFFF;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 🎨 聚焦高亮边框：与页面主色一致的棕红描边 + 浅色外发光，替代默认的
+   "看不出来点没点中"的无反馈状态 */
+.wj-input-focused {
+  border-color: #8C1D18;
+  box-shadow: 0 0 0 4rpx rgba(140, 29, 24, 0.08);
+}
+
+/* 🐛 修复样式 Bug：placeholder 颜色/字号未定制过，不同机型默认灰度深浅不一，
+   偶发出现颜色过深看起来像已经输入了内容的错觉——统一设成 #999、字号与正文
+   接近但略小，且不继承正文的 letter-spacing（那是给已输入的邀请码用的宽字
+   距，placeholder 提示文字不需要这个视觉处理） */
+.wj-input-placeholder {
+  color: #999999;
+  font-size: 28rpx;
+  letter-spacing: normal;
+}
+
+.wj-input-clear {
+  position: absolute;
+  right: 12rpx;
+  top: 0;
+  height: 88rpx;
+  width: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #C4C4C6;
+  font-size: 28rpx;
 }
 
 .wj-form-row {
@@ -86,6 +161,14 @@
   line-height: 84rpx;
   border-radius: 12rpx;
   margin-top: 8rpx;
+}
+
+/* 🎨 禁用态：邀请码/姓名为空时置灰，不能点，视觉上明确"现在还不能点"，
+   有输入后立刻恢复主色高亮 */
+.wj-primary-btn[disabled] {
+  background: #D8CFC7;
+  color: #FFFFFF;
+  opacity: 1;
 }
 
 .wj-secondary-btn {
@@ -102,6 +185,25 @@
   color: #C0392B;
   font-size: 24rpx;
   margin-top: 16rpx;
+  text-align: center;
+}
+
+.wj-tips {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24rpx;
+  padding: 0 24rpx;
+}
+
+.wj-tips-icon {
+  font-size: 24rpx;
+  margin-right: 8rpx;
+}
+
+.wj-tips-text {
+  font-size: 24rpx;
+  color: #ADADB2;
   text-align: center;
 }
 
