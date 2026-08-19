@@ -2,10 +2,16 @@
 //
 // 🚪 入口方式：wx.navigateTo 传入 tenantId 查询参数打开（profile.ts/index.ts
 // 的入口都这么调用），例如
-// '/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId；
+// '/subpackages/factory/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId；
 // 未传 tenantId 时回退读取本地持久化的上次选中空间（见 CURRENT_TENANT_STORAGE_KEY），
 // 两者都没有才提示"缺少工作空间参数"退出。
 //
+// 📦 本页与 product-management/storefront/workspace-join 一起位于独立分包
+// subpackages/factory 下（root: "subpackages/factory"，见 app.json），不在
+// 主包里——这四个页面搬进来之前主包编译体积超过了微信 2MB 主包限制。分包内
+// 页面之间用绝对路径互相跳转（如本文件里跳去 product-management），分包页面
+// 跳回主包页面（如 settlement-summary）同样用绝对路径，两种情况都不需要关心
+// "对方是不是在同一个包"，微信原生支持跨包跳转。
 // 🔀 多工坊切换：账号可能同时属于多个 live_factory 工作空间（自己的工坊 +
 // 被别的工坊邀请当 producer）。顶部工坊切换器只在 mySpaces.length > 1 时
 // 显示，切换后会重置所有当前工坊相关的页面状态（订单列表/角色/各类弹窗）
@@ -16,7 +22,7 @@
 // 校验（仅 space_owner/space_admin/producer 可查看），返回的 orders 字段就是
 // 待发货订单明细（Step 3 之前只返回聚合后的 tasks/materials，本轮追加了
 // 逐单明细，不重复查库）。
-import { getTodayIsoString } from '../../utils/dateUtils';
+import { getTodayIsoString } from '../../../../utils/dateUtils';
 
 const CURRENT_TENANT_STORAGE_KEY = 'LIVE_FACTORY_CURRENT_TENANT_ID';
 
@@ -203,7 +209,7 @@ Page({
   },
 
   onGoToProductManagement() {
-    wx.navigateTo({ url: '/pages/product-management/product-management?tenantId=' + this.data.tenantId });
+    wx.navigateTo({ url: '/subpackages/factory/pages/product-management/product-management?tenantId=' + this.data.tenantId });
   },
 
   onOpenInviteModal() {

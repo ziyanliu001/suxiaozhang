@@ -8,8 +8,8 @@
 // （反查 tenant_members 确认 promoterOpenId 真的是本租户已批准的 promoter，
 // 无效则静默丢弃）——本页只负责"尽量把正确的 promoterOpenId 带上"，不代表
 // 传了就一定生效，也不需要在这里重复校验。
-import { payForOrder } from '../../utils/wxPayCore';
-import { requestShippingNoticeSubscription } from '../../utils/subscribeMessage';
+import { payForOrder } from '../../../../utils/wxPayCore';
+import { requestShippingNoticeSubscription } from '../../../../utils/subscribeMessage';
 
 interface CalendarEntry {
   batchDate: string;
@@ -176,7 +176,7 @@ Page({
     const productId = e.currentTarget.dataset.id;
     if (!productId) return;
     wx.redirectTo({
-      url: `/pages/storefront/storefront?tenantId=${this.data.tenantId}&productId=${productId}&promoterOpenId=${this.data.effectivePromoterOpenId}`
+      url: `/subpackages/factory/pages/storefront/storefront?tenantId=${this.data.tenantId}&productId=${productId}&promoterOpenId=${this.data.effectivePromoterOpenId}`
     });
   },
 
@@ -271,7 +271,7 @@ Page({
     const { tenantId, productId, effectivePromoterOpenId, product } = this.data;
     return {
       title: product ? `${product.name} · 产销工坊直供` : '产销工坊直供好物',
-      path: `/pages/storefront/storefront?tenantId=${tenantId}&productId=${productId}&promoterOpenId=${effectivePromoterOpenId}`
+      path: `/subpackages/factory/pages/storefront/storefront?tenantId=${tenantId}&productId=${productId}&promoterOpenId=${effectivePromoterOpenId}`
     };
   },
 

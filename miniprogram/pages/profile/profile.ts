@@ -4799,7 +4799,7 @@ Page({
     const goTo = (tenantId: string) => {
       this.isNavigating = true;
       safeNavigateTo({
-        url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId,
+        url: '/subpackages/factory/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId,
         fail: () => {
           this.isNavigating = false;
         }
@@ -4826,7 +4826,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
     safeNavigateTo({
-      url: '/pages/workspace-join/workspace-join',
+      url: '/subpackages/factory/pages/workspace-join/workspace-join',
       fail: () => {
         this.isNavigating = false;
       }

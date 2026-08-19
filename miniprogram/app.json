@@ -16,12 +16,19 @@
     "pages/draft-box/draft-box",
     "pages/settings/settings",
     "pages/public-verify/index",
-    "pages/production-fulfillment/production-fulfillment",
     "pages/settlement-summary/settlement-summary",
-    "pages/workspace-join/workspace-join",
-    "pages/product-management/product-management",
-    "pages/storefront/storefront",
     "pages/test/test"
+  ],
+  "subpackages": [
+    {
+      "root": "subpackages/factory",
+      "pages": [
+        "pages/production-fulfillment/production-fulfillment",
+        "pages/product-management/product-management",
+        "pages/storefront/storefront",
+        "pages/workspace-join/workspace-join"
+      ]
+    }
   ],
   "window": {
     "navigationBarTextStyle": "black",

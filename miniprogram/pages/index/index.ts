@@ -8065,11 +8065,11 @@ Page({
     wx.hideLoading();
 
     if (spaces.length === 0) {
-      wx.navigateTo({ url: '/pages/workspace-join/workspace-join' });
+      wx.navigateTo({ url: '/subpackages/factory/pages/workspace-join/workspace-join' });
       return;
     }
     if (spaces.length === 1) {
-      wx.navigateTo({ url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + spaces[0].tenantId });
+      wx.navigateTo({ url: '/subpackages/factory/pages/production-fulfillment/production-fulfillment?tenantId=' + spaces[0].tenantId });
       return;
     }
     // 同时归属多个工坊（如既是自己工坊的负责人，又被别的工坊邀请当制作方）：
@@ -8079,7 +8079,7 @@ Page({
       success: (r) => {
         const chosen = spaces[r.tapIndex];
         if (chosen) {
-          wx.navigateTo({ url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + chosen.tenantId });
+          wx.navigateTo({ url: '/subpackages/factory/pages/production-fulfillment/production-fulfillment?tenantId=' + chosen.tenantId });
         }
       }
     });
