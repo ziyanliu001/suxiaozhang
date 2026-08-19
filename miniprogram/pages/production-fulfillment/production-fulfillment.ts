@@ -120,7 +120,12 @@ Page({
       this.setData({ orders: [], loadError: '加载异常，请重试' });
     } finally {
       this.setData({ loading: false });
-      if (done) done();
+      // 🐛 wxml 的重试按钮 bindtap="loadOrders" 直接把 loadOrders 当 tap 处理
+      // 函数绑定，微信会把 tap 事件对象作为第一个参数传进来——此时 done 是
+      // 一个 truthy 但不可调用的事件对象，done() 直接抛 "done is not a
+      // function"。改用 typeof 判断，只有真的传了函数（onPullDownRefresh
+      // 那种用法）才调用
+      if (typeof done === 'function') done();
     }
   },
 

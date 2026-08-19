@@ -131,7 +131,9 @@ Page({
       this.setData({ loadError: '加载异常，请重试' });
     } finally {
       this.setData({ loading: false });
-      if (done) done();
+      // 🐛 同 production-fulfillment.ts 的修复：重试按钮 bindtap="loadSummary"
+      // 会把 tap 事件对象当 done 传进来，必须判类型而不是只判真值
+      if (typeof done === 'function') done();
     }
   }
 });
