@@ -20,6 +20,34 @@
 
     <scroll-view class="ss-scroll" scroll-y wx:else>
 
+      <view class="ss-ops-card">
+        <view class="ss-ops-header">
+          <text class="ss-section-title">运营简报</text>
+          <view class="ss-ops-range-tabs">
+            <view class="ss-ops-range-tab {{opsRangeDays === 7 ? 'active' : ''}}" data-days="7" bindtap="onSelectOpsRange">近7天</view>
+            <view class="ss-ops-range-tab {{opsRangeDays === 30 ? 'active' : ''}}" data-days="30" bindtap="onSelectOpsRange">近30天</view>
+          </view>
+        </view>
+        <view class="ss-ops-grid">
+          <view class="ss-ops-tile">
+            <text class="ss-ops-tile-value">{{opsDisplay.orderCount}}<text class="ss-ops-tile-unit">单</text></text>
+            <text class="ss-ops-tile-label">出货单量 · 共 {{opsDisplay.totalQuantity}} 份</text>
+          </view>
+          <view class="ss-ops-tile">
+            <text class="ss-ops-tile-value">¥{{opsDisplay.producerAmountYuan}}</text>
+            <text class="ss-ops-tile-label">制作方累计结算</text>
+          </view>
+          <view class="ss-ops-tile">
+            <text class="ss-ops-tile-value">¥{{opsDisplay.promoterAmountYuan}}</text>
+            <text class="ss-ops-tile-label">推广员累计分成</text>
+          </view>
+          <view class="ss-ops-tile">
+            <text class="ss-ops-tile-value">¥{{opsDisplay.platformFeeYuan}}</text>
+            <text class="ss-ops-tile-label">平台留存总收益</text>
+          </view>
+        </view>
+      </view>
+
       <view class="ss-summary-cards">
         <view class="ss-summary-card ss-card-unsettled">
           <text class="ss-card-title">待结算</text>

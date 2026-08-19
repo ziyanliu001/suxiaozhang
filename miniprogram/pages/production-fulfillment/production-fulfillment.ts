@@ -1,14 +1,24 @@
 // 页面：排单与发货管理 —— 素食直播产销协同 Module B/C 的制作方/管理员端入口
 //
-// 🚪 入口方式：本页目前没有接入工作空间列表/切换 UI（那是 Module A 的独立
-// 工作，未在本轮范围内），通过 wx.navigateTo 传入 tenantId 查询参数打开，
-// 例如：wx.navigateTo({ url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId })。
+// 🚪 入口方式：wx.navigateTo 传入 tenantId 查询参数打开（profile.ts/index.ts
+// 的入口都这么调用），例如
+// '/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId；
+// 未传 tenantId 时回退读取本地持久化的上次选中空间（见 CURRENT_TENANT_STORAGE_KEY），
+// 两者都没有才提示"缺少工作空间参数"退出。
+//
+// 🔀 多工坊切换：账号可能同时属于多个 live_factory 工作空间（自己的工坊 +
+// 被别的工坊邀请当 producer）。顶部工坊切换器只在 mySpaces.length > 1 时
+// 显示，切换后会重置所有当前工坊相关的页面状态（订单列表/角色/各类弹窗）
+// 再用新 tenantId 重新加载，不会把上一个工坊的数据残留在页面上——见
+// switchTenant()。
 //
 // 数据来源：直接复用 getProductionBoard 云函数——它已经做了 tenantId 归属
 // 校验（仅 space_owner/space_admin/producer 可查看），返回的 orders 字段就是
 // 待发货订单明细（Step 3 之前只返回聚合后的 tasks/materials，本轮追加了
 // 逐单明细，不重复查库）。
 import { getTodayIsoString } from '../../utils/dateUtils';
+
+const CURRENT_TENANT_STORAGE_KEY = 'LIVE_FACTORY_CURRENT_TENANT_ID';
 
 const RANGE_DAYS = 30; // 展示未来 30 天内的待发货订单，与其它列表页的合理默认区间一致
 
@@ -70,9 +80,14 @@ Page({
     shipSubmitting: false,
 
     // 🧺 商品管理/邀请成员只对 space_owner/space_admin 开放，producer 能看
-    // 发货看板但不能改商品/发邀请——resolveMyRole() 通过 getMyProductionSpaces
+    // 发货看板但不能改商品/发邀请——loadMySpaces() 通过 getMyProductionSpaces
     // 反查当前账号在本 tenantId 下的角色来决定
     canManageProducts: false,
+
+    // 🔀 多工坊切换
+    mySpaces: [] as Array<{ tenantId: string; tenantName: string; role: string }>,
+    currentTenantName: '',
+    showSwitcherModal: false,
 
     // 🤝 邀请成员弹窗状态
     showInviteModal: false,
@@ -84,31 +99,78 @@ Page({
   onLoad(options: Record<string, string>) {
     this.calculateNavBarHeight();
 
-    const tenantId = (options && options.tenantId) || '';
+    const tenantId = (options && options.tenantId) || wx.getStorageSync(CURRENT_TENANT_STORAGE_KEY) || '';
     if (!tenantId) {
       wx.showToast({ title: '缺少工作空间参数', icon: 'none' });
       setTimeout(() => wx.navigateBack({ delta: 1 }), 1200);
       return;
     }
     this.setData({ tenantId });
+    wx.setStorageSync(CURRENT_TENANT_STORAGE_KEY, tenantId);
     this.loadOrders();
-    this.resolveMyRole();
+    this.loadMySpaces();
   },
 
-  // 复用 getMyProductionSpaces（已有云函数，不新增接口）反查本账号在当前
-  // tenantId 下的角色，失败时保守按"不可管理"处理，不额外弹错误打扰用户——
-  // 这只影响两个管理入口是否显示，不是页面主功能
-  async resolveMyRole() {
+  // 复用 getMyProductionSpaces（已有云函数，不新增接口）拿到本账号归属的
+  // 全部工坊列表——既用来判断当前工坊下的角色（决定商品管理/邀请成员两个
+  // 管理入口是否显示），也用来驱动顶部的多工坊切换器（列表长度 >1 才显示）。
+  // 失败时保守按"不可管理、不显示切换器"处理，不额外弹错误打扰用户。
+  async loadMySpaces() {
     try {
       const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
       const result = res.result as any;
-      const spaces: Array<{ tenantId: string; role: string }> = (result && result.success && result.spaces) || [];
+      const spaces: Array<{ tenantId: string; tenantName: string; role: string }> = (result && result.success && result.spaces) || [];
       const mine = spaces.find((s) => s.tenantId === this.data.tenantId);
-      const canManageProducts = !!mine && (mine.role === 'space_owner' || mine.role === 'space_admin');
-      this.setData({ canManageProducts });
+      this.setData({
+        mySpaces: spaces,
+        currentTenantName: mine ? mine.tenantName : '',
+        canManageProducts: !!mine && (mine.role === 'space_owner' || mine.role === 'space_admin')
+      });
     } catch (err) {
-      console.warn('[production-fulfillment] resolveMyRole 失败:', err);
+      console.warn('[production-fulfillment] loadMySpaces 失败:', err);
     }
+  },
+
+  onOpenSwitcherModal() {
+    if (this.data.mySpaces.length <= 1) return; // 只有一个空间时没什么可切换的
+    this.setData({ showSwitcherModal: true });
+  },
+
+  onCloseSwitcherModal() {
+    this.setData({ showSwitcherModal: false });
+  },
+
+  onSelectSpace(e: any) {
+    const tenantId = e.currentTarget.dataset.tenantid;
+    if (!tenantId || tenantId === this.data.tenantId) {
+      this.setData({ showSwitcherModal: false });
+      return;
+    }
+    this.switchTenant(tenantId);
+  },
+
+  // 切换工坊：持久化新的 currentTenantId，重置所有"上一个工坊"相关的页面
+  // 状态（订单列表/发货&邀请弹窗/角色标记），避免切换后短暂闪现旧工坊数据
+  // 或者旧弹窗里残留的 orderId 指向根本不属于新工坊的订单，再用新 tenantId
+  // 重新加载订单与角色——两次云函数调用天然按各自的 tenantId 参数隔离数据，
+  // 不存在"忘了清空导致新旧数据混在一起"的风险
+  switchTenant(tenantId: string) {
+    wx.setStorageSync(CURRENT_TENANT_STORAGE_KEY, tenantId);
+    this.setData({
+      tenantId,
+      showSwitcherModal: false,
+      orders: [],
+      loadError: '',
+      markingId: '',
+      showShipModal: false,
+      shipOrderId: '',
+      showInviteModal: false,
+      inviteResult: null,
+      canManageProducts: false,
+      currentTenantName: ''
+    });
+    this.loadOrders();
+    this.loadMySpaces();
   },
 
   noop() {

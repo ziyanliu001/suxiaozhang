@@ -26,6 +26,14 @@ interface SettlementBucket {
   platformFee: number;
 }
 
+interface OpsStats {
+  orderCount: number;
+  totalQuantity: number;
+  producerAmount: number;
+  promoterAmount: number;
+  platformFee: number;
+}
+
 interface DetailRow {
   orderId: string;
   payAmount: number;
@@ -54,6 +62,15 @@ Page({
     unsettled: { count: 0, producerAmountYuan: '0.00', promoterAmountYuan: '0.00' },
     settled: { count: 0, producerAmountYuan: '0.00', promoterAmountYuan: '0.00' },
     voided: { count: 0, producerAmountYuan: '0.00', promoterAmountYuan: '0.00' },
+
+    // 📊 运营简报：opsStats 是服务端一次性算好的 7 天/30 天两份数据，切换
+    // 区间只是换一份已经在本地的数据展示，不需要重新请求云函数
+    opsRangeDays: 7 as 7 | 30,
+    opsStatsRaw: { last7: null as OpsStats | null, last30: null as OpsStats | null },
+    opsDisplay: {
+      orderCount: 0, totalQuantity: 0,
+      producerAmountYuan: '0.00', promoterAmountYuan: '0.00', platformFeeYuan: '0.00'
+    },
 
     details: [] as DetailRow[]
   },
@@ -99,6 +116,26 @@ Page({
     };
   },
 
+  formatOpsStats(stats: OpsStats | null) {
+    const s = stats || { orderCount: 0, totalQuantity: 0, producerAmount: 0, promoterAmount: 0, platformFee: 0 };
+    return {
+      orderCount: s.orderCount,
+      totalQuantity: s.totalQuantity,
+      producerAmountYuan: yuan(s.producerAmount),
+      promoterAmountYuan: yuan(s.promoterAmount),
+      platformFeeYuan: yuan(s.platformFee)
+    };
+  },
+
+  onSelectOpsRange(e: any) {
+    const days = Number(e.currentTarget.dataset.days);
+    if (days !== 7 && days !== 30) return;
+    this.setData({
+      opsRangeDays: days,
+      opsDisplay: this.formatOpsStats(days === 7 ? this.data.opsStatsRaw.last7 : this.data.opsStatsRaw.last30)
+    });
+  },
+
   async loadSummary(done?: () => void) {
     this.setData({ loading: true, loadError: '' });
 
@@ -116,11 +153,14 @@ Page({
           producerAmountYuan: yuan(d.producerAmount),
           promoterAmountYuan: yuan(d.promoterAmount)
         }));
+        const opsStatsRaw = result.opsStats || { last7: null, last30: null };
         this.setData({
           unsettled: this.formatBucket(result.summary.unsettled),
           settled: this.formatBucket(result.summary.settled),
           voided: this.formatBucket(result.summary.voided),
           details,
+          opsStatsRaw,
+          opsDisplay: this.formatOpsStats(this.data.opsRangeDays === 7 ? opsStatsRaw.last7 : opsStatsRaw.last30),
           loadError: ''
         });
       } else {

@@ -15,6 +15,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+const { buildSpacesList } = require('./lib/buildSpacesList');
+
 const FULFILLMENT_ROLES = ['space_owner', 'space_admin', 'producer'];
 
 exports.main = async (event, context) => {
@@ -33,11 +35,7 @@ exports.main = async (event, context) => {
   const tenantNameMap = {};
   (tenantsRes.data || []).forEach((t) => { tenantNameMap[t.tenantId] = t.tenantName || ''; });
 
-  const spaces = memberships.map((m) => ({
-    tenantId: m.tenantId,
-    tenantName: tenantNameMap[m.tenantId] || '未命名工坊',
-    role: m.role
-  }));
+  const spaces = buildSpacesList(memberships, tenantNameMap);
 
   return { success: true, spaces };
 };

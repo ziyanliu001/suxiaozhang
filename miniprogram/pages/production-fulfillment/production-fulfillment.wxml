@@ -8,6 +8,37 @@
 
   <view class="pf-body" style="margin-top: {{contentTop}}px;">
 
+    <!-- 🔀 多工坊切换器：只有账号同时属于 ≥2 个工坊时才显示，避免绝大多数
+         单工坊账号看到一个永远用不上的下拉入口 -->
+    <view class="pf-switcher-bar" wx:if="{{mySpaces.length > 1}}" hover-class="pf-switcher-bar-hover" bindtap="onOpenSwitcherModal">
+      <text class="pf-switcher-icon">🏭</text>
+      <text class="pf-switcher-name">{{currentTenantName || '选择工坊'}}</text>
+      <text class="pf-switcher-arrow">▾</text>
+    </view>
+
+    <!-- 工坊切换弹窗 -->
+    <view class="pf-modal-mask" wx:if="{{showSwitcherModal}}" bindtap="onCloseSwitcherModal">
+      <view class="pf-modal-card" catchtap="noop">
+        <text class="pf-modal-title">切换工坊</text>
+        <view class="pf-space-list">
+          <view
+            class="pf-space-item {{item.tenantId === tenantId ? 'pf-space-item-active' : ''}}"
+            wx:for="{{mySpaces}}"
+            wx:key="tenantId"
+            data-tenantid="{{item.tenantId}}"
+            bindtap="onSelectSpace"
+          >
+            <view class="pf-space-item-text">
+              <text class="pf-space-item-name">{{item.tenantName}}</text>
+              <text class="pf-space-item-role">{{item.role === 'space_owner' ? '负责人' : (item.role === 'space_admin' ? '管理员' : '制作方')}}</text>
+            </view>
+            <text class="pf-space-item-check" wx:if="{{item.tenantId === tenantId}}">✓</text>
+          </view>
+        </view>
+        <button class="pf-secondary-btn" bindtap="onCloseSwitcherModal">关闭</button>
+      </view>
+    </view>
+
     <view class="pf-quick-actions">
       <view class="pf-quick-action-item" hover-class="pf-quick-action-item-hover" bindtap="onGoToSettlementSummary">
         <text class="pf-quick-action-icon">💰</text>

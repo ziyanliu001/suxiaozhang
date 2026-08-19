@@ -86,6 +86,82 @@
   height: calc(100vh - 176rpx);
 }
 
+.ss-ops-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.ss-ops-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.ss-section-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+}
+
+.ss-ops-range-tabs {
+  display: flex;
+  background: #F0EBE3;
+  border-radius: 10rpx;
+  padding: 4rpx;
+}
+
+.ss-ops-range-tab {
+  font-size: 22rpx;
+  color: #8E8E93;
+  padding: 8rpx 20rpx;
+  border-radius: 8rpx;
+}
+
+.ss-ops-range-tab.active {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.ss-ops-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.ss-ops-tile {
+  width: calc(50% - 8rpx);
+  background: #F8F5F0;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  box-sizing: border-box;
+}
+
+.ss-ops-tile-value {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #8C1D18;
+  margin-bottom: 8rpx;
+}
+
+.ss-ops-tile-unit {
+  font-size: 22rpx;
+  font-weight: 400;
+  color: #8C1D18;
+  margin-left: 4rpx;
+}
+
+.ss-ops-tile-label {
+  display: block;
+  font-size: 22rpx;
+  color: #8E8E93;
+}
+
 .ss-summary-cards {
   display: flex;
   gap: 16rpx;
