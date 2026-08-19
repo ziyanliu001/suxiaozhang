@@ -3,6 +3,7 @@
 'use strict';
 
 const NAME_MAX_LEN = 60;
+const DESCRIPTION_MAX_LEN = 500;
 const MATERIAL_NAME_MAX_LEN = 40;
 const OPENID_MAX_LEN = 128; // 微信 openid 实际长度 ~28 字符，留出余量而非硬编码精确长度
 
@@ -15,11 +16,19 @@ const OPENID_MAX_LEN = 128; // 微信 openid 实际长度 ~28 字符，留出余
  * producerOpenId 可选：指定该商品的制作方/分账接收人。留空是合法状态——
  * 未配置时 completeProductionOrder 不会替这件商品猜一个接收人去分账，
  * producer 份额停留在人工/受托结算路径，不做无依据的归属推断。
+ *
+ * description 可选：图文简介的文字部分（纯文本简介，图片上传本轮未实现，
+ * 留空同样是合法状态）。
  */
-function validateProductInput({ name, price, dailyCapacityLimit, leadTimeDays, materialList, producerOpenId }) {
+function validateProductInput({ name, price, dailyCapacityLimit, leadTimeDays, materialList, producerOpenId, description }) {
   const trimmedName = String(name || '').trim();
   if (!trimmedName) return { valid: false, error: '请填写商品名称' };
   if (trimmedName.length > NAME_MAX_LEN) return { valid: false, error: `商品名称不能超过 ${NAME_MAX_LEN} 个字符` };
+
+  const trimmedDescription = String(description || '').trim();
+  if (trimmedDescription.length > DESCRIPTION_MAX_LEN) {
+    return { valid: false, error: `商品简介不能超过 ${DESCRIPTION_MAX_LEN} 个字符` };
+  }
 
   if (!Number.isInteger(price) || price <= 0) {
     return { valid: false, error: '价格必须是正整数（分）' };
@@ -49,7 +58,7 @@ function validateProductInput({ name, price, dailyCapacityLimit, leadTimeDays, m
     return { valid: false, error: 'producerOpenId 长度异常' };
   }
 
-  return { valid: true, name: trimmedName, producerOpenId: trimmedProducerOpenId };
+  return { valid: true, name: trimmedName, producerOpenId: trimmedProducerOpenId, description: trimmedDescription };
 }
 
-module.exports = { validateProductInput, NAME_MAX_LEN, MATERIAL_NAME_MAX_LEN, OPENID_MAX_LEN };
+module.exports = { validateProductInput, NAME_MAX_LEN, DESCRIPTION_MAX_LEN, MATERIAL_NAME_MAX_LEN, OPENID_MAX_LEN };

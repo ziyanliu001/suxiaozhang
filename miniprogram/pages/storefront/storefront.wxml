@@ -24,17 +24,27 @@
         <text class="sf-product-name">{{product.name}}</text>
         <text class="sf-product-price">¥{{product.priceYuan}}</text>
         <text class="sf-product-note">下单后按现有产能自动排期，{{product.leadTimeDays}} 天起制作</text>
+        <text class="sf-product-desc" wx:if="{{product.description}}">{{product.description}}</text>
       </view>
 
       <view class="sf-calendar-card" wx:if="{{calendar.length > 0}}">
         <text class="sf-section-title">预售日历</text>
         <scroll-view class="sf-calendar-scroll" scroll-x>
-          <view class="sf-calendar-item {{item.soldOut ? 'sf-sold-out' : ''}}" wx:for="{{calendar}}" wx:key="batchDate">
+          <view
+            class="sf-calendar-item {{item.soldOut ? 'sf-sold-out' : 'sf-selectable'}} {{!item.soldOut && item.remaining <= 3 ? 'sf-low-stock' : ''}}"
+            wx:for="{{calendar}}"
+            wx:key="batchDate"
+          >
             <text class="sf-calendar-date">{{item.batchDate}}</text>
-            <text class="sf-calendar-remaining" wx:if="{{!item.soldOut}}">余 {{item.remaining}}</text>
-            <text class="sf-calendar-remaining" wx:else>已订满</text>
+            <text class="sf-calendar-remaining" wx:if="{{item.soldOut}}">已约满</text>
+            <text class="sf-calendar-remaining" wx:else>仅剩 {{item.remaining}} 份</text>
           </view>
         </scroll-view>
+        <view class="sf-calendar-legend">
+          <view class="sf-legend-item"><view class="sf-legend-dot sf-legend-dot-normal"></view><text>可预订</text></view>
+          <view class="sf-legend-item"><view class="sf-legend-dot sf-legend-dot-low"></view><text>库存紧张</text></view>
+          <view class="sf-legend-item"><view class="sf-legend-dot sf-legend-dot-full"></view><text>已约满</text></view>
+        </view>
       </view>
 
       <view class="sf-order-card">

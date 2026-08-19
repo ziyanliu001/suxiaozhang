@@ -73,3 +73,25 @@ test('producerOpenId 超长时拒绝', () => {
   const res = validateProductInput({ ...BASE, producerOpenId: 'x'.repeat(200) });
   assert.equal(res.valid, false);
 });
+
+test('description 未提供时合法，返回空字符串', () => {
+  const res = validateProductInput(BASE);
+  assert.equal(res.valid, true);
+  assert.equal(res.description, '');
+});
+
+test('description 提供时原样（trim 后）返回', () => {
+  const res = validateProductInput({ ...BASE, description: '  非遗手作，古法卤水点制  ' });
+  assert.equal(res.valid, true);
+  assert.equal(res.description, '非遗手作，古法卤水点制');
+});
+
+test('description 超过 500 字时拒绝', () => {
+  const res = validateProductInput({ ...BASE, description: 'x'.repeat(501) });
+  assert.equal(res.valid, false);
+});
+
+test('description 恰好 500 字时通过（边界值）', () => {
+  const res = validateProductInput({ ...BASE, description: 'x'.repeat(500) });
+  assert.equal(res.valid, true);
+});

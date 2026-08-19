@@ -116,6 +116,16 @@
   color: #8E8E93;
 }
 
+.sf-product-desc {
+  display: block;
+  font-size: 26rpx;
+  line-height: 40rpx;
+  color: #4A4A4E;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F0EBE3;
+}
+
 .sf-section-title {
   display: block;
   font-size: 26rpx;
@@ -133,9 +143,28 @@
   flex-direction: column;
   align-items: center;
   background: #F8F5F0;
+  border: 2rpx solid transparent;
   border-radius: 12rpx;
   padding: 16rpx 24rpx;
   margin-right: 16rpx;
+}
+
+/* 🎨 可选日期高亮：绿色描边 + 浅绿底色，一眼看出"这天能订" */
+.sf-selectable {
+  background: rgba(46, 125, 50, 0.06);
+  border-color: rgba(46, 125, 50, 0.24);
+}
+
+/* 🎨 库存紧张（剩余 ≤3 份）：橙色强调，营造"仅剩 X 份"的紧迫感 */
+.sf-low-stock {
+  background: rgba(199, 123, 46, 0.08);
+  border-color: rgba(199, 123, 46, 0.32);
+}
+
+/* 已约满：灰底灰字，弱化视觉权重，与可选日期形成对比 */
+.sf-sold-out {
+  background: #F0EEEA;
+  opacity: 0.7;
 }
 
 .sf-calendar-date {
@@ -146,11 +175,51 @@
 
 .sf-calendar-remaining {
   font-size: 22rpx;
+  font-weight: 600;
   color: #2E7D32;
 }
 
+.sf-low-stock .sf-calendar-remaining {
+  color: #C77B2E;
+}
+
 .sf-sold-out .sf-calendar-remaining {
+  font-weight: 400;
   color: #ADADB2;
+}
+
+.sf-calendar-legend {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F0EBE3;
+}
+
+.sf-legend-item {
+  display: flex;
+  align-items: center;
+  font-size: 20rpx;
+  color: #8E8E93;
+}
+
+.sf-legend-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  margin-right: 6rpx;
+}
+
+.sf-legend-dot-normal {
+  background: #2E7D32;
+}
+
+.sf-legend-dot-low {
+  background: #C77B2E;
+}
+
+.sf-legend-dot-full {
+  background: #ADADB2;
 }
 
 .sf-qty-stepper {

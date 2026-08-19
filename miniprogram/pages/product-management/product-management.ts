@@ -6,6 +6,9 @@
 // （production-fulfillment 页顶部"商品管理"入口已接好，仅 canManageProducts
 // 为 true 时才显示该入口——manageProduct.create/update 本身也会再校验一次
 // space_owner/space_admin 身份，本页面没有权限判断纯粹是体验层，不是唯一防线）。
+const NAME_MAX_LEN = 60; // 与 manageProduct/lib/validateProduct.js 的 NAME_MAX_LEN 保持一致
+const DESCRIPTION_MAX_LEN = 500; // 与 DESCRIPTION_MAX_LEN 保持一致
+
 interface ProductItem {
   _id: string;
   name: string;
@@ -13,6 +16,7 @@ interface ProductItem {
   dailyCapacityLimit: number;
   leadTimeDays: number;
   producerOpenId: string;
+  description: string;
   status: string;
   // 展示用派生字段
   priceYuan?: string;
@@ -25,9 +29,12 @@ interface ProductForm {
   dailyCapacityLimit: string;
   leadTimeDays: string;
   producerOpenId: string;
+  description: string;
 }
 
-const EMPTY_FORM: ProductForm = { name: '', priceYuan: '', dailyCapacityLimit: '', leadTimeDays: '0', producerOpenId: '' };
+const EMPTY_FORM: ProductForm = {
+  name: '', priceYuan: '', dailyCapacityLimit: '', leadTimeDays: '0', producerOpenId: '', description: ''
+};
 
 Page({
   data: {
@@ -124,7 +131,8 @@ Page({
         priceYuan: product.priceYuan || '',
         dailyCapacityLimit: String(product.dailyCapacityLimit),
         leadTimeDays: String(product.leadTimeDays),
-        producerOpenId: product.producerOpenId || ''
+        producerOpenId: product.producerOpenId || '',
+        description: product.description || ''
       }
     });
   },
@@ -144,20 +152,36 @@ Page({
     const form = this.data.form;
 
     const name = (form.name || '').trim();
+    const description = (form.description || '').trim();
     const priceYuan = parseFloat(form.priceYuan);
     const dailyCapacityLimit = parseInt(form.dailyCapacityLimit, 10);
     const leadTimeDays = parseInt(form.leadTimeDays || '0', 10);
 
+    // 基础校验：与服务端 validateProduct.js 的规则同口径提前拦一遍，避免
+    // 用户填完等一圈网络往返才被服务端拒绝——服务端校验仍然是唯一防线，
+    // 这里只是提升体验，不代表信任客户端
     if (!name) {
       wx.showToast({ title: '请填写商品名称', icon: 'none' });
+      return;
+    }
+    if (name.length > NAME_MAX_LEN) {
+      wx.showToast({ title: `商品名称不能超过 ${NAME_MAX_LEN} 个字符`, icon: 'none' });
       return;
     }
     if (!(priceYuan > 0)) {
       wx.showToast({ title: '请填写正确的价格', icon: 'none' });
       return;
     }
-    if (!(dailyCapacityLimit > 0)) {
-      wx.showToast({ title: '请填写正确的单日产能', icon: 'none' });
+    if (!(dailyCapacityLimit > 0) || !Number.isInteger(dailyCapacityLimit)) {
+      wx.showToast({ title: '单日产能须为正整数', icon: 'none' });
+      return;
+    }
+    if (!Number.isInteger(leadTimeDays) || leadTimeDays < 0) {
+      wx.showToast({ title: '前置天数须为非负整数', icon: 'none' });
+      return;
+    }
+    if (description.length > DESCRIPTION_MAX_LEN) {
+      wx.showToast({ title: `商品简介不能超过 ${DESCRIPTION_MAX_LEN} 个字符`, icon: 'none' });
       return;
     }
 
@@ -169,8 +193,9 @@ Page({
       name,
       price: Math.round(priceYuan * 100),
       dailyCapacityLimit,
-      leadTimeDays: Number.isFinite(leadTimeDays) ? leadTimeDays : 0,
-      producerOpenId: (form.producerOpenId || '').trim()
+      leadTimeDays,
+      producerOpenId: (form.producerOpenId || '').trim(),
+      description
     };
     if (this.data.formMode === 'edit') payload.productId = this.data.editingProductId;
 
@@ -198,12 +223,16 @@ Page({
     }
   },
 
-  onTapToggleStatus(e: any) {
+  // switch 组件的 bindchange 已经带上了用户"想要切到"的目标值（e.detail.value），
+  // 但实际状态仍然只认服务端确认后的 products[].status——用户在确认弹窗里点
+  // "取消"时，switch 的 checked 绑定的是 item.status === 'active'，数据没变，
+  // 下一次渲染 switch 会自己弹回原状态，不需要额外手动复位
+  onSwitchStatus(e: any) {
     const id = e.currentTarget.dataset.id;
     const product = this.data.products.find((p) => p._id === id);
     if (!product || this.data.togglingId) return;
 
-    const goingActive = product.status !== 'active';
+    const goingActive = !!e.detail.value;
     wx.showModal({
       title: goingActive ? '确认上架？' : '确认下架？',
       content: goingActive ? '上架后买家可在预售日历中看到并下单该商品。' : '下架后买家将无法继续下单该商品，已有订单不受影响。',

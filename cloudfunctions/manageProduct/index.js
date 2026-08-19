@@ -29,7 +29,8 @@ function pickEditableFields(event) {
     dailyCapacityLimit: Number(event.dailyCapacityLimit),
     leadTimeDays: Number(event.leadTimeDays),
     materialList: event.materialList,
-    producerOpenId: event.producerOpenId
+    producerOpenId: event.producerOpenId,
+    description: event.description
   };
 }
 
@@ -52,6 +53,7 @@ async function handleCreate(event, openid) {
       leadTimeDays: fields.leadTimeDays,
       materialList: fields.materialList || [],
       producerOpenId: validation.producerOpenId || '',
+      description: validation.description || '',
       status: 'active',
       createdBy: openid,
       createdAt: db.serverDate()
@@ -89,6 +91,7 @@ async function handleUpdate(event, openid) {
       leadTimeDays: fields.leadTimeDays,
       materialList: fields.materialList || [],
       producerOpenId: validation.producerOpenId || '',
+      description: validation.description || '',
       updatedAt: db.serverDate()
     }
   });
