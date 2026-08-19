@@ -1,0 +1,9 @@
+{
+  "name": "migrateLiveFactoryMembers",
+  "version": "1.0.0",
+  "description": "一次性迁移脚本：把 user_roles 中混入的 live_factory 成员记录搬到独立的 tenant_members 集合",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

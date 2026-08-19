@@ -1,0 +1,9 @@
+{
+  "name": "getSettlementSummary",
+  "version": "1.0.0",
+  "description": "云函数：简易对账看板——按 tenantId 汇总 order_settlements 的未结算/已结算净额/已撤销总额与明细列表",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

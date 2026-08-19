@@ -9,9 +9,11 @@ const db = cloud.database();
 const INVITABLE_ROLES = ['producer', 'promoter'];
 const CODE_TTL_DAYS = 7;
 
-// 多租户鉴权：与 Step 1 约定的内联 verifyTenantAccess 写法一致，各云函数各自拷贝一份
+// 多租户鉴权：与 Step 1 约定的内联 verifyTenantAccess 写法一致，各云函数各自拷贝一份。
+// 🚨 查 tenant_members 而不是 user_roles：live_factory 成员记录绝不能混进雨花
+// 公益专区依赖的 user_roles 集合（详见 createProductionSpace/index.js 头部注释）。
 async function verifyTenantAccess(openid, tenantId, requiredRoles) {
-  const res = await db.collection('user_roles')
+  const res = await db.collection('tenant_members')
     .where({ _openid: openid, tenantId, status: 'approved' })
     .get();
   return (res.data || []).find((r) => requiredRoles.includes(r.role)) || null;
@@ -80,7 +82,7 @@ async function handleRedeem(event, openid) {
   }
 
   const now = db.serverDate();
-  await db.collection('user_roles').add({
+  await db.collection('tenant_members').add({
     data: {
       _openid: openid,
       tenantId: invite.tenantId,

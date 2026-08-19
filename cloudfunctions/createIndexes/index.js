@@ -140,7 +140,21 @@ exports.main = async (event, context) => {
     ['feedback_submissions', { name: 'storeId_status_createTime', keys: [{ storeId: 1 }, { status: 1 }, { createTime: -1 }], unique: false }],
 
     // ─── 直播产销协同（live_factory）：Step 1 方案新增，纯追加，不影响以上任何条目 ──
+    // tenant_members 是与 user_roles 物理隔离的独立集合（见 createProductionSpace/
+    // index.js 头部注释），查询形状一致：openid+tenantId 查角色、tenantId 列表页
+    ['tenant_members',                 { name: 'openid_tenantId_status',     keys: [{ _openid: 1 }, { tenantId: 1 }, { status: 1 }],         unique: false }],
+    ['tenant_members',                 { name: 'tenantId',                   keys: [{ tenantId: 1 }],                                         unique: false }],
+    // 🔑 live_factory 侧多处按业务字段 tenantId 查 tenants（createProductionOrder/
+    // completeProductionOrder/markSettlementsSettled/getMyProductionSpaces），
+    // 而不是按 _id——tenants 文档的 _id 是自动生成的，tenantId 只是业务字段
+    // （见 createProductionSpace 的 add() 写法），这条索引专供这类查询。
+    // ⚠️ 不设 unique：DEFAULT_TENANT_ID 那条雨花总览机构记录（createStore.js
+    // ensureNationalTenant 用 .doc(id).set() 创建）压根没写 tenantId 字段，
+    // 强行加 unique 很可能因为多条记录都"缺失该字段"而在控制台创建时报错
+    ['tenants',                        { name: 'tenantId',                   keys: [{ tenantId: 1 }],                                         unique: false }],
     ['products',                       { name: 'tenantId_status',            keys: [{ tenantId: 1 }, { status: 1 }],                          unique: false }],
+    // 🔑 getSettlementSummary 制作方视角的查询：{tenantId, producerOpenId}
+    ['products',                       { name: 'tenantId_producerOpenId',    keys: [{ tenantId: 1 }, { producerOpenId: 1 }],                  unique: false }],
     ['production_orders',              { name: 'tenantId_batchDate_status',  keys: [{ tenantId: 1 }, { batchDate: 1 }, { orderStatus: 1 }],  unique: false }],
     ['production_orders',              { name: 'buyerOpenId_tenantId',       keys: [{ buyerOpenId: 1 }, { tenantId: 1 }],                     unique: false }],
     ['production_capacity_counters',   { name: 'tenantId_productId_batchDate_unique', keys: [{ tenantId: 1 }, { productId: 1 }, { batchDate: 1 }], unique: true }],

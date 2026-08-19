@@ -13,8 +13,10 @@ const db = cloud.database();
 
 const { validateProductInput } = require('./lib/validateProduct');
 
+// 🚨 查 tenant_members 而不是 user_roles：见 createProductionSpace/index.js
+// 头部注释——live_factory 成员记录绝不能混进雨花公益专区依赖的 user_roles。
 async function verifyTenantAccess(openid, tenantId, requiredRoles) {
-  const res = await db.collection('user_roles')
+  const res = await db.collection('tenant_members')
     .where({ _openid: openid, tenantId, status: 'approved' })
     .get();
   return (res.data || []).find((r) => requiredRoles.includes(r.role)) || null;

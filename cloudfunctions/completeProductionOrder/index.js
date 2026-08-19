@@ -19,8 +19,10 @@ const db = cloud.database();
 
 const { buildProfitSharingReceivers } = require('./lib/buildReceivers');
 
+// 🚨 查 tenant_members 而不是 user_roles：见 createProductionSpace/index.js
+// 头部注释——live_factory 成员记录绝不能混进雨花公益专区依赖的 user_roles。
 async function verifyTenantAccess(openid, tenantId, requiredRoles) {
-  const res = await db.collection('user_roles')
+  const res = await db.collection('tenant_members')
     .where({ _openid: openid, tenantId, status: 'approved' })
     .get();
   return (res.data || []).find((r) => requiredRoles.includes(r.role)) || null;
@@ -31,8 +33,12 @@ async function verifyTenantAccess(openid, tenantId, requiredRoles) {
 // 主结果，失败信息通过 profitSharing.error 原样透出，供调用方提示"分账失败，
 // 请重试"（可重复调用本函数——settlementStatus 已是 settled 时会直接跳过）。
 async function tryAutoProfitSharing({ tenantId, order }) {
-  const tenantRes = await db.collection('tenants').doc(tenantId).get().catch(() => null);
-  const paymentMode = tenantRes && tenantRes.data && tenantRes.data.paymentMode;
+  // 🐛 tenants 文档 _id 是自动生成的，tenantId 只是业务字段（见
+  // createProductionSpace 的 add() 写法），.doc(tenantId) 永远查不到，此前
+  // 会导致 paymentMode 永远读成 undefined——不管租户实际是不是 direct_wechat
+  // 模式，自动分账这条路径事实上从未被真正触发过
+  const tenantRes = await db.collection('tenants').where({ tenantId }).limit(1).get().catch(() => ({ data: [] }));
+  const paymentMode = tenantRes.data && tenantRes.data[0] && tenantRes.data[0].paymentMode;
   if (paymentMode !== 'direct_wechat') {
     return { attempted: false, reason: '该空间未开启微信直连分账（payment_mode 非 direct_wechat），分成请通过对账单人工确认' };
   }

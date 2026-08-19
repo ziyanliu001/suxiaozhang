@@ -385,6 +385,11 @@ Page({
     // "门店"是机构名下的具体服务点，此前顶部 belong-store-tag 误把 currentStoreName
     // 当机构名展示，见 fetchCurrentTenantName / profile.wxml 修复
     currentTenantName: '',
+    // 📦 素食直播产销协同工作空间列表（getMyProductionSpaces）：与上面雨花
+    // 相关的字段完全独立的一套数据，只用来控制"排单与发货管理"入口的显示
+    // 与跳转目标，见 fetchProductionSpaces/onGoToProductionFulfillment
+    hasProductionSpaceAccess: false,
+    productionSpaces: [] as Array<{ tenantId: string; tenantName: string; role: string }>,
     // 🏪 门店运营状态：见 utils/storeManager.ts fetchAndSyncStoreStatus/getCachedStoreStatus，
     // 全局态与 Storage 双写同步，"查看店铺状态"菜单标题据此动态渲染
     currentStoreStatus: '',
@@ -1310,6 +1315,13 @@ Page({
     // fetchStoreLoveWallSummary 内部会先解析用户自己归属的门店 storeId，
     // 解析不到（无绑定门店的新用户）时函数自己直接跳过，不发起无效请求
     pendingFetches.push(this.fetchStoreLoveWallSummary());
+
+    // 📦 产销工坊「排单与发货管理」入口可见性：live_factory 角色体系与雨花
+    // 角色完全独立（getMyProductionSpaces 查的是物理隔离的 tenant_members
+    // 集合，不是 user_roles），不依赖上面任何角色 flag，所有账号都无条件
+    // 查一次——绝大多数账号没有产销工坊成员身份，云函数直接返回空数组，
+    // 入口卡片保持隐藏，不额外增加权限判断分支
+    pendingFetches.push(this.fetchProductionSpaces());
 
     try {
       await Promise.allSettled(pendingFetches);
@@ -4775,6 +4787,39 @@ Page({
     this.onOpenSubscriptionModal();
   },
 
+  // 📦 排单与发货管理：账号可能同时属于多个 live_factory 工作空间（一个人
+  // 既是自己工坊的 space_owner，又被别的工坊邀请当 producer），单个空间直接
+  // 跳转，多个空间弹出选择——不新建一个完整的"工作空间列表切换"页面，成本
+  // 与当前实际需求（大多数账号最多归属一两个空间）不成比例
+  onGoToProductionFulfillment() {
+    if (this.isNavigating) return;
+    const spaces = this.data.productionSpaces || [];
+    if (spaces.length === 0) return;
+
+    const goTo = (tenantId: string) => {
+      this.isNavigating = true;
+      safeNavigateTo({
+        url: '/pages/production-fulfillment/production-fulfillment?tenantId=' + tenantId,
+        fail: () => {
+          this.isNavigating = false;
+        }
+      });
+    };
+
+    if (spaces.length === 1) {
+      goTo(spaces[0].tenantId);
+      return;
+    }
+
+    wx.showActionSheet({
+      itemList: spaces.map((s: any) => s.tenantName || '未命名工坊'),
+      success: (res) => {
+        const chosen = spaces[res.tapIndex];
+        if (chosen) goTo(chosen.tenantId);
+      }
+    });
+  },
+
   // ──────────────────────────────────────────────────────────────────────────
   // 🛡️ 超管强制解绑：从成员列表选择或手动粘贴 openId，将其角色重置为 volunteer
   // ──────────────────────────────────────────────────────────────────────────
@@ -5249,6 +5294,21 @@ Page({
       this.setData({ currentTenantName: result.tenantName || '' });
     } catch (err) {
       console.warn('[fetchCurrentTenantName] 查询失败:', err);
+    }
+  },
+
+  // 📦 产销工坊工作空间列表：getMyProductionSpaces 查的是与 user_roles 物理
+  // 隔离的 tenant_members 集合（见该云函数头部注释），与雨花角色查询完全
+  // 独立、互不影响，失败时静默隐藏入口即可，不需要 toast 打扰
+  async fetchProductionSpaces() {
+    try {
+      const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
+      const result = res.result as any;
+      const spaces = (result && result.success && result.spaces) || [];
+      this.setData({ hasProductionSpaceAccess: spaces.length > 0, productionSpaces: spaces });
+    } catch (err) {
+      console.warn('[fetchProductionSpaces] 查询失败:', err);
+      this.setData({ hasProductionSpaceAccess: false, productionSpaces: [] });
     }
   },
 

@@ -8,6 +8,11 @@
 
   <view class="pf-body" style="margin-top: {{contentTop}}px;">
 
+    <view class="pf-settlement-entry" hover-class="pf-settlement-entry-hover" bindtap="onGoToSettlementSummary">
+      <text class="pf-settlement-entry-text">💰 查看对账明细</text>
+      <text class="pf-settlement-entry-arrow">❯</text>
+    </view>
+
     <view class="pf-loading-state" wx:if="{{loading && orders.length === 0}}">
       <text>加载中...</text>
     </view>

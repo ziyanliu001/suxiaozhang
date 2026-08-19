@@ -1,0 +1,64 @@
+<view class="ss-page">
+
+  <view class="ss-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="ss-nav-back" hover-class="ss-nav-back-hover" bindtap="goBack">←</view>
+    <text class="ss-nav-title">💰 对账明细</text>
+    <view class="ss-nav-placeholder"></view>
+  </view>
+
+  <view class="ss-body" style="margin-top: {{contentTop}}px;">
+
+    <view class="ss-loading-state" wx:if="{{loading && details.length === 0}}">
+      <text>加载中...</text>
+    </view>
+
+    <view class="ss-error-state" wx:elif="{{loadError}}">
+      <text class="ss-error-icon">⚠️</text>
+      <text class="ss-error-text">{{loadError}}</text>
+      <button class="ss-retry-btn" bindtap="loadSummary">重试</button>
+    </view>
+
+    <scroll-view class="ss-scroll" scroll-y wx:else>
+
+      <view class="ss-summary-cards">
+        <view class="ss-summary-card ss-card-unsettled">
+          <text class="ss-card-title">待结算</text>
+          <text class="ss-card-amount">¥{{unsettled.producerAmountYuan}}</text>
+          <text class="ss-card-sub">推广分成 ¥{{unsettled.promoterAmountYuan}} · {{unsettled.count}} 笔</text>
+        </view>
+        <view class="ss-summary-card ss-card-settled">
+          <text class="ss-card-title">已结算(净额)</text>
+          <text class="ss-card-amount">¥{{settled.producerAmountYuan}}</text>
+          <text class="ss-card-sub">推广分成 ¥{{settled.promoterAmountYuan}} · {{settled.count}} 笔</text>
+        </view>
+        <view class="ss-summary-card ss-card-voided" wx:if="{{voided.count > 0}}">
+          <text class="ss-card-title">已撤销</text>
+          <text class="ss-card-amount">¥{{voided.producerAmountYuan}}</text>
+          <text class="ss-card-sub">未产生实际支付 · {{voided.count}} 笔</text>
+        </view>
+      </view>
+
+      <view class="ss-empty-state" wx:if="{{details.length === 0}}">
+        <text class="ss-empty-icon">📋</text>
+        <text class="ss-empty-text">暂无分账记录</text>
+      </view>
+
+      <view class="ss-detail-list" wx:else>
+        <view class="ss-detail-header">分账明细</view>
+        <view class="ss-detail-row" wx:for="{{details}}" wx:key="orderId">
+          <view class="ss-detail-top">
+            <text class="ss-detail-order">订单 {{item.orderId}}</text>
+            <text class="ss-detail-status ss-status-{{item.settlementStatus}}">{{item.statusLabel}}</text>
+          </view>
+          <view class="ss-detail-amounts">
+            <text class="ss-detail-amount">制作方 ¥{{item.producerAmountYuan}}</text>
+            <text class="ss-detail-amount" wx:if="{{item.promoterAmount > 0}}">推广 ¥{{item.promoterAmountYuan}}</text>
+          </view>
+        </view>
+      </view>
+
+    </scroll-view>
+
+  </view>
+
+</view>

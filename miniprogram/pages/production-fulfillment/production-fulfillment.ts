@@ -88,6 +88,10 @@ Page({
     this.loadOrders(() => wx.stopPullDownRefresh());
   },
 
+  onGoToSettlementSummary() {
+    wx.navigateTo({ url: '/pages/settlement-summary/settlement-summary?tenantId=' + this.data.tenantId });
+  },
+
   async loadOrders(done?: () => void) {
     this.setData({ loading: true, loadError: '' });
 

@@ -17,6 +17,7 @@
     "pages/settings/settings",
     "pages/public-verify/index",
     "pages/production-fulfillment/production-fulfillment",
+    "pages/settlement-summary/settlement-summary",
     "pages/test/test"
   ],
   "window": {

@@ -7,6 +7,17 @@
 // 🛡️ 不写 orgType 字段：orgType 是雨花公益 stores/tenants 的既有分类字段
 // （yuhuazhai/elderly_canteen 等），与本模块的 businessType/entityType 是两套
 // 完全独立的分类体系，字段名刻意不复用，避免混淆两套语义（见 [[feedback-two-orgtype-pickers]]）。
+//
+// 🚨 成员记录写入 tenant_members，绝不写 user_roles：雨花公益专区有 ~50 个云
+// 函数依赖 db.collection('user_roles').where({_openid}).limit(1) 这种不带角色
+// 过滤条件的查询来解析"当前用户的雨花角色"（checkUserRole/manageFinanceLock/
+// deleteMealReport/createStore 等）。如果 live_factory 的成员记录（role:
+// 'space_owner' 等）混进同一个集合，任何同时是雨花义工/店长又开通了产销工坊
+// 的账号，都可能被这些查询随机命中到 live_factory 那条记录而不是雨花角色记录，
+// 导致雨花侧权限判断静默错乱——这是真实存在过的设计失误（已改正），不是假设
+// 风险。tenant_members 是与 user_roles 完全独立的新集合，字段形状故意保持一致
+// （_openid/tenantId/role/status/...）方便复用同一套查询写法，但物理隔离，
+// 雨花专区的任何既有查询永远不会看到这个集合里的数据。
 'use strict';
 
 const cloud = require('wx-server-sdk');
@@ -52,7 +63,7 @@ exports.main = async (event, context) => {
       }
     });
 
-    await transaction.collection('user_roles').add({
+    await transaction.collection('tenant_members').add({
       data: {
         _openid: OPENID,
         tenantId,

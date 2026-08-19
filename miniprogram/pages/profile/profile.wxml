@@ -1316,6 +1316,21 @@
       </view>
     </view>
 
+    <!-- ▸ 素食直播产销协同「排单与发货管理」入口：与雨花公益角色体系完全独立，
+         只要账号在至少一个 live_factory 工作空间里拥有 space_owner/space_admin/
+         producer 角色（getMyProductionSpaces 判定）就显示，不受上面任何雨花
+         角色 wx:if 条件影响，也不影响雨花角色卡片的展示逻辑 -->
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{hasProductionSpaceAccess}}">
+      <view class="admin-divider">产销工坊</view>
+      <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToProductionFulfillment">
+        <view class="item-left">
+          <text class="manager-only-emoji">📦</text>
+          <text class="item-text">排单与发货管理</text>
+        </view>
+        <view class="item-arrow">❯</view>
+      </view>
+    </view>
+
   </view>
 
   <!-- 🏛️ 切换身份面板：账号兼任多个身份（switchableRoleOptions 非空）时，

@@ -1,0 +1,193 @@
+.ss-page {
+  min-height: 100vh;
+  background: #F8F5F0;
+}
+
+.ss-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  height: 88rpx;
+  background: #8C1D18;
+}
+
+.ss-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 36rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ss-nav-back-hover {
+  opacity: 0.5;
+}
+
+.ss-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.ss-nav-placeholder {
+  width: 64rpx;
+  flex-shrink: 0;
+}
+
+.ss-body {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.ss-loading-state,
+.ss-error-state,
+.ss-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 40rpx;
+  color: #8E8E93;
+  font-size: 28rpx;
+}
+
+.ss-error-icon,
+.ss-empty-icon {
+  font-size: 64rpx;
+  margin-bottom: 16rpx;
+}
+
+.ss-error-text,
+.ss-empty-text {
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+.ss-retry-btn {
+  font-size: 28rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  padding: 0 40rpx;
+  line-height: 72rpx;
+  border-radius: 36rpx;
+}
+
+.ss-scroll {
+  height: calc(100vh - 176rpx);
+}
+
+.ss-summary-cards {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.ss-summary-card {
+  flex: 1;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  border-top: 6rpx solid #D8CFC7;
+}
+
+.ss-card-unsettled {
+  border-top-color: #C77B2E;
+}
+
+.ss-card-settled {
+  border-top-color: #2E7D32;
+}
+
+.ss-card-voided {
+  border-top-color: #8E8E93;
+}
+
+.ss-card-title {
+  font-size: 24rpx;
+  color: #8E8E93;
+  margin-bottom: 8rpx;
+}
+
+.ss-card-amount {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+  margin-bottom: 8rpx;
+}
+
+.ss-card-sub {
+  font-size: 20rpx;
+  color: #ADADB2;
+}
+
+.ss-detail-list {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 8rpx 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.ss-detail-header {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #8E8E93;
+  padding: 16rpx 0;
+}
+
+.ss-detail-row {
+  padding: 16rpx 0;
+  border-top: 1rpx solid #F0EBE3;
+}
+
+.ss-detail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.ss-detail-order {
+  font-size: 24rpx;
+  color: #8E8E93;
+}
+
+.ss-detail-status {
+  font-size: 22rpx;
+  padding: 2rpx 14rpx;
+  border-radius: 16rpx;
+  background: rgba(140, 29, 24, 0.08);
+  color: #8C1D18;
+}
+
+.ss-status-unsettled {
+  background: rgba(199, 123, 46, 0.12);
+  color: #C77B2E;
+}
+
+.ss-status-refunded {
+  background: rgba(142, 142, 147, 0.12);
+  color: #8E8E93;
+}
+
+.ss-detail-amounts {
+  display: flex;
+  gap: 24rpx;
+}
+
+.ss-detail-amount {
+  font-size: 28rpx;
+  color: #1C1C1E;
+}

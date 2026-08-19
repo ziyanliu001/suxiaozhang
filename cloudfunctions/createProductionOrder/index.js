@@ -30,8 +30,13 @@ function isCollectionNotExistError(err) {
 }
 
 async function resolveSettlementRates(tenantId, hasPromoter) {
-  const tenantRes = await db.collection('tenants').doc(tenantId).get().catch(() => null);
-  const cfg = (tenantRes && tenantRes.data && tenantRes.data.settlementConfig) || {};
+  // 🐛 tenants 文档的 _id 是云数据库自动生成的，tenantId 只是文档里的业务字段
+  // （见 createProductionSpace/createTenant 的 add() 写法），不能用 .doc(tenantId)
+  // 按 _id 查——那样永远查不到，之前这里就是这么写的，只是靠下面的 .catch(()=>null)
+  // + 默认费率兜底才没直接报错，实际后果是 settlementConfig 永远读不到、只会
+  // 用默认费率，租户自定义的分成比例配置形同虚设
+  const tenantRes = await db.collection('tenants').where({ tenantId }).limit(1).get().catch(() => ({ data: [] }));
+  const cfg = (tenantRes.data && tenantRes.data[0] && tenantRes.data[0].settlementConfig) || {};
   const producerRate = Number.isFinite(cfg.producerRate) ? cfg.producerRate : DEFAULT_PRODUCER_RATE;
   const promoterRate = hasPromoter ? (Number.isFinite(cfg.promoterRate) ? cfg.promoterRate : DEFAULT_PROMOTER_RATE) : 0;
   return { producerRate, promoterRate };

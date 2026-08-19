@@ -1,0 +1,9 @@
+{
+  "name": "getMyProductionSpaces",
+  "version": "1.0.0",
+  "description": "云函数：查当前用户参与的直播产销协同工作空间列表，供个人中心入口按钮权限判断使用",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
