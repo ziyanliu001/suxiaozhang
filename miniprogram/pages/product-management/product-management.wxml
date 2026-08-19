@@ -1,0 +1,88 @@
+<view class="pm-page">
+
+  <view class="pm-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="pm-nav-back" hover-class="pm-nav-back-hover" bindtap="goBack">←</view>
+    <text class="pm-nav-title">🧺 商品管理</text>
+    <view class="pm-nav-placeholder"></view>
+  </view>
+
+  <view class="pm-body" style="margin-top: {{contentTop}}px;">
+
+    <view class="pm-form-card" wx:if="{{showForm}}">
+      <text class="pm-form-title">{{formMode === 'edit' ? '编辑商品' : '新建商品'}}</text>
+
+      <text class="pm-field-label">商品名称</text>
+      <input class="pm-input" placeholder="如：手工豆腐 500g" value="{{form.name}}" data-field="name" bindinput="onFormFieldInput" />
+
+      <text class="pm-field-label">价格（元）</text>
+      <input class="pm-input" type="digit" placeholder="如：15.00" value="{{form.priceYuan}}" data-field="priceYuan" bindinput="onFormFieldInput" />
+
+      <text class="pm-field-label">单日产能上限（件）</text>
+      <input class="pm-input" type="number" placeholder="如：20" value="{{form.dailyCapacityLimit}}" data-field="dailyCapacityLimit" bindinput="onFormFieldInput" />
+
+      <text class="pm-field-label">前置天数（天，当日可排产填 0）</text>
+      <input class="pm-input" type="number" placeholder="如：1" value="{{form.leadTimeDays}}" data-field="leadTimeDays" bindinput="onFormFieldInput" />
+
+      <text class="pm-field-label">制作方 openid（选填，用于分账归属）</text>
+      <input class="pm-input" placeholder="不填则该商品的制作方份额需人工结算" value="{{form.producerOpenId}}" data-field="producerOpenId" bindinput="onFormFieldInput" />
+
+      <button class="pm-primary-btn" loading="{{submitting}}" bindtap="onSubmitForm">保存</button>
+      <button class="pm-secondary-btn" bindtap="onCancelForm">取消</button>
+    </view>
+
+    <button class="pm-create-btn" wx:if="{{!showForm}}" bindtap="onTapCreate">+ 新建商品</button>
+
+    <view class="pm-loading-state" wx:if="{{loading && products.length === 0}}">
+      <text>加载中...</text>
+    </view>
+
+    <view class="pm-error-state" wx:elif="{{loadError}}">
+      <text class="pm-error-icon">⚠️</text>
+      <text class="pm-error-text">{{loadError}}</text>
+      <button class="pm-retry-btn" bindtap="loadProducts">重试</button>
+    </view>
+
+    <view class="pm-empty-state" wx:elif="{{!loading && products.length === 0}}">
+      <text class="pm-empty-icon">🧺</text>
+      <text class="pm-empty-text">还没有商品，点击上方新建</text>
+    </view>
+
+    <view class="pm-list" wx:else>
+      <view class="pm-product-card" wx:for="{{products}}" wx:key="_id">
+        <view class="pm-product-header">
+          <text class="pm-product-name">{{item.name}}</text>
+          <text class="pm-product-status pm-status-{{item.status}}">{{item.statusLabel}}</text>
+        </view>
+        <view class="pm-product-row">
+          <text class="pm-product-label">价格</text>
+          <text class="pm-product-value">¥{{item.priceYuan}}</text>
+        </view>
+        <view class="pm-product-row">
+          <text class="pm-product-label">单日产能</text>
+          <text class="pm-product-value">{{item.dailyCapacityLimit}} 件</text>
+        </view>
+        <view class="pm-product-row">
+          <text class="pm-product-label">前置天数</text>
+          <text class="pm-product-value">{{item.leadTimeDays}} 天</text>
+        </view>
+        <view class="pm-product-row" wx:if="{{item.producerOpenId}}">
+          <text class="pm-product-label">制作方</text>
+          <text class="pm-product-value pm-product-openid">{{item.producerOpenId}}</text>
+        </view>
+        <view class="pm-product-actions">
+          <button class="pm-edit-btn" data-id="{{item._id}}" bindtap="onTapEdit">编辑</button>
+          <button
+            class="pm-toggle-btn {{item.status === 'active' ? 'pm-toggle-off' : 'pm-toggle-on'}}"
+            disabled="{{togglingId === item._id}}"
+            data-id="{{item._id}}"
+            bindtap="onTapToggleStatus"
+          >
+            {{item.status === 'active' ? '下架' : '上架'}}
+          </button>
+        </view>
+      </view>
+    </view>
+
+  </view>
+
+</view>

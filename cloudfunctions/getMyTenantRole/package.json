@@ -1,0 +1,9 @@
+{
+  "name": "getMyTenantRole",
+  "version": "1.0.0",
+  "description": "云函数：查当前用户在某个 live_factory 租户下的角色（含 promoter）及自身 openid，供买家下单页判断推广人归属",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

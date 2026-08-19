@@ -1,0 +1,207 @@
+.sf-page {
+  min-height: 100vh;
+  background: #F8F5F0;
+}
+
+.sf-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  height: 88rpx;
+  background: #8C1D18;
+}
+
+.sf-nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 36rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sf-nav-back-hover {
+  opacity: 0.5;
+}
+
+.sf-nav-title {
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.sf-nav-placeholder {
+  width: 64rpx;
+  flex-shrink: 0;
+}
+
+.sf-body {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.sf-loading-state,
+.sf-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 40rpx;
+  color: #8E8E93;
+  font-size: 28rpx;
+}
+
+.sf-error-icon {
+  font-size: 64rpx;
+  margin-bottom: 16rpx;
+}
+
+.sf-error-text {
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+.sf-retry-btn {
+  font-size: 28rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  padding: 0 40rpx;
+  line-height: 72rpx;
+  border-radius: 36rpx;
+}
+
+.sf-scroll {
+  height: calc(100vh - 176rpx);
+}
+
+.sf-product-card,
+.sf-calendar-card,
+.sf-order-card,
+.sf-other-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.sf-product-name {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+  margin-bottom: 8rpx;
+}
+
+.sf-product-price {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #8C1D18;
+  margin-bottom: 12rpx;
+}
+
+.sf-product-note {
+  display: block;
+  font-size: 24rpx;
+  color: #8E8E93;
+}
+
+.sf-section-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #8E8E93;
+  margin-bottom: 16rpx;
+}
+
+.sf-calendar-scroll {
+  white-space: nowrap;
+}
+
+.sf-calendar-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  background: #F8F5F0;
+  border-radius: 12rpx;
+  padding: 16rpx 24rpx;
+  margin-right: 16rpx;
+}
+
+.sf-calendar-date {
+  font-size: 24rpx;
+  color: #1C1C1E;
+  margin-bottom: 6rpx;
+}
+
+.sf-calendar-remaining {
+  font-size: 22rpx;
+  color: #2E7D32;
+}
+
+.sf-sold-out .sf-calendar-remaining {
+  color: #ADADB2;
+}
+
+.sf-qty-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24rpx;
+}
+
+.sf-qty-btn {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F0EBE3;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  color: #1C1C1E;
+}
+
+.sf-qty-value {
+  width: 96rpx;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.sf-order-btn {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 30rpx;
+  line-height: 84rpx;
+  border-radius: 12rpx;
+}
+
+.sf-other-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-top: 1rpx solid #F0EBE3;
+}
+
+.sf-other-name {
+  font-size: 26rpx;
+  color: #1C1C1E;
+}
+
+.sf-other-price {
+  font-size: 26rpx;
+  color: #8C1D18;
+  font-weight: 600;
+}

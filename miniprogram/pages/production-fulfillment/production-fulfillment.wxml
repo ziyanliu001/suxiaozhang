@@ -8,9 +8,43 @@
 
   <view class="pf-body" style="margin-top: {{contentTop}}px;">
 
-    <view class="pf-settlement-entry" hover-class="pf-settlement-entry-hover" bindtap="onGoToSettlementSummary">
-      <text class="pf-settlement-entry-text">💰 查看对账明细</text>
-      <text class="pf-settlement-entry-arrow">❯</text>
+    <view class="pf-quick-actions">
+      <view class="pf-quick-action-item" hover-class="pf-quick-action-item-hover" bindtap="onGoToSettlementSummary">
+        <text class="pf-quick-action-icon">💰</text>
+        <text class="pf-quick-action-text">对账明细</text>
+      </view>
+      <view class="pf-quick-action-item" hover-class="pf-quick-action-item-hover" wx:if="{{canManageProducts}}" bindtap="onGoToProductManagement">
+        <text class="pf-quick-action-icon">🧺</text>
+        <text class="pf-quick-action-text">商品管理</text>
+      </view>
+      <view class="pf-quick-action-item" hover-class="pf-quick-action-item-hover" wx:if="{{canManageProducts}}" bindtap="onOpenInviteModal">
+        <text class="pf-quick-action-icon">🤝</text>
+        <text class="pf-quick-action-text">邀请成员</text>
+      </view>
+    </view>
+
+    <!-- 邀请成员弹窗：选角色 → 生成邀请码 + 小程序码 -->
+    <view class="pf-modal-mask" wx:if="{{showInviteModal}}" bindtap="onCloseInviteModal">
+      <view class="pf-modal-card" catchtap="noop">
+        <text class="pf-modal-title">邀请成员</text>
+
+        <view class="pf-invite-role-tabs" wx:if="{{!inviteResult}}">
+          <view class="pf-invite-role-tab {{inviteRole === 'producer' ? 'active' : ''}}" data-role="producer" bindtap="onSelectInviteRole">制作方</view>
+          <view class="pf-invite-role-tab {{inviteRole === 'promoter' ? 'active' : ''}}" data-role="promoter" bindtap="onSelectInviteRole">推广员</view>
+        </view>
+
+        <button class="pf-primary-btn" wx:if="{{!inviteResult}}" loading="{{inviteGenerating}}" bindtap="onGenerateInvite">生成邀请码</button>
+
+        <view class="pf-invite-result" wx:if="{{inviteResult}}">
+          <text class="pf-invite-code">{{inviteResult.code}}</text>
+          <text class="pf-invite-hint">{{inviteResult.roleLabel}} · 7 天内有效</text>
+          <image class="pf-invite-qr" wx:if="{{inviteResult.qrFileID}}" src="{{inviteResult.qrFileID}}" mode="aspectFit" show-menu-by-longpress></image>
+          <text class="pf-invite-qr-tip" wx:if="{{inviteResult.qrFileID}}">长按图片可保存/转发</text>
+          <text class="pf-invite-qr-tip" wx:else>小程序码生成失败，可直接把上方邀请码告知对方手动输入</text>
+        </view>
+
+        <button class="pf-secondary-btn" bindtap="onCloseInviteModal">关闭</button>
+      </view>
     </view>
 
     <view class="pf-loading-state" wx:if="{{loading && orders.length === 0}}">

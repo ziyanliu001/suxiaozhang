@@ -4820,6 +4820,19 @@ Page({
     });
   },
 
+  // 🤝 输入工坊邀请码加入：常驻入口，不需要账号已经属于任何 live_factory
+  // 空间——这正是给"第一次拿到邀请码"的新成员用的
+  onGoToWorkspaceJoin() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+    safeNavigateTo({
+      url: '/pages/workspace-join/workspace-join',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
   // ──────────────────────────────────────────────────────────────────────────
   // 🛡️ 超管强制解绑：从成员列表选择或手动粘贴 openId，将其角色重置为 volunteer
   // ──────────────────────────────────────────────────────────────────────────

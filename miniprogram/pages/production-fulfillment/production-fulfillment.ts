@@ -41,6 +41,8 @@ interface FulfillmentOrder {
   payAmountYuan?: string;
 }
 
+const INVITE_ROLE_LABEL: Record<string, string> = { producer: '制作方', promoter: '推广员' };
+
 Page({
   data: {
     navTop: 0,
@@ -51,7 +53,18 @@ Page({
     loadError: '',
     orders: [] as FulfillmentOrder[],
 
-    markingId: '' // 正在标记发货的订单 id，用于禁用对应按钮防止重复点击
+    markingId: '', // 正在标记发货的订单 id，用于禁用对应按钮防止重复点击
+
+    // 🧺 商品管理/邀请成员只对 space_owner/space_admin 开放，producer 能看
+    // 发货看板但不能改商品/发邀请——resolveMyRole() 通过 getMyProductionSpaces
+    // 反查当前账号在本 tenantId 下的角色来决定
+    canManageProducts: false,
+
+    // 🤝 邀请成员弹窗状态
+    showInviteModal: false,
+    inviteRole: 'producer' as 'producer' | 'promoter',
+    inviteGenerating: false,
+    inviteResult: null as { code: string; roleLabel: string; qrFileID: string } | null
   },
 
   onLoad(options: Record<string, string>) {
@@ -65,6 +78,27 @@ Page({
     }
     this.setData({ tenantId });
     this.loadOrders();
+    this.resolveMyRole();
+  },
+
+  // 复用 getMyProductionSpaces（已有云函数，不新增接口）反查本账号在当前
+  // tenantId 下的角色，失败时保守按"不可管理"处理，不额外弹错误打扰用户——
+  // 这只影响两个管理入口是否显示，不是页面主功能
+  async resolveMyRole() {
+    try {
+      const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
+      const result = res.result as any;
+      const spaces: Array<{ tenantId: string; role: string }> = (result && result.success && result.spaces) || [];
+      const mine = spaces.find((s) => s.tenantId === this.data.tenantId);
+      const canManageProducts = !!mine && (mine.role === 'space_owner' || mine.role === 'space_admin');
+      this.setData({ canManageProducts });
+    } catch (err) {
+      console.warn('[production-fulfillment] resolveMyRole 失败:', err);
+    }
+  },
+
+  noop() {
+    // catchtap 占位：阻止邀请弹窗内容区的点击冒泡到遮罩层触发关闭
   },
 
   // 与 store-management.ts 同一套：按胶囊按钮实测位置换算导航栏高度
@@ -90,6 +124,51 @@ Page({
 
   onGoToSettlementSummary() {
     wx.navigateTo({ url: '/pages/settlement-summary/settlement-summary?tenantId=' + this.data.tenantId });
+  },
+
+  onGoToProductManagement() {
+    wx.navigateTo({ url: '/pages/product-management/product-management?tenantId=' + this.data.tenantId });
+  },
+
+  onOpenInviteModal() {
+    this.setData({ showInviteModal: true, inviteRole: 'producer', inviteResult: null });
+  },
+
+  onCloseInviteModal() {
+    this.setData({ showInviteModal: false });
+  },
+
+  onSelectInviteRole(e: any) {
+    const role = e.currentTarget.dataset.role;
+    if (role === 'producer' || role === 'promoter') this.setData({ inviteRole: role });
+  },
+
+  async onGenerateInvite() {
+    if (this.data.inviteGenerating) return;
+    this.setData({ inviteGenerating: true });
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'manageWorkspaceInvite',
+        data: { action: 'generate', tenantId: this.data.tenantId, role: this.data.inviteRole }
+      });
+      const result = res.result as any;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '生成邀请码失败', icon: 'none' });
+        return;
+      }
+      this.setData({
+        inviteResult: {
+          code: result.code,
+          roleLabel: result.roleLabel || INVITE_ROLE_LABEL[this.data.inviteRole],
+          qrFileID: result.qrFileID || ''
+        }
+      });
+    } catch (err) {
+      console.error('[production-fulfillment] onGenerateInvite 异常:', err);
+      wx.showToast({ title: '生成邀请码失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ inviteGenerating: false });
+    }
   },
 
   async loadOrders(done?: () => void) {

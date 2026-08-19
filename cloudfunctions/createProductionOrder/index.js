@@ -29,6 +29,25 @@ function isCollectionNotExistError(err) {
   );
 }
 
+// 🛡️ 佣金归属校验：此前直接信任客户端传来的 promoterOpenId 写进订单——任何人
+// 传任意 openid 都能把推广佣金"分"给指定账号，是一个真实存在的漏洞。现在必须
+// 反查 tenant_members 确认该 openid 在本租户确实是已批准的 promoter 才会被
+// 采纳；校验不通过时静默丢弃（订单按无推广人处理），不阻断买家下单——推广
+// 链接失效/伪造是攻击者或过期链接的问题，不该由买家的购买行为来承担后果。
+async function resolveValidPromoterOpenId(tenantId, promoterOpenId) {
+  if (!promoterOpenId) return '';
+  const res = await db.collection('tenant_members')
+    .where({ _openid: promoterOpenId, tenantId, role: 'promoter', status: 'approved' })
+    .limit(1)
+    .get()
+    .catch(() => ({ data: [] }));
+  if (!res.data || res.data.length === 0) {
+    console.warn('[createProductionOrder] promoterOpenId 校验未通过（非本租户已批准的 promoter），已丢弃归属:', { tenantId, promoterOpenId });
+    return '';
+  }
+  return promoterOpenId;
+}
+
 async function resolveSettlementRates(tenantId, hasPromoter) {
   // 🐛 tenants 文档的 _id 是云数据库自动生成的，tenantId 只是文档里的业务字段
   // （见 createProductionSpace/createTenant 的 add() 写法），不能用 .doc(tenantId)
@@ -80,6 +99,8 @@ async function handleCreateOrder(event) {
     return { success: false, error: '商品未完成产能/定价配置，暂不可下单' };
   }
 
+  const verifiedPromoterOpenId = await resolveValidPromoterOpenId(tenantId, promoterOpenId);
+
   // 1. 排产：先占用产能，成功后再落订单，任何后续失败都必须释放这次占用
   const assignRes = await cloud.callFunction({
     name: 'liveFactoryCore',
@@ -102,7 +123,7 @@ async function handleCreateOrder(event) {
   const orderData = {
     tenantId, productId,
     buyerOpenId: OPENID,
-    promoterOpenId,
+    promoterOpenId: verifiedPromoterOpenId,
     quantity,
     unitPrice: product.price,
     payAmount,

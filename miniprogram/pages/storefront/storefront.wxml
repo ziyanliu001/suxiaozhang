@@ -1,0 +1,62 @@
+<view class="sf-page">
+
+  <view class="sf-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="sf-nav-back" hover-class="sf-nav-back-hover" bindtap="goBack">←</view>
+    <text class="sf-nav-title">🛒 现做现发</text>
+    <view class="sf-nav-placeholder"></view>
+  </view>
+
+  <view class="sf-body" style="margin-top: {{contentTop}}px;">
+
+    <view class="sf-loading-state" wx:if="{{loading && !product}}">
+      <text>加载中...</text>
+    </view>
+
+    <view class="sf-error-state" wx:elif="{{loadError}}">
+      <text class="sf-error-icon">⚠️</text>
+      <text class="sf-error-text">{{loadError}}</text>
+      <button class="sf-retry-btn" bindtap="loadAll">重试</button>
+    </view>
+
+    <scroll-view class="sf-scroll" scroll-y wx:elif="{{product}}">
+
+      <view class="sf-product-card">
+        <text class="sf-product-name">{{product.name}}</text>
+        <text class="sf-product-price">¥{{product.priceYuan}}</text>
+        <text class="sf-product-note">下单后按现有产能自动排期，{{product.leadTimeDays}} 天起制作</text>
+      </view>
+
+      <view class="sf-calendar-card" wx:if="{{calendar.length > 0}}">
+        <text class="sf-section-title">预售日历</text>
+        <scroll-view class="sf-calendar-scroll" scroll-x>
+          <view class="sf-calendar-item {{item.soldOut ? 'sf-sold-out' : ''}}" wx:for="{{calendar}}" wx:key="batchDate">
+            <text class="sf-calendar-date">{{item.batchDate}}</text>
+            <text class="sf-calendar-remaining" wx:if="{{!item.soldOut}}">余 {{item.remaining}}</text>
+            <text class="sf-calendar-remaining" wx:else>已订满</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view class="sf-order-card">
+        <text class="sf-section-title">数量</text>
+        <view class="sf-qty-stepper">
+          <view class="sf-qty-btn" bindtap="onDecreaseQty">－</view>
+          <text class="sf-qty-value">{{quantity}}</text>
+          <view class="sf-qty-btn" bindtap="onIncreaseQty">＋</view>
+        </view>
+        <button class="sf-order-btn" loading="{{placing}}" bindtap="onTapOrder">立即预订</button>
+      </view>
+
+      <view class="sf-other-card" wx:if="{{otherProducts.length > 0}}">
+        <text class="sf-section-title">本店其他商品</text>
+        <view class="sf-other-item" wx:for="{{otherProducts}}" wx:key="_id" data-id="{{item._id}}" bindtap="onTapOtherProduct">
+          <text class="sf-other-name">{{item.name}}</text>
+          <text class="sf-other-price">¥{{item.priceYuan}}</text>
+        </view>
+      </view>
+
+    </scroll-view>
+
+  </view>
+
+</view>

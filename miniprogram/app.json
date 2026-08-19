@@ -18,6 +18,9 @@
     "pages/public-verify/index",
     "pages/production-fulfillment/production-fulfillment",
     "pages/settlement-summary/settlement-summary",
+    "pages/workspace-join/workspace-join",
+    "pages/product-management/product-management",
+    "pages/storefront/storefront",
     "pages/test/test"
   ],
   "window": {
