@@ -13,6 +13,33 @@ async function verifyTenantAccess(openid, tenantId, requiredRoles) {
   return (res.data || []).find((r) => requiredRoles.includes(r.role)) || null;
 }
 
+// 🐛 自愈：wxPayCore 支付成功后靠 dispatchNotifyHook 回调 createProductionOrder
+// 把 production_orders.orderStatus 从 'pending_payment' 翻成 'paid'——此前这条
+// 通知一旦失败会被静默吞掉且几乎无法重试（见 wxPayCore/lib/orderService.js
+// 头部注释，已在同一轮修复），会导致"钱明明已经 PAID、production_orders 却
+// 卡在 pending_payment"，看板查询按 orderStatus 过滤自然什么都查不到。这里
+// 在看板查询前做一次轻量自愈：找出本租户还卡在 pending_payment、但已经拿到
+// outTradeNo 的订单，重放一次 createProductionOrder 自己的 paymentSucceeded
+// 处理（该处理本身幂等、会反查 payment_orders 确认真的 PAID 才生效，不是
+// 无条件强推），修复历史遗留的卡单，不需要额外的人工介入或专门的运维脚本。
+async function reconcileStuckOrders(tenantId) {
+  const pendingRes = await db.collection('production_orders')
+    .where({ tenantId, orderStatus: 'pending_payment' })
+    .limit(50)
+    .get()
+    .catch(() => ({ data: [] }));
+
+  const stuck = (pendingRes.data || []).filter((o) => !!o.outTradeNo);
+  if (stuck.length === 0) return;
+
+  await Promise.all(stuck.map((o) =>
+    cloud.callFunction({
+      name: 'createProductionOrder',
+      data: { action: 'paymentSucceeded', outTradeNo: o.outTradeNo, bizId: o._id }
+    }).catch((err) => console.error('[getProductionBoard] 自愈重放 paymentSucceeded 失败:', o._id, err))
+  ));
+}
+
 exports.main = async (event, context) => {
   const { OPENID } = cloud.getWXContext();
   if (!OPENID) return { success: false, error: '无法获取用户身份' };
@@ -26,6 +53,8 @@ exports.main = async (event, context) => {
 
   const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
   if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可查看制作看板' };
+
+  await reconcileStuckOrders(tenantId);
 
   // 只统计已付款、尚未发货完结的订单，按 batchDate+productId 聚合数量
   const ordersRes = await db.collection('production_orders').where({

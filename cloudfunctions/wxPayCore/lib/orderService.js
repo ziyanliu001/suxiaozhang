@@ -148,18 +148,34 @@ async function markRefunded(outTradeNo, reason) {
 }
 
 // 支付成功后回调业务方：notifyFn 指定的云函数名以 action:'paymentSucceeded' +
-// outTradeNo/bizId 被调用。这里的 try/catch 只记录日志不重新抛出——订单本身
-// 的 PAID 状态已经落库，业务方回调失败属于"下游没接住通知"，不该让上游的
-// 支付主流程（尤其是真实微信回调必须尽快返回 200，否则微信会重试轰炸）被拖住。
+// outTradeNo/bizId 被调用。内部仍然不重新抛出异常——订单本身的 PAID 状态已经
+// 落库，业务方回调失败属于"下游没接住通知"，不该让上游的支付主流程（尤其是
+// 真实微信回调必须尽快返回 200，否则微信会重试轰炸）被拖住。
+//
+// 🐛 曾经的隐患：这里此前吞掉了两类失败——(a) cloud.callFunction 本身抛异常
+// （如目标函数未部署/权限问题），(b) 目标函数正常返回但内部业务逻辑判定失败
+// （如 event.result.success === false），第二类此前压根没被检查过，业务方
+// 拒绝处理时这里会被当成"调用成功"直接放过。两类失败都只进 console.error，
+// 调用方（mockPaySuccess/真实回调）拿不到任何信号，导致"钱已经 PAID、下游
+// 业务状态却没同步"这种不一致只能在很久之后被动发现（例如 getProductionBoard
+// 看板一直查不到明明已支付的订单）。现在返回 {success, error}，调用方可以
+// 把这个信号透出去，出问题时至少不是完全黑箱。
 async function dispatchNotifyHook(order) {
-  if (!order.notifyFn) return;
+  if (!order.notifyFn) return { success: false, error: '订单未配置 notifyFn' };
   try {
-    await cloud.callFunction({
+    const res = await cloud.callFunction({
       name: order.notifyFn,
       data: { action: 'paymentSucceeded', outTradeNo: order.outTradeNo, bizId: order.bizId, bizType: order.bizType }
     });
+    const result = res && res.result;
+    if (result && result.success === false) {
+      console.error(`[orderService] 业务方云函数 ${order.notifyFn} 拒绝处理支付成功通知:`, result.error);
+      return { success: false, error: result.error || '业务方拒绝处理' };
+    }
+    return { success: true };
   } catch (err) {
     console.error(`[orderService] 通知业务方云函数 ${order.notifyFn} 失败:`, err);
+    return { success: false, error: String(err.errMsg || err.message || '调用业务方云函数异常') };
   }
 }
 

@@ -327,11 +327,16 @@ async function handleMockPaySuccess(event) {
 
   const mockTransactionId = `MOCK_TXN_${Date.now()}`;
   const { transitioned, order: latest } = await orderService.markPaidIdempotent(outTradeNo, mockTransactionId);
-  if (transitioned) {
-    await orderService.dispatchNotifyHook(latest);
-  }
-  console.log('[wxPayCore] Mock 支付成功已触发:', { outTradeNo, transitioned });
-  return { success: true, status: latest.status, transitioned };
+  // 🐛 此前只在 transitioned===true（第一次由本次调用触发 PENDING_PAY→PAID）
+  // 时才调用 dispatchNotifyHook——一旦第一次通知失败（业务方云函数异常/未
+  // 部署/拒绝处理），payment_orders 已经是 PAID，之后 transitioned 永远是
+  // false，重复点"模拟支付成功"也不会再重试通知，业务方状态永久卡死在
+  // "钱已付、业务侧没同步"。业务方的 paymentSucceeded 处理本身是幂等的
+  // （见 createProductionOrder/createSubscriptionOrder 的 order.status===
+  // 'paid' 提前返回），所以无论是否本次触发了状态迁移都可以放心重试通知。
+  const notify = await orderService.dispatchNotifyHook(latest);
+  console.log('[wxPayCore] Mock 支付成功已触发:', { outTradeNo, transitioned, notifySuccess: notify.success });
+  return { success: true, status: latest.status, transitioned, notifyDispatched: notify.success, notifyError: notify.success ? undefined : notify.error };
 }
 
 // ── HTTP 触发入口：真实微信支付异步通知 ────────────────────────────────────
@@ -372,12 +377,11 @@ async function handleHttpNotify(event) {
     const outTradeNo = decrypted.out_trade_no;
     const transactionId = decrypted.transaction_id;
     const { transitioned, order } = await orderService.markPaidIdempotent(outTradeNo, transactionId);
-    if (transitioned) {
-      await orderService.dispatchNotifyHook(order);
-      console.log('[wxPayCore] 真实支付回调处理完成:', { outTradeNo, transactionId });
-    } else {
-      console.log('[wxPayCore] 回调重复推送，幂等跳过:', outTradeNo);
-    }
+    // 同 handleMockPaySuccess 的修复：不再只在 transitioned===true 时才通知，
+    // 业务方 paymentSucceeded 处理本身幂等，重复通知安全；这样即使微信重推
+    // 同一笔回调（真实网络场景下常见），也能顺带重试一次此前可能失败的通知
+    const notify = await orderService.dispatchNotifyHook(order);
+    console.log('[wxPayCore] 真实支付回调处理完成:', { outTradeNo, transactionId, transitioned, notifySuccess: notify.success });
     return okResponse('SUCCESS', '成功');
   } catch (err) {
     console.error('[wxPayCore] 处理支付回调异常:', err);
