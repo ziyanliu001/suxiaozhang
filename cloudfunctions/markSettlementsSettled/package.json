@@ -1,0 +1,9 @@
+{
+  "name": "markSettlementsSettled",
+  "version": "1.0.0",
+  "description": "云函数：agent_settlement/none 模式下批量标记分账记录已线下结算",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

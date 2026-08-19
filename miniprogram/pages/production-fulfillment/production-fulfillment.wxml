@@ -1,0 +1,61 @@
+<view class="pf-page">
+
+  <view class="pf-nav-bar" style="padding-top: {{navTop}}px;">
+    <view class="pf-nav-back" hover-class="pf-nav-back-hover" bindtap="goBack">←</view>
+    <text class="pf-nav-title">📦 排单与发货管理</text>
+    <view class="pf-nav-placeholder"></view>
+  </view>
+
+  <view class="pf-body" style="margin-top: {{contentTop}}px;">
+
+    <view class="pf-loading-state" wx:if="{{loading && orders.length === 0}}">
+      <text>加载中...</text>
+    </view>
+
+    <view class="pf-error-state" wx:elif="{{loadError}}">
+      <text class="pf-error-icon">⚠️</text>
+      <text class="pf-error-text">{{loadError}}</text>
+      <button class="pf-retry-btn" bindtap="loadOrders">重试</button>
+    </view>
+
+    <view class="pf-empty-state" wx:elif="{{!loading && orders.length === 0}}">
+      <text class="pf-empty-icon">✅</text>
+      <text class="pf-empty-text">暂无待发货订单</text>
+    </view>
+
+    <scroll-view class="pf-list" scroll-y wx:else>
+      <view class="pf-order-card" wx:for="{{orders}}" wx:key="_id">
+        <view class="pf-order-header">
+          <text class="pf-order-product">{{item.productName}}</text>
+          <text class="pf-order-status">{{item.statusLabel}}</text>
+        </view>
+        <view class="pf-order-row">
+          <text class="pf-order-label">数量</text>
+          <text class="pf-order-value">x{{item.quantity}}</text>
+        </view>
+        <view class="pf-order-row">
+          <text class="pf-order-label">实付</text>
+          <text class="pf-order-value">¥{{item.payAmountYuan}}</text>
+        </view>
+        <view class="pf-order-row">
+          <text class="pf-order-label">生产批次</text>
+          <text class="pf-order-value">{{item.batchDate}}</text>
+        </view>
+        <view class="pf-order-row">
+          <text class="pf-order-label">预计发货</text>
+          <text class="pf-order-value">{{item.estimatedShippingDate}}</text>
+        </view>
+        <button
+          class="pf-ship-btn"
+          disabled="{{markingId === item._id}}"
+          data-id="{{item._id}}"
+          bindtap="onTapMarkShipped"
+        >
+          {{markingId === item._id ? '处理中...' : '标记发货'}}
+        </button>
+      </view>
+    </scroll-view>
+
+  </view>
+
+</view>

@@ -1,0 +1,9 @@
+{
+  "name": "manageProduct",
+  "version": "1.0.0",
+  "description": "云函数：直播产销工作空间商品（SKU）管理 CRUD",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

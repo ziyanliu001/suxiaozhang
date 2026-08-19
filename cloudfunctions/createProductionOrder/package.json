@@ -1,0 +1,9 @@
+{
+  "name": "createProductionOrder",
+  "version": "1.0.0",
+  "description": "云函数：预售下单——排产调度 + wxPayCore 收款 + 分账快照 + 复购打卡",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

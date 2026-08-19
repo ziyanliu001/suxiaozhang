@@ -1,0 +1,9 @@
+{
+  "name": "createProductionSpace",
+  "version": "1.0.0",
+  "description": "云函数：个人用户零门槛创建直播产销协同工作空间（live_factory 租户）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

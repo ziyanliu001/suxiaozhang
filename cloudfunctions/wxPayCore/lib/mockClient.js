@@ -40,4 +40,34 @@ async function closeOrder() {
   return true; // Mock 模式没有真实网关可关，orderService 直接改本地状态即可
 }
 
-module.exports = { createUnifiedOrder, queryOrderByOutTradeNo, closeOrder };
+// Mock 退款：直接返回 SUCCESS——真实网关的 PROCESSING 中间态在 Mock 模式下没有
+// 意义（没有真实资金流转需要等待），让业务方回调链路能同步跑通验证。
+async function createRefund({ outRefundNo }) {
+  return { refundId: `mock_refund_${outRefundNo}`, status: 'SUCCESS' };
+}
+async function queryRefund({ outRefundNo }) {
+  return { status: 'SUCCESS', refundId: `mock_refund_${outRefundNo}` };
+}
+
+async function addProfitSharingReceiver({ type, account }) {
+  return { type, account, mock: true };
+}
+async function requestProfitSharing({ outOrderNo, receivers }) {
+  return {
+    orderId: `mock_share_${outOrderNo}`,
+    status: 'FINISHED',
+    receivers: (receivers || []).map((r) => ({ ...r, result: 'SUCCESS' }))
+  };
+}
+async function queryProfitSharing({ outOrderNo }) {
+  return { status: 'FINISHED', receivers: [] };
+}
+async function finishProfitSharing({ outOrderNo }) {
+  return { orderId: `mock_share_${outOrderNo}`, status: 'FINISHED' };
+}
+
+module.exports = {
+  createUnifiedOrder, queryOrderByOutTradeNo, closeOrder,
+  createRefund, queryRefund,
+  addProfitSharingReceiver, requestProfitSharing, queryProfitSharing, finishProfitSharing
+};

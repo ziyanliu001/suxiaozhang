@@ -1,0 +1,9 @@
+{
+  "name": "getPresaleCalendar",
+  "version": "1.0.0",
+  "description": "云函数：预售日历——消费者查看各批次现做现发排期与余量",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

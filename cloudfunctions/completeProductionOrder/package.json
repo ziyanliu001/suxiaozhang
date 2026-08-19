@@ -1,0 +1,9 @@
+{
+  "name": "completeProductionOrder",
+  "version": "1.0.0",
+  "description": "云函数：标记生产订单已发货/完成，并在此时点（而非支付成功瞬间）触发 direct_wechat 模式下的自动分账 + 分账完结",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

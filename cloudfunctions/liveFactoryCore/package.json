@@ -1,0 +1,9 @@
+{
+  "name": "liveFactoryCore",
+  "version": "1.0.0",
+  "description": "云函数：素食直播产销协同核心服务——生产批次顺延调度、分账快照与退款红冲",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

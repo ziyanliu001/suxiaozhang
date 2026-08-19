@@ -1,0 +1,9 @@
+{
+  "name": "manageWorkspaceInvite",
+  "version": "1.0.0",
+  "description": "云函数：直播产销工作空间邀请码生成与兑换（producer/promoter 角色绑定）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

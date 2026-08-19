@@ -22,6 +22,8 @@ const { isMockMode, getRealPayConfig } = require('./lib/payConfig');
 const wxPayClient = require('./lib/wxPayClient');
 const mockClient = require('./lib/mockClient');
 const orderService = require('./lib/orderService');
+const refundService = require('./lib/refundService');
+const profitSharingService = require('./lib/profitSharingService');
 
 function requireInternalCaller(event) {
   const expected = process.env.WXPAY_INTERNAL_TOKEN || '';
@@ -131,6 +133,183 @@ async function handleCloseOrder(event) {
   }
 }
 
+// ── action: refund ──────────────────────────────────────────────────────
+// 入参同 createOrder 一样只信任服务端调用方：refundAmount 由业务方算好传入，
+// 不接受客户端直传。原订单必须是 PAID（或已退过一部分、仍可继续部分退款）。
+async function handleRefund(event) {
+  if (!requireInternalCaller(event)) {
+    return { success: false, error: '无权限：refund 仅限内部业务云函数调用' };
+  }
+  const { outTradeNo, refundAmount, reason, notifyFn } = event;
+  if (!outTradeNo || !(refundAmount > 0)) {
+    return { success: false, error: '参数缺失: outTradeNo/refundAmount' };
+  }
+  const order = await orderService.getByOutTradeNo(outTradeNo);
+  if (!order) return { success: false, error: '原支付订单不存在' };
+  if (order.status !== orderService.STATUS.PAID && order.status !== orderService.STATUS.REFUNDED) {
+    return { success: false, error: `原订单状态为 ${order.status}，不可退款` };
+  }
+
+  const alreadyRefunded = await refundService.getSuccessfulRefundedTotal(outTradeNo);
+  const validation = refundService.validateRefundAmount({
+    refundAmount, totalAmount: order.amount, alreadyRefundedAmount: alreadyRefunded
+  });
+  if (!validation.valid) return { success: false, error: validation.error };
+
+  const mockMode = isMockMode();
+  // createPendingRefund 内部会在 10 分钟窗口内复用同一笔未终结的 PROCESSING
+  // 记录（与 orderService.createPendingOrder 同一套防重复下单写法），这里
+  // 拿到的要么是全新记录、要么是仍在 PROCESSING 的既有记录，两种情况都需要
+  // 继续走一次网关调用去推进/确认状态
+  const refundRecord = await refundService.createPendingRefund({
+    outTradeNo, transactionId: order.transactionId, tenantId: order.tenantId,
+    bizType: order.bizType, bizId: order.bizId, refundAmount, totalAmount: order.amount,
+    reason, mockMode, notifyFn: notifyFn || order.notifyFn
+  });
+
+  try {
+    const result = mockMode
+      ? await mockClient.createRefund({ outRefundNo: refundRecord.outRefundNo })
+      : await wxPayClient.createRefund({
+          outRefundNo: refundRecord.outRefundNo, outTradeNo, transactionId: order.transactionId,
+          totalAmount: order.amount, refundAmount, reason, realConfig: getRealPayConfig()
+        });
+
+    const { transitioned, record } = await refundService.markRefundStatus(refundRecord.outRefundNo, result.status, { refundId: result.refundId || '' });
+    if (result.status === 'SUCCESS') {
+      await orderService.markRefunded(outTradeNo, reason);
+      if (transitioned) await refundService.dispatchRefundNotifyHook(record);
+    }
+    console.log('[wxPayCore] 退款请求已提交:', { outRefundNo: refundRecord.outRefundNo, status: result.status, mockMode });
+    return { success: true, outRefundNo: refundRecord.outRefundNo, status: result.status, mockMode };
+  } catch (err) {
+    await refundService.markRefundStatus(refundRecord.outRefundNo, 'ABNORMAL', { failReason: String(err.message || err) }).catch(() => {});
+    console.error('[wxPayCore] 申请退款失败:', err);
+    return { success: false, error: `申请退款失败：${err.message || '请重试'}` };
+  }
+}
+
+// ── action: queryRefund（轮询 PROCESSING 状态的退款结果）───────────────────
+async function handleQueryRefund(event) {
+  if (!requireInternalCaller(event)) {
+    return { success: false, error: '无权限：queryRefund 仅限内部业务云函数调用' };
+  }
+  const { outRefundNo } = event;
+  const record = await refundService.getByOutRefundNo(outRefundNo);
+  if (!record) return { success: false, error: '退款记录不存在' };
+  if (record.status !== refundService.STATUS.PROCESSING) {
+    return { success: true, status: record.status };
+  }
+
+  const mockMode = isMockMode();
+  try {
+    const result = mockMode
+      ? await mockClient.queryRefund({ outRefundNo })
+      : await wxPayClient.queryRefund({ outRefundNo, realConfig: getRealPayConfig() });
+
+    const { transitioned, record: updated } = await refundService.markRefundStatus(outRefundNo, result.status, {});
+    if (result.status === 'SUCCESS') {
+      await orderService.markRefunded(record.outTradeNo, record.reason);
+      if (transitioned) await refundService.dispatchRefundNotifyHook(updated);
+    }
+    return { success: true, status: result.status };
+  } catch (err) {
+    console.error('[wxPayCore] 查询退款失败:', err);
+    return { success: false, error: `查询退款失败：${err.message || '请重试'}` };
+  }
+}
+
+// ── action: addProfitSharingReceiver ────────────────────────────────────
+async function handleAddProfitSharingReceiver(event) {
+  if (!requireInternalCaller(event)) {
+    return { success: false, error: '无权限：addProfitSharingReceiver 仅限内部业务云函数调用' };
+  }
+  const { type, account, name, relationType } = event;
+  if (!type || !account) return { success: false, error: '参数缺失: type/account' };
+
+  const mockMode = isMockMode();
+  try {
+    const result = mockMode
+      ? await mockClient.addProfitSharingReceiver({ type, account })
+      : await wxPayClient.addProfitSharingReceiver({ type, account, name, relationType, realConfig: getRealPayConfig() });
+    return { success: true, receiver: result, mockMode };
+  } catch (err) {
+    console.error('[wxPayCore] 添加分账接收方失败:', err);
+    return { success: false, error: `添加分账接收方失败：${err.message || '请重试'}` };
+  }
+}
+
+// ── action: requestProfitSharing ─────────────────────────────────────────
+async function handleRequestProfitSharing(event) {
+  if (!requireInternalCaller(event)) {
+    return { success: false, error: '无权限：requestProfitSharing 仅限内部业务云函数调用' };
+  }
+  const { outTradeNo, tenantId, bizType, bizId, receivers, unfreezeUnsplit, notifyFn } = event;
+  if (!outTradeNo) return { success: false, error: '参数缺失: outTradeNo' };
+
+  const order = await orderService.getByOutTradeNo(outTradeNo);
+  if (!order || order.status !== orderService.STATUS.PAID) {
+    return { success: false, error: '原订单不存在或未支付成功，无法分账' };
+  }
+
+  const validation = profitSharingService.validateReceivers({ receivers, transactionAmount: order.amount });
+  if (!validation.valid) return { success: false, error: validation.error };
+
+  const mockMode = isMockMode();
+  const shareRecord = await profitSharingService.createPendingShare({
+    outTradeNo, transactionId: order.transactionId, tenantId: tenantId || order.tenantId,
+    bizType: bizType || order.bizType, bizId: bizId || order.bizId, receivers, mockMode, notifyFn
+  });
+
+  try {
+    const result = mockMode
+      ? await mockClient.requestProfitSharing({ outOrderNo: shareRecord.outOrderNo, receivers })
+      : await wxPayClient.requestProfitSharing({
+          outOrderNo: shareRecord.outOrderNo, transactionId: order.transactionId,
+          receivers, unfreezeUnsplit, realConfig: getRealPayConfig()
+        });
+    await profitSharingService.markShareStatus(shareRecord.outOrderNo, result.status, { receiversResult: result.receivers });
+    console.log('[wxPayCore] 分账请求已提交:', { outOrderNo: shareRecord.outOrderNo, status: result.status, mockMode });
+    return { success: true, outOrderNo: shareRecord.outOrderNo, status: result.status, mockMode };
+  } catch (err) {
+    await profitSharingService.markShareStatus(shareRecord.outOrderNo, 'CLOSED', { failReason: String(err.message || err) }).catch(() => {});
+    console.error('[wxPayCore] 请求分账失败:', err);
+    return { success: false, error: `请求分账失败：${err.message || '请重试'}` };
+  }
+}
+
+// ── action: queryProfitSharing ───────────────────────────────────────────
+async function handleQueryProfitSharing(event) {
+  if (!requireInternalCaller(event)) {
+    return { success: false, error: '无权限：queryProfitSharing 仅限内部业务云函数调用' };
+  }
+  const record = await profitSharingService.getByOutOrderNo(event.outOrderNo);
+  if (!record) return { success: false, error: '分账记录不存在' };
+  return { success: true, status: record.status, receivers: record.receiversResult || [] };
+}
+
+// ── action: finishProfitSharing（释放未分完的冻结资金）──────────────────────
+async function handleFinishProfitSharing(event) {
+  if (!requireInternalCaller(event)) {
+    return { success: false, error: '无权限：finishProfitSharing 仅限内部业务云函数调用' };
+  }
+  const { outOrderNo, description } = event;
+  const record = await profitSharingService.getByOutOrderNo(outOrderNo);
+  if (!record) return { success: false, error: '分账记录不存在' };
+
+  const mockMode = isMockMode();
+  try {
+    const result = mockMode
+      ? await mockClient.finishProfitSharing({ outOrderNo })
+      : await wxPayClient.finishProfitSharing({ outOrderNo, transactionId: record.transactionId, description, realConfig: getRealPayConfig() });
+    await profitSharingService.markShareStatus(outOrderNo, result.status, {});
+    return { success: true, status: result.status, mockMode };
+  } catch (err) {
+    console.error('[wxPayCore] 完结分账失败:', err);
+    return { success: false, error: `完结分账失败：${err.message || '请重试'}` };
+  }
+}
+
 // ── action: mockPaySuccess（仅 Mock 模式）──────────────────────────────────
 // 对应需求里的 "/api/test/mock-pay-success"：在云函数世界里落地为一个 action，
 // 前端点击"模拟支付成功"按钮时直接调用，跑通完整的订单状态流转与业务回调。
@@ -227,6 +406,18 @@ exports.main = async (event) => {
         return await handleCloseOrder(event);
       case 'mockPaySuccess':
         return await handleMockPaySuccess(event);
+      case 'refund':
+        return await handleRefund(event);
+      case 'queryRefund':
+        return await handleQueryRefund(event);
+      case 'addProfitSharingReceiver':
+        return await handleAddProfitSharingReceiver(event);
+      case 'requestProfitSharing':
+        return await handleRequestProfitSharing(event);
+      case 'queryProfitSharing':
+        return await handleQueryProfitSharing(event);
+      case 'finishProfitSharing':
+        return await handleFinishProfitSharing(event);
       default:
         return { success: false, error: `不支持的 action: ${action}` };
     }

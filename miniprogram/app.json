@@ -16,6 +16,7 @@
     "pages/draft-box/draft-box",
     "pages/settings/settings",
     "pages/public-verify/index",
+    "pages/production-fulfillment/production-fulfillment",
     "pages/test/test"
   ],
   "window": {

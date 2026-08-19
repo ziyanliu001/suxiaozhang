@@ -99,6 +99,22 @@ exports.main = async (event, context) => {
 
     // ─── feedback_submissions ──────────────────────────────────────────
     ['feedback_submissions', { name: 'storeId_status_createTime', keys: [{ storeId: 1 }, { status: 1 }, { createTime: -1 }], unique: false }],
+
+    // ─── 直播产销协同（live_factory）：Step 1 方案新增，纯追加，不影响以上任何条目 ──
+    ['products',                       { name: 'tenantId_status',            keys: [{ tenantId: 1 }, { status: 1 }],                          unique: false }],
+    ['production_orders',              { name: 'tenantId_batchDate_status',  keys: [{ tenantId: 1 }, { batchDate: 1 }, { orderStatus: 1 }],  unique: false }],
+    ['production_orders',              { name: 'buyerOpenId_tenantId',       keys: [{ buyerOpenId: 1 }, { tenantId: 1 }],                     unique: false }],
+    ['production_capacity_counters',   { name: 'tenantId_productId_batchDate_unique', keys: [{ tenantId: 1 }, { productId: 1 }, { batchDate: 1 }], unique: true }],
+    ['order_settlements',              { name: 'tenantId_orderId',           keys: [{ tenantId: 1 }, { orderId: 1 }],                         unique: false }],
+    ['order_settlements',              { name: 'tenantId_settlementStatus',  keys: [{ tenantId: 1 }, { settlementStatus: 1 }],                unique: false }],
+    ['workspace_invite_codes',         { name: 'codeNormalized_unique',      keys: [{ codeNormalized: 1 }],                                   unique: true }],
+    ['customer_checkins',              { name: 'tenantId_buyerOpenId_unique',keys: [{ tenantId: 1 }, { buyerOpenId: 1 }],                     unique: true }],
+
+    // ─── wxPayCore 分账/退款账本（补齐 Step 4 遗留缺口时新增）──────────────
+    ['refund_orders',                  { name: 'outRefundNo_unique',         keys: [{ outRefundNo: 1 }],                                      unique: true }],
+    ['refund_orders',                  { name: 'outTradeNo_status',          keys: [{ outTradeNo: 1 }, { status: 1 }],                        unique: false }],
+    ['profit_sharing_orders',          { name: 'outOrderNo_unique',          keys: [{ outOrderNo: 1 }],                                       unique: true }],
+    ['profit_sharing_orders',          { name: 'outTradeNo_status',          keys: [{ outTradeNo: 1 }, { status: 1 }],                        unique: false }],
   ];
 
   const results = await Promise.all(tasks.map(([col, spec]) => ensureIndex(col, spec)));

@@ -1,0 +1,9 @@
+{
+  "name": "getProductionBoard",
+  "version": "1.0.0",
+  "description": "云函数：制作看板——按日期区间聚合待生产任务清单与物料估算",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
