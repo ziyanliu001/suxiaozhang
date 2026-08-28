@@ -130,3 +130,17 @@
   font-size: 27rpx;
   color: #333333;
 }
+
+.drawer-switch-item {
+  justify-content: space-between;
+}
+
+.drawer-switch-item .drawer-item-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-switch {
+  flex-shrink: 0;
+  transform: scale(0.8);
+}

@@ -13,6 +13,16 @@
 
     <scroll-view scroll-y class="drawer-scroll">
 
+      <!-- 🦻 关怀模式：大字号/高对比度/触控热区放大，不用"老人版"这类标签 -->
+      <view class="drawer-group">
+        <text class="drawer-group-label">显示设置</text>
+        <view class="drawer-item drawer-switch-item">
+          <text class="drawer-item-icon">🦻</text>
+          <text class="drawer-item-text">关怀模式（大字号 · 高对比度）</text>
+          <switch class="drawer-switch" checked="{{careMode}}" bindchange="onToggleCareMode" color="#8C1D18" />
+        </view>
+      </view>
+
       <view class="drawer-group">
         <text class="drawer-group-label">核心记账</text>
         <view class="drawer-item" bindtap="onTapAction" data-type="record">

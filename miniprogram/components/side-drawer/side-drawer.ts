@@ -12,7 +12,10 @@ Component({
     roleLabel: { type: String, value: '义工' },
     isManager: { type: Boolean, value: false },
     isFinance: { type: Boolean, value: false },
-    isSuperAdmin: { type: Boolean, value: false }
+    isSuperAdmin: { type: Boolean, value: false },
+    // 🦻 关怀模式开关当前状态，由宿主页面（index.ts）持有并回传，本组件不自己
+    // 读写 app.globalData/storage，保持"纯展示+事件转发"的既定分工
+    careMode: { type: Boolean, value: false }
   },
 
   data: {
@@ -85,6 +88,12 @@ Component({
       const type = e.currentTarget.dataset.type;
       this.setData({ show: false });
       this.triggerEvent('action', { type });
+    },
+
+    // 🦻 开关本身不关闭抽屉（用户可能想连续看效果），宿主页面负责实际写入
+    // app.globalData.careMode + wx.setStorageSync('care_mode', ...)
+    onToggleCareMode(e: any) {
+      this.triggerEvent('toggleCareMode', { value: !!e.detail.value });
     },
 
     onTapRecent(e: any) {

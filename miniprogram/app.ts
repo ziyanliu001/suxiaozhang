@@ -73,12 +73,17 @@ App({
     // manageStoreInviteCode 的 generate 动作），与上面证书邀请的 u=/s= 格式是
     // 两种互斥的 scene 形态——扫这张码启动/切前台时暂存邀请码本身，首页 onShow
     // 据此调用 manageStoreInviteCode 的 peek/redeem 动作完成"扫码直达绑定"闭环
-    pendingInviteCode: '' as string
+    pendingInviteCode: '' as string,
+    // 🦻 关怀模式（大字号/高对比度/触控热区放大）：一处全局态 + wx.setStorageSync
+    // 本地镜像同步，与 currentStoreStatus 同一种"一处拉取，全局共享"写法（见上方
+    // currentStoreStatus 注释）。阶段一只有首页读取应用，其余页面尚未接入
+    careMode: false as boolean
   },
 
   onLaunch(options: any) {
     console.log('[App] onLaunch start');
     this._captureInviteContext(options);
+    this.globalData.careMode = !!wx.getStorageSync('care_mode');
 
     // 云开发初始化
     // 🐛 根因修复：此前无条件把首次 wx.cloud.init 延迟到 onLaunch 后 1.5s 才执行，
