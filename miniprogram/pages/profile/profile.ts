@@ -2341,10 +2341,18 @@ Page({
   // 不再直接读全局递增计数器——切换门店后这里展示的天数/工时只统计在当前门店的贡献
   loadVolunteerStats() {
     try {
+      // 🐛 与 fetchMeritStats 同一处根因修复：getSelectedStore() 读的是
+      // app.globalData.currentStore，只有真正调用过 switchStoreTarget 才会被
+      // 写入非空值，取不到时兜底到 AuthService.getCachedRoleInfo()（服务端
+      // 下发、更可靠的角色缓存），否则这里现算出来的 0 会先于 fetchMeritStats
+      // 落地展示，给用户"看板显示 0"的第一印象——哪怕 fetchMeritStats 之后能
+      // 修正，中间也有一段误导性的空窗期
       const activeStore = getSelectedStore();
+      const cachedRoleInfo = AuthService.getCachedRoleInfo();
+      const rawStoreName = (activeStore && activeStore.storeName) || (cachedRoleInfo && cachedRoleInfo.storeName) || '';
       const scopedStats = computeMyCheckInStats(
-        (activeStore && activeStore.storeId) || '',
-        (activeStore && activeStore.storeName) || ''
+        (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '',
+        isVirtualStoreName(rawStoreName) ? '' : rawStoreName
       );
 
       this.setData({
@@ -2366,11 +2374,14 @@ Page({
     const volunteerHours = this.data.stats.volunteerHours || 0;
     // 🔥 连续护持天数（streak）纯本地打卡流水计算，与云端校准的 days/hours 各自
     // 独立取数互不影响——不管调用方（loadVolunteerStats/fetchMeritStats 等）当次
-    // 走的是本地口径还是云端校准口径，streak 统一按当前选中门店自行推算一次
+    // 走的是本地口径还是云端校准口径，streak 统一按当前选中门店自行推算一次。
+    // 🐛 同一处 getSelectedStore() 兜底修复，见 loadVolunteerStats 头部注释
     const activeStore = getSelectedStore();
+    const cachedRoleInfoForStreak = AuthService.getCachedRoleInfo();
+    const rawStreakStoreName = (activeStore && activeStore.storeName) || (cachedRoleInfoForStreak && cachedRoleInfoForStreak.storeName) || '';
     const volunteerStreak = computeMyCheckInStreak(
-      (activeStore && activeStore.storeId) || '',
-      (activeStore && activeStore.storeName) || ''
+      (activeStore && activeStore.storeId) || (cachedRoleInfoForStreak && cachedRoleInfoForStreak.storeId) || '',
+      isVirtualStoreName(rawStreakStoreName) ? '' : rawStreakStoreName
     );
     // 解锁规则/阈值提取到 utils/badgeWall.ts 共享给 journey.ts 的 3 列勋章墙，
     // 这里只是调用同一份计算，不再各画一套
@@ -2399,9 +2410,23 @@ Page({
       // 告警（查询条件带着这类脏值触发扫描提示）。命中哨兵值时统一归空，让下面
       // `tenantId && storeId` 的判断自然跳过这两条查询，不再发出这种注定无意义
       // 的请求
+      // 🐛 根因修复："义工电子证书显示 1天/8小时，主看板【服务天数】【累计工时】
+      // 却是 0"：证书走的是 resolveCertificateProfile()，storeId/storeName 解析
+      // 除了 getSelectedStore() 还会兜底一层 AuthService.getCachedRoleInfo()；
+      // 这里此前只信 getSelectedStore()，没有这层兜底——getSelectedStore() 读的
+      // 是 app.globalData.currentStore，只有真正调用过 switchStoreTarget/
+      // app.switchStore 才会被写入非空值，用户如果是"自动绑定默认门店、从未手动
+      // 切换过门店选择器"这类常见路径，这个全局态可能一直停留在 app.ts 里的
+      // 空字符串初始值，而 my_checkin_logs 里的打卡记录 storeId/storeName 是
+      // index.ts 用当次页面态写入的，二者对不上时 scopeByStore() 过滤出空集，
+      // 统计现算成 0。cachedRoleInfo（服务端下发、经 AuthService 落地的角色缓存，
+      // 见下方 tenantId 同一份来源）在这类场景下始终是非空的，作为兜底更可靠，
+      // 与 resolveCertificateProfile() 保持同一套解析优先级
       const activeStore = getSelectedStore();
-      const rawStoreId = (activeStore && activeStore.storeId) || '';
+      const rawStoreId = (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '';
       const storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
+      const rawStoreName = (activeStore && activeStore.storeName) || (cachedRoleInfo && cachedRoleInfo.storeName) || '';
+      const storeName = isVirtualStoreName(rawStoreName) ? '' : rawStoreName;
 
       let submittedCount = 0;
       let auditedCount = 0;
@@ -2447,8 +2472,9 @@ Page({
       }
 
       // 🏪 门店隔离：与 loadVolunteerStats 同一套口径，按当前门店动态过滤
-      // my_checkin_logs，不再直接读全局递增计数器
-      const scopedStats = computeMyCheckInStats(storeId, (activeStore && activeStore.storeName) || '');
+      // my_checkin_logs，不再直接读全局递增计数器；storeName 用上面已经过
+      // cachedRoleInfo 兜底 + isVirtualStoreName 过滤的版本，不再单独现取一遍
+      const scopedStats = computeMyCheckInStats(storeId, storeName);
 
       this.setData({
         stats: {
@@ -2462,10 +2488,15 @@ Page({
       this.computeBadgeList();
     } catch (err) {
       console.error('[fetchMeritStats] 加载失败:', err);
+      // 🐛 与上面 try 分支同一处根因修复，同样加上 cachedRoleInfo 兜底——这个
+      // catch 块只在 report_logs 查询异常时触发，与主分支是完全独立的代码路径，
+      // 各自都要有这层兜底，不能只修一边
       const fallbackStore = getSelectedStore();
+      const fallbackCachedRole = AuthService.getCachedRoleInfo();
+      const fallbackRawStoreName = (fallbackStore && fallbackStore.storeName) || (fallbackCachedRole && fallbackCachedRole.storeName) || '';
       const fallbackStats = computeMyCheckInStats(
-        (fallbackStore && fallbackStore.storeId) || '',
-        (fallbackStore && fallbackStore.storeName) || ''
+        (fallbackStore && fallbackStore.storeId) || (fallbackCachedRole && fallbackCachedRole.storeId) || '',
+        isVirtualStoreName(fallbackRawStoreName) ? '' : fallbackRawStoreName
       );
 
       this.setData({
