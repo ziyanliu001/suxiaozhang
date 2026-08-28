@@ -10594,6 +10594,18 @@ Page({
       checkInSubmitting: false
     });
 
+    // 🐛 修复"今日已打卡记录"列表打完第二个班次后仍只显示一条：todayLogs
+    // 是【今日已打卡记录】列表实际 wx:for 绑定的字段（checkInLogs 是另一个
+    // 全量历史字段，两者互不相通），此前打卡成功只更新了 checkInLogs，
+    // todayLogs 停留在"打开弹窗那一刻"的旧值，直到用户关掉弹窗再重新打开
+    // （触发 refreshTodayShiftStatus 重新从 storage 读取）才会刷新。现在打卡
+    // 成功后立即重新跑一遍 refreshTodayShiftStatus()，同时把 todayLogs/
+    // todayAccumulatedHours/availableMealSlots（今日已完成的时段标记）/
+    // allShiftsCompleted 全部按刚写入的最新 storage 重新算一遍，不再只更新
+    // 部分字段——即使这一次没有立刻关闭弹窗（如以后允许连续打卡而不弹成功卡片），
+    // 列表也会立刻反映刚提交的这一条
+    this.refreshTodayShiftStatus();
+
     if (wasTruncated) {
       wx.showToast({ title: `已为您自动截断至 +${addHours}h（单日上限${DAILY_HOURS_CAP}h）`, icon: 'none', duration: 2500 });
     } else {
