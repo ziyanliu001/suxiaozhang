@@ -158,6 +158,16 @@ exports.main = async (event) => {
     const threeDaysAgoStr = new Date(threeDaysAgoMs).toISOString().slice(0, 10);
     const latestDonorsThreeDay = [];
 
+    // 🌸 近30日阳善跑马灯：与 Weekly/ThreeDay 同款窗口判断逻辑，窗口收窄到真实
+    // 30×24 小时。与另外两份不同的是：本窗口额外并入 materials（实物捐赠，如
+    // "大米20斤"），不再只看 donationItems（善款）——首页/个人页的阳善跑马灯
+    // 组件需要同时展示善款与实物两类善行，不能让捐米面油的爱心人士被漏掉。
+    // deedText 如实反映真实数据（善款给"随喜 ¥金额"，实物给"捐赠+物品+数量+
+    // 单位"），与 latestDonorsWeekly 头部注释同一条"不虚构/不换算"的口径
+    const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgoStr = new Date(thirtyDaysAgoMs).toISOString().slice(0, 10);
+    const latestDonorsMonthly = [];
+
     records.forEach((r) => {
       const dining = parseFloat(r.totalDineCount || r.diningCount) || 0;
       totalDiners += dining;
@@ -258,6 +268,47 @@ exports.main = async (event) => {
           });
         }
       }
+
+      // 🌸 近30日阳善跑马灯：善款(donationItems) + 实物(materials) 合并收集，
+      // 窗口判断与上面两份完全同款逻辑，只是换成 thirtyDaysAgoMs/thirtyDaysAgoStr
+      const materials = Array.isArray(r.materials) ? r.materials : [];
+      if (!r.isAnonymous && (donationItems.length > 0 || materials.length > 0) && latestDonorsMonthly.length < 30) {
+        const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
+        const inMonthlyWindow = !Number.isNaN(recordMs)
+          ? recordMs >= thirtyDaysAgoMs
+          : !!(r.dateString && r.dateString >= thirtyDaysAgoStr);
+        if (inMonthlyWindow) {
+          const monthlyTimeLabel = !Number.isNaN(recordMs)
+            ? formatRelativeTime(r.createTime)
+            : (() => {
+                const dayDiff = r.dateString ? daysBetween(r.dateString, todayStr) : null;
+                return dayDiff === null ? '' : dayDiff === 0 ? '今天' : dayDiff === 1 ? '昨天' : `${dayDiff}天前`;
+              })();
+          donationItems.forEach((item) => {
+            if (latestDonorsMonthly.length >= 30) return;
+            const amount = parseFloat(item.amount) || 0;
+            latestDonorsMonthly.push({
+              name: (item.name || '爱心人士').trim(),
+              amount,
+              deedText: `随喜 ¥${amount}`,
+              timeLabel: monthlyTimeLabel
+            });
+          });
+          materials.forEach((m) => {
+            if (latestDonorsMonthly.length >= 30) return;
+            // 🛡️ item/quantity 缺任一项就不硬拼出"捐赠斤"这类语义不全的残缺
+            // 文案；unit 缺省时按 utils/parser.ts parseMaterials 同款约定回落
+            // 为"份"，不留空——宁可少展示一条也不展示一条读不通的
+            if (!m.item || !m.quantity) return;
+            latestDonorsMonthly.push({
+              name: (m.donor || '爱心人士').trim(),
+              amount: 0,
+              deedText: `捐赠${m.item}${m.quantity}${m.unit || '份'}`,
+              timeLabel: monthlyTimeLabel
+            });
+          });
+        }
+      }
     });
 
     const meritTotal = yangCount + yinCount;
@@ -290,7 +341,8 @@ exports.main = async (event) => {
       yinRatioPct,
       latestDonors,
       latestDonorsWeekly,
-      latestDonorsThreeDay
+      latestDonorsThreeDay,
+      latestDonorsMonthly
     };
   } catch (err) {
     console.error('[getSunshineLedger] 查询异常:', err);

@@ -1,12 +1,24 @@
-<view class="yangshan-wall-card" wx:if="{{donors.length > 0}}">
+<!-- 🌸 阳善公开滚动墙：storeId 未解析出来前整块不渲染（避免闪一下空态寄语再
+     被真实数据替换）；storeId 就绪后恒定展示——有名单滚动播放，无名单则显示
+     静态兜底寄语，不再让整块组件从页面上消失。
+     单行紧凑布局：左侧固定标签 + 右侧内容区（跑马灯/兜底文案）水平排布，
+     不再是标题独占一行、内容另起一行的两段式竖排 -->
+<view class="yangshan-wall-card" wx:if="{{storeId}}">
   <text class="yangshan-wall-title">{{title}}</text>
-  <swiper class="yangshan-wall-swiper" vertical autoplay circular interval="2800" duration="400">
-    <swiper-item wx:for="{{donors}}" wx:for-index="donorIdx" wx:key="donorIdx">
-      <view class="yangshan-wall-item">
-        <text class="yangshan-wall-name">{{item.name}}</text>
-        <text class="yangshan-wall-amount">支持 ¥{{item.amount}}</text>
-        <text class="yangshan-wall-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
-      </view>
-    </swiper-item>
-  </swiper>
+
+  <view class="yangshan-wall-content">
+    <swiper class="yangshan-wall-swiper" wx:if="{{hasYangShanList}}" vertical autoplay circular interval="2800" duration="400">
+      <swiper-item wx:for="{{yangShanList}}" wx:for-index="donorIdx" wx:key="donorIdx">
+        <view class="yangshan-wall-item">
+          <text class="yangshan-wall-name">{{item.name}}</text>
+          <text class="yangshan-wall-deed">{{item.deedText}}</text>
+          <text class="yangshan-wall-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
+        </view>
+      </swiper-item>
+    </swiper>
+
+    <view class="yangshan-wall-empty" wx:else>
+      <text class="yangshan-wall-empty-text">行善积德，福慧双增 · 愿一切善行皆得圆满</text>
+    </view>
+  </view>
 </view>
