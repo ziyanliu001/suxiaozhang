@@ -1,0 +1,9 @@
+{
+  "name": "cronHeartbeatWatcher",
+  "version": "1.0.0",
+  "description": "云函数：长辈静默守护定时触发器，每2小时扫描心跳超时并推送订阅消息关怀提醒",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

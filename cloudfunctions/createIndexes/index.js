@@ -168,6 +168,23 @@ exports.main = async (event, context) => {
     ['refund_orders',                  { name: 'outTradeNo_status',          keys: [{ outTradeNo: 1 }, { status: 1 }],                        unique: false }],
     ['profit_sharing_orders',          { name: 'outOrderNo_unique',          keys: [{ outOrderNo: 1 }],                                       unique: true }],
     ['profit_sharing_orders',          { name: 'outTradeNo_status',          keys: [{ outTradeNo: 1 }, { status: 1 }],                        unique: false }],
+
+    // ─── 代际协同受托 / 互助工时中台 / 静默守护（阶段一新增）────────────────
+    // elder_guardian_bindings：长辈-家属绑定 + 心跳基线，cronHeartbeatWatcher 按
+    // {tenantId, canteen_store_id, elder_phone} 做手机后4位模糊匹配检索，
+    // {tenantId, guardian_openid} 供家属侧"我关注的长辈"列表查询
+    ['elder_guardian_bindings', { name: 'tenantId_store_phone',   keys: [{ tenantId: 1 }, { canteen_store_id: 1 }, { elder_phone: 1 }], unique: false }],
+    ['elder_guardian_bindings', { name: 'tenantId_guardianOpenid',keys: [{ tenantId: 1 }, { guardian_openid: 1 }],                       unique: false }],
+
+    // elder_checkin_logs：长辈代报餐/签到流水，独立于 report_logs（见
+    // ledgerIngestionAdapter 头部注释——report_logs 是整份表单覆盖式 upsert，
+    // 不能承接后台异步字段级写入）
+    ['elder_checkin_logs', { name: 'tenantId_store_date',   keys: [{ tenantId: 1 }, { storeId: 1 }, { dateString: 1 }], unique: false }],
+    ['elder_checkin_logs', { name: 'targetElder_createTime',keys: [{ target_elder_id: 1 }, { createTime: -1 }],         unique: false }],
+
+    // volunteer_timebank_logs：义工工时→时间银行积分中台
+    ['volunteer_timebank_logs', { name: 'openid_dateString',       keys: [{ volunteer_openid: 1 }, { dateString: -1 }],        unique: false }],
+    ['volunteer_timebank_logs', { name: 'tenantId_store_dateString',keys: [{ tenantId: 1 }, { storeId: 1 }, { dateString: 1 }], unique: false }],
   ];
 
   // 1. 确保所有涉及的集合存在（真实支持的 API，与索引管理无关，先做完不受影响）

@@ -1,0 +1,71 @@
+<!-- 👵 长辈代报餐与就餐签到：与 material-usage-modal 共用同一套底部弹出层
+     视觉语言（feedback-sheet-* / vt-form-label / vt-status-pill），落库走
+     独立的 elder_checkin_logs 流水，不进 report_logs，见 .ts 文件头部注释 -->
+<view class="feedback-sheet-backdrop {{visible ? 'show' : ''}}" wx:if="{{visible}}" bindtap="onClose">
+  <view class="feedback-sheet-panel" catchtap="stopPropagation">
+    <view class="feedback-sheet-drag-handle"></view>
+
+    <view class="feedback-sheet-header">
+      <view class="feedback-sheet-header-text">
+        <text class="feedback-sheet-title">👵 长辈代报餐与就餐签到</text>
+        <text class="feedback-sheet-subtitle">输入长辈手机号后4位快速勾选，签到即触发长辈心跳续期</text>
+      </view>
+      <view class="feedback-sheet-close" bindtap="onClose">✕</view>
+    </view>
+
+    <text class="vt-form-label">长辈手机号后4位</text>
+    <view class="ecm-search-row">
+      <input class="ecm-search-input" type="number" maxlength="4" placeholder="如 8866" value="{{form.phoneLast4}}" bindinput="onPhoneLast4Input" />
+      <button class="ecm-search-btn {{searching ? 'btn-is-disabled' : ''}}" bindtap="onSearchElder" loading="{{searching}}" disabled="{{searching}}">查询</button>
+    </view>
+
+    <view wx:if="{{hasSearched && form.candidates.length > 0}}" class="ecm-candidate-list">
+      <view
+        wx:for="{{form.candidates}}"
+        wx:key="elder_id"
+        class="ecm-candidate-item {{form.selectedElderId === item.elder_id ? 'active' : ''}}"
+        bindtap="onSelectElder"
+        data-id="{{item.elder_id}}"
+      >
+        <text class="ecm-candidate-name">{{item.elder_name}}</text>
+        <text class="ecm-candidate-phone">{{item.elder_phone_masked}}</text>
+        <text class="ecm-candidate-relation" wx:if="{{item.relationship}}">{{item.relationship}}</text>
+      </view>
+    </view>
+    <text class="tool-hint-text" wx:if="{{hasSearched && form.candidates.length === 0}}">未找到绑定的长辈，请先联系家属完成绑定后再签到</text>
+
+    <text class="vt-form-label">餐次</text>
+    <view class="vt-status-row">
+      <view
+        wx:for="{{mealTypeOptions}}"
+        wx:key="value"
+        class="vt-status-pill green {{form.mealType === item.value ? 'active' : ''}}"
+        bindtap="onSelectMealType"
+        data-value="{{item.value}}"
+      >{{item.label}}</view>
+    </view>
+
+    <text class="vt-form-label">代报类型</text>
+    <view class="vt-status-row">
+      <view class="vt-status-pill yellow {{form.proxyType === 'VOLUNTEER_PROXY' ? 'active' : ''}}" bindtap="onSelectProxyType" data-value="VOLUNTEER_PROXY">义工代报</view>
+      <view class="vt-status-pill yellow {{form.proxyType === 'FAMILY_PROXY' ? 'active' : ''}}" bindtap="onSelectProxyType" data-value="FAMILY_PROXY">家属代报</view>
+    </view>
+
+    <text class="vt-form-label">附加服务（选填，与义工工时闭环）</text>
+    <view class="vt-status-row">
+      <view
+        wx:for="{{serviceTypeOptions}}"
+        wx:key="*this"
+        class="vt-status-pill green {{form.serviceType === item ? 'active' : ''}}"
+        bindtap="onSelectServiceType"
+        data-value="{{item}}"
+      >{{item}}</view>
+    </view>
+    <view class="ecm-hours-row" wx:if="{{form.serviceType}}">
+      <text class="vt-form-label">服务时长（小时）</text>
+      <input class="ecm-hours-input" type="digit" placeholder="如 1.5" value="{{form.hours}}" bindinput="onHoursInput" />
+    </view>
+
+    <button class="feedback-submit-btn {{submitting ? 'btn-is-disabled' : ''}}" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">✅ 确认签到</button>
+  </view>
+</view>

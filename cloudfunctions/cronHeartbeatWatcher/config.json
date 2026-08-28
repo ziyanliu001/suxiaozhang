@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "openapi": ["subscribeMessage.send"]
+  },
+  "triggers": [
+    {
+      "name": "heartbeatScan",
+      "type": "timer",
+      "config": "0 0 */2 * * * *"
+    }
+  ],
+  "timeout": 60
+}

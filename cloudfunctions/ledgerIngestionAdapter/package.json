@@ -1,0 +1,9 @@
+{
+  "name": "ledgerIngestionAdapter",
+  "version": "1.0.0",
+  "description": "云函数：长辈代报餐/签到统一记账适配器，独立于 report_logs 财务台账，为阶段二语音/OCR 解析预留统一接入点",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
