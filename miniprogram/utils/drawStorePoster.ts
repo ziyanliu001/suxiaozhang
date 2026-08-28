@@ -107,9 +107,14 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
   // 空字符串——原逻辑对这种情况什么都不画，卡片中间就是一块彻底的留白，观感
   // 上跟"白屏"没有区别。现在无论是路径为空还是图片异步加载失败/超时，
   // 都统一落到同一个 drawQrPlaceholder 兜底分支，保证卡片区域一定有内容
-  const qrSize = 180;
+  // 🐛 二维码与下方引导文字重叠修复：qrSize 从 180 收缩到 160，腾出的空间
+  // 用来满足下方三段文案要求的最小间距（QR→第一行 ≥16px 等），而不是继续
+  // 压缩间距凑数；QR_TOP_PAD 与下方内容总高度一起，让整块"QR+三行文案"在
+  // 卡片（cardY ~ cardY+cardH）内接近垂直居中，两端各留约 19px
+  const qrSize = 160;
   const qrX = (width - qrSize) / 2;
-  const qrY = cardY + 30;
+  const QR_TOP_PAD = 19;
+  const qrY = cardY + QR_TOP_PAD;
   const drawQrPlaceholder = () => {
     ctx.fillStyle = '#F1F3F5';
     safeRoundRect(ctx, qrX, qrY, qrSize, qrSize, 12);
@@ -152,14 +157,90 @@ export async function drawStoreInvitationPoster(opts: DrawPosterOptions): Promis
     drawQrPlaceholder();
   }
 
+  // 🐛 重叠根因：这三行文案此前都是相对 cardY 的硬编码偏移量（+218/+240/+250），
+  // 跟 qrY/qrSize 完全脱节——一旦 qrSize 调整，偏移量不会跟着变，QR 底部和
+  // 第一行文字之间的实际间距就会跟着漂移，真机上多次出现文字贴着/压在二维码
+  // 图片下沿的问题。现在改成每一行的坐标都从上一行的视觉底部 + 具体 marginGap
+  // 常量累加算出来，qrY/qrSize 之后再怎么调整，这条链路都会自动跟着重新算，
+  // 不会再出现"改了尺寸忘了改偏移量"导致的重叠。
+  //
+  // fillText 用的是文字基线（baseline）坐标，不是视觉顶部——这里用
+  // "字号 × 0.8" 近似基线相对行顶的位置、"字号 × 0.25" 近似基线以下的
+  // 下伸部分（descender），不追求排版软件级别的精确度量，只保证按此推算出的
+  // "视觉底部"不会比实际渲染更靠上，从而让间距计算始终是保守值（宁可间距
+  // 略大，不会出现按公式算完实际却仍然重叠的情况）。
+  const qrBottom = qrY + qrSize; // qrCodeY + qrCodeSize
+
+  const GAP_QR_TO_LINE1 = 16; // 用户要求：QR 底部 → 第一行文字 ≥16~20px
+  const LINE1_FONT_SIZE = 14;
+  const line1BaselineY = qrBottom + GAP_QR_TO_LINE1 + LINE1_FONT_SIZE * 0.8;
+  const line1BottomY = line1BaselineY + LINE1_FONT_SIZE * 0.25;
+
   ctx.fillStyle = '#495057';
-  ctx.font = '14px sans-serif';
+  ctx.font = `${LINE1_FONT_SIZE}px sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('📱 微信长按或扫描二维码', width / 2, cardY + 235);
+  ctx.fillText('📱 微信长按或扫描二维码', width / 2, line1BaselineY);
+
+  // 🎨 底部引导文案重构：原先"申请成为【财务记账义工】或【现场奉献家人】"
+  // 长句改为"主标题 + 两个身份胶囊标签"的对称结构，字号统一 14px 加粗，
+  // 与卡片左右两侧的黄色描边（cardX ~ cardX+cardW）之间强制留够 ≥16px 安全
+  // 边距，胶囊底部与卡片底边（cardY+cardH）之间也留出清晰间隙，不贴边框。
+  const GAP_LINE1_TO_TITLE = 8;
+  const TITLE_FONT_SIZE = 14;
+  const titleBaselineY = line1BottomY + GAP_LINE1_TO_TITLE + TITLE_FONT_SIZE * 0.8;
+  const titleBottomY = titleBaselineY + TITLE_FONT_SIZE * 0.25;
 
   ctx.fillStyle = '#D9480E';
-  ctx.font = 'bold 13px sans-serif';
-  ctx.fillText('申请成为【财务记账义工】或【现场奉献家人】', width / 2, cardY + 258);
+  ctx.font = `bold ${TITLE_FONT_SIZE}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('扫码加入 · 共同护持爱心食堂', width / 2, titleBaselineY);
+
+  // 身份胶囊标签：财务记账义工（金色系）/ 现场服务家人（绿色系），配色区分
+  // 两种身份，一眼可辨；宽度按 ctx.measureText 实测文字宽度动态算，不是拍脑袋
+  // 硬编码固定像素——避免字体渲染差异导致文字溢出胶囊边缘
+  const GAP_TITLE_TO_BADGE = 10;
+  const badgeFontSize = 14;
+  const badgePaddingX = 10;
+  const badgeGap = 10;
+  const badgeHeight = 20;
+  const badgeTopY = titleBottomY + GAP_TITLE_TO_BADGE;
+
+  ctx.font = `bold ${badgeFontSize}px sans-serif`;
+  const financeLabel = '财务记账义工';
+  const familyLabel = '现场服务家人';
+  const financeBadgeWidth = ctx.measureText(financeLabel).width + badgePaddingX * 2;
+  const familyBadgeWidth = ctx.measureText(familyLabel).width + badgePaddingX * 2;
+  const badgeGroupWidth = financeBadgeWidth + badgeGap + familyBadgeWidth;
+  // 🛡️ 左右两端安全边距强制 ≥16px：默认居中，但当胶囊组宽度逼近/超出卡片
+  // 内容安全区（cardX+16 ~ cardX+cardW-16）时，先夹住左边界，再用右边界兜底
+  // 收回——两条约束都满足不了的极端场景（字体渲染异常放大等）才会退化为
+  // 贴着右边界 16px，不会整段跑出卡片黄色描边之外
+  const safeLeftX = cardX + 16;
+  const safeRightX = cardX + cardW - 16;
+  let badgeGroupStartX = width / 2 - badgeGroupWidth / 2;
+  if (badgeGroupStartX < safeLeftX) badgeGroupStartX = safeLeftX;
+  if (badgeGroupStartX + badgeGroupWidth > safeRightX) badgeGroupStartX = safeRightX - badgeGroupWidth;
+
+  ctx.textBaseline = 'middle';
+
+  safeRoundRect(ctx, badgeGroupStartX, badgeTopY, financeBadgeWidth, badgeHeight, badgeHeight / 2);
+  ctx.fillStyle = '#FFF3BF';
+  ctx.fill();
+  ctx.fillStyle = '#D9480E';
+  ctx.textAlign = 'center';
+  ctx.fillText(financeLabel, badgeGroupStartX + financeBadgeWidth / 2, badgeTopY + badgeHeight / 2);
+
+  const familyBadgeX = badgeGroupStartX + financeBadgeWidth + badgeGap;
+  safeRoundRect(ctx, familyBadgeX, badgeTopY, familyBadgeWidth, badgeHeight, badgeHeight / 2);
+  ctx.fillStyle = '#E6F4EA';
+  ctx.fill();
+  ctx.fillStyle = '#2F9E44';
+  ctx.fillText(familyLabel, familyBadgeX + familyBadgeWidth / 2, badgeTopY + badgeHeight / 2);
+
+  // 🐛 还原默认 textBaseline：下方 introY（地址/简介）与底部版权行都依赖
+  // canvas 默认的 'alphabetic' 基线定位，遗留 'middle' 会让那几行文字整体
+  // 向上偏移，错位到看起来"悬浮"在预期位置上方
+  ctx.textBaseline = 'alphabetic';
 
   // 5.5 门店简介/地址：仅在调用方提供时才绘制，未提供时版式与升级前完全一致
   // （原有 index.ts 调用点不传这两个字段，不受影响）。绘制区固定卡片正下方，
