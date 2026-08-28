@@ -4556,6 +4556,30 @@ button.poster-gen-btn[disabled] {
   color: #8C1D18;
 }
 
+/* 🐛 补齐：这份规则此前只存在于未参与实际构建的 index.scss 里，真正生效的
+   index.wxss 从未定义过 .poster-qr-retry-banner——不仅本次新增的"餐报海报
+   验真二维码"重试条受影响，门店邀请海报（store-poster-mask 里同名类）的
+   二维码重试条也一直是裸文字，没有背景/边框/间距。两处共用同一份样式；
+   不显式设 width:100%——两处父容器的内边距约定不一样（.store-poster-box
+   自带 32rpx/28rpx padding，.modal-content 完全无 padding），block 元素
+   不设宽度时 margin 会自动从可用宽度里扣除，两种父容器下都能正确撑满剩余
+   空间且不溢出，比强行 width:100%+左右 margin 更安全 */
+.poster-qr-retry-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 24rpx;
+  margin: 0 30rpx 16rpx;
+  background: rgba(217, 72, 14, 0.1);
+  color: #D9480E;
+  font-size: 22rpx;
+  font-weight: 500;
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(217, 72, 14, 0.25);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
 .modal-footer {
   display: flex;
   gap: 20rpx;
@@ -6790,6 +6814,13 @@ button.poster-gen-btn[disabled] {
   box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15);
 }
 
+/* 🦻 到岗打卡弹窗底部安全间距：橙色确认按钮紧贴卡片底边，在带 Home 指示条的
+   机型上尤其局促——只加宽这一个弹窗（.modal-card.shift-card 组合选择器，
+   优先级高于基础 .modal-card），不影响项目里其它复用 .modal-card 的弹窗 */
+.modal-card.shift-card {
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+}
+
 .modal-card .modal-header {
   display: flex;
   align-items: center;
@@ -6823,217 +6854,356 @@ button.poster-gen-btn[disabled] {
   margin-top: 0;
 }
 
-.meal-slot-row {
+/* ══════════════════════════════════════════════════════════════════════
+   ⚠️ 2026-08 事故记录：本模态框此前的样式一度只写进了这份 index.wxss，
+   但项目 project.config.json 的 useCompilerPlugins 里同时启用了 "sass"——
+   微信开发者工具在这种配置下，只要同目录存在同名 .scss 文件（index.scss），
+   编译产物就以 .scss 编译结果为准，会静默覆盖这份手写 .wxss，而 index.scss
+   里这一段还停留在"业务模型重构"之前的旧版结构（.shift-item/.shift-time 等
+   早已不被 WXML 引用的死类名），导致真机呈现"完全无样式的纯文本堆叠"。
+   已把 project.config.json 的 useCompilerPlugins 里的 "sass" 移除（全仓库
+   6 个 .scss 都有同名 .wxss，移除不会破坏任何页面），这份 .wxss 现在才是
+   真正生效的样式来源。以下类名与 index.scss 里的同名旧内容已不再对应，
+   .scss 那份仅作历史存档，不再是编译源。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── 供餐时段（第一维）：横向分段选项卡 ────────────────────────────── */
+.shift-tabs-container {
   display: flex;
-  gap: 12rpx;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
 }
 
-.meal-slot-chip {
+/* 固定 2×2 网格：flex-basis 用 calc(50% - 16rpx) 精确扣掉一半 gap，两列宽度
+   严格对称，不再靠 flex:1 的自动增长在 3/4 个元素之间分配剩余空间——那种写法
+   在项目数不能整除每行列数时，最后一行的元素会被拉伸铺满整行，视觉上不对齐 */
+.shift-tab-item {
   position: relative;
-  flex: 1;
+  flex: 1 1 calc(50% - 16rpx);
+  height: 72rpx;
+  box-sizing: border-box;
+  border-radius: 36rpx;
+  border: 2rpx solid #e0e0e0;
+  background: #f8f8f8;
+  font-size: 26rpx;
+  color: #2D2D2D;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4rpx;
-  padding: 18rpx 8rpx;
-  background: #FFFFFF;
-  border: 2rpx solid #F2F4F7;
-  border-radius: 16rpx;
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
-  box-sizing: border-box;
 }
-.meal-slot-chip:active {
+.shift-tab-item:active {
   transform: scale(0.97);
 }
 
-.meal-slot-chip-name {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #2D2D2D;
+.shift-tab-text-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.3;
 }
 
-.meal-slot-chip-time {
+.shift-tab-name {
+  font-size: 26rpx;
+}
+
+.shift-tab-time {
   font-size: 20rpx;
   color: #8D6E63;
 }
 
-.meal-slot-chip-active {
-  background: #FFF8F2;
-  border-color: #F97316;
-  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, 0.15);
+.shift-tab-item.active {
+  background: #fff7e6;
+  border-color: #ff7a00;
+  color: #ff7a00;
+  font-weight: bold;
 }
-.meal-slot-chip-active .meal-slot-chip-name {
-  color: #C0392B;
+.shift-tab-item.active .shift-tab-time {
+  color: #ff7a00;
 }
 
-.meal-slot-chip-completed {
+.shift-tab-item.completed {
   background: #F2F4F7;
   border-color: #E2E8F0;
-  opacity: 0.6;
+  color: #98A2B3;
+  opacity: 0.75;
 }
-
-.meal-slot-chip-completed-tag {
-  font-size: 18rpx;
+.shift-tab-item.completed .shift-tab-time {
   color: #2E7D32;
   font-weight: bold;
 }
 
 /* ── 护持工种（第二维）：2×2 网格卡片，多选 ─────────────────────────── */
-.job-type-grid {
+.job-grid-container {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 16rpx;
+  margin-bottom: 24rpx;
 }
 
-.job-type-card {
+/* 🐛 选中态反差增强：此前选中态是浅橙描边+浅橙底（#fff7e6/#ff7a00 描边），
+   与未选中态的白底灰框反差不够强烈，弱光/小屏下不容易一眼分辨。改为选中态
+   直接实色暖橙渐变填充整卡+文字反白，未选中态保持清爽浅灰，两态对比拉到最大。
+   右上角对勾角标仍是 .active 状态下的纯 CSS ::after 伪元素——只要 .active
+   类命中，勾标一定跟着出现，不会出现"背景高亮了但勾标没出现"的错位情况。
+   布局结构属性（flex/min-height/padding 等）延续之前的版本，颜色/边框/
+   阴影全部按最新配色重写，!important 强制赢过任何残留的低优先级同名规则 */
+.job-card {
   position: relative;
+  min-height: 110rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   gap: 6rpx;
-  padding: 22rpx 12rpx;
-  background: #FFFFFF;
-  border: 2rpx solid #F2F4F7;
-  border-radius: 20rpx;
-  box-sizing: border-box;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  background: #f8f9fa !important;
+  border: 2rpx solid #e2e8f0 !important;
+  border-radius: 18rpx !important;
+  transition: all 0.25s ease;
+  overflow: hidden;
 }
-.job-type-card:active {
+.job-card:active {
   transform: scale(0.97);
 }
 
-.job-type-card-icon {
-  font-size: 44rpx;
+.job-card-icon {
+  font-size: 40rpx;
   line-height: 1.2;
 }
 
-.job-type-card-name {
-  font-size: 26rpx;
-  font-weight: bold;
-  color: #2D2D2D;
+.job-card .job-card-title {
+  color: #334155 !important;
+  font-size: 28rpx !important;
+  font-weight: 500 !important;
 }
 
-.job-type-card-hours {
-  font-size: 20rpx;
-  color: #8D6E63;
+.job-card .job-card-subtitle {
+  color: #94a3b8 !important;
+  font-size: 22rpx !important;
+  margin-top: 6rpx;
 }
 
-.job-type-card-active {
-  background: #FFF8F2;
-  border-color: #F97316;
-  box-shadow: 0 4rpx 12rpx rgba(249, 115, 22, 0.18);
+/* 选中激活态：强对比暖橙实色渐变卡片，WXML 里只会加 active（见 job-card
+   wx:for 循环），.selected 一并写上纯粹是防御性兼容，不影响现状 */
+.job-card.active,
+.job-card.selected {
+  background: linear-gradient(135deg, #ff9800 0%, #ff6f00 100%) !important;
+  border: 2rpx solid #e65100 !important;
+  box-shadow: 0 8rpx 20rpx rgba(255, 111, 0, 0.28) !important;
+  transform: translateY(-2rpx);
 }
-.job-type-card-active .job-type-card-name {
-  color: #C0392B;
+.job-card.active .job-card-title,
+.job-card.selected .job-card-title {
+  color: #ffffff !important;
+  font-weight: bold !important;
 }
-
-/* 右上角对勾角标：与个人页申请身份卡片同一套视觉语言 */
-.job-type-card-check {
-  position: absolute;
-  top: -1rpx;
-  right: -1rpx;
-  width: 36rpx;
-  height: 36rpx;
-  line-height: 36rpx;
-  text-align: center;
-  font-size: 20rpx;
-  font-weight: bold;
-  color: #FFFFFF;
-  background: #F97316;
-  border-radius: 0 18rpx 0 18rpx;
+.job-card.active .job-card-subtitle,
+.job-card.selected .job-card-subtitle {
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-/* ── 工时联动预览 + 微调步进器 ──────────────────────────────────────── */
-.hours-preview-row {
+/* 右上角超大显眼对勾角标 */
+.job-card.active::after,
+.job-card.selected::after {
+  content: "✓" !important;
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  width: 40rpx !important;
+  height: 40rpx !important;
+  background: #ffffff !important;
+  color: #ff6f00 !important;
+  font-size: 24rpx !important;
+  font-weight: 900 !important;
+  line-height: 40rpx !important;
+  text-align: center !important;
+  border-radius: 0 16rpx 0 16rpx !important;
+  box-shadow: -2rpx 2rpx 6rpx rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ── 横向工时微调步进器 ──────────────────────────────────────────────────
+   🐛 挤压/变形根因：.step-btn 此前只设了 width/height，没有 flex-shrink:0，
+   也没有用 flex 居中"－"/"＋"字符（只靠 line-height 估算垂直居中）——微信
+   原生 <button> 组件自带的默认内边距/最小宽度在部分基础库版本下优先级比这些
+   普通属性高，挤压环境下会把圆形按钮撑成椭圆或直接被压扁。改为对
+   .stepper-controls .step-btn 用完整 !important 覆盖（含 flex 居中 +
+   flex-shrink:0 + max-width 兜底），确保任何情况下都以固定 64rpx 圆形渲染，
+   不再被原生按钮默认样式或父级空间不足影响变形 ─────────────────────────── */
+.stepper-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 20rpx;
-  padding: 16rpx 20rpx;
-  background: #FFF8F2;
+  background: #f7f8fa;
   border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 24rpx;
+  box-sizing: border-box;
+  width: 100%;
 }
 
-.hours-preview-label {
+/* 保留 display:flex;flex-direction:column——WXML 里这个容器还嵌着一条条件
+   提示（.stepper-hint，未选工种时显示），需要在主标签下方单独占一行；
+   不影响 white-space:nowrap 的效果，nowrap 只管每个子元素自己的文本
+   不换行，不管子元素之间是纵向堆叠还是横向并排 */
+.stepper-label {
   display: flex;
   flex-direction: column;
   gap: 2rpx;
-  font-size: 24rpx;
-  font-weight: bold;
-  color: #2D2D2D;
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.hours-preview-hint {
-  font-size: 20rpx;
+.stepper-hint {
+  font-size: 22rpx;
   font-weight: normal;
   color: #D92D20;
+  white-space: nowrap;
 }
 
-.hours-stepper {
+.stepper-controls {
   display: flex;
   align-items: center;
   gap: 16rpx;
+  flex-shrink: 0;
 }
 
-.hours-stepper-btn {
-  width: 48rpx;
-  height: 48rpx;
-  line-height: 48rpx;
-  text-align: center;
-  border-radius: 50%;
-  background: #FFFFFF;
-  border: 2rpx solid #F97316;
-  color: #F97316;
-  font-size: 28rpx;
-  font-weight: bold;
+.stepper-controls .step-btn {
+  width: 64rpx !important;
+  height: 64rpx !important;
+  min-height: 64rpx !important;
+  max-width: 64rpx !important;
+  border-radius: 50% !important;
+  border: 2rpx solid #e0e0e0 !important;
+  background: #ffffff !important;
+  color: #ff7a00 !important;
+  font-size: 36rpx !important;
+  line-height: 56rpx !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
 }
-.hours-stepper-btn:active {
+.stepper-controls .step-btn::after {
+  border: none !important;
+}
+.stepper-controls .step-btn:active {
   transform: scale(0.9);
-  background: #FFF3E8;
+  background: #FFF3E8 !important;
 }
 
-.hours-stepper-value {
-  min-width: 64rpx;
-  text-align: center;
-  font-size: 28rpx;
+.stepper-controls .step-value {
+  font-size: 32rpx;
   font-weight: bold;
-  color: #C0392B;
+  color: #ff7a00;
+  min-width: 80rpx;
+  text-align: center;
 }
 
-.meal-reserve-row {
+/* ── 留餐卡片 ────────────────────────────────────────────────────────── */
+.reserve-meal-card {
   display: flex;
   align-items: center;
-  padding: 20rpx 28rpx;
-  background: #FFF9DB;
+  background: #fff;
+  border: 2rpx solid #eee;
   border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 30rpx;
   margin-top: 20rpx;
-  /* 🌟 与上方班次列表做视觉区隔的分割线，紧贴在这一行正上方 */
+  font-size: 28rpx;
+  box-sizing: border-box;
+  gap: 12rpx;
+  /* 🌟 与上方班次/工种区块做视觉区隔的分割线，紧贴在这一行正上方 */
   border-top: 1rpx dashed #EAECF0;
   padding-top: 24rpx;
-  gap: 12rpx;
+}
+
+/* 大尺寸复选框：原生 checkbox 组件不支持直接 width/height 缩放，用 transform
+   放大到约 1.3 倍，视觉上更接近"大尺寸复选框"的要求，同时不影响周围布局
+   （transform 不占用额外文档流空间） */
+.meal-reserve-checkbox {
+  transform: scale(1.3);
+  transform-origin: left center;
 }
 
 .meal-tip {
-  font-size: 24rpx;
+  font-size: 28rpx;
   color: #5D4037;
   flex: 1;
   line-height: 1.4;
 }
 
+/* 🐛 留店用餐细分餐别 Chip 多选（早/午/晚）：此前这份样式只存在于未参与实际
+   构建的 index.scss 里，真正生效的 index.wxss 从未定义过 .meal-type-chip，
+   导致 WXML 里这三个 Chip 在真机上一直是无边框/无底色的裸文字——现在补齐，
+   并按适老化要求把字号/触控热区一并提上来，不是简单照搬旧 scss 数值 */
+.meal-type-chip-row {
+  display: flex;
+  gap: 12rpx;
+  padding: 0 28rpx;
+  margin-top: 12rpx;
+}
+
+.meal-type-chip {
+  flex: 1;
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #8D6E63;
+  background: #FFFFFF;
+  border: 2rpx solid #F2F4F7;
+  border-radius: 16rpx;
+  transition: all 0.15s ease;
+}
+
+.meal-type-chip.active {
+  background: #FFF7E6;
+  color: #C0392B;
+  border-color: #FF7A00;
+  font-weight: bold;
+}
+
+/* 🐛 文案截断修复：此前用固定 height:88rpx + line-height:88rpx 假设文案永远
+   只有一行——"确认打卡 (记录 X 小时)"在窄屏/字号偏大的关怀模式下有真实换行
+   风险，固定高度会把第二行裁掉，看起来像是"结尾的单位和右括号不见了"。
+   改为 min-height（允许按需长高，不强行裁剪）+ flex 居中（不再依赖单一
+   line-height 数值），文案本身已经统一移到 computeConfirmButtonText()
+   计算好完整字符串再绑定，两处一起彻底堵住"结尾内容丢失"的两种可能成因 */
+/* 🐛 折行截断修复第二层防线：computeConfirmButtonText() 已经把文案压缩到
+   "确认打卡 (4.5h)" 这种 11 字符以内的紧凑格式（见该方法注释），理论上单行
+   稳定放得下；这里再加 white-space:nowrap 强制禁止折行兜底——两层防线都在，
+   任何一层失效都不会再复现"第二行文字被固定高度裁在按钮外"的问题 */
 .btn-confirm-checkin {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
   width: 100%;
-  height: 88rpx;
-  line-height: 88rpx;
-  background: #F97316;
+  height: 88rpx !important;
+  line-height: 88rpx !important;
+  padding: 0 24rpx !important;
+  background: #ff7a00;
   color: #FFFFFF;
-  font-size: 30rpx;
+  font-size: 30rpx !important;
   font-weight: bold;
   border: none;
-  border-radius: 48rpx;
+  border-radius: 44rpx;
   margin-top: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(249, 115, 22, 0.25);
+  box-sizing: border-box !important;
+  box-shadow: 0 8rpx 24rpx rgba(255, 122, 0, 0.25);
 }
 
 .btn-confirm-checkin::after {
@@ -8526,6 +8696,48 @@ button.poster-gen-btn[disabled] {
 
 .collapse-trigger-arrow.expanded {
   transform: rotate(180deg);
+}
+
+/* 🦻 关怀模式（阶段一）：本页绝大多数文字/控件的 font-size 是写死的固定 rpx
+   值，天然不参与 CSS 继承缩放，无法靠一条容器级规则统一放大——3470 行 WXML
+   逐个改造改用 em 相对单位不在本次范围内。这里改为对全站最高频复用的结构类
+   （主操作按钮/表单标签/输入框/义工工具金刚区/打卡确认按钮）做定向覆盖，
+   覆盖字号放大、边框加粗、触控热区达到 ≥48px（88rpx）三件事，是"最高频可见
+   区域优先"的务实取舍，不是对全页面每个像素的逐一改造。*/
+.care-mode .vt-form-label,
+.care-mode .home-vt-text,
+.care-mode .drawer-item-text {
+  font-size: 30rpx !important;
+  font-weight: 600 !important;
+}
+
+.care-mode .btn-main-action,
+.care-mode .btn-confirm-checkin {
+  min-height: 96rpx !important;
+  font-size: 32rpx !important;
+  border: 3rpx solid #000000 !important;
+}
+
+.care-mode .home-vt-item {
+  min-height: 96rpx !important;
+  border-width: 3rpx !important;
+  border-color: #333333 !important;
+}
+
+.care-mode .home-vt-icon {
+  font-size: 48rpx !important;
+}
+
+.care-mode input,
+.care-mode textarea {
+  font-size: 30rpx !important;
+  border-width: 2rpx !important;
+  border-color: #333333 !important;
+}
+
+.care-mode .ui-card-wrapper {
+  border-width: 2rpx !important;
+  border-color: #333333 !important;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────── */

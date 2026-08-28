@@ -1,5 +1,5 @@
 <wxs src="./index.wxs" module="mask" />
-<view class="index-page-container">
+<view class="index-page-container {{careMode ? 'care-mode' : ''}}">
   <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseAvatar/chooseMedia 等隐私接口
        （拍照识别小票、爱心支持明细图片识别等），必须放置该组件才能正常弹出授权 -->
   <privacy-popup />
@@ -322,6 +322,13 @@
       <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
         <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">📷</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">记录护持动态</text>
+      </view>
+
+      <!-- 4. 长辈代报餐与签到：落库走独立的 elder_checkin_logs 流水，不进
+           report_logs，见 components/elder-checkin-modal 头部注释 -->
+      <view class="home-vt-item" bindtap="onTapToolElderCheckin" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 8rpx; margin: 0 8rpx; background: #F7FAFC; border-radius: 16rpx; border: 1rpx solid #EDF2F7;">
+        <text class="home-vt-icon" style="font-size: 40rpx; margin-bottom: 8rpx; display: block;">👵</text>
+        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">长辈代报签到</text>
       </view>
 
     </view>
@@ -1661,6 +1668,7 @@
   </block>
 
   <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: {{canvasHeight}}px;"></canvas>
+  <canvas type="2d" id="printCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: {{printCanvasHeight}}px;"></canvas>
 
   <view class="poster-modal" wx:if="{{showPoster}}" bindtap="closePoster">
     <view class="modal-mask"></view>
@@ -1704,6 +1712,20 @@
         </view>
         <image wx:if="{{posterImage}}" class="poster-image" src="{{posterImage}}" mode="widthFix" binderror="onPosterImageLoadError" />
       </view>
+
+      <!-- 🐛 验真二维码加载失败重试条：左下角"扫码验真"码只是绘进整张海报
+           位图里的一小块区域，加载失败没有单独的 <image> 可以 binderror，
+           只能靠 posterVerifyQrFailed 这个显式状态位驱动一条可点击的重试提示——
+           点击只重新拉这一枚二维码 + 原地重绘当前版式，不重新生成整张海报 -->
+      <view
+        class="poster-qr-retry-banner"
+        hover-class="ui-hover"
+        wx:if="{{posterImage && posterVerifyQrFailed && !isSwitchingPosterType}}"
+        catchtap="onRetryVerifyQr"
+      >
+        ⚠️ 验真二维码生成失败，点击重新生成
+      </view>
+
       <view class="modal-footer">
         <button class="btn-close" bindtap="closePoster">关闭</button>
         <button class="btn-save" bindtap="savePoster">保存到相册</button>
@@ -2825,47 +2847,55 @@
 
       <scroll-view scroll-y class="shift-scroll-area">
 
-        <!-- 🕐 第一维：供餐时段（单选）——一次打卡对应一次实际到店服务的时间窗口 -->
+        <!-- 🕐 第一维：供餐时段（单选）——一次打卡对应一次实际到店服务的时间窗口。
+             横向分段选项卡（shift-tabs-container/shift-tab-item），今日已完成的
+             时段额外叠一个 completed 修饰类（禁用态视觉+提示文案），不占用
+             active 这个类名，避免和"当前选中"两种语义混在一起 -->
         <view class="checkin-section-title">供餐时段</view>
-        <view class="meal-slot-row">
+        <view class="shift-tabs-container">
           <block wx:for="{{availableMealSlots}}" wx:key="slotKey" wx:for-item="slot">
-            <view class="meal-slot-chip {{slot.isCompleted ? 'meal-slot-chip-completed' : (selectedShift === slot.slotKey ? 'meal-slot-chip-active' : '')}}"
+            <view class="shift-tab-item {{slot.isCompleted ? 'completed' : (selectedShift === slot.slotKey ? 'active' : '')}}"
                   bindtap="{{slot.isCompleted ? 'onSelectShiftBlocked' : 'onSelectMealSlot'}}"
                   data-slot="{{slot.slotKey}}">
-              <text class="meal-slot-chip-name">{{slot.name}}</text>
-              <text class="meal-slot-chip-time">{{slot.timeDesc}}</text>
-              <text class="meal-slot-chip-completed-tag" wx:if="{{slot.isCompleted}}">✔ 今日已打卡</text>
+              <view class="shift-tab-text-group">
+                <text class="shift-tab-name">{{slot.name}}</text>
+                <text class="shift-tab-time">{{slot.isCompleted ? '✔ 今日已打卡' : slot.timeDesc}}</text>
+              </view>
             </view>
           </block>
         </view>
 
-        <!-- 🍳 第二维：护持工种（多选，2×2 网格卡片）——图标 + 名称 + 建议工时，
-             选中态描边高亮 + 右上角对勾角标，与个人页申请身份卡片同一套视觉语言 -->
+        <!-- 🍳 第二维：护持工种（多选，2×2 网格卡片）——名称 + 建议工时，
+             选中态描边高亮 + 右上角对勾角标，与个人页申请身份卡片同一套视觉语言。
+             迭代 displayJobTypes（按当前 selectedShift 换算过工时）而不是静态的
+             jobTypeDefinitions，切换供餐时段时这里的推荐预估工时会跟着刷新。
+             class 直接读 job.selected（TS 端 refreshDisplayJobTypes/
+             onToggleJobType 已经把选中态预算进每一项），不在模板表达式里对
+             selectedJobTypes 现场调用 .includes() -->
         <view class="checkin-section-title">护持工种（可多选）</view>
-        <view class="job-type-grid">
-          <block wx:for="{{jobTypeDefinitions}}" wx:key="jobKey" wx:for-item="job">
-            <view class="job-type-card {{selectedJobTypes.includes(job.jobKey) ? 'job-type-card-active' : ''}}"
+        <view class="job-grid-container">
+          <block wx:for="{{displayJobTypes}}" wx:key="jobKey" wx:for-item="job">
+            <view class="job-card {{job.selected ? 'active' : ''}}"
                   bindtap="onToggleJobType"
                   data-job="{{job.jobKey}}">
-              <text class="job-type-card-icon">{{job.icon}}</text>
-              <text class="job-type-card-name">{{job.name}}</text>
-              <text class="job-type-card-hours">预估 {{job.hours}}h</text>
-              <view class="job-type-card-check" wx:if="{{selectedJobTypes.includes(job.jobKey)}}">✓</view>
+              <text class="job-card-icon">{{job.icon}}</text>
+              <text class="job-card-title">{{job.name}}</text>
+              <text class="job-card-subtitle">预估 {{job.hours}}h</text>
             </view>
           </block>
         </view>
 
-        <!-- 🎚️ 工时联动预览 + 微调步进器：工种建议工时之和自动累加展示，
+        <!-- 🎚️ 横向工时微调步进器：工种建议工时之和自动累加展示，
              同时保留 ±0.5h 的轻量微调入口（上限裁剪在 recomputeShiftHours 里统一处理） -->
-        <view class="hours-preview-row">
-          <view class="hours-preview-label">
-            <text>本次预估工时</text>
-            <text class="hours-preview-hint" wx:if="{{selectedJobTypes.length === 0}}">请先选择护持工种</text>
+        <view class="stepper-row">
+          <view class="stepper-label">
+            <text>本次服务工时</text>
+            <text class="stepper-hint" wx:if="{{selectedJobTypes.length === 0}}">请先选择护持工种</text>
           </view>
-          <view class="hours-stepper">
-            <view class="hours-stepper-btn" catchtap="onAdjustShiftHours" data-dir="dec">－</view>
-            <text class="hours-stepper-value">{{selectedShiftHours}}h</text>
-            <view class="hours-stepper-btn" catchtap="onAdjustShiftHours" data-dir="inc">＋</view>
+          <view class="stepper-controls">
+            <button class="step-btn minus" catchtap="onAdjustShiftHours" data-dir="dec">－</button>
+            <text class="step-value">{{selectedShiftHours}}h</text>
+            <button class="step-btn plus" catchtap="onAdjustShiftHours" data-dir="inc">＋</button>
           </view>
         </view>
 
@@ -2883,9 +2913,9 @@
            右侧原生 <checkbox> 组件叠在一起，视觉上是两个方框挨在一起，容易被
            误认成"复选框渲染了两次"。这里只保留单层原生 checkbox，文本不再
            自带任何勾选图形字符 -->
-      <view class="meal-reserve-row" bindtap="onToggleMealReserve">
-        <checkbox checked="{{willEatLunch}}" color="#FF6B35"/>
-        <text class="meal-tip">今日留店用餐 (方便后厨预留餐量)</text>
+      <view class="reserve-meal-card" bindtap="onToggleMealReserve">
+        <checkbox class="meal-reserve-checkbox" checked="{{willEatLunch}}" color="#FF6B35"/>
+        <text class="meal-tip">{{mealReserveTipText}}</text>
       </view>
 
       <!-- 🍚 留店用餐细分餐别：勾选后展开门店当前开放餐次的 Chip 多选，精确到具体
@@ -2901,7 +2931,7 @@
               loading="{{checkInSubmitting}}"
               disabled="{{allShiftsCompleted || isOverHoursLimit || selectedJobTypes.length === 0 || checkInSubmitting}}"
               bindtap="onConfirmShiftCheckIn">
-        {{allShiftsCompleted ? '今日时段已全部完成' : (isOverHoursLimit ? '工时超出每日上限' : (selectedJobTypes.length === 0 ? '请先选择护持工种' : '确认打卡'))}}
+        {{confirmButtonText}}
       </button>
     </view>
   </view>
@@ -2921,6 +2951,9 @@
     </button>
     <button class="btn-main-action poster-gen-btn" hover-class="ui-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
       <text class="btn-emoji-icon">🎨</text>生成公示海报
+    </button>
+    <button class="btn-main-action print-gen-btn" hover-class="ui-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}" style="background: #000000 !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
+      <text class="btn-emoji-icon">🖨️</text>导出打印清单
     </button>
   </view>
 
@@ -2946,6 +2979,12 @@
     visible="{{showMaterialUsageModal}}"
     isAutoApproveRole="{{isManager}}"
     bind:close="onCloseMaterialUsageModal"
+  />
+  <elder-checkin-modal
+    id="elderCheckinModal"
+    visible="{{showElderCheckinModal}}"
+    bind:submitted="onElderCheckinSubmitted"
+    bind:close="onCloseElderCheckinModal"
   />
 
 
@@ -3230,7 +3269,9 @@
     is-manager="{{isManager}}"
     is-finance="{{isFinance}}"
     is-super-admin="{{isSuperAdmin}}"
-    bind:action="onSideDrawerAction" />
+    care-mode="{{careMode}}"
+    bind:action="onSideDrawerAction"
+    bind:toggleCareMode="onToggleCareMode" />
   </block>
 
   <!-- 🏢 工作空间选择首页：currentPlatformMode 为空时的默认落地页——标准 SaaS

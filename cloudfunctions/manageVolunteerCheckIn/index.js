@@ -25,6 +25,7 @@ const _ = db.command;
 const COLLECTION = 'volunteer_duty_logs';
 const DAILY_HOURS_CAP = 12.0;
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
+const SHIFT_TYPES = ['BREAKFAST', 'LUNCH', 'DINNER', 'FULL_DAY'];
 
 // 🐛 云函数容器时区固定为 UTC，与 processRoleAudit/submitFeedback 同一套换算，
 // 避免"今日"日期字符串比北京时间晚半天导致工时统计错日归集
@@ -94,6 +95,10 @@ async function handleCheckin(event, OPENID) {
     dateString,
     shiftKey,
     shiftName: event.shiftName || '',
+    // 🍚 shift_type：按餐次精准归档的枚举口径，纯增量字段——不参与上面的
+    // 同工种去重/工时上限校验（那两处继续只认 shiftKey/hours），未传或传了
+    // 非法值时兜底 'LUNCH'，不阻断打卡主流程
+    shift_type: SHIFT_TYPES.includes(event.shift_type) ? event.shift_type : 'LUNCH',
     hours: addHours,
     // 🍚 留店用餐：willEatLunch 是"是否留店用餐"总开关，reservedMeals 是具体细分到
     // 早/午/晚的子集——同一份数据，后厨可直接按 {tenantId, storeId, dateString} 聚合

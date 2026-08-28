@@ -3,6 +3,7 @@ import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '.
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
 import { drawMeritPoster, drawStoryPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
+import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
 import { getSafeSystemInfo } from '../../utils/util';
@@ -680,6 +681,11 @@ Page({
     isGeneratingPoster: false,
     showPoster: false,
     posterImage: '',
+    // 🖨️ 高对比度打印清单：与生成海报同一套"canvas 渲染 → 导出临时图片"
+    // 流程，但导出后直接走 wx.previewImage 原生长按保存，不额外起一个自定义
+    // 预览弹窗（见 utils/printRenderer.ts 头部注释）
+    isGeneratingPrintList: false,
+    printCanvasHeight: 800,
     showPosterModal: false,
     // 🆕 财务公示版 (4:3) / 温馨故事版 (9:16) 切换：posterType 只影响 .poster-modal
     // （showPoster，展示 canvas 导出的真实图片）这一个预览弹窗，与 .modal-backdrop
@@ -699,6 +705,10 @@ Page({
     // 携带 storeId+date）：每次生成/切版式共用同一份，生成失败时为空字符串，
     // 由 posterGenerator.ts 自行降级为占位框
     verifyQrLocalPath: '',
+    // 🐛 验真二维码重试兜底：resolveVerifyQrLocalPath 重试 MAX_ATTEMPTS 次仍
+    // 失败时置为 true，驱动 .poster-modal 里的可点击重试提示条（见
+    // onRetryVerifyQr），成功后复位为 false
+    posterVerifyQrFailed: false,
     // 🐛 修复"二维码显示为空白"：旧默认值是一个早期私人测试云环境的死链
     // （zeng-yuhua-cloud-123.tcb.qcloud.la），且项目里根本没有 /images/ 静态资源目录，
     // 兜底路径同样是空的。现改为状态机 + 动态生成，绝不再依赖任何写死的外部/本地图片路径。
@@ -720,6 +730,11 @@ Page({
     // material-usage-modal 组件）的显隐，表单状态本身由组件内部持有
     showDailyMenuModal: false,
     showMaterialUsageModal: false,
+    // 👵 长辈代报餐与签到弹窗（elder-checkin-modal 组件），显隐同上，表单
+    // 状态在组件内部持有；提交后的人数合并见 onElderCheckinSubmitted
+    showElderCheckinModal: false,
+    // 🦻 关怀模式：onLoad 时从 app.globalData/本地存储回填，见 onToggleCareMode
+    careMode: false,
     archiveUserInfo: {
       totalDays: 0,
       totalCheckInCount: 0,
@@ -1064,30 +1079,61 @@ Page({
     isOverHoursLimit: false,
     checkInSubmitting: false,
     allShiftsCompleted: false,
+    // 🛡️ 确认打卡主按钮文案：由 computeConfirmButtonText() 统一算好，见该方法
+    // 头部注释——不在 WXML 里用嵌套三元表达式拼接，规避表达式引擎解析风险
+    confirmButtonText: '请先勾选护持工种',
     todayLogs: [] as any[],
     myCheckInDays: 0,
     myCheckInCount: 0,
     myServiceHours: 0,
-    // 🍚 供餐时段（第一维）：relatedMeal 供 refreshTodayShiftStatus() 按当前门店
-    // supportedMeals 过滤展示——只供午餐的门店（多数雨花斋）只会看到"午市班次"
-    // 一个时段，早市/晚市自动隐藏。单选（一次打卡对应一次实际到店服务的时间
-    // 窗口，不支持同时勾选多个时段）；午市为默认核心时段，见 getDefaultMealSlot()
+    // 🍚 供餐时段（第一维）：单选（一次打卡对应一次实际到店服务的时间窗口，
+    // 不支持同时勾选多个时段）。🐛 2026-08 修复：refreshTodayShiftStatus()
+    // 此前按当前门店 supportedMeals 过滤这份列表，只供午餐的门店（多数雨花斋）
+    // 只会看到"午市班次"一档，早/晚市自动隐藏——但打卡记录的是义工护持工时，
+    // 跟门店"卖不卖这顿饭"无关（早市开餐前备菜、没有正式晚市供餐的门店做晚间
+    // 收尾保洁，都是真实发生的工时），现在始终完整展示这里定义的全部 4 档，
+    // 不再按 supportedMeals 收窄。relatedMeal 字段保留下来，只用于
+    // getDefaultReservedMeal()——"留店用餐"细分餐别默认勾选值仍需要知道
+    // 某个时段对应哪顿饭；"全天护持"档没有对应具体某一顿饭，relatedMeal 留空。
+    // shiftType 是提交给 manageVolunteerCheckIn 的归档口径
+    // （'BREAKFAST'|'LUNCH'|'DINNER'|'FULL_DAY'），与本地专用的 slotKey 分开管理，
+    // slotKey 继续只做"当日+同 key 去重"的不透明字符串，不需要跟着改
     mealSlotDefinitions: [
-      { slotKey: 'morning', name: '早市班次', timeDesc: '06:30 - 08:30', relatedMeal: 'breakfast' },
-      { slotKey: 'lunch', name: '午市班次', timeDesc: '09:00 - 13:30', relatedMeal: 'lunch' },
-      { slotKey: 'dinner', name: '晚市班次', timeDesc: '16:30 - 19:30', relatedMeal: 'dinner' }
+      { slotKey: 'morning', name: '🌅 早市班次', timeDesc: '06:00 - 08:30', relatedMeal: 'breakfast', shiftType: 'BREAKFAST' },
+      { slotKey: 'lunch', name: '☀️ 午市班次', timeDesc: '09:00 - 13:30', relatedMeal: 'lunch', shiftType: 'LUNCH' },
+      { slotKey: 'dinner', name: '🌙 晚市班次', timeDesc: '16:30 - 19:30', relatedMeal: 'dinner', shiftType: 'DINNER' },
+      { slotKey: 'full_day', name: '🌟 全天护持', timeDesc: '全天常驻', relatedMeal: '', shiftType: 'FULL_DAY' }
     ] as any[],
     availableMealSlots: [] as any[],
-    // 🍳 护持岗位/工种分类（第二维）：多选，每项自带"建议预估工时"，选中态由
-    // selectedJobTypes 驱动，实际提交工时 = 选中工种建议工时之和 + manualHoursAdjust
-    // 微调量（见 recomputeShiftHours）
+    // 🍳 护持岗位/工种分类（第二维）：多选，hours 是"午市班次"口径下的建议工时
+    // 基准值——不同班次的合理工时天然不同（早市窗口比午市短、全天护持要覆盖
+    // 多个窗口），真正展示/参与计算的是 displayJobTypes（见 refreshDisplayJobTypes/
+    // getJobHoursForSlot），jobTypeDefinitions 本身只保留 icon/name/desc 等
+    // 不随班次变化的静态信息 + 午市基准工时
     jobTypeDefinitions: [
       { jobKey: 'chef', icon: '👨‍🍳', name: '主厨/面点', desc: '掌勺烹饪、面点制作、后厨统筹', hours: 3.5 },
       { jobKey: 'prep', icon: '🥬', name: '洗菜/切配', desc: '食材挑选、清洗去杂、切配备料', hours: 2.5 },
       { jobKey: 'serve', icon: '🤝', name: '堂食/引导', desc: '行仪引导、打饭分餐、维持秩序', hours: 2.0 },
       { jobKey: 'clean', icon: '🧹', name: '保洁/洗消', desc: '洗碗消毒、餐桌擦拭、拖地清洁', hours: 2.0 }
     ] as any[],
+    // 🎚️ 各班次工种建议工时覆盖表：只列出与"午市"（jobTypeDefinitions 基准值）
+    // 不同的班次，lunch 本身不需要出现在这里——早市窗口短（2.5h）按各工种
+    // 基准值统一打七折取整到 0.5h 台阶；晚市窗口（3h）介于早/午之间；全天护持
+    // 覆盖早+午两段窗口，按基准值 1.7 倍估算，均取 0.5h 台阶，不是精确算出来的
+    // 数字，是给义工一个合理参考起点，实际仍可用下方步进器 ±0.5h 手动修正
+    jobHoursOverrideBySlot: {
+      morning: { chef: 2.5, prep: 2.0, serve: 1.5, clean: 1.5 },
+      dinner: { chef: 3.0, prep: 2.0, serve: 1.5, clean: 1.5 },
+      full_day: { chef: 6.0, prep: 4.5, serve: 3.5, clean: 3.5 }
+    } as Record<string, Record<string, number>>,
+    // 🍳 按当前 selectedShift 换算过工时的工种卡片展示数据，WXML 的 job-grid-container
+    // 实际迭代这份而不是静态的 jobTypeDefinitions——切换班次时随之刷新
+    // （见 refreshDisplayJobTypes），"下方各工种的推荐预估工时动态刷新"落在这里
+    displayJobTypes: [] as any[],
     selectedJobTypes: [] as string[],
+    // 🍚 留餐提示文案：根据当前选中班次自适应（"今日留店用早/午/晚餐"），
+    // 全天护持档不对应单一餐次，退回通用文案——见 getMealReserveTipText
+    mealReserveTipText: '今日留店用餐 (方便后厨预留餐量)',
     // 🎚️ 工时微调：在"选中工种建议工时之和"基础上做 ±0.5h 的轻量调整（如实际
     // 比预估多干了半小时），范围裁剪在 recomputeShiftHours 里统一做，不单独立
     // 上下限校验分支
@@ -1119,6 +1165,11 @@ Page({
   },
 
   _adjustResolve: null as (() => void) | null,
+  // 🛡️ 护持工种卡片防误触抖动：见 onToggleJobType 头部注释，按 jobKey 维度
+  // 记录"上一次成功触发的 toggle 是哪张卡片、什么时候"，不是 data 字段（不需要
+  // 驱动任何渲染），纯实例属性
+  _lastJobToggleKey: '' as string,
+  _lastJobToggleTime: 0 as number,
 
   async onLoad(options: any) {
     this.debouncedSaveDraft = debounce(() => this.saveDraft(), 500);
@@ -1126,6 +1177,11 @@ Page({
     // 🐛 修复：todayDateStr 此前从未被赋值，义工视角"汇报日期"栏与首页快捷发布弹窗
     // 的日期提示一直渲染为空白
     this.setData({ todayDateStr: getTodayIsoString() });
+
+    // 🦻 关怀模式：app.ts onLaunch 已经从 wx.getStorageSync 回填过 globalData，
+    // 这里直接读一次镜像到本页 data，不重复读存储
+    const app = getApp() as any;
+    this.setData({ careMode: !!(app && app.globalData && app.globalData.careMode) });
 
     // 任务C：解析锚点聚焦参数
     // 支持 action=checkInCard 或 targetElement=checkInCard 两种参数名
@@ -1527,7 +1583,15 @@ Page({
         data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
       });
       const cloudResult = cloudRes.result as any;
-      const list = (cloudResult && cloudResult.success) ? (cloudResult.list || []) : [];
+      // 🐛 与上面缓存读取路径同一处根因、对称补齐防护：这条云端查询路径此前只信
+      // `cloudResult.list || []`，只挡了 list 缺失/为 null 的情况，没校验它"是
+      // 数组"——一旦云函数在某些异常响应形状下把 list 返回成非数组的真值（例如
+      // 对象），这里会原样 setData 进 allStoresList，而它直接绑定
+      // `<picker range="{{allStoresList}}">`，原生渲染层拿到非数组 range 就会
+      // 踩空索引崩溃，报错正是 "Cannot read property '0' of undefined"——与本文件
+      // 上方缓存分支注释记录的历史崩溃是同一个根因、只是换了数据来源触发
+      const rawList = (cloudResult && cloudResult.success) ? cloudResult.list : null;
+      const list = Array.isArray(rawList) ? rawList : [];
       this.setData({ allStoresList: list });
       this.maybeAutoSelectStore(list);
 
@@ -2390,6 +2454,19 @@ Page({
       default:
         break;
     }
+  },
+
+  // 🦻 关怀模式开关：side-drawer 只负责 UI 呈现与事件转发（见该组件头部注释），
+  // 实际持久化落在宿主页——写 app.globalData 供其余页面（阶段一暂未接入，但
+  // 保留接口）读取，wx.setStorageSync 落本地供下次冷启动 onLaunch 回填
+  onToggleCareMode(e: any) {
+    const value = !!(e.detail && e.detail.value);
+    const app = getApp() as any;
+    if (app && app.globalData) {
+      app.globalData.careMode = value;
+    }
+    wx.setStorageSync('care_mode', value);
+    this.setData({ careMode: value });
   },
 
   // 🛡️ 义工绑定审核弹窗的空状态入口专用：全国总览视角下不允许生成海报（见
@@ -8006,7 +8083,11 @@ Page({
       // 专区卡片想额外找一家雨花斋加入），必须显式声明才能跨出自己的 tenantId
       const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { orgType: orgTypeFilter, crossTenant: true } });
       const result = res.result as any;
-      const list = (result && result.success) ? (result.list || []) : [];
+      // 🐛 与 fetchAllStoresList 同一处防护：这里同样直接 setData 进
+      // allStoresList，同一个 `<picker range="{{allStoresList}}">` 绑定，
+      // 必须校验 result.list 真的是数组，不能只信"非空即可用"
+      const rawList = (result && result.success) ? result.list : null;
+      const list = Array.isArray(rawList) ? rawList : [];
       console.log('[openStorePickerForJoin] 站点列表加载完成，success:', !!(result && result.success), '数量:', list.length);
       this.setData({ allStoresList: list });
     } catch (e) {
@@ -8816,6 +8897,45 @@ Page({
     }
   },
 
+  // 🖨️ 导出打印清单：复用生成海报同一份 buildFinancialPosterData()，只是换成
+  // printRenderer.ts 的纯黑白高对比度版式（无渐变/无圆角装饰、大字号、粗边框），
+  // 供年长义工/长辈直接连接便携热敏打印机打印，或长按保存成白底黑字高清图片。
+  // 导出后走 wx.previewImage 原生长按保存/分享，不额外起一个自定义预览弹窗。
+  async onExportPrintList() {
+    if (this.data.isGeneratingPrintList) return;
+
+    if (!this.data.showResult) {
+      wx.showModal({
+        title: '提示',
+        content: '请先点击「⚡ 生成文本」生成日报内容，再导出打印清单。',
+        showCancel: false
+      });
+      return;
+    }
+
+    this.setData({ isGeneratingPrintList: true });
+    wx.showLoading({ title: '正在生成打印清单...', mask: true });
+
+    try {
+      const printData = {
+        ...this.buildFinancialPosterData(),
+        diningCount: parseFloat(this.data.diningCount) || 0
+      };
+      const printImagePath = await drawPrintList(this, printData);
+      wx.hideLoading();
+      wx.previewImage({
+        urls: [printImagePath],
+        current: printImagePath
+      });
+    } catch (err: any) {
+      console.error('[onExportPrintList] 打印清单生成失败:', err);
+      wx.hideLoading();
+      wx.showToast({ title: err.message || '打印清单生成失败', icon: 'none', duration: 3000 });
+    } finally {
+      this.setData({ isGeneratingPrintList: false });
+    }
+  },
+
   closePoster() {
     this.setData({ showPoster: false });
   },
@@ -8880,35 +9000,96 @@ Page({
 
   // 🆕 海报「扫码验真」区域的真实二维码：指向 pages/public-verify/index，携带
   // 当前门店 storeId + 报告日期，与首页推广码（generateQrCode，指向 pages/index/index）
-  // 是两个不同用途的码，各自独立生成/下载，互不影响。任何一步失败都返回空字符串，
-  // 由 posterGenerator.ts 优雅降级为占位框，绝不阻断整张海报的生成
+  // 是两个不同用途的码，各自独立生成/下载，互不影响。
+  //
+  // 🐛 修复"加载失败只显示占位、没有重试入口"：此前这里是单次尝试，云函数调用
+  // 或 downloadFile 任一环节网络抖动失败就直接放弃、返回空字符串，海报里这块
+  // 永久烙印成占位框，用户唯一的补救办法是关掉整张海报重新点【生成公示海报】
+  // 从头再来一遍（连带重算财务数据），成本很高。现在：
+  //  ① 云函数调用 + 下载各自最多重试 MAX_ATTEMPTS 次（间隔递增退避），网络抖动
+  //     这类瞬时失败在重试窗口内大概率能自愈，不需要用户介入；
+  //  ② 仍失败到底时才回退占位框，同时置位 posterVerifyQrFailed，供 WXML 展示
+  //     一条可点击的重试提示（.poster-qr-retry-banner，见 onRetryVerifyQr），
+  //     不需要重新生成整张海报，只重新拉这一枚二维码并原地重绘。
   async resolveVerifyQrLocalPath(): Promise<string> {
-    try {
-      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+    const MAX_ATTEMPTS = 3;
 
-      const storeId = this.data.currentStoreId || '';
-      const storeName = this.data.currentStoreName || this.data.shopName || '';
-      const dateString = deriveDateString(this.data.reportDateValue, this.data.reportDate);
-
-      const qrRes = await wx.cloud.callFunction({
-        name: 'getStoreQRCode',
-        data: { storeId, storeName, purpose: 'verify', date: dateString }
-      });
-      const qrResult = qrRes.result as any;
-
-      if (!qrResult || !qrResult.success || !qrResult.fileID) {
-        throw new Error((qrResult && qrResult.error) || '验真二维码生成失败');
-      }
-
-      const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
-      if (!downRes || !downRes.tempFilePath) {
-        throw new Error('验真二维码下载失败');
-      }
-
-      return downRes.tempFilePath;
-    } catch (err) {
-      console.warn('[resolveVerifyQrLocalPath] 验真二维码生成/下载失败，海报将回退为占位框:', err);
+    if (!isCloudAvailable()) {
+      console.warn('[resolveVerifyQrLocalPath] 云开发不可用，跳过验真二维码生成');
       return '';
+    }
+
+    const storeId = this.data.currentStoreId || '';
+    const storeName = this.data.currentStoreName || this.data.shopName || '';
+    const dateString = deriveDateString(this.data.reportDateValue, this.data.reportDate);
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        // 🐛 优先复用已生成过的 fileID 重新下载，而不是每次重试都重新调云函数——
+        // getStoreQRCode 的 scene 固定编码为 storeId+purpose+date，同一份码在
+        // 云存储里是可复用的永久 fileID（cloud://），只有本地临时下载失败时才
+        // 值得重试；云函数调用本身失败（如首次尚未生成过）仍走完整流程
+        const qrRes = await wx.cloud.callFunction({
+          name: 'getStoreQRCode',
+          data: { storeId, storeName, purpose: 'verify', date: dateString }
+        });
+        const qrResult = qrRes.result as any;
+
+        if (!qrResult || !qrResult.success || !qrResult.fileID) {
+          throw new Error((qrResult && qrResult.error) || '验真二维码生成失败');
+        }
+
+        const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+        if (!downRes || !downRes.tempFilePath) {
+          throw new Error('验真二维码下载失败');
+        }
+
+        if (attempt > 1) {
+          console.log(`[resolveVerifyQrLocalPath] 第${attempt}次重试成功`);
+        }
+        this.setData({ posterVerifyQrFailed: false });
+        return downRes.tempFilePath;
+      } catch (err) {
+        console.warn(`[resolveVerifyQrLocalPath] 第${attempt}/${MAX_ATTEMPTS}次尝试失败:`, err);
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    console.warn('[resolveVerifyQrLocalPath] 已达最大重试次数，海报将回退为占位框');
+    this.setData({ posterVerifyQrFailed: true });
+    return '';
+  },
+
+  // 🔄 验真二维码重试入口：不重新生成整张海报（不重算财务数据、不重新走内容
+  // 安全检测），只重新拉这一枚二维码，成功后按当前展示的版式（财务公示版/
+  // 温馨故事版）原地重绘一次，替换掉预览里那张占位框海报
+  async onRetryVerifyQr() {
+    if (this.data.isSwitchingPosterType) return;
+    this.setData({ isSwitchingPosterType: true });
+    wx.showLoading({ title: '正在重新获取二维码...', mask: true });
+
+    try {
+      const verifyQrLocalPath = await this.resolveVerifyQrLocalPath();
+      this.setData({ verifyQrLocalPath });
+
+      if (!verifyQrLocalPath) {
+        wx.showToast({ title: '二维码仍获取失败，请稍后重试', icon: 'none', duration: 2500 });
+        return;
+      }
+
+      const posterImagePath = this.data.posterType === 'story'
+        ? await drawStoryPoster(this, this.buildStoryPosterData())
+        : await drawMeritPoster(this, this.buildFinancialPosterData());
+      this.setData({ posterImage: posterImagePath });
+      wx.showToast({ title: '二维码已恢复', icon: 'success' });
+    } catch (err: any) {
+      console.error('[onRetryVerifyQr] 重试失败:', err);
+      wx.showToast({ title: err.message || '重试失败，请稍后再试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ isSwitchingPosterType: false });
     }
   },
 
@@ -9805,6 +9986,36 @@ Page({
     this.setData({ showMaterialUsageModal: false });
   },
 
+  onTapToolElderCheckin() {
+    const open = () => {
+      const modal = this.selectComponent('#elderCheckinModal') as any;
+      if (modal) modal.resetForm();
+      this.setData({ showElderCheckinModal: true });
+    };
+    if (!this.ensureStoreBoundForTool(open)) return;
+    open();
+  },
+
+  onCloseElderCheckinModal() {
+    this.setData({ showElderCheckinModal: false });
+  },
+
+  // 👵 长辈签到提交成功后的人数合并：elder-checkin-modal 已经把这次代报
+  // 落库到独立的 elder_checkin_logs 流水（ledgerIngestionAdapter），这里只
+  // 负责把 +1 合并进当前表单内存态，效果等同于人工在"义工与用餐统计"里手动
+  // +1——之所以不能让云函数直接对 report_logs.dineInSeniors 做后台自增，
+  // 是因为 DataService.saveReport 每次保存都会把当前表单整份覆盖回库，后台
+  // 自增会被下一次正常保存静默冲掉（详见 ledgerIngestionAdapter 头部注释）。
+  // 送餐到家类服务算送餐人次，其余（含堂食/家属代报）算堂食人次。
+  onElderCheckinSubmitted(e: any) {
+    const detail = e.detail || {};
+    const isDelivery = detail.serviceType === '送餐到家';
+    const field = isDelivery ? 'deliverySeniors' : 'dineInSeniors';
+    const current = parseFloat(this.data[field]) || 0;
+    this.setData({ [field]: String(current + 1) });
+    this.recalcDiningStats();
+  },
+
   // 📷 记录今日护持动态：本来就是独立页面（活动日志），个人页的同名入口
   // （onOpenVolunteerJournalModal）也是直接 navigateTo 过去，这里跳同一个
   // 目标页面即可，不需要交接标记
@@ -9883,25 +10094,36 @@ Page({
   // 统一计算
   refreshTodayShiftStatus() {
     const todayStr = new Date().toISOString().split('T')[0];
-    const logs = wx.getStorageSync('my_checkin_logs') || [];
+    // 🛡️ 健壮性加固：`|| []` 只挡得住 null/undefined，挡不住 storage 里意外
+    // 存成非数组真值（如损坏的旧版本数据）的情况——那种脏值会原样通过 `|| []`
+    // 往下传，todayLogs.filter/wx:for 等后续消费点才会踩坑。这里改用
+    // Array.isArray 做真正的形状校验，与 fetchAllStoresList 同一套防护口径
+    const rawLogs = wx.getStorageSync('my_checkin_logs');
+    const logs = Array.isArray(rawLogs) ? rawLogs : [];
 
     const todayLogs = logs.filter((log: any) => log.date === todayStr);
     const completedSlotKeys = new Set(todayLogs.map((log: any) => log.shiftKey));
     const todayHours = todayLogs.reduce((sum: number, log: any) => sum + (parseFloat(log.hours) || 0), 0);
     const todayAccumulatedHours = parseFloat(todayHours.toFixed(1));
 
-    // 🍚 供餐时段按门店开放餐次关联联动：只保留 relatedMeal 命中当前门店
-    // supportedMeals 的时段——只供午餐的门店（多数雨花斋）自动只显示"午市班次"
-    // 一档，不需要用户自己甄别哪些时段跟本店没关系
-    const supportedMeals = this.data.supportedMeals && this.data.supportedMeals.length > 0
-      ? this.data.supportedMeals
-      : ['lunch'];
-    const mealFilteredSlots = this.data.mealSlotDefinitions.filter((item: any) =>
-      !item.relatedMeal || supportedMeals.includes(item.relatedMeal)
-    );
+    // 🛡️ mealSlotDefinitions/jobTypeDefinitions 只在页面 data 初始化时赋值一次
+    // （见 data 块声明处），本页面代码里没有任何地方会用 setData 覆盖成其它值，
+    // 理论上不可能是 undefined——这里仍加一层 Array.isArray 兜底，belt-and-
+    // suspenders，避免今后有人不小心在别处 setData 覆盖了这两个字段却没保证
+    // 形状，导致下面 .map() 直接抛错中断整个工作区切换渲染
+    const mealSlotDefinitions = Array.isArray(this.data.mealSlotDefinitions) ? this.data.mealSlotDefinitions : [];
 
+    // 🐛 2026-08 修复：此前按门店 supportedMeals 过滤 mealSlotDefinitions，
+    // 只供午餐的门店（多数雨花斋）会导致早市/晚市班次直接从列表里消失——但
+    // 打卡这一动作本身跟门店"卖不卖这顿饭"是两回事：义工可能在早市开餐前
+    // 备菜、在晚市没有正式供餐的门店里做晚间保洁/收尾，这些护持工时依然需要
+    // 记录。打卡时段固定展示 mealSlotDefinitions 里全部 4 档（早/午/晚/全天），
+    // 不再按 supportedMeals 收窄；supportedMeals 只继续用于"留店用餐"细分
+    // 餐别 Chip（getDefaultReservedMeal/.meal-type-chip-row）——那个场景问的是
+    // "门店今天有没有开这顿饭可以留下吃"，跟"这个时段能不能打卡"是两套不同的
+    // 判断，不能共用同一份过滤逻辑
     let firstAvailableSlot = '';
-    const updatedSlots = mealFilteredSlots.map((item: any) => {
+    const updatedSlots = mealSlotDefinitions.map((item: any) => {
       const isCompleted = completedSlotKeys.has(item.slotKey);
       if (!isCompleted && !firstAvailableSlot) {
         firstAvailableSlot = item.slotKey;
@@ -9909,13 +10131,13 @@ Page({
       return { ...item, isCompleted };
     });
 
-    // 🌟 默认时段：优先午市（多数门店的核心时段），当天午市已打卡过则顺延到
-    // 下一个尚未完成的时段；若门店当前开放的时段今天已全部打卡完，退回午市
-    // 本身仅作占位展示（对应的行会显示"今日已打卡"，不可再选）
-    const lunchSlot = updatedSlots.find((s: any) => s.slotKey === 'lunch');
-    const defaultSlot = (lunchSlot && !lunchSlot.isCompleted)
-      ? 'lunch'
-      : (firstAvailableSlot || 'lunch');
+    // 🌟 默认时段：按当前系统真实时间自动选中最贴近的班次（见
+    // getNearestShiftKeyByTime，"全天护持"不参与这一判定，只能手动选择）；
+    // 当前时间点找不到合适班次（例如今天可选的都已打卡完）时，退回第一个
+    // 尚未完成的时段，仍然全部打卡完则退回午市本身仅作占位展示（对应行会
+    // 显示"今日已打卡"，不可再选）
+    const nearestSlot = this.getNearestShiftKeyByTime(updatedSlots);
+    const defaultSlot = nearestSlot || firstAvailableSlot || 'lunch';
 
     const allCompleted = updatedSlots.length > 0 && updatedSlots.every((item: any) => item.isCompleted);
 
@@ -9925,19 +10147,98 @@ Page({
       availableMealSlots: updatedSlots,
       allShiftsCompleted: allCompleted,
       selectedShift: defaultSlot,
+      mealReserveTipText: this.getMealReserveTipText(defaultSlot),
       // 🎫 每次重新唤起打卡弹窗都清空上一次的工种选择/微调量，这次到底做了
       // 哪些工种由用户当场重新勾选，不沿用历史残留
       selectedJobTypes: [],
       manualHoursAdjust: 0
     });
+    this.refreshDisplayJobTypes();
     this.recomputeShiftHours();
   },
 
-  // 🍳 工种建议工时之和：selectedJobTypes 命中 jobTypeDefinitions 的 hours 累加，
-  // 供 recomputeShiftHours 与 WXML 展示"预估合计"复用同一份口径
+  // 🕐 按当前系统真实时间自动选中最贴近的班次：命中某个班次的时间窗口就直接
+  // 选它，都不在窗口内则选"距最近窗口边界最短"的一个；已打卡完成的班次不参与
+  // 比较（避免选中一个用户点了也没用的档）；"全天护持"没有固定时间窗口，
+  // 不参与这一判定，只能手动切换过去
+  getNearestShiftKeyByTime(slots: any[]): string {
+    const now = new Date();
+    const minutesNow = now.getHours() * 60 + now.getMinutes();
+    // 与 mealSlotDefinitions 的 timeDesc 一一对应，单位分钟（自 00:00 起算）
+    const windows: Record<string, [number, number]> = {
+      morning: [360, 510],  // 06:00 - 08:30
+      lunch: [540, 810],    // 09:00 - 13:30
+      dinner: [990, 1170]   // 16:30 - 19:30
+    };
+
+    let bestKey = '';
+    let bestDist = Infinity;
+    (Array.isArray(slots) ? slots : []).forEach((s: any) => {
+      const win = windows[s.slotKey];
+      if (!win || s.isCompleted) return;
+      const [start, end] = win;
+      const dist = minutesNow < start ? (start - minutesNow) : (minutesNow > end ? (minutesNow - end) : 0);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestKey = s.slotKey;
+      }
+    });
+    return bestKey;
+  },
+
+  // 🍳 某工种在指定班次下的建议工时：优先查 jobHoursOverrideBySlot[slotKey]，
+  // 查不到（如 slotKey='lunch'，或未来新增班次没配覆盖值）就退回
+  // jobTypeDefinitions 里的午市基准值
+  getJobHoursForSlot(jobKey: string, slotKey: string): number {
+    const jobTypeDefinitions = Array.isArray(this.data.jobTypeDefinitions) ? this.data.jobTypeDefinitions : [];
+    const baseJob = jobTypeDefinitions.find((j: any) => j.jobKey === jobKey);
+    const baseHours = (baseJob && baseJob.hours) || 0;
+    const overrideTable = this.data.jobHoursOverrideBySlot as Record<string, Record<string, number>> | undefined;
+    const override = overrideTable ? overrideTable[slotKey] : undefined;
+    return (override && typeof override[jobKey] === 'number') ? override[jobKey] : baseHours;
+  },
+
+  // 🍳 按当前 selectedShift + selectedJobTypes 重新算一份"工种卡片展示数据"：
+  // WXML 的 job-grid-container 迭代这份而不是静态的 jobTypeDefinitions。
+  //
+  // 🛡️ selected/active 字段直接在这里预算好，WXML 端 class 绑定改读
+  // item.selected（见 wxml），不再在 {{}} 里对 selectedJobTypes 现场调用
+  // .includes()——两种写法在这个项目的基础库环境下实测都能生效（本页其它
+  // Chip，如 reservedMeals.includes('breakfast')，一直在用同样的写法且工作
+  // 正常），但把"是否选中"这个派生状态提前在 TS 里算好、直接以布尔字段形式
+  // 交给 WXML，比每次渲染都在模板表达式里现算一遍更直接、更不依赖对表达式
+  // 求值细节的信任，出问题时也更容易在 TS 里单步排查
+  refreshDisplayJobTypes() {
+    const slotKey = this.data.selectedShift;
+    const jobTypeDefinitions = Array.isArray(this.data.jobTypeDefinitions) ? this.data.jobTypeDefinitions : [];
+    const selectedJobTypes = Array.isArray(this.data.selectedJobTypes) ? this.data.selectedJobTypes : [];
+    const displayJobTypes = jobTypeDefinitions.map((j: any) => {
+      const isSelected = selectedJobTypes.includes(j.jobKey);
+      return {
+        ...j,
+        hours: this.getJobHoursForSlot(j.jobKey, slotKey),
+        selected: isSelected,
+        active: isSelected
+      };
+    });
+    this.setData({ displayJobTypes });
+  },
+
+  // 🍚 留餐提示文案按当前选中班次自适应：早/午/晚市班次对应具体餐别，
+  // "全天护持"不对应单一餐次，退回通用文案
+  getMealReserveTipText(slotKey: string): string {
+    const mealLabelMap: Record<string, string> = { morning: '早餐', lunch: '午餐', dinner: '晚餐' };
+    const mealLabel = mealLabelMap[slotKey];
+    return mealLabel ? `今日留店用${mealLabel} (方便后厨预留餐量)` : '今日留店用餐 (方便后厨预留餐量)';
+  },
+
+  // 🍳 工种建议工时之和：selectedJobTypes 命中 displayJobTypes 的 hours 累加——
+  // displayJobTypes 已经按当前 selectedShift 换算过，这里不需要再单独传
+  // slotKey，供 recomputeShiftHours 与 WXML 展示"预估合计"复用同一份口径
   computeJobTypeHoursSum(jobKeys: string[]): number {
-    return this.data.jobTypeDefinitions
-      .filter((j: any) => jobKeys.includes(j.jobKey))
+    const displayJobTypes = Array.isArray(this.data.displayJobTypes) ? this.data.displayJobTypes : [];
+    return displayJobTypes
+      .filter((j: any) => Array.isArray(jobKeys) && jobKeys.includes(j.jobKey))
       .reduce((sum: number, j: any) => sum + (j.hours || 0), 0);
   },
 
@@ -9959,11 +10260,31 @@ Page({
     const baseHours = todayAccumulatedHours != null ? todayAccumulatedHours : this.data.todayAccumulatedHours;
     const shiftHours = selectedShiftHours != null ? selectedShiftHours : this.data.selectedShiftHours;
     const previewTotalHours = parseFloat((baseHours + shiftHours).toFixed(1));
+    const isOverHoursLimit = previewTotalHours > DAILY_HOURS_CAP;
 
     this.setData({
       previewTotalHours: previewTotalHours,
-      isOverHoursLimit: previewTotalHours > DAILY_HOURS_CAP
+      isOverHoursLimit: isOverHoursLimit,
+      confirmButtonText: this.computeConfirmButtonText(isOverHoursLimit, shiftHours)
     });
+  },
+
+  // 🛡️ 主按钮文案计算属性：从 WXML 里三层嵌套三元表达式 + 字符串拼接
+  // （{{a ? x : (b ? y : (c ? z : ('...' + n + '...')))}}）搬到这里用普通 TS
+  // 逻辑算好一个纯字符串再交给 WXML 绑定——WXML {{}} 表达式引擎对这种深层
+  // 嵌套三元混字符串拼接的解析在部分基础库版本下不完全可靠，出现过末尾内容
+  // （单位/右括号）丢失的情况；改成 JS 端算好定长字符串后，就不存在"表达式
+  // 解析到一半截断"这类风险了，来源统一收敛到这一个函数，四个分支覆盖
+  // WXML 里原来的四种状态，判断顺序也保持一致（allShiftsCompleted 优先级最高）
+  computeConfirmButtonText(isOverHoursLimit: boolean, shiftHours: number): string {
+    if (this.data.allShiftsCompleted) return '今日时段已全部完成';
+    if (isOverHoursLimit) return '工时超出每日上限';
+    if (!this.data.selectedJobTypes || this.data.selectedJobTypes.length === 0) return '请先勾选护持工种';
+    // 🐛 文案精简：原"确认打卡 (记录 4.5 小时)"长达 16 个字符，32rpx 加粗字号下
+    // 在按钮内极易换行，固定高度的按钮会把折行的第二行裁在按钮外沿——不再靠
+    // 加大按钮高度去将就长文案，而是把文案本身压缩到"确认打卡 (4.5h)"这种
+    // 11 字符以内的紧凑格式，任何机型单行都能稳定容下
+    return `确认打卡 (${shiftHours}h)`;
   },
 
   onCloseShiftModal() {
@@ -9983,19 +10304,68 @@ Page({
   onSelectMealSlot(e: any) {
     const { slot } = e.currentTarget.dataset;
     if (!slot) return;
-    this.setData({ selectedShift: slot });
+    this.setData({ selectedShift: slot, mealReserveTipText: this.getMealReserveTipText(slot) });
+    // 🍳 班次联动：下方各工种的推荐预估工时按新班次重新算一遍并刷新展示
+    this.refreshDisplayJobTypes();
+    this.recomputeShiftHours();
   },
 
   // 🍳 护持工种多选：卡片式勾选，命中的每一项都会计入建议工时之和（见
   // computeJobTypeHoursSum/recomputeShiftHours）。允许多选是本次重构的核心
   // 诉求——同一次打卡里"主要洗菜、顺便帮忙打饭"这类混合工种场景，此前的固定
   // 班次单选模型完全无法表达
+  // 🍳 护持工种卡片 Toggle：selectedJobTypes 只维护"当前选中了哪些 jobKey"这
+  // 一份集合本身，不维护任何累加/累减的工时中间值。
+  //
+  // 🧮 为什么总工时必须是"从选中集合全量重算"而不是"选中 += 该工种工时、取消
+  // -= 该工种工时"：本弹窗的工种建议工时是按当前选中班次（selectedShift）动态
+  // 换算的（见 refreshDisplayJobTypes/getJobHoursForSlot——同一个"主厨/面点"
+  // 在早市是 2.5h、午市是 3.5h）。如果改成增量加减，会出现这样的时序漏洞：
+  // 用户在【午市】选中"主厨"（+3.5h）→ 切到【早市】（该工种建议工时变成 2.5h，
+  // 但增量模型里"已加过的 3.5h"早已固化进总数，不会跟着班次重新换算）→ 用户
+  // 再取消"主厨"，若按当前班次的 2.5h 去减，实际扣少了 1h，总工时会越攒越多，
+  // 这就是典型的"重复累加"根因。这里坚持"selectedJobTypes 只是一份 key 集合，
+  // 总工时永远从这份集合 + 当前 displayJobTypes（已按当前班次换算好）现算现得"
+  // （见 computeJobTypeHoursSum 的 reduce 累加），无论选中/取消先后顺序、无论
+  // 中途有没有切换班次，结果永远等于"当前选中集合在当前班次下的真实工时之和"，
+  // 不存在任何累积误差的可能。
   onToggleJobType(e: any) {
     const { job } = e.currentTarget.dataset;
     if (!job) return;
+
+    // 🛡️ 同卡片防误触抖动：触屏设备偶发的"回弹二次触发"会让同一次物理点击在
+    // 极短时间内对同一张卡片连续触发两次 tap 事件——两次 toggle 一加一减，
+    // 净效果是选中态"闪一下就消失"，用户会觉得"点了没反应"。这里按 jobKey
+    // 维度设一个 400ms 冷却窗口，冷却期内对同一张卡片的重复 tap 直接丢弃，不
+    // 参与任何状态变更；快速切换点击不同的卡片不受影响（key 不同，判断不命中）
+    const now = Date.now();
+    if (this._lastJobToggleKey === job && (now - this._lastJobToggleTime) < 400) {
+      return;
+    }
+    this._lastJobToggleKey = job;
+    this._lastJobToggleTime = now;
+
     const current = this.data.selectedJobTypes || [];
-    const next = current.includes(job) ? current.filter((k: string) => k !== job) : [...current, job];
-    this.setData({ selectedJobTypes: next });
+    const isCurrentlySelected = current.includes(job);
+    const nextSelectedKeys = isCurrentlySelected ? current.filter((k: string) => k !== job) : [...current, job];
+
+    // 🛡️ selected/active 随 selectedJobTypes 同一次 setData 一起同步写回
+    // displayJobTypes——WXML 的 class 绑定直接读 item.selected（而不是在模板
+    // 表达式里对 selectedJobTypes 现场调用 .includes()），两份状态在同一次
+    // setData 里原子落地，不存在"selectedJobTypes 已经变了、displayJobTypes
+    // 还没跟上"的中间态
+    const displayJobTypes = (this.data.displayJobTypes || []).map((item: any) => ({
+      ...item,
+      selected: nextSelectedKeys.includes(item.jobKey),
+      active: nextSelectedKeys.includes(item.jobKey)
+    }));
+
+    this.setData({
+      selectedJobTypes: nextSelectedKeys,
+      displayJobTypes
+    });
+    // 🔁 每次 selectedJobTypes 变化都统一回到 recomputeShiftHours() 全量重算，
+    // 不在这里手写任何 += / -= 的旁路捷径
     this.recomputeShiftHours();
   },
 
@@ -10010,12 +10380,17 @@ Page({
     this.recomputeShiftHours();
   },
 
-  // 🍚 默认留餐时段：优先午餐（多数门店的唯一/主餐次），门店未开放午餐（如仅供
-  // 早/晚餐的门店）时退回 supportedMeals 里的第一个餐次
+  // 🍚 默认留餐时段：优先跟随当前选中班次对应的餐次（例如正选着早市班次，
+  // 打开"留店用餐"大概率是想留早餐，不该还是默认勾午餐）；班次没有对应餐次
+  // （全天护持）或门店未开放该餐次时，退回午餐，门店也未开放午餐（如仅供
+  // 早/晚餐的门店）时再退回 supportedMeals 里的第一个餐次
   getDefaultReservedMeal(): string {
     const supportedMeals = this.data.supportedMeals && this.data.supportedMeals.length > 0
       ? this.data.supportedMeals
       : ['lunch'];
+    const slotObj = this.data.mealSlotDefinitions.find((s: any) => s.slotKey === this.data.selectedShift);
+    const relatedMeal = slotObj && slotObj.relatedMeal;
+    if (relatedMeal && supportedMeals.includes(relatedMeal)) return relatedMeal;
     return supportedMeals.includes('lunch') ? 'lunch' : supportedMeals[0];
   },
 
@@ -10121,6 +10496,10 @@ Page({
       .filter((j: any) => this.data.selectedJobTypes.includes(j.jobKey))
       .map((j: any) => j.name);
     const shiftLabel = `${(slotObj && slotObj.name) || '爱心护持班'}${jobLabels.length ? ' · ' + jobLabels.join('、') : ''}`;
+    // 🍚 shift_type：按餐次精准归档的枚举口径（'BREAKFAST'|'LUNCH'|'DINNER'|
+    // 'FULL_DAY'），与 shiftKey（继续只做不透明去重字符串）分开，供云端/未来
+    // 统计报表按餐次维度聚合，不需要反查 mealSlotDefinitions 才能知道是哪一餐
+    const shiftType = (slotObj && slotObj.shiftType) || 'LUNCH';
     const currentStoreId = this.data.currentStoreId || '';
     const currentStoreName = this.data.currentStoreName || this.data.shopName || '';
     const reservedMeals = this.data.willEatLunch ? this.data.reservedMeals.slice() : [];
@@ -10141,6 +10520,7 @@ Page({
             storeName: currentStoreName,
             shiftKey: selectedShift,
             shiftName: shiftLabel,
+            shift_type: shiftType,
             hours: requestedHours,
             willEatLunch: this.data.willEatLunch,
             reservedMeals
@@ -10176,6 +10556,7 @@ Page({
       time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
       shiftKey: selectedShift,
       shiftName: shiftLabel,
+      shift_type: shiftType,
       hours: addHours,
       // 🏪 门店隔离：补上 storeId（此前只存 storeName），供 computeMyCheckInStats
       // 精确按门店过滤；storeName 继续保留，作为老记录（没有 storeId）的兜底匹配字段

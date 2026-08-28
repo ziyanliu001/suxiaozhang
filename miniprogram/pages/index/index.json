@@ -9,6 +9,7 @@
     "side-drawer": "../../components/side-drawer/side-drawer",
     "daily-menu-modal": "../../components/daily-menu-modal/daily-menu-modal",
     "material-usage-modal": "../../components/material-usage-modal/material-usage-modal",
+    "elder-checkin-modal": "../../components/elder-checkin-modal/elder-checkin-modal",
     "yangshan-wall": "../../components/yangshan-wall/yangshan-wall"
   }
 }

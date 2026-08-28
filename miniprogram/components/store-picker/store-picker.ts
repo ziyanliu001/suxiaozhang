@@ -233,7 +233,13 @@ Component({
           data: this.properties.orgTypeFilter ? { orgType: this.properties.orgTypeFilter } : {}
         });
         const result = res.result as any;
-        const list = (result && result.success) ? (result.list || []) : [];
+        // 🐛 防御性校验：此前只信"result.list 非空即可用"，未校验它真的是数组——
+        // 一旦云函数在异常响应形状下返回非数组的 list，紧接着的 .map() 会直接
+        // 抛错中断整个 fetchStoreListFromCloud，allStores/groupedStoreList
+        // 停留在上一次的值，本组件正是宿主页面进入雨花/通用专区时新挂载的
+        // <store-picker>，这类未兜底的异常在"首次进入工作区"这个时间点最容易暴露
+        const rawList = (result && result.success) ? result.list : null;
+        const list = Array.isArray(rawList) ? rawList : [];
 
         const fetchedStores = list.map((s: any) => ({
           storeId: s.storeId,
