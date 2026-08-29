@@ -5,8 +5,11 @@ page {
 }
 
 .scrollarea {
+  width: 100%;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: hidden;
+  box-sizing: border-box;
 }
 
 .log-item {

@@ -4,9 +4,12 @@ page {
 }
 
 .help-page-container {
+  width: 100%;
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .help-nav-bar {

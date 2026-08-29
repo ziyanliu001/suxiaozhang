@@ -1,4 +1,24 @@
 /**app.wxss**/
+
+/* 🛡️ 全局盒模型兜底：border-box 让 width + padding/border 不再互相叠加，
+   是本次"width:100% + margin 导致右侧溢出"这整类 bug 的第一道防线——
+   很多元素从未显式声明过 box-sizing，默认走 content-box，同一个元素只要
+   同时设置了 width 和 padding/border 就有溢出风险。global 兜底后，各页面/
+   组件自己已经写的 box-sizing: border-box 仍然生效（同值覆盖不产生副作用），
+   没写过的元素也不再暴露在这个坑里 */
+page, view, scroll-view, text, image, button, input, textarea {
+  box-sizing: border-box;
+}
+
+/* 🛡️ 页面根节点防溢出兜底：任何页面某个子元素万一还是没控制好横向尺寸
+   （如 width:100% 又叠加了左右 margin），也只会被裁掉溢出部分、不会撑出
+   横向滚动条把整页内容推偏——与各页面根容器类自己声明的 overflow-x:hidden
+   是同一道防线的两层，一层在 page 级别兜底，一层在各页面根容器类里显式声明 */
+page {
+  width: 100%;
+  overflow-x: hidden;
+}
+
 .container {
   height: 100%;
   display: flex;

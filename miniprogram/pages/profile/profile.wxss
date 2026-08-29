@@ -1,5 +1,7 @@
 .mine-page-container {
+  width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   background-color: #FDF6E3;
   box-sizing: border-box;
 }

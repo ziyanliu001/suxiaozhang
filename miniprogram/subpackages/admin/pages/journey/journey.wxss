@@ -1,7 +1,10 @@
 /* ===== 暖心历程页 ===== */
 
 .journey-page {
+  width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
+  box-sizing: border-box;
   background: linear-gradient(180deg, #FDFBF6 0%, #F9F5ED 100%);
 }
 

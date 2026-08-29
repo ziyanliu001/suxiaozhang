@@ -3,9 +3,12 @@ page {
 }
 
 .page-container {
+  width: 100%;
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* 🌟 全站统一的卡片基础层与点击态：与 index/journey/profile/notice 等页面的

@@ -3994,6 +3994,72 @@ button.poster-gen-btn[disabled] {
   margin-bottom: 20rpx;
 }
 
+/* 🐛 命名空间隔离：.name-input/.amount-input/.btn-add-item 是全文件共用裸类名
+   （还被"爱心支持"添加行、固定支出添加行两处不相关场景占用，后者甚至要靠
+   内联 !important 才能跟这份共享样式拗过来），直接改基础规则会连带影响那
+   两处。这里用父级 .expense-template-add-row 限定的后代选择器，只在"常用
+   支出项目"这个场景内覆盖尺寸比例/视觉质感，不碰其余两处的既有样式 */
+.expense-template-add-row .name-input {
+  flex: 4.2;
+  width: auto;
+  height: 72rpx;
+  line-height: 72rpx;
+  background: #F7F8FA;
+  border: none;
+  border-radius: 12rpx;
+  padding: 0 16rpx;
+  font-size: 27rpx;
+  box-sizing: border-box;
+}
+
+.expense-template-add-row .amount-input {
+  flex: 3.2;
+  width: auto;
+  height: 72rpx;
+  line-height: 72rpx;
+  background: #F7F8FA;
+  border: none;
+  border-radius: 12rpx;
+  padding: 0 16rpx;
+  font-size: 27rpx;
+  box-sizing: border-box;
+}
+
+/* 🐛 消除原生 button 变形：微信 <button> 自带 min-height（约 96rpx 起）与
+   内部默认 padding，仅靠 height/line-height 压不住，会导致按钮比左右两个
+   input 视觉上更高、文字也不是真正居中。显式清零 min-height + 改用
+   flex 布局居中（不再依赖 line-height 撑起文字），高度才能跟 input 严格
+   一致到 72rpx */
+.expense-template-add-row .btn-add-item {
+  flex: 2.4;
+  min-height: 0 !important;
+  width: auto !important;
+  height: 72rpx;
+  line-height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #FFA94D 0%, #FF922B 100%);
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: 500;
+  border-radius: 12rpx;
+  padding: 0 16rpx !important;
+  margin: 0;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.expense-template-add-row .btn-add-item:active {
+  background: linear-gradient(135deg, #FF922B 0%, #F76707 100%);
+}
+
+/* 微信 <button> 默认自带一圈 ::after 细边框，与上面重新设计的渐变+圆角
+   质感冲突，去掉后视觉才干净 */
+.expense-template-add-row .btn-add-item::after {
+  border: none;
+}
+
 .expense-template-empty {
   padding: 40rpx 20rpx;
   text-align: center;
@@ -5833,6 +5899,40 @@ button.poster-gen-btn[disabled] {
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
+/* 👥 角色筛选横向胶囊：浅灰底色，选中态换成本弹窗已有的品牌高亮色
+   （与上方 Tab 选中态、下方【生成邀请海报】按钮同一套 #D9480E 暖色调，
+   视觉呼应，不额外引入新色系） */
+.audit-role-filter-segment {
+  white-space: nowrap;
+  margin-bottom: 16rpx;
+}
+
+.role-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  flex-shrink: 0;
+  margin-right: 12rpx;
+  padding: 12rpx 24rpx;
+  background: #F5F6F8;
+  color: #495057;
+  font-size: 24rpx;
+  font-weight: 500;
+  border-radius: 999rpx;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.role-filter-chip:last-child {
+  margin-right: 0;
+}
+
+.role-filter-chip.active {
+  background: #FFF3E0;
+  color: #D9480E;
+  font-weight: bold;
+}
+
 /* 滚动列表区：🛡️ 修复底部被自定义 TabBar 遮挡——补上安全内边距，
    确保空状态的【生成邀请海报】按钮与卡片底部操作按钮完整可见、点击无阻碍 */
 .drawer-content-scroll {
@@ -5846,7 +5946,7 @@ button.poster-gen-btn[disabled] {
 .audit-applicant-card {
   background: #FFFFFF;
   border: 1rpx solid #E9ECEF;
-  border-radius: 20rpx;
+  border-radius: 16rpx;
   padding: 24rpx;
   margin-bottom: 20rpx;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.02);
@@ -5893,14 +5993,28 @@ button.poster-gen-btn[disabled] {
   flex-shrink: 0;
 }
 
+/* 🎨 四种申请角色各自独立配色，一眼区分：义工=绿、财务=蓝、店长=金、
+   大家长=紫。此前只定义了 finance/volunteer 两档，item.role 为
+   store_manager/store_patriarch 时（申请角色本就含这两种，见 WXML
+   role-tag-badge 文案分支）落不到任何颜色规则，只能显示成无色裸标签 */
+.role-tag-badge.volunteer {
+  background: #EBFBEE;
+  color: #2B8A3E;
+}
+
 .role-tag-badge.finance {
+  background: #E7F5FF;
+  color: #1C7ED6;
+}
+
+.role-tag-badge.store_manager {
   background: #FFF3BF;
   color: #D9480E;
 }
 
-.role-tag-badge.volunteer {
-  background: #E7F5FF;
-  color: #1C7ED6;
+.role-tag-badge.store_patriarch {
+  background: #F3E8FF;
+  color: #862E9C;
 }
 
 .card-time-row {
@@ -5992,7 +6106,7 @@ button.poster-gen-btn[disabled] {
   flex-direction: column;
   align-items: center;
   margin-top: 40rpx;
-  padding: 40rpx 20rpx;
+  padding: 60rpx 0;
   text-align: center;
 }
 
@@ -6021,14 +6135,15 @@ button.poster-gen-btn[disabled] {
 }
 
 .btn-empty-invite {
-  background: #FFF3BF;
-  color: #D9480E;
-  border: 1rpx solid #FFE066;
+  background: linear-gradient(135deg, #FFE066 0%, #FCC419 100%);
+  color: #7A4D00;
+  border: 1rpx solid #FCC419;
   font-size: 24rpx;
   font-weight: bold;
   border-radius: 30rpx;
   padding: 12rpx 36rpx;
   margin: 0;
+  box-shadow: 0 4rpx 12rpx rgba(252, 196, 25, 0.25);
   transition: all 0.15s ease;
 }
 
@@ -6037,7 +6152,8 @@ button.poster-gen-btn[disabled] {
 }
 
 .btn-empty-invite:active {
-  background: #FFE066;
+  background: linear-gradient(135deg, #FCC419 0%, #F5A623 100%);
+  box-shadow: 0 2rpx 6rpx rgba(252, 196, 25, 0.2);
   transform: scale(0.98);
 }
 

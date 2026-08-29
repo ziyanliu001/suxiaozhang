@@ -1,5 +1,7 @@
 .settings-container {
+  width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   background: #F8F9FA;
   box-sizing: border-box;
 }

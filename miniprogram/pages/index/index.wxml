@@ -2514,7 +2514,7 @@
 
       <view class="expense-template-add-row" wx:if="{{expenseTemplateEditMode}}">
         <input class="name-input" placeholder="项目名称" value="{{expenseTemplateNewName}}" bindinput="onInputExpenseTemplateNewName" />
-        <input class="amount-input" type="digit" placeholder="默认金额(选填)" value="{{expenseTemplateNewAmount}}" bindinput="onInputExpenseTemplateNewAmount" />
+        <input class="amount-input" type="digit" placeholder="默认金额" value="{{expenseTemplateNewAmount}}" bindinput="onInputExpenseTemplateNewAmount" />
         <button class="btn-add-item" bindtap="onAddExpenseTemplateItem" loading="{{expenseTemplateSaving}}">+ 添加</button>
       </view>
 
@@ -2620,13 +2620,17 @@
         </view>
       </view>
 
-      <!-- 👥 角色筛选 Segment：两个 Tab 共用 -->
-      <view class="audit-role-filter-segment">
+      <!-- 👥 角色筛选：两个 Tab 共用。此前这几个 <view> 完全没有对应 CSS 规则
+           （裸 block 元素默认逐行纵向堆叠），渲染出来就是竖排纯文本列表——
+           不是刻意设计的侧边栏，只是从未补过样式。改用 scroll-view scroll-x +
+           enable-flex，与本文件 .preset-scroll-row（公告模板横向滚动标签）
+           同一套已验证过的写法，做成横向可滚动胶囊 -->
+      <scroll-view scroll-x enable-flex show-scrollbar="false" class="audit-role-filter-segment">
         <view class="role-filter-chip {{auditRoleFilter === 'all' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="all">全部</view>
         <view class="role-filter-chip {{auditRoleFilter === 'volunteer' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="volunteer">义工</view>
         <view class="role-filter-chip {{auditRoleFilter === 'finance' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="finance">财务</view>
         <view class="role-filter-chip {{auditRoleFilter === 'leader' ? 'active' : ''}}" bindtap="onSwitchAuditRoleFilter" data-filter="leader">大家长/店长</view>
-      </view>
+      </scroll-view>
 
       <!-- 🔍 已通过列表姓名/手机号搜索 -->
       <view class="audit-search-box" wx:if="{{auditActiveTab === 'approved'}}">

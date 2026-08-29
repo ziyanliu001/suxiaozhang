@@ -1,8 +1,11 @@
 .history-page-wrapper {
   position: relative;
+  width: 100%;
   height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  box-sizing: border-box;
   background-color: #F8F9FA;
 }
 
