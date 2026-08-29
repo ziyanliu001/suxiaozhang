@@ -17,7 +17,6 @@ interface PeekResult {
 
 Page({
   data: {
-    navTop: 0,
     contentTop: 0,
 
     code: '',
@@ -36,8 +35,6 @@ Page({
   },
 
   onLoad(options: Record<string, string>) {
-    this.calculateNavBarHeight();
-
     // 扫码启动：options.scene 是 URL 编码过的 "wcode=XXXXXX"
     const rawScene = options && (options.scene || (options as any).query?.scene);
     if (rawScene) {
@@ -58,18 +55,15 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
-    this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
-    });
+  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
+  // 共享组件
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
+  // goBack 双重用途：<navigation-bar> 的返回键回调（组件内部调用页面上的
+  // 同名方法不成立——这里改由 wj-secondary-btn "取消" 按钮继续绑定，
+  // 组件返回键本身走自己的 wx.navigateBack，不再依赖本方法）
   goBack() {
     // 扫码冷启动时可能没有可返回的页面栈，失败就落到首页 tab
     wx.navigateBack({

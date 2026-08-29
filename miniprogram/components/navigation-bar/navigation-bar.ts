@@ -24,6 +24,15 @@ Component({
       type: String,
       value: ''
     },
+    // 🌟 深色背景模式：返回箭头/回家图标默认走 --weui-FG-0 = rgba(0,0,0,.9)
+    // 这一份深色描边（本组件此前只在浅色背景页面用过，如 journey.wxml），
+    // 门店管理/门店档案等深红 #8C1D18 顶栏场景下图标会跟背景融在一起、
+    // 用户根本看不见返回按钮。dark:true 时把 --weui-FG-0 切到纯白，
+    // 图标与背景色分离由调用方另传 color="#FFFFFF" 控制标题文字颜色
+    dark: {
+      type: Boolean,
+      value: false
+    },
     // 是否显示返回按钮（旧属性名，继续兼容）
     back: {
       type: Boolean,
@@ -171,8 +180,13 @@ Component({
         actualShowHome
       })
 
-      // 供页面获取真实布局尺寸，替代各页面各自估算 navTop 的老写法
-      this.triggerEvent('layout', { statusBarHeight, navBarHeight, totalHeight }, {})
+      // 供页面获取真实布局尺寸，替代各页面各自估算 navTop 的老写法。
+      // contentTop/contentHeight/rightGap 额外提供给需要在导航栏同一行放置
+      // 自定义右侧操作（如"编辑"按钮）的页面——右侧胶囊自身的物理区域已经被
+      // .weui-navigation-bar__right 精确让空（不能塞可见内容进去，会被原生
+      // 胶囊盖住/抢触摸），自定义按钮需要用这几个值算出"胶囊左侧、垂直居中
+      // 对齐"的位置，作为独立于本组件之外的绝对定位元素渲染
+      this.triggerEvent('layout', { statusBarHeight, navBarHeight, totalHeight, contentTop, contentHeight, rightGap }, {})
     },
     _showChange(show: boolean) {
       const animated = this.data.animated

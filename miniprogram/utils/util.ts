@@ -37,6 +37,23 @@ export function getSafeSystemInfo() {
   }
 }
 
+// 🐛 性能修复：wx.getStorageSync 的异步替代——journey.ts/store-profile.ts/
+// daily-menu.ts/activity-log.ts 等页面 onLoad/onShow 里读取 current_user_role/
+// current_store_id 等零散 key 时，此前各自直接调用 wx.getStorageSync，同步
+// 占用页面初始化的执行栈；本项目已出现过 safeNavigateTo 2.5s 诊断警告（见
+// utils/navHelper.ts 的诊断计时器注释）。统一改成这个小工具函数，key 不存在
+// 时 wx.getStorage 走 fail 回调，按空字符串兜底，与原先 wx.getStorageSync(...)
+// || '' 的口径一致
+export function getStorageAsync(key: string): Promise<any> {
+  return new Promise((resolve) => {
+    wx.getStorage({
+      key,
+      success: (res) => resolve(res.data),
+      fail: () => resolve('')
+    });
+  });
+}
+
 export const formatTime = (date: Date) => {
   const year = date.getFullYear()
   const month = date.getMonth() + 1

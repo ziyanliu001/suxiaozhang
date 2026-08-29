@@ -1,10 +1,14 @@
 <view class="pf-page">
 
-  <view class="pf-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="pf-nav-back" hover-class="pf-nav-back-hover" bindtap="goBack">←</view>
-    <text class="pf-nav-title">📦 排单与发货管理</text>
-    <view class="pf-nav-placeholder"></view>
-  </view>
+  <navigation-bar
+    title="📦 排单与发货管理"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
   <view class="pf-body" style="margin-top: {{contentTop}}px;">
 
@@ -119,7 +123,7 @@
       <text class="pf-empty-text">暂无待发货订单</text>
     </view>
 
-    <scroll-view class="pf-list" scroll-y wx:else>
+    <scroll-view class="pf-list" scroll-y style="height: {{pfListHeight}};" wx:else>
       <view class="pf-order-card" wx:for="{{orders}}" wx:key="_id">
         <view class="pf-order-header">
           <text class="pf-order-product">{{item.productName}}</text>

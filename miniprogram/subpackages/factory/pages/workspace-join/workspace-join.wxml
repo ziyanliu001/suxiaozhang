@@ -1,13 +1,17 @@
 <view class="wj-page">
 
-  <view class="wj-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="wj-nav-back" hover-class="wj-nav-back-hover" bindtap="goBack">←</view>
-    <text class="wj-nav-title">🤝 加入产销工坊</text>
-    <view class="wj-nav-placeholder"></view>
-  </view>
+  <navigation-bar
+    title="🤝 加入产销工坊"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
   <view class="wj-body" style="margin-top: {{contentTop}}px;">
-    <view class="wj-center-wrap">
+    <view class="wj-center-wrap" style="min-height: calc(100vh - {{contentTop}}px);">
 
       <view class="wj-intro" wx:if="{{!peekResult}}">
         <text class="wj-intro-icon">🤝</text>

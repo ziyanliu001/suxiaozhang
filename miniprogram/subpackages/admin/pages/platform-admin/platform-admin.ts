@@ -73,7 +73,6 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
-    navTop: 0,
     contentTop: 0,
     checkedAccess: false,
     // 🐛 根因修复：checkAccess() 此前一旦抛异常（网络异常/云函数未部署等），
@@ -195,7 +194,6 @@ Page({
   },
 
   onLoad() {
-    this.calculateNavBarHeight();
     this.checkAccess();
 
     this._navGuard = createNavGuard({
@@ -240,16 +238,10 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
-    this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
-    });
+  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
+  // 共享组件
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
   // 🐛 根因修复：此前任何一步抛异常（fetchUserRole 网络失败、云函数未部署等）

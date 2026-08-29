@@ -1,27 +1,32 @@
 <view class="pv-page">
 
-  <view class="pv-status-bar" style="height: {{statusBarHeight}}px;"></view>
-  <view class="pv-nav-bar" style="height: {{navBarHeight}}px;">
-    <text class="pv-nav-title">阳光账本 · 公开监督</text>
-  </view>
+  <navigation-bar
+    title="阳光账本 · 公开监督"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
-  <view class="pv-loading" wx:if="{{loading}}">
+  <view class="pv-loading" style="margin-top: {{contentTop}}px;" wx:if="{{loading}}">
     <text class="pv-error-icon">☀️</text>
     <text class="pv-error-text">正在查询账目数据...</text>
   </view>
 
-  <view class="pv-error" wx:if="{{!loading && errorMsg}}">
+  <view class="pv-error" style="margin-top: {{contentTop}}px;" wx:if="{{!loading && errorMsg}}">
     <text class="pv-error-icon">⚠️</text>
     <text class="pv-error-text">{{errorMsg}}</text>
   </view>
 
-  <view class="pv-not-found" wx:if="{{!loading && !errorMsg && !found}}">
+  <view class="pv-not-found" style="margin-top: {{contentTop}}px;" wx:if="{{!loading && !errorMsg && !found}}">
     <text class="pv-error-icon">🔍</text>
     <text class="pv-error-text">未查询到 {{dateString}} 的账目记录</text>
     <text class="pv-error-sub">可能尚未发布，或二维码信息有误</text>
   </view>
 
-  <scroll-view scroll-y class="pv-content" wx:if="{{!loading && found}}">
+  <scroll-view scroll-y class="pv-content" style="height: calc(100vh - {{contentTop}}px);" wx:if="{{!loading && found}}">
 
     <!-- ☀️ 善行汇聚：平台公开统计（激励性数据，无需鉴权） -->
     <view class="pv-platform-banner" wx:if="{{platformStoreCount > 0}}">

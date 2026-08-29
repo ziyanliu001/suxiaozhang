@@ -6,48 +6,7 @@
   background: #F8F5F0;
 }
 
-.sp-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.sp-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-}
-
-.sp-nav-back-hover {
-  opacity: 0.5;
-}
-
-/* 🛡️ 标题绝对居中，不依赖左右两侧按钮是否存在：编辑按钮改成 wx:if 后，
-   义工/财务等无编辑权限的角色不会渲染这个节点，若仍用 space-between 布局，
-   标题会因为右侧少了一个占位元素而整体偏移，改为绝对定位彻底消除这个依赖 */
-.sp-nav-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-  white-space: nowrap;
-}
 .sp-scroll {
-  height: calc(100vh - 88rpx);
   box-sizing: border-box;
   padding: 20rpx 24rpx;
   padding-bottom: calc(60rpx + constant(safe-area-inset-bottom));

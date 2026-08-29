@@ -1,4 +1,3 @@
-import { getSafeSystemInfo } from '../../../../utils/util';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 // 🛡️ 100% 公开只读页面：扫码进来的是社会公众/捐赠人，绝不能依赖任何登录态或
@@ -39,8 +38,7 @@ Page({
   _storeId: '' as string,
 
   data: {
-    statusBarHeight: 20,
-    navBarHeight: 44,
+    contentTop: 0,
 
     loading: true,
     errorMsg: '',
@@ -97,8 +95,6 @@ Page({
   },
 
   onLoad(options: Record<string, string>) {
-    this.calculateNavBarHeight();
-
     const target = this.resolveTarget(options);
     if (!target) {
       this.setData({ loading: false, errorMsg: '二维码信息不完整，无法查询该笔账目' });
@@ -108,19 +104,14 @@ Page({
     this.fetchReport(target.storeId, target.date);
   },
 
-  calculateNavBarHeight() {
-    try {
-      const sysInfo = getSafeSystemInfo();
-      const statusBarHeight = sysInfo.statusBarHeight || 20;
-      const menuButton = wx.getMenuButtonBoundingClientRect();
-      let navBarHeight = 44;
-      if (menuButton) {
-        navBarHeight = (menuButton.top - statusBarHeight) * 2 + menuButton.height;
-      }
-      this.setData({ statusBarHeight, navBarHeight: navBarHeight || 44 });
-    } catch (e) {
-      console.warn('[public-verify] Calc height fallback:', e);
-    }
+  // 🐛 根因修复：本页此前是唯一一处没有返回/回家按钮的自定义导航栏页面——
+  // 扫码验真这类分享直入场景，页面栈深度通常为 1，用户进来后完全没有
+  // 离开路径（只能靠系统手势/物理返回，体验生硬）。改用 <navigation-bar>
+  // 共享组件，back+showHomeButton="auto" 会按真实栈深度决定展示返回还是
+  // 回家，且组件内部的点击逻辑本就在栈深度为 1 时安全降级为 switchTab 回首页，
+  // 不会出现点击后卡死的情况
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
   // 兼容两种入口：

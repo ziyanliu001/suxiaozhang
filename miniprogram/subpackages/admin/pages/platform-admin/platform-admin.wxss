@@ -6,52 +6,10 @@
   background: #F4F5F7;
 }
 
-.pa-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #1C2530;
-}
-
-.pa-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.pa-nav-back-hover {
-  opacity: 0.5;
-}
-
 /* 🌟 通用点击反馈：本页此前大部分按钮完全没有 hover-class，点击手感生硬——
-   统一补上这一条，与 .pa-nav-back-hover 同一套"轻微变暗"语言 */
+   统一补上这一条"轻微变暗"语言 */
 .btn-hover {
   opacity: 0.7;
-}
-
-.pa-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
-.pa-nav-placeholder {
-  width: 64rpx;
-  height: 64rpx;
-  flex-shrink: 0;
 }
 
 .pa-loading-state,

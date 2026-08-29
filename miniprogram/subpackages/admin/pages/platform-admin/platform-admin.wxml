@@ -1,10 +1,14 @@
 <view class="pa-page">
 
-  <view class="pa-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="pa-nav-back" hover-class="pa-nav-back-hover" bindtap="onGoBack">←</view>
-    <text class="pa-nav-title">🏢 SaaS 平台管理</text>
-    <view class="pa-nav-placeholder"></view>
-  </view>
+  <navigation-bar
+    title="🏢 SaaS 平台管理"
+    background="#1C2530"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
   <view class="pa-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
     <text>校验身份中...</text>

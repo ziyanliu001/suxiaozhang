@@ -4,6 +4,7 @@ import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { recordRecentVisit } from '../../../../utils/recentPages';
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { getStorageAsync } from '../../../../utils/util';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -109,7 +110,6 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
-    navTop: 0,
     contentTop: 0,
 
     currentStoreId: '',
@@ -260,7 +260,6 @@ Page({
 
   async onLoad() {
     recordRecentVisit('/subpackages/admin/pages/store-profile/store-profile', '门店档案');
-    this.calculateNavBarHeight();
 
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',
@@ -290,16 +289,12 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
-    this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
-    });
+  // 🐛 根因修复：见 store-management.ts 同处修复记录——自己手写的
+  // calculateNavBarHeight() + 内联 padding-top 在全局 box-sizing:border-box
+  // 兜底生效后会把固定高度的导航栏挤爆，标题/返回键被压进刘海区域。改用
+  // <navigation-bar> 共享组件，这里只接住组件上报的真实高度
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
   async initRoleAndStore() {
@@ -318,7 +313,12 @@ Page({
     // 本地缓存——与 profile.ts initMinePage() 的优先级口径不一致，导致"切到家长
     // 身份后个人中心正确刷新，门店档案页却还是不能编辑"。这里补齐同一套优先级：
     // storage 一旦有值就无条件作为生效角色，不再理会服务端角色
-    const storageRole = wx.getStorageSync('current_user_role');
+    // 🐛 性能修复：改用异步 wx.getStorage 而非 wx.getStorageSync——本页从
+    // profile.ts 跳转过来时曾报过 safeNavigateTo 2.5s 诊断警告（当前页 JS
+    // 主线程被同步代码占满导致 navigateTo 原生回调迟迟排不上号），onShow 里
+    // 这类同步 storage 读取即使单次不算重，也是缩小"跳转后到骨架屏可交互"
+    // 这段同步执行栈的一环，能异步化的都异步化
+    const storageRole = await getStorageAsync('current_user_role');
     const effectiveRole = storageRole ? String(storageRole).toLowerCase() : ((roleInfo && roleInfo.role) || '');
 
     // 🏛️ 严格白名单：只有 store_manager / store_patriarch / super_admin 这三种生效
@@ -908,18 +908,4 @@ Page({
     }
   },
 
-  // 🛡️ 全局返回逻辑排查修复：此前这里的 pages.length 判断因为上面一段无条件调用
-  // _navGuard.goHome() 并 return，从未真正执行过——goHome() 是给"分享直入二级页时
-  // 物理返回键/侧滑手势"这个完全不同的场景设计的兜底（见 utils/navGuard.ts），
-  // 拿来当自定义导航栏"←"按钮的点击逻辑，会导致不管从哪个页面点进来，点"←"永远
-  // 跳回首页而不是真正的上一页，"从哪里点进来就退回哪里"完全失效。按钮点击只需要
-  // 最朴素的判断：栈里有上一页就退回去，没有就安全落到首页 Tab
-  goBack() {
-    const pages = getCurrentPages();
-    if (pages.length > 1) {
-      wx.navigateBack({ delta: 1 });
-    } else {
-      wx.switchTab({ url: '/pages/index/index' });
-    }
-  }
 });

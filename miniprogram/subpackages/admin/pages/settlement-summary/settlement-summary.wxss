@@ -6,47 +6,6 @@
   background: #F8F5F0;
 }
 
-.ss-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.ss-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.ss-nav-back-hover {
-  opacity: 0.5;
-}
-
-.ss-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
-.ss-nav-placeholder {
-  width: 64rpx;
-  flex-shrink: 0;
-}
-
 .ss-body {
   padding: 24rpx;
   box-sizing: border-box;
@@ -85,9 +44,8 @@
   border-radius: 36rpx;
 }
 
-.ss-scroll {
-  height: calc(100vh - 176rpx);
-}
+/* 🐛 高度改由 wxml 内联 style 用 contentTop 动态计算（见 <navigation-bar>
+   共享组件迁移记录），不再用写死的 176rpx 猜测导航栏高度 */
 
 .ss-ops-card {
   background: #FFFFFF;

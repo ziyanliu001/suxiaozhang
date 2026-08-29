@@ -2,16 +2,25 @@
   <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseMedia（今日食谱图片上传）隐私接口 -->
   <privacy-popup />
 
-  <view class="dm-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="dm-nav-back" hover-class="dm-nav-back-hover" bindtap="goBack">←</view>
-    <text class="dm-nav-title">🍱 食谱管理中心</text>
-    <text class="dm-nav-action {{canManage ? '' : 'hidden'}}" bindtap="onOpenTodayEditForm">编辑</text>
-  </view>
+  <navigation-bar
+    title="🍱 食谱管理中心"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+  <text
+    class="dm-nav-action {{canManage ? '' : 'hidden'}}"
+    style="top: {{navContentTop}}px; height: {{navContentHeight}}px; line-height: {{navContentHeight}}px; right: calc({{navRightGap}}px + 20rpx);"
+    bindtap="onOpenTodayEditForm"
+  >编辑</text>
 
   <!-- 图片压缩用离屏画布，全页面共用一个即可 -->
   <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
-  <scroll-view scroll-y class="dm-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
+  <scroll-view scroll-y class="dm-list-scroll" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
 
     <view class="dm-store-tip-skeleton" wx:if="{{!roleReady}}"></view>
     <view class="dm-store-tip" wx:elif="{{currentStoreName}}">📍 {{currentStoreName}}</view>

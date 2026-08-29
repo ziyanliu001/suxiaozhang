@@ -68,8 +68,10 @@ const EXPRESS_COMPANY_OPTIONS = ['顺丰', '中通', '圆通', '韵达', '极兔
 
 Page({
   data: {
-    navTop: 0,
     contentTop: 0,
+    // 🌟 列表滚动区高度：随 contentTop（导航栏真实高度）+ 多工坊切换器是否
+    // 显示（额外 112rpx）动态计算，见 updateListHeight()
+    pfListHeight: 'calc(100vh - 88rpx)',
 
     tenantId: '',
     loading: true,
@@ -104,8 +106,6 @@ Page({
   },
 
   onLoad(options: Record<string, string>) {
-    this.calculateNavBarHeight();
-
     const tenantId = (options && options.tenantId) || wx.getStorageSync(CURRENT_TENANT_STORAGE_KEY) || '';
     if (!tenantId) {
       wx.showToast({ title: '缺少工作空间参数', icon: 'none' });
@@ -133,9 +133,19 @@ Page({
         currentTenantName: mine ? mine.tenantName : '',
         canManageProducts: !!mine && (mine.role === 'space_owner' || mine.role === 'space_admin')
       });
+      this.updateListHeight();
     } catch (err) {
       console.warn('[production-fulfillment] loadMySpaces 失败:', err);
     }
+  },
+
+  // 🌟 列表滚动区高度 = 视口高度 - 导航栏真实高度 - 多工坊切换器高度（仅
+  // mySpaces.length > 1 时渲染，额外占 112rpx）。contentTop 由 onNavLayout
+  // 异步上报、mySpaces 由 loadMySpaces 异步加载，两者到达顺序不固定，各自
+  // 更新后都重新算一遍，不假设谁先到
+  updateListHeight() {
+    const extra = this.data.mySpaces.length > 1 ? ' - 112rpx' : '';
+    this.setData({ pfListHeight: `calc(100vh - ${this.data.contentTop}px${extra})` });
   },
 
   onOpenSwitcherModal() {
@@ -184,21 +194,11 @@ Page({
     // catchtap 占位：阻止邀请弹窗内容区的点击冒泡到遮罩层触发关闭
   },
 
-  // 与 store-management.ts 同一套：按胶囊按钮实测位置换算导航栏高度
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
-    this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
-    });
-  },
-
-  goBack() {
-    wx.navigateBack({ delta: 1 });
+  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
+  // 共享组件
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
+    this.updateListHeight();
   },
 
   onPullDownRefresh() {

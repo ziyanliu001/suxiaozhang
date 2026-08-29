@@ -9,24 +9,6 @@ page {
   box-sizing: border-box;
 }
 
-.pv-status-bar {
-  width: 100%;
-  background: #8C1D18;
-}
-
-.pv-nav-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #8C1D18;
-}
-
-.pv-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
 .pv-loading,
 .pv-error,
 .pv-not-found {
@@ -55,7 +37,6 @@ page {
 }
 
 .pv-content {
-  height: calc(100vh - 88rpx);
   box-sizing: border-box;
   padding: 24rpx;
   padding-bottom: calc(24rpx + constant(safe-area-inset-bottom));

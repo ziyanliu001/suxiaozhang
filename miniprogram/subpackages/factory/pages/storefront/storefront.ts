@@ -27,7 +27,6 @@ interface OtherProduct {
 
 Page({
   data: {
-    navTop: 0,
     contentTop: 0,
 
     tenantId: '',
@@ -53,8 +52,6 @@ Page({
   },
 
   onLoad(options: Record<string, string>) {
-    this.calculateNavBarHeight();
-
     const tenantId = (options && options.tenantId) || '';
     const productId = (options && options.productId) || '';
     const incomingPromoterOpenId = (options && options.promoterOpenId) || '';
@@ -74,23 +71,10 @@ Page({
     wx.showShareMenu({ withShareTicket: true, menus: ['shareAppMessage', 'shareTimeline'] });
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
-    this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
-    });
-  },
-
-  goBack() {
-    wx.navigateBack({
-      delta: 1,
-      fail: () => wx.switchTab({ url: '/pages/index/index' })
-    });
+  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
+  // 共享组件
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
   onPullDownRefresh() {

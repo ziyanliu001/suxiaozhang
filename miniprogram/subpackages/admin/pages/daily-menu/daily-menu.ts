@@ -7,6 +7,7 @@ import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../../../util
 import { GRATITUDE_TEXT } from '../../../../utils/cultureData';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { getStorageAsync } from '../../../../utils/util';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
@@ -87,8 +88,10 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
-    navTop: 0,
     contentTop: 0,
+    navContentTop: 0,
+    navContentHeight: 0,
+    navRightGap: 0,
 
     currentStoreId: '',
     currentStoreName: '',
@@ -158,7 +161,6 @@ Page({
 
   async onLoad() {
     recordRecentVisit('/subpackages/admin/pages/daily-menu/daily-menu', '食谱管理中心');
-    this.calculateNavBarHeight();
     // 🔑 需先拿到 currentStoreId 再查今日食谱（getByDate 要求 storeId 必填），故此处 await 顺序执行
     await this.applyRolePermissions();
     this.loadSelectedMenu();
@@ -178,15 +180,14 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
+  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
+  // 共享组件
+  onNavLayout(e: { detail: { totalHeight: number; contentTop: number; contentHeight: number; rightGap: number } }) {
     this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
+      contentTop: e.detail.totalHeight + 8,
+      navContentTop: e.detail.contentTop,
+      navContentHeight: e.detail.contentHeight,
+      navRightGap: e.detail.rightGap
     });
   },
 
@@ -236,12 +237,15 @@ Page({
       }
     }
 
+    // 🐛 性能修复：改用异步 wx.getStorage——见 journey.ts/store-profile.ts
+    // 同类修复记录，onLoad 里能异步化的同步 storage 读取都异步化，缩短跳转到
+    // 本页后骨架屏可交互前的同步执行栈
     if (!storeId) {
-      const storedId = wx.getStorageSync('current_store_id') || '';
+      const storedId = await getStorageAsync('current_store_id');
       storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
     }
     if (!storeName) {
-      const storedName = wx.getStorageSync('current_store_name') || '';
+      const storedName = await getStorageAsync('current_store_name');
       storeName = (!isSuperAdmin && isVirtualStoreName(storedName)) ? '' : storedName;
     }
 
@@ -867,17 +871,6 @@ Page({
 
   onToggleGratitude() {
     this.setData({ gratitudeExpanded: !this.data.gratitudeExpanded });
-  },
-
-  // 🛡️ 全局返回逻辑排查修复：goHome() 是给分享直入场景的物理返回键设计的，不该
-  // 挪用给自定义导航栏的"←"按钮——那会导致不管从哪个页面点进来都被强制跳回首页
-  goBack() {
-    const pages = getCurrentPages();
-    if (pages.length > 1) {
-      wx.navigateBack({ delta: 1 });
-    } else {
-      wx.switchTab({ url: '/pages/index/index' });
-    }
   },
 
   // 🔗 顶部原生"…"菜单的分享入口（与海报弹窗里 onShareMenuPoster 分享的是同一张

@@ -1,10 +1,14 @@
 <view class="sf-page">
 
-  <view class="sf-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="sf-nav-back" hover-class="sf-nav-back-hover" bindtap="goBack">←</view>
-    <text class="sf-nav-title">🛒 现做现发</text>
-    <view class="sf-nav-placeholder"></view>
-  </view>
+  <navigation-bar
+    title="🛒 现做现发"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
   <view class="sf-body" style="margin-top: {{contentTop}}px;">
 
@@ -18,7 +22,7 @@
       <button class="sf-retry-btn" bindtap="loadAll">重试</button>
     </view>
 
-    <scroll-view class="sf-scroll" scroll-y wx:elif="{{product}}">
+    <scroll-view class="sf-scroll" scroll-y style="height: calc(100vh - {{contentTop}}px);" wx:elif="{{product}}">
 
       <view class="sf-product-card">
         <text class="sf-product-name">{{product.name}}</text>

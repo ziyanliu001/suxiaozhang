@@ -2,15 +2,28 @@
   <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseMedia（大事记图片上传）隐私接口 -->
   <privacy-popup />
 
-  <view class="al-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="al-nav-back" hover-class="al-nav-back-hover" bindtap="goBack">←</view>
-    <text class="al-nav-title">📌 门店日志</text>
-    <text class="al-nav-action {{canManage ? '' : 'hidden'}}" bindtap="onOpenTodayEditForm">编辑</text>
-  </view>
+  <navigation-bar
+    title="📌 门店日志"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+  <!-- 🐛 独立于 <navigation-bar> 之外浮层放置："编辑"这类自定义右侧操作不能塞进
+       组件自带的 right slot（该区域精确让空给原生胶囊，塞进去的内容会被胶囊
+       盖住/抢触摸），改为用组件 layout 事件上报的胶囊坐标算出"胶囊左侧、
+       垂直居中对齐"的绝对定位 -->
+  <text
+    class="al-nav-action {{canManage ? '' : 'hidden'}}"
+    style="top: {{navContentTop}}px; height: {{navContentHeight}}px; line-height: {{navContentHeight}}px; right: calc({{navRightGap}}px + 20rpx);"
+    bindtap="onOpenTodayEditForm"
+  >编辑</text>
 
   <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
-  <scroll-view scroll-y class="al-list-scroll" style="margin-top: {{contentTop}}px;" bindscrolltolower="onReachBottom">
+  <scroll-view scroll-y class="al-list-scroll" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
 
     <!-- 📍 门店身份 Header：sticky 吸顶展示当前门店名，异步解析完成前用骨架占位
          兜底，避免闪现任何默认值。currentStoreName 已经过 applyRolePermissions/

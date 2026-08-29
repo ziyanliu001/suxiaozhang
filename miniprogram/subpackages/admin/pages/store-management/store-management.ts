@@ -11,7 +11,6 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
-    navTop: 0,
     contentTop: 0,
     checkedAccess: false,
     isSuperAdmin: false,
@@ -81,7 +80,6 @@ Page({
   },
 
   onLoad() {
-    this.calculateNavBarHeight();
     this.checkAccess();
 
     this._navGuard = createNavGuard({
@@ -98,16 +96,16 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
-    this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
-    });
+  // 🐛 根因修复：原先自己手写 calculateNavBarHeight() + WXML 内联
+  // padding-top:{{navTop}}px 的导航栏，在全局 box-sizing:border-box 兜底
+  // 生效后，固定 height:88rpx 的盒子会被这份 padding-top（通常 90~110rpx）
+  // 整个挤爆——标题连同返回按钮一起被压缩进状态栏/刘海区域，表现为"标题被
+  // 刘海切断、看不到返回键"。改用项目里已有的 <navigation-bar> 共享组件
+  // （journey.wxml 等页面已在用，内部用 position:absolute + top/height 定位
+  // 内容区，不受 box-sizing 影响），组件量出真实布局后通过 bind:layout 上报，
+  // 这里只需要接住 totalHeight 供下方内容区做 margin-top 避让
+  onNavLayout(e: { detail: { totalHeight: number } }) {
+    this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
   // 🐛 去重合并：本地手写的 resolveEffectiveRole 与 AuthService.resolveEffectiveRole

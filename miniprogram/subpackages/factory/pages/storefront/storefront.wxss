@@ -6,47 +6,6 @@
   background: #F8F5F0;
 }
 
-.sf-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.sf-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.sf-nav-back-hover {
-  opacity: 0.5;
-}
-
-.sf-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
-.sf-nav-placeholder {
-  width: 64rpx;
-  flex-shrink: 0;
-}
-
 .sf-body {
   padding: 24rpx;
   box-sizing: border-box;
@@ -80,10 +39,6 @@
   padding: 0 40rpx;
   line-height: 72rpx;
   border-radius: 36rpx;
-}
-
-.sf-scroll {
-  height: calc(100vh - 176rpx);
 }
 
 .sf-product-card,

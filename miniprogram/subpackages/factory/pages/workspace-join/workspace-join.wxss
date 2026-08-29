@@ -6,47 +6,6 @@
   background: #F8F5F0;
 }
 
-.wj-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.wj-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.wj-nav-back-hover {
-  opacity: 0.5;
-}
-
-.wj-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
-.wj-nav-placeholder {
-  width: 64rpx;
-  flex-shrink: 0;
-}
-
 .wj-body {
   padding: 24rpx;
   box-sizing: border-box;
@@ -55,7 +14,6 @@
 /* 🎨 居中卡片布局：内容整体在可视区域内垂直居中，而不是贴在导航栏正下方，
    卡片本身左右留出页面底色余量，视觉上是"浮在页面上的卡片"而非通栏铺满 */
 .wj-center-wrap {
-  min-height: calc(100vh - 200rpx);
   display: flex;
   flex-direction: column;
   justify-content: center;

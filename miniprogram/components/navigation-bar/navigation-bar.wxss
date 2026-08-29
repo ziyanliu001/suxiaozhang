@@ -3,6 +3,13 @@
   --weui-FG-0:rgba(0,0,0,.9);
 }
 
+/* 🌟 深色背景模式：返回箭头/回家图标改用 --weui-FG-0 = 纯白，
+   见 navigation-bar.ts dark 属性说明 */
+.weui-navigation-bar.dark {
+  --weui-FG-0: #FFFFFF;
+  --weui-divider-color: rgba(255, 255, 255, 0.3);
+}
+
 .weui-navigation-bar {
   position: relative;
   overflow: hidden;
@@ -103,7 +110,7 @@
 .weui-navigation-bar__btn_divider {
   width: 1px;
   height: 16px;
-  background-color: rgba(0, 0, 0, 0.15);
+  background-color: var(--weui-divider-color, rgba(0, 0, 0, 0.15));
   margin-left: 6px;
 }
 

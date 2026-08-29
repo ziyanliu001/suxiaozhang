@@ -1,4 +1,4 @@
-<view class="weui-navigation-bar {{extClass}}" style="{{barStyle}}; {{displayStyle}}">
+<view class="weui-navigation-bar {{extClass}} {{dark ? 'dark' : ''}}" style="{{barStyle}}; {{displayStyle}}">
   <view class="weui-navigation-bar__inner {{ios ? 'ios' : 'android'}}" style="color: {{color}}; background: {{background}};">
 
     <!-- 内容区：left/center/right 的容器，top/height 与胶囊按钮严格一致（见 navigation-bar.ts _layout），

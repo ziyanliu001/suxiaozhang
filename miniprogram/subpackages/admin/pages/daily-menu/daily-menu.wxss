@@ -6,47 +6,18 @@
   background: #F8F5F0;
 }
 
-.dm-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.dm-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.dm-nav-back-hover {
-  opacity: 0.5;
-}
-
-.dm-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
+/* 🐛 根因修复：见 store-management.wxss 同处修复记录，改用 <navigation-bar>
+   共享组件。这里只保留"编辑"按钮的浮层定位样式（独立于组件之外渲染，见
+   wxml 说明） */
 .dm-nav-action {
+  position: fixed;
+  right: 0;
+  z-index: 101;
+  display: flex;
+  align-items: center;
   color: #FFFFFF;
   font-size: 26rpx;
-  width: 110rpx;
-  text-align: right;
+  padding: 0 8rpx;
 }
 
 .dm-nav-action.hidden {
@@ -54,7 +25,6 @@
 }
 
 .dm-list-scroll {
-  height: calc(100vh - 88rpx);
   box-sizing: border-box;
   padding: 20rpx 24rpx;
   /* 🛡️ 底部固定的"生成食谱宣传海报"按钮栏自身约 128rpx 高，这里预留足够的

@@ -6,47 +6,6 @@
   background: #F8F5F0;
 }
 
-.sm-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.sm-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.sm-nav-back-hover {
-  opacity: 0.5;
-}
-
-.sm-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
-.sm-nav-placeholder {
-  width: 64rpx;
-  height: 64rpx;
-  flex-shrink: 0;
-}
 
 .sm-loading-state,
 .sm-denied-state {

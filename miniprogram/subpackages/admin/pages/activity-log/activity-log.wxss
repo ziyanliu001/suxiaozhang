@@ -6,47 +6,19 @@
   background: #F8F5F0;
 }
 
-.al-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24rpx;
-  height: 88rpx;
-  background: #8C1D18;
-}
-
-.al-nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-size: 36rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.al-nav-back-hover {
-  opacity: 0.5;
-}
-
-.al-nav-title {
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: bold;
-}
-
+/* 🐛 根因修复：与 store-management.wxss 同处修复记录——自己手写的导航栏在
+   全局 box-sizing:border-box 兜底生效后被固定 height + 内联 padding-top 挤爆，
+   标题/返回键被压进刘海区域。改用 <navigation-bar> 共享组件，这里只保留
+   "编辑"按钮的浮层定位样式（该按钮独立于组件之外渲染，见 wxml 说明） */
 .al-nav-action {
+  position: fixed;
+  right: 0;
+  z-index: 101;
+  display: flex;
+  align-items: center;
   color: #FFFFFF;
   font-size: 26rpx;
-  width: 110rpx;
-  text-align: right;
+  padding: 0 8rpx;
 }
 
 .al-nav-action.hidden {
@@ -54,7 +26,6 @@
 }
 
 .al-list-scroll {
-  height: calc(100vh - 88rpx);
   box-sizing: border-box;
   padding: 20rpx 24rpx;
   padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));

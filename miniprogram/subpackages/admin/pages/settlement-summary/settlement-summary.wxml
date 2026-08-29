@@ -1,10 +1,14 @@
 <view class="ss-page">
 
-  <view class="ss-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="ss-nav-back" hover-class="ss-nav-back-hover" bindtap="goBack">←</view>
-    <text class="ss-nav-title">💰 对账明细</text>
-    <view class="ss-nav-placeholder"></view>
-  </view>
+  <navigation-bar
+    title="💰 对账明细"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
   <view class="ss-body" style="margin-top: {{contentTop}}px;">
 
@@ -18,7 +22,7 @@
       <button class="ss-retry-btn" bindtap="loadSummary">重试</button>
     </view>
 
-    <scroll-view class="ss-scroll" scroll-y wx:else>
+    <scroll-view class="ss-scroll" scroll-y style="height: calc(100vh - {{contentTop}}px);" wx:else>
 
       <view class="ss-ops-card">
         <view class="ss-ops-header">

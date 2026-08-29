@@ -6,6 +6,7 @@ import { drawActivityPoster } from '../../../../utils/drawActivityPoster';
 import { recordRecentVisit } from '../../../../utils/recentPages';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { getStorageAsync } from '../../../../utils/util';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const PAGE_SIZE = 10;
@@ -61,8 +62,12 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
-    navTop: 0,
     contentTop: 0,
+    // 🌟 "编辑"按钮浮层定位（独立于 <navigation-bar> 组件之外渲染，见 wxml
+    // 说明），由 onNavLayout 接住组件上报的胶囊坐标算出
+    navContentTop: 0,
+    navContentHeight: 0,
+    navRightGap: 0,
 
     currentStoreId: '',
     currentStoreName: '',
@@ -137,7 +142,6 @@ Page({
 
   async onLoad() {
     recordRecentVisit('/subpackages/admin/pages/activity-log/activity-log', '门店日志');
-    this.calculateNavBarHeight();
     // 🔑 需先拿到 currentStoreId 再查今日大事记（list 按 storeId 过滤），故此处 await 顺序执行
     await this.initRoleAndStore();
     this.loadTodayActivity();
@@ -167,15 +171,15 @@ Page({
     }
   },
 
-  calculateNavBarHeight() {
-    const menuButton = wx.getMenuButtonBoundingClientRect();
-    if (!menuButton) {
-      this.setData({ navTop: 44, contentTop: 88 });
-      return;
-    }
+  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
+  // 共享组件。navContentTop/navContentHeight/navRightGap 额外接住组件上报的
+  // 胶囊坐标，供"编辑"浮层按钮（独立于组件之外渲染）定位使用
+  onNavLayout(e: { detail: { totalHeight: number; contentTop: number; contentHeight: number; rightGap: number } }) {
     this.setData({
-      navTop: menuButton.top,
-      contentTop: menuButton.top + menuButton.height + 8
+      contentTop: e.detail.totalHeight + 8,
+      navContentTop: e.detail.contentTop,
+      navContentHeight: e.detail.contentHeight,
+      navRightGap: e.detail.rightGap
     });
   },
 
@@ -192,7 +196,7 @@ Page({
   // 顶部误显示"全国总览"。解析口径与 statistics.ts resolveEffectiveStoreIdentity
   // 完全一致：非超管一律过滤虚拟名后退回本地已选中门店；超管允许 storeId 为空
   // （此时顶部展示"全国总览"，这是其真实身份状态）
-  resolveEffectiveStoreIdentity(roleInfo: any, isSuperAdmin: boolean): { storeId: string; storeName: string } {
+  async resolveEffectiveStoreIdentity(roleInfo: any, isSuperAdmin: boolean): Promise<{ storeId: string; storeName: string }> {
     let storeId = (roleInfo && roleInfo.storeId) || '';
     let storeName = (roleInfo && roleInfo.storeName) || '';
     if (!isSuperAdmin && isVirtualStoreName(storeName)) {
@@ -211,12 +215,14 @@ Page({
       }
     }
 
+    // 🐛 性能修复：改用异步 wx.getStorage——见 journey.ts/store-profile.ts
+    // 同类修复记录
     if (!storeId) {
-      const storedId = wx.getStorageSync('current_store_id') || '';
+      const storedId = await getStorageAsync('current_store_id');
       storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
     }
     if (!storeName) {
-      const storedName = wx.getStorageSync('current_store_name') || '';
+      const storedName = await getStorageAsync('current_store_name');
       storeName = (!isSuperAdmin && isVirtualStoreName(storedName)) ? '' : storedName;
     }
 
@@ -271,7 +277,7 @@ Page({
 
     const effectiveRole = AuthService.resolveEffectiveRole(roleInfo ? roleInfo.role : '');
     const isSuperAdmin = effectiveRole === 'super_admin';
-    const identity = this.resolveEffectiveStoreIdentity(roleInfo, isSuperAdmin);
+    const identity = await this.resolveEffectiveStoreIdentity(roleInfo, isSuperAdmin);
     this.applyRolePermissions(effectiveRole, identity.storeName, identity.storeId);
   },
 
@@ -928,17 +934,6 @@ Page({
     const next = { ...this.data.thumbFailedMap };
     delete next[url];
     this.setData({ thumbFailedMap: next });
-  },
-
-  // 🛡️ 全局返回逻辑排查修复：goHome() 是给分享直入场景的物理返回键设计的，不该
-  // 挪用给自定义导航栏的"←"按钮——那会导致不管从哪个页面点进来都被强制跳回首页
-  goBack() {
-    const pages = getCurrentPages();
-    if (pages.length > 1) {
-      wx.navigateBack({ delta: 1 });
-    } else {
-      wx.switchTab({ url: '/pages/index/index' });
-    }
   },
 
   onShareAppMessage() {

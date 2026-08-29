@@ -1,10 +1,14 @@
 <view class="sm-page">
 
-  <view class="sm-nav-bar" style="padding-top: {{navTop}}px;">
-    <view class="sm-nav-back" hover-class="sm-nav-back-hover" bindtap="goBack">←</view>
-    <text class="sm-nav-title">🏪 门店管理</text>
-    <view class="sm-nav-placeholder"></view>
-  </view>
+  <navigation-bar
+    title="🏪 门店管理"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
 
   <view class="sm-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
     <text>校验身份中...</text>
