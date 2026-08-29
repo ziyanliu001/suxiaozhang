@@ -82,6 +82,20 @@ const OPERATING_STATUS_LABELS: Record<string, string> = {
   paused: '暂停运营'
 };
 
+// 🐛 门店档案图片 500 报错修复：门店照片/资质图片理论上都应该是云存储 fileID
+// （cloud://...），但上传中断/历史脏数据等场景可能残留本地临时路径（wxfile://、
+// http(s)://127.0.0.1、localhost、__tmp__ 这类小程序沙箱内部临时文件标识）——
+// 这类路径离开当次上传会话就必然失效，直接塞给 <image src> 会在控制台抛网络
+// 错误。加载时统一过滤掉，不等到渲染报错才补救；binderror 兜底见 onImageLoadError，
+// 覆盖"路径格式看着正常但云端文件已被删除"这类过滤规则本身catch不住的场景
+function isValidPhotoUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || !url.trim()) return false;
+  return !/127\.0\.0\.1|localhost|__tmp__|^wxfile:\/\//i.test(url);
+}
+function sanitizePhotoUrls(arr: unknown): string[] {
+  return Array.isArray(arr) ? arr.filter(isValidPhotoUrl) : [];
+}
+
 // 🏪 门店资质与实景公示：门头照/民政备案复印件/食品安全承诺，与原有的门店环境照
 // （storePhotos）是四个各自独立的照片分类，字段名与 manageStoreProfile 云函数一致；
 // 沿用同一套 onChoosePhoto/onDeletePhoto 通用逻辑（用 data-category 区分），不为
@@ -177,6 +191,10 @@ Page({
     storefrontPhotos: [] as string[],
     civilAffairsPhotos: [] as string[],
     foodSafetyPledgePhotos: [] as string[],
+    // 🐛 图片加载失败兜底：与 activity-log.ts/daily-menu.ts 同款 xxxFailedMap 模式，
+    // key 是失败的图片 URL，命中后 wx:if 让对应 <image> 让位给"加载失败"占位块，
+    // 点击占位块可重试（见 onRetryImage）
+    imageFailedMap: {} as Record<string, boolean>,
     storePhotoUploading: false,
 
     // 🏛️ 家长风控锁：本店若绑定了家长/督导，店长发起的画像变更会先落到这里等待确认，
@@ -378,7 +396,7 @@ Page({
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
-      PHOTO_FIELDS.forEach((f) => { update[f] = Array.isArray(data[f]) ? data[f] : []; });
+      PHOTO_FIELDS.forEach((f) => { update[f] = sanitizePhotoUrls(data[f]); });
       const loadedOrgType = data.orgType || '';
       update.orgType = loadedOrgType;
       update.orgTypeLabel = ORG_TYPE_LABEL_MAP[loadedOrgType] || '';
@@ -594,6 +612,27 @@ Page({
     const urls = e.currentTarget.dataset.urls;
     if (!url) return;
     wx.previewImage({ current: url, urls: Array.isArray(urls) && urls.length > 0 ? urls : [url] });
+  },
+
+  // 🐛 图片 500 报错兜底：URL 格式过滤（isValidPhotoUrl）拦不住"路径长得正常但
+  // 云端文件已被删除/权限失效"这类场景，这里作为最后一道防线——binderror 触发后
+  // 把该 URL 记进 imageFailedMap，对应 <image> 的 wx:if 让位给"加载失败"占位块，
+  // 不再让控制台反复抛同一张图的网络错误
+  onImageLoadError(e: any) {
+    const url = e.currentTarget.dataset.url;
+    console.warn('[store-profile] 图片加载失败:', url, e.detail);
+    if (!url) return;
+    this.setData({ [`imageFailedMap.${url}`]: true });
+  },
+
+  // 点击"加载失败"占位块重试：摘掉失败标记，wx:if/wx:else 会把 <image> 节点
+  // 整个卸载重挂，强制小程序重新发起一次网络请求
+  onRetryImage(e: any) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    const next = { ...this.data.imageFailedMap };
+    delete next[url];
+    this.setData({ imageFailedMap: next });
   },
 
   // 📞 一键拨打门店联系电话

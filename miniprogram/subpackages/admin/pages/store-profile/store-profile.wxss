@@ -520,6 +520,39 @@
   border: 1.5rpx solid #EFE6D8;
 }
 
+/* wx:if/wx:else 在 wx:for 内部必须包一层不循环的容器才能正确配对，这层容器
+   本身不需要绝对定位（两个分支互斥渲染，不会叠放），固定同款尺寸即可 */
+.sp-photo-thumb-wrap {
+  width: 140rpx;
+  height: 140rpx;
+}
+
+/* 🐛 图片加载失败占位块：展示态缩略图与 .sp-photo-thumb 尺寸一致，wx:if/wx:else
+   互斥渲染，不需要绝对定位叠放 */
+.sp-photo-load-failed {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 12rpx;
+  border: 1.5rpx dashed #D9D9D9;
+  background: #F5F5F5;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+}
+
+.sp-photo-load-failed-icon {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.sp-photo-load-failed-text {
+  font-size: 18rpx;
+  color: #999999;
+}
+
 /* 🏪 门店照片：编辑态上传九宫格，与 store-picker 组件的新建门店表单同款视觉
    （组件样式默认隔离不共享页面 wxss，这里单独复制一份） */
 .receipt-grid-container {
@@ -545,6 +578,35 @@
   height: 100%;
   border-radius: 16rpx;
   border: 1.5rpx solid #EFE6D8;
+}
+
+/* 🐛 图片加载失败占位块：编辑态/弹窗九宫格内 .grid-image-item 是 position:relative
+   的正方形容器（padding-top:100% 撑高），这里同 .grid-img 一样绝对定位铺满 */
+.grid-img-load-failed {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+  border: 1.5rpx dashed #D9D9D9;
+  background: #F5F5F5;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+}
+
+.grid-img-load-failed-icon {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.grid-img-load-failed-text {
+  font-size: 18rpx;
+  color: #999999;
 }
 
 .img-delete-badge {

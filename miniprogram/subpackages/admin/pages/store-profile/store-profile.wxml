@@ -116,7 +116,13 @@
       <view class="sp-archive-row vertical" wx:if="{{storePhotos.length > 0}}">
         <text class="sp-archive-lbl">门店照片</text>
         <view class="sp-photo-grid">
-          <image class="sp-photo-thumb" wx:for="{{storePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storePhotos}}" />
+          <view class="sp-photo-thumb-wrap" wx:for="{{storePhotos}}" wx:key="*this">
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storePhotos}}" binderror="onImageLoadError" />
+            <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+              <text class="sp-photo-load-failed-icon">⚠️</text>
+              <text class="sp-photo-load-failed-text">加载失败</text>
+            </view>
+          </view>
         </view>
       </view>
     </view>
@@ -135,7 +141,13 @@
       <view class="sp-archive-row vertical">
         <text class="sp-archive-lbl">门头照</text>
         <view class="sp-photo-grid" wx:if="{{storefrontPhotos.length > 0}}">
-          <image class="sp-photo-thumb" wx:for="{{storefrontPhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storefrontPhotos}}" />
+          <view class="sp-photo-thumb-wrap" wx:for="{{storefrontPhotos}}" wx:key="*this">
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storefrontPhotos}}" binderror="onImageLoadError" />
+            <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+              <text class="sp-photo-load-failed-icon">⚠️</text>
+              <text class="sp-photo-load-failed-text">加载失败</text>
+            </view>
+          </view>
         </view>
         <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
         <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
@@ -143,7 +155,13 @@
       <view class="sp-archive-row vertical">
         <text class="sp-archive-lbl">民政备案复印件</text>
         <view class="sp-photo-grid" wx:if="{{civilAffairsPhotos.length > 0}}">
-          <image class="sp-photo-thumb" wx:for="{{civilAffairsPhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" />
+          <view class="sp-photo-thumb-wrap" wx:for="{{civilAffairsPhotos}}" wx:key="*this">
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" binderror="onImageLoadError" />
+            <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+              <text class="sp-photo-load-failed-icon">⚠️</text>
+              <text class="sp-photo-load-failed-text">加载失败</text>
+            </view>
+          </view>
         </view>
         <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
         <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
@@ -151,7 +169,13 @@
       <view class="sp-archive-row vertical">
         <text class="sp-archive-lbl">食品安全承诺</text>
         <view class="sp-photo-grid" wx:if="{{foodSafetyPledgePhotos.length > 0}}">
-          <image class="sp-photo-thumb" wx:for="{{foodSafetyPledgePhotos}}" wx:key="*this" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" />
+          <view class="sp-photo-thumb-wrap" wx:for="{{foodSafetyPledgePhotos}}" wx:key="*this">
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" binderror="onImageLoadError" />
+            <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+              <text class="sp-photo-load-failed-icon">⚠️</text>
+              <text class="sp-photo-load-failed-text">加载失败</text>
+            </view>
+          </view>
         </view>
         <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
         <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
@@ -256,7 +280,11 @@
         <text class="sp-edit-lbl">门店照片（最多 9 张）</text>
         <view class="receipt-grid-container">
           <view class="grid-image-item" wx:for="{{editForm.storePhotos}}" wx:key="*this">
-            <image class="grid-img" src="{{item}}" mode="aspectFill" />
+            <image wx:if="{{!imageFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" binderror="onImageLoadError" data-url="{{item}}" />
+            <view wx:else class="grid-img-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+              <text class="grid-img-load-failed-icon">⚠️</text>
+              <text class="grid-img-load-failed-text">加载失败</text>
+            </view>
             <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="storePhotos" data-index="{{index}}">✕</view>
           </view>
           <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="storePhotos" wx:if="{{editForm.storePhotos.length < 9}}">
@@ -438,7 +466,11 @@
           <text class="sp-edit-lbl">门头照（最多 6 张）</text>
           <view class="receipt-grid-container">
             <view class="grid-image-item" wx:for="{{qualificationForm.storefrontPhotos}}" wx:key="*this">
-              <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.storefrontPhotos}}" />
+              <image wx:if="{{!imageFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.storefrontPhotos}}" binderror="onImageLoadError" />
+              <view wx:else class="grid-img-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+                <text class="grid-img-load-failed-icon">⚠️</text>
+                <text class="grid-img-load-failed-text">加载失败</text>
+              </view>
               <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="storefrontPhotos" data-target="qualificationForm" data-index="{{index}}">✕</view>
             </view>
             <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="storefrontPhotos" data-target="qualificationForm" wx:if="{{qualificationForm.storefrontPhotos.length < 6}}">
@@ -451,7 +483,11 @@
           <text class="sp-edit-lbl">民政备案复印件（最多 6 张）</text>
           <view class="receipt-grid-container">
             <view class="grid-image-item" wx:for="{{qualificationForm.civilAffairsPhotos}}" wx:key="*this">
-              <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.civilAffairsPhotos}}" />
+              <image wx:if="{{!imageFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.civilAffairsPhotos}}" binderror="onImageLoadError" />
+              <view wx:else class="grid-img-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+                <text class="grid-img-load-failed-icon">⚠️</text>
+                <text class="grid-img-load-failed-text">加载失败</text>
+              </view>
               <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="civilAffairsPhotos" data-target="qualificationForm" data-index="{{index}}">✕</view>
             </view>
             <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="civilAffairsPhotos" data-target="qualificationForm" wx:if="{{qualificationForm.civilAffairsPhotos.length < 6}}">
@@ -464,7 +500,11 @@
           <text class="sp-edit-lbl">食品安全承诺（最多 6 张）</text>
           <view class="receipt-grid-container">
             <view class="grid-image-item" wx:for="{{qualificationForm.foodSafetyPledgePhotos}}" wx:key="*this">
-              <image class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.foodSafetyPledgePhotos}}" />
+              <image wx:if="{{!imageFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{qualificationForm.foodSafetyPledgePhotos}}" binderror="onImageLoadError" />
+              <view wx:else class="grid-img-load-failed" catchtap="onRetryImage" data-url="{{item}}">
+                <text class="grid-img-load-failed-icon">⚠️</text>
+                <text class="grid-img-load-failed-text">加载失败</text>
+              </view>
               <view class="img-delete-badge" catchtap="onDeletePhoto" data-category="foodSafetyPledgePhotos" data-target="qualificationForm" data-index="{{index}}">✕</view>
             </view>
             <view class="grid-add-btn" bindtap="onChoosePhoto" data-category="foodSafetyPledgePhotos" data-target="qualificationForm" wx:if="{{qualificationForm.foodSafetyPledgePhotos.length < 6}}">
