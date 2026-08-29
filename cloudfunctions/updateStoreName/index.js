@@ -19,6 +19,22 @@ const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
 const MAX_NAME_LENGTH = 40;
 
+// 🛡️ 服务端内容安全兜底：门店名对外公开展示，此前只在前端提交前查一次
+// msgSecCheck，绕过前端直接调云函数即可跳过审核。降级口径同 createStore。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[updateStoreName] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 // 确保默认机构（及其订阅配额）存在，供缺失 tenantId 的 super_admin 账号兜底使用
 async function ensureNationalTenant() {
   const tenantRes = await db.collection('tenants').doc(DEFAULT_TENANT_ID).get().catch(() => null);
@@ -90,6 +106,9 @@ exports.main = async (event) => {
   }
   if (trimmedName.length > MAX_NAME_LENGTH) {
     return { success: false, error: `门店名称过长（最多 ${MAX_NAME_LENGTH} 字）` };
+  }
+  if (!(await checkContentSafe(trimmedName))) {
+    return { success: false, error: '内容包含违规信息，请修改后重新提交' };
   }
 
   try {

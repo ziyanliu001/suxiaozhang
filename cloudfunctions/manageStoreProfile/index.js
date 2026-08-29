@@ -14,6 +14,23 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
+// 🛡️ 服务端内容安全兜底：门店名/致谢词/宣传标语/简介等自由文本对外公开展示
+// （公示海报、餐报文本），此前只在前端提交前查一次 msgSecCheck，绕过前端直接
+// 调云函数即可跳过审核。落库前服务端强制再查一遍，API 抖动时降级放行。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[manageStoreProfile] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 // 人员画像：7 项人数指标，走 clampCount（非负整数）
 const PROFILE_FIELDS = [
   'partyMembers',
@@ -349,6 +366,17 @@ exports.main = async (event, context) => {
           return { success: false, error: '无权限：仅大家长或超级管理员可设置/修改管理员密钥' };
         }
         updateFields.adminKey = sanitizeText(event.adminKey).slice(0, 50);
+      }
+
+      // 🛡️ 服务端内容安全检测：对本次实际会写入的公开展示类文本字段做一次统一
+      // 检查（人员数字/坐标/密钥等非公开自由文本字段不需要过审）
+      const textFieldsToCheck = [...TEXT_PROFILE_FIELDS, ...TEMPLATE_FIELDS, 'storeName']
+        .map((f) => updateFields[f])
+        .filter((v) => typeof v === 'string' && v);
+      for (const text of textFieldsToCheck) {
+        if (!(await checkContentSafe(text))) {
+          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
+        }
       }
 
       // 🆕 保存时省市智能回填：调用方这次没有主动修改 province/city（未传这两个

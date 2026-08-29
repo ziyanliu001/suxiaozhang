@@ -46,6 +46,24 @@ function isCollectionNotExistError(err) {
   return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
 }
 
+// 🛡️ 服务端内容安全兜底：公告/模板此前只在小程序前端提交前调用 msgSecCheck，
+// 绕过前端直接调用本云函数即可完全跳过审核，把违规文案发布到跑马灯（面向全机构
+// 所有用户展示，风险高于普通留言）。落库前在服务端强制再查一遍，API 抖动时按
+// msgSecCheck 自身的降级口径放行，不因审核服务临时不可用而拦下正常公告。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'notice' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[manageNotice] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -114,6 +132,9 @@ exports.main = async (event) => {
         }
         if (!content || !String(content).trim()) {
           return { success: false, error: '请填写通知内容' };
+        }
+        if (!(await checkContentSafe(String(title).trim())) || !(await checkContentSafe(String(content).trim()))) {
+          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
         }
 
         const target = await resolveWriteTarget(caller, storeId);
@@ -339,6 +360,9 @@ exports.main = async (event) => {
         }
         if (!content || !String(content).trim()) {
           return { success: false, error: '请填写模板内容' };
+        }
+        if (!(await checkContentSafe(String(title).trim())) || !(await checkContentSafe(String(content).trim()))) {
+          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
         }
 
         const wantsSystem = !!isSystem;

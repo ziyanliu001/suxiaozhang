@@ -38,6 +38,24 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// 🛡️ 服务端内容安全兜底：门店名/初始公告此前只在小程序前端提交前调用
+// msgSecCheck，绕过前端直接调用本云函数即可跳过审核——门店名对外公开展示，
+// 风险较高。落库前服务端强制再查一遍，API 抖动时按 msgSecCheck 自身口径降级
+// 放行，不因审核服务临时不可用而拦下正常建店。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[createStore] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 const DEFAULT_TENANT_ID = 'yuhuazhai_national';
 const DEFAULT_TENANT_STORE_LIMIT = 999;
 
@@ -214,6 +232,9 @@ exports.main = async (event) => {
   }
   if (!storeName || !String(storeName).trim()) {
     return { success: false, error: '请填写门店名称' };
+  }
+  if (!(await checkContentSafe(String(storeName).trim())) || !(await checkContentSafe(String(initialAnnouncement || '').trim()))) {
+    return { success: false, error: '内容包含违规信息，请修改后重新提交' };
   }
 
   try {

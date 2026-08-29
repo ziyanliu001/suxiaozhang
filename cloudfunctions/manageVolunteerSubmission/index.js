@@ -67,6 +67,22 @@ const COLLECTION = 'volunteer_submissions';
 const MAX_NOTE_LENGTH = 300;
 const MAX_LIST_LIMIT = 50;
 
+// 🛡️ 服务端内容安全兜底：备注此前只在前端提交前查一次 msgSecCheck，绕过前端
+// 直接调云函数即可跳过审核。落库前服务端强制再查一遍，API 抖动时降级放行。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[manageVolunteerSubmission] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -188,6 +204,10 @@ async function handleSubmit(event, OPENID) {
     const STOCK_STATUS_VALUES = ['sufficient', 'normal', 'urgent'];
     doc.riceStatus = STOCK_STATUS_VALUES.includes(event.riceStatus) ? event.riceStatus : 'normal';
     doc.oilStatus = STOCK_STATUS_VALUES.includes(event.oilStatus) ? event.oilStatus : 'sufficient';
+  }
+
+  if (!(await checkContentSafe(doc.menuNote)) || !(await checkContentSafe(doc.lossNote))) {
+    return { success: false, error: '内容包含违规信息，请修改后重新提交' };
   }
 
   let addRes;

@@ -16,6 +16,22 @@ const _ = db.command;
 const COLLECTION = 'daily_menus';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+
+// 🛡️ 服务端内容安全兜底：菜谱文字对外公开展示，此前只在前端提交前查一次
+// msgSecCheck，绕过前端直接调云函数即可跳过审核。降级口径同 manageNotice。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[manageDailyMenu] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
 // 🖼️ 今日食谱单条最多 9 张配图（微信标准九宫格），与前端上传数量限制对齐。
 // 注：曾一度收紧为 1 张以控制上百家门店规模下的云存储成本，现按产品需求恢复为 9，
 // 相应的存储成本增长是已知且接受的权衡，如需再次收紧请同步调整前端 onChooseImage 的上限。
@@ -127,6 +143,9 @@ exports.main = async (event) => {
         const target = await resolveWriteTarget(caller, storeId);
         if (!target.allowed) {
           return { success: false, error: target.error };
+        }
+        if (!(await checkContentSafe(menuText))) {
+          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
         }
 
         if (action === 'update' && id) {

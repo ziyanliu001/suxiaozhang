@@ -1,9 +1,0 @@
-{
-  "name": "backfillTenantId",
-  "version": "1.0.0",
-  "description": "云函数：一次性迁移脚本 - 为历史存量数据（stores/user_roles/report_logs）补齐 tenantId",
-  "main": "index.js",
-  "dependencies": {
-    "wx-server-sdk": "~2.6.3"
-  }
-}

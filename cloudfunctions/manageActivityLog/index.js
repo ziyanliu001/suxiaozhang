@@ -29,6 +29,22 @@ const _ = db.command;
 const COLLECTION = 'activity_logs';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+
+// 🛡️ 服务端内容安全兜底：门店日志/护持动态对外公开展示，此前只在前端提交前
+// 查一次 msgSecCheck，绕过前端直接调云函数即可跳过审核。降级口径同 manageNotice。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[manageActivityLog] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
 // 🖼️ 门店日志单条最多 18 张配图（微信标准双九宫格），与前端上传数量限制对齐。
 // 如需调整请同步修改前端 onChooseImage 的上限（activity-log.ts 与 index.ts 两处）。
 const MAX_IMAGES = 18;
@@ -150,6 +166,9 @@ exports.main = async (event) => {
         }
         if (!eventTime || !/^\d{4}-\d{2}-\d{2}$/.test(eventTime)) {
           return { success: false, error: '请提供合法的发生时间 (YYYY-MM-DD)' };
+        }
+        if (!(await checkContentSafe(String(title).trim())) || !(await checkContentSafe(content))) {
+          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
         }
         const safeImages = sanitizeImages(images);
         // 🏷️ 分类仅对手动发布的门店日志/护持动态生效，餐报自动同步（autoSyncFromReport）

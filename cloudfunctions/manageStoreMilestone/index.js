@@ -17,6 +17,23 @@ const db = cloud.database();
 const COLLECTION = 'store_milestones';
 const MAX_IMAGES = 9;
 
+// 🛡️ 服务端内容安全兜底：大事记对外公开展示（门店发展历程时间轴），此前只在
+// 前端提交前查一次 msgSecCheck，绕过前端直接调云函数即可跳过审核。降级口径
+// 同 manageNotice。
+async function checkContentSafe(text) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType: 'report' }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[manageStoreMilestone] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 async function resolveCaller(OPENID) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
@@ -100,6 +117,9 @@ exports.main = async (event) => {
         }
         if (!eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
           return { success: false, error: '请提供合法的发生日期 (YYYY-MM-DD)' };
+        }
+        if (!(await checkContentSafe(String(title).trim())) || !(await checkContentSafe(content))) {
+          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
         }
         const safeImages = sanitizeImages(images);
         const year = parseInt(eventDate.slice(0, 4), 10);

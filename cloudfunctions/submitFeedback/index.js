@@ -76,6 +76,25 @@ function isCollectionNotExistError(err) {
   return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
 }
 
+// 🛡️ 服务端内容安全兜底：msgSecCheck 之前只在小程序前端提交前调用一次，客户端
+// 是"建议性"检查，绕过前端（抓包/自定义客户端直接调云函数）就能完全跳过审核
+// 把违规内容写库。这里在真正落库前于服务端再强制过一遍，不再只信任客户端已经
+// 查过。降级策略沿用 msgSecCheck 自身口径：API 不可用时放行但标记待人工审核，
+// 不会因为微信内容安全接口临时抖动就把家人的正常意见拦下来。
+async function checkContentSafe(text, contentType) {
+  if (!text) return true;
+  try {
+    const res = await cloud.callFunction({
+      name: 'msgSecCheck',
+      data: { text, contentType }
+    });
+    return !res.result || res.result.safe !== false;
+  } catch (err) {
+    console.warn('[submitFeedback] 服务端内容安全检测调用失败，降级放行:', err);
+    return true;
+  }
+}
+
 async function handleSubmit(event, OPENID) {
   if (!OPENID) {
     return { success: false, error: '未登录，无法提交' };
@@ -92,6 +111,9 @@ async function handleSubmit(event, OPENID) {
   }
   if (content.length > MAX_CONTENT_LENGTH) {
     return { success: false, error: `内容过长，请控制在 ${MAX_CONTENT_LENGTH} 字以内` };
+  }
+  if (!(await checkContentSafe(content, 'feedback'))) {
+    return { success: false, error: '内容包含违规信息，请修改后重新提交' };
   }
 
   const caller = await resolveCaller(OPENID);
@@ -200,6 +222,9 @@ async function handleReply(event, OPENID) {
   if (!replyContent) return { success: false, error: '回复内容不能为空' };
   if (replyContent.length > MAX_CONTENT_LENGTH) {
     return { success: false, error: `回复内容过长，请控制在 ${MAX_CONTENT_LENGTH} 字以内` };
+  }
+  if (!(await checkContentSafe(replyContent, 'feedback'))) {
+    return { success: false, error: '回复内容包含违规信息，请修改后重新提交' };
   }
 
   const caller = await resolveCaller(OPENID);
