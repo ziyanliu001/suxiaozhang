@@ -13,6 +13,9 @@ Component({
     isManager: { type: Boolean, value: false },
     isFinance: { type: Boolean, value: false },
     isSuperAdmin: { type: Boolean, value: false },
+    // ❤️ 家人角色：阳光账本/志愿历程与荣誉两项对家人隐藏（与首页/个人页同一套
+    // !isFamily 口径，家人视角本就是轻量展示，不涉及门店治理/义工履历）
+    isFamily: { type: Boolean, value: false },
     // 🦻 关怀模式开关当前状态，由宿主页面（index.ts）持有并回传，本组件不自己
     // 读写 app.globalData/storage，保持"纯展示+事件转发"的既定分工
     careMode: { type: Boolean, value: false }

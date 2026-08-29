@@ -1,4 +1,7 @@
-<!-- 左侧滑出功能导航抽屉：三个分组全部指向首页已有的真实入口，不新造功能 -->
+<!-- 左侧滑出功能导航抽屉：高频操作/核心记账/公益项目管理/辅助功能/最近访问
+     五组卡片化分组。除「扫一扫」「刷新状态缓存」两个新动作外，其余入口全部
+     复用首页/个人页已有的真实功能（切换门店复用 store-picker 弹窗、门店二维码
+     复用推广菜单、意见反馈深链到个人页弹窗），不重复实现一遍业务逻辑 -->
 <view class="drawer-backdrop {{show ? 'show' : ''}}" bindtap="close" catchtouchmove="preventTouchMove">
   <view class="drawer-panel" catchtap="stopBubble">
 
@@ -8,57 +11,99 @@
         <text class="drawer-store-name">{{storeName || '素小账服务'}}</text>
         <text class="drawer-role-label">{{roleLabel}}</text>
       </view>
+      <!-- 🌟 轻量快捷「切换门店」：与首页顶部 store-picker 胶囊复用同一套选店
+           弹窗（见宿主页 onSideDrawerAction 的 switchStore 分支），不新造一套
+           选店 UI，抽屉这里只是多一个更顺手的入口 -->
+      <view class="drawer-switch-store-btn" bindtap="onTapAction" data-type="switchStore">
+        <text>切换</text>
+      </view>
       <text class="drawer-close" bindtap="close">✕</text>
     </view>
 
-    <scroll-view scroll-y class="drawer-scroll">
+    <scroll-view scroll-y class="drawer-scroll" enable-back-to-top>
 
-      <!-- 🦻 关怀模式：大字号/高对比度/触控热区放大，不用"老人版"这类标签 -->
-      <view class="drawer-group">
-        <text class="drawer-group-label">显示设置</text>
-        <view class="drawer-item drawer-switch-item">
-          <text class="drawer-item-icon">🦻</text>
-          <text class="drawer-item-text">关怀模式（大字号 · 高对比度）</text>
-          <switch class="drawer-switch" checked="{{careMode}}" bindchange="onToggleCareMode" color="#8C1D18" />
+      <!-- 🌟 高频操作：扫一扫（核销/打卡等各类场景二维码通用入口）+ 门店二维码
+           （管理岗位专属，生成门店推广海报/邀请码），横向双格突出优先级 -->
+      <view class="drawer-group drawer-group-card">
+        <text class="drawer-group-label">高频操作</text>
+        <view class="drawer-quick-grid">
+          <view class="drawer-quick-item" bindtap="onTapAction" data-type="scan" hover-class="drawer-quick-item-hover">
+            <view class="drawer-quick-icon">📷</view>
+            <text class="drawer-quick-text">扫一扫</text>
+          </view>
+          <view class="drawer-quick-item" wx:if="{{isManager || isSuperAdmin}}" bindtap="onTapAction" data-type="storeQrCode" hover-class="drawer-quick-item-hover">
+            <view class="drawer-quick-icon">📤</view>
+            <text class="drawer-quick-text">门店二维码</text>
+          </view>
         </view>
       </view>
 
-      <view class="drawer-group">
+      <view class="drawer-group drawer-group-card">
         <text class="drawer-group-label">核心记账</text>
         <view class="drawer-item" bindtap="onTapAction" data-type="record">
-          <text class="drawer-item-icon">🧾</text>
+          <view class="drawer-item-icon-badge">🧾</view>
           <text class="drawer-item-text">常规记账</text>
         </view>
         <view class="drawer-item" wx:if="{{isManager || isFinance || isSuperAdmin}}" bindtap="onTapAction" data-type="template">
-          <text class="drawer-item-icon">⚙️</text>
+          <view class="drawer-item-icon-badge">⚙️</view>
           <text class="drawer-item-text">高频账目模板（店铺自定义）</text>
+        </view>
+        <!-- ☀️ 阳光账本：与首页顶部入口同一份公开透明数据大盘，家人视角首页
+             自己已有放大版展示，这里同步排除避免功能重复出现两次 -->
+        <view class="drawer-item" wx:if="{{!isFamily}}" bindtap="onTapAction" data-type="sunshineLedger">
+          <view class="drawer-item-icon-badge">☀️</view>
+          <text class="drawer-item-text">阳光账本</text>
+        </view>
+        <view class="drawer-item" wx:if="{{!isFamily}}" bindtap="onTapAction" data-type="journey">
+          <view class="drawer-item-icon-badge">🌟</view>
+          <text class="drawer-item-text">志愿历程与荣誉</text>
         </view>
       </view>
 
-      <view class="drawer-group" wx:if="{{isManager || isFinance || isSuperAdmin}}">
+      <view class="drawer-group drawer-group-card" wx:if="{{isManager || isFinance || isSuperAdmin}}">
         <text class="drawer-group-label">公益项目管理</text>
         <view class="drawer-item" wx:if="{{isManager || isSuperAdmin}}" bindtap="onTapAction" data-type="audit">
-          <text class="drawer-item-icon">🧑‍🤝‍🧑</text>
+          <view class="drawer-item-icon-badge">🧑‍🤝‍🧑</view>
           <text class="drawer-item-text">义工小队审核</text>
         </view>
         <view class="drawer-item" bindtap="onTapAction" data-type="statistics">
-          <text class="drawer-item-icon">📊</text>
+          <view class="drawer-item-icon-badge">📊</view>
           <text class="drawer-item-text">数据统计与账本导出</text>
         </view>
         <view class="drawer-item" wx:if="{{isSuperAdmin}}" bindtap="onTapAction" data-type="storeManagement">
-          <text class="drawer-item-icon">🏪</text>
+          <view class="drawer-item-icon-badge">🏪</view>
           <text class="drawer-item-text">门店管理</text>
         </view>
       </view>
 
-      <view class="drawer-group" wx:if="{{recentList.length > 0}}">
+      <!-- 🦻 关怀模式：大字号/高对比度/触控热区放大，不用"老人版"这类标签。
+           与「刷新状态缓存」「意见反馈」合并为「辅助功能」一组 -->
+      <view class="drawer-group drawer-group-card">
+        <text class="drawer-group-label">辅助功能</text>
+        <view class="drawer-item drawer-switch-item">
+          <view class="drawer-item-icon-badge">🦻</view>
+          <text class="drawer-item-text">关怀模式（大字号 · 高对比度）</text>
+          <switch class="drawer-switch" checked="{{careMode}}" bindchange="onToggleCareMode" color="#8C1D18" />
+        </view>
+        <view class="drawer-item" bindtap="onTapAction" data-type="refreshCache">
+          <view class="drawer-item-icon-badge">🔄</view>
+          <text class="drawer-item-text">刷新状态缓存</text>
+        </view>
+        <view class="drawer-item" bindtap="onTapAction" data-type="feedback">
+          <view class="drawer-item-icon-badge">💬</view>
+          <text class="drawer-item-text">意见反馈</text>
+        </view>
+      </view>
+
+      <view class="drawer-group drawer-group-card" wx:if="{{recentList.length > 0}}">
         <text class="drawer-group-label">最近访问</text>
         <view class="drawer-item" wx:for="{{recentList}}" wx:key="path" bindtap="onTapRecent" data-path="{{item.path}}">
-          <text class="drawer-item-icon">🕘</text>
+          <view class="drawer-item-icon-badge">🕘</view>
           <text class="drawer-item-text">{{item.title}}</text>
         </view>
       </view>
 
+      <view class="drawer-safe-area-spacer"></view>
     </scroll-view>
   </view>
 </view>

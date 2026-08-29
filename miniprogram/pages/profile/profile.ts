@@ -880,9 +880,14 @@ Page({
     monthlySubmissionStats: { total: 0, approved: 0, pending: 0, rejected: 0 },
   },
 
-  onLoad() {
+  onLoad(options: Record<string, string>) {
     this.calculateNavBarHeight();
     this.hydrateConfirmedAvatarFromStorage();
+    // 🌟 首页侧边抽屉「意见反馈」深链入口：跳转到本页并附带 openFeedback=1
+    // 时直接弹出意见箱弹窗，不需要用户再自己找一遍入口
+    if (options && options.openFeedback === '1') {
+      this.onOpenFeedbackModal();
+    }
   },
 
   // 🛡️ 从本地持久化恢复"上一次上传确认为真"的头像记录：见 CONFIRMED_AVATAR_CACHE_KEY

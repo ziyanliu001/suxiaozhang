@@ -46,8 +46,12 @@ function scopeByStore(logs: CheckInLogEntry[], storeId: string, storeName: strin
   });
 }
 
-export function computeMyCheckInStats(storeId: string, storeName: string, includeAllStores: boolean = false): CheckInStats {
-  const scoped = scopeByStore(getMyCheckInLogs(), storeId, storeName, includeAllStores);
+// preFetchedLogs：调用方已经异步/批量读取过 my_checkin_logs 时可以直接传入，
+// 跳过本函数内部再触发一次 wx.getStorageSync——同一个 key 在同一次页面
+// onLoad 里被多个函数各自同步读取一遍，是曾经真实出现过的性能问题（见
+// pages/journey/journey.ts onLoad 的性能修复记录）。不传时行为与以前完全一致
+export function computeMyCheckInStats(storeId: string, storeName: string, includeAllStores: boolean = false, preFetchedLogs?: CheckInLogEntry[]): CheckInStats {
+  const scoped = scopeByStore(preFetchedLogs || getMyCheckInLogs(), storeId, storeName, includeAllStores);
 
   const uniqueDays = new Set(scoped.map((l) => l.date));
   const hours = parseFloat(
@@ -89,8 +93,8 @@ export function computeMyCheckInStatsWithTodayFallback(storeId: string, storeNam
  * 🐛 日期解析统一走 safeParseDate，避免 iOS Safari/WKWebView 对 "YYYY-MM-DD"
  * 短横线字符串 new Date() 解析不稳定这个本项目已知坑（见该函数注释）。
  */
-export function computeMyCheckInStreak(storeId: string, storeName: string, includeAllStores: boolean = false): number {
-  const scoped = scopeByStore(getMyCheckInLogs(), storeId, storeName, includeAllStores);
+export function computeMyCheckInStreak(storeId: string, storeName: string, includeAllStores: boolean = false, preFetchedLogs?: CheckInLogEntry[]): number {
+  const scoped = scopeByStore(preFetchedLogs || getMyCheckInLogs(), storeId, storeName, includeAllStores);
   const uniqueDates = Array.from(new Set(scoped.map((l) => l.date))).filter(Boolean).sort();
   if (uniqueDates.length === 0) return 0;
 

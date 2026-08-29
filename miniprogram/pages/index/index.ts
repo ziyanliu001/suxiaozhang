@@ -2452,8 +2452,92 @@ Page({
       case 'storeManagement':
         this.onGotoStoreManagement();
         break;
+      case 'switchStore':
+        this.onDrawerSwitchStore();
+        break;
+      case 'scan':
+        this.onDrawerScanCode();
+        break;
+      case 'storeQrCode':
+        this.onOpenPromoActionSheet();
+        break;
+      case 'sunshineLedger':
+        this.onGoToSunshineBoard();
+        break;
+      case 'journey':
+        safeNavigateTo({ url: '/subpackages/admin/pages/journey/journey' });
+        break;
+      case 'refreshCache':
+        this.onDrawerRefreshStateCache();
+        break;
+      case 'feedback':
+        safeNavigateTo({ url: '/pages/profile/profile?openFeedback=1' });
+        break;
       default:
         break;
+    }
+  },
+
+  // 🌟 抽屉「切换门店」：复用首页顶部 store-picker 组件自己的选店弹窗
+  // （onOpenSheet 已经做好门店列表拉取/搜索/切换落地全套逻辑），不新造一套
+  onDrawerSwitchStore() {
+    const picker = this.selectComponent('#storePicker');
+    if (picker && typeof picker.onOpenSheet === 'function') {
+      picker.onOpenSheet();
+    } else {
+      wx.showToast({ title: '选店组件未就绪，请重试', icon: 'none' });
+    }
+  },
+
+  // 🌟 抽屉「扫一扫」：用于扫本小程序自己生成的各类二维码（打卡分享码/验真码/
+  // 门店邀请码等，见 getStoreQRCode 云函数）。这些码都是标准小程序码，
+  // wx.scanCode 扫描后会在 res.path 里直接给出目标页面路径+参数，不需要
+  // 自己解析 scene 编码规则——直接原样跳转即可，一套入口覆盖"核销/打卡"
+  // 等各类场景。扫到非本小程序码（res.path 为空）时如实提示，不假装处理成功
+  onDrawerScanCode() {
+    wx.scanCode({
+      onlyFromCamera: false,
+      success: (res: any) => {
+        if (res && res.path) {
+          safeNavigateTo({
+            url: '/' + res.path.replace(/^\/+/, ''),
+            fail: () => {
+              wx.showToast({ title: '无法打开扫码结果对应的页面', icon: 'none' });
+            }
+          });
+        } else {
+          wx.showModal({
+            title: '扫码结果',
+            content: (res && res.result) || '未识别到有效内容',
+            showCancel: false
+          });
+        }
+      },
+      fail: (err: any) => {
+        // 用户主动取消扫码不算错误，不弹提示打扰
+        if (err && err.errMsg && err.errMsg.includes('cancel')) return;
+        wx.showToast({ title: '扫码失败，请重试', icon: 'none' });
+      }
+    });
+  },
+
+  // 🌟 抽屉「刷新状态缓存」：一键重新拉取服务端权威角色/权限（AuthService.
+  // fetchUserRole）+ 清空门店列表本地缓存 + 重新加载首页动态数据（今日食谱/
+  // 动态/公告/物资状态等"流水"），用于账号权限刚被调整、或怀疑本地缓存与
+  // 服务端不一致时手动兜底，不需要退出重登
+  async onDrawerRefreshStateCache() {
+    wx.showLoading({ title: '刷新中...', mask: true });
+    try {
+      await AuthService.fetchUserRole();
+      clearAllStoresListCache();
+      this.refreshUserRoleView();
+      this.loadHomeDynamicData();
+      wx.hideLoading();
+      wx.showToast({ title: '已刷新最新状态', icon: 'success' });
+    } catch (err) {
+      console.warn('[onDrawerRefreshStateCache] 刷新失败:', err);
+      wx.hideLoading();
+      wx.showToast({ title: '刷新失败，请检查网络后重试', icon: 'none' });
     }
   },
 

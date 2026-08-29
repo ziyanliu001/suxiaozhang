@@ -123,7 +123,7 @@
   box-sizing: border-box;
 }
 
-.weui-navigation-bar__center text {
+.weui-navigation-bar__center-text {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;

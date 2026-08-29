@@ -3283,6 +3283,7 @@
     is-manager="{{isManager}}"
     is-finance="{{isFinance}}"
     is-super-admin="{{isSuperAdmin}}"
+    is-family="{{isFamily}}"
     care-mode="{{careMode}}"
     bind:action="onSideDrawerAction"
     bind:toggleCareMode="onToggleCareMode" />

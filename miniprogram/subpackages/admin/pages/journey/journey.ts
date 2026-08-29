@@ -127,9 +127,19 @@ Page({
     recordRecentVisit('/subpackages/admin/pages/journey/journey', '志愿历程');
     // 🌟 称谓自适应：先同步解析角色缓存，再异步加载数据，两者互不阻塞
     this.resolveOrgLabels();
-    this.loadStats();
-    this.loadHeatmapData();
-    this.loadTimelineData();
+
+    // 🐛 性能修复：此前 loadStats/loadHeatmapData/loadTimelineData 在 onLoad 里
+    // 同步执行——loadHeatmapData/loadTimelineData 各自独立同步调用一次
+    // wx.getStorageSync('my_checkin_logs')，loadStats 经 computeMyCheckInStats/
+    // computeMyCheckInStreak（checkinStats.ts）内部又各自触发一次同名同步读取，
+    // 同一个 key 在同一次 onLoad 里被连续同步读取 4 次，叠加热力图 30 天循环
+    // 过滤、时间轴全量排序分组这类 O(N) 计算全部堆在同步执行栈里，是开发者
+    // 工具报"跳转耗时阻塞警告"的根因。这些数字只影响首屏渲染完成后的展示，
+    // 不影响转场动画本身——改为异步读取一次 my_checkin_logs 后统一分发给三个
+    // 方法复用（loadStats 通过新增的 preFetchedLogs 参数跳过内部重复读取），
+    // 把 4 次同步读取收敛成 1 次异步读取，且整体移出 onLoad 的同步执行栈
+    this.loadAllLocalCheckInStats();
+
     this.loadMealStat();
     // 🔒 全国纵览：权限判定 + 数据拉取全部异步、非阻塞，isSuperAdmin 解析出来前
     // wxml 的 wx:if="{{isSuperAdmin}}" 默认 false，不会有"先露一下又收回去"的闪烁
@@ -144,6 +154,27 @@ Page({
     setTimeout(() => {
       this.setData({ isLoading: false });
     }, 400);
+  },
+
+  // 统一异步读取一次 my_checkin_logs，分发给 loadStats/loadHeatmapData/
+  // loadTimelineData 复用——用 wx.getStorage（异步）而非 wx.getStorageSync，
+  // 不占用 onLoad 的同步执行栈；未写入过打卡记录时 key 不存在会走 fail 回调，
+  // 按空数组处理，与原先 wx.getStorageSync(...) || [] 的兜底口径一致
+  loadAllLocalCheckInStats() {
+    wx.getStorage({
+      key: 'my_checkin_logs',
+      success: (res: any) => {
+        const logs: CheckInLog[] = Array.isArray(res.data) ? res.data : [];
+        this.loadStats(logs);
+        this.loadHeatmapData(logs);
+        this.loadTimelineData(logs);
+      },
+      fail: () => {
+        this.loadStats([]);
+        this.loadHeatmapData([]);
+        this.loadTimelineData([]);
+      }
+    });
   },
 
   onUnload() {
@@ -259,10 +290,10 @@ Page({
   // 门店影响（与下方热力图/时间轴本就展示全部门店记录的口径保持一致）。
   // parseFloat(...) || 0 的双重兜底在 computeMyCheckInStats 内部已处理，这里不会出现
   // NaN/undefined。
-  loadStats() {
+  loadStats(preFetchedLogs?: CheckInLog[]) {
     try {
-      const stats = computeMyCheckInStats('', '', true);
-      const streak = computeMyCheckInStreak('', '', true);
+      const stats = computeMyCheckInStats('', '', true, preFetchedLogs);
+      const streak = computeMyCheckInStreak('', '', true, preFetchedLogs);
       this.animateCountUp('totalDays', stats.days);
       this.animateCountUp('totalCount', stats.count);
       this.animateCountUp('totalHours', stats.hours);
@@ -400,8 +431,7 @@ Page({
   /**
    * 生成近 30 天热力图数据
    */
-  loadHeatmapData() {
-    const logs: CheckInLog[] = wx.getStorageSync('my_checkin_logs') || [];
+  loadHeatmapData(logs: CheckInLog[] = []) {
     const cells: HeatCell[] = [];
     const today = new Date();
 
@@ -426,9 +456,7 @@ Page({
   /**
    * 按月份分组加载时间轴数据，同时计算多站点足迹汇总（storeStats）
    */
-  loadTimelineData() {
-    const logs: CheckInLog[] = wx.getStorageSync('my_checkin_logs') || [];
-
+  loadTimelineData(logs: CheckInLog[] = []) {
     // 按时间倒序（缺失/非法 timestamp 的历史脏数据一律兜底为 0，排到最后而不是破坏排序）
     const sortedLogs = [...logs].sort((a, b) => {
       const tsA = typeof a.timestamp === 'number' && isFinite(a.timestamp) ? a.timestamp : 0;
