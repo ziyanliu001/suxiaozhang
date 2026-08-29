@@ -5,12 +5,14 @@
 // 入参：
 //   storeId     - 门店 ID；全国总览时留空（仅 super_admin 可用）
 //   photoType   - 'all' | 'receipt' | 'menu' | 'log'，默认 'all'
-//   month       - 'YYYY-MM' 格式，不传则取最近 3 个月
+//   month       - 'YYYY-MM' 格式的具体月份，优先级高于 range
+//   range       - '1m' | '3m' | 'year' | 'all'，快捷时间范围，默认 '3m'
+//                 （与旧版本"不传 month 则取最近 3 个月"的默认行为保持一致）
 //   limit       - 返回照片总数上限，默认 60（首页预览只取 6，图册页取 60）
-//   storeId     - 门店 ID
 //
 // 返回：
-//   { success, photos: [{url, type, date, storeName, storeId}], total }
+//   { success, photos: [{url, type, date, storeName, storeId, id}], total }
+//   id 是来源文档（report_logs/daily_menus/activity_logs）的 _id
 //
 // 多租户安全边界：所有查询均先收敛 tenantId，再按 storeId 限制门店；
 // super_admin 可全机构查询，其余角色强制收敛至自身绑定的门店。
@@ -24,7 +26,7 @@ const TENANT_WIDE_ROLES = ['super_admin'];
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
-  const { storeId, photoType = 'all', month, limit = 60 } = event || {};
+  const { storeId, photoType = 'all', month, range, limit = 60 } = event || {};
 
   if (!OPENID) {
     return { success: false, error: '无法获取用户身份' };
@@ -48,19 +50,35 @@ exports.main = async (event) => {
     const isTenantWide = TENANT_WIDE_ROLES.includes(userRole) && !!tenantId;
 
     // 2. 计算日期范围
-    // month 参数如 '2026-07'，解析为起止日期
-    let startDate, endDate;
+    // month 参数如 '2026-07'，指定具体月份，优先级最高；否则按 range 快捷范围
+    // 计算——startDate 为 null 时表示"不限下限"（range === 'all'），下面拼查询
+    // 条件时据此跳过 gte(startDate)，而不是拿一个很早的哨兵日期硬凑下限
+    let startDate = null;
+    let endDate;
+    const now = new Date();
     if (month && /^\d{4}-\d{2}$/.test(month)) {
       startDate = `${month}-01`;
       const [y, m] = month.split('-').map(Number);
       const lastDay = new Date(y, m, 0).getDate();
       endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
     } else {
-      // 默认取最近 3 个月
-      const now = new Date();
       endDate = now.toISOString().slice(0, 10);
-      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      startDate = threeMonthsAgo.toISOString().slice(0, 10);
+      switch (range) {
+        case '1m':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+          break;
+        case 'year':
+          startDate = `${now.getFullYear()}-01-01`;
+          break;
+        case 'all':
+          startDate = null;
+          break;
+        case '3m':
+        default:
+          // 默认/显式 '3m'：最近 3 个月，与此前无 range 参数时的固定行为一致
+          startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10);
+          break;
+      }
     }
 
     // 3. 确定查询的 storeId 边界
@@ -69,6 +87,8 @@ exports.main = async (event) => {
 
     // 4. 并行查询三张表，各自取所需字段
     const queryLimit = Math.min(Number(limit) || 60, 200);
+    // range === 'all' 时 startDate 为 null，只约束上限（不晚于今天），不设下限
+    const dateCondition = startDate ? _.gte(startDate).and(_.lte(endDate)) : _.lte(endDate);
 
     const queries = [];
 
@@ -77,7 +97,7 @@ exports.main = async (event) => {
       let receiptWhere = { isVoid: _.neq(true) };
       if (tenantId) receiptWhere.tenantId = tenantId;
       if (effectiveStoreId) receiptWhere.storeId = effectiveStoreId;
-      receiptWhere.dateString = _.gte(startDate).and(_.lte(endDate));
+      receiptWhere.dateString = dateCondition;
 
       queries.push(
         db.collection('report_logs')
@@ -96,7 +116,7 @@ exports.main = async (event) => {
       let menuWhere = {};
       if (tenantId) menuWhere.tenantId = tenantId;
       if (effectiveStoreId) menuWhere.storeId = effectiveStoreId;
-      menuWhere.dateString = _.gte(startDate).and(_.lte(endDate));
+      menuWhere.dateString = dateCondition;
 
       queries.push(
         db.collection('daily_menus')
@@ -115,7 +135,7 @@ exports.main = async (event) => {
       let logWhere = { approvalStatus: _.neq('PENDING') };
       if (tenantId) logWhere.tenantId = tenantId;
       if (effectiveStoreId) logWhere.storeId = effectiveStoreId;
-      logWhere.eventTime = _.gte(startDate).and(_.lte(endDate));
+      logWhere.eventTime = dateCondition;
 
       queries.push(
         db.collection('activity_logs')
@@ -154,8 +174,10 @@ exports.main = async (event) => {
         const date = type === 'log' ? (row.eventTime || '') : (row.dateString || '');
         const storeName = row.shopName || row.storeName || '';
 
+        // 🆕 带上来源文档 _id：图册页长按详情弹窗（receipt 类型）据此跳转回
+        // 账本模式查看关联的报销流水，不需要额外一次按日期反查
         for (const url of imgs) {
-          photos.push({ url, type, date, storeName, storeId: row.storeId || effectiveStoreId || '' });
+          photos.push({ url, type, date, storeName, storeId: row.storeId || effectiveStoreId || '', id: row._id });
         }
       }
     }

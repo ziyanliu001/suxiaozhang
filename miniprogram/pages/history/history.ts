@@ -14,6 +14,27 @@ import { callFunctionWithTimeout } from '../../utils/withTimeout';
 // 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
 // （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
 // 统一到这一个常量 + isNationalStoreId()，全文件三处判断都改为调用它，杜绝再次出现口径不一致。
+// 🆕 图册快捷时间范围：与 cloudfunctions/getPhotoArchive 的 range 参数枚举
+// 一一对应，label 供 photo-archive-meta 的下拉胶囊按钮与 wx.showActionSheet
+// 菜单展示
+const PHOTO_ARCHIVE_RANGE_LABELS: Record<string, string> = {
+  '1m': '近 1 个月',
+  '3m': '近 3 个月',
+  year: '本年度',
+  all: '全部历史'
+};
+const PHOTO_ARCHIVE_RANGE_ORDER: Array<'1m' | '3m' | 'year' | 'all'> = ['1m', '3m', 'year', 'all'];
+
+// 🆕 图册照片分类标签：与 getPhotoArchive 返回的 type 枚举一一对应，文案换成
+// 更贴合素食公益语境的说法（报销凭证场景多为食材/物资采购 → 爱心采购；
+// 每日食谱场景是门店记录的当日餐食 → 温情就餐），瀑布流网格标签与长按详情
+// 弹窗共用同一份，不写两遍
+const PHOTO_TYPE_LABELS: Record<string, string> = {
+  receipt: '🧾 爱心采购',
+  menu: '🍱 温情就餐',
+  log: '📸 温情活动'
+};
+
 const NATIONAL_STORE_IDS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
 function isNationalStoreId(storeId: string): boolean {
   return !storeId || NATIONAL_STORE_IDS.includes(storeId);
@@ -91,6 +112,16 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     totalHeaderHeight: 150,
+    // 🐛 根因修复（标题/右侧图标与胶囊按钮安全边距）：本页导航栏是手搭的
+    // .nav-title-bar，不是全站统一的 <navigation-bar> 组件，此前标题用
+    // position:absolute + 固定 max-width:420rpx 在整条头部宽度上"数字硬编码
+    // 居中"，右侧的 .nav-right-actions（最多 3 个图标）也只留了 24rpx 右
+    // padding——两者都没有对齐胶囊按钮的真实坐标，窄屏/长标题下都有与胶囊
+    // 重叠的风险。与 calculateNavBarHeight() 同一次 wx.getMenuButtonBoundingClientRect()
+    // 调用里顺带算出"胶囊左边缘到屏幕右边缘的安全距离"，绑定给 .nav-title-bar
+    // 的 padding-right，标题/右侧图标自然都不会越界
+    navCapsuleSafePx: 90,
+
     isAdmin: false,
     // 🆕 个人视角入口标记：仅当从「我的提交与数据」(?view=mine) 进入时为 true，
     // 用于收敛页面为"专注展示个人提交记录"——隐藏超管视角切换预览 Banner 与
@@ -152,9 +183,20 @@ Page({
     photoArchiveMode: false,
     // 照片类型过滤：'all' | 'receipt' | 'menu' | 'log'
     photoTypeFilter: 'all' as string,
-    photoArchiveList: [] as Array<{ url: string; type: string; date: string; storeName: string }>,
+    photoArchiveList: [] as Array<{ url: string; type: string; date: string; storeName: string; id?: string }>,
     photoArchiveLoading: false,
     photoArchiveTotal: 0,
+    // 🆕 长按照片查看详情：轻量弹窗，复用本页已有的 .modal-backdrop/.modal-card
+    // 视觉语言，不新增一套弹窗样式
+    showPhotoDetailModal: false,
+    photoDetailItem: null as null | { url: string; type: string; date: string; storeName: string; id?: string; typeLabel: string },
+    // 🆕 图册专属的快捷时间范围（与账本模式的单月 picker 互不相关——图册模式
+    // 下 .unified-filter-row 整块隐藏，selectedMonthStr 在图册模式里从未被
+    // 真正赋过值，此前"统计行"右侧的时间文案其实是个只会显示"近 3 个月"的
+    // 死态展示，并非真的可切换。这里补一套图册自己的范围状态，与
+    // getPhotoArchive 云函数新增的 range 参数一一对应）
+    photoArchiveRangeKey: '3m' as '1m' | '3m' | 'year' | 'all',
+    photoArchiveRangeLabels: PHOTO_ARCHIVE_RANGE_LABELS,
     // 页面标题随模式 + orgType 动态切换
     pageTitle: '🧾 凭证与账本',
     // 机构类型：从 tenantId 派生（与 index.ts 同款逻辑），驱动图册页面标题文案
@@ -172,8 +214,14 @@ Page({
       this.setData({ viewMode: 'personal', mineEntryMode: true });
     }
     // 📸 首页图册入口卡跳转：?mode=photo 直接打开图册模式
+    // 🐛 根因修复：此前这里写死了雨花斋专属标题，不管当前机构是不是雨花斋都
+    // 展示"🏡 雨花温情图册与阳光凭证"，与 computePhotoArchiveTitle() 的机构类型
+    // 判断口径不一致（该方法只在 onTogglePhotoArchive 手动切换时才会被调用）。
+    // 改为直接调用同一个方法：此时 orgType 尚未从 loadReports() 异步解析出来，
+    // 会先给出中性的 🌸 文案，等 orgType 解析完成后如需要可自行刷新（雨花斋
+    // 机构场景下差异仅一个 emoji，不影响可读性）
     if (options && options.mode === 'photo') {
-      this.setData({ photoArchiveMode: true, pageTitle: '🏡 雨花温情图册与阳光凭证' });
+      this.setData({ photoArchiveMode: true, pageTitle: this.computePhotoArchiveTitle() });
     }
     // 🌟 首页「风控预警日志」弹窗点击卡片"查看账本明细"跳转过来（携带 anomalyType
     // 查询参数）时，进页面即自动按同一类型精准筛选，不需要用户再手动翻找
@@ -537,7 +585,15 @@ Page({
         // 派生 orgType：tenantId 以 'yuhuazhai' 开头视为雨花斋机构，否则 generic
         const tenantId: string = result.roleInfo.tenantId || '';
         const orgType = tenantId.startsWith('yuhuazhai') ? 'yuhuazhai' : (tenantId ? 'generic' : '');
-        if (orgType !== this.data.orgType) this.setData({ orgType });
+        if (orgType !== this.data.orgType) {
+          // 🐛 图册模式下 orgType 异步解析出来后，把 onLoad 阶段先给出的中性
+          // 🌸 标题刷新成机构类型对应的正确 emoji（见 onLoad ?mode=photo 分支
+          // 注释），避免标题在 orgType 解析前后不一致
+          const pageTitlePatch = this.data.photoArchiveMode
+            ? { pageTitle: orgType === 'yuhuazhai' ? '🏡 温情图册 · 阳光凭证' : '🌸 温情图册 · 阳光凭证' }
+            : {};
+          this.setData({ orgType, ...pageTitlePatch });
+        }
       }
     } catch (err: any) {
       console.warn('⚠️ [history] 云端鉴权超时或异常，启动本地缓存兜底:', err.message);
@@ -582,13 +638,20 @@ Page({
 
       const menuButton = wx.getMenuButtonBoundingClientRect();
       let navBarHeight = 44;
+      // 🐛 见 data.navCapsuleSafePx 声明处注释：胶囊左边缘到屏幕右边缘的实测
+      // 距离 + 8px 缓冲，作为 .nav-title-bar 的 padding-right，标题（flex:1 +
+      // ellipsis）与右侧图标行都会自动收窄在这条安全线以内，不再用猜测的固定
+      // rpx 数值硬顶
+      let navCapsuleSafePx = 90;
       if (menuButton) {
         navBarHeight = (menuButton.top - statusBarHeight) * 2 + menuButton.height;
+        navCapsuleSafePx = (sysInfo.screenWidth - menuButton.left) + 8;
       }
 
       this.setData({
         statusBarHeight,
-        navBarHeight: navBarHeight || 44
+        navBarHeight: navBarHeight || 44,
+        navCapsuleSafePx
       }, () => {
         this.recalcTotalHeaderHeight();
       });
@@ -2843,14 +2906,19 @@ Page({
     });
   },
 
-  // 派生图册页标题：与 index.ts computePhotoArchiveTitle() 同一套口径——雨花斋 →
-  // 🏡 雨花温情图册与阳光凭证，社区助餐/其余机构 → 🌸 阳光温情图册与凭证。
-  // 🐛 根因修复：orgType 为空时此前用 `|| !this.data.orgType` 兜底当作"雨花斋"，
-  // 与 profile.ts 修过的"严禁在非雨花斋机构展示雨花斋品牌"同一类问题——orgType
+  // 派生图册页标题：与 index.ts computePhotoArchiveTitle() 同一套口径，仅
+  // emoji 按机构类型区分（雨花斋 🏡 / 其余机构 🌸），文案本身统一精简为
+  // "温情图册 · 阳光凭证"。
+  // 🐛 根因修复（标题截断）：旧文案"🏡 雨花温情图册与阳光凭证"长达 11 个汉字+
+  // emoji，配合 .page-title-txt 此前 max-width:420rpx 的硬编码上限，在窄屏
+  // 机型上非常接近甚至触发省略号截断。精简后的文案 + 上面 navCapsuleSafePx
+  // 的真实胶囊边距双重保障，任何机型下都能单行完整展示。
+  // 🐛 orgType 为空时不再用 `|| !this.data.orgType` 兜底当作"雨花斋"，与
+  // profile.ts 修过的"严禁在非雨花斋机构展示雨花斋品牌"同一类问题——orgType
   // 尚未解析出来的窗口期应展示中性文案，不能提前假定是雨花斋
   computePhotoArchiveTitle(): string {
     const isYuhuazhai = this.data.orgType === 'yuhuazhai';
-    return isYuhuazhai ? '🏡 雨花温情图册与阳光凭证' : '🌸 阳光温情图册与凭证';
+    return isYuhuazhai ? '🏡 温情图册 · 阳光凭证' : '🌸 温情图册 · 阳光凭证';
   },
 
   // 切换照片类型过滤标签；重新从云端加载
@@ -2861,6 +2929,24 @@ Page({
     });
   },
 
+  // 🆕 统计行右侧的"近 3 个月 ▾"下拉胶囊：用原生 ActionSheet 承载 4 个快捷
+  // 选项，不额外搭一套自定义下拉浮层（避免引入新的 z-index/点击外部收起
+  // 等边界情况，ActionSheet 本身就是"从几个选项里选一个"场景最贴合的原生控件）
+  onTogglePhotoArchiveRangeMenu() {
+    if (this.data.photoArchiveLoading) return;
+    wx.showActionSheet({
+      itemList: PHOTO_ARCHIVE_RANGE_ORDER.map((key) => PHOTO_ARCHIVE_RANGE_LABELS[key]),
+      success: (res) => {
+        const key = PHOTO_ARCHIVE_RANGE_ORDER[res.tapIndex];
+        if (!key || key === this.data.photoArchiveRangeKey) return;
+        this.setData({ photoArchiveRangeKey: key, photoArchiveList: [], photoArchiveTotal: 0 }, () => {
+          this.loadPhotoArchive();
+        });
+      },
+      fail: () => { /* 用户取消选择，不需要任何提示 */ }
+    });
+  },
+
   async loadPhotoArchive() {
     if (!isCloudAvailable()) {
       wx.showToast({ title: '云服务暂不可用', icon: 'none' });
@@ -2868,7 +2954,7 @@ Page({
     }
     this.setData({ photoArchiveLoading: true });
 
-    const { currentStoreId, photoTypeFilter, selectedMonthStr } = this.data;
+    const { currentStoreId, photoTypeFilter, photoArchiveRangeKey } = this.data;
     const isAllStores = this.resolveIsAllStoresView(currentStoreId);
     const queryStoreId = isAllStores ? '' : (currentStoreId || '');
 
@@ -2878,7 +2964,13 @@ Page({
         data: {
           storeId: queryStoreId,
           photoType: photoTypeFilter || 'all',
-          month: selectedMonthStr || '',
+          // 🐛 根因修复：此前传的是账本模式的 selectedMonthStr——图册模式下
+          // 月份 picker 整块隐藏，用户压根没有入口设置它，但如果用户是"先在
+          // 账本模式选了某个月，再切到图册模式"，这个残留值会静默把图册过滤
+          // 到那个月，而右上角的范围文案却还显示"近 3 个月"，两者对不上。
+          // 图册改用自己独立的 photoArchiveRangeKey（见 onTogglePhotoArchiveRangeMenu），
+          // 与账本的月份筛选彻底解耦
+          range: photoArchiveRangeKey || '3m',
           limit: 60
         }
       });
@@ -2908,6 +3000,49 @@ Page({
     const current = urls[index] || urls[0];
     if (!current) return;
     wx.previewImage({ current, urls });
+  },
+
+  // 🆕 长按照片：打开详情弹窗（拍摄/上报日期、分类、所属门店 + 查看大图 /
+  // 报销凭证类型额外提供"查看当月账本"入口）
+  onLongPressPhotoItem(e: any) {
+    const index = e.currentTarget.dataset.index as number;
+    const item = this.data.photoArchiveList[index];
+    if (!item) return;
+    this.setData({
+      showPhotoDetailModal: true,
+      photoDetailItem: { ...item, typeLabel: PHOTO_TYPE_LABELS[item.type] || item.type }
+    });
+  },
+
+  onClosePhotoDetailModal() {
+    this.setData({ showPhotoDetailModal: false });
+  },
+
+  onPreviewPhotoDetailImage() {
+    const item = this.data.photoDetailItem;
+    if (!item || !item.url) return;
+    wx.previewImage({ current: item.url, urls: [item.url] });
+  },
+
+  // 🆕 报销凭证类型专属：退出图册模式、切到账本模式，并按该凭证所在月份筛选，
+  // 让用户直接看到这笔支出对应的完整账本记录（reports 已在 onLoad 里无条件
+  // 加载过，见 loadReports() 调用处，不需要在这里另外发起云函数请求）
+  onGoToLedgerFromPhotoDetail() {
+    const item = this.data.photoDetailItem;
+    if (!item || !item.date) return;
+    const match = /^(\d{4})-(\d{2})/.exec(item.date);
+    const monthStr = match ? `${match[1]}-${match[2]}` : '';
+    const monthDisplay = match ? `${match[1]}年${match[2]}月` : '';
+
+    this.setData({
+      showPhotoDetailModal: false,
+      photoArchiveMode: false,
+      pageTitle: '🧾 凭证与账本',
+      selectedMonthStr: monthStr,
+      selectedMonthDisplay: monthDisplay
+    }, () => {
+      this.applyFilters();
+    });
   },
 
   // ─────────────────────────────────────────────────────────────────────────────

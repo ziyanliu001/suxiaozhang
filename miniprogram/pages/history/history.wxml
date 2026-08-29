@@ -5,7 +5,7 @@
   <view class="fixed-top-header">
     <view class="status-bar-spacer" style="height: {{statusBarHeight}}px;"></view>
 
-    <view class="nav-title-bar" style="height: {{navBarHeight}}px;">
+    <view class="nav-title-bar" style="height: {{navBarHeight}}px; padding-right: {{navCapsuleSafePx}}px;">
       <view class="btn-back-arrow" hover-class="btn-back-arrow-hover" bindtap="goBack">←</view>
       <text class="page-title-txt">{{pageTitle || '🧾 凭证与账本'}}</text>
       <view class="nav-right-actions">
@@ -95,27 +95,36 @@
     <!-- 📸 图册模式：照片类型过滤 + 瀑布流网格，账本内容同时隐藏 -->
     <view class="photo-archive-container" wx:if="{{photoArchiveMode}}">
 
-      <!-- 照片类型过滤标签栏 -->
-      <view class="photo-type-tabs">
-        <view
-          wx:for="{{[{label:'🖼️ 全部照片',value:'all'},{label:'🧾 报销凭证',value:'receipt'},{label:'🍱 每日食谱',value:'menu'},{label:'📸 活动日志',value:'log'}]}}"
-          wx:key="value"
-          class="photo-type-tab {{photoTypeFilter === item.value ? 'active' : ''}}"
-          data-type="{{item.value}}"
-          bindtap="onPhotoTypeTabChange"
-        >{{item.label}}</view>
-      </view>
+      <!-- 照片类型过滤标签栏：横向滚动 + 胶囊选中态，与 status-tab-row 共用
+           #8C1D18 主题强调色，不再用与全站不一致的 #C2185B -->
+      <scroll-view scroll-x class="photo-type-tabs-scroll" enhanced show-scrollbar="{{false}}">
+        <view class="photo-type-tabs">
+          <view
+            wx:for="{{[{label:'全部照片',icon:'🖼️',value:'all'},{label:'报销凭证',icon:'🧾',value:'receipt'},{label:'每日食谱',icon:'🍱',value:'menu'},{label:'温情活动',icon:'📸',value:'log'}]}}"
+            wx:key="value"
+            class="photo-type-tab {{photoTypeFilter === item.value ? 'active' : ''}}"
+            data-type="{{item.value}}"
+            bindtap="onPhotoTypeTabChange"
+          >
+            <text class="photo-type-tab-icon">{{item.icon}}</text>
+            <text class="photo-type-tab-label">{{item.label}}</text>
+          </view>
+        </view>
+      </scroll-view>
 
-      <!-- 统计 + 加载状态 -->
+      <!-- 统计 + 时间范围快捷切换 -->
       <view class="photo-archive-meta" wx:if="{{!photoArchiveLoading}}">
-        <text class="photo-archive-count">共 {{photoArchiveTotal}} 张照片</text>
-        <text class="photo-archive-range">{{selectedMonthDisplay ? selectedMonthDisplay : '近 3 个月'}}</text>
+        <text class="photo-archive-count">共 <text class="photo-archive-count-num">{{photoArchiveTotal}}</text> 张照片</text>
+        <view class="photo-archive-range-pill" bindtap="onTogglePhotoArchiveRangeMenu">
+          <text class="photo-archive-range-txt">{{photoArchiveRangeLabels[photoArchiveRangeKey]}}</text>
+          <text class="photo-archive-range-arrow">▾</text>
+        </view>
       </view>
       <view class="photo-archive-loading" wx:if="{{photoArchiveLoading}}">
         <text>加载中...</text>
       </view>
 
-      <!-- 瀑布流照片网格 -->
+      <!-- 瀑布流照片网格：点击预览大图，长按查看详情/关联记录 -->
       <view class="photo-waterfall-grid" wx:if="{{!photoArchiveLoading && photoArchiveList.length > 0}}">
         <view
           class="photo-grid-item"
@@ -123,6 +132,7 @@
           wx:key="url"
           data-index="{{index}}"
           bindtap="onPreviewPhotoItem"
+          bindlongpress="onLongPressPhotoItem"
         >
           <image
             class="photo-grid-img"
@@ -133,17 +143,20 @@
           <view class="photo-grid-tags">
             <text class="photo-tag-date">{{item.date}}</text>
             <text class="photo-tag-type {{item.type}}">
-              {{item.type === 'receipt' ? '🧾 凭证' : item.type === 'menu' ? '🍱 食谱' : '📸 日志'}}
+              {{item.type === 'receipt' ? '🧾 爱心采购' : item.type === 'menu' ? '🍱 温情就餐' : '📸 温情活动'}}
             </text>
           </view>
         </view>
       </view>
 
-      <!-- 空状态 -->
+      <!-- 空状态：温情文案 + 与页面其余空态（.empty-icon 🍃）一致的图标语言，
+           不再引用图册模式下从未真正被赋值过的 selectedMonthDisplay（那个
+           picker 只在账本模式展示，此前这里的条件分支其实是死代码，见
+           history.ts loadPhotoArchive 同一处修复注释） -->
       <view class="photo-archive-empty" wx:if="{{!photoArchiveLoading && photoArchiveList.length === 0}}">
-        <text class="photo-archive-empty-icon">📷</text>
-        <text class="photo-archive-empty-tip">{{selectedMonthDisplay ? selectedMonthDisplay + '暂无照片' : '近期暂无照片'}}</text>
-        <text class="photo-archive-empty-sub">可通过月份筛选器查看历史期间</text>
+        <text class="photo-archive-empty-icon">🍃</text>
+        <text class="photo-archive-empty-tip">用镜头记录温暖，每一份付出皆有印记</text>
+        <text class="photo-archive-empty-sub">{{photoArchiveRangeLabels[photoArchiveRangeKey]}}内暂无照片，可切换分类或时间范围试试</text>
       </view>
 
     </view>
@@ -654,6 +667,45 @@
         <button class="btn-detail-action btn-supplement" bindtap="onSupplementReceiptFromDetail">
           📤 补传凭证
         </button>
+      </view>
+
+    </view>
+  </view>
+
+  <!-- 🆕 图册长按详情弹窗：拍摄/上报日期 + 分类 + 所属门店，报销凭证类型
+       额外提供"查看当月账本"跳转 -->
+  <view class="modal-backdrop" wx:if="{{showPhotoDetailModal}}" bindtap="onClosePhotoDetailModal">
+    <view class="modal-card photo-detail-card" catchtap="stopPropagation">
+
+      <view class="modal-header-bar">
+        <view class="title-left">
+          <text class="pendant-dot">●</text>
+          <text class="modal-title-text">照片详情</text>
+        </view>
+        <view class="modal-close-btn" bindtap="onClosePhotoDetailModal">✕</view>
+      </view>
+
+      <view class="photo-detail-thumb-wrap" bindtap="onPreviewPhotoDetailImage">
+        <image class="photo-detail-thumb" src="{{photoDetailItem.url}}" mode="aspectFill" />
+        <view class="photo-detail-thumb-hint">🔍 点击查看大图</view>
+      </view>
+
+      <view class="photo-detail-info-row">
+        <text class="photo-detail-info-lbl">日期</text>
+        <text class="photo-detail-info-val">{{photoDetailItem.date}}</text>
+      </view>
+      <view class="photo-detail-info-row">
+        <text class="photo-detail-info-lbl">分类</text>
+        <text class="photo-detail-info-val">{{photoDetailItem.typeLabel}}</text>
+      </view>
+      <view class="photo-detail-info-row">
+        <text class="photo-detail-info-lbl">门店</text>
+        <text class="photo-detail-info-val">{{photoDetailItem.storeName || '未命名'}}</text>
+      </view>
+
+      <view class="modal-footer-box">
+        <button class="btn-cancel" bindtap="onClosePhotoDetailModal">关闭</button>
+        <button class="btn-save-recalc" wx:if="{{photoDetailItem.type === 'receipt'}}" bindtap="onGoToLedgerFromPhotoDetail">📖 查看当月账本</button>
       </view>
 
     </view>

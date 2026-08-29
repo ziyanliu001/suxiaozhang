@@ -23,15 +23,23 @@
   width: 100%;
 }
 
+/* 🐛 根因修复（标题/图标与胶囊重叠）：此前是 justify-content:space-between +
+   标题 position:absolute 在整条头部宽度上居中，右侧 padding 只有固定 24rpx，
+   完全没有对齐胶囊按钮真实坐标。改为真正的三段式 flex 布局：返回键固定宽度，
+   标题 flex:1 占满剩余空间自行居中省略，右侧图标行跟随内容宽度——整条
+   .nav-title-bar 的 padding-right 由 history.ts calculateNavBarHeight() 按
+   wx.getMenuButtonBoundingClientRect() 实测出的胶囊安全距离动态绑定（见
+   WXML style），标题和图标天然不会越过这条安全线，不再靠猜测的固定数值 */
 .nav-title-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 24rpx;
+  box-sizing: border-box;
   position: relative;
 }
 
 .btn-back-arrow {
+  flex: none;
   width: 64rpx;
   height: 64rpx;
   display: flex;
@@ -47,17 +55,12 @@
 }
 
 .page-title-txt {
+  flex: 1;
+  min-width: 0;
   font-size: 32rpx;
   font-weight: bold;
   color: #212529;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  /* 🌟 标题单行不换行：长标题（如"雨花温情图册与阳光凭证"）与两侧图标/返回箭头
-     绝对定位互不影响，靠 max-width 约束在两侧控件之间，超出时省略号截断，
-     而不是自动换行撑高导航栏 */
-  max-width: 420rpx;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -68,8 +71,10 @@
   width: 64rpx;
 }
 
-/* 右上角操作区：图册切换 + 设置齿轮 */
+/* 右上角操作区：图册切换 + 设置齿轮，flex:none 保持内容宽度，紧跟在标题
+   右侧、整条头部预留的胶囊安全区之前 */
 .nav-right-actions {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 4rpx;
@@ -2391,36 +2396,54 @@
   padding: 0 0 40rpx;
 }
 
-/* 照片类型过滤标签栏：统一分段控件（Segmented Control）——只有 4 个固定选项，
-   改为等宽平分而不是可横向滚动的散装胶囊，激活态用浅底+暖色文字区分，
-   替换掉原先的实心蓝色块（与页面其余暖色调不搭） */
+/* 照片类型过滤标签栏：横向滚动 + 胶囊选中态，替换原先等宽分段控件的
+   #C2185B 强调色——与全站其余页面（如上方 .status-tab-row）统一改用
+   #8C1D18 主题红，视觉语言不再自成一派 */
+.photo-type-tabs-scroll {
+  width: 100%;
+  white-space: nowrap;
+  margin: 16rpx 0;
+  box-sizing: border-box;
+}
+
 .photo-type-tabs {
-  display: flex;
-  background: #F5F5F5;
-  border-radius: 16rpx;
-  padding: 6rpx;
-  margin: 16rpx 24rpx;
+  display: inline-flex;
+  gap: 12rpx;
+  padding: 4rpx 24rpx;
+  box-sizing: border-box;
 }
 
 .photo-type-tab {
-  flex: 1;
-  text-align: center;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
   font-size: 26rpx;
-  color: #666;
-  padding: 12rpx 0;
-  border-radius: 12rpx;
+  color: #6B6B70;
+  padding: 14rpx 26rpx;
+  border-radius: 999rpx;
+  background: #F5F5F5;
   white-space: nowrap;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.photo-type-tab-icon {
+  font-size: 26rpx;
+  line-height: 1;
+}
+
+.photo-type-tab-label {
+  line-height: 1;
 }
 
 .photo-type-tab.active {
-  background: #FFFFFF;
-  color: #C2185B;
-  font-weight: bold;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-weight: 600;
+  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.28);
 }
 
-/* 统计行 */
+/* 统计行：张数用主题色数字强调，右侧范围文案改为可点击的下拉胶囊 */
 .photo-archive-meta {
   display: flex;
   flex-direction: row;
@@ -2434,9 +2457,31 @@
   color: #888;
 }
 
-.photo-archive-range {
+.photo-archive-count-num {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8C1D18;
+  margin: 0 2rpx;
+}
+
+.photo-archive-range-pill {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  background: #F5F5F5;
+}
+
+.photo-archive-range-txt {
   font-size: 24rpx;
-  color: #888;
+  color: #6B6B70;
+  font-weight: 600;
+}
+
+.photo-archive-range-arrow {
+  font-size: 20rpx;
+  color: #ADADB2;
 }
 
 /* 加载中 */
@@ -2447,31 +2492,30 @@
   font-size: 26rpx;
 }
 
-/* 瀑布流网格：flexbox 自动换行，3 列均分，列间距 4rpx */
-/* 🌟 改用真正的 CSS Grid：此前用 flex-wrap + padding-top 百分比模拟正方形网格，
-   圆角只有 4rpx、几乎无间距，视觉比较原始。改为 3 列定高网格（200rpx），不再依赖
-   padding-top 撑高的 hack，.photo-grid-tags 的 absolute 叠层定位不受影响
-   （.photo-grid-item 仍是 position:relative 的定位上下文） */
+/* 瀑布流网格：3 列定高网格，圆角与间距升级——16rpx 圆角 + 微阴影，图片本身
+   继续用 aspectFill（对应设计稿的 cover 裁剪），.photo-grid-tags 的 absolute
+   叠层定位不受影响（.photo-grid-item 仍是 position:relative 的定位上下文） */
 .photo-waterfall-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16rpx;
-  padding: 12rpx 0;
+  padding: 12rpx 24rpx;
 }
 
 .photo-grid-item {
   position: relative;
   height: 200rpx;
   overflow: hidden;
-  border-radius: 12rpx;
+  border-radius: 16rpx;
   background: #E8E8E8;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
 .photo-grid-img {
   display: block;
   width: 100%;
   height: 200rpx;
-  border-radius: 12rpx;
+  border-radius: 16rpx;
 }
 
 /* 日期 + 类型标签叠加在图片底部 */
@@ -2484,8 +2528,8 @@
   flex-direction: row;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 4rpx 8rpx;
-  background: linear-gradient(transparent, rgba(0,0,0,0.42));
+  padding: 6rpx 10rpx;
+  background: linear-gradient(transparent, rgba(0,0,0,0.5));
 }
 
 .photo-tag-date {
@@ -2528,4 +2572,53 @@
   font-size: 24rpx;
   color: #aaa;
   text-align: center;
+}
+
+/* ── 长按详情弹窗（复用 .modal-card 基础样式） ── */
+.photo-detail-thumb-wrap {
+  position: relative;
+  width: 100%;
+  height: 320rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  margin-bottom: 20rpx;
+  background: #E8E8E8;
+}
+
+.photo-detail-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.photo-detail-thumb-hint {
+  position: absolute;
+  right: 12rpx;
+  bottom: 12rpx;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.5);
+  color: #FFFFFF;
+  font-size: 20rpx;
+}
+
+.photo-detail-info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  font-size: 26rpx;
+  border-bottom: 1rpx solid #EFE6D8;
+}
+
+.photo-detail-info-row:last-of-type {
+  border-bottom: none;
+}
+
+.photo-detail-info-lbl {
+  color: #777777;
+}
+
+.photo-detail-info-val {
+  color: #333333;
+  font-weight: 600;
 }
