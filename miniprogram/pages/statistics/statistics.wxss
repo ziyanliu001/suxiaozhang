@@ -408,6 +408,15 @@ page {
   border: none;
 }
 
+/* 🎨 对齐规范：统一 inline-flex 居中，替代此前依赖 <text> 默认内联渲染 +
+   父级 text-align 的隐式对齐，胶囊内容在任何字号/内容长度下都精确垂直居中 */
+.cost-badge,
+.warning-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .cost-badge.valid {
   color: #2B8A3E;
   font-weight: bold;
@@ -2120,18 +2129,22 @@ button.btn-primary-poster {
   border-radius: 20rpx;
 }
 
-/* 顶部 4 大核心指标：大字号数字，一眼可读 */
+/* 顶部 4 大核心指标：2x2 精致高光卡片——每个指标独立成卡（暖色微渐变底 +
+   微阴影 + 16rpx 圆角），替代此前 4 个格子共享一张平铺白底、只靠文字本身
+   撑视觉的写法 */
 .overview-kpi-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
 }
 
 .overview-kpi-cell {
-  flex: 1 1 50%;
-  min-width: 50%;
   box-sizing: border-box;
   text-align: center;
-  padding: 16rpx 8rpx;
+  padding: 24rpx 12rpx;
+  border-radius: 16rpx;
+  background: linear-gradient(135deg, rgba(140, 29, 24, 0.06), rgba(230, 162, 60, 0.08));
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
 }
 
 .overview-kpi-val {
@@ -2154,17 +2167,22 @@ button.btn-primary-poster {
   margin-top: 4rpx;
 }
 
-/* 次级指标行：收支细分/开餐天数/义工到岗——小字号，视觉权重明显低于顶部核心指标 */
+/* 次级指标行：收支细分/开餐天数/义工到岗——拆成紧凑的次级微卡片网格，
+   小字号 + 浅底微阴影，视觉权重明显低于顶部核心指标卡，但不再是裸文字 */
 .overview-secondary-row {
-  display: flex;
-  border-top: 1rpx solid #F1F3F5;
-  margin-top: 8rpx;
-  padding-top: 20rpx;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+  margin-top: 20rpx;
 }
 
 .overview-sec-cell {
-  flex: 1;
+  box-sizing: border-box;
   text-align: center;
+  padding: 16rpx 8rpx;
+  border-radius: 16rpx;
+  background: #FAFAFA;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
 
 .overview-sec-val {
@@ -2195,8 +2213,9 @@ button.btn-primary-poster {
   flex: 1;
   text-align: center;
   background: #F7F8FA;
-  border-radius: 14rpx;
+  border-radius: 16rpx;
   padding: 12rpx 4rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
 
 .overview-material-cell .material-val {
@@ -2910,12 +2929,18 @@ button.btn-primary-poster {
   padding: 14rpx 16rpx;
 }
 
+/* 🎨 对齐卡片升级：加边框 + 微阴影，两枚卡片各自成为独立可辨识的"卡"，
+   而不是共用一整行背景色块，强化"阳善 vs 积阴德"的左右对比感 */
 .love-merit-split-cell.yang {
   background: rgba(245, 158, 11, 0.08);
+  border: 1.5rpx solid rgba(245, 158, 11, 0.18);
+  box-shadow: 0 2rpx 8rpx rgba(245, 158, 11, 0.08);
 }
 
 .love-merit-split-cell.yin {
   background: rgba(99, 102, 241, 0.08);
+  border: 1.5rpx solid rgba(99, 102, 241, 0.18);
+  box-shadow: 0 2rpx 8rpx rgba(99, 102, 241, 0.08);
 }
 
 .love-merit-split-icon {
@@ -2936,8 +2961,11 @@ button.btn-primary-poster {
   color: #1f2937;
 }
 
+/* 善款金额加粗：与人次数字同一视觉权重，两枚卡片左右并排时更容易一眼
+   对比出阳善/积阴德的善款差异 */
 .love-merit-split-amount {
-  font-size: 22rpx;
+  font-size: 24rpx;
+  font-weight: 700;
   color: #92400e;
 }
 
@@ -2974,11 +3002,16 @@ button.btn-primary-poster {
   height: 52rpx;
 }
 
+/* 🎨 精致列表项：轻量胶囊底色替代此前纯文字裸行，滚动跑马灯（swiper
+   autoplay circular）本身已经实现"轻微滑动"效果，这里只升级单条的视觉质感 */
 .love-scroll-item {
   display: flex;
   align-items: center;
   gap: 8rpx;
   height: 52rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.06), rgba(236, 72, 153, 0.02));
 }
 
 .love-scroll-store {
@@ -3315,33 +3348,45 @@ button.btn-primary-poster {
 }
 
 /* 🏢 全国大屏平台类型筛选器：解耦雨花斋等平台硬编码。
-   🐛 修复胶囊被硬边裁切的遮挡问题：此前是横向单行滚动（overflow-x: auto），
-   实测（见调试截图）行数较多时最后一枚胶囊会卡在卡片圆角边界上，只露出
-   半个 emoji，看起来像是被硬生生切掉，而不是"可以滑动查看更多"的正常
-   滚动态。7 个平台类型选项换成 flex-wrap: wrap 自动换行，彻底不需要横向
-   滚动——所有胶囊必定完整可见，不存在任何被裁切的可能 */
-.org-type-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx 16rpx;
+   🐛 横向滚动实现记录：此前用 overflow-x: auto 单行滚动时，内容区没有留够
+   右侧安全边距，最后一枚胶囊贴着可视区域边缘，看起来像被硬生生裁切——才
+   临时改成 flex-wrap 自动换行规避，但换行后 7 个选项常态占两行，折叠感重。
+   这次用真正的 <scroll-view>（见 WXML）+ 右侧 32rpx 安全 padding 重新实现
+   单行横向滚动，不复用旧的 overflow-x:auto 写法，真机验证时留意最后一枚
+   胶囊是否完整可见 */
+.org-type-filter-scroll {
+  width: 100%;
+  white-space: nowrap;
   margin: 0 0 16rpx;
+  box-sizing: border-box;
+}
+
+.org-type-filter-row {
+  display: inline-flex;
+  gap: 12rpx;
+  padding: 4rpx 32rpx 4rpx 2rpx;
+  box-sizing: border-box;
 }
 
 .org-type-pill {
-  padding: 10rpx 22rpx;
-  border-radius: 30rpx;
-  font-size: 22rpx;
-  color: #666666;
-  background: #F5F0EB;
-  border: 1.5rpx solid #E8D5B5;
+  flex: none;
+  padding: 12rpx 24rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  color: #6B6B70;
+  background: #F5F5F5;
   white-space: nowrap;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
+/* 🐛 高亮色统一：此前用 #1565C0 蓝色，与全站（如 .range-tab-item.active）
+   已经统一的 #8C1D18 暖色主题不一致，自成一派。改为同色系微渐变，呼应
+   "温润主色"的设计诉求 */
 .org-type-pill.active {
-  background: #1565C0;
+  background: linear-gradient(135deg, #8C1D18, #B8452E);
   color: #FFFFFF;
-  border-color: #1565C0;
-  font-weight: bold;
+  font-weight: 600;
+  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.28);
 }
 
 .insights-metric-grid {
@@ -3516,20 +3561,28 @@ button.btn-national-report {
 
 .table-thead {
   display: flex;
-  background: #F8F9FA;
-  padding: 16rpx 12rpx;
+  background: #F1F3F5;
+  padding: 18rpx 12rpx;
   border-radius: 12rpx;
   font-size: 22rpx;
   color: #495057;
   font-weight: bold;
+  letter-spacing: 0.5rpx;
 }
 
 .table-tr {
   display: flex;
-  padding: 20rpx 12rpx;
+  padding: 22rpx 12rpx;
   border-bottom: 1rpx solid #F1F3F5;
   font-size: 24rpx;
   align-items: center;
+}
+
+/* 🎨 斑马纹：用 nth-child 而不是 wx:for-index 派生 class——risk-row 的
+   wx:if 会把部分行整个从 DOM 里过滤掉，nth-child 只计数"实际渲染出来的
+   行"，条纹永远整齐交替，不会因为过滤掉的行打乱奇偶节奏 */
+.table-tr:nth-child(even) {
+  background: #FAFBFC;
 }
 
 /* 🆕 门店存量资金/续航低于预警线（statusLevel === 'urgent'）时整行红色高亮，
@@ -5268,15 +5321,17 @@ button.btn-export-shortcut {
   margin-bottom: 12rpx;
 }
 
+/* 🎨 渐变微底色数据方块：替代原先纯色 #F5F7FF 平底，与页面顶部
+   .overview-kpi-cell 同一套暖色微渐变语言呼应，圆角同步升级到 16rpx */
 .nm-kpi-card {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6rpx;
-  background: #F5F7FF;
+  background: linear-gradient(135deg, rgba(21, 101, 192, 0.06), rgba(140, 29, 24, 0.05));
   border: 1.5rpx solid #E8ECFB;
-  border-radius: 14rpx;
+  border-radius: 16rpx;
   padding: 20rpx 8rpx 16rpx;
 }
 

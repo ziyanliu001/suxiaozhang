@@ -161,16 +161,23 @@
     </view>
 
     <!-- 🏢 平台类型筛选器：超管可见，切换后重新按 orgType 聚合全国大屏数据，
-         彻底解耦"雨花斋"等平台硬编码。与上方时间范围 Tab 并排为两行独立控件 -->
-    <view class="org-type-filter-row" wx:if="{{isAdmin || isPatriarch}}">
-      <view
-        wx:for="{{orgTypeFilterOptions}}"
-        wx:key="value"
-        class="org-type-pill {{nationalOrgTypeFilter === item.value ? 'active' : ''}}"
-        data-orgtype="{{item.value}}"
-        bindtap="onOrgTypeFilterChange"
-      >{{item.label}}</view>
-    </view>
+         彻底解耦"雨花斋"等平台硬编码。与上方时间范围 Tab 并排为两行独立控件。
+         🐛 改回横向滚动的历史记录：此前确实因为 overflow-x:auto 单行滚动 +
+         内容区没留够右侧安全边距，导致最后一枚胶囊贴着可视区域边缘看起来像
+         被截断，才临时改成 flex-wrap 自动换行（两行）规避。这次改用真正的
+         <scroll-view> + 足够的右侧 padding（见 .org-type-filter-row 的
+         padding-right）重新实现横向滚动，不复用旧的 overflow-x:auto 写法 -->
+    <scroll-view scroll-x class="org-type-filter-scroll" enhanced show-scrollbar="{{false}}" wx:if="{{isAdmin || isPatriarch}}">
+      <view class="org-type-filter-row">
+        <view
+          wx:for="{{orgTypeFilterOptions}}"
+          wx:key="value"
+          class="org-type-pill {{nationalOrgTypeFilter === item.value ? 'active' : ''}}"
+          data-orgtype="{{item.value}}"
+          bindtap="onOrgTypeFilterChange"
+        >{{item.label}}</view>
+      </view>
+    </scroll-view>
 
     <!-- 🆕 全国爱心网络数据总览：原先并列的「全国多店大屏」（暖黄渐变）与
          「应急救援队数据大屏」口径完全融合为一张白底卡片——两者本就是同一份
