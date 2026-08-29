@@ -67,6 +67,12 @@ exports.main = async (event, context) => {
     // ─── stores ────────────────────────────────────────────────────────
     ['stores', { name: 'storeName_asc',  keys: [{ storeName: 1 }],  unique: false }],
     ['stores', { name: 'tenantId',       keys: [{ tenantId: 1 }],   unique: false }],
+    // 🔑 manageStoreProfile.resolveReadTarget 总部级角色（super_admin/hq_finance/
+    // regional_finance）传 storeName 时的真实查询：{storeName, tenantId}.limit(1)
+    // ——上面两条各自独立的单字段索引不能最优覆盖这条双字段等值查询，门店数增长
+    // 后是 statistics.ts fetchStoreProfile 报 >8000ms 超时的根因之一，需要一条
+    // 专属复合索引
+    ['stores', { name: 'storeName_tenantId', keys: [{ storeName: 1 }, { tenantId: 1 }], unique: false }],
 
     // ─── daily_reports ─────────────────────────────────────────────────
     ['daily_reports', { name: 'storeId_date',  keys: [{ storeId: 1 }, { reportDate: 1 }],  unique: false }],

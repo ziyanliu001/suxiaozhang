@@ -199,7 +199,9 @@ async function resolveReadTarget(caller, requestedStoreId, requestedStoreName) {
     if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
       return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
     }
-    return { allowed: true, storeId: store._id };
+    // 🐛 性能修复：这里已经拿到完整 store 文档了，一并带出去给 action:'get' 复用，
+    // 避免调用方紧接着再按 _id 查一次同一份文档——见下方 exports.main 的消费处
+    return { allowed: true, storeId: store._id, store };
   }
 
   if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店' };
@@ -257,8 +259,22 @@ exports.main = async (event, context) => {
       const target = await resolveReadTarget(caller, storeId, storeName);
       if (!target.allowed) return { success: false, error: target.error };
 
-      const storeRes = await db.collection('stores').doc(target.storeId).get().catch(() => null);
-      const store = storeRes && storeRes.data;
+      // 🐛 超时根因修复（statistics.ts fetchStoreProfile 报 >8000ms 超时）：
+      // 总部级角色（super_admin/hq_finance/regional_finance）传 storeName 查询时，
+      // resolveReadTarget 内部已经用 db.collection('stores').where({storeName,
+      // tenantId}) 查出了完整 store 文档才能做归属校验，此前这里又无条件按 _id
+      // 重新查一次同一份文档——三次串行数据库往返（resolveCaller + storeName
+      // 反查 + 按 _id 再查一次）叠加 stores 集合当时只有 storeName/tenantId 各自
+      // 独立的单字段索引（没有覆盖这条双字段查询的复合索引，见 createIndexes 里
+      // 新增的 storeName_tenantId 索引），在门店数增长后这条链路明显变慢，
+      // 是统计大屏切换门店卡超时的根因之一。现在优先复用 resolveReadTarget 已经
+      // 查到的文档，只有本店视角（未经过 storeName/storeId 反查分支）才需要真的
+      // 按 _id 查一次。
+      let store = target.store;
+      if (!store) {
+        const storeRes = await db.collection('stores').doc(target.storeId).get().catch(() => null);
+        store = storeRes && storeRes.data;
+      }
       if (!store) return { success: false, error: '门店不存在' };
 
       const profile = {};
