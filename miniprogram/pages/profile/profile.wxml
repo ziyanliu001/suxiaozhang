@@ -1,4 +1,4 @@
-<wxs src="./profile-stats.wxs" module="stats" />
+<wxs src="./profile-stats.wxs" module="statsFmt" />
 <view class="mine-page-container">
   <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseAvatar（头像选择）隐私接口，
        必须放置该组件才能正常弹出授权，否则点击头像会被平台静默拦截、毫无反应 -->
@@ -2245,19 +2245,19 @@
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">早餐人数</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.breakfastCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtCount(storeStats.mealTotals.breakfastCount, '人次')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.mealTotals.breakfastCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtCount(storeStats.mealTotals.breakfastCount, '人次')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">午餐人数</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.lunchCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtCount(storeStats.mealTotals.lunchCount, '人次')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.mealTotals.lunchCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtCount(storeStats.mealTotals.lunchCount, '人次')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">晚餐人数</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.dinnerCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtCount(storeStats.mealTotals.dinnerCount, '人次')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.mealTotals.dinnerCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtCount(storeStats.mealTotals.dinnerCount, '人次')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">今日总计</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.mealTotals.totalCount) ? 'pd-health-val-zero' : 'green'}}">{{stats.fmtCount(storeStats.mealTotals.totalCount, '人次')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.mealTotals.totalCount) ? 'pd-health-val-zero' : 'green'}}">{{statsFmt.fmtCount(storeStats.mealTotals.totalCount, '人次')}}</text>
           </view>
         </view>
 
@@ -2265,19 +2265,19 @@
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">大米</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.riceCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.riceCount, 'rice')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.todayMaterialTotals.riceCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.todayMaterialTotals.riceCount, 'rice')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">面粉</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.flourCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.flourCount, 'flour')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.todayMaterialTotals.flourCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.todayMaterialTotals.flourCount, 'flour')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">食用油</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.oilCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.oilCount, 'oil')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.todayMaterialTotals.oilCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.todayMaterialTotals.oilCount, 'oil')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">蔬菜</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.todayMaterialTotals.vegetableCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.todayMaterialTotals.vegetableCount, 'vegetable')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.todayMaterialTotals.vegetableCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.todayMaterialTotals.vegetableCount, 'vegetable')}}</text>
           </view>
         </view>
 
@@ -2285,19 +2285,19 @@
         <view class="pd-health-grid">
           <view class="pd-health-cell">
             <text class="pd-health-lbl">大米</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.riceCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.riceCount, 'rice')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.monthMaterialTotals.riceCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.monthMaterialTotals.riceCount, 'rice')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">面粉</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.flourCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.flourCount, 'flour')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.monthMaterialTotals.flourCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.monthMaterialTotals.flourCount, 'flour')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">食用油</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.oilCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.oilCount, 'oil')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.monthMaterialTotals.oilCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.monthMaterialTotals.oilCount, 'oil')}}</text>
           </view>
           <view class="pd-health-cell">
             <text class="pd-health-lbl">蔬菜</text>
-            <text class="pd-health-val {{stats.isZero(storeStats.monthMaterialTotals.vegetableCount) ? 'pd-health-val-zero' : ''}}">{{stats.fmtMaterial(storeStats.monthMaterialTotals.vegetableCount, 'vegetable')}}</text>
+            <text class="pd-health-val {{statsFmt.isZero(storeStats.monthMaterialTotals.vegetableCount) ? 'pd-health-val-zero' : ''}}">{{statsFmt.fmtMaterial(storeStats.monthMaterialTotals.vegetableCount, 'vegetable')}}</text>
           </view>
         </view>
 

@@ -22,11 +22,25 @@
     "miniprogram": {
       "list": [
         {
+          "name": "发货管理看板",
+          "pathName": "subpackages/factory/pages/production-fulfillment/production-fulfillment",
+          "query": "tenantId=lf_mt00qmfe_yxyj",
+          "scene": null,
+          "launchMode": "default"
+        },
+        {
+          "name": "平台管理",
+          "pathName": "subpackages/admin/pages/platform-admin/platform-admin",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
           "name": "pages/index/index",
           "pathName": "pages/index/index",
           "query": "",
-          "scene": null,
-          "launchMode": "default"
+          "launchMode": "default",
+          "scene": null
         },
         {
           "name": "pages/index/index",

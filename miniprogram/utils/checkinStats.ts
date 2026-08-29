@@ -58,6 +58,31 @@ export function computeMyCheckInStats(storeId: string, storeName: string, includ
 }
 
 /**
+ * 🐛 门店上下文漂移兜底：profile.ts 的 initMinePage() 在同一次页面停留内可能被
+ * 触发不止一次（如 loadUserProfile 里 AuthService.fetchUserRole() 网络请求
+ * 返回后，为修复"角色缓存刷新不生效"而无条件重跑一次 initMinePage），每次都
+ * 各自重新解析一遍"当前门店"（getSelectedStore()/AuthService.getCachedRoleInfo()）。
+ * 若两次解析出的门店不是同一个（多门店账号/角色缓存尚未完全稳定等场景），
+ * 后一次调用会用一个跟"打卡时实际所在门店"对不上的门店去过滤本地流水，
+ * 现算出 0，并把前一次算对的结果覆盖掉——即使打卡记录明明就在本地。
+ *
+ * 这里用"今天最新一条打卡记录自带的 storeId/storeName"作为兜底真源：按当前
+ * 解析出的门店上下文算出来是 0，但本地流水里确实存在"今天"的记录时，改用
+ * 那条记录自己落库时的门店重新算一次——打卡记录本身的门店归属永远是真的，
+ * 不会因为后续页面重新解析上下文而"漂移"。
+ */
+export function computeMyCheckInStatsWithTodayFallback(storeId: string, storeName: string): CheckInStats {
+  const primary = computeMyCheckInStats(storeId, storeName);
+  if (primary.count > 0) return primary;
+
+  const todayIso = new Date().toISOString().split('T')[0];
+  const todayLog = getMyCheckInLogs().find((l) => l.date === todayIso);
+  if (!todayLog) return primary;
+
+  return computeMyCheckInStats(todayLog.storeId || '', todayLog.storeName || '');
+}
+
+/**
  * 连续护持天数（streak）：从最近一次打卡往前数，中间没有断档的连续自然日天数。
  * 语义与常见"连续打卡"一致——若最近一次打卡不是今天或昨天，视为已断档，返回 0，
  * 不保留断档前的旧连续记录（避免用户很久没来却还显示"连续 30 天"的误导）。

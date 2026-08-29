@@ -1,7 +1,7 @@
 import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
 import { DataService } from '../../utils/dataService';
 import { getSelectedStore, setSelectedStore, getCurrentActiveStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
-import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
+import { computeMyCheckInStats, computeMyCheckInStatsWithTodayFallback, computeMyCheckInStreak, getMyCheckInLogs } from '../../utils/checkinStats';
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
@@ -2350,17 +2350,51 @@ Page({
       // 修正，中间也有一段误导性的空窗期
       const activeStore = getSelectedStore();
       const cachedRoleInfo = AuthService.getCachedRoleInfo();
+      const resolvedStoreId = (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '';
       const rawStoreName = (activeStore && activeStore.storeName) || (cachedRoleInfo && cachedRoleInfo.storeName) || '';
-      const scopedStats = computeMyCheckInStats(
-        (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '',
-        isVirtualStoreName(rawStoreName) ? '' : rawStoreName
-      );
+      const resolvedStoreName = isVirtualStoreName(rawStoreName) ? '' : rawStoreName;
+      // 🐛 门店上下文漂移兜底：见 computeMyCheckInStatsWithTodayFallback 头部
+      // 注释——loadUserProfile 里 fetchUserRole() 网络请求返回后会无条件重跑一次
+      // initMinePage()，两次各自重新解析的"当前门店"如果对不上，后一次会把前一次
+      // 算对的结果用 0 覆盖掉。这里改用带兜底的版本，算出 0 但本地确实有"今天"
+      // 的打卡记录时，改用那条记录自己的门店重新算一次
+      const scopedStats = computeMyCheckInStatsWithTodayFallback(resolvedStoreId, resolvedStoreName);
 
+      // 🔍 诊断日志：看板显示 0 但证书/榜单正确这类问题，根因几乎总是这里
+      // resolvedStoreId/resolvedStoreName 与 my_checkin_logs 里实际写入的
+      // storeId/storeName 对不上（例如多门店超管当前正在浏览的门店，跟
+      // AuthService 缓存里自己"主账号绑定"的门店是两个不同的门店）——打印出
+      // 每一步的中间值和本地流水总条数，下次复现时直接对照就能定位，不用
+      // 反复靠猜
+      console.log('[loadVolunteerStats] activeStore=', activeStore,
+        'cachedRoleInfo.storeId=', cachedRoleInfo && cachedRoleInfo.storeId,
+        'cachedRoleInfo.storeName=', cachedRoleInfo && cachedRoleInfo.storeName,
+        '-> resolvedStoreId=', resolvedStoreId, 'resolvedStoreName=', resolvedStoreName,
+        'my_checkin_logs 总条数=', getMyCheckInLogs().length,
+        '-> scopedStats=', scopedStats);
+
+      // 🐛 统一改为整包合并更新（与 fetchMeritStats 保持同一种 setData 风格）：
+      // 此前这里用字符串路径 'stats.volunteerDays' 局部更新，fetchMeritStats
+      // 用 stats:{...} 整体替换——同一个嵌套字段被两种不同风格的 setData 调用
+      // 在同一次 initMinePage() 生命周期里先后写入，即使两次算出的数值本身都
+      // 对（已用诊断日志验证过），也不该让这种风格不一致继续存在，统一收敛成
+      // 同一种"读当前 stats 展开 + 覆盖变化字段"的合并写法，消除任何不必要的
+      // 不确定性
       this.setData({
-        'stats.volunteerDays': scopedStats.days,
-        'stats.volunteerHours': scopedStats.hours,
-        'stats.volunteerCheckInCount': scopedStats.count
+        stats: {
+          ...(this.data.stats || {}),
+          volunteerDays: scopedStats.days,
+          volunteerHours: scopedStats.hours,
+          volunteerCheckInCount: scopedStats.count
+        }
       });
+
+      // 🔍 读回校验：setData 对简单字段是同步生效的（this.data 立即更新，
+      // 只是原生渲染层的提交是异步的）——这里紧跟着读一次 this.data.stats，
+      // 如果这行打印的也是正确值，就能 100% 排除"数据模型本身错误"这个可能性，
+      // 把范围彻底收窄到"数据是对的，但没有正确渲染到界面"（WXML 编译缓存/
+      // 未热更新等构建环境问题），而不是继续怀疑 TS 逻辑
+      console.log('[loadVolunteerStats] setData 后读回 this.data.stats=', this.data.stats);
       this.computeBadgeList();
     } catch (err) {
       console.warn('[mine] 读取护持统计数据失败:', err);
@@ -2474,8 +2508,14 @@ Page({
 
       // 🏪 门店隔离：与 loadVolunteerStats 同一套口径，按当前门店动态过滤
       // my_checkin_logs，不再直接读全局递增计数器；storeName 用上面已经过
-      // cachedRoleInfo 兜底 + isVirtualStoreName 过滤的版本，不再单独现取一遍
-      const scopedStats = computeMyCheckInStats(storeId, storeName);
+      // cachedRoleInfo 兜底 + isVirtualStoreName 过滤的版本，不再单独现取一遍。
+      // 门店上下文漂移兜底同上，见 computeMyCheckInStatsWithTodayFallback 注释
+      const scopedStats = computeMyCheckInStatsWithTodayFallback(storeId, storeName);
+
+      // 🔍 诊断日志：与 loadVolunteerStats 同一处排查口径，见该方法注释
+      console.log('[fetchMeritStats] storeId=', storeId, 'storeName=', storeName,
+        'my_checkin_logs 总条数=', getMyCheckInLogs().length,
+        '-> scopedStats=', scopedStats);
 
       this.setData({
         stats: {
@@ -2486,6 +2526,10 @@ Page({
           auditedReports: auditedCount
         }
       });
+
+      // 🔍 读回校验：与 loadVolunteerStats 同一处排查口径，见该方法注释
+      console.log('[fetchMeritStats] setData 后读回 this.data.stats=', this.data.stats);
+
       this.computeBadgeList();
     } catch (err) {
       console.error('[fetchMeritStats] 加载失败:', err);
@@ -2495,7 +2539,7 @@ Page({
       const fallbackStore = getSelectedStore();
       const fallbackCachedRole = AuthService.getCachedRoleInfo();
       const fallbackRawStoreName = (fallbackStore && fallbackStore.storeName) || (fallbackCachedRole && fallbackCachedRole.storeName) || '';
-      const fallbackStats = computeMyCheckInStats(
+      const fallbackStats = computeMyCheckInStatsWithTodayFallback(
         (fallbackStore && fallbackStore.storeId) || (fallbackCachedRole && fallbackCachedRole.storeId) || '',
         isVirtualStoreName(fallbackRawStoreName) ? '' : fallbackRawStoreName
       );

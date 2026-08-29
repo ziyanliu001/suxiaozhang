@@ -8948,7 +8948,14 @@ Page({
 
   onPreviewQrCode() {
     if (this.data.qrCodeState !== 'ready' || !this.data.qrCodeUrl) {
-      if (this.data.qrCodeState === 'failed') this.generateQrCode();
+      // 🐛 修复"点击重试没反应"：qrCodeState 的默认值是 'idle'（从未生成过），
+      // 不是 'failed'——此前这里只在 'failed' 时才重新调用 generateQrCode()，
+      // 如果用户这次会话从没成功触发过一次生成（比如没点过【生成公示海报】），
+      // 打卡成功弹出的餐报海报里这枚二维码会一直停在 'idle'，点"点击重试"
+      // 匹配不到 'failed' 分支，直接落空什么都不做。'idle' 与 'loading' 中途
+      // 也允许再点一次触发（loading 时 generateQrCode 内部会被新一轮请求覆盖，
+      // 不会产生阻塞，与其它"点击重试"入口的宽容度保持一致）
+      if (this.data.qrCodeState !== 'loading') this.generateQrCode();
       return;
     }
     wx.previewImage({
@@ -10454,11 +10461,15 @@ Page({
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const logs = wx.getStorageSync('my_checkin_logs') || [];
+    // 🐛 命名说明：这份读取只用于提交前的 UX 校验（isAlreadyChecked/recentDuplicate），
+    // 是发起云端调用之前的一份快照，不是最终落盘依据——真正写回 storage 前会在
+    // await 云函数之后重新读一次最新值（见下方 latestLogs），避免基于这份旧快照
+    // 覆盖掉网络等待期间可能发生的其它变更
+    const existingLogsSnapshot = wx.getStorageSync('my_checkin_logs') || [];
     const selectedShift = this.data.selectedShift;
     const now = Date.now();
 
-    const isAlreadyChecked = logs.some((l: any) => l.date === todayStr && l.shiftKey === selectedShift);
+    const isAlreadyChecked = existingLogsSnapshot.some((l: any) => l.date === todayStr && l.shiftKey === selectedShift);
     if (isAlreadyChecked) {
       wx.showToast({ title: '⚠️ 您今日已完成该班次打卡，请勿重复刷工时', icon: 'none' });
       return;
@@ -10466,7 +10477,7 @@ Page({
 
     // 🌟 防刷去重：同工种 10 分钟内重复提交一律视为无效打卡（防止双击/网络重发产生重复记录）
     const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
-    const recentDuplicate = logs.find((l: any) =>
+    const recentDuplicate = existingLogsSnapshot.find((l: any) =>
       l.shiftKey === selectedShift && typeof l.timestamp === 'number' && (now - l.timestamp) < DUPLICATE_WINDOW_MS
     );
     if (recentDuplicate) {
@@ -10548,16 +10559,6 @@ Page({
       console.warn('[onConfirmShiftCheckIn] 云端打卡调用异常，已降级为本地记录:', err);
     }
 
-    // 🛡️ 全局计数器：必须从 storage 里的旧值递增，不能读 this.data.myCheckInDays 等——
-    // 这三个 data 字段现在展示的是"按当前门店过滤"后的结果（见下方 scopedStats），
-    // 不再等于全局值，拿它们做递增会把错误的数字写回全局计数器
-    const hasTodayLog = logs.some((l: any) => l.date === todayStr);
-    const oldGlobalDays = wx.getStorageSync('my_checkin_days') || 0;
-    const newDays = hasTodayLog ? oldGlobalDays : (oldGlobalDays + 1);
-
-    const newCount = (wx.getStorageSync('my_checkin_count') || 0) + 1;
-    const newHours = parseFloat(((wx.getStorageSync('my_service_hours') || 0) + addHours).toFixed(1));
-
     const timestamp = now;
     const newLog = {
       timestamp: timestamp,
@@ -10578,14 +10579,40 @@ Page({
       // action:'revoke'；云端同步失败时为空字符串，撤销会自动降级为仅本地删除
       cloudLogId
     };
-    logs.unshift(newLog);
+
+    // 🐛 修复"多班次记录被覆盖"：本方法开头读的 existingLogsSnapshot 是发起
+    // 云端 manageVolunteerCheckIn 调用之前的快照，中间隔着一次 await 网络往返——
+    // 期间任何其它代码路径对 my_checkin_logs 的写入都不会反映在这份快照里，
+    // 若仍然基于这份旧快照 unshift 后整体写回，就会把网络等待期间发生的其它
+    // 变更悄悄冲掉。这里改为在真正落盘前重新从 storage 读一次最新值，在最新
+    // 状态上做 Append/Upsert（同一 date+shiftKey 已存在则更新该条，否则追加），
+    // 而不是无条件在旧快照上 unshift，从根上消除"读-等待-写"之间的整个竞态窗口
+    const latestLogsRaw = wx.getStorageSync('my_checkin_logs');
+    const latestLogs = Array.isArray(latestLogsRaw) ? latestLogsRaw : [];
+    const existingIdx = latestLogs.findIndex((l: any) => l.date === todayStr && l.shiftKey === selectedShift);
+    if (existingIdx >= 0) {
+      latestLogs[existingIdx] = newLog;
+    } else {
+      latestLogs.unshift(newLog);
+    }
+
+    // 🛡️ 全局计数器：必须从 storage 里的旧值递增，不能读 this.data.myCheckInDays 等——
+    // 这三个 data 字段现在展示的是"按当前门店过滤"后的结果（见下方 scopedStats），
+    // 不再等于全局值，拿它们做递增会把错误的数字写回全局计数器。hasTodayLog 同样
+    // 基于刚重新读取的 latestLogs（排除本条自身）计算，与实际落盘的数据源保持一致
+    const hasTodayLog = latestLogs.some((l: any) => l.date === todayStr && l.timestamp !== timestamp);
+    const oldGlobalDays = wx.getStorageSync('my_checkin_days') || 0;
+    const newDays = hasTodayLog ? oldGlobalDays : (oldGlobalDays + 1);
+
+    const newCount = (wx.getStorageSync('my_checkin_count') || 0) + 1;
+    const newHours = parseFloat(((wx.getStorageSync('my_service_hours') || 0) + addHours).toFixed(1));
 
     // 🛡️ 全局计数器继续照常维护，不删除——journey.ts/statistics.ts 的个人看板仍在读
     // 这三个 key，本次门店隔离修复不改变它们的既有语义（全部门店/历史累计口径）
     wx.setStorageSync('my_checkin_days', newDays);
     wx.setStorageSync('my_checkin_count', newCount);
     wx.setStorageSync('my_service_hours', newHours);
-    wx.setStorageSync('my_checkin_logs', logs);
+    wx.setStorageSync('my_checkin_logs', latestLogs);
 
     // 🐛 门店隔离修复：首页顶部展示的护持天数/工时/次数改为按当前门店动态过滤
     // 统计（见 computeMyCheckInStats），不再直接用上面刚写入的全局递增值——
@@ -10597,11 +10624,23 @@ Page({
       myCheckInDays: scopedStats.days,
       myCheckInCount: scopedStats.count,
       myServiceHours: scopedStats.hours,
-      checkInLogs: logs,
+      checkInLogs: latestLogs,
       showShiftSelectModal: false,
       showPosterModal: true,
       checkInSubmitting: false
     });
+
+    // 🐛 修复"打卡成功弹出的餐报海报二维码要点一下才有反应"：qrCodeUrl/
+    // qrCodeState 是这枚二维码在整个页面共享的状态，此前只有【生成公示海报】
+    // 那条独立流程会主动调用 generateQrCode()，打卡成功走的是另一条路径
+    // （showPosterModal），从没主动触发过——如果这次会话用户还没点过【生成
+    // 公示海报】，qrCodeState 停在默认值 'idle'，海报一打开就是"点击重试"
+    // 占位图。这里在打卡成功、海报即将展示的同时顺手触发一次生成（已经是
+    // 'ready'/'loading' 时内部会被覆盖，不重复请求造成浪费），不阻塞上面的
+    // setData 主流程，成功与否都不影响打卡本身已经落地的事实
+    if (this.data.qrCodeState !== 'ready' && this.data.qrCodeState !== 'loading') {
+      this.generateQrCode();
+    }
 
     // 🐛 修复"今日已打卡记录"列表打完第二个班次后仍只显示一条：todayLogs
     // 是【今日已打卡记录】列表实际 wx:for 绑定的字段（checkInLogs 是另一个
