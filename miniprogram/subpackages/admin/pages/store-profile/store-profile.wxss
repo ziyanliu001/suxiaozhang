@@ -125,12 +125,26 @@
   color: #2E7D32;
 }
 
+/* 🎨 物资健康度预警：warn/danger 从纯色文字升级为暖黄/暖红圆角胶囊 Tag，
+   与 .sp-operating-badge 同一套"胶囊徽章"视觉语言，比单纯变个文字颜色更
+   醒目——这两档才是真正需要引起注意的"预警"状态，good/neutral 保持素色
+   文字即可，不需要都做成 Tag 稀释掉预警本该有的视觉优先级 */
 .sp-health-val.warn {
-  color: #D48806;
+  display: inline-block;
+  color: #B45309;
+  background: #FFF3E0;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
 }
 
 .sp-health-val.danger {
-  color: #D32F2F;
+  display: inline-block;
+  color: #FFFFFF;
+  background: #D32F2F;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
 }
 
 .sp-health-val.neutral {
@@ -166,16 +180,24 @@
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
-/* 🌟 重构为白底圆角外卡 + 浅黄底色小格双层结构：每个指标自带一张淡黄色小卡片，
-   比裸露排布在共用白底容器里的纯文字更有"数据卡片"质感，数字加粗放大更醒目 */
+/* 🌟 重构为白底圆角外卡 + 暖米/素雅红金微渐变小格双层结构：每个指标自带一张
+   小卡片，比裸露排布在共用白底容器里的纯文字更有"数据卡片"质感，数字加粗
+   放大更醒目；小图标（🚩/👔/💛...）放在标签上方，一眼区分各类人群 */
 .grid-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6rpx;
-  background: #FFFBEE;
+  gap: 4rpx;
+  background: linear-gradient(160deg, #FFFBEE 0%, #FBF1E6 100%);
   border-radius: 16rpx;
-  padding: 20rpx 6rpx;
+  padding: 18rpx 6rpx;
+  box-shadow: 0 2rpx 8rpx rgba(184, 74, 57, 0.06);
+}
+
+.cell-icon {
+  font-size: 26rpx;
+  line-height: 1;
+  margin-bottom: 2rpx;
 }
 
 .cell-lbl {
@@ -190,13 +212,15 @@
   color: #212529;
 }
 
-/* 中共党员：醒目红色高亮，与其余暖橘色指标区分 */
+/* 中共党员：醒目红色高亮，与其余素雅红金调指标区分开来 */
 .cell-val.party-highlight {
   color: #D9363E;
 }
 
+/* 🎨 沿用既有 .orange 类名（避免连带改动 WXML 上的绑定表达式），改为更贴合
+   "素雅红金调"要求的暖红金色，与页面整体的 #8C1D18 主色系呼应 */
 .cell-val.orange {
-  color: #D2691E;
+  color: #B84A39;
 }
 
 .cell-val.grey {
@@ -318,6 +342,19 @@
   gap: 8rpx;
 }
 
+/* 🎨 整行可点直达编辑：仅 canManage 为 true 时套用该类（见 onRowTapToEdit），
+   margin 负值抵消掉多出来的 padding，视觉上不改变行高/对齐，只是扩大可点区域
+   并给一个极轻的底色提示"这一行可以点" */
+.sp-archive-row.clickable {
+  margin: 0 -12rpx;
+  padding: 12rpx 12rpx;
+  border-radius: 10rpx;
+}
+
+.sp-archive-row-hover {
+  background: #FAF5F0;
+}
+
 .sp-archive-lbl {
   font-size: 24rpx;
   color: #868E96;
@@ -328,6 +365,18 @@
   font-size: 26rpx;
   color: #212529;
   text-align: right;
+}
+
+/* 🎨 "未填写"淡雅提示色，与旁边的 ✏️ 图标一起弱化视觉权重，不与已填写的
+   正常黑色文字抢注意力 */
+.sp-archive-val.empty {
+  color: #999999;
+}
+
+.sp-row-edit-icon {
+  font-size: 22rpx;
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .sp-archive-val-block {
@@ -361,11 +410,32 @@
   padding: 4rpx 0;
 }
 
-/* 仅 canManage 为 true 时套用——视觉上标记"暂未上传"占位可点击直达上传弹窗，
-   只读角色（义工/财务/家属）看到的是不带下划线的纯灰提示，不暗示可交互 */
-.sp-archive-empty-hint.clickable {
-  color: #FF8C42;
-  text-decoration: underline;
+/* 🎨 证照上传槽：未上传时的可点击占位卡片（仅 canManage 可见），与编辑态
+   .grid-add-btn 同一套虚线视觉语言（浅米底 + 虚线边框 + 主色图标/文字），
+   替代此前"暂未上传，点击上传"这行不起眼的下划线文字 */
+.sp-upload-slot {
+  width: 100%;
+  height: 160rpx;
+  background: #FAF8F5;
+  border: 2.5rpx dashed #C8B195;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.sp-upload-slot-icon {
+  font-size: 44rpx;
+  line-height: 1;
+}
+
+.sp-upload-slot-text {
+  font-size: 22rpx;
+  color: #8C1D18;
+  font-weight: 500;
 }
 
 .sp-archive-edit-card .sp-edit-item {
@@ -521,10 +591,30 @@
 }
 
 /* wx:if/wx:else 在 wx:for 内部必须包一层不循环的容器才能正确配对，这层容器
-   本身不需要绝对定位（两个分支互斥渲染，不会叠放），固定同款尺寸即可 */
+   本身不需要绝对定位（两个分支互斥渲染，不会叠放），固定同款尺寸即可——
+   但需要 position:relative 供下面 .sp-photo-zoom-badge 浮标绝对定位 */
 .sp-photo-thumb-wrap {
+  position: relative;
   width: 140rpx;
   height: 140rpx;
+}
+
+/* 🎨 放大预览浮标：纯视觉提示"点击可预览大图"，不拦截点击事件——整张缩略图
+   本身已经绑定了 onPreviewProfilePhoto，浮标只是加强这个可交互的视觉暗示，
+   不需要额外的 catchtap */
+.sp-photo-zoom-badge {
+  position: absolute;
+  top: -10rpx;
+  right: -10rpx;
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  font-size: 20rpx;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.2);
 }
 
 /* 🐛 图片加载失败占位块：展示态缩略图与 .sp-photo-thumb 尺寸一致，wx:if/wx:else

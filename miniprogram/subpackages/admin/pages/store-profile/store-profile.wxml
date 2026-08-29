@@ -61,20 +61,27 @@
     </view>
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
-      <view class="sp-archive-row">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
         <text class="sp-archive-lbl">联系电话</text>
         <view class="sp-archive-val-with-action">
-          <text class="sp-archive-val">{{contactPhone || '未填写'}}</text>
+          <text class="sp-archive-val {{!contactPhone ? 'empty' : ''}}">{{contactPhone || '未填写'}}</text>
           <text class="sp-btn-quick-action" wx:if="{{contactPhone}}" catchtap="onCallPhone">📞 一键拨打</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage && !contactPhone}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
         <text class="sp-archive-lbl">开业日期</text>
-        <text class="sp-archive-val">{{openDate || '未填写'}}</text>
+        <view class="sp-archive-val-with-action">
+          <text class="sp-archive-val {{!openDate ? 'empty' : ''}}">{{openDate || '未填写'}}</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage && !openDate}}">✏️</text>
+        </view>
       </view>
-      <view class="sp-archive-row">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
         <text class="sp-archive-lbl">民政登记名称</text>
-        <text class="sp-archive-val">{{registeredName || '未填写'}}</text>
+        <view class="sp-archive-val-with-action">
+          <text class="sp-archive-val {{!registeredName ? 'empty' : ''}}">{{registeredName || '未填写'}}</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage && !registeredName}}">✏️</text>
+        </view>
       </view>
       <view class="sp-archive-row">
         <text class="sp-archive-lbl">所属平台类型</text>
@@ -94,15 +101,19 @@
           {{serviceTargetConfig.targetLabels.dineInLabel || '—'}} · {{serviceTargetConfig.targetLabels.deliveryLabel || '—'}} · {{serviceTargetConfig.targetLabels.listenLabel || '—'}} · {{serviceTargetConfig.targetLabels.takeoutLabel || '—'}}
         </text>
       </view>
-      <view class="sp-archive-row">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
         <text class="sp-archive-lbl">所在省市</text>
-        <text class="sp-archive-val">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
+        <view class="sp-archive-val-with-action">
+          <text class="sp-archive-val {{!(province || city) ? 'empty' : ''}}">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage && !(province || city)}}">✏️</text>
+        </view>
       </view>
-      <view class="sp-archive-row">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
         <text class="sp-archive-lbl">详细地址</text>
         <view class="sp-archive-val-with-action">
-          <text class="sp-archive-val">{{address || '未填写'}}</text>
+          <text class="sp-archive-val {{!address ? 'empty' : ''}}">{{address || '未填写'}}</text>
           <text class="sp-btn-quick-action" wx:if="{{address}}" catchtap="onOpenNavigation">📍 一键导航</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage && !address}}">✏️</text>
         </view>
       </view>
       <view class="sp-archive-row vertical" wx:if="{{background}}">
@@ -143,13 +154,17 @@
         <view class="sp-photo-grid" wx:if="{{storefrontPhotos.length > 0}}">
           <view class="sp-photo-thumb-wrap" wx:for="{{storefrontPhotos}}" wx:key="*this">
             <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storefrontPhotos}}" binderror="onImageLoadError" />
+            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">🔍</text>
             <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
               <text class="sp-photo-load-failed-icon">⚠️</text>
               <text class="sp-photo-load-failed-text">加载失败</text>
             </view>
           </view>
         </view>
-        <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <view class="sp-upload-slot" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">
+          <text class="sp-upload-slot-icon">📷</text>
+          <text class="sp-upload-slot-text">点击上传证照</text>
+        </view>
         <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
       </view>
       <view class="sp-archive-row vertical">
@@ -157,13 +172,17 @@
         <view class="sp-photo-grid" wx:if="{{civilAffairsPhotos.length > 0}}">
           <view class="sp-photo-thumb-wrap" wx:for="{{civilAffairsPhotos}}" wx:key="*this">
             <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" binderror="onImageLoadError" />
+            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">🔍</text>
             <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
               <text class="sp-photo-load-failed-icon">⚠️</text>
               <text class="sp-photo-load-failed-text">加载失败</text>
             </view>
           </view>
         </view>
-        <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <view class="sp-upload-slot" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">
+          <text class="sp-upload-slot-icon">📷</text>
+          <text class="sp-upload-slot-text">点击上传证照</text>
+        </view>
         <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
       </view>
       <view class="sp-archive-row vertical">
@@ -171,13 +190,17 @@
         <view class="sp-photo-grid" wx:if="{{foodSafetyPledgePhotos.length > 0}}">
           <view class="sp-photo-thumb-wrap" wx:for="{{foodSafetyPledgePhotos}}" wx:key="*this">
             <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" binderror="onImageLoadError" />
+            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">🔍</text>
             <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
               <text class="sp-photo-load-failed-icon">⚠️</text>
               <text class="sp-photo-load-failed-text">加载失败</text>
             </view>
           </view>
         </view>
-        <text class="sp-archive-empty-hint clickable" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">暂未上传，点击上传</text>
+        <view class="sp-upload-slot" wx:elif="{{canManage}}" bindtap="onOpenQualificationModal">
+          <text class="sp-upload-slot-icon">📷</text>
+          <text class="sp-upload-slot-text">点击上传证照</text>
+        </view>
         <text class="sp-archive-empty-hint" wx:else>暂未上传</text>
       </view>
     </view>
@@ -331,30 +354,37 @@
          降级为素灰简约样式（.zero），避免满屏彩色数字里混着一堆没意义的高亮 0 -->
     <view class="sp-profile-grid-4col" wx:if="{{!editing}}">
       <view class="grid-cell">
+        <text class="cell-icon">🚩</text>
         <text class="cell-lbl">中共党员</text>
         <text class="cell-val {{partyMembers > 0 ? 'party-highlight' : 'zero'}}">{{partyMembers}}</text>
       </view>
       <view class="grid-cell">
+        <text class="cell-icon">👔</text>
         <text class="cell-lbl">社会工作者</text>
         <text class="cell-val {{socialWorkers > 0 ? 'orange' : 'zero'}}">{{socialWorkers}}</text>
       </view>
       <view class="grid-cell">
+        <text class="cell-icon">💛</text>
         <text class="cell-lbl">志愿者</text>
         <text class="cell-val {{volunteersCount > 0 ? 'orange' : 'zero'}}">{{volunteersCount}}</text>
       </view>
       <view class="grid-cell">
+        <text class="cell-icon">🍽️</text>
         <text class="cell-lbl">堂食老人</text>
         <text class="cell-val {{dineInSeniorsCount > 0 ? 'orange' : 'zero'}}">{{dineInSeniorsCount}}</text>
       </view>
       <view class="grid-cell">
+        <text class="cell-icon">🚴</text>
         <text class="cell-lbl">送餐老人</text>
         <text class="cell-val {{deliverySeniorsCount > 0 ? 'orange' : 'zero'}}">{{deliverySeniorsCount}}</text>
       </view>
       <view class="grid-cell">
+        <text class="cell-icon">👂</text>
         <text class="cell-lbl">倾听陪伴老人</text>
         <text class="cell-val {{listeningSeniorsCount > 0 ? 'orange' : 'zero'}}">{{listeningSeniorsCount}}</text>
       </view>
       <view class="grid-cell">
+        <text class="cell-icon">📋</text>
         <text class="cell-lbl">其他</text>
         <text class="cell-val {{otherCount > 0 ? 'grey' : 'zero'}}">{{otherCount}}</text>
       </view>

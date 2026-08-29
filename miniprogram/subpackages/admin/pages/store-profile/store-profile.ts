@@ -484,6 +484,15 @@ Page({
     }
   },
 
+  // 🎨 档案信息卡片整行可点：与卡片标题栏的"✏️ 修改"按钮效果一致，只是把可点
+  // 触发面从一个小按钮扩大到整行。权限判断放在处理函数内部而不是 WXML 里按
+  // canManage 条件切换 bindtap 绑定的函数名——同一个 canManage 已经在按钮上
+  // 校验过一次，这里是防御性兜底，不依赖 WXML 条件绑定语法
+  onRowTapToEdit() {
+    if (!this.data.canManage || this.data.editing) return;
+    this.onEditProfile();
+  },
+
   onEditProfile() {
     const editForm: any = {};
     PROFILE_FIELDS.forEach((f) => { editForm[f] = String((this.data as any)[f] || 0); });
