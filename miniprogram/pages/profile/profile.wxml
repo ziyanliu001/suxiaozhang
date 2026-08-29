@@ -2935,23 +2935,31 @@
         <view class="invite-role-grid">
           <view class="invite-role-item {{inviteTargetRole === 'STORE_PATRIARCH' ? 'selected' : ''}}"
                 data-role="STORE_PATRIARCH" bindtap="onSelectInviteRole">
+            <view class="invite-role-check" wx:if="{{inviteTargetRole === 'STORE_PATRIARCH'}}">✓</view>
             <text class="invite-role-icon">🏛️</text>
             <text class="invite-role-name">大家长</text>
+            <text class="invite-role-desc">机构全局权限与审批</text>
           </view>
           <view class="invite-role-item {{inviteTargetRole === 'STORE_MANAGER' ? 'selected' : ''}}"
                 data-role="STORE_MANAGER" bindtap="onSelectInviteRole">
+            <view class="invite-role-check" wx:if="{{inviteTargetRole === 'STORE_MANAGER'}}">✓</view>
             <text class="invite-role-icon">⚙️</text>
             <text class="invite-role-name">门店店长</text>
+            <text class="invite-role-desc">门店日常核销与管理</text>
           </view>
           <view class="invite-role-item {{inviteTargetRole === 'FINANCE' ? 'selected' : ''}}"
                 data-role="FINANCE" bindtap="onSelectInviteRole">
+            <view class="invite-role-check" wx:if="{{inviteTargetRole === 'FINANCE'}}">✓</view>
             <text class="invite-role-icon">💰</text>
             <text class="invite-role-name">财务记账</text>
+            <text class="invite-role-desc">收支记账与报表核对</text>
           </view>
           <view class="invite-role-item {{inviteTargetRole === 'VOLUNTEER' ? 'selected' : ''}}"
                 data-role="VOLUNTEER" bindtap="onSelectInviteRole">
+            <view class="invite-role-check" wx:if="{{inviteTargetRole === 'VOLUNTEER'}}">✓</view>
             <text class="invite-role-icon">🙏</text>
             <text class="invite-role-name">普通义工</text>
+            <text class="invite-role-desc">每日打卡与餐报</text>
           </view>
         </view>
       </scroll-view>

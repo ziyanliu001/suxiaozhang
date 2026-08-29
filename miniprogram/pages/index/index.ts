@@ -18,6 +18,7 @@ import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeD
 import { md5 } from '../../utils/md5';
 import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, PreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
+import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {
@@ -2618,7 +2619,13 @@ Page({
   _writeBase64ToTempFile(base64OrDataUrl: string): string {
     const base64Data = base64OrDataUrl.replace(/^data:image\/\w+;base64,/, '');
     const filePath = `${wx.env.USER_DATA_PATH}/store_qr_${Date.now()}.png`;
-    wx.getFileSystemManager().writeFileSync(filePath, base64Data, 'base64');
+    // 🐛 根因修复：此前每次调用都用 Date.now() 拼一个全新文件名、从不清理，
+    // 长期累积会写满 USER_DATA_PATH 配额。writeLocalFileSafe 内部会在写入
+    // 失败时先清理 store_qr_ 前缀的历史临时图再重试一次；调用方（见上方
+    // _fetchStoreQrLocalPath）本就套了 try/catch + 重试循环，这里失败时继续
+    // 抛出，交由既有的降级链路处理，不需要在这里另外兜底
+    const ok = writeLocalFileSafe(filePath, base64Data, 'base64', 'store_qr_');
+    if (!ok) throw new Error('本地二维码临时文件写入失败');
     return filePath;
   },
 

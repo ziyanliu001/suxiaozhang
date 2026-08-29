@@ -6429,12 +6429,18 @@
 
 /* ===== 🎫 生成本店邀请码弹窗 ===== */
 
-/* 半透明遮罩：底部抽屉定位 */
+/* 半透明遮罩：底部抽屉定位
+   🐛 根因修复（遮挡 TabBar 问题）：此前 z-index: 1000 数值上虽然大于
+   custom-tab-bar 的 998，但两者分别嵌在各自的祖先层叠上下文里，数字比较不
+   天然保证跨层叠上下文的绘制顺序——与本文件 .role-switch-modal-mask/
+   .subscription-modal-mask 曾踩过的同一个坑（见那两处头部注释），统一拉开到
+   9998，并让下面 .invite-modal-panel 改为自己独立 position: fixed 贴底 +
+   z-index: 9999，不再依赖 mask 的 flex 布局定位，确保不会被 TabBar 遮挡 */
 .invite-modal-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
+  z-index: 9998;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -6453,6 +6459,11 @@
  *   ③ invite-modal-footer (flex-shrink: 0) — 固定底部，绝不压缩
  */
 .invite-modal-panel {
+  /* 🐛 见上方 .invite-modal-mask 注释：独立 position: fixed 贴底 + 更高的
+     z-index，脱离 mask 的 flex 布局定位，是这个坑在本文件里的统一解法 */
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 9999;
   background: #FFFFFF;
   border-radius: 32rpx 32rpx 0 0;
   width: 100%;
@@ -6460,6 +6471,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* ① 固定头部：包含拖动条、标题行、提示卡片、副标题 */
@@ -6538,23 +6550,44 @@
 }
 
 .invite-role-item {
+  position: relative;
   flex: 1 1 calc(50% - 8rpx);
   min-width: calc(50% - 8rpx);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10rpx;
+  gap: 6rpx;
   padding: 28rpx 16rpx;
   border-radius: 20rpx;
   border: 2rpx solid #E5E7EB;
   background: #F9FAFB;
   box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
+/* 🎨 选中态：轻微渐变高亮替代此前的纯色平铺，与右上角勾选图标共同强化
+   "已选中" 的视觉反馈 */
 .invite-role-item.selected {
   border-color: #2563EB;
-  background: #EFF6FF;
+  background: linear-gradient(135deg, #EFF6FF, #DBEAFE);
+}
+
+.invite-role-check {
+  position: absolute;
+  top: 10rpx;
+  right: 10rpx;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .invite-role-icon {
@@ -6570,6 +6603,22 @@
 .invite-role-item.selected .invite-role-name {
   color: #1D4ED8;
   font-weight: 700;
+}
+
+/* 🆕 单行权限小字：帮助不熟悉角色体系的用户在生成邀请码前就分清楚"这个身份
+   具体能做什么"，不必生成完邀请码发出去后才发现选错了角色 */
+.invite-role-desc {
+  font-size: 20rpx;
+  color: #9CA3AF;
+  line-height: 1.4;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invite-role-item.selected .invite-role-desc {
+  color: #3B82F6;
 }
 
 /* ③ 固定底部：flex-shrink:0 是核心，保证任何情况下按钮完整可见 */

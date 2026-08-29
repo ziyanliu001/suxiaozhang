@@ -13,6 +13,7 @@ import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermissio
 import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
 import { reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
+import { writeLocalFileSafe } from '../../utils/localFileCache';
 
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致
 // shortName 用于动态拼装大屏标题；label 是筛选胶囊展示文案
@@ -4335,7 +4336,6 @@ Page({
 
     try {
       const csvContent = '\ufeff' + this.buildCSV(statistics.dailyRecords, shopName || '全部门店');
-      const fs = wx.getFileSystemManager();
 
       let periodLabel = '';
       if (currentTab === 'week') {
@@ -4352,7 +4352,11 @@ Page({
       const fileName = `${safeStoreName}_收支明细_${periodLabel}.csv`;
       const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`;
 
-      fs.writeFileSync(filePath, csvContent, 'utf8');
+      // 🐛 根因修复（本地文件写满报错）：文件名随周期变化，长期反复导出会
+      // 累积大量不再需要的历史 CSV，写满 USER_DATA_PATH 配额。写入失败时
+      // writeLocalFileSafe 会先清理同门店前缀的历史导出文件再重试一次
+      const written = writeLocalFileSafe(filePath, csvContent, 'utf8', `${safeStoreName}_收支明细_`);
+      if (!written) throw new Error('本地表格文件写入失败');
       wx.hideLoading();
 
       if ((wx as any).shareFileMessage) {
@@ -4556,12 +4560,14 @@ Page({
 
     try {
       const csvContent = '﻿' + built.csv;
-      const fs = wx.getFileSystemManager();
       const rangeLabel = (this.data.superAdminInsights && this.data.superAdminInsights.rangeLabel) || '全部时间';
       const fileName = `全国${built.label}_${rangeLabel}.csv`;
       const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`;
 
-      fs.writeFileSync(filePath, csvContent, 'utf8');
+      // 🐛 根因修复（本地文件写满报错）：见 exportLocalCSV 同类修复注释，写入
+      // 失败时先清理"全国"前缀的历史导出文件再重试一次
+      const written = writeLocalFileSafe(filePath, csvContent, 'utf8', '全国');
+      if (!written) throw new Error('本地表格文件写入失败');
       wx.hideLoading();
       this.setData({ generatingNationalReport: false, showNationalReportModal: false });
 
