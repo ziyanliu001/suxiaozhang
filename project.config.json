@@ -19,7 +19,12 @@
     "enhance": false,
     "lazyCodeLoading": false,
     "showShadowRootInWxmlPanel": false,
-    "packNpmRelationList": [],
+    "packNpmRelationList": [
+      {
+        "packageJsonPath": "./package.json",
+        "miniprogramNpmDistDir": "./miniprogram/"
+      }
+    ],
     "ignoreUploadUnusedFiles": true,
     "compileHotReLoad": false,
     "skylineRenderEnable": false,
@@ -27,7 +32,7 @@
     "compileWorklet": false,
     "uglifyFileName": false,
     "uploadWithSourceMap": true,
-    "packNpmManually": false,
+    "packNpmManually": true,
     "minifyWXSS": true,
     "minifyWXML": true,
     "localPlugins": false,

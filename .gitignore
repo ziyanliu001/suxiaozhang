@@ -9,5 +9,8 @@ miniprogram/project.private.config.json
 # 本地校验用临时依赖（tsc 等），不进入版本库
 node_modules/
 
+# 微信开发者工具"构建 npm"生成的产物，可由 package.json + node_modules 重新生成
+miniprogram/miniprogram_npm/
+
 # 微信开发者工具本地云函数调试缓存
 .cloudbase/
