@@ -283,7 +283,17 @@ exports.main = async (event, context) => {
     // 'region' 模式下省份/城市都留空（前端文案"留空表示不限地区"）时，效果必须
     // 与 'national' 完全一致，包括历史遗留、未在 stores 集合注册的兜底门店数据
     // 也要计入，不能因为选了"按地区筛选"入口就悄悄比"全国总览"少算一部分数据
-    let isScopedFilter = false;
+    // 🐛 根因修复（切换组织类型 Tab 后数据不刷新）：此前 isScopedFilter 只在
+    // filterMode 为 'region'/'custom' 时才置 true，orgType/platformFamily 筛选
+    // 虽然已经正确收窄了 allStores/targetStores，却完全没有让 isScopedFilter
+    // 跟着变 true。下面按 storeId/门店名匹配不到 targetStores 里任何一家的
+    // report_logs（即"被 orgType 筛掉的门店"产生的记账记录）在 isScopedFilter
+    // 为 false 时，会走"兜底门店"分支被重新捡回 storeStatsMap（见下方
+    // `if (isScopedFilter) { return; }` 之后的 fallback 逻辑）——相当于筛了个寂寞，
+    // 全国核心 KPI 仍然是全平台口径，只有 totalStores 这类直接读 targetStores.length
+    // 的字段才会变化，这正是"切换 Tab 后大部分数字不刷新"的真正原因。
+    // orgType/platformFamily 只要生效就必须收窄，与 region/custom 一样对待
+    let isScopedFilter = !!(requestedOrgType || requestedPlatformFamily);
     if (filterMode === 'region') {
       const provinceFilter = normalizeRegionText(event && event.province);
       const cityFilter = normalizeRegionText(event && event.city);
@@ -673,16 +683,27 @@ exports.main = async (event, context) => {
     const nationalMediaGallery = []; // 最多 12 条，供大屏影像墙展示
 
     if (isSuperAdmin) {
+      // 🐛 根因修复（配套上面 isScopedFilter）：此前 daily_menus/activity_logs 只按
+      // tenantId 过滤，完全没有收窄到 targetStores——orgType/地区/自定义门店筛选
+      // 切换后，全网影像卷宗的凭证/食谱/日志照片统计纹丝不动，与核心 KPI 已经
+      // isScopedFilter 收窄的口径不一致。isScopedFilter 生效时直接把 storeId 下推
+      // 进查询条件（而不是查回来再在内存里过滤），与 material_logs 的既有写法一致
+      const mediaQueryConditions = [makeTenantFilter(tenantId)];
+      if (isScopedFilter) {
+        mediaQueryConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
+      }
+      const mediaQueryWhere = _.and(mediaQueryConditions);
+
       const [menuRes, logRes] = await Promise.all([
         db.collection('daily_menus')
-          .where(makeTenantFilter(tenantId))
+          .where(mediaQueryWhere)
           .orderBy('date', 'desc')
           .limit(200)
           .field({ _id: true, date: true, storeName: true, storeId: true, images: true })
           .get()
           .catch(() => ({ data: [] })),
         db.collection('activity_logs')
-          .where(makeTenantFilter(tenantId))
+          .where(mediaQueryWhere)
           .orderBy('date', 'desc')
           .limit(200)
           .field({ _id: true, date: true, storeName: true, storeId: true, images: true })
@@ -695,6 +716,17 @@ exports.main = async (event, context) => {
       // fallback 兜底条目），这里只做只读查找，不影响任何已有聚合计算
       const lookupOrgType = (storeId) =>
         (storeId && storeStatsMap[storeId] && storeStatsMap[storeId].orgType) || 'other';
+
+      // 🐛 同一处根因修复：report_logs（凭证照片来源）没有走数据库查询下推
+      // （复用上面已经拉取好的 allLogs 分页结果），改为在内存里按 targetStores
+      // 过滤——与 storeStatsMap 主聚合循环判定"是否属于本次筛选范围"用同一套
+      // storeId 优先、门店名兜底的匹配口径
+      const mediaTargetStoreIdSet = new Set(targetStores.map(s => s._id));
+      const mediaTargetStoreNameSet = new Set(targetStores.map(s => s.storeName));
+      const isLogInScope = (storeId, storeName) => {
+        if (!isScopedFilter) return true;
+        return (!!storeId && mediaTargetStoreIdSet.has(storeId)) || (!!storeName && mediaTargetStoreNameSet.has(storeName));
+      };
 
       // 统计 daily_menus 图片总数，收集带 URL 的条目
       const menuPhotoEntries = [];
@@ -722,10 +754,13 @@ exports.main = async (event, context) => {
         });
       });
 
-      // 从 allLogs 中抽取最新凭证图片（已按 dateString desc 取）
+      // 从 allLogs 中抽取最新凭证图片（已按 dateString desc 取）。isScopedFilter
+      // 时先跳过不在 targetStores 范围内的记录，再判断是否已凑够 50 张——不能反过来，
+      // 否则 allLogs 前段刚好全是筛选范围外的门店时会提前 break，凑不满在范围内的图片
       const receiptPhotoEntries = [];
       for (const log of allLogs) {
         if (receiptPhotoEntries.length >= 50) break;
+        if (!isLogInScope(log.storeId, log.shopName)) continue;
         const imgs = [...(Array.isArray(log.receiptImages) ? log.receiptImages : []),
                       ...(Array.isArray(log.receiptImageList) ? log.receiptImageList : [])];
         for (const img of imgs) {
