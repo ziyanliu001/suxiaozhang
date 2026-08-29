@@ -95,8 +95,12 @@ exports.main = async (event, context) => {
     // 不能互相替代同一个查询计划——同一组字段、不同领头顺序需要各自建一条复合索引
     ['report_logs', { name: 'storeId_tenantId_auditedBy',      keys: [{ storeId: 1 }, { tenantId: 1 }, { auditedBy: 1 }],   unique: false }],
     ['report_logs', { name: 'storeId_tenantId',                keys: [{ storeId: 1 }, { tenantId: 1 }],                     unique: false }],
-    // 🔑 profile.ts fetchMeritStats 的提交人统计：{tenantId, storeId, _openid}.count()
-    ['report_logs', { name: 'tenantId_storeId_openid',         keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }],    unique: false }],
+    // 🔑 profile.ts fetchMeritStats 的提交人统计：{tenantId, storeId, _openid}.count()——
+    // 个人中心与门店档案统计"个人提报日历流水"计数。索引名改为 idx_tenant_store_openid
+    // （2026-08-29 按知识库部署文档统一的命名口径重命名，keys/unique 未变，纯改标签，
+    // 若云开发控制台里已经按旧名 tenantId_storeId_openid 建过这条索引，效果完全等价，
+    // 不需要重复建一条同字段的索引）
+    ['report_logs', { name: 'idx_tenant_store_openid',         keys: [{ tenantId: 1 }, { storeId: 1 }, { _openid: 1 }],    unique: false }],
     ['report_logs', { name: 'tenantId_storeId_dateString',     keys: [{ tenantId: 1 }, { storeId: 1 }, { dateString: 1 }], unique: false }],
     ['report_logs', { name: 'tenantId_approvalStatus_dateString', keys: [{ tenantId: 1 }, { approvalStatus: 1 }, { dateString: 1 }], unique: false }],
     // 🔑 getPatriarchDashboard 的两条真实查询：都只按 storeId 起头（不带 tenantId
@@ -126,6 +130,22 @@ exports.main = async (event, context) => {
     ['daily_menus',             { name: 'store_date',      keys: [{ storeId: 1 }, { dateString: -1 }],  unique: false }],
     ['activity_logs',           { name: 'store_eventTime', keys: [{ storeId: 1 }, { eventTime: -1 }],   unique: false }],
     ['expense_item_templates',  { name: 'store_category',  keys: [{ storeId: 1 }, { category: 1 }],     unique: false }],
+
+    // ─── volunteer_submissions / material_logs（manageVolunteerSubmission
+    // 云函数在此之前完全没有配套索引，是 profile.ts fetchMyVolunteerSubmissions
+    // 报 >8000ms 超时的根因——不是逻辑挂起，是查询本身缺索引变慢）─────────────
+    // 🔑 handleMyList 真实查询：{_openid}.orderBy('createTime', desc)
+    ['volunteer_submissions',   { name: 'openid_createTime',        keys: [{ _openid: 1 }, { createTime: -1 }],                     unique: false }],
+    // 🔑 handleListPending 真实查询：{storeId, status:'pending'}.orderBy('createTime', desc)
+    ['volunteer_submissions',   { name: 'storeId_status_createTime',keys: [{ storeId: 1 }, { status: 1 }, { createTime: -1 }],      unique: false }],
+    // 🔑 handleStatsSummary 里 mealTotals/todayVolunteerCount 两条查询共用的前缀：
+    // {storeId, status, dateString}（mealTotals 额外带 type，作为该前缀之后的
+    // 二次过滤，仍能吃到这条复合索引）
+    ['volunteer_submissions',   { name: 'storeId_status_dateString',keys: [{ storeId: 1 }, { status: 1 }, { dateString: 1 }],       unique: false }],
+    // 🔑 handleStatsSummary 里 material_logs 的两条真实查询：
+    // {storeId, dateString 区间}（月度汇总）与 {storeId}.orderBy('createTime', desc)（取最新一条）
+    ['material_logs',           { name: 'storeId_dateString',       keys: [{ storeId: 1 }, { dateString: 1 }],                      unique: false }],
+    ['material_logs',           { name: 'storeId_createTime',       keys: [{ storeId: 1 }, { createTime: -1 }],                     unique: false }],
 
     // ─── notices / notice_templates ────────────────────────────────────
     ['notices',           { name: 'tenant_store',        keys: [{ tenantId: 1 }, { storeId: 1 }],                    unique: false }],

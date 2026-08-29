@@ -3265,6 +3265,11 @@ Page({
       });
       const result = res.result;
       if (!result || !result.success) {
+        // 🐛 静默降级：此前失败/超时分支既不重置列表（残留上一次的旧数据，
+        // 可能与最新真实状态不符），也不做任何 setData，只在非 silent 场景弹
+        // toast——现在统一降级为空列表，避免页面停留在一份可能已经过期的
+        // 数据上，也避免调用方各自维护"失败了该展示什么"这套逻辑
+        this.setData({ myVolunteerSubmissionsList: [], rejectedCount: 0, monthlySubmissionStats: this.computeMonthlySubmissionStats([]) });
         if (!silent) {
           wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
         }
@@ -3276,7 +3281,15 @@ Page({
       const rejectedCount = list.filter((item: any) => item && item.status === 'rejected').length;
       this.setData({ myVolunteerSubmissionsList: list, rejectedCount, monthlySubmissionStats: this.computeMonthlySubmissionStats(list) });
     } catch (err) {
-      console.error('[fetchMyVolunteerSubmissions] 加载异常:', err);
+      // 🐛 根因排查记录：manageVolunteerSubmission 的 myList 分支本身逻辑很
+      // 简单（按 _openid 查询 + orderBy createTime，不依赖 tenantId/角色分支，
+      // 不存在"某些角色走不到 return"这类挂起可能），真正超时根因是
+      // volunteer_submissions 集合此前完全没有配套索引（见 createIndexes 新增
+      // 的 openid_createTime 等索引）——这里只做前端侧的容错兜底，不代表问题
+      // 出在这段前端代码。console.warn 而不是 console.error：这是一次已经被
+      // 优雅降级接住的失败，不应该在控制台以醒目的红色错误呈现，误导排查方向
+      console.warn('[fetchMyVolunteerSubmissions] 加载失败，已静默降级为空列表:', err);
+      this.setData({ myVolunteerSubmissionsList: [], rejectedCount: 0, monthlySubmissionStats: this.computeMonthlySubmissionStats([]) });
       if (!silent) {
         wx.showToast({ title: '网络异常，请重试', icon: 'none' });
       }

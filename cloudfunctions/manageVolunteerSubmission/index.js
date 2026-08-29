@@ -773,24 +773,36 @@ exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const action = event.action;
 
-  switch (action) {
-    case 'submit':
-      return handleSubmit(event, OPENID);
-    case 'myList':
-      return handleMyList(event, OPENID);
-    case 'listPending':
-      return handleListPending(event, OPENID);
-    case 'approve':
-      return handleApprove(event, OPENID);
-    case 'reject':
-      return handleReject(event, OPENID);
-    case 'deleteMine':
-      return handleDeleteMine(event, OPENID);
-    case 'revokeMine':
-      return handleRevokeMine(event, OPENID);
-    case 'statsSummary':
-      return handleStatsSummary(event, OPENID);
-    default:
-      return { success: false, error: '未知操作' };
+  // 🛡️ 顶层兜底：此前 switch 分支里任何一个 handler 抛出未捕获异常（例如数据库
+  // 查询在集合不存在之外的其它异常，各 handler 内部的 try/catch 只吞掉了
+  // isCollectionNotExistError 这一种情况，其余错误都是 throw err 继续往外抛），
+  // 会直接从 exports.main 未捕获抛出——不是本次超时排查的根因（未捕获异常通常
+  // 表现为快速失败而不是挂起等待），但与本项目其余云函数（如 wxPayCore）"任何
+  // 分支都必须迅速返回明确结构，不允许把异常裸抛给调用方"的一贯口径不一致，
+  // 顺手补齐这层兜底
+  try {
+    switch (action) {
+      case 'submit':
+        return await handleSubmit(event, OPENID);
+      case 'myList':
+        return await handleMyList(event, OPENID);
+      case 'listPending':
+        return await handleListPending(event, OPENID);
+      case 'approve':
+        return await handleApprove(event, OPENID);
+      case 'reject':
+        return await handleReject(event, OPENID);
+      case 'deleteMine':
+        return await handleDeleteMine(event, OPENID);
+      case 'revokeMine':
+        return await handleRevokeMine(event, OPENID);
+      case 'statsSummary':
+        return await handleStatsSummary(event, OPENID);
+      default:
+        return { success: false, error: '未知操作' };
+    }
+  } catch (err) {
+    console.error('[manageVolunteerSubmission] 未捕获异常:', action, err);
+    return { success: false, error: (err && err.message) || '服务异常，请重试' };
   }
 };
