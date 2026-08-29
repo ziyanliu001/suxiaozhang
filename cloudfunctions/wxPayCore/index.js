@@ -25,13 +25,15 @@ const orderService = require('./lib/orderService');
 const refundService = require('./lib/refundService');
 const profitSharingService = require('./lib/profitSharingService');
 
+// 🛡️ fail-closed：WXPAY_INTERNAL_TOKEN 已在云开发控制台配置，未配置或不匹配
+// 时一律拒绝——此前"未配置时放行"的降级口径会让 createOrder/closeOrder 在
+// 环境变量被误删/漏配时静默退化成"谁都能调用"，是可被任意客户端伪造下单/
+// 关单的高危口径，改为强制要求令牌存在且匹配
 function requireInternalCaller(event) {
   const expected = process.env.WXPAY_INTERNAL_TOKEN || '';
   if (!expected) {
-    // 未配置内部令牌时（如本地/演示环境）不做拦截，但打印告警——生产环境
-    // 必须配置，否则 createOrder/closeOrder 会退化成"谁都能调用"
-    console.warn('[wxPayCore] WXPAY_INTERNAL_TOKEN 未配置，createOrder/closeOrder 未做调用方鉴权！');
-    return true;
+    console.error('[wxPayCore] WXPAY_INTERNAL_TOKEN 未配置，拒绝所有调用（fail-closed）');
+    return false;
   }
   return event.internalToken === expected;
 }

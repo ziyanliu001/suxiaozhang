@@ -6,7 +6,8 @@
 //
 // 🛡️ 安全边界：所有 action 都是"改数据"操作（占用/释放产能、生成分账、红冲），
 // 只信任携带正确 LIVE_FACTORY_INTERNAL_TOKEN 的服务端调用方，与 wxPayCore 的
-// requireInternalCaller 同一份写法（未配置令牌时放行但打印告警，生产环境必须配置）。
+// requireInternalCaller 同一份写法——fail-closed：未配置或不匹配一律拒绝，
+// 令牌已在云开发控制台配置。
 'use strict';
 
 const cloud = require('wx-server-sdk');
@@ -19,8 +20,8 @@ const { buildSettlementSnapshot, decideRefundReversal } = require('./lib/settlem
 function requireInternalCaller(event) {
   const expected = process.env.LIVE_FACTORY_INTERNAL_TOKEN || '';
   if (!expected) {
-    console.warn('[liveFactoryCore] LIVE_FACTORY_INTERNAL_TOKEN 未配置，本函数未做调用方鉴权！');
-    return true;
+    console.error('[liveFactoryCore] LIVE_FACTORY_INTERNAL_TOKEN 未配置，拒绝所有调用（fail-closed）');
+    return false;
   }
   return event.internalToken === expected;
 }
