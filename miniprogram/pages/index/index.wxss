@@ -9,6 +9,10 @@ page {
   flex-direction: column;
   width: 100%;
   height: 100vh;
+  /* 🛡️ 兜底防线：即使个别卡片将来又不小心引入同类"width:100% + 额外横向
+     margin"溢出（见 .volunteer-hero-card 等处根因修复注释），也只会被裁掉
+     溢出部分、不会产生横向滚动条把整页内容推偏，双重保险 */
+  overflow-x: hidden;
   background-color: #F8F9FA;
   box-sizing: border-box;
   /* 自定义导航栏（navigationStyle: custom）下，页面顶部内容需自行避让胶囊按钮/刘海安全区。
@@ -2840,34 +2844,51 @@ textarea, .textarea {
    两块颜色区域贴得很近，读起来像"色块硬堆叠"。改为半透明 + backdrop-filter
    模糊底层内容，视觉上退让为一条"浮在页面上的提示"，不再和下方卡片抢层级；
    底部 margin 从 0 加到 20rpx，与下一张卡片之间留出呼吸空间 */
+/* 🌟 吸顶浮条：position:sticky 让预览提示在滚动时始终可见，不会被滑走后
+   忘记自己在预览态；胶囊圆角 + 半透明毛玻璃质感，字号/间距比原来更松弛。
+   🐛 根因修复：本元素是 .index-page-container（display:flex; flex-direction:
+   column）的直接子项，sticky 定位的 flex 子项在微信小程序渲染引擎下，
+   横向尺寸的"撑满容器再减去左右 margin"这一步会计算错误，实测表现为右侧
+   margin 被吃掉、内容整体偏右贴边。改为显式 width: calc(100% - 左右margin)
+   + box-sizing: border-box，不再依赖引擎对 auto 宽度的隐式计算，彻底绕开
+   这个渲染坑，同时保证左右留白严格对称 */
 .preview-mode-banner {
+  position: sticky;
+  top: 8rpx;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10rpx;
-  background: rgba(255, 253, 245, 0.72);
-  backdrop-filter: blur(12rpx);
-  -webkit-backdrop-filter: blur(12rpx);
-  border: 1rpx solid rgba(241, 196, 15, 0.45);
-  border-radius: 16rpx;
-  padding: 14rpx 20rpx;
+  gap: 12rpx;
+  width: calc(100% - 48rpx);
+  box-sizing: border-box;
+  background: rgba(255, 253, 246, 0.82);
+  backdrop-filter: blur(16rpx);
+  -webkit-backdrop-filter: blur(16rpx);
+  border: 1rpx solid rgba(241, 196, 15, 0.4);
+  border-radius: 999rpx;
+  padding: 16rpx 24rpx;
   margin: 16rpx 24rpx 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(181, 124, 30, 0.08);
+  box-shadow: 0 6rpx 20rpx rgba(181, 124, 30, 0.1);
 }
 
 .preview-mode-text {
   flex: 1;
   min-width: 0;
-  font-size: 22rpx;
+  font-size: 23rpx;
   font-weight: 500;
-  color: #B57C1E;
+  color: #A66E1A;
+  line-height: 1.4;
 }
 
 .preview-mode-link {
   flex-shrink: 0;
   font-size: 22rpx;
   font-weight: bold;
-  color: #B57C1E;
+  color: #FFFFFF;
+  background: #D9A441;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
 }
 
 /* 📢 门店公告：轻量单行通告条，Header 下方 / 工作台上方，替代原先夹在工具区与表单中间的大卡片 */
@@ -2883,7 +2904,10 @@ textarea, .textarea {
   border: 1rpx solid #ffe3e3;
   border-radius: 30rpx;
   padding: 16rpx 24rpx;
-  margin: 16rpx 24rpx 24rpx;
+  /* 🛡️ 底部安全区防遮挡：在原有 24rpx 基础上叠加系统安全区高度（全面屏
+     手势条），避免这条公告栏在页面靠后的角色/视图组合下贴着自定义 TabBar */
+  margin: 16rpx 24rpx calc(24rpx + constant(safe-area-inset-bottom));
+  margin-bottom: calc(24rpx + env(safe-area-inset-bottom));
   box-shadow: 0 2rpx 8rpx rgba(245, 158, 11, 0.08);
   max-height: 100rpx;
   opacity: 1;
@@ -6019,7 +6043,14 @@ button.poster-gen-btn[disabled] {
 
 /* 🌟 C位核心卡片：欢迎语+护持统计+打卡 CTA，置于胶囊下方最顶部，独立于滚动区之外，
    确保永远是志工视角下第一眼看到的内容，不被公告栏/食谱大事记预览卡挤到后面 */
+/* 🐛 根因修复：本类与 .ui-card-wrapper 复合使用（class="ui-card-wrapper
+   volunteer-hero-card"），继承了后者的 width:100%，却又在这里另外声明了
+   左右 24rpx margin——margin 不受 box-sizing:border-box 影响，会直接叠加在
+   100% 宽度之外，导致卡片整体右侧溢出 48rpx，表现为右边距比左边距小、
+   内容整体偏右。显式声明 width: calc(100% - 48rpx) 抵消掉这部分 margin，
+   使卡片实际占用宽度精确等于 100%，左右留白严格对称 */
 .volunteer-hero-card {
+  width: calc(100% - 48rpx);
   background: #FFFFFF;
   border-radius: 16rpx;
   padding: 32rpx 28rpx;
@@ -6042,15 +6073,17 @@ button.poster-gen-btn[disabled] {
 
 .volunteer-hero-card .v-title {
   display: block;
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #8C1D18;
-  margin-bottom: 12rpx;
+  font-size: 38rpx;
+  font-weight: 700;
+  color: #7A1B15;
+  letter-spacing: 0.5rpx;
+  margin-bottom: 10rpx;
 }
 
 .volunteer-hero-card .v-sub {
-  font-size: 26rpx;
-  color: #8C7355;
+  font-size: 25rpx;
+  color: #A08768;
+  font-weight: 400;
 }
 
 .volunteer-hero-card .volunteer-stats-banner {
@@ -6079,18 +6112,22 @@ button.poster-gen-btn[disabled] {
   align-items: center;
 }
 
-/* 🌟 核心荣誉数字：34rpx -> 48rpx 加粗放大，提升志工的归属感与荣誉感 */
+/* 🌟 核心荣誉数字：48rpx -> 56rpx 进一步加粗放大，提升志工的归属感与荣誉感 */
 .volunteer-hero-card .stat-num {
-  font-size: 48rpx;
-  font-weight: bold;
+  font-size: 56rpx;
+  font-weight: 800;
   color: #E65100;
-  line-height: 1.2;
+  line-height: 1.15;
+  letter-spacing: 0.5rpx;
 }
 
 .volunteer-hero-card .stat-label {
+  display: block;
   font-size: 20rpx;
-  color: #8D6E63;
-  margin-top: 4rpx;
+  color: #A98A6E;
+  font-weight: 500;
+  margin-top: 8rpx;
+  letter-spacing: 0.5rpx;
 }
 
 .volunteer-hero-card .stat-divider {
@@ -6099,14 +6136,24 @@ button.poster-gen-btn[disabled] {
   background: #FFE0B2;
 }
 
-/* 🌸 温情激励语：置于统计数字下方，强化"我在被看见、被感恩"的情感连接 */
+/* 🌸 温情激励语：置于统计数字下方，强化"我在被看见、被感恩"的情感连接。
+   改为柔和底色的独立轻量徽章（inline-block 让背景色只贴合文字本身，不再
+   撑满整行），行容器用 flex 居中定位这个徽章 */
+.volunteer-hero-card .warm-encourage-badge-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 14rpx;
+}
+
 .volunteer-hero-card .warm-encourage-text {
-  display: block;
-  text-align: center;
-  font-size: 22rpx;
+  display: inline-block;
+  font-size: 21rpx;
+  font-weight: 500;
   color: #C97B3D;
-  margin-top: 12rpx;
-  line-height: 1.5;
+  background: rgba(201, 123, 61, 0.1);
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
 }
 /* 🍚 今日餐况状态卡：开餐状态 + 主食物资合并展示，用胶囊 Tag 呈现代替纯文字 */
 .volunteer-view-card .today-status-card {
@@ -6318,12 +6365,13 @@ button.poster-gen-btn[disabled] {
     transform: scale(1);
   }
 }
-/* 🌟 第一核心操作 CTA：加大字号、加深阴影，未打卡状态额外用金色描边提醒 */
+/* 🌟 第一核心操作 CTA：渐变底色 + 加深阴影，未打卡状态额外用金色描边提醒，
+   按下时轻微缩放（active 态）给出明确的触控反馈 */
 .volunteer-hero-card .btn-volunteer-checkin {
   width: 100%;
   height: 96rpx;
   line-height: 96rpx;
-  background: #8C1D18;
+  background: linear-gradient(135deg, #A8281F 0%, #7A1B15 100%);
   color: #FFFFFF;
   font-size: 32rpx;
   font-weight: bold;
@@ -6331,8 +6379,8 @@ button.poster-gen-btn[disabled] {
   padding: 0;
   margin: 0;
   border: none;
-  box-shadow: 0 8rpx 20rpx rgba(140, 29, 24, 0.28);
-  transition: box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  box-shadow: 0 10rpx 24rpx rgba(122, 27, 21, 0.32);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
 }
 
 .volunteer-hero-card .btn-volunteer-checkin::after {
@@ -6340,8 +6388,9 @@ button.poster-gen-btn[disabled] {
 }
 
 .volunteer-hero-card .btn-volunteer-checkin:active {
-  background: #6D1410;
-  transform: scale(0.98);
+  background: linear-gradient(135deg, #8C231C 0%, #5F140F 100%);
+  box-shadow: 0 4rpx 12rpx rgba(122, 27, 21, 0.3);
+  transform: scale(0.97);
 }
 
 /* 未打卡：金色描边 + 更强阴影，作为页面最醒目的行动点 */
@@ -6350,9 +6399,9 @@ button.poster-gen-btn[disabled] {
   box-shadow: 0 8rpx 24rpx rgba(245, 166, 35, 0.4);
 }
 
-/* 已打卡部分班次：正常品牌色，鼓励继续 */
+/* 已打卡部分班次：正常品牌色渐变，鼓励继续 */
 .volunteer-hero-card .btn-volunteer-checkin.state-partial {
-  background: #A8281F;
+  background: linear-gradient(135deg, #B8342A 0%, #8C231C 100%);
 }
 
 /* 今日全部班次已完成：切换为沉稳的成功绿，弱化 CTA 紧迫感 */
@@ -6369,7 +6418,11 @@ button.poster-gen-btn[disabled] {
    不依赖 .volunteer-hero-card 作为祖先选择器——原按钮样式都写成
    .volunteer-hero-card .btn-volunteer-checkin 这种强绑定祖先的形式，直接把
    btn-volunteer-checkin 类名搬到这张新卡片里是不会生效的，所以在这里整套复刻。 */
+/* 🐛 根因修复：与 .volunteer-hero-card 同一处问题——复合 .ui-card-wrapper
+   继承 width:100% 后又另加左右 24rpx margin，margin 叠加在 100% 之外导致
+   右侧溢出，见该处详细注释 */
 .omni-checkin-card {
+  width: calc(100% - 48rpx);
   background: #FFFFFF;
   border-radius: 16rpx;
   padding: 28rpx 28rpx 24rpx;
@@ -6401,7 +6454,7 @@ button.poster-gen-btn[disabled] {
   width: 100%;
   height: 96rpx;
   line-height: 96rpx;
-  background: #8C1D18;
+  background: linear-gradient(135deg, #A8281F 0%, #7A1B15 100%);
   color: #FFFFFF;
   font-size: 32rpx;
   font-weight: bold;
@@ -6409,8 +6462,8 @@ button.poster-gen-btn[disabled] {
   padding: 0;
   margin: 0;
   border: none;
-  box-shadow: 0 8rpx 20rpx rgba(140, 29, 24, 0.28);
-  transition: box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  box-shadow: 0 10rpx 24rpx rgba(122, 27, 21, 0.32);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
 }
 
 .omni-checkin-btn::after {
@@ -6418,8 +6471,9 @@ button.poster-gen-btn[disabled] {
 }
 
 .omni-checkin-btn:active {
-  background: #6D1410;
-  transform: scale(0.98);
+  background: linear-gradient(135deg, #8C231C 0%, #5F140F 100%);
+  box-shadow: 0 4rpx 12rpx rgba(122, 27, 21, 0.3);
+  transform: scale(0.97);
 }
 
 .omni-checkin-btn.state-pending {
@@ -6428,7 +6482,7 @@ button.poster-gen-btn[disabled] {
 }
 
 .omni-checkin-btn.state-partial {
-  background: #A8281F;
+  background: linear-gradient(135deg, #B8342A 0%, #8C231C 100%);
 }
 
 .omni-checkin-btn.state-done {
@@ -8116,21 +8170,41 @@ button.poster-gen-btn[disabled] {
 /* 🌟 瘦身为极简公告条：原先双行（标题+副标题）+ 大内边距的卡片明显偏高，
    压缩成 80rpx 单行，标题/副标题同行展示，给下方"财务稽核台""生成餐报"等
    核心操作腾出首屏空间 */
-.sunshine-ledger-entry {
-  display: flex;
-  align-items: center;
-  height: 80rpx;
+/* 🌟 顶部通知栏收纳容器：阳光账本 + 阳善滚动墙共用一张卡片外壳（一份
+   border/shadow 代替原来两份各自独立的），内部靠一条极细分隔线分成两行，
+   降低整体高度占用与视觉噪音 */
+.top-notice-cluster {
   margin: 16rpx 24rpx 20rpx;
   padding: 0 24rpx;
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
-  border: 1rpx solid #FFD54F;
-  border-radius: 16rpx;
-  box-shadow: 0 4rpx 12rpx rgba(255, 193, 7, 0.16);
+  background: linear-gradient(135deg, #FFFDF8 0%, #FFF8E1 100%);
+  border: 1rpx solid #FFE9B3;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 193, 7, 0.1);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
-.sunshine-ledger-entry:active {
-  opacity: 0.85;
+.top-notice-row {
+  display: flex;
+  align-items: center;
+  height: 68rpx;
+}
+
+.top-notice-row-yangshan {
+  height: auto;
+  width: 100%;
+  padding: 8rpx 0;
+}
+
+/* 只有阳光账本这一行可点击跳转，:active 反馈只挂在这一行上，避免下方
+   阳善滚动墙（不可点击）也跟着闪一下按压态造成误导 */
+.top-notice-row:not(.top-notice-row-yangshan):active {
+  opacity: 0.75;
+}
+
+.top-notice-divider {
+  height: 1rpx;
+  background: rgba(255, 213, 79, 0.5);
 }
 
 .sunshine-ledger-icon {
@@ -8420,7 +8494,13 @@ button.poster-gen-btn[disabled] {
    宽度"撑开，不加这两处会导致长一点的中文标签在 3 等分栏宽下溢出、挤到
    相邻卡片上（此前已经踩过一次这个坑，这里直接一并补上，避免同一类问题
    在未来换更长文案时再犯一次） */
+/* 🐛 根因修复：同 .volunteer-hero-card——复合 .ui-card-wrapper 继承
+   width:100% 后又另加左右 28rpx margin，导致右侧溢出 56rpx。这张卡片的
+   核心样式在 wxml 里还写了一份内联 style 做双重保障，两处都要加同样的
+   width 修正，保持同步 */
 .home-vt-card {
+  width: calc(100% - 56rpx);
+  box-sizing: border-box;
   margin: 20rpx 28rpx;
   padding: 24rpx;
   background: #ffffff;

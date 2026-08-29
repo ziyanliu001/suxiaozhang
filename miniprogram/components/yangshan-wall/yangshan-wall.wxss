@@ -13,6 +13,16 @@
   box-shadow: 0 4rpx 16rpx rgba(190, 24, 93, 0.06);
 }
 
+/* 🌟 无卡片模式：去掉自带背景/边框/投影/内边距，供宿主页面把本组件嵌进
+   自己的卡片容器时使用（见 bare 属性），避免"卡中卡"双层视觉 */
+.yangshan-wall-card-bare {
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 4rpx 0;
+}
+
 .yangshan-wall-title {
   flex-shrink: 0;
   margin-right: 16rpx;

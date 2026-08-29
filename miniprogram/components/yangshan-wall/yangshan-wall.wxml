@@ -3,7 +3,7 @@
      静态兜底寄语，不再让整块组件从页面上消失。
      单行紧凑布局：左侧固定标签 + 右侧内容区（跑马灯/兜底文案）水平排布，
      不再是标题独占一行、内容另起一行的两段式竖排 -->
-<view class="yangshan-wall-card" wx:if="{{storeId}}">
+<view class="yangshan-wall-card {{bare ? 'yangshan-wall-card-bare' : ''}}" wx:if="{{storeId}}">
   <text class="yangshan-wall-title">{{title}}</text>
 
   <view class="yangshan-wall-content">
