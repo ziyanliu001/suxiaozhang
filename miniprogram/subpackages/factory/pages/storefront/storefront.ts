@@ -10,6 +10,7 @@
 // 传了就一定生效，也不需要在这里重复校验。
 import { payForOrder } from '../../../../utils/wxPayCore';
 import { requestShippingNoticeSubscription } from '../../../../utils/subscribeMessage';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 interface CalendarEntry {
   batchDate: string;
@@ -101,7 +102,7 @@ Page({
   // 理由把佣金让给别人的分享链接）
   async resolveMyPromoterIdentity() {
     try {
-      const res = await wx.cloud.callFunction({ name: 'getMyTenantRole', data: { tenantId: this.data.tenantId } });
+      const res = await callFunctionWithTimeout({ name: 'getMyTenantRole', data: { tenantId: this.data.tenantId } });
       const result = res.result as any;
       if (result && result.success && result.role === 'promoter' && result.openid) {
         this.setData({ effectivePromoterOpenId: result.openid });
@@ -115,8 +116,8 @@ Page({
     this.setData({ loading: true, loadError: '' });
     try {
       const [productRes, calendarRes] = await Promise.all([
-        wx.cloud.callFunction({ name: 'manageProduct', data: { action: 'get', productId: this.data.productId } }),
-        wx.cloud.callFunction({
+        callFunctionWithTimeout({ name: 'manageProduct', data: { action: 'get', productId: this.data.productId } }),
+        callFunctionWithTimeout({
           name: 'getPresaleCalendar',
           data: { tenantId: this.data.tenantId, productId: this.data.productId, rangeDays: 14 }
         })
@@ -156,7 +157,7 @@ Page({
 
   async loadOtherProducts() {
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageProduct',
         data: { action: 'list', tenantId: this.data.tenantId, status: 'active' }
       });
@@ -213,7 +214,7 @@ Page({
 
     let orderResult: any;
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'createProductionOrder',
         data: {
           tenantId: this.data.tenantId,

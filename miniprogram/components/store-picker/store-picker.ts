@@ -3,6 +3,7 @@ import { safeNavigateTo } from '../../utils/navHelper';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { setCurrentActiveStore } from '../../utils/storeManager';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -184,7 +185,7 @@ Component({
     // 静默失败——查不到就当没有 pending，不阻断门店选择器本身的使用
     async fetchMyApplicationStatus() {
       try {
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'processRoleAudit',
           data: { action: 'getMyApplicationStatus' }
         });
@@ -228,7 +229,7 @@ Component({
         // tenantId 名下混入了跨专区的历史脏数据（如"嵩屿街道敬老中心助餐点"
         // 挂在雨花斋默认全国机构 yuhuazhai_national 下）也不会显示出来。
         // orgTypeFilter 为空（宿主未处于任何专区）时不传，行为与此前一致
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'getStoreList',
           data: this.properties.orgTypeFilter ? { orgType: this.properties.orgTypeFilter } : {}
         });
@@ -623,7 +624,7 @@ Component({
         const cachedRole = AuthService.getCachedRoleInfo();
         const tenantId = (cachedRole && cachedRole.tenantId) || '';
 
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'processRoleAudit',
           data: {
             action: 'apply',
@@ -794,7 +795,7 @@ Component({
         wx.showLoading({ title: '安全核验中...' });
 
         try {
-          const res = await wx.cloud.callFunction({
+          const res = await callFunctionWithTimeout({
             name: 'manageStoreInviteCode',
             data: { action: 'redeem', code: inputCode }
           });
@@ -888,7 +889,7 @@ Component({
         const cachedRole = AuthService.getCachedRoleInfo();
         const tenantId = (cachedRole && cachedRole.tenantId) || '';
 
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'processRoleAudit',
           data: {
             action: 'apply',
@@ -1130,7 +1131,7 @@ Component({
 
       try {
         const orgType = ORG_TYPE_OPTIONS[this.data.orgTypeIndex]?.value || 'other';
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'processRoleAudit',
           data: {
             action: 'apply',
@@ -1200,7 +1201,7 @@ Component({
 
       try {
         const orgType = ORG_TYPE_OPTIONS[this.data.orgTypeIndex]?.value || 'other';
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'createStore',
           data: { storeName: customStoreName, bindAsManager: true, orgType }
         });

@@ -1,10 +1,11 @@
-import { AuthService } from '../../utils/authService';
-import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
-import { compressAndUploadImages } from '../../utils/imageCompress';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { drawActivityPoster } from '../../utils/drawActivityPoster';
-import { recordRecentVisit } from '../../utils/recentPages';
-import { isVirtualStoreName } from '../../utils/storeIdentity';
+import { AuthService } from '../../../../utils/authService';
+import { getSelectedStore, setSelectedStore } from '../../../../utils/storeManager';
+import { compressAndUploadImages } from '../../../../utils/imageCompress';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { drawActivityPoster } from '../../../../utils/drawActivityPoster';
+import { recordRecentVisit } from '../../../../utils/recentPages';
+import { isVirtualStoreName } from '../../../../utils/storeIdentity';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const PAGE_SIZE = 10;
@@ -135,7 +136,7 @@ Page({
   },
 
   async onLoad() {
-    recordRecentVisit('/pages/activity-log/activity-log', '门店日志');
+    recordRecentVisit('/subpackages/admin/pages/activity-log/activity-log', '门店日志');
     this.calculateNavBarHeight();
     // 🔑 需先拿到 currentStoreId 再查今日大事记（list 按 storeId 过滤），故此处 await 顺序执行
     await this.initRoleAndStore();
@@ -278,7 +279,7 @@ Page({
   // 查询逻辑），前面拼一条"全国总览"虚拟聚合项，与 store-picker 组件的口径一致
   async fetchSuperAdminStoreOptions(currentStoreId: string) {
     try {
-      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: {} });
+      const res = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
       const result = res.result as any;
       const stores = (result && result.success) ? (result.list || []) : [];
       const options = [{ storeId: '', storeName: '全国总览' }].concat(
@@ -313,7 +314,7 @@ Page({
     this.setData({ pendingLoading: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageActivityLog',
         data: { action: 'listPending', storeId: this.data.currentStoreId }
       });
@@ -334,7 +335,7 @@ Page({
 
     wx.showLoading({ title: '确认中...', mask: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageActivityLog',
         data: { action: 'approvePending', id }
       });
@@ -369,7 +370,7 @@ Page({
 
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageActivityLog',
             data: { action: 'rejectPending', id }
           });
@@ -400,7 +401,7 @@ Page({
 
     this.setData({ todayLoading: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageActivityLog',
         data: {
           action: 'list',
@@ -454,7 +455,7 @@ Page({
     const filterDate = this.data.historyFilterDate;
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageActivityLog',
         data: {
           action: 'list',
@@ -696,7 +697,7 @@ Page({
       // 值会被云端过滤器整批丢弃，导致"提交成功但图片全没了"。这里转换回数据库
       // 期待的对象形状，字符串数组只是页面内部状态，不是持久化 schema
       const imagesForSubmit = images.map((url: string) => ({ url, thumbUrl: url }));
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageActivityLog',
         data: {
           action: id ? 'update' : 'create',
@@ -742,7 +743,7 @@ Page({
 
         wx.showLoading({ title: '删除中...', mask: true });
         try {
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageActivityLog',
             data: { action: 'delete', id }
           });
@@ -775,7 +776,7 @@ Page({
     if (!id) return;
 
     wx.showLoading({ title: pinned ? '置顶中...' : '取消置顶中...', mask: true });
-    wx.cloud.callFunction({
+    callFunctionWithTimeout({
       name: 'manageActivityLog',
       data: { action: 'togglePin', id, pinned }
     }).then((res: any) => {

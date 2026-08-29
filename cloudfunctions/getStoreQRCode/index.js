@@ -41,9 +41,16 @@ exports.main = async (event, context) => {
     // 二维码贴在自己的证书上，不应该被"仅店长/超管可生成门店推广二维码"这条规则挡住——
     // 门店邀请海报的二维码用于对外招募，权限要求高；证书二维码只是"扫码回到小程序"，
     // 风险等级完全不同。这里放宽的前提是"只能扫自己所在门店的码"，不允许越权生成他人门店的。
-    const isPersonalCertificate = purpose === 'certificate';
+    // 🐛 根因修复：打卡成功后的"餐报海报"底部"扫码查看透明账本"二维码
+    // （index.ts generateQrCode()）此前没传 purpose，落进下面 else 分支——
+    // 该分支要求 store_manager/super_admin，普通义工（打卡这个动作本身就是
+    // 义工最主要的使用场景）调用必然被拒，"点击重试"点多少次都是同一个权限墙，
+    // 永远卡在占位态。这枚二维码跟证书码同一个风险等级（都只是"扫码回到小程序"，
+    // 不是对外招募注册管理身份），补一个 checkin_share 场景纳入同一档低风险豁免，
+    // 同样限定"只能扫自己所在门店的码"
+    const isLowRiskPersonalQr = purpose === 'certificate' || purpose === 'checkin_share';
 
-    if (isPersonalCertificate) {
+    if (isLowRiskPersonalQr) {
       if (userStoreId && userStoreId !== storeId) {
         return { success: false, error: '仅可生成本人所属门店的二维码' };
       }
@@ -64,11 +71,16 @@ exports.main = async (event, context) => {
     }
 
     // 🌟 验真二维码场景：海报右下角"扫码验真"需要一个指向公开只读页面
-    // pages/public-verify/index、且携带 storeId+date 的码，而不是首页推广码。
+    // subpackages/admin/pages/public-verify/index、且携带 storeId+date 的码，而不是首页推广码。
     // scene 字段上限 32 字符（wxacode.getUnlimited 硬限制），装不下完整门店名/
     // 带连字符的日期，编码成 t_<storeId>_d_<yyyymmdd> 由 public-verify 页自行解析
     // （见该页 resolveTarget 里的兼容格式）
     const isVerifyQr = purpose === 'verify';
+    // 🐛 与上面权限检查的 isLowRiskPersonalQr 是两个独立关注点：这里只决定
+    // scene 该编码成"u=<openid前10位>&s=<storeId前10位>"（证书场景，供 app.ts
+    // 朋友圈扫码引流识别"谁分享的"）还是裸 storeId（checkin_share 场景不需要
+    // 这层引流归因，直接复用下面 else 分支的默认门店码格式即可）
+    const isPersonalCertificate = purpose === 'certificate';
     const dateDigits = String(date || '').replace(/[^0-9]/g, '');
     // 🌟 证书二维码 scene 极简编码：证书场景不需要完整 storeId，只用于朋友圈扫码
     // 引流时让 app.ts 识别出"谁分享的、指向哪家门店"，两段各截取前 10 位足以
@@ -86,7 +98,7 @@ exports.main = async (event, context) => {
     // pages/index/index.ts onLoad），且保留对存量已生成/已分享二维码里
     // "s=<storeId>" 老格式的兼容解析，不影响已经印出去、发出去的海报
     const codeTarget = (isVerifyQr && dateDigits.length === 8)
-      ? { page: 'pages/public-verify/index', scene: `t_${storeId}_d_${dateDigits}` }
+      ? { page: 'subpackages/admin/pages/public-verify/index', scene: `t_${storeId}_d_${dateDigits}` }
       : isPersonalCertificate
         ? { page: 'pages/index/index', scene: `u=${String(OPENID || '').substring(0, 10)}&s=${String(storeId).substring(0, 10)}` }
         : { page: 'pages/index/index', scene: String(storeId) };

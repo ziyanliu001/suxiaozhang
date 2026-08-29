@@ -1,3 +1,4 @@
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 // 页面：加入产销工坊 —— 扫码 或 手动输入邀请码 的统一落地页
 //
 // 🚪 两种进入方式：
@@ -117,7 +118,7 @@ Page({
   async doPeek(code: string) {
     this.setData({ peeking: true, peekResult: null, peekError: '' });
     try {
-      const res = await wx.cloud.callFunction({ name: 'manageWorkspaceInvite', data: { action: 'peek', code } });
+      const res = await callFunctionWithTimeout({ name: 'manageWorkspaceInvite', data: { action: 'peek', code } });
       const result = res.result as any;
       if (result && result.success) {
         this.setData({
@@ -159,7 +160,7 @@ Page({
     this.setData({ submitting: true });
     wx.showLoading({ title: '加入中...', mask: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageWorkspaceInvite',
         data: { action: 'redeem', code: this.data.code, realName, phone: this.data.phone }
       });

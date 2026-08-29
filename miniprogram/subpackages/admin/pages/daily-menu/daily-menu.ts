@@ -1,11 +1,12 @@
-import { AuthService } from '../../utils/authService';
-import { getSelectedStore } from '../../utils/storeManager';
-import { compressAndUploadImages } from '../../utils/imageCompress';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { recordRecentVisit } from '../../utils/recentPages';
-import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../utils/drawDailyMenuPoster';
-import { GRATITUDE_TEXT } from '../../utils/cultureData';
-import { isVirtualStoreName } from '../../utils/storeIdentity';
+import { AuthService } from '../../../../utils/authService';
+import { getSelectedStore } from '../../../../utils/storeManager';
+import { compressAndUploadImages } from '../../../../utils/imageCompress';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { recordRecentVisit } from '../../../../utils/recentPages';
+import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../../../utils/drawDailyMenuPoster';
+import { GRATITUDE_TEXT } from '../../../../utils/cultureData';
+import { isVirtualStoreName } from '../../../../utils/storeIdentity';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
@@ -156,7 +157,7 @@ Page({
   },
 
   async onLoad() {
-    recordRecentVisit('/pages/daily-menu/daily-menu', '食谱管理中心');
+    recordRecentVisit('/subpackages/admin/pages/daily-menu/daily-menu', '食谱管理中心');
     this.calculateNavBarHeight();
     // 🔑 需先拿到 currentStoreId 再查今日食谱（getByDate 要求 storeId 必填），故此处 await 顺序执行
     await this.applyRolePermissions();
@@ -275,7 +276,7 @@ Page({
 
     this.setData({ todayLoading: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageDailyMenu',
         data: {
           action: 'getByDate',
@@ -316,7 +317,7 @@ Page({
     const targetPage = reset ? 1 : this.data.page + 1;
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageDailyMenu',
         data: {
           action: 'list',
@@ -540,7 +541,7 @@ Page({
 
     try {
       const imagesForSubmit = images.map((img) => ({ url: img.url, thumbUrl: img.url, name: (img.name || '').trim() }));
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageDailyMenu',
         data: {
           action: id ? 'update' : 'create',
@@ -585,7 +586,7 @@ Page({
 
         wx.showLoading({ title: '删除中...', mask: true });
         try {
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageDailyMenu',
             data: { action: 'delete', id }
           });
@@ -735,7 +736,7 @@ Page({
       // 优雅降级为不画（不阻断海报生成）
       let qrLocalPath = '';
       try {
-        const qrRes = await wx.cloud.callFunction({
+        const qrRes = await callFunctionWithTimeout({
           name: 'getStoreQRCode',
           data: { storeId: this.data.currentStoreId, storeName: this.data.currentStoreName }
         });

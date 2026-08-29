@@ -9,6 +9,7 @@ import { isCloudAvailable } from '../../utils/cloudGuard';
 import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 // 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
 // （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
@@ -440,7 +441,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'recalculateLedger',
         data: { storeId }
       });
@@ -917,7 +918,7 @@ Page({
       for (const file of chooseRes.tempFiles) {
         try {
           const base64Data = fs.readFileSync(file.tempFilePath, 'base64');
-          const checkRes = await wx.cloud.callFunction({
+          const checkRes = await callFunctionWithTimeout({
             name: 'checkImageContent',
             data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
           });
@@ -958,7 +959,7 @@ Page({
         newUrls.push(fileID);
 
         try {
-          const ocrRes = await wx.cloud.callFunction({
+          const ocrRes = await callFunctionWithTimeout({
             name: 'ocrExpenseReceipt',
             data: { fileID }
           });
@@ -1070,7 +1071,7 @@ Page({
       const mergedImages = [...existingImages, ...newUrls];
       const newExpense = parseFloat(item.expenseAmount || 0) + (extraAmount || 0);
 
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'updateAndRecalculateCascade',
         data: {
           docId: item._id,
@@ -1191,7 +1192,7 @@ Page({
     try {
       // 🛡️ 与其它审批动作一致，改为经服务端 manageReportApproval 校验角色/门店归属后再写库，
       // 不再由客户端直接 db.collection('report_logs').update()
-      const approvalRes = await wx.cloud.callFunction({
+      const approvalRes = await callFunctionWithTimeout({
         name: 'manageReportApproval',
         data: { action: 'reconcile', docId: item._id }
       });
@@ -1420,7 +1421,7 @@ Page({
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
 
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'exportAccountExcel',
         data: { shopName, tabType: 'month', selectedYear, selectedMonth, previewOnly: true }
       });
@@ -1479,7 +1480,7 @@ Page({
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
 
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'exportAccountExcel',
         data: { shopName, tabType: 'month', selectedYear, selectedMonth }
       });
@@ -1932,7 +1933,7 @@ Page({
       for (const file of res.tempFiles) {
         try {
           const base64Data = fs.readFileSync(file.tempFilePath, 'base64');
-          const checkRes = await wx.cloud.callFunction({
+          const checkRes = await callFunctionWithTimeout({
             name: 'checkImageContent',
             data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
           });
@@ -2015,7 +2016,7 @@ Page({
         }
       }
 
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'updateAndRecalculateCascade',
         data: {
           docId: editForm._id,
@@ -2113,7 +2114,7 @@ Page({
         wx.showLoading({ title: '正在删除并重算...', mask: true });
 
         try {
-          const delRes = await wx.cloud.callFunction({
+          const delRes = await callFunctionWithTimeout({
             name: 'deleteMealReport',
             data: { id: editForm._id, reason: deleteReason }
           });
@@ -2168,7 +2169,7 @@ Page({
     wx.showLoading({ title: '正在级联更新...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'cascadeRecalculator',
         data: {
           action: 'update_and_recalculate',
@@ -2269,7 +2270,7 @@ Page({
           // 完全没有角色/门店/机构/锁定状态的校验，等于把"能否作废"这道关卡完全交给
           // 客户端 JS 判断（可被绕过）。现在改为调用云函数，由服务端重新核验一遍。
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const approvalRes = await wx.cloud.callFunction({
+          const approvalRes = await callFunctionWithTimeout({
             name: 'manageReportApproval',
             data: { action: 'void', docId: id }
           });
@@ -2403,7 +2404,7 @@ Page({
 
       wx.showLoading({ title: '正在级联校正后续账目...', mask: true });
 
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'cascadeRecalculator',
         data: {
           action: 'recalculate_after_delete',
@@ -2595,7 +2596,7 @@ Page({
           // .update()，服务端对"是否真的是店长/是否本店"没有任何校验。现在改为调用
           // manageReportApproval 云函数，由服务端重新核验角色、门店归属与当前状态。
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const approvalRes = await wx.cloud.callFunction({
+          const approvalRes = await callFunctionWithTimeout({
             name: 'manageReportApproval',
             data: { action: 'confirm', docId }
           });
@@ -2686,7 +2687,7 @@ Page({
           // .update()，服务端对"是否真的是财务/是否本店"没有任何校验——这是整套
           // RBAC 体系里最敏感的一步（封账后声称"任何人都无法再修改"），必须服务端把关。
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const approvalRes = await wx.cloud.callFunction({
+          const approvalRes = await callFunctionWithTimeout({
             name: 'manageReportApproval',
             data: { action: 'financeAudit', docId }
           });
@@ -2760,7 +2761,7 @@ Page({
         wx.showLoading({ title: '解封中...' });
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const approvalRes = await wx.cloud.callFunction({
+          const approvalRes = await callFunctionWithTimeout({
             name: 'manageReportApproval',
             data: { action: 'unlock', docId, reason: res.content.trim() }
           });
@@ -2872,7 +2873,7 @@ Page({
     const queryStoreId = isAllStores ? '' : (currentStoreId || '');
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getPhotoArchive',
         data: {
           storeId: queryStoreId,

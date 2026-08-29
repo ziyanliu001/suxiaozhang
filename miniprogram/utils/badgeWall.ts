@@ -1,6 +1,6 @@
 /**
  * 数字荣誉墙 / 勋章墙：共享的解锁规则与计算逻辑。
- * 被 pages/profile/profile.ts（核心荣誉横向滚动条）与 pages/journey/journey.ts
+ * 被 pages/profile/profile.ts（核心荣誉横向滚动条）与 subpackages/admin/pages/journey/journey.ts
  * （暖心历程页 3 列勋章墙）共同使用，只维护一份阈值定义与解锁判定，避免两处
  * 各画一套、后续调整门槛时漏改一处。
  */

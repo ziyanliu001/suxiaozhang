@@ -12,6 +12,7 @@ import { AuthService } from '../../utils/authService'
 import { drawStaticWxacodeFallback } from '../../utils/staticWxacode'
 import { HonorProgress, computeHonorProgress, lightenHex, drawMedalBadge } from '../../utils/honorLevels'
 import { getSafeSystemInfo } from '../../utils/util'
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 export type { HonorProgress }
 
@@ -499,7 +500,7 @@ Component({
         const cachedRole = AuthService.getCachedRoleInfo()
         const storeId = cachedRole && cachedRole.storeId
         if (!storeId) return ''
-        const qrRes = await wx.cloud.callFunction({
+        const qrRes = await callFunctionWithTimeout({
           name: 'getStoreQRCode',
           data: { storeId, storeName: cachedRole.storeName, purpose: 'certificate' }
         })

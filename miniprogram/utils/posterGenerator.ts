@@ -137,7 +137,7 @@ const FOOTER_LINE_HEIGHT = 20;
 const FOOTER_HEIGHT = 90;
 // 🆕 右下角「扫码验真」区域：真实小程序码已接入（见 drawVerifyQRArea，
 // index.ts resolveVerifyQrLocalPath 调 getStoreQRCode 云函数 purpose:'verify'
-// 生成指向 pages/public-verify/index 的码），生成/下载失败时才降级画占位框
+// 生成指向 subpackages/admin/pages/public-verify/index 的码），生成/下载失败时才降级画占位框
 const VERIFY_QR_SIZE = 120;
 const VERIFY_AREA_HEIGHT = 170;
 

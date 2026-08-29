@@ -1,4 +1,5 @@
 import { isCloudAvailable } from '../../utils/cloudGuard';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 // 🌸 阳善公开滚动墙：单店专属、全角色可见的公开只读展示组件。
 //
@@ -65,7 +66,7 @@ Component({
 
       this.setData({ loading: true });
       try {
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'getSunshineLedger',
           data: { storeId }
         });

@@ -1,8 +1,9 @@
-import { AuthService } from '../../utils/authService';
-import { getSelectedStore } from '../../utils/storeManager';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { recordRecentVisit } from '../../utils/recentPages';
-import { compressAndUploadImages } from '../../utils/imageCompress';
+import { AuthService } from '../../../../utils/authService';
+import { getSelectedStore } from '../../../../utils/storeManager';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { recordRecentVisit } from '../../../../utils/recentPages';
+import { compressAndUploadImages } from '../../../../utils/imageCompress';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -258,7 +259,7 @@ Page({
   },
 
   async onLoad() {
-    recordRecentVisit('/pages/store-profile/store-profile', '门店档案');
+    recordRecentVisit('/subpackages/admin/pages/store-profile/store-profile', '门店档案');
     this.calculateNavBarHeight();
 
     this._navGuard = createNavGuard({
@@ -344,7 +345,7 @@ Page({
 
     this.setData({ loading: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get', storeId: this.data.currentStoreId }
       });
@@ -415,7 +416,7 @@ Page({
   async fetchHealthDashboard() {
     if (!this.data.currentStoreId) return;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'statsSummary', storeId: this.data.currentStoreId }
       });
@@ -674,7 +675,7 @@ Page({
         payload.longitude = this.data.editForm.longitude;
       }
 
-      const res: any = await wx.cloud.callFunction({ name: 'manageStoreProfile', data: payload });
+      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload });
       const result = res.result;
 
       if (!result || !result.success) {
@@ -748,7 +749,7 @@ Page({
       const payload: any = { action: 'update', storeId: this.data.currentStoreId };
       PROFILE_FIELDS.forEach((f) => { payload[f] = parseInt(this.data.profileCountForm[f], 10) || 0; });
 
-      const res: any = await wx.cloud.callFunction({ name: 'manageStoreProfile', data: payload });
+      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload });
       const result = res.result;
 
       if (!result || !result.success) {
@@ -821,7 +822,7 @@ Page({
         foodSafetyPledgePhotos: this.data.qualificationForm.foodSafetyPledgePhotos
       };
 
-      const res: any = await wx.cloud.callFunction({ name: 'manageStoreProfile', data: payload });
+      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload });
       const result = res.result;
 
       if (!result || !result.success) {
@@ -883,7 +884,7 @@ Page({
     this.setData({ adminKeySaving: true });
     wx.showLoading({ title: '保存中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'update', storeId: this.data.currentStoreId, adminKey: newKey }
       });

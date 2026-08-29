@@ -1,3 +1,4 @@
+import { callFunctionWithTimeout } from './withTimeout';
 // 微信支付统一拉起工具：封装 wx.requestPayment 调用 + Mock 模式下的模拟支付确认，
 // 统一处理 loading 状态、防重复点击、用户取消与失败提示——业务页面只需要：
 //   1) 调用自己的业务云函数（内部已封装好调用 wxPayCore.createOrder 的定价/权限校验）拿到下单结果
@@ -73,7 +74,7 @@ function confirmMockPayment(outTradeNo: string): Promise<PayOutcome> {
           return;
         }
         wx.showLoading({ title: '模拟支付中...', mask: true });
-        wx.cloud.callFunction({
+        callFunctionWithTimeout({
           name: 'wxPayCore',
           data: { action: 'mockPaySuccess', outTradeNo }
         }).then((callRes) => {
@@ -125,7 +126,7 @@ export async function createOrderAndPay(
   wx.showLoading({ title: loadingTitle, mask: true });
   let orderResult: CreateOrderResponse;
   try {
-    const res = await wx.cloud.callFunction({ name: businessCloudFunctionName, data: businessPayload });
+    const res = await callFunctionWithTimeout({ name: businessCloudFunctionName, data: businessPayload });
     orderResult = res.result as CreateOrderResponse;
   } catch (err: any) {
     wx.hideLoading();

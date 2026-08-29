@@ -10,6 +10,7 @@
 //   记录的原始数据带回来重新修改），见 profile.ts onOpenDailyMenuModal / onTapMyVolunteerSubmissionItem
 import { getSelectedStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 type MealStatus = 'open' | 'closed';
 
@@ -160,7 +161,7 @@ Component({
         const d = String(yesterday.getDate()).padStart(2, '0');
         const endDate = `${y}-${m}-${d}`;
 
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'manageDailyMenu',
           data: { action: 'list', storeId, endDate, pageSize: 10 }
         });
@@ -245,7 +246,7 @@ Component({
 
       try {
         const activeStore = getSelectedStore();
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerSubmission',
           data: {
             action: 'submit',

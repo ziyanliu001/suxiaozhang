@@ -1,5 +1,6 @@
-import { AuthService } from '../../utils/authService';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
+import { AuthService } from '../../../../utils/authService';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 const PLAN_LABELS: Record<string, string> = {
   basic: '基础版',
@@ -302,7 +303,7 @@ Page({
   async loadOverview() {
     this.setData({ overviewLoading: true });
     try {
-      const res = await wx.cloud.callFunction({ name: 'getPlatformOverview' });
+      const res = await callFunctionWithTimeout({ name: 'getPlatformOverview' });
       const result = res.result as any;
       if (result && result.success) {
         this.setData({ overview: result });
@@ -329,7 +330,7 @@ Page({
     }
     this.setData({ tenantsLoading: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
         data: { action: 'listTenants', skip: 0 }
       });
@@ -360,7 +361,7 @@ Page({
     if (this.data.tenantsLoading || this.data.tenantsLoadingMore || !this.data.tenantsHasMore) return;
     this.setData({ tenantsLoadingMore: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
         data: { action: 'listTenants', skip: this.data.tenantsSkip }
       });
@@ -507,7 +508,7 @@ Page({
     this.setData({ generatingCodes: true });
     wx.showLoading({ title: '铸造中...', mask: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
         data: codeType === 'add_on'
           ? { action: 'generate', codeType: 'add_on', extraStores: parseInt(extraStores, 10), quantity: parseInt(quantity, 10) }
@@ -614,7 +615,7 @@ Page({
         this.setData({ revokingCodeId: codeid });
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cloudRes = await wx.cloud.callFunction({
+          const cloudRes = await callFunctionWithTimeout({
             name: 'activateTenantSubscription',
             data: { action: 'revoke', codeId: codeid, reason }
           });
@@ -645,7 +646,7 @@ Page({
     if (this.data.activationCodesLoading) return;
     this.setData({ activationCodesLoading: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
         data: { action: 'list', status: this.data.activationCodesFilter, skip: 0 }
       });
@@ -672,7 +673,7 @@ Page({
     if (this.data.activationCodesLoading || this.data.activationCodesLoadingMore || !this.data.activationCodesHasMore) return;
     this.setData({ activationCodesLoadingMore: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
         data: { action: 'list', status: this.data.activationCodesFilter, skip: this.data.activationCodesSkip }
       });
@@ -730,7 +731,7 @@ Page({
     this.setData({ creatingTenant: true });
     wx.showLoading({ title: '创建中...', mask: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
         data: { action: 'createTenant', name, contactName, contactPhone }
       });
@@ -840,7 +841,7 @@ Page({
     this.setData({ renewSubmitting: true });
     wx.showLoading({ title: '提交中...', mask: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
         data: {
           action: 'createOrRenewSubscription',
@@ -889,7 +890,7 @@ Page({
   async loadTenantStores(tenantId: string) {
     this.setData({ tenantStoresLoading: true, tenantStores: [] });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
         data: { action: 'getTenantDetail', tenantId }
       });
@@ -936,7 +937,7 @@ Page({
         this.setData({ storeActionInFlightId: storeid });
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cloudRes = await wx.cloud.callFunction({
+          const cloudRes = await callFunctionWithTimeout({
             name: 'manageTenantSubscription',
             data: { action: 'removeStoreFromTenant', storeId: storeid }
           });
@@ -985,7 +986,7 @@ Page({
         this.setData({ storeActionInFlightId: storeid });
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cloudRes = await wx.cloud.callFunction({
+          const cloudRes = await callFunctionWithTimeout({
             name: 'manageTenantSubscription',
             data: { action: 'assignStoreToTenant', storeId: storeid, targetTenantId }
           });
@@ -1031,7 +1032,7 @@ Page({
         this.setData({ storeActionInFlightId: storeid });
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cloudRes = await wx.cloud.callFunction({
+          const cloudRes = await callFunctionWithTimeout({
             name: 'manageTenantSubscription',
             data: { action: 'setStoreStatus', storeId: storeid, status: targetStatus }
           });
@@ -1073,7 +1074,7 @@ Page({
         this.setData({ storeActionInFlightId: storeid });
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cloudRes = await wx.cloud.callFunction({
+          const cloudRes = await callFunctionWithTimeout({
             name: 'manageTenantSubscription',
             data: { action: 'unbindStorePatriarch', storeId: storeid }
           });
@@ -1128,7 +1129,7 @@ Page({
 
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageTenantSubscription',
             data: { action: 'updateTenantStatus', tenantId: tenantid, status: nextStatus, reason }
           });
@@ -1167,7 +1168,7 @@ Page({
         this.setData({ terminatingTenantId: tenantid });
         wx.showLoading({ title: '处理中...', mask: true });
         try {
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageTenantSubscription',
             data: { action: 'terminateTenantSubscription', tenantId: tenantid }
           });

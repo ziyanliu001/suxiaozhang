@@ -18,6 +18,7 @@ import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeD
 import { md5 } from '../../utils/md5';
 import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, PreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
+import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {
   hasAgreedYuhuaGeneralDisclaimer,
@@ -701,7 +702,7 @@ Page({
     posterShowPeopleSignature: true,
     storePatriarchName: '',
     storeManagerName: '',
-    // 🆕 海报右下角"扫码验真"用的真实小程序码本地临时路径（指向 pages/public-verify/index，
+    // 🆕 海报右下角"扫码验真"用的真实小程序码本地临时路径（指向 subpackages/admin/pages/public-verify/index，
     // 携带 storeId+date）：每次生成/切版式共用同一份，生成失败时为空字符串，
     // 由 posterGenerator.ts 自行降级为占位框
     verifyQrLocalPath: '',
@@ -1578,7 +1579,7 @@ Page({
       // "嵩屿街道敬老中心助餐点"挂在雨花斋默认全国机构下）一起被带出来
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const orgTypeFilter = this.data.currentPlatformMode === 'yuhua' ? 'yuhuazhai' : (this.data.currentPlatformMode === 'general' ? 'general' : '');
-      const cloudRes = await wx.cloud.callFunction({
+      const cloudRes = await callFunctionWithTimeout({
         name: 'getStoreList',
         data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
       });
@@ -1649,7 +1650,7 @@ Page({
   async fetchStoreSponsor(storeId: string) {
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getStoreSponsor',
         data: { storeId }
       });
@@ -1678,7 +1679,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageDailyMenu',
         data: { action: 'getByDate', storeId, dateString: todayStr }
       });
@@ -1712,7 +1713,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageActivityLog',
         data: { action: 'list', storeId, startDate: todayStr, endDate: todayStr, page: 1, pageSize: 1 }
       });
@@ -1757,7 +1758,7 @@ Page({
 
     if (!storeId || !isCloudAvailable()) return;
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get', storeId }
       });
@@ -1834,7 +1835,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'statsSummary', storeId }
       });
@@ -1852,15 +1853,15 @@ Page({
   },
 
   onGotoDailyMenu() {
-    safeNavigateTo({ url: '/pages/daily-menu/daily-menu' });
+    safeNavigateTo({ url: '/subpackages/admin/pages/daily-menu/daily-menu' });
   },
 
   onGotoActivityLog() {
-    safeNavigateTo({ url: '/pages/activity-log/activity-log' });
+    safeNavigateTo({ url: '/subpackages/admin/pages/activity-log/activity-log' });
   },
 
   onGotoStoreManagement() {
-    safeNavigateTo({ url: '/pages/store-management/store-management' });
+    safeNavigateTo({ url: '/subpackages/admin/pages/store-management/store-management' });
   },
 
   // 🏢 空状态引导升级：机构其实已有门店（allStoresList.length > 0，只是当前
@@ -2001,7 +2002,7 @@ Page({
 
   _doRenew(storeId: string, dateStr: string) {
     if (!isCloudAvailable()) return;
-    wx.cloud.callFunction({
+    callFunctionWithTimeout({
       name: 'manageDraftLock',
       data: {
         action: 'RENEW',
@@ -2040,7 +2041,7 @@ Page({
     this._stopLockPolling();
     this._lockPollingTimer = setInterval(() => {
       if (!isCloudAvailable()) return;
-      wx.cloud.callFunction({
+      callFunctionWithTimeout({
         name: 'manageDraftLock',
         data: {
           action: 'QUERY',
@@ -2073,7 +2074,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageDraftLock',
         data: {
           action: 'ACQUIRE',
@@ -2127,7 +2128,7 @@ Page({
     if (!storeId || !reportDate) return;
 
     if (!isCloudAvailable()) return;
-    wx.cloud.callFunction({
+    callFunctionWithTimeout({
       name: 'manageDraftLock',
       data: {
         action: 'RELEASE',
@@ -2154,7 +2155,7 @@ Page({
         if (!res.confirm) return;
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await wx.cloud.callFunction({
+          const result = await callFunctionWithTimeout({
             name: 'manageDraftLock',
             data: {
               action: 'FORCE_RELEASE',
@@ -2569,13 +2570,6 @@ Page({
     const cachedRoleInfo = AuthService.getCachedRoleInfo();
     const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
 
-    const withTimeout = <T>(p: Promise<T>, ms: number, timeoutMsg: string): Promise<T> => {
-      return Promise.race([
-        p,
-        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(timeoutMsg)), ms))
-      ]);
-    };
-
     const cache = this._readStoreQrCache(storeId);
     if (cache && cache.tempFilePath) {
       try {
@@ -2605,8 +2599,8 @@ Page({
       const attemptStartedAt = Date.now();
       try {
         if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-        const qrRes: any = await withTimeout(
-          wx.cloud.callFunction({ name: 'getStoreQRCode', data: { storeId, storeName, tenantId } }),
+        const qrRes: any = await callFunctionWithTimeout(
+          { name: 'getStoreQRCode', data: { storeId, storeName, tenantId } },
           CALL_FUNCTION_TIMEOUT_MS,
           `getStoreQRCode 调用超时（>${CALL_FUNCTION_TIMEOUT_MS}ms）`
         );
@@ -3389,7 +3383,7 @@ Page({
     if (!storeId || NATIONAL_IDS.includes(storeId)) return;
     try {
       if (!isCloudAvailable()) return;
-      const res = await wx.cloud.callFunction({ name: 'manageStoreProfile', data: { action: 'get', storeId } });
+      const res = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: { action: 'get', storeId } });
       const result = res.result as any;
       if (result && result.success && result.data) {
         const d = result.data;
@@ -3443,7 +3437,7 @@ Page({
       // 🛡️ 数据硬卡口：storeId 固定取 currentStoreId（非超管在 wxml 里已被锁死无法更改；
       // 超管切店走 onTemplateStorePickerChange 会同步更新 currentStoreId）。云函数端
       // resolveWriteTarget 对店长/大家长还会再强制取其自身绑定 storeId，不信任任何客户端值
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'update', storeId, thankText, slogan1, slogan2, mpAccount }
       });
@@ -3748,7 +3742,7 @@ Page({
       // 🛡️ 提交改走 processRoleAudit 云函数（action:'apply'），不再由客户端直接写
       // status/role 字段——服务端统一决定是否自动通过（目前仅"义工 + 已有门店"
       // 免审即时生效），避免客户端能直接摆布这两个字段自我提权
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: {
           action: 'apply',
@@ -3960,7 +3954,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreInviteCode',
         data: { action: 'generate', storeId, targetRole: INVITE_ROLE_SERVER_MAP[role] }
       });
@@ -4135,7 +4129,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'listAuditQueue', tab, storeId: this.data.currentStoreId }
       });
@@ -4203,7 +4197,7 @@ Page({
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       // 🛡️ storeId/storeName 不再由客户端传入：云函数会重新拉取申请记录本身来确定
       // 目标门店（含"新建门店"申请的自动建店逻辑），避免信任客户端可篡改的字段
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { applyId: id, action }
       });
@@ -4273,7 +4267,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { applyId: id, action: 'reject', rejectReason }
       });
@@ -4319,7 +4313,7 @@ Page({
         wx.showLoading({ title: '正在更新角色...', mask: true });
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await wx.cloud.callFunction({
+          const result = await callFunctionWithTimeout({
             name: 'manageVolunteerBinding',
             data: { targetId: id, action: 'changeRole', newRole: targetRole }
           });
@@ -4363,7 +4357,7 @@ Page({
         wx.showLoading({ title: '正在解除绑定...', mask: true });
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await wx.cloud.callFunction({
+          const result = await callFunctionWithTimeout({
             name: 'manageVolunteerBinding',
             data: { targetId: id, action: 'unbind' }
           });
@@ -5218,7 +5212,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageExpenseTemplate',
         data: { action: 'list', storeId }
       });
@@ -5280,7 +5274,7 @@ Page({
   // 不该让用户感知到任何等待或干扰主流程（记账）本身
   bumpExpenseTemplateUsage(id: string) {
     if (!id || !isCloudAvailable()) return;
-    wx.cloud.callFunction({
+    callFunctionWithTimeout({
       name: 'manageExpenseTemplate',
       data: { action: 'incrementUsage', id }
     }).catch((err) => console.warn('[bumpExpenseTemplateUsage] 计数失败（不影响记账）:', err));
@@ -5370,7 +5364,7 @@ Page({
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       for (const name of presets) {
         try {
-          const res = await wx.cloud.callFunction({
+          const res = await callFunctionWithTimeout({
             name: 'manageExpenseTemplate',
             data: { action: 'create', storeId, category, itemName: name }
           });
@@ -5412,7 +5406,7 @@ Page({
     this.setData({ expenseTemplateSaving: true });
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageExpenseTemplate',
         data: {
           action: 'create',
@@ -5448,7 +5442,7 @@ Page({
         if (!res.confirm) return;
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageExpenseTemplate',
             data: { action: 'delete', id }
           });
@@ -5487,7 +5481,7 @@ Page({
 
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
-          const cbRes = await wx.cloud.callFunction({
+          const cbRes = await callFunctionWithTimeout({
             name: 'manageExpenseTemplate',
             data: { action: 'update', id, itemName: newName }
           });
@@ -5614,7 +5608,7 @@ Page({
         if (!canCheckImage) break;
         try {
           const base64Data = fs.readFileSync(file.tempFilePath, 'base64');
-          const checkRes = await wx.cloud.callFunction({
+          const checkRes = await callFunctionWithTimeout({
             name: 'checkImageContent',
             data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
           });
@@ -6163,7 +6157,7 @@ Page({
         try {
           const tempFilePath = chooseRes.tempFiles[i].tempFilePath;
           const base64Data = fs.readFileSync(tempFilePath, 'base64');
-          const checkRes = await wx.cloud.callFunction({
+          const checkRes = await callFunctionWithTimeout({
             name: 'checkImageContent',
             data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
           });
@@ -6201,7 +6195,7 @@ Page({
           });
           uploadedFileIds.push(uploadRes.fileID);
 
-          const ocrRes = await wx.cloud.callFunction({
+          const ocrRes = await callFunctionWithTimeout({
             name: 'ocrExpenseReceipt',
             data: { fileID: uploadRes.fileID }
           });
@@ -6358,7 +6352,7 @@ Page({
       try {
         // 与小票拍照识别同一套合规校验：上传前先过内容安全检测，不合规直接拦截，不进入 OCR
         const base64Data = fs.readFileSync(tempFilePath, 'base64');
-        const checkRes = await wx.cloud.callFunction({
+        const checkRes = await callFunctionWithTimeout({
           name: 'checkImageContent',
           data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
         });
@@ -6382,7 +6376,7 @@ Page({
         const uploadRes = await wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath });
         uploadedFileId = uploadRes.fileID;
 
-        const ocrRes = await wx.cloud.callFunction({
+        const ocrRes = await callFunctionWithTimeout({
           name: 'ocrDonationList',
           data: { fileID: uploadedFileId }
         });
@@ -7174,7 +7168,7 @@ Page({
 
     if (hasRecipe) {
       try {
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'manageDailyMenu',
           data: { action: 'create', storeId, dateString, menuText: '', images: recipeImagesForSubmit }
         });
@@ -7218,7 +7212,7 @@ Page({
               images: activityImagesForSubmit
             };
 
-        const res = await wx.cloud.callFunction({
+        const res = await callFunctionWithTimeout({
           name: 'manageActivityLog',
           data: activityPayload
         });
@@ -7394,7 +7388,7 @@ Page({
       }
 
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'recalculateCascadeBalances',
         data: {
           shopName,
@@ -7427,7 +7421,7 @@ Page({
       }
 
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'recalculateCascadeBalances',
         data: {
           shopName,
@@ -7698,7 +7692,7 @@ Page({
     if (!isCloudAvailable()) return;
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'bindReferralStore',
         data: {
           action: 'resolve',
@@ -7738,7 +7732,7 @@ Page({
   async confirmInviteBind(inviteContext: { referrerUserId: string; targetStoreId: string }) {
     const app = getApp() as any;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'bindReferralStore',
         data: {
           action: 'bind',
@@ -7781,7 +7775,7 @@ Page({
     if (!isCloudAvailable()) return;
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreInviteCode',
         data: { action: 'peek', code }
       });
@@ -7823,7 +7817,7 @@ Page({
   async confirmInviteCodeRedeem(code: string) {
     const app = getApp() as any;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreInviteCode',
         data: { action: 'redeem', code }
       });
@@ -8081,7 +8075,7 @@ Page({
       // 现在要求显式声明才会跨机构查询，不再仅凭传了 orgType 就自动判定，见该
       // 云函数注释）——这里调用者可能已经归属其他机构（如社区食堂义工点了雨花
       // 专区卡片想额外找一家雨花斋加入），必须显式声明才能跨出自己的 tenantId
-      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { orgType: orgTypeFilter, crossTenant: true } });
+      const res = await callFunctionWithTimeout({ name: 'getStoreList', data: { orgType: orgTypeFilter, crossTenant: true } });
       const result = res.result as any;
       // 🐛 与 fetchAllStoresList 同一处防护：这里同样直接 setData 进
       // allStoresList，同一个 `<picker range="{{allStoresList}}">` 绑定，
@@ -8134,7 +8128,7 @@ Page({
     wx.showLoading({ title: '加载中...', mask: true });
     let spaces: Array<{ tenantId: string; tenantName: string; role: string }> = [];
     try {
-      const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
+      const res = await callFunctionWithTimeout({ name: 'getMyProductionSpaces', data: {} });
       const result = res.result as any;
       spaces = (result && result.success && result.spaces) || [];
     } catch (err) {
@@ -8640,7 +8634,7 @@ Page({
   async fetchStorePeopleNames() {
     try {
       if (!isCloudAvailable()) return;
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get', storeId: this.data.currentStoreId }
       });
@@ -8974,14 +8968,29 @@ Page({
       const storeId = this.data.currentStoreId || '';
       const storeName = this.data.currentStoreName || this.data.shopName || '';
 
-      const qrRes = await wx.cloud.callFunction({
+      // 🐛 根因修复：此前不传 purpose，落进 getStoreQRCode 的默认"门店推广邀请码"
+      // 分支（仅 store_manager/super_admin 可生成）——这枚二维码是打卡成功后
+      // 餐报海报底部"扫码查看透明账本"用途，义工本人就是最主要的查看者，必须
+      // 传 purpose:'checkin_share' 命中该云函数里与证书码同档的低风险豁免，
+      // 否则普通义工账号调用必然返回"无权限生成二维码"，点多少次重试都没用
+      const requestData = { storeId, storeName, purpose: 'checkin_share' };
+      console.log('[PosterQR] 发起 getStoreQRCode 调用，入参=', requestData,
+        'currentUserRole=', this.data.currentUserRole);
+      const qrRes = await callFunctionWithTimeout({
         name: 'getStoreQRCode',
-        data: { storeId, storeName }
+        data: requestData
       });
       const qrResult = qrRes.result as any;
+      console.log('[PosterQR] getStoreQRCode 返回=', qrResult);
 
       if (!qrResult || !qrResult.success || !qrResult.fileID) {
-        throw new Error((qrResult && qrResult.errMsg) || '二维码生成失败');
+        // 🐛 字段名修复：getStoreQRCode 云函数失败时返回的是 `{success:false,
+        // error:'...'}`（字段名是 error，不是 errMsg）——此前这里一直读
+        // qrResult.errMsg，永远是 undefined，导致服务端真正的失败原因（如
+        // "无权限生成二维码"）从没能透传到这里的 Error/日志里，只会看到一个
+        // 毫无信息量的兜底文案"二维码生成失败"，没法从控制台判断真实根因
+        console.error('[PosterQR] 生成失败原因:', qrResult && qrResult.error, '完整返回:', qrResult);
+        throw new Error((qrResult && qrResult.error) || '二维码生成失败');
       }
 
       // 必须等云存储文件真正下载到本地 wxfile:// 临时路径后，再切换为 ready 触发 <image> 渲染，
@@ -8993,12 +9002,12 @@ Page({
 
       this.setData({ qrCodeUrl: downRes.tempFilePath, qrCodeState: 'ready' });
     } catch (err) {
-      console.error('[generateQrCode] 二维码生成/加载失败:', err);
+      console.error('[PosterQR] 生成失败原因:', err);
       this.setData({ qrCodeUrl: '', qrCodeState: 'failed' });
     }
   },
 
-  // 🆕 海报「扫码验真」区域的真实二维码：指向 pages/public-verify/index，携带
+  // 🆕 海报「扫码验真」区域的真实二维码：指向 subpackages/admin/pages/public-verify/index，携带
   // 当前门店 storeId + 报告日期，与首页推广码（generateQrCode，指向 pages/index/index）
   // 是两个不同用途的码，各自独立生成/下载，互不影响。
   //
@@ -9029,7 +9038,7 @@ Page({
         // getStoreQRCode 的 scene 固定编码为 storeId+purpose+date，同一份码在
         // 云存储里是可复用的永久 fileID（cloud://），只有本地临时下载失败时才
         // 值得重试；云函数调用本身失败（如首次尚未生成过）仍走完整流程
-        const qrRes = await wx.cloud.callFunction({
+        const qrRes = await callFunctionWithTimeout({
           name: 'getStoreQRCode',
           data: { storeId, storeName, purpose: 'verify', date: dateString }
         });
@@ -9177,7 +9186,7 @@ Page({
     }
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'getSunshineLedger',
         data: { storeId, yearMonth }
       });
@@ -9311,7 +9320,7 @@ Page({
   async checkContentSafety(text: string): Promise<boolean> {
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'msgSecCheck',
         data: { text: text }
       });
@@ -9449,7 +9458,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: { action: 'list', storeId }
       });
@@ -9627,7 +9636,7 @@ Page({
     }
     this.setData({ noticeTemplatesLoading: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: { action: 'getTemplates', storeId: this.data.currentStoreId }
       });
@@ -9699,7 +9708,7 @@ Page({
     wx.showLoading({ title: '保存模板中...', mask: true });
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: {
           action: 'createTemplate',
@@ -9854,7 +9863,7 @@ Page({
     wx.showLoading({ title: '保存中...', mask: true });
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: {
           action: noticeEditId ? 'update' : 'create',
@@ -10024,7 +10033,7 @@ Page({
       if (this.isNavigating) return;
       this.isNavigating = true;
       safeNavigateTo({
-        url: '/pages/activity-log/activity-log',
+        url: '/subpackages/admin/pages/activity-log/activity-log',
         fail: () => { this.isNavigating = false; }
       });
     };
@@ -10055,7 +10064,7 @@ Page({
     if (!force && this._checkInHoursCachedDate === dateString) return;
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerCheckIn',
         data: { action: 'queryStoreHours', storeId: currentStoreId, dateString }
       });
@@ -10512,7 +10521,7 @@ Page({
     let cloudLogId = '';
     try {
       if (isCloudAvailable()) {
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerCheckIn',
           data: {
             action: 'checkin',
@@ -10657,7 +10666,7 @@ Page({
         // 与 onConfirmShiftCheckIn 的云端失败降级策略对称——本地记录该字段为空时直接跳过
         if (cloudLogId) {
           try {
-            const cloudRes: any = await wx.cloud.callFunction({
+            const cloudRes: any = await callFunctionWithTimeout({
               name: 'manageVolunteerCheckIn',
               data: { action: 'revoke', logId: cloudLogId }
             });
@@ -10791,7 +10800,7 @@ Page({
     // 延迟 200ms 等弹窗关闭动画完成再跳转
     setTimeout(() => {
       safeNavigateTo({
-        url: '/pages/journey/journey'
+        url: '/subpackages/admin/pages/journey/journey'
       });
     }, 200);
   },
@@ -10923,7 +10932,7 @@ Page({
     this.setData({ financeLockStatusLoading: true, lockStatusText: '查询区间状态中...' });
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'manageFinanceLock',
         data: { action: 'checkRangeStatus', storeId, startDate, endDate }
       });
@@ -10983,7 +10992,7 @@ Page({
         wx.showLoading({ title: '安全封账中...', mask: true });
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await wx.cloud.callFunction({
+          const result = await callFunctionWithTimeout({
             name: 'manageFinanceLock',
             data: { action: 'lockRange', storeId, startDate, endDate }
           });
@@ -11042,7 +11051,7 @@ Page({
         wx.showLoading({ title: '解封处理中...', mask: true });
         try {
           if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await wx.cloud.callFunction({
+          const result = await callFunctionWithTimeout({
             name: 'manageFinanceLock',
             data: { action: 'unlockRange', storeId, startDate, endDate }
           });
@@ -11142,7 +11151,7 @@ Page({
     }
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'getRiskAlerts',
         data: { storeId }
       });

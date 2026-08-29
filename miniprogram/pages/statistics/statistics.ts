@@ -12,6 +12,7 @@ import { isVirtualStoreName, resolveHonorCardStoreName } from '../../utils/store
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
 import { reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致
 // shortName 用于动态拼装大屏标题；label 是筛选胶囊展示文案
@@ -1314,7 +1315,7 @@ Page({
     try {
       const now = new Date();
       const targetYearMonth = yearMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'getSunshineLedger',
         data: { storeId, yearMonth: targetYearMonth }
       });
@@ -1377,7 +1378,7 @@ Page({
   async loadPatriarchResourceStats() {
     this.setData({ patriarchStatsLoading: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'getPatriarchDashboard',
         data: {}
       });
@@ -1426,7 +1427,7 @@ Page({
 
       let diningCount = 0;
       try {
-        const statsRes: any = await wx.cloud.callFunction({ name: 'getVolunteerHonorStats' });
+        const statsRes: any = await callFunctionWithTimeout({ name: 'getVolunteerHonorStats' });
         const statsResult = statsRes.result;
         if (statsResult && statsResult.success) {
           diningCount = statsResult.diningCount || 0;
@@ -1506,7 +1507,7 @@ Page({
       let qrLocalPath = '';
       if (storeId) {
         try {
-          const qrRes: any = await wx.cloud.callFunction({
+          const qrRes: any = await callFunctionWithTimeout({
             name: 'getStoreQRCode',
             data: { storeId, storeName, purpose: 'certificate' }
           });
@@ -1593,7 +1594,7 @@ Page({
     }
     this.setData({ storeProfileLoading: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get', storeName: this.data.shopName }
       });
@@ -1706,7 +1707,7 @@ Page({
       this.setData({ dashboardTitle });
       console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'getNationalDashboard',
         data: callParams
       });
@@ -1837,7 +1838,7 @@ Page({
   async ensureStoreDirectory(): Promise<boolean> {
     if (this.data.storeDirectory.length > 0) return true;
     try {
-      const res: any = await wx.cloud.callFunction({ name: 'getStoreList', data: {} });
+      const res: any = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
       const result = res.result;
       if (!result || !result.success || !Array.isArray(result.list)) {
         wx.showToast({ title: '门店目录加载失败，请重试', icon: 'none' });
@@ -2098,7 +2099,7 @@ Page({
   // 大家长免费版引导：静默拉取全机构门店总数（不含财务数据），展示在升级引导 Modal 中
   async _fetchNationalStoreCount() {
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getNationalDashboard',
         data: { action: 'storeCount' }
       }) as any;
@@ -2697,7 +2698,7 @@ Page({
 
     this.setData({ statisticsFetchLoading: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getStatisticsData',
         data: statisticsCallData
       });
@@ -3336,7 +3337,7 @@ Page({
   async fetchLatestMaterialStockStatus(storeId: string) {
     if (!this.data.statistics) return;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'statsSummary', storeId }
       });
@@ -4206,7 +4207,7 @@ Page({
     wx.showLoading({ title: '正在核对数据...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'exportAccountExcel',
         data: { ...this.buildExportCallData(), previewOnly: true }
       });
@@ -4253,7 +4254,7 @@ Page({
 
     try {
       // 优先使用云函数生成带样式的 xlsx
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'exportAccountExcel',
         data: this.buildExportCallData()
       });
@@ -4425,7 +4426,7 @@ Page({
 
   // 🔢 义工与用餐服务数据看板·数字滚动动画：ease-out 缓动，单个定时器同时驱动
   // 看板内全部数值（而非每个格子各开一个 setInterval），减少 setData 调用次数。
-  // 参考 pages/journey/journey.ts 的 animateCountUp 同一套 ease-out 三次方缓动
+  // 参考 subpackages/admin/pages/journey/journey.ts 的 animateCountUp 同一套 ease-out 三次方缓动
   animateCareCountUp(targets: Record<string, number>, duration: number = 700) {
     if (this._careCountUpTimer) {
       clearInterval(this._careCountUpTimer);
@@ -5402,7 +5403,7 @@ Page({
 
     try {
       if (targetId) {
-        const result = await wx.cloud.callFunction({
+        const result = await callFunctionWithTimeout({
           name: 'updateReportLog',
           data: {
             recordId: targetId,
@@ -5563,7 +5564,7 @@ Page({
             wx.showLoading({ title: '更新中...', mask: true });
             try {
               if (item._id) {
-                const result = await wx.cloud.callFunction({
+                const result = await callFunctionWithTimeout({
                   name: 'updateReportLog',
                   data: {
                     recordId: item._id,
@@ -5644,7 +5645,7 @@ Page({
           
           if (recordId) {
             try {
-              const result = await wx.cloud.callFunction({
+              const result = await callFunctionWithTimeout({
                 name: 'updateReportLog',
                 data: {
                   recordId,

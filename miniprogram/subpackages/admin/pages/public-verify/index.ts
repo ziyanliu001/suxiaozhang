@@ -1,4 +1,5 @@
-import { getSafeSystemInfo } from '../../utils/util';
+import { getSafeSystemInfo } from '../../../../utils/util';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 // 🛡️ 100% 公开只读页面：扫码进来的是社会公众/捐赠人，绝不能依赖任何登录态或
 // user_roles 缓存——本文件不导入 AuthService，也不调用任何需要登录态的接口，
@@ -159,7 +160,7 @@ Page({
     this.setData({ loading: true, errorMsg: '' });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'publicVerifyReport',
         data: { storeId, date }
       });

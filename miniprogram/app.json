@@ -7,17 +7,8 @@
     "pages/logs/logs",
     "pages/statistics/statistics",
     "pages/help/help",
-    "pages/journey/journey",
-    "pages/platform-admin/platform-admin",
-    "pages/daily-menu/daily-menu",
-    "pages/activity-log/activity-log",
-    "pages/store-management/store-management",
-    "pages/store-profile/store-profile",
     "pages/draft-box/draft-box",
-    "pages/settings/settings",
-    "pages/public-verify/index",
-    "pages/settlement-summary/settlement-summary",
-    "pages/test/test"
+    "pages/settings/settings"
   ],
   "subpackages": [
     {
@@ -28,8 +19,32 @@
         "pages/storefront/storefront",
         "pages/workspace-join/workspace-join"
       ]
+    },
+    {
+      "name": "admin",
+      "root": "subpackages/admin",
+      "pages": [
+        "pages/journey/journey",
+        "pages/platform-admin/platform-admin",
+        "pages/daily-menu/daily-menu",
+        "pages/activity-log/activity-log",
+        "pages/store-management/store-management",
+        "pages/store-profile/store-profile",
+        "pages/public-verify/index",
+        "pages/settlement-summary/settlement-summary"
+      ]
     }
   ],
+  "preloadRule": {
+    "pages/index/index": {
+      "network": "all",
+      "packages": ["admin"]
+    },
+    "pages/profile/profile": {
+      "network": "all",
+      "packages": ["admin"]
+    }
+  },
   "window": {
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"

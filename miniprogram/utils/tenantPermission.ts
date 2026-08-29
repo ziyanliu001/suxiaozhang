@@ -16,6 +16,7 @@
 // 唯一的把关点。
 import { isCloudAvailable } from './cloudGuard';
 import { AuthService } from './authService';
+import { callFunctionWithTimeout } from './withTimeout';
 
 export const FEATURE_KEYS = {
   MULTI_STORE_DASHBOARD: 'multiStoreDashboard',
@@ -142,7 +143,7 @@ export async function checkTenantPermission(
   }
 
   try {
-    const res = await wx.cloud.callFunction({ name: 'checkTenantPermission', data: { featureKey } });
+    const res = await callFunctionWithTimeout({ name: 'checkTenantPermission', data: { featureKey } });
     const r = res.result as any;
     if (!r || !r.success) {
       console.warn('[tenantPermission] checkTenantPermission 返回失败，保守放行:', r);

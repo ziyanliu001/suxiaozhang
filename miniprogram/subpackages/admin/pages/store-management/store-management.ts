@@ -1,10 +1,11 @@
-import { AuthService } from '../../utils/authService';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { setSelectedStore, clearAllStoresListCache } from '../../utils/storeManager';
-import { setGenCodeHandoff } from '../../utils/genCodeHandoff';
-import { isCloudAvailable } from '../../utils/cloudGuard';
-import { drawStoreInvitationPoster, SponsorInfo } from '../../utils/drawStorePoster';
-import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
+import { AuthService } from '../../../../utils/authService';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { setSelectedStore, clearAllStoresListCache } from '../../../../utils/storeManager';
+import { setGenCodeHandoff } from '../../../../utils/genCodeHandoff';
+import { isCloudAvailable } from '../../../../utils/cloudGuard';
+import { drawStoreInvitationPoster, SponsorInfo } from '../../../../utils/drawStorePoster';
+import { requestOpenSubscription } from '../../../../utils/subscriptionHandoff';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 Page({
   _navGuard: null as NavGuardInstance | null,
@@ -135,7 +136,7 @@ Page({
     try {
       // includeInactive:true —— 门店管理页需要连"已停用"门店一起看，才能重新启用；
       // 首页 store-picker / 邀请码弹窗走的是默认调用（不传），只看得到 active 门店
-      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { includeInactive: true } });
+      const res = await callFunctionWithTimeout({ name: 'getStoreList', data: { includeInactive: true } });
       const result = res.result as any;
       if (result && result.success) {
         this.setData({ list: result.list || [] });
@@ -164,7 +165,7 @@ Page({
     const riskResults = await Promise.all(
       activeStores.map(async (store: any) => {
         try {
-          const res = await wx.cloud.callFunction({ name: 'getRiskAlerts', data: { storeId: store.storeId } });
+          const res = await callFunctionWithTimeout({ name: 'getRiskAlerts', data: { storeId: store.storeId } });
           const result = res.result as any;
           if (!result || !result.success) return null;
 
@@ -258,7 +259,7 @@ Page({
     wx.showLoading({ title: '正在授权...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { applyId: id, action: 'approve' }
       });
@@ -346,7 +347,7 @@ Page({
 
       let qrCodeLocalPath = '';
       try {
-        const qrRes = await wx.cloud.callFunction({
+        const qrRes = await callFunctionWithTimeout({
           name: 'getStoreQRCode',
           data: { storeId: storeid, storeName: storename }
         });
@@ -363,7 +364,7 @@ Page({
       // drawStoreInvitationPoster 内部本就有"无 sponsorInfo"的默认文案分支
       let sponsorInfo: SponsorInfo | null = null;
       try {
-        const sponsorRes = await wx.cloud.callFunction({ name: 'getStoreSponsor', data: { storeId: storeid } });
+        const sponsorRes = await callFunctionWithTimeout({ name: 'getStoreSponsor', data: { storeId: storeid } });
         const sponsorResult = sponsorRes.result as any;
         if (sponsorResult && sponsorResult.success && sponsorResult.data) {
           sponsorInfo = sponsorResult.data;
@@ -491,7 +492,7 @@ Page({
     });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: { action: 'list', storeId: scopeStoreId }
       });
@@ -548,7 +549,7 @@ Page({
     wx.showLoading({ title: '保存中...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: {
           action: id ? 'update' : 'create',
@@ -605,7 +606,7 @@ Page({
     wx.showLoading({ title: '处理中...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'updateStoreStatus',
         data: { storeId, status: targetStatus }
       });
@@ -680,7 +681,7 @@ Page({
     wx.showLoading({ title: '提交中...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'updateStoreName',
         data: { storeId, newStoreName: trimmed }
       });
@@ -763,7 +764,7 @@ Page({
     wx.showLoading({ title: '创建中...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'createStore',
         data: {
           storeName: trimmedName,
@@ -787,7 +788,7 @@ Page({
         const trimmedAnnouncement = (announcement || '').trim();
         if (trimmedAnnouncement) {
           try {
-            await wx.cloud.callFunction({
+            await callFunctionWithTimeout({
               name: 'manageNotice',
               data: {
                 action: 'create',

@@ -6,6 +6,7 @@ import { formatRelativeTime } from '../../utils/dateUtils';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeDisplay';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 const ANNOUNCE_PAGE_SIZE = 15;
 
@@ -140,7 +141,7 @@ Page({
     if (storeIds.length === 0 || !isCloudAvailable()) return {};
 
     try {
-      const res = await wx.cloud.callFunction({ name: 'getStoreList', data: { storeIds } });
+      const res = await callFunctionWithTimeout({ name: 'getStoreList', data: { storeIds } });
       const result = res.result as any;
       if (!result || !result.success) return {};
 
@@ -226,7 +227,7 @@ Page({
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
 
       const storeId = wx.getStorageSync('current_store_id') || '';
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: { action: 'listPaged', storeId, page: nextPage, pageSize: ANNOUNCE_PAGE_SIZE }
       });
@@ -321,7 +322,7 @@ Page({
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
 
-      const res = await wx.cloud.callFunction({ name: 'manageNotice', data: { action: 'markAllRead' } });
+      const res = await callFunctionWithTimeout({ name: 'manageNotice', data: { action: 'markAllRead' } });
       const result = res.result as any;
       if (!result || !result.success) {
         throw new Error((result && result.error) || '标记已读失败');

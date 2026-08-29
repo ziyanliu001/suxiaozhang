@@ -11,6 +11,7 @@
 // ledgerIngestionAdapter/index.js 头部注释）。
 import { getSelectedStore } from '../../utils/storeManager';
 import { elderCheckinManualAdapter } from '../../utils/inputPipeline';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 interface ElderCandidate {
   elder_id: string;
@@ -94,7 +95,7 @@ Component({
       this.setData({ searching: true });
       try {
         const activeStore = getSelectedStore();
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'ledgerIngestionAdapter',
           data: {
             action: 'searchElder',
@@ -173,7 +174,7 @@ Component({
           serviceType,
           hours
         });
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'ledgerIngestionAdapter',
           data: {
             action: 'checkin',

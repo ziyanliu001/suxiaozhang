@@ -1,4 +1,5 @@
 import { isCloudAvailable } from '../../utils/cloudGuard';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 // 🌸 近7日阳善榜：门店卡片专属、公开只读的短窗口滚动展示组件。
 //
@@ -52,7 +53,7 @@ Component({
 
       this.setData({ loading: true });
       try {
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'getSunshineLedger',
           data: { storeId }
         });

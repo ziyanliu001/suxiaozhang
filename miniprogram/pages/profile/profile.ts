@@ -20,6 +20,7 @@ import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWal
 import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolveTier, PERMISSION_TIER } from '../../utils/tenantPermission';
 import { setTabBarHidden } from '../../utils/tabBarVisibility';
 import { payForOrder, CreateOrderResponse } from '../../utils/wxPayCore';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -117,7 +118,7 @@ function normalizeStoreStats(raw: any) {
 // 🏛️ 家长管理 / 资源兜底：门店人员画像 7 项字段名，与 manageStoreProfile 云函数一致——
 // 迁移自已废弃的 pages/patriarch-dashboard，用于展示 pendingProfileUpdate 里
 // "店长本次提交了什么"的明细列表
-// 🔐 套餐档位文案：与 pages/platform-admin/platform-admin.ts 的 PLAN_LABELS
+// 🔐 套餐档位文案：与 subpackages/admin/pages/platform-admin/platform-admin.ts 的 PLAN_LABELS
 // 保持同一套措辞，两处独立部署（云函数/页面各自没有共享模块机制），文案硬编码
 // 一致即可，不需要额外抽取共享常量
 const PLAN_LABELS: Record<string, string> = {
@@ -1348,7 +1349,7 @@ Page({
   async fetchStoreOrgType() {
     if (!isCloudAvailable()) return;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get' }
       });
@@ -1377,7 +1378,7 @@ Page({
     const storeId = activeStore.storeId || '';
     if (storeId === 'national_overview' || storeId === 'ALL_STORES') return;
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getPhotoArchive',
         data: { storeId, photoType: 'all', limit: 1 }
       });
@@ -1475,7 +1476,7 @@ Page({
 
     this.setData({ onboardingCreating: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'createTenant',
         data: { orgName, storeName, realName, phone, orgType }
       }) as any;
@@ -1525,7 +1526,7 @@ Page({
     this.setData({ 'patriarchData.currentStoreId': storeId, 'patriarchData.loading': true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'getPatriarchDashboard',
         data: { storeId: this.data.patriarchData.currentStoreId }
       });
@@ -1609,8 +1610,8 @@ Page({
     this.setData({ 'financeAuditData.loading': true });
     try {
       const [dashboardRes, riskRes] = await Promise.all([
-        wx.cloud.callFunction({ name: 'getPatriarchDashboard', data: { storeId } }),
-        wx.cloud.callFunction({ name: 'getRiskAlerts', data: { storeId } })
+        callFunctionWithTimeout({ name: 'getPatriarchDashboard', data: { storeId } }),
+        callFunctionWithTimeout({ name: 'getRiskAlerts', data: { storeId } })
       ]);
 
       const dashboardResult: any = dashboardRes.result;
@@ -1655,7 +1656,7 @@ Page({
 
     const fetchTodayCounts = (async () => {
       try {
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerSubmission',
           data: { action: 'statsSummary' }
         });
@@ -1713,7 +1714,7 @@ Page({
 
     this.setData({ storeLoveWallLoading: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'getSunshineLedger',
         data: { storeId }
       });
@@ -1768,7 +1769,7 @@ Page({
       const storeId = await this.resolveManageStoreId();
       if (!storeId) return;
 
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'count', storeId }
       });
@@ -1794,7 +1795,7 @@ Page({
 
     try {
       const storeId = await this.resolveManageStoreId();
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'list', storeId }
       });
@@ -1860,7 +1861,7 @@ Page({
     this.setData({ [`feedbackAdminList[${idx}].handling`]: true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'markHandled', feedbackId }
       });
@@ -1917,7 +1918,7 @@ Page({
     this.setData({ feedbackReplySubmitting: true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'reply', feedbackId, replyContent }
       });
@@ -1977,7 +1978,7 @@ Page({
     this.setData({ 'patriarchData.voidActionInFlight': true });
     wx.showLoading({ title: '处理中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageReportApproval',
         data: { action: cloudAction, docId: id }
       });
@@ -2005,7 +2006,7 @@ Page({
     this.setData({ 'patriarchData.profileActionInFlight': true });
     wx.showLoading({ title: '处理中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: cloudAction, storeId: this.data.patriarchData.currentStoreId }
       });
@@ -2559,7 +2560,7 @@ Page({
     this._leaderboardFetchTimer = setTimeout(async () => {
       try {
         if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerCheckIn',
           data: { action: 'leaderboard', range: targetRange, storeId }
         });
@@ -2727,7 +2728,7 @@ Page({
 
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'releaseSelf', targetRole: this.data.releaseTargetRole }
       });
@@ -2793,7 +2794,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/journey/journey',
+      url: '/subpackages/admin/pages/journey/journey',
       fail: () => {
         this.isNavigating = false;
       }
@@ -2904,7 +2905,7 @@ Page({
     try {
       const storeId = qrStoreId;
       if (storeId) {
-        const qrRes = await wx.cloud.callFunction({
+        const qrRes = await callFunctionWithTimeout({
           name: 'getStoreQRCode',
           data: { storeId, storeName: currentStoreName, purpose: 'certificate' }
         });
@@ -3120,7 +3121,7 @@ Page({
     if (!confirmed) return;
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'deleteMine', id: item._id }
       });
@@ -3178,7 +3179,7 @@ Page({
     if (!confirmed) return;
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'revokeMine', id: item._id }
       });
@@ -3209,7 +3210,7 @@ Page({
     }
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'myList' }
       });
@@ -3262,7 +3263,7 @@ Page({
       const storeId = await this.resolveManageStoreId();
       if (!storeId) return;
 
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'listPending', storeId }
       });
@@ -3311,7 +3312,7 @@ Page({
     this.setData({ noticeManagementLoading: true });
     try {
       const storeId = await this.resolveManageStoreId();
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: { action: 'list', storeId }
       });
@@ -3398,7 +3399,7 @@ Page({
     try {
       const storeId = await this.resolveManageStoreId();
       const id = this.data.noticeMgmtEditId;
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: {
           action: id ? 'update' : 'create',
@@ -3459,7 +3460,7 @@ Page({
     this.setData({ noticeMgmtDeletingId: id });
     wx.showLoading({ title: '删除中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: { action: 'delete', id }
       });
@@ -3487,7 +3488,7 @@ Page({
     this.setData({ noticeMgmtDeletingId: id });
     try {
       const storeId = await this.resolveManageStoreId();
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageNotice',
         data: {
           action: 'update',
@@ -3527,7 +3528,7 @@ Page({
       // 两边日志一起看能直接定位到底哪个环节的 storeId 对不上
       const storeId = this.data.currentInspectStoreId || '';
       console.log('[fetchPendingApplications] 拉取待审批参数:', { storeId, cachedStoreId: AuthService.getCachedRoleInfo()?.storeId });
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'listPendingApplications', storeId }
       });
@@ -3587,7 +3588,7 @@ Page({
     try {
       const roleInfo = AuthService.getCachedRoleInfo();
       const storeId = roleInfo && roleInfo.storeId;
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'listAuditQueue', tab: 'approved', storeId }
       });
@@ -3698,7 +3699,7 @@ Page({
     if (!confirm) return;
     this.setData({ memberManageOperating: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerBinding',
         data: { targetId: id, action: 'changeRole', newRole }
       });
@@ -3740,7 +3741,7 @@ Page({
     if (!confirm) return;
     this.setData({ memberManageOperating: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerBinding',
         data: { targetId: id, action: 'unbind' }
       });
@@ -3776,7 +3777,7 @@ Page({
       const store = getSelectedStore();
       const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
       if (!storeId) return;
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get', storeId }
       });
@@ -3836,7 +3837,7 @@ Page({
     this.setData({ adminKeyModalSaving: true });
     wx.showLoading({ title: '保存中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'update', storeId, adminKey: newKey }
       });
@@ -3904,7 +3905,7 @@ Page({
 
     wx.showLoading({ title: '处理中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { applyId: id, action: 'approve' }
       });
@@ -3954,7 +3955,7 @@ Page({
     this.setData({ rejectApplicationSubmitting: true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { applyId: id, action: 'reject', rejectReason }
       });
@@ -3988,7 +3989,7 @@ Page({
     this.setData({ [`volunteerSubmissionAdminList[${idx}].processing`]: true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'approve', id }
       });
@@ -4049,7 +4050,7 @@ Page({
     this.setData({ rejectSubmissionSubmitting: true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageVolunteerSubmission',
         data: { action: 'reject', id, rejectReason }
       });
@@ -4093,7 +4094,7 @@ Page({
       data.storeId = this.data.currentInspectStoreId;
     }
 
-    wx.cloud.callFunction({
+    callFunctionWithTimeout({
       name: 'manageVolunteerSubmission',
       data
     }).then((res: any) => {
@@ -4242,7 +4243,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/store-profile/store-profile',
+      url: '/subpackages/admin/pages/store-profile/store-profile',
       fail: () => {
         this.isNavigating = false;
       }
@@ -4335,7 +4336,7 @@ Page({
     this.setData({ myFeedbackLoading: true });
 
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'mySubmissions' }
       });
@@ -4359,7 +4360,7 @@ Page({
   async fetchUnreadReplyCount() {
     if (!isCloudAvailable()) return;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'unreadReplyCount' }
       });
@@ -4378,7 +4379,7 @@ Page({
     if (!isCloudAvailable() || this.data.unreadReplyCount === 0) return;
     this.setData({ unreadReplyCount: 0 });
     try {
-      await wx.cloud.callFunction({
+      await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: { action: 'markRepliedRead' }
       });
@@ -4392,7 +4393,7 @@ Page({
   async checkFeedbackContentSafety(text: string): Promise<boolean> {
     try {
       if (!isCloudAvailable()) return true;
-      const result = await wx.cloud.callFunction({ name: 'msgSecCheck', data: { text } });
+      const result = await callFunctionWithTimeout({ name: 'msgSecCheck', data: { text } });
       const r = result.result as any;
       if (r && !r.safe) {
         wx.showToast({ title: '内容包含违规信息，请修改后重试', icon: 'none' });
@@ -4438,7 +4439,7 @@ Page({
       // 与 fetchMeritStats 里同一个门店隔离修复用的是同一个数据源）显式传给云函数，
       // 云函数收到就优先用它，不再依赖对家人账号必然查不到的角色绑定门店
       const activeStore = getSelectedStore();
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'submitFeedback',
         data: {
           action: 'submit',
@@ -4508,7 +4509,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/activity-log/activity-log',
+      url: '/subpackages/admin/pages/activity-log/activity-log',
       fail: () => {
         this.isNavigating = false;
       }
@@ -4611,7 +4612,7 @@ Page({
     const targetRole = this.data.inviteTargetRole || 'VOLUNTEER';
     this.setData({ inviteGenerating: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreInviteCode',
         data: { action: 'generate', storeId, targetRole }
       });
@@ -4727,7 +4728,7 @@ Page({
     this.setData({ createIndexesRunning: true });
     wx.showLoading({ title: '加速优化中…', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({ name: 'createIndexes' });
+      const res: any = await callFunctionWithTimeout({ name: 'createIndexes' });
       const result = res.result;
       wx.hideLoading();
       if (result && result.success) {
@@ -4805,7 +4806,7 @@ Page({
     if (AuthService.isPlatformAdmin()) {
       this.isNavigating = true;
       safeNavigateTo({
-        url: '/pages/platform-admin/platform-admin',
+        url: '/subpackages/admin/pages/platform-admin/platform-admin',
         fail: () => {
           this.isNavigating = false;
         }
@@ -4878,7 +4879,7 @@ Page({
     });
     // 加载跨门店已授权成员（超管视角不传 storeId → 全机构）
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'listAuditQueue', tab: 'approved' }
       });
@@ -4985,7 +4986,7 @@ Page({
       } else {
         callData.targetOpenId = manualOpenId;
       }
-      const res: any = await wx.cloud.callFunction({ name: 'processRoleAudit', data: callData });
+      const res: any = await callFunctionWithTimeout({ name: 'processRoleAudit', data: callData });
       const result = res.result;
       if (!result || !result.success) {
         wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
@@ -5040,7 +5041,7 @@ Page({
       // 超管自己真实绑定门店的 orgType（this.data.orgType，由 fetchStoreOrgType
       // 查到的权威值）传给云函数做第二层收窄，与 index.ts 传法一致
       const orgTypeFilter = this.data.orgType === 'yuhuazhai' ? 'yuhuazhai' : (this.data.orgType ? 'general' : '');
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'getStoreList',
         data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
       });
@@ -5181,7 +5182,7 @@ Page({
       // 🐛 顺手修复：getStoreList 云函数实际返回字段是 `list`，不是 `stores`——
       // 这里读错了字段名，此前无论门店数据本身如何都恒为空数组，"重置门店申请
       // 密钥"弹窗的门店搜索列表功能等于完全失效
-      const res: any = await wx.cloud.callFunction({ name: 'getStoreList' });
+      const res: any = await callFunctionWithTimeout({ name: 'getStoreList' });
       // 过滤掉虚拟聚合门店（"全国总览"/"全部门店"），列表里只保留真实具体门店
       const list: Array<{ storeId: string; storeName: string }> =
         (Array.isArray(res.result?.list) ? res.result.list : []).filter(
@@ -5297,7 +5298,7 @@ Page({
     this.setData({ resetStoreKeySaving: true });
     wx.showLoading({ title: '重置中...', mask: true });
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'update', storeId, adminKey: newKey }
       });
@@ -5346,7 +5347,7 @@ Page({
   // 独立、互不影响，失败时静默隐藏入口即可，不需要 toast 打扰
   async fetchProductionSpaces() {
     try {
-      const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
+      const res = await callFunctionWithTimeout({ name: 'getMyProductionSpaces', data: {} });
       const result = res.result as any;
       const spaces = (result && result.success && result.spaces) || [];
       this.setData({ hasProductionSpaceAccess: spaces.length > 0, productionSpaces: spaces });
@@ -5488,7 +5489,7 @@ Page({
     wx.showLoading({ title: '正在兑换...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
         data: { action: 'redeem', activationCode: code }
       });
@@ -5603,7 +5604,7 @@ Page({
       // Step 1: 调用云函数统一下单（内部已转发 wxPayCore，见 createSubscriptionOrder
       // 文件头注释），获取支付参数——mockMode 时是 Mock 拉起参数，真实模式时是
       // 已用商户私钥签好的真实 paySign，业务侧完全无感
-      const orderRes = await wx.cloud.callFunction({
+      const orderRes = await callFunctionWithTimeout({
         name: 'createSubscriptionOrder',
         data: planKey === 'ADD_ON_STORE'
           ? { planType: planKey, quantity: quantity || 1 }
@@ -5723,7 +5724,7 @@ Page({
         || '';
       const callData: Record<string, any> = { action: 'update', storeName: newName, registeredName: newName };
       if (storeId) callData.storeId = storeId;
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: callData
       });
@@ -5781,7 +5782,7 @@ Page({
     });
     // 后台拉取最新配置覆盖（slogan / logo 等本地缓存没有的字段）
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get' }
       });
@@ -5909,7 +5910,7 @@ Page({
       if (orgConfigOrgType) updateData.orgType = orgConfigOrgType;
       // super_admin 必须传 storeId，patriarch/manager 传了也无害（云函数对非超管忽略此参数）
       if (orgCfgStoreId) updateData.storeId = orgCfgStoreId;
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'update', ...updateData }
       }) as any;

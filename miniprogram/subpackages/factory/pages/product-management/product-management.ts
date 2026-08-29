@@ -1,3 +1,4 @@
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 // 页面：商品管理 —— 素食直播产销协同 Module B，space_owner/space_admin 端
 // 商品（SKU）新建/编辑/上下架，直接调用既有的 manageProduct 云函数（create/
 // update/remove/restore/list），本页不改动任何后端逻辑，只是给它接一个前端。
@@ -90,7 +91,7 @@ Page({
   async loadProducts(done?: () => void) {
     this.setData({ loading: true, loadError: '' });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageProduct',
         data: { action: 'list', tenantId: this.data.tenantId, status: 'all' }
       });
@@ -200,7 +201,7 @@ Page({
     if (this.data.formMode === 'edit') payload.productId = this.data.editingProductId;
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageProduct',
         data: { action: this.data.formMode === 'edit' ? 'update' : 'create', ...payload }
       });
@@ -247,7 +248,7 @@ Page({
     this.setData({ togglingId: productId });
     wx.showLoading({ title: '处理中...', mask: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageProduct',
         data: { action: goingActive ? 'restore' : 'remove', tenantId: this.data.tenantId, productId }
       });

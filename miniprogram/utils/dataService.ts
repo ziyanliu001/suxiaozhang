@@ -3,6 +3,7 @@ import { generateReportText } from './reportGenerator';
 import { isStoreNameFuzzyMatch } from './constants';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate } from './dateUtils';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from './cloudGuard';
+import { callFunctionWithTimeout } from './withTimeout';
 
 const STORAGE_KEY = 'local_report_logs';
 
@@ -394,7 +395,7 @@ export const DataService = {
       // 🛡️ 资金流水防篡改：客户端不持有 HMAC 密钥，写入后立即请求云函数在服务端补盖校验码；
       // 该调用不阻塞主提交流程，失败仅记录日志，不影响餐报本身已保存成功的事实
       if (cloudResult && cloudResult._id && isCloudAvailable()) {
-        wx.cloud.callFunction({
+        callFunctionWithTimeout({
           name: 'stampReportChecksum',
           data: { id: cloudResult._id }
         }).catch(e => console.warn('[DataService] 校验码补盖调用失败:', e));
@@ -495,7 +496,7 @@ export const DataService = {
       }
 
       // 云端查询传 storeId 做强隔离（超管全国总览时 storeId 为空或 ALL_STORES 则不过滤）
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'getReports',
         data: { startDate, endDate, storeId, mpAccount, limit, viewMode, approvedOnly }
       });
@@ -723,7 +724,7 @@ export const DataService = {
         }
 
         // 🛡️ 资金流水防篡改：离线草稿补同步后同样需要服务端补盖 HMAC 校验码
-        wx.cloud.callFunction({
+        callFunctionWithTimeout({
           name: 'stampReportChecksum',
           data: { id: cloudId }
         }).catch(e => console.warn('[DataService] 离线同步校验码补盖调用失败:', e));
@@ -786,7 +787,7 @@ export const DataService = {
           throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端删除');
         }
 
-        const cloudResult = await wx.cloud.callFunction({
+        const cloudResult = await callFunctionWithTimeout({
           name: 'deleteMealReport',
           data: { id, reason: reason.trim() }
         });
@@ -887,7 +888,7 @@ export const DataService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端清理');
       }
 
-      const cloudResult = await wx.cloud.callFunction({
+      const cloudResult = await callFunctionWithTimeout({
         name: 'clearMealReports',
         data: { mode: 'dirty' }
       });
@@ -969,7 +970,7 @@ export const DataService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端查询');
       }
 
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'getPreviousBalance',
         data: { shopName, mpAccount, targetDateString, storeId }
       });
@@ -1042,7 +1043,7 @@ export const DataService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端查询');
       }
 
-      const result = await wx.cloud.callFunction({
+      const result = await callFunctionWithTimeout({
         name: 'getStatistics',
         data: { startDate, endDate, shopName, viewMode, storeId }
       });

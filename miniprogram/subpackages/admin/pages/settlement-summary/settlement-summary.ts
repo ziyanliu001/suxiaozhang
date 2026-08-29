@@ -1,3 +1,4 @@
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 // 页面：对账明细 —— 素食直播产销协同「简易对账看板」
 //
 // 🚪 入口方式：与 production-fulfillment 同款，通过 wx.navigateTo 传入
@@ -140,7 +141,7 @@ Page({
     this.setData({ loading: true, loadError: '' });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getSettlementSummary',
         data: { tenantId: this.data.tenantId }
       });

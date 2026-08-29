@@ -1,4 +1,5 @@
 import { isCloudAvailable } from './cloudGuard';
+import { callFunctionWithTimeout } from './withTimeout';
 
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
@@ -41,14 +42,6 @@ interface RoleInfo {
   // "还持有哪些身份"的清单，供 profile.ts 的"切换身份"面板判断是否需要展示
   // 多身份切换列表
   roles?: string[];
-}
-
-function withTimeout(promise, timeoutMs, timeoutMsg) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(timeoutMsg)), timeoutMs);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function generateTempOpenid(): string {
@@ -212,8 +205,8 @@ export const AuthService = {
 
       let result;
       try {
-        result = await withTimeout(
-          wx.cloud.callFunction({ name: 'login' }),
+        result = await callFunctionWithTimeout(
+          { name: 'login' },
           LOGIN_TIMEOUT_MS,
           '登录超时，请检查网络后重试'
         );
@@ -225,8 +218,8 @@ export const AuthService = {
           throw firstErr;
         }
         console.warn('[AuthService] 登录首次超时，自动重试 1 次...');
-        result = await withTimeout(
-          wx.cloud.callFunction({ name: 'login' }),
+        result = await callFunctionWithTimeout(
+          { name: 'login' },
           LOGIN_TIMEOUT_MS,
           '登录超时，请检查网络后重试'
         );
@@ -295,8 +288,8 @@ export const AuthService = {
 
       let result;
       try {
-        result = await withTimeout(
-          wx.cloud.callFunction({ name: 'checkUserRole' }),
+        result = await callFunctionWithTimeout(
+          { name: 'checkUserRole' },
           ROLE_QUERY_TIMEOUT_MS,
           '角色查询超时'
         );
@@ -307,8 +300,8 @@ export const AuthService = {
           throw firstErr;
         }
         console.warn('[AuthService] 角色查询首次超时，自动重试 1 次...');
-        result = await withTimeout(
-          wx.cloud.callFunction({ name: 'checkUserRole' }),
+        result = await callFunctionWithTimeout(
+          { name: 'checkUserRole' },
           ROLE_QUERY_TIMEOUT_MS,
           '角色查询超时'
         );
@@ -480,7 +473,7 @@ export const AuthService = {
         throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过资料更新');
       }
 
-      const result = await wx.cloud.callFunction({ name: 'updateUserProfile', data: fields });
+      const result = await callFunctionWithTimeout({ name: 'updateUserProfile', data: fields });
       const r = result.result as any;
 
       if (r && r.success) {

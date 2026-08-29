@@ -1,3 +1,4 @@
+import { callFunctionWithTimeout } from './withTimeout';
 const STORE_STORAGE_KEY = 'selectedStore';
 
 export interface StoreInfo {
@@ -175,7 +176,7 @@ export function getCachedStoreStatus(): string {
 export async function fetchAndSyncStoreStatus(storeId: string): Promise<string> {
   if (!storeId) return '';
   try {
-    const res: any = await wx.cloud.callFunction({
+    const res: any = await callFunctionWithTimeout({
       name: 'manageStoreProfile',
       data: { action: 'get', storeId }
     });

@@ -8,15 +8,16 @@
  *  - 从首页传递或本地存储读取打卡日志
  */
 
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { safeParseDate } from '../../utils/dateUtils';
-import { recordRecentVisit } from '../../utils/recentPages';
-import { AuthService } from '../../utils/authService';
-import { isCloudAvailable } from '../../utils/cloudGuard';
-import { resolveHonorCardStoreName } from '../../utils/storeIdentity';
-import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
-import { computeMyCheckInStats, computeMyCheckInStreak } from '../../utils/checkinStats';
-import { computeBadgeList as computeBadgeListShared, BadgeItem } from '../../utils/badgeWall';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { safeParseDate } from '../../../../utils/dateUtils';
+import { recordRecentVisit } from '../../../../utils/recentPages';
+import { AuthService } from '../../../../utils/authService';
+import { isCloudAvailable } from '../../../../utils/cloudGuard';
+import { resolveHonorCardStoreName } from '../../../../utils/storeIdentity';
+import { drawVolunteerHonorCard, VolunteerHonorData } from '../../../../utils/posterGenerator';
+import { computeMyCheckInStats, computeMyCheckInStreak } from '../../../../utils/checkinStats';
+import { computeBadgeList as computeBadgeListShared, BadgeItem } from '../../../../utils/badgeWall';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 interface CheckInLog {
   timestamp: number;
@@ -123,7 +124,7 @@ Page({
   },
 
   onLoad(options: any) {
-    recordRecentVisit('/pages/journey/journey', '志愿历程');
+    recordRecentVisit('/subpackages/admin/pages/journey/journey', '志愿历程');
     // 🌟 称谓自适应：先同步解析角色缓存，再异步加载数据，两者互不阻塞
     this.resolveOrgLabels();
     this.loadStats();
@@ -239,7 +240,7 @@ Page({
   async fetchRealOrgType() {
     if (!isCloudAvailable()) return;
     try {
-      const res: any = await wx.cloud.callFunction({
+      const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get' }
       });
@@ -278,7 +279,7 @@ Page({
   async loadMealStat() {
     try {
       if (!isCloudAvailable()) return;
-      const res = await wx.cloud.callFunction({ name: 'getVolunteerHonorStats' });
+      const res = await callFunctionWithTimeout({ name: 'getVolunteerHonorStats' });
       const result = res.result as any;
       if (result && result.success) {
         this.animateCountUp('totalMeals', result.diningCount || 0);
@@ -370,7 +371,7 @@ Page({
       this.setData({ isLoadingNationalSummary: true });
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用');
 
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getVolunteerHonorStats',
         data: { action: 'networkSummary' }
       });
@@ -535,7 +536,7 @@ Page({
       let reportCount = 0;
       let diningCount = 0;
       try {
-        const statsRes = await wx.cloud.callFunction({ name: 'getVolunteerHonorStats' });
+        const statsRes = await callFunctionWithTimeout({ name: 'getVolunteerHonorStats' });
         const statsResult = statsRes.result as any;
         if (statsResult && statsResult.success) {
           reportCount = statsResult.reportCount || 0;
@@ -550,7 +551,7 @@ Page({
       let qrLocalPath = '';
       if (storeId) {
         try {
-          const qrRes = await wx.cloud.callFunction({
+          const qrRes = await callFunctionWithTimeout({
             name: 'getStoreQRCode',
             data: { storeId, storeName, purpose: 'certificate' }
           });

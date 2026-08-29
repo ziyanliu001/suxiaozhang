@@ -23,6 +23,7 @@
 // 待发货订单明细（Step 3 之前只返回聚合后的 tasks/materials，本轮追加了
 // 逐单明细，不重复查库）。
 import { getTodayIsoString } from '../../../../utils/dateUtils';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
 const CURRENT_TENANT_STORAGE_KEY = 'LIVE_FACTORY_CURRENT_TENANT_ID';
 
@@ -123,7 +124,7 @@ Page({
   // 失败时保守按"不可管理、不显示切换器"处理，不额外弹错误打扰用户。
   async loadMySpaces() {
     try {
-      const res = await wx.cloud.callFunction({ name: 'getMyProductionSpaces', data: {} });
+      const res = await callFunctionWithTimeout({ name: 'getMyProductionSpaces', data: {} });
       const result = res.result as any;
       const spaces: Array<{ tenantId: string; tenantName: string; role: string }> = (result && result.success && result.spaces) || [];
       const mine = spaces.find((s) => s.tenantId === this.data.tenantId);
@@ -205,7 +206,7 @@ Page({
   },
 
   onGoToSettlementSummary() {
-    wx.navigateTo({ url: '/pages/settlement-summary/settlement-summary?tenantId=' + this.data.tenantId });
+    wx.navigateTo({ url: '/subpackages/admin/pages/settlement-summary/settlement-summary?tenantId=' + this.data.tenantId });
   },
 
   onGoToProductManagement() {
@@ -229,7 +230,7 @@ Page({
     if (this.data.inviteGenerating) return;
     this.setData({ inviteGenerating: true });
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'manageWorkspaceInvite',
         data: { action: 'generate', tenantId: this.data.tenantId, role: this.data.inviteRole }
       });
@@ -260,7 +261,7 @@ Page({
     const endDate = addDaysIso(startDate, RANGE_DAYS);
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'getProductionBoard',
         data: { tenantId: this.data.tenantId, startDate, endDate }
       });
@@ -337,7 +338,7 @@ Page({
     wx.showLoading({ title: '正在提交...', mask: true });
 
     try {
-      const res = await wx.cloud.callFunction({
+      const res = await callFunctionWithTimeout({
         name: 'completeProductionOrder',
         data: { tenantId: this.data.tenantId, orderId, expressCompany, trackingNumber }
       });

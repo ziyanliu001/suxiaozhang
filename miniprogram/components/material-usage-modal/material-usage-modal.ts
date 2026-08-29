@@ -3,6 +3,7 @@
 // 见该组件文件头部注释
 import { getSelectedStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
+import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
 type StockStatus = 'sufficient' | 'normal' | 'urgent';
 
@@ -148,7 +149,7 @@ Component({
 
       try {
         const activeStore = getSelectedStore();
-        const res: any = await wx.cloud.callFunction({
+        const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerSubmission',
           data: {
             action: 'submit',
