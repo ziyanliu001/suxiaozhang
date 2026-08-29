@@ -2153,16 +2153,20 @@
         </view>
 
         <!-- 🩺 空态区分：超管未选中巡检门店时走的是不含 finance/volunteer 的
-             elevated 队列，这跟"这家店真没有待审批申请"是两种不同的空——此前
-             UI 上完全分不清，超管反复误以为查询逻辑有 bug。这里给出明确的
-             下一步指引（去选门店），而不是同一句不带信息量的"暂无" -->
-        <view class="feedback-admin-empty" wx:if="{{!memberApplicationLoading && memberApplicationList.length === 0 && memberApplicationQueueType === 'elevated'}}">
-          <text>当前是"店长/大家长任命与新建门店"队列，不含义工/财务申请</text>
-          <text class="feedback-admin-empty-hint">请先在【门店选择与搜索】里选中要巡检的门店，再打开本弹窗查看该店的义工/财务待审批申请</text>
+             elevated 队列，这跟"这家店真没有待审批申请"是两种不同的空——普通
+             大家长/店长自 fetchPendingApplications 的 storeId 回退链修复后
+             会始终穿透到自己门店，不会再落进这个分支，只有超管未选巡检门店时
+             才会命中，因此这里同时显式判一次 isSuperAdmin 作为双重保险 -->
+        <view class="feedback-admin-empty" wx:if="{{!memberApplicationLoading && memberApplicationList.length === 0 && isSuperAdmin && memberApplicationQueueType === 'elevated'}}">
+          <text class="feedback-admin-empty-icon">📍</text>
+          <text class="feedback-admin-empty-title">请先选择要巡检的门店</text>
+          <text class="feedback-admin-empty-hint">选定门店后，即可查看该店的义工/财务待审批申请</text>
           <view class="feedback-admin-empty-action" bindtap="onGoSelectStoreFromEmptyHint">📍 去选择门店</view>
         </view>
         <view class="feedback-admin-empty" wx:elif="{{!memberApplicationLoading && memberApplicationList.length === 0}}">
-          <text>暂无待审批的成员申请</text>
+          <text class="feedback-admin-empty-icon">✨</text>
+          <text class="feedback-admin-empty-title">当前暂无待审批申请</text>
+          <text class="feedback-admin-empty-hint">义工或财务提交申请后将在此展示</text>
         </view>
 
         <view class="feedback-admin-item" wx:for="{{memberApplicationList}}" wx:key="applyId">

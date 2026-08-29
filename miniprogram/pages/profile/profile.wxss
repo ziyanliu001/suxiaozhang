@@ -3796,6 +3796,21 @@
   font-size: 24rpx;
 }
 
+/* 🎨 典雅空状态：大号图标 + 主标题 + 辅助说明两段式，替代此前单行灰字 */
+.feedback-admin-empty-icon {
+  display: block;
+  font-size: 56rpx;
+  line-height: 1;
+  margin-bottom: 16rpx;
+}
+
+.feedback-admin-empty-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #495057;
+}
+
 .feedback-admin-empty-hint {
   display: block;
   margin-top: 12rpx;

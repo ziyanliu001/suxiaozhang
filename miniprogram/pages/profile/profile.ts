@@ -3597,12 +3597,28 @@ Page({
   async fetchPendingApplications() {
     if (!isCloudAvailable()) return;
     try {
+      // 🐛 根因修复：此前只读 currentInspectStoreId——这是"超管巡检门店选择"
+      // 专用字段（见 data 声明处注释），大家长/店长/财务等普通角色从不会给它
+      // 赋值，导致这些角色打开待审批弹窗时 storeId 永远是空字符串，云函数据此
+      // 判定"未选门店"、穿透不到自己门店的义工/财务审批队列——{ storeId: '' }
+      // 打到云函数，看起来像是"这家店真没有待审批申请"，实际上是压根没把
+      // 自己的门店 id 传过去。
+      // 超管留空 currentInspectStoreId（未选巡检门店）时应当走 elevated 队列
+      // 这一产品设计不变（见本方法头部注释）；只对非超管角色补上"取自己门店
+      // id"的回退链，与 loadVolunteerStats/fetchMeritStats 同一处 getSelectedStore()
+      // → AuthService.getCachedRoleInfo().storeId 优先级保持一致
+      const cachedRoleInfo = AuthService.getCachedRoleInfo();
+      const storeId = this.data.isSuperAdmin
+        ? (this.data.currentInspectStoreId || '')
+        : (this.data.currentInspectStoreId
+          || (getSelectedStore() && getSelectedStore().storeId)
+          || (cachedRoleInfo && cachedRoleInfo.storeId)
+          || '');
       // 🩺 诊断日志：storeId 与云函数端 caller.storeId（或超管穿透时的
       // scopeStoreId）是否一致，是"提交成功但列表看不到"这类问题最常见的
       // 根因；云函数侧 submitRoleApply/listPendingApplications 也各打了一份，
       // 两边日志一起看能直接定位到底哪个环节的 storeId 对不上
-      const storeId = this.data.currentInspectStoreId || '';
-      console.log('[fetchPendingApplications] 拉取待审批参数:', { storeId, cachedStoreId: AuthService.getCachedRoleInfo()?.storeId });
+      console.log('[fetchPendingApplications] 拉取待审批参数:', { storeId, cachedStoreId: cachedRoleInfo?.storeId });
       const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'listPendingApplications', storeId }
