@@ -13,7 +13,17 @@ interface PeekResult {
   tenantName: string;
   role: string;
   roleLabel: string;
+  // 🎯 工坊主理人姓名：并非所有工坊都能查到（理论上每个工坊创建时都会有一条
+  // space_owner 记录，查不到多半是极端历史数据缺失），云函数查不到时给空
+  // 字符串，前端据此隐藏这一行，不编造一个"主理人"出来
+  ownerName?: string;
 }
+
+// 🎯 邀请码格式：与 manageWorkspaceInvite 生成端的 codeNormalized 校验口径
+// 一致——6 位大写字母/数字。一键粘贴时用这个规则从剪贴板原始文本里提取，
+// 剪贴板内容可能带多余空格/换行/其它文本（用户复制了整句"邀请码：ABC123
+// 快来加入"这种场景也不算罕见）
+const CODE_PATTERN = /[A-Z0-9]{6}/;
 
 Page({
   data: {
@@ -76,6 +86,26 @@ Page({
     this.setData({ code: String(e.detail.value || '').toUpperCase(), peekResult: null, peekError: '' });
   },
 
+  // 🎨 一键粘贴：从剪贴板原始文本里按 CODE_PATTERN 提取 6 位邀请码——不是
+  // "剪贴板前 6 个字符"这种粗暴截取，避免用户复制了带前后缀说明文字的整句话
+  // 时截出一串无效字符。提取失败给一次轻提示，不静默什么都不做让用户以为
+  // 点击没反应
+  async onPasteCode() {
+    try {
+      const res = await wx.getClipboardData();
+      const raw = String((res && res.data) || '').toUpperCase();
+      const match = CODE_PATTERN.exec(raw);
+      if (!match) {
+        wx.showToast({ title: '剪贴板中未找到有效邀请码', icon: 'none' });
+        return;
+      }
+      this.setData({ code: match[0], peekResult: null, peekError: '' });
+    } catch (err) {
+      console.warn('[workspace-join] onPasteCode 读取剪贴板失败:', err);
+      wx.showToast({ title: '读取剪贴板失败', icon: 'none' });
+    }
+  },
+
   // 🎨 聚焦高亮边框：纯展示态，data-field 与 wxml 里三个 input 的
   // data-field="code"/"realName"/"phone" 一一对应
   onFieldFocus(e: any) {
@@ -102,8 +132,11 @@ Page({
   onTapPeek() {
     if (this.data.peeking) return; // 防重复点击：查询进行中再次点击直接忽略
     const code = (this.data.code || '').trim();
-    if (!code) {
-      wx.showToast({ title: '请输入邀请码', icon: 'none' });
+    // 🎨 与按钮 disabled="{{code.length !== 6}}" 同一条口径：未输满 6 位时
+    // 按钮本身已经是禁用态点不到这里，这里是防御性兜底（如小程序基础库某些
+    // 边缘场景下 disabled 态仍派发了 tap 事件），不是主要拦截点
+    if (code.length !== 6) {
+      wx.showToast({ title: '请输入完整的 6 位邀请码', icon: 'none' });
       return;
     }
     this.doPeek(code);
@@ -120,7 +153,8 @@ Page({
             tenantId: result.tenantId,
             tenantName: result.tenantName,
             role: result.role,
-            roleLabel: result.roleLabel
+            roleLabel: result.roleLabel,
+            ownerName: result.ownerName || ''
           }
         });
       } else {

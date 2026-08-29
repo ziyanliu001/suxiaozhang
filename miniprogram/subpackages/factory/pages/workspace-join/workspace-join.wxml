@@ -1,7 +1,7 @@
 <view class="wj-page">
 
   <navigation-bar
-    title="🤝 加入产销工坊"
+    title="加入产销工坊"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"
@@ -13,16 +13,21 @@
   <view class="wj-body" style="margin-top: {{contentTop}}px;">
     <view class="wj-center-wrap" style="min-height: calc(100vh - {{contentTop}}px);">
 
-      <view class="wj-intro" wx:if="{{!peekResult}}">
-        <text class="wj-intro-icon">🤝</text>
-        <text class="wj-intro-text">请输入工坊主理人分享的专属邀请码，加入后即可开启制作协同或推广带货</text>
+      <!-- 🎨 头部：渐变徽标 + 副标题引导 + 说明文案，只在查询前展示——查询结果
+           出来后整页焦点应该收窄到"即将加入哪个工坊"，不需要再看一遍开场白 -->
+      <view class="wj-header" wx:if="{{!peekResult}}">
+        <view class="wj-header-badge">
+          <text class="wj-header-icon">🤝</text>
+        </view>
+        <text class="wj-header-subtitle">协同排产制作 · 直播带货分账</text>
+        <text class="wj-header-desc">请输入工坊主理人分享的专属邀请码，加入后即可开启制作协同或推广带货</text>
       </view>
 
       <view class="wj-card" wx:if="{{!peekResult}}">
         <text class="wj-input-label">工坊邀请码</text>
         <view class="wj-input-wrap">
           <input
-            class="wj-input {{focusedField === 'code' ? 'wj-input-focused' : ''}}"
+            class="wj-input wj-input-code {{focusedField === 'code' ? 'wj-input-focused' : ''}}"
             placeholder-class="wj-input-placeholder"
             placeholder="请输入 6 位邀请码"
             value="{{code}}"
@@ -32,10 +37,36 @@
             data-field="code"
             maxlength="6"
           />
-          <view class="wj-input-clear" wx:if="{{code}}" catchtap="onClearField" data-field="code">✕</view>
+          <!-- 🎨 未输入时给"一键粘贴"，已输入时给"清空"——同一个位置按状态
+               切换，不需要同时占两个按钮位挤压输入区域 -->
+          <view class="wj-input-action-btn" wx:if="{{!code}}" catchtap="onPasteCode">
+            <text class="wj-input-action-icon">📋</text>
+            <text class="wj-input-action-label">粘贴</text>
+          </view>
+          <view class="wj-input-clear" wx:else catchtap="onClearField" data-field="code">✕</view>
         </view>
-        <button class="wj-primary-btn" disabled="{{!code || peeking}}" loading="{{peeking}}" bindtap="onTapPeek">查询邀请码</button>
+        <button class="wj-primary-btn" disabled="{{code.length !== 6 || peeking}}" loading="{{peeking}}" bindtap="onTapPeek">查询邀请码</button>
         <text class="wj-error-text" wx:if="{{peekError}}">{{peekError}}</text>
+      </view>
+
+      <!-- 🎨 工坊身份权益指引：轻量常驻展示（不做成折叠面板，避免多一次点击
+           才能看到关键信息），帮助还没决定的用户提前了解两种身份分别能做什么 -->
+      <view class="wj-role-guide" wx:if="{{!peekResult}}">
+        <view class="wj-role-guide-item">
+          <text class="wj-role-guide-icon">👩‍🍳</text>
+          <view class="wj-role-guide-text">
+            <text class="wj-role-guide-title">制作合伙人</text>
+            <text class="wj-role-guide-desc">接收工坊排单、打卡制作履约、按单结算工时分账</text>
+          </view>
+        </view>
+        <view class="wj-role-guide-divider"></view>
+        <view class="wj-role-guide-item">
+          <text class="wj-role-guide-icon">📱</text>
+          <view class="wj-role-guide-text">
+            <text class="wj-role-guide-title">推广达人</text>
+            <text class="wj-role-guide-desc">生成专属带货码、实时查看成单明细与分账收益</text>
+          </view>
+        </view>
       </view>
 
       <view class="wj-tips" wx:if="{{!peekResult}}">
@@ -45,9 +76,14 @@
 
       <view class="wj-card" wx:if="{{peekResult}}">
         <view class="wj-confirm-summary">
-          <text class="wj-confirm-icon">📦</text>
+          <view class="wj-confirm-icon-badge">
+            <text class="wj-confirm-icon">📦</text>
+          </view>
           <text class="wj-confirm-title">即将加入</text>
           <text class="wj-confirm-tenant">{{peekResult.tenantName}}</text>
+          <!-- 🎯 主理人姓名不是每次都能查到（见 workspace-join.ts PeekResult
+               注释），查不到就不展示这一行，不编造一个"主理人"出来 -->
+          <text class="wj-confirm-owner" wx:if="{{peekResult.ownerName}}">主理人：{{peekResult.ownerName}}</text>
           <text class="wj-confirm-role">担任「{{peekResult.roleLabel}}」</text>
         </view>
 

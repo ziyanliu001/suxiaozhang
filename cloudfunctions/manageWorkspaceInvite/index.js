@@ -134,15 +134,34 @@ async function findValidInvite(rawCode) {
 }
 
 // 只读预览：不核销，供扫码/输码后先展示"即将加入【工坊名】担任【角色】"确认弹窗
+//
+// 🎯 附带查一下工坊主理人（space_owner）姓名：workspace-join 页面的确认卡片
+// 需要多一个身份锚点防止用户误入同名/相似工坊，tenant_members 里 role
+// 恰好就是 space_owner 的那条记录的 realName 即可——查不到（理论上每个工坊
+// 创建时 createProductionSpace 都会写一条 space_owner 记录，查不到只可能是
+// 极端历史数据缺失）就留空，前端据此隐藏这一行，不编造一个"主理人"出来
 async function handlePeek(event) {
   const { invite, error } = await findValidInvite(event.code);
   if (error) return { success: false, error };
+
+  let ownerName = '';
+  try {
+    const ownerRes = await db.collection('tenant_members')
+      .where({ tenantId: invite.tenantId, role: 'space_owner', status: 'approved' })
+      .limit(1)
+      .get();
+    ownerName = (ownerRes.data && ownerRes.data[0] && ownerRes.data[0].realName) || '';
+  } catch (err) {
+    console.warn('[manageWorkspaceInvite] handlePeek 查询主理人姓名失败（不影响主流程）:', err);
+  }
+
   return {
     success: true,
     tenantId: invite.tenantId,
     tenantName: invite.tenantName || '未命名工坊',
     role: invite.role,
-    roleLabel: ROLE_LABEL[invite.role] || invite.role
+    roleLabel: ROLE_LABEL[invite.role] || invite.role,
+    ownerName
   };
 }
 

@@ -21,7 +21,9 @@
   box-sizing: border-box;
 }
 
-.wj-intro {
+/* 🎨 头部：渐变徽标 + 副标题 + 说明文案，与 production-fulfillment 富态空
+   状态卡片同一套"圆形渐变徽标背景"视觉语言，页面之间保持一致的设计语汇 */
+.wj-header {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -30,12 +32,30 @@
   margin-bottom: 32rpx;
 }
 
-.wj-intro-icon {
-  font-size: 56rpx;
-  margin-bottom: 16rpx;
+.wj-header-badge {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(140, 29, 24, 0.1), rgba(230, 162, 60, 0.14));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20rpx;
 }
 
-.wj-intro-text {
+.wj-header-icon {
+  font-size: 64rpx;
+  line-height: 1;
+}
+
+.wj-header-subtitle {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #8C1D18;
+  margin-bottom: 12rpx;
+}
+
+.wj-header-desc {
   font-size: 26rpx;
   line-height: 40rpx;
   color: #6B6B70;
@@ -73,12 +93,25 @@
   box-sizing: border-box;
   border: 2rpx solid #E5DED4;
   border-radius: 12rpx;
-  padding: 0 68rpx 0 24rpx;
+  padding: 0 80rpx 0 24rpx;
   font-size: 30rpx;
   color: #1C1C1E;
   letter-spacing: 4rpx;
   background: #FFFFFF;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 🎨 邀请码输入框：大字号 + 拉宽字距，视觉上接近"分格展示"的效果，同时
+   保留单一 <input> 实现（不做真正的 6 格 OTP 拼接输入，避免引入额外的
+   焦点管理/退格跳格逻辑复杂度，用一个更简单的方案达成同等的视觉意图） */
+.wj-input-code {
+  height: 96rpx;
+  line-height: 96rpx;
+  font-size: 40rpx;
+  font-weight: 700;
+  letter-spacing: 12rpx;
+  text-align: center;
+  padding-left: 0;
 }
 
 /* 🎨 聚焦高亮边框：与页面主色一致的棕红描边 + 浅色外发光，替代默认的
@@ -109,6 +142,35 @@
   justify-content: center;
   color: #C4C4C6;
   font-size: 28rpx;
+}
+
+/* 🎨 一键粘贴按钮：与 .wj-input-clear 共用同一个"输入框内右侧浮层"槽位，
+   两者互斥展示（有值时清空、无值时粘贴），图标+文字纵向堆叠塞进同样的
+   竖直空间里 */
+.wj-input-action-btn {
+  position: absolute;
+  right: 8rpx;
+  top: 8rpx;
+  bottom: 8rpx;
+  width: 72rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rpx;
+  border-radius: 8rpx;
+  background: #FAF5F0;
+}
+
+.wj-input-action-icon {
+  font-size: 24rpx;
+  line-height: 1;
+}
+
+.wj-input-action-label {
+  font-size: 18rpx;
+  color: #8C1D18;
+  line-height: 1;
 }
 
 .wj-form-row {
@@ -149,6 +211,54 @@
   text-align: center;
 }
 
+/* 🎨 工坊身份权益指引：轻量常驻卡片，两档身份各一行，中间一道细分隔线 */
+.wj-role-guide {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-top: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.wj-role-guide-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 8rpx 0;
+}
+
+.wj-role-guide-icon {
+  font-size: 40rpx;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.wj-role-guide-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+.wj-role-guide-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1C1C1E;
+}
+
+.wj-role-guide-desc {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #8E8E93;
+}
+
+.wj-role-guide-divider {
+  height: 1rpx;
+  background: #F1F1EE;
+  margin: 8rpx 0;
+}
+
 .wj-tips {
   display: flex;
   align-items: center;
@@ -175,9 +285,22 @@
   padding: 24rpx 0 40rpx;
 }
 
-.wj-confirm-icon {
-  font-size: 72rpx;
+/* 🎨 与 .wj-header-badge 同一套渐变圆形徽标语言，确认卡片与头部保持一致的
+   设计语汇 */
+.wj-confirm-icon-badge {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(140, 29, 24, 0.1), rgba(230, 162, 60, 0.14));
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 16rpx;
+}
+
+.wj-confirm-icon {
+  font-size: 56rpx;
+  line-height: 1;
 }
 
 .wj-confirm-title {
@@ -190,6 +313,14 @@
   font-weight: 700;
   color: #1C1C1E;
   margin: 8rpx 0;
+}
+
+/* 🎯 主理人姓名：作为额外的身份锚点，弱化于门店名之下、角色徽章之上，
+   帮助用户在确认加入前多一层"认得出这个工坊"的核对依据 */
+.wj-confirm-owner {
+  font-size: 24rpx;
+  color: #8E8E93;
+  margin-bottom: 12rpx;
 }
 
 .wj-confirm-role {
