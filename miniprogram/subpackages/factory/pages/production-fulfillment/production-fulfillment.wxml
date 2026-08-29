@@ -62,6 +62,18 @@
       </view>
     </view>
 
+    <!-- 🎨 履约状态筛选 Tab：常驻显示在快捷金刚区下方（不随列表滚动），
+         本地对已拉取的订单重新分组，不重新发起云调用 -->
+    <view class="pf-status-tabs">
+      <view
+        class="pf-status-tab {{activeStatusFilter === item.value ? 'active' : ''}}"
+        wx:for="{{statusFilterTabs}}"
+        wx:key="value"
+        data-value="{{item.value}}"
+        bindtap="onSelectStatusFilter"
+      >{{item.label}}</view>
+    </view>
+
     <!-- 邀请成员弹窗：选角色 → 生成邀请码 + 小程序码 -->
     <view class="pf-modal-mask" wx:if="{{showInviteModal}}" bindtap="onCloseInviteModal">
       <view class="pf-modal-card" catchtap="noop">
@@ -77,8 +89,8 @@
         <view class="pf-invite-result" wx:if="{{inviteResult}}">
           <text class="pf-invite-code">{{inviteResult.code}}</text>
           <text class="pf-invite-hint">{{inviteResult.roleLabel}} · 7 天内有效</text>
-          <image class="pf-invite-qr" wx:if="{{inviteResult.qrFileID}}" src="{{inviteResult.qrFileID}}" mode="aspectFit" show-menu-by-longpress></image>
-          <text class="pf-invite-qr-tip" wx:if="{{inviteResult.qrFileID}}">长按图片可保存/转发</text>
+          <image class="pf-invite-qr" wx:if="{{inviteResult.qrFileID && !imageFailedMap[inviteResult.qrFileID]}}" src="{{inviteResult.qrFileID}}" mode="aspectFit" show-menu-by-longpress binderror="onImageLoadError" data-url="{{inviteResult.qrFileID}}"></image>
+          <text class="pf-invite-qr-tip" wx:if="{{inviteResult.qrFileID && !imageFailedMap[inviteResult.qrFileID]}}">长按图片可保存/转发</text>
           <text class="pf-invite-qr-tip" wx:else>小程序码生成失败，可直接把上方邀请码告知对方手动输入</text>
         </view>
 
@@ -122,12 +134,31 @@
       <button class="pf-retry-btn" bindtap="loadOrders">重试</button>
     </view>
 
+    <!-- 🎨 富态空状态：仅在"整个工坊近 30 天内一笔订单都没有"时出现（不受
+         状态筛选 Tab 影响，筛选导致的"这个状态下没有订单"走下面 scroll-view
+         内部的轻量提示，两种空态语义不同，不能共用同一套大卡片） -->
     <view class="pf-empty-state" wx:elif="{{!loading && orderCount === 0}}">
-      <text class="pf-empty-icon">✅</text>
-      <text class="pf-empty-text">暂无待发货订单</text>
+      <view class="pf-empty-card">
+        <view class="pf-empty-icon-badge">
+          <text class="pf-empty-icon">📭</text>
+        </view>
+        <text class="pf-empty-title">当前暂无待处理订单</text>
+        <text class="pf-empty-subtitle">新订单支付后将自动进入 CAS 原子排产</text>
+        <view class="pf-empty-actions">
+          <button class="pf-empty-action-btn primary" wx:if="{{canManageProducts}}" bindtap="onGoToProductManagement">去商品管理</button>
+          <button class="pf-empty-action-btn" bindtap="onGoToSettlementSummary">查看对账明细</button>
+        </view>
+      </view>
     </view>
 
     <scroll-view class="pf-list" scroll-y style="height: {{pfListHeight}};" wx:else>
+
+      <!-- 🎨 筛选后无匹配：整体确实有订单（orderCount > 0），只是当前选中的
+           状态 Tab 下没有匹配项——与上面"整个工坊都没有订单"的富态空状态区分
+           开，这里只是一条轻量提示，不重复展示大卡片 -->
+      <view class="pf-filter-empty" wx:if="{{filteredOrderCount === 0 && activeStatusFilter !== 'all'}}">
+        <text class="pf-filter-empty-text">「{{activeStatusFilterLabel}}」状态下暂无订单</text>
+      </view>
 
       <!-- 🩹 卡单自愈提示：getProductionBoard 每次查询前会自动重放因通知丢失
            卡在"待支付确认"的订单，healedStuckOrders > 0 时把这件事亮出来，

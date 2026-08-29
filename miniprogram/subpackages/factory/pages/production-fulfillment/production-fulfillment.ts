@@ -185,6 +185,19 @@ function buildBoardGroups(
   return result;
 }
 
+// 🎨 状态筛选 Tab：命名对齐真实 orderStatus 枚举（'待生产'='已付款·待生产'，即
+// paid；'已发货'=shipped；'已退款'=refunded），不是理想化的 PENDING/PACKED 那套
+// 虚构中间态——in_production 目前没有任何云函数会真正置为该状态（见文件头
+// STATUS_ORDER 注释），Tab 仍保留是为了 schema 一旦启用该状态时前端已经就绪，
+// 现状下点开这个 Tab 会看到"此状态下暂无订单"，属实反映数据
+const STATUS_FILTER_TABS: Array<{ value: string; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'paid', label: '待生产' },
+  { value: 'in_production', label: '生产中' },
+  { value: 'shipped', label: '已发货' },
+  { value: 'refunded', label: '已退款' }
+];
+
 const INVITE_ROLE_LABEL: Record<string, string> = { producer: '制作方', promoter: '推广员' };
 
 // 与 cloudfunctions/completeProductionOrder/lib/validateShipment.js 的
@@ -194,20 +207,33 @@ const INVITE_ROLE_LABEL: Record<string, string> = { producer: '制作方', promo
 const EXPRESS_COMPANY_OPTIONS = ['顺丰', '中通', '圆通', '韵达', '极兔', '邮政', '其他'];
 
 Page({
+  // 🎨 状态筛选原始数据：与 _leaderboardCache（profile.ts 同类用法）一样挂在
+  // 实例上而不进 data——boardGroups 是这三者过滤后的派生视图，切换筛选 Tab
+  // 时只需要本地重新分组一次，不必重新发起云调用；这三份原始数据本身不需要
+  // 参与 setData 差异对比，放 data 里只会徒增无意义的 diff 体积
+  _rawOrders: [] as FulfillmentOrder[],
+  _rawTasks: [] as BoardTask[],
+  _rawCapacityByBatch: {} as Record<string, CapacityEntry>,
+
   data: {
     contentTop: 0,
-    // 🌟 列表滚动区高度：随 contentTop（导航栏真实高度）+ 多工坊切换器是否
-    // 显示（额外 112rpx）动态计算，见 updateListHeight()
+    // 🌟 列表滚动区高度：随 contentTop（导航栏真实高度）+ 多工坊切换器/状态
+    // 筛选 Tab 是否显示动态计算，见 updateListHeight()
     pfListHeight: 'calc(100vh - 88rpx)',
 
     tenantId: '',
     loading: true,
     loadError: '',
     // 🎨 看板主视图：按 batchDate → orderStatus 两层分组，见 buildBoardGroups；
-    // orderCount 用于空态判断（boardGroups 本身为空数组时无法快速判断"是否
-    // 真的没有任何订单"，直接存一份订单总数更直观）
+    // orderCount 是"本次拉取到的订单总数"（不受筛选 Tab 影响），用于判断"是否
+    // 真的一笔订单都没有"；filteredOrderCount 是当前筛选 Tab 下的匹配数，两者
+    // 分开是为了区分"全空"与"这个筛选条件下恰好没有匹配项"两种不同的空态
     boardGroups: [] as BatchGroup[],
     orderCount: 0,
+    filteredOrderCount: 0,
+    statusFilterTabs: STATUS_FILTER_TABS,
+    activeStatusFilter: 'all',
+    activeStatusFilterLabel: '全部',
     materialsSummary: [] as MaterialSummary[],
     // 🩹 自愈提示：getProductionBoard 每次查询前会自动重放卡在 pending_payment
     // 但已支付成功的订单，healedStuckOrders > 0 时把这条提示亮出来告诉管理员
@@ -238,7 +264,11 @@ Page({
     showInviteModal: false,
     inviteRole: 'producer' as 'producer' | 'promoter',
     inviteGenerating: false,
-    inviteResult: null as { code: string; roleLabel: string; qrFileID: string } | null
+    inviteResult: null as { code: string; roleLabel: string; qrFileID: string } | null,
+
+    // 🐛 图片加载失败兜底：与 store-profile.ts 同款 imageFailedMap 模式，
+    // key 是失败的图片 URL，命中后 wx:if 让对应 <image> 让位给文案提示
+    imageFailedMap: {} as Record<string, boolean>
   },
 
   onLoad(options: Record<string, string>) {
@@ -276,12 +306,38 @@ Page({
   },
 
   // 🌟 列表滚动区高度 = 视口高度 - 导航栏真实高度 - 多工坊切换器高度（仅
-  // mySpaces.length > 1 时渲染，额外占 112rpx）。contentTop 由 onNavLayout
-  // 异步上报、mySpaces 由 loadMySpaces 异步加载，两者到达顺序不固定，各自
-  // 更新后都重新算一遍，不假设谁先到
+  // mySpaces.length > 1 时渲染，额外占 112rpx）- 状态筛选 Tab 栏高度（常驻
+  // 显示，.pf-status-tabs 实际盒高 = padding 8rpx×2 + line-height 60rpx +
+  // margin-bottom 20rpx = 96rpx）。contentTop 由 onNavLayout 异步上报、
+  // mySpaces 由 loadMySpaces 异步加载，两者到达顺序不固定，各自更新后都
+  // 重新算一遍，不假设谁先到
   updateListHeight() {
-    const extra = this.data.mySpaces.length > 1 ? ' - 112rpx' : '';
-    this.setData({ pfListHeight: `calc(100vh - ${this.data.contentTop}px${extra})` });
+    const switcherExtra = this.data.mySpaces.length > 1 ? ' - 112rpx' : '';
+    this.setData({ pfListHeight: `calc(100vh - ${this.data.contentTop}px - 96rpx${switcherExtra})` });
+  },
+
+  // 🎨 状态筛选 Tab 切换：本地重新分组，不重新拉取云函数——loadOrders 每次
+  // 已经把该工坊未来 30 天内全部四种终态订单都拉回来了，切换 Tab 只是换一种
+  // 子集视角看同一份数据
+  onSelectStatusFilter(e: any) {
+    const value = e.currentTarget.dataset.value;
+    if (!value || value === this.data.activeStatusFilter) return;
+    const tab = STATUS_FILTER_TABS.find((t) => t.value === value);
+    this.setData({ activeStatusFilter: value, activeStatusFilterLabel: (tab && tab.label) || value });
+    this.applyStatusFilter();
+  },
+
+  // 按 activeStatusFilter 从原始订单里筛出子集，重新跑一遍 buildBoardGroups——
+  // tasks/capacityByBatch（物料预估、产能徽标）保持全量不随筛选变化，那两者
+  // 描述的是"这个批次接下来还要备多少料/还有多少产能"，是面向未来生产计划的
+  // 信息，跟"我现在想看哪个履约阶段的订单"是两个独立维度，不应该互相影响
+  applyStatusFilter() {
+    const filter = this.data.activeStatusFilter;
+    const orders = filter === 'all'
+      ? this._rawOrders
+      : this._rawOrders.filter((o) => o.orderStatus === filter);
+    const boardGroups = buildBoardGroups(orders, this._rawTasks, this._rawCapacityByBatch);
+    this.setData({ boardGroups, filteredOrderCount: orders.length });
   },
 
   onOpenSwitcherModal() {
@@ -309,11 +365,17 @@ Page({
   // 不存在"忘了清空导致新旧数据混在一起"的风险
   switchTenant(tenantId: string) {
     wx.setStorageSync(CURRENT_TENANT_STORAGE_KEY, tenantId);
+    this._rawOrders = [];
+    this._rawTasks = [];
+    this._rawCapacityByBatch = {};
     this.setData({
       tenantId,
       showSwitcherModal: false,
       boardGroups: [],
       orderCount: 0,
+      filteredOrderCount: 0,
+      activeStatusFilter: 'all',
+      activeStatusFilterLabel: '全部',
       materialsSummary: [],
       selfHealNotice: '',
       loadError: '',
@@ -346,6 +408,16 @@ Page({
 
   onDismissSelfHealNotice() {
     this.setData({ selfHealNotice: '' });
+  },
+
+  // 🐛 图片 500 报错兜底：邀请码小程序码理论上是刚生成的云存储 fileID，但
+  // 云端生成失败/权限异常时仍可能给到一个加载不出来的路径，binderror 触发后
+  // 记进 imageFailedMap，让位给"小程序码生成失败"文案而不是控制台反复报网络错误
+  onImageLoadError(e: any) {
+    const url = e.currentTarget.dataset.url;
+    console.warn('[production-fulfillment] 图片加载失败:', url, e.detail);
+    if (!url) return;
+    this.setData({ [`imageFailedMap.${url}`]: true });
   },
 
   onGoToSettlementSummary() {
@@ -421,10 +493,11 @@ Page({
           statusClass: ORDER_STATUS_CLASS[o.orderStatus] || '',
           payAmountYuan: (o.payAmount / 100).toFixed(2)
         }));
-        const boardGroups = buildBoardGroups(orders, result.tasks || [], result.capacityByBatch || {});
+        this._rawOrders = orders;
+        this._rawTasks = result.tasks || [];
+        this._rawCapacityByBatch = result.capacityByBatch || {};
         const healedCount = Number(result.healedStuckOrders) || 0;
         this.setData({
-          boardGroups,
           orderCount: orders.length,
           materialsSummary: result.materials || [],
           selfHealNotice: healedCount > 0
@@ -432,12 +505,21 @@ Page({
             : '',
           loadError: ''
         });
+        // 🎨 重新加载后按当前已选中的筛选 Tab 重新分组（下拉刷新场景下用户
+        // 可能选的不是"全部"），不强制把筛选重置回"全部"
+        this.applyStatusFilter();
       } else {
-        this.setData({ boardGroups: [], orderCount: 0, materialsSummary: [], loadError: (result && result.error) || '加载失败' });
+        this._rawOrders = [];
+        this._rawTasks = [];
+        this._rawCapacityByBatch = {};
+        this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: (result && result.error) || '加载失败' });
       }
     } catch (err) {
       console.error('[production-fulfillment] loadOrders 异常:', err);
-      this.setData({ boardGroups: [], orderCount: 0, materialsSummary: [], loadError: '加载异常，请重试' });
+      this._rawOrders = [];
+      this._rawTasks = [];
+      this._rawCapacityByBatch = {};
+      this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: '加载异常，请重试' });
     } finally {
       this.setData({ loading: false });
       // 🐛 wxml 的重试按钮 bindtap="loadOrders" 直接把 loadOrders 当 tap 处理

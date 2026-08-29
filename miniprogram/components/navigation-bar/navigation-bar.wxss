@@ -130,12 +130,14 @@
   box-sizing: border-box;
 }
 
+/* 🐛 标题折行修复：此前用 -webkit-line-clamp:2 允许标题换到第二行，窄屏
+   （iPhone SE 等）+ 较长标题（如"📦 排单与发货管理"）叠加 .weui-navigation-bar__center
+   为右侧胶囊预留的 120rpx padding 后，经常真的换成两行，与胶囊/返回键错位。
+   微信原生导航栏标题从不换行，统一改成单行省略号截断，绝不出现双行 */
 .weui-navigation-bar__center-text {
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   max-width: 100%;
 }
 
