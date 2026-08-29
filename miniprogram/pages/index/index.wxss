@@ -5649,12 +5649,22 @@ button.poster-gen-btn[disabled] {
 }
 
 /* ── 弹窗内表单通用样式：仅供"新建门店"档案补全子块（地区/地址/电话/照片）
-   使用，其余表单项已改为内联样式，不再依赖这里的 class ── */
-.form-item {
+   使用，其余表单项已改为内联样式，不再依赖这里的 class ──
+   🐛 命名空间冲突修复：与下面 .apply-form-picker-selector 同一处历史遗留问题——
+   此前这里直接复用裸类名 .form-item/.form-label，而这两个类名分别同时被本文件
+   其它不相关功能占用（.form-item 见约第 2156 行，含 flex:1/min-width:0，
+   原意是给某处横向并排布局的 flex 子项用；.form-label 见约第 4030 行"生成
+   邀请码"表单，display:block + 24rpx 字号）。CSS 按源码顺序层叠合并同名规则、
+   不是整条替换：这里的 view 会先被那条 flex:1 污染（父级并非 flex 容器，
+   在部分客户端渲染引擎下仍可能引发宽度/换行异常），而这里声明在后的
+   display:flex 又会反向覆盖掉"生成邀请码"表单本该有的 display:block，
+   两头互相污染，正是"门店地址/联系电话输入框变形重叠"的根因。改用
+   .apply-form-item/.apply-form-label 专属类名彻底解耦，不再共享裸类名 */
+.apply-form-item {
   margin-bottom: 24rpx;
 }
 
-.form-label {
+.apply-form-label {
   font-size: 26rpx;
   color: #495057;
   font-weight: 500;
@@ -5673,7 +5683,8 @@ button.poster-gen-btn[disabled] {
 .form-input {
   width: 100%;
   background: #F7F8FA;
-  border-radius: 12rpx;
+  border: 1.5rpx solid #ECEEF0;
+  border-radius: 16rpx;
   padding: 22rpx 24rpx;
   font-size: 28rpx;
   box-sizing: border-box;
@@ -5694,7 +5705,8 @@ button.poster-gen-btn[disabled] {
   justify-content: space-between;
   width: 100%;
   background: #F7F8FA;
-  border-radius: 12rpx;
+  border: 1.5rpx solid #ECEEF0;
+  border-radius: 16rpx;
   padding: 22rpx 24rpx;
   font-size: 28rpx;
   color: #212529;

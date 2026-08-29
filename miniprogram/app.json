@@ -55,6 +55,7 @@
     }
   },
   "requiredPrivateInfos": ["getLocation"],
+  "lazyCodeLoading": "requiredComponents",
   "tabBar": {
     "custom": true,
     "color": "#8E8E93",

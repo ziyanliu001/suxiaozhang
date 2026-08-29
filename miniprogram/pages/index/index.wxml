@@ -3379,16 +3379,16 @@
         <text bindtap="onCloseApplyModal" style="flex-shrink: 0; font-size: 36rpx; color: #ADB5BD; padding: 8rpx; line-height: 1;">✕</text>
       </view>
 
-      <!-- 2. Body（可滚动，flex:1 吃光 Header/Footer 剩余高度） -->
-      <scroll-view scroll-y enhanced="true" show-scrollbar="true" style="height: 52vh; width: 100%; padding: 24rpx 32rpx 8rpx; box-sizing: border-box;">
+      <!-- 2. Body（可滚动，max-height 封顶，内容不足时随内容收缩，不留空白） -->
+      <scroll-view scroll-y enhanced="true" show-scrollbar="true" style="max-height: 70vh; width: 100%; padding: 24rpx 32rpx 8rpx; box-sizing: border-box;">
 
         <view style="margin-bottom: 24rpx;">
           <!-- 🐛 顺序修复：Tab 切换器决定"新建/已有"这个模式，理应排在最前面；
                此前先渲染随模式变化的标签文字（如"新门店名称"），再渲染决定这个
                模式的 Tab，视觉/逻辑顺序倒置 -->
           <view style="display: flex; flex-direction: row; gap: 6rpx; margin-bottom: 12rpx; background: #F1F3F5; border-radius: 999rpx; padding: 6rpx; box-sizing: border-box;">
-            <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; {{applyForm.storeSelectionType === 'existing' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold;' : 'color: #666666;'}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
-            <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; {{applyForm.storeSelectionType === 'custom' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold;' : 'color: #666666;'}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
+            <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; transition: all 0.2s ease; {{applyForm.storeSelectionType === 'existing' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold; box-shadow: 0 4rpx 12rpx rgba(192, 57, 43, 0.28);' : 'color: #666666;'}}" data-mode="existing" bindtap="onSwitchApplyStoreMode">选择已有门店</view>
+            <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; transition: all 0.2s ease; {{applyForm.storeSelectionType === 'custom' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold; box-shadow: 0 4rpx 12rpx rgba(192, 57, 43, 0.28);' : 'color: #666666;'}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
           </view>
 
           <!-- 标签随模式切换：新建门店时显示必填红星 -->
@@ -3396,37 +3396,39 @@
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:else>门店</text>
 
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
-            <view style="background: #FAF8F5; border: 1.5rpx solid #EFE6D8; border-radius: 16rpx; padding: 22rpx 24rpx; box-sizing: border-box; display: flex; flex-direction: row; align-items: center;">
+            <view style="background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 22rpx 24rpx; box-sizing: border-box; display: flex; flex-direction: row; align-items: center;">
               <text style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 28rpx;">{{applyForm.storeName || '请选择门店'}}</text>
               <text style="flex-shrink: 0; margin-left: 12rpx; font-size: 22rpx; color: #ADB5BD;">▾</text>
             </view>
           </picker>
-          <input wx:else style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F8F9FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; border: 1rpx solid #EAEAEA; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <input wx:else style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
         <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进
              申请表单，超管审核通过后由 processRoleAudit 一并写入新建的门店档案。
-             继续沿用原 class 结构（未在任何一次问题截图中出现，且门店照片
-             上传格子复用全文件共用的 receipt-grid-container 组件样式，不值得
-             为此改造） -->
+             🐛 form-item/form-label 已改名为 apply-form-item/apply-form-label
+             （见 index.wxss 同处说明）：原裸类名与文件里另外两处不相关功能撞名，
+             CSS 按源码顺序层叠合并、不是整条替换，双向互相污染样式，正是"门店
+             地址/联系电话输入框变形重叠"的根因。门店照片上传格子仍复用全文件
+             共用的 receipt-grid-container 组件样式，未改动 -->
         <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
-          <view class="form-item">
-            <text class="form-label"><text class="form-required">*</text> 选择所属地区</text>
+          <view class="apply-form-item">
+            <text class="apply-form-label"><text class="form-required">*</text> 选择所属地区</text>
             <picker mode="region" value="{{applyForm.region}}" bindchange="onApplyRegionChange">
               <view class="apply-form-picker-selector">{{applyForm.region.length ? applyForm.region.join(' / ') : '请选择省 / 市 / 区 ▼'}}</view>
             </picker>
           </view>
-          <view class="form-item">
-            <text class="form-label">门店地址（可选）</text>
+          <view class="apply-form-item">
+            <text class="apply-form-label">门店地址（可选）</text>
             <input class="form-input" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
           </view>
-          <view class="form-item">
-            <text class="form-label">联系电话（可选）</text>
+          <view class="apply-form-item">
+            <text class="apply-form-label">联系电话（可选）</text>
             <input class="form-input" type="number" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
           </view>
-          <view class="form-item">
-            <text class="form-label">门店照片（可选）</text>
+          <view class="apply-form-item">
+            <text class="apply-form-label">门店照片（可选）</text>
             <view class="receipt-grid-container">
               <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
                 <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" binderror="onImageLoadError" />
@@ -3481,16 +3483,16 @@
              决定，这里不做客户端必填校验（没配置密钥的门店留空也能通过） -->
         <view style="margin-bottom: 24rpx;" wx:if="{{applyForm.storeSelectionType === 'existing' && (applyForm.requestedRole === 'store_patriarch' || applyForm.requestedRole === 'store_manager' || applyForm.requestedRole === 'finance')}}">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;">管理员密钥（如目标门店已设置，请填写）</text>
-          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="未设置密钥的门店可留空" value="{{applyForm.adminKeyInput}}" bindinput="onApplyAdminKeyInput" />
+          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="未设置密钥的门店可留空" value="{{applyForm.adminKeyInput}}" bindinput="onApplyAdminKeyInput" />
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;">💡 密钥由该门店现任大家长设置，向其索取；若该门店从未设置过密钥，留空也能提交</text>
         </view>
         <view style="margin-bottom: 24rpx;">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 真实姓名</text>
-          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
+          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
         </view>
         <view style="margin-bottom: 24rpx;">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 手机号</text>
-          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
+          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
         </view>
         <!-- 🛡️ 额外滚动安全边距：在原有 safe-area 占位基础上再加 40rpx 固定间距，
              确保表单滚到底部时最后一个输入框不贴着底部固定的提交按钮 -->
@@ -3498,7 +3500,7 @@
       </scroll-view>
 
       <!-- 3. Footer（固定置底，不随 Body 滚动） -->
-      <view style="flex-shrink: 0; position: sticky; bottom: 0; background: #FFFFFF; padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom)); box-sizing: border-box; z-index: 10;">
+      <view style="flex-shrink: 0; position: sticky; bottom: 0; background: #FFFFFF; padding: 24rpx 32rpx calc(24rpx + constant(safe-area-inset-bottom)); padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); box-sizing: border-box; z-index: 10;">
         <button
           style="width: 100%; height: 88rpx; line-height: 88rpx; display: flex; align-items: center; justify-content: center; text-align: center; background: #C0392B; color: #FFFFFF; border-radius: 44rpx; font-size: 32rpx; font-weight: 600; border: none; white-space: nowrap; box-sizing: border-box; {{isSubmittingApply ? 'opacity: 0.55;' : ''}}"
           bindtap="onSubmitRoleApply"
