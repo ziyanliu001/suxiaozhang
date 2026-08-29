@@ -477,6 +477,13 @@ Page({
       if (!durationDaysNum || durationDaysNum <= 0) {
         errors.durationDays = '请填写有效的有效期天数';
         ok = false;
+      } else if (durationDaysNum > 3650) {
+        // 🐛 根因修复（2102 年到期日溢出）：与云函数 activateTenantSubscription
+        // 的 MAX_DURATION_DAYS 同一口径——多打/少删一个 0（365 误输成 3650/36500）
+        // 会铸造出携带巨额有效期天数的激活码，兑换后到期日会被"正确地"顺延到
+        // 离谱的未来年份。10 年封顶在这里先拦一道，不必等云函数兜底才发现填错
+        errors.durationDays = '有效期天数最多 3650 天（10 年），请检查是否多输了 0';
+        ok = false;
       }
     }
     if (!quantityNum || quantityNum <= 0) {

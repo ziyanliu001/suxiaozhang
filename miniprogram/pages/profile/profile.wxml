@@ -2553,8 +2553,8 @@
              white-space:nowrap + overflow:hidden + text-overflow:ellipsis，
              双重保险确保严禁出现折行 -->
         <view class="sub-modal-footer">
-          <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:if="{{comparePlanTab === 'pro'}}">💳 立即开通专业版</button>
-          <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">👑 立即开通旗舰版</button>
+          <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:if="{{comparePlanTab === 'pro'}}">{{planActionLabels.pro}}</button>
+          <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">{{planActionLabels.enterprise}}</button>
           <button class="btn-pay-action btn-pay-action-addon" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'add_on'}}">🏪 确认购买扩容包</button>
           <view class="btn-pay-action btn-pay-action-disabled" wx:else>当前为默认免费档位</view>
           <text class="sub-btn-dismiss" bindtap="onCloseSubscriptionModal">暂不升级</text>

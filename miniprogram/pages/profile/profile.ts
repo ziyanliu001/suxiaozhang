@@ -127,6 +127,15 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: '旗舰版'
 };
 
+// 🆕 底部主按钮文案联动：与 cloudfunctions/createSubscriptionOrder/lib/applyPayment.js
+// 的 PLAN_RANK 同一份拷贝（只用于前端文案判断"该不该说续费/该不该说升级"，
+// 不参与任何鉴权/计费，真正生效的档位排序仍以云函数为准）
+const PLAN_RANK: Record<string, number> = { basic: 0, pro: 1, enterprise: 2 };
+const PLAN_ACTION_META: Record<'pro' | 'enterprise', { icon: string; name: string; price: string }> = {
+  pro: { icon: '💳', name: '专业版', price: '¥1,688/年' },
+  enterprise: { icon: '👑', name: '旗舰版', price: '¥3,688/年' }
+};
+
 // 🏷️ 公告管理弹窗：内置 7 条常用场景预设文案，与首页「编辑通报内容」弹窗中的
 // PRESET_NOTICES 同步，让店长/财务可在两处弹窗快速套用同一套模板
 // 🐛 重大隔离漏洞修复：与 index.ts getNoticeTemplate 同一个根因——这份预设文案
@@ -512,6 +521,10 @@ Page({
     // createSubscriptionOrder 云函数里登记真实价格，底部主按钮按 Tab 分流成
     // 三种真实的微信支付下单动作；basic 是免费默认档，不对应任何下单动作
     comparePlanTab: 'pro' as 'basic' | 'pro' | 'enterprise' | 'add_on',
+    // 🆕 套餐对比底部主按钮文案：按"当前实际持有的档位 vs 正在浏览的 Tab
+    // 档位"联动——已是该档位显示"立即续费 ¥xxx/年"，更高档位显示"立即升级"，
+    // 尚未开通/已过期时保留原有"立即开通"首购文案。见 computePlanActionLabels()
+    planActionLabels: { pro: '💳 立即开通专业版', enterprise: '👑 立即开通旗舰版' } as Record<'pro' | 'enterprise', string>,
     // 🏪 扩容门店包购买数量（家/年），¥200/店/年，与后端 activateTenantSubscription
     // MAX_ADD_ON_EXTRA_STORES / createSubscriptionOrder MAX_ADD_ON_QUANTITY 同一档上限
     addOnQuantity: 1,
@@ -5456,8 +5469,25 @@ Page({
         coreReadOnly: result.coreReadOnly,
         isActive,
         expireDateStr
-      }
+      },
+      planActionLabels: this.computePlanActionLabels(result.planType, isActive)
     });
+  },
+
+  // 🆕 见 data.planActionLabels 声明处注释：只依赖"当前持有档位 + 是否已生效"
+  // 两个输入，与 comparePlanTab（用户正在浏览哪个 Tab）无关——两个 Tab
+  // （pro/enterprise）各自的文案一次性算好存进 data，WXML 按当前 Tab 直接取用，
+  // 不需要每次切 Tab 都重新算一遍
+  computePlanActionLabels(currentPlanType: string, isActive: boolean): Record<'pro' | 'enterprise', string> {
+    const currentRank = PLAN_RANK[currentPlanType] ?? 0;
+    const build = (tab: 'pro' | 'enterprise') => {
+      const meta = PLAN_ACTION_META[tab];
+      const tabRank = PLAN_RANK[tab];
+      if (isActive && currentRank >= tabRank) return `${meta.icon} 立即续费 ${meta.price}`;
+      if (isActive && currentRank < tabRank) return `${meta.icon} 立即升级${meta.name}`;
+      return `${meta.icon} 立即开通${meta.name}`;
+    };
+    return { pro: build('pro'), enterprise: build('enterprise') };
   },
 
   // 🐛 防重锁：与 statistics.ts fetchStatistics 同一套 isLoading 式防抖，避免用户
@@ -5579,11 +5609,12 @@ Page({
         showSubscriptionModal: false
       });
       setTabBarHidden(this, false);
-      wx.showToast({
-        title: `已成功激活【${planLabel}】，有效期至 ${result.data.serviceExpireDate}`,
-        icon: 'success',
-        duration: 3000
-      });
+      // 🐛 根因修复：微信原生 Toast 默认宽度只能容纳约 7 个汉字/行、最多两行，
+      // 此前"已成功激活【XX版】，有效期至 YYYY-MM-DD"这类长文案在真机上会被
+      // 截断成"已成功激活【专业...」看不全。到期日/套餐名 fetchSubscriptionInfo()
+      // 已经刷新进 subscriptionInfo 卡片里完整展示，Toast 只需要给一个简短的
+      // 动作反馈，不必在寸土寸金的弹层里塞完整信息
+      wx.showToast({ title: '激活成功', icon: 'success', duration: 2000 });
     } catch (err) {
       wx.hideLoading();
       console.error('[onRedeemActivationCode] 兑换异常:', err);
@@ -5716,17 +5747,19 @@ Page({
         wx.hideLoading();
       }
 
-      // 🆕 按下单的 SKU 分别展示对应的成功文案，不再写死"专业版"——旗舰版/
-      // 扩容门店包走同一条支付流程，成功提示也应该对得上用户实际购买的东西
+      // 🐛 根因修复：此前按 SKU 拼出的完整权益说明长达二三十字，远超微信原生
+      // Toast 单行约 7 字、最多两行的默认宽度，真机上会截断成"激活成功！已为
+      // 您开通专..."看不全。精简为短促的动作反馈，完整权益本就在套餐对比卡片
+      // 里列着，Toast 不需要重复一遍
       const successTitleMap: Record<string, string> = {
-        PRO_YEARLY: '激活成功！已为您开通专业版跨店汇总、进销存与 Excel 导出权限',
-        FLAGSHIP_YEARLY: '激活成功！已为您开通旗舰版数据大屏、财务凭证导出与数据备份权限',
-        ADD_ON_STORE: `购买成功！已为您的机构追加 ${quantity || 1} 家门店配额`
+        PRO_YEARLY: '激活成功',
+        FLAGSHIP_YEARLY: '激活成功',
+        ADD_ON_STORE: `购买成功 +${quantity || 1}家`
       };
       wx.showToast({
-        title: successTitleMap[planKey] || '激活成功！',
+        title: successTitleMap[planKey] || '激活成功',
         icon: 'success',
-        duration: 3000
+        duration: 2000
       });
     } catch (err: any) {
       wx.hideLoading();

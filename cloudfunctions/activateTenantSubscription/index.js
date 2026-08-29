@@ -40,6 +40,14 @@ const _ = db.command;
 const ACTIVATION_CODES_COLLECTION = 'tenant_activation_codes';
 const TENANT_SUB_COLLECTION = 'tenant_subscriptions';
 const DEFAULT_DURATION_DAYS = 365;
+// 🐛 根因修复（2102 年到期日溢出）：generate 表单的"有效期天数"此前只校验
+// `> 0`，没有上限——平台管理员一次多打/少删一个 0（如把 365 误输成 3650、
+// 36500）会铸造出一张携带巨额 durationDays 的激活码，兑换后 addDaysToDateStr
+// 会"正确地"把这个天数加上去，产生类似 2102 年这种远超预期的到期日。这不是
+// 日期计算逻辑本身的 bug（setDate 累加天数没有任何溢出问题），而是数值输入
+// 缺少合理上限——铸造激活码本就是给"按年付费"场景用的，10 年封顶足够覆盖
+// 任何真实合同场景，超出这个范围基本可以断定是误输入
+const MAX_DURATION_DAYS = 3650; // 10 年封顶
 const DEFAULT_PLAN_TYPE = 'pro';
 // 激活码只用来解锁付费档位——basic 本就是默认免费档，没有"兑换成 basic"这回事
 const VALID_PLAN_TYPES = ['pro', 'enterprise'];
@@ -172,7 +180,7 @@ async function handleGenerate(event, OPENID) {
 
   const planType = VALID_PLAN_TYPES.includes(event.planType) ? event.planType : DEFAULT_PLAN_TYPE;
   const durationDays = Number.isFinite(event.durationDays) && event.durationDays > 0
-    ? Math.floor(event.durationDays)
+    ? Math.min(Math.floor(event.durationDays), MAX_DURATION_DAYS)
     : DEFAULT_DURATION_DAYS;
 
   for (let i = 0; i < quantity; i++) {
