@@ -46,7 +46,9 @@ async function resolveTarget(caller, requestedStoreId) {
     const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
     const store = storeRes && storeRes.data;
     if (!store) return { allowed: false, error: '目标门店不存在' };
-    if (caller.tenantId && store.tenantId && caller.tenantId !== store.tenantId) {
+    // 🛡️ 多租户越权修复：两侧 tenantId 都必须存在且相等才放行，任一缺失时不再
+    // 无条件放行。
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
       return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
     }
     return { allowed: true, storeId: requestedStoreId };

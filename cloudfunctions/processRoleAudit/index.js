@@ -1042,7 +1042,13 @@ exports.main = async (event, context) => {
     }
 
     // 🏢 多租户边界：审核人与申请人必须同属一个机构
-    if (auditor.tenantId && applyData.tenantId && auditor.tenantId !== applyData.tenantId) {
+    // 🛡️ 多租户越权修复：auditor.tenantId 或 applyData.tenantId 任一缺失时不再
+    // 放行——此前"两侧都有值才比对"的写法，会让尚未回填 tenantId 的超管账号
+    // （早期 setupSuperAdmin 引导创建，见 createStore.js resolveCallerTenantId
+    // 同类场景）或尚未回填 tenantId 的历史待审批记录跳过比对，等于可以审批任意
+    // 机构的角色申请（含下方大家长任命这类高权限角色）。两侧都必须存在且相等
+    // 才放行，宁可因迁移过渡期账号被拒绝也不放行跨机构审批。
+    if (!auditor.tenantId || !applyData.tenantId || auditor.tenantId !== applyData.tenantId) {
       return { success: false, error: '无权限：该申请不属于您所在的机构' };
     }
 

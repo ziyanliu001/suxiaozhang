@@ -49,10 +49,20 @@ async function hasBoundPatriarch(storeId) {
 
 // 职责分离版本的门店/机构归属校验：与 checkCanEdit 不同，这里【不】自动放行"提交人本人"，
 // 核对确认/稽核封账/解封/作废这四个动作本质是"审批别人提交的东西"，提交人不能自证自批。
+//
+// 🛡️ 多租户越权修复：super_admin 的越权兜底权限严格收敛到"caller 与 doc 的 tenantId
+// 都存在且相等"，不能只要角色是 super_admin 就无条件放行。此前的写法在 caller.tenantId
+// 或 doc.tenantId 任一侧缺失时（早期通过 setupSuperAdmin 引导创建的账号可能没有
+// tenantId，见 createStore.js resolveCallerTenantId 同类场景；或历史存量记录尚未
+// 回填 tenantId）会直接跳过租户比对、无条件放行，等于一个尚未回填 tenantId 的
+// super_admin 账号可以绕开租户边界审批任意机构的 report_logs 记录。与
+// deleteMealReport 头部注释里"多租户改造迁移样板"（super_admin 管辖收敛为同一
+// tenantId 下所有门店，不是全局跨租户）同一套安全口径对齐；tenantId 尚未回填时
+// 宁可拒绝也不放行，与本仓库一贯的 fail-closed 原则一致。
 function isSameScope(caller, doc) {
   if (!caller) return false;
   if (caller.tenantId && doc.tenantId && caller.tenantId !== doc.tenantId) return false;
-  if (caller.role === 'super_admin') return true;
+  if (caller.role === 'super_admin' && caller.tenantId && doc.tenantId && caller.tenantId === doc.tenantId) return true;
   return !!((caller.storeId && doc.storeId && caller.storeId === doc.storeId)
     || (caller.storeName && doc.shopName && caller.storeName === doc.shopName));
 }

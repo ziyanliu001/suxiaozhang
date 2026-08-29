@@ -122,6 +122,16 @@ async function resolveReviewStoreId(caller, requestedStoreId) {
 
   if (caller.role === 'super_admin') {
     if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
+    // 🛡️ 多租户越权修复：此前这里没有做任何 tenantId 校验，只要传了任意
+    // requestedStoreId 就无条件放行，等于任何 super_admin 都能查看/审核其他
+    // 机构门店的义工提交记录。改为与 manageActivityLog/manageDailyMenu 等同一套
+    // 口径：查出目标门店后要求两侧 tenantId 都存在且相等才放行。
+    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
+    const store = storeRes && storeRes.data;
+    if (!store) return { allowed: false, error: '目标门店不存在' };
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+      return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
+    }
     return { allowed: true, storeId: requestedStoreId };
   }
 
@@ -614,6 +624,14 @@ async function resolveReadStoreId(caller, requestedStoreId) {
 
   if (caller.role === 'super_admin') {
     if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
+    // 🛡️ 多租户越权修复：同上 resolveReviewStoreId 处的修复说明，此前没有做
+    // 任何 tenantId 校验。
+    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
+    const store = storeRes && storeRes.data;
+    if (!store) return { allowed: false, error: '目标门店不存在' };
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+      return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
+    }
     return { allowed: true, storeId: requestedStoreId };
   }
 

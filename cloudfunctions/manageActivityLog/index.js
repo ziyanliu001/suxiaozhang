@@ -70,7 +70,9 @@ async function resolveWriteTarget(caller, requestedStoreId, opts) {
     const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
     const store = storeRes && storeRes.data;
     if (!store) return { allowed: false, error: '目标门店不存在' };
-    if (caller.tenantId && store.tenantId && caller.tenantId !== store.tenantId) {
+    // 🛡️ 多租户越权修复：两侧 tenantId 都必须存在且相等才放行，任一缺失时不再
+    // 无条件放行（与 manageStoreProfile/deleteMealReport 同类修复一致）。
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
       return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
     }
     return { allowed: true, storeId: requestedStoreId, storeName: store.storeName || '', tenantId: caller.tenantId || store.tenantId || '' };
@@ -107,6 +109,16 @@ async function resolveReviewStoreId(caller, requestedStoreId) {
 
   if (caller.role === 'super_admin') {
     if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
+    // 🛡️ 多租户越权修复：此前这里没有做任何 tenantId 校验，只要传了任意
+    // requestedStoreId 就无条件放行，等于任何 super_admin 都能审核其他机构
+    // 门店的待确认动态。改为与上方 resolveWriteTarget 同一套口径：查出目标
+    // 门店后要求两侧 tenantId 都存在且相等才放行。
+    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
+    const store = storeRes && storeRes.data;
+    if (!store) return { allowed: false, error: '目标门店不存在' };
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+      return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
+    }
     return { allowed: true, storeId: requestedStoreId };
   }
 
@@ -195,7 +207,7 @@ exports.main = async (event) => {
             if (!target.allowed) {
               return { success: false, error: target.error };
             }
-            if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+            if (!existing.tenantId || !target.tenantId || existing.tenantId !== target.tenantId) {
               return { success: false, error: '无权限：该记录不属于您所在的机构' };
             }
             if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
@@ -318,7 +330,7 @@ exports.main = async (event) => {
           if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
             return { success: false, error: '无权限：不能删除其他门店的大事记' };
           }
-          if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+          if (!existing.tenantId || !target.tenantId || existing.tenantId !== target.tenantId) {
             return { success: false, error: '无权限：该记录不属于您所在的机构' };
           }
         }
@@ -345,7 +357,7 @@ exports.main = async (event) => {
         if ((caller.role === 'store_manager' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
           return { success: false, error: '无权限：不能操作其他门店的大事记' };
         }
-        if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+        if (!existing.tenantId || !target.tenantId || existing.tenantId !== target.tenantId) {
           return { success: false, error: '无权限：该记录不属于您所在的机构' };
         }
 

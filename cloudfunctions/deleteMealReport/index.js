@@ -40,12 +40,18 @@ async function checkCanDelete(doc) {
       const role = user.role;
 
       // 🏢 租户边界：若双方都已回填 tenantId 且不一致，直接拒绝（无论角色多高）
-      if (user.tenantId && doc.tenantId && user.tenantId !== doc.tenantId) {
-        return { allowed: false, role };
-      }
-
+      // 🛡️ 多租户越权修复：super_admin 的兜底放行严格收敛到"双方 tenantId 都
+      // 存在且相等"，不再是"只要没被证明不一致就放行"——此前的写法在 user.tenantId
+      // 或 doc.tenantId 任一缺失时（早期 setupSuperAdmin 引导创建的账号可能没有
+      // tenantId，见 createStore.js resolveCallerTenantId 同类场景；或本文件顶部
+      // 注释提到的"迁移过渡期存量数据"）会让 super_admin 无条件跳过比对直接放行，
+      // 等于可以跨机构删除他人门店的记账记录。non-super_admin 角色仍走下方的
+      // 同店校验，不受本次修复影响。
       if (role === 'super_admin') {
-        return { allowed: true, role };
+        if (user.tenantId && doc.tenantId && user.tenantId === doc.tenantId) {
+          return { allowed: true, role };
+        }
+        return { allowed: false, role };
       }
       // 🛡️ 店长/财务/大家长（权限向下继承）仅可操作本门店数据，禁止跨店删除他店记录
       if (role === 'store_manager' || role === 'finance' || role === 'store_patriarch') {

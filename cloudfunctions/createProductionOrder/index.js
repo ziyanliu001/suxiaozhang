@@ -233,9 +233,21 @@ async function handlePaymentSucceeded(event) {
   if (!order) return { success: false, error: '订单不存在' };
   if (order.orderStatus === 'paid') return { success: true, alreadyProcessed: true }; // 幂等
 
-  await db.collection(ORDERS_COLLECTION).doc(bizId).update({
-    data: { orderStatus: 'paid', paidAt: db.serverDate(), transactionId: paymentOrder.transactionId || '' }
-  });
+  // 🛡️ 幂等修复：上面这行"先读 orderStatus 再判断"不是原子操作，wxPayCore 的
+  // dispatchNotifyHook 会在同一笔支付上重复触发通知（真实微信回调网络重推、
+  // mock-pay-success 连续调用都会走到这里），两次几乎同时的调用都可能读到
+  // orderStatus !== 'paid' 而双双通过检查。buildSettlement/bumpCustomerCheckin
+  // 各自内部虽然也有幂等兜底，但这里改用与 wxPayCore.orderService.markPaidIdempotent
+  // 同一套 CAS（条件更新）手法作为第一道防线，两次并发调用只有一次能真正拿到
+  // "由我处理"的资格，避免重复触发下游分账/打卡云函数调用。
+  const _ = db.command;
+  const claimRes = await db.collection(ORDERS_COLLECTION).where({
+    _id: bizId,
+    orderStatus: _.neq('paid')
+  }).update({ data: { orderStatus: 'paid', paidAt: db.serverDate(), transactionId: paymentOrder.transactionId || '' } });
+  if (!claimRes.stats || claimRes.stats.updated !== 1) {
+    return { success: true, alreadyProcessed: true };
+  }
 
   const { producerRate, promoterRate } = await resolveSettlementRates(order.tenantId, !!order.promoterOpenId);
   await cloud.callFunction({

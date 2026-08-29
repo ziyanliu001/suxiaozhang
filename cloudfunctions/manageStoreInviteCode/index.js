@@ -125,7 +125,12 @@ async function handleGenerate(event, OPENID) {
   }
   // 🏢 多租户边界：super_admin 的管辖范围收敛为本机构，与 createStore/getStoreQRCode
   // 同一口径，禁止跨机构发码
-  if (caller.role === 'super_admin' && caller.tenantId && store.tenantId && store.tenantId !== caller.tenantId) {
+  // 🛡️ 多租户越权修复：两侧 tenantId 都必须存在且相等才放行，任一缺失时不再
+  // 无条件放行——此前的写法在 caller.tenantId 或 store.tenantId 任一缺失时会
+  // 跳过比对，让尚未回填 tenantId 的 super_admin 账号（见 createStore.js
+  // resolveCallerTenantId 同类场景）为任意机构的门店生成邀请码，等于可以向
+  // 其他机构注入 store_manager/store_patriarch 等高权限角色。
+  if (caller.role === 'super_admin' && (!caller.tenantId || !store.tenantId || store.tenantId !== caller.tenantId)) {
     return { success: false, error: '无权限：不能为其他机构门店生成邀请码' };
   }
 

@@ -41,6 +41,13 @@ exports.main = async (event, context) => {
 
     // 🏢 多租户边界：任何角色的查询都先收敛到调用者所属机构，
     // "全部门店"在多租户语境下始终指"本机构下的全部门店"，绝不跨机构
+    // 🛡️ 多租户越权修复：super_admin 若 tenantId 缺失（早期账号未回填，见
+    // createStore.js resolveCallerTenantId 同类场景），此前 matchCondition
+    // 完全不带 tenantId 约束，"查看全部门店"就会变成查看全平台所有机构的
+    // report_logs，直接拒绝而不是静默放行无约束查询。
+    if (role === 'super_admin' && !tenantId) {
+      return { success: false, error: '您的管理员账号缺少所属机构信息，无法查询' };
+    }
     if (tenantId) {
       matchCondition.tenantId = tenantId;
     }

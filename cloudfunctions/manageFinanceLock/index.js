@@ -244,6 +244,19 @@ exports.main = async (event) => {
     if ((caller.role === 'finance' || caller.role === 'store_patriarch') && caller.storeId !== storeId) {
       return { success: false, errMsg: '无权限：不能操作其他门店的账本' };
     }
+    // 🛡️ 多租户越权修复：super_admin 此前没有任何门店归属校验，只要传了任意
+    // storeId 就能批量封账/解封——buildRangeWhere 里 tenantId 又是"caller.tenantId
+    // 存在才加进 where"，一个尚未回填 tenantId 的 super_admin 账号（见 createStore.js
+    // resolveCallerTenantId 同类场景）实际上可以对任意机构的账本批量操作。要求
+    // 目标门店存在且与 caller 的 tenantId 严格相等才放行。
+    if (caller.role === 'super_admin') {
+      const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+      const store = storeRes && storeRes.data;
+      if (!store) return { success: false, errMsg: '目标门店不存在' };
+      if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+        return { success: false, errMsg: '无权限：目标门店不属于您所在的机构' };
+      }
+    }
 
     const where = buildRangeWhere(caller, storeId, startDate, endDate);
 

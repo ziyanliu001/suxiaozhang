@@ -50,7 +50,10 @@ function checkCanStamp(doc, openId, caller) {
   if (!caller) return false;
 
   if (caller.tenantId && doc.tenantId && caller.tenantId !== doc.tenantId) return false;
-  if (caller.role === 'super_admin') return true;
+  // 🛡️ 多租户越权修复：super_admin 的兜底放行严格收敛到"双方 tenantId 都存在
+  // 且相等"，不再是"只要没被证明不一致就放行"——任一侧缺失 tenantId（早期
+  // 账号或历史记录）时不再无条件放行，与其余管理类云函数同一套修复口径一致。
+  if (caller.role === 'super_admin' && caller.tenantId && doc.tenantId && caller.tenantId === doc.tenantId) return true;
   // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
   if (caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') {
     return !!((caller.storeId && doc.storeId && caller.storeId === doc.storeId)

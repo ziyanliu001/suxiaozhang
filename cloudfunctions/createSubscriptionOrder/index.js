@@ -222,9 +222,22 @@ async function handlePaymentSucceeded(event) {
     return { success: false, error: '订单不存在' };
   }
 
-  // 幂等：已处理过的订单直接返回成功，避免 dispatchNotifyHook 异常重试时重复延期
-  if (order.status === 'paid') {
-    console.log('[createSubscriptionOrder] 订单已处理（幂等跳过）:', bizId);
+  // 🛡️ 幂等修复：原先"先读 order.status 再判断"不是原子操作，wxPayCore 的
+  // dispatchNotifyHook 明确会在同一笔支付上重复触发通知（真实微信回调网络重推、
+  // 或 mock-pay-success 短时间内被连续调用都会走到这里）——两次几乎同时的调用
+  // 都可能读到 status !== 'paid'，双双通过检查后各自执行一次 applySubscriptionPayment，
+  // 等于一笔支付被计成两次续期/升级，租户平白多得订阅时长或门店配额。改用与
+  // wxPayCore.orderService.markPaidIdempotent 同一套 CAS（条件更新）手法：
+  // 只有 status 不是 'paid' 时才能原子地抢到"本次由我处理"的资格，抢到后才
+  // 调用 applySubscriptionPayment（其内部末尾仍会把 status 正式写成 'paid'
+  // 并补充 finalPlanType/newExpireDate 等字段，这里先用占位状态卡住并发）。
+  const _ = db.command;
+  const claimRes = await db.collection(ORDERS_COLLECTION).where({
+    _id: bizId,
+    status: _.neq('paid')
+  }).update({ data: { status: 'activating' } });
+  if (!claimRes.stats || claimRes.stats.updated !== 1) {
+    console.log('[createSubscriptionOrder] 订单已处理或正在处理中（幂等跳过）:', bizId);
     return { success: true, alreadyProcessed: true };
   }
 

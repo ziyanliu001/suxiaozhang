@@ -190,7 +190,13 @@ async function resolveReadTarget(caller, requestedStoreId, requestedStoreName) {
       store = listRes && listRes.data && listRes.data[0];
     }
     if (!store) return { allowed: false, error: '目标门店不存在' };
-    if (caller.tenantId && store.tenantId && caller.tenantId !== store.tenantId) {
+    // 🛡️ 多租户越权修复：caller.tenantId 或 store.tenantId 任一缺失时不再放行——
+    // 此前"两侧都有值才比对"的写法，会让尚未回填 tenantId 的总部级账号（早期
+    // setupSuperAdmin 引导创建，见 createStore.js resolveCallerTenantId 同类场景）
+    // 或尚未回填 tenantId 的历史门店记录跳过比对，读到 adminKey 等敏感字段（见
+    // 下方 GET 分支）。两侧都必须存在且相等才放行，与 deleteMealReport 同类修复
+    // 一致，宁可因迁移过渡期账号被拒绝也不放行跨机构读取。
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
       return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
     }
     return { allowed: true, storeId: store._id };
@@ -217,7 +223,9 @@ async function resolveWriteTarget(caller, requestedStoreId) {
     const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
     const store = storeRes && storeRes.data;
     if (!store) return { allowed: false, error: '目标门店不存在' };
-    if (caller.tenantId && store.tenantId && caller.tenantId !== store.tenantId) {
+    // 🛡️ 多租户越权修复：同上 resolveReadTarget 处的修复说明，两侧 tenantId 都
+    // 必须存在且相等才放行编辑，不因任一侧缺失就跳过比对。
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
       return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
     }
     return { allowed: true, storeId: requestedStoreId };
@@ -437,7 +445,9 @@ exports.main = async (event, context) => {
       const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
       const store = storeRes && storeRes.data;
       if (!store) return { success: false, error: '门店不存在' };
-      if (caller.tenantId && store.tenantId && caller.tenantId !== store.tenantId) {
+      // 🛡️ 多租户越权修复：同上 resolveReadTarget/resolveWriteTarget 处的修复
+      // 说明，两侧 tenantId 都必须存在且相等才放行审批。
+      if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
         return { success: false, error: '无权限：不能审批其他机构的门店' };
       }
       if (caller.role === 'store_patriarch' && caller.storeId !== storeId) {

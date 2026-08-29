@@ -49,6 +49,16 @@ async function resolveManageStoreId(caller, requestedStoreId) {
 
   if (caller.role === 'super_admin') {
     if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
+    // 🛡️ 多租户越权修复：此前这里没有做任何 tenantId 校验，只要传了任意
+    // requestedStoreId 就无条件放行，等于任何 super_admin 都能查看其他机构
+    // 门店的意见箱内容。改为与 manageActivityLog 等同一套口径：查出目标门店
+    // 后要求两侧 tenantId 都存在且相等才放行。
+    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
+    const store = storeRes && storeRes.data;
+    if (!store) return { allowed: false, error: '目标门店不存在' };
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+      return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
+    }
     return { allowed: true, storeId: requestedStoreId };
   }
 

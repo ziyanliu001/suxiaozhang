@@ -44,7 +44,9 @@ async function resolveWriteTarget(caller, requestedStoreId) {
     const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
     const store = storeRes && storeRes.data;
     if (!store) return { allowed: false, error: '目标门店不存在' };
-    if (caller.tenantId && store.tenantId && caller.tenantId !== store.tenantId) {
+    // 🛡️ 多租户越权修复：两侧 tenantId 都必须存在且相等才放行，任一缺失时不再
+    // 无条件放行。
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
       return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
     }
     return { allowed: true, storeId: requestedStoreId, storeName: store.storeName || '', tenantId: caller.tenantId || store.tenantId || '' };
@@ -144,7 +146,7 @@ exports.main = async (event) => {
         if ((caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
           return { success: false, error: '无权限：不能编辑其他门店的模板' };
         }
-        if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+        if (!existing.tenantId || !target.tenantId || existing.tenantId !== target.tenantId) {
           return { success: false, error: '无权限：该记录不属于您所在的机构' };
         }
 
@@ -179,7 +181,7 @@ exports.main = async (event) => {
         if ((caller.role === 'store_manager' || caller.role === 'finance' || caller.role === 'store_patriarch') && existing.storeId !== target.storeId) {
           return { success: false, error: '无权限：不能删除其他门店的模板' };
         }
-        if (existing.tenantId && target.tenantId && existing.tenantId !== target.tenantId) {
+        if (!existing.tenantId || !target.tenantId || existing.tenantId !== target.tenantId) {
           return { success: false, error: '无权限：该记录不属于您所在的机构' };
         }
 
@@ -199,7 +201,7 @@ exports.main = async (event) => {
         const existing = existingRes && existingRes.data;
         if (!existing) return { success: true, message: '记录不存在，忽略计数' };
 
-        if (existing.tenantId && caller.tenantId && existing.tenantId !== caller.tenantId) {
+        if (!existing.tenantId || !caller.tenantId || existing.tenantId !== caller.tenantId) {
           return { success: false, error: '无权限：该记录不属于您所在的机构' };
         }
 

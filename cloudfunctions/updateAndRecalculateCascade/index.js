@@ -56,12 +56,17 @@ async function checkCanEdit(doc) {
       const user = roleRes.data[0];
 
       // 🏢 租户边界：若双方都已回填 tenantId 且不一致，直接拒绝（无论角色多高）
+      // 🛡️ 多租户越权修复：同 deleteMealReport 同类修复，super_admin 的兜底放行
+      // 严格收敛到"双方 tenantId 都存在且相等"，任一缺失时不再无条件放行。
       if (user.tenantId && doc.tenantId && user.tenantId !== doc.tenantId) {
         return { allowed: false, role: user.role };
       }
 
       if (user.role === 'super_admin') {
-        return { allowed: true, role: 'super_admin' };
+        if (user.tenantId && doc.tenantId && user.tenantId === doc.tenantId) {
+          return { allowed: true, role: 'super_admin' };
+        }
+        return { allowed: false, role: user.role };
       }
       // 🛡️ 店长/财务/大家长（权限向下继承）仅可编辑本门店数据，禁止跨店修改他店记录
       if (user.role === 'store_manager' || user.role === 'finance' || user.role === 'store_patriarch') {
