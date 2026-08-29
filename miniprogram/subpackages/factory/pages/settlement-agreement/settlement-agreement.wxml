@@ -1,0 +1,43 @@
+<view class="sa-page">
+
+  <navigation-bar
+    title="📜 工坊分成合作协议"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+
+  <scroll-view class="sa-scroll" scroll-y style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+
+    <view class="sa-card">
+      <text class="sa-card-title">协议主体</text>
+      <view class="sa-party-row" wx:for="{{parties}}" wx:for-item="p" wx:key="role">
+        <text class="sa-party-role">{{p.role}}</text>
+        <text class="sa-party-entity">{{p.entity}}</text>
+        <text class="sa-party-duty">{{p.duty}}</text>
+      </view>
+    </view>
+
+    <view class="sa-card">
+      <text class="sa-card-title">核心费率结构</text>
+      <view class="sa-rate-row" wx:for="{{rateRows}}" wx:for-item="r" wx:key="key">
+        <text class="sa-rate-label">{{r.label}}</text>
+        <text class="sa-rate-value">{{r.value}}</text>
+        <text class="sa-rate-owner">{{r.owner}}</text>
+      </view>
+      <text class="sa-rate-note">无推广人订单：渠道推广分成归零，对应份额并入工坊履约分成（即无推广场景下工坊履约分成实际为 95.00%），平台技术服务费与微信支付通道费比例不变。</text>
+    </view>
+
+    <view class="sa-card" wx:for="{{sections}}" wx:for-item="sec" wx:key="title">
+      <text class="sa-card-title">{{sec.title}}</text>
+      <text class="sa-paragraph" wx:for="{{sec.paragraphs}}" wx:for-item="para" wx:key="*this">{{para}}</text>
+    </view>
+
+    <text class="sa-footer-note">本页展示的费率为系统当前默认口径，具体以三方书面确认的协议为准。</text>
+
+  </scroll-view>
+
+</view>

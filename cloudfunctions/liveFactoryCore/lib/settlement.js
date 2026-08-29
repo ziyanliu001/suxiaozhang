@@ -27,6 +27,11 @@ function computeSettlementSplit({ payAmount, producerRate, promoterRate }) {
 /**
  * 构造一条待写入 order_settlements 的快照记录（不含 db 写入，纯数据组装，
  * 便于 Step 3 的支付成功回调直接复用）。
+ *
+ * 🎯 producerRate/promoterRate 与算出来的金额一起存进快照——费率是产品政策，
+ * 未来可能调整（如工坊分成合作协议的费率变更），但历史订单的分账不能跟着
+ * 一起变。只存金额、不存当时用的费率，日后翻查一笔历史订单只能反推出一个
+ * 近似费率（还要考虑取整误差），不如直接把生效那一刻的费率原样存下来。
  */
 function buildSettlementSnapshot({ tenantId, orderId, payAmount, producerRate, promoterRate }) {
   const split = computeSettlementSplit({ payAmount, producerRate, promoterRate });
@@ -34,6 +39,8 @@ function buildSettlementSnapshot({ tenantId, orderId, payAmount, producerRate, p
     tenantId,
     orderId,
     payAmount,
+    producerRate,
+    promoterRate,
     ...split,
     settlementStatus: 'unsettled',
     isReversal: false
@@ -74,6 +81,9 @@ function decideRefundReversal(settlement, reversalAlreadyExists) {
       orderId: settlement.orderId,
       originalSettlementId: settlement._id,
       payAmount: -settlement.payAmount,
+      // 费率是描述性元数据，不是金额，冲销分录原样带上原费率供核对用，不取负
+      producerRate: settlement.producerRate,
+      promoterRate: settlement.promoterRate,
       producerAmount: -settlement.producerAmount,
       promoterAmount: -settlement.promoterAmount,
       platformFee: -settlement.platformFee,

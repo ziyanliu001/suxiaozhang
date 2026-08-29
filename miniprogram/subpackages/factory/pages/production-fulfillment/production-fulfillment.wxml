@@ -48,6 +48,10 @@
         <text class="pf-quick-action-icon">💰</text>
         <text class="pf-quick-action-text">对账明细</text>
       </view>
+      <view class="pf-quick-action-item" hover-class="pf-quick-action-item-hover" bindtap="onGoToSettlementAgreement">
+        <text class="pf-quick-action-icon">📜</text>
+        <text class="pf-quick-action-text">分账协议</text>
+      </view>
       <view class="pf-quick-action-item" hover-class="pf-quick-action-item-hover" wx:if="{{canManageProducts}}" bindtap="onGoToProductManagement">
         <text class="pf-quick-action-icon">🧺</text>
         <text class="pf-quick-action-text">商品管理</text>
@@ -108,7 +112,7 @@
       </view>
     </view>
 
-    <view class="pf-loading-state" wx:if="{{loading && orders.length === 0}}">
+    <view class="pf-loading-state" wx:if="{{loading && orderCount === 0}}">
       <text>加载中...</text>
     </view>
 
@@ -118,42 +122,91 @@
       <button class="pf-retry-btn" bindtap="loadOrders">重试</button>
     </view>
 
-    <view class="pf-empty-state" wx:elif="{{!loading && orders.length === 0}}">
+    <view class="pf-empty-state" wx:elif="{{!loading && orderCount === 0}}">
       <text class="pf-empty-icon">✅</text>
       <text class="pf-empty-text">暂无待发货订单</text>
     </view>
 
     <scroll-view class="pf-list" scroll-y style="height: {{pfListHeight}};" wx:else>
-      <view class="pf-order-card" wx:for="{{orders}}" wx:key="_id">
-        <view class="pf-order-header">
-          <text class="pf-order-product">{{item.productName}}</text>
-          <text class="pf-order-status">{{item.statusLabel}}</text>
-        </view>
-        <view class="pf-order-row">
-          <text class="pf-order-label">数量</text>
-          <text class="pf-order-value">x{{item.quantity}}</text>
-        </view>
-        <view class="pf-order-row">
-          <text class="pf-order-label">实付</text>
-          <text class="pf-order-value">¥{{item.payAmountYuan}}</text>
-        </view>
-        <view class="pf-order-row">
-          <text class="pf-order-label">生产批次</text>
-          <text class="pf-order-value">{{item.batchDate}}</text>
-        </view>
-        <view class="pf-order-row">
-          <text class="pf-order-label">预计发货</text>
-          <text class="pf-order-value">{{item.estimatedShippingDate}}</text>
-        </view>
-        <button
-          class="pf-ship-btn"
-          disabled="{{markingId === item._id}}"
-          data-id="{{item._id}}"
-          bindtap="onTapMarkShipped"
-        >
-          {{markingId === item._id ? '处理中...' : '去发货 / 录入单号'}}
-        </button>
+
+      <!-- 🩹 卡单自愈提示：getProductionBoard 每次查询前会自动重放因通知丢失
+           卡在"待支付确认"的订单，healedStuckOrders > 0 时把这件事亮出来，
+           不悄无声息地改完就算——点 ✕ 只是本次会话内隐藏，下次进页面/下拉
+           刷新如果又查到新的卡单仍会再提示 -->
+      <view class="pf-selfheal-banner" wx:if="{{selfHealNotice}}">
+        <text class="pf-selfheal-icon">🩹</text>
+        <text class="pf-selfheal-text">{{selfHealNotice}}</text>
+        <text class="pf-selfheal-close" catchtap="onDismissSelfHealNotice">✕</text>
       </view>
+
+      <!-- 🧾 物料预估：来自 getProductionBoard 的 materials 字段（按待生产订单
+           × 商品 materialList 换算），此前该字段一直返回但从未被本页渲染过 -->
+      <view class="pf-materials-card" wx:if="{{materialsSummary.length > 0}}">
+        <text class="pf-materials-title">🧾 物料预估 · 待生产订单汇总</text>
+        <view class="pf-materials-chips">
+          <text class="pf-material-chip" wx:for="{{materialsSummary}}" wx:for-item="m" wx:key="materialName">{{m.materialName}} {{m.quantity}}{{m.unit}}</text>
+        </view>
+      </view>
+
+      <!-- 📅 按批次日期分组，批次内再按履约阶段（待生产/生产中/已发货/已退款）
+           分组——batch.capacityClass 来自 production_capacity_counters 的
+           reserved/limit 实际占用比例，不是猜的 -->
+      <view class="pf-batch-section" wx:for="{{boardGroups}}" wx:for-item="batch" wx:key="batchDate">
+        <view class="pf-batch-header pf-capacity-{{batch.capacityClass}}">
+          <text class="pf-batch-date">📅 {{batch.batchDate}}</text>
+          <view class="pf-batch-chips" wx:if="{{batch.chips.length > 0}}">
+            <text class="pf-chip pf-chip-{{chip.capacityClass}}" wx:for="{{batch.chips}}" wx:for-item="chip" wx:key="productId">
+              {{chip.productName}} {{chip.quantity}}件{{chip.capacityLabel ? '（产能 ' + chip.capacityLabel + (chip.capacityStatusLabel ? ' · ' + chip.capacityStatusLabel : '') + '）' : ''}}
+            </text>
+          </view>
+          <text class="pf-batch-rollover-hint" wx:if="{{batch.capacityClass === 'full'}}">⚠️ 本批次产能已满，新下单将自动顺延至更晚批次</text>
+        </view>
+
+        <view class="pf-status-section" wx:for="{{batch.groups}}" wx:for-item="group" wx:key="status">
+          <view class="pf-status-header pf-status-header-{{group.statusClass}}">
+            <text class="pf-status-dot"></text>
+            <text class="pf-status-title">{{group.statusLabel}}</text>
+            <text class="pf-status-count">{{group.orders.length}} 单</text>
+          </view>
+
+          <view class="pf-order-card" wx:for="{{group.orders}}" wx:key="_id">
+            <view class="pf-order-header">
+              <text class="pf-order-product">{{item.productName}}</text>
+              <text class="pf-order-status pf-order-status-{{item.statusClass}}">{{item.statusLabel}}</text>
+            </view>
+            <view class="pf-order-row">
+              <text class="pf-order-label">数量</text>
+              <text class="pf-order-value">x{{item.quantity}}</text>
+            </view>
+            <view class="pf-order-row">
+              <text class="pf-order-label">实付</text>
+              <text class="pf-order-value">¥{{item.payAmountYuan}}</text>
+            </view>
+            <view class="pf-order-row">
+              <text class="pf-order-label">预计发货</text>
+              <text class="pf-order-value">{{item.estimatedShippingDate}}</text>
+            </view>
+            <view class="pf-order-row" wx:if="{{item.orderStatus === 'shipped' && item.expressCompany}}">
+              <text class="pf-order-label">物流</text>
+              <text class="pf-order-value">{{item.expressCompany}} {{item.trackingNumber}}</text>
+            </view>
+            <view class="pf-order-row" wx:if="{{item.orderStatus === 'refunded'}}">
+              <text class="pf-order-label">退款原因</text>
+              <text class="pf-order-value">{{item.refundReason || '未填写'}}</text>
+            </view>
+            <button
+              class="pf-ship-btn"
+              wx:if="{{item.orderStatus === 'paid' || item.orderStatus === 'in_production'}}"
+              disabled="{{markingId === item._id}}"
+              data-id="{{item._id}}"
+              bindtap="onTapMarkShipped"
+            >
+              {{markingId === item._id ? '处理中...' : '去发货 / 录入单号'}}
+            </button>
+          </view>
+        </view>
+      </view>
+
     </scroll-view>
 
   </view>

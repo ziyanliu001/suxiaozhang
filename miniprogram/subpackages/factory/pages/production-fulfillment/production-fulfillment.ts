@@ -38,10 +38,34 @@ function addDaysIso(isoDateStr: string, days: number): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// 🎯 状态展示与顺序：STATUS_ORDER 决定同一批次内各阶段分组的排列顺序（履约
+// 流程序 paid → in_production → shipped，refunded 作为终止分支放最后），与
+// production_orders.orderStatus 真实枚举一一对应（见 completeProductionOrder/
+// lib/orderStatusMachine.js、processProductionRefund/index.js）——不是 KB 文档
+// 早期草案里 PENDING/PRODUCING/PACKED/FULFILLED 那套理想化状态机
+const STATUS_ORDER = ['paid', 'in_production', 'shipped', 'refunded'];
 const ORDER_STATUS_LABEL: Record<string, string> = {
   paid: '已付款 · 待生产',
-  in_production: '生产中'
+  in_production: '生产中',
+  shipped: '已发货',
+  refunded: '已退款'
 };
+// 与 WXSS 里 .pf-status-header-{{class}} / .pf-order-status-{{class}} / .pf-chip-{{class}}
+// 拼接使用，值本身不带 pf- 前缀（前缀在 WXML class 拼接时统一加），避免拼出
+// pf-status-header-pf-status-xxx 这种重复前缀
+const ORDER_STATUS_CLASS: Record<string, string> = {
+  paid: 'pending',
+  in_production: 'producing',
+  shipped: 'shipped',
+  refunded: 'refunded'
+};
+
+const CAPACITY_STATUS_LABEL: Record<string, string> = {
+  full: '已满',
+  near_full: '临近满',
+  normal: '正常'
+};
+const CAPACITY_STATUS_RANK: Record<string, number> = { normal: 0, near_full: 1, full: 2 };
 
 interface FulfillmentOrder {
   _id: string;
@@ -53,9 +77,112 @@ interface FulfillmentOrder {
   batchDate: string;
   estimatedShippingDate: string;
   orderStatus: string;
+  expressCompany?: string;
+  trackingNumber?: string;
+  refundReason?: string;
+  refundedAt?: string | null;
   // 展示用派生字段
   statusLabel?: string;
+  statusClass?: string;
   payAmountYuan?: string;
+}
+
+interface BoardTask {
+  batchDate: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+}
+
+interface MaterialSummary {
+  materialName: string;
+  quantity: number;
+  unit: string;
+}
+
+interface CapacityEntry {
+  reserved: number;
+  limit: number;
+  status: 'normal' | 'near_full' | 'full';
+}
+
+// 批次内单个 SKU 的产能预警徽标——数据来自 getProductionBoard 直接透出的
+// production_capacity_counters 快照，是"这批会不会满、会不会顺延"唯一真实
+// 来源，不是前端按订单数量猜的
+interface BatchChip {
+  productId: string;
+  productName: string;
+  quantity: number;
+  capacityLabel: string;
+  capacityClass: string;
+  capacityStatusLabel: string;
+}
+
+interface StatusGroup {
+  status: string;
+  statusLabel: string;
+  statusClass: string;
+  orders: FulfillmentOrder[];
+}
+
+interface BatchGroup {
+  batchDate: string;
+  capacityClass: string; // 该批次所有 SKU 里最紧张的产能状态，用于批次头部强调色
+  chips: BatchChip[];
+  groups: StatusGroup[];
+}
+
+// 🎨 把 getProductionBoard 返回的扁平 orders + tasks + capacityByBatch 组装成
+// "批次日期 → 履约阶段 → 订单" 两层分组视图，供看板按 batchDate/status 分区
+// 渲染——orders 本身已按 batchDate 升序（后端排序过），用 Map 收集分组时天然
+// 保留这个顺序，不需要再排一次
+function buildBoardGroups(
+  orders: FulfillmentOrder[],
+  tasks: BoardTask[],
+  capacityByBatch: Record<string, CapacityEntry>
+): BatchGroup[] {
+  const chipsByBatch = new Map<string, BatchChip[]>();
+  tasks.forEach((t) => {
+    const cap = capacityByBatch[`${t.batchDate}__${t.productId}`];
+    const chip: BatchChip = {
+      productId: t.productId,
+      productName: t.productName,
+      quantity: t.quantity,
+      capacityLabel: cap ? `${cap.reserved}/${cap.limit}` : '',
+      capacityClass: cap ? cap.status : '',
+      capacityStatusLabel: cap ? (CAPACITY_STATUS_LABEL[cap.status] || '') : ''
+    };
+    if (!chipsByBatch.has(t.batchDate)) chipsByBatch.set(t.batchDate, []);
+    (chipsByBatch.get(t.batchDate) as BatchChip[]).push(chip);
+  });
+
+  const batchMap = new Map<string, Map<string, FulfillmentOrder[]>>();
+  orders.forEach((o) => {
+    if (!batchMap.has(o.batchDate)) batchMap.set(o.batchDate, new Map());
+    const statusMap = batchMap.get(o.batchDate) as Map<string, FulfillmentOrder[]>;
+    if (!statusMap.has(o.orderStatus)) statusMap.set(o.orderStatus, []);
+    (statusMap.get(o.orderStatus) as FulfillmentOrder[]).push(o);
+  });
+
+  const result: BatchGroup[] = [];
+  batchMap.forEach((statusMap, batchDate) => {
+    const groups: StatusGroup[] = STATUS_ORDER
+      .filter((s) => statusMap.has(s))
+      .map((s) => ({
+        status: s,
+        statusLabel: ORDER_STATUS_LABEL[s] || s,
+        statusClass: ORDER_STATUS_CLASS[s] || '',
+        orders: statusMap.get(s) as FulfillmentOrder[]
+      }));
+    const chips = chipsByBatch.get(batchDate) || [];
+    const worstRank = chips.reduce((max, c) => Math.max(max, CAPACITY_STATUS_RANK[c.capacityClass] ?? -1), -1);
+    const capacityClass = worstRank >= 0
+      ? (Object.keys(CAPACITY_STATUS_RANK).find((k) => CAPACITY_STATUS_RANK[k] === worstRank) || '')
+      : '';
+    result.push({ batchDate, capacityClass, chips, groups });
+  });
+
+  return result;
 }
 
 const INVITE_ROLE_LABEL: Record<string, string> = { producer: '制作方', promoter: '推广员' };
@@ -76,7 +203,16 @@ Page({
     tenantId: '',
     loading: true,
     loadError: '',
-    orders: [] as FulfillmentOrder[],
+    // 🎨 看板主视图：按 batchDate → orderStatus 两层分组，见 buildBoardGroups；
+    // orderCount 用于空态判断（boardGroups 本身为空数组时无法快速判断"是否
+    // 真的没有任何订单"，直接存一份订单总数更直观）
+    boardGroups: [] as BatchGroup[],
+    orderCount: 0,
+    materialsSummary: [] as MaterialSummary[],
+    // 🩹 自愈提示：getProductionBoard 每次查询前会自动重放卡在 pending_payment
+    // 但已支付成功的订单，healedStuckOrders > 0 时把这条提示亮出来告诉管理员
+    // "刚才有订单是系统自动修复的"，而不是悄无声息地改完就算了
+    selfHealNotice: '',
 
     markingId: '', // 正在标记发货的订单 id，用于禁用对应按钮防止重复点击
 
@@ -176,7 +312,10 @@ Page({
     this.setData({
       tenantId,
       showSwitcherModal: false,
-      orders: [],
+      boardGroups: [],
+      orderCount: 0,
+      materialsSummary: [],
+      selfHealNotice: '',
       loadError: '',
       markingId: '',
       showShipModal: false,
@@ -205,8 +344,16 @@ Page({
     this.loadOrders(() => wx.stopPullDownRefresh());
   },
 
+  onDismissSelfHealNotice() {
+    this.setData({ selfHealNotice: '' });
+  },
+
   onGoToSettlementSummary() {
     wx.navigateTo({ url: '/subpackages/admin/pages/settlement-summary/settlement-summary?tenantId=' + this.data.tenantId });
+  },
+
+  onGoToSettlementAgreement() {
+    wx.navigateTo({ url: '/subpackages/factory/pages/settlement-agreement/settlement-agreement' });
   },
 
   onGoToProductManagement() {
@@ -271,15 +418,26 @@ Page({
         const orders: FulfillmentOrder[] = (result.orders || []).map((o: FulfillmentOrder) => ({
           ...o,
           statusLabel: ORDER_STATUS_LABEL[o.orderStatus] || o.orderStatus,
+          statusClass: ORDER_STATUS_CLASS[o.orderStatus] || '',
           payAmountYuan: (o.payAmount / 100).toFixed(2)
         }));
-        this.setData({ orders, loadError: '' });
+        const boardGroups = buildBoardGroups(orders, result.tasks || [], result.capacityByBatch || {});
+        const healedCount = Number(result.healedStuckOrders) || 0;
+        this.setData({
+          boardGroups,
+          orderCount: orders.length,
+          materialsSummary: result.materials || [],
+          selfHealNotice: healedCount > 0
+            ? `系统自动修复了 ${healedCount} 笔因通知延迟卡在"待支付确认"状态的订单，已计入下方看板`
+            : '',
+          loadError: ''
+        });
       } else {
-        this.setData({ orders: [], loadError: (result && result.error) || '加载失败' });
+        this.setData({ boardGroups: [], orderCount: 0, materialsSummary: [], loadError: (result && result.error) || '加载失败' });
       }
     } catch (err) {
       console.error('[production-fulfillment] loadOrders 异常:', err);
-      this.setData({ orders: [], loadError: '加载异常，请重试' });
+      this.setData({ boardGroups: [], orderCount: 0, materialsSummary: [], loadError: '加载异常，请重试' });
     } finally {
       this.setData({ loading: false });
       // 🐛 wxml 的重试按钮 bindtap="loadOrders" 直接把 loadOrders 当 tap 处理

@@ -298,8 +298,162 @@
   border-radius: 36rpx;
 }
 
-.pf-list {
-  height: calc(100vh - 200rpx);
+.pf-selfheal-banner {
+  display: flex;
+  align-items: center;
+  background: rgba(230, 162, 60, 0.12);
+  border: 2rpx solid rgba(230, 162, 60, 0.35);
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.pf-selfheal-icon {
+  font-size: 28rpx;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+}
+
+.pf-selfheal-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #8A5A1E;
+  line-height: 34rpx;
+}
+
+.pf-selfheal-close {
+  font-size: 24rpx;
+  color: #8A5A1E;
+  padding: 0 8rpx;
+  margin-left: 12rpx;
+  flex-shrink: 0;
+}
+
+.pf-materials-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.pf-materials-title {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #1C1C1E;
+  margin-bottom: 12rpx;
+}
+
+.pf-materials-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.pf-material-chip {
+  font-size: 22rpx;
+  color: #6B6B70;
+  background: #F8F5F0;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.pf-batch-section {
+  margin-bottom: 28rpx;
+}
+
+.pf-batch-header {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  border-left: 6rpx solid #D8CFC7;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.pf-batch-header.pf-capacity-near_full {
+  border-left-color: #E6A23C;
+}
+
+.pf-batch-header.pf-capacity-full {
+  border-left-color: #C0392B;
+}
+
+.pf-batch-date {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+  margin-bottom: 12rpx;
+}
+
+.pf-batch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.pf-chip {
+  font-size: 22rpx;
+  color: #6B6B70;
+  background: #F0EBE3;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.pf-chip-near_full {
+  color: #A56A1D;
+  background: rgba(230, 162, 60, 0.14);
+}
+
+.pf-chip-full {
+  color: #C0392B;
+  background: rgba(192, 57, 43, 0.1);
+}
+
+.pf-batch-rollover-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #C0392B;
+  margin-top: 12rpx;
+}
+
+.pf-status-section {
+  margin-bottom: 12rpx;
+}
+
+.pf-status-header {
+  display: flex;
+  align-items: center;
+  padding: 8rpx 8rpx 8rpx 4rpx;
+}
+
+.pf-status-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #8C1D18;
+  margin-right: 10rpx;
+  flex-shrink: 0;
+}
+
+.pf-status-header-pending .pf-status-dot { background: #8C1D18; }
+.pf-status-header-producing .pf-status-dot { background: #E6A23C; }
+.pf-status-header-shipped .pf-status-dot { background: #2E7D32; }
+.pf-status-header-refunded .pf-status-dot { background: #8E8E93; }
+
+.pf-status-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1C1C1E;
+}
+
+.pf-status-count {
+  font-size: 22rpx;
+  color: #8E8E93;
+  margin-left: 8rpx;
 }
 
 .pf-order-card {
@@ -329,6 +483,21 @@
   background: rgba(140, 29, 24, 0.08);
   padding: 4rpx 16rpx;
   border-radius: 20rpx;
+}
+
+.pf-order-status-producing {
+  color: #A56A1D;
+  background: rgba(230, 162, 60, 0.12);
+}
+
+.pf-order-status-shipped {
+  color: #2E7D32;
+  background: rgba(46, 125, 50, 0.08);
+}
+
+.pf-order-status-refunded {
+  color: #8E8E93;
+  background: rgba(142, 142, 147, 0.08);
 }
 
 .pf-order-row {

@@ -17,7 +17,8 @@
         "pages/production-fulfillment/production-fulfillment",
         "pages/product-management/product-management",
         "pages/storefront/storefront",
-        "pages/workspace-join/workspace-join"
+        "pages/workspace-join/workspace-join",
+        "pages/settlement-agreement/settlement-agreement"
       ]
     },
     {

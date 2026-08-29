@@ -1,0 +1,119 @@
+.sa-page {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  background: #F8F5F0;
+}
+
+.sa-scroll {
+  box-sizing: border-box;
+  padding: 24rpx;
+}
+
+.sa-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.sa-card-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+  margin-bottom: 20rpx;
+}
+
+.sa-party-row {
+  display: flex;
+  flex-direction: column;
+  padding: 16rpx 0;
+  border-bottom: 2rpx solid #F0EBE3;
+}
+
+.sa-party-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.sa-party-role {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #8C1D18;
+  margin-bottom: 6rpx;
+}
+
+.sa-party-entity {
+  font-size: 28rpx;
+  color: #1C1C1E;
+  margin-bottom: 6rpx;
+}
+
+.sa-party-duty {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #6B6B70;
+}
+
+.sa-rate-row {
+  display: flex;
+  align-items: center;
+  padding: 14rpx 0;
+  border-bottom: 2rpx solid #F0EBE3;
+}
+
+.sa-rate-row:last-of-type {
+  border-bottom: none;
+}
+
+.sa-rate-label {
+  flex: 1.4;
+  font-size: 26rpx;
+  color: #1C1C1E;
+}
+
+.sa-rate-value {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8C1D18;
+  text-align: right;
+}
+
+.sa-rate-owner {
+  flex: 1.6;
+  font-size: 22rpx;
+  color: #8E8E93;
+  text-align: right;
+}
+
+.sa-rate-note {
+  display: block;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: #ADADB2;
+  margin-top: 16rpx;
+}
+
+.sa-paragraph {
+  display: block;
+  font-size: 26rpx;
+  line-height: 42rpx;
+  color: #3A3A3C;
+  margin-bottom: 16rpx;
+}
+
+.sa-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.sa-footer-note {
+  display: block;
+  font-size: 22rpx;
+  color: #ADADB2;
+  text-align: center;
+  padding: 8rpx 24rpx 32rpx;
+}

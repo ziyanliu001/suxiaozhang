@@ -18,9 +18,15 @@ const PAYMENT_ORDERS_COLLECTION = 'payment_orders';
 
 // 🏛️ 分成比例策略默认值：与 PLAN_STORE_LIMITS 同类性质——这是产品定价/分账
 // 政策的既定常量，不是替商家瞎编的具体业务数据，未在 tenants.settlementConfig
-// 显式配置时按此兜底，保证"没配置也能把全链路跑通"
-const DEFAULT_PRODUCER_RATE = 0.85;
-const DEFAULT_PROMOTER_RATE = 0.05; // 仅当订单带 promoterOpenId 时生效
+// 显式配置时按此兜底，保证"没配置也能把全链路跑通"。
+//
+// 三方费率对齐工坊分成合作协议（渠道推广 20.00% / 工坊履约 75.00% / 平台技术
+// 服务费 4.40% + 微信支付通道费 0.60% 合计 5.00%）：DEFAULT_PRODUCER_RATE +
+// DEFAULT_PROMOTER_RATE 之外的剩余比例即落入下面 computeSettlementSplit 的
+// platformFee 桶——该桶当前不拆分存储平台服务费与微信支付通道费两个子项，
+// 只在协议文本层面注明口径（见 Obsidian「工坊分成合作协议」）
+const DEFAULT_PRODUCER_RATE = 0.75;
+const DEFAULT_PROMOTER_RATE = 0.20; // 仅当订单带 promoterOpenId 时生效
 
 function isCollectionNotExistError(err) {
   return !!err && (

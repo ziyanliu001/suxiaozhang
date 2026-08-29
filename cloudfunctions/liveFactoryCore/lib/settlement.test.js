@@ -39,6 +39,12 @@ test('buildSettlementSnapshot 生成的初始记录状态为 unsettled 且非冲
   assert.equal(snap.payAmount, 5000);
 });
 
+test('buildSettlementSnapshot 原样保留生效费率快照，供历史订单核对', () => {
+  const snap = buildSettlementSnapshot({ tenantId: 't1', orderId: 'o1', payAmount: 5000, producerRate: 0.75, promoterRate: 0.2 });
+  assert.equal(snap.producerRate, 0.75);
+  assert.equal(snap.promoterRate, 0.2);
+});
+
 test('退款红冲：unsettled 状态直接原地标记 refunded，不生成冲销分录', () => {
   const settlement = { _id: 's1', tenantId: 't1', orderId: 'o1', payAmount: 5000, settlementStatus: 'unsettled', isReversal: false };
   const decision = decideRefundReversal(settlement, false);
@@ -48,14 +54,16 @@ test('退款红冲：unsettled 状态直接原地标记 refunded，不生成冲�
 test('退款红冲：settled 状态生成金额相反的冲销分录，原记录不变', () => {
   const settlement = {
     _id: 's1', tenantId: 't1', orderId: 'o1',
-    payAmount: 5000, producerAmount: 3000, promoterAmount: 500, platformFee: 1500,
+    payAmount: 5000, producerRate: 0.75, promoterRate: 0.1,
+    producerAmount: 3000, promoterAmount: 500, platformFee: 1500,
     settlementStatus: 'settled', isReversal: false
   };
   const decision = decideRefundReversal(settlement, false);
   assert.equal(decision.action, 'create_reversal');
   assert.deepEqual(decision.reversalDoc, {
     tenantId: 't1', orderId: 'o1', originalSettlementId: 's1',
-    payAmount: -5000, producerAmount: -3000, promoterAmount: -500, platformFee: -1500,
+    payAmount: -5000, producerRate: 0.75, promoterRate: 0.1,
+    producerAmount: -3000, promoterAmount: -500, platformFee: -1500,
     settlementStatus: 'refunded', isReversal: true
   });
 });

@@ -24,6 +24,11 @@ async function verifyTenantAccess(openid, tenantId, requiredRoles) {
 // outTradeNo 的订单，重放一次 createProductionOrder 自己的 paymentSucceeded
 // 处理（该处理本身幂等、会反查 payment_orders 确认真的 PAID 才生效，不是
 // 无条件强推），修复历史遗留的卡单，不需要额外的人工介入或专门的运维脚本。
+//
+// 返回实际 healedCount 供前端展示"系统自动修复了 N 笔卡单"提示——只统计真正
+// 由本次调用翻转成功的订单（result.success 且非 alreadyProcessed），跳过反查
+// 未确认到 PAID 记录、本来就不该被激活的订单，避免把"买家其实没付款成功"
+// 误报成"已修复"。
 async function reconcileStuckOrders(tenantId) {
   const pendingRes = await db.collection('production_orders')
     .where({ tenantId, orderStatus: 'pending_payment' })
@@ -32,14 +37,20 @@ async function reconcileStuckOrders(tenantId) {
     .catch(() => ({ data: [] }));
 
   const stuck = (pendingRes.data || []).filter((o) => !!o.outTradeNo);
-  if (stuck.length === 0) return;
+  if (stuck.length === 0) return { healedCount: 0 };
 
-  await Promise.all(stuck.map((o) =>
+  const outcomes = await Promise.all(stuck.map((o) =>
     cloud.callFunction({
       name: 'createProductionOrder',
       data: { action: 'paymentSucceeded', outTradeNo: o.outTradeNo, bizId: o._id }
-    }).catch((err) => console.error('[getProductionBoard] 自愈重放 paymentSucceeded 失败:', o._id, err))
+    })
+      .then((res) => !!(res.result && res.result.success && !res.result.alreadyProcessed))
+      .catch((err) => {
+        console.error('[getProductionBoard] 自愈重放 paymentSucceeded 失败:', o._id, err);
+        return false;
+      })
   ));
+  return { healedCount: outcomes.filter(Boolean).length };
 }
 
 exports.main = async (event, context) => {
@@ -56,25 +67,54 @@ exports.main = async (event, context) => {
   const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
   if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可查看制作看板' };
 
-  await reconcileStuckOrders(tenantId);
+  const { healedCount } = await reconcileStuckOrders(tenantId);
 
-  // 只统计已付款、尚未发货完结的订单，按 batchDate+productId 聚合数量
+  // 🎯 看板需要展示完整履约链路（待生产 → 生产中 → 已发货 → 已退款），不再
+  // 只查 paid/in_production——但下面 tasks/materials 的备料聚合仍然只应该
+  // 统计"还需要真的去生产"的订单，shipped 已经做完、refunded 已经取消，都
+  // 不该再算进备料清单，所以这里先取全量再在内存里筛出 activeOrders 分开用
   const ordersRes = await db.collection('production_orders').where({
     tenantId,
     batchDate: _.gte(startDate).and(_.lte(endDate)),
-    orderStatus: _.in(['paid', 'in_production'])
+    orderStatus: _.in(['paid', 'in_production', 'shipped', 'refunded'])
   }).limit(1000).get();
 
+  const allOrders = ordersRes.data || [];
+  const activeOrders = allOrders.filter((o) => o.orderStatus === 'paid' || o.orderStatus === 'in_production');
+
   const grouped = {}; // key: `${batchDate}__${productId}` -> { batchDate, productId, quantity }
-  (ordersRes.data || []).forEach((o) => {
+  activeOrders.forEach((o) => {
     const key = `${o.batchDate}__${o.productId}`;
     if (!grouped[key]) grouped[key] = { batchDate: o.batchDate, productId: o.productId, quantity: 0 };
     grouped[key].quantity += o.quantity;
   });
   const tasks = Object.values(grouped).sort((a, b) => a.batchDate.localeCompare(b.batchDate));
 
+  // 🎯 产能预警：直接读 production_capacity_counters（liveFactoryCore 排产时
+  // CAS 原子扣减的同一张表），按 reserved/limit 换算利用率——这是"某批次已
+  // 满、之后下单会自动顺延到更晚批次"这件事在数据层面唯一的真实来源，不是
+  // 靠猜测或额外统计订单数反推
+  const capacityRes = await db.collection('production_capacity_counters')
+    .where({ tenantId, batchDate: _.gte(startDate).and(_.lte(endDate)) })
+    .limit(1000)
+    .get()
+    .catch(() => ({ data: [] }));
+  const capacityByBatch = {}; // key: `${batchDate}__${productId}` -> { reserved, limit, status }
+  (capacityRes.data || []).forEach((c) => {
+    const ratio = c.limit > 0 ? c.reserved / c.limit : 0;
+    capacityByBatch[`${c.batchDate}__${c.productId}`] = {
+      reserved: c.reserved,
+      limit: c.limit,
+      status: ratio >= 1 ? 'full' : (ratio >= 0.85 ? 'near_full' : 'normal')
+    };
+  });
+
   // 物料估算：只对配置了 materialList 的商品估算，未配置的不编造数据
-  const productIds = [...new Set(tasks.map((t) => t.productId))];
+  // 🐛 productName 反查用的 productIds 必须来自 allOrders 而不是 tasks——
+  // tasks 只包含 activeOrders，若某批次的订单已全部发货/退款（该 batchDate+
+  // productId 组合不再出现在 tasks 里），下面 orders 列表拼 productName 时
+  // productMap 会查不到，已发货/已退款的历史订单卡片就会显示成空白商品名
+  const productIds = [...new Set(allOrders.map((o) => o.productId))];
   const productsRes = productIds.length
     ? await db.collection('products').where({ _id: _.in(productIds) }).get()
     : { data: [] };
@@ -91,9 +131,11 @@ exports.main = async (event, context) => {
     });
   });
 
-  // 单笔订单明细：供「排单与发货管理」页逐单标记发货用，与 tasks 的聚合视图
-  // 是同一份查询结果的两种展现，不重复查库
-  const orders = (ordersRes.data || [])
+  // 单笔订单明细：供「排单与发货管理」页逐单标记发货/查看履约进度用，与
+  // tasks 的聚合视图是同一份查询结果的两种展现，不重复查库。现在覆盖全部
+  // 四种终态（paid/in_production/shipped/refunded），发货与退款相关字段
+  // 按状态附带对应的物流/退款凭据，供前端卡片展示履约进度与退款红冲详情
+  const orders = allOrders
     .map((o) => ({
       _id: o._id,
       productId: o.productId,
@@ -103,7 +145,11 @@ exports.main = async (event, context) => {
       payAmount: o.payAmount,
       batchDate: o.batchDate,
       estimatedShippingDate: o.estimatedShippingDate,
-      orderStatus: o.orderStatus
+      orderStatus: o.orderStatus,
+      expressCompany: o.expressCompany || '',
+      trackingNumber: o.trackingNumber || '',
+      refundReason: o.refundReason || '',
+      refundedAt: o.refundedAt || null
     }))
     .sort((a, b) => a.batchDate.localeCompare(b.batchDate));
 
@@ -111,6 +157,8 @@ exports.main = async (event, context) => {
     success: true,
     tasks: tasks.map((t) => ({ ...t, productName: (productMap[t.productId] || {}).name || '' })),
     materials: Object.entries(materialTotals).map(([materialName, v]) => ({ materialName, quantity: v.qty, unit: v.unit })),
-    orders
+    orders,
+    capacityByBatch,
+    healedStuckOrders: healedCount
   };
 };
