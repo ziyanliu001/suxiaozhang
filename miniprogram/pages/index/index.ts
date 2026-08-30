@@ -3949,21 +3949,32 @@ Page({
   // 🛡️ 身份阶梯权限过滤：仅超级管理员/店长/大家长可打开本弹窗——财务/义工/家人
   // 不在权限阶梯里，不能自我复制/越级授权（与云函数 checkGeneratePermission 同一口径，
   // 这里提前拦截只是避免用户填完表单才在最后一步被云函数拒绝，真正的强制点在服务端）
+  // 🐛 根因修复（预览视角污染真实发码权限）：canGenerate/genAvailableRoles/门店
+  // 选择器分支此前统一读 this.data.isSuperAdmin——但这个字段会被"视角切换预览"
+  // （applyRoleViewOverride，见 utils/viewModePreview.ts）降级模拟，真实身份是
+  // super_admin、只是正在预览【店长/义工/家人/财务视角】时，isSuperAdmin 会被
+  // 置为 false，导致：① 预览义工/家人/财务视角时 isManager 也一并被置为 false，
+  // canGenerate 三个条件全部落空，整个弹窗直接被"无权限"拦死；② 预览店长视角时
+  // isManager 恰好仍是 true 能进入弹窗，但 genAvailableRoles 会误判成"店长权限"，
+  // 【大家长】【门店店长】两档被错误禁用。这与页面顶部 Banner"实际操作仍以超级
+  // 管理员权限执行"的承诺自相矛盾。isRealSuperAdmin 是本文件专门为此设计、不受
+  // 预览覆盖影响的真实身份标志位（同一类历史修复见 initCurrentUserRole/
+  // onStoreChanged 注释），发码权限判定统一改用它，而不是会被预览污染的 isSuperAdmin
   onOpenGenCodeModal() {
-    const canGenerate = this.data.isSuperAdmin || this.data.isManager || this.data.isPatriarch;
+    const isRealSuperAdmin = this.data.isRealSuperAdmin;
+    const canGenerate = isRealSuperAdmin || this.data.isManager || this.data.isPatriarch;
     if (!canGenerate) {
       wx.showToast({ title: '无权限：仅超级管理员/店长/大家长可生成邀请码', icon: 'none', duration: 2500 });
       return;
     }
 
     const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
-    const isSuperAdmin = this.data.isSuperAdmin;
 
     let storeOptions: any[];
     let genStoreSelectorDisabled: boolean;
     let defaultStore: any;
 
-    if (isSuperAdmin) {
+    if (isRealSuperAdmin) {
       // 🏢 过滤掉"全国总览"等虚拟条目，picker 只应展示本机构下的真实门店
       storeOptions = (this.data.allStoresList || []).filter((s: any) =>
         s && s.storeName !== '全国总览' && !NATIONAL_IDS.includes(s.storeId)
@@ -3990,7 +4001,7 @@ Page({
     // 店长次一级，可任命门店财务/家人/志愿者，但不能任命大家长/门店店长——
     // 这两档与店长自身同级或更高，只有大家长本人或超管能任命。
     // 与云函数 checkGeneratePermission 的口径完全一致
-    const genAvailableRoles = (isSuperAdmin || this.data.isPatriarch)
+    const genAvailableRoles = (isRealSuperAdmin || this.data.isPatriarch)
       ? ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER']
       : ['FINANCE', 'FAMILY', 'VOLUNTEER'];
 

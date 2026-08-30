@@ -2403,7 +2403,11 @@
           </view>
           <!-- 🏛️ 大家长（含超管）：全部五档身份都已解锁，给一句正向的授权说明，
                不再是"需要超级管理员授权"这种限制口吻 -->
-          <view class="gencode-role-empower-tip" wx:if="{{isPatriarch || isSuperAdmin}}">
+          <!-- 🐛 与 onOpenGenCodeModal 的根因修复保持一致：这里必须用 isRealSuperAdmin
+               （不受"视角切换预览"覆盖影响的真实身份），否则超管预览成非超管视角时，
+               genAvailableRoles 已经正确放开全部五档，这条提示却仍按 isSuperAdmin
+               （被预览降级成 false）判断走到下面的"店长限制"文案分支，图文不一致 -->
+          <view class="gencode-role-empower-tip" wx:if="{{isPatriarch || isRealSuperAdmin}}">
             👑 大家长作为最高负责人，可直接任命店长、财务及继任大家长。
           </view>
           <!-- 🔒 店长：仍有两档任命不了，给出准确的限制说明——找大家长而不是只说超管 -->
