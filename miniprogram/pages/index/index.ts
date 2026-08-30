@@ -4020,17 +4020,22 @@ Page({
       targetGenStoreId: defaultStore ? defaultStore.storeId : '',
       targetGenStoreName: defaultStore ? defaultStore.storeName : ''
     });
-    // 🐛 底部按钮被 TabBar 遮挡修复：pages/index/index 是 tabBar 页面，原生
-    // TabBar 渲染在独立的 native 图层，永远盖在 WXML 内容之上——CSS z-index
-    // 只能控制 WebView 内部的层叠顺序，管不到这层 native 组件，光靠加大
-    // z-index/安全区 padding 治标不治本。生成邀请码是一次性、沉浸式的操作
-    // 流程，弹窗打开期间直接隐藏 TabBar，从根源上消除遮挡的可能
-    wx.hideTabBar({ animation: true });
+    // 🐛 根因修复（上一版用错 API，未生效）：app.json 的 tabBar.custom 为
+    // true，本项目走的是 custom-tab-bar 自定义组件方案，不是原生 tabBar——
+    // wx.hideTabBar()/wx.showTabBar() 只对原生 tabBar 生效，对自定义组件是
+    // 纯粹的空调用，之前这里调用它完全没有效果，弹窗底部按钮依旧被遮挡。
+    // 该组件是微信客户端框架在 tabBar.custom=true 时自动挂载到页面上的
+    // 特殊图层组件，不在页面自己的 WXML 层叠上下文里，任何 CSS z-index 都
+    // 盖不住它（见 utils/tabBarVisibility.ts 头部注释，微信官方确认过的平台
+    // 限制）。正确做法是调用该文件导出的 setTabBarHidden()，直接操作
+    // custom-tab-bar 组件自身的 hide 状态——本文件其它弹窗（如 3595/8198 行）
+    // 已经在用这个方法，这里统一改为同一套
+    setTabBarHidden(this, true);
   },
 
   onCloseGenCodeModal() {
     this.setData({ showGenCodeModal: false });
-    wx.showTabBar({ animation: true });
+    setTabBarHidden(this, false);
   },
 
   onSelectGenRole(e: any) {
@@ -4124,9 +4129,9 @@ Page({
   onCloseInviteResultModal() {
     this.setData({ showInviteResultModal: false, inviteResultCode: '', inviteResultQrPath: '' });
     // 生成成功后 showGenCodeModal→showInviteResultModal 是同一次沉浸式流程的
-    // 延续（中途未调用过 wx.showTabBar），TabBar 一直保持隐藏，这里才是
-    // 真正的流程终点，在此统一恢复
-    wx.showTabBar({ animation: true });
+    // 延续（中途未调用过 setTabBarHidden(this, false)），custom-tab-bar 一直
+    // 保持隐藏，这里才是真正的流程终点，在此统一恢复
+    setTabBarHidden(this, false);
   },
 
   onCopyInviteResultCode() {
@@ -8509,11 +8514,11 @@ Page({
   },
 
   onUnload() {
-    // 🛡️ 邀请码弹窗隐藏 TabBar 的安全网：正常关闭路径（onCloseGenCodeModal/
-    // onCloseInviteResultModal）已经会恢复，这里防的是弹窗开着时用户通过非
-    // 常规路径离开本页（如被其它逻辑强制 reLaunch），避免 TabBar 一直卡在
-    // 隐藏态。已经是显示态时重复调用无副作用
-    wx.showTabBar({ animation: false });
+    // 🛡️ 邀请码弹窗隐藏 custom-tab-bar 的安全网：正常关闭路径
+    // （onCloseGenCodeModal/onCloseInviteResultModal）已经会恢复，这里防的
+    // 是弹窗开着时用户通过非常规路径离开本页（如被其它逻辑强制 reLaunch），
+    // 避免 custom-tab-bar 一直卡在隐藏态。已经是显示态时重复调用无副作用
+    setTabBarHidden(this, false);
     // 🛡️ 页面卸载前，若有未保存数据则静默写入草稿，防止意外退出导致数据丢失
     if (this._hasFormDirtyData()) {
       this.saveDraft();
