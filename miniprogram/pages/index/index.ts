@@ -624,6 +624,11 @@ Page({
       totalAmount: 0,
       totalCount: 0
     },
+    // 🌸🌿 逐条阳善/阴德展示态：由 refreshDisplayDonorItems() 从 parseResult.items +
+    // meritType 派生——每一项预算好 effectiveAnonymous（未逐条标记时跟随 meritType
+    // 兜底）与 displayName（阴德态直接显示"爱心善士"），WXML 只读这两个字段，
+    // 不在模板里现场判断三元表达式，与本文件 job-type 网格同一处历史修复思路
+    displayDonorItems: [] as any[],
     totalParsedAmount: '0.00',
     calculationFormulaText: '',
     receiptImages: [] as string[],
@@ -5278,7 +5283,49 @@ Page({
       parseResult: result,
       totalParsedAmount: result.totalAmount.toFixed(2)
     });
+    this.refreshDisplayDonorItems();
     this.updateRealTimeBalance();
+  },
+
+  // 🌸🌿 逐条阳善/阴德展示派生：见 displayDonorItems 声明处注释。每次
+  // parseResult.items 变化（updateParseResult）或 meritType 变化（onSelectMerit）
+  // 都要重新算一遍——未逐条标记的条目需要跟着最新的 meritType 默认值联动，
+  // 已显式标记的条目（item.isAnonymous !== undefined）不受 meritType 变化影响，
+  // 这正是"批量默认值 + 逐条覆盖，覆盖优先"的核心语义
+  refreshDisplayDonorItems() {
+    const meritType = this.data.meritType;
+    const items = (this.data.parseResult && this.data.parseResult.items) || [];
+    const displayDonorItems = items.map((item: any, index: number) => {
+      const effectiveAnonymous = item.isAnonymous !== undefined ? item.isAnonymous : (meritType === 'yin');
+      return {
+        ...item,
+        index,
+        effectiveAnonymous,
+        displayName: effectiveAnonymous ? '爱心善士' : item.name
+      };
+    });
+    this.setData({ displayDonorItems });
+  },
+
+  // 🌸🌿 逐条阳善/阴德：点击单条明细的发心徽标，在"阳善(实名)"与"阴德(匿名)"
+  // 之间切换这一条——不直接改 parseResult/displayDonorItems（那两个是派生状态），
+  // 而是把改动写回 allDonations 这个唯一权威文本源（用 formatDonationItemsToText
+  // 重新生成一份带正确逐条标记的文本），再走一遍标准的 updateParseResult 解析
+  // 流程刷新所有派生状态——与本页"文本是唯一权威来源，不额外维护旁路状态"的
+  // 既有设计完全一致，也保证这次改动能被草稿箱正常保存/恢复
+  onToggleItemAnonymous(e: any) {
+    const index = e.currentTarget.dataset.index;
+    const items = ((this.data.parseResult && this.data.parseResult.items) || []).slice();
+    const target = items[index];
+    if (!target) return;
+
+    const currentEffective = target.isAnonymous !== undefined ? target.isAnonymous : (this.data.meritType === 'yin');
+    items[index] = { ...target, isAnonymous: !currentEffective };
+
+    const newText = formatDonationItemsToText(items);
+    this.setData({ allDonations: newText });
+    this.updateParseResult(newText);
+    this.debouncedSaveDraft();
   },
 
   // 🌟 第二道防线：文本行级去重。图片 MD5 只能拦住"完全相同的一张图片"，拦不住
@@ -5729,11 +5776,16 @@ Page({
     this.setData({ singleAmount: String(amount) });
   },
 
-  // 🌸🌿 了凡四训·阳善与阴德：发心选择切换
+  // 🌸🌿 了凡四训·阳善与阴德：批量默认值切换（不覆盖逐条单独标记）
   // data-type="yang" → 阳善（公示真实姓名）；data-type="yin" → 积阴德（匿名）
+  // 🐛 支持"部分人阳善、部分人阴德"：这里只改 meritType 这个报告级默认值，
+  // 不再重写 allDonations/逐条标记——已经在明细列表里单独点过发心徽标的条目
+  // （item.isAnonymous !== undefined）保持自己的显式选择不受影响，只有从未
+  // 单独标记过的条目才会跟着这个批量默认值联动展示，见 refreshDisplayDonorItems
   onSelectMerit(e: any) {
     const t = e.currentTarget.dataset.type;
     this.setData({ meritType: t === 'yin' ? 'yin' : 'yang' });
+    this.refreshDisplayDonorItems();
   },
 
   onInputSingleName(e: any) {
@@ -7150,6 +7202,15 @@ Page({
         // ====== 第一步：纯前端生成文本（不依赖云端，绝不阻塞） ======
         const { reportDate, otherDonation, expenses, dailyExpenseText, fixedExpenseText, fixedExpenseItems, shopName, mpAccount, adjustReason, receiptImages, reportDateValue, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, stapleRiceStatus, stapleOilStatus, mergeToReportText, announcement, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, listeningSeniors, totalDineCount, totalVolunteers, meritType } = this.data;
         const isAnonymous = meritType === 'yin';
+        // 🌸🌿 逐条阳善/阴德：items 里每一条的 isAnonymous 可能是 true/false（逐条
+        // 显式标记过）或 undefined（从未单独标记，跟随上面这个报告级默认值）。
+        // 提交前统一解析成明确的布尔值——生成的报告文本、落库的 donationItems
+        // 都应该看到"这一条到底要不要匿名"的最终结果，不需要（也不应该）在
+        // reportGenerator/数据库层再重新猜一遍"未定义时该怎么办"
+        const effectiveItems = items.map((item: any) => ({
+          ...item,
+          isAnonymous: item.isAnonymous !== undefined ? item.isAnonymous : isAnonymous
+        }));
         const prevBalanceNum = parseFloat(yesterdayBalance) || 0;
         const b4_total = parseFloat(otherDonation) || 0;
 
@@ -7166,7 +7227,7 @@ Page({
           shopName: shopName,
           dateString: dateString,
           reportDate: reportDate,
-          items: items,
+          items: effectiveItems,
           totalAmount: donationsTotal,
           otherDonation: b4_total,
           yesterdayBalance: prevBalanceNum,
@@ -7270,7 +7331,7 @@ Page({
           dailyIngredientItems: dailyIngredientItems,
           todayBalance: newBalanceSum,
           reportText: report,
-          donationItems: items,
+          donationItems: effectiveItems,
           receiptImages: receiptImages || [],
           isManualAdjust: isManualAdjust,
           systemBalance: systemBalance,

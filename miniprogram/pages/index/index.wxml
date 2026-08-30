@@ -910,9 +910,14 @@
           <view class="support-list-preview" wx:if="{{parseResult.items.length > 0}}">
             <view class="list-count-tag">已录入 {{parseResult.totalCount}} 人，共 ¥{{parseResult.totalAmount.toFixed(2)}}</view>
             <scroll-view scroll-y class="list-scroll-box">
-              <view class="support-item-cell" wx:for="{{parseResult.items}}" wx:key="index">
+              <!-- 🌸🌿 逐条阳善/阴德：迭代 displayDonorItems（已预算好 effectiveAnonymous/
+                   displayName，见 index.ts refreshDisplayDonorItems）而不是原始的
+                   parseResult.items，不在模板里现场判断 meritType 三元表达式。点击发心
+                   徽标单独切换这一条，不影响其它条目或批量默认值 -->
+              <view class="support-item-cell" wx:for="{{displayDonorItems}}" wx:key="index">
                 <text class="item-idx">{{index + 1}}.</text>
-                <text class="item-name">{{meritType === 'yin' ? '爱心善士' : item.name}}</text>
+                <text class="item-merit-badge" catchtap="onToggleItemAnonymous" data-index="{{item.index}}">{{item.effectiveAnonymous ? '🌿' : '🌸'}}</text>
+                <text class="item-name">{{item.displayName}}</text>
                 <text class="item-amount">¥{{item.amount}}</text>
                 <text class="btn-del" bindtap="onDeleteSupportItem" data-index="{{index}}">✕</text>
               </view>
@@ -947,9 +952,13 @@
               </view>
             </view>
             
+            <!-- 🌸🌿 逐条阳善/阴德：与"逐条"模式同一套 displayDonorItems 数据源，
+                 点击发心徽标可单独切换这一条，不影响批量默认值（上方 intention-badge
+                 展示的是"未逐条标记的条目会跟随的默认值"，两者不冲突） -->
             <view class="preview-list">
-              <view class="preview-item" wx:for="{{parseResult.items}}" wx:key="name">
-                <text class="item-name">{{meritType === 'yin' ? '爱心善士' : item.name}}</text>
+              <view class="preview-item" wx:for="{{displayDonorItems}}" wx:key="index">
+                <text class="item-merit-badge" catchtap="onToggleItemAnonymous" data-index="{{item.index}}">{{item.effectiveAnonymous ? '🌿' : '🌸'}}</text>
+                <text class="item-name">{{item.displayName}}</text>
                 <text class="item-amount">¥{{item.amount}}</text>
               </view>
             </view>

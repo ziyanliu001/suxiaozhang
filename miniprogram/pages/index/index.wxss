@@ -2407,6 +2407,17 @@ page {
   flex-shrink: 0;
 }
 
+/* 🌸🌿 逐条阳善/阴德发心徽标：小图标，点击在两态间切换，见 onToggleItemAnonymous。
+   两种列表（逐条/粘贴预览）共用同一份样式，padding 撑开到至少 44rpx 触控热区，
+   避免在紧凑的单条明细行里因为图标本身太小而误触/点不中 */
+.item-merit-badge {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  padding: 8rpx 12rpx;
+  margin-right: 4rpx;
+  line-height: 1;
+}
+
 /* ============================================================
    🌸🌿 了凡四训·阳善与阴德：发心选择器 (Radio Cards)
    Bug fix: gap不兼容微信flex / <text>无block display / 胶囊换行

@@ -1,6 +1,14 @@
 export interface DonorItem {
   name: string;
   amount: number;
+  // 🌸🌿 逐条阳善（实名公示）/阴德（匿名）区分：可选字段，三种状态——
+  //   true  ：这一条明确标记为"积阴德"（匿名），无论报告级 meritType 是什么
+  //   false ：这一条明确标记为"阳善"（实名公示），无论报告级 meritType 是什么
+  //   未定义 ：未单独标记，跟随报告级 meritType 的默认值展示/提交
+  // 通过行尾"匿名"/"实名"文字标记随文本一起持久化（见 parseLine/
+  // formatDonationItemsToText），不额外维护一份脱离文本的旁路状态，
+  // 与本文件"文本是唯一权威来源"的既有设计保持一致
+  isAnonymous?: boolean;
 }
 
 export interface ParseResult {
@@ -38,9 +46,24 @@ function isTitleLine(line: string): boolean {
 
 // 🌟 一行可能塞了多个人（逗号/空格/顿号分隔），返回该行解析出的全部条目，
 // 而不再是"至多一条"；调用方通过返回数组是否为空判断这一行是否可识别。
+// 🌸🌿 逐条阳善/阴德文字标记：行尾出现"匿名"/"匿"即显式标记这一行（们）为
+// 阴德，"实名"/"阳善"即显式标记为阳善；不出现任何标记则不设置该字段，交由
+// 报告级 meritType 兜底。只支持"标记在整行末尾"，天然对应 formatDonationItemsToText
+// 生成的"一行一人"格式——多人共享一行时不支持逐条区分，该行统一按未标记处理，
+// 这是刻意的简化（多人共享一行本就是批量粘贴场景，精细化区分需求较低）
+const LINE_ANONYMITY_MARKER_REGEX = /(?:^|\s)(匿名|匿|实名|阳善)\s*$/;
+
 function parseLine(line: string): DonorItem[] {
   const trimmed = line.trim();
   if (!trimmed) return [];
+
+  const markerMatch = trimmed.match(LINE_ANONYMITY_MARKER_REGEX);
+  let lineIsAnonymous: boolean | undefined;
+  let scanTarget = trimmed;
+  if (markerMatch) {
+    lineIsAnonymous = (markerMatch[1] === '匿名' || markerMatch[1] === '匿');
+    scanTarget = trimmed.slice(0, markerMatch.index).trim();
+  }
 
   const results: DonorItem[] = [];
 
@@ -51,7 +74,7 @@ function parseLine(line: string): DonorItem[] {
   NAME_AMOUNT_REGEX.lastIndex = 0;
 
   let match: RegExpExecArray | null;
-  while ((match = NAME_AMOUNT_REGEX.exec(trimmed)) !== null) {
+  while ((match = NAME_AMOUNT_REGEX.exec(scanTarget)) !== null) {
     const amount = parseFloat(match[2]);
     if (isNaN(amount) || amount <= 0) continue;
 
@@ -64,7 +87,11 @@ function parseLine(line: string): DonorItem[] {
 
     if (!cleanedName) continue;
 
-    results.push({ name: cleanedName, amount });
+    const item: DonorItem = { name: cleanedName, amount };
+    if (lineIsAnonymous !== undefined) {
+      item.isAnonymous = lineIsAnonymous;
+    }
+    results.push(item);
   }
 
   return results;
@@ -168,7 +195,10 @@ export function parseMaterials(text: string): MaterialItem[] {
   return materials;
 }
 
-/** 将 donationItems 结构化数组还原为可编辑的自由文本（每行 "姓名 金额"） */
+/** 将 donationItems 结构化数组还原为可编辑的自由文本（每行 "姓名 金额"，
+ * 逐条显式标记为阳善/阴德的条目会在行尾追加"实名"/"匿名"文字标记，
+ * 与 parseLine 的 LINE_ANONYMITY_MARKER_REGEX 互为逆操作，保证
+ * "解析→编辑→再解析"全程不丢失逐条标记状态） */
 export function formatDonationItemsToText(items: any[]): string {
   if (!items || !Array.isArray(items) || items.length === 0) {
     return '';
@@ -176,7 +206,8 @@ export function formatDonationItemsToText(items: any[]): string {
   return items.map(item => {
     const name = item.name || item.donor || '';
     const amount = item.amount || item.value || 0;
-    return `${name} ${amount}`;
+    const suffix = item.isAnonymous === true ? ' 匿名' : (item.isAnonymous === false ? ' 实名' : '');
+    return `${name} ${amount}${suffix}`;
   }).join('\n');
 }
 

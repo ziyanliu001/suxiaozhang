@@ -10,6 +10,12 @@ const YUHUA_GOLDEN_QUOTES = [
 export interface DonorItem {
   name: string;
   amount: number;
+  // 🌸🌿 逐条阳善（实名）/阴德（匿名）区分：与 utils/parser.ts 的同名字段
+  // 同一套语义——未定义时跟随 ReportData.isAnonymous（报告级默认值）展示，
+  // 显式 true/false 时优先于报告级默认值。调用方（index.ts 提交逻辑）负责
+  // 在传入本函数前把"未定义"解析成明确的布尔值（见该处 effectiveItems 注释），
+  // 这里只需要按字段已有值渲染，不重复实现默认值兜底逻辑
+  isAnonymous?: boolean;
 }
 
 export interface MaterialItem {
@@ -211,13 +217,18 @@ export function generateReportText(data: ReportData): string {
 
   if (items.length > 0) {
     textArray.push(`💗【爱心支持明细】`);
+    // 🌸🌿 逐条阳善/阴德：每一条优先用自己显式标记的 isAnonymous，未标记的才
+    // 退回报告级默认值 isAnonymous——与 index.ts 提交逻辑传入前已解析好的
+    // effectiveItems 是同一套"显式优先、未标记兜底默认值"语义，这里再兜底一层
+    // 纯粹是防御性冗余，不依赖调用方一定已经处理过
+    const resolveItemAnonymous = (item: DonorItem) => (item.isAnonymous !== undefined ? item.isAnonymous : !!isAnonymous);
     if (items.length >= 4) {
       for (let i = 0; i < items.length; i += 2) {
         const left = items[i];
         const right = items[i + 1];
-        const leftStr = `${i + 1}.${formatDisplayName(left.name, !!isAnonymous)} ¥${formatMoney(left.amount)}`;
+        const leftStr = `${i + 1}.${formatDisplayName(left.name, resolveItemAnonymous(left))} ¥${formatMoney(left.amount)}`;
         if (right) {
-          const rightStr = `${i + 2}.${formatDisplayName(right.name, !!isAnonymous)} ¥${formatMoney(right.amount)}`;
+          const rightStr = `${i + 2}.${formatDisplayName(right.name, resolveItemAnonymous(right))} ¥${formatMoney(right.amount)}`;
           textArray.push(`${leftStr.padEnd(16, ' ')} | ${rightStr}`);
         } else {
           textArray.push(`${leftStr}`);
@@ -225,7 +236,7 @@ export function generateReportText(data: ReportData): string {
       }
     } else {
       items.forEach((item, index) => {
-        textArray.push(`${index + 1}. ${formatDisplayName(item.name, !!isAnonymous)}：¥${formatMoney(item.amount)}`);
+        textArray.push(`${index + 1}. ${formatDisplayName(item.name, resolveItemAnonymous(item))}：¥${formatMoney(item.amount)}`);
       });
     }
     textArray.push(`📊 总人数：${items.length}人 | 总金额：¥${formatMoney(totalAmount)}`);
