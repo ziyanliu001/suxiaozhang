@@ -1186,6 +1186,13 @@ Page({
   // 驱动任何渲染），纯实例属性
   _lastJobToggleKey: '' as string,
   _lastJobToggleTime: 0 as number,
+  // 🐛 根因修复（getStoreList 超时）：见 fetchAllStoresList 头部注释——
+  // initCurrentUserRole 的 cached 分支与 fetchUserRole 权威分支在满足同一个
+  // 条件时会各自独立调用一次 fetchAllStoresList，同一次 onLoad 里并发发起
+  // 两次相同的云函数请求，互相抢占网络/云端并发资源。这里记录"当前是否有一次
+  // 尚未完成的请求，以及是哪个专区（zoneKey）发起的"，用于去重，纯实例属性，
+  // 不需要驱动任何渲染
+  _fetchAllStoresListInFlight: null as { zoneKey: string; promise: Promise<void> } | null,
 
   async onLoad(options: any) {
     this.debouncedSaveDraft = debounce(() => this.saveDraft(), 500);
@@ -1554,13 +1561,41 @@ Page({
     }
   },
 
+  // 🐛 根因修复（getStoreList 调用超时）：initCurrentUserRole() 里 cached
+  // 分支（本地角色缓存，冷启动同步先行渲染一遍）与 fetchUserRole 权威分支
+  // （服务端角色落地后再渲染一遍）在满足同一个条件（canSwitchStore ||
+  // isManager && !storeId）时，各自独立调用了一次 fetchAllStoresList()——
+  // 同一次 onLoad 里 getStoreList 云函数被并发触发两次，恰恰是页面刚冷启动、
+  // 云函数容器最容易处于冷启动状态的时刻，两次并发请求互相抢占网络/云端
+  // 并发资源，使原本单次调用能在 8s 超时阈值内跑完的请求因排队而更容易撞线，
+  // 正是 "[fetchAllStoresList] 查询失败: ...getStoreList 调用超时" 的根因。
+  // 用一个按专区（zoneKey）区分的进行中 Promise 做去重：同一专区的第二次
+  // 调用直接复用第一次仍未完成的 Promise，不重复发起云函数调用；专区不同
+  // （理论上可能发生，如两次调用之间 currentPlatformMode 被权威角色信息
+  // 纠正过）则视为独立请求，各自正常发起
   async fetchAllStoresList() {
+    const zoneKey = this.data.currentPlatformMode || 'default';
+    const inFlight = this._fetchAllStoresListInFlight;
+    if (inFlight && inFlight.zoneKey === zoneKey) {
+      return inFlight.promise;
+    }
+    const promise = this._doFetchAllStoresList(zoneKey);
+    this._fetchAllStoresListInFlight = { zoneKey, promise };
+    try {
+      await promise;
+    } finally {
+      if (this._fetchAllStoresListInFlight && this._fetchAllStoresListInFlight.promise === promise) {
+        this._fetchAllStoresListInFlight = null;
+      }
+    }
+  },
+
+  async _doFetchAllStoresList(zoneKey: string) {
     try {
       // 🐛 Bug 修复：缓存 key 按当前专区（currentPlatformMode）区分——此前是
       // 一把全局共享的缓存，超管在雨花专区拉取过一次列表后，5 分钟内切到通用
       // 专区会直接复用这份缓存，展示的仍是雨花专区的门店（或反之）。现在两个
       // 专区各自独立缓存，互不覆盖，也就不存在"缓存跨专区污染"的窗口期
-      const zoneKey = this.data.currentPlatformMode || 'default';
       const cacheKey = `all_stores_list_cache_${zoneKey}`;
       const cacheTimeKey = `all_stores_list_cache_time_${zoneKey}`;
 
@@ -1593,11 +1628,20 @@ Page({
       // orgType 精确匹配，防止 tenantId 名下混入的跨专区历史脏数据（如
       // "嵩屿街道敬老中心助餐点"挂在雨花斋默认全国机构下）一起被带出来
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const orgTypeFilter = this.data.currentPlatformMode === 'yuhua' ? 'yuhuazhai' : (this.data.currentPlatformMode === 'general' ? 'general' : '');
-      const cloudRes = await callFunctionWithTimeout({
-        name: 'getStoreList',
-        data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
-      });
+      const orgTypeFilter = zoneKey === 'yuhua' ? 'yuhuazhai' : (zoneKey === 'general' ? 'general' : '');
+      const callArgs = orgTypeFilter ? { orgType: orgTypeFilter } : {};
+      // 🐛 冷启动兜底：即使上面的并发去重已经消灭了"同一次 onLoad 打两枪"这个
+      // 主要诱因，页面首次冷启动时云函数容器本身仍可能恰好处于冷启动状态、
+      // 单次调用就逼近甚至超过 8s——冷启动几乎总是"一次性税"，紧接着的第二次
+      // 调用会打在已经预热好的容器上，通常几百毫秒内返回。超时后不直接放弃，
+      // 静默重试一次，仍失败才落到下面的 catch 分支
+      let cloudRes;
+      try {
+        cloudRes = await callFunctionWithTimeout({ name: 'getStoreList', data: callArgs });
+      } catch (timeoutErr) {
+        console.warn('[fetchAllStoresList] 首次调用超时/失败，重试一次:', timeoutErr);
+        cloudRes = await callFunctionWithTimeout({ name: 'getStoreList', data: callArgs });
+      }
       const cloudResult = cloudRes.result as any;
       // 🐛 与上面缓存读取路径同一处根因、对称补齐防护：这条云端查询路径此前只信
       // `cloudResult.list || []`，只挡了 list 缺失/为 null 的情况，没校验它"是
