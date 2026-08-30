@@ -2184,56 +2184,64 @@ Page({
   },
 
   // 🆘 支援预警队列：遍历已格式化的 storeMatrix，对每家门店计算综合风险得分，
-  // 筛出得分 > 0 的门店并按分值降序返回，供 WXML 渲染「待支援站点预警」面板。
+  // 筛出得分 > 0 的门店并按分值降序返回，供 WXML 渲染「门店健康度告警中心」面板。
   //
-  // 得分维度（使用服务端已下发的字段，不新增云调用）：
-  //   +40  isOffline：超过 3 天未提交餐报（运营中断风险最高）
-  //   +35  statusLevel === 'urgent' / healthStatus === 'danger'：续航 < 10 天（资金见底）
-  //   +15  statusLevel === 'warning' / healthStatus === 'warning'：续航 10~30 天（资金告警）
+  // 🆕（2026-08-30 动态续航预测引擎）得分维度改用服务端新版字段：
+  //   +45  isSeriouslyOffline：超过 7 天未提交餐报（失联，运营中断风险最高）
+  //   +30  isOffline（未达"失联"程度）：超过 3 天未提交餐报
+  //   +40  healthStatus === 'CRITICAL'：资金续航 ≤7 天
+  //   +20  healthStatus === 'WARNING'：资金续航 8~15 天
   //   +20  latestBalance < 0：账面已出现赤字
   //   +10  hasRiskFlag：凭证合规率 < 100%（仅超管视角下发此字段）
+  // healthStatus === 'NEW_STORE'（新店爬坡中，开餐天数 < 3 天）直接跳过，不计
+  // 入告警中心——样本量太小，不构成"需要支援"的信号，只是还没攒够数据。
   //
-  // 同时生成人类可读的 reasonTags 数组（例如 ['资金告急', '离线未记账']）供卡片展示。
+  // reasonTags 优先直接复用服务端 alertTags（getNationalDashboard 已按同一套
+  // 优先级组装好文案：离线/失联 → 凭证合规 → 资金告急/预警），不再客户端重新
+  // 拼一遍措辞，避免两处文案/权重日后各自漂移不一致；账面赤字是服务端目前
+  // 没有转成文案标签的信号，这里作为补充追加。
   deriveSupportNeededStores(stores: any[]): any[] {
     const result: any[] = [];
 
     for (const s of stores) {
-      let score = 0;
-      const reasons: string[] = [];
+      if (s.healthStatus === 'NEW_STORE') continue;
 
-      if (s.isOffline) {
-        score += 40;
-        const days = s.daysSinceLastReport;
-        reasons.push(days ? `离线 ${days} 天未记账` : '离线未记账');
+      let score = 0;
+      if (s.isSeriouslyOffline) {
+        score += 45;
+      } else if (s.isOffline) {
+        score += 30;
       }
-      if (s.statusLevel === 'urgent' || s.healthStatus === 'danger') {
-        score += 35;
-        const days = typeof s.runwayDays === 'number' ? s.runwayDays : null;
-        reasons.push(days !== null ? `资金告急（仅剩 ${days} 天续航）` : '资金告急');
-      } else if (s.statusLevel === 'warning' || s.healthStatus === 'warning') {
-        score += 15;
-        const days = typeof s.runwayDays === 'number' ? s.runwayDays : null;
-        reasons.push(days !== null ? `资金预警（${days} 天续航）` : '资金预警');
+      if (s.healthStatus === 'CRITICAL') {
+        score += 40;
+      } else if (s.healthStatus === 'WARNING') {
+        score += 20;
       }
       const balance = parseFloat(s.latestBalance ?? s.balance ?? 'NaN');
-      if (!isNaN(balance) && balance < 0) {
+      const hasDeficit = !isNaN(balance) && balance < 0;
+      if (hasDeficit) {
         score += 20;
-        reasons.push(`账面赤字（¥${Math.abs(balance).toFixed(0)}）`);
       }
       if (s.hasRiskFlag) {
         score += 10;
-        reasons.push('凭证合规率不足');
       }
 
       if (score === 0) continue;
 
       // 严重程度标签：用于 WXML 选择呼吸灯颜色
       const severity: 'critical' | 'high' | 'medium' =
-        score >= 55 ? 'critical' : score >= 35 ? 'high' : 'medium';
+        score >= 55 ? 'critical' : score >= 30 ? 'high' : 'medium';
 
       const location = [s.province, s.city].filter(Boolean).join('·');
+      const reasonTags: string[] = Array.isArray(s.alertTags) ? [...s.alertTags] : [];
+      if (hasDeficit) {
+        reasonTags.push(`账面赤字（¥${Math.abs(balance).toFixed(0)}）`);
+      }
+      if (reasonTags.length === 0) {
+        reasonTags.push('需关注');
+      }
 
-      result.push({ ...s, supportScore: score, severity, reasonTags: reasons, location });
+      result.push({ ...s, supportScore: score, severity, reasonTags, location });
     }
 
     // 按得分降序，最多展示 10 条（防止全国性事件时卡片无限膨胀）
@@ -2270,40 +2278,42 @@ Page({
       let statusLevel: 'ample' | 'warning' | 'urgent' | 'nodata' = 'nodata';
       let statusText = '';
 
-      // 🌟 精确续航天数属于可反推资金余额的财务隐私：志工脱敏响应中 runwayDays 已被
+      // 🌟 精确续航天数属于可反推资金余额的财务隐私：志工脱敏响应中 fundingDays 已被
       // 服务端置空，但定性的 healthStatus 标签依然保留——因此这里优先按 healthStatus
-      // 判断状态标签，仅当 runwayDays 是真实数字时才在文案里附上具体天数（管理者视角）
-      const hasExactDays = typeof store.runwayDays === 'number';
+      // 判断状态标签，仅当 fundingDays 是真实数字时才在文案里附上具体天数（管理者视角）
+      const hasExactDays = typeof store.fundingDays === 'number';
 
-      if (store.healthStatus === 'nodata') {
-        // 🐛 "告急(0天)"误报修复：门店压根没有日常开销/收支数据时，服务端已经把
-        // healthStatus 明确标成 'nodata'（而不是拿默认值 0 硬算出一个假的"资金告急"），
-        // 这里对应展示中性灰色的"数据建设中"，不制造不必要的焦虑感
+      // 🆕（2026-08-30 动态续航预测引擎）healthStatus 枚举改为大写四态：
+      // NEW_STORE（开餐天数 < 3 天，样本太小不评级）/ HEALTHY / WARNING / CRITICAL
+      if (store.healthStatus === 'NEW_STORE') {
+        // 🐛 "告急(0天)"误报修复：新店/无结余数据时服务端已经把 healthStatus
+        // 明确标成 'NEW_STORE'（而不是拿默认值 0 硬算出一个假的"资金告急"），
+        // 这里对应展示中性的"新店筹备中"，不制造不必要的焦虑感
         statusLevel = 'nodata';
-        statusText = '⚪ 数据建设中';
-      } else if (store.healthStatus === 'healthy') {
+        statusText = '⚪ 新店筹备中';
+      } else if (store.healthStatus === 'HEALTHY') {
         statusLevel = 'ample';
-        statusText = hasExactDays ? `🟢 充足(${store.runwayDays}天)` : '🟢 充足';
-      } else if (store.healthStatus === 'warning') {
+        statusText = hasExactDays ? `🟢 充足(${store.fundingDays}天)` : '🟢 充足';
+      } else if (store.healthStatus === 'WARNING') {
         statusLevel = 'warning';
-        statusText = hasExactDays ? `🟡 注意(${store.runwayDays}天)` : '🟡 注意';
+        statusText = hasExactDays ? `🟡 注意(${store.fundingDays}天)` : '🟡 注意';
       } else if (store.healthStatus) {
-        // 'danger' 及其他未识别取值，一律按告急处理（历史即有的兜底口径，不改变含义）
+        // 'CRITICAL' 及其他未识别取值，一律按告急处理（历史即有的兜底口径，不改变含义）
         statusLevel = 'urgent';
-        statusText = hasExactDays ? `🔴 告急(${store.runwayDays}天)` : '🔴 告急';
+        statusText = hasExactDays ? `🔴 告急(${store.fundingDays}天)` : '🔴 告急';
       } else {
-        // 兼容旧数据：既无 healthStatus 也无 runwayDays 时，退回用余额/日均开销就地反推
+        // 兼容旧数据：既无 healthStatus 也无 fundingDays 时，退回用余额/日均开销就地反推
         // （仅管理者视角会走到这里——志工响应即使字段缺失也不会误算出虚假的告急状态）
         // 🐛 同一个"告急(0天)"误报根因：balance/foodExpense/days 全部缺失时会被 parseFloat/parseInt
         // 兜底成 0，估算出的 estimatedDays 也是 0，会被当成"资金见底"而不是"没有数据"。
-        // 先判断是否真的有任何一项原始字段存在，完全没有时展示中性的"数据建设中"
+        // 先判断是否真的有任何一项原始字段存在，完全没有时展示中性的"新店筹备中"
         const hasBalanceField = store.balance != null || store.latestBalance != null;
         const hasExpenseField = store.foodExpense != null || store.dailyExpenseTotal != null;
         const hasDaysField = store.openDays != null || store.days != null;
 
         if (!hasBalanceField && !hasExpenseField && !hasDaysField) {
           statusLevel = 'nodata';
-          statusText = '⚪ 数据建设中';
+          statusText = '⚪ 新店筹备中';
         } else {
           const balance = parseFloat(store.balance || store.latestBalance || 0);
           const foodExpense = parseFloat(store.foodExpense || store.dailyExpenseTotal || 0);

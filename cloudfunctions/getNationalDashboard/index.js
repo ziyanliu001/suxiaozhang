@@ -26,7 +26,19 @@ function makeTenantFilter(tenantId) {
 // 🌟 超管专属高阶治理看板：时间维度切片 + 离线门店预警阈值
 const RANGE_DAYS = { '7d': 7, 'month': 30, 'quarter': 90, 'year': 365 };
 const RANGE_LABELS = { '7d': '近7天', 'month': '本月', 'quarter': '本季度', 'year': '本年', 'all': '全部时间' };
+// 🆕 门店健康度告警中心（2026-08-30 动态续航预测引擎）：离线判定改为两档——
+// 超过 3 天未提交视为需要留意的 OFFLINE，超过 7 天升级为更紧急的
+// SERIOUS_OFFLINE（失联），与资金续航（fundingDays）是两个独立维度，
+// 不再合并成一个笼统的 healthStatus 枚举值，见下方 storeMatrix 构建处
 const OFFLINE_ALERT_DAYS = 3;
+const SERIOUS_OFFLINE_ALERT_DAYS = 7;
+// 🆕 新店爬坡中判定阈值：查询窗口内实际开餐天数 < 3 天时，样本量太小，任何
+// 续航天数推算都不可信（比如只开了 1 天、当天恰好没什么支出，会算出一个
+// 虚高的续航天数），统一归为 NEW_STORE，不参与资金健康度评级
+const NEW_STORE_MIN_OPEN_DAYS = 3;
+// 🆕 日均支出兜底基数：开餐天数不足以计算真实日均支出时的保守估算值，
+// 与此前 avgDailyExpense 的兜底值保持一致，不凭空拍一个新数字
+const DEFAULT_DAILY_EXPENSE_FALLBACK = 150;
 
 function isoDateNDaysAgo(n) {
   const d = new Date();
@@ -150,12 +162,15 @@ function sanitizeReportForVolunteer(data, userRole) {
   }
 
   const SENSITIVE_KEYS = [
-    'singleMealCost', 'costPerMeal',
+    'singleMealCost', 'costPerMeal', 'avgMealCost',
     'totalIncome', 'totalExpense', 'ingredientExpense',
     'nationalTotalIncome', 'nationalTotalExpense', 'nationalNetAccumulation',
     'latestBalance', 'balance', 'todayBalance', 'yesterdayBalance',
-    // 精确续航天数属于可反推资金余额的财务隐私，志工只保留 healthStatus 状态标签
-    'runwayDays',
+    // 精确续航天数属于可反推资金余额的财务隐私，志工只保留 healthStatus 状态标签。
+    // 🆕 alertTags 文本里直接拼了 fundingDays/离线天数等具体数字（如"资金告急
+    // (仅剩5天)"），同样需要整体遮罩，否则 SENSITIVE_KEYS 这份按字段名清空的
+    // 机制会漏掉"数字被嵌进文本"这种间接泄露
+    'fundingDays', 'alertTags',
     // 🆕 支出环比趋势会暴露"运营规模是在扩张还是收缩"这类财务动向，与它所描述的
     // 原始支出金额同一档隐私级别，一并脱敏；服务人次环比不涉及财务，不需要遮罩
     'nationalTotalExpenseTrend',
@@ -803,34 +818,70 @@ exports.main = async (event, context) => {
       nationalMediaGallery.push(...allPhotoEntries.slice(0, 12));
     }
 
-    // 计算各店单餐成本与续航预警
+    // 🆕 动态物资与资金续航预测引擎（2026-08-30）：计算各店单餐成本与资金续航预警
     const storeMatrix = Object.values(storeStatsMap).map(s => {
-      // 🐛 "告急(0天)"误报根因：门店在查询窗口内一条 report_logs 都没有时，
-      // openDays/totalIncome/totalExpense/ingredientExpense 全部是初始值 0——
-      // avgDailyExpense 兜底成 150、runwayDays 算出来是 (0-0)/150=0，
-      // 而下面 `runwayDays < 10` 的判断把这个"压根没数据"的 0 当成"资金见底"的 0，
-      // 误判成 healthStatus='danger'，前端就渲染出一个吓人的红色"🔴 告急(0天)"。
-      // 用 hasAnyData 显式区分"真的没数据"与"有数据算出来确实是 0 天"这两种情况，
-      // 前者给一个中性的 nodata 状态，不再冒充成资金告急
-      const hasAnyData = s.openDays > 0 || s.totalIncome > 0 || s.totalExpense > 0 || s.ingredientExpense > 0;
+      // 🐛 根因修复（新店误报"告急(0天)"）：查询窗口内实际开餐天数 < 3 天时，
+      // 样本量太小，任何续航天数推算都不可信（比如只开了 1 天、当天恰好没什么
+      // 支出，会算出一个虚高或虚低的续航天数）。统一归为 NEW_STORE，不参与
+      // 资金健康度评级，前端展示"新店筹备中"而不是一个具体但不可信的天数
+      const isNewStore = (s.openDays || 0) < NEW_STORE_MIN_OPEN_DAYS;
 
       const costPerMeal = s.totalDiners > 0
         ? (s.ingredientExpense / s.totalDiners).toFixed(2)
         : '—';
-      const avgDailyExpense = s.openDays > 0
-        ? (s.ingredientExpense / s.openDays)
-        : 150;
-      const runwayDays = avgDailyExpense > 0
-        ? Math.floor((s.totalIncome - s.totalExpense) / avgDailyExpense)
-        : 0;
+      // 🆕 avgMealCost：costPerMeal 的数值版（供未来直接绑定展示用），语义与
+      // costPerMeal 完全一致，costPerMeal 保留给既有的门店矩阵表格显示逻辑，
+      // 两者不重复计算、只是一个是格式化字符串一个是原始数值
+      const avgMealCost = s.totalDiners > 0
+        ? Number((s.ingredientExpense / s.totalDiners).toFixed(2))
+        : null;
 
-      let healthStatus = 'healthy';
-      if (!hasAnyData) {
-        healthStatus = 'nodata';
-      } else if (runwayDays < 10) {
-        healthStatus = 'danger';
-      } else if (runwayDays < 30) {
-        healthStatus = 'warning';
+      // 🐛 根因修复（续航天数系统性偏高）：日均支出此前只算食材成本
+      // （ingredientExpense），续航天数本该回答"账上的钱还能撑几天门店整体
+      // 运转"，只算食材成本会漏掉房租/人力等固定成本，系统性高估续航。改用
+      // 总支出（totalExpense，即 dailyExpenseTotal + fixedExpenseTotal 的
+      // report_logs 汇总口径）
+      const avgDailyExpense = isNewStore
+        ? DEFAULT_DAILY_EXPENSE_FALLBACK
+        : (s.openDays > 0 ? (s.totalExpense / s.openDays) : DEFAULT_DAILY_EXPENSE_FALLBACK);
+
+      // 🐛 根因修复（续航天数误判根源）：此前用"窗口内收入 - 窗口内支出"的净
+      // 变化额反推续航，完全遗漏了窗口开始前结转的账面余额——一家店可能账上
+      // 还有大笔结存，只是这段时间收入恰好没覆盖支出，就被误判成资金告急；
+      // 反过来一家店可能这段时间收入亮眼，但账面早已透支，也会被误判成健康。
+      // 改用真实账面结余（latestBalance，取自窗口内最新一条 report_logs 的
+      // todayBalance，是"现在账上到底还有多少钱"的唯一权威数字）
+      const hasBalanceData = !isNewStore && s.latestBalance !== undefined && s.latestBalance !== null;
+      const fundingDays = (hasBalanceData && avgDailyExpense > 0)
+        ? Math.floor(s.latestBalance / avgDailyExpense)
+        : null;
+
+      // 🆕 健康度评级阈值：≤7 天 CRITICAL（红色告急）、8~15 天 WARNING（黄色
+      // 预警，建议爱心劝募/调拨）、>15 天 HEALTHY（绿色正常）；新店/无结余
+      // 数据统一归为 NEW_STORE，不参与评级
+      let healthStatus;
+      if (isNewStore || fundingDays === null) {
+        healthStatus = 'NEW_STORE';
+      } else if (fundingDays <= 7) {
+        healthStatus = 'CRITICAL';
+      } else if (fundingDays <= 15) {
+        healthStatus = 'WARNING';
+      } else {
+        healthStatus = 'HEALTHY';
+      }
+
+      // 🆕 资金维度告警文案：与 isSuperAdmin 专属的离线维度告警文案分开组装
+      // （见下方），最终合并进同一个 alertTags 数组——资金维度对 hq_finance/
+      // regional_finance/volunteer（脱敏后）同样可见，与 healthStatus/
+      // fundingDays 保持同一条可见性口径，不因为拆分了两个维度就意外收窄
+      // 了非超管角色原本就能看到的资金告警信息
+      const fundingTags = [];
+      if (isNewStore) {
+        fundingTags.push('新店爬坡中');
+      } else if (healthStatus === 'CRITICAL') {
+        fundingTags.push(`资金告急(仅剩${fundingDays}天)`);
+      } else if (healthStatus === 'WARNING') {
+        fundingTags.push(`资金预警(${fundingDays}天)`);
       }
 
       const item = {
@@ -845,11 +896,11 @@ exports.main = async (event, context) => {
         province: s.province,
         totalDiners: s.totalDiners,
         openDays: s.openDays,
-        // 无数据时 runwayDays 给 null 而不是 0，前端据此判断"有没有具体天数可展示"，
-        // 不会拼出一个"(0天)"的假天数
-        runwayDays: hasAnyData ? (runwayDays > 0 ? runwayDays : 0) : null,
+        fundingDays,
         healthStatus,
+        alertTags: fundingTags,
         costPerMeal,
+        avgMealCost,
         totalIncome: s.totalIncome,
         totalExpense: s.totalExpense,
         ingredientExpense: s.ingredientExpense,
@@ -865,13 +916,37 @@ exports.main = async (event, context) => {
           ? Number(((s.receiptRecordCount / s.expenseRecordCount) * 100).toFixed(1))
           : null;
         item.lastReportDate = s.lastReportDate || '';
-        item.daysSinceLastReport = s.lastReportDate ? daysBetween(s.lastReportDate, todayStr) : null;
-        item.isOffline = !s.lastReportDate || daysBetween(s.lastReportDate, todayStr) > OFFLINE_ALERT_DAYS;
+        const daysSinceLastReport = s.lastReportDate ? daysBetween(s.lastReportDate, todayStr) : null;
+        // 🆕 lastReportDaysAgo：与既有 daysSinceLastReport 同一个值，新增一个
+        // 更贴合本次动态续航预测引擎交付规范的字段名，两个名字并存，避免
+        // 强行改名牵连其他尚未涉及本次迭代的调用方
+        item.daysSinceLastReport = daysSinceLastReport;
+        item.lastReportDaysAgo = daysSinceLastReport;
+        // 🆕 离线判定两档：新店从未提交报表是正常筹备状态，不算"离线"（离线
+        // 描述的是"曾经在正常运转、突然停止上报"，不该扣在新店头上）
+        item.isOffline = !isNewStore && (daysSinceLastReport === null || daysSinceLastReport > OFFLINE_ALERT_DAYS);
+        item.isSeriouslyOffline = !isNewStore && (daysSinceLastReport === null || daysSinceLastReport > SERIOUS_OFFLINE_ALERT_DAYS);
         // 🌟 全局大屏"今日预警门店数"用：凭证合规率不满 100%（即扫描区间内有支出
         // 记录缺失小票）即视为需要关注，与 store-management 页 getRiskAlerts 的
         // missing_receipt 判定同一个口径，这里不重新发起 N 次单店查询，直接复用
         // 本函数已经在跑的同一份逐日志聚合结果
         item.hasRiskFlag = item.receiptComplianceRate !== null && item.receiptComplianceRate < 100;
+
+        const offlineTags = [];
+        if (!isNewStore) {
+          if (item.isSeriouslyOffline) {
+            offlineTags.push(daysSinceLastReport !== null ? `失联${daysSinceLastReport}天` : '从未提交报表');
+          } else if (item.isOffline) {
+            offlineTags.push(`离线${daysSinceLastReport}天`);
+          }
+          if (item.hasRiskFlag) {
+            offlineTags.push('凭证合规率不足');
+          }
+        }
+        // 离线/合规告警排在资金告警前面——运营中断/失联的紧迫性通常高于
+        // 资金预警，与 statistics.ts deriveSupportNeededStores 的加分权重
+        // 排序保持一致
+        item.alertTags = [...offlineTags, ...fundingTags];
       }
 
       return item;
