@@ -217,6 +217,32 @@ const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', '
 // 这一次调用的超时跟别处不一样"
 const NATIONAL_DASHBOARD_TIMEOUT_MS = 15000;
 
+// 🆕 全国大屏本地快照缓存（SWR：Stale-While-Revalidate，2026-08-31）：先渲染
+// 上一次的聚合结果，再静默发起真实请求刷新——消除弱网环境下"点了全部门店，
+// 盯着骨架屏傻等甚至等到超时"的挫败感，哪怕数据略旧几秒也比一片空白更安心。
+// NATIONAL_SNAPSHOT_VERSION：写入快照时随数据一起落盘，读取时严格核对——
+// 这块聚合结果的 setData 字段集合这几轮迭代改了好几次（healthStatus 枚举
+// 值、rebalanceSuggestions 结构、auditProofSummary 等），版本号不一致说明
+// 本地缓存是旧版本代码写入的，字段形状可能已经不兼容，直接丢弃重新走一次
+// 正常加载，不强行拿旧形状的数据去渲染新版本 WXML
+const NATIONAL_SNAPSHOT_VERSION = 1;
+// 🆕 快照最大有效期：SWR"先展示旧数据"应该只发生在数据还算新鲜的窗口内——
+// 缓存已经放了好几天才展示，反而比一片空白更容易造成误导（比如让大家长
+// 误以为某家店"资金续航还有 20 天"，其实早已经变化），超过这个时长直接
+// 当没有缓存处理
+const NATIONAL_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
+
+// 🆕 快照缓存键按 tenantId 隔离：同一台设备被不同机构的账号先后登录使用
+// 时（罕见但并非不可能），杜绝串读别的机构缓存下来的聚合数据；取不到
+// tenantId（角色缓存尚未落地）时退回 'unknown' 这个固定桶，最坏情况下只是
+// 缓存命中率降低，不会读到别人机构的真实数据（写入时也用同一个 key，两者
+// 天然对齐）
+function getNationalSnapshotCacheKey(): string {
+  const cached = AuthService.getCachedRoleInfo();
+  const tenantId = (cached && cached.tenantId) || 'unknown';
+  return 'national_dashboard_snapshot_' + tenantId;
+}
+
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
 // 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
@@ -464,6 +490,11 @@ Page({
   // 🐛 见 data.roleReady 注释：reloadShopListAndStats() 在角色尚未就绪时把这次
   // 请求记成待办，不放进 data（不需要驱动渲染），applyRolePermissions() 落地后读取
   _pendingStatsReload: false,
+  // 🆕 SWR 快照秒开只在本次页面生命周期内"第一次"调用 loadNationalDashboard()
+  // 时尝试渲染缓存——切换筛选条件/手动点"刷新数据"等后续调用都是用户主动
+  // 触发的二次请求，屏幕上已经有当前真实数据，不该被快照"倒退"回一份更旧的
+  // 缓存值，见 loadNationalDashboard() 内 isFirstLoad 判断
+  _nationalDashboardEverLoaded: false,
   // 🌟 导出配置弹窗「确认导出」（onConfirmExportConfig）置位，等选定周期的
   // loadStatistics() 重新把 statistics 灌好后自动触发一次 exportToExcel()。
   // 🐛 不再由 onLoad 的 ?autoShowExport=true/?action=export 直接置位——那两个
@@ -1670,6 +1701,44 @@ Page({
     }
   },
 
+  // 🆕 SWR 快照读取：命中且未过期、版本匹配时直接渲染，返回 true；否则不做
+  // 任何事情，返回 false 交由调用方走原有的 loading 骨架屏路径。快照只覆盖
+  // "首屏展示"这一份数据，不包含 nationalDashboardLoading/nationalDashboardError
+  // 这类瞬时状态字段——那些应该由本次真实请求的结果决定，不能被缓存值污染
+  tryRenderNationalSnapshot(): boolean {
+    try {
+      const key = getNationalSnapshotCacheKey();
+      const snapshot = wx.getStorageSync(key);
+      if (!snapshot || typeof snapshot !== 'object') return false;
+      if (snapshot.version !== NATIONAL_SNAPSHOT_VERSION) return false;
+      if (!snapshot.cachedAt || Date.now() - snapshot.cachedAt > NATIONAL_SNAPSHOT_MAX_AGE_MS) return false;
+      if (!snapshot.data || typeof snapshot.data !== 'object') return false;
+      this.setData(snapshot.data);
+      console.log('[NationalDashboard] 命中本地快照，秒开渲染，随后静默刷新真实数据');
+      return true;
+    } catch (err) {
+      console.warn('[NationalDashboard] 读取本地快照失败:', err);
+      return false;
+    }
+  },
+
+  // 🆕 SWR 快照写入：与本次真实请求成功后落地的 setData payload 完全一致的
+  // 字段集合，附带 cachedAt 时间戳与 NATIONAL_SNAPSHOT_VERSION。写入失败
+  // （存储配额已满等）不影响本次页面正常展示，只是下次没有快照可用于秒开，
+  // 静默吞掉异常，不打断主流程
+  saveNationalSnapshot(payload: any) {
+    try {
+      const key = getNationalSnapshotCacheKey();
+      wx.setStorageSync(key, {
+        version: NATIONAL_SNAPSHOT_VERSION,
+        cachedAt: Date.now(),
+        data: payload
+      });
+    } catch (err) {
+      console.warn('[NationalDashboard] 写入本地快照失败:', err);
+    }
+  },
+
   async loadNationalDashboard() {
     console.log('[NationalDashboard] 开始拉取全国大屏数据...');
     // 🐛 根因修复（并发雪崩）：initUserRole() 命中本地角色缓存时会先同步触发一次
@@ -1691,7 +1760,16 @@ Page({
     // "点了没反应"。现在查看权限只保留角色卡口（canViewNationalDashboard）+
     // 服务端 tenantId 硬隔离，付费墙只保留在 Excel 批量导出等真正的深度功能上
     // （见 onOpenPlanUpgradeModal('Excel 报表导出') 调用处），不在这里拦截
-    this.setData({ showNationalDashboard: true, nationalDashboardLoading: true, nationalDashboardError: '' });
+    //
+    // 🆕 SWR 快照秒开（2026-08-31）：仅本次页面生命周期内第一次调用时尝试
+    // 命中本地快照——命中则直接渲染缓存数据、不展示阻塞式骨架屏，紧接着
+    // 仍然照常发起下面的真实请求做静默刷新；未命中（首次进入且从无缓存/
+    // 缓存已过期/版本不匹配，或非首次调用）则退回原有的 loading 骨架屏
+    // 体验，行为与升级前完全一致
+    const isFirstLoad = !this._nationalDashboardEverLoaded;
+    const hasSnapshot = isFirstLoad && this.tryRenderNationalSnapshot();
+    this._nationalDashboardEverLoaded = true;
+    this.setData({ showNationalDashboard: true, nationalDashboardLoading: !hasSnapshot, nationalDashboardError: '' });
 
     try {
       // 🛡️ rangeType 仅超管高阶面板使用；云函数侧会再次校验调用者角色，非 super_admin
@@ -1795,7 +1873,10 @@ Page({
         const topDinersStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.totalDiners || 0) - (a.totalDiners || 0)).slice(0, 5);
         const topActiveStores = cleanedMatrix.slice().sort((a: any, b: any) => (b.openDays || 0) - (a.openDays || 0)).slice(0, 5);
         const supportNeededStores = this.deriveSupportNeededStores(cleanedMatrix);
-        this.setData({
+        // 🆕 SWR 快照：与本次真正 setData 的字段集合保持完全一致（同一个
+        // 对象字面量，不是照着抄一份可能悄悄漂移的拷贝），下次冷启动/重新
+        // 进入全国大屏时用它秒开首屏，见 tryRenderNationalSnapshot()
+        const snapshotPayload = {
           nationalData: displaySummary,
           nationalMatrixList: cleanedMatrix,
           nationalTopDinersStores: topDinersStores,
@@ -1809,21 +1890,29 @@ Page({
             : [],
           // 🆕 顶部横幅机构名：见 data.currentTenantName 声明处注释
           currentTenantName: r.tenantName || ''
-        });
+        };
+        this.setData(snapshotPayload);
+        this.saveNationalSnapshot(snapshotPayload);
 
-        // 🔢 义工与用餐服务数据看板：数据落地后驱动一次 0 → 目标值的滚动动画
-        this.animateCareCountUp({
-          dineIn,
-          delivery,
-          takeaway,
-          listen,
-          onDutyVolunteers,
-          deliveryVolunteers,
-          volunteerHours: sanitizedSummary.nationalTotalVolunteerHours || 0,
-          totalDiningCount,
-          totalVolunteerPersonTimes,
-          totalServicePersonTimes
-        });
+        // 🔢 义工与用餐服务数据看板：数据落地后驱动一次 0 → 目标值的滚动动画。
+        // 🆕 SWR 快照命中时跳过这次动画——数字在快照渲染那一刻就已经是正确
+        // 值了，若真实数据回来后再从 0 重新滚动一遍，视觉上会变成"数字先对、
+        // 后归零、再滚回来"的诡异闪烁，只有本次是"从无到有"首次落地数据时
+        // 才需要这个动画
+        if (!hasSnapshot) {
+          this.animateCareCountUp({
+            dineIn,
+            delivery,
+            takeaway,
+            listen,
+            onDutyVolunteers,
+            deliveryVolunteers,
+            volunteerHours: sanitizedSummary.nationalTotalVolunteerHours || 0,
+            totalDiningCount,
+            totalVolunteerPersonTimes,
+            totalServicePersonTimes
+          });
+        }
       } else {
         // 🐛 根因修复：此前云函数返回 success:false（例如账号缺 tenantId、无权限）
         // 时什么反馈都没有，容器又靠 nationalData 是否有值来决定渲不渲染，
