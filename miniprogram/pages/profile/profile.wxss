@@ -5126,8 +5126,9 @@
   width: 90%;
   height: 88rpx;
   line-height: 88rpx;
-  /* 底部间距只由 .sub-btn-dismiss 的 margin-top 单一负责（见下方），这里不再
-     兼职留白，避免两处各留一点、间距忽大忽小、全靠凑 */
+  /* 底部安全区留白已由 .sub-modal-footer 的 padding-bottom 单一负责（含
+     safe-area-inset-bottom），这里不再兼职留白，避免两处各留一点、间距
+     忽大忽小、全靠凑 */
   margin: 20rpx auto 0;
   border-radius: 44rpx;
   display: flex;
@@ -5172,13 +5173,6 @@
   font-size: 27rpx;
   font-weight: 600;
   box-shadow: none;
-}
-
-.sub-btn-dismiss {
-  font-size: 24rpx;
-  color: #9CA3AF;
-  margin-top: 16rpx;
-  padding: 2rpx 24rpx 4rpx;
 }
 
 /* ── ②.5 套餐对比 Tab ────────────────────────────────────────── */

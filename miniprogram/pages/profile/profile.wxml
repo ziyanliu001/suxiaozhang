@@ -2457,7 +2457,7 @@
                 <text class="sub-plan-compare-price-unit">/ 年</text>
               </view>
               <view class="sub-plan-compare-price-row" wx:else>
-                <text class="sub-plan-compare-price-unit">具体价格请联系客服咨询</text>
+                <text class="sub-plan-compare-price-unit">受平台规范限制，iOS 端暂不支持在线支付</text>
               </view>
               <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">10</text> 家</view>
               <view class="sub-plan-compare-feature-row">
@@ -2485,7 +2485,7 @@
                 <text class="sub-plan-compare-price-unit">/ 年</text>
               </view>
               <view class="sub-plan-compare-price-row" wx:else>
-                <text class="sub-plan-compare-price-unit">具体价格请联系客服咨询</text>
+                <text class="sub-plan-compare-price-unit">受平台规范限制，iOS 端暂不支持在线支付</text>
               </view>
               <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">30</text> 家</view>
               <view class="sub-plan-compare-feature-row">
@@ -2513,7 +2513,7 @@
                 <text class="sub-plan-compare-price-unit">/ 店 / 年</text>
               </view>
               <view class="sub-plan-compare-price-row" wx:else>
-                <text class="sub-plan-compare-price-unit">具体价格请联系客服咨询</text>
+                <text class="sub-plan-compare-price-unit">受平台规范限制，iOS 端暂不支持在线支付</text>
               </view>
               <view class="sub-plan-quota-tag">📦 在当前机构门店上限基础上按需叠加</view>
               <view class="sub-plan-compare-feature-row">
@@ -2556,6 +2556,7 @@
                 <input class="sub-redeem-input"
                        placeholder="请输入或粘贴授权码 / 兑换卡号"
                        value="{{activationCodeInput}}"
+                       focus="{{redeemInputFocus}}"
                        bindinput="onActivationCodeInput" />
                 <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
               </view>
@@ -2592,7 +2593,6 @@
           <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">{{planActionLabels.enterprise}}</button>
           <button class="btn-pay-action btn-pay-action-addon" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'add_on'}}">🏪 确认购买扩容包</button>
           <view class="btn-pay-action btn-pay-action-disabled" wx:else>当前为默认免费档位</view>
-          <text class="sub-btn-dismiss" bindtap="onCloseSubscriptionModal">暂不升级</text>
         </view>
 
       </block>

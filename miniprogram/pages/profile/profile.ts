@@ -584,6 +584,9 @@ Page({
     // 套餐对比/微信支付购买路径同权重常驻展开——绝大多数用户走微信支付，
     // 只有极少数拿到卡号的用户才需要点开这块，见 onToggleRedeemSection
     showRedeemSection: false,
+    // 🍎 iOS 端底部按钮引导：点击"使用兑换码续费/升级"时展开折叠区后还要
+    // 真正把光标聚焦到输入框上，而不是仅仅展开——见 onGuideToRedeemSection
+    redeemInputFocus: false,
     activationCodeInput: '',
     activationSubmitting: false,
     // 🆕 套餐对比 Tab：纯浏览态，与"当前实际持有的套餐"（subscriptionInfo.planType）
@@ -5847,14 +5850,19 @@ Page({
     });
   },
 
-  // 🍎 iOS 端付费 Tab 底部按钮：文案已改为"使用兑换码续费/升级/开通"（见
-  // computeIOSPlanActionLabels），点击不拉起任何支付，只是确保"授权码/兑换
-  // 卡号"折叠区展开（打开弹窗时已默认展开，这里是防御性兜底）并提示用户
-  // 视线下移，与文案承诺的动作保持一致，不能文案说"用兑换码"、点击却触发
-  // 一个跟兑换码毫不相关的动作
+  // 🍎 iOS 端付费 Tab 底部按钮：文案已改为"使用兑换码续费/升级"（见
+  // computeIOSPlanActionLabels），点击不拉起任何支付，直接展开"授权码/兑换
+  // 卡号"折叠区并把光标聚焦到输入框上——与文案承诺的动作保持一致，不能文案
+  // 说"用兑换码"、点击却只是弹个提示需要用户自己再去找输入框。
+  // 🐛 focus 重触发：input 的 focus 属性是"设为 true 时触发一次聚焦"，若上
+  // 一次操作已经把它置为 true，本次再设 true 不会产生变化、无法重新聚焦
+  // （小程序只在值真正变化时才触发副作用）。先显式置 false、下一个渲染周期
+  // 再置 true，确保每次点击都能重新聚焦，即使折叠区本来就是展开状态
   onGuideToRedeemSection() {
-    this.setData({ showRedeemSection: true });
-    wx.showToast({ title: '请在下方"授权码 / 兑换卡号"区域输入', icon: 'none', duration: 2000 });
+    this.setData({ showRedeemSection: true, redeemInputFocus: false });
+    wx.nextTick(() => {
+      this.setData({ redeemInputFocus: true });
+    });
   },
 
   // 🌟 在线订购：接入 wxPayCore 支付基础设施（APIv3 + Mock 开关，详见
