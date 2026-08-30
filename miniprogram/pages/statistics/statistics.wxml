@@ -184,37 +184,19 @@
       >{{item.label}}</view>
     </view>
 
-    <!-- 🏢 平台类型筛选器：超管可见，切换后重新按 orgType 聚合全国大屏数据，
-         彻底解耦"雨花斋"等平台硬编码。与上方时间范围 Tab 并排为两行独立控件。
-         🐛 改回横向滚动的历史记录：此前确实因为 overflow-x:auto 单行滚动 +
-         内容区没留够右侧安全边距，导致最后一枚胶囊贴着可视区域边缘看起来像
-         被截断，才临时改成 flex-wrap 自动换行（两行）规避。这次改用真正的
-         <scroll-view> + 足够的右侧 padding（见 .org-type-filter-row 的
-         padding-right）重新实现横向滚动，不复用旧的 overflow-x:auto 写法 -->
-    <scroll-view scroll-x class="org-type-filter-scroll" enhanced show-scrollbar="{{false}}" wx:if="{{isAdmin || isPatriarch}}">
-      <view class="org-type-filter-row">
-        <view
-          wx:for="{{orgTypeFilterOptions}}"
-          wx:key="value"
-          class="org-type-pill {{nationalOrgTypeFilter === item.value ? 'active' : ''}}"
-          data-orgtype="{{item.value}}"
-          bindtap="onOrgTypeFilterChange"
-        >{{item.label}}</view>
-      </view>
-    </scroll-view>
+    <!-- 🐛 根因修复（精简冗余分类层级）：此处原有"平台类型筛选器"（全部平台/
+         雨花斋/助老食堂/义工服务站）Tab 已移除——工作空间进入统计页时早已
+         锁定"雨花公益食堂专区"这一个业务范围，再让用户选一次"看哪个专区"
+         是多余的一层。orgType 现固定传 'all'（见 loadNationalDashboard()
+         callParams 注释），直接呈现本机构名下的完整爱心网络大盘 -->
 
-    <!-- 🆕 全国爱心网络数据总览：原先并列的「全国多店大屏」（暖黄渐变）与
-         「应急救援队数据大屏」口径完全融合为一张白底卡片——两者本就是同一份
-         nationalData 数据源，只是 orgTypeFilter 切到 rescue_team 时的同一套卡片，
-         此前拆成两张视觉不一致的卡片纯属历史遗留。现在统一为一张卡：顶部 4 大
-         核心指标用大字号数字置顶，收支细分/开餐天数/义工到岗降为次级小字号行，
-         物资消耗（大米/面粉/油/蔬菜）收拢到底部轻量 4 列微卡片，不再挤占首屏 -->
+    <!-- 🆕 全国爱心网络数据总览：统一为一张白底卡片，顶部 4 大核心指标用大
+         字号数字置顶，收支细分/开餐天数/义工到岗降为次级小字号行，物资消耗
+         （大米/面粉/油/蔬菜）收拢到底部轻量 4 列微卡片，不再挤占首屏 -->
     <view class="ui-card-wrapper national-overview-card">
-      <!-- 🐛 修复标题重复：此前标题下方还挂了一行 {{dashboardTitle}}（默认文案
-           "全网爱心矩阵数据大屏"），与主标题"全国爱心网络数据总览"语义完全重复，
-           两行连读像是同一句话被拆成两行（见调试截图）。dashboardTitle 真正携带
-           的信息——当前是"全网"还是筛到某个具体平台——上方 org-type-filter-row
-           的高亮胶囊本身就已经表达了，这里不再重复展示，只保留一个主标题 -->
+      <!-- 🐛 修复标题重复：此前标题下方还挂了一行 dashboardTitle 文案（"全网
+           爱心矩阵数据大屏"），与主标题"全国爱心网络数据总览"语义完全重复，
+           两行连读像是同一句话被拆成两行——这里不重复展示，只保留一个主标题 -->
       <view class="overview-header">
         <view class="overview-title-row">
           <text class="overview-title">🌐 全国爱心网络数据总览</text>
@@ -584,8 +566,9 @@
               {{item.type === 'receipt' ? '🧾' : item.type === 'menu' ? '🍱' : '📷'}}
             </text>
             <text class="nm-tag-store">{{item.storeName}}</text>
-            <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分影像来源属于哪一类业态站点 -->
-            <text class="nm-tag-org" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+            <!-- 🆕 平台徽章：区分影像来源属于哪一类业态站点——平台类型筛选 Tab
+                 已移除（大盘固定展示全部平台），不再需要按筛选状态判断是否展示 -->
+            <text class="nm-tag-org">{{item.orgTypeLabel}}</text>
           </view>
         </view>
       </view>
@@ -629,8 +612,9 @@
               <view class="hai-name-row">
                 <text class="hai-location" wx:if="{{item.location}}">【{{item.location}}】</text>
                 <text class="hai-name">{{item.storeName}}</text>
-                <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分待支援站点所属业态 -->
-                <text class="hai-org-tag" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+                <!-- 🆕 平台徽章：区分待支援站点所属业态——平台类型筛选 Tab 已移除
+                     （大盘固定展示全部平台），不再需要按筛选状态判断是否展示 -->
+                <text class="hai-org-tag">{{item.orgTypeLabel}}</text>
               </view>
               <text class="hai-score hai-score-{{item.severity}}">风险分 {{item.supportScore}}</text>
             </view>
@@ -729,8 +713,9 @@
         <view class="ranking-item" wx:for="{{nationalTopActiveStores}}" wx:key="storeId" wx:for-index="rankIdx">
           <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
           <text class="ranking-name">{{item.storeName}}</text>
-          <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分排行榜条目所属业态 -->
-          <text class="ranking-org-tag" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+          <!-- 🆕 平台徽章：区分排行榜条目所属业态——平台类型筛选 Tab 已移除
+               （大盘固定展示全部平台），不再需要按筛选状态判断是否展示 -->
+          <text class="ranking-org-tag">{{item.orgTypeLabel}}</text>
           <text class="ranking-value">{{item.openDays}} 天</text>
         </view>
         <view class="ranking-empty" wx:if="{{nationalTopActiveStores.length === 0}}">
@@ -742,8 +727,9 @@
         <view class="ranking-item" wx:for="{{nationalTopDinersStores}}" wx:key="storeId" wx:for-index="rankIdx">
           <text class="ranking-badge rank-{{rankIdx + 1}}">{{rankIdx + 1}}</text>
           <text class="ranking-name">{{item.storeName}}</text>
-          <!-- 🆕 平台徽章：仅"全部平台"视角下展示，区分排行榜条目所属业态 -->
-          <text class="ranking-org-tag" wx:if="{{nationalOrgTypeFilter === 'all'}}">{{item.orgTypeLabel}}</text>
+          <!-- 🆕 平台徽章：区分排行榜条目所属业态——平台类型筛选 Tab 已移除
+               （大盘固定展示全部平台），不再需要按筛选状态判断是否展示 -->
+          <text class="ranking-org-tag">{{item.orgTypeLabel}}</text>
           <text class="ranking-value">{{item.totalDiners}} 人次</text>
         </view>
         <view class="ranking-empty" wx:if="{{nationalTopDinersStores.length === 0}}">

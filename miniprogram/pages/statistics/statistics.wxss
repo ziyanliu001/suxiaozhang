@@ -1829,8 +1829,7 @@ page {
   gap: 16rpx;
 }
 
-.btn-primary-poster,
-button.btn-primary-poster {
+.btn-primary-poster {
   width: 100% !important;
   height: 88rpx;
   line-height: 88rpx;
@@ -3407,48 +3406,6 @@ button.btn-primary-poster {
   font-weight: bold;
 }
 
-/* 🏢 全国大屏平台类型筛选器：解耦雨花斋等平台硬编码。
-   🐛 横向滚动实现记录：此前用 overflow-x: auto 单行滚动时，内容区没有留够
-   右侧安全边距，最后一枚胶囊贴着可视区域边缘，看起来像被硬生生裁切——才
-   临时改成 flex-wrap 自动换行规避，但换行后 7 个选项常态占两行，折叠感重。
-   这次用真正的 <scroll-view>（见 WXML）+ 右侧 32rpx 安全 padding 重新实现
-   单行横向滚动，不复用旧的 overflow-x:auto 写法，真机验证时留意最后一枚
-   胶囊是否完整可见 */
-.org-type-filter-scroll {
-  width: 100%;
-  white-space: nowrap;
-  margin: 0 0 16rpx;
-  box-sizing: border-box;
-}
-
-.org-type-filter-row {
-  display: inline-flex;
-  gap: 12rpx;
-  padding: 4rpx 32rpx 4rpx 2rpx;
-  box-sizing: border-box;
-}
-
-.org-type-pill {
-  flex: none;
-  padding: 12rpx 24rpx;
-  border-radius: 999rpx;
-  font-size: 24rpx;
-  color: #6B6B70;
-  background: #F5F5F5;
-  white-space: nowrap;
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* 🐛 高亮色统一：此前用 #1565C0 蓝色，与全站（如 .range-tab-item.active）
-   已经统一的 #8C1D18 暖色主题不一致，自成一派。改为同色系微渐变，呼应
-   "温润主色"的设计诉求 */
-.org-type-pill.active {
-  background: linear-gradient(135deg, #8C1D18, #B8452E);
-  color: #FFFFFF;
-  font-weight: 600;
-  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.28);
-}
-
 .insights-metric-grid {
   display: flex;
   gap: 16rpx;
@@ -3541,7 +3498,6 @@ button.btn-primary-poster {
    基础规则里 width:100% !important 是给单按钮场景设计的，双按钮并排时改用
    flex:1 让两者各自撑满一半，不再依赖 flex-shrink 的隐式换算 */
 .national-bottom-bar .btn-primary-poster,
-.national-bottom-bar button.btn-primary-poster,
 .national-bottom-bar .btn-national-report {
   flex: 1;
   width: auto !important;
@@ -3549,8 +3505,7 @@ button.btn-primary-poster {
 
 /* 报表按钮：黑金配色，呼应上方「超管高阶治理面板」，与主按钮（海报，红色渐变）
    形成主次分明的视觉层级 */
-.btn-national-report,
-button.btn-national-report {
+.btn-national-report {
   height: 88rpx;
   line-height: 88rpx;
   padding: 0 12rpx;
@@ -4633,8 +4588,7 @@ button.btn-national-report {
 }
 
 /* 胶囊基础样式：轻量灰底圆角，不与主按钮抢视觉权重 */
-.btn-quick-pill,
-button.btn-quick-pill {
+.btn-quick-pill {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4661,8 +4615,7 @@ button.btn-quick-pill {
 }
 
 /* 金色变体：超管专属「切换全国总览」 */
-.btn-quick-pill-gold,
-button.btn-quick-pill-gold {
+.btn-quick-pill-gold {
   background: #FFF8E8;
   color: #B8860B;
   border-color: #FFE082;
@@ -4673,8 +4626,7 @@ button.btn-quick-pill-gold {
 }
 
 /* 主操作按钮：快捷补报餐报（全宽红色主 CTA，置于胶囊组下方） */
-.btn-empty-primary,
-button.btn-empty-primary {
+.btn-empty-primary {
   width: 100%;
   display: flex;
   align-items: center;
@@ -5139,8 +5091,7 @@ button.btn-empty-primary {
 }
 
 
-.btn-primary-poster,
-button.btn-primary-poster {
+.btn-primary-poster {
   flex: 1;
   width: auto !important;
 }
@@ -5149,8 +5100,7 @@ button.btn-primary-poster {
    旧版靠行高撑开文字垂直居中的写法，与后来补上的 flex 居中叠加在一起纯属冗余
    （height 也和规范要求的 84rpx 对不上），显式改成 line-height:1 + box-sizing:
    border-box，避免文字/图标出现肉眼可见的基线偏斜 */
-.btn-export-shortcut,
-button.btn-export-shortcut {
+.btn-export-shortcut {
   flex: 1;
   display: flex;
   align-items: center;

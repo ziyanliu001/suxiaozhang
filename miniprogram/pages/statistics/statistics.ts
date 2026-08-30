@@ -608,9 +608,6 @@ Page({
     // 🆕 顶部横幅"📊 爱心网络总览 · [机构名称]"：来自 getNationalDashboard
     // 返回的 tenantName，加载完成前/查询失败时兜底展示通用文案，不留空
     currentTenantName: '',
-    // 🏢 全国大屏平台类型筛选器：'all' = 不限类型（默认），其他值对应 stores.orgType
-    nationalOrgTypeFilter: 'all',
-    orgTypeFilterOptions: ORG_TYPE_FILTER_OPTIONS,
 
     // 🆕 家长专属：资源储备/资金物资兜底/续航预警，复用 getPatriarchDashboard
     // 云函数（该函数早已对 store_patriarch 做 storeId 硬隔离，见该云函数
@@ -1703,18 +1700,20 @@ Page({
       // 传参，服务端 getNationalDashboard 会在"已确认属于本机构"的门店集合内做
       // 子集收窄，不传或 filterMode='national' 时行为与升级前完全一致
       const filterMode = this.data.nationalFilterMode || 'national';
-      const orgTypeFilter = this.data.nationalOrgTypeFilter || 'all';
-      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode, orgType: orgTypeFilter };
+      // 🐛 根因修复（精简冗余分类层级）：工作空间进入统计页时早已锁定"雨花公益
+      // 食堂专区"这一个业务范围，顶部的平台分类 Tab（全部平台/雨花斋/助老
+      // 食堂/义工服务站）是多余的一层——用户已经在专区内，不需要再选一次
+      // "看哪个专区"。orgType 固定传 'all'，直接呈现本机构名下的完整爱心网络
+      // 大盘，不再依赖已移除的 Tab 选择状态（原 nationalOrgTypeFilter 字段/
+      // onOrgTypeFilterChange 分类切换逻辑一并删除，见 statistics.wxml
+      // org-type-filter-scroll 移除处注释）
+      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode, orgType: 'all' };
       if (filterMode === 'region') {
         callParams.province = this.data.selectedProvince || '';
         callParams.city = this.data.selectedCity || '';
       } else if (filterMode === 'custom') {
         callParams.storeIds = this.data.customStoreSelection || [];
       }
-      // 🏢 按当前 orgTypeFilter 动态计算大屏标题
-      const orgTypeOpt = ORG_TYPE_FILTER_OPTIONS.find(o => o.value === orgTypeFilter);
-      const dashboardTitle = `🌐 ${(orgTypeOpt && orgTypeOpt.shortName) || '全网'}爱心矩阵数据大屏`;
-      this.setData({ dashboardTitle });
       console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
       // 见 NATIONAL_DASHBOARD_TIMEOUT_MS 声明处注释——只这一次调用放宽超时，
@@ -2166,14 +2165,6 @@ Page({
     const rangeType = e.currentTarget.dataset.range;
     if (!rangeType || rangeType === this.data.nationalRangeType) return;
     this.setData({ nationalRangeType: rangeType });
-    this.loadNationalDashboard();
-  },
-
-  // 🏢 全国大屏平台类型筛选器：切换后重新聚合
-  onOrgTypeFilterChange(e: any) {
-    const orgType = e.currentTarget.dataset.orgtype;
-    if (!orgType || orgType === this.data.nationalOrgTypeFilter) return;
-    this.setData({ nationalOrgTypeFilter: orgType });
     this.loadNationalDashboard();
   },
 
