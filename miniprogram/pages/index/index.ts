@@ -6626,6 +6626,19 @@ Page({
       const fileBuffer = fs.readFileSync(tempFilePath) as ArrayBuffer;
       const imageHash = md5(fileBuffer);
 
+      // 🐛 根因修复（TypeError: Cannot read property 'includes' of undefined）：
+      // _uploadedImageHashes 是在 Page({...}) 对象字面量里以纯实例属性形式声明
+      // 的 `[] as string[]`（不在 data 里，不经过 setData），本该在页面每次
+      // onLoad 创建新实例时随之初始化好。实测在反复编辑/热重载调试期间会
+      // 出现该属性读到 undefined 的情况——与本文件其它所有"本地状态形状不
+      // 可尽信"的历史 bug 同一个教训（见 fetchAllStoresList 对 allStoresList
+      // 缓存的 Array.isArray 校验注释），这里同样不能假设它一定是数组，用之
+      // 前先校验/兜底成空数组，而不是在真正崩溃后才发现
+      if (!Array.isArray(this._uploadedImageHashes)) {
+        console.warn('[onScanDonorScreenshot] _uploadedImageHashes 不是数组，重置为空数组');
+        this._uploadedImageHashes = [];
+      }
+
       if (this._uploadedImageHashes.includes(imageHash)) {
         wx.showModal({
           title: '系统提示',
