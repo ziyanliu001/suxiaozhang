@@ -2962,6 +2962,21 @@ page {
   line-height: 1.4;
 }
 
+/* 🆕 逐条/逐店"已存证"微标：善缘墙单条捐赠、门店矩阵单个门店都复用同一个
+   小巧的绿色标签，与上面卡片级 .audit-proof-badge 是同一套"已核验"视觉
+   语言的缩小版 */
+.audit-proof-mini-tag {
+  display: inline-block;
+  font-size: 18rpx;
+  font-weight: 600;
+  color: #0f766e;
+  background: rgba(13, 148, 136, 0.12);
+  padding: 1rpx 10rpx;
+  border-radius: 100rpx;
+  margin-left: 6rpx;
+  vertical-align: middle;
+}
+
 /* KPI 行 */
 .love-kpi-row {
   display: flex;
@@ -3506,6 +3521,37 @@ page {
   font-size: 24rpx;
   color: #374151;
   line-height: 1.5;
+}
+
+.ssi-store-bold {
+  font-weight: 700;
+  color: #0f766e;
+}
+
+.ssi-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10rpx;
+}
+
+.ssi-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: #FFFFFF;
+  border: 1rpx solid rgba(13, 148, 136, 0.30);
+  border-radius: 100rpx;
+  padding: 6rpx 18rpx;
+}
+
+.ssi-copy-icon {
+  font-size: 20rpx;
+}
+
+.ssi-copy-text {
+  font-size: 22rpx;
+  color: #0d9488;
+  font-weight: 600;
 }
 
 /* 🆕 空状态：与 .health-alert-empty 同一套弱化居中文案规范 */

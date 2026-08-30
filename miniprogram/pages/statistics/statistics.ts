@@ -2283,11 +2283,12 @@ Page({
     const managerLabel = item.managerName ? `${item.managerName}店长` : `${item.storeName || '门店'}店长`;
     const tags: string[] = Array.isArray(item.reasonTags) ? item.reasonTags : [];
 
+    // 🐛 2026-08-31 二次迭代：失联/离线场景的措辞对齐最新规范给定的精确文案
+    // （"已多日未提交日报"/"请问近期运营或物资是否需要支持？"），其余场景
+    // 沿用同一条收尾问句，保持模板统一、不为每种告警各自维护一套问法
     let concern = '门店近期运营情况';
-    if (tags.some((t: string) => t.indexOf('失联') !== -1)) {
-      concern = '门店已失联多日未记账';
-    } else if (tags.some((t: string) => t.indexOf('离线') !== -1)) {
-      concern = '门店已离线未记账';
+    if (tags.some((t: string) => t.indexOf('失联') !== -1) || tags.some((t: string) => t.indexOf('离线') !== -1)) {
+      concern = '门店已多日未提交日报';
     } else if (tags.some((t: string) => t.indexOf('资金') !== -1)) {
       concern = '门店资金续航偏紧';
     } else if (tags.some((t: string) => t.indexOf('主料') !== -1)) {
@@ -2298,10 +2299,28 @@ Page({
       concern = '门店账面出现赤字';
     }
 
-    const message = `【雨花爱心网络关怀】${location}${managerLabel}您好，系统检测到${concern}，请问近期食材与义工排班是否需要协助？`;
+    const message = `【雨花爱心关怀】${location}${managerLabel}您好，系统检测到${concern}，请问近期运营或物资是否需要支持？`;
     wx.setClipboardData({
       data: message,
       success: () => wx.showToast({ title: '关怀文案已复制，可直接粘贴发送', icon: 'none', duration: 2500 })
+    });
+  },
+
+  // 🆕 复制跨店调拨/劝募建议文案（2026-08-31）：与 rebalanceSuggestions 的
+  // 两种情形一一对应——撮合到支援门店时生成一段"请求平调"的协同话术，
+  // 撮合不到时改生成一段面向公众的"定向劝募"话术，方便大家长直接粘贴到
+  // 微信工作群/朋友圈发起协调
+  onCopyRebalanceSuggestion(e: any) {
+    const item = (e.currentTarget.dataset.item || {}) as any;
+    let message: string;
+    if (item.sourceStoreName) {
+      message = `【雨花爱心网络协同】${item.targetStoreName}${item.urgency === 'HIGH' ? '近期资金续航紧张' : '近期主料库存偏紧'}，${item.sourceStoreName}资金续航相对充裕（约${item.sourceFundingDays}天），恳请${item.sourceStoreName}大家长/店长协助进行一次爱心平调支援，双方可直接联系具体协商，感恩！`;
+    } else {
+      message = `【雨花爱心倡议】${item.targetStoreName}${item.reason || '近期运营遇到困难'}，同城/同省暂无充裕门店可平调，恳请各界爱心人士与机构伸出援手，助力门店渡过难关，感恩！`;
+    }
+    wx.setClipboardData({
+      data: message,
+      success: () => wx.showToast({ title: '建议文案已复制，可直接粘贴发送', icon: 'none', duration: 2500 })
     });
   },
 

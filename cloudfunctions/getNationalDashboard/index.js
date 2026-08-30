@@ -1157,6 +1157,9 @@ exports.main = async (event, context) => {
         targetStoreName: shortage.storeName,
         sourceStoreId: best ? best.storeId : undefined,
         sourceStoreName: best ? best.storeName : undefined,
+        // 🆕 sourceFundingDays：撮合到的支援门店自身的资金续航天数，供前端
+        // 文案"对方资金续航 X 天"直接展示，不撮合到时随 sourceStoreId 一起缺省
+        sourceFundingDays: best ? best.fundingDays : undefined,
         reason: best
           ? `${reasonCore}，建议${scopeLabel}平调支援`
           : `${reasonCore}，同城/同省暂无充裕门店可平调，建议发起对外爱心劝募`,

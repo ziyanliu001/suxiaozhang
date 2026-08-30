@@ -443,8 +443,8 @@
            换一种颜色提示"存在需要核查的数据完整性缺口"，不代表账目被篡改，
            不使用红色等报警色，避免和真正的资金/离线告警混淆 -->
       <view class="audit-proof-badge audit-proof-{{nationalData.auditProofSummary.chainStatus}}" wx:if="{{nationalData.auditProofSummary}}">
-        <text class="audit-proof-icon">🔒</text>
-        <text class="audit-proof-text">阳光账目存证守护中 · 已封账数据防篡改（覆盖率 {{nationalData.auditProofSummary.auditCoverageRate}}）</text>
+        <text class="audit-proof-icon">🛡️</text>
+        <text class="audit-proof-text">财务核账存证保护中 · 覆盖率 {{nationalData.auditProofSummary.auditCoverageRate}}</text>
       </view>
 
       <!-- KPI 行：支持人次 + 现场随喜总额（随喜总额对志工脱敏） -->
@@ -498,6 +498,11 @@
             <view class="love-scroll-item">
               <text class="love-scroll-store">[{{item.storeName}}]</text>
               <text class="love-scroll-name">{{item.name}}</text>
+              <!-- 🆕 已存证微标：hasAuditProof===true 时点亮，反映这条记录所在
+                   报表已通过财务稽核封账（AUDITED_LOCKED），见
+                   getNationalDashboard formatDonorDisplayName 调用处附近的
+                   hasAuditProof 打标注释 -->
+              <text class="audit-proof-mini-tag" wx:if="{{item.hasAuditProof}}">✅已存证</text>
               <text class="love-scroll-amount">支持 ¥{{item.amount}}</text>
               <text class="love-scroll-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
             </view>
@@ -673,28 +678,35 @@
       </view>
     </view>
 
-    <!-- 🆕 跨店爱心互助调拨建议（2026-08-30 首版，2026-08-31 升级为
-         rebalanceSuggestions 结构化撮合结果）：同机构内"受援门店"（资金续航
-         ≤7 天或主料库存告急）与"支援门店"（资金续航 ≥45 天）轻量撮合，帮
-         大家长/超管一眼看出"该找哪家兄弟门店求助"。与上方「门店健康度告警
-         中心」同一条常驻展示策略——受援门店为空时展示"全网门店运营稳健"的
-         正向空状态，而不是整块消失，让大家长明确知道"系统检查过、结果是
-         没有风险" -->
-    <view class="support-suggestion-card" wx:if="{{isPatriarch || isAdmin}}">
+    <!-- 🆕 爱心互助与调拨建议（2026-08-30 首版，2026-08-31 升级为
+         rebalanceSuggestions 结构化撮合结果，同日再迭代为最终 UI 交互）：
+         同机构内"受援门店"（资金续航 ≤7 天或主料库存告急）与"支援门店"
+         （资金续航 ≥45 天）轻量撮合，帮大家长/超管一眼看出"该找哪家兄弟
+         门店求助"。🐛 与上一版不同：无受援门店时整张卡片优雅隐藏（不再
+         常驻展示正向空状态）——门店健康度告警中心已经承担了"系统检查过、
+         没有风险"的常驻反馈职责，这张卡片本身只服务于"有事要办"的场景，
+         没有建议时不需要再占一屏版面 -->
+    <view class="support-suggestion-card" wx:if="{{nationalData.rebalanceSuggestions && nationalData.rebalanceSuggestions.length > 0}}">
       <view class="matrix-header">
-        <text class="matrix-title">🤝 跨店爱心互助调拨建议</text>
+        <text class="matrix-title">🤝 爱心互助与调拨建议</text>
       </view>
-      <view class="support-suggestion-list" wx:if="{{nationalData.rebalanceSuggestions && nationalData.rebalanceSuggestions.length > 0}}">
+      <view class="support-suggestion-list">
         <view class="support-suggestion-item" wx:for="{{nationalData.rebalanceSuggestions}}" wx:key="targetStoreId">
           <view class="ssi-header">
             <text class="ssi-store">🏪 {{item.targetStoreName}}</text>
             <text class="ssi-urgency-tag ssi-urgency-{{item.urgency}}">{{item.urgency === 'HIGH' ? '紧急' : '关注'}}</text>
           </view>
-          <text class="ssi-text">{{item.reason}}</text>
+          <!-- 撮合成功：同城/同省有支援门店 -->
+          <text class="ssi-text" wx:if="{{item.sourceStoreName}}">🤝 建议 <text class="ssi-store-bold">{{item.targetStoreName}}</text> 向同城/周边 <text class="ssi-store-bold">{{item.sourceStoreName}}</text> 申请爱心平调（对方资金续航 {{item.sourceFundingDays}} 天）</text>
+          <!-- 撮合不到：改走对外劝募 -->
+          <text class="ssi-text" wx:else>📢 <text class="ssi-store-bold">{{item.targetStoreName}}</text> {{item.reason}}（建议发起定向爱心倡议与劝募）</text>
+          <view class="ssi-footer">
+            <view class="ssi-copy-btn" hover-class="ui-hover" bindtap="onCopyRebalanceSuggestion" data-item="{{item}}">
+              <text class="ssi-copy-icon">📋</text>
+              <text class="ssi-copy-text">复制建议</text>
+            </view>
+          </view>
         </view>
-      </view>
-      <view class="support-suggestion-empty" wx:else>
-        <text class="support-suggestion-empty-text">✅ 全网门店运营稳健，暂无告急</text>
       </view>
     </view>
 
@@ -725,7 +737,11 @@
             wx:key="storeId"
             wx:if="{{!isAdmin || (storeMatrixFilter === 'risk' ? (item.isOffline || item.hasRiskFlag) : !(item.isOffline || item.hasRiskFlag))}}"
           >
-            <text class="td col-store font-bold">{{item.storeName}}</text>
+            <view class="td col-store">
+              <text class="font-bold">{{item.storeName}}</text>
+              <!-- 🆕 已存证微标：门店最新一条记录已通过财务稽核封账 -->
+              <text class="audit-proof-mini-tag" wx:if="{{item.hasAuditProof}}">✅已存证</text>
+            </view>
             <!-- 🌟 志工视角：门店成本属运营敏感数据，列保留但数值以 *** 屏蔽（服务端已同步做空值处理，而非仅前端隐藏） -->
             <view class="td col-cost" wx:if="{{isManager}}">
               <text class="cost-badge {{item.isCostValid ? 'valid' : 'neutral'}}">{{item.costPerMealStr}}</text>
