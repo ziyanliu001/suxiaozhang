@@ -4712,18 +4712,21 @@ Page({
   async onGeneratePatriarchInviteCode() {
     if (this.data.inviteGenerating) return;
     if (!isCloudAvailable()) return;
-    // 🐛 根因修复：此前只读 AuthService.getCachedRoleInfo().storeId 单一
-    // 来源——与本文件其余全部"当前门店"取值口径（loadVolunteerStats/
-    // getStoreQRCode 等十余处，均以 getSelectedStore() 为主、cachedRoleInfo
-    // 兜底）不一致。cachedRoleInfo 是登录时缓存的服务端角色快照，大家长切换
-    // 门店（getSelectedStore() 里的 store-picker 生效值）后这份缓存不一定
-    // 同步更新；此时哪怕控制台其它方法（如 loadVolunteerStats 的
-    // resolvedStoreId 调试日志）都能正确读到 storeId，这里仍会因为只读了
-    // 那份滞后的缓存而误判成"无法获取门店信息"直接拦死。改为与全文件统一
-    // 的取值口径：getSelectedStore() 优先，cachedRoleInfo 兜底
+    // 🐛 根因修复（二次订正）：此前改用过 getSelectedStore()（legacy 口径，
+    // 读 app.globalData.currentStore/selectedStore 或 STORE_STORAGE_KEY），
+    // 但本文件 initMinePage() 早已有过同一类问题的根因修复记录（见 1104 行
+    // 附近注释）：真正的 canonical 口径是 storeManager.ts 的
+    // getCurrentActiveStore()——它统一读 current_store_id/current_store_name
+    // 这两个 canonical key（由 index.ts switchStoreTarget/store-picker.ts
+    // _persistStoreSelection 等所有"切店"入口通过 setCurrentActiveStore()
+    // 写入），legacy 的 getSelectedStore() 只是内部兜底分支之一，两套系统在
+    // 边缘场景下可能不同步（例如只有 app.globalData.currentStore 被写入而
+    // canonical key 未同步、或反过来），继续用 legacy 口径依然可能读到与
+    // 首页"切店"结果不一致的门店。cachedRoleInfo（登录时缓存的服务端角色
+    // 快照）保留为最后一道兜底
     const roleInfo = AuthService.getCachedRoleInfo();
-    const activeStore = getSelectedStore();
-    const storeId = (activeStore && activeStore.storeId) || (roleInfo && roleInfo.storeId) || '';
+    const activeStore = getCurrentActiveStore();
+    const storeId = activeStore.storeId || (roleInfo && roleInfo.storeId) || '';
     if (!storeId) {
       wx.showToast({ title: '无法获取门店信息，请重新进入', icon: 'none' });
       return;
