@@ -205,35 +205,23 @@ exports.main = async (event, context) => {
       return { success: false, error: '无法确认您所属的机构，暂不支持访问数据大屏' };
     }
 
-    // 🔐 多门店汇总看板属于专业版专属功能：仅角色卡口（ALLOWED_ROLES）不够——
-    // 免费版租户的普通管理员不该看到跨门店的汇总财务数据。
-    // 🛡️ 超级管理员豁免：super_admin 是平台级运营账号，必须能无条件查看全机构
-    // 大屏数据，不受租户订阅套餐约束——对超管返回"请升级专业版"完全没有意义
-    // 且会误导其判断。免费版租户的 super_admin 仍受前面 tenantId 硬隔离约束，
-    // 不会拿到其他机构的数据，只是跳过了"该机构是否已付费"这一道额外门槛。
+    // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：本大屏属于
+    // 「全国大屏 / 透视台」维度——社会公信力与透明公开账目总览，查看权限不
+    // 挂钩租户订阅套餐，与「工作空间 / 生产台」维度（多店连锁管理、Excel
+    // 批量导出等私有功能深度，见 utils/tenantPermission.ts FEATURE_KEYS）
+    // 彻底解耦。此前这里有一道 tenant_subscriptions 订阅拦截（非 pro/enterprise
+    // 直接拒绝并返回 PLAN_UPGRADE_REQUIRED），导致基础版租户的大家长/财务/志工
+    // 切换组织类型 Tab 时每次请求都被拒，界面表现为"点了没反应"——本质是把
+    // 该看的公开数据也锁进了付费墙。现在查看权限只保留 ALLOWED_ROLES 角色卡口
+    // + tenantId 硬隔离两道防线；财务类敏感字段的访问仍按角色脱敏
+    // （sanitizeReportForVolunteer/前端 isManager），付费墙只保留在 Excel
+    // 批量导出等真正的深度功能上，不在这里拦截
     const isSuperAdmin = userRole === 'super_admin';
-    if (!isSuperAdmin) {
-      const subRes = await db.collection('tenant_subscriptions')
-        .where({ tenantId })
-        .orderBy('lastRenewedAt', 'desc')
-        .limit(1)
-        .get();
-      const sub = subRes.data && subRes.data[0];
-      let effectivePlanType = 'basic';
-      if (sub) {
-        const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
-        const isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
-        effectivePlanType = isExpired ? 'basic' : (sub.planType || 'basic');
-      }
-      if (!['pro', 'enterprise'].includes(effectivePlanType)) {
-        return { success: false, error: '该功能为专业版专属，请联系大家长升级套餐', errorCode: 'PLAN_UPGRADE_REQUIRED' };
-      }
-    }
 
     // 🛡️ 超管专属高阶治理看板：时间维度切片仅对已核验的 super_admin 生效——即使
     // hq_finance/regional_finance/volunteer 在 event 里传了 rangeType，也一律忽略，
     // 继续走原有的全量聚合，不额外扩大这些角色的数据访问范围（见需求4：后端二次校验）
-    // （isSuperAdmin 已在上方套餐拦截豁免逻辑中声明，此处直接复用）
+    // （isSuperAdmin 已在上方声明，此处直接复用）
     const requestedRangeType = (event && event.rangeType) || '';
     const rangeType = (isSuperAdmin && RANGE_DAYS[requestedRangeType]) ? requestedRangeType : 'all';
     const rangeStartDate = RANGE_DAYS[rangeType] ? isoDateNDaysAgo(RANGE_DAYS[rangeType]) : null;

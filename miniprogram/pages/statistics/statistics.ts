@@ -1639,52 +1639,13 @@ Page({
     if (!this.data.canViewNationalDashboard) return;
     if (!this.data.isAllStoresMode) return;
 
-    // 🔐 多门店汇总看板为专业版专属功能：与角色卡口（canViewNationalDashboard，
-    // 严格收窄到 super_admin 等）是两条独立的准入条件——免费版租户的普通管理员
-    // 拦在这里。
-    // 🛡️ 超级管理员豁免：super_admin 是平台级运营账号，必须能无条件查看全国大屏，
-    // 不受租户套餐限制——弹"请升级专业版"对超管完全没有意义，且会误导其操作。
-    // 🐛 调用方 onSuperAdminSelectStore 在触发本函数前已经把 isAllStoresMode/
-    // shopName 切到"全部门店"聚合态——被拦截时如果只 return，页面会卡在一个
-    // 已经切换成聚合视图、却永远没有数据回来的空白状态（与海报生成白屏是同一
-    // 类根因）。这里把状态退回到用户自己的实际门店，并重新拉一遍单店数据，
-    // 而不是留一块空白
-    const isSuperAdminUser = this.data.isAdmin === true;
-    const permission = isSuperAdminUser ? { allowed: true } : await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
-    if (!permission.allowed) {
-      // 🆕 大家长免费版安全兜底：正常路径已在 _triggerPatriarchNationalView() 提前
-      // 拦截，不会走到这里。极端情况（例如订阅在本次会话内过期）下仍能正确弹出 Modal
-      // 引导升级，且不破坏单店页面排版——isAllStoresMode 保持当前值，不额外修改。
-      if (this.data.isPatriarch) {
-        this.setData({ showNationalDashboard: false, showNationalTeaser: true });
-        this._fetchNationalStoreCount();
-        return;
-      }
-      // 🐛 根因修复（模拟器实测发现）：getSelectedStore() 兜底读到的可能正是刚
-      // 触发本次全国总览请求前残留的虚拟聚合值（storeId:'national_overview'/
-      // storeName:'全国总览'，例如用户此前在首页 store-picker 选过全国总览、
-      // 全局缓存尚未被其他地方清洗）——不过滤直接当"用户自己的真实门店"落地，
-      // 会把"全国总览"当成一个字面店名传给 getStatisticsData/getReports 查询，
-      // 查不到任何数据，空状态卡片还会显示"暂无【全国总览】在选定周期的统计
-      // 数据"这种自相矛盾的文案。命中虚拟聚合名时一律视为"没有可回退的具体门店"
-      const rawOwnStore = getSelectedStore();
-      const ownStoreIsVirtual = isVirtualStoreName(rawOwnStore.storeName) || NATIONAL_STORE_ID_SENTINELS.includes(rawOwnStore.storeId || '');
-      const ownStoreName = ownStoreIsVirtual ? '' : (rawOwnStore.storeName || '');
-      const ownStoreId = ownStoreIsVirtual ? '' : (rawOwnStore.storeId || '');
-      this.setData({
-        isAllStoresMode: false,
-        showNationalDashboard: false,
-        nationalFilterMode: 'national',
-        shopName: ownStoreName,
-        currentUserStoreName: ownStoreName,
-        currentUserStoreId: ownStoreId
-      });
-      this.onOpenPlanUpgradeModal('多门店聚合看板');
-      this.calculateStats();
-      this.fetchStatistics();
-      return;
-    }
-
+    // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：全国大屏是
+    // 社会公信力总览，查看权限不挂钩租户订阅套餐——此前这里有一道
+    // checkTenantPermission(MULTI_STORE_DASHBOARD) 拦截，免费版租户的大家长/
+    // 财务角色切换组织类型 Tab 时每次请求都会被打回单店视图，界面表现为
+    // "点了没反应"。现在查看权限只保留角色卡口（canViewNationalDashboard）+
+    // 服务端 tenantId 硬隔离，付费墙只保留在 Excel 批量导出等真正的深度功能上
+    // （见 onOpenPlanUpgradeModal('Excel 报表导出') 调用处），不在这里拦截
     this.setData({ showNationalDashboard: true, nationalDashboardLoading: true, nationalDashboardError: '' });
 
     try {
@@ -2076,23 +2037,18 @@ Page({
   // 用的是原生 wx.showModal——原生弹窗按钮完全渲染在 webview/WXML 之外，没有
   // 任何 class/id 可挂，WXSS 对它的按钮布局零控制力。这里改为页面自有的自定义
   // 半屏卡片弹窗，"知道了"/"去反馈"两个按钮才能真正用 flex 强制居中重构样式
-  // 大家长快捷入口：统计页右上角"全国看板 ↗"按钮
-  // 先做订阅校验，未订阅只弹 Modal（不动页面状态），已订阅再进入全国视图
+  // 大家长快捷入口：统计页右上角"全国看板 ↗"按钮，直接进入全国大屏
   onPatriarchGoNational() {
     if (!this.data.isPatriarch) return;
     this._triggerPatriarchNationalView();
   },
 
   // 大家长全国看板统一触发入口（onPatriarchGoNational + _autoNationalIntent 共用）：
-  // ① 未订阅 → 弹升级引导 Modal，页面停留在单店统计，排版零干扰
-  // ② 已订阅 → 设 isAllStoresMode:true 后进入全国大屏
+  // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：全国大屏查看权限
+  // 不挂钩订阅套餐，此前这里的 checkTenantPermission(MULTI_STORE_DASHBOARD)
+  // 订阅拦截已移除——免费版租户的大家长直接进入全国视图，与超管/其它角色
+  // 待遇一致；真正的付费墙留在 Excel 批量导出等深度功能上
   async _triggerPatriarchNationalView() {
-    const permission = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
-    if (!permission.allowed) {
-      this.setData({ showNationalTeaser: true });
-      this._fetchNationalStoreCount();
-      return;
-    }
     this.setData({ isAllStoresMode: true, showNationalTeaser: false });
     await this.loadNationalDashboard();
   },
