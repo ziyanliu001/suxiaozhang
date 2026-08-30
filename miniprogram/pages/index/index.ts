@@ -6511,6 +6511,61 @@ Page({
     }
   },
 
+  // 🐛 根因修复（"点击已触发但拉不起选图界面"）：此前直接 `await wx.chooseMedia(...)`
+  // （不带 success/fail 回调时走的是小程序官方的隐式 Promise 包装）。真正的问题
+  // 不是回调写法，而是 wx.chooseMedia 在部分环境（开发者工具模拟器的某些版本、
+  // 低基础库真机）下会既不 resolve 也不 reject——原生选图面板根本没有被拉起，
+  // 整个 await 静默挂起，没有任何后续日志、也不会走到下面的 try/catch，与本次
+  // 反馈"点击触发日志打印了，之后再没有任何动静"完全吻合，纯粹的 setTimeout/
+  // Promise 层面等不到结果，光靠 fail 回调兜底完全没用——因为 fail 压根不会
+  // 触发。用 withTimeout（本文件已引入的全局超时封装）给 chooseMedia 设一个
+  // 5s 超时上限：超时或 chooseMedia 本身不存在（wx.canIUse 返回 false）就自动
+  // 回退到兼容性更好、几乎所有环境都支持的 wx.chooseImage（虽是旧 API 但选图
+  // 这个基础能力上落地更早、更稳）。5s 足够覆盖正常的选图/取消交互耗时，不会
+  // 在用户还在原生面板里挑图时就误触发回退
+  chooseDonorScreenshotSafe(): Promise<string> {
+    const viaChooseMedia = new Promise<string>((resolve, reject) => {
+      if (!wx.canIUse('chooseMedia')) {
+        reject(new Error('chooseMedia not available'));
+        return;
+      }
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+        success: (res) => {
+          const tempFilePath = res.tempFiles && res.tempFiles[0] && res.tempFiles[0].tempFilePath;
+          if (tempFilePath) {
+            resolve(tempFilePath);
+          } else {
+            reject(new Error('chooseMedia 未返回图片路径'));
+          }
+        },
+        fail: (err) => reject(err)
+      });
+    });
+
+    return withTimeout(viaChooseMedia, 5000, 'chooseMedia 超时未响应').catch((err) => {
+      // 🛡️ 用户主动在原生面板里点取消，errMsg 会明确带 cancel，这类"正常放弃
+      // 选图"不该被当成"chooseMedia 坏了"再弹一个 chooseImage 面板出来干扰用户，
+      // 直接把原始取消错误继续抛给调用方（外层 catch 已有 cancel 静默处理）
+      const errMsg = (err && (err.errMsg || err.message)) || '';
+      if (errMsg.includes('cancel')) {
+        throw err;
+      }
+      console.warn('[chooseDonorScreenshotSafe] chooseMedia 不可用/超时，回退到 wx.chooseImage:', err);
+      return new Promise<string>((resolve, reject) => {
+        wx.chooseImage({
+          count: 1,
+          sourceType: ['album', 'camera'],
+          success: (res) => resolve(res.tempFilePaths[0]),
+          fail: (fallbackErr) => reject(fallbackErr)
+        });
+      });
+    });
+  },
+
   // 🌟 爱心支持明细·图片识别：上传微信群收款/接龙截图，OCR 识别"昵称+金额"明细，
   // 自动追加进【批量粘贴】文本框。识别只负责"认字配对"，绝不在云函数里求和/去重——
   // 结果统一交给前端唯一权威的 parseDonorText（经 updateParseResult 调用）解析汇总，
@@ -6552,16 +6607,8 @@ Page({
         return;
       }
 
-      const chooseRes = await wx.chooseMedia({
-        count: 1,
-        mediaType: ['image'],
-        sourceType: ['album', 'camera'],
-        sizeType: ['compressed']
-      });
-
-      if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
-
-      const tempFilePath = chooseRes.tempFiles[0].tempFilePath;
+      const tempFilePath = await this.chooseDonorScreenshotSafe();
+      if (!tempFilePath) return;
 
       // 🌟 第一道防线：图片 MD5 去重。在触发任何网络请求（内容安全检测/上传/OCR）之前，
       // 先读取本地临时文件的原始二进制内容算出 MD5——同一张图片（哪怕文件名不同，
