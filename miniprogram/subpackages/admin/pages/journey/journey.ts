@@ -27,7 +27,7 @@ interface CheckInLog {
   shiftName: string;
   hours: number;
   storeName: string;
-  serviceType?: 'reception' | 'kitchen' | 'finance' | 'other';
+  serviceType?: TimeSlotType;
 }
 
 interface StoreStatItem {
@@ -51,14 +51,25 @@ interface TimelineGroup {
   expanded: boolean;
 }
 
-const SERVICE_TYPE_MAP: Record<string, 'reception' | 'kitchen' | 'finance' | 'other'> = {
-  'morning_prep': 'kitchen',
-  'lunch_service': 'reception',
-  'afternoon_cleanup': 'kitchen',
-  'finance_audit': 'finance',
-  'evening_prep': 'kitchen',
-  'weekend_special': 'other'
-};
+// 🕐 时间轴图标分类：按当前"服务餐次（时段）"模型分类，不再按工种分类——
+// shiftKey 早已是 index.ts mealSlotDefinitions 里的 morning/lunch/dinner/
+// full_day 这 4 个时段 key 之一，"分类"这一步本质就是"认出这 4 个已知值，
+// 认不出的一律兜底 other"，不需要额外持久化任何字段。
+// 🐛 根因修复：此前这里是一份按【旧固定班次】key（morning_prep/lunch_service/
+// afternoon_cleanup 等）映射到【reception/kitchen/finance】三类工种图标的表——
+// "服务餐次+护持岗位"业务模型重构后 shiftKey 早已改用现在这 4 个时段 key，
+// 旧表的 key 全部命中不上，所有打卡记录（不分工种）实际上都落到了兜底的
+// other，时间轴图标分类早已名存实亡。改为直接对齐当前 shiftKey 值域
+const KNOWN_TIME_SLOTS = ['morning', 'lunch', 'dinner', 'full_day'] as const;
+type TimeSlotType = typeof KNOWN_TIME_SLOTS[number] | 'other';
+
+// 历史遗留的旧 shiftKey（不在这 4 个之内，如重构前的 morning_prep 等）自然
+// 落到 other，与此前"未识别就兜底"的语义保持一致
+function resolveTimeSlotType(shiftKey: string): TimeSlotType {
+  return (KNOWN_TIME_SLOTS as readonly string[]).includes(shiftKey)
+    ? (shiftKey as TimeSlotType)
+    : 'other';
+}
 
 Page({
   _navGuard: null as NavGuardInstance | null,
@@ -479,8 +490,8 @@ Page({
         groupMap.set(monthKey, { monthKey, monthLabel, logs: [], expanded: true });
       }
 
-      // 为每条日志补充服务类型（用于图标分类）
-      const serviceType = SERVICE_TYPE_MAP[log.shiftKey] || 'other';
+      // 为每条日志补充时段分类（用于图标分类）
+      const serviceType = resolveTimeSlotType(log.shiftKey);
       const enrichedLog: CheckInLog = { ...log, serviceType };
       groupMap.get(monthKey)!.logs.push(enrichedLog);
 
