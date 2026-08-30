@@ -4712,8 +4712,18 @@ Page({
   async onGeneratePatriarchInviteCode() {
     if (this.data.inviteGenerating) return;
     if (!isCloudAvailable()) return;
+    // 🐛 根因修复：此前只读 AuthService.getCachedRoleInfo().storeId 单一
+    // 来源——与本文件其余全部"当前门店"取值口径（loadVolunteerStats/
+    // getStoreQRCode 等十余处，均以 getSelectedStore() 为主、cachedRoleInfo
+    // 兜底）不一致。cachedRoleInfo 是登录时缓存的服务端角色快照，大家长切换
+    // 门店（getSelectedStore() 里的 store-picker 生效值）后这份缓存不一定
+    // 同步更新；此时哪怕控制台其它方法（如 loadVolunteerStats 的
+    // resolvedStoreId 调试日志）都能正确读到 storeId，这里仍会因为只读了
+    // 那份滞后的缓存而误判成"无法获取门店信息"直接拦死。改为与全文件统一
+    // 的取值口径：getSelectedStore() 优先，cachedRoleInfo 兜底
     const roleInfo = AuthService.getCachedRoleInfo();
-    const storeId = roleInfo && roleInfo.storeId;
+    const activeStore = getSelectedStore();
+    const storeId = (activeStore && activeStore.storeId) || (roleInfo && roleInfo.storeId) || '';
     if (!storeId) {
       wx.showToast({ title: '无法获取门店信息，请重新进入', icon: 'none' });
       return;
