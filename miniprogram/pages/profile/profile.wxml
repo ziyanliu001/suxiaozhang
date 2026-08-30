@@ -2360,7 +2360,7 @@
             <text class="sub-expiry-grace" wx:if="{{subscriptionInfo.isInGracePeriod}}">⏳ 已到期，宽限期至 {{subscriptionInfo.graceExpireDate}}（宽限期内权益不受影响），请尽快续费</text>
             <text class="sub-expiry-warn" wx:elif="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期：{{subscriptionInfo.expireDateStr}}</text>
             <text class="sub-expiry-expired" wx:elif="{{subscriptionInfo.isExpired}}">套餐已到期（超出 7 天宽限期），续费后恢复高级权益</text>
-            <text class="sub-expiry-active" wx:elif="{{subscriptionInfo.isActive}}">有效期至 {{subscriptionInfo.expireDateStr}}</text>
+            <text class="sub-expiry-active" wx:elif="{{subscriptionInfo.isActive}}">{{subscriptionInfo.expireDisplayText}}</text>
             <text class="sub-expiry-free" wx:else>当前为免费基础版，升级解锁更多权益</text>
           </view>
         </view>
@@ -2441,9 +2441,13 @@
             </view>
 
             <view class="sub-plan-compare-panel" wx:elif="{{comparePlanTab === 'pro'}}">
-              <view class="sub-plan-compare-price-row">
+              <!-- 🍎 iOS 虚拟商品支付合规：不得展示价格，见 data.isIOSPlatform 注释 -->
+              <view class="sub-plan-compare-price-row" wx:if="{{!isIOSPlatform}}">
                 <text class="sub-plan-compare-price">¥1,688</text>
                 <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-compare-price-row" wx:else>
+                <text class="sub-plan-compare-price-unit">具体价格请联系客服咨询</text>
               </view>
               <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">10</text> 家</view>
               <view class="sub-plan-compare-feature-row">
@@ -2465,9 +2469,13 @@
             </view>
 
             <view class="sub-plan-compare-panel" wx:elif="{{comparePlanTab === 'enterprise'}}">
-              <view class="sub-plan-compare-price-row">
+              <!-- 🍎 iOS 虚拟商品支付合规：不得展示价格，见 data.isIOSPlatform 注释 -->
+              <view class="sub-plan-compare-price-row" wx:if="{{!isIOSPlatform}}">
                 <text class="sub-plan-compare-price">¥3,688</text>
                 <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-compare-price-row" wx:else>
+                <text class="sub-plan-compare-price-unit">具体价格请联系客服咨询</text>
               </view>
               <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">30</text> 家</view>
               <view class="sub-plan-compare-feature-row">
@@ -2489,9 +2497,13 @@
             </view>
 
             <view class="sub-plan-compare-panel" wx:else>
-              <view class="sub-plan-compare-price-row">
+              <!-- 🍎 iOS 虚拟商品支付合规：不得展示价格，见 data.isIOSPlatform 注释 -->
+              <view class="sub-plan-compare-price-row" wx:if="{{!isIOSPlatform}}">
                 <text class="sub-plan-compare-price">¥200</text>
                 <text class="sub-plan-compare-price-unit">/ 店 / 年</text>
+              </view>
+              <view class="sub-plan-compare-price-row" wx:else>
+                <text class="sub-plan-compare-price-unit">具体价格请联系客服咨询</text>
               </view>
               <view class="sub-plan-quota-tag">📦 在当前机构门店上限基础上按需叠加</view>
               <view class="sub-plan-compare-feature-row">
@@ -2502,7 +2514,7 @@
                 <text class="sub-plan-compare-feature-icon">✓</text>
                 <text>基础版机构同样可购买</text>
               </view>
-              <view class="sub-plan-addon-stepper-row">
+              <view class="sub-plan-addon-stepper-row" wx:if="{{!isIOSPlatform}}">
                 <text class="sub-plan-addon-stepper-label">购买数量（家/年）</text>
                 <view class="sub-plan-addon-stepper">
                   <view class="sub-plan-addon-stepper-btn" bindtap="onDecreaseAddOnQuantity">－</view>
@@ -2510,7 +2522,7 @@
                   <view class="sub-plan-addon-stepper-btn" bindtap="onIncreaseAddOnQuantity">＋</view>
                 </view>
               </view>
-              <view class="sub-plan-addon-total-row">
+              <view class="sub-plan-addon-total-row" wx:if="{{!isIOSPlatform}}">
                 <text>合计：</text>
                 <text class="sub-plan-addon-total-price">¥{{addOnTotalPrice}}</text>
               </view>
@@ -2557,7 +2569,13 @@
              white-space:nowrap + overflow:hidden + text-overflow:ellipsis，
              双重保险确保严禁出现折行 -->
         <view class="sub-modal-footer">
-          <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:if="{{comparePlanTab === 'pro'}}">{{planActionLabels.pro}}</button>
+          <!-- 🐛 根因修复：永久有效套餐同/低档 Tab 不再展示会触发下单的"续费"按钮，
+               见 data.isRedundantRenewTab / computeRedundantRenewFlag 注释 -->
+          <view class="btn-pay-action btn-pay-action-disabled" wx:if="{{isRedundantRenewTab}}">✅ 已享永久版权益，无需续费</view>
+          <!-- 🍎 iOS 虚拟商品支付合规：付费 Tab 一律替换为"联系客服咨询"，不拉起
+               小程序内支付，见 data.isIOSPlatform / onOpenSubscriptionModal 注释 -->
+          <button class="btn-pay-action" bindtap="onCopyPlatformSupportWechat" wx:elif="{{isIOSPlatform && comparePlanTab !== 'basic'}}">📞 联系客服咨询开通</button>
+          <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'pro'}}">{{planActionLabels.pro}}</button>
           <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">{{planActionLabels.enterprise}}</button>
           <button class="btn-pay-action btn-pay-action-addon" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'add_on'}}">🏪 确认购买扩容包</button>
           <view class="btn-pay-action btn-pay-action-disabled" wx:else>当前为默认免费档位</view>

@@ -136,6 +136,36 @@ const PLAN_ACTION_META: Record<'pro' | 'enterprise', { icon: string; name: strin
   enterprise: { icon: '👑', name: '旗舰版', price: '¥3,688/年' }
 };
 
+// 🐛 根因修复：checkTenantPermission 云函数对"永久有效"套餐（人工赠送/活动权益）
+// 用一个遥远哨兵日期（如 2102-12-31）表示"没有真实到期日"，此前前端把这个哨兵
+// 日期原样拼进"有效期至 XXXX-XX-XX"文案展示给用户，看起来像是"过一百年后失效"，
+// 体验非常怪异。哨兵阈值取"年份 ≥2099 或 ≤1970 或无效日期"——现网真实套餐到期年
+// 不可能落在这个区间，命中即视为永久有效
+function isPerpetualExpireDate(expireDateStrOrTimestamp: any): boolean {
+  if (!expireDateStrOrTimestamp) return true;
+  const year = new Date(expireDateStrOrTimestamp).getFullYear();
+  return isNaN(year) || year >= 2099 || year <= 1970;
+}
+
+function formatTenantExpireText(expireDateStrOrTimestamp: any): string {
+  if (isPerpetualExpireDate(expireDateStrOrTimestamp)) return '永久有效';
+  const d = new Date(expireDateStrOrTimestamp);
+  const year = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `有效期至 ${year}-${m}-${day}`;
+}
+
+// 🆕 见 data.isRedundantRenewTab 声明处注释：只对 pro/enterprise 两个"有真实
+// 档位排序"的 Tab 生效——basic 本就走"当前为默认免费档位"的常驻禁用文案，
+// add_on 是叠加购买、与是否永久无关，两者都不应被这个判断影响
+function computeRedundantRenewFlag(tab: string, currentPlanType: string, isActive: boolean, isPerpetual: boolean): boolean {
+  if (tab !== 'pro' && tab !== 'enterprise') return false;
+  if (!isActive || !isPerpetual) return false;
+  const currentRank = PLAN_RANK[currentPlanType] ?? 0;
+  return currentRank >= PLAN_RANK[tab];
+}
+
 // 🏷️ 公告管理弹窗：内置 7 条常用场景预设文案，与首页「编辑通报内容」弹窗中的
 // PRESET_NOTICES 同步，让店长/财务可在两处弹窗快速套用同一套模板
 // 🐛 重大隔离漏洞修复：与 index.ts getNoticeTemplate 同一个根因——这份预设文案
@@ -506,8 +536,18 @@ Page({
       // 驱动弹窗"已开通/未开通"两种状态渲染，而不是在 WXML 里重复拼一遍
       // planType/isExpired 的判断表达式
       isActive: false,
-      expireDateStr: ''
+      expireDateStr: '',
+      // 🆕 永久有效套餐：见 isPerpetualExpireDate/formatTenantExpireText，
+      // expireDisplayText 是已经处理过哨兵日期的最终展示文案（"永久有效"或
+      // "有效期至 YYYY-MM-DD"），WXML 不应再自行拼接"有效期至"前缀
+      isPerpetual: false,
+      expireDisplayText: ''
     },
+    // 🍎 iOS 平台虚拟商品支付合规：微信小程序平台规则要求 iOS 客户端不得展示
+    // 虚拟商品价格/拉起小程序内支付，只能引导线下/客服渠道购买——见
+    // onOpenSubscriptionModal 里通过 getSafeSystemInfo() 赋值，WXML 据此隐藏
+    // 价格展示与支付按钮，改为"联系客服咨询"
+    isIOSPlatform: false,
     // 🆕 激活码自助兑换：无需人工审批，校验通过立即生效
     // 🐛 层级冲突修复：授权码输入区改为折叠式次级入口（默认收起），不再与
     // 套餐对比/微信支付购买路径同权重常驻展开——绝大多数用户走微信支付，
@@ -521,6 +561,11 @@ Page({
     // createSubscriptionOrder 云函数里登记真实价格，底部主按钮按 Tab 分流成
     // 三种真实的微信支付下单动作；basic 是免费默认档，不对应任何下单动作
     comparePlanTab: 'pro' as 'basic' | 'pro' | 'enterprise' | 'add_on',
+    // 🆕 见 computeRedundantRenewFlag 注释：当前正在浏览的 Tab 是否属于
+    // "已持有永久版同/低档位，点击就是白白发起一笔不存在意义的续费订单"，
+    // 由 onSwitchComparePlanTab / fetchSubscriptionInfo 联动重算，WXML 不再
+    // 自行拼接判断表达式（避免重蹈"角色置灰弹窗" .includes() 的旧坑）
+    isRedundantRenewTab: false,
     // 🆕 套餐对比底部主按钮文案：按"当前实际持有的档位 vs 正在浏览的 Tab
     // 档位"联动——已是该档位显示"立即续费 ¥xxx/年"，更高档位显示"立即升级"，
     // 尚未开通/已过期时保留原有"立即开通"首购文案。见 computePlanActionLabels()
@@ -5506,6 +5551,10 @@ Page({
     // planType 提前改写回 basic（见 checkTenantPermission 云函数），这里再
     // 显式判一次 isExpired 是双重保险，不是重复逻辑
     const isActive = resolveTier(result.planType) === PERMISSION_TIER.ADVANCED && !result.isExpired;
+    // 🆕 永久有效套餐：见 isPerpetualExpireDate/formatTenantExpireText 头部注释——
+    // 只有"已开通高级档位"才需要判断是否永久，basic 免费档没有"到期"概念，
+    // 不应被误判为"永久有效"从而影响下方按钮文案
+    const isPerpetual = isActive && isPerpetualExpireDate(expireDateStr);
 
     this.setData({
       subscriptionInfo: {
@@ -5519,9 +5568,12 @@ Page({
         graceExpireDate: result.graceExpireDate || '',
         coreReadOnly: result.coreReadOnly,
         isActive,
-        expireDateStr
+        expireDateStr,
+        isPerpetual,
+        expireDisplayText: formatTenantExpireText(expireDateStr)
       },
-      planActionLabels: this.computePlanActionLabels(result.planType, isActive)
+      planActionLabels: this.computePlanActionLabels(result.planType, isActive, isPerpetual),
+      isRedundantRenewTab: computeRedundantRenewFlag(this.data.comparePlanTab, result.planType, isActive, isPerpetual)
     });
   },
 
@@ -5529,11 +5581,17 @@ Page({
   // 两个输入，与 comparePlanTab（用户正在浏览哪个 Tab）无关——两个 Tab
   // （pro/enterprise）各自的文案一次性算好存进 data，WXML 按当前 Tab 直接取用，
   // 不需要每次切 Tab 都重新算一遍
-  computePlanActionLabels(currentPlanType: string, isActive: boolean): Record<'pro' | 'enterprise', string> {
+  // 🐛 根因修复：永久有效套餐（isPerpetual）没有真实到期日，currentRank >= tabRank
+  // 分支此前无条件展示"立即续费 ¥xxx/年"，等于在邀请一个永远不会过期的机构
+  // 花钱续费一个不存在的到期。永久档位下同/低档 Tab 改为"已享永久版权益"提示，
+  // 不再拼价格、也不再是一个会触发下单的诱导性文案（见下方 WXML 改动，这类
+  // Tab 的底部按钮已联动改为禁用态，此处文案只是兜底展示，不依赖调用方判断）
+  computePlanActionLabels(currentPlanType: string, isActive: boolean, isPerpetual?: boolean): Record<'pro' | 'enterprise', string> {
     const currentRank = PLAN_RANK[currentPlanType] ?? 0;
     const build = (tab: 'pro' | 'enterprise') => {
       const meta = PLAN_ACTION_META[tab];
       const tabRank = PLAN_RANK[tab];
+      if (isActive && isPerpetual && currentRank >= tabRank) return `✅ 已享永久版权益`;
       if (isActive && currentRank >= tabRank) return `${meta.icon} 立即续费 ${meta.price}`;
       if (isActive && currentRank < tabRank) return `${meta.icon} 立即升级${meta.name}`;
       return `${meta.icon} 立即开通${meta.name}`;
@@ -5545,10 +5603,15 @@ Page({
   // 手快连点"会员开通/续费管理"打出重复的鉴权云调用
   async onOpenSubscriptionModal() {
     if (this.data.subscriptionLoading) return;
+    // 🍎 iOS 虚拟商品支付合规：微信小程序平台规则要求 iOS 客户端不得展示价格/
+    // 拉起小程序内支付，每次打开弹窗都重新探测一次（成本极低，避免长驻页面
+    // 缓存一份过期的平台判断），WXML 据此隐藏价格与支付按钮
+    const sysInfo = getSafeSystemInfo();
     this.setData({
       showSubscriptionModal: true,
       subscriptionLoading: true,
       activationCodeInput: '',
+      isIOSPlatform: sysInfo.platform === 'ios',
       // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态
       showRedeemSection: false
     });
@@ -5677,7 +5740,12 @@ Page({
 
   // 🆕 套餐对比 Tab 切换：纯浏览态，见 data.comparePlanTab 声明处注释
   onSwitchComparePlanTab(e: any) {
-    this.setData({ comparePlanTab: e.currentTarget.dataset.plan });
+    const tab = e.currentTarget.dataset.plan;
+    const info = this.data.subscriptionInfo;
+    this.setData({
+      comparePlanTab: tab,
+      isRedundantRenewTab: computeRedundantRenewFlag(tab, info.planType, info.isActive, info.isPerpetual)
+    });
   },
 
   // 🏪 扩容门店包数量步进：¥200/店/年，1~20 家区间（与 createSubscriptionOrder
@@ -5697,11 +5765,25 @@ Page({
   // ADD_ON_STORE），不再有"联系客服定制开通"这条兜底路径。basic 是免费默认档，
   // 对应的按钮在 wxml 里就是一条不可点击的置灰提示条，不会触发本方法
   onPrimaryPlanAction() {
-    if (this.data.comparePlanTab === 'add_on') {
+    // 🍎 iOS 虚拟商品支付合规：按钮本应已被 WXML 换成"联系客服咨询"（不会
+    // 触发本方法），这里再做一道兜底拦截，防止任何遗漏分支下 iOS 客户端
+    // 意外拉起小程序内支付
+    if (this.data.isIOSPlatform) {
+      wx.showToast({ title: '暂不支持应用内购买，请联系客服咨询开通', icon: 'none', duration: 2500 });
+      return;
+    }
+    const tab = this.data.comparePlanTab;
+    // 🐛 根因修复：永久有效套餐没有真实到期日，同/低档 Tab 下点击不应真的
+    // 发起一笔"续费"订单——见 computeRedundantRenewFlag 注释
+    if (this.data.isRedundantRenewTab) {
+      wx.showToast({ title: '您的机构已享永久版权益，无需续费', icon: 'none', duration: 2500 });
+      return;
+    }
+    if (tab === 'add_on') {
       this.onSubscribeAdvancedFeature('ADD_ON_STORE', this.data.addOnQuantity);
       return;
     }
-    if (this.data.comparePlanTab === 'enterprise') {
+    if (tab === 'enterprise') {
       this.onSubscribeAdvancedFeature('FLAGSHIP_YEARLY');
       return;
     }
