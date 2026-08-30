@@ -1,14 +1,26 @@
 @charset "UTF-8";
+/* 🐛 根因修复（「进入店务管理/财务稽核台」点击无滚动效果）：page/
+   .index-page-container 此前都写死 height:100vh——固定高度容器在小程序
+   渲染层面不会因为子元素溢出而产生可滚动的页面级 scrollHeight，导致
+   wx.pageScrollTo（无论传 selector 还是显式算出 scrollTop）在非义工视角
+   （店长/财务/超管，见下方 .index-page-container 内 padding-bottom 注释）
+   下永远没有可用的滚动范围可用，点击按钮日志正常打印、目标节点也确实
+   存在，页面却纹丝不动。改为 min-height:100vh——内容不超过一屏时行为
+   与之前完全一致（容器仍然至少占满 100vh，.page-body-scroll 仍按 flex:1
+   吃满剩余空间）；内容超出一屏时，容器不再被硬性裁死，允许自然长高，
+   原生页面级滚动从此真正有滚动范围可用，无需改动任何 WXML 结构
+   （不再重蹈上一版把 scroll-view 起始标签整体上移、结果与内部
+   <block wx:elif> 交叉嵌套导致编译报错/白屏的覆辙） */
 page {
   background-color: #f8f9fa;
-  height: 100vh;
+  min-height: 100vh;
 }
 
 .index-page-container {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
   /* 🛡️ 兜底防线：即使个别卡片将来又不小心引入同类"width:100% + 额外横向
      margin"溢出（见 .volunteer-hero-card 等处根因修复注释），也只会被裁掉
      溢出部分、不会产生横向滚动条把整页内容推偏，双重保险 */
