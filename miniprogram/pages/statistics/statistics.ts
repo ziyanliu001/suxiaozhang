@@ -204,6 +204,14 @@ function isAllStoresMode(storeName: string): boolean {
 // 兜底读取时同样要排除，不能当真实门店 id 使用
 const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL', 'yuhuazhai_national'];
 
+// 🐛 根因修复：全国大屏是跨机构/跨门店的聚合查询，服务端要扫描的数据量远超
+// 单店 getReports，withTimeout.ts 的通用默认超时（8000ms）在弱网/冷启动叠加
+// 高并发时经常提前判死（日志里的"调用超时（>8000ms）"），实际云函数还在
+// 正常跑、只是前端已经先一步展示了失败态。单独为这一次调用放宽超时阈值，
+// 抽成命名常量而不是在调用处留一个孤立的数字字面量，方便日后排查"为什么
+// 这一次调用的超时跟别处不一样"
+const NATIONAL_DASHBOARD_TIMEOUT_MS = 15000;
+
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
 // 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
@@ -1701,15 +1709,12 @@ Page({
       this.setData({ dashboardTitle });
       console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
-      // 🐛 根因修复：全国大屏是跨机构/跨门店的聚合查询，服务端要扫描的数据量远
-      // 超单店 getReports，8000ms 通用默认超时在弱网/冷启动叠加高并发时经常
-      // 提前判死（日志里的"调用超时（>8000ms）"），实际云函数还在正常跑、只是
-      // 前端已经先一步展示了失败态。这里单独放宽到 15000ms，与本次调用的真实
-      // 耗时量级匹配，不影响其余调用点仍使用的默认 8000ms
+      // 见 NATIONAL_DASHBOARD_TIMEOUT_MS 声明处注释——只这一次调用放宽超时，
+      // 不影响其余调用点仍使用 withTimeout.ts 的默认 8000ms
       const result = await callFunctionWithTimeout({
         name: 'getNationalDashboard',
         data: callParams
-      }, 15000);
+      }, NATIONAL_DASHBOARD_TIMEOUT_MS);
 
       console.log('[DEBUG] getNationalDashboard 返回原始结果：', result);
 
