@@ -66,20 +66,6 @@ const DEFAULT_ADD_ON_EXTRA_STORES = 1;
 const MAX_ADD_ON_EXTRA_STORES = 20;
 const CODE_TYPES = ['package', 'add_on'];
 
-// 🩹 一次性数据修复（action: 'repairNationalTenantExpireDate'）：订正开发环境
-// 「雨花斋（全国总览机构）」在 tenants.expiresAt / tenant_subscriptions.
-// serviceExpireDate 里残留的异常到期日脏数据（如 2102-12-31，根因见文件头
-// 2102 年到期日溢出注释——handleRedeem 此前未对历史激活码的 durationDays
-// 做封顶，兑换一张封顶修复前铸造的老码就会算出这类异常日期）。TARGET_TENANT_ID
-// 与 createStore/updateStoreName/updateStoreStatus/processRoleAudit/
-// manageTenantSubscription 五处 ensureNationalTenant() 完全同一份 ID 拷贝
-// （各云函数独立部署，没有跨函数共享模块机制）。这是一次性维护动作，不是
-// 常规业务写路径，用完即可从 exports.main 里移除这个 action 分支
-const REPAIR_TARGET_TENANT_ID = 'yuhuazhai_national';
-// 修复目标日期：与 addDaysToDateStr(今天, 365) 同一口径，落库统一用
-// YYYY-MM-DD（不带时间/时区），与本文件/全项目所有到期日字段的既有约定一致
-const REPAIR_TARGET_EXPIRE_DATE = '2027-08-30';
-
 // 🌟 高对比度字符集：剔除 0/O、1/I 这类肉眼易混淆字符，与 manageStoreInviteCode
 // 同一套生成规则，人工朗读/誊抄卡号不容易抄错
 const CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -550,62 +536,6 @@ async function handleRevoke(event, OPENID) {
   return { success: true };
 }
 
-// 🩹 一次性数据修复：见上方 REPAIR_TARGET_TENANT_ID 声明处注释。仅平台管理员
-// 可执行；只精确改写 REPAIR_TARGET_TENANT_ID 这一个机构名下的记录，不做任何
-// 批量/模糊匹配，不会误伤其他机构的正常订阅数据。tenant_subscriptions 下该
-// 机构可能存在多条历史记录（每次续费都是 update 同一条，但不排除历史上因
-// 集合曾不存在触发过 add() 兜底产生多条），全部一并修正，不只挑"最近一次
-// 续费"的那一条，避免脏数据残留在旧记录里
-async function handleRepairNationalTenantExpireDate(OPENID) {
-  const caller = await resolveCaller(OPENID);
-  if (!caller || caller.role !== 'platform_admin') {
-    return { success: false, error: '无权限：仅平台管理员可执行该修复动作' };
-  }
-
-  const result = {
-    tenantId: REPAIR_TARGET_TENANT_ID,
-    repairedExpireDate: REPAIR_TARGET_EXPIRE_DATE,
-    tenantsDocUpdated: false,
-    subscriptionsFound: 0,
-    subscriptionsUpdated: 0
-  };
-
-  // 1) tenants 集合：到期字段是 expiresAt（与 createSubscriptionOrder/lib/
-  // applyPayment.js 支付成功后写回的字段名一致，不是 serviceExpireDate——
-  // 那个字段名只存在于 tenant_subscriptions 集合，两个集合各自的字段命名
-  // 不同，不能混用同一个名字去改）
-  const tenantRes = await db.collection('tenants').doc(REPAIR_TARGET_TENANT_ID).get().catch(() => null);
-  if (tenantRes && tenantRes.data) {
-    await db.collection('tenants').doc(REPAIR_TARGET_TENANT_ID).update({
-      data: { expiresAt: REPAIR_TARGET_EXPIRE_DATE }
-    });
-    result.tenantsDocUpdated = true;
-  }
-
-  // 2) tenant_subscriptions 集合：该机构名下全部记录的 serviceExpireDate 一并
-  // 修正，并各自追加一条 renewalHistory 说明本次是数据修复，不是真实续费
-  const subRes = await db.collection(TENANT_SUB_COLLECTION).where({ tenantId: REPAIR_TARGET_TENANT_ID }).get().catch(() => ({ data: [] }));
-  const subDocs = subRes.data || [];
-  result.subscriptionsFound = subDocs.length;
-  for (const doc of subDocs) {
-    await db.collection(TENANT_SUB_COLLECTION).doc(doc._id).update({
-      data: {
-        serviceExpireDate: REPAIR_TARGET_EXPIRE_DATE,
-        renewalHistory: _.push({
-          operatorId: OPENID,
-          operateTime: db.serverDate(),
-          fromExpireDate: doc.serviceExpireDate || null,
-          toExpireDate: REPAIR_TARGET_EXPIRE_DATE,
-          reason: '一次性数据修复：订正开发环境异常到期日脏数据（如 2102-12-31）为正常 1 年期限'
-        })
-      }
-    });
-    result.subscriptionsUpdated += 1;
-  }
-
-  return { success: true, data: result };
-}
-
 exports.main = async (event) => {
   const { action } = event;
   const { OPENID } = cloud.getWXContext();
@@ -626,9 +556,6 @@ exports.main = async (event) => {
     }
     if (action === 'list') {
       return await handleList(event, OPENID);
-    }
-    if (action === 'repairNationalTenantExpireDate') {
-      return await handleRepairNationalTenantExpireDate(OPENID);
     }
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {
