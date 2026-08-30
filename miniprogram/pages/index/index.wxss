@@ -4360,10 +4360,16 @@ button.poster-gen-btn[disabled] {
   display: block;
 }
 
+/* 🐛 底部安全间距兜底：.gencode-modal-card 是居中卡片（非贴底 sheet），
+   wx.hideTabBar() 已经从根源上消除 TabBar 遮挡（见 onOpenGenCodeModal），
+   这里再加一道 CSS 兜底——某些机型/基础库版本下 hideTabBar 的隐藏动画有
+   短暂过渡帧，或极端场景下调用时序被打断时，底部按钮仍有安全区可退让，
+   不会紧贴甚至压在刘海屏/全面屏手势条上 */
 .gen-code-footer {
   display: flex;
   gap: 20rpx;
   margin-top: 32rpx;
+  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
 }
 
 .btn-cancel {
