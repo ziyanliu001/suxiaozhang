@@ -2852,6 +2852,11 @@ textarea, .textarea {
    margin 被吃掉、内容整体偏右贴边。改为显式 width: calc(100% - 左右margin)
    + box-sizing: border-box，不再依赖引擎对 auto 宽度的隐式计算，彻底绕开
    这个渲染坑，同时保证左右留白严格对称 */
+/* 🐛 根因修复配套：page-body-scroll 的滚动边界上移后（见 index.wxml 头部
+   注释），本元素从 .index-page-container（无横向 padding）的直接子项变成
+   了 .page-body-scroll（左右各 24rpx padding，也是 sticky 现在真正生效的
+   滚动祖先）的子项，原 width:calc(100% - 48rpx) + margin 横向 24rpx 会与
+   新增的祖先 padding 叠加导致额外收窄，改为 width:100% + 仅保留纵向 margin */
 .preview-mode-banner {
   position: sticky;
   top: 8rpx;
@@ -2860,7 +2865,7 @@ textarea, .textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12rpx;
-  width: calc(100% - 48rpx);
+  width: 100%;
   box-sizing: border-box;
   background: rgba(255, 253, 246, 0.82);
   backdrop-filter: blur(16rpx);
@@ -2868,7 +2873,7 @@ textarea, .textarea {
   border: 1rpx solid rgba(241, 196, 15, 0.4);
   border-radius: 999rpx;
   padding: 16rpx 24rpx;
-  margin: 16rpx 24rpx 20rpx;
+  margin: 16rpx 0 20rpx;
   box-shadow: 0 6rpx 20rpx rgba(181, 124, 30, 0.1);
 }
 
@@ -6205,12 +6210,17 @@ button.poster-gen-btn[disabled] {
    100% 宽度之外，导致卡片整体右侧溢出 48rpx，表现为右边距比左边距小、
    内容整体偏右。显式声明 width: calc(100% - 48rpx) 抵消掉这部分 margin，
    使卡片实际占用宽度精确等于 100%，左右留白严格对称 */
+/* 🐛 根因修复配套：page-body-scroll 的滚动边界上移后（见 index.wxml 头部
+   注释），本卡片从 .index-page-container（无横向 padding）的直接子项变成了
+   .page-body-scroll（左右各 24rpx padding）的子项，原先为抵消 margin 而设的
+   width:calc(100% - 48rpx) 现在会与新增的祖先 padding 叠加导致卡片额外收窄。
+   改为 width:100% + 仅保留纵向 margin，横向留白交给 .page-body-scroll 提供 */
 .volunteer-hero-card {
-  width: calc(100% - 48rpx);
+  width: 100%;
   background: #FFFFFF;
   border-radius: 16rpx;
   padding: 32rpx 28rpx;
-  margin: 24rpx 24rpx 0;
+  margin: 24rpx 0 0;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
@@ -6577,12 +6587,18 @@ button.poster-gen-btn[disabled] {
 /* 🐛 根因修复：与 .volunteer-hero-card 同一处问题——复合 .ui-card-wrapper
    继承 width:100% 后又另加左右 24rpx margin，margin 叠加在 100% 之外导致
    右侧溢出，见该处详细注释 */
+/* 🐛 根因修复配套：page-body-scroll 的滚动边界上移后（见 index.wxml 头部
+   注释），本卡片从 .index-page-container（无横向 padding）的直接子项变成了
+   .page-body-scroll（左右各 24rpx padding）的子项——原先 width:calc(100% -
+   48rpx) + margin:24rpx 的组合是按"无横向 padding 的祖先"设计的，两层
+   inset 会叠加导致卡片额外收窄 48rpx。改为 width:100% + 仅保留纵向 margin，
+   横向留白完全交给 .page-body-scroll 的 padding 提供，不再重复计算 */
 .omni-checkin-card {
-  width: calc(100% - 48rpx);
+  width: 100%;
   background: #FFFFFF;
   border-radius: 16rpx;
   padding: 28rpx 28rpx 24rpx;
-  margin: 24rpx 24rpx 24rpx;
+  margin: 24rpx 0 24rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
   border: 1rpx solid #F1E6D8;
 }
@@ -8329,8 +8345,12 @@ button.poster-gen-btn[disabled] {
 /* 🌟 顶部通知栏收纳容器：阳光账本 + 阳善滚动墙共用一张卡片外壳（一份
    border/shadow 代替原来两份各自独立的），内部靠一条极细分隔线分成两行，
    降低整体高度占用与视觉噪音 */
+/* 🐛 根因修复配套：page-body-scroll 的滚动边界上移后（见 index.wxml 头部
+   注释），本元素从无横向 padding 的祖先变成了自带 24rpx 横向 padding 的
+   .page-body-scroll 的子项，原横向 margin 24rpx 会叠加成 48rpx，去掉横向
+   margin 交由祖先 padding 统一提供 */
 .top-notice-cluster {
-  margin: 16rpx 24rpx 20rpx;
+  margin: 16rpx 0 20rpx;
   padding: 0 24rpx;
   background: linear-gradient(135deg, #FFFDF8 0%, #FFF8E1 100%);
   border: 1rpx solid #FFE9B3;
@@ -8654,10 +8674,13 @@ button.poster-gen-btn[disabled] {
    width:100% 后又另加左右 28rpx margin，导致右侧溢出 56rpx。这张卡片的
    核心样式在 wxml 里还写了一份内联 style 做双重保障，两处都要加同样的
    width 修正，保持同步 */
+/* 🐛 根因修复配套：见 index.wxml 该卡片内联 style 处的同名注释——
+   page-body-scroll 滚动边界上移后祖先已带 24rpx 横向 padding，这里不再
+   重复收窄宽度 */
 .home-vt-card {
-  width: calc(100% - 56rpx);
+  width: 100%;
   box-sizing: border-box;
-  margin: 20rpx 28rpx;
+  margin: 20rpx 0;
   padding: 24rpx;
   background: #ffffff;
   border-radius: 20rpx;
