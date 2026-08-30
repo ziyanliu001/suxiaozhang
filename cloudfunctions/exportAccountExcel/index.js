@@ -77,8 +77,11 @@ exports.main = async (event, context) => {
     // 页面拥有跨店查看权限（canViewAllStoresDropdown），导出功能作为该页面的延伸操作，
     // 口径保持一致
     const isTenantWideAllowed = ['super_admin', 'hq_finance', 'regional_finance'].includes(userRole);
-    const wantsAllStores = !shopName || shopName === '全部门店';
-    if (wantsAllStores && !isTenantWideAllowed && !userStoreId && !userStoreName) {
+    // 🐛 与下方 whereConditions 的收敛逻辑保持一致：非租户级角色现在无论传
+    // 什么 shopName（含"全部门店"）都会被强制收敛到自己绑定的门店，这条
+    // 早退校验也不应该只在客户端传"全部门店"时才检查——否则一个没绑定门店
+    // 的账号传一个具体门店名会静默查出空结果，而不是收到明确的报错提示
+    if (!isTenantWideAllowed && !userStoreId && !userStoreName) {
       return { success: false, errMsg: '您尚未绑定门店，无法导出' };
     }
 
@@ -89,8 +92,14 @@ exports.main = async (event, context) => {
       // 🛡️ 已作废（红字冲销）的记录不计入导出明细/合计
       isVoid: _.neq(true)
     };
-    if (wantsAllStores && !isTenantWideAllowed) {
-      // 🛡️ 非超管请求"全部门店"一律强制收敛为本人所在门店，禁止导出他店数据
+    // 🐛 根因修复（跨门店越权导出）：此前只在客户端传"全部门店"/空值时才会把
+    // 非租户级角色强制收敛回自己的门店——一旦客户端显式传了同一机构内另一家
+    // 真实门店的 shopName，会原样进入下面 else if 分支被采信，只受 tenantId
+    // 隔离，同一机构内非超管/非总部财务角色可以越权导出别的门店的完整财务
+    // 明细。现在改为：只要不是 isTenantWideAllowed（super_admin/hq_finance/
+    // regional_finance），无论客户端传的是"全部门店"还是任何具体门店名，
+    // 一律强制收敛到自己绑定的门店，服务端不信任客户端传入的 shopName 参数
+    if (!isTenantWideAllowed) {
       if (userStoreId) {
         whereConditions.storeId = userStoreId;
       } else {

@@ -150,12 +150,17 @@ async function handleRevoke(event, OPENID) {
 
 // 云函数独立部署运行，无法直接 import miniprogram/utils/privacy.ts 的 maskName——
 // 这里内联一份同口径的实现，与前端展示脱敏规则保持一致（3+ 字取首尾字，2 字取首字）
+// 🐛 根因修复：中间固定只留一个 '*'，字符越长脱敏强度反而越弱（"欧阳志强"
+// 此前脱敏成"欧*强"，丢了一个字的观感）——改为按隐去字符数量逐一替换成
+// 等量的 '*'。与 miniprogram/utils/privacy.ts、publicVerifyReport/index.js、
+// pages/index/index.wxs 三处同名实现保持同一套规则（各云函数/WXS 独立
+// 部署、无共享模块机制，需要手动同步这四处拷贝）
 function maskName(name) {
   if (!name) return '';
   const str = String(name).trim();
   if (str.length <= 1) return str + '*';
   if (str.length === 2) return str.charAt(0) + '*';
-  return str.charAt(0) + '*' + str.charAt(str.length - 1);
+  return str.charAt(0) + '*'.repeat(str.length - 2) + str.charAt(str.length - 1);
 }
 
 const LEADERBOARD_TOP_N = 20;
@@ -233,13 +238,20 @@ async function handleLeaderboard(event, OPENID) {
     });
   }
 
-  const top = ranked.slice(0, LEADERBOARD_TOP_N).map((r, idx) => ({
-    rank: idx + 1,
-    // 🛡️ 隐私脱敏：榜单一律只下发脱敏后的姓名，真实姓名/openid 都不回传给客户端
-    displayName: maskName(nameMap.get(r.openid) || '') || '匿名义工',
-    hours: r.hours,
-    isSelf: r.openid === OPENID
-  }));
+  const top = ranked.slice(0, LEADERBOARD_TOP_N).map((r, idx) => {
+    const isSelf = r.openid === OPENID;
+    const realName = nameMap.get(r.openid) || '';
+    return {
+      rank: idx + 1,
+      // 🐛 根因修复：榜单里除了自己以外的其他人一律只下发脱敏后的姓名，
+      // openid 也不回传给客户端；此前 isSelf 只是算出来但没被用来决定
+      // displayName，导致调用者查看自己的排名时看到的也是脱敏后的姓名，
+      // 而不是"这是我自己"该有的完整姓名展示
+      displayName: isSelf ? (realName || '匿名义工') : (maskName(realName) || '匿名义工'),
+      hours: r.hours,
+      isSelf
+    };
+  });
 
   const selfIndex = ranked.findIndex((r) => r.openid === OPENID);
   const selfRank = selfIndex >= 0 ? selfIndex + 1 : 0;

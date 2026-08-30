@@ -45,6 +45,34 @@ function daysBetween(dateStr, todayStr) {
   return Math.floor((b - a) / (24 * 60 * 60 * 1000));
 }
 
+// 🐛 根因修复（2026-08-30 全平台脱敏专项）：全国大屏的"爱心滚动墙"
+// （publicDonorEntries/latestPublicDonors）此前原样吐出捐赠人真实姓名，且
+// 只按报告级 log.isAnonymous 一刀切要么整份收要么整份跳过——"item 本身没有
+// 独立的匿名标记"这条旧注释已经过时：逐条阳善/阴德区分功能（见
+// utils/parser.ts DonorItem.isAnonymous）允许单条捐赠显式覆盖报告级默认值，
+// 报告级阳善里单独标记阴德的一条不该被当成阳善展示真实姓名。现在统一：
+// ①姓名一律脱敏展示（不再原样吐出全名），②按每一条自己的 isAnonymous
+// 判断（未标记的才继承报告级默认值），阴德统一展示"爱心善士"占位，阳善
+// 展示脱敏后的姓名而不是直接跳过整份报表——与
+// cloudfunctions/getSunshineLedger、miniprogram/utils/privacy.ts 同一套
+// 规则（各云函数/前端独立部署，无共享模块机制，需要手动同步这几处拷贝）
+function maskName(name) {
+  if (!name) return '';
+  const str = String(name).trim();
+  if (str.length <= 1) return str + '*';
+  if (str.length === 2) return str.charAt(0) + '*';
+  return str.charAt(0) + '*'.repeat(str.length - 2) + str.charAt(str.length - 1);
+}
+
+function resolveItemAnonymous(item, reportLevelAnonymous) {
+  return item && item.isAnonymous !== undefined ? !!item.isAnonymous : !!reportLevelAnonymous;
+}
+
+function formatDonorDisplayName(name, isAnonymous) {
+  if (isAnonymous || !name || !String(name).trim()) return '爱心善士';
+  return maskName(name);
+}
+
 // 🆕 按地区筛选：province/city 是门店档案里的自由文本字段（见 manageStoreProfile
 // TEXT_PROFILE_FIELDS），实际录入可能带"省/市"后缀也可能不带（如"福建省"/"福建"，
 // "厦门市"/"厦门"）。只做末尾后缀剥离 + 去空白的轻量归一化，与前端 statistics.ts
@@ -585,10 +613,10 @@ exports.main = async (event, context) => {
         yangshanCount += donationItems.length;
         yangshanAmount += logDonationAmount;
       }
-      // 收集公开（阳善）捐赠条目：logs 已按 dateString 降序取，所以最先遇到的就是最新的
-      // isAnonymous:false 且有明细条目时才入列；整份匿名报表(isAnonymous:true)统一跳过，
-      // 不再逐条检查 item 级别（item 本身没有独立的匿名标记）
-      if (!log.isAnonymous && donationItems.length > 0 && publicDonorEntries.length < 40) {
+      // 收集公开捐赠条目：logs 已按 dateString 降序取，所以最先遇到的就是最新的。
+      // 不再按报告级 log.isAnonymous 一刀切决定整份收不收——每条自己的匿名状态由
+      // resolveItemAnonymous 逐条判断，阴德的条目仍然入列，只是姓名展示为"爱心善士"
+      if (donationItems.length > 0 && publicDonorEntries.length < 40) {
         const entryStoreName = (storeStatsMap[matchedKey] && storeStatsMap[matchedKey].storeName)
           || log.shopName || '爱心站点';
         // 🆕 平台类型透传：与下方 logOrgType（698行左右）同一个 matchedKey 查法，
@@ -605,7 +633,7 @@ exports.main = async (event, context) => {
         donationItems.forEach(item => {
           if (publicDonorEntries.length >= 40) return;
           publicDonorEntries.push({
-            name:      (item.name  || '爱心人士').trim(),
+            name:      formatDonorDisplayName(item.name, resolveItemAnonymous(item, log.isAnonymous)),
             amount:    parseFloat(item.amount) || 0,
             storeName: entryStoreName,
             orgType:   entryOrgType,

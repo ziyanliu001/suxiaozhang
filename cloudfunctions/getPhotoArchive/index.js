@@ -82,8 +82,16 @@ exports.main = async (event) => {
     }
 
     // 3. 确定查询的 storeId 边界
+    // 🐛 根因修复（跨门店越权）：此前非租户级角色（store_manager/finance/
+    // store_patriarch）只在客户端传"全部门店"哨兵值时才会被强制收敛回自己
+    // 绑定的门店——一旦客户端显式传了另一家真实门店的 storeId（哪怕只是
+    // 改一下请求参数，不需要任何特殊权限），就会原样采信，只受 tenantId
+    // 隔离，同一机构内不同门店之间的凭证/食谱/日志图片可以互相越权拉取。
+    // 现在收紧为：只有 isTenantWide（当前仅 super_admin）才允许自行指定/
+    // 留空 storeId；其余任何角色一律强制收敛到 userStoreId，服务端不信任
+    // 客户端传入的 storeId 参数，彻底关闭这条越权路径
     const wantsAllStores = !storeId || storeId === 'national_overview' || storeId === 'ALL_STORES';
-    const effectiveStoreId = (!isTenantWide && wantsAllStores) ? userStoreId : (wantsAllStores ? '' : storeId);
+    const effectiveStoreId = isTenantWide ? (wantsAllStores ? '' : storeId) : userStoreId;
 
     // 4. 并行查询三张表，各自取所需字段
     const queryLimit = Math.min(Number(limit) || 60, 200);

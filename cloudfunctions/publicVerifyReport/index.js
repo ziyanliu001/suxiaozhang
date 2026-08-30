@@ -25,12 +25,17 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// 🐛 根因修复：中间固定只留一个 '*'，字符越长脱敏强度反而越弱（"欧阳志强"
+// 此前脱敏成"欧*强"，丢了一个字的观感）——改为按隐去字符数量逐一替换成
+// 等量的 '*'。与 miniprogram/utils/privacy.ts、manageVolunteerCheckIn/index.js、
+// pages/index/index.wxs 三处同名实现保持同一套规则（各云函数/WXS 独立
+// 部署、无共享模块机制，需要手动同步这四处拷贝）
 function maskName(name) {
   if (!name) return '';
   const str = String(name).trim();
   if (str.length <= 1) return str + '*';
   if (str.length === 2) return str.charAt(0) + '*';
-  return str.charAt(0) + '*' + str.charAt(str.length - 1);
+  return str.charAt(0) + '*'.repeat(str.length - 2) + str.charAt(str.length - 1);
 }
 
 // 与 miniprogram/pages/index/index.ts 里"充足/一般/告急"三档展示口径保持一致，

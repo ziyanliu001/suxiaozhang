@@ -21,6 +21,7 @@ import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolv
 import { setTabBarHidden } from '../../utils/tabBarVisibility';
 import { payForOrder, CreateOrderResponse } from '../../utils/wxPayCore';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
+import { maskPhone } from '../../utils/privacy';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -3776,10 +3777,9 @@ Page({
           finance: 'blue',
           store_manager: 'purple'
         };
-        const maskPhone = (p: string) => {
-          if (!p || p.length < 7) return p || '';
-          return p.slice(0, 3) + '****' + p.slice(-4);
-        };
+        // 🐛 去重：改用 utils/privacy.ts 的共享 maskPhone，不再各自维护一份
+        // 行为还不完全一致的内联实现（旧版对 <7 位的畸形号码直接原样返回，
+        // 共享版本一律脱敏，不会因为号码格式不标准就意外原样泄露）
         // 🛡️ 前端兜底过滤：服务端 listAuditQueue 的 approved 查询已经排除了
         // role==='super_admin'（见 processRoleAudit 云函数同处注释），这里
         // 再加一层客户端过滤，双重保险，不依赖单一环节
@@ -5092,10 +5092,8 @@ Page({
       });
       const result = res.result;
       const ELEVATED = ['finance', 'store_manager', 'store_patriarch'];
-      const maskPhone = (p: string) => {
-        if (!p || p.length < 7) return p || '';
-        return p.slice(0, 3) + '****' + p.slice(-4);
-      };
+      // 🐛 去重：改用 utils/privacy.ts 的共享 maskPhone，见上方
+      // onOpenMemberManageModal 同款去重注释
       const all = (result && result.success && Array.isArray(result.data))
         ? result.data
             .filter((m: any) => ELEVATED.includes(m.role))

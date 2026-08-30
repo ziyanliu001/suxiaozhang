@@ -39,6 +39,34 @@ function daysBetween(dateStr, todayStr) {
   return Math.floor((b - a) / (24 * 60 * 60 * 1000));
 }
 
+// 🐛 根因修复（2026-08-30 全平台脱敏专项）：本函数是完全无鉴权的公开接口（见
+// 文件头注释），此前把"阳善（isAnonymous:false）"报表的捐赠人姓名原样吐出到
+// 善缘墙——任何人扫码/访问首页都能看到真实姓名，且只判断了报告级 r.isAnonymous，
+// 完全没看每一条捐赠自己的 item.isAnonymous 覆盖（逐条阳善/阴德区分功能，见
+// utils/parser.ts DonorItem.isAnonymous），一份报告级"阳善"的报表里单独标记
+// 阴德的那一条也会被当成阳善原样展示真实姓名。现在统一：①姓名一律脱敏展示
+// （不再原样吐出全名），②按每一条自己的 isAnonymous 判断（未标记的才继承
+// 报告级默认值），阴德统一展示"爱心善士"占位，阳善展示脱敏后的姓名而不是
+// 直接跳过整份报表——与 miniprogram/utils/privacy.ts 的 maskName/
+// formatDisplayName 同一套规则（各云函数/前端独立部署，无共享模块机制，
+// 需要手动同步这几处拷贝）
+function maskName(name) {
+  if (!name) return '';
+  const str = String(name).trim();
+  if (str.length <= 1) return str + '*';
+  if (str.length === 2) return str.charAt(0) + '*';
+  return str.charAt(0) + '*'.repeat(str.length - 2) + str.charAt(str.length - 1);
+}
+
+function resolveItemAnonymous(item, reportLevelAnonymous) {
+  return item && item.isAnonymous !== undefined ? !!item.isAnonymous : !!reportLevelAnonymous;
+}
+
+function formatDonorDisplayName(name, isAnonymous) {
+  if (isAnonymous || !name || !String(name).trim()) return '爱心善士';
+  return maskName(name);
+}
+
 // 🌸 近7日阳善榜专用：精确到分钟/小时的相对时间（"2小时前"），比 daysBetween
 // 那套按天粒度的 timeLabel（今天/昨天/N天前）更适合一个只滚动最近 7 天的短窗口
 // 列表——7 天内的记录几乎全是"今天/昨天"，天粒度会让列表看起来像是同一时间
@@ -189,9 +217,12 @@ exports.main = async (event) => {
       } else {
         yangCount++;
       }
-      // 阳善（公开姓名）餐报才收进善缘墙；整份匿名报表(isAnonymous:true)统一跳过，
-      // records 已按 dateString 降序取，先遇到的就是最新的
-      if (!r.isAnonymous && donationItems.length > 0 && latestDonors.length < 20) {
+      // 🐛 根因修复：善缘墙不再"整份报表按 r.isAnonymous 一刀切要么全收要么全跳过"——
+      // 逐条阳善/阴德区分功能允许单条捐赠显式覆盖报告级默认值（见 resolveItemAnonymous），
+      // 报告级阴德里单独标记阳善的一条、或报告级阳善里单独标记阴德的一条，都要按
+      // 它自己的标记展示，不能被报告级默认值掩盖。records 已按 dateString 降序取，
+      // 先遇到的就是最新的
+      if (donationItems.length > 0 && latestDonors.length < 20) {
         const dayDiff = r.dateString ? daysBetween(r.dateString, todayStr) : null;
         const timeLabel = dayDiff === null ? ''
           : dayDiff === 0 ? '今天'
@@ -202,7 +233,7 @@ exports.main = async (event) => {
         donationItems.forEach((item) => {
           if (latestDonors.length >= 20) return;
           latestDonors.push({
-            name: (item.name || '爱心人士').trim(),
+            name: formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous)),
             amount: parseFloat(item.amount) || 0,
             timeLabel
           });
@@ -210,9 +241,9 @@ exports.main = async (event) => {
       }
 
       // 🌸 近7日阳善榜：独立的窗口判断与收集，不复用上面 latestDonors 的 20 条上限
-      // 与天粒度 timeLabel——同一条 isAnonymous===false 的记录，只要落在 7 天窗口内，
-      // 这里会再收一遍（用小时/分钟粒度的相对时间），两份列表用途不同，允许重复处理
-      if (!r.isAnonymous && donationItems.length > 0 && latestDonorsWeekly.length < 30) {
+      // 与天粒度 timeLabel——同一条记录只要落在 7 天窗口内，这里会再收一遍（用
+      // 小时/分钟粒度的相对时间），两份列表用途不同，允许重复处理
+      if (donationItems.length > 0 && latestDonorsWeekly.length < 30) {
         const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
         const inWeeklyWindow = !Number.isNaN(recordMs)
           ? recordMs >= sevenDaysAgoMs
@@ -230,7 +261,7 @@ exports.main = async (event) => {
             if (latestDonorsWeekly.length >= 30) return;
             const amount = parseFloat(item.amount) || 0;
             latestDonorsWeekly.push({
-              name: (item.name || '爱心人士').trim(),
+              name: formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous)),
               amount,
               // 善举说明：如实反映真实善款金额（"随喜 ¥50"），不虚构"份数"这类
               // 记录里并不存在的换算单位，避免误导公众对实际捐助内容的理解
@@ -244,7 +275,7 @@ exports.main = async (event) => {
       // 🌸 近3日阳善榜：与上面 latestDonorsWeekly 完全同款逻辑，只是窗口换成
       // threeDaysAgoMs/threeDaysAgoStr，同样允许与 latestDonors/latestDonorsWeekly
       // 重复处理同一条记录
-      if (!r.isAnonymous && donationItems.length > 0 && latestDonorsThreeDay.length < 30) {
+      if (donationItems.length > 0 && latestDonorsThreeDay.length < 30) {
         const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
         const inThreeDayWindow = !Number.isNaN(recordMs)
           ? recordMs >= threeDaysAgoMs
@@ -260,7 +291,7 @@ exports.main = async (event) => {
             if (latestDonorsThreeDay.length >= 30) return;
             const amount = parseFloat(item.amount) || 0;
             latestDonorsThreeDay.push({
-              name: (item.name || '爱心人士').trim(),
+              name: formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous)),
               amount,
               deedText: `随喜 ¥${amount}`,
               timeLabel: threeDayTimeLabel
@@ -270,9 +301,11 @@ exports.main = async (event) => {
       }
 
       // 🌸 近30日阳善跑马灯：善款(donationItems) + 实物(materials) 合并收集，
-      // 窗口判断与上面两份完全同款逻辑，只是换成 thirtyDaysAgoMs/thirtyDaysAgoStr
+      // 窗口判断与上面两份完全同款逻辑，只是换成 thirtyDaysAgoMs/thirtyDaysAgoStr。
+      // materials（实物捐赠）目前没有逐条 isAnonymous 覆盖字段（见 utils/parser.ts
+      // MaterialItem 定义），只能按报告级 r.isAnonymous 判断
       const materials = Array.isArray(r.materials) ? r.materials : [];
-      if (!r.isAnonymous && (donationItems.length > 0 || materials.length > 0) && latestDonorsMonthly.length < 30) {
+      if ((donationItems.length > 0 || materials.length > 0) && latestDonorsMonthly.length < 30) {
         const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
         const inMonthlyWindow = !Number.isNaN(recordMs)
           ? recordMs >= thirtyDaysAgoMs
@@ -288,7 +321,7 @@ exports.main = async (event) => {
             if (latestDonorsMonthly.length >= 30) return;
             const amount = parseFloat(item.amount) || 0;
             latestDonorsMonthly.push({
-              name: (item.name || '爱心人士').trim(),
+              name: formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous)),
               amount,
               deedText: `随喜 ¥${amount}`,
               timeLabel: monthlyTimeLabel
@@ -301,7 +334,7 @@ exports.main = async (event) => {
             // 为"份"，不留空——宁可少展示一条也不展示一条读不通的
             if (!m.item || !m.quantity) return;
             latestDonorsMonthly.push({
-              name: (m.donor || '爱心人士').trim(),
+              name: formatDonorDisplayName(m.donor, !!r.isAnonymous),
               amount: 0,
               deedText: `捐赠${m.item}${m.quantity}${m.unit || '份'}`,
               timeLabel: monthlyTimeLabel
