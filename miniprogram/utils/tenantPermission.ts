@@ -14,13 +14,46 @@
 // 完全相同的判断逻辑，即使跳过这层前端弹窗直接发起云调用也会被拒绝。
 // Excel 导出目前是纯客户端拼表操作，没有可拦截的云调用，这层前端检查就是
 // 唯一的把关点。
+//
+// 🏛️ 双轨制架构（见仓库根目录 CLAUDE.md「多租户隔离与全国公信力大屏双轨制
+// 设计」+ docs/BUSINESS_MODEL.md）：FEATURE_KEYS 按盈利模型分三组登记——
+//   - 免费公开能力：全国大屏/义工打卡/阳光台账等公益侧能力。这些 key 只作为
+//     跨模块统一的功能标识（埋点/日志/未来数据分析用），绝不允许接入
+//     checkTenantPermission() 做拦截——公益专区的查看权限不挂钩商业套餐，
+//     这是硬约束，不是待定项。
+//   - 第一阶段付费能力：与下面 PERMISSION_TIER.ADVANCED 对应，要求
+//     tenant_subscriptions.planType 为 pro/enterprise。MULTI_STORE_DASHBOARD/
+//     EXCEL_EXPORT 两项已接入实际拦截（见各自调用点）；ADVANCED_ROLE_PERMISSION/
+//     PRODUCTION_PIPELINE/SMS_NOTIFICATION 三项目前只登记常量本身——对应的
+//     生产排单/多角色协同/短信通知功能页面尚未接入 checkTenantPermission()
+//     调用，落地时需要先确认具体拦截哪些入口，避免一次性把现有免费用户正在
+//     使用的功能突然锁死。
+//   - 第二阶段预留能力：ESG_CARBON_REPORT/D2C_SUPPLY_CHAIN_ORDER 对应的实体
+//     功能尚未建设，仅预先登记 key 占位，不接入任何鉴权调用。
 import { isCloudAvailable } from './cloudGuard';
 import { AuthService } from './authService';
 import { callFunctionWithTimeout } from './withTimeout';
 
 export const FEATURE_KEYS = {
-  MULTI_STORE_DASHBOARD: 'multiStoreDashboard',
-  EXCEL_EXPORT: 'excelExport'
+  // ── 免费公开能力：仅作跨模块统一标识，严禁传入 checkTenantPermission() ──
+  PUBLIC_NATIONAL_DASHBOARD: 'publicNationalDashboard',
+  VOLUNTEER_CHECK_IN: 'volunteerCheckIn',
+  PUBLIC_SUNSHINE_LEDGER: 'publicSunshineLedger',
+
+  // ── 第一阶段付费 SaaS 增值能力（需订阅/加购）──
+  // 🛡️ 以下两个 value（'multiStoreDashboard'/'excelExport'）是与
+  // cloudfunctions/checkTenantPermission 的 FEATURE_PLAN_REQUIREMENTS 及
+  // getNationalDashboard 的历史约定值，禁止修改字符串——改了会导致服务端
+  // 矩阵查不到对应 key，按"未登记 featureKey 一律放行"的兜底策略静默变成免费
+  EXCEL_EXPORT: 'excelExport',                          // 财务/审计级报表导出
+  MULTI_STORE_DASHBOARD: 'multiStoreDashboard',          // 自家多门店/连锁聚合管理
+  ADVANCED_ROLE_PERMISSION: 'advancedRolePermission',    // 多店长/财务协同审批（尚未接入拦截，见上方架构说明）
+  PRODUCTION_PIPELINE: 'productionPipeline',             // 工坊生产排单与批次追溯（尚未接入拦截，见上方架构说明）
+  SMS_NOTIFICATION: 'smsNotification',                   // 自动化短信/模板通知包（尚未接入拦截，见上方架构说明）
+
+  // ── 第二阶段高阶资产能力预留（对应功能尚未建设，仅占位）──
+  ESG_CARBON_REPORT: 'esgCarbonReport',                  // 企业 ESG 碳资产认证导出
+  D2C_SUPPLY_CHAIN_ORDER: 'd2cSupplyChainOrder'          // 善意严选供应链下单与分销
 } as const;
 
 export type FeatureKey = typeof FEATURE_KEYS[keyof typeof FEATURE_KEYS];
@@ -30,8 +63,8 @@ export type FeatureKey = typeof FEATURE_KEYS[keyof typeof FEATURE_KEYS];
 // 的两档概念，仅供 UI 展示/文档使用，不引入新的数据字段：
 //   - BASIC（基础功能）：单店日常管理、义工打卡、基础统计——全员默认免费自动
 //     开通，压根不经过本模块的鉴权检查（这些功能的调用点从来不 import 本文件）。
-//   - ADVANCED（高级功能）：即 FEATURE_KEYS 里登记的这两项（全国/跨店汇总大屏、
-//     Excel 批量导出），要求 tenant_subscriptions.planType 为 pro/enterprise
+//   - ADVANCED（高级功能）：FEATURE_KEYS 里"第一阶段付费"分组的几项，要求
+//     tenant_subscriptions.planType 为 pro/enterprise
 //     且未到期，由 resolveTier() 从 checkTenantPermission() 已经算好的
 //     planType/isExpired 结果派生，不重复实现一遍到期判断逻辑
 export const PERMISSION_TIER = {
