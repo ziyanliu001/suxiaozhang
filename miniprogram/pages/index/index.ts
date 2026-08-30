@@ -1112,21 +1112,31 @@ Page({
     // 多个窗口），真正展示/参与计算的是 displayJobTypes（见 refreshDisplayJobTypes/
     // getJobHoursForSlot），jobTypeDefinitions 本身只保留 icon/name/desc 等
     // 不随班次变化的静态信息 + 午市基准工时
+    // 🆕 2026-08 新增两个外勤工种（送餐/上门关怀）：卡片标题沿用既有"A/B" 4 字
+    // 紧凑命名惯例（与"主厨/面点"等保持同一视觉节奏，避免"上门倾听关怀服务"
+    // 这类 8 字长名称在 job-card 固定宽度下换行/溢出），完整业务语义放在 desc
+    // 里；jobKey 同样沿用短小写惯例（chef/prep/serve/clean），未采用需求里
+    // 建议的 MEAL_DELIVERY/HOME_CARE_LISTENING 这类长命名，理由同上
     jobTypeDefinitions: [
       { jobKey: 'chef', icon: '👨‍🍳', name: '主厨/面点', desc: '掌勺烹饪、面点制作、后厨统筹', hours: 3.5 },
       { jobKey: 'prep', icon: '🥬', name: '洗菜/切配', desc: '食材挑选、清洗去杂、切配备料', hours: 2.5 },
       { jobKey: 'serve', icon: '🤝', name: '堂食/引导', desc: '行仪引导、打饭分餐、维持秩序', hours: 2.0 },
-      { jobKey: 'clean', icon: '🧹', name: '保洁/洗消', desc: '洗碗消毒、餐桌擦拭、拖地清洁', hours: 2.0 }
+      { jobKey: 'clean', icon: '🧹', name: '保洁/洗消', desc: '洗碗消毒、餐桌擦拭、拖地清洁', hours: 2.0 },
+      { jobKey: 'delivery', icon: '🛵', name: '送餐/配送', desc: '爱心便当上门派送、助老送餐、特殊群体关怀配送', hours: 1.5 },
+      { jobKey: 'listen', icon: '👂', name: '倾听/关怀', desc: '入户走访、长者陪聊、心理慰藉与倾听关怀', hours: 2.0 }
     ] as any[],
     // 🎚️ 各班次工种建议工时覆盖表：只列出与"午市"（jobTypeDefinitions 基准值）
     // 不同的班次，lunch 本身不需要出现在这里——早市窗口短（2.5h）按各工种
     // 基准值统一打七折取整到 0.5h 台阶；晚市窗口（3h）介于早/午之间；全天护持
     // 覆盖早+午两段窗口，按基准值 1.7 倍估算，均取 0.5h 台阶，不是精确算出来的
-    // 数字，是给义工一个合理参考起点，实际仍可用下方步进器 ±0.5h 手动修正
+    // 数字，是给义工一个合理参考起点，实际仍可用下方步进器 ±0.5h 手动修正。
+    // delivery/listen 两个外勤工种延续同一套折算比例（delivery 对齐 serve/
+    // clean 的 75%/175% 折算档；listen 与 serve/clean 基准值相同，直接复用
+    // 同一组折算值）
     jobHoursOverrideBySlot: {
-      morning: { chef: 2.5, prep: 2.0, serve: 1.5, clean: 1.5 },
-      dinner: { chef: 3.0, prep: 2.0, serve: 1.5, clean: 1.5 },
-      full_day: { chef: 6.0, prep: 4.5, serve: 3.5, clean: 3.5 }
+      morning: { chef: 2.5, prep: 2.0, serve: 1.5, clean: 1.5, delivery: 1.0, listen: 1.5 },
+      dinner: { chef: 3.0, prep: 2.0, serve: 1.5, clean: 1.5, delivery: 1.0, listen: 1.5 },
+      full_day: { chef: 6.0, prep: 4.5, serve: 3.5, clean: 3.5, delivery: 2.5, listen: 3.5 }
     } as Record<string, Record<string, number>>,
     // 🍳 按当前 selectedShift 换算过工时的工种卡片展示数据，WXML 的 job-grid-container
     // 实际迭代这份而不是静态的 jobTypeDefinitions——切换班次时随之刷新
