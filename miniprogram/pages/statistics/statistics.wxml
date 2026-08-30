@@ -646,24 +646,28 @@
       </view>
     </view>
 
-    <!-- 🆕 爱心互助调拨建议（2026-08-30 跨店爱心调拨建议引擎）：同机构内
-         "紧缺门店"（资金续航 ≤7 天或主料库存告急）与"充裕门店"（资金续航
-         >45 天）轻量撮合，帮大家长/超管一眼看出"该找哪家兄弟门店求助"，
-         而不是空泛地告诉他"这家店缺钱"。无紧缺门店或撮合不到合适对象
-         （同城/同省都没有充裕门店）时，服务端 supportSuggestions 为空数组，
-         整张卡片优雅隐藏，不占位、不留一个空标题 -->
-    <view class="support-suggestion-card" wx:if="{{(isPatriarch || isAdmin) && nationalData.supportSuggestions && nationalData.supportSuggestions.length > 0}}">
+    <!-- 🆕 跨店爱心互助调拨建议（2026-08-30 首版，2026-08-31 升级为
+         rebalanceSuggestions 结构化撮合结果）：同机构内"受援门店"（资金续航
+         ≤7 天或主料库存告急）与"支援门店"（资金续航 ≥45 天）轻量撮合，帮
+         大家长/超管一眼看出"该找哪家兄弟门店求助"。与上方「门店健康度告警
+         中心」同一条常驻展示策略——受援门店为空时展示"全网门店运营稳健"的
+         正向空状态，而不是整块消失，让大家长明确知道"系统检查过、结果是
+         没有风险" -->
+    <view class="support-suggestion-card" wx:if="{{isPatriarch || isAdmin}}">
       <view class="matrix-header">
-        <text class="matrix-title">🤝 爱心互助调拨建议</text>
+        <text class="matrix-title">🤝 跨店爱心互助调拨建议</text>
       </view>
-      <view class="support-suggestion-list">
-        <view class="support-suggestion-item" wx:for="{{nationalData.supportSuggestions}}" wx:key="shortageStoreId">
+      <view class="support-suggestion-list" wx:if="{{nationalData.rebalanceSuggestions && nationalData.rebalanceSuggestions.length > 0}}">
+        <view class="support-suggestion-item" wx:for="{{nationalData.rebalanceSuggestions}}" wx:key="targetStoreId">
           <view class="ssi-header">
-            <text class="ssi-store">🏪 {{item.shortageStoreName}}</text>
-            <text class="ssi-reason">{{item.reason}}</text>
+            <text class="ssi-store">🏪 {{item.targetStoreName}}</text>
+            <text class="ssi-urgency-tag ssi-urgency-{{item.urgency}}">{{item.urgency === 'HIGH' ? '紧急' : '关注'}}</text>
           </view>
-          <text class="ssi-text">{{item.suggestion}}</text>
+          <text class="ssi-text">{{item.reason}}</text>
         </view>
+      </view>
+      <view class="support-suggestion-empty" wx:else>
+        <text class="support-suggestion-empty-text">✅ 全网门店运营稳健，暂无告急</text>
       </view>
     </view>
 

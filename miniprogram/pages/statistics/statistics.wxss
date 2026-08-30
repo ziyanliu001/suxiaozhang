@@ -3409,12 +3409,24 @@ page {
   color: #0f766e;
 }
 
-.ssi-reason {
-  font-size: 22rpx;
-  color: #0d9488;
-  background: rgba(13, 148, 136, 0.12);
+/* 🆕 urgency 徽标：HIGH（资金续航≤7天）用告急红，MEDIUM（仅主料告急，
+   资金尚健康）用关注橙，与门店健康度告警中心的红/橙配色呼应，但用不同
+   底色区分"这是调拨建议区"而不是"又一条红色警报" */
+.ssi-urgency-tag {
+  font-size: 20rpx;
+  font-weight: 600;
   padding: 2rpx 14rpx;
   border-radius: 100rpx;
+}
+
+.ssi-urgency-HIGH {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.ssi-urgency-MEDIUM {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
 }
 
 .ssi-text {
@@ -3422,6 +3434,17 @@ page {
   font-size: 24rpx;
   color: #374151;
   line-height: 1.5;
+}
+
+/* 🆕 空状态：与 .health-alert-empty 同一套弱化居中文案规范 */
+.support-suggestion-empty {
+  text-align: center;
+  padding: 24rpx 0;
+}
+
+.support-suggestion-empty-text {
+  font-size: 24rpx;
+  color: #2f9e44;
 }
 
 /* 🆕 黑金配色治理区块：与页面其余白底卡片明确区隔，标示这是超管权限专区 */

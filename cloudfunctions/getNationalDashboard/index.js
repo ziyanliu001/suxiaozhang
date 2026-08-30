@@ -171,9 +171,9 @@ function sanitizeReportForVolunteer(data, userRole) {
     // (仅剩5天)"），同样需要整体遮罩，否则 SENSITIVE_KEYS 这份按字段名清空的
     // 机制会漏掉"数字被嵌进文本"这种间接泄露
     'fundingDays', 'alertTags',
-    // 🆕 跨店调拨建议里点名了具体门店的续航天数（candidateStores[].fundingDays）
-    // 与文案（suggestion 里嵌了店名+"充裕"字样），同属财务隐私，一并脱敏
-    'supportSuggestions',
+    // 🆕 跨店调拨建议（rebalanceSuggestions）文案里点名了具体门店与"资金告急
+    // (仅剩X天)"这类具体天数，同属财务隐私，一并脱敏
+    'rebalanceSuggestions',
     // 🆕 支出环比趋势会暴露"运营规模是在扩张还是收缩"这类财务动向，与它所描述的
     // 原始支出金额同一档隐私级别，一并脱敏；服务人次环比不涉及财务，不需要遮罩
     'nationalTotalExpenseTrend',
@@ -565,7 +565,9 @@ exports.main = async (event, context) => {
         // pages/index/index.ts "充足/一般/告急"三档口径一致（stapleRiceStatus/
         // stapleOilStatus 是 report_logs 上的枚举字段，见 publicVerifyReport
         // 头部注释），供跨店爱心调拨建议引擎判断"紧缺门店"用
-        stapleUrgent: false
+        stapleUrgent: false,
+        // 🆕 审计存证指纹：门店最新一条记录是否已财务稽核封账
+        hasAuditProof: false
       };
     });
 
@@ -610,7 +612,8 @@ exports.main = async (event, context) => {
             lastReportDate: '',
             expenseRecordCount: 0,
             receiptRecordCount: 0,
-            stapleUrgent: false
+            stapleUrgent: false,
+            hasAuditProof: false
           };
         }
         matchedKey = sId;
@@ -671,6 +674,13 @@ exports.main = async (event, context) => {
           : dayDiff < 7  ? dayDiff + '天前'
           : dayDiff < 30 ? Math.floor(dayDiff / 7) + '周前'
           : Math.floor(dayDiff / 30) + '个月前';
+        // 🆕 审计存证指纹打标（2026-08-31）：记录本身是否已经过财务稽核封账
+        // （report_logs.approvalStatus === 'AUDITED_LOCKED'）——APPROVED 只是
+        // 店长/大家长核对确认过，AUDITED_LOCKED 是更进一步的财务复核锁定，
+        // 公信力等级更高，供前端在善缘墙上展示"已稽核"合规标识，不代表未
+        // 打标的记录不可信（本函数查询条件本就只认 APPROVED/AUDITED_LOCKED
+        // 两档已生效数据，见文件头/logsQueryConditions 注释）
+        const hasAuditProof = log.approvalStatus === 'AUDITED_LOCKED';
         donationItems.forEach(item => {
           if (publicDonorEntries.length >= 40) return;
           publicDonorEntries.push({
@@ -678,7 +688,8 @@ exports.main = async (event, context) => {
             amount:    parseFloat(item.amount) || 0,
             storeName: entryStoreName,
             orgType:   entryOrgType,
-            timeLabel
+            timeLabel,
+            hasAuditProof
           });
         });
       }
@@ -736,6 +747,10 @@ exports.main = async (event, context) => {
           // "充足/一般/告急"三档展示一致，取窗口内最新一条记录的枚举值
           // （report_logs.stapleRiceStatus/stapleOilStatus，'urgent' 即告急）
           entry.stapleUrgent = log.stapleRiceStatus === 'urgent' || log.stapleOilStatus === 'urgent';
+          // 🆕 审计存证指纹打标：门店最新一条记录是否已财务稽核封账，供
+          // 门店矩阵展示公信力合规标识（与 latestPublicDonors 每条记录各自
+          // 独立打标的 hasAuditProof 同一套口径，这里是"门店当前状态"视角）
+          entry.hasAuditProof = log.approvalStatus === 'AUDITED_LOCKED';
         }
       }
     });
@@ -934,6 +949,9 @@ exports.main = async (event, context) => {
         fundingDays,
         healthStatus,
         stapleUrgent: !!s.stapleUrgent,
+        // 🆕 审计存证指纹打标：门店最新一条记录是否已财务稽核封账
+        // （AUDITED_LOCKED），公信力等级高于普通 APPROVED，供前端展示合规标识
+        hasAuditProof: !!s.hasAuditProof,
         alertTags: fundingTags,
         costPerMeal,
         avgMealCost,
@@ -991,57 +1009,67 @@ exports.main = async (event, context) => {
     // 按服务人次降序排列
     storeMatrix.sort((a, b) => b.totalDiners - a.totalDiners);
 
-    // 🆕 跨店爱心调拨建议引擎（2026-08-30）：在同一机构（storeMatrix 已经过
+    // 🆕 跨店爱心调拨建议引擎（2026-08-30 首版，2026-08-31 升级为
+    // rebalanceSuggestions 结构化撮合结果）：在同一机构（storeMatrix 已经过
     // tenantId 硬隔离 + targetStores 范围收窄，见文件头/上方 isScopedFilter
-    // 注释）名下，把"紧缺门店"与"充裕门店"撮合成轻量建议，帮大家长一眼看出
+    // 注释）名下，把"受援门店"与"支援门店"撮合成轻量建议，帮大家长一眼看出
     // "该找哪家兄弟门店求助"，而不是空泛地告诉他"这家店缺钱"。
-    // 紧缺：资金续航 ≤7 天（healthStatus==='CRITICAL'）或主料库存告急，
-    // 二者满足其一即可——资金健康但恰好断粮、或账上有钱但青黄不接，都算
-    // 需要外部支援。充裕：资金续航 >45 天，且暂不考虑主料库存（有钱不代表
-    // 一定有多余的米油可以支援，只用资金侧筛"有没有余力"）
+    // 受援（NeedSupport）：healthStatus==='CRITICAL'（资金续航≤7天，天然已
+    // 排除 NEW_STORE——新店 healthStatus 恒为 'NEW_STORE'，见上方评级逻辑）
+    // 或主料库存告急，二者满足其一即可——资金健康但恰好断粮、或账上有钱但
+    // 青黄不接，都算需要外部支援。
+    // 支援（CanSupport）：资金续航 ≥45 天，且排除"运营不稳定"的门店——
+    // isSeriouslyOffline 只在超管视角下发，非超管响应里该字段是 undefined，
+    // !undefined 恒为 true，不会误伤非超管视角下的可选门店范围
     const SURPLUS_FUNDING_DAYS_THRESHOLD = 45;
     const shortageStores = storeMatrix.filter(s =>
       s.healthStatus === 'CRITICAL' || s.stapleUrgent
     );
     const surplusStores = storeMatrix.filter(s =>
-      typeof s.fundingDays === 'number' && s.fundingDays > SURPLUS_FUNDING_DAYS_THRESHOLD
+      typeof s.fundingDays === 'number' && s.fundingDays >= SURPLUS_FUNDING_DAYS_THRESHOLD && !s.isSeriouslyOffline
     );
-    const supportSuggestions = [];
-    if (shortageStores.length > 0 && surplusStores.length > 0) {
-      shortageStores.forEach(shortage => {
-        // 优先撮合同城，同城没有充裕门店时退而求其次找同省——跨省调拨物流/
-        // 人情成本都太高，不在轻量建议的范围内，宁可不建议也不瞎凑
-        const sameCity = surplusStores.filter(s =>
-          s.storeId !== shortage.storeId && shortage.city && s.city === shortage.city
-        );
-        const sameProvince = surplusStores.filter(s =>
-          s.storeId !== shortage.storeId && shortage.province && s.province === shortage.province
-        );
-        const candidates = sameCity.length > 0 ? sameCity : sameProvince;
-        if (candidates.length === 0) return;
+    const rebalanceSuggestions = [];
+    shortageStores.forEach(shortage => {
+      // 优先撮合同城，同城没有充裕门店时退而求其次找同省——跨省调拨物流/
+      // 人情成本都太高，不在轻量建议的范围内
+      const sameCity = surplusStores.filter(s =>
+        s.storeId !== shortage.storeId && shortage.city && s.city === shortage.city
+      );
+      const sameProvince = surplusStores.filter(s =>
+        s.storeId !== shortage.storeId && shortage.province && s.province === shortage.province
+      );
+      const candidates = sameCity.length > 0 ? sameCity : sameProvince;
+      // 🆕 与首版不同：即便同城/同省都找不到充裕门店，也不再直接丢弃这条
+      // 受援记录——受援门店本身的"需要关注"信号不该因为撮合不到内部对象就
+      // 消失不见，改为生成一条 sourceStoreId 缺省的建议，提示改走对外劝募
+      const best = candidates.length > 0
+        ? candidates.slice().sort((a, b) => b.fundingDays - a.fundingDays)[0]
+        : null;
+      const scopeLabel = sameCity.length > 0 ? '同城' : '同省';
 
-        const picked = candidates
-          .slice()
-          .sort((a, b) => b.fundingDays - a.fundingDays)
-          .slice(0, 2);
-        const scopeLabel = sameCity.length > 0 ? '同城' : '同省';
-        const reasonParts = [];
-        if (shortage.healthStatus === 'CRITICAL') {
-          reasonParts.push(`资金续航仅剩${shortage.fundingDays}天`);
-        }
-        if (shortage.stapleUrgent) {
-          reasonParts.push('主料库存告急');
-        }
+      const isFundingCritical = shortage.healthStatus === 'CRITICAL';
+      const urgency = isFundingCritical ? 'HIGH' : 'MEDIUM';
 
-        supportSuggestions.push({
-          shortageStoreId: shortage.storeId,
-          shortageStoreName: shortage.storeName,
-          reason: reasonParts.join('、'),
-          candidateStores: picked.map(p => ({ storeId: p.storeId, storeName: p.storeName, fundingDays: p.fundingDays })),
-          suggestion: `建议${shortage.storeName}向${scopeLabel}充裕门店（${picked.map(p => p.storeName).join('、')}）申请物资协调/爱心平调`
-        });
+      let reasonCore;
+      if (isFundingCritical && shortage.stapleUrgent) {
+        reasonCore = `资金告急(仅剩${shortage.fundingDays}天)且主料库存告急`;
+      } else if (isFundingCritical) {
+        reasonCore = `资金告急(仅剩${shortage.fundingDays}天)`;
+      } else {
+        reasonCore = '主料（大米/食用油）库存告急';
+      }
+
+      rebalanceSuggestions.push({
+        targetStoreId: shortage.storeId,
+        targetStoreName: shortage.storeName,
+        sourceStoreId: best ? best.storeId : undefined,
+        sourceStoreName: best ? best.storeName : undefined,
+        reason: best
+          ? `${reasonCore}，建议${scopeLabel}平调支援`
+          : `${reasonCore}，同城/同省暂无充裕门店可平调，建议发起对外爱心劝募`,
+        urgency
       });
-    }
+    });
 
     const nationalSummary = {
       // 🆕 筛选态下，覆盖门店总数应反映当前筛选范围（targetStores），而不是本机构
@@ -1085,7 +1113,7 @@ exports.main = async (event, context) => {
       // （对 isPatriarch/hq_finance/regional_finance/super_admin 可见，志工
       // 视角走下方 SENSITIVE_KEYS 统一置空——建议文案里点名了其他门店的
       // 续航天数，属于同一档财务隐私）
-      supportSuggestions,
+      rebalanceSuggestions,
       // 🏮 品牌矩阵标签：非 null 时大屏标题应使用此标签（如"同心慈善会矩阵"）
       brandMatrixLabel,
       // 🌍 多业态受助群体人次分维度：{ [orgType]: { dineIn, delivery, total } }[]
