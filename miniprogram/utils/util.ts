@@ -37,6 +37,24 @@ export function getSafeSystemInfo() {
   }
 }
 
+// 🐛 根因修复：微信开发者工具里切换到 iPhone 机型模拟器调试时，
+// wx.getDeviceInfo().platform 恒为 'devtools'，不会变成 'ios'——如果 iOS 专属
+// 分支（如订阅弹窗隐藏价格/支付按钮，见 pages/profile/profile.ts）只判断
+// platform === 'ios'，开发者工具里选 iPhone 机型也永远进不去该分支，看起来
+// "改了但没生效"，容易被误判成代码没生效而不是判断条件本身覆盖不到调试环境。
+// 开发者工具的机型模拟会把 model/system 换成对应的 iPhone 型号名/iOS 版本号
+// （如 model: 'iPhone 15 Pro'，system: 'iOS 17.0'），兜底再从这两个字段识别，
+// 覆盖开发者工具调试场景；真机上 platform 本身就已经是 'ios'，第一个条件
+// 就命中，不受这条兜底影响
+export function isIOSDevice(sysInfo?: ReturnType<typeof getSafeSystemInfo>): boolean {
+  const info = sysInfo || getSafeSystemInfo();
+  if (info.platform === 'ios') return true;
+  if (info.platform === 'devtools') {
+    return /ios|iphone/i.test(info.model || '') || /ios/i.test(info.system || '');
+  }
+  return false;
+}
+
 // 🐛 性能修复：wx.getStorageSync 的异步替代——journey.ts/store-profile.ts/
 // daily-menu.ts/activity-log.ts 等页面 onLoad/onShow 里读取 current_user_role/
 // current_store_id 等零散 key 时，此前各自直接调用 wx.getStorageSync，同步

@@ -2,7 +2,7 @@ import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
 import { DataService } from '../../utils/dataService';
 import { getSelectedStore, setSelectedStore, getCurrentActiveStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { computeMyCheckInStats, computeMyCheckInStatsWithTodayFallback, computeMyCheckInStreak, getMyCheckInLogs } from '../../utils/checkinStats';
-import { getSafeSystemInfo } from '../../utils/util';
+import { getSafeSystemInfo, isIOSDevice } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -5644,9 +5644,11 @@ Page({
     if (this.data.subscriptionLoading) return;
     // 🍎 iOS 虚拟商品支付合规：微信小程序平台规则要求 iOS 客户端不得展示价格/
     // 拉起小程序内支付，每次打开弹窗都重新探测一次（成本极低，避免长驻页面
-    // 缓存一份过期的平台判断），WXML 据此隐藏价格与支付按钮
+    // 缓存一份过期的平台判断），WXML 据此隐藏价格与支付按钮。isIOSDevice()
+    // 而不是直接判 platform === 'ios'——开发者工具切换 iPhone 机型调试时
+    // platform 恒为 'devtools'，见 utils/util.ts isIOSDevice 头部注释
     const sysInfo = getSafeSystemInfo();
-    const isIOSPlatform = sysInfo.platform === 'ios';
+    const isIOSPlatform = isIOSDevice(sysInfo);
     this.setData({
       showSubscriptionModal: true,
       subscriptionLoading: true,
