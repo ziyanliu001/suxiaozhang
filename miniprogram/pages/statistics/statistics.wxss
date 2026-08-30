@@ -241,6 +241,66 @@ page {
   font-size: 22rpx;
 }
 
+/* 🆕 全国大屏顶部横幅：替代单店模式下的"当前统计门店"卡片，见
+   statistics.wxml store-select-header-row / national-banner-row 注释 */
+.national-banner-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.national-banner-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.national-banner-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+}
+
+.national-banner-text {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #1A56DB;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.national-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+
+.national-banner-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  background: #E7F5FF;
+  border: 1rpx solid #A5D8FF;
+  padding: 8rpx 16rpx;
+  border-radius: 30rpx;
+}
+
+.national-banner-action-icon {
+  font-size: 20rpx;
+}
+
+.national-banner-action-text {
+  font-size: 22rpx;
+  color: #1C7ED6;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
 .national-entry-text {
   font-size: 22rpx;
   color: #FFFFFF;

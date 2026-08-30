@@ -222,6 +222,13 @@ exports.main = async (event, context) => {
       return { success: false, error: '无法确认您所属的机构，暂不支持访问数据大屏' };
     }
 
+    // 🆕 机构名称：供前端全国大屏顶部横幅"📊 爱心网络总览 · [机构名称]"展示，
+    // 与 checkTenantPermission 云函数同款只读 name 字段查法（不新增权限面，
+    // tenantId 本就只从调用者自己的 user_roles 反查，与上面的隔离判断同一条
+    // 安全边界）
+    const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true }).get().catch(() => null);
+    const tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
+
     // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：本大屏属于
     // 「全国大屏 / 透视台」维度——社会公信力与透明公开账目总览，查看权限不
     // 挂钩租户订阅套餐，与「工作空间 / 生产台」维度（多店连锁管理、Excel
@@ -255,7 +262,17 @@ exports.main = async (event, context) => {
     // 两者可独立叠加——例如"雨花斋 + 按地区筛选"同时生效。
     // 没有 orgType 字段的历史门店（建站前录入）在"全部平台"模式下正常计入；选定具体类型
     // 后，历史门店因 orgType 字段缺失而被排除——预期行为，驱动门店完善档案录入。
-    const requestedOrgType = (event && event.orgType && event.orgType !== 'all') ? String(event.orgType) : null;
+    // 🐛 根因修复（专区外分类污染）：雨花公益食堂专区的大屏此前接受任意 orgType
+    // 字符串作为筛选参数，前端 Tab 列表历史上也曾出现过不属于本专区的分类
+    // （救援队/同心儿童院/其他组织等，来自早期跨业态探索、并未真正落地成
+    // createStore 表单可选项），选中后台无法归属任何真实门店的筛选值直接
+    // 产生一个空数据大屏，界面表现为"点了这个分类什么都没有"。服务端现在
+    // 只认食堂专区实际合规的三个业态分类，客户端传入的其余任何值一律静默
+    // 退回"全部平台"（不筛选），不是报错拒绝——与本文件一贯的防御性降级
+    // 风格一致（宁可退回安全默认值也不中断请求）
+    const SUPPORTED_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station'];
+    const requestedOrgType = (event && event.orgType && SUPPORTED_ORG_TYPES.includes(event.orgType))
+      ? String(event.orgType) : null;
     if (requestedOrgType) {
       allStores = allStores.filter(s => s.orgType === requestedOrgType);
     }
@@ -963,7 +980,8 @@ exports.main = async (event, context) => {
       success: true,
       nationalSummary: sanitizeReportForVolunteer(nationalSummary, userRole),
       storeMatrix: sanitizeReportForVolunteer(storeMatrix, userRole),
-      superAdminInsights
+      superAdminInsights,
+      tenantName
     };
   } catch (err) {
     console.error('[getNationalDashboard] 异常:', err);

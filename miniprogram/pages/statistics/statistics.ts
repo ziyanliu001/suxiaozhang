@@ -17,14 +17,19 @@ import { writeLocalFileSafe } from '../../utils/localFileCache';
 
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致
 // shortName 用于动态拼装大屏标题；label 是筛选胶囊展示文案
+// 🐛 根因修复（专区外分类污染）：此前这份列表还挂着"救援队/同心儿童院/
+// 其他组织"三个不属于雨花公益食堂专区的选项——其中"同心儿童院"对应的
+// orgType 甚至从未出现在 createStore 云函数的 VALID_ORG_TYPES 白名单里
+// （从来没有真实门店能被创建成这个类型），选中后台面上什么数据都没有，
+// 表现为"点了这个分类什么都没有"的空白页。现在收窄为食堂专区实际合规的
+// 三个业态 + 全部平台，与 cloudfunctions/getNationalDashboard 的
+// SUPPORTED_ORG_TYPES 白名单保持同一份口径（两处独立维护，无共享模块
+// 机制，需要手动同步）
 const ORG_TYPE_FILTER_OPTIONS = [
   { label: '全部平台', value: 'all', shortName: '全网' },
   { label: '🌸 雨花斋', value: 'yuhuazhai', shortName: '雨花斋' },
   { label: '👵 助老食堂', value: 'elderly_canteen', shortName: '社区助老食堂' },
-  { label: '🤝 义工服务站', value: 'volunteer_station', shortName: '义工服务站' },
-  { label: '🛟 救援队', value: 'rescue_team', shortName: '应急救援队' },
-  { label: '🧒 同心儿童院', value: 'tongxin_children', shortName: '同心儿童院' },
-  { label: '💫 其他组织', value: 'other', shortName: '其他爱心组织' }
+  { label: '🤝 义工服务站', value: 'volunteer_station', shortName: '义工服务站' }
 ];
 
 // 🆕 平台类型徽章文案：与 dashboardTitle 复用同一份 shortName 映射，避免另起一套命名。
@@ -600,6 +605,9 @@ Page({
     showNationalDashboardEntry: false,
     dashboardTitle: '🌐 全网爱心矩阵数据大屏',
     dashboardRoleTag: '',
+    // 🆕 顶部横幅"📊 爱心网络总览 · [机构名称]"：来自 getNationalDashboard
+    // 返回的 tenantName，加载完成前/查询失败时兜底展示通用文案，不留空
+    currentTenantName: '',
     // 🏢 全国大屏平台类型筛选器：'all' = 不限类型（默认），其他值对应 stores.orgType
     nationalOrgTypeFilter: 'all',
     orgTypeFilterOptions: ORG_TYPE_FILTER_OPTIONS,
@@ -1799,7 +1807,9 @@ Page({
           // 🆕 影像墙平台徽章：每张图云函数已带上 orgType 原始值，转成短文案
           nationalMediaGallery: (r.superAdminInsights && Array.isArray(r.superAdminInsights.nationalMediaGallery))
             ? r.superAdminInsights.nationalMediaGallery.map((g: any) => ({ ...g, orgTypeLabel: orgTypeShortName(g.orgType) }))
-            : []
+            : [],
+          // 🆕 顶部横幅机构名：见 data.currentTenantName 声明处注释
+          currentTenantName: r.tenantName || ''
         });
 
         // 🔢 义工与用餐服务数据看板：数据落地后驱动一次 0 → 目标值的滚动动画

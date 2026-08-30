@@ -19,7 +19,12 @@
 
   <view class="content-area" style="padding-top: {{contentTop}}px;">
     <view class="ui-card-wrapper period-control-card">
-      <view class="store-select-header-row">
+      <!-- 🐛 根因修复：全国大屏模式下此前仍然常驻展示"当前统计门店：xxx"这张
+           单店卡片（只有下方周期 Tab 那一段被隐藏），与页面下方真正的全国大屏
+           内容语义脱节——用户在全国总览视角还看着一行单店信息，容易误以为
+           大屏数据只是这一家店的。现在按 showNationalDashboard 二选一：单店
+           模式展示原有的门店信息+切换器，全国大屏模式换成专属横幅 -->
+      <view class="store-select-header-row" wx:if="{{!showNationalDashboard}}">
         <view class="store-label">
           <text class="pin-icon">📍</text>
           <text class="title">当前统计门店</text>
@@ -35,7 +40,7 @@
             <text class="arrow">▼</text>
           </view>
         </picker>
-        <view wx:elif="{{isPatriarch && showNationalDashboardEntry && !showNationalDashboard}}" class="patriarch-store-row">
+        <view wx:elif="{{isPatriarch && showNationalDashboardEntry}}" class="patriarch-store-row">
           <view class="store-picker-pill locked">
             <text class="name">{{currentUserStoreName || shopName}}</text>
             <text class="lock-icon">🔒</text>
@@ -51,6 +56,25 @@
           <text class="name">{{currentUserStoreName || shopName}}</text>
           <text class="lock-icon">🔒</text>
           <text class="role-tag-badge" wx:if="{{currentUserRole}}">{{roleLabelMap[currentUserRole]}}</text>
+        </view>
+      </view>
+      <view class="national-banner-row" wx:else>
+        <view class="national-banner-title">
+          <text class="national-banner-icon">📊</text>
+          <text class="national-banner-text">爱心网络总览 · {{currentTenantName || '全国爱心网络'}}</text>
+        </view>
+        <view class="national-banner-actions">
+          <view class="national-banner-action-btn" hover-class="ui-hover" bindtap="onRefreshData">
+            <text class="national-banner-action-icon">🔄</text>
+            <text class="national-banner-action-text">刷新数据</text>
+          </view>
+          <!-- 数据导出：直接复用页面下方已有的"生成运营/财务报表"弹窗（onOpenNationalReportModal），
+               不重复实现一套导出逻辑；与该弹窗按钮同一条 isAdmin 权限口径，
+               非超管在这里同样看不到导出入口 -->
+          <view class="national-banner-action-btn" hover-class="ui-hover" bindtap="onOpenNationalReportModal" wx:if="{{isAdmin}}">
+            <text class="national-banner-action-icon">📄</text>
+            <text class="national-banner-action-text">数据导出</text>
+          </view>
         </view>
       </view>
 
