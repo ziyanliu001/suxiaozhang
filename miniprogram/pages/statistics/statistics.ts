@@ -891,8 +891,11 @@ Page({
     // 直接拉起导出配置弹窗（见 openExportConfigModal），让用户自主选定年/月，
     // 空值校验交给用户确认选择之后
     const autoOpenExportConfig = (options && options.autoShowExport === 'true') || actionParam === 'export';
-    // 大家长从"全国数据看板"入口跳转而来，角色落地后自动切入全国视图
-    if (options && options.view === 'national') {
+    // 大家长从"全国数据看板"入口跳转而来，角色落地后自动切入全国视图。
+    // filterMode==='national' 一并识别（预留的等价入参写法，目前尚无实际跳转
+    // 携带这个参数，但语义与 view=national 完全等价，不应该被漏判）
+    const isNationalIntent = !!(options && (options.view === 'national' || options.filterMode === 'national'));
+    if (isNationalIntent) {
       (this as any)._autoNationalIntent = true;
     }
 
@@ -903,9 +906,20 @@ Page({
     this.calculateNavBarHeight();
     this.initCustomDates();
     this.initUserRole();
-    this.scheduleReloadStats();
+    // 🐛 根因修复（并发雪崩）：明确是"直接进全国大屏"的入口跳转时，本页当前
+    // 门店的 loadShopList()/getReports（单店报表列表、门店选择器计数）与全国
+    // 大屏是两套完全独立、互不重叠的数据源——national 视图不渲染任何依赖它们
+    // 的 UI（stats-content 整块被 wx:if="{{!showNationalDashboard}}" 隐藏），
+    // 调度这次刷新纯属陪跑，还会跟 initUserRole() 触发的 loadNationalDashboard/
+    // getPatriarchDashboard 抢占同一时间窗口的云函数并发配额，是"路由超时警告
+    // +多个云函数互相排队"的根因之一。跳过调度，全国视图自己的数据完全由
+    // applyRolePermissions() 里的 _autoNationalIntent 分支驱动
+    if (!isNationalIntent) {
+      this.scheduleReloadStats();
+    }
     // 🐛 见 _skipNextShowReload 声明处注释：冷启动紧随其后的第一次 onShow 不用
-    // 再重复调度一次 reloadShopListAndStats()，这里已经调度过了
+    // 再重复调度一次 reloadShopListAndStats()——不管上面是否跳过了 onLoad 自己
+    // 的这次调度，national 入口同样不需要 onShow 补一次
     this._skipNextShowReload = true;
     this.initWatermarkIdentity();
 
@@ -1265,7 +1279,14 @@ Page({
         isAllStoresMode: shouldDefaultToNational
       });
       this.fetchStoreProfile();
-      if (isPatriarch) {
+      // 🐛 根因修复（并发雪崩）：大家长从 profile「全国数据看板」入口带
+      // view=national 跳转直达全国大屏时，下面 _autoNationalIntent 分支会立即
+      // 触发 _triggerPatriarchNationalView()——单店营运的资源续航卡片根本不会
+      // 渲染（wxml 里只在非全国视图分支展示），这里提前查一次 getPatriarchDashboard
+      // 纯属浪费一次云函数调用，还会跟马上发起的 loadNationalDashboard 抢占
+      // 并发配额，是"进入全国大屏卡顿"的根因之一
+      const headingStraightToNational = isPatriarch && (this as any)._autoNationalIntent;
+      if (isPatriarch && !headingStraightToNational) {
         // 🆕 家长专属：资源储备/资金物资兜底/续航预警——与店长/财务共用的
         // 单店营运卡片是两套不同的数据源，单独加载
         this.loadPatriarchResourceStats();
@@ -1374,6 +1395,11 @@ Page({
   // 不接受客户端传参指定查其他门店），只在本页面重新映射展示字段，不重复实现
   // 权限校验逻辑
   async loadPatriarchResourceStats() {
+    // 🐛 根因修复（并发雪崩）：与 loadNationalDashboard() 同一个根因——initUserRole()
+    // 缓存命中 + 网络角色请求落地各触发一次 applyRolePermissions()，isPatriarch
+    // 分支此前无条件调用本方法，两次都会各自打一次 getPatriarchDashboard。用
+    // patriarchStatsLoading 本身当请求中防重标志位，避免同一时刻发起第二次
+    if (this.data.patriarchStatsLoading) return;
     this.setData({ patriarchStatsLoading: true });
     try {
       const res: any = await callFunctionWithTimeout({
@@ -1633,6 +1659,15 @@ Page({
 
   async loadNationalDashboard() {
     console.log('[NationalDashboard] 开始拉取全国大屏数据...');
+    // 🐛 根因修复（并发雪崩）：initUserRole() 命中本地角色缓存时会先同步触发一次
+    // applyRolePermissions()，随后 AuthService.fetchUserRole() 网络请求落地后又
+    // 会再触发一次——两次都可能各自独立地走到 loadNationalDashboard()（大家长
+    // _autoNationalIntent 分支 / 超管 shouldDefaultToNational 分支），叠加
+    // onPatriarchGoNational 等用户主动入口，同一时间窗口内轻易打出两份并发的
+    // getNationalDashboard 请求，互相排队拖长响应时间、甚至先返回的那次
+    // finally 已经把 loading 置回 false 让后一次重复渲染。这里用 nationalDashboardLoading
+    // 本身当请求中防重标志位，同一时刻只允许一次真正在途的调用
+    if (this.data.nationalDashboardLoading) return;
     if (!this.data.canViewNationalDashboard) return;
     if (!this.data.isAllStoresMode) return;
 
@@ -1666,10 +1701,15 @@ Page({
       this.setData({ dashboardTitle });
       console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
+      // 🐛 根因修复：全国大屏是跨机构/跨门店的聚合查询，服务端要扫描的数据量远
+      // 超单店 getReports，8000ms 通用默认超时在弱网/冷启动叠加高并发时经常
+      // 提前判死（日志里的"调用超时（>8000ms）"），实际云函数还在正常跑、只是
+      // 前端已经先一步展示了失败态。这里单独放宽到 15000ms，与本次调用的真实
+      // 耗时量级匹配，不影响其余调用点仍使用的默认 8000ms
       const result = await callFunctionWithTimeout({
         name: 'getNationalDashboard',
         data: callParams
-      });
+      }, 15000);
 
       console.log('[DEBUG] getNationalDashboard 返回原始结果：', result);
 
