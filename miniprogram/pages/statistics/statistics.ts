@@ -2193,6 +2193,8 @@ Page({
   //   +20  healthStatus === 'WARNING'：资金续航 8~15 天
   //   +20  latestBalance < 0：账面已出现赤字
   //   +10  hasRiskFlag：凭证合规率 < 100%（仅超管视角下发此字段）
+  //   +25  stapleUrgent：主料（大米/食用油）库存告急——与资金续航是独立维度，
+  //        资金健康但恰好断粮的门店也需要被这份告警中心捕捉到
   // healthStatus === 'NEW_STORE'（新店爬坡中，开餐天数 < 3 天）直接跳过，不计
   // 入告警中心——样本量太小，不构成"需要支援"的信号，只是还没攒够数据。
   //
@@ -2224,6 +2226,9 @@ Page({
       }
       if (s.hasRiskFlag) {
         score += 10;
+      }
+      if (s.stapleUrgent) {
+        score += 25;
       }
 
       if (score === 0) continue;
