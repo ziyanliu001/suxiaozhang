@@ -437,6 +437,16 @@
         <text class="love-wall-sub">了凡四训 · 阳善积德</text>
       </view>
 
+      <!-- 🆕 阳光防篡改存证徽标（2026-08-31）：auditProofSummary 是公信力/
+           合规展示指标（覆盖率、是否存在签名缺口），不涉及具体收支金额，
+           对所有角色（含志工）一视同仁展示。chainStatus==='VERIFYING' 时
+           换一种颜色提示"存在需要核查的数据完整性缺口"，不代表账目被篡改，
+           不使用红色等报警色，避免和真正的资金/离线告警混淆 -->
+      <view class="audit-proof-badge audit-proof-{{nationalData.auditProofSummary.chainStatus}}" wx:if="{{nationalData.auditProofSummary}}">
+        <text class="audit-proof-icon">🔒</text>
+        <text class="audit-proof-text">阳光账目存证守护中 · 已封账数据防篡改（覆盖率 {{nationalData.auditProofSummary.auditCoverageRate}}）</text>
+      </view>
+
       <!-- KPI 行：支持人次 + 现场随喜总额（随喜总额对志工脱敏） -->
       <view class="love-kpi-row">
         <view class="love-kpi-cell">
@@ -605,34 +615,51 @@
           wx:for="{{supportNeededStores}}"
           wx:key="storeId"
         >
-          <!-- 左侧：严重程度指示点 + 门店名称与省市位置 -->
-          <view class="hai-left">
-            <view class="hai-dot severity-dot-{{item.severity}}"></view>
-            <view class="hai-info">
-              <view class="hai-name-row">
-                <text class="hai-location" wx:if="{{item.location}}">【{{item.location}}】</text>
-                <text class="hai-name">{{item.storeName}}</text>
-                <!-- 🆕 平台徽章：区分待支援站点所属业态——平台类型筛选 Tab 已移除
-                     （大盘固定展示全部平台），不再需要按筛选状态判断是否展示 -->
-                <text class="hai-org-tag">{{item.orgTypeLabel}}</text>
+          <view class="hai-top-row">
+            <!-- 左侧：严重程度指示点 + 门店名称与省市位置 -->
+            <view class="hai-left">
+              <view class="hai-dot severity-dot-{{item.severity}}"></view>
+              <view class="hai-info">
+                <view class="hai-name-row">
+                  <text class="hai-location" wx:if="{{item.location}}">【{{item.location}}】</text>
+                  <text class="hai-name">{{item.storeName}}</text>
+                  <!-- 🆕 平台徽章：区分待支援站点所属业态——平台类型筛选 Tab 已移除
+                       （大盘固定展示全部平台），不再需要按筛选状态判断是否展示 -->
+                  <text class="hai-org-tag">{{item.orgTypeLabel}}</text>
+                </view>
+                <text class="hai-score hai-score-{{item.severity}}">风险分 {{item.supportScore}}</text>
               </view>
-              <text class="hai-score hai-score-{{item.severity}}">风险分 {{item.supportScore}}</text>
+            </view>
+            <!-- 右侧：危险红/警示橙圆角 Tag，靠右对齐展示，排查一眼可见。
+                 🆕 原因标签最多展示 2 条（reasonTags 已按扣分权重降序排列，见
+                 deriveSupportNeededStores），超过部分折叠成"+N"徽标——此前风险因素
+                 多的门店（如同时离线+资金告急+合规不足）会堆出 3~4 个满宽度胶囊，
+                 把整行撑得很高，与旁边只有 1 条标签的门店行高差异悬殊 -->
+            <view class="hai-right">
+              <text
+                class="hai-tag hai-tag-{{item.severity}}"
+                wx:for="{{item.reasonTags}}"
+                wx:key="*this"
+                wx:for-item="tag"
+                wx:if="{{index < 2}}"
+              >{{tag}}</text>
+              <text class="hai-tag-more" wx:if="{{item.reasonTags.length > 2}}">+{{item.reasonTags.length - 2}}</text>
             </view>
           </view>
-          <!-- 右侧：危险红/警示橙圆角 Tag，靠右对齐展示，排查一眼可见。
-               🆕 原因标签最多展示 2 条（reasonTags 已按扣分权重降序排列，见
-               deriveSupportNeededStores），超过部分折叠成"+N"徽标——此前风险因素
-               多的门店（如同时离线+资金告急+合规不足）会堆出 3~4 个满宽度胶囊，
-               把整行撑得很高，与旁边只有 1 条标签的门店行高差异悬殊 -->
-          <view class="hai-right">
-            <text
-              class="hai-tag hai-tag-{{item.severity}}"
-              wx:for="{{item.reasonTags}}"
-              wx:key="*this"
-              wx:for-item="tag"
-              wx:if="{{index < 2}}"
-            >{{tag}}</text>
-            <text class="hai-tag-more" wx:if="{{item.reasonTags.length > 2}}">+{{item.reasonTags.length - 2}}</text>
+          <!-- 🆕 失联告警一键督导触达（2026-08-31）：两个按钮对任意告警门店都
+               常驻展示——managerPhone 只在 CRITICAL/OFFLINE 门店由服务端下发
+               （见 getNationalDashboard isSuperAdmin || isPatriarchCaller 判断），
+               缺失时 onCallStoreManager 自己兜底改为复制门店名称，不需要在
+               WXML 里预判"有没有电话"再决定要不要渲染按钮 -->
+          <view class="hai-actions">
+            <view class="hai-action-btn" hover-class="ui-hover" bindtap="onCallStoreManager" data-item="{{item}}">
+              <text class="hai-action-icon">📞</text>
+              <text class="hai-action-text">一键联系</text>
+            </view>
+            <view class="hai-action-btn" hover-class="ui-hover" bindtap="onCopyCareMessage" data-item="{{item}}">
+              <text class="hai-action-icon">💌</text>
+              <text class="hai-action-text">督导关怀</text>
+            </view>
           </view>
         </view>
       </view>

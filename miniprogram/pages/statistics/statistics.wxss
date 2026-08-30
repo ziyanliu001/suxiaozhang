@@ -2929,6 +2929,39 @@ page {
   font-style: italic;
 }
 
+/* 🆕 阳光防篡改存证徽标（2026-08-31）：SECURED 用沉稳的蓝绿色传达"已核验"，
+   VERIFYING 用中性灰黄提示"核查中"——刻意不用红色，避免和资金/离线告警的
+   报警色混淆，这条徽标本身传达的是正面的公信力信息 */
+.audit-proof-badge {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.audit-proof-SECURED {
+  background: rgba(13, 148, 136, 0.08);
+  border: 1rpx solid rgba(13, 148, 136, 0.20);
+}
+
+.audit-proof-VERIFYING {
+  background: rgba(156, 163, 175, 0.12);
+  border: 1rpx solid rgba(156, 163, 175, 0.25);
+}
+
+.audit-proof-icon {
+  font-size: 22rpx;
+  flex-shrink: 0;
+}
+
+.audit-proof-text {
+  font-size: 21rpx;
+  color: #374151;
+  line-height: 1.4;
+}
+
 /* KPI 行 */
 .love-kpi-row {
   display: flex;
@@ -3180,13 +3213,52 @@ page {
 }
 
 /* 单条告警行：左侧门店名称/位置，右侧危险红/警示橙圆角 Tag */
+/* 🐛 2026-08-31 结构调整：原来的行内 flex 布局（hai-left/hai-right 并排）
+   下移到新增的 .hai-top-row 上，.health-alert-item 本身改为纵向排列，
+   为下方新增的 .hai-actions（一键联系/督导关怀）腾出独立的一行 */
 .health-alert-item {
+  display: flex;
+  flex-direction: column;
+  border-radius: 16rpx;
+  padding: 16rpx 18rpx;
+  gap: 10rpx;
+}
+
+.hai-top-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  border-radius: 16rpx;
-  padding: 16rpx 18rpx;
   gap: 12rpx;
+}
+
+/* 🆕 一键联系 / 督导关怀操作行 */
+.hai-actions {
+  display: flex;
+  gap: 10rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.06);
+}
+
+.hai-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  background: #FFFFFF;
+  border: 1rpx solid rgba(0, 0, 0, 0.10);
+  border-radius: 100rpx;
+  padding: 8rpx 0;
+}
+
+.hai-action-icon {
+  font-size: 22rpx;
+}
+
+.hai-action-text {
+  font-size: 22rpx;
+  color: #374151;
+  font-weight: 600;
 }
 
 .health-alert-item.severity-critical {

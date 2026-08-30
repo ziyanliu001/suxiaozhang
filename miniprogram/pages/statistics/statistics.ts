@@ -2253,6 +2253,58 @@ Page({
     return result.sort((a: any, b: any) => b.supportScore - a.supportScore).slice(0, 10);
   },
 
+  // 🆕 失联告警一键督导触达（2026-08-31）：一键联系——managerPhone 只在
+  // CRITICAL/OFFLINE 门店由服务端下发（getNationalDashboard 只对
+  // isSuperAdmin || isPatriarchCaller 附带这个字段，其余角色本就看不到本卡片，
+  // 见 WXML wx:if="isPatriarch || isAdmin"），没有登记电话时不留一个点了没
+  // 反应的死按钮，退而求其次复制门店名称，方便用户自己在通讯录/群聊里找人
+  onCallStoreManager(e: any) {
+    const item = (e.currentTarget.dataset.item || {}) as any;
+    const phone = item.managerPhone;
+    if (!phone) {
+      wx.setClipboardData({
+        data: item.storeName || '',
+        success: () => wx.showToast({ title: '暂未登记店长电话，已复制门店名称', icon: 'none', duration: 2500 })
+      });
+      return;
+    }
+    wx.makePhoneCall({
+      phoneNumber: phone,
+      fail: () => wx.showToast({ title: '拨号失败，请手动拨打', icon: 'none' })
+    });
+  },
+
+  // 🆕 督导关怀：按 reasonTags 的优先级（失联→离线→资金→主料→合规，与
+  // deriveSupportNeededStores 的加分权重排序一致）挑一句最贴切的具体原因，
+  // 不逐条堆砌，保持关怀文案简洁自然、像真人写的而不是系统日志
+  onCopyCareMessage(e: any) {
+    const item = (e.currentTarget.dataset.item || {}) as any;
+    const location = item.location ? `【${item.location}】` : '';
+    const managerLabel = item.managerName ? `${item.managerName}店长` : `${item.storeName || '门店'}店长`;
+    const tags: string[] = Array.isArray(item.reasonTags) ? item.reasonTags : [];
+
+    let concern = '门店近期运营情况';
+    if (tags.some((t: string) => t.indexOf('失联') !== -1)) {
+      concern = '门店已失联多日未记账';
+    } else if (tags.some((t: string) => t.indexOf('离线') !== -1)) {
+      concern = '门店已离线未记账';
+    } else if (tags.some((t: string) => t.indexOf('资金') !== -1)) {
+      concern = '门店资金续航偏紧';
+    } else if (tags.some((t: string) => t.indexOf('主料') !== -1)) {
+      concern = '门店主料库存偏紧';
+    } else if (tags.some((t: string) => t.indexOf('合规') !== -1)) {
+      concern = '门店凭证合规率有待补齐';
+    } else if (tags.some((t: string) => t.indexOf('赤字') !== -1)) {
+      concern = '门店账面出现赤字';
+    }
+
+    const message = `【雨花爱心网络关怀】${location}${managerLabel}您好，系统检测到${concern}，请问近期食材与义工排班是否需要协助？`;
+    wx.setClipboardData({
+      data: message,
+      success: () => wx.showToast({ title: '关怀文案已复制，可直接粘贴发送', icon: 'none', duration: 2500 })
+    });
+  },
+
   formatNationalMatrixData(rawStores: any[]): any[] {
     return rawStores.map((store: any) => {
       const diners = parseInt(store.totalDiners || store.diningCount || 0);

@@ -259,6 +259,14 @@ exports.main = async (event, context) => {
     // （sanitizeReportForVolunteer/前端 isManager），付费墙只保留在 Excel
     // 批量导出等真正的深度功能上，不在这里拦截
     const isSuperAdmin = userRole === 'super_admin';
+    // 🆕（2026-08-31 失联告警一键督导触达）：门店离线判定与联系人信息此前
+    // 只对 isSuperAdmin 下发，但「门店健康度告警中心」卡片本就对
+    // store_patriarch 同样可见（见前端 wx:if="isPatriarch || isAdmin"）——
+    // 大家长是本机构内部的最高负责人，理应拥有和超管同等的"自己机构内"
+    // 运营治理视野，不该被挡在"离线了哪家店、该打给谁"这类信息之外。这条
+    // 判断只加宽"离线检测+联系人"这一小块字段，receiptComplianceRate/
+    // hasRiskFlag（凭证合规审计）仍严格保持 isSuperAdmin 专属，不一并放开
+    const isPatriarchCaller = userRole === 'store_patriarch';
 
     // 🛡️ 超管专属高阶治理看板：时间维度切片仅对已核验的 super_admin 生效——即使
     // hq_finance/regional_finance/volunteer 在 event 里传了 rangeType，也一律忽略，
@@ -574,6 +582,16 @@ exports.main = async (event, context) => {
     // 兜底门店（stores 集合中未注册但有日志的门店）
     const fallbackStoreMap = {};
 
+    // 🆕 阳光防篡改存证覆盖率统计（auditProofSummary）：totalReportsInScope 是
+    // 本次聚合范围内全部生效报表（APPROVED + AUDITED_LOCKED，见 logsQueryConditions
+    // 的 approvalStatus 过滤），totalAuditedLocked 是其中已财务稽核封账的部分，
+    // totalAuditedWithProof 是"封账 且 确实带有 HMAC 防篡改签名"的部分——
+    // stampReportChecksum 云函数才会写入 _checksum，理论上封账记录应该 100%
+    // 带签名，覆盖率统计正是用来发现"封了账但签名缺失"这类数据完整性缺口
+    let totalReportsInScope = 0;
+    let totalAuditedLocked = 0;
+    let totalAuditedWithProof = 0;
+
     allLogs.forEach(log => {
       const logStoreName = log.shopName || '';
       const sId = log.storeId || logStoreName || '_unclassified_store_';
@@ -716,6 +734,17 @@ exports.main = async (event, context) => {
 
       const entry = storeStatsMap[matchedKey];
       if (entry) {
+        // 🆕 阳光防篡改存证覆盖率：见上方 totalReportsInScope 声明处注释，
+        // 按"这条记录是否真正计入本次聚合范围"（entry 命中即为在范围内）逐条
+        // 计数，不受下方 isNewStore/fundingDays 等派生判断影响
+        totalReportsInScope++;
+        if (log.approvalStatus === 'AUDITED_LOCKED') {
+          totalAuditedLocked++;
+          if (log._checksum) {
+            totalAuditedWithProof++;
+          }
+        }
+
         entry.totalDiners += diners;
         entry.totalIncome += income;
         entry.totalExpense += expense;
@@ -860,6 +889,11 @@ exports.main = async (event, context) => {
       nationalMediaGallery.push(...allPhotoEntries.slice(0, 12));
     }
 
+    // 🆕 失联告警一键督导触达：CRITICAL/OFFLINE 门店的 storeId 集合，构建完
+    // storeMatrix 后统一批量查一次 user_roles，不在下面的逐店 map 循环里各自
+    // 发起查询
+    const storeIdsNeedingContact = new Set();
+
     // 🆕 动态物资与资金续航预测引擎（2026-08-30）：计算各店单餐成本与资金续航预警
     const storeMatrix = Object.values(storeStatsMap).map(s => {
       // 🐛 根因修复（新店误报"告急(0天)"）：查询窗口内实际开餐天数 < 3 天时，
@@ -962,13 +996,11 @@ exports.main = async (event, context) => {
         isCostRestricted: false
       };
 
-      // 🛡️ 凭证合规率 + 离线天数属于"超管专属高阶治理"维度，只在服务端确认调用者
-      // 确系 super_admin 时才附加，hq_finance/regional_finance/volunteer 拿到的
-      // storeMatrix 结构与升级前完全一致，不额外扩大这些角色的数据可见范围
-      if (isSuperAdmin) {
-        item.receiptComplianceRate = s.expenseRecordCount > 0
-          ? Number(((s.receiptRecordCount / s.expenseRecordCount) * 100).toFixed(1))
-          : null;
+      // 🛡️ 离线检测：此前只对 isSuperAdmin 下发，见 isPatriarchCaller 声明处
+      // 注释——store_patriarch 是本机构最高负责人，理应拥有和超管同等的
+      // "自己机构内"运营治理视野。hq_finance/regional_finance/volunteer 拿到
+      // 的 storeMatrix 结构与升级前完全一致，不额外扩大这些角色的数据可见范围
+      if (isSuperAdmin || isPatriarchCaller) {
         item.lastReportDate = s.lastReportDate || '';
         const daysSinceLastReport = s.lastReportDate ? daysBetween(s.lastReportDate, todayStr) : null;
         // 🆕 lastReportDaysAgo：与既有 daysSinceLastReport 同一个值，新增一个
@@ -980,11 +1012,6 @@ exports.main = async (event, context) => {
         // 描述的是"曾经在正常运转、突然停止上报"，不该扣在新店头上）
         item.isOffline = !isNewStore && (daysSinceLastReport === null || daysSinceLastReport > OFFLINE_ALERT_DAYS);
         item.isSeriouslyOffline = !isNewStore && (daysSinceLastReport === null || daysSinceLastReport > SERIOUS_OFFLINE_ALERT_DAYS);
-        // 🌟 全局大屏"今日预警门店数"用：凭证合规率不满 100%（即扫描区间内有支出
-        // 记录缺失小票）即视为需要关注，与 store-management 页 getRiskAlerts 的
-        // missing_receipt 判定同一个口径，这里不重新发起 N 次单店查询，直接复用
-        // 本函数已经在跑的同一份逐日志聚合结果
-        item.hasRiskFlag = item.receiptComplianceRate !== null && item.receiptComplianceRate < 100;
 
         const offlineTags = [];
         if (!isNewStore) {
@@ -993,14 +1020,38 @@ exports.main = async (event, context) => {
           } else if (item.isOffline) {
             offlineTags.push(`离线${daysSinceLastReport}天`);
           }
-          if (item.hasRiskFlag) {
+        }
+
+        // 🛡️ 凭证合规率仍严格保持 super_admin 专属——比"离线没记账"更细的
+        // 财务审计维度，不属于大家长日常督导所需的最小信息集，不随上面这条
+        // 放宽一并扩大
+        if (isSuperAdmin) {
+          item.receiptComplianceRate = s.expenseRecordCount > 0
+            ? Number(((s.receiptRecordCount / s.expenseRecordCount) * 100).toFixed(1))
+            : null;
+          // 🌟 全局大屏"今日预警门店数"用：凭证合规率不满 100%（即扫描区间内有
+          // 支出记录缺失小票）即视为需要关注，与 store-management 页
+          // getRiskAlerts 的 missing_receipt 判定同一个口径，这里不重新发起
+          // N 次单店查询，直接复用本函数已经在跑的同一份逐日志聚合结果
+          item.hasRiskFlag = item.receiptComplianceRate !== null && item.receiptComplianceRate < 100;
+          if (!isNewStore && item.hasRiskFlag) {
             offlineTags.push('凭证合规率不足');
           }
         }
+
         // 离线/合规告警排在资金告警前面——运营中断/失联的紧迫性通常高于
         // 资金预警，与 statistics.ts deriveSupportNeededStores 的加分权重
         // 排序保持一致
         item.alertTags = [...offlineTags, ...fundingTags];
+
+        // 🆕 失联告警一键督导触达：CRITICAL/OFFLINE 门店才附带联系人信息，
+        // 避免给运营健康的门店也塞一份不会被用到的字段；storeIdsNeedingContact
+        // 收集后统一批量查询 user_roles，不在这层循环里逐店发起查询
+        if (item.isOffline || healthStatus === 'CRITICAL') {
+          storeIdsNeedingContact.add(s.storeId);
+        }
+      } else {
+        item.alertTags = fundingTags;
       }
 
       return item;
@@ -1008,6 +1059,48 @@ exports.main = async (event, context) => {
 
     // 按服务人次降序排列
     storeMatrix.sort((a, b) => b.totalDiners - a.totalDiners);
+
+    // 🆕 失联告警一键督导触达：批量查询 CRITICAL/OFFLINE 门店的联系人信息
+    // （店长优先，门店没有单独店长时退回大家长本人），一次查询覆盖所有
+    // 需要联系人的门店，不对每家门店各自发起一次查询。tenantId 仍是硬隔离
+    // 边界——只查本机构名下的 user_roles，不存在跨租户读到别的机构联系方式
+    if (storeIdsNeedingContact.size > 0) {
+      const contactRes = await db.collection('user_roles')
+        .where({
+          tenantId,
+          storeId: _.in(Array.from(storeIdsNeedingContact)),
+          role: _.in(['store_manager', 'store_patriarch'])
+        })
+        .field({ storeId: true, role: true, realName: true, phone: true })
+        .limit(100)
+        .get()
+        .catch(() => ({ data: [] }));
+
+      const contactMap = {};
+      (contactRes.data || []).forEach(r => {
+        if (!r.storeId) return;
+        // 店长优先：同一门店若同时匹配到 store_manager 和 store_patriarch
+        // （大家长直接兼管某家店的罕见情形），保留先遇到的 store_manager，
+        // 不被后遇到的 patriarch 记录覆盖
+        const existing = contactMap[r.storeId];
+        if (!existing || (existing.role !== 'store_manager' && r.role === 'store_manager')) {
+          contactMap[r.storeId] = r;
+        }
+      });
+
+      storeMatrix.forEach(item => {
+        if (!storeIdsNeedingContact.has(item.storeId)) return;
+        const contact = contactMap[item.storeId];
+        if (!contact) return;
+        // managerName 无条件脱敏（即便对已经能看到 managerPhone 的大家长/超管
+        // 也一样）——与本项目其余"内部展示同样默认脱敏"的口径一致，见
+        // maskName/formatDonorDisplayName 头部注释；managerPhone 是原始号码，
+        // 只在能走到这个分支（isSuperAdmin || isPatriarchCaller）时才会被
+        // 赋值，义工等其余角色的 storeMatrix 条目上这个字段始终不存在
+        item.managerName = maskName(contact.realName || '');
+        item.managerPhone = contact.phone || '';
+      });
+    }
 
     // 🆕 跨店爱心调拨建议引擎（2026-08-30 首版，2026-08-31 升级为
     // rebalanceSuggestions 结构化撮合结果）：在同一机构（storeMatrix 已经过
@@ -1071,6 +1164,24 @@ exports.main = async (event, context) => {
       });
     });
 
+    // 🆕 阳光防篡改存证覆盖率（auditProofSummary）：覆盖率 = 封账且带签名的
+    // 报表数 / 本次聚合范围内全部生效报表数（APPROVED + AUDITED_LOCKED），
+    // 是"我们机构有多大比例的账目已经过最高等级的财务核验与防篡改签名"这个
+    // 公信力指标，供向民政/理事会汇报使用。chainStatus：范围内没有封账记录，
+    // 或封账记录 100% 都带有效签名 → SECURED；存在"封了账但签名缺失"的数据
+    // 完整性缺口 → VERIFYING（提示需要人工核查，不代表数据被篡改）
+    const auditCoverageRate = totalReportsInScope > 0
+      ? ((totalAuditedWithProof / totalReportsInScope) * 100).toFixed(1) + '%'
+      : '0.0%';
+    const chainStatus = (totalAuditedLocked === 0 || totalAuditedWithProof === totalAuditedLocked)
+      ? 'SECURED'
+      : 'VERIFYING';
+    const auditProofSummary = {
+      totalAuditedReports: totalAuditedWithProof,
+      auditCoverageRate,
+      chainStatus
+    };
+
     const nationalSummary = {
       // 🆕 筛选态下，覆盖门店总数应反映当前筛选范围（targetStores），而不是本机构
       // 全量门店数——否则"按地区筛选"选中一个只有 2 家门店的城市，KPI 卡却仍显示
@@ -1114,6 +1225,10 @@ exports.main = async (event, context) => {
       // 视角走下方 SENSITIVE_KEYS 统一置空——建议文案里点名了其他门店的
       // 续航天数，属于同一档财务隐私）
       rebalanceSuggestions,
+      // 🆕 阳光防篡改存证覆盖率：这是公信力/合规展示指标，不是财务隐私数字
+      // （不透露具体收支金额），对所有角色（含志工）一视同仁下发，不进
+      // SENSITIVE_KEYS 脱敏名单
+      auditProofSummary,
       // 🏮 品牌矩阵标签：非 null 时大屏标题应使用此标签（如"同心慈善会矩阵"）
       brandMatrixLabel,
       // 🌍 多业态受助群体人次分维度：{ [orgType]: { dineIn, delivery, total } }[]
