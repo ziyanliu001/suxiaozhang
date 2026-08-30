@@ -1170,6 +1170,20 @@ Page({
     // 可选全部五种（大家长是门店最高负责人），店长只放开 [门店财务, 家人, 志愿者]
     // （大家长/门店店长两档与调用者自身同级或更高，严禁越权生成）
     genAvailableRoles: ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER'] as string[],
+    // 🐛 排查加固：与 job-type 工种网格（refreshDisplayJobTypes）同一处历史
+    // 修复思路——WXML {{}} 表达式引擎对"在模板里现场调用数组方法"（这里是
+    // genAvailableRoles.includes(...)）的求值可靠性不完全可信任，且一旦
+    // genAvailableRoles 的运行时形状意外不是数组（如被某次 setData 错误地
+    // 赋成了字符串——字符串同样有 .includes() 方法，但语义变成子串匹配，
+    // 只会让"恰好是子串"的那一项被误判为可用，其余全部被误判禁用，且不会
+    // 抛出任何错误/警告，非常隐蔽），WXML 侧完全看不出问题出在哪。这里在
+    // TS 侧把"每个角色是否禁用"预算成显式布尔字段，WXML 只读布尔值，不再
+    // 现场调用任何数组方法，彻底消除这一整类不确定性
+    genRolePatriarchDisabled: false,
+    genRoleManagerDisabled: false,
+    genRoleFinanceDisabled: false,
+    genRoleFamilyDisabled: false,
+    genRoleVolunteerDisabled: false,
 
     // 🔑 生成结果弹窗：展示 8 位邀请码 + 对应太阳码，与 gencode-modal 是两个独立弹窗——
     // 生成成功后立即关闭 gencode-modal、打开这个结果弹窗，不再像旧版那样自动复制关闭
@@ -4053,6 +4067,26 @@ Page({
       ? ['PATRIARCH', 'MANAGER', 'FINANCE', 'FAMILY', 'VOLUNTEER']
       : ['FINANCE', 'FAMILY', 'VOLUNTEER'];
 
+    // 🐛 排查加固：见 genRolePatriarchDisabled 等字段声明处注释——预算好每个
+    // 角色的禁用态，WXML 不再现场调用 genAvailableRoles.includes(...)
+    const genRolePatriarchDisabled = !genAvailableRoles.includes('PATRIARCH');
+    const genRoleManagerDisabled = !genAvailableRoles.includes('MANAGER');
+    const genRoleFinanceDisabled = !genAvailableRoles.includes('FINANCE');
+    const genRoleFamilyDisabled = !genAvailableRoles.includes('FAMILY');
+    const genRoleVolunteerDisabled = !genAvailableRoles.includes('VOLUNTEER');
+
+    // 🐛 排查诊断日志：临时保留，用于确认"除大家长外全部禁用"这类异常究竟是
+    // isRealSuperAdmin/isPatriarch 本身取值有问题，还是 genAvailableRoles
+    // 计算/渲染环节的问题——复现问题时请把这几行日志一并截图反馈
+    console.log('[onOpenGenCodeModal] 权限诊断：', {
+      isRealSuperAdmin,
+      isPatriarch: this.data.isPatriarch,
+      isManager: this.data.isManager,
+      isSuperAdmin: this.data.isSuperAdmin,
+      currentViewMode: this.data.currentViewMode,
+      genAvailableRoles
+    });
+
     this.setData({
       showGenCodeModal: true,
       generatedCode: '',
@@ -4061,6 +4095,11 @@ Page({
       genStoreOptions: storeOptions,
       genStoreSelectorDisabled,
       genAvailableRoles,
+      genRolePatriarchDisabled,
+      genRoleManagerDisabled,
+      genRoleFinanceDisabled,
+      genRoleFamilyDisabled,
+      genRoleVolunteerDisabled,
       targetGenStoreId: defaultStore ? defaultStore.storeId : '',
       targetGenStoreName: defaultStore ? defaultStore.storeName : ''
     });

@@ -2371,38 +2371,43 @@
              （showInviteModal/.invite-role-grid）保持同一套规范，此前两处各自
              维护一份图标体系（这里是 idx-icon-* 图标字体，profile 是原生 emoji）
              + 不一致的角色中文名，用户在不同入口看到的"同一个身份"长得不一样 -->
+        <!-- 🐛 排查加固：禁用态不再在 WXML 里现场调用 genAvailableRoles.includes(...)，
+             改读 TS 侧预算好的 genRoleXxxDisabled 布尔字段（onOpenGenCodeModal
+             计算），与 job-type 工种网格（displayJobTypes 的 selected/active）
+             同一处历史修复思路——WXML 表达式引擎里现场调用数组方法的可靠性/
+             可排查性都不如直接读一个已经算好的布尔值 -->
         <view class="form-item-row">
           <text class="form-label">2. 选择授权身份：</text>
           <view class="gencode-role-group">
-            <view class="gencode-role-item {{genTargetRole === 'PATRIARCH' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('PATRIARCH') ? 'gencode-role-disabled' : ''}}"
+            <view class="gencode-role-item {{genTargetRole === 'PATRIARCH' ? 'active' : 'inactive'}} {{genRolePatriarchDisabled ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="PATRIARCH">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'PATRIARCH'}}">✓</view>
               <text class="gencode-role-icon">🏛️</text>
               <text class="gencode-role-name">大家长</text>
               <text class="gencode-role-desc">机构全局权限与审批</text>
             </view>
-            <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('MANAGER') ? 'gencode-role-disabled' : ''}}"
+            <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}} {{genRoleManagerDisabled ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="MANAGER">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'MANAGER'}}">✓</view>
               <text class="gencode-role-icon">⚙️</text>
               <text class="gencode-role-name">门店店长</text>
               <text class="gencode-role-desc">门店日常核销与管理</text>
             </view>
-            <view class="gencode-role-item {{genTargetRole === 'FINANCE' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('FINANCE') ? 'gencode-role-disabled' : ''}}"
+            <view class="gencode-role-item {{genTargetRole === 'FINANCE' ? 'active' : 'inactive'}} {{genRoleFinanceDisabled ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="FINANCE">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'FINANCE'}}">✓</view>
               <text class="gencode-role-icon">💰</text>
               <text class="gencode-role-name">财务记账</text>
               <text class="gencode-role-desc">收支记账与报表核对</text>
             </view>
-            <view class="gencode-role-item {{genTargetRole === 'FAMILY' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('FAMILY') ? 'gencode-role-disabled' : ''}}"
+            <view class="gencode-role-item {{genTargetRole === 'FAMILY' ? 'active' : 'inactive'}} {{genRoleFamilyDisabled ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="FAMILY">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'FAMILY'}}">✓</view>
               <text class="gencode-role-icon">❤️</text>
               <text class="gencode-role-name">爱心家人</text>
               <text class="gencode-role-desc">查看爱心餐与门店动态</text>
             </view>
-            <view class="gencode-role-item {{genTargetRole === 'VOLUNTEER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('VOLUNTEER') ? 'gencode-role-disabled' : ''}}"
+            <view class="gencode-role-item {{genTargetRole === 'VOLUNTEER' ? 'active' : 'inactive'}} {{genRoleVolunteerDisabled ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="VOLUNTEER">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'VOLUNTEER'}}">✓</view>
               <text class="gencode-role-icon">🙏</text>
@@ -2420,7 +2425,7 @@
             👑 大家长作为最高负责人，可直接任命店长、财务及继任大家长。
           </view>
           <!-- 🔒 店长：仍有两档任命不了，给出准确的限制说明——找大家长而不是只说超管 -->
-          <view class="gencode-role-restrict-tip" wx:elif="{{!genAvailableRoles.includes('MANAGER')}}">
+          <view class="gencode-role-restrict-tip" wx:elif="{{genRoleManagerDisabled}}">
             🔒 店长仅可发放【门店财务】【家人】【志愿者】邀请码，大家长/门店店长身份需大家长或超级管理员授权
           </view>
         </view>
