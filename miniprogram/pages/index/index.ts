@@ -6519,10 +6519,18 @@ Page({
   // 反馈"点击触发日志打印了，之后再没有任何动静"完全吻合，纯粹的 setTimeout/
   // Promise 层面等不到结果，光靠 fail 回调兜底完全没用——因为 fail 压根不会
   // 触发。用 withTimeout（本文件已引入的全局超时封装）给 chooseMedia 设一个
-  // 5s 超时上限：超时或 chooseMedia 本身不存在（wx.canIUse 返回 false）就自动
+  // 超时上限：超时或 chooseMedia 本身不存在（wx.canIUse 返回 false）就自动
   // 回退到兼容性更好、几乎所有环境都支持的 wx.chooseImage（虽是旧 API 但选图
-  // 这个基础能力上落地更早、更稳）。5s 足够覆盖正常的选图/取消交互耗时，不会
-  // 在用户还在原生面板里挑图时就误触发回退
+  // 这个基础能力上落地更早、更稳）。
+  // 🐛 二次订正：这个超时的性质与 callFunctionWithTimeout 那类"网络/云函数
+  // 耗时"完全不同——chooseMedia 的等待时长取决于用户本人的操作节奏（在相册里
+  // 翻找照片、临时改主意切到拍照、拍完还要预览确认），不是一个可预期的固定
+  // 区间，5s 对这类"人在交互，不是接口在耗时"的等待完全不够，实测会在用户
+  // 还没选完图时就被判定超时，转而弹出第二个 wx.chooseImage 面板打断用户，
+  // 表现为"选图选到一半突然被打断/换了一个面板"。改为 60s——这个超时的唯一
+  // 目的是兜底"chooseMedia 在这个环境下彻底坏掉、回调永远不会来"这一种极端
+  // 情况，不是给用户的选图操作设一道时限，60s 已经远超正常人挑图/改用拍照的
+  // 合理耗时，不会再误伤真实交互
   chooseDonorScreenshotSafe(): Promise<string> {
     const viaChooseMedia = new Promise<string>((resolve, reject) => {
       if (!wx.canIUse('chooseMedia')) {
@@ -6546,7 +6554,7 @@ Page({
       });
     });
 
-    return withTimeout(viaChooseMedia, 5000, 'chooseMedia 超时未响应').catch((err) => {
+    return withTimeout(viaChooseMedia, 60000, 'chooseMedia 超时未响应').catch((err) => {
       // 🛡️ 用户主动在原生面板里点取消，errMsg 会明确带 cancel，这类"正常放弃
       // 选图"不该被当成"chooseMedia 坏了"再弹一个 chooseImage 面板出来干扰用户，
       // 直接把原始取消错误继续抛给调用方（外层 catch 已有 cancel 静默处理）
