@@ -43,7 +43,7 @@ const PLAN_STORE_LIMIT_DEFAULTS: Record<string, string> = {
   enterprise: '30'
 };
 
-// 🌟 套餐档位切换联动：basic 固定为「1 家门店 + 永久有效」，不再需要选服务
+// 🌟 套餐档位切换联动：basic 固定为「2 家门店 + 永久有效」，不再需要选服务
 // 到期日期；pro/enterprise 恢复成"以开始日期为基准往后一年"的到期日建议值 +
 // 该档位的默认门店配额，两者都还可以在弹窗里手动改
 function getPlanQuotaDefaults(planType: string, serviceStartDate: string): { storeLimit: string; serviceExpireDate: string } {

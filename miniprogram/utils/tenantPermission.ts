@@ -103,6 +103,10 @@ export interface TenantPermissionResult {
   // 两者是两个不同层级，见 profile.ts fetchCurrentTenantName 注释）。platform_admin/
   // 未归属任何机构/查询失败时为空字符串
   tenantName: string;
+  // 🆕 已接入门店数：与 storeLimit 搭配展示"已接入 X / Y 家"配额进度（见
+  // profile.ts fetchSubscriptionInfo），取自 tenants.currentStoreCount（与
+  // createStore/manageTenantSubscription 原子自增写入的同一个字段，唯一真源）
+  usedStoreCount: number;
 }
 
 // 保守放行的默认结果：查询失败/云不可用/未命中缓存前的兜底值。宁可放行一次
@@ -115,10 +119,15 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
   isInGracePeriod: false,
   graceExpireDate: null,
   coreReadOnly: false,
-  storeLimit: 1,
+  // 🐛 根因修复：basic（免费默认档）真实门店上限是 2 家（见 checkTenantPermission
+  // 云函数 PLAN_STORE_LIMITS 与雨花斋服务协议第 3 节费率表），此前这里写的 1
+  // 与服务端口径不一致——虽然这只是"云不可用时的保守放行兜底值"，不参与任何
+  // 服务端硬校验，但仍会导致弹窗在网络异常时短暂展示错误的配额基准
+  storeLimit: 2,
   serviceExpireDate: null,
   reason: '',
-  tenantName: ''
+  tenantName: '',
+  usedStoreCount: 0
 };
 
 // 🛡️ 轻量内存缓存：同一 featureKey 60s 内不重复发起云调用，避免用户在
@@ -155,7 +164,8 @@ const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
   storeLimit: Number.MAX_SAFE_INTEGER,
   serviceExpireDate: null,
   reason: '',
-  tenantName: ''
+  tenantName: '',
+  usedStoreCount: 0
 };
 
 export async function checkTenantPermission(
@@ -190,10 +200,13 @@ export async function checkTenantPermission(
       isInGracePeriod: !!r.isInGracePeriod,
       graceExpireDate: r.graceExpireDate || null,
       coreReadOnly: !!r.coreReadOnly,
-      storeLimit: r.storeLimit || 1,
+      // 🐛 根因修复：与上方 FALLBACK_ALLOWED 同一处 basic 配额口径错误——
+      // 真实兜底值应是 2 家，不是 1 家
+      storeLimit: r.storeLimit || 2,
       serviceExpireDate: r.serviceExpireDate || null,
       reason: r.reason || '',
-      tenantName: r.tenantName || ''
+      tenantName: r.tenantName || '',
+      usedStoreCount: r.usedStoreCount || 0
     };
     _cache[featureKey] = { result, expiresAt: Date.now() + CACHE_TTL_MS };
     return result;

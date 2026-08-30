@@ -4898,6 +4898,12 @@
   font-size: 23rpx;
   color: #FFD27A;
 }
+.sub-store-quota-line {
+  display: block;
+  font-size: 22rpx;
+  color: rgba(255,255,255,0.55);
+  margin-top: 6rpx;
+}
 
 /* ── ② 中间滚动区：.sub-modal-body / .sub-scroll-body（同一元素双类名）──
    flex:1 + min-height:0 + overflow-y:auto 是让"确定高度的 flex 父容器"里
@@ -5279,6 +5285,16 @@
 /* 📦 门店配额标签：紧跟在每档价格下方，清晰标注"包含机构门店上限：X 家"。
    数字部分单独用 .sub-plan-quota-num 包裹并放大加粗突出，是用户扫一眼最想
    确认的具体数值，与前后说明文字拉开一档视觉权重 */
+.sub-ios-compliance-banner {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #8A6D1F;
+  background: #FFF8E1;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
 .sub-plan-quota-tag {
   display: inline-block;
   font-size: 26rpx;

@@ -48,12 +48,13 @@ function isCollectionNotExistError(err) {
 // 这是本仓库一贯的做法，见各处重复出现的 DEFAULT_TENANT_ID 常量）。
 // 取"最近一次续费的订阅记录"（orderBy lastRenewedAt desc limit 1）；到期
 // （serviceExpireDate 已过）自动降级为 basic；从未订阅过（无记录）同样按
-// basic 处理；storeLimit 取 cloudQuota.storeLimit，缺省 1（免费版门店数上限）
+// basic 处理；storeLimit 取 cloudQuota.storeLimit，缺省 2（basic 免费版门店
+// 数上限，见 PLAN_STORE_LIMITS，与雨花斋服务协议第 3 节费率表一致）
 async function checkTenantPermission(tenantId, featureKey) {
   if (!tenantId) {
     return {
       allowed: false, planType: 'basic', isExpired: false, isInGracePeriod: false,
-      graceExpireDate: null, coreReadOnly: false, storeLimit: 1, serviceExpireDate: null,
+      graceExpireDate: null, coreReadOnly: false, storeLimit: PLAN_STORE_LIMITS.basic, serviceExpireDate: null,
       reason: '无法确认所属机构'
     };
   }
@@ -168,23 +169,29 @@ exports.main = async (event) => {
         reason: '',
         // 🏢 platform_admin 不隶属任何机构（见 authService.ts UserRole 注释），
         // 空字符串即语义正确，不需要伪造一个"平台方"机构名
-        tenantName: ''
+        tenantName: '',
+        usedStoreCount: 0
       };
     }
 
     const result = await checkTenantPermission(tenantId, featureKey);
 
-    // 🏢 机构名称：与 planType/storeLimit 同一次调用一并下发，供个人中心页顶部
-    // "归属机构"展示使用（不再把门店名误当机构名展示，见 profile.ts/profile.wxml
-    // 的 belong-store-tag 修复）。只读 name 字段，不新增权限面——tenantId 本就
-    // 只从调用者自己的 user_roles 记录反查，与上面套餐查询同一条安全边界
+    // 🏢 机构名称 + 已接入门店数：与 planType/storeLimit 同一次调用一并下发，
+    // 供个人中心页"专业服务/订阅管理"弹窗顶部展示"归属机构"与"已接入 X / Y 家"
+    // 门店配额进度（不再把门店名误当机构名展示，见 profile.ts/profile.wxml 的
+    // belong-store-tag 修复）。只读这两个字段，不新增权限面——tenantId 本就
+    // 只从调用者自己的 user_roles 记录反查，与上面套餐查询同一条安全边界；
+    // currentStoreCount 与 createStore/manageTenantSubscription 原子自增写入
+    // 的同一个字段（见这两个云函数头部注释），是"已用门店数"的唯一真源
     let tenantName = '';
+    let usedStoreCount = 0;
     if (tenantId) {
-      const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true }).get().catch(() => null);
+      const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true, currentStoreCount: true }).get().catch(() => null);
       tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
+      usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
     }
 
-    return { success: true, ...result, tenantName };
+    return { success: true, ...result, tenantName, usedStoreCount };
   } catch (err) {
     console.error('[checkTenantPermission] 异常:', err);
     // 🛡️ 严禁把裸的数据库报错暴露给调用方——checkTenantPermission() 内部已经

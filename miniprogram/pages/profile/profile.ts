@@ -541,7 +541,11 @@ Page({
       // expireDisplayText 是已经处理过哨兵日期的最终展示文案（"永久有效"或
       // "有效期至 YYYY-MM-DD"），WXML 不应再自行拼接"有效期至"前缀
       isPerpetual: false,
-      expireDisplayText: ''
+      expireDisplayText: '',
+      // 🆕 门店配额进度："已接入 X / Y 家"，X 取 tenants.currentStoreCount，
+      // Y 取 cloudQuota.storeLimit，均来自 checkTenantPermission 云函数
+      storeLimit: 2,
+      usedStoreCount: 0
     },
     // 🍎 iOS 平台虚拟商品支付合规：微信小程序平台规则要求 iOS 客户端不得展示
     // 虚拟商品价格/拉起小程序内支付，只能引导线下/客服渠道购买——见
@@ -5570,7 +5574,9 @@ Page({
         isActive,
         expireDateStr,
         isPerpetual,
-        expireDisplayText: formatTenantExpireText(expireDateStr)
+        expireDisplayText: formatTenantExpireText(expireDateStr),
+        storeLimit: result.storeLimit || 2,
+        usedStoreCount: result.usedStoreCount || 0
       },
       planActionLabels: this.computePlanActionLabels(result.planType, isActive, isPerpetual),
       isRedundantRenewTab: computeRedundantRenewFlag(this.data.comparePlanTab, result.planType, isActive, isPerpetual)
@@ -5607,13 +5613,16 @@ Page({
     // 拉起小程序内支付，每次打开弹窗都重新探测一次（成本极低，避免长驻页面
     // 缓存一份过期的平台判断），WXML 据此隐藏价格与支付按钮
     const sysInfo = getSafeSystemInfo();
+    const isIOSPlatform = sysInfo.platform === 'ios';
     this.setData({
       showSubscriptionModal: true,
       subscriptionLoading: true,
       activationCodeInput: '',
-      isIOSPlatform: sysInfo.platform === 'ios',
-      // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态
-      showRedeemSection: false
+      isIOSPlatform,
+      // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态；
+      // 🍎 iOS 端例外——应用内支付被隐藏后，授权码/兑换卡号是唯一的自助开通
+      // 通道，直接展开主导展示，不需要用户先发现"原来还有个折叠入口"
+      showRedeemSection: isIOSPlatform
     });
     // 🐛 根因修复：自定义 tabBar 是框架自动挂载的原生层组件，本卡片的
     // z-index 再高也盖不住它（见 utils/tabBarVisibility.ts 头部注释），

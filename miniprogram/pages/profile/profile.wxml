@@ -2362,6 +2362,9 @@
             <text class="sub-expiry-expired" wx:elif="{{subscriptionInfo.isExpired}}">套餐已到期（超出 7 天宽限期），续费后恢复高级权益</text>
             <text class="sub-expiry-active" wx:elif="{{subscriptionInfo.isActive}}">{{subscriptionInfo.expireDisplayText}}</text>
             <text class="sub-expiry-free" wx:else>当前为免费基础版，升级解锁更多权益</text>
+            <!-- 🆕 门店配额进度：与到期状态无关，任何档位/状态下都展示，见
+                 fetchSubscriptionInfo storeLimit/usedStoreCount 注释 -->
+            <text class="sub-store-quota-line">📦 已接入 {{subscriptionInfo.usedStoreCount}} / {{subscriptionInfo.storeLimit}} 家</text>
           </view>
         </view>
 
@@ -2370,6 +2373,13 @@
              卡片组、套餐对比 Tab、价格/配额卡片、扩容包 Stepper、授权码
              折叠区，内容再多也只在这一个区域内部滚动，不影响上下两段固定区 -->
         <scroll-view scroll-y="true" class="sub-modal-body sub-scroll-body">
+
+          <!-- 🍎 iOS 虚拟商品支付合规提示：平面提示 + 引导授权码通道，见
+               data.isIOSPlatform / onOpenSubscriptionModal 注释——放在滚动区
+               最顶部，打开弹窗无需滚动即可看到，不是藏在底部按钮才发现 -->
+          <view class="sub-ios-compliance-banner" wx:if="{{isIOSPlatform}}">
+            🍎 根据苹果平台规则，iOS 端暂不支持展示价格及应用内购买/续费。如需开通或续费，请使用下方「授权码 / 兑换卡号」自助兑换，或联系客服咨询。
+          </view>
 
           <!-- ②.1 高级权益卡片组 ──────────────────────────────── -->
           <view class="sub-section">
