@@ -2582,9 +2582,12 @@
           <!-- 🐛 根因修复：永久有效套餐同/低档 Tab 不再展示会触发下单的"续费"按钮，
                见 data.isRedundantRenewTab / computeRedundantRenewFlag 注释 -->
           <view class="btn-pay-action btn-pay-action-disabled" wx:if="{{isRedundantRenewTab}}">✅ 已享永久版权益，无需续费</view>
-          <!-- 🍎 iOS 虚拟商品支付合规：付费 Tab 一律替换为"联系客服咨询"，不拉起
-               小程序内支付，见 data.isIOSPlatform / onOpenSubscriptionModal 注释 -->
-          <button class="btn-pay-action" bindtap="onCopyPlatformSupportWechat" wx:elif="{{isIOSPlatform && comparePlanTab !== 'basic'}}">📞 联系客服咨询开通</button>
+          <!-- 🍎 iOS 虚拟商品支付合规：付费 Tab 一律替换为"使用兑换码续费/升级/
+               开通"，引导走下方已自动展开的授权码区域，不拉起小程序内支付——
+               见 data.isIOSPlatform / computeIOSPlanActionLabels / onGuideToRedeemSection 注释 -->
+          <button class="btn-pay-action" bindtap="onGuideToRedeemSection" wx:elif="{{isIOSPlatform && comparePlanTab === 'pro'}}">{{iosPlanActionLabels.pro}}</button>
+          <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onGuideToRedeemSection" wx:elif="{{isIOSPlatform && comparePlanTab === 'enterprise'}}">{{iosPlanActionLabels.enterprise}}</button>
+          <button class="btn-pay-action btn-pay-action-addon" bindtap="onGuideToRedeemSection" wx:elif="{{isIOSPlatform && comparePlanTab === 'add_on'}}">使用兑换码购买扩容包</button>
           <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'pro'}}">{{planActionLabels.pro}}</button>
           <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">{{planActionLabels.enterprise}}</button>
           <button class="btn-pay-action btn-pay-action-addon" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'add_on'}}">🏪 确认购买扩容包</button>

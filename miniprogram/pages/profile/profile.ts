@@ -136,24 +136,51 @@ const PLAN_ACTION_META: Record<'pro' | 'enterprise', { icon: string; name: strin
   enterprise: { icon: '👑', name: '旗舰版', price: '¥3,688/年' }
 };
 
-// 🐛 根因修复：checkTenantPermission 云函数对"永久有效"套餐（人工赠送/活动权益）
-// 用一个遥远哨兵日期（如 2102-12-31）表示"没有真实到期日"，此前前端把这个哨兵
-// 日期原样拼进"有效期至 XXXX-XX-XX"文案展示给用户，看起来像是"过一百年后失效"，
-// 体验非常怪异。哨兵阈值取"年份 ≥2099 或 ≤1970 或无效日期"——现网真实套餐到期年
-// 不可能落在这个区间，命中即视为永久有效
-function isPerpetualExpireDate(expireDateStrOrTimestamp: any): boolean {
-  if (!expireDateStrOrTimestamp) return true;
-  const year = new Date(expireDateStrOrTimestamp).getFullYear();
-  return isNaN(year) || year >= 2099 || year <= 1970;
+// 🐛 根因修复（专业版被误判为永久有效）：此前"是否永久有效"完全靠猜测服务端
+// 存的到期日期是不是长得像哨兵值（年份 ≥2099）——但 pro/enterprise 是真实的
+// 年费订阅，任何历史脏数据/异常写入（如激活码铸造时曾出现过的 2102-12-31，
+// 见 activateTenantSubscription MAX_DURATION_DAYS 修复注释）都可能让它的真实
+// 到期日恰好落进这个区间，届时会被误判成"永久有效"，连带底部按钮也错误地
+// 隐藏了本该展示的"立即续费"。"是否永久"不能靠猜到期日期像不像哨兵值反推，
+// 只能由两个明确信号决定：
+//   ① 套餐本身就是免费的 basic 档（长期可用，天然没有"到期"概念）；
+//   ② 该订阅记录被显式标记了终身特权（tenant_subscriptions.isLifetimeGrant
+//      === true，只有 manageTenantSubscription 后台人工操作才会打上这个
+//      标记，不会被一笔普通的支付/激活码续费意外产生）
+// pro/enterprise 只要不满足②，哪怕存的到期日恰好落在哨兵区间，也一律如实
+// 按日期展示——不再由前端帮着掩盖数据问题，脏数据交给平台管理员在
+// platform-admin 后台核实修正
+function isPerpetualPlan(planType: string, isLifetimeGrant: boolean): boolean {
+  return planType === 'basic' || !!isLifetimeGrant;
 }
 
-function formatTenantExpireText(expireDateStrOrTimestamp: any): string {
-  if (isPerpetualExpireDate(expireDateStrOrTimestamp)) return '永久有效';
+// 🌟 到期日展示：isPerpetual 由上面 isPerpetualPlan() 判定后传入，本函数不再
+// 自行用日期形状去反推是否永久——同一份到期日字符串，"永久有效"还是"如实
+// 显示日期"完全取决于调用方传入的 isPerpetual，职责单一、不重复判断
+function formatTenantExpireText(expireDateStrOrTimestamp: any, isPerpetual: boolean): string {
+  if (isPerpetual) return '永久有效';
   const d = new Date(expireDateStrOrTimestamp);
   const year = d.getFullYear();
+  if (!expireDateStrOrTimestamp || isNaN(year)) return '到期日异常，请联系客服核实';
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `有效期至 ${year}-${m}-${day}`;
+}
+
+// 🍎 iOS 虚拟商品支付合规：付费 Tab 隐藏价格/支付按钮后，底部按钮改为引导
+// 使用授权码/兑换卡号自助操作——文案按"续费/升级/开通"三种场景区分，与
+// computePlanActionLabels 非 iOS 分支同一套判断，只是把"立即 X"换成"使用
+// 兑换码 X"，让用户清楚这条路径要走的是下方的授权码输入框，而不是小程序内
+// 支付
+function computeIOSPlanActionLabels(currentPlanType: string, isActive: boolean): Record<'pro' | 'enterprise', string> {
+  const currentRank = PLAN_RANK[currentPlanType] ?? 0;
+  const build = (tab: 'pro' | 'enterprise') => {
+    const tabRank = PLAN_RANK[tab];
+    if (isActive && currentRank >= tabRank) return '使用兑换码续费';
+    if (isActive && currentRank < tabRank) return '使用兑换码升级';
+    return '使用兑换码开通';
+  };
+  return { pro: build('pro'), enterprise: build('enterprise') };
 }
 
 // 🆕 见 data.isRedundantRenewTab 声明处注释：只对 pro/enterprise 两个"有真实
@@ -537,9 +564,9 @@ Page({
       // planType/isExpired 的判断表达式
       isActive: false,
       expireDateStr: '',
-      // 🆕 永久有效套餐：见 isPerpetualExpireDate/formatTenantExpireText，
-      // expireDisplayText 是已经处理过哨兵日期的最终展示文案（"永久有效"或
-      // "有效期至 YYYY-MM-DD"），WXML 不应再自行拼接"有效期至"前缀
+      // 🆕 永久有效套餐：见 isPerpetualPlan/formatTenantExpireText，
+      // expireDisplayText 是已经处理过"是否永久"判断的最终展示文案（"永久有效"
+      // 或"有效期至 YYYY-MM-DD"），WXML 不应再自行拼接"有效期至"前缀
       isPerpetual: false,
       expireDisplayText: '',
       // 🆕 门店配额进度："已接入 X / Y 家"，X 取 tenants.currentStoreCount，
@@ -574,6 +601,8 @@ Page({
     // 档位"联动——已是该档位显示"立即续费 ¥xxx/年"，更高档位显示"立即升级"，
     // 尚未开通/已过期时保留原有"立即开通"首购文案。见 computePlanActionLabels()
     planActionLabels: { pro: '💳 立即开通专业版', enterprise: '👑 立即开通旗舰版' } as Record<'pro' | 'enterprise', string>,
+    // 🍎 iOS 端底部按钮文案：见 computeIOSPlanActionLabels 注释
+    iosPlanActionLabels: { pro: '使用兑换码开通', enterprise: '使用兑换码开通' } as Record<'pro' | 'enterprise', string>,
     // 🏪 扩容门店包购买数量（家/年），¥200/店/年，与后端 activateTenantSubscription
     // MAX_ADD_ON_EXTRA_STORES / createSubscriptionOrder MAX_ADD_ON_QUANTITY 同一档上限
     addOnQuantity: 1,
@@ -5555,10 +5584,10 @@ Page({
     // planType 提前改写回 basic（见 checkTenantPermission 云函数），这里再
     // 显式判一次 isExpired 是双重保险，不是重复逻辑
     const isActive = resolveTier(result.planType) === PERMISSION_TIER.ADVANCED && !result.isExpired;
-    // 🆕 永久有效套餐：见 isPerpetualExpireDate/formatTenantExpireText 头部注释——
-    // 只有"已开通高级档位"才需要判断是否永久，basic 免费档没有"到期"概念，
-    // 不应被误判为"永久有效"从而影响下方按钮文案
-    const isPerpetual = isActive && isPerpetualExpireDate(expireDateStr);
+    // 🆕 是否永久有效：见 isPerpetualPlan() 头部注释——只由 planType===basic
+    // 或显式 isLifetimeGrant 标记决定，不再从到期日期的形状反推，避免真实
+    // 年费订阅因为一条脏到期日数据被误判成"永久有效"
+    const isPerpetual = isPerpetualPlan(result.planType, result.isLifetimeGrant);
 
     this.setData({
       subscriptionInfo: {
@@ -5574,11 +5603,12 @@ Page({
         isActive,
         expireDateStr,
         isPerpetual,
-        expireDisplayText: formatTenantExpireText(expireDateStr),
+        expireDisplayText: formatTenantExpireText(expireDateStr, isPerpetual),
         storeLimit: result.storeLimit || 2,
         usedStoreCount: result.usedStoreCount || 0
       },
       planActionLabels: this.computePlanActionLabels(result.planType, isActive, isPerpetual),
+      iosPlanActionLabels: computeIOSPlanActionLabels(result.planType, isActive),
       isRedundantRenewTab: computeRedundantRenewFlag(this.data.comparePlanTab, result.planType, isActive, isPerpetual)
     });
   },
@@ -5815,6 +5845,16 @@ Page({
       data: wechat,
       success: () => wx.showToast({ title: `已复制客服微信号：${wechat}，请在微信添加好友咨询`, icon: 'none', duration: 3000 })
     });
+  },
+
+  // 🍎 iOS 端付费 Tab 底部按钮：文案已改为"使用兑换码续费/升级/开通"（见
+  // computeIOSPlanActionLabels），点击不拉起任何支付，只是确保"授权码/兑换
+  // 卡号"折叠区展开（打开弹窗时已默认展开，这里是防御性兜底）并提示用户
+  // 视线下移，与文案承诺的动作保持一致，不能文案说"用兑换码"、点击却触发
+  // 一个跟兑换码毫不相关的动作
+  onGuideToRedeemSection() {
+    this.setData({ showRedeemSection: true });
+    wx.showToast({ title: '请在下方"授权码 / 兑换卡号"区域输入', icon: 'none', duration: 2000 });
   },
 
   // 🌟 在线订购：接入 wxPayCore 支付基础设施（APIv3 + Mock 开关，详见

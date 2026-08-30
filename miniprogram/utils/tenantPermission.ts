@@ -107,6 +107,11 @@ export interface TenantPermissionResult {
   // profile.ts fetchSubscriptionInfo），取自 tenants.currentStoreCount（与
   // createStore/manageTenantSubscription 原子自增写入的同一个字段，唯一真源）
   usedStoreCount: number;
+  // 🆕 终身特权显式标记：与 profile.ts isPerpetualPlan() 同一套口径——只有
+  // manageTenantSubscription 后台人工打上这个标记的订阅记录才会被判定为
+  // "永久有效"，不再靠 serviceExpireDate 的日期形状反推（历史教训：pro/
+  // enterprise 的真实年费到期日一旦落入脏数据区间会被误判成永久有效）
+  isLifetimeGrant: boolean;
 }
 
 // 保守放行的默认结果：查询失败/云不可用/未命中缓存前的兜底值。宁可放行一次
@@ -127,7 +132,8 @@ const FALLBACK_ALLOWED: TenantPermissionResult = {
   serviceExpireDate: null,
   reason: '',
   tenantName: '',
-  usedStoreCount: 0
+  usedStoreCount: 0,
+  isLifetimeGrant: false
 };
 
 // 🛡️ 轻量内存缓存：同一 featureKey 60s 内不重复发起云调用，避免用户在
@@ -165,7 +171,8 @@ const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
   serviceExpireDate: null,
   reason: '',
   tenantName: '',
-  usedStoreCount: 0
+  usedStoreCount: 0,
+  isLifetimeGrant: true
 };
 
 export async function checkTenantPermission(
@@ -206,7 +213,8 @@ export async function checkTenantPermission(
       serviceExpireDate: r.serviceExpireDate || null,
       reason: r.reason || '',
       tenantName: r.tenantName || '',
-      usedStoreCount: r.usedStoreCount || 0
+      usedStoreCount: r.usedStoreCount || 0,
+      isLifetimeGrant: !!r.isLifetimeGrant
     };
     _cache[featureKey] = { result, expiresAt: Date.now() + CACHE_TTL_MS };
     return result;

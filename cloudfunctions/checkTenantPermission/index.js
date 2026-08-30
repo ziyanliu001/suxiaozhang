@@ -55,6 +55,7 @@ async function checkTenantPermission(tenantId, featureKey) {
     return {
       allowed: false, planType: 'basic', isExpired: false, isInGracePeriod: false,
       graceExpireDate: null, coreReadOnly: false, storeLimit: PLAN_STORE_LIMITS.basic, serviceExpireDate: null,
+      isLifetimeGrant: false,
       reason: '无法确认所属机构'
     };
   }
@@ -83,6 +84,12 @@ async function checkTenantPermission(tenantId, featureKey) {
   let coreReadOnly = false;
   let storeLimit = PLAN_STORE_LIMITS.basic;
   let serviceExpireDate = null;
+  // 🆕 终身特权显式标记：与前端 isPerpetualPlan() 的判断口径完全对齐——
+  // "是否永久有效"只认这个显式字段（+ planType==='basic'），不再靠猜测
+  // serviceExpireDate 的日期形状反推，避免真实年费订阅因为一条脏到期日
+  // 数据（如历史上出现过的 2102-12-31）被误判成永久有效。只有
+  // manageTenantSubscription 后台人工操作才会打上这个标记
+  let isLifetimeGrant = false;
   if (sub) {
     const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
     const rawExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
@@ -109,6 +116,10 @@ async function checkTenantPermission(tenantId, featureKey) {
     // 展示真实到期日，而不只是一个 isExpired 布尔值，"7月1日已到期"比"已过期"
     // 对续费决策更有信息量
     serviceExpireDate = sub.serviceExpireDate || null;
+    // 🛡️ 到期自动降级为 basic 的情形不继承原套餐的终身标记——到期意味着这份
+    // "终身特权"本身就有问题（正常的终身授权不应该带一个会触发降级判断的
+    // 到期日），交由平台管理员核实，不在这里静默继续放行
+    isLifetimeGrant = !isExpired && !!sub.isLifetimeGrant;
   }
 
   const requiredPlans = FEATURE_PLAN_REQUIREMENTS[featureKey];
@@ -126,6 +137,7 @@ async function checkTenantPermission(tenantId, featureKey) {
     coreReadOnly,
     storeLimit,
     serviceExpireDate,
+    isLifetimeGrant,
     requiredPlans: requiredPlans || null,
     reason: allowed ? '' : '该功能为付费套餐专属，请联系大家长升级套餐或购买/兑换授权'
   };
@@ -166,6 +178,7 @@ exports.main = async (event) => {
         coreReadOnly: false,
         storeLimit: Number.MAX_SAFE_INTEGER,
         serviceExpireDate: null,
+        isLifetimeGrant: true,
         reason: '',
         // 🏢 platform_admin 不隶属任何机构（见 authService.ts UserRole 注释），
         // 空字符串即语义正确，不需要伪造一个"平台方"机构名

@@ -397,7 +397,14 @@ async function handleRedeem(event, OPENID) {
   }
 
   const planType = VALID_PLAN_TYPES.includes(codeDoc.planType) ? codeDoc.planType : DEFAULT_PLAN_TYPE;
-  const durationDays = codeDoc.durationDays > 0 ? codeDoc.durationDays : DEFAULT_DURATION_DAYS;
+  // 🐛 根因修复（专业版被误判永久有效的真正源头）：handleGenerate 铸造新码时
+  // 已用 MAX_DURATION_DAYS 把 durationDays 封顶（见文件头 2102 年到期日溢出
+  // 注释），但那只挡住"以后新铸造的码"——这里兑换时直接信任 codeDoc.durationDays
+  // 里已经落库的值，对封顶修复上线前就已经铸造好、还没被兑换的historical
+  // 激活码没有任何防护，兑一张这样的老码依然会算出 2102 年这种异常到期日。
+  // 兑换时再套一层同样的封顶，双重保险确保不管码是什么时候铸造的，兑换出的
+  // 到期日永远落在合理区间内
+  const durationDays = Math.min(codeDoc.durationDays > 0 ? codeDoc.durationDays : DEFAULT_DURATION_DAYS, MAX_DURATION_DAYS);
 
   // 🌟 续期不清零：已生效套餐且尚未到期时，从"现有到期日"往后顺延，而不是从
   // 今天重新起算——提前兑换续费码不会白白损失剩余天数
