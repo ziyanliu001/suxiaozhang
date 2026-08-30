@@ -963,13 +963,6 @@ Page({
     storeTargetLabels: FALLBACK_TARGET_LABELS as { dineInLabel: string; deliveryLabel: string; listenLabel: string; takeoutLabel: string },
     // 📋 表单折叠：默认收起次要录入项（支出/凭证/照片/日志），首屏聚焦核心字段
     showFormExtra: false,
-    // 🐛 根因修复（滚动定位彻底失效）：驱动 page-body-scroll 的 scroll-into-view，
-    // 见 index.wxml 该 scroll-view 头部注释与 _scrollToAnchor()——.index-page-container/
-    // page 选择器都写死了 height:100vh，固定高度容器下原生页面级滚动
-    // （wx.pageScrollTo）没有可用的滚动范围，点击「进入店务管理/财务稽核台」
-    // 时哪怕日志正常打印、目标节点也确实存在，页面依然纹丝不动。改用
-    // scroll-view 自带的 scroll-into-view 机制，不再依赖原生页面滚动
-    currentScrollAnchor: '',
     // 🌟 视角切换预览：isRealSuperAdmin 恒等于真实身份，不受预览覆盖影响，用于门店切换器等
     // 处的"视角切换"入口自身的显隐判断；currentViewMode 是当前选中的预览视角
     isRealSuperAdmin: false,
@@ -10079,35 +10072,48 @@ Page({
 
   // 🌟 全角色打卡卡片（omni-checkin-card）的次级跳转：不是导航去另一个页面，
   // 店务管理/财务稽核台本来就在同一页往下一点的位置（manager-home-card/finance-home-card），
-  // 滚动过去即可，比再开一个页面更轻量、也不会丢失打卡卡片的上下文
+  // 用 wx.pageScrollTo 按 id 平滑滚动过去即可，比再开一个页面更轻量、也不会丢失打卡卡片的上下文
   onScrollToManagerConsole() {
-    this._scrollToAnchor('managerConsoleAnchor', '店务管理');
+    this._scrollToAnchor('#managerConsoleAnchor', '店务管理');
   },
 
   onScrollToFinanceConsole() {
-    this._scrollToAnchor('financeConsoleAnchor', '财务稽核台');
+    this._scrollToAnchor('#financeConsoleAnchor', '财务稽核台');
   },
 
-  // 🐛 根因修复（滚动定位彻底失效，历史上两次尝试都没找对根因）：
-  // 第一次排查以为是 selector 语法/时序问题，改成 wx.createSelectorQuery()
-  // 显式算 scrollTop 再调 wx.pageScrollTo，结果控制台日志正常打印、目标节点
-  // 也确实查得到，页面依然纹丝不动——因为 wx.pageScrollTo 操控的是"原生页面
-  // 级滚动"，而 .index-page-container 与 page 选择器（见 index.wxss）都写死了
-  // height:100vh，固定高度容器在小程序渲染层面不会因为子元素溢出而产生可
-  // 滚动的页面级 scrollHeight，不管传 selector 还是显式 scrollTop，实际都没有
-  // 任何滚动范围可用——这才是真正的根因，不是选择器或事件绑定问题。
-  // 彻底修复：① 把 page-body-scroll 这个 scroll-view 组件的起始位置从"门店
-  // 管理宫格"结束处上移到紧跟固定头部（app-header-section）之后（见
-  // index.wxml），让 manager-home-card/finance-home-card 这两个目标锚点从此
-  // 真正成为这个 scroll-view 的子元素；② 改用 scroll-view 自带的
-  // scroll-into-view 属性驱动滚动，完全不依赖原生页面滚动是否有效——
-  // 这是 scroll-view 内部滚动的标准做法，比 wx.pageScrollTo 更可靠
-  _scrollToAnchor(anchorId: string, label: string) {
-    console.log('[Navigate] 触发 scroll-into-view 定位:', label, '->', anchorId);
-    // 先清空再赋值，保证连续点击同一个锚点（currentScrollAnchor 值不变导致
-    // setData 视为无变化、不会重新触发滚动）也能再次触发滚动动画
-    this.setData({ currentScrollAnchor: '' }, () => {
-      this.setData({ currentScrollAnchor: anchorId });
+  // 🐛 根因排查：此前 wx.pageScrollTo 直接传 selector，既没有 fail 回调也没有
+  // 任何前置校验——.index-page-container 是 height:100vh 的 flex 列容器，
+  // 大部分内容区（.page-body-scroll）走的是内部 scroll-view 独立滚动，只有
+  // 非义工视角这段"打卡卡片+店务管理+财务稽核台"卡片位于该 scroll-view 之外
+  // （见 index.wxss .page-body-scroll 头部注释），真正依赖原生页面级滚动。
+  // 一旦这段内容总高度恰好未超出可视区（如某些机型/字号下 anchor 本就在首屏
+  // 内可见）或选择器因任何原因查不到节点，selector 版 pageScrollTo 只会
+  // 悄无声息地什么都不做——控制台没有一行日志、没有报错、也没有 toast，
+  // 与"按钮点了没反应"的现象完全吻合。改为先用 SelectorQuery 显式定位目标
+  // 节点再计算 scrollTop 滚动，找不到节点或滚动失败都会打日志+弹 toast，
+  // 把"静默无效"变成"看得见原因"
+  _scrollToAnchor(selector: string, label: string) {
+    console.log('[Navigate] 触发滚动定位:', label, selector);
+    const query = wx.createSelectorQuery();
+    query.select(selector).boundingClientRect();
+    query.selectViewport().scrollOffset();
+    query.exec((res) => {
+      const rect = res && res[0];
+      const viewport = res && res[1];
+      if (!rect) {
+        console.error('[_scrollToAnchor] 未找到目标节点:', selector);
+        wx.showToast({ title: `暂时无法定位${label}入口，请下滑页面查看`, icon: 'none' });
+        return;
+      }
+      const targetTop = Math.max(0, (viewport ? viewport.scrollTop : 0) + rect.top - 20);
+      wx.pageScrollTo({
+        scrollTop: targetTop,
+        duration: 300,
+        fail: (err) => {
+          console.error('[_scrollToAnchor] pageScrollTo 失败:', selector, err);
+          wx.showToast({ title: `${label}定位失败，请下滑页面查看`, icon: 'none' });
+        }
+      });
     });
   },
 
