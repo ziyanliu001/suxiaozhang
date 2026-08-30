@@ -35,6 +35,13 @@ const MAX_PAGE_STACK = 10;
 // 两眼一抹黑
 const DIAGNOSTIC_TIMEOUT_MS = 2500;
 
+// 🐛 分包跳转假超时修复：分包页面在 wx.navigateTo 的原生回调触发前，多了一段
+// "分包代码下载 + 注入"的网络耗时（尤其是首次进入、未命中分包缓存时），这段
+// 耗时与"当前页主线程被同步代码占满"是两种完全不同的成因，但共用同一个
+// 2.5s 阈值会导致分包跳转（哪怕最终渲染完全正常）被高概率误报成"卡死"。
+// 这里单独放宽分包页面的诊断窗口，主包页面维持原阈值不变
+const SUBPACKAGE_DIAGNOSTIC_TIMEOUT_MS = 6000;
+
 // 🛡️ TabBar 页面清单：与 app.json 的 tabBar.list 一一对应（该文件独立部署/
 // 没有跨文件读取 app.json 的机制，只能手动保持一致，改 tabBar 时记得同步这
 // 里）。wx.navigateTo 对这几个页面一律直接 fail（errMsg 固定是
@@ -56,6 +63,19 @@ function stripQuery(url: string): string {
 
 function isTabBarPage(url: string): boolean {
   return TABBAR_PAGES.includes(stripQuery(url || ''));
+}
+
+// 分包判定：与 TABBAR_PAGES 需要精确匹配整条路径不同，分包只需要看路径前缀
+// 是否落在 subpackages/ 目录下——项目里所有分包（factory/admin 等）都统一收在
+// 这个目录下，不需要像 TabBar 那样逐条枚举、手动跟 app.json 保持同步
+function isSubpackagePage(url: string): boolean {
+  return stripQuery(url || '').replace(/^\//, '').startsWith('subpackages/');
+}
+
+// getCurrentPages() 返回的 route 不带开头的 '/' 也不带查询串，跳转参数里的
+// url 可能两者都带，统一成同一种形式才能比较
+function normalizeRoute(url: string): string {
+  return stripQuery(url || '').replace(/^\//, '');
 }
 
 let navigating = false;
@@ -138,15 +158,32 @@ export function safeNavigateTo(
     // 究还是姗姗来迟，靠 settled 标记避免它再重复走一遍收尾逻辑
     let settled = false;
     let fallbackAttempted = false;
+    const diagnosticTimeoutMs = isSubpackagePage(options.url)
+      ? SUBPACKAGE_DIAGNOSTIC_TIMEOUT_MS
+      : DIAGNOSTIC_TIMEOUT_MS;
     const diagnosticTimer = setTimeout(() => {
-      console.error(
-        '[safeNavigateTo] ⚠️ 跳转 2.5s 仍未完成，疑似当前页 JS 主线程被同步代码阻塞（大循环 / 密集 wx.xxxSync 调用），或开发者工具路由管道卡死:',
-        options.url, '发起跳转时页面栈深度:', stackDepth
-      );
+      // 🐛 假超时修复：complete 回调没来 ≠ 跳转没成功——分包下载/注入、或开发者
+      // 工具路由管道本身的调度延迟，都可能导致回调姗姗来迟，但目标页面早已经
+      // 在栈顶正常渲染完毕。先拿 getCurrentPages() 核实一遍：栈顶已经是目标页
+      // 时说明跳转客观上已经成功，只是回调触发慢，不再当成"卡死"报错误导排查
+      const pages = getCurrentPages();
+      const topRoute = pages.length ? pages[pages.length - 1].route : '';
+      const targetRoute = normalizeRoute(options.url);
+      if (topRoute === targetRoute) {
+        console.warn(
+          `[safeNavigateTo] 跳转 ${diagnosticTimeoutMs / 1000}s 后 complete 回调仍未触发，但页面栈顶已是目标页，跳转已实际成功（回调延迟，非阻塞，可忽略）:`,
+          options.url
+        );
+      } else {
+        console.error(
+          `[safeNavigateTo] ⚠️ 跳转 ${diagnosticTimeoutMs / 1000}s 仍未完成，且页面栈顶尚未变为目标页，疑似当前页 JS 主线程被同步代码阻塞（大循环 / 密集 wx.xxxSync 调用），或开发者工具路由管道卡死:`,
+          options.url, '发起跳转时页面栈深度:', stackDepth, '当前栈顶:', topRoute || '(空)'
+        );
+      }
       if (!settled) {
         navigating = false;
       }
-    }, DIAGNOSTIC_TIMEOUT_MS);
+    }, diagnosticTimeoutMs);
 
     wx.navigateTo({
       ...options,
