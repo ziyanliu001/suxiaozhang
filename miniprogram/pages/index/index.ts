@@ -6517,11 +6517,33 @@ Page({
   // 与手动粘贴文本走的是完全相同的一条路径，不会另开一套计算逻辑。
   async onScanDonorScreenshot() {
     // 🌟 诊断日志：如果点击按钮后连这一行都没打印出来，说明问题根本不在这个函数内部
-    // （大概率是小程序端跑的还不是最新编译产物），而不是这里的业务逻辑有 bug
+    // （大概率是小程序端跑的还不是最新编译产物，或点击事件被祖先节点拦截/未走到
+    // 这里），而不是这里的业务逻辑有 bug——之前这里只留了注释、漏了真正打印的
+    // 那一行，排查"点击无反应"时完全看不出函数到底有没有被调用，这次补上
+    console.log('[onScanDonorScreenshot] 点击触发，isScanningDonorList=', this.data.isScanningDonorList);
 
     if (this.data.isScanningDonorList) {
-      return;
+      // 🐛 卡死态兜底：正常流程下 isScanningDonorList 只会在下方 finally 里被
+      // 复位，理论上不会长时间卡在 true。但 pages/index/index 是 tabBar 页面，
+      // 若用户在系统相册/相机选择器弹出期间切到其它 Tab 或短暂锁屏，小程序端
+      // 偶发场景下（如 App 被系统临时挂起）chooseMedia 的回调可能迟迟不触发，
+      // 导致这个标志位被"孤儿态"卡住——此后再点识图按钮会一直静默 return，
+      // 表现和"点击完全无反应"一模一样，且没有任何日志/报错可循，与本次
+      // 排查的现象吻合。用一个时间戳判断"卡住"是否已经超过合理时长
+      // （20s，远超一次真实识别流程的耗时），超过就视为孤儿态，打印警告并
+      // 强制复位后继续本次点击，而不是无限期地静默拦死后续所有点击；未超时
+      // 则说明识别确实正在进行中，弹出提示而不是什么反馈都不给
+      const stuckDuration = Date.now() - (this._scanDonorStartedAt || 0);
+      if (stuckDuration > 20000) {
+        console.warn('[onScanDonorScreenshot] 检测到孤儿态（isScanningDonorList 卡住超过', stuckDuration, 'ms），强制复位后继续本次点击');
+        wx.hideLoading();
+        this.setData({ isScanningDonorList: false });
+      } else {
+        wx.showToast({ title: '识别中，请稍候', icon: 'none' });
+        return;
+      }
     }
+    this._scanDonorStartedAt = Date.now();
 
     try {
       if (!isCloudAvailable()) {
@@ -6667,6 +6689,9 @@ Page({
   // 手滑重复选中/重复提交同一张截图导致支持数据加倍——只在当前页面实例存活期间
   // 有效（刷新/重进页面会清空），不做跨会话持久化，符合"当前会话去重"的定位
   _uploadedImageHashes: [] as string[],
+  // 🛡️ 见 onScanDonorScreenshot 头部"孤儿态兜底"注释：记录本次识别发起的时间戳，
+  // 用于判断 isScanningDonorList 卡住是否已经超出合理时长，纯实例属性
+  _scanDonorStartedAt: 0 as number,
 
   // 🌟 图文同屏对比：点击小票缩略图直接原生放大查看原图
   onPreviewOcrReceiptImage(e: any) {
