@@ -65,8 +65,12 @@ const FALLBACK_TARGET_LABELS = { dineInLabel: '堂食服务人次', deliveryLabe
 const INVITE_ROLE_SERVER_MAP: Record<string, string> = {
   PATRIARCH: 'STORE_PATRIARCH', MANAGER: 'STORE_MANAGER', FINANCE: 'FINANCE', FAMILY: 'FAMILY', VOLUNTEER: 'VOLUNTEER'
 };
+// 🐛 跨页面文案统一：与 profile.ts 的邀请码弹窗（showInviteModal）共用同一套
+// 角色中文名——此前两处各自维护一份，"门店财务"/"财务记账"、"志愿者"/"普通
+// 义工"两两不一致，用户在不同入口生成的邀请码展示文案对不上，误以为是两种
+// 不同的身份
 const INVITE_ROLE_LABEL_MAP: Record<string, string> = {
-  PATRIARCH: '大家长', MANAGER: '门店店长', FINANCE: '门店财务', FAMILY: '家人', VOLUNTEER: '志愿者'
+  PATRIARCH: '大家长', MANAGER: '门店店长', FINANCE: '财务记账', FAMILY: '爱心家人', VOLUNTEER: '普通义工'
 };
 // 服务端角色词汇 -> 本地胶囊词汇（大小写两种形式都兜底，落库后的 role 单值字段是
 // 小写 snake_case，targetRole 邀请码字段本身是大写）
@@ -4016,10 +4020,17 @@ Page({
       targetGenStoreId: defaultStore ? defaultStore.storeId : '',
       targetGenStoreName: defaultStore ? defaultStore.storeName : ''
     });
+    // 🐛 底部按钮被 TabBar 遮挡修复：pages/index/index 是 tabBar 页面，原生
+    // TabBar 渲染在独立的 native 图层，永远盖在 WXML 内容之上——CSS z-index
+    // 只能控制 WebView 内部的层叠顺序，管不到这层 native 组件，光靠加大
+    // z-index/安全区 padding 治标不治本。生成邀请码是一次性、沉浸式的操作
+    // 流程，弹窗打开期间直接隐藏 TabBar，从根源上消除遮挡的可能
+    wx.hideTabBar({ animation: true });
   },
 
   onCloseGenCodeModal() {
     this.setData({ showGenCodeModal: false });
+    wx.showTabBar({ animation: true });
   },
 
   onSelectGenRole(e: any) {
@@ -4112,6 +4123,10 @@ Page({
 
   onCloseInviteResultModal() {
     this.setData({ showInviteResultModal: false, inviteResultCode: '', inviteResultQrPath: '' });
+    // 生成成功后 showGenCodeModal→showInviteResultModal 是同一次沉浸式流程的
+    // 延续（中途未调用过 wx.showTabBar），TabBar 一直保持隐藏，这里才是
+    // 真正的流程终点，在此统一恢复
+    wx.showTabBar({ animation: true });
   },
 
   onCopyInviteResultCode() {
@@ -8494,6 +8509,11 @@ Page({
   },
 
   onUnload() {
+    // 🛡️ 邀请码弹窗隐藏 TabBar 的安全网：正常关闭路径（onCloseGenCodeModal/
+    // onCloseInviteResultModal）已经会恢复，这里防的是弹窗开着时用户通过非
+    // 常规路径离开本页（如被其它逻辑强制 reLaunch），避免 TabBar 一直卡在
+    // 隐藏态。已经是显示态时重复调用无副作用
+    wx.showTabBar({ animation: false });
     // 🛡️ 页面卸载前，若有未保存数据则静默写入草稿，防止意外退出导致数据丢失
     if (this._hasFormDirtyData()) {
       this.saveDraft();

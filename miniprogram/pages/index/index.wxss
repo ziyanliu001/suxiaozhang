@@ -4212,22 +4212,56 @@ button.poster-gen-btn[disabled] {
    .role-radio-group/.role-radio-item（原生 radio-group + label 那一套简单单选样式）
    彻底解耦——此前两处共用同一套类名，后声明的规则会覆盖前面的部分属性，
    全靠层叠顺序侥幸不冲突，稍改一处就可能悄悄影响另一个完全不相关的弹窗。 */
+/* 🐛 跨页面统一：2 列 Grid 布局，与 profile.ts 的 .invite-role-grid 同一套
+   规范——5 项自然排成 2+2+1，与该文件其余多选卡片网格（如护持工种）保持
+   同一种"2 列自动换行"节奏，不再是单行挤压的 5 等分 flex 布局 */
 .gencode-role-group {
   display: flex;
-  gap: 20rpx;
+  flex-wrap: wrap;
+  gap: 16rpx;
 }
 
 .gencode-role-item {
   position: relative;
-  flex: 1;
+  flex: 1 1 calc(50% - 8rpx);
+  min-width: calc(50% - 8rpx);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
   text-align: center;
   background: #F8F9FA;
   border: 2rpx solid #DEE2E6;
   border-radius: 18rpx;
-  padding: 18rpx 0;
+  padding: 20rpx 12rpx;
   font-size: 24rpx;
   color: #495057;
   transition: all 0.2s ease;
+}
+
+.gencode-role-icon {
+  font-size: 32rpx;
+  line-height: 1.2;
+}
+
+.gencode-role-name {
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+/* 副标题描述：与 profile.ts 的 .invite-role-desc 同一套用途——生成前就让
+   调用方看清"这个身份具体能做什么"，不必等生成完再去核对 */
+.gencode-role-desc {
+  font-size: 20rpx;
+  color: #9CA3AF;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.gencode-role-item.active .gencode-role-desc {
+  color: #B8860B;
 }
 
 .gencode-role-item:active {

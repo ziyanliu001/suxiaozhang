@@ -2367,38 +2367,47 @@
              或更高，只有大家长/超管能任命）。genAvailableRoles 不含的选项
              置灰禁用（gencode-role-disabled），点击不生效，见 onSelectGenRole
              的二次拦截。 -->
+        <!-- 🐛 跨页面统一：图标/文案/2 列 Grid 布局与 profile.ts 的邀请码弹窗
+             （showInviteModal/.invite-role-grid）保持同一套规范，此前两处各自
+             维护一份图标体系（这里是 idx-icon-* 图标字体，profile 是原生 emoji）
+             + 不一致的角色中文名，用户在不同入口看到的"同一个身份"长得不一样 -->
         <view class="form-item-row">
           <text class="form-label">2. 选择授权身份：</text>
           <view class="gencode-role-group">
             <view class="gencode-role-item {{genTargetRole === 'PATRIARCH' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('PATRIARCH') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="PATRIARCH">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'PATRIARCH'}}">✓</view>
-              <view class="idx-icon-sm idx-icon-handshake" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
-              <text>大家长</text>
+              <text class="gencode-role-icon">🏛️</text>
+              <text class="gencode-role-name">大家长</text>
+              <text class="gencode-role-desc">机构全局权限与审批</text>
             </view>
             <view class="gencode-role-item {{genTargetRole === 'MANAGER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('MANAGER') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="MANAGER">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'MANAGER'}}">✓</view>
-              <view class="idx-icon-sm idx-icon-crown" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
-              <text>门店店长</text>
+              <text class="gencode-role-icon">⚙️</text>
+              <text class="gencode-role-name">门店店长</text>
+              <text class="gencode-role-desc">门店日常核销与管理</text>
             </view>
             <view class="gencode-role-item {{genTargetRole === 'FINANCE' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('FINANCE') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="FINANCE">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'FINANCE'}}">✓</view>
-              <view class="idx-icon-sm idx-icon-lock" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
-              <text>门店财务</text>
+              <text class="gencode-role-icon">💰</text>
+              <text class="gencode-role-name">财务记账</text>
+              <text class="gencode-role-desc">收支记账与报表核对</text>
             </view>
             <view class="gencode-role-item {{genTargetRole === 'FAMILY' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('FAMILY') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="FAMILY">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'FAMILY'}}">✓</view>
-              <view class="idx-icon-sm idx-icon-people" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
-              <text>家人</text>
+              <text class="gencode-role-icon">❤️</text>
+              <text class="gencode-role-name">爱心家人</text>
+              <text class="gencode-role-desc">查看爱心餐与门店动态</text>
             </view>
             <view class="gencode-role-item {{genTargetRole === 'VOLUNTEER' ? 'active' : 'inactive'}} {{!genAvailableRoles.includes('VOLUNTEER') ? 'gencode-role-disabled' : ''}}"
                   bindtap="onSelectGenRole" data-role="VOLUNTEER">
               <view class="role-check-badge" wx:if="{{genTargetRole === 'VOLUNTEER'}}">✓</view>
-              <view class="idx-icon-sm idx-icon-heart" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>
-              <text>志愿者</text>
+              <text class="gencode-role-icon">🙏</text>
+              <text class="gencode-role-name">普通义工</text>
+              <text class="gencode-role-desc">每日打卡与餐报</text>
             </view>
           </view>
           <!-- 🏛️ 大家长（含超管）：全部五档身份都已解锁，给一句正向的授权说明，

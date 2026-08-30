@@ -2958,6 +2958,16 @@
             <text class="invite-role-name">财务记账</text>
             <text class="invite-role-desc">收支记账与报表核对</text>
           </view>
+          <!-- 🐛 跨页面统一：此前本弹窗缺失【爱心家人】这一档，与 index.ts 的
+               邀请码弹窗（onOpenGenCodeModal/genAvailableRoles）少了一个选项，
+               大家长在本页无法生成家人身份的邀请码 -->
+          <view class="invite-role-item {{inviteTargetRole === 'FAMILY' ? 'selected' : ''}}"
+                data-role="FAMILY" bindtap="onSelectInviteRole">
+            <view class="invite-role-check" wx:if="{{inviteTargetRole === 'FAMILY'}}">✓</view>
+            <text class="invite-role-icon">❤️</text>
+            <text class="invite-role-name">爱心家人</text>
+            <text class="invite-role-desc">查看爱心餐与门店动态</text>
+          </view>
           <view class="invite-role-item {{inviteTargetRole === 'VOLUNTEER' ? 'selected' : ''}}"
                 data-role="VOLUNTEER" bindtap="onSelectInviteRole">
             <view class="invite-role-check" wx:if="{{inviteTargetRole === 'VOLUNTEER'}}">✓</view>

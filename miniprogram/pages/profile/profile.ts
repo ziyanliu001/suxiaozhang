@@ -962,6 +962,11 @@ Page({
 
   onUnload() {
     this.clearPendingLeaderboardTimer();
+    // 🛡️ 邀请码弹窗隐藏 TabBar 的安全网：正常关闭路径（onCloseInviteModal/
+    // onCloseInviteResultModal）已经会恢复，这里防的是弹窗开着时用户通过非
+    // 常规路径离开本页，避免 TabBar 一直卡在隐藏态。已经是显示态时重复
+    // 调用无副作用
+    wx.showTabBar({ animation: false });
   },
 
   clearPendingLeaderboardTimer() {
@@ -4674,10 +4679,18 @@ Page({
 
   onPatriarchGenCode() {
     this.setData({ showInviteModal: true, inviteTargetRole: 'VOLUNTEER', inviteResultCode: '', inviteResultQrFileId: '', inviteQrLoadFailed: false });
+    // 🐛 底部按钮被 TabBar 遮挡修复：pages/profile/profile 是 tabBar 页面，
+    // 原生 TabBar 渲染在独立的 native 图层，永远盖在 WXML 内容之上——单靠
+    // .invite-modal-panel 的 z-index/安全区 padding（见 profile.wxss 同名
+    // 注释）治标不治本，实测仍会挡住底部生成按钮。弹窗打开期间直接隐藏
+    // TabBar，从根源上消除遮挡的可能，与 index.ts 的 onOpenGenCodeModal
+    // 采用同一套处理方式，两处邀请码弹窗行为保持一致
+    wx.hideTabBar({ animation: true });
   },
 
   onCloseInviteModal() {
     this.setData({ showInviteModal: false });
+    wx.showTabBar({ animation: true });
   },
 
   onSelectInviteRole(e: any) {
@@ -4732,6 +4745,10 @@ Page({
 
   onCloseInviteResultModal() {
     this.setData({ showInviteResultModal: false });
+    // 生成成功后 showInviteModal→showInviteResultModal 是同一次沉浸式流程的
+    // 延续（中途未调用过 wx.showTabBar），TabBar 一直保持隐藏，这里才是
+    // 真正的流程终点，在此统一恢复
+    wx.showTabBar({ animation: true });
   },
 
   onCopyPatriarchInviteCode() {
