@@ -948,7 +948,7 @@
                 <text class="summary-item">人数：{{parseResult.totalCount}}</text>
                 <text class="summary-item summary-highlight">金额：¥{{totalParsedAmount}}</text>
                 <view class="intention-badge intention-badge-yangshan" wx:if="{{meritType !== 'yin'}}"><text>🌸 阳善</text></view>
-                <view class="intention-badge intention-badge-yinde" wx:else><text>🌿 积阴德</text></view>
+                <view class="intention-badge intention-badge-yinde" wx:else><text>🌿 匿名</text></view>
               </view>
             </view>
             
