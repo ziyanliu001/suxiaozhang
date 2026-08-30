@@ -709,9 +709,6 @@ Page({
     // 只含得分 > 0 的门店。纯前端计算，不需要额外云函数请求
     supportNeededStores: [] as any[],
     showNationalDashboard: false,
-    // 🆕 大家长免费版引导卡片：未订阅专业版时展示门店总数 + 升级 CTA，订阅后消失
-    showNationalTeaser: false,
-    nationalStoreCountForTeaser: 0,
     // 🐛 根因修复：wxml 容器此前用 nationalData.nationalTotalDiners !== undefined
     // 作为"是否已加载好"的隐式判据——loadNationalDashboard() 云调用还在飞行中，
     // 或者失败/报错时，这个字段永远是 undefined，容器就一直不渲染。而此时
@@ -2049,41 +2046,19 @@ Page({
   // 订阅拦截已移除——免费版租户的大家长直接进入全国视图，与超管/其它角色
   // 待遇一致；真正的付费墙留在 Excel 批量导出等深度功能上
   async _triggerPatriarchNationalView() {
-    this.setData({ isAllStoresMode: true, showNationalTeaser: false });
+    this.setData({ isAllStoresMode: true });
     await this.loadNationalDashboard();
   },
 
-  // 大家长免费版引导：静默拉取全机构门店总数（不含财务数据），展示在升级引导 Modal 中
-  async _fetchNationalStoreCount() {
-    try {
-      const res = await callFunctionWithTimeout({
-        name: 'getNationalDashboard',
-        data: { action: 'storeCount' }
-      }) as any;
-      const count = res && res.result && res.result.storeCount;
-      if (typeof count === 'number') {
-        this.setData({ nationalStoreCountForTeaser: count });
-      }
-    } catch (e) {
-      console.warn('[statistics] _fetchNationalStoreCount 失败（忽略）:', e);
-      reportCloudSdkErrorIfCorrupted(e);
-    }
-  },
-
-  // 关闭升级引导 Modal：仅隐藏弹窗，单店统计页面状态原封不动
-  onCloseNationalTeaser() {
-    this.setData({ showNationalTeaser: false });
-  },
-
-  // 🌟 featureName：具体触发这次拦截的功能名（如"多门店聚合看板"/"Excel 报表
-  // 导出"），拼进 feature-locked-modal 组件的提示文案；不传时组件自己兜底成
+  // 🌟 featureName：具体触发这次拦截的功能名（如"Excel 报表导出"，见
+  // CLAUDE.md 双轨制架构——全国大屏查看已免费，付费墙目前只剩这一类深度
+  // 功能），拼进 feature-locked-modal 组件的提示文案；不传时组件自己兜底成
   // "该功能"。大家长/超管分支不弹这个轻量拦截弹窗——直接设交接标记后跳个人
   // 中心，profile.onShow 检测到标记会自动唤起详细的套餐订购/权益对比弹窗
   // （唯一维护权益文案的地方，见 profile.ts showSubscriptionModal），不再
   // 出现死循环 Toast
   onOpenPlanUpgradeModal(featureName?: string) {
     if (this.data.isPatriarch || this.data.isAdmin) {
-      this.setData({ showNationalTeaser: false });
       requestOpenSubscription();
       wx.switchTab({ url: '/pages/profile/profile' });
     } else {
