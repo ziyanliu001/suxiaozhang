@@ -2,6 +2,45 @@ const cloud = require('wx-server-sdk');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
+// 🐛（2026-08-31 紧急修复：验真二维码 scene 45 字符超限）根因：验真场景
+// scene 原编码为 `t_${storeId}_d_${dateDigits}`，云数据库自动生成的 _id 是
+// 32 位十六进制字符串——2(t_) + 32(storeId) + 3(_d_) + 8(日期) = 45 字符，
+// 远超 wxacode.getUnlimited 的 32 字符硬顶，生成必然失败。
+//
+// 🛡️ 压缩策略：不做有损截断（截断 storeId 前 N 位会导致扫码验真查到别家
+// 门店，见下方分支保留的旧格式注释里对这个风险的说明），而是把 32 位十六进
+// 制 _id（128 bit）当大整数用 BigInt 重新按 36 进制编码——128 bit 数值在
+// 36 进制下最多 25 个字符（36^25 > 2^128 - 1 > 36^24），可逆、不丢精度，
+// 比原样保留省下至少 7 个字符。日期同样按 36 进制编码：yyyymmdd 这个
+// 8 位十进制数在 2000-01-01 至 2099-12-31 整个 21 世纪范围内换算成 36 进制
+// 恒为 5 位（36^4 < 20000101 且 20991231 < 36^5），不需要额外补零对齐。
+// 新格式 = base36(storeId) + base36(yyyymmdd)，全程不含分隔符——旧格式
+// t_..._d_... 固定包含下划线，新格式的 36 进制字母表（0-9a-z）里没有下划线，
+// 解析侧（public-verify resolveTarget）靠"是否包含下划线"零成本区分两种
+// 格式，互不冲突，已经打印/分享出去的旧码不受影响。
+const HEX32_PATTERN = /^[0-9a-f]{32}$/i;
+
+function hexToBase36(hexStr) {
+  return BigInt('0x' + hexStr).toString(36);
+}
+
+// 🛡️ 只在"能保证安全落在 32 字符硬顶内"时才启用压缩格式：非标准 32 位
+// 十六进制 _id（如少量手工建的短字符串种子门店 'store_haicang_001'）本就
+// 不长，直接沿用旧的可读格式即可，没有压缩必要，也避免对非十六进制输入
+// 做 BigInt 转换出错
+function buildVerifyScene(storeId, dateDigits) {
+  if (HEX32_PATTERN.test(storeId) && dateDigits.length === 8) {
+    const storeIdB36 = hexToBase36(storeId);
+    const dateB36 = parseInt(dateDigits, 10).toString(36);
+    if (dateB36.length === 5) {
+      return storeIdB36 + dateB36;
+    }
+    // 极端兜底：日期换算后不是预期的 5 位（理论上只有 22 世纪之后才会发生），
+    // 退回旧格式，交给下方 MAX_SCENE_LENGTH 校验兜底
+  }
+  return `t_${storeId}_d_${dateDigits}`;
+}
+
 exports.main = async (event, context) => {
   const { OPENID } = cloud.getWXContext();
   const { storeId, storeName, purpose, date } = event;
@@ -72,9 +111,11 @@ exports.main = async (event, context) => {
 
     // 🌟 验真二维码场景：海报右下角"扫码验真"需要一个指向公开只读页面
     // subpackages/admin/pages/public-verify/index、且携带 storeId+date 的码，而不是首页推广码。
-    // scene 字段上限 32 字符（wxacode.getUnlimited 硬限制），装不下完整门店名/
-    // 带连字符的日期，编码成 t_<storeId>_d_<yyyymmdd> 由 public-verify 页自行解析
-    // （见该页 resolveTarget 里的兼容格式）
+    // scene 字段上限 32 字符（wxacode.getUnlimited 硬限制），实际编码由
+    // buildVerifyScene() 决定——32 位十六进制 _id 走 base36 压缩格式（不含
+    // 下划线），短种子门店 ID 走旧的 t_<storeId>_d_<yyyymmdd> 可读格式，
+    // 由 public-verify 页 resolveTarget 按"是否含下划线"自动区分解析
+    // （见该页头部注释）
     const isVerifyQr = purpose === 'verify';
     // 🐛 与上面权限检查的 isLowRiskPersonalQr 是两个独立关注点：这里只决定
     // scene 该编码成"u=<openid前10位>&s=<storeId前10位>"（证书场景，供 app.ts
@@ -98,7 +139,7 @@ exports.main = async (event, context) => {
     // pages/index/index.ts onLoad），且保留对存量已生成/已分享二维码里
     // "s=<storeId>" 老格式的兼容解析，不影响已经印出去、发出去的海报
     const codeTarget = (isVerifyQr && dateDigits.length === 8)
-      ? { page: 'subpackages/admin/pages/public-verify/index', scene: `t_${storeId}_d_${dateDigits}` }
+      ? { page: 'subpackages/admin/pages/public-verify/index', scene: buildVerifyScene(storeId, dateDigits) }
       : isPersonalCertificate
         ? { page: 'pages/index/index', scene: `u=${String(OPENID || '').substring(0, 10)}&s=${String(storeId).substring(0, 10)}` }
         : { page: 'pages/index/index', scene: String(storeId) };

@@ -34,6 +34,25 @@ const APPROVAL_STATUS_LABELS: Record<string, string> = {
 // 优雅降级为固定的温馨感言，而不是让感言墙空白
 const DEFAULT_TESTIMONIAL = '感恩每一位爱心志愿者的无私付出，你们的善行温暖了每一颗心！';
 
+// 🐛（2026-08-31 紧急修复：验真二维码 scene 45 字符超限）与
+// cloudfunctions/getStoreQRCode 的 buildVerifyScene() 配套的解码逻辑——
+// 32 位十六进制 _id 那边按 36 进制重新编码成 base36(storeId)+base36(yyyymmdd)
+// 不含分隔符的紧凑格式（详见该云函数头部注释），这里原样逆运算还原。
+// BigInt 保证 128 位整数精度不丢失，纯字符串正则/parseInt 做不到这一点
+// （Number 只有 53 位安全整数精度）。
+function base36ToHex(b36Str: string): string {
+  // 🛡️ 用 BigInt(36)/BigInt(0) 函数调用而不是 36n/0n 字面量后缀写法——后者
+  // 需要 tsconfig target 至少 ES2020 才能编译，本项目 target 是 ES2017
+  // （历史既有配置，不为这一处改动牵动全项目编译目标），函数调用写法在
+  // 任何 target 下都能编译，运行时行为完全等价
+  let n = BigInt(0);
+  const base = BigInt(36);
+  for (const ch of b36Str) {
+    n = n * base + BigInt(parseInt(ch, 36));
+  }
+  return n.toString(16).padStart(32, '0');
+}
+
 Page({
   _storeId: '' as string,
 
@@ -114,11 +133,17 @@ Page({
     this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
-  // 兼容两种入口：
+  // 兼容三种入口：
   // 1. 直接携带参数打开（分享链接/调试）：?storeId=xxx&date=2026-07-20
-  // 2. 扫码进入：wx.getMenuButtonBoundingClientRect...不，是 options.scene，
-  //    格式 t_<storeId>_d_<yyyymmdd>（微信小程序码 scene 字段最长 32 字符，
-  //    只能塞精简编码，装不下完整门店名或带连字符的日期）
+  // 2. 扫码进入·旧格式（短种子门店 ID，如 'store_haicang_001'）：
+  //    options.scene 格式 t_<storeId>_d_<yyyymmdd>
+  // 3. 扫码进入·新紧凑格式（32 位十六进制云数据库 _id）：options.scene 格式
+  //    base36(storeId)+base36(yyyymmdd)，不含下划线——与 2 互斥自解释，靠
+  //    "是否包含下划线"零成本区分（36 进制字母表 0-9a-z 里没有下划线，
+  //    格式 2 恒含下划线），见 cloudfunctions/getStoreQRCode buildVerifyScene()
+  //    头部注释。微信小程序码 scene 字段硬限 32 字符，格式 2 对完整 32 位
+  //    十六进制 _id 会超限（2026-08-31 线上事故：45 字符生成失败），格式 3
+  //    是这次的修复方案
   resolveTarget(options: Record<string, string>): { storeId: string; date: string } | null {
     if (options && options.storeId && options.date) {
       return { storeId: options.storeId, date: this.normalizeDate(options.date) };
@@ -132,9 +157,20 @@ Page({
 
     const scene = options && options.scene ? decodeURIComponent(options.scene) : '';
     if (scene) {
-      const match = /^t_(.+)_d_(\d{8})$/.exec(scene);
-      if (match) {
-        return { storeId: match[1], date: this.normalizeDate(match[2]) };
+      const legacyMatch = /^t_(.+)_d_(\d{8})$/.exec(scene);
+      if (legacyMatch) {
+        return { storeId: legacyMatch[1], date: this.normalizeDate(legacyMatch[2]) };
+      }
+
+      // 新紧凑格式：末 5 位是 base36(yyyymmdd)（21 世纪范围内恒为 5 位，见
+      // 云函数 buildVerifyScene 头部注释），其余为 base36(storeId)
+      if (scene.length > 5 && /^[0-9a-z]+$/.test(scene)) {
+        const dateB36 = scene.slice(-5);
+        const storeIdB36 = scene.slice(0, -5);
+        const dateDigits = String(parseInt(dateB36, 36));
+        if (dateDigits.length === 8) {
+          return { storeId: base36ToHex(storeIdB36), date: this.normalizeDate(dateDigits) };
+        }
       }
     }
 
