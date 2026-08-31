@@ -101,6 +101,23 @@ const FILE_OVERRIDES = [
   {
     target: 'miniprogram/pages/profile/enterprise/index.ts',
     source: 'scripts/core-overrides/profile.enterprise.index.ts'
+  },
+  // 🆕（视图层精简）statistics.wxml/profile.wxml 用 <include> 引用这几个
+  // WXML 文件——与 .ts 的 import 不同，<include> 引用的文件在编译期必须真实
+  // 存在，物理删除会导致小程序编译直接报错，不是"优雅降级"。所以这里跟
+  // index.ts 一样走整份覆盖（置空），而不是像同目录下只被它们内部引用的
+  // 子文件那样直接删除（见下面 SINGLE_FILE_EXCLUDES）
+  {
+    target: 'miniprogram/pages/statistics/enterprise/nationalDashboardView.wxml',
+    source: 'scripts/core-overrides/statistics.nationalDashboardView.wxml'
+  },
+  {
+    target: 'miniprogram/pages/statistics/enterprise/procurementModal.wxml',
+    source: 'scripts/core-overrides/statistics.procurementModal.wxml'
+  },
+  {
+    target: 'miniprogram/pages/profile/enterprise/saasSubscriptionModal.wxml',
+    source: 'scripts/core-overrides/profile.saasSubscriptionModal.wxml'
   }
 ];
 
@@ -117,24 +134,31 @@ const SINGLE_FILE_EXCLUDES = [
   'miniprogram/pages/statistics/enterprise/drillDownHandler.ts',
   'miniprogram/pages/statistics/enterprise/procurementHandler.ts',
   // 🆕（终局阶段）pages/profile/enterprise 的真实实现文件，同上
-  'miniprogram/pages/profile/enterprise/saasSubscriptionHandler.ts'
+  'miniprogram/pages/profile/enterprise/saasSubscriptionHandler.ts',
+  // 🆕（视图层精简）只被 nationalDashboardView.wxml 内部 <include> 引用的两个
+  // 卡片片段——该文件已被上面 FILE_OVERRIDES 换成空 stub，不再引用它们，
+  // 删除物理文件不会留下悬空的 <include>
+  'miniprogram/pages/statistics/enterprise/rebalanceSuggestionCard.wxml',
+  'miniprogram/pages/statistics/enterprise/procurementCard.wxml'
 ];
 
 // ── 已知遗留耦合（本阶段不处理，如实记录，不假装已完成物理拆分） ──────
 const KNOWN_MIXED_FILES = [
-  'pages/statistics/statistics.wxml / .wxss（全国大屏与单店历史统计的渲染标记' +
-    '仍交织在同一份 WXML/WXSS 里，见 OPEN_CORE_ARCHITECTURE.md 第 6/9 节——' +
-    '终局阶段已把 loadNationalDashboard/onDrillDownStore/集采直通车等【逻辑】' +
-    '物理搬迁到 enterprise/ 子目录并在 Core 包里整体替换为 stub，但承载这些' +
-    '逻辑的【标记结构】本身仍是同一份文件，Core 包会原样带着这些标记——' +
-    '由于对应逻辑已是 stub、云函数也已排除，这些区块在 Core 部署下渲染出的' +
-    '只会是空数据兜底态，不影响单店核心记账功能，但源码文本层面还不是' +
-    '"纯净"）',
-  'pages/profile/profile.wxml（SaaS 订阅弹窗的四处渲染入口——pro-service-card/' +
-    'top-advanced-secondary/sa-dev-tool-row/subscription-modal-mask——已各自' +
-    '叠加 enterpriseBuildEnabled && 前置条件，Core 构建下这些区块运行时' +
-    '完全不渲染；但 WXML 标记本身仍物理保留在文件里，同上，逻辑已 stub 化，' +
-    '不是"WXML 文本也物理删除"）'
+  // 🆕（视图层精简，2026-08-31）statistics.wxml/profile.wxml 里体量最大的
+  // Enterprise 标记块（全国大屏大盘+四个弹窗、SaaS 订阅+支付兜底弹窗）已经
+  // 用 <include> 物理搬出主文件，Core 构建下对应 <include> 目标文件被整份
+  // 置空（见 FILE_OVERRIDES），不再随 Core 包带着这些区块的完整 UI 结构与
+  // 文案。下面两项是本轮排查后仍然刻意不动的更小的残留：
+  'pages/profile/profile.wxml（三处更小的 SaaS 入口——pro-service-card 卡片、' +
+    'top-advanced-secondary 徽标、sa-dev-tool-row 调试入口——本身已各自叠加' +
+    'enterpriseBuildEnabled && 前置条件，Core 构建下运行时不渲染；因为每处' +
+    '都只有几行、且已经运行时不可达，没有进一步拆成独立 <include> 文件，' +
+    '与三个大弹窗块相比性价比不高，本阶段维持现状）',
+  'pages/statistics/statistics.wxss / pages/profile/profile.wxss（本轮只拆分' +
+    'WXML 结构，未同步做 WXSS 按需过滤——.national-dashboard-container/' +
+    '.procurement-card/.subscription-modal-mask 等 Enterprise 专属的样式' +
+    '规则仍留在两份主 WXSS 里，Core 包会带着这些用不到的 CSS 类定义，纯粹' +
+    '是产物体积上的冗余，不涉及信息泄露或功能问题，如实记录不假装已处理）'
 ];
 
 function readTrackedAndUntrackedFiles() {

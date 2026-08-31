@@ -1,0 +1,32 @@
+
+  <!-- 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车·意向说明弹窗：
+       全网大屏「集采直通车」卡片「提报集采意向 / 基地合作」按钮的落地点，
+       这是产品原型阶段的轻量转化路径（复制对接联系方式），真正的意向表单/
+       CRM 对接系统是独立的后续项目，本次不做 -->
+  <view class="patch-modal-mask" wx:if="{{showProcurementModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">🌾 爱心粮油源头集采直通车</text>
+        <text class="btn-close" bindtap="onCloseProcurementModal">✕</text>
+      </view>
+
+      <view class="procurement-modal-section">
+        <text class="procurement-modal-section-title">🌱 基地认证标准</text>
+        <text class="procurement-modal-section-text">合作基地须提供绿色食品/有机认证资质及产地检测报告，统一入库前经第三方抽检复核，确保源头食材安全可溯源。</text>
+      </view>
+
+      <view class="procurement-modal-section">
+        <text class="procurement-modal-section-title">🤝 统谈统采流程</text>
+        <text class="procurement-modal-section-text">全网门店月度需求汇总 → 平台统一比价议价 → 签订直供协议 → 基地直发门店/区域仓 → 门店验收入账，全程留痕可查验。</text>
+      </view>
+
+      <view class="procurement-modal-tip">
+        <text>💡 以上为产品原型说明，实际合作以平台正式对接团队沟通为准，预估节省金额为经验性测算，不构成价格承诺。</text>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCloseProcurementModal">关闭</button>
+        <button class="btn-modal-submit" bindtap="onRegisterProcurementIntent">登记合作意向</button>
+      </view>
+    </view>
+  </view>

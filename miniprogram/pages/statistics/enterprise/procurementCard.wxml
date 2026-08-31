@@ -1,0 +1,34 @@
+    <view class="procurement-card" wx:if="{{nationalData.procurementSummary}}">
+      <view class="matrix-header">
+        <text class="matrix-title">🌾 爱心粮油源头集采直通车</text>
+      </view>
+
+      <view class="procurement-demand-row">
+        <view class="procurement-demand-cell">
+          <text class="procurement-demand-val">{{nationalData.procurementSummary.monthlyRiceEstimateKg}}</text>
+          <text class="procurement-demand-lbl">大米(kg/月)</text>
+        </view>
+        <view class="procurement-demand-cell">
+          <text class="procurement-demand-val">{{nationalData.procurementSummary.monthlyFlourEstimateKg}}</text>
+          <text class="procurement-demand-lbl">面粉(kg/月)</text>
+        </view>
+        <view class="procurement-demand-cell">
+          <text class="procurement-demand-val">{{nationalData.procurementSummary.monthlyOilEstimateKg}}</text>
+          <text class="procurement-demand-lbl">食用油(kg/月)</text>
+        </view>
+      </view>
+
+      <!-- 🛡️ 措辞用"预计"，不构成价格承诺——见云函数 RICE_SAVINGS_PER_KG
+           等常量处注释，这是经验性基准测算，不是真实议价/合同锁定的价格 -->
+      <view class="procurement-savings-banner">
+        <text class="procurement-savings-text">源头基地直供预计月度可为全网节省 ¥{{nationalData.procurementSummary.estimatedSavingsYuan}} 善款</text>
+      </view>
+
+      <view class="procurement-footer">
+        <text class="procurement-partner-tag">🚜 合作直供基地 {{nationalData.procurementSummary.partnerFarmCount}} 家</text>
+        <view class="procurement-cta-btn" hover-class="ui-hover" bindtap="onOpenProcurementModal">
+          <text class="procurement-cta-icon">📋</text>
+          <text class="procurement-cta-text">提报集采意向 / 基地合作</text>
+        </view>
+      </view>
+    </view>

@@ -1,0 +1,8 @@
+<!-- 🏛️（2026-08-31 Open-Core 视图层精简构建产物）scripts/build-open-core.js
+     打包 suxiaozhang-core 时，用本文件整体覆盖
+     miniprogram/pages/profile/enterprise/saasSubscriptionModal.wxml——SaaS
+     订阅购买/续费半屏卡片 + 微信支付未配置兜底弹窗，Core 部署没有订阅套餐
+     概念，置空。对应逻辑（onOpenSubscriptionModal 等）在 Core 包里已经是
+     安全空操作 stub（见 scripts/core-overrides/profile.enterprise.index.ts），
+     showSubscriptionModal 永远不会被置为 true，置空只是为了不让 Core 开源
+     包里带着一份完整的定价文案与支付流程 UI 结构。 -->

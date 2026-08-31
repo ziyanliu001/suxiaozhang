@@ -1,0 +1,4 @@
+<!-- 🏛️（2026-08-31 Open-Core 视图层精简构建产物）scripts/build-open-core.js
+     打包 suxiaozhang-core 时，用本文件整体覆盖
+     miniprogram/pages/statistics/enterprise/procurementModal.wxml——爱心
+     粮油集采直通车意向说明弹窗，Core 部署没有跨机构集采撮合概念，置空。 -->

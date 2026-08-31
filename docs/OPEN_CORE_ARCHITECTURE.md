@@ -1,6 +1,6 @@
-# Open-Core 架构拆分方案（2026-08-31，已推进至终局阶段）
+# Open-Core 架构拆分方案（2026-08-31，已推进至视图层精简阶段）
 
-> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`；终局阶段（见第 9 节）把 `pages/statistics`/`pages/profile` 里此前一直标记为"深度耦合、本阶段未拆分"的 Enterprise 逻辑，物理搬迁进各自的 `enterprise/` 子目录，是本文档目前对 Core/Enterprise 边界落地最彻底的一次。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布；`pages/statistics`/`pages/profile` 的 WXML/WXSS 标记层仍未物理拆分（见第 9.4 节）。
+> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`；终局阶段（第 9 节）把 `pages/statistics`/`pages/profile` 的 Enterprise **逻辑层**（.ts）物理搬迁进各自的 `enterprise/` 子目录；视图层精简阶段（第 10 节）接着把两个页面体量最大的 Enterprise **视图层**（.wxml）也用 `<include>` 物理搬了出去。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布；两份主 WXSS 里对应的样式规则、profile.wxml 里三处更小的 SaaS 入口仍未拆分（见第 10.4 节）。
 
 ## 1. 边界定义原则
 
@@ -198,3 +198,45 @@ Stub 方法覆盖范围**不是只覆盖"字面被外部调用"的那几个**，
 - `profile.wxml` 的四处 SaaS 订阅入口（`pro-service-card`/`top-advanced-secondary`/`sa-dev-tool-row`/`subscription-modal-mask`）已有 `enterpriseBuildEnabled &&` 前置条件（上一阶段加的），Core 构建下运行时完全不渲染，但同样是"标记还在、判断为假"而不是"标记被物理删除"。
 
 要做到 WXML 层也物理纯净，需要把这些区块拆成独立的 `.wxml` 片段（`<import>`/`<template>`）或整页拆分（如 `pages/statistics` 拆成 Core 版 + 仅 Enterprise 构建才包含的 `pages/enterprise-dashboard`），是比本次"方法级搬迁"更大的一次页面级重构，本阶段不做，如实记录，不假装已经完成。
+
+> ⚠️ 本节写于终局阶段，第 9.5 节说的"WXML 层"物理拆分已在第 10 节完成了体量最大的部分——全国大屏大盘 + 四个弹窗、SaaS 订阅 + 支付兜底弹窗都已经用 `<include>` 物理搬出主文件。仍然成立的只是 profile.wxml 三处更小的入口与两份 WXSS，见第 10.4 节。
+
+## 10. 视图层精简：statistics.wxml 与 profile.wxml 的物理拆分（2026-08-31）
+
+第 9 节把 Enterprise **逻辑**（.ts 方法）搬进了 `enterprise/` 子目录，但当时的 WXML 仍然是"标记留在原地、判断为假就不渲染"（`wx:if="{{enterpriseBuildEnabled}}"`）。本节用 WXML 原生的 **`<include>`** 机制把标记本身也物理搬出去。
+
+### 10.1 为什么选 `<include>` 而不是 `<template>`/自定义组件
+
+任务本身给了"组件或 template"两个选项，排查后选择了两者之外的第三个机制：
+
+- **自定义组件（`Component()`）**排除：组件有独立的 `data`/`methods` 作用域，组件内的 `bindtap` 只会解析到组件自己的方法，不会落到页面的 `Page()` 实例上——这意味着要把 `.national-dashboard-container` 改成组件，其内部几十个 `bindtap="onXxx"` 全部要么重写成 `triggerEvent` 事件转发再由页面监听转调，要么把第 9 节刚刚搬进 `enterprise/*.ts` 的逻辑再重新誊一份到组件的 `Component()` 里——两条路都是大改，且都会让"同一份逻辑在页面和组件里各留一份"的风险死灰复燃。
+- **`<template>`**排除：`<template is="x" data="{{...}}">` 同样不会自动继承页面完整的 `data`——必须在调用处显式枚举模板要用到的每一个字段（`data="{{a: a, b: b, ...}}"`）。`.national-dashboard-container` 绑定的数据字段有四十多个（`nationalData`/`nationalMatrixList`/`superAdminInsights`/`storeDirectory`/`provincePickerOptions`……），手工枚举既繁琐又容易漏字段导致"模板里读到 undefined 但没有任何报错提示"的静默 bug。
+- **`<include>`**：官方文档原话"将目标文件除 `<template/>` 外的整个代码引入，相当于是拷贝到 include 位置"——**完全共享调用页面的数据与方法作用域**，`bindtap="onDrillDownStore"` 之类的绑定挪到独立文件后行为分毫不差，不需要重写任何一处事件绑定或数据传递。这与第 9 节"方法定义挪到哪个文件不影响 `this` 绑定"是同一个精神：**只挪代码物理位置，不改变运行时行为**。
+
+### 10.2 具体拆分
+
+**`pages/statistics/`**：`.national-dashboard-container`（原 174~1012 行，含全国大屏大盘、地区/自定义门店筛选弹窗、超管高阶面板）+ 三个配套弹窗（全国运营/财务报表生成弹窗、机构多店合并 Excel 导出确认弹窗、SaaS 权益看板弹窗）合并搬进 `enterprise/nationalDashboardView.wxml`；调拨建议卡片（`.support-suggestion-card`）单独搬进 `enterprise/rebalanceSuggestionCard.wxml`，爱心粮油集采卡片（`.procurement-card`）单独搬进 `enterprise/procurementCard.wxml`，两者通过嵌套 `<include>` 从 `nationalDashboardView.wxml` 内部引用（`<include>` 支持嵌套，允许一份被包含的文件自己再 `<include>` 别的文件）；集采意向说明弹窗（`.patch-modal-mask` + `showProcurementModal`）单独搬进 `enterprise/procurementModal.wxml`。`statistics.wxml` 最终只留两行：
+```xml
+<include src="./enterprise/nationalDashboardView.wxml"/>
+<include src="./enterprise/procurementModal.wxml"/>
+```
+`statistics.wxml` 从 2487 行降到 1495 行（**净减 992 行，40%**）。
+
+**`pages/profile/`**：SaaS 订阅购买半屏卡片（`.subscription-modal-mask`）与微信支付未配置兜底弹窗（`.payment-pending-modal-mask`，两者原本就紧邻）一并搬进 `enterprise/saasSubscriptionModal.wxml`，`profile.wxml` 只留一行 `<include src="./enterprise/saasSubscriptionModal.wxml"/>`。`profile.wxml` 从 3334 行降到 3035 行（**净减 299 行，9%**）——比例上不如 statistics.wxml 是因为 profile.wxml 里还有另外三处更小的 SaaS 入口没有一并拆（见 10.4 节），且 profile.wxml 本身承载的 Core 内容（个人信息/义工打卡/角色设置等）占比远高于 statistics.wxml。
+
+### 10.3 构建流水线：`<include>` 目标文件必须"置空"而不是"删除"
+
+这是本节与第 9 节 `.ts` 覆盖方式的关键差异——`import` 是运行时/编译期的符号解析，模块不存在只会在真正 `require`/`import` 到它时才报错；`<include>` 是 WXML 编译期的文本拼接，**目标文件在编译小程序时必须真实存在**，物理删除会导致整个页面编译失败，不是"优雅降级"。因此 `scripts/build-open-core.js` 对这三个 `<include>` 直接引用的文件（`nationalDashboardView.wxml`/`procurementModal.wxml`/`saasSubscriptionModal.wxml`）走的是 `FILE_OVERRIDES`（整份替换成只剩一行说明注释的空文件），而不是 `SINGLE_FILE_EXCLUDES`（直接删除）；只有那两个"只被 `nationalDashboardView.wxml` 内部嵌套 `<include>` 引用、没有被主文件直接引用"的卡片文件（`rebalanceSuggestionCard.wxml`/`procurementCard.wxml`），因为引用它们的文件本身已经被置空、不会再触发对它们的 `<include>`，才真正物理删除。
+
+### 10.4 已知遗留（如实记录）
+
+- `pages/profile/profile.wxml` 里还有三处更小的 SaaS 入口（`pro-service-card` 卡片、`top-advanced-secondary` 徽标、`sa-dev-tool-row` 调试入口）——本身已经各自叠加 `enterpriseBuildEnabled &&` 前置条件、Core 构建下运行时不可达，但因为每处只有几行、拆成独立 `<include>` 文件的收益远低于三个大弹窗块，本阶段没有动。
+- `statistics.wxss`/`profile.wxss` 未做同步的按需过滤——`.national-dashboard-container`/`.procurement-card`/`.subscription-modal-mask` 等样式规则仍然完整存在于两份 WXSS 里。这纯粹是 Core 产物体积上的冗余（用不到的 CSS 类定义），不涉及信息泄露（CSS 规则本身不包含业务文案/定价），也不影响功能，本阶段判定优先级低于 WXML 结构拆分，未处理。
+
+### 10.5 验证
+
+`npx tsc --noEmit`（全量源码）与 WXML 标签平衡校验对新增的 5 个 `.wxml` 片段文件（`nationalDashboardView`/`rebalanceSuggestionCard`/`procurementCard`/`procurementModal`/`saasSubscriptionModal`）与两个修改后的主文件均通过。执行 `npm run build:core` 生成 `dist/suxiaozhang-core` 后核对：`statistics/enterprise`/`profile/enterprise` 目录下只剩 `index.ts` 与置空后的 `.wxml` stub，两个卡片片段文件已被物理删除；对整个 Core 产物 grep 搜索定价数字字面量（`1,688`/`3,688`）与真实的容器/弹窗 class 名（`national-dashboard-container`/`subscription-modal-mask`）均零命中，确认没有结构性泄漏；`scripts/security-audit.js` 对该产物扫描结果全绿。
+
+### ⚠️ 部署状态说明
+
+本节纯前端改动：新增 `miniprogram/pages/statistics/enterprise/{nationalDashboardView,rebalanceSuggestionCard,procurementCard,procurementModal}.wxml`、`miniprogram/pages/profile/enterprise/saasSubscriptionModal.wxml`；`statistics.wxml`/`profile.wxml` 对应区块替换为 `<include>`；新增 `scripts/core-overrides/{statistics.nationalDashboardView,statistics.procurementModal,profile.saasSubscriptionModal}.wxml` 三份置空 stub；`scripts/build-open-core.js` 的 `FILE_OVERRIDES`/`SINGLE_FILE_EXCLUDES`/`KNOWN_MIXED_FILES` 均已同步更新。`tsc --noEmit`、WXML 标签平衡校验、`build:core` + `security-audit.js` 均已通过，不涉及任何 `.ts` 逻辑改动、不涉及云函数改动、不涉及数据库结构迁移，重新编译/预览小程序即可生效。

@@ -1,0 +1,300 @@
+  <!-- 🔐 高级功能授权半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
+       管理"时唤起。卡片分为：① 黑钻身份卡（门店 + 套餐状态）② 高级权益对比
+       ③ 授权码自助兑换 ④ 底部金色主按钮（在线订购/续费）。
+       card 自独立 position:fixed 贴底 + z-index:9999，避免被自定义 tabBar 遮挡。-->
+  <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" wx:if="{{enterpriseBuildEnabled}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
+    <!-- 🏛️ Flex 垂直三段式骨架：.sub-modal-container 固定 height:80vh（封顶
+         1200rpx），不再是"内容多高、卡片多高"的 max-height 内容驱动型盒子——
+         无论中间套餐对比/权益卡片内容有多少，这个盒子的总高度都是确定值，
+         底部操作区（flex-shrink:0）永远有稳定的落脚空间，不会被顶出可视区 -->
+    <view class="sub-modal-container" catchtap="stopPropagation">
+
+      <!-- 右上角关闭 -->
+      <view class="sub-close-row">
+        <view class="sub-close-btn" bindtap="onCloseSubscriptionModal">✕</view>
+      </view>
+
+      <!-- 加载中骨架 -->
+      <view class="subscription-loading" wx:if="{{subscriptionLoading}}">
+        <text>加载套餐信息中…</text>
+      </view>
+
+      <block wx:else>
+
+        <!-- ① 顶部固定：黑钻身份卡（机构信息） ──────────────────────── -->
+        <view class="sub-identity-card sub-identity-card-{{subscriptionInfo.planType}}">
+          <!-- 🐛 归属层级修复：套餐是按机构（tenantId）生效的，不是按单店——同一机构
+               多家门店共享这一份套餐权益（见 checkTenantPermission 云函数），这里改
+               展示机构名而不是当前门店名，避免"续费的到底是这家店还是整个机构"的误解 -->
+          <view class="sub-identity-top">
+            <text class="sub-store-name">{{currentTenantName || currentStoreName || '我的机构'}}</text>
+            <view class="sub-plan-badge sub-plan-badge-{{subscriptionInfo.planType}}">
+              {{subscriptionInfo.planLabel}}
+            </view>
+          </view>
+          <view class="sub-identity-bottom">
+            <!-- 🕊️ 宽限期：套餐已过到期日但仍在 7 天宽限期内，高级功能照常可用，
+                 只是明确提醒"快去续费"，与彻底降级为 basic 的 isExpired 分开展示 -->
+            <text class="sub-expiry-grace" wx:if="{{subscriptionInfo.isInGracePeriod}}">⏳ 已到期，宽限期至 {{subscriptionInfo.graceExpireDate}}（宽限期内权益不受影响），请尽快续费</text>
+            <text class="sub-expiry-warn" wx:elif="{{subscriptionInfo.isExpiringSoon}}">⚠️ 即将到期：{{subscriptionInfo.expireDateStr}}</text>
+            <text class="sub-expiry-expired" wx:elif="{{subscriptionInfo.isExpired}}">套餐已到期（超出 7 天宽限期），续费后恢复高级权益</text>
+            <text class="sub-expiry-active" wx:elif="{{subscriptionInfo.isActive}}">{{subscriptionInfo.expireDisplayText}}</text>
+            <text class="sub-expiry-free" wx:else>当前为免费基础版，升级解锁更多权益</text>
+            <!-- 🆕 门店配额进度：与到期状态无关，任何档位/状态下都展示，见
+                 fetchSubscriptionInfo storeLimit/usedStoreCount 注释 -->
+            <text class="sub-store-quota-line">📦 已接入 {{subscriptionInfo.usedStoreCount}} / {{subscriptionInfo.storeLimit}} 家</text>
+          </view>
+        </view>
+
+        <!-- ② 中间滚动区：.sub-modal-body（flex:1，唯一会滚动的区域）——
+             机构信息卡片已固定在上方，这里只承载"可以变长"的内容：升级权益
+             卡片组、套餐对比 Tab、价格/配额卡片、扩容包 Stepper、授权码
+             折叠区，内容再多也只在这一个区域内部滚动，不影响上下两段固定区 -->
+        <scroll-view scroll-y="true" class="sub-modal-body sub-scroll-body">
+
+          <!-- 🍎 iOS 虚拟商品支付合规提示：平面提示 + 引导授权码通道，见
+               data.isIOSPlatform / onOpenSubscriptionModal 注释——放在滚动区
+               最顶部，打开弹窗无需滚动即可看到，不是藏在底部按钮才发现 -->
+          <view class="sub-ios-compliance-banner" wx:if="{{isIOSPlatform}}">
+            🍎 根据苹果平台规则，iOS 端暂不支持展示价格及应用内购买/续费。如需开通或续费，请使用下方「授权码 / 兑换卡号」自助兑换，或联系客服咨询。
+          </view>
+
+          <!-- ②.1 高级权益卡片组 ──────────────────────────────── -->
+          <view class="sub-section">
+            <text class="sub-section-title">{{subscriptionInfo.isActive ? '✦ 当前权益' : '✦ 升级后解锁'}}</text>
+            <view class="sub-benefit-grid">
+              <view class="sub-benefit-card {{subscriptionInfo.isActive ? 'sub-benefit-active' : ''}}">
+                <text class="sub-benefit-icon">📊</text>
+                <text class="sub-benefit-name">全国汇总大屏</text>
+                <text class="sub-benefit-desc">跨店数据一屏掌握</text>
+              </view>
+              <view class="sub-benefit-card {{subscriptionInfo.isActive ? 'sub-benefit-active' : ''}}">
+                <text class="sub-benefit-icon">📑</text>
+                <text class="sub-benefit-name">Excel 批量导出</text>
+                <text class="sub-benefit-desc">账目明细一键导表</text>
+              </view>
+              <view class="sub-benefit-card {{subscriptionInfo.isActive ? 'sub-benefit-active' : ''}}">
+                <text class="sub-benefit-icon">⚡</text>
+                <text class="sub-benefit-name">高级权限管理</text>
+                <text class="sub-benefit-desc">多财务/多大家长并行</text>
+              </view>
+            </view>
+          </view>
+
+          <!-- ②.2 套餐对比：基础版 / 专业版 / 旗舰版 / 扩容门店包 四个 Tab
+               切换，明确列出定价与门店配额——与上面的"当前权益"摘要不同，这里是
+               给用户"看清楚每档具体差在哪、该选哪个"用的完整对比，纯浏览态，
+               不影响任何已生效的订阅状态。门店配额口径与 checkTenantPermission/
+               createStore 等云函数的 PLAN_STORE_LIMITS 完全一致：
+               basic 2 家 / pro 10 家 / enterprise（旗舰版）30 家 -->
+          <view class="sub-section">
+            <text class="sub-section-title">✦ 套餐对比</text>
+            <view class="sub-plan-compare-tabs">
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'basic' ? 'active' : ''}}" data-plan="basic" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">🌱</text>
+                <text>基础版</text>
+              </view>
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'pro' ? 'active' : ''}}" data-plan="pro" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">🌟</text>
+                <text>专业版</text>
+              </view>
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'enterprise' ? 'active' : ''}}" data-plan="enterprise" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">👑</text>
+                <text>旗舰版</text>
+              </view>
+              <view class="sub-plan-compare-tab {{comparePlanTab === 'add_on' ? 'active' : ''}}" data-plan="add_on" bindtap="onSwitchComparePlanTab">
+                <text class="sub-plan-compare-tab-icon">🏪</text>
+                <text>扩容包</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:if="{{comparePlanTab === 'basic'}}">
+              <view class="sub-plan-compare-price-row">
+                <text class="sub-plan-compare-price">¥0</text>
+                <text class="sub-plan-compare-price-unit">永久免费</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">2</text> 家</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>基础收支记账</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>日常流水查看</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>简单日报</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:elif="{{comparePlanTab === 'pro'}}">
+              <!-- 🍎 iOS 虚拟商品支付合规：不得展示价格，见 data.isIOSPlatform 注释 -->
+              <view class="sub-plan-compare-price-row" wx:if="{{!isIOSPlatform}}">
+                <text class="sub-plan-compare-price">¥1,688</text>
+                <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-compare-price-row" wx:else>
+                <text class="sub-plan-compare-price-unit">受平台规范限制，iOS 端暂不支持在线支付</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">10</text> 家</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>跨店汇总统计</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>进销存 / 物资管理</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>Excel 账目与收支报表导出</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>角色权限精细化</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:elif="{{comparePlanTab === 'enterprise'}}">
+              <!-- 🍎 iOS 虚拟商品支付合规：不得展示价格，见 data.isIOSPlatform 注释 -->
+              <view class="sub-plan-compare-price-row" wx:if="{{!isIOSPlatform}}">
+                <text class="sub-plan-compare-price">¥3,688</text>
+                <text class="sub-plan-compare-price-unit">/ 年</text>
+              </view>
+              <view class="sub-plan-compare-price-row" wx:else>
+                <text class="sub-plan-compare-price-unit">受平台规范限制，iOS 端暂不支持在线支付</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 包含机构门店上限：<text class="sub-plan-quota-num">30</text> 家</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>数据大屏看板</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>专属财务凭证导出</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>数据备份</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>多级人员调度与优先客服</text>
+              </view>
+            </view>
+
+            <view class="sub-plan-compare-panel" wx:else>
+              <!-- 🍎 iOS 虚拟商品支付合规：不得展示价格，见 data.isIOSPlatform 注释 -->
+              <view class="sub-plan-compare-price-row" wx:if="{{!isIOSPlatform}}">
+                <text class="sub-plan-compare-price">¥200</text>
+                <text class="sub-plan-compare-price-unit">/ 店 / 年</text>
+              </view>
+              <view class="sub-plan-compare-price-row" wx:else>
+                <text class="sub-plan-compare-price-unit">受平台规范限制，iOS 端暂不支持在线支付</text>
+              </view>
+              <view class="sub-plan-quota-tag">📦 在当前机构门店上限基础上按需叠加</view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>不改变套餐档位，仅追加门店名额</text>
+              </view>
+              <view class="sub-plan-compare-feature-row">
+                <text class="sub-plan-compare-feature-icon">✓</text>
+                <text>基础版机构同样可购买</text>
+              </view>
+              <view class="sub-plan-addon-stepper-row" wx:if="{{!isIOSPlatform}}">
+                <text class="sub-plan-addon-stepper-label">购买数量（家/年）</text>
+                <view class="sub-plan-addon-stepper">
+                  <view class="sub-plan-addon-stepper-btn" bindtap="onDecreaseAddOnQuantity">－</view>
+                  <text class="sub-plan-addon-stepper-value">{{addOnQuantity}}</text>
+                  <view class="sub-plan-addon-stepper-btn" bindtap="onIncreaseAddOnQuantity">＋</view>
+                </view>
+              </view>
+              <view class="sub-plan-addon-total-row" wx:if="{{!isIOSPlatform}}">
+                <text>合计：</text>
+                <text class="sub-plan-addon-total-price">¥{{addOnTotalPrice}}</text>
+              </view>
+            </view>
+          </view>
+
+          <!-- ②.3 授权码兑换区：折叠式次级入口 ──────────────────────
+               🐛 层级冲突修复：此前是一张与"套餐对比"同权重的常驻展开卡片
+               （标题+输入框+按钮全部常驻可见），与主线"微信支付开通"抢视觉
+               焦点，容易让用户误以为"这两条路都得走一遍"。改为默认折叠的
+               轻量入口——只有极少数拿到卡号/授权码的用户才会点开，绝大多数
+               走微信支付的用户完全不会被这块内容分散注意力 -->
+          <view class="sub-section sub-redeem-collapse">
+            <view class="sub-redeem-toggle" bindtap="onToggleRedeemSection">
+              <text class="sub-redeem-toggle-icon">🎫</text>
+              <text class="sub-redeem-toggle-text">使用授权码 / 兑换卡号</text>
+              <text class="sub-redeem-toggle-arrow {{showRedeemSection ? 'sub-redeem-toggle-arrow-expanded' : ''}}">›</text>
+            </view>
+            <view class="sub-redeem-panel" wx:if="{{showRedeemSection}}">
+              <view class="sub-redeem-input-row">
+                <input class="sub-redeem-input"
+                       placeholder="请输入或粘贴授权码 / 兑换卡号"
+                       value="{{activationCodeInput}}"
+                       focus="{{redeemInputFocus}}"
+                       bindinput="onActivationCodeInput" />
+                <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+              </view>
+              <button class="sub-btn-activate {{(activationSubmitting || !activationCodeInput) ? 'sub-btn-activate-disabled' : ''}}"
+                      bindtap="onRedeemActivationCode"
+                      disabled="{{activationSubmitting || !activationCodeInput}}"
+                      loading="{{activationSubmitting}}">激活授权码</button>
+            </view>
+          </view>
+
+        </scroll-view>
+
+        <!-- ③ 底部固定操作区：.sub-modal-footer（flex-shrink:0，不随
+             .sub-modal-body 滚动），按 comparePlanTab 分流成三种真实的微信
+             支付下单动作（专业版/旗舰版/扩容门店包，均已在
+             createSubscriptionOrder 云函数登记真实价格与 SKU），基础版本身
+             免费无需下单——见 onPrimaryPlanAction 注释。
+             🐛 折行截断修复：文案精简为更短的行动导向文案（价格信息通过 " · "
+             紧凑呈现），且必须在按钮内单行水平居中展示——按钮文本直接写在
+             同一行源码里，不留换行/多余空白，配合 .btn-pay-action 的
+             white-space:nowrap + overflow:hidden + text-overflow:ellipsis，
+             双重保险确保严禁出现折行 -->
+        <view class="sub-modal-footer">
+          <!-- 🐛 根因修复：永久有效套餐同/低档 Tab 不再展示会触发下单的"续费"按钮，
+               见 data.isRedundantRenewTab / computeRedundantRenewFlag 注释 -->
+          <view class="btn-pay-action btn-pay-action-disabled" wx:if="{{isRedundantRenewTab}}">✅ 已享永久版权益，无需续费</view>
+          <!-- 🍎 iOS 虚拟商品支付合规：付费 Tab 一律替换为"使用兑换码续费/升级/
+               开通"，引导走下方已自动展开的授权码区域，不拉起小程序内支付——
+               见 data.isIOSPlatform / computeIOSPlanActionLabels / onGuideToRedeemSection 注释 -->
+          <button class="btn-pay-action" bindtap="onGuideToRedeemSection" wx:elif="{{isIOSPlatform && comparePlanTab === 'pro'}}">{{iosPlanActionLabels.pro}}</button>
+          <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onGuideToRedeemSection" wx:elif="{{isIOSPlatform && comparePlanTab === 'enterprise'}}">{{iosPlanActionLabels.enterprise}}</button>
+          <button class="btn-pay-action btn-pay-action-addon" bindtap="onGuideToRedeemSection" wx:elif="{{isIOSPlatform && comparePlanTab === 'add_on'}}">使用兑换码购买扩容包</button>
+          <button class="btn-pay-action" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'pro'}}">{{planActionLabels.pro}}</button>
+          <button class="btn-pay-action btn-pay-action-enterprise" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'enterprise'}}">{{planActionLabels.enterprise}}</button>
+          <button class="btn-pay-action btn-pay-action-addon" bindtap="onPrimaryPlanAction" loading="{{subscriptionLoading}}" wx:elif="{{comparePlanTab === 'add_on'}}">🏪 确认购买扩容包</button>
+          <view class="btn-pay-action btn-pay-action-disabled" wx:else>当前为默认免费档位</view>
+        </view>
+
+      </block>
+    </view>
+  </view>
+
+  <!-- 💳 微信支付资质申请中兜底弹窗：点击"微信支付开通"但支付未配置时展示，
+       引导走授权码兑换或联系客服，文案为需求方指定的固定措辞，不可改写 -->
+  <view class="payment-pending-modal-mask" wx:if="{{showPaymentPendingModal}}" catchtouchmove="stopPropagation" bindtap="onClosePaymentPendingModal">
+    <view class="payment-pending-modal-card" catchtap="stopPropagation">
+      <view class="payment-pending-modal-header">
+        <text class="payment-pending-modal-title">💳 微信支付开通中</text>
+        <view class="payment-pending-modal-close" bindtap="onClosePaymentPendingModal">✕</view>
+      </view>
+      <text class="payment-pending-modal-desc">微信在线支付正在开通中，当前支持使用授权码直接激活。如需开通请联系平台开发者。</text>
+
+      <view class="payment-pending-modal-contact-row">
+        <view class="payment-pending-modal-contact-info">
+          <text class="payment-pending-modal-contact-label">💬 平台客服微信号</text>
+          <text class="payment-pending-modal-contact-value">{{superAdminContactWechat}}</text>
+        </view>
+        <button class="payment-pending-modal-contact-btn" bindtap="onCopyPlatformSupportWechat">复制</button>
+      </view>
+
+      <button class="payment-pending-modal-ok-btn" bindtap="onClosePaymentPendingModal">🔑 我知道了，去输入授权码</button>
+    </view>
+  </view>

@@ -1,0 +1,13 @@
+<!-- 🏛️（2026-08-31 Open-Core 视图层精简构建产物）scripts/build-open-core.js
+     打包 suxiaozhang-core 时，用本文件整体覆盖
+     miniprogram/pages/statistics/enterprise/nationalDashboardView.wxml，
+     并物理删除同目录下只被它 <include> 引用的
+     rebalanceSuggestionCard.wxml / procurementCard.wxml（本文件不再引用，
+     删除它们不会留下悬空的 <include>）。
+
+     statistics.wxml 里的 `<include src="./enterprise/nationalDashboardView.wxml"/>`
+     本身不需要改动——保持空内容即可：对应的 Enterprise 逻辑
+     （loadNationalDashboard 等）在 Core 包里已经是安全空操作 stub（见
+     scripts/core-overrides/statistics.enterprise.index.ts），showNationalDashboard
+     永远不会被置为 true，这里就算不是空文件、原样保留也不会渲染出任何内容；
+     置空是为了不让 Core 开源包里带着一份国大屏的完整 UI 结构与文案。 -->

@@ -1,0 +1,23 @@
+    <view class="support-suggestion-card" wx:if="{{nationalData.rebalanceSuggestions && nationalData.rebalanceSuggestions.length > 0}}">
+      <view class="matrix-header">
+        <text class="matrix-title">🤝 爱心互助与调拨建议</text>
+      </view>
+      <view class="support-suggestion-list">
+        <view class="support-suggestion-item" wx:for="{{nationalData.rebalanceSuggestions}}" wx:key="targetStoreId">
+          <view class="ssi-header">
+            <text class="ssi-store">🏪 {{item.targetStoreName}}</text>
+            <text class="ssi-urgency-tag ssi-urgency-{{item.urgency}}">{{item.urgency === 'HIGH' ? '紧急' : '关注'}}</text>
+          </view>
+          <!-- 撮合成功：同城/同省有支援门店 -->
+          <text class="ssi-text" wx:if="{{item.sourceStoreName}}">🤝 建议 <text class="ssi-store-bold">{{item.targetStoreName}}</text> 向同城/周边 <text class="ssi-store-bold">{{item.sourceStoreName}}</text> 申请爱心平调（对方资金续航 {{item.sourceFundingDays}} 天）</text>
+          <!-- 撮合不到：改走对外劝募 -->
+          <text class="ssi-text" wx:else>📢 <text class="ssi-store-bold">{{item.targetStoreName}}</text> {{item.reason}}（建议发起定向爱心倡议与劝募）</text>
+          <view class="ssi-footer">
+            <view class="ssi-copy-btn" hover-class="ui-hover" bindtap="onCopyRebalanceSuggestion" data-item="{{item}}">
+              <text class="ssi-copy-icon">📋</text>
+              <text class="ssi-copy-text">复制建议</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
