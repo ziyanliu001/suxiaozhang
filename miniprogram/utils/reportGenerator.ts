@@ -1,4 +1,4 @@
-import { maskName, formatDisplayName } from './privacy';
+import { maskName, formatDisplayName } from './core/privacy';
 
 const YUHUA_GOLDEN_QUOTES = [
   "用一餐饭的温度，传递温暖与关爱。",

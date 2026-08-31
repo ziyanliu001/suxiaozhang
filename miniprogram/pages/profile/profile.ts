@@ -21,7 +21,7 @@ import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolv
 import { setTabBarHidden } from '../../utils/tabBarVisibility';
 import { payForOrder, CreateOrderResponse } from '../../utils/wxPayCore';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
-import { maskPhone } from '../../utils/privacy';
+import { maskPhone } from '../../utils/core/privacy';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 

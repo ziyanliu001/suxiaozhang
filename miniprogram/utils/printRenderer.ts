@@ -7,7 +7,7 @@
 // 数据源直接复用 index.ts 已有的 buildFinancialPosterData()（PosterData 类型，
 // posterGenerator.ts 导出），不重新定义一套数据结构、不重新计算财务口径。
 import { PosterData } from './posterGenerator';
-import { maskName } from './privacy';
+import { maskName } from './core/privacy';
 
 // PosterData.totalCount 是"捐款笔数"（爱心支持明细条数），不是用餐人次——
 // 用餐总人次在这个页面里叫 diningCount/totalDineCount，PosterData 没有这个

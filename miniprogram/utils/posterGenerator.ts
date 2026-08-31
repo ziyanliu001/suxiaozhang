@@ -1,4 +1,4 @@
-import { maskName, formatDisplayName } from './privacy';
+import { maskName, formatDisplayName } from './core/privacy';
 import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 import { drawStaticWxacodeFallback } from './staticWxacode';
 import { computeHonorProgress, drawMedalBadge } from './honorLevels';

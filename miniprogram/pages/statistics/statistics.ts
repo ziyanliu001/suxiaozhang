@@ -14,6 +14,7 @@ import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
 import { reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { writeLocalFileSafe } from '../../utils/localFileCache';
+import { canExportNationalExcel, resolveEnterpriseCapabilities } from '../../utils/enterpriseCapabilities';
 
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致
 // shortName 用于动态拼装大屏标题；label 是筛选胶囊展示文案
@@ -1877,7 +1878,12 @@ Page({
           totalServicePersonTimes,
           dineInRatioPct,
           deliveryRatioPct,
-          listenRatioPct
+          listenRatioPct,
+          // 🏛️（2026-08-31 Open-Core 架构拆分）预先算好的商业能力矩阵，供 WXML
+          // 直接绑定 nationalData.enterpriseCapabilities.xxx，不再依赖
+          // subscriptionQuota.features 的具体嵌套形状——见 utils/enterpriseCapabilities.ts
+          // 头部注释
+          enterpriseCapabilities: resolveEnterpriseCapabilities(sanitizedSummary.subscriptionQuota)
         };
         const sanitizedMatrix = sanitizeReportForVolunteer(r.storeMatrix || [], role);
         const cleanedMatrix = this.formatNationalMatrixData(sanitizedMatrix);
@@ -4817,7 +4823,12 @@ Page({
   onOpenNationalExcelExportModal() {
     if (!this.data.isAdmin) return;
     const quota = this.data.nationalData && this.data.nationalData.subscriptionQuota;
-    if (quota && quota.features && !quota.features.canExportNationalExcel) {
+    // 🏛️（2026-08-31 Open-Core 架构拆分）改走 canExportNationalExcel() 命名
+    // 判定函数，不再直接读 quota.features.canExportNationalExcel 裸字段——
+    // 仍保留 `quota &&` 前置判断：quota 尚未加载完成时不拦截（让用户先进入
+    // 弹窗，真正的硬校验交给服务端），只在"已经明确知道这个机构不享有该
+    // 权益"时才拦截，语义与改造前完全一致
+    if (quota && !canExportNationalExcel(quota)) {
       this.onOpenPlanUpgradeModal('机构多店合并导出');
       return;
     }

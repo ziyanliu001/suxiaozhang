@@ -24,6 +24,17 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 const HMAC_SECRET = process.env.LEDGER_HMAC_SECRET || 'yuhua_ledger_default_secret_please_override_in_cloud_env';
+// 🛡️（2026-08-31 Open-Core 安全审计）这个默认值只是开发调试期的兜底，一旦代码公开
+// （Open-Core 拟开源场景）或仓库被外部读取，任何人都能看到这串默认密钥，凡是没有在
+// 云开发控制台配置 LEDGER_HMAC_SECRET 环境变量覆盖的部署，其"防篡改"校验码形同虚设——
+// 与 cloudfunctions/wxPayCore 的 WXPAY_INTERNAL_TOKEN 已经采用的"未配置直接拒绝"
+// fail-closed 原则相比，这里仍是"未配置则静默使用弱默认值"，是已知但尚未整改的风险点
+// （整改需要先确认生产环境是否已经配置了真实密钥，贸然改成 fail-closed 可能让已经用
+// 弱默认值盖过章的历史记录集体校验失败，属于需要谨慎评估后再动的变更，这里先加一条
+// 运行时告警，不改变任何校验行为）
+if (!process.env.LEDGER_HMAC_SECRET) {
+  console.error('[stampReportChecksum] 🚨 LEDGER_HMAC_SECRET 环境变量未配置，正在使用公开可见的默认密钥，防篡改校验码可被伪造！请立即在云开发控制台为本云函数配置真实密钥。');
+}
 const AMOUNT_TOLERANCE = 0.01;
 
 function computeChecksum(item) {

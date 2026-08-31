@@ -6,6 +6,11 @@ const _ = db.command;
 
 // 🛡️ 资金流水防篡改：与 cascadeRecalculator 共用同一套 HMAC 校验规则
 const HMAC_SECRET = process.env.LEDGER_HMAC_SECRET || 'yuhua_ledger_default_secret_please_override_in_cloud_env';
+// 🛡️（2026-08-31 Open-Core 安全审计）见 stampReportChecksum 同名常量处的完整说明：
+// 这个硬编码默认值一旦代码公开就形同虚设，未整改的已知风险点，这里先加运行时告警
+if (!process.env.LEDGER_HMAC_SECRET) {
+  console.error('[updateAndRecalculateCascade] 🚨 LEDGER_HMAC_SECRET 环境变量未配置，正在使用公开可见的默认密钥，防篡改校验码可被伪造！请立即在云开发控制台为本云函数配置真实密钥。');
+}
 
 function computeChecksum(item) {
   const yb = (parseFloat(item.yesterdayBalance || 0)).toFixed(2);

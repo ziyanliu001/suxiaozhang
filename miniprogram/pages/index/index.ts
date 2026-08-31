@@ -13,7 +13,7 @@ import { getSelectedStore, setCurrentActiveStore, clearSelectedStoreCache, getCa
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
-import { maskName } from '../../utils/privacy';
+import { maskName } from '../../utils/core/privacy';
 import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeDisplay';
 import { md5 } from '../../utils/md5';
 import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, PreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';

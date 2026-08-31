@@ -1033,16 +1033,20 @@
           <text class="sbs-feature-icon sbs-icon-on">✅</text>
           <text class="sbs-feature-text">全网大屏总览（全部套餐可用）</text>
         </view>
+        <!-- 🏛️（2026-08-31 Open-Core 架构拆分）改读预先算好的 nationalData.
+             enterpriseCapabilities（见 utils/enterpriseCapabilities.ts
+             resolveEnterpriseCapabilities），不再直接绑定 subscriptionQuota.
+             features 的裸嵌套路径——WXML 不需要知道云函数返回体的具体形状 -->
         <view class="sbs-feature-item">
-          <text class="sbs-feature-icon {{nationalData.subscriptionQuota.features.canUseRebalanceEngine ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.subscriptionQuota.features.canUseRebalanceEngine ? '✅' : '🔒'}}</text>
+          <text class="sbs-feature-icon {{nationalData.enterpriseCapabilities.canUseRebalanceEngine ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.enterpriseCapabilities.canUseRebalanceEngine ? '✅' : '🔒'}}</text>
           <text class="sbs-feature-text">跨店智能调拨引擎</text>
         </view>
         <view class="sbs-feature-item">
-          <text class="sbs-feature-icon {{nationalData.subscriptionQuota.features.canExportNationalExcel ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.subscriptionQuota.features.canExportNationalExcel ? '✅' : '🔒'}}</text>
+          <text class="sbs-feature-icon {{nationalData.enterpriseCapabilities.canExportNationalExcel ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.enterpriseCapabilities.canExportNationalExcel ? '✅' : '🔒'}}</text>
           <text class="sbs-feature-text">多店合并阳光台账一键导出</text>
         </view>
         <view class="sbs-feature-item">
-          <text class="sbs-feature-icon {{nationalData.subscriptionQuota.features.canAccessAuditProof ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.subscriptionQuota.features.canAccessAuditProof ? '✅' : '🔒'}}</text>
+          <text class="sbs-feature-icon {{nationalData.enterpriseCapabilities.canAccessAuditProof ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.enterpriseCapabilities.canAccessAuditProof ? '✅' : '🔒'}}</text>
           <text class="sbs-feature-text">防篡改存证验真徽章</text>
         </view>
       </view>
