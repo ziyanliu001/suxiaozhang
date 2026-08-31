@@ -1,0 +1,254 @@
+#!/usr/bin/env node
+'use strict';
+
+// 🏛️ Open-Core 架构拆分 · 第三阶段：物理构建与打包脚本
+//
+// 用途：从当前单体仓库自动提取、过滤出一份纯净的 suxiaozhang-core 开源
+// 发布包（写到 dist/suxiaozhang-core/），不改动、不污染当前工作目录。
+//
+// 设计取舍（务必先读 docs/OPEN_CORE_ARCHITECTURE.md 再改这个文件）：
+//
+// 1. 源文件枚举用 `git ls-files --cached --others --exclude-standard`，
+//    不是裸的 `fs.cpSync(ROOT, DIST)`——这一步天然复用仓库已有的 .gitignore
+//    规则，本地开发机才有的 `private.wx*.key`（小程序代码上传私钥）、
+//    `project.private.config.json`（开发者工具本地私有配置）等文件本来就
+//    不会进入这份文件清单，不需要在本脚本里重新维护一份"哪些本地文件不能
+//    打包"的排除名单，从根源上避免打包脚本本身沦为新的泄露点。同时又能
+//    包含尚未 `git commit` 但已经 `git add`/新建在工作区的改动（不要求
+//    "构建前必须先 commit"），方便边开发边试跑本脚本。
+// 2. 云函数的 Enterprise 排除名单，以及 exportAccountExcel/pages/profile
+//    的处理方式，均直接对应 docs/OPEN_CORE_ARCHITECTURE.md 已经写清楚的
+//    判断——本脚本不是这份判断的来源，只是把已经写在文档里的结论落成
+//    可执行代码。新增/调整 Enterprise 边界时，先改文档、再改这里两处
+//    保持同步，不要只改一处。
+// 3. 本脚本【没有】对仓库全部 70+ 个云函数逐一做过 Core/Enterprise 审计——
+//    只排除了 docs/OPEN_CORE_ARCHITECTURE.md 第 3 节已经明确列出的几个
+//    （getNationalDashboard/checkTenantPermission/activateTenantSubscription/
+//    manageTenantSubscription/createSubscriptionOrder），外加本次新核实
+//    确认的 getPlatformOverview（SaaS 平台运维方专用大盘，纯粹的多租户
+//    宿主运营概念，自托管单机构部署用不上，也不应该让自托管方看到别的
+//    机构的运维统计）。未列入排除名单的云函数默认保留在 Core 包内——
+//    宁可多带一些用不上的机构内部治理工具函数，也不要因为一次不完整的
+//    人工审计而漏删/错删，破坏本该保留的多店治理能力。
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const ROOT = path.resolve(__dirname, '..');
+const DIST_ROOT = path.join(ROOT, 'dist');
+const DIST_DIR = path.join(DIST_ROOT, 'suxiaozhang-core');
+
+const RED = '\x1b[31m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const CYAN = '\x1b[36m';
+const RESET = '\x1b[0m';
+
+function log(msg) { console.log(msg); }
+function warn(msg) { console.log(`${YELLOW}⚠️  ${msg}${RESET}`); }
+function ok(msg) { console.log(`${GREEN}✅ ${msg}${RESET}`); }
+function fail(msg) { console.log(`${RED}❌ ${msg}${RESET}`); }
+
+// ── 1. 顶层目录/文件：整体不进入开源包 ───────────────────────────────
+// docs/：内部商业化战略与 Open-Core 拆分判断依据本身（写清楚了"哪些代码
+// 故意不开源"，公开仓库反而不该收录这份"泄密地图"）；scripts/：本套构建/
+// 审计工具服务于闭源主仓库维护者自己，不是开源使用者需要的产物。
+const TOP_LEVEL_EXCLUDES = new Set(['docs', 'scripts']);
+
+// ── 2. Enterprise 专有云函数：整目录排除 ─────────────────────────────
+// 见文件头注释——直接对应 docs/OPEN_CORE_ARCHITECTURE.md 第 3 节表格。
+const ENTERPRISE_CLOUDFUNCTIONS = [
+  'getNationalDashboard',
+  'checkTenantPermission',
+  'activateTenantSubscription',
+  'manageTenantSubscription',
+  'createSubscriptionOrder',
+  // 🆕 本次新核实：SaaS 平台运维方专用大盘，纯 count() 聚合查看全平台机构/
+  // 门店/云资源消耗概览，自托管单机构部署天然没有"平台"这个上级概念，
+  // 也不该让自托管方看到（假设的）其它机构统计——文档尚未收录，随本次
+  // 一并记录进 OPEN_CORE_ARCHITECTURE.md
+  'getPlatformOverview'
+].map((name) => `cloudfunctions/${name}`);
+
+// ── 3. Enterprise 专有前端页面/路由：整目录排除 ──────────────────────
+// subpackages/admin/pages/platform-admin：SaaS 平台管理员专属页面
+// （仅 platform_admin 角色可进入，服务端 requirePlatformAdmin 硬校验），
+// 是本仓库里少有的"物理上已经是独立页面目录、天然干净可拆"的 Enterprise
+// 路由，因此可以像云函数一样整目录排除，不像 pages/profile 那样需要
+// 运行时旗标兜底。
+const ENTERPRISE_FRONTEND_DIRS = ['miniprogram/subpackages/admin/pages/platform-admin'];
+
+// ── 4. 文件级覆盖：整份替换成 Core-only 版本 ─────────────────────────
+// 左边是仓库原路径，右边是本仓库内维护的"Core 替身"源文件。
+const FILE_OVERRIDES = [
+  {
+    target: 'cloudfunctions/exportAccountExcel/index.js',
+    source: 'scripts/core-overrides/exportAccountExcel.index.js'
+  },
+  {
+    target: 'miniprogram/utils/buildFlags.ts',
+    source: 'scripts/core-overrides/buildFlags.core.ts'
+  }
+];
+
+// ── 5. 单文件级排除（目录保留，只删其中的 Enterprise 文件） ──────────
+const SINGLE_FILE_EXCLUDES = [
+  // Enterprise 专有的多店合并导出实现——见上面 FILE_OVERRIDES 里
+  // index.js 已经换成不 require 它的 Core-only 版本，这里再显式排除
+  // 物理文件本身，双重保险，避免 require 图以外还残留这份源码
+  'cloudfunctions/exportAccountExcel/lib/exportNationalExcel.js'
+];
+
+// ── 已知遗留耦合（本阶段不处理，如实记录，不假装已完成物理拆分） ──────
+const KNOWN_MIXED_FILES = [
+  'pages/statistics/statistics.ts / .wxml / .wxss（全国大屏与单店历史统计交织，' +
+    '见 OPEN_CORE_ARCHITECTURE.md 第 6 节，本阶段未拆分——Core 包里这些文件原样' +
+    '保留，全国大屏相关调用会因为 getNationalDashboard 云函数已被排除而在' +
+    '运行时优雅失败，不影响单店核心记账功能）',
+  'pages/profile/profile.ts / .wxml（SaaS 订阅弹窗入口分散在页面三处 + 自动' +
+    '唤起逻辑，与免费账户设置深度交织，本阶段改用 utils/buildFlags.ts 运行时' +
+    '旗标【完全隐藏/禁用】这些入口，而不是物理删除源码行——见该文件头部注释）'
+];
+
+function readTrackedAndUntrackedFiles() {
+  // --cached：已提交/已 git add 的文件；--others --exclude-standard：
+  // 工作区里新增但尚未提交、且没有被 .gitignore 排除的文件。两者合并
+  // 起来才是"当前打开这个仓库能看到的、且不违反 .gitignore 的完整源码
+  // 视图"，见文件头注释第 1 点。
+  const out = execFileSync(
+    'git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    { cwd: ROOT, maxBuffer: 1024 * 1024 * 64 }
+  ).toString('utf8');
+  return out.split('\0').filter(Boolean);
+}
+
+function isExcluded(relPath) {
+  const topLevel = relPath.split('/')[0];
+  if (TOP_LEVEL_EXCLUDES.has(topLevel)) return true;
+  if (ENTERPRISE_CLOUDFUNCTIONS.some((dir) => relPath === dir || relPath.startsWith(dir + '/'))) return true;
+  if (ENTERPRISE_FRONTEND_DIRS.some((dir) => relPath === dir || relPath.startsWith(dir + '/'))) return true;
+  if (SINGLE_FILE_EXCLUDES.includes(relPath)) return true;
+  return false;
+}
+
+function copyFile(relPath) {
+  const src = path.join(ROOT, relPath);
+  const dest = path.join(DIST_DIR, relPath);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
+}
+
+function applyOverrides() {
+  for (const { target, source } of FILE_OVERRIDES) {
+    const destPath = path.join(DIST_DIR, target);
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, source), destPath);
+  }
+}
+
+// app.json 的 admin 分包 pages 数组里，platform-admin 这一条路由记录也要
+// 跟着 ENTERPRISE_FRONTEND_DIRS 的目录一起摘掉，否则小程序基础库加载
+// app.json 时会因为声明的页面路径在磁盘上找不到对应文件而直接报错，
+// 而不是"优雅降级"——这是唯一一处需要真正解析/改写 JSON 内容的地方，
+// 而不是单纯拷贝或整份替换文件
+function stripPlatformAdminRoute() {
+  const appJsonPath = path.join(DIST_DIR, 'miniprogram/app.json');
+  const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+  const subpackagesKey = appJson.subpackages ? 'subpackages' : 'subPackages';
+  const list = appJson[subpackagesKey] || [];
+  const adminPkg = list.find((p) => p.root === 'subpackages/admin');
+  if (adminPkg && Array.isArray(adminPkg.pages)) {
+    const before = adminPkg.pages.length;
+    adminPkg.pages = adminPkg.pages.filter((p) => !p.includes('platform-admin'));
+    if (adminPkg.pages.length !== before) {
+      fs.writeFileSync(appJsonPath, JSON.stringify(appJson, null, 2) + '\n');
+      ok(`app.json 已移除 platform-admin 路由声明（admin 分包 pages: ${before} → ${adminPkg.pages.length}）`);
+    }
+  }
+}
+
+// project.config.json 的 appid 是当前生产小程序的真实账号标识——虽然不是
+// 密钥（任何人打开这个小程序、抓包都能看到），但开源模板不应该带着别人的
+// 真实账号跑，替换成微信开发者工具官方承认的"无账号预览"占位值，下载源码
+// 的人换成自己的 appid 即可直接在开发者工具里打开
+function anonymizeProjectConfig() {
+  const configPath = path.join(DIST_DIR, 'project.config.json');
+  if (!fs.existsSync(configPath)) return;
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  if (config.appid) {
+    config.appid = 'touristappid';
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+    ok('project.config.json 的 appid 已替换为 touristappid（微信开发者工具官方无账号预览占位值）');
+  }
+}
+
+function generateReadmeAndEnvTemplate() {
+  const readmeSrc = path.join(ROOT, 'scripts/templates/core-readme.md');
+  const envSrc = path.join(ROOT, 'scripts/templates/env.example.json');
+  fs.copyFileSync(readmeSrc, path.join(DIST_DIR, 'README.md'));
+  fs.copyFileSync(envSrc, path.join(DIST_DIR, 'env.example.json'));
+  ok('已生成 README.md 与 env.example.json');
+}
+
+function runSecurityAudit() {
+  try {
+    execFileSync('node', [path.join(ROOT, 'scripts/security-audit.js'), '--dir', DIST_DIR], {
+      cwd: ROOT,
+      stdio: 'inherit'
+    });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function main() {
+  log(`${CYAN}🏛️  Open-Core 构建：正在从工作区枚举源文件…${RESET}`);
+
+  if (fs.existsSync(DIST_DIR)) {
+    fs.rmSync(DIST_DIR, { recursive: true, force: true });
+  }
+  fs.mkdirSync(DIST_DIR, { recursive: true });
+
+  const files = readTrackedAndUntrackedFiles();
+  let copied = 0;
+  let excluded = 0;
+  for (const relPath of files) {
+    if (isExcluded(relPath)) {
+      excluded++;
+      continue;
+    }
+    // FILE_OVERRIDES 里的目标文件先按普通文件拷贝一份原文件也无妨——
+    // 紧接着 applyOverrides() 会整份覆盖掉，这里不需要单独跳过
+    copyFile(relPath);
+    copied++;
+  }
+  ok(`已拷贝 ${copied} 个文件，按 Enterprise 名单排除 ${excluded} 个`);
+
+  applyOverrides();
+  ok(`已应用 ${FILE_OVERRIDES.length} 处 Core-only 文件覆盖`);
+
+  stripPlatformAdminRoute();
+  anonymizeProjectConfig();
+  generateReadmeAndEnvTemplate();
+
+  log('');
+  log(`${CYAN}📋 已知遗留耦合（本阶段未物理拆分，如实记录）：${RESET}`);
+  KNOWN_MIXED_FILES.forEach((line) => log(`   - ${line}`));
+
+  log('');
+  log(`${CYAN}🛡️  正在对生成的 Core 包运行安全防泄露审计…${RESET}`);
+  const auditPassed = runSecurityAudit();
+
+  log('');
+  if (!auditPassed) {
+    fail('安全审计未通过，Core 包已生成但请勿发布，见上方红色告警定位并清除敏感信息');
+    process.exitCode = 1;
+    return;
+  }
+
+  ok(`Open-Core 构建完成：${path.relative(ROOT, DIST_DIR)}`);
+}
+
+main();

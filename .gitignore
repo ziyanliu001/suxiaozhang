@@ -14,3 +14,6 @@ miniprogram/miniprogram_npm/
 
 # 微信开发者工具本地云函数调试缓存
 .cloudbase/
+
+# scripts/build-open-core.js 的构建产物，可随时重新生成，不进入版本库
+dist/

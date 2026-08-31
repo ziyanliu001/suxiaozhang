@@ -1,6 +1,6 @@
-# Open-Core 架构拆分方案（2026-08-31 第一阶段）
+# Open-Core 架构拆分方案（2026-08-31，已推进至第三阶段）
 
-> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段只完成了规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`），**没有**把云函数物理拆库、没有真正发布任何 npm 包/子仓库。这些是本文档明确标注的后续阶段工作，不在本次改动范围内。
+> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段（见第 8 节）交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`，可以一键产出、审计一份 `dist/suxiaozhang-core` 开源发布包。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布。
 
 ## 1. 边界定义原则
 
@@ -112,3 +112,45 @@ if (!HMAC_SECRET) {
 - `cloudfunctions/stampReportChecksum`/`cascadeRecalculator`/`updateAndRecalculateCascade`：HMAC 密钥 fail-closed 改造，**功能行为变化**——若生产环境此前从未配置 `LEDGER_HMAC_SECRET`，部署后这三个云函数会立即拒绝执行签名相关操作直至配置该环境变量，需要提前确认生产配置或安排配置窗口。
 - `cloudfunctions/exportAccountExcel`：物理拆分为 `index.js` + `lib/*.js` 四个文件，**响应体结构与既有行为完全不变**（`node --check` 通过，函数间调用关系已逐一核对，因本地无 `exceljs` 依赖未做端到端运行时验证，建议部署后跑一次单店导出 + 一次合并导出的真实回归）。
 - 均需要重新部署对应云函数（微信开发者工具「上传并部署：云端安装依赖」）才能生效，不涉及数据库结构迁移。
+
+## 8. 第三阶段：物理构建与打包脚本 + 安全防泄露门禁（2026-08-31）
+
+本阶段交付两个可执行脚本（`scripts/build-open-core.js` / `scripts/security-audit.js`），把第一、二阶段的规划性结论变成"能跑出一份真实 zip 包"的工程能力，同时排查过程中发现并处理了两个前两阶段文档未覆盖的边界。
+
+### 8.1 `scripts/build-open-core.js`：源文件枚举方式的关键选择
+
+没有用 `fs.cpSync(ROOT, DIST)` 裸拷贝整个工作目录，而是用 `git ls-files --cached --others --exclude-standard` 枚举文件清单再逐个拷贝。这不是代码洁癖，是排查中发现的真实必要性：仓库根目录躺着一份本地开发者工具生成的 `private.wx967852422ebfce48.key`（小程序代码上传私钥，`.gitignore` 已正确排除，从未进入过 Git 历史）——如果构建脚本直接裸拷贝文件系统，这类"只应该存在于开发者本机、绝不应该出现在任何分发产物里"的文件会被原样带进开源包。借道 `git ls-files` 天然复用仓库已经维护好的 `.gitignore` 规则，把"哪些本地文件不能进构建产物"这条判断的权威来源锚定在 `.gitignore` 本身，而不是在构建脚本里重新维护一份可能过时的排除名单。
+
+### 8.2 Enterprise 排除清单：在第一阶段基础上新增两项
+
+排查确认第 3 节"Enterprise 层清单"遗漏了两个同样应该排除、但物理上恰好足够干净可以直接排除的对象：
+
+- **`cloudfunctions/getPlatformOverview`**：SaaS 平台运维方（开发者/运维团队，区别于任何一个机构自己的 `super_admin`）专用的全平台资源消耗大盘，纯 `count()` 聚合。自托管单机构部署天然没有"平台"这个上级概念，这个云函数对 Core 使用者而言既用不上、语义上也不该存在（它意味着"有一个更高权限的第三方在看我的机构数据"，这与自托管的信任模型矛盾）。
+- **`miniprogram/subpackages/admin/pages/platform-admin`**：调用上述云函数的前端页面。这是仓库里少见的"物理上已经是独立页面目录、天然干净可以整目录删除"的 Enterprise 前端资产（不像 `pages/profile`/`pages/statistics` 那样和 Core 逻辑揉在同一个文件里）——排除该目录后，脚本还需要联动改写 `miniprogram/app.json` 里 `admin` 分包 `pages` 数组中对应的路由声明，否则基础库加载 `app.json` 时会因为声明的页面路径在磁盘上找不到文件而直接报错（而不是"优雅降级"），这是本次唯一需要真正解析/改写 JSON 内容（而非整份拷贝/整份替换）的一步。
+
+`cloudfunctions/exportAccountExcel` 按第二阶段已经做好的物理拆分，走"文件覆盖"而非"目录删除"：`lib/exportNationalExcel.js` 直接排除，`index.js` 整份替换成 `scripts/core-overrides/exportAccountExcel.index.js`（一份手写维护的 Core-only 路由分发实现，砍掉 `isNationalExport`/`isAdvancedPlanActive` 分支，其余查询范围收敛/`previewOnly` 预览逻辑与原文件保持一致）。
+
+### 8.3 `pages/profile` 的真实排查结果：比预期更深的耦合，改用运行时旗标而非物理删代码
+
+原计划参照 `exportAccountExcel` 的思路，给 SaaS 订阅弹窗相关代码也做"标记区域 → 脚本自动摘除"式的物理拆分。排查 `pages/profile/profile.wxml`/`profile.ts` 后发现这条路走不通：
+
+- 订阅弹窗的入口点**分散在页面三处**（`isFinance` 角色卡片里的 `pro-service-card`、`isPatriarch`/`isManager` 顶部卡片区的 `top-advanced-secondary`、超管 Dev/Debug 专区的 `sa-dev-tool-row`），外加 `onShow` 生命周期里一处"从统计页跳转过来自动唤起弹窗"的逻辑（`takeOpenSubscriptionRequest()`），全部散落调用同一个 `onOpenSubscriptionModal()`方法。
+- 弹窗本体（`<view class="subscription-modal-mask">`）虽然在 WXML 里是一段干净、自成一体的区块（`profile.wxml` 2343~2617 行），但四处调用入口分散在文件各处，用脚本按区域标记（`#region`/`#endregion`）自动摘除，漏删任意一处入口就会在 Core 包里留下一个"指向已删除弹窗方法"的死按钮，比不删更差。
+
+因此改用**运行时旗标**：新增 `miniprogram/utils/buildFlags.ts`，导出单一常量 `ENTERPRISE_BUILD_ENABLED`（默认 `true`）。`onOpenSubscriptionModal()`——四处入口的唯一汇合点——开头加一行 `if (!ENTERPRISE_BUILD_ENABLED) return;`，四处 WXML 渲染位置也都加上 `enterpriseBuildEnabled &&` 前缀条件（页面 `data` 里镜像一份 `enterpriseBuildEnabled: ENTERPRISE_BUILD_ENABLED`，WXML 表达式读不到 import 进来的模块变量）。`scripts/build-open-core.js` 打包时用 `scripts/core-overrides/buildFlags.core.ts`（内容只有 `ENTERPRISE_BUILD_ENABLED = false` 这一行取值不同）整份覆盖掉这个文件。
+
+**效果边界要说清楚**：这实现的是"运行时完全不可达"——Core 包编译出的小程序里，用户绝对看不到、点不开任何 SaaS 购买/续费入口，不存在"旗标失效露出弹窗"的可能（四处入口全部显式判断，不是靠某一处兜底）。但**没有**实现"源码文本纯净"——`profile.ts` 里的定价常量（`PLAN_ACTION_META` 里的 `¥1,688/年`/`¥3,688/年`）、平台客服联系方式等，物理上仍然存在于开源包的这个文件里，只是被判定为死代码。要做到源码级纯净，需要先把订阅相关 UI 抽成独立页面/组件——这是比"写构建脚本"更大的一块独立工作量，本阶段不做，如实记录在这里，构建脚本运行时也会把这条"已知遗留"打印在控制台。
+
+`pages/statistics/statistics.ts`/`.wxml`/`.wxss`（第 6 节已经记录的"仍待处理"混合文件）本阶段同样不处理，原样保留在 Core 包里——全国大屏相关调用会因为 `getNationalDashboard` 云函数已被排除而在运行时优雅失败（不是崩溃），不影响单店历史统计功能正常使用。
+
+`miniprogram/utils/tenantPermission.ts`/`enterpriseCapabilities.ts`/`enterpriseSpi.ts` 这三个前两阶段就存在的 Enterprise 前端工具文件，本阶段判定为**保留在 Core 包内、不排除**——排查发现 `pages/history/history.ts`（单店历史页，Core）也在用 `checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT)` 做导出功能的能力探测，排除这个文件会直接破坏 Core 包的编译。而且 `tenantPermission.ts` 自带的 `FALLBACK_ALLOWED`（云调用失败时保守放行）与 `isCloudAvailable()` 判断，在 Core 部署下（`checkTenantPermission` 云函数已被排除、调用必然失败）恰好自然产生"自托管环境没有订阅系统，默认允许使用"的正确行为，不需要额外写一份 stub 替换——这是排查后确认的一个既有安全设计的正面副作用，不是本次新写的代码。
+
+### 8.4 `scripts/security-audit.js`：规则设计与自测结果
+
+扫描规则覆盖 PEM 私钥块、疑似硬编码微信 AppSecret（32 位十六进制）、疑似硬编码商户号（`mchid` 赋值且同行不含 `process.env`）、密钥类环境变量的非空硬编码兜底值（形如 `process.env.XXX_SECRET || '一个非空字符串'`）、已知历史泄露默认值回归检测（`yuhua_ledger_default_secret_please_override_in_cloud_env` 字面量），以及目录中直接存在 `.key`/`.pem`/`.p12`/`.pfx` 文件本身。
+
+**自测**：用一份包含全部六类违规的合成测试文件跑过一遍，六项全部命中、exit code 1；同一份测试里 `process.env.WXPAY_MCHID || ''`（仓库里真实的 fail-closed 写法）未被误报。对仓库全量源码跑一遍会命中 `docs/OPEN_CORE_ARCHITECTURE.md`（本文档引用历史问题字符串做说明）与本地未纳入 Git 的 `private.wx967852422ebfce48.key`——前者已通过限定"已知历史泄露默认值回归"规则只扫描 `.js`/`.ts` 排除，后者是真实存在于开发者本机磁盘、但从未进入 Git 历史的文件，属于工具按设计正确报告的情况，不是误报。对 `scripts/build-open-core.js` 生成的 `dist/suxiaozhang-core` 产物跑一遍（`docs/`/`scripts/` 均已被排除在外）结果是全绿。
+
+### 8.5 部署状态说明
+
+本节两个脚本均为纯 Node.js 脚本（`node --check` 通过），不依赖任何新增 npm 包，`package.json` 新增 `build:core`/`security-audit` 两条命令。`tsconfig.json` 补充 `exclude: ["dist"]`——否则跑过一次 `build:core` 后本地目录会同时存在 `miniprogram/` 源码与 `dist/suxiaozhang-core/miniprogram/` 副本，`tsc --noEmit` 会报一堆"重复声明"的假阳性错误。`miniprogram/pages/profile/profile.ts`/`.wxml` 新增 `ENTERPRISE_BUILD_ENABLED` 旗标判断，`tsc --noEmit` 与 WXML 标签平衡校验均已通过，重新编译/预览小程序即可生效，不涉及云函数改动、不涉及数据库结构迁移。`dist/` 目录已加入 `.gitignore`，构建产物不进入版本库。

@@ -22,6 +22,7 @@ import { setTabBarHidden } from '../../utils/tabBarVisibility';
 import { payForOrder, CreateOrderResponse } from '../../utils/wxPayCore';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { maskPhone } from '../../utils/core/privacy';
+import { ENTERPRISE_BUILD_ENABLED } from '../../utils/buildFlags';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -552,6 +553,9 @@ Page({
     storePickerSearchText: '',
     storePickerAllStores: [] as Array<{ storeId: string; storeName: string; city: string; province: string }>,
     storePickerFilteredStores: [] as Array<{ storeId: string; storeName: string; city: string; province: string }>,
+    // 🏛️（2026-08-31 Open-Core 第三阶段）WXML 用这份 data 快照而不是直接绑定
+    // 模块常量——WXML 表达式只能读 data，读不到 import 进来的模块级变量
+    enterpriseBuildEnabled: ENTERPRISE_BUILD_ENABLED,
     // 🔐 套餐升级/续费半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
     // 管理"时唤起，展示本机构当前套餐/到期时间，而不是像 platform_admin 那样
     // 跳转 pages/platform-admin（那个页面服务端只认 platform_admin，租户自己的
@@ -5668,7 +5672,12 @@ Page({
 
   // 🐛 防重锁：与 statistics.ts fetchStatistics 同一套 isLoading 式防抖，避免用户
   // 手快连点"会员开通/续费管理"打出重复的鉴权云调用
+  // 🏛️（2026-08-31 Open-Core 第三阶段）本方法是页面内所有 SaaS 订阅弹窗入口
+  // 的唯一汇合点（pro-service-card/top-advanced-secondary/sa-dev-tool-row
+  // 三处 WXML 按钮 + onShow 里的自动唤起，均最终调用到这里）——Core 构建下
+  // 直接早退，不发起任何鉴权云调用/不展示弹窗，见 utils/buildFlags.ts 头部注释
   async onOpenSubscriptionModal() {
+    if (!ENTERPRISE_BUILD_ENABLED) return;
     if (this.data.subscriptionLoading) return;
     // 🍎 iOS 虚拟商品支付合规：微信小程序平台规则要求 iOS 客户端不得展示价格/
     // 拉起小程序内支付，每次打开弹窗都重新探测一次（成本极低，避免长驻页面

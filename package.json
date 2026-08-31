@@ -4,7 +4,9 @@
   "description": "",
   "scripts": {
     "test": "node --test cloudfunctions/*/lib/*.test.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "security-audit": "node scripts/security-audit.js",
+    "build:core": "node scripts/build-open-core.js"
   },
   "keywords": [],
   "author": "",

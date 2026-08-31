@@ -340,7 +340,7 @@
     <!-- 🆕 大家长（及店长）不再展示这张整行大卡片：专业版服务状态收纳进上方
          「顶部卡片区」.top-advanced-secondary 弱化辅助卡片，与全国数据看板
          并排展示，不再单独占用一整行——财务角色需求不变，仍显示完整版 -->
-    <view class="pro-service-card" wx:if="{{isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch}}">
+    <view class="pro-service-card" wx:if="{{enterpriseBuildEnabled && isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch}}">
       <view class="pro-card-header">
         <text class="pro-title">👑 专业版服务状态</text>
         <text class="pro-status-badge {{subscriptionInfo.isActive ? 'active' : 'inactive'}}">
@@ -447,7 +447,7 @@
         <text class="top-advanced-primary-sub">{{isPatriarch ? '查看全平台 / 全国统计数据' : '查看本店历史经营数据'}}</text>
         <text class="top-advanced-primary-arrow">❯</text>
       </view>
-      <view class="top-advanced-secondary {{subscriptionInfo.isActive ? 'active' : ''}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
+      <view class="top-advanced-secondary {{subscriptionInfo.isActive ? 'active' : ''}}" wx:if="{{enterpriseBuildEnabled}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
         <text class="top-advanced-secondary-icon">👑</text>
         <text class="top-advanced-secondary-title">专业服务</text>
         <text class="top-advanced-secondary-tag">{{subscriptionInfo.isActive ? '已开通' : '未开通 · 点击了解'}}</text>
@@ -1234,7 +1234,7 @@
         </view>
 
         <!-- 🧪 Dev/Debug 专用：模拟开通专业版，仅供功能自测，不接入真实支付/计费流程 -->
-        <view class="sa-dev-tool-row" wx:if="{{!subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
+        <view class="sa-dev-tool-row" wx:if="{{enterpriseBuildEnabled && !subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
           <text class="sa-dev-tool-tag">DEV</text>
           <text class="sa-dev-tool-text">体验 / 模拟开通专业版（测试用）</text>
         </view>
@@ -2340,7 +2340,7 @@
        管理"时唤起。卡片分为：① 黑钻身份卡（门店 + 套餐状态）② 高级权益对比
        ③ 授权码自助兑换 ④ 底部金色主按钮（在线订购/续费）。
        card 自独立 position:fixed 贴底 + z-index:9999，避免被自定义 tabBar 遮挡。-->
-  <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
+  <view class="subscription-modal-mask {{showSubscriptionModal ? 'show' : ''}}" wx:if="{{enterpriseBuildEnabled}}" catchtouchmove="stopPropagation" bindtap="onCloseSubscriptionModal">
     <!-- 🏛️ Flex 垂直三段式骨架：.sub-modal-container 固定 height:80vh（封顶
          1200rpx），不再是"内容多高、卡片多高"的 max-height 内容驱动型盒子——
          无论中间套餐对比/权益卡片内容有多少，这个盒子的总高度都是确定值，
