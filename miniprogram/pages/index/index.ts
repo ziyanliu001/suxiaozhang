@@ -6630,32 +6630,37 @@ Page({
     }
   },
 
-  // 🐛 根因修复（"点击已触发但拉不起选图界面"）：此前直接 `await wx.chooseMedia(...)`
-  // （不带 success/fail 回调时走的是小程序官方的隐式 Promise 包装）。真正的问题
-  // 不是回调写法，而是 wx.chooseMedia 在部分环境（开发者工具模拟器的某些版本、
-  // 低基础库真机）下会既不 resolve 也不 reject——原生选图面板根本没有被拉起，
-  // 整个 await 静默挂起，没有任何后续日志、也不会走到下面的 try/catch，与本次
-  // 反馈"点击触发日志打印了，之后再没有任何动静"完全吻合，纯粹的 setTimeout/
-  // Promise 层面等不到结果，光靠 fail 回调兜底完全没用——因为 fail 压根不会
-  // 触发。用 withTimeout（本文件已引入的全局超时封装）给 chooseMedia 设一个
-  // 超时上限：超时或 chooseMedia 本身不存在（wx.canIUse 返回 false）就自动
-  // 回退到兼容性更好、几乎所有环境都支持的 wx.chooseImage（虽是旧 API 但选图
-  // 这个基础能力上落地更早、更稳）。
-  // 🐛 二次订正：这个超时的性质与 callFunctionWithTimeout 那类"网络/云函数
-  // 耗时"完全不同——chooseMedia 的等待时长取决于用户本人的操作节奏（在相册里
-  // 翻找照片、临时改主意切到拍照、拍完还要预览确认），不是一个可预期的固定
-  // 区间，5s 对这类"人在交互，不是接口在耗时"的等待完全不够，实测会在用户
-  // 还没选完图时就被判定超时，转而弹出第二个 wx.chooseImage 面板打断用户，
-  // 表现为"选图选到一半突然被打断/换了一个面板"。改为 60s——这个超时的唯一
-  // 目的是兜底"chooseMedia 在这个环境下彻底坏掉、回调永远不会来"这一种极端
-  // 情况，不是给用户的选图操作设一道时限，60s 已经远超正常人挑图/改用拍照的
-  // 合理耗时，不会再误伤真实交互
+  // 🐛（2026-08-31 彻底移除超时竞速）根因翻案：此前认为 wx.chooseMedia 在部分
+  // 环境下"既不 resolve 也不 reject"，据此套了一层 60s withTimeout 兜底。真机
+  // 日志实测推翻了这个假设——控制台明确打出了"chooseMedia 超时未响应
+  // at withTimeout.ts:12"，说明 wx.chooseMedia 的原生选图面板其实正常拉起了、
+  // 用户正在里面挑图，只是超过 60s 还没选完，人为设定的定时器就先一步把这次
+  // 调用强行判定成"超时"并 reject，紧接着的 catch 分支又在原生面板可能还开着
+  // 的情况下再拉起一个 wx.chooseImage 面板——两个选图面板互相打架，表现正是
+  // 本次反馈的"连续点击唤不起相册"。
+  // 给"用户在原生系统面板里挑图"这件事设一个固定时长的超时，思路本身就不
+  // 成立：不管这个数字定多大，总有比它挑得更久的真实用户，迟早会在某个时刻
+  // 误伤——不是把 60s 改成更长或更短能修好的问题，而是这层竞速定时器本来就
+  // 不该存在。wx.chooseMedia/wx.chooseImage 是微信官方文档保证过的标准回调
+  // API，success/fail 二选一必然会被调用一次，不需要也不应该在上面叠加一层
+  // 竞速 Promise。降级到 wx.chooseImage 只在 chooseMedia 的 fail 回调真正
+  // 触发、且不是用户主动取消时才发生，不再有任何计时器参与判断。
   chooseDonorScreenshotSafe(): Promise<string> {
-    const viaChooseMedia = new Promise<string>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
+      const fallbackToChooseImage = () => {
+        wx.chooseImage({
+          count: 1,
+          sourceType: ['album', 'camera'],
+          success: (res) => resolve(res.tempFilePaths[0]),
+          fail: (fallbackErr) => reject(fallbackErr)
+        });
+      };
+
       if (!wx.canIUse('chooseMedia')) {
-        reject(new Error('chooseMedia not available'));
+        fallbackToChooseImage();
         return;
       }
+
       wx.chooseMedia({
         count: 1,
         mediaType: ['image'],
@@ -6669,26 +6674,19 @@ Page({
             reject(new Error('chooseMedia 未返回图片路径'));
           }
         },
-        fail: (err) => reject(err)
-      });
-    });
-
-    return withTimeout(viaChooseMedia, 60000, 'chooseMedia 超时未响应').catch((err) => {
-      // 🛡️ 用户主动在原生面板里点取消，errMsg 会明确带 cancel，这类"正常放弃
-      // 选图"不该被当成"chooseMedia 坏了"再弹一个 chooseImage 面板出来干扰用户，
-      // 直接把原始取消错误继续抛给调用方（外层 catch 已有 cancel 静默处理）
-      const errMsg = (err && (err.errMsg || err.message)) || '';
-      if (errMsg.includes('cancel')) {
-        throw err;
-      }
-      console.warn('[chooseDonorScreenshotSafe] chooseMedia 不可用/超时，回退到 wx.chooseImage:', err);
-      return new Promise<string>((resolve, reject) => {
-        wx.chooseImage({
-          count: 1,
-          sourceType: ['album', 'camera'],
-          success: (res) => resolve(res.tempFilePaths[0]),
-          fail: (fallbackErr) => reject(fallbackErr)
-        });
+        fail: (err) => {
+          // 🛡️ 用户主动在原生面板里点取消，errMsg 会明确带 cancel，这类"正常
+          // 放弃选图"不该被当成"chooseMedia 坏了"再弹一个 chooseImage 面板出来
+          // 干扰用户，直接把原始取消错误继续抛给调用方（外层 catch 已有 cancel
+          // 静默处理）
+          const errMsg = (err && err.errMsg) || '';
+          if (errMsg.includes('cancel')) {
+            reject(err);
+            return;
+          }
+          console.warn('[chooseDonorScreenshotSafe] chooseMedia 调用失败，降级到 wx.chooseImage:', err);
+          fallbackToChooseImage();
+        }
       });
     });
   },
