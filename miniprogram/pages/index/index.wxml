@@ -984,20 +984,27 @@
           </view>
         </block>
 
-        <!-- 🌸🌿 了凡四训·阳善与阴德：发心选择器（双卡片单选，纯内联样式） -->
+        <!-- 🌸🌿（2026-08-31 传统文化底色优化）了凡四训·阳善与阴德：发心选择器
+             （双卡片单选，纯内联样式）。选中态配色此前用的是通用 WeChat 品牌
+             红/绿（#E64340/#07C160），与"发心""公示/匿名"这类传统文化语境
+             不太贴——改用本文件其它文化语境处（.culture-toggle-item 雨花家风
+             落款、财务公示版 .poster-type-tab.active）已经在用的暖色调：
+             阳善（公示）用深赭红 #8C1D18 + 米白底，阴德（匿名）用低饱和墨玉绿
+             #4A7C59 + 淡青底，两者都比原来的品牌色更沉稳温润，同时仍保持
+             红/绿两个方向一眼可辨的对比 -->
         <view style="margin-top: 16rpx;">
           <view style="font-size: 24rpx; color: #666; margin-bottom: 12rpx;">✨ 发心选择（影响姓名在报告与海报中的公示方式）</view>
           <view style="display: flex; flex-direction: row;">
             <!-- 卡片 1：公示姓名（阳善） -->
             <view bindtap="onSelectMerit" data-type="yang"
-                  style="flex: 1; margin-right: 16rpx; padding: 16rpx; border-radius: 12rpx; background-color: {{meritType === 'yang' ? '#FFF2F0' : '#F7F8FA'}}; border: 2rpx solid {{meritType === 'yang' ? '#E64340' : '#E5E5E5'}};">
-              <view style="font-weight: bold; font-size: 26rpx; color: #333;">🌸 公示姓名 (阳善)</view>
+                  style="flex: 1; margin-right: 16rpx; padding: 16rpx; border-radius: 12rpx; background-color: {{meritType === 'yang' ? '#FDF6EC' : '#F7F8FA'}}; border: 2rpx solid {{meritType === 'yang' ? '#8C1D18' : '#E5E5E5'}};">
+              <view style="font-weight: bold; font-size: 26rpx; color: {{meritType === 'yang' ? '#8C1D18' : '#333'}};">🌸 公示姓名 (阳善)</view>
               <view style="font-size: 20rpx; color: #666; margin-top: 4rpx;">公开姓名，长养公信</view>
             </view>
             <!-- 卡片 2：积阴德（匿名） -->
             <view bindtap="onSelectMerit" data-type="yin"
-                  style="flex: 1; padding: 16rpx; border-radius: 12rpx; background-color: {{meritType === 'yin' ? '#E8F8F0' : '#F7F8FA'}}; border: 2rpx solid {{meritType === 'yin' ? '#07C160' : '#E5E5E5'}};">
-              <view style="font-weight: bold; font-size: 26rpx; color: #333;">🌿 积阴德 (匿名)</view>
+                  style="flex: 1; padding: 16rpx; border-radius: 12rpx; background-color: {{meritType === 'yin' ? '#F0F5F0' : '#F7F8FA'}}; border: 2rpx solid {{meritType === 'yin' ? '#4A7C59' : '#E5E5E5'}};">
+              <view style="font-weight: bold; font-size: 26rpx; color: {{meritType === 'yin' ? '#4A7C59' : '#333'}};">🌿 积阴德 (匿名)</view>
               <view style="font-size: 20rpx; color: #666; margin-top: 4rpx;">隐名护持，涵养阴德</view>
             </view>
           </view>
@@ -1026,19 +1033,45 @@
         </view>
       </view>
 
+      <!-- 🛡️（2026-08-31 结余算式看板化）此前是一整行 flex-wrap 的行内文本
+           表达式"昨日 + 收入 - 支出 = 结果"，数字位数一多（如四位数结余）
+           在窄屏上极易挤压换行、+/- 符号和数字粘在一起不好辨认。改成三柱
+           指标卡横排 + 底部大字号最终结果单独一行，读数优先级更清楚；
+           四个数字来源（yesterdayBalDisplay/totalIncomeDisplay/
+           totalExpenseDisplay/previewTodayBalanceDisplay）与算式本身
+           （唯一权威计算入口 computeTodayFinancials）完全不变，只重排视觉 -->
       <view class="formula-preview-banner">
         <view class="formula-header">
           <view class="icon idx-icon-sm idx-icon-chart"></view>
-          <text class="title">今日预计结余算式预览</text>
+          <text class="title">今日预计结余</text>
         </view>
-        <view class="formula-expression-row">
-          <text class="num-item">{{yesterdayBalDisplay || '0.00'}} <text class="unit">(昨日)</text></text>
-          <text class="operator">+</text>
-          <text class="num-item green">{{totalIncomeDisplay || '0.00'}} <text class="unit">(收入)</text></text>
-          <text class="operator">-</text>
-          <text class="num-item red">{{totalExpenseDisplay || '0.00'}} <text class="unit">(支出)</text></text>
-          <text class="operator">=</text>
-          <text class="result-val orange">¥{{previewTodayBalanceDisplay || '0.00'}}</text>
+        <view class="formula-metric-row">
+          <view class="formula-metric-col">
+            <text class="metric-label">昨日结余</text>
+            <text class="metric-value">¥{{yesterdayBalDisplay || '0.00'}}</text>
+          </view>
+          <text class="formula-op">+</text>
+          <view class="formula-metric-col">
+            <text class="metric-label">今日收入</text>
+            <text class="metric-value green">¥{{totalIncomeDisplay || '0.00'}}</text>
+          </view>
+          <text class="formula-op">-</text>
+          <view class="formula-metric-col">
+            <text class="metric-label">今日支出</text>
+            <text class="metric-value red">¥{{totalExpenseDisplay || '0.00'}}</text>
+          </view>
+        </view>
+        <view class="formula-result-row">
+          <view class="formula-result-main">
+            <text class="result-label">预计今日结余</text>
+            <text class="result-val orange {{previewBalanceIsNegative ? 'danger' : ''}}">¥{{previewTodayBalanceDisplay || '0.00'}}</text>
+          </view>
+          <!-- 收支平衡校验状态指示：结余为负说明支出超过了昨日结余+今日收入，
+               需要店长/财务核查是否漏录收入或误录支出，不是"计算本身出错"
+               （算式永远是自洽的，这里提示的是数据本身看起来是否合理） -->
+          <view class="balance-check-badge {{previewBalanceIsNegative ? 'warn' : 'ok'}}">
+            <text>{{previewBalanceIsNegative ? '⚠️ 结余为负，请核查' : '✓ 收支平衡'}}</text>
+          </view>
         </view>
       </view>
     </view>
@@ -1052,19 +1085,29 @@
              "拍照识别"不是一个持续切换的模式，是一次性动作——识别完成后
              直接把结果追加进下方文本框并原地重新解析，与手动粘贴走完全
              相同的一条路径（updateMaterialsParse → parseMaterials） -->
-        <view class="block-title-row" style="display: flex !important; justify-content: space-between !important; align-items: center !important; margin-bottom: 16rpx !important;">
-          <view class="block-title no-margin" style="display: flex !important; align-items: center !important;">
+        <!-- 🐛（2026-08-31 追加修复标题栏重叠）此前左侧标题 .block-title 和
+             右侧 .entry-mode-segmented 都没有显式 flex-shrink/min-width，
+             两者在窄屏上会一起参与挤压，标题较长时（"爱心物资明细 (选填)"
+             比义工统计标题更长）容易把按钮组挤到换行或与标题重叠。改为
+             标题 flex:1 + min-width:0 + 单行省略号（允许收缩，内容优先级
+             低于按钮组），按钮组固定 flex-shrink:0（右侧操作入口任何时候
+             都保持完整可点，不参与挤压），按钮组与标题之间再留 12rpx 安全
+             间距；同时把按钮文案从"📋 粘贴/速记"/"📷 拍照识别"缩短成
+             "📋 速记"/"📷 拍照"，与义工统计标题栏（复用同一个 .block-title-row）
+             并排时进一步降低总宽度压力 -->
+        <view class="block-title-row" style="display: flex !important; justify-content: space-between !important; align-items: center !important; gap: 12rpx !important; margin-bottom: 16rpx !important;">
+          <view class="block-title no-margin" style="display: flex !important; align-items: center !important; flex: 1 !important; min-width: 0 !important; overflow: hidden !important; white-space: nowrap !important; text-overflow: ellipsis !important;">
             <view class="idx-icon-sm idx-icon-box"></view> 爱心物资明细 <text class="optional-tag">(选填)</text>
           </view>
-          <view class="entry-mode-segmented">
+          <view class="entry-mode-segmented" style="flex-shrink: 0 !important;">
             <view class="segment-btn active">
-              <text class="txt">📋 粘贴/速记</text>
+              <text class="txt">📋 速记</text>
             </view>
             <view
               class="segment-btn segment-btn-ocr {{isScanningMaterialList ? 'active' : ''}}"
               bindtap="onScanMaterialScreenshot"
             >
-              <text class="txt">📷 拍照识别</text>
+              <text class="txt">📷 拍照</text>
             </view>
           </view>
         </view>
@@ -1126,6 +1169,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="number" confirm-type="next" value="{{dineInSeniors}}" placeholder="0" bindinput="onInput" data-field="dineInSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                  <view class="stats-quick-step" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="dineInSeniors">+1</view>
                 </view>
               </view>
               <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
@@ -1133,6 +1177,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="number" confirm-type="next" value="{{deliverySeniors}}" placeholder="0" bindinput="onInput" data-field="deliverySeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                  <view class="stats-quick-step" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="deliverySeniors">+1</view>
                 </view>
               </view>
             </view>
@@ -1142,6 +1187,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="number" confirm-type="next" value="{{takeawayCount}}" placeholder="0" bindinput="onInput" data-field="takeawayCount" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">份</text>
+                  <view class="stats-quick-step" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="takeawayCount">+1</view>
                 </view>
               </view>
               <!-- 奇数项占位 spacer：不可见，只为了让上面这个单项与相邻分组的两列宫格保持同宽对齐 -->
@@ -1158,6 +1204,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="number" confirm-type="next" value="{{dineInVolunteers}}" placeholder="0" bindinput="onInput" data-field="dineInVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                  <view class="stats-quick-step" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="dineInVolunteers">+1</view>
                 </view>
               </view>
               <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
@@ -1165,6 +1212,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="number" confirm-type="next" value="{{deliveryVolunteers}}" placeholder="0" bindinput="onInput" data-field="deliveryVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                  <view class="stats-quick-step" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="deliveryVolunteers">+1</view>
                 </view>
               </view>
             </view>
@@ -1174,6 +1222,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="number" confirm-type="next" value="{{listeningSeniors}}" placeholder="0" bindinput="onInput" data-field="listeningSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #15803D !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
+                  <view class="stats-quick-step green" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="listeningSeniors">+1</view>
                 </view>
                 <text style="font-size: 18rpx !important; color: #475569 !important; white-space: nowrap !important;">陪伴/关怀</text>
               </view>
@@ -1183,6 +1232,7 @@
                 <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
                   <input class="stats-input" type="digit" confirm-type="next" value="{{volunteerHours}}" placeholder="0" bindinput="onInput" data-field="volunteerHours" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
                   <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">小时</text>
+                  <view class="stats-quick-step" catchtap="onStatsQuickIncrement" hover-class="stats-quick-step-hover" data-field="volunteerHours" data-step="0.5">+0.5</view>
                 </view>
                 <!-- 🔗 打卡工时联动提示（云端汇总时显示） -->
                 <text wx:if="{{checkInHoursTip}}" style="font-size: 18rpx !important; color: #059669 !important; text-align: center !important; line-height: 1.4 !important; padding: 0 6rpx !important;">{{checkInHoursTip}}</text>

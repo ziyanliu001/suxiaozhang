@@ -597,6 +597,12 @@ Page({
     totalIncomeDisplay: '0.00',
     totalExpenseDisplay: '0.00',
     previewTodayBalanceDisplay: '0.00',
+    // 🐛（2026-08-31 结余算式看板化）配合三柱看板新增的"收支平衡校验状态"，
+    // 从 updateRealTimeBalance 里真正的 number 类型 todayBalance 直接算出，
+    // 不在 WXML 里对 previewTodayBalanceDisplay 这个已经 toFixed(2) 过的
+    // 字符串做数值比较——本文件其它地方没有这个先例，避免引入一个未经验证
+    // 的字符串转数字隐式行为
+    previewBalanceIsNegative: false,
     singleName: '',
     singleAmount: '',
     allDonations: '',
@@ -5149,6 +5155,7 @@ Page({
       totalIncomeDisplay: parsedTotalIncome.toFixed(2),
       totalExpenseDisplay: totalExpense.toFixed(2),
       previewTodayBalanceDisplay: computedTodayBalance,
+      previewBalanceIsNegative: todayBalance < 0,
       calculationFormulaText
     });
   },
@@ -5274,6 +5281,26 @@ Page({
     }
 
     this.debouncedSaveDraft();
+  },
+
+  // 🛡️（2026-08-31 义工与用餐统计操作便捷化）「义工与用餐统计」宫格里 6 个
+  // type="number" 整数字段 + 1 个 type="digit" 小数字段（服务工时）共用的
+  // 轻量"+N"微调步进——data-step 缺省时按 +1 处理，服务工时按 data-step="0.5"
+  // 半小时递增。直接复用 onInput 的完整副作用（recalcDiningStats/
+  // debouncedSaveDraft/isManualHours 标记等），不重复实现一份"只改 setData"
+  // 的浅拷贝逻辑，保证点击"+1"和手动敲数字键盘的结果完全等效，不会出现
+  // 两条路径各自维护、后续改一处忘改另一处的分裂
+  onStatsQuickIncrement(e: any) {
+    const { field, step } = e.currentTarget.dataset;
+    if (!field) return;
+    const current = parseFloat((this.data as any)[field]) || 0;
+    const delta = parseFloat(step) || 1;
+    const next = current + delta;
+    // 人数/份数字段没有小数位概念，四舍五入取整并规避浮点误差（如 0.1+0.2
+    // 这类累加残留）；服务工时是这组字段里唯一允许小数的，保留 1 位小数，
+    // 与 +0.5 的步长语义对应
+    const formatted = field === 'volunteerHours' ? next.toFixed(1) : String(Math.round(next));
+    this.onInput({ currentTarget: { dataset: { field } }, detail: { value: formatted } });
   },
 
   // 🍱 用餐/义工细分统计实时计算：用餐总数 = 堂食长者+送餐长者+打包+堂食志愿者；

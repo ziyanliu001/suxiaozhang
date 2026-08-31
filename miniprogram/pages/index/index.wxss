@@ -1391,47 +1391,107 @@ page {
   color: #B45309;
 }
 
-.formula-expression-row {
+/* 🛡️（2026-08-31 结余算式看板化）三柱指标卡：昨日结余/今日收入/今日支出
+   横排展示，取代此前容易在窄屏挤压换行的行内文本表达式 */
+.formula-metric-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10rpx;
-  font-size: 30rpx;
-  color: #212529;
+  gap: 8rpx;
 }
 
-.formula-expression-row .num-item {
+.formula-metric-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 12rpx;
+  padding: 12rpx 4rpx;
+}
+
+.formula-metric-col .metric-label {
+  font-size: 20rpx;
+  color: #868E96;
+  margin-bottom: 4rpx;
+  white-space: nowrap;
+}
+
+.formula-metric-col .metric-value {
+  font-size: 26rpx;
   font-weight: bold;
   color: #343A40;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
-.formula-expression-row .unit {
-  font-size: 18rpx;
-  color: #868E96;
-  font-weight: normal;
+.formula-metric-col .metric-value.green {
+  color: #2B8A3E;
 }
 
-.formula-expression-row .operator {
-  font-size: 30rpx;
+.formula-metric-col .metric-value.red {
+  color: #E03131;
+}
+
+.formula-op {
+  font-size: 28rpx;
   font-weight: bold;
   color: #B45309;
-  padding: 0 4rpx;
+  flex-shrink: 0;
+  padding: 0 2rpx;
 }
 
-.formula-expression-row .green {
-  color: #2B8A3E;
-  font-weight: bold;
+.formula-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed #FFD79A;
 }
 
-.formula-expression-row .red {
-  color: #E03131;
-  font-weight: bold;
+.formula-result-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+  min-width: 0;
 }
 
-.formula-expression-row .result-val.orange {
-  font-size: 38rpx;
+.formula-result-main .result-label {
+  font-size: 22rpx;
+  color: #868E96;
+  white-space: nowrap;
+}
+
+.formula-result-main .result-val.orange {
+  font-size: 40rpx;
   font-weight: bold;
   color: #D9480E;
+}
+
+.formula-result-main .result-val.orange.danger {
+  color: #E03131;
+}
+
+.balance-check-badge {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 20rpx;
+  white-space: nowrap;
+}
+
+.balance-check-badge.ok {
+  color: #2B8A3E;
+  background: #EBFBEE;
+}
+
+.balance-check-badge.warn {
+  color: #E03131;
+  background: #FFF0F0;
 }
 
 /* Card B: 物资与服务统计网格 */
@@ -1576,6 +1636,45 @@ page {
   font-size: 18rpx !important;
   color: #999999 !important;
   white-space: nowrap !important;
+}
+
+/* 🛡️（2026-08-31 义工与用餐统计操作便捷化）轻量"+1"微调步进：紧跟在
+   数字输入框右侧，义工人在原地点几下就能填常见小数字，不用每次都唤起
+   系统数字键盘再手动敲。catchtap（不是 bindtap）避免误触冒泡到父级卡片
+   的其它点击区域。复用 onInput 的完整副作用（recalcDiningStats/
+   debouncedSaveDraft/isManualHours 等），不是另起一套只改 setData 的
+   浅拷贝逻辑，保证与手动输入完全等效 */
+.stats-quick-step {
+  font-size: 16rpx;
+  color: #D9531E;
+  background: #FFF3E8;
+  border: 1rpx solid #FFD8B8;
+  border-radius: 8rpx;
+  padding: 2rpx 6rpx;
+  margin-left: 8rpx;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+.stats-quick-step.green {
+  color: #15803D;
+  background: #E8F8F0;
+  border-color: #BBF7D0;
+}
+
+/* 🐛（2026-08-31 追加修复）按压态反馈：本文件（index.wxss）此前没有定义
+   .ui-hover——那是 profile.wxss/statistics.wxss/notice.wxss 各自页面
+   作用域内的同名类，WXSS 按页面隔离，跨页面引用不会生效，直接在这里
+   hover-class="ui-hover" 会是个视觉上什么都不做的死绑定。改为给
+   .stats-quick-step 单独定义一个按压态，颜色跟随琥珀色/绿色两个变体 */
+.stats-quick-step-hover {
+  background: #FFE0BF !important;
+  border-color: #FFB877 !important;
+}
+
+.stats-quick-step.green.stats-quick-step-hover {
+  background: #C8ECD9 !important;
+  border-color: #86D9AC !important;
 }
 
 /* Card C: 主食物资单选胶囊 */
