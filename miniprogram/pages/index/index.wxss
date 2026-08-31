@@ -5036,6 +5036,17 @@ button.poster-gen-btn[disabled] {
   height: calc(180rpx + env(safe-area-inset-bottom));
 }
 
+/* 🐛（2026-08-31 修复 16 处死绑定）这个类此前在 WXML 里一处都没被引用——
+   16 处按钮/卡片用的是 hover-class="ui-hover"，而 .ui-hover 从未在本文件
+   定义过（那是 profile.wxss/statistics.wxss/notice.wxss 各自页面作用域
+   内的同名类，WXSS 按页面隔离，跨页面引用不会生效）。上面 .btn-main-action
+   的注释其实早就写明了原始设计意图是"hover-class="btn-hover""，说明这个
+   类从一开始就是为了配这些按钮做的，只是 WXML 那边不知何时起被写成了
+   "ui-hover"，两边就此失联。用 opacity+transform（不依赖具体背景色）而不是
+   纯色块背景，是特意选的通用方案——本文件里既有浅色卡片按钮，也有红色
+   渐变/纯黑的主 CTA 按钮，纯背景色叠加对深色按钮不友好，缩放+变暗则在
+   任何底色上都适用。16 处引用已经从 ui-hover 改回 btn-hover，这个类终于
+   真正生效 */
 .btn-hover {
   opacity: 0.8;
   transform: scale(0.99);

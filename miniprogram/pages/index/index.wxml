@@ -255,7 +255,7 @@
     <view class="v-action-box {{highlightCheckInCard ? 'highlight-pulse' : ''}}" id="checkInCard">
       <button
         class="btn-volunteer-checkin {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
-        hover-class="ui-hover"
+        hover-class="btn-hover"
         bindtap="onVolunteerCheckIn"
       >
         <view class="idx-icon-sm idx-icon-handshake"></view>
@@ -284,7 +284,7 @@
     </view>
     <button
       class="btn-volunteer-checkin omni-checkin-btn {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
-      hover-class="ui-hover"
+      hover-class="btn-hover"
       bindtap="onVolunteerCheckIn"
     >
       <view class="idx-icon-sm idx-icon-handshake"></view>
@@ -332,26 +332,26 @@
     <view class="home-vt-grid" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
 
       <!-- 1. 登记菜单人数 -->
-      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
+      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
         <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">🍱</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记菜单人数</text>
       </view>
 
       <!-- 2. 登记物资消耗 -->
-      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
+      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
         <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">🌾</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记物资消耗</text>
       </view>
 
       <!-- 3. 记录护持动态 -->
-      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
+      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
         <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">📷</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">记录护持动态</text>
       </view>
 
       <!-- 4. 长辈代报餐与签到：落库走独立的 elder_checkin_logs 流水，不进
            report_logs，见 components/elder-checkin-modal 头部注释 -->
-      <view class="home-vt-item" bindtap="onTapToolElderCheckin" hover-class="ui-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
+      <view class="home-vt-item" bindtap="onTapToolElderCheckin" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
         <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">👵</text>
         <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">长辈代报签到</text>
       </view>
@@ -1477,7 +1477,7 @@
             </view>
           </block>
 
-          <view class="recipe-dish-add" bindtap="chooseRecipeImages" hover-class="ui-hover" wx:if="{{recipeImages.length < 9}}" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border: 2rpx dashed #C8B195 !important; background-color: #FAF8F5 !important; border-radius: 12rpx !important; box-sizing: border-box !important; margin: 0 !important;">
+          <view class="recipe-dish-add" bindtap="chooseRecipeImages" hover-class="btn-hover" wx:if="{{recipeImages.length < 9}}" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border: 2rpx dashed #C8B195 !important; background-color: #FAF8F5 !important; border-radius: 12rpx !important; box-sizing: border-box !important; margin: 0 !important;">
             <view class="recipe-add-icon" style="position: absolute !important; top: 35% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 40rpx !important; color: #8C1D18 !important; line-height: 1 !important;">{{recipeUploading ? '…' : '+'}}</view>
             <view class="recipe-add-txt" style="position: absolute !important; top: 65% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 22rpx !important; color: #8C1D18 !important; white-space: nowrap !important;">{{recipeUploading ? '压缩中' : '拍下菜品'}}</view>
           </view>
@@ -1522,7 +1522,7 @@
             <view class="img-delete-badge" catchtap="deleteActivityImage" data-index="{{index}}">✕</view>
           </view>
 
-          <view class="grid-add-btn" bindtap="chooseActivityImages" hover-class="ui-hover" wx:if="{{activityImages.length < 18}}">
+          <view class="grid-add-btn" bindtap="chooseActivityImages" hover-class="btn-hover" wx:if="{{activityImages.length < 18}}">
             <text class="add-icon">{{activityUploading ? '…' : '+'}}</text>
             <text class="add-txt">{{activityUploading ? '压缩中' : '记录瞬间'}}</text>
           </view>
@@ -1612,7 +1612,7 @@
     <!-- 主生成按钮已迁移至底部固定吸底的 .bottom-action-floating-bar，这里仅保留精简的反馈/协议链接 -->
     <view class="bottom-links-card">
       <view class="sub-btn-group">
-        <button class="btn-sub" hover-class="ui-hover" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>意见反馈</button>
+        <button class="btn-sub" hover-class="btn-hover" open-type="feedback"><view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:4rpx;"></view>意见反馈</button>
       </view>
       <view class="agreement-tips">
         生成即代表同意 <text class="link" bindtap="showServiceAgreement">《用户服务协议》</text>
@@ -1878,7 +1878,7 @@
            点击只重新拉这一枚二维码 + 原地重绘当前版式，不重新生成整张海报 -->
       <view
         class="poster-qr-retry-banner"
-        hover-class="ui-hover"
+        hover-class="btn-hover"
         wx:if="{{posterImage && posterVerifyQrFailed && !isSwitchingPosterType}}"
         catchtap="onRetryVerifyQr"
       >
@@ -2994,7 +2994,7 @@
     <view class="store-poster-box" catchtap="stopPropagation">
       <view class="modal-header-row">
         <view class="modal-title"><view class="idx-icon-sm idx-icon-image" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>门店邀请绑定海报</view>
-        <view class="btn-close-modal-circle" hover-class="ui-hover" bindtap="onCloseStorePosterModal">
+        <view class="btn-close-modal-circle" hover-class="btn-hover" bindtap="onCloseStorePosterModal">
           ✕
         </view>
       </view>
@@ -3024,7 +3024,7 @@
            跟海报底部"雨花斋餐报助手"标语在视觉上重叠遮挡 -->
       <view
         class="poster-qr-retry-banner"
-        hover-class="ui-hover"
+        hover-class="btn-hover"
         wx:if="{{storePosterTempFilePath && storePosterQrFailed && !isStorePosterDrawing}}"
         catchtap="onRetryStoreQr"
       >
@@ -3032,7 +3032,7 @@
       </view>
 
       <view class="poster-actions-bar">
-        <button class="btn-share-single-line" hover-class="ui-hover" open-type="share" bindtap="onSharePosterToFriends">
+        <button class="btn-share-single-line" hover-class="btn-hover" open-type="share" bindtap="onSharePosterToFriends">
           <view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>分享给微信群和朋友
         </button>
       </view>
@@ -3153,13 +3153,13 @@
        低对比度重叠。SVG 图标系统这里没法简单换色，改用原生 emoji 字符作为图标（用户自身颜色不受
        按钮 color 影响，天然清晰可辨，也是需求里给出的示例做法），一步到位解决对比度问题。 -->
   <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
-    <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="ui-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
+    <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text>生成餐报文本
     </button>
-    <button class="btn-main-action poster-gen-btn" hover-class="ui-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
+    <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
       <text class="btn-emoji-icon">🎨</text>生成公示海报
     </button>
-    <button class="btn-main-action print-gen-btn" hover-class="ui-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}" style="background: #000000 !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
+    <button class="btn-main-action print-gen-btn" hover-class="btn-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}" style="background: #000000 !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
       <text class="btn-emoji-icon">🖨️</text>导出打印清单
     </button>
   </view>
