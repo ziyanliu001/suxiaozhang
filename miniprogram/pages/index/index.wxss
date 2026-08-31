@@ -4611,13 +4611,22 @@ button.poster-gen-btn[disabled] {
   position: relative;
   width: 90%;
   max-width: 680rpx;
-  max-height: calc(100vh - 200rpx);
+  max-height: 82vh;
   background-color: #fff;
   border-radius: 32rpx;
   overflow: hidden;
   margin-top: 160rpx;
   display: flex;
   flex-direction: column;
+  /* 🐛（2026-08-31 追加修复）真机上底部按钮被顶出屏幕：本组件 WXML 上还叠了
+     一层内联 style="padding-top: {{modalSafeTop}}px"（状态栏高度，用来避开
+     刘海/挖孔屏），此前 .modal-content 没设 box-sizing，默认 content-box
+     下这段 padding-top 会叠加在 max-height 预算之外，真机状态栏高度不为 0
+     时整个弹窗盒子实际渲染高度就会超出 max-height 原本要卡住的视口上限，
+     底部 .modal-footer（flex 列的最后一项）被顶到可视区域下方——模拟器上
+     不一定复现是因为 modalSafeTop 取值路径不同。改成 border-box 后，
+     padding-top 被计入 max-height 预算内，不再额外加高 */
+  box-sizing: border-box;
 }
 
 .modal-header {
@@ -4668,6 +4677,7 @@ button.poster-gen-btn[disabled] {
   display: flex;
   gap: 12rpx;
   padding: 20rpx 30rpx 0;
+  flex-shrink: 0;
 }
 
 .poster-type-tab {
@@ -4691,6 +4701,7 @@ button.poster-gen-btn[disabled] {
   display: flex;
   gap: 12rpx;
   padding: 16rpx 30rpx 0;
+  flex-shrink: 0;
 }
 
 .culture-toggle-item {
@@ -4762,6 +4773,9 @@ button.poster-gen-btn[disabled] {
   border-top: 1rpx solid #eee;
   flex-shrink: 0;
   box-sizing: border-box;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
 }
 
 .btn-close {
