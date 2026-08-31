@@ -99,6 +99,24 @@ export interface VolunteerHonorData {
   honorDesc?: string;
 }
 
+// 🌱 善信个人爱心足迹「善行卡」：与前三张海报同一套"调用方按真实数据拼好
+// 再传入"设计原则，posterGenerator.ts 不查库、不算业务口径。数据来自
+// getSunshineLedger 的 personalFootprint 字段（见该云函数头部注释——姓名是
+// 一次尽力而为的姓名匹配，不是身份级别的精确核验；verificationCode 是对
+// 足迹摘要计算的 SHA-256 指纹，供人工核对这张卡有没有被二次篡改，不是加密学
+// 意义上不可伪造的数字签名）
+export interface SunshineFootprintPosterData {
+  storeName: string;
+  maskedName: string;
+  firstDonationDaysAgo: number;
+  estimatedMealsCount: number;
+  verificationCode: string;
+  // 验真二维码本地临时路径，语义与 PosterData.verifyQrLocalPath 一致：
+  // 有值画真图，未提供/下载失败时优雅降级为官方静态小程序码，再失败则退回
+  // 占位菊花码，绝不能因为二维码画不出来就让整张海报生成中断
+  qrLocalPath?: string;
+}
+
 const BG_COLOR = '#FAF7F2';
 const BORDER_COLOR = '#E8E4DC';
 const PRIMARY_COLOR = '#B8860B';
@@ -169,6 +187,18 @@ const HONOR_QR_SIZE = 70;
 // 像素——CSS 圆角不会写进图片文件，保存/转发到微信外部时四角其实是直角，与预览
 // 观感不一致。改为在画布层面真正 clip 出圆角矩形，导出的 PNG 本身四角透明镂空
 const HONOR_CARD_RADIUS = 24;
+
+// 🌱 善行卡专属尺寸/配色：与荣誉卡同一个 375 宽度（复用 #posterCanvas 节点），
+// 高度略矮（无头像区），配色改用清新绿调，与"荣誉卡"的暖金调区分开——
+// "专属于我的故事"（善信个人足迹）不该跟"机构荣誉认证"（义工护持等级）
+// 长得一样，避免用户混淆两张卡的性质
+const FOOTPRINT_CANVAS_WIDTH = 375;
+const FOOTPRINT_CANVAS_HEIGHT = 520;
+const FOOTPRINT_CARD_RADIUS = 24;
+const FOOTPRINT_QR_SIZE = 64;
+const FOOTPRINT_PRIMARY_COLOR = '#2F7D3C';
+const FOOTPRINT_SECONDARY_COLOR = '#4E8D57';
+const FOOTPRINT_LIGHT_TEXT = '#8A9E8D';
 
 const SINGLE_COL_NAME_MAX = 200;
 const DOUBLE_COL_NAME_MAX = 110;
@@ -1271,6 +1301,149 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             const qrY = height - HONOR_QR_SIZE - 44 - 20;
             const qrX = width - 30 - HONOR_QR_SIZE;
             await drawVerifyQRArea(ctx, canvas, qrX, qrY, HONOR_QR_SIZE, '微信扫码·一起加入爱心公益', width, data.qrLocalPath, '微信扫码加入');
+
+            ctx.restore(); // 对应开头的圆角裁剪 save/clip
+
+            wx.canvasToTempFilePath({
+              canvas,
+              x: 0,
+              y: 0,
+              width: width * dpr,
+              height: height * dpr,
+              destWidth: width * dpr,
+              destHeight: height * dpr,
+              fileType: 'png',
+              quality: 1,
+              success: (tempRes) => resolve(tempRes.tempFilePath),
+              fail: (err: any) => reject(new Error('Canvas 转图片失败: ' + err.errMsg))
+            });
+          } catch (drawErr) {
+            reject(drawErr);
+          }
+        })();
+      });
+  });
+}
+
+// 🌱（2026-08-31 商业化生态演进第一步）善信个人爱心足迹「善行卡」：Canvas 2D
+// 离屏绘制，与 drawVolunteerHonorCard 同一套"query 画布节点 → getContext('2d')
+// → 按 dpr 缩放 → 圆角裁剪 → 逐段绘制 → canvasToTempFilePath 导出"流程，复用
+// 同一个 #posterCanvas 节点（调用方需保证同一时刻只生成一张海报，不会并发
+// 复用同一个画布节点）。数据全部由调用方（pages/index/index.ts）按真实
+// getSunshineLedger.personalFootprint 拼好传入，本函数不查库、不算业务口径
+export async function drawSunshineFootprintPoster(pageInstance: any, data: SunshineFootprintPosterData): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const query = wx.createSelectorQuery().in(pageInstance);
+    query.select('#posterCanvas')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res || !res[0] || !res[0].node) {
+          return reject(new Error('未找到 id="posterCanvas" 节点，请检查 wxml 是否存在且非 wx:if 渲染'));
+        }
+
+        const canvas = res[0].node;
+        const ctx = canvas.getContext('2d');
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
+
+        const width = FOOTPRINT_CANVAS_WIDTH;
+        const height = FOOTPRINT_CANVAS_HEIGHT;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+
+        (async () => {
+          try {
+            // 圆角裁剪：与荣誉卡同一处理，导出的 PNG 四角是真实透明镂空
+            ctx.save();
+            drawRoundedRectPath(ctx, 0, 0, width, height, FOOTPRINT_CARD_RADIUS);
+            ctx.clip();
+
+            // 清新绿调底：与荣誉卡的暖金调区分开，呼应素食公益的"生长/自然"意象
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+            bgGradient.addColorStop(0, '#F3FAF3');
+            bgGradient.addColorStop(1, '#E3F5E5');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Header：横幅标题 + 门店名副标题
+            ctx.fillStyle = FOOTPRINT_PRIMARY_COLOR;
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🌱 雨花公益食堂 · 阳光善行录', width / 2, 46);
+
+            ctx.fillStyle = FOOTPRINT_SECONDARY_COLOR;
+            ctx.font = '13px sans-serif';
+            ctx.fillText(truncateText(ctx, data.storeName || '', width - 60), width / 2, 70);
+
+            // 核心指标：结缘同行天数 / 累计温暖善餐份数，双宫格大字卡
+            const statsTop = 96;
+            const statsHeight = 96;
+            ctx.save();
+            ctx.shadowColor = 'rgba(47,125,60,0.12)';
+            ctx.shadowBlur = 14;
+            ctx.shadowOffsetY = 6;
+            ctx.fillStyle = '#FFFFFF';
+            drawRoundedRectPath(ctx, 25, statsTop, width - 50, statsHeight, 18);
+            ctx.fill();
+            ctx.restore();
+
+            const stats = [
+              { label: '结缘同行天数', value: `${data.firstDonationDaysAgo || 0}` },
+              { label: '累计温暖善餐（份）', value: `${data.estimatedMealsCount || 0}` }
+            ];
+            const colWidth = (width - 50) / 2;
+            stats.forEach((s, i) => {
+              const colCx = 25 + colWidth * i + colWidth / 2;
+              ctx.fillStyle = FOOTPRINT_PRIMARY_COLOR;
+              ctx.font = 'bold 32px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(s.value, colCx, statsTop + 48);
+
+              ctx.fillStyle = FOOTPRINT_LIGHT_TEXT;
+              ctx.font = '13px sans-serif';
+              ctx.fillText(s.label, colCx, statsTop + 74);
+
+              if (i > 0) {
+                ctx.strokeStyle = '#DCEFDD';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(25 + colWidth * i, statsTop + 18);
+                ctx.lineTo(25 + colWidth * i, statsTop + statsHeight - 18);
+                ctx.stroke();
+              }
+            });
+
+            // 伦理金句：固定文案，手工断成两行居中展示（不是动态用户输入，不需要
+            // 通用的自动换行算法，手工断行在视觉上比字符宽度硬换行更整齐）
+            const quoteTop = statsTop + statsHeight + 30;
+            ctx.save();
+            ctx.strokeStyle = '#CDE8CE';
+            ctx.lineWidth = 1;
+            drawRoundedRectPath(ctx, 40, quoteTop, width - 80, 78, 14);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = FOOTPRINT_SECONDARY_COLOR;
+            ctx.font = 'italic 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('「积善之家，必有余庆。', width / 2, quoteTop + 32);
+            ctx.fillText('每一粒米、每一滴油皆有回响」', width / 2, quoteTop + 56);
+
+            // 存证信标：脱敏姓名 + 16 位存证指纹（见 getSunshineLedger
+            // generateFootprintCode 注释，是人工核对锚点，不是加密学签名）
+            const provenanceY = quoteTop + 78 + 30;
+            ctx.fillStyle = FOOTPRINT_PRIMARY_COLOR;
+            ctx.font = 'bold 15px sans-serif';
+            ctx.fillText(`善信：${data.maskedName || '爱心善士'}`, width / 2, provenanceY);
+
+            ctx.fillStyle = FOOTPRINT_LIGHT_TEXT;
+            ctx.font = '11px monospace';
+            ctx.fillText(`存证指纹 ${data.verificationCode || '——'}`, width / 2, provenanceY + 20);
+
+            // Footer：验真二维码 + 查验指引
+            const qrY = height - FOOTPRINT_QR_SIZE - 44 - 16;
+            const qrX = (width - FOOTPRINT_QR_SIZE) / 2;
+            await drawVerifyQRArea(ctx, canvas, qrX, qrY, FOOTPRINT_QR_SIZE, '公开透明 · 全民监督', width, data.qrLocalPath, '扫码查验阳光台账');
 
             ctx.restore(); // 对应开头的圆角裁剪 save/clip
 

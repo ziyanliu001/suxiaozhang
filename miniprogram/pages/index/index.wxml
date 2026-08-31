@@ -1768,6 +1768,31 @@
     </view>
   </view>
 
+  <!-- 🌱（2026-08-31 商业化生态演进第一步）善行卡海报预览：与上面「爱心海报
+       预览」是两条独立的海报生成流程（各自的 canvasHeight/临时图片路径/显隐
+       状态互不共享，见 onGenerateFootprintCard 头部注释），复用同一套
+       .poster-modal/.modal-mask/.modal-content 样式类，不需要新增 WXSS -->
+  <view class="poster-modal" wx:if="{{showMeritPosterModal}}" bindtap="onCloseMeritPosterModal">
+    <view class="modal-mask"></view>
+    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">🌱 我的善行卡</text>
+        <view class="modal-close" bindtap="onCloseMeritPosterModal">
+          <text class="close-icon">×</text>
+        </view>
+      </view>
+
+      <view class="modal-body">
+        <image wx:if="{{meritPosterTempPath}}" class="poster-image" src="{{meritPosterTempPath}}" mode="widthFix" />
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-close" bindtap="onCloseMeritPosterModal">关闭</button>
+        <button class="btn-save" bindtap="onSaveMeritPosterToAlbum">保存到相册</button>
+      </view>
+    </view>
+  </view>
+
   <view class="modal-backdrop" wx:if="{{showPosterModal}}">
     <view class="poster-modal-card">
 

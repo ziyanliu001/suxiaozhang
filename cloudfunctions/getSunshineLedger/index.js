@@ -15,6 +15,7 @@
 // 尚未审核的草稿金额被公众误当作已生效数据看待。
 
 const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
@@ -56,6 +57,18 @@ function maskName(name) {
   if (str.length <= 1) return str + '*';
   if (str.length === 2) return str.charAt(0) + '*';
   return str.charAt(0) + '*'.repeat(str.length - 2) + str.charAt(str.length - 1);
+}
+
+// 🆕（2026-08-31 善行卡海报）个人足迹存证指纹：与 exportAccountExcel 的
+// generateVerificationCode 同一套设计哲学——对本次计算出的足迹摘要（门店+
+// 脱敏姓名+累计金额+结缘天数）算一次 SHA-256，截取前 16 位十六进制大写作为
+// 人工可誊抄核对的"存证指纹"。目的是给分享出去的善行卡提供一个"这张卡的
+// 数据有没有被二次篡改"的核对锚点，不是加密学意义上不可伪造的数字签名——
+// 收到者可以要求出具方（善信本人重新打开小程序）重新生成同一份数据核对
+// 是否一致
+function generateFootprintCode(payload) {
+  const canonical = JSON.stringify(payload, Object.keys(payload).sort());
+  return crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 16).toUpperCase();
 }
 
 function resolveItemAnonymous(item, reportLevelAnonymous) {
@@ -374,7 +387,9 @@ exports.main = async (event) => {
       estimatedMealsCount: 0,
       firstDonationDaysAgo: 0,
       donatedStoresCount: 0,
-      hasFootprint: false
+      hasFootprint: false,
+      maskedName: '',
+      verificationCode: ''
     };
     try {
       const { OPENID } = cloud.getWXContext();
@@ -416,13 +431,25 @@ exports.main = async (event) => {
               : 0;
             const estimatedMealsCount = avgMealCost > 0 ? Math.round(totalAmount / avgMealCost) : 0;
             const rawDaysAgo = daysBetween(earliestDateStr, todayStr);
+            const firstDonationDaysAgo = Number.isFinite(rawDaysAgo) ? Math.max(0, rawDaysAgo) : 0;
+            const roundedTotalAmount = Number(totalAmount.toFixed(2));
+            const maskedName = maskName(callerName);
+            const verificationCode = generateFootprintCode({
+              storeId,
+              maskedName,
+              totalAmount: roundedTotalAmount,
+              estimatedMealsCount,
+              firstDonationDaysAgo
+            });
 
             personalFootprint = {
-              totalAmount: Number(totalAmount.toFixed(2)),
+              totalAmount: roundedTotalAmount,
               estimatedMealsCount,
-              firstDonationDaysAgo: Number.isFinite(rawDaysAgo) ? Math.max(0, rawDaysAgo) : 0,
+              firstDonationDaysAgo,
               donatedStoresCount: 1,
-              hasFootprint: true
+              hasFootprint: true,
+              maskedName,
+              verificationCode
             };
           }
         }

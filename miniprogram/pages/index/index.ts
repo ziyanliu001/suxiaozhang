@@ -2,7 +2,7 @@ import { DataService, formatMoney } from '../../utils/dataService';
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
-import { drawMeritPoster, drawStoryPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
+import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
@@ -566,9 +566,18 @@ Page({
         estimatedMealsCount: 0,
         firstDonationDaysAgo: 0,
         donatedStoresCount: 0,
-        hasFootprint: false
+        hasFootprint: false,
+        maskedName: '',
+        verificationCode: ''
       }
     },
+    // 🆕（2026-08-31 善行卡海报）Canvas 动态绘制状态：全屏预览 Modal 的显隐 +
+    // 生成好的临时图片路径，与首页其余海报（generateQrCode 等）各自独立维护
+    // 一套状态，不复用同一批字段名，避免"义工二维码正在加载"这类无关状态
+    // 意外影响善行卡预览
+    showMeritPosterModal: false,
+    meritPosterLoading: false,
+    meritPosterTempPath: '',
     // ☀️ 阳光账本 4x2 网格展示数组：从 sunshineLedgerData 派生，供 WXML wx:for
     // 渲染，避免 8 个统计格子手写重复结构；value 统一存字符串（账本公开率是
     // "100%"/"暂无数据"这类文本，与其余数字指标共用同一套渲染逻辑更简单）
@@ -9600,7 +9609,8 @@ Page({
         operatingDays: result.operatingDays || 0,
         ledgerPublicRate: result.ledgerPublicRate || null,
         personalFootprint: result.personalFootprint || {
-          totalAmount: 0, estimatedMealsCount: 0, firstDonationDaysAgo: 0, donatedStoresCount: 0, hasFootprint: false
+          totalAmount: 0, estimatedMealsCount: 0, firstDonationDaysAgo: 0, donatedStoresCount: 0, hasFootprint: false,
+          maskedName: '', verificationCode: ''
         }
       };
       const isYuhuazhai = this.data.orgType === 'yuhuazhai';
@@ -9634,20 +9644,108 @@ Page({
     }
   },
 
-  // 🌱（2026-08-31 穿透式阳光模型）「生成善行卡」轻量分享触发点：不是画布
-  // 绘图海报（那套更重的实现见 utils/posterGenerator.ts，服务于义工护持
-  // 荣誉卡等场景），这里只是把足迹文案拼成一段温馨话术复制到剪贴板，供
-  // 善信直接粘贴分享到微信聊天/朋友圈——与本页其余"轻量文本分享"场景
-  // （如统计页 fallbackCopyToClipboard）同一套朴素实现思路
-  onGenerateFootprintCard() {
+  // 🌱（2026-08-31 商业化生态演进第一步）「生成善行卡」：从上一版的纯文案
+  // 剪贴板分享（见旧注释）升级为真正的 Canvas 2D 动态绘制海报，与
+  // generateGratitudeReport/onGeneratePoster 等既有海报生成入口同一套
+  // "showLoading → 设 canvasHeight → 调 posterGenerator 函数 → 存临时路径 →
+  // 弹全屏预览 Modal"流程，复用同一个 #posterCanvas 节点（本函数与页面其它
+  // 海报生成互斥执行，用户此刻只可能触发其中一种海报生成，不会并发抢用
+  // 同一个画布节点）
+  async onGenerateFootprintCard() {
     const fp = this.data.sunshineLedgerData.personalFootprint;
     if (!fp || !fp.hasFootprint) return;
-    const storeName = this.data.sunshineLedgerData.storeName || this.data.currentStoreName || '本门店';
-    const text = `🌱【我的爱心善行足迹】\n在${storeName}，我已默默同行 ${fp.firstDonationDaysAgo} 天，累计温暖 ${fp.estimatedMealsCount} 份爱心餐 ☀️\n阳光账本，公开透明，全民监督。`;
-    wx.setClipboardData({
-      data: text,
+    if (this.data.meritPosterLoading) return;
+
+    wx.showLoading({ title: '正在凝结善行长卷...', mask: true });
+    this.setData({ meritPosterLoading: true, canvasHeight: 520 });
+
+    try {
+      const qrLocalPath = await this.resolveFootprintQrLocalPath();
+      const tempPath = await drawSunshineFootprintPoster(this, {
+        storeName: this.data.sunshineLedgerData.storeName || this.data.currentStoreName || '本门店',
+        maskedName: fp.maskedName || '爱心善士',
+        firstDonationDaysAgo: fp.firstDonationDaysAgo || 0,
+        estimatedMealsCount: fp.estimatedMealsCount || 0,
+        verificationCode: fp.verificationCode || '',
+        qrLocalPath
+      });
+      wx.hideLoading();
+      this.setData({ meritPosterTempPath: tempPath, showMeritPosterModal: true });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onGenerateFootprintCard] 善行卡生成失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
+      wx.showToast({ title: '善行卡生成失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ meritPosterLoading: false });
+    }
+  },
+
+  // 善行卡验真二维码：复用 checkin_share 场景（与"扫码查看透明账本"同一档
+  // 低风险个人码，义工/家人本人调用即可生成，不需要 store_manager/super_admin
+  // 权限，见 getStoreQRCode 云函数 isLowRiskPersonalQr 判断），指向本店首页——
+  // 扫码后可在首页顶部直接打开"☀️ 阳光账本"查看公开数据。单次尝试，失败直接
+  // 返回空字符串——drawSunshineFootprintPoster 内部的 drawVerifyQRArea 会
+  // 优雅降级为官方静态小程序码/占位菊花码，不阻断整张海报生成
+  async resolveFootprintQrLocalPath(): Promise<string> {
+    if (!isCloudAvailable()) return '';
+    const storeId = this.data.currentStoreId || '';
+    const storeName = this.data.currentStoreName || this.data.shopName || '';
+    if (!storeId) return '';
+
+    try {
+      const qrRes = await callFunctionWithTimeout({
+        name: 'getStoreQRCode',
+        data: { storeId, storeName, purpose: 'checkin_share' }
+      });
+      const qrResult = qrRes.result as any;
+      if (!qrResult || !qrResult.success || !qrResult.fileID) return '';
+      const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+      return (downRes && downRes.tempFilePath) || '';
+    } catch (err) {
+      console.warn('[resolveFootprintQrLocalPath] 善行卡二维码生成失败，将降级为静态码:', err);
+      return '';
+    }
+  },
+
+  onCloseMeritPosterModal() {
+    if (this.data.meritPosterLoading) return;
+    this.setData({ showMeritPosterModal: false });
+  },
+
+  // 「保存到相册」：与既有 savePoster() 同一套授权失败处理（errMsg 含 'auth'
+  // 时引导 wx.openSetting()），各自独立维护一份，不复用 posterImage/closePoster
+  // 那套状态字段，避免"善行卡"与"日常财务公示海报"两条互不相关的预览流程
+  // 意外共享同一批 data 字段产生耦合
+  onSaveMeritPosterToAlbum() {
+    const { meritPosterTempPath } = this.data;
+    if (!meritPosterTempPath) {
+      wx.showToast({ title: '海报图片为空', icon: 'none' });
+      return;
+    }
+
+    wx.saveImageToPhotosAlbum({
+      filePath: meritPosterTempPath,
       success: () => {
-        wx.showToast({ title: '善行卡文案已复制，快去分享吧', icon: 'none', duration: 2500 });
+        wx.showToast({ title: '已保存到相册', icon: 'success' });
+        this.setData({ showMeritPosterModal: false });
+      },
+      fail: (err: any) => {
+        console.error('[onSaveMeritPosterToAlbum] 保存失败:', err);
+        if (err && err.errMsg && err.errMsg.includes('auth')) {
+          wx.showModal({
+            title: '提示',
+            content: '请授权允许保存图片到相册',
+            confirmText: '去授权',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting();
+              }
+            }
+          });
+        } else {
+          wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+        }
       }
     });
   },
