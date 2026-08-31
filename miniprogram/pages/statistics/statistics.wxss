@@ -2289,6 +2289,73 @@ page {
   color: #969799;
 }
 
+/* 🆕 食材消耗统计卡片（近30天固定窗口，供机构集采参考）：与上方
+   overview-materials-row 视觉呼应但用浅橙色调加以区分——避免大家长把
+   两组时间口径不同的数字误看成同一组数据的两种展示方式 */
+.ingredient-trend-card {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #FFF9F0;
+  border-radius: 16rpx;
+  border: 1rpx solid #FFE8CC;
+}
+
+.itc-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.itc-title {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #D9480E;
+}
+
+.itc-sub {
+  font-size: 20rpx;
+  color: #969799;
+}
+
+.itc-grid {
+  display: flex;
+  gap: 12rpx;
+}
+
+.itc-cell {
+  flex: 1;
+  text-align: center;
+  background: #FFFFFF;
+  border-radius: 12rpx;
+  padding: 12rpx 4rpx;
+}
+
+.itc-val {
+  display: block;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #D9480E;
+}
+
+.itc-lbl {
+  font-size: 18rpx;
+  color: #969799;
+}
+
+.itc-forecast {
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx dashed #FFE8CC;
+  text-align: center;
+}
+
+.itc-forecast-text {
+  font-size: 22rpx;
+  color: #D9480E;
+  font-weight: 500;
+}
+
 .hero-header {
   display: flex;
   justify-content: space-between;
@@ -3735,6 +3802,14 @@ page {
   font-size: 26rpx;
   color: #333333;
   border-bottom: 1rpx solid #F1F3F5;
+}
+
+/* 🆕 机构多店合并阳光台账导出确认弹窗说明文案 */
+.export-confirm-desc {
+  padding: 8rpx 0 24rpx 0;
+  font-size: 26rpx;
+  color: #495057;
+  line-height: 1.6;
 }
 
 .custom-store-search-input {

@@ -1,12 +1,282 @@
 const cloud = require('wx-server-sdk');
 const ExcelJS = require('exceljs');
+const crypto = require('crypto');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// 🆕 多店合并阳光台账导出（2026-08-31）：与 statistics.ts 页面顶部横幅
+// 「数据导出」发起的机构级合并导出对接，事件体新增 isNationalExport: true
+// 时生效——不改变默认单店/单 Sheet 导出路径的任何既有行为
+const HEADER_STYLE = {
+  font: { bold: true, size: 12, color: { argb: 'FFFFFFFF' } },
+  fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9480E' } },
+  alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+  border: {
+    top: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    left: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    bottom: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    right: { style: 'thin', color: { argb: 'FFDEE2E6' } }
+  }
+};
+
+const CELL_STYLE = {
+  font: { size: 11 },
+  alignment: { vertical: 'middle', wrapText: true },
+  border: {
+    top: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    left: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    bottom: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    right: { style: 'thin', color: { argb: 'FFDEE2E6' } }
+  }
+};
+
+const NUMBER_STYLE = {
+  ...CELL_STYLE,
+  alignment: { horizontal: 'right', vertical: 'middle' }
+};
+
+const INCOME_STYLE = {
+  ...NUMBER_STYLE,
+  font: { size: 11, color: { argb: 'FF2F9E44' } }
+};
+
+const EXPENSE_STYLE = {
+  ...NUMBER_STYLE,
+  font: { size: 11, color: { argb: 'FFE03131' } }
+};
+
+const TOTAL_STYLE = {
+  font: { bold: true, size: 12, color: { argb: 'FFD9480E' } },
+  fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3BF' } },
+  alignment: { horizontal: 'right', vertical: 'middle' },
+  border: {
+    top: { style: 'medium', color: { argb: 'FFD9480E' } },
+    left: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    bottom: { style: 'thin', color: { argb: 'FFDEE2E6' } },
+    right: { style: 'thin', color: { argb: 'FFDEE2E6' } }
+  }
+};
+
+// 🌟 单店/单 Sheet 收支明细构建：从原 exports.main 内联逻辑抽出，供默认单店
+// 导出与多店合并导出（每店一个 Sheet）共用同一套列定义/样式/合计行逻辑，
+// 不重复维护两份容易走样的构建代码。返回该 Sheet 的合计数字，供调用方汇总
+function addRecordsSheet(workbook, sheetName, records) {
+  const worksheet = workbook.addWorksheet(sheetName.substring(0, 31), {
+    properties: { defaultColWidth: 12 }
+  });
+
+  worksheet.columns = [
+    { header: '日期', key: 'date', width: 14 },
+    { header: '门店名称', key: 'shopName', width: 18 },
+    { header: '爱心收入(元)', key: 'income', width: 14 },
+    { header: '日常食材(元)', key: 'dailyExpense', width: 14 },
+    { header: '房租专项(元)', key: 'largeExpense', width: 14 },
+    { header: '总支出(元)', key: 'totalExpense', width: 14 },
+    { header: '净盈亏(元)', key: 'net', width: 14 },
+    { header: '用餐人次', key: 'diners', width: 10 },
+    { header: '到岗义工', key: 'volunteers', width: 10 },
+    { header: '义工工时', key: 'volunteerHours', width: 10 },
+    { header: '备注说明', key: 'remark', width: 30 }
+  ];
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 28;
+  headerRow.eachCell((cell) => {
+    cell.style = HEADER_STYLE;
+  });
+
+  let totalIncome = 0;
+  let totalDaily = 0;
+  let totalLarge = 0;
+  let totalExpense = 0;
+  let totalDiners = 0;
+  let totalVolunteers = 0;
+  let totalVolHours = 0;
+  // 🌟 月度财务审计表：物资捐赠笔数——按每条记录 materials 数组的条目数累加，
+  // 而不是"有物资捐赠的记录条数"，与门店财务公示海报（posterGenerator.ts
+  // drawMeritPoster 物资赞助明细）同一个"逐笔"统计口径
+  let totalMaterialsCount = 0;
+
+  records.forEach(record => {
+    const income = parseFloat(record.listDonationTotal || 0) + parseFloat(record.otherDonation || 0);
+    const dailyExp = parseFloat(record.dailyExpenseTotal || 0);
+    const largeExp = parseFloat(record.fixedExpenseTotal || 0);
+    const totalExp = parseFloat(record.expenseAmount || 0);
+    const net = income - totalExp;
+    const diners = parseInt(record.diningCount || 0, 10);
+    const vols = parseInt(record.volunteerCount || 0, 10);
+    const volHours = parseFloat(record.volunteerHours || 0);
+
+    totalIncome += income;
+    totalDaily += dailyExp;
+    totalLarge += largeExp;
+    totalExpense += totalExp;
+    totalDiners += diners;
+    totalVolunteers += vols;
+    totalVolHours += volHours;
+    if (Array.isArray(record.materials)) {
+      totalMaterialsCount += record.materials.length;
+    }
+
+    let remark = '';
+    if (record.materials && Array.isArray(record.materials) && record.materials.length > 0) {
+      remark = record.materials.map(m => `${m.item}${m.quantity || ''}${m.unit || ''}`).join('; ');
+    } else if (record.remark) {
+      remark = String(record.remark).replace(/[\r\n]/g, ' ');
+    }
+
+    const row = worksheet.addRow({
+      date: record.dateString || '',
+      shopName: record.shopName || '',
+      income: Number(income.toFixed(2)),
+      dailyExpense: Number(dailyExp.toFixed(2)),
+      largeExpense: Number(largeExp.toFixed(2)),
+      totalExpense: Number(totalExp.toFixed(2)),
+      net: Number(net.toFixed(2)),
+      diners: diners,
+      volunteers: vols,
+      volunteerHours: Number(volHours.toFixed(1)),
+      remark: remark
+    });
+
+    row.height = 24;
+    row.eachCell((cell, colNumber) => {
+      if (colNumber === 3 || colNumber === 7) {
+        cell.style = INCOME_STYLE;
+        cell.numFmt = '#,##0.00';
+      } else if (colNumber >= 4 && colNumber <= 6) {
+        cell.style = EXPENSE_STYLE;
+        cell.numFmt = '#,##0.00';
+      } else if (colNumber === 8 || colNumber === 9 || colNumber === 10) {
+        cell.style = NUMBER_STYLE;
+      } else {
+        cell.style = CELL_STYLE;
+      }
+    });
+  });
+
+  const totalRow = worksheet.addRow({
+    date: '合计',
+    shopName: `${records.length} 条记录`,
+    income: Number(totalIncome.toFixed(2)),
+    dailyExpense: Number(totalDaily.toFixed(2)),
+    largeExpense: Number(totalLarge.toFixed(2)),
+    totalExpense: Number(totalExpense.toFixed(2)),
+    net: Number((totalIncome - totalExpense).toFixed(2)),
+    diners: totalDiners,
+    volunteers: totalVolunteers,
+    volunteerHours: Number(totalVolHours.toFixed(1)),
+    remark: ''
+  });
+
+  totalRow.height = 28;
+  totalRow.eachCell((cell, colNumber) => {
+    cell.style = { ...TOTAL_STYLE };
+    if (colNumber >= 3 && colNumber <= 7) {
+      cell.numFmt = '#,##0.00';
+    }
+    if (colNumber === 1) {
+      cell.style = { ...TOTAL_STYLE, alignment: { horizontal: 'left', vertical: 'middle' } };
+    }
+  });
+
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  return {
+    recordCount: records.length,
+    totalIncome, totalDaily, totalLarge, totalExpense,
+    totalDiners, totalVolunteers, totalVolHours, totalMaterialsCount
+  };
+}
+
+// 🆕 机构合并台账「总览」Sheet：一店一行 + 机构合计行，插在工作簿最前面
+// （exceljs 按 addWorksheet 调用顺序排 Tab，先建总览 Sheet 就会排在第一个），
+// 方便理事会/民政打开文件第一眼先看全局，再按需翻到具体门店的明细 Sheet
+function addSummarySheet(workbook, storeTotalsList, grandTotal, meta) {
+  const worksheet = workbook.addWorksheet('总览', { properties: { defaultColWidth: 14 } });
+
+  worksheet.mergeCells('A1:H1');
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = `${meta.tenantName || '本机构'} · 多店合并阳光台账（${meta.periodLabel}）`;
+  titleCell.font = { bold: true, size: 14, color: { argb: 'FFD9480E' } };
+  titleCell.alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(1).height = 30;
+
+  worksheet.addRow([`统计区间：${meta.startDateStr} 至 ${meta.endDateStr}`]);
+  worksheet.addRow([`生成时间：${meta.generatedAt}`]);
+  // 🆕 存证核验签名：见 generateVerificationCode 注释，供收件方核对这份台账
+  // 与系统生成的原始摘要是否一致，防止文件在传阅过程中被篡改替换
+  worksheet.addRow([`存证核验码：${meta.verificationCode}`]);
+  worksheet.addRow([]);
+
+  const theadRow = worksheet.addRow(['门店名称', '爱心收入(元)', '日常食材(元)', '房租专项(元)', '总支出(元)', '净盈亏(元)', '用餐人次', '记录数']);
+  theadRow.height = 26;
+  theadRow.eachCell((cell) => { cell.style = HEADER_STYLE; });
+
+  storeTotalsList.forEach(s => {
+    const row = worksheet.addRow([
+      s.shopName,
+      Number(s.totalIncome.toFixed(2)),
+      Number(s.totalDaily.toFixed(2)),
+      Number(s.totalLarge.toFixed(2)),
+      Number(s.totalExpense.toFixed(2)),
+      Number((s.totalIncome - s.totalExpense).toFixed(2)),
+      s.totalDiners,
+      s.recordCount
+    ]);
+    row.eachCell((cell, colNumber) => {
+      if (colNumber === 2 || colNumber === 6) {
+        cell.style = INCOME_STYLE;
+        cell.numFmt = '#,##0.00';
+      } else if (colNumber >= 3 && colNumber <= 5) {
+        cell.style = EXPENSE_STYLE;
+        cell.numFmt = '#,##0.00';
+      } else if (colNumber === 7 || colNumber === 8) {
+        cell.style = NUMBER_STYLE;
+      } else {
+        cell.style = CELL_STYLE;
+      }
+    });
+  });
+
+  const grandRow = worksheet.addRow([
+    `机构合计（${storeTotalsList.length} 家门店）`,
+    Number(grandTotal.totalIncome.toFixed(2)),
+    Number(grandTotal.totalDaily.toFixed(2)),
+    Number(grandTotal.totalLarge.toFixed(2)),
+    Number(grandTotal.totalExpense.toFixed(2)),
+    Number((grandTotal.totalIncome - grandTotal.totalExpense).toFixed(2)),
+    grandTotal.totalDiners,
+    grandTotal.recordCount
+  ]);
+  grandRow.height = 28;
+  grandRow.eachCell((cell, colNumber) => {
+    cell.style = colNumber === 1
+      ? { ...TOTAL_STYLE, alignment: { horizontal: 'left', vertical: 'middle' } }
+      : { ...TOTAL_STYLE };
+    if (colNumber >= 2 && colNumber <= 6) {
+      cell.numFmt = '#,##0.00';
+    }
+  });
+
+  worksheet.views = [{ state: 'frozen', ySplit: 5 }];
+}
+
+// 🌟 存证核验签名：对本次导出的机构合计摘要（不含逐条明细，逐条明细的
+// 防篡改由 report_logs._checksum 各自负责，见 stampReportChecksum）计算
+// 一次 SHA-256 摘要，截取前 16 位十六进制作为人工可誊抄核对的"校验码"。
+// 目的是给理事会/民政核对提供一个"文件有没有被中途替换/篡改"的锚点，不是
+// 加密学意义上不可伪造的数字签名——收到者可以要求出具方重新生成同一批
+// 摘要数据对应的校验码核对是否一致
+function generateVerificationCode(payload) {
+  const canonical = JSON.stringify(payload, Object.keys(payload).sort());
+  return crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 16).toUpperCase();
+}
+
 exports.main = async (event, context) => {
-  const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate, previewOnly } = event;
+  const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate, previewOnly, isNationalExport } = event;
   const { OPENID } = cloud.getWXContext();
 
   const now = new Date();
@@ -48,7 +318,7 @@ exports.main = async (event, context) => {
     periodLabel = '今日';
   }
 
-  console.log(`📊 [exportAccountExcel] 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}`);
+  console.log(`📊 [exportAccountExcel] 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}, isNationalExport: ${!!isNationalExport}`);
 
   try {
     // 🏢 多租户边界：导出功能涉及完整财务明细，必须先收敛到调用者所属机构，
@@ -77,6 +347,15 @@ exports.main = async (event, context) => {
     // 页面拥有跨店查看权限（canViewAllStoresDropdown），导出功能作为该页面的延伸操作，
     // 口径保持一致
     const isTenantWideAllowed = ['super_admin', 'hq_finance', 'regional_finance'].includes(userRole);
+
+    // 🆕 机构级合并导出（isNationalExport）同样只对租户级角色开放——与
+    // pages/statistics/statistics.wxml 顶部横幅"数据导出"按钮的 isAdmin
+    // 权限口径一致，非租户级角色请求这个模式直接拒绝，不静默降级成单店导出
+    // （降级会让调用方以为拿到的就是全机构数据，造成误解）
+    if (isNationalExport && !isTenantWideAllowed) {
+      return { success: false, errMsg: '仅机构超管/总部财务可发起多店合并导出' };
+    }
+
     // 🐛 与下方 whereConditions 的收敛逻辑保持一致：非租户级角色现在无论传
     // 什么 shopName（含"全部门店"）都会被强制收敛到自己绑定的门店，这条
     // 早退校验也不应该只在客户端传"全部门店"时才检查——否则一个没绑定门店
@@ -105,11 +384,15 @@ exports.main = async (event, context) => {
       } else {
         whereConditions.shopName = userStoreName;
       }
+    } else if (isNationalExport) {
+      // 🆕 机构合并导出：无条件按全机构口径查询，即使客户端仍带着某个具体
+      // shopName（例如用户在切到"合并导出"之前恰好停留在某个单店 Tab），
+      // 也不能让这个残留参数意外把合并导出收窄成单店导出
     } else if (shopName && shopName !== '全部门店') {
       whereConditions.shopName = shopName;
     }
 
-    const MAX_LIMIT = 1000;
+    const MAX_LIMIT = isNationalExport ? 5000 : 1000;
     const recordRes = await db.collection('report_logs')
       .where(whereConditions)
       .orderBy('dateString', 'asc')
@@ -201,73 +484,6 @@ exports.main = async (event, context) => {
     workbook.creator = '雨花斋爱心账本';
     workbook.created = new Date();
 
-    const sheetName = `${periodLabel}收支明细`.substring(0, 31);
-    const worksheet = workbook.addWorksheet(sheetName, {
-      properties: { defaultColWidth: 12 }
-    });
-
-    // 标题行样式
-    const headerStyle = {
-      font: { bold: true, size: 12, color: { argb: 'FFFFFFFF' } },
-      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9480E' } },
-      alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
-      border: {
-        top: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        left: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        bottom: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        right: { style: 'thin', color: { argb: 'FFDEE2E6' } }
-      }
-    };
-
-    const cellStyle = {
-      font: { size: 11 },
-      alignment: { vertical: 'middle', wrapText: true },
-      border: {
-        top: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        left: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        bottom: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        right: { style: 'thin', color: { argb: 'FFDEE2E6' } }
-      }
-    };
-
-    const numberStyle = {
-      ...cellStyle,
-      alignment: { horizontal: 'right', vertical: 'middle' }
-    };
-
-    const incomeStyle = {
-      ...numberStyle,
-      font: { size: 11, color: { argb: 'FF2F9E44' } }
-    };
-
-    const expenseStyle = {
-      ...numberStyle,
-      font: { size: 11, color: { argb: 'FFE03131' } }
-    };
-
-    // 定义列
-    worksheet.columns = [
-      { header: '日期', key: 'date', width: 14 },
-      { header: '门店名称', key: 'shopName', width: 18 },
-      { header: '爱心收入(元)', key: 'income', width: 14 },
-      { header: '日常食材(元)', key: 'dailyExpense', width: 14 },
-      { header: '房租专项(元)', key: 'largeExpense', width: 14 },
-      { header: '总支出(元)', key: 'totalExpense', width: 14 },
-      { header: '净盈亏(元)', key: 'net', width: 14 },
-      { header: '用餐人次', key: 'diners', width: 10 },
-      { header: '到岗义工', key: 'volunteers', width: 10 },
-      { header: '义工工时', key: 'volunteerHours', width: 10 },
-      { header: '备注说明', key: 'remark', width: 30 }
-    ];
-
-    // 应用标题行样式
-    const headerRow = worksheet.getRow(1);
-    headerRow.height = 28;
-    headerRow.eachCell((cell, colNumber) => {
-      cell.style = headerStyle;
-    });
-
-    // 填充数据行
     let totalIncome = 0;
     let totalDaily = 0;
     let totalLarge = 0;
@@ -275,117 +491,100 @@ exports.main = async (event, context) => {
     let totalDiners = 0;
     let totalVolunteers = 0;
     let totalVolHours = 0;
-    // 🌟 月度财务审计表：物资捐赠笔数——按每条记录 materials 数组的条目数累加，
-    // 而不是"有物资捐赠的记录条数"，与门店财务公示海报（posterGenerator.ts
-    // drawMeritPoster 物资赞助明细）同一个"逐笔"统计口径
     let totalMaterialsCount = 0;
+    let verificationCode = '';
+    let safeStoreName = '';
 
-    records.forEach(record => {
-      const income = parseFloat(record.listDonationTotal || 0) + parseFloat(record.otherDonation || 0);
-      const dailyExp = parseFloat(record.dailyExpenseTotal || 0);
-      const largeExp = parseFloat(record.fixedExpenseTotal || 0);
-      const totalExp = parseFloat(record.expenseAmount || 0);
-      const net = income - totalExp;
-      const diners = parseInt(record.diningCount || 0, 10);
-      const vols = parseInt(record.volunteerCount || 0, 10);
-      const volHours = parseFloat(record.volunteerHours || 0);
+    if (isNationalExport) {
+      // 🆕 机构合并阳光台账：按 shopName 分组，每家门店各自一个 Sheet（复用
+      // addRecordsSheet 与默认单店导出完全同一套列定义/样式），外加一张
+      // "总览" Sheet 汇总全机构，插在最前面方便理事会/民政优先查看
+      const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true }).get().catch(() => null);
+      const tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '本机构';
 
-      totalIncome += income;
-      totalDaily += dailyExp;
-      totalLarge += largeExp;
-      totalExpense += totalExp;
-      totalDiners += diners;
-      totalVolunteers += vols;
-      totalVolHours += volHours;
-      if (Array.isArray(record.materials)) {
-        totalMaterialsCount += record.materials.length;
-      }
-
-      let remark = '';
-      if (record.materials && Array.isArray(record.materials) && record.materials.length > 0) {
-        remark = record.materials.map(m => `${m.item}${m.quantity || ''}${m.unit || ''}`).join('; ');
-      } else if (record.remark) {
-        remark = String(record.remark).replace(/[\r\n]/g, ' ');
-      }
-
-      const row = worksheet.addRow({
-        date: record.dateString || '',
-        shopName: record.shopName || '',
-        income: Number(income.toFixed(2)),
-        dailyExpense: Number(dailyExp.toFixed(2)),
-        largeExpense: Number(largeExp.toFixed(2)),
-        totalExpense: Number(totalExp.toFixed(2)),
-        net: Number(net.toFixed(2)),
-        diners: diners,
-        volunteers: vols,
-        volunteerHours: Number(volHours.toFixed(1)),
-        remark: remark
-      });
-
-      row.height = 24;
-      row.eachCell((cell, colNumber) => {
-        if (colNumber === 3 || colNumber === 7) {
-          cell.style = incomeStyle;
-          cell.numFmt = '#,##0.00';
-        } else if (colNumber >= 4 && colNumber <= 6) {
-          cell.style = expenseStyle;
-          cell.numFmt = '#,##0.00';
-        } else if (colNumber === 8 || colNumber === 9 || colNumber === 10) {
-          cell.style = numberStyle;
-        } else {
-          cell.style = cellStyle;
+      const groupedByStore = {};
+      const storeOrder = [];
+      records.forEach(r => {
+        const name = r.shopName || '未命名门店';
+        if (!groupedByStore[name]) {
+          groupedByStore[name] = [];
+          storeOrder.push(name);
         }
+        groupedByStore[name].push(r);
       });
-    });
 
-    // 合计行
-    const totalRow = worksheet.addRow({
-      date: '合计',
-      shopName: `${records.length} 条记录`,
-      income: Number(totalIncome.toFixed(2)),
-      dailyExpense: Number(totalDaily.toFixed(2)),
-      largeExpense: Number(totalLarge.toFixed(2)),
-      totalExpense: Number(totalExpense.toFixed(2)),
-      net: Number((totalIncome - totalExpense).toFixed(2)),
-      diners: totalDiners,
-      volunteers: totalVolunteers,
-      volunteerHours: Number(totalVolHours.toFixed(1)),
-      remark: ''
-    });
+      const storeTotalsList = [];
+      storeOrder.forEach(name => {
+        const storeRecords = groupedByStore[name];
+        const totals = addRecordsSheet(workbook, `${name}`, storeRecords);
+        storeTotalsList.push({ shopName: name, ...totals });
 
-    const totalStyle = {
-      font: { bold: true, size: 12, color: { argb: 'FFD9480E' } },
-      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3BF' } },
-      alignment: { horizontal: 'right', vertical: 'middle' },
-      border: {
-        top: { style: 'medium', color: { argb: 'FFD9480E' } },
-        left: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        bottom: { style: 'thin', color: { argb: 'FFDEE2E6' } },
-        right: { style: 'thin', color: { argb: 'FFDEE2E6' } }
-      }
-    };
+        totalIncome += totals.totalIncome;
+        totalDaily += totals.totalDaily;
+        totalLarge += totals.totalLarge;
+        totalExpense += totals.totalExpense;
+        totalDiners += totals.totalDiners;
+        totalVolunteers += totals.totalVolunteers;
+        totalVolHours += totals.totalVolHours;
+        totalMaterialsCount += totals.totalMaterialsCount;
+      });
 
-    totalRow.height = 28;
-    totalRow.eachCell((cell, colNumber) => {
-      cell.style = totalStyle;
-      if (colNumber >= 3 && colNumber <= 7) {
-        cell.numFmt = '#,##0.00';
-      }
-      if (colNumber === 1) {
-        cell.style.alignment = { horizontal: 'left', vertical: 'middle' };
-      }
-    });
+      const nowStrForCode = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      }).format(new Date());
 
-    // 冻结首行
-    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+      verificationCode = generateVerificationCode({
+        tenantId,
+        periodLabel,
+        startDateStr,
+        endDateStr,
+        storeCount: storeOrder.length,
+        totalIncome: Number(totalIncome.toFixed(2)),
+        totalExpense: Number(totalExpense.toFixed(2)),
+        recordCount: records.length,
+        generatedAt: nowStrForCode
+      });
+
+      // 🆕 总览 Sheet 需要在明细 Sheet 之前建好才会排在第一个 Tab——但
+      // addSummarySheet 依赖上面逐店 addRecordsSheet 算出的 storeTotalsList，
+      // 只能后建。exceljs 支持通过 orderNo 手动指定 Tab 顺序，避免为了排序
+      // 硬拆成"先占位再填内容"这种更绕的写法
+      addSummarySheet(workbook, storeTotalsList, {
+        totalIncome, totalDaily, totalLarge, totalExpense, totalDiners, recordCount: records.length
+      }, {
+        tenantName, periodLabel, startDateStr, endDateStr, generatedAt: nowStrForCode, verificationCode
+      });
+      // 把总览 Sheet 挪到第一个 Tab 位置（exceljs workbook.worksheets 数组
+      // 顺序即 Tab 顺序，orderNo 越小越靠前）
+      workbook.worksheets.forEach((ws, idx) => {
+        ws.orderNo = ws.name === '总览' ? 0 : idx + 1;
+      });
+
+      safeStoreName = tenantName.replace(/[\\/:*?"<>|]/g, '');
+    } else {
+      const sheetName = `${periodLabel}收支明细`;
+      const totals = addRecordsSheet(workbook, sheetName, records);
+      totalIncome = totals.totalIncome;
+      totalDaily = totals.totalDaily;
+      totalLarge = totals.totalLarge;
+      totalExpense = totals.totalExpense;
+      totalDiners = totals.totalDiners;
+      totalVolunteers = totals.totalVolunteers;
+      totalVolHours = totals.totalVolHours;
+      totalMaterialsCount = totals.totalMaterialsCount;
+      safeStoreName = String(shopName || '全部门店').replace(/[\\/:*?"<>|]/g, '');
+    }
 
     // 3. 生成 Buffer
     const buffer = await workbook.xlsx.writeBuffer();
 
     // 4. 上传到云存储
-    const safeStoreName = String(shopName || '全部门店').replace(/[\\/:*?"<>|]/g, '');
     const timestamp = Date.now();
-    const cloudPath = `exports/${safeStoreName}_收支明细_${periodLabel}_${timestamp}.xlsx`;
+    const fileLabel = isNationalExport ? '多店合并阳光台账' : '收支明细';
+    const cloudPath = `exports/${safeStoreName}_${fileLabel}_${periodLabel}_${timestamp}.xlsx`;
 
     const uploadRes = await cloud.uploadFile({
       cloudPath: cloudPath,
@@ -413,7 +612,7 @@ exports.main = async (event, context) => {
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: false
     }).format(new Date());
-    const auditText = [
+    const auditTextLines = [
       `【${safeStoreName} · ${periodLabel} 财务审计公示】`,
       `统计区间：${startDateStr} 至 ${endDateStr}`,
       '——————————',
@@ -425,15 +624,21 @@ exports.main = async (event, context) => {
       '——————————',
       `数据来源：门店逐日提交的透明账本记录（共 ${records.length} 条），如有疑问欢迎联系门店核实。`,
       `生成时间：${nowStr}`
-    ].join('\n');
+    ];
+    if (isNationalExport) {
+      auditTextLines.splice(1, 0, `存证核验码：${verificationCode}`);
+    }
+    const auditText = auditTextLines.join('\n');
 
     return {
       success: true,
       fileID: uploadRes.fileID,
       tempFileURL,
-      fileName: `${safeStoreName}_收支明细_${periodLabel}.xlsx`,
+      fileName: `${safeStoreName}_${fileLabel}_${periodLabel}.xlsx`,
       recordCount: records.length,
       auditText,
+      isNationalExport: !!isNationalExport,
+      verificationCode: isNationalExport ? verificationCode : undefined,
       auditSummary: {
         periodLabel,
         startDateStr,

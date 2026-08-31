@@ -839,6 +839,10 @@ Page({
     showNationalReportModal: false,
     nationalReportSelection: { operations: true, financeAudit: false },
     generatingNationalReport: false,
+    // 🆕（2026-08-31）机构多店合并阳光台账 Excel 导出：与上面 CSV 报表弹窗
+    // 状态字段独立，避免两条导出通道的 loading/弹窗开关互相干扰
+    showNationalExcelExportModal: false,
+    generatingNationalExcelExport: false,
     showGratitudeModal: false,
     gratitudeTempFilePath: '',
     gratitudeReportData: {} as GratitudeReportData,
@@ -4743,6 +4747,81 @@ Page({
       wx.hideLoading();
       this.setData({ generatingNationalReport: false });
       console.error('[NationalReport] CSV 导出失败:', error);
+      wx.showToast({ title: '导出失败，请重试', icon: 'none' });
+    }
+  },
+
+  // ========== 🆕（2026-08-31）超管专属：机构多店合并阳光台账 Excel 导出 ==========
+  // 与上面「全国运营/财务报表 CSV 导出」是两条独立通道：那条是纯客户端从
+  // 已加载的 nationalMatrixList/superAdminInsights 聚合摘要派生的轻量 CSV，
+  // 这条是重新发起 exportAccountExcel 云调用、按 report_logs 逐条明细生成
+  // 的正式多 Sheet .xlsx 工作簿（各店一个 Sheet + 机构总览 Sheet），附带
+  // 存证核验码，供理事会/民政核对存档
+
+  onOpenNationalExcelExportModal() {
+    if (!this.data.isAdmin) return;
+    this.setData({ showNationalExcelExportModal: true });
+  },
+
+  onCloseNationalExcelExportModal() {
+    if (this.data.generatingNationalExcelExport) return;
+    this.setData({ showNationalExcelExportModal: false });
+  },
+
+  // 将大屏当前选中的 nationalRangeType（7d/month/quarter/year/all）换算成
+  // exportAccountExcel 认识的 tabType: 'custom' + 具体 startDate/endDate，
+  // 让合并导出的统计口径与大屏当前展示的数据范围保持一致，而不是另起一套
+  // 用户没有主动选过的周期
+  buildNationalExportDateRange(): { startDate: string; endDate: string } {
+    const rangeType = this.data.nationalRangeType;
+    const today = new Date();
+    const endDate = formatDate(today);
+    const daysMap: Record<string, number> = { '7d': 7, month: 30, quarter: 90, year: 365 };
+    const days = daysMap[rangeType];
+    if (!days) {
+      // 'all'：用一个足够早的锚点日期覆盖机构全部历史记录
+      return { startDate: '2000-01-01', endDate };
+    }
+    const start = new Date(today);
+    start.setDate(start.getDate() - days);
+    return { startDate: formatDate(start), endDate };
+  },
+
+  async onConfirmNationalExcelExport() {
+    if (this.data.generatingNationalExcelExport) return;
+    this.setData({ generatingNationalExcelExport: true });
+    wx.showLoading({ title: '正在生成合并台账...', mask: true });
+
+    try {
+      const { startDate, endDate } = this.buildNationalExportDateRange();
+      const res = await callFunctionWithTimeout({
+        name: 'exportAccountExcel',
+        data: { isNationalExport: true, tabType: 'custom', startDate, endDate }
+      });
+      const result = (res.result || {}) as any;
+      wx.hideLoading();
+      this.setData({ generatingNationalExcelExport: false, showNationalExcelExportModal: false });
+
+      if (result.success && result.tempFileURL) {
+        if (result.verificationCode) {
+          wx.showModal({
+            title: '✅ 台账已生成',
+            content: `存证核验码：${result.verificationCode}\n\n请妥善留存此核验码，用于核对该台账文件是否被篡改替换。`,
+            showCancel: false,
+            confirmText: '我知道了',
+            success: () => this.downloadAndOpenExcel(result.tempFileURL, result.fileName || '多店合并阳光台账.xlsx')
+          });
+        } else {
+          this.downloadAndOpenExcel(result.tempFileURL, result.fileName || '多店合并阳光台账.xlsx');
+        }
+      } else {
+        wx.showToast({ title: result.errMsg || '导出失败，请重试', icon: 'none' });
+      }
+    } catch (err: any) {
+      wx.hideLoading();
+      this.setData({ generatingNationalExcelExport: false });
+      console.error('[NationalExcelExport] 导出失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
       wx.showToast({ title: '导出失败，请重试', icon: 'none' });
     }
   },

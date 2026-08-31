@@ -68,10 +68,11 @@
             <text class="national-banner-action-icon">🔄</text>
             <text class="national-banner-action-text">刷新数据</text>
           </view>
-          <!-- 数据导出：直接复用页面下方已有的"生成运营/财务报表"弹窗（onOpenNationalReportModal），
-               不重复实现一套导出逻辑；与该弹窗按钮同一条 isAdmin 权限口径，
-               非超管在这里同样看不到导出入口 -->
-          <view class="national-banner-action-btn" hover-class="ui-hover" bindtap="onOpenNationalReportModal" wx:if="{{isAdmin}}">
+          <!-- 🆕（2026-08-31）数据导出：改为发起"机构多店合并阳光台账"Excel 导出
+               确认弹窗（含存证核验码），与底部吸底栏"📄 生成运营/财务报表"按钮
+               （轻量级 CSV 聚合报表，走 onOpenNationalReportModal）是两个不同
+               产出物的独立入口，不再复用同一个弹窗——同一条 isAdmin 权限口径 -->
+          <view class="national-banner-action-btn" hover-class="ui-hover" bindtap="onOpenNationalExcelExportModal" wx:if="{{isAdmin}}">
             <text class="national-banner-action-icon">📄</text>
             <text class="national-banner-action-text">数据导出</text>
           </view>
@@ -275,6 +276,38 @@
         <view class="overview-material-cell" wx:if="{{nationalData.nationalVegetableTotal > 0}}">
           <text class="material-val">{{nationalData.nationalVegetableTotal}}斤</text>
           <text class="material-lbl">🥬 蔬菜</text>
+        </view>
+      </view>
+
+      <!-- 🆕 食材消耗统计卡片（2026-08-31 供应链集采预估）：固定近30天窗口，
+           与上方「物资消耗」微卡片（随顶部 rangeType 联动，7天/本月/本季度/
+           全部时间）刻意分开——切换时间片 Tab 不会影响这里的集采预估数字，
+           避免大家长误以为"本季度"大米消耗量就是月度集采基准 -->
+      <view class="ingredient-trend-card" wx:if="{{nationalData.ingredientStats30d && (nationalData.ingredientStats30d.riceKg > 0 || nationalData.ingredientStats30d.flourKg > 0 || nationalData.ingredientStats30d.oilKg > 0 || nationalData.ingredientStats30d.veggieKg > 0)}}">
+        <view class="itc-header">
+          <text class="itc-title">📦 近30天食材消耗趋势</text>
+          <text class="itc-sub">供机构集采参考</text>
+        </view>
+        <view class="itc-grid">
+          <view class="itc-cell" wx:if="{{nationalData.ingredientStats30d.riceKg > 0}}">
+            <text class="itc-val">{{nationalData.ingredientStats30d.riceKg}}kg</text>
+            <text class="itc-lbl">🌾 大米</text>
+          </view>
+          <view class="itc-cell" wx:if="{{nationalData.ingredientStats30d.flourKg > 0}}">
+            <text class="itc-val">{{nationalData.ingredientStats30d.flourKg}}kg</text>
+            <text class="itc-lbl">🌽 面粉</text>
+          </view>
+          <view class="itc-cell" wx:if="{{nationalData.ingredientStats30d.oilKg > 0}}">
+            <text class="itc-val">{{nationalData.ingredientStats30d.oilKg}}kg</text>
+            <text class="itc-lbl">🫗 食用油</text>
+          </view>
+          <view class="itc-cell" wx:if="{{nationalData.ingredientStats30d.veggieKg > 0}}">
+            <text class="itc-val">{{nationalData.ingredientStats30d.veggieKg}}kg</text>
+            <text class="itc-lbl">🥬 蔬菜</text>
+          </view>
+        </view>
+        <view class="itc-forecast" wx:if="{{nationalData.ingredientStats30d.estimatedMonthlySupplyNeeds}}">
+          <text class="itc-forecast-text">💡 {{nationalData.ingredientStats30d.estimatedMonthlySupplyNeeds}}</text>
         </view>
       </view>
 
@@ -893,6 +926,28 @@
       <view class="modal-footer">
         <button class="btn-modal-cancel" bindtap="onCopyNationalReport" disabled="{{generatingNationalReport}}">复制到剪贴板</button>
         <button class="btn-modal-submit" bindtap="onExportNationalReport" disabled="{{generatingNationalReport}}" loading="{{generatingNationalReport}}">导出下载</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🆕（2026-08-31）机构多店合并阳光台账导出确认弹窗：与上面 CSV 报表弹窗
+       是两条独立的导出通道——这个走 exportAccountExcel 云函数生成真实的
+       多 Sheet .xlsx 工作簿（每店一 Sheet + 总览汇总 Sheet），附带存证核验码，
+       而不是客户端聚合出的纯文本 CSV -->
+  <view class="patch-modal-mask" wx:if="{{showNationalExcelExportModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">📊 导出机构多店合并阳光台账</text>
+        <text class="btn-close" bindtap="onCloseNationalExcelExportModal">✕</text>
+      </view>
+
+      <view class="export-confirm-desc">
+        <text>将本机构名下所有门店近期的开餐人次、财务收支及食材流水明细，合并生成一份标准化 Excel 工作簿（各店一个 Sheet + 机构总览 Sheet），并附带存证核验码，便于理事会/民政核对存档。</text>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCloseNationalExcelExportModal" disabled="{{generatingNationalExcelExport}}">取消</button>
+        <button class="btn-modal-submit" bindtap="onConfirmNationalExcelExport" disabled="{{generatingNationalExcelExport}}" loading="{{generatingNationalExcelExport}}">确认并导出</button>
       </view>
     </view>
   </view>

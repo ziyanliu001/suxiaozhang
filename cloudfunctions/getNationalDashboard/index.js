@@ -499,6 +499,81 @@ exports.main = async (event, context) => {
       // 视为总量 0，不影响主统计
     }
 
+    // 🆕 机构级食材消耗走势（2026-08-31 供应链集采预估）：与上面
+    // nationalRiceTotal 等字段刻意分开、独立查询——上面那组是"当前所选
+    // rangeType 时间片"的口径，会随大屏顶部 7天/本月/本季度/全部时间 切换
+    // 而变化；而集采预估天然需要一个稳定的、不受用户当前切换的时间片
+    // 干扰的固定窗口（近30天），否则大家长切到"本季度"或"全部时间"看到
+    // 的"月度集采预估"会离谱地偏大，切到"近7天"又会偏小到不可用
+    let ingredientStats30d = {
+      riceKg: 0,
+      flourKg: 0,
+      oilKg: 0,
+      veggieKg: 0,
+      estimatedMonthlySupplyNeeds: ''
+    };
+    try {
+      const ingredient30dStart = isoDateNDaysAgo(30);
+      const ingredient30dConditions = [
+        makeTenantFilter(tenantId),
+        { dateString: _.gte(ingredient30dStart) }
+      ];
+      if (isScopedFilter) {
+        ingredient30dConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
+      }
+      let ingredient30dLogs = [];
+      let ingredient30dSkip = 0;
+      while (true) {
+        const batch = await db.collection('material_logs')
+          .where(_.and(ingredient30dConditions))
+          .skip(ingredient30dSkip)
+          .limit(batchLimit)
+          .get();
+        if (!batch.data || batch.data.length === 0) break;
+        ingredient30dLogs = ingredient30dLogs.concat(batch.data);
+        if (batch.data.length < batchLimit) break;
+        ingredient30dSkip += batchLimit;
+        if (ingredient30dSkip >= 1000) break;
+      }
+      // 🐛 material_logs 的 riceCount/flourCount/oilCount/vegetableCount 历史上
+      // 一律按"斤"（0.5kg）记录（对照 pages/index/index.ts 的填写占位提示
+      // "大米50斤"），而这里对外输出的接口字段名是 riceKg 等公斤单位，必须
+      // 显式做一次 ×0.5 换算，不能直接把"斤"数值套上 Kg 的字段名
+      let rice30dJin = 0;
+      let flour30dJin = 0;
+      let oil30dJin = 0;
+      let veggie30dJin = 0;
+      ingredient30dLogs.forEach((m) => {
+        rice30dJin += parseFloat(m.riceCount) || 0;
+        flour30dJin += parseFloat(m.flourCount) || 0;
+        oil30dJin += parseFloat(m.oilCount) || 0;
+        veggie30dJin += parseFloat(m.vegetableCount) || 0;
+      });
+      const riceKg = Math.round(rice30dJin * 0.5 * 10) / 10;
+      const flourKg = Math.round(flour30dJin * 0.5 * 10) / 10;
+      const oilKg = Math.round(oil30dJin * 0.5 * 10) / 10;
+      const veggieKg = Math.round(veggie30dJin * 0.5 * 10) / 10;
+
+      // 🌟 月度集采预估：以近30天大米实际消耗量线性外推到"每月"口径（大米是
+      // 雨花斋/助老食堂最核心、最需要提前备货的主食食材，故预估文案以大米为
+      // 主角，其余品类仍在 riceKg/flourKg/oilKg/veggieKg 里原样暴露给前端自行
+      // 展示），≥1000kg 时换算成"吨"展示更符合采购人员的直觉单位
+      const estimatedMonthlyRiceKg = riceKg;
+      let estimatedMonthlySupplyNeeds = '暂无近30天食材消耗数据';
+      if (estimatedMonthlyRiceKg > 0) {
+        if (estimatedMonthlyRiceKg >= 1000) {
+          const tons = Math.round((estimatedMonthlyRiceKg / 1000) * 10) / 10;
+          estimatedMonthlySupplyNeeds = `大米约需 ${tons} 吨/月`;
+        } else {
+          estimatedMonthlySupplyNeeds = `大米约需 ${Math.round(estimatedMonthlyRiceKg)} 公斤/月`;
+        }
+      }
+
+      ingredientStats30d = { riceKg, flourKg, oilKg, veggieKg, estimatedMonthlySupplyNeeds };
+    } catch (err) {
+      // material_logs 集合可能尚未创建，视为近30天消耗为 0，不影响主统计
+    }
+
     let nationalTotalDiners = 0;
     let nationalTotalIncome = 0;
     let nationalTotalExpense = 0;
@@ -1207,6 +1282,10 @@ exports.main = async (event, context) => {
       nationalFlourTotal: Math.round(nationalFlourTotal * 10) / 10,
       nationalOilTotal: Math.round(nationalOilTotal * 10) / 10,
       nationalVegetableTotal: Math.round(nationalVegetableTotal * 10) / 10,
+      // 🆕 机构级食材消耗走势（近30天固定窗口，不随 rangeType 联动，见上方
+      // ingredientStats30d 计算处注释）：面向机构集采参考，非财务敏感字段，
+      // 不加入下方 SENSITIVE_KEYS 脱敏名单
+      ingredientStats30d,
       // 🆕 核心 KPI 环比趋势（vs 上一个同长度周期）：rangeType='all' 或查无
       // 可比基数时 prevTotal*=0，computePctChange 自动返回 null，前端隐藏徽标
       nationalTotalDinersTrend: computePctChange(nationalTotalDiners, prevTotalDiners),
