@@ -5,6 +5,7 @@ import { getSelectedStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { isCloudAvailable } from '../../utils/cloudGuard';
+import { playOcrSuccess } from '../../utils/audioService';
 
 type StockStatus = 'sufficient' | 'normal' | 'urgent';
 
@@ -184,6 +185,17 @@ Component({
         // 🌟 长者友好：醒目 Toast + 较长展示时长，明确告知"哪几项被自动填了"，
         // 支持在下方输入框里手动微调，不强制信任 OCR 结果
         wx.showToast({ title: `已自动填入${filledLabels.join('/')}重量，请核对`, icon: 'none', duration: 3500 });
+
+        // 🔊 后厨语音与音效无感反馈：双手沾着食材/正在称重时不方便看手机，
+        // 一声清脆确认音 + 轻震动示意"识别完成"。summaryText 摘要文案与上面
+        // Toast 同源拼装，见 audioService.playOcrSuccess 头部注释——当前只
+        // 记录日志、不做真正的语音播报（小程序没有内置任意文本 TTS 能力）
+        const summaryParts = filledLabels.map((label) => {
+          const fieldMap: Record<string, string> = { 大米: 'form.riceCount', 面粉: 'form.flourCount', 食用油: 'form.oilCount', 蔬菜: 'form.vegetableCount' };
+          const field = fieldMap[label];
+          return field && patch[field] ? `${label}${patch[field]}斤` : label;
+        });
+        playOcrSuccess(`已识别${summaryParts.join('、')}`);
       } catch (err) {
         console.error('[material-usage-modal onScanMaterialReceipt] 识别失败:', err);
         wx.showToast({ title: '识别失败，请手动填写', icon: 'none' });

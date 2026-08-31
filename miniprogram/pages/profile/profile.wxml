@@ -1262,6 +1262,15 @@
         </view>
         <switch checked="{{careMode}}" bindchange="onToggleCareModeFromProfile" color="#8C1D18" />
       </view>
+      <!-- 🔊（2026-08-31 后厨音效与语音无感确认中台）与上面「关怀模式」是
+           两个独立维度的开关，各自持久化，见 utils/audioService.ts -->
+      <view class="action-item-cell">
+        <view class="item-left">
+          <text class="manager-only-emoji">🔊</text>
+          <text class="item-text">语音提示（打卡 / 识票 / 封账音效反馈）</text>
+        </view>
+        <switch checked="{{voiceFeedbackEnabled}}" bindchange="onToggleVoiceFeedback" color="#8C1D18" />
+      </view>
     </view>
 
     <view class="list-group-label">文化与平台监督</view>

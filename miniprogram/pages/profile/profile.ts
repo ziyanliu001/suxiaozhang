@@ -23,6 +23,7 @@ import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { maskPhone } from '../../utils/core/privacy';
 import { ENTERPRISE_BUILD_ENABLED } from '../../utils/buildFlags';
 import { saasSubscriptionHandlers } from './enterprise';
+import { isVoiceFeedbackEnabled, setVoiceFeedbackEnabled } from '../../utils/audioService';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -328,6 +329,9 @@ Page({
     // 🦻（2026-08-31 关怀模式视觉基座落地）与 index.ts/side-drawer 共用同一份
     // app.globalData.careMode + wx.getStorageSync('care_mode')，onShow 时回填
     careMode: false,
+    // 🔊（2026-08-31 后厨音效与语音无感确认中台）与「关怀模式」是两个独立
+    // 维度的开关，各自持久化，见 utils/audioService.ts isVoiceFeedbackEnabled
+    voiceFeedbackEnabled: true,
     statusBarHeight: 20,
     navBarHeight: 44,
     // 🛡️ 自定义导航栏避让官方胶囊菜单：与 statistics.ts 同款方案，capsuleLeft/windowWidth
@@ -946,6 +950,9 @@ Page({
     // 状态后，回到个人中心时也要看到最新值，不能停留在页面刚创建时的旧快照
     const app = getApp() as any;
     this.setData({ careMode: !!(app && app.globalData && app.globalData.careMode) });
+    // 🔊 语音提示开关：直接读 storage（audioService 自己没有维护一份内存态，
+    // 每次调用 isVoiceFeedbackEnabled() 都是实时读取），同样在 onShow 时回填
+    this.setData({ voiceFeedbackEnabled: isVoiceFeedbackEnabled() });
 
     // 🐛 性能修复（Page.onShow took 67ms 警告）：initMinePage() 在真正发起网络
     // 请求之前，有一大段纯同步的角色/门店展示态计算（storageRole/globalData 融合、
@@ -986,6 +993,15 @@ Page({
     }
     wx.setStorageSync('care_mode', value);
     this.setData({ careMode: value });
+  },
+
+  // 🔊（2026-08-31 后厨音效与语音无感确认中台）「语音提示」开关：与上面
+  // 「关怀模式」是两个独立维度，各自持久化——有人想要大字但不想要声音，
+  // 反之亦然，不绑定同一个 storage key。见 utils/audioService.ts
+  onToggleVoiceFeedback(e: any) {
+    const value = !!(e.detail && e.detail.value);
+    setVoiceFeedbackEnabled(value);
+    this.setData({ voiceFeedbackEnabled: value });
   },
 
   // 🛡️ 内存泄漏防护：profile 是 tabBar 页面，正常使用中几乎不会真正走到 onUnload

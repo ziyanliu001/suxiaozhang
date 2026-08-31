@@ -28,6 +28,7 @@ import {
   acknowledgeYuhuaPrivilegedDisclaimer
 } from '../../utils/yuhuaDisclaimer';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
+import { playCheckInSuccess, playReportSealed } from '../../utils/audioService';
 import { takeOpenSunshineLedgerRequest } from '../../utils/sunshineLedgerHandoff';
 import { takeOpenCultureFullRequest } from '../../utils/cultureFullHandoff';
 import { takeOpenStorePickerRequest } from '../../utils/storePickerHandoff';
@@ -11227,6 +11228,10 @@ Page({
     // 列表也会立刻反映刚提交的这一条
     this.refreshTodayShiftStatus();
 
+    // 🔊 后厨语音与音效无感反馈：打卡这一步无论是否被自动截断都是"成功"，
+    // 统一在分支之前触发一次，不跟着 wasTruncated 的文案分支走
+    playCheckInSuccess();
+
     if (wasTruncated) {
       wx.showToast({ title: `已为您自动截断至 +${addHours}h（单日上限${DAILY_HOURS_CAP}h）`, icon: 'none', duration: 2500 });
     } else {
@@ -11611,6 +11616,11 @@ Page({
           const res2 = result.result as any;
           wx.hideLoading();
           if (res2 && res2.success) {
+            // 🔊 后厨语音与音效无感反馈：封账是本页面口径最接近"日结签名存证"
+            // 的动作（manageFinanceLock 会生成数字指纹 Hash 作为完整性凭证，
+            // 见上方 wx.showModal 确认文案），厚重下行音效 + 重震动区别于
+            // 打卡/识票两个更轻量的操作反馈
+            playReportSealed();
             const fingerprintTip = res2.lockFingerprint ? `\n数字指纹：${res2.lockFingerprint}` : '';
             wx.showModal({
               title: '封账完成',
