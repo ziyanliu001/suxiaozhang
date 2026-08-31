@@ -1,4 +1,10 @@
 <view class="page-container">
+  <!-- 🌟（2026-08-31 合规终局阶段）微信用户隐私授权弹窗：本页会调用
+       wx.setClipboardData（复制核验码/报表文本等）与
+       wx.saveImageToPhotosAlbum（保存全国公示海报/感恩海报）等隐私接口，
+       必须放置该组件才能正常弹出授权，否则相关按钮会被平台静默拦截、
+       毫无反应——与 index.wxml/profile.wxml 同一套挂载方式 -->
+  <privacy-popup />
   <watermark identity="{{watermarkIdentity}}" />
   <!-- 🛡️ 动态避让官方胶囊菜单：padding-right 由 capsuleLeft/windowWidth 换算得出，
        不再用固定像素贴右，避免在不同机型上与胶囊按钮重叠遮挡 -->

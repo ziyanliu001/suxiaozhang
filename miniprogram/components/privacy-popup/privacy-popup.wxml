@@ -11,13 +11,21 @@
          各自一套名称，用户点开一看对不上号。现改为标题与正文统一读同一个
          privacyContractName，只有一处兜底默认值，不会再出现两个不同的产品名 -->
     <view class="privacy-popup-title">{{privacyContractName || '素小账公益助手小程序隐私保护指引'}}</view>
+    <!-- 🛡️（2026-08-31 合规终局阶段）按具体权限逐项列明用途，而不是笼统一句
+         "相册与相机权限"——逐项声明经排查真实代码里的调用点核对过范围：
+         相机/相册不止服务于单一某种海报（本项目里同时有个人善行足迹卡、
+         义工荣誉证书、门店感恩海报、活动海报、全国公示海报等多种保存
+         场景），剪贴板也不止"存证指纹与联系方式"（还包括报表文本、关怀
+         文案等一键复制，以及邀请码/激活码的一键粘贴读取），文案据实覆盖
+         真实使用场景，不缩小也不夸大 -->
     <view class="privacy-popup-body">
-      为了向您提供小票识别、拍照记账及保存荣誉证书功能，我们需要申请您的相册与相机权限。我们承诺严格保护您的数据安全，不作他用。详见
-      <text class="privacy-popup-link" bindtap="onOpenPrivacyContract">《{{privacyContractName || '素小账公益助手小程序隐私保护指引'}}》</text>
-      。
+      <view>为保障您的使用体验，本小程序会按需申请以下权限，均不会用于声明用途之外的其它用途：</view>
+      <view class="privacy-popup-item">📷 相机 / 相册：拍摄或选择票据照片，用于 AI 智能识票自动填单、日常记账凭证留存；将您生成的荣誉证书、善行足迹卡、公益海报等图片保存至相册。</view>
+      <view class="privacy-popup-item">📋 剪贴板：仅在您主动点击"复制"按钮时，用于复制票据核验码、机构联系方式、报表文本等内容；仅在您主动点击"粘贴"按钮时读取剪贴板中的邀请码/激活码为您自动填入表单，不会在后台静默读取剪贴板内容。</view>
+      <view>详见<text class="privacy-popup-link" bindtap="onOpenPrivacyContract">《{{privacyContractName || '素小账公益助手小程序隐私保护指引'}}》</text>。</view>
     </view>
     <view class="privacy-popup-footer">
-      <button class="privacy-popup-btn privacy-popup-btn-disagree" bindtap="onDisagree">拒绝</button>
+      <button class="privacy-popup-btn privacy-popup-btn-disagree" bindtap="onDisagree">不同意</button>
       <button class="privacy-popup-btn privacy-popup-btn-agree" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onAgree">同意并继续</button>
     </view>
   </view>

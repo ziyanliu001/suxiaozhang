@@ -57,6 +57,10 @@
   },
   "requiredPrivateInfos": ["getLocation"],
   "lazyCodeLoading": "requiredComponents",
+  "usingComponents": {
+    "privacy-popup": "components/privacy-popup/privacy-popup"
+  },
+  "__usePrivacyCheck__": true,
   "tabBar": {
     "custom": true,
     "color": "#8E8E93",

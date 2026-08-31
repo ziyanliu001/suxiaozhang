@@ -35,6 +35,15 @@
   color: #495057;
   line-height: 1.7;
   margin-bottom: 32rpx;
+  /* 🛡️（2026-08-31 合规终局阶段）逐项列明权限用途后正文变长，小屏机型上
+     加一道保险丝——超出可视高度时正文本身可滚动，不会把底部同意/不同意
+     按钮挤出屏幕外导致用户操作不到 */
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.privacy-popup-item {
+  margin-top: 12rpx;
 }
 
 .privacy-popup-link {
