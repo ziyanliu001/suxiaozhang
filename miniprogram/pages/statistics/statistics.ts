@@ -2288,6 +2288,9 @@ Page({
   //   +10  hasRiskFlag：凭证合规率 < 100%（仅超管视角下发此字段）
   //   +25  stapleUrgent：主料（大米/食用油）库存告急——与资金续航是独立维度，
   //        资金健康但恰好断粮的门店也需要被这份告警中心捕捉到
+  //   +15  volunteerDeficit（2026-08-31 新增）：近7天日均出勤义工数 < 3 人，
+  //        "资金-物资-义工"三维健康度监控的第三个维度，权重略低于资金/主料——
+  //        义工短缺通常有更长的缓冲期去补位，不像断粮/资金告急那样紧迫
   // healthStatus === 'NEW_STORE'（新店爬坡中，开餐天数 < 3 天）直接跳过，不计
   // 入告警中心——样本量太小，不构成"需要支援"的信号，只是还没攒够数据。
   //
@@ -2322,6 +2325,9 @@ Page({
       }
       if (s.stapleUrgent) {
         score += 25;
+      }
+      if (s.volunteerDeficit) {
+        score += 15;
       }
 
       if (score === 0) continue;
@@ -4757,6 +4763,20 @@ Page({
   // 这条是重新发起 exportAccountExcel 云调用、按 report_logs 逐条明细生成
   // 的正式多 Sheet .xlsx 工作簿（各店一个 Sheet + 机构总览 Sheet），附带
   // 存证核验码，供理事会/民政核对存档
+
+  // 🆕（2026-08-31）机构套餐配额详情：轻量微章点击后弹出的权益详情，纯展示，
+  // 不跳转任何页面——真正的"升级/续费"操作入口仍是个人中心的订阅管理弹窗，
+  // 这里只是让大家长在全国大屏顺手就能看一眼配额，不用切页面去查
+  onShowSubscriptionQuotaDetail() {
+    const quota = this.data.nationalData && this.data.nationalData.subscriptionQuota;
+    if (!quota) return;
+    wx.showModal({
+      title: `📋 ${quota.planName}权益详情`,
+      content: `已接入门店：${quota.activeStores} / ${quota.maxStores} 家\n有效期：${quota.expireDateText}\n\n如需升级套餐或扩容门店，请前往「个人中心 · 专业服务」办理。`,
+      showCancel: false,
+      confirmText: '我知道了'
+    });
+  },
 
   onOpenNationalExcelExportModal() {
     if (!this.data.isAdmin) return;

@@ -40,6 +40,15 @@ const NEW_STORE_MIN_OPEN_DAYS = 3;
 // 与此前 avgDailyExpense 的兜底值保持一致，不凭空拍一个新数字
 const DEFAULT_DAILY_EXPENSE_FALLBACK = 150;
 
+// 🆕 机构套餐配额感知（2026-08-31）：与 checkTenantPermission 云函数同一份
+// tenant_subscriptions 查询/降级逻辑的精简拷贝（各云函数独立部署，无共享
+// 模块机制，需要手动同步这几处拷贝，见 checkTenantPermission 头部注释）。
+// 🏛️ 这里只是"展示用量"，不做任何放行/拦截判断——与本文件"全国大屏查看
+// 权限不挂钩订阅套餐"的双轨制原则（见 CLAUDE.md）不冲突
+const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
+const PLAN_NAME_MAP = { basic: '基础版', pro: '专业版', enterprise: '旗舰版' };
+const SUBSCRIPTION_GRACE_PERIOD_DAYS = 7;
+
 function isoDateNDaysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -244,8 +253,63 @@ exports.main = async (event, context) => {
     // 与 checkTenantPermission 云函数同款只读 name 字段查法（不新增权限面，
     // tenantId 本就只从调用者自己的 user_roles 反查，与上面的隔离判断同一条
     // 安全边界）
-    const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true }).get().catch(() => null);
+    const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true, currentStoreCount: true }).get().catch(() => null);
     const tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
+    // 🆕 已接入门店数：与 checkTenantPermission/profile.ts 同一个 tenants.currentStoreCount
+    // 字段（createStore/manageTenantSubscription 原子自增写入的唯一真源）
+    const usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
+
+    // 🆕 机构套餐配额感知：默认兜底为 basic/永久有效——与 tenant_subscriptions
+    // 从未有过记录（该机构还没触发过任何订阅写入）时的语义一致
+    let subscriptionQuota = {
+      planName: PLAN_NAME_MAP.basic,
+      activeStores: usedStoreCount,
+      maxStores: PLAN_STORE_LIMITS.basic,
+      expireDateText: '永久有效'
+    };
+    try {
+      const subRes = await db.collection('tenant_subscriptions')
+        .where({ tenantId })
+        .orderBy('lastRenewedAt', 'desc')
+        .limit(1)
+        .get();
+      const sub = subRes.data && subRes.data[0];
+      if (sub) {
+        const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
+        const rawExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+        const graceDeadline = rawExpired ? expireTime + SUBSCRIPTION_GRACE_PERIOD_DAYS * 24 * 3600 * 1000 : null;
+        const isInGracePeriod = rawExpired && graceDeadline !== null && graceDeadline >= Date.now();
+        const isExpired = rawExpired && !isInGracePeriod;
+        // 🕊️ 宽限期内仍按到期前档位展示，与 checkTenantPermission 同一条口径，
+        // 不因为财务同事晚了几天续费就让配额徽章当场显示"已降级为基础版"
+        const planType = isExpired ? 'basic' : (sub.planType || 'basic');
+        let maxStores = (sub.cloudQuota && sub.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[planType] || PLAN_STORE_LIMITS.basic;
+        if (planType === 'basic') {
+          maxStores = PLAN_STORE_LIMITS.basic;
+        }
+        // 🐛 与 profile.ts isPerpetualPlan() 同一套口径：只由 planType===basic
+        // 或显式 isLifetimeGrant 标记判定"永久有效"，不靠到期日期形状反推
+        const isPerpetual = planType === 'basic' || (!isExpired && !!sub.isLifetimeGrant);
+        let expireDateText = '永久有效';
+        if (!isPerpetual && sub.serviceExpireDate) {
+          const d = new Date(sub.serviceExpireDate);
+          if (!Number.isNaN(d.getFullYear())) {
+            expireDateText = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          } else {
+            expireDateText = '到期日异常';
+          }
+        }
+        subscriptionQuota = {
+          planName: PLAN_NAME_MAP[planType] || PLAN_NAME_MAP.basic,
+          activeStores: usedStoreCount,
+          maxStores,
+          expireDateText
+        };
+      }
+    } catch (err) {
+      // tenant_subscriptions 集合可能尚未创建（该机构从未触发过任何订阅写入），
+      // 沿用上面 basic 兜底值，不影响主统计
+    }
 
     // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：本大屏属于
     // 「全国大屏 / 透视台」维度——社会公信力与透明公开账目总览，查看权限不
@@ -964,6 +1028,127 @@ exports.main = async (event, context) => {
       nationalMediaGallery.push(...allPhotoEntries.slice(0, 12));
     }
 
+    // 🆕 跨店义工工时与荣誉榜聚合（2026-08-31）：数据来自 volunteer_duty_logs
+    // （与 manageVolunteerCheckIn 的单店「爱心护持榜」leaderboard 同一张表，
+    // 字段 {_openid, tenantId, storeId, dateString, hours, status:'active'}，
+    // 这里不限 storeId、覆盖机构全部门店）。固定近30天窗口，与 ingredientStats30d
+    // 同一设计动机——不随顶部 rangeType 联动，保持"荣誉榜"排名不因用户切换
+    // 时间片 Tab 而大幅抖动。近7天出勤数据从同一批 30 天日志里按 dateString
+    // 二次过滤取得，不再额外发起一次查询
+    let volunteerSummary = {
+      totalHours: 0,
+      totalCheckIns: 0,
+      activeVolunteersCount: 0,
+      topVolunteers: []
+    };
+    // 🆕 义工缺口预警数据源：storeId -> Set("dateString_openid")，用于下方
+    // storeMatrix 构建时判定"近7天日均出勤义工数 < 3 人"，与 healthStatus/
+    // stapleUrgent 是并列的第三个健康度维度（资金-物资-义工）
+    const volunteerAttendanceByStore = {};
+    try {
+      const volunteer30dStart = isoDateNDaysAgo(30);
+      const volunteer7dStart = isoDateNDaysAgo(7);
+      const dutyConditions = [{ tenantId, status: 'active', dateString: _.gte(volunteer30dStart) }];
+      if (isScopedFilter) {
+        dutyConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
+      }
+      let allDutyLogs = [];
+      let dutySkip = 0;
+      while (true) {
+        const batch = await db.collection('volunteer_duty_logs')
+          .where(_.and(dutyConditions))
+          .field({ _openid: true, hours: true, dateString: true, storeId: true })
+          .skip(dutySkip)
+          .limit(batchLimit)
+          .get();
+        if (!batch.data || batch.data.length === 0) break;
+        allDutyLogs = allDutyLogs.concat(batch.data);
+        if (batch.data.length < batchLimit) break;
+        dutySkip += batchLimit;
+        if (dutySkip >= 2000) break;
+      }
+
+      const openidTotalHours = new Map();
+      const openidStoreHours = new Map(); // openid -> Map(storeId -> hours)
+      const openidSet = new Set();
+      let totalHours30d = 0;
+      let totalCheckIns30d = 0;
+
+      allDutyLogs.forEach((log) => {
+        const hours = parseFloat(log.hours) || 0;
+        totalHours30d += hours;
+        totalCheckIns30d++;
+        if (!log._openid) return;
+        openidSet.add(log._openid);
+        openidTotalHours.set(log._openid, (openidTotalHours.get(log._openid) || 0) + hours);
+        if (log.storeId) {
+          if (!openidStoreHours.has(log._openid)) openidStoreHours.set(log._openid, new Map());
+          const storeHoursMap = openidStoreHours.get(log._openid);
+          storeHoursMap.set(log.storeId, (storeHoursMap.get(log.storeId) || 0) + hours);
+
+          if (log.dateString && log.dateString >= volunteer7dStart) {
+            if (!volunteerAttendanceByStore[log.storeId]) {
+              volunteerAttendanceByStore[log.storeId] = new Set();
+            }
+            volunteerAttendanceByStore[log.storeId].add(`${log.dateString}_${log._openid}`);
+          }
+        }
+      });
+
+      // 🌟 全网义工奉献榜：按跨店累计工时降序取前5，姓名严格脱敏（maskName，
+      // 与本文件"爱心滚动墙"同一条规则），不暴露任何可反查真实身份的原始信息
+      const rankedOpenids = Array.from(openidTotalHours.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      let topVolunteers = [];
+      if (rankedOpenids.length > 0) {
+        const topOpenidList = rankedOpenids.map(([openid]) => openid);
+        const nameRes = await db.collection('user_roles')
+          .where({ tenantId, _openid: _.in(topOpenidList) })
+          .field({ _openid: true, realName: true, nickName: true })
+          .limit(100)
+          .get()
+          .catch(() => ({ data: [] }));
+        const nameMap = {};
+        (nameRes.data || []).forEach(r => {
+          nameMap[r._openid] = r.realName || r.nickName || '';
+        });
+
+        topVolunteers = rankedOpenids.map(([openid, hours]) => {
+          const storeHoursMap = openidStoreHours.get(openid) || new Map();
+          const serviceStoreCount = storeHoursMap.size;
+          // primaryStoreName：该义工投入工时最多的门店，供榜单展示"主要服务于XX店"
+          let primaryStoreId = '';
+          let primaryHours = -1;
+          storeHoursMap.forEach((h, sId) => {
+            if (h > primaryHours) {
+              primaryHours = h;
+              primaryStoreId = sId;
+            }
+          });
+          const primaryStoreName = (storeStatsMap[primaryStoreId] && storeStatsMap[primaryStoreId].storeName) ||
+            (fallbackStoreMap[primaryStoreId] && fallbackStoreMap[primaryStoreId].storeName) || '';
+          return {
+            maskedName: maskName(nameMap[openid] || '') || '匿名义工',
+            totalHours: Math.round(hours * 10) / 10,
+            serviceStoreCount,
+            primaryStoreName
+          };
+        });
+      }
+
+      volunteerSummary = {
+        totalHours: Math.round(totalHours30d * 10) / 10,
+        totalCheckIns: totalCheckIns30d,
+        activeVolunteersCount: openidSet.size,
+        topVolunteers
+      };
+    } catch (err) {
+      // volunteer_duty_logs 集合可能尚未创建（该机构还没有任何一条义工打卡被采纳过），
+      // 视为无数据，不影响主统计
+    }
+
     // 🆕 失联告警一键督导触达：CRITICAL/OFFLINE 门店的 storeId 集合，构建完
     // storeMatrix 后统一批量查一次 user_roles，不在下面的逐店 map 循环里各自
     // 发起查询
@@ -1043,6 +1228,18 @@ exports.main = async (event, context) => {
         }
       }
 
+      // 🆕 义工缺口预警：近7天日均出勤义工数（按 "dateString_openid" 去重，
+      // 同一义工同天多个班次只算一次）< 3 人时追加提示，与资金/主料并列成为
+      // "资金-物资-义工"三维健康度监控的第三个维度。只对已过爬坡期的门店生效
+      // （isNewStore 分支已经把新店整体排除在健康度评级之外，义工缺口判定
+      // 沿用同一个"是否处于正常开餐状态"的口径，不再单独定义一套新阈值）
+      const attendanceSet = volunteerAttendanceByStore[s.storeId];
+      const avgDailyVolunteers = attendanceSet ? attendanceSet.size / 7 : 0;
+      const volunteerDeficit = !isNewStore && avgDailyVolunteers < 3;
+      if (volunteerDeficit) {
+        fundingTags.push('义工紧缺预警');
+      }
+
       const item = {
         storeId: s.storeId,
         storeName: s.storeName,
@@ -1058,6 +1255,7 @@ exports.main = async (event, context) => {
         fundingDays,
         healthStatus,
         stapleUrgent: !!s.stapleUrgent,
+        volunteerDeficit,
         // 🆕 审计存证指纹打标：门店最新一条记录是否已财务稽核封账
         // （AUDITED_LOCKED），公信力等级高于普通 APPROVED，供前端展示合规标识
         hasAuditProof: !!s.hasAuditProof,
@@ -1286,6 +1484,13 @@ exports.main = async (event, context) => {
       // ingredientStats30d 计算处注释）：面向机构集采参考，非财务敏感字段，
       // 不加入下方 SENSITIVE_KEYS 脱敏名单
       ingredientStats30d,
+      // 🆕 跨店义工工时与荣誉榜（近30天固定窗口，见上方 volunteerSummary 计算处
+      // 注释）：全网奉献榜姓名已脱敏，非财务字段，不加入下方 SENSITIVE_KEYS
+      volunteerSummary,
+      // 🆕 机构套餐配额感知（见上方 subscriptionQuota 计算处注释）：与全国大屏
+      // 查看权限彻底解耦（双轨制原则，见 CLAUDE.md）——这里只是把机构自己已经
+      // 知道的用量展示出来，不做任何放行/拦截判断，也不属于财务敏感字段
+      subscriptionQuota,
       // 🆕 核心 KPI 环比趋势（vs 上一个同长度周期）：rangeType='all' 或查无
       // 可比基数时 prevTotal*=0，computePctChange 自动返回 null，前端隐藏徽标
       nationalTotalDinersTrend: computePctChange(nationalTotalDiners, prevTotalDiners),

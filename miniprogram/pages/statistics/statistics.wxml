@@ -61,7 +61,16 @@
       <view class="national-banner-row" wx:else>
         <view class="national-banner-title">
           <text class="national-banner-icon">📊</text>
-          <text class="national-banner-text">爱心网络总览 · {{currentTenantName || '全国爱心网络'}}</text>
+          <view class="national-banner-title-col">
+            <text class="national-banner-text">爱心网络总览 · {{currentTenantName || '全国爱心网络'}}</text>
+            <!-- 🆕（2026-08-31）机构套餐配额微章：与顶部"数据导出"按钮同一条
+                 isAdmin 权限口径，非超管/大家长看不到本机构套餐用量信息；
+                 点击弹出权益详情，见 onShowSubscriptionQuotaDetail -->
+            <view class="national-quota-badge" wx:if="{{isAdmin && nationalData.subscriptionQuota}}" bindtap="onShowSubscriptionQuotaDetail">
+              <text class="nqb-text">{{nationalData.subscriptionQuota.planName}} {{nationalData.subscriptionQuota.activeStores}}/{{nationalData.subscriptionQuota.maxStores}}门店</text>
+              <text class="nqb-arrow">›</text>
+            </view>
+          </view>
         </view>
         <view class="national-banner-actions">
           <view class="national-banner-action-btn" hover-class="ui-hover" bindtap="onRefreshData">
@@ -416,6 +425,39 @@
             <text class="cb-cell-val">{{careDisplay.volunteerHours}}</text>
             <text class="cb-cell-lbl">累计服务工时</text>
             <text class="cb-cell-unit">小时</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 🆕（2026-08-31）跨店义工工时荣誉大盘：数据来自 volunteer_duty_logs
+           实际打卡记录（近30天固定窗口），与上方"义工力量与服务关怀"组的
+           report_logs 自报汇总口径是两个独立数据源——这里补上"具体是谁在
+           贡献"这一层此前完全空白的荣誉展示 -->
+      <view class="cb-group" wx:if="{{nationalData.volunteerSummary && (nationalData.volunteerSummary.totalHours > 0 || nationalData.volunteerSummary.activeVolunteersCount > 0)}}">
+        <text class="cb-group-title">🌟 全网义工奉献光荣榜</text>
+        <view class="cb-group-grid cols-3">
+          <view class="cb-cell">
+            <text class="cb-cell-val">{{nationalData.volunteerSummary.totalHours}}</text>
+            <text class="cb-cell-lbl">近30天累计工时</text>
+            <text class="cb-cell-unit">小时</text>
+          </view>
+          <view class="cb-cell">
+            <text class="cb-cell-val">{{nationalData.volunteerSummary.totalCheckIns}}</text>
+            <text class="cb-cell-lbl">出勤总人次</text>
+            <text class="cb-cell-unit">人次</text>
+          </view>
+          <view class="cb-cell cb-cell-accent">
+            <text class="cb-cell-val">{{nationalData.volunteerSummary.activeVolunteersCount}}</text>
+            <text class="cb-cell-lbl">活跃义工数</text>
+            <text class="cb-cell-unit">人</text>
+          </view>
+        </view>
+        <view class="volunteer-honor-list" wx:if="{{nationalData.volunteerSummary.topVolunteers.length > 0}}">
+          <view class="vhl-item" wx:for="{{nationalData.volunteerSummary.topVolunteers}}" wx:key="index" wx:for-index="idx">
+            <text class="vhl-rank">{{idx + 1}}</text>
+            <text class="vhl-name">{{item.maskedName}}</text>
+            <text class="vhl-hours">{{item.totalHours}}h</text>
+            <text class="vhl-store" wx:if="{{item.primaryStoreName}}">{{item.primaryStoreName}}{{item.serviceStoreCount > 1 ? '等' + item.serviceStoreCount + '店' : ''}}</text>
           </view>
         </view>
       </view>

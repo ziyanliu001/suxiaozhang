@@ -273,6 +273,36 @@ page {
   white-space: nowrap;
 }
 
+.national-banner-title-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+/* 🆕 机构套餐配额微章：轻量文字徽章，不与右侧数据导出/刷新按钮争夺视觉权重 */
+.national-quota-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2rpx;
+  width: fit-content;
+  background: #FFF3E0;
+  border-radius: 20rpx;
+  padding: 2rpx 12rpx;
+}
+
+.nqb-text {
+  font-size: 18rpx;
+  color: #E8590C;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nqb-arrow {
+  font-size: 18rpx;
+  color: #E8590C;
+}
+
 .national-banner-actions {
   display: flex;
   align-items: center;
@@ -2821,6 +2851,73 @@ page {
 .cb-cell-unit {
   font-size: 18rpx;
   color: #94A3B8;
+}
+
+/* 🆕 全网义工奉献光荣榜：与上方浅色 cb-cell 网格同一区域，列表项走更紧凑的
+   单行布局（排名 + 脱敏姓名 + 工时 + 主要服务门店） */
+.volunteer-honor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.vhl-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  background: #F8FAFC;
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+}
+
+.vhl-rank {
+  width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 20rpx;
+  font-weight: 700;
+  background: #E2E8F0;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.vhl-item:nth-child(1) .vhl-rank {
+  background: #FCD34D;
+  color: #78350F;
+}
+
+.vhl-item:nth-child(2) .vhl-rank {
+  background: #E2E8F0;
+  color: #334155;
+}
+
+.vhl-item:nth-child(3) .vhl-rank {
+  background: #FDBA74;
+  color: #7C2D12;
+}
+
+.vhl-name {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.vhl-hours {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #D9480E;
+}
+
+.vhl-store {
+  flex: 1;
+  text-align: right;
+  font-size: 20rpx;
+  color: #94A3B8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 比例条（替代饼图，纯 CSS，不依赖 ECharts） */
