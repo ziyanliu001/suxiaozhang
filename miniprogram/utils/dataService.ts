@@ -147,6 +147,15 @@ export function sanitizeReportForVolunteer<T = any>(data: T, userRole: string): 
   return maskOne(data);
 }
 
+// 🆕（2026-08-31 OCR 智能记账数据结构规范）票据 OCR 元数据协议：见
+// saveReport() 内 formattedData.ocrMetadata 处注释，目前没有任何前端入口
+// 真正产出这份数据，纯粹是为"拍照识别小票自动填单"预留的落库结构
+export interface OcrMetadata {
+  sourceImageUrl?: string;
+  parsedItemCount?: number;
+  isAutoFilled?: boolean;
+}
+
 export const DataService = {
   async saveReport(reportData: any): Promise<{ success: boolean; message: string; data?: any; errorDetail?: string }> {
     // 🌟 云开发 SDK 可用性防护：wx.cloud.database() 曾在个别环境（wx.cloud.init 内部
@@ -208,6 +217,18 @@ export const DataService = {
       stapleOilStatus: reportData.stapleOilStatus || 'sufficient',
       // 🌿 了凡四训·积阴德：匿名护持标记，true 表示本条餐报所有捐款人姓名在公开展示时脱敏为"爱心善士"
       isAnonymous: !!(reportData.isAnonymous),
+      // 🆕（2026-08-31 OCR 智能记账数据结构规范）票据 OCR 元数据：目前没有任何
+      // 前端入口会真正填充这个字段（尚未接入智能拍照识别），这里只是为"后续
+      // 接入拍照记账自动识别小票/手写单据"预留底层协议——一旦有 OCR 解析结果，
+      // 直接按这个结构传入 reportData.ocrMetadata 即可落库，不需要再改一次
+      // formattedData 白名单。不存在时落 null 而不是空对象，与本对象其余
+      // "未提供即默认值"字段的空值口径保持一致，也方便前端简单判断"这条记录
+      // 是不是 OCR 辅助录入的"
+      ocrMetadata: (reportData.ocrMetadata && typeof reportData.ocrMetadata === 'object') ? {
+        sourceImageUrl: reportData.ocrMetadata.sourceImageUrl || '',
+        parsedItemCount: parseInt(reportData.ocrMetadata.parsedItemCount, 10) || 0,
+        isAutoFilled: !!reportData.ocrMetadata.isAutoFilled
+      } : null,
       updateTime: db ? db.serverDate() : Date.now(),
       isSynced: false,
       // 🛡️ 六大角色餐报提交对齐：无论提交者角色是什么，新记录一律从 PENDING 起步，
@@ -350,6 +371,7 @@ export const DataService = {
             totalVolunteers: formattedData.totalVolunteers,
             stapleRiceStatus: formattedData.stapleRiceStatus,
             stapleOilStatus: formattedData.stapleOilStatus,
+            ocrMetadata: formattedData.ocrMetadata,
             updateTime: db.serverDate()
           }
         });

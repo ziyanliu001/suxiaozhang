@@ -8483,6 +8483,48 @@ button.poster-gen-btn[disabled] {
   min-height: 0;
 }
 
+/* 🌱（2026-08-31 穿透式阳光模型）我的爱心善行足迹卡片：与下方理念介绍卡
+   同一圆角/间距规格，但用清新的浅绿色调区分——"专属于我的故事" vs
+   "机构公开数据"，两者视觉上不该长得一样 */
+.footprint-card {
+  width: 100%;
+  background: linear-gradient(155deg, #F0FAF0 0%, #E3F5E5 100%);
+  border: 1rpx solid #B8E6BE;
+  border-radius: 20rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.footprint-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #2F7D3C;
+  margin-bottom: 10rpx;
+}
+
+.footprint-text {
+  display: block;
+  font-size: 24rpx;
+  color: #4E8D57;
+  line-height: 1.6;
+  margin-bottom: 16rpx;
+}
+
+.footprint-share-btn {
+  display: inline-block;
+  font-size: 22rpx;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #6FCF7A, #2F9E44);
+  border-radius: 30rpx;
+  padding: 0 28rpx;
+  height: 60rpx;
+  line-height: 60rpx;
+  margin: 0 auto;
+}
+
 /* 📖 理念介绍卡片：暖金质感背景，与下方数据大盘的配色自然衔接，
    避免纯数字表格显得冷冰冰。弹窗 Header 已经承载"关于雨花斋与阳光账本"
    这层标题，卡片内部不再重复次级标题，直接进两段内容 */

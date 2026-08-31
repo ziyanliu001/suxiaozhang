@@ -59,6 +59,17 @@
       </view>
 
       <scroll-view scroll-y class="sunshine-modal-scroll">
+        <!-- 🌱（2026-08-31 穿透式阳光模型）我的爱心善行足迹：只有服务端能反查到
+             调用者身份且确实匹配到本店捐赠记录时才会出现（见 getSunshineLedger
+             personalFootprint 头部注释——多数匿名访客/未绑定角色账号看不到这张
+             卡片，不是 bug）。摆在善缘榜/理念介绍最前面，让善信一进来就先看到
+             "自己的故事"，再往下看机构整体的公开数据 -->
+        <view class="footprint-card" wx:if="{{sunshineLedgerData.personalFootprint.hasFootprint}}">
+          <text class="footprint-title">🌱 我的爱心善行足迹</text>
+          <text class="footprint-text">已默默同行 {{sunshineLedgerData.personalFootprint.firstDonationDaysAgo}} 天 · 累计温暖 {{sunshineLedgerData.personalFootprint.estimatedMealsCount}} 份爱心餐</text>
+          <button class="footprint-share-btn" bindtap="onGenerateFootprintCard">📇 生成善行卡</button>
+        </view>
+
         <!-- 📖 理念介绍卡片：conceptLabel/conceptContent 由 computeConceptCopy 按
              getSunshineLedger 返回的门店真实 orgType 计算（雨花斋/助老食堂/其他
              机构三档兜底），不再是 WXML 里硬编码的雨花斋专属文案。

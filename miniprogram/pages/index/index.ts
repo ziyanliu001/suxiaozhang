@@ -557,7 +557,17 @@ Page({
       totalHours: 0,
       volunteerCount: 0,
       operatingDays: 0,
-      ledgerPublicRate: null as string | null
+      ledgerPublicRate: null as string | null,
+      // 🆕（2026-08-31 穿透式阳光模型）善信个人爱心足迹：见 getSunshineLedger
+      // personalFootprint 头部注释，只有能反查到 realName 且确实匹配到本店
+      // 捐赠记录时 hasFootprint 才为 true——多数匿名访客/未绑定角色账号恒为 false
+      personalFootprint: {
+        totalAmount: 0,
+        estimatedMealsCount: 0,
+        firstDonationDaysAgo: 0,
+        donatedStoresCount: 0,
+        hasFootprint: false
+      }
     },
     // ☀️ 阳光账本 4x2 网格展示数组：从 sunshineLedgerData 派生，供 WXML wx:for
     // 渲染，避免 8 个统计格子手写重复结构；value 统一存字符串（账本公开率是
@@ -9588,7 +9598,10 @@ Page({
         totalHours: result.totalHours || 0,
         volunteerCount: result.volunteerCount || 0,
         operatingDays: result.operatingDays || 0,
-        ledgerPublicRate: result.ledgerPublicRate || null
+        ledgerPublicRate: result.ledgerPublicRate || null,
+        personalFootprint: result.personalFootprint || {
+          totalAmount: 0, estimatedMealsCount: 0, firstDonationDaysAgo: 0, donatedStoresCount: 0, hasFootprint: false
+        }
       };
       const isYuhuazhai = this.data.orgType === 'yuhuazhai';
       // 🆕 理念弹窗文案：result.orgType 是这次调用刚拿到的门店真实业态类型，
@@ -9619,6 +9632,24 @@ Page({
     } finally {
       this.setData({ sunshineLedgerLoading: false });
     }
+  },
+
+  // 🌱（2026-08-31 穿透式阳光模型）「生成善行卡」轻量分享触发点：不是画布
+  // 绘图海报（那套更重的实现见 utils/posterGenerator.ts，服务于义工护持
+  // 荣誉卡等场景），这里只是把足迹文案拼成一段温馨话术复制到剪贴板，供
+  // 善信直接粘贴分享到微信聊天/朋友圈——与本页其余"轻量文本分享"场景
+  // （如统计页 fallbackCopyToClipboard）同一套朴素实现思路
+  onGenerateFootprintCard() {
+    const fp = this.data.sunshineLedgerData.personalFootprint;
+    if (!fp || !fp.hasFootprint) return;
+    const storeName = this.data.sunshineLedgerData.storeName || this.data.currentStoreName || '本门店';
+    const text = `🌱【我的爱心善行足迹】\n在${storeName}，我已默默同行 ${fp.firstDonationDaysAgo} 天，累计温暖 ${fp.estimatedMealsCount} 份爱心餐 ☀️\n阳光账本，公开透明，全民监督。`;
+    wx.setClipboardData({
+      data: text,
+      success: () => {
+        wx.showToast({ title: '善行卡文案已复制，快去分享吧', icon: 'none', duration: 2500 });
+      }
+    });
   },
 
   onCloseSunshineLedgerModal() {

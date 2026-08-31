@@ -355,6 +355,83 @@ exports.main = async (event) => {
     // 没有记录时展示为 null，由前端呈现"暂无数据"而不是误导性的 100%
     const ledgerPublicRate = records.length > 0 ? '100%' : null;
 
+    // 🆕 善信个人爱心足迹（2026-08-31 穿透式阳光模型）：
+    //
+    // 🛡️ 诚实的架构边界说明——本函数是刻意【无鉴权】的公开接口（见文件头注释），
+    // `donationItems` 里的捐赠人姓名是店长/义工日报时手工录入的自由文本，从未
+    // 与任何真实身份（OpenID/手机号）绑定过，项目里也不存在一个"善信自助认领
+    // 自己捐赠记录"的入口。因此这里能做到的只是：用调用者 OpenID 反查其在
+    // user_roles 里登记的 realName（义工/店长/大家长等已绑定角色的账号才会有），
+    // 再用这个姓名去匹配本店 donationItems 的姓名字段——是一次尽力而为的姓名
+    // 匹配，不是身份级别的精确核验，同名不同人会被误匹配，未登记角色/纯匿名
+    // 访客一律拿不到姓名、直接 hasFootprint:false。
+    // 🛡️ 与"结缘门店数"字段的诚实映射：本函数按设计只接受单一 storeId、
+    // 无跨店聚合能力（避免被当成批量抓取入口，见文件头注释），因此
+    // donatedStoresCount 在当前实现里恒为 0 或 1，是面向未来"善信自助认领 +
+    // 跨店身份体系"的字段预留，暂不代表真实的多店足迹统计。
+    let personalFootprint = {
+      totalAmount: 0,
+      estimatedMealsCount: 0,
+      firstDonationDaysAgo: 0,
+      donatedStoresCount: 0,
+      hasFootprint: false
+    };
+    try {
+      const { OPENID } = cloud.getWXContext();
+      if (OPENID) {
+        const callerRes = await db.collection('user_roles')
+          .where({ _openid: OPENID })
+          .field({ realName: true })
+          .limit(1)
+          .get()
+          .catch(() => ({ data: [] }));
+        const callerName = ((callerRes.data && callerRes.data[0] && callerRes.data[0].realName) || '').trim();
+
+        if (callerName) {
+          let totalAmount = 0;
+          let earliestDateStr = '';
+          let totalExpenseForMealCost = 0;
+          let totalDinersForMealCost = 0;
+
+          records.forEach((r) => {
+            totalExpenseForMealCost += parseFloat(r.dailyExpense || r.dailyExpenseTotal || r.ingredientCost || r.dailyIngredientText || 0) || 0;
+            totalDinersForMealCost += parseFloat(r.totalDineCount || r.diningCount) || 0;
+
+            const items = Array.isArray(r.donationItems) ? r.donationItems : [];
+            items.forEach((item) => {
+              if (!item || !item.name || String(item.name).trim() !== callerName) return;
+              totalAmount += parseFloat(item.amount) || 0;
+              if (r.dateString && (!earliestDateStr || r.dateString < earliestDateStr)) {
+                earliestDateStr = r.dateString;
+              }
+            });
+          });
+
+          if (totalAmount > 0 && earliestDateStr) {
+            // 🌟 平均单餐成本：本店查询范围内的食材支出 / 服务人次，与
+            // getNationalDashboard 的 costPerMeal 同一口径；数据不足（无支出/无
+            // 就餐记录）时不编造一个固定单价，estimatedMealsCount 诚实展示为 0
+            const avgMealCost = totalDinersForMealCost > 0 && totalExpenseForMealCost > 0
+              ? totalExpenseForMealCost / totalDinersForMealCost
+              : 0;
+            const estimatedMealsCount = avgMealCost > 0 ? Math.round(totalAmount / avgMealCost) : 0;
+            const rawDaysAgo = daysBetween(earliestDateStr, todayStr);
+
+            personalFootprint = {
+              totalAmount: Number(totalAmount.toFixed(2)),
+              estimatedMealsCount,
+              firstDonationDaysAgo: Number.isFinite(rawDaysAgo) ? Math.max(0, rawDaysAgo) : 0,
+              donatedStoresCount: 1,
+              hasFootprint: true
+            };
+          }
+        }
+      }
+    } catch (err) {
+      // 身份反查/匹配异常一律降级为无足迹，不影响阳光账本主流程
+      console.warn('[getSunshineLedger] 个人爱心足迹计算失败（不影响主流程）:', err);
+    }
+
     return {
       success: true,
       storeId,
@@ -375,7 +452,8 @@ exports.main = async (event) => {
       latestDonors,
       latestDonorsWeekly,
       latestDonorsThreeDay,
-      latestDonorsMonthly
+      latestDonorsMonthly,
+      personalFootprint
     };
   } catch (err) {
     console.error('[getSunshineLedger] 查询异常:', err);
