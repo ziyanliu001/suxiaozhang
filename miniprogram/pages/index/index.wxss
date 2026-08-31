@@ -1821,16 +1821,43 @@ page {
   margin-bottom: 16rpx;
 }
 
-.expense-parse-preview {
-  display: block;
-  margin-top: 10rpx;
+/* 🐛（2026-08-31 结构化预览升级）取代此前的 .expense-parse-preview（一行
+   纯文本"已解析 X 项，预计金额：¥Y 元"，WXML 里已无引用，替换而不是并存）：
+   逐条品名+金额小卡片横排在左，小计固定在右，chips 与 textarea 同一套
+   暖米色调（呼应 .expense-textarea 的 #FDFBF7/#EFE6D8） */
+.expense-parse-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.expense-parse-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.expense-chip {
   font-size: 22rpx;
-  color: #D9480E;
-  font-weight: bold;
-  background: #FFF3BF;
-  padding: 4rpx 16rpx;
+  color: #8C1D18;
+  background: #FDF6EC;
+  border: 1rpx solid #F0DCC0;
   border-radius: 20rpx;
-  width: fit-content;
+  padding: 6rpx 16rpx;
+  white-space: nowrap;
+}
+
+.expense-parse-subtotal {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #D9480E;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* 🔒 大额专项：逐条添加 + 行级独立凭证 */
@@ -2757,7 +2784,17 @@ page {
   border-radius: 12rpx;
 }
 
-textarea, .textarea {
+/* 🐛（2026-08-31 修复 WXSS 标签选择器告警）此前是 "textarea, .textarea {}"
+   —— 裸标签选择器 textarea 会命中页面里*所有* <textarea>，包括那些设计上
+   刻意不要边框/内边距的（如 .notice-edit-textarea，靠外层 .textarea-box-container
+   提供视觉容器），这些元素因为自己没显式覆盖 border/padding/border-radius，
+   会从这条裸标签规则里"偷"到一圈 2rpx 边框 + 20rpx 内边距——与外层容器的
+   20rpx 内边距叠加，形成从未被设计过的"双层内边距+多余内边框"。核实确认
+   本文件真正用到 .textarea 类的两处（thankText 感谢语、爱心支持明细批量
+   粘贴框，见 class="textarea small"/"textarea autosize"）都会同时带着这个
+   类名，改成纯类选择器不改变它们的样式，同时顺带修掉 .notice-edit-textarea
+   的双重内边距/多余边框问题 */
+.textarea {
   display: block;
   width: 100%;
   min-height: 260rpx;
@@ -9249,8 +9286,36 @@ button.poster-gen-btn[disabled] {
   font-size: 48rpx !important;
 }
 
-.care-mode input,
-.care-mode textarea {
+/* 🐛（2026-08-31 修复 WXSS 标签选择器告警）此前是
+   ".care-mode input, .care-mode textarea {}"——虽然已经比裸标签选择器窄
+   （限定在 .care-mode 祖先下），但组合选择器里仍然含有裸标签名，同样会被
+   开发者工具标黄。关怀模式的设计意图是"页面里任何一个文字输入框都要放大
+   字号+加粗边框"，不能只覆盖一部分——枚举了本文件当前用到的每一个
+   input/textarea 具体 class（核对过 WXML 逐个确认，而不是猜），四个此前
+   完全没有 class 的门店绑定申请表单输入框（customStoreName/adminKeyInput/
+   realName/phone）已在 WXML 里补上 .form-input 类一并纳入，确保枚举替换
+   后关怀模式的覆盖范围与替换前的裸标签选择器完全一致，不会因为枚举遗漏
+   而让某个输入框在关怀模式下悄悄变回小字号 */
+.care-mode .amount-input,
+.care-mode .audit-search-input,
+.care-mode .balance-val,
+.care-mode .fe-amount-input,
+.care-mode .form-input,
+.care-mode .input,
+.care-mode .input-item-name,
+.care-mode .input-item-price,
+.care-mode .input-receipt-amount,
+.care-mode .name-input,
+.care-mode .notice-edit-input,
+.care-mode .num-input,
+.care-mode .quick-amount-input,
+.care-mode .recipe-dish-name-input,
+.care-mode .stats-input,
+.care-mode .textarea,
+.care-mode .single-line-textarea,
+.care-mode .expense-textarea,
+.care-mode .notice-edit-textarea,
+.care-mode .adjust-textarea {
   font-size: 30rpx !important;
   border-width: 2rpx !important;
   border-color: #333333 !important;

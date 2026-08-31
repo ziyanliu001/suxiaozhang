@@ -615,6 +615,12 @@ Page({
     dailyExpenseText: '',
     dailyExpenseParseCount: 0,
     dailyExpenseParseAmount: '0.00',
+    // 🐛（2026-08-31 食材与杂购结构化预览）parseExpenseTextToItems 早就在
+    // updateDailyExpenseParsePreview 里被调用，此前只取了 items.length/总额
+    // 两个派生数字，完整的逐条明细（title/amount）算出来却直接被丢弃，从未
+    // 渲染成可视卡片——与更早一次会话「爱心物资明细」踩过的同一类坑（数据
+    // 已经在算，只是没接到 UI 上）。这里把 items 本身也存下来供结构化预览用
+    dailyExpenseParseItems: [] as { date: string; title: string; amount: string }[],
     fixedExpenseText: '',
     // 🌟 大额专项支出：从 fixedExpenseText 自由文本改为「逐条添加」结构化列表，
     // 使每一条都能挂一个真实的独立凭证按钮（<textarea> 内部做不到按行挂按钮）。
@@ -3337,7 +3343,8 @@ Page({
     const total = items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || 0), 0);
     this.setData({
       dailyExpenseParseCount: items.length,
-      dailyExpenseParseAmount: total.toFixed(2)
+      dailyExpenseParseAmount: total.toFixed(2),
+      dailyExpenseParseItems: items
     });
   },
 
@@ -5224,6 +5231,7 @@ Page({
             dailyExpenseText: '',
             dailyExpenseParseCount: 0,
             dailyExpenseParseAmount: '0.00',
+            dailyExpenseParseItems: [],
             fixedExpenseText: '',
             fixedExpenseItems: [],
             reportResult: '',

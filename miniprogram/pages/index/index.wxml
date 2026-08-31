@@ -1336,7 +1336,17 @@
           auto-height="{{true}}"
           style="min-height: 160rpx;"
         />
-        <text class="expense-parse-preview" wx:if="{{dailyExpenseParseCount > 0}}">已解析 {{dailyExpenseParseCount}} 项，预计金额：¥{{dailyExpenseParseAmount}} 元</text>
+        <!-- 🐛（2026-08-31 结构化预览升级）此前只有一行纯文本"已解析 X 项，
+             预计金额：¥Y 元"，看不出具体解析成了哪几项、有没有识别错。
+             parseExpenseTextToItems 本就逐条算出了 title/amount，这次接到
+             UI 上：每一项一个小卡片（品名 + 金额），右侧固定展示小计，
+             不再需要靠一句汇总文字反推"解析对不对" -->
+        <view class="expense-parse-chips-row" wx:if="{{dailyExpenseParseItems.length > 0}}">
+          <view class="expense-parse-chips">
+            <text class="expense-chip" wx:for="{{dailyExpenseParseItems}}" wx:key="index">{{item.title}} ¥{{item.amount}}</text>
+          </view>
+          <text class="expense-parse-subtotal">食材杂购小计: ¥{{dailyExpenseParseAmount}}</text>
+        </view>
       </view>
 
       <view class="expense-field-box major-box">
@@ -1376,7 +1386,13 @@
                 <view class="fe-voucher-btn {{item.independent_image_urls.length > 0 ? 'has-voucher' : ''}}" data-index="{{index}}" bindtap="onToggleIndependentVoucher">
                   <text class="lbl">📂 独立凭证 ({{item.independent_image_urls.length}}/3)</text>
                 </view>
-                <text class="fe-del" data-index="{{index}}" bindtap="onDeleteFixedExpenseItem">✕</text>
+                <!-- 🐛（2026-08-31 优化）删除入口从纯文字"✕"换成本文件已有的
+                     垃圾桶图标（.idx-icon-trash，与"清空日志"按钮同一套图标，
+                     见 textarea-toolbar 用法），辨识度更高。<text> 组件内部
+                     只能嵌套 <text>，不能放 <view>，这里同步改成 <view> -->
+                <view class="fe-del" data-index="{{index}}" bindtap="onDeleteFixedExpenseItem">
+                  <view class="idx-icon-sm idx-icon-trash"></view>
+                </view>
               </view>
             </view>
 
@@ -1420,7 +1436,7 @@
           
           <view class="grid-add-btn" bindtap="chooseReceiptImages" wx:if="{{receiptImages.length < 9}}">
             <text class="add-icon">+</text>
-            <text class="add-txt">上传小票/收据</text>
+            <text class="add-txt">上传发票/收据</text>
           </view>
         </view>
 
@@ -1463,7 +1479,7 @@
 
           <view class="recipe-dish-add" bindtap="chooseRecipeImages" hover-class="ui-hover" wx:if="{{recipeImages.length < 9}}" style="width: 100% !important; height: 0 !important; padding-bottom: 100% !important; position: relative !important; border: 2rpx dashed #C8B195 !important; background-color: #FAF8F5 !important; border-radius: 12rpx !important; box-sizing: border-box !important; margin: 0 !important;">
             <view class="recipe-add-icon" style="position: absolute !important; top: 35% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 40rpx !important; color: #8C1D18 !important; line-height: 1 !important;">{{recipeUploading ? '…' : '+'}}</view>
-            <view class="recipe-add-txt" style="position: absolute !important; top: 65% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 22rpx !important; color: #8C1D18 !important; white-space: nowrap !important;">{{recipeUploading ? '压缩中' : '添加照片'}}</view>
+            <view class="recipe-add-txt" style="position: absolute !important; top: 65% !important; left: 50% !important; transform: translate(-50%, -50%) !important; font-size: 22rpx !important; color: #8C1D18 !important; white-space: nowrap !important;">{{recipeUploading ? '压缩中' : '拍下菜品'}}</view>
           </view>
         </view>
       </view>
@@ -1508,7 +1524,7 @@
 
           <view class="grid-add-btn" bindtap="chooseActivityImages" hover-class="ui-hover" wx:if="{{activityImages.length < 18}}">
             <text class="add-icon">{{activityUploading ? '…' : '+'}}</text>
-            <text class="add-txt">{{activityUploading ? '压缩中' : '添加照片'}}</text>
+            <text class="add-txt">{{activityUploading ? '压缩中' : '记录瞬间'}}</text>
           </view>
         </view>
       </view>
@@ -3593,7 +3609,7 @@
               <text style="flex-shrink: 0; margin-left: 12rpx; font-size: 22rpx; color: #ADB5BD;">▾</text>
             </view>
           </picker>
-          <input wx:else style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <input wx:else class="form-input" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
@@ -3675,16 +3691,16 @@
              决定，这里不做客户端必填校验（没配置密钥的门店留空也能通过） -->
         <view style="margin-bottom: 24rpx;" wx:if="{{applyForm.storeSelectionType === 'existing' && (applyForm.requestedRole === 'store_patriarch' || applyForm.requestedRole === 'store_manager' || applyForm.requestedRole === 'finance')}}">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;">管理员密钥（如目标门店已设置，请填写）</text>
-          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="未设置密钥的门店可留空" value="{{applyForm.adminKeyInput}}" bindinput="onApplyAdminKeyInput" />
+          <input class="form-input" style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="未设置密钥的门店可留空" value="{{applyForm.adminKeyInput}}" bindinput="onApplyAdminKeyInput" />
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;">💡 密钥由该门店现任大家长设置，向其索取；若该门店从未设置过密钥，留空也能提交</text>
         </view>
         <view style="margin-bottom: 24rpx;">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 真实姓名</text>
-          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
+          <input class="form-input" style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入真实姓名" value="{{applyForm.realName}}" bindinput="onApplyRealNameInput" />
         </view>
         <view style="margin-bottom: 24rpx;">
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 手机号</text>
-          <input style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
+          <input class="form-input" style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border: 1.5rpx solid #ECEEF0; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" type="number" placeholder="请输入手机号" value="{{applyForm.phone}}" bindinput="onApplyPhoneInput" />
         </view>
         <!-- 🛡️ 额外滚动安全边距：在原有 safe-area 占位基础上再加 40rpx 固定间距，
              确保表单滚到底部时最后一个输入框不贴着底部固定的提交按钮 -->
