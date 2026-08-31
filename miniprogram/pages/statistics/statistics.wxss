@@ -3916,6 +3916,29 @@ page {
   line-height: 1.6;
 }
 
+/* 🆕（2026-08-31 生态演进第三步）导出弹窗专业调性标签 */
+.export-format-badge {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  width: fit-content;
+  background: #FFF3E0;
+  border: 1rpx solid #FFD8A8;
+  border-radius: 20rpx;
+  padding: 8rpx 18rpx;
+  margin-bottom: 20rpx;
+}
+
+.export-format-badge-icon {
+  font-size: 22rpx;
+}
+
+.export-format-badge-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #D9480E;
+}
+
 /* 🆕（2026-08-31 商业化权益中心）机构 SaaS 权益看板：半屏弹窗，与页面其余
    .patch-modal-mask 居中弹窗风格区分——底部贴边 + 圆角顶部，符合"半屏"要求 */
 .saas-benefits-mask {

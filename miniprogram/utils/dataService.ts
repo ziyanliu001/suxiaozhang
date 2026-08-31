@@ -149,11 +149,17 @@ export function sanitizeReportForVolunteer<T = any>(data: T, userRole: string): 
 
 // 🆕（2026-08-31 OCR 智能记账数据结构规范）票据 OCR 元数据协议：见
 // saveReport() 内 formattedData.ocrMetadata 处注释，目前没有任何前端入口
-// 真正产出这份数据，纯粹是为"拍照识别小票自动填单"预留的落库结构
+// 真正产出这份数据，纯粹是为"拍照识别小票自动填单"预留的落库结构。
+// 🆕（2026-08-31 生态演进第三步）新增 ocrRawText——cloudfunctions/
+// ocrExpenseReceipt 已经在返回体里带上了 rawTextList（OCR 原始识别文本行，
+// 见该云函数注释），这里补一个字段位置把它落进 report_logs，供日后需要
+// 核对"AI 到底认出了什么字"时回溯，仍是纯字段预留，同样没有任何调用方
+// 真正传值
 export interface OcrMetadata {
   sourceImageUrl?: string;
   parsedItemCount?: number;
   isAutoFilled?: boolean;
+  ocrRawText?: string;
 }
 
 export const DataService = {
@@ -227,7 +233,11 @@ export const DataService = {
       ocrMetadata: (reportData.ocrMetadata && typeof reportData.ocrMetadata === 'object') ? {
         sourceImageUrl: reportData.ocrMetadata.sourceImageUrl || '',
         parsedItemCount: parseInt(reportData.ocrMetadata.parsedItemCount, 10) || 0,
-        isAutoFilled: !!reportData.ocrMetadata.isAutoFilled
+        isAutoFilled: !!reportData.ocrMetadata.isAutoFilled,
+        // 🛡️ 截断到 500 字：只是留痕供人工回溯核对"AI 当时认出了什么"，不是
+        // 完整存档小票原文的场所（原图本身已经存在 sourceImageUrl 指向的云存储
+        // 文件里），report_logs 单条文档没必要为这份辅助信息无限膨胀
+        ocrRawText: String(reportData.ocrMetadata.ocrRawText || '').slice(0, 500)
       } : null,
       updateTime: db ? db.serverDate() : Date.now(),
       isSynced: false,

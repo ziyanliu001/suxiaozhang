@@ -1009,6 +1009,15 @@
         <text>将本机构名下所有门店近期的开餐人次、财务收支及食材流水明细，合并生成一份标准化 Excel 工作簿（各店一个 Sheet + 机构总览 Sheet），并附带存证核验码，便于理事会/民政核对存档。</text>
       </view>
 
+      <!-- 🆕（2026-08-31 生态演进第三步）专业调性标签：强调这份导出物是"给
+           理事会/民政看的正式材料"而不是随手导出的流水账，与上方描述文字
+           呼应，不是新的合规认证声明——真正的存证核验码见 exportAccountExcel
+           generateVerificationCode 注释 -->
+      <view class="export-format-badge">
+        <text class="export-format-badge-icon">📄</text>
+        <text class="export-format-badge-text">包含民政审计标准格式与存证校验码</text>
+      </view>
+
       <view class="modal-footer">
         <button class="btn-modal-cancel" bindtap="onCloseNationalExcelExportModal" disabled="{{generatingNationalExcelExport}}">取消</button>
         <button class="btn-modal-submit" bindtap="onConfirmNationalExcelExport" disabled="{{generatingNationalExcelExport}}" loading="{{generatingNationalExcelExport}}">确认并导出</button>
