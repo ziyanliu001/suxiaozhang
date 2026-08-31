@@ -9840,6 +9840,14 @@ Page({
     wx.saveImageToPhotosAlbum({
       filePath: posterImage,
       success: () => {
+        // 🌟（2026-08-31 爱心海报分享完善）轻震动反馈，与项目里其它"轻量级
+        // 成功确认"场景（如 index.ts 内其它 wx.vibrateShort({type:'light'})
+        // 调用点）同一档强度——保存到相册是一次性即时操作，不需要
+        // utils/audioService.ts 那种"中等/重"强度的震动+音效组合（那套是
+        // 为打卡/识票/封账这类后厨双手不便查看屏幕的场景设计的，语境不同）
+        if (wx.vibrateShort) {
+          wx.vibrateShort({ type: 'light' } as any);
+        }
         wx.showToast({ title: '保存成功', icon: 'success' });
         this.closePoster();
       },
@@ -11834,6 +11842,21 @@ Page({
         title: `🌸【${store}】诚邀您加入义工/护持团队，扫码即可申请`,
         path: `/pages/index/index?storeName=${encodeURIComponent(store)}`,
         imageUrl: this.data.storePosterTempFilePath
+      };
+    }
+
+    // 🌟（2026-08-31 爱心海报分享完善）同一个根因修复应用到「爱心海报预览」
+    // 弹窗：本弹窗自己的「分享给好友」按钮走 wx.showShareImageMenu 直接分享
+    // 图片（见 onSharePosterImage 头部注释），不经过本方法；但用户仍然可能
+    // 通过微信右上角「···」胶囊菜单的系统级转发入口分享——那条路径就是走
+    // onShareAppMessage()，此前同样会落到下面兜底的通用 share_cover.png，
+    // 白白浪费了用户刚生成好的这张海报。弹窗开着且海报已生成完成时，转发
+    // 卡片封面优先换成这张海报图
+    if (this.data.showPoster && this.data.posterImage) {
+      return {
+        title: `🌸【${store}】${date}爱心餐报公示，请家人阅览！`,
+        path: `/pages/index/index?storeName=${encodeURIComponent(store)}`,
+        imageUrl: this.data.posterImage
       };
     }
 

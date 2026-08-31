@@ -4597,14 +4597,27 @@ button.poster-gen-btn[disabled] {
   background-color: rgba(0, 0, 0, 0.7);
 }
 
+/* 🐛（2026-08-31 爱心海报分享完善）此前 .modal-content 只有 overflow:hidden，
+   没有整体高度上限——.modal-body 自己 max-height:70vh 可以滚动，但 header/
+   footer 是跟 body 简单纵向堆叠、不参与任何高度分配，三者加上 160rpx 的
+   margin-top 在小屏机型（如 iPhone SE）上合计很容易超出可视区高度，
+   底部操作栏（保存/分享按钮）会被推出屏幕之外或紧贴边缘看不全。改成
+   flex 纵向布局 + 整体 max-height，header/footer 保持自身高度不参与压缩
+   （未显式设置 flex-shrink 时 flex 子项默认就是 1，这里维持默认已经够用，
+   真正需要收缩让出空间的是 .modal-body），配合下方 .modal-body 的
+   flex:1;min-height:0，小屏幕上会先压缩/滚动中间的海报预览区，而不是把
+   底部按钮顶到屏幕外面 */
 .modal-content {
   position: relative;
   width: 90%;
   max-width: 680rpx;
+  max-height: calc(100vh - 200rpx);
   background-color: #fff;
   border-radius: 32rpx;
   overflow: hidden;
   margin-top: 160rpx;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -4613,6 +4626,7 @@ button.poster-gen-btn[disabled] {
   align-items: center;
   padding: 30rpx;
   border-bottom: 1rpx solid #eee;
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -4638,7 +4652,8 @@ button.poster-gen-btn[disabled] {
 .modal-body {
   position: relative;
   padding: 20rpx;
-  max-height: 70vh;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   background-color: #f8f8f8;
 }
@@ -4737,12 +4752,22 @@ button.poster-gen-btn[disabled] {
   display: flex;
   gap: 20rpx;
   padding: 30rpx;
+  /* 🐛（2026-08-31 爱心海报分享完善）iPhone X 及以上机型底部有一条系统手势
+     指示条（Home Indicator），弹窗贴底的操作栏若不额外让出这段安全区，
+     按钮下半截会被系统手势条遮挡/难以点击——双写 constant()/env() 兼容新旧
+     内核（老版本 iOS WKWebView 只认 constant，新版本才认 env，同时写两行
+     由内核自动取其认识的最后一条生效，是本文件其它安全区适配处的既有写法） */
+  padding-bottom: calc(30rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
   border-top: 1rpx solid #eee;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .btn-close {
   flex: 1;
   height: 88rpx;
+  line-height: 88rpx;
   font-size: 28rpx;
   color: #666;
   background-color: #f5f5f5;
@@ -4753,11 +4778,37 @@ button.poster-gen-btn[disabled] {
 .btn-save {
   flex: 1;
   height: 88rpx;
+  line-height: 88rpx;
   font-size: 28rpx;
   color: #fff;
   background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
   border: none;
   border-radius: 44rpx;
+}
+
+/* 🐛（2026-08-31 爱心海报分享完善）根因：WXML 里「分享给好友」按钮
+   （bindtap="onSharePosterImage"，调 wx.showShareImageMenu 直接分享这张
+   海报图片本身——刻意不用 open-type="share"，那样分享出去的是小程序卡片
+   入口而不是这张具体的图，见 onSharePosterImage 头部注释）class 名
+   .btn-share-poster 此前在整份 WXSS 里从未定义过任何样式规则，按钮虽然
+   点击有效，但视觉上没有任何装饰，与相邻两个按钮观感割裂。补齐与
+   .btn-close/.btn-save 同一套尺寸规范，配色采用微信绿区分"分享"这个
+   动作语义 */
+.btn-share-poster {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 28rpx;
+  color: #fff;
+  background: linear-gradient(135deg, #07C160 0%, #05A64F 100%);
+  border: none;
+  border-radius: 44rpx;
+}
+
+.btn-close::after,
+.btn-save::after,
+.btn-share-poster::after {
+  border: none;
 }
 .offline-banner {
   display: flex;

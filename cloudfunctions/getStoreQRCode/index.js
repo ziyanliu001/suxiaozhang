@@ -181,8 +181,21 @@ exports.main = async (event, context) => {
     // 与本次报告的现象完全吻合。改为 try/catch 包裹每一次尝试，同时兼容
     // "resolve 出一个非 0 errCode 对象"与"直接 throw"两种可能的 SDK 行为，
     // 不管这份 SDK 实际是哪种，都能命中重试分支。
+    //
+    // 🐛（2026-08-31 三次修复：从"重试兜底"升级为"从根上不触发"）
+    // check_path: false ——这是 wxacode.getUnlimited 官方文档明确记录的
+    // 参数：默认 true 时会校验 page 是否为已发布小程序里真实存在的页面，
+    // 不存在/未发布就是 41030 的直接成因；显式传 false 会跳过这项校验，
+    // 允许 page 指向"小程序当前还没有发布过、但迟早会发布"的页面（官方
+    // 文档原话："为 false 时允许小程序未发布或者 page 不存在"）。加上这
+    // 一个参数后，验真二维码这类指向 subpackages 页面的场景在开发版/体验版/
+    // 尚未随最新代码发布的线上版本下都不会再触发 41030——不再需要退化成
+    // "省略 page 跳首页"才能生成成功，用户扫码能直接落地到验真页而不是
+    // 被动跳首页。下面"重试时省略 page"的逻辑继续保留作为纵深防御（万一
+    // check_path:false 在某个基础库版本下行为有出入，或 41030 由其它原因
+    // 触发），双保险不冲突
     async function callGetUnlimited(page) {
-      const params = { scene: codeTarget.scene, width: 430, isHyaline: false };
+      const params = { scene: codeTarget.scene, width: 430, isHyaline: false, check_path: false };
       if (page) params.page = page;
       return cloud.openapi.wxacode.getUnlimited(params);
     }
