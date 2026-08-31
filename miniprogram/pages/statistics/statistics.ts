@@ -1323,43 +1323,59 @@ Page({
         ? (effectiveStoreName || cleanSelectedStoreName)
         : effectiveStoreName;
 
-      // 超管账号在角色缓存/服务端/全局态/本地存储任何来源都解析不出一个真实门店时
-      // ——典型场景是从未在任何页面手动选过具体门店，或者上次选的就是"全国总览"/
-      // "全部门店"这类虚拟聚合名（现已在上面被过滤成空）——finalShopName 会是
-      // 空字符串。只在这种"压根没有可展示的具体门店"时才回退到全国总览，不会
-      // 重新引入此前"无条件默认全国大屏"的旧 Bug——那个 Bug 是不看实际选择、
-      // 永远默认全国；这里只在无从选择时才兜底。
-      // 🐛 显式全国总览信号：storeId 为空≠明确选了全国总览，也可能只是压根没
-      // 选过任何门店——但 rawSelectedIsNational 为 true 时是用户/店铺选择器
-      // 明确写入的聚合哨兵值，必须强制兜底为全国大屏，即便 finalShopName 因为
-      // 上面某个环节还残留着旧值也不能让它逃逸成单店界面
-      const shouldDefaultToNational = isSuperAdmin && (!finalShopName || rawSelectedIsNational);
+      // 🐛 根因修复（大家长大屏门禁逻辑断层）：此前 shouldDefaultToNational
+      // 硬编码只看 isSuperAdmin，完全没有把大家长纳入判断——大家长只能通过
+      // profile「全国数据看板」入口携带 ?view=national 跳转、由下方
+      // _autoNationalIntent 分支临时触发一次 _triggerPatriarchNationalView()
+      // 进全国视图，但 initUserRole() 缓存命中 + 网络角色请求落地会各自独立
+      // 触发一次本方法（见文件其余处"两次 applyRolePermissions()"的既有注释），
+      // _autoNationalIntent 在第一次调用里就被消费清空，第二次调用完全没有
+      // 任何信号能让 shouldDefaultToNational 判真，于是这里重新把
+      // isAllStoresMode 覆写回 false——全国大屏"看一眼就被打回单店"，控制台
+      // 日志表现为 "currentUserRole: store_patriarch, showNationalDashboard:
+      // false"。现在补两个大家长专属信号：
+      //   ① isPatriarchNationalIntent：本次调用确实是从 view=national 跳转
+      //      触发的（与此前 headingStraightToNational 语义相同）
+      //   ② isPatriarchStayingNational："粘性"信号——读取本次 setData 之前
+      //      的 isAllStoresMode（上一次调用已经进入全国视图），避免重复调用
+      //      把已经建立好的全国视图状态悄悄打回单店。大家长没有 super_admin
+      //      那种能在门店选择器里选中"全国总览"哨兵值的入口（store-picker
+      //      组件里"全国总览"虚拟条目严格限定 super_admin 专属），因此不能
+      //      照搬 super_admin 那套 getSelectedStore() 判断，只能靠这个粘性
+      //      信号在多次调用之间保持视图连续
+      const isPatriarchNationalIntent = isPatriarch && !!(this as any)._autoNationalIntent;
+      const isPatriarchStayingNational = isPatriarch && this.data.isAllStoresMode;
+      const shouldDefaultToNational = isSuperAdmin
+        ? (!finalShopName || rawSelectedIsNational)
+        : (isPatriarchNationalIntent || isPatriarchStayingNational);
 
       this.setData({
         shopName: shouldDefaultToNational ? '全部门店' : finalShopName,
         isAllStoresMode: shouldDefaultToNational
       });
       this.fetchStoreProfile();
-      // 🐛 根因修复（并发雪崩）：大家长从 profile「全国数据看板」入口带
-      // view=national 跳转直达全国大屏时，下面 _autoNationalIntent 分支会立即
-      // 触发 _triggerPatriarchNationalView()——单店营运的资源续航卡片根本不会
+      // 🐛 根因修复（并发雪崩）：进全国大屏时，单店营运的资源续航卡片根本不会
       // 渲染（wxml 里只在非全国视图分支展示），这里提前查一次 getPatriarchDashboard
       // 纯属浪费一次云函数调用，还会跟马上发起的 loadNationalDashboard 抢占
-      // 并发配额，是"进入全国大屏卡顿"的根因之一
-      const headingStraightToNational = isPatriarch && (this as any)._autoNationalIntent;
-      if (isPatriarch && !headingStraightToNational) {
+      // 并发配额，是"进入全国大屏卡顿"的根因之一——只在确定不进全国视图时才加载
+      if (isPatriarch && !shouldDefaultToNational) {
         // 🆕 家长专属：资源储备/资金物资兜底/续航预警——与店长/财务共用的
         // 单店营运卡片是两套不同的数据源，单独加载
         this.loadPatriarchResourceStats();
       }
       if (shouldDefaultToNational) {
         this.setData({ showNationalDashboard: true });
+        // 意图信号一旦被消费（用于本次判定 shouldDefaultToNational 为真）
+        // 就清空，避免残留到未来某次用户已经主动切回单店后的调用里，被
+        // isPatriarchStayingNational 判定接手前又意外再次触发
+        if (isPatriarchNationalIntent) {
+          (this as any)._autoNationalIntent = false;
+        }
+        // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：全国大屏
+        // 查看权限不挂钩订阅套餐，大家长与超管待遇一致，这里不再做任何订阅
+        // 拦截（历史上 _triggerPatriarchNationalView 曾经做过，已在更早的
+        // 修复中移除，见该方法头部注释）
         this.loadNationalDashboard();
-      } else if (isPatriarch && (this as any)._autoNationalIntent) {
-        // 大家长从 profile 点击"全国数据看板"跳转而来（view=national），
-        // 在这里做订阅校验：未订阅弹 Modal 引导升级，订阅后进入全国视图
-        (this as any)._autoNationalIntent = false;
-        this._triggerPatriarchNationalView();
       }
     }
 
