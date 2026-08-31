@@ -1,6 +1,25 @@
     <view class="procurement-card" wx:if="{{nationalData.procurementSummary}}">
       <view class="matrix-header">
         <text class="matrix-title">🌾 爱心粮油源头集采直通车</text>
+        <!-- 🌾（2026-08-31 集采进阶：阶梯拼单池引擎）已解锁档位徽章：档位与
+             折扣由 procurementHandler.ts computeProcurementPoolTiers() 算好，
+             暂未解锁任何档位（currentTierLevel===0）时不展示，避免"第 0 阶梯"
+             这种没有意义的文案 -->
+        <text class="procurement-tier-badge" wx:if="{{nationalData.procurementSummary.currentTierLevel > 0}}">🏆 已解锁第 {{nationalData.procurementSummary.currentTierLevel}} 阶梯源头特惠 · {{nationalData.procurementSummary.currentDiscountLabel}}</text>
+      </view>
+
+      <!-- 🌾 阶梯拼单进度条："全网已汇聚 X 吨 / 目标 Y 吨"——Y 未解锁最高档时
+           是下一档门槛，已解锁最高档时是最高档门槛本身（此时进度条恒满格）。
+           增强多店协同采购的直观感知：门店越多参与月度餐报记账，这份全网
+           汇聚吨数就越接近下一档折扣 -->
+      <view class="procurement-pool-progress">
+        <view class="procurement-pool-progress-label-row">
+          <text class="procurement-pool-progress-label">🌾 全网已汇聚 {{nationalData.procurementSummary.totalWeightTon}} 吨 / 目标 {{nationalData.procurementSummary.poolTargetTon}} 吨</text>
+          <text class="procurement-pool-progress-gap" wx:if="{{nationalData.procurementSummary.nextTierGapTon > 0}}">再拼 {{nationalData.procurementSummary.nextTierGapTon}} 吨解锁下一档</text>
+        </view>
+        <view class="procurement-pool-progress-track">
+          <view class="procurement-pool-progress-fill" style="width:{{nationalData.procurementSummary.poolProgressPercent}}%"></view>
+        </view>
       </view>
 
       <view class="procurement-demand-row">
@@ -22,6 +41,7 @@
            等常量处注释，这是经验性基准测算，不是真实议价/合同锁定的价格 -->
       <view class="procurement-savings-banner">
         <text class="procurement-savings-text">源头基地直供预计月度可为全网节省 ¥{{nationalData.procurementSummary.estimatedSavingsYuan}} 善款</text>
+        <text class="procurement-savings-text" wx:if="{{nationalData.procurementSummary.currentTierLevel > 0}}">按当前阶梯折扣（{{nationalData.procurementSummary.currentDiscountLabel}}），预计每斤直降 ¥{{nationalData.procurementSummary.estimatedPerJinDiscount}}</text>
       </view>
 
       <view class="procurement-footer">

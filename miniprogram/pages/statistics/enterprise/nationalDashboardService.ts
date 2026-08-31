@@ -234,6 +234,25 @@ export const nationalDashboardHandlers = {
         // yangshanAmount/yindeAmount（全租户全门店口径，通过上面 ...sanitizedSummary
         // 展开带出，金额已 toFixed(2) 处理好），不需要在客户端再额外计算占比
 
+        // 🌾（2026-08-31 集采进阶：阶梯拼单池引擎）procurementSummary 存在时
+        // 追加阶梯档位/进度/差距/单斤直降字段——计算逻辑定义在
+        // procurementHandler.ts（见该文件 computeProcurementPoolTiers 头部
+        // 注释），这里直接 this.xxx() 调用而不 import：procurementHandlers
+        // 已经 spread 进同一个 Page 实例（见 ./index.ts），且那边的
+        // procurementHandler.ts 反过来也 import 了本文件的
+        // PLATFORM_SUPPORT_CONTACT，静态 import 回来会形成真循环依赖
+        const rawProcurement = sanitizedSummary.procurementSummary;
+        const procurementSummaryWithTiers = rawProcurement
+          ? {
+              ...rawProcurement,
+              ...this.computeProcurementPoolTiers(
+                rawProcurement.monthlyRiceEstimateKg,
+                rawProcurement.monthlyFlourEstimateKg,
+                rawProcurement.monthlyOilEstimateKg
+              )
+            }
+          : rawProcurement;
+
         const displaySummary = {
           ...sanitizedSummary,
           nationalTotalDinersDisplay: formatCompactNumber(sanitizedSummary.nationalTotalDiners),
@@ -245,6 +264,7 @@ export const nationalDashboardHandlers = {
           dineInRatioPct,
           deliveryRatioPct,
           listenRatioPct,
+          procurementSummary: procurementSummaryWithTiers,
           // 🏛️（2026-08-31 Open-Core 架构拆分）预先算好的商业能力矩阵，供 WXML
           // 直接绑定 nationalData.enterpriseCapabilities.xxx，不再依赖
           // subscriptionQuota.features 的具体嵌套形状——见 utils/enterpriseCapabilities.ts

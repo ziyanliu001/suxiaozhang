@@ -1,0 +1,68 @@
+name: Open-Core CI
+
+# 🏛️ Open-Core 自动化 CI 门禁：每次 push/PR 都验证——
+#   1) 完整版源码本身类型检查通过；
+#   2) scripts/build-open-core.js 能一键产出 dist/suxiaozhang-core；
+#   3) 产出的 Core 包通过 scripts/security-audit.js 安全红线扫描；
+#   4) Core 包物理删除了 Enterprise 真实实现文件之后，import/<include>
+#      图依然自洽——独立对着它自己的 tsconfig.json 再跑一遍 tsc --noEmit，
+#      而不是只对完整版仓库跑一遍就假定 Core 包也没问题。
+# 见 docs/OPEN_CORE_ARCHITECTURE.md 第 8/9/10 节的设计判断记录。
+# 🐛 "on" 加引号：裸 `on:` 在 YAML 1.1 解析器（如 PyYAML）下会被当成布尔值
+# true（俗称"挪威问题"），GitHub 自己的解析器对此做了特殊处理不受影响，
+# 但显式加引号能让任何用标准 YAML 库校验这份文件的第三方工具也读到正确
+# 的字符串 key，两种写法在 GitHub Actions 里完全等价
+"on":
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  open-core-quality-gate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18.x', '20.x']
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 安装依赖（npm ci，锁定 package-lock.json）
+        run: npm ci
+
+      - name: 全量类型检查（完整版源码，含 Enterprise 逻辑）
+        run: npx tsc --noEmit
+
+      - name: 构建 Open-Core 发布包（scripts/build-open-core.js）
+        run: node scripts/build-open-core.js
+
+      # 🛡️ build-open-core.js 内部最后一步已经会自动跑一次安全审计并在
+      # 不通过时以非零 exit code 结束整个脚本——上一步失败这里就不会执行到。
+      # 这里再单独显式跑一遍，是为了让 CI 日志里出现独立的、按名字可辨认的
+      # "安全审计"步骤（Actions UI 上每个 step 单独可见通过/失败），而不是
+      # 依赖构建步骤当中间接夹带的一次调用来体现审计结果
+      - name: 安全防泄露审计（scripts/security-audit.js，对 Core 产物）
+        run: node scripts/security-audit.js --dir dist/suxiaozhang-core
+
+      # 🐛 根因说明：dist/suxiaozhang-core 是从 git 工作区拷贝出来的纯源码
+      # 目录，不带自己的 node_modules（node_modules 本就被 .gitignore 排除，
+      # 见 scripts/build-open-core.js 用 git ls-files 枚举源文件的设计）。
+      # 如果在这个目录下直接跑 `npx tsc`，npx 找不到本地安装会尝试从 npm
+      # 现拉一个最新版 TypeScript——版本漂移可能带来与本仓库 pin 住的版本
+      # 不一致的编译器行为（历史上曾因此撞见 `alwaysStrict` 选项被新版
+      # TypeScript 移除而报错，而不是真的代码有问题）。改为显式调用仓库根
+      # 目录 node_modules 里 npm ci 刚装好的那一份 tsc 二进制，确保这一步
+      # 验证的是"用我们实际会用的编译器版本，Core 包能不能编译"，而不是
+      # "用 npm registry 当下最新的随机版本能不能编译"
+      - name: 独立编译校验 Core 发布包（cd dist/suxiaozhang-core && tsc --noEmit）
+        run: |
+          cd dist/suxiaozhang-core
+          node ../../node_modules/typescript/bin/tsc --noEmit

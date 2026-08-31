@@ -3746,6 +3746,66 @@ page {
   margin-bottom: 24rpx;
 }
 
+/* 🌾（2026-08-31 集采进阶）只在集采卡片内把 .matrix-header 改成两端对齐的
+   flex 行（标题 + 阶梯徽章），不改动 .matrix-header 基础规则本身——避免
+   影响页面其它同样复用这个类名的卡片头部（如全国门店运营健康度概览） */
+.procurement-card .matrix-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8rpx;
+}
+
+.procurement-tier-badge {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #F08C00, #D9480E);
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  white-space: nowrap;
+}
+
+.procurement-pool-progress {
+  margin: 16rpx 0;
+}
+
+.procurement-pool-progress-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+}
+
+.procurement-pool-progress-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #5C4A1E;
+}
+
+.procurement-pool-progress-gap {
+  font-size: 20rpx;
+  color: #D9480E;
+  flex-shrink: 0;
+}
+
+.procurement-pool-progress-track {
+  width: 100%;
+  height: 14rpx;
+  background: #FBF0D6;
+  border-radius: 7rpx;
+  overflow: hidden;
+}
+
+.procurement-pool-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #F08C00, #D9480E);
+  border-radius: 7rpx;
+  transition: width 0.3s ease;
+}
+
 .procurement-demand-row {
   display: flex;
   gap: 12rpx;
@@ -3781,10 +3841,19 @@ page {
 }
 
 .procurement-savings-text {
+  display: block;
   font-size: 26rpx;
   font-weight: 700;
   color: #8A5A00;
   line-height: 1.5;
+}
+
+/* 🌾（2026-08-31 集采进阶）第二行"预计每斤直降"文案与上面的月度节省善款
+   文案字号拉开层级，避免两行同等权重显得拥挤 */
+.procurement-savings-text + .procurement-savings-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  margin-top: 4rpx;
 }
 
 .procurement-footer {

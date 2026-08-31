@@ -240,3 +240,44 @@ Stub 方法覆盖范围**不是只覆盖"字面被外部调用"的那几个**，
 ### ⚠️ 部署状态说明
 
 本节纯前端改动：新增 `miniprogram/pages/statistics/enterprise/{nationalDashboardView,rebalanceSuggestionCard,procurementCard,procurementModal}.wxml`、`miniprogram/pages/profile/enterprise/saasSubscriptionModal.wxml`；`statistics.wxml`/`profile.wxml` 对应区块替换为 `<include>`；新增 `scripts/core-overrides/{statistics.nationalDashboardView,statistics.procurementModal,profile.saasSubscriptionModal}.wxml` 三份置空 stub；`scripts/build-open-core.js` 的 `FILE_OVERRIDES`/`SINGLE_FILE_EXCLUDES`/`KNOWN_MIXED_FILES` 均已同步更新。`tsc --noEmit`、WXML 标签平衡校验、`build:core` + `security-audit.js` 均已通过，不涉及任何 `.ts` 逻辑改动、不涉及云函数改动、不涉及数据库结构迁移，重新编译/预览小程序即可生效。
+
+## 11. 自动化 CI 门禁：把第 8~10 节的验证步骤搬进 GitHub Actions（2026-08-31）
+
+前面几节的所有验证（`tsc --noEmit`/`build:core`/`security-audit.js`/独立编译 Core 产物）此前都要靠人工在本地记得跑一遍。本节新增 `.github/workflows/open-core-ci.yml`，把这条验证链固化成每次 `push`/`pull_request`（`master`/`main`）自动触发的门禁，Node 18.x/20.x 双矩阵下依次执行：`npm ci` → 全量 `tsc --noEmit` → `node scripts/build-open-core.js` → `node scripts/security-audit.js --dir dist/suxiaozhang-core` → `cd dist/suxiaozhang-core && node ../../node_modules/typescript/bin/tsc --noEmit`。任意一步非零退出都阻断 CI。
+
+**两处踩坑记录**：
+
+1. **不能在 `dist/suxiaozhang-core` 目录里裸跑 `npx tsc`**——这个目录是从 git 工作区拷贝出来的纯源码目录，不带自己的 `node_modules`（`node_modules` 本就被 `.gitignore` 排除，`build-open-core.js` 用 `git ls-files` 枚举源文件的设计天然不会把它带进去）。裸 `npx tsc` 在找不到本地安装时会去 npm 现拉一份最新版 TypeScript——这正是第 9 节 9.4 小节人工验证时踩过的坑（新版 TypeScript 移除了 `alwaysStrict` 选项直接报错，误判成"Core 包编译失败"，其实只是编译器版本对不上）。工作流改为显式调用 `node ../../node_modules/typescript/bin/tsc`，用仓库自己 `npm ci` 装好、`package.json` pin 住的那一份编译器，确保这一步验证的是"用实际会用的版本能不能编译"而不是"用当下 npm registry 最新版能不能编译"。
+2. **`on:` 要加引号**——GitHub Actions 工作流的裸 `on:` 在 YAML 1.1 解析器（如 Python PyYAML）下会被当成布尔值 `true`（俗称"挪威问题"：`yes`/`no`/`on`/`off` 都是 YAML 1.1 的布尔字面量）。GitHub 自己的工作流解析器对此做了特殊处理，裸写不影响实际触发效果，但显式写成 `"on":` 能让任何用标准 YAML 库校验这份文件的第三方工具（比如本次提交前用来做语法校验的 Python 脚本）也读到语义正确的字符串 key，两种写法在 GitHub Actions 里完全等价。
+
+**验证方式**：GitHub Actions 本身要 push 后才能在 Actions 页面看到真实运行结果，提交前先在本地按工作流里同样的五步命令顺序手动跑了一遍（`npm ci` 已由本地既有 `node_modules` 覆盖，其余四步逐一执行），全部通过后才写入工作流文件——这与本文档一贯的"先手动验证过一遍，再落成自动化脚本"的做法一致。
+
+### ⚠️ 部署状态说明
+纯 CI 配置改动：新增 `.github/workflows/open-core-ci.yml`（YAML 语法已用 Python `yaml.safe_load` 校验），不涉及任何业务代码/云函数改动。首次真正触发效果需要 push 到 GitHub 后在 Actions 页面确认。
+
+## 12. 商业化生态延伸：集采直通车阶梯拼单池引擎（2026-08-31）
+
+在第 7 节落地的 `procurementSummary`（月度粮油汇聚量 + 预估节省善款）基础上，新增"阶梯拼单"机制——全网参与的门店越多、汇聚的月度采购量越大，理论上能拿到的批发折扣越深，用一个直观的进度条 + 折扣徽章把这种"人多力量大"的规模效应可视化，激励更多门店参与月度记账申报。
+
+### 12.1 计算逻辑落在 `procurementHandler.ts`，而不是云函数
+
+`computeProcurementPoolTiers(monthlyRiceEstimateKg, monthlyFlourEstimateKg, monthlyOilEstimateKg)` 是一个不读写 `this.data` 的纯函数，按三种物资总重（换算成吨）判定当前解锁到第几档：
+
+| 阶梯 | 门槛 | 折扣 |
+| --- | --- | --- |
+| 1 档 | ≥5 吨 | 95 折 |
+| 2 档 | ≥10 吨 | 9 折 |
+| 3 档（最高） | ≥20 吨 | 85 折 |
+
+门槛与折扣均为产品原型阶段的经验性设定（与 `getNationalDashboard` 里 `procurementSummary` 其余字段的"诚实占位"口径一致），不是任何真实供应商合同价格。输出字段：`totalWeightTon`（总重换算吨数）、`currentTierLevel`/`currentDiscountLabel`（当前已解锁档位与折扣文案）、`poolProgressPercent`/`nextTierGapTon`（距下一档的进度百分比与差距吨数，已解锁最高档时恒为 100%/0）、`poolTargetTon`（卡片文案"目标 Y 吨"里的 Y）、`estimatedPerJinDiscount`（按三种物资重量加权算出一份示例基准价，乘以"1-当前折扣"换算成"每斤直降"的直观金额——这个基准价与 `estimatedSavingsYuan` 用的 `RICE/FLOUR/OIL_SAVINGS_PER_KG` 是两套不同口径的常量，前者回答"市面上一斤大概能便宜多少钱"，后者回答"合并采购能省多少钱"，特意没有混用）。
+
+### 12.2 ⚠️ 避免真循环依赖：改用 `this.xxx()` 而不是静态 `import`
+
+`nationalDashboardService.ts` 的 `loadNationalDashboard()` 需要在拿到 `procurementSummary` 原始数据后调用这个新方法，而 `procurementHandler.ts` 本身已经 `import` 了 `nationalDashboardService.ts` 导出的 `PLATFORM_SUPPORT_CONTACT`（第 9 节落地）。如果反过来也用静态 `import`，两个兄弟文件会形成真循环依赖。解法沿用第 9 节确立的模式——`nationalDashboardHandlers`/`procurementHandlers` 两个导出对象最终都 `spread` 进同一个 `Page` 实例（见 `enterprise/index.ts`），`loadNationalDashboard()` 直接 `this.computeProcurementPoolTiers(...)` 运行时调用即可，不需要任何静态 import，也不会有循环依赖问题。
+
+### 12.3 视觉呈现
+
+`procurementCard.wxml` 新增「🏆 已解锁第 N 阶梯源头特惠 · 95折/9折/85折」徽章（`currentTierLevel === 0` 时不展示，避免"第 0 阶梯"这种没有意义的文案）与「🌾 全网已汇聚 X 吨 / 目标 Y 吨」动态进度条（`poolProgressPercent` 驱动宽度，未解锁最高档时额外展示"再拼 N 吨解锁下一档"）；`estimatedPerJinDiscount` 在原有的月度节省善款文案下方追加一行"按当前阶梯折扣，预计每斤直降 ¥X"。`statistics.wxss` 新增对应样式，`.matrix-header` 的 flex 两端对齐布局特意 scope 在 `.procurement-card .matrix-header` 而不是改动 `.matrix-header` 基础规则，避免影响页面其它复用同一类名的卡片头部（如全国门店运营健康度概览）。
+
+### ⚠️ 部署状态说明
+纯前端 + 逻辑层改动：`miniprogram/pages/statistics/enterprise/procurementHandler.ts`（新增 `computeProcurementPoolTiers`）、`nationalDashboardService.ts`（`loadNationalDashboard()` 接入调用，合并进 `displaySummary.procurementSummary`）、`enterprise/procurementCard.wxml`（新增阶梯徽章与进度条标记）、`statistics.wxss`（新增对应样式规则）。`tsc --noEmit`、WXML 标签平衡校验、`build:core` + `security-audit.js` 均已通过，不涉及云函数改动（复用既有 `procurementSummary` 原始字段做客户端二次计算）、不涉及数据库结构迁移，重新编译/预览小程序即可生效。
