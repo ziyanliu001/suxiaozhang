@@ -699,6 +699,12 @@ Page({
     // 与 canViewAllStoresDropdown（默认同样是 false，严格收窄到 super_admin）
     // 保持同一条口径，只有确认是 super_admin 才允许被置为 true
     isAllStoresMode: false,
+    // 🆕（2026-08-31）大屏门店矩阵行点击下钻单店明细：标记"当前这次单店视图
+    // 是从全国大屏点击某一行下钻进来的"，驱动"‹ 返回全国大屏"胶囊的显示，
+    // 与 isAllStoresMode/showNationalDashboard 是两个维度——后两者描述"现在
+    // 展示的是不是全国大屏"，这个字段描述"如果现在展示的不是，是不是刚从
+    // 全国大屏下钻过来的"，见 onDrillDownStore/onReturnToNationalDashboard
+    drilledDownFromNational: false,
     // 🏠 门店人员与服务人群画像：仅单店视角下有值，来自 manageStoreProfile 云函数
     storeProfile: null as any,
     // 🆕 骨架屏判据：仅在"首次请求还在飞、且还没有任何数据可展示"时才展示骨架屏，
@@ -2808,6 +2814,52 @@ Page({
       this.fetchStatistics();
     }
     this.fetchStoreProfile();
+  },
+
+  // 🆕（2026-08-31）大屏门店矩阵行点击下钻单店明细：只对大家长/超管生效——
+  // 其余角色（含 hq_finance/regional_finance）即使能看到全国矩阵表格，点进
+  // 某一具体门店也没有意义：getReports/getStatisticsData 等单店数据云函数
+  // 服务端仍会把非租户级角色强制收敛回自己绑定的门店（"总部财务只看汇总
+  // 数字，不看单店流水明细"的既有口径），点了也只会看到自己的店，不是点的
+  // 那家，容易造成"点了没反应/点错店"的困惑，所以这里直接不响应
+  onDrillDownStore(e: any) {
+    if (!this.data.isAdmin && !this.data.isPatriarch) return;
+
+    const storeId = e.currentTarget.dataset.storeid || '';
+    const storeName = e.currentTarget.dataset.storename || '';
+    if (!storeName) return;
+
+    // 与 onSuperAdminSelectStore 选中具体门店时完全同一套状态切换（shopName/
+    // currentUserStoreName/currentUserStoreId/isAllStoresMode/showNationalDashboard
+    // 等），只是触发源从"顶部下拉选择器"换成"矩阵表格行点击"，额外多记一个
+    // drilledDownFromNational 标记驱动"‹ 返回全国大屏"胶囊显示
+    this.setData({
+      shopName: storeName,
+      currentUserStoreName: storeName,
+      currentUserStoreId: storeId,
+      isAllStoresMode: false,
+      nationalFilterMode: 'national',
+      hasOtherStoreData: false,
+      statistics: null,
+      showNationalDashboard: false,
+      drilledDownFromNational: true
+    });
+
+    setSelectedStore({ storeId, storeName });
+
+    this.calculateStats();
+    this.fetchStatistics();
+    this.fetchStoreProfile();
+  },
+
+  // 「‹ 返回全国大屏」：与 _triggerPatriarchNationalView() 完全同一套动作
+  // （该方法内部不做角色判断，安全边界在 loadNationalDashboard() 的
+  // canViewNationalDashboard 守卫），大家长/超管共用同一个返回入口，不需要
+  // 用户记住"超管用顶部下拉选择器切回、大家长用另一个按钮切回"这两条不同路径
+  onReturnToNationalDashboard() {
+    if (!this.data.isAdmin && !this.data.isPatriarch) return;
+    this.setData({ drilledDownFromNational: false });
+    this._triggerPatriarchNationalView();
   },
 
   // 🔗 数据联动：切 Tab/翻页/年月选择器/刷新数据这些入口都统一走

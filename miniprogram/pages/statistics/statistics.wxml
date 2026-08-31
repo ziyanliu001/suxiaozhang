@@ -24,6 +24,15 @@
            内容语义脱节——用户在全国总览视角还看着一行单店信息，容易误以为
            大屏数据只是这一家店的。现在按 showNationalDashboard 二选一：单店
            模式展示原有的门店信息+切换器，全国大屏模式换成专属横幅 -->
+      <!-- 🆕（2026-08-31）大屏门店矩阵行点击下钻单店明细：只在"确实是从全国大屏
+           下钻进来的"这次会话内出现，不影响店长/财务/义工等角色平时看到的单店
+           视图布局；仅大家长/超管能触发下钻（见 onDrillDownStore 权限守卫），
+           胶囊统一提供"返回全国大屏"这一条清晰路径，不需要用户记住"超管用
+           顶部下拉选择器切回、大家长用另一个按钮切回"这两条不同路径 -->
+      <view class="drill-back-banner" hover-class="ui-hover" wx:if="{{!showNationalDashboard && drilledDownFromNational && (isAdmin || isPatriarch)}}" bindtap="onReturnToNationalDashboard">
+        <text class="drill-back-arrow">‹</text>
+        <text class="drill-back-text">返回全国大屏</text>
+      </view>
       <view class="store-select-header-row" wx:if="{{!showNationalDashboard}}">
         <view class="store-label">
           <text class="pin-icon">📍</text>
@@ -813,10 +822,14 @@
 
         <view class="table-tbody">
           <view
-            class="table-tr {{item.statusLevel === 'urgent' ? 'risk-row' : ''}}"
+            class="table-tr {{item.statusLevel === 'urgent' ? 'risk-row' : ''}} {{(isAdmin || isPatriarch) ? 'table-tr-clickable' : ''}}"
+            hover-class="{{(isAdmin || isPatriarch) ? 'ui-hover' : ''}}"
             wx:for="{{nationalMatrixList}}"
             wx:key="storeId"
             wx:if="{{!isAdmin || (storeMatrixFilter === 'risk' ? (item.isOffline || item.hasRiskFlag) : !(item.isOffline || item.hasRiskFlag))}}"
+            data-storeid="{{item.storeId}}"
+            data-storename="{{item.storeName}}"
+            bindtap="onDrillDownStore"
           >
             <view class="td col-store">
               <text class="font-bold">{{item.storeName}}</text>
@@ -834,6 +847,9 @@
             <view class="td col-status">
               <text class="warning-pill {{item.statusLevel}}">{{item.statusText}}</text>
             </view>
+            <!-- 🆕 下钻提示：仅大家长/超管可点击行下钻单店明细，其余角色点击无
+                 反应（见 onDrillDownStore 权限守卫），不展示这个箭头避免误导 -->
+            <text class="td-drill-chevron" wx:if="{{isAdmin || isPatriarch}}">›</text>
           </view>
 
           <view class="matrix-filter-empty" wx:if="{{isAdmin && storeMatrixFilter === 'risk' && superAdminInsights && superAdminInsights.riskStoreCount === 0}}">

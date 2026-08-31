@@ -4111,6 +4111,46 @@ page {
   padding-left: 6rpx;
 }
 
+/* 🆕（2026-08-31）大屏门店矩阵行点击下钻：仅大家长/超管可点（见 WXML
+   isAdmin || isPatriarch 判断），末尾留一点右内边距给下钻箭头 */
+.table-tr.table-tr-clickable {
+  padding-right: 8rpx;
+}
+
+.td-drill-chevron {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  color: #ADB5BD;
+  margin-left: 4rpx;
+}
+
+/* 🆕 返回全国大屏胶囊：从矩阵表格行下钻进单店视图后出现在"当前统计门店"
+   卡片最上方，浅蓝底色与顶部"数据导出"等横幅按钮呼应，一眼可辨是导航
+   而非普通信息展示 */
+.drill-back-banner {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  width: fit-content;
+  background: #E7F5FF;
+  border: 1rpx solid #A5D8FF;
+  border-radius: 30rpx;
+  padding: 10rpx 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.drill-back-arrow {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #1C7ED6;
+}
+
+.drill-back-text {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #1C7ED6;
+}
+
 .col-store {
   flex: 2;
 }
