@@ -1,6 +1,6 @@
-# Open-Core 架构拆分方案（2026-08-31，已推进至第三阶段）
+# Open-Core 架构拆分方案（2026-08-31，已推进至终局阶段）
 
-> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段（见第 8 节）交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`，可以一键产出、审计一份 `dist/suxiaozhang-core` 开源发布包。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布。
+> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`；终局阶段（见第 9 节）把 `pages/statistics`/`pages/profile` 里此前一直标记为"深度耦合、本阶段未拆分"的 Enterprise 逻辑，物理搬迁进各自的 `enterprise/` 子目录，是本文档目前对 Core/Enterprise 边界落地最彻底的一次。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布；`pages/statistics`/`pages/profile` 的 WXML/WXSS 标记层仍未物理拆分（见第 9.4 节）。
 
 ## 1. 边界定义原则
 
@@ -154,3 +154,47 @@ if (!HMAC_SECRET) {
 ### 8.5 部署状态说明
 
 本节两个脚本均为纯 Node.js 脚本（`node --check` 通过），不依赖任何新增 npm 包，`package.json` 新增 `build:core`/`security-audit` 两条命令。`tsconfig.json` 补充 `exclude: ["dist"]`——否则跑过一次 `build:core` 后本地目录会同时存在 `miniprogram/` 源码与 `dist/suxiaozhang-core/miniprogram/` 副本，`tsc --noEmit` 会报一堆"重复声明"的假阳性错误。`miniprogram/pages/profile/profile.ts`/`.wxml` 新增 `ENTERPRISE_BUILD_ENABLED` 旗标判断，`tsc --noEmit` 与 WXML 标签平衡校验均已通过，重新编译/预览小程序即可生效，不涉及云函数改动、不涉及数据库结构迁移。`dist/` 目录已加入 `.gitignore`，构建产物不进入版本库。
+
+## 9. 终局阶段：pages/statistics 与 pages/profile 的物理模块拆解（2026-08-31）
+
+第 8 节交付的构建脚本证明了"能不能打包出一份 Core 发布包"，但当时 `pages/statistics`/`pages/profile` 两个页面的 Enterprise 逻辑还只是**运行时旗标隔离**——源码文本仍然物理混在一个文件里，只是通过 `ENTERPRISE_BUILD_ENABLED` 判断让它在 Core 构建下"跑不到"。本阶段把这两处真正拆成独立文件，用与 `exportAccountExcel`（第二阶段）完全一致的手法：**真实实现文件（enterprise/ 子目录）+ Core-only stub（core-overrides/）**。
+
+### 9.1 statistics.ts：比预期分散得多，按内容逐个甄别而非按行区间整体切割
+
+原计划参照任务描述的三个模块名字，先入为主以为可以整块搬迁 `loadNationalDashboard`/`onDrillDownStore`/集采直通车三段代码。实际排查后发现全国大屏相关方法**散落在文件的 5 个不连续区间**里（地区/自定义门店筛选、排行榜 Tab、门店健康告警、全国 CSV/Excel 导出、SaaS 权益看板、集采直通车、公示海报……），与 `switchViewMode`/`loadShopList`/`onSuperAdminSelectStore` 等 Core 方法犬牙交错。逐个方法核对调用关系（哪些方法只被 Enterprise 方法调用、哪些被 Core 生命周期方法调用）后确认：
+
+- **移入 `pages/statistics/enterprise/nationalDashboardService.ts`**（1394 行）：全国大屏数据拉取 + SWR 本地快照、地区/自定义门店筛选整套弹窗、超管高阶面板（排行榜/健康告警/离线督导）、全国运营/财务 CSV 报表、机构 SaaS 权益看板与套餐升级引导、多店合并 Excel 导出、全国公示海报。
+- **移入 `pages/statistics/enterprise/drillDownHandler.ts`**（59 行）：矩阵行点击下钻单店 + 返回全国大屏。
+- **移入 `pages/statistics/enterprise/procurementHandler.ts`**（36 行）：爱心粮油集采直通车弹窗与意向登记。
+- **确认保留在 Core（曾经怀疑但排查后判定不该移）**：`stopPropagation`（三处弹窗共用的空操作，非 Enterprise 专属）、`ensureStoreDirectory` 的调用方 `loadShopList`（超管门店选择器构建，本身是 Core 治理能力）、`onSwitchToAllStores`（同租户内"全部门店"聚合视图，与真正跨租户的 `onGoToNationalDashboard` 是两个不同概念，前者留 Core、后者归 Enterprise）、`roundRect`/`getSafeSystemInfo`（Core 海报绘制方法与 Enterprise 全国海报共用的画布工具函数）。
+- `statistics.ts` 净减少 **1455 行**（6124 → 4669），Enterprise 侧新增 1394+59+36=1489 行（含约 35 行三文件各自的头部说明注释，比原地略多属正常）。
+
+### 9.2 profile.ts：三个可安全外置的模块级常量 + 一个方法簇
+
+排查确认 SaaS 订阅相关的常量（`PLAN_LABELS`/`PLAN_RANK`/`PLAN_ACTION_META`/`isPerpetualPlan`/`formatTenantExpireText`/`computeIOSPlanActionLabels`/`computeRedundantRenewFlag`）与方法簇（`fetchSubscriptionInfo` 至 `onSubscribeAdvancedFeature` 共 17 个方法）在 profile.ts 里全部只互相引用、不被文件其余部分调用——比 statistics.ts 干净得多，一次性整体移入 `pages/profile/enterprise/saasSubscriptionHandler.ts`（510 行）。`profile.ts` 净减少 **478 行**（6278 → 5800）。
+
+上一阶段已经加在 `onOpenSubscriptionModal()` 开头的 `if (!ENTERPRISE_BUILD_ENABLED) return;` 早退**原样保留、跟着方法一起搬迁**——物理隔离（Core 构建整份删掉这个文件）与运行时旗标（完整版下运营侧可能想临时关闭购买入口）是两件不冲突的事，不需要二选一。
+
+### 9.3 汇合点 + Core-only stub：两页统一同一套模式
+
+`pages/statistics/enterprise/index.ts`、`pages/profile/enterprise/index.ts` 各自作为唯一的 re-export 汇合点——两个页面主文件只 `import ... from './enterprise'`，不直接 import 子模块。`scripts/build-open-core.js` 打包时：
+
+1. 用 `scripts/core-overrides/statistics.enterprise.index.ts` / `profile.enterprise.index.ts` 整份覆盖对应的 `enterprise/index.ts`，导出结构（同名对象/函数）与原文件完全一致，方法体全部改成安全空操作或最基本兜底返回值；
+2. 物理删除四个真实实现文件（`nationalDashboardService.ts`/`drillDownHandler.ts`/`procurementHandler.ts`/`saasSubscriptionHandler.ts`）。
+
+Stub 方法覆盖范围**不是只覆盖"字面被外部调用"的那几个**，而是覆盖导出对象里的全部方法名——原因是 `statistics.ts` 里仍有几处 Core 生命周期代码（`applyRolePermissions` 的超管默认视图分支、`loadShopList`、`fetchStatistics`/`loadStatistics`/`onRefreshData`、`exportToExcel` 的订阅拦截兜底）会调用到 `loadNationalDashboard`/`ensureStoreDirectory`/`onOpenPlanUpgradeModal` 这三个"看似纯 Enterprise"的方法，逐一核对确认后：`loadNationalDashboard`/`_triggerPatriarchNationalView` 空操作即可（Core 部署下这些调用点本就不会产生数据）；`ensureStoreDirectory` 的 stub 返回 `true`（让调用方后续流程正常往下走，只是拿不到全国门店目录）；`onOpenPlanUpgradeModal` 空操作是安全的（Core 部署没有 `checkTenantPermission` 云函数，`FALLBACK_ALLOWED` 保守放行机制决定了触发这个方法的分支在 Core 下几乎不可达）。
+
+### 9.4 验证：不只是"tsc 不报错"，而是真的编译了一遍 Core 包
+
+除了常规的 `npx tsc --noEmit`（对完整版源码）与 WXML 标签平衡校验，本次额外做了一步更硬的验证：执行 `npm run build:core` 生成 `dist/suxiaozhang-core` 后，**直接 cd 进这个目录、用项目自己 pin 住的 TypeScript 版本，对着 Core 包自带的 `tsconfig.json` 跑一遍完整的 `tsc --noEmit`**（而不是只对着完整版仓库跑）。结果零报错——这是比"抽象上应该能编译"更强的证据：证明 Core 包的 `import` 图（`statistics.ts`/`profile.ts` → 各自的 `enterprise/index.ts` stub）在物理删除了三/四个真实文件之后依然自洽，不存在任何遗漏的死引用。
+
+`security-audit.js` 对同一份 `dist/suxiaozhang-core` 产物扫描结果全绿。人工核对确认两处预期内的残留（`profile.wxml` 里的 `¥1,688` 定价文案、`profile.ts` 里 `SUPER_ADMIN_CONTACT` 的客服微信号）——前者见 9.5 节"已知遗留"，后者是"联系超级管理员协助权限调整"这一 Core 治理功能真实复用的常量，与 SaaS 无关，留在 Core 属于正确行为，均非 bug。
+
+### 9.5 已知遗留：WXML/WXSS 标记层仍未物理拆分
+
+本阶段拆的是**逻辑层**（.ts 方法/常量），**标记层**（.wxml/.wxss）刻意没有动：
+
+- `statistics.wxml`/`.wxss` 里全国大屏与单店历史统计的 `<view>` 结构仍交织在同一份文件里——对应的 `.ts` 逻辑已经 stub 化、`getNationalDashboard` 云函数也已被排除，Core 部署下这些区块渲染出的是空数据兜底态（不会报错，也不会显示任何真实全国数据），但 WXML 源码文本本身还留在 Core 包里。
+- `profile.wxml` 的四处 SaaS 订阅入口（`pro-service-card`/`top-advanced-secondary`/`sa-dev-tool-row`/`subscription-modal-mask`）已有 `enterpriseBuildEnabled &&` 前置条件（上一阶段加的），Core 构建下运行时完全不渲染，但同样是"标记还在、判断为假"而不是"标记被物理删除"。
+
+要做到 WXML 层也物理纯净，需要把这些区块拆成独立的 `.wxml` 片段（`<import>`/`<template>`）或整页拆分（如 `pages/statistics` 拆成 Core 版 + 仅 Enterprise 构建才包含的 `pages/enterprise-dashboard`），是比本次"方法级搬迁"更大的一次页面级重构，本阶段不做，如实记录，不假装已经完成。

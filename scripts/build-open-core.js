@@ -88,6 +88,19 @@ const FILE_OVERRIDES = [
   {
     target: 'miniprogram/utils/buildFlags.ts',
     source: 'scripts/core-overrides/buildFlags.core.ts'
+  },
+  // 🆕（终局阶段）pages/statistics 与 pages/profile 的 Enterprise 扩展包
+  // 汇合点——真实实现文件（见下面 SINGLE_FILE_EXCLUDES）整份排除，这两个
+  // index.ts 换成导出结构相同、方法体全部安全空操作的 stub，statistics.ts/
+  // profile.ts 里 `import {...} from './enterprise'` 这行代码本身不需要
+  // 跟着改
+  {
+    target: 'miniprogram/pages/statistics/enterprise/index.ts',
+    source: 'scripts/core-overrides/statistics.enterprise.index.ts'
+  },
+  {
+    target: 'miniprogram/pages/profile/enterprise/index.ts',
+    source: 'scripts/core-overrides/profile.enterprise.index.ts'
   }
 ];
 
@@ -96,18 +109,32 @@ const SINGLE_FILE_EXCLUDES = [
   // Enterprise 专有的多店合并导出实现——见上面 FILE_OVERRIDES 里
   // index.js 已经换成不 require 它的 Core-only 版本，这里再显式排除
   // 物理文件本身，双重保险，避免 require 图以外还残留这份源码
-  'cloudfunctions/exportAccountExcel/lib/exportNationalExcel.js'
+  'cloudfunctions/exportAccountExcel/lib/exportNationalExcel.js',
+  // 🆕（终局阶段）pages/statistics/enterprise 的三个真实实现文件——
+  // index.ts 已被上面 FILE_OVERRIDES 换成 stub，不再 import 这三个文件，
+  // 这里显式删除物理文件本身
+  'miniprogram/pages/statistics/enterprise/nationalDashboardService.ts',
+  'miniprogram/pages/statistics/enterprise/drillDownHandler.ts',
+  'miniprogram/pages/statistics/enterprise/procurementHandler.ts',
+  // 🆕（终局阶段）pages/profile/enterprise 的真实实现文件，同上
+  'miniprogram/pages/profile/enterprise/saasSubscriptionHandler.ts'
 ];
 
 // ── 已知遗留耦合（本阶段不处理，如实记录，不假装已完成物理拆分） ──────
 const KNOWN_MIXED_FILES = [
-  'pages/statistics/statistics.ts / .wxml / .wxss（全国大屏与单店历史统计交织，' +
-    '见 OPEN_CORE_ARCHITECTURE.md 第 6 节，本阶段未拆分——Core 包里这些文件原样' +
-    '保留，全国大屏相关调用会因为 getNationalDashboard 云函数已被排除而在' +
-    '运行时优雅失败，不影响单店核心记账功能）',
-  'pages/profile/profile.ts / .wxml（SaaS 订阅弹窗入口分散在页面三处 + 自动' +
-    '唤起逻辑，与免费账户设置深度交织，本阶段改用 utils/buildFlags.ts 运行时' +
-    '旗标【完全隐藏/禁用】这些入口，而不是物理删除源码行——见该文件头部注释）'
+  'pages/statistics/statistics.wxml / .wxss（全国大屏与单店历史统计的渲染标记' +
+    '仍交织在同一份 WXML/WXSS 里，见 OPEN_CORE_ARCHITECTURE.md 第 6/9 节——' +
+    '终局阶段已把 loadNationalDashboard/onDrillDownStore/集采直通车等【逻辑】' +
+    '物理搬迁到 enterprise/ 子目录并在 Core 包里整体替换为 stub，但承载这些' +
+    '逻辑的【标记结构】本身仍是同一份文件，Core 包会原样带着这些标记——' +
+    '由于对应逻辑已是 stub、云函数也已排除，这些区块在 Core 部署下渲染出的' +
+    '只会是空数据兜底态，不影响单店核心记账功能，但源码文本层面还不是' +
+    '"纯净"）',
+  'pages/profile/profile.wxml（SaaS 订阅弹窗的四处渲染入口——pro-service-card/' +
+    'top-advanced-secondary/sa-dev-tool-row/subscription-modal-mask——已各自' +
+    '叠加 enterpriseBuildEnabled && 前置条件，Core 构建下这些区块运行时' +
+    '完全不渲染；但 WXML 标记本身仍物理保留在文件里，同上，逻辑已 stub 化，' +
+    '不是"WXML 文本也物理删除"）'
 ];
 
 function readTrackedAndUntrackedFiles() {
