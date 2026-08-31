@@ -393,6 +393,9 @@ Page({
   _loadUserProfileInFlight: false,
 
   data: {
+    // 🦻（2026-08-31 关怀模式视觉基座落地）与 index.ts/side-drawer 共用同一份
+    // app.globalData.careMode + wx.getStorageSync('care_mode')，onShow 时回填
+    careMode: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     // 🛡️ 自定义导航栏避让官方胶囊菜单：与 statistics.ts 同款方案，capsuleLeft/windowWidth
@@ -1004,6 +1007,11 @@ Page({
     console.log('[verify] profile.onShow 已触发, 当前 userAvatarUrl=', this.data.userAvatarUrl);
     this.isNavigating = false;
 
+    // 🦻 关怀模式：与 index.ts 同一套回填逻辑——从别的页面（如侧边抽屉）切换过
+    // 状态后，回到个人中心时也要看到最新值，不能停留在页面刚创建时的旧快照
+    const app = getApp() as any;
+    this.setData({ careMode: !!(app && app.globalData && app.globalData.careMode) });
+
     // 🐛 性能修复（Page.onShow took 67ms 警告）：initMinePage() 在真正发起网络
     // 请求之前，有一大段纯同步的角色/门店展示态计算（storageRole/globalData 融合、
     // applyRoleViewOverride 等），loadUserProfile()/refreshStoreStatus() 各自也有
@@ -1028,6 +1036,21 @@ Page({
       // initMinePage 是异步的，稍等一帧确保角色数据已就绪再唤起弹窗
       setTimeout(() => this.onOpenSubscriptionModal(), 300);
     }
+  },
+
+  // 🦻（2026-08-31 关怀模式视觉基座落地）个人中心「关怀模式」开关：与
+  // index.ts 的 onToggleCareMode 完全同一套持久化逻辑（写 app.globalData +
+  // wx.setStorageSync('care_mode', ...)），只是触发源从侧边抽屉换成个人
+  // 中心设置列表，两处状态始终是同一份，不会出现"个人中心开了、抽屉里还
+  // 显示关闭"这种不同步的情况
+  onToggleCareModeFromProfile(e: any) {
+    const value = !!(e.detail && e.detail.value);
+    const app = getApp() as any;
+    if (app && app.globalData) {
+      app.globalData.careMode = value;
+    }
+    wx.setStorageSync('care_mode', value);
+    this.setData({ careMode: value });
   },
 
   // 🛡️ 内存泄漏防护：profile 是 tabBar 页面，正常使用中几乎不会真正走到 onUnload

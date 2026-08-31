@@ -9031,6 +9031,35 @@ button.poster-gen-btn[disabled] {
   border: 3rpx solid #000000 !important;
 }
 
+/* 🦻（2026-08-31 关怀模式"阶段二"）到岗打卡主 CTA：这是本页第一核心操作，
+   此前"阶段一"覆盖了打卡后弹出的班次确认弹窗按钮（.btn-confirm-checkin），
+   但漏了这颗真正最先被点到的入口按钮——按 line-height 居中的按钮（不是
+   flex 布局），必须把 height 与 line-height 一起改，只改 height 会导致
+   文字仍按旧的 line-height 居中、看起来往上偏 */
+.care-mode .btn-volunteer-checkin {
+  height: 112rpx !important;
+  line-height: 112rpx !important;
+  font-size: 34rpx !important;
+  border: 3rpx solid #000000 !important;
+}
+
+/* 🦻 拍照识票是紧凑小胶囊，跟"常用项目"胶囊并排在同一行——不能直接套用
+   上面大按钮的 112rpx 高度，否则会撑破横向排布，按约 1.4x 温和放大 */
+.care-mode .btn-scan-receipt-pill {
+  height: 64rpx !important;
+  padding: 0 22rpx !important;
+  border-width: 2rpx !important;
+}
+
+.care-mode .btn-scan-receipt-pill .lbl {
+  font-size: 24rpx !important;
+}
+
+.care-mode .btn-scan-receipt-pill .icon {
+  width: 30rpx !important;
+  height: 30rpx !important;
+}
+
 .care-mode .home-vt-item {
   min-height: 96rpx !important;
   border-width: 3rpx !important;
@@ -9051,6 +9080,44 @@ button.poster-gen-btn[disabled] {
 .care-mode .ui-card-wrapper {
   border-width: 2rpx !important;
   border-color: #333333 !important;
+}
+
+/* 🦻（2026-08-31 关怀模式"阶段二"）大字成功提示覆盖层：wx.showToast 原生
+   组件不支持自定义字号（微信平台本身的限制），仅在关怀模式开启、打卡/
+   保存报告这两个核心成功时刻由 showCareModeSuccess() 触发，2.5秒后自动
+   消失。样式上刻意做得比原生 Toast 更醒目（更大字号+绿色成功底色+居中
+   悬浮），但不遮挡整个屏幕（不设背景蒙层），操作过程中仍能看到下方内容 */
+.care-success-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 40%;
+  display: flex;
+  justify-content: center;
+  z-index: 999;
+  pointer-events: none;
+}
+
+.care-success-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: rgba(47, 125, 60, 0.96);
+  border-radius: 24rpx;
+  padding: 32rpx 48rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.25);
+  max-width: 80%;
+}
+
+.care-success-icon {
+  font-size: 44rpx;
+}
+
+.care-success-text {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.4;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────── */

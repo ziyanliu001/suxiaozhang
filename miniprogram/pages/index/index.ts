@@ -765,6 +765,11 @@ Page({
     showElderCheckinModal: false,
     // 🦻 关怀模式：onLoad 时从 app.globalData/本地存储回填，见 onToggleCareMode
     careMode: false,
+    // 🦻（2026-08-31 关怀模式视觉基座落地）大字成功提示覆盖层：wx.showToast
+    // 原生组件不支持自定义字号，仅在关怀模式开启时、打卡/保存报告这两个
+    // 核心成功时刻替换成这个自绘覆盖层，见 showCareModeSuccess()
+    showCareSuccessBanner: false,
+    careSuccessBannerText: '',
     archiveUserInfo: {
       totalDays: 0,
       totalCheckInCount: 0,
@@ -2649,6 +2654,35 @@ Page({
     }
     wx.setStorageSync('care_mode', value);
     this.setData({ careMode: value });
+  },
+
+  // 🦻（2026-08-31 关怀模式视觉基座落地）"阶段二"：接入关怀模式的真实成功
+  // 反馈——打卡/保存报告这两个核心动作成功时，关怀模式开启则震动 + 弹出
+  // 大字覆盖层（2.5秒自动消失），未开启时行为不变，仍走原生 wx.showToast。
+  // wx.showToast 原生组件不支持自定义字号，这是微信平台本身的限制，不是
+  // 没做——要做到"大字提示"只能用这个自绘覆盖层，也因此只挑这两个最核心
+  // 的成功时刻单独处理，不是把全站所有 wx.showToast 都换掉
+  showCareModeSuccess(text: string) {
+    if (!this.data.careMode) {
+      wx.showToast({ title: text, icon: 'success' });
+      return;
+    }
+
+    // 🌟 物理触感确认：heavy 震动强度比默认的 light 更明显，长者更容易感知到
+    if (wx.vibrateShort) {
+      wx.vibrateShort({ type: 'heavy' } as any);
+    }
+
+    const self = this as any;
+    if (self._careSuccessBannerTimer) {
+      clearTimeout(self._careSuccessBannerTimer);
+      self._careSuccessBannerTimer = null;
+    }
+    this.setData({ showCareSuccessBanner: true, careSuccessBannerText: text });
+    self._careSuccessBannerTimer = setTimeout(() => {
+      this.setData({ showCareSuccessBanner: false });
+      self._careSuccessBannerTimer = null;
+    }, 2500);
   },
 
   // 🛡️ 义工绑定审核弹窗的空状态入口专用：全国总览视角下不允许生成海报（见
@@ -7484,7 +7518,7 @@ Page({
           await this.triggerCascadeRecalculation(submitData);
         }
 
-        wx.showToast({ title: '保存成功', icon: 'success', duration: 1500 });
+        this.showCareModeSuccess('保存成功');
         recordSuccessfulSubmit(); // 记录提交成功（用于频率限制）
 
         // 🍱📌 餐报保存成功后，若随表单一并上传了食谱/大事记照片，则同步发布，
@@ -11196,7 +11230,7 @@ Page({
     if (wasTruncated) {
       wx.showToast({ title: `已为您自动截断至 +${addHours}h（单日上限${DAILY_HOURS_CAP}h）`, icon: 'none', duration: 2500 });
     } else {
-      wx.showToast({ title: `打卡成功！+${addHours}h`, icon: 'success' });
+      this.showCareModeSuccess(`打卡成功！+${addHours}h`);
     }
 
     // 🔗 打卡成功 → 强制刷新服务总工时联动（忽略 isManualHours，以最新云端汇总为准）

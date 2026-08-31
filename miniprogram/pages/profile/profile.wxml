@@ -1248,6 +1248,22 @@
          initMinePage 内 computeOrgDisplayCopy() 按门店真实 orgType 计算，
          已经是雨花斋/社区助餐/通用机构三档区分文案，比单纯 isYuhuazhai 二选一
          更贴合当前多租户去品牌化方向，两个入口本身对角色无感知，全角色可见 -->
+    <!-- 🦻（2026-08-31 关怀模式视觉基座落地）大字号/高对比度开关：与
+         components/side-drawer 里的同名开关是同一个状态（app.globalData.
+         careMode + wx.setStorageSync('care_mode', ...)），两处都能切换、
+         永远同步——个人中心是更符合"设置"心智模型的入口，侧边抽屉留给
+         快捷切换，互不冲突 -->
+    <view class="list-group-label">无障碍与关怀</view>
+    <view class="ui-card-wrapper action-list-container">
+      <view class="action-item-cell">
+        <view class="item-left">
+          <text class="manager-only-emoji">🦻</text>
+          <text class="item-text">关怀模式（大字号 · 高对比度）</text>
+        </view>
+        <switch checked="{{careMode}}" bindchange="onToggleCareModeFromProfile" color="#8C1D18" />
+      </view>
+    </view>
+
     <view class="list-group-label">文化与平台监督</view>
     <view class="ui-card-wrapper action-list-container">
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToCultureFull">

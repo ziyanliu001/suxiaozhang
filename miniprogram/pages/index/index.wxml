@@ -1704,6 +1704,17 @@
   <canvas type="2d" id="posterCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: {{canvasHeight}}px;"></canvas>
   <canvas type="2d" id="printCanvas" style="position: fixed; left: -9999px; top: 0; width: 375px; height: {{printCanvasHeight}}px;"></canvas>
 
+  <!-- 🦻（2026-08-31 关怀模式视觉基座落地）大字成功提示覆盖层：wx.showToast
+       原生组件不支持自定义字号，仅在关怀模式开启、打卡/保存报告这两个核心
+       成功时刻由 showCareModeSuccess() 触发展示，2.5秒后自动消失，不可点击
+       关闭（与原生 Toast 的自动消失行为一致，不需要用户额外操作） -->
+  <view class="care-success-banner" wx:if="{{showCareSuccessBanner}}">
+    <view class="care-success-banner-inner">
+      <text class="care-success-icon">✅</text>
+      <text class="care-success-text">{{careSuccessBannerText}}</text>
+    </view>
+  </view>
+
   <view class="poster-modal" wx:if="{{showPoster}}" bindtap="closePoster">
     <view class="modal-mask"></view>
     <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
