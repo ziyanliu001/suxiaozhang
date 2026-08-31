@@ -3,5 +3,6 @@
     "openapi": [
       "ocr.printedText"
     ]
-  }
+  },
+  "timeout": 20
 }

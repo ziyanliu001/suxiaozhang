@@ -6478,10 +6478,16 @@ Page({
         try {
           const tempFilePath = chooseRes.tempFiles[i].tempFilePath;
           const base64Data = fs.readFileSync(tempFilePath, 'base64');
+          // 🐛（2026-08-31 追加修复 -504003 超时）checkImageContent/config.json
+          // 已把云函数自身的执行超时从默认 3s 调到 20s，这里的客户端等待上限
+          // 不能继续用 callFunctionWithTimeout 的默认值 8000ms——8s 比云函数
+          // 自己允许跑的 20s 还短，客户端会先一步判定"调用超时"报错，而云函数
+          // 其实还在合法执行窗口内，两边超时预算不对齐等于新配置白改。这里显式
+          // 传 25000ms，比云端 20s 上限再留 5s 网络往返余量
           const checkRes = await callFunctionWithTimeout({
             name: 'checkImageContent',
             data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
-          });
+          }, 25000);
           const resultData = checkRes.result as any;
 
           if (resultData && !resultData.isSafe) {
@@ -6516,10 +6522,17 @@ Page({
           });
           uploadedFileIds.push(uploadRes.fileID);
 
+          // 🐛（2026-08-31 追加修复 -504003 超时）同上：ocrExpenseReceipt/config.json
+          // 云函数执行超时已调到 20s（原来没配置字段，走平台默认 3s，这才是
+          // "-504003 FUNCTIONS_TIME_LIMIT_EXCEEDED"报错的真实根因——单张小票
+          // OCR 涉及 getTempFileURL/downloadFile 兜底 + 调用腾讯云 OCR 接口的
+          // 完整网络往返，3s 在弱网/冷启动下很容易不够），客户端等待上限同步
+          // 从默认 8000ms 提到 25000ms，与上面 checkImageContent 保持一致的
+          // 5s 余量原则
           const ocrRes = await callFunctionWithTimeout({
             name: 'ocrExpenseReceipt',
             data: { fileID: uploadRes.fileID }
-          });
+          }, 25000);
 
           const result = ocrRes.result as any;
           if (result && result.success && (result.amount || result.totalAmount)) {
