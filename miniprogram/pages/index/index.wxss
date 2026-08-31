@@ -2743,6 +2743,21 @@ textarea, .textarea {
   color: #e53935;
 }
 
+/* 🌾（2026-08-31 物资解析预览）物资标签：与本文件其它"物资/护持"语境
+   （如 .culture-toggle-item 的雨花家风落款开关）同一套琥珀色调，
+   与「爱心支持明细」预览列表共用的 .item-name/.item-amount 区分开——
+   物资场景多一个"品名"字段，需要独立的视觉锚点 */
+.material-tag {
+  font-size: 22rpx;
+  color: #B45309;
+  background: #FFF9F0;
+  border: 1rpx solid #FFE8CC;
+  border-radius: 8rpx;
+  padding: 4rpx 10rpx;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+}
+
 .preview-errors {
   margin-top: 16rpx;
   padding-top: 16rpx;

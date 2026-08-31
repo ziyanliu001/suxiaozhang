@@ -179,12 +179,24 @@ export function parseMaterials(text: string): MaterialItem[] {
         });
       }
     } else {
-      // 尝试简单格式：直接"大米50斤"（匿名服务记录）
+      // 🐛（2026-08-31 追加修复）此前无冒号分隔时一律当"匿名服务记录"整体
+      // 处理——"张三: 大米50斤"能正确拆出捐赠人，但没有冒号的"李四 爱心面粉
+      // 2袋"/"王五 苹果3箱"这类同样常见的口语化写法，会把"李四""王五"错误
+      // 并入物资描述本身（item 变成"李四 爱心面粉"），姓名却被填成"匿名爱心
+      // 人士"——姓名信息没丢，只是被安错了地方。
+      // 先按原逻辑提取出数量/单位之前的剩余文本 beforeQty，再看这段文本里
+      // 有没有空格：有（如"李四 爱心面粉"）就取第一个空格前的词当捐赠人、
+      // 其余当物资描述；完全没有分隔符（如"大米50斤"或"王五苹果3箱"全部
+      // 连写）时无法可靠区分姓名和物资，保留原有"匿名爱心人士"兜底，不做
+      // 没有把握的猜测拼接（宁可保守，不臆造一个可能是错的姓名）
       const simpleMatch = trimmed.match(/^(?:赞助\s*)?(.+?)\s*(\d+(?:\.\d+)?)\s*(斤|公斤|kg|箱|袋|桶|瓶|份|个)?$/i);
       if (simpleMatch) {
+        const beforeQty = simpleMatch[1].trim();
+        const spaceIdx = beforeQty.indexOf(' ');
+        const hasNameSeparator = spaceIdx > 0 && spaceIdx < beforeQty.length - 1;
         materials.push({
-          donor: '匿名爱心人士',
-          item: simpleMatch[1].trim(),
+          donor: hasNameSeparator ? beforeQty.slice(0, spaceIdx).trim() : '匿名爱心人士',
+          item: hasNameSeparator ? beforeQty.slice(spaceIdx + 1).trim() : beforeQty,
           quantity: simpleMatch[2],
           unit: simpleMatch[3] || '份'
         });

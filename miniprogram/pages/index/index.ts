@@ -511,6 +511,11 @@ Page({
     computedTodayBalance: '0.00',
     inputMode: 'text',
     isScanningDonorList: false,
+    // 🌾（2026-08-31 爱心物资拍照识别）与 isScanningDonorList 同一套设计，
+    // 独立命名/独立状态位——物资识图与爱心支持明细识图是两条完全独立的
+    // 识别流程（不同云函数、不同解析口径），不共用同一个 loading 标志，
+    // 避免两个入口互相锁死彼此的按钮态
+    isScanningMaterialList: false,
     showFrequentDonorModal: false,
     frequentDonorList: [] as { name: string; count: number }[],
     // 🌟 高频账目模板：门店常用支出项目速录（云端存储，店长/财务/超管维护，全员可用）
@@ -6813,10 +6818,16 @@ Page({
         const uploadRes = await wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath });
         uploadedFileId = uploadRes.fileID;
 
+        // 🐛（2026-08-31 追加修复）ocrDonationList/config.json 此前没有
+        // timeout 字段，走平台默认 3s 执行上限，与 ocrExpenseReceipt/
+        // checkImageContent 是同一类问题（见更早一次会话的 -504003 根因
+        // 排查），这次一并补上 timeout:20；客户端等待上限同步从默认
+        // 8000ms 提到 25000ms，避免服务端窗口延长后客户端反而先一步判定
+        // "调用超时"
         const ocrRes = await callFunctionWithTimeout({
           name: 'ocrDonationList',
           data: { fileID: uploadedFileId }
-        });
+        }, 25000);
 
         const result = ocrRes.result as any;
         if (result && result.success && result.formattedText) {
@@ -6881,6 +6892,184 @@ Page({
     }
   },
 
+  // 🌾（2026-08-31 爱心物资拍照识别）与 chooseDonorScreenshotSafe 同一套
+  // 已修复实现（不套 withTimeout 竞速定时器——真机日志证明过给"用户在原生
+  // 相册面板里挑图"这件事设固定时长超时本身就会导致连续点击唤不起相册，
+  // 详见 chooseDonorScreenshotSafe 头部注释），独立复制一份而不是抽公共
+  // 函数共用：两个入口的 loading/dedup/错误提示状态完全独立，硬耦合在一起
+  // 反而增加意外互相影响的风险，各自维护一份更简单可靠
+  chooseMaterialScreenshotSafe(): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const fallbackToChooseImage = () => {
+        wx.chooseImage({
+          count: 1,
+          sourceType: ['album', 'camera'],
+          success: (res) => resolve(res.tempFilePaths[0]),
+          fail: (fallbackErr) => reject(fallbackErr)
+        });
+      };
+
+      if (!wx.canIUse('chooseMedia')) {
+        fallbackToChooseImage();
+        return;
+      }
+
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+        success: (res) => {
+          const tempFilePath = res.tempFiles && res.tempFiles[0] && res.tempFiles[0].tempFilePath;
+          if (tempFilePath) {
+            resolve(tempFilePath);
+          } else {
+            reject(new Error('chooseMedia 未返回图片路径'));
+          }
+        },
+        fail: (err) => {
+          const errMsg = (err && err.errMsg) || '';
+          if (errMsg.includes('cancel')) {
+            reject(err);
+            return;
+          }
+          console.warn('[chooseMaterialScreenshotSafe] chooseMedia 调用失败，降级到 wx.chooseImage:', err);
+          fallbackToChooseImage();
+        }
+      });
+    });
+  },
+
+  // 🌾 爱心物资明细·图片识别：拍摄/截图手写物资登记册或群接龙截图，OCR 识别
+  // "捐赠人+物资+数量单位"明细，自动追加进物资文本框。识别只负责"认字配对"，
+  // 绝不在云函数里做单位换算/汇总——结果统一交给前端唯一权威的
+  // parseMaterials（经 updateMaterialsParse 调用）解析，与手动粘贴走的是
+  // 完全相同的一条路径，不会另开一套计算逻辑
+  async onScanMaterialScreenshot() {
+    if (this.data.isScanningMaterialList) {
+      const stuckDuration = Date.now() - (this._scanMaterialStartedAt || 0);
+      if (stuckDuration > 20000) {
+        console.warn('[onScanMaterialScreenshot] 检测到孤儿态（isScanningMaterialList 卡住超过', stuckDuration, 'ms），强制复位后继续本次点击');
+        wx.hideLoading();
+        this.setData({ isScanningMaterialList: false });
+      } else {
+        wx.showToast({ title: '识别中，请稍候', icon: 'none' });
+        return;
+      }
+    }
+    this._scanMaterialStartedAt = Date.now();
+
+    try {
+      if (!isCloudAvailable()) {
+        wx.showToast({ title: '云服务暂不可用，无法使用图片识别', icon: 'none' });
+        return;
+      }
+
+      wx.showLoading({ title: '正在打开相册...', mask: true });
+      const tempFilePath = await this.chooseMaterialScreenshotSafe();
+      wx.hideLoading();
+      if (!tempFilePath) return;
+
+      // 与爱心支持明细共用同一份本会话内 MD5 去重记录——不同识别目标复用
+      // 同一张原图理论上也该被拦下，无需为物资识图另开一份哈希表
+      const fs = wx.getFileSystemManager();
+      const fileBuffer = fs.readFileSync(tempFilePath) as ArrayBuffer;
+      const imageHash = md5(fileBuffer);
+
+      if (!Array.isArray(this._uploadedImageHashes)) {
+        this._uploadedImageHashes = [];
+      }
+
+      if (this._uploadedImageHashes.includes(imageHash)) {
+        wx.showModal({
+          title: '系统提示',
+          content: '您已上传过此图片，请勿重复提交相同截图。',
+          showCancel: false
+        });
+        return;
+      }
+      this._uploadedImageHashes.push(imageHash);
+
+      this.setData({ isScanningMaterialList: true });
+      wx.showLoading({ title: '图片合规核验中...', mask: true });
+
+      let uploadedFileId = '';
+
+      try {
+        // 🛡️ 图片合规预检：与 onScanReceiptPhoto 同一套做法（try/catch 包裹，
+        // 检测接口本身异常时降级放行、不拦死整个识别流程，只有明确判定
+        // isSafe===false 才拦截），本文件没有一个统一的"安全检测能力是否
+        // 可用"探测函数，不额外造一个
+        try {
+          const base64Data = fs.readFileSync(tempFilePath, 'base64');
+          const checkRes = await callFunctionWithTimeout({
+            name: 'checkImageContent',
+            data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
+          }, 25000);
+          const resultData = checkRes.result as any;
+
+          if (resultData && !resultData.isSafe) {
+            wx.hideLoading();
+            wx.showModal({
+              title: '⚠️ 违规内容拦截',
+              content: '系统检测到您选择的图片包含不合规、敏感或非法广告内容，已被全量阻断，请重新拍摄上传真实合规图片！',
+              showCancel: false,
+              confirmColor: '#D32F2F'
+            });
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('🛡️ 图片安全预读失败，降级放行:', checkErr);
+        }
+
+        wx.showLoading({ title: 'AI 识别中...', mask: true });
+
+        const fileName = 'material_screenshots/' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.jpg';
+        const uploadRes = await wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath });
+        uploadedFileId = uploadRes.fileID;
+
+        const ocrRes = await callFunctionWithTimeout({
+          name: 'ocrMaterialList',
+          data: { fileID: uploadedFileId }
+        }, 25000);
+
+        const result = ocrRes.result as any;
+        if (result && result.success && result.formattedText) {
+          const current = (this.data.materialsInput || '').trim();
+          const merged = current ? (current + '\n' + result.formattedText) : result.formattedText;
+
+          this.updateMaterialsParse(merged);
+          this.debouncedSaveDraft();
+
+          wx.showToast({ title: `已识别 ${result.totalCount} 条物资明细，请核对`, icon: 'none', duration: 2500 });
+        } else {
+          wx.showModal({
+            title: '识别失败',
+            content: (result && result.errMsg) || '未能从图片中识别出有效的物资明细，请手动录入或换一张更清晰的图片',
+            showCancel: false,
+            confirmText: '知道了'
+          });
+        }
+      } finally {
+        if (uploadedFileId) {
+          wx.cloud.deleteFile({ fileList: [uploadedFileId] }).catch((err: any) => {
+            console.warn('[onScanMaterialScreenshot] 清理截图失败:', err);
+          });
+        }
+      }
+    } catch (e: any) {
+      const errMsg = e.errMsg || e.message || '';
+      console.warn('[onScanMaterialScreenshot] 捕获到异常:', e);
+      if (errMsg.includes('cancel')) {
+        return;
+      }
+      wx.showToast({ title: '识别失败：' + (e.message || errMsg || '未知错误'), icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ isScanningMaterialList: false });
+    }
+  },
+
   _pendingOcrResults: [],
   _pendingOcrFileIds: [],
   _ocrPendingResults: [],
@@ -6892,6 +7081,9 @@ Page({
   // 🛡️ 见 onScanDonorScreenshot 头部"孤儿态兜底"注释：记录本次识别发起的时间戳，
   // 用于判断 isScanningDonorList 卡住是否已经超出合理时长，纯实例属性
   _scanDonorStartedAt: 0 as number,
+  // 🛡️ 见 onScanMaterialScreenshot 头部注释：与 _scanDonorStartedAt 同一套
+  // 孤儿态兜底判断，独立命名，不共用同一个时间戳
+  _scanMaterialStartedAt: 0 as number,
 
   // 🌟 图文同屏对比：点击小票缩略图直接原生放大查看原图
   onPreviewOcrReceiptImage(e: any) {

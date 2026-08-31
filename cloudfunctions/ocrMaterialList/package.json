@@ -1,0 +1,9 @@
+{
+  "name": "ocrMaterialList",
+  "version": "1.0.0",
+  "description": "爱心物资登记册/接龙截图 OCR 识别，提取物资明细（捐赠人+物资+数量单位）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

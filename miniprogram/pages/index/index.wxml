@@ -1046,17 +1046,50 @@
     <!-- Card B: 物资赞助与服务统计卡片 -->
     <view class="ui-card-wrapper stats-grid-card">
       <view class="form-sub-block">
-        <view class="block-title"><view class="idx-icon-sm idx-icon-box"></view> 爱心物资明细 <text class="optional-tag">(选填)</text></view>
+        <!-- 🌾（2026-08-31 多模态录入升级）对齐「爱心支持明细」的
+             .entry-mode-segmented + 一次性识图按钮：物资只有"粘贴/速记"这
+             一种持续输入方式（不像爱心支持明细还有独立的"逐条"表单模式），
+             "拍照识别"不是一个持续切换的模式，是一次性动作——识别完成后
+             直接把结果追加进下方文本框并原地重新解析，与手动粘贴走完全
+             相同的一条路径（updateMaterialsParse → parseMaterials） -->
+        <view class="block-title-row" style="display: flex !important; justify-content: space-between !important; align-items: center !important; margin-bottom: 16rpx !important;">
+          <view class="block-title no-margin" style="display: flex !important; align-items: center !important;">
+            <view class="idx-icon-sm idx-icon-box"></view> 爱心物资明细 <text class="optional-tag">(选填)</text>
+          </view>
+          <view class="entry-mode-segmented">
+            <view class="segment-btn active">
+              <text class="txt">📋 粘贴/速记</text>
+            </view>
+            <view
+              class="segment-btn segment-btn-ocr {{isScanningMaterialList ? 'active' : ''}}"
+              bindtap="onScanMaterialScreenshot"
+            >
+              <text class="txt">📷 拍照识别</text>
+            </view>
+          </view>
+        </view>
         <view class="input-wrapper-inner">
-          <textarea 
-            class="single-line-textarea" 
-            value="{{materialsInput}}" 
+          <textarea
+            class="single-line-textarea"
+            value="{{materialsInput}}"
             placeholder="示例：张三: 大米50斤；李四: 食用油2箱"
             bindinput="onMaterialsInput"
             data-field="materialsInput"
             auto-height
             maxlength="-1"
           />
+        </view>
+
+        <!-- 🌾 物资解析预览：复用「解析结果预览」同一套 .preview-item/.item-idx
+             序号样式；materials 由 updateMaterialsParse 在每次输入变化时
+             实时算好（parseMaterials，见 utils/parser.ts），不是这里现算 -->
+        <view class="preview-list" wx:if="{{materials.length > 0}}">
+          <view class="preview-item" wx:for="{{materials}}" wx:key="index">
+            <text class="item-idx">{{index + 1}}.</text>
+            <text class="material-tag">🌾 {{item.item}}</text>
+            <text class="item-name">{{item.donor}}</text>
+            <text class="item-amount">{{item.quantity}}{{item.unit}}</text>
+          </view>
         </view>
       </view>
 
@@ -1075,84 +1108,98 @@
           </view>
         </view>
 
-        <!-- 🛡️ 2×4 对称宫格：3 行双列宫格 + 1 行全宽工时横条，消除孤格视觉失衡
-             真机布局保险：关键容器叠加行内 style + !important，不依赖 WXSS 命中 -->
-        <view class="stats-grid-container" style="display: flex !important; flex-direction: column !important; gap: 12rpx !important; width: 100% !important; margin: 16rpx 0 24rpx !important;">
-          <!-- 第一行：堂食/用餐 | 送餐/外送（标签由 storeTargetLabels 动态配置） -->
-          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.dineInLabel}}</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{dineInSeniors}}" placeholder="0" bindinput="onInput" data-field="dineInSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+        <!-- 🛡️（2026-08-31 分组重构）此前是一条不分主次的"2×4 宫格"，第二行把
+             "打包"（用餐人群）和"到岗志愿者"（义工团队）硬凑一行，混淆了两种
+             性质完全不同的统计口径。改成两个带小标题的分组子卡片——用餐人群
+             （堂食/送餐/打包，3 项）与义工团队（到岗/送餐志愿者/陪伴义工/
+             服务工时/自动汇总总人次，5 项），组内仍按 2 列宫格排布、奇数项
+             用一个不可见的等宽 spacer 补位对齐，不改变任何字段/校验/提交逻辑，
+             只是重新分组视觉层级。真机布局保险：关键容器继续叠加行内
+             style + !important，不依赖 WXSS 命中，与本文件既有写法一致 -->
+        <view class="stats-grid-container" style="display: flex !important; flex-direction: column !important; gap: 20rpx !important; width: 100% !important; margin: 16rpx 0 24rpx !important;">
+          <!-- 用餐人群分组：堂食/送餐/打包 -->
+          <view class="stats-group">
+            <text class="stats-group-title" style="display: block !important; font-size: 22rpx !important; font-weight: 600 !important; color: #B45309 !important; margin-bottom: 10rpx !important;">🍚 用餐人群</text>
+            <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important; margin-bottom: 12rpx !important;">
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.dineInLabel}}</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="number" confirm-type="next" value="{{dineInSeniors}}" placeholder="0" bindinput="onInput" data-field="dineInSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                </view>
+              </view>
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.deliveryLabel}}</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="number" confirm-type="next" value="{{deliverySeniors}}" placeholder="0" bindinput="onInput" data-field="deliverySeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                </view>
               </view>
             </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.deliveryLabel}}</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{deliverySeniors}}" placeholder="0" bindinput="onInput" data-field="deliverySeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+            <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.takeoutLabel}}</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="number" confirm-type="next" value="{{takeawayCount}}" placeholder="0" bindinput="onInput" data-field="takeawayCount" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">份</text>
+                </view>
               </view>
-            </view>
-          </view>
-
-          <!-- 第二行：打包/物资 | 到岗志愿者 -->
-          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">{{storeTargetLabels.takeoutLabel}}</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{takeawayCount}}" placeholder="0" bindinput="onInput" data-field="takeawayCount" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">份</text>
-              </view>
-            </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">到岗志愿者</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{dineInVolunteers}}" placeholder="0" bindinput="onInput" data-field="dineInVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
-              </view>
-            </view>
-          </view>
-
-          <!-- 第三行：送餐志愿者 | 🎧 倾听陪伴（绿色主题） -->
-          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">送餐志愿者</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{deliveryVolunteers}}" placeholder="0" bindinput="onInput" data-field="deliveryVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
-              </view>
-            </view>
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #BBF7D0 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #15803D !important; white-space: nowrap !important;">🎧 {{storeTargetLabels.listenLabel}}</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="number" value="{{listeningSeniors}}" placeholder="0" bindinput="onInput" data-field="listeningSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #15803D !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
-              </view>
-              <text style="font-size: 18rpx !important; color: #475569 !important; white-space: nowrap !important;">陪伴/关怀</text>
+              <!-- 奇数项占位 spacer：不可见，只为了让上面这个单项与相邻分组的两列宫格保持同宽对齐 -->
+              <view style="flex: 1 !important;"></view>
             </view>
           </view>
 
-          <!-- 第四行：⏱️ 服务总工时（可输入）| 🤝 志愿者总人次（自动汇总） -->
-          <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
-            <!-- 服务总工时：手动可调，支持打卡数据自动联动 -->
-            <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">⏱️ 服务工时</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <input class="stats-input" type="digit" value="{{volunteerHours}}" placeholder="0" bindinput="onInput" data-field="volunteerHours" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">小时</text>
+          <!-- 义工团队分组：到岗/送餐志愿者、陪伴义工、服务工时、自动汇总总人次 -->
+          <view class="stats-group">
+            <text class="stats-group-title" style="display: block !important; font-size: 22rpx !important; font-weight: 600 !important; color: #B45309 !important; margin-bottom: 10rpx !important;">🙋 义工团队</text>
+            <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important; margin-bottom: 12rpx !important;">
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">到岗志愿者</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="number" confirm-type="next" value="{{dineInVolunteers}}" placeholder="0" bindinput="onInput" data-field="dineInVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                </view>
               </view>
-              <!-- 🔗 打卡工时联动提示（云端汇总时显示） -->
-              <text wx:if="{{checkInHoursTip}}" style="font-size: 18rpx !important; color: #059669 !important; text-align: center !important; line-height: 1.4 !important; padding: 0 6rpx !important;">{{checkInHoursTip}}</text>
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">送餐志愿者</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="number" confirm-type="next" value="{{deliveryVolunteers}}" placeholder="0" bindinput="onInput" data-field="deliveryVolunteers" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人</text>
+                </view>
+              </view>
             </view>
-            <!-- 志愿者总人次：只读展示，由到岗+送餐志愿者自动汇总 -->
-            <view class="stats-card-item" style="flex: 1 !important; background: #F8F9FA !important; border: 1rpx solid #E9ECEF !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
-              <text class="stats-item-label" style="font-size: 22rpx !important; color: #6B7280 !important; white-space: nowrap !important;">🤝 总人次</text>
-              <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
-                <text style="font-size: 32rpx !important; font-weight: bold !important; color: #374151 !important; min-width: 72rpx !important; text-align: center !important; line-height: 48rpx !important;">{{totalVolunteers}}</text>
-                <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
+            <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important; margin-bottom: 12rpx !important;">
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #BBF7D0 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #15803D !important; white-space: nowrap !important;">🎧 {{storeTargetLabels.listenLabel}}</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="number" confirm-type="next" value="{{listeningSeniors}}" placeholder="0" bindinput="onInput" data-field="listeningSeniors" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #15803D !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
+                </view>
+                <text style="font-size: 18rpx !important; color: #475569 !important; white-space: nowrap !important;">陪伴/关怀</text>
               </view>
-              <text style="font-size: 18rpx !important; color: #94A3B8 !important; white-space: nowrap !important;">自动汇总</text>
+              <!-- 服务总工时：手动可调，支持打卡数据自动联动 -->
+              <view class="stats-card-item" style="flex: 1 !important; background: #FFFFFF !important; border: 1rpx solid #F0E8D8 !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #7A6343 !important; white-space: nowrap !important;">⏱️ 服务工时</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <input class="stats-input" type="digit" confirm-type="next" value="{{volunteerHours}}" placeholder="0" bindinput="onInput" data-field="volunteerHours" style="width: 72rpx !important; height: 48rpx !important; text-align: center !important; font-size: 32rpx !important; font-weight: bold !important; color: #D9531E !important;" />
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">小时</text>
+                </view>
+                <!-- 🔗 打卡工时联动提示（云端汇总时显示） -->
+                <text wx:if="{{checkInHoursTip}}" style="font-size: 18rpx !important; color: #059669 !important; text-align: center !important; line-height: 1.4 !important; padding: 0 6rpx !important;">{{checkInHoursTip}}</text>
+              </view>
+            </view>
+            <view class="stats-grid-row" style="display: flex !important; flex-direction: row !important; gap: 12rpx !important; width: 100% !important;">
+              <!-- 志愿者总人次：只读展示，由到岗+送餐志愿者自动汇总 -->
+              <view class="stats-card-item" style="flex: 1 !important; background: #F8F9FA !important; border: 1rpx solid #E9ECEF !important; border-radius: 16rpx !important; padding: 16rpx 4rpx !important; display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4rpx !important;">
+                <text class="stats-item-label" style="font-size: 22rpx !important; color: #6B7280 !important; white-space: nowrap !important;">🤝 总人次</text>
+                <view class="stats-input-wrap" style="display: flex !important; align-items: baseline !important; justify-content: center !important;">
+                  <text style="font-size: 32rpx !important; font-weight: bold !important; color: #374151 !important; min-width: 72rpx !important; text-align: center !important; line-height: 48rpx !important;">{{totalVolunteers}}</text>
+                  <text class="stats-unit" style="font-size: 18rpx !important; color: #999999 !important;">人次</text>
+                </view>
+                <text style="font-size: 18rpx !important; color: #94A3B8 !important; white-space: nowrap !important;">自动汇总</text>
+              </view>
+              <!-- 奇数项占位 spacer -->
+              <view style="flex: 1 !important;"></view>
             </view>
           </view>
         </view>
