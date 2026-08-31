@@ -3115,6 +3115,13 @@ page {
   border: 1rpx solid rgba(156, 163, 175, 0.25);
 }
 
+/* 🆕（2026-08-31 商业化权益中心）免费版锁定态：浅橙色调，与"告急"红色/
+   "核验中"灰色区分，避免读成一条负面告警 */
+.audit-proof-LOCKED {
+  background: rgba(217, 72, 14, 0.06);
+  border: 1rpx solid rgba(217, 72, 14, 0.18);
+}
+
 .audit-proof-icon {
   font-size: 22rpx;
   flex-shrink: 0;
@@ -3907,6 +3914,134 @@ page {
   font-size: 26rpx;
   color: #495057;
   line-height: 1.6;
+}
+
+/* 🆕（2026-08-31 商业化权益中心）机构 SaaS 权益看板：半屏弹窗，与页面其余
+   .patch-modal-mask 居中弹窗风格区分——底部贴边 + 圆角顶部，符合"半屏"要求 */
+.saas-benefits-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+}
+
+.saas-benefits-sheet {
+  width: 100%;
+  background: #FFFFFF;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 16rpx 32rpx calc(40rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.sbs-handle {
+  width: 72rpx;
+  height: 8rpx;
+  background: #E9ECEF;
+  border-radius: 4rpx;
+  margin: 0 auto 24rpx;
+}
+
+.sbs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28rpx;
+}
+
+.sbs-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.sbs-quota-block {
+  background: #FFF9F0;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 28rpx;
+}
+
+.sbs-quota-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14rpx;
+}
+
+.sbs-expire-row {
+  margin-bottom: 0;
+}
+
+.sbs-quota-label {
+  font-size: 24rpx;
+  color: #868E96;
+}
+
+.sbs-quota-value {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #D9480E;
+}
+
+.sbs-progress-track {
+  width: 100%;
+  height: 14rpx;
+  background: #FFE8CC;
+  border-radius: 7rpx;
+  overflow: hidden;
+  margin-bottom: 14rpx;
+}
+
+.sbs-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FFA94D, #D9480E);
+  border-radius: 7rpx;
+}
+
+.sbs-expiring-tag {
+  margin-top: 14rpx;
+  font-size: 22rpx;
+  color: #E8590C;
+  font-weight: 600;
+}
+
+.sbs-features {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-bottom: 32rpx;
+}
+
+.sbs-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.sbs-feature-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+}
+
+.sbs-feature-text {
+  font-size: 26rpx;
+  color: #343A40;
+}
+
+.sbs-cta-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  background: linear-gradient(135deg, #FFA94D, #D9480E);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
 }
 
 .custom-store-search-input {

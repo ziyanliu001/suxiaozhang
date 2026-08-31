@@ -46,8 +46,20 @@ const DEFAULT_DAILY_EXPENSE_FALLBACK = 150;
 // 🏛️ 这里只是"展示用量"，不做任何放行/拦截判断——与本文件"全国大屏查看
 // 权限不挂钩订阅套餐"的双轨制原则（见 CLAUDE.md）不冲突
 const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
-const PLAN_NAME_MAP = { basic: '基础版', pro: '专业版', enterprise: '旗舰版' };
 const SUBSCRIPTION_GRACE_PERIOD_DAYS = 7;
+// 🆕（2026-08-31 商业化权益中心）商业化展示口径：内部 planType 仍是
+// 'basic'/'pro'/'enterprise'（tenant_subscriptions 唯一真源字段值，与
+// PLAN_STORE_LIMITS/checkTenantPermission/profile.ts 等处一致，不重命名），
+// planCode/planName 只是本次新增的"对外展示别名"，不引入新的底层数据模型
+const PLAN_CODE_MAP = { basic: 'free', pro: 'pro', enterprise: 'enterprise' };
+function buildPlanName(planType, maxStores) {
+  if (planType === 'pro') return `专业版 (${maxStores}店)`;
+  if (planType === 'enterprise') return `旗舰版 (${maxStores}店)`;
+  return '基础免费版';
+}
+// 🆕 临期提醒阈值：与"续费宽限期"（SUBSCRIPTION_GRACE_PERIOD_DAYS，到期后
+// 才生效）是两个不同方向的时间窗——这个是"还没到期，但快了"的提前预警
+const EXPIRING_SOON_THRESHOLD_DAYS = 30;
 
 function isoDateNDaysAgo(n) {
   const d = new Date();
@@ -259,13 +271,23 @@ exports.main = async (event, context) => {
     // 字段（createStore/manageTenantSubscription 原子自增写入的唯一真源）
     const usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
 
-    // 🆕 机构套餐配额感知：默认兜底为 basic/永久有效——与 tenant_subscriptions
-    // 从未有过记录（该机构还没触发过任何订阅写入）时的语义一致
+    // 🆕（2026-08-31 商业化权益中心）机构套餐配额感知升级：默认兜底为
+    // basic/free/永久有效——与 tenant_subscriptions 从未有过记录（该机构还
+    // 没触发过任何订阅写入）时的语义一致。features 三项衍生能力（合并导出/
+    // 调拨引擎/存证徽章）默认全部关闭，与"未订阅=free 档"一致
     let subscriptionQuota = {
-      planName: PLAN_NAME_MAP.basic,
+      planCode: PLAN_CODE_MAP.basic,
+      planName: buildPlanName('basic', PLAN_STORE_LIMITS.basic),
       activeStores: usedStoreCount,
       maxStores: PLAN_STORE_LIMITS.basic,
-      expireDateText: '永久有效'
+      usagePercent: PLAN_STORE_LIMITS.basic > 0 ? Math.round((usedStoreCount / PLAN_STORE_LIMITS.basic) * 100) : 0,
+      isExpiringSoon: false,
+      expireDateText: '永久有效',
+      features: {
+        canExportNationalExcel: false,
+        canUseRebalanceEngine: false,
+        canAccessAuditProof: false
+      }
     };
     try {
       const subRes = await db.collection('tenant_subscriptions')
@@ -291,24 +313,45 @@ exports.main = async (event, context) => {
         // 或显式 isLifetimeGrant 标记判定"永久有效"，不靠到期日期形状反推
         const isPerpetual = planType === 'basic' || (!isExpired && !!sub.isLifetimeGrant);
         let expireDateText = '永久有效';
+        let isExpiringSoon = false;
         if (!isPerpetual && sub.serviceExpireDate) {
           const d = new Date(sub.serviceExpireDate);
           if (!Number.isNaN(d.getFullYear())) {
             expireDateText = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            // 🆕 临期提醒：只在"尚未到期"这一侧生效（rawExpired 为 false），
+            // 已过期/宽限期内走的是另一套"续费"提示语境，不叠加"即将到期"文案
+            if (!rawExpired) {
+              const daysUntilExpire = Math.floor((expireTime - Date.now()) / (24 * 3600 * 1000));
+              isExpiringSoon = daysUntilExpire >= 0 && daysUntilExpire <= EXPIRING_SOON_THRESHOLD_DAYS;
+            }
           } else {
             expireDateText = '到期日异常';
           }
         }
+        // 🆕 衍生能力商业化鉴权：合并导出/调拨引擎/存证徽章统一按"是否
+        // pro/enterprise 且未到期降级"判定，与 exportAccountExcel 的
+        // isNationalExport 硬校验、本文件下方 rebalanceSuggestions/
+        // auditProofSummary 的服务端强鉴权共用同一个 isAdvancedPlan 结果，
+        // 三处判断逻辑不允许出现"前端显示能用、服务端却拒绝"或反过来的偏差
+        const isAdvancedPlan = planType === 'pro' || planType === 'enterprise';
         subscriptionQuota = {
-          planName: PLAN_NAME_MAP[planType] || PLAN_NAME_MAP.basic,
+          planCode: PLAN_CODE_MAP[planType] || PLAN_CODE_MAP.basic,
+          planName: buildPlanName(planType, maxStores),
           activeStores: usedStoreCount,
           maxStores,
-          expireDateText
+          usagePercent: maxStores > 0 ? Math.round((usedStoreCount / maxStores) * 100) : 0,
+          isExpiringSoon,
+          expireDateText,
+          features: {
+            canExportNationalExcel: isAdvancedPlan,
+            canUseRebalanceEngine: isAdvancedPlan,
+            canAccessAuditProof: isAdvancedPlan
+          }
         };
       }
     } catch (err) {
       // tenant_subscriptions 集合可能尚未创建（该机构从未触发过任何订阅写入），
-      // 沿用上面 basic 兜底值，不影响主统计
+      // 沿用上面 basic/free 兜底值，不影响主统计
     }
 
     // 🏛️ 架构共识（工作空间 vs 全国大屏双轨制，见 CLAUDE.md）：本大屏属于
@@ -1257,8 +1300,13 @@ exports.main = async (event, context) => {
         stapleUrgent: !!s.stapleUrgent,
         volunteerDeficit,
         // 🆕 审计存证指纹打标：门店最新一条记录是否已财务稽核封账
-        // （AUDITED_LOCKED），公信力等级高于普通 APPROVED，供前端展示合规标识
-        hasAuditProof: !!s.hasAuditProof,
+        // （AUDITED_LOCKED），公信力等级高于普通 APPROVED，供前端展示合规标识。
+        // 🏛️（2026-08-31 商业化权益中心）存证验真徽章是"审计增值服务"付费层，
+        // 服务端按 subscriptionQuota.features.canAccessAuditProof 强鉴权——
+        // 免费版门店哪怕自己确实已财务稽核封账，也不下发这个徽章标记，只是
+        // 不展示"徽章"这一层商业化包装，不影响该门店 report_logs 里
+        // approvalStatus/_checksum 本身的真实防篡改数据完整性
+        hasAuditProof: subscriptionQuota.features.canAccessAuditProof ? !!s.hasAuditProof : false,
         alertTags: fundingTags,
         costPerMeal,
         avgMealCost,
@@ -1395,6 +1443,12 @@ exports.main = async (event, context) => {
       typeof s.fundingDays === 'number' && s.fundingDays >= SURPLUS_FUNDING_DAYS_THRESHOLD && !s.isSeriouslyOffline
     );
     const rebalanceSuggestions = [];
+    // 🏛️（2026-08-31 商业化权益中心）跨店智能调拨撮合是"审计增值服务"付费层的
+    // 调拨引擎能力，服务端按 subscriptionQuota.features.canUseRebalanceEngine
+    // 强鉴权——免费版机构哪怕确实存在受援/支援门店，也不撮合、不下发建议，
+    // 与个人中心/大屏顶部套餐权益卡片描述的权益边界保持一致，不出现"前端说
+    // 没有这个权益、服务端却照样算好数据"的偏差
+    if (subscriptionQuota.features.canUseRebalanceEngine) {
     shortageStores.forEach(shortage => {
       // 优先撮合同城，同城没有充裕门店时退而求其次找同省——跨省调拨物流/
       // 人情成本都太高，不在轻量建议的范围内
@@ -1439,6 +1493,7 @@ exports.main = async (event, context) => {
         urgency
       });
     });
+    }
 
     // 🆕 阳光防篡改存证覆盖率（auditProofSummary）：覆盖率 = 封账且带签名的
     // 报表数 / 本次聚合范围内全部生效报表数（APPROVED + AUDITED_LOCKED），
@@ -1452,11 +1507,13 @@ exports.main = async (event, context) => {
     const chainStatus = (totalAuditedLocked === 0 || totalAuditedWithProof === totalAuditedLocked)
       ? 'SECURED'
       : 'VERIFYING';
-    const auditProofSummary = {
-      totalAuditedReports: totalAuditedWithProof,
-      auditCoverageRate,
-      chainStatus
-    };
+    // 🏛️（2026-08-31 商业化权益中心）存证验真徽章是"审计增值服务"付费层，
+    // 免费版机构不下发真实覆盖率/链路状态——只返回一个 locked 占位，前端据此
+    // 展示"🔒 存证验真为专业版/旗舰版专享"引导，而不是把 0% 覆盖率误展示成
+    // "这家机构完全没做财务核验"
+    const auditProofSummary = subscriptionQuota.features.canAccessAuditProof
+      ? { totalAuditedReports: totalAuditedWithProof, auditCoverageRate, chainStatus, locked: false }
+      : { totalAuditedReports: 0, auditCoverageRate: null, chainStatus: 'LOCKED', locked: true };
 
     const nationalSummary = {
       // 🆕 筛选态下，覆盖门店总数应反映当前筛选范围（targetStores），而不是本机构

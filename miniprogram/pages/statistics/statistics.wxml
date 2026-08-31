@@ -517,9 +517,15 @@
            对所有角色（含志工）一视同仁展示。chainStatus==='VERIFYING' 时
            换一种颜色提示"存在需要核查的数据完整性缺口"，不代表账目被篡改，
            不使用红色等报警色，避免和真正的资金/离线告警混淆 -->
-      <view class="audit-proof-badge audit-proof-{{nationalData.auditProofSummary.chainStatus}}" wx:if="{{nationalData.auditProofSummary}}">
+      <view class="audit-proof-badge audit-proof-{{nationalData.auditProofSummary.chainStatus}}" wx:if="{{nationalData.auditProofSummary && !nationalData.auditProofSummary.locked}}">
         <text class="audit-proof-icon">🛡️</text>
         <text class="audit-proof-text">财务核账存证保护中 · 覆盖率 {{nationalData.auditProofSummary.auditCoverageRate}}</text>
+      </view>
+      <!-- 🆕（2026-08-31 商业化权益中心）免费版存证徽章锁定态：仅管理者可点击
+           跳转权益看板，志工/普通角色只看到锁定提示文案，不响应点击 -->
+      <view class="audit-proof-badge audit-proof-LOCKED" wx:elif="{{nationalData.auditProofSummary && nationalData.auditProofSummary.locked}}" bindtap="{{isAdmin ? 'onShowSubscriptionQuotaDetail' : ''}}">
+        <text class="audit-proof-icon">🔒</text>
+        <text class="audit-proof-text">存证验真徽章为专业版/旗舰版专享{{isAdmin ? '，点击了解详情' : ''}}</text>
       </view>
 
       <!-- KPI 行：支持人次 + 现场随喜总额（随喜总额对志工脱敏） -->
@@ -991,6 +997,57 @@
         <button class="btn-modal-cancel" bindtap="onCloseNationalExcelExportModal" disabled="{{generatingNationalExcelExport}}">取消</button>
         <button class="btn-modal-submit" bindtap="onConfirmNationalExcelExport" disabled="{{generatingNationalExcelExport}}" loading="{{generatingNationalExcelExport}}">确认并导出</button>
       </view>
+    </view>
+  </view>
+
+  <!-- 🆕（2026-08-31 商业化权益中心）机构 SaaS 权益看板：顶部配额微章点击
+       后弹出的半屏弹窗，展示门店席位进度条 + 三项衍生能力开通状态。这是
+       "查看我当前用量"，唯一的套餐对比/定价真源仍是 profile.ts 的
+       showSubscriptionModal，本弹窗不重复一份定价文案，见
+       onShowSubscriptionQuotaDetail 头部注释 -->
+  <view class="saas-benefits-mask" wx:if="{{showSaasBenefitsModal}}" bindtap="onCloseSaasBenefitsModal">
+    <view class="saas-benefits-sheet" catchtap="noop">
+      <view class="sbs-handle"></view>
+      <view class="sbs-header">
+        <text class="sbs-title">📋 {{nationalData.subscriptionQuota.planName}} · 机构权益看板</text>
+        <text class="btn-close" bindtap="onCloseSaasBenefitsModal">✕</text>
+      </view>
+
+      <view class="sbs-quota-block">
+        <view class="sbs-quota-row">
+          <text class="sbs-quota-label">门店席位</text>
+          <text class="sbs-quota-value">{{nationalData.subscriptionQuota.activeStores}} / {{nationalData.subscriptionQuota.maxStores}}</text>
+        </view>
+        <view class="sbs-progress-track">
+          <view class="sbs-progress-fill" style="width:{{nationalData.subscriptionQuota.usagePercent > 100 ? 100 : nationalData.subscriptionQuota.usagePercent}}%"></view>
+        </view>
+        <view class="sbs-quota-row sbs-expire-row">
+          <text class="sbs-quota-label">有效期</text>
+          <text class="sbs-quota-value">{{nationalData.subscriptionQuota.expireDateText}}</text>
+        </view>
+        <view class="sbs-expiring-tag" wx:if="{{nationalData.subscriptionQuota.isExpiringSoon}}">⏰ 即将到期，建议尽快续费</view>
+      </view>
+
+      <view class="sbs-features">
+        <view class="sbs-feature-item">
+          <text class="sbs-feature-icon sbs-icon-on">✅</text>
+          <text class="sbs-feature-text">全网大屏总览（全部套餐可用）</text>
+        </view>
+        <view class="sbs-feature-item">
+          <text class="sbs-feature-icon {{nationalData.subscriptionQuota.features.canUseRebalanceEngine ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.subscriptionQuota.features.canUseRebalanceEngine ? '✅' : '🔒'}}</text>
+          <text class="sbs-feature-text">跨店智能调拨引擎</text>
+        </view>
+        <view class="sbs-feature-item">
+          <text class="sbs-feature-icon {{nationalData.subscriptionQuota.features.canExportNationalExcel ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.subscriptionQuota.features.canExportNationalExcel ? '✅' : '🔒'}}</text>
+          <text class="sbs-feature-text">多店合并阳光台账一键导出</text>
+        </view>
+        <view class="sbs-feature-item">
+          <text class="sbs-feature-icon {{nationalData.subscriptionQuota.features.canAccessAuditProof ? 'sbs-icon-on' : 'sbs-icon-off'}}">{{nationalData.subscriptionQuota.features.canAccessAuditProof ? '✅' : '🔒'}}</text>
+          <text class="sbs-feature-text">防篡改存证验真徽章</text>
+        </view>
+      </view>
+
+      <button class="sbs-cta-btn" bindtap="onConsultUpgrade">💬 扩容 / 续费咨询</button>
     </view>
   </view>
 

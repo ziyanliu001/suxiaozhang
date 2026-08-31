@@ -9,6 +9,40 @@ const _ = db.command;
 // 🆕 多店合并阳光台账导出（2026-08-31）：与 statistics.ts 页面顶部横幅
 // 「数据导出」发起的机构级合并导出对接，事件体新增 isNationalExport: true
 // 时生效——不改变默认单店/单 Sheet 导出路径的任何既有行为
+
+// 🏛️（2026-08-31 商业化权益中心）机构多店合并导出是"审计增值服务"付费层
+// 能力，与 cloudfunctions/getNationalDashboard 的 subscriptionQuota.features.
+// canExportNationalExcel 判断口径必须一致——各云函数独立部署，无共享模块
+// 机制，这是本仓库一贯做法（同一份 tenant_subscriptions 查询/宽限期逻辑，
+// 在 checkTenantPermission/getNationalDashboard/本文件各自维护一份拷贝）
+const SUBSCRIPTION_GRACE_PERIOD_DAYS = 7;
+
+// 判断该机构当前是否为未到期的 pro/enterprise 档——只做"是/否"判断，不需要
+// 像 checkTenantPermission 那样返回完整的展示字段（storeLimit/expireDateText
+// 等），这里只服务于 isNationalExport 的服务端硬校验
+async function isAdvancedPlanActive(tenantId) {
+  try {
+    const subRes = await db.collection('tenant_subscriptions')
+      .where({ tenantId })
+      .orderBy('lastRenewedAt', 'desc')
+      .limit(1)
+      .get();
+    const sub = subRes.data && subRes.data[0];
+    if (!sub) return false;
+    const expireTime = sub.serviceExpireDate ? new Date(sub.serviceExpireDate).getTime() : NaN;
+    const rawExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+    const graceDeadline = rawExpired ? expireTime + SUBSCRIPTION_GRACE_PERIOD_DAYS * 24 * 3600 * 1000 : null;
+    const isInGracePeriod = rawExpired && graceDeadline !== null && graceDeadline >= Date.now();
+    const isExpired = rawExpired && !isInGracePeriod;
+    if (isExpired) return false;
+    return sub.planType === 'pro' || sub.planType === 'enterprise';
+  } catch (err) {
+    // tenant_subscriptions 集合可能尚未创建（该机构从未触发过任何订阅写入），
+    // 视为未开通高级套餐
+    return false;
+  }
+}
+
 const HEADER_STYLE = {
   font: { bold: true, size: 12, color: { argb: 'FFFFFFFF' } },
   fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9480E' } },
@@ -354,6 +388,18 @@ exports.main = async (event, context) => {
     // （降级会让调用方以为拿到的就是全机构数据，造成误解）
     if (isNationalExport && !isTenantWideAllowed) {
       return { success: false, errMsg: '仅机构超管/总部财务可发起多店合并导出' };
+    }
+
+    // 🏛️（2026-08-31 商业化权益中心）多店合并导出商业化鉴权：与
+    // getNationalDashboard 的 subscriptionQuota.features.canExportNationalExcel
+    // 同一份判断口径——免费版机构即使角色满足上面的 isTenantWideAllowed，
+    // 这里仍然拒绝，服务端强鉴权，不依赖前端体验层拦截（体验层见
+    // statistics.ts onOpenNationalExcelExportModal）
+    if (isNationalExport) {
+      const hasAdvancedPlan = await isAdvancedPlanActive(tenantId);
+      if (!hasAdvancedPlan) {
+        return { success: false, errMsg: '该功能为专业版/旗舰版专享，请前往个人中心升级机构套餐', requiresUpgrade: true };
+      }
     }
 
     // 🐛 与下方 whereConditions 的收敛逻辑保持一致：非租户级角色现在无论传

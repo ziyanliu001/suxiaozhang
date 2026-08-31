@@ -209,6 +209,12 @@ function isAllStoresMode(storeName: string): boolean {
 // 兜底读取时同样要排除，不能当真实门店 id 使用
 const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL', 'yuhuazhai_national'];
 
+// 🛡️ 平台客服联系方式：与 profile.ts 的 SUPER_ADMIN_CONTACT 同一份真实联系
+// 方式的拷贝（各页面独立维护，无跨页面共享常量的既有约定，与 cloudfunctions
+// 那边 DEFAULT_TENANT_ID 等常量的重复定义是同一套项目惯例），供「机构 SaaS
+// 权益看板」的"咨询客服/升级套餐"按钮使用
+const PLATFORM_SUPPORT_CONTACT = { phone: '15859242258', wechat: 'renfei1888' };
+
 // 🐛 根因修复：全国大屏是跨机构/跨门店的聚合查询，服务端要扫描的数据量远超
 // 单店 getReports，withTimeout.ts 的通用默认超时（8000ms）在弱网/冷启动叠加
 // 高并发时经常提前判死（日志里的"调用超时（>8000ms）"），实际云函数还在
@@ -872,6 +878,12 @@ Page({
     // planUpgradeFeatureName 是具体触发这次拦截的功能名，拼进弹窗文案
     showPlanUpgradeModal: false,
     planUpgradeFeatureName: '',
+    // 🆕（2026-08-31 商业化权益中心）机构 SaaS 权益看板：与上面的
+    // feature-locked-modal（单一功能被拦截时的轻量引导）是两个不同场景——
+    // 这个是用户主动点开"查看我的套餐用量"，展示完整的门店席位进度条 +
+    // 三项衍生能力开通状态，不涉及具体定价文案（唯一定价真源仍是
+    // profile.ts 的 showSubscriptionModal，见 onOpenPlanUpgradeModal 注释）
+    showSaasBenefitsModal: false,
   },
 
   onLoad(options: any) {
@@ -4764,22 +4776,51 @@ Page({
   // 的正式多 Sheet .xlsx 工作簿（各店一个 Sheet + 机构总览 Sheet），附带
   // 存证核验码，供理事会/民政核对存档
 
-  // 🆕（2026-08-31）机构套餐配额详情：轻量微章点击后弹出的权益详情，纯展示，
-  // 不跳转任何页面——真正的"升级/续费"操作入口仍是个人中心的订阅管理弹窗，
-  // 这里只是让大家长在全国大屏顺手就能看一眼配额，不用切页面去查
+  // 🆕（2026-08-31 商业化权益中心）机构 SaaS 权益看板：顶部配额微章点击后
+  // 弹出的自定义半屏弹窗，展示门店席位进度条 + 三项衍生能力（合并导出/调拨
+  // 引擎/存证徽章）开通状态。这是"查看我当前用量"，不是"套餐对比购买"——
+  // 后者唯一真源仍是 profile.ts 的 showSubscriptionModal，见
+  // onOpenPlanUpgradeModal 头部注释，本弹窗不重复一份定价文案
   onShowSubscriptionQuotaDetail() {
-    const quota = this.data.nationalData && this.data.nationalData.subscriptionQuota;
-    if (!quota) return;
-    wx.showModal({
-      title: `📋 ${quota.planName}权益详情`,
-      content: `已接入门店：${quota.activeStores} / ${quota.maxStores} 家\n有效期：${quota.expireDateText}\n\n如需升级套餐或扩容门店，请前往「个人中心 · 专业服务」办理。`,
-      showCancel: false,
-      confirmText: '我知道了'
+    if (!this.data.nationalData || !this.data.nationalData.subscriptionQuota) return;
+    this.setData({ showSaasBenefitsModal: true });
+  },
+
+  onCloseSaasBenefitsModal() {
+    this.setData({ showSaasBenefitsModal: false });
+  },
+
+  // 阻止点击半屏弹窗卡片内部时冒泡到外层遮罩触发关闭
+  noop() {},
+
+  // 「扩容 / 续费咨询」：大家长/超管本就有权限自助升级，直接引导前往个人中心
+  // 唤起真正的套餐订购弹窗（与 onOpenPlanUpgradeModal 同一套角色分支）；
+  // 其余角色一键复制平台客服微信，线下联系咨询
+  onConsultUpgrade() {
+    this.setData({ showSaasBenefitsModal: false });
+    if (this.data.isPatriarch || this.data.isAdmin) {
+      requestOpenSubscription();
+      wx.switchTab({ url: '/pages/profile/profile' });
+      return;
+    }
+    wx.setClipboardData({
+      data: PLATFORM_SUPPORT_CONTACT.wechat,
+      success: () => wx.showToast({ title: `已复制客服微信号：${PLATFORM_SUPPORT_CONTACT.wechat}，请在微信添加好友咨询`, icon: 'none', duration: 3000 })
     });
   },
 
+  // 🏛️（2026-08-31 商业化权益中心）免费版试用引导：机构多店合并导出是"审计
+  // 增值服务"付费层能力，云端 exportAccountExcel 已按 isNationalExport 做了
+  // 硬校验，这里是体验层前置拦截——免费版机构点击"数据导出"直接走既有的
+  // feature-locked-modal 升级转化漏斗，不再弹出一个反正会被服务端拒绝的
+  // 导出确认弹窗，避免用户点了"确认导出"才收到失败提示的糟糕体验
   onOpenNationalExcelExportModal() {
     if (!this.data.isAdmin) return;
+    const quota = this.data.nationalData && this.data.nationalData.subscriptionQuota;
+    if (quota && quota.features && !quota.features.canExportNationalExcel) {
+      this.onOpenPlanUpgradeModal('机构多店合并导出');
+      return;
+    }
     this.setData({ showNationalExcelExportModal: true });
   },
 
@@ -4834,6 +4875,11 @@ Page({
         } else {
           this.downloadAndOpenExcel(result.tempFileURL, result.fileName || '多店合并阳光台账.xlsx');
         }
+      } else if (result.requiresUpgrade) {
+        // 🛡️ 服务端强鉴权兜底：理论上前端 onOpenNationalExcelExportModal 已经
+        // 拦过一次，这里是"客户端缓存的 subscriptionQuota 与服务端最新套餐状态
+        // 不一致"（如刚好套餐到期）时的兜底，改走真正的升级引导而不是普通报错
+        this.onOpenPlanUpgradeModal('机构多店合并导出');
       } else {
         wx.showToast({ title: result.errMsg || '导出失败，请重试', icon: 'none' });
       }

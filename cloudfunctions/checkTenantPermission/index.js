@@ -29,6 +29,18 @@ const FEATURE_PLAN_REQUIREMENTS = {
 // 手动调高（如购买扩容包），服务端只保证"不低于当前套餐档位的默认配额"
 const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
+// 🆕（2026-08-31 商业化权益中心）商业化展示口径：内部 planType 仍是
+// 'basic'/'pro'/'enterprise'，planCode/planName 只是对外展示别名，与
+// cloudfunctions/getNationalDashboard 的同名常量保持一致（各云函数独立
+// 部署，无共享模块机制，需要手动同步这几处拷贝）
+const PLAN_CODE_MAP = { basic: 'free', pro: 'pro', enterprise: 'enterprise' };
+function buildPlanName(planType, maxStores) {
+  if (planType === 'pro') return `专业版 (${maxStores}店)`;
+  if (planType === 'enterprise') return `旗舰版 (${maxStores}店)`;
+  return '基础免费版';
+}
+const EXPIRING_SOON_THRESHOLD_DAYS = 30;
+
 // 🕊️ 到期宽限期（Grace Period）：与 createStore 完全同一份拷贝（各云函数独立
 // 部署，没有跨函数共享模块机制）。套餐到期后 7 天内，机构仍按到期前的档位
 // 正常使用——一线公益门店的记账/日常流水不能因为财务同事没来得及续费就立即
@@ -183,7 +195,13 @@ exports.main = async (event) => {
         // 🏢 platform_admin 不隶属任何机构（见 authService.ts UserRole 注释），
         // 空字符串即语义正确，不需要伪造一个"平台方"机构名
         tenantName: '',
-        usedStoreCount: 0
+        usedStoreCount: 0,
+        // 🆕 商业化展示字段：platform_admin 视同享有全部衍生能力，与上面
+        // planType: 'enterprise' 的豁免口径一致
+        planCode: 'enterprise',
+        usagePercent: 0,
+        isExpiringSoon: false,
+        features: { canExportNationalExcel: true, canUseRebalanceEngine: true, canAccessAuditProof: true }
       };
     }
 
@@ -204,7 +222,34 @@ exports.main = async (event) => {
       usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
     }
 
-    return { success: true, ...result, tenantName, usedStoreCount };
+    // 🆕（2026-08-31 商业化权益中心）与 getNationalDashboard 的 subscriptionQuota
+    // 同一份展示口径的增量字段——纯附加，不改变上面 result 里任何既有字段的
+    // 含义，profile.ts 现有消费方（TenantPermissionResult）按需读取即可
+    const isAdvancedPlan = result.planType === 'pro' || result.planType === 'enterprise';
+    let isExpiringSoon = false;
+    if (!result.isExpired && result.serviceExpireDate) {
+      const d = new Date(result.serviceExpireDate);
+      if (!Number.isNaN(d.getTime())) {
+        const daysUntilExpire = Math.floor((d.getTime() - Date.now()) / (24 * 3600 * 1000));
+        isExpiringSoon = daysUntilExpire >= 0 && daysUntilExpire <= EXPIRING_SOON_THRESHOLD_DAYS;
+      }
+    }
+
+    return {
+      success: true,
+      ...result,
+      tenantName,
+      usedStoreCount,
+      planCode: PLAN_CODE_MAP[result.planType] || PLAN_CODE_MAP.basic,
+      planName: buildPlanName(result.planType, result.storeLimit),
+      usagePercent: result.storeLimit > 0 ? Math.round((usedStoreCount / result.storeLimit) * 100) : 0,
+      isExpiringSoon,
+      features: {
+        canExportNationalExcel: isAdvancedPlan,
+        canUseRebalanceEngine: isAdvancedPlan,
+        canAccessAuditProof: isAdvancedPlan
+      }
+    };
   } catch (err) {
     console.error('[checkTenantPermission] 异常:', err);
     // 🛡️ 严禁把裸的数据库报错暴露给调用方——checkTenantPermission() 内部已经
