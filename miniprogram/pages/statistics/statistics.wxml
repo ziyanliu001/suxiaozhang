@@ -800,6 +800,47 @@
       </view>
     </view>
 
+    <!-- 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车：全网大盘食材
+         消耗折算集采规模与预估节省善款，打通公益软件向供应链撮合延伸的商业
+         通道。刻意不挂钩订阅套餐（全角色可见）——集采意向汇聚的本质是"越多
+         门店参与、议价筹码越大"，与 rebalanceSuggestions/合并导出等"按套餐
+         分层的服务能力"不是同一类衍生能力，见 getNationalDashboard
+         procurementSummary 计算处注释 -->
+    <view class="procurement-card" wx:if="{{nationalData.procurementSummary}}">
+      <view class="matrix-header">
+        <text class="matrix-title">🌾 爱心粮油源头集采直通车</text>
+      </view>
+
+      <view class="procurement-demand-row">
+        <view class="procurement-demand-cell">
+          <text class="procurement-demand-val">{{nationalData.procurementSummary.monthlyRiceEstimateKg}}</text>
+          <text class="procurement-demand-lbl">大米(kg/月)</text>
+        </view>
+        <view class="procurement-demand-cell">
+          <text class="procurement-demand-val">{{nationalData.procurementSummary.monthlyFlourEstimateKg}}</text>
+          <text class="procurement-demand-lbl">面粉(kg/月)</text>
+        </view>
+        <view class="procurement-demand-cell">
+          <text class="procurement-demand-val">{{nationalData.procurementSummary.monthlyOilEstimateKg}}</text>
+          <text class="procurement-demand-lbl">食用油(kg/月)</text>
+        </view>
+      </view>
+
+      <!-- 🛡️ 措辞用"预计"，不构成价格承诺——见云函数 RICE_SAVINGS_PER_KG
+           等常量处注释，这是经验性基准测算，不是真实议价/合同锁定的价格 -->
+      <view class="procurement-savings-banner">
+        <text class="procurement-savings-text">源头基地直供预计月度可为全网节省 ¥{{nationalData.procurementSummary.estimatedSavingsYuan}} 善款</text>
+      </view>
+
+      <view class="procurement-footer">
+        <text class="procurement-partner-tag">🚜 合作直供基地 {{nationalData.procurementSummary.partnerFarmCount}} 家</text>
+        <view class="procurement-cta-btn" hover-class="ui-hover" bindtap="onOpenProcurementModal">
+          <text class="procurement-cta-icon">📋</text>
+          <text class="procurement-cta-text">提报集采意向 / 基地合作</text>
+        </view>
+      </view>
+    </view>
+
     <view class="national-matrix-card">
       <view class="matrix-header">
         <text class="matrix-title">📊 全国门店运营健康度概览</text>
@@ -1077,6 +1118,38 @@
       </view>
 
       <button class="sbs-cta-btn" bindtap="onConsultUpgrade">💬 扩容 / 续费咨询</button>
+    </view>
+  </view>
+
+  <!-- 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车·意向说明弹窗：
+       全网大屏「集采直通车」卡片「提报集采意向 / 基地合作」按钮的落地点，
+       这是产品原型阶段的轻量转化路径（复制对接联系方式），真正的意向表单/
+       CRM 对接系统是独立的后续项目，本次不做 -->
+  <view class="patch-modal-mask" wx:if="{{showProcurementModal}}">
+    <view class="patch-modal-box">
+      <view class="modal-header">
+        <text class="modal-title">🌾 爱心粮油源头集采直通车</text>
+        <text class="btn-close" bindtap="onCloseProcurementModal">✕</text>
+      </view>
+
+      <view class="procurement-modal-section">
+        <text class="procurement-modal-section-title">🌱 基地认证标准</text>
+        <text class="procurement-modal-section-text">合作基地须提供绿色食品/有机认证资质及产地检测报告，统一入库前经第三方抽检复核，确保源头食材安全可溯源。</text>
+      </view>
+
+      <view class="procurement-modal-section">
+        <text class="procurement-modal-section-title">🤝 统谈统采流程</text>
+        <text class="procurement-modal-section-text">全网门店月度需求汇总 → 平台统一比价议价 → 签订直供协议 → 基地直发门店/区域仓 → 门店验收入账，全程留痕可查验。</text>
+      </view>
+
+      <view class="procurement-modal-tip">
+        <text>💡 以上为产品原型说明，实际合作以平台正式对接团队沟通为准，预估节省金额为经验性测算，不构成价格承诺。</text>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-modal-cancel" bindtap="onCloseProcurementModal">关闭</button>
+        <button class="btn-modal-submit" bindtap="onRegisterProcurementIntent">登记合作意向</button>
+      </view>
     </view>
   </view>
 

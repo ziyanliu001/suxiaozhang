@@ -3736,6 +3736,117 @@ page {
   color: #2f9e44;
 }
 
+/* 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车：暖麦穗黄绿调，
+   与"调拨建议"（蓝绿协作色）、"健康度告警"（红橙警示色）区分开，传达
+   "这是供应链增值服务"而不是治理/告警类信息 */
+.procurement-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.procurement-demand-row {
+  display: flex;
+  gap: 12rpx;
+  margin: 16rpx 0;
+}
+
+.procurement-demand-cell {
+  flex: 1;
+  text-align: center;
+  background: #FBF8EF;
+  border-radius: 14rpx;
+  padding: 16rpx 4rpx;
+}
+
+.procurement-demand-val {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #A67C00;
+  font-variant-numeric: tabular-nums;
+}
+
+.procurement-demand-lbl {
+  font-size: 20rpx;
+  color: #8A7E5C;
+}
+
+.procurement-savings-banner {
+  background: linear-gradient(135deg, #FFF3D6, #FFE8B3);
+  border-radius: 14rpx;
+  padding: 18rpx 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.procurement-savings-text {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #8A5A00;
+  line-height: 1.5;
+}
+
+.procurement-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.procurement-partner-tag {
+  font-size: 22rpx;
+  color: #8A7E5C;
+  flex-shrink: 0;
+}
+
+.procurement-cta-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: #A67C00;
+  border-radius: 100rpx;
+  padding: 12rpx 24rpx;
+}
+
+.procurement-cta-icon {
+  font-size: 22rpx;
+}
+
+.procurement-cta-text {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  white-space: nowrap;
+}
+
+/* 🌾 集采意向说明弹窗内容区 */
+.procurement-modal-section {
+  margin-bottom: 20rpx;
+}
+
+.procurement-modal-section-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #8A5A00;
+  margin-bottom: 8rpx;
+}
+
+.procurement-modal-section-text {
+  display: block;
+  font-size: 24rpx;
+  color: #495057;
+  line-height: 1.6;
+}
+
+.procurement-modal-tip {
+  font-size: 21rpx;
+  color: #ADB5BD;
+  line-height: 1.5;
+  margin-bottom: 8rpx;
+}
+
 /* 🆕 黑金配色治理区块：与页面其余白底卡片明确区隔，标示这是超管权限专区 */
 .super-admin-insights-card {
   background: linear-gradient(135deg, #2B1D10 0%, #17110A 100%);

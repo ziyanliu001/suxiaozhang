@@ -681,6 +681,39 @@ exports.main = async (event, context) => {
       // material_logs 集合可能尚未创建，视为近30天消耗为 0，不影响主统计
     }
 
+    // 🌾（2026-08-31 商业化生态延伸）全网粮油集采测算：直接复用上面已经算好
+    // 的 ingredientStats30d（近30天固定窗口，公斤单位），不重复发起一次
+    // material_logs 查询——"月度大盘总需"与"近30天实际消耗"是同一份数据的
+    // 两种叫法，即使 ingredientStats30d 因异常仍是初始的全 0 状态，这里也会
+    // 如实展示 0，不额外编造一个兜底基准值
+    const monthlyRiceEstimateKg = Math.round(ingredientStats30d.riceKg || 0);
+    const monthlyFlourEstimateKg = Math.round(ingredientStats30d.flourKg || 0);
+    const monthlyOilEstimateKg = Math.round(ingredientStats30d.oilKg || 0);
+    // 🛡️ 经济测算口径（人工设定的行业经验基准，非实时议价结果）：大米每斤省
+    // 0.4元（0.8元/kg）、面粉每斤省0.3元（0.6元/kg）、食用油每斤省1.5元（3.0元/kg）——
+    // 这是"统谈统采"相比各门店零散采购的经验性溢价空间估算，不是任何一次
+    // 真实询价/合同锁定的价格，前端展示措辞必须是"预计/预估节省"而不是
+    // "保证节省"，避免构成事实上的价格承诺
+    const RICE_SAVINGS_PER_KG = 0.8;
+    const FLOUR_SAVINGS_PER_KG = 0.6;
+    const OIL_SAVINGS_PER_KG = 3.0;
+    const estimatedSavingsYuan = Math.round(
+      monthlyRiceEstimateKg * RICE_SAVINGS_PER_KG +
+      monthlyFlourEstimateKg * FLOUR_SAVINGS_PER_KG +
+      monthlyOilEstimateKg * OIL_SAVINGS_PER_KG
+    );
+    const procurementSummary = {
+      monthlyRiceEstimateKg,
+      monthlyFlourEstimateKg,
+      monthlyOilEstimateKg,
+      estimatedSavingsYuan,
+      // 🛡️ 诚实占位：这是产品原型阶段展示用的示例值，平台目前尚未真正签约
+      // 任何粮油直供基地——上线真实合作基地后，需要改造成从一张真实的
+      // "合作基地"配置表/集合里读取真实数量，不能继续硬编码这个 3
+      partnerFarmCount: 3,
+      status: 'active'
+    };
+
     let nationalTotalDiners = 0;
     let nationalTotalIncome = 0;
     let nationalTotalExpense = 0;
@@ -1541,6 +1574,14 @@ exports.main = async (event, context) => {
       // ingredientStats30d 计算处注释）：面向机构集采参考，非财务敏感字段，
       // 不加入下方 SENSITIVE_KEYS 脱敏名单
       ingredientStats30d,
+      // 🌾（2026-08-31 商业化生态延伸）全网粮油集采测算：与 ingredientStats30d
+      // 同源（复用同一份 riceKg/flourKg/oilKg），面向机构集采参考与商业化
+      // 生态延伸，非财务敏感字段（不涉及本机构具体收支金额），不加入下方
+      // SENSITIVE_KEYS 脱敏名单，全角色可见——刻意不做订阅套餐门禁：集采
+      // 意向汇聚的本质是"越多门店参与、议价筹码越大"，对免费版机构设限
+      // 反而削弱平台自己的集采规模效应，与 rebalanceSuggestions/合并导出等
+      // "按订阅套餐分层的服务能力"不是同一类衍生能力，见智慧库本节说明
+      procurementSummary,
       // 🆕 跨店义工工时与荣誉榜（近30天固定窗口，见上方 volunteerSummary 计算处
       // 注释）：全网奉献榜姓名已脱敏，非财务字段，不加入下方 SENSITIVE_KEYS
       volunteerSummary,
