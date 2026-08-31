@@ -35,12 +35,27 @@ exports.main = async (event, context) => {
   if (!callerTenantId) {
     return { success: false, errMsg: '无法确认调用者所属机构，出于数据隔离安全考虑已拒绝执行级联重算' };
   }
-  if (caller.role === 'super_admin') {
+  // 🐛（2026-08-31 彻底修复："docId必须为字符串或数字"）此前无条件执行
+  // db.collection('stores').doc(storeId)——调用方（pages/index/index.ts
+  // triggerCascadeRecalculation/triggerAtomicCascadeUpdate）此前从未在
+  // data 里传过 storeId，destructure 出来恒为 undefined，.doc(undefined)
+  // 同步抛出这个异常，且发生在 .catch(() => null) 能兜住的 Promise 链
+  // 之前，是这次报错真正的根因（不是 cascadeRecalculator 云函数，那个
+  // 函数在这条调用链上完全没被用到）。调用方那侧已经补上了 storeId 传参，
+  // 这里再加一层类型校验双向兜底：storeId 缺失/类型不对时，直接跳过这条
+  // "按门店 ID 反查所属机构"的补充校验——下面 report_logs 查询本身已经
+  // 强制 tenantId: callerTenantId 过滤（第 34-37 行的检查已确保
+  // callerTenantId 非空），是真正生效的租户隔离边界，这里只是叠加的
+  // 额外一层"店铺确实属于该机构"防御，storeId 拿不到时优雅跳过而不是
+  // 直接让整个云函数崩掉
+  if (caller.role === 'super_admin' && storeId && (typeof storeId === 'string' || typeof storeId === 'number')) {
     const storeDoc = await db.collection('stores').doc(storeId).get().catch(() => null);
     const targetTenantId = storeDoc && storeDoc.data && storeDoc.data.tenantId;
     if (targetTenantId && targetTenantId !== callerTenantId) {
       return { success: false, errMsg: '无权限重算其他机构的门店账目' };
     }
+  } else if (caller.role === 'super_admin') {
+    console.warn('[recalculateCascadeBalances] super_admin 调用未携带有效 storeId，跳过门店归属机构额外校验，仍受下方 tenantId 强过滤保护:', storeId);
   }
 
   try {

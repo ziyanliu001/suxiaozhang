@@ -7806,9 +7806,19 @@ Page({
   // 会跳过门店过滤条件，把全部门店的历史记录当作同一条流水链混算，曾导致全库结余数据被
   // 串联污染。现改为调用经过门店/租户强校验、且明确限定只写 report_logs 集合内
   // yesterdayBalance/todayBalance 字段的 recalculateCascadeBalances，绝不触碰 storeId/storeName。
+  // 🐛（2026-08-31 彻底修复 triggerCascadeRecalculation 报错）根因排查：
+  // 本方法与下面 triggerAtomicCascadeUpdate 调用的是 recalculateCascadeBalances
+  // 云函数（不是 cascadeRecalculator——那个函数在这两处压根没被调用，见
+  // Obsidian 智慧库上一轮修复记录里已经指出过这个出入）。该云函数内部
+  // super_admin 分支会执行 db.collection('stores').doc(storeId).get()
+  // 做跨机构越权校验，但这里此前从未在 data 里传过 storeId——destructure
+  // 出来恒为 undefined，.doc(undefined) 同步抛出"docId必须为字符串或数字"，
+  // 这才是控制台报错的真实来源。补上 storeId 传参，与 shopName 同一套
+  // "submitData 优先，退回页面当前状态"兜底顺序
   async triggerCascadeRecalculation(submitData: any) {
     try {
       const shopName = submitData.shopName || this.data.shopName || '';
+      const storeId = submitData.storeId || this.data.currentStoreId || '';
       const modifiedDate = submitData.dateString || '';
 
       if (!shopName || !modifiedDate) {
@@ -7820,6 +7830,7 @@ Page({
         name: 'recalculateCascadeBalances',
         data: {
           shopName,
+          storeId,
           modifiedDate
         }
       });
@@ -7838,9 +7849,12 @@ Page({
     }
   },
 
+  // 🐛 同上（见 triggerCascadeRecalculation 头部注释）：storeId 同样此前从未
+  // 传过，补上
   async triggerAtomicCascadeUpdate(submitData: any) {
     try {
       const shopName = submitData.shopName || this.data.shopName || '';
+      const storeId = submitData.storeId || this.data.currentStoreId || '';
       const modifiedDate = submitData.dateString || '';
 
       if (!modifiedDate) {
@@ -7853,6 +7867,7 @@ Page({
         name: 'recalculateCascadeBalances',
         data: {
           shopName,
+          storeId,
           modifiedDate
         }
       });

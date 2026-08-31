@@ -170,17 +170,44 @@ exports.main = async (event, context) => {
     // 省略 page 字段时微信会默认跳转小程序首页（官方文档明确行为），先按
     // 原 page 尝试一次，命中 41030 再退化成不带 page 重试一次，用户扫码至少
     // 能进小程序首页，不会拿到一张彻底生成失败的码
+    //
+    // 🐛（2026-08-31 二次修复：上一版重试代码从未真正生效过）根因：
+    // cloud.openapi.wxacode.getUnlimited 对 41030 这类业务错误，在这份项目
+    // 实际使用的 wx-server-sdk（~2.6.3）里是【reject 一个带 errCode 的
+    // Error】，不是像最初以为的那样【resolve 一个 errCode!==0 的对象】。
+    // 上一版把重试判断写在 `await callGetUnlimited(...)` 之后，异常一旦被
+    // rejected，代码根本执行不到那一行判断，会直接跳到外层 catch——等于
+    // 重试逻辑从写下的那一刻起就是死代码，线上仍然是"连续 3 次 41030 降级"，
+    // 与本次报告的现象完全吻合。改为 try/catch 包裹每一次尝试，同时兼容
+    // "resolve 出一个非 0 errCode 对象"与"直接 throw"两种可能的 SDK 行为，
+    // 不管这份 SDK 实际是哪种，都能命中重试分支。
     async function callGetUnlimited(page) {
       const params = { scene: codeTarget.scene, width: 430, isHyaline: false };
       if (page) params.page = page;
       return cloud.openapi.wxacode.getUnlimited(params);
     }
 
-    let result = await callGetUnlimited(codeTarget.page);
+    function is41030(errOrResult) {
+      if (!errOrResult) return false;
+      if (errOrResult.errCode === 41030) return true;
+      const msg = String(errOrResult.errMsg || errOrResult.message || '');
+      return msg.indexOf('41030') !== -1;
+    }
 
-    if (result && result.errCode === 41030 && codeTarget.page) {
-      console.warn('[getStoreQRCode] page 无效(41030)，省略 page 字段回退默认首页重试:', codeTarget.page);
-      result = await callGetUnlimited('');
+    let result;
+    try {
+      result = await callGetUnlimited(codeTarget.page);
+      if (codeTarget.page && result && result.errCode && result.errCode !== 0 && is41030(result)) {
+        console.warn('[getStoreQRCode] page 无效(41030，resolve 形态)，省略 page 字段回退默认首页重试:', codeTarget.page);
+        result = await callGetUnlimited('');
+      }
+    } catch (firstErr) {
+      if (codeTarget.page && is41030(firstErr)) {
+        console.warn('[getStoreQRCode] page 无效(41030，reject 形态)，省略 page 字段回退默认首页重试:', codeTarget.page);
+        result = await callGetUnlimited('');
+      } else {
+        throw firstErr;
+      }
     }
 
     if (result.errCode === 0) {
