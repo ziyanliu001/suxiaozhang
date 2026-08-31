@@ -6734,7 +6734,22 @@ Page({
         return;
       }
 
+      // 🐛（2026-08-31 追加修复"点击无反应"）根因不是选图链路本身缺 try/catch
+      // 或缺失败提示——chooseDonorScreenshotSafe 内部早就有 60s 超时兜底 +
+      // wx.chooseImage 降级、外层也早有 catch+toast，异常/取消都能正确复位
+      // isScanningDonorList（见下方 finally）。真正的缺口是"这条兜底链路生效
+      // 之前"这段等待期完全没有任何界面反馈：wx.chooseMedia 一旦在部分环境
+      // 卡死不回调（上面 chooseDonorScreenshotSafe 头部注释记录的原始 bug
+      // 场景），用户在长达 60s 里只看到点击日志打印了一次，然后界面像是
+      // "死了"——这正是本次反馈的现场描述。不缩短 60s 这个超时阈值本身（那是
+      // 给用户在系统相册里正常挑图预留的时间，缩短会重新引入"选图选到一半被
+      // 打断"的旧问题），而是在等待期间先给一个可见的 loading 提示，用户至少
+      // 能确认"点击生效了，正在处理"，而不是误判成按钮坏了
+      wx.showLoading({ title: '正在打开相册...', mask: true });
       const tempFilePath = await this.chooseDonorScreenshotSafe();
+      // 图已经选完，"正在打开相册..."这个提示的使命已经结束——不提前收掉的话，
+      // 下面 MD5 去重命中时弹出的 showModal 会叠在这个还没消失的 loading 上面
+      wx.hideLoading();
       if (!tempFilePath) return;
 
       // 🌟 第一道防线：图片 MD5 去重。在触发任何网络请求（内容安全检测/上传/OCR）之前，
