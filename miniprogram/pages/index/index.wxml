@@ -968,6 +968,7 @@
                  展示的是"未逐条标记的条目会跟随的默认值"，两者不冲突） -->
             <view class="preview-list">
               <view class="preview-item" wx:for="{{displayDonorItems}}" wx:key="index">
+                <text class="item-idx">{{index + 1}}.</text>
                 <text class="item-merit-badge" catchtap="onToggleItemAnonymous" data-index="{{item.index}}">{{item.effectiveAnonymous ? '🌿' : '🌸'}}</text>
                 <text class="item-name">{{item.displayName}}</text>
                 <text class="item-amount">¥{{item.amount}}</text>
