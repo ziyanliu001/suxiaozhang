@@ -1343,11 +1343,19 @@
 
     <!-- ▸ 素食直播产销协同：与雨花公益角色体系完全独立，不受上面任何雨花角色
          wx:if 条件影响，也不影响雨花角色卡片的展示逻辑。
-         「排单与发货管理」只有账号在至少一个 live_factory 工作空间里拥有
-         space_owner/space_admin/producer 角色（getMyProductionSpaces 判定）
-         才显示；「输入工坊邀请码加入」常驻显示——否则一个刚拿到邀请码、还
-         没加入任何工坊的新成员，压根看不到任何入口去输入邀请码 -->
-    <view class="ui-card-wrapper admin-developer-section">
+         🐛（2026-08-31 精简个人中心追加修复）整张卡片改为
+         wx:if="{{hasProductionSpaceAccess}}"——此前「输入工坊邀请码加入」
+         一行是常驻显示的（不看 hasProductionSpaceAccess），本意是让刚拿到
+         邀请码、还没加入任何工坊的新成员也能看到入口去输入。这次按需求
+         把整卡收进 hasProductionSpaceAccess 之后，纯公益食堂/素小账账号
+         （绝大多数账号）不会再看到这张与自己业务无关的卡片，代价是「一个
+         从未加入过任何工坊、但刚拿到邀请码的新成员」也会看不到这个入口——
+         这是本次改动权衡后接受的已知副作用，不是遗漏；如果后续要恢复
+         "新成员可发现产销工坊"这条路径，需要走扫码直接跳转
+         onGoToWorkspaceJoin 页面等替代入口，而不是在个人中心常驻暴露卡片。
+         「排单与发货管理」在卡片内继续按 space_owner/space_admin/producer
+         角色（getMyProductionSpaces 判定）二次收窄 -->
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{hasProductionSpaceAccess}}">
       <view class="admin-divider">产销工坊</view>
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasProductionSpaceAccess}}" bindtap="onGoToProductionFulfillment">
         <view class="item-left">

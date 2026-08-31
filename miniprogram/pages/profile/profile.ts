@@ -1396,10 +1396,11 @@ Page({
     // 解析不到（无绑定门店的新用户）时函数自己直接跳过，不发起无效请求
     pendingFetches.push(this.fetchStoreLoveWallSummary());
 
-    // 📦 产销工坊「排单与发货管理」入口可见性：live_factory 角色体系与雨花
-    // 角色完全独立（getMyProductionSpaces 查的是物理隔离的 tenant_members
-    // 集合，不是 user_roles），不依赖上面任何角色 flag，所有账号都无条件
-    // 查一次——绝大多数账号没有产销工坊成员身份，云函数直接返回空数组，
+    // 📦 产销工坊整张卡片 + 「排单与发货管理」入口可见性：live_factory 角色
+    // 体系与雨花角色完全独立（getMyProductionSpaces 查的是物理隔离的
+    // tenant_members 集合，不是 user_roles），不依赖上面任何角色 flag，
+    // 所有账号都无条件查一次——绝大多数账号没有产销工坊成员身份，云函数
+    // 直接返回空数组，整张卡片（含「输入工坊邀请码加入」）保持隐藏，
     // 入口卡片保持隐藏，不额外增加权限判断分支
     pendingFetches.push(this.fetchProductionSpaces());
 
