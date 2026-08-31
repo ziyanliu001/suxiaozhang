@@ -61,22 +61,27 @@
 
 ## 5. 敏感信息审计结论
 
-### 🚨 严重（阻断开源前必须处理）
+### ✅ 已整改（2026-08-31 第二阶段）
 
-`cloudfunctions/stampReportChecksum`、`cascadeRecalculator`、`updateAndRecalculateCascade` 三处共享同一段代码模式：
+`cloudfunctions/stampReportChecksum`、`cascadeRecalculator`、`updateAndRecalculateCascade` 三处此前共享同一段代码模式：
 
 ```js
 const HMAC_SECRET = process.env.LEDGER_HMAC_SECRET || 'yuhua_ledger_default_secret_please_override_in_cloud_env';
 ```
 
-一旦代码公开，这个硬编码默认密钥人人可见——任何没有在云开发控制台配置 `LEDGER_HMAC_SECRET` 环境变量覆盖的部署，其资金流水防篡改校验码形同虚设，可被任意伪造。对比 `cloudfunctions/wxPayCore` 的 `WXPAY_INTERNAL_TOKEN` 已经采用"未配置直接拒绝"（fail-closed）原则，这三处仍是"未配置则静默使用弱默认值"（fail-open），是已识别但**尚未整改**的风险点。
+已改为 `wxPayCore` 同款 fail-closed：
 
-**本次已做的最小改动**：三处均加了运行时 `console.error` 告警（`LEDGER_HMAC_SECRET` 未配置时打印醒目日志），不改变任何校验行为——因为贸然改成 fail-closed，如果生产环境实际上从未配置过这个环境变量、一直在用默认值盖章，会让历史上所有用默认密钥生成的校验码在改造后集体校验失败，是需要先确认生产环境真实配置状态、再评估切换方案（如按环境变量灰度切换 + 历史数据重新盖章）的变更，风险级别不适合在本次顺带处理。
+```js
+const HMAC_SECRET = process.env.LEDGER_HMAC_SECRET || '';
+if (!HMAC_SECRET) {
+  console.error('...本云函数拒绝执行任何签名操作（fail-closed）...');
+}
+// computeChecksum() 内部：!HMAC_SECRET 时直接 throw，不再产出任何基于弱默认值的签名
+```
 
-**开源前必须完成的动作**（人工确认，非代码可自动完成）：
-1. 登录微信云开发控制台，确认 `LEDGER_HMAC_SECRET` 环境变量是否已在生产环境配置为真实随机值（而非默认值）。
-2. 若已配置：移除代码里的硬编码默认值，改为 `wxPayCore` 同款 fail-closed（未配置直接拒绝执行）。
-3. 若未配置：先补配置一个强随机密钥，评估历史校验码是否需要用旧密钥批量重新验证一遍再切换，避免误报"全库数据被篡改"。
+三个文件里所有需要签名的代码路径（`stampReportChecksum` 的盖章、`cascadeRecalculator`/`updateAndRecalculateCascade` 的级联重算与完整性巡检）全部收口经过 `computeChecksum()`，因此在这个函数内部一处 `throw` 即可覆盖所有调用路径，不需要在每个 action 分支里各自加判断。三个文件的 `exports.main` 原本就用 try/catch 包裹全部逻辑并返回 `{success:false, errMsg}`，抛出的异常会被优雅捕获返回给调用方，不会导致云函数进程级崩溃。
+
+**为什么这次判定为安全**：这个改动只影响"环境变量缺失"这一种情形的行为（从"静默用弱默认值签名"变成"拒绝执行并报错"）。只要生产环境已经配置了 `LEDGER_HMAC_SECRET`（不论配置的是什么值），本次改动完全不改变任何运行时行为——密钥值本身没有被本次改动修改或轮换，历史签名的校验结果不受影响。真正会导致历史签名集体失效的操作是"更换密钥的实际取值"，那是一个独立于本次改动的操作决策，不属于本次代码变更的范围。
 
 ### ✅ 已核查、无污染
 
@@ -89,13 +94,21 @@ const HMAC_SECRET = process.env.LEDGER_HMAC_SECRET || 'yuhua_ledger_default_secr
 
 平台客服联系方式（`SUPER_ADMIN_CONTACT`/`PLATFORM_SUPPORT_CONTACT`，手机号+微信号）、`PLAN_STORE_LIMITS`、定价文案（`¥1,688/年`/`¥3,688/年`）：均只出现在 `profile.ts`/`statistics.ts`/订阅相关云函数里，未泄漏进任何 Core 候选文件，物理拆库时随所在文件自然留在 Enterprise 侧，无需额外处理。
 
-## 6. 待办：混合文件清单（后续阶段，本次未处理）
+## 6. 混合文件清单
 
-以下文件目前同时包含 Core 与 Enterprise 逻辑，是"能不能干净物理拆库"的主要阻碍，本次评估已识别但未拆分（拆分需要更大改动、更高回归测试成本，超出第一阶段范围）：
-
-- **`cloudfunctions/exportAccountExcel`**：`isNationalExport:false`（Core，单店导出）与 `isNationalExport:true`（Enterprise，合并导出）共用一个云函数文件、共享 `addRecordsSheet()` 等辅助函数。物理拆分方案：Core 保留单店导出逻辑；Enterprise 新建独立云函数（如 `exportNationalLedger`），复制一份 `addRecordsSheet()`（本仓库既有的"跨函数手工同步拷贝"惯例）。
-- **`pages/statistics/statistics.ts`/`.wxml`/`.wxss`**：单店历史统计（Core）与全国大屏（Enterprise：`loadNationalDashboard`/`formatNationalMatrixData`/`deriveSupportNeededStores`/SaaS 权益看板等）在同一文件里按 `isAllStoresMode`/`isAdmin` 等条件分支交织。这是全仓库里 Core/Enterprise 耦合最深的单一文件，物理拆分需要把页面本身拆成两个（如 `pages/statistics/statistics` 保留单店视图 + 一个仅 Enterprise 构建才包含的 `pages/enterprise-dashboard/dashboard`），影响面大，需要单独立项评估。
+- **✅ `cloudfunctions/exportAccountExcel`（已于 2026-08-31 第二阶段物理拆分）**：原本 `isNationalExport:false`（Core，单店导出）与 `isNationalExport:true`（Enterprise，合并导出）共用一个 706 行的单文件、共享 `addRecordsSheet()` 等辅助函数。现拆分为：
+  - `index.js`（22 行核心逻辑，其余为参数解析/权限校验）：纯路由——解析日期范围、解析调用者身份/权限、收敛查询范围、执行查询、处理 `previewOnly` 预览，最后按 `isNationalExport` 调度到下面两个模块之一。仍是**同一个云函数**（同一个部署单元），不是两个云函数——`isNationalExport` 商业化鉴权（`isAdvancedPlanActive`）与角色鉴权仍在这里做，因为这是"要不要往下走"的前置判断，不属于任何一个导出实现本身。
+  - `lib/exportSingleStoreExcel.js`（Core）：`addRecordsSheet()`（单店/单 Sheet 构建器）+ `uploadWorkbookAndRespond()`（工作簿收尾：写 Buffer/上传/取链接/拼审计文本，单店与合并导出共用）+ `buildSingleStoreExport()`（单店导出主流程）。
+  - `lib/exportNationalExcel.js`（Enterprise）：`addSummarySheet()`（总览 Sheet）+ `generateVerificationCode()`（存证核验码）+ `isAdvancedPlanActive()`（订阅门禁）+ `buildNationalExport()`（合并导出主流程，`require` 复用 Core 的 `addRecordsSheet`/`uploadWorkbookAndRespond`）。
+  - `lib/excelStyles.js`：两侧共用的纯样式常量。
+  - **依赖方向**：`exportNationalExcel.js` → `require('./exportSingleStoreExcel')`，反过来不成立——Enterprise 可以依赖 Core，Core 绝不依赖 Enterprise，这是验证"拆分是否干净"的核心判据。未来若要把 Enterprise 部分整个搬进独立仓库/独立云函数，只需要把 `lib/exportNationalExcel.js` 连同 `index.js` 里"`isNationalExport` 商业化鉴权"那几行一起移出去，`lib/exportSingleStoreExcel.js`（连带 `excelStyles.js`）原样留在 Core 仓库继续独立工作。
+- **⏳ `pages/statistics/statistics.ts`/`.wxml`/`.wxss`（仍待处理）**：单店历史统计（Core）与全国大屏（Enterprise：`loadNationalDashboard`/`formatNationalMatrixData`/`deriveSupportNeededStores`/SaaS 权益看板等）在同一文件里按 `isAllStoresMode`/`isAdmin` 等条件分支交织。这是全仓库里 Core/Enterprise 耦合最深的单一文件，物理拆分需要把页面本身拆成两个（如 `pages/statistics/statistics` 保留单店视图 + 一个仅 Enterprise 构建才包含的 `pages/enterprise-dashboard/dashboard`），影响面大，需要单独立项评估，本次未处理。
 
 ## 7. 部署与生效状态
 
-本阶段代码改动：`miniprogram/utils/core/privacy.ts`（含 2 处历史 import 路径更新）、`miniprogram/utils/enterpriseCapabilities.ts`（新增）、`miniprogram/utils/enterpriseSpi.ts`（新增，纯类型定义）、`pages/statistics/statistics.ts`/`.wxml`（改走新封装，行为不变）、三处云函数的 HMAC 告警日志。均为前端/纯新增文件或不改变运行时行为的重构，重新编译/预览小程序、重新部署三个云函数（仅为了让告警日志生效，不影响现有校验逻辑）即可，不涉及数据迁移。
+**第一阶段**（架构规划）：`miniprogram/utils/core/privacy.ts`（含 5 处历史 import 路径更新）、`miniprogram/utils/enterpriseCapabilities.ts`（新增）、`miniprogram/utils/enterpriseSpi.ts`（新增，纯类型定义）、`pages/statistics/statistics.ts`/`.wxml`（改走新封装，行为不变）——纯前端改动，重新编译/预览小程序即可生效。
+
+**第二阶段**（本节，安全收口 + 导出模块拆分）：
+- `cloudfunctions/stampReportChecksum`/`cascadeRecalculator`/`updateAndRecalculateCascade`：HMAC 密钥 fail-closed 改造，**功能行为变化**——若生产环境此前从未配置 `LEDGER_HMAC_SECRET`，部署后这三个云函数会立即拒绝执行签名相关操作直至配置该环境变量，需要提前确认生产配置或安排配置窗口。
+- `cloudfunctions/exportAccountExcel`：物理拆分为 `index.js` + `lib/*.js` 四个文件，**响应体结构与既有行为完全不变**（`node --check` 通过，函数间调用关系已逐一核对，因本地无 `exceljs` 依赖未做端到端运行时验证，建议部署后跑一次单店导出 + 一次合并导出的真实回归）。
+- 均需要重新部署对应云函数（微信开发者工具「上传并部署：云端安装依赖」）才能生效，不涉及数据库结构迁移。
