@@ -85,6 +85,11 @@ export function resolveTier(planType: string): PermissionTier {
 export interface TenantPermissionResult {
   allowed: boolean;
   planType: string;
+  // 🆕（2026-08-31）降级前的真实套餐：planType 到期后会被服务端改写回
+  // 'basic'（见下方注释），isPerpetualPlan() 等"是否本来就是免费档"的判断
+  // 必须用这个字段，不能用已降级的 planType，否则过期的 pro/enterprise 会被
+  // 误判为"永久免费"
+  originalPlanType: string;
   isExpired: boolean;
   // 🕊️ 到期宽限期（7 天，GRACE_PERIOD_DAYS，见 checkTenantPermission 云函数）：
   // 到期后仍在宽限期内时 isExpired 为 true 但 isInGracePeriod 也为 true，
@@ -120,6 +125,7 @@ export interface TenantPermissionResult {
 const FALLBACK_ALLOWED: TenantPermissionResult = {
   allowed: true,
   planType: 'basic',
+  originalPlanType: 'basic',
   isExpired: false,
   isInGracePeriod: false,
   graceExpireDate: null,
@@ -163,6 +169,7 @@ export function clearTenantPermissionCache() {
 const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
   allowed: true,
   planType: 'enterprise',
+  originalPlanType: 'enterprise',
   isExpired: false,
   isInGracePeriod: false,
   graceExpireDate: null,
@@ -203,6 +210,7 @@ export async function checkTenantPermission(
     const result: TenantPermissionResult = {
       allowed: !!r.allowed,
       planType: r.planType || 'basic',
+      originalPlanType: r.originalPlanType || r.planType || 'basic',
       isExpired: !!r.isExpired,
       isInGracePeriod: !!r.isInGracePeriod,
       graceExpireDate: r.graceExpireDate || null,

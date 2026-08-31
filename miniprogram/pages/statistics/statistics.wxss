@@ -4144,6 +4144,20 @@ page {
   font-weight: 600;
 }
 
+/* 🆕（2026-08-31 订阅有效期动态化）已过期状态：比"即将到期"更强的警示色，
+   与 sbs-expiring-tag 互斥展示 */
+.sbs-quota-value-expired {
+  color: #C92A2A;
+}
+
+.sbs-expired-tag {
+  margin-top: 14rpx;
+  font-size: 22rpx;
+  color: #C92A2A;
+  font-weight: 600;
+}
+
+
 .sbs-features {
   display: flex;
   flex-direction: column;
@@ -4176,6 +4190,12 @@ page {
   font-size: 28rpx;
   font-weight: bold;
   border-radius: 44rpx;
+}
+
+/* 🆕（2026-08-31 订阅有效期动态化）已过期状态下 CTA 改用更强的警示色，
+   引导走"使用兑换码续费"路径，需在 .sbs-cta-btn 之后声明才能覆盖背景色 */
+.sbs-cta-btn-expired {
+  background: linear-gradient(135deg, #FF6B6B, #C92A2A);
 }
 
 .custom-store-search-input {

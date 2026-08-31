@@ -282,6 +282,9 @@ exports.main = async (event, context) => {
       maxStores: PLAN_STORE_LIMITS.basic,
       usagePercent: PLAN_STORE_LIMITS.basic > 0 ? Math.round((usedStoreCount / PLAN_STORE_LIMITS.basic) * 100) : 0,
       isExpiringSoon: false,
+      // 🆕（2026-08-31 订阅有效期动态化）从未触发过订阅写入的机构，天然不存在
+      // "过期"这个概念，恒为 false
+      isExpired: false,
       expireDateText: '永久有效',
       features: {
         canExportNationalExcel: false,
@@ -304,20 +307,30 @@ exports.main = async (event, context) => {
         const isExpired = rawExpired && !isInGracePeriod;
         // 🕊️ 宽限期内仍按到期前档位展示，与 checkTenantPermission 同一条口径，
         // 不因为财务同事晚了几天续费就让配额徽章当场显示"已降级为基础版"
-        const planType = isExpired ? 'basic' : (sub.planType || 'basic');
+        // 🆕（2026-08-31）originalPlanType 保留降级前的真实套餐，仅用于判断
+        // "这个租户本来就是 basic" vs "这个租户是 pro/enterprise 过期被降级"——
+        // 下面的 isPerpetual 必须用这个原始值，否则过期账号会被误判为"永久免费"
+        const originalPlanType = sub.planType || 'basic';
+        const planType = isExpired ? 'basic' : originalPlanType;
         let maxStores = (sub.cloudQuota && sub.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[planType] || PLAN_STORE_LIMITS.basic;
         if (planType === 'basic') {
           maxStores = PLAN_STORE_LIMITS.basic;
         }
-        // 🐛 与 profile.ts isPerpetualPlan() 同一套口径：只由 planType===basic
-        // 或显式 isLifetimeGrant 标记判定"永久有效"，不靠到期日期形状反推
-        const isPerpetual = planType === 'basic' || (!isExpired && !!sub.isLifetimeGrant);
+        // 🐛（2026-08-31 修复）此前用降级后的 planType 判断"永久有效"，导致
+        // pro/enterprise 到期降级为 basic 的租户被误判为 isPerpetual=true，
+        // expireDateText 恒显示"永久有效"，永远走不到"已于 X 到期"分支。
+        // 改为用降级前的 originalPlanType 判断"是否本来就是免费档"
+        const isPerpetual = originalPlanType === 'basic' || (!isExpired && !!sub.isLifetimeGrant);
         let expireDateText = '永久有效';
         let isExpiringSoon = false;
         if (!isPerpetual && sub.serviceExpireDate) {
           const d = new Date(sub.serviceExpireDate);
           if (!Number.isNaN(d.getFullYear())) {
-            expireDateText = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const formattedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            // 🆕（2026-08-31）补全到"日"并加前缀文案，替代此前只到"月"且无
+            // 语境前缀的 expireDateText，与 profile.ts formatTenantExpireText
+            // 的"已于/有效期至"措辞保持一致
+            expireDateText = isExpired ? `已于 ${formattedDate} 到期` : `有效期至 ${formattedDate}`;
             // 🆕 临期提醒：只在"尚未到期"这一侧生效（rawExpired 为 false），
             // 已过期/宽限期内走的是另一套"续费"提示语境，不叠加"即将到期"文案
             if (!rawExpired) {
@@ -341,6 +354,7 @@ exports.main = async (event, context) => {
           maxStores,
           usagePercent: maxStores > 0 ? Math.round((usedStoreCount / maxStores) * 100) : 0,
           isExpiringSoon,
+          isExpired,
           expireDateText,
           features: {
             canExportNationalExcel: isAdvancedPlan,

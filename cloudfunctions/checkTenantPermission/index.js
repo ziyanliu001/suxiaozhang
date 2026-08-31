@@ -65,7 +65,7 @@ function isCollectionNotExistError(err) {
 async function checkTenantPermission(tenantId, featureKey) {
   if (!tenantId) {
     return {
-      allowed: false, planType: 'basic', isExpired: false, isInGracePeriod: false,
+      allowed: false, planType: 'basic', originalPlanType: 'basic', isExpired: false, isInGracePeriod: false,
       graceExpireDate: null, coreReadOnly: false, storeLimit: PLAN_STORE_LIMITS.basic, serviceExpireDate: null,
       isLifetimeGrant: false,
       reason: '无法确认所属机构'
@@ -86,6 +86,7 @@ async function checkTenantPermission(tenantId, featureKey) {
   }
 
   let planType = 'basic';
+  let originalPlanType = 'basic';
   let isExpired = false;
   let isInGracePeriod = false;
   let graceExpireDate = null;
@@ -115,7 +116,12 @@ async function checkTenantPermission(tenantId, featureKey) {
       isExpired = !isInGracePeriod;
       coreReadOnly = !isInGracePeriod;
     }
-    planType = isExpired ? 'basic' : (sub.planType || 'basic');
+    // 🆕（2026-08-31）originalPlanType 保留降级前的真实套餐，供调用方（如
+    // profile.ts isPerpetualPlan()）判断"本来就是 basic"还是"pro/enterprise
+    // 到期被降级"——不能用下面已降级的 planType 做这个判断，否则过期账号会
+    // 被误判为"永久免费"
+    originalPlanType = sub.planType || 'basic';
+    planType = isExpired ? 'basic' : originalPlanType;
     storeLimit = (sub.cloudQuota && sub.cloudQuota.storeLimit) || PLAN_STORE_LIMITS[planType] || PLAN_STORE_LIMITS.basic;
     // 🛡️ 服务端硬校验：basic（含到期自动降级为 basic 的情形）固定套餐门店配额，
     // 不管 tenant_subscriptions.cloudQuota.storeLimit 里存的是什么历史/脏数据
@@ -143,6 +149,7 @@ async function checkTenantPermission(tenantId, featureKey) {
   return {
     allowed,
     planType,
+    originalPlanType,
     isExpired,
     isInGracePeriod,
     graceExpireDate,
@@ -184,6 +191,7 @@ exports.main = async (event) => {
         success: true,
         allowed: true,
         planType: 'enterprise',
+        originalPlanType: 'enterprise',
         isExpired: false,
         isInGracePeriod: false,
         graceExpireDate: null,

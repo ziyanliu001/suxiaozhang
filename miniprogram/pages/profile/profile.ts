@@ -151,21 +151,27 @@ const PLAN_ACTION_META: Record<'pro' | 'enterprise', { icon: string; name: strin
 // pro/enterprise 只要不满足②，哪怕存的到期日恰好落在哨兵区间，也一律如实
 // 按日期展示——不再由前端帮着掩盖数据问题，脏数据交给平台管理员在
 // platform-admin 后台核实修正
-function isPerpetualPlan(planType: string, isLifetimeGrant: boolean): boolean {
-  return planType === 'basic' || !!isLifetimeGrant;
+// 🐛（2026-08-31 修复）第一个参数此前直接传入 checkTenantPermission 返回的
+// planType——但那是"到期已降级"后的值，pro/enterprise 到期会被降级成 'basic'，
+// 导致这里误判为"本来就是免费档"从而永久显示"永久有效"，掩盖了真实的到期
+// 状态。现在要求调用方改传 originalPlanType（降级前的真实套餐）
+function isPerpetualPlan(originalPlanType: string, isLifetimeGrant: boolean): boolean {
+  return originalPlanType === 'basic' || !!isLifetimeGrant;
 }
 
 // 🌟 到期日展示：isPerpetual 由上面 isPerpetualPlan() 判定后传入，本函数不再
 // 自行用日期形状去反推是否永久——同一份到期日字符串，"永久有效"还是"如实
 // 显示日期"完全取决于调用方传入的 isPerpetual，职责单一、不重复判断
-function formatTenantExpireText(expireDateStrOrTimestamp: any, isPerpetual: boolean): string {
+// 🆕（2026-08-31）新增 isExpired：非永久套餐已过期时改用"已于 X 到期"措辞，
+// 与 getNationalDashboard 的 expireDateText 文案口径保持一致
+function formatTenantExpireText(expireDateStrOrTimestamp: any, isPerpetual: boolean, isExpired: boolean = false): string {
   if (isPerpetual) return '永久有效';
   const d = new Date(expireDateStrOrTimestamp);
   const year = d.getFullYear();
   if (!expireDateStrOrTimestamp || isNaN(year)) return '到期日异常，请联系客服核实';
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `有效期至 ${year}-${m}-${day}`;
+  return isExpired ? `已于 ${year}-${m}-${day} 到期` : `有效期至 ${year}-${m}-${day}`;
 }
 
 // 🍎 iOS 虚拟商品支付合规：付费 Tab 隐藏价格/支付按钮后，底部按钮改为引导
@@ -5608,10 +5614,11 @@ Page({
     // planType 提前改写回 basic（见 checkTenantPermission 云函数），这里再
     // 显式判一次 isExpired 是双重保险，不是重复逻辑
     const isActive = resolveTier(result.planType) === PERMISSION_TIER.ADVANCED && !result.isExpired;
-    // 🆕 是否永久有效：见 isPerpetualPlan() 头部注释——只由 planType===basic
-    // 或显式 isLifetimeGrant 标记决定，不再从到期日期的形状反推，避免真实
-    // 年费订阅因为一条脏到期日数据被误判成"永久有效"
-    const isPerpetual = isPerpetualPlan(result.planType, result.isLifetimeGrant);
+    // 🆕 是否永久有效：见 isPerpetualPlan() 头部注释——只由 originalPlanType
+    // ===basic（降级前的真实套餐）或显式 isLifetimeGrant 标记决定，不再从
+    // 到期日期的形状反推，也不能用已降级的 result.planType（否则过期的
+    // pro/enterprise 会被误判成"永久有效"）
+    const isPerpetual = isPerpetualPlan(result.originalPlanType, result.isLifetimeGrant);
 
     this.setData({
       subscriptionInfo: {
@@ -5627,7 +5634,7 @@ Page({
         isActive,
         expireDateStr,
         isPerpetual,
-        expireDisplayText: formatTenantExpireText(expireDateStr, isPerpetual),
+        expireDisplayText: formatTenantExpireText(expireDateStr, isPerpetual, result.isExpired),
         storeLimit: result.storeLimit || 2,
         usedStoreCount: result.usedStoreCount || 0
       },

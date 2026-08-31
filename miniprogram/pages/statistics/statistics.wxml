@@ -1089,9 +1089,14 @@
         </view>
         <view class="sbs-quota-row sbs-expire-row">
           <text class="sbs-quota-label">有效期</text>
-          <text class="sbs-quota-value">{{nationalData.subscriptionQuota.expireDateText}}</text>
+          <text class="sbs-quota-value {{nationalData.subscriptionQuota.isExpired ? 'sbs-quota-value-expired' : ''}}">{{nationalData.subscriptionQuota.expireDateText}}</text>
         </view>
         <view class="sbs-expiring-tag" wx:if="{{nationalData.subscriptionQuota.isExpiringSoon}}">⏰ 即将到期，建议尽快续费</view>
+        <!-- 🆕（2026-08-31 订阅有效期动态化）已过期徽章：与上面 isExpiringSoon
+             互斥（服务端 expireDateText 计算逻辑保证同一时刻只有一个为
+             true），高亮引导走下方「扩容/续费咨询」按钮——该按钮已支持
+             大家长/超管直接跳转个人中心自助用兑换码续费（见 onConsultUpgrade） -->
+        <view class="sbs-expired-tag" wx:if="{{nationalData.subscriptionQuota.isExpired}}">⚠️ 套餐已过期，续费后立即恢复高级权益</view>
       </view>
 
       <view class="sbs-features">
@@ -1117,7 +1122,7 @@
         </view>
       </view>
 
-      <button class="sbs-cta-btn" bindtap="onConsultUpgrade">💬 扩容 / 续费咨询</button>
+      <button class="sbs-cta-btn {{nationalData.subscriptionQuota.isExpired ? 'sbs-cta-btn-expired' : ''}}" bindtap="onConsultUpgrade">{{nationalData.subscriptionQuota.isExpired ? '🔑 使用兑换码续费' : '💬 扩容 / 续费咨询'}}</button>
     </view>
   </view>
 
