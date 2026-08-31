@@ -109,6 +109,36 @@ const SECTION_END_MARKERS = /商品数量合计|---其他---|商品小计|商品
 // 而不是把 [x2] 里的数字误当成另一个价格
 const QUANTITY_MULTIPLIER_REGEX = /[\[\(]\s*[xX×]\s*(\d+)\s*[\]\)]/;
 
+// 🌾（2026-08-31 商业化生态演进第二步）食材品类关键字：与 material_logs/
+// getNationalDashboard 的"大米/面粉/食用油/蔬菜"四类核心物资口径一致。
+// 🛡️ 诚实的能力边界——这是一次轻量正则清洗，不是接入了付费的通用票据结构化
+// OCR 产品（那类产品才能做到"表格级"字段对齐，需要额外的 Tencent Cloud API
+// 密钥与计费，不在本次范围内）。只有当"品类关键字"与"数字+重量单位"出现在
+// 同一行（如"大米 5斤 25.00"）才能提取出 weightKg；品类名与重量数字分属
+// 两行（部分小票的常见排版）时本版本识别不到，交给用户在确认弹窗里手动填写，
+// 不做没有把握的跨行猜测拼接
+const RICE_KEYWORDS_REGEX = /大米|香米|籼米|粳米|东北大米/;
+const FLOUR_KEYWORDS_REGEX = /面粉|富强粉|小麦粉/;
+const OIL_KEYWORDS_REGEX = /食用油|大豆油|花生油|菜籽油|调和油|色拉油|玉米油|葵花籽油|橄榄油/;
+const VEGGIE_KEYWORDS_REGEX = /蔬菜|青菜|白菜|土豆|萝卜|黄瓜|西红柿|番茄|生菜|包菜|花菜|茄子|豆角|辣椒|冬瓜|南瓜|芹菜|菠菜|韭菜|豆芽/;
+// 数字 + 重量单位紧邻出现——只认带显式单位的重量数字，不去猜测"这一行里
+// 哪个孤立数字是重量、哪个是价格"，那类猜测精度不可控，容易把价格错当重量
+const WEIGHT_UNIT_REGEX = /(\d+(?:\.\d+)?)\s*(斤|千克|公斤|kg|KG|Kg)/;
+
+function classifyIngredientLine(line) {
+  if (RICE_KEYWORDS_REGEX.test(line)) return 'rice';
+  if (FLOUR_KEYWORDS_REGEX.test(line)) return 'flour';
+  if (OIL_KEYWORDS_REGEX.test(line)) return 'oil';
+  if (VEGGIE_KEYWORDS_REGEX.test(line)) return 'veggie';
+  return null;
+}
+
+// 斤转公斤：除以 2；千克/公斤/kg 本身已是标准公斤单位，原样返回
+function normalizeWeightToKg(value, unit) {
+  if (unit === '斤') return value * 0.5;
+  return value;
+}
+
 exports.main = async (event, context) => {
   const { fileID, fileId, imageBase64 } = event;
   const actualFileId = fileID || fileId;
@@ -271,6 +301,54 @@ exports.main = async (event, context) => {
     }
     const itemSectionLines = lines.slice(0, itemSectionEndIndex);
     console.log(`✂️ [分区截断] 商品明细区共 ${itemSectionLines.length} 行（截止于第 ${itemSectionEndIndex} 行结束标记）`);
+
+    // 🌾（2026-08-31 商业化生态演进第二步）食材重量提取：独立于下面的商品名/
+    // 价格拼接逻辑单独扫一遍商品明细区——只关心"这一行是不是米面油菜品类 +
+    // 是否带显式重量单位"，与下面 parsedGoodsList 的拼行/白名单/数量标记等
+    // 逻辑无关，两段互不干扰、互不依赖
+    let riceKg = 0;
+    let flourKg = 0;
+    let oilKg = 0;
+    let veggieKg = 0;
+    const parsedItems = [];
+    itemSectionLines.forEach((line) => {
+      const category = classifyIngredientLine(line);
+      if (!category) return;
+
+      const weightMatch = line.match(WEIGHT_UNIT_REGEX);
+      let weightKg;
+      if (weightMatch) {
+        const rawValue = parseFloat(weightMatch[1]);
+        if (!isNaN(rawValue) && rawValue > 0) {
+          weightKg = Number(normalizeWeightToKg(rawValue, weightMatch[2]).toFixed(2));
+          if (category === 'rice') riceKg += weightKg;
+          else if (category === 'flour') flourKg += weightKg;
+          else if (category === 'oil') oilKg += weightKg;
+          else if (category === 'veggie') veggieKg += weightKg;
+        }
+      }
+
+      // 品名/金额：与 weightKg 是否识别到无关，即使这一行没有显式重量单位，
+      // 也如实记进 parsedItems（weightKg 留空），供前端展示"识别到了这个
+      // 品类但没认出重量，需要手动填写斤两"
+      const priceMatches = line.match(/\d+\.\d{1,3}/g) || [];
+      const priceCandidate = priceMatches.length > 0 ? parseFloat(priceMatches[priceMatches.length - 1]) : 0;
+      const cleanedName = line
+        .replace(WEIGHT_UNIT_REGEX, '')
+        .replace(/\d+\.\d{1,3}/g, '')
+        .replace(/[•·:：\s]/g, '')
+        .trim();
+      parsedItems.push({
+        name: cleanedName || line,
+        amount: !isNaN(priceCandidate) ? priceCandidate : 0,
+        weightKg
+      });
+    });
+    riceKg = Number(riceKg.toFixed(2));
+    flourKg = Number(flourKg.toFixed(2));
+    oilKg = Number(oilKg.toFixed(2));
+    veggieKg = Number(veggieKg.toFixed(2));
+    console.log('🌾 [食材重量提取]:', { riceKg, flourKg, oilKg, veggieKg, parsedItemsCount: parsedItems.length });
 
     const isNoiseLine = (str) => {
       return /店号|工号|单号|品名|数量|单价|金额|售出商品|原价合计|为您节省|实收|回找|微支付|微信支付|检索号|会员|销售时间|欢迎光临|请保留|存根|小票|合计|小计|总计|商品小计|商品实付|在线支付|实付|支付宝|应付/i.test(str);
@@ -456,7 +534,14 @@ exports.main = async (event, context) => {
         amount: '',
         isHighConfidence: false,
         isConfidenceLow: true,
-        errMsg: '未能从图片中识别出有效金额，请手动填写或重新拍摄更清晰的小票'
+        errMsg: '未能从图片中识别出有效金额，请手动填写或重新拍摄更清晰的小票',
+        // 🌾 金额识别失败不代表食材重量也识别失败——比如一张只拍了食材品类、
+        // 没拍到底部合计行的小票，riceKg 等字段仍然是有效数据，不因为上面
+        // 的金额判定失败就一并清空扔掉，让 material-usage-modal 的拍照识别
+        // 场景（只关心食材重量，不关心金额）仍能用上这批数据
+        ingredients: { riceKg, flourKg, oilKg, veggieKg },
+        parsedItems,
+        rawTextList: lines
       };
     }
 
@@ -501,7 +586,15 @@ exports.main = async (event, context) => {
       // 🌟 isConfidenceLow 与 isHighConfidence 互为反义，同时提供给前端——
       // isHighConfidence 是既有页面已在用的字段，isConfidenceLow 是本次新增的显式字段名
       isConfidenceLow: !isHighConfidence,
-      merchant: merchantName || ''
+      merchant: merchantName || '',
+      // 🌾（2026-08-31 商业化生态演进第二步）食材品类重量提取：见文件头部
+      // classifyIngredientLine/WEIGHT_UNIT_REGEX 注释——只有品类关键字与显式
+      // 重量单位同行出现时才认得出 weightKg，未识别到重量的品类行仍会出现在
+      // parsedItems 里（weightKg 留空），供前端提示"识别到但没认出重量，请
+      // 手动填写"，不做没有把握的猜测
+      ingredients: { riceKg, flourKg, oilKg, veggieKg },
+      parsedItems,
+      rawTextList: lines
     };
 
   } catch (err) {
@@ -515,7 +608,10 @@ exports.main = async (event, context) => {
       amount: '',
       isHighConfidence: false,
       isConfidenceLow: true,
-      errMsg: err.message || '识别解析异常'
+      errMsg: err.message || '识别解析异常',
+      ingredients: { riceKg: 0, flourKg: 0, oilKg: 0, veggieKg: 0 },
+      parsedItems: [],
+      rawTextList: []
     };
   }
 };

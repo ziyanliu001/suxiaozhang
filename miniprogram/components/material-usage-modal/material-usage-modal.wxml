@@ -14,6 +14,16 @@
       <view class="feedback-sheet-close" bindtap="onClose">✕</view>
     </view>
 
+    <!-- 🌱（2026-08-31 AI 拍照识票）拍照智能识票：拍一张采买小票，自动识别
+         大米/面粉/食用油/蔬菜重量并回填下方输入框，识别中禁用按钮本身，
+         不阻塞用户同时手动填写 -->
+    <button
+      class="vt-scan-receipt-btn {{scanningReceipt ? 'btn-is-disabled' : ''}}"
+      bindtap="onScanMaterialReceipt"
+      loading="{{scanningReceipt}}"
+      disabled="{{scanningReceipt}}"
+    >📸 拍照智能识票</button>
+
     <view class="vt-count-grid-2x2">
       <view class="vt-count-cell">
         <text class="vt-form-label">大米消耗（斤）</text>

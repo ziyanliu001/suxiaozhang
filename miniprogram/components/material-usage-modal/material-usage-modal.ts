@@ -4,6 +4,7 @@
 import { getSelectedStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
+import { isCloudAvailable } from '../../utils/cloudGuard';
 
 type StockStatus = 'sufficient' | 'normal' | 'urgent';
 
@@ -46,6 +47,9 @@ Component({
 
   data: {
     submitting: false,
+    // 🆕（2026-08-31 AI 拍照识票）拍照识别进行中——与 submitting 分开维护，
+    // 识别期间禁用"拍照智能识票"按钮本身，不影响用户同时手动填写其它字段
+    scanningReceipt: false,
     form: { ...BLANK_FORM } as MaterialUsageForm
   },
 
@@ -54,6 +58,11 @@ Component({
 
     resetForm() {
       this.setData({ form: { ...BLANK_FORM } });
+      // 🆕 清空上一次可能残留的 OCR 溯源信息——组件实例跨多次打开复用，不清空
+      // 会导致这一次明明是纯手工填写，提交时却把上一次拍照识别的 ocrMetadata
+      // 也一并带上，误导审核方以为这批数据是拍照自动识别的
+      (this as any)._ocrSourceFileId = '';
+      (this as any)._ocrParsedItemCount = 0;
     },
 
     // 把一条已驳回记录的原始数据带回表单，供"重新修改并提交"入口调用
@@ -78,6 +87,110 @@ Component({
           oilStatus: item.oilStatus || 'sufficient'
         }
       });
+      (this as any)._ocrSourceFileId = '';
+      (this as any)._ocrParsedItemCount = 0;
+    },
+
+    // 🌱（2026-08-31 AI 拍照识票）「拍照智能识票」：拍一张采买小票，自动识别
+    // 大米/面粉/食用油/蔬菜的重量并回填对应输入框，消除长者/义工手动换算
+    // 斤两、逐项誊抄的录入壁垒。复用既有 ocrExpenseReceipt 云函数（本次已
+    // 扩展支持食材重量提取，见该云函数头部注释），不新建一套 OCR 云函数——
+    // 与 pages/index/index.ts 的 onScanReceiptPhoto（financial 用途，批量
+    // 多张、聚焦金额）是同一个 OCR 引擎的两种不同前端消费方式，各自独立
+    // 维护交互流程，互不影响
+    async onScanMaterialReceipt() {
+      if (this.data.scanningReceipt || this.data.submitting) return;
+      if (!isCloudAvailable()) {
+        wx.showToast({ title: '云服务暂不可用，无法使用拍照识别', icon: 'none' });
+        return;
+      }
+
+      let tempFilePath = '';
+      try {
+        const chooseRes = await wx.chooseMedia({
+          count: 1,
+          mediaType: ['image'],
+          sourceType: ['album', 'camera'],
+          sizeType: ['compressed']
+        });
+        if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
+        tempFilePath = chooseRes.tempFiles[0].tempFilePath;
+      } catch (err) {
+        // 用户取消选图，静默返回，不提示错误
+        return;
+      }
+
+      this.setData({ scanningReceipt: true });
+      wx.showLoading({ title: '图片合规核验中...', mask: true });
+
+      try {
+        // 🛡️ 与首页拍照识票同一套合规校验：上传前先过内容安全检测，
+        // 不合规直接拦截，不进入 OCR
+        const fs = wx.getFileSystemManager();
+        const base64Data = fs.readFileSync(tempFilePath, 'base64') as string;
+        const checkRes = await callFunctionWithTimeout({
+          name: 'checkImageContent',
+          data: { imgBuffer: base64Data, contentType: 'image/jpeg' }
+        });
+        const checkResult = checkRes.result as any;
+        if (checkResult && checkResult.isSafe === false) {
+          wx.hideLoading();
+          wx.showModal({
+            title: '⚠️ 违规内容拦截',
+            content: '系统检测到您选择的图片包含不合规、敏感或非法广告内容，已被全量阻断，请重新拍摄上传真实合规小票！',
+            showCancel: false,
+            confirmColor: '#D32F2F'
+          });
+          return;
+        }
+
+        wx.showLoading({ title: 'AI 识别中...', mask: true });
+        const uploadRes = await wx.cloud.uploadFile({
+          cloudPath: `receipts/material_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`,
+          filePath: tempFilePath
+        });
+
+        const ocrRes = await callFunctionWithTimeout({
+          name: 'ocrExpenseReceipt',
+          data: { fileID: uploadRes.fileID }
+        });
+        const result = ocrRes.result as any;
+        wx.hideLoading();
+
+        const ingredients = result && result.ingredients;
+        const hasAnyWeight = !!ingredients && (ingredients.riceKg > 0 || ingredients.flourKg > 0 || ingredients.oilKg > 0 || ingredients.veggieKg > 0);
+        if (!hasAnyWeight) {
+          wx.showModal({
+            title: '未识别到食材重量',
+            content: '照片里没有认出标注了斤/kg重量的大米、面粉、食用油或蔬菜品类，请手动填写，或换一张能同时看清品名与重量数字的照片重试。',
+            showCancel: false
+          });
+          return;
+        }
+
+        // 云函数返回的是标准公斤（riceKg 等），表单单位是斤——斤=公斤×2
+        const toJin = (kg: number): string => (kg > 0 ? String(Math.round(kg * 2 * 10) / 10) : '');
+        const patch: Record<string, string> = {};
+        const filledLabels: string[] = [];
+        if (ingredients.riceKg > 0) { patch['form.riceCount'] = toJin(ingredients.riceKg); filledLabels.push('大米'); }
+        if (ingredients.flourKg > 0) { patch['form.flourCount'] = toJin(ingredients.flourKg); filledLabels.push('面粉'); }
+        if (ingredients.oilKg > 0) { patch['form.oilCount'] = toJin(ingredients.oilKg); filledLabels.push('食用油'); }
+        if (ingredients.veggieKg > 0) { patch['form.vegetableCount'] = toJin(ingredients.veggieKg); filledLabels.push('蔬菜'); }
+
+        this.setData(patch);
+        (this as any)._ocrSourceFileId = uploadRes.fileID;
+        (this as any)._ocrParsedItemCount = Array.isArray(result.parsedItems) ? result.parsedItems.length : 0;
+
+        // 🌟 长者友好：醒目 Toast + 较长展示时长，明确告知"哪几项被自动填了"，
+        // 支持在下方输入框里手动微调，不强制信任 OCR 结果
+        wx.showToast({ title: `已自动填入${filledLabels.join('/')}重量，请核对`, icon: 'none', duration: 3500 });
+      } catch (err) {
+        console.error('[material-usage-modal onScanMaterialReceipt] 识别失败:', err);
+        wx.showToast({ title: '识别失败，请手动填写', icon: 'none' });
+      } finally {
+        wx.hideLoading();
+        this.setData({ scanningReceipt: false });
+      }
     },
 
     onClose() {
@@ -149,6 +262,17 @@ Component({
 
       try {
         const activeStore = getSelectedStore();
+        // 🆕（2026-08-31 AI 拍照识票）本次填报若经过拍照识别自动回填过任意一项
+        // （_ocrSourceFileId 非空），随提交一并记下 ocrMetadata 溯源信息；纯手工
+        // 填写时这三个字段本就是空/0，不携带这个字段，与 dataService.ts
+        // saveReport() 的 report_logs.ocrMetadata 未提供时落 null 同一口径
+        const ocrSourceFileId = (this as any)._ocrSourceFileId || '';
+        const ocrMetadata = ocrSourceFileId ? {
+          sourceImageUrl: ocrSourceFileId,
+          parsedItemCount: (this as any)._ocrParsedItemCount || 0,
+          isAutoFilled: true
+        } : undefined;
+
         const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerSubmission',
           data: {
@@ -162,7 +286,8 @@ Component({
             riceStatus,
             oilStatus,
             storeId: (activeStore && activeStore.storeId) || '',
-            storeName: (activeStore && activeStore.storeName) || ''
+            storeName: (activeStore && activeStore.storeName) || '',
+            ...(ocrMetadata ? { ocrMetadata } : {})
           }
         });
         const result = res.result;
@@ -178,6 +303,8 @@ Component({
         });
         this.triggerEvent('submitted', { autoApproved: !!result.autoApproved }, {});
         this.triggerEvent('close', {}, {});
+        (this as any)._ocrSourceFileId = '';
+        (this as any)._ocrParsedItemCount = 0;
       } catch (err) {
         console.error('[material-usage-modal onSubmit] 提交异常:', err);
         wx.showToast({ title: '网络异常，请重试', icon: 'none' });

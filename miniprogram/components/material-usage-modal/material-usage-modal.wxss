@@ -88,6 +88,30 @@
   margin-bottom: 12rpx;
 }
 
+/* 🌱（2026-08-31 AI 拍照识票）拍照智能识票按钮：置于食材消耗板块顶部，
+   浅绿底色与"AI 智能"标签区分于下方普通表单元素，禁用态复用 .btn-is-disabled
+   （与底部提交按钮同一套禁用样式规范） */
+.vt-scan-receipt-btn {
+  width: 100%;
+  height: 76rpx;
+  line-height: 76rpx;
+  background: #E6F7E9;
+  border: 1rpx solid #B8E6BE;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #2F7D3C;
+  margin-bottom: 20rpx;
+}
+
+.vt-scan-receipt-btn::after {
+  border: none;
+}
+
+.vt-scan-receipt-btn.btn-is-disabled {
+  opacity: 0.6;
+}
+
 /* 🌾 物资消耗四项：2x2 网格，比 3 列一行更宽裕，数字不用挤在一起 */
 .vt-count-grid-2x2 {
   display: grid;

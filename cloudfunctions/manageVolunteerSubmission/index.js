@@ -214,6 +214,19 @@ async function handleSubmit(event, OPENID) {
     const STOCK_STATUS_VALUES = ['sufficient', 'normal', 'urgent'];
     doc.riceStatus = STOCK_STATUS_VALUES.includes(event.riceStatus) ? event.riceStatus : 'normal';
     doc.oilStatus = STOCK_STATUS_VALUES.includes(event.oilStatus) ? event.oilStatus : 'sufficient';
+    // 🆕（2026-08-31 AI 拍照识票）票据 OCR 元数据：与 dataService.ts saveReport()
+    // 的 report_logs.ocrMetadata 同一套协议（sourceImageUrl/parsedItemCount/
+    // isAutoFilled），落在 pending_submissions 这条 doc 上，approve/autoApprove
+    // 两条路径都会把 doc 原样传给 writeMaterialLog()，由它决定是否写进
+    // material_logs——这里只负责"接住前端传来的、结构合法的这一份"，不信任
+    // 客户端能传别的任意字段
+    if (event.ocrMetadata && typeof event.ocrMetadata === 'object') {
+      doc.ocrMetadata = {
+        sourceImageUrl: String(event.ocrMetadata.sourceImageUrl || ''),
+        parsedItemCount: parseInt(event.ocrMetadata.parsedItemCount, 10) || 0,
+        isAutoFilled: !!event.ocrMetadata.isAutoFilled
+      };
+    }
   }
 
   if (!(await checkContentSafe(doc.menuNote)) || !(await checkContentSafe(doc.lossNote))) {
@@ -430,7 +443,11 @@ async function writeMaterialLog(doc, OPENID) {
     submittedBy: doc._openid,
     submittedByName: doc.nickName || '',
     approvedBy: OPENID,
-    createTime: db.serverDate()
+    createTime: db.serverDate(),
+    // 🆕（2026-08-31 AI 拍照识票）见提交入口 doc.ocrMetadata 处注释，未走
+    // 拍照识别的人工填报没有这个字段时落 null，与 report_logs.ocrMetadata
+    // 未提供时的空值口径一致
+    ocrMetadata: doc.ocrMetadata || null
   };
 
   try {
