@@ -28,18 +28,36 @@ function buildReportSaveLockKey(tenantId: string, storeId: string, openid: strin
   return `${tenantId || 'no_tenant'}|${storeId || 'no_store'}|${openid || 'no_openid'}`;
 }
 
-function getLocalReports(): any[] {
+// 🐛（2026-08-31 紧急修复："allReports.filter is not a function"）根因：本函数
+// 此前恒定假设 STORAGE_KEY 存的是 JSON.stringify 过的字符串，无条件 JSON.parse；
+// 但 pages/index/index.ts、pages/statistics/statistics.ts 里另外七八处直接
+// `wx.getStorageSync('local_report_logs') || []` 读取同一个 key 时，从来没
+// 手动 JSON.stringify 过（wx.setStorageSync 原生就支持直接存数组/对象，不需要
+// 手动序列化），写入的是原生数组。同一个 storage key 被两种不兼容的读写约定
+// 交替写入/读取——哪种约定"最后写入"，下一次用另一种约定读取就会拿到错误
+// 形状：字符串遇上 .filter()/.find() 直接抛 TypeError，数组遇上 JSON.parse()
+// 也会因为非字符串入参被隐式 toString 成 "[object Object]" 而抛 SyntaxError。
+// 现在两种形状都识别：已经是数组直接用，是字符串才 JSON.parse，两者都不是
+// （或解析失败）时兜底空数组——不管上一次是被哪种约定写入的，都能正确读出。
+export function getLocalReports(): any[] {
   try {
     const data = wx.getStorageSync(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'string' && data) return JSON.parse(data);
+    return [];
   } catch {
     return [];
   }
 }
 
+// 🐛 配套修复：写入侧同步改成原生数组直接存（不再手动 JSON.stringify）——
+// wx.setStorageSync 本身就会正确序列化数组/对象，手动 stringify 只是徒增一层
+// 不必要的转换，还正是上面读取端形状不一致 bug 的根源。此后无论走本文件这条
+// 写入路径，还是 statistics.ts 里另外几处直接 wx.setStorageSync('local_report_logs', ...)
+// 的本地缓存补丁写入，存的都统一是原生数组，两边收敛成同一套约定。
 function saveLocalReports(reports: any[]): void {
   try {
-    wx.setStorageSync(STORAGE_KEY, JSON.stringify(reports));
+    wx.setStorageSync(STORAGE_KEY, reports);
   } catch (error) {
     console.error('[DataService] 本地缓存写入失败:', error);
   }

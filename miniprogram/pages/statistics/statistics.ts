@@ -1,4 +1,4 @@
-import { DataService, formatMoney } from '../../utils/dataService';
+import { DataService, formatMoney, getLocalReports } from '../../utils/dataService';
 import { AuthService, ROLE_LABELS } from '../../utils/authService';
 import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
 import { formatGratitudeReportText, GratitudeReportData } from '../../utils/reportFormatter';
@@ -1728,10 +1728,10 @@ Page({
       
       if (allRecords.length === 0) {
         try {
-          const localData = wx.getStorageSync('local_report_logs');
-          if (localData && Array.isArray(localData)) {
-            allRecords = localData;
-          }
+          // 🐛（2026-08-31 紧急修复）原来只认原生数组形状、静默丢弃字符串形状
+          // 的本地缓存（不报错但也读不到数据），改用 getLocalReports() 两种
+          // 形状都能正确读出，见 dataService.ts 该函数头部注释
+          allRecords = getLocalReports();
           // 🛡️ 二级审核门槛：同一条口径，绕开 approvedOnly 过滤的本地兜底直读
           // 也必须重新套用一遍
           allRecords = allRecords.filter((r: any) => r && (r.approvalStatus === 'APPROVED' || r.approvalStatus === 'AUDITED_LOCKED'));
@@ -2371,14 +2371,10 @@ Page({
 
       if (allRecords.length === 0) {
         try {
-          const localData = wx.getStorageSync('local_report_logs');
-          if (localData) {
-            if (Array.isArray(localData)) {
-              allRecords = localData;
-            } else if (typeof localData === 'string') {
-              allRecords = JSON.parse(localData);
-            }
-          }
+          // 🐛（2026-08-31 紧急修复）此处原本已经手写了"数组/字符串两种形状都
+          // 兼容"的判断——收敛改用共用的 getLocalReports()（dataService.ts），
+          // 逻辑完全一致，避免同一段判断在多处各自维护一份拷贝
+          allRecords = getLocalReports();
           // 🛡️ 二级审核门槛：这是绕开 DataService.getReports()（已经过
           // approvedOnly 过滤）的最后兜底直读，同一条口径必须在这里重新套用一遍，
           // 否则还没被店长核对确认的本地草稿会在云端查询失败时抢先计入统计
@@ -4374,7 +4370,7 @@ Page({
         }
       }
 
-      const localRecords = wx.getStorageSync('local_report_logs') || [];
+      const localRecords = getLocalReports();
       const targetLocal = localRecords.find((r: any) => (r._id === targetId || r.reportDate === editingTargetRecord.date));
       if (targetLocal) {
         targetLocal.fixedMajorText = patchText;
@@ -4530,7 +4526,7 @@ Page({
                   console.warn('[DinerUpdate] 云函数更新失败:', res && res.error);
                 }
               } else if (item._localId) {
-                const localReports = wx.getStorageSync('local_report_logs') || [];
+                const localReports = getLocalReports();
                 const localIdx = localReports.findIndex((r: any) => r._localId === item._localId);
                 if (localIdx >= 0) {
                   localReports[localIdx].diningCount = count;
@@ -4610,7 +4606,7 @@ Page({
               if (res && res.success) {
                 updatedCount++;
               } else if (res && res.error && res.error.includes('doc not found')) {
-                const localReports = wx.getStorageSync('local_report_logs') || [];
+                const localReports = getLocalReports();
                 const idx = localReports.findIndex((r: any) => r._localId === item._localId || r._id === recordId);
                 if (idx >= 0) {
                   localReports[idx].diningCount = dinersVal;
@@ -4624,7 +4620,7 @@ Page({
               console.warn('[BatchDiner] 云函数调用失败:', callErr);
             }
           } else if (item._localId) {
-            const localReports = wx.getStorageSync('local_report_logs') || [];
+            const localReports = getLocalReports();
             const idx = localReports.findIndex((r: any) => r._localId === item._localId);
             if (idx >= 0) {
               localReports[idx].diningCount = dinersVal;

@@ -1,4 +1,4 @@
-import { DataService, formatMoney } from '../../utils/dataService';
+import { DataService, formatMoney, getLocalReports } from '../../utils/dataService';
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
@@ -4745,7 +4745,7 @@ Page({
       }
 
       if (rawList.length === 0) {
-        const localRecords = wx.getStorageSync('local_report_logs') || [];
+        const localRecords = getLocalReports();
         rawList = localRecords.filter((r: any) => {
           if (!r) return false;
           const rDate = r.dateString || r.reportDate || r.date || '';
@@ -4898,7 +4898,7 @@ Page({
   },
 
   async checkExistingRecord(dateString: string) {
-    const allRecords = wx.getStorageSync('local_report_logs') || [];
+    const allRecords = getLocalReports();
     const normalizeStore = (str: string) => (str || '').replace(/[区市省店\s]/g, '').trim();
     const cleanCurrentStore = normalizeStore(this.data.shopName);
 
@@ -7678,7 +7678,12 @@ Page({
         return false;
       }
 
-      const allReports = wx.getStorageSync('local_report_logs') || [];
+      // 🐛（2026-08-31 紧急修复）改用 getLocalReports() 而不是裸
+      // wx.getStorageSync('local_report_logs') || []——同一个 storage key
+      // 可能被 DataService.saveReport() 那条写入路径以外的约定写入过，
+      // 直接读出来的形状不保证是数组，见 dataService.ts getLocalReports()
+      // 头部注释
+      const allReports = getLocalReports();
       const storeName = this.data.shopName || '';
       const storeReports = allReports.filter((r: any) => r.shopName === storeName);
 

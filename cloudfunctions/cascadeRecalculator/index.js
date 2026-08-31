@@ -216,12 +216,23 @@ exports.main = async (event, context) => {
   try {
     switch (action) {
       case 'update_and_recalculate': {
-        if (!docId) {
-          return { success: false, errMsg: 'update_and_recalculate 模式需要 docId 参数' };
+        // 🐛（2026-08-31 紧急修复："docId必须为字符串或数字"）此前只判断
+        // docId 是否"存在"（!docId），没有校验类型——db.collection(...).doc()
+        // 对非字符串/数字类型的入参（如对象、数组、布尔值）会直接同步抛出
+        // "docId必须为字符串或数字"，这个异常发生在 .doc() 调用本身、发生
+        // 在同步阶段，不是后续 .get()/.update() 的 Promise 链上——下面
+        // .get().catch(() => null) 只能兜住 .get() 真正发起查询后失败的
+        // 情形，兜不住 .doc() 这一步的同步抛出。这里同时校验类型（.doc()
+        // 明确只接受字符串或数字，这里同口径放行两种），并兼容调用方可能
+        // 传成 reportId/_id 的情形（当前仅 history.ts 一处调用点、恒传
+        // docId，这里是面向未来调用方的防御性兜底，不改变现有行为）
+        const targetId = docId || event.reportId || event._id;
+        if (!targetId || (typeof targetId !== 'string' && typeof targetId !== 'number')) {
+          return { success: false, errMsg: '无效的 docId 参数' };
         }
 
         // 🏢 多租户边界：目标记录若已回填 tenantId，必须与调用者一致，防止跨机构改动他人资金流水
-        const targetDoc = await db.collection('report_logs').doc(docId).get().catch(() => null);
+        const targetDoc = await db.collection('report_logs').doc(targetId).get().catch(() => null);
         if (targetDoc && targetDoc.data && callerTenantId && targetDoc.data.tenantId && targetDoc.data.tenantId !== callerTenantId) {
           return { success: false, errMsg: '无权限：目标记录不属于您所在的机构' };
         }
@@ -244,7 +255,7 @@ exports.main = async (event, context) => {
             todayBalance: updatedTodayBal
           });
 
-          await db.collection('report_logs').doc(docId).update({
+          await db.collection('report_logs').doc(targetId).update({
             data: updateFields
           });
 

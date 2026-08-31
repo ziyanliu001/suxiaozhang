@@ -160,12 +160,28 @@ exports.main = async (event, context) => {
       return { success: false, error: `门店标识过长（scene ${codeTarget.scene.length} 字符，上限 32），暂无法生成二维码` };
     }
 
-    const result = await cloud.openapi.wxacode.getUnlimited({
-      scene: codeTarget.scene,
-      page: codeTarget.page,
-      width: 430,
-      isHyaline: false
-    });
+    // 🐛（2026-08-31 紧急修复：41030 invalid page）codeTarget.page 本身已经是
+    // 不带前导斜杠的标准路径（'pages/index/index'/'subpackages/admin/pages/
+    // public-verify/index'，与微信官方"page 严禁以 / 开头"的要求一致，排查
+    // 确认这里从未拼过带斜杠的路径），真正会触发 41030 的场景是：page 指向
+    // 的页面还没有随最新代码一起走完"提交审核 → 发布"流程、只存在于开发版/
+    // 体验版——wxacode.getUnlimited 只认已发布的线上版本。这类情况无法在
+    // 云函数这一层"修好"（发布状态不是代码能决定的），但可以优雅兜底：
+    // 省略 page 字段时微信会默认跳转小程序首页（官方文档明确行为），先按
+    // 原 page 尝试一次，命中 41030 再退化成不带 page 重试一次，用户扫码至少
+    // 能进小程序首页，不会拿到一张彻底生成失败的码
+    async function callGetUnlimited(page) {
+      const params = { scene: codeTarget.scene, width: 430, isHyaline: false };
+      if (page) params.page = page;
+      return cloud.openapi.wxacode.getUnlimited(params);
+    }
+
+    let result = await callGetUnlimited(codeTarget.page);
+
+    if (result && result.errCode === 41030 && codeTarget.page) {
+      console.warn('[getStoreQRCode] page 无效(41030)，省略 page 字段回退默认首页重试:', codeTarget.page);
+      result = await callGetUnlimited('');
+    }
 
     if (result.errCode === 0) {
       const cloudPath = isVerifyQr
