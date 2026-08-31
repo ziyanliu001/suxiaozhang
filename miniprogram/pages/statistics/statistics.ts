@@ -13,7 +13,7 @@ import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermissio
 import { reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { writeLocalFileSafe } from '../../utils/localFileCache';
-import { nationalDashboardHandlers, drillDownHandlers, procurementHandlers } from './enterprise';
+import { nationalDashboardHandlers, drillDownHandlers, procurementHandlers } from './enterprise/index';
 
 // ☀️ 阳光账本理念弹窗文案：与 pages/index/index.ts 的 computeConceptCopy 是
 // 同一份内容（按 getSunshineLedger 返回的真实 orgType 三档区分），未提炼成共享

@@ -92,8 +92,17 @@ const FILE_OVERRIDES = [
   // 🆕（终局阶段）pages/statistics 与 pages/profile 的 Enterprise 扩展包
   // 汇合点——真实实现文件（见下面 SINGLE_FILE_EXCLUDES）整份排除，这两个
   // index.ts 换成导出结构相同、方法体全部安全空操作的 stub，statistics.ts/
-  // profile.ts 里 `import {...} from './enterprise'` 这行代码本身不需要
-  // 跟着改
+  // profile.ts 里 `import {...} from './enterprise/index'` 这行代码本身不
+  // 需要跟着改
+  // 🐛（2026-08-31 运行时报错修复）导入路径必须显式写到 /index——微信小
+  // 程序运行时解析 require('./enterprise') 不会像 Node/webpack 那样自动
+  // 补全目录下的 index 文件，会直接报 "module 'xxx/enterprise.js' is not
+  // defined" 并去找一个根本不存在的同级 enterprise.js。tsc 类型检查不会
+  // 发现这个问题（TS 的模块解析确实支持目录省略 /index，这是编译期检查
+  // 与小程序运行时两套不同解析规则之间的落差），只有真机/开发者工具运行
+  // 时才会暴露，因此 statistics.ts/profile.ts 的这两处 import 都已改成
+  // 显式的 './enterprise/index'，与下面 FILE_OVERRIDES 的物理文件路径
+  // （本就是 .../enterprise/index.ts）保持字面一致
   {
     target: 'miniprogram/pages/statistics/enterprise/index.ts',
     source: 'scripts/core-overrides/statistics.enterprise.index.ts'

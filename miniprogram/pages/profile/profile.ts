@@ -22,7 +22,7 @@ import { setTabBarHidden } from '../../utils/tabBarVisibility';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { maskPhone } from '../../utils/core/privacy';
 import { ENTERPRISE_BUILD_ENABLED } from '../../utils/buildFlags';
-import { saasSubscriptionHandlers } from './enterprise';
+import { saasSubscriptionHandlers } from './enterprise/index';
 import { isVoiceFeedbackEnabled, setVoiceFeedbackEnabled } from '../../utils/audioService';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
