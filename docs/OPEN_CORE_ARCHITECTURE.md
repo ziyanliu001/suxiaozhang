@@ -334,7 +334,33 @@ grep `cloud.callFunction` 对 `wxPayCore` 的调用方，命中 4 处：`createS
 
 排除 `wxPayCore`/`liveFactoryCore` 后，实际具备"移入私有库"理由的是以下 11 个云函数整目录：`createProductionOrder`、`completeProductionOrder`、`processProductionRefund`、`getSettlementSummary`、`markSettlementsSettled`、`manageProduct`、`getProductionBoard`、`reorderProductionOrder`、`getPresaleCalendar`、`getMyProductionSpaces`、`createProductionSpace`。
 
-本节仅完成审计与分类，**尚未执行任何复制/迁移操作**，是否按 Tier A 的方式复制备份到 `enterprise-core/cloudfunctions/`，需要另行确认。
+> ✅ **已于 2026-09-01 执行完毕**：以上 11 项已按 Tier A 的方式复制备份到私有知识库仓库 `enterprise-core/cloudfunctions/`（详见该仓库同名 README），主仓库源码同步未删除。
 
 ### ⚠️ 部署状态说明
 纯文档新增，不涉及任何代码改动、云函数改动、构建脚本改动，不影响 `build-open-core.js`/CI 门禁的现有行为。
+
+## 14. `wxPayCore` / `liveFactoryCore` 专项审计（2026-09-01）
+
+> 背景：第 13 节已从依赖关系角度初步判断这两个云函数是"跨业务线共享的中立基础设施"，本节应要求做一次同等严格程度的独立审计——逐文件通读（而非抽样 grep）+ 隔离环境跑 `security-audit.js` + 全量调用方排查，验证第 13 节的结论是否站得住。
+
+### 14.1 逐文件通读结论：均为业务无关的纯基础设施，零商业敏感常量
+
+- **`wxPayCore`**（12 个源文件，1609 行）：`index.js` 头部注释明确自我定位——"本函数是纯粹的支付基础设施，不认识任何具体业务（订阅/捐赠/…）"。全部 10 个 action（`createOrder`/`queryOrder`/`closeOrder`/`refund`/`queryRefund`/`addProfitSharingReceiver`/`requestProfitSharing`/`queryProfitSharing`/`finishProfitSharing`/`mockPaySuccess`）均只接收调用方已经算好的金额/费率/接收方参数，函数体内逐一确认**不存在任何硬编码分账比例、定价常量或私有联系方式**。`lib/payConfig.js` 的商户凭证读取严格走环境变量 + 缺失时 `WXPAY_CONFIG_INCOMPLETE` 抛错拒绝（fail-closed），`index.js` 的 `requireInternalCaller` 对 `createOrder`/`closeOrder`/`refund` 等改钱操作强制要求 `WXPAY_INTERNAL_TOKEN` 匹配，未配置时拒绝所有调用，不存在"降级放行"分支。
+- **`liveFactoryCore`**（6 个源文件，729 行）：`index.js` 头部注释"定位与 `wxPayCore` 完全同构……本函数不认识'谁在下单''这个 tenant 的角色权限规则'"。`lib/settlement.js` 的 `computeSettlementSplit`/`buildSettlementSnapshot` 均以 `producerRate`/`promoterRate` 作为**纯参数**传入（无默认值兜底，`buildSettlement` action 缺参时按 0 处理），未发现任何形如 `0.75`/`0.20` 的硬编码费率字面量。`lib/scheduling.js` 的批次顺延调度、`requireInternalCaller` 的 `LIVE_FACTORY_INTERNAL_TOKEN` fail-closed 校验，与 `wxPayCore` 同一套安全模式。
+
+### 14.2 隔离环境安全扫描：✅ 全绿
+
+将两个云函数目录单独拷贝到临时目录，运行 `node scripts/security-audit.js --dir <临时目录>`，`exit code 0`，未发现任何硬编码敏感信息（独立于第 13 节对 13 个函数的批量扫描，本次是仅针对这两个函数的干净复测）。
+
+### 14.3 全量调用方排查
+
+- **`wxPayCore` 的云函数调用方**（`cloud.callFunction` 直接引用）：`createSubscriptionOrder`（Tier A，已收录于私有库）、`createProductionOrder`/`processProductionRefund`/`completeProductionOrder`（Tier B'，已收录于私有库）——确认同时被 SaaS 订阅与产销工坊两条业务线依赖，坐实第 13.5 节的判断。
+- **`liveFactoryCore` 的云函数调用方**：`createProductionOrder`、`processProductionRefund`——仅产销工坊一条业务线直接调用，本身不构成"跨业务线共享"的独立证据，但其代码内容本身（不含业务费率常量）已足以支撑"不应归入私有集群"的结论，不依赖调用方是否跨业务线。
+- **前端调用链补充发现**：`miniprogram/utils/wxPayCore.ts`（`wxPayCore` 云函数的前端薄封装）仅被两处页面 import——`subpackages/factory/pages/storefront/storefront.ts`（Tier B' 工坊）与 `pages/profile/enterprise/saasSubscriptionHandler.ts`（Tier A 订阅，已在 `enterprise/` 子目录）。**目前没有任何 Core 页面引用这个前端封装**——这不改变"云函数本体不含商业机密"的结论，但说明"共享基础设施"目前是设计意图层面成立、当前实际调用层面尚未有 Core 场景真正用上，如实记录，不夸大为"Core 也依赖它"。
+
+### 14.4 最终结论：维持第 13.5 节判断，`wxPayCore`/`liveFactoryCore` 继续留在主仓库，不纳入任何私有集群
+
+两个函数均通过独立、逐文件级别的复核：不含硬编码商业机密（分账比例/定价文案/私有联系方式一律未发现）、fail-closed 安全模式无退化分支、且 `wxPayCore` 被已私有化的 Tier A 依赖——继续留在主仓库既不构成信息泄露风险，也是唯一能避免"Tier A 私有库反向依赖 Tier B 私有库"这种不干净依赖方向的做法。**本次审计未发现需要变更第 13 节结论的新信息，不产生任何新的迁移动作。**
+
+### ⚠️ 部署状态说明
+纯文档新增，仅审计与复核，未修改任何代码/云函数/构建脚本，不影响 `build-open-core.js`/CI 门禁的现有行为。
