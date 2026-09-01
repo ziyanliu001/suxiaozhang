@@ -43,6 +43,19 @@ Component({
     isAutoApproveRole: {
       type: Boolean,
       value: false
+    },
+    // 🆕 宿主页面当前已知的最新大米/食用油库存状态（如首页 stapleRiceStatus/
+    // stapleOilStatus，来自 fetchLatestMaterialStatus）。resetForm() 打开一张
+    // 全新登记表单时用它做初始高亮，而不是硬编码猜一个默认值——避免义工没
+    // 意识去重新点选胶囊、就直接提交，把真实的"告急"状态静默覆盖回默认的
+    // "充足"。宿主页面若拿不到当前状态（如个人页），保持不传，退回原默认值
+    currentRiceStatus: {
+      type: String,
+      value: ''
+    },
+    currentOilStatus: {
+      type: String,
+      value: ''
     }
   },
 
@@ -58,7 +71,11 @@ Component({
     stopPropagation() {},
 
     resetForm() {
-      this.setData({ form: { ...BLANK_FORM } });
+      // 🆕 用宿主页面传入的当前实际库存状态做初始高亮（见 properties 注释）；
+      // 未传值（如个人页场景）时退回原有硬编码默认值，行为不变
+      const riceStatus = (this.data.currentRiceStatus as StockStatus) || BLANK_FORM.riceStatus;
+      const oilStatus = (this.data.currentOilStatus as StockStatus) || BLANK_FORM.oilStatus;
+      this.setData({ form: { ...BLANK_FORM, riceStatus, oilStatus } });
       // 🆕 清空上一次可能残留的 OCR 溯源信息——组件实例跨多次打开复用，不清空
       // 会导致这一次明明是纯手工填写，提交时却把上一次拍照识别的 ocrMetadata
       // 也一并带上，误导审核方以为这批数据是拍照自动识别的

@@ -17,51 +17,72 @@
     <!-- 🌱（2026-08-31 AI 拍照识票）拍照智能识票：拍一张采买小票，自动识别
          大米/面粉/食用油/蔬菜重量并回填下方输入框，识别中禁用按钮本身，
          不阻塞用户同时手动填写 -->
-    <button
+    <view
       class="vt-scan-receipt-btn {{scanningReceipt ? 'btn-is-disabled' : ''}}"
+      hover-class="vt-scan-receipt-btn-hover"
       bindtap="onScanMaterialReceipt"
-      loading="{{scanningReceipt}}"
-      disabled="{{scanningReceipt}}"
-    >📸 拍照智能识票</button>
+    >
+      <view class="vt-scan-receipt-content">
+        <view class="vt-camera-icon-svg"></view>
+        <text class="vt-scan-title">AI 拍照智能识别票据</text>
+        <text class="vt-scan-subtext">(增强版)</text>
+      </view>
+      <view class="vt-scan-ai-badge">AI</view>
+    </view>
 
     <view class="vt-count-grid-2x2">
       <view class="vt-count-cell">
         <text class="vt-form-label">大米消耗（斤）</text>
-        <input class="vt-count-input" type="digit" placeholder="0" value="{{form.riceCount}}" bindinput="onRiceCountInput" />
+        <view class="vt-count-input-wrap">
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{form.riceCount}}" bindinput="onRiceCountInput" />
+          <text class="vt-count-unit">斤</text>
+        </view>
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">面粉消耗（斤）</text>
-        <input class="vt-count-input" type="digit" placeholder="0" value="{{form.flourCount}}" bindinput="onFlourCountInput" />
+        <view class="vt-count-input-wrap">
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{form.flourCount}}" bindinput="onFlourCountInput" />
+          <text class="vt-count-unit">斤</text>
+        </view>
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">食用油消耗（斤）</text>
-        <input class="vt-count-input" type="digit" placeholder="0" value="{{form.oilCount}}" bindinput="onOilCountInput" />
+        <view class="vt-count-input-wrap">
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{form.oilCount}}" bindinput="onOilCountInput" />
+          <text class="vt-count-unit">斤</text>
+        </view>
       </view>
       <view class="vt-count-cell">
         <text class="vt-form-label">蔬菜消耗（斤）</text>
-        <input class="vt-count-input" type="digit" placeholder="0" value="{{form.vegetableCount}}" bindinput="onVegetableCountInput" />
+        <view class="vt-count-input-wrap">
+          <input class="vt-count-input" type="digit" placeholder="0" value="{{form.vegetableCount}}" bindinput="onVegetableCountInput" />
+          <text class="vt-count-unit">斤</text>
+        </view>
       </view>
     </view>
 
     <!-- 🌾 防腐引导：物资只做斤数/重量的大颗粒度健康评估，容忍采购毛重与
          后厨净重的正常损耗误差，不是精确 ERP 库存盘点，无需为凑数精确称重 -->
-    <text class="tool-hint-text">提示：填报数量为预估毛重即可，无需精确称重，店长采纳与审核后将自动归档。</text>
+    <view class="tool-hint-row">
+      <view class="tool-hint-badge">💡</view>
+      <text class="tool-hint-text">提示：填报数量为预估毛重即可，无需精确称重，店长采纳与审核后将自动归档。</text>
+    </view>
 
     <!-- 🌟 大米/食用油库存状态：单轨制改造后，这里是全店唯一能设置该状态的地方
          （原"填写今日明细"表单里的重复选择器已移除），首页"今日餐况"卡片的
          充足/一般/告急标签直接读取本次提交的这两个字段 -->
     <text class="vt-form-label">大米/面粉库存状态</text>
     <view class="vt-status-row">
-      <view class="vt-status-pill green {{form.riceStatus === 'sufficient' ? 'active' : ''}}" bindtap="onSelectRiceStatus" data-value="sufficient">充足</view>
-      <view class="vt-status-pill yellow {{form.riceStatus === 'normal' ? 'active' : ''}}" bindtap="onSelectRiceStatus" data-value="normal">一般</view>
-      <view class="vt-status-pill red {{form.riceStatus === 'urgent' ? 'active' : ''}}" bindtap="onSelectRiceStatus" data-value="urgent">告急</view>
+      <view class="vt-status-pill green {{form.riceStatus === 'sufficient' ? 'active' : ''}}" hover-class="capsule-hover" bindtap="onSelectRiceStatus" data-value="sufficient">充足</view>
+      <view class="vt-status-pill yellow {{form.riceStatus === 'normal' ? 'active' : ''}}" hover-class="capsule-hover" bindtap="onSelectRiceStatus" data-value="normal">一般</view>
+      <view class="vt-status-pill red {{form.riceStatus === 'urgent' ? 'active' : ''}}" hover-class="capsule-hover" bindtap="onSelectRiceStatus" data-value="urgent">告急</view>
     </view>
 
     <text class="vt-form-label">食用油库存状态</text>
     <view class="vt-status-row">
-      <view class="vt-status-pill green {{form.oilStatus === 'sufficient' ? 'active' : ''}}" bindtap="onSelectOilStatus" data-value="sufficient">充足</view>
-      <view class="vt-status-pill yellow {{form.oilStatus === 'normal' ? 'active' : ''}}" bindtap="onSelectOilStatus" data-value="normal">一般</view>
-      <view class="vt-status-pill red {{form.oilStatus === 'urgent' ? 'active' : ''}}" bindtap="onSelectOilStatus" data-value="urgent">告急</view>
+      <view class="vt-status-pill green {{form.oilStatus === 'sufficient' ? 'active' : ''}}" hover-class="capsule-hover" bindtap="onSelectOilStatus" data-value="sufficient">充足</view>
+      <view class="vt-status-pill yellow {{form.oilStatus === 'normal' ? 'active' : ''}}" hover-class="capsule-hover" bindtap="onSelectOilStatus" data-value="normal">一般</view>
+      <view class="vt-status-pill red {{form.oilStatus === 'urgent' ? 'active' : ''}}" hover-class="capsule-hover" bindtap="onSelectOilStatus" data-value="urgent">告急</view>
     </view>
 
     <text class="vt-form-label">报损 / 蔬菜种类 / 补充说明</text>
@@ -75,6 +96,6 @@
       auto-height
     ></textarea>
 
-    <button class="feedback-submit-btn {{submitting ? 'btn-is-disabled' : ''}}" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">📮 提交登记</button>
+    <button class="feedback-submit-btn {{submitting ? 'btn-is-disabled' : ''}}" hover-class="submit-btn-hover" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">提交登记</button>
   </view>
 </view>

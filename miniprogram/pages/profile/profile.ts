@@ -4721,6 +4721,14 @@ Page({
     this.setData({ showMaterialUsageModal: false });
   },
 
+  // 🌟 物资消耗提交成功后即时刷新"我的提交记录"列表：与 onTapMyVolunteerSubmissionItem
+  // "重新修改并提交"配套——不刷新的话，刚重新提交的记录不会立刻出现在列表里，
+  // 要重新打开"我的提交与数据"弹窗才能看到，复用与其它变更动作（如撤销/删除）
+  // 同一套 fetchMyVolunteerSubmissions() 刷新入口
+  onMaterialUsageSubmitted() {
+    this.fetchMyVolunteerSubmissions();
+  },
+
   onTriggerGenCode() {
     if (this.isNavigating) return;
     this.isNavigating = true;

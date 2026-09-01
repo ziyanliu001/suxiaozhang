@@ -10857,6 +10857,15 @@ Page({
     this.setData({ showMaterialUsageModal: false });
   },
 
+  // 🌟 物资消耗提交成功后即时刷新"今日餐况"：manageVolunteerSubmission 写入的
+  // 大米/食用油库存状态是首页展示的唯一数据源（见 fetchLatestMaterialStatus
+  // 头部注释），提交前不刷新的话，义工/店长本人自动采纳入库后仍会看到旧的
+  // 充足/一般/告急标签，要退出重进页面才会更新。复用 loadHomeDynamicData()
+  // 既有的防抖入口，与 onDrawerRefreshStateCache 同一套刷新习惯
+  onMaterialUsageSubmitted() {
+    this.loadHomeDynamicData();
+  },
+
   onTapToolElderCheckin() {
     const open = () => {
       const modal = this.selectComponent('#elderCheckinModal') as any;
