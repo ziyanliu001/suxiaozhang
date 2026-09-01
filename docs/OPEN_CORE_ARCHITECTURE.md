@@ -281,3 +281,60 @@ Stub 方法覆盖范围**不是只覆盖"字面被外部调用"的那几个**，
 
 ### ⚠️ 部署状态说明
 纯前端 + 逻辑层改动：`miniprogram/pages/statistics/enterprise/procurementHandler.ts`（新增 `computeProcurementPoolTiers`）、`nationalDashboardService.ts`（`loadNationalDashboard()` 接入调用，合并进 `displaySummary.procurementSummary`）、`enterprise/procurementCard.wxml`（新增阶梯徽章与进度条标记）、`statistics.wxss`（新增对应样式规则）。`tsc --noEmit`、WXML 标签平衡校验、`build:core` + `security-audit.js` 均已通过，不涉及云函数改动（复用既有 `procurementSummary` 原始字段做客户端二次计算）、不涉及数据库结构迁移，重新编译/预览小程序即可生效。
+
+## 13. Tier B 专项审计：产销工坊分账结算集群（2026-09-01）
+
+> 背景：私有知识库仓库（`suxiaozhang-vault`）已按本文档第 3/8.2 节的既有结论，把 `getNationalDashboard`/`checkTenantPermission`/`activateTenantSubscription`/`manageTenantSubscription`/`createSubscriptionOrder`/`getPlatformOverview` 六个云函数整目录 + `exportAccountExcel/lib/exportNationalExcel.js` 单文件（称 Tier A）复制备份到 `enterprise-core/cloudfunctions/`（主仓库源码未删除，纯镜像备份）。本节是对尚未处理的"产销工坊分账结算集群"（Tier B）单独立项的审计，**只产出分类结论，不涉及任何代码搬迁/复制动作**。
+
+### 13.1 审计范围与方法
+
+范围：`getSettlementSummary`、`markSettlementsSettled`、`createProductionOrder`、`completeProductionOrder`、`processProductionRefund`、`liveFactoryCore`、`wxPayCore`、`manageProduct`、`getProductionBoard`、`reorderProductionOrder`、`getPresaleCalendar`、`getMyProductionSpaces`、`createProductionSpace`，共 13 个云函数。
+
+方法与第 5/8.2 节一致：① 复用现有 `scripts/security-audit.js` 对该批文件跑一遍硬编码敏感信息扫描；② 按第 1 节边界原则三条标准逐函数核对（是否依赖 `tenant_subscriptions`/SaaS 订阅概念、是否嵌入商业计费规则/私有联系方式、是否服务于"公益信任基础设施"）；③ grep 排查跨云函数依赖关系（重点是 `wxPayCore` 会不会像 `tenantPermission.ts` 那样被 Core 侧引用）。
+
+### 13.2 安全信息扫描结果：✅ 全绿
+
+对该批 13 个云函数目录跑 `node scripts/security-audit.js --dir <临时目录>`，结果 `exit code 0`，未发现任何硬编码 PEM 私钥、AppSecret、商户号或密钥类环境变量的非空兜底值。`wxPayCore/lib/payConfig.js` 的商户凭证读取延续第 5 节已经认可的 fail-closed 模式，无需重复整改。
+
+### 13.3 关键发现一：产销工坊是现有二分类之外的第三种业态，不能照搬"是否依赖订阅"这条标准
+
+全量 grep `tenant_subscriptions`/`planType`/`checkTenantPermission`/`PLAN_STORE_LIMITS` 在这 13 个云函数里**零命中**（唯一一处命中是 `createProductionOrder/index.js` 第 19 行一条注释里拿 `PLAN_STORE_LIMITS` 做类比说明，不是真实依赖）——按第 1 节标准 2（"不依赖 SaaS 订阅套餐概念"）字面判断，这批代码甚至满足 Core 的资格。
+
+但这恰恰暴露了现有边界原则的一个盲区：第 1 节标准 2 是为"该不该挂订阅门禁"设计的判据，产销工坊压根不是按 `basic/pro/enterprise` 分层的功能，而是**完全独立于订阅套餐体系之外的第二条商业变现路径**（真实交易 + 自动分账抽成）。用"是否依赖订阅"这一条判断它是否该开源，标准本身就用错了地方。更贴切的判断是标准 1（"是否服务于单店公益信任基础设施"）——产销工坊是电商履约与营利性分账系统，与"透明记账/义工打卡/存证校验"这类公益信任基础设施在性质上完全不同，**不满足标准 1**，且 `createProductionOrder` 里硬编码了真实的商业分账比例常量（见 13.4），**违反标准 3**。
+
+**结论**：产销工坊整条业务线本质上是与 Core 定义的"单店公益信任基础设施"平行的另一套商业产品，不应该因为"不依赖订阅"就被当作 Core 候选，应整体归入私有/Enterprise 范畴——但原因是标准 1/3，不是标准 2。建议后续修订第 1 节时把"产销工坊类营利性交易系统"作为独立于"SaaS 订阅门禁"之外的第二种排除理由写清楚，避免以后再有人用"不依赖订阅"这一条误判其它营利模块。
+
+### 13.4 逐函数分类结论
+
+| 云函数 | 建议归类 | 依据 |
+| --- | --- | --- |
+| `createProductionOrder` | **Enterprise/私有** | 硬编码真实分账比例 `DEFAULT_PRODUCER_RATE = 0.75`/`DEFAULT_PROMOTER_RATE = 0.20`（index.js:28-29），直接违反标准 3 |
+| `completeProductionOrder` | **Enterprise/私有** | 调用 `tryAutoProfitSharing()` 触发真实分账，是订单履约与分账链路的关键节点 |
+| `processProductionRefund` | **Enterprise/私有** | 触发 `reverseSettlement` 分账红冲与 `releaseBatchCapacity` 产能释放，与上面同属订单生命周期闭环 |
+| `getSettlementSummary` | **Enterprise/私有** | 暴露真实分账金额、结算状态等财务汇总数据 |
+| `markSettlementsSettled` | **Enterprise/私有** | 管理员批量标记线下结算，财务操作类 |
+| `manageProduct` | **Enterprise/私有** | 商品/SKU 与产能配置管理，属于该商业产品线的运营配置 |
+| `getProductionBoard` | **Enterprise/私有** | 制作看板聚合，暴露经营数据（待产量、物料需求） |
+| `reorderProductionOrder` | **Enterprise/私有** | 薄包装层，直接转发给 `createProductionOrder`，与其同生命周期 |
+| `getPresaleCalendar` | **Enterprise/私有** | 预售日历，面向消费者但数据来自商业排产系统 |
+| `getMyProductionSpaces` | **Enterprise/私有** | 工作空间归属查询，整条业务线的入口判定 |
+| `createProductionSpace` | **Enterprise/私有** | 开通商业工作空间，整条业务线的起点 |
+| `liveFactoryCore` | **中立基础设施，不建议归入本集群** | 见 13.5 |
+| `wxPayCore` | **中立基础设施，不建议归入本集群** | 见 13.5 |
+
+### 13.5 关键发现二：`wxPayCore`/`liveFactoryCore` 是跨业务线共享基础设施，不属于"产销工坊私有集群"
+
+grep `cloud.callFunction` 对 `wxPayCore` 的调用方，命中 4 处：`createSubscriptionOrder`（已收录于 Tier A/Enterprise 私有库）、`createProductionOrder`/`processProductionRefund`/`completeProductionOrder`（本次 Tier B 候选）。**`wxPayCore` 同时被订阅支付与工坊支付两条业务线依赖**，这一点第 3 节早有提及，本次审计用实际 grep 结果坐实。进一步核对 `wxPayCore` 全部 12 个源文件（1609 行），未发现任何硬编码的分账比例、定价常量或私有联系方式——真实的商业费率常量只存在于 `createProductionOrder`（工坊侧）与已收录的订阅云函数（SaaS 侧），`wxPayCore` 本身只是通用的微信支付客户端/证书缓存/加密工具/分账调度基础设施，与第 5 节对它"密钥管理正面范例"的评价一致。
+
+`liveFactoryCore` 同理：知识库 `工坊分成合作协议.md` 已记录"默认费率常量位于 `createProductionOrder`，不在 `liveFactoryCore` 里——`liveFactoryCore` 定位是纯基础设施层，不持有任何业务费率默认值"，本次审计确认其 6 个源文件（729 行）不含任何商业敏感常量，只有产能 CAS 原子扣减、批次调度等通用逻辑。
+
+**结论**：若后续执行 Tier B 的实际迁移，`wxPayCore`/`liveFactoryCore` 不应整体搬入 `enterprise-core/`——它们本身不携带商业机密，且被 Tier A 已收录的 `createSubscriptionOrder` 依赖，物理搬走会制造一个 Tier A 反过来依赖 Tier B 私有库的不干净依赖方向（违反第 6 节"Enterprise 可以依赖 Core，Core 绝不依赖 Enterprise"的判据精神——这里 `wxPayCore` 相当于两条业务线共用的 Core 级基础设施，理应留在主仓库）。
+
+### 13.6 修订后的迁移候选清单（Tier B'，待后续单独确认后再执行）
+
+排除 `wxPayCore`/`liveFactoryCore` 后，实际具备"移入私有库"理由的是以下 11 个云函数整目录：`createProductionOrder`、`completeProductionOrder`、`processProductionRefund`、`getSettlementSummary`、`markSettlementsSettled`、`manageProduct`、`getProductionBoard`、`reorderProductionOrder`、`getPresaleCalendar`、`getMyProductionSpaces`、`createProductionSpace`。
+
+本节仅完成审计与分类，**尚未执行任何复制/迁移操作**，是否按 Tier A 的方式复制备份到 `enterprise-core/cloudfunctions/`，需要另行确认。
+
+### ⚠️ 部署状态说明
+纯文档新增，不涉及任何代码改动、云函数改动、构建脚本改动，不影响 `build-open-core.js`/CI 门禁的现有行为。
