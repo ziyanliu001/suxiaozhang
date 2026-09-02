@@ -17,7 +17,7 @@ const { buildSingleStoreExport } = require('./lib/exportSingleStoreExcel');
 const { buildNationalExport, isAdvancedPlanActive } = require('./lib/exportNationalExcel');
 
 exports.main = async (event, context) => {
-  const { shopName, tabType, selectedYear, selectedMonth, startDate, endDate, previewOnly, isNationalExport } = event;
+  const { shopName, storeId, tabType, selectedYear, selectedMonth, startDate, endDate, previewOnly, isNationalExport } = event;
   const { OPENID } = cloud.getWXContext();
 
   const now = new Date();
@@ -59,7 +59,7 @@ exports.main = async (event, context) => {
     periodLabel = '今日';
   }
 
-  console.log(`📊 [exportAccountExcel] 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}, isNationalExport: ${!!isNationalExport}`);
+  console.log(`📊 [exportAccountExcel] 范围: ${startDateStr} ~ ${endDateStr}, 门店: ${shopName || '全部'}(storeId=${storeId || '无'}), isNationalExport: ${!!isNationalExport}`);
 
   try {
     // 🏢 多租户边界：导出功能涉及完整财务明细，必须先收敛到调用者所属机构，
@@ -143,6 +143,14 @@ exports.main = async (event, context) => {
       // 🆕 机构合并导出：无条件按全机构口径查询，即使客户端仍带着某个具体
       // shopName（例如用户在切到"合并导出"之前恰好停留在某个单店 Tab），
       // 也不能让这个残留参数意外把合并导出收窄成单店导出
+    } else if (storeId) {
+      // 🐛 补齐 storeId 精确匹配：此前租户级角色（super_admin/hq_finance/
+      // regional_finance）浏览单店导出时只认 shopName 字符串精确匹配，与
+      // pages/statistics/statistics.ts loadStatistics() 早已改用的
+      // "storeId 精确匹配优先、shopName 兜底"双保险口径不一致——门店曾改名/
+      // 历史录入差异导致 shopName 对不上时，屏幕统计与导出表格可能不一致，
+      // 甚至导出查到 0 条。storeId 是稳定主键，客户端传了就优先信任它
+      whereConditions.storeId = storeId;
     } else if (shopName && shopName !== '全部门店') {
       whereConditions.shopName = shopName;
     }

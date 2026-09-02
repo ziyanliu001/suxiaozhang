@@ -3473,9 +3473,16 @@ Page({
   // 的明细/汇总供用户核对，确认无误后才在 onExportPreviewConfirm 里发起真正的
   // 导出调用——保证「核对的」与「导出的」严格是同一份数据
   buildExportCallData() {
-    const { shopName, selectedYear, selectedMonth, currentTab, customStartDate, customEndDate } = this.data;
+    const { shopName, selectedYear, selectedMonth, currentTab, customStartDate, customEndDate, currentUserStoreId } = this.data;
     return {
       shopName: shopName || 'default',
+      // 🐛 补齐 storeId：exportAccountExcel 此前只按 shopName 字符串精确匹配
+      // 门店（见该云函数 whereConditions 的 tenant-wide 角色分支），与
+      // loadStatistics() 早已改用的"storeId 精确匹配 || shopName 模糊匹配"
+      // 双保险口径（deepExtractStoreId/cleanStore，见该函数注释）不一致——
+      // 门店曾改名/录入有历史差异时，屏幕上看到的统计与导出的表格可能对不上
+      // （甚至导出查到 0 条）。这里把当前选中门店的 storeId 一并传给云函数
+      storeId: currentUserStoreId || undefined,
       tabType: currentTab,
       selectedYear: String(selectedYear),
       selectedMonth: String(selectedMonth).padStart(2, '0'),

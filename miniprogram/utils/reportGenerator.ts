@@ -50,6 +50,9 @@ export interface ReportData {
   volunteerCount?: number;
   volunteerHours?: number;
   diningCount?: number;
+  // 🆕 倾听陪伴/关怀人次：与 index.ts 表单同名字段 listeningSeniors 同源，
+  // 独立关怀指标，不计入 diningCount 汇总
+  listeningSeniors?: number;
   // 🍚 按门店开启餐次动态生成的供餐人数细分（仅门店开放不止一个餐次时才有值，
   // 见 index.ts buildMealBreakdown）——只供一种餐次的门店不需要这份细分，
   // 与 diningCount 汇总数字重复
@@ -70,7 +73,7 @@ export function formatMoney(value: number): string {
 }
 
 export function generateReportText(data: ReportData): string {
-  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, mealBreakdown, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode, isAnonymous } = data;
+  const { shopName, reportDate, items, totalAmount, otherDonation, yesterdayBalance, expenseAmount, dailyExpenseTotal, fixedExpenseTotal, todayBalance, expenses, dailyExpenseText, fixedExpenseText, mpAccount, thankText, slogan1, slogan2, materials, activityText, volunteerCount, volunteerHours, diningCount, listeningSeniors, mealBreakdown, stapleRiceStatus, stapleOilStatus, noticeTag, noticeTitle, noticeContent, mergeToReportText, reportMode, isAnonymous } = data;
 
   const defaultThankText = '感谢大家的自愿赞助\n与默默付出的义工！';
   const defaultSlogan1 = '吃 素 一 日   健 康 一 天';
@@ -101,6 +104,10 @@ export function generateReportText(data: ReportData): string {
 
     if (Number(volunteerCount) > 0) {
       text += `🤝 ${volunteerCount} 位志愿者无偿服务 ${volunteerHours || 0} 小时\n`;
+    }
+
+    if (Number(listeningSeniors) > 0) {
+      text += `👂 另有 ${listeningSeniors} 人次获倾听陪伴关怀\n`;
     }
 
     text += `💳 账户结余：¥${formatMoney(todayBalance)} 元 | 拒绝浪费，爱心传递！\n`;
@@ -155,7 +162,10 @@ export function generateReportText(data: ReportData): string {
   textArray.push('');
 
   const hasMealBreakdown = !!(mealBreakdown && mealBreakdown.length > 0);
-  const hasDiningStats = (volunteerCount && volunteerCount > 0) || (volunteerHours && volunteerHours > 0) || (diningCount && diningCount > 0) || hasMealBreakdown;
+  // 🐛 补齐 listeningSeniors：纯"陪伴关怀"类工种的记录（其余用餐/义工字段可能
+  // 全为 0）此前会因这里漏判被整个跳过【义工与结缘成果】板块，与 history.ts
+  // hasDiningBreakdown 同一根因、同一处修复原则
+  const hasDiningStats = (volunteerCount && volunteerCount > 0) || (volunteerHours && volunteerHours > 0) || (diningCount && diningCount > 0) || (listeningSeniors && listeningSeniors > 0) || hasMealBreakdown;
 
   if (hasDiningStats) {
     textArray.push(`🤝【义工与结缘成果】`);
@@ -173,6 +183,9 @@ export function generateReportText(data: ReportData): string {
     }
     if (volunteerCount && volunteerCount > 0) {
       textArray.push(`• 到岗护持义工：${volunteerCount} 人 (服务总时长 ${volunteerHours || 0} 小时)`);
+    }
+    if (listeningSeniors && listeningSeniors > 0) {
+      textArray.push(`• 倾听陪伴/关怀：${listeningSeniors} 人次`);
     }
     textArray.push('感恩诸位志愿者无私奉献，用一餐饭的温度，温暖世间人心！');
     textArray.push('');

@@ -37,6 +37,9 @@ export interface PosterData {
   activityText?: string;
   volunteerCount?: number;
   volunteerHours?: number;
+  // 🆕 倾听陪伴/关怀人次：与 index.ts 表单同名字段 listeningSeniors 同源，
+  // 独立关怀指标，随 volunteerCount/volunteerHours 同一护持数据区绘制
+  listeningSeniors?: number;
   // 🍚 按门店开启餐次动态生成的供餐人数细分（仅门店开放不止一个餐次时才有值，
   // 见 index.ts buildMealBreakdown）——不查库、不算业务口径，调用方按真实数据
   // 拼好再传入，与本文件其余字段同一设计原则
@@ -444,6 +447,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
         const mealBreakdownRows = data.mealBreakdown || [];
         const volunteerLineCount = (data.volunteerCount && data.volunteerCount > 0 ? 1 : 0)
           + (data.volunteerHours && data.volunteerHours > 0 ? 1 : 0)
+          + (data.listeningSeniors && data.listeningSeniors > 0 ? 1 : 0)
           + mealBreakdownRows.length;
         const hasVolunteer = volunteerLineCount > 0;
         const useTwoColumns = itemCount > TWO_COLUMN_THRESHOLD;
@@ -619,7 +623,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           // hasVolunteer 判断口径也要跟着改，否则门店只配置了 mealBreakdown（无
           // volunteerCount/Hours）时，这个区域会被预估阶段算了高度却完全不绘制
           const mealBreakdownRows = data.mealBreakdown || [];
-          const hasVolunteer = (data.volunteerCount && data.volunteerCount > 0) || (data.volunteerHours && data.volunteerHours > 0) || mealBreakdownRows.length > 0;
+          const hasVolunteer = (data.volunteerCount && data.volunteerCount > 0) || (data.volunteerHours && data.volunteerHours > 0) || (data.listeningSeniors && data.listeningSeniors > 0) || mealBreakdownRows.length > 0;
           if (hasVolunteer) {
             const volunteerTitleY = materialsEndY + 10;
             ctx.fillStyle = '#D2691E';
@@ -656,6 +660,17 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
               ctx.font = 'bold 14px sans-serif';
               const labelWidth2 = ctx.measureText('• 奉献服务时长：').width;
               ctx.fillText(`${data.volunteerHours} 小时`, 35 + labelWidth2, volY);
+              volY += 26;
+            }
+
+            if (data.listeningSeniors && data.listeningSeniors > 0) {
+              ctx.fillStyle = LIGHT_TEXT;
+              ctx.font = '14px sans-serif';
+              ctx.fillText('• 倾听陪伴/关怀：', 35, volY);
+              ctx.fillStyle = '#D2691E';
+              ctx.font = 'bold 14px sans-serif';
+              const labelWidth4 = ctx.measureText('• 倾听陪伴/关怀：').width;
+              ctx.fillText(`${data.listeningSeniors} 人次`, 35 + labelWidth4, volY);
               volY += 26;
             }
 
