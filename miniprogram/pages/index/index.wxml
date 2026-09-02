@@ -3652,7 +3652,12 @@
              （见 index.wxss 同处说明）：原裸类名与文件里另外两处不相关功能撞名，
              CSS 按源码顺序层叠合并、不是整条替换，双向互相污染样式，正是"门店
              地址/联系电话输入框变形重叠"的根因。门店照片上传格子仍复用全文件
-             共用的 receipt-grid-container 组件样式，未改动 -->
+             共用的 receipt-grid-container 组件样式，未改动
+             🐛 后续反馈截图证实：地址/电话这两个 input 当初只留了裸 .form-input
+             class（没有像上面 customStoreName / 下方 adminKeyInput/realName/phone
+             那样叠一份内联样式兜底），在同一个"外部 WXSS 增量更新对部分客户端
+             选择性失效"的环境下被压扁成一条细线——现补齐与同页其余 .form-input
+             完全一致的内联尺寸兜底，不再单独依赖外部 class -->
         <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
           <view class="apply-form-item">
             <text class="apply-form-label"><text class="form-required">*</text> 选择所属地区</text>
@@ -3662,11 +3667,11 @@
           </view>
           <view class="apply-form-item">
             <text class="apply-form-label">门店地址（可选）</text>
-            <input class="form-input" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
+            <input class="form-input" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-top: 10rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
           </view>
           <view class="apply-form-item">
             <text class="apply-form-label">联系电话（可选）</text>
-            <input class="form-input" type="number" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
+            <input class="form-input" type="number" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-top: 10rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
           </view>
           <view class="apply-form-item">
             <text class="apply-form-label">门店照片（可选）</text>

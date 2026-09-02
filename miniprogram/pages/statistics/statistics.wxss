@@ -1590,14 +1590,24 @@ page {
 .store-people-grid-4col {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20rpx 16rpx;
+  gap: 16rpx;
 }
 
+/* 🐛 卡片化重构：此前 align-items:flex-start 让每格内容各自贴左，"中共党员"
+   "堂食老人"等标签长度不一，视觉上一格比一格靠左/靠右，看起来"拥挤错位"；
+   改为居中 + 单元自带浅底卡片，配合下面 cell-lbl 的强制单行，才是真正规整的
+   Tag/名称/数值三段式网格，而不是简单换个 class 名 */
 .store-people-grid-4col .grid-cell {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6rpx;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8rpx;
+  min-width: 0;
+  padding: 16rpx 8rpx;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  box-sizing: border-box;
 }
 
 /* 🆕 色彩 Badge：真正的背景色胶囊（不再只是一个小圆点），三大分组配色——
@@ -1617,15 +1627,22 @@ page {
 .store-people-grid-4col .cell-badge.badge-elderly   { background: #D0EBFF; color: #1971C2; }
 .store-people-grid-4col .cell-badge.badge-other     { background: #F1F3F5; color: #868E96; }
 
+/* 强制单行：人群名称最长到"倾听陪伴老人"5 字，24rpx 字号下单行必然放得下，
+   加 nowrap+ellipsis 兜底，禁止在极端字号设置下折行把下面的数值挤歪 */
 .store-people-grid-4col .cell-lbl {
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #868E96;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .store-people-grid-4col .cell-val {
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: bold;
   color: #212529;
+  line-height: 1.2;
 }
 
 .store-people-grid-4col .cell-val.party-highlight {
@@ -5434,12 +5451,34 @@ page {
   padding: 14rpx 20rpx;
   background: #FFF8E1;
   border-radius: 10rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
 }
 
 .pending-audit-notice-text {
+  flex: 1;
+  min-width: 0;
   font-size: 24rpx;
   color: #A66A00;
   line-height: 1.5;
+}
+
+/* 🆕 一键跳转按钮：点击整条胶囊即可直达账本待审核 Tab，见 statistics.ts
+   onGoToPendingAudit（跳转 /pages/history/history?statusTab=pending，与
+   profile.ts 财务「凭证快速复核」入口复用同一个 history.ts onLoad 查询参数，
+   不新造一套跳转口径） */
+.pending-audit-notice-btn {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #C97B3D;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  white-space: nowrap;
 }
 
 /* 🆕 3x2 网格：新增「阳光凭证数」「凭证合规率」两格后从 2 列改为 3 列，

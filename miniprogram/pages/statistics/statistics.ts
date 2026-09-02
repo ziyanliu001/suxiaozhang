@@ -3557,6 +3557,13 @@ Page({
     safeNavigateTo({ url: '/pages/history/history' });
   },
 
+  // 🆕「⏳待审核餐报」提示条一键跳转：直达账本页待审核 Tab，与 profile.ts
+  // 财务「凭证快速复核」入口复用同一个 history.ts onLoad 查询参数
+  // （?statusTab=pending），形成店长看到提示→一点直达→审核的闭环
+  onGoToPendingAudit() {
+    safeNavigateTo({ url: '/pages/history/history?statusTab=pending' });
+  },
+
   // 「数据无误，确认并导出」：关闭预览弹窗，发起真正的 xlsx 生成
   async onExportPreviewConfirm() {
     this.setData({ showExportPreviewModal: false });

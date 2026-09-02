@@ -649,8 +649,9 @@
            见 cloudfunctions/getStatisticsData 同名注释）。这不是 Bug——但当
            一段周期内几乎全部记录都还在待审核状态时，用户看到的是一片 0，
            容易误以为统计功能坏了，这里把真实原因显式说出来 -->
-      <view class="pending-audit-notice" wx:if="{{statsData.pendingReportCount > 0}}">
+      <view class="pending-audit-notice" wx:if="{{statsData.pendingReportCount > 0}}" bindtap="onGoToPendingAudit">
         <text class="pending-audit-notice-text">⏳ 当前有 {{statsData.pendingReportCount}} 笔餐报待审核，审核通过后正式纳入本统计与阳光账本</text>
+        <text class="pending-audit-notice-btn">去审核 &gt;</text>
       </view>
 
       <view class="core-metrics-grid" wx:if="{{!(statisticsLoadLoading && !coreMetrics.hasData)}}">
