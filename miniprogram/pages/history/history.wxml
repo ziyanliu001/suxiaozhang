@@ -273,32 +273,34 @@
         </view>
 
         <!-- 💰 资产看板：结余与净变动为核心高亮指标，昨日/今日收支明细并列紧凑排布在下方。
-             隐私脱敏模式开启且未临时显示时，金额统一加 .privacy-blurred 模糊，配合右上角
-             "一键眼睛"（onToggleSensitiveReveal）临时显示 -->
+             隐私脱敏模式开启且未临时显示时（amountsMasked），金额直接换成掩码占位文本
+             "¥ ***.**"，而不是对真实数字加 CSS 模糊——低端机型上大量 filter:blur 元素会
+             拖慢渲染，且模糊态下真实数字仍在 DOM 里，长按仍可选中复制泄露；掩码文本两个
+             问题都不存在。配合右上角"一键眼睛"（onToggleSensitiveReveal）临时显示 -->
         <view class="asset-board {{item.isVoid ? 'strikethrough' : ''}}">
           <view class="asset-board-highlight-row">
             <view class="asset-highlight-cell">
               <text class="asset-highlight-lbl">今日结余</text>
-              <text class="asset-highlight-val {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">¥{{item.todayBalanceStr}}</text>
+              <text class="asset-highlight-val">{{amountsMasked ? '¥ ***.**' : ('¥' + item.todayBalanceStr)}}</text>
             </view>
             <view class="asset-divider"></view>
             <view class="asset-highlight-cell">
               <text class="asset-highlight-lbl">净变动</text>
-              <text class="asset-highlight-val {{item.netChange >= 0 ? 'up' : 'down'}} {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">{{item.netChange >= 0 ? '+' : ''}}¥{{item.netChangeStr}}</text>
+              <text class="asset-highlight-val {{item.netChange >= 0 ? 'up' : 'down'}}">{{amountsMasked ? '¥ ***.**' : ((item.netChange >= 0 ? '+' : '') + '¥' + item.netChangeStr)}}</text>
             </view>
           </view>
           <view class="asset-board-detail-row">
             <view class="asset-detail-cell">
               <text class="asset-detail-lbl">昨日余额</text>
-              <text class="asset-detail-val {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">¥{{item.yesterdayBalanceStr}}</text>
+              <text class="asset-detail-val">{{amountsMasked ? '¥ ***.**' : ('¥' + item.yesterdayBalanceStr)}}</text>
             </view>
             <view class="asset-detail-cell">
               <text class="asset-detail-lbl">服务收入</text>
-              <text class="asset-detail-val up {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">+¥{{item.totalIncomeStr}}</text>
+              <text class="asset-detail-val up">{{amountsMasked ? '¥ ***.**' : ('+¥' + item.totalIncomeStr)}}</text>
             </view>
             <view class="asset-detail-cell">
               <text class="asset-detail-lbl">今日支出</text>
-              <text class="asset-detail-val down {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">-¥{{item.expenseAmountStr}}</text>
+              <text class="asset-detail-val down">{{amountsMasked ? '¥ ***.**' : ('-¥' + item.expenseAmountStr)}}</text>
             </view>
           </view>
         </view>

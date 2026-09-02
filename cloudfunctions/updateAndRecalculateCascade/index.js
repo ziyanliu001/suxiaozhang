@@ -112,13 +112,20 @@ exports.main = async (event, context) => {
     donationItems, materials, stapleRiceStatus, stapleOilStatus,
     modifyReason,
     // 🍱 用餐/义工细分统计（堂食/送餐/打包），见下方 hasBreakdown 分支说明
-    dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount
+    dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount,
+    // 🆕 仅追加凭证模式（history.ts appendReceiptImagesToReport 专用）：见下方
+    // logData 读出后的 appendImagesOnly 分支注释
+    appendImagesOnly, newImageIds
   } = event;
   const targetShop = shopName || storeId || '';
   const strReportDate = String(reportDate || '').trim();
   // 凭证图片以前端提交的最终数组为准（无论走 receiptImages 还是 receiptImageList 字段传入），
-  // 两个字段必须同步落库，否则历史列表优先展示的 receiptImages 会保留旧图，造成"删除后又恢复"的假象
-  const finalReceiptImages = Array.isArray(receiptImages)
+  // 两个字段必须同步落库，否则历史列表优先展示的 receiptImages 会保留旧图，造成"删除后又恢复"的假象。
+  // 🐛 这份"前端提交的最终数组"在 appendImagesOnly 模式下会被下面 logData 读出后的分支整体
+  // 覆盖——历史上 history.ts 曾把它算成"已转换为展示态 tempFileURL 的旧图 + 新 fileID"的拼接，
+  // 一旦落库会把会过期的临时链接当成永久 fileID 存下来，是"补传凭证后图片丢失"的根因。
+  // appendImagesOnly 模式下改为完全不信任这份数组，只用服务端自己读到的 logData 原值 + newImageIds。
+  let finalReceiptImages = Array.isArray(receiptImages)
     ? receiptImages
     : (Array.isArray(receiptImageList) ? receiptImageList : []);
 
@@ -166,6 +173,17 @@ exports.main = async (event, context) => {
     const logData = logRes.data;
     if (!logData) {
       return { success: false, errMsg: '记录不存在' };
+    }
+
+    // 🆕 仅追加凭证模式：logData 是服务端刚从数据库读出的权威原值，
+    // receiptImageList/receiptImages 里存的必然是可长期使用的 cloud:// fileID
+    // （从未经过任何客户端展示态转换）。在此基础上追加 newImageIds，完全不采信
+    // 前端提交的 finalReceiptImages（那份可能混入了会过期的展示态 tempFileURL）
+    if (appendImagesOnly === true && Array.isArray(newImageIds) && newImageIds.length > 0) {
+      const authoritativeExisting = Array.isArray(logData.receiptImageList)
+        ? logData.receiptImageList
+        : (Array.isArray(logData.receiptImages) ? logData.receiptImages : []);
+      finalReceiptImages = [...authoritativeExisting, ...newImageIds];
     }
 
     const { allowed: canEdit, role: operatorRole } = await checkCanEdit(logData);
@@ -295,7 +313,7 @@ exports.main = async (event, context) => {
     console.log(`📦 [Step 2] 查找到 >= ${strReportDate} 的记录共 ${records.length} 条`);
 
     if (records.length === 0) {
-      return { success: true, updatedCount: 1, message: '已更新当前记录' };
+      return { success: true, updatedCount: 1, message: '已更新当前记录', finalReceiptImages };
     }
 
     let runningTodayBal = newTodayBal;
@@ -342,7 +360,8 @@ exports.main = async (event, context) => {
     return {
       success: true,
       updatedCount: updatedCount + 1,
-      message: `成功联动校正了包含 ${strReportDate} 在内的 ${updatedCount + 1} 天账目`
+      message: `成功联动校正了包含 ${strReportDate} 在内的 ${updatedCount + 1} 天账目`,
+      finalReceiptImages
     };
 
   } catch (err) {

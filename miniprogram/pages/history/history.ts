@@ -154,11 +154,15 @@ Page({
     // 但不含 statusTab 本身），随 applyFilters() 一起重算，供 Tab 角标展示
     statusTabCounts: { all: 0, pending: 0, approved: 0, rejected: 0 },
     // 🆕 设置页「隐私与脱敏模式」在本页的落地：开启后经办人姓名（approvedBy/
-    // auditedBy）掩码展示、金额默认模糊；每次 onShow 重读一次（用户可能刚从
+    // auditedBy）掩码展示、金额默认掩码；每次 onShow 重读一次（用户可能刚从
     // 设置页切换过开关再返回），不缓存过期值。sensitiveRevealed 是纯会话内的
-    // "一键眼睛"临时显示态，不写回 Storage，也不影响持久化开关本身
+    // "一键眼睛"临时显示态，不写回 Storage，也不影响持久化开关本身。
+    // amountsMasked = privacyMaskEnabled && !sensitiveRevealed，随这两个字段
+    // 任一变化同步重算（见 onShow/onToggleSensitiveReveal），WXML 只读这一个
+    // 派生字段，不在每处金额绑定里重复写一遍布尔表达式
     privacyMaskEnabled: false,
     sensitiveRevealed: false,
+    amountsMasked: false,
     permissions: {} as PermissionFlags,
     showEditModal: false,
     editingRecord: null as any,
@@ -302,8 +306,15 @@ Page({
 
     // 🆕 隐私脱敏模式：每次 onShow 重读一次（用户可能刚从设置页切换过开关
     // 再返回本页），不缓存上一次进页时的旧值；formattedReports 里已经预算好
-    // approvedByMasked/auditedByMasked，这里只需要切换 WXML 用哪一份展示
-    this.setData({ privacyMaskEnabled: isPrivacyMaskEnabled() });
+    // approvedByMasked/auditedByMasked，这里只需要切换 WXML 用哪一份展示。
+    // 每次进页重置 sensitiveRevealed=false：临时显示态只在当前这次停留有效，
+    // 不应该跨越"离开又回来"继续保持
+    const nextPrivacyMaskEnabled = isPrivacyMaskEnabled();
+    this.setData({
+      privacyMaskEnabled: nextPrivacyMaskEnabled,
+      sensitiveRevealed: false,
+      amountsMasked: nextPrivacyMaskEnabled
+    });
 
     const activeStore = getSelectedStore();
     // 🐛 硬性根治："切到全国汇总账本查不出记录"根因：current_store_id/
@@ -643,7 +654,11 @@ Page({
   // 不写回 Storage、不影响设置页的持久化开关本身——重进本页或重启小程序后
   // 恢复为默认隐藏
   onToggleSensitiveReveal() {
-    this.setData({ sensitiveRevealed: !this.data.sensitiveRevealed });
+    const nextRevealed = !this.data.sensitiveRevealed;
+    this.setData({
+      sensitiveRevealed: nextRevealed,
+      amountsMasked: this.data.privacyMaskEnabled && !nextRevealed
+    });
   },
 
   // 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，纯客户端过滤，已加载的
@@ -1159,6 +1174,18 @@ Page({
 
     try {
       await withLoading('保存中...', async () => {
+        // 🐛 根因修复（补传凭证"丢失"）：item.receiptImages/receiptImageList 早在
+        // convertReceiptImagesToUrls() 里就已被原地替换成用于展示的 https 临时链接
+        // （tempFileURL 有到期时间），不再是持久化用的 cloud:// fileID。此前这里直接
+        // 拿这份"展示态"数组拼成 mergedImages 整体提交，云函数又对它照单全收写库，
+        // 等于把一个会过期的临时链接当成永久 fileID 存进 report_logs.receiptImageList，
+        // 过期后这条记录此前所有凭证图片（不只是这次新传的）都会打不开。
+        // 本函数（appendReceiptImagesToReport）语义上只做"追加"，从不删除已有图片
+        // ——因此不需要客户端猜一份完整数组再整体提交：改为把新增的 fileID 单独通过
+        // appendImagesOnly/newImageIds 传给云函数，由它在事务内基于服务端自己刚读到
+        // 的、从未被展示态转换污染过的权威 receiptImageList 追加，保证落库的永远是
+        // 可长期使用的 fileID。mergedImages 只作为"云函数暂未部署新版本"时的兼容
+        // 回退值，以及本地乐观展示的初始占位
         const existingImages = item.receiptImages || item.receiptImageList || [];
         const mergedImages = [...existingImages, ...newUrls];
         const newExpense = parseFloat(item.expenseAmount || 0) + (extraAmount || 0);
@@ -1176,8 +1203,12 @@ Page({
             expense: newExpense,
             diningPeople: Number(item.diningPeople || item.diningCount || 0),
             volunteers: Number(item.volunteers || item.volunteerCount || 0),
+            // 兼容回退：旧版云函数没有 appendImagesOnly 分支时，仍按原逻辑整体采信这份数组
             receiptImageList: mergedImages,
             receiptImages: mergedImages,
+            // 新增：仅追加模式，云函数据此改为"服务端权威旧数组 + newImageIds"，忽略上面两个字段
+            appendImagesOnly: true,
+            newImageIds: newUrls,
             donationItems: item.donationItems || [],
             materials: item.materials || [],
             stapleRiceStatus: item.stapleRiceStatus || 'normal',
@@ -1192,14 +1223,21 @@ Page({
           wx.showToast({ title: '凭证已保存', icon: 'success' });
           this.setData({ showReceiptDetailModal: false });
 
+          // 🛡️ 优先采信云函数返回的 finalReceiptImages（服务端权威追加结果，
+          // 从未被展示态 URL 污染）；只有对接旧版本、云函数还没返回这个字段时，
+          // 才退回本地 mergedImages 这份"尽力而为"的猜测值
+          const authoritativeImages: string[] = Array.isArray(result.finalReceiptImages)
+            ? result.finalReceiptImages
+            : mergedImages;
+
           // 🐛 体验闭环修复：此前无论金额是否变化都无条件 loadReports() 全量重载——
           // 该方法会先 setData({loading:true}) 把 history-list-box 整个卸载换成
           // 加载态占位，滚动位置随之丢失。补传凭证（extraAmount===0）不改变任何
-          // 金额/结余链路，只需要把这一条记录的图片数组原地патch 进已渲染的列表；
+          // 金额/结余链路，只需要把这一条记录的图片数组原地 patch 进已渲染的列表；
           // 只有真正改了支出金额（如 OCR 识别追加金额）才会级联影响后续日期的结余，
           // 这种情况下游数据确实变了，仍旧走全量重载保证一致性
           if (extraAmount === 0) {
-            await this.patchReportImagesInPlace(item._id || item._localId, mergedImages);
+            await this.patchReportImagesInPlace(item._id || item._localId, authoritativeImages);
           } else {
             this.loadReports();
           }

@@ -765,7 +765,10 @@
   color: #D9480E;
 }
 
-/* 🆕 隐私脱敏模式：经办人信息行 + 金额模糊态 */
+/* 🆕 隐私脱敏模式：经办人信息行。金额掩码不再用 CSS filter:blur 处理——低端
+   机型上大量模糊元素会拖慢渲染，且真实数字仍在 DOM 里、长按可选中复制泄露；
+   改为 WXML 层直接把绑定值换成掩码占位文本"¥ ***.**"（见 asset-board 各处
+   amountsMasked 三元表达式），真实金额压根不会出现在渲染结果里 */
 .handler-info-row {
   display: flex;
   flex-wrap: wrap;
@@ -776,14 +779,6 @@
 .handler-info-text {
   font-size: 20rpx;
   color: #868E96;
-}
-
-/* 金额模糊：配合右上角"一键眼睛"（onToggleSensitiveReveal）临时显示，
-   user-select:none 避免模糊态下被长按选中复制出明文数字 */
-.privacy-blurred {
-  filter: blur(7rpx);
-  user-select: none;
-  transition: filter 0.2s ease;
 }
 
 /* ================= 💰 资产看板：结余 / 净变动高亮 + 昨日/今日收支明细紧凑排布 ================= */

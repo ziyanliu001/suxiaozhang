@@ -4,6 +4,21 @@ import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { requestDailyReportReminderSubscription } from '../../utils/subscribeMessage';
 import { STORAGE_KEY_DEFAULT_HOME_VIEW, STORAGE_KEY_PRIVACY_MASK } from '../../utils/userPreferences';
+import { getLocalReports } from '../../utils/dataService';
+
+// 🛡️ 白名单式清理缓存：只清理这里明确列出的、已核实"纯缓存/可重新生成"的 key，
+// 不确定语义的 key 一律不动——宁可少清理一点存储空间，也不能猜错导致数据丢失。
+// 与全量 wx.clearStorageSync() 相比，这份名单排除了 utils/authService.ts 的
+// OPENID_CACHE_KEY/USER_CACHE_KEY/USER_ROLE_CACHE_KEY、当前角色/门店会话
+// （current_user_role 等）、以及本页/其余页面的持久化偏好设置——这些都不会
+// 因为"清理缓存"这个操作被误删
+const CACHE_CLEAR_EXACT_KEYS = ['notice_bar_hidden_date'];
+const CACHE_CLEAR_PREFIX_KEYS = [
+  'pending_receipt_stash_', // 📥 history.ts 今日凭证图片暂存（getStashKey）
+  'warning_confirm_',       // ⚠️ validateReportGuardrails.ts 异常提交二次确认节流标记
+  'all_stores_list_cache_', // 🏪 index.ts 全部门店列表缓存（含配套的 _time 变体，同前缀）
+  'store_qr_cache_'         // 📱 index.ts 门店二维码图片缓存
+];
 
 // 🆕 本页新增的三项本地偏好，均为纯客户端展示/交互开关（不改动任何服务端权限
 // 判定口径）：默认首页视图 / 隐私脱敏模式 / 每日餐报提醒。前两项的 Storage key
@@ -71,6 +86,11 @@ Page({
 
   onShow() {
     this.initRoleState();
+    // 🛡️ 系统设置返回自动同步：用户从 onOpenSystemAuthSetting 拉起的系统授权
+    // 面板返回小程序时，小程序侧会重新触发 onShow——这里兜底再查一次 wx.getSetting，
+    // 确保哪怕用户是通过下拉/侧滑手势之外的方式返回（例如系统面板本身的返回键），
+    // 相机/相册状态展示也不会停留在旧值。与 onOpenSystemAuthSetting 里 wx.openSetting
+    // success 回调的即时刷新是两道保险，不是重复劳动
     this.refreshPermissionStatus();
   },
 
@@ -222,34 +242,67 @@ Page({
     }
   },
 
-  // 清理本地缓存：与此前逻辑一致（清空 Storage 后重启回首页），额外补上清理前的
-  // 容量展示，让"清理"这个操作有具体可感知的数字反馈，而不是纯粹的盲操作
+  // 🛡️ 白名单式清理缓存：严禁直接 wx.clearStorage()/wx.clearStorageSync() 全量清空——
+  // 那会把 utils/authService.ts 缓存的登录凭证（openid/用户信息/角色）、当前角色与
+  // 门店会话状态一并清掉，用户清个缓存却被强制退出登录/丢失当前门店上下文，体验上
+  // 等同于一次意外的"注销"。改为只清理 CACHE_CLEAR_EXACT_KEYS/CACHE_CLEAR_PREFIX_KEYS
+  // 里明确核实过的临时缓存/暂存数据，其余一律保留；清理完成后原地刷新容量展示，
+  // 不再需要 reLaunch 回首页（因为登录态从未被动过，无需重新走一遍启动流程）
   onTapClearCache() {
     // 打开确认弹窗前重新读一次，避免展示上次 onLoad 时留下的旧数值（与
     // profile.ts onTriggerClearCache 同款时机）
     this.refreshCacheSize();
     wx.showModal({
       title: '🧹 确认清除本地缓存？',
-      content: `当前本地缓存约 ${this.data.cacheSizeStr}（含统计数据缓存、未提交草稿等）。此操作会清理全部本地缓存，云端正式数据不受影响。确认继续？`,
+      content: `当前本地缓存约 ${this.data.cacheSizeStr}（含报表临时缓存、门店列表/二维码缓存、图片暂存数据等）。登录信息与已保存的设置偏好不会受影响，云端正式数据也不受影响。确认继续？`,
       confirmText: '确认清除',
       confirmColor: '#8C1D18',
       success: (res) => {
-        if (res.confirm) {
-          try {
-            wx.clearStorageSync();
-            wx.showToast({ title: '本地缓存已清除', icon: 'success' });
-            setTimeout(() => {
-              wx.reLaunch({
-                url: '/pages/index/index',
-                fail: () => {}
-              });
-            }, 800);
-          } catch (err) {
-            wx.showToast({ title: '清理失败，请重试', icon: 'none' });
-          }
+        if (!res.confirm) return;
+        try {
+          const clearedCount = this.safeClearCache();
+          this.refreshCacheSize();
+          wx.showToast({ title: `已清理 ${clearedCount} 项缓存，剩余 ${this.data.cacheSizeStr}`, icon: 'none', duration: 2500 });
+        } catch (err) {
+          console.error('[settings] 清理缓存失败:', err);
+          wx.showToast({ title: '清理失败，请重试', icon: 'none' });
         }
       }
     });
+  },
+
+  // 实际执行白名单式清理，返回清理掉的 key 数量供 Toast 展示
+  safeClearCache(): number {
+    let clearedCount = 0;
+
+    const info = wx.getStorageInfoSync();
+    (info.keys || []).forEach((key) => {
+      const isExactMatch = CACHE_CLEAR_EXACT_KEYS.indexOf(key) !== -1;
+      const isPrefixMatch = CACHE_CLEAR_PREFIX_KEYS.some((prefix) => key.indexOf(prefix) === 0);
+      if (!isExactMatch && !isPrefixMatch) return;
+      try {
+        wx.removeStorageSync(key);
+        clearedCount++;
+      } catch (err) {
+        console.warn('[settings] 清理缓存 key 失败:', key, err);
+      }
+    });
+
+    // 🛡️ local_report_logs 不能整体删除：里面混着"已同步到云端"的记录（纯缓存，
+    // 删了不影响云端数据）和"尚未同步"的离线草稿（isSynced!==true，删了等于
+    // 丢失用户还没提交成功的真实数据）。只清掉已同步的部分，未同步草稿原样保留
+    try {
+      const localReports = getLocalReports();
+      const unsyncedReports = localReports.filter((r: any) => r && r.isSynced !== true);
+      if (unsyncedReports.length !== localReports.length) {
+        wx.setStorageSync('local_report_logs', unsyncedReports);
+        clearedCount++;
+      }
+    } catch (err) {
+      console.warn('[settings] 清理 local_report_logs 已同步记录失败:', err);
+    }
+
+    return clearedCount;
   },
 
   // 🆕 缓存容量展示：与 profile.ts refreshCacheSize() 同款格式化口径（"<0.1MB"/
