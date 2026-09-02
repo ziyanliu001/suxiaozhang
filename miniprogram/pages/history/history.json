@@ -1,5 +1,8 @@
 {
   "navigationStyle": "custom",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#F7F8FA",
+  "backgroundTextStyle": "dark",
   "usingComponents": {
     "store-picker": "../../components/store-picker/store-picker",
     "watermark": "../../components/watermark/watermark",

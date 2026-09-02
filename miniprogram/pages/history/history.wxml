@@ -258,15 +258,19 @@
     </view>
 
     <view class="history-list-box" wx:if="{{!photoArchiveMode && !loading && filteredReports.length > 0}}">
-      <view wx:for="{{filteredReports}}" wx:key="rowKey" class="history-card {{item.isLocked ? 'locked-card state-locked' : ''}} {{item.isVoid ? 'state-voided' : ''}} {{item.approvalStatus === 'AUDITED_LOCKED' ? 'state-locked' : ''}}" data-index="{{index}}" wx:if="{{item.dateString}}">
+      <view wx:for="{{filteredReports}}" wx:key="rowKey" class="history-card {{item.isLocked ? 'locked-card state-locked' : ''}} {{item.isVoid ? 'state-voided' : ''}} {{item.approvalStatus === 'AUDITED_LOCKED' ? 'state-locked' : ''}}" hover-class="item-hover" hover-stay-time="80" data-index="{{index}}" wx:if="{{item.dateString}}">
 
         <!-- 🌟 作废印章 -->
         <view class="void-seal-box" wx:if="{{item.isVoid}}">
           <text class="seal-txt">已作废\n红字冲销</text>
         </view>
 
-        <!-- 卡片顶部：日期 + 门店 + 单行状态 Flow Tag -->
-        <view class="card-top-header">
+        <!-- 卡片顶部：日期 + 门店 + 单行状态 Flow Tag。点击跳转"🔍 凭证稽核"详情
+             （本项目没有独立的记录详情页，稽核详情弹窗是最接近的既有"查看明细"
+             入口，与卡片底部"🔍 查看明细"复用同一个 onOpenReceiptDetail，不新增
+             一套流程）；bindtap 而非 catchtap——这个区域内没有更深的可点击子元素，
+             不需要拦截冒泡 -->
+        <view class="card-top-header" bindtap="onOpenReceiptDetail" data-index="{{index}}">
           <view class="date-box">
             <view class="date-title-row">
               <text class="report-date {{item.isVoid ? 'strikethrough' : ''}}">{{item.dateString}}</text>
@@ -293,7 +297,7 @@
              "¥ ***.**"，而不是对真实数字加 CSS 模糊——低端机型上大量 filter:blur 元素会
              拖慢渲染，且模糊态下真实数字仍在 DOM 里，长按仍可选中复制泄露；掩码文本两个
              问题都不存在。配合右上角"一键眼睛"（onToggleSensitiveReveal）临时显示 -->
-        <view class="asset-board {{item.isVoid ? 'strikethrough' : ''}}">
+        <view class="asset-board {{item.isVoid ? 'strikethrough' : ''}}" bindtap="onOpenReceiptDetail" data-index="{{index}}">
           <view class="asset-board-highlight-row">
             <view class="asset-highlight-cell">
               <text class="asset-highlight-lbl">今日结余</text>
@@ -478,8 +482,23 @@
       </block>
     </view>
 
-    <view class="loading-state" wx:if="{{loading && !photoArchiveMode}}">
-      <text class="loading-text">加载中...</text>
+    <!-- 🆕 骨架屏：切换门店/查看视角触发 loadReports() 全量重载期间，用卡片形状
+         的占位骨架替代此前的纯文字"加载中..."——切筛选条件时列表会先被 wx:if
+         整块卸载再重新挂载，纯文字提示会让人感觉"白屏一下"，骨架屏承接住这段
+         过渡，观感上是"内容还在加载"而不是"页面空了" -->
+    <view class="skeleton-list" wx:if="{{loading && !photoArchiveMode}}">
+      <view class="skeleton-card" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+        <view class="skeleton-row skeleton-row-top">
+          <view class="skeleton-block skeleton-block-date"></view>
+          <view class="skeleton-block skeleton-block-tag"></view>
+        </view>
+        <view class="skeleton-block skeleton-block-wide"></view>
+        <view class="skeleton-row">
+          <view class="skeleton-block skeleton-block-cell"></view>
+          <view class="skeleton-block skeleton-block-cell"></view>
+          <view class="skeleton-block skeleton-block-cell"></view>
+        </view>
+      </view>
     </view>
 
     <view class="compliance-disclaimer" wx:if="{{!photoArchiveMode && !loading && filteredReports.length > 0}}">

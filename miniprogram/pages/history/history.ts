@@ -1,6 +1,6 @@
 import { DataService, formatMoney } from '../../utils/dataService';
-import { AuthService, getPermissionFlags, PermissionFlags } from '../../utils/authService';
-import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
+import { AuthService } from '../../utils/authService';
+import { getSelectedStore } from '../../utils/storeManager';
 import { getSafeSystemInfo } from '../../utils/util';
 import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
@@ -101,10 +101,17 @@ Page({
   _deleteInFlight: false,
   _todayActionInFlight: false,
   _supplementInFlight: false,
+  // 🆕 精简 setData payload：本页全部报表记录（可达 DataService 默认上限
+  // 100 条，每条都是 30+ 字段的格式化对象），从来没有在 WXML 里直接绑定过
+  // ——渲染层只读 filteredReports（applyFilters() 从这份数据筛出的子集）。
+  // 放进 data 里的唯一效果是每次 loadReports()/convertReceiptImagesToUrls()/
+  // patchReportImagesInPlace() 都要把这一整包数据经 JSBridge 序列化传给渲染层，
+  // 白白消耗一次传输开销却没有任何页面在读。改成普通实例字段，this._reports
+  // 在纯 JS 逻辑层读写，不再进入 setData
+  _reports: [] as any[],
 
   data: {
     watermarkIdentity: '',
-    reports: [],
     filteredReports: [],
     loading: true,
     // 🧾 今日凭证与记账（当日+历史一体化：置顶高亮展示当天记录，无需翻找历史列表）
@@ -137,8 +144,6 @@ Page({
     // 决定查到谁的数据，mineEntryMode 只决定这些管理向 UI 元素是否展示
     mineEntryMode: false,
     viewMode: 'all' as 'all' | 'personal',
-    storeFilterOptions: ['全部门店'],
-    storeFilterIndex: 0,
     selectedStoreName: '',
     currentStoreId: '',
     isAllStoresView: false,
@@ -177,16 +182,13 @@ Page({
     privacyMaskEnabled: false,
     sensitiveRevealed: false,
     amountsMasked: false,
-    permissions: {} as PermissionFlags,
     showEditModal: false,
     editingRecord: null as any,
-    canAddEditImage: true,
     receiptImgCount: 0,
     isManagerOrAdmin: false,
     isFinanceOrAdmin: false,
     showPreviewBanner: false,
     previewBannerText: '',
-    shareRecord: null as any,
     // 🐛 修复：placeholder 曾使用 XML 数字字符实体 &#10; 表示换行，微信 WXML 不会对其解码，
     // 会把字面量 "&#10;" 原样展示给用户。这里改为在 TS 层用真实的 \n 换行符拼好，再绑定渲染。
     donationsPlaceholder: '示例：张三 100\n李四 200（支持空格/逗号/冒号分隔，自动识别金额）',
@@ -295,6 +297,23 @@ Page({
     if (this._navGuard) {
       this._navGuard.teardown();
       this._navGuard = null;
+    }
+  },
+
+  // 🆕 下拉刷新：账本模式重新拉取报表列表，图册模式重新拉取图片档案；
+  // finally 里统一 wx.stopPullDownRefresh()，无论成功/失败都要收起下拉圈，
+  // 否则失败时下拉圈会一直转到系统超时才自己消失
+  async onPullDownRefresh() {
+    try {
+      if (this.data.photoArchiveMode) {
+        await this.loadPhotoArchive();
+      } else {
+        await this.loadReports();
+      }
+    } catch (err) {
+      console.warn('[onPullDownRefresh] 刷新失败:', err);
+    } finally {
+      wx.stopPullDownRefresh();
     }
   },
 
@@ -576,7 +595,6 @@ Page({
       // 🏛️ 权限向下继承：大家长天然拥有店长 + 财务的全套日常管理权限
       const isManagerRole = normalizedRole === 'store_manager' || normalizedRole === 'store_patriarch' || isSuperAdmin;
       const isFinanceRole = normalizedRole === 'finance' || normalizedRole === 'store_patriarch' || isSuperAdmin;
-      const flags = getPermissionFlags({ role: normalizedRole });
 
       // 🛡️ 仅做提示，不做授权：本页所有权限判断全程只认 normalizedRole（真实身份），
       // 从不接入 viewModePreview 的展示层覆盖——这里读取预览模式仅用于渲染一条
@@ -586,7 +604,6 @@ Page({
       const showPreviewBanner = isSuperAdmin && previewMode !== 'SUPER_ADMIN';
 
       this.setData({
-        permissions: flags,
         isManagerOrAdmin: isManagerRole,
         isFinanceOrAdmin: isFinanceRole,
         isManagerRole: isManagerRole,
@@ -847,15 +864,8 @@ Page({
       };
     });
 
-    const storeSet = new Set<string>();
-    formattedReports.forEach((item: any) => {
-      if (item.shopName) storeSet.add(item.shopName);
-    });
-    const storeOptions = ['全部门店', ...Array.from(storeSet)];
-
+    this._reports = formattedReports;
     this.setData({
-      reports: formattedReports,
-      storeFilterOptions: storeOptions,
       isAllStoresView: isAllStoresView
     }, () => {
       this.convertReceiptImagesToUrls();
@@ -863,7 +873,7 @@ Page({
   },
 
   async convertReceiptImagesToUrls() {
-    const { reports } = this.data;
+    const reports = this._reports;
     const allCloudIds: string[] = [];
     const idMap: Record<string, { reportIdx: number; imgIdx: number }> = {};
 
@@ -908,7 +918,8 @@ Page({
         if (report.receiptImageList) report.receiptImageList = convertedImages;
       });
 
-      this.setData({ reports: updatedReports, loading: false }, () => {
+      this._reports = updatedReports;
+      this.setData({ loading: false }, () => {
         this.applyFilters();
         this.computeTodayLedger();
       });
@@ -922,7 +933,8 @@ Page({
 
   // 🧾 从已加载的账本记录中取出"今日"这一条，置顶高亮展示（当日+历史一体化，对齐食谱/大事记模块的交互模式）
   computeTodayLedger() {
-    const { reports, isAllStoresView } = this.data;
+    const reports = this._reports;
+    const { isAllStoresView } = this.data;
     const todayStr = getTodayIsoString();
 
     // 全国总览视角不针对具体门店，"今日凭证"栏位无从谈起，仅展示历史列表
@@ -1311,8 +1323,8 @@ Page({
       return { ...r, receiptImages: displayImages, receiptImageList: displayImages };
     });
 
+    this._reports = patchList(this._reports);
     const patch: Record<string, any> = {
-      reports: patchList(this.data.reports),
       filteredReports: patchList(this.data.filteredReports)
     };
 
@@ -1351,6 +1363,16 @@ Page({
     const { index } = e.currentTarget.dataset;
     const item = this.data.filteredReports[index];
     if (!item) return;
+
+    // 🆕 轻微触感反馈：卡片点击跳转详情前的即时反馈，覆盖卡片头部/资产看板/
+    // "🔍稽核"链接/"🔍查看明细"链接这几个共用本方法的入口，不需要各自重复调用；
+    // try/catch 兜底——个别机型或基础库版本可能不支持振动 API，不能因此打断
+    // 详情弹窗本身的展示
+    try {
+      wx.vibrateShort({ type: 'light' });
+    } catch (err) {
+      /* 静默降级：振动反馈是锦上添花，不是功能前提 */
+    }
 
     const images = item.receiptImages || item.receiptImageList || [];
     this.setData({
@@ -1496,7 +1518,8 @@ Page({
   },
 
   applyFilters() {
-    const { reports, selectedStoreName, selectedMonthStr, anomalyFilterType, statusTab } = this.data;
+    const reports = this._reports;
+    const { selectedStoreName, selectedMonthStr, anomalyFilterType, statusTab } = this.data;
 
     let filtered = [...reports];
 
@@ -1556,21 +1579,6 @@ Page({
     );
 
     this.setData({ filteredReports: this.processReportListAudit(filtered), statusTabCounts, hasActiveFilters });
-  },
-
-  onStoreFilterChange(e: any) {
-    const index = e.detail.value;
-    const storeName = this.data.storeFilterOptions[index];
-    this.setData({
-      storeFilterIndex: index,
-      selectedStoreName: index === 0 ? '' : storeName
-    }, () => {
-      this.applyFilters();
-    });
-
-    if (index !== 0 && storeName) {
-      setSelectedStore({ storeId: '', storeName });
-    }
   },
 
   onMonthFilterChange(e: any) {
@@ -1867,20 +1875,18 @@ Page({
       return;
     }
 
-    const report = this.data.reports.find((r: any) => (r._id || r._localId) === id);
+    const report = this._reports.find((r: any) => (r._id || r._localId) === id);
 
     if (!report) {
       const filteredReport = this.data.filteredReports.find((r: any) => (r._id || r._localId) === id);
       if (filteredReport) {
         this._shareRecord = filteredReport;
-        this.setData({ shareRecord: filteredReport });
       } else {
         wx.showToast({ title: '未找到记录', icon: 'none' });
         return;
       }
     } else {
       this._shareRecord = report;
-      this.setData({ shareRecord: report });
     }
 
     const reportText = DataService.buildReportText(this._shareRecord);
@@ -1896,7 +1902,7 @@ Page({
   },
 
   onShareAppMessage(options?: any) {
-    const record = this._shareRecord || this.data.shareRecord;
+    const record = this._shareRecord;
 
     if (!record) {
       console.warn('[Share] 未找到分享记录，返回默认分享');
@@ -1924,7 +1930,7 @@ Page({
   },
 
   onShareTimeline() {
-    const record = this._shareRecord || this.data.shareRecord;
+    const record = this._shareRecord;
 
     if (!record) {
       return {
@@ -2033,7 +2039,6 @@ Page({
     this.setData({
       showEditModal: true,
       editingRecord,
-      canAddEditImage: imgCount < 9,
       receiptImgCount: imgCount
     });
   },
@@ -2152,7 +2157,6 @@ Page({
     editingRecord.deletedImageIds = deletedImageIds;
     this.setData({
       editingRecord,
-      canAddEditImage: imageList.length < 9,
       receiptImgCount: imageList.length
     });
 
@@ -2225,7 +2229,6 @@ Page({
       const newCount = editingRecord.receiptImageList.length;
       this.setData({
         editingRecord,
-        canAddEditImage: newCount < 9,
         receiptImgCount: newCount
       });
 
@@ -2746,7 +2749,8 @@ Page({
               icon: 'success',
               duration: 2000
             });
-            this.setData({ reports: [], filteredReports: [] });
+            this._reports = [];
+            this.setData({ filteredReports: [] });
             this.loadReports();
           } else {
             wx.showModal({

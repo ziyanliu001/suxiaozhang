@@ -613,6 +613,14 @@
   margin-bottom: 20rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   border: 1rpx solid #F1F3F5;
+  transition: background-color 0.1s ease;
+}
+
+/* 🆕 卡片点击触感反馈：轻微背景微灰，hover-stay-time=80ms（见 WXML）让反馈
+   干脆利落，不拖沓；.state-voided 等状态类自带 !important 背景，仍会按状态
+   优先显示，这里不用 !important 抢占，两者不冲突 */
+.item-hover {
+  background-color: #F7F8FA;
 }
 
 .history-card.locked-card {
@@ -1145,11 +1153,65 @@
   opacity: 0.7;
 }
 
-.loading-state {
+/* ================= 🆕 骨架屏：loadReports() 全量重载期间的过渡占位 ================= */
+.skeleton-list {
+  padding: 16rpx 0;
+}
+
+.skeleton-card {
+  background: #FFFFFF;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.skeleton-row {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 100rpx 0;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.skeleton-row-top {
+  justify-content: space-between;
+}
+
+.skeleton-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 单条 shimmer 动画：背景渐变横向平移，比静态灰块更能传达"正在加载"而不是
+   "内容缺失"，@keyframes 是 WXSS 原生支持的标准动画写法 */
+.skeleton-block {
+  background: linear-gradient(90deg, #F1F3F5 25%, #E9ECEF 37%, #F1F3F5 63%);
+  background-size: 400% 100%;
+  border-radius: 8rpx;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.skeleton-block-date {
+  width: 160rpx;
+  height: 32rpx;
+}
+
+.skeleton-block-tag {
+  width: 120rpx;
+  height: 32rpx;
+}
+
+.skeleton-block-wide {
+  height: 96rpx;
+  margin-bottom: 20rpx;
+}
+
+.skeleton-block-cell {
+  flex: 1;
+  height: 60rpx;
 }
 
 /* 合规展示声明 */
@@ -1163,11 +1225,6 @@
   font-size: 20rpx;
   line-height: 1.6;
   color: #9a9a9a;
-}
-
-.loading-text {
-  font-size: 28rpx;
-  color: #999;
 }
 
 .modal-backdrop {
@@ -2432,11 +2489,13 @@
   align-items: center;
   justify-content: center;
   z-index: 200;
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
+/* 🆕 按压缩放反馈：0.92 比此前的 0.96 更明显，配合 transition 而不是瞬时跳变 */
 .fab-upload-receipt-hover {
   opacity: 0.85;
-  transform: scale(0.96);
+  transform: scale(0.92);
 }
 
 .fab-upload-icon {
