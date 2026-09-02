@@ -153,14 +153,17 @@
 
 /* 🆕 左侧 SegmentedControl 固定紧凑宽度，不再跟右侧门店/月份 Chip 抢等宽空间——
    这正是长门店名此前被压缩截断的根因（三列硬性等分时，门店名可用宽度被压到
-   很窄）。文案固定（🏪门店/👤我的 或 🌐全国/🏪门店），180rpx 足够容纳不换行 */
+   很窄）。文案固定（🏪门店/👤我的 或 🌐全国/🏪门店），148rpx + 收紧的
+   .filter-col-seg 字号/内边距足够容纳不换行、不出现省略号 */
 .filter-col-segment {
-  flex: 0 0 180rpx;
-  min-width: 0;
+  width: 148rpx;
+  flex: 0 0 148rpx;
+  flex-shrink: 0;
 }
 
-/* 🆕 右侧门店 + 月份两枚胶囊 Chip 分组：平分 SegmentedControl 让出的剩余空间，
-   门店 Chip 略宽于月份 Chip（门店名通常比"2026年07月"更长） */
+/* 🆕 右侧门店 + 月份两枚胶囊 Chip 分组：门店 Chip 占满剩余空间、超长自动省略号收尾，
+   月份 Chip 按自身内容宽度自适应、禁止被压缩——两者语义不同（门店名不可控可能很长，
+   月份文案固定短小），不该套用同一种"平分空间"逻辑 */
 .filter-chips-group {
   display: flex;
   align-items: stretch;
@@ -170,11 +173,22 @@
 }
 
 .filter-chips-group .filter-col:first-child {
-  flex: 1.3;
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-chips-group .filter-col:last-child {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: 180rpx;
+}
+
+/* mineEntryMode 下门店列整体隐藏，月份 Chip 变成这一组里唯一的孩子——此时
+   它既是 :first-child 也是 :last-child，两条规则会叠加冲突，用 :only-child
+   （源码顺序在后，覆盖上面的 :last-child）纠正为占满整行 */
+.filter-chips-group .filter-col:only-child {
   flex: 1;
+  min-width: 0;
 }
 
 /* 🐛 WXSS 规范修复：微信小程序不支持组件标签选择器（如 `store-picker`），
@@ -187,14 +201,17 @@
   width: 100%;
 }
 
+/* 门店/月份胶囊统一规范：56rpx 高、垂直居中——与 store-picker 组件自身的
+   .store-picker-capsule 高度对齐（见 components/store-picker/store-picker.wxss），
+   两枚胶囊在同一行里视觉对齐，不会一高一矮 */
 .filter-col-pill {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 64rpx;
+  height: 56rpx;
   background: #F5F5F5;
-  border-radius: 32rpx;
-  padding: 0 16rpx;
+  border-radius: 28rpx;
+  padding: 0 12rpx;
   box-sizing: border-box;
   gap: 4rpx;
 }
@@ -202,10 +219,10 @@
 .filter-col-seg {
   flex: 1;
   text-align: center;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #666;
-  padding: 10rpx 0;
-  border-radius: 26rpx;
+  padding: 8rpx 0;
+  border-radius: 24rpx;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1155,19 +1172,20 @@
   color: #ADB5BD;
 }
 
-/* 🆕 筛选导致 0 条结果时的"重置筛选"文字链接：轻量胶囊，配色融入品牌主题
-   （浅红底+主题红字），不是又一个沉重的深色实心大按钮 */
+/* 🆕 筛选导致 0 条结果时的"重置筛选"轻胶囊：浅灰底+中性灰字，融入全站基调，
+   不用生硬的描边强调色；hover-class 需要 view/button 才生效（<text> 不支持
+   hover-class，见 WXML 已改用 <view>），故用 hover-class 而非 :active 伪类 */
 .empty-reset-link {
   margin-top: 20rpx;
-  padding: 12rpx 28rpx;
+  padding: 12rpx 36rpx;
   border-radius: 30rpx;
-  background: #FBE9E7;
-  color: #8C1D18;
-  font-size: 24rpx;
+  background: #F2F3F5;
+  color: #4E5969;
+  font-size: 26rpx;
   font-weight: bold;
 }
 
-.empty-reset-link:active {
+.empty-reset-link-hover {
   opacity: 0.7;
 }
 
@@ -2558,21 +2576,28 @@
   flex-shrink: 0;
 }
 
-/* 🆕 一键关闭：非阻断式收起整条提醒（onDismissTodayReminder），catchtap 拦截
-   冒泡，不会顺带触发外层整行的"去录入"跳转 */
-.today-reminder-close {
-  flex-shrink: 0;
-  width: 40rpx;
-  height: 40rpx;
+/* 🆕 右侧操作区："去录入"与"×"关闭各自独立，中间留足间距，避免共用一个
+   紧凑热区导致点关闭时连带误触外层"去录入"跳转 */
+.notice-right-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 20rpx;
-  color: #C99A4B;
-  margin: -8rpx -8rpx -8rpx 0;
+  gap: 20rpx;
+  flex-shrink: 0;
 }
 
-.today-reminder-close:active {
+/* 🆕 一键关闭：非阻断式收起整条提醒（onDismissTodayReminder），catchtap 拦截
+   冒泡，不会顺带触发外层整行的"去录入"跳转。padding+负 margin 把实际点击热区
+   撑大到 44rpx 见方，不影响视觉排布 */
+.dismiss-btn {
+  flex-shrink: 0;
+  padding: 10rpx;
+  margin: -10rpx;
+  font-size: 24rpx;
+  line-height: 1;
+  color: #C99A4B;
+}
+
+.dismiss-btn:active {
   opacity: 0.6;
 }
 

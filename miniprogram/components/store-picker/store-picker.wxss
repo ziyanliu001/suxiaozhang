@@ -3,6 +3,9 @@
    把组件放进较窄的 flex 列时，胶囊会按内容自然宽度溢出、视觉上与相邻控件挤在
    一起（表现为"文字被挤压截断"）。max-width:100% 让胶囊最多撑满宿主给出的
    宽度，超出部分交给下面 .store-name 的 ellipsis 收尾，而不是溢出裁切 */
+/* 🐛 与 history.wxss 门店/月份胶囊统一规范对齐：56rpx 高（此前 64rpx），
+   两枚胶囊同一行内视觉对齐；本组件同时被 pages/index/index.wxml 复用，
+   高度收紧对那边同样是更紧凑的观感，不影响其布局（该处是居中的独立一行） */
 .store-picker-capsule {
   display: inline-flex !important;
   align-items: center !important;
@@ -10,9 +13,9 @@
   max-width: 100%;
   background: #FFFFFF;
   border: 1.5rpx solid #EFE6D8;
-  border-radius: 40rpx;
-  padding: 10rpx 28rpx;
-  height: 64rpx;
+  border-radius: 28rpx;
+  padding: 8rpx 24rpx;
+  height: 56rpx;
   box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.06);
   box-sizing: border-box;
   transition: opacity 0.2s ease;
@@ -24,27 +27,28 @@
 
 /* 圆形头像占位：取门店名首字，替代原先的定位图标 */
 .store-picker-capsule .capsule-avatar {
-  width: 40rpx;
-  height: 40rpx;
+  width: 36rpx;
+  height: 36rpx;
   border-radius: 50%;
   background: linear-gradient(135deg, #8C1D18 0%, #B8433C 100%);
   color: #FFFFFF;
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: bold;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-right: 12rpx;
+  margin-right: 10rpx;
   flex-shrink: 0;
   line-height: 1;
 }
 
-/* 门店名称：大幅提升字号与加粗
+/* 门店名称：与 history.wxss 门店/月份胶囊统一字号规范 24rpx（此前 30rpx，
+   在收紧后的 56rpx 胶囊里也更协调）
    🐛 长门店名截断修复：min-width:0 + flex:1 让这段文字在胶囊宽度不够时才是
    真正收窄的那一环（头像/箭头保持固定尺寸），超出部分用 ellipsis 省略号收尾，
    而不是任由整个胶囊溢出撑破宿主布局 */
 .store-picker-capsule .store-name {
-  font-size: 30rpx !important;
+  font-size: 24rpx !important;
   font-weight: bold !important;
   color: #333333;
   line-height: 1 !important;

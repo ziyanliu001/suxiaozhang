@@ -237,8 +237,13 @@
         <view class="today-ledger-empty" bindtap="goToHome">
           <text class="alert-icon">💡</text>
           <text class="empty-tip">今日尚未录入餐报</text>
-          <text class="btn-go-fill-today-mini">去录入 ›</text>
-          <view class="today-reminder-close" catchtap="onDismissTodayReminder">✕</view>
+          <!-- 🐛 右侧操作区拆分："去录入"（冒泡到外层跳转）与"×"关闭（catchtap
+               拦截冒泡，避免点关闭误触发跳转）此前紧挨着，热区容易连带误触，
+               现用独立 flex 行 + 20rpx 间距彻底分开 -->
+          <view class="notice-right-actions">
+            <text class="btn-go-fill-today-mini">去录入 ›</text>
+            <text class="dismiss-btn" catchtap="onDismissTodayReminder">×</text>
+          </view>
         </view>
 
         <view class="staged-receipt-block" wx:if="{{stagedReceiptImages.length > 0}}">
@@ -487,7 +492,7 @@
       <text class="empty-icon">🍃</text>
       <block wx:if="{{hasActiveFilters}}">
         <text class="empty-text">该分类/月份下暂无记录</text>
-        <text class="empty-reset-link" bindtap="onResetFilters">🔄 重置筛选</text>
+        <view class="empty-reset-link" hover-class="empty-reset-link-hover" bindtap="onResetFilters">🔄 重置筛选</view>
       </block>
       <block wx:else>
         <text class="empty-text">暂无相关记录</text>
