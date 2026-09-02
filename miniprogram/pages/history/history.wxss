@@ -1110,11 +1110,29 @@
   transform: scale(0.98);
 }
 
-.history-empty-box {
+.history-empty-box,
+.history-error-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 100rpx 0;
+}
+
+/* 🆕 网络异常"重新加载"：轻量描边胶囊，颜色借用品牌红但不填色，与 .btn-util-void
+   同一套"警示但不刺眼"语汇，跟 .empty-reset-link 的实色胶囊拉开一点视觉差异，
+   提示这是"出错重试"而不是"筛选调整" */
+.error-retry-btn {
+  margin-top: 20rpx;
+  padding: 12rpx 28rpx;
+  border-radius: 30rpx;
+  border: 1.5rpx solid #C43A3A;
+  color: #C43A3A;
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+.error-retry-btn:active {
+  background: #FFF1F0;
 }
 
 .empty-icon {

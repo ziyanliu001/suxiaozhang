@@ -407,7 +407,10 @@
           <text class="empty-tip">📷 暂无上传小票凭证</text>
         </view>
 
-        <!-- 🌟 按审核状态区分主次操作：待确认/待稽核 → 确认为主；已锁定 → 分享为主；已作废 → 无按钮，仅提示条 -->
+        <!-- 🌟 按审核状态区分主次操作：待确认/待稽核 → 确认为主；已锁定 → 分享为主；已作废 → 无按钮，仅提示条
+             🛡️ 防穿透：本区域内的审核确认/编辑/作废按钮统一用 catchtap（而非 bindtap）拦截冒泡——
+             card-top-header/asset-board 上绑定了 onOpenReceiptDetail（见上文），若这几个按钮的点击
+             冒泡上去，会在关闭/处理这些操作的同时意外弹出稽核详情弹窗 -->
         <view class="card-action-footer">
 
           <!-- 状态：已作废/冲销 —— 不展示任何操作按钮，仅一条静态提示 -->
@@ -433,12 +436,12 @@
           <!-- 状态：待确认（店长）/ 待稽核（财务） —— 确认审核为主按钮，编辑/作废并排为次，隐藏分享 -->
           <block wx:else>
             <view class="primary-workflow-row" wx:if="{{item.approvalStatus === 'PENDING_APPROVAL' && (isManagerRole || isSuperAdmin)}}">
-              <button class="btn-workflow-main btn-workflow-audit-cta" bindtap="onManagerAuditClick" data-id="{{item._id}}">
+              <button class="btn-workflow-main btn-workflow-audit-cta" catchtap="onManagerAuditClick" data-id="{{item._id}}">
                 ⚖️ 确认审核（店长）
               </button>
             </view>
             <view class="primary-workflow-row" wx:elif="{{item.approvalStatus === 'APPROVED' && (isFinanceRole || isSuperAdmin)}}">
-              <button class="btn-workflow-main btn-workflow-audit-cta" bindtap="onFinanceAuditClick" data-id="{{item._id}}">
+              <button class="btn-workflow-main btn-workflow-audit-cta" catchtap="onFinanceAuditClick" data-id="{{item._id}}">
                 ⚖️ 确认审核（财务）
               </button>
             </view>
@@ -448,11 +451,11 @@
                  见 loadReports() 里的预计算），提交人也能看到编辑入口修正自己的草稿。
                  红字作废仍严格保持仅店长/超管可见，不随这次放宽扩大 -->
             <view class="utility-actions-row" wx:if="{{isManagerRole || isSuperAdmin || item.isOwnPendingRecord}}">
-              <button class="btn-utility btn-util-edit" bindtap="onEditReport" data-index="{{index}}">
+              <button class="btn-utility btn-util-edit" catchtap="onEditReport" data-index="{{index}}">
                 ✏️ 编辑
               </button>
               <block wx:if="{{isManagerRole || isSuperAdmin}}">
-                <button class="btn-utility btn-util-void" wx:if="{{!item.voidPending}}" bindtap="onVoidReportModal" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
+                <button class="btn-utility btn-util-void" wx:if="{{!item.voidPending}}" catchtap="onVoidReportModal" data-id="{{item._id || item._localId}}" data-date="{{item.dateString}}">
                   🚨 红字作废
                 </button>
                 <text class="btn-utility btn-util-void-pending" wx:else>⏳ 待家长确认作废中</text>
@@ -465,12 +468,22 @@
       </view>
     </view>
 
+    <!-- 🆕 网络异常占位卡片：与下面的"空状态"互斥——loadError 只在"云端确有
+         错误 且 最终没有任何数据可展示"时才为 true（见 history.ts loadReports），
+         优先于普通空状态展示，避免把"网络问题"误当成"真的没有记录" -->
+    <view class="history-error-box" wx:if="{{!photoArchiveMode && !loading && loadError}}">
+      <text class="empty-icon">📡</text>
+      <text class="empty-text">网络异常，加载失败</text>
+      <text class="empty-subtitle">请检查网络后重试</text>
+      <view class="error-retry-btn" bindtap="onRetryLoadReports">🔄 重新加载</view>
+    </view>
+
     <!-- 🆕 空状态智能分场景：筛选条件（月份/状态 Tab/风控追溯）导致 0 条结果时，
          提示"该分类/月份下暂无记录" + "重置筛选"文字链接；账号/门店本身确实没有
          任何记录时，提示"暂无相关记录"，引导使用右下角 FAB（不在这里重复放一个
          强色大按钮——FAB 已经是唯一的"立即记账/上传凭证"入口，两处入口会显得
          冗余，全国总览等 FAB 本就隐藏的场景也不提这句引导，避免文案对不上界面） -->
-    <view class="history-empty-box" wx:if="{{!photoArchiveMode && !loading && filteredReports.length === 0}}">
+    <view class="history-empty-box" wx:if="{{!photoArchiveMode && !loading && !loadError && filteredReports.length === 0}}">
       <text class="empty-icon">🍃</text>
       <block wx:if="{{hasActiveFilters}}">
         <text class="empty-text">该分类/月份下暂无记录</text>

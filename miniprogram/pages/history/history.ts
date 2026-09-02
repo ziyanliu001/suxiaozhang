@@ -42,6 +42,13 @@ const PHOTO_TYPE_LABELS: Record<string, string> = {
 // 只是这个数组里 statusTab 的下标，驱动滑动指示条的 left 偏移
 const STATUS_TAB_ORDER: Array<'all' | 'pending' | 'approved' | 'rejected'> = ['all', 'pending', 'approved', 'rejected'];
 
+// 🆕 "一键眼睛"显示/隐藏金额的记忆偏好：与设置页「隐私与脱敏模式」总开关
+// （utils/userPreferences.ts 的 setting_privacy_mask_mode）是两个不同维度——
+// 那个开关决定"要不要脱敏"，这个 key 只决定"脱敏开启时，用户上次是选择看
+// 明文还是掩码"，纯粹是这一个眼睛按钮自己的记忆，本页私有，不需要放进共享的
+// userPreferences.ts
+const HISTORY_AMOUNTS_REVEALED_KEY = 'history_amounts_revealed';
+
 const NATIONAL_STORE_IDS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
 function isNationalStoreId(storeId: string): boolean {
   return !storeId || NATIONAL_STORE_IDS.includes(storeId);
@@ -114,6 +121,12 @@ Page({
     watermarkIdentity: '',
     filteredReports: [],
     loading: true,
+    // 🆕 网络异常/拉取失败的占位态：DataService.getReports() 云端失败时会静默
+    // 降级读本地缓存，result.data 因此几乎总是一个数组（不会抛错），此前这里
+    // 完全没检查 result.error，导致"云端真的失败、本地又没缓存"时呈现的是一个
+    // 和"账号真没有任何记录"看起来一模一样的空状态，用户分不清是网络问题还是
+    // 真的没数据。loadError 只在"确有错误 且 最终结果为空"时置 true
+    loadError: false,
     // 🧾 今日凭证与记账（当日+历史一体化：置顶高亮展示当天记录，无需翻找历史列表）
     todayLedger: null as any,
     todayDateStr: '',
@@ -340,13 +353,19 @@ Page({
     // 🆕 隐私脱敏模式：每次 onShow 重读一次（用户可能刚从设置页切换过开关
     // 再返回本页），不缓存上一次进页时的旧值；formattedReports 里已经预算好
     // approvedByMasked/auditedByMasked，这里只需要切换 WXML 用哪一份展示。
-    // 每次进页重置 sensitiveRevealed=false：临时显示态只在当前这次停留有效，
-    // 不应该跨越"离开又回来"继续保持
+    // sensitiveRevealed 改为读取本地记忆偏好（HISTORY_AMOUNTS_REVEALED_KEY）——
+    // 用户上次手动选择"看明文"还是"看掩码"，下次进页保持一致，不用每次重新点
+    let sensitiveRevealed = false;
+    try {
+      sensitiveRevealed = !!wx.getStorageSync(HISTORY_AMOUNTS_REVEALED_KEY);
+    } catch (err) {
+      /* 读取失败按默认隐藏处理 */
+    }
     const nextPrivacyMaskEnabled = isPrivacyMaskEnabled();
     this.setData({
       privacyMaskEnabled: nextPrivacyMaskEnabled,
-      sensitiveRevealed: false,
-      amountsMasked: nextPrivacyMaskEnabled,
+      sensitiveRevealed,
+      amountsMasked: nextPrivacyMaskEnabled && !sensitiveRevealed,
       // 🆕 今日未录入提醒每次进页重新展示：关闭只是当次停留的临时收起，
       // 不应该在用户下次回到本页时仍然缺席这条提醒
       todayReminderDismissed: false
@@ -684,11 +703,28 @@ Page({
     this.loadReports();
   },
 
-  // 🆕 隐私脱敏模式下的"一键眼睛"：临时显示/隐藏本页所有金额，纯会话内展示态，
-  // 不写回 Storage、不影响设置页的持久化开关本身——重进本页或重启小程序后
-  // 恢复为默认隐藏
+  // 🆕 网络异常占位卡片的"重新加载"按钮：与下拉刷新走同一条 loadReports()，
+  // 不另开一套刷新逻辑
+  onRetryLoadReports() {
+    this.loadReports();
+  },
+
+  // 🆕 隐私脱敏模式下的"一键眼睛"：显示/隐藏本页所有金额。选择会记住
+  // （HISTORY_AMOUNTS_REVEALED_KEY），下次进页沿用同一个选择，不影响设置页
+  // 的持久化脱敏总开关本身（那个开关决定"要不要脱敏"，这里只决定"脱敏开启
+  // 时默认看明文还是看掩码"）
   onToggleSensitiveReveal() {
     const nextRevealed = !this.data.sensitiveRevealed;
+    try {
+      wx.vibrateShort({ type: 'light' });
+    } catch (err) {
+      /* 静默降级：振动反馈是锦上添花，不是功能前提 */
+    }
+    try {
+      wx.setStorageSync(HISTORY_AMOUNTS_REVEALED_KEY, nextRevealed);
+    } catch (err) {
+      console.warn('[onToggleSensitiveReveal] 记忆偏好写入失败:', err);
+    }
     this.setData({
       sensitiveRevealed: nextRevealed,
       amountsMasked: this.data.privacyMaskEnabled && !nextRevealed
@@ -866,7 +902,8 @@ Page({
 
     this._reports = formattedReports;
     this.setData({
-      isAllStoresView: isAllStoresView
+      isAllStoresView: isAllStoresView,
+      loadError: !!result.error && formattedReports.length === 0
     }, () => {
       this.convertReceiptImagesToUrls();
     });
@@ -2482,6 +2519,11 @@ Page({
   onVoidReportModal(e: any) {
     const { id, date } = e.currentTarget.dataset;
 
+    // 🛡️ 防抖：此前 _voidInFlight 只在 wx.showModal 的 success 回调里检查——
+    // 弱网/慢机型下，原生弹窗从"按钮被点"到"真正渲染拦住后续点击"之间有个空档，
+    // 这里在弹窗弹出前先挡一道，避免同一次请求还没走完就又弹出第二个确认框
+    if (this._voidInFlight) return;
+
     // 🛡️ 权限防线：即使入口按钮被非法暴露，函数内部也拦截非店长/超管的作废请求
     if (!this.data.isManagerRole && !this.data.isSuperAdmin) {
       wx.showToast({ title: '仅店长与超管可执行作废操作', icon: 'none' });
@@ -2515,7 +2557,7 @@ Page({
         if (this._voidInFlight) return;
         this._voidInFlight = true;
 
-        wx.showLoading({ title: isApprovedStage ? '安全冲销中...' : '作废处理中...' });
+        wx.showLoading({ title: isApprovedStage ? '安全冲销中...' : '作废处理中...', mask: true });
 
         try {
           // 🛡️ 状态机与权限判定统一收敛到 manageReportApproval 云函数：此前这里直接
@@ -2844,7 +2886,7 @@ Page({
         if (this._managerAuditInFlight) return;
         this._managerAuditInFlight = true;
 
-        wx.showLoading({ title: '提交中...' });
+        wx.showLoading({ title: '提交中...', mask: true });
         try {
           // 🛡️ 店长核对确认此前是客户端直接 db.collection('report_logs').doc(docId)
           // .update()，服务端对"是否真的是店长/是否本店"没有任何校验。现在改为调用
@@ -2935,7 +2977,7 @@ Page({
         if (this._financeAuditInFlight) return;
         this._financeAuditInFlight = true;
 
-        wx.showLoading({ title: '安全封账中...' });
+        wx.showLoading({ title: '安全封账中...', mask: true });
         try {
           // 🛡️ 财务稽核封账此前是客户端直接 db.collection('report_logs').doc(docId)
           // .update()，服务端对"是否真的是财务/是否本店"没有任何校验——这是整套
