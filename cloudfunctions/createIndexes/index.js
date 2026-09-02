@@ -79,6 +79,15 @@ exports.main = async (event, context) => {
     ['daily_reports', { name: 'reportDate_asc', keys: [{ reportDate: 1 }],                  unique: false }],
 
     // ─── report_logs ───────────────────────────────────────────────────
+    // 🔍 2026-09 排查记录：曾有需求提议按 {dateString, storeId, shopName}
+    // 建一条三字段复合索引消除全表扫描告警。实际追踪 report_logs 上的每条
+    // 真实查询（getStatisticsData/publicVerifyReport/updateAndRecalculateCascade/
+    // recalculateCascadeBalances）发现 storeId 与 shopName 从未同时出现在同一个
+    // AND 条件里——调用方要么已知 storeId 直接传 storeId，要么只有门店名时才退回
+    // 传 shopName，两者互斥，不存在"三字段一起等值匹配"的查询形状。真正覆盖这些
+    // 查询的是下面已有的 storeId_dateString（storeId 分支）与本条 shopName_date
+    // （shopName 分支），额外加一条从未被任何查询前缀匹配到的三字段复合索引只会
+    // 徒增写入开销，故未采纳该字面提议，改为在此记录排查结论
     ['report_logs', { name: 'shopName_date',                   keys: [{ shopName: 1 }, { dateString: 1 }],                  unique: false }],
     ['report_logs', { name: 'tenantId_date',                   keys: [{ tenantId: 1 }, { dateString: 1 }],                  unique: false }],
     ['report_logs', { name: 'auditedBy_asc',                   keys: [{ auditedBy: 1 }],                                    unique: false }],

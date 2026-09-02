@@ -82,7 +82,7 @@
   align-items: center;
   justify-content: center;
   gap: 24rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 24rpx;
 }
 
 .dm-date-nav-arrow {
@@ -101,9 +101,13 @@
 
 /* 🍚 餐别切换：三段式分段控件，选中态用品牌红底白字，未选中态浅灰背景，
    与 .dm-form-picker/.dm-action-btn 已有的视觉语言保持一致 */
+/* 🐛 未选中态不可见修复：容器底色此前是 #F8F5F0，与 .dm-page 页面背景色完全
+   相同——未选中的两个分段在视觉上直接融进页面背景，只剩选中态那一枚红色胶囊
+   看得见，整组分段控件读不出"可切换的三态"。改用本文件已有的暖灰 token
+   #EFE6D8（.dm-store-tip-skeleton 同款），与页面暖色调一致又留出可辨识的对比 */
 .dm-meal-switcher {
   display: flex;
-  background: #F8F5F0;
+  background: #EFE6D8;
   border-radius: 12rpx;
   padding: 4rpx;
   margin-bottom: 20rpx;
@@ -695,16 +699,29 @@
   z-index: 99;
 }
 
+/* 🎨 白卡+品牌红边框风格：与 .dm-btn-reuse-template 同款"浅红弱底"语言统一——
+   吸底常驻按钮用实心红块视觉过重，且与上方 .dm-btn-publish-primary 主操作按钮
+   抢视觉权重；改成描边卡片后，主/次操作层级更清楚 */
 .dm-btn-poster {
-  background: #8C1D18;
-  color: #FFFFFF;
+  background: #FFF5F0;
+  color: #8C1D18;
+  border: 1.5rpx solid #8C1D18;
   font-size: 28rpx;
   font-weight: bold;
 }
 
+.dm-btn-poster::after {
+  border: none;
+}
+
+.dm-btn-poster-hover {
+  background: #FFE6DC;
+}
+
 .dm-btn-poster[disabled] {
-  background: #E0D5C8;
-  color: #FFFFFF;
+  background: #F8F5F0;
+  color: #B8ADA0;
+  border-color: #E0D5C8;
 }
 
 .dm-poster-box {

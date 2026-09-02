@@ -3,7 +3,7 @@
   <privacy-popup />
 
   <navigation-bar
-    title="🍱 食谱管理中心"
+    title="🍱 食谱管理"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"
@@ -143,7 +143,7 @@
 
   <!-- 📤 页面底部固定按钮：生成今日食谱宣传海报 -->
   <view class="dm-bottom-bar" style="padding-bottom: calc(20rpx + env(safe-area-inset-bottom));">
-    <button class="dm-btn-poster" bindtap="onGenerateMenuPoster" disabled="{{!todayItem || posterGenerating}}">
+    <button class="dm-btn-poster" hover-class="dm-btn-poster-hover" bindtap="onGenerateMenuPoster" disabled="{{!todayItem || posterGenerating}}">
       🖼️ {{posterGenerating ? '生成中...' : '生成食谱宣传海报'}}
     </button>
   </view>
