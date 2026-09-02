@@ -38,6 +38,10 @@ const PHOTO_TYPE_LABELS: Record<string, string> = {
   log: '📸 温情活动'
 };
 
+// 🆕 状态 Tab 顺序：与 WXML status-tab-row 的渲染顺序一一对应，statusTabIndex
+// 只是这个数组里 statusTab 的下标，驱动滑动指示条的 left 偏移
+const STATUS_TAB_ORDER: Array<'all' | 'pending' | 'approved' | 'rejected'> = ['all', 'pending', 'approved', 'rejected'];
+
 const NATIONAL_STORE_IDS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
 function isNationalStoreId(storeId: string): boolean {
   return !storeId || NATIONAL_STORE_IDS.includes(storeId);
@@ -150,9 +154,19 @@ Page({
     // 三态，没有独立的"驳回"状态字段，isVoid 是这份数据模型里唯一"未能通过、
     // 已被撤销"的语义，是最贴近的既有信号，不新造一个服务端并不产生的状态值
     statusTab: 'all' as 'all' | 'pending' | 'approved' | 'rejected',
+    // 🆕 状态 Tab 下标：与 statusTab 一一对应（all=0/pending=1/approved=2/rejected=3），
+    // 单独存一份是因为 WXML 里没法对字符串枚举做数组下标查找，滑动指示条的
+    // left 偏移量要用这个数字直接乘算（见 status-tab-indicator 的 style 绑定）
+    statusTabIndex: 0,
     // 🆕 状态 Tab badge 计数：与 statusTab 同一套过滤口径（叠加门店/月份/风控筛选，
     // 但不含 statusTab 本身），随 applyFilters() 一起重算，供 Tab 角标展示
     statusTabCounts: { all: 0, pending: 0, approved: 0, rejected: 0 },
+    // 🆕 空状态智能文案：筛选条件（门店/月份/状态 Tab/风控追溯）导致 0 条结果时，
+    // 展示"重置筛选"文字链接；账号/门店本身确实没有任何记录时不展示（重置了也没用）
+    hasActiveFilters: false,
+    // 🆕 今日未录入提醒 NoticeBar 的一键关闭态：纯会话内展示态，每次 onShow 重置，
+    // 不持久化——用户离开页面再回来时提醒应该照常出现，不是永久消失
+    todayReminderDismissed: false,
     // 🆕 设置页「隐私与脱敏模式」在本页的落地：开启后经办人姓名（approvedBy/
     // auditedBy）掩码展示、金额默认掩码；每次 onShow 重读一次（用户可能刚从
     // 设置页切换过开关再返回），不缓存过期值。sensitiveRevealed 是纯会话内的
@@ -256,7 +270,7 @@ Page({
     // 落在"待审批"筛选 Tab 上，不需要财务再自己点一次筛选——与上面 view=mine/
     // mode=photo/anomalyType 同一套"带参进页直接命中目标筛选"的入口设计
     if (options && options.statusTab && ['all', 'pending', 'approved', 'rejected'].includes(options.statusTab)) {
-      this.setData({ statusTab: options.statusTab });
+      this.setData({ statusTab: options.statusTab, statusTabIndex: STATUS_TAB_ORDER.indexOf(options.statusTab) });
     }
     this.calculateNavBarHeight();
     this.checkAdminStatus();
@@ -313,7 +327,10 @@ Page({
     this.setData({
       privacyMaskEnabled: nextPrivacyMaskEnabled,
       sensitiveRevealed: false,
-      amountsMasked: nextPrivacyMaskEnabled
+      amountsMasked: nextPrivacyMaskEnabled,
+      // 🆕 今日未录入提醒每次进页重新展示：关闭只是当次停留的临时收起，
+      // 不应该在用户下次回到本页时仍然缺席这条提醒
+      todayReminderDismissed: false
     });
 
     const activeStore = getSelectedStore();
@@ -661,12 +678,18 @@ Page({
     });
   },
 
+  // 🆕 今日未录入提醒 NoticeBar 一键关闭：非阻断式收起，纯会话内展示态（见
+  // data.todayReminderDismissed 声明处注释），点击 ✕ 不触发外层整行的跳转
+  onDismissTodayReminder() {
+    this.setData({ todayReminderDismissed: true });
+  },
+
   // 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，纯客户端过滤，已加载的
   // reports 里直接筛，不重新请求云函数
   onSwitchStatusTab(e: any) {
     const tab = e.currentTarget.dataset.tab as 'all' | 'pending' | 'approved' | 'rejected';
     if (tab === this.data.statusTab) return;
-    this.setData({ statusTab: tab });
+    this.setData({ statusTab: tab, statusTabIndex: STATUS_TAB_ORDER.indexOf(tab) });
     this.applyFilters();
   },
 
@@ -1522,7 +1545,17 @@ Page({
       return dateB.localeCompare(dateA);
     });
 
-    this.setData({ filteredReports: this.processReportListAudit(filtered), statusTabCounts });
+    // 🆕 空状态智能文案：只要门店/月份/状态 Tab/风控追溯任一筛选条件生效，
+    // 空列表时就展示"重置筛选"——与账号/门店本身确实没有任何记录（重置了也
+    // 无济于事）区分开，不用同一句"暂无相关记录"误导用户
+    const hasActiveFilters = !!(
+      (selectedStoreName && selectedStoreName !== '全部门店' && selectedStoreName !== '全国总览') ||
+      selectedMonthStr ||
+      anomalyFilterType ||
+      statusTab !== 'all'
+    );
+
+    this.setData({ filteredReports: this.processReportListAudit(filtered), statusTabCounts, hasActiveFilters });
   },
 
   onStoreFilterChange(e: any) {
@@ -1573,6 +1606,22 @@ Page({
     this.setData({ anomalyFilterType: '', anomalyFilterLabel: '' });
     this.applyFilters();
     wx.showToast({ title: '已清除风控筛选', icon: 'none' });
+  },
+
+  // 🆕 空状态"重置筛选"：一次性清掉月份/状态 Tab/风控追溯这几项页面本地筛选。
+  // 🛡️ 有意不重置门店选择——store-picker 反映的是全局当前门店上下文（其余页面
+  // 共享同一份），"重置本页筛选"不该顺带改掉用户在别处也在用的门店选择
+  onResetFilters() {
+    this.setData({
+      selectedMonthStr: '',
+      selectedMonthDisplay: '',
+      statusTab: 'all',
+      statusTabIndex: 0,
+      anomalyFilterType: '',
+      anomalyFilterLabel: ''
+    });
+    this.applyFilters();
+    wx.showToast({ title: '已重置筛选条件', icon: 'none' });
   },
 
   // 🌟「先核对、再确认、后导出」安全闭环：复用 exportAccountExcel 云函数

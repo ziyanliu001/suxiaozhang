@@ -37,8 +37,12 @@
     <!-- 🆕 个人视角入口（mineEntryMode，见 history.ts onLoad）：隐去"门店/我的"
          切换栏与门店选择下拉框，专注展示个人提交记录，避免非管理员用户面对一堆
          与自己无关的门店管理向控件；月份筛选仍保留，翻查自己历史记录时依然有用 -->
+    <!-- 🆕 第一行（快速过滤器）布局重排：左侧「全部门店/我的」SegmentedControl
+         紧凑固定宽度，右侧门店/月份两枚胶囊 Chip 平分剩余空间——此前三列等宽
+         挤在一起是门店名长文本被压缩截断的直接原因，SegmentedControl 文案固定
+         就不需要跟门店名抢等宽空间 -->
     <view class="unified-filter-row" wx:if="{{!photoArchiveMode}}">
-      <view class="filter-col" wx:if="{{!mineEntryMode}}">
+      <view class="filter-col filter-col-segment" wx:if="{{!mineEntryMode}}">
         <view class="filter-col-pill">
           <!-- 🛡️ 越权兜底：即使 isAllStoresView 因某种异常状态被误置为 true，
                这里再叠加一层 isSuperAdmin 校验，非超管永远只能看到"🏪 门店账本"，
@@ -52,18 +56,24 @@
         </view>
       </view>
 
-      <view class="filter-col" wx:if="{{!mineEntryMode}}">
-        <store-picker id="historyStorePicker" class="filter-col-storepicker" bind:storechange="onStorePickerChange"></store-picker>
-      </view>
+      <view class="filter-chips-group">
+        <!-- 🐛 长门店名截断修复：store-picker 内部展示文案配合这里给出的
+             flex-basis 自适应收缩 + ellipsis，展示不下时省略号收尾；组件本身
+             点击即拉起完整门店选择面板（见 store-picker.wxml），面板里门店名
+             不再受这条胶囊宽度限制，等同于"点击查看完整名称" -->
+        <view class="filter-col" wx:if="{{!mineEntryMode}}">
+          <store-picker id="historyStorePicker" class="filter-col-storepicker" bind:storechange="onStorePickerChange"></store-picker>
+        </view>
 
-      <view class="filter-col">
-        <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
-          <view class="filter-col-pill month-pill {{selectedMonthStr ? 'has-value' : ''}}">
-            <text class="filter-col-lbl">📅 {{selectedMonthDisplay || '全部月份'}}</text>
-            <text class="filter-col-arrow" wx:if="{{!selectedMonthStr}}">▾</text>
-            <view class="filter-col-clear" wx:if="{{selectedMonthStr}}" catchtap="onClearMonthFilter">✕</view>
-          </view>
-        </picker>
+        <view class="filter-col">
+          <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
+            <view class="filter-col-pill month-pill {{selectedMonthStr ? 'has-value' : ''}}">
+              <text class="filter-col-lbl">📅 {{selectedMonthDisplay || '全部月份'}}</text>
+              <text class="filter-col-arrow" wx:if="{{!selectedMonthStr}}">▾</text>
+              <view class="filter-col-clear" wx:if="{{selectedMonthStr}}" catchtap="onClearMonthFilter">✕</view>
+            </view>
+          </picker>
+        </view>
       </view>
     </view>
 
@@ -88,6 +98,10 @@
         <text>已驳回</text>
         <text class="status-tab-badge" wx:if="{{statusTabCounts.rejected > 0}}">{{statusTabCounts.rejected > 99 ? '99+' : statusTabCounts.rejected}}</text>
       </view>
+      <!-- 🆕 单条滑动指示条：取代此前每个 Tab 各自的 ::after 下划线，随 statusTabIndex
+           （0~3，四个 Tab 等宽 25%）用 left 百分比 + CSS transition 平滑移动，而不是
+           在四个位置之间瞬时跳变 -->
+      <view class="status-tab-indicator" style="left: {{statusTabIndex * 25}}%;"></view>
     </view>
 
     <!-- 🌟 从首页「风控预警日志」弹窗点击卡片跳转过来时的精准追溯筛选提示 -->
@@ -215,25 +229,27 @@
              .fab-upload-receipt），不再以强色大按钮的形式挤占卡片内容区 -->
       </view>
 
-      <!-- 🆕 "今日未录入餐报"改为轻量 Alert 提示条（暖黄色，与全站其余轻提示条
-           如 .anomaly-filter-banner 同一套视觉语言），替代此前一整张带虚线边框、
-           内含大按钮的空状态卡片——降低视觉重量，只保留必要信息 + 引导链接 -->
-      <view class="today-ledger-empty" wx:else>
-        <view class="today-empty-top-row">
+      <!-- 🆕 "今日未录入餐报"改为标准内嵌 NoticeBar：整行可点击跳转录入，
+           右侧带一键关闭 ✕（非阻断式收起，onDismissTodayReminder，纯会话内
+           展示态，见 history.ts 注释）。todayReminderDismissed 为 true 时
+           连同下方暂存凭证预览一并收起，不占任何空间 -->
+      <block wx:elif="{{!todayReminderDismissed}}">
+        <view class="today-ledger-empty" bindtap="goToHome">
           <text class="alert-icon">💡</text>
           <text class="empty-tip">今日尚未录入餐报</text>
-          <text class="btn-go-fill-today-mini" bindtap="goToHome">去录入 ›</text>
+          <text class="btn-go-fill-today-mini">去录入 ›</text>
+          <view class="today-reminder-close" catchtap="onDismissTodayReminder">✕</view>
         </view>
 
         <view class="staged-receipt-block" wx:if="{{stagedReceiptImages.length > 0}}">
           <view class="receipt-9grid">
-            <view class="grid9-item" wx:for="{{stagedReceiptImages}}" wx:key="*this" bindtap="onPreviewStagedReceipt" data-url="{{item}}">
+            <view class="grid9-item" wx:for="{{stagedReceiptImages}}" wx:key="*this" catchtap="onPreviewStagedReceipt" data-url="{{item}}">
               <image class="grid9-img" src="{{item}}" mode="aspectFill" lazy-load="{{true}}" />
             </view>
           </view>
           <text class="staged-tip">📥 已暂存 {{stagedReceiptImages.length}} 张，提交今日餐报时自动带入</text>
         </view>
-      </view>
+      </block>
     </view>
 
     <view class="section-divider-label history-ledger-divider" wx:if="{{!photoArchiveMode && !loading && filteredReports.length > 0}}">
@@ -445,16 +461,21 @@
       </view>
     </view>
 
-    <!-- 🆕 空状态附带一键提交入口：筛选条件下没有任何记录时，与其让用户自己
-         去找入口，不如顺手给一个"立即提交/上传凭证"按钮——复用今日凭证卡片
-         同款 onTodayOcrScan（拍照 -> 自动 OCR 识别填单），不新增一套流程 -->
+    <!-- 🆕 空状态智能分场景：筛选条件（月份/状态 Tab/风控追溯）导致 0 条结果时，
+         提示"该分类/月份下暂无记录" + "重置筛选"文字链接；账号/门店本身确实没有
+         任何记录时，提示"暂无相关记录"，引导使用右下角 FAB（不在这里重复放一个
+         强色大按钮——FAB 已经是唯一的"立即记账/上传凭证"入口，两处入口会显得
+         冗余，全国总览等 FAB 本就隐藏的场景也不提这句引导，避免文案对不上界面） -->
     <view class="history-empty-box" wx:if="{{!photoArchiveMode && !loading && filteredReports.length === 0}}">
       <text class="empty-icon">🍃</text>
-      <text class="empty-text">暂无相关提交记录</text>
-      <view class="btn-empty-upload" hover-class="btn-empty-upload-hover" bindtap="onTodayOcrScan">
-        <text class="icon">📷</text>
-        <text class="lbl">立即提交 / 上传凭证</text>
-      </view>
+      <block wx:if="{{hasActiveFilters}}">
+        <text class="empty-text">该分类/月份下暂无记录</text>
+        <text class="empty-reset-link" bindtap="onResetFilters">🔄 重置筛选</text>
+      </block>
+      <block wx:else>
+        <text class="empty-text">暂无相关记录</text>
+        <text class="empty-subtitle" wx:if="{{!isAllStoresView}}">可点击右下角按钮上传新凭证</text>
+      </block>
     </view>
 
     <view class="loading-state" wx:if="{{loading && !photoArchiveMode}}">

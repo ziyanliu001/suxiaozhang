@@ -6,7 +6,7 @@
   flex-direction: column;
   overflow-x: hidden;
   box-sizing: border-box;
-  background-color: #F8F9FA;
+  background-color: #F7F8FA;
 }
 
 .fixed-top-header {
@@ -15,7 +15,7 @@
   left: 0;
   right: 0;
   z-index: 999;
-  background-color: #F8F9FA;
+  background-color: #F7F8FA;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.03);
 }
 
@@ -151,6 +151,32 @@
   min-width: 0;
 }
 
+/* 🆕 左侧 SegmentedControl 固定紧凑宽度，不再跟右侧门店/月份 Chip 抢等宽空间——
+   这正是长门店名此前被压缩截断的根因（三列硬性等分时，门店名可用宽度被压到
+   很窄）。文案固定（🏪门店/👤我的 或 🌐全国/🏪门店），180rpx 足够容纳不换行 */
+.filter-col-segment {
+  flex: 0 0 180rpx;
+  min-width: 0;
+}
+
+/* 🆕 右侧门店 + 月份两枚胶囊 Chip 分组：平分 SegmentedControl 让出的剩余空间，
+   门店 Chip 略宽于月份 Chip（门店名通常比"2026年07月"更长） */
+.filter-chips-group {
+  display: flex;
+  align-items: stretch;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-chips-group .filter-col:first-child {
+  flex: 1.3;
+}
+
+.filter-chips-group .filter-col:last-child {
+  flex: 1;
+}
+
 /* 🐛 WXSS 规范修复：微信小程序不支持组件标签选择器（如 `store-picker`），
    `.filter-col store-picker` 编译期即报违规警告。store-picker 是独立自定义
    组件，样式作用域本就不共享，这里只负责给它在三列布局里分配等宽空间——改为
@@ -239,6 +265,7 @@
    放在 .fixed-top-header 内部（与筛选栏同级），随头部一起测高、一起固定，
    不需要额外的 sticky/滚动偏移计算 */
 .status-tab-row {
+  position: relative;
   display: flex;
   padding: 0 24rpx;
   border-bottom: 1rpx solid #F0F0F0;
@@ -263,8 +290,19 @@
   font-weight: bold;
 }
 
-/* 🆕 状态 Tab 切换过渡动画：下划线宽度/透明度渐变展开，而非瞬时出现 */
-.status-tab::after {
+/* 🆕 单条滑动指示条：取代此前每个 Tab 各自独立的 ::after 下划线（瞬时切换/
+   容易看起来像"跳变"），改成 .status-tab-row 内唯一一条指示条，靠 left 百分比
+   （四个 Tab 等宽 25%，由 statusTabIndex 算出，见 WXML）+ CSS transition
+   平滑滑动到目标 Tab 下方，观感上是"同一条线在移动"而不是"旧的消失、新的出现" */
+.status-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  width: 25%;
+  height: 5rpx;
+  transition: left 0.25s ease;
+}
+
+.status-tab-indicator::after {
   content: '';
   position: absolute;
   left: 50%;
@@ -274,12 +312,6 @@
   height: 5rpx;
   border-radius: 3rpx;
   background: #8C1D18;
-  opacity: 0;
-  transition: opacity 0.25s ease, width 0.25s ease;
-}
-
-.status-tab.active::after {
-  opacity: 1;
 }
 
 /* 🆕 状态 Tab 数量角标：默认灰底深字，待审核态换成警示橙，与全站语义色对齐 */
@@ -576,10 +608,10 @@
 .history-card {
   position: relative;
   background: #FFFFFF;
-  border-radius: 16rpx;
-  padding: 28rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   border: 1rpx solid #F1F3F5;
 }
 
@@ -784,7 +816,7 @@
 /* ================= 💰 资产看板：结余 / 净变动高亮 + 昨日/今日收支明细紧凑排布 ================= */
 .asset-board {
   background: #FAFBFC;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   padding: 20rpx 24rpx;
   margin-bottom: 20rpx;
 }
@@ -904,7 +936,7 @@
   display: flex;
   flex-direction: column;
   gap: 10rpx;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   padding: 18rpx 20rpx;
 }
 
@@ -1084,34 +1116,33 @@
 }
 
 .empty-text {
-  font-size: 26rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #495057;
+}
+
+/* 🆕 空状态副标题：纯说明文字，不重复放一个强色大按钮——FAB 已经是唯一的
+   "立即记账/上传凭证"入口 */
+.empty-subtitle {
+  margin-top: 12rpx;
+  font-size: 24rpx;
   color: #ADB5BD;
 }
 
-/* 🆕 空状态一键提交入口 */
-.btn-empty-upload {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  margin-top: 28rpx;
-  padding: 14rpx 32rpx;
-  border-radius: 32rpx;
-  background: #8C1D18;
-  box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.2);
-}
-
-.btn-empty-upload-hover {
-  opacity: 0.85;
-}
-
-.btn-empty-upload .icon {
-  font-size: 24rpx;
-}
-
-.btn-empty-upload .lbl {
+/* 🆕 筛选导致 0 条结果时的"重置筛选"文字链接：轻量胶囊，配色融入品牌主题
+   （浅红底+主题红字），不是又一个沉重的深色实心大按钮 */
+.empty-reset-link {
+  margin-top: 20rpx;
+  padding: 12rpx 28rpx;
+  border-radius: 30rpx;
+  background: #FBE9E7;
+  color: #8C1D18;
   font-size: 24rpx;
   font-weight: bold;
-  color: #FFFFFF;
+}
+
+.empty-reset-link:active {
+  opacity: 0.7;
 }
 
 .loading-state {
@@ -1631,7 +1662,7 @@
 /* ================= 历史卡片小票预览条 ================= */
 .card-receipt-section {
   background: #FAF8F5;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
   padding: 16rpx;
   margin: 18rpx 0;
   border: 1rpx solid #F0E8DD;
@@ -2290,9 +2321,9 @@
 .today-ledger-card {
   background: linear-gradient(135deg, #FFFDFB 0%, #FFF8F0 100%);
   border: 1.5rpx solid #FFD3BE;
-  border-radius: 16rpx;
-  padding: 28rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  border-radius: 12rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
 
 .today-card-top {
@@ -2414,31 +2445,33 @@
 
 /* 🆕 今日未录入餐报：改为轻量 Alert 提示条（暖黄色，与全站其余轻提示条同一套
    视觉语言），替代此前一整张带虚线边框、内含大按钮的空状态卡片 */
+/* 🆕 标准内嵌 NoticeBar：单行布局（图标+文案+"去录入"+关闭按钮），整行可点击
+   跳转录入（history.wxml bindtap="goToHome"），与全站其余轻提示条同一套暖黄
+   色语汇 */
 .today-ledger-empty {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
   background: #FFF7E6;
   border: 1rpx solid #FFE1A8;
   border-radius: 12rpx;
   padding: 16rpx 20rpx;
 }
 
-.today-empty-top-row {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.today-empty-top-row .alert-icon {
+.today-ledger-empty .alert-icon {
   font-size: 24rpx;
   flex-shrink: 0;
   line-height: 1;
 }
 
-.today-empty-top-row .empty-tip {
+.today-ledger-empty .empty-tip {
   font-size: 24rpx;
   color: #B45309;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .btn-go-fill-today-mini {
@@ -2446,6 +2479,24 @@
   font-weight: bold;
   color: #8C1D18;
   flex-shrink: 0;
+}
+
+/* 🆕 一键关闭：非阻断式收起整条提醒（onDismissTodayReminder），catchtap 拦截
+   冒泡，不会顺带触发外层整行的"去录入"跳转 */
+.today-reminder-close {
+  flex-shrink: 0;
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;
+  color: #C99A4B;
+  margin: -8rpx -8rpx -8rpx 0;
+}
+
+.today-reminder-close:active {
+  opacity: 0.6;
 }
 
 .staged-receipt-block {

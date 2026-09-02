@@ -1,8 +1,13 @@
-/* 极简大方胶囊容器 */
+/* 极简大方胶囊容器
+   🐛 长门店名截断修复：此前没有 max-width，宿主页面（如 history.ts 筛选栏）
+   把组件放进较窄的 flex 列时，胶囊会按内容自然宽度溢出、视觉上与相邻控件挤在
+   一起（表现为"文字被挤压截断"）。max-width:100% 让胶囊最多撑满宿主给出的
+   宽度，超出部分交给下面 .store-name 的 ellipsis 收尾，而不是溢出裁切 */
 .store-picker-capsule {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  max-width: 100%;
   background: #FFFFFF;
   border: 1.5rpx solid #EFE6D8;
   border-radius: 40rpx;
@@ -34,15 +39,25 @@
   line-height: 1;
 }
 
-/* 门店名称：大幅提升字号与加粗 */
+/* 门店名称：大幅提升字号与加粗
+   🐛 长门店名截断修复：min-width:0 + flex:1 让这段文字在胶囊宽度不够时才是
+   真正收窄的那一环（头像/箭头保持固定尺寸），超出部分用 ellipsis 省略号收尾，
+   而不是任由整个胶囊溢出撑破宿主布局 */
 .store-picker-capsule .store-name {
   font-size: 30rpx !important;
   font-weight: bold !important;
   color: #333333;
   line-height: 1 !important;
-  display: inline-flex;
-  align-items: center;
+  /* text-overflow:ellipsis 只在 block/inline-block 容器上可靠生效，flex 容器
+     不保证支持——这里从 inline-flex 改为 inline-block，垂直居中改由父级
+     .store-picker-capsule 的 align-items:center 负责（对 flex-item 的子元素
+     同样生效，不依赖子元素自身是不是 flex 容器） */
+  display: inline-block;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 下拉箭头 */
