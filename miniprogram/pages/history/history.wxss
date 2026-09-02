@@ -90,6 +90,18 @@
   border-radius: 30rpx;
 }
 
+/* 🆕 隐私脱敏模式「一键眼睛」：与 .btn-photo-archive-toggle 同尺寸，保持右上角
+   图标行观感统一 */
+.btn-sensitive-reveal {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  border-radius: 30rpx;
+}
+
 .btn-photo-archive-toggle-hover {
   background: rgba(0, 0, 0, 0.06);
 }
@@ -234,11 +246,16 @@
 
 .status-tab {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
   text-align: center;
   font-size: 26rpx;
   color: #868E96;
   padding: 16rpx 0;
   position: relative;
+  transition: color 0.25s ease;
 }
 
 .status-tab.active {
@@ -246,7 +263,8 @@
   font-weight: bold;
 }
 
-.status-tab.active::after {
+/* 🆕 状态 Tab 切换过渡动画：下划线宽度/透明度渐变展开，而非瞬时出现 */
+.status-tab::after {
   content: '';
   position: absolute;
   left: 50%;
@@ -256,6 +274,43 @@
   height: 5rpx;
   border-radius: 3rpx;
   background: #8C1D18;
+  opacity: 0;
+  transition: opacity 0.25s ease, width 0.25s ease;
+}
+
+.status-tab.active::after {
+  opacity: 1;
+}
+
+/* 🆕 状态 Tab 数量角标：默认灰底深字，待审核态换成警示橙，与全站语义色对齐 */
+.status-tab-badge {
+  min-width: 30rpx;
+  height: 30rpx;
+  padding: 0 6rpx;
+  border-radius: 15rpx;
+  background: #F1F3F5;
+  color: #868E96;
+  font-size: 18rpx;
+  font-weight: bold;
+  line-height: 30rpx;
+  text-align: center;
+  box-sizing: border-box;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+.status-tab.active .status-tab-badge {
+  background: #FBE9E7;
+  color: #8C1D18;
+}
+
+.status-tab-badge.warn {
+  background: #FFF3E0;
+  color: #FF9F00;
+}
+
+.status-tab.active .status-tab-badge.warn {
+  background: #FF9F00;
+  color: #FFFFFF;
 }
 
 /* ===== 月度财务审计表导出结果弹窗 ===== */
@@ -507,8 +562,10 @@
 
 .history-scroll-list {
   height: 100vh;
-  /* history 已不是 TabBar 页面（通过 navigateTo 进入，无底部导航栏），仅预留安全区 */
-  padding: 0 24rpx calc(40rpx + env(safe-area-inset-bottom)) 24rpx;
+  /* history 已不是 TabBar 页面（通过 navigateTo 进入，无底部导航栏），仅预留安全区。
+     🐛 底部内边距额外叠加 FAB 直径(96rpx)+间距，避免滚动到底部时最后一张卡片的
+     操作按钮（编辑/红字作废/分享）被悬浮拍照按钮遮挡 */
+  padding: 0 24rpx calc(160rpx + env(safe-area-inset-bottom)) 24rpx;
   box-sizing: border-box;
 }
 
@@ -519,10 +576,10 @@
 .history-card {
   position: relative;
   background: #FFFFFF;
-  border-radius: 24rpx;
+  border-radius: 16rpx;
   padding: 28rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
   border: 1rpx solid #F1F3F5;
 }
 
@@ -536,9 +593,11 @@
   opacity: 0.8;
 }
 
-/* 已作废卡片内所有金额数字（净增/余额四宫格）统一压灰，与正常生效账册形成明显区分 */
-.history-card.state-voided .cell-val,
-.history-card.state-voided .banner-val {
+/* 已作废卡片内所有金额数字（资产看板高亮值/明细值）统一压灰，与正常生效账册形成明显区分 */
+.history-card.state-voided .asset-highlight-val,
+.history-card.state-voided .asset-detail-val,
+.history-card.state-voided .zone-col-total,
+.history-card.state-voided .zone-row-val {
   color: #8c8c8c !important;
 }
 
@@ -561,7 +620,7 @@
 
 .void-seal-box .seal-txt {
   font-size: 18rpx;
-  color: #D32F2F;
+  color: #FA5151;
   font-weight: bold;
   text-align: center;
   line-height: 1.2;
@@ -579,8 +638,8 @@
 
 .error-badge {
   font-size: 18rpx;
-  color: #D32F2F;
-  background: #FFEBEE;
+  color: #FA5151;
+  background: #FFF1F0;
   padding: 2rpx 10rpx;
   border-radius: 8rpx;
   margin-left: 12rpx;
@@ -588,7 +647,7 @@
 }
 
 .error-badge-tappable {
-  border: 1rpx solid #D32F2F;
+  border: 1rpx solid #FA5151;
 }
 
 .error-badge-tappable:active {
@@ -706,39 +765,113 @@
   color: #D9480E;
 }
 
-.net-income-banner {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 20rpx;
-  border-radius: 12rpx;
+/* 🆕 隐私脱敏模式：经办人信息行 + 金额模糊态 */
+.handler-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6rpx 20rpx;
   margin-bottom: 16rpx;
 }
 
-.net-income-banner.positive {
-  background: #E6FCF5;
+.handler-info-text {
+  font-size: 20rpx;
+  color: #868E96;
 }
 
-.net-income-banner.negative {
-  background: #FFF5F5;
+/* 金额模糊：配合右上角"一键眼睛"（onToggleSensitiveReveal）临时显示，
+   user-select:none 避免模糊态下被长按选中复制出明文数字 */
+.privacy-blurred {
+  filter: blur(7rpx);
+  user-select: none;
+  transition: filter 0.2s ease;
 }
 
-.net-income-banner .banner-lbl {
-  font-size: 22rpx;
-  color: #0CA678;
+/* ================= 💰 资产看板：结余 / 净变动高亮 + 昨日/今日收支明细紧凑排布 ================= */
+.asset-board {
+  background: #FAFBFC;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
 }
 
-.net-income-banner.negative .banner-lbl {
-  color: #E03131;
+.asset-board-highlight-row {
+  display: flex;
+  align-items: center;
+  padding-bottom: 16rpx;
+  margin-bottom: 16rpx;
+  border-bottom: 1rpx dashed #E9ECEF;
 }
 
-.net-income-banner .banner-val {
-  font-size: 24rpx;
+.asset-highlight-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.asset-divider {
+  width: 1rpx;
+  height: 56rpx;
+  background: #E9ECEF;
+  flex-shrink: 0;
+}
+
+.asset-highlight-lbl {
+  font-size: 20rpx;
+  color: #888888;
+}
+
+.asset-highlight-val {
+  font-size: 34rpx;
   font-weight: bold;
-  color: #0CA678;
+  color: #FF9F00;
 }
 
-.net-income-banner.negative .banner-val {
-  color: #E03131;
+.asset-highlight-val.up {
+  color: #07C160;
+}
+
+.asset-highlight-val.down {
+  color: #FA5151;
+}
+
+.asset-board-detail-row {
+  display: flex;
+  align-items: stretch;
+}
+
+/* 🆕 昨日/今日收支明细三列之间加淡灰色分割细线，避免多列数字视线粘连 */
+.asset-detail-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  border-left: 1rpx solid #E9ECEF;
+}
+
+.asset-detail-cell:first-child {
+  border-left: none;
+}
+
+.asset-detail-lbl {
+  font-size: 20rpx;
+  color: #888888;
+}
+
+.asset-detail-val {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #495057;
+}
+
+.asset-detail-val.up {
+  color: #07C160;
+}
+
+.asset-detail-val.down {
+  color: #FA5151;
 }
 
 .card-header-tags {
@@ -760,64 +893,89 @@
   color: #495057;
 }
 
-.balance-4grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16rpx 24rpx;
-  padding: 16rpx 0;
-  border-top: 1rpx dashed #F1F3F5;
-  border-bottom: 1rpx dashed #F1F3F5;
+/* ================= 🍱 用餐/志愿双区紧凑布局：左用餐（浅灰胶囊）、右志愿（浅蓝胶囊），
+   两个分栏容器各自独立成胶囊卡片，数值采用 tabular-nums 等宽数字特性 + 800 字重，
+   模拟 DIN Condensed 风格的紧凑加粗数字观感，与标签文字拉开主次层级 ================= */
+.dual-zone-board {
+  display: flex;
+  align-items: stretch;
   margin-bottom: 20rpx;
+  gap: 16rpx;
 }
 
-/* 🍱 用餐/义工细分栅格：与 .balance-4grid 共用 .grid-cell/.cell-lbl/.cell-val，
-   仅列数不同（4 列，7 项数据两行排布，用餐总数/志愿者总人次高亮收尾） */
-.dining-breakdown-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16rpx 16rpx;
-  padding: 16rpx 0;
-  border-top: 1rpx dashed #F1F3F5;
-  border-bottom: 1rpx dashed #F1F3F5;
-  margin-bottom: 20rpx;
-}
-
-.grid-cell {
+.zone-col {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  gap: 10rpx;
+  border-radius: 16rpx;
+  padding: 18rpx 20rpx;
 }
 
-.cell-lbl {
+.zone-col.zone-dining {
+  background: #F5F6F7;
+}
+
+.zone-col.zone-volunteer {
+  background: #EEF6FF;
+}
+
+.zone-col-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+  margin-bottom: 4rpx;
+}
+
+.zone-col-icon {
+  font-size: 20rpx;
+}
+
+.zone-col-title {
   font-size: 22rpx;
-  color: #868E96;
+  font-weight: bold;
+  color: #495057;
+  flex: 1;
 }
 
-/* 统一数字字体层级：基础态即加粗，不再依赖各调用处是否叠加 .bold，保证四格数字观感一致 */
-.cell-val {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #212529;
+.zone-col-total {
+  font-size: 32rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5rpx;
+  color: #FF9F00;
 }
 
-.cell-val.bold {
-  font-weight: bold;
+.zone-col.zone-volunteer .zone-col-total {
+  color: #1C7ED6;
 }
 
-.cell-val.green {
-  color: #2B8A3E;
-  font-weight: bold;
+.zone-col-total-unit {
+  font-size: 20rpx;
+  font-weight: normal;
+  color: #888888;
+  margin-left: 2rpx;
 }
 
-.cell-val.red {
-  color: #E03131;
-  font-weight: bold;
+.zone-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.cell-val.orange {
-  color: #F59F00;
-  font-weight: bold;
+.zone-row-lbl {
+  font-size: 20rpx;
+  color: #888888;
 }
+
+.zone-row-val {
+  font-size: 24rpx;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #495057;
+}
+
 
 .card-receipts {
   margin-top: 8rpx;
@@ -1556,6 +1714,33 @@
 
 .card-receipt-empty .empty-tip { font-size: 20rpx; color: #B0B0B0; }
 
+/* 🆕 缺省凭证交互化：可点击的轻量卡片按钮，替代纯静态文字提示，直接拉起
+   稽核详情弹窗补传凭证 */
+.card-receipt-empty-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 16rpx 0;
+  background: #FAFBFC;
+  border: 1.5rpx dashed #DEE2E6;
+  border-radius: 16rpx;
+}
+
+.card-receipt-empty-btn:active {
+  background: #F1F3F5;
+}
+
+.card-receipt-empty-btn .empty-camera-icon {
+  font-size: 24rpx;
+}
+
+.card-receipt-empty-btn .empty-tip {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #1565C0;
+}
+
 /* ================= 编辑弹窗 4 宫格网格 ================= */
 .receipt-grid-4col {
   display: grid;
@@ -1750,7 +1935,7 @@
    （如 org-config 弹窗机构类型 Tag、anomaly-filter-banner） */
 .status-flow-tag.st-manager {
   background: #FFF7E6;
-  color: #D46B08;
+  color: #FF9F00;
   border: 1.5rpx solid #FFE1A8;
 }
 
@@ -1760,15 +1945,15 @@
    留给真正的驳回/作废状态（见下方 void-seal-box），这里改为绿色系 */
 .status-flow-tag.st-finance {
   background: #E6F7EE;
-  color: #2B8A3E;
+  color: #07C160;
   border: 1.5rpx solid #B7EACB;
 }
 
 /* 已锁定 (烫金高级感) */
 .status-flow-tag.st-locked {
-  background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+  background: linear-gradient(135deg, #07C160 0%, #06AD56 100%);
   color: #FFFFFF;
-  box-shadow: 0 4rpx 10rpx rgba(46, 125, 50, 0.2);
+  box-shadow: 0 4rpx 10rpx rgba(7, 193, 96, 0.2);
 }
 
 /* 锁定状态下的卡片样式 */
@@ -1822,12 +2007,6 @@
   border: 1rpx solid #DEE2E6;
 }
 
-/* 高亮背景 */
-.grid-cell.highlight-bg {
-  background: #FFFDF8;
-  border-radius: 12rpx;
-  padding: 8rpx 12rpx;
-}
 
 /* ================= 优化后的分层操作区样式 ================= */
 
@@ -1869,13 +2048,13 @@
 
 /* 主按钮：待店长确认 / 待财务稽核 —— 统一醒目 CTA 橙色 */
 .btn-workflow-audit-cta {
-  background: linear-gradient(135deg, #FF9100 0%, #FF6D00 100%);
+  background: linear-gradient(135deg, #FF9F00 0%, #F08C00 100%);
   color: #FFFFFF;
 }
 
 /* 主按钮：已锁定状态下的分享/导出 —— 稳重绿色 */
 .btn-workflow-share {
-  background: linear-gradient(135deg, #00C853 0%, #009624 100%);
+  background: linear-gradient(135deg, #07C160 0%, #06AD56 100%);
   color: #FFFFFF;
 }
 
@@ -1938,18 +2117,23 @@
   transform: scale(0.97);
 }
 
-/* 编辑按钮淡雅蓝 */
+/* ✏️ 编辑：胶囊实色轻按钮——无描边、纯色浅底，视觉分量适中，鼓励日常修正操作 */
 .btn-util-edit {
-  border-color: #90CAF9;
+  border: none;
   color: #1565C0;
   background: #E3F2FD;
 }
 
-/* 作废危险红色 */
+/* 🚨 红字作废：轻量警告线框——透明底 + 描边，视觉分量明显低于「编辑」的实色按钮，
+   防止与高频的编辑操作并排时被误触；仅描边不填色，需要用户主动辨认才会点击 */
 .btn-util-void {
-  border-color: #EF9A9A;
-  color: #C62828;
-  background: #FFEBEE;
+  border: 1.5rpx solid #FA5151;
+  color: #FA5151;
+  background: transparent;
+}
+
+.btn-util-void:active {
+  background: #FFF1F0;
 }
 
 /* 🏛️ 家长风控锁：已提交待确认的作废申请，替代原"红字作废"按钮所在位置 */
@@ -2146,12 +2330,12 @@
   padding: 8rpx 18rpx;
   border-radius: 20rpx;
   background: #FFF3E0;
-  color: #E65100;
+  color: #FF9F00;
 }
 
 .today-status-pill.approved {
-  background: #E8F5E9;
-  color: #2E7D32;
+  background: #E6F7EE;
+  color: #07C160;
 }
 
 .today-status-pill.locked {
@@ -2202,7 +2386,13 @@
 
 /* 🆕 快捷上传凭证 FAB：替代此前嵌在今日卡片里的强色通栏大按钮
    （.btn-today-action/.btn-today-upload/.today-action-row 已随之整体移除，
-   不再挤占卡片/列表内容区）。悬浮于右下角，任意滚动位置都可快速唤起 */
+   不再挤占卡片/列表内容区）。悬浮于右下角，任意滚动位置都可快速唤起。
+   🐛 吸底层级修复：z-index 提到 200，稳定高于卡片内任何绝对定位装饰元素
+   （如 .void-seal-box z-index:10、.status-stamp-badge z-index:2），并低于
+   弹窗遮罩（.modal-backdrop/.audit-modal-mask z-index:500/1000），避免打开
+   弹窗时 FAB 仍浮在遮罩之上；真正防遮挡的关键是 .history-scroll-list 的
+   底部内边距已上调到 160rpx + 安全区（见上方注释），FAB 不会再压住最后一张
+   卡片的编辑/作废/分享按钮 */
 .fab-upload-receipt {
   position: fixed;
   right: 32rpx;
@@ -2215,7 +2405,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
 }
 
 .fab-upload-receipt-hover {
@@ -2279,7 +2469,7 @@
 /* 历史卡片：小票九宫格标题行的锁定/对单徽章 */
 .r-lock-badge {
   font-size: 18rpx;
-  color: #E65100;
+  color: #FF9F00;
   background: #FFF3E0;
   border-radius: 12rpx;
   padding: 2rpx 10rpx;
@@ -2293,8 +2483,8 @@
 
 .r-reconcile-badge {
   font-size: 18rpx;
-  color: #2E7D32;
-  background: #E8F5E9;
+  color: #07C160;
+  background: #E6F7EE;
   border-radius: 12rpx;
   padding: 2rpx 10rpx;
   margin-left: 8rpx;

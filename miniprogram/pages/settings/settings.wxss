@@ -56,6 +56,49 @@
   padding: 24rpx;
 }
 
+/* 🆕 头部 Profile 简述卡片：当前身份 + 所属站点，仿微信原生"我的账号"卡片质感 */
+.profile-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+}
+
+.profile-avatar {
+  width: 96rpx;
+  height: 96rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #F8F5F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48rpx;
+}
+
+.profile-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.profile-role {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212529;
+}
+
+.profile-store {
+  font-size: 24rpx;
+  color: #868E96;
+}
+
 .settings-group-label {
   font-size: 24rpx;
   color: #999999;
@@ -92,9 +135,60 @@
   color: #333333;
 }
 
+/* 🆕 开关类设置项：左侧标题+说明文字两行，右侧 <switch>，不需要点击态/箭头 */
+.settings-item-switch:active {
+  background: transparent;
+}
+
+.settings-item-text-group {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding-right: 20rpx;
+}
+
+.settings-item-sub {
+  font-size: 22rpx;
+  color: #ADB5BD;
+}
+
+/* 🆕 右侧附加值（当前档位/容量/版本号）+ 箭头组合 */
+.settings-item-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.settings-item-value {
+  font-size: 26rpx;
+  color: #999999;
+}
+
 .settings-item-arrow {
   font-size: 28rpx;
   color: #C9C0B0;
+}
+
+/* 🆕 相机/相册授权状态徽章 */
+.auth-status-tag {
+  font-size: 22rpx;
+  font-weight: 500;
+  padding: 4rpx 14rpx;
+  border-radius: 10rpx;
+  background: #F1F3F5;
+  color: #868E96;
+}
+
+.auth-status-tag.authorized {
+  background: #E6F7EE;
+  color: #07C160;
+}
+
+.auth-status-tag.denied {
+  background: #FFF1F0;
+  color: #FA5151;
 }
 
 .danger-text {

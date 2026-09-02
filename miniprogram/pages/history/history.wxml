@@ -9,6 +9,11 @@
       <view class="btn-back-arrow" hover-class="btn-back-arrow-hover" bindtap="goBack">←</view>
       <text class="page-title-txt">{{pageTitle || '🧾 凭证与账本'}}</text>
       <view class="nav-right-actions">
+        <!-- 🆕 隐私脱敏模式「一键眼睛」：仅当设置页开关开启时展示，临时显示/隐藏
+             本页所有金额（会话内展示态，不影响持久化开关） -->
+        <view class="btn-sensitive-reveal" hover-class="btn-photo-archive-toggle-hover" wx:if="{{!photoArchiveMode && privacyMaskEnabled}}" bindtap="onToggleSensitiveReveal">
+          <text>{{sensitiveRevealed ? '🙈' : '👁️'}}</text>
+        </view>
         <!-- 📄 导出财务审计表：从原先横跨一整行的文字按钮下沉为图标，仅账本模式展示 -->
         <view class="btn-export-audit-icon" hover-class="btn-photo-archive-toggle-hover" wx:if="{{!photoArchiveMode && (isManagerOrAdmin || isFinanceOrAdmin)}}" bindtap="onExportMonthlyAudit">
           <text wx:if="{{!exportingAudit}}">📄</text>
@@ -67,10 +72,22 @@
          measureActualHeaderHeight() 会自动把它的高度并入 totalHeaderHeight，
          滚动列表的 padding-top 自动跟着让位，不需要额外手算偏移 -->
     <view class="status-tab-row" wx:if="{{!photoArchiveMode}}">
-      <view class="status-tab {{statusTab === 'all' ? 'active' : ''}}" data-tab="all" bindtap="onSwitchStatusTab">全部</view>
-      <view class="status-tab {{statusTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onSwitchStatusTab">待审核</view>
-      <view class="status-tab {{statusTab === 'approved' ? 'active' : ''}}" data-tab="approved" bindtap="onSwitchStatusTab">已通过</view>
-      <view class="status-tab {{statusTab === 'rejected' ? 'active' : ''}}" data-tab="rejected" bindtap="onSwitchStatusTab">已驳回</view>
+      <view class="status-tab {{statusTab === 'all' ? 'active' : ''}}" data-tab="all" bindtap="onSwitchStatusTab">
+        <text>全部</text>
+        <text class="status-tab-badge" wx:if="{{statusTabCounts.all > 0}}">{{statusTabCounts.all > 99 ? '99+' : statusTabCounts.all}}</text>
+      </view>
+      <view class="status-tab {{statusTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onSwitchStatusTab">
+        <text>待审核</text>
+        <text class="status-tab-badge warn" wx:if="{{statusTabCounts.pending > 0}}">{{statusTabCounts.pending > 99 ? '99+' : statusTabCounts.pending}}</text>
+      </view>
+      <view class="status-tab {{statusTab === 'approved' ? 'active' : ''}}" data-tab="approved" bindtap="onSwitchStatusTab">
+        <text>已通过</text>
+        <text class="status-tab-badge" wx:if="{{statusTabCounts.approved > 0}}">{{statusTabCounts.approved > 99 ? '99+' : statusTabCounts.approved}}</text>
+      </view>
+      <view class="status-tab {{statusTab === 'rejected' ? 'active' : ''}}" data-tab="rejected" bindtap="onSwitchStatusTab">
+        <text>已驳回</text>
+        <text class="status-tab-badge" wx:if="{{statusTabCounts.rejected > 0}}">{{statusTabCounts.rejected > 99 ? '99+' : statusTabCounts.rejected}}</text>
+      </view>
     </view>
 
     <!-- 🌟 从首页「风控预警日志」弹窗点击卡片跳转过来时的精准追溯筛选提示 -->
@@ -248,65 +265,85 @@
           </view>
         </view>
 
-        <view class="net-income-banner {{item.netChange >= 0 ? 'positive' : 'negative'}} {{item.isVoid ? 'strikethrough' : ''}}">
-          <text class="banner-lbl">净增：</text>
-          <text class="banner-val">{{item.netChange >= 0 ? '+' : ''}}¥{{item.netChangeStr}}</text>
+        <!-- 🆕 经办人信息：仅在确有值时展示，隐私脱敏模式开启时按 privacyMaskEnabled
+             切换到 approvedByMasked/auditedByMasked（预先算好，见 history.ts loadReports） -->
+        <view class="handler-info-row" wx:if="{{!item.isVoid && (item.approvedBy || item.auditedBy)}}">
+          <text class="handler-info-text" wx:if="{{item.approvedBy}}">👤 店长确认：{{privacyMaskEnabled ? item.approvedByMasked : item.approvedBy}}</text>
+          <text class="handler-info-text" wx:if="{{item.auditedBy}}">👤 财务稽核：{{privacyMaskEnabled ? item.auditedByMasked : item.auditedBy}}</text>
         </view>
 
-        <!-- 🍱 用餐/义工细分栅格：记录本身带细分统计（新记录，或老记录被编辑弹窗补录过）才展示；
+        <!-- 💰 资产看板：结余与净变动为核心高亮指标，昨日/今日收支明细并列紧凑排布在下方。
+             隐私脱敏模式开启且未临时显示时，金额统一加 .privacy-blurred 模糊，配合右上角
+             "一键眼睛"（onToggleSensitiveReveal）临时显示 -->
+        <view class="asset-board {{item.isVoid ? 'strikethrough' : ''}}">
+          <view class="asset-board-highlight-row">
+            <view class="asset-highlight-cell">
+              <text class="asset-highlight-lbl">今日结余</text>
+              <text class="asset-highlight-val {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">¥{{item.todayBalanceStr}}</text>
+            </view>
+            <view class="asset-divider"></view>
+            <view class="asset-highlight-cell">
+              <text class="asset-highlight-lbl">净变动</text>
+              <text class="asset-highlight-val {{item.netChange >= 0 ? 'up' : 'down'}} {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">{{item.netChange >= 0 ? '+' : ''}}¥{{item.netChangeStr}}</text>
+            </view>
+          </view>
+          <view class="asset-board-detail-row">
+            <view class="asset-detail-cell">
+              <text class="asset-detail-lbl">昨日余额</text>
+              <text class="asset-detail-val {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">¥{{item.yesterdayBalanceStr}}</text>
+            </view>
+            <view class="asset-detail-cell">
+              <text class="asset-detail-lbl">服务收入</text>
+              <text class="asset-detail-val up {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">+¥{{item.totalIncomeStr}}</text>
+            </view>
+            <view class="asset-detail-cell">
+              <text class="asset-detail-lbl">今日支出</text>
+              <text class="asset-detail-val down {{privacyMaskEnabled && !sensitiveRevealed ? 'privacy-blurred' : ''}}">-¥{{item.expenseAmountStr}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 🍱 用餐/义工双区紧凑布局：记录本身带细分统计（新记录，或老记录被编辑弹窗补录过）才展示；
              老记录没有细分数据时，沿用此前的"结缘/义工"两枚汇总标签 -->
         <view class="card-header-tags" wx:if="{{!item.hasDiningBreakdown}}">
           <text class="metric-tag info" wx:if="{{item.diningCount > 0}}">👥 结缘 {{item.diningCount}}人</text>
           <text class="metric-tag info" wx:if="{{item.volunteerCount > 0}}">❤️ 义工 {{item.volunteerCount}}人</text>
         </view>
 
-        <view class="dining-breakdown-grid" wx:if="{{item.hasDiningBreakdown}}">
-          <view class="grid-cell">
-            <text class="cell-lbl">送餐长者</text>
-            <text class="cell-val">{{item.deliverySeniors}} 人</text>
+        <view class="dual-zone-board" wx:if="{{item.hasDiningBreakdown}}">
+          <view class="zone-col zone-dining">
+            <view class="zone-col-header">
+              <text class="zone-col-icon">🍽️</text>
+              <text class="zone-col-title">用餐</text>
+              <text class="zone-col-total">{{item.totalDineCount}}<text class="zone-col-total-unit">人</text></text>
+            </view>
+            <view class="zone-row">
+              <text class="zone-row-lbl">堂食长者</text>
+              <text class="zone-row-val">{{item.dineInSeniors}}</text>
+            </view>
+            <view class="zone-row">
+              <text class="zone-row-lbl">送餐长者</text>
+              <text class="zone-row-val">{{item.deliverySeniors}}</text>
+            </view>
+            <view class="zone-row">
+              <text class="zone-row-lbl">打包份数</text>
+              <text class="zone-row-val">{{item.takeawayCount}}</text>
+            </view>
           </view>
-          <view class="grid-cell">
-            <text class="cell-lbl">送餐志愿者</text>
-            <text class="cell-val">{{item.deliveryVolunteers}} 人</text>
-          </view>
-          <view class="grid-cell">
-            <text class="cell-lbl">堂食长者</text>
-            <text class="cell-val">{{item.dineInSeniors}} 人</text>
-          </view>
-          <view class="grid-cell">
-            <text class="cell-lbl">打包份数</text>
-            <text class="cell-val">{{item.takeawayCount}} 份</text>
-          </view>
-          <view class="grid-cell">
-            <text class="cell-lbl">用餐志愿者</text>
-            <text class="cell-val">{{item.dineInVolunteers}} 人</text>
-          </view>
-          <view class="grid-cell highlight-bg">
-            <text class="cell-lbl">用餐总数</text>
-            <text class="cell-val orange bold">{{item.totalDineCount}} 人</text>
-          </view>
-          <view class="grid-cell highlight-bg">
-            <text class="cell-lbl">志愿者总人次</text>
-            <text class="cell-val orange bold">{{item.totalVolunteers}} 人次</text>
-          </view>
-        </view>
-
-        <view class="balance-4grid {{item.isVoid ? 'strikethrough' : ''}}">
-          <view class="grid-cell">
-            <text class="cell-lbl">昨日余额</text>
-            <text class="cell-val bold">¥{{item.yesterdayBalanceStr}}</text>
-          </view>
-          <view class="grid-cell">
-            <text class="cell-lbl">服务收入</text>
-            <text class="cell-val green">+¥{{item.totalIncomeStr}}</text>
-          </view>
-          <view class="grid-cell">
-            <text class="cell-lbl">今日支出</text>
-            <text class="cell-val red">-¥{{item.expenseAmountStr}}</text>
-          </view>
-          <view class="grid-cell highlight-bg">
-            <text class="cell-lbl">今日结余</text>
-            <text class="cell-val orange bold">¥{{item.todayBalanceStr}}</text>
+          <view class="zone-col zone-volunteer">
+            <view class="zone-col-header">
+              <text class="zone-col-icon">❤️</text>
+              <text class="zone-col-title">志愿</text>
+              <text class="zone-col-total">{{item.totalVolunteers}}<text class="zone-col-total-unit">人次</text></text>
+            </view>
+            <view class="zone-row">
+              <text class="zone-row-lbl">用餐志愿者</text>
+              <text class="zone-row-val">{{item.dineInVolunteers}}</text>
+            </view>
+            <view class="zone-row">
+              <text class="zone-row-lbl">送餐志愿者</text>
+              <text class="zone-row-val">{{item.deliveryVolunteers}}</text>
+            </view>
           </view>
         </view>
 
@@ -336,6 +373,13 @@
               <image class="thumb60-img" src="{{imgUrl}}" mode="aspectFill" lazy-load="{{true}}" />
             </view>
           </view>
+        </view>
+        <!-- 🆕 缺省凭证交互化：从纯文字提示改为可点击的轻量卡片按钮，直接拉起
+             稽核详情弹窗（内含"📤 补传凭证"入口），已作废记录不再邀请上传，
+             仍保留静态提示 -->
+        <view class="card-receipt-empty card-receipt-empty-btn" wx:elif="{{!item.isVoid}}" bindtap="onOpenReceiptDetail" data-index="{{index}}">
+          <text class="empty-camera-icon">📷</text>
+          <text class="empty-tip">补传凭证</text>
         </view>
         <view class="card-receipt-empty" wx:else>
           <text class="empty-tip">📷 暂无上传小票凭证</text>

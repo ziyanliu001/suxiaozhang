@@ -29,3 +29,28 @@ export function requestShippingNoticeSubscription(): Promise<void> {
     });
   });
 }
+
+// ⚠️ DAILY_REPORT_REMINDER_TEMPLATE_ID 同样是占位值：真实值需要在「微信公众平台 ->
+// 订阅消息 -> 我的模板」申请"提醒通知"类目下的一次性/长期模板后替换，并与实际负责
+// 定时推送的云函数（例如某个 scheduled trigger）里的模板 ID 环境变量保持一致——这里
+// 只负责在用户打开设置页开关时唤起订阅授权弹窗，真正的每日定时推送逻辑不在本文件内。
+// 未替换前本函数直接跳过，仅把开关状态持久化在本地，不会弹出授权框，也不会报错。
+const DAILY_REPORT_REMINDER_TEMPLATE_ID = '';
+
+export function requestDailyReportReminderSubscription(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!DAILY_REPORT_REMINDER_TEMPLATE_ID) {
+      console.warn('[subscribeMessage] 每日餐报提醒模板 ID 未配置，跳过订阅授权弹窗（开关状态仍会正常保存）');
+      resolve(true);
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: [DAILY_REPORT_REMINDER_TEMPLATE_ID],
+      success: (res: any) => resolve(res[DAILY_REPORT_REMINDER_TEMPLATE_ID] === 'accept'),
+      fail: (err: any) => {
+        console.warn('[subscribeMessage] 每日餐报提醒订阅授权失败/被拒绝:', err);
+        resolve(false);
+      }
+    });
+  });
+}

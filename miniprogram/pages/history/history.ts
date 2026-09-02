@@ -10,6 +10,9 @@ import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewMo
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
+import { withLoading } from '../../utils/loadingGuard';
+import { isPrivacyMaskEnabled } from '../../utils/userPreferences';
+import { maskName } from '../../utils/core/privacy';
 
 // 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
 // （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
@@ -147,6 +150,15 @@ Page({
     // 三态，没有独立的"驳回"状态字段，isVoid 是这份数据模型里唯一"未能通过、
     // 已被撤销"的语义，是最贴近的既有信号，不新造一个服务端并不产生的状态值
     statusTab: 'all' as 'all' | 'pending' | 'approved' | 'rejected',
+    // 🆕 状态 Tab badge 计数：与 statusTab 同一套过滤口径（叠加门店/月份/风控筛选，
+    // 但不含 statusTab 本身），随 applyFilters() 一起重算，供 Tab 角标展示
+    statusTabCounts: { all: 0, pending: 0, approved: 0, rejected: 0 },
+    // 🆕 设置页「隐私与脱敏模式」在本页的落地：开启后经办人姓名（approvedBy/
+    // auditedBy）掩码展示、金额默认模糊；每次 onShow 重读一次（用户可能刚从
+    // 设置页切换过开关再返回），不缓存过期值。sensitiveRevealed 是纯会话内的
+    // "一键眼睛"临时显示态，不写回 Storage，也不影响持久化开关本身
+    privacyMaskEnabled: false,
+    sensitiveRevealed: false,
     permissions: {} as PermissionFlags,
     showEditModal: false,
     editingRecord: null as any,
@@ -287,6 +299,11 @@ Page({
     if (this._navGuard) {
       this._navGuard.setupOnShow();
     }
+
+    // 🆕 隐私脱敏模式：每次 onShow 重读一次（用户可能刚从设置页切换过开关
+    // 再返回本页），不缓存上一次进页时的旧值；formattedReports 里已经预算好
+    // approvedByMasked/auditedByMasked，这里只需要切换 WXML 用哪一份展示
+    this.setData({ privacyMaskEnabled: isPrivacyMaskEnabled() });
 
     const activeStore = getSelectedStore();
     // 🐛 硬性根治："切到全国汇总账本查不出记录"根因：current_store_id/
@@ -622,6 +639,13 @@ Page({
     this.loadReports();
   },
 
+  // 🆕 隐私脱敏模式下的"一键眼睛"：临时显示/隐藏本页所有金额，纯会话内展示态，
+  // 不写回 Storage、不影响设置页的持久化开关本身——重进本页或重启小程序后
+  // 恢复为默认隐藏
+  onToggleSensitiveReveal() {
+    this.setData({ sensitiveRevealed: !this.data.sensitiveRevealed });
+  },
+
   // 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，纯客户端过滤，已加载的
   // reports 里直接筛，不重新请求云函数
   onSwitchStatusTab(e: any) {
@@ -769,8 +793,13 @@ Page({
         approvalStatus: item.approvalStatus || 'PENDING_APPROVAL',
         isLocked: item.isLocked || false,
         approvedBy: item.approvedBy || '',
+        // 🆕 隐私脱敏模式：经办人姓名预先算好脱敏版本（复用全项目统一的
+        // utils/core/privacy.ts maskName），WXML 按 privacyMaskEnabled 二选一
+        // 展示，不需要在开关状态变化时重新跑一遍 loadReports
+        approvedByMasked: maskName(item.approvedBy || ''),
         approveTime: item.approveTime || '',
         auditedBy: item.auditedBy || '',
+        auditedByMasked: maskName(item.auditedBy || ''),
         auditTime: item.auditTime || '',
         // 🛡️ 六大角色对齐：义工/家人/财务/店长/家长/超管提交的记录，只要还没被店长
         // 核对确认（APPROVED）或财务稽核封账（AUDITED_LOCKED），提交人本人就能编辑——
@@ -1127,52 +1156,62 @@ Page({
   async appendReceiptImagesToReport(item: any, newUrls: string[], extraAmount: number, reason: string, isSupplementAfterLock: boolean) {
     if (this._todayActionInFlight) return;
     this._todayActionInFlight = true;
-    wx.showLoading({ title: '保存中...', mask: true });
 
     try {
-      const existingImages = item.receiptImages || item.receiptImageList || [];
-      const mergedImages = [...existingImages, ...newUrls];
-      const newExpense = parseFloat(item.expenseAmount || 0) + (extraAmount || 0);
+      await withLoading('保存中...', async () => {
+        const existingImages = item.receiptImages || item.receiptImageList || [];
+        const mergedImages = [...existingImages, ...newUrls];
+        const newExpense = parseFloat(item.expenseAmount || 0) + (extraAmount || 0);
 
-      const res = await callFunctionWithTimeout({
-        name: 'updateAndRecalculateCascade',
-        data: {
-          docId: item._id,
-          shopName: item.shopName || '',
-          storeId: item.storeId || '',
-          reportDate: item.dateString || item.reportDate,
-          yesterdayBalance: parseFloat(item.yesterdayBalance || 0),
-          listDonationTotal: parseFloat(item.listDonationTotal || 0),
-          otherDonation: parseFloat(item.otherDonation || 0),
-          expense: newExpense,
-          diningPeople: Number(item.diningPeople || item.diningCount || 0),
-          volunteers: Number(item.volunteers || item.volunteerCount || 0),
-          receiptImageList: mergedImages,
-          receiptImages: mergedImages,
-          donationItems: item.donationItems || [],
-          materials: item.materials || [],
-          stapleRiceStatus: item.stapleRiceStatus || 'normal',
-          stapleOilStatus: item.stapleOilStatus || 'sufficient',
-          modifyReason: reason
+        const res = await callFunctionWithTimeout({
+          name: 'updateAndRecalculateCascade',
+          data: {
+            docId: item._id,
+            shopName: item.shopName || '',
+            storeId: item.storeId || '',
+            reportDate: item.dateString || item.reportDate,
+            yesterdayBalance: parseFloat(item.yesterdayBalance || 0),
+            listDonationTotal: parseFloat(item.listDonationTotal || 0),
+            otherDonation: parseFloat(item.otherDonation || 0),
+            expense: newExpense,
+            diningPeople: Number(item.diningPeople || item.diningCount || 0),
+            volunteers: Number(item.volunteers || item.volunteerCount || 0),
+            receiptImageList: mergedImages,
+            receiptImages: mergedImages,
+            donationItems: item.donationItems || [],
+            materials: item.materials || [],
+            stapleRiceStatus: item.stapleRiceStatus || 'normal',
+            stapleOilStatus: item.stapleOilStatus || 'sufficient',
+            modifyReason: reason
+          }
+        });
+
+        const result = res.result as any;
+
+        if (result && result.success) {
+          wx.showToast({ title: '凭证已保存', icon: 'success' });
+          this.setData({ showReceiptDetailModal: false });
+
+          // 🐛 体验闭环修复：此前无论金额是否变化都无条件 loadReports() 全量重载——
+          // 该方法会先 setData({loading:true}) 把 history-list-box 整个卸载换成
+          // 加载态占位，滚动位置随之丢失。补传凭证（extraAmount===0）不改变任何
+          // 金额/结余链路，只需要把这一条记录的图片数组原地патch 进已渲染的列表；
+          // 只有真正改了支出金额（如 OCR 识别追加金额）才会级联影响后续日期的结余，
+          // 这种情况下游数据确实变了，仍旧走全量重载保证一致性
+          if (extraAmount === 0) {
+            await this.patchReportImagesInPlace(item._id || item._localId, mergedImages);
+          } else {
+            this.loadReports();
+          }
+        } else {
+          wx.showModal({
+            title: isSupplementAfterLock ? '补传失败' : '保存失败',
+            content: (result && result.errMsg) || '云函数未返回正确结果',
+            showCancel: false
+          });
         }
       });
-
-      wx.hideLoading();
-      const result = res.result as any;
-
-      if (result && result.success) {
-        wx.showToast({ title: '凭证已保存', icon: 'success' });
-        this.setData({ showReceiptDetailModal: false });
-        this.loadReports();
-      } else {
-        wx.showModal({
-          title: isSupplementAfterLock ? '补传失败' : '保存失败',
-          content: (result && result.errMsg) || '云函数未返回正确结果',
-          showCancel: false
-        });
-      }
     } catch (err) {
-      wx.hideLoading();
       console.error('[appendReceiptImagesToReport] 异常:', err);
       wx.showModal({
         title: '调用失败',
@@ -1182,6 +1221,48 @@ Page({
     } finally {
       this._todayActionInFlight = false;
     }
+  },
+
+  // 🆕 局部更新：把补传后的凭证图片数组原地写回 reports/filteredReports 里对应的那
+  // 一条记录（按 _id/_localId 匹配），不触碰其余任何字段、不重新拉取云端数据、不
+  // 经过 loading 态占位——history-scroll-list 的滚动位置因此不会被打断。
+  // mergedImages 由旧的（已转换为可展示 URL 的）图片 + 新上传的 cloud:// fileID
+  // 拼接而成，这里只需要把新增部分转换成可展示 URL 再拼回去
+  async patchReportImagesInPlace(docId: string, mergedImages: string[]) {
+    const cloudIds = mergedImages.filter((u) => u && u.indexOf('cloud://') === 0);
+    let displayImages = mergedImages;
+
+    if (cloudIds.length > 0) {
+      try {
+        const tempResult: any = await wx.cloud.getTempFileURL({ fileList: cloudIds });
+        const urlMap: Record<string, string> = {};
+        (tempResult.fileList || []).forEach((f: any) => {
+          if (f.tempFileURL) urlMap[f.fileID] = f.tempFileURL;
+        });
+        displayImages = mergedImages.map((u) => urlMap[u] || u);
+      } catch (err) {
+        console.warn('[patchReportImagesInPlace] 图片URL转换失败，原样展示:', err);
+      }
+    }
+
+    const patchList = (list: any[]) => list.map((r: any) => {
+      if ((r._id || r._localId) !== docId) return r;
+      return { ...r, receiptImages: displayImages, receiptImageList: displayImages };
+    });
+
+    const patch: Record<string, any> = {
+      reports: patchList(this.data.reports),
+      filteredReports: patchList(this.data.filteredReports)
+    };
+
+    if (this.data.todayLedger && (this.data.todayLedger._id || this.data.todayLedger._localId) === docId) {
+      patch.todayLedger = { ...this.data.todayLedger, receiptImages: displayImages, receiptImageList: displayImages };
+    }
+    if (this.data.receiptDetailItem && (this.data.receiptDetailItem._id || this.data.receiptDetailItem._localId) === docId) {
+      patch.receiptDetailImages = displayImages;
+    }
+
+    this.setData(patch);
   },
 
   // 📷 直观预览：点击卡片内 60x60 小票缩略图直接原生放大，不经过稽核详情弹窗
@@ -1300,45 +1381,54 @@ Page({
 
     if (this._supplementInFlight) return;
 
-    try {
-      const currentCount = (item.receiptImages || item.receiptImageList || []).length;
-      const remainCount = 9 - currentCount;
-      if (remainCount <= 0) {
-        wx.showToast({ title: '凭证已达 9 张上限', icon: 'none' });
-        return;
-      }
+    const currentCount = (item.receiptImages || item.receiptImageList || []).length;
+    const remainCount = 9 - currentCount;
+    if (remainCount <= 0) {
+      wx.showToast({ title: '凭证已达 9 张上限', icon: 'none' });
+      return;
+    }
 
-      const res = await wx.chooseMedia({
+    let chooseRes: WechatMiniprogram.ChooseMediaSuccessCallbackResult;
+    try {
+      chooseRes = await wx.chooseMedia({
         count: remainCount,
         mediaType: ['image'],
         sourceType: ['album', 'camera']
       });
-      if (!res.tempFiles || res.tempFiles.length === 0) return;
-
-      this._supplementInFlight = true;
-      wx.showLoading({ title: '上传凭证中...', mask: true });
-
-      const newUrls: string[] = [];
-      for (const file of res.tempFiles) {
-        const cloudPath = `receipts/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
-        const uploadRes = await wx.cloud.uploadFile({ cloudPath, filePath: file.tempFilePath });
-        if (uploadRes.fileID) newUrls.push(uploadRes.fileID);
+    } catch (chooseErr: any) {
+      // 🐛 优雅退出修复：用户取消选择/拒绝相册相机权限时，wx.showLoading 根本
+      // 还没被调用过——此前这里统一走到下面的 catch 分支无条件 wx.hideLoading()，
+      // 在没有对应 showLoading 的情况下多喊一次 hideLoading，正是"必须配对使用"
+      // 告警的来源之一，也可能误关掉此刻其他操作正在展示的遮罩。取消/拒绝都只是
+      // 静默退出，不残留、也不额外触发任何 loading 相关调用
+      const errMsg = (chooseErr && chooseErr.errMsg) || '';
+      if (errMsg.indexOf('cancel') === -1) {
+        wx.showToast({ title: '未能选择图片，请重试', icon: 'none' });
       }
-      wx.hideLoading();
+      return;
+    }
+    if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
 
-      if (newUrls.length === 0) {
-        wx.showToast({ title: '上传失败，请重试', icon: 'none' });
-        this._supplementInFlight = false;
-        return;
-      }
+    this._supplementInFlight = true;
+    try {
+      await withLoading('上传凭证中...', async () => {
+        const newUrls: string[] = [];
+        for (const file of chooseRes.tempFiles) {
+          const cloudPath = `receipts/${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
+          const uploadRes = await wx.cloud.uploadFile({ cloudPath, filePath: file.tempFilePath });
+          if (uploadRes.fileID) newUrls.push(uploadRes.fileID);
+        }
 
-      await this.appendReceiptImagesToReport(item, newUrls, 0, `补传凭证（稽核补充材料，不涉及金额变更）`, isLocked);
+        if (newUrls.length === 0) {
+          wx.showToast({ title: '上传失败，请重试', icon: 'none' });
+          return;
+        }
+
+        await this.appendReceiptImagesToReport(item, newUrls, 0, `补传凭证（稽核补充材料，不涉及金额变更）`, isLocked);
+      });
     } catch (err: any) {
-      wx.hideLoading();
-      const errMsg = (err && err.message) || '';
-      if (errMsg && !errMsg.includes('cancel')) {
-        console.error('[onSupplementReceiptFromDetail] 异常:', err);
-      }
+      console.error('[onSupplementReceiptFromDetail] 异常:', err);
+      wx.showToast({ title: '补传失败，请重试', icon: 'none' });
     } finally {
       this._supplementInFlight = false;
     }
@@ -1352,15 +1442,6 @@ Page({
     // 🌟 Bug 修复：全国总览/全部门店时不按具体门店名过滤
     if (selectedStoreName && selectedStoreName !== '全部门店' && selectedStoreName !== '全国总览') {
       filtered = filtered.filter((item: any) => item.shopName === selectedStoreName);
-    }
-
-    // 🆕 状态筛选 Tab：见 data.statusTab 注释——"已驳回"映射到 isVoid
-    if (statusTab === 'pending') {
-      filtered = filtered.filter((item: any) => !item.isVoid && item.approvalStatus === 'PENDING_APPROVAL');
-    } else if (statusTab === 'approved') {
-      filtered = filtered.filter((item: any) => !item.isVoid && (item.approvalStatus === 'APPROVED' || item.approvalStatus === 'AUDITED_LOCKED'));
-    } else if (statusTab === 'rejected') {
-      filtered = filtered.filter((item: any) => !!item.isVoid);
     }
 
     if (selectedMonthStr) {
@@ -1378,13 +1459,32 @@ Page({
       filtered = filterByAnomalyType(filtered, anomalyFilterType);
     }
 
+    // 🆕 状态 Tab 角标计数：在 statusTab 本身生效之前，基于门店/月份/风控筛选后的
+    // 结果统计各状态数量，与下方 statusTab 过滤复用同一套 pending/approved/rejected
+    // 判定口径（见 data.statusTab 注释——"已驳回"映射到 isVoid）
+    const statusTabCounts = {
+      all: filtered.length,
+      pending: filtered.filter((item: any) => !item.isVoid && item.approvalStatus === 'PENDING_APPROVAL').length,
+      approved: filtered.filter((item: any) => !item.isVoid && (item.approvalStatus === 'APPROVED' || item.approvalStatus === 'AUDITED_LOCKED')).length,
+      rejected: filtered.filter((item: any) => !!item.isVoid).length
+    };
+
+    // 🆕 状态筛选 Tab：见 data.statusTab 注释——"已驳回"映射到 isVoid
+    if (statusTab === 'pending') {
+      filtered = filtered.filter((item: any) => !item.isVoid && item.approvalStatus === 'PENDING_APPROVAL');
+    } else if (statusTab === 'approved') {
+      filtered = filtered.filter((item: any) => !item.isVoid && (item.approvalStatus === 'APPROVED' || item.approvalStatus === 'AUDITED_LOCKED'));
+    } else if (statusTab === 'rejected') {
+      filtered = filtered.filter((item: any) => !!item.isVoid);
+    }
+
     filtered.sort((a: any, b: any) => {
       const dateA = a.dateString || a.reportDate || '';
       const dateB = b.dateString || b.reportDate || '';
       return dateB.localeCompare(dateA);
     });
 
-    this.setData({ filteredReports: this.processReportListAudit(filtered) });
+    this.setData({ filteredReports: this.processReportListAudit(filtered), statusTabCounts });
   },
 
   onStoreFilterChange(e: any) {
@@ -1479,32 +1579,34 @@ Page({
     const shopName = this.data.selectedStoreName || '全部门店';
 
     this.setData({ exportingAudit: true });
-    wx.showLoading({ title: '正在核对数据...', mask: true });
 
+    // 🐛 showLoading/hideLoading 配对修复：此前在成功分支、"该月无数据"提前 return
+    // 分支、catch 分支各自手写了一次 wx.hideLoading()，任一处日后被误删或新增分支
+    // 忘记补上都会导致配对告警。改用 withLoading()（见 utils/loadingGuard.ts）——
+    // wx.hideLoading() 只在其内部 finally 里统一调用一次，业务分支只管 return/throw
     try {
-      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      await withLoading('正在核对数据...', async () => {
+        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
 
-      const res = await callFunctionWithTimeout({
-        name: 'exportAccountExcel',
-        data: { shopName, tabType: 'month', selectedYear, selectedMonth, previewOnly: true }
-      });
-      const result = res.result as any;
+        const res = await callFunctionWithTimeout({
+          name: 'exportAccountExcel',
+          data: { shopName, tabType: 'month', selectedYear, selectedMonth, previewOnly: true }
+        });
+        const result = res.result as any;
 
-      wx.hideLoading();
+        if (!result || !result.success) {
+          wx.showToast({ title: (result && result.errMsg) || '该月无明细数据可导出', icon: 'none' });
+          return;
+        }
 
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.errMsg) || '该月无明细数据可导出', icon: 'none' });
-        return;
-      }
-
-      this._pendingAuditParams = { shopName, selectedYear, selectedMonth, yearMonth };
-      this.setData({
-        showExportPreviewModal: true,
-        exportPreviewSummary: result.summary || {},
-        exportPreviewRecords: result.records || []
+        this._pendingAuditParams = { shopName, selectedYear, selectedMonth, yearMonth };
+        this.setData({
+          showExportPreviewModal: true,
+          exportPreviewSummary: result.summary || {},
+          exportPreviewRecords: result.records || []
+        });
       });
     } catch (err: any) {
-      wx.hideLoading();
       console.error('[onExportMonthlyAudit] 核对数据加载失败:', err);
       wx.showToast({ title: '核对数据加载失败，请重试', icon: 'none' });
     } finally {
@@ -1538,33 +1640,31 @@ Page({
     const { shopName, selectedYear, selectedMonth, yearMonth } = params;
 
     this.setData({ exportingAudit: true });
-    wx.showLoading({ title: '正在生成审计表...', mask: true });
 
     try {
-      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      await withLoading('正在生成审计表...', async () => {
+        if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
 
-      const res = await callFunctionWithTimeout({
-        name: 'exportAccountExcel',
-        data: { shopName, tabType: 'month', selectedYear, selectedMonth }
-      });
-      const result = res.result as any;
+        const res = await callFunctionWithTimeout({
+          name: 'exportAccountExcel',
+          data: { shopName, tabType: 'month', selectedYear, selectedMonth }
+        });
+        const result = res.result as any;
 
-      wx.hideLoading();
+        if (!result || !result.success) {
+          wx.showToast({ title: (result && result.errMsg) || '该月无明细数据可导出', icon: 'none' });
+          return;
+        }
 
-      if (!result || !result.success) {
-        wx.showToast({ title: (result && result.errMsg) || '该月无明细数据可导出', icon: 'none' });
-        return;
-      }
-
-      this.setData({
-        showAuditExportModal: true,
-        auditExportPeriodLabel: (result.auditSummary && result.auditSummary.periodLabel) || yearMonth,
-        auditExportText: result.auditText || '',
-        auditExportFileURL: result.tempFileURL || '',
-        auditExportFileName: result.fileName || `财务审计表_${yearMonth}.xlsx`
+        this.setData({
+          showAuditExportModal: true,
+          auditExportPeriodLabel: (result.auditSummary && result.auditSummary.periodLabel) || yearMonth,
+          auditExportText: result.auditText || '',
+          auditExportFileURL: result.tempFileURL || '',
+          auditExportFileName: result.fileName || `财务审计表_${yearMonth}.xlsx`
+        });
       });
     } catch (err: any) {
-      wx.hideLoading();
       console.error('[performMonthlyAuditExport] 导出失败:', err);
       wx.showToast({ title: '导出失败，请重试', icon: 'none' });
     } finally {

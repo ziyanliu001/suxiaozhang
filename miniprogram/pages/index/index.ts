@@ -14,6 +14,7 @@ import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, reco
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
 import { maskName } from '../../utils/core/privacy';
+import { getDefaultHomeView } from '../../utils/userPreferences';
 import { classifyNotice, stripTitlePrefixFromContent } from '../../utils/noticeDisplay';
 import { md5 } from '../../utils/md5';
 import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, PreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
@@ -10727,8 +10728,17 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
 
+    // 🆕 设置页「默认首页视图」偏好落地：这是首页"凭证与账本"泛入口（未携带
+    // anomalyType/statusTab 等精准追溯参数），按用户偏好决定落到 history.ts 的
+    // 门店视角还是个人视角——复用已有的 ?view=mine 机制（见 history.ts onLoad），
+    // 不新增第二套视角切换逻辑。偏好为默认值"门店汇总"时不追加参数，与此前行为
+    // 完全一致，不影响没有设置过这项偏好的用户
+    const url = getDefaultHomeView() === 'personal'
+      ? '/pages/history/history?view=mine'
+      : '/pages/history/history';
+
     safeNavigateTo({
-      url: '/pages/history/history',
+      url,
       fail: () => {
         this.isNavigating = false;
       }
