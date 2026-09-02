@@ -6,6 +6,11 @@
 /* 🐛 与 history.wxss 门店/月份胶囊统一规范对齐：56rpx 高（此前 64rpx），
    两枚胶囊同一行内视觉对齐；本组件同时被 pages/index/index.wxml 复用，
    高度收紧对那边同样是更紧凑的观感，不影响其布局（该处是居中的独立一行） */
+/* 🐛 门店名文字顶部被削根因修复：此前 height:56rpx 是硬性锁死的固定高度，
+   配合 .store-name 的 line-height:1，中文字形（尤其是带较高笔画的字，如
+   "漳""雨""花"）的实际渲染包围盒会超出这条极窄的行框，被裁切掉顶部一截。
+   改为 min-height + height:auto，容器高度跟着内容的真实行高走，不再反过来
+   拿一个固定数值卡住文字 */
 .store-picker-capsule {
   display: inline-flex !important;
   align-items: center !important;
@@ -15,7 +20,8 @@
   border: 1.5rpx solid #EFE6D8;
   border-radius: 28rpx;
   padding: 8rpx 24rpx;
-  height: 56rpx;
+  min-height: 56rpx;
+  height: auto;
   box-shadow: 0 4rpx 12rpx rgba(140, 29, 24, 0.06);
   box-sizing: border-box;
   transition: opacity 0.2s ease;
@@ -39,7 +45,9 @@
   justify-content: center;
   margin-right: 10rpx;
   flex-shrink: 0;
-  line-height: 1;
+  /* storeInitial 取门店名首字，同样是中文字符——与 .store-name 同一类
+     line-height:1 顶部裁切风险，一并放宽；36rpx 圆内空间足够容纳 1.4 倍行高 */
+  line-height: 1.4;
 }
 
 /* 门店名称：与 history.wxss 门店/月份胶囊统一字号规范 24rpx（此前 30rpx，
@@ -51,7 +59,11 @@
   font-size: 24rpx !important;
   font-weight: bold !important;
   color: #333333;
-  line-height: 1 !important;
+  /* 🐛 门店名文字顶部被削：line-height:1 给中文字形留的行框太紧，笔画较高的
+     字（"漳""雨""花"等）配合下面 overflow:hidden 会被直接裁掉顶部一截。
+     1.4 倍行高留出足够的字形上缘空间，是"削字"这个问题真正的修复点，不是
+     line-height:1 只是"看起来不好看" */
+  line-height: 1.4;
   /* text-overflow:ellipsis 只在 block/inline-block 容器上可靠生效，flex 容器
      不保证支持——这里从 inline-flex 改为 inline-block，垂直居中改由父级
      .store-picker-capsule 的 align-items:center 负责（对 flex-item 的子元素
