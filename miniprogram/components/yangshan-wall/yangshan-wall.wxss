@@ -42,14 +42,14 @@
 
 .yangshan-wall-swiper {
   width: 100%;
-  height: 56rpx;
+  height: 64rpx;
 }
 
 .yangshan-wall-item {
   display: flex;
   align-items: center;
   gap: 10rpx;
-  height: 56rpx;
+  height: 64rpx;
 }
 
 .yangshan-wall-name {
@@ -64,7 +64,7 @@
 }
 
 .yangshan-wall-deed {
-  font-size: 25rpx;
+  font-size: 24rpx;
   color: #374151;
   /* flex:1 + min-width:0：物资类善行文案（如"捐赠东北大米50斤"）可能比善款
      文案更长，用弹性收缩 + 省略号兜底，避免把右侧时间标签挤出卡片 */
@@ -76,17 +76,17 @@
 }
 
 .yangshan-wall-time {
-  font-size: 21rpx;
+  font-size: 22rpx;
   color: #9CA3AF;
   flex-shrink: 0;
 }
 
-/* 🌟 空态兜底：与 .yangshan-wall-swiper 同一份高度（56rpx），保证有/无数据
+/* 🌟 空态兜底：与 .yangshan-wall-swiper 同一份高度（64rpx），保证有/无数据
    两种状态下卡片高度一致，不会因为切换状态导致页面内容跳动；左对齐、垂直
    居中，与滚动名单的排布方式保持一致，不再单独居中显得脱节 */
 .yangshan-wall-empty {
   width: 100%;
-  height: 56rpx;
+  height: 64rpx;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -100,4 +100,66 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ================= 🆕 善行详情轻量弹窗 ================= */
+.yangshan-detail-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.yangshan-detail-card {
+  width: 560rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
+  box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.12);
+}
+
+.yangshan-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.yangshan-detail-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #BE185D;
+}
+
+.yangshan-detail-close {
+  font-size: 32rpx;
+  color: #999999;
+  padding: 4rpx 10rpx;
+}
+
+.yangshan-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.yangshan-detail-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.yangshan-detail-deed {
+  font-size: 28rpx;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.yangshan-detail-time {
+  font-size: 24rpx;
+  color: #9CA3AF;
 }

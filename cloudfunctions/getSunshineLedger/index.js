@@ -199,15 +199,19 @@ exports.main = async (event) => {
     const threeDaysAgoStr = new Date(threeDaysAgoMs).toISOString().slice(0, 10);
     const latestDonorsThreeDay = [];
 
-    // 🌸 近30日阳善跑马灯：与 Weekly/ThreeDay 同款窗口判断逻辑，窗口收窄到真实
-    // 30×24 小时。与另外两份不同的是：本窗口额外并入 materials（实物捐赠，如
-    // "大米20斤"），不再只看 donationItems（善款）——首页/个人页的阳善跑马灯
-    // 组件需要同时展示善款与实物两类善行，不能让捐米面油的爱心人士被漏掉。
-    // deedText 如实反映真实数据（善款给"随喜 ¥金额"，实物给"捐赠+物品+数量+
-    // 单位"），与 latestDonorsWeekly 头部注释同一条"不虚构/不换算"的口径
+    // 🌸【最新善行】近30日滚动名单：与 Weekly/ThreeDay 同款窗口判断逻辑，
+    // 窗口收窄到真实 30×24 小时。与另外两份不同的是：①本窗口额外并入
+    // materials（实物捐赠，如"大米20斤"），不再只看 donationItems（善款）；
+    // ②额外并入义工到岗护持记录（volunteer_duty_logs，见下方合并逻辑）——
+    // "最新善行"不该只有捐赠，义工奉献工时同样是善行。deedText 如实反映
+    // 真实数据（善款给"随喜 ¥金额"，实物给"捐赠+物品+数量+单位"，义工给
+    // "奉献工时 N小时"），不虚构/不换算。monthlyPool 是收集阶段的原始池
+    // （带 sortMs 排序键），下方与义工记录混合排序后才产出最终的
+    // latestDonorsMonthly
     const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const thirtyDaysAgoStr = new Date(thirtyDaysAgoMs).toISOString().slice(0, 10);
-    const latestDonorsMonthly = [];
+    const MONTHLY_POOL_CAP = 60;
+    const monthlyPool = [];
 
     records.forEach((r) => {
       const dining = parseFloat(r.totalDineCount || r.diningCount) || 0;
@@ -313,13 +317,17 @@ exports.main = async (event) => {
         }
       }
 
-      // 🌸 近30日阳善跑马灯：善款(donationItems) + 实物(materials) 合并收集，
+      // 🌸 近30日"最新善行"跑马灯：善款(donationItems) + 实物(materials) 合并
+      // 收集到 monthlyPool（带 sortMs，供下面与义工护持记录混合后按真实时间
+      // 重新排序——不能直接定形成 latestDonorsMonthly，两类数据要混排）。
       // 窗口判断与上面两份完全同款逻辑，只是换成 thirtyDaysAgoMs/thirtyDaysAgoStr。
       // materials（实物捐赠）目前没有逐条 isAnonymous 覆盖字段（见 utils/parser.ts
       // MaterialItem 定义），只能按报告级 r.isAnonymous 判断
       const materials = Array.isArray(r.materials) ? r.materials : [];
-      if ((donationItems.length > 0 || materials.length > 0) && latestDonorsMonthly.length < 30) {
+      if ((donationItems.length > 0 || materials.length > 0) && monthlyPool.length < MONTHLY_POOL_CAP) {
         const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
+        const fallbackMs = r.dateString ? Date.parse(r.dateString) : NaN;
+        const sortMs = !Number.isNaN(recordMs) ? recordMs : fallbackMs;
         const inMonthlyWindow = !Number.isNaN(recordMs)
           ? recordMs >= thirtyDaysAgoMs
           : !!(r.dateString && r.dateString >= thirtyDaysAgoStr);
@@ -331,9 +339,10 @@ exports.main = async (event) => {
                 return dayDiff === null ? '' : dayDiff === 0 ? '今天' : dayDiff === 1 ? '昨天' : `${dayDiff}天前`;
               })();
           donationItems.forEach((item) => {
-            if (latestDonorsMonthly.length >= 30) return;
+            if (monthlyPool.length >= MONTHLY_POOL_CAP) return;
             const amount = parseFloat(item.amount) || 0;
-            latestDonorsMonthly.push({
+            monthlyPool.push({
+              sortMs,
               name: formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous)),
               amount,
               deedText: `随喜 ¥${amount}`,
@@ -341,12 +350,13 @@ exports.main = async (event) => {
             });
           });
           materials.forEach((m) => {
-            if (latestDonorsMonthly.length >= 30) return;
+            if (monthlyPool.length >= MONTHLY_POOL_CAP) return;
             // 🛡️ item/quantity 缺任一项就不硬拼出"捐赠斤"这类语义不全的残缺
             // 文案；unit 缺省时按 utils/parser.ts parseMaterials 同款约定回落
             // 为"份"，不留空——宁可少展示一条也不展示一条读不通的
             if (!m.item || !m.quantity) return;
-            latestDonorsMonthly.push({
+            monthlyPool.push({
+              sortMs,
               name: formatDonorDisplayName(m.donor, !!r.isAnonymous),
               amount: 0,
               deedText: `捐赠${m.item}${m.quantity}${m.unit || '份'}`,
@@ -356,6 +366,70 @@ exports.main = async (event) => {
         }
       }
     });
+
+    // 🆕【最新善行】整合义工到岗护持记录：与善款/实物捐赠同属"最新善行"，
+    // 此前只有捐赠类数据进这份 30 天滚动名单，义工到岗奉献工时完全没有
+    // 入口展示。volunteer_duty_logs 是 manageVolunteerCheckIn 云函数的
+    // 打卡落库集合，status:'active' 表示未撤销；createTime 是服务端时间戳，
+    // 与上面捐赠记录用同一个 thirtyDaysAgoMs 窗口比较，才能混排出真实的
+    // 时间先后顺序，而不是"捐赠一段+义工一段"两段拼接
+    try {
+      const volunteerLogsRes = await db.collection('volunteer_duty_logs')
+        .where(_.and([
+          { storeId },
+          { status: 'active' },
+          { createTime: _.gte(new Date(thirtyDaysAgoMs)) }
+        ]))
+        .orderBy('createTime', 'desc')
+        .limit(MONTHLY_POOL_CAP)
+        .get();
+      const volunteerLogs = volunteerLogsRes.data || [];
+
+      if (volunteerLogs.length > 0) {
+        // 批量解析义工姓名：与 manageVolunteerCheckIn 榜单同款查询，一次
+        // in() 覆盖，不逐条查询
+        const openidList = [...new Set(volunteerLogs.map((l) => l._openid).filter(Boolean))];
+        const nameMap = new Map();
+        if (openidList.length > 0) {
+          const nameRes = await db.collection('user_roles')
+            .where({ _openid: _.in(openidList) })
+            .field({ _openid: true, realName: true, nickName: true })
+            .limit(openidList.length)
+            .get();
+          (nameRes.data || []).forEach((u) => {
+            nameMap.set(u._openid, u.realName || u.nickName || '');
+          });
+        }
+
+        volunteerLogs.forEach((log) => {
+          if (monthlyPool.length >= MONTHLY_POOL_CAP * 2) return;
+          const hours = parseFloat(log.hours) || 0;
+          if (hours <= 0) return;
+          const sortMs = log.createTime ? new Date(log.createTime).getTime() : NaN;
+          if (Number.isNaN(sortMs)) return;
+          const rawName = nameMap.get(log._openid) || '';
+          monthlyPool.push({
+            sortMs,
+            name: rawName ? maskName(rawName) : '爱心义工',
+            amount: 0,
+            deedText: `义工 · 奉献工时 ${hours}小时`,
+            timeLabel: formatRelativeTime(log.createTime)
+          });
+        });
+      }
+    } catch (volunteerErr) {
+      // 义工记录合并失败不影响捐赠类数据正常返回——这是"最新善行"的增量来源，
+      // 不是主流程的必要条件
+      console.warn('[getSunshineLedger] 合并义工护持记录失败（不影响捐赠数据）:', volunteerErr);
+    }
+
+    // 混合排序：捐赠 + 义工护持按真实时间倒序合并成一份，砍到 30 条，
+    // 再剥离仅用于排序的 sortMs 字段——不改变 latestDonorsMonthly 对外的
+    // 数据形状（yangshan-wall 组件按 {name, deedText, timeLabel, amount} 消费）
+    const latestDonorsMonthly = monthlyPool
+      .sort((a, b) => b.sortMs - a.sortMs)
+      .slice(0, 30)
+      .map(({ sortMs, ...entry }) => entry);
 
     const meritTotal = yangCount + yinCount;
     const yangRatioPct = meritTotal > 0 ? Math.round(yangCount / meritTotal * 1000) / 10 : 0;

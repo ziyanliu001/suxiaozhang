@@ -1,6 +1,15 @@
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
+// 🌟 无数据兜底寄语：轮流展示几句语气温和、不带宗派色彩的通用善行寄语
+// （与全站"去宗教化合规"口径一致，避免"因果""功德""轮回"这类特定信仰术语），
+// 每次组件加载时随机挑一句，比恒定一句更不容易让人觉得是一段写死的占位符
+const EMPTY_FALLBACK_MESSAGES = [
+  '行善积德，福慧双增 · 愿一切善行皆得圆满',
+  '一粥一饭，当思来处不易 · 感恩每一份爱心支持',
+  '赠人玫瑰，手有余香 · 愿善意在这里持续流转'
+];
+
 // 🌸 阳善公开滚动墙：单店专属、全角色可见的公开只读展示组件。
 //
 // 数据源固定为 getSunshineLedger 云函数的 latestDonorsMonthly 字段——与
@@ -43,12 +52,24 @@ Component({
     yangShanList: [] as Array<{ name: string; deedText: string; timeLabel: string; amount: number }>,
     // 🌟 空态兜底：list.length===0 时（含"从未有过阳善记录"与"近 30 天恰好
     // 没有"两种情况）自动切换为静态寄语，不再让整块组件从页面上消失——消失
-    // 会让人误以为组件坏了/加载失败，一句寄语比空白更友好
-    hasYangShanList: false
+    // 会让人误以为组件坏了/加载失败，一句寄语比空白更友好。emptyMessage 从
+    // EMPTY_FALLBACK_MESSAGES 里随机挑一句，每次组件加载各自独立随机，
+    // 不强求同一个页面上多个实例挑到同一句
+    hasYangShanList: false,
+    emptyMessage: EMPTY_FALLBACK_MESSAGES[0],
+    // 🆕 点击某条善行弹出的轻量详情卡片：复用已有数据（name/deedText/
+    // timeLabel/amount），不需要额外发起一次云调用去查"这条记录的更多信息"
+    // ——服务端在 getSunshineLedger 阶段已经把能公开展示的信息给全了，
+    // 详情卡片只是把同一份数据放大展示，不是导航去一个新页面
+    showDetailModal: false,
+    detailItem: null as null | { name: string; deedText: string; timeLabel: string; amount: number }
   },
 
   lifetimes: {
     attached() {
+      this.setData({
+        emptyMessage: EMPTY_FALLBACK_MESSAGES[Math.floor(Math.random() * EMPTY_FALLBACK_MESSAGES.length)]
+      });
       if (this.properties.storeId) {
         this.fetchYangShanList();
       }
@@ -91,6 +112,23 @@ Component({
       } finally {
         this.setData({ loading: false });
       }
-    }
+    },
+
+    // 🆕 点击某条善行：弹出轻量详情卡片（组件自身内部弹窗，不依赖宿主页面
+    // 提供跳转目标）。donorIdx 与 WXML wx:for-index 对应，取当前展示的
+    // yangShanList 里那一条的完整数据
+    onTapDeedItem(e: any) {
+      const index = e.currentTarget.dataset.index;
+      const item = this.data.yangShanList[index];
+      if (!item) return;
+      this.setData({ showDetailModal: true, detailItem: item });
+    },
+
+    onCloseDeedDetail() {
+      this.setData({ showDetailModal: false, detailItem: null });
+    },
+
+    // 弹窗卡片本身的点击不应该冒泡触发背景遮罩的关闭
+    stopDeedDetailPropagation() {}
   }
 });
