@@ -554,23 +554,31 @@
   line-height: 1.6;
 }
 
+/* 🐛 输入框高度塌陷修复：统一规范为标准输入控件规格——height/line-height
+   双写保证 <input> 单行文本必定垂直居中（不依赖组件自身默认行为），
+   box-sizing:border-box 保证 padding 不会把内容区再往下挤出可视高度之外。
+   margin-top 是标签与输入框之间的间距，margin-bottom 保留给下一个字段的
+   标签留白，两者不冲突 */
 .new-store-input {
-  background: #F8F9FA;
-  border: 1.5rpx solid #EFE6D8;
-  border-radius: 16rpx;
-  height: 76rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  background: #F7F8FA;
+  border-radius: 12rpx;
   padding: 0 24rpx;
-  font-size: 26rpx;
-  color: #333333;
   box-sizing: border-box;
+  font-size: 28rpx;
+  color: #333333;
+  margin-top: 12rpx;
   margin-bottom: 24rpx;
 }
 
 /* 🆕 所属地区 picker 的展示行——套用 <input> 同款外观，用 flex 让文字垂直居中
-   （<input> 本身自带垂直居中，换成 <view> 包 <text> 需要手动补上） */
+   （<input> 本身自带垂直居中，换成 <view> 包 <text> 需要手动补上），并与
+   平台类型 picker 一致在右侧留出下拉箭头的位置 */
 .region-picker-display {
   display: flex;
   align-items: center;
+  justify-content: space-between;
 }
 
 .region-placeholder {
@@ -584,15 +592,96 @@
   justify-content: space-between;
 }
 
+/* 两个 picker 展示行点击态微暗反馈，与全站其余可点击行统一语汇 */
+.picker-selector-hover {
+  background: #EDEEF0;
+}
+
 .picker-arrow {
   color: #ADB5BD;
-  font-size: 28rpx;
+  font-size: 24rpx;
+  flex-shrink: 0;
 }
 
 /* 必填星号 */
 .form-label-required {
   color: #E53935;
   margin-right: 4rpx;
+}
+
+/* 选填字段的弱化提示，跟在 form-label 后面同一行展示 */
+.form-label-optional {
+  color: #ADB5BD;
+  font-weight: normal;
+  font-size: 22rpx;
+}
+
+/* ================= 🌟 申请身份：大家长/店长 双列核心角色卡片 ================= */
+.role-card-row {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.role-card {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  padding: 24rpx 12rpx;
+  background: #F8F9FA;
+  border: 2rpx solid #EEEEEE;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.role-card-active {
+  background: #FFF2F0;
+  border-color: #C43A3A;
+}
+
+/* 原生 radio 圆点隐藏——label 包裹整张卡片仍是完整可点击区域，
+   radio-group 只关心 radio 的 checked 状态变化，不要求它可见 */
+.role-card-radio {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.role-card-badge {
+  position: absolute;
+  top: -1rpx;
+  right: -1rpx;
+  background: #C43A3A;
+  color: #FFFFFF;
+  font-size: 18rpx;
+  font-weight: bold;
+  padding: 4rpx 12rpx;
+  border-radius: 0 14rpx 0 14rpx;
+}
+
+.role-card-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+}
+
+.role-card-active .role-card-title {
+  color: #C43A3A;
+}
+
+.role-card-desc {
+  font-size: 20rpx;
+  color: #999999;
+}
+
+.role-card-active .role-card-desc {
+  color: #C97B7B;
 }
 
 .new-store-role-group {

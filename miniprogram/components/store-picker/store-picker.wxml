@@ -142,46 +142,62 @@
                  type="text"
                  placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）"
                  value="{{newStoreForm.customStoreName}}"
-                 bindinput="onNewStoreNameInput"/>
+                 bindinput="onNewStoreNameInput"
+                 cursor-spacing="50"
+                 adjust-position="{{true}}"/>
           <text class="form-hint">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
 
           <block wx:if="{{currentStore.role !== 'ADMIN'}}">
             <text class="form-label">申请身份</text>
-            <radio-group class="new-store-role-group" bindchange="onSelectNewStoreRole">
-              <label class="new-store-role-item">
-                <radio value="store_family" checked="{{newStoreForm.applyRole === 'store_family'}}" color="#8C1D18"/>
-                <text>🏠 家人</text>
-              </label>
-              <label class="new-store-role-item">
-                <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
-                <text>🌸 义工</text>
-              </label>
-              <label class="new-store-role-item">
-                <radio value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}" color="#8C1D18"/>
-                <text>👑 大家长</text>
-              </label>
-              <label class="new-store-role-item">
-                <radio value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}" color="#8C1D18"/>
-                <text>👑 店长</text>
-              </label>
-              <label class="new-store-role-item">
-                <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
-                <text>🔒 财务</text>
-              </label>
+            <radio-group bindchange="onSelectNewStoreRole">
+              <!-- 🌟 核心管理身份双列卡片：大家长/店长是新建门店时最主要的两个
+                   管理岗位，用对等卡片突出展示，选中态品牌红描边+浅红底+角标；
+                   radio 本身隐藏，靠 label 包裹保持点击可用（radio-group 会
+                   识别任意深度嵌套的 radio 后代，不要求直接子节点） -->
+              <view class="role-card-row">
+                <label class="role-card {{newStoreForm.applyRole === 'store_patriarch' ? 'role-card-active' : ''}}">
+                  <radio class="role-card-radio" value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}"/>
+                  <view class="role-card-badge" wx:if="{{newStoreForm.applyRole === 'store_patriarch'}}">已选</view>
+                  <text class="role-card-title">👑 大家长</text>
+                  <text class="role-card-desc">统筹发起 / 核心管理</text>
+                </label>
+                <label class="role-card {{newStoreForm.applyRole === 'store_manager' ? 'role-card-active' : ''}}">
+                  <radio class="role-card-radio" value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}"/>
+                  <view class="role-card-badge" wx:if="{{newStoreForm.applyRole === 'store_manager'}}">已选</view>
+                  <text class="role-card-title">👑 店长</text>
+                  <text class="role-card-desc">日常运营 / 排班餐报</text>
+                </label>
+              </view>
+
+              <!-- 其余身份（家人/义工/财务）保持原有简洁单选样式，不参与卡片化 -->
+              <view class="new-store-role-group">
+                <label class="new-store-role-item">
+                  <radio value="store_family" checked="{{newStoreForm.applyRole === 'store_family'}}" color="#8C1D18"/>
+                  <text>🏠 家人</text>
+                </label>
+                <label class="new-store-role-item">
+                  <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
+                  <text>🌸 义工</text>
+                </label>
+                <label class="new-store-role-item">
+                  <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
+                  <text>🔒 财务</text>
+                </label>
+              </view>
             </radio-group>
 
             <text class="form-label">真实姓名</text>
-            <input class="new-store-input" type="text" placeholder="请输入真实姓名" value="{{newStoreForm.realName}}" bindinput="onNewStoreRealNameInput"/>
+            <input class="new-store-input" type="text" placeholder="请输入真实姓名" value="{{newStoreForm.realName}}" bindinput="onNewStoreRealNameInput" cursor-spacing="50" adjust-position="{{true}}"/>
 
             <text class="form-label">手机号</text>
-            <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput"/>
+            <input class="new-store-input" type="number" placeholder="请输入手机号" value="{{newStoreForm.phone}}" bindinput="onNewStorePhoneInput" cursor-spacing="50" adjust-position="{{true}}"/>
 
             <!-- 🔐 新建门店初始密钥：建店成功后其他人申请管理岗位时需提供此密钥。
                  留空则自动使用建店人手机号后 6 位作为初始密钥（服务端兜底）。
                  仅大家长/店长/财务角色展开此项；义工/家人无需设置密钥 -->
             <block wx:if="{{newStoreForm.applyRole === 'store_patriarch' || newStoreForm.applyRole === 'store_manager' || newStoreForm.applyRole === 'finance'}}">
               <text class="form-label">设置门店管理员密钥（可选）</text>
-              <input class="new-store-input" type="text" password placeholder="留空则默认使用手机号后 6 位" value="{{newStoreForm.adminKey}}" bindinput="onAdminKeyInput"/>
+              <input class="new-store-input" type="text" password placeholder="留空则默认使用手机号后 6 位" value="{{newStoreForm.adminKey}}" bindinput="onAdminKeyInput" cursor-spacing="50" adjust-position="{{true}}"/>
               <text class="form-hint">建店成功后，其他人申请管理岗位时须提供此密钥方可提交申请，可在门店设置中随时修改</text>
             </block>
 
@@ -194,7 +210,7 @@
                    聚合与筛选，解耦"雨花斋"等平台硬编码 -->
               <text class="form-label"><text class="form-label-required">*</text> 所属平台类型</text>
               <picker bindchange="onOrgTypeChange" value="{{orgTypeIndex}}" range="{{orgTypeOptions}}" range-key="name">
-                <view class="new-store-input picker-selector">
+                <view class="new-store-input picker-selector" hover-class="picker-selector-hover">
                   <text>{{orgTypeOptions[orgTypeIndex].name}}</text>
                   <text class="picker-arrow">▾</text>
                 </view>
@@ -203,16 +219,17 @@
               <!-- 🆕 所属地区：原生 <picker mode="region"> 省-市-区级联选择 -->
               <text class="form-label">选择所属地区</text>
               <picker mode="region" bindchange="onNewStoreRegionChange" value="{{newStoreForm.regionArray}}">
-                <view class="new-store-input region-picker-display">
+                <view class="new-store-input region-picker-display" hover-class="picker-selector-hover">
                   <text class="{{newStoreForm.regionArray.length === 0 ? 'region-placeholder' : ''}}">{{newStoreForm.regionArray.length > 0 ? newStoreForm.regionArray[0] + ' ' + newStoreForm.regionArray[1] + ' ' + newStoreForm.regionArray[2] : '请选择省/市/区'}}</text>
+                  <text class="picker-arrow">▾</text>
                 </view>
               </picker>
 
-              <text class="form-label">门店地址</text>
-              <input class="new-store-input" type="text" placeholder="请输入门店详细地址" value="{{newStoreForm.address}}" bindinput="onNewStoreAddressInput"/>
+              <text class="form-label">门店地址<text class="form-label-optional">（可选）</text></text>
+              <input class="new-store-input" type="text" placeholder="请输入门店详细地址" value="{{newStoreForm.address}}" bindinput="onNewStoreAddressInput" cursor-spacing="50" adjust-position="{{true}}"/>
 
-              <text class="form-label">联系电话</text>
-              <input class="new-store-input" type="number" placeholder="请输入门店联系电话" value="{{newStoreForm.contactPhone}}" bindinput="onNewStoreContactPhoneInput"/>
+              <text class="form-label">联系电话<text class="form-label-optional">（可选）</text></text>
+              <input class="new-store-input" type="number" placeholder="请输入门店联系电话" value="{{newStoreForm.contactPhone}}" bindinput="onNewStoreContactPhoneInput" cursor-spacing="50" adjust-position="{{true}}"/>
 
               <text class="form-label">门店照片</text>
               <view class="receipt-grid-container">
