@@ -105,6 +105,9 @@ Page({
   _financeAuditInFlight: false,
   _voidInFlight: false,
   _recalibrateInFlight: false,
+  // 🆕 校准二次确认自定义弹窗记住校准目标（'all' 或具体 storeId），
+  // 不需要渲染，不放进 data
+  _recalibrateConfirmTarget: '',
   _deleteInFlight: false,
   _todayActionInFlight: false,
   _supplementInFlight: false,
@@ -195,6 +198,12 @@ Page({
     privacyMaskEnabled: false,
     sensitiveRevealed: false,
     amountsMasked: false,
+    // 🆕 校准操作二次确认：改用自定义弹窗（原生 wx.showModal 不支持任何样式
+    // 定制，长文案 + editable 输入框组合在部分机型上会挤压/裁切正文，只能换
+    // 成完全可控的页内弹窗）
+    showRecalibrateConfirmModal: false,
+    recalibrateConfirmContent: '',
+    recalibrateConfirmInput: '',
     showEditModal: false,
     editingRecord: null as any,
     receiptImgCount: 0,
@@ -463,6 +472,10 @@ Page({
   },
 
   // 🌟 高危功能：一键链式校准全线结余流水
+  // 🐛 二次确认改用自定义弹窗（见 showRecalibrateConfirmModal 一组字段）：
+  // wx.showModal 是原生系统弹窗，不接受任何 WXSS 定制，长文案 + editable
+  // 输入框组合在部分机型上会把正文压缩/裁切到几乎不可读——只有换成完全
+  // 由页面自己渲染的弹窗，才能真正控制文字排版与按钮样式
   async onRecalibrateAllBalances() {
     if (!this.data.isManagerRole && !this.data.isFinanceRole && !this.data.isSuperAdmin) {
       wx.showToast({ title: '仅店长与财务拥有校准权限', icon: 'none' });
@@ -481,66 +494,72 @@ Page({
       }
 
       // 🛡️ 临时加固：近期曾发生全库数据异常事故，全国范围校准（影响面最大的一档操作）
-      // 现新增一道输入型二次确认，需手动键入"确认校准"四字才会进入下一步弹窗，
-      // 防止手滑/误触；云函数本身也已改为逐店事务+失败回滚，仅允许写结余/校验和字段。
-      wx.showModal({
-        title: '⚠️ 高风险操作二次确认',
-        content: '全国范围校准会遍历全部门店的历史账目。请务必确认 recalculateLedger 云函数已部署最新版本（事务+回滚+字段白名单）。请输入"确认校准"以继续：',
-        editable: true,
-        placeholderText: '请输入：确认校准',
-        confirmText: '下一步',
-        confirmColor: '#D32F2F',
-        success: (res) => {
-          if (!res.confirm) return;
-          if ((res.content || '').trim() !== '确认校准') {
-            wx.showToast({ title: '输入不匹配，已取消操作', icon: 'none' });
-            return;
-          }
+      // 需手动键入"确认校准"四字才会进入下一步弹窗，防止手滑/误触；云函数本身也已
+      // 改为逐店事务+失败回滚，仅允许写结余/校验和字段。
+      this._recalibrateConfirmTarget = 'all';
+      this.setData({
+        showRecalibrateConfirmModal: true,
+        recalibrateConfirmContent: '全国范围校准会遍历全部门店的历史账目。请务必确认 recalculateLedger 云函数已部署最新版本（事务+回滚+字段白名单）。请输入"确认校准"以继续：',
+        recalibrateConfirmInput: ''
+      });
+      return;
+    }
 
-          wx.showModal({
-            title: '确认全国范围校准？',
-            content: '确认要重新校准【全国所有门店】的全线结余流水账目吗？这可能需要几秒钟。',
-            confirmText: '确认校准',
-            confirmColor: '#D32F2F',
-            cancelText: '我再想想',
-            success: async (res2) => {
-              if (!res2.confirm) return;
-              await this.executeRecalculateLedger('all');
-            }
-          });
+    // 🛡️ 防误触升级：单店校准同样要求手动键入"确认校准"才能进入下一步，
+    // 与全国范围校准的防护级别保持一致
+    const storeLabel = this.data.selectedStoreName || currentStoreId;
+    this._recalibrateConfirmTarget = currentStoreId;
+    this.setData({
+      showRecalibrateConfirmModal: true,
+      recalibrateConfirmContent: `即将重新校准【${storeLabel}】的全线结余流水账目。请输入"确认校准"以继续：`,
+      recalibrateConfirmInput: ''
+    });
+  },
+
+  onRecalibrateConfirmInput(e: any) {
+    this.setData({ recalibrateConfirmInput: e.detail.value });
+  },
+
+  onCloseRecalibrateConfirmModal() {
+    this.setData({ showRecalibrateConfirmModal: false, recalibrateConfirmInput: '' });
+  },
+
+  // 校验输入的确认口令，通过后关闭自定义弹窗、拉起原生 wx.showModal 做最终审阅确认
+  // （这一步文案短，原生弹窗完全够用，不需要跟着一起换成自定义弹窗）
+  onRecalibrateConfirmNext() {
+    if ((this.data.recalibrateConfirmInput || '').trim() !== '确认校准') {
+      wx.showToast({ title: '输入不匹配，请重新输入', icon: 'none' });
+      return;
+    }
+
+    const target = this._recalibrateConfirmTarget;
+    this.setData({ showRecalibrateConfirmModal: false, recalibrateConfirmInput: '' });
+
+    if (target === 'all') {
+      wx.showModal({
+        title: '确认全国范围校准？',
+        content: '确认要重新校准【全国所有门店】的全线结余流水账目吗？这可能需要几秒钟。',
+        confirmText: '确认校准',
+        confirmColor: '#D32F2F',
+        cancelText: '我再想想',
+        success: async (res2) => {
+          if (!res2.confirm) return;
+          await this.executeRecalculateLedger('all');
         }
       });
       return;
     }
 
-    // 🛡️ 防误触升级：单店校准此前只有一层普通确认弹窗，现同样加上输入型二次确认，
-    // 需手动键入"确认校准"才会进入下一步，与全国范围校准的防护级别保持一致
-    const storeLabel = this.data.selectedStoreName || currentStoreId;
+    const storeLabel = this.data.selectedStoreName || target;
     wx.showModal({
-      title: '⚠️ 校准操作二次确认',
-      content: `即将重新校准【${storeLabel}】的全线结余流水账目。请输入"确认校准"以继续：`,
-      editable: true,
-      placeholderText: '请输入：确认校准',
-      confirmText: '下一步',
+      title: `确认校准【${storeLabel}】？`,
+      content: '确认要重新校准该门店的全线结余流水账目吗？',
+      confirmText: '确认校准',
       confirmColor: '#E65100',
-      success: (res) => {
-        if (!res.confirm) return;
-        if ((res.content || '').trim() !== '确认校准') {
-          wx.showToast({ title: '输入不匹配，已取消操作', icon: 'none' });
-          return;
-        }
-
-        wx.showModal({
-          title: `确认校准【${storeLabel}】？`,
-          content: '确认要重新校准该门店的全线结余流水账目吗？',
-          confirmText: '确认校准',
-          confirmColor: '#E65100',
-          cancelText: '我再想想',
-          success: async (res2) => {
-            if (!res2.confirm) return;
-            await this.executeRecalculateLedger(currentStoreId);
-          }
-        });
+      cancelText: '我再想想',
+      success: async (res2) => {
+        if (!res2.confirm) return;
+        await this.executeRecalculateLedger(target);
       }
     });
   },

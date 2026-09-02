@@ -1286,6 +1286,109 @@
   box-shadow: 0 12rpx 40rpx rgba(0,0,0,0.15);
 }
 
+/* ================= 🌟 校准操作二次确认（自定义弹窗） =================
+   替代原生 wx.showModal——系统弹窗不接受任何样式定制，长文案 + editable
+   输入框组合在部分机型上会把正文压缩/裁切到难以阅读，这是唯一能真正修好
+   这个问题的办法：整个弹窗自己画 */
+.calib-modal-card {
+  width: 600rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  box-sizing: border-box;
+  box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.12);
+}
+
+.calib-modal-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #212529;
+  text-align: center;
+  margin-bottom: 16rpx;
+}
+
+/* 正文容器：不设 height/max-height，交给内容自然撑开——这正是原生弹窗
+   "长文案被压缩裁切"问题的根因（系统弹窗内部会给正文一个受限的可视区域），
+   这里只用 min-height 兜底最小观感，overflow:visible 保证多行文字完整展示 */
+.calib-modal-body-wrap {
+  min-height: 80rpx;
+  overflow: visible;
+  padding: 24rpx 32rpx;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  box-sizing: border-box;
+}
+
+.calib-modal-body {
+  display: block;
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: #4E5969;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.calib-modal-input {
+  margin-top: 20rpx;
+  height: 76rpx;
+  padding: 0 24rpx;
+  background: #F7F8FA;
+  border: 2rpx solid #DEE2E6;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  color: #212529;
+  box-sizing: border-box;
+}
+
+.calib-modal-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 28rpx;
+}
+
+.calib-btn-cancel,
+.calib-btn-confirm {
+  flex: 1;
+  height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+}
+
+.calib-btn-cancel::after,
+.calib-btn-confirm::after {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.calib-btn-cancel {
+  background: #F2F3F5;
+  color: #86909C;
+  font-weight: 500;
+}
+
+.calib-btn-cancel-hover {
+  background: #E5E6EB;
+}
+
+/* 实色填充 + 按压变暗：比浅色描边更"强化视觉主导"，与全站其余主 CTA
+   （如 .btn-workflow-audit-cta）同一套"确定性操作用实色"语言 */
+.calib-btn-confirm {
+  background: #C43A3A;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.calib-btn-confirm-hover {
+  background: #A82E2E;
+}
+
 .edit-report-card {
   width: 90%;
   max-width: 660rpx;

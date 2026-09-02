@@ -890,6 +890,28 @@
     </view>
   </view>
 
+  <!-- 🌟 校准操作二次确认：自定义弹窗，替代原生 wx.showModal——原生弹窗不支持
+       任何样式定制，长文案 + editable 输入框组合在部分机型上会把正文压缩/裁切到
+       难以阅读，只有页面自己渲染才能保证文字完整展示、按钮样式符合全站规范 -->
+  <view class="modal-backdrop" wx:if="{{showRecalibrateConfirmModal}}" bindtap="onCloseRecalibrateConfirmModal">
+    <view class="calib-modal-card" catchtap="stopPropagation">
+      <text class="calib-modal-title">⚠️ 校准操作二次确认</text>
+      <view class="calib-modal-body-wrap">
+        <text class="calib-modal-body">{{recalibrateConfirmContent}}</text>
+      </view>
+      <input
+        class="calib-modal-input"
+        placeholder="请输入：确认校准"
+        value="{{recalibrateConfirmInput}}"
+        bindinput="onRecalibrateConfirmInput"
+      />
+      <view class="calib-modal-actions">
+        <button class="calib-btn-cancel" hover-class="calib-btn-cancel-hover" bindtap="onCloseRecalibrateConfirmModal">取消</button>
+        <button class="calib-btn-confirm" hover-class="calib-btn-confirm-hover" bindtap="onRecalibrateConfirmNext">下一步</button>
+      </view>
+    </view>
+  </view>
+
   <!-- 🔐 专业版功能拦截弹窗：月度财务审计表导出为专业版专属，见 onExportMonthlyAudit -->
   <feature-locked-modal
     visible="{{showFeatureLockedModal}}"
