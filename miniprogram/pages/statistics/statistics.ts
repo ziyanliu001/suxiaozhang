@@ -2384,6 +2384,15 @@ Page({
         }
       }
 
+      // 🐛 根因修复（路由阻塞）：pages/index/index → pages/statistics/statistics
+      // 的 safeNavigateTo 曾报"JS主线程受阻"——本方法在 await DataService.getReports()
+      // 拿到最多 1000 条记录后，紧接着在同一个同步执行片段里做 filterRecordsByPeriodAndStore
+      // ×2（当期+同比）、calculateStatistics、dailyRecords 逐条格式化、aggregateMonthlyStats、
+      // buildLedgerRecords 等多轮遍历，恰好与页面刚完成的路由切换/首帧渲染抢占同一条主线程，
+      // 导致 safeNavigateTo 的 2.5s 看门狗判定超时。这里让出一次宏任务（等价于 setTimeout(...,0)），
+      // 把下面的重计算切到路由过渡之后的下一个事件循环，不改变任何计算结果，只调整执行时机
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+
       const cleanStore = (s: string) => String(s || '').replace(/[区市省店\s]/g, '').trim();
       const targetStoreClean = cleanStore(shopName);
 

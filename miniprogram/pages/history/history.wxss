@@ -139,9 +139,12 @@
   min-width: 0;
 }
 
-/* store-picker 是独立自定义组件，样式作用域不共享，这里只负责给它在三列布局里
-   分配等宽空间，组件内部观感维持原样（不在本次改动范围内） */
-.filter-col store-picker {
+/* 🐛 WXSS 规范修复：微信小程序不支持组件标签选择器（如 `store-picker`），
+   `.filter-col store-picker` 编译期即报违规警告。store-picker 是独立自定义
+   组件，样式作用域本就不共享，这里只负责给它在三列布局里分配等宽空间——改为
+   在 WXML 上直接打一个纯 class（.filter-col-storepicker），组件内部观感维持
+   原样（不在本次改动范围内） */
+.filter-col-storepicker {
   display: block;
   width: 100%;
 }

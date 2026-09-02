@@ -48,7 +48,7 @@
       </view>
 
       <view class="filter-col" wx:if="{{!mineEntryMode}}">
-        <store-picker id="historyStorePicker" bind:storechange="onStorePickerChange"></store-picker>
+        <store-picker id="historyStorePicker" class="filter-col-storepicker" bind:storechange="onStorePickerChange"></store-picker>
       </view>
 
       <view class="filter-col">
