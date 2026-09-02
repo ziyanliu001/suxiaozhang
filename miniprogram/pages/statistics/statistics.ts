@@ -3045,6 +3045,10 @@ Page({
       totalTakeawayCount: 0,
       totalVolunteerCount: 0,
       totalVolunteerHours: 0,
+      // 🆕 关怀/陪伴人次：与 cloudfunctions/getStatisticsData 的 totalListeningSeniors
+      // 同源字段（listeningSeniors），供云函数调用失败时的本地兜底路径使用，
+      // 与 wxml 里 statsData.totalListeningSeniors 同一套展示口径
+      totalListeningSeniors: 0,
       totalDonorCount: 0,
       startDate: startDate,
       endDate: endDate,
@@ -3110,6 +3114,7 @@ Page({
       statistics.totalDineInCount += (parseFloat(item.dineInSeniors) || 0) + (parseFloat(item.dineInVolunteers) || 0);
       statistics.totalDeliveryCount += (parseFloat(item.deliverySeniors) || 0) + (parseFloat(item.deliveryVolunteers) || 0);
       statistics.totalTakeawayCount += parseFloat(item.takeawayCount) || 0;
+      statistics.totalListeningSeniors += parseFloat(item.listeningSeniors) || 0;
 
       const dailyIncome = otherDonation + listDonationTotal;
       const hasIncome = dailyIncome > 0;

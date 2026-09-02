@@ -152,14 +152,33 @@ exports.main = async (event, context) => {
       materialConditions.push({ storeName: shopName });
     }
 
+    // 🆕 待审核记录数（供前端"当前有 X 笔餐报待审核，审核通过后正式纳入公开账本"
+    // 提示用）：与 andConditions 同一套日期/机构/门店范围收敛，唯一区别是把
+    // approvalStatus 的 IN 反转成 NIN——不复用/修改 andConditions 本身（那是本
+    // 函数统计口径的核心过滤条件，改动风险高），单独拼一份仅用于 .count()，
+    // 不拉取文档内容，开销可忽略
+    const pendingConditions = [
+      { dateString: _.gte(startDateStr).and(_.lte(endDateStr)) },
+      { isVoid: _.neq(true) },
+      _.or([{ tenantId: tenantId }, { tenantId: _.exists(false) }]),
+      { approvalStatus: _.nin(['APPROVED', 'AUDITED_LOCKED']) }
+    ];
+    if (!isTenantWideAllowed) {
+      pendingConditions.push(userStoreId ? { storeId: userStoreId } : { shopName: userStoreName });
+    } else if (shopName && shopName !== '全部门店') {
+      pendingConditions.push({ shopName: shopName });
+    }
+
     // report_logs 与 material_logs 是两张互相独立的表，查询条件互不依赖，
     // 并发发起而非顺序 await，减少一次往返延迟
-    const [recordRes, materialRes] = await Promise.all([
+    const [recordRes, materialRes, pendingCountRes] = await Promise.all([
       db.collection('report_logs').where(_.and(andConditions)).limit(1000).get(),
       db.collection('material_logs').where(_.and(materialConditions)).limit(1000).get()
         // material_logs 集合可能尚未创建（该机构还没有任何一条物资消耗提交被
         // 采纳过）——这里单独兜底成空结果，不能让它拖垮上面的 report_logs 查询
-        .catch(() => ({ data: [] }))
+        .catch(() => ({ data: [] })),
+      db.collection('report_logs').where(_.and(pendingConditions)).count()
+        .catch(() => ({ total: 0 }))
     ]);
 
     const records = recordRes.data || [];
@@ -185,6 +204,10 @@ exports.main = async (event, context) => {
     let totalDiningPeople = 0;
     let totalVolunteers = 0;
     let totalVolunteerHours = 0;
+    // 🆕 关怀/陪伴人次：与 pages/index/index.ts 提交表单的 listeningSeniors
+    // 字段同源（倾听/陪伴长者人次，独立关怀指标，不计入用餐总数）。数据模型
+    // 里没有配套的"陪伴工时"字段，只有人次维度，故不新增工时聚合
+    let totalListeningSeniors = 0;
     // 🆕 凭证合规率：与 getPatriarchDashboard 的 auditedCount/totalCount 同一套
     // 口径（approvalStatus === 'AUDITED_LOCKED' 视为已完成稽核/凭证合规），
     // 复用本函数已经查出来的 records，不需要额外发起一次查询
@@ -243,6 +266,7 @@ exports.main = async (event, context) => {
       totalDiningPeople += parseFloat(r.totalDineCount || r.diningCount) || 0;
       totalVolunteers += parseFloat(r.totalVolunteers || r.volunteerCount) || 0;
       totalVolunteerHours += parseFloat(r.volunteerHours) || 0;
+      totalListeningSeniors += parseFloat(r.listeningSeniors) || 0;
 
       if (r.approvalStatus === 'AUDITED_LOCKED') auditedCount += 1;
 
@@ -292,10 +316,15 @@ exports.main = async (event, context) => {
       totalDiningPeople,
       totalVolunteers,
       totalVolunteerHours,
+      totalListeningSeniors,
       costPerMeal,
       recordCount: records.length,
       auditedCount,
       complianceRate,
+      // 🆕 供前端"当前有 X 笔餐报待审核，审核通过后正式纳入公开账本"友好提示——
+      // 不是放宽 approvalStatus 过滤本身（那是刻意的二级审核门槛，见上方
+      // andConditions 注释），只是让"为什么统计是 0/偏低"这件事对用户可见
+      pendingReportCount: pendingCountRes.total || 0,
       materialSummaryText: materialSummary.length > 0 ? materialSummary.join('；') : '暂无捐赠明细记录',
       riceTotal: Math.round(riceTotal * 10) / 10,
       flourTotal: Math.round(flourTotal * 10) / 10,

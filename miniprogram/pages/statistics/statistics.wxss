@@ -5427,6 +5427,21 @@ page {
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🆕 待审核提示：警示黄弱底 + 左侧强调色文字，与全站其余"友好提示/非阻断性
+   说明"条一致的轻量语汇，不用红色（红色在本站语义上专属"错误/作废"） */
+.pending-audit-notice {
+  margin-top: 16rpx;
+  padding: 14rpx 20rpx;
+  background: #FFF8E1;
+  border-radius: 10rpx;
+}
+
+.pending-audit-notice-text {
+  font-size: 24rpx;
+  color: #A66A00;
+  line-height: 1.5;
+}
+
 /* 🆕 3x2 网格：新增「阳光凭证数」「凭证合规率」两格后从 2 列改为 3 列，
    6 格排成 3 列 2 行，比原来 2 列 4 行更紧凑，不会把卡片拉得过高 */
 .core-metrics-grid {

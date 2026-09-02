@@ -643,6 +643,16 @@
       <view class="card-header">
         <text class="card-title">📌 核心经营指标</text>
       </view>
+
+      <!-- 🆕 待审核提示：统计口径只计入店长核对确认（APPROVED）/财务稽核封账
+           （AUDITED_LOCKED）的记录，PENDING 草稿刻意不计入（二级审核门槛，
+           见 cloudfunctions/getStatisticsData 同名注释）。这不是 Bug——但当
+           一段周期内几乎全部记录都还在待审核状态时，用户看到的是一片 0，
+           容易误以为统计功能坏了，这里把真实原因显式说出来 -->
+      <view class="pending-audit-notice" wx:if="{{statsData.pendingReportCount > 0}}">
+        <text class="pending-audit-notice-text">⏳ 当前有 {{statsData.pendingReportCount}} 笔餐报待审核，审核通过后正式纳入本统计与阳光账本</text>
+      </view>
+
       <view class="core-metrics-grid" wx:if="{{!(statisticsLoadLoading && !coreMetrics.hasData)}}">
         <view class="core-metrics-cell">
           <view class="core-metrics-val-row">
@@ -945,6 +955,12 @@
 
         <view class="volunteer-summary-row" wx:if="{{statistics.totalVolunteerCount > 0 || statsData.totalVolunteers > 0}}">
           <text class="vol-summary-text">❤️ 义工护持：{{statsData.totalVolunteers || statistics.totalVolunteerCount}} 人次 · {{statsData.totalVolunteerHours || statistics.totalVolunteerHours}} 小时</text>
+        </view>
+
+        <!-- 🆕 长者陪伴（关怀/陪伴人次）：与上方义工护持并列，凑齐"长者用餐/义工出勤/
+             长者陪伴"三项温暖指标。数据模型没有独立的陪伴工时字段，只展示人次 -->
+        <view class="volunteer-summary-row" wx:if="{{statsData.totalListeningSeniors > 0 || statistics.totalListeningSeniors > 0}}">
+          <text class="vol-summary-text">🤝 长者陪伴：{{statsData.totalListeningSeniors || statistics.totalListeningSeniors}} 人次</text>
         </view>
 
         <view class="materials-summary-card">
