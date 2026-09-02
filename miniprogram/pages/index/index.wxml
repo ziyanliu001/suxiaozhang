@@ -3657,7 +3657,11 @@
              class（没有像上面 customStoreName / 下方 adminKeyInput/realName/phone
              那样叠一份内联样式兜底），在同一个"外部 WXSS 增量更新对部分客户端
              选择性失效"的环境下被压扁成一条细线——现补齐与同页其余 .form-input
-             完全一致的内联尺寸兜底，不再单独依赖外部 class -->
+             完全一致的内联尺寸兜底，不再单独依赖外部 class。
+             🐛（二次加固）内联样式优先级本已足够高，这里再给全部关键尺寸属性
+             追加 !important，属于同一根因的纵深防御，排除任何潜在覆盖源；
+             高度维持 80rpx（与本弹窗内 customStoreName/adminKeyInput/realName/
+             phone 等兄弟输入框统一口径，不单独改成其它数值制造新的不一致） -->
         <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
           <view class="apply-form-item">
             <text class="apply-form-label"><text class="form-required">*</text> 选择所属地区</text>
@@ -3667,11 +3671,11 @@
           </view>
           <view class="apply-form-item">
             <text class="apply-form-label">门店地址（可选）</text>
-            <input class="form-input" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-top: 10rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
+            <input class="form-input" style="width: 100% !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; background: #F7F8FA !important; border-radius: 16rpx !important; padding: 0 24rpx !important; font-size: 28rpx !important; border: 1.5rpx solid #ECEEF0 !important; box-sizing: border-box !important; margin-top: 10rpx !important; display: block !important;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
           </view>
           <view class="apply-form-item">
             <text class="apply-form-label">联系电话（可选）</text>
-            <input class="form-input" type="number" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-top: 10rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
+            <input class="form-input" type="number" style="width: 100% !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; background: #F7F8FA !important; border-radius: 16rpx !important; padding: 0 24rpx !important; font-size: 28rpx !important; border: 1.5rpx solid #ECEEF0 !important; box-sizing: border-box !important; margin-top: 10rpx !important; display: block !important;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
           </view>
           <view class="apply-form-item">
             <text class="apply-form-label">门店照片（可选）</text>
