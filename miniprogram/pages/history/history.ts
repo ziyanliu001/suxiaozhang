@@ -881,7 +881,12 @@ Page({
       const volunteerCount = parseInt(item.volunteerCount || 0);
       // 🍱 用餐/义工细分统计：只有历史记录本身带细分字段（新样式记录，或老记录被
       // 编辑弹窗补录过）才展示细分栅格卡片，否则沿用老式的"结缘/义工"两枚汇总标签
-      const hasDiningBreakdown = !!(item.dineInSeniors || item.deliverySeniors || item.dineInVolunteers || item.deliveryVolunteers || item.takeawayCount);
+      // 🐛 补齐：listeningSeniors（倾听陪伴/关怀人次，见 pages/index/index.ts 提交表单
+      // 同名字段）此前完全没有纳入这个判断——纯"陪伴关怀"类工种（如 volunteer_station
+      // 空间类型，其余用餐类细分字段可能全为 0）的记录会因此判定为 hasDiningBreakdown
+      // 为 false，整块双栏统计栅格连带这条数据一起不渲染，不是"这一行没显示"而是
+      // "整个卡片都没有细分区域可看"
+      const hasDiningBreakdown = !!(item.dineInSeniors || item.deliverySeniors || item.dineInVolunteers || item.deliveryVolunteers || item.takeawayCount || item.listeningSeniors);
 
       return {
         ...item,
@@ -902,9 +907,25 @@ Page({
         dineInVolunteers: parseInt(item.dineInVolunteers || 0),
         deliveryVolunteers: parseInt(item.deliveryVolunteers || 0),
         takeawayCount: parseInt(item.takeawayCount || 0),
+        // 🐛 补齐：listeningSeniors（倾听陪伴/关怀，见 pages/index/index.ts submitData 同名字段）
+        // 从提交起就一直落库，但历史卡片的志愿栏映射从未读取过这个字段，一直被静默丢弃
+        listeningSeniors: parseInt(item.listeningSeniors || 0),
         totalDineCount: parseInt(item.totalDineCount || diningCount || 0),
         totalVolunteers: parseInt(item.totalVolunteers || volunteerCount || 0),
-        approvalStatus: item.approvalStatus || 'PENDING_APPROVAL',
+        // 🐛 状态归一修复：dataService.ts saveReport 现在会给新记录显式写入
+        // approvalStatus: 'PENDING'（历史上曾经完全不写，字段是 undefined）。本行
+        // 原先只对"字段缺失"这一种情况兜底成展示态 'PENDING_APPROVAL'，对字面值
+        // 'PENDING' 视为已经是"合法值"直接透传——但 'PENDING_APPROVAL' 从来不是
+        // 真实写入数据库的值，只是这里的展示层归一标签。结果是新记录的 approvalStatus
+        // 停留在 'PENDING' 而不是 'PENDING_APPROVAL'，导致下方 statusTabCounts.pending
+        // 计数、状态 Tab 过滤、以及 WXML 里"⚖️ 确认审核（店长/财务）"主按钮的
+        // === 'PENDING_APPROVAL' 判断全部命中失败——待审核角标与审核按钮对新提交的
+        // 记录形同虚设。改成只要不是 APPROVED/AUDITED_LOCKED 就统一归一为
+        // 'PENDING_APPROVAL'，与本文件 onEditReport 附近"不正向匹配 PENDING"的
+        // 既有修复原则保持一致，一处归一，下游三处判断无需各自再打补丁
+        approvalStatus: (item.approvalStatus === 'APPROVED' || item.approvalStatus === 'AUDITED_LOCKED')
+          ? item.approvalStatus
+          : 'PENDING_APPROVAL',
         isLocked: item.isLocked || false,
         approvedBy: item.approvedBy || '',
         // 🆕 隐私脱敏模式：经办人姓名预先算好脱敏版本（复用全项目统一的

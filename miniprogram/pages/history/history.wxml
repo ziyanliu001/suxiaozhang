@@ -371,6 +371,10 @@
               <text class="zone-row-lbl">送餐志愿者</text>
               <text class="zone-row-val">{{item.deliveryVolunteers}}</text>
             </view>
+            <view class="zone-row">
+              <text class="zone-row-lbl">倾听陪伴/关怀</text>
+              <text class="zone-row-val">{{item.listeningSeniors}}</text>
+            </view>
           </view>
         </view>
 
