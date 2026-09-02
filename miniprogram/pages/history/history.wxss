@@ -71,26 +71,19 @@
   width: 64rpx;
 }
 
-/* 右上角操作区：图册切换 + 设置齿轮，flex:none 保持内容宽度，紧跟在标题
-   右侧、整条头部预留的胶囊安全区之前 */
+/* 🐛 顶栏图标极简治理：右上角此前最多同屏堆叠 4 个图标（👁️ 隐私/📄 导出/
+   📸 图册切换/⚙️ 设置），彼此只有 4rpx 间隙，与胶囊按钮挤在一起、极易误触。
+   📄/📸 已合并进 .btn-settings-gear 的二次菜单（见 history.wxml/ts），右上角
+   最多只剩「👁️ 隐私」+「⋯ 更多」两个图标，gap 放宽到 24rpx，与胶囊之间的
+   安全距离仍由 .nav-title-bar 的动态 navCapsuleSafePx 兜底 */
 .nav-right-actions {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 4rpx;
+  gap: 24rpx;
 }
 
-.btn-photo-archive-toggle {
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32rpx;
-  border-radius: 30rpx;
-}
-
-/* 🆕 隐私脱敏模式「一键眼睛」：与 .btn-photo-archive-toggle 同尺寸，保持右上角
+/* 🆕 隐私脱敏模式「一键眼睛」：与 .btn-settings-gear 同尺寸，保持右上角
    图标行观感统一 */
 .btn-sensitive-reveal {
   width: 60rpx;
@@ -106,96 +99,76 @@
   background: rgba(0, 0, 0, 0.06);
 }
 
-/* 📄 导出财务审计表：原先是横跨一整行的文字按钮，下沉为与 📸/⚙️ 同尺寸的
-   图标按钮，收进右上角次要操作区，不再单独占一整行 */
-.btn-export-audit-icon {
+.btn-export-audit-loading {
+  font-size: 26rpx;
+}
+
+/* 🛡️ 顶栏仅存的一个操作图标：原「导出📄/图册切换📸/设置⚙️」三合一，
+   承载 onOpenHistorySettingsMenu 二次菜单 */
+.btn-settings-gear {
   width: 60rpx;
   height: 60rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30rpx;
-  border-radius: 30rpx;
-}
-
-.btn-export-audit-loading {
-  font-size: 26rpx;
-}
-
-/* 🛡️ 一键校准入口降级：右上角"⚙️ 设置"图标承载二次菜单，替代原先常驻的显眼大按钮 */
-.btn-settings-gear {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 32rpx;
+  font-weight: bold;
+  border-radius: 30rpx;
 }
 
 .btn-settings-gear:active {
   opacity: 0.6;
 }
 
-/* 🌟 统一筛选栏：查看视角 / 站点选择 / 月份选择三列等宽，统一浅灰底 + 深灰字的
+/* 🌟 统一筛选栏：查看视角 / 站点选择 / 月份选择三列，统一浅灰底 + 深灰字的
    极简下拉选择器观感，取消原先"查看视角"maroon 实心胶囊、月份胶囊白底描边、
-   导出按钮金色描边各自不同配色的"花哨拼盘"，三列视觉统一 */
+   导出按钮金色描边各自不同配色的"花哨拼盘"，三列视觉统一。
+   🐛 首行拥挤/省略号修复：三个组件拍平成直接子元素、由这一层统一 gap 管理
+   （不再套嵌套分组各自一份 gap），分段器固定宽度、站点胶囊吃满剩余空间、
+   月份胶囊按内容自适应——三者职责单一，不会互相挤占导致门店名/分段文案
+   被压出省略号 */
 .unified-filter-row {
   display: flex;
   align-items: stretch;
-  gap: 12rpx;
+  gap: 16rpx;
   padding: 12rpx 24rpx 16rpx;
 }
 
-.filter-col {
-  flex: 1;
-  min-width: 0;
-}
-
 /* 🆕 左侧 SegmentedControl 固定紧凑宽度，不再跟右侧门店/月份 Chip 抢等宽空间——
-   这正是长门店名此前被压缩截断的根因（三列硬性等分时，门店名可用宽度被压到
-   很窄）。文案固定（🏪门店/👤我的 或 🌐全国/🏪门店），148rpx + 收紧的
-   .filter-col-seg 字号/内边距足够容纳不换行、不出现省略号 */
+   这正是长门店名此前被压缩截断的根因。文案固定（🏪门店/👤我的 或 🌐全国/🏪门店），
+   168rpx + 24rpx 字号 + text-overflow:clip 兜底，"门店"/"我的"两个汉字
+   保证不折行、不出现省略号 */
 .filter-col-segment {
-  width: 148rpx;
-  flex: 0 0 148rpx;
+  width: 168rpx;
+  flex: 0 0 168rpx;
   flex-shrink: 0;
 }
 
-/* 🆕 右侧门店 + 月份两枚胶囊 Chip 分组：门店 Chip 占满剩余空间、超长自动省略号收尾，
-   月份 Chip 按自身内容宽度自适应、禁止被压缩——两者语义不同（门店名不可控可能很长，
-   月份文案固定短小），不该套用同一种"平分空间"逻辑 */
-.filter-chips-group {
-  display: flex;
-  align-items: stretch;
-  gap: 12rpx;
+/* 站点选择胶囊：吃满分段器与月份胶囊之间的剩余空间，min-width:0 才能让
+   flex 子项真正收缩到比其内容更窄，超长门店名的省略号交给 store-picker
+   组件内部的 .store-name 处理（见该组件 wxss），这一层只负责分配空间 */
+.filter-col-store {
   flex: 1;
   min-width: 0;
 }
 
-.filter-chips-group .filter-col:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.filter-chips-group .filter-col:last-child {
+/* 月份胶囊：按自身内容宽度自适应，禁止被压缩——月份文案固定短小
+   （"📅 全部月份"/"📅 2026年09月"），不需要也不该跟着门店名一起被挤 */
+.filter-col-month {
   flex: 0 0 auto;
   flex-shrink: 0;
-  min-width: 180rpx;
 }
 
-/* mineEntryMode 下门店列整体隐藏，月份 Chip 变成这一组里唯一的孩子——此时
-   它既是 :first-child 也是 :last-child，两条规则会叠加冲突，用 :only-child
-   （源码顺序在后，覆盖上面的 :last-child）纠正为占满整行 */
-.filter-chips-group .filter-col:only-child {
+/* mineEntryMode 下门店列整体隐藏，月份胶囊是这一行里唯一的孩子，撑满整行
+   而不是缩在左边孤零零一小块 */
+.unified-filter-row > .filter-col-month:only-child {
   flex: 1;
-  min-width: 0;
 }
 
 /* 🐛 WXSS 规范修复：微信小程序不支持组件标签选择器（如 `store-picker`），
    `.filter-col store-picker` 编译期即报违规警告。store-picker 是独立自定义
-   组件，样式作用域本就不共享，这里只负责给它在三列布局里分配等宽空间——改为
-   在 WXML 上直接打一个纯 class（.filter-col-storepicker），组件内部观感维持
-   原样（不在本次改动范围内） */
+   组件，样式作用域本就不共享，这里只负责给它在行内分配空间——改为在 WXML 上
+   直接打一个纯 class（.filter-col-storepicker），组件内部观感维持原样 */
 .filter-col-storepicker {
   display: block;
   width: 100%;
@@ -219,13 +192,15 @@
 .filter-col-seg {
   flex: 1;
   text-align: center;
-  font-size: 20rpx;
+  font-size: 24rpx;
   color: #666;
-  padding: 8rpx 0;
+  padding: 4rpx 10rpx;
   border-radius: 24rpx;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  /* "门店"/"我的"就两个汉字，168rpx 宽度 + 24rpx 字号下必然放得下——不用
+     ellipsis 兜底，直接 clip，杜绝在极端场景下悄悄冒出省略号 */
+  text-overflow: clip;
   transition: all 0.2s ease;
 }
 

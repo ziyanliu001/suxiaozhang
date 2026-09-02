@@ -568,19 +568,33 @@ Page({
     });
   },
 
-  // 🛡️ 入口降级：一键校准从顶部常规区域移出，改为右上角"⚙️ 设置"入口的二次菜单，
-  // 降低误触概率；仅门店/超管等具备权限的角色可见该设置图标
+  // 🛡️ 顶栏图标极简治理：原先「导出财务审计表📄」「图册/账本切换📸」
+  // 「设置⚙️」三个图标常驻右上角，与胶囊按钮挤在一起。图册切换是所有角色都要用
+  // 的常规功能（不是"高级设置"），不能收进仅管理向角色可见的菜单里；导出审计表
+  // 与一键校准本来就是管理/财务向操作。三者合并进这一个 action sheet 后，
+  // 图标本身不再按角色收敛可见性（否则普通角色会连"切换图册"入口都没有），
+  // 菜单里的具体条目仍按角色/当前模式动态显示——图标数量减到 1 个，功能一个不丢
   onOpenHistorySettingsMenu() {
-    if (!this.data.isManagerRole && !this.data.isFinanceRole && !this.data.isSuperAdmin) {
-      return;
+    const canManage = this.data.isManagerRole || this.data.isFinanceRole || this.data.isSuperAdmin;
+    const canExportAudit = !this.data.photoArchiveMode && (this.data.isManagerOrAdmin || this.data.isFinanceOrAdmin);
+
+    const actions: Array<{ label: string; run: () => void }> = [];
+    actions.push({
+      label: this.data.photoArchiveMode ? '📒 返回账本模式' : '📸 切换到温情图册',
+      run: () => this.onTogglePhotoArchive()
+    });
+    if (canExportAudit) {
+      actions.push({ label: '📄 导出本月财务审计表', run: () => this.onExportMonthlyAudit() });
+    }
+    if (canManage) {
+      actions.push({ label: '🔄 一键校准全线结余流水', run: () => this.onRecalibrateAllBalances() });
     }
 
     wx.showActionSheet({
-      itemList: ['🔄 一键校准全线结余流水'],
+      itemList: actions.map((item) => item.label),
       success: (res) => {
-        if (res.tapIndex === 0) {
-          this.onRecalibrateAllBalances();
-        }
+        const action = actions[res.tapIndex];
+        if (action) action.run();
       }
     });
   },
