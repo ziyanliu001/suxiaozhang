@@ -402,7 +402,10 @@ page {
   color: #868E96;
   margin-top: 16rpx;
   text-align: center;
-  white-space: nowrap;
+  /* 🐛 提示文案补充"长按图片可保存到相册"后变长，680rpx 弹窗宽度内 nowrap
+     会在小屏上被裁切/溢出——改为允许换行，两行居中比裁掉半句话更清楚 */
+  white-space: normal;
+  line-height: 1.5;
   flex-shrink: 0;
 }
 
@@ -3752,13 +3755,17 @@ page {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 48rpx 0;
+  padding: 32rpx 0;
 }
 
+/* 🐛 空状态插画统一放大到 120rpx（此前 56rpx，和一枚普通行内 emoji 没什么
+   区别，看起来像是漏了配图），与 .tmp-empty-icon 同一档规格 */
 .fm-empty-icon,
 .fa-empty-icon {
-  font-size: 56rpx;
+  font-size: 120rpx;
+  line-height: 1;
   margin-bottom: 12rpx;
+  opacity: 0.85;
 }
 
 .fm-empty-text,
@@ -3822,26 +3829,39 @@ page {
   overflow: hidden;
 }
 
-.tmp-empty-text {
-  display: inline-block;
-  max-width: 100%;
-  font-size: 24rpx;
-  color: #999999;
-  background: #F1F3F5;
-  border-radius: 8rpx;
-  padding: 4rpx 14rpx;
-  box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 🌟 空状态统一卡片排版：与家人首页 .fm-empty/.fa-empty 同一套视觉语言——
+   大图标（120rpx）+ 提示语居中 + 弱化操作入口，替代此前紧贴标题的一枚
+   细碎小灰底文字胶囊。.today-menu-preview-card 本身是横向 flex 行，这里
+   让空状态这个唯一子节点占满整行宽度再自己纵向居中排布 */
+.tmp-empty-state {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12rpx 0 20rpx;
 }
 
-.tmp-side-action {
-  flex-shrink: 0;
+.tmp-empty-state-title {
+  align-self: flex-start;
+  margin-bottom: 20rpx;
+}
+
+.tmp-empty-icon {
+  font-size: 120rpx;
+  line-height: 1;
+  margin-bottom: 12rpx;
+  opacity: 0.85;
+}
+
+.tmp-empty-msg {
+  font-size: 26rpx;
+  color: #999999;
+  text-align: center;
+  margin-bottom: 16rpx;
 }
 
 /* 🌟 轻量级 Outline 胶囊按钮，避免在首页抢走核心工作台宫格的视觉重心 */
-.tmp-side-btn {
+.tmp-empty-action {
   display: block;
   font-size: 24rpx;
   font-weight: bold;
@@ -3849,8 +3869,12 @@ page {
   background: #FFF5F0;
   border: 1.5rpx solid #E8C4B8;
   border-radius: 24rpx;
-  padding: 10rpx 20rpx;
+  padding: 10rpx 28rpx;
   white-space: nowrap;
+}
+
+.tmp-side-action {
+  flex-shrink: 0;
 }
 
 .tmp-side-link {

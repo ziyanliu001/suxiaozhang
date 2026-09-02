@@ -436,25 +436,34 @@
        会跟家人首页自己更精美的【🍱 今日菜谱】模块（大字号/高对比度）同时出现，
        加 !isFamily 排除，家人视角下只保留那张质感更好的版本 -->
   <view class="today-menu-preview-card {{todayMenu ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && !isFamily && todayMenuLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoDailyMenu' : ''}}">
-    <view class="tmp-main">
-      <view class="tmp-header">
-        <text class="tmp-title">🍱 今日食谱</text>
-      </view>
-      <view class="tmp-9grid" wx:if="{{todayMenu && todayMenu.images.length > 0}}">
-        <view class="tmp-grid-item" wx:for="{{todayMenu.images}}" wx:for-item="img" wx:key="url">
-          <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="tmp-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
-          <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
-            <text class="thumb-load-failed-icon">⚠️</text>
-            <text class="thumb-load-failed-text">加载失败</text>
+    <block wx:if="{{todayMenu}}">
+      <view class="tmp-main">
+        <view class="tmp-header">
+          <text class="tmp-title">🍱 今日食谱</text>
+        </view>
+        <view class="tmp-9grid" wx:if="{{todayMenu.images.length > 0}}">
+          <view class="tmp-grid-item" wx:for="{{todayMenu.images}}" wx:for-item="img" wx:key="url">
+            <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="tmp-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
+            <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
           </view>
         </view>
+        <text class="tmp-text">{{todayMenu.menuText || '（未填写文字菜谱，见图片）'}}</text>
       </view>
-      <text class="tmp-text" wx:if="{{todayMenu}}">{{todayMenu.menuText || '（未填写文字菜谱，见图片）'}}</text>
-      <text class="tmp-empty-text" wx:else>今日食谱尚未发布</text>
-    </view>
-    <view class="tmp-side-action" catchtap="onGotoDailyMenu" wx:if="{{isManager || isSuperAdmin}}">
-      <text class="tmp-side-btn" wx:if="{{!todayMenu}}">+ 去发布</text>
-      <text class="tmp-side-link" wx:else>去管理 ›</text>
+      <view class="tmp-side-action" catchtap="onGotoDailyMenu" wx:if="{{isManager || isSuperAdmin}}">
+        <text class="tmp-side-link">去管理 ›</text>
+      </view>
+    </block>
+    <!-- 🌟 空状态统一为居中卡片排版：大图标 + 提示语 + 操作入口，替代此前
+         紧贴标题的一枚细碎小灰底文字胶囊，与家人首页 .fm-empty/.fa-empty
+         同一套空状态语言，全页视觉统一 -->
+    <view class="tmp-empty-state" wx:else>
+      <text class="tmp-title tmp-empty-state-title">🍱 今日食谱</text>
+      <text class="tmp-empty-icon">🍱</text>
+      <text class="tmp-empty-msg">今日食谱尚未发布</text>
+      <text class="tmp-empty-action" catchtap="onGotoDailyMenu" wx:if="{{isManager || isSuperAdmin}}">+ 去发布</text>
     </view>
   </view>
 
@@ -463,25 +472,33 @@
        🐛 精简重复：同上，加 !isFamily 排除——家人首页自己的【📌 雨花大事记与
        护持剪影】模块已经承载同一份 todayActivity 数据，功能完全重叠 -->
   <view class="today-menu-preview-card {{todayActivity ? 'is-filled' : 'is-empty'}}" wx:if="{{!isVolunteer && !isFamily && todayActivityLoaded && currentStoreId !== 'national_overview' && currentStoreId !== 'ALL_STORES'}}" bindtap="{{(isManager || isSuperAdmin) ? 'onGotoActivityLog' : ''}}">
-    <view class="tmp-main">
-      <view class="tmp-header">
-        <text class="tmp-title">📌 今日门店日志</text>
-      </view>
-      <view class="tmp-9grid" wx:if="{{todayActivity && todayActivity.images.length > 0}}">
-        <view class="tmp-grid-item" wx:for="{{todayActivity.images}}" wx:for-item="img" wx:key="url">
-          <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="tmp-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
-          <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
-            <text class="thumb-load-failed-icon">⚠️</text>
-            <text class="thumb-load-failed-text">加载失败</text>
+    <block wx:if="{{todayActivity}}">
+      <view class="tmp-main">
+        <view class="tmp-header">
+          <text class="tmp-title">📌 今日门店日志</text>
+        </view>
+        <view class="tmp-9grid" wx:if="{{todayActivity.images.length > 0}}">
+          <view class="tmp-grid-item" wx:for="{{todayActivity.images}}" wx:for-item="img" wx:key="url">
+            <image wx:if="{{!previewImagesFailedMap[img.thumbUrl]}}" class="tmp-grid-img" src="{{img.thumbUrl}}" mode="aspectFill" lazy-load="{{true}}" binderror="onPreviewCardImageLoadError" data-url="{{img.thumbUrl}}" />
+            <view wx:else class="thumb-load-failed" catchtap="onRetryPreviewCardImage" data-url="{{img.thumbUrl}}">
+              <text class="thumb-load-failed-icon">⚠️</text>
+              <text class="thumb-load-failed-text">加载失败</text>
+            </view>
           </view>
         </view>
+        <text class="tmp-text">{{todayActivity.title}}</text>
       </view>
-      <text class="tmp-text" wx:if="{{todayActivity}}">{{todayActivity.title}}</text>
-      <text class="tmp-empty-text" wx:else>今日尚无门店日志</text>
-    </view>
-    <view class="tmp-side-action" catchtap="onGotoActivityLog" wx:if="{{isManager || isSuperAdmin}}">
-      <text class="tmp-side-btn" wx:if="{{!todayActivity}}">+ 去发布</text>
-      <text class="tmp-side-link" wx:else>去管理 ›</text>
+      <view class="tmp-side-action" catchtap="onGotoActivityLog" wx:if="{{isManager || isSuperAdmin}}">
+        <text class="tmp-side-link">去管理 ›</text>
+      </view>
+    </block>
+    <!-- 🌟 空状态统一为居中卡片排版，与上方"今日食谱"空状态、家人首页
+         .fm-empty/.fa-empty 同一套语言 -->
+    <view class="tmp-empty-state" wx:else>
+      <text class="tmp-title tmp-empty-state-title">📌 今日门店日志</text>
+      <text class="tmp-empty-icon">📌</text>
+      <text class="tmp-empty-msg">今日尚无门店日志</text>
+      <text class="tmp-empty-action" catchtap="onGotoActivityLog" wx:if="{{isManager || isSuperAdmin}}">+ 去发布</text>
     </view>
   </view>
 
@@ -3046,7 +3063,10 @@
           <view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>分享给微信群和朋友
         </button>
       </view>
-      <view class="poster-bottom-tip">可打印贴于财务桌或保存发至微信群</view>
+      <!-- 🌟 图片本身已带 show-menu-by-longpress（长按原生菜单可保存），此前
+           这条提示只说了打印/分享场景，没提怎么保存——补上"长按图片保存"，
+           与上面的分享按钮凑成一句完整的"点击分享 / 长按保存"操作指引 -->
+      <view class="poster-bottom-tip">长按上方图片可保存到相册 · 可打印贴于财务桌或保存发至微信群</view>
     </view>
   </view>
 
