@@ -23,7 +23,20 @@ export function evaluateReportStatus(item: any, roleFlags: ApprovalRoleFlags): R
   const diff = Math.round((actualBalance - expected) * 100) / 100;
   const isMismatch = Math.abs(diff) >= 0.01;
 
-  const status = item.approvalStatus || 'PENDING_APPROVAL';
+  // 🐛 状态归一修复（与 pages/history/history.ts formattedReports 映射同一根因）：
+  // utils/dataService.ts saveReport 现在会给新提交记录显式写入 approvalStatus:
+  // 'PENDING'（历史上完全不写这个字段，值是 undefined）。这里原先的
+  // `item.approvalStatus || 'PENDING_APPROVAL'` 只处理"字段缺失"这一种情况，
+  // 字面值 'PENDING' 是真值不会走 fallback，会原样透传成 'PENDING'——但
+  // 'PENDING_APPROVAL' 从来不是真实写入数据库的值，只是这里用来统一表示
+  // "尚未审核"的展示态标签。后果：下面 status === 'PENDING_APPROVAL' 分支对
+  // 当前所有新提交的记录全部落空，pages/notice/notice.ts buildReminderItem
+  // 渲染出空 tag/desc + 通用 📋 图标，custom-tab-bar 的"通知"红点徽标计数
+  // 也漏计这些真正待处理的记录。改成"非 APPROVED/AUDITED_LOCKED 一律归一为
+  // 'PENDING_APPROVAL'"，与 history.ts 那处修复保持同一套原则
+  const status = (item.approvalStatus === 'APPROVED' || item.approvalStatus === 'AUDITED_LOCKED')
+    ? item.approvalStatus
+    : 'PENDING_APPROVAL';
   let actionable = false;
 
   if (status === 'PENDING_APPROVAL') {
