@@ -361,12 +361,27 @@ exports.main = async (event) => {
     const yangRatioPct = meritTotal > 0 ? Math.round(yangCount / meritTotal * 1000) / 10 : 0;
     const yinRatioPct = meritTotal > 0 ? Math.round(yinCount / meritTotal * 1000) / 10 : 0;
 
-    // ☀️ 第 8 项指标——账本公开率：本函数的查询条件本身就严格白名单只取
-    // APPROVED/AUDITED_LOCKED（见文件头注释），也就是说只要有查到记录，
-    // 这些记录 100% 都是已完成审核公示的，不存在"部分公开"的中间态，
-    // 因此这里是按定义直接给定的常量展示值，不是从另一个分母算出来的比率——
-    // 没有记录时展示为 null，由前端呈现"暂无数据"而不是误导性的 100%
-    const ledgerPublicRate = records.length > 0 ? '100%' : null;
+    // ☀️ 第 8 项指标——账本公开率：此前这里恒定按"查到记录就是 100%"展示——
+    // 但 records 本来就是严格过滤过 APPROVED/AUDITED_LOCKED 的子集，拿它自己
+    // 除自己必然是 100%，这不是一个"账本公开率"，只是重复宣称"我筛出来的都是
+    // 已审核的"。真正有意义的公开率分母应该是"本店全部已提交、未作废的餐报"，
+    // 分子是其中已完成审核公示的那部分——这样长期有大量待审核积压的门店才会
+    // 如实展示一个低于 100% 的数字，而不是永远自吹自擂 100%。
+    // 两次都是 count()（不拉取文档内容），公开无鉴权接口下增量开销可忽略
+    const [totalRecordsCountRes, approvedRecordsCountRes] = await Promise.all([
+      db.collection('report_logs').where({ storeId, isVoid: _.neq(true) }).count(),
+      db.collection('report_logs').where(_.and([
+        { storeId },
+        { isVoid: _.neq(true) },
+        { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) }
+      ])).count()
+    ]);
+    const totalRecordsCount = totalRecordsCountRes.total || 0;
+    const approvedRecordsCount = approvedRecordsCountRes.total || 0;
+    // 没有任何记录时展示为 null，由前端呈现"暂无数据"而不是误导性的 100%/0%
+    const ledgerPublicRate = totalRecordsCount > 0
+      ? `${Math.round(approvedRecordsCount / totalRecordsCount * 1000) / 10}%`
+      : null;
 
     // 🆕 善信个人爱心足迹（2026-08-31 穿透式阳光模型）：
     //

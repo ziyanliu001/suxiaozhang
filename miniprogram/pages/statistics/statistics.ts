@@ -1366,10 +1366,14 @@ Page({
         sunshineConceptTitle: concept.title,
         sunshineConceptLabel: concept.label,
         sunshineConceptContent: concept.content,
+        // 🐛 "已核销餐报篇数"下线，改为"出勤义工总人次"：前者只是重复宣称
+        // "查到的记录都已审核"（本函数查询条件本身就白名单过滤了审核状态，
+        // 这个数字对公众没有信息量），后者绑定 volunteerCount——云函数早就
+        // 聚合好了这个值，此前只是没有任何一张卡片展示它，白算了一遍
         sunshineBoardCards: [
           { label: '累计就餐人次', value: String(ledgerData.totalDiners) },
           { label: '当月就餐人次', value: String(ledgerData.monthlyDiners) },
-          { label: '已核销餐报篇数', value: String(ledgerData.auditedReportsCount) },
+          { label: '出勤义工总人次', value: String(ledgerData.volunteerCount) },
           { label: '爱心送餐份数', value: String(ledgerData.takeawayMeals) },
           { label: '安全营运天数', value: String(ledgerData.operatingDays) },
           { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }

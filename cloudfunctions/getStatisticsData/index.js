@@ -233,8 +233,15 @@ exports.main = async (event, context) => {
       }
       majorExpense += fixedExpense;
 
-      totalDiningPeople += parseFloat(r.diningCount) || 0;
-      totalVolunteers += parseFloat(r.volunteerCount) || 0;
+      // 🐛 口径统一：与 getSunshineLedger/publicVerifyReport 同一套 fallback——
+      // totalDineCount/totalVolunteers 是细分堂食/送餐/打包统计算出的权威值
+      // （index.ts recalcDiningStats() 已经把它们与 diningCount/volunteerCount
+      // 同步写入，正常情况下两者相等），这里只读 diningCount/volunteerCount
+      // 本身不会漏算，但若未来出现只回填了细分字段、没同步旧字段的写入路径
+      // （如批量迁移脚本/第三方导入），只读旧字段会静默统计成 0——统一加上
+      // 同款 fallback，不依赖某一条写入路径必须完美同步两个字段
+      totalDiningPeople += parseFloat(r.totalDineCount || r.diningCount) || 0;
+      totalVolunteers += parseFloat(r.totalVolunteers || r.volunteerCount) || 0;
       totalVolunteerHours += parseFloat(r.volunteerHours) || 0;
 
       if (r.approvalStatus === 'AUDITED_LOCKED') auditedCount += 1;
