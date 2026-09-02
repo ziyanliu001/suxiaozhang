@@ -520,6 +520,10 @@ Page({
     this.setData({ recalibrateConfirmInput: e.detail.value });
   },
 
+  onClearRecalibrateConfirmInput() {
+    this.setData({ recalibrateConfirmInput: '' });
+  },
+
   onCloseRecalibrateConfirmModal() {
     this.setData({ showRecalibrateConfirmModal: false, recalibrateConfirmInput: '' });
   },

@@ -899,12 +899,23 @@
       <view class="calib-modal-body-wrap">
         <text class="calib-modal-body">{{recalibrateConfirmContent}}</text>
       </view>
-      <input
-        class="calib-modal-input"
-        placeholder="请输入：确认校准"
-        value="{{recalibrateConfirmInput}}"
-        bindinput="onRecalibrateConfirmInput"
-      />
+      <!-- 🐛 软键盘避让：cursor-spacing 保证光标/输入行不被键盘遮挡，
+           adjust-position 让系统在键盘弹出时自动上移页面——真机上这个弹窗
+           本身又叠加在 fixed 定位的 modal-backdrop 里，没有这两个属性时
+           键盘唤起后输入框经常被整个盖住 -->
+      <view class="calib-input-wrap">
+        <input
+          class="calib-modal-input"
+          placeholder="请输入：确认校准"
+          placeholder-class="calib-input-placeholder"
+          value="{{recalibrateConfirmInput}}"
+          bindinput="onRecalibrateConfirmInput"
+          maxlength="10"
+          cursor-spacing="40"
+          adjust-position="{{true}}"
+        />
+        <view class="calib-input-clear" wx:if="{{recalibrateConfirmInput}}" catchtap="onClearRecalibrateConfirmInput">✕</view>
+      </view>
       <view class="calib-modal-actions">
         <button class="calib-btn-cancel" hover-class="calib-btn-cancel-hover" bindtap="onCloseRecalibrateConfirmModal">取消</button>
         <button class="calib-btn-confirm" hover-class="calib-btn-confirm-hover" bindtap="onRecalibrateConfirmNext">下一步</button>
