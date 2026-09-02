@@ -134,6 +134,9 @@
        完全是原有首页逻辑，未做任何删改——只是包了一层可见性开关 -->
   <block wx:if="{{currentPlatformMode}}">
   <view class="app-header-section" style="padding-top: {{headerSafeTop}}px;">
+    <!-- 🌟 顶栏精简：只保留应用标题 + 左侧汉堡菜单 + 右侧帮助入口这三样"全局导航"
+         元素，与门店门店切换等"当前业务上下文"元素分层——帮助入口从下方
+         .capsule-bar-row 移到这里，与汉堡菜单左右对称，同一行内 top 对齐 -->
     <view class="main-title-header-box">
       <view class="hamburger-menu-btn" bindtap="onOpenSideDrawer" hover-class="capsule-hover">
         <view class="hamburger-line"></view>
@@ -141,8 +144,14 @@
         <view class="hamburger-line"></view>
       </view>
       <text class="brand-header-title">素小账服务</text>
+      <view class="header-help-btn" bindtap="onNavigateToHelp" hover-class="capsule-hover">
+        <view class="idx-icon-sm idx-icon-help"></view>
+        <text class="header-help-text">帮助</text>
+      </view>
     </view>
 
+    <!-- 🌟 当前业务上下文栏：门店切换 + 运营状态标签，两者统一高度、垂直居中，
+         不再因为徽标只是一段纯文字而显得比胶囊矮一截、错位悬浮 -->
     <view class="capsule-bar-row">
       <!-- 🐛 Bug 修复：orgTypeFilter 把当前所在专区透传给 store-picker，组件内
            fetchStoreListFromCloud() 据此在 tenantId 过滤基础上叠加 orgType 收窄，
@@ -163,7 +172,6 @@
       <view class="btn-invite-capsule" wx:if="{{isFinance && !isManager}}" bindtap="onOpenFinanceInviteMenu">
         <view class="idx-icon-sm idx-icon-key"></view> 邀请协同
       </view>
-      <view class="btn-help-capsule" bindtap="onNavigateToHelp"><view class="idx-icon-sm idx-icon-help"></view> 帮助</view>
     </view>
   </view>
 
@@ -278,18 +286,23 @@
        他们是纯粹的视觉噪音——严格用 currentUserRole 而非 isFinance 判断，
        大家长/超管仍然保留打卡入口，不受影响 -->
   <view class="ui-card-wrapper omni-checkin-card" wx:if="{{!isVolunteer && !isFamily && currentUserRole !== 'finance'}}">
-    <view class="omni-checkin-header">
-      <text class="omni-checkin-title">🙋 服务打卡</text>
-      <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
+    <!-- 🌟 Hero Card 布局：左侧核心状态文案 + 右侧主操作按钮左右分区，
+         而不是标题/副标题独占一行、按钮再另起一整行——按钮不再需要撑满卡片
+         宽度也能保持主操作的视觉分量（品牌红渐变 + 按压缩放） -->
+    <view class="omni-checkin-main-row">
+      <view class="omni-checkin-header">
+        <text class="omni-checkin-title">🙋 服务打卡</text>
+        <text class="omni-checkin-sub">到岗服务，即刻记录爱心工时</text>
+      </view>
+      <button
+        class="btn-volunteer-checkin omni-checkin-btn {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
+        hover-class="btn-hover"
+        bindtap="onVolunteerCheckIn"
+      >
+        <view class="idx-icon-sm idx-icon-handshake"></view>
+        {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '到岗服务打卡')}}
+      </button>
     </view>
-    <button
-      class="btn-volunteer-checkin omni-checkin-btn {{allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending')}}"
-      hover-class="btn-hover"
-      bindtap="onVolunteerCheckIn"
-    >
-      <view class="idx-icon-sm idx-icon-handshake"></view>
-      {{allShiftsCompleted ? '✅ 今日已打卡（查看记录）' : (todayLogs.length > 0 ? '继续到岗打卡' : '到岗服务打卡')}}
-    </button>
 
     <!-- 次级跳转：滚动定位到下方对应的管理/财务控制台卡片，不是另开一个页面——
          那张卡片本来就在同一页往下一点的位置，这里只是给个明确的"下一步在哪"的路标。
@@ -318,42 +331,39 @@
        跨 Tab 跳转；表单状态/提交/校验逻辑唯一实现在组件里，两个页面共用同一份，
        不会出现改了一头忘改另一头。护持动态本来就是独立页面，直接 navigateTo。
        访客/家人角色不显示 -->
-  <!-- 🛡️ 内联 style + class 双重保障：class 仍保留（供 index.wxss 里同名规则
-       兜底 min-width:0/word-break 等防溢出细节，见该文件注释），但视觉呈现的
-       核心样式直接写进 style，不依赖任何 wxss 规则匹配是否生效 -->
-  <view
-    class="ui-card-wrapper home-vt-card"
-    style="width: calc(100% - 56rpx); box-sizing: border-box; margin: 20rpx 28rpx; padding: 24rpx; background: #ffffff; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06);"
-    wx:if="{{isVolunteer || isManager}}"
-  >
-    <view class="home-vt-title" style="font-size: 28rpx; font-weight: bold; color: #2D3748; margin-bottom: 20rpx; text-align: left;">
-      🛠️ 义工现场服务工具
-    </view>
-    <view class="home-vt-grid" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+  <!-- 🐛 内联 style 清理：此前每个节点都把视觉样式重复写成一份内联 style，
+       与 index.wxss 里同名 class 长期存在两套互相矛盾的定义（内联优先级更高，
+       实际渲染的一直是内联那份，class 定义早已是从未生效的死代码）。现在把
+       内联样式删掉，实际生效的那份数值原样搬进 index.wxss 的同名 class——
+       不是重新设计配色，只是让"渲染出来的样子"和"CSS 里写的样子"重新对上，
+       并顺手把 .home-vt-grid 从 flex 改成标准 4 列 Grid（见该 class 注释） -->
+  <view class="ui-card-wrapper home-vt-card" wx:if="{{isVolunteer || isManager}}">
+    <view class="home-vt-title">🛠️ 义工现场服务工具</view>
+    <view class="home-vt-grid">
 
       <!-- 1. 登记菜单人数 -->
-      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
-        <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">🍱</text>
-        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记菜单人数</text>
+      <view class="home-vt-item" bindtap="onTapToolDailyMenu" hover-class="btn-hover">
+        <text class="home-vt-icon">🍱</text>
+        <text class="home-vt-text">登记菜单人数</text>
       </view>
 
       <!-- 2. 登记物资消耗 -->
-      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
-        <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">🌾</text>
-        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">登记物资消耗</text>
+      <view class="home-vt-item" bindtap="onTapToolMaterialUsage" hover-class="btn-hover">
+        <text class="home-vt-icon">🌾</text>
+        <text class="home-vt-text">登记物资消耗</text>
       </view>
 
       <!-- 3. 记录护持动态 -->
-      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
-        <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">📷</text>
-        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">记录护持动态</text>
+      <view class="home-vt-item" bindtap="onTapToolVolunteerJournal" hover-class="btn-hover">
+        <text class="home-vt-icon">📷</text>
+        <text class="home-vt-text">记录护持动态</text>
       </view>
 
       <!-- 4. 长辈代报餐与签到：落库走独立的 elder_checkin_logs 流水，不进
            report_logs，见 components/elder-checkin-modal 头部注释 -->
-      <view class="home-vt-item" bindtap="onTapToolElderCheckin" hover-class="btn-hover" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28rpx 8rpx; margin: 0 8rpx; background: #FFFDF9; border-radius: 20rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); transition: transform 0.15s ease, box-shadow 0.15s ease;">
-        <text class="home-vt-icon" style="font-size: 42rpx; margin-bottom: 12rpx; display: block;">👵</text>
-        <text class="home-vt-text" style="font-size: 24rpx; font-weight: 600; color: #2D3748; text-align: center;">长辈代报签到</text>
+      <view class="home-vt-item" bindtap="onTapToolElderCheckin" hover-class="btn-hover">
+        <text class="home-vt-icon">👵</text>
+        <text class="home-vt-text">长辈代报签到</text>
       </view>
 
     </view>
