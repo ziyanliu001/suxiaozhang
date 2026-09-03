@@ -803,8 +803,14 @@
          当日餐报的能力（重复录入防护见 saveReportAsync 的 duplicate_date_blocked
          校验），这里用 showFinanceFormOverride 保留这条口子——财务点击稽核台
          旁边的"临时代为填报"链接（见 onToggleFinanceFormOverride）即可展开完整
-         表单，行为与店长完全一致，只是不再是财务首页默认呈现的内容 -->
-    <block wx:if="{{currentUserRole !== 'finance' || showFinanceFormOverride}}">
+         表单，行为与店长完全一致，只是不再是财务首页默认呈现的内容。
+         🛡️ 越权/错位修复：补上 currentStoreId && !isAllStoresView——"填写当日
+         明细"本质是给某一家具体门店记账，机构下尚无门店（走上方"空机构建店
+         引导卡"分支）或超管正在看"全国总览"聚合视图时，压根没有一个具体的
+         记账对象，不该渲染这张表单。与下方 .bottom-action-floating-bar 必须
+         保持完全一致的可见性口径（见该处历史教训注释），两处同步加了这个
+         条件，不能只改一处 -->
+    <block wx:if="{{currentStoreId && !isAllStoresView && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
     <view class="ui-card-wrapper form-main-card">
       <view class="form-card-header">
         <view class="title-group">
@@ -3176,7 +3182,14 @@
   <!-- 生成餐报文本/海报本就是"填写当日明细"表单（见 form-main-card）的后续动作，
        两者的可见性必须完全一致，否则会出现"能看到表单却找不到提交按钮"的空页面——
        🐛 历史教训：这里曾经单独写成比表单条件更严格的角色判断，导致部分角色能看到表单却看不到按钮。
-       现在表单已经对所有非志工角色（含纯财务）开放，这里只保留 !isVolunteer，与表单条件保持同步。 -->
+       现在表单已经对所有非志工角色（含纯财务）开放，这里只保留 !isVolunteer，与表单条件保持同步。
+       🐛（2026-09-03 大厅/未选门店错位修复）同一处历史教训的另一次重演：表单条件
+       补了 currentStoreId && !isAllStoresView（见 form-main-card 前的 wx:if 注释）
+       这里却漏了同步——机构下尚无门店（"空机构建店引导卡"分支）或超管在看全国
+       总览聚合视图时，表单已经不渲染了，这条吸底操作条却仍然按 !isVolunteer 独立
+       判断继续显示，用户在"该机构已有 N 家门店，请选择"的引导页面下方看到一条
+       无表单可对应的"生成餐报文本"操作条，点击后写入/读取的是一个不存在的门店
+       上下文。两处条件必须再次同步补齐，不能只改表单这一边 -->
   <!-- 🐛 修复图标"看不见"问题的真正根因：.idx-icon-bolt / .idx-icon-palette 是内联 base64 SVG
        background-image，stroke 颜色写死为 #FFFFFF，不会跟随按钮文字颜色变化——白底红字的左按钮上，
        白色图标直接和白色背景融为一体（看起来像"没有图标"）；金色底的右按钮上白色图标也和金黄背景
@@ -3189,7 +3202,7 @@
        日志/大事记"输入框会被压在条下面。根治办法是让这一行永远不换行：文案改用独立
        <text class="btn-main-label"> 承载并配 ellipsis 兜底（见 index.wxss），保证条本身
        高度稳定可预期，而不是让 padding-bottom 去猜一个会变的高度 -->
-  <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
+  <view class="bottom-action-floating-bar" wx:if="{{currentStoreId && !isAllStoresView && !isVolunteer && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text><text class="btn-main-label">生成餐报文本</text>
     </button>
