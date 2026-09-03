@@ -32,22 +32,14 @@ page {
      单靠 env() 不够，故强制再叠加 80rpx 兜底，与 headerSafeTop 的动态胶囊测算共同生效，
      确保首屏渲染早于 JS 测算完成时内容也不会被遮挡 */
   padding-top: calc(env(safe-area-inset-top) + 80rpx) !important;
-  /* 🛡️ 非义工视角（店长/财务/超管）在 .page-body-scroll 之外还叠了打卡卡片/店长工作台/
-     财务稽核台/管理宫格/空机构建店引导卡（"该机构已有 N 家门店"）等一整段非滚动区
-     内容，矮屏设备上这段总高度可能超出 100vh，导致页面本体（而非内部 page-body-scroll）
-     整体上滚，此时底部固定吸底双按钮栏仍会盖住刚露出的这段内容。
-     🐛 之前这里写死 180rpx，比 .bottom-action-floating-bar 注释里算好的
-     "三段式 TabBar（100rpx）+ 吸底双按钮组（136rpx）= 236rpx" 还少 56rpx，且完全没算
-     底部安全区，iPhone 类全面屏机型上"该机构已有 N 家门店"卡片的按钮实测仍被压住——
-     改为与 .page-body-scroll 同一份 236rpx + 安全区计算，两处不再各算一套。
-     🐛（底部输入框被遮挡二次修复）236rpx 恰好等于"TabBar+按钮组"的高度总和，滚到底
-     时内容边缘与按钮组顶边严丝合缝贴在一起，没有任何呼吸间距；再叠加 32rpx 安全垫，
-     确保滚动到底部时最后一块内容与吸底按钮组之间始终留有可见间隙。
-     🐛（TabBar 投影擦碰修复）.bottom-action-floating-bar 的 bottom 呼吸间距从
-     16rpx 追加到 48rpx（模拟器实测仍贴 TabBar 顶边阴影），这里同步 +32rpx
-     保持两处不脱节 */
-  padding-bottom: calc(316rpx + constant(safe-area-inset-bottom)) !important;
-  padding-bottom: calc(316rpx + env(safe-area-inset-bottom)) !important;
+  /* 🏛️（2026-09-03 彻底根治 TabBar 踩踏）.bottom-action-floating-bar 已从
+     position:fixed 悬浮层改为普通文档流内容（随 .page-body-scroll 一起滚动），
+     不再需要为它单独预留一份"TabBar + 按钮组高度"的组合安全垫——这里只需要
+     跟其它页面（如 profile.wxss）同一套口径，单纯避让自定义 TabBar 本身
+     （custom-tab-bar/index.wxss 实测 100rpx）+ 安全区 + 一点呼吸间距，
+     不再叠加按钮组高度 */
+  padding-bottom: calc(100rpx + constant(safe-area-inset-bottom) + 40rpx) !important;
+  padding-bottom: calc(100rpx + env(safe-area-inset-bottom) + 40rpx) !important;
 }
 
 .app-header-section {
@@ -61,18 +53,12 @@ page {
 .page-body-scroll {
   flex: 1;
   width: 100%;
-  /* 底部同时叠着两层固定元素：三段式 TabBar（100rpx）+ 吸底按钮组 .bottom-action-floating-bar
-     （bottom: 100rpx 起，自身高度 24+88+24=136rpx），两者共占 236rpx，
-     padding-bottom 必须盖过这个总高度，否则滚到底部时"意见反馈"/协议链接/"门店今日
-     日志/大事记"输入框仍会被按钮组压住。
-     🐛 底部输入框被遮挡根因修复：236rpx 只是刚好盖过、没有任何余量，一旦按钮组因为
-     窄屏/系统字号放大而实际渲染得比 136rpx 更高（三枚按钮挤一行，此前无 nowrap 兜底
-     容易换行），这份 padding 立刻不够用。现在 .btn-main-label 已强制单行+ellipsis
-     （见对应规则），按钮组高度不再会变，这里再加 32rpx 安全垫，保证滚动到底部时最后
-     一块内容与吸底按钮组顶边之间始终留有 ≥32rpx 的可见间隙，不是刚好贴边。
-     🐛（TabBar 投影擦碰修复）同步 .bottom-action-floating-bar 的呼吸间距
-     16rpx → 48rpx 变化，+32rpx */
-  padding: 24rpx 24rpx calc(316rpx + env(safe-area-inset-bottom)) 24rpx;
+  /* 🏛️（2026-09-03 彻底根治 TabBar 踩踏）.bottom-action-floating-bar 已从
+     position:fixed 悬浮层改为文档流内容，本身会自然滚动到"门店今日日志/
+     大事记"这类内容之后，不会再遮挡任何东西——这里的 padding-bottom 只需要
+     单纯避让自定义 TabBar（100rpx 实测高度）+ 安全区 + 一点呼吸间距，
+     与 .index-page-container 同一份口径，不用再叠加一份按钮组的高度估算 */
+  padding: 24rpx 24rpx calc(100rpx + env(safe-area-inset-bottom) + 40rpx) 24rpx;
   box-sizing: border-box;
 }
 
@@ -3944,27 +3930,23 @@ page {
   font-size: 22rpx;
 }
 /* ================= 底部悬浮核心功能按钮 ================= */
+/* 🏛️（2026-09-03 彻底根治 TabBar 踩踏）经过多轮 position:fixed + bottom
+   计算加固，仍在不同机型/模拟器上反复出现与自定义 TabBar 的间距观感问题——
+   与其继续加大呼吸间距打地鼠，不如从根上取消 fixed 悬浮，回归标准文档流：
+   这组按钮现在就是 .page-body-scroll 里排在表单结果之后的一张普通卡片，
+   随页面滚动、占用自己的实际空间，不再需要 bottom/z-index/安全区计算，
+   也就从根本上不存在"压 TabBar"的可能性——TabBar 的避让完全交给
+   .page-body-scroll 统一的 padding-bottom（100rpx + 安全区 + 40rpx） */
 .bottom-action-floating-bar {
-  position: fixed !important;
-  /* 悬浮于底部三段式导航栏（custom-tab-bar/index.wxss 实测 100rpx，z-index: 998）
-     之上，避免相互遮挡。100rpx 是本项目 TabBar 的实测真值，不因呼吸间距的
-     调整而改变——变的只是下面这个 +Nrpx 的呼吸间距本身。
-     🐛（模拟器实测反馈：胶囊条仍贴 TabBar 顶边阴影）16rpx 间距不足以完全
-     盖过 TabBar 自身的上投影观感，追加到 48rpx，与 custom-tab-bar 之间留出
-     清晰可辨的空隙，不再是"擦边而过"的观感 */
-  bottom: calc(100rpx + env(safe-area-inset-bottom) + 48rpx) !important;
-  left: 0 !important;
-  right: 0 !important;
-  /* 纯白不透明背景 + 更轻的阴影，与上方表单滚动区形成明确的物理分层，
-     不透明是必须的——半透明底色滚动时会看到文字从下面透上来，观感很脏 */
-  background: #FFFFFF;
+  position: static;
+  margin: 8rpx 0 24rpx 0;
   padding: 24rpx 32rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
   display: flex;
   gap: 20rpx;
-  border-top: 1rpx solid #E9ECEF;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.05);
-  box-sizing: border-box !important;
-  z-index: 90 !important;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
 }
 
 /* 🐛 加固：display:flex 居中此前已生效，这里补上 box-sizing/padding/margin/
@@ -5112,8 +5094,8 @@ page {
 }
 
 .bottom-links-card {
-  /* 主生成按钮已迁移到底部固定吸底的 .bottom-action-floating-bar；
-     这里只剩意见反馈/协议链接，保持页面滚动内容末尾干净精简 */
+  /* 生成动作卡片（.bottom-action-floating-bar）已改为普通文档流内容，
+     排在本卡片之前；这里只剩意见反馈/协议链接，作为页面滚动内容的末尾 */
   width: 100%;
   background-color: #FFFFFF;
   border-radius: 16rpx;
@@ -5138,13 +5120,6 @@ page {
   border-radius: 34rpx;
   border: none;
   padding: 0;
-}
-
-/* 吸底按钮组的高度占位，防止其遮挡滚动区域最后一块内容 */
-.floating-bar-spacer {
-  /* 🌟 加大到 180rpx，确保"意见反馈/用户服务协议"链接不会被下方固定吸底的
-     生成餐报文本/生成公示海报双按钮遮挡（原 88rpx+48rpx=136rpx 余量偏紧） */
-  height: calc(180rpx + env(safe-area-inset-bottom));
 }
 
 /* 🐛（2026-08-31 修复 16 处死绑定）这个类此前在 WXML 里一处都没被引用——
