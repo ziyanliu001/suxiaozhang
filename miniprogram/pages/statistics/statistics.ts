@@ -427,6 +427,12 @@ Page({
   // 只应该针对用户在弹窗里选定的周期，而不是页面刚打开时的默认周期。
   // 消费一次后立即清零，不随 onShow/切 Tab 反复重放
   _autoShowExportPending: false,
+  // 🐛（路由超时排查）与上面 _autoShowExportPending 是两件不同的事：那个是
+  // "选定周期后数据重新灌好，自动继续弹导出确认"，这个是"冷启动 onLoad 阶段
+  // 携带 autoShowExport=true，把首次弹出导出配置弹窗的时机从 onLoad 同步阶段
+  // 挪到 onReady 之后延迟触发"——两者触发时机、消费点都不同，不能共用同一个
+  // 标记，否则会互相误吃对方的状态
+  _autoOpenExportConfigPending: false,
   // 🐛 根因修复：fetchStatistics()/loadStatistics() 此前的防抖锁是"已有请求
   // 在途就直接丢弃这次调用"——用户快速连续切换 Tab/年月/自定义日期时，最后一次
   // （真正想看的那次）选择很可能就在某次请求还没返回时被发起，直接被丢弃，
@@ -899,8 +905,16 @@ Page({
     }
 
     this.sanitizeDateVariables();
+    // 🐛（路由超时排查）与上面 isNationalIntent 分支同一类根因——onLoad 的
+    // 同步阶段已经在触发 initUserRole()/scheduleReloadStats() 这些会连带
+    // 发起云函数请求的调用，此时再同步弹出导出配置弹窗（走一次 setData +
+    // refreshExportFileNamePreview），会跟这些请求抢在同一个事件循环节拍里
+    // 触发，让页面路由切换动画/safeNavigateTo 的原生回调排在更靠后的位置，
+    // 增加被误判为"卡顿超时"的概率。改为只记一个待办标记，真正弹出的动作
+    // 挪到 onReady（页面首屏渲染完成）之后再延迟 300ms 执行，让路由切换和
+    // 首屏渲染先稳定落地，不参与 onLoad 这一波并发峰值
     if (autoOpenExportConfig) {
-      this.openExportConfigModal('month');
+      this._autoOpenExportConfigPending = true;
     }
     this.calculateNavBarHeight();
     this.initCustomDates();
@@ -935,6 +949,19 @@ Page({
       alertMessage: '即将退出雨花爱心餐报助手，是否返回首页继续使用？'
     });
     this._navGuard.setupOnLoad();
+  },
+
+  // 🐛（路由超时排查）onReady 在页面首屏渲染完成后触发，此时 safeNavigateTo
+  // 发起方的原生跳转回调早已经有机会执行——把 autoShowExport 冷启动场景下的
+  // 导出配置弹窗挪到这里、再叠加 300ms 延迟，确保它不会跟 onLoad 同步阶段的
+  // initUserRole()/scheduleReloadStats() 挤在同一个事件循环节拍里触发
+  onReady() {
+    if (this._autoOpenExportConfigPending) {
+      this._autoOpenExportConfigPending = false;
+      setTimeout(() => {
+        this.openExportConfigModal('month');
+      }, 300);
+    }
   },
 
   onUnload() {
