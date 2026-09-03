@@ -1658,9 +1658,17 @@
       <view class="agreement-tips">
         生成即代表同意 <text class="link" bindtap="showServiceAgreement">《用户服务协议》</text>
       </view>
-      <!-- 吸底按钮组高度占位，避免固定按钮遮挡本区域内容 -->
-      <view class="floating-bar-spacer"></view>
     </view>
+
+    <!-- 🐛 根因修复（协议小字看起来"贴"在按钮条上）：.floating-bar-spacer 这块
+         吸底按钮组高度占位此前写在 .bottom-links-card 内部——该卡片自身带白色
+         背景+圆角+阴影，占位区随之被卡片背景一起拉长成一块紧挨着协议文字的
+         180rpx 空白，而这块空白又与下方同为纯白色的 .bottom-action-floating-bar
+         紧邻，两片白色视觉上融成一整块，看起来就像协议文字直接贴在按钮条顶部。
+         改成卡片外的独立兄弟节点：卡片的白底/圆角/阴影在协议文字之后就收尾，
+         占位区回归页面背景色（透明/#F8F9FA），与按钮条之间是真实可辨的留白，
+         而不是同色块的无缝延伸 -->
+    <view class="floating-bar-spacer"></view>
 
   </scroll-view>
   </block>
