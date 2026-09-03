@@ -4759,35 +4759,26 @@ page {
   line-height: 1.4;
 }
 
-/* 导出渠道单选：下载至本机 / 发送至邮箱 */
-.export-channel-group {
-  display: flex;
-  gap: 28rpx;
-  margin: 20rpx 0 4rpx;
-}
-
-.export-channel-option {
+/* 🆕【方案 A】导出方式说明行：只有一条路径，展示为固定选中态，纯信息展示，
+   不是需要用户二选一的交互控件（不绑 bindtap） */
+.export-method-row {
   display: flex;
   align-items: center;
   gap: 10rpx;
+  margin: 20rpx 0 4rpx;
 }
 
-.export-channel-radio {
+.export-method-radio {
   width: 32rpx;
   height: 32rpx;
   border-radius: 50%;
-  border: 2rpx solid #CED4DA;
+  border: 2rpx solid #D9480E;
   box-sizing: border-box;
   position: relative;
   flex-shrink: 0;
-  transition: border-color 0.15s ease;
 }
 
-.export-channel-radio.checked {
-  border-color: #D9480E;
-}
-
-.export-channel-radio.checked::after {
+.export-method-radio.checked::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -4799,29 +4790,12 @@ page {
   transform: translate(-50%, -50%);
 }
 
-.export-channel-lbl {
+.export-method-lbl {
   font-size: 26rpx;
   color: #343A40;
 }
 
-/* 邮箱输入框：仅"发送至邮箱"渠道选中时展开 */
-.export-email-input-wrap {
-  margin-top: 12rpx;
-}
-
-.export-email-input {
-  width: 100%;
-  height: 72rpx;
-  background: #F8F9FA;
-  border: 1.5rpx solid #EFE6D8;
-  border-radius: 14rpx;
-  padding: 0 20rpx;
-  font-size: 26rpx;
-  color: #333333;
-  box-sizing: border-box;
-}
-
-/* 温馨提示条：浅灰弱底，说明导出内容范围 */
+/* 温馨提示条：浅灰弱底，说明导出内容范围/转发引导 */
 .export-scope-tip {
   font-size: 21rpx;
   color: #ADB5BD;

@@ -175,9 +175,12 @@
   <!-- 🆕 导出配置弹窗：底部「导出当前周期 Excel 账本」快捷入口的落地点，显式
        选定"导出哪段数据"（周期类型 + 年/月），确认后走已有的核对/确认/生成/
        下载全流程（见 onConfirmExportConfig 复用 _autoShowExportPending 机制） -->
-  <!-- 🆕 导出体验重构：精致 Header（Excel 绿色图标）+ 动态文件名预览 +
-       导出渠道单选（下载至本机/发送至邮箱，邮箱地址本地记忆）+ 内容范围
-       提示条 + 宽幅圆角主按钮，取代此前只有周期选择的极简弹窗。
+  <!-- 🆕【方案 A：下载至本机/微信转发】导出弹窗：精致 Header（Excel 绿色图标）+
+       动态文件名预览 + 单一导出方式说明 + 转发引导提示 + 宽幅圆角主按钮。
+       上一版曾经加过"下载/邮箱"双渠道单选 + 邮箱输入，邮箱发送目前没有可对接的
+       真实发信服务，只能诚实降级成"筹备中"弹窗，体验别扭还容易误触——按这一版
+       方案 A 简化：只有一条路径（下载到本机，openDocument 打开后可直接用其
+       右上角菜单转发/保存），不再需要一个引导用户去选、选了却发不出去的邮箱选项。
        z-index 见 .patch-modal-mask（>1000，避免被大盘卡片遮挡） -->
   <view class="patch-modal-mask" wx:if="{{showExportConfigModal}}" bindtap="onCloseExportConfigModal">
     <view class="patch-modal-box export-config-box" catchtap="stopPropagation">
@@ -226,34 +229,19 @@
         <text class="export-filename-text">{{exportFileNamePreview}}</text>
       </view>
 
-      <!-- 🆕 导出渠道单选 -->
-      <view class="export-channel-group">
-        <view class="export-channel-option" data-channel="download" bindtap="onSelectExportChannel">
-          <view class="export-channel-radio {{exportChannel === 'download' ? 'checked' : ''}}"></view>
-          <text class="export-channel-lbl">下载至本机</text>
-        </view>
-        <view class="export-channel-option" data-channel="email" bindtap="onSelectExportChannel">
-          <view class="export-channel-radio {{exportChannel === 'email' ? 'checked' : ''}}"></view>
-          <text class="export-channel-lbl">发送至电子邮箱</text>
-        </view>
+      <!-- 🆕 导出方式说明：方案 A 只有这一条路径，展示为已选中态，
+           不再是需要用户二选一的可交互单选组 -->
+      <view class="export-method-row">
+        <view class="export-method-radio checked"></view>
+        <text class="export-method-lbl">下载至手机 / 发送给微信好友</text>
       </view>
-      <view class="export-email-input-wrap" wx:if="{{exportChannel === 'email'}}">
-        <input
-          class="export-email-input"
-          placeholder="请输入接收邮箱"
-          value="{{exportEmail}}"
-          bindinput="onExportEmailInput"
-        />
-      </view>
-
-      <!-- 🆕 内容范围提示条 -->
       <view class="export-scope-tip">
-        <text>· 包含选定周期的每日餐报、爱心物资、专项支出明细及义工服务记录</text>
+        <text>· 文件生成后将自动打开，点击右上角【···】即可直接转发给微信好友/工作群，或保存至本地。</text>
       </view>
 
       <view class="modal-footer">
         <button class="btn-modal-cancel btn-export-cancel" bindtap="onCloseExportConfigModal">取消</button>
-        <button class="btn-modal-submit btn-export-primary" bindtap="onConfirmExportConfig">{{exportChannel === 'email' ? '立即发送到邮箱' : '立即生成并下载'}}</button>
+        <button class="btn-modal-submit btn-export-primary" bindtap="onConfirmExportConfig">立即生成并打开</button>
       </view>
     </view>
   </view>

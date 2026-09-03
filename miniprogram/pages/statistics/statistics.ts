@@ -158,11 +158,6 @@ function isAllStoresMode(storeName: string): boolean {
 // 兜底读取时同样要排除，不能当真实门店 id 使用
 const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL', 'yuhuazhai_national'];
 
-// 🆕 导出 Excel 账本弹窗：邮箱本地记忆与格式校验，见 openExportConfigModal/
-// onConfirmExportConfig
-const EXPORT_EMAIL_CACHE_KEY = 'export_email_cache';
-const EXPORT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 // 🐛 修复"成功解析日期 0 条"根因之一：此前 reportDate/createTime 等字段排在 dateString 之前，
 // 一旦某条记录的 reportDate 缺失但 createTime 是云端 db.serverDate() 读回的原生 Date 对象，
 // 该 Date 对象会被当作"提交时间"误用为"汇报日期"（语义错误，且经字符串往返在 iOS 下极易解析失败）。
@@ -813,12 +808,9 @@ Page({
     exportConfigTab: 'month' as 'week' | 'month' | 'year',
     exportConfigYear: new Date().getFullYear(),
     exportConfigMonth: new Date().getMonth() + 1,
-    // 🆕 导出体验重构：文件名预览（随周期选择实时重算，见
-    // refreshExportFileNamePreview）+ 导出渠道单选（下载至本机/发送至邮箱，
-    // 后者的邮箱地址本地记忆，见 EXPORT_EMAIL_CACHE_KEY）
+    // 🆕【方案 A：下载至本机/微信转发】文件名预览，随周期选择实时重算，
+    // 见 refreshExportFileNamePreview
     exportFileNamePreview: '',
-    exportChannel: 'download' as 'download' | 'email',
-    exportEmail: '',
     // 🔐 专业版功能拦截弹窗：见 components/feature-locked-modal，
     // planUpgradeFeatureName 是具体触发这次拦截的功能名，拼进弹窗文案
     showPlanUpgradeModal: false,
@@ -3460,23 +3452,11 @@ Page({
   // 那个选定周期发生（见 onConfirmExportConfig → exportToExcel）
   openExportConfigModal(defaultTab: 'week' | 'month' | 'year') {
     const { selectedYear, selectedMonth } = this.data;
-    // 🆕 每次打开弹窗都重新读一次本地记忆的邮箱——用户可能在设置页/其它设备
-    // 更新过常用邮箱，不缓存上一次进本页时的旧值；渠道单选每次都重置回默认的
-    // "下载至本机"，不记忆上一次选择的渠道（导出是低频操作，默认走最简单可靠
-    // 的下载路径，邮箱是需要用户每次主动选择的例外情况）
-    let cachedEmail = '';
-    try {
-      cachedEmail = wx.getStorageSync(EXPORT_EMAIL_CACHE_KEY) || '';
-    } catch (err) {
-      console.warn('[openExportConfigModal] 读取邮箱缓存失败:', err);
-    }
     this.setData({
       showExportConfigModal: true,
       exportConfigTab: defaultTab,
       exportConfigYear: selectedYear,
-      exportConfigMonth: selectedMonth,
-      exportChannel: 'download',
-      exportEmail: cachedEmail
+      exportConfigMonth: selectedMonth
     });
     this.refreshExportFileNamePreview();
   },
@@ -3511,17 +3491,20 @@ Page({
     this.refreshExportFileNamePreview();
   },
 
-  // 🆕 动态文件名预览：【门店名称】-财务明细账本-{{startDate}}_{{endDate}}.xlsx，
-  // 与 buildExportCallData()/exportAccountExcel 云函数实际使用的周期解析口径
-  // 保持一致（周报用当前自然周一至周日，月报/年报按选定年月的自然月/年首尾），
-  // 只是纯本地字符串拼接，不发起任何请求——每次周期选项变化时同步重算
+  // 🆕【方案 A】动态文件名预览：{{门店名}}-{{周期文案}}财务账本.xlsx，用人可读的
+  // 周期说法（"2026年09月"/"2026年度"/"09/01-09/07周报"）而不是原始起止日期，
+  // 更贴近店长/财务归档时脑子里想的那个文件名。纯本地字符串拼接，不发起任何
+  // 请求——每次周期选项变化时同步重算
   refreshExportFileNamePreview() {
     const { exportConfigTab, exportConfigYear, exportConfigMonth, shopName, currentUserStoreName } = this.data;
+    // 🛡️ 不用任何单一机构的品牌名兜底（如"雨花斋"）——本页服务于雨花公益
+    // 食堂/通用素食记账/产销工坊等多种工作空间类型，门店名解析失败时应该
+    // 退回中性的"全部门店"，不能让一个特定机构的名字悄悄出现在别的租户导出
+    // 的文件名里
     const storeLabel = (shopName && shopName !== 'default') ? shopName : (currentUserStoreName || '全部门店');
     const safeStoreName = String(storeLabel).replace(/[\\/:*?"<>|]/g, '');
 
-    let startDate = '';
-    let endDate = '';
+    let periodText = '';
     if (exportConfigTab === 'week') {
       // 与 getWeekRange() 同款"周一至周日"算法，但不复用该方法本身——它会
       // 顺带 setData weekRangeLabel（副作用属于主周期导航条，与本弹窗的
@@ -3533,73 +3516,21 @@ Page({
       start.setDate(diff);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
-      startDate = formatDate(start);
-      endDate = formatDate(end);
+      const mmdd = (d: Date) => `${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      periodText = `${mmdd(start)}-${mmdd(end)}周报`;
     } else if (exportConfigTab === 'year') {
-      startDate = `${exportConfigYear}-01-01`;
-      endDate = `${exportConfigYear}-12-31`;
+      periodText = `${exportConfigYear}年度`;
     } else {
-      const lastDay = new Date(exportConfigYear, exportConfigMonth, 0).getDate();
-      const mm = String(exportConfigMonth).padStart(2, '0');
-      startDate = `${exportConfigYear}-${mm}-01`;
-      endDate = `${exportConfigYear}-${mm}-${String(lastDay).padStart(2, '0')}`;
+      periodText = `${exportConfigYear}年${String(exportConfigMonth).padStart(2, '0')}月`;
     }
 
-    this.setData({ exportFileNamePreview: `${safeStoreName}-财务明细账本-${startDate}_${endDate}.xlsx` });
+    this.setData({ exportFileNamePreview: `${safeStoreName}-${periodText}财务账本.xlsx` });
   },
 
-  // 🆕 导出渠道单选：下载至本机 / 发送至邮箱，切换渠道时不清空已填的邮箱
-  // （用户可能先填了邮箱又切回下载，再切回来不用重打）
-  onSelectExportChannel(e: any) {
-    const channel = e.currentTarget.dataset.channel;
-    if (channel !== 'download' && channel !== 'email') return;
-    this.setData({ exportChannel: channel });
-  },
-
-  onExportEmailInput(e: any) {
-    this.setData({ exportEmail: e.detail.value });
-  },
-
+  // 🆕【方案 A：下载至本机/微信转发】只有一条导出路径，不再需要邮箱渠道的
+  // 校验/记忆分支——直接推进到"核对 → 确认 → 生成 → 下载并打开"既有链路
   onConfirmExportConfig() {
-    const { exportConfigTab, exportConfigYear, exportConfigMonth, exportChannel, exportEmail } = this.data;
-
-    if (exportChannel === 'email') {
-      const trimmedEmail = (exportEmail || '').trim();
-      if (!trimmedEmail) {
-        wx.showToast({ title: '请输入接收邮箱', icon: 'none' });
-        return;
-      }
-      if (!EXPORT_EMAIL_RE.test(trimmedEmail)) {
-        wx.showToast({ title: '邮箱格式不正确，请检查后重试', icon: 'none' });
-        return;
-      }
-      try {
-        wx.setStorageSync(EXPORT_EMAIL_CACHE_KEY, trimmedEmail);
-      } catch (err) {
-        console.warn('[onConfirmExportConfig] 记忆邮箱地址失败:', err);
-      }
-      // 🛡️ 诚实降级：邮箱直发目前还没有对接真实的发信服务（本仓库没有任何
-      // SMTP/第三方邮件网关配置），点击后不能假装"已发送"——万一发不出去，
-      // 用户会误以为财务报表真的送到对方邮箱了，实际上根本没发生，比"按钮
-      // 没反应"更糟。这里如实告知，邮箱地址已经记住方便下次直接用，本次改为
-      // 生成后下载到本机，用户可以自己转发；用户可以取消回去改选"下载至本机"
-      wx.showModal({
-        title: '邮箱直发功能筹备中',
-        content: `暂不支持自动发送到邮箱，已记住您填写的地址（${trimmedEmail}），本次将改为生成后下载到本机，您可以再手动通过邮件转发`,
-        confirmText: '继续生成',
-        cancelText: '我再想想',
-        success: (res) => {
-          if (!res.confirm) return;
-          this.proceedExportConfigConfirm(exportConfigTab, exportConfigYear, exportConfigMonth);
-        }
-      });
-      return;
-    }
-
-    this.proceedExportConfigConfirm(exportConfigTab, exportConfigYear, exportConfigMonth);
-  },
-
-  proceedExportConfigConfirm(exportConfigTab: 'week' | 'month' | 'year', exportConfigYear: number, exportConfigMonth: number) {
+    const { exportConfigTab, exportConfigYear, exportConfigMonth } = this.data;
     this.setData({
       showExportConfigModal: false,
       currentTab: exportConfigTab,
@@ -3739,6 +3670,12 @@ Page({
     }
   },
 
+  // 🆕【方案 A：下载至本机/微信转发】直接 wx.downloadFile → wx.openDocument
+  // （showMenu:true 打开原生右上角菜单，用户自己选转发/保存），不再先尝试
+  // shareFileMessage 分享面板——上一版"shareFileMessage 优先，失败再退回
+  // openDocument"的两段式逻辑与本页提示文案（"打开后点右上角···转发"）对不
+  // 上，用户可能先看到一个分享联系人的选择面板，跟提示语描述的操作完全是
+  // 两回事。方案 A 统一成一条路径：打开文档，转发/保存都通过文档自带菜单完成
   downloadAndOpenExcel(tempFileURL: string, fileName: string) {
     wx.showLoading({ title: '正在下载表格...', mask: true });
 
@@ -3748,62 +3685,29 @@ Page({
         wx.hideLoading();
         const filePath = downloadRes.tempFilePath;
 
-        // 🆕 电脑端微信兜底：wx.openDocument/shareFileMessage 在 Windows/Mac
-        // 客户端上的支持不如手机端可靠，这里额外把临时下载链接复制到剪贴板，
-        // 即使下面的打开/分享流程在电脑端表现不佳，用户手里也已经有一份可以
-        // 粘贴到浏览器里直接下载的链接，不会完全卡死拿不到文件。
-        // 🛡️ 特意放在 wx.hideLoading() 之后才 setClipboardData+showToast——
-        // showToast 与 showLoading 共享同一层原生 UI 队列，若在 loading 遮罩
-        // 仍显示时弹 toast，会被遮罩挡住/相互冲突（本项目已有过同类真实教训）
-        try {
-          const platform = getSafeSystemInfo().platform;
-          if (platform === 'windows' || platform === 'mac') {
+        wx.openDocument({
+          filePath: filePath,
+          fileType: 'xlsx',
+          showMenu: true,
+          success: () => {
+            wx.showToast({ title: '已打开，可点右上角转发', icon: 'none', duration: 2500 });
+          },
+          fail: () => {
+            // 🛡️ 兜底降级：真机预览/文档组件异常（尤其电脑端微信客户端，
+            // wx.openDocument 的支持不如手机端可靠）时，复制临时下载直链，
+            // 用户仍能粘贴到浏览器里把文件下载下来，不会完全卡死拿不到文件
             wx.setClipboardData({
               data: tempFileURL,
               success: () => {
-                wx.showToast({ title: '下载链接已复制，可粘贴到浏览器打开', icon: 'none', duration: 2500 });
+                wx.showModal({
+                  title: '提示',
+                  content: '文件已生成，下载链接已复制到剪贴板，可粘贴至浏览器下载。',
+                  showCancel: false
+                });
               }
             });
           }
-        } catch (err) {
-          console.warn('[downloadAndOpenExcel] 电脑端复制链接兜底异常:', err);
-        }
-
-        // 优先使用 shareFileMessage 发送给文件
-        if ((wx as any).shareFileMessage) {
-          (wx as any).shareFileMessage({
-            filePath: filePath,
-            fileName: fileName,
-            success: () => {
-              wx.showToast({ title: '表格已导出成功', icon: 'success' });
-            },
-            fail: (shareErr) => {
-              if (!shareErr.errMsg || !shareErr.errMsg.includes('cancel')) {
-                wx.openDocument({
-                  filePath: filePath,
-                  fileType: 'xlsx',
-                  showMenu: true,
-                  fail: () => {
-                    wx.showModal({
-                      title: '已生成表格文件',
-                      content: '请重新点击"导出表格"，在微信列表中选择【文件传输助手】保存到手机即可查看！',
-                      showCancel: false
-                    });
-                  }
-                });
-              }
-            }
-          });
-        } else {
-          wx.openDocument({
-            filePath: filePath,
-            fileType: 'xlsx',
-            showMenu: true,
-            fail: () => {
-              wx.showToast({ title: '打开失败，请重试', icon: 'none' });
-            }
-          });
-        }
+        });
       },
       fail: () => {
         wx.hideLoading();
