@@ -320,9 +320,22 @@
   border: 2rpx solid #8C1D18;
   border-left: 8rpx solid #8C1D18;
   border-radius: 20rpx;
-  padding: 24rpx 28rpx;
+  padding: 20rpx 24rpx;
   box-sizing: border-box;
   box-shadow: 0 6rpx 20rpx rgba(140, 29, 24, 0.12);
+}
+
+/* 🎨 图标与标题紧凑一体：本卡片只有盾牌图标 + 标题一行，24rpx/12rpx 的默认
+   .store-icon/.store-card-header 间距是给"图标+标题+城市/距离元信息"两行式
+   普通门店卡片留的呼吸空间，套在这张单行卡片上会显得图标和标题之间、标题
+   与下方身份胶囊之间空洞松散——单独收紧这两处间距 */
+.superadmin-pinned-card .store-card-header {
+  margin-bottom: 14rpx;
+}
+
+.superadmin-pinned-card .store-icon {
+  font-size: 28rpx;
+  margin-right: 10rpx;
 }
 
 .superadmin-name {
@@ -358,12 +371,27 @@
   box-sizing: border-box;
 }
 
-/* 核心：选中态卡片 - 采用左侧高亮烫金线 + 柔和内阴影 */
+/* 核心：选中态卡片——柔和主题红描边 + 极淡暖色渐变，取代此前生硬的
+   深色粗边框（2rpx 描边 + 8rpx 加粗左侧线），配合右上角"当前站点"微胶囊
+   （见下方 .active-store-badge），激活层级一眼可辨但不抢戏 */
 .store-group-card.active-store {
-  border-color: #8C1D18 !important;
-  background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF9 100%) !important;
-  box-shadow: 0 8rpx 24rpx rgba(140, 29, 24, 0.08) !important;
-  border-left: 8rpx solid #8C1D18 !important;
+  border: 2rpx solid #FFCCC7 !important;
+  background: linear-gradient(180deg, #FFF9F9 0%, #FFFFFF 100%) !important;
+  box-shadow: 0 4rpx 16rpx rgba(255, 163, 158, 0.18) !important;
+}
+
+.active-store-badge {
+  position: absolute;
+  top: -16rpx;
+  right: 24rpx;
+  background: #D9363E;
+  color: #FFFFFF;
+  font-size: 18rpx;
+  font-weight: 600;
+  line-height: 1.6;
+  padding: 4rpx 16rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 6rpx rgba(217, 54, 62, 0.3);
 }
 
 /* 门店标题 */
@@ -386,11 +414,17 @@
   line-height: 1;
 }
 
-/* 身份胶囊选择行 */
+/* 🎨 身份胶囊选择行：此前 flex-wrap 在 5 个身份（家人/义工/店长/财务/家长）
+   排不满整行时，最后一个（通常是"家长"）会独自换到下一行、左对齐悬空，
+   卡片底部因此一高一低、凹凸不平。改用规整的两列等宽网格——每个胶囊固定
+   占半行宽度，5 个身份自然排成 2+2+1 三行；末行只剩单个胶囊时（见下方
+   :last-child:nth-child(odd)）让它跨满整行，不再出现"半行空着"的悬空感。
+   超级管理员卡片的单枚"系统超管"胶囊复用同一个 .role-selector-row，1 个
+   胶囊天然满足"末行单个"条件，自动铺满整行，效果与此前的独占一行完全一致 */
 .role-selector-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10rpx;
 }
 
 /* 身份可点击胶囊
@@ -398,14 +432,19 @@
    pill 都能响应 bindtap，但视觉上完全没有按压反馈，手感生硬，用户容易怀疑
    "有没有点中"。补一条与本页其余可点击元素同风格的轻微缩放+透明度反馈 */
 .role-choice-pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  padding: 12rpx 20rpx;
+  justify-content: center;
+  padding: 8rpx 16rpx;
   border-radius: 32rpx;
   background: #F8F9FA;
   border: 1rpx solid #E9ECEF;
   box-sizing: border-box;
   transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.role-choice-pill:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .role-choice-pill:active {
@@ -414,13 +453,13 @@
 }
 
 .role-choice-pill .role-icon {
-  font-size: 24rpx;
-  margin-right: 8rpx;
+  font-size: 22rpx;
+  margin-right: 6rpx;
   line-height: 1;
 }
 
 .role-choice-pill .role-label {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #555555;
   font-weight: 500;
   line-height: 1;
@@ -477,9 +516,9 @@
   font-weight: 500;
 }
 
-/* ===== ➕ 新建门店入口按钮：吸底高亮 CTA，视觉权重与"确认激活"按钮一致
-   🐛 加固：显式 flex 居中，不再单靠 text-align + 对称 padding 隐式凑出居中
-   效果——与本项目其余按钮统一走 flex 居中这一套，文本/图标垂直水平都居中 ===== */
+/* ===== ➕ 新建门店入口：此前是与"确认激活"同等视觉权重的砖红实底长条 CTA，
+   与上方核心的选点/身份操作抢焦点——降级为轻量次级入口卡片：浅底虚线框，
+   视觉上明确"这是补充路径，不是本页主操作" ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
   /* 面板本身在 z-index:99999 遮罩层内，无需为 TabBar 留出 120rpx；
@@ -491,17 +530,17 @@
   justify-content: center;
   text-align: center;
   box-sizing: border-box;
-  padding: 22rpx 0;
+  padding: 20rpx 0;
   border-radius: 40rpx;
-  color: #FFFFFF;
-  font-size: 27rpx;
-  font-weight: bold;
-  background: #8C1D18;
-  box-shadow: 0 8rpx 20rpx rgba(140, 29, 24, 0.22);
+  color: #4E5969;
+  font-size: 26rpx;
+  font-weight: 500;
+  background: #F7F8FA;
+  border: 1rpx dashed #C9CDD4;
 }
 
 .new-store-entry-btn:active {
-  opacity: 0.85;
+  opacity: 0.7;
   transform: scale(0.98);
 }
 

@@ -75,6 +75,9 @@
              理论上可能重复，storeName 匹配会让"同名门店"互相错误共享高亮/选中态 -->
         <view class="store-group-card {{item.storeId === currentStore.storeId ? 'active-store' : ''}}">
 
+          <!-- 🎨 当前站点微胶囊：柔和激活态的视觉锚点，只在真正选中的那张卡片上浮现 -->
+          <text class="active-store-badge" wx:if="{{item.storeId === currentStore.storeId}}">当前站点</text>
+
           <!-- 门店名称栏 -->
           <view class="store-card-header">
             <text class="store-icon">🏪</text>
