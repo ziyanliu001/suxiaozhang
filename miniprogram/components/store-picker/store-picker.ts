@@ -4,6 +4,7 @@ import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { setCurrentActiveStore } from '../../utils/storeManager';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
+import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -995,6 +996,9 @@ Component({
       }
 
       try {
+        // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+        // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+        await ensurePrivacyAuthorized();
         const chooseRes = await wx.chooseMedia({
           count: remaining,
           mediaType: ['image'],

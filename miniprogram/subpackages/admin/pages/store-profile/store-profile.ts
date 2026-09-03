@@ -5,6 +5,7 @@ import { recordRecentVisit } from '../../../../utils/recentPages';
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync } from '../../../../utils/util';
+import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -572,6 +573,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
         mediaType: ['image'],

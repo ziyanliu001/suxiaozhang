@@ -13,6 +13,7 @@ import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { withLoading } from '../../utils/loadingGuard';
 import { isPrivacyMaskEnabled } from '../../utils/userPreferences';
 import { maskName } from '../../utils/core/privacy';
+import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 
 // 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
 // （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
@@ -1235,6 +1236,9 @@ Page({
 
     let chooseRes: WechatMiniprogram.ChooseMediaSuccessCallbackResult;
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       chooseRes = await wx.chooseMedia({
         count: 1,
         mediaType: ['image'],
@@ -1682,6 +1686,9 @@ Page({
 
     let chooseRes: WechatMiniprogram.ChooseMediaSuccessCallbackResult;
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       chooseRes = await wx.chooseMedia({
         count: remainCount,
         mediaType: ['image'],
@@ -2389,6 +2396,9 @@ Page({
         return;
       }
 
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const res = await wx.chooseMedia({
         count: remainCount,
         mediaType: ['image'],

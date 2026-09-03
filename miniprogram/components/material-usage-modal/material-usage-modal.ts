@@ -6,6 +6,7 @@ import { checkContentSafety } from '../../utils/contentSafety';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { isCloudAvailable } from '../../utils/cloudGuard';
 import { playOcrSuccess } from '../../utils/audioService';
+import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 
 type StockStatus = 'sufficient' | 'normal' | 'urgent';
 
@@ -125,6 +126,9 @@ Component({
 
       let tempFilePath = '';
       try {
+        // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+        // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+        await ensurePrivacyAuthorized();
         const chooseRes = await wx.chooseMedia({
           count: 1,
           mediaType: ['image'],

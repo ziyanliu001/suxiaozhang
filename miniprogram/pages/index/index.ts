@@ -21,6 +21,7 @@ import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, Prev
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
+import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {
   hasAgreedYuhuaGeneralDisclaimer,
@@ -3890,6 +3891,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
         mediaType: ['image'],
@@ -5952,6 +5956,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const res = await wx.chooseMedia({
         count: remainingCount,
         mediaType: ['image'],
@@ -6046,6 +6053,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
         mediaType: ['image'],
@@ -6189,6 +6199,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
         mediaType: ['image'],
@@ -6340,6 +6353,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
         mediaType: ['image'],
@@ -6495,6 +6511,9 @@ Page({
         wx.showToast({ title: '云服务暂不可用，无法使用拍照识别', icon: 'none' });
         return;
       }
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       // #10 支持多张图片批量识别（最多5张）
       const chooseRes = await wx.chooseMedia({
         count: 5,
@@ -6790,22 +6809,20 @@ Page({
         return;
       }
 
-      // 🐛（2026-08-31 追加修复"点击无反应"）根因不是选图链路本身缺 try/catch
-      // 或缺失败提示——chooseDonorScreenshotSafe 内部早就有 60s 超时兜底 +
-      // wx.chooseImage 降级、外层也早有 catch+toast，异常/取消都能正确复位
-      // isScanningDonorList（见下方 finally）。真正的缺口是"这条兜底链路生效
-      // 之前"这段等待期完全没有任何界面反馈：wx.chooseMedia 一旦在部分环境
-      // 卡死不回调（上面 chooseDonorScreenshotSafe 头部注释记录的原始 bug
-      // 场景），用户在长达 60s 里只看到点击日志打印了一次，然后界面像是
-      // "死了"——这正是本次反馈的现场描述。不缩短 60s 这个超时阈值本身（那是
-      // 给用户在系统相册里正常挑图预留的时间，缩短会重新引入"选图选到一半被
-      // 打断"的旧问题），而是在等待期间先给一个可见的 loading 提示，用户至少
-      // 能确认"点击生效了，正在处理"，而不是误判成按钮坏了
-      wx.showLoading({ title: '正在打开相册...', mask: true });
+      // 🐛（2026-09-03 死锁根因修复）此前这里在调 chooseMedia 之前先
+      // wx.showLoading({mask:true})，理由是给"用户在系统相册里挑图"这段可能
+      // 较长的等待期一个可见反馈（见 utils/privacyAuthHub.ts ensurePrivacyAuthorized
+      // 头部注释里记录的完整根因）——但如果这是本次会话第一次触碰隐私接口、
+      // 用户还没同意过《隐私保护指引》，chooseMedia 会先触发隐私拦截弹出该
+      // 指引弹窗，此时 showLoading 的全屏遮罩已经盖在最上层，挡住"同意并继续"
+      // 按钮的点击事件——用户点不到同意，chooseMedia 永远不会 resolve/reject，
+      // 界面彻底死锁。改为先 await ensurePrivacyAuthorized()（屏幕上此时绝不
+      // 能有任何遮罩）确保隐私授权已经解决，再唤起选图面板，全程不再弹这层
+      // loading——重入窗口已经改用 isScanningDonorList 标志位在函数入口处
+      // 直接堵死（见上方注释），不再需要 loading 遮罩来防止连点拉起两个选图
+      // 面板，两者互不依赖
+      await ensurePrivacyAuthorized();
       const tempFilePath = await this.chooseDonorScreenshotSafe();
-      // 图已经选完，"正在打开相册..."这个提示的使命已经结束——不提前收掉的话，
-      // 下面 MD5 去重命中时弹出的 showModal 会叠在这个还没消失的 loading 上面
-      wx.hideLoading();
       if (!tempFilePath) return;
 
       // 🌟 第一道防线：图片 MD5 去重。在触发任何网络请求（内容安全检测/上传/OCR）之前，
@@ -7042,9 +7059,13 @@ Page({
         return;
       }
 
-      wx.showLoading({ title: '正在打开相册...', mask: true });
+      // 🐛（2026-09-03 死锁根因修复）见 onScanDonorScreenshot 同一处修复注释：
+      // 不再在调 chooseMedia 前弹 showLoading——首次触碰隐私接口时，chooseMedia
+      // 会先弹《隐私保护指引》，showLoading 的全屏遮罩会挡住"同意并继续"按钮，
+      // 造成彻底死锁。改为先确保隐私授权已解决（全程不带任何遮罩），重入防护
+      // 已经在函数入口处用 isScanningMaterialList 标志位堵死，不再依赖 loading
+      await ensurePrivacyAuthorized();
       const tempFilePath = await this.chooseMaterialScreenshotSafe();
-      wx.hideLoading();
       if (!tempFilePath) return;
 
       // 与爱心支持明细共用同一份本会话内 MD5 去重记录——不同识别目标复用

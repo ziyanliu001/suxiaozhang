@@ -91,3 +91,49 @@ export function subscribeNeedAuth(subscriber: PrivacyAuthSubscriber) {
 export function unsubscribeNeedAuth(subscriber: PrivacyAuthSubscriber) {
   subscribers.delete(subscriber);
 }
+
+// 🛡️（2026-09-03 死锁根因修复）ensurePrivacyAuthorized：在调用 wx.chooseMedia/
+// chooseImage/saveImageToPhotosAlbum 等隐私接口之前主动调用，确保隐私授权在
+// "屏幕上完全没有任何遮罩层"的干净状态下弹出。
+//
+// 死锁根因：此前部分选图入口的写法是"先 wx.showLoading({mask:true})，再调
+// wx.chooseMedia"——如果这是本次会话第一次触碰隐私接口、用户还没同意过《隐私
+// 保护指引》，wx.chooseMedia 内部会先触发隐私拦截弹出该指引弹窗（走
+// wx.onNeedPrivacyAuthorization，见 initPrivacyAuthHub），但此时 showLoading
+// 的全屏遮罩已经盖在页面最上层——原生 loading 遮罩与隐私弹窗共享同一层
+// WeChat 客户端 UI 层级，遮罩会挡住隐私弹窗"同意并继续"按钮的点击事件，用户
+// 点不到同意，chooseMedia 永远不会 resolve/reject，showLoading 也永远等不到
+// 对应的 hideLoading——彻底死锁，界面表现为"点了拍照/相册后卡死不动"。
+//
+// 修复：把"确保隐私授权已解决"这一步提到调用方最前面、且不携带任何 loading，
+// 用官方的主动式 wx.requirePrivacyAuthorize API（与已有的被动式
+// wx.onNeedPrivacyAuthorization 走同一套隐私弹窗——本小程序已经用
+// components/privacy-popup 接管了这个弹窗的展示，requirePrivacyAuthorize 只是
+// 提供一个"我要主动确认一下，现在授权到底有没有解决"的 await 入口，不会额外
+// 弹出第二个弹窗）。无论用户同意还是拒绝都直接 resolve，不阻塞调用方——拒绝
+// 时紧接着的 chooseMedia 调用会自己失败并走既有的 catch 分支，不需要在这里
+// 代为判断/拦截。
+export function ensurePrivacyAuthorized(): Promise<void> {
+  return new Promise((resolve) => {
+    const wxAny = wx as any;
+    if (typeof wxAny.requirePrivacyAuthorize !== 'function') {
+      // 基础库版本过旧、没有这个主动式 API：静默跳过，退回到纯被动式
+      // wx.onNeedPrivacyAuthorization 兜底（本模块已经在 app.ts onLaunch 里
+      // 注册好），不阻塞调用方
+      resolve();
+      return;
+    }
+    try {
+      wxAny.requirePrivacyAuthorize({
+        success: () => resolve(),
+        // 用户拒绝、或本次调用与隐私接口无关而被判定失败：同样直接放行，
+        // 不在这里弹任何提示——调用方紧接着发起的 chooseMedia 等真正的隐私
+        // 接口调用会自己走一遍平台校验，该失败的地方交给那里处理
+        fail: () => resolve()
+      });
+    } catch (e) {
+      console.error('[privacyAuthHub] requirePrivacyAuthorize 调用异常:', e);
+      resolve();
+    }
+  });
+}

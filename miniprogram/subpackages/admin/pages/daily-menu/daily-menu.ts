@@ -8,6 +8,7 @@ import { GRATITUDE_TEXT } from '../../../../utils/cultureData';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync } from '../../../../utils/util';
+import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
@@ -492,6 +493,9 @@ Page({
     }
 
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
         mediaType: ['image'],

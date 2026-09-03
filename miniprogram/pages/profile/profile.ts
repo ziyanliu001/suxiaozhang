@@ -24,6 +24,7 @@ import { maskPhone } from '../../utils/core/privacy';
 import { ENTERPRISE_BUILD_ENABLED } from '../../utils/buildFlags';
 import { saasSubscriptionHandlers } from './enterprise/index';
 import { isVoiceFeedbackEnabled, setVoiceFeedbackEnabled } from '../../utils/audioService';
+import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 
 const VIEW_MODE_OPTIONS: PreviewViewMode[] = ['SUPER_ADMIN', 'STORE_PATRIARCH', 'STORE_MANAGER', 'FINANCE', 'VOLUNTEER', 'FAMILY'];
 
@@ -5709,6 +5710,9 @@ Page({
 
   async onUploadOrgLogo() {
     try {
+      // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
+      // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: 1,
         mediaType: ['image'],
