@@ -1883,28 +1883,40 @@
             <text class="fa-item-time">🗓️ {{item.createTimeStr}}</text>
           </view>
 
+          <!-- 🌟 数值微卡片化：把"米: 10斤 | 面: 20斤 | ..."这种连续文本拆成独立的
+               行内胶囊标签，浅灰底 + 加粗数值，比一整行文字更快扫读到具体是哪个品类 -->
           <block wx:if="{{item.type === 'menu'}}">
             <text class="fa-item-content" wx:if="{{item.mealStatus === 'closed'}}">今日休餐</text>
-            <text class="fa-item-content fa-item-core-data" wx:else>早: <text class="highlight-num">{{item.breakfastCount || 0}}</text> 人 | 午: <text class="highlight-num">{{item.lunchCount || 0}}</text> 人 | 晚: <text class="highlight-num">{{item.dinnerCount || 0}}</text> 人</text>
-            <text class="fa-item-content fa-item-note" wx:if="{{item.menuNote}}">备注：{{item.menuNote}}</text>
+            <view class="fa-data-chip-row" wx:else>
+              <text class="fa-data-chip">早 <text class="fa-data-chip-num">{{item.breakfastCount || 0}}</text>人</text>
+              <text class="fa-data-chip">午 <text class="fa-data-chip-num">{{item.lunchCount || 0}}</text>人</text>
+              <text class="fa-data-chip">晚 <text class="fa-data-chip-num">{{item.dinnerCount || 0}}</text>人</text>
+            </view>
+            <text class="fa-item-content fa-item-note" wx:if="{{item.menuNote}}">📝 {{item.menuNote}}</text>
           </block>
           <block wx:else>
-            <text class="fa-item-content fa-item-core-data">米: <text class="highlight-num">{{item.riceCount || 0}}</text>斤 | 面: <text class="highlight-num">{{item.flourCount || 0}}</text>斤 | 油: <text class="highlight-num">{{item.oilCount || 0}}</text>斤 | 菜: <text class="highlight-num">{{item.vegetableCount || 0}}</text>斤</text>
-            <text class="fa-item-content fa-item-note" wx:if="{{item.lossNote}}">说明：{{item.lossNote}}</text>
+            <view class="fa-data-chip-row">
+              <text class="fa-data-chip">米 <text class="fa-data-chip-num">{{item.riceCount || 0}}</text>斤</text>
+              <text class="fa-data-chip">面 <text class="fa-data-chip-num">{{item.flourCount || 0}}</text>斤</text>
+              <text class="fa-data-chip">油 <text class="fa-data-chip-num">{{item.oilCount || 0}}</text>斤</text>
+              <text class="fa-data-chip">菜 <text class="fa-data-chip-num">{{item.vegetableCount || 0}}</text>斤</text>
+            </view>
+            <text class="fa-item-content fa-item-note" wx:if="{{item.lossNote}}">📝 {{item.lossNote}}</text>
           </block>
 
+          <!-- 🛡️ 台账真实性：已采纳入库的记录已合并进门店账本/库存统计，普通提交人
+               （含店长/家长本人）不再允许自助撤回——按钮替换为"申请冲销"提示语，引导
+               线下联系店长处理；仅超级管理员保留真正的撤回操作，且走二次强确认 +
+               服务端级联撤销（不是简单隐藏按钮了事，级联影响的数据需要有真实出口） -->
           <block wx:if="{{item.status === 'approved'}}">
-            <text class="my-vs-status-tag approved">✅ 已采纳入库</text>
-            <!-- 🛡️ 已采纳入库的记录已合并进门店账本/库存统计，普通提交人（含店长/家长
-                 本人）不再允许自助撤回——按钮替换为"申请冲销"提示语，引导线下联系店长
-                 处理；仅超级管理员保留真正的撤回操作，且走二次强确认 + 服务端级联撤销 -->
-            <view class="my-vs-action-row">
-              <button wx:if="{{isRealSuperAdmin}}" class="delete-submission-btn" catchtap="onRevokeApprovedSubmission" data-index="{{index}}">🗑️ 撤回记录</button>
-              <button wx:else class="request-writeoff-btn" catchtap="onRequestWriteOff" data-index="{{index}}">🔒 申请冲销</button>
+            <view class="my-vs-status-row">
+              <text class="my-vs-status-tag approved">✓ 已采纳入库</text>
+              <text wx:if="{{isRealSuperAdmin}}" class="my-vs-text-action danger" catchtap="onRevokeApprovedSubmission" data-index="{{index}}">撤回记录</text>
+              <text wx:else class="my-vs-text-action" catchtap="onRequestWriteOff" data-index="{{index}}">申请冲销</text>
             </view>
           </block>
           <block wx:elif="{{item.status === 'rejected'}}">
-            <text class="my-vs-status-tag rejected">❌ 已驳回</text>
+            <text class="my-vs-status-tag rejected">✕ 未采纳</text>
             <text class="my-vs-reject-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</text>
             <view class="my-vs-action-row">
               <button class="resubmit-btn" catchtap="onTapMyVolunteerSubmissionItem" data-index="{{index}}">✏️ 重新修改并提交</button>
@@ -1912,9 +1924,13 @@
             </view>
           </block>
           <block wx:else>
-            <text class="my-vs-status-tag pending">⏳ 待店长确认</text>
-            <view class="my-vs-action-row">
-              <button class="cancel-pending-btn" catchtap="onDeleteMyVolunteerSubmission" data-index="{{index}}">🗑️ 撤销提交</button>
+            <!-- 🎨 轻量文字按钮：待确认状态与"已采纳/已驳回"不同，这条记录随时可能
+                 秒级被店长处理掉，不需要一个和"删除""重新提交"同等视觉分量的实体
+                 按钮长期占位——改成状态徽章右侧一个弱化文字链接，消除按钮与徽章的
+                 视觉打架，同一行内直接给出"撤回"操作 -->
+            <view class="my-vs-status-row">
+              <text class="my-vs-status-tag pending">⏳ 待店长确认</text>
+              <text class="my-vs-text-action" catchtap="onDeleteMyVolunteerSubmission" data-index="{{index}}">撤回</text>
             </view>
           </block>
         </view>

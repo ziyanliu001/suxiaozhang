@@ -3237,9 +3237,9 @@ Page({
     const isPending = item.status === 'pending';
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
-        title: isPending ? '撤销提交' : '删除记录',
-        content: isPending ? '确定要撤销并删除这条尚未审核的提交吗？' : '确定要删除此条已驳回记录吗？',
-        confirmText: isPending ? '撤销' : '删除',
+        title: isPending ? '撤回' : '删除记录',
+        content: isPending ? '确定撤回该笔填报记录吗？' : '确定要删除此条已驳回记录吗？',
+        confirmText: isPending ? '撤回' : '删除',
         confirmColor: '#C0392B',
         success: (res) => resolve(!!res.confirm),
         fail: () => resolve(false)
@@ -3257,7 +3257,7 @@ Page({
         wx.showToast({ title: (result && result.error) || '删除失败', icon: 'none' });
         return;
       }
-      wx.showToast({ title: isPending ? '已撤销' : '已删除', icon: 'success' });
+      wx.showToast({ title: isPending ? '已撤回' : '已删除', icon: 'success' });
       this.fetchMyVolunteerSubmissions();
     } catch (err) {
       console.error('[onDeleteMyVolunteerSubmission] 删除异常:', err);

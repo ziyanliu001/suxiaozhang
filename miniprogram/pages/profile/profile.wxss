@@ -3902,11 +3902,39 @@
   line-height: 1.5;
 }
 
-/* 📝 备注/说明：与上面核心数据行区分开的次要信息，上下各留一点边距，
-   避免紧挨着核心数据行或底部的【店长已采纳】/【待店长确认】状态标签 */
-.fa-item-note {
+/* 🌟 数值微卡片化（我的提交与数据）：把"米: 10斤 | 面: 20斤 | ..."这种连续
+   文本拆成独立的行内胶囊标签，浅灰底 + 加粗数值，扫读效率比一整行文字更高。
+   与上面 .fa-item-core-data（另一处"待审核的义工餐报"管理列表仍在用的旧样式）
+   刻意分开维护，不互相影响 */
+.fa-data-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.fa-data-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4rpx;
   font-size: 26rpx;
-  color: #4A5568;
+  color: #495057;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  padding: 8rpx 16rpx;
+}
+
+.fa-data-chip-num {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A202C;
+}
+
+/* 📝 备注/说明：与上面核心数据行区分开的次要信息，字号收窄、弱化前缀图标，
+   避免和加粗的数值胶囊抢视觉焦点，上下各留一点边距，避免紧挨着底部的状态徽章 */
+.fa-item-note {
+  font-size: 24rpx;
+  color: #868E96;
   margin-top: 12rpx;
   margin-bottom: 16rpx;
 }
@@ -4493,25 +4521,53 @@
   display: inline-block;
   margin-top: 12rpx;
   font-size: 24rpx;
+  font-weight: 600;
   padding: 8rpx 20rpx;
   border-radius: 20rpx;
 }
 
 .my-vs-status-tag.pending {
-  color: #B8860B;
-  background: #FFF9E6;
+  color: #D46B08;
+  background: #FFF7E6;
 }
 
 .my-vs-status-tag.approved {
-  color: #2B8A3E;
-  background: #EBFBEE;
-  border: 2rpx solid #2B8A3E;
-  font-weight: bold;
+  color: #07C160;
+  background: #E8FFEA;
 }
 
 .my-vs-status-tag.rejected {
-  color: #C92A2A;
-  background: #FFF0F0;
+  color: #CF1322;
+  background: #FFF1F0;
+}
+
+/* 🎨 状态徽章 + 操作同排：徽章负责"是什么状态"，右侧轻量文字负责"能做什么"，
+   两者左右分列不再互相抢视觉重量（对应下方 .my-vs-text-action） */
+.my-vs-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4rpx;
+}
+
+/* 待确认/已采纳这类"链接式"轻操作：纯文字 + 下划线，克制的辅助灰，
+   刻意不做成实体按钮——避免和上面 .resubmit-btn/.delete-submission-btn
+   这类真正的强操作按钮同等视觉分量，产品语义上也更贴近"顺手可做的次要动作" */
+.my-vs-text-action {
+  font-size: 24rpx;
+  color: #86909C;
+  text-decoration: underline;
+  padding: 4rpx 4rpx 4rpx 20rpx;
+}
+
+.my-vs-text-action:active {
+  opacity: 0.6;
+}
+
+/* 超管专属的"撤回记录"：级联扣减账本/库存统计，即便做成轻量文字也要保留
+   警示色，与普通的"申请冲销"/"撤回（待确认）"区分开 */
+.my-vs-text-action.danger {
+  color: #CF1322;
 }
 
 .my-vs-reject-reason {
@@ -4576,55 +4632,6 @@
 }
 
 .delete-submission-btn:active {
-  opacity: 0.7;
-}
-
-.cancel-pending-btn {
-  display: block;
-  flex: 1;
-  height: 72rpx;
-  line-height: 68rpx;
-  margin-top: 0;
-  padding: 0;
-  background: #FFFFFF;
-  color: #868E96;
-  font-size: 26rpx;
-  font-weight: 600;
-  border-radius: 36rpx;
-  border: 2rpx solid #CED4DA;
-}
-
-.cancel-pending-btn::after {
-  border: none;
-}
-
-.cancel-pending-btn:active {
-  opacity: 0.7;
-}
-
-/* 🔒 申请冲销：已采纳入库记录对非超管的替代按钮，视觉上刻意做成灰色弱化的
-   "非直接可执行"操作（与 .cancel-pending-btn 同款克制配色），点击只弹出引导
-   联系店长的说明，不真正触发任何撤回/删除动作 */
-.request-writeoff-btn {
-  display: block;
-  flex: 1;
-  height: 72rpx;
-  line-height: 68rpx;
-  margin-top: 0;
-  padding: 0;
-  background: #F1F3F5;
-  color: #868E96;
-  font-size: 26rpx;
-  font-weight: 600;
-  border-radius: 36rpx;
-  border: 2rpx solid #DEE2E6;
-}
-
-.request-writeoff-btn::after {
-  border: none;
-}
-
-.request-writeoff-btn:active {
   opacity: 0.7;
 }
 
