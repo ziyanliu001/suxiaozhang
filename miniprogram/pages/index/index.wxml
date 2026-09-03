@@ -809,8 +809,16 @@
          引导卡"分支）或超管正在看"全国总览"聚合视图时，压根没有一个具体的
          记账对象，不该渲染这张表单。与下方 .bottom-action-floating-bar 必须
          保持完全一致的可见性口径（见该处历史教训注释），两处同步加了这个
-         条件，不能只改一处 -->
-    <block wx:if="{{currentStoreId && !isAllStoresView && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
+         条件，不能只改一处
+         🐛（2026-09-03 场景状态泄露修复）此前唯独漏了 !isFamily——isFamily
+         不止覆盖真实的"家人"（服务对象）角色，还覆盖"未审核通过的默认
+         volunteer 账号"（见本文件 initCurrentUserRole 里 rawIsFamily 的
+         判定：normalizedRole === 'store_family' || (isVolunteer && status
+         !== 'approved')），也就是大众/义工服务大厅这一档尚未审核通过的
+         访客。这两类人本就是"来看不来填"的角色，此前条件完全没有排除他们，
+         只要 currentStoreId 恰好非空（如曾经绑定过门店/上次选店留下的值），
+         这张记账表单就会误渲染给他们看 -->
+    <block wx:if="{{currentStoreId && !isAllStoresView && !isFamily && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
     <view class="ui-card-wrapper form-main-card">
       <view class="form-card-header">
         <view class="title-group">
@@ -3202,7 +3210,13 @@
        日志/大事记"输入框会被压在条下面。根治办法是让这一行永远不换行：文案改用独立
        <text class="btn-main-label"> 承载并配 ellipsis 兜底（见 index.wxss），保证条本身
        高度稳定可预期，而不是让 padding-bottom 去猜一个会变的高度 -->
-  <view class="bottom-action-floating-bar" wx:if="{{currentStoreId && !isAllStoresView && !isVolunteer && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
+  <!-- 🐛（2026-09-03 场景状态泄露修复）与上方 .form-main-card 同一个坑：!isVolunteer
+       没有覆盖 isFamily——真实"家人"（服务对象）角色与"未审核通过的默认 volunteer
+       账号"（大众/义工服务大厅访客，见 initCurrentUserRole 的 rawIsFamily 判定）
+       都会落进 isFamily=true，此前完全没被这里排除。这两类人是"来看不来填"的角色，
+       一旦 currentStoreId 恰好非空（如上次选店/审核前绑定的门店残留），这组店长专用
+       操作条就会误渲染在他们的 TabBar 上方——与表单卡片保持完全一致的排除口径 -->
+  <view class="bottom-action-floating-bar" wx:if="{{currentStoreId && !isAllStoresView && !isVolunteer && !isFamily && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text><text class="btn-main-label">生成餐报文本</text>
     </button>
