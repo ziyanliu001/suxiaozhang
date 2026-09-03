@@ -502,6 +502,10 @@ Page({
     // fetchSunshineBoardData），管理视图/个人视图两个分支都会渲染，只要能拿到
     // storeId 就与角色无关——该云函数本身就是"全角色/免登录门槛"的公开数据
     sunshineBoardLoading: false,
+    // 🆕（与首页每日统计录入口径对齐）dineInCount/deliveryCount/takeawayCount/
+    // accompanyCount/receiptCount/totalDiningService 取代此前的同质化
+    // sunshineBoardCards 数组，见 fetchSunshineBoardData 与 statistics.wxml
+    // 三组"暖心就餐关怀/义工仁爱奉献/阳光透明度"卡片
     sunshineBoardData: {
       storeName: '',
       periodLabel: '',
@@ -509,12 +513,17 @@ Page({
       totalDiners: 0,
       monthlyDiners: 0,
       takeawayMeals: 0,
+      dineInCount: 0,
+      deliveryCount: 0,
+      takeawayCount: 0,
+      accompanyCount: 0,
+      receiptCount: 0,
+      totalDiningService: 0,
       totalHours: 0,
       volunteerCount: 0,
       operatingDays: 0,
       ledgerPublicRate: null as string | null
     },
-    sunshineBoardCards: [] as { label: string; value: string }[],
     // 🆕 阳光宣言辅助弹窗：由阳光大盘标题旁的 ⓘ 图标触发，只做理念说明，不再是
     // 进页面就顶在最前面的"点了只弹窗"入口——见 onOpenSunshineConceptModal
     showSunshineConceptModal: false,
@@ -1349,6 +1358,15 @@ Page({
         return;
       }
 
+      // 🆕（与首页每日统计录入口径对齐）dineInSeniors/deliverySeniors/
+      // takeawayCount/listeningSeniors 是 pages/index/index.ts 提交表单的原始
+      // 字段名，getSunshineLedger 云函数这一轮同步新增了按这些字段聚合的
+      // dineInCount/deliveryCount/takeawayCount/accompanyCount/receiptCount，
+      // 字段缺失（旧版云函数还没重新部署的过渡期）一律安全回退 0，不会因为
+      // 某个新字段暂时缺失就整块报错
+      const dineInCount = result.dineInCount || 0;
+      const deliveryCount = result.deliveryCount || 0;
+      const takeawayCount = result.takeawayCount || 0;
       const ledgerData = {
         storeName: result.storeName || '',
         periodLabel: result.periodLabel || '',
@@ -1356,6 +1374,15 @@ Page({
         totalDiners: result.totalDiners || 0,
         monthlyDiners: result.monthlyDiners || 0,
         takeawayMeals: result.takeawayMeals || 0,
+        dineInCount,
+        deliveryCount,
+        takeawayCount,
+        // 🍚【暖心就餐关怀】核心大字：堂食+送餐+打包三项服务合计，与首页
+        // "总就餐人次"卡片同一口径（totalDineCount = dineInSeniors +
+        // deliverySeniors + takeawayCount）
+        totalDiningService: dineInCount + deliveryCount + takeawayCount,
+        accompanyCount: result.accompanyCount || 0,
+        receiptCount: result.receiptCount || 0,
         totalHours: result.totalHours || 0,
         volunteerCount: result.volunteerCount || 0,
         operatingDays: result.operatingDays || 0,
@@ -1367,22 +1394,15 @@ Page({
         sunshineBoardData: ledgerData,
         sunshineConceptTitle: concept.title,
         sunshineConceptLabel: concept.label,
-        sunshineConceptContent: concept.content,
-        // 🐛 "已核销餐报篇数"下线，改为"出勤义工总人次"：前者只是重复宣称
-        // "查到的记录都已审核"（本函数查询条件本身就白名单过滤了审核状态，
-        // 这个数字对公众没有信息量），后者绑定 volunteerCount——云函数早就
-        // 聚合好了这个值，此前只是没有任何一张卡片展示它，白算了一遍
-        sunshineBoardCards: [
-          { label: '累计就餐人次', value: String(ledgerData.totalDiners) },
-          { label: '当月就餐人次', value: String(ledgerData.monthlyDiners) },
-          { label: '出勤义工总人次', value: String(ledgerData.volunteerCount) },
-          { label: '爱心送餐份数', value: String(ledgerData.takeawayMeals) },
-          { label: '安全营运天数', value: String(ledgerData.operatingDays) },
-          { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }
-        ]
+        sunshineConceptContent: concept.content
       });
     } catch (err) {
-      console.error('[fetchSunshineBoardData] 加载阳光账本异常:', err);
+      // 🛡️ 静默降级：本卡片是首页/个人中心跳转落地即自动拉取的公开只读展示位，
+      // 失败时沿用既有的骨架/上一次数据展示，不弹 toast 打断用户，也不该在
+      // 控制台留一条刺眼的红色 error——与 yangshan-wall/sunshine-board 组件
+      // 同一轮修复的处理口径一致，网络波动导致的加载失败是预期内会发生的
+      // 降级路径，改用 console.warn 与真正需要开发者立即关注的异常区分开
+      console.warn('[fetchSunshineBoardData] 加载阳光账本失败，已静默降级:', err);
       reportCloudSdkErrorIfCorrupted(err);
     } finally {
       this.setData({ sunshineBoardLoading: false });
@@ -1505,7 +1525,11 @@ Page({
         personalMonthlyTrend
       });
     } catch (err) {
-      console.error('[loadPersonalDashboard] 个人数据加载异常:', err);
+      // 🛡️ 静默降级：个人护持数据卡片加载失败时沿用既有骨架/空态展示，不弹
+      // toast 打断用户，也不该在控制台留一条刺眼的红色 error——与
+      // fetchSunshineBoardData 等同一轮修复的"公开只读展示位失败即静默降级"
+      // 口径一致，改用 console.warn 与真正需要开发者关注的异常区分开
+      console.warn('[loadPersonalDashboard] 个人数据加载异常，已静默降级:', err);
     } finally {
       this.setData({ personalStatsLoading: false });
     }
@@ -1658,7 +1682,10 @@ Page({
         this.setData({ storeProfile: null });
       }
     } catch (err) {
-      console.error('[fetchStoreProfile] 获取门店人员画像失败:', err);
+      // 🛡️ 静默降级：门店人员画像失败时沿用既有骨架/空态展示，不弹 toast，
+      // 也不该在控制台留一条刺眼的红色 error——与 fetchSunshineBoardData 等
+      // 同一轮修复的"公开只读展示位失败即静默降级"口径一致
+      console.warn('[fetchStoreProfile] 获取门店人员画像失败，已静默降级:', err);
       reportCloudSdkErrorIfCorrupted(err);
       this.setData({ storeProfile: null });
     } finally {

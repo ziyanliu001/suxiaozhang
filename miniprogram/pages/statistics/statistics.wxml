@@ -413,14 +413,61 @@
       </view>
       <text class="sunshine-board-sub">{{sunshineBoardData.storeName || currentUserStoreName || '本门店'}} · {{sunshineBoardData.periodLabel || '本月'}} · 公开透明 · 全民监督</text>
 
-      <view class="sunshine-board-grid" wx:if="{{!sunshineBoardLoading}}">
-        <view class="sunshine-board-cell" wx:for="{{sunshineBoardCards}}" wx:key="label">
-          <text class="sunshine-board-val">{{item.value}}</text>
-          <text class="sunshine-board-lbl">{{item.label}}</text>
+      <!-- 🆕（与首页每日统计录入口径对齐）三组层次分明的公益大盘，取代此前
+           粗粒度的同质化 6 宫格，见 statistics.ts fetchSunshineBoardData 注释 -->
+      <view class="sunshine-board-groups" wx:if="{{!sunshineBoardLoading}}">
+        <view class="sb-group sb-group-dining">
+          <text class="sb-group-title">🍚 暖心就餐关怀</text>
+          <view class="sb-hero-row">
+            <text class="sb-hero-num">{{sunshineBoardData.totalDiningService}}</text>
+            <text class="sb-hero-unit">人次</text>
+          </view>
+          <view class="sb-sub-tags">
+            <text class="sb-sub-tag">堂食 {{sunshineBoardData.dineInCount}}人次</text>
+            <text class="sb-sub-tag">送餐 {{sunshineBoardData.deliveryCount}}份</text>
+            <text class="sb-sub-tag">打包 {{sunshineBoardData.takeawayCount}}份</text>
+          </view>
+        </view>
+
+        <view class="sb-group sb-group-volunteer">
+          <text class="sb-group-title">❤️ 义工仁爱奉献</text>
+          <view class="sb-hero-row sb-hero-row-dual">
+            <view class="sb-hero-dual-item">
+              <text class="sb-hero-num">{{sunshineBoardData.volunteerCount}}</text>
+              <text class="sb-hero-unit">人次</text>
+            </view>
+            <view class="sb-hero-divider"></view>
+            <view class="sb-hero-dual-item">
+              <text class="sb-hero-num">{{sunshineBoardData.totalHours}}</text>
+              <text class="sb-hero-unit">小时</text>
+            </view>
+          </view>
+          <view class="sb-sub-tags">
+            <text class="sb-sub-tag">🤝 关爱陪伴长者 {{sunshineBoardData.accompanyCount}}人</text>
+          </view>
+        </view>
+
+        <view class="sb-group sb-group-transparency">
+          <text class="sb-group-title">☀️ 阳光透明度</text>
+          <view class="sb-mini-grid">
+            <view class="sb-mini-cell">
+              <text class="sb-mini-val">{{sunshineBoardData.operatingDays}}</text>
+              <text class="sb-mini-lbl">安全营运天数</text>
+            </view>
+            <view class="sb-mini-cell">
+              <text class="sb-mini-val">{{sunshineBoardData.ledgerPublicRate || '暂无数据'}}</text>
+              <text class="sb-mini-lbl">账本公开率</text>
+            </view>
+            <view class="sb-mini-cell">
+              <text class="sb-mini-val">{{sunshineBoardData.receiptCount}}</text>
+              <text class="sb-mini-lbl">阳光凭证公示数</text>
+            </view>
+          </view>
         </view>
       </view>
-      <view class="sunshine-board-grid" wx:else>
-        <view class="sunshine-board-cell skel-cell" wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this">
+      <view class="sunshine-board-groups" wx:else>
+        <view class="sb-group sb-group-skel" wx:for="{{[1,2,3]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-sm"></view>
           <view class="skel-bar skel-bar-lg"></view>
           <view class="skel-bar skel-bar-sm"></view>
         </view>
@@ -545,14 +592,62 @@
       </view>
       <text class="sunshine-board-sub">{{sunshineBoardData.storeName || currentUserStoreName || shopName}} · {{sunshineBoardData.periodLabel || '本月'}} · 公开透明 · 全民监督</text>
 
-      <view class="sunshine-board-grid" wx:if="{{!sunshineBoardLoading}}">
-        <view class="sunshine-board-cell" wx:for="{{sunshineBoardCards}}" wx:key="label">
-          <text class="sunshine-board-val">{{item.value}}</text>
-          <text class="sunshine-board-lbl">{{item.label}}</text>
+      <!-- 🆕（与首页每日统计录入口径对齐）三组层次分明的公益大盘，取代此前
+           粗粒度的同质化 6 宫格，见 statistics.ts fetchSunshineBoardData 注释——
+           与上方个人视角分支同一套结构，两处保持完全一致 -->
+      <view class="sunshine-board-groups" wx:if="{{!sunshineBoardLoading}}">
+        <view class="sb-group sb-group-dining">
+          <text class="sb-group-title">🍚 暖心就餐关怀</text>
+          <view class="sb-hero-row">
+            <text class="sb-hero-num">{{sunshineBoardData.totalDiningService}}</text>
+            <text class="sb-hero-unit">人次</text>
+          </view>
+          <view class="sb-sub-tags">
+            <text class="sb-sub-tag">堂食 {{sunshineBoardData.dineInCount}}人次</text>
+            <text class="sb-sub-tag">送餐 {{sunshineBoardData.deliveryCount}}份</text>
+            <text class="sb-sub-tag">打包 {{sunshineBoardData.takeawayCount}}份</text>
+          </view>
+        </view>
+
+        <view class="sb-group sb-group-volunteer">
+          <text class="sb-group-title">❤️ 义工仁爱奉献</text>
+          <view class="sb-hero-row sb-hero-row-dual">
+            <view class="sb-hero-dual-item">
+              <text class="sb-hero-num">{{sunshineBoardData.volunteerCount}}</text>
+              <text class="sb-hero-unit">人次</text>
+            </view>
+            <view class="sb-hero-divider"></view>
+            <view class="sb-hero-dual-item">
+              <text class="sb-hero-num">{{sunshineBoardData.totalHours}}</text>
+              <text class="sb-hero-unit">小时</text>
+            </view>
+          </view>
+          <view class="sb-sub-tags">
+            <text class="sb-sub-tag">🤝 关爱陪伴长者 {{sunshineBoardData.accompanyCount}}人</text>
+          </view>
+        </view>
+
+        <view class="sb-group sb-group-transparency">
+          <text class="sb-group-title">☀️ 阳光透明度</text>
+          <view class="sb-mini-grid">
+            <view class="sb-mini-cell">
+              <text class="sb-mini-val">{{sunshineBoardData.operatingDays}}</text>
+              <text class="sb-mini-lbl">安全营运天数</text>
+            </view>
+            <view class="sb-mini-cell">
+              <text class="sb-mini-val">{{sunshineBoardData.ledgerPublicRate || '暂无数据'}}</text>
+              <text class="sb-mini-lbl">账本公开率</text>
+            </view>
+            <view class="sb-mini-cell">
+              <text class="sb-mini-val">{{sunshineBoardData.receiptCount}}</text>
+              <text class="sb-mini-lbl">阳光凭证公示数</text>
+            </view>
+          </view>
         </view>
       </view>
-      <view class="sunshine-board-grid" wx:else>
-        <view class="sunshine-board-cell skel-cell" wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this">
+      <view class="sunshine-board-groups" wx:else>
+        <view class="sb-group sb-group-skel" wx:for="{{[1,2,3]}}" wx:key="*this">
+          <view class="skel-bar skel-bar-sm"></view>
           <view class="skel-bar skel-bar-lg"></view>
           <view class="skel-bar skel-bar-sm"></view>
         </view>

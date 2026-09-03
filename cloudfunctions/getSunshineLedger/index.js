@@ -170,6 +170,16 @@ exports.main = async (event) => {
     let takeawayMeals = 0;
     let totalHours = 0;
     let volunteerCount = 0;
+    // 🆕（统计分析/阳光大盘与首页录入口径对齐）与首页 pages/index/index.ts
+    // 提交表单同名字段一一对应：dineInSeniors=堂食长者、deliverySeniors=送餐
+    // 长者（takeawayMeals 变量名历史遗留，实际就是这个字段的累加，见下方
+    // forEach，保留不动以免影响已有的首页阳光账本弹窗展示）、takeawayCount=
+    // 打包份数、listeningSeniors=倾听陪伴/关怀人次。均为新增累加器，只做加法，
+    // 不改动上面任何既有字段的口径
+    let dineInCount = 0;
+    let takeawayCount = 0;
+    let accompanyCount = 0;
+    let receiptCount = 0;
     const operatingDateSet = new Set();
 
     // 💖 发心分布（阳善 vs 积阴德）+ 最新爱心支持善缘墙：与 getNationalDashboard
@@ -227,6 +237,18 @@ exports.main = async (event) => {
       if (r.dateString) {
         operatingDateSet.add(r.dateString);
       }
+
+      // 🆕 与首页录入口径对齐的细分累加，字段缺失一律安全回退 0
+      dineInCount += parseFloat(r.dineInSeniors) || 0;
+      takeawayCount += parseFloat(r.takeawayCount) || 0;
+      accompanyCount += parseFloat(r.listeningSeniors) || 0;
+      // 🧾 阳光凭证公示数：与 history.ts 卡片同一条兼容路径——新记录用
+      // receiptImages，老记录可能只有 receiptImageList，二选一取有值的那份，
+      // 不重复计数同一条记录的两份字段
+      const receiptImgs = (Array.isArray(r.receiptImages) && r.receiptImages.length > 0)
+        ? r.receiptImages
+        : (Array.isArray(r.receiptImageList) ? r.receiptImageList : []);
+      receiptCount += receiptImgs.length;
 
       const donationItems = Array.isArray(r.donationItems) ? r.donationItems : [];
       if (r.isAnonymous) {
@@ -559,6 +581,13 @@ exports.main = async (event) => {
       totalDiners,
       monthlyDiners,
       takeawayMeals,
+      // 🆕 与首页录入口径对齐的细分字段，供统计分析页「阳光大盘」重构使用；
+      // 上面几个既有字段原样保留，不影响首页「☀️ 阳光账本」弹窗等既有消费方
+      dineInCount,
+      deliveryCount: takeawayMeals,
+      takeawayCount,
+      accompanyCount,
+      receiptCount,
       totalHours: Math.round(totalHours * 10) / 10,
       volunteerCount,
       operatingDays: operatingDateSet.size,

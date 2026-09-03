@@ -5609,34 +5609,151 @@ page {
   margin-top: 6rpx;
 }
 
-.sunshine-board-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12rpx;
+/* ═══════════════════════════════════════════════════════════════
+   🆕 阳光大盘·三组层次分明的公益大盘（取代此前粗粒度的同质化 6 宫格），
+   与首页「请填写当日明细」表单的字段口径严格对齐——见 statistics.ts
+   fetchSunshineBoardData / statistics.wxml 三组卡片
+   ═══════════════════════════════════════════════════════════════ */
+.sunshine-board-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
   margin-top: 16rpx;
 }
 
-.sunshine-board-cell {
+.sb-group {
   background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 22rpx;
+  box-sizing: border-box;
+}
+
+/* 🍚【暖心就餐关怀】暖橙色系——与卡片整体的金黄底色同一色相，做主视觉 */
+.sb-group-dining {
+  border: 1rpx solid #FFE0B2;
+  background: linear-gradient(135deg, #FFF8ED 0%, #FFFFFF 70%);
+}
+
+/* ❤️【义工仁爱奉献】胭脂红系——与全站"爱心/义工"语义色对齐 */
+.sb-group-volunteer {
+  border: 1rpx solid #FFD4D4;
+  background: linear-gradient(135deg, #FFF5F5 0%, #FFFFFF 70%);
+}
+
+/* ☀️【阳光透明度】中性金系——三格小数据并列，不需要一个抢眼的大数字 */
+.sb-group-transparency {
   border: 1rpx solid #FFF3CD;
-  border-radius: 12rpx;
-  padding: 16rpx 12rpx;
+  background: #FFFEFB;
+}
+
+.sb-group-title {
+  display: block;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #495057;
+  margin-bottom: 12rpx;
+}
+
+.sb-hero-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6rpx;
+}
+
+.sb-hero-num {
+  font-size: 48rpx;
+  font-weight: 800;
+  color: #D9480E;
+  line-height: 1.1;
+}
+
+.sb-group-volunteer .sb-hero-num {
+  color: #E03131;
+}
+
+.sb-hero-unit {
+  font-size: 22rpx;
+  color: #868E96;
+}
+
+/* 义工组：出勤人次 + 服务工时并排展示，中间一条竖分隔线 */
+.sb-hero-row-dual {
+  gap: 32rpx;
+}
+
+.sb-hero-dual-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+}
+
+.sb-hero-divider {
+  width: 1rpx;
+  height: 36rpx;
+  background: #FFD4D4;
+  align-self: center;
+}
+
+.sb-sub-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+
+.sb-sub-tag {
+  font-size: 22rpx;
+  color: #4E5969;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 100rpx;
+  padding: 6rpx 16rpx;
+  white-space: nowrap;
+}
+
+.sb-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+}
+
+.sb-mini-cell {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 6rpx;
   min-width: 0;
 }
 
-.sunshine-board-val {
-  font-size: 30rpx;
+.sb-mini-val {
+  font-size: 28rpx;
   font-weight: 800;
   color: #D9480E;
   line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.sunshine-board-lbl {
-  font-size: 22rpx;
+.sb-mini-lbl {
+  font-size: 20rpx;
   color: #868E96;
+  text-align: center;
+}
+
+/* 骨架屏：三组一致高度的占位条，替代原先的 6 宫格骨架 */
+.sb-group-skel {
+  background: #FFFFFF;
+  border: 1rpx solid #F1F3F5;
+  border-radius: 16rpx;
+  padding: 20rpx 22rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+  box-sizing: border-box;
 }
 
 .sunshine-concept-modal-box {
