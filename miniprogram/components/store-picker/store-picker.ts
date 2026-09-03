@@ -2,7 +2,7 @@ import { AuthService } from '../../utils/authService';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
-import { setCurrentActiveStore } from '../../utils/storeManager';
+import { setCurrentActiveStore, getCurrentActiveStore } from '../../utils/storeManager';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 
@@ -149,6 +149,18 @@ Component({
     }
   },
 
+  // 🐛 根因修复（场景状态泄露：胶囊常驻显示"请选择站点"，与首页实际已选门店
+  // 脱节）：attached() 只在组件第一次挂载时跑一次，此后即使用户通过 index.ts
+  // 自身的 onStoreChanged/switchStoreTarget 等路径（不经过本组件的选店面板）
+  // 换了门店，这颗顶部胶囊也不会重新读取——补一次 pageLifetimes.show，与宿主
+  // 页面 index.ts onShow() 里的 refreshUserRoleView() 保持同一节奏，每次页面
+  // 重新可见都重新核对一次
+  pageLifetimes: {
+    show() {
+      this.loadStoreInfo();
+    }
+  },
+
   observers: {
     'currentStore.storeName': function (this: any, storeName: string) {
       this.setData({ storeInitial: (storeName || '海').slice(0, 1) });
@@ -156,7 +168,32 @@ Component({
   },
 
   methods: {
+    // 🐛 根因修复：此前直接读 app.globalData.currentStore——这份数据只有
+    // legacy 的 setSelectedStore(storeInfo) 且显式带 role 时才会被写入（见
+    // utils/storeManager.ts setSelectedStore），而本项目真正的 canonical
+    // 换店入口 setCurrentActiveStore() 调用 setSelectedStore() 时没有传
+    // role，导致 globalData.currentStore 不会被 canonical 换店流程同步更新。
+    // 结果是：用户已经通过 index.ts 选定了真实门店（current_store_id 等
+    // canonical key 均已写入，首页记账表单/操作条据此正常渲染），这颗顶部
+    // 胶囊却仍然读着从未更新过的旧值，显示"请选择站点"，与首页实际状态脱节
+    // ——这不是首页操作条的权限判断错了，是这颗胶囊读错了数据源。
+    // 改为优先读 getCurrentActiveStore()（canonical，与 index.ts
+    // refreshUserRoleView 同源）+ current_user_role 存储；只有 canonical
+    // 也确实没有门店时（真正的"尚未选店"），才退回原有的 globalData 兜底
     loadStoreInfo() {
+      const activeStore = getCurrentActiveStore();
+      if (activeStore.storeId) {
+        const role = wx.getStorageSync('current_user_role') || 'VOLUNTEER';
+        this.setData({
+          currentStore: {
+            storeId: activeStore.storeId,
+            storeName: activeStore.storeName,
+            role: this._normalizeRole(role) as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
+          }
+        });
+        return;
+      }
+
       const app = getApp() as any;
       if (app && app.globalData) {
         const raw = app.globalData.currentStore || {
