@@ -731,8 +731,8 @@
     </view>
 
     <view class="template-expand-panel ui-card-wrapper" wx:if="{{showSettings}}">
-      <view class="row">
-        <view class="col">
+      <view class="row row-store-identity">
+        <view class="col col-wide">
           <text class="label">店铺名称</text>
           <!-- 🛡️ 数据硬卡口：非超级管理员禁用店铺选择——永远锁定当前绑定门店，直接展示
                锁定状态的门店名，避免跨店改写他人门店的致谢词/宣传标语。超管仍可下拉切换，
@@ -755,7 +755,7 @@
             <text class="picker-lock-icon">🔒</text>
           </view>
         </view>
-        <view class="col">
+        <view class="col col-wide">
           <text class="label">公众号名称</text>
           <view class="field-focus-box {{templateFocusField === 'mpAccount' ? 'is-focused' : ''}}">
             <input class="input" value="{{mpAccount}}" bindinput="onInput" bindfocus="onTemplateFieldFocus" bindblur="onTemplateFieldBlur" data-field="mpAccount" placeholder="选择店铺后自动填充" />
@@ -3274,9 +3274,9 @@
 
       <button
         wx:if="{{!financeLockRangeLocked}}"
-        class="finance-modal-confirm-btn btn-danger"
+        class="finance-modal-confirm-btn {{(financeLockInFlight || !financeLockHasApprovedRecords) ? 'btn-flat-disabled' : 'btn-danger'}}"
         bindtap="onConfirmFinanceLock"
-        disabled="{{financeLockInFlight}}"
+        disabled="{{financeLockInFlight || !financeLockHasApprovedRecords}}"
       >
         {{financeLockInFlight ? '封账中...' : '确认封账'}}
       </button>

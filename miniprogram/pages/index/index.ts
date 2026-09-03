@@ -1037,6 +1037,13 @@ Page({
     financeUnlockInFlight: false,
     financeLockStatusLoading: false,
     lockStatusText: '',
+    // 🐛 根因修复（"该区间暂无可封账的记录"提示下确认封账按钮仍可点）：此前
+    // 【确认封账】按钮只在 financeLockInFlight（提交中）时禁用，从不关心
+    // 这个区间到底有没有真的可封账的记录——checkRangeLockStatus() 早已算出
+    // res.approvedCount（已审核待封账笔数），只是没有存成一个独立的布尔态，
+    // WXML 没法据此禁用按钮。新增这个字段，只在 approvedCount > 0 时置真，
+    // 其余分支（无记录/还有待审核/查询失败/日期区间非法）一律置假
+    financeLockHasApprovedRecords: false,
     financeLockRangeLocked: false,
     showRiskAlertsModal: false,
     riskAlertsLoading: false,
@@ -11890,7 +11897,8 @@ Page({
       showFinanceLockModal: true,
       financeLockStartDate: this.data.financeLockStartDate || defaultStartDate,
       financeLockEndDate: this.data.financeLockEndDate || defaultEndDate,
-      lockStatusText: ''
+      lockStatusText: '',
+      financeLockHasApprovedRecords: false
     }, () => {
       this.checkRangeLockStatus();
     });
@@ -11919,11 +11927,11 @@ Page({
     const { financeLockStartDate: startDate, financeLockEndDate: endDate, currentStoreId: storeId } = this.data;
     if (!startDate || !endDate || !storeId) return;
     if (startDate > endDate) {
-      this.setData({ lockStatusText: '⚠️ 开始日期不能晚于结束日期', financeLockRangeLocked: false });
+      this.setData({ lockStatusText: '⚠️ 开始日期不能晚于结束日期', financeLockRangeLocked: false, financeLockHasApprovedRecords: false });
       return;
     }
 
-    this.setData({ financeLockStatusLoading: true, lockStatusText: '查询区间状态中...' });
+    this.setData({ financeLockStatusLoading: true, lockStatusText: '查询区间状态中...', financeLockHasApprovedRecords: false });
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const result = await callFunctionWithTimeout({
@@ -11944,7 +11952,8 @@ Page({
         }
         this.setData({
           lockStatusText: tip,
-          financeLockRangeLocked: !!res.isLocked
+          financeLockRangeLocked: !!res.isLocked,
+          financeLockHasApprovedRecords: !res.isLocked && res.approvedCount > 0
         });
       } else {
         this.setData({ lockStatusText: (res && res.errMsg) || '查询区间状态失败', financeLockRangeLocked: false });
@@ -11959,6 +11968,13 @@ Page({
 
   async onConfirmFinanceLock() {
     if (this.data.financeLockInFlight) return;
+    // 🛡️ 与 WXML 按钮的 disabled 条件保持一致：区间内没有已审核待封账的记录时，
+    // 服务端 manageFinanceLock 本就会拒绝，这里提前拦截只是避免一次注定失败的
+    // 网络往返，不是唯一防线
+    if (!this.data.financeLockHasApprovedRecords) {
+      wx.showToast({ title: this.data.lockStatusText || '该区间暂无可封账的记录', icon: 'none' });
+      return;
+    }
     const { financeLockStartDate: startDate, financeLockEndDate: endDate } = this.data;
     if (!startDate || !endDate) {
       wx.showToast({ title: '请先选择要封账的起止日期', icon: 'none' });

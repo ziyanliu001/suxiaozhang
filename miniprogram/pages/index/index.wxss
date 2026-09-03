@@ -2357,6 +2357,26 @@ page {
   width: 48%;
 }
 
+/* 🐛 根因修复（"店铺名称/公众号名称"截断成省略号）：这两个字段与下面的
+   宣传标语 1/2 共用同一份 .row/.col（48% 双栏）布局，但门店名常见到 12 字
+   （如"嵩屿街道敬老中心助餐点"），挤在 48% 栏宽 + picker 图标/下拉箭头占位
+   后剩余空间里必然触发 .picker-text 的 ellipsis。宣传标语通常较短，不受
+   影响，不做全局改动——只给这一行单独加 .row-store-identity/.col-wide，
+   改成上下堆叠、各自占满整行宽度，从根上给够展示空间，而不是继续压窄字号 */
+.row-store-identity {
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.row-store-identity .col-wide {
+  width: 100%;
+}
+
+.row-store-identity .picker-text,
+.row-store-identity .input {
+  font-size: 26rpx;
+}
+
 .col-full {
   width: 100%;
 }
@@ -7259,30 +7279,63 @@ page {
   margin-bottom: 24rpx;
 }
 
+/* 🐛 根因修复（日期区间行"至"字与两个日期框对不齐/纵向堆叠）：
+   .finance-range-picker-row 此前完全没有样式，<view> 默认块级布局，两个
+   <picker> 包裹的日期框各自占满一整行纵向堆叠，"至"字被挤在中间自成一行——
+   不是简单的对齐问题，是整行压根没有起 flex。补上横向 flex 行，两个日期框
+   等宽平分、"至"字居中夹在中间，且不再各自带 margin-bottom（原先是按"纵向
+   表单字段"设计的间距，现在由行级容器统一控制） */
+.finance-range-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 28rpx;
+}
+
 .finance-month-picker {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 1;
+  min-width: 0;
   background: #F8F9FA;
   border: 1rpx solid #E9ECEF;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
-  margin-bottom: 28rpx;
   font-size: 28rpx;
   color: #212529;
   font-weight: 500;
+  box-sizing: border-box;
 }
 
 .finance-month-picker .arrow {
   font-size: 20rpx;
   color: #ADB5BD;
+  flex-shrink: 0;
 }
 
+.finance-range-sep {
+  font-size: 26rpx;
+  color: #868E96;
+  flex-shrink: 0;
+}
+
+.lock-status-tip {
+  display: block;
+  font-size: 24rpx;
+  color: #4E5969;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+/* 🐛 补齐一直缺失的按钮语义配色：WXML 早就按"确认封账/解封/已封账只读"
+   三种状态挂了 btn-danger/btn-unlock/btn-locked-disabled 三个类名，但这里
+   此前只有基础的 .finance-modal-confirm-btn 一份写死的绿色渐变——三种状态
+   视觉上完全一样，用户分不清当前是哪个动作 */
 .finance-modal-confirm-btn {
   width: 100% !important;
   height: 88rpx;
   line-height: 88rpx;
-  background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
   color: #FFFFFF;
   font-size: 28rpx;
   font-weight: bold;
@@ -7294,6 +7347,67 @@ page {
 
 .finance-modal-confirm-btn::after {
   border: none;
+}
+
+.finance-modal-confirm-btn.btn-danger {
+  background: linear-gradient(135deg, #C9302C 0%, #A32621 100%);
+}
+
+.finance-modal-confirm-btn.btn-unlock {
+  background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+}
+
+/* 🎨 禁用态置灰：区间内没有可封账记录（或已锁定的只读态）时，按钮不该再
+   长得和可点击的红/绿实底一个样——微信原生 button[disabled] 自带的半透明
+   遮罩在深色实底渐变上视觉区分度不够，这里用显式类名彻底覆盖成浅灰不可
+   点样式（小程序 wxss 不支持 [disabled] 属性选择器，靠 WXML 动态类名切换，
+   而不是属性选择器兜底） */
+.finance-modal-confirm-btn.btn-flat-disabled,
+.finance-modal-confirm-btn.btn-locked-disabled {
+  background: #F2F3F5 !important;
+  color: #C9CDD4 !important;
+  box-shadow: none !important;
+}
+
+/* 🐛 根因修复（"近 60 天: ... 至 ..."与"刷新"挤在一起，"刷新"二字被拆成
+   两行）：.risk-range-row/.risk-range-label/.risk-range-refresh 此前完全
+   没有任何样式——<view> 默认块级堆叠、<text> 默认行内换行，日期区间文本一长
+   就把"刷新"两个字挤到换行处生生拆开。补上标准左右 flex 行：日期区间用
+   nowrap，"刷新"做成不换行的浅灰小胶囊，两者各自有固定的行为边界，不会
+   互相挤占对方的换行空间 */
+.risk-range-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.risk-range-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #4E5969;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.risk-range-refresh {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+  background: #F2F3F5;
+  color: #1D2129;
+  white-space: nowrap;
+}
+
+.risk-range-refresh.is-spinning {
+  color: #868E96;
 }
 
 .risk-summary-row {
