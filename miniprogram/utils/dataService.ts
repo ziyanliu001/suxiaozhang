@@ -235,6 +235,15 @@ export const DataService = {
       dineInVolunteers: parseFloat(reportData.dineInVolunteers) || 0,
       deliveryVolunteers: parseFloat(reportData.deliveryVolunteers) || 0,
       takeawayCount: parseFloat(reportData.takeawayCount) || 0,
+      // 🐛 根因修复（数据丢失）：pages/index/index.ts 的提交表单一直在收集并
+      // 传入 listeningSeniors（倾听陪伴/关怀长者人次），但这份 formattedData
+      // 白名单此前一直没有列出这个字段——saveReport() 是客户端直连数据库写入
+      // （见下方注释"没有云函数中转"），不在这份白名单里的字段会被静默丢弃，
+      // 从未真正落库过。history.ts/statistics.ts 展示层与本轮新增的
+      // getSunshineLedger accompanyCount 聚合读到的都会是这个字段的默认值，
+      // 不是真实数据——与本文件其余"字段值域变化后要审计所有按该字段建的表"
+      // 同一类教训，只是这次是从源头就没写进去
+      listeningSeniors: parseFloat(reportData.listeningSeniors) || 0,
       totalDineCount: parseFloat(reportData.totalDineCount) || 0,
       totalVolunteers: parseFloat(reportData.totalVolunteers) || 0,
       stapleRiceStatus: reportData.stapleRiceStatus || 'normal',
@@ -395,6 +404,7 @@ export const DataService = {
             dineInVolunteers: formattedData.dineInVolunteers,
             deliveryVolunteers: formattedData.deliveryVolunteers,
             takeawayCount: formattedData.takeawayCount,
+            listeningSeniors: formattedData.listeningSeniors,
             totalDineCount: formattedData.totalDineCount,
             totalVolunteers: formattedData.totalVolunteers,
             stapleRiceStatus: formattedData.stapleRiceStatus,
