@@ -43,10 +43,11 @@ page {
      🐛（底部输入框被遮挡二次修复）236rpx 恰好等于"TabBar+按钮组"的高度总和，滚到底
      时内容边缘与按钮组顶边严丝合缝贴在一起，没有任何呼吸间距；再叠加 32rpx 安全垫，
      确保滚动到底部时最后一块内容与吸底按钮组之间始终留有可见间隙。
-     🐛（TabBar 投影擦碰修复）.bottom-action-floating-bar 的 bottom 又叠加了 16rpx
-     间距（隔开 custom-tab-bar 自身的上投影），这里同步 +16rpx 保持两处不脱节 */
-  padding-bottom: calc(284rpx + constant(safe-area-inset-bottom)) !important;
-  padding-bottom: calc(284rpx + env(safe-area-inset-bottom)) !important;
+     🐛（TabBar 投影擦碰修复）.bottom-action-floating-bar 的 bottom 呼吸间距从
+     16rpx 追加到 48rpx（模拟器实测仍贴 TabBar 顶边阴影），这里同步 +32rpx
+     保持两处不脱节 */
+  padding-bottom: calc(316rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(316rpx + env(safe-area-inset-bottom)) !important;
 }
 
 .app-header-section {
@@ -69,8 +70,9 @@ page {
      容易换行），这份 padding 立刻不够用。现在 .btn-main-label 已强制单行+ellipsis
      （见对应规则），按钮组高度不再会变，这里再加 32rpx 安全垫，保证滚动到底部时最后
      一块内容与吸底按钮组顶边之间始终留有 ≥32rpx 的可见间隙，不是刚好贴边。
-     🐛（TabBar 投影擦碰修复）同步 .bottom-action-floating-bar 新增的 16rpx 呼吸间距 */
-  padding: 24rpx 24rpx calc(284rpx + env(safe-area-inset-bottom)) 24rpx;
+     🐛（TabBar 投影擦碰修复）同步 .bottom-action-floating-bar 的呼吸间距
+     16rpx → 48rpx 变化，+32rpx */
+  padding: 24rpx 24rpx calc(316rpx + env(safe-area-inset-bottom)) 24rpx;
   box-sizing: border-box;
 }
 
@@ -3945,17 +3947,12 @@ page {
 .bottom-action-floating-bar {
   position: fixed !important;
   /* 悬浮于底部三段式导航栏（custom-tab-bar/index.wxss 实测 100rpx，z-index: 998）
-     之上，避免相互遮挡。这里不是贴零缝隙——custom-tab-bar 自身带
-     box-shadow: 0 -2rpx 16rpx rgba(0,0,0,0.06) 向上投影，零间隙拼接时这层
-     很轻的投影会在视觉上与本条的下边缘"擦碰"在一起，叠加 16rpx 呼吸间距
-     彻底隔开两者。
-     🛡️（第四轮同类工单加固）三轮排查（class/规则唯一性、祖先 transform、
-     scroll-view 嵌套、媒体查询、构建产物、z-index 层级）均未发现任何代码层面
-     会覆盖这条规则的冲突源——998（TabBar）远高于本条 z-index，从未存在过
-     被压在 TabBar 下方的可能。这里追加 !important 纯粹是防御性加固，不是
-     因为找到了被覆盖的证据；100rpx 是本项目 TabBar 的实测真值，不随每轮工单
-     重新猜测的数字改变，加固不等于改数值 */
-  bottom: calc(100rpx + env(safe-area-inset-bottom) + 16rpx) !important;
+     之上，避免相互遮挡。100rpx 是本项目 TabBar 的实测真值，不因呼吸间距的
+     调整而改变——变的只是下面这个 +Nrpx 的呼吸间距本身。
+     🐛（模拟器实测反馈：胶囊条仍贴 TabBar 顶边阴影）16rpx 间距不足以完全
+     盖过 TabBar 自身的上投影观感，追加到 48rpx，与 custom-tab-bar 之间留出
+     清晰可辨的空隙，不再是"擦边而过"的观感 */
+  bottom: calc(100rpx + env(safe-area-inset-bottom) + 48rpx) !important;
   left: 0 !important;
   right: 0 !important;
   /* 纯白不透明背景 + 更轻的阴影，与上方表单滚动区形成明确的物理分层，
