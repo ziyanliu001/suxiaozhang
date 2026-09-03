@@ -226,29 +226,17 @@ async function uploadWorkbookAndRespond(cloud, workbook, opts) {
 }
 
 // Core 单店导出主流程：给定已经查询好、且已经过权限收敛的 records，构建
-// 单 Sheet 工作簿并完成上传，返回最终响应体
-async function buildSingleStoreExport(cloud, { records, periodLabel, startDateStr, endDateStr, shopName }) {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = '雨花斋爱心账本';
-  workbook.created = new Date();
-
-  const sheetName = `${periodLabel}收支明细`;
-  const totals = addRecordsSheet(workbook, sheetName, records);
-  const safeStoreName = String(shopName || '全部门店').replace(/[\\/:*?"<>|]/g, '');
-
-  return uploadWorkbookAndRespond(cloud, workbook, {
-    fileLabel: '收支明细',
-    safeStoreName,
-    periodLabel,
-    startDateStr,
-    endDateStr,
-    totalIncome: totals.totalIncome,
-    totalExpense: totals.totalExpense,
-    totalDiners: totals.totalDiners,
-    totalMaterialsCount: totals.totalMaterialsCount,
-    recordCount: records.length,
-    isNationalExport: false
-  });
+// 三工作表审计级台账（Cash_Flow / Material_Inventory / Service_Proof，
+// 见 lib/auditLedgerExcel.js）并完成上传，返回最终响应体。
+//
+// 🏛️（2026-09-03）本函数此前直接调用 addRecordsSheet 生成单 Sheet 扁平流水表，
+// 现改为委派给 auditLedgerExcel.js 的审计级实现，以对齐《民间非营利组织会计
+// 制度》底稿抽查规范——addRecordsSheet 本身不做任何改动，继续原样服务于下方
+// 的 Enterprise 多店合并导出（exportNationalExcel.js 每店一个 Sheet 仍是扁平
+// 流水表，不受本次调整影响）
+async function buildSingleStoreExport(cloud, { db, records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId }) {
+  const { buildAuditGradeSingleStoreExport } = require('./auditLedgerExcel');
+  return buildAuditGradeSingleStoreExport(cloud, db, { records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId });
 }
 
 module.exports = { addRecordsSheet, uploadWorkbookAndRespond, buildSingleStoreExport };

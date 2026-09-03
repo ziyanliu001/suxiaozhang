@@ -247,7 +247,15 @@ exports.main = async (event, context) => {
     if (isNationalExport) {
       return await buildNationalExport(cloud, db, { tenantId, records, periodLabel, startDateStr, endDateStr });
     }
-    return await buildSingleStoreExport(cloud, { records, periodLabel, startDateStr, endDateStr, shopName });
+    // 🏛️（2026-09-03 审计级台账）单店审计级三工作表导出需要 db 做二次查询
+    // （user_roles 经办人昵称、material_logs 物资消耗、daily_menus 当日菜谱），
+    // 以及 storeId/tenantId 做查询范围收敛——都是本函数已经解析好的调用者上下文，
+    // 直接透传，不在 lib 层重新解析身份（避免绕过上面已经做过的租户/角色收敛）
+    return await buildSingleStoreExport(cloud, {
+      db, records, periodLabel, startDateStr, endDateStr, shopName,
+      storeId: whereConditions.storeId || storeId || '',
+      tenantId
+    });
 
   } catch (err) {
     console.error('💥 [exportAccountExcel] 失败:', err);
