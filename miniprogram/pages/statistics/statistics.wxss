@@ -4667,7 +4667,11 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* 🛡️ 严格大于 1000：本页大盘卡片（阳光大盘/核心经营指标等）均未显式设置
+     z-index（默认层叠序），恒定 1000 本就足够覆盖，这里再顶高一档纯粹是
+     给这条规则留出明确、不模糊的安全余量，不依赖"默认层叠序恰好够用"这种
+     隐式假设 */
+  z-index: 1010;
 }
 
 .patch-modal-box {
@@ -4683,6 +4687,173 @@ page {
 
 .export-config-picker-row {
   margin-bottom: 8rpx;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   🆕 导出 Excel 账本弹窗体验重构：精致 Header / 文件名预览 / 渠道单选 /
+   范围提示 / 宽幅主按钮
+   ═══════════════════════════════════════════════════════════════ */
+.export-config-box {
+  width: 88%;
+}
+
+.export-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.export-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* Excel 品牌绿图标徽标：纯 CSS 绘制的迷你表格网格（边框 + 十字分隔线），
+   不依赖任何图片/SVG 资源，辨识度足够 */
+.excel-icon-badge {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 12rpx;
+  background: #1D6F42;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2rpx 6rpx rgba(29, 111, 66, 0.3);
+}
+
+.excel-icon-grid {
+  width: 28rpx;
+  height: 24rpx;
+  border: 2rpx solid #FFFFFF;
+  border-radius: 3rpx;
+  background-image: linear-gradient(#FFFFFF, #FFFFFF), linear-gradient(#FFFFFF, #FFFFFF);
+  background-repeat: no-repeat;
+  background-size: 2rpx 100%, 100% 2rpx;
+  background-position: 50% 0, 0 50%;
+}
+
+/* 动态文件名预览卡片：灰底微浅框，让店长/财务在下载前就清楚文件命名规则 */
+.export-filename-preview {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: #F8F9FA;
+  border: 1rpx solid #EFF1F3;
+  border-radius: 12rpx;
+  padding: 16rpx 18rpx;
+  margin: 16rpx 0;
+}
+
+.export-filename-icon {
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+
+.export-filename-text {
+  font-size: 22rpx;
+  color: #495057;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* 导出渠道单选：下载至本机 / 发送至邮箱 */
+.export-channel-group {
+  display: flex;
+  gap: 28rpx;
+  margin: 20rpx 0 4rpx;
+}
+
+.export-channel-option {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.export-channel-radio {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  border: 2rpx solid #CED4DA;
+  box-sizing: border-box;
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.export-channel-radio.checked {
+  border-color: #D9480E;
+}
+
+.export-channel-radio.checked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #D9480E;
+  transform: translate(-50%, -50%);
+}
+
+.export-channel-lbl {
+  font-size: 26rpx;
+  color: #343A40;
+}
+
+/* 邮箱输入框：仅"发送至邮箱"渠道选中时展开 */
+.export-email-input-wrap {
+  margin-top: 12rpx;
+}
+
+.export-email-input {
+  width: 100%;
+  height: 72rpx;
+  background: #F8F9FA;
+  border: 1.5rpx solid #EFE6D8;
+  border-radius: 14rpx;
+  padding: 0 20rpx;
+  font-size: 26rpx;
+  color: #333333;
+  box-sizing: border-box;
+}
+
+/* 温馨提示条：浅灰弱底，说明导出内容范围 */
+.export-scope-tip {
+  font-size: 21rpx;
+  color: #ADB5BD;
+  background: #FAFBFC;
+  border-radius: 10rpx;
+  padding: 12rpx 14rpx;
+  margin: 18rpx 0 8rpx;
+  line-height: 1.5;
+}
+
+/* 主操作按钮升级：宽幅圆角大按钮，暖金渐变，点击态平滑缩放 */
+.btn-export-primary {
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 40rpx;
+  background: linear-gradient(135deg, #F08C00 0%, #D9480E 100%) !important;
+  font-size: 28rpx !important;
+  box-shadow: 0 6rpx 16rpx rgba(217, 72, 14, 0.25);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-export-primary:active {
+  transform: scale(0.97);
+  opacity: 0.92;
+}
+
+/* 与 .btn-export-primary 同一行的取消按钮，高度/圆角对齐，不使用默认的
+   原生 button 高度（避免两颗按钮一高一矮） */
+.btn-export-cancel {
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 40rpx;
 }
 
 .export-preview-summary-grid {
