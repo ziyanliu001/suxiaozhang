@@ -6557,10 +6557,18 @@ Page({
           wx.showLoading({ title: 'AI 识别中 ' + (i + 1) + '/' + totalFiles, mask: true });
 
           const fileName = 'receipts/' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.jpg';
-          const uploadRes = await wx.cloud.uploadFile({
-            cloudPath: fileName,
-            filePath: tempFilePath
-          });
+          // 🐛 补齐上传超时保护：见 onScanDonorScreenshot/onScanMaterialScreenshot
+          // 同一处修复注释——wx.cloud.uploadFile 此前没有任何超时兜底，弱网/连接
+          // 中断时会一直挂起不回调，卡在这个循环里的一张图会拖死整批小票的
+          // 'AI 识别中 i/total' 遮罩，永远等不到后面的 hideLoading
+          const uploadRes = await withTimeout(
+            wx.cloud.uploadFile({
+              cloudPath: fileName,
+              filePath: tempFilePath
+            }),
+            20000,
+            '图片上传超时，请检查网络后重试'
+          );
           uploadedFileIds.push(uploadRes.fileID);
 
           // 🐛（2026-08-31 追加修复 -504003 超时）同上：ocrExpenseReceipt/config.json
@@ -6765,6 +6773,15 @@ Page({
       }
     }
     this._scanDonorStartedAt = Date.now();
+    // 🐛（拍照/相册"正在打开相册.."遮罩卡死根因修复）此前这个标志位要等选完图、
+    // MD5 去重通过之后才置 true，导致"用户已经看到 loading，但原生选图面板还没
+    // 真正响应"这段等待期内标志位仍是 false——手快的用户在这段窗口内二次点击
+    // 会绕过下面 if(this.data.isScanningDonorList) 的拦截，径直再调一次
+    // chooseDonorScreenshotSafe()，等于同时拉起两个原生选图面板互相打架（与
+    // chooseDonorScreenshotSafe 头部注释记录的"两个选图面板互相打架"是同一类
+    // 现象，只是诱因从"超时竞速定时器"换成了"标志位置位太晚"）。提前到点击
+    // 生效的第一时间就置位，彻底堵死这个重入窗口，不依赖任何计时器
+    this.setData({ isScanningDonorList: true });
 
     try {
       if (!isCloudAvailable()) {
@@ -6822,7 +6839,6 @@ Page({
       }
       this._uploadedImageHashes.push(imageHash);
 
-      this.setData({ isScanningDonorList: true });
       wx.showLoading({ title: '图片合规核验中...', mask: true });
 
       let uploadedFileId = '';
@@ -6836,10 +6852,14 @@ Page({
         });
         const checkResult = checkRes.result as any;
         if (checkResult && !checkResult.isSafe) {
-          // 🐛 showLoading/hideLoading 配对修复：这里曾经额外调用过一次 wx.hideLoading()，
-          // 但函数末尾的外层 finally（见下方）已经保证无论走哪条分支都会且只会隐藏一次
-          // loading——这里再调一次会导致 hideLoading 调用次数多于 showLoading，触发调试器
-          // "showLoading 与 hideLoading 必须配对使用"的告警。统一收口到外层 finally。
+          // 🐛（"正在打开相册.."遮罩卡死根因修复之二）此前这里特意不调 hideLoading，
+          // 理由是"函数末尾的外层 finally 已经保证隐藏一次，这里再调会触发调试器
+          // 配对告警"——但 wx.showModal 与 wx.showLoading 共享同一层原生 UI 队列，
+          // 官方文档明确要求"展示 modal/toast 前应先 hideLoading"，不满足这条时
+          // 偶发导致遮罩在弹窗关闭后依然卡在屏幕上，不会因为外层 finally 之后补一次
+          // hideLoading 就自动清掉。调试器"必须配对"的告警只是 devtools 里的提示，
+          // 多调一次没有任何真实副作用，两害相权取真正能修复卡死的这条
+          wx.hideLoading();
           wx.showModal({
             title: '⚠️ 违规内容拦截',
             content: checkResult.reason || '图片内容未通过安全校验，请更换图片',
@@ -6851,7 +6871,16 @@ Page({
         wx.showLoading({ title: 'AI 识别中...', mask: true });
 
         const fileName = 'donation_screenshots/' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.jpg';
-        const uploadRes = await wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath });
+        // 🐛 补齐上传超时保护：wx.cloud.uploadFile 此前没有任何超时兜底，弱网/
+        // 连接中断时会一直挂起不 resolve 也不 reject，'AI 识别中...' 遮罩因此
+        // 永远等不到 finally 里的 hideLoading，是"拍照后卡死"的另一个真实成因——
+        // 与 checkImageContent/ocrDonationList 已有的 callFunctionWithTimeout
+        // 保护同一套思路，统一用 withTimeout 兜底
+        const uploadRes = await withTimeout(
+          wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath }),
+          20000,
+          '图片上传超时，请检查网络后重试'
+        );
         uploadedFileId = uploadRes.fileID;
 
         // 🐛（2026-08-31 追加修复）ocrDonationList/config.json 此前没有
@@ -6866,6 +6895,11 @@ Page({
         }, 25000);
 
         const result = ocrRes.result as any;
+        // 🐛（"正在打开相册.."遮罩卡死根因修复之三）同上：下面无论走成功 toast 还是
+        // 失败 showModal 分支，都会在 loading 仍显示的状态下拉起 toast/modal——
+        // 官方文档要求展示前先 hideLoading，这里统一提前隐藏一次，不依赖分支末尾
+        // 各自记得处理
+        wx.hideLoading();
         if (result && result.success && result.formattedText) {
           const current = (this.data.allDonations || '').trim();
 
@@ -6921,8 +6955,10 @@ Page({
       }
       wx.showToast({ title: '识别失败：' + (e.message || errMsg || '未知错误'), icon: 'none' });
     } finally {
-      // 🐛 唯一的 hideLoading 出口：无论成功/提前 return/异常，finally 都保证恰好
-      // 执行一次，与函数内唯一一次进入循环前的 wx.showLoading() 严格配对
+      // 🛡️ 最终安全网：中间各分支已经各自在展示 modal/toast 前 hideLoading 过，
+      // 这里再调一次纯粹是兜底（异常路径未覆盖到的场景），wx.hideLoading 在没有
+      // loading 显示时调用是无害的空操作，不会因为调用次数多于 showLoading 而
+      // 产生真实副作用
       wx.hideLoading();
       this.setData({ isScanningDonorList: false });
     }
@@ -6994,6 +7030,11 @@ Page({
       }
     }
     this._scanMaterialStartedAt = Date.now();
+    // 🐛（拍照/相册"正在打开相册.."遮罩卡死根因修复，与 onScanDonorScreenshot
+    // 同一处问题同一套修法）提前到点击生效的第一时间就置位，堵死"选图面板还
+    // 没关闭、标志位却还是 false"这段重入窗口，防止手快连点拉起两个原生选图
+    // 面板互相打架
+    this.setData({ isScanningMaterialList: true });
 
     try {
       if (!isCloudAvailable()) {
@@ -7026,7 +7067,6 @@ Page({
       }
       this._uploadedImageHashes.push(imageHash);
 
-      this.setData({ isScanningMaterialList: true });
       wx.showLoading({ title: '图片合规核验中...', mask: true });
 
       let uploadedFileId = '';
@@ -7061,7 +7101,15 @@ Page({
         wx.showLoading({ title: 'AI 识别中...', mask: true });
 
         const fileName = 'material_screenshots/' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.jpg';
-        const uploadRes = await wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath });
+        // 🐛 补齐上传超时保护：见 onScanDonorScreenshot 同一处修复注释——
+        // wx.cloud.uploadFile 此前没有任何超时兜底，弱网/连接中断时会一直
+        // 挂起不回调，'AI 识别中...' 遮罩因此永远等不到 finally 里的
+        // hideLoading，是"拍照后卡死"的另一个真实成因
+        const uploadRes = await withTimeout(
+          wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath }),
+          20000,
+          '图片上传超时，请检查网络后重试'
+        );
         uploadedFileId = uploadRes.fileID;
 
         const ocrRes = await callFunctionWithTimeout({
@@ -7070,6 +7118,9 @@ Page({
         }, 25000);
 
         const result = ocrRes.result as any;
+        // 🐛 见 onScanDonorScreenshot 同一处修复注释：showToast/showModal 前先
+        // hideLoading，不依赖分支末尾各自处理、也不依赖外层 finally 兜底
+        wx.hideLoading();
         if (result && result.success && result.formattedText) {
           const current = (this.data.materialsInput || '').trim();
           const merged = current ? (current + '\n' + result.formattedText) : result.formattedText;
