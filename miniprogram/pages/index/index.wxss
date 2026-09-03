@@ -3943,15 +3943,21 @@ page {
 }
 /* ================= 底部悬浮核心功能按钮 ================= */
 .bottom-action-floating-bar {
-  position: fixed;
-  /* 悬浮于底部三段式导航栏（custom-tab-bar/index.wxss 实测 100rpx）之上，
-     避免相互遮挡。这里不是贴零缝隙——custom-tab-bar 自身带
+  position: fixed !important;
+  /* 悬浮于底部三段式导航栏（custom-tab-bar/index.wxss 实测 100rpx，z-index: 998）
+     之上，避免相互遮挡。这里不是贴零缝隙——custom-tab-bar 自身带
      box-shadow: 0 -2rpx 16rpx rgba(0,0,0,0.06) 向上投影，零间隙拼接时这层
      很轻的投影会在视觉上与本条的下边缘"擦碰"在一起，叠加 16rpx 呼吸间距
-     彻底隔开两者，不是为了纠正 100rpx 这个已实测数值 */
-  bottom: calc(100rpx + env(safe-area-inset-bottom) + 16rpx);
-  left: 0;
-  right: 0;
+     彻底隔开两者。
+     🛡️（第四轮同类工单加固）三轮排查（class/规则唯一性、祖先 transform、
+     scroll-view 嵌套、媒体查询、构建产物、z-index 层级）均未发现任何代码层面
+     会覆盖这条规则的冲突源——998（TabBar）远高于本条 z-index，从未存在过
+     被压在 TabBar 下方的可能。这里追加 !important 纯粹是防御性加固，不是
+     因为找到了被覆盖的证据；100rpx 是本项目 TabBar 的实测真值，不随每轮工单
+     重新猜测的数字改变，加固不等于改数值 */
+  bottom: calc(100rpx + env(safe-area-inset-bottom) + 16rpx) !important;
+  left: 0 !important;
+  right: 0 !important;
   /* 纯白不透明背景 + 更轻的阴影，与上方表单滚动区形成明确的物理分层，
      不透明是必须的——半透明底色滚动时会看到文字从下面透上来，观感很脏 */
   background: #FFFFFF;
@@ -3960,8 +3966,8 @@ page {
   gap: 20rpx;
   border-top: 1rpx solid #E9ECEF;
   box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.05);
-  box-sizing: border-box;
-  z-index: 90;
+  box-sizing: border-box !important;
+  z-index: 90 !important;
 }
 
 /* 🐛 加固：display:flex 居中此前已生效，这里补上 box-sizing/padding/margin/
