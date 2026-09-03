@@ -15,6 +15,13 @@ const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
 const POSTER_WIDTH = 320;
 const PAGE_SIZE = 10;
 
+// 🆕 历史备注记忆：本地设备维度缓存，不区分门店/账号——同一台设备上管理员
+// 常用的备注措辞（"食材紧张""正常供应"之类）跨门店/跨账号复用的价值大于
+// 隔离的必要性，且这只是一份"快速填入"的辅助建议，不是业务数据，不需要
+// 云端同步
+const CACHE_KEY_DAILY_MENU_REMARKS = 'daily_menu_recent_remarks';
+const MAX_RECENT_REMARKS = 8;
+
 // 🍱 早/午/晚餐可独立发布食谱，云函数 manageDailyMenu 按 {storeId, dateString,
 // mealType} 三元组区分记录（存量记录没有 mealType 字段，云函数兼容按 lunch 处理）
 type MealType = 'breakfast' | 'lunch' | 'dinner';
@@ -127,6 +134,9 @@ Page({
     detailItem: null as any,
 
     showEditForm: false,
+    // 🆕 历史备注记忆：最近提交成功过的文字备注，去重、最近使用排最前，
+    // 见 loadRecentRemarks/rememberRecentRemark
+    recentRemarks: [] as string[],
     editForm: {
       id: '',
       dateString: getTodayStr(),
@@ -162,6 +172,7 @@ Page({
 
   async onLoad() {
     recordRecentVisit('/subpackages/admin/pages/daily-menu/daily-menu', '食谱管理中心');
+    this.loadRecentRemarks();
     // 🔑 需先拿到 currentStoreId 再查今日食谱（getByDate 要求 storeId 必填），故此处 await 顺序执行
     await this.applyRolePermissions();
     this.loadSelectedMenu();
@@ -470,6 +481,54 @@ Page({
     this.setData({ 'editForm.menuText': e.detail.value });
   },
 
+  // 🆕 历史备注记忆：从本地缓存读取最近提交成功过的备注列表，onLoad 时读一次；
+  // 不在每次打开编辑弹窗时重新读——本页存活期间列表只会通过 rememberRecentRemark/
+  // onClearRecentRemarks 变化，没有其它写入方，读一次内存态足够
+  loadRecentRemarks() {
+    try {
+      const cached = wx.getStorageSync(CACHE_KEY_DAILY_MENU_REMARKS);
+      this.setData({ recentRemarks: Array.isArray(cached) ? cached : [] });
+    } catch (err) {
+      console.warn('[daily-menu] 读取历史备注缓存失败:', err);
+    }
+  },
+
+  // 提交成功后调用：去空白/过滤空文本，已存在则移到最前（LRU），截断到
+  // MAX_RECENT_REMARKS 条再持久化
+  rememberRecentRemark(text: string) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return;
+    try {
+      const existing: string[] = Array.isArray(this.data.recentRemarks) ? this.data.recentRemarks : [];
+      const next = [trimmed, ...existing.filter((t) => t !== trimmed)].slice(0, MAX_RECENT_REMARKS);
+      wx.setStorageSync(CACHE_KEY_DAILY_MENU_REMARKS, next);
+      this.setData({ recentRemarks: next });
+    } catch (err) {
+      console.warn('[daily-menu] 保存历史备注缓存失败:', err);
+    }
+  },
+
+  // 🆕 点击快捷标签填入：输入框为空直接设为该文本；已有内容则用中文逗号追加
+  // 在末尾（两条备注拼读起来更自然），不做整段替换——误触一下不会丢掉刚打的字
+  onSelectQuickRemark(e: any) {
+    const text = e.currentTarget.dataset.text;
+    if (!text) return;
+    const current = (this.data.editForm.menuText || '').trim();
+    const merged = current ? `${current}，${text}` : text;
+    this.setData({ 'editForm.menuText': merged });
+    wx.showToast({ title: '已填入', icon: 'none', duration: 800 });
+  },
+
+  onClearRecentRemarks() {
+    try {
+      wx.removeStorageSync(CACHE_KEY_DAILY_MENU_REMARKS);
+    } catch (err) {
+      console.warn('[daily-menu] 清空历史备注缓存失败:', err);
+    }
+    this.setData({ recentRemarks: [] });
+    wx.showToast({ title: '已清空', icon: 'none' });
+  },
+
   onRemoveImage(e: any) {
     const index = e.currentTarget.dataset.index;
     const images = [...this.data.editForm.images];
@@ -567,6 +626,9 @@ Page({
 
       if (result && result.success) {
         wx.showToast({ title: result.message || '提交成功', icon: 'success' });
+        // 🆕 只在提交真正成功后才记入历史备注——半途放弃/提交失败的草稿文字
+        // 不该污染这份"确实用过的常用备注"列表
+        this.rememberRecentRemark(menuText);
         this.setData({ showEditForm: false });
         // 提交的记录可能是当前选中日期（顶部区）或历史某天（下方区），两处都刷新一次以保持同步
         this.loadSelectedMenu();

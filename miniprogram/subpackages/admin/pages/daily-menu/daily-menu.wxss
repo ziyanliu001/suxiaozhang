@@ -584,6 +584,60 @@
   min-height: 160rpx;
 }
 
+/* 🆕 历史备注记忆：紧贴文字备注输入框下方的横向滚动快捷标签组，微浅灰/
+   莫兰迪弱色系，观感上是"辅助小贴士"而不是抢眼的操作按钮 */
+.quick-tags-container {
+  margin-top: 12rpx;
+  margin-bottom: 8rpx;
+}
+
+.quick-tags-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 20rpx;
+  color: #86909C;
+  margin-bottom: 8rpx;
+}
+
+.quick-tags-clear {
+  color: #C9CDD4;
+  padding: 4rpx 8rpx;
+}
+
+.quick-tags-clear:active {
+  color: #86909C;
+}
+
+.quick-tags-scroll {
+  display: flex;
+  gap: 12rpx;
+  width: 100%;
+}
+
+.quick-tag-chip {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 0 16rpx;
+  height: 44rpx;
+  line-height: 44rpx;
+  background: #F2F3F5;
+  color: #4E5969;
+  border-radius: 22rpx;
+  font-size: 22rpx;
+  border: 1rpx solid #E5E6EB;
+  max-width: 360rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.quick-tag-chip:active {
+  background: #E5E6EB;
+  color: #1D2129;
+}
+
 /* 🍚 编辑表单里的餐别展示：只读，不可在编辑中途切换餐别（切餐别请回到顶部
    分段控件），浅灰文字与可编辑的 .dm-form-picker 区分开 */
 .dm-form-picker-readonly {

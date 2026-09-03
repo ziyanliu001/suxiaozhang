@@ -206,6 +206,25 @@
           maxlength="500"
         />
 
+        <!-- 🆕 历史备注记忆：最近提交成功过的文字备注（去重、最近使用排前），
+             点击即可快速填入，减少重复输入常见备注（如"食材紧张""正常供应"）
+             的打字量。为空时整块不渲染，不占位置 -->
+        <view class="quick-tags-container" wx:if="{{recentRemarks && recentRemarks.length > 0}}">
+          <view class="quick-tags-title">
+            <text>常用/历史备注（点击填入）</text>
+            <text class="quick-tags-clear" catchtap="onClearRecentRemarks">清空</text>
+          </view>
+          <scroll-view class="quick-tags-scroll" scroll-x enable-flex>
+            <view
+              class="quick-tag-chip"
+              wx:for="{{recentRemarks}}"
+              wx:key="*this"
+              data-text="{{item}}"
+              catchtap="onSelectQuickRemark"
+            >{{item}}</view>
+          </scroll-view>
+        </view>
+
         <text class="dm-form-label">菜品（最多 9 道，每道菜一图一名，图片自动压缩至 300KB 以内）</text>
         <view class="dm-image-grid">
           <view class="dm-image-item" wx:for="{{editForm.images}}" wx:for-item="img" wx:for-index="idx" wx:key="url">
