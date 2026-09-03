@@ -750,6 +750,12 @@
             <text class="ledger-row-income">收 +¥{{item.incomeStr}}</text>
             <text class="ledger-row-expense">支 -¥{{item.expenseStr}}</text>
           </view>
+          <!-- 🛡️ 存证/复核微标：只在真的有对应服务端标记时才出现，不为空数据
+               状态硬凑一个标签占位 -->
+          <view class="ledger-row-proof" wx:if="{{item.hmacStamped || item.arithmeticMismatch}}">
+            <text class="ledger-proof-badge hmac" wx:if="{{item.hmacStamped}}">🛡️ HMAC防篡改已存证</text>
+            <text class="ledger-proof-badge mismatch" wx:if="{{item.arithmeticMismatch}}">⚖️ 收支复核中</text>
+          </view>
         </view>
       </view>
     </view>

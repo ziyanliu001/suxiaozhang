@@ -3033,7 +3033,18 @@ Page({
           statusLabel: statusInfo.label,
           statusClass: statusInfo.className,
           categoryLabel: category.label,
-          categoryClass: category.className
+          categoryClass: category.className,
+          // 🛡️ HMAC 防篡改存证标：_checksum 由 stampReportChecksum 云函数用
+          // 服务端专属的 LEDGER_HMAC_SECRET 计算写入（前端不持有密钥，无法
+          // 自行伪造），这里只能诚实地展示"是否已被服务端盖过章"，不能在
+          // 前端重新计算/核验这个签名是否仍然合法——那需要专门的服务端核验
+          // 往返，不是本次范围。只在已封账（AUDITED_LOCKED）且确实有签名值
+          // 时才展示，避免对未封账/未盖章的记录做出误导性的"已存证"承诺
+          hmacStamped: item.approvalStatus === 'AUDITED_LOCKED' && !!item._checksum,
+          // ⚖️ 算术复核兜底：arithmeticMismatch 由同一个云函数的服务端复核
+          // 写入（昨日余额+今日收入-今日支出 与 今日结余 是否对得上），真值
+          // 时用温和的琥珀色提示财务核实，而不是抛出刺眼的系统报错
+          arithmeticMismatch: !!item.arithmeticMismatch
         };
       })
       .sort((a, b) => (a.date < b.date ? 1 : (a.date > b.date ? -1 : 0)));

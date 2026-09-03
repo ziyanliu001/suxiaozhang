@@ -6216,6 +6216,31 @@ page {
   color: #C62828;
 }
 
+.ledger-row-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  margin-top: 10rpx;
+}
+
+.ledger-proof-badge {
+  display: inline-block;
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 4rpx 14rpx;
+  border-radius: 16rpx;
+}
+
+.ledger-proof-badge.hmac {
+  background: #E8FFEA;
+  color: #137A2B;
+}
+
+.ledger-proof-badge.mismatch {
+  background: #FFF8E1;
+  color: #B8860B;
+}
+
 .core-metrics-yoy {
   font-size: 20rpx;
   font-weight: bold;

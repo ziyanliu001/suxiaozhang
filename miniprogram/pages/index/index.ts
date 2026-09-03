@@ -12060,35 +12060,57 @@ Page({
       confirmText: '确认解封',
       confirmColor: '#E65100',
       cancelText: '我再想想',
-      success: async (res) => {
+      success: (res) => {
         if (!res.confirm) return;
-        this.setData({ financeUnlockInFlight: true });
-        wx.showLoading({ title: '解封处理中...', mask: true });
-        try {
-          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await callFunctionWithTimeout({
-            name: 'manageFinanceLock',
-            data: { action: 'unlockRange', storeId, startDate, endDate }
-          });
-          const res2 = result.result as any;
-          wx.hideLoading();
-          if (res2 && res2.success) {
-            wx.showModal({
-              title: '解封完成',
-              content: res2.message || `已成功解封 ${res2.unlockedCount || 0} 条记录`,
-              showCancel: false
-            });
-            this.checkRangeLockStatus();
-          } else {
-            wx.showModal({ title: '解封失败', content: (res2 && (res2.message || res2.errMsg)) || '云函数未返回正确结果', showCancel: false });
+        // 🛡️ 解封二次确认保险丝：批量解封会把区间内已核销封账的记录整批退回
+        // APPROVED（重新可编辑/可作废），影响面比单条操作大得多，此前只有一层
+        // 固定文案确认——误触/被诱导点击"确认解封"就足以让已核验账目脱保。
+        // 加一道强制填写核验理由的关卡：manageFinanceLock 的 unlockRange 早已
+        // 支持接收 reason 落进 auditLogs（此前前端从未真正传过，一直落到服务端
+        // 兜底的泛泛文案），这里改为真的收集、真的传，且不允许空理由通过
+        wx.showModal({
+          title: '请填写解封核验理由',
+          editable: true,
+          placeholderText: '请如实填写解封核验理由（如：发现某笔记录金额录入有误，需重新核对）',
+          confirmText: '提交解封',
+          confirmColor: '#E65100',
+          success: async (reasonRes) => {
+            if (!reasonRes.confirm) return;
+            const reason = String(reasonRes.content || '').trim();
+            if (!reason) {
+              wx.showToast({ title: '请填写解封核验理由后再提交', icon: 'none' });
+              return;
+            }
+
+            this.setData({ financeUnlockInFlight: true });
+            wx.showLoading({ title: '解封处理中...', mask: true });
+            try {
+              if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+              const result = await callFunctionWithTimeout({
+                name: 'manageFinanceLock',
+                data: { action: 'unlockRange', storeId, startDate, endDate, reason }
+              });
+              const res2 = result.result as any;
+              wx.hideLoading();
+              if (res2 && res2.success) {
+                wx.showModal({
+                  title: '解封完成',
+                  content: res2.message || `已成功解封 ${res2.unlockedCount || 0} 条记录`,
+                  showCancel: false
+                });
+                this.checkRangeLockStatus();
+              } else {
+                wx.showModal({ title: '解封失败', content: (res2 && (res2.message || res2.errMsg)) || '云函数未返回正确结果', showCancel: false });
+              }
+            } catch (err) {
+              wx.hideLoading();
+              console.error('[handleUnlockMonth] 异常:', err);
+              wx.showModal({ title: '调用失败', content: '未成功触发解封，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
+            } finally {
+              this.setData({ financeUnlockInFlight: false });
+            }
           }
-        } catch (err) {
-          wx.hideLoading();
-          console.error('[handleUnlockMonth] 异常:', err);
-          wx.showModal({ title: '调用失败', content: '未成功触发解封，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
-        } finally {
-          this.setData({ financeUnlockInFlight: false });
-        }
+        });
       }
     });
   },
