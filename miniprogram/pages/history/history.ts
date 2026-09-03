@@ -313,8 +313,19 @@ Page({
     }
     this.calculateNavBarHeight();
     this.checkAdminStatus();
-    this.initPermissions();
-    this.loadReports();
+    // 🐛（路由卡死根因修复）此前这里还会调一次 initPermissions()/loadReports()，
+    // 而微信小程序页面首次打开时 onLoad() 结束后必然紧接着触发 onShow()（同一次
+    // "页面出现"周期内的两个连续生命周期钩子，不是可能触发也不是异步触发），
+    // onShow() 自己也无条件调用了同样这两个方法（见下方）——等于每次打开本页
+    // 都会把"查角色权限（一次云函数）+ 拉报表列表（一次云函数 + 一整套
+    // convertReceiptImagesToUrls/applyFilters/processReportListAudit 同步计算）"
+    // 这一整条链路同步执行两遍。微信小程序全部页面共享同一个逻辑层 JS 线程
+    // （AppService），这两遍重复的同步计算 + setData 序列化恰好会在页面刚出现的
+    // 这一刻抢占线程，如果是从别的页面用 wx.navigateTo 跳转过来的，会导致发起
+    // 跳转那一侧的 navHelper.ts safeNavigateTo() 诊断计时器（2.5s）等不到
+    // complete 回调按时触发，控制台报"疑似当前页 JS 主线程被同步代码阻塞"，
+    // 表现为跳转卡顿/告警。onShow() 的调用已经足够覆盖首次打开这个场景，这里
+    // 不再重复调用，只保留 onLoad 独有的查询参数解析副作用
     // 若从首页图册入口直接进入图册模式，立即加载图片档案
     if (options && options.mode === 'photo') {
       this.loadPhotoArchive();
