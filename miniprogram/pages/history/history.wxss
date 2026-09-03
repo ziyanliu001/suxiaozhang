@@ -319,6 +319,15 @@
   transition: color 0.25s ease;
 }
 
+/* 🛡️ 越权修复：非本店视角下"待审核/已驳回"两个 Tab 被整体隐藏，只剩这一个
+   "已通过（阳光账本）"——它不再是"多个选项里选中的一个"，而是这一整行唯一的
+   静态标签，字重加粗、色值固定用主题色，不依赖 .active 类才显得"被选中"，
+   视觉上读作一句说明文字而不是一个可切换的按钮组 */
+.status-tab-solo {
+  color: #8C1D18;
+  font-weight: bold;
+}
+
 .status-tab.active {
   color: #8C1D18;
   font-weight: bold;

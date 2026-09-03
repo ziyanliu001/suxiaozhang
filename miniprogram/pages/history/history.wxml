@@ -90,28 +90,34 @@
     <!-- 🆕 状态筛选 Tab：全部/待审核/已通过/已驳回，与月份/门店筛选可叠加，
          纯客户端过滤（见 history.ts applyFilters）。放在固定头部内，
          measureActualHeaderHeight() 会自动把它的高度并入 totalHeaderHeight，
-         滚动列表的 padding-top 自动跟着让位，不需要额外手算偏移 -->
+         滚动列表的 padding-top 自动跟着让位，不需要额外手算偏移。
+         🛡️ 越权修复：canViewPendingRejected 为 false（正在浏览非本人所属门店，
+         见 history.ts _recomputeStoreScopedPermissions）时，"待审核"/"已驳回"
+         这两个 Tab 连同各自角标一并整体不渲染——服务端 getReports 云函数这一轮
+         同步修复后，非本店管理者本就拿不到这两类数据，这里只保留"已通过（阳光
+         账本）"一个可看的入口，不展示一个点了也没有数据、徒增困惑的空 Tab -->
     <view class="status-tab-row" wx:if="{{!photoArchiveMode}}">
-      <view class="status-tab {{statusTab === 'all' ? 'active' : ''}}" data-tab="all" bindtap="onSwitchStatusTab">
+      <view class="status-tab {{statusTab === 'all' ? 'active' : ''}}" data-tab="all" bindtap="onSwitchStatusTab" wx:if="{{canViewPendingRejected}}">
         <text>全部</text>
         <text class="status-tab-badge" wx:if="{{statusTabCounts.all > 0}}">{{statusTabCounts.all > 99 ? '99+' : statusTabCounts.all}}</text>
       </view>
-      <view class="status-tab {{statusTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onSwitchStatusTab">
+      <view class="status-tab {{statusTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onSwitchStatusTab" wx:if="{{canViewPendingRejected}}">
         <text>待审核</text>
         <text class="status-tab-badge warn" wx:if="{{statusTabCounts.pending > 0}}">{{statusTabCounts.pending > 99 ? '99+' : statusTabCounts.pending}}</text>
       </view>
-      <view class="status-tab {{statusTab === 'approved' ? 'active' : ''}}" data-tab="approved" bindtap="onSwitchStatusTab">
-        <text>已通过</text>
+      <view class="status-tab {{statusTab === 'approved' ? 'active' : ''}} {{!canViewPendingRejected ? 'status-tab-solo' : ''}}" data-tab="approved" bindtap="onSwitchStatusTab">
+        <text>{{canViewPendingRejected ? '已通过' : '已通过（阳光账本）'}}</text>
         <text class="status-tab-badge" wx:if="{{statusTabCounts.approved > 0}}">{{statusTabCounts.approved > 99 ? '99+' : statusTabCounts.approved}}</text>
       </view>
-      <view class="status-tab {{statusTab === 'rejected' ? 'active' : ''}}" data-tab="rejected" bindtap="onSwitchStatusTab">
+      <view class="status-tab {{statusTab === 'rejected' ? 'active' : ''}}" data-tab="rejected" bindtap="onSwitchStatusTab" wx:if="{{canViewPendingRejected}}">
         <text>已驳回</text>
         <text class="status-tab-badge" wx:if="{{statusTabCounts.rejected > 0}}">{{statusTabCounts.rejected > 99 ? '99+' : statusTabCounts.rejected}}</text>
       </view>
       <!-- 🆕 单条滑动指示条：取代此前每个 Tab 各自的 ::after 下划线，随 statusTabIndex
            （0~3，四个 Tab 等宽 25%）用 left 百分比 + CSS transition 平滑移动，而不是
-           在四个位置之间瞬时跳变 -->
-      <view class="status-tab-indicator" style="left: {{statusTabIndex * 25}}%;"></view>
+           在四个位置之间瞬时跳变。canViewPendingRejected 为 false 时只剩一个 Tab，
+           指示条没有意义，一并隐藏 -->
+      <view class="status-tab-indicator" wx:if="{{canViewPendingRejected}}" style="left: {{statusTabIndex * 25}}%;"></view>
     </view>
 
     <!-- 🌟 从首页「风控预警日志」弹窗点击卡片跳转过来时的精准追溯筛选提示 -->

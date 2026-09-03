@@ -114,6 +114,37 @@ exports.main = async (event, context) => {
       whereConditions._openid = OPENID;
     }
 
+    // 🛡️ 越权修复（核心）：本函数返回的是逐条原始记录（含未核实的 PENDING/REJECTED
+    // 待审凭证、收据图片等私密数据），此前只要客户端传入一个具体 storeId/shopName，
+    // 服务端就直接原样用它过滤查询条件——完全没有核实调用者本人是否真的在该门店
+    // 任职。store-picker 的 FAMILY/VOLUNTEER 访客身份对同租户下任意门店都天然
+    // "已授权"（无需邀请码，见该组件 refreshRolePermissions 注释），用户随手切换
+    // 到其它门店后打开 history.ts「凭证与账本」页面，loadReports() 默认不传
+    // approvedOnly，就会把该店完整的 PENDING/REJECTED 记录（含收据图片、驳回
+    // 理由等）原样拉给这个跟该店毫无关系的访客——这正是本次要堵的越权漏洞。
+    //
+    // 判定"是否在查看非本人所属门店"：优先按 storeId 精确比对（同名门店不会
+    // 误判）；调用方若走 shopName 兼容路径（storeId 为空场景），退化按门店名比对。
+    // isTenantWideAllowed（当前只有 super_admin）豁免——超管本就该能看到全租户
+    // 任意门店的完整账目用于稽核，这也是全国大屏"公信力大屏"双轨制里唯一保留的
+    // 管理向穿透权限（与 getNationalDashboard 的公开只读查询是两条不同轨道，见
+    // CLAUDE.md 多租户隔离说明）。
+    const requestedStoreId = whereConditions.storeId || '';
+    const requestedShopName = whereConditions.shopName || '';
+    const isViewingOwnStoreById = !!userStoreId && requestedStoreId === userStoreId;
+    const isViewingOwnStoreByName = !userStoreId && !!userStoreName && requestedShopName === userStoreName;
+    const isViewingSpecificStore = !!requestedStoreId || !!requestedShopName;
+    const isForeignStoreRequest = isViewingSpecificStore && !isTenantWideAllowed
+      && !isViewingOwnStoreById && !isViewingOwnStoreByName;
+
+    if (isForeignStoreRequest) {
+      // 非本店：无论客户端 approvedOnly 传了什么，一律强制收敛为已归档
+      // （APPROVED/AUDITED_LOCKED）的公开阳光账本数据，PENDING/REJECTED 严禁下发——
+      // 与 cloudfunctions/getSunshineLedger"已通过数据允许公开跨店查阅"同一条口径，
+      // 只是这里额外收紧到"未归档数据绝不允许跨店查阅"
+      whereConditions.approvalStatus = _.in(['APPROVED', 'AUDITED_LOCKED']);
+    }
+
     let query = db.collection('report_logs');
     if (Object.keys(whereConditions).length > 0) {
       query = query.where(whereConditions);

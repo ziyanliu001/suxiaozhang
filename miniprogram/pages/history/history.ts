@@ -111,6 +111,16 @@ Page({
   _deleteInFlight: false,
   _todayActionInFlight: false,
   _supplementInFlight: false,
+  // 🛡️ 越权修复：账号真实（未按当前浏览门店收敛前）的管理向角色标记，与账号
+  // 真实所属门店 id。isManagerRole/isFinanceRole/isManagerOrAdmin/isFinanceOrAdmin
+  // 这四个 data 字段此后会被 _recomputeStoreScopedPermissions() 按"是否正在浏览
+  // 本人真实所属门店"重新收敛，不再直接等同于账号的全局角色——这里的 _raw* 保存
+  // 一份未收敛的原始值，供每次切店时重新收敛，不需要重新查一遍角色
+  _rawIsManagerRole: false,
+  _rawIsFinanceRole: false,
+  _rawIsManagerOrAdmin: false,
+  _rawIsFinanceOrAdmin: false,
+  _myHomeStoreId: '',
   // 🆕 精简 setData payload：本页全部报表记录（可达 DataService 默认上限
   // 100 条，每条都是 30+ 字段的格式化对象），从来没有在 WXML 里直接绑定过
   // ——渲染层只读 filteredReports（applyFilters() 从这份数据筛出的子集）。
@@ -209,6 +219,11 @@ Page({
     receiptImgCount: 0,
     isManagerOrAdmin: false,
     isFinanceOrAdmin: false,
+    // 🛡️ 越权修复：是否允许在当前浏览的门店上看到"待审核"/"已驳回" Tab 及其
+    // 管理操作——默认 true（首屏通常先看自己所属门店），initPermissions()/
+    // onStoreChange() 会按"当前门店是否是本人真实所属门店"重新收敛，见
+    // _recomputeStoreScopedPermissions()
+    canViewPendingRejected: true,
     showPreviewBanner: false,
     previewBannerText: '',
     // 🐛 修复：placeholder 曾使用 XML 数字字符实体 &#10; 表示换行，微信 WXML 不会对其解码，
@@ -448,6 +463,12 @@ Page({
       isAllStoresView: isAllStores
     });
 
+    // 🛡️ 越权修复：账号真实角色不会因为切店而改变，但"当前浏览门店是否是本人
+    // 所属门店"这个判定结果会——每次切店都要重新收敛一遍 isManagerRole 等
+    // store-scoped 权限标记，否则店长/财务切到别的门店浏览时，管理操作按钮会
+    // 原样带过去（见 _recomputeStoreScopedPermissions 头部注释）
+    this._recomputeStoreScopedPermissions();
+
     if (this.data.photoArchiveMode) {
       // 图册模式下切店：重新加载图册
       this.setData({ photoArchiveList: [], photoArchiveTotal: 0 });
@@ -659,15 +680,26 @@ Page({
       const previewMode = isSuperAdmin ? getPreviewViewMode() : 'SUPER_ADMIN';
       const showPreviewBanner = isSuperAdmin && previewMode !== 'SUPER_ADMIN';
 
+      // 🛡️ 越权修复：先记下这一轮查到的"账号真实角色/真实所属门店"原始值，
+      // 供 _recomputeStoreScopedPermissions() 按当前浏览的门店重新收敛——
+      // AuthService.getCachedRoleInfo() 在 fetchUserRole() 成功后会同步刷新，
+      // 这里再读一次就是本轮查询到的最新 storeId，不需要改 applyRoleFlags 的
+      // 函数签名去额外传参
+      this._rawIsManagerRole = isManagerRole;
+      this._rawIsFinanceRole = isFinanceRole;
+      this._rawIsManagerOrAdmin = isManagerRole;
+      this._rawIsFinanceOrAdmin = isFinanceRole;
+      const freshCachedRole = AuthService.getCachedRoleInfo();
+      this._myHomeStoreId = (freshCachedRole && freshCachedRole.storeId) || '';
+
       this.setData({
-        isManagerOrAdmin: isManagerRole,
-        isFinanceOrAdmin: isFinanceRole,
-        isManagerRole: isManagerRole,
-        isFinanceRole: isFinanceRole,
         isSuperAdmin: isSuperAdmin,
         showPreviewBanner: showPreviewBanner,
         previewBannerText: showPreviewBanner ? `当前正在预览「${PREVIEW_VIEW_MODE_LABELS[previewMode]}」的界面样式，本页操作仍按您的真实身份（超级管理员）执行` : ''
       });
+      // isManagerRole/isFinanceRole/isManagerOrAdmin/isFinanceOrAdmin 由这里统一
+      // 按当前浏览门店收敛后写入，不在上面直接写原始值——见该方法头部注释
+      this._recomputeStoreScopedPermissions();
 
       // 🐛 硬性根治：onShow() 里对 isAllStoresView 的赋值发生在 initPermissions()
       // （本函数）之前，此时用的 isSuperAdmin 还是上一轮渲染的旧值（首次进页时
@@ -717,6 +749,44 @@ Page({
       console.warn('⚠️ [history] 云端鉴权超时或异常，启动本地缓存兜底:', err.message);
       const fallbackRole = wx.getStorageSync('current_user_role') || 'volunteer';
       applyRoleFlags(fallbackRole);
+    }
+  },
+
+  // 🛡️ 越权修复（核心）：把"账号真实角色"收敛为"对当前浏览门店是否有管理权限"。
+  // 根因：isManagerRole/isFinanceRole 此前是账号的全局真实角色，对应其唯一绑定
+  // 的门店，却被本页 WXML 直接当作"对当前正在浏览的这家门店是否有管理权限"来用。
+  // store-picker 的 FAMILY/VOLUNTEER 访客身份对同租户下任意门店天然"已授权"（无
+  // 需邀请码），店长/财务通过 store-picker 切到自己不管理的其它门店浏览时，这两
+  // 个全局角色标记完全不变——"⚖️ 确认审核""🚨 红字作废""🔓 解封"这些管理操作
+  // 按钮会原样出现在别人门店的卡片上（服务端 manageReportApproval/
+  // updateAndRecalculateCascade 会因门店不匹配拒绝真正的写操作，不会造成数据
+  // 损坏，但按钮本不该出现——展示了不该展示的管理入口本身就是一种越权信息泄露）。
+  //
+  // isSuperAdmin 不受此限制：超管本就该对全租户任意门店拥有完整治理权限，与
+  // cloudfunctions/getReports 的 TENANT_WIDE_ROLES 口径一致。
+  //
+  // 调用时机：initPermissions() 每次查到/刷新角色后调用一次；onStoreChange()
+  // 每次切店后也要调用一次——账号角色不变，但"当前浏览门店是否是本人所属门店"
+  // 这个判定结果会随切店变化，两处都要重算，不能只算一次
+  _recomputeStoreScopedPermissions() {
+    const isSuperAdmin = this.data.isSuperAdmin;
+    const currentStoreId = this.data.currentStoreId;
+    const isOwnStore = isSuperAdmin || (!!this._myHomeStoreId && currentStoreId === this._myHomeStoreId);
+
+    this.setData({
+      isManagerRole: isOwnStore ? this._rawIsManagerRole : false,
+      isFinanceRole: isOwnStore ? this._rawIsFinanceRole : false,
+      isManagerOrAdmin: isOwnStore ? this._rawIsManagerOrAdmin : false,
+      isFinanceOrAdmin: isOwnStore ? this._rawIsFinanceOrAdmin : false,
+      canViewPendingRejected: isOwnStore
+    });
+
+    // 非本店视角下，"待审核"/"已驳回" Tab 已在 WXML 整体隐藏（见
+    // canViewPendingRejected），若用户此前在自己门店停留在这两个 Tab、再切到
+    // 别的门店，statusTab 必须一并强制收敛回"已通过"，否则会停在一个已经不可见
+    // 的 Tab 上，列表看起来像突然清空而不知道原因
+    if (!isOwnStore && this.data.statusTab !== 'approved') {
+      this.setData({ statusTab: 'approved', statusTabIndex: STATUS_TAB_ORDER.indexOf('approved') });
     }
   },
 
@@ -1665,12 +1735,16 @@ Page({
 
     // 🆕 空状态智能文案：只要门店/月份/状态 Tab/风控追溯任一筛选条件生效，
     // 空列表时就展示"重置筛选"——与账号/门店本身确实没有任何记录（重置了也
-    // 无济于事）区分开，不用同一句"暂无相关记录"误导用户
+    // 无济于事）区分开，不用同一句"暂无相关记录"误导用户。
+    // 🛡️ 越权修复：非本店视角下 statusTab 被 _recomputeStoreScopedPermissions()
+    // 强制收敛为 'approved'（"全部"Tab 本身已隐藏，不是用户主动筛选的结果），
+    // 这种情况不计入"生效筛选"，否则每个访客浏览别人门店时都会莫名其妙看到
+    // "重置筛选"链接，明明什么都没筛选
     const hasActiveFilters = !!(
       (selectedStoreName && selectedStoreName !== '全部门店' && selectedStoreName !== '全国总览') ||
       selectedMonthStr ||
       anomalyFilterType ||
-      statusTab !== 'all'
+      (this.data.canViewPendingRejected && statusTab !== 'all')
     );
 
     this.setData({ filteredReports: this.processReportListAudit(filtered), statusTabCounts, hasActiveFilters });
@@ -1715,11 +1789,15 @@ Page({
   // 🛡️ 有意不重置门店选择——store-picker 反映的是全局当前门店上下文（其余页面
   // 共享同一份），"重置本页筛选"不该顺带改掉用户在别处也在用的门店选择
   onResetFilters() {
+    // 🛡️ 越权修复：非本店视角下"全部"Tab 本身已被隐藏（见 canViewPendingRejected），
+    // 重置筛选不能无条件把 statusTab 打回 'all'，否则会停在一个 WXML 里已经不存在
+    // 对应 Tab 元素的状态上，没有任何 Tab 显示为选中，看起来像是坏了
+    const resetStatusTab = this.data.canViewPendingRejected ? 'all' : 'approved';
     this.setData({
       selectedMonthStr: '',
       selectedMonthDisplay: '',
-      statusTab: 'all',
-      statusTabIndex: 0,
+      statusTab: resetStatusTab,
+      statusTabIndex: STATUS_TAB_ORDER.indexOf(resetStatusTab),
       anomalyFilterType: '',
       anomalyFilterLabel: ''
     });
