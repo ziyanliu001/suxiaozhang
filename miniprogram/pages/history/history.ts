@@ -466,8 +466,17 @@ Page({
     // 🛡️ 越权修复：账号真实角色不会因为切店而改变，但"当前浏览门店是否是本人
     // 所属门店"这个判定结果会——每次切店都要重新收敛一遍 isManagerRole 等
     // store-scoped 权限标记，否则店长/财务切到别的门店浏览时，管理操作按钮会
-    // 原样带过去（见 _recomputeStoreScopedPermissions 头部注释）
-    this._recomputeStoreScopedPermissions();
+    // 原样带过去（见 _recomputeStoreScopedPermissions 头部注释）。
+    // 🛡️ 存在性防御：该方法定义在本文件下方（Page 对象的直接方法），理论上
+    // this 上下文里必然存在；这里仍加一层 typeof 检查，纯粹是防御性编程——
+    // 万一将来有人在重构时不慎把这个方法从 Page 对象里挪走/改名却漏改这里的
+    // 调用点，也只会静默跳过一次权限收敛，而不是抛出未捕获的 TypeError 把
+    // 整条 onStoreChange 流程带崩
+    if (typeof this._recomputeStoreScopedPermissions === 'function') {
+      this._recomputeStoreScopedPermissions();
+    } else {
+      console.error('[onStoreChange] _recomputeStoreScopedPermissions 未定义，跳过本次门店权限收敛');
+    }
 
     if (this.data.photoArchiveMode) {
       // 图册模式下切店：重新加载图册
@@ -698,8 +707,13 @@ Page({
         previewBannerText: showPreviewBanner ? `当前正在预览「${PREVIEW_VIEW_MODE_LABELS[previewMode]}」的界面样式，本页操作仍按您的真实身份（超级管理员）执行` : ''
       });
       // isManagerRole/isFinanceRole/isManagerOrAdmin/isFinanceOrAdmin 由这里统一
-      // 按当前浏览门店收敛后写入，不在上面直接写原始值——见该方法头部注释
-      this._recomputeStoreScopedPermissions();
+      // 按当前浏览门店收敛后写入，不在上面直接写原始值——见该方法头部注释。
+      // 🛡️ 存在性防御：见 onStoreChange 同一处调用点的注释，纯粹是防御性编程
+      if (typeof this._recomputeStoreScopedPermissions === 'function') {
+        this._recomputeStoreScopedPermissions();
+      } else {
+        console.error('[applyRoleFlags] _recomputeStoreScopedPermissions 未定义，isManagerRole 等标记本轮未按当前门店收敛');
+      }
 
       // 🐛 硬性根治：onShow() 里对 isAllStoresView 的赋值发生在 initPermissions()
       // （本函数）之前，此时用的 isSuperAdmin 还是上一轮渲染的旧值（首次进页时
@@ -714,12 +728,24 @@ Page({
       }
     };
 
-    const cached = AuthService.getCachedRoleInfo();
-    if (cached && cached.role) {
-      applyRoleFlags(cached.role);
-    } else {
-      const localRole = wx.getStorageSync('current_user_role') || 'volunteer';
-      applyRoleFlags(localRole);
+    // 🛡️ 生命周期加固：这一段发生在下面 try/catch 之外，此前若 applyRoleFlags
+    // 内部任何一步同步抛错（例如误引用了一个尚未定义的方法），异常不会被下面的
+    // try/catch 兜住——虽然 initPermissions() 本身是 async 函数，同步抛错不会
+    // 中断 onShow() 的后续同步语句（loadReports() 仍会正常执行），但这里的异常
+    // 会变成一个没有任何 catch 兜底的 rejected Promise（控制台里的 Unhandled
+    // promise rejection），角色标记也会永久停留在这一步之前的旧值，且没有任何
+    // 诊断信息可循。补上这层 try/catch，与下面云端刷新那段保持同一套"绝不同步
+    // 抛出未捕获异常"的防御口径
+    try {
+      const cached = AuthService.getCachedRoleInfo();
+      if (cached && cached.role) {
+        applyRoleFlags(cached.role);
+      } else {
+        const localRole = wx.getStorageSync('current_user_role') || 'volunteer';
+        applyRoleFlags(localRole);
+      }
+    } catch (err: any) {
+      console.error('⚠️ [history] 本地角色标记计算异常，本轮角色权限可能未生效:', err && err.message);
     }
 
     try {
@@ -747,8 +773,15 @@ Page({
       }
     } catch (err: any) {
       console.warn('⚠️ [history] 云端鉴权超时或异常，启动本地缓存兜底:', err.message);
-      const fallbackRole = wx.getStorageSync('current_user_role') || 'volunteer';
-      applyRoleFlags(fallbackRole);
+      try {
+        const fallbackRole = wx.getStorageSync('current_user_role') || 'volunteer';
+        applyRoleFlags(fallbackRole);
+      } catch (fallbackErr: any) {
+        // 🛡️ 兜底分支本身也不能再抛——这已经是最后一道防线，走到这里意味着本轮
+        // 角色权限标记计算失败，但绝不能因此让 initPermissions() 以 rejected
+        // Promise 收尾、把异常悄悄丢给一个没人 catch 的调用方
+        console.error('⚠️ [history] 本地缓存兜底角色标记计算异常:', fallbackErr && fallbackErr.message);
+      }
     }
   },
 
