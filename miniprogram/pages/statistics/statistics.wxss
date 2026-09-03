@@ -1627,12 +1627,20 @@ page {
 .store-people-grid-4col .cell-badge.badge-elderly   { background: #D0EBFF; color: #1971C2; }
 .store-people-grid-4col .cell-badge.badge-other     { background: #F1F3F5; color: #868E96; }
 
-/* 强制单行：人群名称最长到"倾听陪伴老人"5 字，24rpx 字号下单行必然放得下，
-   加 nowrap+ellipsis 兜底，禁止在极端字号设置下折行把下面的数值挤歪 */
+/* 🐛 截断修复：此前假设"人群名称最长到'倾听陪伴老人'5 字，24rpx 字号下单行
+   必然放得下"并不成立——四列网格里每格实际可用宽度远小于这个假设，"倾听陪伴
+   老人"这类 5~6 字标签在真机上被生硬截断成"倾听陪..."。治本的做法是标签文案
+   本身收窄到 2~4 个汉字（见 WXML），这里字号同步收窄到 22rpx、显式加
+   min-width:0（配合父级 .grid-cell 已有的 min-width:0，flex 子项才能真正
+   收缩到比内容更窄），text-align:center 确保居中展示；nowrap+ellipsis 继续
+   保留兜底——万一未来又出现更长的标签，至少体面地省略号收尾，而不是把数值
+   挤到下一行 */
 .store-people-grid-4col .cell-lbl {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #868E96;
   max-width: 100%;
+  min-width: 0;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1643,6 +1651,8 @@ page {
   font-weight: bold;
   color: #212529;
   line-height: 1.2;
+  min-width: 0;
+  text-align: center;
 }
 
 .store-people-grid-4col .cell-val.party-highlight {

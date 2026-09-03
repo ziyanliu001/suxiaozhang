@@ -651,7 +651,7 @@
            容易误以为统计功能坏了，这里把真实原因显式说出来 -->
       <view class="pending-audit-notice" wx:if="{{statsData.pendingReportCount > 0}}" bindtap="onGoToPendingAudit">
         <text class="pending-audit-notice-text">⏳ 当前有 {{statsData.pendingReportCount}} 笔餐报待审核，审核通过后正式纳入本统计与阳光账本</text>
-        <text class="pending-audit-notice-btn">去审核 &gt;</text>
+        <text class="pending-audit-notice-btn">去审核 ›</text>
       </view>
 
       <view class="core-metrics-grid" wx:if="{{!(statisticsLoadLoading && !coreMetrics.hasData)}}">
@@ -1165,6 +1165,9 @@
           <text class="card-title">门店人员与服务人群画像</text>
         </view>
       </view>
+      <!-- 🐛 文字截断修复：标签文案统一收窄到 2~4 个汉字（原"社会工作者"/"倾听陪伴
+           老人"等 5~6 字标签在四列网格里放不下，被生硬截断成"倾听陪..."），
+           数字/含义不变，只是换成更短的等价说法 -->
       <view class="store-people-grid-4col">
         <view class="grid-cell">
           <view class="cell-badge badge-party">党员</view>
@@ -1173,27 +1176,27 @@
         </view>
         <view class="grid-cell">
           <view class="cell-badge badge-volunteer">志愿</view>
-          <text class="cell-lbl">社会工作者</text>
+          <text class="cell-lbl">社工人员</text>
           <text class="cell-val volunteer">{{storeProfile.socialWorkers}}</text>
         </view>
         <view class="grid-cell">
           <view class="cell-badge badge-volunteer">志愿</view>
-          <text class="cell-lbl">志愿者</text>
+          <text class="cell-lbl">志愿义工</text>
           <text class="cell-val volunteer">{{storeProfile.volunteersCount}}</text>
         </view>
         <view class="grid-cell">
           <view class="cell-badge badge-elderly">长者</view>
-          <text class="cell-lbl">堂食老人</text>
+          <text class="cell-lbl">堂食长者</text>
           <text class="cell-val elderly">{{storeProfile.dineInSeniorsCount}}</text>
         </view>
         <view class="grid-cell">
           <view class="cell-badge badge-elderly">长者</view>
-          <text class="cell-lbl">送餐老人</text>
+          <text class="cell-lbl">送餐长者</text>
           <text class="cell-val elderly">{{storeProfile.deliverySeniorsCount}}</text>
         </view>
         <view class="grid-cell">
           <view class="cell-badge badge-elderly">长者</view>
-          <text class="cell-lbl">倾听陪伴老人</text>
+          <text class="cell-lbl">倾听关怀</text>
           <text class="cell-val elderly">{{storeProfile.listeningSeniorsCount}}</text>
         </view>
         <view class="grid-cell">
@@ -1256,8 +1259,15 @@
          latestDataLabel 已从本店历史记录里解析出最近一条数据所在月份时才显示，
          见 loadStatistics() 里的计算逻辑） -->
     <view class="smart-empty-card" wx:if="{{!statistics || statistics.recordCount === 0}}">
-      <text class="empty-icon">📊</text>
-      <text class="empty-title">暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
+      <!-- 🆕 空状态数据联动：正式数据（APPROVED/AUDITED_LOCKED）为 0 不等于
+           "什么都没发生"——选定周期内可能已经有一批餐报提交了，只是还卡在待审核
+           （PENDING）没有跨过二级审核门槛（见 pending-audit-notice 同一处
+           statsData.pendingReportCount 注释）。这种情况下继续显示"暂无统计数据"
+           会让刚提交完凭证的义工/店长误以为提交失败或系统坏了，改成明确点出
+           "有 N 笔待审核"，把原因说清楚，而不是让用户自己去猜 -->
+      <text class="empty-icon">{{statsData.pendingReportCount > 0 ? '⏳' : '📊'}}</text>
+      <text class="empty-title" wx:if="{{statsData.pendingReportCount > 0}}">选定周期内有 {{statsData.pendingReportCount}} 笔餐报待审核，审核通过后正式纳入公开账本</text>
+      <text class="empty-title" wx:else>暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
 
       <!-- 🏷️ 快捷操作胶囊组：所有次要引导操作并排展示，取代原先垂直堆叠的大按钮 -->
       <view class="empty-quick-pill-row">
