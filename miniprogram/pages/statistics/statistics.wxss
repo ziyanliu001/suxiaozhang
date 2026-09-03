@@ -4735,15 +4735,15 @@ page {
   background-position: 50% 0, 0 50%;
 }
 
-/* 动态文件名预览卡片：灰底微浅框，让店长/财务在下载前就清楚文件命名规则 */
+/* 🆕 第二轮精细化：文件名预览卡片提升视觉层级——更深的文字色 + 单行省略
+   + 右侧格式徽章，一眼确认"这是一份 xlsx" */
 .export-filename-preview {
   display: flex;
   align-items: center;
   gap: 10rpx;
-  background: #F8F9FA;
-  border: 1rpx solid #EFF1F3;
+  background: #F7F8FA;
   border-radius: 12rpx;
-  padding: 16rpx 18rpx;
+  padding: 20rpx;
   margin: 16rpx 0;
 }
 
@@ -4753,19 +4753,41 @@ page {
 }
 
 .export-filename-text {
-  font-size: 22rpx;
-  color: #495057;
-  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  color: #1D2129;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-ext-badge {
+  flex-shrink: 0;
+  font-size: 18rpx;
+  font-weight: bold;
+  color: #07C160;
+  background: #E5F9EC;
+  border-radius: 6rpx;
+  padding: 4rpx 10rpx;
   line-height: 1.4;
 }
 
 /* 🆕【方案 A】导出方式说明行：只有一条路径，展示为固定选中态，纯信息展示，
-   不是需要用户二选一的交互控件（不绑 bindtap） */
+   不是需要用户二选一的交互控件（不绑 bindtap）。第二轮精细化：外面包一层
+   浅色卡片，与上方文件名预览呼应，视觉上是同一组"信息展示"卡片 */
+.export-method-card {
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  padding: 18rpx 20rpx;
+  margin-top: 16rpx;
+}
+
 .export-method-row {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  margin: 20rpx 0 4rpx;
+  gap: 12rpx;
 }
 
 .export-method-radio {
@@ -4795,39 +4817,42 @@ page {
   color: #343A40;
 }
 
-/* 温馨提示条：浅灰弱底，说明导出内容范围/转发引导 */
+/* 温馨提示条：标准辅助灰，避免发灰发白导致阅读困难 */
 .export-scope-tip {
-  font-size: 21rpx;
-  color: #ADB5BD;
-  background: #FAFBFC;
-  border-radius: 10rpx;
-  padding: 12rpx 14rpx;
-  margin: 18rpx 0 8rpx;
+  font-size: 22rpx;
+  color: #86909C;
+  padding: 0 4rpx;
+  margin: 16rpx 0 24rpx;
   line-height: 1.5;
 }
 
-/* 主操作按钮升级：宽幅圆角大按钮，暖金渐变，点击态平滑缩放 */
+/* 🆕 第二轮精细化：取消底部"取消"按钮（右上角 ✕ 已是明确关闭入口），
+   改为单一通栏大按钮独占一行——不再叠加在 .btn-modal-submit 之上做局部
+   覆盖，直接是这颗按钮的完整样式定义。专业翡翠绿呼应 Excel 图标，
+   与本页其余暖金主题按钮（.btn-modal-submit 等）刻意区分，强调这是
+   "生成 Excel 文件"这个动作本身 */
 .btn-export-primary {
-  height: 80rpx;
-  line-height: 80rpx;
-  border-radius: 40rpx;
-  background: linear-gradient(135deg, #F08C00 0%, #D9480E 100%) !important;
-  font-size: 28rpx !important;
-  box-shadow: 0 6rpx 16rpx rgba(217, 72, 14, 0.25);
+  display: block;
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  background: #07C160;
+  color: #FFFFFF;
+  font-size: 30rpx;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 8rpx 20rpx rgba(7, 193, 96, 0.25);
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
-.btn-export-primary:active {
-  transform: scale(0.97);
-  opacity: 0.92;
+.btn-export-primary::after {
+  border: none;
 }
 
-/* 与 .btn-export-primary 同一行的取消按钮，高度/圆角对齐，不使用默认的
-   原生 button 高度（避免两颗按钮一高一矮） */
-.btn-export-cancel {
-  height: 80rpx;
-  line-height: 80rpx;
-  border-radius: 40rpx;
+.btn-export-primary:active {
+  transform: scale(0.98);
+  opacity: 0.92;
 }
 
 .export-preview-summary-grid {

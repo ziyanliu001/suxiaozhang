@@ -223,26 +223,30 @@
         </view>
       </view>
 
-      <!-- 🆕 动态文件名预览：见 statistics.ts refreshExportFileNamePreview -->
+      <!-- 🆕 动态文件名预览：见 statistics.ts refreshExportFileNamePreview。
+           右侧格式徽章 XLSX 是纯装饰性视觉标签，不是文件名本身的一部分 -->
       <view class="export-filename-preview">
         <text class="export-filename-icon">📄</text>
         <text class="export-filename-text">{{exportFileNamePreview}}</text>
+        <text class="file-ext-badge">XLSX</text>
       </view>
 
       <!-- 🆕 导出方式说明：方案 A 只有这一条路径，展示为已选中态，
-           不再是需要用户二选一的可交互单选组 -->
-      <view class="export-method-row">
-        <view class="export-method-radio checked"></view>
-        <text class="export-method-lbl">下载至手机 / 发送给微信好友</text>
+           不再是需要用户二选一的可交互单选组，包一层浅色卡片提升质感 -->
+      <view class="export-method-card">
+        <view class="export-method-row">
+          <view class="export-method-radio checked"></view>
+          <text class="export-method-lbl">下载至手机 / 发送给微信好友</text>
+        </view>
       </view>
       <view class="export-scope-tip">
-        <text>· 文件生成后将自动打开，点击右上角【···】即可直接转发给微信好友/工作群，或保存至本地。</text>
+        <text>· 文档生成后将自动打开，点击右上角【···】即可直接转发给好友或保存至手机</text>
       </view>
 
-      <view class="modal-footer">
-        <button class="btn-modal-cancel btn-export-cancel" bindtap="onCloseExportConfigModal">取消</button>
-        <button class="btn-modal-submit btn-export-primary" bindtap="onConfirmExportConfig">立即生成并打开</button>
-      </view>
+      <!-- 🆕 第二轮精细化：去掉底部"取消"按钮（右上角✕已经是明确的关闭入口，
+           两个关闭动作并存是冗余），改为单一通栏大按钮，专业翡翠绿呼应
+           Excel 图标 -->
+      <button class="btn-export-primary" bindtap="onConfirmExportConfig">立即生成并打开</button>
     </view>
   </view>
 
