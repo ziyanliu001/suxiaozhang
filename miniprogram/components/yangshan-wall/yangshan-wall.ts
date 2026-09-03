@@ -95,10 +95,17 @@ Component({
 
       this.setData({ loading: true });
       try {
+        // 🐛（首页红色超时报错根因修复）getSunshineLedger/config.json 此前没有
+        // timeout 字段，走平台默认 3s 执行上限——与 checkImageContent/
+        // ocrExpenseReceipt 等云函数是完全同一类问题（见 -504003 根因排查），
+        // 该云函数本身要串行查 report_logs/volunteer_duty_logs/user_roles 等
+        // 多张表，冷启动下很容易超过 3s。现已给云函数配置补上 timeout:20，
+        // 客户端等待上限同步从默认 8000ms 提到 25000ms，避免服务端窗口延长后
+        // 客户端反而先一步判定"调用超时"
         const res: any = await callFunctionWithTimeout({
           name: 'getSunshineLedger',
           data: { storeId }
-        });
+        }, 25000);
         const result = res.result;
         if (!result || !result.success) return;
 
@@ -108,7 +115,12 @@ Component({
           hasYangShanList: yangShanList.length > 0
         });
       } catch (err) {
-        console.error('[yangshan-wall] 加载阳善公开名单失败:', err);
+        // 🛡️ 静默降级：本组件是首页自动挂载即拉取的公开只读展示位，失败时
+        // 直接沿用 hasYangShanList: false 的既有空态兜底文案（见 data 定义），
+        // 不弹 toast/modal 打断用户，也不应该在控制台留一条刺眼的红色 error——
+        // 网络波动导致的加载失败是预期内会发生的降级路径，不是真正需要开发者
+        // 立即关注的异常，改用 console.warn 与"真正的异常"在控制台里区分开
+        console.warn('[yangshan-wall] 加载阳善公开名单失败，已静默降级为空态兜底文案:', err);
       } finally {
         this.setData({ loading: false });
       }

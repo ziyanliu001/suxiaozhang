@@ -9948,10 +9948,13 @@ Page({
     }
 
     try {
+      // 🐛 getSunshineLedger 云函数已补上 timeout:20（此前没配置字段走平台
+      // 默认 3s，是"调用超时"的真实根因），客户端等待上限同步提到 25000ms，
+      // 两边超时预算对齐，与 yangshan-wall/sunshine-board 同一处修复
       const res: any = await callFunctionWithTimeout({
         name: 'getSunshineLedger',
         data: { storeId, yearMonth }
-      });
+      }, 25000);
       const result = res.result;
       if (!result || !result.success) {
         wx.showToast({ title: (result && result.error) || '加载阳光账本失败', icon: 'none' });

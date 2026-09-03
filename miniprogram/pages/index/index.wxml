@@ -1389,10 +1389,10 @@
         <!-- 🌟 大额专项已改为逐条添加的结构化列表（而非自由文本），因为要给
              每一条挂一个真实的[独立凭证]按钮，<textarea> 做不到按行挂按钮。
              fixedExpenseText 仍由 fixedExpenseItems 自动派生，无需手改。 -->
-        <view class="fixed-expense-add-row">
-          <input class="name-input" placeholder="项目名称" value="{{fixedExpenseNewName}}" bindinput="onInputFixedExpenseNewName" style="flex: 1 !important;" />
-          <input class="amount-input" type="digit" placeholder="金额" value="{{fixedExpenseNewAmount}}" bindinput="onInputFixedExpenseNewAmount" style="width: 220rpx !important; min-width: 220rpx !important; flex: none !important;" />
-          <button class="btn-add-item" bindtap="onAddFixedExpenseItem" style="width: 120rpx !important; padding: 0 12rpx !important; flex: none !important;">+ 添加</button>
+        <view class="fixed-expense-add-row" style="align-items: center !important;">
+          <input class="name-input" placeholder="项目名称" value="{{fixedExpenseNewName}}" bindinput="onInputFixedExpenseNewName" style="flex: 1 !important; height: 72rpx !important; background: #F7F8FA !important; border-radius: 12rpx !important; box-sizing: border-box !important;" />
+          <input class="amount-input" type="digit" placeholder="金额" value="{{fixedExpenseNewAmount}}" bindinput="onInputFixedExpenseNewAmount" style="width: 220rpx !important; min-width: 220rpx !important; flex: none !important; height: 72rpx !important; background: #F7F8FA !important; border-radius: 12rpx !important; box-sizing: border-box !important;" />
+          <button class="btn-add-item" bindtap="onAddFixedExpenseItem" style="width: 120rpx !important; padding: 0 12rpx !important; flex: none !important; height: 72rpx !important; line-height: normal !important; display: flex !important; align-items: center !important; justify-content: center !important; border-radius: 12rpx !important; box-sizing: border-box !important;">+ 添加</button>
         </view>
 
         <view class="fixed-expense-empty" wx:if="{{fixedExpenseItems.length === 0}}">
@@ -3182,15 +3182,22 @@
        白色图标直接和白色背景融为一体（看起来像"没有图标"）；金色底的右按钮上白色图标也和金黄背景
        低对比度重叠。SVG 图标系统这里没法简单换色，改用原生 emoji 字符作为图标（用户自身颜色不受
        按钮 color 影响，天然清晰可辨，也是需求里给出的示例做法），一步到位解决对比度问题。 -->
+  <!-- 🐛 底部输入框被遮挡根因修复：这里从两枚按钮扩到三枚后，.bottom-action-floating-bar
+       仍按"双按钮组 136rpx"这个旧估算值参与 .page-body-scroll/.index-page-container 的
+       padding-bottom 计算（见 index.wxss 对应注释）——三枚按钮挤在同一行，窄屏/系统字号
+       调大时文案容易换行，实际渲染高度一旦超过 136rpx，底部安全垫就不够用，"门店今日
+       日志/大事记"输入框会被压在条下面。根治办法是让这一行永远不换行：文案改用独立
+       <text class="btn-main-label"> 承载并配 ellipsis 兜底（见 index.wxss），保证条本身
+       高度稳定可预期，而不是让 padding-bottom 去猜一个会变的高度 -->
   <view class="bottom-action-floating-bar" wx:if="{{!isVolunteer && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
-      <text class="btn-emoji-icon">📋</text>生成餐报文本
+      <text class="btn-emoji-icon">📋</text><text class="btn-main-label">生成餐报文本</text>
     </button>
     <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
-      <text class="btn-emoji-icon">🎨</text>生成公示海报
+      <text class="btn-emoji-icon">🎨</text><text class="btn-main-label">生成公示海报</text>
     </button>
     <button class="btn-main-action print-gen-btn" hover-class="btn-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}" style="background: #000000 !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
-      <text class="btn-emoji-icon">🖨️</text>导出打印清单
+      <text class="btn-emoji-icon">🖨️</text><text class="btn-main-label">导出打印清单</text>
     </button>
   </view>
 

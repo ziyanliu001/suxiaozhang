@@ -1794,10 +1794,12 @@ Page({
 
     this.setData({ storeLoveWallLoading: true });
     try {
+      // 🐛 getSunshineLedger 已补上 timeout:20（此前无配置走平台默认 3s，是
+      // "调用超时"真实根因），客户端等待上限同步提到 25000ms 对齐
       const res: any = await callFunctionWithTimeout({
         name: 'getSunshineLedger',
         data: { storeId }
-      });
+      }, 25000);
       const result = res.result;
       if (!result || !result.success) return;
 

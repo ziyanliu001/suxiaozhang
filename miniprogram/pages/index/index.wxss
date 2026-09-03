@@ -39,9 +39,12 @@ page {
      🐛 之前这里写死 180rpx，比 .bottom-action-floating-bar 注释里算好的
      "三段式 TabBar（100rpx）+ 吸底双按钮组（136rpx）= 236rpx" 还少 56rpx，且完全没算
      底部安全区，iPhone 类全面屏机型上"该机构已有 N 家门店"卡片的按钮实测仍被压住——
-     改为与 .page-body-scroll 同一份 236rpx + 安全区计算，两处不再各算一套 */
-  padding-bottom: calc(236rpx + constant(safe-area-inset-bottom)) !important;
-  padding-bottom: calc(236rpx + env(safe-area-inset-bottom)) !important;
+     改为与 .page-body-scroll 同一份 236rpx + 安全区计算，两处不再各算一套。
+     🐛（底部输入框被遮挡二次修复）236rpx 恰好等于"TabBar+按钮组"的高度总和，滚到底
+     时内容边缘与按钮组顶边严丝合缝贴在一起，没有任何呼吸间距；再叠加 32rpx 安全垫，
+     确保滚动到底部时最后一块内容与吸底按钮组之间始终留有可见间隙 */
+  padding-bottom: calc(268rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(268rpx + env(safe-area-inset-bottom)) !important;
 }
 
 .app-header-section {
@@ -55,10 +58,16 @@ page {
 .page-body-scroll {
   flex: 1;
   width: 100%;
-  /* 底部同时叠着两层固定元素：三段式 TabBar（100rpx）+ 吸底双按钮组 .bottom-action-floating-bar
+  /* 底部同时叠着两层固定元素：三段式 TabBar（100rpx）+ 吸底按钮组 .bottom-action-floating-bar
      （bottom: 100rpx 起，自身高度 24+88+24=136rpx），两者共占 236rpx，
-     padding-bottom 必须盖过这个总高度，否则滚到底部时"意见反馈"/协议链接仍会被按钮组压住 */
-  padding: 24rpx 24rpx calc(236rpx + env(safe-area-inset-bottom)) 24rpx;
+     padding-bottom 必须盖过这个总高度，否则滚到底部时"意见反馈"/协议链接/"门店今日
+     日志/大事记"输入框仍会被按钮组压住。
+     🐛 底部输入框被遮挡根因修复：236rpx 只是刚好盖过、没有任何余量，一旦按钮组因为
+     窄屏/系统字号放大而实际渲染得比 136rpx 更高（三枚按钮挤一行，此前无 nowrap 兜底
+     容易换行），这份 padding 立刻不够用。现在 .btn-main-label 已强制单行+ellipsis
+     （见对应规则），按钮组高度不再会变，这里再加 32rpx 安全垫，保证滚动到底部时最后
+     一块内容与吸底按钮组顶边之间始终留有 ≥32rpx 的可见间隙，不是刚好贴边 */
+  padding: 24rpx 24rpx calc(268rpx + env(safe-area-inset-bottom)) 24rpx;
   box-sizing: border-box;
 }
 
@@ -1892,27 +1901,46 @@ page {
 /* 🔒 大额专项：逐条添加 + 行级独立凭证 */
 .fixed-expense-add-row {
   display: flex;
+  align-items: center;
   gap: 12rpx;
   margin-bottom: 16rpx;
 }
 
 /* 📐 大额支出新增列 3 段式比例调整：.name-input/.amount-input/.btn-add-item 是
    全局共用类名（同时还用在"爱心人士姓名"单笔支持行、支出模板新增行），这里用
-   .fixed-expense-add-row 限定，只调整这一行的比例，不影响另外两处 */
+   .fixed-expense-add-row 限定，只调整这一行的比例，不影响另外两处。
+   🐛 排版规范化：全局 .name-input/.amount-input 是 76rpx 高、#F8F9FA 底；这一行
+   单独收窄到 72rpx + 微浅灰 #F7F8FA，三个控件（输入框×2 + 添加按钮）高度严格
+   一致、统一垂直居中，不再各自沿用不同来源的高度/底色 */
 .fixed-expense-add-row .name-input {
   flex: 1;
+  height: 72rpx;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  box-sizing: border-box;
 }
 
 .fixed-expense-add-row .amount-input {
   flex: none;
   width: 220rpx !important;
   min-width: 220rpx;
+  height: 72rpx;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  box-sizing: border-box;
 }
 
 .fixed-expense-add-row .btn-add-item {
   flex: none;
   width: 120rpx !important;
   padding: 0 12rpx !important;
+  height: 72rpx;
+  line-height: normal;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12rpx;
+  box-sizing: border-box;
 }
 
 .fixed-expense-empty {
@@ -3958,9 +3986,23 @@ page {
   font-size: 28rpx;
   margin-right: 8rpx;
   line-height: 1;
+  flex-shrink: 0;
   /* emoji 字符自带色彩，不受按钮 color 影响，天然清晰可辨，
      用它代替之前 stroke 写死为白色、在白底/浅色底上完全隐形的 SVG 图标；
      line-height:1 避免 emoji 字形自身的行高与按钮文字基线产生视觉错位 */
+}
+
+/* 🐛 底部输入框被遮挡根因修复之一：三枚按钮共占一行，裸文本节点在系统字号
+   调大/窄屏设备上没有 nowrap 兜底时会自动换行，把 .bottom-action-floating-bar
+   撑到超出下方 padding-bottom 预留的高度。改用独立 <text> 承载文案并强制单行 +
+   ellipsis 收尾——正常宽度下六个汉字仍完整展示，只有真正极端窄屏才会看到省略号，
+   但无论哪种情况，这一行的渲染高度都稳定等于单行文字高度，不会把整条 bar 撑高 */
+.btn-main-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 /* 🌟 左右两个按钮做主次区分：生成餐报文本是流程首步、可反复重新生成校对，用白底红描边，

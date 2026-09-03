@@ -53,10 +53,13 @@ Component({
 
       this.setData({ loading: true });
       try {
+        // 🐛 同 yangshan-wall 组件：getSunshineLedger 云函数已补上 timeout:20
+        // （此前没配置字段走平台默认 3s，是"调用超时"的真实根因），客户端
+        // 等待上限同步提到 25000ms，两边超时预算对齐
         const res: any = await callFunctionWithTimeout({
           name: 'getSunshineLedger',
           data: { storeId }
-        });
+        }, 25000);
         const result = res?.result;
         if (!result?.success) return;
 
@@ -64,7 +67,9 @@ Component({
           entries: Array.isArray(result.latestDonorsWeekly) ? result.latestDonorsWeekly : []
         });
       } catch (err) {
-        console.error('[sunshine-board] 加载近7日阳善榜失败:', err);
+        // 🛡️ 静默降级：与 yangshan-wall 同一套处理——公开只读展示位失败时
+        // 沿用既有空态展示，不打断用户，不留刺眼的控制台红色 error
+        console.warn('[sunshine-board] 加载近7日阳善榜失败，已静默降级:', err);
       } finally {
         this.setData({ loading: false });
       }
