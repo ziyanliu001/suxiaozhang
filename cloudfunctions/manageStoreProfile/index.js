@@ -53,6 +53,11 @@ const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
 // 🏢 平台类型允许值白名单：防止客户端写入任意字符串
 // tongxin_children:     厦门同心慈善会儿童院（青少年/儿童关爱业态）
 // tongxin_cancer_care:  厦门同心癌友关怀会（重疾/癌症患者关怀业态）
+// 🏛️（2026-09-04 orgType 枚举体系统一）本文件这份是深度集成、被十余处下游
+// 消费的真实权威取值域——与 createTenant/index.js ORG_TYPES、
+// createStore/index.js VALID_ORG_TYPES、miniprogram/utils/constants.ts
+// ORG_TYPE_VALUES 四处保持同一份拷贝，改动这里务必同步改另外三处，否则
+// 又会退回"新建门店的 orgType 与编辑门店的 orgType 是两套不同取值"的老问题
 const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
 
 // 🏮 品牌矩阵归属：一个机构可同时拥有多种 orgType 的站点，通过 platformFamily 将其

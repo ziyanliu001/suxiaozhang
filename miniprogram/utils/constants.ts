@@ -4,6 +4,42 @@
 export const APP_NAME = '素小账';
 
 /**
+ * 🏛️ 机构类型（orgType）唯一权威枚举
+ *
+ * 🐛 根因修复（2026-09-04 两套 orgType 枚举体系不统一）：此前 createTenant
+ * 云函数的 ORG_TYPES（'charity'/'elderly_care'/'community'/'vegetarian'/
+ * 'rescue'/'other'）与 manageStoreProfile 云函数的 VALID_ORG_TYPES
+ * （'yuhuazhai'/'elderly_canteen'/'volunteer_station'/'rescue_team'/
+ * 'tongxin_children'/'tongxin_cancer_care'/'other'）是两套几乎完全不重叠
+ * 的取值——所有通过新用户"新建组织"引导流程创建的门店，写入的 orgType
+ * 是前者，而 getNationalDashboard 的大屏分组 Tab、computeOrgDisplayCopy/
+ * getNoticeTemplate 的品牌文化文案分支、门店信息配置弹窗的机构类型选择器
+ * 等全部只认后者——前者的值在这些下游消费方眼里全部等价于"未识别"，
+ * 静默落入默认/兜底分支，从未真正生效过。
+ *
+ * manageStoreProfile 的 VALID_ORG_TYPES 是深度集成、被十余处下游消费的
+ * 真实权威口径（与本文件 CLAUDE.md 文档记录的 orgType 域基本一致），本次
+ * 以它为准统一收敛——createTenant/createStore 两个云函数的白名单、以及
+ * 本文件这份前端选择器共用同一份取值，不再各自维护互相对不上的列表。
+ *
+ * 🛡️ 云函数之间没有跨文件共享模块的机制（本仓库一贯做法），
+ * cloudfunctions/createTenant/index.js、cloudfunctions/createStore/index.js、
+ * cloudfunctions/manageStoreProfile/index.js 三处各自维护一份同源拷贝——
+ * 修改这里的取值域时，务必同步改这三个文件，否则又会退回"两套体系"的老问题
+ */
+export const ORG_TYPES: Array<{ value: string; label: string }> = [
+  { value: 'yuhuazhai', label: '雨花斋' },
+  { value: 'elderly_canteen', label: '社区助餐 / 敬老家园' },
+  { value: 'volunteer_station', label: '义工服务站 / 公益团队' },
+  { value: 'rescue_team', label: '应急救援队' },
+  { value: 'tongxin_children', label: '同心 · 儿童关爱' },
+  { value: 'tongxin_cancer_care', label: '同心 · 抗癌关爱' },
+  { value: 'other', label: '其他公益组织' }
+];
+
+export const ORG_TYPE_VALUES: string[] = ORG_TYPES.map(item => item.value);
+
+/**
  * 门店预设映射配置
  * 🌐 多租户说明：这些预设仅供"雨花斋原始账套"内已有门店的快捷匹配使用
  * （如海报生成时自动填充公众号名称/标语），不作为新用户的默认门店。

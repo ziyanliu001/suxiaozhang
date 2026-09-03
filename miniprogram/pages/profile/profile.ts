@@ -21,6 +21,7 @@ import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermissio
 import { setTabBarHidden } from '../../utils/tabBarVisibility';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { maskPhone } from '../../utils/core/privacy';
+import { ORG_TYPES } from '../../utils/constants';
 import { ENTERPRISE_BUILD_ENABLED } from '../../utils/buildFlags';
 import { saasSubscriptionHandlers } from './enterprise/index';
 import { isVoiceFeedbackEnabled, setVoiceFeedbackEnabled } from '../../utils/audioService';
@@ -274,16 +275,19 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
   };
 }
 
-// 🎨 组织信息配置弹窗·机构类型选项：直接用 manageStoreProfile 云函数的
-// VALID_ORG_TYPES 真实取值（不是 onboarding「新建组织」弹窗那份措辞/取值都对不上
-// 后端的 orgTypeOptions/onboardingOrgType，两者是完全独立的两套字段，互不影响）。
-// 选中后立即持久化写回 stores.orgType，全局品牌/文化文案（computeOrgDisplayCopy）
-// 随之自动切换
-const ORG_CONFIG_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'elderly_canteen',   label: '社区助餐 / 敬老家园' },
-  { value: 'yuhuazhai',         label: '雨花斋' },
-  { value: 'volunteer_station', label: '义工服务站 / 公益团队' }
-];
+// 🎨 组织信息配置弹窗·机构类型选项：面向"已有门店"的大家长/店长/超管做日常
+// 编辑，只展示最常见的三种自助业态，'rescue_team'/'tongxin_children'/
+// 'tongxin_cancer_care' 这类特定合作机构专属类型不在这个自助编辑入口开放
+// 选择（避免普通用户误选成需要平台侧另行核实的合作方身份）。
+// 🏛️（2026-09-04 orgType 枚举体系统一）此前这里与 onboarding「新建组织」
+// 弹窗各自维护一份完全独立、取值都对不上的 orgTypeOptions/onboardingOrgType
+// ——本次统一改为两处都从 utils/constants.ts 的 ORG_TYPES（与
+// manageStoreProfile 云函数 VALID_ORG_TYPES 同源）筛选/引用，不再各自手写
+// 一份容易再次分叉的取值表。选中后立即持久化写回 stores.orgType，全局品牌/
+// 文化文案（computeOrgDisplayCopy）随之自动切换
+const ORG_CONFIG_CURATED_VALUES = ['elderly_canteen', 'yuhuazhai', 'volunteer_station'];
+const ORG_CONFIG_TYPE_OPTIONS: Array<{ value: string; label: string }> =
+  ORG_TYPES.filter(item => ORG_CONFIG_CURATED_VALUES.includes(item.value));
 
 Page({
   // 🏛️（2026-08-31 Open-Core 架构拆分·终局阶段）Enterprise 扩展包：SaaS 订阅
@@ -369,21 +373,21 @@ Page({
     onboardingStep: 'choice' as 'choice' | 'create',
     // 创建新组织表单字段
     onboardingOrgName:   '',
-    onboardingOrgType:   'charity' as string,
+    // 🐛 根因修复（两套 orgType 枚举体系不统一）：默认值与下方 orgTypeOptions
+    // 此前是一套与后端完全对不上的独立取值（'charity' 等），提交后
+    // createTenant 云函数的旧白名单虽然能收下，但 manageStoreProfile/
+    // getNationalDashboard/computeOrgDisplayCopy 等十余处下游消费方都不认识
+    // 这个值，等同于"从未设置过机构类型"。改为 utils/constants.ts 的
+    // ORG_TYPES 真实取值，'other' 是其中最中性、不预设机构归属的默认档位
+    onboardingOrgType:   'other' as string,
     onboardingStoreName: '',
     onboardingRealName:  '',
     onboardingPhone:     '',
     onboardingCreating:  false,
-    // 组织类型选项（UI 选择器用）
-    orgTypeOptions: [
-      { value: 'charity',     label: '公益慈善' },
-      { value: 'elderly_care',label: '助老食堂' },
-      { value: 'community',   label: '社区义工站' },
-      { value: 'vegetarian',  label: '素食餐厅' },
-      { value: 'rescue',      label: '公益救援队' },
-      { value: 'other',       label: '其他公益组织' }
-    ],
-    orgTypeIndex: 0,
+    // 组织类型选项（UI 选择器用）：与 orgConfigTypeOptions 同源于
+    // utils/constants.ts ORG_TYPES，不再各自维护一份容易再次分叉的取值表
+    orgTypeOptions: ORG_TYPES,
+    orgTypeIndex: ORG_TYPES.findIndex(item => item.value === 'other'),
     // ────────────────────────────────────────────────────────────────────
 
     currentUserRole: 'volunteer' as 'super_admin' | 'store_manager' | 'store_patriarch' | 'finance' | 'volunteer' | 'store_family',
@@ -1537,7 +1541,7 @@ Page({
     const options = this.data.orgTypeOptions as any[];
     this.setData({
       orgTypeIndex: idx,
-      onboardingOrgType: (options[idx] && options[idx].value) || 'charity'
+      onboardingOrgType: (options[idx] && options[idx].value) || 'other'
     });
   },
 

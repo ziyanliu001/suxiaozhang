@@ -216,7 +216,14 @@ exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const { storeName, city, address, initialAnnouncement, bindAsManager, province, operatingStatus, latitude, longitude, orgType, supportedMeals } = event;
   const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
-  const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'other'];
+  // 🐛 根因修复（两套 orgType 枚举体系不统一）：此前这里漏了 tongxin_children/
+  // tongxin_cancer_care——manageStoreProfile 的编辑白名单已经接受这两个值
+  // （"同心慈善会矩阵"分组机构在用），但本函数（新建门店）的白名单没跟上，
+  // 导致这两类机构永远无法通过正常建店流程创建同 orgType 的新门店。
+  // 与 manageStoreProfile/index.js VALID_ORG_TYPES、createTenant/index.js
+  // ORG_TYPES、miniprogram/utils/constants.ts ORG_TYPE_VALUES 四处保持
+  // 同一份取值，改动这里务必同步改另外三处
+  const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
   const finalOrgType = VALID_ORG_TYPES.includes(orgType) ? orgType : '';
   const finalOperatingStatus = VALID_OPERATING_STATUSES.includes(operatingStatus) ? operatingStatus : 'operating';
   // 🍚 供餐餐次配置：绝大多数雨花斋只供午餐，默认单餐次——与 manageStoreProfile

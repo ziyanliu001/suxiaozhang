@@ -18,7 +18,18 @@ const db = cloud.database();
 const _ = db.command;
 
 const MAX_LEN = 100;
-const ORG_TYPES = ['charity', 'elderly_care', 'community', 'vegetarian', 'rescue', 'other'];
+// 🐛 根因修复（两套 orgType 枚举体系不统一）：此前这里是
+// ['charity','elderly_care','community','vegetarian','rescue','other']，
+// 与 manageStoreProfile/createStore 两个云函数的 VALID_ORG_TYPES 几乎完全
+// 不重叠——所有通过本云函数（新用户"新建组织"引导流程）创建的门店，写入的
+// orgType 是这套独立取值，getNationalDashboard 大屏分组/computeOrgDisplayCopy
+// 品牌文化文案/门店信息配置弹窗的机构类型选择器等十余处下游消费方全部只认
+// 后者，前者的值在它们眼里等价于"未识别"，从未真正生效过。改为与
+// manageStoreProfile/index.js VALID_ORG_TYPES、createStore/index.js
+// VALID_ORG_TYPES、miniprogram/utils/constants.ts ORG_TYPES_VALUES
+// 四处保持同一份取值——云函数之间没有跨文件共享模块的机制，只能各自维护
+// 同源拷贝，改动这里务必同步改另外三处
+const ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
 
 function sanitize(v, maxLen) {
   return String(v || '').trim().slice(0, maxLen || MAX_LEN);
@@ -38,7 +49,7 @@ exports.main = async (event, context) => {
   try {
     // ── 参数清洗 ──────────────────────────────────────────────────────────
     const orgName   = sanitize(event.orgName);
-    const orgType   = ORG_TYPES.includes(event.orgType) ? event.orgType : 'charity';
+    const orgType   = ORG_TYPES.includes(event.orgType) ? event.orgType : 'other';
     // storeName 若未填写，默认与组织同名（单门店机构常见做法）
     const storeName = sanitize(event.storeName) || orgName;
     const realName  = sanitize(event.realName);
