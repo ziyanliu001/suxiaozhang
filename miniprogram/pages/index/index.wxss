@@ -42,9 +42,11 @@ page {
      改为与 .page-body-scroll 同一份 236rpx + 安全区计算，两处不再各算一套。
      🐛（底部输入框被遮挡二次修复）236rpx 恰好等于"TabBar+按钮组"的高度总和，滚到底
      时内容边缘与按钮组顶边严丝合缝贴在一起，没有任何呼吸间距；再叠加 32rpx 安全垫，
-     确保滚动到底部时最后一块内容与吸底按钮组之间始终留有可见间隙 */
-  padding-bottom: calc(268rpx + constant(safe-area-inset-bottom)) !important;
-  padding-bottom: calc(268rpx + env(safe-area-inset-bottom)) !important;
+     确保滚动到底部时最后一块内容与吸底按钮组之间始终留有可见间隙。
+     🐛（TabBar 投影擦碰修复）.bottom-action-floating-bar 的 bottom 又叠加了 16rpx
+     间距（隔开 custom-tab-bar 自身的上投影），这里同步 +16rpx 保持两处不脱节 */
+  padding-bottom: calc(284rpx + constant(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(284rpx + env(safe-area-inset-bottom)) !important;
 }
 
 .app-header-section {
@@ -66,8 +68,9 @@ page {
      窄屏/系统字号放大而实际渲染得比 136rpx 更高（三枚按钮挤一行，此前无 nowrap 兜底
      容易换行），这份 padding 立刻不够用。现在 .btn-main-label 已强制单行+ellipsis
      （见对应规则），按钮组高度不再会变，这里再加 32rpx 安全垫，保证滚动到底部时最后
-     一块内容与吸底按钮组顶边之间始终留有 ≥32rpx 的可见间隙，不是刚好贴边 */
-  padding: 24rpx 24rpx calc(268rpx + env(safe-area-inset-bottom)) 24rpx;
+     一块内容与吸底按钮组顶边之间始终留有 ≥32rpx 的可见间隙，不是刚好贴边。
+     🐛（TabBar 投影擦碰修复）同步 .bottom-action-floating-bar 新增的 16rpx 呼吸间距 */
+  padding: 24rpx 24rpx calc(284rpx + env(safe-area-inset-bottom)) 24rpx;
   box-sizing: border-box;
 }
 
@@ -3941,8 +3944,12 @@ page {
 /* ================= 底部悬浮核心功能按钮 ================= */
 .bottom-action-floating-bar {
   position: fixed;
-  /* 悬浮于底部三段式导航栏（100rpx + 安全区）之上，避免相互遮挡 */
-  bottom: calc(100rpx + env(safe-area-inset-bottom));
+  /* 悬浮于底部三段式导航栏（custom-tab-bar/index.wxss 实测 100rpx）之上，
+     避免相互遮挡。这里不是贴零缝隙——custom-tab-bar 自身带
+     box-shadow: 0 -2rpx 16rpx rgba(0,0,0,0.06) 向上投影，零间隙拼接时这层
+     很轻的投影会在视觉上与本条的下边缘"擦碰"在一起，叠加 16rpx 呼吸间距
+     彻底隔开两者，不是为了纠正 100rpx 这个已实测数值 */
+  bottom: calc(100rpx + env(safe-area-inset-bottom) + 16rpx);
   left: 0;
   right: 0;
   /* 纯白不透明背景 + 更轻的阴影，与上方表单滚动区形成明确的物理分层，
@@ -3953,6 +3960,7 @@ page {
   gap: 20rpx;
   border-top: 1rpx solid #E9ECEF;
   box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
   z-index: 90;
 }
 
