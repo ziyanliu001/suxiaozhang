@@ -5,68 +5,56 @@
   <view class="fixed-top-header">
     <view class="status-bar-spacer" style="height: {{statusBarHeight}}px;"></view>
 
+    <!-- 🛡️ 顶栏彻底纯净化：右上角不再挂任何图标——「👁️ 隐私一键眼」与「⋯ 更多」
+         都已下沉到第二行筛选栏右侧（见下方 .filter-row-secondary-right），顶栏
+         只保留返回键 + 标题，与微信原生胶囊之间不再有任何自定义图标抢位置/易误触 -->
     <view class="nav-title-bar" style="height: {{navBarHeight}}px; padding-right: {{navCapsuleSafePx}}px;">
       <view class="btn-back-arrow" hover-class="btn-back-arrow-hover" bindtap="goBack">←</view>
       <text class="page-title-txt">{{pageTitle || '🧾 凭证与账本'}}</text>
-      <view class="nav-right-actions">
-        <!-- 🆕 隐私脱敏模式「一键眼睛」：仅当设置页开关开启时展示，临时显示/隐藏
-             本页所有金额（会话内展示态，不影响持久化开关） -->
-        <view class="btn-sensitive-reveal" hover-class="btn-photo-archive-toggle-hover" wx:if="{{!photoArchiveMode && privacyMaskEnabled}}" bindtap="onToggleSensitiveReveal">
-          <text>{{sensitiveRevealed ? '🙈' : '👁️'}}</text>
-        </view>
-        <!-- 🛡️ 顶栏图标极简治理：原先常驻的「📄 导出审计表」「📸 图册切换」两个
-             图标已合并进这一个"⋯更多"菜单（见 history.ts onOpenHistorySettingsMenu），
-             顶栏最多只留这一个轻量图标，与右侧微信原生胶囊之间的安全间距交给
-             .nav-title-bar 的动态 navCapsuleSafePx；导出/校准仍按角色收敛在菜单
-             条目里，图册切换所有角色都能用，图标本身不再按角色隐藏 -->
-        <view class="btn-settings-gear" hover-class="btn-photo-archive-toggle-hover" bindtap="onOpenHistorySettingsMenu">
-          <text wx:if="{{!exportingAudit}}">⋯</text>
-          <text wx:else class="btn-export-audit-loading">⏳</text>
-        </view>
-      </view>
+      <view class="nav-right-placeholder"></view>
     </view>
 
-    <!-- 🌟 统一筛选栏：查看视角 / 站点选择 / 月份选择合并为一行三列极简选择器。
+    <!-- 🌟 双行自适应筛选栏：查看视角/站点选择、时间筛选/统计彻底拆成两行，
+         不再挤在同一行抢空间。
          🐛 根因修复：此前这一整块没有 photoArchiveMode 判断，切到图册模式后，
-         账本专属的这一整套筛选栏（查看视角 + 站点 + 月份 + 导出审计表按钮）
-         仍会和下方图册自己的 photo-type-tabs 同屏堆叠——两套毫不相关的筛选控件
-         叠在一起，才是"控件过多、视觉杂乱"的真正根因。现在加上 wx:if 严格
-         互斥：账本模式显示这一栏，图册模式显示 photo-type-tabs，绝不同屏 -->
-    <!-- 🆕 个人视角入口（mineEntryMode，见 history.ts onLoad）：隐去"门店/我的"
-         切换栏与门店选择下拉框，专注展示个人提交记录，避免非管理员用户面对一堆
-         与自己无关的门店管理向控件；月份筛选仍保留，翻查自己历史记录时依然有用 -->
-    <!-- 🆕 第一行（快速过滤器）布局重排：左侧「全部门店/我的」SegmentedControl
-         固定 168rpx 宽度，中间门店胶囊 flex:1 吃满剩余空间，右侧月份胶囊按
-         内容自适应宽度——三者是三个直接子元素，同一层 gap:16rpx 管理间距，
-         职责单一不互相挤占，这才是门店名/分段文案不再被压出省略号的关键 -->
-    <view class="unified-filter-row" wx:if="{{!photoArchiveMode}}">
-      <view class="filter-col-segment" wx:if="{{!mineEntryMode}}">
-        <view class="filter-col-pill">
+         账本专属的这一整套筛选栏仍会和下方图册自己的 photo-type-tabs 同屏堆叠——
+         两套毫不相关的筛选控件叠在一起，才是"控件过多、视觉杂乱"的真正根因。
+         现在加上 wx:if 严格互斥：账本模式显示这一栏，图册模式显示
+         photo-type-tabs，绝不同屏 -->
+    <view class="filter-section" wx:if="{{!photoArchiveMode}}">
+
+      <!-- 第一行：范围/站点选择。🆕 个人视角入口（mineEntryMode，见 history.ts
+           onLoad）整行隐藏——专注展示个人提交记录，避免非管理员用户面对一堆
+           与自己无关的门店管理向控件；月份筛选（第二行）不受影响，翻查自己
+           历史记录时依然有用 -->
+      <view class="filter-row-primary" wx:if="{{!mineEntryMode}}">
+        <view class="scope-switch">
           <!-- 🛡️ 越权兜底：即使 isAllStoresView 因某种异常状态被误置为 true，
-               这里再叠加一层 isSuperAdmin 校验，非超管永远只能看到"🏪 门店账本"，
-               绝不渲染"🌐 全国汇总"文案——与 resolveIsAllStoresView()/loadReports()
+               这里再叠加一层 isSuperAdmin 校验，非超管永远只能看到"门店"，
+               绝不渲染"全国"文案——与 resolveIsAllStoresView()/loadReports()
                的角色校验口径保持一致，双保险 -->
-          <text class="filter-col-seg {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">
-            <block wx:if="{{isSuperAdmin}}">{{isAllStoresView ? '🌐 全国' : '🏪 门店'}}</block>
-            <block wx:else>🏪 门店</block>
+          <text class="switch-item {{viewMode === 'all' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="all">
+            <block wx:if="{{isSuperAdmin}}">{{isAllStoresView ? '全国' : '门店'}}</block>
+            <block wx:else>门店</block>
           </text>
-          <text class="filter-col-seg {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">👤 我的</text>
+          <text class="switch-item {{viewMode === 'personal' ? 'active' : ''}}" bindtap="switchViewMode" data-mode="personal">我的</text>
+        </view>
+
+        <!-- 🐛 长门店名截断修复：store-picker 独占本行右侧剩余全部空间
+             （flex:1 + min-width:0），"漳州白礁保生雨花斋"这类长店名不再
+             因为要跟月份胶囊挤同一行而被压出省略号；展示不下时兜底省略号
+             收尾由 store-picker 组件内部处理，点击仍可拉起完整选择面板 -->
+        <view class="filter-row-store">
+          <store-picker id="historyStorePicker" class="filter-col-storepicker" bind:storechange="onStorePickerChange"></store-picker>
         </view>
       </view>
 
-      <!-- 🐛 长门店名截断修复：store-picker 内部展示文案配合这里给出的
-           flex:1 自适应收缩 + ellipsis，展示不下时省略号收尾；组件本身
-           点击即拉起完整门店选择面板（见 store-picker.wxml），面板里门店名
-           不再受这条胶囊宽度限制，等同于"点击查看完整名称"。
-           🐛 三列拥挤修复：此前分段器 + 这两枚胶囊套了一层 .filter-chips-group
-           中间容器，间距只作用在组之间，组内两枚胶囊之间的 gap 和组外分段器的
-           gap 不是同一个数值，视觉上忽宽忽窄。拍平成三个直接子元素后统一交给
-           .unified-filter-row 一个 gap:16rpx 管理，不再有嵌套间距打架 -->
-      <view class="filter-col-store" wx:if="{{!mineEntryMode}}">
-        <store-picker id="historyStorePicker" class="filter-col-storepicker" bind:storechange="onStorePickerChange"></store-picker>
-      </view>
-
-      <view class="filter-col-month">
+      <!-- 第二行：左侧月份筛选独占空间不再被挤压；右侧收纳原顶栏右上角的两个
+           操作入口——「👁️ 隐私一键眼」+「⚙️ 账本工具 ▾」（原「⋯ 更多」菜单，
+           承载温情图册切换/导出审计表/一键校准，见 history.ts
+           onOpenHistorySettingsMenu），连同既有的"重置筛选/共 N 条"状态文字，
+           三者一起靠右排布，两端对齐 -->
+      <view class="filter-row-secondary">
         <picker mode="date" fields="month" value="{{selectedMonthStr}}" bindchange="onMonthFilterChange">
           <view class="filter-col-pill month-pill {{selectedMonthStr ? 'has-value' : ''}}">
             <text class="filter-col-lbl">📅 {{selectedMonthDisplay || '全部月份'}}</text>
@@ -74,6 +62,28 @@
             <view class="filter-col-clear" wx:if="{{selectedMonthStr}}" catchtap="onClearMonthFilter">✕</view>
           </view>
         </picker>
+
+        <view class="filter-row-secondary-right">
+          <text class="filter-reset-link" wx:if="{{hasActiveFilters}}" bindtap="onResetFilters">🔄 重置筛选</text>
+          <text class="filter-count-stat" wx:else>共 {{statusTabCounts.all}} 条</text>
+
+          <!-- 🆕 隐私脱敏模式「一键眼睛」：从顶栏下沉到这里，仅当设置页开关开启时
+               展示，临时显示/隐藏本页所有金额（会话内展示态，不影响持久化开关） -->
+          <view class="btn-sensitive-reveal-inline" hover-class="ledger-tools-pill-hover" wx:if="{{privacyMaskEnabled}}" bindtap="onToggleSensitiveReveal">
+            <text>{{sensitiveRevealed ? '🙈' : '👁️'}}</text>
+          </view>
+
+          <!-- 🛡️ 顶栏图标极简治理：原「⋯ 更多」图标下沉到这里，改名「⚙️ 账本工具」，
+               承载 onOpenHistorySettingsMenu 二次菜单（温情图册切换/导出审计表/
+               一键校准）——导出/校准仍按角色收敛在菜单条目里，图册切换所有角色
+               都能用，胶囊本身不再按角色隐藏 -->
+          <view class="ledger-tools-pill" hover-class="ledger-tools-pill-hover" bindtap="onOpenHistorySettingsMenu">
+            <text class="ledger-tools-icon" wx:if="{{!exportingAudit}}">⚙️</text>
+            <text class="ledger-tools-icon" wx:else>⏳</text>
+            <text class="ledger-tools-label">账本工具</text>
+            <text class="ledger-tools-arrow">▾</text>
+          </view>
+        </view>
       </view>
     </view>
 

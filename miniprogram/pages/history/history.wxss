@@ -67,108 +67,92 @@
   box-sizing: border-box;
 }
 
+/* 🐛 顶栏彻底纯净化：右上角此前最多同屏堆叠 4 个图标（👁️ 隐私/📄 导出/
+   📸 图册切换/⚙️ 设置），彼此只有 4rpx 间隙，与胶囊按钮挤在一起、极易误触。
+   现在右上角不再挂任何自定义图标——「👁️ 隐私一键眼」与「⋯ 更多」（现更名
+   「⚙️ 账本工具」）都已下沉到第二行筛选栏右侧（见下方 .filter-row-secondary-right
+   及相关规则），.nav-right-placeholder 只是一个与 .btn-back-arrow 等宽的空占位块，
+   让 .page-title-txt 在视觉上真正居中，不需要再靠一排图标的宽度去配平 */
 .nav-right-placeholder {
   width: 64rpx;
-}
-
-/* 🐛 顶栏图标极简治理：右上角此前最多同屏堆叠 4 个图标（👁️ 隐私/📄 导出/
-   📸 图册切换/⚙️ 设置），彼此只有 4rpx 间隙，与胶囊按钮挤在一起、极易误触。
-   📄/📸 已合并进 .btn-settings-gear 的二次菜单（见 history.wxml/ts），右上角
-   最多只剩「👁️ 隐私」+「⋯ 更多」两个图标，gap 放宽到 24rpx，与胶囊之间的
-   安全距离仍由 .nav-title-bar 的动态 navCapsuleSafePx 兜底 */
-.nav-right-actions {
   flex: none;
+}
+
+/* 🌟 双行自适应筛选栏：第一行范围/站点选择，第二行时间筛选/统计，彻底拆开
+   不再抢同一行的横向空间。统一浅灰底 + 深灰字的极简选择器观感，取消原先
+   "查看视角"maroon 实心胶囊、月份胶囊白底描边、导出按钮金色描边各自不同
+   配色的"花哨拼盘"。
+   🐛 首行拥挤/省略号根因修复：此前分段器 + 门店胶囊 + 月份胶囊三者挤在同一行
+   抢空间，是长门店名/分段文案被压出省略号的根本原因——拆成两行后，第一行只有
+   分段器（固定宽度）+ 门店胶囊（flex:1 独占剩余空间），第二行只有月份胶囊，
+   互不挤占 */
+.filter-section {
+  background: #FFFFFF;
+  padding: 16rpx 24rpx 8rpx;
+}
+
+.filter-row-primary {
   display: flex;
   align-items: center;
-  gap: 24rpx;
-}
-
-/* 🆕 隐私脱敏模式「一键眼睛」：与 .btn-settings-gear 同尺寸，保持右上角
-   图标行观感统一 */
-.btn-sensitive-reveal {
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 30rpx;
-  border-radius: 30rpx;
-}
-
-.btn-photo-archive-toggle-hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-.btn-export-audit-loading {
-  font-size: 26rpx;
-}
-
-/* 🛡️ 顶栏仅存的一个操作图标：原「导出📄/图册切换📸/设置⚙️」三合一，
-   承载 onOpenHistorySettingsMenu 二次菜单 */
-.btn-settings-gear {
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32rpx;
-  font-weight: bold;
-  border-radius: 30rpx;
-}
-
-.btn-settings-gear:active {
-  opacity: 0.6;
-}
-
-/* 🌟 统一筛选栏：查看视角 / 站点选择 / 月份选择三列，统一浅灰底 + 深灰字的
-   极简下拉选择器观感，取消原先"查看视角"maroon 实心胶囊、月份胶囊白底描边、
-   导出按钮金色描边各自不同配色的"花哨拼盘"，三列视觉统一。
-   🐛 首行拥挤/省略号修复：三个组件拍平成直接子元素、由这一层统一 gap 管理
-   （不再套嵌套分组各自一份 gap），分段器固定宽度、站点胶囊吃满剩余空间、
-   月份胶囊按内容自适应——三者职责单一，不会互相挤占导致门店名/分段文案
-   被压出省略号 */
-.unified-filter-row {
-  display: flex;
-  align-items: stretch;
   gap: 16rpx;
-  padding: 12rpx 24rpx 16rpx;
+  margin-bottom: 16rpx;
 }
 
-/* 🆕 左侧 SegmentedControl 固定紧凑宽度，不再跟右侧门店/月份 Chip 抢等宽空间——
-   这正是长门店名此前被压缩截断的根因。文案固定（🏪门店/👤我的 或 🌐全国/🏪门店），
-   168rpx + 24rpx 字号 + text-overflow:clip 兜底，"门店"/"我的"两个汉字
-   保证不折行、不出现省略号 */
-.filter-col-segment {
-  width: 168rpx;
-  flex: 0 0 168rpx;
+.filter-row-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+/* 🆕 分段控件：固定紧凑宽度，不跟右侧门店 Chip 抢等宽空间——这正是长门店名
+   此前被压缩截断的根因。纯文字（门店/我的 或 全国/门店），去除此前的彩色
+   emoji 图标，配圆角微阴影滑块 */
+.scope-switch {
+  display: inline-flex;
+  align-items: center;
+  width: 156rpx;
+  height: 56rpx;
+  background: #F2F3F5;
+  border-radius: 28rpx;
+  padding: 4rpx;
+  box-sizing: border-box;
   flex-shrink: 0;
 }
 
-/* 站点选择胶囊：吃满分段器与月份胶囊之间的剩余空间，min-width:0 才能让
+.scope-switch .switch-item {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #4E5969;
+  border-radius: 24rpx;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.scope-switch .switch-item.active {
+  background: #FFFFFF;
+  color: #C43A3A;
+  font-weight: bold;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.08);
+}
+
+/* 站点选择胶囊：独占第一行分段器之外的全部剩余空间，min-width:0 才能让
    flex 子项真正收缩到比其内容更窄，超长门店名的省略号交给 store-picker
    组件内部的 .store-name 处理（见该组件 wxss），这一层只负责分配空间 */
-.filter-col-store {
+.filter-row-store {
   flex: 1;
   min-width: 0;
 }
 
-/* 月份胶囊：按自身内容宽度自适应，禁止被压缩——月份文案固定短小
-   （"📅 全部月份"/"📅 2026年09月"），不需要也不该跟着门店名一起被挤 */
-.filter-col-month {
-  flex: 0 0 auto;
-  flex-shrink: 0;
-}
-
-/* mineEntryMode 下门店列整体隐藏，月份胶囊是这一行里唯一的孩子，撑满整行
-   而不是缩在左边孤零零一小块 */
-.unified-filter-row > .filter-col-month:only-child {
-  flex: 1;
-}
-
 /* 🐛 WXSS 规范修复：微信小程序不支持组件标签选择器（如 `store-picker`），
-   `.filter-col store-picker` 编译期即报违规警告。store-picker 是独立自定义
-   组件，样式作用域本就不共享，这里只负责给它在行内分配空间——改为在 WXML 上
-   直接打一个纯 class（.filter-col-storepicker），组件内部观感维持原样 */
+   `.filter-row-store store-picker` 编译期即报违规警告。store-picker 是独立
+   自定义组件，样式作用域本就不共享，这里只负责给它在行内分配空间——改为在
+   WXML 上直接打一个纯 class（.filter-col-storepicker），组件内部观感维持原样 */
 .filter-col-storepicker {
   display: block;
   width: 100%;
@@ -176,7 +160,7 @@
 
 /* 门店/月份胶囊统一规范：56rpx 高、垂直居中——与 store-picker 组件自身的
    .store-picker-capsule 高度对齐（见 components/store-picker/store-picker.wxss），
-   两枚胶囊在同一行里视觉对齐，不会一高一矮 */
+   两枚胶囊在各自所在行里视觉对齐，不会一高一矮 */
 .filter-col-pill {
   display: flex;
   align-items: center;
@@ -189,26 +173,84 @@
   gap: 4rpx;
 }
 
-.filter-col-seg {
-  flex: 1;
-  text-align: center;
-  font-size: 24rpx;
-  color: #666;
-  padding: 4rpx 10rpx;
-  border-radius: 24rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  /* "门店"/"我的"就两个汉字，168rpx 宽度 + 24rpx 字号下必然放得下——不用
-     ellipsis 兜底，直接 clip，杜绝在极端场景下悄悄冒出省略号 */
-  text-overflow: clip;
-  transition: all 0.2s ease;
+/* 🆕 第二行右侧：重置筛选 / 当前筛选统计二选一展示，轻量文字链接，
+   不与月份胶囊抢视觉重量 */
+.filter-reset-link {
+  font-size: 22rpx;
+  color: #8C1D18;
+  flex-shrink: 0;
+  padding: 4rpx 0;
 }
 
-.filter-col-seg.active {
+.filter-count-stat {
+  font-size: 22rpx;
+  color: #868E96;
+  flex-shrink: 0;
+  padding: 4rpx 0;
+}
+
+/* 🆕 第二行右侧收纳组：重置筛选/统计文字 + 👁️ 隐私一键眼（从顶栏下沉）+
+   ⚙️ 账本工具胶囊（原顶栏「⋯ 更多」），三者靠右紧凑排布 */
+.filter-row-secondary-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+/* 🆕 隐私脱敏「一键眼」下沉到这里后的行内尺寸——比原顶栏版本（60rpx 方形）
+   收窄一圈，与月份胶囊的 56rpx 高度对齐，融入这一行紧凑的筛选栏观感，
+   而不是继续保留顶栏图标的大尺寸方块 */
+.btn-sensitive-reveal-inline {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26rpx;
+  border-radius: 24rpx;
+  flex-shrink: 0;
+}
+
+/* 🆕 精致胶囊按钮：原顶栏「⋯ 更多」图标下沉改名「⚙️ 账本工具 ▾」，承载
+   onOpenHistorySettingsMenu 二次菜单（温情图册切换/导出审计表/一键校准）。
+   与月份胶囊同高（56rpx），浅灰底 + 描边，视觉上明确是"可点击的工具入口"
+   而不是纯展示文字，与左侧月份胶囊的极简下拉观感呼应但不完全同款，
+   靠右侧描边 + 深色文字强调这是操作入口 */
+.ledger-tools-pill {
+  display: flex;
+  align-items: center;
+  height: 56rpx;
   background: #FFFFFF;
-  color: #C2185B;
-  font-weight: bold;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  border: 1rpx solid #DDE1E6;
+  border-radius: 28rpx;
+  padding: 0 18rpx;
+  box-sizing: border-box;
+  gap: 4rpx;
+  flex-shrink: 0;
+}
+
+.ledger-tools-pill-hover {
+  background: #F1F3F5;
+}
+
+.ledger-tools-icon {
+  font-size: 24rpx;
+  line-height: 1;
+}
+
+.ledger-tools-label {
+  font-size: 24rpx;
+  color: #343A40;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: 4rpx;
+}
+
+.ledger-tools-arrow {
+  font-size: 18rpx;
+  color: #868E96;
+  margin-left: 2rpx;
 }
 
 .filter-col-lbl {

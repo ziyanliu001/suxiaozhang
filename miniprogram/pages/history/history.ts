@@ -245,7 +245,7 @@ Page({
     showPhotoDetailModal: false,
     photoDetailItem: null as null | { url: string; type: string; date: string; storeName: string; id?: string; typeLabel: string },
     // 🆕 图册专属的快捷时间范围（与账本模式的单月 picker 互不相关——图册模式
-    // 下 .unified-filter-row 整块隐藏，selectedMonthStr 在图册模式里从未被
+    // 下 .filter-section 整块隐藏，selectedMonthStr 在图册模式里从未被
     // 真正赋过值，此前"统计行"右侧的时间文案其实是个只会显示"近 3 个月"的
     // 死态展示，并非真的可切换。这里补一套图册自己的范围状态，与
     // getPhotoArchive 云函数新增的 range 参数一一对应）
