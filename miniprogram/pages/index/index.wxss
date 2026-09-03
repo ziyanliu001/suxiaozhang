@@ -3940,33 +3940,39 @@ page {
 .bottom-action-floating-bar {
   position: static;
   margin: 8rpx 0 24rpx 0;
-  padding: 24rpx 32rpx;
+  padding: 20rpx 16rpx;
   background: #FFFFFF;
   border-radius: 20rpx;
   display: flex;
-  gap: 20rpx;
+  justify-content: space-between;
+  gap: 14rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
 }
 
-/* 🐛 加固：display:flex 居中此前已生效，这里补上 box-sizing/padding/margin/
-   line-height 显式归零——消除微信原生 <button> 默认内边距与行高对 emoji 图标 +
-   文字组合可能造成的视觉干扰，不再依赖任何隐式默认值 */
+/* 🎨（2026-09-04 三色配色统一 + 4 字文案精简）此前"白底红框 + 实心深红渐变 +
+   纯黑底"三种质感杂乱冲突，且六字文案在窄屏/系统字号放大时会被 ellipsis
+   截断成"生成餐报..."。改为统一的轻质感微卡片规范：三枚按钮共用同一套
+   flex:1 1 0 + min-width:0 + 76rpx 高度 + 38rpx 圆角，只用色彩区分语义，
+   文案精简到 4 字黄金排版（生成餐报/公示海报/打印清单），正常屏宽下不会
+   触发截断——.btn-main-label 仍保留 overflow:hidden + text-overflow:clip
+   作为极端窄屏下的最后防线（clip 而非 ellipsis：与其让用户看到一串省略号
+   误以为文案很长，不如干净截断，反正 4 字文案本就不该走到这一步） */
 .btn-main-action {
-  flex: 1;
-  height: 88rpx;
-  border-radius: 44rpx;
-  font-size: 28rpx;
-  font-weight: bold;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 76rpx;
+  border-radius: 38rpx;
+  font-size: 24rpx;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   box-sizing: border-box;
-  padding: 0;
+  padding: 0 8rpx;
   margin: 0;
   line-height: 1;
-  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
   transition: all 0.15s ease;
   border: none;
 }
@@ -3977,12 +3983,11 @@ page {
 .btn-main-action:active {
   opacity: 0.8;
   transform: scale(0.97);
-  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.05);
 }
 
 .btn-emoji-icon {
-  font-size: 28rpx;
-  margin-right: 8rpx;
+  font-size: 26rpx;
+  margin-right: 4rpx;
   line-height: 1;
   flex-shrink: 0;
   /* emoji 字符自带色彩，不受按钮 color 影响，天然清晰可辨，
@@ -3990,57 +3995,63 @@ page {
      line-height:1 避免 emoji 字形自身的行高与按钮文字基线产生视觉错位 */
 }
 
-/* 🐛 底部输入框被遮挡根因修复之一：三枚按钮共占一行，裸文本节点在系统字号
-   调大/窄屏设备上没有 nowrap 兜底时会自动换行，把 .bottom-action-floating-bar
-   撑到超出下方 padding-bottom 预留的高度。改用独立 <text> 承载文案并强制单行 +
-   ellipsis 收尾——正常宽度下六个汉字仍完整展示，只有真正极端窄屏才会看到省略号，
-   但无论哪种情况，这一行的渲染高度都稳定等于单行文字高度，不会把整条 bar 撑高 */
 .btn-main-label {
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   min-width: 0;
   flex-shrink: 1;
 }
 
-/* 🌟 左右两个按钮做主次区分：生成餐报文本是流程首步、可反复重新生成校对，用白底红描边，
-   视觉上更"轻"；生成公示海报是最终对外公示的产出物，用正红色实底强调，作为这组操作的主 CTA */
+/* 🌟 三色语义（均为柔化后的高级微卡片配色，取代此前的纯黑/深红实底重块感）：
+   生成餐报——流程首步，可反复重新生成校对，用最轻的浅红底描边卡片；
+   公示海报——最终对外公示的产出物，用正红实底作为这组操作的主 CTA；
+   打印清单——归档/导出动作，用沉稳藏灰替代此前突兀的纯黑块，三者同属暖色系
+   但明度/纯度依次递进，一眼可辨主次而不互相打架 */
 .text-gen-btn {
-  background: #FFFFFF;
-  color: #C62828;
-  border: 2rpx solid #C62828;
-  box-shadow: none;
+  background: #FFF1F0;
+  color: #D9363E;
+  border: 1rpx solid #FFA39E;
 }
 
 .text-gen-btn:active {
-  background: #FFF0ED;
+  background: #FFE0DE;
 }
 
 /* 🐛 该按钮初始 disabled（showResult 默认 false，需先生成餐报文本才可点），微信原生
-   button[disabled] 自带 color 覆盖 + opacity 遮罩，之前的金/橙渐变系配色在遮罩下始终糊成一片。
-   彻底放弃黄橙色系，改用与左侧描边按钮同色系的正红渐变 + 纯白粗体字。
-   若改动后画面仍无变化，大概率是 WeChat DevTools 未重新编译，而非本文件的样式没生效——
-   需要手动点击"编译"或清除数据缓存后重试。
-   🐛 非法选择器修复：原来这里用 button.poster-gen-btn / .poster-gen-btn[disabled] /
-   button.poster-gen-btn[disabled] 三个变体去覆盖原生 disabled 遮罩——元素+类名组合选择器
-   与属性选择器都不在小程序 wxss 支持范围内，编译期会报"Some selectors are not allowed
-   in component wxss"。禁用态的视觉需求本质是"不管 disabled 与否都要长一个样"，改用
+   button[disabled] 自带 color 覆盖 + opacity 遮罩，实底配色在遮罩下会糊成一片。
+   🐛 非法选择器修复：不用 button.poster-gen-btn[disabled] 这类元素+属性组合选择器
+   （小程序 wxss 不支持，编译期报"Some selectors are not allowed in component
+   wxss"）——禁用态的视觉需求本质是"不管 disabled 与否都要长一个样"，改用
    .poster-gen-btn-disabled 显式类名（随 disabled 判断条件一起写在 WXML 的 class 里，
-   见 index.wxml 对应按钮），与 .poster-gen-btn 共用同一份声明，纯类选择器，效果完全等价 */
+   见 index.wxml 对应按钮），与 .poster-gen-btn 共用同一份声明，纯类选择器，效果完全等价。
+   打印清单按钮同理，见下方 .print-gen-btn-disabled */
 .poster-gen-btn,
 .poster-gen-btn-disabled {
-  background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
+  background: #D9363E !important;
   color: #FFFFFF !important;
-  font-weight: bold !important;
-  font-size: 28rpx !important;
+  font-weight: 600 !important;
   opacity: 1 !important;
   border: none !important;
-  box-shadow: 0 4rpx 12rpx rgba(198, 40, 40, 0.3) !important;
+  box-shadow: 0 4rpx 12rpx rgba(217, 54, 62, 0.25) !important;
 }
 
 .poster-gen-btn:active {
-  opacity: 0.8 !important;
-  box-shadow: 0 2rpx 6rpx rgba(198, 40, 40, 0.2) !important;
+  opacity: 0.85 !important;
+}
+
+.print-gen-btn,
+.print-gen-btn-disabled {
+  background: #1F2329 !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+  border: none !important;
+  box-shadow: 0 4rpx 12rpx rgba(31, 35, 41, 0.2) !important;
+}
+
+.print-gen-btn:active {
+  opacity: 0.85 !important;
 }
 
 /* ================= 🔑 生成邀请码弹窗 =================
@@ -8634,20 +8645,21 @@ page {
   border: none;
 }
 
-/* 🚨 页面末尾强制覆盖：正红渐变 + 纯白大字，压过微信原生 button[disabled] 半透明遮罩。
-   与本文件前面 .poster-gen-btn 那份规则内容一致，这里追加在文件最末尾仅为提高
-   源码顺序上的最终优先级，双重保险。
+/* 🚨 页面末尾强制覆盖：压过微信原生 button[disabled] 半透明遮罩。
+   与本文件前面 .poster-gen-btn 那份规则内容保持一致（2026-09-04 配色统一，
+   由渐变改为柔化后的正红实底 #D9363E），这里追加在文件最末尾仅为提高
+   源码顺序上的最终优先级，双重保险——两处必须同步改，否则源码顺序更靠后的
+   这条会把前面刚改的配色重新覆盖回旧值。
    🐛 非法选择器修复：同上一处，button.poster-gen-btn / [disabled] 属性选择器不在
    小程序 wxss 支持范围内，改用 .poster-gen-btn-disabled 显式类名 */
 .poster-gen-btn,
 .poster-gen-btn-disabled {
-  background: #C62828 !important;
-  background-image: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
+  background: #D9363E !important;
   color: #FFFFFF !important;
-  font-weight: bold !important;
+  font-weight: 600 !important;
   opacity: 1 !important;
   border: none !important;
-  box-shadow: 0 4rpx 12rpx rgba(198, 40, 40, 0.3) !important;
+  box-shadow: 0 4rpx 12rpx rgba(217, 54, 62, 0.25) !important;
 }
 
 /* 🍱 义工与用餐统计标题按钮/汇总卡片保险：class 名沿用既有的 .reuse-yesterday-btn

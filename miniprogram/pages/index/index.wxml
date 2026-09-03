@@ -1665,13 +1665,13 @@
          调整表单可见性条件时，理应同步检查这里 -->
     <view class="bottom-action-floating-bar" wx:if="{{currentStoreId && !isAllStoresView && !isVolunteer && !isFamily && !showNewUserGuide && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
       <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
-        <text class="btn-emoji-icon">📋</text><text class="btn-main-label">生成餐报文本</text>
+        <text class="btn-emoji-icon">📋</text><text class="btn-main-label">生成餐报</text>
       </button>
-      <button class="btn-main-action poster-gen-btn {{(isGeneratingPoster || !showResult) ? 'poster-gen-btn-disabled' : ''}}" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
-        <text class="btn-emoji-icon">🎨</text><text class="btn-main-label">生成公示海报</text>
+      <button class="btn-main-action poster-gen-btn {{(isGeneratingPoster || !showResult) ? 'poster-gen-btn-disabled' : ''}}" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}">
+        <text class="btn-emoji-icon">🎨</text><text class="btn-main-label">公示海报</text>
       </button>
-      <button class="btn-main-action print-gen-btn" hover-class="btn-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}" style="background: #000000 !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
-        <text class="btn-emoji-icon">🖨️</text><text class="btn-main-label">导出打印清单</text>
+      <button class="btn-main-action print-gen-btn {{(isGeneratingPrintList || !showResult) ? 'print-gen-btn-disabled' : ''}}" hover-class="btn-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}">
+        <text class="btn-emoji-icon">🖨️</text><text class="btn-main-label">打印清单</text>
       </button>
     </view>
 
