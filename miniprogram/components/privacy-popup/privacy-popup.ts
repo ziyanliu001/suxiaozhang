@@ -1,3 +1,5 @@
+import { subscribeNeedAuth, unsubscribeNeedAuth, PrivacyAuthSubscriber } from '../../utils/privacyAuthHub';
+
 // 🌟 微信用户隐私保护弹窗组件
 //
 // 背景：微信平台自 2023 年起对 chooseAvatar（头像填写能力）、chooseMedia/chooseImage
@@ -32,9 +34,9 @@ Component({
       if (!ENABLE_PRIVACY_API_PROBE) return;
 
       // 🛡️ 防御性幂等卫士：正常情况下每个页面只挂载一次本组件，attached 只会触发一次；
-      // 这里额外挡一道是为了防止万一某种场景下组件被重复挂载，重复调用
-      // wx.onNeedPrivacyAuthorization（该 API 是累加式注册，多次调用会叠加多个全局监听器，
-      // 不会互相覆盖，也不会自动去重）
+      // 这里额外挡一道是为了防止万一某种场景下组件被重复挂载，重复订阅（虽然订阅
+      // 走的是下面的 Set，重复 add 本就是安全的空操作，这里仍保留卫士，避免重复
+      // 触发下面的 getPrivacySetting 请求）
       if ((this as any)._attachedOnce) return;
       (this as any)._attachedOnce = true;
 
@@ -50,7 +52,7 @@ Component({
       // 才通过 wx.onNeedPrivacyAuthorization 回调弹出确认框）。
       // 现在只保留下面的 getPrivacySetting 调用来预取 privacyContractName（用于
       // 弹窗标题/正文动态展示真实协议名，不因此触发弹窗本身），真正的弹出时机
-      // 完全交给下方 onNeedPrivacyAuthorization 被动监听器按需触发
+      // 完全交给下方对 privacyAuthHub 的订阅按需触发
       try {
         if (typeof wxAny.getPrivacySetting === 'function') {
           wxAny.getPrivacySetting({
@@ -60,7 +62,7 @@ Component({
               }
             },
             fail: () => {
-              // 取不到隐私配置时静默跳过，不影响下面 onNeedPrivacyAuthorization 的按需弹出
+              // 取不到隐私配置时静默跳过，不影响下面按需弹出
             }
           });
         }
@@ -68,37 +70,35 @@ Component({
         console.error('[privacy-popup] getPrivacySetting 调用异常:', e);
       }
 
-      try {
-        if (typeof wxAny.onNeedPrivacyAuthorization === 'function') {
-          // 把 handler 存到实例上，以便 detached 时精准 off，避免误清其他监听者
-          const privacyHandler = (resolve: (res: { event: 'agree' | 'disagree' }) => void) => {
-            (this as any)._pendingResolve = resolve;
-            this.setData({ visible: true });
-          };
-          (this as any)._privacyHandler = privacyHandler;
-          wxAny.onNeedPrivacyAuthorization(privacyHandler);
+      // 🛡️ 内存泄漏根因修复：此前每个组件实例各自直接调用 wx.onNeedPrivacyAuthorization
+      // 注册一份原生监听器，卸载时尝试 wx.offNeedPrivacyAuthorization 注销——但该 off API
+      // 在不少基础库版本里根本不存在，一旦静默失败，注册就永远撤不掉，history/statistics
+      // 这类非 tabBar 页面每次导航进出都会新增一次注册，最终触发"21 listeners of event
+      // onBeforeUnloadPage_N have been added, possibly causing memory leak"告警。
+      // 现在原生 API 只在 app.ts onLaunch 里注册一次（见 utils/privacyAuthHub.ts），
+      // 这里只是订阅一个模块内的普通 Set，attached/detached 无论触发多少次都只是
+      // Set.add/delete，不会有任何残留。onResolved 用于收起本实例可能残留的陈旧
+      // 弹窗（见 privacyAuthHub 顶部注释——其它 tab 页的实例先一步 resolve 时）
+      const privacySubscriber: PrivacyAuthSubscriber = {
+        onNeedAuth: (resolve) => {
+          (this as any)._pendingResolve = resolve;
+          this.setData({ visible: true });
+        },
+        onResolved: () => {
+          this.setData({ visible: false });
+          (this as any)._pendingResolve = null;
         }
-      } catch (e) {
-        console.error('[privacy-popup] onNeedPrivacyAuthorization 注册异常:', e);
-      }
+      };
+      (this as any)._privacySubscriber = privacySubscriber;
+      subscribeNeedAuth(privacySubscriber);
     },
 
-    // 🛡️ 内存泄漏防护：wx.onNeedPrivacyAuthorization 是全局累加式监听器，
-    // 组件卸载时若不对消，每次页面加载都会新增一个监听器，最终触发
-    // "onBeforeUnloadPage_N 多监听器"类告警（profile 是 tabBar 页，
-    // onHide/onUnload 都不会触发页面销毁，但子组件 detached 在 setData
-    // 导致组件树重绘时仍会触发）。此处配套调用 off 消除泄露。
     detached() {
-      const wxAny = wx as any;
-      try {
-        const handler = (this as any)._privacyHandler;
-        if (handler && typeof wxAny.offNeedPrivacyAuthorization === 'function') {
-          wxAny.offNeedPrivacyAuthorization(handler);
-        }
-      } catch (e) {
-        // offNeedPrivacyAuthorization 在旧基础库版本中不存在，静默跳过
+      const subscriber = (this as any)._privacySubscriber;
+      if (subscriber) {
+        unsubscribeNeedAuth(subscriber);
       }
-      (this as any)._privacyHandler = null;
+      (this as any)._privacySubscriber = null;
       (this as any)._pendingResolve = null;
       (this as any)._attachedOnce = false;
     }

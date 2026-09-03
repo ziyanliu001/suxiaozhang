@@ -2407,7 +2407,12 @@ page {
   display: block;
 }
 
-.input[disabled] {
+/* 🐛 非法选择器修复：属性选择器 [disabled] 不在小程序 wxss 支持的选择器范围内，
+   编译期会报 "Some selectors are not allowed in component wxss"。改用显式类名
+   .input-disabled——目前本页 class="input" 的三处 <input>（mpAccount/slogan1/
+   slogan2）都没有绑定 disabled，这条规则暂时没有实际生效对象，保留为未来若某处
+   需要禁用态时可直接在 WXML 上追加这个类名，不需要再碰 wxss */
+.input-disabled {
   background-color: #f5f7fa !important;
   color: #7f8c8d !important;
   border-color: #e1e4e8;
@@ -4020,14 +4025,17 @@ page {
 
 /* 🐛 该按钮初始 disabled（showResult 默认 false，需先生成餐报文本才可点），微信原生
    button[disabled] 自带 color 覆盖 + opacity 遮罩，之前的金/橙渐变系配色在遮罩下始终糊成一片。
-   彻底放弃黄橙色系，改用与左侧描边按钮同色系的正红渐变 + 纯白粗体字，四个选择器
-   （基础态/element+class/两种 disabled 态）全部加 !important 兜底覆盖原生样式。
+   彻底放弃黄橙色系，改用与左侧描边按钮同色系的正红渐变 + 纯白粗体字。
    若改动后画面仍无变化，大概率是 WeChat DevTools 未重新编译，而非本文件的样式没生效——
-   需要手动点击"编译"或清除数据缓存后重试。 */
+   需要手动点击"编译"或清除数据缓存后重试。
+   🐛 非法选择器修复：原来这里用 button.poster-gen-btn / .poster-gen-btn[disabled] /
+   button.poster-gen-btn[disabled] 三个变体去覆盖原生 disabled 遮罩——元素+类名组合选择器
+   与属性选择器都不在小程序 wxss 支持范围内，编译期会报"Some selectors are not allowed
+   in component wxss"。禁用态的视觉需求本质是"不管 disabled 与否都要长一个样"，改用
+   .poster-gen-btn-disabled 显式类名（随 disabled 判断条件一起写在 WXML 的 class 里，
+   见 index.wxml 对应按钮），与 .poster-gen-btn 共用同一份声明，纯类选择器，效果完全等价 */
 .poster-gen-btn,
-button.poster-gen-btn,
-.poster-gen-btn[disabled],
-button.poster-gen-btn[disabled] {
+.poster-gen-btn-disabled {
   background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
   color: #FFFFFF !important;
   font-weight: bold !important;
@@ -8642,11 +8650,11 @@ button.poster-gen-btn[disabled] {
 
 /* 🚨 页面末尾强制覆盖：正红渐变 + 纯白大字，压过微信原生 button[disabled] 半透明遮罩。
    与本文件前面 .poster-gen-btn 那份规则内容一致，这里追加在文件最末尾仅为提高
-   源码顺序上的最终优先级，双重保险。 */
+   源码顺序上的最终优先级，双重保险。
+   🐛 非法选择器修复：同上一处，button.poster-gen-btn / [disabled] 属性选择器不在
+   小程序 wxss 支持范围内，改用 .poster-gen-btn-disabled 显式类名 */
 .poster-gen-btn,
-button.poster-gen-btn,
-.poster-gen-btn[disabled],
-button.poster-gen-btn[disabled] {
+.poster-gen-btn-disabled {
   background: #C62828 !important;
   background-image: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
   color: #FFFFFF !important;

@@ -1,6 +1,7 @@
 // app.ts
 
 import { isCloudAvailable } from './utils/cloudGuard';
+import { initPrivacyAuthHub } from './utils/privacyAuthHub';
 
 if (typeof App === 'undefined') {
   // 防御 Linux 环境下开发者工具打包器（wxmodule.patch.js）模块加载顺序错乱、
@@ -128,6 +129,12 @@ App({
         }
       }
     });
+
+    // 🛡️ 内存泄漏根因修复：wx.onNeedPrivacyAuthorization 全局只在这里注册一次
+    // （与上面的 wx.onNetworkStatusChange 同一种"App 级单例监听器"用法），不再由
+    // 每个页面的 privacy-popup 组件各自注册/尝试注销——详见 utils/privacyAuthHub.ts
+    // 头部注释，这正是"21 listeners of event onBeforeUnloadPage_N"告警的根因
+    initPrivacyAuthHub();
 
     console.log('[App] onLaunch end');
   },

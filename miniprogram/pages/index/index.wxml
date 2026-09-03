@@ -3193,7 +3193,7 @@
     <button class="btn-main-action text-gen-btn {{isSubmitting ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="generateReport" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">
       <text class="btn-emoji-icon">📋</text><text class="btn-main-label">生成餐报文本</text>
     </button>
-    <button class="btn-main-action poster-gen-btn" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
+    <button class="btn-main-action poster-gen-btn {{(isGeneratingPoster || !showResult) ? 'poster-gen-btn-disabled' : ''}}" hover-class="btn-hover" bindtap="onGeneratePoster" loading="{{isGeneratingPoster}}" disabled="{{isGeneratingPoster || !showResult}}" style="background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
       <text class="btn-emoji-icon">🎨</text><text class="btn-main-label">生成公示海报</text>
     </button>
     <button class="btn-main-action print-gen-btn" hover-class="btn-hover" bindtap="onExportPrintList" loading="{{isGeneratingPrintList}}" disabled="{{isGeneratingPrintList || !showResult}}" style="background: #000000 !important; color: #FFFFFF !important; opacity: 1 !important; border: none !important; font-weight: bold !important;">
