@@ -487,7 +487,7 @@
               <text class="sb-mini-lbl">安全营运天数</text>
             </view>
             <view class="sb-mini-cell">
-              <text class="sb-mini-val">{{sunshineBoardData.ledgerPublicRate || '暂无数据'}}</text>
+              <text class="sb-mini-val {{!sunshineBoardData.ledgerPublicRate ? 'sb-mini-val-empty' : ''}}">{{sunshineBoardData.ledgerPublicRate || '暂无数据'}}</text>
               <text class="sb-mini-lbl">账本公开率</text>
             </view>
             <view class="sb-mini-cell">
@@ -667,7 +667,7 @@
               <text class="sb-mini-lbl">安全营运天数</text>
             </view>
             <view class="sb-mini-cell">
-              <text class="sb-mini-val">{{sunshineBoardData.ledgerPublicRate || '暂无数据'}}</text>
+              <text class="sb-mini-val {{!sunshineBoardData.ledgerPublicRate ? 'sb-mini-val-empty' : ''}}">{{sunshineBoardData.ledgerPublicRate || '暂无数据'}}</text>
               <text class="sb-mini-lbl">账本公开率</text>
             </view>
             <view class="sb-mini-cell">

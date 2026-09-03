@@ -373,6 +373,18 @@ page {
   gap: 16rpx;
 }
 
+/* 🐛 排版修复：◀/▶ 翻页行此前没有覆盖 .picker-pill-btn 的 flex:1，日期胶囊
+   撑满行内除两枚圆形箭头外的全部剩余空间，把箭头顶到了屏幕左右两端。改为
+   居中聚集式布局——胶囊按内容宽度收紧，整行居中，箭头与日期文本之间只保留
+   .date-picker-subrow 已有的 16rpx gap，不再散得很开 */
+.period-nav-subrow {
+  justify-content: center;
+}
+
+.period-nav-subrow .picker-pill-btn {
+  flex: 0 1 auto;
+}
+
 .picker-pill-btn {
   flex: 1;
   background: #FFF9DB;
@@ -5776,6 +5788,7 @@ page {
   display: block;
   font-size: 22rpx;
   color: #868E96;
+  line-height: 1.5;
   margin-top: 6rpx;
 }
 
@@ -5896,15 +5909,31 @@ page {
   min-width: 0;
 }
 
+/* 🐛 根因修复（"暂无数据"上半截被切）：line-height:1.15 叠加 overflow:hidden，
+   中文字符的字形上沿比数字更高，紧凑行高下会被 overflow:hidden 直接切掉——
+   数字/百分比这类短内容本来就不会触发换行，不需要 overflow:hidden 兜底，
+   改用 min-height + flex 居中撑开足够的呼吸空间，overflow 放行 */
 .sb-mini-val {
   font-size: 28rpx;
   font-weight: 800;
   color: #D9480E;
-  line-height: 1.15;
+  line-height: 1.3;
+  min-height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
+}
+
+/* 空值兜底态（"暂无数据"等文案）：字号收窄、辅助灰色、更松行高，与数字值的
+   醒目大号样式区分开，同一个 <text> 通过额外叠加这个 class 切换 */
+.sb-mini-val-empty {
+  font-size: 24rpx;
+  font-weight: 400;
+  color: #86909C;
+  line-height: 1.2;
 }
 
 .sb-mini-lbl {
