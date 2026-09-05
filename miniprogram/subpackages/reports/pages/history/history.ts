@@ -1,19 +1,19 @@
-import { DataService, formatMoney } from '../../utils/dataService';
-import { AuthService } from '../../utils/authService';
-import { getSelectedStore } from '../../utils/storeManager';
-import { getSafeSystemInfo } from '../../utils/util';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
-import { getTodayIsoString } from '../../utils/dateUtils';
-import { isCloudAvailable } from '../../utils/cloudGuard';
-import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../utils/viewModePreview';
-import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
-import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
-import { callFunctionWithTimeout } from '../../utils/withTimeout';
-import { withLoading } from '../../utils/loadingGuard';
-import { isPrivacyMaskEnabled } from '../../utils/userPreferences';
-import { maskName } from '../../utils/core/privacy';
-import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
+import { DataService, formatMoney } from '../../../../utils/dataService';
+import { AuthService } from '../../../../utils/authService';
+import { getSelectedStore } from '../../../../utils/storeManager';
+import { getSafeSystemInfo } from '../../../../utils/util';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../../../utils/parser';
+import { getTodayIsoString } from '../../../../utils/dateUtils';
+import { isCloudAvailable } from '../../../../utils/cloudGuard';
+import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../../../utils/viewModePreview';
+import { checkTenantPermission, FEATURE_KEYS } from '../../../../utils/tenantPermission';
+import { requestOpenSubscription } from '../../../../utils/subscriptionHandoff';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { withLoading } from '../../../../utils/loadingGuard';
+import { isPrivacyMaskEnabled } from '../../../../utils/userPreferences';
+import { maskName } from '../../../../utils/core/privacy';
+import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 
 // 🌐 全国总览/多店汇总视角的门店 ID 哨兵值集合。此前 history.ts 内三处各自手写了不完整的判断
 // （有的漏了 'all'，有的漏了空字符串），导致某些视角下"今日凭证与记账"卡片被错误地展示出来。
@@ -275,7 +275,7 @@ Page({
 
   onLoad(options: any) {
     // 🛡️ 六大角色对齐："我的餐报提交记录"（profile.ts onGoToMySubmissions 跳转的
-    // /pages/history/history?view=mine）此前完全没有读取过这个查询参数——onLoad
+    // /subpackages/reports/pages/history/history?view=mine）此前完全没有读取过这个查询参数——onLoad
     // 从来不接收 options，viewMode 一直停留在默认的 'all'，导致"我的记录"入口
     // 实际展示的是全店所有人的记录，而不是严格收敛到 createdBy/_openid === 当前
     // 用户自己。getReports 云函数早就支持 viewMode==='personal' 时按 _openid 收敛

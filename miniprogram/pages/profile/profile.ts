@@ -928,7 +928,7 @@ Page({
 
     // 📄 义工版【我的餐报提交记录】：查的是 volunteer_submissions（义工自己提交的
     // 菜单/物资原始记录），不是 report_logs——义工从不写 report_logs，那张表继续
-    // 只服务店长/财务的正式台账历史（/pages/history/history?view=mine）
+    // 只服务店长/财务的正式台账历史（/subpackages/reports/pages/history/history?view=mine）
     showMyVolunteerSubmissionsModal: false,
     myVolunteerSubmissionsLoading: false,
     // 🔴 "我的餐报提交记录"入口角标：myVolunteerSubmissionsList 里 status==='rejected'
@@ -1533,7 +1533,7 @@ Page({
 
   // 点击图册入口卡，导航到 history 页图册模式——与原首页入口跳转目标完全一致
   onGoToPhotoArchive() {
-    safeNavigateTo({ url: '/pages/history/history?mode=photo' });
+    safeNavigateTo({ url: '/subpackages/reports/pages/history/history?mode=photo' });
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -3229,7 +3229,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/history/history?view=mine',
+      url: '/subpackages/reports/pages/history/history?view=mine',
       fail: () => {
         this.isNavigating = false;
       }
@@ -4337,7 +4337,7 @@ Page({
 
     this.setData({ showStoreStatsModal: false });
     safeNavigateTo({
-      url: '/pages/history/history',
+      url: '/subpackages/reports/pages/history/history',
       fail: () => {
         this.isNavigating = false;
       }
@@ -4366,13 +4366,13 @@ Page({
 
   // 🌟 店长专属入口：本店数据明细（携带 shopName 预选中本店，与超管工具箱里
   // 不带 shopName、默认落到全国汇总视角的"全国多店大屏"区分开），复用同一个
-  // 统计页面（/pages/statistics/statistics），不新建一套统计逻辑
+  // 统计页面（/subpackages/reports/pages/statistics/statistics），不新建一套统计逻辑
   onGoToStoreOverview() {
     if (this.isNavigating) return;
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`,
+      url: `/subpackages/reports/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`,
       fail: () => {
         this.isNavigating = false;
       }
@@ -4387,7 +4387,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/history/history?statusTab=pending',
+      url: '/subpackages/reports/pages/history/history?statusTab=pending',
       fail: () => {
         this.isNavigating = false;
       }
@@ -4405,7 +4405,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=ledger&viewMode=finance`,
+      url: `/subpackages/reports/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=ledger&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
       }
@@ -4423,7 +4423,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=sunshine&viewMode=finance`,
+      url: `/subpackages/reports/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&tab=sunshine&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
       }
@@ -4438,7 +4438,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&action=export&viewMode=finance`,
+      url: `/subpackages/reports/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}&action=export&viewMode=finance`,
       fail: () => {
         this.isNavigating = false;
       }
@@ -5005,7 +5005,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/statistics/statistics',
+      url: '/subpackages/reports/pages/statistics/statistics',
       fail: () => {
         this.isNavigating = false;
       }
@@ -5028,8 +5028,8 @@ Page({
     this.isNavigating = true;
 
     const url = this.data.isPatriarch
-      ? '/pages/statistics/statistics?view=national'
-      : `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`;
+      ? '/subpackages/reports/pages/statistics/statistics?view=national'
+      : `/subpackages/reports/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.currentStoreName || '')}`;
 
     safeNavigateTo({
       url,

@@ -1,18 +1,18 @@
-import { DataService, formatMoney, getLocalReports } from '../../utils/dataService';
-import { AuthService, ROLE_LABELS } from '../../utils/authService';
-import { getSelectedStore, setSelectedStore } from '../../utils/storeManager';
-import { formatGratitudeReportText, GratitudeReportData } from '../../utils/reportFormatter';
-import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
-import { safeNavigateTo } from '../../utils/navHelper';
-import { recordRecentVisit } from '../../utils/recentPages';
-import { drawVolunteerHonorCard, VolunteerHonorData } from '../../utils/posterGenerator';
-import { getSafeSystemInfo } from '../../utils/util';
-import { isVirtualStoreName, resolveHonorCardStoreName } from '../../utils/storeIdentity';
-import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
-import { reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
-import { callFunctionWithTimeout } from '../../utils/withTimeout';
-import { writeLocalFileSafe } from '../../utils/localFileCache';
+import { DataService, formatMoney, getLocalReports } from '../../../../utils/dataService';
+import { AuthService, ROLE_LABELS } from '../../../../utils/authService';
+import { getSelectedStore, setSelectedStore } from '../../../../utils/storeManager';
+import { formatGratitudeReportText, GratitudeReportData } from '../../../../utils/reportFormatter';
+import { calculateEmaRunway, RunwayResult } from '../../../../utils/calculateRunway';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { safeNavigateTo } from '../../../../utils/navHelper';
+import { recordRecentVisit } from '../../../../utils/recentPages';
+import { drawVolunteerHonorCard, VolunteerHonorData } from '../../../../utils/posterGenerator';
+import { getSafeSystemInfo } from '../../../../utils/util';
+import { isVirtualStoreName, resolveHonorCardStoreName } from '../../../../utils/storeIdentity';
+import { checkTenantPermission, FEATURE_KEYS } from '../../../../utils/tenantPermission';
+import { reportCloudSdkErrorIfCorrupted } from '../../../../utils/cloudGuard';
+import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { writeLocalFileSafe } from '../../../../utils/localFileCache';
 import { nationalDashboardHandlers, drillDownHandlers, procurementHandlers } from './enterprise/index';
 
 // ☀️ 阳光账本理念弹窗文案：与 pages/index/index.ts 的 computeConceptCopy 是
@@ -842,7 +842,7 @@ Page({
   },
 
   onLoad(options: any) {
-    recordRecentVisit('/pages/statistics/statistics', '统计分析');
+    recordRecentVisit('/subpackages/reports/pages/statistics/statistics', '统计分析');
 
     // 🐛 根因修复：此前只解构 shopName/autoShowExport/view 三个参数，Profile
     // 「财务稽核专区」新增携带的 viewMode/tab/action 完全没人读，日志里才会打出
@@ -3728,14 +3728,14 @@ Page({
   // 「发现异常，前去处理」：关闭预览弹窗，跳转账本页核实/处理
   onExportPreviewGoFix() {
     this.setData({ showExportPreviewModal: false });
-    safeNavigateTo({ url: '/pages/history/history' });
+    safeNavigateTo({ url: '/subpackages/reports/pages/history/history' });
   },
 
   // 🆕「⏳待审核餐报」提示条一键跳转：直达账本页待审核 Tab，与 profile.ts
   // 财务「凭证快速复核」入口复用同一个 history.ts onLoad 查询参数
   // （?statusTab=pending），形成店长看到提示→一点直达→审核的闭环
   onGoToPendingAudit() {
-    safeNavigateTo({ url: '/pages/history/history?statusTab=pending' });
+    safeNavigateTo({ url: '/subpackages/reports/pages/history/history?statusTab=pending' });
   },
 
   // 「数据无误，确认并导出」：关闭预览弹窗，发起真正的 xlsx 生成
@@ -4883,14 +4883,14 @@ Page({
       const stores = nd.totalStores || 0;
       return {
         title: `🌍 全国爱心公信力大屏：已服务${diners}人次，覆盖${stores}家爱心站点`,
-        path: '/pages/statistics/statistics?view=national&from=share',
+        path: '/subpackages/reports/pages/statistics/statistics?view=national&from=share',
         imageUrl: ''
       };
     }
 
     return {
       title: '素小账·统计分析——让爱心账目更透明',
-      path: '/pages/statistics/statistics',
+      path: '/subpackages/reports/pages/statistics/statistics',
       imageUrl: ''
     };
   },

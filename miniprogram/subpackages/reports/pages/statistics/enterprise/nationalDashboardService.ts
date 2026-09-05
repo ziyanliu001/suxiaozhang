@@ -18,14 +18,14 @@
 //
 // tsconfig.json 全局关闭了 noImplicitThis/strict，与 statistics.ts 原有写法
 // 一致，本文件方法体内的 this 沿用隐式 any，不额外声明 this 参数类型。
-import { formatMoney, sanitizeReportForVolunteer } from '../../../utils/dataService';
-import { AuthService } from '../../../utils/authService';
-import { callFunctionWithTimeout } from '../../../utils/withTimeout';
-import { reportCloudSdkErrorIfCorrupted } from '../../../utils/cloudGuard';
-import { writeLocalFileSafe } from '../../../utils/localFileCache';
-import { canExportNationalExcel, resolveEnterpriseCapabilities } from '../../../utils/enterpriseCapabilities';
-import { requestOpenSubscription } from '../../../utils/subscriptionHandoff';
-import { getSafeSystemInfo } from '../../../utils/util';
+import { formatMoney, sanitizeReportForVolunteer } from '../../../../../utils/dataService';
+import { AuthService } from '../../../../../utils/authService';
+import { callFunctionWithTimeout } from '../../../../../utils/withTimeout';
+import { reportCloudSdkErrorIfCorrupted } from '../../../../../utils/cloudGuard';
+import { writeLocalFileSafe } from '../../../../../utils/localFileCache';
+import { canExportNationalExcel, resolveEnterpriseCapabilities } from '../../../../../utils/enterpriseCapabilities';
+import { requestOpenSubscription } from '../../../../../utils/subscriptionHandoff';
+import { getSafeSystemInfo } from '../../../../../utils/util';
 import { formatCompactNumber, formatDate } from '../statistics';
 
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致，仅供

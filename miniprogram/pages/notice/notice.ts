@@ -362,7 +362,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/history/history',
+      url: '/subpackages/reports/pages/history/history',
       fail: () => {
         this.isNavigating = false;
       }

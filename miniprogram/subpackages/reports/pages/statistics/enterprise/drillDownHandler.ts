@@ -8,7 +8,7 @@
 // onReturnToNationalDashboard 调用的 this._triggerPatriarchNationalView()
 // 定义在 ./nationalDashboardService.ts——三者运行时合并到同一个页面实例，
 // 互相调用不受物理文件边界影响。
-import { setSelectedStore } from '../../../utils/storeManager';
+import { setSelectedStore } from '../../../../../utils/storeManager';
 
 export const drillDownHandlers = {
   // 🆕（2026-08-31）大屏门店矩阵行点击下钻单店明细：只对大家长/超管生效——

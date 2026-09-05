@@ -5125,7 +5125,7 @@ Page({
           cancelText: '我知道了',
           success: (res) => {
             if (res.confirm) {
-              safeNavigateTo({ url: '/pages/history/history' });
+              safeNavigateTo({ url: '/subpackages/reports/pages/history/history' });
             }
           }
         });
@@ -7959,7 +7959,7 @@ Page({
             cancelText: '我知道了',
             success: (res) => {
               if (res.confirm) {
-                safeNavigateTo({ url: '/pages/history/history' });
+                safeNavigateTo({ url: '/subpackages/reports/pages/history/history' });
               }
             }
           });
@@ -10041,7 +10041,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: '/pages/statistics/statistics?tab=sunshine',
+      url: '/subpackages/reports/pages/statistics/statistics?tab=sunshine',
       fail: () => {
         this.isNavigating = false;
       }
@@ -10588,7 +10588,7 @@ Page({
   // 关闭通知栏：写入"今天"这个日期，整条隐藏不留空白；到了新的一天这个判断
   // 自然失效，不需要额外的清理逻辑
   // 🌟 优雅收起 + 防抖：先切到 closing 态播放收起动效（max-height/opacity 过渡，
-  // 见 index.scss .announce-bar-closing），动效播完再真正移出 wx:if；
+  // 见 index.wxss .announce-bar-closing），动效播完再真正移出 wx:if；
   // isNoticeBarClosing 守卫防止动效播放期间连续点击 X 反复触发/写入
   onCloseNoticeBar() {
     if (this.data.isNoticeBarClosing) return;
@@ -10955,8 +10955,8 @@ Page({
     // 不新增第二套视角切换逻辑。偏好为默认值"门店汇总"时不追加参数，与此前行为
     // 完全一致，不影响没有设置过这项偏好的用户
     const url = getDefaultHomeView() === 'personal'
-      ? '/pages/history/history?view=mine'
-      : '/pages/history/history';
+      ? '/subpackages/reports/pages/history/history?view=mine'
+      : '/subpackages/reports/pages/history/history';
 
     safeNavigateTo({
       url,
@@ -10971,7 +10971,7 @@ Page({
     this.isNavigating = true;
 
     safeNavigateTo({
-      url: `/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.shopName)}`,
+      url: `/subpackages/reports/pages/statistics/statistics?shopName=${encodeURIComponent(this.data.shopName)}`,
       fail: () => {
         this.isNavigating = false;
       }
@@ -12013,7 +12013,7 @@ Page({
     if (this.isNavigating) return;
     this.isNavigating = true;
     safeNavigateTo({
-      url: '/pages/statistics/statistics?autoShowExport=true',
+      url: '/subpackages/reports/pages/statistics/statistics?autoShowExport=true',
       fail: () => {
         this.isNavigating = false;
       }
@@ -12312,7 +12312,7 @@ Page({
   onGoToHistoryAnomalyDetail() {
     const type = this.data.riskAlertsFilterType;
     if (!type) return;
-    safeNavigateTo({ url: `/pages/history/history?anomalyType=${type}` });
+    safeNavigateTo({ url: `/subpackages/reports/pages/history/history?anomalyType=${type}` });
   },
 
   onRefreshRiskAlerts() {

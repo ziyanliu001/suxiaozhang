@@ -22,7 +22,7 @@ Component({
     onTapHistory() {
       this.close();
       safeNavigateTo({
-        url: '/pages/history/history?view=mine',
+        url: '/subpackages/reports/pages/history/history?view=mine',
         fail: (err) => console.warn('[mine-quick-sheet] 跳转历史记录失败:', err)
       });
     },

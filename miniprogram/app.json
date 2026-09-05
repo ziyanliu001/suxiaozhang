@@ -3,9 +3,7 @@
     "pages/index/index",
     "pages/notice/notice",
     "pages/profile/profile",
-    "pages/history/history",
     "pages/logs/logs",
-    "pages/statistics/statistics",
     "pages/help/help",
     "pages/draft-box/draft-box",
     "pages/settings/settings"
@@ -35,16 +33,24 @@
         "pages/public-verify/index",
         "pages/settlement-summary/settlement-summary"
       ]
+    },
+    {
+      "name": "reports",
+      "root": "subpackages/reports",
+      "pages": [
+        "pages/statistics/statistics",
+        "pages/history/history"
+      ]
     }
   ],
   "preloadRule": {
     "pages/index/index": {
       "network": "all",
-      "packages": ["admin"]
+      "packages": ["admin", "reports"]
     },
     "pages/profile/profile": {
       "network": "all",
-      "packages": ["admin"]
+      "packages": ["admin", "reports"]
     }
   },
   "window": {
