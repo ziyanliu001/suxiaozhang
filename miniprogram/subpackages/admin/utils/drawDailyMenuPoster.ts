@@ -1,4 +1,4 @@
-import { getSafeSystemInfo } from './util';
+import { getSafeSystemInfo } from '../../../utils/util';
 
 /**
  * 绘制今日食谱宣传海报 (Canvas 2D)：3 列九宫格菜品卡片（实拍图 + 菜名）

@@ -3,7 +3,7 @@ import { getSelectedStore } from '../../../../utils/storeManager';
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { recordRecentVisit } from '../../../../utils/recentPages';
-import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../../../utils/drawDailyMenuPoster';
+import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../utils/drawDailyMenuPoster';
 import { GRATITUDE_TEXT } from '../../../../utils/cultureData';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';

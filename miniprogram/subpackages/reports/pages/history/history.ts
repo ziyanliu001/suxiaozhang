@@ -10,7 +10,7 @@ import { getPreviewViewMode, PREVIEW_VIEW_MODE_LABELS } from '../../../../utils/
 import { checkTenantPermission, FEATURE_KEYS } from '../../../../utils/tenantPermission';
 import { requestOpenSubscription } from '../../../../utils/subscriptionHandoff';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-import { withLoading } from '../../../../utils/loadingGuard';
+import { withLoading } from '../../utils/loadingGuard';
 import { isPrivacyMaskEnabled } from '../../../../utils/userPreferences';
 import { maskName } from '../../../../utils/core/privacy';
 import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';

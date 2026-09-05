@@ -1,5 +1,5 @@
-import { getSafeSystemInfo } from './util';
-import { safeRoundRect } from './canvasShapes';
+import { getSafeSystemInfo } from '../../../utils/util';
+import { safeRoundRect } from '../../../utils/canvasShapes';
 
 /**
  * 绘制大事记活动海报 (Canvas 2D)

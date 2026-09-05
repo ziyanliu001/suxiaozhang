@@ -23,7 +23,7 @@ import { AuthService } from '../../../../../utils/authService';
 import { callFunctionWithTimeout } from '../../../../../utils/withTimeout';
 import { reportCloudSdkErrorIfCorrupted } from '../../../../../utils/cloudGuard';
 import { writeLocalFileSafe } from '../../../../../utils/localFileCache';
-import { canExportNationalExcel, resolveEnterpriseCapabilities } from '../../../../../utils/enterpriseCapabilities';
+import { canExportNationalExcel, resolveEnterpriseCapabilities } from '../../../utils/enterpriseCapabilities';
 import { requestOpenSubscription } from '../../../../../utils/subscriptionHandoff';
 import { getSafeSystemInfo } from '../../../../../utils/util';
 import { formatCompactNumber, formatDate } from '../statistics';
