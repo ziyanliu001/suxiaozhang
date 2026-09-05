@@ -146,13 +146,39 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 | `category` | `grain_oil`（粮油调味）/ `fresh_produce`（生鲜蔬果）/ `mushroom_dried`（菌菇干货）/ `plant_protein`（植物蛋白）/ `packaging`（包材耗材） |
 | `unit` | `kg` / `bag`（包）/ `bucket`（桶）/ `box`（箱）/ `piece`（个） |
 | `conversionUnit` / `conversionRatio` | 辅助计量单位与换算比例，选填，默认比例 `1` |
-| `costPrice` | 参考进价，**"元"浮点数口径**——与 `report_logs`（本文档第 4 节）一致，不是"分"整型，避免仓库出现第三套金额存储规则 |
-| `currentStock` | 当前库存量，Phase 1 手动编辑，**未接入**任何自动出入库扣减逻辑（后续阶段范围） |
+| `costPrice` | 参考进价，**"元"浮点数口径**——与 `report_logs`（本文档第 4 节）一致，不是"分"整型，避免仓库出现第三套金额存储规则。Phase 2 起由 `manageInventoryTransaction` 的 `PURCHASE_IN` 自动按加权平均法维护（`新costPrice=(旧costPrice×旧库存+本次unitCost×本次数量)/新库存`），手动编辑仍然可用，但正常业务流程下应该让入库动作驱动这个字段，不需要每次手动改 |
+| `currentStock` | 当前库存量。Phase 1 只能手动编辑；Phase 2 起由 `manageInventoryTransaction` 通过事务原子更新（见本文档第 7 节），仍保留手动编辑作为兜底修正手段 |
 | `safetyStockMin` / `safetyStockMax` | 安全库存下限/上限，选填，Phase 1 只存字段不做预警计算 |
 | `shelfLifeDays` / `expiryAlertDays` | 保质期天数 / 临期预警阈值（默认 7 天），选填 |
 | `status` | `active` / `disabled`，软删除；免费版数量配额只统计 `active` |
 
 **免费版数量配额**：`PLAN_INVENTORY_ITEM_LIMITS = { basic: 30, pro: 200, enterprise: 999999 }`，**按单店计数**（`storeId` 维度），不是按租户——与 `PLAN_STORE_LIMITS`（本文档第 3 节，按 `tenants.currentStoreCount` 租户维度计数）是两个不同维度的配额，不要混用查询条件。这份常量只维护在 `manageInventoryItem` 一个文件里（只有这一个云函数会创建物料），不存在 `PLAN_STORE_LIMITS` 那种"5+ 处拷贝"的重复风险。达到上限时返回 `errorCode: 'INVENTORY_LIMIT_REACHED'`，与 `createStore` 的 `STORE_LIMIT_REACHED` 同一套前端识别约定。
+
+---
+
+## 7. 商业进销存出入库流水（`inventory_logs` 集合，Phase 2）
+
+权威定义 `cloudfunctions/manageInventoryTransaction/index.js`。与 `inventory_items` 同一套业态边界（雨花斋硬拒绝，见第 6 节）。
+
+字段：
+
+| 字段 | 含义 |
+|---|---|
+| `tenantId` / `storeId` | 同第 6 节口径 |
+| `itemId` | 关联 `inventory_items._id` |
+| `itemCode` / `itemName` | 操作当下的物料编码/名称**快照**——物料后续改名不影响历史流水可读性，与 `report_logs.shopName` 快照惯例一致，不是实时关联查询 |
+| `actionType` | `PURCHASE_IN`（采购入库）/ `KITCHEN_OUT`（后厨领料出库）/ `STOCKTAKE_ADJUST`（盘点差异校准）/ `SPOILED_SCRAP`（变质/边角料报损） |
+| `changeQuantity` | 变动数量，正数入负数出。`STOCKTAKE_ADJUST` 由云函数按"实际盘点量 − 变动前库存"反推，不是前端直接填写这个字段 |
+| `unitCost` | 本次进价/领料成本，选填，`STOCKTAKE_ADJUST` 场景通常不填 |
+| `totalAmount` | `unitCost × \|changeQuantity\|`，纯金额大小不带方向（方向已经体现在 `changeQuantity` 正负号上，不重复编码） |
+| `balanceAfter` | 变动后结存量，事务内计算并直接落库，不是前端传参也不是事后反查 |
+| `remark` | 备注，选填，落库前过 `msgSecCheck` |
+| `operatorOpenId` / `operatorName` | 操作人 openid + 当时的角色记录姓名快照 |
+| `createTime` | `db.serverDate()` |
+
+**一致性保证**：`manageInventoryTransaction` 的 `create` action 用 `db.startTransaction()`（与 `cloudfunctions/createStore/index.js:371-429` 建店事务同一种写法）在同一个事务里完成"读物料当前快照 → 校验结存量不为负 → 更新 `inventory_items.currentStock`（`PURCHASE_IN` 时一并重算 `costPrice` 加权平均）→ 写入 `inventory_logs`"，不会出现流水和库存其中一个写成功、另一个失败的半成品状态。**库存不允许变为负数**——校验失败时整个事务回滚，不产生任何流水记录，也不静默钳制成 0。
+
+索引：`{itemId, createTime desc}`（`list` action 的主查询路径，供物料详情"变动明细台账"面板使用，只读、不提供编辑历史流水的入口）。
 
 ---
 

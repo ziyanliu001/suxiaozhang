@@ -1,0 +1,9 @@
+{
+  "name": "manageInventoryTransaction",
+  "version": "1.0.0",
+  "description": "云函数：商业进销存出入库流水登记（事务原子更新 inventory_items.currentStock + 写入 inventory_logs），雨花斋专区硬性拒绝",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

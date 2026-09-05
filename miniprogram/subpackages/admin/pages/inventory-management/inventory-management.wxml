@@ -70,6 +70,8 @@
           <text class="im-item-sub">进价：¥{{item.costPrice}}/{{item.unitText}}</text>
         </view>
         <view class="im-item-actions">
+          <view class="im-item-action-btn im-item-action-primary" data-id="{{item._id}}" bindtap="onOpenTxModal">出入库</view>
+          <view class="im-item-action-btn" data-id="{{item._id}}" bindtap="onOpenLedger">台账</view>
           <view class="im-item-action-btn" data-id="{{item._id}}" bindtap="onOpenEditModal">编辑</view>
           <view class="im-item-action-btn im-item-action-danger" data-id="{{item._id}}" data-name="{{item.name}}" bindtap="onDisableItem">停用</view>
         </view>
@@ -156,6 +158,82 @@
           {{formMode === 'create' ? '确认添加' : '保存修改'}}
         </button>
       </view>
+    </view>
+  </view>
+
+  <!-- 🆕 Phase 2：快捷出入库/调账半屏弹窗 -->
+  <view class="im-modal-mask" wx:if="{{showTxModal}}" catchtap="onCloseTxModal">
+    <view class="im-modal-card" catchtap="stopPropagation">
+      <view class="im-modal-header">
+        <text class="im-modal-title">📦 {{txForm.itemName}} · 出入库</text>
+        <text class="im-modal-close" bindtap="onCloseTxModal">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="im-modal-body">
+        <view class="im-form-row">
+          <text class="im-form-label">变动类型 *</text>
+          <picker range="{{actionTypeOptions}}" range-key="label" value="{{actionTypePickerIndex}}" bindchange="onTxActionTypePickerChange">
+            <view class="im-form-picker">{{actionTypeOptions[actionTypePickerIndex].label}}</view>
+          </picker>
+        </view>
+
+        <view class="im-form-row" wx:if="{{actionTypeOptions[actionTypePickerIndex].isStocktake}}">
+          <text class="im-form-label">本次实际盘点到的库存量 *</text>
+          <input class="im-form-input" type="digit" placeholder="填写实际数出来的数量" value="{{txForm.actualStock}}" data-field="actualStock" bindinput="onTxFieldInput" />
+        </view>
+        <view class="im-form-row" wx:else>
+          <text class="im-form-label">本次数量 *</text>
+          <input class="im-form-input" type="digit" placeholder="填写本次变动的数量（正数）" value="{{txForm.quantity}}" data-field="quantity" bindinput="onTxFieldInput" />
+        </view>
+
+        <view class="im-form-row">
+          <text class="im-form-label">进价/成本（元）</text>
+          <input class="im-form-input" type="digit" placeholder="选填" value="{{txForm.unitCost}}" data-field="unitCost" bindinput="onTxFieldInput" />
+        </view>
+        <view class="im-form-row">
+          <text class="im-form-label">备注</text>
+          <input class="im-form-input" placeholder="如：供货商批次/领料档口，选填" value="{{txForm.remark}}" data-field="remark" bindinput="onTxFieldInput" />
+        </view>
+        <view class="im-form-safe-area-spacer"></view>
+      </scroll-view>
+
+      <view class="im-modal-footer">
+        <button class="im-btn-submit" loading="{{txSubmitting}}" bindtap="onSubmitTx">确认登记</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🆕 Phase 2：变动明细台账面板（只读，不提供编辑历史流水的入口） -->
+  <view class="im-modal-mask" wx:if="{{showLedgerModal}}" catchtap="onCloseLedger">
+    <view class="im-modal-card" catchtap="stopPropagation">
+      <view class="im-modal-header">
+        <text class="im-modal-title">🗂️ {{ledgerItemName}} · 变动台账</text>
+        <text class="im-modal-close" bindtap="onCloseLedger">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="im-ledger-body">
+        <view class="im-ledger-loading" wx:if="{{ledgerLoading}}">
+          <text>加载中...</text>
+        </view>
+        <view class="im-ledger-empty" wx:if="{{!ledgerLoading && ledgerList.length === 0}}">
+          <text>暂无出入库记录</text>
+        </view>
+        <view class="im-ledger-row" wx:for="{{ledgerList}}" wx:for-item="log" wx:key="_id">
+          <view class="im-ledger-row-top">
+            <text class="im-ledger-type">{{log.actionTypeText}}</text>
+            <text class="im-ledger-qty {{log.changeQuantity < 0 ? 'im-ledger-qty-out' : 'im-ledger-qty-in'}}">
+              {{log.changeQuantity > 0 ? '+' : ''}}{{log.changeQuantity}}
+            </text>
+          </view>
+          <view class="im-ledger-row-mid">
+            <text class="im-ledger-sub">结存：{{log.balanceAfter}}</text>
+            <text class="im-ledger-sub" wx:if="{{log.totalAmount}}">金额：¥{{log.totalAmount}}</text>
+          </view>
+          <text class="im-ledger-remark" wx:if="{{log.remark}}">备注：{{log.remark}}</text>
+          <text class="im-ledger-operator">{{log.operatorName || '未知操作人'}} · {{log.createTime}}</text>
+        </view>
+        <view class="im-form-safe-area-spacer"></view>
+      </scroll-view>
     </view>
   </view>
 

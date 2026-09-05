@@ -216,6 +216,11 @@ page {
   color: #DC2626;
 }
 
+.im-item-action-primary {
+  color: #FFFFFF;
+  background: #8C1D18;
+}
+
 .im-safe-area-spacer {
   height: env(safe-area-inset-bottom);
 }
@@ -329,4 +334,79 @@ page {
   border-radius: 16rpx;
   padding: 20rpx 0;
   width: 100%;
+}
+
+/* 变动明细台账面板（只读） */
+
+.im-ledger-body {
+  flex: 1;
+  max-height: 70vh;
+  padding: 8rpx 32rpx 32rpx;
+  box-sizing: border-box;
+}
+
+.im-ledger-loading,
+.im-ledger-empty {
+  display: flex;
+  justify-content: center;
+  padding: 80rpx 0;
+  color: #94A3B8;
+  font-size: 26rpx;
+}
+
+.im-ledger-row {
+  background: #F8FAFC;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.im-ledger-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.im-ledger-type {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.im-ledger-qty {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.im-ledger-qty-in {
+  color: #16A34A;
+}
+
+.im-ledger-qty-out {
+  color: #DC2626;
+}
+
+.im-ledger-row-mid {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 8rpx;
+}
+
+.im-ledger-sub {
+  font-size: 22rpx;
+  color: #64748B;
+}
+
+.im-ledger-remark {
+  display: block;
+  font-size: 22rpx;
+  color: #94A3B8;
+  margin-top: 8rpx;
+}
+
+.im-ledger-operator {
+  display: block;
+  font-size: 20rpx;
+  color: #CBD5E1;
+  margin-top: 10rpx;
 }

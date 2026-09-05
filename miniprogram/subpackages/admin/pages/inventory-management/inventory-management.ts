@@ -40,6 +40,43 @@ function unitLabel(value: string): string {
   return opt ? opt.label : value;
 }
 
+// 🆕 Phase 2：出入库/调账变动类型。isStocktake 标记这一档的数量输入方式是
+// "实际盘点到的库存量"（绝对值），其余三档是"本次数量"（正数，由云函数按
+// actionType 决定存成正数还是负数）——与 manageInventoryTransaction 的
+// 决策口径完全对应，不在前端重复实现一遍换算逻辑，只负责收集正确形状的输入
+const ACTION_TYPE_OPTIONS = [
+  { value: 'PURCHASE_IN', label: '采购入库', isStocktake: false },
+  { value: 'KITCHEN_OUT', label: '后厨领料出库', isStocktake: false },
+  { value: 'STOCKTAKE_ADJUST', label: '盘点差异校准', isStocktake: true },
+  { value: 'SPOILED_SCRAP', label: '变质/边角料报损', isStocktake: false }
+];
+
+function actionTypeLabel(value: string): string {
+  const opt = ACTION_TYPE_OPTIONS.find((o) => o.value === value);
+  return opt ? opt.label : value;
+}
+
+// 🌟 manageInventoryTransaction 的 createTime 用 db.serverDate() 写入，云函数
+// 响应体里会被序列化成 ISO 字符串——直接绑到 WXML 上会显示成
+// "2026-09-05T08:00:00.000Z" 这种不可读的原始格式，这里格式化成"YYYY-MM-DD
+// HH:mm"再展示
+function formatCreateTime(value: any): string {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const EMPTY_TX_FORM = {
+  itemId: '',
+  itemName: '',
+  actionType: 'PURCHASE_IN',
+  quantity: '',
+  actualStock: '',
+  unitCost: '',
+  remark: ''
+};
+
 const EMPTY_FORM = {
   id: '',
   itemCode: '',
@@ -84,7 +121,20 @@ Page({
     form: { ...EMPTY_FORM },
     categoryPickerIndex: -1,
     unitPickerIndex: -1,
-    submitting: false
+    submitting: false,
+
+    // 🆕 Phase 2：快捷出入库/调账半屏弹窗
+    showTxModal: false,
+    actionTypeOptions: ACTION_TYPE_OPTIONS,
+    actionTypePickerIndex: 0,
+    txForm: { ...EMPTY_TX_FORM },
+    txSubmitting: false,
+
+    // 🆕 Phase 2：变动明细台账面板（只读）
+    showLedgerModal: false,
+    ledgerItemName: '',
+    ledgerLoading: false,
+    ledgerList: [] as any[]
   },
 
   onLoad() {
@@ -366,5 +416,134 @@ Page({
         }
       }
     });
+  },
+
+  // ============ Phase 2：快捷出入库/调账 ============
+
+  onOpenTxModal(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const item = this.data.list.find((it: any) => it._id === id);
+    if (!item) return;
+    const defaultOption = ACTION_TYPE_OPTIONS[0];
+    this.setData({
+      showTxModal: true,
+      actionTypePickerIndex: 0,
+      txForm: { ...EMPTY_TX_FORM, itemId: item._id, itemName: item.name, actionType: defaultOption.value }
+    });
+  },
+
+  onCloseTxModal() {
+    this.setData({ showTxModal: false });
+  },
+
+  onTxActionTypePickerChange(e: any) {
+    const index = parseInt(e.detail.value, 10);
+    const opt = ACTION_TYPE_OPTIONS[index];
+    if (!opt) return;
+    // 切换类型时清空数量类字段——盘点校准（actualStock）与其余三档（quantity）
+    // 是两个不同语义的输入框，防止切换后残留上一档误填的数值被一起提交
+    this.setData({
+      actionTypePickerIndex: index,
+      'txForm.actionType': opt.value,
+      'txForm.quantity': '',
+      'txForm.actualStock': ''
+    });
+  },
+
+  onTxFieldInput(e: any) {
+    const field = e.currentTarget.dataset.field;
+    this.setData({ [`txForm.${field}`]: e.detail.value });
+  },
+
+  async onSubmitTx() {
+    if (this.data.txSubmitting) return;
+    const { txForm, storeId } = this.data;
+    const currentOption = ACTION_TYPE_OPTIONS.find((o) => o.value === txForm.actionType);
+    const isStocktake = !!(currentOption && currentOption.isStocktake);
+
+    if (isStocktake) {
+      if (txForm.actualStock === '') {
+        wx.showToast({ title: '请输入本次实际盘点到的库存量', icon: 'none' });
+        return;
+      }
+    } else if (!txForm.quantity || parseFloat(txForm.quantity) <= 0) {
+      wx.showToast({ title: '请输入大于 0 的本次数量', icon: 'none' });
+      return;
+    }
+
+    this.setData({ txSubmitting: true });
+    wx.showLoading({ title: '提交中...', mask: true });
+
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageInventoryTransaction',
+        data: {
+          action: 'create',
+          itemId: txForm.itemId,
+          storeId,
+          actionType: txForm.actionType,
+          quantity: txForm.quantity,
+          actualStock: txForm.actualStock,
+          unitCost: txForm.unitCost,
+          remark: txForm.remark
+        }
+      });
+      const result = res && res.result;
+      wx.hideLoading();
+
+      if (result && result.success) {
+        this.setData({ showTxModal: false });
+        wx.showToast({ title: `已登记（结存 ${result.balanceAfter}）`, icon: 'none' });
+        this.fetchList();
+        return;
+      }
+      wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none', duration: 3000 });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[inventory-management] onSubmitTx 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ txSubmitting: false });
+    }
+  },
+
+  // ============ Phase 2：变动明细台账（只读） ============
+
+  onOpenLedger(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const item = this.data.list.find((it: any) => it._id === id);
+    if (!item) return;
+    this.setData({ showLedgerModal: true, ledgerItemName: item.name, ledgerList: [] });
+    this.fetchLedger(id);
+  },
+
+  onCloseLedger() {
+    this.setData({ showLedgerModal: false });
+  },
+
+  async fetchLedger(itemId: string) {
+    this.setData({ ledgerLoading: true });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageInventoryTransaction',
+        data: { action: 'list', itemId }
+      });
+      const result = res && res.result;
+      if (result && result.success) {
+        const ledgerList = (result.data || []).map((log: any) => ({
+          ...log,
+          actionTypeText: actionTypeLabel(log.actionType),
+          createTime: formatCreateTime(log.createTime)
+        }));
+        this.setData({ ledgerList });
+      } else {
+        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[inventory-management] fetchLedger 异常:', err);
+      wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ ledgerLoading: false });
+    }
   }
 });
