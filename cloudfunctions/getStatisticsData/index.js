@@ -214,7 +214,7 @@ exports.main = async (event, context) => {
     let auditedCount = 0;
     const materialSummary = [];
 
-    const FIXED_EXPENSE_KEYWORDS = ['租金', '房租', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置', '大额', '专项'];
+    const FIXED_EXPENSE_KEYWORDS = ['租金', '房租', '物业', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '冷库', '蒸柜', '桌椅', '改造', '工程', '消防', '维修', '购置', '大额', '专项'];
 
     records.forEach(r => {
       const otherDonation = parseFloat(r.otherDonation) || 0;

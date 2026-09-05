@@ -101,15 +101,19 @@ function extractRegionFromText(text) {
   return { province: '', city: '' };
 }
 
+// 2026-09 重构：fixed 分类与 miniprogram/pages/index/index.ts 的
+// EXPENSE_TEMPLATE_PRESETS.fixed 对齐收敛为 4 个标准规范项，避免新建门店种子数据
+// 与前端"一键预置"/自愈兜底两套来源的命名不一致
 const DEFAULT_EXPENSE_TEMPLATES = [
   { category: 'daily', itemName: '青菜' },
   { category: 'daily', itemName: '豆腐' },
   { category: 'daily', itemName: '大米' },
   { category: 'daily', itemName: '食用油' },
   { category: 'daily', itemName: '燃气费' },
-  { category: 'fixed', itemName: '店铺租金' },
-  { category: 'fixed', itemName: '水电费' },
-  { category: 'fixed', itemName: '设备维护' }
+  { category: 'fixed', itemName: '场地租金' },
+  { category: 'fixed', itemName: '大型设备' },
+  { category: 'fixed', itemName: '装修改造' },
+  { category: 'fixed', itemName: '其他专项' }
 ];
 
 // 确保默认机构（及其订阅配额）存在，供缺失 tenantId 的 super_admin 账号兜底使用

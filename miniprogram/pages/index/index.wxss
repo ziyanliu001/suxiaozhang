@@ -4366,23 +4366,34 @@ page {
   line-height: 1.6;
 }
 
+/* 🩹 从 flex-wrap 改为标准 2 列网格：flex-wrap 下每个 chip 宽度由文字内容
+   撑开，长短名称混排（如"场地租金" vs "其他专项"）会导致每行个数不一致、
+   折行参差不齐；grid 固定 2 列等宽，无论名称长短都严格对齐成规整方阵 */
 .expense-template-chip-list {
   max-height: 50vh;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 16rpx;
+}
+
+/* 末尾的安全区占位块（用于滚动到底部时留出手机底部安全区）不参与 2 列排布，
+   独占一整行，不然会随奇偶个数落进某一列变成一个诡异的空格子 */
+.expense-template-chip-list .fa-safe-area-spacer {
+  grid-column: 1 / -1;
 }
 
 .expense-template-chip {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8rpx;
   background: #FFF9DB;
   border: 1rpx solid #FFE066;
   border-radius: 16rpx;
-  padding: 14rpx 20rpx;
+  padding: 14rpx 12rpx;
   min-height: 44px; /* 触控热区 ≥44pt，与拒绝/同意等操作按钮口径一致 */
   box-sizing: border-box;
+  width: 100%;
 }
 
 .expense-template-chip:active {
@@ -4394,6 +4405,13 @@ page {
   font-size: 26rpx;
   color: #333333;
   font-weight: 500;
+  /* 固定 2 列网格下每格宽度是定值，管理态下自定义项目名称最长可到 20 字——
+     不裁断会把整个 chip 撑变形、破坏网格的整齐对齐。min-width:0 是必须的：
+     flex 子项默认 min-width:auto（撑到内容宽度），不显式清零 ellipsis 不会生效 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .expense-template-chip .chip-amount {

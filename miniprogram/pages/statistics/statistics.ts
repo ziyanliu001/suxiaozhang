@@ -3002,7 +3002,7 @@ Page({
     // "日常食材 vs 专项大额"拆分口径（dailyExpenseTotal/fixedExpenseTotal 字段
     // 优先，缺失时按 FIXED_EXPENSE_KEYWORDS 关键词兜底），按当天实际发生的收支
     // 构成推断出最贴切的展示分类，不臆造一个数据库里不存在的精确分类
-    const FIXED_KEYWORDS = ['租金', '房租', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置', '大额', '专项'];
+    const FIXED_KEYWORDS = ['租金', '房租', '物业', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '冷库', '蒸柜', '桌椅', '改造', '工程', '消防', '维修', '购置', '大额', '专项'];
     const splitExpense = (item: any, expenseAmount: number): { dailyExpense: number; fixedExpense: number } => {
       const dailyExpenseText = item.dailyExpenseText || item.dailyIngredientText || '';
       const fixedExpenseText = item.fixedExpenseText || item.fixedMajorText || item.remark || '';
@@ -3097,7 +3097,7 @@ Page({
   },
 
   calculateStatistics(records: any[], startDate: string, endDate: string): any {
-    const FIXED_EXPENSE_KEYWORDS = ['租金', '房租', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置', '大额', '专项'];
+    const FIXED_EXPENSE_KEYWORDS = ['租金', '房租', '物业', '服装', '义工服', '设备', '装修', '采购', '大件', '空调', '冰箱', '冰柜', '冷库', '蒸柜', '桌椅', '改造', '工程', '消防', '维修', '购置', '大额', '专项'];
 
     const uniqueMap = new Map();
     records.forEach((item: any) => {

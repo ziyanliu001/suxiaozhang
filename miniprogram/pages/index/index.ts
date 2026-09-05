@@ -86,11 +86,22 @@ const INVITE_SERVER_ROLE_TO_LOCAL: Record<string, string> = {
 };
 
 // 🧾 常用支出项目「一键预置模版」：仅覆盖两个分类各自语义相符的高频项，不混着塞——
-// 食材类（daily）与水电/维修这类大额专项（fixed）本就不该出现在同一个分类下
+// 食材类（daily）与水电/维修这类大额专项（fixed）本就不该出现在同一个分类下。
+// 2026-09 重构：fixed 分类收敛成 4 个标准规范项（原"店铺租金/水电燃气/厨房维修"
+// 三条杂项已废弃，不再是预置来源）——具体门店记账时的措辞差异（房租/物业费/
+// 场地使用费、蒸柜/冷库/净水系统、排烟工程/电路改造/消防设施等）不体现为额外的
+// chip，而是落在 dataService.ts 的 LARGE_EXPENSE_KEYWORDS（及云函数同款关键词表）
+// 里做自由文本兜底识别，chip 本身只保留 4 个大类名称：
 const EXPENSE_TEMPLATE_PRESETS: Record<'daily' | 'fixed', string[]> = {
   daily: ['米面油', '蔬菜采买', '调味副食'],
-  fixed: ['店铺租金', '水电燃气', '厨房维修']
+  fixed: ['场地租金', '大型设备', '装修改造', '其他专项']
 };
+
+// 🧹 一次性收敛清洗名单：老门店在 4 项标准分类落地前导入过的旧版 fixed 预置词——
+// 水电燃气不属于资本性大额支出予以移除，店铺租金并入场地租金，厨房维修并入
+// 装修改造/大型设备，均已被上面 EXPENSE_TEMPLATE_PRESETS.fixed 的标准 4 项取代，
+// 见 fetchExpenseTemplateList() 里的清洗调用
+const LEGACY_FIXED_TEMPLATE_NAMES = ['店铺租金', '水电燃气', '厨房维修'];
 
 // 🐛 重大隔离漏洞修复：这 7 条"常用场景一键套用"预设文案此前是写死的静态对象，
 // opening 那条甚至直接硬编码了一个具体的雨花斋示例门店名"三源弘雨花敬老家园"——
@@ -5586,15 +5597,85 @@ Page({
       });
       const result = res.result as any;
       const list = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+      const dailyList = list.filter((item: any) => item.category === 'daily');
+      const fixedList = this.stripLegacyFixedTemplates(list.filter((item: any) => item.category === 'fixed'), storeId);
       this.setData({
-        expenseTemplateDailyList: list.filter((item: any) => item.category === 'daily'),
-        expenseTemplateFixedList: list.filter((item: any) => item.category === 'fixed'),
+        expenseTemplateDailyList: this.fillMissingPresetTemplates('daily', dailyList, storeId),
+        expenseTemplateFixedList: this.fillMissingPresetTemplates('fixed', fixedList, storeId),
         expenseTemplateLoaded: true
       });
     } catch (e) {
       console.error('[fetchExpenseTemplateList] 查询失败:', e);
       this.setData({ expenseTemplateLoaded: true });
     }
+  },
+
+  // 🧹 一次性收敛清洗：上一轮"只增量合并、不删除旧项"的自愈逻辑，导致老门店的
+  // fixed 分类新旧堆叠（店铺租金/水电燃气/厨房维修 + 场地租金/大型设备/装修改造/
+  // 其他专项，共 7 条）。产品明确决策收口——LEGACY_FIXED_TEMPLATE_NAMES 这 3 个
+  // 旧词已被标准 4 项完全取代，每次拉取列表时无条件从展示层剔除（对所有角色一视
+  // 同仁，保证不管有没有写权限都只看到标准网格），具备该门店模板写权限的身份
+  // 额外异步把云端记录也真正删掉（失败静默，不阻塞展示）。返回的清洗后列表会再
+  // 传进 fillMissingPresetTemplates 补齐标准项，两步合起来保证一次拉取内收敛到位。
+  stripLegacyFixedTemplates(
+    list: { _id: string; itemName: string; defaultAmount: number | null; usageCount?: number }[],
+    storeId: string
+  ) {
+    const legacyItems = list.filter((item) => LEGACY_FIXED_TEMPLATE_NAMES.includes(item.itemName));
+    if (legacyItems.length === 0) return list;
+
+    if (this.data.isManager || this.data.isFinance || this.data.isSuperAdmin) {
+      legacyItems.forEach((item) => {
+        if (!item._id) return; // 虚拟 chip（尚未落库）没有真实记录可删
+        callFunctionWithTimeout({
+          name: 'manageExpenseTemplate',
+          data: { action: 'delete', id: item._id }
+        }).catch(() => {});
+      });
+    }
+
+    return list.filter((item) => !LEGACY_FIXED_TEMPLATE_NAMES.includes(item.itemName));
+  },
+
+  // 🩹 老门店兜底补齐：EXPENSE_TEMPLATE_PRESETS 后续新增/改版的预置项（如
+  // 2026-09 把 fixed 分类从"店铺租金/水电燃气/厨房维修"重构成"场地租金/大型设备/
+  // 装修改造/其他专项"）对已经导入过旧版预置的老门店不会自动出现——"一键预置"
+  // 按钮只在该分类列表为空时才展示，老门店的 fixed 分类早已非空，永远摸不到这个
+  // 入口。这里每次拉取列表时做增量比对：发现云端缺失某个预置项名称，就地补一条
+  // "虚拟" chip 保证界面立即可见可点——插入表单不依赖 _id，只有使用频次埋点会
+  // 因命中不到真实记录而静默失败（云函数 incrementUsage 对不存在的 id 直接返回
+  // success，不报错）。若当前身份具备该门店模板写权限，再额外异步把这条预置项
+  // 真正落库（失败静默，不影响本次展示），落库成功后后续所有角色（含无写权限的
+  // 志工）拉取到的就是同一条持久化记录，不必永远靠虚拟兜底。
+  // ⚠️ 只对 LEGACY_FIXED_TEMPLATE_NAMES 这份明确点名的旧词单独收敛清洗（见
+  // stripLegacyFixedTemplates，在本函数之前调用），对该清单之外的门店自建项目
+  // 仍然保持纯增量合并、绝不删除——不会因为"这个名字看起来像废弃预置"就臆测
+  // 删除店长真实自定义的条目，只有产品明确判定为历史遗留词的名单才会被清掉。
+  fillMissingPresetTemplates(
+    category: 'daily' | 'fixed',
+    list: { _id: string; itemName: string; defaultAmount: number | null; usageCount?: number }[],
+    storeId: string
+  ) {
+    const presets = EXPENSE_TEMPLATE_PRESETS[category] || [];
+    const existingNames = new Set(list.map((item) => item.itemName));
+    const missingNames = presets.filter((name) => !existingNames.has(name));
+    if (missingNames.length === 0) return list;
+
+    if (this.data.isManager || this.data.isFinance || this.data.isSuperAdmin) {
+      missingNames.forEach((name) => {
+        callFunctionWithTimeout({
+          name: 'manageExpenseTemplate',
+          data: { action: 'create', storeId, category, itemName: name }
+        }).catch(() => {});
+      });
+    }
+
+    // _id 用 category+name 拼一个稳定占位值（而非空字符串），避免多条虚拟 chip
+    // 同时存在时 wx:key="_id" 撞车；bumpExpenseTemplateUsage 的 !id 兜底判断的是
+    // "假不假"而不是"空不空"，这里非空字符串仍会尝试计数请求，云函数按无效 id 处理
+    // 会静默失败（catch 已兜底），不影响记账主流程
+    const virtualItems = missingNames.map((name) => ({ _id: `preset_${category}_${name}`, itemName: name, defaultAmount: null }));
+    return [...list, ...virtualItems];
   },
 
   onSelectExpenseTemplateItem(e: any) {
