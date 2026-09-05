@@ -23,6 +23,7 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
 
 // 🚨 查 tenant_members 而不是 user_roles：见 createProductionSpace/index.js
 // 头部注释——live_factory 成员记录绝不能混进雨花公益专区依赖的 user_roles。
@@ -31,6 +32,12 @@ async function verifyTenantAccess(openid, tenantId, requiredRoles) {
     .where({ _openid: openid, tenantId, status: 'approved' })
     .get();
   return (res.data || []).find((r) => requiredRoles.includes(r.role)) || null;
+}
+
+async function releaseRefundClaim(orderId) {
+  await db.collection('production_orders').doc(orderId).update({
+    data: { refundClaimedAt: _.remove(), refundClaimedBy: _.remove() }
+  }).catch((err) => console.error('[processProductionRefund] 释放退款占位失败（需人工核对是否卡死）:', orderId, err));
 }
 
 exports.main = async (event, context) => {
@@ -53,6 +60,22 @@ exports.main = async (event, context) => {
   }
   if (!order.outTradeNo) return { success: false, error: '订单缺少支付流水号，无法发起退款' };
 
+  // 🛡️ 原子领单（claim）：上面这次读 orderStatus 判断"是否可退款"和下面真正
+  // 发起退款之间存在窗口——双击提交、或网络超时后客户端自动重试，都可能让
+  // 两次调用同时通过上面的判断，各自继续走到 wxPayCore.refund，等于对同一笔
+  // 订单发起两次真实退款请求。改用与 wxPayCore.orderService.markPaidIdempotent
+  // 同一套 CAS（条件更新）手法：where 同时命中 orderStatus 仍在可退范围 +
+  // refundClaimedAt 尚不存在，两个条件都满足才允许更新；并发调用只有一次能
+  // 抢到 stats.updated===1，抢不到的直接拒绝，不再往下发起退款。
+  const claimRes = await db.collection('production_orders').where({
+    _id: orderId,
+    orderStatus: _.in(['paid', 'in_production', 'shipped']),
+    refundClaimedAt: _.exists(false)
+  }).update({ data: { refundClaimedAt: db.serverDate(), refundClaimedBy: OPENID } });
+  if (!claimRes.stats || claimRes.stats.updated !== 1) {
+    return { success: false, error: '该订单退款正在处理中或状态已变更，请勿重复提交' };
+  }
+
   // 分账已完成的订单退款时给出提示（不拦截，见文件头 ⚠️ 残余风险说明）
   const settlementRes = await db.collection('order_settlements')
     .where({ tenantId, orderId, isReversal: false }).limit(1).get().catch(() => ({ data: [] }));
@@ -73,9 +96,12 @@ exports.main = async (event, context) => {
 
   const refund = refundRes.result || {};
   if (!refund.success) {
+    // 网关明确没有受理这笔退款：释放占位，允许调用方直接重试
+    await releaseRefundClaim(orderId);
     return { success: false, error: refund.error || '退款失败，请重试' };
   }
   if (refund.status === 'ABNORMAL' || refund.status === 'CLOSED') {
+    await releaseRefundClaim(orderId);
     return { success: false, error: `微信支付拒绝了这笔退款（状态：${refund.status}），请核实后重试` };
   }
 
@@ -86,7 +112,10 @@ exports.main = async (event, context) => {
     data: { action: 'reverseSettlement', internalToken, tenantId, orderId }
   }).catch((err) => ({ result: { success: false, error: String(err.errMsg || err.message || '分账冲销服务异常') } }));
   if (!(reverseRes.result || {}).success) {
-    // 钱已经退了，账没冲成——记录下来供人工核对，不能再回滚已经发生的真实退款
+    // 钱已经退了，账没冲成——记录下来供人工核对，不能再回滚已经发生的真实退款。
+    // 🔒 故意不释放退款占位：真实退款已经发往微信支付，一旦放开占位允许重试，
+    // 会对同一笔订单再发起一次真实退款请求，这里宁可让占位保持"卡住"状态，
+    // 逼人工介入核对，而不是自动放行重复退款
     console.error('[processProductionRefund] 退款已受理但分账冲销失败，需人工核对:', { orderId, outTradeNo: order.outTradeNo, error: (reverseRes.result || {}).error });
     return { success: false, error: '退款已受理，但账目冲销失败，请联系技术人员核对（不要重复退款）' };
   }
@@ -101,7 +130,10 @@ exports.main = async (event, context) => {
   }).catch((err) => console.error('[processProductionRefund] 释放产能失败（需人工核对）:', err));
 
   await db.collection('production_orders').doc(orderId).update({
-    data: { orderStatus: 'refunded', refundedAt: db.serverDate(), refundReason: reason, refundedBy: OPENID, refundStatus: refund.status }
+    data: {
+      orderStatus: 'refunded', refundedAt: db.serverDate(), refundReason: reason, refundedBy: OPENID, refundStatus: refund.status,
+      refundClaimedAt: _.remove(), refundClaimedBy: _.remove()
+    }
   });
 
   return {

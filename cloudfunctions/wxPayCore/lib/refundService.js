@@ -5,8 +5,10 @@
 
 const cloud = require('wx-server-sdk');
 const db = cloud.database();
+const _ = db.command;
 const COLLECTION = 'refund_orders';
 const { validateRefundAmount } = require('./refundValidation');
+const { ORDERS_COLLECTION } = require('./orderService');
 
 const STATUS = Object.freeze({
   PROCESSING: 'PROCESSING',
@@ -53,29 +55,66 @@ async function findReusablePendingRefund({ outTradeNo }) {
   return record;
 }
 
+// 🛡️ 原子防重复退款：在 payment_orders 主记录上抢占一把"退款处理中"锁——
+// 只有抢到锁的调用才能继续走"查重复用 -> 插入新退款记录"这段本身有竞态
+// 窗口的逻辑，抢不到直接拒绝（不排队等待），与 orderService.markPaidIdempotent
+// 同一套 CAS（条件更新）手法：where 命中 refundLockedAt 不存在才允许更新，
+// stats.updated===1 才算真正抢到。锁只在 createPendingRefund 的函数级
+// try/finally 内持有，正常退款请求几毫秒就会释放，不影响后续的合法退款
+// （包括同一笔支付先后发起的多次部分退款）。
+async function acquireRefundLock(outTradeNo) {
+  const res = await db.collection(ORDERS_COLLECTION).where({
+    outTradeNo,
+    refundLockedAt: _.exists(false)
+  }).update({ data: { refundLockedAt: db.serverDate() } });
+  return !!(res.stats && res.stats.updated === 1);
+}
+
+async function releaseRefundLock(outTradeNo) {
+  await db.collection(ORDERS_COLLECTION).where({ outTradeNo }).update({
+    data: { refundLockedAt: _.remove() }
+  }).catch((err) => console.error('[refundService] 释放退款锁失败（需人工核对是否卡死）:', outTradeNo, err));
+}
+
 async function createPendingRefund({ outTradeNo, transactionId, tenantId, bizType, bizId, refundAmount, totalAmount, reason, mockMode, notifyFn }) {
   await ensureCollection();
 
   const reusable = await findReusablePendingRefund({ outTradeNo });
   if (reusable) return reusable;
 
-  const outRefundNo = genOutRefundNo();
-  const data = {
-    outRefundNo, outTradeNo,
-    transactionId: transactionId || '',
-    tenantId: tenantId || '',
-    bizType: bizType || '',
-    bizId: bizId || '',
-    refundAmount, totalAmount,
-    reason: reason || '',
-    notifyFn: notifyFn || '',
-    status: STATUS.PROCESSING,
-    mockMode: !!mockMode,
-    createdAt: db.serverDate(),
-    updatedAt: db.serverDate()
-  };
-  const addRes = await db.collection(COLLECTION).add({ data });
-  return { ...data, _id: addRes._id };
+  const locked = await acquireRefundLock(outTradeNo);
+  if (!locked) {
+    const err = new Error('该笔支付已有退款正在处理中，请稍后重试，不要重复提交');
+    err.code = 'REFUND_IN_PROGRESS';
+    throw err;
+  }
+
+  try {
+    // 抢到锁之后，不会再有并发者能同时插入，这次重新查一遍复用窗口是可信的，
+    // 覆盖"两次调用几乎同时到达、都在抢锁前查到过一次'不存在'"的边界情况
+    const reusableAfterLock = await findReusablePendingRefund({ outTradeNo });
+    if (reusableAfterLock) return reusableAfterLock;
+
+    const outRefundNo = genOutRefundNo();
+    const data = {
+      outRefundNo, outTradeNo,
+      transactionId: transactionId || '',
+      tenantId: tenantId || '',
+      bizType: bizType || '',
+      bizId: bizId || '',
+      refundAmount, totalAmount,
+      reason: reason || '',
+      notifyFn: notifyFn || '',
+      status: STATUS.PROCESSING,
+      mockMode: !!mockMode,
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    };
+    const addRes = await db.collection(COLLECTION).add({ data });
+    return { ...data, _id: addRes._id };
+  } finally {
+    await releaseRefundLock(outTradeNo);
+  }
 }
 
 async function getByOutRefundNo(outRefundNo) {
@@ -83,8 +122,17 @@ async function getByOutRefundNo(outRefundNo) {
   return (res.data && res.data[0]) || null;
 }
 
-async function getSuccessfulRefundedTotal(outTradeNo) {
-  const res = await db.collection(COLLECTION).where({ outTradeNo, status: STATUS.SUCCESS }).get();
+// 🐛 超额退款修复：此前只统计 status:SUCCESS 的历史退款，同一笔支付如果已有
+// 一条 PROCESSING（微信侧尚未回执终态，真实网络场景下可能持续数秒到数分钟）
+// 的退款记录，这里会读成 0——若此时发起第二笔退款，两笔金额分别校验都不超额，
+// 但合计已经超过原订单实付总额，等于系统性放过了"分批退款、旧的还没到终态
+// 就发起新的"这种超额退款场景。改为把 PROCESSING 也计入"已占用额度"，与
+// SUCCESS 一起校验，堵住这条口子。
+async function getCommittedRefundedTotal(outTradeNo) {
+  const res = await db.collection(COLLECTION).where({
+    outTradeNo,
+    status: _.in([STATUS.SUCCESS, STATUS.PROCESSING])
+  }).get();
   return (res.data || []).reduce((sum, r) => sum + (r.refundAmount || 0), 0);
 }
 
@@ -118,7 +166,7 @@ module.exports = {
   validateRefundAmount,
   createPendingRefund,
   getByOutRefundNo,
-  getSuccessfulRefundedTotal,
+  getCommittedRefundedTotal,
   markRefundStatus,
   dispatchRefundNotifyHook
 };

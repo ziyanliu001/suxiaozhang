@@ -89,7 +89,7 @@ const INVITE_SERVER_ROLE_TO_LOCAL: Record<string, string> = {
 // 食材类（daily）与水电/维修这类大额专项（fixed）本就不该出现在同一个分类下
 const EXPENSE_TEMPLATE_PRESETS: Record<'daily' | 'fixed', string[]> = {
   daily: ['米面油', '蔬菜采买', '调味副食'],
-  fixed: ['水电燃气', '厨房维修']
+  fixed: ['店铺租金', '水电燃气', '厨房维修']
 };
 
 // 🐛 重大隔离漏洞修复：这 7 条"常用场景一键套用"预设文案此前是写死的静态对象，

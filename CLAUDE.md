@@ -44,7 +44,7 @@
 
 > **历史教训**：`getNationalDashboard` 曾经把“查看全国大屏”和“`tenant_subscriptions` 是否为 pro/enterprise”耦合在一起（`PLAN_UPGRADE_REQUIRED` 拦截），导致基础版租户的大家长/财务/志工角色切换组织类型 Tab 时每次请求都被服务端拒绝，界面表现为“点了没反应”——这正是把两条轨道的权限逻辑混在一起导致的典型问题。修复见 2026-08-30 的 commit。
 >
-> **⚠️ 已知风险（待产品/工程决策，尚未修复）**：`getNationalDashboard` 目前要求用调用者 `OPENID` 反查出 `tenantId`，反查失败直接 `success:false` 拒绝（`index.js:260-262`）。这意味着一个从未加入任何机构的纯匿名访客（例如搜一搜/外部 AI 引荐进来的陌生人）即便通过了角色卡口，也无法查看全国大屏——与本节“全国大屏应始终可查看”的战略目标存在缺口，且与上一条历史教训不是同一个 bug（性质类似但触发路径不同）。详见 [`GEO_STRATEGY.md`](docs/GEO_STRATEGY.md) 第 4.2 节。
+> **✅ 已修复（2026-09-05，commit 648a303）**：`getNationalDashboard` 曾经要求用调用者 `OPENID` 反查出 `tenantId`，反查失败直接 `success:false` 拒绝，导致从未加入任何机构的纯匿名访客（例如搜一搜/外部 AI 引荐进来的陌生人）即便通过了角色卡口也无法查看全国大屏，与本节"全国大屏应始终可查看"的战略目标存在缺口。现已改为：`tenantId` 反查为空时分流到 `buildPublicAggregateSummary()`（与本机构大屏彻底独立的只读聚合分支，只返回机构数/门店数/服务人次/义工工时等非金额指标，不读取任何原始文档或财务字段），纯匿名访客也能看到脱敏后的全国聚合数据。详见 [`GEO_STRATEGY.md`](docs/GEO_STRATEGY.md) 第 4.2 节。
 
 ---
 

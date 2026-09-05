@@ -1135,7 +1135,7 @@ export const DataService = {
   },
 
   calculateStatistics(records: any[], startDate: string, endDate: string): any {
-    const LARGE_EXPENSE_KEYWORDS = ['房租', '装修', '设备', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置'];
+    const LARGE_EXPENSE_KEYWORDS = ['租金', '房租', '装修', '设备', '大件', '空调', '冰箱', '冰柜', '桌椅', '改造', '维修', '购置'];
     const LARGE_EXPENSE_THRESHOLD = 1000;
 
     let statistics = {

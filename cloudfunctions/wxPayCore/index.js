@@ -152,9 +152,12 @@ async function handleRefund(event) {
     return { success: false, error: `原订单状态为 ${order.status}，不可退款` };
   }
 
-  const alreadyRefunded = await refundService.getSuccessfulRefundedTotal(outTradeNo);
+  // 🐛 超额退款修复：改用 getCommittedRefundedTotal，把 PROCESSING（微信侧
+  // 尚未回执终态）也计入已占用额度，不再只看 SUCCESS——否则"旧的退款还没到
+  // 终态就发起新的一笔"会被两次校验都放过，合计超过原订单实付总额
+  const committedRefunded = await refundService.getCommittedRefundedTotal(outTradeNo);
   const validation = refundService.validateRefundAmount({
-    refundAmount, totalAmount: order.amount, alreadyRefundedAmount: alreadyRefunded
+    refundAmount, totalAmount: order.amount, alreadyRefundedAmount: committedRefunded
   });
   if (!validation.valid) return { success: false, error: validation.error };
 
@@ -162,12 +165,21 @@ async function handleRefund(event) {
   // createPendingRefund 内部会在 10 分钟窗口内复用同一笔未终结的 PROCESSING
   // 记录（与 orderService.createPendingOrder 同一套防重复下单写法），这里
   // 拿到的要么是全新记录、要么是仍在 PROCESSING 的既有记录，两种情况都需要
-  // 继续走一次网关调用去推进/确认状态
-  const refundRecord = await refundService.createPendingRefund({
-    outTradeNo, transactionId: order.transactionId, tenantId: order.tenantId,
-    bizType: order.bizType, bizId: order.bizId, refundAmount, totalAmount: order.amount,
-    reason, mockMode, notifyFn: notifyFn || order.notifyFn
-  });
+  // 继续走一次网关调用去推进/确认状态；REFUND_IN_PROGRESS 是并发抢锁失败的
+  // 预期信号（见 refundService.acquireRefundLock），不是异常，转成正常错误返回
+  let refundRecord;
+  try {
+    refundRecord = await refundService.createPendingRefund({
+      outTradeNo, transactionId: order.transactionId, tenantId: order.tenantId,
+      bizType: order.bizType, bizId: order.bizId, refundAmount, totalAmount: order.amount,
+      reason, mockMode, notifyFn: notifyFn || order.notifyFn
+    });
+  } catch (err) {
+    if (err.code === 'REFUND_IN_PROGRESS') {
+      return { success: false, error: err.message };
+    }
+    throw err;
+  }
 
   try {
     const result = mockMode

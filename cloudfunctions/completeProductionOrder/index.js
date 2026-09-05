@@ -24,6 +24,7 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const _ = db.command;
 
 const { buildProfitSharingReceivers } = require('./lib/buildReceivers');
 const { canMarkShipped } = require('./lib/orderStatusMachine');
@@ -112,6 +113,24 @@ async function tryAutoProfitSharing({ tenantId, order }) {
     return { attempted: false, reason: '商品未配置制作方 producerOpenId 且订单无推广人，没有可自动分账的接收方，分成请人工确认' };
   }
 
+  // 🛡️ 原子领单（claim）：上面对 settlementStatus 的判断和下面真正调用微信
+  // 分账网关之间存在窗口——"标记发货完成"被并发/重复调用（双击、客户端超时
+  // 重试）会让两次调用都读到 settlementStatus !== 'settled' 从而双双通过检查，
+  // 各自触发一次 requestProfitSharing，等于同一笔支付被重复分账、真实资金
+  // 多分一次。改用与 wxPayCore.orderService.markPaidIdempotent 同一套 CAS
+  // （条件更新）手法抢占一个独立的锁字段（不改 settlementStatus 本身，避免
+  // getSettlementSummary 的三桶归类逻辑读到一个它不认识的中间状态而漏统计）：
+  // where 命中 settlementStatus 仍是 'unsettled' 且尚未被锁定才允许更新，
+  // 只有抢到 stats.updated===1 的这次调用才能继续往下发起分账请求。
+  const claimRes = await db.collection('order_settlements').where({
+    _id: settlement._id,
+    settlementStatus: 'unsettled',
+    profitSharingLockedAt: _.exists(false)
+  }).update({ data: { profitSharingLockedAt: db.serverDate() } });
+  if (!claimRes.stats || claimRes.stats.updated !== 1) {
+    return { attempted: false, reason: '该订单分账正在被另一次请求处理或状态已变更，本次跳过（幂等）', skippedDueToRace: true };
+  }
+
   const internalToken = process.env.WXPAY_INTERNAL_TOKEN || '';
   const shareRes = await cloud.callFunction({
     name: 'wxPayCore',
@@ -120,6 +139,10 @@ async function tryAutoProfitSharing({ tenantId, order }) {
 
   const share = shareRes.result || {};
   if (!share.success) {
+    // 分账网关明确拒绝/异常：释放锁，允许"分成请重试"再次抢占
+    await db.collection('order_settlements').doc(settlement._id).update({
+      data: { profitSharingLockedAt: _.remove() }
+    }).catch((err) => console.error('[completeProductionOrder] 释放分账占位失败（需人工核对是否卡死）:', settlement._id, err));
     return { attempted: true, success: false, error: share.error || '请求分账失败' };
   }
 
@@ -134,7 +157,10 @@ async function tryAutoProfitSharing({ tenantId, order }) {
   }
 
   await db.collection('order_settlements').doc(settlement._id).update({
-    data: { settlementStatus: 'settled', settledAt: db.serverDate(), settledBy: 'system_auto_profit_sharing', profitSharingOutOrderNo: share.outOrderNo }
+    data: {
+      settlementStatus: 'settled', settledAt: db.serverDate(), settledBy: 'system_auto_profit_sharing', profitSharingOutOrderNo: share.outOrderNo,
+      profitSharingLockedAt: _.remove()
+    }
   });
 
   return { attempted: true, success: true, outOrderNo: share.outOrderNo, status: share.status };
