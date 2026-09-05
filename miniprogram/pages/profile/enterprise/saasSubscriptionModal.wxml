@@ -231,17 +231,26 @@
             </view>
             <view class="sub-redeem-panel" wx:if="{{showRedeemSection}}">
               <view class="sub-redeem-input-row">
+                <!-- 🐛 根因修复：基础版本身免费，不存在"授权码/兑换卡号"这回事——
+                     此前无论 comparePlanTab 是什么，这个折叠区都原样展开输入框+
+                     【激活授权码】按钮，与底部固定操作区在 basic Tab 下展示的
+                     【当前为默认免费档位】禁用态按钮同屏出现，看起来像两条互相
+                     矛盾的操作路径。basic Tab 下输入框禁用+文案提示，粘贴/激活
+                     两个按钮一并隐藏，只留下折叠入口本身可见（不隐藏整个区块，
+                     用户切到 pro/enterprise Tab 后仍能立刻用同一个入口） -->
                 <input class="sub-redeem-input"
-                       placeholder="请输入或粘贴授权码 / 兑换卡号"
+                       placeholder="{{comparePlanTab === 'basic' ? '免费基础版无需兑换码' : '请输入或粘贴授权码 / 兑换卡号'}}"
                        value="{{activationCodeInput}}"
                        focus="{{redeemInputFocus}}"
+                       disabled="{{comparePlanTab === 'basic'}}"
                        bindinput="onActivationCodeInput" />
-                <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+                <view class="sub-paste-btn" bindtap="onPasteActivationCode" wx:if="{{comparePlanTab !== 'basic'}}">粘贴</view>
               </view>
               <button class="sub-btn-activate {{(activationSubmitting || !activationCodeInput) ? 'sub-btn-activate-disabled' : ''}}"
                       bindtap="onRedeemActivationCode"
                       disabled="{{activationSubmitting || !activationCodeInput}}"
-                      loading="{{activationSubmitting}}">激活授权码</button>
+                      loading="{{activationSubmitting}}"
+                      wx:if="{{comparePlanTab !== 'basic'}}">激活授权码</button>
             </view>
           </view>
 

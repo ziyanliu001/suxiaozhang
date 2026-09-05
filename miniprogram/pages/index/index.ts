@@ -1835,7 +1835,30 @@ Page({
   //  （currentPlatformMode 非空）才允许自动选店。
   // - switchStoreTarget 改为静默调用（不弹全局 Toast）——当前选中站点名称本就会
   //   实时展示在工作台顶部 store-picker 胶囊里，不需要额外的阻塞式提示打断视线。
+  // 🐛 根因修复（activeStore 跨专区渗透残留）：此前"清除跨专区脏缓存"写在下面
+  // 几个提前 return 之后——目标专区确实一家门店都没有（list.length===0，如
+  // "通用素食/门店记账"下暂无门店）、或调用者是义工/家人/已绑定门店角色时，
+  // 函数会在读到这段清理逻辑之前就直接退出，导致上一个专区选中的门店（存在
+  // Storage/globalData 里的 getSelectedStore() 覆盖态）原样保留，store-picker
+  // 顶部胶囊与"选择服务站点与身份"弹窗的 loadStoreInfo() 都是直接读这份 Storage
+  // 现算展示，于是继续显示"当前生效：三源弘雨花斋 · 义工"这类已经不属于新专区
+  // 的历史选择，而门店下拉列表本身却是正确过滤过的空列表——列表和顶部提示各读
+  // 各的数据源，看起来自相矛盾。抽成独立方法、不受下面任何 role/列表长度门槛
+  // 限制，只要拿到"当前专区收窄后的门店列表"就无条件先校验一次
+  invalidateStaleZoneStore(list: any[]): boolean {
+    const lastSelected = getSelectedStore();
+    const lastStoreId = lastSelected && lastSelected.storeId;
+    if (!lastStoreId) return false;
+    const matched = Array.isArray(list) && list.some((s: any) => s.storeId === lastStoreId);
+    if (matched) return false;
+    clearSelectedStoreCache();
+    return true;
+  },
+
   maybeAutoSelectStore(list: any[]) {
+    // 见 invalidateStaleZoneStore 注释：必须在下面任何 return 之前无条件跑一次
+    this.invalidateStaleZoneStore(list);
+
     const { currentPlatformMode, currentStoreId, isVolunteer, isFamily, isManager, isSuperAdmin } = this.data;
     // 🛡️ 仍在【选择工作空间】中立首页（尚未点雨花/通用专区卡片）时，绝不自动
     // 选店/弹提示——门店激活必须下沉到用户实际进入的具体专区内才发生
@@ -1846,13 +1869,6 @@ Page({
     const lastSelected = getSelectedStore();
     const lastStoreId = lastSelected && lastSelected.storeId;
     const matched = lastStoreId ? list.find((s: any) => s.storeId === lastStoreId) : null;
-    // 🐛 专区状态污染清理：本地缓存的"上次访问门店"如果不在当前专区收窄后的
-    // 列表里，说明它是切专区前（或旧版本遗留）的跨专区脏缓存，直接清掉，避免
-    // 之后其它读取 getSelectedStore() 的地方继续展示这个已经不属于当前专区的
-    // 门店名，而不是放任它悬在本地存储里"看似有效"
-    if (lastStoreId && !matched) {
-      clearSelectedStoreCache();
-    }
     const target = matched || list[0];
     if (target && target.storeId) {
       this.switchStoreTarget(target.storeId, target.storeName, { silent: true });

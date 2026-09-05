@@ -326,7 +326,11 @@
 <view class="modal-backdrop" wx:if="{{showPatriarchApplyModal}}" catchtap="onClosePatriarchApplyModal">
   <view class="modal-card auth-card" catchtap="stopBubble">
     <view class="modal-header">
-      <text class="modal-title">🙏 申请【{{patriarchApplyStoreName}} · 大家长】</text>
+      <!-- 🐛 根因修复：此前无条件拼 "申请【{{storeName}} · 大家长】"，storeName
+           为占位性质的测试门店名（如"测试"）时读起来生硬突兀。storeName 有值时
+           改用更符合中文语感的「」包裹门店名、"大家长"放在引号外；storeName
+           缺失时退回通用的"申请大家长"，不再展示一对空【】 -->
+      <text class="modal-title">🙏 {{patriarchApplyStoreName ? ('申请「' + patriarchApplyStoreName + '」大家长') : '申请大家长'}}</text>
       <text class="close-btn" bindtap="onClosePatriarchApplyModal">✕</text>
     </view>
 
@@ -342,7 +346,7 @@
              placeholder="请输入您的手机号"
              value="{{patriarchApplyPhone}}"
              bindinput="onPatriarchApplyPhoneInput"/>
-      <text class="sub-help-text">提交后，超级管理员将在管理后台收到审核通知，请耐心等待。</text>
+      <text class="sub-help-text sub-help-text-patriarch">提交后，超级管理员将在管理后台收到审核通知，请耐心等待。</text>
     </view>
 
     <view class="auth-footer-btns">

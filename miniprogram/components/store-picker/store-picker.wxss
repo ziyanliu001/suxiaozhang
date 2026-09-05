@@ -938,6 +938,16 @@
   display: block;
 }
 
+/* 🐛 根因修复：大家长申请弹窗的辅助文案此前与其他两处弹窗共用 .sub-help-text
+   的 20rpx/margin-top:12rpx，紧跟在 .auth-footer-btns（margin-top:24rpx）
+   前面，视觉上像是贴着按钮的一行小字。这里单独加一档更清晰的字体层级 +
+   margin-bottom，只影响大家长申请弹窗，不改动店长/财务激活弹窗共用的基础样式 */
+.sub-help-text-patriarch {
+  font-size: 22rpx;
+  color: #8A8A8A;
+  margin-bottom: 24rpx;
+}
+
 .auth-footer-btns {
   display: flex;
   gap: 16rpx;
