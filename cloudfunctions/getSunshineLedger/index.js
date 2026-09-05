@@ -25,6 +25,19 @@ const _ = db.command;
 // 不适合为极端场景无限拉取全表，与 getStatisticsData 等同类云函数的 limit 口径一致
 const QUERY_LIMIT = 2000;
 
+// 🐛（2026-09-06）单店历史改名兼容：三源弘雨花斋（storeId 8e9ed36b6a77084506c0fe6c659304f9）
+// 早年曾用名"海沧区雨花斋"，2026 年 7 月那批真实随喜流水落库时 shopName 快照写的
+// 是这个旧称，且这批记录同样缺失 storeId 字段（与本文件另一处"孤儿历史记录"兜底
+// 是同一类问题，见下方 storeIdMatchCondition 注释）——本店当前名称查出来是"三源弘
+// 雨花斋"，与 7 月记录快照的"海沧区雨花斋"对不上，仅靠"孤儿记录 shopName===当前
+// 门店名"这一条兜底捞不到它们，导致单店阳光账本这段历史善行一直是空的。这里按
+// storeId 建一份"历史曾用名"白名单，与当前门店名一起纳入 shopName 匹配——只加这一条
+// 已核实过的具体记录，不引入通用的"门店改名自动追溯"机制（那需要专门的门店改名
+// 历史表设计，超出本次修复范围，且没有更多真实改名案例前不必抽象）
+const LEGACY_SHOP_NAME_ALIASES = {
+  '8e9ed36b6a77084506c0fe6c659304f9': ['海沧区雨花斋']
+};
+
 const YEAR_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function daysInMonth(year, month) {
@@ -173,11 +186,13 @@ exports.main = async (event) => {
     // JS 层"先按 storeId 精确匹配，查不到再退回按门店当前名称匹配"两级兜底
     // 不是同一套逻辑，那边能找到的孤儿记录，这里的纯数据库查询天然找不到，
     // 表现为"全国大屏能看到这笔善行，单店阳光账本却看不到"。这里补上同一种
-    // 兜底：storeId 精确匹配 或者（storeId 字段缺失 且 shopName 等于本店当前
-    // 名称）都算命中——只在 storeName 已知时追加这条 or 分支，避免 storeName
-    // 查询失败（见上方 try/catch）时误伤查询本身
+    // 兜底：storeId 精确匹配 或者（storeId 字段缺失 且 shopName 命中"本店当前
+    // 名称 + 已知历史曾用名"任意一个）都算命中——只在 storeName 已知时追加这条
+    // or 分支，避免 storeName 查询失败（见上方 try/catch）时误伤查询本身。
+    // 历史曾用名清单见 LEGACY_SHOP_NAME_ALIASES（目前只有一条已核实的具体记录）
+    const legacyShopNames = LEGACY_SHOP_NAME_ALIASES[storeId] || [];
     const storeIdMatchCondition = storeName
-      ? _.or([{ storeId }, _.and([{ storeId: _.exists(false) }, { shopName: storeName }])])
+      ? _.or([{ storeId }, _.and([{ storeId: _.exists(false) }, { shopName: _.in([storeName, ...legacyShopNames]) }])])
       : { storeId };
     const recordRes = await db.collection('report_logs')
       .where(_.and([
