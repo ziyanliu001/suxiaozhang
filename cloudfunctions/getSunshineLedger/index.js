@@ -153,9 +153,22 @@ exports.main = async (event) => {
     // 🆕 orderBy dateString desc：供下方"最新爱心支持"善缘墙按时间倒序收集前
     // 20 条，此前没有排序，聚合类指标（求和/去重计数）不受影响，只是新增的
     // latestDonors 收集需要这份顺序保证
+    // 🐛 根因修复（单店"最新善行"漏掉缺失 storeId 的孤儿历史记录）：本查询是
+    // 数据库层面的硬 WHERE 条件精确匹配 storeId，缺 storeId 的老记录（门店
+    // storeId 体系上线前提交的历史数据）永远不会被这次查询捞出来，哪怕它们的
+    // shopName 快照与本店当前名称完全一致——这与 getNationalDashboard 的
+    // JS 层"先按 storeId 精确匹配，查不到再退回按门店当前名称匹配"两级兜底
+    // 不是同一套逻辑，那边能找到的孤儿记录，这里的纯数据库查询天然找不到，
+    // 表现为"全国大屏能看到这笔善行，单店阳光账本却看不到"。这里补上同一种
+    // 兜底：storeId 精确匹配 或者（storeId 字段缺失 且 shopName 等于本店当前
+    // 名称）都算命中——只在 storeName 已知时追加这条 or 分支，避免 storeName
+    // 查询失败（见上方 try/catch）时误伤查询本身
+    const storeIdMatchCondition = storeName
+      ? _.or([{ storeId }, _.and([{ storeId: _.exists(false) }, { shopName: storeName }])])
+      : { storeId };
     const recordRes = await db.collection('report_logs')
       .where(_.and([
-        { storeId },
+        storeIdMatchCondition,
         { isVoid: _.neq(true) },
         { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) }
       ]))
