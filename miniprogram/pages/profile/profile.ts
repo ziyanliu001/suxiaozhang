@@ -416,15 +416,16 @@ Page({
     // 才置为 true——严禁用 tenantId 前缀猜测（见 initMinePage 根因修复注释：同一 tenantId
     // 前缀下完全可能挂着 elderly_canteen 等非雨花斋门店），初始值给最保守的 false
     isYuhuazhai: false,
-    // 🐛 根因修复（升级卡片闪烁/残留）：isYuhuazhai 的"最保守 false"初始值对
-    // "这家店是不是雨花斋"这个问题是安全默认，但对"专业版服务状态/立即开通"
-    // 这类付费推销卡片的显隐判断不安全——查询结果回来之前 isYuhuazhai 恒为
-    // false，会被误判成"已确认不是雨花斋"，导致雨花斋账号打开个人中心的
-    // 一瞬间先看到一次不该出现的推销卡片，才在 fetchStoreOrgType() 回来后
-    // 收起。这两者是"真实业态是什么"与"业态是否已查证完毕"两个独立维度，
-    // 不能用同一个 isYuhuazhai 字段的默认值兼顾——新增这个专门的"是否已查证"
-    // 信号，未就绪前一律不展示任何跟 orgType 挂钩的付费推销卡片
-    isOrgTypeResolved: false,
+    // 🐛 根因修复（大家长/财务预览视角下升级卡片依然顽固展示）：「专业版服务
+    // 状态/立即开通」两张售卖卡片唯一认这一个字段，不再直接绑 !isYuhuazhai——
+    // isYuhuazhai 的"最保守 false"初始值对"这家店是不是雨花斋"这个问题是安全
+    // 默认，但反过来当"能不能展示付费推销卡片"的判断依据就不安全了：查询结果
+    // 回来之前、或查询失败/查不到时，isYuhuazhai 恒为 false，会被误判成"已
+    // 确认不是雨花斋"从而放行卡片。shouldShowProCards 语义收紧为"已经明确
+    // 查证到这不是雨花斋"，只有 fetchStoreOrgType() 成功拿到结果后才可能置为
+    // true，初始值与任何查询失败路径都保持最保守的 false——宁可让通用商户
+    // 短暂看不到升级入口，也绝不能让雨花斋账号看到售卖卡片
+    shouldShowProCards: false,
     // 🆕 真实机构类型原始值（stores.orgType），供公告一键套用预设文案（见
     // getNoticeMgmtTemplate）等需要区分 elderly_canteen 的场景使用——isYuhuazhai
     // 只是个二值信号，不够精确
@@ -1455,49 +1456,49 @@ Page({
     }
   },
 
-  // 🌟 拉取当前绑定门店的真实 orgType（stores.orgType，见 manageStoreProfile
-  // 云函数 get 动作），用它覆盖 initMinePage 里先起的中性默认文案——只有这一步
-  // 才能精确区分 yuhuazhai / elderly_canteen（社区助餐）/ 其余机构类型，同时
-  // 一并回填 isYuhuazhai（此前由不可靠的 tenantId 前缀猜测驱动，会导致
-  // "社区助餐点被标成雨花斋"这类误判——见 initMinePage 里的根因修复注释），
-  // 让门店文化/温情故事/证书落款等一整批 isYuhuazhai 三元表达式都跟着一起归正。
-  // 超管在"全国总览"视角下没有绑定具体门店，云函数会返回"您尚未绑定门店"，
-  // 属于预期内的空结果，静默跳过即可，不影响其余展示
+  // 🌟 拉取真实 orgType（stores.orgType，见 manageStoreProfile 云函数 get 动作），
+  // 用它覆盖 initMinePage 里先起的中性默认文案——只有这一步才能精确区分
+  // yuhuazhai / elderly_canteen（社区助餐）/ 其余机构类型，同时一并回填
+  // isYuhuazhai（此前由不可靠的 tenantId 前缀猜测驱动，会导致"社区助餐点被
+  // 标成雨花斋"这类误判——见 initMinePage 里的根因修复注释），让门店文化/
+  // 温情故事/证书落款等一整批 isYuhuazhai 三元表达式都跟着一起归正。
+  //
+  // 🐛 根因修复（大家长/财务预览视角下升级卡片依然显示）：此前不传任何
+  // storeId/storeName，manageStoreProfile 默认按"调用者自己绑定的门店"
+  // （caller.storeId）查询——但 super_admin 这类跨店角色的账号本身往往没有
+  // 个人绑定门店，会直接命中"您尚未绑定门店"的空结果分支，orgType 永远查不到，
+  // isYuhuazhai 只能停在安全默认 false，哪怕这个超管实际正在管理/巡检的就是
+  // 一家真实雨花斋机构，也会被误判成"非雨花斋"从而露出售卖卡片。现在显式带上
+  // this.data.currentStoreName（getCurrentActiveStore() 归并出的"当前实际
+  // 选中/巡检门店"，initMinePage 已经算好）——manageStoreProfile 的
+  // CROSS_STORE_VIEW_ROLES 分支专门支持 super_admin 按 storeName 查任意门店；
+  // 非跨店角色即便传了 storeName 也会被服务端忽略，仍按自己绑定门店查询，
+  // 不影响原有行为
   async fetchStoreOrgType() {
-    if (!isCloudAvailable()) {
-      // 🐛 根因修复：见 data.isOrgTypeResolved 声明处注释——云 SDK 不可用这条
-      // 早退路径此前完全不碰 isOrgTypeResolved，永远停在初始 false，会让
-      // 跟 orgType 挂钩的付费推销卡片永久隐藏（哪怕这家店其实不是雨花斋）。
-      // 查不到就按"已查证、结果未知"处理，不无限期卡在"查证中"状态
-      this.setData({ isOrgTypeResolved: true });
-      return;
-    }
+    // 🛡️ shouldShowProCards 是「专业版服务状态/立即开通」两张售卖卡片唯一认的
+    // 字段（见 profile.wxml），语义是"已经明确查证到这不是雨花斋机构"——
+    // 只有下面成功查到结果（哪怕 orgType 本身是空）才允许置为 true，云 SDK
+    // 不可用、网络异常等任何"查不清楚"的情形一律保持 data 里的默认值 false，
+    // 不允许因为查询失败就放行售卖卡片
+    if (!isCloudAvailable()) return;
     try {
+      const storeName = this.data.currentStoreName || '';
       const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
-        data: { action: 'get' }
+        data: { action: 'get', ...(storeName ? { storeName } : {}) }
       });
       const orgType = (res && res.result && res.result.data && res.result.data.orgType) || '';
-      if (!orgType) {
-        // 🐛 根因修复：超管"全国总览"视角无绑定门店、或历史门店 orgType 字段
-        // 缺失，都会走到这个空结果分支——同样只是"查不到具体业态"，不代表
-        // "查证流程还没跑完"，必须同步标记已查证，否则这批账号会永久看不到
-        // 付费推销卡片
-        this.setData({ isOrgTypeResolved: true });
-        return;
-      }
+      const isYuhuazhai = orgType === 'yuhuazhai';
       this.setData({
-        orgType,
-        isYuhuazhai: orgType === 'yuhuazhai',
-        isOrgTypeResolved: true,
-        ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin)
+        isYuhuazhai,
+        shouldShowProCards: !isYuhuazhai,
+        ...(orgType ? { orgType, ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin) } : {})
       });
     } catch (err) {
       // 静默失败：已有中性兜底文案在展示，不会误显示任何机构品牌标签；
-      // 同样标记已查证（结果未知，isYuhuazhai 保持安全默认 false），避免
-      // 一次网络抖动就让推销卡片永久消失
+      // shouldShowProCards 保持默认 false，不因为一次网络抖动就误放行售卖卡片，
+      // 下次 onShow 重新调用本方法时会自然重试
       console.warn('[profile][fetchStoreOrgType] 查询真实机构类型失败:', err);
-      this.setData({ isOrgTypeResolved: true });
     }
   },
 
