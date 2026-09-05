@@ -72,6 +72,31 @@ page {
   color: #8C1D18;
 }
 
+.im-category-tabs {
+  flex-shrink: 0;
+  white-space: nowrap;
+  background: #FFFFFF;
+  border-bottom: 1rpx solid #F1F5F9;
+  padding: 16rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.im-category-tab {
+  display: inline-block;
+  font-size: 24rpx;
+  color: #64748B;
+  background: #F8FAFC;
+  border-radius: 999rpx;
+  padding: 10rpx 24rpx;
+  margin-right: 16rpx;
+}
+
+.im-category-tab.active {
+  color: #FFFFFF;
+  background: #8C1D18;
+  font-weight: 600;
+}
+
 .im-content {
   flex: 1;
   padding: 24rpx;

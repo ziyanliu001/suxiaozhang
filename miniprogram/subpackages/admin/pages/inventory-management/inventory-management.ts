@@ -70,6 +70,12 @@ Page({
 
     loading: false,
     list: [] as any[],
+    // 🆕 分类筛选 Tab：'all' + 5 个物料分类，纯本地过滤 wx:if，数据已在 list
+    // 里（单店物料量级小，免费版上限才 30 条），不重新发起云调用——与
+    // store-management.ts 的 storeMatrixFilter 同一种"一键快筛"写法
+    filteredList: [] as any[],
+    categoryFilter: 'all',
+    categoryTabs: [{ value: 'all', label: '全部' }, ...CATEGORY_OPTIONS],
     categoryOptions: CATEGORY_OPTIONS,
     unitOptions: UNIT_OPTIONS,
 
@@ -157,6 +163,7 @@ Page({
           unitText: unitLabel(item.unit)
         }));
         this.setData({ list });
+        this.applyCategoryFilter();
       } else {
         // 🌸 服务端对雨花斋门店会返回 success:false + 明确文案，这里原样透传
         // 展示，不当成普通网络错误吞掉
@@ -172,6 +179,19 @@ Page({
 
   onPullDownRefresh() {
     this.fetchList().finally(() => wx.stopPullDownRefresh());
+  },
+
+  onSwitchCategoryFilter(e: any) {
+    const value = e.currentTarget.dataset.value;
+    if (value === this.data.categoryFilter) return;
+    this.setData({ categoryFilter: value });
+    this.applyCategoryFilter();
+  },
+
+  applyCategoryFilter() {
+    const { list, categoryFilter } = this.data;
+    const filteredList = categoryFilter === 'all' ? list : list.filter((item: any) => item.category === categoryFilter);
+    this.setData({ filteredList });
   },
 
   onOpenCreateModal() {

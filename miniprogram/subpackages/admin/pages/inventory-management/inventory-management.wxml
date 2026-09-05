@@ -28,6 +28,18 @@
       <text class="im-store-name">{{storeName}}</text>
     </view>
 
+    <!-- 🆕 分类筛选 Tab：纯本地过滤，不重新发起云调用 -->
+    <scroll-view scroll-x show-scrollbar="{{false}}" class="im-category-tabs" wx:if="{{list.length > 0}}">
+      <view
+        class="im-category-tab {{categoryFilter === tab.value ? 'active' : ''}}"
+        wx:for="{{categoryTabs}}"
+        wx:for-item="tab"
+        wx:key="value"
+        data-value="{{tab.value}}"
+        bindtap="onSwitchCategoryFilter"
+      >{{tab.label}}</view>
+    </scroll-view>
+
     <scroll-view scroll-y show-scrollbar="{{false}}" class="im-content">
       <view class="im-header-row">
         <button class="im-btn-create" hover-class="im-btn-create-hover" bindtap="onOpenCreateModal">➕ 添加物料</button>
@@ -38,7 +50,12 @@
         <text class="im-empty-text">还没有物料档案，点上方"添加物料"开始建档</text>
       </view>
 
-      <view class="im-item-card" wx:for="{{list}}" wx:key="_id">
+      <view class="im-empty-state" wx:if="{{!loading && list.length > 0 && filteredList.length === 0}}">
+        <text class="im-empty-icon">🗂️</text>
+        <text class="im-empty-text">该分类下暂无物料</text>
+      </view>
+
+      <view class="im-item-card" wx:for="{{filteredList}}" wx:key="_id">
         <view class="im-item-row">
           <view class="im-item-main">
             <text class="im-item-name">{{item.name}}</text>
