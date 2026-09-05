@@ -1,0 +1,9 @@
+{
+  "name": "manageInventoryItem",
+  "version": "1.0.0",
+  "description": "云函数：商业进销存物料档案增删改查（店长/财务/大家长可写本店，超管可写本机构任意门店，雨花斋专区硬性拒绝）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

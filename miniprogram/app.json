@@ -30,6 +30,7 @@
         "pages/daily-menu/daily-menu",
         "pages/activity-log/activity-log",
         "pages/store-management/store-management",
+        "pages/inventory-management/inventory-management",
         "pages/store-profile/store-profile",
         "pages/public-verify/index",
         "pages/settlement-summary/settlement-summary"

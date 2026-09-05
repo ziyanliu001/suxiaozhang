@@ -696,6 +696,17 @@
         <text class="txt">门店管理</text>
         <text class="qa-extra-arrow">›</text>
       </view>
+
+      <!-- 🌸 商业进销存 Phase 1：只在通用素食/商业门店专区展示，雨花公益专区
+           保持极简阳光账本，不引入进销存复杂度——与本次会话"雨花斋隐藏专业版
+           推销卡片"同一个 currentPlatformMode 判断字段，云函数侧同样会对
+           orgType==='yuhuazhai' 的门店硬性拒绝（见 manageInventoryItem 双层
+           拦截设计），这里不是唯一防线 -->
+      <view class="qa-extra-row" wx:if="{{(isManager || isSuperAdmin) && currentPlatformMode === 'general'}}" bindtap="onGotoInventoryManagement">
+        <text class="qa-grid-emoji">📦</text>
+        <text class="txt">进销存</text>
+        <text class="qa-extra-arrow">›</text>
+      </view>
     </view>
 
     <scroll-view scroll-y class="page-body-scroll">

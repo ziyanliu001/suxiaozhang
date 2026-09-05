@@ -2119,6 +2119,14 @@ Page({
     safeNavigateTo({ url: '/subpackages/admin/pages/store-management/store-management' + query });
   },
 
+  // 🌸 商业进销存 Phase 1 入口：只在通用素食/商业门店专区展示（见 index.wxml
+  // qa-extra-row 的 currentPlatformMode==='general' 判断），云函数
+  // manageInventoryItem 自己也会对 orgType==='yuhuazhai' 的门店硬性拒绝，这里
+  // 不是唯一防线
+  onGotoInventoryManagement() {
+    safeNavigateTo({ url: '/subpackages/admin/pages/inventory-management/inventory-management' });
+  },
+
   // 🏢 空状态引导升级：机构其实已有门店（allStoresList.length > 0，只是当前
   // 账号自己还没绑定/选定其中一家）时，"创建首家门店"这个文案与操作都文不对
   // 题——用户要做的不是新建一家，而是从已有门店里挑一家。直接唤起 store-picker

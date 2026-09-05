@@ -14,7 +14,7 @@
 ## 第一阶段：五大基础盈利支柱（稳健现金流与规模化底座）
 
 1. **SaaS 订阅与多租户增值服务**
-   - 商业门店 / 连锁版：进销存、收银台账、会员管理、多门店财务合并报表（年费订阅）。
+   - 商业门店 / 连锁版：进销存（Phase 1「物料档案与基础库存」已落地，代码落点 `cloudfunctions/manageInventoryItem`，免费版单店最多 30 种物料、超出需升级，见 `docs/SCHEMA.md` 第 6 节）、收银台账、会员管理、多门店财务合并报表（年费订阅）。
    - 直播产销工坊版：排单生产、批次追溯、直播带货履约与供应链分账系统。
    - 功能增值包：税局/审计级 Excel 导出包、多角色权限协同包、自动化短信/模板消息包。
    - 代码落点参考：`miniprogram/utils/tenantPermission.ts` 的 `FEATURE_KEYS`（`MULTI_STORE_DASHBOARD`/`EXCEL_EXPORT`）与 `tenant_subscriptions` 集合。

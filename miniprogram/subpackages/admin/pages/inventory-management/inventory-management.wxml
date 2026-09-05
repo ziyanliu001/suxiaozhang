@@ -1,0 +1,145 @@
+<view class="im-page">
+
+  <navigation-bar
+    title="📦 进销存"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+
+  <view class="im-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
+    <text>校验身份中...</text>
+  </view>
+
+  <view class="im-denied-state" wx:if="{{checkedAccess && !hasAccess}}" style="margin-top: {{contentTop}}px;">
+    <text class="im-denied-icon">📦</text>
+    <text class="im-denied-title">暂不可用</text>
+    <text class="im-denied-sub">{{deniedReason}}</text>
+    <button class="im-denied-btn" bindtap="goBack">返回</button>
+  </view>
+
+  <view class="im-body" wx:if="{{checkedAccess && hasAccess}}" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+
+    <view class="im-store-banner">
+      <text class="im-store-icon">🏪</text>
+      <text class="im-store-name">{{storeName}}</text>
+    </view>
+
+    <scroll-view scroll-y show-scrollbar="{{false}}" class="im-content">
+      <view class="im-header-row">
+        <button class="im-btn-create" hover-class="im-btn-create-hover" bindtap="onOpenCreateModal">➕ 添加物料</button>
+      </view>
+
+      <view class="im-empty-state" wx:if="{{!loading && list.length === 0}}">
+        <text class="im-empty-icon">📦</text>
+        <text class="im-empty-text">还没有物料档案，点上方"添加物料"开始建档</text>
+      </view>
+
+      <view class="im-item-card" wx:for="{{list}}" wx:key="_id">
+        <view class="im-item-row">
+          <view class="im-item-main">
+            <text class="im-item-name">{{item.name}}</text>
+            <text class="im-item-tag">{{item.categoryText}}</text>
+          </view>
+          <text class="im-item-stock {{item.currentStock <= item.safetyStockMin && item.safetyStockMin ? 'im-item-stock-warn' : ''}}">
+            {{item.currentStock}}{{item.unitText}}
+          </text>
+        </view>
+        <view class="im-item-row im-item-sub-row">
+          <text class="im-item-sub" wx:if="{{item.itemCode}}">编码：{{item.itemCode}}</text>
+          <text class="im-item-sub">进价：¥{{item.costPrice}}/{{item.unitText}}</text>
+        </view>
+        <view class="im-item-actions">
+          <view class="im-item-action-btn" data-id="{{item._id}}" bindtap="onOpenEditModal">编辑</view>
+          <view class="im-item-action-btn im-item-action-danger" data-id="{{item._id}}" data-name="{{item.name}}" bindtap="onDisableItem">停用</view>
+        </view>
+      </view>
+
+      <view class="im-safe-area-spacer"></view>
+    </scroll-view>
+  </view>
+
+  <!-- 新增/编辑物料半屏弹窗：与全站其余"半屏卡片"弹窗同一套视觉语言 -->
+  <view class="im-modal-mask" wx:if="{{showFormModal}}" catchtap="onCloseFormModal">
+    <view class="im-modal-card" catchtap="stopPropagation">
+      <view class="im-modal-header">
+        <text class="im-modal-title">{{formMode === 'create' ? '➕ 添加物料' : '✏️ 编辑物料'}}</text>
+        <text class="im-modal-close" bindtap="onCloseFormModal">✕</text>
+      </view>
+
+      <scroll-view scroll-y class="im-modal-body">
+        <view class="im-form-row">
+          <text class="im-form-label">物料名称 *</text>
+          <input class="im-form-input" placeholder="如：有机胚芽米" value="{{form.name}}" data-field="name" bindinput="onFormFieldInput" />
+        </view>
+        <view class="im-form-row">
+          <text class="im-form-label">物料编码</text>
+          <input class="im-form-input" placeholder="内部条码/编码，选填" value="{{form.itemCode}}" data-field="itemCode" bindinput="onFormFieldInput" />
+        </view>
+        <view class="im-form-row">
+          <text class="im-form-label">物料分类 *</text>
+          <picker range="{{categoryOptions}}" range-key="label" value="{{categoryPickerIndex}}" bindchange="onCategoryPickerChange">
+            <view class="im-form-picker">{{categoryPickerIndex > -1 ? categoryOptions[categoryPickerIndex].label : '请选择分类'}}</view>
+          </picker>
+        </view>
+        <view class="im-form-row">
+          <text class="im-form-label">计量单位 *</text>
+          <picker range="{{unitOptions}}" range-key="label" value="{{unitPickerIndex}}" bindchange="onUnitPickerChange">
+            <view class="im-form-picker">{{unitPickerIndex > -1 ? unitOptions[unitPickerIndex].label : '请选择单位'}}</view>
+          </picker>
+        </view>
+        <view class="im-form-row-group">
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">辅助单位</text>
+            <input class="im-form-input" placeholder="如：箱" value="{{form.conversionUnit}}" data-field="conversionUnit" bindinput="onFormFieldInput" />
+          </view>
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">换算比例</text>
+            <input class="im-form-input" type="digit" placeholder="1 辅助单位=?主单位" value="{{form.conversionRatio}}" data-field="conversionRatio" bindinput="onFormFieldInput" />
+          </view>
+        </view>
+        <view class="im-form-row-group">
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">参考进价（元）</text>
+            <input class="im-form-input" type="digit" placeholder="0.00" value="{{form.costPrice}}" data-field="costPrice" bindinput="onFormFieldInput" />
+          </view>
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">当前库存量</text>
+            <input class="im-form-input" type="digit" placeholder="0" value="{{form.currentStock}}" data-field="currentStock" bindinput="onFormFieldInput" />
+          </view>
+        </view>
+        <view class="im-form-row-group">
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">安全库存下限</text>
+            <input class="im-form-input" type="digit" placeholder="选填" value="{{form.safetyStockMin}}" data-field="safetyStockMin" bindinput="onFormFieldInput" />
+          </view>
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">安全库存上限</text>
+            <input class="im-form-input" type="digit" placeholder="选填" value="{{form.safetyStockMax}}" data-field="safetyStockMax" bindinput="onFormFieldInput" />
+          </view>
+        </view>
+        <view class="im-form-row-group">
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">保质期天数</text>
+            <input class="im-form-input" type="number" placeholder="选填" value="{{form.shelfLifeDays}}" data-field="shelfLifeDays" bindinput="onFormFieldInput" />
+          </view>
+          <view class="im-form-row im-form-row-half">
+            <text class="im-form-label">临期预警天数</text>
+            <input class="im-form-input" type="number" placeholder="默认7天" value="{{form.expiryAlertDays}}" data-field="expiryAlertDays" bindinput="onFormFieldInput" />
+          </view>
+        </view>
+        <view class="im-form-safe-area-spacer"></view>
+      </scroll-view>
+
+      <view class="im-modal-footer">
+        <button class="im-btn-submit" loading="{{submitting}}" bindtap="onSubmitForm">
+          {{formMode === 'create' ? '确认添加' : '保存修改'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+</view>

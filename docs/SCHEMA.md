@@ -132,6 +132,30 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 ---
 
+## 6. 商业进销存模型（`inventory_items` 集合，Phase 1：物料档案与基础库存）
+
+⚠️ **业态边界**：只服务于商业专区（`orgType !== 'yuhuazhai'`）。云函数 `manageInventoryItem` 在解析出目标门店后会硬性拒绝 `orgType === 'yuhuazhai'` 的读写请求（`cloudfunctions/manageInventoryItem/index.js` `resolveWriteTarget`/`list` action），前端 `pages/index/index.wxml` 的入口同样按 `currentPlatformMode === 'general'` 收窄——两层拦截缺一不可，不能只依赖前端隐藏入口。
+
+字段（权威定义 `cloudfunctions/manageInventoryItem/index.js`）：
+
+| 字段 | 含义 |
+|---|---|
+| `tenantId` / `storeId` | 所属租户/门店，写入时从调用者角色记录/超管指定目标店解析，不信任客户端直传 |
+| `itemCode` | 物料编码/内部条码，选填 |
+| `name` | 物料名称，必填，落库前过 `msgSecCheck` |
+| `category` | `grain_oil`（粮油调味）/ `fresh_produce`（生鲜蔬果）/ `mushroom_dried`（菌菇干货）/ `plant_protein`（植物蛋白）/ `packaging`（包材耗材） |
+| `unit` | `kg` / `bag`（包）/ `bucket`（桶）/ `box`（箱）/ `piece`（个） |
+| `conversionUnit` / `conversionRatio` | 辅助计量单位与换算比例，选填，默认比例 `1` |
+| `costPrice` | 参考进价，**"元"浮点数口径**——与 `report_logs`（本文档第 4 节）一致，不是"分"整型，避免仓库出现第三套金额存储规则 |
+| `currentStock` | 当前库存量，Phase 1 手动编辑，**未接入**任何自动出入库扣减逻辑（后续阶段范围） |
+| `safetyStockMin` / `safetyStockMax` | 安全库存下限/上限，选填，Phase 1 只存字段不做预警计算 |
+| `shelfLifeDays` / `expiryAlertDays` | 保质期天数 / 临期预警阈值（默认 7 天），选填 |
+| `status` | `active` / `disabled`，软删除；免费版数量配额只统计 `active` |
+
+**免费版数量配额**：`PLAN_INVENTORY_ITEM_LIMITS = { basic: 30, pro: 200, enterprise: 999999 }`，**按单店计数**（`storeId` 维度），不是按租户——与 `PLAN_STORE_LIMITS`（本文档第 3 节，按 `tenants.currentStoreCount` 租户维度计数）是两个不同维度的配额，不要混用查询条件。这份常量只维护在 `manageInventoryItem` 一个文件里（只有这一个云函数会创建物料），不存在 `PLAN_STORE_LIMITS` 那种"5+ 处拷贝"的重复风险。达到上限时返回 `errorCode: 'INVENTORY_LIMIT_REACHED'`，与 `createStore` 的 `STORE_LIMIT_REACHED` 同一套前端识别约定。
+
+---
+
 ## 维护须知
 
 - 本文档的权威性来自"贴代码位置"，不是来自本身的表述。**任何字段/枚举一旦在代码中变更，必须同步更新本文档对应条目**（这是 CLAUDE.md 治理要求）——尤其是 `orgType`/`businessType` 这类被 3-4 个文件各自维护同源拷贝的取值域，改动时本文档也要算作需要同步的一处。
