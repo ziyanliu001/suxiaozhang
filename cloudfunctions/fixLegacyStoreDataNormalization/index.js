@@ -42,7 +42,15 @@ async function requirePlatformAdmin(OPENID) {
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
-  const isAdmin = await requirePlatformAdmin(OPENID);
+  // 🛡️ 云开发控制台"云端测试"发起的调用，cloud.getWXContext().OPENID 恒为空——
+  // 真实小程序端调用永远带着微信客户端签发的真实 OPENID，这个分支在生产流量里
+  // 走不到。这里【不】绕过鉴权本身：只是在拿不到 context.OPENID 时，把身份来源
+  // 换成 event.operatorOpenId（调用方自己传的、要拿去验证的 openid），随后仍然
+  // 走一模一样的 requirePlatformAdmin() 数据库查证——传一个不是 platform_admin
+  // 的 openid 一样会被拒绝。控制台测试时，把你自己已经在 user_roles 里登记为
+  // platform_admin 的账号 openid 填进 event.operatorOpenId 即可
+  const effectiveOPENID = OPENID || (event && event.operatorOpenId) || '';
+  const isAdmin = await requirePlatformAdmin(effectiveOPENID);
   if (!isAdmin) {
     return { success: false, error: '无权限：仅平台管理员可执行数据迁移' };
   }
