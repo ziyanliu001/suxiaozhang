@@ -93,6 +93,11 @@ async function ensureNationalTenant() {
         serviceExpireDate: '2099-12-31',
         cloudQuota: { storeLimit: DEFAULT_TENANT_STORE_LIMIT },
         status: 'active',
+        // 🐛 根因修复：见 createStore/index.js 同名函数同一处注释——不标记
+        // isLifetimeGrant 会让这条兜底记录被前端当成一笔真实的、即将到期的
+        // 企业版订阅展示，导致因缺失 tenantId 而兜底挂靠到这个共享机构的
+        // 用户，误以为自己"已开通付费套餐"
+        isLifetimeGrant: true,
         lastRenewedAt: db.serverDate(),
         renewalHistory: [{
           operatorId: 'system_auto_init',

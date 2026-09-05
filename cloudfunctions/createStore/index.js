@@ -151,6 +151,17 @@ async function ensureNationalTenant() {
         serviceExpireDate: '2099-12-31',
         cloudQuota: { storeLimit: DEFAULT_TENANT_STORE_LIMIT },
         status: 'active',
+        // 🐛 根因修复：此前这条兜底记录不带 isLifetimeGrant，checkTenantPermission/
+        // profile.ts 会把它当成一笔真实到期日为 2099-12-31 的普通企业版订阅原样
+        // 透传——一旦后续有人拿这个共享兜底机构测试过真实的购买/激活码流程
+        // （lastRenewedAt 会被那次测试覆盖成更新的一条真实记录），任何因为账号
+        // 缺失 tenantId 而兜底挂靠到这个机构上的用户，都会看到一个和真实付费
+        // 客户毫无区别、还带着"即将到期"观感的专业版/旗舰版卡片——用户从未
+        // 付过费却显示"有效期至 20XX-XX-XX"，正是这个根因。显式标记
+        // isLifetimeGrant:true，让 isPerpetualPlan()/formatTenantExpireText()
+        // 按"系统兜底授予的永久权益"展示（"永久有效"），不再冒充一笔会到期的
+        // 真实订阅
+        isLifetimeGrant: true,
         lastRenewedAt: db.serverDate(),
         renewalHistory: [{
           operatorId: 'system_auto_init',
