@@ -467,7 +467,13 @@ exports.main = async (event, context) => {
     // 1. 获取本机构下的门店列表（🏢 多租户严格隔离：仅返回本机构门店，绝不跨机构聚合）
     // 🛡️ makeTenantFilter 处理历史兼容：原始账套（yuhuazhai_national）兼容无 tenantId 字段
     // 的旧记录；新机构账套严格等值匹配，100% 隔离，杜绝跨租户数据污染（见函数注释）
-    const storesQuery = makeTenantFilter(tenantId);
+    // 🛡️ 已停用门店（status:'inactive'，本 schema 唯一的软删除标记，见
+    // updateStoreStatus 云函数 VALID_STATUSES——没有 'CLOSED'/isDeleted 这类
+    // 字段）不计入全国大盘：与 storeStatsMap 用 makeTenantFilter 时的 _.or
+    // 顶层写法保持一致，用 _.and 组合而不是直接往同一个对象里塞 status 键——
+    // makeTenantFilter 在兼容旧账套时返回的是顶层 _.or(...) 命令，不是普通对象，
+    // 不能直接 { ...storesQuery, status: ... } 展开
+    const storesQuery = _.and([makeTenantFilter(tenantId), { status: _.neq('inactive') }]);
     const storesRes = await db.collection('stores').where(storesQuery).get();
     let allStores = storesRes.data || [];
 
