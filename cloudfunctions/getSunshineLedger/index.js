@@ -222,6 +222,13 @@ exports.main = async (event) => {
     const thirtyDaysAgoStr = new Date(thirtyDaysAgoMs).toISOString().slice(0, 10);
     const MONTHLY_POOL_CAP = 60;
     const monthlyPool = [];
+    // 🆕（方案3兜底）全历史善行池：与 monthlyPool 收集完全同款的记录（善款+
+    // 实物），唯一区别是不受 30 天窗口限制——门店近 30 天恰好没有新善行时
+    // （如刚改名/长期未记账的老门店），不能让跑马灯直接跳回静态寄语空态，
+    // 退回展示这份全历史里最近的记录，让用户依然能看到真实善行数据。
+    // records 本身已经是"该店全部已审核历史记录"（见上方查询未按日期收窄，
+    // limit(QUERY_LIMIT)=2000），复用同一次查询结果，不新增数据库调用
+    const allTimePool = [];
 
     records.forEach((r) => {
       const dining = parseFloat(r.totalDineCount || r.diningCount) || 0;
@@ -387,6 +394,44 @@ exports.main = async (event) => {
           });
         }
       }
+
+      // 🆕（方案3兜底）全历史善行池：与上面 monthlyPool 完全同款的收集逻辑，
+      // 唯一区别是不做 inMonthlyWindow 判断——独立成一段而不是复用上面的
+      // if 分支，是为了不改动已经测试过的 30 天窗口逻辑本身，只在旁边追加
+      // 一份不受窗口限制的兜底数据
+      if ((donationItems.length > 0 || materials.length > 0) && allTimePool.length < MONTHLY_POOL_CAP) {
+        const recordMs = r.createTime ? new Date(r.createTime).getTime() : NaN;
+        const fallbackMs = r.dateString ? Date.parse(r.dateString) : NaN;
+        const sortMs = !Number.isNaN(recordMs) ? recordMs : fallbackMs;
+        const allTimeLabel = !Number.isNaN(recordMs)
+          ? formatRelativeTime(r.createTime)
+          : (() => {
+              const dayDiff = r.dateString ? daysBetween(r.dateString, todayStr) : null;
+              return dayDiff === null ? '' : dayDiff === 0 ? '今天' : dayDiff === 1 ? '昨天' : `${dayDiff}天前`;
+            })();
+        donationItems.forEach((item) => {
+          if (allTimePool.length >= MONTHLY_POOL_CAP) return;
+          const amount = parseFloat(item.amount) || 0;
+          allTimePool.push({
+            sortMs,
+            name: formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous)),
+            amount,
+            deedText: `随喜 ¥${amount}`,
+            timeLabel: allTimeLabel
+          });
+        });
+        materials.forEach((m) => {
+          if (allTimePool.length >= MONTHLY_POOL_CAP) return;
+          if (!m.item || !m.quantity) return;
+          allTimePool.push({
+            sortMs,
+            name: formatDonorDisplayName(m.donor, !!r.isAnonymous),
+            amount: 0,
+            deedText: `捐赠${m.item}${m.quantity}${m.unit || '份'}`,
+            timeLabel: allTimeLabel
+          });
+        });
+      }
     });
 
     // 🆕【最新善行】整合义工到岗护持记录：与善款/实物捐赠同属"最新善行"，
@@ -448,10 +493,22 @@ exports.main = async (event) => {
     // 混合排序：捐赠 + 义工护持按真实时间倒序合并成一份，砍到 30 条，
     // 再剥离仅用于排序的 sortMs 字段——不改变 latestDonorsMonthly 对外的
     // 数据形状（yangshan-wall 组件按 {name, deedText, timeLabel, amount} 消费）
-    const latestDonorsMonthly = monthlyPool
+    const monthlyWindowResult = monthlyPool
       .sort((a, b) => b.sortMs - a.sortMs)
       .slice(0, 30)
       .map(({ sortMs, ...entry }) => entry);
+
+    // 🆕（方案3兜底）近 30 天窗口内一条善行都没有时（如门店刚改名/近期没有
+    // 新记账），不再直接让 yangshan-wall 组件退回静态寄语空态——改用
+    // allTimePool（不受时间窗口限制，只覆盖善款/实物，不含义工护持记录，
+    // 见该常量声明处注释）里最近的记录顶上；只有本店从未有过任何阳善/实物
+    // 捐赠记录（allTimePool 也是空）时，才会真正落到组件自己的空态兜底文案
+    const latestDonorsMonthly = monthlyWindowResult.length > 0
+      ? monthlyWindowResult
+      : allTimePool
+          .sort((a, b) => b.sortMs - a.sortMs)
+          .slice(0, 30)
+          .map(({ sortMs, ...entry }) => entry);
 
     const meritTotal = yangCount + yinCount;
     const yangRatioPct = meritTotal > 0 ? Math.round(yangCount / meritTotal * 1000) / 10 : 0;
