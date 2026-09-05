@@ -75,9 +75,22 @@ function resolveItemAnonymous(item, reportLevelAnonymous) {
   return item && item.isAnonymous !== undefined ? !!item.isAnonymous : !!reportLevelAnonymous;
 }
 
+// 🐛 根因修复（"爱**士"这类公用泛称被误脱敏）：见 getNationalDashboard 同名
+// 函数同一处注释——捐赠人写"爱心人士"/"十方大众"这类公用泛称时并没有勾选
+// 阴德匿名，maskName() 却把它当普通姓名按位置打码，泛称本身反而被脱敏得
+// 面目全非。只对"看起来是具体个人姓名"的字符串脱敏，命中已知泛称关键词
+// （含子串）一律原样展示
+const GENERIC_DONOR_NAME_KEYWORDS = ['爱心人士', '无名氏', '十方大众', '爱心同修', '义工', '大众随喜'];
+function isGenericDonorName(name) {
+  const str = String(name || '').trim();
+  return !!str && GENERIC_DONOR_NAME_KEYWORDS.some((kw) => str.includes(kw));
+}
+
 function formatDonorDisplayName(name, isAnonymous) {
   if (isAnonymous || !name || !String(name).trim()) return '爱心善士';
-  return maskName(name);
+  const trimmed = String(name).trim();
+  if (isGenericDonorName(trimmed)) return trimmed;
+  return maskName(trimmed);
 }
 
 // 🌸 近7日阳善榜专用：精确到分钟/小时的相对时间（"2小时前"），比 daysBetween

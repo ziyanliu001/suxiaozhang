@@ -101,9 +101,26 @@ function resolveItemAnonymous(item, reportLevelAnonymous) {
   return item && item.isAnonymous !== undefined ? !!item.isAnonymous : !!reportLevelAnonymous;
 }
 
+// 🐛 根因修复（"爱**士"这类公用泛称被误脱敏）：捐赠人不填真实姓名、直接写
+// "爱心人士"/"十方大众"这类公用泛称时，这条记录本身并没有勾选阴德匿名
+// （isAnonymous 仍是 false，捐赠人的本意就是"我不报具体姓名，但这行字本身
+// 就是公开展示用的占位说法"）——maskName() 却把它当成一个普通姓名字符串
+// 按位置打码，"爱心人士"→"爱**士"，泛称本身反而被脱敏得面目全非，比直接
+// 显示原文还奇怪。这里只对"看起来是具体个人姓名"的字符串做脱敏，命中已知
+// 泛称关键词（含子串）的一律原样展示，不打码——与
+// cloudfunctions/getSunshineLedger 同一套规则（各云函数独立部署，无共享
+// 模块机制，需要手动同步这处拷贝）
+const GENERIC_DONOR_NAME_KEYWORDS = ['爱心人士', '无名氏', '十方大众', '爱心同修', '义工', '大众随喜'];
+function isGenericDonorName(name) {
+  const str = String(name || '').trim();
+  return !!str && GENERIC_DONOR_NAME_KEYWORDS.some((kw) => str.includes(kw));
+}
+
 function formatDonorDisplayName(name, isAnonymous) {
   if (isAnonymous || !name || !String(name).trim()) return '爱心善士';
-  return maskName(name);
+  const trimmed = String(name).trim();
+  if (isGenericDonorName(trimmed)) return trimmed;
+  return maskName(trimmed);
 }
 
 // 🆕 按地区筛选：province/city 是门店档案里的自由文本字段（见 manageStoreProfile
@@ -1634,14 +1651,19 @@ exports.main = async (event, context) => {
     });
     }
 
-    // 🆕 阳光防篡改存证覆盖率（auditProofSummary）：覆盖率 = 封账且带签名的
-    // 报表数 / 本次聚合范围内全部生效报表数（APPROVED + AUDITED_LOCKED），
-    // 是"我们机构有多大比例的账目已经过最高等级的财务核验与防篡改签名"这个
-    // 公信力指标，供向民政/理事会汇报使用。chainStatus：范围内没有封账记录，
-    // 或封账记录 100% 都带有效签名 → SECURED；存在"封了账但签名缺失"的数据
-    // 完整性缺口 → VERIFYING（提示需要人工核查，不代表数据被篡改）
+    // 🐛 根因修复（覆盖率 0.0% 与"已存证"徽章矛盾）：此前覆盖率的分子用
+    // totalAuditedWithProof（封账 且 _checksum 存在），但单条记录的"已存证"
+    // 徽标（hasAuditProof，见上方逐条打标处与下方 storeMatrix/publicDonorEntries
+    // 消费点）只看 approvalStatus==='AUDITED_LOCKED'，完全不检查 _checksum——
+    // 两处对"算不算已存证"用了两套不同标准，一条已经财务稽核封账、界面上明明
+    // 打着"已存证"徽章的记录，因为 stampReportChecksum 从未在它身上真正跑过
+    // （多见于早于该功能上线的历史记录，或本身就缺 storeId 的孤儿数据），
+    // 覆盖率却显示 0.0%，看起来像是"标了但没算进去"的矛盾。现在覆盖率分子
+    // 统一改用 totalAuditedLocked，与徽章同一套口径（只认 approvalStatus）——
+    // totalAuditedWithProof/_checksum 仍然照常统计，供下方 chainStatus 单独
+    // 标记"已封账但签名缺失"这类数据完整性缺口，不再混进覆盖率百分比本身
     const auditCoverageRate = totalReportsInScope > 0
-      ? ((totalAuditedWithProof / totalReportsInScope) * 100).toFixed(1) + '%'
+      ? ((totalAuditedLocked / totalReportsInScope) * 100).toFixed(1) + '%'
       : '0.0%';
     const chainStatus = (totalAuditedLocked === 0 || totalAuditedWithProof === totalAuditedLocked)
       ? 'SECURED'
@@ -1651,7 +1673,7 @@ exports.main = async (event, context) => {
     // 展示"🔒 存证验真为专业版/旗舰版专享"引导，而不是把 0% 覆盖率误展示成
     // "这家机构完全没做财务核验"
     const auditProofSummary = subscriptionQuota.features.canAccessAuditProof
-      ? { totalAuditedReports: totalAuditedWithProof, auditCoverageRate, chainStatus, locked: false }
+      ? { totalAuditedReports: totalAuditedLocked, auditCoverageRate, chainStatus, locked: false }
       : { totalAuditedReports: 0, auditCoverageRate: null, chainStatus: 'LOCKED', locked: true };
 
     const nationalSummary = {
