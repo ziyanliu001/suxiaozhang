@@ -436,6 +436,34 @@
       </view>
     </view>
 
+    <!-- 🌸 雨花全国大盘·跨店阳善轮播：与上面通用的"全网爱心支持与善缘墙"
+         （latestPublicDonors，按时间倒序，可能被单个高频记账门店刷屏）是两张
+         独立卡片——这里服务端已按门店去重（一店一条，仅 orgType==='yuhuazhai'，
+         见 getNationalDashboard nationalYangshanCarousel 收集处注释）+ 前端
+         加载时 Shuffle 打散（见 nationalDashboardService.ts shuffleArray 调用
+         处），目的是"各站点爱心汇聚"的动态感，而不是单纯展示最新几条流水。
+         当前 orgType 筛选不是"雨花斋/全部平台"时数组为空，容器自动不渲染，
+         不需要额外的 orgType 判断。样式直接复用 love-wall-card/love-scroll-*
+         系列已有类名，不新增 WXSS -->
+    <view class="love-wall-card" wx:if="{{nationalData.nationalYangshanCarousel && nationalData.nationalYangshanCarousel.length > 0}}">
+      <view class="love-wall-header">
+        <text class="love-wall-title">🌸 雨花全国大盘 · 阳善轮播</text>
+        <text class="love-wall-sub">各站点爱心汇聚 · 一店一条</text>
+      </view>
+      <view class="love-scroll-section">
+        <swiper class="love-scroll-swiper" vertical autoplay circular interval="3200" duration="500">
+          <swiper-item wx:for="{{nationalData.nationalYangshanCarousel}}" wx:for-index="carouselIdx" wx:key="carouselIdx">
+            <view class="love-scroll-item">
+              <text class="love-scroll-store">[{{item.storeName}}]</text>
+              <text class="love-scroll-name">{{item.name}}</text>
+              <text class="love-scroll-amount">支持 ¥{{item.amount}}</text>
+              <text class="love-scroll-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
+            </view>
+          </swiper-item>
+        </swiper>
+      </view>
+    </view>
+
     <!-- 📸 全网影像卷宗与凭证审计：超管专属，展示三类照片总量 KPI + 最新 12 张影像墙 -->
     <view class="national-media-card" wx:if="{{superAdminInsights && superAdminInsights.nationalTotalPhotos !== undefined}}">
       <!-- 🆕 标题区改为纵向堆叠：原横向 flex + baseline 对齐在标题较长时会与

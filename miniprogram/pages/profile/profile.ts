@@ -489,9 +489,10 @@ Page({
     myStoreId: '',
     storeLoveWallMeritRatio: { yangRatioPct: 0, yinRatioPct: 0 },
     // 🌸 阳善纵向"冒出"轮播名单：由 fetchStoreLoveWallSummary 用同一次
-    // getSunshineLedger 响应里的 latestDonorsThreeDay（近 3 天窗口）拼装，
-    // 空数组时 WXML 用 wx:else 展示默认祝福文案兜底
-    yangShanList: [] as Array<{ name: string; amount: number }>,
+    // getSunshineLedger 响应里的 latestDonorsMonthly（近 30 天为空时自动退回
+    // 全历史最近记录，见该云函数 allTimePool 兜底逻辑）拼装，空数组时 WXML
+    // 用 wx:else 展示默认祝福文案兜底（只有本店从未有过任何善行记录才会走到）
+    yangShanList: [] as Array<{ name: string; amount: number; deedText: string }>,
     showStorePickerModal: false,
     storePickerLoading: false,
     storePickerSearchText: '',
@@ -1844,7 +1845,14 @@ Page({
   // 保留 donors 列表这份数据
   async fetchStoreLoveWallSummary() {
     if (!isCloudAvailable()) return;
-    const storeId = await this.resolveManageStoreId();
+    // 🐛 根因修复（跨店串数据）：resolveManageStoreId() 对非跨店角色返回"自己
+    // 绑定的门店"，对超管则退回 getSelectedStore()（legacy 口径，可能落后于
+    // getCurrentActiveStore() 归并出的"当前实际选中/巡检门店"——本 session 已
+    // 在 fetchStoreOrgType() 修过同一类问题）。阳善名单必须严格跟随用户当前
+    // 正在看的这家店，改用 getCurrentActiveStore()（canonical），查不到时才
+    // 退回 resolveManageStoreId() 的角色绑定兜底，不直接改动那个被多处其他
+    // 功能（意见箱/待审核列表）共用的方法本身
+    const storeId = getCurrentActiveStore().storeId || (await this.resolveManageStoreId());
     if (!storeId) return;
     this.setData({ myStoreId: storeId });
 
@@ -1859,10 +1867,20 @@ Page({
       const result = res.result;
       if (!result || !result.success) return;
 
-      let list = Array.isArray(result.latestDonorsThreeDay)
-        ? result.latestDonorsThreeDay.slice(0, 20).map((item: any) => ({
+      // 🐛 根因修复（"静态标语"观感）：此前用 latestDonorsThreeDay（真实 3×24
+      // 小时窗口，极容易命中"近 3 天没人随喜"从而一直空着，界面上看起来像是
+      // 写死的祝福语，而不是真的在轮播）。改用 latestDonorsMonthly——已经是
+      // 本 session 早前"方案3"修好的"近 30 天为空时自动退回全历史最近记录"
+      // 兜底口径（见 getSunshineLedger.js allTimePool），不需要新写一套时间
+      // 窗口/兜底逻辑，直接复用同一份已验证过的数据源。deedText 一并保留——
+      // latestDonorsMonthly 混排了善款/实物/义工三类善行（善款才有意义展示
+      // 金额，实物/义工的 amount 恒为 0），不能像之前那样只取 name+amount
+      // 硬拼"随喜 ¥0"这类失真文案
+      let list = Array.isArray(result.latestDonorsMonthly)
+        ? result.latestDonorsMonthly.slice(0, 20).map((item: any) => ({
             name: item.name || '爱心人士',
-            amount: item.amount || 0
+            amount: item.amount || 0,
+            deedText: item.deedText || `随喜 ¥${item.amount || 0}`
           }))
         : [];
 

@@ -31,6 +31,18 @@ import { formatCompactNumber, formatDate } from '../statistics';
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致，仅供
 // formatNationalMatrixData/formatSuperAdminInsights 的 orgTypeShortName()
 // 内部使用，statistics.wxml 不直接绑定这份列表（未暴露为 data 字段）
+// 🌸 雨花全国大盘·跨店阳善轮播池"加载时 Shuffle 打散"（需求原话）：Fisher-Yates
+// 就地洗牌，纯展示顺序随机化，不改变数组内容/不影响任何统计口径。只在这里
+// 用一次，不为此单独建 utils 文件
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = arr.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 const ORG_TYPE_FILTER_OPTIONS = [
   { label: '全部平台', value: 'all', shortName: '全网' },
   { label: '🌸 雨花斋', value: 'yuhuazhai', shortName: '雨花斋' },
@@ -275,7 +287,14 @@ export const nationalDashboardHandlers = {
           // 直接绑定 nationalData.enterpriseCapabilities.xxx，不再依赖
           // subscriptionQuota.features 的具体嵌套形状——见 utils/enterpriseCapabilities.ts
           // 头部注释
-          enterpriseCapabilities: resolveEnterpriseCapabilities(sanitizedSummary.subscriptionQuota)
+          enterpriseCapabilities: resolveEnterpriseCapabilities(sanitizedSummary.subscriptionQuota),
+          // 🌸 雨花全国大盘·跨店阳善轮播：服务端已按门店去重（一店一条，仅
+          // orgType==='yuhuazhai'，见 getNationalDashboard nationalYangshanCarousel
+          // 收集处注释），这里做一次客户端洗牌满足"加载时 Shuffle 打散"要求——
+          // 当前查看的 orgType 筛选不是"雨花斋/全部平台"时该数组本就是空的
+          // （因为 allStores 在服务端已按筛选收窄，不会有雨花斋门店参与聚合），
+          // 不需要在前端再额外判断 orgType 隐藏这张卡片
+          nationalYangshanCarousel: shuffleArray(sanitizedSummary.nationalYangshanCarousel || [])
         };
         const sanitizedMatrix = sanitizeReportForVolunteer(r.storeMatrix || [], role);
         const cleanedMatrix = this.formatNationalMatrixData(sanitizedMatrix);

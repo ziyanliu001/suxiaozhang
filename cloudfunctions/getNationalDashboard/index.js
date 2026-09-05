@@ -868,6 +868,16 @@ exports.main = async (event, context) => {
     let yangshanAmount = 0;
     let yindeAmount = 0;
     const publicDonorEntries = [];   // 积累后取最多 40 条，最终截取 20 条返回
+    // 🌸 雨花全国大盘·跨店阳善轮播池（nationalYangshanCarousel）：与上面
+    // publicDonorEntries（全局按时间倒序，可能被单个高频记账门店刷屏）不同——
+    // 这里按门店去重，每店只取一条本店最新的公开阳善记录，目的是"各站点爱心
+    // 汇聚"的轮播观感，不是单纯比谁家记账勤。仅收 orgType === 'yuhuazhai' 的
+    // 门店（本节点是"雨花全国大盘"专属，见 CLAUDE.md 轨道二双轨制说明）。
+    // Shuffle 打散交给前端做（nationalDashboardService.ts），服务端只按
+    // "最新→最旧"顺序去重产出确定性的跨店池，方便排查数据
+    const NATIONAL_CAROUSEL_STORE_CAP = 30;
+    const nationalYangshanCarousel = [];
+    const carouselSeenStoreIds = new Set();
 
     // 🌟 全国凭证合规率：有支出金额的记录中，附带小票/发票凭证图片的占比
     let nationalExpenseRecordCount = 0;
@@ -1037,6 +1047,22 @@ exports.main = async (event, context) => {
         // 打标的记录不可信（本函数查询条件本就只认 APPROVED/AUDITED_LOCKED
         // 两档已生效数据，见文件头/logsQueryConditions 注释）
         const hasAuditProof = log.approvalStatus === 'AUDITED_LOCKED';
+        // 🌸 跨店轮播池采样：本店尚未入选、且本店确实是雨花斋业态时，取本条
+        // 记录第一位支持者作为该店的代表条目（一店一条，见上方池声明注释）
+        if (
+          entryOrgType === 'yuhuazhai' &&
+          !carouselSeenStoreIds.has(matchedKey) &&
+          nationalYangshanCarousel.length < NATIONAL_CAROUSEL_STORE_CAP &&
+          donationItems[0]
+        ) {
+          carouselSeenStoreIds.add(matchedKey);
+          nationalYangshanCarousel.push({
+            storeName: entryStoreName,
+            name: formatDonorDisplayName(donationItems[0].name, resolveItemAnonymous(donationItems[0], log.isAnonymous)),
+            amount: parseFloat(donationItems[0].amount) || 0,
+            timeLabel
+          });
+        }
         donationItems.forEach(item => {
           if (publicDonorEntries.length >= 40) return;
           publicDonorEntries.push({
@@ -1733,6 +1759,10 @@ exports.main = async (event, context) => {
       yindeAmount: parseFloat(yindeAmount.toFixed(2)),
       // 公开爱心支持墙：最多 20 条阳善（公开姓名）记录，logs 已降序所以就是最新的
       latestPublicDonors: publicDonorEntries.slice(0, 20),
+      // 🌸 雨花全国大盘·跨店阳善轮播池：一店一条，仅 orgType==='yuhuazhai'，见
+      // 上方 nationalYangshanCarousel 收集处注释；不受角色脱敏影响（阳善本就
+      // 是公开姓名展示，脱敏已在采样时由 formatDonorDisplayName 完成）
+      nationalYangshanCarousel,
       // 🆕 跨店爱心调拨建议：与 healthStatus/fundingDays 同一条可见性口径
       // （对 isPatriarch/hq_finance/regional_finance/super_admin 可见，志工
       // 视角走下方 SENSITIVE_KEYS 统一置空——建议文案里点名了其他门店的

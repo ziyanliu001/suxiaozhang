@@ -135,13 +135,19 @@
       </view>
     </view>
 
-    <!-- 🌸 阳善纵向"冒出"轮播：紧邻身份 Banner 下方，展示本店近 3 天公开随喜
-         捐赠记录。数据源固定为 getSunshineLedger 的 latestDonorsThreeDay——与
-         本页下方 <yangshan-wall>/sunshine-board 同一份公开只读查询，不另起
-         一套云函数调用（见 profile.ts fetchStoreLoveWallSummary）。义工工时/
-         今日供餐份数暂无对应数据源，本期先只做捐赠随喜；yangShanList 为空时
-         wx:else 展示默认祝福文案兜底，本节点始终有内容可展示 -->
-    <view class="sunshine-marquee-bar">
+    <!-- 🌸 阳善纵向"冒出"轮播：紧邻身份 Banner 下方，展示 getCurrentActiveStore()
+         当前选中门店（严格不跨店）的公开善行记录。数据源为 getSunshineLedger 的
+         latestDonorsMonthly——近 30 天窗口，若本店近 30 天无新流水则由该云函数
+         自动退回全历史最近记录兜底（见 allTimePool 逻辑），与本页下方
+         <yangshan-wall>/sunshine-board 同一份公开只读查询，不另起一套云函数调用
+         （见 profile.ts fetchStoreLoveWallSummary）。列表混排善款/实物/义工三类
+         善行，故用 deedText（已在 profile.ts 拼好文案）而非固定"随喜 ¥xx"，
+         避免非善款记录被误标成随喜 0 元；yangShanList 为空时（本店从未有过任何
+         记录）wx:else 展示默认祝福文案兜底，本节点始终有内容可展示。⚠️ 仅雨花斋
+         业态展示（wx:if isYuhuazhai）——"阳善"是雨花斋语境下的专属术语，与同页
+         <yangshan-wall> 对所有业态展示（换文案为"爱心/志愿"）不是同一约定，
+         二者从这里起分道，不要误合并 -->
+    <view class="sunshine-marquee-bar" wx:if="{{isYuhuazhai}}">
       <view class="sunshine-tag">
         <text class="sunshine-icon">🏵️</text>
         <text class="sunshine-tag-title">阳善</text>
@@ -158,7 +164,7 @@
         <swiper-item wx:for="{{yangShanList}}" wx:key="index">
           <view class="sunshine-swiper-item">
             <text class="sunshine-swiper-name">{{item.name}}</text>
-            <text class="sunshine-swiper-amount">随喜 ¥{{item.amount}}</text>
+            <text class="sunshine-swiper-amount">{{item.deedText}}</text>
           </view>
         </swiper-item>
       </swiper>
