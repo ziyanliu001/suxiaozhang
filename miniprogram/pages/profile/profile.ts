@@ -1345,7 +1345,7 @@ Page({
     }
     this._initMinePageInFlight = true;
 
-    const pendingFetches: Promise<any>[] = [this.fetchMeritStats(role), this.fetchStoreOrgType(), this.loadRecentPhotos()];
+    const pendingFetches: Promise<any>[] = [this.fetchMeritStats(), this.fetchStoreOrgType(), this.loadRecentPhotos()];
 
     // 🏢 归属机构名称：超管/平台管理员顶部改展示"超级管理员 · 全局总览"高亮标识
     // （见 profile.wxml），不属于任何单一机构的语境，不需要查这个
@@ -2510,14 +2510,15 @@ Page({
     this.setData({ badgeList: computeBadgeListShared(volunteerDays, volunteerHours, volunteerStreak) });
   },
 
-  async fetchMeritStats(role: string) {
+  // 🛡️ 根因修复（-502003 database permission denied）：此前直接用前端
+  // wx.cloud.database() 查 report_logs——该集合的数据库安全规则只认"是否是
+  // 文档所有者"，不认识 isFinance/isManager 这类应用层角色，财务/店长查询
+  // 店内其他人提交的记录必然被数据库规则拒绝，与调用者角色是否有权限无关。
+  // 此前这个失败被下面的 try/catch 吞掉，静默归零，从未真正报过错。改为收敛
+  // 到 manageReportApproval 云函数的 getMeritStats action（该文件本就是
+  // report_logs 审批状态机 approvalStatus/auditedBy 语义的唯一权威来源）。
+  async fetchMeritStats() {
     try {
-      const db = wx.cloud.database();
-      const openid = AuthService.getOpenid() || '';
-      // 🛡️ 数据库缺索引告警根因：下面两条 report_logs count() 都曾只按 createdBy/auditedBy
-      // 过滤，没有 tenantId 前缀，等于对全表（跨所有机构）做扫描。tenantId 是
-      // tenantId_date 复合索引的前导字段，查询条件必须带上它才能真正走到索引，
-      // 而不是退化成全表扫描；同时也顺带堵住了"跨租户读到别的机构统计数字"的隔离漏洞。
       const cachedRoleInfo = AuthService.getCachedRoleInfo();
       const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
       // 🏪 门店隔离：本页顶层 data.currentStoreId 从未被真正赋值过（只有
@@ -2554,43 +2555,21 @@ Page({
       let auditedCount = 0;
 
       try {
-        // 🐛 严重根因修复：report_logs 集合从未写过 createdBy 字段（createdBy 只在
-        // stores/notice/daily_menu 等其他集合里使用），提交人身份统一走云开发自动
-        // 挂载的 _openid（updateReportLog/getReports/manageReportApproval 等云函数
-        // 判断"是否为提交人本人"全都用的是 docData._openid）。此前按 createdBy 查询，
-        // 查询条件恒不命中，"登记餐报"这项荣誉墙统计对所有人都是 0。
-        // 🏛️ 权限向下继承：大家长同样可能承担日常提交/稽核工作，统计口径一并覆盖
-        if ((role === 'store_manager' || role === 'store_patriarch' || role === 'super_admin') && tenantId && storeId) {
-          const subRes = await db.collection('report_logs')
-            .where({
-              tenantId,
-              storeId,
-              _openid: openid
-            })
-            .count();
-          submittedCount = subRes.total || 0;
-        }
-
-        // 🛡️ 已知局限（非本次可修复范围）：report_logs.auditedBy 由 manageReportApproval
-        // 写入的是角色标签字符串（如"财务稽核员"/"大家长"），不是个人 openid——真正的
-        // 个人操作者身份只记录在独立的 report_audit_logs.operator_id 里，report_logs
-        // 文档本身不具备"这条记录是谁个人稽核的"这个字段，无法在这条查询上做到与
-        // submittedCount 同等的个人隔离，暂时只能收窄到"当前门店 + 本机构"维度
-        // （即"本店已稽核的账目数"，不是"我个人稽核过的账目数"）。
-        // 这两个数字是直接展示给用户的"已提交/已稽核"荣誉墙统计，不是单纯的"是否存在"
-        // 判断，所以不能用 limit(1) 替代——limit(1) 只能回答"有没有"，答不出"有多少"。
-        if ((role === 'finance' || role === 'store_patriarch' || role === 'super_admin') && tenantId && storeId) {
-          const audRes = await db.collection('report_logs')
-            .where({
-              tenantId,
-              storeId,
-              auditedBy: db.command.exists(true)
-            })
-            .count();
-          auditedCount = audRes.total || 0;
+        if (tenantId && storeId && isCloudAvailable()) {
+          const res: any = await callFunctionWithTimeout({
+            name: 'manageReportApproval',
+            data: { action: 'getMeritStats', storeId }
+          });
+          const result = res && res.result;
+          if (result && result.success) {
+            submittedCount = result.submittedCount || 0;
+            auditedCount = result.auditedCount || 0;
+          } else {
+            console.warn('[fetchMeritStats] getMeritStats 返回失败，使用兜底数据:', result && result.errMsg);
+          }
         }
       } catch (dbErr) {
-        console.warn('[fetchMeritStats] 数据库查询失败，使用兜底数据:', dbErr);
+        console.warn('[fetchMeritStats] 云函数查询失败，使用兜底数据:', dbErr);
       }
 
       // 🏪 门店隔离：与 loadVolunteerStats 同一套口径，按当前门店动态过滤

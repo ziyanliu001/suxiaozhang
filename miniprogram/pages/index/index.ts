@@ -11825,30 +11825,34 @@ Page({
   },
 
   // ☀️ 账本锁定状态：finance-home-card 顶部指标，此前是写死的 "100%" 占位文案。
-  // 真实口径 = 本店累计已稽核签核笔数 / 本店累计总笔数（tenantId+storeId 精确
-  // 匹配，count() 均能命中 createIndexes 里已声明的复合索引——总数命中
-  // tenantId_storeId_dateString 的前两列前缀，已稽核数精确命中
-  // tenantId_storeId_auditedBy 三列全匹配，两条 count() 都不会触发云开发的
-  // "建议添加索引"控制台告警）
+  // 真实口径 = 本店累计已稽核签核笔数 / 本店累计总笔数。
+  // 🛡️ 根因修复（-502003 database permission denied）：此前直接用前端 wx.cloud.database()
+  // 查 report_logs——该集合的数据库安全规则只认"是否是文档所有者"，不认识
+  // isFinance/isSuperAdmin 这类应用层角色，财务/大家长查询店内其他人提交的记录
+  // 必然被数据库规则拒绝，与调用者角色是否有权限无关。这类跨 openid 的业务查询
+  // 必须收敛到云函数（云函数用的是不受安全规则限制的特权数据库连接），改为复用
+  // manageFinanceLock 的 checkRangeStatus（省略 startDate/endDate 表示查全部历史，
+  // 该 action 本就限定 finance/store_patriarch/super_admin 三个角色，与本卡片的
+  // 触发条件 isFinance||isSuperAdmin 一致）。
+  // 顺带修正了统计口径：原来的 auditedBy:exists(true) 只覆盖 manageFinanceLock 批量
+  // 封账写入的记录，manageReportApproval 单条稽核封账（financeAudit）从未写过
+  // auditedBy 字段，会被漏计；checkRangeStatus 按 approvalStatus==='AUDITED_LOCKED'
+  // 统计，两条封账路径都覆盖到，与 getStatisticsData 的稽核口径一致。
   async fetchFinanceLedgerStatus() {
     const storeId = this.data.currentStoreId;
     if (!storeId || !isCloudAvailable()) return;
 
     this.setData({ financeLedgerStatusLoading: true });
     try {
-      const db = wx.cloud.database();
-      const cachedRoleInfo = AuthService.getCachedRoleInfo();
-      const tenantId = (cachedRoleInfo && cachedRoleInfo.tenantId) || '';
-      const baseWhere: any = { storeId };
-      if (tenantId) baseWhere.tenantId = tenantId;
+      const result = await callFunctionWithTimeout({
+        name: 'manageFinanceLock',
+        data: { action: 'checkRangeStatus', storeId }
+      });
+      const res = result.result as any;
+      if (!res || !res.success) throw new Error((res && res.errMsg) || '查询失败');
 
-      const [totalRes, auditedRes] = await Promise.all([
-        db.collection('report_logs').where(baseWhere).count(),
-        db.collection('report_logs').where({ ...baseWhere, auditedBy: db.command.exists(true) }).count()
-      ]);
-
-      const total = totalRes.total || 0;
-      const audited = auditedRes.total || 0;
+      const total = res.totalCount || 0;
+      const audited = res.lockedCount || 0;
       this.setData({
         financeLedgerAuditedRate: total > 0 ? Math.round((audited / total) * 100) : null
       });

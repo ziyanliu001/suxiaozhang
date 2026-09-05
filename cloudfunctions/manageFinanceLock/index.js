@@ -47,12 +47,18 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
+// 🌟 checkRangeStatus 支持省略 startDate/endDate 表示"全部历史"（不限日期区间）——
+// 供 index.ts 的 finance-home-card 顶部"账本锁定/稽核完成率"角标使用，该角标
+// 展示的是全店全部历史记录的稽核进度，不是某个自定义区间；lockRange/unlockRange
+// 两个真正改数据的 action 仍然强制要求明确区间，不能省略
 function buildRangeWhere(caller, storeId, startDate, endDate) {
   const where = {
     storeId,
-    dateString: _.gte(startDate).and(_.lte(endDate)),
     isVoid: _.neq(true)
   };
+  if (startDate && endDate) {
+    where.dateString = _.gte(startDate).and(_.lte(endDate));
+  }
   if (caller.tenantId) {
     where.tenantId = caller.tenantId;
   }
@@ -223,10 +229,13 @@ exports.main = async (event) => {
   if (!['lockRange', 'unlockRange', 'checkRangeStatus'].includes(action)) {
     return { success: false, errMsg: `不支持的 action: ${action}` };
   }
-  if (!storeId || !startDate || !endDate) {
+  // 只有 checkRangeStatus 允许同时省略 startDate/endDate（= 查全部历史）；
+  // lockRange/unlockRange 会真的改数据，必须明确指定要处理的区间
+  const isAllTimeCheck = action === 'checkRangeStatus' && !startDate && !endDate;
+  if (!storeId || (!isAllTimeCheck && (!startDate || !endDate))) {
     return { success: false, errMsg: '缺少 storeId / startDate / endDate 参数' };
   }
-  if (startDate > endDate) {
+  if (startDate && endDate && startDate > endDate) {
     return { success: false, errMsg: '开始日期不能晚于结束日期' };
   }
 

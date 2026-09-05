@@ -274,6 +274,62 @@ exports.main = async (event) => {
     }
   }
 
+  // 🛡️ 根因修复（-502003 database permission denied）：profile.ts 的"荣誉墙"
+  // 统计（登记餐报数/已稽核账本数）此前由前端 wx.cloud.database() 直查
+  // report_logs——该集合的安全规则只认"是否是文档所有者"，财务/店长查询店内
+  // 其他人提交的记录必然被拒绝，与角色是否有权限无关，只是此前查询失败被内层
+  // try/catch 吞掉、静默归零，没有报错弹出来。改为服务端聚合，角色也不再信任
+  // 客户端传入的 role 参数，一律以 resolveCaller 反查的真实角色为准。
+  if (action === 'getMeritStats') {
+    const { storeId } = event;
+    if (!storeId) return { success: false, errMsg: '缺少 storeId 参数' };
+    try {
+      const caller = await resolveCaller(OPENID);
+      if (!caller) return { success: false, errMsg: '无法确认您的角色信息' };
+
+      // 门店/机构边界：与 manageFinanceLock 的 checkRangeStatus 同一套校验口径——
+      // 非超管一律要求 caller.storeId 与目标 storeId 严格相等；super_admin 允许
+      // 查看本机构内任意门店，但必须验证目标门店确实属于自己的 tenantId
+      if (caller.role === 'super_admin') {
+        const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+        const store = storeRes && storeRes.data;
+        if (!store) return { success: false, errMsg: '目标门店不存在' };
+        if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+          return { success: false, errMsg: '无权限：目标门店不属于您所在的机构' };
+        }
+      } else if (!caller.storeId || caller.storeId !== storeId) {
+        return { success: false, errMsg: '无权限：只能查看本店统计' };
+      }
+
+      const tenantId = caller.tenantId || '';
+      let submittedCount = 0;
+      let auditedCount = 0;
+
+      if (tenantId) {
+        // 🏛️ 权限向下继承：大家长同样可能承担日常提交/稽核工作，统计口径一并覆盖，
+        // 与 profile.ts 原有的角色分支完全一致，只是查询挪到了服务端
+        if (['store_manager', 'store_patriarch', 'super_admin'].includes(caller.role)) {
+          const subRes = await db.collection('report_logs').where({ tenantId, storeId, _openid: OPENID }).count();
+          submittedCount = subRes.total || 0;
+        }
+        // 🐛 统计口径修正：原前端实现用 auditedBy:exists(true) 判断"已稽核"，但
+        // financeAudit（本文件 ACTION_RULES，单条稽核）从未写过 auditedBy 字段，
+        // 只有 manageFinanceLock 的批量封账才写，会漏计单条稽核的记录。改用
+        // approvalStatus === 'AUDITED_LOCKED'，两条稽核路径都能正确覆盖，与
+        // manageFinanceLock.checkRangeStatus/getStatisticsData 的稽核口径一致
+        if (['finance', 'store_patriarch', 'super_admin'].includes(caller.role)) {
+          const audRes = await db.collection('report_logs').where({ tenantId, storeId, approvalStatus: 'AUDITED_LOCKED' }).count();
+          auditedCount = audRes.total || 0;
+        }
+      }
+
+      return { success: true, submittedCount, auditedCount };
+    } catch (err) {
+      console.error('[manageReportApproval] getMeritStats 异常:', err);
+      return { success: false, errMsg: err.message || '查询失败' };
+    }
+  }
+
   const rule = ACTION_RULES[action];
   if (!rule) {
     return { success: false, errMsg: `不支持的 action: ${action}` };
