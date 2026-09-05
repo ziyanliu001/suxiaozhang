@@ -4366,20 +4366,20 @@ page {
   line-height: 1.6;
 }
 
-/* 🩹 从 flex-wrap 改为标准 2 列网格：flex-wrap 下每个 chip 宽度由文字内容
-   撑开，长短名称混排（如"场地租金" vs "其他专项"）会导致每行个数不一致、
-   折行参差不齐；grid 固定 2 列等宽，无论名称长短都严格对齐成规整方阵 */
 .expense-template-chip-list {
   max-height: 50vh;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
 }
 
-/* 末尾的安全区占位块（用于滚动到底部时留出手机底部安全区）不参与 2 列排布，
-   独占一整行，不然会随奇偶个数落进某一列变成一个诡异的空格子 */
-.expense-template-chip-list .fa-safe-area-spacer {
-  grid-column: 1 / -1;
+/* 🐛 grid 必须挂在 scroll-view 内部的普通 view 上，不能直接挂在 scroll-view
+   自身（上面 .expense-template-chip-list）：小程序 scroll-view 组件对布局模式
+   有特殊处理，官方文档只为 flex 布局开了 enable-flex 开关，display:grid 挂在
+   scroll-view 节点上不会生效、静默退化成默认块级流布局——这正是"变成单列纵向
+   排列"的真实原因。改成 scroll-view 内嵌一层 view 承载 grid，scroll-view 只
+   负责纵向滚动容器本身 */
+.expense-template-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 10px;
 }
 
 .expense-template-chip {

@@ -2781,11 +2781,13 @@
           >⚡️ 一键导入公益常用标签</button>
         </view>
         <scroll-view scroll-y enable-flex="true" class="expense-template-chip-list" wx:else>
-          <view class="expense-template-chip" wx:for="{{expenseTemplateDailyList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
-            <text class="chip-name">{{item.itemName}}</text>
-            <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
-            <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
-            <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
+          <view class="expense-template-chip-grid">
+            <view class="expense-template-chip" wx:for="{{expenseTemplateDailyList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
+              <text class="chip-name">{{item.itemName}}</text>
+              <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
+              <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
+              <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
+            </view>
           </view>
           <view class="fa-safe-area-spacer"></view>
         </scroll-view>
@@ -2801,11 +2803,13 @@
           >⚡️ 一键导入公益常用标签</button>
         </view>
         <scroll-view scroll-y enable-flex="true" class="expense-template-chip-list" wx:else>
-          <view class="expense-template-chip" wx:for="{{expenseTemplateFixedList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
-            <text class="chip-name">{{item.itemName}}</text>
-            <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
-            <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
-            <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
+          <view class="expense-template-chip-grid">
+            <view class="expense-template-chip" wx:for="{{expenseTemplateFixedList}}" wx:key="_id" bindtap="onSelectExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}" data-amount="{{item.defaultAmount}}">
+              <text class="chip-name">{{item.itemName}}</text>
+              <text class="chip-amount" wx:if="{{item.defaultAmount}}">¥{{item.defaultAmount}}</text>
+              <text class="chip-rename" wx:if="{{expenseTemplateEditMode}}" catchtap="onRenameExpenseTemplateItem" data-id="{{item._id}}" data-name="{{item.itemName}}">✏️</text>
+              <text class="chip-del" wx:if="{{expenseTemplateEditMode}}" catchtap="onDeleteExpenseTemplateItem" data-id="{{item._id}}">✕</text>
+            </view>
           </view>
           <view class="fa-safe-area-spacer"></view>
         </scroll-view>
