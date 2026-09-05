@@ -76,3 +76,12 @@
 - Open-Core 拆分构建：`npm run build:core`（`scripts/build-open-core.js`，生成开源 Core 代码产物）
 - 云函数本地调试/部署：在对应云函数目录下执行 `npm install`
 - Obsidian 知识库链接检查：`ls -l ./docs`
+
+---
+
+## 5. 远端同步与代码/商业机密安全红线
+
+- 本仓库（`suxiaozhang`）是产品**唯一真源代码**，含完整业务逻辑（分账费率、订阅套餐规则等商业敏感实现，见 [`OPEN_CORE_ARCHITECTURE.md`](docs/OPEN_CORE_ARCHITECTURE.md) 的 Enterprise 分级），必须始终保持 **Private** 属性：GitHub `suxiaozhang` 与 Gitee `yuhua-zhushou` 两个远程仓库都不得改为公开，改动仓库可见性前必须先经用户明确同意。
+- 远端推送**只允许**走已配置好的 `origin`（单一 remote 名、双 push URL：GitHub SSH `git@github.com:ziyanliu001/suxiaozhang.git` + Gitee HTTPS `https://gitee.com/zeng-qingliang/yuhua-zhushou.git`）。`git push origin master` 一条命令即完成双发，**严禁**新增指向其他托管服务、公开仓库、或权限属性未经确认的第三方 remote（2026-09-05 已移除一个冗余且缺凭证的独立 `github` HTTPS remote，不要重新添加）。
+- **严禁**任何形式的对外公开发布——不得把本仓库代码/文档复制、粘贴或推送到任何公开可访问的位置（公开 Gist、公开 Pages、未加访问控制的分享链接、聊天工具的公开频道等），`scripts/build-open-core.js` 产出的开源 Core 构建物如需对外发布，须走独立评审流程，不等同于直接公开本仓库。
+- **严禁在代码、注释、commit message 或任何文档里明文记录私钥、access token、密码、云开发密钥等凭证**。本仓库已有的既定防线：`.gitignore` 里 `private.*.key`/`*.pem`/`project.private.config.json` 三类规则专门拦截小程序上传密钥与本地私有配置——新增任何凭证类文件时，必须先补齐对应的 `.gitignore` 规则再落盘，不能先写文件再补规则（存在"补规则前那个 commit 窗口"意外提交的风险，先加规则再建文件）。一旦发现已提交的明文凭证，视为需要立即撤销/轮换该凭证的安全事件处理，删除文件/改写内容不能让已泄露的凭证重新变安全（git 历史仍会留痕）。
