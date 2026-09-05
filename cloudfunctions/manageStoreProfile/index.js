@@ -14,6 +14,13 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
+// 🛡️ 全国总览/全部门店哨兵值：前端 index.ts 已经在 loadStoreTargetConfig 里
+// 挡了这两个值不再发起调用（见该方法注释），这里作为纵深防御同样识别、快速
+// 拒绝——resolveReadTarget 原本也会因为查不到这个假 _id 的门店文档而较快返回
+// "目标门店不存在"，但那仍是一次真实的数据库往返；这里提前一步直接拒绝，
+// 不再发起这次注定查不到数据的查询
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all'];
+
 // 🛡️ 服务端内容安全兜底：门店名/致谢词/宣传标语/简介等自由文本对外公开展示
 // （公示海报、餐报文本），此前只在前端提交前查一次 msgSecCheck，绕过前端直接
 // 调云函数即可跳过审核。落库前服务端强制再查一遍，API 抖动时降级放行。
@@ -261,6 +268,9 @@ exports.main = async (event, context) => {
     const caller = await resolveCaller(OPENID);
 
     if (action === 'get') {
+      if (storeId && NATIONAL_STORE_ID_SENTINELS.includes(storeId)) {
+        return { success: false, error: 'storeId required' };
+      }
       const target = await resolveReadTarget(caller, storeId, storeName);
       if (!target.allowed) return { success: false, error: target.error };
 

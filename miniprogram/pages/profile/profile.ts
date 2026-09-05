@@ -490,6 +490,18 @@ Page({
     // 🏛️（2026-08-31 Open-Core 第三阶段）WXML 用这份 data 快照而不是直接绑定
     // 模块常量——WXML 表达式只能读 data，读不到 import 进来的模块级变量
     enterpriseBuildEnabled: ENTERPRISE_BUILD_ENABLED,
+    // 🛡️ 根因修复：ENTERPRISE_BUILD_ENABLED 区分的是"完整版/开源核心版"两种
+    // 代码构建，跟"这次运行是不是正式上线版本"完全是两回事——真正打包上线的
+    // 生产环境同样是完整版（true），此前"DEV 体验/模拟开通专业版（测试用）"
+    // 只挂了 enterpriseBuildEnabled 这一道门槛，导致真实上线后任何尚未订阅的
+    // 真实用户都能在个人中心看到这个标着"DEV"/"测试用"字样的入口——不仅体验
+    // 割裂，字面意思还容易被审核方或用户误解为"可以绕过付费白嫖开通"。默认
+    // 值先给 false（宁可开发者工具首帧闪现一下再收起，也不能有任何一帧在真机
+    // 上意外把 DEV 工具亮出来），onLoad 里用 wx.getAccountInfoSync().miniProgram.
+    // envVersion 现算一次真实值——官方推荐的正式区分"开发版/体验版/正式版"的
+    // 方式，比"是否在开发者工具里运行"更准确（后者漏判"开发版真机扫码预览"
+    // 这种同样该算作调试环境的场景）
+    isDevEnvironment: false,
     // 🔐 套餐升级/续费半屏卡片：super_admin/store_patriarch 点击"会员开通/续费
     // 管理"时唤起，展示本机构当前套餐/到期时间，而不是像 platform_admin 那样
     // 跳转 pages/platform-admin（那个页面服务端只认 platform_admin，租户自己的
@@ -925,6 +937,17 @@ Page({
   onLoad(options: Record<string, string>) {
     this.calculateNavBarHeight();
     this.hydrateConfirmedAvatarFromStorage();
+    // 🛡️ 见 data.isDevEnvironment 声明处注释：envVersion !== 'release' 才允许
+    // 展示 DEV 调试专属入口，失败时按 fail-closed 处理（default false 已在
+    // data 里兜底，异常直接不覆盖），绝不能因为这一步查询异常而意外把调试
+    // 入口暴露在正式版
+    try {
+      const accountInfo = wx.getAccountInfoSync();
+      const envVersion = accountInfo && accountInfo.miniProgram && accountInfo.miniProgram.envVersion;
+      this.setData({ isDevEnvironment: envVersion !== 'release' });
+    } catch (err) {
+      console.warn('[profile] 读取小程序版本信息失败，DEV 调试入口按默认隐藏处理:', err);
+    }
     // 🌟 首页侧边抽屉「意见反馈」深链入口：跳转到本页并附带 openFeedback=1
     // 时直接弹出意见箱弹窗，不需要用户再自己找一遍入口
     if (options && options.openFeedback === '1') {

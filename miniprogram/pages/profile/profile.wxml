@@ -99,9 +99,16 @@
                不展示具体机构名（避免与巡检门店/全局视角产生混淆）；其余角色展示
                真实机构名（currentTenantName，见 fetchCurrentTenantName），选定了
                具体门店时下面再单独一行"当前门店" -->
+          <!-- 🐛 根因修复（标签堆叠去重）：上方 role-badge-row 在 currentUserRole
+               ==='super_admin' 时已经展示过一次"超级管理员"，这里此前无条件再拼
+               一遍"超级管理员 · 全局总览"，同一屏挤出两个写着"超级管理员"的标签，
+               视觉啰嗦。只在 currentUserRole 不是 'super_admin' 时（真实超管正在
+               预览其他角色视角，见下方 role-switch-modal，上方角色胶囊此时显示的
+               是被预览的角色名而不是"超级管理员"）才需要保留完整前缀——这种场景下
+               两个标签本就展示不同信息（预览角色 vs 真实身份+数据范围），不是重复 -->
           <view class="belong-store-tag super-admin-highlight" wx:if="{{isSuperAdmin}}">
             <text class="store-icon">🛡️</text>
-            <text class="store-name">超级管理员 · 全局总览</text>
+            <text class="store-name">{{currentUserRole === 'super_admin' ? '全局总览' : '超级管理员 · 全局总览'}}</text>
           </view>
           <block wx:else>
             <view class="belong-store-tag">
@@ -1233,8 +1240,12 @@
           <view class="sa-light-action-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
         </view>
 
-        <!-- 🧪 Dev/Debug 专用：模拟开通专业版，仅供功能自测，不接入真实支付/计费流程 -->
-        <view class="sa-dev-tool-row" wx:if="{{enterpriseBuildEnabled && !subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
+        <!-- 🧪 Dev/Debug 专用：模拟开通专业版，仅供功能自测，不接入真实支付/计费流程。
+             🛡️ 根因修复：见 profile.ts data.isDevEnvironment 声明处注释——此前只挂
+             enterpriseBuildEnabled（区分完整版/开源核心版代码，跟"是否正式上线"
+             无关），正式生产包里真实用户也能看到这个标 DEV 字样的入口，叠加
+             isDevEnvironment（envVersion !== 'release'）后正式版直接隐藏 -->
+        <view class="sa-dev-tool-row" wx:if="{{isDevEnvironment && enterpriseBuildEnabled && !subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
           <text class="sa-dev-tool-tag">DEV</text>
           <text class="sa-dev-tool-text">体验 / 模拟开通专业版（测试用）</text>
         </view>

@@ -1876,6 +1876,16 @@ Page({
   },
 
   async fetchStoreSponsor(storeId: string) {
+    // 🐛 根因修复（全国总览连续 8000ms 超时）：全国总览/全部门店没有唯一确定的
+    // 赞助商展示位可言——此前无条件按 storeId 发起 getStoreSponsor 查询，切到
+    // 全国总览时会带着 'national_overview'/'ALL_STORES' 这类哨兵值发起一次纯
+    // 语义上无意义的单店查询，与 onStoreChanged 同一时刻并发触发的其余单店级
+    // 请求（loadStoreTargetConfig 等）叠加，一起加重切店瞬间的并发云函数压力。
+    // 直接跳过请求、清空展示态，不再发起这次注定无意义的调用
+    if (this.isNationalOverviewSelected()) {
+      this.setData({ currentSponsorInfo: null });
+      return;
+    }
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const res = await callFunctionWithTimeout({
@@ -1984,7 +1994,12 @@ Page({
     const defaultLabels = ORG_TYPE_DEFAULT_TARGET_LABELS[orgType] || FALLBACK_TARGET_LABELS;
     this.setData({ storeTargetLabels: defaultLabels });
 
-    if (!storeId || !isCloudAvailable()) return;
+    // 🐛 根因修复（全国总览连续 8000ms 超时）：见 fetchStoreSponsor 同一处
+    // 注释——此前这里只挡了真正的空字符串，'national_overview'/'ALL_STORES'
+    // 这类哨兵值会原样透传给 manageStoreProfile，命中该云函数"目标门店不存在"
+    // 分支虽能快速返回，但仍是一次纯浪费的并发云函数调用，全国总览没有唯一
+    // 门店画像可言，直接跳过更彻底
+    if (!storeId || this.isNationalOverviewSelected() || !isCloudAvailable()) return;
     try {
       const res = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
