@@ -38,6 +38,25 @@ function maskName(name) {
   return str.charAt(0) + '*'.repeat(str.length - 2) + str.charAt(str.length - 1);
 }
 
+// 🐛 根因修复（"爱**士"这类公用泛称被误脱敏）：同一批修复见
+// cloudfunctions/getNationalDashboard、getSunshineLedger 的
+// GENERIC_DONOR_NAME_KEYWORDS 同名常量——捐赠人/物资记录填"爱心人士"/
+// "十方大众"这类公用泛称本就不是真实姓名，maskName() 却把它按位置打码，
+// "爱心人士"→"爱**士"，泛称本身反而面目全非。下方 materials.donor 缺省
+// 兜底用的字面量"匿名爱心人士"本身就包含"爱心人士"这个泛称，也会被这条
+// 白名单命中原样保留，不再需要单独处理
+const GENERIC_DONOR_NAME_KEYWORDS = ['爱心人士', '无名氏', '十方大众', '爱心同修', '义工', '大众随喜'];
+function isGenericDonorName(name) {
+  const str = String(name || '').trim();
+  return !!str && GENERIC_DONOR_NAME_KEYWORDS.some((kw) => str.includes(kw));
+}
+function formatVerifyDonorName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+  if (isGenericDonorName(trimmed)) return trimmed;
+  return maskName(trimmed);
+}
+
 // 与 miniprogram/pages/index/index.ts 里"充足/一般/告急"三档展示口径保持一致，
 // 该字段本身就是 stapleRiceStatus/stapleOilStatus 两个枚举值（sufficient/normal/urgent）
 function stapleStatusLabel(status) {
@@ -110,7 +129,7 @@ exports.main = async (event) => {
 
     const donationItems = Array.isArray(report.donationItems)
       ? report.donationItems.map((d) => ({
-          name: maskName(d && d.name),
+          name: formatVerifyDonorName(d && d.name),
           amount: (d && d.amount) || 0
         }))
       : [];
@@ -123,7 +142,7 @@ exports.main = async (event) => {
     // 捐赠人姓名同样脱敏，只暴露"验真"所需的物资流向，不暴露任何账号身份信息
     const materials = Array.isArray(report.materials)
       ? report.materials.map((m) => ({
-          donor: maskName((m && m.donor) || '匿名爱心人士'),
+          donor: formatVerifyDonorName((m && m.donor) || '匿名爱心人士'),
           item: (m && m.item) || '',
           quantity: (m && m.quantity) || '',
           unit: (m && m.unit) || ''
