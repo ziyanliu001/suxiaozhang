@@ -9,7 +9,7 @@ import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../uti
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
-import { getSelectedStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache } from '../../utils/storeManager';
+import { getSelectedStore, getCurrentActiveStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -1150,6 +1150,15 @@ Page({
     financeLedgerStatusLoading: false,
     financeLedgerAuditedRate: null as number | null,
     currentStoreId: '' as string,
+    // 🐛 根因修复（首页"最新善行"右侧空白）：<yangshan-wall> 此前直绑
+    // currentStoreId——该字段在 refreshUserRoleView()/角色初始化时会被重置为
+    // "调用者角色自己绑定的门店"（cached.storeId/storage 里的 current_user_role
+    // 关联店），与 getCurrentActiveStore()（读 current_store_id/active_store_id，
+    // 反映"用户上次手动切换/巡检选中的门店"）在超管/大家长跨店查看场景下可能
+    // 是两个不同的店——个人页阳善栏早前就踩过同一个坑（见 profile.ts
+    // fetchStoreLoveWallSummary 注释），这里同样单独维护一个不会被角色重置
+    // 覆盖的字段，专供 <yangshan-wall> 绑定
+    yangshanWallStoreId: '' as string,
     isAllStoresView: false,
     allStoresList: [] as any[],
     showStorePosterModal: false,
@@ -1596,7 +1605,11 @@ Page({
         currentViewMode,
         currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
         currentStoreName: storeName,
-        currentStoreId: storeId
+        currentStoreId: storeId,
+        // 🐛 见 data 声明处 yangshanWallStoreId 注释：cached.storeId 是角色自己
+        // 绑定的门店，可能与用户上次手动切换/巡检选中的门店不是同一家，
+        // getCurrentActiveStore() 优先，查不到时才退回这次角色解析出的 storeId
+        yangshanWallStoreId: getCurrentActiveStore().storeId || storeId
       });
       // 🌐 自动续接工作空间：账号已有明确归属（真实门店 orgType）时，跳过"工作
       // 空间选择"首页，直接落地到对应专区——见 autoResumeWorkspaceMode 注释
@@ -1655,7 +1668,8 @@ Page({
         currentViewMode,
         currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
         currentStoreName: storeName,
-        currentStoreId: storeId
+        currentStoreId: storeId,
+        yangshanWallStoreId: getCurrentActiveStore().storeId || storeId
       });
       // 🌐 自动续接工作空间：服务端权威角色落地后再校正一次——万一上面 cached
       // 分支用的是过期的本地角色缓存（orgType 与服务端最新值不一致），这里用
@@ -2526,6 +2540,9 @@ Page({
 
     this.setData({
       currentStoreId: storeId,
+      // 🐛 本函数是手动切店的权威来源（setCurrentActiveStore 就在上面几行调用），
+      // storeId 就是这次切换的目标店，直接同步，不需要再查 getCurrentActiveStore()
+      yangshanWallStoreId: storeId,
       currentStoreName: storeName,
       // 🔑 关键修复：同步更新 shopName 字段，确保 loadBalanceForDate 等函数使用新门店名
       shopName: storeName,
@@ -2602,6 +2619,8 @@ Page({
   switchStoreTarget(storeId: string, storeName: string, options?: { silent?: boolean }) {
     this.setData({
       currentStoreId: storeId,
+      // 🐛 见 onStoreChanged 同款注释：本函数就是切店权威来源，直接同步
+      yangshanWallStoreId: storeId,
       currentStoreName: storeName,
       // 🔑 与 onStoreChanged 对齐：shopName 是餐报提交/余额查询实际读取的字段，
       // 必须跟随 currentStoreName 同步，否则会继续沿用切店前的门店名
@@ -8877,6 +8896,13 @@ Page({
       currentRole: rawRole,
       currentStoreName: storeName,
       currentStoreId: storeId,
+      // 🐛 见 data 声明处 yangshanWallStoreId 注释：这里的 storeId 来自角色缓存/
+      // storage 的 current_user_role 关联店，每次 onShow 都会重新执行本函数、
+      // 无条件覆盖 currentStoreId——若超管/大家长此前手动切换/巡检过其他门店，
+      // 会被这里覆盖回自己绑定的门店（甚至覆盖成空）。getCurrentActiveStore()
+      // 读取的 current_store_id/active_store_id 才是"用户当前实际选中门店"的
+      // canonical 来源，优先用它，查不到时才退回本次解析出的 storeId
+      yangshanWallStoreId: getCurrentActiveStore().storeId || storeId,
       isRealSuperAdmin: isVerifiedSuperAdminAccount,
       currentViewMode,
       currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],

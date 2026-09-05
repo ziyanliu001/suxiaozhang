@@ -191,7 +191,12 @@
        视觉上是一张卡、观感上仍是两条独立信息。yangshan-wall 组件样式默认
        隔离，页面层 CSS 穿不进去，这里传 bare 属性让组件自己去掉内嵌的
        背景/边框/投影，避免"卡中卡"（见 components/yangshan-wall 的 bare
-       属性说明，默认 false，profile.wxml 的独立用法不受影响） -->
+       属性说明，默认 false，profile.wxml 的独立用法不受影响）。
+       🐛 根因修复（右侧空白）：storeId 绑定 yangshanWallStoreId 而不是
+       currentStoreId——后者会被 refreshUserRoleView()/角色初始化每次 onShow
+       无条件重置为"角色自己绑定的门店"，与超管/大家长实际巡检/切换选中的
+       门店可能不是同一家，导致组件用错门店 id 查到空数据。见 index.ts
+       data 声明处 yangshanWallStoreId 注释 -->
   <view class="top-notice-cluster" wx:if="{{!isFamily}}">
     <view class="top-notice-row" bindtap="onGoToSunshineBoard">
       <view class="sunshine-ledger-icon">☀️</view>
@@ -203,13 +208,13 @@
     </view>
     <view class="top-notice-divider"></view>
     <view class="top-notice-row top-notice-row-yangshan">
-      <yangshan-wall storeId="{{currentStoreId}}" bare="{{true}}" />
+      <yangshan-wall storeId="{{yangshanWallStoreId}}" bare="{{true}}" />
     </view>
   </view>
 
   <!-- 🌸 家人视角下阳光账本卡片被隐藏（见上方 !isFamily），但阳善滚动墙本身
        全角色可见——单独渲染，不跟着一起消失 -->
-  <yangshan-wall wx:if="{{isFamily}}" storeId="{{currentStoreId}}" />
+  <yangshan-wall wx:if="{{isFamily}}" storeId="{{yangshanWallStoreId}}" />
 
   <!-- 🌟 视角切换预览提示条：仅超级管理员在非全景视角下可见，避免误以为真的丢失了管理权限。
        🐛 根因修复：原先是 currentViewMode === 'STORE_MANAGER' ? '店长视角' : '财务视角'
