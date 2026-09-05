@@ -2103,8 +2103,20 @@ Page({
     safeNavigateTo({ url: '/subpackages/admin/pages/activity-log/activity-log' });
   },
 
+  // 🐛 根因修复（通用工作空间门店管理页泄露雨花专区门店）：门店管理是独立的
+  // 子包页面，与本页不共享 this.data.currentPlatformMode（页面内存态，见该
+  // 字段声明处注释——不引入持久化缓存），此前跳转时完全没有透传当前专区，
+  // store-management.ts 的 getStoreList 调用因此从不带 orgType 过滤条件，
+  // 拿到的是调用者 tenantId 下的全量门店（雨花斋 + 通用混在一起），在"通用
+  // 素食/门店记账"专区点开门店管理，一样会看到"三源弘雨花斋"这类雨花斋门店。
+  // 通过 URL 查询参数把当前专区显式带过去——与 statistics.ts ?tab=sunshine
+  // 同一种"跨页面传专区/意图参数"的既有写法，不新增持久化存储
   onGotoStoreManagement() {
-    safeNavigateTo({ url: '/subpackages/admin/pages/store-management/store-management' });
+    const orgTypeFilter = this.data.currentPlatformMode === 'yuhua'
+      ? 'yuhuazhai'
+      : (this.data.currentPlatformMode === 'general' ? 'general' : '');
+    const query = orgTypeFilter ? `?orgTypeFilter=${orgTypeFilter}` : '';
+    safeNavigateTo({ url: '/subpackages/admin/pages/store-management/store-management' + query });
   },
 
   // 🏢 空状态引导升级：机构其实已有门店（allStoresList.length > 0，只是当前

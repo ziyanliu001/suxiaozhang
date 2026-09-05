@@ -15,6 +15,12 @@ Page({
     checkedAccess: false,
     isSuperAdmin: false,
 
+    // 🐛 根因修复（通用工作空间门店管理页泄露雨花专区门店）：见 onLoad 注释——
+    // 由 index.ts onGotoStoreManagement 通过 URL 查询参数透传当前专区
+    // （'yuhuazhai'/'general'/空），loadStoreList() 据此在 getStoreList 调用上
+    // 叠加 orgType 过滤，与 store-picker/首页门店列表遵循同一条数据隔离边界
+    orgTypeFilter: '',
+
     // 已激活 / 待审核 两个 Tab
     activeTab: 'active' as 'active' | 'pending',
 
@@ -79,7 +85,17 @@ Page({
     }
   },
 
-  onLoad() {
+  onLoad(options?: { orgTypeFilter?: string }) {
+    // 🐛 根因修复（通用工作空间门店管理页泄露雨花专区门店）：本页是独立子包
+    // 页面，不共享 index.ts 页面实例的 currentPlatformMode 内存态，此前
+    // loadStoreList() 调用 getStoreList 从不带 orgType，拿到的是调用者
+    // tenantId 下的全量门店（雨花斋+通用混在一起）。这里只在真正收到查询参数
+    // 时才覆盖——本方法在"新建门店成功后延时刷新"场景（见下方 setTimeout 里
+    // 的 this.onLoad()）会被无参数重新调用一次，此时不能把已经存好的
+    // orgTypeFilter 冲掉，否则刷新后又变回未过滤的全量列表
+    if (options && options.orgTypeFilter) {
+      this.setData({ orgTypeFilter: options.orgTypeFilter });
+    }
     this.checkAccess();
 
     this._navGuard = createNavGuard({
@@ -133,8 +149,15 @@ Page({
     this.setData({ loading: true });
     try {
       // includeInactive:true —— 门店管理页需要连"已停用"门店一起看，才能重新启用；
-      // 首页 store-picker / 邀请码弹窗走的是默认调用（不传），只看得到 active 门店
-      const res = await callFunctionWithTimeout({ name: 'getStoreList', data: { includeInactive: true } });
+      // 首页 store-picker / 邀请码弹窗走的是默认调用（不传），只看得到 active 门店。
+      // 🐛 根因修复：叠加 orgType 过滤（见 onLoad/data.orgTypeFilter 注释），
+      // 与首页 store-picker/getStoreList 其余调用方遵循同一条专区数据隔离边界，
+      // 超管也不例外——不能因为超管跨专区可见就全量返回
+      const orgTypeFilter = this.data.orgTypeFilter;
+      const res = await callFunctionWithTimeout({
+        name: 'getStoreList',
+        data: { includeInactive: true, ...(orgTypeFilter ? { orgType: orgTypeFilter } : {}) }
+      });
       const result = res.result as any;
       if (result && result.success) {
         this.setData({ list: result.list || [] });
@@ -232,8 +255,21 @@ Page({
       }
 
       const db = wx.cloud.database();
+      const where: Record<string, any> = { status: 'pending', tenantId, storeSelectionType: 'custom' };
+      // 🐛 根因修复（专区隔离闭环）：见 loadStoreList/onSubmitCreateStore 同一处
+      // 注释——"新建门店"待审核申请同样携带 orgType（processRoleAudit 的
+      // isCustom 分支写入 docData.orgType，未显式指定时默认 'other'），此前
+      // 这里完全没有按当前专区过滤，通用专区切到「待审核」Tab 一样能看到雨花
+      // 专区的新建门店申请。待审核记录都是 orgType 字段上线后才产生的新数据，
+      // 不存在 stores 集合那种"历史门店字段缺失"的兼容包袱，直接精确匹配/排除
+      // 'yuhuazhai' 即可，不需要 buildOrgTypeCondition 那套空值兼容分支
+      if (this.data.orgTypeFilter === 'yuhuazhai') {
+        where.orgType = 'yuhuazhai';
+      } else if (this.data.orgTypeFilter === 'general') {
+        where.orgType = db.command.neq('yuhuazhai');
+      }
       const res = await db.collection('user_roles')
-        .where({ status: 'pending', tenantId, storeSelectionType: 'custom' })
+        .where(where)
         .orderBy('applyTime', 'desc')
         .limit(50)
         .get();
@@ -761,6 +797,19 @@ Page({
     this.setData({ creating: true });
     wx.showLoading({ title: '创建中...', mask: true });
 
+    // 🐛 根因修复（专区隔离闭环）：此前建店完全不传 orgType，新店落库后是
+    // orgType 字段缺失状态——getStoreList 的 buildOrgTypeCondition 为兼容
+    // "orgType 字段上线前的历史门店"，把"字段缺失/空字符串"也当雨花斋兼容匹配
+    // （见该函数注释），新店会同时被雨花专区与通用专区的过滤条件命中，等于
+    // 刚建好就渗透进了另一个专区。这里按本页当前所处专区（data.orgTypeFilter，
+    // 由 index.ts onGotoStoreManagement 透传）显式打标：雨花专区传 'yuhuazhai'，
+    // 通用专区传 'other'（VALID_ORG_TYPES 里代表其余通用业态的取值，与
+    // 'yuhuazhai' 严格互斥）；未带专区上下文时（理论上不会发生，兜底）不传，
+    // 保留原有的空值兼容行为，不额外引入新的判断分支
+    const orgTypeForNewStore = this.data.orgTypeFilter === 'yuhuazhai'
+      ? 'yuhuazhai'
+      : (this.data.orgTypeFilter === 'general' ? 'other' : '');
+
     try {
       const res = await callFunctionWithTimeout({
         name: 'createStore',
@@ -771,6 +820,7 @@ Page({
           province: (province || '').trim(),
           operatingStatus,
           ...(typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : {}),
+          ...(orgTypeForNewStore ? { orgType: orgTypeForNewStore } : {}),
           bindAsManager: true
         }
       });
