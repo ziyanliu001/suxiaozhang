@@ -416,6 +416,15 @@ Page({
     // 才置为 true——严禁用 tenantId 前缀猜测（见 initMinePage 根因修复注释：同一 tenantId
     // 前缀下完全可能挂着 elderly_canteen 等非雨花斋门店），初始值给最保守的 false
     isYuhuazhai: false,
+    // 🐛 根因修复（升级卡片闪烁/残留）：isYuhuazhai 的"最保守 false"初始值对
+    // "这家店是不是雨花斋"这个问题是安全默认，但对"专业版服务状态/立即开通"
+    // 这类付费推销卡片的显隐判断不安全——查询结果回来之前 isYuhuazhai 恒为
+    // false，会被误判成"已确认不是雨花斋"，导致雨花斋账号打开个人中心的
+    // 一瞬间先看到一次不该出现的推销卡片，才在 fetchStoreOrgType() 回来后
+    // 收起。这两者是"真实业态是什么"与"业态是否已查证完毕"两个独立维度，
+    // 不能用同一个 isYuhuazhai 字段的默认值兼顾——新增这个专门的"是否已查证"
+    // 信号，未就绪前一律不展示任何跟 orgType 挂钩的付费推销卡片
+    isOrgTypeResolved: false,
     // 🆕 真实机构类型原始值（stores.orgType），供公告一键套用预设文案（见
     // getNoticeMgmtTemplate）等需要区分 elderly_canteen 的场景使用——isYuhuazhai
     // 只是个二值信号，不够精确
@@ -1455,22 +1464,40 @@ Page({
   // 超管在"全国总览"视角下没有绑定具体门店，云函数会返回"您尚未绑定门店"，
   // 属于预期内的空结果，静默跳过即可，不影响其余展示
   async fetchStoreOrgType() {
-    if (!isCloudAvailable()) return;
+    if (!isCloudAvailable()) {
+      // 🐛 根因修复：见 data.isOrgTypeResolved 声明处注释——云 SDK 不可用这条
+      // 早退路径此前完全不碰 isOrgTypeResolved，永远停在初始 false，会让
+      // 跟 orgType 挂钩的付费推销卡片永久隐藏（哪怕这家店其实不是雨花斋）。
+      // 查不到就按"已查证、结果未知"处理，不无限期卡在"查证中"状态
+      this.setData({ isOrgTypeResolved: true });
+      return;
+    }
     try {
       const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'get' }
       });
       const orgType = (res && res.result && res.result.data && res.result.data.orgType) || '';
-      if (!orgType) return;
+      if (!orgType) {
+        // 🐛 根因修复：超管"全国总览"视角无绑定门店、或历史门店 orgType 字段
+        // 缺失，都会走到这个空结果分支——同样只是"查不到具体业态"，不代表
+        // "查证流程还没跑完"，必须同步标记已查证，否则这批账号会永久看不到
+        // 付费推销卡片
+        this.setData({ isOrgTypeResolved: true });
+        return;
+      }
       this.setData({
         orgType,
         isYuhuazhai: orgType === 'yuhuazhai',
+        isOrgTypeResolved: true,
         ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin)
       });
     } catch (err) {
-      // 静默失败：已有中性兜底文案在展示，不会误显示任何机构品牌标签
+      // 静默失败：已有中性兜底文案在展示，不会误显示任何机构品牌标签；
+      // 同样标记已查证（结果未知，isYuhuazhai 保持安全默认 false），避免
+      // 一次网络抖动就让推销卡片永久消失
       console.warn('[profile][fetchStoreOrgType] 查询真实机构类型失败:', err);
+      this.setData({ isOrgTypeResolved: true });
     }
   },
 

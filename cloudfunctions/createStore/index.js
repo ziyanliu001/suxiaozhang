@@ -192,7 +192,12 @@ async function reserveStoreQuota(tenantId, storeLimit) {
   // 若这期间另一个并发请求已经抢先完成了初始化，这次写入会 0 匹配落空，
   // 回落到步骤 3 按常规路径重试一次，不会出现"两次初始化互相覆盖导致计数
   // 偏小、变相放大配额"的问题
-  const actualCountRes = await db.collection('stores').where({ tenantId }).count();
+  // 🌸 商业策略例外：见本函数上方 reserveStoreQuota 调用处 isYuhuazhaiNewStore
+  // 注释——currentStoreCount 现在的语义收窄为"仅统计非雨花斋门店"，这条首次
+  // 迁移初始化同步排除 orgType==='yuhuazhai'，不把存量雨花斋门店计入新初始化
+  // 出来的计数（不影响此前已经初始化过、可能仍含历史雨花斋计数的老记录，
+  // 那属于已知的一次性历史数据口径差异）
+  const actualCountRes = await db.collection('stores').where({ tenantId, orgType: _.neq('yuhuazhai') }).count();
   await db.collection('tenants').where({
     _id: tenantId,
     currentStoreCount: _.exists(false)
@@ -318,25 +323,37 @@ exports.main = async (event) => {
       }
     }
 
+    // 🌸 商业策略例外（docs/BUSINESS_MODEL.md 已回写，与 statistics.ts 雨花斋
+    // Excel 导出免拦截、profile.wxml 隐藏升级卡片同一次公益扶持决策）：新建
+    // 雨花斋门店（orgType==='yuhuazhai'）完全不占用、也不检查门店数量配额，
+    // 彻底跳过下面的 reserveStoreQuota。orgType 是门店级字段，同一机构下可能
+    // 混合雨花斋与商业门店，currentStoreCount 现在的语义收窄为"仅统计非雨花斋
+    // 门店"——存量已计入的历史雨花斋门店不会自动从这个计数里扣除，属于已知的
+    // 一次性历史数据口径差异，需要时另行走人工核对/校正，不在这次改动里做
+    // 批量数据迁移
+    const isYuhuazhaiNewStore = finalOrgType === 'yuhuazhai';
+
     // 3. 并发安全的配额占用：用 tenants.currentStoreCount 做原子条件自增（CAS）
     // 而不是"先 count() 查询、再单独 insert"——后者存在 TOCTOU 竞态，两个并发
     // 建店请求都读到"未满配额"就都会通过校验，最终双双插入导致超额。
     // where 条件（currentStoreCount < storeLimit）与 inc(1) 操作在同一次
     // update() 里原子执行，是 MongoDB 单文档写操作天然具备的原子性保证，不需要
     // 额外的分布式锁；若这次 update 因为条件不满足而 0 匹配，代表配额确实已满。
-    const reserved = await reserveStoreQuota(tenantId, storeLimit);
-    if (!reserved) {
-      // 🆕 errorCode：与 checkTenantPermission/getNationalDashboard 的
-      // PLAN_UPGRADE_REQUIRED 同一套约定，供前端精确识别"这次失败是套餐配额
-      // 问题"，从而弹出可操作的升级引导弹窗，而不是把这条 error 文案当成普通
-      // 建店失败原样吐司了事
-      const currentCountRes = await db.collection('tenants').doc(tenantId).field({ currentStoreCount: true }).get().catch(() => null);
-      const currentCount = (currentCountRes && currentCountRes.data && currentCountRes.data.currentStoreCount) || storeLimit;
-      return {
-        success: false,
-        error: `当前机构套餐门店额度已满(${currentCount}/${storeLimit})，请扩容或升级`,
-        errorCode: 'STORE_LIMIT_REACHED'
-      };
+    if (!isYuhuazhaiNewStore) {
+      const reserved = await reserveStoreQuota(tenantId, storeLimit);
+      if (!reserved) {
+        // 🆕 errorCode：与 checkTenantPermission/getNationalDashboard 的
+        // PLAN_UPGRADE_REQUIRED 同一套约定，供前端精确识别"这次失败是套餐配额
+        // 问题"，从而弹出可操作的升级引导弹窗，而不是把这条 error 文案当成普通
+        // 建店失败原样吐司了事
+        const currentCountRes = await db.collection('tenants').doc(tenantId).field({ currentStoreCount: true }).get().catch(() => null);
+        const currentCount = (currentCountRes && currentCountRes.data && currentCountRes.data.currentStoreCount) || storeLimit;
+        return {
+          success: false,
+          error: `当前机构套餐门店额度已满(${currentCount}/${storeLimit})，请扩容或升级`,
+          errorCode: 'STORE_LIMIT_REACHED'
+        };
+      }
     }
 
     // 4-6. 建店 + bindAsManager 回写 + 默认账目模板预装，三步一个事务，失败整体回滚
@@ -411,8 +428,12 @@ exports.main = async (event) => {
     } catch (txErr) {
       await transaction.rollback();
       // 🛡️ 门店没能真正建成，归还上面已经原子占用的一个配额名额，避免配额
-      // 被永久性泄漏（占了名额、门店却没建出来）
-      await releaseStoreQuota(tenantId);
+      // 被永久性泄漏（占了名额、门店却没建出来）——雨花斋门店从一开始就没有
+      // 占用过配额（见上方 isYuhuazhaiNewStore 分支），这里不能无条件归还，
+      // 否则会把机构商业门店的真实计数错误地扣减 1
+      if (!isYuhuazhaiNewStore) {
+        await releaseStoreQuota(tenantId);
+      }
       throw txErr;
     }
 

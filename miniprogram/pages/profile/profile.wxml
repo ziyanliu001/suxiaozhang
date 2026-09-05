@@ -351,7 +351,7 @@
          exportToExcel 的雨花斋导出免拦截同一次决策）：雨花公益食堂专区门店
          彻底隐藏这张"专业版服务状态/立即开通"推销卡片——isYuhuazhai 由
          fetchStoreOrgType() 按真实 stores.orgType 计算，不是靠猜 -->
-    <view class="pro-service-card" wx:if="{{enterpriseBuildEnabled && isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch && !isYuhuazhai}}">
+    <view class="pro-service-card" wx:if="{{enterpriseBuildEnabled && isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch && isOrgTypeResolved && !isYuhuazhai}}">
       <view class="pro-card-header">
         <text class="pro-title">👑 专业版服务状态</text>
         <text class="pro-status-badge {{subscriptionInfo.isActive ? 'active' : 'inactive'}}">
@@ -461,7 +461,7 @@
       <!-- 🌸 商业策略例外：见 .pro-service-card 同一处注释——雨花斋门店同样
            隐藏这张顶部弱化版"专业服务"卡片，不影响同一行的
            "全国数据看板/所在店铺历史数据看板"主入口 -->
-      <view class="top-advanced-secondary {{subscriptionInfo.isActive ? 'active' : ''}}" wx:if="{{enterpriseBuildEnabled && !isYuhuazhai}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
+      <view class="top-advanced-secondary {{subscriptionInfo.isActive ? 'active' : ''}}" wx:if="{{enterpriseBuildEnabled && isOrgTypeResolved && !isYuhuazhai}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
         <text class="top-advanced-secondary-icon">👑</text>
         <text class="top-advanced-secondary-title">专业服务</text>
         <text class="top-advanced-secondary-tag">{{subscriptionInfo.isActive ? '已开通' : '未开通 · 点击了解'}}</text>

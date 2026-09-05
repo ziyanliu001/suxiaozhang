@@ -320,7 +320,11 @@ exports.main = async (event) => {
         // currentStoreCount > 0 才自减，防止历史脏数据（如计数器从未被正确
         // 初始化过）被减成负数——0 匹配时静默跳过即可，下次 createStore 的
         // 惰性迁移路径会用 stores 集合的真实计数重新校准
-        if (store.tenantId) {
+        // 🌸 商业策略例外（与 createStore.js isYuhuazhaiNewStore 同一次决策）：
+        // 雨花斋门店（store.orgType==='yuhuazhai'）从一开始建店/加入时就没有
+        // 占用过配额，这里不能对它做归还自减，否则会把机构商业门店的真实
+        // 计数错误地多减 1
+        if (store.tenantId && store.orgType !== 'yuhuazhai') {
           await db.collection('tenants').where({
             _id: store.tenantId,
             currentStoreCount: _.gt(0)
@@ -359,46 +363,56 @@ exports.main = async (event) => {
           return { success: false, error: '该门店已经归属于这家机构，无需重复操作' };
         }
 
-        const targetSub = await safeGetLatestSubscription(targetTenantId);
+        // 🌸 商业策略例外（与 createStore.js isYuhuazhaiNewStore 同一次决策）：
+        // 雨花斋门店（store.orgType==='yuhuazhai'）加入机构完全不占用、也不
+        // 检查目标机构的门店数量配额
+        const isYuhuazhaiStore = store.orgType === 'yuhuazhai';
         let storeLimit = PLAN_STORE_LIMITS.basic;
-        if (targetSub) {
-          storeLimit = (targetSub.cloudQuota && targetSub.cloudQuota.storeLimit)
-            || PLAN_STORE_LIMITS[targetSub.planType]
-            || PLAN_STORE_LIMITS.basic;
-          if (targetSub.planType === 'basic') storeLimit = PLAN_STORE_LIMITS.basic;
-        }
 
-        // CAS 条件自增：currentStoreCount 未写入过（老机构/刚创建）时按 0 处理，
-        // 与 createStore.reserveStoreQuota 步骤 2 的惰性迁移是同一个问题，这里
-        // 直接内联处理（可调用方一次性场景，不额外抽 helper）
-        let reserved = false;
-        const casRes = await db.collection('tenants').where({
-          _id: targetTenantId,
-          currentStoreCount: _.lt(storeLimit)
-        }).update({ data: { currentStoreCount: _.inc(1) } });
-        if (casRes.stats.updated === 1) {
-          reserved = true;
-        } else {
-          const actualCountRes = await db.collection('stores').where({ tenantId: targetTenantId }).count();
-          await db.collection('tenants').where({
-            _id: targetTenantId,
-            currentStoreCount: _.exists(false)
-          }).update({ data: { currentStoreCount: actualCountRes.total } }).catch(() => {});
-          const retryRes = await db.collection('tenants').where({
+        if (!isYuhuazhaiStore) {
+          const targetSub = await safeGetLatestSubscription(targetTenantId);
+          if (targetSub) {
+            storeLimit = (targetSub.cloudQuota && targetSub.cloudQuota.storeLimit)
+              || PLAN_STORE_LIMITS[targetSub.planType]
+              || PLAN_STORE_LIMITS.basic;
+            if (targetSub.planType === 'basic') storeLimit = PLAN_STORE_LIMITS.basic;
+          }
+
+          // CAS 条件自增：currentStoreCount 未写入过（老机构/刚创建）时按 0 处理，
+          // 与 createStore.reserveStoreQuota 步骤 2 的惰性迁移是同一个问题，这里
+          // 直接内联处理（可调用方一次性场景，不额外抽 helper）
+          let reserved = false;
+          const casRes = await db.collection('tenants').where({
             _id: targetTenantId,
             currentStoreCount: _.lt(storeLimit)
           }).update({ data: { currentStoreCount: _.inc(1) } });
-          reserved = retryRes.stats.updated === 1;
-        }
+          if (casRes.stats.updated === 1) {
+            reserved = true;
+          } else {
+            // 🌸 商业策略例外：见上方 isYuhuazhaiStore 注释——首次迁移初始化
+            // 同步排除雨花斋门店，保持 currentStoreCount "仅统计非雨花斋门店"
+            // 的语义一致
+            const actualCountRes = await db.collection('stores').where({ tenantId: targetTenantId, orgType: _.neq('yuhuazhai') }).count();
+            await db.collection('tenants').where({
+              _id: targetTenantId,
+              currentStoreCount: _.exists(false)
+            }).update({ data: { currentStoreCount: actualCountRes.total } }).catch(() => {});
+            const retryRes = await db.collection('tenants').where({
+              _id: targetTenantId,
+              currentStoreCount: _.lt(storeLimit)
+            }).update({ data: { currentStoreCount: _.inc(1) } });
+            reserved = retryRes.stats.updated === 1;
+          }
 
-        if (!reserved) {
-          const currentCountRes = await db.collection('tenants').doc(targetTenantId).field({ currentStoreCount: true }).get().catch(() => null);
-          const currentCount = (currentCountRes && currentCountRes.data && currentCountRes.data.currentStoreCount) || storeLimit;
-          return {
-            success: false,
-            error: `当前机构套餐门店额度已满(${currentCount}/${storeLimit})，请扩容或升级`,
-            errorCode: 'STORE_LIMIT_REACHED'
-          };
+          if (!reserved) {
+            const currentCountRes = await db.collection('tenants').doc(targetTenantId).field({ currentStoreCount: true }).get().catch(() => null);
+            const currentCount = (currentCountRes && currentCountRes.data && currentCountRes.data.currentStoreCount) || storeLimit;
+            return {
+              success: false,
+              error: `当前机构套餐门店额度已满(${currentCount}/${storeLimit})，请扩容或升级`,
+              errorCode: 'STORE_LIMIT_REACHED'
+            };
+          }
         }
 
         try {
@@ -415,15 +429,19 @@ exports.main = async (event) => {
             }
           });
         } catch (err) {
-          // 🛡️ 门店没能真正改写归属，归还刚占用的配额名额
-          await db.collection('tenants').doc(targetTenantId).update({
-            data: { currentStoreCount: _.inc(-1) }
-          }).catch(() => {});
+          // 🛡️ 门店没能真正改写归属，归还刚占用的配额名额——雨花斋门店没有
+          // 占用过，不能归还
+          if (!isYuhuazhaiStore) {
+            await db.collection('tenants').doc(targetTenantId).update({
+              data: { currentStoreCount: _.inc(-1) }
+            }).catch(() => {});
+          }
           throw err;
         }
 
-        // 归还门店在原机构占用的名额（若此前确实挂在某个机构下）
-        if (store.tenantId) {
+        // 归还门店在原机构占用的名额（若此前确实挂在某个机构下）——同样跳过
+        // 雨花斋门店，它在原机构下也从未被计入过 currentStoreCount
+        if (store.tenantId && !isYuhuazhaiStore) {
           await db.collection('tenants').where({
             _id: store.tenantId,
             currentStoreCount: _.gt(0)

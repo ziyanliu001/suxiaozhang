@@ -156,7 +156,9 @@ async function reserveStoreQuota(tenantId, storeLimit) {
   }).update({ data: { currentStoreCount: _.inc(1) } });
   if (casRes.stats.updated === 1) return true;
 
-  const actualCountRes = await db.collection('stores').where({ tenantId }).count();
+  // 🌸 商业策略例外：见文件头 resolveOrCreateStore isYuhuazhaiNewStore 注释——
+  // currentStoreCount 语义收窄为"仅统计非雨花斋门店"，首次迁移初始化同步排除
+  const actualCountRes = await db.collection('stores').where({ tenantId, orgType: _.neq('yuhuazhai') }).count();
   await db.collection('tenants').where({
     _id: tenantId,
     currentStoreCount: _.exists(false)
@@ -176,7 +178,11 @@ async function releaseStoreQuota(tenantId) {
   }).catch((err) => console.error('[processRoleAudit] 配额归还失败（需要人工核对 tenants.currentStoreCount）:', tenantId, err));
 }
 
-async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
+// 🌸 商业策略例外（docs/BUSINESS_MODEL.md 已回写，与 createStore.js 同一处
+// isYuhuazhaiNewStore 注释同一次决策）：orgType 参数供本函数判断是否豁免
+// 门店数量配额——新建雨花斋门店（orgType==='yuhuazhai'）完全跳过下面的
+// reserveStoreQuota，不占用、不检查配额
+async function resolveOrCreateStore(tenantId, storeName, operatorOpenId, orgType) {
   const existingRes = await db.collection('stores').where({ tenantId, storeName }).limit(1).get();
   if (existingRes.data && existingRes.data.length > 0) {
     const existing = existingRes.data[0];
@@ -220,10 +226,14 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
 
   // 🔒 并发安全的配额占用：与 createStore 云函数同一套 CAS 计数器（见文件头
   // reserveStoreQuota 注释），不再用"先 count() 查询、再单独 insert"这种存在
-  // TOCTOU 竞态的写法
-  const reserved = await reserveStoreQuota(tenantId, storeLimit);
-  if (!reserved) {
-    throw new Error(`当前机构套餐门店配额已满（上限 ${storeLimit} 家），请升级套餐或购买扩容包`);
+  // TOCTOU 竞态的写法。雨花斋门店（见本函数头部 isYuhuazhaiNewStore 注释）
+  // 完全跳过这一步，不占用、也不受配额已满校验的约束
+  const isYuhuazhaiNewStore = orgType === 'yuhuazhai';
+  if (!isYuhuazhaiNewStore) {
+    const reserved = await reserveStoreQuota(tenantId, storeLimit);
+    if (!reserved) {
+      throw new Error(`当前机构套餐门店配额已满（上限 ${storeLimit} 家），请升级套餐或购买扩容包`);
+    }
   }
 
   let createRes;
@@ -238,8 +248,11 @@ async function resolveOrCreateStore(tenantId, storeName, operatorOpenId) {
       }
     });
   } catch (err) {
-    // 🛡️ 门店没能真正建成，归还上面已经原子占用的一个配额名额
-    await releaseStoreQuota(tenantId);
+    // 🛡️ 门店没能真正建成，归还上面已经原子占用的一个配额名额——雨花斋门店
+    // 从一开始就没有占用过配额，不能无条件归还，否则会错误扣减商业门店计数
+    if (!isYuhuazhaiNewStore) {
+      await releaseStoreQuota(tenantId);
+    }
     throw err;
   }
 
@@ -400,7 +413,7 @@ async function submitRoleApply(event, OPENID) {
 
       let resolved;
       try {
-        resolved = await resolveOrCreateStore(resolvedTenantId, newStoreName, OPENID);
+        resolved = await resolveOrCreateStore(resolvedTenantId, newStoreName, OPENID, docData.orgType);
       } catch (quotaErr) {
         return { success: false, error: quotaErr.message || '建店失败' };
       }
@@ -1122,7 +1135,7 @@ exports.main = async (event, context) => {
       }
 
       try {
-        const resolved = await resolveOrCreateStore(auditorTenantId, customName, OPENID);
+        const resolved = await resolveOrCreateStore(auditorTenantId, customName, OPENID, applyData.orgType);
         targetStoreId = resolved.storeId;
         targetStoreName = resolved.storeName;
 
