@@ -416,6 +416,15 @@ Page({
     // 才置为 true——严禁用 tenantId 前缀猜测（见 initMinePage 根因修复注释：同一 tenantId
     // 前缀下完全可能挂着 elderly_canteen 等非雨花斋门店），初始值给最保守的 false
     isYuhuazhai: false,
+    // 🐛 根因修复（阳善栏"闪现后消失"）：initMinePage() 每次 onShow 都会把
+    // isYuhuazhai 无条件重置为 false（见本文件 1314 行"从根上不可靠"注释），
+    // 再等 fetchStoreOrgType() 网络回来才纠正为 true——如果 sunshine-marquee-bar
+    // 直接绑 isYuhuazhai，雨花斋账号每次切回"我的"tab 都会先经历一次"消失→
+    // 几百毫秒后重新出现"的闪烁。sunshineMarqueeVisible 是单向锁存信号：只在
+    // fetchStoreOrgType() 确认为雨花斋时置 true，此后本页面实例生命周期内不再
+    // 被重置回 false（onShow 触发的 initMinePage() 不会碰它），一旦亮起就不再
+    // 因为角色重新拉取的短暂窗口而消失；非雨花斋账号里恒为 false，不受影响
+    sunshineMarqueeVisible: false,
     // 🐛 根因修复（大家长/财务预览视角下升级卡片依然顽固展示）：「专业版服务
     // 状态/立即开通」两张售卖卡片唯一认这一个字段，不再直接绑 !isYuhuazhai——
     // isYuhuazhai 的"最保守 false"初始值对"这家店是不是雨花斋"这个问题是安全
@@ -1493,6 +1502,10 @@ Page({
       this.setData({
         isYuhuazhai,
         shouldShowProCards: !isYuhuazhai,
+        // 🐛 单向锁存：只在确认为雨花斋时置 true，绝不在这里显式写 false——
+        // 见 data 声明处 sunshineMarqueeVisible 注释，避免每次 onShow 重新
+        // 查询期间阳善栏闪烁消失
+        ...(isYuhuazhai ? { sunshineMarqueeVisible: true } : {}),
         ...(orgType ? { orgType, ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin) } : {})
       });
     } catch (err) {

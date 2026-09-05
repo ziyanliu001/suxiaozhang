@@ -144,10 +144,14 @@
          善行，故用 deedText（已在 profile.ts 拼好文案）而非固定"随喜 ¥xx"，
          避免非善款记录被误标成随喜 0 元；yangShanList 为空时（本店从未有过任何
          记录）wx:else 展示默认祝福文案兜底，本节点始终有内容可展示。⚠️ 仅雨花斋
-         业态展示（wx:if isYuhuazhai）——"阳善"是雨花斋语境下的专属术语，与同页
-         <yangshan-wall> 对所有业态展示（换文案为"爱心/志愿"）不是同一约定，
-         二者从这里起分道，不要误合并 -->
-    <view class="sunshine-marquee-bar" wx:if="{{isYuhuazhai}}">
+         业态展示——"阳善"是雨花斋语境下的专属术语，与同页 <yangshan-wall> 对
+         所有业态展示（换文案为"爱心/志愿"）不是同一约定，二者从这里起分道，
+         不要误合并。绑定 sunshineMarqueeVisible 而不是直接绑 isYuhuazhai：
+         后者每次 onShow 触发 initMinePage() 都会先重置为 false 再等网络查询
+         纠正，直绑会导致本模块每次切回"我的"tab 都闪烁消失再重新出现；
+         sunshineMarqueeVisible 是单向锁存（见 profile.ts fetchStoreOrgType()
+         注释），一旦确认是雨花斋就不再因为角色重新拉取而消失 -->
+    <view class="sunshine-marquee-bar" wx:if="{{sunshineMarqueeVisible}}">
       <view class="sunshine-tag">
         <text class="sunshine-icon">🏵️</text>
         <text class="sunshine-tag-title">阳善</text>

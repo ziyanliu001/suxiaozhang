@@ -35,7 +35,18 @@ const QUERY_LIMIT = 2000;
 // 已核实过的具体记录，不引入通用的"门店改名自动追溯"机制（那需要专门的门店改名
 // 历史表设计，超出本次修复范围，且没有更多真实改名案例前不必抽象）
 const LEGACY_SHOP_NAME_ALIASES = {
-  '8e9ed36b6a77084506c0fe6c659304f9': ['海沧区雨花斋']
+  '8e9ed36b6a77084506c0fe6c659304f9': ['海沧区雨花斋', '海沧雨花斋', '厦门海沧雨花斋', '嵩屿雨花斋']
+};
+
+// 🐛（2026-09-06 补充）人工历史录入的店名写法变体不止上面精确枚举的几种，穷举
+// 不完——给这一家已核实过的具体门店额外加一条"店名包含关键词"的模糊兜底。
+// 刻意不做成对所有门店生效的通用机制：'海沧'是厦门一个行政区名，其他门店店名
+// 恰好也带这两个字完全可能，全局关键词模糊匹配 shopName 有把别的门店历史记录
+// 误归集进来的跨店风险（违反 tenantId/storeId 隔离铁律）。这里用 db.RegExp 时
+// 仍然叠加在 storeId 字段缺失（孤儿记录）这个前提之上——不会把"其他门店有真实
+// storeId、只是店名恰好也带'海沧'"的记录误捞进来，只补"这一家店"的孤儿记录
+const LEGACY_SHOP_NAME_KEYWORD_ALIASES = {
+  '8e9ed36b6a77084506c0fe6c659304f9': '海沧'
 };
 
 const YEAR_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -187,12 +198,23 @@ exports.main = async (event) => {
     // 不是同一套逻辑，那边能找到的孤儿记录，这里的纯数据库查询天然找不到，
     // 表现为"全国大屏能看到这笔善行，单店阳光账本却看不到"。这里补上同一种
     // 兜底：storeId 精确匹配 或者（storeId 字段缺失 且 shopName 命中"本店当前
-    // 名称 + 已知历史曾用名"任意一个）都算命中——只在 storeName 已知时追加这条
-    // or 分支，避免 storeName 查询失败（见上方 try/catch）时误伤查询本身。
-    // 历史曾用名清单见 LEGACY_SHOP_NAME_ALIASES（目前只有一条已核实的具体记录）
+    // 名称 / 已知历史曾用名精确列表 / 已知关键词模糊匹配"三者之一）都算命中。
+    // 历史曾用名/关键词清单见 LEGACY_SHOP_NAME_ALIASES / LEGACY_SHOP_NAME_KEYWORD_ALIASES
+    // （目前只有一家已核实过的具体门店），两者都与 storeName 是否查询成功解耦——
+    // 即便 storeName 查询失败（见上方 try/catch），这家店配置好的曾用名/关键词
+    // 兜底依然生效，不会因为查不到当前名称就整体失效
     const legacyShopNames = LEGACY_SHOP_NAME_ALIASES[storeId] || [];
-    const storeIdMatchCondition = storeName
-      ? _.or([{ storeId }, _.and([{ storeId: _.exists(false) }, { shopName: _.in([storeName, ...legacyShopNames]) }])])
+    const legacyKeyword = LEGACY_SHOP_NAME_KEYWORD_ALIASES[storeId] || '';
+    const currentAndLegacyNames = storeName ? [storeName, ...legacyShopNames] : legacyShopNames;
+    const orphanShopNameConditions = [];
+    if (currentAndLegacyNames.length > 0) {
+      orphanShopNameConditions.push(_.and([{ storeId: _.exists(false) }, { shopName: _.in(currentAndLegacyNames) }]));
+    }
+    if (legacyKeyword) {
+      orphanShopNameConditions.push(_.and([{ storeId: _.exists(false) }, { shopName: db.RegExp({ regexp: legacyKeyword, options: 'i' }) }]));
+    }
+    const storeIdMatchCondition = orphanShopNameConditions.length > 0
+      ? _.or([{ storeId }, ...orphanShopNameConditions])
       : { storeId };
     const recordRes = await db.collection('report_logs')
       .where(_.and([
