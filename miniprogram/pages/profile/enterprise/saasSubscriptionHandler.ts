@@ -135,6 +135,20 @@ export const saasSubscriptionHandlers = {
     const isPerpetual = isPerpetualPlan(result.originalPlanType, result.isLifetimeGrant);
 
     this.setData({
+      // 🐛 根因修复（升级弹窗顶部机构名称错误/写死）：见 WXML
+      // {{currentTenantName || currentStoreName || '我的机构'}} 绑定——此前
+      // currentTenantName 只由 fetchCurrentTenantName() 写入，而该方法明确
+      // 排除了 super_admin/platform_admin（见其头部注释"超管/平台管理员不
+      // 调用本方法"），导致这两类账号打开本弹窗时 currentTenantName 永远是
+      // 空字符串，退回展示 currentStoreName——一个跟"当前订阅所属机构"完全
+      // 无关、且可能是切工作空间/切店前遗留的旧字段，表现为"通用工作空间下
+      // 却显示雨花斋（全国总览机构）"这类张冠李戴。本方法本就在调用同一个
+      // checkTenantPermission（已按调用者真实 tenantId 反查 tenants.name，
+      // 见该云函数），这里顺带把 tenantName 一并写入，不新增云调用，且不受
+      // fetchCurrentTenantName() 的角色限制影响——每次打开弹窗都会重新调用
+      // 本方法，天然保证展示的是当前账号真实所属机构，不会残留旧工作空间的
+      // 机构名
+      currentTenantName: result.tenantName || this.data.currentTenantName,
       subscriptionInfo: {
         planType: result.planType,
         planLabel: PLAN_LABELS[result.planType] || result.planType,

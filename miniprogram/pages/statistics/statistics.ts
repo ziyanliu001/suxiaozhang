@@ -1753,6 +1753,28 @@ Page({
     }
   },
 
+  // 🌸 商业策略例外配套：见 exportToExcel 调用处注释——现查"当前选中门店"的
+  // 真实 orgType，判断是否命中雨花公益专区导出免拦截。不复用 this.data.storeProfile
+  // 缓存——那份缓存没有记录"是为哪个 shopName 查的"，切店后到导出这段时间窗口
+  // 里存在读到上一家门店缓存的风险，付费墙这类涉及商业收费边界的判断必须现查，
+  // 不能省这一次云调用。"全部门店"聚合视图没有唯一门店，直接返回 false（不豁免，
+  // 走原有专业版拦截），失败时同样按不豁免处理（fail-closed，不能因为查询异常
+  // 就误放行本该收费的功能）
+  async resolveIsYuhuazhaiStore(): Promise<boolean> {
+    if (this.data.isAllStoresMode || !this.data.shopName) return false;
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageStoreProfile',
+        data: { action: 'get', storeName: this.data.shopName }
+      });
+      const result = res?.result;
+      return !!(result && result.success && result.data && result.data.orgType === 'yuhuazhai');
+    } catch (err) {
+      console.warn('[resolveIsYuhuazhaiStore] 查询门店业态失败，按非雨花斋处理（不豁免付费拦截）:', err);
+      return false;
+    }
+  },
+
   // 🆕 SWR 快照读取：命中且未过期、版本匹配时直接渲染，返回 true；否则不做
   // 任何事情，返回 false 交由调用方走原有的 loading 骨架屏路径。快照只覆盖
   // "首屏展示"这一份数据，不包含 nationalDashboardLoading/nationalDashboardError
@@ -3647,16 +3669,26 @@ Page({
       return;
     }
 
+    // 🌸 商业策略例外（docs/BUSINESS_MODEL.md 已回写）：雨花公益专区门店导出
+    // 财务审计表免拦截，直接放行——公益扶持策略，与"通用素食"商户继续走专业版
+    // 付费墙区分开。orgType 是门店级字段（同一租户下可能混合多种业态，见
+    // CLAUDE.md 多租户隔离一节），必须按"当前选中的这一家门店"现查，不能按
+    // 租户或页面专区一刀切；"全部门店"聚合导出没有唯一门店可判断 orgType，
+    // 不适用这条豁免，仍走下面的专业版拦截
+    const isYuhuazhaiStore = await this.resolveIsYuhuazhaiStore();
+
     // 🔐 Excel 批量导出为专业版专属功能：这是纯前端拦截——exportAccountExcel
     // 云函数本身没有加同款服务端硬校验，因为 performExcelExport 云调用失败时
     // 会自动降级走本地 CSV（exportLocalCSV），如果只在云函数里拒绝会被这条
     // 降级路径悄悄绕过，要彻底堵住还需要额外区分"云端主动拒绝"与"云端故障"
     // 两种失败、且让降级逻辑认识这个新错误码——这部分改动本次不做，此处的前端
     // 拦截是当前唯一的把关点
-    const permission = await checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT);
-    if (!permission.allowed) {
-      this.onOpenPlanUpgradeModal('Excel 报表导出');
-      return;
+    if (!isYuhuazhaiStore) {
+      const permission = await checkTenantPermission(FEATURE_KEYS.EXCEL_EXPORT);
+      if (!permission.allowed) {
+        this.onOpenPlanUpgradeModal('Excel 报表导出');
+        return;
+      }
     }
 
     this.setData({ isExportPreviewLoading: true });
