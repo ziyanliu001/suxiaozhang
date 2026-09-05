@@ -955,7 +955,16 @@ exports.main = async (event, context) => {
       const diners = parseInt(log.diningCount || log.diners || 0, 10);
       const income = parseFloat(log.income || log.loveIncome || log.totalDonation || 0) || 0;
       const expense = parseFloat(log.expense || log.todayExpense || log.expenseAmount || 0) || 0;
-      const dailyExpense = parseFloat(log.dailyExpense || log.ingredientCost || log.dailyIngredientText || 0) || 0;
+      // 🐛 根因修复（单餐成本恒显示"暂无支出"）：dataService.ts saveReport() 唯一
+      // 写入入口实际落库的字段名是 dailyExpenseTotal（每日食材/日常支出合计），
+      // 这里此前读的 log.dailyExpense/log.ingredientCost/log.dailyIngredientText
+      // 三个字段名在 report_logs 里从未真正存在过——entry.ingredientExpense 因此
+      // 恒为 0，前端 formatNationalMatrixData() 的 costPerMealStr 计算链路
+      // （foodExpense||dailyExpenseTotal||ingredientExpense，见该函数注释）
+      // 实际上只有 ingredientExpense 这一个字段会被真正赋值，取到的却永远是 0，
+      // 全站所有门店的"单餐成本"列因此都会误判成"暂无支出"，不是只有本次
+      // 遇到的这一家门店才有问题
+      const dailyExpense = parseFloat(log.dailyExpenseTotal || 0) || 0;
 
       nationalTotalDiners += diners;
       nationalTotalIncome += income;
