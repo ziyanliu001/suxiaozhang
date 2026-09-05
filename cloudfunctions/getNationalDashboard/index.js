@@ -490,6 +490,17 @@ exports.main = async (event, context) => {
       allStores = allStores.filter(s => s.orgType === requestedOrgType);
     }
 
+    // 🌸 商业策略例外（docs/BUSINESS_MODEL.md 已回写）：雨花斋专区大屏的
+    // 防篡改存证验真徽章（auditProofSummary，见下方计算处）是"查看类"公信力
+    // 展示，不是深度功能，按 CLAUDE.md/BUSINESS_MODEL.md 一贯原则本就不该
+    // 挂订阅套餐门槛——与"多店合并导出"（canExportNationalExcel）/"调拨引擎"
+    // （canUseRebalanceEngine）这两项真正的深度功能严格区分，不因为这条豁免
+    // 就连带放开那两项。这里在 subscriptionQuota 已经按套餐算好默认值之后
+    // 单独覆盖这一个字段，不改动上面 isAdvancedPlan 的判定逻辑本身
+    if (requestedOrgType === 'yuhuazhai') {
+      subscriptionQuota.features.canAccessAuditProof = true;
+    }
+
     // 🏮 品牌矩阵筛选（platformFamily）：与 orgType 筛选互斥——选了矩阵就按 platformFamily
     // 过滤，覆盖旗下所有 orgType（如"同心慈善会矩阵"涵盖 tongxin_children + tongxin_cancer_care）。
     // orgType 已经过滤过则跳过（两者不叠加，避免结果集为空）。

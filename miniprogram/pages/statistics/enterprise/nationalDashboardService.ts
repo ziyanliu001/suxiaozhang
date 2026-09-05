@@ -161,14 +161,20 @@ export const nationalDashboardHandlers = {
       // 传参，服务端 getNationalDashboard 会在"已确认属于本机构"的门店集合内做
       // 子集收窄，不传或 filterMode='national' 时行为与升级前完全一致
       const filterMode = this.data.nationalFilterMode || 'national';
-      // 🐛 根因修复（精简冗余分类层级）：工作空间进入统计页时早已锁定"雨花公益
-      // 食堂专区"这一个业务范围，顶部的平台分类 Tab（全部平台/雨花斋/助老
-      // 食堂/义工服务站）是多余的一层——用户已经在专区内，不需要再选一次
-      // "看哪个专区"。orgType 固定传 'all'，直接呈现本机构名下的完整爱心网络
-      // 大盘，不再依赖已移除的 Tab 选择状态（原 nationalOrgTypeFilter 字段/
-      // onOrgTypeFilterChange 分类切换逻辑一并删除，见 statistics.wxml
-      // org-type-filter-scroll 移除处注释）
-      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode, orgType: 'all' };
+      // 🐛 根因修复（精简冗余分类层级，二次修正）：工作空间进入统计页时早已
+      // 锁定"雨花公益食堂专区"这一个业务范围，顶部的平台分类 Tab（全部平台/
+      // 雨花斋/助老食堂/义工服务站）是多余的一层——用户已经在专区内，不需要
+      // 再选一次"看哪个专区"（原 nationalOrgTypeFilter 字段/onOrgTypeFilterChange
+      // 分类切换逻辑一并删除，见 statistics.wxml org-type-filter-scroll 移除
+      // 处注释）。
+      // 🐛 上一版这里固定传 orgType:'all'——这个推理的隐含前提"本机构名下的
+      // 门店全都是雨花斋"只对干净的独立机构成立，对 yuhuazhai_national 这个
+      // 供缺失 tenantId 账号兜底挂靠的共享机构不成立（该机构下混有非雨花斋的
+      // 测试/调试门店）。'all' 传给 getNationalDashboard 后不在其 SUPPORTED_ORG_TYPES
+      // 白名单内会被直接判定为"不过滤"，等于没做任何 orgType 收窄，这才是
+      // 雨花专区大屏混入非雨花门店的真正原因。这条调用路径本就只从"雨花公益
+      // 食堂专区"工作空间触发，明确传 'yuhuazhai' 才是这里真正想表达的意图
+      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode, orgType: 'yuhuazhai' };
       if (filterMode === 'region') {
         callParams.province = this.data.selectedProvince || '';
         callParams.city = this.data.selectedCity || '';
