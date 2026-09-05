@@ -2213,6 +2213,83 @@ page {
   margin-bottom: 24rpx;
 }
 
+/* === 匿名公开聚合视图（GEO 分享落地页专属，见 isPublicAggregateView） === */
+.public-aggregate-container {
+  padding: 24rpx;
+}
+
+.public-aggregate-loading,
+.public-aggregate-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 40rpx;
+  text-align: center;
+  color: #969799;
+  font-size: 26rpx;
+}
+
+.public-aggregate-error .error-text {
+  color: #E53935;
+  margin-bottom: 24rpx;
+}
+
+.public-aggregate-card {
+  background: linear-gradient(135deg, #2B8A3E, #1C7ED6);
+  border-radius: 24rpx;
+  padding: 40rpx 32rpx;
+  color: #fff;
+}
+
+.public-aggregate-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  text-align: center;
+}
+
+.public-aggregate-subtitle {
+  display: block;
+  font-size: 22rpx;
+  opacity: 0.85;
+  text-align: center;
+  margin-top: 12rpx;
+  line-height: 1.5;
+}
+
+.public-aggregate-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 36rpx;
+}
+
+.public-aggregate-item {
+  width: 33.33%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 28rpx;
+}
+
+.public-aggregate-val {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.public-aggregate-lbl {
+  font-size: 20rpx;
+  opacity: 0.85;
+  margin-top: 8rpx;
+}
+
+.public-aggregate-footnote {
+  display: block;
+  font-size: 20rpx;
+  opacity: 0.75;
+  text-align: center;
+  margin-top: 8rpx;
+}
+
 /* 合规展示声明 */
 .compliance-disclaimer {
   padding: 24rpx 32rpx 48rpx;

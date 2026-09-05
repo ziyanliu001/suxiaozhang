@@ -24,7 +24,9 @@
   </view>
 
   <view class="content-area" style="padding-top: {{contentTop}}px;">
-    <view class="ui-card-wrapper period-control-card">
+    <!-- 🌍 匿名公开聚合视图（isPublicAggregateView）没有"当前门店"这个概念，
+         下面这张单店周期控制卡片对完全没有归属机构的访客没有意义，直接跳过 -->
+    <view class="ui-card-wrapper period-control-card" wx:if="{{!isPublicAggregateView}}">
       <!-- 🐛 根因修复：全国大屏模式下此前仍然常驻展示"当前统计门店：xxx"这张
            单店卡片（只有下方周期 Tab 那一段被隐藏），与页面下方真正的全国大屏
            内容语义脱节——用户在全国总览视角还看着一行单店信息，容易误以为
@@ -166,6 +168,47 @@
       </view>
       <button class="btn-custom-query" wx:if="{{currentTab === 'custom'}}" bindtap="loadCustomStatistics">查询统计</button>
       </block>
+    </view>
+  </view>
+
+  <!-- 🌍（docs/GEO_STRATEGY.md 第 4.2 节已知风险的修复）完全匿名/未加入任何机构
+       的访客专属视图：与下方 nationalDashboardView.wxml 那套"本机构大屏"彻底
+       独立，只在 isPublicAggregateView 为真时渲染（见 loadPublicAggregateDashboard
+       调用点注释），不共享 showNationalDashboard/nationalData 任何状态 -->
+  <view class="public-aggregate-container" wx:if="{{isPublicAggregateView}}">
+    <view class="public-aggregate-loading" wx:if="{{publicAggregateLoading && !publicAggregateData}}">
+      <text>爱心数据加载中...</text>
+    </view>
+    <view class="public-aggregate-error" wx:elif="{{publicAggregateError}}">
+      <text class="error-text">{{publicAggregateError}}</text>
+      <button class="btn-empty-action" hover-class="ui-hover" bindtap="loadPublicAggregateDashboard">重试</button>
+    </view>
+    <view class="public-aggregate-card" wx:elif="{{publicAggregateData}}">
+      <view class="public-aggregate-title">🌍 全网爱心公信力总览</view>
+      <view class="public-aggregate-subtitle">素小账连接的公益食堂 / 助老餐厅 / 义工站点，账目数据接受公众监督</view>
+      <view class="public-aggregate-grid">
+        <view class="public-aggregate-item">
+          <text class="public-aggregate-val">{{publicAggregateData.nationalTotalDinersDisplay}}</text>
+          <text class="public-aggregate-lbl">累计服务人次</text>
+        </view>
+        <view class="public-aggregate-item">
+          <text class="public-aggregate-val">{{publicAggregateData.totalStores}}</text>
+          <text class="public-aggregate-lbl">爱心站点覆盖</text>
+        </view>
+        <view class="public-aggregate-item">
+          <text class="public-aggregate-val">{{publicAggregateData.totalOrgs}}</text>
+          <text class="public-aggregate-lbl">入驻机构数</text>
+        </view>
+        <view class="public-aggregate-item">
+          <text class="public-aggregate-val">{{publicAggregateData.nationalTotalVolunteers}}</text>
+          <text class="public-aggregate-lbl">义工到岗人次</text>
+        </view>
+        <view class="public-aggregate-item">
+          <text class="public-aggregate-val">{{publicAggregateData.nationalTotalVolunteerHours}}</text>
+          <text class="public-aggregate-lbl">义工服务工时</text>
+        </view>
+      </view>
+      <view class="public-aggregate-footnote">登录后可查看所在机构的完整账目明细与阳光账本</view>
     </view>
   </view>
 
@@ -434,7 +477,7 @@
 
   <!-- 🆕 个人视角：非管理角色（普通义工/无角色账号）专属，与「全国大屏」/「单店明细」
        完全独立——不展示任何跨门店治理/运营敏感数据，只有属于自己的护持数据 -->
-  <view class="personal-dashboard-container" wx:if="{{showPersonalView}}">
+  <view class="personal-dashboard-container" wx:if="{{showPersonalView && !isPublicAggregateView}}">
     <!-- ☀️ 阳光大盘：首页「阳光账本」跳转（?tab=sunshine）落地的第一屏，个人
          视角下与管理视角共用同一套 fetchSunshineBoardData 数据管线/卡片结构，
          只是排在个人护持数据之前——阳光账本是公开数据，与角色无关 -->

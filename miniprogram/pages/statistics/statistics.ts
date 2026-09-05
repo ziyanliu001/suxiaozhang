@@ -708,6 +708,16 @@ Page({
     // 状态显式区分"正在加载"与"加载失败"，不再用数据字段反推加载状态
     nationalDashboardLoading: false,
     nationalDashboardError: '',
+    // 🌍（docs/GEO_STRATEGY.md 第 4.2 节已知风险的修复）完全匿名/未加入任何机构
+    // 的访客专属视图：与上面 showNationalDashboard/nationalData 那套"本机构大屏"
+    // 彻底独立，绝不复用同一份状态——匿名访客没有 canViewNationalDashboard/
+    // isAllStoresMode 这些前提条件，走独立的 loadPublicAggregateDashboard()，
+    // 只展示非金额的社会影响力汇总，见该方法与 getNationalDashboard 云函数的
+    // buildPublicAggregateSummary() 注释
+    isPublicAggregateView: false,
+    publicAggregateData: null as any,
+    publicAggregateLoading: false,
+    publicAggregateError: '',
     // 📸 全网影像卷宗：来自 superAdminInsights，超管专属
     nationalMediaGallery: [] as Array<{ url: string; type: string; date: string; storeName: string; orgTypeLabel?: string; loadError?: boolean }>,
 
@@ -1046,14 +1056,18 @@ Page({
     const cachedRole = AuthService.getCachedRoleInfo();
     if (cachedRole) {
       const identity = this.resolveEffectiveStoreIdentity(cachedRole);
-      this.applyRolePermissions(this.resolveEffectiveRole(cachedRole.role), identity.storeName, identity.storeId);
+      // 🌍 status==='guest' 是 checkUserRole 云函数对"user_roles/users 两个集合都
+      // 查不到任何记录"的新用户的显式标记（见该云函数末尾兜底分支），是判断"这是
+      // 一个完全没有归属机构的匿名访客"最可靠的信号——不能用 role==='volunteer'
+      // 判断，真实机构里已批准的志工角色默认值同样是 'volunteer'
+      this.applyRolePermissions(this.resolveEffectiveRole(cachedRole.role), identity.storeName, identity.storeId, cachedRole.status === 'guest');
     }
 
     const result = await AuthService.fetchUserRole();
     if (result.success && result.roleInfo) {
       const info = result.roleInfo;
       const identity = this.resolveEffectiveStoreIdentity(info);
-      this.applyRolePermissions(this.resolveEffectiveRole(info.role), identity.storeName, identity.storeId);
+      this.applyRolePermissions(this.resolveEffectiveRole(info.role), identity.storeName, identity.storeId, info.status === 'guest');
     } else if (!cachedRole) {
       // 🛡️ 兜底：既没有缓存角色、这次网络请求又失败/未拿到角色信息（例如彻底离线），
       // applyRolePermissions() 全程不会被调用，roleReady 会永远停在 false，
@@ -1128,7 +1142,7 @@ Page({
   },
 
   // 🛡️ 三级角色权限卡口：单店财务 / 总部财务 / 超级管理员 / 志工（只读全国大屏）
-  applyRolePermissions(role: string, storeName: string, storeId: string = '') {
+  applyRolePermissions(role: string, storeName: string, storeId: string = '', isGuest: boolean = false) {
     const isSuperAdmin = role === 'super_admin';
 
     // 🐛 根因修复："超级管理员看全国大屏却渲染单店界面"，日志显示
@@ -1253,7 +1267,23 @@ Page({
       }
     }
 
-    if (showPersonalView) {
+    // 🌍（docs/GEO_STRATEGY.md 第 4.2 节已知风险的修复）完全匿名/未加入任何机构
+    // 的访客，通过分享链接携带 ?view=national 进来时，此前会无差别落进下面
+    // showPersonalView → loadPersonalDashboard() 分支（个人视角查无 openid 归属
+    // 的任何记录，界面表现为空白），"全国大屏应始终可查看"这条战略目标对他们
+    // 形同虚设。这里只加一条特例：仅当"分享深链明确要求看全国视图"且"这个账号
+    // 是 checkUserRole 显式标记的 guest（真正没有归属任何机构，不是已登录的
+    // 志工/无角色但已挂靠机构的成员）"同时成立时，才转去 loadPublicAggregateDashboard()
+    // 这条独立分支；不满足任一条件（包括真实机构里的志工哪怕自己转发了这个链接
+    // 给自己）一律走原有 showPersonalView 逻辑，不放宽任何一寸——与
+    // canViewNationalDashboard 上方注释"志工/无角色个人不再放行全国数据大屏"
+    // 的既有决策完全不冲突：那条决策针对的是"已归属某机构"的志工，这里针对的是
+    // "压根没有机构"的陌生公众，两者是不同的人群
+    const isAnonymousNationalIntent = isGuest && !!(this as any)._autoNationalIntent;
+    if (isAnonymousNationalIntent) {
+      (this as any)._autoNationalIntent = false;
+      this.loadPublicAggregateDashboard();
+    } else if (showPersonalView) {
       // 个人视角：不触碰门店选择器/全国大屏那套状态，只加载属于自己的数据
       this.loadPersonalDashboard();
     } else {
@@ -4799,5 +4829,54 @@ Page({
     } else {
       wx.switchTab({ url: '/pages/index/index' });
     }
+  },
+
+  // 🌍（docs/GEO_STRATEGY.md 第 5/6 节）此前本页没有定义 onShareAppMessage/
+  // onShareTimeline，转发时一律退回小程序全局默认分享卡片，搜一搜与外部渠道
+  // 拿不到任何有辨识度的标题——尤其是"全国大屏"这个本该面向公众转发、服务
+  // GEO 引流的场景，反而是最没有定制文案的。这里区分两种场景：
+  // 1) 正在展示全国大屏（showNationalDashboard 且数据已加载完成）：标题带上
+  //    真实的全国服务人次/覆盖站点数，强化"社会公信力"定位，path 带上
+  //    view=national 让被分享者直接落地到全国大屏（复用 onLoad 里已有的
+  //    isNationalIntent 深链逻辑），而不是落到默认的个人门店统计页；
+  // 2) 其余场景（个人/门店统计）：延续页面原有语境，不臆造具体门店的私域
+  //    数据摘要，只给一个通用但仍然体现产品定位的标题。
+  // 只用非金额类的服务人次/覆盖站点数做摘要，不把 totalIncome/totalExpense
+  // 这类财务字段写进分享文案——分享卡片是明文透传给任意接收者的，不经过
+  // sanitizeReportForVolunteer 那套角色脱敏，不应该绕开它直接把金额亮出去。
+  onShareAppMessage() {
+    const nd: any = this.data.nationalData || {};
+    if (this.data.showNationalDashboard && nd.nationalTotalDiners !== undefined) {
+      const diners = nd.nationalTotalDinersDisplay || nd.nationalTotalDiners || 0;
+      const stores = nd.totalStores || 0;
+      return {
+        title: `🌍 全国爱心公信力大屏：已服务${diners}人次，覆盖${stores}家爱心站点`,
+        path: '/pages/statistics/statistics?view=national&from=share',
+        imageUrl: ''
+      };
+    }
+
+    return {
+      title: '素小账·统计分析——让爱心账目更透明',
+      path: '/pages/statistics/statistics',
+      imageUrl: ''
+    };
+  },
+
+  onShareTimeline() {
+    const nd: any = this.data.nationalData || {};
+    if (this.data.showNationalDashboard && nd.nationalTotalDiners !== undefined) {
+      const diners = nd.nationalTotalDinersDisplay || nd.nationalTotalDiners || 0;
+      const stores = nd.totalStores || 0;
+      return {
+        title: `🌍 全国爱心公信力大屏：已服务${diners}人次，覆盖${stores}家爱心站点`,
+        query: 'view=national&from=timeline'
+      };
+    }
+
+    return {
+      title: '素小账·统计分析——让爱心账目更透明',
+      query: ''
+    };
   }
 });

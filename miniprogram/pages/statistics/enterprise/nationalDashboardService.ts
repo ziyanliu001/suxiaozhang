@@ -340,6 +340,45 @@ export const nationalDashboardHandlers = {
     }
   },
 
+  // 🌍（docs/GEO_STRATEGY.md 第 4.2 节已知风险的修复）完全匿名/未加入任何机构
+  // 的访客专属加载入口——与上面 loadNationalDashboard() 是两条彻底独立的调用
+  // 路径，故意不复用它：loadNationalDashboard() 内部一上来就卡
+  // canViewNationalDashboard/isAllStoresMode 两道只对超管/大家长放行的门槛，
+  // 匿名访客天然过不了，也不应该过（那两个前提条件背后还挂着门店选择器/
+  // 地区筛选/超管高阶面板等一整套不该暴露给陌生公众的状态）。这里只请求、
+  // 只落地 getNationalDashboard 在 tenantId 为空时新返回的 isPublicAggregate
+  // 安全子集（见该云函数 buildPublicAggregateSummary 注释），不触碰
+  // showNationalDashboard/nationalData 等"本机构大屏"状态，两套视图完全不
+  // 共享数据，避免任何一处 wx:if 判断疏漏导致互相串场
+  async loadPublicAggregateDashboard() {
+    if (this.data.publicAggregateLoading) return;
+    this.setData({ isPublicAggregateView: true, publicAggregateLoading: true, publicAggregateError: '' });
+    try {
+      const result = await callFunctionWithTimeout({ name: 'getNationalDashboard', data: {} }, NATIONAL_DASHBOARD_TIMEOUT_MS);
+      const r = result.result as any;
+      if (r && r.success && r.isPublicAggregate) {
+        const s = r.nationalSummary || {};
+        this.setData({
+          publicAggregateData: {
+            totalOrgs: s.totalOrgs || 0,
+            totalStores: s.totalStores || 0,
+            nationalTotalDinersDisplay: formatCompactNumber(s.nationalTotalDiners || 0),
+            nationalTotalVolunteers: s.nationalTotalVolunteers || 0,
+            nationalTotalVolunteerHours: s.nationalTotalVolunteerHours || 0
+          }
+        });
+      } else {
+        this.setData({ publicAggregateError: (r && r.error) || '数据加载失败，请重试' });
+      }
+    } catch (err: any) {
+      console.error('[loadPublicAggregateDashboard] 加载失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
+      this.setData({ publicAggregateError: '网络异常，请重试' });
+    } finally {
+      this.setData({ publicAggregateLoading: false });
+    }
+  },
+
   // 🆕 门店目录懒加载：地区筛选的省市级联 picker、自定义门店勾选列表都依赖这份
   // {storeId,storeName,province,city}[] 数据，复用已有的 getStoreList 云函数
   // （本就按 tenantId 隔离，见该云函数注释），只在首次用到时才请求一次，之后

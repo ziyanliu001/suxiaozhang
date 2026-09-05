@@ -222,6 +222,68 @@ function sanitizeReportForVolunteer(data, userRole) {
   return Array.isArray(data) ? data.map(maskOne) : maskOne(data);
 }
 
+// 🌍（docs/GEO_STRATEGY.md 第 4.2 节已知风险的修复）完全匿名/未加入任何机构的
+// 访客专属分支：与本文件其余"本机构大屏"逻辑是两条彻底独立的数据管线——本函数
+// 天生就要跨全平台聚合，绝不能和 tenantId 相关的任何查询共用同一套代码路径，
+// 本文件其余分支必须继续严格按 tenantId 隔离。这里只允许读到"计数/求和"这一级
+// 聚合结果，不 get() 拉取任何一条 report_logs/stores/tenants 原始文档，从数据
+// 访问层面杜绝把某个具体机构的门店名、地址、大家长/店长联系方式、捐赠人姓名、
+// 小票图片等私密明细带出到这个无鉴权可达的分支（与 getPlatformOverview 的
+// "只 count()、绝不读取记录内容"合规边界同一套设计哲学）。
+// 🛡️ 口径：只暴露非金额的"社会影响力"指标（服务人次、机构/门店覆盖、义工
+// 工时），不返回 totalIncome/totalExpense/nationalNetAccumulation 等金额汇总——
+// 这几个字段是 sanitizeReportForVolunteer() 专门对着已经登录、归属某个真实
+// 机构的志工都要脱敏隐藏的敏感字段（见 SENSITIVE_KEYS），没有理由反而对完全
+// 陌生、连角色都没有的公众原样放开，也没有任何机构单独同意过自己的经营数据
+// 被跨租户汇总对外公开。
+async function buildPublicAggregateSummary() {
+  async function safeCount(collectionQuery) {
+    try {
+      const res = await collectionQuery.count();
+      return res.total || 0;
+    } catch (err) {
+      // 集合尚不存在（全新环境）按 0 处理，与 getPlatformOverview 的 safeCount 同一口径
+      return 0;
+    }
+  }
+
+  const [totalOrgs, totalStores, sumRes] = await Promise.all([
+    safeCount(db.collection('tenants')),
+    safeCount(db.collection('stores')),
+    db.collection('report_logs')
+      .aggregate()
+      .match({ approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) })
+      .group({
+        _id: null,
+        totalDineIn: _.aggregate.sum('dineInSeniors'),
+        totalDelivery: _.aggregate.sum('deliverySeniors'),
+        totalTakeaway: _.aggregate.sum('takeawayCount'),
+        totalVolunteers: _.aggregate.sum('volunteerCount'),
+        totalVolunteerHours: _.aggregate.sum('volunteerHours')
+      })
+      .end()
+      .catch(() => ({ list: [] }))
+  ]);
+
+  const sums = (sumRes && sumRes.list && sumRes.list[0]) || {};
+  const nationalTotalDiners = (sums.totalDineIn || 0) + (sums.totalDelivery || 0) + (sums.totalTakeaway || 0);
+
+  return {
+    success: true,
+    isPublicAggregate: true,
+    tenantName: '',
+    nationalSummary: {
+      totalOrgs,
+      totalStores,
+      nationalTotalDiners,
+      nationalTotalVolunteers: Math.round(sums.totalVolunteers || 0),
+      nationalTotalVolunteerHours: Math.round((sums.totalVolunteerHours || 0) * 10) / 10
+    },
+    storeMatrix: [],
+    superAdminInsights: null
+  };
+}
+
 exports.main = async (event, context) => {
   const { OPENID } = cloud.getWXContext();
 
@@ -254,11 +316,15 @@ exports.main = async (event, context) => {
       return { success: false, error: '无权限访问本机构数据大屏' };
     }
 
-    // 🛡️ 无法解析出所属机构（游客/未分配角色账号）时直接拒绝，绝不退化为跨机构全量聚合。
-    // 此前 tenantId 为空时下面两处查询会直接变成 `{}`（无过滤条件），等于把全平台所有
-    // 机构的门店与餐报都聚合进同一张"大屏"返回给调用者，是最严重的一类跨租户数据泄露。
+    // 🛡️（2026-09-05 GEO 匿名可读性修复）无法解析出所属机构（游客/未分配角色账号）时，
+    // 不再直接拒绝——但也绝不能让下面"本机构大屏"的查询流程带着空 tenantId 继续往下走，
+    // 那会退化为 `{}`（无过滤条件），把全平台所有机构的门店与餐报聚合进同一张"大屏"
+    // 返回给调用者，是最严重的一类跨租户数据泄露。改为在这里就分流：完全匿名的访客
+    // 走 buildPublicAggregateSummary() 这条专门为跨租户聚合设计的独立安全分支（只读
+    // 计数/求和，不返回任何机构可识别信息与金额字段，见该函数头部注释），下面所有
+    // 依赖 tenantId 的查询与本次请求彻底无关
     if (!tenantId) {
-      return { success: false, error: '无法确认您所属的机构，暂不支持访问数据大屏' };
+      return await buildPublicAggregateSummary();
     }
 
     // 🆕 机构名称：供前端全国大屏顶部横幅"📊 爱心网络总览 · [机构名称]"展示，
