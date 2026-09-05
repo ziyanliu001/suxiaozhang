@@ -85,3 +85,25 @@
 - 远端推送**只允许**走已配置好的 `origin`（单一 remote 名、双 push URL：GitHub SSH `git@github.com:ziyanliu001/suxiaozhang.git` + Gitee HTTPS `https://gitee.com/zeng-qingliang/yuhua-zhushou.git`）。`git push origin master` 一条命令即完成双发，**严禁**新增指向其他托管服务、公开仓库、或权限属性未经确认的第三方 remote（2026-09-05 已移除一个冗余且缺凭证的独立 `github` HTTPS remote，不要重新添加）。
 - **严禁**任何形式的对外公开发布——不得把本仓库代码/文档复制、粘贴或推送到任何公开可访问的位置（公开 Gist、公开 Pages、未加访问控制的分享链接、聊天工具的公开频道等），`scripts/build-open-core.js` 产出的开源 Core 构建物如需对外发布，须走独立评审流程，不等同于直接公开本仓库。
 - **严禁在代码、注释、commit message 或任何文档里明文记录私钥、access token、密码、云开发密钥等凭证**。本仓库已有的既定防线：`.gitignore` 里 `private.*.key`/`*.pem`/`project.private.config.json` 三类规则专门拦截小程序上传密钥与本地私有配置——新增任何凭证类文件时，必须先补齐对应的 `.gitignore` 规则再落盘，不能先写文件再补规则（存在"补规则前那个 commit 窗口"意外提交的风险，先加规则再建文件）。一旦发现已提交的明文凭证，视为需要立即撤销/轮换该凭证的安全事件处理，删除文件/改写内容不能让已泄露的凭证重新变安全（git 历史仍会留痕）。
+  > ⚠️ **2026-09-05 发现的存量违规**：根目录 `project.private.config.json` 早于 `.gitignore` 规则落地前就已被 `git add`，规则只挡"未来新增"，不会retroactively 补挡已跟踪文件，目前该文件仍在版本库里（`git ls-files` 可见）。核实过内容本身不含真实凭证（只是 DevTools 本地调试场景配置 + 一个内部测试 `tenantId`），不构成本条"明文凭证"意义上的安全事件，但违反了本条防线的初衷，建议 `git rm --cached project.private.config.json`（只停止跟踪、不删本地文件）——因涉及改变已跟踪文件集，需用户确认后再执行。
+
+---
+
+## 6. 商业级上线准备度体检记录（2026-09-05）
+
+本节记录一轮完整的"审计 → 加固 → 回归核验"闭环，供后续排期/复盘时直接查阅，不必重新翻 commit 历史还原上下文。
+
+**审计范围与结论**：多租户隔离（`verifyTenantAccess`/角色反查模式抽查 11 个云函数，未发现可利用越权）、结算与订单状态机幂等性（发现 4 处 read-then-write 竞态）、微信合规（隐私授权配置正常；`sitemap.json` 全放行不符合"轨道一/二"分离原则）。
+
+**已落地的加固**（详见对应文件内注释，均已通过 `npm run typecheck`）：
+- `cloudfunctions/completeProductionOrder/index.js`：`tryAutoProfitSharing` 加 `profitSharingLockedAt` 字段 CAS 领单，防止并发/重试触发重复分账。
+- `cloudfunctions/processProductionRefund/index.js`：发起退款前加 `refundClaimedAt` 字段 CAS 领单，防止重复退款请求；分账冲销失败时故意不放开占位，逼人工核对。
+- `cloudfunctions/wxPayCore/lib/refundService.js` + `index.js`：`createPendingRefund` 加函数级退款锁；`getCommittedRefundedTotal` 把 `PROCESSING` 状态并入已占用退款额度校验（原来只算 `SUCCESS`，存在"旧退款未到终态又发起新退款"导致超额退款的口子）。
+- `cloudfunctions/liveFactoryCore/index.js`：`buildSettlement`/`reverseSettlement` 改用确定性 `_id`（`settle_${tenantId}_${orderId}` / `settle_reversal_${settlementId}`）+ 数据库主键唯一性兜底防重复插入；`mark_refunded` 分支改条件更新（CAS）。
+- `miniprogram/sitemap.json`：收敛为仅 `allow` 全国大屏（`pages/statistics/statistics`）与公开核验页（`subpackages/admin/pages/public-verify/index`），其余 `disallow: "*"` 兜底，详见 [`GEO_STRATEGY.md`](docs/GEO_STRATEGY.md)。
+- 「常用支出项目」大额专项分类补齐 `店铺租金`（`miniprogram/pages/index/index.ts` + 本地兜底统计关键词表 `miniprogram/utils/dataService.ts` 同步补齐 `租金` 关键词）。
+
+**已知残留风险（本轮未解决，如实标注）**：
+- "结算已完成"与"退款红冲"仍是跨函数竞速（`tryAutoProfitSharing` 写 `settled` 与 `processProductionRefund`→`reverseSettlement` 读旧状态之间没有互斥），本轮 CAS 只保证"同一操作不会被自己重复触发"，不解决两个不同操作互相抢跑的业务级竞态——这与 `processProductionRefund` 文件头一直标注的"分账已完成后再退款"残余风险是同一类问题，需要专项设计（如引入乐观锁版本号或状态机加锁范围扩大到跨函数）才能根治。
+- `PAYMENT_MOCK_MODE` 等生产环境变量清单以 [`cloudfunctions/wxPayCore/lib/payConfig.js`](cloudfunctions/wxPayCore/lib/payConfig.js) 文件头注释为唯一真源（`WXPAY_APPID`/`WXPAY_MCHID`/`WXPAY_MCH_SERIAL_NO`/`WXPAY_MCH_PRIVATE_KEY`/`WXPAY_API_V3_KEY`/`WXPAY_NOTIFY_URL`/`WXPAY_INTERNAL_TOKEN`），本文档不重复抄写以免日后再次drift；上线前额外要确认 `WXPAY_INTERNAL_TOKEN` 与 `LIVE_FACTORY_INTERNAL_TOKEN` 分别在各自的"内部调用方"云函数（前者：`createSubscriptionOrder`/`createProductionOrder`/`processProductionRefund`/`completeProductionOrder`；后者：`liveFactoryCore`/`createProductionOrder`/`processProductionRefund`）里配了同一份值，这两个令牌不在 `payConfig.js` 的校验范围内，配错不会报错、只会静默拒绝调用。
+- 敏感控制台日志扫描（前端 + 云函数）未发现明文密钥/手机号/未脱敏用户信息打印；`cloudfunctions/createSubscriptionOrder/index.js` 里有一处打印整个 `event` 对象（参数缺失分支），当前该路径的 `event` 只含 `action`/`outTradeNo`/`bizId`/`bizType`，不含 PII，风险低，可作为后续代码卫生的小优化项，不阻塞上线。
