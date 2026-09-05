@@ -1,0 +1,9 @@
+{
+  "name": "fixLegacyStoreDataNormalization",
+  "version": "1.0.0",
+  "description": "云函数：一次性数据迁移——把三源弘雨花斋历史曾用名（海沧区雨花斋等）的孤儿 report_logs 记录归一到当前 storeId/shopName",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

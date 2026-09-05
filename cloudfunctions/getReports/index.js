@@ -14,6 +14,47 @@ const _ = db.command;
 // manager/finance 处理，因此这里刻意不放开，保持"总部财务只看汇总数字，不看单店流水明细"。
 const TENANT_WIDE_ROLES = ['super_admin'];
 
+// 🐛（2026-09-06）单店历史改名兼容：与 cloudfunctions/getSunshineLedger 同一份
+// 拷贝（各云函数独立部署，无共享模块机制，需要手动同步）。三源弘雨花斋
+// （storeId 8e9ed36b6a77084506c0fe6c659304f9）历史录入用过多种写法，这些
+// 记录同时缺失 storeId 字段——本函数是"凭证与账本"页面唯一数据源，此前
+// storeId 严格精确匹配，完全捞不到这批孤儿历史记录，表现为"选中该店查全部
+// 月份仍显示暂无记录"。见下方 buildStoreIdOrAliasCondition 使用处
+const LEGACY_SHOP_NAME_ALIASES = {
+  '8e9ed36b6a77084506c0fe6c659304f9': ['海沧区雨花斋', '海沧雨花斋', '厦门海沧雨花斋', '嵩屿雨花斋']
+};
+const LEGACY_SHOP_NAME_KEYWORD_ALIASES = {
+  '8e9ed36b6a77084506c0fe6c659304f9': '海沧'
+};
+
+// 🛡️ 兜底范围与 getSunshineLedger 完全一致：storeId 精确匹配 或者（storeId
+// 字段缺失 且 shopName 命中"当前名称/已知历史曾用名精确列表/已知关键词模糊
+// 匹配"任意一个）——不会误吞其他门店有真实 storeId、只是店名恰好也带同一
+// 关键词的记录。currentStoreName 查询失败时传空字符串，只用曾用名/关键词
+// 兜底，不影响函数主流程
+async function buildStoreIdOrAliasCondition(db, _, targetStoreId) {
+  let currentStoreName = '';
+  try {
+    const storeRes = await db.collection('stores').doc(targetStoreId).get().catch(() => null);
+    currentStoreName = (storeRes && storeRes.data && storeRes.data.storeName) || '';
+  } catch (err) {
+    console.warn('[getReports] 门店名称查询失败（不影响主流程）:', err);
+  }
+  const legacyShopNames = LEGACY_SHOP_NAME_ALIASES[targetStoreId] || [];
+  const legacyKeyword = LEGACY_SHOP_NAME_KEYWORD_ALIASES[targetStoreId] || '';
+  const currentAndLegacyNames = currentStoreName ? [currentStoreName, ...legacyShopNames] : legacyShopNames;
+  const orphanConditions = [];
+  if (currentAndLegacyNames.length > 0) {
+    orphanConditions.push(_.and([{ storeId: _.exists(false) }, { shopName: _.in(currentAndLegacyNames) }]));
+  }
+  if (legacyKeyword) {
+    orphanConditions.push(_.and([{ storeId: _.exists(false) }, { shopName: db.RegExp({ regexp: legacyKeyword, options: 'i' }) }]));
+  }
+  return orphanConditions.length > 0
+    ? _.or([{ storeId: targetStoreId }, ...orphanConditions])
+    : { storeId: targetStoreId };
+}
+
 exports.main = async (event, context) => {
   const { startDate, endDate, shopName, storeId, mpAccount, limit = 100, viewMode, approvedOnly } = event;
   const { OPENID } = cloud.getWXContext();
@@ -145,9 +186,24 @@ exports.main = async (event, context) => {
       whereConditions.approvalStatus = _.in(['APPROVED', 'AUDITED_LOCKED']);
     }
 
+    // 🐛 历史改名兼容：只在最终确定要按某个具体 storeId 过滤、且该 storeId
+    // 命中已知曾用名配置时才介入——不影响 shopName 兼容路径/全租户查询等其余
+    // 分支。用 delete 把 storeId 从原有的隐式 AND 字段里摘出来，替换成
+    // _.and([其余条件, storeId-或-曾用名 OR 条件])，其余字段/权限收敛逻辑
+    // 原样不变
+    let finalWhere = whereConditions;
+    if (whereConditions.storeId && LEGACY_SHOP_NAME_ALIASES[whereConditions.storeId]) {
+      const targetStoreId = whereConditions.storeId;
+      const restConditions = { ...whereConditions };
+      delete restConditions.storeId;
+      const storeIdOrAliasCondition = await buildStoreIdOrAliasCondition(db, _, targetStoreId);
+      finalWhere = _.and([restConditions, storeIdOrAliasCondition]);
+    }
+
+    const hasAnyCondition = finalWhere !== whereConditions || Object.keys(whereConditions).length > 0;
     let query = db.collection('report_logs');
-    if (Object.keys(whereConditions).length > 0) {
-      query = query.where(whereConditions);
+    if (hasAnyCondition) {
+      query = query.where(finalWhere);
     }
 
     const result = await query.orderBy('dateString', 'desc').limit(limit).get();
