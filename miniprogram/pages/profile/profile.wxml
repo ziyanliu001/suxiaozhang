@@ -135,47 +135,11 @@
       </view>
     </view>
 
-    <!-- 🌸 阳善纵向"冒出"轮播：紧邻身份 Banner 下方，展示 getCurrentActiveStore()
-         当前选中门店（严格不跨店）的公开善行记录。数据源为 getSunshineLedger 的
-         latestDonorsMonthly——近 30 天窗口，若本店近 30 天无新流水则由该云函数
-         自动退回全历史最近记录兜底（见 allTimePool 逻辑），与本页下方
-         <yangshan-wall>/sunshine-board 同一份公开只读查询，不另起一套云函数调用
-         （见 profile.ts fetchStoreLoveWallSummary）。列表混排善款/实物/义工三类
-         善行，故用 deedText（已在 profile.ts 拼好文案）而非固定"随喜 ¥xx"，
-         避免非善款记录被误标成随喜 0 元；yangShanList 为空时（本店从未有过任何
-         记录）wx:else 展示默认祝福文案兜底，本节点始终有内容可展示。⚠️ 仅雨花斋
-         业态展示——"阳善"是雨花斋语境下的专属术语，与同页 <yangshan-wall> 对
-         所有业态展示（换文案为"爱心/志愿"）不是同一约定，二者从这里起分道，
-         不要误合并。绑定 sunshineMarqueeVisible 而不是直接绑 isYuhuazhai：
-         后者每次 onShow 触发 initMinePage() 都会先重置为 false 再等网络查询
-         纠正，直绑会导致本模块每次切回"我的"tab 都闪烁消失再重新出现；
-         sunshineMarqueeVisible 是单向锁存（见 profile.ts fetchStoreOrgType()
-         注释），一旦确认是雨花斋就不再因为角色重新拉取而消失 -->
-    <view class="sunshine-marquee-bar" wx:if="{{sunshineMarqueeVisible}}">
-      <view class="sunshine-tag">
-        <text class="sunshine-icon">🏵️</text>
-        <text class="sunshine-tag-title">阳善</text>
-      </view>
-      <swiper
-        wx:if="{{yangShanList && yangShanList.length > 0}}"
-        class="sunshine-swiper"
-        vertical
-        autoplay
-        circular
-        interval="3000"
-        duration="600"
-      >
-        <swiper-item wx:for="{{yangShanList}}" wx:key="index">
-          <view class="sunshine-swiper-item">
-            <text class="sunshine-swiper-name">{{item.name}}</text>
-            <text class="sunshine-swiper-amount">{{item.deedText}}</text>
-          </view>
-        </swiper-item>
-      </swiper>
-      <view class="sunshine-swiper-fallback" wx:else>
-        <text class="sunshine-text">行善积德，福慧双增 · 愿一切善行皆得圆满</text>
-      </view>
-    </view>
+    <!-- 🐛（去重）原"阳善纵向冒出轮播"（.sunshine-marquee-bar）已删除：与下方
+         【善行功德专区】（.merit-hall-card）里的 <yangshan-wall> 组件展示的是
+         同一份 getSunshineLedger 数据（同店、同近30天窗口），紧邻身份 Banner
+         下方 + 页面中段各出现一条几乎一样的阳善滚动条，纯属重复。保留下方
+         善行功德专区里的完整展示即可，这里不再渲染任何内容 -->
 
     <!-- 🐛 合并重构："超管巡检门店"（currentInspectStoreId）与"管理视角模拟"
          （isImpersonating）此前是两条独立的黄色提示条，判断口径又都依赖

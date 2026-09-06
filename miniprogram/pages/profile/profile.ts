@@ -416,15 +416,6 @@ Page({
     // 才置为 true——严禁用 tenantId 前缀猜测（见 initMinePage 根因修复注释：同一 tenantId
     // 前缀下完全可能挂着 elderly_canteen 等非雨花斋门店），初始值给最保守的 false
     isYuhuazhai: false,
-    // 🐛 根因修复（阳善栏"闪现后消失"）：initMinePage() 每次 onShow 都会把
-    // isYuhuazhai 无条件重置为 false（见本文件 1314 行"从根上不可靠"注释），
-    // 再等 fetchStoreOrgType() 网络回来才纠正为 true——如果 sunshine-marquee-bar
-    // 直接绑 isYuhuazhai，雨花斋账号每次切回"我的"tab 都会先经历一次"消失→
-    // 几百毫秒后重新出现"的闪烁。sunshineMarqueeVisible 是单向锁存信号：只在
-    // fetchStoreOrgType() 确认为雨花斋时置 true，此后本页面实例生命周期内不再
-    // 被重置回 false（onShow 触发的 initMinePage() 不会碰它），一旦亮起就不再
-    // 因为角色重新拉取的短暂窗口而消失；非雨花斋账号里恒为 false，不受影响
-    sunshineMarqueeVisible: false,
     // 🐛 根因修复（大家长/财务预览视角下升级卡片依然顽固展示）：「专业版服务
     // 状态/立即开通」两张售卖卡片唯一认这一个字段，不再直接绑 !isYuhuazhai——
     // isYuhuazhai 的"最保守 false"初始值对"这家店是不是雨花斋"这个问题是安全
@@ -497,11 +488,6 @@ Page({
     // 阳善公开名单，这里只需要保存解析出来的门店 ID
     myStoreId: '',
     storeLoveWallMeritRatio: { yangRatioPct: 0, yinRatioPct: 0 },
-    // 🌸 阳善纵向"冒出"轮播名单：由 fetchStoreLoveWallSummary 用同一次
-    // getSunshineLedger 响应里的 latestDonorsMonthly（近 30 天为空时自动退回
-    // 全历史最近记录，见该云函数 allTimePool 兜底逻辑）拼装，空数组时 WXML
-    // 用 wx:else 展示默认祝福文案兜底（只有本店从未有过任何善行记录才会走到）
-    yangShanList: [] as Array<{ name: string; amount: number; deedText: string }>,
     showStorePickerModal: false,
     storePickerLoading: false,
     storePickerSearchText: '',
@@ -1508,10 +1494,6 @@ Page({
       this.setData({
         isYuhuazhai,
         shouldShowProCards: !isYuhuazhai,
-        // 🐛 单向锁存：只在确认为雨花斋时置 true，绝不在这里显式写 false——
-        // 见 data 声明处 sunshineMarqueeVisible 注释，避免每次 onShow 重新
-        // 查询期间阳善栏闪烁消失
-        ...(isYuhuazhai ? { sunshineMarqueeVisible: true } : {}),
         ...(orgType ? { orgType, ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin) } : {})
       });
     } catch (err) {
@@ -1886,38 +1868,16 @@ Page({
       const result = res.result;
       if (!result || !result.success) return;
 
-      // 🐛 根因修复（"静态标语"观感）：此前用 latestDonorsThreeDay（真实 3×24
-      // 小时窗口，极容易命中"近 3 天没人随喜"从而一直空着，界面上看起来像是
-      // 写死的祝福语，而不是真的在轮播）。改用 latestDonorsMonthly——已经是
-      // 本 session 早前"方案3"修好的"近 30 天为空时自动退回全历史最近记录"
-      // 兜底口径（见 getSunshineLedger.js allTimePool），不需要新写一套时间
-      // 窗口/兜底逻辑，直接复用同一份已验证过的数据源。deedText 一并保留——
-      // latestDonorsMonthly 混排了善款/实物/义工三类善行（善款才有意义展示
-      // 金额，实物/义工的 amount 恒为 0），不能像之前那样只取 name+amount
-      // 硬拼"随喜 ¥0"这类失真文案
-      let list = Array.isArray(result.latestDonorsMonthly)
-        ? result.latestDonorsMonthly.slice(0, 20).map((item: any) => ({
-            name: item.name || '爱心人士',
-            amount: item.amount || 0,
-            deedText: item.deedText || `随喜 ¥${item.amount || 0}`
-          }))
-        : [];
-
-      // 🐛 只有 1 条记录时 swiper 没有第二个 item 可以切换，autoplay 形同虚设，
-      // 观感上和完全静止没区别；复制成 2 条让它能真正滚动起来。0 条时维持现有
-      // 的空态兜底文案（wx:else 的祝福语），不在这里编造看起来像真实姓名的
-      // 假数据混进同一份列表——阳善公示的是真实随喜记录，伪造"善心家人"这类
-      // 假名字/假金额会让用户误以为是真实公开记录，这是诚信问题，不是纯 UI 问题
-      if (list.length === 1) {
-        list = [...list, ...list];
-      }
-
+      // 🐛（去重清理）此前这里还会从 result.latestDonorsMonthly 拼一份
+      // yangShanList 供页面顶部的"阳善纵向冒出轮播"（.sunshine-marquee-bar）
+      // 使用——该模块已删除（与下方【善行功德专区】里的 <yangshan-wall> 组件
+      // 展示同一份数据，纯属重复），这里只需要保留发心比例条要用的
+      // yangRatioPct/yinRatioPct，不再处理名单列表
       this.setData({
         storeLoveWallMeritRatio: {
           yangRatioPct: result.yangRatioPct || 0,
           yinRatioPct: result.yinRatioPct || 0
-        },
-        yangShanList: list
+        }
       });
     } catch (err) {
       console.error('[fetchStoreLoveWallSummary] 加载本店爱心支持摘要异常:', err);

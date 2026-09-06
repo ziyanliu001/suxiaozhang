@@ -244,82 +244,8 @@
   box-shadow: 0 4rpx 14rpx rgba(181, 124, 30, 0.14);
 }
 
-/* 🌸 阳善纵向"冒出"轮播：暖色卡片，与页面其余暖色调（identity-banner-card 等）
-   协调；左侧"阳善"标签固定不动，右侧 swiper 纵向轮播每条近 3 天随喜记录 */
-.sunshine-marquee-bar {
-  display: flex;
-  align-items: center;
-  height: 64rpx;
-  background: #FFFDF5;
-  border: 2rpx solid #FFE8B8;
-  border-radius: 12rpx;
-  padding: 0 20rpx;
-  margin: 12rpx 0 16rpx;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.sunshine-tag {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-right: 16rpx;
-}
-
-.sunshine-icon {
-  font-size: 26rpx;
-  margin-right: 6rpx;
-}
-
-.sunshine-tag-title {
-  font-size: 24rpx;
-  font-weight: bold;
-  color: #D35400;
-}
-
-.sunshine-swiper {
-  flex: 1;
-  min-width: 0;
-  height: 64rpx;
-}
-
-.sunshine-swiper-item {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  overflow: hidden;
-}
-
-.sunshine-swiper-name {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  font-weight: bold;
-  color: #D35400;
-  margin-right: 12rpx;
-}
-
-.sunshine-swiper-amount {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 24rpx;
-  color: #C0392B;
-  font-weight: bold;
-}
-
-.sunshine-swiper-fallback {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.sunshine-text {
-  font-size: 24rpx;
-  color: #7D6608;
-}
+/* 🐛（去重）原"阳善纵向冒出轮播"（.sunshine-marquee-bar 及其子元素样式）
+   已随 WXML 节点一起删除——与【善行功德专区】里的 <yangshan-wall> 组件重复 */
 
 .role-badge-row {
   display: flex;
