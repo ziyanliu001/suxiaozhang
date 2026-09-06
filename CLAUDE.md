@@ -150,7 +150,7 @@
 | `utils/drawVolunteerCertificate.ts` | `drawSealStamp()` 新增可选 `lines` 参数（默认值与原调用点完全一致），支持单行文字印章，供水墨日签复用 |
 | `utils/posterGenerator.ts` | 新增 `MeritTagPosterData` 接口 + `drawMeritTagPoster()`，复用 `showMeritPosterModal`/`meritPosterTempPath` 既有全屏预览基础设施（新增 `meritPosterModalTitle` 字段区分"善行卡"/"今日善行日签"两种标题，避免标题残留串场） |
 
-**已知未覆盖**：`cloudfunctions/manageVolunteerCheckIn/index.js` 没有 `lib/*.test.js` 测试文件（该云函数历史上就没有拆分出 `lib/` 纯函数目录），本次新增的 `sanitizeMeritTags` 未补单元测试——如需覆盖，需要先把该文件重构出 `lib/` 目录（比对齐现有测试范本的成本更高），本次未做，如实记录。
+**测试覆盖（2026-09-06 已补齐）**：`sanitizeMeritTags` 已拆到 `cloudfunctions/manageVolunteerCheckIn/lib/sanitizeMeritTags.js`（纯逻辑，不依赖 `wx-server-sdk`），`index.js` 通过 `require('./lib/sanitizeMeritTags')` 引入，与本仓库 `wxPayCore`/`getSettlementSummary` 等云函数已有的 `index.js` + `lib/*.js` + `lib/*.test.js` 拆分写法保持一致；配套 `lib/sanitizeMeritTags.test.js` 共 10 个用例（非数组/null/undefined 兜底、白名单过滤、重复值不去重、白名单本身逐值反向校验），随 `npm test` 一并跑。
 
 ### 7.5 验证命令
 

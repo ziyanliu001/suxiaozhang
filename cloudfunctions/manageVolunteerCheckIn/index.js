@@ -22,23 +22,16 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+// 🌸 修心积善打卡·微善标签白名单校验：拆到 lib/sanitizeMeritTags.js（纯
+// 逻辑、不依赖 wx-server-sdk），配一份 lib/sanitizeMeritTags.test.js 单测，
+// 与本仓库 wxPayCore/getSettlementSummary 等云函数已有的 index.js +
+// lib/*.js + lib/*.test.js 拆分写法保持一致，见 CLAUDE.md 第 7.3 节字典表
+const { sanitizeMeritTags } = require('./lib/sanitizeMeritTags');
+
 const COLLECTION = 'volunteer_duty_logs';
 const DAILY_HOURS_CAP = 12.0;
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
 const SHIFT_TYPES = ['BREAKFAST', 'LUNCH', 'DINNER', 'FULL_DAY'];
-
-// 🌸 修心积善打卡·微善标签：纯精神修持与文化激励标记，不与资金、订阅套餐、
-// 任何形式的商业积分/兑换挂钩（详见 CLAUDE.md 第7节合规基线）。默认空数组，
-// 历史数据/未选择场景天然兼容，不需要迁移脚本。后续如需扩展"百善/千善"电子
-// 证书，应该新增门槛值配置去读取 meritTags 的历史累计计数，而不是扩充这个
-// 枚举本身——枚举值一旦扩大，旧记录里从未出现过的新值会让"累计次数"统计口径
-// 产生歧义（新老用户能选的标签数量不一致）
-const MERIT_TAGS = ['almsgiving', 'kindwords', 'thrift', 'cleaning'];
-
-function sanitizeMeritTags(v) {
-  if (!Array.isArray(v)) return [];
-  return v.filter((t) => MERIT_TAGS.includes(t));
-}
 
 // 🐛 云函数容器时区固定为 UTC，与 processRoleAudit/submitFeedback 同一套换算，
 // 避免"今日"日期字符串比北京时间晚半天导致工时统计错日归集
