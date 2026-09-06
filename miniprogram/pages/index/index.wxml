@@ -3455,12 +3455,17 @@
         <view class="platform-card-arrow">进入 ›</view>
       </view>
 
+      <!-- 🏛️（2026-09-06 业务定位校准）本卡片服务于雨花斋体系之外的各类民间爱心
+           素食食堂、寺庙斋堂、免费互助餐厅——记账/进销存/阳光日结等核心功能对
+           单店全面开放，不是商业收银入口，文案统一改为"爱心互助"调性，不再用
+           "普通商户"这类商业措辞 -->
       <view class="platform-card platform-card-general" bindtap="onSelectGeneralPlatform" hover-class="platform-card-hover">
+        <view class="platform-card-badge">爱心互助 · 独立记账</view>
         <view class="platform-card-body">
           <text class="platform-card-icon">🍽️</text>
           <view class="platform-card-text">
-            <text class="platform-card-title">通用素食/门店记账</text>
-            <text class="platform-card-desc">适用于普通商户、独立食堂或通用多租户门店的日常记账</text>
+            <text class="platform-card-title">民间爱心素食食堂 / 独立斋堂</text>
+            <text class="platform-card-desc">面向雨花斋体系之外的民间爱心素食食堂、寺庙斋堂与互助餐厅的日常记账</text>
           </view>
         </view>
         <view class="platform-card-arrow">进入 ›</view>
@@ -3473,6 +3478,7 @@
            navigateTo 到 live_factory 自己独立的页面树——两者架构上本来就不是
            同一类东西，见 onSelectFactoryPlatform 注释 -->
       <view class="platform-card platform-card-factory" bindtap="onSelectFactoryPlatform" hover-class="platform-card-hover">
+        <view class="platform-card-badge">素食工坊生态预售 · 以产养善</view>
         <view class="platform-card-body">
           <text class="platform-card-icon">🧺</text>
           <view class="platform-card-text">

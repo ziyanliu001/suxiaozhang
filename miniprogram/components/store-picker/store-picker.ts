@@ -5,6 +5,7 @@ import { compressAndUploadImages, compressAndUploadScaledImage } from '../../uti
 import { setCurrentActiveStore, getCurrentActiveStore } from '../../utils/storeManager';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
+import { requestOpenOnboardingCreate } from '../../utils/onboardingHandoff';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -1174,12 +1175,30 @@ Component({
 
       // 🏢 多租户边界（非超管场景）：申请必须归属一个明确的机构，否则待审批记录会缺少
       // tenantId，导致任何机构的超级管理员都可能审批到它——这里宁可拦截也不允许提交裸记录
+      //
+      // 🐛 根因修复（自愈建店死锁）：此前查到调用者没有 tenantId 时，只弹一句
+      // "请先通过邀请码/申请加入已有门店，或联系平台管理员开通机构"就结束了——
+      // 但本项目早就有现成的自助建新独立机构流程（cloudfunctions/createTenant，
+      // 见 profile.ts onSubmitCreateOrg），不需要邀请码也不需要联系任何人，这条
+      // 提示反而把用户往更麻烦的路上引，等于一个真死锁。改为可操作的确认框：
+      // 确认后落一个跨 Tab 交接标记（见 utils/onboardingHandoff.ts，与
+      // subscriptionHandoff.ts 同一套手法），切到个人中心 Tab 后由该页面
+      // onShow() 自动唤起"创建全新机构"引导弹窗，直接进 create 步骤（跳过
+      // choice 选择页——用户已经在这里明确表达了"要新建"的意图）
       const tenantId = (roleInfo && roleInfo.tenantId) || '';
       if (!tenantId) {
         wx.showModal({
-          title: '暂无法提交',
-          content: '您的账号尚未关联任何机构，无法申请新建门店。请先通过邀请码/申请加入已有门店，或联系平台管理员开通机构。',
-          showCancel: false
+          title: '还没有加入任何机构',
+          content: '无需邀请码，也不用等待审批——现在就可以创建您自己的爱心互助食堂账套，立即开始记账。',
+          confirmText: '去创建',
+          cancelText: '再想想',
+          success: (res) => {
+            if (res.confirm) {
+              this.setData({ showNewStoreForm: false, showPickerSheet: false });
+              requestOpenOnboardingCreate();
+              wx.switchTab({ url: '/pages/profile/profile' });
+            }
+          }
         });
         return;
       }

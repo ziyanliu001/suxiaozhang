@@ -15,6 +15,7 @@ import { requestOpenSunshineLedger } from '../../utils/sunshineLedgerHandoff';
 import { requestOpenCultureFull } from '../../utils/cultureFullHandoff';
 import { requestOpenStorePicker } from '../../utils/storePickerHandoff';
 import { takeOpenSubscriptionRequest } from '../../utils/subscriptionHandoff';
+import { takeOpenOnboardingCreateRequest } from '../../utils/onboardingHandoff';
 import { isVirtualStoreName } from '../../utils/storeIdentity';
 import { computeBadgeList as computeBadgeListShared } from '../../utils/badgeWall';
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
@@ -1017,6 +1018,16 @@ Page({
     if (takeOpenSubscriptionRequest()) {
       // initMinePage 是异步的，稍等一帧确保角色数据已就绪再唤起弹窗
       setTimeout(() => this.onOpenSubscriptionModal(), 300);
+    }
+
+    // 🐛 根因修复配套：store-picker 组件发现调用者没有归属任何机构、又确认
+    // 要"自助创建"时，落一个跨 Tab 交接标记（见 utils/onboardingHandoff.ts）
+    // 并 switchTab 过来——这里消费标记，直接跳到 create 步骤（用户已经在
+    // 上一个页面明确选择过"新建"，不需要再看一遍 choice 选择页）
+    if (takeOpenOnboardingCreateRequest()) {
+      setTimeout(() => {
+        this.setData({ showOnboardingModal: true, onboardingStep: 'create' });
+      }, 300);
     }
   },
 
