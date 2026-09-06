@@ -1406,6 +1406,140 @@
   white-space: nowrap;
 }
 
+/* 🏛️（护城河一 M1）产销工坊反哺卡片——与 .admin-workbench-summary 同一套
+   骨架，配色改用公益调性的绿色系，与"门店管理中心"（雨花斋暖橙）区分开 */
+.charity-contribution-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F1F8F1;
+  border: 1rpx solid #A5D6A7;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.charity-contribution-card:active {
+  opacity: 0.85;
+}
+
+.ccc-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.ccc-icon {
+  font-size: 40rpx;
+  flex-shrink: 0;
+}
+
+.ccc-text-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+.ccc-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #2E7D32;
+}
+
+.ccc-sub {
+  font-size: 22rpx;
+  color: #5A8C5D;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccc-arrow {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #2E7D32;
+}
+
+/* 🏛️（护城河一 M1）反哺核销弹窗内容——复用全局 .certificate-modal-mask/
+   .certificate-modal-card/.certificate-modal-header 骨架，这里只补列表 */
+.ccm-loading,
+.ccm-empty {
+  text-align: center;
+  padding: 60rpx 0;
+  color: #8E8E93;
+  font-size: 26rpx;
+}
+
+.ccm-list {
+  max-height: 60vh;
+}
+
+.ccm-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #F0EBE3;
+}
+
+.ccm-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6rpx;
+}
+
+.ccm-item-amount {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+}
+
+.ccm-item-status {
+  font-size: 20rpx;
+  padding: 2rpx 14rpx;
+  border-radius: 16rpx;
+  background: rgba(46, 125, 50, 0.1);
+  color: #2E7D32;
+}
+
+.ccm-status-redeemed {
+  background: rgba(142, 142, 147, 0.12);
+  color: #8E8E93;
+}
+
+.ccm-status-cancelled {
+  background: rgba(211, 47, 47, 0.1);
+  color: #D32F2F;
+}
+
+.ccm-item-sub {
+  display: block;
+  font-size: 22rpx;
+  color: #8E8E93;
+  margin-bottom: 4rpx;
+}
+
+.ccm-item-note {
+  display: block;
+  font-size: 22rpx;
+  color: #ADADB2;
+  margin-bottom: 8rpx;
+}
+
+.ccm-redeem-btn {
+  display: inline-block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 60rpx;
+  padding: 0 28rpx;
+  border-radius: 30rpx;
+  background: #2E7D32;
+  color: #FFFFFF;
+}
+
 .aws-toggle {
   flex-shrink: 0;
   font-size: 24rpx;

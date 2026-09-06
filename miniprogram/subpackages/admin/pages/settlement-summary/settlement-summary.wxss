@@ -240,3 +240,158 @@
   font-size: 28rpx;
   color: #1C1C1E;
 }
+
+/* 🏛️（护城河一 M1）以产养善 —— 累计转捐卡片，颜色跟其余三桶区分开，
+   用一个偏公益调性的绿色，避免和 .ss-card-settled 的深绿撞色太接近导致
+   混淆哪个是"结算"哪个是"转捐" */
+.ss-card-charity {
+  border-top-color: #4CAF50;
+}
+
+.ss-pledge-btn {
+  margin-top: 12rpx;
+  display: inline-block;
+  font-size: 22rpx;
+  line-height: 52rpx;
+  padding: 0 24rpx;
+  border-radius: 26rpx;
+  background: #EDF7ED;
+  color: #2E7D32;
+  border: 1rpx solid #A5D6A7;
+}
+
+.ss-pledge-btn::after {
+  border: none;
+}
+
+/* 🏛️（护城河一 M1）转捐弹窗——半屏卡片，与本仓库其余"选择+确认"类弹窗
+   同一套视觉语言（浅底卡片+主操作按钮+次要取消按钮） */
+.ss-pledge-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+}
+
+.ss-pledge-modal-card {
+  width: 100%;
+  max-height: 85vh;
+  background: #FFFFFF;
+  border-top-left-radius: 24rpx;
+  border-top-right-radius: 24rpx;
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.ss-pledge-modal-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+  margin-bottom: 4rpx;
+}
+
+.ss-pledge-modal-sub {
+  font-size: 22rpx;
+  color: #8E8E93;
+  margin-bottom: 20rpx;
+}
+
+.ss-pledge-field-label {
+  display: block;
+  font-size: 24rpx;
+  color: #8E8E93;
+  margin-bottom: 8rpx;
+}
+
+.ss-pledge-input {
+  width: 100%;
+  height: 76rpx;
+  line-height: 76rpx;
+  box-sizing: border-box;
+  border: 2rpx solid #E5DED4;
+  border-radius: 12rpx;
+  padding: 0 20rpx;
+  font-size: 28rpx;
+  color: #1C1C1E;
+  margin-bottom: 16rpx;
+}
+
+.ss-pledge-store-loading {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #8E8E93;
+  font-size: 26rpx;
+}
+
+.ss-pledge-store-list {
+  max-height: 400rpx;
+  border: 2rpx solid #F0EBE3;
+  border-radius: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.ss-pledge-store-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid #F0EBE3;
+}
+
+.ss-pledge-store-item.active {
+  background: #EDF7ED;
+}
+
+.ss-pledge-store-name {
+  font-size: 26rpx;
+  color: #1C1C1E;
+  flex: 1;
+}
+
+.ss-pledge-store-region {
+  font-size: 22rpx;
+  color: #ADADB2;
+}
+
+.ss-pledge-store-check {
+  color: #2E7D32;
+  font-weight: 700;
+}
+
+.ss-pledge-store-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #ADADB2;
+  font-size: 24rpx;
+}
+
+.ss-pledge-submit-btn {
+  background: #2E7D32;
+  color: #FFFFFF;
+  font-size: 30rpx;
+  line-height: 84rpx;
+  border-radius: 12rpx;
+}
+
+.ss-pledge-submit-btn[disabled] {
+  background: #C8E6C9;
+  color: #FFFFFF;
+  opacity: 1;
+}
+
+.ss-pledge-cancel-btn {
+  background: #F0EBE3;
+  color: #8E8E93;
+  font-size: 28rpx;
+  line-height: 76rpx;
+  border-radius: 12rpx;
+  margin-top: 16rpx;
+}

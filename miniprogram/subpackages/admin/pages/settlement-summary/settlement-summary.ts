@@ -36,6 +36,7 @@ interface OpsStats {
 }
 
 interface DetailRow {
+  settlementId: string;
   orderId: string;
   payAmount: number;
   producerAmount: number;
@@ -49,6 +50,16 @@ interface DetailRow {
   statusLabel?: string;
   producerAmountYuan?: string;
   promoterAmountYuan?: string;
+}
+
+// 🏛️（护城河一 M1）转捐目标门店——manageCharityContribution.listTargetStores
+// 返回的原始字段
+interface TargetStore {
+  storeId: string;
+  storeName: string;
+  orgType: string;
+  city: string;
+  province: string;
 }
 
 Page({
@@ -72,7 +83,23 @@ Page({
       producerAmountYuan: '0.00', promoterAmountYuan: '0.00', platformFeeYuan: '0.00'
     },
 
-    details: [] as DetailRow[]
+    details: [] as DetailRow[],
+
+    // 🏛️（护城河一 M1）以产养善：累计转捐额度 + 转捐弹窗状态
+    charityPledgedTotalYuan: '0.00',
+    showPledgeModal: false,
+    pledgeTargetOrderId: '',
+    pledgeSettlementId: '',
+    pledgeMaxAmount: 0, // 分，等于该笔结算的 producerAmount，前端校验上限用
+    pledgeMaxAmountYuan: '0.00', // 仅供弹窗展示，不参与校验（校验用上面的分）
+    pledgeAmountYuan: '',
+    pledgeSubmitting: false,
+    pledgeStoresLoading: false,
+    pledgeStoresAll: [] as TargetStore[],
+    pledgeStoresFiltered: [] as TargetStore[],
+    pledgeKeyword: '',
+    pledgeSelectedStoreId: '',
+    pledgeSelectedStoreName: ''
   },
 
   onLoad(options: Record<string, string>) {
@@ -149,6 +176,7 @@ Page({
           details,
           opsStatsRaw,
           opsDisplay: this.formatOpsStats(this.data.opsRangeDays === 7 ? opsStatsRaw.last7 : opsStatsRaw.last30),
+          charityPledgedTotalYuan: yuan(result.charityPledgedTotal || 0),
           loadError: ''
         });
       } else {
@@ -162,6 +190,125 @@ Page({
       // 🐛 同 production-fulfillment.ts 的修复：重试按钮 bindtap="loadSummary"
       // 会把 tap 事件对象当 done 传进来，必须判类型而不是只判真值
       if (typeof done === 'function') done();
+    }
+  },
+
+  // ============ 护城河一 M1：转捐给公益厨房 ============
+
+  stopPropagation() {},
+
+  async onOpenPledgeModal(e: any) {
+    const orderId = e.currentTarget.dataset.orderId;
+    const row = this.data.details.find((d) => d.orderId === orderId);
+    if (!row) return;
+
+    this.setData({
+      showPledgeModal: true,
+      pledgeTargetOrderId: row.orderId,
+      pledgeSettlementId: row.settlementId,
+      pledgeMaxAmount: row.producerAmount,
+      pledgeMaxAmountYuan: yuan(row.producerAmount),
+      // 默认全额转捐，用户可以改小——不能改大，见 onPledgeAmountInput 的上限拦截
+      pledgeAmountYuan: yuan(row.producerAmount),
+      pledgeKeyword: '',
+      pledgeSelectedStoreId: '',
+      pledgeSelectedStoreName: '',
+      pledgeStoresAll: [],
+      pledgeStoresFiltered: []
+    });
+    this.loadTargetStores();
+  },
+
+  onClosePledgeModal() {
+    if (this.data.pledgeSubmitting) return;
+    this.setData({ showPledgeModal: false });
+  },
+
+  async loadTargetStores() {
+    this.setData({ pledgeStoresLoading: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageCharityContribution',
+        data: { action: 'listTargetStores', tenantId: this.data.tenantId }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        const stores: TargetStore[] = result.stores || [];
+        this.setData({ pledgeStoresAll: stores, pledgeStoresFiltered: stores });
+      } else {
+        wx.showToast({ title: (result && result.error) || '门店列表加载失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[settlement-summary] loadTargetStores 异常:', err);
+      wx.showToast({ title: '门店列表加载异常', icon: 'none' });
+    } finally {
+      this.setData({ pledgeStoresLoading: false });
+    }
+  },
+
+  onPledgeKeywordInput(e: any) {
+    const keyword = String(e.detail.value || '').trim();
+    const all = this.data.pledgeStoresAll;
+    const filtered = keyword ? all.filter((s) => s.storeName.indexOf(keyword) !== -1) : all;
+    this.setData({ pledgeKeyword: keyword, pledgeStoresFiltered: filtered });
+  },
+
+  onSelectTargetStore(e: any) {
+    const storeId = e.currentTarget.dataset.storeId;
+    const store = this.data.pledgeStoresFiltered.find((s) => s.storeId === storeId);
+    if (!store) return;
+    this.setData({ pledgeSelectedStoreId: store.storeId, pledgeSelectedStoreName: store.storeName });
+  },
+
+  onPledgeAmountInput(e: any) {
+    this.setData({ pledgeAmountYuan: e.detail.value });
+  },
+
+  async onSubmitPledge() {
+    if (this.data.pledgeSubmitting) return;
+    if (!this.data.pledgeSelectedStoreId) {
+      wx.showToast({ title: '请先选择要捐赠的公益厨房', icon: 'none' });
+      return;
+    }
+    const amountYuan = parseFloat(this.data.pledgeAmountYuan);
+    if (!(amountYuan > 0)) {
+      wx.showToast({ title: '请填写正确的转捐金额', icon: 'none' });
+      return;
+    }
+    const amount = Math.round(amountYuan * 100);
+    if (amount > this.data.pledgeMaxAmount) {
+      wx.showToast({ title: '转捐金额不能超过该笔订单制作方分成金额', icon: 'none' });
+      return;
+    }
+
+    this.setData({ pledgeSubmitting: true });
+    wx.showLoading({ title: '提交中...', mask: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageCharityContribution',
+        data: {
+          action: 'pledge',
+          tenantId: this.data.tenantId,
+          settlementId: this.data.pledgeSettlementId,
+          amount,
+          targetStoreId: this.data.pledgeSelectedStoreId
+        }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '提交失败，请重试', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '已转捐，感谢您的善心', icon: 'success' });
+      this.setData({ showPledgeModal: false });
+      this.loadSummary();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[settlement-summary] onSubmitPledge 异常:', err);
+      wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ pledgeSubmitting: false });
     }
   }
 });

@@ -468,6 +468,14 @@ Page({
     // "会员开通/续费管理"这一项的显隐判断，不参与任何业务权限计算
     isPlatformAdmin: false,
 
+    // 🏛️（护城河一 M1：以产养善·物资反哺链）产销工坊反哺——只读
+    // charity_contributions 这张中间账本，targetStoreId 匹配当前门店的记录
+    charityContributions: [] as any[],
+    charityPendingCount: 0,
+    charityTotalYuan: '0.00',
+    showCharityContributionModal: false,
+    charityContributionModalLoading: false,
+
     // 🌐 超管【门店选择与搜索】弹窗：默认"全国总览"（currentInspectStoreId 为空），
     // 选中具体门店后进入单店巡检视角。这里的字段只在页面运行期间由本弹窗自己的
     // on* 处理函数写入（initMinePage 不会重置它们），与 currentStoreName/currentViewMode
@@ -1453,6 +1461,13 @@ Page({
     // 各有自己的大盘卡片）时拉取今日用餐人次/今日义工打卡/结余概览
     if (isManager) {
       pendingFetches.push(this.fetchManagerTodaySnapshot());
+    }
+
+    // 🏛️（护城河一 M1）产销工坊反哺：店长/大家长/超管都可能是收到转捐的
+    // 门店管理者，与 manageCharityContribution 云函数的 CHARITY_SIDE_MANAGERIAL_ROLES
+    // 权限口径保持一致
+    if (isManager || isPatriarch || overridden.isSuperAdmin) {
+      pendingFetches.push(this.fetchCharityContributions());
     }
 
     // 💌 家人端未读回复红点：与上面管理端角标是两套完全独立的计数
@@ -5614,6 +5629,109 @@ Page({
       this.setData({ currentTenantName: result.tenantName || '' });
     } catch (err) {
       console.warn('[fetchCurrentTenantName] 查询失败:', err);
+    }
+  },
+
+  // ============ 护城河一 M1：以产养善·产销工坊反哺 ============
+  // 只读 charity_contributions 这张中间账本（manageCharityContribution 云
+  // 函数），绝不直接查 tenant_members/production_orders——两套体系之间
+  // 唯一被设计出来的桥梁，见该云函数头部注释
+
+  formatContributionDate(dateVal: any): string {
+    if (!dateVal) return '';
+    try {
+      const d = new Date(dateVal);
+      if (Number.isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } catch (err) {
+      return '';
+    }
+  },
+
+  formatCharityContribution(c: any) {
+    const STATUS_LABEL: Record<string, string> = { pledged: '待核销', redeemed: '已核销', cancelled: '已取消' };
+    return {
+      ...c,
+      amountYuan: ((c.amount || 0) / 100).toFixed(2),
+      pledgeStatusLabel: STATUS_LABEL[c.pledgeStatus] || c.pledgeStatus,
+      pledgedAtLabel: this.formatContributionDate(c.pledgedAt)
+    };
+  },
+
+  async fetchCharityContributions() {
+    if (!isCloudAvailable()) return;
+    try {
+      const activeStore = getCurrentActiveStore();
+      const storeId = activeStore.storeId || '';
+      // 全国总览/全部门店这类虚拟哨兵值不对应任何真实门店文档，
+      // manageCharityContribution 服务端会直接拒绝，这里提前跳过，不发起
+      // 一次必然失败的请求
+      if (!storeId || storeId === 'national_overview' || storeId === 'ALL_STORES') return;
+
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageCharityContribution',
+        data: { action: 'list', targetStoreId: storeId }
+      });
+      const result = res.result;
+      if (!result || !result.success) return;
+
+      const contributions = (result.contributions || []).map((c: any) => this.formatCharityContribution(c));
+      const pendingCount = contributions.filter((c: any) => c.pledgeStatus === 'pledged').length;
+      const total = contributions.reduce((sum: number, c: any) => sum + (c.amount || 0), 0);
+      this.setData({
+        charityContributions: contributions,
+        charityPendingCount: pendingCount,
+        charityTotalYuan: (total / 100).toFixed(2)
+      });
+    } catch (err) {
+      // 静默失败：这是一张锦上添花的展示卡片，查询失败不影响本页任何核心
+      // 功能，下次 onShow 重新调用本方法时会自然重试
+      console.warn('[profile][fetchCharityContributions] 查询失败:', err);
+    }
+  },
+
+  async onOpenCharityContributionModal() {
+    this.setData({ showCharityContributionModal: true, charityContributionModalLoading: true });
+    await this.fetchCharityContributions();
+    this.setData({ charityContributionModalLoading: false });
+  },
+
+  onCloseCharityContributionModal() {
+    this.setData({ showCharityContributionModal: false });
+  },
+
+  onRedeemCharityContribution(e: any) {
+    const contributionId = e.currentTarget.dataset.id;
+    if (!contributionId) return;
+    wx.showModal({
+      title: '确认核销？',
+      content: '核销后视为本门店已实际领用这笔产销工坊转捐的物资额度，不可撤销。',
+      confirmColor: '#2E7D32',
+      success: (res) => {
+        if (res.confirm) this.doRedeemCharityContribution(contributionId);
+      }
+    });
+  },
+
+  async doRedeemCharityContribution(contributionId: string) {
+    wx.showLoading({ title: '提交中...', mask: true });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageCharityContribution',
+        data: { action: 'redeem', contributionId }
+      });
+      wx.hideLoading();
+      const result = res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '核销失败，请重试', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '已核销', icon: 'success' });
+      this.fetchCharityContributions();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[profile][doRedeemCharityContribution] 异常:', err);
+      wx.showToast({ title: '核销失败，请重试', icon: 'none' });
     }
   },
 

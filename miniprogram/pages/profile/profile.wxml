@@ -397,6 +397,21 @@
       </view>
     </view>
 
+    <!-- 🏛️（护城河一 M1：以产养善·物资反哺链）收到的产销工坊反哺——只有
+         店长/大家长/超管这三个能核销的角色才需要看到，且只在真的收到过
+         转捐时才展示，避免给从未跟产销工坊有过交集的门店平添一张空卡片 -->
+    <view class="charity-contribution-card" wx:if="{{(isManager || isPatriarch || isSuperAdmin) && charityContributions.length > 0}}" bindtap="onOpenCharityContributionModal">
+      <view class="ccc-left">
+        <text class="ccc-icon">🌾</text>
+        <view class="ccc-text-col">
+          <text class="ccc-title">产销工坊反哺</text>
+          <text class="ccc-sub" wx:if="{{charityPendingCount > 0}}">{{charityPendingCount}} 笔待核销 · 累计 ¥{{charityTotalYuan}}</text>
+          <text class="ccc-sub" wx:else>累计 ¥{{charityTotalYuan}}，均已核销</text>
+        </view>
+      </view>
+      <text class="ccc-arrow">❯</text>
+    </view>
+
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方经营健康大盘 +
          门店管理中心两张详情卡，个人志愿档案/阳善荣誉等个人属性内容因此能
          提前进入首屏可视范围，不需要物理挪动这些个人内容区块。点击展开后
@@ -3134,6 +3149,39 @@
           {{editStoreNameSaving ? '保存中…' : '确认修改'}}
         </view>
       </view>
+    </view>
+  </view>
+
+  <!-- 🏛️（护城河一 M1：以产养善·物资反哺链）产销工坊反哺核销弹窗——只读
+       charity_contributions 这张两边体系之间唯一的中间账本，不触碰
+       tenant_members/production_orders 半点，见 manageCharityContribution
+       云函数头部注释 -->
+  <view class="certificate-modal-mask" wx:if="{{showCharityContributionModal}}" catchtouchmove="stopPropagation" bindtap="onCloseCharityContributionModal">
+    <view class="certificate-modal-card" catchtap="stopPropagation">
+      <view class="certificate-modal-header">
+        <text class="admin-key-modal-title">🌾 产销工坊反哺</text>
+        <view class="certificate-modal-close" bindtap="onCloseCharityContributionModal">✕</view>
+      </view>
+
+      <view class="ccm-loading" wx:if="{{charityContributionModalLoading}}">
+        <text>加载中...</text>
+      </view>
+      <view class="ccm-empty" wx:elif="{{charityContributions.length === 0}}">
+        <text>暂无产销工坊转捐记录</text>
+      </view>
+      <scroll-view class="ccm-list" scroll-y wx:else>
+        <view class="ccm-item" wx:for="{{charityContributions}}" wx:key="_id">
+          <view class="ccm-item-top">
+            <text class="ccm-item-amount">¥{{item.amountYuan}}</text>
+            <text class="ccm-item-status ccm-status-{{item.pledgeStatus}}">{{item.pledgeStatusLabel}}</text>
+          </view>
+          <text class="ccm-item-sub">来自「{{item.tenantId}}」工坊 · {{item.pledgedAtLabel}}</text>
+          <text class="ccm-item-note" wx:if="{{item.redeemNote}}">备注：{{item.redeemNote}}</text>
+          <view class="ccm-redeem-btn" wx:if="{{item.pledgeStatus === 'pledged'}}" data-id="{{item._id}}" bindtap="onRedeemCharityContribution">
+            标记已核销领用
+          </view>
+        </view>
+      </scroll-view>
     </view>
   </view>
 

@@ -1,0 +1,9 @@
+{
+  "name": "manageCharityContribution",
+  "version": "1.0.0",
+  "description": "云函数：直播产销工坊「以产养善」公益反哺账本——转捐/核销/查询",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -89,6 +89,10 @@ function buildDetailRows(docs) {
     const reversal = reversalByOriginalId[d._id];
     if (!reversal) {
       return {
+        // 🌟（护城河一 M1）settlementId 供前端"转捐给公益厨房"动作引用——
+        // 此前这行明细完全不带 order_settlements 自己的 _id，只有 orderId，
+        // manageCharityContribution.pledge 需要精确到具体哪一条分账记录
+        settlementId: d._id,
         orderId: d.orderId, payAmount: d.payAmount, producerAmount: d.producerAmount,
         promoterAmount: d.promoterAmount, platformFee: d.platformFee,
         settlementStatus: d.settlementStatus, createdAt: d.createdAt || null, settledAt: d.settledAt || null
@@ -96,6 +100,11 @@ function buildDetailRows(docs) {
     }
     const net = netAmounts(d, reversal);
     return {
+      // 已结算后被红冲的记录净额行，转捐场景下这行本来就不该出现"再转捐"
+      // 入口（前端按 settlementStatus==='settled' 精确匹配才显示按钮，
+      // 'settled_then_reversed' 不匹配），这里仍然带上 settlementId 只是
+      // 保持返回结构一致，不代表这条记录允许转捐
+      settlementId: d._id,
       orderId: d.orderId, ...net,
       settlementStatus: 'settled_then_reversed',
       createdAt: d.createdAt || null, settledAt: d.settledAt || null, reversedAt: reversal.createdAt || null

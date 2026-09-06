@@ -40,11 +40,25 @@ exports.main = async (event, context) => {
   const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
   if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可查看对账' };
 
+  // 🌟（护城河一 M1）累计转捐额度：与三桶结算汇总同一次调用一并下发，供
+  // settlement-summary 页展示"已转捐给公益厨房 ¥X"。转捐是 space_owner/
+  // space_admin 的动作（见 manageCharityContribution.pledge 权限校验），
+  // 与下方 producer 视角的 productIdFilter 收窄无关，统一按 tenantId 全量
+  // 口径展示——producer 本来就看不到、也不需要看到转捐信息之外的其他人的
+  // 分成明细，但"整个租户捐了多少"这个数字对所有能看对账页的角色都一样
+  const charityRes = await db.collection('charity_contributions')
+    .where({ tenantId, pledgeStatus: _.neq('cancelled') })
+    .field({ amount: true })
+    .limit(1000)
+    .get()
+    .catch(() => ({ data: [] }));
+  const charityPledgedTotal = (charityRes.data || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+
   let productIdFilter = null; // null = 不按商品过滤（owner/admin 看全租户）
   if (caller.role === 'producer') {
     const productsRes = await db.collection('products').where({ tenantId, producerOpenId: OPENID }).get();
     productIdFilter = (productsRes.data || []).map((p) => p._id);
-    if (productIdFilter.length === 0) return EMPTY_RESULT();
+    if (productIdFilter.length === 0) return { ...EMPTY_RESULT(), charityPledgedTotal };
   }
 
   // 🔑 production_orders 是 opsStats（出货单量/份数）与 order_settlements 查询
@@ -52,7 +66,7 @@ exports.main = async (event, context) => {
   const ordersWhere = productIdFilter ? { tenantId, productId: _.in(productIdFilter) } : { tenantId };
   const ordersRes = await db.collection('production_orders').where(ordersWhere).limit(1000).get();
   const orders = ordersRes.data || [];
-  if (orders.length === 0) return EMPTY_RESULT();
+  if (orders.length === 0) return { ...EMPTY_RESULT(), charityPledgedTotal };
 
   const orderIds = orders.map((o) => o._id);
   const settlementsRes = await db.collection('order_settlements').where({ tenantId, orderId: _.in(orderIds) }).limit(1000).get();
@@ -78,6 +92,7 @@ exports.main = async (event, context) => {
     success: true,
     summary: bucketSettlements(docs),
     details: details.slice(0, 200),
-    opsStats
+    opsStats,
+    charityPledgedTotal
   };
 };

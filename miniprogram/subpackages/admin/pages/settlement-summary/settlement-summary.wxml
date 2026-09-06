@@ -70,6 +70,12 @@
           <text class="ss-card-amount">¥{{voided.producerAmountYuan}}</text>
           <text class="ss-card-sub">未产生实际支付 · {{voided.count}} 笔</text>
         </view>
+        <!-- 🏛️（护城河一 M1）以产养善累计转捐——独立于三桶结算，只要 > 0 才展示 -->
+        <view class="ss-summary-card ss-card-charity" wx:if="{{charityPledgedTotalYuan !== '0.00'}}">
+          <text class="ss-card-title">🌾 已转捐公益厨房</text>
+          <text class="ss-card-amount">¥{{charityPledgedTotalYuan}}</text>
+          <text class="ss-card-sub">累计以产养善额度</text>
+        </view>
       </view>
 
       <view class="ss-empty-state" wx:if="{{details.length === 0}}">
@@ -88,11 +94,68 @@
             <text class="ss-detail-amount">制作方 ¥{{item.producerAmountYuan}}</text>
             <text class="ss-detail-amount" wx:if="{{item.promoterAmount > 0}}">推广 ¥{{item.promoterAmountYuan}}</text>
           </view>
+          <!-- 🏛️（护城河一 M1）只有真正 settled（不是 settled_then_reversed/
+               unsettled/refunded）的记录才允许转捐——避免把已经被红冲、或
+               根本还没结算到手的钱捐出去 -->
+          <button
+            class="ss-pledge-btn"
+            wx:if="{{item.settlementStatus === 'settled'}}"
+            data-order-id="{{item.orderId}}"
+            bindtap="onOpenPledgeModal"
+          >🌾 捐给公益厨房</button>
         </view>
       </view>
 
     </scroll-view>
 
+  </view>
+
+  <!-- 🏛️（护城河一 M1）转捐弹窗 -->
+  <view class="ss-pledge-modal-mask" wx:if="{{showPledgeModal}}" catchtap="onClosePledgeModal">
+    <view class="ss-pledge-modal-card" catchtap="stopPropagation">
+      <text class="ss-pledge-modal-title">转捐给公益厨房</text>
+      <text class="ss-pledge-modal-sub">订单 {{pledgeTargetOrderId}} · 制作方分成上限 ¥{{pledgeMaxAmountYuan}}</text>
+
+      <text class="ss-pledge-field-label">转捐金额（元）</text>
+      <input
+        class="ss-pledge-input"
+        type="digit"
+        placeholder="默认全额，可减少"
+        value="{{pledgeAmountYuan}}"
+        bindinput="onPledgeAmountInput"
+      />
+
+      <text class="ss-pledge-field-label">选择公益厨房</text>
+      <input
+        class="ss-pledge-input"
+        placeholder="搜索门店名称"
+        value="{{pledgeKeyword}}"
+        bindinput="onPledgeKeywordInput"
+      />
+
+      <view class="ss-pledge-store-loading" wx:if="{{pledgeStoresLoading}}">
+        <text>加载门店列表中...</text>
+      </view>
+      <scroll-view class="ss-pledge-store-list" scroll-y wx:else>
+        <view
+          class="ss-pledge-store-item {{pledgeSelectedStoreId === item.storeId ? 'active' : ''}}"
+          wx:for="{{pledgeStoresFiltered}}"
+          wx:key="storeId"
+          data-store-id="{{item.storeId}}"
+          bindtap="onSelectTargetStore"
+        >
+          <text class="ss-pledge-store-name">{{item.storeName}}</text>
+          <text class="ss-pledge-store-region" wx:if="{{item.city || item.province}}">📍 {{item.city || item.province}}</text>
+          <text class="ss-pledge-store-check" wx:if="{{pledgeSelectedStoreId === item.storeId}}">✔</text>
+        </view>
+        <view class="ss-pledge-store-empty" wx:if="{{pledgeStoresFiltered.length === 0}}">
+          <text>没有找到匹配的门店</text>
+        </view>
+      </scroll-view>
+
+      <button class="ss-pledge-submit-btn" loading="{{pledgeSubmitting}}" disabled="{{pledgeSubmitting}}" bindtap="onSubmitPledge">确认转捐</button>
+      <button class="ss-pledge-cancel-btn" bindtap="onClosePledgeModal">取消</button>
+    </view>
   </view>
 
 </view>
