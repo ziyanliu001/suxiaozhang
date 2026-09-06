@@ -26,6 +26,7 @@ import { writeLocalFileSafe } from '../../../../../utils/localFileCache';
 import { canExportNationalExcel, resolveEnterpriseCapabilities } from '../../../utils/enterpriseCapabilities';
 import { requestOpenSubscription } from '../../../../../utils/subscriptionHandoff';
 import { getSafeSystemInfo } from '../../../../../utils/util';
+import { getCurrentActiveStore } from '../../../../../utils/storeManager';
 import { formatCompactNumber, formatDate } from '../statistics';
 
 // 🏢 全国大屏平台类型筛选器选项：value 与 stores.orgType 字段一致，仅供
@@ -179,14 +180,34 @@ export const nationalDashboardHandlers = {
       // 再选一次"看哪个专区"（原 nationalOrgTypeFilter 字段/onOrgTypeFilterChange
       // 分类切换逻辑一并删除，见 statistics.wxml org-type-filter-scroll 移除
       // 处注释）。
-      // 🐛 上一版这里固定传 orgType:'all'——这个推理的隐含前提"本机构名下的
-      // 门店全都是雨花斋"只对干净的独立机构成立，对 yuhuazhai_national 这个
-      // 供缺失 tenantId 账号兜底挂靠的共享机构不成立（该机构下混有非雨花斋的
-      // 测试/调试门店）。'all' 传给 getNationalDashboard 后不在其 SUPPORTED_ORG_TYPES
-      // 白名单内会被直接判定为"不过滤"，等于没做任何 orgType 收窄，这才是
-      // 雨花专区大屏混入非雨花门店的真正原因。这条调用路径本就只从"雨花公益
-      // 食堂专区"工作空间触发，明确传 'yuhuazhai' 才是这里真正想表达的意图
-      const callParams: any = { rangeType: this.data.nationalRangeType, filterMode, orgType: 'yuhuazhai' };
+      // 🐛 根因修复（跨专区大屏归属混淆）：此前固定传 orgType:'yuhuazhai'，
+      // 这条调用路径不再只服务雨花专区——改为动态解析当前实际预览门店
+      // （getCurrentActiveStore()，与 profile.ts fetchStoreOrgType() 同一套写法）
+      // 的真实 orgType，一并把 storeId 传给云函数；配合 getNationalDashboard
+      // 新增的 effectiveTenantId 覆盖逻辑，超管跨机构预览时也能查到正确租户
+      // 的数据，而不是回落到自己账号注册时的固定机构。查询失败/门店是虚拟
+      // "全国总览"哨兵值（manageStoreProfile 会拒绝）时 resolvedOrgType 留空，
+      // 不传 orgType 给云函数——云函数没收到合法 orgType 时按"不过滤"处理，
+      // 返回该机构下全部业态门店，是比误判成雨花斋更安全的降级
+      const activeStore = getCurrentActiveStore();
+      let resolvedOrgType = '';
+      if (activeStore.storeId) {
+        try {
+          const orgRes: any = await callFunctionWithTimeout({
+            name: 'manageStoreProfile',
+            data: { action: 'get', storeId: activeStore.storeId }
+          });
+          resolvedOrgType = (orgRes && orgRes.result && orgRes.result.data && orgRes.result.data.orgType) || '';
+        } catch (err) {
+          console.warn('[loadNationalDashboard] 查询当前门店真实机构类型失败，本次不做 orgType 收窄:', err);
+        }
+      }
+      const callParams: any = {
+        rangeType: this.data.nationalRangeType,
+        filterMode,
+        storeId: activeStore.storeId || '',
+        ...(resolvedOrgType ? { orgType: resolvedOrgType } : {})
+      };
       if (filterMode === 'region') {
         callParams.province = this.data.selectedProvince || '';
         callParams.city = this.data.selectedCity || '';

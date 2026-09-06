@@ -325,6 +325,19 @@ exports.main = async (event, context) => {
       }
     }
 
+    // 🛡️ 超管跨机构预览：与 checkTenantPermission 云函数同一套 effectiveTenantId
+    // 覆盖逻辑——只有服务端重新确认调用者本人角色确实是 super_admin，且客户端
+    // 传了 storeId 时，才用该门店真实所属的 tenantId 覆盖账号固定的 tenantId，
+    // 解决"超管切换到完全独立的另一个机构门店后，全国大盘仍显示原机构数据"的
+    // 问题；非超管账号传了不会生效，行为与此前完全一致
+    if (userRole === 'super_admin' && event.storeId) {
+      const storeRes = await db.collection('stores').doc(event.storeId).field({ tenantId: true }).get().catch(() => null);
+      const storeTenantId = storeRes && storeRes.data && storeRes.data.tenantId;
+      if (storeTenantId) {
+        tenantId = storeTenantId;
+      }
+    }
+
     // 🛡️ 权限卡口：超管 / 大家长 / 总部财务 / 志工均可访问本机构大屏。
     // 大家长已是门店自治最高负责人，有权查看全机构汇总大盘（订阅套餐检查在下方）。
     // 志工侧为只读脱敏视图；platform_admin 不在名单——大屏是机构内部财务数据，平台运维方无需访问。
