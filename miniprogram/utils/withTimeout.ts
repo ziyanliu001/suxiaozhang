@@ -29,9 +29,26 @@ export function callFunctionWithTimeout<T = any>(
   timeoutMs: number = DEFAULT_CALL_FUNCTION_TIMEOUT_MS,
   timeoutMsg?: string
 ): Promise<T> {
-  const name = (options && options.name) || 'unknown';
+  const name = (options && options.name) || '';
+  // 🐛 防御：调用方传入空/undefined 云函数名时，wx.cloud.callFunction 会以
+  // -501000 FunctionName could not be found 报错——错误信息完全看不出"根因是
+  // 调用方没传对 name"，容易被误判成云端未部署。这里提前在本地快速失败，
+  // 报错文案直接点名问题，不让排查者绕远路
+  if (!name) {
+    return Promise.reject(new Error('callFunctionWithTimeout: 缺少云函数名 name，请检查调用方传参'));
+  }
   return withTimeout(
-    wx.cloud.callFunction(options) as unknown as Promise<T>,
+    (wx.cloud.callFunction(options) as unknown as Promise<T>).catch((err: any) => {
+      // 🐛 -501000 FunctionName could not be found：绝大多数真实场景下是该
+      // 云函数代码在仓库里存在，但从未在微信开发者工具里对其执行过"上传并
+      // 部署：云端安装依赖"，而不是调用方拼错了函数名（拼错的话代码审查/
+      // 全仓库搜索更容易先发现）。这里补一句可操作的诊断日志，不改变原始
+      // 错误对象本身，调用方现有的 catch/toast 逻辑不受影响
+      if (err && (err.errCode === -501000 || /FunctionName.*could not be found/i.test(err.errMsg || ''))) {
+        console.error(`[callFunctionWithTimeout] 云函数 "${name}" 未找到（-501000）：请确认已在微信开发者工具对 cloudfunctions/${name} 目录执行"上传并部署：云端安装依赖"，这通常是部署遗漏而非调用方代码问题`);
+      }
+      throw err;
+    }),
     timeoutMs,
     timeoutMsg || `${name} 调用超时（>${timeoutMs}ms），请检查网络后重试`
   );

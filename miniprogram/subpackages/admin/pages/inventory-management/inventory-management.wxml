@@ -89,14 +89,14 @@
         <text class="im-modal-close" bindtap="onCloseFormModal">✕</text>
       </view>
 
-      <scroll-view scroll-y class="im-modal-body">
+      <scroll-view scroll-y enable-flex="{{true}}" class="im-modal-body">
         <view class="im-form-row">
           <text class="im-form-label">物料名称 *</text>
           <input class="im-form-input" placeholder="如：有机胚芽米" value="{{form.name}}" data-field="name" bindinput="onFormFieldInput" />
         </view>
         <view class="im-form-row">
-          <text class="im-form-label">物料编码</text>
-          <input class="im-form-input" placeholder="内部条码/编码，选填" value="{{form.itemCode}}" data-field="itemCode" bindinput="onFormFieldInput" />
+          <text class="im-form-label">物料编码（选填）</text>
+          <input class="im-form-input" placeholder="内部条码/编码，可留空或直接使用默认值" value="{{form.itemCode}}" data-field="itemCode" bindinput="onFormFieldInput" />
         </view>
         <view class="im-form-row">
           <text class="im-form-label">物料分类 *</text>
@@ -169,7 +169,7 @@
         <text class="im-modal-close" bindtap="onCloseTxModal">✕</text>
       </view>
 
-      <scroll-view scroll-y class="im-modal-body">
+      <scroll-view scroll-y enable-flex="{{true}}" class="im-modal-body">
         <view class="im-form-row">
           <text class="im-form-label">变动类型 *</text>
           <picker range="{{actionTypeOptions}}" range-key="label" value="{{actionTypePickerIndex}}" bindchange="onTxActionTypePickerChange">

@@ -67,6 +67,20 @@ function formatCreateTime(value: any): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// 🌟 物料编码默认前缀：后厨/义工建档时最容易在这个纯自由文本字段上卡壳纠结
+// "到底该填什么"——服务端 sanitizeCode() 允许空值也不做唯一性校验（见
+// cloudfunctions/manageInventoryItem/index.js），本就不是强制唯一的业务
+// 主键，只是给愿意维护条码习惯的门店用的辅助字段。这里预填一个
+// "WL+日期+3位随机数"默认值减轻输入负担，用户仍可自由改写或清空
+function generateDefaultItemCode(): string {
+  const d = new Date();
+  const y = String(d.getFullYear()).slice(2);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const rand = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+  return `WL${y}${m}${day}${rand}`;
+}
+
 const EMPTY_TX_FORM = {
   itemId: '',
   itemName: '',
@@ -248,7 +262,7 @@ Page({
     this.setData({
       showFormModal: true,
       formMode: 'create',
-      form: { ...EMPTY_FORM },
+      form: { ...EMPTY_FORM, itemCode: generateDefaultItemCode() },
       categoryPickerIndex: -1,
       unitPickerIndex: -1
     });
