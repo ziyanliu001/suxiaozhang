@@ -123,9 +123,15 @@ Component({
       }
 
       if (!this.data.logId) {
-        wx.showToast({ title: '本次打卡暂未同步至云端，标签无法保存', icon: 'none' });
+        // 🐛 根因排查：这个分支曾经和下面的 wx.showToast 一起被误读成"两个
+        // 弹窗打架"——实际是 showToast 与 triggerEvent('close') 挤在同一个
+        // 事件循环 tick 里，宿主页 onMeritDialogClose() 收到 close 后立刻
+        // 把海报弹窗顶上来，Toast 才刚弹出就被下一个弹窗盖住，视觉上像冲突。
+        // 现在把 close 推迟到 Toast 展示时长（1500ms 默认值）内的一个合理
+        // 停留窗口之后，让"提示 → 关闭 → 拉起海报"三步真正按顺序发生
+        wx.showToast({ title: '本次打卡记录暂未同步云端，善行标签这次没有保存成功', icon: 'none' });
         this.resetForm();
-        this.triggerEvent('close', {}, {});
+        setTimeout(() => this.triggerEvent('close', {}, {}), 600);
         return;
       }
 
@@ -137,7 +143,15 @@ Component({
         });
         const result = res.result;
         if (!result || !result.success) {
-          wx.showToast({ title: (result && result.error) || '记录失败，请重试', icon: 'none' });
+          // 🐛 根因排查：'无效操作' 是 manageVolunteerCheckIn 云函数 dispatcher
+          // 对"未识别的 action"的兜底文案（见该文件 exports.main），只有云端
+          // 部署的版本落后于前端（还没有 updateMeritTags 这个 action）时才会
+          // 出现——把这句内部错误码原样甩给用户会让人一头雾水，这里换成
+          // 指向真实原因的措辞；其余业务错误（如网络异常、logId 不存在）
+          // 保留 result.error 原样透传，不掩盖真实问题
+          const rawError = result && result.error;
+          const friendlyError = rawError === '无效操作' ? '当前版本暂不支持记录，请稍后再试' : (rawError || '记录失败，请重试');
+          wx.showToast({ title: friendlyError, icon: 'none' });
           return;
         }
         wx.showToast({ title: '已记录今日善行 🌸', icon: 'success' });

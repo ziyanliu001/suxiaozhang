@@ -11818,9 +11818,12 @@ Page({
     this.syncCheckInHoursToForm(true);
   },
 
-  // 🌸 修心积善打卡·微善标签弹窗关闭：无论用户是提交了标签还是直接"稍后再说"
-  // 跳过，都要继续走原有的"打卡成功"海报预览流程——两个弹窗依次展示，见
-  // onConfirmShiftCheckIn 成功分支的注释
+  // 🌸 修心积善打卡·微善标签弹窗关闭：无论用户是提交了标签、直接"稍后再说"
+  // 跳过，还是标签保存失败（本次打卡没有云端 logId、或云函数调用出错，见
+  // volunteer-merit-dialog.ts onSubmit 的 close 分支），都要继续走原有的
+  // "打卡成功"海报预览流程——两个弹窗依次展示，不是并发/互斥关系，见
+  // onConfirmShiftCheckIn 成功分支的注释。组件侧已经给"保存失败"这条路径
+  // 的 Toast 留足展示时间才触发 close，这里不需要再额外加延迟
   onMeritDialogClose() {
     this.setData({ showMeritDialog: false, showPosterModal: true });
   },
