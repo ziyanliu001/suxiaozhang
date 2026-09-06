@@ -254,6 +254,13 @@
   text-decoration: underline;
 }
 
+/* 🐛 "确实没有门店"空态的第二行提示文案：字号更小、颜色更淡，跟第一行的
+   主提示区分主次，不需要独立的 flex/padding（继承 .store-empty-tip 已有的） */
+.store-empty-hint {
+  font-size: 22rpx;
+  color: #B0B0B0;
+}
+
 .store-operating-badge {
   font-size: 20rpx;
   padding: 2rpx 12rpx;

@@ -9094,12 +9094,20 @@ Page({
   // setData 成 'yuhua'/'general' 后，这里补一次刷新，让 fetchAllStoresList()
   // 用已经落地的新专区重新按 orgType 收窄查询，再交给 maybeAutoSelectStore()
   // 做静默默认选中——确保"先过滤专区门店列表，再在工作台展示选中站点"这个顺序，
-  // 不是拿着进专区前的脏列表乱选。已绑定具体门店（currentStoreId 非空）时无需
-  // 这一步，直接跳过
+  // 不是拿着进专区前的脏列表乱选。
+  // 🐛 根因修复（通用/雨花两个专区来回切换时机构上下文串号）：此前"已绑定具体
+  // 门店（currentStoreId 非空）时无需这一步，直接跳过"这条短路对超管/多专区
+  // 账号是错的——currentStoreId 非空只能说明"上一次在某个专区选过一家店"，
+  // 不能证明"这家店属于本次刚进入的新专区"。超管从雨花专区（currentStoreId
+  // 指向三源弘雨花斋）点回选择工作空间首页、再点【通用素食/门店记账】时，
+  // currentStoreId 原样保留，这条短路会让 fetchAllStoresList()→
+  // maybeAutoSelectStore()→invalidateStaleZoneStore() 这整条"清理跨专区脏
+  // 选中态"的链路完全不执行，store-picker 顶部胶囊与选店抽屉继续展示上一个
+  // 专区的门店名，造成"专区已经切了，机构上下文却没跟着变"的错觉。现在无条件
+  // 触发刷新，交给 invalidateStaleZoneStore() 按"新专区列表里是否还能找到这个
+  // storeId"做真正的判断，而不是简单地"有值就当作有效"
   syncStoresForZoneEntry() {
-    if (!this.data.currentStoreId) {
-      this.fetchAllStoresList();
-    }
+    this.fetchAllStoresList();
   },
 
   // 🛡️ 超管判定：优先信任 this.data 上已经算好的 isRealSuperAdmin（真实身份，见

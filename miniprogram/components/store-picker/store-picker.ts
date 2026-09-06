@@ -978,10 +978,22 @@ Component({
     },
 
     // ➕ 切换"门店列表" / "申请新门店表单"
+    // 🐛 根因修复（通用专区新建门店被悄悄提交成雨花斋）：orgTypeIndex 此前无论
+    // 从哪个专区点进来都硬写死 0（ORG_TYPE_OPTIONS[0] 固定是 'yuhuazhai'）——
+    // 用户从【通用素食/门店记账】专区点"找不到您的门店？申请新建"，若不手动
+    // 触碰这个下拉框直接提交，新建的门店会被打上 orgType:'yuhuazhai' 标签，
+    // 之后在通用专区里永远找不到它（buildOrgTypeCondition 会把它当雨花斋过滤
+    // 掉），造成"明明刚建了店，通用专区还是空的"这类更隐蔽的二次故障。现在按
+    // 宿主页面透传的 orgTypeFilter 选一个与当前专区语义一致的默认项：雨花专区
+    // 仍默认 'yuhuazhai'（index 0）；通用专区默认 'other'（ORG_TYPE_OPTIONS
+    // 里语义最接近"未归类的爱心组织"的一项），用户仍可在下拉框里改成更精确的
+    // 具体类型（社区助老/义工服务站等），只是不再让默认值本身就选错专区
     onToggleNewStoreForm() {
+      const defaultOrgType = this.properties.orgTypeFilter === 'yuhuazhai' ? 'yuhuazhai' : 'other';
+      const orgTypeIndex = Math.max(0, ORG_TYPE_OPTIONS.findIndex((o) => o.value === defaultOrgType));
       this.setData({
         showNewStoreForm: !this.data.showNewStoreForm,
-        orgTypeIndex: 0,
+        orgTypeIndex,
         newStoreForm: {
           customStoreName: '', applyRole: 'volunteer', realName: '', phone: '', adminKey: '',
           address: '', contactPhone: '', storePhotos: [], regionArray: [], province: '', city: '', district: ''

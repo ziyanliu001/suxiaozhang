@@ -65,7 +65,19 @@
       <view class="store-list-loading-tip" wx:if="{{storeListLoading}}">
         <text>正在加载最新门店列表...</text>
       </view>
-      <view class="store-empty-tip" wx:if="{{!storeListLoading && groupedStoreList.length === 0}}">
+      <!-- 🐛 根因修复（"清空筛选"看起来毫无反应）：此前无论"确实一家门店都没有"
+           还是"筛选条件太窄"都共用同一句"没有找到符合条件的门店，试试清空筛选
+           条件"文案——账号所属机构在当前专区本就一家门店都没有时（如雨花斋
+           机构下点【通用素食/门店记账】），allStores 本身是空的，清空筛选自然
+           不会变出门店来，用户会误以为按钮坏了。现在按 allStores 是否为空
+           分成两种空态：真的一家都没有时给出"未创建/加入"的引导文案，呼应
+           下方"找不到您的门店？申请新建/加入新门店"入口；仅仅是筛选筛没了
+           才展示"清空筛选" -->
+      <view class="store-empty-tip" wx:if="{{!storeListLoading && groupedStoreList.length === 0 && allStores.length === 0}}">
+        <text>{{orgTypeFilter === 'yuhuazhai' ? '您尚未创建或加入雨花斋门店' : (orgTypeFilter === 'general' ? '您尚未创建或加入通用素食门店' : '您尚未创建或加入任何门店')}}</text>
+        <text class="store-empty-hint">点击下方"申请新建/加入新门店"创建您的第一家门店</text>
+      </view>
+      <view class="store-empty-tip" wx:if="{{!storeListLoading && groupedStoreList.length === 0 && allStores.length > 0}}">
         <text>没有找到符合条件的门店，试试清空筛选条件</text>
         <text class="btn-clear-filters" bindtap="onClearFilters">清空筛选</text>
       </view>
