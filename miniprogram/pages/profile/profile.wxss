@@ -481,30 +481,33 @@
 
 /* 🐛 合并重构：原 .sa-inspect-bar（巡检门店）+ .sa-impersonation-bar（模拟视角）
    两条几乎同款配色/结构的顶部黄色提示条，合并为一条 .sa-status-bar——按当前
-   实际激活的临时视角组合展示文案，避免两者同时激活时堆成两个提示框 */
+   实际激活的临时视角组合展示文案，避免两者同时激活时堆成两个提示框。
+   🆕（信息架构瘦身）原本是厚重渐变底色+大内边距的"警示条"视觉权重，只是
+   一句提示信息+一个重置按钮，不该抢首屏视觉焦点。降级为轻量描边徽标条：
+   浅色描边取代渐变底色，内边距/字号统一收紧，视觉上从"警告"降到"状态
+   提示"，wx:if 条件/文案逻辑/onResetSuperAdminTempViews 按钮行为完全不变 */
 .sa-status-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
-  background: linear-gradient(135deg, #fff7e6 0%, #fff1d6 100%);
-  border: 1rpx solid #f5c26b;
-  border-radius: 20rpx;
-  padding: 20rpx 22rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(217, 155, 33, 0.12);
+  gap: 12rpx;
+  background: #fffaf0;
+  border: 1rpx solid #f0d9a8;
+  border-radius: 16rpx;
+  padding: 12rpx 18rpx;
+  margin-bottom: 16rpx;
 }
 
 .sa-status-left {
   display: flex;
   align-items: center;
-  gap: 14rpx;
+  gap: 10rpx;
   flex: 1;
   min-width: 0;
 }
 
 .sa-status-icon {
-  font-size: 30rpx;
+  font-size: 24rpx;
   flex-shrink: 0;
 }
 
@@ -515,7 +518,7 @@
 }
 
 .sa-status-text {
-  font-size: 24rpx;
+  font-size: 22rpx;
   font-weight: 600;
   color: #8a5a00;
   overflow: hidden;
@@ -525,31 +528,24 @@
 
 .sa-status-restore-btn {
   flex-shrink: 0;
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 600;
-  color: #ffffff;
-  background: #d99b21;
-  padding: 12rpx 22rpx;
+  color: #d99b21;
+  background: #ffffff;
+  border: 1rpx solid #d99b21;
+  padding: 8rpx 18rpx;
   border-radius: 100rpx;
   white-space: nowrap;
 }
 
 .sa-status-restore-btn:active {
-  opacity: 0.85;
+  opacity: 0.7;
 }
 
-/* 📸 雨花温情图册与阳光凭证入口：从首页迁移至个人中心，与页面其余白底卡片
-   同一套圆角+阴影语言，图标/标题/副标题/箭头四段式列表入口 */
-.photo-archive-mine-entry {
-  display: flex;
-  align-items: center;
-  background: #FFFFFF;
-  border-radius: 20rpx;
-  padding: 24rpx 28rpx;
-  margin: 0 24rpx 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-}
-
+/* 📸 雨花温情图册与阳光凭证入口：图标/标题/副标题/箭头四段式，原来是独立
+   白卡（.photo-archive-mine-entry，已随善行功德专区合并移除），现在是
+   .merit-hall-card 内部的一个子行（见该卡片的 .merit-hall-row），这几个
+   内部元素类名原样保留复用 */
 .pame-icon-wrap {
   flex-shrink: 0;
   width: 72rpx;
@@ -1430,6 +1426,68 @@
   opacity: 0.88;
 }
 
+/* 🆕（信息架构瘦身）管理"工作台"摘要卡：大家长/店长/超管三组角色共用同一套
+   样式，折叠态下取代原本直接铺开的详情卡片，与页面其余金边卡片同一视觉
+   语言（浅金背景+金边），但更矮更轻——只是一个"点击展开"的入口，不该比
+   展开后的详情卡片更抢眼 */
+.admin-workbench-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFBF0;
+  border: 1rpx solid #E6D0A0;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.admin-workbench-summary:active {
+  opacity: 0.85;
+}
+
+.aws-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.aws-icon {
+  font-size: 40rpx;
+  flex-shrink: 0;
+}
+
+.aws-text-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+.aws-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
+.aws-sub {
+  font-size: 22rpx;
+  color: #A0844A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aws-toggle {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #8C1D18;
+  margin-left: 16rpx;
+}
+
 /* ===== 🏛️ 家长管理 / 资源兜底：内嵌自原 pages/patriarch-dashboard，样式沿用
    该页原有的 pd-* 命名，外层包一层与本页其余卡片一致的金边容器 ===== */
 .patriarch-panel-card {
@@ -1905,6 +1963,27 @@
   transition: width 0.3s ease;
 }
 
+/* 🆕 当月无流水快捷入口：与 pd-health-more 同一档辅助文字权重，不抢
+   上方四宫格数据的视觉焦点 */
+.pd-health-empty-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F1F3F5;
+}
+
+.pd-health-empty-text {
+  font-size: 24rpx;
+  color: #868E96;
+}
+
+.pd-health-empty-arrow {
+  font-size: 24rpx;
+  color: #ADB5BD;
+}
+
 .pd-verify-text {
   font-size: 24rpx;
   color: #495057;
@@ -1988,9 +2067,11 @@
 
 /* ===== 🆕 顶部卡片区（数据与高级功能）：左侧全国数据看板作为最高层级的
    全局数据视图，加粗放大突出展示；右侧专业服务弱化为轻量 Banner/Tag，
-   只标明开通状态，不与左侧核心数据入口抢视觉焦点。配色与 .national-overview-card
-   （超管的全国纵览卡片）同一套绿色系呼应，全站统一"全国/全局数据=绿色调"的
-   视觉语言。取代原先并排的 .pd-advanced-row（专业版+全国数据看板同权重展示） ===== */
+   只标明开通状态，不与左侧核心数据入口抢视觉焦点。配色沿用"全国/全局数据=
+   绿色调"的全站视觉语言（当年与同款绿色系的旧 .national-overview-card
+   呼应而定——该类名已随「善行功德专区」信息架构调整改名为暖色调的
+   .merit-hall-card，两者不再是同一色系，仅作历史沿革说明，不影响本处
+   实际取色）。取代原先并排的 .pd-advanced-row（专业版+全国数据看板同权重展示） ===== */
 .top-advanced-row {
   display: flex;
   align-items: stretch;
@@ -2114,15 +2195,50 @@
   color: #868E96;
 }
 
-/* ── 💖 全网爱心支持卡片：个人页公开展示区，不含门店总数/服务人次等运营数据
-   （那些留在统计页专属大屏），只保留发心分布比例条 + 最新爱心支持善缘墙 ── */
-.national-overview-card {
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+/* ── 🌸 善行功德专区：合并「阳光温情图册与爱心故事」+「发心分布：阳善vs
+   积阴德 + 阳善善缘墙」（原各自独立的 photo-archive-mine-entry 白卡 /
+   national-overview-card 白卡），暖色调统一容器，避免两块相关但配色不同的
+   内容各自成卡、生硬堆叠 ── */
+.merit-hall-card {
+  background: linear-gradient(135deg, #FFFBF3 0%, #FFF6E8 100%);
+  border: 1rpx solid #F0DDB8;
   border-radius: 24rpx;
-  padding: 28rpx 24rpx 24rpx;
+  padding: 24rpx;
   margin-bottom: 20rpx;
-  box-shadow: 0 4rpx 16rpx rgba(16, 185, 129, 0.08);
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
+}
+
+.merit-hall-header {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+}
+
+.merit-hall-icon {
+  font-size: 30rpx;
+}
+
+.merit-hall-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
+/* 专区内的图册入口子行：与原独立白卡视觉一致（白底+圆角），但去掉外层
+   margin/box-shadow——阴影/边距现在由 .merit-hall-card 统一提供 */
+.merit-hall-row {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-radius: 18rpx;
+  padding: 20rpx 22rpx;
+}
+
+.merit-hall-divider {
+  height: 1rpx;
+  background: #F0DDB8;
+  margin: 20rpx 0;
 }
 
 /* 发心分布：阳善 vs 积阴德——迁移自统计页全国大屏，配色（金/靛蓝）原样保留 */

@@ -207,26 +207,9 @@
          点击即可退出预览、admin-dashboard-card 随之重新出现，再从卡片内入口切换
          到另一个角色——不会出现"卡在预览态里出不来"的死路 -->
 
-    <!-- 📸 阳光温情图册与爱心故事：从首页迁移至个人中心，路由（history 页图册模式）
-         与数据加载逻辑（getPhotoArchive 云函数）与原首页入口卡完全一致。
-         🆕 全角色通用头部入口：wx:if 去掉了原先的 !isVolunteer && !isFamily 限制，
-         义工/家人现在也能看到（呼应 initMinePage 里 loadRecentPhotos 放宽后的
-         触发条件）；全国总览视角下 getPhotoArchive 仍会正常聚合返回，不特殊排除。
-         🆕 合并原【爱心温情故事】独立入口：getPhotoArchive 本就聚合 activity_logs
-         （门店日志/温情故事图片）与 report_logs/daily_menus（阳光凭证）三类图片，
-         history 图册页也已有"📸 活动日志"筛选 Tab——点击本卡片即可同时查阅温情
-         故事与阳光凭证，不再需要旧版"温情故事"弹窗的二次跳转，标题/文案统一不
-         再按 isYuhuazhai 分裂措辞 -->
-    <view class="photo-archive-mine-entry" wx:if="{{recentPhotosLoaded}}" hover-class="ui-hover" bindtap="onGoToPhotoArchive">
-      <view class="pame-icon-wrap">
-        <text class="pame-icon">🏡</text>
-      </view>
-      <view class="pame-text">
-        <text class="pame-title">阳光温情图册与爱心故事</text>
-        <text class="pame-subtitle">查看爱心图册、温情故事与阳光凭证{{recentPhotosTotal > 0 ? '（' + recentPhotosTotal + '张）' : ''}}</text>
-      </view>
-      <view class="pame-arrow">›</view>
-    </view>
+    <!-- 📸 阳光温情图册与爱心故事入口已并入下方【🌸 善行功德专区】统一卡片
+         （merit-hall-card，与「发心分布/阳善善缘墙」合并展示，见该卡片处
+         注释），此处不再单独渲染，避免同一份内容分两处出现 -->
 
     <!-- 🌟 家人骨干版护持榜：与流动义工共用同一套统计结构（护持天数/累计工时），
          只是标题文案换成"家人"专属用语，与义工版视觉区分开——不是隐藏，是选项 B
@@ -275,9 +258,9 @@
            看到大标题"爱心家园"，往下滑几屏又看到一个一模一样的"爱心家园"子标题，
            以为是重复渲染/滚动出了问题。这里改成描述本组实际内容（门店档案 + 日志 +
            关注门店 + 意见箱，都是"门店"维度信息，不是"我的爱心"这类个人维度贡献）
-           的独立文案，不再跟外层大标题撞名。原"温情故事"独立入口已合并进顶部通栏
-           卡片"阳光温情图册与爱心故事"（见上方 photo-archive-mine-entry，
-           getPhotoArchive 已聚合门店日志图片） -->
+           的独立文案，不再跟外层大标题撞名。原"温情故事"独立入口已合并进
+           【善行功德专区】卡片（merit-hall-card）里的"阳光温情图册与爱心故事"
+           子区块，getPhotoArchive 已聚合门店日志图片 -->
       <text class="list-group-label family-care-list-label">🏡 门店信息</text>
       <view class="ui-card-wrapper action-list-container family-care-list">
         <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToStoreProfile">
@@ -482,10 +465,27 @@
       </view>
     </view>
 
+    <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方经营健康大盘 +
+         门店管理中心两张详情卡，个人志愿档案/阳善荣誉等个人属性内容因此能
+         提前进入首屏可视范围，不需要物理挪动这些个人内容区块。点击展开后
+         下方两张卡片原样出现，绑定/数据获取逻辑完全不变 -->
+    <view class="admin-workbench-summary" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}" bindtap="onToggleAdminWorkbench">
+      <view class="aws-left">
+        <text class="aws-icon">🏪</text>
+        <view class="aws-text-col">
+          <text class="aws-title">门店管理中心</text>
+          <text class="aws-sub" wx:if="{{(pendingMemberApplicationCount + pendingVolunteerSubmissionCount + pendingFeedbackCount) > 0}}">{{pendingMemberApplicationCount + pendingVolunteerSubmissionCount + pendingFeedbackCount}} 项待处理</text>
+          <text class="aws-sub" wx:else>暂无待处理事项</text>
+        </view>
+      </view>
+      <text class="aws-toggle">{{showAdminWorkbench ? '收起 ▲' : '展开 ▼'}}</text>
+    </view>
+
     <!-- 🆕 区块一：本店经营健康大盘——服务人次/收支/净额 + 验真状态 + 高风险
          待确认队列（作废申请/门店画像变更）。仅真实大家长本人可见，超管不再
-         直接经手单店日常运营数据 -->
-    <view class="patriarch-panel-card" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}">
+         直接经手单店日常运营数据。🆕 追加 showAdminWorkbench 折叠开关（见上方
+         admin-workbench-summary 摘要卡） -->
+    <view class="patriarch-panel-card" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance && showAdminWorkbench}}">
       <view class="patriarch-panel-header">
         <text class="patriarch-panel-title">📊 本店经营健康大盘</text>
       </view>
@@ -527,6 +527,18 @@
           <view class="pd-verify-progress-track" wx:if="{{patriarchData.totalCount > 0}}">
             <view class="pd-verify-progress-fill" style="width: {{patriarchData.verifyProgressPercent}}%;"></view>
           </view>
+        </view>
+
+        <!-- 🆕 当月无流水快捷入口：getPatriarchDashboard 硬编码"当月"，没有
+             跨月查询能力（不像 getSunshineLedger 支持 yearMonth 参数），本月
+             刚开始/门店暂停营业等场景下三项数据全零会显得界面空洞——不改
+             云函数，纯前端加一条跳转全部历史流水的入口，复用既有的
+             onGoToMySubmissions()（大家长走该方法的默认分支，落地到
+             /subpackages/reports/pages/history/history?view=mine 真实台账
+             历史页），点击本行不冒泡触发整卡的 onGoToStoreOverview -->
+        <view class="pd-health-empty-link" wx:if="{{patriarchData.monthDiners == 0 && patriarchData.monthIncome == 0 && patriarchData.monthExpense == 0 && !patriarchData.loading}}" catchtap="onGoToMySubmissions">
+          <text class="pd-health-empty-text">📜 本月暂无流水，查看全部历史流水凭证</text>
+          <text class="pd-health-empty-arrow">›</text>
         </view>
       </view>
 
@@ -574,8 +586,9 @@
          【门店运营配置】维持列表形式（低频公示/配置类操作，不需要抢视觉优先级），
          两种信息密度物理分组，管理任务轻重缓急一目了然。此卡片严格仅
          isPatriarch 专属——原合并卡片（下方 patriarch-panel-card，isManager 专属）
-         保留给店长继续使用旧的列表式布局，互不影响 -->
-    <view class="patriarch-panel-card" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance}}">
+         保留给店长继续使用旧的列表式布局，互不影响。🆕 追加 showAdminWorkbench
+         折叠开关，见上方 admin-workbench-summary 摘要卡 -->
+    <view class="patriarch-panel-card" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance && showAdminWorkbench}}">
       <view class="patriarch-panel-header">
         <text class="patriarch-panel-title">⚙️ 门店管理中心</text>
         <view class="pd-store-name-pill" catchtap="onEditStoreInfo">
@@ -686,12 +699,28 @@
       </view>
     </view>
 
+    <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方数据概览 + 门店
+         管理中心两张详情卡，与大家长分支同一套折叠开关（showAdminWorkbench），
+         点击展开后下方两张卡片原样出现 -->
+    <view class="admin-workbench-summary" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch}}" bindtap="onToggleAdminWorkbench">
+      <view class="aws-left">
+        <text class="aws-icon">🏪</text>
+        <view class="aws-text-col">
+          <text class="aws-title">门店管理中心</text>
+          <text class="aws-sub" wx:if="{{(pendingMemberApplicationCount + pendingVolunteerSubmissionCount + pendingFeedbackCount) > 0}}">{{pendingMemberApplicationCount + pendingVolunteerSubmissionCount + pendingFeedbackCount}} 项待处理</text>
+          <text class="aws-sub" wx:else>暂无待处理事项</text>
+        </view>
+      </view>
+      <text class="aws-toggle">{{showAdminWorkbench ? '收起 ▲' : '展开 ▼'}}</text>
+    </view>
+
     <!-- 🆕 【店长专属】📊 本店数据概览：2x2 核心指标卡片，放在【门店管理中心】
          正上方——店长打开个人中心第一眼就能扫到今日运营核心数字，不用逐个点开
          管理弹窗才能看到。今日用餐人次/今日义工打卡/结余概览见
          fetchManagerTodaySnapshot；待审批事项直接对三路已在 initMinePage 里
-         proactively 拉取好的角标计数求和展示，不发起额外请求 -->
-    <view class="mgr-snapshot-card" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch}}">
+         proactively 拉取好的角标计数求和展示，不发起额外请求。🆕 追加
+         showAdminWorkbench 折叠开关，见上方 admin-workbench-summary 摘要卡 -->
+    <view class="mgr-snapshot-card" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch && showAdminWorkbench}}">
       <view class="mgr-snapshot-header">
         <text class="mgr-snapshot-title">📊 本店数据概览</text>
       </view>
@@ -717,8 +746,9 @@
 
     <!-- 🏪 【店长专属】⚙️ 门店管理中心：与上方大家长专属的宫格化卡片同名，
          但沿用旧版列表式布局——大家长已改用新版宫格卡片（isManager 已从
-         wx:if 中移除），这里严格只服务 isManager，二者互不重叠 -->
-    <view class="patriarch-panel-card" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch}}">
+         wx:if 中移除），这里严格只服务 isManager，二者互不重叠。🆕 追加
+         showAdminWorkbench 折叠开关，见上方 admin-workbench-summary 摘要卡 -->
+    <view class="patriarch-panel-card" wx:if="{{isManager && !isSuperAdmin && !isVolunteer && !isFamily && !isFinance && !isPatriarch && showAdminWorkbench}}">
       <!-- 🐛 层级瘦身：此前标题行"⚙️ 门店管理中心"与紧接着第二行的"🏢 门店管理
            中心 [门店名] ✏️修改"重复堆叠了两遍"门店管理中心"文案——合并为一行，
            门店名改用轻量 Pill 标签收纳在大标题右侧，点击直接唤起【组织信息配置】
@@ -926,23 +956,53 @@
       </view>
     </view>
 
-    <!-- 💖 全网爱心支持卡片：不展示门店总数/活跃门店/服务人次等运营数据网格，
-         也没有跳转数据大屏的卡片标题/入口——只保留「发心分布：阳善 vs 积阴德」
-         比例条这块公开、温情性质的内容；「最新爱心支持」滚动善缘墙已抽成独立
-         可复用组件 <yangshan-wall/>（与首页同款，见 components/yangshan-wall），
-         组件自行按 storeId 拉取数据，不需要本卡片再传一份 donors 列表进去。
-         🆕 数据源是公开只读云函数 getSunshineLedger（与首页「☀️ 阳光账本」入口
-         同款，见 fetchStoreLoveWallSummary），严格按调用方自己归属的 storeId
-         查询，不做任何角色权限校验——家人/义工/财务/店长/大家长/超管全部角色
-         都能看到，且只会看到自己所属门店的数据，不会带出其他门店的信息。
-         比例条 wx:if 与 <yangshan-wall/> 各自独立判空，不需要卡片外层再做
-         一次联合判断——donors 非空必然意味着 yangRatioPct>0（donors 只会来自
-         阳善报表），不存在"比例条为空但善缘墙有数据"的情况 -->
-    <view class="national-overview-card" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
-      <!-- 发心分布：阳善 vs 积阴德——从统计页「全国数据看板」迁移至此，原位置是
-           数据密集的运营/财务分析场景，这类温情公开展示放在那里既不醒目也不合
-           场景；个人中心是人人都会打开的页面，更适合公开展示 -->
-      <view class="no-merit-section no-merit-section--first">
+    <!-- 🌸（信息架构优化）善行功德专区：合并原先物理位置相距很远的两块内容——
+         「阳光温情图册与爱心故事」（原顶部 photo-archive-mine-entry 独立白卡）
+         与「发心分布：阳善vs积阴德 + 阳善善缘墙」（原 national-overview-card），
+         统一进一张视觉庄重的暖色专区卡片，避免色块生硬堆叠。两个子区块各自
+         独立判空（一个用 recentPhotosLoaded，一个用 yangRatioPct/yinRatioPct），
+         整卡 wx:if 取两者并集，任一子区块有内容就整卡渲染；数据获取逻辑
+         （loadRecentPhotos()/fetchStoreLoveWallSummary()）完全不变，只是渲染
+         的视觉容器合并了。子区块内部原有的数据源/角色可见性说明见下方各自
+         注释，均从原位置原样迁移，未改动业务逻辑 -->
+    <view class="merit-hall-card" wx:if="{{recentPhotosLoaded || storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
+      <view class="merit-hall-header">
+        <text class="merit-hall-icon">🌸</text>
+        <text class="merit-hall-title">善行功德专区</text>
+      </view>
+
+      <!-- 📸 阳光温情图册与爱心故事：从首页迁移至个人中心，路由（history 页图册
+           模式）与数据加载逻辑（getPhotoArchive 云函数）与原首页入口卡完全一致。
+           全角色通用：wx:if 不再限制 !isVolunteer && !isFamily，义工/家人也能
+           看到；已合并原【爱心温情故事】独立入口——getPhotoArchive 本就聚合
+           activity_logs（温情故事）与 report_logs/daily_menus（阳光凭证），
+           history 图册页已有"📸 活动日志"筛选 Tab，不需要旧版温情故事弹窗的
+           二次跳转 -->
+      <view class="merit-hall-row" wx:if="{{recentPhotosLoaded}}" hover-class="ui-hover" bindtap="onGoToPhotoArchive">
+        <view class="pame-icon-wrap">
+          <text class="pame-icon">🏡</text>
+        </view>
+        <view class="pame-text">
+          <text class="pame-title">阳光温情图册与爱心故事</text>
+          <text class="pame-subtitle">查看爱心图册、温情故事与阳光凭证{{recentPhotosTotal > 0 ? '（' + recentPhotosTotal + '张）' : ''}}</text>
+        </view>
+        <view class="pame-arrow">›</view>
+      </view>
+
+      <view class="merit-hall-divider" wx:if="{{recentPhotosLoaded && (storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0)}}"></view>
+
+      <!-- 💖 发心分布：阳善 vs 积阴德——从统计页「全国数据看板」迁移至此，原位置
+           是数据密集的运营/财务分析场景，这类温情公开展示放在那里既不醒目也不
+           合场景；个人中心是人人都会打开的页面，更适合公开展示。「最新爱心
+           支持」滚动善缘墙已抽成独立可复用组件 <yangshan-wall/>（与首页同款，
+           见 components/yangshan-wall），组件自行按 storeId 拉取数据。数据源是
+           公开只读云函数 getSunshineLedger（与首页「☀️ 阳光账本」入口同款，见
+           fetchStoreLoveWallSummary），严格按调用方自己归属的 storeId 查询，
+           不做任何角色权限校验——家人/义工/财务/店长/大家长/超管全部角色都能
+           看到，且只会看到自己所属门店的数据。比例条 wx:if 与 <yangshan-wall/>
+           各自独立判空，不需要联合判断——donors 非空必然意味着 yangRatioPct>0
+           （donors 只会来自阳善报表），不存在"比例条为空但善缘墙有数据"的情况 -->
+      <view class="no-merit-section no-merit-section--first" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
         <text class="no-merit-title">发心分布：阳善 vs 积阴德</text>
         <view class="no-merit-bar-wrap">
           <view class="no-merit-seg seg-yang" style="width:{{storeLoveWallMeritRatio.yangRatioPct}}%" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0}}"></view>
@@ -969,7 +1029,7 @@
         </view>
       </view>
 
-      <view class="no-yangshan-wall-slot">
+      <view class="no-yangshan-wall-slot" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
         <yangshan-wall storeId="{{myStoreId}}" />
       </view>
     </view>
@@ -1116,12 +1176,30 @@
          指挥卡与浅色列表在预览态下同时刷屏、语义打架。真正的"超管专属操作"权限
          仍由各 on* 处理函数内部用 isRealSuperAdmin 二次校验，与卡片显隐是两回事。 -->
 
+    <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方两张超管专属
+         卡片（全局控制台 + 风控/视角/运维工具箱，合计 9 行纯列表平铺），与
+         大家长/店长分支同一套折叠开关。风控待办直接复用 patriarchData 已加载
+         的字段判断（超管本就与 patriarch 共用 fetchPatriarchDashboardData()
+         取数，见该函数注释），不新增请求 -->
+    <view class="admin-workbench-summary" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}" bindtap="onToggleAdminWorkbench">
+      <view class="aws-left">
+        <text class="aws-icon">🛡️</text>
+        <view class="aws-text-col">
+          <text class="aws-title">超管工具箱</text>
+          <text class="aws-sub" wx:if="{{patriarchData.pendingVoidList.length > 0 || patriarchData.pendingProfileUpdate}}">存在待处理风控事项</text>
+          <text class="aws-sub" wx:else>全网数据 · 风控与安全 · 系统运维</text>
+        </view>
+      </view>
+      <text class="aws-toggle">{{showAdminWorkbench ? '收起 ▲' : '展开 ▼'}}</text>
+    </view>
+
     <!-- 模块一：全局控制台（深色，全网数据与决策入口）
          🛡️ 加固：显式排除 isVolunteer/isFamily/isManager/isPatriarch/isFinance，
          多重兜底——即便未来角色计算逻辑出现回归导致 isSuperAdmin 与其他角色标志
          同时为 true，店长/义工/家人/大家长/财务视角也绝不会渲染这张超管专属卡片。
-         isSuperAdmin 本身已与其余角色互斥，这里是防御性冗余，不是当前已知的漏洞修复 -->
-    <view class="sa-command-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}">
+         isSuperAdmin 本身已与其余角色互斥，这里是防御性冗余，不是当前已知的漏洞修复。
+         🆕 追加 showAdminWorkbench 折叠开关，见上方 admin-workbench-summary 摘要卡 -->
+    <view class="sa-command-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance && showAdminWorkbench}}">
       <view class="sa-command-header">
         <view class="sa-command-badge-row">
           <text class="sa-command-crown">👑</text>
@@ -1174,8 +1252,9 @@
          页面外层卡片数量减少 2 张，各分组内部的 action-row 绑定与交互逻辑完全不变 -->
     <!-- 🛡️ 加固：同 sa-command-card，显式排除 isVolunteer/isFamily/isManager/isPatriarch/
          isFinance 作防御性冗余——"撤销违规管理权限"/"重置门店申请密钥"/"系统运维与性能"
-         这类平台全局工具收在这张卡片内，大家长/财务（放权自治后）绝不应该看到 -->
-    <view class="admin-dashboard-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}">
+         这类平台全局工具收在这张卡片内，大家长/财务（放权自治后）绝不应该看到。
+         🆕 追加 showAdminWorkbench 折叠开关，见上方 admin-workbench-summary 摘要卡 -->
+    <view class="admin-dashboard-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance && showAdminWorkbench}}">
       <view class="admin-dashboard-header">
         <text class="admin-dashboard-title">🛡️ 系统管理面板</text>
       </view>

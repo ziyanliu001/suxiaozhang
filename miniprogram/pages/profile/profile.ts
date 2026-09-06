@@ -880,6 +880,12 @@ Page({
     // 🆕 系统管理面板「更多系统工具」折叠区展开态：一键加速系统/DEV 模拟开通是
     // 低频运维项，默认折叠收起，减少常驻占地方的零散提示块
     showAdminMoreTools: false,
+    // 🆕（信息架构瘦身）大家长/店长/超管的管理类卡片（经营健康大盘、门店管理
+    // 中心宫格/列表、超管两张工具卡）统一收纳进一张"工作台"摘要卡，默认折叠，
+    // 让个人志愿档案/阳善荣誉等个人属性内容优先出现在首屏——四组角色各自
+    // 复用自己既有的 wx:if 判断条件，只是额外叠加这一个共享开关，不新建
+    // 判断逻辑、不影响任何一组卡片原有的数据获取/展示细节
+    showAdminWorkbench: false,
 
     // 📢 公告管理半屏弹窗
     showNoticeManagementModal: false,
@@ -4930,6 +4936,12 @@ Page({
   // 这类低频运维项，默认不占地方
   onToggleAdminMoreTools() {
     this.setData({ showAdminMoreTools: !this.data.showAdminMoreTools });
+  },
+
+  // 🆕 管理"工作台"摘要卡展开/收起：大家长/店长/超管四组互斥的管理类卡片
+  // 共用同一个开关，默认折叠，点击摘要卡展开查看完整管理内容
+  onToggleAdminWorkbench() {
+    this.setData({ showAdminWorkbench: !this.data.showAdminWorkbench });
   },
 
   // 🆕 大家长视角·爱心护持榜/核心荣誉折叠区展开/收起：管理任务优先，个人荣誉
