@@ -854,6 +854,11 @@ Page({
     const actionParam = options && options.action;
     console.log('[Statistics][onLoad] 入参解构结果：', {
       shopName: (options && options.shopName) || undefined,
+      // 🐛 排查线索补全：view 才是下面 isNationalIntent 判断依据的字段，此前
+      // 这条日志没打印它，排查时只看到 viewMode: undefined 容易误以为
+      // ?view=national 完全没被解析——其实 viewMode 本来就是另一个字段
+      // （Profile「财务稽核专区」专用），与"是否要看全国大屏"无关
+      view: (options && options.view) || undefined,
       viewMode: viewModeParam || undefined,
       tab: tabParam || undefined,
       action: actionParam || undefined,
