@@ -45,6 +45,58 @@
     inset 0 0 0 1rpx rgba(255, 255, 255, 0.35);
 }
 
+/* 🌸 修心积善打卡·德行手账卡片：宣纸米黄 + 印章红基调，与
+   components/volunteer-merit-dialog 同一套配色语言，视觉上与本页其余
+   金色/翡翠绿卡片区分开，突出"文化修持"而非"数据统计"的调性 */
+.merit-passbook-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #FAF6EE;
+  border: 1rpx solid #E8DFC8;
+  border-radius: 24rpx;
+  padding: 32rpx 28rpx;
+}
+
+.merit-passbook-seal {
+  width: 72rpx;
+  height: 72rpx;
+  line-height: 68rpx;
+  text-align: center;
+  border: 3rpx solid #D81E06;
+  border-radius: 50%;
+  color: #D81E06;
+  font-size: 36rpx;
+  font-weight: bold;
+  transform: rotate(-8deg);
+  margin-bottom: 16rpx;
+}
+
+.merit-passbook-days {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-bottom: 16rpx;
+}
+
+.merit-passbook-days-num {
+  font-size: 44rpx;
+  font-weight: bold;
+  color: #5A4632;
+}
+
+.merit-passbook-days-label {
+  font-size: 24rpx;
+  color: #A08A6A;
+}
+
+.merit-passbook-quote {
+  font-size: 22rpx;
+  color: #A08A6A;
+  letter-spacing: 1rpx;
+}
+
 .journey-title-row {
   display: flex;
   align-items: center;

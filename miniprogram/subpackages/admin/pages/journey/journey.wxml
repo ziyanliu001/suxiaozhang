@@ -41,6 +41,19 @@
       <button class="btn-gen-honor-card" bindtap="onGenerateHonorCard" loading="{{isGeneratingHonorCard}}" disabled="{{isGeneratingHonorCard}}">🎖️ 生成我的爱心荣誉卡</button>
     </view>
 
+    <!-- 🌸 修心积善打卡·德行手账：善字印章 + 累计护持天数 + 传统文化短句，
+         纯精神修持与文化激励展示，不涉及资金/订阅套餐/任何商业积分，见
+         CLAUDE.md 第 7 节合规基线。totalDays 复用本页头部统计卡片同一份
+         computeMyCheckInStats 结果（见 loadStats()），不重复发起请求 -->
+    <view class="ui-card-wrapper merit-passbook-card" wx:if="{{totalDays > 0}}">
+      <view class="merit-passbook-seal">善</view>
+      <view class="merit-passbook-days">
+        <text class="merit-passbook-days-num">{{totalDays}}</text>
+        <text class="merit-passbook-days-label">日累计护持</text>
+      </view>
+      <view class="merit-passbook-quote">命由我作，福自己求 —— 《了凡四训》</view>
+    </view>
+
     <!-- 📍 多站点足迹汇总：仅在志愿者参与了 2 个及以上门店时展示，单站点不冗余显示 -->
     <view class="ui-card-wrapper store-stats-card" wx:if="{{storeStats.length > 1}}">
       <view class="card-header">

@@ -1,0 +1,178 @@
+/* 组件默认样式隔离（isolated）——与 elder-checkin-modal/material-usage-modal
+   的 feedback-sheet-* 骨架同一套交互手法，但配色改为宣纸米黄 + 印章红，
+   不复用赤金色系，视觉上与"业务表单类"弹窗区分开 */
+
+.vmd-backdrop {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999998 !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.vmd-backdrop.show {
+  opacity: 1;
+}
+
+.vmd-panel {
+  position: relative;
+  z-index: 999999 !important;
+  width: 100%;
+  background: #FAF6EE;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  padding: 16rpx 28rpx calc(28rpx + env(safe-area-inset-bottom)) !important;
+  box-sizing: border-box;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.vmd-backdrop.show .vmd-panel {
+  transform: translateY(0);
+}
+
+.vmd-drag-handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #E3D9C8;
+  margin: 0 auto 24rpx;
+}
+
+.vmd-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-bottom: 28rpx;
+  text-align: center;
+}
+
+.vmd-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #5A4632;
+}
+
+.vmd-subtitle {
+  font-size: 22rpx;
+  color: #A08A6A;
+}
+
+.vmd-tag-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.vmd-tag-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 22rpx 20rpx;
+  background: #FFFFFF;
+  border: 2rpx solid #E8DFC8;
+  border-radius: 20rpx;
+  box-sizing: border-box;
+}
+
+.vmd-tag-chip.active {
+  border-color: #B8342A;
+  background: #FDF1EE;
+}
+
+.vmd-tag-emoji {
+  font-size: 36rpx;
+  flex-shrink: 0;
+}
+
+.vmd-tag-label {
+  font-size: 26rpx;
+  color: #5A4632;
+  font-weight: 500;
+}
+
+.vmd-tag-check {
+  position: absolute;
+  top: 10rpx;
+  right: 14rpx;
+  font-size: 22rpx;
+  color: #B8342A;
+  font-weight: bold;
+}
+
+.vmd-submitted-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12rpx;
+  margin-bottom: 32rpx;
+}
+
+.vmd-submitted-chip {
+  padding: 12rpx 24rpx;
+  background: #FDF1EE;
+  border: 2rpx solid #B8342A;
+  border-radius: 999rpx;
+  color: #B8342A;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.vmd-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.vmd-btn-skip {
+  flex: 1;
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  color: #A08A6A;
+  font-size: 28rpx;
+  border: 2rpx solid #E8DFC8;
+  border-radius: 44rpx;
+}
+
+.vmd-btn-skip::after {
+  border: none;
+}
+
+.vmd-btn-submit {
+  flex: 2;
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #B8342A 0%, #D81E18 100%);
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(184, 52, 42, 0.30);
+}
+
+.vmd-btn-submit::after {
+  border: none;
+}
+
+.vmd-btn-submit:active {
+  opacity: 0.85;
+}
+
+.vmd-btn-submit.btn-is-disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}

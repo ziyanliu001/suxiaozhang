@@ -107,3 +107,51 @@
 - "结算已完成"与"退款红冲"仍是跨函数竞速（`tryAutoProfitSharing` 写 `settled` 与 `processProductionRefund`→`reverseSettlement` 读旧状态之间没有互斥），本轮 CAS 只保证"同一操作不会被自己重复触发"，不解决两个不同操作互相抢跑的业务级竞态——这与 `processProductionRefund` 文件头一直标注的"分账已完成后再退款"残余风险是同一类问题，需要专项设计（如引入乐观锁版本号或状态机加锁范围扩大到跨函数）才能根治。
 - `PAYMENT_MOCK_MODE` 等生产环境变量清单以 [`cloudfunctions/wxPayCore/lib/payConfig.js`](cloudfunctions/wxPayCore/lib/payConfig.js) 文件头注释为唯一真源（`WXPAY_APPID`/`WXPAY_MCHID`/`WXPAY_MCH_SERIAL_NO`/`WXPAY_MCH_PRIVATE_KEY`/`WXPAY_API_V3_KEY`/`WXPAY_NOTIFY_URL`/`WXPAY_INTERNAL_TOKEN`），本文档不重复抄写以免日后再次drift；上线前额外要确认 `WXPAY_INTERNAL_TOKEN` 与 `LIVE_FACTORY_INTERNAL_TOKEN` 分别在各自的"内部调用方"云函数（前者：`createSubscriptionOrder`/`createProductionOrder`/`processProductionRefund`/`completeProductionOrder`；后者：`liveFactoryCore`/`createProductionOrder`/`processProductionRefund`）里配了同一份值，这两个令牌不在 `payConfig.js` 的校验范围内，配错不会报错、只会静默拒绝调用。
 - 敏感控制台日志扫描（前端 + 云函数）未发现明文密钥/手机号/未脱敏用户信息打印；`cloudfunctions/createSubscriptionOrder/index.js` 里有一处打印整个 `event` 对象（参数缺失分支），当前该路径的 `event` 只含 `action`/`outTradeNo`/`bizId`/`bizType`，不含 PII，风险低，可作为后续代码卫生的小优化项，不阻塞上线。
+
+---
+
+## 7. 义工修心积善打卡模块与去宗教化合规基线（2026-09-06）
+
+### 7.1 模块定位
+
+「今日微善记录」是义工到岗服务打卡（`onConfirmShiftCheckIn`，`pages/index/index.ts`）成功后追加的一层**纯精神修持与文化激励**记录：打卡本身已经落地成功，用户可选择性地勾选当日做到的几件小事（微善标签），不选也可直接跳过，不影响打卡记录的有效性。
+
+**不可突破的红线**：本模块的一切展示与激励**严禁**与资金、门店 SaaS 订阅套餐、任何形式的可兑换/可交易商业积分挂钩——`meritTags` 是纯展示型的自我记录字段，不参与任何 `checkTenantPermission`/`tenant_subscriptions` 的权益判断，不产生任何形式的抵扣、兑换或排名奖励（爱心护持榜按工时排名，与本模块彻底独立，见 `cloudfunctions/manageVolunteerCheckIn/index.js` 的 `handleLeaderboard`）。新增任何与本模块相关的功能前，先确认没有违反这条边界。
+
+### 7.2 去宗教化合规基线（历史上首次统一成文档）
+
+⚠️ 本项目此前从未把"去宗教化"写成过成文规则，全部相关工作散落在 7 处代码/wxml 注释里（`pages/index/index.wxml`/`.ts`、`components/yangshan-wall/yangshan-wall.ts`、`utils/drawVolunteerCertificate.ts`），且执行口径并不统一——已放行的措辞（"护持"「感恩」「福慧双增」，以及 `utils/cultureData.ts` 里"长时熏修""一门深入""圣贤教育""常生惭愧""离苦得乐"等更浓的佛教修行术语）比历次被要求清洗的词（"愿心"/"发心"/"随喜"/"供养"/"同修"/"功德主"/"因果"/"轮回"）尺度更大。本节把口径第一次统一下来，后续新增文案按此执行：
+
+- **一律不使用**（无论新旧功能）：愿心、发心、随喜、供养、同修、因果、轮回、功德主、**功过格**（道教/佛教传统修行语境里特指记善恶、算报应的修行记数法，是比上述已清洗词更具体指向宗教修行体系的专有名词，本模块的产品设计灵感虽然来自"功过格"这一传统文化概念，但用户可见文案一律不出现这三个字，一律用"修心积善打卡"/"德行手账"/"今日微善记录"等中性表述）。
+- **允许保留、且已有先例**：引用《了凡四训》作为传统文化短句——本仓库已有先例并已上线（`nationalDashboardView.wxml` 的"了凡四训 · 阳善积德"、`pages/index/index.ts`/`.wxml` 的"阳善/阴德"捐赠分类），问题不在于"能不能引用《了凡四训》"，而在于引用**哪一句**。本模块固定只用"命由我作，福自己求"这一句——这是全篇里最不涉及因果轮回教义、最接近"自我承担/主观能动性"的一句，不做多句轮换池（避免后续为了凑轮换库无意中引入更偏教义的句子）。"善"字印章、阳善/阴德标签延续既有产品决策，不算新增风险。
+- 任何新增文化引用/激励文案，落笔前先对照这份清单，拿不准时按"更保守"的方向选词，不要现造一个新的宽松标准。
+
+### 7.3 `meritTags` 字典与扩展规约
+
+| value（存库值） | label（展示文案） | emoji |
+| --- | --- | --- |
+| `almsgiving` | 行堂布施 | 🤲 |
+| `kindwords` | 和颜柔语 | 😊 |
+| `thrift` | 惜福护物 | 🍚 |
+| `cleaning` | 清扫庄严 | 🧹 |
+
+两处独立维护同一份字典（`cloudfunctions/manageVolunteerCheckIn/index.js` 的 `MERIT_TAGS` 白名单 + `components/volunteer-merit-dialog/volunteer-merit-dialog.ts` 的 `MERIT_TAG_OPTIONS`），无共享模块机制，改动需手动同步。
+
+**扩展规约**：后续如需推出"百善/千善"电子证书之类的里程碑激励，应该新增一个**读取 `meritTags` 历史累计次数的门槛值配置**（如 `MERIT_MILESTONES = [{count:100,label:'百善'},{count:1000,label:'千善'}]`），而不是扩充 `meritTags` 枚举本身——枚举值一旦扩大，旧记录里从未出现过的新值会让"累计次数"统计口径产生歧义（新老用户能选的标签种类不一致，历史数据也无法回填新标签）。里程碑证书本身仍需先过 7.1/7.2 两节的红线检查，证书文案不得暗示可兑换任何实物/资金/商业权益。
+
+### 7.4 架构状态
+
+| 文件 | 变更 |
+| --- | --- |
+| `cloudfunctions/manageVolunteerCheckIn/index.js` | 新增 `MERIT_TAGS`/`sanitizeMeritTags`；`handleCheckin` 的 `doc` 新增 `meritTags: []`；新增 `action: 'updateMeritTags'`（`handleUpdateMeritTags`），仅记录本人打卡记录，无门店/角色权限校验 |
+| `components/volunteer-merit-dialog/`（新增） | 打卡成功后的微善标签弹窗，两段式界面（选择态/确认态），确认态可选生成日签海报 |
+| `pages/index/index.ts`/`.wxml`/`.json` | `onConfirmShiftCheckIn` 成功分支改为先弹 `showMeritDialog`，关闭后再进入原有 `showPosterModal` 流程；新增 `onMeritDialogClose`/`onMeritDialogSubmitted`/`onMeritDialogGeneratePoster`；`volunteer-hero-card` 新增轻量"善"字印记（`.merit-seal-mini`，纯 CSS，非 canvas） |
+| `subpackages/admin/pages/journey/journey.wxml`/`.wxss`（德行手账卡片） | 新增 `.merit-passbook-card`：善字印章 + 累计护持天数 + 固定引用《了凡四训》短句，复用本页已有的 `computeMyCheckInStats` 结果，不新增云调用 |
+| `utils/drawVolunteerCertificate.ts` | `drawSealStamp()` 新增可选 `lines` 参数（默认值与原调用点完全一致），支持单行文字印章，供水墨日签复用 |
+| `utils/posterGenerator.ts` | 新增 `MeritTagPosterData` 接口 + `drawMeritTagPoster()`，复用 `showMeritPosterModal`/`meritPosterTempPath` 既有全屏预览基础设施（新增 `meritPosterModalTitle` 字段区分"善行卡"/"今日善行日签"两种标题，避免标题残留串场） |
+
+**已知未覆盖**：`cloudfunctions/manageVolunteerCheckIn/index.js` 没有 `lib/*.test.js` 测试文件（该云函数历史上就没有拆分出 `lib/` 纯函数目录），本次新增的 `sanitizeMeritTags` 未补单元测试——如需覆盖，需要先把该文件重构出 `lib/` 目录（比对齐现有测试范本的成本更高），本次未做，如实记录。
+
+### 7.5 验证命令
+
+同第 4 节，本模块未引入新的终端命令：`npm run typecheck`、`npm test`。

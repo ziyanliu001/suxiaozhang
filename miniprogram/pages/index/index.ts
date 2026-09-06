@@ -2,7 +2,7 @@ import { DataService, formatMoney, getLocalReports } from '../../utils/dataServi
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
-import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
+import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawMeritTagPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
@@ -669,6 +669,11 @@ Page({
     showMeritPosterModal: false,
     meritPosterLoading: false,
     meritPosterTempPath: '',
+    // 🌸（2026-09-06）该预览 Modal 现在被两条生成流程共用（善行卡 + 修心积善
+    // 打卡的今日善行日签），标题不再写死在 wxml 里——各自生成函数在设置
+    // meritPosterTempPath 的同一个 setData 里一并写清楚这次展示的是哪一张，
+    // 避免上一次生成的标题残留到下一次不同种类的海报预览上
+    meritPosterModalTitle: '🌱 我的善行卡',
     // ☀️ 阳光账本 4x2 网格展示数组：从 sunshineLedgerData 派生，供 WXML wx:for
     // 渲染，避免 8 个统计格子手写重复结构；value 统一存字符串（账本公开率是
     // "100%"/"暂无数据"这类文本，与其余数字指标共用同一套渲染逻辑更简单）
@@ -820,6 +825,12 @@ Page({
     isGeneratingPrintList: false,
     printCanvasHeight: 800,
     showPosterModal: false,
+    // 🌸 修心积善打卡·微善标签弹窗：打卡成功后先弹这个（见 onConfirmShiftCheckIn
+    // 成功分支），关闭/提交后才继续原有的 showPosterModal 流程，两个弹窗顺序
+    // 展示，不同时叠加。meritDialogLogId 是本次打卡在云端 volunteer_duty_logs
+    // 的 _id，供组件内 updateMeritTags 精确对应到这一条记录
+    showMeritDialog: false,
+    meritDialogLogId: '',
     // 🆕 财务公示版 (4:3) / 温馨故事版 (9:16) 切换：posterType 只影响 .poster-modal
     // （showPoster，展示 canvas 导出的真实图片）这一个预览弹窗，与 .modal-backdrop
     // （showPosterModal，纯 WXML 拼版预览）互不相关，不需要跟着切
@@ -10240,7 +10251,7 @@ Page({
         qrLocalPath
       });
       wx.hideLoading();
-      this.setData({ meritPosterTempPath: tempPath, showMeritPosterModal: true });
+      this.setData({ meritPosterTempPath: tempPath, meritPosterModalTitle: '🌱 我的善行卡', showMeritPosterModal: true });
     } catch (err) {
       wx.hideLoading();
       console.error('[onGenerateFootprintCard] 善行卡生成失败:', err);
@@ -11755,13 +11766,17 @@ Page({
     const isAllStoresView = this.data.isAllStoresView;
     const scopedStats = computeMyCheckInStats(currentStoreId, currentStoreName, isAllStoresView || !currentStoreName);
 
+    // 🌸 修心积善打卡：先弹微善标签弹窗，原有的"打卡成功"WXML 拼版海报预览
+    // （showPosterModal）顺延到该弹窗关闭之后才展示，见 onMeritDialogClose/
+    // onMeritDialogSubmitted——两个弹窗依次展示，不同时叠加
     this.setData({
       myCheckInDays: scopedStats.days,
       myCheckInCount: scopedStats.count,
       myServiceHours: scopedStats.hours,
       checkInLogs: latestLogs,
       showShiftSelectModal: false,
-      showPosterModal: true,
+      showMeritDialog: true,
+      meritDialogLogId: cloudLogId,
       checkInSubmitting: false
     });
 
@@ -11801,6 +11816,51 @@ Page({
 
     // 🔗 打卡成功 → 强制刷新服务总工时联动（忽略 isManualHours，以最新云端汇总为准）
     this.syncCheckInHoursToForm(true);
+  },
+
+  // 🌸 修心积善打卡·微善标签弹窗关闭：无论用户是提交了标签还是直接"稍后再说"
+  // 跳过，都要继续走原有的"打卡成功"海报预览流程——两个弹窗依次展示，见
+  // onConfirmShiftCheckIn 成功分支的注释
+  onMeritDialogClose() {
+    this.setData({ showMeritDialog: false, showPosterModal: true });
+  },
+
+  // 提交成功时组件已经自己弹过一次 Toast，也已经切到确认态等待用户选择
+  // "完成"或"生成日签"，这里不需要重复提示、也不提前关闭弹窗，只是一个
+  // 供页面感知"标签已落地"的钩子（当前无需额外动作，meritTags 本身不需要
+  // 在页面这一层再存一份，云端已经落地）
+  onMeritDialogSubmitted() {},
+
+  // 🌸 修心积善打卡·生成今日善行日签：与既有 onGenerateFootprintCard 同一套
+  // "showLoading → 调 posterGenerator 函数 → 存临时路径 → 弹全屏预览 Modal"
+  // 流程，复用同一个 showMeritPosterModal/meritPosterTempPath（见该处新增的
+  // meritPosterModalTitle 字段说明），不新建一套预览 UI。弹窗组件本身不关闭——
+  // 生成失败也不影响用户已经记录成功的善行标签，用户可以重试或直接点"完成"
+  async onMeritDialogGeneratePoster(e: any) {
+    const tags = (e && e.detail && e.detail.tags) || [];
+    if (this.data.meritPosterLoading) return;
+
+    wx.showLoading({ title: '正在书写日签...', mask: true });
+    this.setData({ meritPosterLoading: true, canvasHeight: 500 });
+
+    try {
+      const now = new Date();
+      const dateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const tempPath = await drawMeritTagPoster(this, {
+        storeName: this.data.currentStoreName || this.data.shopName || '本门店',
+        dateString,
+        tags,
+        totalDays: this.data.myCheckInDays || 0
+      });
+      wx.hideLoading();
+      this.setData({ meritPosterTempPath: tempPath, meritPosterModalTitle: '🌸 今日善行日签', showMeritPosterModal: true });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onMeritDialogGeneratePoster] 善行日签生成失败:', err);
+      wx.showToast({ title: '日签生成失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ meritPosterLoading: false });
+    }
   },
 
   // 🔒 撤销打卡：限当天（today-checked-section 本就只渲染 todayLogs，天然满足"限当天"）

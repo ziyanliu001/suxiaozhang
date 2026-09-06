@@ -27,6 +27,19 @@ const DAILY_HOURS_CAP = 12.0;
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
 const SHIFT_TYPES = ['BREAKFAST', 'LUNCH', 'DINNER', 'FULL_DAY'];
 
+// 🌸 修心积善打卡·微善标签：纯精神修持与文化激励标记，不与资金、订阅套餐、
+// 任何形式的商业积分/兑换挂钩（详见 CLAUDE.md 第7节合规基线）。默认空数组，
+// 历史数据/未选择场景天然兼容，不需要迁移脚本。后续如需扩展"百善/千善"电子
+// 证书，应该新增门槛值配置去读取 meritTags 的历史累计计数，而不是扩充这个
+// 枚举本身——枚举值一旦扩大，旧记录里从未出现过的新值会让"累计次数"统计口径
+// 产生歧义（新老用户能选的标签数量不一致）
+const MERIT_TAGS = ['almsgiving', 'kindwords', 'thrift', 'cleaning'];
+
+function sanitizeMeritTags(v) {
+  if (!Array.isArray(v)) return [];
+  return v.filter((t) => MERIT_TAGS.includes(t));
+}
+
 // 🐛 云函数容器时区固定为 UTC，与 processRoleAudit/submitFeedback 同一套换算，
 // 避免"今日"日期字符串比北京时间晚半天导致工时统计错日归集
 function todayStr() {
@@ -105,6 +118,10 @@ async function handleCheckin(event, OPENID) {
     // reservedMeals 出"今日各餐别留餐人数"，这份 volunteer_duty_logs 本身即是后厨预留量数据源
     willEatLunch: !!event.willEatLunch,
     reservedMeals,
+    // 🌸 meritTags：打卡这一步本身不接收标签（前端弹窗是打卡成功之后才唤起的
+    // 补充信息，见 updateMeritTags action），这里落一个空数组占位，保证字段
+    // 从第一天起就存在，读取方不需要对"字段缺失"和"选了但是空"两种情况分别兜底
+    meritTags: [],
     status: 'active',
     createTime: db.serverDate()
   };
@@ -112,6 +129,26 @@ async function handleCheckin(event, OPENID) {
   const addRes = await db.collection(COLLECTION).add({ data: doc });
 
   return { success: true, logId: addRes._id, hours: addHours, wasTruncated };
+}
+
+// 🌸 修心积善打卡·补写微善标签：打卡本身（handleCheckin）已经成功落地，标签
+// 是随后的增量、可选信息（前端弹窗支持"跳过"），故意拆成独立 action 而不是
+// 塞进 checkin 的参数里——精神激励类的补充记录不该有能力阻塞/拖慢核心打卡
+// 操作本身。校验粒度只对齐"这是不是我自己的打卡记录"：不涉及资金、不涉及
+// 他人数据，不需要门店管理岗位的审批权限
+async function handleUpdateMeritTags(event, OPENID) {
+  const { logId } = event;
+  if (!logId) return { success: false, error: '缺少 logId 参数' };
+
+  const logRes = await db.collection(COLLECTION).doc(logId).get().catch(() => null);
+  const log = logRes && logRes.data;
+  if (!log) return { success: false, error: '打卡记录不存在（可能仅存在于本地，未成功同步至云端）' };
+  if (log._openid !== OPENID) return { success: false, error: '无权限：只能记录本人的打卡标签' };
+
+  const meritTags = sanitizeMeritTags(event.meritTags);
+  await db.collection(COLLECTION).doc(logId).update({ data: { meritTags } });
+
+  return { success: true, meritTags };
 }
 
 async function handleRevoke(event, OPENID) {
@@ -343,6 +380,7 @@ exports.main = async (event, context) => {
 
   try {
     if (action === 'checkin') return await handleCheckin(event, OPENID);
+    if (action === 'updateMeritTags') return await handleUpdateMeritTags(event, OPENID);
     if (action === 'revoke') return await handleRevoke(event, OPENID);
     if (action === 'leaderboard') return await handleLeaderboard(event, OPENID);
     if (action === 'queryStoreHours') return await handleQueryStoreHours(event, OPENID);

@@ -72,7 +72,10 @@ function fitFontSize(ctx: any, text: string, weight: string, baseSize: number, m
 // 🐛 内部两行字号/行距此前是按半径 30 写死的固定像素值，radius 改小之后如果
 // 不跟着缩，文字会直接超出圆圈范围——这里改为按半径等比例换算，圆章大小无论
 // 怎么调，内部文字始终与圆圈边界保持同一比例的留白
-function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: number): void {
+// 🌸 修心积善打卡·水墨日签复用同一个印章原语：新增可选 lines 参数（默认值
+// 与原有两行文字完全一致，不影响本文件既有调用点），单行文字（如"善"字章）
+// 居中画在圆心，不再套用两行的上下偏移
+export function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: number, lines: string[] = ['雨花爱心', '互助认证']): void {
   ctx.save();
   ctx.globalAlpha = 0.75;
   ctx.translate(centerX, centerY);
@@ -96,8 +99,12 @@ function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: numbe
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `bold ${sealFontSize}px sans-serif`;
-  ctx.fillText('雨花爱心', 0, -sealLineOffset);
-  ctx.fillText('互助认证', 0, sealLineOffset);
+  if (lines.length <= 1) {
+    ctx.fillText(lines[0] || '', 0, 0);
+  } else {
+    ctx.fillText(lines[0], 0, -sealLineOffset);
+    ctx.fillText(lines[1], 0, sealLineOffset);
+  }
 
   ctx.restore();
 }

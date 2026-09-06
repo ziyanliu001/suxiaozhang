@@ -10,6 +10,7 @@
     "daily-menu-modal": "../../components/daily-menu-modal/daily-menu-modal",
     "material-usage-modal": "../../components/material-usage-modal/material-usage-modal",
     "elder-checkin-modal": "../../components/elder-checkin-modal/elder-checkin-modal",
+    "volunteer-merit-dialog": "../../components/volunteer-merit-dialog/volunteer-merit-dialog",
     "yangshan-wall": "../../components/yangshan-wall/yangshan-wall"
   }
 }

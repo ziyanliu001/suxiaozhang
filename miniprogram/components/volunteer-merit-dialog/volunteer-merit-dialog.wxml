@@ -1,0 +1,53 @@
+<!-- 🌸 修心积善打卡·微善标签：与全站 feedback-sheet-* 弹窗骨架同一套
+     半屏上滑交互手法，色调改用宣纸米黄 + 印章红点缀（区别于其余弹窗惯用的
+     赤金色），突出"文化修持"而非"业务操作"的调性。不选任何标签也能直接
+     "稍后再说"关闭，不阻塞打卡本身已经完成的事实 -->
+<view class="vmd-backdrop {{visible ? 'show' : ''}}" wx:if="{{visible}}" bindtap="onClose">
+  <view class="vmd-panel" catchtap="stopPropagation">
+    <view class="vmd-drag-handle"></view>
+
+    <!-- 选择态：未提交前展示四个可多选标签 -->
+    <block wx:if="{{!submitted}}">
+      <view class="vmd-header">
+        <text class="vmd-title">🌸 今日微善记录</text>
+        <text class="vmd-subtitle">打卡辛苦了，选一选今天做到的小事（可多选，也可跳过）</text>
+      </view>
+
+      <view class="vmd-tag-grid">
+        <view
+          wx:for="{{tagOptions}}"
+          wx:key="value"
+          class="vmd-tag-chip {{selectedTags.includes(item.value) ? 'active' : ''}}"
+          bindtap="onToggleTag"
+          data-value="{{item.value}}"
+        >
+          <text class="vmd-tag-emoji">{{item.emoji}}</text>
+          <text class="vmd-tag-label">{{item.label}}</text>
+          <text class="vmd-tag-check" wx:if="{{selectedTags.includes(item.value)}}">✓</text>
+        </view>
+      </view>
+
+      <view class="vmd-actions">
+        <button class="vmd-btn-skip" bindtap="onSkip">稍后再说</button>
+        <button class="vmd-btn-submit {{submitting ? 'btn-is-disabled' : ''}}" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitting}}">✅ 记录今日善行</button>
+      </view>
+    </block>
+
+    <!-- 确认态：提交成功后，展示已记录的标签 + 生成日签入口 -->
+    <block wx:else>
+      <view class="vmd-header">
+        <text class="vmd-title">🌸 已记录今日善行</text>
+        <text class="vmd-subtitle">感恩您的付出，愿把这份善意留个纪念</text>
+      </view>
+
+      <view class="vmd-submitted-list">
+        <text class="vmd-submitted-chip" wx:for="{{submittedTagObjects}}" wx:key="value">{{item.emoji}} {{item.label}}</text>
+      </view>
+
+      <view class="vmd-actions">
+        <button class="vmd-btn-skip" bindtap="onClose">完成</button>
+        <button class="vmd-btn-submit" bindtap="onGeneratePoster">🖼️ 生成今日善行日签</button>
+      </view>
+    </block>
+  </view>
+</view>

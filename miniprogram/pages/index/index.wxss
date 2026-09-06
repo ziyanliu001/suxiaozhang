@@ -6682,8 +6682,27 @@ page {
    撑满整行），行容器用 flex 居中定位这个徽章 */
 .volunteer-hero-card .warm-encourage-badge-row {
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8rpx;
   margin-top: 14rpx;
+}
+
+/* 🌸 修心积善打卡·轻量德行印记：纯 CSS 圆形红色描边 + "善"字，与
+   utils/drawVolunteerCertificate.ts 的 drawSealStamp() canvas 印章同一套
+   红色印章视觉语言（#D81E06 系），这里只是它的静态 CSS 版本 */
+.merit-seal-mini {
+  flex-shrink: 0;
+  width: 28rpx;
+  height: 28rpx;
+  line-height: 26rpx;
+  text-align: center;
+  border: 1.5rpx solid #D81E06;
+  border-radius: 50%;
+  color: #D81E06;
+  font-size: 18rpx;
+  font-weight: bold;
+  transform: rotate(-8deg);
 }
 
 .volunteer-hero-card .warm-encourage-text {

@@ -2,6 +2,7 @@ import { maskName, formatDisplayName } from './core/privacy';
 import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 import { drawStaticWxacodeFallback } from './staticWxacode';
 import { computeHonorProgress, drawMedalBadge } from './honorLevels';
+import { drawSealStamp } from './drawVolunteerCertificate';
 
 export interface MaterialItem {
   donor: string;
@@ -118,6 +119,20 @@ export interface SunshineFootprintPosterData {
   // 有值画真图，未提供/下载失败时优雅降级为官方静态小程序码，再失败则退回
   // 占位菊花码，绝不能因为二维码画不出来就让整张海报生成中断
   qrLocalPath?: string;
+}
+
+// 🌸 修心积善打卡·水墨日签：纯精神修持与文化激励展示（今日选择的微善标签 +
+// 累计护持天数 + 传统文化短句），不涉及资金/订阅套餐/任何商业积分，见
+// CLAUDE.md 第 7 节合规基线。dateString 由调用方按当地时间拼好传入，本文件
+// 不自己取 Date（与其余三张海报"调用方按真实数据拼好再传入"同一设计原则）
+export interface MeritTagPosterData {
+  storeName: string;
+  dateString: string;
+  // 今日选中的微善标签，{value,label,emoji} 与
+  // components/volunteer-merit-dialog 的 MERIT_TAG_OPTIONS 同一份字典，
+  // 未选择任何标签时传空数组，海报仍可生成（只是标签区留白）
+  tags: Array<{ label: string; emoji: string }>;
+  totalDays: number;
 }
 
 const BG_COLOR = '#FAF7F2';
@@ -1336,6 +1351,111 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             reject(drawErr);
           }
         })();
+      });
+  });
+}
+
+const MERIT_CANVAS_WIDTH = 375;
+const MERIT_CANVAS_HEIGHT = 500;
+const MERIT_CARD_RADIUS = 24;
+const MERIT_SEAL_RADIUS = 36;
+
+// 🌸 修心积善打卡·水墨日签：与 drawVolunteerHonorCard 同一套"query 画布节点 →
+// getContext('2d') → 按 dpr 缩放 → 圆角裁剪 → 逐段绘制 → canvasToTempFilePath
+// 导出"流程，复用同一个 #posterCanvas 节点。不需要头像/二维码，画面比其余
+// 三张海报更短更轻，是一张"当日小结"而不是"长期荣誉证书"
+export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPosterData): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const query = wx.createSelectorQuery().in(pageInstance);
+    query.select('#posterCanvas')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res || !res[0] || !res[0].node) {
+          return reject(new Error('未找到 id="posterCanvas" 节点，请检查 wxml 是否存在且非 wx:if 渲染'));
+        }
+
+        const canvas = res[0].node;
+        const ctx = canvas.getContext('2d');
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
+
+        const width = MERIT_CANVAS_WIDTH;
+        const height = MERIT_CANVAS_HEIGHT;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+
+        try {
+          ctx.save();
+          drawRoundedRectPath(ctx, 0, 0, width, height, MERIT_CARD_RADIUS);
+          ctx.clip();
+
+          // 宣纸米黄底，与 components/volunteer-merit-dialog 同一套配色语言
+          const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+          bgGradient.addColorStop(0, '#FAF6EE');
+          bgGradient.addColorStop(1, '#F3ECDD');
+          ctx.fillStyle = bgGradient;
+          ctx.fillRect(0, 0, width, height);
+
+          // Header
+          ctx.fillStyle = '#5A4632';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('今日善行日签', width / 2, 46);
+
+          ctx.fillStyle = '#A08A6A';
+          ctx.font = '13px sans-serif';
+          const subtitle = `${truncateText(ctx, data.storeName || '', width - 100)} · ${data.dateString || ''}`;
+          ctx.fillText(subtitle, width / 2, 70);
+
+          // 善字印章：复用 drawVolunteerCertificate.ts 的印章原语，单行文字
+          drawSealStamp(ctx, width / 2, 140, MERIT_SEAL_RADIUS, ['善']);
+
+          // 今日微善标签：逐行居中列出，未选择时留白（不画"暂无"这类占位文案，
+          // 保持画面素雅）
+          let tagY = 210;
+          if (data.tags && data.tags.length > 0) {
+            ctx.font = '16px sans-serif';
+            data.tags.forEach((tag) => {
+              ctx.fillStyle = '#5A4632';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${tag.emoji} ${tag.label}`, width / 2, tagY);
+              tagY += 34;
+            });
+          }
+
+          // 累计护持天数
+          const daysY = Math.max(tagY + 20, 330);
+          ctx.fillStyle = '#B8342A';
+          ctx.font = 'bold 30px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${data.totalDays || 0}`, width / 2, daysY);
+          ctx.fillStyle = '#A08A6A';
+          ctx.font = '13px sans-serif';
+          ctx.fillText('日累计护持', width / 2, daysY + 26);
+
+          // 底部文化短句
+          ctx.fillStyle = '#A08A6A';
+          ctx.font = '13px sans-serif';
+          ctx.fillText('命由我作，福自己求 —— 《了凡四训》', width / 2, height - 40);
+
+          ctx.restore(); // 对应开头的圆角裁剪 save/clip
+
+          wx.canvasToTempFilePath({
+            canvas,
+            x: 0,
+            y: 0,
+            width: width * dpr,
+            height: height * dpr,
+            destWidth: width * dpr,
+            destHeight: height * dpr,
+            fileType: 'png',
+            quality: 1,
+            success: (tempRes) => resolve(tempRes.tempFilePath),
+            fail: (err: any) => reject(new Error('Canvas 转图片失败: ' + err.errMsg))
+          });
+        } catch (drawErr) {
+          reject(drawErr);
+        }
       });
   });
 }
