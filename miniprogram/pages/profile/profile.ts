@@ -134,18 +134,18 @@ function normalizeStoreStats(raw: any) {
 function getNoticeMgmtTemplate(type: string, orgType: string, storeName: string): { tag: string; title: string; content: string } {
   const isYuhuazhai = orgType === 'yuhuazhai';
   const isElderlyCanteen = orgType === 'elderly_canteen';
-  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本公益服务站';
+  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本互助服务站';
   const name = storeName || fallbackName;
 
   switch (type) {
     case 'opening':
       if (isYuhuazhai) {
-        return { tag: '喜讯通报', title: `${name}试营业`, content: `${name}正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！` };
+        return { tag: '喜讯通报', title: `${name}试营业`, content: `${name}正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康爱心素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！` };
       }
       if (isElderlyCanteen) {
         return { tag: '喜讯通报', title: `${name}试营业喜讯`, content: `${name}正式开启试营业啦！用心为社区长者提供健康、卫生、实惠的助餐服务。欢迎长辈们前来用餐，也欢迎爱心义工加入我们，一起守护社区里的老人家❤️。感恩大家的支持！` };
       }
-      return { tag: '喜讯通报', title: `${name}试营业喜讯`, content: `${name}正式开启试营业啦！我们将用心为社区提供公益服务。欢迎大家前来了解，也欢迎爱心志愿者加入我们，一起传递温暖❤️。感恩大家的支持！` };
+      return { tag: '喜讯通报', title: `${name}试营业喜讯`, content: `${name}正式开启试营业啦！我们将用心为社区提供爱心互助服务。欢迎大家前来了解，也欢迎爱心志愿者加入我们，一起传递温暖❤️。感恩大家的支持！` };
 
     case 'volunteer':
       if (isYuhuazhai) {
@@ -266,7 +266,7 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
     return { orgTypeBadge: '雨花斋', cultureTitle: '机构文化和每日诵读', aboutTitle: '关于雨花斋与阳光账本' };
   }
   if (orgType === 'elderly_canteen') {
-    return { orgTypeBadge: '社区助餐', cultureTitle: '敬老助餐文化与每日家训', aboutTitle: '关于社区公益平台与阳光账本' };
+    return { orgTypeBadge: '社区助餐', cultureTitle: '敬老助餐文化与每日家训', aboutTitle: '关于社区互助平台与阳光账本' };
   }
   return {
     orgTypeBadge: '',

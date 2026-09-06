@@ -18,19 +18,19 @@
       <scroll-view scroll-y class="compliance-modal-body">
         <view class="compliance-section">
           <view class="compliance-section-title">一、开发主体与身份声明</view>
-          <view class="compliance-section-text">本小程序「雨花爱心餐报助手」由民间素食公益志愿者（义工）团队基于公益服务需求自发开发与维护，用于协助素食公益食堂进行内部餐报记录与信息公示。<text class="compliance-emphasis">本程序并非"雨花斋"商标持有人、雨花斋总部或其关联机构官方发布、授权或运营的产品</text>，与雨花斋总部及各地分支机构无隶属、代理或授权关系。程序内出现的"雨花""雨花斋"等字样，仅为沿用民间素食公益活动的通用称谓与历史习惯用语，不代表任何商标权利主张，亦不用于任何商业用途。</view>
+          <view class="compliance-section-text">本小程序「雨花爱心餐报助手」由民间素食爱心志愿者（义工）团队基于互助服务需求自发开发与维护，用于协助素食爱心互助食堂进行内部餐报记录与信息公示。<text class="compliance-emphasis">本程序并非"雨花斋"商标持有人、雨花斋总部或其关联机构官方发布、授权或运营的产品</text>，与雨花斋总部及各地分支机构无隶属、代理或授权关系。程序内出现的"雨花""雨花斋"等字样，仅为沿用民间素食爱心互助活动的通用称谓与历史习惯用语，不代表任何商标权利主张，亦不用于任何商业用途。</view>
         </view>
 
         <view class="compliance-section">
           <view class="compliance-section-title">二、功能定位声明</view>
           <!-- 🛡️ 去宗教化合规要求（用户已确认范围：仅本弹窗内文案，parser.ts 解析关键词与
                代码注释保留不动，避免影响既有解析逻辑）："供养"替换为"支持/资助" -->
-          <view class="compliance-section-text">本小程序仅作为面向公益食堂内部使用的<text class="compliance-emphasis">数字化辅助记账与信息公示工具</text>，核心功能包括：当日开餐食材支出的录入与核算、爱心支持/资助/护持款项的手工登记与自动核对、以及供内部/信息公示使用的餐报文本与海报生成。所有数据处理均围绕已发生的线下业务展开，旨在提升门店账目透明度与信息化管理效率。</view>
+          <view class="compliance-section-text">本小程序仅作为面向爱心互助食堂内部使用的<text class="compliance-emphasis">数字化辅助记账与信息公示工具</text>，核心功能包括：当日开餐食材支出的录入与核算、爱心支持/资助/护持款项的手工登记与自动核对、以及供内部/信息公示使用的餐报文本与海报生成。所有数据处理均围绕已发生的线下业务展开，旨在提升门店账目透明度与信息化管理效率。</view>
         </view>
 
         <view class="compliance-section">
           <view class="compliance-section-title">三、资金与募捐合规声明（重要）</view>
-          <view class="compliance-section-text"><text class="compliance-emphasis">本小程序不具备、也绝不提供任何形式的线上募捐、众筹、善款代收、在线支付或资金归集功能。</text>小程序内展示的所有金额数据，均为门店义工/店长/财务人员对线下已实际发生的现金或实物支持/资助、开支进行的后期人工录入与信息公示，仅用于账目留痕与对外透明公示，不构成、也不应被理解为面向公众的网络募捐邀约或众筹行为。如您希望向相关公益组织提供支持，请通过其官方、合规渠道进行。</view>
+          <view class="compliance-section-text"><text class="compliance-emphasis">本小程序不具备、也绝不提供任何形式的线上募捐、众筹、善款代收、在线支付或资金归集功能。</text>小程序内展示的所有金额数据，均为门店义工/店长/财务人员对线下已实际发生的现金或实物支持/资助、开支进行的后期人工录入与信息公示，仅用于账目留痕与对外透明公示，不构成、也不应被理解为面向公众的网络募捐邀约或众筹行为。如您希望向相关爱心互助组织提供支持，请通过其官方、合规渠道进行。</view>
         </view>
 
         <view class="compliance-section">
@@ -232,7 +232,7 @@
        作为页面第一视觉焦点，不再被公告栏/食谱大事记预览卡挤到后面 -->
   <view class="ui-card-wrapper volunteer-hero-card" wx:if="{{isVolunteer}}">
     <view class="v-header">
-      <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{isAllStoresView ? '爱心大家庭' : (currentStoreName || '公益爱心站')}}</view>
+      <view class="v-title"><view class="idx-icon-sm idx-icon-flower"></view> 欢迎回到 {{isAllStoresView ? '爱心大家庭' : (currentStoreName || '爱心互助站')}}</view>
       <text class="v-sub">端上一碗热饭，温暖世间一颗心</text>
     </view>
 
@@ -431,7 +431,7 @@
     </view>
     <view class="announce-bar-divider"></view>
     <view class="announce-bar-viewport">
-      <text class="announce-bar-text">欢迎使用素小账，今日公益服务正常进行中</text>
+      <text class="announce-bar-text">欢迎使用素小账，今日爱心服务正常进行中</text>
     </view>
   </view>
 
@@ -1798,7 +1798,7 @@
 
       <!-- 底部说明 -->
       <view style="text-align: center; font-size: 22rpx; color: #94a3b8; margin-top: 36rpx; line-height: 1.6; padding: 0 8rpx;">
-        支持公益食堂、社区义工站、救援队等各类公益组织无缝接入
+        支持爱心互助食堂、社区义工站、救援队等各类互助组织无缝接入
       </view>
     </view>
 
@@ -1994,7 +1994,7 @@
     <view class="poster-modal-card">
 
       <view class="modal-header-bar">
-        <view class="modal-title-text"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{currentStoreName || shopName || '公益爱心'}}餐报海报</view>
+        <view class="modal-title-text"><view class="idx-icon-sm idx-icon-flower" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>{{currentStoreName || shopName || '爱心互助'}}餐报海报</view>
         <text class="modal-close-btn" bindtap="onClosePosterModal">✕</text>
       </view>
 
@@ -2002,7 +2002,7 @@
         <view class="poster-canvas-box">
 
           <view class="p-header-section">
-            <view class="p-brand-tag">{{currentStoreName || shopName || '公益爱心站'}} · 阳光透明账本</view>
+            <view class="p-brand-tag">{{currentStoreName || shopName || '爱心互助站'}} · 阳光透明账本</view>
             <text class="p-main-title">吃素一日 · 健康一天</text>
             <view class="p-date-sub"><view class="idx-icon-sm idx-icon-calendar" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>汇报日期：{{reportDate || '2026年07月14日'}}</view>
           </view>
@@ -2080,7 +2080,7 @@
               </view>
             </view>
             <view class="qr-right-text">
-              <text class="p-app-name">【素小账】公益爱心助手</text>
+              <text class="p-app-name">【素小账】爱心互助助手</text>
               <text class="p-qr-tip">点击二维码放大 / 长按识别查看透明账本 ›</text>
             </view>
           </view>
@@ -2786,7 +2786,7 @@
             class="btn-quick-import-template"
             bindtap="onQuickImportExpenseTemplates"
             loading="{{expenseTemplateSaving}}"
-          >⚡️ 一键导入公益常用标签</button>
+          >⚡️ 一键导入互助常用标签</button>
         </view>
         <scroll-view scroll-y enable-flex="true" class="expense-template-chip-list" wx:else>
           <view class="expense-template-chip-grid">
@@ -2808,7 +2808,7 @@
             class="btn-quick-import-template"
             bindtap="onQuickImportExpenseTemplates"
             loading="{{expenseTemplateSaving}}"
-          >⚡️ 一键导入公益常用标签</button>
+          >⚡️ 一键导入互助常用标签</button>
         </view>
         <scroll-view scroll-y enable-flex="true" class="expense-template-chip-list" wx:else>
           <view class="expense-template-chip-grid">
@@ -3405,7 +3405,7 @@
             <text class="motto-section-text culture-quote-line" wx:if="{{cultureStoreSlogan2}}">{{cultureStoreSlogan2}}</text>
           </view>
 
-          <text class="motto-section-title">{{orgType === 'elderly_canteen' ? '敬老助餐精神' : '公益服务精神'}}</text>
+          <text class="motto-section-title">{{orgType === 'elderly_canteen' ? '敬老助餐精神' : '互助服务精神'}}</text>
           <text class="culture-sub-title">—— 通用占位内容，欢迎联系开发者补充机构专属素材 ——</text>
           <view class="culture-list-single-column">
             <text class="culture-list-line" wx:if="{{orgType === 'elderly_canteen'}}">敬老爱老，一餐一饭见真心。</text>
@@ -3444,12 +3444,12 @@
       </view>
 
       <view class="platform-card platform-card-yuhua" bindtap="onSelectYuhuaPlatform" hover-class="platform-card-hover">
-        <view class="platform-card-badge">公益专属 · 受托记账</view>
+        <view class="platform-card-badge">爱心互助 · 受托记账</view>
         <view class="platform-card-body">
           <text class="platform-card-icon">🌸</text>
           <view class="platform-card-text">
-            <text class="platform-card-title">雨花公益食堂专区</text>
-            <text class="platform-card-desc">面向雨花斋公益食堂的餐报记录、义工工时与阳光账本</text>
+            <text class="platform-card-title">雨花爱心互助食堂专区</text>
+            <text class="platform-card-desc">面向雨花斋爱心互助食堂的餐报记录、义工工时与阳光账本</text>
           </view>
         </view>
         <view class="platform-card-arrow">进入 ›</view>

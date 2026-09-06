@@ -1315,7 +1315,7 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             // Footer：邀请二维码（非验真用途，指向门店招募入口）
             const qrY = height - HONOR_QR_SIZE - 44 - 20;
             const qrX = width - 30 - HONOR_QR_SIZE;
-            await drawVerifyQRArea(ctx, canvas, qrX, qrY, HONOR_QR_SIZE, '微信扫码·一起加入爱心公益', width, data.qrLocalPath, '微信扫码加入');
+            await drawVerifyQRArea(ctx, canvas, qrX, qrY, HONOR_QR_SIZE, '微信扫码·一起加入爱心互助', width, data.qrLocalPath, '微信扫码加入');
 
             ctx.restore(); // 对应开头的圆角裁剪 save/clip
 
@@ -1384,7 +1384,7 @@ export async function drawSunshineFootprintPoster(pageInstance: any, data: Sunsh
             ctx.fillStyle = FOOTPRINT_PRIMARY_COLOR;
             ctx.font = 'bold 20px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('🌱 雨花公益食堂 · 阳光善行录', width / 2, 46);
+            ctx.fillText('🌱 雨花爱心互助食堂 · 阳光善行录', width / 2, 46);
 
             ctx.fillStyle = FOOTPRINT_SECONDARY_COLOR;
             ctx.font = '13px sans-serif';

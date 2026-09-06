@@ -25,7 +25,7 @@ function computeSunshineConceptCopy(orgType: string, storeName: string): { title
     return {
       title: '☀️ 阳光账本与雨花理念',
       label: '雨花精神',
-      content: '雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与公益互助。'
+      content: '雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与爱心互助。'
     };
   }
   if (orgType === 'elderly_canteen') {
@@ -36,9 +36,9 @@ function computeSunshineConceptCopy(orgType: string, storeName: string): { title
     };
   }
   return {
-    title: '☀️ 阳光账本与公益宣言',
-    label: '公益宗旨',
-    content: `阳光笃行，爱心同行。${displayStoreName}坚持以公益之心服务社区，守护每一份需要关爱的心意。`
+    title: '☀️ 阳光账本与爱心宣言',
+    label: '互助宗旨',
+    content: `阳光笃行，爱心同行。${displayStoreName}坚持以互助初心服务社区，守护每一份需要关爱的心意。`
   };
 }
 
@@ -533,7 +533,7 @@ Page({
     // 🆕 阳光宣言辅助弹窗：由阳光大盘标题旁的 ⓘ 图标触发，只做理念说明，不再是
     // 进页面就顶在最前面的"点了只弹窗"入口——见 onOpenSunshineConceptModal
     showSunshineConceptModal: false,
-    sunshineConceptTitle: '☀️ 阳光账本与公益宣言',
+    sunshineConceptTitle: '☀️ 阳光账本与爱心宣言',
     sunshineConceptLabel: '',
     sunshineConceptContent: '',
     // 🆕 ?tab=sunshine / ?tab=ledger 跳转锚点：management 视图的主滚动区据此自动

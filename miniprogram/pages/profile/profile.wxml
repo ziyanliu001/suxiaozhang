@@ -1687,16 +1687,16 @@
           <text class="certificate-family-icon">🌸</text>
 
           <view class="cert-salutation">尊敬的家人【{{userNickName}}】：</view>
-          <view class="cert-paragraph">{{isYuhuazhai ? '感谢您对雨花斋公益事业的倾心关怀与倾心护持。一碗热饭，温暖世间。雨花斋因您的守护而更具温情！' : '感谢您对公益事业的倾心关怀与护持。一碗热饭，温暖世间。您的守护让这个大家庭更有力量！'}}</view>
+          <view class="cert-paragraph">{{isYuhuazhai ? '感谢您对雨花斋爱心互助事业的倾心关怀与倾心护持。一碗热饭，温暖世间。雨花斋因您的守护而更具温情！' : '感谢您对爱心互助事业的倾心关怀与护持。一碗热饭，温暖世间。您的守护让这个大家庭更有力量！'}}</view>
           <view class="cert-paragraph">特发此证，以兹感谢。</view>
 
           <view class="cf-signature-row">
             <view class="cf-seal">
-              <text class="cf-seal-line">{{isYuhuazhai ? '雨花' : '公益'}}</text>
+              <text class="cf-seal-line">{{isYuhuazhai ? '雨花' : '互助'}}</text>
               <text class="cf-seal-line">爱心</text>
             </view>
             <view class="cf-signature-text">
-              <text class="cf-sign-line">{{isYuhuazhai ? '雨花斋公益团队' : (currentStoreName || '公益志愿团队')}}</text>
+              <text class="cf-sign-line">{{isYuhuazhai ? '雨花斋爱心团队' : (currentStoreName || '爱心志愿团队')}}</text>
               <text class="cf-sign-line">{{certificateIssueDate}}</text>
             </view>
           </view>
@@ -1739,7 +1739,7 @@
       <view class="feedback-sheet-header">
         <view class="feedback-sheet-header-text">
           <text class="feedback-sheet-title">📮 爱心意见箱</text>
-          <text class="feedback-sheet-subtitle">感恩您的倾心护持，共同守护{{isYuhuazhai ? '雨花温情' : '公益温情'}}</text>
+          <text class="feedback-sheet-subtitle">感恩您的倾心护持，共同守护{{isYuhuazhai ? '雨花温情' : '互助温情'}}</text>
         </view>
         <view class="feedback-sheet-close" bindtap="onCloseFeedbackModal">✕</view>
       </view>

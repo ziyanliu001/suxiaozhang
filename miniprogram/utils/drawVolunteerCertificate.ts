@@ -97,7 +97,7 @@ function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: numbe
   ctx.textBaseline = 'middle';
   ctx.font = `bold ${sealFontSize}px sans-serif`;
   ctx.fillText('雨花爱心', 0, -sealLineOffset);
-  ctx.fillText('公益认证', 0, sealLineOffset);
+  ctx.fillText('互助认证', 0, sealLineOffset);
 
   ctx.restore();
 }
@@ -218,7 +218,7 @@ export async function drawVolunteerCertificate(opts: CertificateData): Promise<v
   const highlightFont = 'bold 18px sans-serif';
   const highlightColor = '#D81E06';
   const bodyRuns: TextRun[] = [
-    { text: '义工伙伴，感谢您在雨花斋公益活动中的无私奉献。截止目前，您已累计护持 ', font: normalFont, color: normalColor },
+    { text: '义工伙伴，感谢您在雨花斋爱心互助活动中的无私奉献。截止目前，您已累计护持 ', font: normalFont, color: normalColor },
     { text: `${safeDays} 天`, font: highlightFont, color: highlightColor },
     { text: '，累计工时达 ', font: normalFont, color: normalColor },
     { text: `${safeHours} 小时`, font: highlightFont, color: highlightColor },

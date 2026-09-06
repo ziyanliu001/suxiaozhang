@@ -30,11 +30,11 @@ export const APP_NAME = '素小账';
 export const ORG_TYPES: Array<{ value: string; label: string }> = [
   { value: 'yuhuazhai', label: '雨花斋' },
   { value: 'elderly_canteen', label: '社区助餐 / 敬老家园' },
-  { value: 'volunteer_station', label: '义工服务站 / 公益团队' },
+  { value: 'volunteer_station', label: '义工服务站 / 互助团队' },
   { value: 'rescue_team', label: '应急救援队' },
   { value: 'tongxin_children', label: '同心 · 儿童关爱' },
   { value: 'tongxin_cancer_care', label: '同心 · 抗癌关爱' },
-  { value: 'other', label: '其他公益组织' }
+  { value: 'other', label: '其他互助组织' }
 ];
 
 export const ORG_TYPE_VALUES: string[] = ORG_TYPES.map(item => item.value);

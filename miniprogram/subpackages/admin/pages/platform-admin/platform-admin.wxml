@@ -405,7 +405,7 @@
       <text class="pa-field-hint" wx:if="{{renewForm.planType === 'basic'}}">基础版为免费版固定配额（2 家门店），不可调整</text>
 
       <text class="pa-field-label">开通/续费原因（必填，留痕审计）</text>
-      <textarea class="pa-textarea {{renewFormErrors.reason ? 'pa-input-error' : ''}}" placeholder="{{renewForm.planType === 'basic' ? '如：新机构公益接入 / 免费开通' : '如：新机构首次开通 / 年度续费'}}" value="{{renewForm.reason}}" bindinput="onRenewFormInput" data-field="reason" />
+      <textarea class="pa-textarea {{renewFormErrors.reason ? 'pa-input-error' : ''}}" placeholder="{{renewForm.planType === 'basic' ? '如：新机构爱心互助接入 / 免费开通' : '如：新机构首次开通 / 年度续费'}}" value="{{renewForm.reason}}" bindinput="onRenewFormInput" data-field="reason" />
       <text class="pa-field-error" wx:if="{{renewFormErrors.reason}}">{{renewFormErrors.reason}}</text>
 
       <view class="pa-sheet-actions">

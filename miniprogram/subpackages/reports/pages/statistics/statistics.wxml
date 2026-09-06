@@ -185,7 +185,7 @@
     </view>
     <view class="public-aggregate-card" wx:elif="{{publicAggregateData}}">
       <view class="public-aggregate-title">🌍 全网爱心公信力总览</view>
-      <view class="public-aggregate-subtitle">素小账连接的公益食堂 / 助老餐厅 / 义工站点，账目数据接受公众监督</view>
+      <view class="public-aggregate-subtitle">素小账连接的爱心互助食堂 / 助老餐厅 / 义工站点，账目数据接受公众监督</view>
       <view class="public-aggregate-grid">
         <view class="public-aggregate-item">
           <text class="public-aggregate-val">{{publicAggregateData.nationalTotalDinersDisplay}}</text>

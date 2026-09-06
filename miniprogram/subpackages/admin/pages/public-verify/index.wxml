@@ -238,9 +238,9 @@
     </view>
 
     <view class="pv-footer">
-      <text class="pv-footer-brand">素小账 · 公益透明账本</text>
+      <text class="pv-footer-brand">素小账 · 阳光透明账本</text>
       <text class="pv-footer-declaration">公开透明 · 全民监督</text>
-      <text class="pv-footer-note">素小账公益平台提供技术支持</text>
+      <text class="pv-footer-note">素小账提供技术支持</text>
     </view>
     <view class="fa-safe-area-spacer"></view>
 

@@ -189,7 +189,7 @@ function getNoticeTemplate(type: NoticePresetType, orgType: string, storeName: s
   const isElderlyCanteen = orgType === 'elderly_canteen';
   // 三档兜底称谓：yuhuazhai 沿用"雨花斋"，elderly_canteen 用"社区助餐点"，
   // 其余通用公益机构用"本公益服务站"——storeName 有值时优先用真实门店名
-  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本公益服务站';
+  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本互助服务站';
   const name = storeName || fallbackName;
 
   switch (type) {
@@ -198,7 +198,7 @@ function getNoticeTemplate(type: NoticePresetType, orgType: string, storeName: s
         return {
           tag: '喜讯通报',
           title: `${name}试营业`,
-          content: `${name}正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康公益素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！`
+          content: `${name}正式开启试营业。秉承敬老爱老、扶弱助困理念，为长者提供健康爱心素食午餐。欢迎长辈们前来用餐，也欢迎爱心家人抽空回家做义工，一起践行敬老美德，传递关爱❤️。感恩大家支持！`
         };
       }
       if (isElderlyCanteen) {
@@ -211,7 +211,7 @@ function getNoticeTemplate(type: NoticePresetType, orgType: string, storeName: s
       return {
         tag: '喜讯通报',
         title: `${name}试营业喜讯`,
-        content: `${name}正式开启试营业啦！我们将用心为社区提供公益服务。欢迎大家前来了解，也欢迎爱心志愿者加入我们，一起传递温暖❤️。感恩大家的支持！`
+        content: `${name}正式开启试营业啦！我们将用心为社区提供爱心互助服务。欢迎大家前来了解，也欢迎爱心志愿者加入我们，一起传递温暖❤️。感恩大家的支持！`
       };
 
     case 'volunteer':
@@ -445,7 +445,7 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
     return {
       title: '☀️ 阳光账本与雨花理念',
       label: '雨花精神',
-      content: '雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与公益互助。'
+      content: '雨花无家，家在雨花。雨花斋致力于推广素食护生、恭敬生命与爱心互助。'
     };
   }
   if (orgType === 'elderly_canteen') {
@@ -456,9 +456,9 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
     };
   }
   return {
-    title: '☀️ 阳光账本与公益宣言',
-    label: '公益宗旨',
-    content: `阳光笃行，爱心同行。${displayStoreName}坚持以公益之心服务社区，守护每一份需要关爱的心意。`
+    title: '☀️ 阳光账本与爱心宣言',
+    label: '互助宗旨',
+    content: `阳光笃行，爱心同行。${displayStoreName}坚持以互助初心服务社区，守护每一份需要关爱的心意。`
   };
 }
 
@@ -473,7 +473,7 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
 function computeCultureModalTitle(orgType: string): string {
   if (orgType === 'yuhuazhai') return '机构文化和每日诵读';
   if (orgType === 'elderly_canteen') return '社区敬老文化与每日家训';
-  return '公益文化与团队公约';
+  return '互助文化与团队公约';
 }
 
 // 📖 雨花文化全集【十个有没有/祈盼排比句】：把"只有他人，没有自己。"
@@ -675,8 +675,8 @@ Page({
     sunshineStatCards: [] as { label: string; value: string }[],
     // 🆕 理念弹窗文案：按 getSunshineLedger 返回的真实门店 orgType 计算（见
     // computeConceptCopy），不再是 WXML 里硬编码的雨花斋专属文案 + 兜底二选一
-    conceptTitle: '☀️ 阳光账本与公益宣言',
-    conceptLabel: '公益宗旨',
+    conceptTitle: '☀️ 阳光账本与爱心宣言',
+    conceptLabel: '互助宗旨',
     conceptContent: '',
     yesterdayBalDisplay: '0.00',
     totalIncomeDisplay: '0.00',
@@ -1087,7 +1087,7 @@ Page({
     // 🆕【机构文化与每日家训】弹窗：标题按真实 orgType 三档计算（见
     // computeCultureModalTitle），非雨花斋分支展示门店自己配置的文化寄语——
     // 中性默认，不臆造具体机构品牌
-    cultureModalTitle: '公益文化与团队公约',
+    cultureModalTitle: '互助文化与团队公约',
     cultureStoreSlogan1: '',
     cultureStoreSlogan2: '',
     // 🏷️ 服务受众标签：驱动首页填报表单文案自适应渲染，来自 serviceTargetConfig 自定义配置
@@ -4488,7 +4488,7 @@ Page({
   onShareInviteResultCode() {
     const roleLabel = this.data.inviteResultRoleLabel;
     const storeName = this.data.inviteResultStoreName || this.data.currentStoreName || this.data.shopName || '本门店';
-    const copyText = `【素小账】公益爱心助手\n诚邀您加入【${storeName}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
+    const copyText = `【素小账】爱心互助助手\n诚邀您加入【${storeName}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
     wx.setClipboardData({
       data: copyText,
       success: () => wx.showToast({ title: '邀请文案已复制，快发送给TA吧', icon: 'none', duration: 2500 })
@@ -9029,7 +9029,7 @@ Page({
     if (!isSuperAdminAccount && this.data.orgType === 'yuhuazhai') {
       wx.showModal({
         title: '暂不支持',
-        content: '您的账号当前绑定的是雨花斋门店，请从「雨花公益食堂专区」进入。',
+        content: '您的账号当前绑定的是雨花斋门店，请从「雨花爱心互助食堂专区」进入。',
         showCancel: false
       });
       return;

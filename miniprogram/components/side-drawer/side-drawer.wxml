@@ -61,7 +61,7 @@
       </view>
 
       <view class="drawer-group drawer-group-card" wx:if="{{isManager || isFinance || isSuperAdmin}}">
-        <text class="drawer-group-label">公益项目管理</text>
+        <text class="drawer-group-label">爱心互助管理</text>
         <view class="drawer-item" wx:if="{{isManager || isSuperAdmin}}" bindtap="onTapAction" data-type="audit">
           <view class="drawer-item-icon-badge">🧑‍🤝‍🧑</view>
           <text class="drawer-item-text">义工小队审核</text>
