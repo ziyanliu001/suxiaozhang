@@ -224,6 +224,19 @@ exports.main = async (event) => {
       .limit(100)
       .get();
 
+    // 🐛 新建独立机构发现修复：调用者已归属某个机构（tenantId 非空），但该机构
+    // 名下恰好没有任何门店匹配 requestedOrgType（例如新建了一个完全独立的社区
+    // 长者食堂机构 songyu_elderly_care，而当前登录账号仍挂在雨花斋总部机构下）——
+    // 严格按自己 tenantId 查询必然是空列表，用户在"切换其它工作空间"选完新专区
+    // 后看到的就是这个空列表，永远发现不了任何可以申请加入的门店。跨机构发现
+    // 模式（handleDiscoverByOrgType）本来就是为这个"选择工作空间"场景设计的
+    // （见该函数头部注释），这里补一个自动兜底：本机构名下这个 orgType 确实一条
+    // 都没有时，自动降级为跨机构发现查询；本机构名下只要有哪怕一条匹配，就不会
+    // 触发这个兜底，不影响任何已有的租户隔离边界
+    if (requestedOrgType && (storesRes.data || []).length === 0) {
+      return await handleDiscoverByOrgType(requestedOrgType);
+    }
+
     return { success: true, list: (storesRes.data || []).map(toStoreListItem) };
   } catch (err) {
     console.error('[getStoreList] 异常:', err);
