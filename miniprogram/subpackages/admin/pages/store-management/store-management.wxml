@@ -44,10 +44,6 @@
     <!-- ===== 已激活门店 ===== -->
     <scroll-view scroll-y show-scrollbar="{{false}}" class="sm-content" wx:if="{{activeTab === 'active'}}">
 
-      <view class="sm-header-row" wx:if="{{list.length > 0}}">
-        <button class="sm-btn-create-inline" hover-class="sm-btn-create-hover" bindtap="onOpenCreateStore">➕ 创建新门店</button>
-      </view>
-
       <!-- 全国总览公告：面向"全国总览"视角展示的机构级通用通告，与门店专属通告
            严格互斥展示（不叠加），见 manageNotice 云函数 -->
       <view class="sm-overview-notice-card">
@@ -62,7 +58,6 @@
 
       <view class="sm-empty-state" wx:if="{{!loading && list.length === 0}}">
         <text>本机构暂无门店</text>
-        <button class="sm-btn-create" hover-class="sm-btn-create-hover" bindtap="onOpenCreateStore">➕ 创建新门店</button>
       </view>
 
       <view class="sm-store-card {{item.status === 'inactive' ? 'inactive' : ''}}" wx:for="{{list}}" wx:key="storeId">
@@ -97,7 +92,6 @@
           </button>
         </view>
       </view>
-      <view class="fa-safe-area-spacer"></view>
 
     </scroll-view>
 
@@ -126,9 +120,18 @@
           ✅ 一键通过审核
         </button>
       </view>
-      <view class="fa-safe-area-spacer"></view>
 
     </scroll-view>
+
+    <!-- 🏛️（2026-09-06 布局重构）"创建新门店"原来有两个互斥渲染的按钮
+         （列表非空时的表头按钮 + 空状态内嵌按钮），且空状态内文案与按钮同为
+         内联级盒子兄弟节点，靠 margin-top 撑开垂直间距在内联布局下不可靠，
+         真机上会出现"文案与按钮重叠"。改为唯一一个持久可见的吸底操作栏，
+         只在"已激活门店" tab 显示——不再依赖 list.length 分支，也消除了
+         重复入口。.sm-content 已统一预留 padding-bottom 避免遮挡列表最后一项 -->
+    <view class="sm-bottom-bar" wx:if="{{activeTab === 'active'}}">
+      <button class="sm-btn-create" hover-class="sm-btn-create-hover" bindtap="onOpenCreateStore">➕ 创建新门店</button>
+    </view>
 
   </view>
 

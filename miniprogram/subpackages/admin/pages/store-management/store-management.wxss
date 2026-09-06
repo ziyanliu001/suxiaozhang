@@ -99,6 +99,11 @@
   min-height: 0;
   box-sizing: border-box;
   padding: 24rpx;
+  /* 🏛️（2026-09-06）为吸底的 .sm-bottom-bar（仅"已激活门店" tab 显示）预留
+     空间，避免最后一张门店卡片被遮挡。"待审核" tab 没有吸底栏，多出这点
+     底部空白无害，两个 tab 共用同一个 class，不做条件区分，保持简单 */
+  padding-bottom: calc(140rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
 }
 
 /* 隐藏原生滚动条：右侧不再露出突兀的系统滚动条滑轨 */
@@ -110,27 +115,19 @@
   background: transparent;
 }
 
-.sm-header-row {
+/* 🏛️（2026-09-06）.sm-empty-state 改为真正的居中 flex 列容器——此前是纯
+   text-align:center 的内联流布局，"待审核"tab 只有一段文案时没问题，但
+   "已激活门店"tab 曾经在这里同时放文案 + 按钮两个内联级盒子兄弟节点，
+   按钮的 margin-top 在内联布局下不保证撑开垂直空间，真机上出现过文案与
+   按钮重叠。现在"创建新门店"按钮已移到独立的吸底操作栏（.sm-bottom-bar），
+   这里统一改成 flex 列容器纯粹是为了布局健壮性，两个 tab 复用同一个 class
+   都不受影响 */
+.sm-empty-state {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20rpx;
-}
-
-.sm-btn-create-inline {
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: 0 32rpx;
-  background: #8C1D18;
-  color: #FFFFFF;
-  font-size: 26rpx;
-  font-weight: bold;
-  border-radius: 40rpx;
-}
-
-.sm-empty-state {
-  text-align: center;
+  gap: 24rpx;
   padding: 100rpx 0;
   color: #999999;
   font-size: 26rpx;
@@ -145,19 +142,35 @@
   font-size: 26rpx;
 }
 
+/* 📤（2026-09-06）"创建新门店"吸底操作栏：与 daily-menu.wxss 的
+   .dm-bottom-bar 同一套写法，脱离文档流后不再受内联流/flex 子项的高度
+   计算问题影响，且在所有机型上位置稳定 */
+.sm-bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(30rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  box-shadow: 0 -6rpx 20rpx rgba(0, 0, 0, 0.06);
+  z-index: 99;
+}
+
 .sm-btn-create {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-height: 44px; /* 触控热区 ≥44pt */
-  margin-top: 32rpx;
-  padding: 0 48rpx;
   background: #8C1D18;
   color: #FFFFFF;
   font-size: 28rpx;
   font-weight: bold;
   border-radius: 44rpx;
   transition: all 0.2s ease;
+}
+
+.sm-btn-create::after {
+  border: none;
 }
 
 .sm-btn-create-hover {

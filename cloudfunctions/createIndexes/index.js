@@ -123,6 +123,10 @@ exports.main = async (event, context) => {
     ['user_roles', { name: 'openid',                      keys: [{ _openid: 1 }],                                               unique: false }],
     ['user_roles', { name: 'tenantId',                    keys: [{ tenantId: 1 }],                                              unique: false }],
     ['user_roles', { name: 'tenantId_status_applyTime',   keys: [{ tenantId: 1 }, { status: 1 }, { applyTime: -1 }],           unique: false }],
+    // 🏛️（2026-09-06）云开发控制台对 store-management.ts 的 fetchPendingStoreRequests
+    // 客户端直连查询（where({status,tenantId,storeSelectionType,orgType}).orderBy
+    // ('applyTime','desc')）报出"缺少索引"告警，字段顺序与下面完全一致
+    ['user_roles', { name: 'tenantId_status_storeSelectionType_orgType_applyTime', keys: [{ tenantId: 1 }, { status: 1 }, { storeSelectionType: 1 }, { orgType: 1 }, { applyTime: -1 }], unique: false }],
     ['user_roles', { name: 'storeId_status_applyTime',    keys: [{ storeId: 1 }, { status: 1 }, { applyTime: -1 }],            unique: false }],
     ['user_roles', { name: 'storeId_status_approveTime',  keys: [{ storeId: 1 }, { status: 1 }, { approveTime: -1 }],         unique: false }],
     ['user_roles', { name: 'storeName_status_approveTime',keys: [{ storeName: 1 }, { status: 1 }, { approveTime: -1 }],       unique: false }],
