@@ -7,7 +7,7 @@
 // 权益对比"卡片只在 pages/profile/profile.ts 的 showSubscriptionModal 维护
 // 一份（唯一真源）——本组件"立即前往"按钮只是跳转过去 + 视情况自动唤起那张
 // 卡片，不在这里重复一份权益列表文案，避免定价/权益说明散落多处逐渐漂移。
-import { requestOpenSubscription } from '../../utils/subscriptionHandoff';
+import { requestOpenSubscription } from '../../../../utils/subscriptionHandoff';
 
 Component({
   options: {

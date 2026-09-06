@@ -3,7 +3,7 @@ import { getSelectedStore, setSelectedStore } from '../../../../utils/storeManag
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { drawActivityPoster } from '../../utils/drawActivityPoster';
-import { recordRecentVisit } from '../../../../utils/recentPages';
+import { recordRecentVisit } from '../../utils/recentPages';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync } from '../../../../utils/util';

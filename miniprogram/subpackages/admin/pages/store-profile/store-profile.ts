@@ -1,7 +1,7 @@
 import { AuthService } from '../../../../utils/authService';
 import { getSelectedStore } from '../../../../utils/storeManager';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
-import { recordRecentVisit } from '../../../../utils/recentPages';
+import { recordRecentVisit } from '../../utils/recentPages';
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync } from '../../../../utils/util';

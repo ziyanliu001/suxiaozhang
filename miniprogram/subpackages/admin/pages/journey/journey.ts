@@ -10,7 +10,7 @@
 
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { safeParseDate } from '../../../../utils/dateUtils';
-import { recordRecentVisit } from '../../../../utils/recentPages';
+import { recordRecentVisit } from '../../utils/recentPages';
 import { AuthService } from '../../../../utils/authService';
 import { isCloudAvailable } from '../../../../utils/cloudGuard';
 import { resolveHonorCardStoreName } from '../../../../utils/storeIdentity';

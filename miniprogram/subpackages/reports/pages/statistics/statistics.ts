@@ -5,7 +5,7 @@ import { formatGratitudeReportText, GratitudeReportData } from '../../utils/repo
 import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { safeNavigateTo } from '../../../../utils/navHelper';
-import { recordRecentVisit } from '../../../../utils/recentPages';
+import { recordRecentVisit } from '../../utils/recentPages';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../../../utils/posterGenerator';
 import { getSafeSystemInfo } from '../../../../utils/util';
 import { isVirtualStoreName, resolveHonorCardStoreName } from '../../../../utils/storeIdentity';
