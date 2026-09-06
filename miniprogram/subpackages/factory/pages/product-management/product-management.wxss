@@ -11,13 +11,32 @@
   box-sizing: border-box;
 }
 
+.pm-header-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
 .pm-create-btn {
+  flex: 1;
   background: #8C1D18;
   color: #FFFFFF;
   font-size: 28rpx;
   line-height: 80rpx;
   border-radius: 12rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 0;
+}
+
+/* 🏛️（M0）支付与分账设置入口：与"新建商品"同宽两列，视觉权重次于主操作，
+   用浅底描边而不是实底红色，避免抢"新建商品"的焦点 */
+.pm-settings-btn {
+  flex: 1;
+  background: #FFFFFF;
+  color: #8C1D18;
+  border: 2rpx solid #8C1D18;
+  font-size: 28rpx;
+  line-height: 76rpx;
+  border-radius: 12rpx;
 }
 
 .pm-form-card {
@@ -102,6 +121,47 @@
   line-height: 76rpx;
   border-radius: 12rpx;
   margin-top: 16rpx;
+}
+
+/* 🏛️（M0）支付模式二选一胶囊——本页此前没有 radio-group 场景，跟随
+   .pm-primary-btn 同一套品牌红配色语言，未选中态用浅底描边区分 */
+.pm-mode-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.pm-mode-pill {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  line-height: 72rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid #E5DED4;
+  color: #8E8E93;
+  box-sizing: border-box;
+}
+
+.pm-mode-pill-active {
+  border-color: #8C1D18;
+  color: #8C1D18;
+  background: #FDF1EE;
+  font-weight: 600;
+}
+
+.pm-field-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #B8860B;
+  margin-bottom: 20rpx;
+  line-height: 32rpx;
+}
+
+.pm-settlement-loading {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #8E8E93;
+  font-size: 26rpx;
 }
 
 .pm-loading-state,

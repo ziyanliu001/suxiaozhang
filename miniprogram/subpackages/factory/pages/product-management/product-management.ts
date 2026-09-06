@@ -37,6 +37,21 @@ const EMPTY_FORM: ProductForm = {
   name: '', priceYuan: '', dailyCapacityLimit: '', leadTimeDays: '0', producerOpenId: '', description: ''
 };
 
+// 🏛️（《素食产销工坊升级与生态护城河演进计划书》里程碑 M0）支付模式与分账
+// 费率此前没有任何前端配置入口，只能去数据库控制台手改。这里把它接在商品
+// 管理页——本页已经是 space_owner/space_admin 语境下管理工坊核心资产的地方，
+// 不新建一个专门的"工坊设置"页面（当前唯一使用场景就是这一处配置，不值得
+// 单独开一整套路由/app.json 注册）
+interface SettlementConfigForm {
+  paymentMode: 'none' | 'direct_wechat';
+  producerRatePercent: string; // 展示层用百分数字符串（如 "75"），提交时才换算成 0~1 小数
+  promoterRatePercent: string;
+}
+
+const EMPTY_SETTLEMENT_CONFIG_FORM: SettlementConfigForm = {
+  paymentMode: 'none', producerRatePercent: '75', promoterRatePercent: '20'
+};
+
 Page({
   data: {
     contentTop: 0,
@@ -52,7 +67,16 @@ Page({
     form: { ...EMPTY_FORM },
     submitting: false,
 
-    togglingId: ''
+    togglingId: '',
+
+    // 🏛️ 支付与分账设置（M0）
+    showSettlementConfigForm: false,
+    settlementConfigLoading: false,
+    settlementConfigSubmitting: false,
+    settlementConfigForm: { ...EMPTY_SETTLEMENT_CONFIG_FORM },
+    // 平台留存比例是展示派生值（100% - 制作方 - 推广员），每次用户改动费率
+    // 输入框都会重新计算，不需要用户自己心算
+    platformRatePercentDisplay: '5'
   },
 
   onLoad(options: Record<string, string>) {
@@ -104,7 +128,7 @@ Page({
   },
 
   onTapCreate() {
-    this.setData({ showForm: true, formMode: 'create', editingProductId: '', form: { ...EMPTY_FORM } });
+    this.setData({ showForm: true, showSettlementConfigForm: false, formMode: 'create', editingProductId: '', form: { ...EMPTY_FORM } });
   },
 
   onTapEdit(e: any) {
@@ -113,6 +137,7 @@ Page({
     if (!product) return;
     this.setData({
       showForm: true,
+      showSettlementConfigForm: false,
       formMode: 'edit',
       editingProductId: id,
       form: {
@@ -253,6 +278,122 @@ Page({
       wx.showToast({ title: '操作失败，请重试', icon: 'none' });
     } finally {
       this.setData({ togglingId: '' });
+    }
+  },
+
+  // ============ 支付与分账设置（M0） ============
+
+  async onOpenSettlementConfig() {
+    this.setData({ showSettlementConfigForm: true, showForm: false, settlementConfigLoading: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageTenantSettlementConfig',
+        data: { action: 'get', tenantId: this.data.tenantId }
+      });
+      const result = res.result as any;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '加载失败，请重试', icon: 'none' });
+        this.setData({ showSettlementConfigForm: false });
+        return;
+      }
+      const producerRatePercent = String(Math.round((result.producerRate || 0) * 100));
+      const promoterRatePercent = String(Math.round((result.promoterRate || 0) * 100));
+      this.setData({
+        settlementConfigForm: {
+          paymentMode: result.paymentMode === 'direct_wechat' ? 'direct_wechat' : 'none',
+          producerRatePercent,
+          promoterRatePercent
+        }
+      });
+      this.updatePlatformRateDisplay(producerRatePercent, promoterRatePercent);
+    } catch (err) {
+      console.error('[product-management] onOpenSettlementConfig 异常:', err);
+      wx.showToast({ title: '加载异常，请重试', icon: 'none' });
+      this.setData({ showSettlementConfigForm: false });
+    } finally {
+      this.setData({ settlementConfigLoading: false });
+    }
+  },
+
+  onCancelSettlementConfig() {
+    this.setData({ showSettlementConfigForm: false });
+  },
+
+  onSelectPaymentMode(e: any) {
+    const mode = e.currentTarget.dataset.mode;
+    if (mode !== 'none' && mode !== 'direct_wechat') return;
+    this.setData({ 'settlementConfigForm.paymentMode': mode });
+  },
+
+  onSettlementConfigFieldInput(e: any) {
+    const field = e.currentTarget.dataset.field;
+    if (!field) return;
+    const value = e.detail.value;
+    this.setData({ [`settlementConfigForm.${field}`]: value });
+    const form = this.data.settlementConfigForm;
+    const producerRatePercent = field === 'producerRatePercent' ? value : form.producerRatePercent;
+    const promoterRatePercent = field === 'promoterRatePercent' ? value : form.promoterRatePercent;
+    this.updatePlatformRateDisplay(producerRatePercent, promoterRatePercent);
+  },
+
+  // 纯展示层派生计算，不做任何校验兜底——真正的合法性校验在 onSubmitSettlementConfig
+  // 与服务端 validateSettlementConfig.js 里，这里只是让用户填的时候心里有数
+  updatePlatformRateDisplay(producerRatePercent: string, promoterRatePercent: string) {
+    const producer = parseFloat(producerRatePercent) || 0;
+    const promoter = parseFloat(promoterRatePercent) || 0;
+    const platform = Math.round((100 - producer - promoter) * 100) / 100;
+    this.setData({ platformRatePercentDisplay: String(platform) });
+  },
+
+  async onSubmitSettlementConfig() {
+    if (this.data.settlementConfigSubmitting) return;
+    const form = this.data.settlementConfigForm;
+    const producerRate = parseFloat(form.producerRatePercent) / 100;
+    const promoterRate = parseFloat(form.promoterRatePercent) / 100;
+
+    // 基础校验：与服务端 validateSettlementConfig.js 同口径提前拦一遍，避免
+    // 用户填完等一圈网络往返才被服务端拒绝——服务端校验仍然是唯一防线
+    if (!Number.isFinite(producerRate) || producerRate < 0 || producerRate > 1) {
+      wx.showToast({ title: '制作方分成比例须为 0~100 的数字', icon: 'none' });
+      return;
+    }
+    if (!Number.isFinite(promoterRate) || promoterRate < 0 || promoterRate > 1) {
+      wx.showToast({ title: '推广员分成比例须为 0~100 的数字', icon: 'none' });
+      return;
+    }
+    if (producerRate + promoterRate > 1) {
+      wx.showToast({ title: '制作方 + 推广员比例之和不能超过 100%', icon: 'none' });
+      return;
+    }
+
+    this.setData({ settlementConfigSubmitting: true });
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageTenantSettlementConfig',
+        data: { action: 'update', tenantId: this.data.tenantId, paymentMode: form.paymentMode, producerRate, promoterRate }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败，请重试', icon: 'none' });
+        return;
+      }
+      // 🌟 切到 direct_wechat 时服务端会带一句真实前置条件提醒，用 showModal
+      // 而不是 showToast——这句话信息量较大（提醒去微信支付商户平台开通分账
+      // 权限），Toast 停留时间太短看不完
+      if (result.warning) {
+        wx.showModal({ title: '提示', content: result.warning, showCancel: false, confirmText: '知道了' });
+      } else {
+        wx.showToast({ title: '已保存', icon: 'success' });
+      }
+      this.setData({ showSettlementConfigForm: false });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[product-management] onSubmitSettlementConfig 异常:', err);
+      wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ settlementConfigSubmitting: false });
     }
   }
 });

@@ -1,0 +1,9 @@
+{
+  "name": "manageTenantSettlementConfig",
+  "version": "1.0.0",
+  "description": "云函数：直播产销工坊支付模式（paymentMode）与分账费率（settlementConfig）配置管理",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -86,7 +86,64 @@
       <button class="pm-secondary-btn" bindtap="onCancelForm">取消</button>
     </view>
 
-    <button class="pm-create-btn" wx:if="{{!showForm}}" bindtap="onTapCreate">+ 新建商品</button>
+    <!-- 🏛️（M0）支付与分账设置：与"新建商品"同一行，本页已经是 space_owner/
+         space_admin 语境下管理工坊核心资产的地方，不新建专门的"工坊设置"页 -->
+    <view class="pm-header-actions" wx:if="{{!showForm && !showSettlementConfigForm}}">
+      <button class="pm-create-btn" bindtap="onTapCreate">+ 新建商品</button>
+      <button class="pm-settings-btn" bindtap="onOpenSettlementConfig">⚙️ 支付与分账设置</button>
+    </view>
+
+    <view class="pm-form-card" wx:if="{{showSettlementConfigForm}}">
+      <text class="pm-form-title">支付与分账设置</text>
+
+      <view class="pm-settlement-loading" wx:if="{{settlementConfigLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <block wx:else>
+        <text class="pm-field-label">支付模式</text>
+        <view class="pm-mode-row">
+          <view
+            class="pm-mode-pill {{settlementConfigForm.paymentMode === 'none' ? 'pm-mode-pill-active' : ''}}"
+            data-mode="none"
+            bindtap="onSelectPaymentMode"
+          >人工/线下结算</view>
+          <view
+            class="pm-mode-pill {{settlementConfigForm.paymentMode === 'direct_wechat' ? 'pm-mode-pill-active' : ''}}"
+            data-mode="direct_wechat"
+            bindtap="onSelectPaymentMode"
+          >微信直连自动分账</view>
+        </view>
+        <text class="pm-field-hint" wx:if="{{settlementConfigForm.paymentMode === 'direct_wechat'}}">⚠️ 需已在微信支付商户平台开通分账权限，并为制作方/推广员完成分账接收方注册，否则发货时自动分账会静默失败</text>
+
+        <text class="pm-field-label">制作方分成比例（%）</text>
+        <input
+          class="pm-input"
+          placeholder-class="pm-input-placeholder"
+          type="digit"
+          placeholder="如：75"
+          value="{{settlementConfigForm.producerRatePercent}}"
+          data-field="producerRatePercent"
+          bindinput="onSettlementConfigFieldInput"
+        />
+
+        <text class="pm-field-label">推广员分成比例（%，订单没有推广人时不生效）</text>
+        <input
+          class="pm-input"
+          placeholder-class="pm-input-placeholder"
+          type="digit"
+          placeholder="如：20"
+          value="{{settlementConfigForm.promoterRatePercent}}"
+          data-field="promoterRatePercent"
+          bindinput="onSettlementConfigFieldInput"
+        />
+
+        <text class="pm-field-hint">平台留存比例：{{platformRatePercentDisplay}}%（100% 减去以上两项自动算出）</text>
+
+        <button class="pm-primary-btn" loading="{{settlementConfigSubmitting}}" disabled="{{settlementConfigSubmitting}}" bindtap="onSubmitSettlementConfig">保存</button>
+        <button class="pm-secondary-btn" bindtap="onCancelSettlementConfig">取消</button>
+      </block>
+    </view>
 
     <view class="pm-loading-state" wx:if="{{loading && products.length === 0}}">
       <text>加载中...</text>
