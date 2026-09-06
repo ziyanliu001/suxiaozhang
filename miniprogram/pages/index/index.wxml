@@ -133,11 +133,16 @@
        未选定时（冷启动默认态）走下面 wx:else 的工作空间选择首页。选定后的内容
        完全是原有首页逻辑，未做任何删改——只是包了一层可见性开关 -->
   <block wx:if="{{currentPlatformMode}}">
-  <view class="app-header-section" style="padding-top: {{headerSafeTop}}px;">
+  <!-- 🐛 顶部留白修复（2026-09-06）：这里不再用 headerSafeTop（capsuleBottom+15，
+       整段内容顶到胶囊底部之后再加一截间距），改用 modalSafeTop（=statusBarHeight）
+       只清掉状态栏；标题行自己的 navBarHeight 高度精确覆盖胶囊所在区间，两者
+       配合才是"标题行与胶囊上下居中对齐"，不是简单顶到胶囊下方。headerSafeTop
+       原样保留给下方 platform-select-page（工作空间选择首页）使用，不受影响 -->
+  <view class="app-header-section" style="padding-top: {{modalSafeTop}}px;">
     <!-- 🌟 顶栏精简：只保留应用标题 + 左侧汉堡菜单 + 右侧帮助入口这三样"全局导航"
          元素，与门店门店切换等"当前业务上下文"元素分层——帮助入口从下方
          .capsule-bar-row 移到这里，与汉堡菜单左右对称，同一行内 top 对齐 -->
-    <view class="main-title-header-box">
+    <view class="main-title-header-box" style="height: {{navBarHeight}}px;">
       <view class="hamburger-menu-btn" bindtap="onOpenSideDrawer" hover-class="capsule-hover">
         <view class="hamburger-line"></view>
         <view class="hamburger-line"></view>

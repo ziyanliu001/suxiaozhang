@@ -27,11 +27,11 @@ page {
   overflow-x: hidden;
   background-color: #F8F9FA;
   box-sizing: border-box;
-  /* 自定义导航栏（navigationStyle: custom）下，页面顶部内容需自行避让胶囊按钮/刘海安全区。
-     env(safe-area-inset-top) 只覆盖刘海/状态栏高度，胶囊按钮本身还有额外高度，
-     单靠 env() 不够，故强制再叠加 80rpx 兜底，与 headerSafeTop 的动态胶囊测算共同生效，
-     确保首屏渲染早于 JS 测算完成时内容也不会被遮挡 */
-  padding-top: calc(env(safe-area-inset-top) + 80rpx) !important;
+  /* 🐛 2026-09-06 修复：此前这里还写死一份 padding-top: calc(env(safe-area-inset-top)
+     + 80rpx)，与内部 .app-header-section/.platform-select-page 各自的内联
+     padding-top（headerSafeTop/modalSafeTop，均已用 wx.getMenuButtonBoundingClientRect()
+     精确测算）叠加，是首页标题行与胶囊按钮之间出现异常大空白的根因——容器
+     本身不需要再重复承担一份避让，删除，避让完全交给两个子分支各自的内联样式 */
   /* 🏛️（2026-09-03 彻底根治 TabBar 踩踏）.bottom-action-floating-bar 已从
      position:fixed 悬浮层改为普通文档流内容（随 .page-body-scroll 一起滚动），
      不再需要为它单独预留一份"TabBar + 按钮组高度"的组合安全垫——这里只需要
@@ -75,8 +75,14 @@ page {
 
 .main-title-header-box {
   position: relative;
+  /* 🐛 2026-09-06 修复：高度由 wxml 内联 style（navBarHeight）精确赋值为
+     胶囊按钮所在的导航内容区高度，配合 flex 居中——不再用 padding-top:32rpx
+     把内容硬顶下去一截，标题文字与下面汉堡菜单/帮助按钮现在与胶囊真正
+     上下居中对齐，而不是顶到胶囊下方再加一段间距 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  padding-top: 32rpx;
   margin-bottom: 16rpx;
 }
 
@@ -91,7 +97,10 @@ page {
 .hamburger-menu-btn {
   position: absolute;
   left: 28rpx;
-  top: 32rpx;
+  /* 🐛 2026-09-06 修复：top:32rpx 改成 top:50%+translateY(-50%)，跟随
+     .main-title-header-box 的 flex 垂直居中基准，不再硬编码固定像素值 */
+  top: 50%;
+  transform: translateY(-50%);
   width: 56rpx;
   height: 56rpx;
   display: flex;
@@ -118,7 +127,9 @@ page {
 .header-help-btn {
   position: absolute;
   right: 28rpx;
-  top: 32rpx;
+  /* 🐛 2026-09-06 修复：与 .hamburger-menu-btn 同步换成 top:50%+translateY(-50%) */
+  top: 50%;
+  transform: translateY(-50%);
   height: 56rpx;
   display: flex;
   align-items: center;

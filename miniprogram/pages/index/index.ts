@@ -748,7 +748,15 @@ Page({
     slogan2: '清晰记账  透明运行',
     donationPlaceholder: '可以直接把所有支持名单一次性全部贴在这里。例如：\n黄玉珍 16\n周瑞德 2\n吴建平 3\n邢善积德 2\n',
     headerSafeTop: 85,
-    modalSafeTop: 0,
+    // 🐛 顶部留白修复：默认值从 0 改为 20——这个字段现在也供 .app-header-section
+    // 的 padding-top 使用（见 onLoad 里的胶囊测算），JS 测算完成前的首帧兜底
+    // 不能是 0（会让标题行短暂顶到状态栏），20 与 getSafeSystemInfo() 自身
+    // statusBarHeight 兜底值一致
+    modalSafeTop: 20,
+    // 🐛 顶部留白修复：.main-title-header-box 的精确高度，与胶囊按钮所在的
+    // 导航内容区高度一致，配合 modalSafeTop 做 padding-top，让标题行与胶囊
+    // 按钮真正上下居中对齐（公式与共享 navigation-bar 组件同源）
+    navBarHeight: 44,
     isSubmitting: false,
     hasDraft: false,
     parseResult: {
@@ -1421,12 +1429,19 @@ Page({
     try {
       const rect = wx.getMenuButtonBoundingClientRect();
       const capsuleBottom = rect.bottom;
+      // 🐛 顶部留白修复：顺带算出 navBarHeight（与共享 navigation-bar 组件
+      // 同一个公式），供 .main-title-header-box 精确对齐胶囊——headerSafeTop
+      // 本身的公式/用途不变，继续只服务 platform-select-page 分支
+      const sysInfo = getSafeSystemInfo();
+      const statusBarHeight = sysInfo.statusBarHeight || 20;
       this.setData({
-        headerSafeTop: capsuleBottom + 15
+        headerSafeTop: capsuleBottom + 15,
+        navBarHeight: (rect.top - statusBarHeight) * 2 + rect.height
       });
     } catch (error) {
       this.setData({
-        headerSafeTop: 85
+        headerSafeTop: 85,
+        navBarHeight: 44
       });
     }
 
@@ -12245,7 +12260,14 @@ Page({
         financeLedgerAuditedRate: total > 0 ? Math.round((audited / total) * 100) : null
       });
     } catch (err) {
-      console.error('[fetchFinanceLedgerStatus] 查询失败:', err);
+      // 🐛 消除刺眼的红色误报：manageFinanceLock 对 super_admin 有意做了严格的
+      // 多租户越权校验（目标门店 tenantId 与调用者自己的 tenantId 不一致时
+      // 拒绝，见该云函数 checkRangeStatus action 注释"多租户越权修复"）——
+      // 超管账号切换预览到自己机构以外的门店（跨机构发现流程）时，这里必然
+      // 收到"无权限：目标门店不属于您所在的机构"，是预期内的正常拒绝，不是
+      // 程序错误，本函数也只是首页一个锦上添花的信息卡片，静默降级即可，
+      // 不用 console.error 打红、也不打扰用户
+      console.warn('[fetchFinanceLedgerStatus] 查询失败（可能是跨机构预览门店的正常拒绝）:', err);
     } finally {
       this.setData({ financeLedgerStatusLoading: false });
     }
