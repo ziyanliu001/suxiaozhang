@@ -7208,8 +7208,9 @@ page {
   background: rgba(140, 29, 24, 0.1);
 }
 
-/* 🌟 财务专属功能区宫格：复用 .qa-main-grid 的白底/圆角/阴影样式，与稽核台间隔开 */
-.finance-qa-grid {
+/* 🌟（2026-09-06）财务健康指标 → 直达财务稽核台的入口行：复用 .qa-extra-row
+   （门店管理/进销存同款独立横条样式），与上方 3 项 stat-item 保持 20rpx 间隔 */
+.finance-audit-entry-row {
   margin-top: 20rpx;
 }
 

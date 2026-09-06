@@ -643,24 +643,17 @@
         </view>
       </view>
 
-      <!-- 🌟 财务专属功能区：标准 2x2 宫格，聚焦稽核指标 + 账本审核 + 导出/封账 -->
-      <view class="qa-main-grid finance-qa-grid">
-        <view class="qa-grid-cell" bindtap="onOpenFinanceExportMenu">
-          <text class="qa-grid-emoji">📊</text>
-          <text class="txt">Excel 账本导出</text>
-        </view>
-        <view class="qa-grid-cell" bindtap="onOpenFinanceLockModal">
-          <text class="qa-grid-emoji">🔒</text>
-          <text class="txt">稽核与封账</text>
-        </view>
-        <view class="qa-grid-cell" bindtap="onOpenRiskAlertsModal">
-          <text class="qa-grid-emoji">⚠️</text>
-          <text class="txt">风控预警日志</text>
-        </view>
-        <view class="qa-grid-cell" bindtap="toggleSettings">
-          <view class="icon idx-icon-svg idx-icon-settings"></view>
-          <text class="txt">店铺模板自定义</text>
-        </view>
+      <!-- 🌟（2026-09-06 消除多头堆叠）"稽核与封账"/"风控预警日志"已随上方
+           stat-item 一起指向 finance-audit 分包页面，原 2x2 宫格里的同名格子
+           是纯重复入口，删除；"Excel 账本导出"与上方"月度导出/次" stat-item
+           本就是同一个 onOpenFinanceExportMenu 调用，同样删除重复格；"店铺
+           模板自定义"迁回下方通栏横条统一入口（见 template-card），不再在
+           这里单独占一格。整个卡片改为"3 项健康指标 + 1 条直达财务稽核台"，
+           不再需要额外的功能宫格 -->
+      <view class="qa-extra-row finance-audit-entry-row" bindtap="onOpenFinanceLockModal">
+        <text class="qa-grid-emoji">🔍</text>
+        <text class="txt">进入财务稽核台</text>
+        <text class="qa-extra-arrow">›</text>
       </view>
 
       <!-- 🐛 财务首页瘦身后的唯一展开口子：「请填写当日明细」整条录入表单流水线
@@ -733,12 +726,11 @@
       <text class="offline-action">[重传]</text>
     </view>
 
-    <!-- 🐛 与 finance-qa-grid 第 4 格【店铺模板自定义】(toggleSettings) 重复的通栏横条：
-         纯财务/超管已经能从四宫格进入同一个 toggleSettings，这里再展示一条一模一样的
-         入口纯属冗余视觉噪音。但对"只是店长、不是财务也不是超管"的角色来说，四宫格
-         (manager-quick-actions-v2) 里压根没有这一格，这条横条是他们唯一能进店铺模板
-         设置的入口——不能一并删掉，只隐藏"已经有格子可以点"的那部分用户 -->
-    <view class="ui-card-wrapper template-card" wx:if="{{!(isFinance || isSuperAdmin)}}" bindtap="toggleSettings">
+    <!-- 🌟（2026-09-06）店铺模板自定义的唯一入口：finance-qa-grid 第 4 格已随该宫格
+         一并删除（见上方 finance-home-card 改动），不再需要用 wx:if 排除
+         isFinance/isSuperAdmin——现在所有角色都从这一条通栏横条进入 toggleSettings，
+         不存在"已经有格子可以点"的重复入口了 -->
+    <view class="ui-card-wrapper template-card" bindtap="toggleSettings">
       <view class="template-header-left">
         <view class="icon idx-icon-svg idx-icon-settings"></view>
         <text class="title">店铺模板自定义</text>

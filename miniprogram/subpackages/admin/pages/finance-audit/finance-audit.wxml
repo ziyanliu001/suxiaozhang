@@ -7,7 +7,7 @@
      "跳转本页" -->
 <view class="fa-page">
   <navigation-bar
-    title="🔒 财务稽核台"
+    title="财务稽核台"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"
