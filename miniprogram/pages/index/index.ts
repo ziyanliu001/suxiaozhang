@@ -1611,6 +1611,7 @@ Page({
         // getCurrentActiveStore() 优先，查不到时才退回这次角色解析出的 storeId
         yangshanWallStoreId: getCurrentActiveStore().storeId || storeId
       });
+      console.log('[index][yangshanWallStoreId] initCurrentUserRole·cached 分支写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
       // 🌐 自动续接工作空间：账号已有明确归属（真实门店 orgType）时，跳过"工作
       // 空间选择"首页，直接落地到对应专区——见 autoResumeWorkspaceMode 注释
       this.autoResumeWorkspaceMode(orgType, isSuperAdmin, isPlatformAdmin);
@@ -1671,6 +1672,7 @@ Page({
         currentStoreId: storeId,
         yangshanWallStoreId: getCurrentActiveStore().storeId || storeId
       });
+      console.log('[index][yangshanWallStoreId] initCurrentUserRole·服务端角色分支写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
       // 🌐 自动续接工作空间：服务端权威角色落地后再校正一次——万一上面 cached
       // 分支用的是过期的本地角色缓存（orgType 与服务端最新值不一致），这里用
       // 权威值重新判定/纠正，见 autoResumeWorkspaceMode 注释
@@ -2560,6 +2562,7 @@ Page({
       isFamily: overridden.isFamily,
       permissions: flags
     }, () => {
+      console.log('[index][yangshanWallStoreId] onStoreChanged 写入:', this.data.yangshanWallStoreId);
 
       // 🏪 门店选择器引导闭环：若此前有操作因"未选定具体门店"被拦截（如点击【发布今日食谱】），
       // 且刚选定的确实是具体门店（非全部门店/全国总览），自动续跑一次原操作，无需用户再点一次
@@ -2626,6 +2629,7 @@ Page({
       // 必须跟随 currentStoreName 同步，否则会继续沿用切店前的门店名
       shopName: storeName
     });
+    console.log('[index][yangshanWallStoreId] switchStoreTarget 写入:', this.data.yangshanWallStoreId);
 
     // 🐛 根因修复："首页显示门店 A，切到个人中心却显示门店 B"：此前这里只调用
     // setSelectedStore()，只写了 legacy 的 selectedStore key，没写
@@ -8915,6 +8919,7 @@ Page({
       isFamily: overridden.isFamily,
       permissions: getPermissionFlags({ role })
     });
+    console.log('[index][yangshanWallStoreId] refreshUserRoleView 写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
   },
 
   // 🐛 根因排查记录：之前超管点【通用素食/门店记账】仍被拦"暂不支持"，真正原因不是
