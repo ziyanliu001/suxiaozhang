@@ -5602,7 +5602,15 @@ Page({
   // 改为展示"超级管理员 · 全局总览"高亮标识，见 profile.wxml isSuperAdmin 分支
   async fetchCurrentTenantName() {
     try {
-      const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD);
+      // 🐛 超管跨机构预览修复：本页顶层 data.currentStoreId 从未被真正赋值过
+      // （见本文件 1550/2611 行注释），必须像其余读取"当前生效门店"的写法
+      // 一样用 getCurrentActiveStore() 现取，才能拿到切店后的真实 storeId；
+      // skipCache:true 避免 60s 内存缓存把切店前的旧机构名继续吐给这次调用
+      const activeStore = getCurrentActiveStore();
+      const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, {
+        skipCache: true,
+        storeId: activeStore.storeId || ''
+      });
       this.setData({ currentTenantName: result.tenantName || '' });
     } catch (err) {
       console.warn('[fetchCurrentTenantName] 查询失败:', err);

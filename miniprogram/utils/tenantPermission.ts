@@ -184,7 +184,11 @@ const PLATFORM_ADMIN_ALLOWED: TenantPermissionResult = {
 
 export async function checkTenantPermission(
   featureKey: FeatureKey,
-  opts?: { skipCache?: boolean }
+  // 🛡️ storeId 可选：仅供服务端在确认调用者本人是 super_admin 时，用来把
+  // 套餐/机构名查询临时切到"当前预览门店"真实所属的租户（见 cloudfunctions/
+  // checkTenantPermission 的 effectiveTenantId 覆盖逻辑）——非超管账号传了
+  // 也不会生效，服务端角色校验不通过时行为与不传完全一致
+  opts?: { skipCache?: boolean; storeId?: string }
 ): Promise<TenantPermissionResult> {
   if (AuthService.isPlatformAdmin()) {
     return PLATFORM_ADMIN_ALLOWED;
@@ -200,7 +204,7 @@ export async function checkTenantPermission(
   }
 
   try {
-    const res = await callFunctionWithTimeout({ name: 'checkTenantPermission', data: { featureKey } });
+    const res = await callFunctionWithTimeout({ name: 'checkTenantPermission', data: { featureKey, storeId: opts?.storeId } });
     const r = res.result as any;
     if (!r || !r.success) {
       console.warn('[tenantPermission] checkTenantPermission 返回失败，保守放行:', r);

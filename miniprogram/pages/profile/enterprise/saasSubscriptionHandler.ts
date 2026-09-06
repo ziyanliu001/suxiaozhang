@@ -17,6 +17,7 @@
 // stub 整份替换 ./index.ts），旗标则继续服务于"同一份完整版代码，运营侧想
 // 临时关闭购买入口但不想重新走一次构建发布"这个不同的场景，两者互不冲突。
 import { checkTenantPermission, FEATURE_KEYS, clearTenantPermissionCache, resolveTier, PERMISSION_TIER } from '../../../utils/tenantPermission';
+import { getCurrentActiveStore } from '../../../utils/storeManager';
 import { getSafeSystemInfo, isIOSDevice } from '../../../utils/util';
 import { setTabBarHidden } from '../../../utils/tabBarVisibility';
 import { callFunctionWithTimeout } from '../../../utils/withTimeout';
@@ -116,7 +117,15 @@ export const saasSubscriptionHandlers = {
     // Storage 缓存的授权标记。这意味着换一台手机用同一个微信账号登录，这里
     // 依然会查到同一个 tenantId 名下云端保存的真实套餐状态，专业版权益天然
     // 跨设备保持有效，不需要额外做"迁移本地授权状态"这类操作
-    const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, { skipCache: true });
+    // 🐛 超管跨机构预览修复：补传 storeId（getCurrentActiveStore() 现取，与
+    // fetchCurrentTenantName 同一套写法）——服务端只有确认调用者本人是
+    // super_admin 时才会用它覆盖成"当前预览门店"真实所属的租户，非超管账号
+    // 传了也不影响既有行为
+    const activeStore = getCurrentActiveStore();
+    const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, {
+      skipCache: true,
+      storeId: activeStore.storeId || ''
+    });
     const expireDateStr = result.serviceExpireDate || '';
     // 🌟 7 天内到期同样标红提醒——与 pages/platform-admin 大盘"7 天内到期机构"
     // 预警口径保持一致（见 getPlatformOverview 的 soonExpiringTenants）

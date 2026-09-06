@@ -179,6 +179,21 @@ exports.main = async (event) => {
     const callerRole = (roleRes.data && roleRes.data[0] && roleRes.data[0].role) || '';
     const tenantId = (roleRes.data && roleRes.data[0] && roleRes.data[0].tenantId) || '';
 
+    // 🛡️ 超管跨机构预览：只有服务端重新反查确认调用者本人角色确实是 super_admin
+    // （不是从客户端传的角色/租户参数直接采信）才信任这个 storeId——避免非超管
+    // 账号伪造 storeId 探测别的机构套餐状态。命中时改用该门店真实所属的
+    // tenantId，而不是超管自己账号注册时那个固定 tenantId，解决"超管切换到
+    // 完全独立的另一个机构门店后，专业服务弹窗/归属机构名称仍显示原机构"的问题；
+    // 未命中（非超管、或没传 storeId、或门店不存在）时行为与此前完全一致
+    let effectiveTenantId = tenantId;
+    if (callerRole === 'super_admin' && event.storeId) {
+      const storeRes = await db.collection('stores').doc(event.storeId).field({ tenantId: true }).get().catch(() => null);
+      const storeTenantId = storeRes && storeRes.data && storeRes.data.tenantId;
+      if (storeTenantId) {
+        effectiveTenantId = storeTenantId;
+      }
+    }
+
     // 🛡️ 平台管理员豁免：platform_admin（SaaS 平台运维方）与业务角色/租户套餐
     // 彻底隔离——这堵付费墙是针对"某个机构自己的 super_admin"设计的，防止免费版
     // 租户靠自己的超管账号绕过 pro/enterprise 专属功能（每个机构都有自己的
@@ -213,7 +228,7 @@ exports.main = async (event) => {
       };
     }
 
-    const result = await checkTenantPermission(tenantId, featureKey);
+    const result = await checkTenantPermission(effectiveTenantId, featureKey);
 
     // 🏢 机构名称 + 已接入门店数：与 planType/storeLimit 同一次调用一并下发，
     // 供个人中心页"专业服务/订阅管理"弹窗顶部展示"归属机构"与"已接入 X / Y 家"
@@ -224,8 +239,8 @@ exports.main = async (event) => {
     // 的同一个字段（见这两个云函数头部注释），是"已用门店数"的唯一真源
     let tenantName = '';
     let usedStoreCount = 0;
-    if (tenantId) {
-      const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true, currentStoreCount: true }).get().catch(() => null);
+    if (effectiveTenantId) {
+      const tenantRes = await db.collection('tenants').doc(effectiveTenantId).field({ name: true, currentStoreCount: true }).get().catch(() => null);
       tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
       usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
     }
