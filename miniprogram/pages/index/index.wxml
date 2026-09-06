@@ -158,7 +158,7 @@
            防止"雨花专区"选择服务站点时混入通用/社区长者食堂门店（如嵩屿）。
            currentPlatformMode 为空（工作空间选择首页阶段）时传空字符串，
            组件内按"不过滤"处理，与此前行为一致 -->
-      <store-picker id="storePicker" orgTypeFilter="{{currentPlatformMode === 'yuhua' ? 'yuhuazhai' : (currentPlatformMode === 'general' ? 'general' : '')}}" bind:storechange="onStoreChanged" bind:storelistchange="onStoreListChanged" />
+      <store-picker id="storePicker" orgTypeFilter="{{currentPlatformMode === 'yuhua' ? 'yuhuazhai' : (currentPlatformMode === 'general' ? 'general' : '')}}" bind:storechange="onStoreChanged" bind:storelistchange="onStoreListChanged" bind:switchworkspace="onResetToWorkspaceSelect" />
       <!-- 🏪 门店运营状态徽标：紧贴 store-picker 胶囊右侧，不侵入该共享组件自身
            （被 profile/history 等页面共用，改动它的 wxml 影响面更大）。"全国总览"等
            虚拟门店场景下 currentStoreStatus 会被清空（见 onStoreChanged），此时不渲染 -->
@@ -560,7 +560,7 @@
           </view>
           <text style="font-size: 32rpx; color: rgba(255,255,255,0.8); font-weight: 300;">›</text>
         </view>
-        <view bindtap="onSwitchToOtherZoneFromEmptyState" style="background: #f8fafc !important; border: 1rpx solid #cbd5e1 !important; border-radius: 20rpx !important; padding: 26rpx 32rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important;">
+        <view bindtap="onResetToWorkspaceSelect" style="background: #f8fafc !important; border: 1rpx solid #cbd5e1 !important; border-radius: 20rpx !important; padding: 26rpx 32rpx !important; display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important;">
           <view style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 16rpx !important;">
             <text style="font-size: 40rpx; line-height: 1;">🔀</text>
             <view style="font-size: 30rpx !important; font-weight: 600 !important; color: #334155 !important; line-height: 1.3 !important;">切换其它专区</view>

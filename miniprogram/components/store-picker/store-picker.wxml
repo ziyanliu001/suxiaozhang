@@ -145,6 +145,20 @@
       <text>➕ 找不到您的门店？申请新建/加入新门店</text>
     </view>
 
+    <!-- 🏛️（2026-09-06）「切换其它工作空间」：修复进入雨花/通用某个专区工作台
+         后，本弹窗里也没有任何入口能跳回工作空间选择页的问题——与顶部
+         .filter-search-box 等筛选控件是"同一专区内换一家店"的性质不同，这个
+         按钮是"跳出当前专区"的动作，与本弹窗的常规选店流程分开成独立一行，
+         点击后由宿主页面（index.ts）统一走 onResetToWorkspaceSelect() 重置。
+         🛡️ 仅在 orgTypeFilter 有值时显示——本组件同时被 history.wxml 复用
+         （不传该 property，恒为空字符串，也没有"工作空间"这个概念），
+         index.wxml 里 <store-picker> 本身就嵌在 currentPlatformMode 非空的
+         条件分支内，只要本弹窗能被打开，orgTypeFilter 必然是 'yuhuazhai'/
+         'general' 之一，恒真，不会误藏 -->
+    <view class="switch-workspace-entry-btn" wx:if="{{!showNewStoreForm && orgTypeFilter}}" bindtap="onSwitchWorkspace">
+      <text>🔀 切换其它工作空间（雨花 / 通用 / 工坊）</text>
+    </view>
+
     <!-- 申请新门店表单（三段式：Header 已在上方 sheet-header，Body 可滚动，Footer 固定） -->
     <block wx:if="{{showNewStoreForm}}">
       <!-- Body：所有表单字段放入 scroll-view，防止内容过多被底部按钮遮挡 -->

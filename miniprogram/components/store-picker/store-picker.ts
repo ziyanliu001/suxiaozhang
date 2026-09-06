@@ -978,6 +978,17 @@ Component({
       this.setData({ orgTypeIndex: parseInt(e.detail.value, 10) || 0 });
     },
 
+    // 🏛️（2026-09-06）「切换其它工作空间」：修复进入雨花/通用某个专区工作台
+    // 后，本弹窗里也没有任何入口能跳回工作空间选择页的问题。本组件不持有
+    // currentPlatformMode（那是宿主页面 index.ts 的状态），只负责关闭自身
+    // 弹窗 + 抛一个 switchworkspace 事件，具体的重置逻辑交给宿主页面的
+    // onResetToWorkspaceSelect()（与首页空状态"切换其它专区"按钮、侧边抽屉
+    // "切换工作空间"常驻项三处共用同一份重置逻辑，不在这里另起一套）
+    onSwitchWorkspace() {
+      this.setData({ showPickerSheet: false });
+      this.triggerEvent('switchworkspace', {});
+    },
+
     // ➕ 切换"门店列表" / "申请新门店表单"
     // 🐛 根因修复（通用专区新建门店被悄悄提交成雨花斋）：orgTypeIndex 此前无论
     // 从哪个专区点进来都硬写死 0（ORG_TYPE_OPTIONS[0] 固定是 'yuhuazhai'）——

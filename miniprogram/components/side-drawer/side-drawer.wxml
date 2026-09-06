@@ -20,6 +20,18 @@
       <text class="drawer-close" bindtap="close">✕</text>
     </view>
 
+    <!-- 🏛️（2026-09-06）「切换工作空间」常驻高权重入口：修复"进入雨花/通用任一
+         专区工作台后没有任何入口能退回工作空间选择页（雨花/通用/工坊三选一），
+         只能靠开发者工具重新编译"这个真实的交互死胡同。放在 drawer-header 之下、
+         滚动区域之上，不随列表滚动、始终可见，与"切换门店"（同一专区内切换
+         具体门店）是两个不同层级的动作，故意分开摆放不放在同一行——宿主页面
+         onSideDrawerAction 的 switchWorkspace 分支复用 onResetToWorkspaceSelect() -->
+    <view class="drawer-switch-workspace-banner" bindtap="onTapAction" data-type="switchWorkspace">
+      <text class="drawer-switch-workspace-icon">🔀</text>
+      <text class="drawer-switch-workspace-text">切换工作空间 / 返回专区选择</text>
+      <text class="drawer-switch-workspace-arrow">›</text>
+    </view>
+
     <scroll-view scroll-y class="drawer-scroll" enable-back-to-top>
 
       <!-- 🌟 高频操作：扫一扫（核销/打卡等各类场景二维码通用入口）+ 门店二维码

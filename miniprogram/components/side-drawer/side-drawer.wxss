@@ -106,6 +106,43 @@
   opacity: 0.7;
 }
 
+/* 🏛️（2026-09-06）「切换工作空间」常驻高权重入口：与下方普通功能项（白底、
+   同权重）刻意区分开，用实底色块 + 更大字号强调"这是一个跳出当前专区的
+   关键动作"，不随 .drawer-scroll 列表滚动 */
+.drawer-switch-workspace-banner {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin: 20rpx 20rpx 0;
+  padding: 22rpx 24rpx;
+  background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
+  border-radius: 20rpx;
+  box-shadow: 0 6rpx 16rpx rgba(140, 29, 24, 0.24);
+  flex-shrink: 0;
+}
+
+.drawer-switch-workspace-banner:active {
+  opacity: 0.85;
+}
+
+.drawer-switch-workspace-icon {
+  font-size: 32rpx;
+  flex-shrink: 0;
+}
+
+.drawer-switch-workspace-text {
+  flex: 1;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+}
+
+.drawer-switch-workspace-arrow {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
+}
+
 .drawer-scroll {
   flex: 1;
   padding: 12rpx 20rpx 0;

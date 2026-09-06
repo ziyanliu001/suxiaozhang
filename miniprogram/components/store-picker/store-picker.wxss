@@ -528,9 +528,9 @@
    视觉上明确"这是补充路径，不是本页主操作" ===== */
 .new-store-entry-btn {
   margin-top: 20rpx;
-  /* 面板本身在 z-index:99999 遮罩层内，无需为 TabBar 留出 120rpx；
-     仅需 safe-area-inset-bottom 保障 iOS 全面屏底部不被黑条遮挡 */
-  margin-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  /* 🏛️（2026-09-06）下方新增 .switch-workspace-entry-btn 后，本按钮不再是
+     面板最后一个元素，底部安全区内边距移到那一个上，这里改回普通间距 */
+  margin-bottom: 12rpx;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -549,6 +549,28 @@
 .new-store-entry-btn:active {
   opacity: 0.7;
   transform: scale(0.98);
+}
+
+/* 🏛️（2026-09-06）「切换其它工作空间」：与"找不到您的门店"是两个不同性质的
+   跳出动作（新建/加入 vs 跳出当前专区），视觉上弱化一档（纯文字链接风格）
+   避免和上面的按钮抢视觉权重，但同样保证 ≥44pt 触控热区 */
+.switch-workspace-entry-btn {
+  margin-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 12rpx 0;
+  color: #8C1D18;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.switch-workspace-entry-btn:active {
+  opacity: 0.6;
 }
 
 /* ===== 新建门店申请表单（三段式 Body + Footer） ===== */
