@@ -72,21 +72,48 @@ function fitFontSize(ctx: any, text: string, weight: string, baseSize: number, m
 // 🐛 内部两行字号/行距此前是按半径 30 写死的固定像素值，radius 改小之后如果
 // 不跟着缩，文字会直接超出圆圈范围——这里改为按半径等比例换算，圆章大小无论
 // 怎么调，内部文字始终与圆圈边界保持同一比例的留白
+export interface SealStampOptions {
+  color?: string;
+  alpha?: number;
+  outerLineWidth?: number;
+  innerLineWidth?: number;
+  fontFamily?: string;
+}
+
 // 🌸 修心积善打卡·水墨日签复用同一个印章原语：新增可选 lines 参数（默认值
 // 与原有两行文字完全一致，不影响本文件既有调用点），单行文字（如"善"字章）
-// 居中画在圆心，不再套用两行的上下偏移
-export function drawSealStamp(ctx: any, centerX: number, centerY: number, radius: number, lines: string[] = ['雨花爱心', '互助认证']): void {
+// 居中画在圆心，不再套用两行的上下偏移。
+//
+// 🖌️ 2026-09-06 新增可选第 5 参数 options：drawSealStamp 是共享函数，除本文件
+// 长期荣誉证书外，utils/posterGenerator.ts 的「今日善行日签」也在用它——如果
+// 直接改这里硬编码的颜色/线宽/透明度，会连带把荣誉证书的印章样式也改掉。所有
+// options 字段默认值与改动前完全一致，不传 options 的调用点（本文件内荣誉证书
+// 那一处）渲染结果零变化，只有日签那一处显式传入更浓郁的朱砂红新样式
+export function drawSealStamp(
+  ctx: any,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  lines: string[] = ['雨花爱心', '互助认证'],
+  options?: SealStampOptions
+): void {
+  const color = options?.color ?? '#D81E06';
+  const alpha = options?.alpha ?? 0.75;
+  const outerLineWidth = options?.outerLineWidth ?? 2;
+  const innerLineWidth = options?.innerLineWidth ?? 1;
+  const fontFamily = options?.fontFamily ?? 'sans-serif';
+
   ctx.save();
-  ctx.globalAlpha = 0.75;
+  ctx.globalAlpha = alpha;
   ctx.translate(centerX, centerY);
   ctx.rotate((-10 * Math.PI) / 180);
 
-  ctx.strokeStyle = '#D81E06';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = outerLineWidth;
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.lineWidth = 1;
+  ctx.lineWidth = innerLineWidth;
   ctx.beginPath();
   ctx.arc(0, 0, radius - 5, 0, Math.PI * 2);
   ctx.stroke();
@@ -95,10 +122,10 @@ export function drawSealStamp(ctx: any, centerX: number, centerY: number, radius
   // 留出安全余量（0.9 折）反推：fontSize ≈ 内圈直径 * 0.9 / 4 ≈ radius * 0.32
   const sealFontSize = Math.max(6, Math.round(radius * 0.32));
   const sealLineOffset = radius * 0.2;
-  ctx.fillStyle = '#D81E06';
+  ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `bold ${sealFontSize}px sans-serif`;
+  ctx.font = `bold ${sealFontSize}px ${fontFamily}`;
   if (lines.length <= 1) {
     ctx.fillText(lines[0] || '', 0, 0);
   } else {

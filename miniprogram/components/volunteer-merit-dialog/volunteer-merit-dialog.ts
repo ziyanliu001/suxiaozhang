@@ -78,6 +78,20 @@ Component({
     submittedTagObjects: [] as MeritTagOption[]
   },
 
+  // 🐛 弹窗叠加修复（2026-09-06）：宿主页 onMeritDialogGeneratePoster 现在会
+  // 直接把 visible（对应 showMeritDialog）设为 false 来关闭本弹窗，绕开了
+  // onSkip/onClose/onSubmit 里"主动触发 close 事件时才 resetForm()"这条路径——
+  // 不加这个 observer 的话，submitted/selectedTags/submittedTagObjects 会残留
+  // 到下一次打卡周期，弹窗重新打开时错误地停留在"已提交"确认态。resetForm()
+  // 本身幂等，组件自己关闭时已经调用过一次、这里再触发一次没有副作用
+  observers: {
+    visible(v: boolean) {
+      if (!v) {
+        this.resetForm();
+      }
+    }
+  },
+
   methods: {
     stopPropagation() {},
 

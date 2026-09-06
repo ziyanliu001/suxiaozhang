@@ -12005,10 +12005,14 @@ Page({
     }
   },
 
-  // 生成失败也不影响用户已经记录成功的善行标签，用户可以重试或直接点"完成"
+  // 生成失败也不影响用户已经记录成功的善行标签，用户可以重试或直接点"完成"。
+  // 🐛 弹窗叠加修复（2026-09-06）：.vmd-backdrop（微善确认卡片）z-index 999998
+  // 高于 .poster-modal（日签预览）z-index 1000，此前点这个按钮时没有关闭
+  // showMeritDialog，日签预览会被压在微善弹窗的半透明遮罩底下，几乎看不见——
+  // 这里显式把 showMeritDialog 设为 false，同时关闭确认卡片、展示日签预览
   async onMeritDialogGeneratePoster(e: any) {
     const tags = (e && e.detail && e.detail.tags) || [];
-    this.setData({ meritPosterShownThisCycle: true });
+    this.setData({ meritPosterShownThisCycle: true, showMeritDialog: false });
     await this.generateAndShowMeritPoster(tags);
   },
 

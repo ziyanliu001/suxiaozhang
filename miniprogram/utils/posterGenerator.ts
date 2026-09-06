@@ -1396,46 +1396,57 @@ export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPoster
           ctx.fillStyle = bgGradient;
           ctx.fillRect(0, 0, width, height);
 
-          // Header
-          ctx.fillStyle = '#5A4632';
-          ctx.font = 'bold 20px sans-serif';
+          // Header：#3D2B1B 是通篇正文的"墨色"主色，比原来的 #5A4632 更深，
+          // 与次要文字色 #8A6D4C 拉开对比度，避免整张海报显得灰蒙蒙
+          ctx.fillStyle = '#3D2B1B';
+          ctx.font = 'bold 22px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText('今日善行日签', width / 2, 46);
 
-          ctx.fillStyle = '#A08A6A';
+          ctx.fillStyle = '#8A6D4C';
           ctx.font = '13px sans-serif';
           const subtitle = `${truncateText(ctx, data.storeName || '', width - 100)} · ${data.dateString || ''}`;
           ctx.fillText(subtitle, width / 2, 70);
 
-          // 善字印章：复用 drawVolunteerCertificate.ts 的印章原语，单行文字
-          drawSealStamp(ctx, width / 2, 140, MERIT_SEAL_RADIUS, ['善']);
+          // 善字印章：复用 drawVolunteerCertificate.ts 的印章原语，单行文字。
+          // 朱砂红 #BD3124 + 双圈加粗线宽 + 更高不透明度，呈现更真实的红泥拓印感；
+          // fontFamily 带 serif 兜底，设备没有楷体字体时按 CSS 字体匹配规则退化到
+          // 通用 serif（仍比全篇的 sans-serif 更有传统质感），不会缺字/报错
+          drawSealStamp(ctx, width / 2, 140, MERIT_SEAL_RADIUS, ['善'], {
+            color: '#BD3124',
+            alpha: 0.92,
+            outerLineWidth: 3,
+            innerLineWidth: 1.5,
+            fontFamily: '"STKaiti", "Kaiti SC", "KaiTi", serif'
+          });
 
           // 今日微善标签：逐行居中列出，未选择时留白（不画"暂无"这类占位文案，
           // 保持画面素雅）
           let tagY = 210;
           if (data.tags && data.tags.length > 0) {
-            ctx.font = '16px sans-serif';
+            ctx.font = 'bold 17px sans-serif';
             data.tags.forEach((tag) => {
-              ctx.fillStyle = '#5A4632';
+              ctx.fillStyle = '#3D2B1B';
               ctx.textAlign = 'center';
               ctx.fillText(`${tag.emoji} ${tag.label}`, width / 2, tagY);
               tagY += 34;
             });
           }
 
-          // 累计护持天数
+          // 累计护持天数：颜色与印章同色系 #BD3124，让海报上仅有的两处红色
+          // （印章、天数）视觉呼应统一；字号加大到 34px，层级更突出
           const daysY = Math.max(tagY + 20, 330);
-          ctx.fillStyle = '#B8342A';
-          ctx.font = 'bold 30px sans-serif';
+          ctx.fillStyle = '#BD3124';
+          ctx.font = 'bold 34px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(`${data.totalDays || 0}`, width / 2, daysY);
-          ctx.fillStyle = '#A08A6A';
+          ctx.fillStyle = '#8A6D4C';
           ctx.font = '13px sans-serif';
           ctx.fillText('日累计护持', width / 2, daysY + 26);
 
           // 底部文化短句
-          ctx.fillStyle = '#A08A6A';
-          ctx.font = '13px sans-serif';
+          ctx.fillStyle = '#8A6D4C';
+          ctx.font = '14px sans-serif';
           ctx.fillText('命由我作，福自己求 —— 《了凡四训》', width / 2, height - 40);
 
           ctx.restore(); // 对应开头的圆角裁剪 save/clip

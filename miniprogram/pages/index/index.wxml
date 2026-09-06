@@ -3258,9 +3258,10 @@
     bind:submitted="onElderCheckinSubmitted"
     bind:close="onCloseElderCheckinModal"
   />
-  <!-- 🌸 修心积善打卡·微善标签：到岗服务打卡成功后唤起，见
-       onConfirmShiftCheckIn 成功分支——关闭/提交后才继续原有的
-       showPosterModal 打卡成功海报预览流程 -->
+  <!-- 🌸 修心积善打卡·微善标签：到岗服务打卡成功后唤起，见 onConfirmShiftCheckIn
+       成功分支——关闭后拉起专属的「今日善行日签」（showMeritPosterModal，见
+       onMeritDialogClose/generateAndShowMeritPoster），与不相关的 showPosterModal
+       门店餐报海报早已物理隔离（2026-09-06 修复） -->
   <volunteer-merit-dialog
     id="volunteerMeritDialog"
     visible="{{showMeritDialog}}"
