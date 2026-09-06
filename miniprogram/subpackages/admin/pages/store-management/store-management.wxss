@@ -66,7 +66,9 @@
   font-size: 26rpx;
   color: #666666;
   border-radius: 999rpx;
-  transition: all 0.25s ease;
+  /* 🏛️（2026-09-06）换成带轻微回弹感的缓动曲线，配合下面 .active 的
+     scale，切换 Tab 时更"轻快"，不再是纯颜色/阴影的平淡渐变 */
+  transition: all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .sm-tab-item.active {
@@ -74,6 +76,7 @@
   font-weight: bold;
   background: #FFFFFF;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  transform: scale(1.02);
 }
 
 .sm-tab-badge {
@@ -90,6 +93,9 @@
   font-weight: bold;
   text-align: center;
   box-sizing: border-box;
+  /* 🏛️（2026-09-06）数字徽标此前是紧跟文字后的内联块，基线对不齐"待审核"
+     文字——补上 vertical-align 让两者视觉居中对齐 */
+  vertical-align: middle;
 }
 
 /* flex:1 自动吃满 .sm-body 里除 .sm-tab-bar 外的剩余空间，不再靠猜 Tab 栏
@@ -133,6 +139,28 @@
   font-size: 26rpx;
 }
 
+/* 🏛️（2026-09-06）"已激活门店"空态图标 + 主标题 + 副标题三段式，参照
+   daily-menu.wxss 的 .dm-empty-icon/.dm-empty-title/.dm-empty-suggest 惯例，
+   与"待审核"tab 复用同一个 .sm-empty-state 容器互不影响（后者仍是单行文字） */
+.sm-empty-icon {
+  font-size: 88rpx;
+  line-height: 1;
+}
+
+.sm-empty-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #444444;
+}
+
+.sm-empty-sub {
+  font-size: 24rpx;
+  color: #AAAAAA;
+  line-height: 1.6;
+  padding: 0 60rpx;
+  text-align: center;
+}
+
 .sm-pending-loading,
 .sm-staff-loading,
 .sm-staff-empty {
@@ -142,20 +170,25 @@
   font-size: 26rpx;
 }
 
-/* 📤（2026-09-06）"创建新门店"吸底操作栏：与 daily-menu.wxss 的
-   .dm-bottom-bar 同一套写法，脱离文档流后不再受内联流/flex 子项的高度
-   计算问题影响，且在所有机型上位置稳定 */
+/* 📤（2026-09-06）"创建新门店"吸底操作栏：脱离文档流后不再受内联流/flex
+   子项的高度计算问题影响，且在所有机型上位置稳定。
+   🏛️（2026-09-06 质感升级）纯白实底改为半透明 + backdrop-filter 毛玻璃，
+   与 index.wxss/profile.wxss 里 .finance-home-card .card-header-welcome
+   等处的既有玻璃拟态写法同一套手法；上下内边距统一为 24rpx 基准（原来
+   20rpx/30rpx 不对称），底部叠加安全区内边距 */
 .sm-bottom-bar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   box-sizing: border-box;
-  padding: 20rpx 32rpx;
-  padding-bottom: calc(30rpx + constant(safe-area-inset-bottom));
-  padding-bottom: calc(30rpx + env(safe-area-inset-bottom));
-  background: #FFFFFF;
-  box-shadow: 0 -6rpx 20rpx rgba(0, 0, 0, 0.06);
+  padding: 24rpx 32rpx;
+  padding-bottom: calc(24rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  box-shadow: 0 -8rpx 24rpx rgba(0, 0, 0, 0.08);
   z-index: 99;
 }
 
@@ -319,13 +352,6 @@
   margin-bottom: 20rpx;
   box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.06);
   border: 1.5rpx dashed #EFDCC8;
-}
-
-.sm-overview-notice-hint {
-  display: block;
-  font-size: 22rpx;
-  color: #999999;
-  margin-bottom: 20rpx;
 }
 
 /* 总览卡片只有一个按钮，不套用两列网格，撑满整行更自然 */

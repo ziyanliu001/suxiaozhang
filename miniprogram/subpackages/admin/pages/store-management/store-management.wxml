@@ -44,20 +44,29 @@
     <!-- ===== 已激活门店 ===== -->
     <scroll-view scroll-y show-scrollbar="{{false}}" class="sm-content" wx:if="{{activeTab === 'active'}}">
 
-      <!-- 全国总览公告：面向"全国总览"视角展示的机构级通用通告，与门店专属通告
-           严格互斥展示（不叠加），见 manageNotice 云函数 -->
-      <view class="sm-overview-notice-card">
+      <!-- 🏛️（2026-09-06 治理）机构级通用通告：本页没有"单店视角/全国总览视角"
+           的切换（那是首页 index.ts 的概念，本页恒定展示全部门店），此前那句
+           "仅在超管切换到'全国总览'视角时展示"是描述一个本页不存在的状态，纯属
+           误导性开发态提示，已删除。改用真实可判断的数据——机构名下门店数 >1
+           （真正的多店/全国连锁）才展示这张机构通用公告；只有 1 家或 0 家门店
+           时，机构级公告与该店自己的专属公告是同一件事，折叠隐藏，统一走下方
+           每张 .sm-store-card 已有的"📢 编辑通告"入口，不制造两个语义重叠的
+           公告入口 -->
+      <view class="sm-overview-notice-card" wx:if="{{list.length > 1}}">
         <view class="sm-store-header-row">
           <text class="sm-store-name">🌐 全国总览公告</text>
         </view>
-        <text class="sm-overview-notice-hint">仅在超管切换到"全国总览"视角时展示，与各门店专属通告互斥（不叠加）</text>
         <view class="sm-store-actions">
           <button class="sm-btn-action" bindtap="onOpenOverviewNotice">📢 编辑通告</button>
         </view>
       </view>
 
+      <!-- 🏛️（2026-09-06 空态升级）图标 + 主标题 + 副标题三段式，参照
+           daily-menu.wxml/activity-log.wxml 已有的空态惯例 -->
       <view class="sm-empty-state" wx:if="{{!loading && list.length === 0}}">
-        <text>本机构暂无门店</text>
+        <text class="sm-empty-icon">🏛️</text>
+        <text class="sm-empty-title">暂未收录运营中的爱心门店</text>
+        <text class="sm-empty-sub">创建属于您的互助食堂或斋堂，开启日常流水记账与阳光公示</text>
       </view>
 
       <view class="sm-store-card {{item.status === 'inactive' ? 'inactive' : ''}}" wx:for="{{list}}" wx:key="storeId">
