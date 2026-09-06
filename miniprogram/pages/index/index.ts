@@ -1115,6 +1115,12 @@ Page({
     // 这里只保留驱动首页摘要卡片数字的最小状态，onOpenFinanceLockModal/
     // onOpenRiskAlertsModal 改为跳转分包页面
     riskAlertCount: 0,
+    // 🐛 治理占位假数据（2026-09-06）：此前 wxml 用 {{excelExportCount || 6}} 兜底，
+    // 但本字段从未被赋值过，"6"是一直展示的写死假数字。exportAccountExcel 云函数
+    // 排查确认没有写任何导出日志/统计记录（见该函数 index.js，全程只读
+    // report_logs/user_roles，不落库任何导出历史），暂无真实调用统计可读，
+    // 如实展示为 0，不再编造数字
+    excelExportCount: 0,
     // 🐛 财务首页瘦身：默认收起"请填写当日明细"整条录入表单流水线（含爱心支持/
     // 物资明细、义工与用餐统计、生成结果预览、底部吸底生成按钮），首屏聚焦
     // 【财务稽核台】。财务仍保留亲自代填当日餐报的能力（见 onScrollToFinanceConsole

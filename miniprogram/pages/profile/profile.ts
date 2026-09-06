@@ -1394,6 +1394,17 @@ Page({
       pendingFetches.push(this.fetchPatriarchDashboardData());
     }
 
+    // 🏛️（2026-09-06）"机构席位管理"行需要真实门店配额数据（如"基础免费版 ·
+    // 2/2 门店"），不能等用户点开半屏订购弹窗才现拉——那样首屏会先展示
+    // subscriptionInfo 的初始占位值（基础版 · 0/2），与本次治理 excelExportCount
+    // 写死假数字是同一类问题，这里改为随 initMinePage 主批次一并预取。
+    // enterpriseBuildEnabled 为 false（Open-Core 精简版）时 fetchSubscriptionInfo
+    // 是安全空操作（见 core-overrides 桩文件），这里提前判断只是省一次真实的
+    // checkTenantPermission 云调用，不是必需的正确性判断
+    if (this.data.enterpriseBuildEnabled && (isPatriarch || overridden.isSuperAdmin)) {
+      pendingFetches.push(this.fetchSubscriptionInfo());
+    }
+
     // 💰 财务稽核专区【数据看板】：仅 isFinance（严格等于 finance 角色本身，
     // 不含继承了财务权限的大家长——大家长有自己的家长大盘卡片）
     if (isFinance) {

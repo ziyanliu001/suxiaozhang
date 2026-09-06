@@ -633,7 +633,7 @@
         </view>
         <view class="stat-divider"></view>
         <view class="stat-item" bindtap="onExportExcelHistory">
-          <text class="stat-num">{{excelExportCount || 6}}</text>
+          <text class="stat-num">{{excelExportCount || 0}}</text>
           <text class="stat-label">月度导出/次</text>
         </view>
         <view class="stat-divider"></view>

@@ -285,49 +285,17 @@
       </view>
     </view>
 
-    <!-- 🏛️🆕 放权自治重构：大家长视角原先是一整张混合卡片（健康大盘 + 专业版状态 +
-         门店管理中心，且用 isPatriarch || isSuperAdmin 与超管共用），现拆分为：
-         ① 独立的 .pro-service-card（订阅是机构/租户维度的权益，超管与大家长按各自
-            身份都可能需要管理，保持 isPatriarch || isSuperAdmin 共用不变）；
-         ② 两张严格仅 isPatriarch && !isSuperAdmin 可见的自治卡片——【本店经营健康
-            大盘】【大家长自治管理中心】。超管即便去掉视角切换预览、以自己真实身份
-            浏览时，也绝不会看到这两张店级日常运营卡片；要看某店的这两张卡片，
-            走"视角切换"预览成该店大家长身份即可（预览态下 isSuperAdmin 会降级为
-            false，isPatriarch 命中，两张卡片自然显示）。
-         store_manager（店长）有自己独立的"门店管理中心"卡片（见下方），不再混入
-         这里 -->
-    <!-- 🆕 加入 isFinance：财务角色的"👑 专业版服务"卡片组第一项——财务本就
-         最关心订阅权益是否覆盖多账本稽核/无限制通知数，与大家长共用同一张卡。
-         🛡️ 超管视角下彻底隐藏：套餐订阅是租户/门店维度的权益，超管作为平台方本人
-         无需（也不该）看到"立即开通专业版"这类面向租户的推销卡片——此前误与
-         isPatriarch/isFinance 共用同一张卡片，现显式排除 isSuperAdmin -->
-    <!-- 🆕 大家长（及店长）不再展示这张整行大卡片：专业版服务状态收纳进上方
-         「顶部卡片区」.top-advanced-secondary 弱化辅助卡片，与全国数据看板
-         并排展示，不再单独占用一整行——财务角色需求不变，仍显示完整版 -->
-    <!-- 🌸 商业策略例外（docs/BUSINESS_MODEL.md 已回写，与 statistics.ts
-         exportToExcel 的雨花斋导出免拦截同一次决策）：雨花公益食堂专区门店
-         彻底隐藏这张"专业版服务状态/立即开通"推销卡片。shouldShowProCards
-         由 profile.ts fetchStoreOrgType() 按真实 stores.orgType 计算并显式
-         置位，语义是"已经明确查证到这不是雨花斋机构"——查询中/查询失败都
-         保持初始值 false，不直接用 !isYuhuazhai（那样查询未就绪或大家长/
-         财务预览下查不到自己绑定门店时会误判成"确认不是雨花斋"，见该方法
-         头部注释） -->
-    <view class="pro-service-card" wx:if="{{enterpriseBuildEnabled && isFinance && !isVolunteer && !isFamily && !isManager && !isSuperAdmin && !isPatriarch && shouldShowProCards}}">
-      <view class="pro-card-header">
-        <text class="pro-title">👑 专业版服务状态</text>
-        <text class="pro-status-badge {{subscriptionInfo.isActive ? 'active' : 'inactive'}}">
-          {{subscriptionInfo.isActive ? '已生效（专业版）' : '未开通'}}
-        </text>
-      </view>
-      <view class="pro-card-body">
-        <text class="pro-desc">解锁全国数据大屏、跨店数据导出、多账本稽核与无限制通知数。</text>
-        <button class="pro-action-btn" bindtap="onOpenProSubscriptionModal">
-          {{subscriptionInfo.isActive ? '管理续费套餐' : '立即开通 / 升级专业版'}}
-        </button>
-      </view>
-      <!-- 超管一键模拟开通入口已迁移至「系统运维与性能」模块的 Dev/Debug 专区
-           （见 sa-dev-tool-row），与真实订阅管理操作解耦，避免重复入口 -->
-    </view>
+    <!-- 🏛️（2026-09-06 边界规范化）财务角色不再展示任何"立即开通/升级专业版"
+         持久化购买入口——原先这里有一张仅 isFinance 可见的 .pro-service-card
+         全宽卡片（含真实购买按钮），与"财务不应常驻升级购买入口"的定位冲突，
+         已删除。财务遇到真正受套餐限制的高阶功能（如全国合并 Excel 导出）时，
+         走的是 subpackages/reports/components/feature-locked-modal 现成的
+         只读提示（can-self-upgrade 为 false 时文案是"请联系您所在站点的
+         大家长在线开通"，点击"去了解"只跳转个人中心，不代为唤起购买弹窗），
+         不需要在个人中心额外维护一张常驻卡片。
+         机构订阅/门店席位管理是大家长/超管的职责，入口见下方【门店管理中心】
+         （大家长）与【超管工具箱】（超管）内的"机构席位管理"行，不再与财务
+         共用同一张卡片。 -->
 
     <!-- 💰 财务角色卡片组第二部分：财务稽核专区——isFinance 严格等于
          displayRole === 'finance'（不含大家长/超管/店长），不需要额外排除条件。
@@ -658,6 +626,30 @@
           <text class="item-text">邀请码</text>
         </view>
         <view class="pd-feedback-entry-right">
+          <view class="item-arrow">❯</view>
+        </view>
+      </view>
+
+      <!-- 🏛️ 机构席位与技术服务（2026-09-06 规范化接回）：低调的"机构席位管理"
+           行，替代原先仅财务可见的整卡购买横幅。展示真实门店配额用量（如
+           "基础免费版 · 2/2 门店"，数据来自 fetchSubscriptionInfo，initMinePage
+           已按 isPatriarch/isSuperAdmin 并发预取，不是打开弹窗那一刻才现拉，
+           不展示写死占位数字）。点击复用既有 onOpenProSubscriptionModal
+           （= onOpenSubscriptionModal），弹窗内部已按 isIOSDevice 做 iOS 虚拟
+           支付合规隔离（价格/支付按钮隐藏，改兑换码通道）。与其余订阅相关
+           入口共用同一套门禁：enterpriseBuildEnabled（Open-Core 精简版隐藏）+
+           shouldShowProCards（雨花公益专区门店隐藏，见 docs/BUSINESS_MODEL.md
+           商业策略例外） -->
+      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{enterpriseBuildEnabled && shouldShowProCards}}" bindtap="onOpenProSubscriptionModal">
+        <view class="item-left">
+          <text class="manager-only-emoji">🏢</text>
+          <view class="item-text-col">
+            <text class="item-text">机构席位管理</text>
+            <text class="item-sub-text">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
+          </view>
+        </view>
+        <view class="pd-feedback-entry-right">
+          <text class="item-sub-text">席位管理</text>
           <view class="item-arrow">❯</view>
         </view>
       </view>
@@ -1194,19 +1186,23 @@
            等于 'super_admin'，见 authService.ts UserRole 定义处注释）——这张卡片
            对 platform_admin 账号根本不会渲染，isPlatformAdmin 分支永远走不到。
            platform_admin 的入口在下方 admin-developer-section（会员开通/续费
-           管理），本行固定展示 super_admin/store_patriarch 唯一会看到的文案：
-           点击后由 onGoToPlatformAdminTenants() 就地弹出本机构的"套餐升级/续费"
-           半屏卡片，不跳转 pages/platform-admin（该页面服务端 requirePlatformAdmin
-           只认 platform_admin，super_admin 进去只会撞见硬拦截） -->
+           管理），本行固定展示 super_admin 唯一会看到的文案：点击后由
+           onGoToPlatformAdminTenants() 就地弹出本机构的"套餐升级/续费"半屏卡片，
+           不跳转 pages/platform-admin（该页面服务端 requirePlatformAdmin 只认
+           platform_admin，super_admin 进去只会撞见硬拦截）。
+           🏛️（2026-09-06 规范化接回）改名"机构席位管理"并展示真实门店配额用量，
+           与大家长【门店管理中心】里同名行保持措辞/交互一致（同一套
+           fetchSubscriptionInfo 数据源 + onOpenProSubscriptionModal 点击行为），
+           不再是纯静态的营销文案 -->
       <view class="sa-action-row" bindtap="onGoToPlatformAdminTenants" hover-class="ui-hover">
         <view class="sa-action-left">
-          <text class="sa-action-icon">💎</text>
+          <text class="sa-action-icon">🏢</text>
           <view class="sa-action-text-col">
-            <text class="sa-action-title">开通 / 续费专业版套餐</text>
-            <text class="sa-action-desc">全国汇总大屏 · 批量导出 · 高级权限</text>
+            <text class="sa-action-title">机构席位管理</text>
+            <text class="sa-action-desc">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
           </view>
         </view>
-        <view class="sa-action-arrow">❯</view>
+        <view class="sa-action-arrow">席位管理 ❯</view>
       </view>
     </view>
 
