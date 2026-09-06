@@ -93,13 +93,19 @@ Component({
     // 🔒 申请人本人是否有正在 pending 的申请：用来在角色胶囊上锁定"⏳ 待审核"状态，
     // 防止重复提交。见 getMyApplicationStatus（processRoleAudit 新增 action）
     myPendingApplication: null as { requestedRole: string; storeId: string; storeSelectionType: string } | null,
+    // 🐛（去除硬编码具体门店兜底）此前恒定写死"haicang_yuhuazhai/海沧区雨花斋"
+    // 这一个具体客户的门店名当默认值——本组件服务的是多租户平台上的任意机构，
+    // 硬编码某一家真实门店当兜底不仅是过时数据（该店后来改名为"三源弘雨花斋"），
+    // 更是架构上的错误：不该让平台上其他任何租户的账号，在数据尚未解析出来的
+    // 空窗期看到一个属于别的客户的门店名。改为真正的空值，交给 WXML 的
+    // `currentStore.storeName || '请选择站点'` 展示中性占位文案
     currentStore: {
-      storeId: 'haicang_yuhuazhai',
-      storeName: '海沧区雨花斋',
+      storeId: '',
+      storeName: '',
       role: 'VOLUNTEER' as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
     },
     // WXML 表达式不支持字符串下标 name[0]，胶囊头像的首字改由 observers 算好后绑定展示
-    storeInitial: '海',
+    storeInitial: '?',
     // 🐛 曾经是写死的 3 条演示数据（海沧区雨花斋/湖里区雨花斋/全国总览），导致超管新建的
     // 门店永远不会出现在这里——现改为 onOpenSheet() 时向 getStoreList 云函数活查询。
     // 🛡️ 权限隔离：默认不再预置"全国总览"虚拟入口——是否插入该条目取决于当前账号是否为
@@ -163,7 +169,7 @@ Component({
 
   observers: {
     'currentStore.storeName': function (this: any, storeName: string) {
-      this.setData({ storeInitial: (storeName || '海').slice(0, 1) });
+      this.setData({ storeInitial: (storeName || '?').slice(0, 1) });
     }
   },
 
@@ -196,9 +202,11 @@ Component({
 
       const app = getApp() as any;
       if (app && app.globalData) {
+        // 🐛 同上：真正查不到任何门店信息时用空值兜底，不写死某个具体客户的
+        // 门店名——WXML 的 `currentStore.storeName || '请选择站点'` 会接管展示
         const raw = app.globalData.currentStore || {
-          storeId: 'haicang_yuhuazhai',
-          storeName: '海沧区雨花斋',
+          storeId: '',
+          storeName: '',
           role: 'VOLUNTEER'
         };
         this.setData({
@@ -1288,8 +1296,9 @@ Component({
     updateCurrentStore(storeInfo: { storeId: string; storeName: string; role: string }) {
       if (!storeInfo) return;
       const newRole = this._normalizeRole(storeInfo.role);
-      const newStoreId = storeInfo.storeId || 'haicang_yuhuazhai';
-      const newStoreName = storeInfo.storeName || '海沧区雨花斋';
+      // 🐛 同上：不写死某个具体客户的门店 id/名当兜底
+      const newStoreId = storeInfo.storeId || '';
+      const newStoreName = storeInfo.storeName || '';
       const current = this.data.currentStore || {};
 
       // 值未改变则直接跳过，杜绝重复 setData 引发的循环

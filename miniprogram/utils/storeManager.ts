@@ -94,6 +94,23 @@ export function getCurrentActiveStore(): StoreInfo {
   const storeId = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
   const storeName = wx.getStorageSync('current_store_name') || '';
   if (storeId) {
+    // 🐛 根因修复（首页顶部站点胶囊显示"请选择站点"，但同一时刻其余模块已能
+    // 正常拉到该店数据）：canonical 的 current_store_id 与 current_store_name
+    // 理论上应该总是配对写入（见 setCurrentActiveStore()），但历史上存在直接
+    // wx.setStorageSync('current_store_id', ...) 单独写 storeId、没有同步写
+    // storeName 的旁路（如页面自己的 onStoreChange 事件处理，见各页面同名
+    // 方法），一旦这类旁路先于 current_store_name 落地，就会出现"storeId 有效
+    // 但 storeName 是空字符串"的中间态——用它的调用方（如 store-picker.ts
+    // loadStoreInfo()）会误判成"未选择站点"。这里只在 storeName 恰好为空时
+    // 退回 legacy 的 selectedStore key（getSelectedStore()，setCurrentActiveStore
+    // 内部本就同步写这份 legacy 数据，见该函数尾部注释）找一个更可能有效的
+    // 名字，storeId 本身仍以 canonical 值为准，不受 legacy 影响
+    if (!storeName) {
+      const legacyName = getSelectedStore().storeName || '';
+      if (legacyName) {
+        return { storeId, storeName: legacyName };
+      }
+    }
     return { storeId, storeName };
   }
   // canonical key 缺失（极少数只调用过旧版 setSelectedStore 的历史路径）时，
