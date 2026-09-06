@@ -6,6 +6,12 @@ import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawMeri
 import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
+import {
+  getQueue as getPendingMeritQueue,
+  saveToQueue as savePendingMeritCheckin,
+  removeFromQueue as removePendingMeritCheckin,
+  updateMeritTags as updatePendingMeritTags
+} from '../../utils/pendingMeritCheckinQueue';
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
@@ -826,11 +832,17 @@ Page({
     printCanvasHeight: 800,
     showPosterModal: false,
     // 🌸 修心积善打卡·微善标签弹窗：打卡成功后先弹这个（见 onConfirmShiftCheckIn
-    // 成功分支），关闭/提交后才继续原有的 showPosterModal 流程，两个弹窗顺序
-    // 展示，不同时叠加。meritDialogLogId 是本次打卡在云端 volunteer_duty_logs
-    // 的 _id，供组件内 updateMeritTags 精确对应到这一条记录
+    // 成功分支）。⚠️ 2026-09-06 海报分流修复：关闭后不再走 showPosterModal（那是
+    // 不相关的门店餐报海报），而是弹专属的「今日善行日签」（showMeritPosterModal，
+    // 见 onMeritDialogClose/generateAndShowMeritPoster）。meritDialogLogId 是本次
+    // 打卡在云端 volunteer_duty_logs 的 _id，供组件内 updateMeritTags 精确对应到
+    // 这一条记录；meritPosterShownThisCycle 防止用户已经手动点过"生成日签"按钮后，
+    // 关闭弹窗时又重复弹一次；pendingMeritQueueItemId 对应云端打卡同步失败时挂到
+    // pendingMeritCheckinQueue 的那条待补录记录 id，供标签弹窗关闭时补挂标签
     showMeritDialog: false,
     meritDialogLogId: '',
+    meritPosterShownThisCycle: false,
+    pendingMeritQueueItemId: '',
     // 🆕 财务公示版 (4:3) / 温馨故事版 (9:16) 切换：posterType 只影响 .poster-modal
     // （showPoster，展示 canvas 导出的真实图片）这一个预览弹窗，与 .modal-backdrop
     // （showPosterModal，纯 WXML 拼版预览）互不相关，不需要跟着切
@@ -8537,11 +8549,13 @@ Page({
     DataService.syncLocalDataToCloud();
     this.updateOfflineQueueCount();
     this.autoSyncOfflineQueue();
+    this.resyncPendingMeritCheckins();
     this.mergeStagedReceiptStash();
 
     const app = getApp();
     app.globalData.onNetworkReconnected = () => {
       this.autoSyncOfflineQueue();
+      this.resyncPendingMeritCheckins();
     };
 
     this.loadEditReportData();
@@ -9458,6 +9472,92 @@ Page({
           : `${rejectedCount} 条离线记录因日期重复/门店已停用等原因被拒绝，未能保存，请前往历史记录核对。`,
         showCancel: false
       });
+    }
+  },
+
+  // 🌸 云端打卡状态自愈：与 autoSyncOfflineQueue 同一套"onShow/网络恢复时静默
+  // 重试"节奏，专门处理 onConfirmShiftCheckIn 云端调用异常（网络抖动/超时）
+  // 时挂进 pendingMeritCheckinQueue 的待补录打卡。这里必须先补打卡本身拿到
+  // logId，再补标签——updateMeritTags 云函数硬性要求已存在的 logId，没有
+  // "打卡+标签一次性提交"的合并 action（见 manageVolunteerCheckIn/index.js）。
+  // 全程不弹 wx.showModal/刺眼提示，失败静默保留队列等下一轮，符合"自愈"
+  // 而非"报错"的产品定位
+  async resyncPendingMeritCheckins() {
+    const queue = getPendingMeritQueue();
+    if (queue.length === 0) return;
+
+    const networkInfo = (wx as any).getNetworkTypeSync ? (wx as any).getNetworkTypeSync() : { networkType: 'wifi' };
+    if (networkInfo.networkType === 'none' || !isCloudAvailable()) return;
+
+    let resyncedCount = 0;
+    for (const item of queue) {
+      try {
+        let logId = item.cloudLogId;
+        if (!logId) {
+          const res: any = await callFunctionWithTimeout({
+            name: 'manageVolunteerCheckIn',
+            data: {
+              action: 'checkin',
+              storeId: item.storeId,
+              storeName: item.storeName,
+              shiftKey: item.shiftKey,
+              shiftName: item.shiftName,
+              shift_type: item.shiftType,
+              hours: item.hours,
+              willEatLunch: item.willEatLunch,
+              reservedMeals: item.reservedMeals
+            }
+          });
+          const result = res.result;
+          if (result && result.success) {
+            logId = result.logId || '';
+          } else if (result && result.error === '您今日已完成该班次打卡，请勿重复提交') {
+            // 原始打卡其实已经在云端成功，只是客户端当时没收到 logId——这条
+            // 拒绝不会带回原文档 _id，无法恢复，静默丢弃，不再重复重试
+            removePendingMeritCheckin(item.id);
+            continue;
+          } else {
+            // 仍然失败（网络抖动/后端异常）：保留在队列里，交给下一轮重试
+            continue;
+          }
+          if (logId) {
+            this.patchLocalCheckInLogCloudId(item.localLogTimestamp, logId);
+          }
+        }
+
+        if (logId && item.meritTags && item.meritTags.length > 0) {
+          await callFunctionWithTimeout({
+            name: 'manageVolunteerCheckIn',
+            data: { action: 'updateMeritTags', logId, meritTags: item.meritTags }
+          }).catch((err: any) => console.warn('[resyncPendingMeritCheckins] 标签补写失败，尽力而为:', err));
+        }
+
+        removePendingMeritCheckin(item.id);
+        resyncedCount++;
+      } catch (err) {
+        console.warn('[resyncPendingMeritCheckins] 本轮重试失败，保留待下次重试:', err);
+      }
+    }
+
+    if (resyncedCount > 0) {
+      wx.showToast({ title: `已为您自动同步 ${resyncedCount} 条打卡记录 🌸`, icon: 'none', duration: 2500 });
+    }
+  },
+
+  // 把 my_checkin_logs 里 timestamp 匹配的那条本地记录的 cloudLogId 回填——
+  // 补打卡成功后本地记录才第一次拿到真正的云端 _id，供以后撤销打卡精确对应。
+  // 这是后台静默补录，不强求立即刷新当前页面已渲染的 checkInLogs/todayLogs
+  // （下次 refreshTodayShiftStatus/进出页面自然会读到最新的 storage 值）
+  patchLocalCheckInLogCloudId(localTimestamp: number, cloudLogId: string) {
+    try {
+      const logsRaw = wx.getStorageSync('my_checkin_logs');
+      const logs = Array.isArray(logsRaw) ? logsRaw : [];
+      const idx = logs.findIndex((l: any) => l.timestamp === localTimestamp);
+      if (idx === -1) return;
+      logs[idx] = { ...logs[idx], cloudLogId };
+      wx.setStorageSync('my_checkin_logs', logs);
+    } catch (err) {
+      console.warn('[patchLocalCheckInLogCloudId] 回填 cloudLogId 失败:', err);
     }
   },
 
@@ -11676,6 +11776,12 @@ Page({
     // 并记下 cloudLogId 供撤销时精确对应云端记录；云端不可用/失败时静默降级为
     // 纯本地打卡（与项目其余提交流程一致的离线兜底策略），不阻断打卡本身
     let cloudLogId = '';
+    // 🌸 云端打卡状态自愈：网络异常/超时（catch 分支）时把这次打卡挂到本地待
+    // 补录队列，供 onShow()/网络恢复时静默重试（见 resyncPendingMeritCheckins）；
+    // pendingMeritQueueItemId 供标签弹窗关闭时把用户选的标签补挂到这条记录上。
+    // 服务端明确业务拒绝（else if 分支，如已达单日上限）不入队——重试一个必然
+    // 复现的业务错误没有意义，只会让队列一直堆积
+    let pendingMeritQueueItemId = '';
     try {
       if (isCloudAvailable()) {
         const res: any = await callFunctionWithTimeout({
@@ -11703,6 +11809,21 @@ Page({
       }
     } catch (err) {
       console.warn('[onConfirmShiftCheckIn] 云端打卡调用异常，已降级为本地记录:', err);
+      if (isCloudAvailable()) {
+        pendingMeritQueueItemId = savePendingMeritCheckin({
+          localLogTimestamp: now,
+          storeId: currentStoreId,
+          storeName: currentStoreName,
+          shiftKey: selectedShift,
+          shiftName: shiftLabel,
+          shiftType,
+          hours: requestedHours,
+          willEatLunch: this.data.willEatLunch,
+          reservedMeals,
+          cloudLogId: '',
+          meritTags: []
+        }).id;
+      }
     }
 
     const timestamp = now;
@@ -11766,9 +11887,11 @@ Page({
     const isAllStoresView = this.data.isAllStoresView;
     const scopedStats = computeMyCheckInStats(currentStoreId, currentStoreName, isAllStoresView || !currentStoreName);
 
-    // 🌸 修心积善打卡：先弹微善标签弹窗，原有的"打卡成功"WXML 拼版海报预览
-    // （showPosterModal）顺延到该弹窗关闭之后才展示，见 onMeritDialogClose/
-    // onMeritDialogSubmitted——两个弹窗依次展示，不同时叠加
+    // 🌸 修心积善打卡：先弹微善标签弹窗，关闭后拉起专属的「今日善行日签」
+    // （见 onMeritDialogClose/generateAndShowMeritPoster），不再顺延到不相关的
+    // showPosterModal 餐报海报——两个弹窗依次展示，不同时叠加。
+    // meritPosterShownThisCycle 重置为 false：这是新一轮打卡周期，之前周期
+    // 是否弹过日签与这次无关
     this.setData({
       myCheckInDays: scopedStats.days,
       myCheckInCount: scopedStats.count,
@@ -11777,6 +11900,8 @@ Page({
       showShiftSelectModal: false,
       showMeritDialog: true,
       meritDialogLogId: cloudLogId,
+      meritPosterShownThisCycle: false,
+      pendingMeritQueueItemId,
       checkInSubmitting: false
     });
 
@@ -11818,14 +11943,28 @@ Page({
     this.syncCheckInHoursToForm(true);
   },
 
-  // 🌸 修心积善打卡·微善标签弹窗关闭：无论用户是提交了标签、直接"稍后再说"
-  // 跳过，还是标签保存失败（本次打卡没有云端 logId、或云函数调用出错，见
-  // volunteer-merit-dialog.ts onSubmit 的 close 分支），都要继续走原有的
-  // "打卡成功"海报预览流程——两个弹窗依次展示，不是并发/互斥关系，见
-  // onConfirmShiftCheckIn 成功分支的注释。组件侧已经给"保存失败"这条路径
-  // 的 Toast 留足展示时间才触发 close，这里不需要再额外加延迟
-  onMeritDialogClose() {
-    this.setData({ showMeritDialog: false, showPosterModal: true });
+  // 🌸 海报分流修复（2026-09-06）：微善标签弹窗关闭后（无论是提交了标签、
+  // 直接"稍后再说"跳过，还是标签保存失败），不再顺延到不相关的
+  // showPosterModal 门店餐报海报——那是历史遗留的错误分流。改为自动拉起
+  // 专属的「今日善行日签」（generateAndShowMeritPoster，与用户手动点
+  // "🖼️ 生成今日善行日签" 按钮走同一套逻辑）。meritPosterShownThisCycle
+  // 防重复：确认态里"完成"和"生成日签"两个按钮同时可见，若用户已经手动
+  // 生成过一次，这里不再重复弹一次
+  onMeritDialogClose(e: any) {
+    this.setData({ showMeritDialog: false });
+
+    const meritTags = (e && e.detail && e.detail.meritTags) || [];
+
+    // 🌸 云端打卡状态自愈：本次打卡云端同步失败（meritDialogLogId 为空）且
+    // 已经挂了一条待补录队列记录时，把用户刚选的标签补挂上去，供网络恢复后
+    // 随打卡一起补录（见 resyncPendingMeritCheckins）
+    if (!this.data.meritDialogLogId && this.data.pendingMeritQueueItemId && meritTags.length > 0) {
+      updatePendingMeritTags(this.data.pendingMeritQueueItemId, meritTags.map((t: any) => t.value));
+    }
+
+    if (this.data.meritPosterShownThisCycle) return;
+    this.setData({ meritPosterShownThisCycle: true });
+    this.generateAndShowMeritPoster(meritTags);
   },
 
   // 提交成功时组件已经自己弹过一次 Toast，也已经切到确认态等待用户选择
@@ -11837,10 +11976,10 @@ Page({
   // 🌸 修心积善打卡·生成今日善行日签：与既有 onGenerateFootprintCard 同一套
   // "showLoading → 调 posterGenerator 函数 → 存临时路径 → 弹全屏预览 Modal"
   // 流程，复用同一个 showMeritPosterModal/meritPosterTempPath（见该处新增的
-  // meritPosterModalTitle 字段说明），不新建一套预览 UI。弹窗组件本身不关闭——
-  // 生成失败也不影响用户已经记录成功的善行标签，用户可以重试或直接点"完成"
-  async onMeritDialogGeneratePoster(e: any) {
-    const tags = (e && e.detail && e.detail.tags) || [];
+  // meritPosterModalTitle 字段说明），不新建一套预览 UI。抽成独立方法，供
+  // "手动点生成日签按钮"（onMeritDialogGeneratePoster）与"关闭弹窗自动展示"
+  // （onMeritDialogClose）两条路径共用，避免重复实现同一套画海报逻辑
+  async generateAndShowMeritPoster(tags: Array<{ label: string; emoji: string }>) {
     if (this.data.meritPosterLoading) return;
 
     wx.showLoading({ title: '正在书写日签...', mask: true });
@@ -11859,11 +11998,18 @@ Page({
       this.setData({ meritPosterTempPath: tempPath, meritPosterModalTitle: '🌸 今日善行日签', showMeritPosterModal: true });
     } catch (err) {
       wx.hideLoading();
-      console.error('[onMeritDialogGeneratePoster] 善行日签生成失败:', err);
+      console.error('[generateAndShowMeritPoster] 善行日签生成失败:', err);
       wx.showToast({ title: '日签生成失败，请重试', icon: 'none' });
     } finally {
       this.setData({ meritPosterLoading: false });
     }
+  },
+
+  // 生成失败也不影响用户已经记录成功的善行标签，用户可以重试或直接点"完成"
+  async onMeritDialogGeneratePoster(e: any) {
+    const tags = (e && e.detail && e.detail.tags) || [];
+    this.setData({ meritPosterShownThisCycle: true });
+    await this.generateAndShowMeritPoster(tags);
   },
 
   // 🔒 撤销打卡：限当天（today-checked-section 本就只渲染 todayLogs，天然满足"限当天"）

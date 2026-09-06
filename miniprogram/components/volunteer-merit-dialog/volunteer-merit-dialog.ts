@@ -98,18 +98,24 @@ Component({
       this.setData({ selectedTags: next, tagOptions: computeTagOptions(next) });
     },
 
+    // 🌸 海报分流：close 事件带上 meritTags（{value,label,emoji}[]），供宿主页
+    // 决定关闭后要不要弹「今日善行日签」——跳过语义上等于放弃选择，即使 UI 上
+    // 曾经点选过又点了跳过，也不算数，一律传空数组，不把未提交的选择泄露出去
     onSkip() {
       if (this.data.submitting) return;
       this.resetForm();
-      this.triggerEvent('close', {}, {});
+      this.triggerEvent('close', { meritTags: [] }, {});
     },
 
     // 提交成功后的确认态没有单独的"跳过"，直接复用 onClose——语义上此时
-    // 用户已经记录成功，点击的只是"完成/关闭弹窗"，不再是"放弃填写"
+    // 用户已经记录成功，点击的只是"完成/关闭弹窗"，不再是"放弃填写"。
+    // submittedTagObjects 已经是 close 事件需要的 {value,label,emoji}[] 形状，
+    // 必须在 resetForm() 清空它之前取出来
     onClose() {
       if (this.data.submitting) return;
+      const meritTags = this.data.submittedTagObjects || [];
       this.resetForm();
-      this.triggerEvent('close', {}, {});
+      this.triggerEvent('close', { meritTags }, {});
     },
 
     async onSubmit() {
@@ -129,9 +135,14 @@ Component({
         // 把海报弹窗顶上来，Toast 才刚弹出就被下一个弹窗盖住，视觉上像冲突。
         // 现在把 close 推迟到 Toast 展示时长（1500ms 默认值）内的一个合理
         // 停留窗口之后，让"提示 → 关闭 → 拉起海报"三步真正按顺序发生
-        wx.showToast({ title: '本次打卡记录暂未同步云端，善行标签这次没有保存成功', icon: 'none' });
+        //
+        // 🌸 云端打卡状态自愈：文案从"没有保存成功"软化为"会自动补上"——宿主页
+        // onMeritDialogClose() 会把这里带出去的 meritTags 挂到本地待补录队列
+        // （pendingMeritCheckinQueue），网络恢复后静默重试，标签并没有真的丢失
+        wx.showToast({ title: '本次打卡暂未同步云端，已为您保存善行标签，将在网络恢复后自动补上', icon: 'none' });
+        const meritTags = MERIT_TAG_OPTIONS.filter((o) => selectedTags.includes(o.value));
         this.resetForm();
-        setTimeout(() => this.triggerEvent('close', {}, {}), 600);
+        setTimeout(() => this.triggerEvent('close', { meritTags }, {}), 600);
         return;
       }
 

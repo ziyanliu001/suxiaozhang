@@ -987,6 +987,12 @@ Page({
     console.log('[verify] profile.onShow 已触发, 当前 userAvatarUrl=', this.data.userAvatarUrl);
     this.isNavigating = false;
 
+    // 🐛 顶部安全区加固：profile 是 custom:true 的 tabBar 页面，实例常驻、
+    // calculateNavBarHeight() 此前只在 onLoad 跑一次，一旦那一次失败就再没有
+    // 自然的重试机会。这里多一次防御性重算，成本很低（纯同步计算 + 一次
+    // setData），避免同类问题再次卡死不自愈
+    this.calculateNavBarHeight();
+
     // 🦻 关怀模式：与 index.ts 同一套回填逻辑——从别的页面（如侧边抽屉）切换过
     // 状态后，回到个人中心时也要看到最新值，不能停留在页面刚创建时的旧快照
     const app = getApp() as any;
@@ -1083,28 +1089,39 @@ Page({
     }
   },
 
+  // 🐛 根因修复（2026-09-06）：此前 wx.getMenuButtonBoundingClientRect() 和
+  // getSafeSystemInfo() 套在同一个 try/catch 里，一旦胶囊按钮 API 异常，
+  // catch 分支只打了个 warn、完全没有 setData——statusBarHeight/navBarHeight
+  // 永远停在 data 里的硬编码默认值 20/44，在刘海屏上远小于真实状态栏高度，
+  // 顶部标题被状态栏遮挡。getSafeSystemInfo() 自身已经有内部兜底、不会抛
+  // 异常（见 utils/util.ts），真正可能抛异常的只有胶囊按钮这一行，现在单独
+  // 用一层 try/catch 包住（照抄共享 navigation-bar 组件 _layout() 的写法），
+  // 保证无论胶囊检测是否成功，最后的 setData 都一定会执行
   calculateNavBarHeight() {
+    const sysInfo = getSafeSystemInfo();
+    const statusBarHeight = sysInfo.statusBarHeight || 20;
+    const windowWidth = sysInfo.windowWidth || 375;
+
+    let menuButton: WechatMiniprogram.Rect | null = null;
     try {
-      const sysInfo = getSafeSystemInfo();
-      const statusBarHeight = sysInfo.statusBarHeight || 20;
-      const windowWidth = sysInfo.windowWidth || 375;
-      const menuButton = wx.getMenuButtonBoundingClientRect();
-      let navBarHeight = 44;
-      // 官方胶囊默认宽度约 87px 的兜底估算，避免 API 不可用时右侧完全不避让
-      let capsuleLeft = windowWidth - 87;
-      if (menuButton) {
-        navBarHeight = (menuButton.top - statusBarHeight) * 2 + menuButton.height;
-        capsuleLeft = menuButton.left;
-      }
-      this.setData({
-        statusBarHeight,
-        navBarHeight: navBarHeight || 44,
-        windowWidth,
-        capsuleLeft
-      });
+      menuButton = wx.getMenuButtonBoundingClientRect();
     } catch (e) {
-      console.warn('Calc height fallback:', e);
+      console.warn('[calculateNavBarHeight] 胶囊按钮信息获取异常，使用兜底估算:', e);
     }
+
+    let navBarHeight = 44;
+    // 官方胶囊默认宽度约 87px 的兜底估算，避免 API 不可用时右侧完全不避让
+    let capsuleLeft = windowWidth - 87;
+    if (menuButton) {
+      navBarHeight = (menuButton.top - statusBarHeight) * 2 + menuButton.height;
+      capsuleLeft = menuButton.left;
+    }
+    this.setData({
+      statusBarHeight,
+      navBarHeight: navBarHeight || 44,
+      windowWidth,
+      capsuleLeft
+    });
   },
 
   async initMinePage() {
