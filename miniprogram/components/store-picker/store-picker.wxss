@@ -355,7 +355,13 @@
 .sheet-scroll-list {
   flex: 1;
   height: 0;
+  /* 🐛 2026-09-06 修复：面板本身只有 max-height:75vh（没有显式 height），
+     flex:1+height:0 子项能不能真正拿到"增长空间"在不同渲染引擎下不总是
+     一致，这里加一道显式硬顶，不依赖引擎如何处理这种不确定主轴尺寸的场景，
+     确保门店数量较多时列表内部滚动、顶部标题与底部按钮始终锚定可见 */
+  max-height: 60vh;
   margin-top: 20rpx;
+  padding-bottom: calc(16rpx + constant(safe-area-inset-bottom));
   padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
 }
 
@@ -445,7 +451,9 @@
   padding: 8rpx 16rpx;
   border-radius: 32rpx;
   background: #F8F9FA;
-  border: 1rpx solid #E9ECEF;
+  /* 🐛 2026-09-06 视觉加固：原 #E9ECEF 对比背景色几乎不可见，未选中态胶囊
+     轮廓不清晰；加深一档仍保持中性、不抢戏 */
+  border: 1.5rpx solid #D8DCE1;
   box-sizing: border-box;
   transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
@@ -487,11 +495,13 @@
   margin-left: 10rpx;
 }
 
-/* 选中高亮状态：朱红浅底 + 微阴影，当前激活身份一目了然 */
+/* 选中高亮状态：朱红浅底 + 微阴影，当前激活身份一目了然。
+   🐛 2026-09-06 视觉加固：描边从 1rpx 加粗到 2rpx、背景色加深一档、阴影
+   略加强，进一步拉开与未选中态的辨识度 */
 .role-choice-pill.selected {
-  border-color: #8C1D18 !important;
-  background: #FFEBEE !important;
-  box-shadow: 0 2rpx 8rpx rgba(140, 29, 24, 0.15) !important;
+  border: 2rpx solid #8C1D18 !important;
+  background: #FFDBD8 !important;
+  box-shadow: 0 2rpx 10rpx rgba(140, 29, 24, 0.22) !important;
 }
 
 .role-choice-pill.selected .role-label {
@@ -555,6 +565,11 @@
    跳出动作（新建/加入 vs 跳出当前专区），视觉上弱化一档（纯文字链接风格）
    避免和上面的按钮抢视觉权重，但同样保证 ≥44pt 触控热区 */
 .switch-workspace-entry-btn {
+  /* 🐛 2026-09-06 修复：此前只写 env() 单行，没有 constant() 兼容回退——
+     本仓库其余 38 处安全区适配全部是"先 constant() 后 env()"的双行写法，
+     这里是孤例遗漏，在不识别 env() 的客户端内核上会直接退化成完全没有
+     安全区留白，与用户截图里"紧贴 Home 指示条"的现象吻合 */
+  margin-bottom: calc(24rpx + constant(safe-area-inset-bottom));
   margin-bottom: calc(24rpx + env(safe-area-inset-bottom));
   flex-shrink: 0;
   display: flex;
@@ -586,7 +601,9 @@
 .sheet-footer {
   flex-shrink: 0;
   background: #FBF9F5;
-  /* 120rpx = 100rpx TabBar + 20rpx 间距，防止新门店申请提交按钮被 TabBar 遮挡 */
+  /* 120rpx = 100rpx TabBar + 20rpx 间距，防止新门店申请提交按钮被 TabBar 遮挡。
+     补 constant() 兼容回退，同上方 .switch-workspace-entry-btn 的修复理由 */
+  padding: 24rpx 0 calc(120rpx + constant(safe-area-inset-bottom));
   padding: 24rpx 0 calc(120rpx + env(safe-area-inset-bottom));
   z-index: 10;
   box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
