@@ -11192,9 +11192,7 @@ Page({
   // manageVolunteerSubmission/activity-log 都需要一个真实门店作为归属，虚拟的
   // "全国总览" ID 不对应任何真实门店文档
   ensureStoreBoundForTool(resumeAction?: () => void): boolean {
-    const NATIONAL_IDS = ['national_overview', 'ALL_STORES', 'all'];
-    const storeId = this.data.currentStoreId;
-    if (!storeId || NATIONAL_IDS.includes(storeId)) {
+    if (this.isNationalOverviewSelected()) {
       wx.showToast({ title: '全国总览模式，请先选择具体门店', icon: 'none', duration: 2000 });
       if (resumeAction) {
         this._pendingStoreSelectAction = resumeAction;
