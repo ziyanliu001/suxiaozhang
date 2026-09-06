@@ -10,7 +10,9 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="pm-body" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距 -->
+  <view class="pm-body" style="margin-top: 24rpx;">
 
     <view class="pm-form-card" wx:if="{{showForm}}">
       <text class="pm-form-title">{{formMode === 'edit' ? '编辑商品' : '新建商品'}}</text>

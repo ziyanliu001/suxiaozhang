@@ -7,6 +7,32 @@
 // 移出主包。两份拷贝内容需保持同步维护
 import { getSafeSystemInfo } from '../../../../utils/util'
 
+// 🐛 首帧闪烁修复（2026-09-06）：此前 data 里 barStyle/contentStyle/statusBarHeight
+// 全部缺省，要等 attached() 里的 _layout() 跑完才第一次 setData——组件挂载到那次
+// setData 之间的一帧，.weui-navigation-bar 没有任何内联高度/内容定位样式，标题/
+// 返回键会短暂贴在屏幕物理顶部，与状态栏重叠。这里用 _layout() 自己在胶囊 API
+// 不可用时的保守估算公式（见下方 _layout 方法里 menuButtonInfo 为空的分支）同步
+// 算出一份首帧兜底值，作为 data 的初始值——attached() 里真实的胶囊测量值算出来后
+// 会再 setData 一次精修，多数机型上两次的值非常接近，不会有肉眼可见的跳动
+function computeFallbackLayout() {
+  const sysInfo = getSafeSystemInfo()
+  const isAndroid = sysInfo.platform === 'android'
+  const statusBarHeight = sysInfo.statusBarHeight || 20
+  const contentHeight = isAndroid ? 48 : 44
+  const contentTop = statusBarHeight + (isAndroid ? 4 : 6)
+  const navBarHeight = (contentTop - statusBarHeight) * 2 + contentHeight
+  const totalHeight = statusBarHeight + navBarHeight
+  return {
+    ios: !isAndroid,
+    statusBarHeight,
+    navBarHeight,
+    barStyle: `height: ${totalHeight}px;`,
+    contentStyle: `top: ${contentTop}px; height: ${contentHeight}px;`,
+    rightWidth: `width: 90px`,
+    leftWidth: `width: 80px`
+  }
+}
+
 Component({
   options: {
     multipleSlots: true // 在组件定义时的选项中启用多slot支持
@@ -104,7 +130,8 @@ Component({
     // 是否实际渲染「返回」按钮
     actualBack: true,
     // 是否实际渲染「回到首页」按钮（根据 showHome/showHomeButton 配置 + 页面栈深度计算）
-    actualShowHome: false
+    actualShowHome: false,
+    ...computeFallbackLayout()
   },
   lifetimes: {
     attached() {

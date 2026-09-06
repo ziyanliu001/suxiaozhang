@@ -10,28 +10,32 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="pa-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 2026-09-06 修复：margin-top/padding-top 不再叠加 navigation-bar
+       已占用的 totalHeight，只留 24rpx 呼吸边距。下方 .pa-tab-switcher 的
+       position:sticky; top:{{contentTop}}px 是吸顶阈值，语义与这里的外边距
+       完全不同，本次不动 -->
+  <view class="pa-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: 24rpx;">
     <text>校验身份中...</text>
   </view>
 
   <!-- 🐛 根因修复：身份校验本身失败（网络异常/云函数未部署）时的独立错误态，
        与"确认有身份、但不是平台管理员"的拒绝态区分开——前者可以重试，后者不该
        给一个"重试"按钮误导用户以为多点几次就能有权限 -->
-  <view class="pa-denied-state" wx:if="{{checkedAccess && accessError}}" style="margin-top: {{contentTop}}px;">
+  <view class="pa-denied-state" wx:if="{{checkedAccess && accessError}}" style="margin-top: 24rpx;">
     <text class="pa-denied-icon">⚠️</text>
     <text class="pa-denied-title">身份校验失败</text>
     <text class="pa-denied-sub">{{accessError}}</text>
     <button class="pa-denied-btn" hover-class="btn-hover" bindtap="onRetryCheckAccess">重新校验</button>
   </view>
 
-  <view class="pa-denied-state" wx:if="{{checkedAccess && !accessError && !isPlatformAdmin}}" style="margin-top: {{contentTop}}px;">
+  <view class="pa-denied-state" wx:if="{{checkedAccess && !accessError && !isPlatformAdmin}}" style="margin-top: 24rpx;">
     <text class="pa-denied-icon">🚫</text>
     <text class="pa-denied-title">无权限访问</text>
     <text class="pa-denied-sub">本页面仅限 SaaS 平台管理员（开发者）使用，且不会显示任何门店财务明细。</text>
     <button class="pa-denied-btn" hover-class="btn-hover" bindtap="onGoBack">返回首页</button>
   </view>
 
-  <view class="pa-content" wx:if="{{checkedAccess && !accessError && isPlatformAdmin}}" style="padding-top: {{contentTop}}px;">
+  <view class="pa-content" wx:if="{{checkedAccess && !accessError && isPlatformAdmin}}" style="padding-top: 24rpx;">
 
     <!-- 📊 统计总览看板：三张轻量 KPI 卡片，横跨两个 Tab 共用，随时能看到
          "有多少码等着卖出去 / 有多少机构在真实付费 / 有几家快到期该跟进续费" -->

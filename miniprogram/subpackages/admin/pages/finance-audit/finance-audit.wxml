@@ -18,8 +18,11 @@
 
   <view class="fa-store-bar-skeleton" wx:if="{{!roleReady}}"></view>
 
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距（与下面 .fa-store-bar-skeleton 本来
+       就采用的 margin:24rpx 目标态一致）；height calc 里的 contentTop 不动 -->
   <block wx:elif="{{!hasAccess}}">
-    <view class="fa-denied-state" style="margin-top: {{contentTop}}px;">
+    <view class="fa-denied-state" style="margin-top: 24rpx;">
       <text class="fa-denied-icon">🔒</text>
       <text class="fa-denied-title">无权限查看</text>
       <text class="fa-denied-sub">仅财务、大家长与超级管理员可查看稽核封账与风控预警</text>
@@ -27,14 +30,14 @@
   </block>
 
   <block wx:elif="{{isNationalOverview}}">
-    <view class="fa-denied-state" style="margin-top: {{contentTop}}px;">
+    <view class="fa-denied-state" style="margin-top: 24rpx;">
       <text class="fa-denied-icon">🏪</text>
       <text class="fa-denied-title">请先选择具体门店</text>
       <text class="fa-denied-sub">全国总览视角下无法查看单店的稽核封账与风控预警，请回到首页切换到具体门店后再进入本页</text>
     </view>
   </block>
 
-  <scroll-view scroll-y class="fa-body-scroll" wx:else style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+  <scroll-view scroll-y class="fa-body-scroll" wx:else style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);">
     <view class="fa-store-bar">
       <text class="fa-store-bar-name">📍 {{currentStoreName}}</text>
     </view>

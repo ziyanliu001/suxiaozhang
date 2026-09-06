@@ -20,7 +20,10 @@
   <!-- 图片压缩用离屏画布，全页面共用一个即可 -->
   <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
-  <scroll-view scroll-y class="dm-list-scroll" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；height calc、下方弹窗的 max-height
+       calc、上面 .dm-nav-action 用的 navContentTop 等对齐字段均不动 -->
+  <scroll-view scroll-y class="dm-list-scroll" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
 
     <view class="dm-store-tip-skeleton" wx:if="{{!roleReady}}"></view>
     <view class="dm-store-tip" wx:elif="{{currentStoreName}}">📍 {{currentStoreName}}</view>

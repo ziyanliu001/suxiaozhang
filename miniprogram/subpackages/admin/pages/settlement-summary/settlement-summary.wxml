@@ -10,7 +10,9 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="ss-body" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；内层 .ss-scroll 的 height calc 不动 -->
+  <view class="ss-body" style="margin-top: 24rpx;">
 
     <view class="ss-loading-state" wx:if="{{loading && details.length === 0}}">
       <text>加载中...</text>

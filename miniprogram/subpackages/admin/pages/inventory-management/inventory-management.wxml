@@ -10,18 +10,20 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="im-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；height calc 里的 contentTop 不动 -->
+  <view class="im-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: 24rpx;">
     <text>校验身份中...</text>
   </view>
 
-  <view class="im-denied-state" wx:if="{{checkedAccess && !hasAccess}}" style="margin-top: {{contentTop}}px;">
+  <view class="im-denied-state" wx:if="{{checkedAccess && !hasAccess}}" style="margin-top: 24rpx;">
     <text class="im-denied-icon">📦</text>
     <text class="im-denied-title">暂不可用</text>
     <text class="im-denied-sub">{{deniedReason}}</text>
     <button class="im-denied-btn" bindtap="goBack">返回</button>
   </view>
 
-  <view class="im-body" wx:if="{{checkedAccess && hasAccess}}" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+  <view class="im-body" wx:if="{{checkedAccess && hasAccess}}" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);">
 
     <view class="im-store-banner">
       <text class="im-store-icon">🏪</text>

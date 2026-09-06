@@ -10,7 +10,10 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="wj-body" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；内层 .wj-center-wrap 的 min-height
+       calc 不动 -->
+  <view class="wj-body" style="margin-top: 24rpx;">
     <view class="wj-center-wrap" style="min-height: calc(100vh - {{contentTop}}px);">
 
       <!-- 🎨 头部：渐变徽标 + 副标题引导 + 说明文案，只在查询前展示——查询结果

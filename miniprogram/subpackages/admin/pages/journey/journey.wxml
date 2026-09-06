@@ -5,10 +5,14 @@
     showHomeButton="auto"
     bind:back="onGoBack"
     bind:home="onGoBack"
-    bind:layout="onNavLayout"
   />
 
-  <scroll-view scroll-y class="journey-scroll" style="padding-top: {{navBarTotalHeight}}px;">
+  <!-- 🐛 重复计算空白修复（2026-09-06）：navigation-bar 组件本身已经用真实高度
+       占了一份排版空间，这里不再额外叠加同样大小的 padding-top（此前用
+       navBarTotalHeight 二次叠加导致标题栏与卡片之间空出一大截），只保留
+       24rpx 的正常呼吸边距，与 finance-audit.wxss 的 .fa-store-bar-skeleton
+       同一套目标态 -->
+  <scroll-view scroll-y class="journey-scroll" style="padding-top: 24rpx;">
     <!-- 顶部统计卡片：.ui-card-wrapper 是全站统一的圆角柔和阴影基础层（本页在
          journey.wxss 本地复刻同款数值，WXSS 页面级作用域不跨页共享样式），
          叠加各卡片自己的渐变/边框作为差异化装饰 -->

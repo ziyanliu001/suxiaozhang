@@ -10,7 +10,10 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="pf-body" style="margin-top: {{contentTop}}px;">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；updateListHeight() 派生的 .pf-list
+       高度计算仍基于真实 contentTop，不动 -->
+  <view class="pf-body" style="margin-top: 24rpx;">
 
     <!-- 🔀 多工坊切换器：只有账号同时属于 ≥2 个工坊时才显示，避免绝大多数
          单工坊账号看到一个永远用不上的下拉入口 -->

@@ -76,9 +76,6 @@ Page({
   _countUpTimers: {} as Record<string, any>,
 
   data: {
-    // 页面元数据（由 navigation-bar 组件 bind:layout 上报，见 onNavLayout）
-    navBarTotalHeight: 0,
-
     // ✨ 动态称谓：由 resolveOrgLabels() 根据 tenantId 派生，默认通用文案
     isYuhuazhai: false,
     pageTitle: '我的志愿历程',
@@ -201,11 +198,6 @@ Page({
     if (this._navGuard) {
       this._navGuard.setupOnShow();
     }
-  },
-
-  // navigation-bar 组件按胶囊按钮实测坐标算出真实导航栏高度后通过 layout 事件上报
-  onNavLayout(e: { detail: { totalHeight: number } }) {
-    this.setData({ navBarTotalHeight: e.detail.totalHeight });
   },
 
   // ✨ 称谓自适应：读取 tenantId → 判断是否雨花斋 → 派生全部展示文案。

@@ -9,7 +9,11 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <scroll-view scroll-y class="sp-scroll" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+  <!-- 🐛 重复计算空白修复（2026-09-06）：navigation-bar 组件已经用真实高度
+       占了一份排版空间，margin-top 不再叠加 contentTop（只保留 24rpx 呼吸
+       边距）；height calc 里的 contentTop 是"从满屏高度里减掉导航栏真实
+       占用空间"的正确用法，不属于重复计算，继续保留不动 -->
+  <scroll-view scroll-y class="sp-scroll" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);">
 
     <view class="sp-store-card">
       <view class="sp-store-name-row">

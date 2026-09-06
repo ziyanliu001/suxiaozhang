@@ -23,7 +23,11 @@
 
   <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
-  <scroll-view scroll-y class="al-list-scroll" style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；height calc、下方弹窗的 max-height
+       calc、上面 .al-nav-action 用的 navContentTop/navContentHeight/
+       navRightGap（对齐胶囊）均不动，那些不是重复计算 -->
+  <scroll-view scroll-y class="al-list-scroll" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
 
     <!-- 📍 门店身份 Header：sticky 吸顶展示当前门店名，异步解析完成前用骨架占位
          兜底，避免闪现任何默认值。currentStoreName 已经过 applyRolePermissions/

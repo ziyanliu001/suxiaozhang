@@ -10,17 +10,19 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <view class="pv-loading" style="margin-top: {{contentTop}}px;" wx:if="{{loading}}">
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
+       totalHeight，只留 24rpx 呼吸边距；下方 .pv-content 的 height calc 不动 -->
+  <view class="pv-loading" style="margin-top: 24rpx;" wx:if="{{loading}}">
     <text class="pv-error-icon">☀️</text>
     <text class="pv-error-text">正在查询账目数据...</text>
   </view>
 
-  <view class="pv-error" style="margin-top: {{contentTop}}px;" wx:if="{{!loading && errorMsg}}">
+  <view class="pv-error" style="margin-top: 24rpx;" wx:if="{{!loading && errorMsg}}">
     <text class="pv-error-icon">⚠️</text>
     <text class="pv-error-text">{{errorMsg}}</text>
   </view>
 
-  <view class="pv-not-found" style="margin-top: {{contentTop}}px;" wx:if="{{!loading && !errorMsg && !found}}">
+  <view class="pv-not-found" style="margin-top: 24rpx;" wx:if="{{!loading && !errorMsg && !found}}">
     <text class="pv-error-icon">🔍</text>
     <text class="pv-error-text">未查询到 {{dateString}} 的账目记录</text>
     <text class="pv-error-sub">可能尚未发布，或二维码信息有误</text>
