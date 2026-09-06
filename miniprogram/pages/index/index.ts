@@ -2138,14 +2138,25 @@ Page({
 
   // 🏢 空状态引导升级：机构确实一家门店都没有时，除了"创建首家门店"，也可能是
   // 用户点错了专区卡片（如以为自己是雨花斋，其实账号归属通用商户体系）——补上
-  // "切换其它专区"按钮，一步直接跳到另一个专区（复用两张工作空间卡片各自
-  // 已有的入口方法，超管无条件放行，不会被拦），而不是被晾在一个死胡同状态里
+  // "切换其它专区"按钮，兜底"点错专区卡片"这种情况。
+  // 🐛 根因修复（雨花合规弹窗死循环）：此前这里在"雨花/通用"两个专区之间硬编码
+  // 二选一直接跳转——currentPlatformMode 不是 'yuhua' 时无条件调用
+  // onSelectYuhuaPlatform()，而该方法只要账号未绑定雨花门店就会触发
+  // enterYuhuaWorkspaceFlow() 强制弹出《重要声明与合规须知》，用户读完声明后
+  // 若依然没有雨花门店会退回同一个空态，再点一次又被同一个二选一逻辑弹回雨花
+  // 声明或打回通用专区，永远够不到真正的【选择工作空间】三选一面板（雨花/
+  // 通用/工坊）——工坊这个选项在这套硬编码二选一里更是从头到尾都不可达。
+  // 现在不再猜测"另一个专区是哪个"，直接清空 currentPlatformMode 回到中立的
+  // 工作空间选择页（wxml 里 `<block wx:else>` 分支，见 platform-select-page），
+  // 顺带关闭可能残留的雨花合规弹窗，避免"专区已经清空了，弹窗还叠在上面"的
+  // 视觉错乱；三张卡片各自的点击入口（onSelectYuhuaPlatform/
+  // onSelectGeneralPlatform/onSelectFactoryPlatform）本就能正常工作，不需要
+  // 在这里替用户预先决定要进哪一个
   onSwitchToOtherZoneFromEmptyState() {
-    if (this.data.currentPlatformMode === 'yuhua') {
-      this.onSelectGeneralPlatform();
-    } else {
-      this.onSelectYuhuaPlatform();
-    }
+    this.setData({
+      currentPlatformMode: '',
+      showComplianceModal: false
+    });
   },
 
   // ================= 🍽️ 首页快捷发布：今日菜单 =================
