@@ -28,6 +28,16 @@ interface MeritTagOption {
   emoji: string;
 }
 
+// 🐛 排查"标签点击无高亮反馈"：wxml 侧渲染用的 tagOptions 补一个预先算好的
+// selected 布尔字段，不再在模板表达式里对 data 现算 selectedTags.includes(...)
+// ——本仓库其它地方（index.wxml 的 reservedMeals.includes(...)）证明这类写法
+// 基础库版本层面是支持的，静态审查也没找到确凿的 bug，但"在 JS 侧预先算好
+// 布尔字段、wx:for 直接读字段"本就是社区公认更稳妥的写法，排除模板表达式
+// 求值这条路径上的任何疑点，改动本身也是纯粹的健壮性加固，不会有副作用
+interface MeritTagOptionView extends MeritTagOption {
+  selected: boolean;
+}
+
 // 四个 value 必须与 cloudfunctions/manageVolunteerCheckIn/index.js 的
 // MERIT_TAGS 白名单一一对应，两处独立部署、无共享模块机制，需手动同步
 const MERIT_TAG_OPTIONS: MeritTagOption[] = [
@@ -36,6 +46,13 @@ const MERIT_TAG_OPTIONS: MeritTagOption[] = [
   { value: 'thrift', label: '惜福护物', emoji: '🍚' },
   { value: 'cleaning', label: '清扫庄严', emoji: '🧹' }
 ];
+
+// 每次都用 .map() 产出全新数组（不是原地改某一项的 selected 属性）——保证
+// wx:for 的差异对比一定能感知到变化，不依赖"引用不变但属性变了"这种更容易
+// 被忽略的更新方式
+function computeTagOptions(selectedTags: string[]): MeritTagOptionView[] {
+  return MERIT_TAG_OPTIONS.map((o) => ({ ...o, selected: selectedTags.includes(o.value) }));
+}
 
 Component({
   properties: {
@@ -53,7 +70,7 @@ Component({
   },
 
   data: {
-    tagOptions: MERIT_TAG_OPTIONS,
+    tagOptions: computeTagOptions([]) as MeritTagOptionView[],
     selectedTags: [] as string[],
     submitting: false,
     // 提交成功后翻转为 true，切换到"已记录 + 生成日签"确认态
@@ -65,7 +82,12 @@ Component({
     stopPropagation() {},
 
     resetForm() {
-      this.setData({ selectedTags: [], submitted: false, submittedTagObjects: [] });
+      this.setData({
+        selectedTags: [],
+        tagOptions: computeTagOptions([]),
+        submitted: false,
+        submittedTagObjects: []
+      });
     },
 
     onToggleTag(e: any) {
@@ -73,7 +95,7 @@ Component({
       if (!value) return;
       const current: string[] = this.data.selectedTags || [];
       const next = current.includes(value) ? current.filter((t: string) => t !== value) : [...current, value];
-      this.setData({ selectedTags: next });
+      this.setData({ selectedTags: next, tagOptions: computeTagOptions(next) });
     },
 
     onSkip() {

@@ -17,13 +17,15 @@
         <view
           wx:for="{{tagOptions}}"
           wx:key="value"
-          class="vmd-tag-chip {{selectedTags.includes(item.value) ? 'active' : ''}}"
+          class="vmd-tag-chip {{item.selected ? 'active' : ''}}"
+          hover-class="vmd-tag-chip-hover"
+          hover-stay-time="80"
           bindtap="onToggleTag"
           data-value="{{item.value}}"
         >
           <text class="vmd-tag-emoji">{{item.emoji}}</text>
           <text class="vmd-tag-label">{{item.label}}</text>
-          <text class="vmd-tag-check" wx:if="{{selectedTags.includes(item.value)}}">✓</text>
+          <text class="vmd-tag-check" wx:if="{{item.selected}}">✓</text>
         </view>
       </view>
 

@@ -89,6 +89,13 @@
   background: #FDF1EE;
 }
 
+/* 🐛 点击瞬间的按压反馈：与 wxml 的 hover-class="vmd-tag-chip-hover" 配套，
+   让用户在 setData 重渲染完成前就能立刻确认"这一下点击被识别到了" */
+.vmd-tag-chip-hover {
+  opacity: 0.7;
+  transform: scale(0.97);
+}
+
 .vmd-tag-emoji {
   font-size: 36rpx;
   flex-shrink: 0;
