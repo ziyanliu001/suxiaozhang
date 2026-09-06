@@ -8847,6 +8847,23 @@ page {
   padding: 8rpx 0;
 }
 
+/* 🐛 根因修复（数据已拉到 30 条，右侧仍是空白）：<yangshan-wall> 自定义组件
+   自身 wxss 里 .yangshan-wall-card 是 width:100%，这个百分比相对的是组件
+   宿主标签自己的盒子——profile.wxml 把它放在纯块级容器 .no-yangshan-wall-slot
+   里（没有 display:flex），块级上下文默认让子元素撑满父容器宽度，
+   width:100% 能正常解析出一个具体数值。但这里 .top-notice-row-yangshan
+   同时叠加了 .top-notice-row 的 display:flex——flex 容器里的子项（含自定义
+   组件标签本身）默认 flex:0 1 auto，不会自动撑满剩余空间，宿主标签自己的
+   宽度解析不出来，组件内部"100%"跟着算成 0，标题（flex-shrink:0，按内容
+   撑开）正常显示，右侧内容区因此塌缩不可见。这里在宿主页面直接选中自定义
+   组件标签本身（选择器只作用于组件的外层盒子，不会穿透进组件内部的
+   style isolation），显式给它一个具体的 flex 尺寸 */
+.top-notice-row-yangshan yangshan-wall {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
 /* 只有阳光账本这一行可点击跳转，:active 反馈只挂在这一行上，避免下方
    阳善滚动墙（不可点击）也跟着闪一下按压态造成误导 */
 .top-notice-row:not(.top-notice-row-yangshan):active {
