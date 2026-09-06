@@ -30,7 +30,7 @@ import {
   acknowledgeYuhuaPrivilegedDisclaimer
 } from '../../utils/yuhuaDisclaimer';
 import { takeGenCodeHandoff } from '../../utils/genCodeHandoff';
-import { playCheckInSuccess, playReportSealed } from '../../utils/audioService';
+import { playCheckInSuccess } from '../../utils/audioService';
 import { takeOpenSunshineLedgerRequest } from '../../utils/sunshineLedgerHandoff';
 import { takeOpenCultureFullRequest } from '../../utils/cultureFullHandoff';
 import { takeOpenStorePickerRequest } from '../../utils/storePickerHandoff';
@@ -1110,35 +1110,11 @@ Page({
     // 🏪 门店运营状态徽标：见 utils/storeManager.ts fetchAndSyncStoreStatus/
     // getCachedStoreStatus，全局态与 Storage 双写同步，与 profile.ts 共用同一份数据
     currentStoreStatus: '' as string,
-    // 🌟 财务专属功能区：风控预警数量（首页角标）、封账弹窗、风控预警明细弹窗
+    // 🌟 财务专属功能区：风控预警数量（首页角标）——详情/筛选/封账操作本身已
+    // 搬迁至 subpackages/admin/pages/finance-audit（主包瘦身，2026-09-06），
+    // 这里只保留驱动首页摘要卡片数字的最小状态，onOpenFinanceLockModal/
+    // onOpenRiskAlertsModal 改为跳转分包页面
     riskAlertCount: 0,
-    showFinanceLockModal: false,
-    // 🌟 稽核与封账：自定义起止日期区间（取代原先的单一月份 Picker），支持跨月批量封账/解封
-    financeLockStartDate: '',
-    financeLockEndDate: '',
-    financeLockInFlight: false,
-    financeUnlockInFlight: false,
-    financeLockStatusLoading: false,
-    lockStatusText: '',
-    // 🐛 根因修复（"该区间暂无可封账的记录"提示下确认封账按钮仍可点）：此前
-    // 【确认封账】按钮只在 financeLockInFlight（提交中）时禁用，从不关心
-    // 这个区间到底有没有真的可封账的记录——checkRangeLockStatus() 早已算出
-    // res.approvedCount（已审核待封账笔数），只是没有存成一个独立的布尔态，
-    // WXML 没法据此禁用按钮。新增这个字段，只在 approvedCount > 0 时置真，
-    // 其余分支（无记录/还有待审核/查询失败/日期区间非法）一律置假
-    financeLockHasApprovedRecords: false,
-    financeLockRangeLocked: false,
-    showRiskAlertsModal: false,
-    riskAlertsLoading: false,
-    riskAlertsList: [] as any[],
-    // 🌟 详情筛选：点击风控卡片后仅展示该类型的明细，'' 表示不筛选、展示全部
-    riskAlertsFilterType: '' as '' | 'void' | 'missing_receipt' | 'balance',
-    riskAlertsFilteredList: [] as any[],
-    riskAlertsSummary: { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 },
-    // 🌟 是否存在任意异常：驱动弹窗头部图标/配色在"绿色安全"与"橙红警示"之间联动
-    riskAlertsHasAnomaly: false,
-    // 🌟 统计区间文案，例如"近 60 天：2026-06-02 至 2026-08-01"
-    riskAlertsRangeLabel: '',
     // 🐛 财务首页瘦身：默认收起"请填写当日明细"整条录入表单流水线（含爱心支持/
     // 物资明细、义工与用餐统计、生成结果预览、底部吸底生成按钮），首屏聚焦
     // 【财务稽核台】。财务仍保留亲自代填当日餐报的能力（见 onScrollToFinanceConsole
@@ -12051,7 +12027,17 @@ Page({
     });
   },
 
-  // 🌟 财务专属功能区「稽核与封账」：按自定义起止日期区间批量锁定/解封已通过店长确认的账本
+  // 🏛️（主包瘦身，2026-09-06）「稽核与封账」「风控预警日志」两个弹窗的完整
+  // 交互逻辑（日期区间选择、封账/解封确认、风控明细筛选等）已搬迁至
+  // subpackages/admin/pages/finance-audit（排查确认这两块不涉及海报生成/
+  // 打卡回填/共用 onInput 分发器这类跨功能耦合，是首页里能安全剪切的部分）。
+  // 这里的入口方法只做权限/门店前置校验 + 跳转，原有的校验文案原样保留。
+  // fetchRiskAlerts() 简化为只保留驱动首页摘要卡片 riskAlertCount 数字的
+  // 最小实现（原本还要维护 riskAlertsList/riskAlertsSummary/筛选态等只有
+  // 弹窗自己用的状态，现在这些状态和它们的操作逻辑都在新页面自己独立维护），
+  // fetchFinanceLedgerStatus() 完全不受影响（首页 loadHomeDynamicData() 每次
+  // onShow 都会重新拉取这两个数字，从新页面操作完导航返回后会自然刷新，不需要
+  // 跨页面手动同步）
   onOpenFinanceLockModal() {
     if (!this.data.isFinance && !this.data.isSuperAdmin && !this.data.isPatriarch) {
       wx.showToast({ title: '仅财务、大家长与超管可执行稽核封账', icon: 'none' });
@@ -12061,234 +12047,11 @@ Page({
       wx.showToast({ title: '请先选择具体的门店再执行封账', icon: 'none', duration: 2500 });
       return;
     }
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const defaultEndDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    const defaultStartDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-    this.setData({
-      showFinanceLockModal: true,
-      financeLockStartDate: this.data.financeLockStartDate || defaultStartDate,
-      financeLockEndDate: this.data.financeLockEndDate || defaultEndDate,
-      lockStatusText: '',
-      financeLockHasApprovedRecords: false
-    }, () => {
-      this.checkRangeLockStatus();
-    });
-  },
-
-  onCloseFinanceLockModal() {
-    if (this.data.financeLockInFlight || this.data.financeUnlockInFlight) return;
-    this.setData({ showFinanceLockModal: false });
-  },
-
-  onFinanceLockStartDateChange(e: any) {
-    this.setData({ financeLockStartDate: e.detail.value }, () => {
-      this.checkRangeLockStatus();
-    });
-  },
-
-  onFinanceLockEndDateChange(e: any) {
-    this.setData({ financeLockEndDate: e.detail.value }, () => {
-      this.checkRangeLockStatus();
-    });
-  },
-
-  // 🌟 实时查询当前选定区间的封账状态：区间是否已全部封账、封账人/时间，或区间内待审核笔数，
-  // 用于驱动 lock-status-tip 提示文案与"确认封账/解封/反封账"按钮的显隐切换
-  async checkRangeLockStatus() {
-    const { financeLockStartDate: startDate, financeLockEndDate: endDate, currentStoreId: storeId } = this.data;
-    if (!startDate || !endDate || !storeId) return;
-    if (startDate > endDate) {
-      this.setData({ lockStatusText: '⚠️ 开始日期不能晚于结束日期', financeLockRangeLocked: false, financeLockHasApprovedRecords: false });
-      return;
-    }
-
-    this.setData({ financeLockStatusLoading: true, lockStatusText: '查询区间状态中...', financeLockHasApprovedRecords: false });
-    try {
-      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const result = await callFunctionWithTimeout({
-        name: 'manageFinanceLock',
-        data: { action: 'checkRangeStatus', storeId, startDate, endDate }
-      });
-      const res = result.result as any;
-      if (res && res.success) {
-        let tip = '';
-        if (res.isLocked) {
-          tip = `🔒 该区间已封账（共 ${res.lockedCount} 条${res.lockedBy ? `，由 ${res.lockedBy}` : ''}${res.lockedAt ? ` 于 ${res.lockedAt}` : ''}）`;
-        } else if (res.pendingCount > 0) {
-          tip = `⚠️ 区间内还有 ${res.pendingCount} 笔待审核，需全部审核或作废后才能封账`;
-        } else if (res.approvedCount > 0) {
-          tip = `已审核待封账 ${res.approvedCount} 笔`;
-        } else {
-          tip = '该区间暂无可封账的记录';
-        }
-        this.setData({
-          lockStatusText: tip,
-          financeLockRangeLocked: !!res.isLocked,
-          financeLockHasApprovedRecords: !res.isLocked && res.approvedCount > 0
-        });
-      } else {
-        this.setData({ lockStatusText: (res && res.errMsg) || '查询区间状态失败', financeLockRangeLocked: false });
-      }
-    } catch (err) {
-      console.error('[checkRangeLockStatus] 异常:', err);
-      this.setData({ lockStatusText: '查询区间状态失败，请检查网络', financeLockRangeLocked: false });
-    } finally {
-      this.setData({ financeLockStatusLoading: false });
-    }
-  },
-
-  async onConfirmFinanceLock() {
-    if (this.data.financeLockInFlight) return;
-    // 🛡️ 与 WXML 按钮的 disabled 条件保持一致：区间内没有已审核待封账的记录时，
-    // 服务端 manageFinanceLock 本就会拒绝，这里提前拦截只是避免一次注定失败的
-    // 网络往返，不是唯一防线
-    if (!this.data.financeLockHasApprovedRecords) {
-      wx.showToast({ title: this.data.lockStatusText || '该区间暂无可封账的记录', icon: 'none' });
-      return;
-    }
-    const { financeLockStartDate: startDate, financeLockEndDate: endDate } = this.data;
-    if (!startDate || !endDate) {
-      wx.showToast({ title: '请先选择要封账的起止日期', icon: 'none' });
-      return;
-    }
-    if (startDate > endDate) {
-      wx.showToast({ title: '开始日期不能晚于结束日期', icon: 'none' });
-      return;
-    }
-    const storeId = this.data.currentStoreId;
-    const storeLabel = this.data.currentStoreName || storeId;
-
-    wx.showModal({
-      title: '🔒 确认稽核封账？',
-      // 🐛 数字指纹 Hash：manageFinanceLock 的 lockRange 会对本次锁定的全部记录
-      // 生成一份 SHA-256 摘要（见该云函数 computeLockFingerprint），确认文案
-      // 提前告知用户这个动作会留下可事后核对的完整性凭证，不只是"锁定"两个字
-      content: `确定要封账【${storeLabel}】${startDate} 至 ${endDate} 的账目吗？锁定后店长将无法修改，系统将为本次封账生成数字指纹 Hash 作为完整性凭证。`,
-      confirmText: '确认封账',
-      confirmColor: '#D32F2F',
-      cancelText: '我再想想',
-      success: async (res) => {
-        if (!res.confirm) return;
-        this.setData({ financeLockInFlight: true });
-        wx.showLoading({ title: '安全封账中...', mask: true });
-        try {
-          if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-          const result = await callFunctionWithTimeout({
-            name: 'manageFinanceLock',
-            data: { action: 'lockRange', storeId, startDate, endDate }
-          });
-          const res2 = result.result as any;
-          wx.hideLoading();
-          if (res2 && res2.success) {
-            // 🔊 后厨语音与音效无感反馈：封账是本页面口径最接近"日结签名存证"
-            // 的动作（manageFinanceLock 会生成数字指纹 Hash 作为完整性凭证，
-            // 见上方 wx.showModal 确认文案），厚重下行音效 + 重震动区别于
-            // 打卡/识票两个更轻量的操作反馈
-            playReportSealed();
-            const fingerprintTip = res2.lockFingerprint ? `\n数字指纹：${res2.lockFingerprint}` : '';
-            wx.showModal({
-              title: '封账完成',
-              content: (res2.message || `已成功封账 ${res2.lockedCount || 0} 条记录`) + fingerprintTip,
-              showCancel: false
-            });
-            this.checkRangeLockStatus();
-            // 🐛 封账动作会改变"已稽核笔数"，同步刷新账本锁定状态百分比，不用等
-            // 用户离开首页再回来才看到最新值
-            this.fetchFinanceLedgerStatus();
-          } else if (res2 && res2.error === 'SELECTED_RANGE_HAS_PENDING_REPORTS') {
-            wx.showModal({ title: '无法封账', content: res2.message || '选中区间内存在待审核数据，请全部审核或作废后再封账！', showCancel: false });
-          } else {
-            wx.showModal({ title: '封账失败', content: (res2 && (res2.message || res2.errMsg)) || '云函数未返回正确结果', showCancel: false });
-          }
-        } catch (err) {
-          wx.hideLoading();
-          console.error('[onConfirmFinanceLock] 异常:', err);
-          wx.showModal({ title: '调用失败', content: '未成功触发封账，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
-        } finally {
-          this.setData({ financeLockInFlight: false });
-        }
-      }
-    });
-  },
-
-  // 🌟 大家长专属「解封 / 反封账」：仅 isPatriarch || isSuperAdmin 可执行，finance 无权批量解封
-  handleUnlockMonth() {
-    if (this.data.financeUnlockInFlight) return;
-    if (!this.data.isPatriarch && !this.data.isSuperAdmin) {
-      wx.showToast({ title: '仅大家长与超级管理员可执行解封', icon: 'none' });
-      return;
-    }
-    const { financeLockStartDate: startDate, financeLockEndDate: endDate, currentStoreId: storeId } = this.data;
-    if (!startDate || !endDate) {
-      wx.showToast({ title: '请先选择要解封的起止日期', icon: 'none' });
-      return;
-    }
-    const storeLabel = this.data.currentStoreName || storeId;
-
-    wx.showModal({
-      title: '⚠️ 确认解除封账？',
-      content: `仅限大家长权限操作，确定要解除【${storeLabel}】${startDate} 至 ${endDate} 的账目锁定吗？`,
-      confirmText: '确认解封',
-      confirmColor: '#E65100',
-      cancelText: '我再想想',
-      success: (res) => {
-        if (!res.confirm) return;
-        // 🛡️ 解封二次确认保险丝：批量解封会把区间内已核销封账的记录整批退回
-        // APPROVED（重新可编辑/可作废），影响面比单条操作大得多，此前只有一层
-        // 固定文案确认——误触/被诱导点击"确认解封"就足以让已核验账目脱保。
-        // 加一道强制填写核验理由的关卡：manageFinanceLock 的 unlockRange 早已
-        // 支持接收 reason 落进 auditLogs（此前前端从未真正传过，一直落到服务端
-        // 兜底的泛泛文案），这里改为真的收集、真的传，且不允许空理由通过
-        wx.showModal({
-          title: '请填写解封核验理由',
-          editable: true,
-          placeholderText: '请如实填写解封核验理由（如：发现某笔记录金额录入有误，需重新核对）',
-          confirmText: '提交解封',
-          confirmColor: '#E65100',
-          success: async (reasonRes) => {
-            if (!reasonRes.confirm) return;
-            const reason = String(reasonRes.content || '').trim();
-            if (!reason) {
-              wx.showToast({ title: '请填写解封核验理由后再提交', icon: 'none' });
-              return;
-            }
-
-            this.setData({ financeUnlockInFlight: true });
-            wx.showLoading({ title: '解封处理中...', mask: true });
-            try {
-              if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-              const result = await callFunctionWithTimeout({
-                name: 'manageFinanceLock',
-                data: { action: 'unlockRange', storeId, startDate, endDate, reason }
-              });
-              const res2 = result.result as any;
-              wx.hideLoading();
-              if (res2 && res2.success) {
-                wx.showModal({
-                  title: '解封完成',
-                  content: res2.message || `已成功解封 ${res2.unlockedCount || 0} 条记录`,
-                  showCancel: false
-                });
-                this.checkRangeLockStatus();
-              } else {
-                wx.showModal({ title: '解封失败', content: (res2 && (res2.message || res2.errMsg)) || '云函数未返回正确结果', showCancel: false });
-              }
-            } catch (err) {
-              wx.hideLoading();
-              console.error('[handleUnlockMonth] 异常:', err);
-              wx.showModal({ title: '调用失败', content: '未成功触发解封，请确认 manageFinanceLock 云函数已右键【上传并部署】', showCancel: false });
-            } finally {
-              this.setData({ financeUnlockInFlight: false });
-            }
-          }
-        });
-      }
-    });
+    safeNavigateTo({ url: '/subpackages/admin/pages/finance-audit/finance-audit' });
   },
 
   // 🌟 财务专属功能区「风控预警日志」：余额异常突变 / 红字冲销频次 / 小票缺失明细
-  async onOpenRiskAlertsModal() {
+  onOpenRiskAlertsModal() {
     if (!this.data.isFinance && !this.data.isSuperAdmin) {
       wx.showToast({ title: '仅财务与超管可查看风控预警', icon: 'none' });
       return;
@@ -12297,67 +12060,14 @@ Page({
       wx.showToast({ title: '请先选择具体的门店再查看风控预警', icon: 'none', duration: 2500 });
       return;
     }
-
-    this.setData({ showRiskAlertsModal: true, riskAlertsLoading: true, riskAlertsFilterType: '' });
-    await this.fetchRiskAlerts();
+    safeNavigateTo({ url: '/subpackages/admin/pages/finance-audit/finance-audit' });
   },
 
-  onCloseRiskAlertsModal() {
-    this.setData({ showRiskAlertsModal: false });
-  },
-
-  // 🌟 统计区间文案："近 N 天：起始日期 至 结束日期"，N 取云函数实际返回的 scanRangeDays，
-  // 不在前端硬编码天数，避免与后端扫描窗口（cloudfunctions/getRiskAlerts SCAN_DAYS）脱节
-  buildRiskAlertsRangeLabel(scanRangeDays: number): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - scanRangeDays);
-    return `近 ${scanRangeDays} 天：${fmt(start)} 至 ${fmt(end)}`;
-  },
-
-  // 🌟 按类型筛选明细：'balance' 同时覆盖余额链路断裂(balance_break)与单日净变动过大(balance_jump)，
-  // 二者共同构成汇总卡片里的"余额异常"计数
-  computeFilteredRiskAlerts(list: any[], filterType: string): any[] {
-    if (!filterType) return list;
-    if (filterType === 'balance') {
-      return list.filter((item) => item.type === 'balance_break' || item.type === 'balance_jump');
-    }
-    return list.filter((item) => item.type === filterType);
-  },
-
-  // 🌟 点击汇总卡片：再次点击同一张卡片可取消筛选、回到全部明细
-  onRiskCardTap(e: any) {
-    const type = e.currentTarget.dataset.type as string;
-    if (!type) return;
-    const nextFilterType = this.data.riskAlertsFilterType === type ? '' : type;
-    this.setData({
-      riskAlertsFilterType: nextFilterType,
-      riskAlertsFilteredList: this.computeFilteredRiskAlerts(this.data.riskAlertsList, nextFilterType)
-    });
-  },
-
-  // 🌟 精准追溯：从当前筛选类型跳转到历史账本页，携带 anomalyType 参数，
-  // history.ts 会按同一条判定口径（见其 filterByAnomalyType）自动预筛选明细
-  onGoToHistoryAnomalyDetail() {
-    const type = this.data.riskAlertsFilterType;
-    if (!type) return;
-    safeNavigateTo({ url: `/subpackages/reports/pages/history/history?anomalyType=${type}` });
-  },
-
-  onRefreshRiskAlerts() {
-    if (this.data.riskAlertsLoading) return;
-    this.setData({ riskAlertsLoading: true });
-    this.fetchRiskAlerts();
-  },
-
+  // 🌟 首页摘要卡片「异常风控预警」角标数字：只需要总数，明细/筛选已搬去
+  // subpackages/admin/pages/finance-audit 自己独立维护
   async fetchRiskAlerts() {
     const storeId = this.data.currentStoreId;
-    if (!storeId) {
-      this.setData({ riskAlertsLoading: false });
-      return;
-    }
+    if (!storeId) return;
     try {
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const result = await callFunctionWithTimeout({
@@ -12366,24 +12076,12 @@ Page({
       });
       const res = result.result as any;
       if (res && res.success) {
-        const alerts = res.alerts || [];
-        const summary = res.summary || { voidCount: 0, missingReceiptCount: 0, balanceAnomalyCount: 0 };
-        const filterType = this.data.riskAlertsFilterType;
-        this.setData({
-          riskAlertsList: alerts,
-          riskAlertsFilteredList: this.computeFilteredRiskAlerts(alerts, filterType),
-          riskAlertsSummary: summary,
-          riskAlertsHasAnomaly: (summary.voidCount + summary.missingReceiptCount + summary.balanceAnomalyCount) > 0,
-          riskAlertsRangeLabel: this.buildRiskAlertsRangeLabel(res.scanRangeDays || 60),
-          riskAlertCount: alerts.length
-        });
+        this.setData({ riskAlertCount: (res.alerts || []).length });
       } else {
         console.warn('[fetchRiskAlerts] 云函数返回失败:', res);
       }
     } catch (err) {
       console.error('[fetchRiskAlerts] 异常:', err);
-    } finally {
-      this.setData({ riskAlertsLoading: false });
     }
   },
 

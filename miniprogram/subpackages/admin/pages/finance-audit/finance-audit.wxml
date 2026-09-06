@@ -1,0 +1,150 @@
+<!-- 🏛️（主包瘦身）本页从 pages/index/index.wxml 的两个财务专属弹窗
+     （finance-modal-mask：账本锁定 + 风控预警日志）搬迁而来，原弹窗内容/
+     交互/云函数调用逻辑原样保留，只是把"半屏弹窗"改成"独立分包页面"——
+     排查确认这两块没有海报生成/打卡回填/共用 onInput 分发器这类跨页面耦合，
+     是首页里唯一能安全剪切的一段。首页原有的"店长工作台/财务稽核台"摘要
+     卡片（待处理事项数量等）保留不动，只是点击入口从"展开本地弹窗"改成
+     "跳转本页" -->
+<view class="fa-page">
+  <navigation-bar
+    title="🔒 财务稽核台"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+
+  <view class="fa-store-bar-skeleton" wx:if="{{!roleReady}}"></view>
+
+  <block wx:elif="{{!hasAccess}}">
+    <view class="fa-denied-state" style="margin-top: {{contentTop}}px;">
+      <text class="fa-denied-icon">🔒</text>
+      <text class="fa-denied-title">无权限查看</text>
+      <text class="fa-denied-sub">仅财务、大家长与超级管理员可查看稽核封账与风控预警</text>
+    </view>
+  </block>
+
+  <block wx:elif="{{isNationalOverview}}">
+    <view class="fa-denied-state" style="margin-top: {{contentTop}}px;">
+      <text class="fa-denied-icon">🏪</text>
+      <text class="fa-denied-title">请先选择具体门店</text>
+      <text class="fa-denied-sub">全国总览视角下无法查看单店的稽核封账与风控预警，请回到首页切换到具体门店后再进入本页</text>
+    </view>
+  </block>
+
+  <scroll-view scroll-y class="fa-body-scroll" wx:else style="margin-top: {{contentTop}}px; height: calc(100vh - {{contentTop}}px);">
+    <view class="fa-store-bar">
+      <text class="fa-store-bar-name">📍 {{currentStoreName}}</text>
+    </view>
+
+    <!-- 🌟 财务专属功能区：稽核与封账（自定义起止日期区间批量锁定/解封已通过店长确认的账本记录） -->
+    <view class="fa-section-card" wx:if="{{isFinance || isSuperAdmin || isPatriarch}}">
+      <view class="fa-section-header">
+        <text class="fa-section-title">🔒 稽核与封账</text>
+      </view>
+
+      <text class="finance-modal-desc">选择要封账的起止日期区间，区间内所有已通过店长确认的记录将被批量锁定，锁定后店长无法再编辑或作废。</text>
+
+      <view class="finance-range-picker-row">
+        <picker mode="date" value="{{financeLockStartDate}}" bindchange="onFinanceLockStartDateChange">
+          <view class="finance-month-picker">
+            <text>{{financeLockStartDate || '开始日期'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+        <text class="finance-range-sep">至</text>
+        <picker mode="date" value="{{financeLockEndDate}}" bindchange="onFinanceLockEndDateChange">
+          <view class="finance-month-picker">
+            <text>{{financeLockEndDate || '结束日期'}}</text>
+            <text class="arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <view class="lock-status-tip">{{ lockStatusText }}</view>
+
+      <button
+        wx:if="{{!financeLockRangeLocked}}"
+        class="finance-modal-confirm-btn {{(financeLockInFlight || !financeLockHasApprovedRecords) ? 'btn-flat-disabled' : 'btn-danger'}}"
+        bindtap="onConfirmFinanceLock"
+        disabled="{{financeLockInFlight || !financeLockHasApprovedRecords}}"
+      >
+        {{financeLockInFlight ? '封账中...' : '确认封账'}}
+      </button>
+      <button
+        wx:elif="{{isPatriarch || isSuperAdmin}}"
+        class="finance-modal-confirm-btn btn-unlock"
+        bindtap="handleUnlockMonth"
+        disabled="{{financeUnlockInFlight}}"
+      >
+        {{financeUnlockInFlight ? '解封中...' : '解封 / 反封账'}}
+      </button>
+      <button
+        wx:else
+        class="finance-modal-confirm-btn btn-locked-disabled"
+        disabled="true"
+      >
+        该区间已封账
+      </button>
+    </view>
+
+    <!-- 🌟 财务专属功能区：风控预警日志 -->
+    <view class="fa-section-card" wx:if="{{isFinance || isSuperAdmin}}">
+      <view class="fa-section-header {{riskAlertsHasAnomaly ? 'is-danger' : 'is-safe'}}">
+        <text class="risk-modal-icon">{{riskAlertsHasAnomaly ? '⚠️' : '🛡️'}}</text>
+        <text class="fa-section-title">风控预警日志</text>
+      </view>
+
+      <text class="finance-modal-desc">红字冲销频次、小票缺失、余额异常突变——点击下方卡片可查看对应明细</text>
+
+      <view class="risk-range-row" bindtap="onRefreshRiskAlerts">
+        <text class="risk-range-label">{{riskAlertsRangeLabel || '统计区间加载中...'}}</text>
+        <text class="risk-range-refresh {{riskAlertsLoading ? 'is-spinning' : ''}}">⟳ 刷新</text>
+      </view>
+
+      <view class="risk-summary-row" wx:if="{{!riskAlertsLoading}}">
+        <view class="risk-summary-item {{riskAlertsSummary.voidCount > 0 ? 'is-danger' : 'is-safe'}} {{riskAlertsFilterType === 'void' ? 'is-active' : ''}}" data-type="void" bindtap="onRiskCardTap">
+          <text class="risk-summary-num">{{riskAlertsSummary.voidCount}}</text>
+          <text class="risk-summary-label">红字冲销</text>
+        </view>
+        <view class="risk-summary-item {{riskAlertsSummary.missingReceiptCount > 0 ? 'is-danger' : 'is-safe'}} {{riskAlertsFilterType === 'missing_receipt' ? 'is-active' : ''}}" data-type="missing_receipt" bindtap="onRiskCardTap">
+          <text class="risk-summary-num">{{riskAlertsSummary.missingReceiptCount}}</text>
+          <text class="risk-summary-label">小票缺失</text>
+        </view>
+        <view class="risk-summary-item {{riskAlertsSummary.balanceAnomalyCount > 0 ? 'is-danger' : 'is-safe'}} {{riskAlertsFilterType === 'balance' ? 'is-active' : ''}}" data-type="balance" bindtap="onRiskCardTap">
+          <text class="risk-summary-num">{{riskAlertsSummary.balanceAnomalyCount}}</text>
+          <text class="risk-summary-label">余额异常</text>
+        </view>
+      </view>
+
+      <view class="risk-filter-tip" wx:if="{{riskAlertsFilterType}}">
+        <text>已按该类型筛选，仅显示相关明细</text>
+        <view class="risk-filter-actions">
+          <text class="risk-filter-goto" wx:if="{{riskAlertsFilteredList.length > 0}}" bindtap="onGoToHistoryAnomalyDetail">查看账本明细 →</text>
+          <text class="risk-filter-clear" data-type="{{riskAlertsFilterType}}" bindtap="onRiskCardTap">清除筛选 ✕</text>
+        </view>
+      </view>
+
+      <view class="risk-loading" wx:if="{{riskAlertsLoading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="risk-alert-list-static" wx:if="{{!riskAlertsLoading}}">
+        <view class="risk-alert-item {{item.level}}" wx:for="{{riskAlertsFilteredList}}" wx:key="index">
+          <text class="risk-alert-date">{{item.dateString}}</text>
+          <text class="risk-alert-msg">{{item.message}}</text>
+        </view>
+        <view class="risk-alert-empty" wx:if="{{riskAlertsFilteredList.length === 0 && !riskAlertsFilterType}}">
+          <text>✅ 近期账本未发现异常信号</text>
+        </view>
+        <view class="risk-alert-empty" wx:if="{{riskAlertsFilteredList.length === 0 && riskAlertsFilterType}}">
+          <text>该类型暂无明细</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="fa-safe-area-spacer"></view>
+  </scroll-view>
+</view>

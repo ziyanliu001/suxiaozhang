@@ -30,7 +30,8 @@
         "pages/inventory-management/inventory-management",
         "pages/store-profile/store-profile",
         "pages/public-verify/index",
-        "pages/settlement-summary/settlement-summary"
+        "pages/settlement-summary/settlement-summary",
+        "pages/finance-audit/finance-audit"
       ]
     },
     {

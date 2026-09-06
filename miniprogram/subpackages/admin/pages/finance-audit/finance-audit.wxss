@@ -1,0 +1,285 @@
+page {
+  background: #F5F6F8;
+  height: 100%;
+}
+
+.fa-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.fa-store-bar-skeleton {
+  height: 88rpx;
+  margin: 24rpx;
+  border-radius: 16rpx;
+  background: #EDEFF2;
+}
+
+.fa-denied-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx 60rpx;
+  color: #94A3B8;
+}
+
+.fa-denied-icon {
+  font-size: 72rpx;
+  margin-bottom: 20rpx;
+}
+
+.fa-denied-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 12rpx;
+}
+
+.fa-denied-sub {
+  font-size: 26rpx;
+  color: #64748B;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.fa-body-scroll {
+  box-sizing: border-box;
+}
+
+.fa-store-bar {
+  padding: 20rpx 24rpx;
+  background: #FFF9DB;
+  border-bottom: 1rpx solid #FFE066;
+}
+
+.fa-store-bar-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #8C1D18;
+}
+
+.fa-section-card {
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  margin: 20rpx 24rpx 0;
+  box-sizing: border-box;
+}
+
+.fa-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+}
+
+.fa-section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #212529;
+}
+
+.risk-modal-icon {
+  font-size: 30rpx;
+}
+
+/* 以下样式从 pages/index/index.wxss 原样迁移（.finance-modal-mask/
+   .finance-modal-card 这两个"弹窗外壳"相关样式已不需要，本页是独立页面
+   不是弹窗；内容层样式原样保留，保证视觉与原弹窗一致） */
+
+.finance-modal-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #868E96;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.finance-range-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 28rpx;
+}
+
+.finance-month-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+  background: #F8F9FA;
+  border: 1rpx solid #E9ECEF;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  font-size: 28rpx;
+  color: #212529;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+
+.finance-month-picker .arrow {
+  font-size: 20rpx;
+  color: #ADB5BD;
+  flex-shrink: 0;
+}
+
+.finance-range-sep {
+  font-size: 26rpx;
+  color: #868E96;
+  flex-shrink: 0;
+}
+
+.lock-status-tip {
+  display: block;
+  font-size: 24rpx;
+  color: #4E5969;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.finance-modal-confirm-btn {
+  width: 100% !important;
+  height: 88rpx;
+  line-height: 88rpx;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: bold;
+  border-radius: 44rpx;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.finance-modal-confirm-btn::after {
+  border: none;
+}
+
+.finance-modal-confirm-btn.btn-danger {
+  background: linear-gradient(135deg, #C9302C 0%, #A32621 100%);
+}
+
+.finance-modal-confirm-btn.btn-unlock {
+  background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+}
+
+.finance-modal-confirm-btn.btn-flat-disabled,
+.finance-modal-confirm-btn.btn-locked-disabled {
+  background: #F2F3F5 !important;
+  color: #C9CDD4 !important;
+  box-shadow: none !important;
+}
+
+.risk-range-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.risk-range-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #4E5969;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.risk-range-refresh {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+  background: #F2F3F5;
+  color: #1D2129;
+  white-space: nowrap;
+}
+
+.risk-range-refresh.is-spinning {
+  color: #868E96;
+}
+
+.risk-summary-row {
+  display: flex;
+  justify-content: space-around;
+  background: #FAF8F5;
+  border-radius: 16rpx;
+  padding: 20rpx 0;
+  margin-bottom: 20rpx;
+}
+
+.risk-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.risk-summary-num {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #C62828;
+}
+
+.risk-summary-label {
+  font-size: 20rpx;
+  color: #868E96;
+}
+
+.risk-loading {
+  text-align: center;
+  padding: 40rpx 0;
+  font-size: 24rpx;
+  color: #868E96;
+}
+
+.risk-alert-list-static {
+  box-sizing: border-box;
+}
+
+.risk-alert-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  margin-bottom: 12rpx;
+  background: #FFF8E1;
+  border-left: 6rpx solid #FFA000;
+}
+
+.risk-alert-item.danger {
+  background: #FFEBEE;
+  border-left-color: #C62828;
+}
+
+.risk-alert-date {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #444444;
+}
+
+.risk-alert-msg {
+  font-size: 22rpx;
+  color: #666666;
+  line-height: 1.5;
+}
+
+.risk-alert-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  font-size: 24rpx;
+  color: #2E7D32;
+}
+
+.fa-safe-area-spacer {
+  height: calc(20rpx + constant(safe-area-inset-bottom));
+  height: calc(20rpx + env(safe-area-inset-bottom));
+}
