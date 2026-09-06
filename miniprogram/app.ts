@@ -110,11 +110,6 @@ App({
       });
     }
 
-    const logs = wx.getStorageSync('logs') || [];
-    logs.unshift(Date.now());
-    if (logs.length > 20) logs.length = 20;
-    wx.setStorageSync('logs', logs);
-
     // 登录预热延迟执行，不阻塞首屏渲染
     setTimeout(() => {
       this._delayedLoginInit();

@@ -11,9 +11,6 @@
   "keywords": [],
   "author": "",
   "license": "",
-  "dependencies": {
-    "@babel/runtime": "^7.24.0"
-  },
   "devDependencies": {
     "miniprogram-api-typings": "^2.8.3-1",
     "typescript": "^5.9.3"

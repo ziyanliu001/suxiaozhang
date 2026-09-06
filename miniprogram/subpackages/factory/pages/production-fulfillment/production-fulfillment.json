@@ -2,6 +2,6 @@
   "navigationStyle": "custom",
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "navigation-bar": "/components/navigation-bar/navigation-bar"
+    "navigation-bar": "/subpackages/factory/components/navigation-bar/navigation-bar"
   }
 }

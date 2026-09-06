@@ -3,7 +3,6 @@
     "pages/index/index",
     "pages/notice/notice",
     "pages/profile/profile",
-    "pages/logs/logs",
     "pages/help/help",
     "pages/draft-box/draft-box",
     "pages/settings/settings"

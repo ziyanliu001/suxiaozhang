@@ -2,6 +2,6 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "privacy-popup": "/components/privacy-popup/privacy-popup",
-    "navigation-bar": "/components/navigation-bar/navigation-bar"
+    "navigation-bar": "/subpackages/admin/components/navigation-bar/navigation-bar"
   }
 }

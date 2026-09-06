@@ -1,4 +1,11 @@
-import { getSafeSystemInfo } from '../../utils/util'
+// 🐛（2026-09-06 主包瘦身）本组件原在主包 components/ 下，唯一的主包页面
+// 消费者 pages/logs/logs（微信小程序云开发默认模板自带的"启动日志"页，
+// 全仓库零真实导航入口，纯脚手架残留）已确认删除，本组件因此变成"物理
+// 位置在主包、实际只服务两个分包"——被 subpackages/admin 与
+// subpackages/factory 两个分包各自的多个页面引用。改为在两个分包里各放
+// 一份拷贝（纯 UI 组件，无跨分包共享状态，不存在数据不一致风险），彻底
+// 移出主包。两份拷贝内容需保持同步维护
+import { getSafeSystemInfo } from '../../../../utils/util'
 
 Component({
   options: {
