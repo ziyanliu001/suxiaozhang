@@ -17,3 +17,7 @@ miniprogram/miniprogram_npm/
 
 # scripts/build-open-core.js 的构建产物，可随时重新生成，不进入版本库
 dist/
+
+# scripts/seedActivationCodes.ts 生成的真实激活码 JSON——等价于可直接兑换出
+# 付费套餐权益的凭证，绝不能进入版本库（即便是私有仓库）
+scripts/output/
