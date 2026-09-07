@@ -78,6 +78,10 @@ export interface SealStampOptions {
   outerLineWidth?: number;
   innerLineWidth?: number;
   fontFamily?: string;
+  // 🆕（2026-09-07 今日善行日签 UI 重构）仿朱砂印泥质感：描边与文字改用径向
+  // 渐变（圆心颜色更浓、边缘略淡）模拟手工蘸泥盖印时的深浅不均，并在圆周内侧
+  // 缀几点极淡的印泥颗粒斑点——默认 false，不影响本文件既有的荣誉证书调用点
+  inkTexture?: boolean;
 }
 
 // 🌸 修心积善打卡·水墨日签复用同一个印章原语：新增可选 lines 参数（默认值
@@ -102,13 +106,27 @@ export function drawSealStamp(
   const outerLineWidth = options?.outerLineWidth ?? 2;
   const innerLineWidth = options?.innerLineWidth ?? 1;
   const fontFamily = options?.fontFamily ?? 'sans-serif';
+  const inkTexture = options?.inkTexture ?? false;
 
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(centerX, centerY);
   ctx.rotate((-10 * Math.PI) / 180);
 
-  ctx.strokeStyle = color;
+  // 仿印泥渐变：圆心处颜色更深（模拟盖印时中心受力更足、渗墨更浓），往外沿
+  // 渐次转淡至传入的 color 本身——只在 inkTexture 打开时才建，避免给不需要
+  // 这个效果的荣誉证书印章额外增加渐变计算成本
+  const inkGradient = inkTexture
+    ? (() => {
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+      g.addColorStop(0, '#7A1508');
+      g.addColorStop(0.55, color);
+      g.addColorStop(1, color);
+      return g;
+    })()
+    : null;
+
+  ctx.strokeStyle = inkGradient || color;
   ctx.lineWidth = outerLineWidth;
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -118,11 +136,29 @@ export function drawSealStamp(
   ctx.arc(0, 0, radius - 5, 0, Math.PI * 2);
   ctx.stroke();
 
+  if (inkTexture) {
+    // 印泥颗粒斑点：固定相对位置（不用 Math.random()，保证同一次打卡多次
+    // 预览/重新生成海报时印章质感一致，不会忽浓忽淡），在双圈之间缀几点
+    // 极淡的浅色斑点，模拟印泥本身颗粒不均匀的手工感
+    const speckOffsets: Array<[number, number, number]> = [
+      [0.55, 0.15, 1.6], [-0.4, 0.62, 1.2], [0.32, -0.68, 1.4], [-0.62, -0.28, 1.1]
+    ];
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.35;
+    ctx.fillStyle = '#F3D9C8';
+    speckOffsets.forEach(([dx, dy, r]) => {
+      ctx.beginPath();
+      ctx.arc(dx * (radius - 5) * 0.7, dy * (radius - 5) * 0.7, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
   // 内圈直径 (radius-5)*2 要装下 4 个汉字一行，系数按"字宽约等于字号"估算并
   // 留出安全余量（0.9 折）反推：fontSize ≈ 内圈直径 * 0.9 / 4 ≈ radius * 0.32
   const sealFontSize = Math.max(6, Math.round(radius * 0.32));
   const sealLineOffset = radius * 0.2;
-  ctx.fillStyle = color;
+  ctx.fillStyle = inkGradient || color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `bold ${sealFontSize}px ${fontFamily}`;

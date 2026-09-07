@@ -1359,6 +1359,98 @@ const MERIT_CANVAS_WIDTH = 375;
 const MERIT_CANVAS_HEIGHT = 500;
 const MERIT_CARD_RADIUS = 24;
 const MERIT_SEAL_RADIUS = 36;
+// 🎨（2026-09-07 今日善行日签 UI 重构）宣纸温润底色：与
+// components/volunteer-merit-dialog 的弹窗面板背景改用同一组色值，保证
+// "选标签的弹窗"与"最终导出的海报"视觉调性完全统一，不是弹窗一套配色、
+// 海报又是另一套配色各自为政
+const MERIT_BG_TOP = '#FDFBF7';
+const MERIT_BG_BOTTOM = '#FAF7F2';
+// 典雅内边框：仿宋代理学典籍/善书页面边栏的暗金描边色，比印泥红更沉稳，
+// 用于在纸面内侧勾一圈"书页边栏"，而不是让画面四周空落落没有边界感
+const MERIT_BORDER_COLOR = '#B8965A';
+const MERIT_QUOTE_FONT_STACK = '"Songti SC", "SimSun", "Noto Serif SC", serif';
+
+// 🎨（2026-09-07 今日善行日签 UI 重构）典雅内边框：仿宋代理学典籍/善书刻本
+// 页面常见的"双线边栏 + 四角饰角"版式，双线之间留出细缝，比单线描边更有
+// 古籍质感；四角饰角用简化的直角折线（不引入复杂纹样，避免在 36px 见方的
+// 小角落里画得过于拥挤反而显脏）
+function drawEleganceBookBorder(ctx: any, width: number, height: number, radius: number): void {
+  const outerInset = 14;
+  const innerInset = outerInset + 5;
+  const cornerLen = 16;
+
+  ctx.save();
+  ctx.strokeStyle = MERIT_BORDER_COLOR;
+  ctx.globalAlpha = 0.55;
+
+  ctx.lineWidth = 1.5;
+  drawRoundedRectPath(ctx, outerInset, outerInset, width - outerInset * 2, height - outerInset * 2, Math.max(radius - outerInset, 4));
+  ctx.stroke();
+
+  ctx.lineWidth = 1;
+  drawRoundedRectPath(ctx, innerInset, innerInset, width - innerInset * 2, height - innerInset * 2, Math.max(radius - innerInset, 4));
+  ctx.stroke();
+
+  // 四角饰角：在双线边框的四个角外侧各画一对短直角折线，呼应古籍装帧的
+  // 转角包边，不用真的画复杂回纹图案
+  ctx.globalAlpha = 0.75;
+  ctx.lineWidth = 2;
+  const corners: Array<[number, number, number, number]> = [
+    [outerInset, outerInset, 1, 1],
+    [width - outerInset, outerInset, -1, 1],
+    [outerInset, height - outerInset, 1, -1],
+    [width - outerInset, height - outerInset, -1, -1]
+  ];
+  corners.forEach(([x, y, dx, dy]) => {
+    ctx.beginPath();
+    ctx.moveTo(x + dx * cornerLen, y);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x, y + dy * cornerLen);
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+// 🎨（2026-09-07 今日善行日签 UI 重构）金句卷轴衬底：横向对联纸条 + 两端
+// 轴头小圆点，模拟一条挂起来的短卷轴/对联，衬在《了凡四训》引句下方，
+// 比直接把字浮在宣纸底色上更有"这是一句被郑重题写下来的话"的仪式感
+function drawQuoteScrollBackdrop(ctx: any, centerX: number, centerY: number, scrollWidth: number, scrollHeight: number): void {
+  const left = centerX - scrollWidth / 2;
+  const top = centerY - scrollHeight / 2;
+
+  ctx.save();
+  // 纸条本体：比整体宣纸底色略深一阶，让轮廓在同色系里仍能被看出来
+  ctx.fillStyle = '#F1E6C8';
+  ctx.strokeStyle = MERIT_BORDER_COLOR;
+  ctx.globalAlpha = 0.9;
+  drawRoundedRectPath(ctx, left, top, scrollWidth, scrollHeight, 6);
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.6;
+  ctx.stroke();
+
+  // 轴头：两端各一个小圆点 + 细线延伸出纸条之外，模拟卷轴轴身探出的两端
+  const axleY = centerY;
+  const axleR = 5;
+  [left, left + scrollWidth].forEach((axleX, i) => {
+    const dir = i === 0 ? -1 : 1;
+    ctx.strokeStyle = MERIT_BORDER_COLOR;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(axleX, axleY);
+    ctx.lineTo(axleX + dir * 10, axleY);
+    ctx.stroke();
+    ctx.fillStyle = MERIT_BORDER_COLOR;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.arc(axleX + dir * 10, axleY, axleR, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
 
 // 🌸 修心积善打卡·水墨日签：与 drawVolunteerHonorCard 同一套"query 画布节点 →
 // getContext('2d') → 按 dpr 缩放 → 圆角裁剪 → 逐段绘制 → canvasToTempFilePath
@@ -1389,12 +1481,17 @@ export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPoster
           drawRoundedRectPath(ctx, 0, 0, width, height, MERIT_CARD_RADIUS);
           ctx.clip();
 
-          // 宣纸米黄底，与 components/volunteer-merit-dialog 同一套配色语言
+          // 宣纸温润底色：与 components/volunteer-merit-dialog 弹窗面板同一组
+          // 色值（#FDFBF7 → #FAF7F2），保证"选标签的弹窗"与"最终导出的海报"
+          // 视觉调性完全统一
           const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-          bgGradient.addColorStop(0, '#FAF6EE');
-          bgGradient.addColorStop(1, '#F3ECDD');
+          bgGradient.addColorStop(0, MERIT_BG_TOP);
+          bgGradient.addColorStop(1, MERIT_BG_BOTTOM);
           ctx.fillStyle = bgGradient;
           ctx.fillRect(0, 0, width, height);
+
+          // 典雅内边框：仿宋代理学典籍/善书刻本页面的双线边栏 + 四角饰角
+          drawEleganceBookBorder(ctx, width, height, MERIT_CARD_RADIUS);
 
           // Header：#3D2B1B 是通篇正文的"墨色"主色，比原来的 #5A4632 更深，
           // 与次要文字色 #8A6D4C 拉开对比度，避免整张海报显得灰蒙蒙
@@ -1411,13 +1508,17 @@ export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPoster
           // 善字印章：复用 drawVolunteerCertificate.ts 的印章原语，单行文字。
           // 朱砂红 #BD3124 + 双圈加粗线宽 + 更高不透明度，呈现更真实的红泥拓印感；
           // fontFamily 带 serif 兜底，设备没有楷体字体时按 CSS 字体匹配规则退化到
-          // 通用 serif（仍比全篇的 sans-serif 更有传统质感），不会缺字/报错
+          // 通用 serif（仍比全篇的 sans-serif 更有传统质感），不会缺字/报错。
+          // 🆕（2026-09-07）inkTexture:true 打开仿朱砂印泥渐变 + 颗粒斑点，比纯
+          // 色平涂更接近真实印泥手工蘸盖的深浅不均质感，正文"善"字仍保持朱红
+          // （正阳/阳文），不改成负片白字
           drawSealStamp(ctx, width / 2, 140, MERIT_SEAL_RADIUS, ['善'], {
             color: '#BD3124',
             alpha: 0.92,
             outerLineWidth: 3,
             innerLineWidth: 1.5,
-            fontFamily: '"STKaiti", "Kaiti SC", "KaiTi", serif'
+            fontFamily: '"STKaiti", "Kaiti SC", "KaiTi", serif',
+            inkTexture: true
           });
 
           // 今日微善标签：逐行居中列出，未选择时留白（不画"暂无"这类占位文案，
@@ -1444,10 +1545,16 @@ export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPoster
           ctx.font = '13px sans-serif';
           ctx.fillText('日累计护持', width / 2, daysY + 26);
 
-          // 底部文化短句
-          ctx.fillStyle = '#8A6D4C';
-          ctx.font = '14px sans-serif';
-          ctx.fillText('命由我作，福自己求 —— 《了凡四训》', width / 2, height - 40);
+          // 底部文化短句：卷轴/对联衬底 + 衬线书法字体栈，比裸文字浮在宣纸上
+          // 更有"郑重题写"的仪式感；字体栈优先取 Songti SC/SimSun/Noto Serif SC，
+          // 设备均不具备时按 CSS 字体匹配规则退化到通用 serif，不会缺字
+          const quoteText = '命由我作，福自己求 —— 《了凡四训》';
+          const quoteCenterY = height - 40;
+          drawQuoteScrollBackdrop(ctx, width / 2, quoteCenterY, width - 64, 34);
+          ctx.fillStyle = '#6B4A2B';
+          ctx.font = `14px ${MERIT_QUOTE_FONT_STACK}`;
+          ctx.textAlign = 'center';
+          ctx.fillText(quoteText, width / 2, quoteCenterY + 5);
 
           ctx.restore(); // 对应开头的圆角裁剪 save/clip
 

@@ -25,7 +25,10 @@
   position: relative;
   z-index: 999999 !important;
   width: 100%;
-  background: #FAF6EE;
+  /* 🎨（2026-09-07 今日善行日签 UI 重构）宣纸温润底色：与
+     utils/posterGenerator.ts 的 drawMeritTagPoster 背景渐变改用同一组色值
+     （#FDFBF7 → #FAF7F2），弹窗与最终导出的海报视觉调性保持完全统一 */
+  background: linear-gradient(180deg, #FDFBF7 0%, #FAF7F2 100%);
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
   padding: 16rpx 28rpx calc(28rpx + env(safe-area-inset-bottom)) !important;
@@ -36,6 +39,21 @@
 
 .vmd-backdrop.show .vmd-panel {
   transform: translateY(0);
+}
+
+/* 🎨（2026-09-07）典雅内边框：呼应海报 drawEleganceBookBorder 的双线边栏
+   质感，用同一个暗金描边色（#B8965A）在面板内侧勾一圈细边，纯装饰、不吃
+   点击事件，也不设背景色，不会挡住下方任何按钮/文字 */
+.vmd-panel::before {
+  content: '';
+  position: absolute;
+  top: 10rpx;
+  left: 14rpx;
+  right: 14rpx;
+  bottom: 10rpx;
+  border: 1rpx solid rgba(184, 150, 90, 0.4);
+  border-radius: 20rpx;
+  pointer-events: none;
 }
 
 .vmd-drag-handle {
@@ -57,12 +75,15 @@
 .vmd-title {
   font-size: 32rpx;
   font-weight: bold;
-  color: #5A4632;
+  /* 🎨（2026-09-07）与海报正文墨色 #3D2B1B 对齐，此前 #5A4632 是弹窗独有的
+     一份相近但不完全一致的墨色，两处统一成同一个色值 */
+  color: #3D2B1B;
 }
 
 .vmd-subtitle {
   font-size: 22rpx;
-  color: #A08A6A;
+  /* 🎨（2026-09-07）与海报辅助文字色 #8A6D4C 对齐，理由同上 */
+  color: #8A6D4C;
 }
 
 .vmd-tag-grid {
@@ -85,7 +106,7 @@
 }
 
 .vmd-tag-chip.active {
-  border-color: #B8342A;
+  border-color: #BD3124;
   background: #FDF1EE;
 }
 
@@ -112,7 +133,7 @@
   top: 10rpx;
   right: 14rpx;
   font-size: 22rpx;
-  color: #B8342A;
+  color: #BD3124;
   font-weight: bold;
 }
 
@@ -127,9 +148,9 @@
 .vmd-submitted-chip {
   padding: 12rpx 24rpx;
   background: #FDF1EE;
-  border: 2rpx solid #B8342A;
+  border: 2rpx solid #BD3124;
   border-radius: 999rpx;
-  color: #B8342A;
+  color: #BD3124;
   font-size: 24rpx;
   font-weight: 500;
 }
@@ -162,13 +183,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #B8342A 0%, #D81E18 100%);
+  /* 🎨（2026-09-07）渐变终止色改用 #7A1508——与
+     utils/drawVolunteerCertificate.ts 的 drawSealStamp inkTexture 渐变圆心色
+     完全一致，让"按钮的红"与"印章的红"是同一份仿朱砂印泥色系，不是各自
+     选一个"看起来差不多的红" */
+  background: linear-gradient(135deg, #BD3124 0%, #7A1508 100%);
   color: #FFFFFF;
   font-size: 28rpx;
   font-weight: bold;
   border-radius: 44rpx;
   border: none;
-  box-shadow: 0 6rpx 16rpx rgba(184, 52, 42, 0.30);
+  box-shadow: 0 6rpx 16rpx rgba(189, 49, 36, 0.30);
 }
 
 .vmd-btn-submit::after {
