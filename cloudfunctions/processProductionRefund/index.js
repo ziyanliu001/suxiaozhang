@@ -129,6 +129,19 @@ exports.main = async (event, context) => {
     }
   }).catch((err) => console.error('[processProductionRefund] 释放产能失败（需人工核对）:', err));
 
+  // 3.5（护城河二）若该订单是通过拼团批次成交的，退款时同步释放已认购的
+  // 拼团份额——否则拼团进度条会一直算上这笔已经退掉的订单，显示虚高的
+  // "已认购 N 件"，也可能因此错误维持一个本不该解锁的阶梯价
+  if (order.groupBuyBatchId) {
+    await cloud.callFunction({
+      name: 'liveFactoryCore',
+      data: {
+        action: 'releaseGroupBuyProgress', internalToken,
+        tenantId, productId: order.productId, batchDate: order.batchDate, quantity: order.quantity
+      }
+    }).catch((err) => console.error('[processProductionRefund] 释放拼团份额失败（需人工核对）:', err));
+  }
+
   await db.collection('production_orders').doc(orderId).update({
     data: {
       orderStatus: 'refunded', refundedAt: db.serverDate(), refundReason: reason, refundedBy: OPENID, refundStatus: refund.status,

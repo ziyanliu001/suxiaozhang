@@ -16,6 +16,7 @@ const db = cloud.database();
 
 const { assignProductionBatch, makeDbReserveFn, makeDbReleaseFn } = require('./lib/scheduling');
 const { buildSettlementSnapshot, decideRefundReversal } = require('./lib/settlement');
+const { resolveTierPrice } = require('./lib/groupBuyTier');
 
 function requireInternalCaller(event) {
   const expected = process.env.LIVE_FACTORY_INTERNAL_TOKEN || '';
@@ -149,6 +150,69 @@ async function handleReverseSettlement(event) {
   }
 }
 
+// ── action: updateGroupBuyProgress（护城河二：拼团累计认购量原子自增 + 阶梯定价）
+// 🛡️ 命中价格与占用同一次 CAS 原子完成：先原子自增 committedQuantity，再用
+// 自增后的最新总量算出命中的阶梯——这样即使多个买家近乎同时下单，每个人
+// 拿到的价格都是"轮到自己被计入总量那一刻"真实生效的阶梯，不会有人读到
+// 一个马上被别人超过的旧总量算出错误的价格。
+async function handleUpdateGroupBuyProgress(event) {
+  const { tenantId, productId, batchDate, quantity, basePrice, dailyCapacityLimit } = event;
+  if (!tenantId || !productId || !batchDate || !(quantity > 0) || !(basePrice > 0)) {
+    return { success: false, error: '参数缺失: tenantId/productId/batchDate/quantity/basePrice' };
+  }
+
+  const batchRes = await db.collection('group_buy_batches').where({ tenantId, productId, batchDate }).limit(1).get();
+  const batch = (batchRes.data && batchRes.data[0]) || null;
+  if (!batch) return { success: false, error: '该批次不存在拼团活动' };
+  if (batch.status !== 'collecting') return { success: false, error: '该拼团已截止或已关闭，无法加入' };
+  if (batch.deadlineAt && Date.now() >= new Date(batch.deadlineAt).getTime()) {
+    return { success: false, error: '该拼团已截止，无法加入' };
+  }
+
+  const _ = db.command;
+  const claimRes = await db.collection('group_buy_batches').where({
+    _id: batch._id, status: 'collecting'
+  }).update({ data: { committedQuantity: _.inc(quantity) } });
+  if (!claimRes.stats || claimRes.stats.updated !== 1) {
+    return { success: false, error: '拼团状态刚被并发变更，请重试' };
+  }
+
+  const freshRes = await db.collection('group_buy_batches').doc(batch._id).get();
+  const fresh = freshRes.data;
+  const { unitPrice, appliedTierLevel } = resolveTierPrice(fresh.tierThresholds, fresh.committedQuantity, basePrice);
+
+  // 认购量达到单日产能上限时自动锁定，不再接受新的拼团加入（产能本身仍由
+  // production_capacity_counters 的 CAS 独立把关，这里只是让拼团批次自己的
+  // 状态及时反映"已经订满"，避免继续展示"进行中"误导买家）
+  if (Number.isFinite(dailyCapacityLimit) && fresh.committedQuantity >= dailyCapacityLimit) {
+    await db.collection('group_buy_batches').where({ _id: batch._id, status: 'collecting' })
+      .update({ data: { status: 'locked' } }).catch((err) => console.error('[liveFactoryCore] 拼团批次自动锁定失败（不影响本次下单）:', batch._id, err));
+  }
+
+  return { success: true, unitPrice, appliedTierLevel, committedQuantity: fresh.committedQuantity, groupBuyBatchId: batch._id };
+}
+
+// ── action: releaseGroupBuyProgress（退款时释放已认购的拼团份额）───────────
+async function handleReleaseGroupBuyProgress(event) {
+  const { tenantId, productId, batchDate, quantity } = event;
+  if (!tenantId || !productId || !batchDate || !(quantity > 0)) {
+    return { success: false, error: '参数缺失: tenantId/productId/batchDate/quantity' };
+  }
+  const batchRes = await db.collection('group_buy_batches').where({ tenantId, productId, batchDate }).limit(1).get().catch(() => ({ data: [] }));
+  const batch = (batchRes.data && batchRes.data[0]) || null;
+  if (!batch) return { success: true, noop: true }; // 批次已不存在（如被删除），无需释放
+
+  const _ = db.command;
+  // 🐛 与产能释放同一处理原则：不会减到负数。批次若因产能满而被自动 'locked'，
+  // 这里刻意不自动重新打开成 'collecting'——重新开放涉及"要不要让新买家继续
+  // 用这个已经流转过退款的批次"的产品判断，不是退款流程该顺手替商家做的
+  // 决定，需要商家自己在管理端手动处理，避免退款这个动作产生意料之外的副作用
+  await db.collection('group_buy_batches').where({
+    _id: batch._id, committedQuantity: _.gte(quantity)
+  }).update({ data: { committedQuantity: _.inc(-quantity) } });
+  return { success: true };
+}
+
 exports.main = async (event, context) => {
   if (!requireInternalCaller(event)) {
     return { success: false, error: '无权限：liveFactoryCore 仅限内部业务云函数调用' };
@@ -158,6 +222,8 @@ exports.main = async (event, context) => {
     case 'releaseBatchCapacity': return handleReleaseBatchCapacity(event);
     case 'buildSettlement': return handleBuildSettlement(event);
     case 'reverseSettlement': return handleReverseSettlement(event);
+    case 'updateGroupBuyProgress': return handleUpdateGroupBuyProgress(event);
+    case 'releaseGroupBuyProgress': return handleReleaseGroupBuyProgress(event);
     default: return { success: false, error: `未知 action: ${event.action}` };
   }
 };

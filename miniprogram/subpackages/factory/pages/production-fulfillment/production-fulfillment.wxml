@@ -192,7 +192,15 @@
             <text class="pf-chip pf-chip-{{chip.capacityClass}}" wx:for="{{batch.chips}}" wx:for-item="chip" wx:key="productId">
               {{chip.productName}} {{chip.quantity}}件{{chip.capacityLabel ? '（产能 ' + chip.capacityLabel + (chip.capacityStatusLabel ? ' · ' + chip.capacityStatusLabel : '') + '）' : ''}}
             </text>
+            <!-- 🏛️（护城河二 M3）拼团进度标签，与产能徽标并列独立展示 -->
+            <text class="pf-chip pf-chip-groupbuy" wx:for="{{batch.chips}}" wx:for-item="chip" wx:key="productId" wx:if="{{chip.groupBuyLabel}}">
+              {{chip.groupBuyLabel}}
+            </text>
           </view>
+          <!-- 上面两个 wx:for 共用同一份 batch.chips 数组：第一个渲染产能徽标，
+               第二个（带 wx:if 过滤）只渲染有拼团活动的 SKU 的拼团徽标，两者
+               是并列的独立标签行，不是同一个 chip 的两个字段拼接在一起——拼团
+               标签比产能标签更醒目（橙底），单独一行更容易被工坊主注意到 -->
           <text class="pf-batch-rollover-hint" wx:if="{{batch.capacityClass === 'full'}}">⚠️ 本批次产能已满，新下单将自动顺延至更晚批次</text>
         </view>
 

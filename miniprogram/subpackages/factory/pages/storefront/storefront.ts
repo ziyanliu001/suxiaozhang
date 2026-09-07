@@ -12,10 +12,42 @@ import { payForOrder } from '../../../../utils/wxPayCore';
 import { requestShippingNoticeSubscription } from '../../../../utils/subscribeMessage';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 
+// 🏛️（护城河二）拼团阶梯——与 liveFactoryCore/lib/groupBuyTier.js 同一份
+// 命中规则，这里只做"预览"用途（进度条/文案），不是最终成交价的权威来源；
+// 真正的价格由 createProductionOrder → liveFactoryCore.updateGroupBuyProgress
+// 在下单那一刻原子算出，本页展示的只是"如果现在下单大概率是这个价"的预估
+interface GroupBuyTier {
+  minQuantity: number;
+  unitPriceOverride: number;
+}
+
+interface GroupBuyBatch {
+  batchId: string;
+  tierThresholds: GroupBuyTier[];
+  committedQuantity: number;
+  deadlineAt: string | null;
+}
+
 interface CalendarEntry {
   batchDate: string;
   remaining: number;
   soldOut: boolean;
+  groupBuyBatch: GroupBuyBatch | null;
+}
+
+function resolveTierPreview(tiers: GroupBuyTier[], projectedTotal: number, basePriceCents: number) {
+  const sorted = (tiers || []).slice().sort((a, b) => a.minQuantity - b.minQuantity);
+  let applied: GroupBuyTier | null = null;
+  for (const t of sorted) {
+    if (projectedTotal >= t.minQuantity) applied = t;
+    else break;
+  }
+  const nextTier = sorted.find((t) => t.minQuantity > projectedTotal) || null;
+  return {
+    unitPrice: applied ? applied.unitPriceOverride : basePriceCents,
+    appliedTierLevel: applied ? applied.minQuantity : 0,
+    nextTier
+  };
 }
 
 interface OtherProduct {
@@ -39,12 +71,22 @@ Page({
     loading: true,
     loadError: '',
 
-    product: null as { name: string; priceYuan: string; dailyCapacityLimit: number; leadTimeDays: number; description: string } | null,
+    product: null as { name: string; priceYuan: string; priceCents: number; dailyCapacityLimit: number; leadTimeDays: number; description: string } | null,
     calendar: [] as CalendarEntry[],
     // 🎯 买家在预售日历上选中的具体批次日：留空 = 沿用原来的"自动找最早
     // 可用日"行为（向后兼容，选期是可选的轻量交互，不是强制流程）
     selectedBatchDate: '',
     quantity: 1,
+
+    // 🏛️（护城河二）拼团预览：selectedBatchDate 命中的批次信息 + 按当前
+    // quantity 预估的成交价文案，随 onSelectBatchDate/onIncreaseQty/
+    // onDecreaseQty 联动刷新
+    groupBuyPreview: null as {
+      unitPriceYuan: string;
+      appliedTierLevel: number;
+      committedQuantity: number;
+      nextTierHint: string;
+    } | null,
 
     otherProducts: [] as OtherProduct[],
 
@@ -118,6 +160,7 @@ Page({
         product: {
           name: p.name,
           priceYuan: ((p.price || 0) / 100).toFixed(2),
+          priceCents: p.price || 0,
           dailyCapacityLimit: p.dailyCapacityLimit,
           leadTimeDays: p.leadTimeDays,
           description: p.description || ''
@@ -127,6 +170,7 @@ Page({
       const calendarResult = calendarRes.result as any;
       if (calendarResult && calendarResult.success) {
         this.setData({ calendar: calendarResult.calendar || [] });
+        this.updateGroupBuyPreview();
       }
 
       this.loadOtherProducts();
@@ -173,15 +217,50 @@ Page({
     const entry = this.data.calendar.find((c) => c.batchDate === date);
     if (!entry || entry.soldOut) return;
     this.setData({ selectedBatchDate: this.data.selectedBatchDate === date ? '' : date });
+    this.updateGroupBuyPreview();
   },
 
   onDecreaseQty() {
-    if (this.data.quantity > 1) this.setData({ quantity: this.data.quantity - 1 });
+    if (this.data.quantity > 1) {
+      this.setData({ quantity: this.data.quantity - 1 });
+      this.updateGroupBuyPreview();
+    }
   },
 
   onIncreaseQty() {
     const max = (this.data.product && this.data.product.dailyCapacityLimit) || 999;
-    if (this.data.quantity < max) this.setData({ quantity: this.data.quantity + 1 });
+    if (this.data.quantity < max) {
+      this.setData({ quantity: this.data.quantity + 1 });
+      this.updateGroupBuyPreview();
+    }
+  },
+
+  // 🏛️（护城河二）纯展示层预估：selectedBatchDate 命中的批次若挂了拼团活动，
+  // 按"当前已认购量 + 本次下单量"预估会落在哪一档——只是给买家一个大致
+  // 参考，真正生效的价格在下单瞬间由服务端 CAS 原子算出（见
+  // createProductionOrder 的 groupBuyBatchId 接线），两者理论上一致，但如果
+  // 下单瞬间又有别的买家抢先推高了总量，实际成交价可能比这里预估的更优惠
+  // （不会更差——阶梯只会随总量增加变得更便宜）
+  updateGroupBuyPreview() {
+    const entry = this.data.calendar.find((c) => c.batchDate === this.data.selectedBatchDate);
+    const batch = entry && entry.groupBuyBatch;
+    if (!batch || !this.data.product) {
+      this.setData({ groupBuyPreview: null });
+      return;
+    }
+    const projectedTotal = batch.committedQuantity + this.data.quantity;
+    const { unitPrice, appliedTierLevel, nextTier } = resolveTierPreview(batch.tierThresholds, projectedTotal, this.data.product.priceCents);
+    const nextTierHint = nextTier
+      ? `再拼 ${nextTier.minQuantity - projectedTotal} 份可解锁 ¥${(nextTier.unitPriceOverride / 100).toFixed(2)}/份`
+      : '已解锁最低价';
+    this.setData({
+      groupBuyPreview: {
+        unitPriceYuan: (unitPrice / 100).toFixed(2),
+        appliedTierLevel,
+        committedQuantity: batch.committedQuantity,
+        nextTierHint
+      }
+    });
   },
 
   // 🐛 没有直接用 createOrderAndPay 这个一站式封装：它内部下单成功后只往外
@@ -196,6 +275,9 @@ Page({
     this.setData({ placing: true });
     wx.showLoading({ title: '正在生成订单...', mask: true });
 
+    const selectedEntry = this.data.calendar.find((c) => c.batchDate === this.data.selectedBatchDate);
+    const groupBuyBatchId = (selectedEntry && selectedEntry.groupBuyBatch && selectedEntry.groupBuyBatch.batchId) || '';
+
     let orderResult: any;
     try {
       const res = await callFunctionWithTimeout({
@@ -205,7 +287,8 @@ Page({
           productId: this.data.productId,
           quantity: this.data.quantity,
           promoterOpenId: this.data.effectivePromoterOpenId,
-          preferredDate: this.data.selectedBatchDate
+          preferredDate: this.data.selectedBatchDate,
+          groupBuyBatchId
         }
       });
       orderResult = res.result;
@@ -231,18 +314,19 @@ Page({
       // 手势直接触发的调用链里发起，紧跟在支付成功之后是最自然的时机），
       // 授权与否都会 resolve，不影响后面成功弹窗正常展示
       await requestShippingNoticeSubscription();
-      this.showOrderSuccessModal(orderResult.batchDate, orderResult.estimatedShippingDate);
-      this.setData({ selectedBatchDate: '' }); // 下单完成，清空选期，避免下一笔订单误用旧选择
+      this.showOrderSuccessModal(orderResult.batchDate, orderResult.estimatedShippingDate, orderResult.appliedTierLevel > 0 ? orderResult.unitPrice : 0);
+      this.setData({ selectedBatchDate: '', groupBuyPreview: null }); // 下单完成，清空选期，避免下一笔订单误用旧选择
       this.loadAll(); // 刷新预售日历余量
     } else if (!outcome.cancelled) {
       wx.showToast({ title: outcome.message, icon: 'none' });
     }
   },
 
-  showOrderSuccessModal(batchDate: string, estimatedShippingDate: string) {
+  showOrderSuccessModal(batchDate: string, estimatedShippingDate: string, groupBuyUnitPriceCents: number) {
+    const tierNote = groupBuyUnitPriceCents > 0 ? `本次以拼团价 ¥${(groupBuyUnitPriceCents / 100).toFixed(2)}/份成交，` : '';
     wx.showModal({
       title: '下单成功',
-      content: `已按现有产能排入 ${batchDate} 批次制作，预计 ${estimatedShippingDate} 发货，请留意收货信息。`,
+      content: `${tierNote}已按现有产能排入 ${batchDate} 批次制作，预计 ${estimatedShippingDate} 发货，请留意收货信息。`,
       showCancel: false,
       confirmText: '知道了',
       confirmColor: '#8C1D18'

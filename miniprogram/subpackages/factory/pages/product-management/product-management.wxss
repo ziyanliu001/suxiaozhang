@@ -291,3 +291,153 @@
   line-height: 68rpx;
   border-radius: 10rpx;
 }
+
+.pm-groupbuy-btn {
+  flex: 1;
+  background: #FFF3E0;
+  color: #E8770F;
+  font-size: 26rpx;
+  line-height: 68rpx;
+  border-radius: 10rpx;
+}
+
+/* 🏛️（护城河二 M3）拼团设置弹窗——半屏卡片，同 settlement-summary.wxss 的
+   .ss-pledge-modal-* 视觉语言（浅底卡片 + 主操作按钮 + 次要取消按钮） */
+.pm-groupbuy-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+}
+
+.pm-groupbuy-modal-card {
+  width: 100%;
+  max-height: 88vh;
+  background: #FFFFFF;
+  border-top-left-radius: 24rpx;
+  border-top-right-radius: 24rpx;
+  padding: 32rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-groupbuy-modal-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+  margin-bottom: 4rpx;
+}
+
+.pm-groupbuy-modal-sub {
+  font-size: 22rpx;
+  color: #8E8E93;
+  margin-bottom: 20rpx;
+}
+
+.pm-groupbuy-scroll {
+  max-height: 68vh;
+}
+
+.pm-groupbuy-loading,
+.pm-groupbuy-empty {
+  font-size: 24rpx;
+  color: #8E8E93;
+  padding: 16rpx 0;
+}
+
+.pm-groupbuy-batch-item {
+  background: #F8F5F0;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 12rpx;
+}
+
+.pm-groupbuy-batch-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6rpx;
+}
+
+.pm-groupbuy-batch-date {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1C1C1E;
+}
+
+.pm-groupbuy-batch-status {
+  font-size: 20rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 16rpx;
+  background: rgba(46, 125, 50, 0.12);
+  color: #2E7D32;
+}
+
+.pm-gbs-locked {
+  background: rgba(199, 123, 46, 0.12);
+  color: #C77B2E;
+}
+
+.pm-gbs-closed {
+  background: rgba(142, 142, 147, 0.12);
+  color: #8E8E93;
+}
+
+.pm-groupbuy-batch-tiers {
+  display: block;
+  font-size: 22rpx;
+  color: #E8770F;
+  margin-bottom: 4rpx;
+}
+
+.pm-groupbuy-batch-meta {
+  display: block;
+  font-size: 20rpx;
+  color: #ADADB2;
+  margin-bottom: 8rpx;
+}
+
+.pm-groupbuy-close-btn {
+  font-size: 20rpx;
+  line-height: 48rpx;
+  padding: 0 16rpx;
+  margin: 0;
+  background: #F0EBE3;
+  color: #8E8E93;
+  border-radius: 20rpx;
+}
+
+.pm-groupbuy-new-title {
+  margin-top: 12rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F0EBE3;
+}
+
+.pm-picker-display {
+  display: flex;
+  align-items: center;
+}
+
+.pm-groupbuy-deadline-row {
+  display: flex;
+  gap: 16rpx;
+}
+
+.pm-groupbuy-deadline-row .pm-input {
+  flex: 1;
+}
+
+.pm-groupbuy-tier-row {
+  display: flex;
+  gap: 16rpx;
+}
+
+.pm-tier-input {
+  flex: 1;
+}

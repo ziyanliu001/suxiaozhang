@@ -535,6 +535,13 @@
   background: rgba(192, 57, 43, 0.1);
 }
 
+/* 🏛️（护城河二 M3）拼团进度标签——橙底强调色，与产能徽标的灰/黄/红三色
+   语言区分开，避免工坊主把"拼团进度"误看成"产能预警"的一种 */
+.pf-chip-groupbuy {
+  color: #E8770F;
+  background: rgba(232, 119, 15, 0.12);
+}
+
 .pf-batch-rollover-hint {
   display: block;
   font-size: 22rpx;

@@ -47,6 +47,7 @@
             bindtap="onSelectBatchDate"
           >
             <text class="sf-calendar-check" wx:if="{{selectedBatchDate === item.batchDate}}">✓</text>
+            <text class="sf-calendar-groupbuy-tag" wx:if="{{item.groupBuyBatch}}">🎉拼团</text>
             <text class="sf-calendar-date">{{item.batchDate}}</text>
             <text class="sf-calendar-remaining" wx:if="{{item.soldOut}}">已约满</text>
             <text class="sf-calendar-remaining" wx:else>仅剩 {{item.remaining}} 份</text>
@@ -56,6 +57,16 @@
           <view class="sf-legend-item"><view class="sf-legend-dot sf-legend-dot-normal"></view><text>可预订</text></view>
           <view class="sf-legend-item"><view class="sf-legend-dot sf-legend-dot-low"></view><text>库存紧张</text></view>
           <view class="sf-legend-item"><view class="sf-legend-dot sf-legend-dot-full"></view><text>已约满</text></view>
+        </view>
+
+        <!-- 🏛️（护城河二）拼团阶梯预览：只在选中的日期挂了拼团批次时展示 -->
+        <view class="sf-groupbuy-card" wx:if="{{groupBuyPreview}}">
+          <view class="sf-groupbuy-header">
+            <text class="sf-groupbuy-title">🎉 拼团进行中</text>
+            <text class="sf-groupbuy-price">¥{{groupBuyPreview.unitPriceYuan}}/份</text>
+          </view>
+          <text class="sf-groupbuy-sub">当前已认购 {{groupBuyPreview.committedQuantity}} 份 · {{groupBuyPreview.nextTierHint}}</text>
+          <text class="sf-groupbuy-disclaimer">最终成交价以下单时实际结算为准</text>
         </view>
       </view>
 

@@ -95,7 +95,14 @@ async function handleCreateOrder(event) {
   // 买家在预售日历上选中的具体批次日（'YYYY-MM-DD'，选填）：转发给
   // liveFactoryCore.assignBatch，格式/前置天数/容量的校验都在那一层做，
   // 这里不重复校验
-  const preferredDate = event.preferredDate ? String(event.preferredDate) : '';
+  let preferredDate = event.preferredDate ? String(event.preferredDate) : '';
+  // 🏛️（护城河二）拼团批次 ID：买家选中的这一天如果挂了拼团活动，storefront
+  // 会把 getPresaleCalendar 返回的 groupBuyBatch.batchId 原样带回来。批次的
+  // batchDate 是服务端权威值——一旦传了 groupBuyBatchId，下面会用批次自己的
+  // batchDate 覆盖 preferredDate，不信任客户端可能传来的不一致日期（同一套
+  // "买家选的是哪天就该是哪天，不能悄悄改派"原则的反向应用：这里是不能让
+  // 客户端把"拼团批次"和"实际下单日期"拆成两个互相矛盾的值）
+  const groupBuyBatchId = event.groupBuyBatchId ? String(event.groupBuyBatchId) : '';
   if (!tenantId || !productId || !(quantity > 0)) {
     return { success: false, error: '参数缺失: tenantId/productId/quantity' };
   }
@@ -107,6 +114,25 @@ async function handleCreateOrder(event) {
   }
   if (!(product.price > 0) || !(product.dailyCapacityLimit > 0)) {
     return { success: false, error: '商品未完成产能/定价配置，暂不可下单' };
+  }
+
+  // 🏛️（护城河二）拼团批次校验放在最前面（排产/支付之前）：批次不存在/已
+  // 截止时应该在还没占用任何产能之前就把订单挡下来，不能等占完产能才发现
+  // 拼团已经失效，那样还要多一步释放产能的回滚
+  let groupBuyBatch = null;
+  if (groupBuyBatchId) {
+    const batchRes = await db.collection('group_buy_batches').doc(groupBuyBatchId).get().catch(() => null);
+    groupBuyBatch = batchRes && batchRes.data;
+    if (!groupBuyBatch || groupBuyBatch.tenantId !== tenantId || groupBuyBatch.productId !== productId) {
+      return { success: false, error: '拼团批次不存在' };
+    }
+    if (groupBuyBatch.status !== 'collecting') {
+      return { success: false, error: '该拼团已截止或已关闭，无法加入' };
+    }
+    if (groupBuyBatch.deadlineAt && Date.now() >= new Date(groupBuyBatch.deadlineAt).getTime()) {
+      return { success: false, error: '该拼团已截止，无法加入' };
+    }
+    preferredDate = groupBuyBatch.batchDate; // 服务端权威值覆盖客户端传入的 preferredDate
   }
 
   const verifiedPromoterOpenId = await resolveValidPromoterOpenId(tenantId, promoterOpenId);
@@ -130,16 +156,44 @@ async function handleCreateOrder(event) {
     return { success: false, error: assign.error || '排产失败，请重试' };
   }
 
-  const payAmount = product.price * quantity;
+  // 🏛️（护城河二）拼团阶梯定价：认购量的原子自增与"这次成交按哪档单价"的
+  // 判定必须是同一次 CAS（见 liveFactoryCore.updateGroupBuyProgress 注释），
+  // 不能自己在这里先读 committedQuantity 再算价格——那样并发下单时会读到
+  // 同一个旧总量，多个买家都误以为自己拿到了同一档价格。放在产能占用成功
+  // 之后调用：只有确定这批真的能生产，才让这份认购计入拼团总量
+  let unitPrice = product.price;
+  let appliedTierLevel = 0;
+  if (groupBuyBatch) {
+    const progressRes = await cloud.callFunction({
+      name: 'liveFactoryCore',
+      data: {
+        action: 'updateGroupBuyProgress',
+        internalToken: process.env.LIVE_FACTORY_INTERNAL_TOKEN || '',
+        tenantId, productId, batchDate: assign.batchDate,
+        quantity, basePrice: product.price, dailyCapacityLimit: product.dailyCapacityLimit
+      }
+    }).catch((err) => ({ result: { success: false, error: String(err.errMsg || err.message || '拼团服务异常') } }));
+    const progress = progressRes.result || {};
+    if (!progress.success) {
+      await releaseCapacity(tenantId, productId, assign.batchDate, quantity);
+      return { success: false, error: progress.error || '拼团加入失败，请重试' };
+    }
+    unitPrice = progress.unitPrice;
+    appliedTierLevel = progress.appliedTierLevel;
+  }
+
+  const payAmount = unitPrice * quantity;
   const orderData = {
     tenantId, productId,
     buyerOpenId: OPENID,
     promoterOpenId: verifiedPromoterOpenId,
     quantity,
-    unitPrice: product.price,
+    unitPrice,
     payAmount,
     batchDate: assign.batchDate,
     estimatedShippingDate: assign.estimatedShippingDate,
+    groupBuyBatchId: groupBuyBatch ? groupBuyBatch._id : '',
+    appliedTierLevel,
     orderStatus: 'pending_payment',
     createdBy: OPENID,
     createdAt: db.serverDate()
@@ -157,6 +211,7 @@ async function handleCreateOrder(event) {
     } else {
       console.error('[createProductionOrder] 写入订单失败，释放已占用产能:', err);
       await releaseCapacity(tenantId, productId, assign.batchDate, quantity);
+      await releaseGroupBuyIfNeeded(groupBuyBatch, tenantId, productId, assign.batchDate, quantity);
       return { success: false, error: '创建订单失败，请重试' };
     }
   }
@@ -182,6 +237,7 @@ async function handleCreateOrder(event) {
     console.error('[createProductionOrder] 调用 wxPayCore 异常:', err);
     await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { orderStatus: 'failed' } }).catch(() => {});
     await releaseCapacity(tenantId, productId, assign.batchDate, quantity);
+    await releaseGroupBuyIfNeeded(groupBuyBatch, tenantId, productId, assign.batchDate, quantity);
     return { success: false, error: '支付服务暂时不可用，请重试' };
   }
 
@@ -189,6 +245,7 @@ async function handleCreateOrder(event) {
   if (!payResult.success) {
     await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { orderStatus: 'failed' } }).catch(() => {});
     await releaseCapacity(tenantId, productId, assign.batchDate, quantity);
+    await releaseGroupBuyIfNeeded(groupBuyBatch, tenantId, productId, assign.batchDate, quantity);
     return { success: false, error: payResult.error || '支付下单失败，请重试', paymentNotConfigured: payResult.paymentNotConfigured };
   }
 
@@ -201,7 +258,10 @@ async function handleCreateOrder(event) {
     batchDate: assign.batchDate,
     estimatedShippingDate: assign.estimatedShippingDate,
     payment: payResult.payment,
-    mockMode: payResult.mockMode
+    mockMode: payResult.mockMode,
+    unitPrice,
+    appliedTierLevel,
+    groupBuyBatchId: groupBuyBatch ? groupBuyBatch._id : ''
   };
 }
 
@@ -214,6 +274,21 @@ async function releaseCapacity(tenantId, productId, batchDate, quantity) {
       tenantId, productId, batchDate, quantity
     }
   }).catch((err) => console.error('[createProductionOrder] 释放产能失败（需人工核对）:', err));
+}
+
+// 🏛️（护城河二）下单成功占用拼团份额后，若后续任一环节失败导致整笔订单
+// 作废，必须同步把这份认购退回拼团总量——否则会出现"订单其实没建成/没
+// 付款，但拼团进度条却虚高"的数据不一致，买家看到的"还差 N 件解锁"会算错
+async function releaseGroupBuyIfNeeded(groupBuyBatch, tenantId, productId, batchDate, quantity) {
+  if (!groupBuyBatch) return;
+  await cloud.callFunction({
+    name: 'liveFactoryCore',
+    data: {
+      action: 'releaseGroupBuyProgress',
+      internalToken: process.env.LIVE_FACTORY_INTERNAL_TOKEN || '',
+      tenantId, productId, batchDate, quantity
+    }
+  }).catch((err) => console.error('[createProductionOrder] 释放拼团份额失败（需人工核对）:', err));
 }
 
 // ── 支付成功回调 ──────────────────────────────────────────────────────────

@@ -193,10 +193,79 @@
         <text class="pm-product-desc" wx:if="{{item.description}}">{{item.description}}</text>
         <view class="pm-product-actions">
           <button class="pm-edit-btn" data-id="{{item._id}}" bindtap="onTapEdit">编辑</button>
+          <button class="pm-groupbuy-btn" data-id="{{item._id}}" bindtap="onOpenGroupBuyModal">🎯 拼团设置</button>
         </view>
       </view>
     </view>
 
+  </view>
+
+  <!-- 🏛️（护城河二 M3）拼团批次设置弹窗 -->
+  <view class="pm-groupbuy-modal-mask" wx:if="{{showGroupBuyModal}}" catchtap="onCloseGroupBuyModal">
+    <view class="pm-groupbuy-modal-card" catchtap="stopPropagation">
+      <text class="pm-groupbuy-modal-title">拼团设置 · {{groupBuyProductName}}</text>
+      <text class="pm-groupbuy-modal-sub">商品原价 ¥{{groupBuyProductPriceYuan}}</text>
+
+      <scroll-view class="pm-groupbuy-scroll" scroll-y>
+
+        <text class="pm-field-label">现有批次</text>
+        <view class="pm-groupbuy-loading" wx:if="{{groupBuyBatchesLoading}}">
+          <text>加载中...</text>
+        </view>
+        <view class="pm-groupbuy-empty" wx:elif="{{groupBuyBatches.length === 0}}">
+          <text>暂无拼团批次</text>
+        </view>
+        <view class="pm-groupbuy-batch-item" wx:for="{{groupBuyBatches}}" wx:key="_id" wx:else>
+          <view class="pm-groupbuy-batch-top">
+            <text class="pm-groupbuy-batch-date">{{item.batchDate}}</text>
+            <text class="pm-groupbuy-batch-status pm-gbs-{{item.status}}">{{item.statusLabel}}</text>
+          </view>
+          <text class="pm-groupbuy-batch-tiers">{{item.tiersLabel}}</text>
+          <text class="pm-groupbuy-batch-meta">已认购 {{item.committedQuantity}} 份 · 截止 {{item.deadlineStr}}</text>
+          <button
+            class="pm-groupbuy-close-btn"
+            wx:if="{{item.status !== 'closed'}}"
+            data-date="{{item.batchDate}}"
+            bindtap="onCloseGroupBuyBatch"
+          >关闭此批次</button>
+        </view>
+
+        <text class="pm-field-label pm-groupbuy-new-title">+ 新建批次</text>
+
+        <text class="pm-field-label">批次日期</text>
+        <picker mode="date" value="{{groupBuyForm.batchDate}}" bindchange="onGroupBuyDateChange">
+          <view class="pm-input pm-picker-display">{{groupBuyForm.batchDate || '请选择日期'}}</view>
+        </picker>
+
+        <text class="pm-field-label">拼团截止日期 + 时间</text>
+        <view class="pm-groupbuy-deadline-row">
+          <picker mode="date" value="{{groupBuyForm.deadlineDate}}" bindchange="onGroupBuyDeadlineDateChange">
+            <view class="pm-input pm-picker-display">{{groupBuyForm.deadlineDate || '日期'}}</view>
+          </picker>
+          <picker mode="time" value="{{groupBuyForm.deadlineTime}}" bindchange="onGroupBuyDeadlineTimeChange">
+            <view class="pm-input pm-picker-display">{{groupBuyForm.deadlineTime}}</view>
+          </picker>
+        </view>
+
+        <text class="pm-field-label">阶梯价（最多 3 档，可只填 1 档；单价须低于原价、且随数量递增单调不增）</text>
+        <view class="pm-groupbuy-tier-row">
+          <input class="pm-input pm-tier-input" type="number" placeholder="满N件" value="{{groupBuyForm.tier1Qty}}" data-field="tier1Qty" bindinput="onGroupBuyFormFieldInput" />
+          <input class="pm-input pm-tier-input" type="digit" placeholder="单价(元)" value="{{groupBuyForm.tier1PriceYuan}}" data-field="tier1PriceYuan" bindinput="onGroupBuyFormFieldInput" />
+        </view>
+        <view class="pm-groupbuy-tier-row">
+          <input class="pm-input pm-tier-input" type="number" placeholder="满N件（选填）" value="{{groupBuyForm.tier2Qty}}" data-field="tier2Qty" bindinput="onGroupBuyFormFieldInput" />
+          <input class="pm-input pm-tier-input" type="digit" placeholder="单价(元)" value="{{groupBuyForm.tier2PriceYuan}}" data-field="tier2PriceYuan" bindinput="onGroupBuyFormFieldInput" />
+        </view>
+        <view class="pm-groupbuy-tier-row">
+          <input class="pm-input pm-tier-input" type="number" placeholder="满N件（选填）" value="{{groupBuyForm.tier3Qty}}" data-field="tier3Qty" bindinput="onGroupBuyFormFieldInput" />
+          <input class="pm-input pm-tier-input" type="digit" placeholder="单价(元)" value="{{groupBuyForm.tier3PriceYuan}}" data-field="tier3PriceYuan" bindinput="onGroupBuyFormFieldInput" />
+        </view>
+
+        <button class="pm-primary-btn" loading="{{groupBuySubmitting}}" disabled="{{groupBuySubmitting}}" bindtap="onSubmitGroupBuyBatch">创建批次</button>
+      </scroll-view>
+
+      <button class="pm-secondary-btn" bindtap="onCloseGroupBuyModal">关闭</button>
+    </view>
   </view>
 
 </view>

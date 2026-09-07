@@ -109,6 +109,25 @@ exports.main = async (event, context) => {
     };
   });
 
+  // 🏛️（护城河二）拼团进度：与 capacityByBatch 同一个 key 形状，供
+  // production-fulfillment 页在已有的产能芯片旁边追加"拼团 N/M 件"标签——
+  // 这里不过滤 status（collecting/locked/closed 都展示），工坊主视角需要看到
+  // 一个批次是"还在收单"还是"已经锁定/关闭"，与买家视角（只展示 collecting）
+  // 的 getPresaleCalendar 不是同一份口径
+  const groupBuyRes = await db.collection('group_buy_batches')
+    .where({ tenantId, batchDate: _.gte(startDate).and(_.lte(endDate)) })
+    .limit(1000)
+    .get()
+    .catch(() => ({ data: [] }));
+  const groupBuyByBatch = {};
+  (groupBuyRes.data || []).forEach((b) => {
+    groupBuyByBatch[`${b.batchDate}__${b.productId}`] = {
+      committedQuantity: b.committedQuantity || 0,
+      status: b.status,
+      deadlineAt: b.deadlineAt || null
+    };
+  });
+
   // 物料估算：只对配置了 materialList 的商品估算，未配置的不编造数据
   // 🐛 productName 反查用的 productIds 必须来自 allOrders 而不是 tasks——
   // tasks 只包含 activeOrders，若某批次的订单已全部发货/退款（该 batchDate+
@@ -159,6 +178,7 @@ exports.main = async (event, context) => {
     materials: Object.entries(materialTotals).map(([materialName, v]) => ({ materialName, quantity: v.qty, unit: v.unit })),
     orders,
     capacityByBatch,
+    groupBuyByBatch,
     healedStuckOrders: healedCount
   };
 };

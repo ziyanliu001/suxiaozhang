@@ -44,10 +44,29 @@ exports.main = async (event, context) => {
   const reservedMap = {};
   (countersRes.data || []).forEach((c) => { reservedMap[c.batchDate] = c.reserved || 0; });
 
+  // 🏛️（护城河二）拼团批次：只把"进行中"（collecting）的批次暴露给买家——
+  // 已关闭/已锁定的批次不该再出现在预售日历上引导新买家点进去，见
+  // manageGroupBuyBatch 的 status 语义
+  const groupBuyRes = await db.collection('group_buy_batches')
+    .where({ tenantId, productId, batchDate: _.in(dateList), status: 'collecting' })
+    .get()
+    .catch(() => ({ data: [] }));
+  const groupBuyMap = {};
+  (groupBuyRes.data || []).forEach((b) => { groupBuyMap[b.batchDate] = b; });
+
   const calendar = dateList.map((batchDate) => {
     const reserved = reservedMap[batchDate] || 0;
     const remaining = Math.max(product.dailyCapacityLimit - reserved, 0);
-    return { batchDate, remaining, soldOut: remaining <= 0 };
+    const batch = groupBuyMap[batchDate];
+    const groupBuyBatch = batch
+      ? {
+        batchId: batch._id,
+        tierThresholds: batch.tierThresholds || [],
+        committedQuantity: batch.committedQuantity || 0,
+        deadlineAt: batch.deadlineAt || null
+      }
+      : null;
+    return { batchDate, remaining, soldOut: remaining <= 0, groupBuyBatch };
   });
 
   return { success: true, productId, productName: product.name, dailyCapacityLimit: product.dailyCapacityLimit, calendar };

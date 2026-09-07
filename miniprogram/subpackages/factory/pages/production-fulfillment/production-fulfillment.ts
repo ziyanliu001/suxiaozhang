@@ -67,6 +67,13 @@ const CAPACITY_STATUS_LABEL: Record<string, string> = {
 };
 const CAPACITY_STATUS_RANK: Record<string, number> = { normal: 0, near_full: 1, full: 2 };
 
+// 🏛️（护城河二 M3）拼团进度标签——只在该 batchDate__productId 组合确实挂了
+// 拼团批次时才展示，与产能徽标并列但独立（一个描述"能不能生产"，一个描述
+// "拼团凑单进度"，两者语义不同，不合并成一个字段）
+const GROUP_BUY_STATUS_LABEL: Record<string, string> = {
+  collecting: '进行中', locked: '已锁定', closed: '已关闭'
+};
+
 interface FulfillmentOrder {
   _id: string;
   productId: string;
@@ -106,6 +113,12 @@ interface CapacityEntry {
   status: 'normal' | 'near_full' | 'full';
 }
 
+interface GroupBuyEntry {
+  committedQuantity: number;
+  status: string;
+  deadlineAt: string | null;
+}
+
 // 批次内单个 SKU 的产能预警徽标——数据来自 getProductionBoard 直接透出的
 // production_capacity_counters 快照，是"这批会不会满、会不会顺延"唯一真实
 // 来源，不是前端按订单数量猜的
@@ -116,6 +129,7 @@ interface BatchChip {
   capacityLabel: string;
   capacityClass: string;
   capacityStatusLabel: string;
+  groupBuyLabel: string; // 空字符串 = 该 SKU 这一天没有拼团活动
 }
 
 interface StatusGroup {
@@ -139,18 +153,22 @@ interface BatchGroup {
 function buildBoardGroups(
   orders: FulfillmentOrder[],
   tasks: BoardTask[],
-  capacityByBatch: Record<string, CapacityEntry>
+  capacityByBatch: Record<string, CapacityEntry>,
+  groupBuyByBatch: Record<string, GroupBuyEntry> = {}
 ): BatchGroup[] {
   const chipsByBatch = new Map<string, BatchChip[]>();
   tasks.forEach((t) => {
-    const cap = capacityByBatch[`${t.batchDate}__${t.productId}`];
+    const key = `${t.batchDate}__${t.productId}`;
+    const cap = capacityByBatch[key];
+    const groupBuy = groupBuyByBatch[key];
     const chip: BatchChip = {
       productId: t.productId,
       productName: t.productName,
       quantity: t.quantity,
       capacityLabel: cap ? `${cap.reserved}/${cap.limit}` : '',
       capacityClass: cap ? cap.status : '',
-      capacityStatusLabel: cap ? (CAPACITY_STATUS_LABEL[cap.status] || '') : ''
+      capacityStatusLabel: cap ? (CAPACITY_STATUS_LABEL[cap.status] || '') : '',
+      groupBuyLabel: groupBuy ? `拼团 ${groupBuy.committedQuantity}件 · ${GROUP_BUY_STATUS_LABEL[groupBuy.status] || groupBuy.status}` : ''
     };
     if (!chipsByBatch.has(t.batchDate)) chipsByBatch.set(t.batchDate, []);
     (chipsByBatch.get(t.batchDate) as BatchChip[]).push(chip);
@@ -214,6 +232,7 @@ Page({
   _rawOrders: [] as FulfillmentOrder[],
   _rawTasks: [] as BoardTask[],
   _rawCapacityByBatch: {} as Record<string, CapacityEntry>,
+  _rawGroupBuyByBatch: {} as Record<string, GroupBuyEntry>,
 
   data: {
     contentTop: 0,
@@ -336,7 +355,7 @@ Page({
     const orders = filter === 'all'
       ? this._rawOrders
       : this._rawOrders.filter((o) => o.orderStatus === filter);
-    const boardGroups = buildBoardGroups(orders, this._rawTasks, this._rawCapacityByBatch);
+    const boardGroups = buildBoardGroups(orders, this._rawTasks, this._rawCapacityByBatch, this._rawGroupBuyByBatch);
     this.setData({ boardGroups, filteredOrderCount: orders.length });
   },
 
@@ -368,6 +387,7 @@ Page({
     this._rawOrders = [];
     this._rawTasks = [];
     this._rawCapacityByBatch = {};
+    this._rawGroupBuyByBatch = {};
     this.setData({
       tenantId,
       showSwitcherModal: false,
@@ -496,6 +516,7 @@ Page({
         this._rawOrders = orders;
         this._rawTasks = result.tasks || [];
         this._rawCapacityByBatch = result.capacityByBatch || {};
+        this._rawGroupBuyByBatch = result.groupBuyByBatch || {};
         const healedCount = Number(result.healedStuckOrders) || 0;
         this.setData({
           orderCount: orders.length,
@@ -512,6 +533,7 @@ Page({
         this._rawOrders = [];
         this._rawTasks = [];
         this._rawCapacityByBatch = {};
+        this._rawGroupBuyByBatch = {};
         this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: (result && result.error) || '加载失败' });
       }
     } catch (err) {
@@ -519,6 +541,7 @@ Page({
       this._rawOrders = [];
       this._rawTasks = [];
       this._rawCapacityByBatch = {};
+      this._rawGroupBuyByBatch = {};
       this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: '加载异常，请重试' });
     } finally {
       this.setData({ loading: false });

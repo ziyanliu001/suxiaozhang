@@ -52,6 +52,44 @@ const EMPTY_SETTLEMENT_CONFIG_FORM: SettlementConfigForm = {
   paymentMode: 'none', producerRatePercent: '75', promoterRatePercent: '20'
 };
 
+// 🏛️（护城河二 M3）拼团批次管理——固定 3 档阶梯价输入（后端 validateGroupBuyBatch
+// 最多支持 5 档，但商品管理页只暴露 3 档：绝大多数拼团场景 3 档阶梯已经够用，
+// 一次性做一个"动态增删档位"的表单交互成本明显高于收益，不做这个提前投入；
+// 真有商家需要 4~5 档，届时再加字段/表单行，不提前设计一个没人用的灵活度
+interface GroupBuyBatchItem {
+  _id: string;
+  batchDate: string;
+  committedQuantity: number;
+  status: string;
+  deadlineAt: string;
+  tierThresholds: Array<{ minQuantity: number; unitPriceOverride: number }>;
+  // 展示用派生字段
+  statusLabel?: string;
+  deadlineStr?: string;
+  tiersLabel?: string;
+}
+
+interface GroupBuyForm {
+  batchDate: string;
+  deadlineDate: string;
+  deadlineTime: string;
+  tier1Qty: string;
+  tier1PriceYuan: string;
+  tier2Qty: string;
+  tier2PriceYuan: string;
+  tier3Qty: string;
+  tier3PriceYuan: string;
+}
+
+const EMPTY_GROUP_BUY_FORM: GroupBuyForm = {
+  batchDate: '', deadlineDate: '', deadlineTime: '20:00',
+  tier1Qty: '', tier1PriceYuan: '', tier2Qty: '', tier2PriceYuan: '', tier3Qty: '', tier3PriceYuan: ''
+};
+
+const GROUP_BUY_STATUS_LABEL: Record<string, string> = {
+  collecting: '进行中', locked: '已锁定（产能已满）', closed: '已关闭'
+};
+
 Page({
   data: {
     contentTop: 0,
@@ -76,7 +114,17 @@ Page({
     settlementConfigForm: { ...EMPTY_SETTLEMENT_CONFIG_FORM },
     // 平台留存比例是展示派生值（100% - 制作方 - 推广员），每次用户改动费率
     // 输入框都会重新计算，不需要用户自己心算
-    platformRatePercentDisplay: '5'
+    platformRatePercentDisplay: '5',
+
+    // 🏛️（护城河二 M3）拼团批次设置
+    showGroupBuyModal: false,
+    groupBuyProductId: '',
+    groupBuyProductName: '',
+    groupBuyProductPriceYuan: '',
+    groupBuyBatchesLoading: false,
+    groupBuyBatches: [] as GroupBuyBatchItem[],
+    groupBuyForm: { ...EMPTY_GROUP_BUY_FORM },
+    groupBuySubmitting: false
   },
 
   onLoad(options: Record<string, string>) {
@@ -394,6 +442,187 @@ Page({
       wx.showToast({ title: '保存失败，请重试', icon: 'none' });
     } finally {
       this.setData({ settlementConfigSubmitting: false });
+    }
+  },
+
+  // ============ 护城河二 M3：拼团批次管理 ============
+
+  stopPropagation() {},
+
+  onOpenGroupBuyModal(e: any) {
+    const id = e.currentTarget.dataset.id;
+    const product = this.data.products.find((p) => p._id === id);
+    if (!product) return;
+    this.setData({
+      showGroupBuyModal: true,
+      showForm: false,
+      showSettlementConfigForm: false,
+      groupBuyProductId: id,
+      groupBuyProductName: product.name,
+      groupBuyProductPriceYuan: product.priceYuan || '',
+      groupBuyForm: { ...EMPTY_GROUP_BUY_FORM }
+    });
+    this.loadGroupBuyBatches();
+  },
+
+  onCloseGroupBuyModal() {
+    this.setData({ showGroupBuyModal: false });
+  },
+
+  async loadGroupBuyBatches() {
+    this.setData({ groupBuyBatchesLoading: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageGroupBuyBatch',
+        data: { action: 'list', tenantId: this.data.tenantId, productId: this.data.groupBuyProductId }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        const batches: GroupBuyBatchItem[] = (result.batches || []).map((b: GroupBuyBatchItem) => ({
+          ...b,
+          statusLabel: GROUP_BUY_STATUS_LABEL[b.status] || b.status,
+          deadlineStr: b.deadlineAt ? new Date(b.deadlineAt).toLocaleString('zh-CN', { hour12: false }) : '',
+          tiersLabel: (b.tierThresholds || [])
+            .slice().sort((x, y) => x.minQuantity - y.minQuantity)
+            .map((t) => `满${t.minQuantity}件¥${(t.unitPriceOverride / 100).toFixed(2)}`)
+            .join(' / ')
+        }));
+        this.setData({ groupBuyBatches: batches });
+      } else {
+        wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[product-management] loadGroupBuyBatches 异常:', err);
+      wx.showToast({ title: '加载异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ groupBuyBatchesLoading: false });
+    }
+  },
+
+  onGroupBuyFormFieldInput(e: any) {
+    const field = e.currentTarget.dataset.field;
+    if (!field) return;
+    this.setData({ [`groupBuyForm.${field}`]: e.detail.value });
+  },
+
+  onGroupBuyDateChange(e: any) {
+    this.setData({ 'groupBuyForm.batchDate': e.detail.value });
+  },
+
+  onGroupBuyDeadlineDateChange(e: any) {
+    this.setData({ 'groupBuyForm.deadlineDate': e.detail.value });
+  },
+
+  onGroupBuyDeadlineTimeChange(e: any) {
+    this.setData({ 'groupBuyForm.deadlineTime': e.detail.value });
+  },
+
+  // 基础校验：与服务端 validateGroupBuyBatch.js 同口径提前拦一遍，服务端仍是
+  // 唯一防线。空的档位行（数量/单价任一为空）视为"这一档不填"，直接跳过，
+  // 不强制用户填满 3 档
+  buildTierThresholdsFromForm(): Array<{ minQuantity: number; unitPriceOverride: number }> | null {
+    const form = this.data.groupBuyForm;
+    const rows = [
+      [form.tier1Qty, form.tier1PriceYuan],
+      [form.tier2Qty, form.tier2PriceYuan],
+      [form.tier3Qty, form.tier3PriceYuan]
+    ];
+    const tiers: Array<{ minQuantity: number; unitPriceOverride: number }> = [];
+    for (const [qtyStr, priceStr] of rows) {
+      if (!qtyStr && !priceStr) continue; // 整行都没填，跳过
+      const minQuantity = parseInt(qtyStr, 10);
+      const unitPriceOverride = Math.round(parseFloat(priceStr) * 100);
+      if (!(minQuantity > 0) || !(unitPriceOverride > 0)) return null; // 半填状态视为非法
+      tiers.push({ minQuantity, unitPriceOverride });
+    }
+    return tiers;
+  },
+
+  async onSubmitGroupBuyBatch() {
+    if (this.data.groupBuySubmitting) return;
+    const form = this.data.groupBuyForm;
+    if (!form.batchDate) {
+      wx.showToast({ title: '请选择批次日期', icon: 'none' });
+      return;
+    }
+    if (!form.deadlineDate) {
+      wx.showToast({ title: '请选择拼团截止日期', icon: 'none' });
+      return;
+    }
+    const tierThresholds = this.buildTierThresholdsFromForm();
+    if (!tierThresholds || tierThresholds.length === 0) {
+      wx.showToast({ title: '请至少完整填写一档阶梯价（数量+单价）', icon: 'none' });
+      return;
+    }
+    const deadlineAt = `${form.deadlineDate}T${form.deadlineTime || '20:00'}:00`;
+    if (new Date(deadlineAt).getTime() <= Date.now()) {
+      wx.showToast({ title: '截止时间必须晚于当前时间', icon: 'none' });
+      return;
+    }
+
+    this.setData({ groupBuySubmitting: true });
+    wx.showLoading({ title: '提交中...', mask: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageGroupBuyBatch',
+        data: {
+          action: 'create',
+          tenantId: this.data.tenantId,
+          productId: this.data.groupBuyProductId,
+          batchDate: form.batchDate,
+          tierThresholds,
+          deadlineAt
+        }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '创建失败，请重试', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '拼团批次已创建', icon: 'success' });
+      this.setData({ groupBuyForm: { ...EMPTY_GROUP_BUY_FORM } });
+      this.loadGroupBuyBatches();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[product-management] onSubmitGroupBuyBatch 异常:', err);
+      wx.showToast({ title: '创建失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ groupBuySubmitting: false });
+    }
+  },
+
+  async onCloseGroupBuyBatch(e: any) {
+    const batchDate = e.currentTarget.dataset.date;
+    if (!batchDate) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '关闭拼团批次',
+        content: `确认关闭 ${batchDate} 这场拼团？关闭后不再接受新的拼团加入，已下单的订单不受影响。`,
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageGroupBuyBatch',
+        data: { action: 'close', tenantId: this.data.tenantId, productId: this.data.groupBuyProductId, batchDate }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '操作失败，请重试', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '已关闭', icon: 'success' });
+      this.loadGroupBuyBatches();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[product-management] onCloseGroupBuyBatch 异常:', err);
+      wx.showToast({ title: '操作失败，请重试', icon: 'none' });
     }
   }
 });

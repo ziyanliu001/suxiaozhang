@@ -111,6 +111,7 @@
 }
 
 .sf-calendar-item {
+  position: relative;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -213,6 +214,59 @@
 
 .sf-legend-dot-full {
   background: #ADADB2;
+}
+
+/* 🏛️（护城河二）拼团标签 + 阶梯价预览卡片 */
+.sf-calendar-groupbuy-tag {
+  position: absolute;
+  top: -10rpx;
+  left: -6rpx;
+  font-size: 18rpx;
+  line-height: 28rpx;
+  padding: 0 8rpx;
+  color: #FFFFFF;
+  background: #E8770F;
+  border-radius: 8rpx;
+}
+
+.sf-groupbuy-card {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #FFF7ED;
+  border: 2rpx solid #F5C99A;
+  border-radius: 12rpx;
+}
+
+.sf-groupbuy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.sf-groupbuy-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #E8770F;
+}
+
+.sf-groupbuy-price {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
+.sf-groupbuy-sub {
+  display: block;
+  font-size: 22rpx;
+  color: #8E8E93;
+  margin-bottom: 4rpx;
+}
+
+.sf-groupbuy-disclaimer {
+  display: block;
+  font-size: 20rpx;
+  color: #ADADB2;
 }
 
 .sf-qty-stepper {
