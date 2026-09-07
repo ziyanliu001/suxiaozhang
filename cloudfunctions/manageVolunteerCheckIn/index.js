@@ -45,6 +45,23 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
+// 🛡️（2026-09-07 硬化）门店的 tenantId 是权威来源，caller.tenantId（user_roles
+// 记录里的缓存值）只是角色创建那一刻的快照——机构架构调整后会过期。真实案例：
+// fixTenantHierarchy 把"嵩屿街道敬老中心助餐点"从误挂的雨花斋总部机构拆成独立
+// 机构 songyu_elderly_care，只更新了 stores.tenantId，从未 touch 过 user_roles；
+// getStoreList/index.js 第 227 行注释已经记录过同一类"调用者仍挂在旧机构下"的
+// 后遗症。此前这里的写法是 `caller.tenantId || (查门店兜底)`——只有缓存值为空
+// 才会去查门店，非空但过期的缓存值会被直接采信，导致打卡记录写进错误的机构桶
+// （同工种去重/单日 12h 上限/爱心护持榜全部按 {tenantId, storeId, ...} 查询，
+// tenantId 一旦对不上门店真实归属，这几个安全校验就形同虚设）。现在改为门店
+// 现查结果永远优先，只有查不到门店文档（storeId 缺失/门店异常）时才退回缓存值
+async function resolveAuthoritativeTenantId(storeId, fallbackTenantId) {
+  if (!storeId) return fallbackTenantId || '';
+  const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+  const storeTenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
+  return storeTenantId || (fallbackTenantId || '');
+}
+
 function sanitizeReservedMeals(v) {
   if (!Array.isArray(v)) return [];
   return v.filter((m) => MEAL_TYPES.includes(m));
@@ -58,11 +75,11 @@ async function handleCheckin(event, OPENID) {
   const storeName = event.storeName || caller.storeName || '';
   if (!storeId) return { success: false, error: '未识别到您所在的门店，请先在首页选择门店' };
 
-  let tenantId = caller.tenantId || '';
-  if (!tenantId) {
-    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-    tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
-  }
+  const tenantId = await resolveAuthoritativeTenantId(storeId, caller.tenantId);
+  // 🛡️ 门店真的查不到自己的 tenantId、且 user_roles 缓存也没有兜底值时，宁可
+  // 明确拒绝也不要写一条 tenantId:'' 的脏记录进 volunteer_duty_logs——之前是
+  // 静默写空值，事后排查比现在直接告知失败原因更难
+  if (!tenantId) return { success: false, error: '无法确认所属机构，请联系管理员核实门店归属后重试' };
 
   const shiftKey = event.shiftKey;
   const requestedHours = Math.max(0, parseFloat(event.hours) || 0);
@@ -206,11 +223,7 @@ async function handleLeaderboard(event, OPENID) {
   const storeId = event.storeId || caller.storeId || '';
   if (!storeId) return { success: false, error: '未识别到您所在的门店' };
 
-  let tenantId = caller.tenantId || '';
-  if (!tenantId) {
-    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-    tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
-  }
+  const tenantId = await resolveAuthoritativeTenantId(storeId, caller.tenantId);
 
   const range = ['month', 'year', 'total'].includes(event.range) ? event.range : 'month';
   const where = { tenantId, storeId, status: 'active' };
@@ -314,11 +327,7 @@ async function handleQueryStoreHours(event, OPENID) {
   const storeId = event.storeId || caller.storeId || '';
   if (!storeId) return { success: false, error: '未指定门店' };
 
-  let tenantId = caller.tenantId || '';
-  if (!tenantId) {
-    const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-    tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
-  }
+  const tenantId = await resolveAuthoritativeTenantId(storeId, caller.tenantId);
 
   const dateString = event.dateString || todayStr();
 
