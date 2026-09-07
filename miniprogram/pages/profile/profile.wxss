@@ -5270,6 +5270,40 @@
    .sub-btn-activate-disabled 类名，样式判断收归纯 class 选择器 */
 .sub-btn-activate-disabled { opacity: 0.45; }
 
+/* 🍎 iOS 合规客服引导：见 saasSubscriptionModal.wxml sub-redeem-compliance-hint
+   处注释——open-type="contact" 原生按钮默认带一圈灰色边框，用 ::after 去掉，
+   配色改用页面既有品牌色（与 .aws-title/.seb-cta 同一套 #8C1D18）而不是灰色，
+   与"移除默认灰色边框、保持整体调性一致"的要求对应 */
+.sub-redeem-compliance-hint {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F1F3F5;
+}
+.sub-redeem-compliance-text {
+  display: block;
+  font-size: 22rpx;
+  color: #868E96;
+  margin-bottom: 12rpx;
+}
+.btn-contact-advisor {
+  width: 100%;
+  height: 72rpx;
+  line-height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FDF2F1;
+  color: #8C1D18;
+  font-size: 26rpx;
+  font-weight: 700;
+  border-radius: 14rpx;
+  border: none;
+  box-sizing: border-box;
+  margin: 0;
+}
+.btn-contact-advisor::after { border: none; }
+.btn-contact-advisor:active { background: #FBE4E2; }
+
 /* ── ③ 底部固定操作区：.sub-modal-footer ─────────────────────────
    与 .sub-modal-container 的 flex 三段结构对应：① 关闭行 + 身份卡
    （顶部固定）② .sub-modal-body scroll-view（中间滚动：权益卡片/套餐对比/

@@ -251,6 +251,15 @@
                       disabled="{{activationSubmitting || !activationCodeInput}}"
                       loading="{{activationSubmitting}}"
                       wx:if="{{comparePlanTab !== 'basic'}}">激活授权码</button>
+
+              <!-- 🍎 iOS 合规客服引导：见《平台多租户SaaS与订阅规范》"真实用户
+                   激活码标准获取路径"一节——iOS 端不能自建跳转链接/展示收款
+                   方式，一律用微信原生 open-type="contact" 承接到官方客服，
+                   session-from 供客服侧识别来源场景 -->
+              <view class="sub-redeem-compliance-hint" wx:if="{{isIOSPlatform}}">
+                <text class="sub-redeem-compliance-text">如何获取激活码？请联系所属机构或平台技术顾问</text>
+                <button class="btn-contact-advisor" open-type="contact" session-from="saas_activation_guide">联系在线客服</button>
+              </view>
             </view>
           </view>
 
