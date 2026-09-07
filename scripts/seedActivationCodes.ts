@@ -127,12 +127,16 @@ function printChecklist(entries: { doc: ActivationCodeDoc; spec: SpecPoolEntry }
 // 下执行（与 package.json 里其余 scripts/*.js 的既有运行方式一致）
 const OUTPUT_DIR = 'scripts/output';
 
+// 🐛 云开发控制台"导入 JSON"实际要求 JSON Lines（ndjson）格式——每行一个
+// 独立的 JSON 对象，不是一个外层数组，之前输出的 `[ {...}, {...} ]` 格式
+// 会被控制台拒绝（"导入数据格式不正确，请检查是否为 JSON Lines 格式"）。
+// 改为逐行 JSON.stringify 单个文档、用 \n 拼接，不带最外层方括号/逗号分隔符
 function writeOutputFile(entries: { doc: ActivationCodeDoc; spec: SpecPoolEntry }[]): string {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outputPath = `${OUTPUT_DIR}/activation-codes-${timestamp}.json`;
-  const docsOnly = entries.map((e: { doc: ActivationCodeDoc }) => e.doc);
-  fs.writeFileSync(outputPath, JSON.stringify(docsOnly, null, 2), 'utf8');
+  const outputPath = `${OUTPUT_DIR}/activation-codes-${timestamp}.jsonl`;
+  const lines = entries.map((e: { doc: ActivationCodeDoc }) => JSON.stringify(e.doc));
+  fs.writeFileSync(outputPath, lines.join('\n') + '\n', 'utf8');
   return outputPath;
 }
 
@@ -140,9 +144,10 @@ function main(): void {
   const entries = buildActivationCodes();
   printChecklist(entries);
   const outputPath = writeOutputFile(entries);
-  console.log(`已写入可导入 JSON 文件：${outputPath}`);
+  console.log(`已写入 JSON Lines 文件：${outputPath}`);
   console.log('该目录已在 .gitignore 中排除，不会被提交进版本库；如需真正生效，');
-  console.log('请通过微信云开发控制台"导入 JSON"功能导入 tenant_activation_codes 集合。');
+  console.log('请通过微信云开发控制台"导入 JSON"功能导入 tenant_activation_codes 集合');
+  console.log('（控制台实际要求 JSON Lines/ndjson 格式，每行一个独立对象）。');
 }
 
 main();
