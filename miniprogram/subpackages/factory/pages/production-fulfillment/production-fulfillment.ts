@@ -24,7 +24,7 @@
 // 逐单明细，不重复查库）。
 import { getTodayIsoString } from '../../../../utils/dateUtils';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-import { ORDER_STATUS_LABEL, ORDER_STATUS_CLASS } from '../../../../utils/orderStatusLabels';
+import { ORDER_STATUS_LABEL, ORDER_STATUS_CLASS } from '../../utils/orderStatusLabels';
 
 const CURRENT_TENANT_STORAGE_KEY = 'LIVE_FACTORY_CURRENT_TENANT_ID';
 

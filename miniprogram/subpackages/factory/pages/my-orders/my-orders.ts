@@ -8,7 +8,7 @@
 // 交互：列表卡片可展开/收起（wx:if 切换，不跳详情页——买家订单量级小，不值得
 // 为此新增第二个页面），展开后显示物流信息 + 「善行反哺凭据」小卡。
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-import { ORDER_STATUS_CLASS } from '../../../../utils/orderStatusLabels';
+import { ORDER_STATUS_CLASS } from '../../utils/orderStatusLabels';
 
 interface CharityContribution {
   amountYuan: string;

@@ -2,10 +2,7 @@
   "pages": [
     "pages/index/index",
     "pages/notice/notice",
-    "pages/profile/profile",
-    "pages/help/help",
-    "pages/draft-box/draft-box",
-    "pages/settings/settings"
+    "pages/profile/profile"
   ],
   "subpackages": [
     {
@@ -18,6 +15,14 @@
         "pages/settlement-agreement/settlement-agreement",
         "pages/discover/discover",
         "pages/my-orders/my-orders"
+      ]
+    },
+    {
+      "root": "subpackages/personal",
+      "pages": [
+        "pages/settings/settings",
+        "pages/help/help",
+        "pages/draft-box/draft-box"
       ]
     },
     {

@@ -1,4 +1,4 @@
-// 用户本地展示偏好：pages/settings/settings.ts 写入，其余业务页面读取后据此调整
+// 用户本地展示偏好：subpackages/personal/pages/settings/settings.ts 写入，其余业务页面读取后据此调整
 // 展示/导航行为。Storage key 与默认值集中维护在这一个文件里，避免各页面各自
 // 复制一份容易长期漂移不一致的字符串常量（历史教训见 feedback_stale_lookup_table_after_refactor）。
 

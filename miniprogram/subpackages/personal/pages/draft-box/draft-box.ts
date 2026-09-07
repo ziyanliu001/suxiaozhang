@@ -1,5 +1,5 @@
-import { setResumeDraftHandoff } from '../../utils/draftHandoff';
-import { getSafeSystemInfo } from '../../utils/util';
+import { setResumeDraftHandoff } from '../../../../utils/draftHandoff';
+import { getSafeSystemInfo } from '../../../../utils/util';
 
 const DRAFT_KEY_PREFIX = 'DRAFT_';
 

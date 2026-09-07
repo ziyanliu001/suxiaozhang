@@ -1,10 +1,10 @@
-import { AuthService } from '../../utils/authService';
-import { requestComplianceReview } from '../../utils/complianceHandoff';
-import { getSafeSystemInfo } from '../../utils/util';
-import { safeNavigateTo } from '../../utils/navHelper';
-import { requestDailyReportReminderSubscription } from '../../utils/subscribeMessage';
-import { STORAGE_KEY_DEFAULT_HOME_VIEW, STORAGE_KEY_PRIVACY_MASK } from '../../utils/userPreferences';
-import { getLocalReports } from '../../utils/dataService';
+import { AuthService } from '../../../../utils/authService';
+import { requestComplianceReview } from '../../../../utils/complianceHandoff';
+import { getSafeSystemInfo } from '../../../../utils/util';
+import { safeNavigateTo } from '../../../../utils/navHelper';
+import { requestDailyReportReminderSubscription } from '../../../../utils/subscribeMessage';
+import { STORAGE_KEY_DEFAULT_HOME_VIEW, STORAGE_KEY_PRIVACY_MASK } from '../../../../utils/userPreferences';
+import { getLocalReports } from '../../../../utils/dataService';
 
 // 🛡️ 白名单式清理缓存：只清理这里明确列出的、已核实"纯缓存/可重新生成"的 key，
 // 不确定语义的 key 一律不动——宁可少清理一点存储空间，也不能猜错导致数据丢失。
@@ -402,7 +402,7 @@ Page({
 
   onTapAbout() {
     safeNavigateTo({
-      url: '/pages/help/help',
+      url: '/subpackages/personal/pages/help/help',
       fail: (err) => {
         console.warn('[settings] 跳转帮助页失败:', err);
       }

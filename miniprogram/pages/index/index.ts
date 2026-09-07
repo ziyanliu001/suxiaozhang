@@ -2712,7 +2712,7 @@ Page({
       targetTab = 'finance';
     }
     safeNavigateTo({
-      url: `/pages/help/help?tab=${targetTab}`,
+      url: `/subpackages/personal/pages/help/help?tab=${targetTab}`,
       fail: () => {
         this.isNavigating = false;
       }

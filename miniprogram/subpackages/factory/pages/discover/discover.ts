@@ -9,7 +9,7 @@
 // 过滤，见该云函数头部注释），本页只做展示 + 跳转，不持有任何下单逻辑——
 // 点击卡片直接 navigateTo storefront.ts，复用买家下单全部既有流程。
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-import { GroupBuyTier, resolveTierPreview, buildNextTierHint } from '../../../../utils/groupBuyPreview';
+import { GroupBuyTier, resolveTierPreview, buildNextTierHint } from '../../utils/groupBuyPreview';
 
 interface FeedGroupBuyBatch {
   tierThresholds: GroupBuyTier[];

@@ -275,7 +275,7 @@
            列表组（与其他角色不再重复维护一份），这里只保留"使用帮助" -->
       <text class="list-group-label family-care-list-label">📚 帮助</text>
       <view class="ui-card-wrapper action-list-container family-care-list">
-        <navigator class="action-item-cell" hover-class="ui-hover" url="/pages/help/help">
+        <navigator class="action-item-cell" hover-class="ui-hover" url="/subpackages/personal/pages/help/help">
           <view class="item-left">
             <text class="manager-only-emoji">❓</text>
             <text class="item-text">使用帮助</text>

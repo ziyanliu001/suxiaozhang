@@ -11,7 +11,7 @@
 import { payForOrder } from '../../../../utils/wxPayCore';
 import { requestShippingNoticeSubscription } from '../../../../utils/subscribeMessage';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-import { GroupBuyTier, TierRow, resolveTierPreview, buildTierRows } from '../../../../utils/groupBuyPreview';
+import { GroupBuyTier, TierRow, resolveTierPreview, buildTierRows } from '../../utils/groupBuyPreview';
 
 interface GroupBuyBatch {
   batchId: string;

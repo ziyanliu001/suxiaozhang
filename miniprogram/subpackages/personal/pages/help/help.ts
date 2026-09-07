@@ -1,4 +1,4 @@
-import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 
 Page({
   _navGuard: null as NavGuardInstance | null,

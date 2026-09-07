@@ -30,7 +30,7 @@ Component({
     onTapDraftBox() {
       this.close();
       safeNavigateTo({
-        url: '/pages/draft-box/draft-box',
+        url: '/subpackages/personal/pages/draft-box/draft-box',
         fail: (err) => console.warn('[mine-quick-sheet] 跳转草稿箱失败:', err)
       });
     },
@@ -38,7 +38,7 @@ Component({
     onTapSettings() {
       this.close();
       safeNavigateTo({
-        url: '/pages/settings/settings',
+        url: '/subpackages/personal/pages/settings/settings',
         fail: (err) => console.warn('[mine-quick-sheet] 跳转设置页失败:', err)
       });
     },
@@ -46,7 +46,7 @@ Component({
     onTapHelp() {
       this.close();
       safeNavigateTo({
-        url: '/pages/help/help',
+        url: '/subpackages/personal/pages/help/help',
         fail: (err) => console.warn('[mine-quick-sheet] 跳转帮助页失败:', err)
       });
     }
