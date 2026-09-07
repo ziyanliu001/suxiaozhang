@@ -25,10 +25,11 @@
   position: relative;
   z-index: 999999 !important;
   width: 100%;
-  /* 🎨（2026-09-07 今日善行日签 UI 重构）宣纸温润底色：与
-     utils/posterGenerator.ts 的 drawMeritTagPoster 背景渐变改用同一组色值
-     （#FDFBF7 → #FAF7F2），弹窗与最终导出的海报视觉调性保持完全统一 */
-  background: linear-gradient(180deg, #FDFBF7 0%, #FAF7F2 100%);
+  /* 🎨（2026-09-07 第三轮精修·宋韵规约）宣纸温润底色：与
+     utils/posterGenerator.ts 的 drawSongDynastyMeritPoster 背景渐变改用
+     同一组色值（#FAF7F2 → #F3ECE1），弹窗与最终导出的海报视觉调性保持
+     完全统一 */
+  background: linear-gradient(180deg, #FAF7F2 0%, #F3ECE1 100%);
   border-top-left-radius: 32rpx;
   border-top-right-radius: 32rpx;
   padding: 16rpx 28rpx calc(28rpx + env(safe-area-inset-bottom)) !important;
@@ -41,9 +42,9 @@
   transform: translateY(0);
 }
 
-/* 🎨（2026-09-07）典雅内边框：呼应海报 drawEleganceBookBorder 的双线边栏
-   质感，用同一个暗金描边色（#B8965A）在面板内侧勾一圈细边，纯装饰、不吃
-   点击事件，也不设背景色，不会挡住下方任何按钮/文字 */
+/* 🎨（2026-09-07 第三轮精修）典雅内边框：呼应海报 drawEleganceBookBorder
+   的双线边栏质感，用同一个米褐描边色（#D8C9B4）在面板内侧勾一圈细边，
+   纯装饰、不吃点击事件，也不设背景色，不会挡住下方任何按钮/文字 */
 .vmd-panel::before {
   content: '';
   position: absolute;
@@ -51,7 +52,7 @@
   left: 14rpx;
   right: 14rpx;
   bottom: 10rpx;
-  border: 1rpx solid rgba(184, 150, 90, 0.4);
+  border: 1rpx solid rgba(216, 201, 180, 0.4);
   border-radius: 20rpx;
   pointer-events: none;
 }
@@ -104,14 +105,14 @@
   justify-content: center;
   padding: 22rpx 20rpx;
   background: #FBF7EF;
-  border: 2rpx solid rgba(184, 150, 90, 0.4);
+  border: 2rpx solid rgba(216, 201, 180, 0.4);
   border-radius: 12rpx;
   box-sizing: border-box;
 }
 
 .vmd-tag-chip.active {
-  border-color: #8B2627;
-  background: linear-gradient(135deg, #9E2A2B 0%, #8B2627 100%);
+  border-color: #861F1A;
+  background: linear-gradient(135deg, #A73229 0%, #861F1A 100%);
 }
 
 /* 🐛 点击瞬间的按压反馈：与 wxml 的 hover-class="vmd-tag-chip-hover" 配套，
@@ -149,13 +150,13 @@
   margin-bottom: 32rpx;
 }
 
-/* 🎨（2026-09-07 第二轮精修）确认态徽标：与 utils/posterGenerator.ts 的
-   drawMeritBadge 同一组朱砂渐变（#9E2A2B → #8B2627）+ 米白衬线字 + 暗金
+/* 🎨（第三轮精修·宋韵规约）确认态徽标：与 utils/posterGenerator.ts 的
+   drawMeritBadge 同一组朱砂渐变（#A73229 → #861F1A）+ 米白衬线字 + 米褐
    细边、微圆角（不是纯药丸形），弹窗和最终导出的海报是同一份"印" */
 .vmd-submitted-chip {
   padding: 12rpx 24rpx;
-  background: linear-gradient(135deg, #9E2A2B 0%, #8B2627 100%);
-  border: 1rpx solid rgba(184, 150, 90, 0.5);
+  background: linear-gradient(135deg, #A73229 0%, #861F1A 100%);
+  border: 1rpx solid rgba(216, 201, 180, 0.5);
   border-radius: 10rpx;
   color: #F4EFE6;
   font-size: 24rpx;
@@ -191,18 +192,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 🎨（2026-09-07 第二轮精修）渐变改用 #9E2A2B → #8B2627——与
+  /* 🎨（第三轮精修·宋韵规约）渐变改用 #A73229 → #861F1A——与
      utils/posterGenerator.ts 的 MERIT_SEAL_COLOR_CENTER/EDGE（方印 + 微善
      徽标共用的朱砂渐变）完全一致，弹窗按钮、选中态 chip、确认态徽标、
      海报印章/徽标现在是同一份仿朱砂印泥色系，不是各自选一个"看起来差不多
      的红" */
-  background: linear-gradient(135deg, #9E2A2B 0%, #8B2627 100%);
+  background: linear-gradient(135deg, #A73229 0%, #861F1A 100%);
   color: #FFFFFF;
   font-size: 28rpx;
   font-weight: bold;
   border-radius: 44rpx;
   border: none;
-  box-shadow: 0 6rpx 16rpx rgba(158, 42, 43, 0.30);
+  box-shadow: 0 6rpx 16rpx rgba(167, 50, 41, 0.30);
 }
 
 .vmd-btn-submit::after {

@@ -215,20 +215,22 @@
         <view class="pm-groupbuy-empty" wx:elif="{{groupBuyBatches.length === 0}}">
           <text>暂无拼团批次</text>
         </view>
-        <view class="pm-groupbuy-batch-item" wx:for="{{groupBuyBatches}}" wx:key="_id" wx:else>
-          <view class="pm-groupbuy-batch-top">
-            <text class="pm-groupbuy-batch-date">{{item.batchDate}}</text>
-            <text class="pm-groupbuy-batch-status pm-gbs-{{item.status}}">{{item.statusLabel}}</text>
+        <block wx:else>
+          <view class="pm-groupbuy-batch-item" wx:for="{{groupBuyBatches}}" wx:key="_id">
+            <view class="pm-groupbuy-batch-top">
+              <text class="pm-groupbuy-batch-date">{{item.batchDate}}</text>
+              <text class="pm-groupbuy-batch-status pm-gbs-{{item.status}}">{{item.statusLabel}}</text>
+            </view>
+            <text class="pm-groupbuy-batch-tiers">{{item.tiersLabel}}</text>
+            <text class="pm-groupbuy-batch-meta">已认购 {{item.committedQuantity}} 份 · 截止 {{item.deadlineStr}}</text>
+            <button
+              class="pm-groupbuy-close-btn"
+              wx:if="{{item.status !== 'closed'}}"
+              data-date="{{item.batchDate}}"
+              bindtap="onCloseGroupBuyBatch"
+            >关闭此批次</button>
           </view>
-          <text class="pm-groupbuy-batch-tiers">{{item.tiersLabel}}</text>
-          <text class="pm-groupbuy-batch-meta">已认购 {{item.committedQuantity}} 份 · 截止 {{item.deadlineStr}}</text>
-          <button
-            class="pm-groupbuy-close-btn"
-            wx:if="{{item.status !== 'closed'}}"
-            data-date="{{item.batchDate}}"
-            bindtap="onCloseGroupBuyBatch"
-          >关闭此批次</button>
-        </view>
+        </block>
 
         <text class="pm-field-label pm-groupbuy-new-title">+ 新建批次</text>
 

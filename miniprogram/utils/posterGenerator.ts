@@ -1364,21 +1364,25 @@ const MERIT_CARD_RADIUS = 24;
 // 换成方印后视觉上"占满"的观感比同尺寸圆形更强，边长取 78 而不是直接套用
 // 原直径，避免方印显得比圆章更小气
 const MERIT_SEAL_SIZE = 78;
-// 🎨（2026-09-07 今日善行日签 UI 重构）宣纸温润底色：与
+// 🎨（2026-09-07 第三轮精修·宋韵规约）宣纸温润底色：与
 // components/volunteer-merit-dialog 的弹窗面板背景改用同一组色值，保证
 // "选标签的弹窗"与"最终导出的海报"视觉调性完全统一，不是弹窗一套配色、
-// 海报又是另一套配色各自为政
-const MERIT_BG_TOP = '#FDFBF7';
-const MERIT_BG_BOTTOM = '#FAF7F2';
+// 海报又是另一套配色各自为政。色值本身第三轮从 #FDFBF7→#FAF7F2 调深一档到
+// #FAF7F2→#F3ECE1，更接近宋韵参考图里泛黄陈纸的沉稳感
+const MERIT_BG_TOP = '#FAF7F2';
+const MERIT_BG_BOTTOM = '#F3ECE1';
 // 典雅内边框：仿宋代理学典籍/善书页面边栏的暗金描边色，比印泥红更沉稳，
-// 用于在纸面内侧勾一圈"书页边栏"，而不是让画面四周空落落没有边界感
-const MERIT_BORDER_COLOR = '#B8965A';
+// 用于在纸面内侧勾一圈"书页边栏"，而不是让画面四周空落落没有边界感。
+// 🎨（第三轮）#B8965A → #D8C9B4，比原来更浅、更接近参考图的米褐色边栏，
+// 不是金属感更强的暗金
+const MERIT_BORDER_COLOR = '#D8C9B4';
 const MERIT_QUOTE_FONT_STACK = '"Songti SC", "SimSun", "Noto Serif SC", serif';
-// 🎨（2026-09-07 第二轮精修）方印朱砂渐变色（中心 → 边缘），与
+// 🎨（第三轮精修·宋韵规约）方印朱砂渐变色（中心 → 边缘），与
 // components/volunteer-merit-dialog.wxss 确认态徽标底色改用同一组值，
-// 保证弹窗与海报的"印泥红"是同一种红，不是各自选一个"看起来差不多"的红
-const MERIT_SEAL_COLOR_CENTER = '#9E2A2B';
-const MERIT_SEAL_COLOR_EDGE = '#8B2627';
+// 保证弹窗与海报的"印泥红"是同一种红，不是各自选一个"看起来差不多"的红。
+// #9E2A2B→#8B2627 调整为更沉的 #A73229→#861F1A，对齐参考图"正阳方印"色调
+const MERIT_SEAL_COLOR_CENTER = '#A73229';
+const MERIT_SEAL_COLOR_EDGE = '#861F1A';
 
 // 🎨（2026-09-07 今日善行日签 UI 重构）典雅内边框：仿宋代理学典籍/善书刻本
 // 页面常见的"双线边栏 + 四角饰角"版式，双线之间留出细缝，比单线描边更有
@@ -1503,11 +1507,16 @@ function drawSquareInkSeal(ctx: any, centerX: number, centerY: number, size: num
   drawRoundedRectPath(ctx, -half, -half, size, size, cornerRadius);
   ctx.fill();
 
-  // 3. 内框细描边：呼应真实方印常见的"边框 + 字腔"两层结构
-  ctx.strokeStyle = 'rgba(248, 243, 233, 0.55)';
-  ctx.lineWidth = 1.5;
+  // 3. 内框双线描边：呼应真实方印常见的"边框 + 字腔"两层结构。🎨（第三轮
+  //    精修）此前是单圈 0.55 透明度的细线，太不显眼；改成两圈不透明米白线
+  //    （外圈稍大、内圈稍小），才是参考图里"清晰白色双线方框"的观感
+  ctx.strokeStyle = '#F8F3E9';
+  ctx.lineWidth = 2;
   const innerInset = size * 0.12;
   drawRoundedRectPath(ctx, -half + innerInset, -half + innerInset, size - innerInset * 2, size - innerInset * 2, cornerRadius * 0.6);
+  ctx.stroke();
+  const innerInset2 = innerInset + 5;
+  drawRoundedRectPath(ctx, -half + innerInset2, -half + innerInset2, size - innerInset2 * 2, size - innerInset2 * 2, Math.max(cornerRadius * 0.6 - 3, 2));
   ctx.stroke();
 
   // 4. 阴文白字：负片，不是红字
@@ -1604,7 +1613,7 @@ function toChineseNumeral(n: number): string {
 // getContext('2d') → 按 dpr 缩放 → 圆角裁剪 → 逐段绘制 → canvasToTempFilePath
 // 导出"流程，复用同一个 #posterCanvas 节点。不需要头像/二维码，画面比其余
 // 三张海报更短更轻，是一张"当日小结"而不是"长期荣誉证书"
-export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPosterData): Promise<string> {
+export async function drawSongDynastyMeritPoster(pageInstance: any, data: MeritTagPosterData): Promise<string> {
   return new Promise((resolve, reject) => {
     const query = wx.createSelectorQuery().in(pageInstance);
     query.select('#posterCanvas')
@@ -1738,7 +1747,7 @@ export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPoster
           // 不影响海报正常导出
           const scrollTop = quoteCenterY - 17;
           if (ritualCardBottom > scrollTop - 8) {
-            console.warn('[drawMeritTagPoster] 功过格卡片与金句卷轴间距过近，请检查 MERIT_CANVAS_HEIGHT/间距常量', { ritualCardBottom, scrollTop });
+            console.warn('[drawSongDynastyMeritPoster] 功过格卡片与金句卷轴间距过近，请检查 MERIT_CANVAS_HEIGHT/间距常量', { ritualCardBottom, scrollTop });
           }
 
           ctx.restore(); // 对应开头的圆角裁剪 save/clip

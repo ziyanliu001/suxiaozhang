@@ -2,7 +2,7 @@ import { DataService, formatMoney, getLocalReports } from '../../utils/dataServi
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
-import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawMeritTagPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
+import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawSongDynastyMeritPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
@@ -12006,7 +12006,7 @@ Page({
     try {
       const now = new Date();
       const dateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const tempPath = await drawMeritTagPoster(this, {
+      const tempPath = await drawSongDynastyMeritPoster(this, {
         storeName: this.data.currentStoreName || this.data.shopName || '本门店',
         dateString,
         tags,
