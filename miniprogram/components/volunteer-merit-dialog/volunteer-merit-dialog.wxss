@@ -93,21 +93,25 @@
   margin-bottom: 32rpx;
 }
 
+/* 🎨（2026-09-07 第二轮精修）选择态 chip：去掉原生彩色 emoji（尤其"和颜
+   柔语"的 😊 在水墨调性里显得现代拼凑），未选中态改用宣纸底 + 暗金细边的
+   素雅样式；选中态改成暗朱砂实心底 + 米白字，呼应印章/徽标的阴文质感，
+   不再是"白卡 + 红描边"这种业务表单常见的选中态语言 */
 .vmd-tag-chip {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  justify-content: center;
   padding: 22rpx 20rpx;
-  background: #FFFFFF;
-  border: 2rpx solid #E8DFC8;
-  border-radius: 20rpx;
+  background: #FBF7EF;
+  border: 2rpx solid rgba(184, 150, 90, 0.4);
+  border-radius: 12rpx;
   box-sizing: border-box;
 }
 
 .vmd-tag-chip.active {
-  border-color: #BD3124;
-  background: #FDF1EE;
+  border-color: #8B2627;
+  background: linear-gradient(135deg, #9E2A2B 0%, #8B2627 100%);
 }
 
 /* 🐛 点击瞬间的按压反馈：与 wxml 的 hover-class="vmd-tag-chip-hover" 配套，
@@ -117,15 +121,15 @@
   transform: scale(0.97);
 }
 
-.vmd-tag-emoji {
-  font-size: 36rpx;
-  flex-shrink: 0;
-}
-
 .vmd-tag-label {
   font-size: 26rpx;
   color: #5A4632;
   font-weight: 500;
+  font-family: "Songti SC", "SimSun", "Noto Serif SC", serif;
+}
+
+.vmd-tag-chip.active .vmd-tag-label {
+  color: #F4EFE6;
 }
 
 .vmd-tag-check {
@@ -133,7 +137,7 @@
   top: 10rpx;
   right: 14rpx;
   font-size: 22rpx;
-  color: #BD3124;
+  color: #F4EFE6;
   font-weight: bold;
 }
 
@@ -145,14 +149,18 @@
   margin-bottom: 32rpx;
 }
 
+/* 🎨（2026-09-07 第二轮精修）确认态徽标：与 utils/posterGenerator.ts 的
+   drawMeritBadge 同一组朱砂渐变（#9E2A2B → #8B2627）+ 米白衬线字 + 暗金
+   细边、微圆角（不是纯药丸形），弹窗和最终导出的海报是同一份"印" */
 .vmd-submitted-chip {
   padding: 12rpx 24rpx;
-  background: #FDF1EE;
-  border: 2rpx solid #BD3124;
-  border-radius: 999rpx;
-  color: #BD3124;
+  background: linear-gradient(135deg, #9E2A2B 0%, #8B2627 100%);
+  border: 1rpx solid rgba(184, 150, 90, 0.5);
+  border-radius: 10rpx;
+  color: #F4EFE6;
   font-size: 24rpx;
   font-weight: 500;
+  font-family: "Songti SC", "SimSun", "Noto Serif SC", serif;
 }
 
 .vmd-actions {
@@ -183,17 +191,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 🎨（2026-09-07）渐变终止色改用 #7A1508——与
-     utils/drawVolunteerCertificate.ts 的 drawSealStamp inkTexture 渐变圆心色
-     完全一致，让"按钮的红"与"印章的红"是同一份仿朱砂印泥色系，不是各自
-     选一个"看起来差不多的红" */
-  background: linear-gradient(135deg, #BD3124 0%, #7A1508 100%);
+  /* 🎨（2026-09-07 第二轮精修）渐变改用 #9E2A2B → #8B2627——与
+     utils/posterGenerator.ts 的 MERIT_SEAL_COLOR_CENTER/EDGE（方印 + 微善
+     徽标共用的朱砂渐变）完全一致，弹窗按钮、选中态 chip、确认态徽标、
+     海报印章/徽标现在是同一份仿朱砂印泥色系，不是各自选一个"看起来差不多
+     的红" */
+  background: linear-gradient(135deg, #9E2A2B 0%, #8B2627 100%);
   color: #FFFFFF;
   font-size: 28rpx;
   font-weight: bold;
   border-radius: 44rpx;
   border: none;
-  box-shadow: 0 6rpx 16rpx rgba(189, 49, 36, 0.30);
+  box-shadow: 0 6rpx 16rpx rgba(158, 42, 43, 0.30);
 }
 
 .vmd-btn-submit::after {

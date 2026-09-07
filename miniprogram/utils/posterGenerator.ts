@@ -2,7 +2,6 @@ import { maskName, formatDisplayName } from './core/privacy';
 import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 import { drawStaticWxacodeFallback } from './staticWxacode';
 import { computeHonorProgress, drawMedalBadge } from './honorLevels';
-import { drawSealStamp } from './drawVolunteerCertificate';
 
 export interface MaterialItem {
   donor: string;
@@ -1356,9 +1355,15 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
 }
 
 const MERIT_CANVAS_WIDTH = 375;
-const MERIT_CANVAS_HEIGHT = 500;
+// 🎨（2026-09-07 第二轮精修）500 → 520：新版"功过格"卡片 + 徽标化标签行比
+// 第一轮的裸文字排版更占纵向空间，实测 4 个标签全选的最坏情况后加高画布，
+// 保证功过格卡片与底部金句卷轴之间有干净的呼吸间距，不挤压/不重叠
+const MERIT_CANVAS_HEIGHT = 520;
 const MERIT_CARD_RADIUS = 24;
-const MERIT_SEAL_RADIUS = 36;
+// 🎨（2026-09-07 第二轮精修）实心方印边长：此前是圆形印章半径 36（直径72），
+// 换成方印后视觉上"占满"的观感比同尺寸圆形更强，边长取 78 而不是直接套用
+// 原直径，避免方印显得比圆章更小气
+const MERIT_SEAL_SIZE = 78;
 // 🎨（2026-09-07 今日善行日签 UI 重构）宣纸温润底色：与
 // components/volunteer-merit-dialog 的弹窗面板背景改用同一组色值，保证
 // "选标签的弹窗"与"最终导出的海报"视觉调性完全统一，不是弹窗一套配色、
@@ -1369,6 +1374,11 @@ const MERIT_BG_BOTTOM = '#FAF7F2';
 // 用于在纸面内侧勾一圈"书页边栏"，而不是让画面四周空落落没有边界感
 const MERIT_BORDER_COLOR = '#B8965A';
 const MERIT_QUOTE_FONT_STACK = '"Songti SC", "SimSun", "Noto Serif SC", serif';
+// 🎨（2026-09-07 第二轮精修）方印朱砂渐变色（中心 → 边缘），与
+// components/volunteer-merit-dialog.wxss 确认态徽标底色改用同一组值，
+// 保证弹窗与海报的"印泥红"是同一种红，不是各自选一个"看起来差不多"的红
+const MERIT_SEAL_COLOR_CENTER = '#9E2A2B';
+const MERIT_SEAL_COLOR_EDGE = '#8B2627';
 
 // 🎨（2026-09-07 今日善行日签 UI 重构）典雅内边框：仿宋代理学典籍/善书刻本
 // 页面常见的"双线边栏 + 四角饰角"版式，双线之间留出细缝，比单线描边更有
@@ -1420,8 +1430,10 @@ function drawQuoteScrollBackdrop(ctx: any, centerX: number, centerY: number, scr
   const top = centerY - scrollHeight / 2;
 
   ctx.save();
-  // 纸条本体：比整体宣纸底色略深一阶，让轮廓在同色系里仍能被看出来
-  ctx.fillStyle = '#F1E6C8';
+  // 纸条本体：🎨（2026-09-07 第二轮精修）#F1E6C8 → #F4EFE6，饱和度更低的
+  // 米褐宣纸签，与整体宣纸底色更贴近而不是跳色（此前偏黄，与用户反馈的
+  // "高饱和淡黄色底块"是同一个问题）
+  ctx.fillStyle = '#F4EFE6';
   ctx.strokeStyle = MERIT_BORDER_COLOR;
   ctx.globalAlpha = 0.9;
   drawRoundedRectPath(ctx, left, top, scrollWidth, scrollHeight, 6);
@@ -1450,6 +1462,142 @@ function drawQuoteScrollBackdrop(ctx: any, centerX: number, centerY: number, scr
   });
 
   ctx.restore();
+}
+
+// 🎨（2026-09-07 第二轮精修）实心方印·阴文白字："善"字印章从第一轮的圆形
+// 双圈镂空描边，换成真正的"实心方印"观感——朱砂渐变填充 + 白字负片 +
+// 内阴影/宣纸渗透微质感。刻意不复用 drawVolunteerCertificate.ts 的
+// drawSealStamp：那个函数是"圆形双圈镂空 + 阳文红字"的视觉语言，与这里
+// "方形实心 + 阴文白字"是两种不同的印章形制，硬塞进同一个函数只会让参数
+// 暴增、两边都不好维护；drawSealStamp 本身保持不动，荣誉证书继续用现在
+// 的圆形阳文印。
+function drawSquareInkSeal(ctx: any, centerX: number, centerY: number, size: number, char: string): void {
+  const half = size / 2;
+  const cornerRadius = size * 0.12;
+
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  // 轻微旋转，比荣誉证书圆章的 -10° 收敛（方形过度旋转视觉上更别扭）
+  ctx.rotate((-6 * Math.PI) / 180);
+
+  // 1. 阴影 + 朱砂渐变主体：阴影只包这一次 fill，避免后面的描边/文字也带阴影，
+  //    把方印从纸面"抬"起来，模拟盖印的立体感
+  ctx.save();
+  ctx.shadowColor = 'rgba(139, 38, 39, 0.35)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 4;
+  const sealGradient = ctx.createRadialGradient(0, 0, size * 0.1, 0, 0, size * 0.75);
+  sealGradient.addColorStop(0, MERIT_SEAL_COLOR_CENTER);
+  sealGradient.addColorStop(1, MERIT_SEAL_COLOR_EDGE);
+  ctx.fillStyle = sealGradient;
+  drawRoundedRectPath(ctx, -half, -half, size, size, cornerRadius);
+  ctx.fill();
+  ctx.restore();
+
+  // 2. 边缘暗角：Canvas 2D 没有原生 inset-shadow，用中心透明→边缘转暗的径向
+  //    渐变叠加模拟"手压印泥时边缘更实、中心略透"的内阴影效果
+  const vignette = ctx.createRadialGradient(0, 0, size * 0.25, 0, 0, size * 0.7);
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vignette.addColorStop(1, 'rgba(60, 10, 10, 0.35)');
+  ctx.fillStyle = vignette;
+  drawRoundedRectPath(ctx, -half, -half, size, size, cornerRadius);
+  ctx.fill();
+
+  // 3. 内框细描边：呼应真实方印常见的"边框 + 字腔"两层结构
+  ctx.strokeStyle = 'rgba(248, 243, 233, 0.55)';
+  ctx.lineWidth = 1.5;
+  const innerInset = size * 0.12;
+  drawRoundedRectPath(ctx, -half + innerInset, -half + innerInset, size - innerInset * 2, size - innerInset * 2, cornerRadius * 0.6);
+  ctx.stroke();
+
+  // 4. 阴文白字：负片，不是红字
+  ctx.fillStyle = '#F8F3E9';
+  ctx.font = `bold ${Math.round(size * 0.56)}px "STKaiti", "Kaiti SC", "KaiTi", serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(char, 0, size * 0.02);
+
+  // 5. 宣纸渗透微质感：印章边缘外侧固定几点极淡的朱砂色小圆斑，坐标写死
+  //    （不用 Math.random()），保证同一次打卡多次预览/重新生成海报时质感
+  //    一致，不会忽浓忽淡
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = MERIT_SEAL_COLOR_EDGE;
+  const bleedSpecks: Array<[number, number, number]> = [
+    [0.62, -0.5, 3], [-0.58, 0.42, 2.4], [0.5, 0.6, 2], [-0.62, -0.35, 2.6]
+  ];
+  bleedSpecks.forEach(([dx, dy, r]) => {
+    ctx.beginPath();
+    ctx.arc(dx * half, dy * half, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+// 🎨（2026-09-07 第二轮精修）微善标签徽标：暗朱砂渐变底 + 米白衬线字，
+// 替代第一轮"emoji + 裸文字"的现代拼凑感；微圆角矩形（不是纯药丸形），
+// 呼应方印的阴文质感——"今日善行"里的每一件小事都像盖了一枚小小的印
+function drawMeritBadge(ctx: any, centerX: number, centerY: number, boxWidth: number, boxHeight: number, text: string): void {
+  const left = centerX - boxWidth / 2;
+  const top = centerY - boxHeight / 2;
+
+  ctx.save();
+  const badgeGradient = ctx.createLinearGradient(left, top, left, top + boxHeight);
+  badgeGradient.addColorStop(0, MERIT_SEAL_COLOR_CENTER);
+  badgeGradient.addColorStop(1, '#6B1D1E');
+  ctx.fillStyle = badgeGradient;
+  drawRoundedRectPath(ctx, left, top, boxWidth, boxHeight, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(184, 150, 90, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = '#F4EFE6';
+  ctx.font = `bold 15px ${MERIT_QUOTE_FONT_STACK}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, centerX, centerY + 1);
+  ctx.restore();
+}
+
+const CN_DIGITS = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+const CN_UNITS = ['', '十', '百', '千'];
+
+// 🎨（2026-09-07 第二轮精修）"功过格"卡片专用：0~9999 的标准中文数字转换
+// （十二/二十/一百零一 这类常见写法），不追求财务大写级别的完整性；超出
+// 9999 直接回退阿拉伯数字兜底——义工累计护持天数现实中不会到这个量级，
+// 只是防御性上限，不做万位递归。纯逻辑、无副作用，本仓库前端 TS 目前没有
+// 配置任何单测框架（npm test 只跑 cloudfunctions/*/lib/*.test.js），已手工
+// 验算过 0/1/10/11/20/47/100/101/1024 等边界值，与仓库里其余没有测试覆盖
+// 的纯展示层函数（如 storefront.ts 的 resolveTierPreview）处境一致
+function toChineseNumeral(n: number): string {
+  const num = Math.floor(Math.max(0, n || 0));
+  if (num === 0) return '零';
+  if (num > 9999) return String(num);
+
+  const digits = String(num).split('').map(Number);
+  const len = digits.length;
+  let result = '';
+  let pendingZero = false;
+
+  digits.forEach((d, i) => {
+    const unitIndex = len - i - 1;
+    if (d === 0) {
+      pendingZero = true;
+      return;
+    }
+    if (pendingZero) {
+      result += '零';
+      pendingZero = false;
+    }
+    // "十二"而不是"一十二"：仅在整个数字恰好两位、且最高位是十位、且该位
+    // 为 1 时省略这个"一"
+    const omitLeadingOne = unitIndex === 1 && d === 1 && len === 2;
+    if (!omitLeadingOne) result += CN_DIGITS[d];
+    result += CN_UNITS[unitIndex];
+  });
+
+  return result;
 }
 
 // 🌸 修心积善打卡·水墨日签：与 drawVolunteerHonorCard 同一套"query 画布节点 →
@@ -1505,56 +1653,93 @@ export async function drawMeritTagPoster(pageInstance: any, data: MeritTagPoster
           const subtitle = `${truncateText(ctx, data.storeName || '', width - 100)} · ${data.dateString || ''}`;
           ctx.fillText(subtitle, width / 2, 70);
 
-          // 善字印章：复用 drawVolunteerCertificate.ts 的印章原语，单行文字。
-          // 朱砂红 #BD3124 + 双圈加粗线宽 + 更高不透明度，呈现更真实的红泥拓印感；
-          // fontFamily 带 serif 兜底，设备没有楷体字体时按 CSS 字体匹配规则退化到
-          // 通用 serif（仍比全篇的 sans-serif 更有传统质感），不会缺字/报错。
-          // 🆕（2026-09-07）inkTexture:true 打开仿朱砂印泥渐变 + 颗粒斑点，比纯
-          // 色平涂更接近真实印泥手工蘸盖的深浅不均质感，正文"善"字仍保持朱红
-          // （正阳/阳文），不改成负片白字
-          drawSealStamp(ctx, width / 2, 140, MERIT_SEAL_RADIUS, ['善'], {
-            color: '#BD3124',
-            alpha: 0.92,
-            outerLineWidth: 3,
-            innerLineWidth: 1.5,
-            fontFamily: '"STKaiti", "Kaiti SC", "KaiTi", serif',
-            inkTexture: true
-          });
+          // 🎨（2026-09-07 第二轮精修）善字印章：从圆形双圈镂空描边换成实心方印
+          // 阴文白字，见 drawSquareInkSeal 头部注释
+          drawSquareInkSeal(ctx, width / 2, 140, MERIT_SEAL_SIZE, '善');
 
-          // 今日微善标签：逐行居中列出，未选择时留白（不画"暂无"这类占位文案，
-          // 保持画面素雅）
-          let tagY = 210;
+          // 🎨（2026-09-07 第二轮精修）今日微善标签：从裸文字逐行列出改为逐行
+          // 徽标（drawMeritBadge），文案统一加"行善·"前缀，去掉原生彩色 emoji
+          // （尤其"和颜柔语"的 😊 在通篇水墨调性里显得现代拼凑）。contentBottom
+          // 记录标签区实际画到的最低点，供下面"功过格"卡片据此定位，没有任何
+          // 标签时退回一个与原布局一致的默认位置，不留大片空白
+          const TAG_BADGE_WIDTH = 230;
+          const TAG_BADGE_HEIGHT = 30;
+          const TAG_ROW_ADVANCE = 40;
+          let contentBottom = 200 - TAG_BADGE_HEIGHT / 2;
           if (data.tags && data.tags.length > 0) {
-            ctx.font = 'bold 17px sans-serif';
+            let tagCenterY = 200;
             data.tags.forEach((tag) => {
-              ctx.fillStyle = '#3D2B1B';
-              ctx.textAlign = 'center';
-              ctx.fillText(`${tag.emoji} ${tag.label}`, width / 2, tagY);
-              tagY += 34;
+              drawMeritBadge(ctx, width / 2, tagCenterY, TAG_BADGE_WIDTH, TAG_BADGE_HEIGHT, `行善·${tag.label}`);
+              tagCenterY += TAG_ROW_ADVANCE;
             });
+            contentBottom = tagCenterY - TAG_ROW_ADVANCE + TAG_BADGE_HEIGHT / 2;
           }
 
-          // 累计护持天数：颜色与印章同色系 #BD3124，让海报上仅有的两处红色
-          // （印章、天数）视觉呼应统一；字号加大到 34px，层级更突出
-          const daysY = Math.max(tagY + 20, 330);
-          ctx.fillStyle = '#BD3124';
-          ctx.font = 'bold 34px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${data.totalDays || 0}`, width / 2, daysY);
-          ctx.fillStyle = '#8A6D4C';
-          ctx.font = '13px sans-serif';
-          ctx.fillText('日累计护持', width / 2, daysY + 26);
+          // 🎨（2026-09-07 第二轮精修）"累计护持"改造成"功过格"仪式感小卡：
+          // 细边框圆角矩形 + 衬线排版，累计天数用中文数字（toChineseNumeral）
+          // 而不是阿拉伯数字，呼应整张海报的传统文化调性
+          const RITUAL_CARD_WIDTH = 220;
+          const RITUAL_CARD_HEIGHT = 64;
+          const ritualCardTop = Math.max(contentBottom + 20, 235);
+          const ritualCardLeft = width / 2 - RITUAL_CARD_WIDTH / 2;
+          ctx.save();
+          ctx.strokeStyle = MERIT_BORDER_COLOR;
+          ctx.globalAlpha = 0.6;
+          ctx.lineWidth = 1.5;
+          drawRoundedRectPath(ctx, ritualCardLeft, ritualCardTop, RITUAL_CARD_WIDTH, RITUAL_CARD_HEIGHT, 10);
+          ctx.stroke();
+          ctx.restore();
 
-          // 底部文化短句：卷轴/对联衬底 + 衬线书法字体栈，比裸文字浮在宣纸上
-          // 更有"郑重题写"的仪式感；字体栈优先取 Songti SC/SimSun/Noto Serif SC，
-          // 设备均不具备时按 CSS 字体匹配规则退化到通用 serif，不会缺字
-          const quoteText = '命由我作，福自己求 —— 《了凡四训》';
+          ctx.fillStyle = '#8A6D4C';
+          ctx.font = `13px ${MERIT_QUOTE_FONT_STACK}`;
+          ctx.textAlign = 'center';
+          ctx.fillText('每日精进', width / 2, ritualCardTop + 25);
+
+          // 🛡️ 极端场景防御：累计天数一旦到三位数以上，中文数字比阿拉伯数字
+          // 占更宽，"累积持善 · X 日"这行有可能比 RITUAL_CARD_WIDTH 更宽——
+          // 从 22px 起步，量出来超宽就逐步缩小到 16px 下限，避免文字溢出卡片
+          const ritualLine = `累积持善 · ${toChineseNumeral(data.totalDays || 0)} 日`;
+          let ritualFontSize = 22;
+          ctx.font = `bold ${ritualFontSize}px ${MERIT_QUOTE_FONT_STACK}`;
+          while (ctx.measureText(ritualLine).width > RITUAL_CARD_WIDTH - 16 && ritualFontSize > 16) {
+            ritualFontSize -= 1;
+            ctx.font = `bold ${ritualFontSize}px ${MERIT_QUOTE_FONT_STACK}`;
+          }
+          ctx.fillStyle = MERIT_SEAL_COLOR_EDGE;
+          ctx.fillText(ritualLine, width / 2, ritualCardTop + 49);
+
+          const ritualCardBottom = ritualCardTop + RITUAL_CARD_HEIGHT;
+
+          // 🎨（2026-09-07 第二轮精修）底部文化短句：卷轴/对联衬底（纸条改用
+          // 更沉稳的 #F4EFE6）+ 衬线书法字体栈，比裸文字浮在宣纸上更有"郑重
+          // 题写"的仪式感；引句正文与出处拆成两段独立渲染——正文墨黑加大，
+          // 出处小字低饱和靠右点缀，不再是一整条同色文字的单调排版
+          const quoteMain = '命由我作，福自己求';
+          const quoteSource = '——《了凡四训》';
           const quoteCenterY = height - 40;
           drawQuoteScrollBackdrop(ctx, width / 2, quoteCenterY, width - 64, 34);
-          ctx.fillStyle = '#6B4A2B';
-          ctx.font = `14px ${MERIT_QUOTE_FONT_STACK}`;
+          ctx.fillStyle = '#2B2B2B';
+          ctx.font = `15px ${MERIT_QUOTE_FONT_STACK}`;
           ctx.textAlign = 'center';
-          ctx.fillText(quoteText, width / 2, quoteCenterY + 5);
+          ctx.fillText(quoteMain, width / 2 - 14, quoteCenterY + 5);
+          // 出处宽度必须在切到小字号字体之前量，否则量出来的是错误字号下的宽度
+          const quoteMainWidth = ctx.measureText(quoteMain).width;
+
+          ctx.fillStyle = MERIT_SEAL_COLOR_EDGE;
+          ctx.globalAlpha = 0.75;
+          ctx.font = `11px ${MERIT_QUOTE_FONT_STACK}`;
+          ctx.textAlign = 'left';
+          ctx.fillText(quoteSource, width / 2 - 14 + quoteMainWidth / 2 + 8, quoteCenterY + 5);
+          ctx.globalAlpha = 1;
+          ctx.textAlign = 'center';
+
+          // 布局兜底校验：功过格卡片底边理应始终留在卷轴纸条顶边之上，防止
+          // 未来改动任一区块间距时悄悄压线——仅开发期可见的 console.warn，
+          // 不影响海报正常导出
+          const scrollTop = quoteCenterY - 17;
+          if (ritualCardBottom > scrollTop - 8) {
+            console.warn('[drawMeritTagPoster] 功过格卡片与金句卷轴间距过近，请检查 MERIT_CANVAS_HEIGHT/间距常量', { ritualCardBottom, scrollTop });
+          }
 
           ctx.restore(); // 对应开头的圆角裁剪 save/clip
 

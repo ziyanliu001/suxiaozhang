@@ -23,7 +23,6 @@
           bindtap="onToggleTag"
           data-value="{{item.value}}"
         >
-          <text class="vmd-tag-emoji">{{item.emoji}}</text>
           <text class="vmd-tag-label">{{item.label}}</text>
           <text class="vmd-tag-check" wx:if="{{item.selected}}">✓</text>
         </view>
@@ -43,7 +42,7 @@
       </view>
 
       <view class="vmd-submitted-list">
-        <text class="vmd-submitted-chip" wx:for="{{submittedTagObjects}}" wx:key="value">{{item.emoji}} {{item.label}}</text>
+        <text class="vmd-submitted-chip" wx:for="{{submittedTagObjects}}" wx:key="value">行善·{{item.label}}</text>
       </view>
 
       <view class="vmd-actions">
