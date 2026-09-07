@@ -84,10 +84,42 @@
       </view>
 
       <view class="ss-detail-list" wx:else>
-        <view class="ss-detail-header">分账明细</view>
-        <view class="ss-detail-row" wx:for="{{details}}" wx:key="orderId">
+        <view class="ss-detail-header-row">
+          <text class="ss-detail-header">分账明细</text>
+          <button class="ss-export-btn" size="mini" loading="{{exportPreviewLoading}}" bindtap="onExportSettlement">📤 导出对账</button>
+        </view>
+
+        <!-- 🏛️（护城河三 M2）批量确认结算工具条：direct_wechat 模式下分账由
+             微信支付自动划拨，不该出现这个入口（云函数本身也会拒绝） -->
+        <view class="ss-batch-toolbar" wx:if="{{paymentMode !== 'direct_wechat' && unsettled.count > 0}}">
+          <view class="ss-batch-toolbar-links">
+            <text class="ss-batch-link" bindtap="onSelectAllUnsettled">全选待结算</text>
+            <text class="ss-batch-link" bindtap="onClearSelection">清空</text>
+          </view>
+          <button
+            class="ss-batch-confirm-btn"
+            size="mini"
+            loading="{{markSettling}}"
+            disabled="{{selectedOrderIds.length === 0}}"
+            bindtap="onConfirmMarkSettled"
+          >批量确认结算（{{selectedOrderIds.length}}）</button>
+        </view>
+
+        <view class="ss-detail-row" wx:for="{{details}}" wx:key="orderId" wx:for-index="index">
           <view class="ss-detail-top">
-            <text class="ss-detail-order">订单 {{item.orderId}}</text>
+            <view
+              class="ss-detail-order-group"
+              wx:if="{{paymentMode !== 'direct_wechat' && item.settlementStatus === 'unsettled'}}"
+              data-order-id="{{item.orderId}}"
+              data-index="{{index}}"
+              bindtap="onToggleSelectOrder"
+            >
+              <checkbox class="ss-detail-checkbox" checked="{{item.selected}}" color="#8C1D18" />
+              <text class="ss-detail-order">订单 {{item.orderId}}</text>
+            </view>
+            <view class="ss-detail-order-group" wx:else>
+              <text class="ss-detail-order">订单 {{item.orderId}}</text>
+            </view>
             <text class="ss-detail-status ss-status-{{item.settlementStatus}}">{{item.statusLabel}}</text>
           </view>
           <view class="ss-detail-amounts">
@@ -155,6 +187,52 @@
 
       <button class="ss-pledge-submit-btn" loading="{{pledgeSubmitting}}" disabled="{{pledgeSubmitting}}" bindtap="onSubmitPledge">确认转捐</button>
       <button class="ss-pledge-cancel-btn" bindtap="onClosePledgeModal">取消</button>
+    </view>
+  </view>
+
+  <!-- 🏛️（护城河三 M2）导出核对弹窗：与 statistics.ts 的
+       showExportPreviewModal 同一套「先核对、再确认、后导出」安全闭环 -->
+  <view class="ss-pledge-modal-mask" wx:if="{{showExportPreviewModal}}" catchtap="onCloseExportPreviewModal">
+    <view class="ss-pledge-modal-card" catchtap="stopPropagation">
+      <text class="ss-pledge-modal-title">核对对账明细</text>
+      <text class="ss-pledge-modal-sub">共 {{exportPreviewSummary.recordCount}} 笔记录，请核对无误后再导出</text>
+
+      <view class="ss-export-summary-grid">
+        <view class="ss-export-summary-item">
+          <text class="ss-export-summary-label">应付总额</text>
+          <text class="ss-export-summary-value">¥{{exportPreviewSummary.payAmountYuan}}</text>
+        </view>
+        <view class="ss-export-summary-item">
+          <text class="ss-export-summary-label">制作方分成</text>
+          <text class="ss-export-summary-value">¥{{exportPreviewSummary.producerAmountYuan}}</text>
+        </view>
+        <view class="ss-export-summary-item">
+          <text class="ss-export-summary-label">推广分成</text>
+          <text class="ss-export-summary-value">¥{{exportPreviewSummary.promoterAmountYuan}}</text>
+        </view>
+        <view class="ss-export-summary-item">
+          <text class="ss-export-summary-label">平台服务费</text>
+          <text class="ss-export-summary-value">¥{{exportPreviewSummary.platformFeeYuan}}</text>
+        </view>
+      </view>
+
+      <!-- 🛡️（护城河三 4.5）恒等式复核异常提示：导出前主动复核
+           producerAmount+promoterAmount+platformFee===payAmount，任何一条对
+           不上都在这里如实提示，异常记录仍会正常出现在导出的表格里（带⚠标记），
+           不悄悄隐藏 -->
+      <view class="ss-export-anomaly-hint" wx:if="{{exportPreviewSummary.anomalyCount > 0}}">
+        ⚠ 发现 {{exportPreviewSummary.anomalyCount}} 笔记录金额恒等式校验异常，导出表格中会单独标红，建议优先核实
+      </view>
+
+      <scroll-view class="ss-export-preview-list" scroll-y>
+        <view class="ss-export-preview-row" wx:for="{{exportPreviewRecords}}" wx:key="orderId">
+          <text class="ss-export-preview-order {{item.invariantOk ? '' : 'anomaly'}}">{{item.orderId}}{{item.invariantOk ? '' : ' ⚠'}}</text>
+          <text class="ss-export-preview-amount">¥{{item.producerAmountYuan}}</text>
+        </view>
+      </scroll-view>
+
+      <button class="ss-pledge-submit-btn" loading="{{exportSubmitting}}" disabled="{{exportSubmitting}}" bindtap="onExportPreviewConfirm">确认并导出</button>
+      <button class="ss-pledge-cancel-btn" bindtap="onCloseExportPreviewModal">取消</button>
     </view>
   </view>
 

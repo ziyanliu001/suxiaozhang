@@ -1,0 +1,9 @@
+{
+  "name": "liveFactorySettlementCron",
+  "version": "1.0.0",
+  "description": "云函数：工坊 T+1 对账定时扫描——direct_wechat 模式补跑漏网自动分账，其余模式提醒空间负责人人工确认",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

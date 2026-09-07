@@ -1,0 +1,10 @@
+{
+  "name": "exportSettlementExcel",
+  "version": "1.0.0",
+  "description": "云函数：导出工坊对账明细 Excel（护城河三 M2）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "exceljs": "^4.4.0"
+  }
+}

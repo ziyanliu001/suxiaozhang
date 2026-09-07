@@ -40,6 +40,14 @@ exports.main = async (event, context) => {
   const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
   if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可查看对账' };
 
+  // 🌟（护城河三 M2）settlement-summary 页"批量确认结算"入口只应该在
+  // direct_wechat 模式之外展示——该模式下分账由微信支付自动划拨
+  // （tryAutoProfitSharing），手动标记会被 markSettlementsSettled 直接拒绝
+  // （见该云函数注释）。与三桶汇总同一次调用一并下发，前端不用再多打一次
+  // 云函数请求去单独查 paymentMode
+  const tenantRes = await db.collection('tenants').where({ tenantId }).limit(1).get().catch(() => ({ data: [] }));
+  const paymentMode = (tenantRes.data && tenantRes.data[0] && tenantRes.data[0].paymentMode) || 'none';
+
   // 🌟（护城河一 M1）累计转捐额度：与三桶结算汇总同一次调用一并下发，供
   // settlement-summary 页展示"已转捐给公益厨房 ¥X"。转捐是 space_owner/
   // space_admin 的动作（见 manageCharityContribution.pledge 权限校验），
@@ -58,7 +66,7 @@ exports.main = async (event, context) => {
   if (caller.role === 'producer') {
     const productsRes = await db.collection('products').where({ tenantId, producerOpenId: OPENID }).get();
     productIdFilter = (productsRes.data || []).map((p) => p._id);
-    if (productIdFilter.length === 0) return { ...EMPTY_RESULT(), charityPledgedTotal };
+    if (productIdFilter.length === 0) return { ...EMPTY_RESULT(), charityPledgedTotal, paymentMode };
   }
 
   // 🔑 production_orders 是 opsStats（出货单量/份数）与 order_settlements 查询
@@ -66,7 +74,7 @@ exports.main = async (event, context) => {
   const ordersWhere = productIdFilter ? { tenantId, productId: _.in(productIdFilter) } : { tenantId };
   const ordersRes = await db.collection('production_orders').where(ordersWhere).limit(1000).get();
   const orders = ordersRes.data || [];
-  if (orders.length === 0) return { ...EMPTY_RESULT(), charityPledgedTotal };
+  if (orders.length === 0) return { ...EMPTY_RESULT(), charityPledgedTotal, paymentMode };
 
   const orderIds = orders.map((o) => o._id);
   const settlementsRes = await db.collection('order_settlements').where({ tenantId, orderId: _.in(orderIds) }).limit(1000).get();
@@ -93,6 +101,7 @@ exports.main = async (event, context) => {
     summary: bucketSettlements(docs),
     details: details.slice(0, 200),
     opsStats,
-    charityPledgedTotal
+    charityPledgedTotal,
+    paymentMode
   };
 };

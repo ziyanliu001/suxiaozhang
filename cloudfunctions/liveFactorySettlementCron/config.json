@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "openapi": ["subscribeMessage.send"]
+  },
+  "triggers": [
+    {
+      "name": "settlementScan",
+      "type": "timer",
+      "config": "0 0 3 * * * *"
+    }
+  ],
+  "timeout": 60
+}

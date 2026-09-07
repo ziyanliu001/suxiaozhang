@@ -192,6 +192,146 @@
   padding: 16rpx 0;
 }
 
+/* 🏛️（护城河三 M2）导出对账入口 + 批量确认结算工具条 */
+.ss-detail-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ss-export-btn {
+  font-size: 22rpx;
+  line-height: 52rpx;
+  padding: 0 20rpx;
+  margin: 0;
+  background: #F0EBE3;
+  color: #8C1D18;
+  border-radius: 24rpx;
+}
+
+.ss-export-btn::after {
+  border: none;
+}
+
+.ss-batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F8F5F0;
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.ss-batch-toolbar-links {
+  display: flex;
+  gap: 20rpx;
+}
+
+.ss-batch-link {
+  font-size: 22rpx;
+  color: #8C1D18;
+  text-decoration: underline;
+}
+
+.ss-batch-confirm-btn {
+  font-size: 22rpx;
+  line-height: 52rpx;
+  padding: 0 20rpx;
+  margin: 0;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 24rpx;
+}
+
+.ss-batch-confirm-btn::after {
+  border: none;
+}
+
+.ss-batch-confirm-btn[disabled] {
+  background: #D8CFC7;
+  color: #FFFFFF;
+  opacity: 1;
+}
+
+.ss-detail-order-group {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.ss-detail-checkbox {
+  transform: scale(0.75);
+  margin-right: -4rpx;
+}
+
+/* 🏛️（护城河三 M2）导出核对弹窗——复用 .ss-pledge-modal-* 半屏卡片视觉语言 */
+.ss-export-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.ss-export-summary-item {
+  background: #F8F5F0;
+  border-radius: 10rpx;
+  padding: 16rpx;
+}
+
+.ss-export-summary-label {
+  display: block;
+  font-size: 20rpx;
+  color: #8E8E93;
+  margin-bottom: 6rpx;
+}
+
+.ss-export-summary-value {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1C1C1E;
+}
+
+.ss-export-anomaly-hint {
+  font-size: 22rpx;
+  color: #E03131;
+  background: rgba(224, 49, 49, 0.08);
+  border-radius: 10rpx;
+  padding: 12rpx 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.ss-export-preview-list {
+  max-height: 400rpx;
+  border: 2rpx solid #F0EBE3;
+  border-radius: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.ss-export-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 24rpx;
+  border-bottom: 1rpx solid #F0EBE3;
+}
+
+.ss-export-preview-order {
+  font-size: 24rpx;
+  color: #1C1C1E;
+}
+
+.ss-export-preview-order.anomaly {
+  color: #E03131;
+  font-weight: 700;
+}
+
+.ss-export-preview-amount {
+  font-size: 24rpx;
+  color: #8E8E93;
+}
+
 .ss-detail-row {
   padding: 16rpx 0;
   border-top: 1rpx solid #F0EBE3;
