@@ -200,11 +200,16 @@ async function handleList(event, openid) {
     // 工坊侧视角："我捐了多少"
     const caller = await verifyTenantAccess(openid, tenantId, ['space_owner', 'space_admin']);
     if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员可查看转捐记录' };
+    // 🛡️ 容错：charity_contributions 是"首次有人转捐才会被动建表"的集合，
+    // 该租户从未发生过转捐时查询会抛 -502005（collection not exists），与
+    // getSettlementSummary/getMyProductionOrders 里同一张集合的查询保持同一种
+    // 降级写法——查不到就当空列表，不让控制台报红字/调用方收到失败响应
     const res = await db.collection('charity_contributions')
       .where({ tenantId })
       .orderBy('pledgedAt', 'desc')
       .limit(200)
-      .get();
+      .get()
+      .catch(() => ({ data: [] }));
     return { success: true, contributions: res.data || [] };
   }
 
@@ -215,7 +220,8 @@ async function handleList(event, openid) {
     .where({ targetStoreId })
     .orderBy('pledgedAt', 'desc')
     .limit(200)
-    .get();
+    .get()
+    .catch(() => ({ data: [] }));
   return { success: true, contributions: res.data || [] };
 }
 

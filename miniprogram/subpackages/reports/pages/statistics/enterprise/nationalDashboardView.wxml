@@ -365,11 +365,12 @@
         <text class="audit-proof-icon">🛡️</text>
         <text class="audit-proof-text">财务核账存证保护中 · 覆盖率 {{nationalData.auditProofSummary.auditCoverageRate}}</text>
       </view>
-      <!-- 🆕（2026-08-31 商业化权益中心）免费版存证徽章锁定态：仅管理者可点击
-           跳转权益看板，志工/普通角色只看到锁定提示文案，不响应点击 -->
-      <view class="audit-proof-badge audit-proof-LOCKED" wx:elif="{{nationalData.auditProofSummary && nationalData.auditProofSummary.locked}}" bindtap="{{isAdmin ? 'onShowSubscriptionQuotaDetail' : ''}}">
+      <!-- 🆕（2026-08-31 商业化权益中心）免费版存证徽章锁定态：超管/大家长可
+           点击跳转权益看板（与 statistics.wxml 顶部配额微章同一条可见性口径），
+           志工/普通角色只看到锁定提示文案，不响应点击 -->
+      <view class="audit-proof-badge audit-proof-LOCKED" wx:elif="{{nationalData.auditProofSummary && nationalData.auditProofSummary.locked}}" bindtap="{{(isAdmin || isPatriarch) ? 'onShowSubscriptionQuotaDetail' : ''}}">
         <text class="audit-proof-icon">🔒</text>
-        <text class="audit-proof-text">存证验真徽章为专业版/旗舰版专享{{isAdmin ? '，点击了解详情' : ''}}</text>
+        <text class="audit-proof-text">存证验真徽章为专业版/旗舰版专享{{(isAdmin || isPatriarch) ? '，点击了解详情' : ''}}</text>
       </view>
 
       <!-- KPI 行：支持人次 + 现场随喜总额（随喜总额对志工脱敏） -->

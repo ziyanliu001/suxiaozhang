@@ -80,10 +80,11 @@
           <text class="national-banner-icon">📊</text>
           <view class="national-banner-title-col">
             <text class="national-banner-text">爱心网络总览 · {{currentTenantName || '全国爱心网络'}}</text>
-            <!-- 🆕（2026-08-31）机构套餐配额微章：与顶部"数据导出"按钮同一条
-                 isAdmin 权限口径，非超管/大家长看不到本机构套餐用量信息；
-                 点击弹出权益详情，见 onShowSubscriptionQuotaDetail -->
-            <view class="national-quota-badge" wx:if="{{isAdmin && nationalData.subscriptionQuota}}" bindtap="onShowSubscriptionQuotaDetail">
+            <!-- 🆕（2026-08-31）机构套餐配额微章：超管与大家长共享同一条可见性
+                 口径（与顶部"数据导出"按钮的 isAdmin-only 权限面不是同一件事，
+                 导出仍只限超管）；点击弹出权益详情，见
+                 onShowSubscriptionQuotaDetail -->
+            <view class="national-quota-badge" wx:if="{{(isAdmin || isPatriarch) && nationalData.subscriptionQuota}}" bindtap="onShowSubscriptionQuotaDetail">
               <text class="nqb-text">{{nationalData.subscriptionQuota.planName}} {{nationalData.subscriptionQuota.activeStores}}/{{nationalData.subscriptionQuota.maxStores}}门店</text>
               <text class="nqb-arrow">›</text>
             </view>
