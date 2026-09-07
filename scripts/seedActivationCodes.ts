@@ -127,14 +127,16 @@ function printChecklist(entries: { doc: ActivationCodeDoc; spec: SpecPoolEntry }
 // 下执行（与 package.json 里其余 scripts/*.js 的既有运行方式一致）
 const OUTPUT_DIR = 'scripts/output';
 
-// 🐛 云开发控制台"导入 JSON"实际要求 JSON Lines（ndjson）格式——每行一个
-// 独立的 JSON 对象，不是一个外层数组，之前输出的 `[ {...}, {...} ]` 格式
-// 会被控制台拒绝（"导入数据格式不正确，请检查是否为 JSON Lines 格式"）。
-// 改为逐行 JSON.stringify 单个文档、用 \n 拼接，不带最外层方括号/逗号分隔符
+// 🐛 云开发控制台"导入 JSON"要求内容是 JSON Lines（ndjson，每行一个独立
+// JSON 对象，不带外层方括号/逗号），但底层 Mongo 导入接口只认 .json/.csv
+// 这两种文件名后缀——之前用 .jsonl 后缀触发了另一层报错
+// "invalid import filename(only support .json or .csv)"。
+// 后缀与内容格式是两回事：文件名固定用 .json，内容依然是逐行独立对象的
+// JSON Lines，不要因为换回 .json 后缀就误以为要改回外层数组格式
 function writeOutputFile(entries: { doc: ActivationCodeDoc; spec: SpecPoolEntry }[]): string {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outputPath = `${OUTPUT_DIR}/activation-codes-${timestamp}.jsonl`;
+  const outputPath = `${OUTPUT_DIR}/activation-codes-${timestamp}.json`;
   const lines = entries.map((e: { doc: ActivationCodeDoc }) => JSON.stringify(e.doc));
   fs.writeFileSync(outputPath, lines.join('\n') + '\n', 'utf8');
   return outputPath;
@@ -144,7 +146,7 @@ function main(): void {
   const entries = buildActivationCodes();
   printChecklist(entries);
   const outputPath = writeOutputFile(entries);
-  console.log(`已写入 JSON Lines 文件：${outputPath}`);
+  console.log(`已写入 .json 文件（内容为 JSON Lines 格式）：${outputPath}`);
   console.log('该目录已在 .gitignore 中排除，不会被提交进版本库；如需真正生效，');
   console.log('请通过微信云开发控制台"导入 JSON"功能导入 tenant_activation_codes 集合');
   console.log('（控制台实际要求 JSON Lines/ndjson 格式，每行一个独立对象）。');
