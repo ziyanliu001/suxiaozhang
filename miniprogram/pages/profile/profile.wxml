@@ -426,22 +426,27 @@
       <text class="ccc-arrow">❯</text>
     </view>
 
-    <!-- 🏛️（常驻外露化）机构席位与套餐管理：此前这一行物理嵌在下方
-         patriarch-panel-card 内部，而那张卡片被 showAdminWorkbench 折叠开关
-         收起，默认只看到一条摘要条——等于套餐/门店配额信息对大家长不可见。
-         改为不受折叠开关影响、紧跟在摘要条之前的常驻条目，点击行为与原条目
-         完全一致（onOpenSubscriptionModal），下方详情卡内原条目已删除，不
-         重复展示。enterpriseBuildEnabled/shouldShowProCards 门禁原样保留
-         （Open-Core 精简版隐藏 + 雨花公益专区商业策略例外） -->
-    <view class="saas-entitlement-banner" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance && enterpriseBuildEnabled && shouldShowProCards}}" hover-class="ui-hover" bindtap="onOpenSubscriptionModal">
+    <!-- 🏛️（彻底独立外露）机构席位与 SaaS 套餐：与上面"我的工坊订单"/
+         "产销工坊反哺"同一层级的独立一级卡片，不嵌在任何折叠面板或角色分支
+         专属容器内，isPatriarch/isSuperAdmin 共用同一张卡片（此前两个角色
+         各自一份几乎相同的副本已合并，避免重复维护）。isSuperAdmin 分支
+         无条件可见；isPatriarch 分支保留 shouldShowProCards 子条件——这不是
+         遗留的折叠 bug，是 docs/BUSINESS_MODEL.md 第 7 行 2026-09-05 记录的
+         雨花公益专区商业策略例外（雨花斋账号对所有推销类入口彻底隐藏，同一
+         账号上方 top-advanced-secondary"专业服务"标签也受同一条件管控，两处
+         口径必须一致）。shouldShowProCards 默认 false，需等 initMinePage 里
+         并发的 fetchStoreOrgType() 云调用成功返回、确认非雨花斋后才置 true，
+         这是刻意的"查不清楚就不放行"保守设计（见该方法注释），不是本次改动
+         引入的新行为 -->
+    <view class="saas-entitlement-banner" wx:if="{{enterpriseBuildEnabled && (isSuperAdmin || (isPatriarch && shouldShowProCards))}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
       <view class="aws-left">
         <text class="aws-icon">🏢</text>
         <view class="aws-text-col">
-          <text class="aws-title">机构席位与套餐管理</text>
+          <text class="aws-title">机构席位与 SaaS 套餐</text>
           <text class="aws-sub">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
         </view>
       </view>
-      <text class="seb-cta">{{isIOSPlatform ? '🔑 使用兑换码/授权码激活' : '管理 / 升级 ❯'}}</text>
+      <text class="seb-cta">{{isIOSPlatform ? '🔑 兑换卡密/授权码' : '管理 / 升级 ❯'}}</text>
     </view>
 
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方经营健康大盘 +
@@ -677,9 +682,10 @@
         </view>
       </view>
 
-      <!-- 🏛️（常驻外露化）机构席位管理行已迁出本折叠卡片，改为 admin-workbench-
-           summary 摘要条之前的常驻条目 .saas-entitlement-banner，见该处注释，
-           不在折叠卡片内重复展示 -->
+      <!-- 🏛️（彻底独立外露）机构席位管理行已迁出本折叠卡片，改为页面顶部与
+           "我的工坊订单"同级的常驻卡片 .saas-entitlement-banner（isPatriarch/
+           isSuperAdmin 共用同一张，不再各角色各留一份），不在折叠卡片内重复
+           展示 -->
     </view>
 
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方数据概览 + 门店
@@ -1159,23 +1165,9 @@
          指挥卡与浅色列表在预览态下同时刷屏、语义打架。真正的"超管专属操作"权限
          仍由各 on* 处理函数内部用 isRealSuperAdmin 二次校验，与卡片显隐是两回事。 -->
 
-    <!-- 🏛️（常驻外露化）机构席位与套餐管理：原 sa-action-row"机构席位管理"行
-         物理嵌在 sa-command-card 内部，被 showAdminWorkbench 折叠收起，默认
-         不可见。改为不受折叠影响、紧跟在摘要条之前的常驻条目，点击行为与原
-         条目一致（直接 onOpenSubscriptionModal，跳过 onGoToPlatformAdminTenants
-         里仅服务 platform_admin 的跳转分支——这个条目本就只对 isSuperAdmin
-         渲染，两者互斥），下方 sa-command-card 内原条目已删除，不重复展示。
-         不叠加 enterpriseBuildEnabled/shouldShowProCards（与原条目口径一致） -->
-    <view class="saas-entitlement-banner" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}" hover-class="ui-hover" bindtap="onOpenSubscriptionModal">
-      <view class="aws-left">
-        <text class="aws-icon">🏢</text>
-        <view class="aws-text-col">
-          <text class="aws-title">机构席位与套餐管理</text>
-          <text class="aws-sub">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
-        </view>
-      </view>
-      <text class="seb-cta">{{isIOSPlatform ? '🔑 使用兑换码/授权码激活' : '管理 / 升级 ❯'}}</text>
-    </view>
+    <!-- 🏛️（彻底独立外露）机构席位与 SaaS 套餐已合并为页面顶部与"我的工坊
+         订单"同级的唯一一张常驻卡片（isPatriarch/isSuperAdmin 共用），不再
+         在超管这里单独维护一份副本，见页面顶部该卡片处注释 -->
 
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方两张超管专属
          卡片（全局控制台 + 风控/视角/运维工具箱，合计 9 行纯列表平铺），与
