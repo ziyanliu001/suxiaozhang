@@ -1406,6 +1406,34 @@
   white-space: nowrap;
 }
 
+/* 🏛️（常驻外露化）机构席位与套餐管理：复用 .admin-workbench-summary 同款
+   米白底金边卡片视觉（.aws-left/.aws-icon/.aws-text-col 原样沿用），不受
+   showAdminWorkbench 折叠开关影响，始终渲染在摘要条之前——只新增外层容器
+   与右侧 CTA 两处样式，不重新发明视觉语言 */
+.saas-entitlement-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFBF0;
+  border: 1rpx solid #E6D0A0;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.saas-entitlement-banner:active {
+  opacity: 0.85;
+}
+
+.seb-cta {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #8C1D18;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
 /* 🏛️（护城河一 M1）产销工坊反哺卡片——与 .admin-workbench-summary 同一套
    骨架，配色改用公益调性的绿色系，与"门店管理中心"（雨花斋暖橙）区分开 */
 .charity-contribution-card {

@@ -2,7 +2,7 @@ import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
 import { DataService } from '../../utils/dataService';
 import { getSelectedStore, setSelectedStore, getCurrentActiveStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
 import { computeMyCheckInStats, computeMyCheckInStatsWithTodayFallback, computeMyCheckInStreak, getMyCheckInLogs } from '../../utils/checkinStats';
-import { getSafeSystemInfo } from '../../utils/util';
+import { getSafeSystemInfo, isIOSDevice } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -1386,6 +1386,11 @@ Page({
       isVolunteer,
       isFamily,
       isServiceUser: isFamily,
+      // 🍎（机构席位与套餐管理常驻条目）提前到页面初始化就探测好 iOS 合规态，
+      // 不等用户点开 onOpenSubscriptionModal 才现算——该方法内部仍保留自己的
+      // 独立探测（两处同值重复赋值，互不冲突），这里只是让常驻条目在弹窗
+      // 打开前也能正确分支 CTA 文案，见 utils/util.ts isIOSDevice 头部注释
+      isIOSPlatform: isIOSDevice(getSafeSystemInfo()),
       isYuhuazhai,
       aboutTitle,
       orgTypeBadge,

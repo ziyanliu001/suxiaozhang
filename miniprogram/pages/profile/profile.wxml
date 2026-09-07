@@ -426,6 +426,24 @@
       <text class="ccc-arrow">❯</text>
     </view>
 
+    <!-- 🏛️（常驻外露化）机构席位与套餐管理：此前这一行物理嵌在下方
+         patriarch-panel-card 内部，而那张卡片被 showAdminWorkbench 折叠开关
+         收起，默认只看到一条摘要条——等于套餐/门店配额信息对大家长不可见。
+         改为不受折叠开关影响、紧跟在摘要条之前的常驻条目，点击行为与原条目
+         完全一致（onOpenSubscriptionModal），下方详情卡内原条目已删除，不
+         重复展示。enterpriseBuildEnabled/shouldShowProCards 门禁原样保留
+         （Open-Core 精简版隐藏 + 雨花公益专区商业策略例外） -->
+    <view class="saas-entitlement-banner" wx:if="{{isPatriarch && !isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isFinance && enterpriseBuildEnabled && shouldShowProCards}}" hover-class="ui-hover" bindtap="onOpenSubscriptionModal">
+      <view class="aws-left">
+        <text class="aws-icon">🏢</text>
+        <view class="aws-text-col">
+          <text class="aws-title">机构席位与套餐管理</text>
+          <text class="aws-sub">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
+        </view>
+      </view>
+      <text class="seb-cta">{{isIOSPlatform ? '🔑 使用兑换码/授权码激活' : '管理 / 升级 ❯'}}</text>
+    </view>
+
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方经营健康大盘 +
          门店管理中心两张详情卡，个人志愿档案/阳善荣誉等个人属性内容因此能
          提前进入首屏可视范围，不需要物理挪动这些个人内容区块。点击展开后
@@ -659,29 +677,9 @@
         </view>
       </view>
 
-      <!-- 🏛️ 机构席位与技术服务（2026-09-06 规范化接回）：低调的"机构席位管理"
-           行，替代原先仅财务可见的整卡购买横幅。展示真实门店配额用量（如
-           "基础免费版 · 2/2 门店"，数据来自 fetchSubscriptionInfo，initMinePage
-           已按 isPatriarch/isSuperAdmin 并发预取，不是打开弹窗那一刻才现拉，
-           不展示写死占位数字）。点击复用既有 onOpenProSubscriptionModal
-           （= onOpenSubscriptionModal），弹窗内部已按 isIOSDevice 做 iOS 虚拟
-           支付合规隔离（价格/支付按钮隐藏，改兑换码通道）。与其余订阅相关
-           入口共用同一套门禁：enterpriseBuildEnabled（Open-Core 精简版隐藏）+
-           shouldShowProCards（雨花公益专区门店隐藏，见 docs/BUSINESS_MODEL.md
-           商业策略例外） -->
-      <view class="action-item-cell pd-feedback-entry-cell" hover-class="ui-hover" wx:if="{{enterpriseBuildEnabled && shouldShowProCards}}" bindtap="onOpenProSubscriptionModal">
-        <view class="item-left">
-          <text class="manager-only-emoji">🏢</text>
-          <view class="item-text-col">
-            <text class="item-text">机构席位管理</text>
-            <text class="item-sub-text">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
-          </view>
-        </view>
-        <view class="pd-feedback-entry-right">
-          <text class="item-sub-text">席位管理</text>
-          <view class="item-arrow">❯</view>
-        </view>
-      </view>
+      <!-- 🏛️（常驻外露化）机构席位管理行已迁出本折叠卡片，改为 admin-workbench-
+           summary 摘要条之前的常驻条目 .saas-entitlement-banner，见该处注释，
+           不在折叠卡片内重复展示 -->
     </view>
 
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方数据概览 + 门店
@@ -1161,6 +1159,24 @@
          指挥卡与浅色列表在预览态下同时刷屏、语义打架。真正的"超管专属操作"权限
          仍由各 on* 处理函数内部用 isRealSuperAdmin 二次校验，与卡片显隐是两回事。 -->
 
+    <!-- 🏛️（常驻外露化）机构席位与套餐管理：原 sa-action-row"机构席位管理"行
+         物理嵌在 sa-command-card 内部，被 showAdminWorkbench 折叠收起，默认
+         不可见。改为不受折叠影响、紧跟在摘要条之前的常驻条目，点击行为与原
+         条目一致（直接 onOpenSubscriptionModal，跳过 onGoToPlatformAdminTenants
+         里仅服务 platform_admin 的跳转分支——这个条目本就只对 isSuperAdmin
+         渲染，两者互斥），下方 sa-command-card 内原条目已删除，不重复展示。
+         不叠加 enterpriseBuildEnabled/shouldShowProCards（与原条目口径一致） -->
+    <view class="saas-entitlement-banner" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}" hover-class="ui-hover" bindtap="onOpenSubscriptionModal">
+      <view class="aws-left">
+        <text class="aws-icon">🏢</text>
+        <view class="aws-text-col">
+          <text class="aws-title">机构席位与套餐管理</text>
+          <text class="aws-sub">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
+        </view>
+      </view>
+      <text class="seb-cta">{{isIOSPlatform ? '🔑 使用兑换码/授权码激活' : '管理 / 升级 ❯'}}</text>
+    </view>
+
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方两张超管专属
          卡片（全局控制台 + 风控/视角/运维工具箱，合计 9 行纯列表平铺），与
          大家长/店长分支同一套折叠开关。风控待办直接复用 patriarchData 已加载
@@ -1208,31 +1224,11 @@
         </view>
         <view class="sa-action-arrow">❯</view>
       </view>
-      <!-- 🐛 死代码清理：这一行此前按 isPlatformAdmin 分流文案，但本卡片整体的
-           wx:if 已要求 isSuperAdmin===true（见上方 sa-command-card），而
-           isPlatformAdmin===true 时 isSuperAdmin 恒为 false（platform_admin 与
-           super_admin 是两个完全独立的角色维度，前者的 trueServerRole 永远不会
-           等于 'super_admin'，见 authService.ts UserRole 定义处注释）——这张卡片
-           对 platform_admin 账号根本不会渲染，isPlatformAdmin 分支永远走不到。
-           platform_admin 的入口在下方 admin-developer-section（会员开通/续费
-           管理），本行固定展示 super_admin 唯一会看到的文案：点击后由
-           onGoToPlatformAdminTenants() 就地弹出本机构的"套餐升级/续费"半屏卡片，
-           不跳转 pages/platform-admin（该页面服务端 requirePlatformAdmin 只认
-           platform_admin，super_admin 进去只会撞见硬拦截）。
-           🏛️（2026-09-06 规范化接回）改名"机构席位管理"并展示真实门店配额用量，
-           与大家长【门店管理中心】里同名行保持措辞/交互一致（同一套
-           fetchSubscriptionInfo 数据源 + onOpenProSubscriptionModal 点击行为），
-           不再是纯静态的营销文案 -->
-      <view class="sa-action-row" bindtap="onGoToPlatformAdminTenants" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">🏢</text>
-          <view class="sa-action-text-col">
-            <text class="sa-action-title">机构席位管理</text>
-            <text class="sa-action-desc">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
-          </view>
-        </view>
-        <view class="sa-action-arrow">席位管理 ❯</view>
-      </view>
+      <!-- 🏛️（常驻外露化）机构席位管理行已迁出本折叠卡片，改为 admin-workbench-
+           summary 摘要条之前的常驻条目 .saas-entitlement-banner，见该处注释，
+           不在折叠卡片内重复展示。platform_admin 的会员开通/续费管理入口仍在
+           下方 admin-developer-section，与本卡片（仅 super_admin 可见）互不
+           影响 -->
     </view>
 
     <!-- 🆕 结构瘦身：风控与安全 / 视角与租户管理 / 系统运维与性能，原先是三张
