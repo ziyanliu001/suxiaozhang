@@ -1,0 +1,71 @@
+<view class="df-page">
+
+  <navigation-bar
+    title="🌾 工坊好物·爱心预售"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+
+  <view class="df-body" style="margin-top: 24rpx;">
+
+    <view class="df-staff-entry" bindtap="onGoToWorkspaceJoin">
+      <text>我有工坊邀请码，我是工坊员工 →</text>
+    </view>
+
+    <view class="df-loading-state" wx:if="{{loading && products.length === 0}}">
+      <text>加载中...</text>
+    </view>
+
+    <view class="df-error-state" wx:elif="{{loadError}}">
+      <text class="df-error-icon">⚠️</text>
+      <text class="df-error-text">{{loadError}}</text>
+      <button class="df-retry-btn" bindtap="loadFeed">重试</button>
+    </view>
+
+    <view class="df-empty-state" wx:elif="{{products.length === 0}}">
+      <text class="df-empty-icon">🌾</text>
+      <text class="df-empty-text">暂时还没有工坊上架好物，请稍后再来看看</text>
+    </view>
+
+    <scroll-view class="df-scroll" scroll-y style="height: calc(100vh - {{contentTop}}px - 96rpx);" wx:else>
+      <view class="df-grid">
+        <view
+          class="df-card"
+          wx:for="{{products}}"
+          wx:key="productId"
+          data-tenant-id="{{item.tenantId}}"
+          data-product-id="{{item.productId}}"
+          bindtap="onTapProduct"
+        >
+          <view class="df-card-thumb" style="background: {{item.cardColor}};">
+            <text class="df-card-emoji">{{item.cardEmoji}}</text>
+            <text class="df-card-charity-tag">🌾 以产养善</text>
+          </view>
+          <view class="df-card-body">
+            <text class="df-card-name">{{item.name}}</text>
+            <text class="df-card-workshop">{{item.workshopName}}</text>
+
+            <view class="df-card-price-row" wx:if="{{item.hasGroupBuy}}">
+              <text class="df-card-price-original">¥{{item.priceYuan}}</text>
+              <text class="df-card-price-current">¥{{item.groupBuyPriceYuan}}</text>
+            </view>
+            <text class="df-card-price-current df-card-price-solo" wx:else>¥{{item.priceYuan}}</text>
+
+            <view class="df-card-groupbuy" wx:if="{{item.hasGroupBuy}}">
+              <view class="df-card-progress-track">
+                <view class="df-card-progress-fill" style="width: {{item.groupBuyProgress}}%;"></view>
+              </view>
+              <text class="df-card-groupbuy-hint">🎉 {{item.groupBuyHint}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+  </view>
+
+</view>

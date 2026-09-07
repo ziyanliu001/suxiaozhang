@@ -1,0 +1,9 @@
+{
+  "name": "getMyProductionOrders",
+  "version": "1.0.0",
+  "description": "云函数：买家自查「我的工坊订单」+ 善行反哺凭据（方向 B）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

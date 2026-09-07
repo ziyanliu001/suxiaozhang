@@ -31,6 +31,24 @@
         <text class="sf-product-price">¥{{product.priceYuan}}</text>
         <text class="sf-product-note">下单后按现有产能自动排期，{{product.leadTimeDays}} 天起制作</text>
         <text class="sf-product-desc" wx:if="{{product.description}}">{{product.description}}</text>
+
+        <!-- 🏛️（方向 B）今日产能进度：一眼看到"手慢无" -->
+        <view class="sf-capacity-progress" wx:if="{{capacityProgress}}">
+          <view class="sf-capacity-progress-track">
+            <view class="sf-capacity-progress-fill sf-capacity-{{capacityProgress.urgencyClass}}" style="width: {{capacityProgress.percentLocked}}%;"></view>
+          </view>
+          <text class="sf-capacity-progress-text sf-capacity-text-{{capacityProgress.urgencyClass}}">
+            {{capacityProgress.batchDate}} 产能已锁 {{capacityProgress.percentLocked}}% · 仅剩 {{capacityProgress.remaining}} 份
+          </text>
+        </view>
+      </view>
+
+      <!-- 🏛️（方向 B）支付前反哺说明：固定文案，不承诺具体反哺数字——
+           charity_contributions 是工坊主结算后自主选择是否转捐，下单页不能
+           对买家做系统不保证的承诺，实际是否发生反哺以「我的工坊订单」里的
+           真实记录为准 -->
+      <view class="sf-charity-note">
+        <text class="sf-charity-note-text">🌾 本工坊践行"以产养善"——所得盈利部分可能定向转捐雨花公益厨房，具体反哺记录可在「我的工坊订单」中查看</text>
       </view>
 
       <view class="sf-calendar-card" wx:if="{{calendar.length > 0}}">
@@ -66,6 +84,20 @@
             <text class="sf-groupbuy-price">¥{{groupBuyPreview.unitPriceYuan}}/份</text>
           </view>
           <text class="sf-groupbuy-sub">当前已认购 {{groupBuyPreview.committedQuantity}} 份 · {{groupBuyPreview.nextTierHint}}</text>
+
+          <!-- 🏛️（方向 B）阶梯梯度全量展示：当前档高亮，已解锁档打勾灰显 -->
+          <view class="sf-tier-ladder" wx:if="{{groupBuyPreview.tierRows.length > 0}}">
+            <view
+              class="sf-tier-row {{item.isCurrent ? 'sf-tier-current' : ''}} {{item.isReached ? 'sf-tier-reached' : ''}}"
+              wx:for="{{groupBuyPreview.tierRows}}"
+              wx:key="minQuantity"
+            >
+              <text class="sf-tier-check" wx:if="{{item.isReached}}">✓</text>
+              <text class="sf-tier-qty">满{{item.minQuantity}}件</text>
+              <text class="sf-tier-price">¥{{item.priceYuan}}</text>
+            </view>
+          </view>
+
           <text class="sf-groupbuy-disclaimer">最终成交价以下单时实际结算为准</text>
         </view>
       </view>

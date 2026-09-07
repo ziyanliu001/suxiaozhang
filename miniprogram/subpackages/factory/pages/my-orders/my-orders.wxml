@@ -1,0 +1,77 @@
+<view class="mo-page">
+
+  <navigation-bar
+    title="🛒 我的工坊订单"
+    background="#8C1D18"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+
+  <view class="mo-body" style="margin-top: 24rpx;">
+
+    <view class="mo-loading-state" wx:if="{{loading && orders.length === 0}}">
+      <text>加载中...</text>
+    </view>
+
+    <view class="mo-error-state" wx:elif="{{loadError}}">
+      <text class="mo-error-icon">⚠️</text>
+      <text class="mo-error-text">{{loadError}}</text>
+      <button class="mo-retry-btn" bindtap="loadOrders">重试</button>
+    </view>
+
+    <view class="mo-empty-state" wx:elif="{{orders.length === 0}}">
+      <text class="mo-empty-icon">🛒</text>
+      <text class="mo-empty-text">还没有下过工坊订单，去逛逛吧</text>
+    </view>
+
+    <scroll-view class="mo-scroll" scroll-y style="height: calc(100vh - {{contentTop}}px);" wx:else>
+      <view class="mo-order-card" wx:for="{{orders}}" wx:key="orderId" wx:for-index="index">
+        <view class="mo-order-top" data-index="{{index}}" bindtap="onToggleExpand">
+          <view class="mo-order-info">
+            <text class="mo-order-product">{{item.productName}}</text>
+            <text class="mo-order-workshop">{{item.workshopName}} · {{item.quantity}} 份</text>
+          </view>
+          <view class="mo-order-right">
+            <text class="mo-order-status mo-status-{{item.statusClass}}">{{item.statusLabel}}</text>
+            <text class="mo-order-amount">¥{{item.payAmountYuan}}</text>
+          </view>
+        </view>
+
+        <view class="mo-order-detail" wx:if="{{item.expanded}}">
+          <view class="mo-detail-row" wx:if="{{item.batchDate}}">
+            <text class="mo-detail-label">批次日期</text>
+            <text class="mo-detail-value">{{item.batchDate}}</text>
+          </view>
+          <view class="mo-detail-row" wx:if="{{item.estimatedShippingDate}}">
+            <text class="mo-detail-label">预计发货</text>
+            <text class="mo-detail-value">{{item.estimatedShippingDate}}</text>
+          </view>
+          <view class="mo-detail-row" wx:if="{{item.trackingNumber}}">
+            <text class="mo-detail-label">物流单号</text>
+            <text class="mo-detail-value">{{item.expressCompany}} {{item.trackingNumber}}</text>
+          </view>
+          <view class="mo-detail-row" wx:if="{{item.appliedTierLevel > 0}}">
+            <text class="mo-detail-label">成交方式</text>
+            <text class="mo-detail-value">拼团价（满{{item.appliedTierLevel}}件档）</text>
+          </view>
+
+          <!-- 🌾（护城河一 M1）善行反哺凭据：有真实转捐记录才显示金额，
+               没有就如实显示"暂无"，不伪造进度条/数字 -->
+          <view class="mo-charity-card">
+            <text class="mo-charity-title">🌾 善行反哺凭据</text>
+            <block wx:if="{{item.charityContribution}}">
+              <text class="mo-charity-text">已转捐 ¥{{item.charityContribution.amountYuan}} 至 {{item.charityContribution.targetStoreName}}</text>
+              <text class="mo-charity-status">{{item.charityContribution.pledgeStatusLabel}}</text>
+            </block>
+            <text class="mo-charity-empty" wx:else>该订单尚未产生转捐记录</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+  </view>
+
+</view>

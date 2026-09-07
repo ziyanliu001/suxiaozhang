@@ -9126,7 +9126,12 @@ Page({
     wx.hideLoading();
 
     if (spaces.length === 0) {
-      wx.navigateTo({ url: '/subpackages/factory/pages/workspace-join/workspace-join' });
+      // 🏛️（方向 B）此前 0 空间无条件送去 workspace-join（员工邀请码入口）——
+      // 普通买家（无 tenant_members 身份）点这张卡片本来就是想"逛逛工坊有什么
+      // 好物"，被邀请码页面拦住除了退出无事可做，是一个真实的死胡同。改为送去
+      // 发现页 discover.ts，员工入职路径没有被删除，只是挪到发现页顶部的
+      // "我有工坊邀请码"入口，两条路径都保留
+      wx.navigateTo({ url: '/subpackages/factory/pages/discover/discover' });
       return;
     }
     if (spaces.length === 1) {

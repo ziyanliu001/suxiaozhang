@@ -15,7 +15,9 @@
         "pages/product-management/product-management",
         "pages/storefront/storefront",
         "pages/workspace-join/workspace-join",
-        "pages/settlement-agreement/settlement-agreement"
+        "pages/settlement-agreement/settlement-agreement",
+        "pages/discover/discover",
+        "pages/my-orders/my-orders"
       ]
     },
     {

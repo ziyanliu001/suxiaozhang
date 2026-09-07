@@ -476,6 +476,12 @@ Page({
     showCharityContributionModal: false,
     charityContributionModalLoading: false,
 
+    // 🛒（方向 B）我的工坊订单——买家自查入口，与上面的"产销工坊反哺"是
+    // 两个不同视角（反哺卡是"我作为公益厨房管理者收到的转捐"，这张是"我
+    // 作为买家自己下过的单"），有数据才露出，同一种克制展示原则
+    myProductionOrdersCount: 0,
+    myProductionOrdersLatestSummary: '',
+
     // 🌐 超管【门店选择与搜索】弹窗：默认"全国总览"（currentInspectStoreId 为空），
     // 选中具体门店后进入单店巡检视角。这里的字段只在页面运行期间由本弹窗自己的
     // on* 处理函数写入（initMinePage 不会重置它们），与 currentStoreName/currentViewMode
@@ -1497,6 +1503,11 @@ Page({
     // 直接返回空数组，整张卡片（含「输入工坊邀请码加入」）保持隐藏，
     // 入口卡片保持隐藏，不额外增加权限判断分支
     pendingFetches.push(this.fetchProductionSpaces());
+
+    // 🛒（方向 B）我的工坊订单：同样无条件查一次——任何账号都可能是买家
+    // （getMyProductionOrders 以 buyerOpenId 为唯一过滤维度，与角色/tenant_members
+    // 身份完全无关），没有下过单的账号云函数直接返回空数组，卡片保持隐藏
+    pendingFetches.push(this.fetchMyProductionOrders());
 
     try {
       await Promise.allSettled(pendingFetches);
@@ -5748,6 +5759,29 @@ Page({
       console.warn('[fetchProductionSpaces] 查询失败:', err);
       this.setData({ hasProductionSpaceAccess: false, productionSpaces: [] });
     }
+  },
+
+  // 🛒（方向 B）我的工坊订单：只取一个数量 + 最近一单摘要用于卡片展示，
+  // 完整列表在 my-orders.ts 里自己重新拉一次全量（本页不缓存传参，避免
+  // 两处数据不同步时互相打架）
+  async fetchMyProductionOrders() {
+    try {
+      const res = await callFunctionWithTimeout({ name: 'getMyProductionOrders', data: {} });
+      const result = res.result as any;
+      const orders = (result && result.success && result.orders) || [];
+      const latest = orders[0];
+      this.setData({
+        myProductionOrdersCount: orders.length,
+        myProductionOrdersLatestSummary: latest ? `最近一单：${latest.productName}（${latest.statusLabel}）` : ''
+      });
+    } catch (err) {
+      console.warn('[fetchMyProductionOrders] 查询失败:', err);
+      this.setData({ myProductionOrdersCount: 0, myProductionOrdersLatestSummary: '' });
+    }
+  },
+
+  onGoToMyProductionOrders() {
+    wx.navigateTo({ url: '/subpackages/factory/pages/my-orders/my-orders' });
   },
 
 

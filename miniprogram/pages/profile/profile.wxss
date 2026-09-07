@@ -1458,6 +1458,32 @@
   white-space: nowrap;
 }
 
+/* 🛒（方向 B）我的工坊订单卡片——与 .charity-contribution-card 同一套骨架
+   （复用 .ccc-left/.ccc-icon/.ccc-text-col/.ccc-sub/.ccc-arrow 结构类），
+   配色改用工坊红，与"产销工坊反哺"卡片的公益绿区分开——一个是"我收到的
+   转捐"，一个是"我自己买过的东西"，视觉上不该长得一样容易混淆 */
+.my-orders-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FBF3F1;
+  border: 1rpx solid #E8C4BC;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.my-orders-entry-card:active {
+  opacity: 0.85;
+}
+
+.myoc-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
 .ccc-arrow {
   flex-shrink: 0;
   font-size: 24rpx;

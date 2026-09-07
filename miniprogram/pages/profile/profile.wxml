@@ -412,6 +412,20 @@
       <text class="ccc-arrow">❯</text>
     </view>
 
+    <!-- 🛒（方向 B）我的工坊订单——买家自查入口，任何账号只要下过工坊订单
+         就会露出，与上面的"产销工坊反哺"是两个不同视角（反哺卡是"我作为
+         公益厨房管理者收到的转捐"，这张是"我作为买家自己下过的单"） -->
+    <view class="my-orders-entry-card" wx:if="{{myProductionOrdersCount > 0}}" bindtap="onGoToMyProductionOrders">
+      <view class="ccc-left">
+        <text class="ccc-icon">🛒</text>
+        <view class="ccc-text-col">
+          <text class="myoc-title">我的工坊订单</text>
+          <text class="ccc-sub">共 {{myProductionOrdersCount}} 笔 · {{myProductionOrdersLatestSummary}}</text>
+        </view>
+      </view>
+      <text class="ccc-arrow">❯</text>
+    </view>
+
     <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方经营健康大盘 +
          门店管理中心两张详情卡，个人志愿档案/阳善荣誉等个人属性内容因此能
          提前进入首屏可视范围，不需要物理挪动这些个人内容区块。点击展开后

@@ -24,6 +24,7 @@
 // 逐单明细，不重复查库）。
 import { getTodayIsoString } from '../../../../utils/dateUtils';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { ORDER_STATUS_LABEL, ORDER_STATUS_CLASS } from '../../../../utils/orderStatusLabels';
 
 const CURRENT_TENANT_STORAGE_KEY = 'LIVE_FACTORY_CURRENT_TENANT_ID';
 
@@ -44,21 +45,11 @@ function addDaysIso(isoDateStr: string, days: number): string {
 // lib/orderStatusMachine.js、processProductionRefund/index.js）——不是 KB 文档
 // 早期草案里 PENDING/PRODUCING/PACKED/FULFILLED 那套理想化状态机
 const STATUS_ORDER = ['paid', 'in_production', 'shipped', 'refunded'];
-const ORDER_STATUS_LABEL: Record<string, string> = {
-  paid: '已付款 · 待生产',
-  in_production: '生产中',
-  shipped: '已发货',
-  refunded: '已退款'
-};
-// 与 WXSS 里 .pf-status-header-{{class}} / .pf-order-status-{{class}} / .pf-chip-{{class}}
+// ORDER_STATUS_LABEL/ORDER_STATUS_CLASS 现在从 utils/orderStatusLabels.ts 共享
+// 导入（与买家侧 my-orders.ts 同一份口径，见该文件头部注释）；本页 WXSS 用
+// .pf-status-header-{{class}} / .pf-order-status-{{class}} / .pf-chip-{{class}}
 // 拼接使用，值本身不带 pf- 前缀（前缀在 WXML class 拼接时统一加），避免拼出
 // pf-status-header-pf-status-xxx 这种重复前缀
-const ORDER_STATUS_CLASS: Record<string, string> = {
-  paid: 'pending',
-  in_production: 'producing',
-  shipped: 'shipped',
-  refunded: 'refunded'
-};
 
 const CAPACITY_STATUS_LABEL: Record<string, string> = {
   full: '已满',

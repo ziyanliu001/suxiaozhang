@@ -1,0 +1,9 @@
+{
+  "name": "getFactoryProductFeed",
+  "version": "1.0.0",
+  "description": "云函数：「工坊好物·爱心预售」跨租户商品发现（方向 B）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

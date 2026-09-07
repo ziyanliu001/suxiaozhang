@@ -11,15 +11,7 @@
 import { payForOrder } from '../../../../utils/wxPayCore';
 import { requestShippingNoticeSubscription } from '../../../../utils/subscribeMessage';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-
-// 🏛️（护城河二）拼团阶梯——与 liveFactoryCore/lib/groupBuyTier.js 同一份
-// 命中规则，这里只做"预览"用途（进度条/文案），不是最终成交价的权威来源；
-// 真正的价格由 createProductionOrder → liveFactoryCore.updateGroupBuyProgress
-// 在下单那一刻原子算出，本页展示的只是"如果现在下单大概率是这个价"的预估
-interface GroupBuyTier {
-  minQuantity: number;
-  unitPriceOverride: number;
-}
+import { GroupBuyTier, TierRow, resolveTierPreview, buildTierRows } from '../../../../utils/groupBuyPreview';
 
 interface GroupBuyBatch {
   batchId: string;
@@ -33,21 +25,6 @@ interface CalendarEntry {
   remaining: number;
   soldOut: boolean;
   groupBuyBatch: GroupBuyBatch | null;
-}
-
-function resolveTierPreview(tiers: GroupBuyTier[], projectedTotal: number, basePriceCents: number) {
-  const sorted = (tiers || []).slice().sort((a, b) => a.minQuantity - b.minQuantity);
-  let applied: GroupBuyTier | null = null;
-  for (const t of sorted) {
-    if (projectedTotal >= t.minQuantity) applied = t;
-    else break;
-  }
-  const nextTier = sorted.find((t) => t.minQuantity > projectedTotal) || null;
-  return {
-    unitPrice: applied ? applied.unitPriceOverride : basePriceCents,
-    appliedTierLevel: applied ? applied.minQuantity : 0,
-    nextTier
-  };
 }
 
 interface OtherProduct {
@@ -80,12 +57,25 @@ Page({
 
     // 🏛️（护城河二）拼团预览：selectedBatchDate 命中的批次信息 + 按当前
     // quantity 预估的成交价文案，随 onSelectBatchDate/onIncreaseQty/
-    // onDecreaseQty 联动刷新
+    // onDecreaseQty 联动刷新。tierRows 是方向 B 新增的完整阶梯梯度展示
+    // （当前档高亮 + 已解锁档打勾），此前只有 nextTierHint 一行摘要文案
     groupBuyPreview: null as {
       unitPriceYuan: string;
       appliedTierLevel: number;
       committedQuantity: number;
       nextTierHint: string;
+      tierRows: TierRow[];
+    } | null,
+
+    // 🏛️（方向 B）今日产能进度：取当前选中日期（未选中时取最早可下单日）的
+    // 产能占用比例，让买家直观看到"仅剩 N 份，手慢无"的紧迫感——数据源就是
+    // calendar[].remaining/product.dailyCapacityLimit，纯前端计算，不新增
+    // 云函数调用
+    capacityProgress: null as {
+      batchDate: string;
+      remaining: number;
+      percentLocked: number; // 0~100
+      urgencyClass: string; // 'normal' | 'low' | 'full'，复用日历既有三档阈值
     } | null,
 
     otherProducts: [] as OtherProduct[],
@@ -171,6 +161,7 @@ Page({
       if (calendarResult && calendarResult.success) {
         this.setData({ calendar: calendarResult.calendar || [] });
         this.updateGroupBuyPreview();
+        this.updateCapacityProgress();
       }
 
       this.loadOtherProducts();
@@ -218,6 +209,7 @@ Page({
     if (!entry || entry.soldOut) return;
     this.setData({ selectedBatchDate: this.data.selectedBatchDate === date ? '' : date });
     this.updateGroupBuyPreview();
+    this.updateCapacityProgress();
   },
 
   onDecreaseQty() {
@@ -258,7 +250,35 @@ Page({
         unitPriceYuan: (unitPrice / 100).toFixed(2),
         appliedTierLevel,
         committedQuantity: batch.committedQuantity,
-        nextTierHint
+        nextTierHint,
+        tierRows: buildTierRows(batch.tierThresholds, projectedTotal)
+      }
+    });
+  },
+
+  // 🏛️（方向 B）今日产能进度：取当前选中日期，未选中时取预售日历最早的一天
+  // （即"今日/最快可下单日"），把 remaining/dailyCapacityLimit 换算成一条
+  // "已锁 N% · 仅剩 M 份"的紧迫感文案。三档阈值与日历卡片本身的
+  // soldOut/remaining<=3 判断口径一致，不新造一套颜色规则
+  updateCapacityProgress() {
+    const product = this.data.product;
+    if (!product || !this.data.calendar || this.data.calendar.length === 0) {
+      this.setData({ capacityProgress: null });
+      return;
+    }
+    const entry = this.data.calendar.find((c) => c.batchDate === this.data.selectedBatchDate) || this.data.calendar[0];
+    if (!entry || !(product.dailyCapacityLimit > 0)) {
+      this.setData({ capacityProgress: null });
+      return;
+    }
+    const percentLocked = Math.round((1 - entry.remaining / product.dailyCapacityLimit) * 100);
+    const urgencyClass = entry.soldOut ? 'full' : (entry.remaining <= 3 ? 'low' : 'normal');
+    this.setData({
+      capacityProgress: {
+        batchDate: entry.batchDate,
+        remaining: entry.remaining,
+        percentLocked: Math.min(Math.max(percentLocked, 0), 100),
+        urgencyClass
       }
     });
   },

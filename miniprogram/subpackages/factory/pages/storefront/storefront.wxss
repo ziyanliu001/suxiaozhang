@@ -269,6 +269,133 @@
   color: #ADADB2;
 }
 
+/* 🏛️（方向 B）阶梯梯度全量展示 */
+.sf-tier-ladder {
+  display: flex;
+  gap: 12rpx;
+  margin: 12rpx 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.sf-tier-row {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 100rpx;
+  padding: 10rpx 14rpx;
+  background: #FFFFFF;
+  border: 2rpx solid #F0E4D4;
+  border-radius: 10rpx;
+}
+
+.sf-tier-row.sf-tier-reached {
+  border-color: #D9B98C;
+  opacity: 0.7;
+}
+
+.sf-tier-row.sf-tier-current {
+  border-color: #8C1D18;
+  background: #FDF1EE;
+  opacity: 1;
+}
+
+.sf-tier-check {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  width: 28rpx;
+  height: 28rpx;
+  line-height: 28rpx;
+  text-align: center;
+  font-size: 18rpx;
+  color: #FFFFFF;
+  background: #8C9A7C;
+  border-radius: 50%;
+}
+
+.sf-tier-qty {
+  font-size: 20rpx;
+  color: #8E8E93;
+}
+
+.sf-tier-price {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #8C1D18;
+  margin-top: 2rpx;
+}
+
+.sf-tier-row.sf-tier-current .sf-tier-qty {
+  color: #A85C3A;
+}
+
+/* 🏛️（方向 B）今日产能进度条 */
+.sf-capacity-progress {
+  margin-top: 16rpx;
+}
+
+.sf-capacity-progress-track {
+  width: 100%;
+  height: 12rpx;
+  background: #F0EBE3;
+  border-radius: 6rpx;
+  overflow: hidden;
+}
+
+.sf-capacity-progress-fill {
+  height: 100%;
+  border-radius: 6rpx;
+  transition: width 0.3s ease;
+}
+
+.sf-capacity-normal {
+  background: #2E7D32;
+}
+
+.sf-capacity-low {
+  background: #C77B2E;
+}
+
+.sf-capacity-full {
+  background: #ADADB2;
+}
+
+.sf-capacity-progress-text {
+  display: block;
+  font-size: 20rpx;
+  margin-top: 8rpx;
+}
+
+.sf-capacity-text-normal {
+  color: #2E7D32;
+}
+
+.sf-capacity-text-low {
+  color: #C77B2E;
+}
+
+.sf-capacity-text-full {
+  color: #8E8E93;
+}
+
+/* 🏛️（方向 B）支付前反哺说明——固定文案，克制的浅底提示条，不喧宾夺主 */
+.sf-charity-note {
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  background: #F3F7F0;
+  border-radius: 12rpx;
+  border: 2rpx solid #DCE8D6;
+}
+
+.sf-charity-note-text {
+  font-size: 22rpx;
+  color: #4E7A45;
+  line-height: 32rpx;
+}
+
 .sf-qty-stepper {
   display: flex;
   align-items: center;

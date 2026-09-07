@@ -1,0 +1,175 @@
+.df-page {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  background: #F8F5F0;
+}
+
+.df-body {
+  padding: 0 24rpx;
+  box-sizing: border-box;
+}
+
+.df-staff-entry {
+  text-align: center;
+  font-size: 22rpx;
+  color: #8C1D18;
+  background: #FFFFFF;
+  border: 2rpx solid #F0EBE3;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.df-loading-state,
+.df-error-state,
+.df-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 40rpx;
+  color: #8E8E93;
+  font-size: 28rpx;
+}
+
+.df-error-icon,
+.df-empty-icon {
+  font-size: 64rpx;
+  margin-bottom: 16rpx;
+}
+
+.df-error-text,
+.df-empty-text {
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+.df-retry-btn {
+  font-size: 28rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  padding: 0 40rpx;
+  line-height: 72rpx;
+  border-radius: 36rpx;
+}
+
+.df-scroll {
+  width: 100%;
+}
+
+.df-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  padding-bottom: 24rpx;
+}
+
+.df-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+}
+
+.df-card-thumb {
+  position: relative;
+  height: 160rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.df-card-emoji {
+  font-size: 64rpx;
+}
+
+.df-card-charity-tag {
+  position: absolute;
+  top: 8rpx;
+  left: 8rpx;
+  font-size: 18rpx;
+  line-height: 30rpx;
+  padding: 0 10rpx;
+  background: rgba(255, 255, 255, 0.85);
+  color: #4E7A45;
+  border-radius: 8rpx;
+}
+
+.df-card-body {
+  padding: 16rpx;
+}
+
+.df-card-name {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1C1C1E;
+  margin-bottom: 4rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.df-card-workshop {
+  display: block;
+  font-size: 20rpx;
+  color: #8E8E93;
+  margin-bottom: 10rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.df-card-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-bottom: 8rpx;
+}
+
+.df-card-price-original {
+  font-size: 20rpx;
+  color: #ADADB2;
+  text-decoration: line-through;
+}
+
+.df-card-price-current {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
+.df-card-price-solo {
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.df-card-groupbuy {
+  margin-top: 4rpx;
+}
+
+.df-card-progress-track {
+  width: 100%;
+  height: 8rpx;
+  background: #F0EBE3;
+  border-radius: 4rpx;
+  overflow: hidden;
+}
+
+.df-card-progress-fill {
+  height: 100%;
+  background: #E8770F;
+  border-radius: 4rpx;
+}
+
+.df-card-groupbuy-hint {
+  display: block;
+  font-size: 18rpx;
+  color: #E8770F;
+  margin-top: 6rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
