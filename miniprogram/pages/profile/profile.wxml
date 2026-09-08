@@ -443,21 +443,27 @@
       <text class="ccc-arrow">❯</text>
     </view>
 
-    <!-- 🏛️（彻底独立外露）机构席位与 SaaS 套餐：与上面"我的工坊订单"/
+    <!-- 🏛️（彻底独立外露）机构席位与 SaaS 套餐：与上面"工坊生产与履约"/
          "产销工坊反哺"同一层级的独立一级卡片，不嵌在任何折叠面板或角色分支
          专属容器内，isPatriarch/isSuperAdmin 共用同一张卡片。
-         🐛（2026-09-08 订正）此前这里对 isPatriarch 分支叠加过
-         shouldShowProCards（雨花斋 !isYuhuazhai 判定，依赖 fetchStoreOrgType()
-         异步云调用，默认 false）——依据的是 docs/BUSINESS_MODEL.md 里已经过时
-         的雨花斋商业策略例外。以 2026-09-06《平台多租户 SaaS 与订阅规范》
-         （唯一真源，见 Obsidian 智慧库同名文档）为准：计费主体是机构大家长
-         （Tenant），雨花公益食堂/通用素食记账/产销工坊三个工作空间专区共用
-         同一套订阅体系，本就不该按门店业态区分，旧文档的特化逻辑已失效。
-         改为纯粹的 isPatriarch || isSuperAdmin，不再依赖异步 orgType 查证，
-         进页面即可常驻可见。⚠️ top-advanced-secondary"专业服务"标签
-         （:393）目前仍挂着 shouldShowProCards，本次未动——那是另一处独立
-         入口，按同一份唯一真源精神理应一并去掉这个子条件，但不在本次改动
-         范围内，需要用户确认后再处理，避免未经确认扩大改动面 -->
+         ✅（2026-09-08 最终裁决，唯一真源见 docs/BUSINESS_MODEL.md +
+         docs/architecture/01_sustainable_charity_and_tenant_isolation.md）：
+         雨花斋（orgType==='yuhuazhai'）享受全功能永久公益豁免、不设配额，
+         绝不因租户级 SaaS 收费策略向雨花斋门店发起强制收费或阻断；商业化
+         SaaS 策略仅针对社会化独立租户（通用素食记账/产销工坊等非雨花斋
+         业态）。此前一版注释曾以"计费主体是机构大家长、不该按门店业态区分"
+         为由移除过 shouldShowProCards（雨花斋 !isYuhuazhai 判定）子条件，
+         该理由已被本次裁决推翻废止，判定依据仍以 orgType 为唯一真源。
+         本卡片入口本身对雨花斋大家长/超管仍保持可见（wx:if 条件本次未改
+         动），点击后唤起的 onOpenProSubscriptionModal 半屏卡片内部已按
+         isYuhuazhai 分流展示纯公益文案，不出现任何购买/续费/价格词汇（见
+         saasSubscriptionModal.wxml），落地了"永不阻断"的原则，故本次仅
+         订正说明性注释，不改动 wx:if 条件——如需入口卡片本身也针对雨花斋
+         做视觉/文案区分（如换成"雨花斋公益已享权益"字样），需单独排期。
+         ⚠️ top-advanced-secondary"专业服务"标签（:393）目前仍挂着
+         shouldShowProCards，本次同样未动——按同一份唯一真源精神理应一并
+         梳理，但不在本次改动范围内，需要用户确认后再处理，避免未经确认
+         扩大改动面 -->
     <view class="saas-entitlement-banner" wx:if="{{enterpriseBuildEnabled && (isPatriarch || isSuperAdmin)}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
       <view class="aws-left">
         <text class="aws-icon">🏢</text>
