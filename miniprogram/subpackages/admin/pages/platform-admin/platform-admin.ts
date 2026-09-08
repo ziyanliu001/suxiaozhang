@@ -202,6 +202,11 @@ Page({
   },
 
   onLoad() {
+    // 🩺（排查白屏用）确认 onLoad 是否真的被调用——如果模拟器控制台看不到
+    // 这条日志，说明问题出在 onLoad 之前（编译模式指向的路径/WXML 编译失败/
+    // 模块 require 阶段异常），不是本方法内部逻辑的问题，不用再往下排查
+    // this.checkAccess()/navGuard 这些具体实现
+    console.log('[platform-admin] onLoad 开始执行');
     this.checkAccess();
 
     this._navGuard = createNavGuard({
@@ -209,6 +214,7 @@ Page({
       alertMessage: '即将退出雨花爱心餐报助手，是否返回首页继续使用？'
     });
     this._navGuard.setupOnLoad();
+    console.log('[platform-admin] onLoad 执行完毕（navGuard 已初始化）');
   },
 
   onUnload() {
@@ -249,7 +255,13 @@ Page({
 
   // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
   // 共享组件
+  // 🩺（排查白屏用）navigation-bar 组件 attached() 里的 _layout() 算完自身
+  // 高度后会 triggerEvent('layout', ...) 上报到这里——这条日志能出现，说明
+  // 自定义导航栏组件本身已经正常渲染/挂载完成，胶囊高度计算没有卡死；如果
+  // onLoad 的日志出现了但这条没出现，说明问题出在 WXML 里
+  // <navigation-bar> 这个组件本身没有正常渲染，而不是页面 JS 逻辑的问题
   onNavLayout(e: { detail: { totalHeight: number } }) {
+    console.log('[platform-admin] onNavLayout 收到导航栏布局上报:', e.detail);
     this.setData({ contentTop: e.detail.totalHeight + 8 });
   },
 
@@ -258,13 +270,16 @@ Page({
   // 现在用 try/catch 兜底，失败也会把 checkedAccess 置为 true 并落一条
   // accessError 友好文案 + 重试按钮，不会无限转圈
   async checkAccess() {
+    console.log('[platform-admin] checkAccess 开始');
     try {
       let cached = AuthService.getCachedRoleInfo();
       if (!cached) {
+        console.log('[platform-admin] 无缓存角色信息，发起 fetchUserRole');
         const result = await AuthService.fetchUserRole();
         cached = result.roleInfo || null;
       }
       const isPlatformAdmin = !!(cached && cached.role === 'platform_admin');
+      console.log('[platform-admin] checkAccess 角色判定结果:', cached && cached.role, 'isPlatformAdmin=', isPlatformAdmin);
       this.setData({ checkedAccess: true, isPlatformAdmin, accessError: '' });
 
       if (isPlatformAdmin) {
