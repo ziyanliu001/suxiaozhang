@@ -3,7 +3,7 @@
   <privacy-popup />
 
   <navigation-bar
-    title="🍱 食谱管理"
+    title="食谱管理"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"

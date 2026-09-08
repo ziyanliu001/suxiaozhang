@@ -1,0 +1,9 @@
+{
+  "name": "cleanDevData",
+  "version": "1.0.0",
+  "description": "平台管理员运维工具：按 tenantId/reportDate 精准批量删除测试日报数据（report_logs），并同步清理关联的云存储照片文件（receiptImages）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

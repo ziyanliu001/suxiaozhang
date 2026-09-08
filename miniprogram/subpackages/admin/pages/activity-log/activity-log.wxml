@@ -3,7 +3,7 @@
   <privacy-popup />
 
   <navigation-bar
-    title="📌 门店日志"
+    title="门店日志"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"

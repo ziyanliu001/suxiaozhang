@@ -1,7 +1,7 @@
 <view class="sa-page">
 
   <navigation-bar
-    title="📜 工坊分成合作协议"
+    title="分成协议"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"

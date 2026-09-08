@@ -1,6 +1,6 @@
 <view class="sp-page">
   <navigation-bar
-    title="🏠 门店档案"
+    title="门店档案"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"

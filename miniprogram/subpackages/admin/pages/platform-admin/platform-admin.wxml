@@ -1,7 +1,7 @@
 <view class="pa-page">
 
   <navigation-bar
-    title="🏢 SaaS 平台管理"
+    title="平台管理"
     background="#1C2530"
     color="#FFFFFF"
     dark="{{true}}"

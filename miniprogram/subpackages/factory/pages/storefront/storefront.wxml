@@ -1,7 +1,7 @@
 <view class="sf-page">
 
   <navigation-bar
-    title="🛒 现做现发"
+    title="现做现发"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"

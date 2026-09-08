@@ -1,7 +1,7 @@
 <view class="ss-page">
 
   <navigation-bar
-    title="💰 对账明细"
+    title="对账明细"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"
