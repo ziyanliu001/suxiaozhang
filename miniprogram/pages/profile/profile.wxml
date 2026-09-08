@@ -3209,11 +3209,23 @@
   <!-- 🏛️（护城河一 M1：以产养善·物资反哺链）产销工坊反哺核销弹窗——只读
        charity_contributions 这张两边体系之间唯一的中间账本，不触碰
        tenant_members/production_orders 半点，见 manageCharityContribution
-       云函数头部注释 -->
+       云函数头部注释。
+       🍚（2026-09-08）标题与入口卡片统一改为"工坊爱心护持"系措辞（modal 内
+       用"明细"二字与卡片本身区分，避免同名歧义），裸露的 🌾 emoji 升级为
+       微圆角低饱和图标容器，与本页/workspace-join 等页面已验证过的
+       icon-badge 设计语言保持一致。⚠️ 本 modal 复用的 .admin-key-modal-title
+       共享 class 在另外三处（联系超级管理员/设置管理员密钥/重置门店管理员
+       密钥）仍是裸 emoji 前缀写法，本次只针对这一处做局部包裹，未改动共享
+       class 本身，如需统一到全部四处需要单独确认 -->
   <view class="certificate-modal-mask" wx:if="{{showCharityContributionModal}}" catchtouchmove="stopPropagation" bindtap="onCloseCharityContributionModal">
     <view class="certificate-modal-card" catchtap="stopPropagation">
       <view class="certificate-modal-header">
-        <text class="admin-key-modal-title">🌾 产销工坊反哺</text>
+        <view class="ccm-title-row">
+          <view class="ccm-title-icon-badge">
+            <text class="ccm-title-icon">🍚</text>
+          </view>
+          <text class="admin-key-modal-title">工坊爱心护持明细</text>
+        </view>
         <view class="certificate-modal-close" bindtap="onCloseCharityContributionModal">✕</view>
       </view>
 

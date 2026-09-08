@@ -3329,9 +3329,37 @@
   display: flex;
   align-items: center;
   /* 标题文字已删除，header 现在只剩关闭按钮——改成 flex-end 让它继续贴右上角，
-     不再需要 space-between 那种"两端对齐"布局 */
+     不再需要 space-between 那种"两端对齐"布局。⚠️ 本页部分 modal（如工坊
+     爱心护持明细）仍会在这个 header 里放标题，flex-end 下标题会紧贴在关闭
+     按钮左侧，不是"标题居左、关闭居右"的两端对齐——这是既有共享布局，本次
+     未改动 */
   justify-content: flex-end;
   margin-bottom: 20rpx;
+}
+
+/* 🍚（工坊爱心护持明细弹窗标题）微圆角低饱和图标容器，与
+   workspace-join.wj-role-guide-icon-badge/pages/index
+   .platform-card-icon-badge 同一套设计语言——emoji 不再裸露直出 */
+.ccm-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex: 1;
+  min-width: 0;
+}
+.ccm-title-icon-badge {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: #E8F5E9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ccm-title-icon {
+  font-size: 26rpx;
+  line-height: 1;
 }
 
 .certificate-modal-close {
