@@ -223,13 +223,7 @@ export const saasSubscriptionHandlers = {
       showSubscriptionModal: true,
       subscriptionLoading: true,
       activationCodeInput: '',
-      isIOSPlatform,
-      // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态；
-      // 🍎 iOS 端例外——应用内支付被隐藏后，授权码/兑换卡号是唯一的自助开通
-      // 通道，直接展开主导展示，不需要用户先发现"原来还有个折叠入口"
-      // 🌸 雨花斋公益专区同理——公益专区分支里完全没有付费按钮，公益扩容
-      // 授权码是这个分支唯一的操作入口，同样直接展开
-      showRedeemSection: isIOSPlatform || this.data.isYuhuazhai
+      isIOSPlatform
     });
     // 🐛 根因修复：自定义 tabBar 是框架自动挂载的原生层组件，本卡片的
     // z-index 再高也盖不住它（见 utils/tabBarVisibility.ts 头部注释），
@@ -237,11 +231,30 @@ export const saasSubscriptionHandlers = {
     setTabBarHidden(this, true);
 
     try {
-      await this.fetchSubscriptionInfo();
+      // 🐛 根因修复（雨花斋误入商业分支）：saasSubscriptionModal.wxml 按
+      // this.data.isYuhuazhai 分流"公益/商业"两条完全不同的展示分支——但
+      // isYuhuazhai 是页面首次加载时 fetchStoreOrgType() 异步查证得到的，
+      // 该方法头部注释明确写着：查询失败/云不可用时静默保留安全默认值
+      // false（这对隐藏售卖卡片是安全方向，但反过来用在本弹窗的分支选择
+      // 上是不安全方向——会把一个真实雨花斋账号错误地引导进下面的商业
+      // 分支，展示与自己无关的定价/购买按钮）。这里在每次打开半屏卡片时
+      // 都与刷新套餐信息一并重新查证一次 orgType，成本是一次轻量云调用，
+      // 确保渲染分支时 isYuhuazhai 是当次已验证过的最新值，不依赖页面
+      // 加载时那次可能失败/过期的查询结果
+      await Promise.allSettled([this.fetchSubscriptionInfo(), this.fetchStoreOrgType()]);
     } catch (err) {
       console.warn('[onOpenSubscriptionModal] 加载套餐信息失败:', err);
     } finally {
-      this.setData({ subscriptionLoading: false });
+      this.setData({
+        subscriptionLoading: false,
+        // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态；
+        // 🍎 iOS 端例外——应用内支付被隐藏后，授权码/兑换卡号是唯一的自助开通
+        // 通道，直接展开主导展示；🌸 雨花斋公益专区同理——公益专区分支里
+        // 完全没有付费按钮，公益扩容授权码是这个分支唯一的操作入口，同样
+        // 直接展开。放在这里而不是打开弹窗那一刻同步计算，是因为此时
+        // this.data.isYuhuazhai 已经是上面重新查证过的最新值
+        showRedeemSection: isIOSPlatform || this.data.isYuhuazhai
+      });
     }
   },
 
