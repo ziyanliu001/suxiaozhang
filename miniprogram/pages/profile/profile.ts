@@ -246,6 +246,21 @@ const PATRIARCH_PROFILE_FIELD_LABELS: Record<string, string> = {
   otherCount: '其他'
 };
 
+// 🌾（伦理防火墙第三重：功德受赠实物化展示，见
+// docs/architecture/01_sustainable_charity_and_tenant_isolation.md 4.3 节）
+// 大米折算参考价：公益爱心米某一时段的参考单价，约 2.5 元/斤——不是接入
+// 实时粮价行情的精确换算，只是把"产销工坊反哺"卡片上冷冰冰的金额转成
+// "大约相当于多少斤大米"这种更直观的公益感知展示。charity_contributions
+// 的记账/核销仍以分为单位的真实金额为唯一真源，本折算值只用于展示层，
+// 不参与任何鉴权/记账逻辑
+const CHARITY_RICE_PRICE_YUAN_PER_JIN = 2.5;
+
+// 轻量折算：反哺总金额（分）→ 约合大米斤数，向下取整（宁可少报，不虚报）
+function computeCharityRiceEquivalent(totalCents: number): number {
+  const yuan = (totalCents || 0) / 100;
+  return Math.floor(yuan / CHARITY_RICE_PRICE_YUAN_PER_JIN);
+}
+
 // 从 createIndexes 云函数返回的摘要字符串（"新建 N 条，已存在跳过 M 条，失败 0 条"）
 // 提取数字，供口语化结果展示使用
 function parseIndexSummary(summary: string): { created: number; skipped: number; failed: number } {
@@ -480,6 +495,9 @@ Page({
     charityContributions: [] as any[],
     charityPendingCount: 0,
     charityTotalYuan: '0.00',
+    // 🌾（伦理防火墙第三重：功德受赠实物化展示）反哺金额的大米斤数折算展示，
+    // 见 computeCharityRiceEquivalent 注释——纯展示层派生值，不是记账字段
+    charityRiceEquivalent: 0,
     showCharityContributionModal: false,
     charityContributionModalLoading: false,
 
@@ -5716,7 +5734,8 @@ Page({
       this.setData({
         charityContributions: contributions,
         charityPendingCount: pendingCount,
-        charityTotalYuan: (total / 100).toFixed(2)
+        charityTotalYuan: (total / 100).toFixed(2),
+        charityRiceEquivalent: computeCharityRiceEquivalent(total)
       });
     } catch (err) {
       // 静默失败：这是一张锦上添花的展示卡片，查询失败不影响本页任何核心

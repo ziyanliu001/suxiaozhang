@@ -1486,6 +1486,23 @@
   white-space: nowrap;
 }
 
+/* 🍚（伦理防火墙第三重）大米斤数折算胶囊：与卡片本身的公益绿同色系，
+   浅底深字的小标签，视觉上明确区别于"金额"这一行，弱化商业分润感 */
+.ccc-rice-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 4rpx;
+  padding: 4rpx 14rpx;
+  background: #E8F5E9;
+  border-radius: 16rpx;
+}
+.ccc-rice-tag text {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #2E7D32;
+}
+
 /* 🛒（方向 B）我的工坊订单卡片——与 .charity-contribution-card 同一套骨架
    （复用 .ccc-left/.ccc-icon/.ccc-text-col/.ccc-sub/.ccc-arrow 结构类），
    配色改用工坊红，与"产销工坊反哺"卡片的公益绿区分开——一个是"我收到的

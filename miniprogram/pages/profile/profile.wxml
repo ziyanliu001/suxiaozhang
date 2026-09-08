@@ -399,14 +399,22 @@
 
     <!-- 🏛️（护城河一 M1：以产养善·物资反哺链）收到的产销工坊反哺——只有
          店长/大家长/超管这三个能核销的角色才需要看到，且只在真的收到过
-         转捐时才展示，避免给从未跟产销工坊有过交集的门店平添一张空卡片 -->
+         转捐时才展示，避免给从未跟产销工坊有过交集的门店平添一张空卡片。
+         🌾（2026-09-08 伦理防火墙第三重落地）标题改为「工坊爱心护持」并
+         追加大米斤数折算胶囊，强调"工坊爱心护持"属性，消除纯商业分润的
+         生硬感——折算率与展示层实现见 profile.ts
+         computeCharityRiceEquivalent 注释，charity_contributions 的记账/
+         核销仍以 ¥{{charityTotalYuan}} 对应的真实分账金额为唯一真源 -->
     <view class="charity-contribution-card" wx:if="{{(isManager || isPatriarch || isSuperAdmin) && charityContributions.length > 0}}" bindtap="onOpenCharityContributionModal">
       <view class="ccc-left">
         <text class="ccc-icon">🌾</text>
         <view class="ccc-text-col">
-          <text class="ccc-title">产销工坊反哺</text>
-          <text class="ccc-sub" wx:if="{{charityPendingCount > 0}}">{{charityPendingCount}} 笔待核销 · 累计 ¥{{charityTotalYuan}}</text>
-          <text class="ccc-sub" wx:else>累计 ¥{{charityTotalYuan}}，均已核销</text>
+          <text class="ccc-title">工坊爱心护持</text>
+          <text class="ccc-sub" wx:if="{{charityPendingCount > 0}}">{{charityPendingCount}} 笔待核销 · 已反哺善款 ¥{{charityTotalYuan}}</text>
+          <text class="ccc-sub" wx:else>已反哺善款 ¥{{charityTotalYuan}}，均已核销</text>
+          <view class="ccc-rice-tag" wx:if="{{charityRiceEquivalent > 0}}">
+            <text>🍚 相当于护持大米约 {{charityRiceEquivalent}} 斤</text>
+          </view>
         </view>
       </view>
       <text class="ccc-arrow">❯</text>
