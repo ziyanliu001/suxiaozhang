@@ -36,8 +36,8 @@ async function resolveCaller(openid) {
 }
 
 // 🗑️ 按 tenantId + reportDate 精确匹配删除日报 + 同步清理云存储照片
-async function handleDeleteByTenantAndDate(event, OPENID) {
-  const caller = await resolveCaller(OPENID);
+async function handleDeleteByTenantAndDate(event, openId) {
+  const caller = await resolveCaller(openId);
   if (!caller || caller.role !== 'platform_admin') {
     return { success: false, error: '无权限：仅平台管理员可清理数据' };
   }
@@ -99,12 +99,34 @@ async function handleDeleteByTenantAndDate(event, OPENID) {
 }
 
 exports.main = async (event) => {
-  const { OPENID } = cloud.getWXContext();
-  if (!OPENID) return { success: false, error: '无法获取用户身份' };
+  // 🛡️（2026-09-08 控制台测试兼容）云开发控制台"运行测试"没有真实用户
+  // 会话，wxContext.OPENID 恒为空——这里补一条 event._openid/event.openId
+  // 兜底，只是把"去哪里找身份"的来源放宽，紧接着的 resolveCaller() 角色
+  // 校验完全没有放宽：不管 openid 是从 wxContext 还是从 event 拿到的，都要
+  // 这个 openid 在 user_roles 里真实登记着 platform_admin 才放行。控制台
+  // 测试要传 event._openid 跑通，前提是这个 openid 本身已经是数据库里
+  // 记录在案的平台管理员，不是随便传一个字符串就能绕过。
+  //
+  // ⚠️ 明确没有采纳的两个方案，如实说明原因：
+  // ① event.forceClean===true 直接跳过权限校验——event 是调用方完全可控的
+  //   参数，这样写等于任何调用方只要在请求体里加一个布尔值就能绕过鉴权，
+  //   对一个"批量删数据库记录+清空云存储文件"的高危操作来说是真实的越权
+  //   漏洞，不是"仅控制台可用"的安全豁免。
+  // ② 硬编码某个具体 openid 字符串永久放行——把"谁是管理员"这件事写死在
+  //   代码里，脱离 user_roles 这张唯一真源表，以后这个人被取消管理员权限
+  //   时，这段硬编码依然会放行，是一个不会随权限变化而失效的后门。
+  // 如果要用 oBHrkxt9yPUKNjKSGMLnWVQqdIXM 这个 openid 在控制台测试，正确
+  // 做法是确认它在 user_roles 里的 role 字段本来就是 'platform_admin'
+  // （如果还不是，需要先按本仓库既有的角色审批流程正常授予，不是靠这个
+  // 云函数自己开后门），之后传 event._openid 就能像任何真实管理员一样
+  // 正常跑通，不需要也不应该在代码里为这一个 openid 开特例。
+  const wxContext = cloud.getWXContext();
+  const openId = wxContext.OPENID || event._openid || event.openId;
+  if (!openId) return { success: false, error: '无法获取用户身份' };
 
   try {
     if (event.action === 'deleteByTenantAndDate') {
-      return await handleDeleteByTenantAndDate(event, OPENID);
+      return await handleDeleteByTenantAndDate(event, openId);
     }
     return { success: false, error: `不支持的 action: ${event.action}` };
   } catch (err) {
