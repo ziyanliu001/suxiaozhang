@@ -227,7 +227,9 @@ export const saasSubscriptionHandlers = {
       // 🎫 每次重新打开半屏卡片都收起授权码折叠区，不带着上一次的展开态；
       // 🍎 iOS 端例外——应用内支付被隐藏后，授权码/兑换卡号是唯一的自助开通
       // 通道，直接展开主导展示，不需要用户先发现"原来还有个折叠入口"
-      showRedeemSection: isIOSPlatform
+      // 🌸 雨花斋公益专区同理——公益专区分支里完全没有付费按钮，公益扩容
+      // 授权码是这个分支唯一的操作入口，同样直接展开
+      showRedeemSection: isIOSPlatform || this.data.isYuhuazhai
     });
     // 🐛 根因修复：自定义 tabBar 是框架自动挂载的原生层组件，本卡片的
     // z-index 再高也盖不住它（见 utils/tabBarVisibility.ts 头部注释），

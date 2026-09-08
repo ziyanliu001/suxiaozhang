@@ -360,7 +360,11 @@ async function submitRoleApply(event, OPENID) {
     docData.contactPhone = sanitizeText(contactPhone);
     docData.storePhotos = sanitizePhotos(storePhotos);
     // 🏢 平台类型：写入门店档案，供全国大屏按 orgType 筛选聚合
-    const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'other'];
+    // 🐛 根因修复：与 createStore 同一处历史遗留——此前漏了 tongxin_children/
+    // tongxin_cancer_care 两个机构类型，导致这两类机构通过"申请加入/新建门店"
+    // 这条路径提交时被静默降级成 'other'，与 SCHEMA.md 1.2 节的七值权威枚举
+    // 不一致
+    const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
     docData.orgType = VALID_ORG_TYPES.includes(orgType) ? orgType : 'other';
     // 🆕 所属地区：优先用申请人在 <picker mode="region"> 里手动选择的省市区；
     // 客户端未传（如老版本小程序）时，尝试从门店名称/地址文本里轻量提取兜底

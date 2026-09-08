@@ -5124,6 +5124,31 @@
   margin-bottom: 14rpx;
 }
 
+/* 🌸 雨花斋公益专区横幅：与 .sub-ios-compliance-banner 同一档"信息提示条"
+   视觉权重，配色改用温柔的浅粉调，呼应 🌸 图标与"公益"语境，避免复用金色/
+   琥珀色系（那是本弹窗商业分支专用的强调色，公益分支不应沿用同一套视觉
+   暗示"这是需要付费关注的信息"） */
+.sub-charity-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  background: #FFF0F3;
+  border-radius: 16rpx;
+  padding: 18rpx 20rpx;
+  margin: 0 24rpx 22rpx;
+}
+.sub-charity-banner-icon {
+  font-size: 32rpx;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+.sub-charity-banner-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #A64D63;
+}
+
 /* ── ②.1 高级权益卡片组 ──────────────────────────────────────── */
 .sub-benefit-grid {
   display: flex;
@@ -5210,6 +5235,16 @@
 }
 .sub-redeem-panel {
   padding: 0 22rpx 20rpx;
+}
+/* 🌸 雨花斋公益扩容码提示：与 .sub-redeem-compliance-text 同一档灰色小字
+   说明文案，但放在输入框之前（先说明"为什么不用付费"，再引导输入），
+   而不是像 iOS 合规提示那样放在按钮之后 */
+.sub-redeem-charity-hint {
+  display: block;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #868E96;
+  margin-bottom: 16rpx;
 }
 .sub-redeem-input-row {
   display: flex;

@@ -46,11 +46,72 @@
           </view>
         </view>
 
+        <!-- 🌸 雨花斋公益专区：不展示任何价格/购买/续费商业词汇——雨花斋门店的
+             门店数量豁免与审计导出免拦截已经是永久生效的既有事实（见
+             docs/BUSINESS_MODEL.md「雨花公益专区扶持例外」两节，分别由
+             createStore/processRoleAudit 的配额豁免与 statistics.ts 的导出
+             免拦截独立实现，不经过本弹窗/tenant_subscriptions），这里只如实
+             说明这些权益、不重复"开通"这类动作性文案。如确有门店数量异常
+             （如存量脏数据导致的展示偏差，见 BUSINESS_MODEL.md 已知数据口径
+             缺口），提供免费的"公益扩容授权码"入口——复用与商业版完全相同的
+             activateTenantSubscription redeem 通道，只是文案不写"购买/兑换
+             卡密"，平台核发这类码本身不收取任何费用 -->
+        <scroll-view scroll-y="true" class="sub-modal-body sub-scroll-body" wx:if="{{isYuhuazhai}}">
+          <view class="sub-charity-banner">
+            <text class="sub-charity-banner-icon">🌸</text>
+            <text class="sub-charity-banner-text">雨花斋公益专区：全网门店记账、查看与审计导出均由平台志愿团队免费维护，永久免费，无需购买或续费</text>
+          </view>
+
+          <view class="sub-section">
+            <text class="sub-section-title">✦ 已享公益权益</text>
+            <view class="sub-benefit-grid">
+              <view class="sub-benefit-card sub-benefit-active">
+                <text class="sub-benefit-icon">🏪</text>
+                <text class="sub-benefit-name">门店数量不设上限</text>
+                <text class="sub-benefit-desc">新建雨花斋门店永久免费，不占用配额</text>
+              </view>
+              <view class="sub-benefit-card sub-benefit-active">
+                <text class="sub-benefit-icon">📑</text>
+                <text class="sub-benefit-name">审计级 Excel 导出</text>
+                <text class="sub-benefit-desc">阳光台账导出免拦截</text>
+              </view>
+              <view class="sub-benefit-card sub-benefit-active">
+                <text class="sub-benefit-icon">📊</text>
+                <text class="sub-benefit-name">基础记账与查看</text>
+                <text class="sub-benefit-desc">日常流水、统计全部免费</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="sub-section sub-redeem-collapse">
+            <view class="sub-redeem-toggle" bindtap="onToggleRedeemSection">
+              <text class="sub-redeem-toggle-icon">🎫</text>
+              <text class="sub-redeem-toggle-text">输入公益扩容授权码</text>
+              <text class="sub-redeem-toggle-arrow {{showRedeemSection ? 'sub-redeem-toggle-arrow-expanded' : ''}}">›</text>
+            </view>
+            <view class="sub-redeem-panel" wx:if="{{showRedeemSection}}">
+              <text class="sub-redeem-charity-hint">如遇门店数量展示异常，可联系平台志愿团队领取公益扩容授权码，全程无需支付任何费用</text>
+              <view class="sub-redeem-input-row">
+                <input class="sub-redeem-input"
+                       placeholder="请输入公益扩容授权码"
+                       value="{{activationCodeInput}}"
+                       focus="{{redeemInputFocus}}"
+                       bindinput="onActivationCodeInput" />
+                <view class="sub-paste-btn" bindtap="onPasteActivationCode">粘贴</view>
+              </view>
+              <button class="sub-btn-activate {{(activationSubmitting || !activationCodeInput) ? 'sub-btn-activate-disabled' : ''}}"
+                      bindtap="onRedeemActivationCode"
+                      disabled="{{activationSubmitting || !activationCodeInput}}"
+                      loading="{{activationSubmitting}}">激活授权码</button>
+            </view>
+          </view>
+        </scroll-view>
+
         <!-- ② 中间滚动区：.sub-modal-body（flex:1，唯一会滚动的区域）——
              机构信息卡片已固定在上方，这里只承载"可以变长"的内容：升级权益
              卡片组、套餐对比 Tab、价格/配额卡片、扩容包 Stepper、授权码
              折叠区，内容再多也只在这一个区域内部滚动，不影响上下两段固定区 -->
-        <scroll-view scroll-y="true" class="sub-modal-body sub-scroll-body">
+        <scroll-view scroll-y="true" class="sub-modal-body sub-scroll-body" wx:else>
 
           <!-- 🍎 iOS 虚拟商品支付合规提示：平面提示 + 引导授权码通道，见
                data.isIOSPlatform / onOpenSubscriptionModal 注释——放在滚动区
@@ -275,7 +336,12 @@
              同一行源码里，不留换行/多余空白，配合 .btn-pay-action 的
              white-space:nowrap + overflow:hidden + text-overflow:ellipsis，
              双重保险确保严禁出现折行 -->
-        <view class="sub-modal-footer">
+        <!-- 🌸 雨花斋公益专区：不展示任何"开通/续费/购买"按钮——已享权益无需
+             任何操作，如需扩容店数走上方免费授权码入口，不经过本按钮 -->
+        <view class="sub-modal-footer" wx:if="{{isYuhuazhai}}">
+          <view class="btn-pay-action btn-pay-action-disabled">🌸 雨花斋公益门店全网免费，无需付费开通</view>
+        </view>
+        <view class="sub-modal-footer" wx:else>
           <!-- 🐛 根因修复：永久有效套餐同/低档 Tab 不再展示会触发下单的"续费"按钮，
                见 data.isRedundantRenewTab / computeRedundantRenewFlag 注释 -->
           <view class="btn-pay-action btn-pay-action-disabled" wx:if="{{isRedundantRenewTab}}">✅ 已享永久版权益，无需续费</view>
