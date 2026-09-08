@@ -8364,10 +8364,36 @@ page {
   align-items: center;
 }
 
-.platform-card-icon {
-  font-size: 56rpx;
-  margin-right: 20rpx;
+/* 🆕（三卡片视觉统一）此前图标是没有任何衬底的裸 emoji 文字，三张卡片
+   一起补一套结构统一、配色分工的圆形衬底——不是"改某一张去对齐另外两张"，
+   是三张一起新增 */
+.platform-card-icon-badge {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  margin-right: 20rpx;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+.platform-card-icon-badge-yuhua {
+  background: rgba(140, 29, 24, 0.10);
+}
+
+.platform-card-icon-badge-general {
+  background: #FFF3E4;
+}
+
+.platform-card-icon-badge-factory {
+  background: rgba(184, 134, 11, 0.12);
+}
+
+.platform-card-icon {
+  font-size: 44rpx;
+  line-height: 1;
 }
 
 .platform-card-text {
@@ -8402,14 +8428,17 @@ page {
   border: 2rpx solid rgba(140, 29, 24, 0.15);
 }
 
+/* 🆕 白字+深红渐变底本身对比度已经达标，这里只做进一步清晰度打磨
+   （字号/字距），不重新设计配色 */
 .platform-card-badge {
   position: absolute;
   top: -16rpx;
   right: 24rpx;
   background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
   color: #FFFFFF;
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: bold;
+  letter-spacing: 0.5rpx;
   padding: 6rpx 16rpx;
   border-radius: 20rpx;
   box-shadow: 0 4rpx 10rpx rgba(140, 29, 24, 0.3);

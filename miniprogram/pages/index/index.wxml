@@ -3467,7 +3467,9 @@
       <view class="platform-card platform-card-yuhua" bindtap="onSelectYuhuaPlatform" hover-class="platform-card-hover">
         <view class="platform-card-badge">爱心互助 · 受托记账</view>
         <view class="platform-card-body">
-          <text class="platform-card-icon">🌸</text>
+          <view class="platform-card-icon-badge platform-card-icon-badge-yuhua">
+            <text class="platform-card-icon">🌸</text>
+          </view>
           <view class="platform-card-text">
             <text class="platform-card-title">雨花爱心互助食堂专区</text>
             <text class="platform-card-desc">面向雨花斋爱心互助食堂的餐报记录、义工工时与阳光账本</text>
@@ -3479,11 +3481,15 @@
       <!-- 🏛️（2026-09-06 业务定位校准）本卡片服务于雨花斋体系之外的各类民间爱心
            素食食堂、寺庙斋堂、免费互助餐厅——记账/进销存/阳光日结等核心功能对
            单店全面开放，不是商业收银入口，文案统一改为"爱心互助"调性，不再用
-           "普通商户"这类商业措辞 -->
+           "普通商户"这类商业措辞。
+           🐛（2026-09-08 图标校准）原西式刀叉盘子图标 🍽️ 与中式素食/爱心斋堂
+           语境不符，改为温热饭碗 🥣，配暖橙色圆形衬底，呼应"温热"意象 -->
       <view class="platform-card platform-card-general" bindtap="onSelectGeneralPlatform" hover-class="platform-card-hover">
         <view class="platform-card-badge">爱心互助 · 独立记账</view>
         <view class="platform-card-body">
-          <text class="platform-card-icon">🍽️</text>
+          <view class="platform-card-icon-badge platform-card-icon-badge-general">
+            <text class="platform-card-icon">🥣</text>
+          </view>
           <view class="platform-card-text">
             <text class="platform-card-title">民间爱心素食食堂 / 独立斋堂</text>
             <text class="platform-card-desc">面向雨花斋体系之外的民间爱心素食食堂、寺庙斋堂与互助餐厅的日常记账</text>
@@ -3501,7 +3507,9 @@
       <view class="platform-card platform-card-factory" bindtap="onSelectFactoryPlatform" hover-class="platform-card-hover">
         <view class="platform-card-badge">素食工坊生态预售 · 以产养善</view>
         <view class="platform-card-body">
-          <text class="platform-card-icon">🧺</text>
+          <view class="platform-card-icon-badge platform-card-icon-badge-factory">
+            <text class="platform-card-icon">🧺</text>
+          </view>
           <view class="platform-card-text">
             <text class="platform-card-title">素食直播产销工坊</text>
             <text class="platform-card-desc">面向素食工坊的日产能排单、预售直播带货、制作履约与分账管理</text>
