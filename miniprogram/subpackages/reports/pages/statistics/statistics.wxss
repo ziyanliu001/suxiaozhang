@@ -3252,6 +3252,38 @@ page {
 /* 🆕 逐条/逐店"已存证"微标：善缘墙单条捐赠、门店矩阵单个门店都复用同一个
    小巧的绿色标签，与上面卡片级 .audit-proof-badge 是同一套"已核验"视觉
    语言的缩小版 */
+/* 🆕（全国大盘分级门禁）通用付费权益小角标——沿用 .audit-proof-LOCKED 已验证
+   过的浅橙色"锁定态"配色，不用红色告警色，避免和资金/离线告警混淆。三处复用：
+   数据导出按钮、range-tab-row 本年/全部时间 Tab、跨店调拨建议锁定态卡片 */
+.pro-lock-badge {
+  display: inline-block;
+  font-size: 18rpx;
+  font-weight: 600;
+  color: #C2410C;
+  background: rgba(217, 72, 14, 0.10);
+  border-radius: 8rpx;
+  padding: 2rpx 8rpx;
+  margin-left: 8rpx;
+  vertical-align: middle;
+}
+
+.pro-lock-badge-inline {
+  font-size: 16rpx;
+  padding: 0 4rpx;
+  margin-left: 4rpx;
+}
+
+.support-suggestion-locked {
+  background: rgba(217, 72, 14, 0.06);
+  border: 1rpx solid rgba(217, 72, 14, 0.18);
+}
+
+.support-suggestion-locked-text {
+  font-size: 24rpx;
+  color: #7C2D12;
+  line-height: 1.5;
+}
+
 .audit-proof-mini-tag {
   display: inline-block;
   font-size: 18rpx;

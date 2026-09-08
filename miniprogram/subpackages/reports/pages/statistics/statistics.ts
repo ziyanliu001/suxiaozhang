@@ -783,12 +783,15 @@ Page({
     // 云函数 superAdminInsights（服务端已按 role==='super_admin' 二次校验，非超管拿到的字段恒为 null）
     superAdminInsights: null as any,
     nationalRangeType: 'all' as 'all' | '7d' | 'month' | 'quarter' | 'year',
+    // 🆕（分级门禁）locked:true 的两档是"深度运营工具"——全历史/跨年查询，
+    // 免费版点击会被 onSwitchNationalRange 拦截转去升级引导；7d/month/quarter
+    // 三档是公益核心数据的短周期查看，保持所有已订阅角色免费，不受此标记影响
     nationalRangeOptions: [
       { value: '7d', label: '近7天' },
       { value: 'month', label: '本月' },
       { value: 'quarter', label: '本季度' },
-      { value: 'year', label: '本年' },
-      { value: 'all', label: '全部时间' }
+      { value: 'year', label: '本年', locked: true },
+      { value: 'all', label: '全部时间', locked: true }
     ],
     // 一键快筛：门店矩阵表按"正常运营/需关注预警"二选一展示，见 nationalMatrixList wx:if
     storeMatrixFilter: 'normal' as 'normal' | 'risk',

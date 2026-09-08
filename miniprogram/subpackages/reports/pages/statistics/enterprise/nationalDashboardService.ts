@@ -706,6 +706,13 @@ export const nationalDashboardHandlers = {
     this.setData({ showPlanUpgradeModal: false });
   },
 
+  // 🆕（分级门禁）rebalanceSuggestionCard.wxml 锁定态卡片的 bindtap 包装——
+  // onOpenPlanUpgradeModal 直接绑 WXML 会把触发事件对象当成 featureName 参数
+  // 传进去，不改共享方法签名，加一个一行包装传固定文案
+  onTapRebalanceLock() {
+    this.onOpenPlanUpgradeModal('跨店智能调拨引擎');
+  },
+
   // 🐛 修复"全国平均单餐成本"异常金额：云函数已按 nationalTotalDiners>0 兜底过一次，
   // 但活跃门店数为 0（例如切到"近7天"等窄区间恰好全员离线）时同样不该展示一个具体金额——
   // 分母门店数为 0 时哪怕算出的数值本身不是 NaN，也不代表"真实的单餐成本"，这里补上
@@ -733,10 +740,19 @@ export const nationalDashboardHandlers = {
     };
   },
 
-  // 超管高阶面板：切换"近7天/本月/本季度/全部时间"，重新拉取云函数聚合数据
+  // 超管高阶面板：切换"近7天/本月/本季度/本年/全部时间"，重新拉取云函数聚合
+  // 数据。🆕（分级门禁）本年/全部时间是"深度运营工具"，免费版点击直接拦截转
+  // 去升级引导，不发起这次云调用——7d/month/quarter 三档不受影响，任何已
+  // 订阅角色都能直接切换
   onSwitchNationalRange(e: any) {
     const rangeType = e.currentTarget.dataset.range;
+    const locked = e.currentTarget.dataset.locked;
     if (!rangeType || rangeType === this.data.nationalRangeType) return;
+    const isAdvanced = !!(this.data.nationalData && this.data.nationalData.enterpriseCapabilities && this.data.nationalData.enterpriseCapabilities.isAdvancedPlanActive);
+    if (locked && !isAdvanced) {
+      this.onOpenPlanUpgradeModal('全部时间 / 本年数据查询');
+      return;
+    }
     this.setData({ nationalRangeType: rangeType });
     this.loadNationalDashboard();
   },

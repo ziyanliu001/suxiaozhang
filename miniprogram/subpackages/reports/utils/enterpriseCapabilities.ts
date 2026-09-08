@@ -27,6 +27,7 @@ export interface SubscriptionQuotaFeatures {
   canExportNationalExcel: boolean;
   canUseRebalanceEngine: boolean;
   canAccessAuditProof: boolean;
+  isAdvancedPlanActive: boolean;
 }
 
 // 🌟 结构宽松：故意不要求调用方传入完整的 subscriptionQuota 形状，Core 独立
@@ -35,6 +36,7 @@ export interface SubscriptionQuotaFeatures {
 // 抛出 "Cannot read property 'xxx' of undefined"
 export interface SubscriptionQuotaLike {
   features?: Partial<SubscriptionQuotaFeatures> | null;
+  planCode?: string | null;
 }
 
 function readFeature(
@@ -62,7 +64,16 @@ export function canAccessAuditProof(quota: SubscriptionQuotaLike | null | undefi
   return readFeature(quota, 'canAccessAuditProof');
 }
 
-// 供页面一次性算好三项能力，直接铺进 setData 的展示数据里（WXML 只能绑定
+// 🆕（全国大盘分级门禁）机构当前是否为专业版/旗舰版——不依赖 features 子字段
+// （那三项衍生能力已经足够精细，但"全历史/跨年筛选"这类新门禁点没有对应的
+// features 字段），直接读 subscriptionQuota.planCode（getNationalDashboard/
+// checkTenantPermission 都已返回，三项衍生能力服务端也是从同一个
+// planType==='pro'||'enterprise' 布尔值派生的），不需要新增云函数字段
+export function isAdvancedPlanActive(quota: SubscriptionQuotaLike | null | undefined): boolean {
+  return !!quota && (quota.planCode === 'pro' || quota.planCode === 'enterprise');
+}
+
+// 供页面一次性算好各项能力，直接铺进 setData 的展示数据里（WXML 只能绑定
 // 数据字段、不能调用任意 TS 函数），避免 WXML 里出现
 // `{{nationalData.subscriptionQuota.features.xxx}}` 这种依赖云函数返回体
 // 具体嵌套形状的裸路径表达式
@@ -72,6 +83,7 @@ export function resolveEnterpriseCapabilities(
   return {
     canExportNationalExcel: canExportNationalExcel(quota),
     canUseRebalanceEngine: canUseRebalanceEngine(quota),
-    canAccessAuditProof: canAccessAuditProof(quota)
+    canAccessAuditProof: canAccessAuditProof(quota),
+    isAdvancedPlanActive: isAdvancedPlanActive(quota)
   };
 }

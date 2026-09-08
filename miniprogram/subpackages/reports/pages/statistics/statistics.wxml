@@ -99,9 +99,13 @@
                确认弹窗（含存证核验码），与底部吸底栏"📄 生成运营/财务报表"按钮
                （轻量级 CSV 聚合报表，走 onOpenNationalReportModal）是两个不同
                产出物的独立入口，不再复用同一个弹窗——同一条 isAdmin 权限口径 -->
+          <!-- 🆕（分级门禁视觉锁）免费版点击后已经会被 onOpenNationalExcelExportModal
+               拦截转去升级引导（见该方法注释），这里补一个 🔒 角标让用户点击前
+               就知道这是付费权益，不用点了才发现被拦 -->
           <view class="national-banner-action-btn" hover-class="ui-hover" bindtap="onOpenNationalExcelExportModal" wx:if="{{isAdmin}}">
             <text class="national-banner-action-icon">📄</text>
             <text class="national-banner-action-text">数据导出</text>
+            <text class="pro-lock-badge" wx:if="{{!nationalData.enterpriseCapabilities.canExportNationalExcel}}">🔒 专业版</text>
           </view>
         </view>
       </view>
