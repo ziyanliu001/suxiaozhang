@@ -183,6 +183,10 @@ async function handleGenerate(event, OPENID) {
     ? Math.min(Math.floor(event.durationDays), MAX_DURATION_DAYS)
     : DEFAULT_DURATION_DAYS;
 
+  // 🆕（可视化制卡台账）备注：铸造这批码的用途说明（如"卖给XX机构"/
+  // "线下渠道分发"），非必填，纯留痕，不参与任何鉴权/兑换逻辑
+  const note = String(event.note || '').trim();
+
   for (let i = 0; i < quantity; i++) {
     const { display, normalized } = generateRandomCode();
     const codeData = {
@@ -191,6 +195,7 @@ async function handleGenerate(event, OPENID) {
       codeType: 'package',
       planType,
       durationDays,
+      note,
       status: 'UNUSED',
       createdBy: OPENID,
       createdAt: db.serverDate(),
@@ -199,10 +204,40 @@ async function handleGenerate(event, OPENID) {
       redeemedAt: null
     };
     await db.collection(ACTIVATION_CODES_COLLECTION).add({ data: codeData });
-    codes.push({ code: display, codeType: 'package', planType, durationDays });
+    codes.push({ code: display, codeType: 'package', planType, durationDays, note });
   }
 
   return { success: true, codes };
+}
+
+// 📊（可视化制卡台账）库存统计：专业版/旗舰版未核销余量 + 已核销总数，
+// 用 .count() 聚合查询而不是拉全量文档再数——集合会随铸造持续增长，
+// count() 不受文档条数影响
+async function handleGetStats(event, OPENID) {
+  const caller = await resolveCaller(OPENID);
+  if (!caller || caller.role !== 'platform_admin') {
+    return { success: false, error: '无权限：仅平台管理员可查看统计' };
+  }
+
+  await ensureActivationCodesCollection();
+
+  const countSafe = async (where) => {
+    try {
+      const res = await db.collection(ACTIVATION_CODES_COLLECTION).where(where).count();
+      return res.total || 0;
+    } catch (err) {
+      if (!isCollectionNotExistError(err)) throw err;
+      return 0;
+    }
+  };
+
+  const [unusedPro, unusedEnterprise, usedTotal] = await Promise.all([
+    countSafe({ status: 'UNUSED', codeType: 'package', planType: 'pro' }),
+    countSafe({ status: 'UNUSED', codeType: 'package', planType: 'enterprise' }),
+    countSafe({ status: 'USED', codeType: 'package' })
+  ]);
+
+  return { success: true, stats: { unusedPro, unusedEnterprise, usedTotal } };
 }
 
 // 📋 铸造历史台账：仅平台管理员可查看，按状态筛选（不传/'all' 时不过滤）。
@@ -219,6 +254,11 @@ async function handleList(event, OPENID) {
   const where = {};
   if (event.status === 'UNUSED' || event.status === 'USED' || event.status === 'REVOKED') {
     where.status = event.status;
+  }
+  // 🆕（可视化制卡台账）按套餐类型筛选——不传/其余值时不过滤，与 status
+  // 筛选是两个独立维度，可以同时生效
+  if (event.planType === 'pro' || event.planType === 'enterprise') {
+    where.planType = event.planType;
   }
 
   // 📄 分页：台账会随着一批批铸造持续增长，不能无限期一次性拉全量。skip 由
@@ -263,6 +303,7 @@ async function handleList(event, OPENID) {
       code: c.code,
       codeType: c.codeType || 'package',
       planType: c.planType,
+      note: c.note || '',
       durationDays: c.durationDays,
       extraStores: c.extraStores,
       status: c.status,
@@ -547,6 +588,9 @@ exports.main = async (event) => {
   try {
     if (action === 'generate') {
       return await handleGenerate(event, OPENID);
+    }
+    if (action === 'getStats') {
+      return await handleGetStats(event, OPENID);
     }
     if (action === 'redeem') {
       return await handleRedeem(event, OPENID);

@@ -66,6 +66,23 @@
     <!-- ═══════════════════════ 🔑 授权码管理 ═══════════════════════ -->
     <block wx:if="{{activeTab === 'codes'}}">
 
+      <!-- 🆕（可视化制卡台账）顶部库存看板：专业版/旗舰版未核销余量 + 已核销
+           总数，getStats 用 .count() 聚合查询，与下方分页列表是两次独立云调用 -->
+      <view class="pa-stats-row">
+        <view class="pa-stat-card">
+          <text class="pa-stat-value">{{codeStats.unusedPro}}</text>
+          <text class="pa-stat-label">专业版余量</text>
+        </view>
+        <view class="pa-stat-card">
+          <text class="pa-stat-value">{{codeStats.unusedEnterprise}}</text>
+          <text class="pa-stat-label">旗舰版余量</text>
+        </view>
+        <view class="pa-stat-card">
+          <text class="pa-stat-value">{{codeStats.usedTotal}}</text>
+          <text class="pa-stat-label">已核销总数</text>
+        </view>
+      </view>
+
       <view class="pa-section-header">
         <text class="pa-section-title">授权码台账</text>
         <button class="pa-btn-create" hover-class="btn-hover" bindtap="onOpenGenerateCodesSheet">+ 生成授权码</button>
@@ -89,6 +106,14 @@
         <view class="pa-codes-filter-tab {{activationCodesFilter === 'USED' ? 'active' : ''}}" data-filter="USED" bindtap="onSwitchActivationCodesFilter">已核销</view>
         <view class="pa-codes-filter-tab {{activationCodesFilter === 'REVOKED' ? 'active' : ''}}" data-filter="REVOKED" bindtap="onSwitchActivationCodesFilter">已作废</view>
         <view class="pa-codes-filter-tab {{activationCodesFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesFilter">全部</view>
+      </view>
+
+      <!-- 🆕（可视化制卡台账）套餐类型筛选：与上面的状态筛选是两个独立维度，
+           可以同时生效 -->
+      <view class="pa-codes-filter-row">
+        <view class="pa-codes-filter-tab {{activationCodesPlanFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesPlanFilter">全部套餐</view>
+        <view class="pa-codes-filter-tab {{activationCodesPlanFilter === 'pro' ? 'active' : ''}}" data-filter="pro" bindtap="onSwitchActivationCodesPlanFilter">专业版</view>
+        <view class="pa-codes-filter-tab {{activationCodesPlanFilter === 'enterprise' ? 'active' : ''}}" data-filter="enterprise" bindtap="onSwitchActivationCodesPlanFilter">旗舰版</view>
       </view>
 
       <!-- 首屏骨架屏：区分"正在加载"与"确认加载完、真的没有数据"两种状态，
@@ -133,6 +158,8 @@
             <text class="pa-code-redeemed-row" wx:if="{{item.revokedAtLabel}}">🕐 {{item.revokedAtLabel}}</text>
             <text class="pa-code-redeemed-row" wx:if="{{item.revokeReason}}">📝 {{item.revokeReason}}</text>
           </view>
+          <!-- 🆕（可视化制卡台账）铸造备注：非必填，有填才展示 -->
+          <text class="pa-code-note" wx:if="{{item.note}}">📝 {{item.note}}</text>
         </view>
 
         <view class="pa-load-more-row" wx:if="{{activationCodesLoadingMore}}">
@@ -263,6 +290,13 @@
       <text class="pa-field-label">生成数量（单次最多 50 张）</text>
       <input class="pa-input {{generateCodesErrors.quantity ? 'pa-input-error' : ''}}" type="number" placeholder="如：1" value="{{generateCodesForm.quantity}}" bindinput="onGenerateCodesFormInput" data-field="quantity" />
       <text class="pa-field-error" wx:if="{{generateCodesErrors.quantity}}">{{generateCodesErrors.quantity}}</text>
+
+      <!-- 🆕（可视化制卡台账）备注：非必填，纯留痕，只对套餐码生效——扩容包
+           码的用途本身已经很明确，不需要额外备注 -->
+      <block wx:if="{{generateCodesForm.codeType === 'package'}}">
+        <text class="pa-field-label">备注（选填，如"卖给XX机构"）</text>
+        <input class="pa-input" placeholder="不填则留空" value="{{generateCodesForm.note}}" bindinput="onGenerateCodesFormInput" data-field="note" />
+      </block>
 
       <view class="pa-sheet-actions">
         <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseGenerateCodesSheet" disabled="{{generatingCodes}}">取消</button>

@@ -105,14 +105,18 @@ Page({
     // 🏢 codeType：'package'（常规套餐码，走 planType/durationDays）/ 'add_on'
     // （扩容门店包码，走 extraStores）——与 activateTenantSubscription 云函数
     // generate action 的 codeType 分支一一对应
-    generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1' },
+    // 🆕 note：铸造用途备注（如"卖给XX机构"），非必填，纯留痕，不参与校验
+    generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1', note: '' },
     // 🆕 前端基础校验：输入框失焦/提交时填充，非空即代表校验不通过，wxml 据此
     // 显示红色错误提示，不用等点了提交按钮才用 Toast 告知
     generateCodesErrors: { durationDays: '', quantity: '', extraStores: '' },
     generatingCodes: false,
+    // 🆕（可视化制卡台账）顶部库存看板：专业版/旗舰版未核销余量 + 已核销总数
+    codeStats: { unusedPro: 0, unusedEnterprise: 0, usedTotal: 0 },
+    codeStatsLoading: false,
     // 🌟 刚生成的这一批：单独存一份，生成成功后置顶展示 + 一键复制，不用去
     // 下面的台账列表里翻找刚铸造出来的这几个码
-    lastGeneratedCodes: [] as Array<{ code: string; codeType?: string; planType?: string; durationDays?: number; extraStores?: number }>,
+    lastGeneratedCodes: [] as Array<{ code: string; codeType?: string; planType?: string; durationDays?: number; extraStores?: number; note?: string }>,
     // 🐛 根因修复：这里此前也照搬 overviewLoading 的"初始值设 true 防闪烁"套路，
     // 但 loadActivationCodes() 自己开头有一道 `if (this.data.activationCodesLoading)
     // return` 的防重入锁——loadOverview() 没有这道锁，套用同一个技巧是安全的，
@@ -125,11 +129,15 @@ Page({
     activationCodesLoading: false,
     activationCodesLoadingMore: false,
     activationCodesFilter: 'UNUSED' as 'UNUSED' | 'USED' | 'REVOKED' | 'all',
+    // 🆕（可视化制卡台账）按套餐类型筛选，与 activationCodesFilter（状态）是
+    // 两个独立维度，可以同时生效
+    activationCodesPlanFilter: 'all' as 'all' | 'pro' | 'enterprise',
     activationCodes: [] as Array<{
       _id: string;
       code: string;
       planType: string;
       durationDays: number;
+      note: string;
       status: string;
       createdAt: string;
       redeemedAt: string;
@@ -219,6 +227,7 @@ Page({
       const tasks: Promise<any>[] = [this.loadOverview()];
       if (this.data.activeTab === 'codes') {
         tasks.push(this.loadActivationCodes(true));
+        tasks.push(this.loadCodeStats());
       } else {
         tasks.push(this.loadTenants(true));
       }
@@ -262,6 +271,7 @@ Page({
         this.loadOverview();
         this.loadTenants();
         this.loadActivationCodes();
+        this.loadCodeStats();
       }
     } catch (err) {
       console.error('[platform-admin] checkAccess 异常:', err);
@@ -286,6 +296,7 @@ Page({
     // checkAccess 时那次请求失败了），这里补一次兜底加载，不需要用户手动下拉刷新
     if (tab === 'codes' && this.data.activationCodes.length === 0 && !this.data.activationCodesLoading) {
       this.loadActivationCodes();
+      this.loadCodeStats();
     }
     if (tab === 'tenants' && this.data.tenants.length === 0 && !this.data.tenantsLoading) {
       this.loadTenants();
@@ -503,7 +514,7 @@ Page({
     if (this.data.generatingCodes) return;
     if (!this.validateGenerateCodesForm()) return;
 
-    const { codeType, planType, durationDays, quantity, extraStores } = this.data.generateCodesForm;
+    const { codeType, planType, durationDays, quantity, extraStores, note } = this.data.generateCodesForm;
     this.setData({ generatingCodes: true });
     wx.showLoading({ title: '铸造中...', mask: true });
     try {
@@ -511,7 +522,7 @@ Page({
         name: 'activateTenantSubscription',
         data: codeType === 'add_on'
           ? { action: 'generate', codeType: 'add_on', extraStores: parseInt(extraStores, 10), quantity: parseInt(quantity, 10) }
-          : { action: 'generate', codeType: 'package', planType, durationDays: parseInt(durationDays, 10), quantity: parseInt(quantity, 10) }
+          : { action: 'generate', codeType: 'package', planType, durationDays: parseInt(durationDays, 10), quantity: parseInt(quantity, 10), note }
       });
       wx.hideLoading();
       const result = res.result as any;
@@ -522,10 +533,11 @@ Page({
           lastGeneratedCodes: result.codes,
           showGenerateCodesSheet: false,
           // 🌟 成功后清空表单残留，下次打开是干净的默认值，不会看到上一批填的数量
-          generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1' }
+          generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1', note: '' }
         });
         this.loadActivationCodes(true);
         this.loadOverview();
+        this.loadCodeStats();
       } else {
         wx.showModal({ title: '生成失败', content: (result && result.error) || '未知错误', showCancel: false });
       }
@@ -565,6 +577,36 @@ Page({
     if (filter === this.data.activationCodesFilter) return;
     this.setData({ activationCodesFilter: filter });
     this.loadActivationCodes(true);
+  },
+
+  // 🆕（可视化制卡台账）套餐类型筛选——与上面的状态筛选是两个独立维度，
+  // 写法完全同款
+  onSwitchActivationCodesPlanFilter(e: any) {
+    const filter = e.currentTarget.dataset.filter;
+    if (filter === this.data.activationCodesPlanFilter) return;
+    this.setData({ activationCodesPlanFilter: filter });
+    this.loadActivationCodes(true);
+  },
+
+  // 📊（可视化制卡台账）库存看板：不影响 activationCodesLoading 那把锁——
+  // 统计卡片和列表是两次独立云调用，互不阻塞
+  async loadCodeStats() {
+    if (this.data.codeStatsLoading) return;
+    this.setData({ codeStatsLoading: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'activateTenantSubscription',
+        data: { action: 'getStats' }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({ codeStats: result.stats });
+      }
+    } catch (err) {
+      console.error('[platform-admin] loadCodeStats 异常:', err);
+    } finally {
+      this.setData({ codeStatsLoading: false });
+    }
   },
 
   // 🕐 台账时间展示：createdAt/redeemedAt 是云函数透传的 Date 对象序列化
@@ -647,7 +689,7 @@ Page({
     try {
       const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
-        data: { action: 'list', status: this.data.activationCodesFilter, skip: 0 }
+        data: { action: 'list', status: this.data.activationCodesFilter, planType: this.data.activationCodesPlanFilter, skip: 0 }
       });
       const result = res.result as any;
       if (result && result.success) {
@@ -674,7 +716,7 @@ Page({
     try {
       const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
-        data: { action: 'list', status: this.data.activationCodesFilter, skip: this.data.activationCodesSkip }
+        data: { action: 'list', status: this.data.activationCodesFilter, planType: this.data.activationCodesPlanFilter, skip: this.data.activationCodesSkip }
       });
       const result = res.result as any;
       if (result && result.success) {

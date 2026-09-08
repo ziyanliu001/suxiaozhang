@@ -581,6 +581,37 @@
   font-weight: bold;
 }
 
+/* 🆕（可视化制卡台账）顶部库存看板：三张等宽卡片，与下方 .pa-code-card
+   同一套白底圆角阴影视觉语言，数值用页面主色（#1C2530）突出 */
+.pa-stats-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-stat-card {
+  flex: 1;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 20rpx 12rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.pa-stat-value {
+  font-size: 40rpx;
+  font-weight: 800;
+  color: #1C2530;
+}
+
+.pa-stat-label {
+  font-size: 20rpx;
+  color: #868E96;
+}
+
 .pa-code-card {
   background: #FFFFFF;
   border-radius: 16rpx;
@@ -676,6 +707,15 @@
    与上面 .pa-code-status-REVOKED 的红色系呼应 */
 .pa-code-revoked-box {
   border-top-color: #FFC9C9;
+}
+
+/* 🆕（可视化制卡台账）铸造备注：与 .pa-code-redeemed-row 同一套次要信息文字
+   样式，不占用独立信息盒子（备注是可选的轻量信息，不需要分隔线/内边距） */
+.pa-code-note {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #868E96;
 }
 
 /* ═══════════════════════════════════════════════════════════════
