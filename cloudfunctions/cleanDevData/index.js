@@ -1,17 +1,26 @@
 // 云函数：cleanDevData
-// 平台管理员专用运维工具：按 tenantId + 目标日期精准批量删除测试/脏数据，
-// 覆盖三张会带图片的业务表（report_logs 日报 / daily_menus 每日食谱 /
-// activity_logs 门店日志——爱心墙"温情图册"的三个真实图片来源，见
-// getPhotoArchive 头部注释），并同步清理这些记录引用的云存储照片文件。
+// 平台管理员专用运维工具：按（tenantId 或 storeId）+ 目标日期批量删除
+// 测试/脏数据，覆盖三张会带图片的业务表（report_logs 日报 / daily_menus
+// 每日食谱 / activity_logs 门店日志——爱心墙"温情图册"的三个真实图片
+// 来源，见 getPhotoArchive 头部注释），并同步清理这些记录引用的云存储
+// 照片文件。
+//
+// action: 'scanByDate' —— 只读排查，不带身份限制、按日期扫描三张表，把
+//   命中记录的 _id/tenantId/storeId/日期字段/图片字段完整打印+返回，用来
+//   确认"这一天的数据到底在哪张表、tenantId/storeId 实际存的是什么值"。
+//   建议先跑这个确认清楚，再用下面的 action 精确删。
+// action: 'deleteByTenantAndDate' —— 真正执行删除，tenantId/storeId 至少
+//   要提供一个（见该函数注释里"为什么不能完全不限定身份"的说明）。
 //
 // 🛡️ 权限：仅 platform_admin 可调用，与本仓库其余"数据管理/清理"类高危
 // 工具（activateTenantSubscription/manageTenantSubscription）同一条鉴权
 // 口径。不对外暴露前端调用入口——这是运维工具，平台管理员通过云开发控制台
 // "云函数测试"面板直接传参调用，不需要为此单独做一个前端表单页面。
 //
-// 🎯 精确匹配单日，不做日期范围批量删除：范围删除误删真实数据的风险更高，
-// 与"清理某一天的测试数据"这个具体场景对齐即可，如需批量清理需要另开
-// 专项方案（如加二次确认+预览命中条数）。
+// 🎯 精确匹配单日（日期用前缀正则，兜住带时间后缀的历史脏数据），不做
+// 日期范围批量删除：范围删除误删真实数据的风险更高，与"清理某一天的测试
+// 数据"这个具体场景对齐即可，如需批量清理需要另开专项方案（如加二次
+// 确认+预览命中条数）。
 //
 // 🖼️ 三张表各自的图片字段结构不同，核实自各自的云函数写入路径：
 //   - report_logs.receiptImages：纯字符串数组，元素本身就是 fileID
@@ -37,6 +46,22 @@ function isCollectionNotExistError(err) {
   return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
 }
 
+// 🆕（排查"传了 storeId 依然 0 条"）转义关键词里的正则特殊字符——日期本身
+// 是 YYYY-MM-DD 格式，"-"不是正则特殊字符不影响匹配，这里只是保持与
+// manageTenantSubscription 的 escapeRegExp 同一套防御习惯
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 🆕 日期改用前缀正则匹配（^2026-07-21）而不是精确字符串相等——如果真实
+// 存的日期带了时间后缀（如 "2026-07-21 08:30" 这类历史脏数据），精确匹配
+// 会漏掉，前缀匹配能兜住这种情况。三张表各自的日期字段名（reportDate/
+// dateString/eventTime）是从各自的写入云函数源码里核实过的真实字段名，
+// 不是猜的，这里不额外去猜其他没有证据支持的字段名
+function dateRegex(dateStr) {
+  return db.RegExp({ regexp: `^${escapeRegExp(dateStr)}`, options: '' });
+}
+
 async function resolveCaller(openid) {
   if (!openid) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: openid }).limit(1).get();
@@ -45,15 +70,17 @@ async function resolveCaller(openid) {
 
 // 🗑️ 查询命中记录 + 收集其图片 fileID，不在这里做删除——三张表各自查完、
 // 汇总出完整的待删 id/fileId 清单后，再统一批量删，避免"查一张删一张"中途
-// 某一张表异常导致前面已经删掉、后面还没处理，数据处于不上不下的中间态
+// 某一张表异常导致前面已经删掉、后面还没处理，数据处于不上不下的中间态。
+// 同时把原始 rows 一并返回——调用方要在真正 remove() 之前把命中详情打印
+// 出来供人工核对，不能删完了才后悔
 async function collectMatchedRows(collectionName, whereClause, extractFileIds) {
   let rows = [];
   try {
-    const res = await db.collection(collectionName).where(whereClause).get();
+    const res = await db.collection(collectionName).where(whereClause).limit(200).get();
     rows = res.data || [];
   } catch (err) {
     if (!isCollectionNotExistError(err)) throw err;
-    return { ids: [], fileIds: [] };
+    return { rows: [], ids: [], fileIds: [] };
   }
   const ids = rows.map((r) => r._id);
   const fileIds = [];
@@ -62,7 +89,7 @@ async function collectMatchedRows(collectionName, whereClause, extractFileIds) {
       if (fileId) fileIds.push(fileId);
     });
   });
-  return { ids, fileIds };
+  return { rows, ids, fileIds };
 }
 
 async function removeByIds(collectionName, ids) {
@@ -88,8 +115,74 @@ async function deleteCloudFiles(fileIds) {
   return deletedFileCount;
 }
 
-// 🗑️ 按 tenantId + 目标日期精确匹配，清理 report_logs/daily_menus/
-// activity_logs 三张表的测试数据 + 同步清理引用的云存储照片
+// 🔍（只读排查，不删任何数据）不带 tenantId 限制、按日期前缀正则扫描三张表，
+// 命中详情（_id/tenantId/storeId/日期字段值/图片字段）通过 console.log
+// 完整打印，也原样放进返回体的 preview 里——用来确认"这一天的数据到底存在
+// 哪张表、tenantId/storeId 实际存的是什么值"，确认清楚了再用
+// deleteByTenantAndDate 精确删，不要没看过数据长什么样就直接删
+async function handleScanByDate(event, openId) {
+  const caller = await resolveCaller(openId);
+  if (!caller || caller.role !== 'platform_admin') {
+    return { success: false, error: '无权限：仅平台管理员可查看数据' };
+  }
+
+  const reportDate = String(event.reportDate || '').trim();
+  if (!reportDate) {
+    return { success: false, error: '参数缺失: reportDate' };
+  }
+
+  const scanOne = async (collectionName, dateField) => {
+    try {
+      const res = await db.collection(collectionName)
+        .where({ [dateField]: dateRegex(reportDate) })
+        .limit(50)
+        .get();
+      return res.data || [];
+    } catch (err) {
+      if (!isCollectionNotExistError(err)) throw err;
+      return [];
+    }
+  };
+
+  const [reportLogs, dailyMenus, activityLogs] = await Promise.all([
+    scanOne('report_logs', 'reportDate'),
+    scanOne('daily_menus', 'dateString'),
+    scanOne('activity_logs', 'eventTime')
+  ]);
+
+  const preview = {
+    report_logs: reportLogs.map((r) => ({ _id: r._id, tenantId: r.tenantId, storeId: r.storeId, reportDate: r.reportDate, receiptImages: r.receiptImages })),
+    daily_menus: dailyMenus.map((r) => ({ _id: r._id, tenantId: r.tenantId, storeId: r.storeId, dateString: r.dateString, images: r.images })),
+    activity_logs: activityLogs.map((r) => ({ _id: r._id, tenantId: r.tenantId, storeId: r.storeId, eventTime: r.eventTime, images: r.images }))
+  };
+
+  console.log('[cleanDevData] scanByDate 命中详情（不限 tenantId，各表最多 50 条）:', JSON.stringify(preview));
+
+  return {
+    success: true,
+    counts: {
+      report_logs: reportLogs.length,
+      daily_menus: dailyMenus.length,
+      activity_logs: activityLogs.length
+    },
+    preview
+  };
+}
+
+// 🗑️ 按（tenantId 或 storeId，至少一项）+ 目标日期匹配，清理 report_logs/
+// daily_menus/activity_logs 三张表的测试数据 + 同步清理引用的云存储照片。
+//
+// 🛡️（2026-09-08 收到"传了 storeId 依然 0 条"反馈后调整，如实说明取舍）
+// 没有采纳"完全取消 tenantId/storeId 校验，只认角色+日期"这个方案——那会
+// 把一个"清理某个机构某一天数据"的工具变成"清理全平台某一天所有机构数据"
+// 的工具，对一个真删数据库记录+清空云存储文件的操作来说，误杀真实数据的
+// 风险扩大到了整个平台，不是"仅测试环境可用"的安全豁免。改为两处有真实
+// 依据的放宽：① identity 条件从"必须同时有 tenantId"放宽成"tenantId 或
+// storeId 至少给一个就行"（不少测试数据是手工在控制台插入的，可能没有
+// 正确挂 tenantId 但 storeId 是对的，这是更贴近真实原因的放宽，而不是
+// 完全不限定身份）；② 日期改前缀正则而不是精确匹配，兜住"日期字段带时间
+// 后缀"这种可能。调用前建议先用 action:'scanByDate' 看一眼真实命中的数据
+// 长什么样，确认 tenantId/storeId 到底是什么值。
 async function handleDeleteByTenantAndDate(event, openId) {
   const caller = await resolveCaller(openId);
   if (!caller || caller.role !== 'platform_admin') {
@@ -97,16 +190,35 @@ async function handleDeleteByTenantAndDate(event, openId) {
   }
 
   const tenantId = String(event.tenantId || '').trim();
+  const storeId = String(event.storeId || '').trim();
   const reportDate = String(event.reportDate || '').trim();
-  if (!tenantId || !reportDate) {
-    return { success: false, error: '参数缺失: tenantId/reportDate' };
+  if (!reportDate) {
+    return { success: false, error: '参数缺失: reportDate' };
+  }
+  if (!tenantId && !storeId) {
+    return { success: false, error: '参数缺失: tenantId 与 storeId 至少需要提供一个，避免误删其他机构的数据' };
   }
 
+  const identityCondition = tenantId && storeId
+    ? _.or([{ tenantId }, { storeId }])
+    : tenantId
+      ? { tenantId }
+      : { storeId };
+  const buildWhere = (dateField) => _.and([identityCondition, { [dateField]: dateRegex(reportDate) }]);
+
   const [reportLogs, dailyMenus, activityLogs] = await Promise.all([
-    collectMatchedRows('report_logs', { tenantId, reportDate }, (r) => r.receiptImages || []),
-    collectMatchedRows('daily_menus', { tenantId, dateString: reportDate }, (r) => (r.images || []).map((img) => img && img.url)),
-    collectMatchedRows('activity_logs', { tenantId, eventTime: reportDate }, (r) => (r.images || []).map((img) => img && img.url))
+    collectMatchedRows('report_logs', buildWhere('reportDate'), (r) => r.receiptImages || []),
+    collectMatchedRows('daily_menus', buildWhere('dateString'), (r) => (r.images || []).map((img) => img && img.url)),
+    collectMatchedRows('activity_logs', buildWhere('eventTime'), (r) => (r.images || []).map((img) => img && img.url))
   ]);
+
+  // 🆕 真正 remove() 之前，先把命中的记录完整打印出来——删完了再想看已经
+  // 来不及了，这是"删之前最后一次确认没删错"的机会
+  console.log('[cleanDevData] deleteByTenantAndDate 即将删除的命中详情:', JSON.stringify({
+    report_logs: reportLogs.rows.map((r) => ({ _id: r._id, tenantId: r.tenantId, storeId: r.storeId, reportDate: r.reportDate })),
+    daily_menus: dailyMenus.rows.map((r) => ({ _id: r._id, tenantId: r.tenantId, storeId: r.storeId, dateString: r.dateString })),
+    activity_logs: activityLogs.rows.map((r) => ({ _id: r._id, tenantId: r.tenantId, storeId: r.storeId, eventTime: r.eventTime }))
+  }));
 
   await Promise.all([
     removeByIds('report_logs', reportLogs.ids),
@@ -153,6 +265,9 @@ exports.main = async (event) => {
   if (!openId) return { success: false, error: '无法获取用户身份' };
 
   try {
+    if (event.action === 'scanByDate') {
+      return await handleScanByDate(event, openId);
+    }
     if (event.action === 'deleteByTenantAndDate') {
       return await handleDeleteByTenantAndDate(event, openId);
     }
