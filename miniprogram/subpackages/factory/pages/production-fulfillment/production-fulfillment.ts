@@ -241,9 +241,15 @@ Page({
     boardGroups: [] as BatchGroup[],
     orderCount: 0,
     filteredOrderCount: 0,
+    // 🆕"待生产" Tab 动态角标：orderStatus === 'paid' 的条数，随 loadOrders/
+    // 下拉刷新在 applyStatusFilter() 里一并重新计算
+    pendingProductionCount: 0,
     statusFilterTabs: STATUS_FILTER_TABS,
     activeStatusFilter: 'all',
     activeStatusFilterLabel: '全部',
+    // 🆕 无权限错误态：getProductionBoard 对非空间成员返回"无权限：..."，
+    // 这种情况下「重试」按钮没有意义，见 loadOrders 的 else 分支
+    isPermissionError: false,
     materialsSummary: [] as MaterialSummary[],
     // 🩹 自愈提示：getProductionBoard 每次查询前会自动重放卡在 pending_payment
     // 但已支付成功的订单，healedStuckOrders > 0 时把这条提示亮出来告诉管理员
@@ -347,7 +353,10 @@ Page({
       ? this._rawOrders
       : this._rawOrders.filter((o) => o.orderStatus === filter);
     const boardGroups = buildBoardGroups(orders, this._rawTasks, this._rawCapacityByBatch, this._rawGroupBuyByBatch);
-    this.setData({ boardGroups, filteredOrderCount: orders.length });
+    // 🆕"待生产" Tab 角标：从全量订单（不受当前筛选影响）里数，与
+    // filteredOrderCount（当前筛选子集的条数）是两个不同的口径
+    const pendingProductionCount = this._rawOrders.filter((o) => o.orderStatus === 'paid').length;
+    this.setData({ boardGroups, filteredOrderCount: orders.length, pendingProductionCount });
   },
 
   onOpenSwitcherModal() {
@@ -419,6 +428,11 @@ Page({
 
   onDismissSelfHealNotice() {
     this.setData({ selfHealNotice: '' });
+  },
+
+  // 🆕 无权限错误态的「返回」按钮——身份不会因为重试而改变，直接退出本页
+  onGoBack() {
+    wx.navigateBack({ delta: 1 });
   },
 
   // 🐛 图片 500 报错兜底：邀请码小程序码理论上是刚生成的云存储 fileID，但
@@ -515,7 +529,8 @@ Page({
           selfHealNotice: healedCount > 0
             ? `系统自动修复了 ${healedCount} 笔因通知延迟卡在"待支付确认"状态的订单，已计入下方看板`
             : '',
-          loadError: ''
+          loadError: '',
+          isPermissionError: false
         });
         // 🎨 重新加载后按当前已选中的筛选 Tab 重新分组（下拉刷新场景下用户
         // 可能选的不是"全部"），不强制把筛选重置回"全部"
@@ -525,7 +540,9 @@ Page({
         this._rawTasks = [];
         this._rawCapacityByBatch = {};
         this._rawGroupBuyByBatch = {};
-        this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: (result && result.error) || '加载失败' });
+        const errorMsg = (result && result.error) || '加载失败';
+        // 🆕 无权限错误态：见 data.isPermissionError 声明处注释
+        this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: errorMsg, isPermissionError: errorMsg.indexOf('无权限') === 0 });
       }
     } catch (err) {
       console.error('[production-fulfillment] loadOrders 异常:', err);
@@ -533,7 +550,7 @@ Page({
       this._rawTasks = [];
       this._rawCapacityByBatch = {};
       this._rawGroupBuyByBatch = {};
-      this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: '加载异常，请重试' });
+      this.setData({ boardGroups: [], orderCount: 0, filteredOrderCount: 0, materialsSummary: [], loadError: '加载异常，请重试', isPermissionError: false });
     } finally {
       this.setData({ loading: false });
       // 🐛 wxml 的重试按钮 bindtap="loadOrders" 直接把 loadOrders 当 tap 处理

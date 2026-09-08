@@ -1,7 +1,7 @@
 <view class="pf-page">
 
   <navigation-bar
-    title="📦 排单与发货管理"
+    title="排单发货"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"
@@ -74,7 +74,11 @@
         wx:key="value"
         data-value="{{item.value}}"
         bindtap="onSelectStatusFilter"
-      >{{item.label}}</view>
+      >
+        {{item.label}}
+        <!-- 🆕 待生产动态角标：99+ 封顶，避免个别工坊订单量大时撑爆 -->
+        <text class="pf-status-tab-badge" wx:if="{{item.value === 'paid' && pendingProductionCount > 0}}">{{pendingProductionCount > 99 ? '99+' : pendingProductionCount}}</text>
+      </view>
     </view>
 
     <!-- 邀请成员弹窗：选角色 → 生成邀请码 + 小程序码 -->
@@ -134,7 +138,9 @@
     <view class="pf-error-state" wx:elif="{{loadError}}">
       <text class="pf-error-icon">⚠️</text>
       <text class="pf-error-text">{{loadError}}</text>
-      <button class="pf-retry-btn" bindtap="loadOrders">重试</button>
+      <!-- 🆕 无权限时"重试"没有意义（身份不会因为重试而变化），换成「返回」 -->
+      <button class="pf-retry-btn" wx:if="{{isPermissionError}}" bindtap="onGoBack">返回</button>
+      <button class="pf-retry-btn" wx:else bindtap="loadOrders">重试</button>
     </view>
 
     <!-- 🎨 富态空状态：仅在"整个工坊近 30 天内一笔订单都没有"时出现（不受
@@ -146,7 +152,7 @@
           <text class="pf-empty-icon">📭</text>
         </view>
         <text class="pf-empty-title">当前暂无待处理订单</text>
-        <text class="pf-empty-subtitle">新订单支付后将自动进入 CAS 原子排产</text>
+        <text class="pf-empty-subtitle">客户下单支付后将自动汇入待生产列表</text>
         <view class="pf-empty-actions">
           <button class="pf-empty-action-btn primary" wx:if="{{canManageProducts}}" bindtap="onGoToProductManagement">去商品管理</button>
           <button class="pf-empty-action-btn" bindtap="onGoToSettlementSummary">查看对账明细</button>

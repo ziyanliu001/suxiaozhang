@@ -90,7 +90,7 @@
 
 .pf-quick-actions {
   display: flex;
-  gap: 16rpx;
+  gap: 14rpx;
   margin-bottom: 20rpx;
 }
 
@@ -102,7 +102,7 @@
   justify-content: center;
   background: #FFFFFF;
   border-radius: 16rpx;
-  padding: 22rpx 8rpx;
+  padding: 24rpx 8rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
@@ -116,8 +116,8 @@
 }
 
 .pf-quick-action-icon {
-  font-size: 40rpx;
-  margin-bottom: 10rpx;
+  font-size: 44rpx;
+  margin-bottom: 12rpx;
   line-height: 1;
 }
 
@@ -316,6 +316,7 @@
 }
 
 .pf-status-tab {
+  position: relative;
   flex: 1;
   text-align: center;
   font-size: 24rpx;
@@ -323,6 +324,25 @@
   line-height: 60rpx;
   border-radius: 12rpx;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* 🆕"待生产"动态角标：min-width 而不是固定 width + 50% 圆角，避免
+   两位数/"99+"被压扁成椭圆看不清 */
+.pf-status-tab-badge {
+  position: absolute;
+  top: -8rpx;
+  right: 4rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 6rpx;
+  border-radius: 16rpx;
+  background: #E03131;
+  color: #FFFFFF;
+  font-size: 18rpx;
+  font-weight: 700;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .pf-status-tab.active {
