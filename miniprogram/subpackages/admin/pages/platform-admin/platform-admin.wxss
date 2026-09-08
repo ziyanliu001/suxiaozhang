@@ -186,10 +186,18 @@
   border: none;
 }
 
+/* 🐛 修复输入框高度塌陷/重叠：此前只有上下 20rpx padding、没有显式
+   height/line-height，不同 input（数字/文本、有无 placeholder）实际渲染
+   高度会因内容/字体渲染差异而不一致，与相邻的 label/error 文本行距挤在
+   一起。改为固定 height + 同值 line-height 让文字/placeholder 垂直居中，
+   box-sizing: border-box 确保 padding 不会把盒子撑高过设定值 */
 .pa-input {
-  background: #F4F5F7;
-  border-radius: 10rpx;
-  padding: 20rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  box-sizing: border-box;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
   font-size: 26rpx;
   margin-bottom: 8rpx;
   border: 2rpx solid transparent;
@@ -811,7 +819,7 @@
 
 .pa-sheet-box {
   width: 100%;
-  max-height: 85vh;
+  max-height: 80vh;
   box-sizing: border-box;
   background: #FFFFFF;
   border-radius: 32rpx 32rpx 0 0;
@@ -869,18 +877,23 @@
   display: block;
   font-size: 24rpx;
   color: #999999;
-  margin-bottom: 10rpx;
+  margin-bottom: 12rpx;
 }
 
+/* 🐛 底部安全区：改为直接在操作栏自己身上留出"固定间距 + 安全区"，
+   与 .pa-sheet-box 后面各自的 .pa-safe-area-spacer 兜底 view 是同一个目的的
+   两套实现，保留这一套后已移除 WXML 里那 4 个重复的 spacer view（否则会
+   叠加两份安全区高度） */
 .pa-sheet-actions {
   display: flex;
   gap: 16rpx;
   margin-top: 16rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
 }
 
 .pa-btn-cancel {
   flex: 1;
-  height: 76rpx;
+  height: 88rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -889,7 +902,7 @@
   padding: 0;
   margin: 0;
   line-height: 1;
-  border-radius: 38rpx;
+  border-radius: 44rpx;
   background: #EDEFF2;
   color: #333333;
   font-size: 28rpx;
@@ -901,7 +914,7 @@
 
 .pa-btn-submit {
   flex: 1;
-  height: 76rpx;
+  height: 88rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -910,7 +923,7 @@
   padding: 0;
   margin: 0;
   line-height: 1;
-  border-radius: 38rpx;
+  border-radius: 44rpx;
   background: #1C2530;
   color: #FFFFFF;
   font-size: 28rpx;
@@ -918,9 +931,4 @@
 
 .pa-btn-submit::after {
   border: none;
-}
-
-.pa-safe-area-spacer {
-  height: constant(safe-area-inset-bottom);
-  height: env(safe-area-inset-bottom);
 }

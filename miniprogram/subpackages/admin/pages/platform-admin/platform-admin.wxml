@@ -302,7 +302,6 @@
         <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseGenerateCodesSheet" disabled="{{generatingCodes}}">取消</button>
         <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitGenerateCodes" loading="{{generatingCodes}}" disabled="{{generatingCodes}}">铸造授权码</button>
       </view>
-      <view class="pa-safe-area-spacer"></view>
     </view>
   </view>
 
@@ -326,7 +325,6 @@
         <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseCreateTenantSheet" disabled="{{creatingTenant}}">取消</button>
         <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitCreateTenant" loading="{{creatingTenant}}" disabled="{{creatingTenant}}">创建机构</button>
       </view>
-      <view class="pa-safe-area-spacer"></view>
     </view>
   </view>
 
@@ -408,7 +406,6 @@
       <view class="pa-sheet-actions">
         <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseTenantStores">关闭</button>
       </view>
-      <view class="pa-safe-area-spacer"></view>
     </view>
   </view>
 
@@ -450,7 +447,6 @@
         <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseRenewForm" disabled="{{renewSubmitting}}">取消</button>
         <button class="pa-btn-submit" hover-class="btn-hover" bindtap="onSubmitRenew" loading="{{renewSubmitting}}" disabled="{{renewSubmitting}}">确认提交</button>
       </view>
-      <view class="pa-safe-area-spacer"></view>
     </view>
   </view>
 
