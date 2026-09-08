@@ -210,25 +210,23 @@ async function handleGenerate(event, OPENID) {
   return { success: true, codes };
 }
 
-// 🐛 根因修复（库存看板恒为 0）：原写法 `.where({status:'UNUSED',
-// codeType:'package', planType:'pro'})` 要求三个字段逐字符精确匹配——
-// ① 早期手工通过云开发控制台导入 JSON 的存量记录，大小写不一定严格遵循
-// handleGenerate 的写入约定（如 planType 被人手误输成 'Pro'/'PRO'）；
-// ② codeType 字段本身是后加的，handleList 的返回映射早就用
-// `codeType: c.codeType || 'package'` 兜底"没有这个字段就当套餐码"——但
-// handleGetStats 的精确匹配 `codeType:'package'` 不会命中"字段压根不存在"
-// 的旧记录，这类记录会被完全漏计，库存卡片因此显示 0。改为：
-// ① planType/status 用不区分大小写的 db.RegExp 精确匹配（^...$ 锚定首尾，
-// 不是模糊包含）；② codeType 用 _.or 同时接受显式 'package' 或字段缺失两种
-// 情况，与 handleList 的兜底语义保持一致，真正的 'add_on' 扩容包码仍会被
-// 精确排除在外
+// 🛡️ 不区分大小写的精确匹配（^...$ 锚定首尾，不是模糊包含）——供 handleList
+// 的单字段筛选使用，见该函数内部注释
 function ciExact(value) {
   return db.RegExp({ regexp: `^${value}$`, options: 'i' });
 }
 
-// 📊（可视化制卡台账）库存统计：专业版/旗舰版未核销余量 + 已核销总数，
-// 用 .count() 聚合查询而不是拉全量文档再数——集合会随铸造持续增长，
-// count() 不受文档条数影响
+// 🐛 根因修复第二版（库存看板依然为 0）：上一版把 status/planType 改成了
+// db.RegExp 不区分大小写匹配、codeType 改成"显式 'package' 或字段缺失都算"，
+// 但这两个条件仍然是"猜"存量数据大概长什么样——真实情况可能是笔者没预料到
+// 的第三种偏差（如字段里带前后空白、codeType 是空字符串而非真的不存在这个
+// 字段等），任何基于 .where() 精确条件的猜测都可能还是漏掉一部分。这次彻底
+// 放弃"用数据库查询条件去猜测历史数据长什么样"的思路，改为拉取
+// status/planType/codeType 三个轻量字段（不是整份文档）后在云函数里用宽松的
+// trim + 大小写归一化逻辑自己判断——不管这三个字段历史上被写成什么大小写、
+// 有没有多余空白、codeType 是缺失还是空字符串，都能正确分类。activation
+// codes 这张表在业务体量上不会到几十万条，一次性拉字段投影 + 内存计数的开销
+// 可以接受，正确性优先于用 count() 省下来的这点读取成本
 async function handleGetStats(event, OPENID) {
   const caller = await resolveCaller(OPENID);
   if (!caller || caller.role !== 'platform_admin') {
@@ -237,27 +235,45 @@ async function handleGetStats(event, OPENID) {
 
   await ensureActivationCodesCollection();
 
-  const packageTypeOrLegacy = () => _.or([{ codeType: 'package' }, { codeType: _.exists(false) }]);
+  const stats = { unusedPro: 0, unusedEnterprise: 0, usedTotal: 0 };
+  const BATCH_SIZE = 1000;
+  let skip = 0;
 
-  const countSafe = async (extraConditions) => {
-    try {
+  try {
+    for (;;) {
       const res = await db.collection(ACTIVATION_CODES_COLLECTION)
-        .where(_.and([packageTypeOrLegacy(), ...extraConditions]))
-        .count();
-      return res.total || 0;
-    } catch (err) {
-      if (!isCollectionNotExistError(err)) throw err;
-      return 0;
+        .field({ status: true, planType: true, codeType: true })
+        .skip(skip)
+        .limit(BATCH_SIZE)
+        .get();
+      const rows = res.data || [];
+
+      for (const row of rows) {
+        // 🛡️ codeType 缺失/空字符串一律当 'package'——与 handleList 返回映射
+        // `codeType: c.codeType || 'package'` 同一套兜底语义；真正的 add_on
+        // 扩容包码 codeType 一定是非空的 'add_on'，不会被这条兜底误吞
+        const codeType = String(row.codeType || '').trim().toLowerCase() || 'package';
+        if (codeType !== 'package') continue;
+
+        const status = String(row.status || '').trim().toUpperCase();
+        const planType = String(row.planType || '').trim().toLowerCase();
+
+        if (status === 'UNUSED') {
+          if (planType === 'pro') stats.unusedPro += 1;
+          else if (planType === 'enterprise') stats.unusedEnterprise += 1;
+        } else if (status === 'USED') {
+          stats.usedTotal += 1;
+        }
+      }
+
+      if (rows.length < BATCH_SIZE) break;
+      skip += BATCH_SIZE;
     }
-  };
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+  }
 
-  const [unusedPro, unusedEnterprise, usedTotal] = await Promise.all([
-    countSafe([{ planType: ciExact('pro') }, { status: ciExact('UNUSED') }]),
-    countSafe([{ planType: ciExact('enterprise') }, { status: ciExact('UNUSED') }]),
-    countSafe([{ status: ciExact('USED') }])
-  ]);
-
-  return { success: true, stats: { unusedPro, unusedEnterprise, usedTotal } };
+  return { success: true, stats };
 }
 
 // 📋 铸造历史台账：仅平台管理员可查看，按状态筛选（不传/'all' 时不过滤）。
