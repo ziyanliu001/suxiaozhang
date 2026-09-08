@@ -210,6 +210,22 @@ async function handleGenerate(event, OPENID) {
   return { success: true, codes };
 }
 
+// 🐛 根因修复（库存看板恒为 0）：原写法 `.where({status:'UNUSED',
+// codeType:'package', planType:'pro'})` 要求三个字段逐字符精确匹配——
+// ① 早期手工通过云开发控制台导入 JSON 的存量记录，大小写不一定严格遵循
+// handleGenerate 的写入约定（如 planType 被人手误输成 'Pro'/'PRO'）；
+// ② codeType 字段本身是后加的，handleList 的返回映射早就用
+// `codeType: c.codeType || 'package'` 兜底"没有这个字段就当套餐码"——但
+// handleGetStats 的精确匹配 `codeType:'package'` 不会命中"字段压根不存在"
+// 的旧记录，这类记录会被完全漏计，库存卡片因此显示 0。改为：
+// ① planType/status 用不区分大小写的 db.RegExp 精确匹配（^...$ 锚定首尾，
+// 不是模糊包含）；② codeType 用 _.or 同时接受显式 'package' 或字段缺失两种
+// 情况，与 handleList 的兜底语义保持一致，真正的 'add_on' 扩容包码仍会被
+// 精确排除在外
+function ciExact(value) {
+  return db.RegExp({ regexp: `^${value}$`, options: 'i' });
+}
+
 // 📊（可视化制卡台账）库存统计：专业版/旗舰版未核销余量 + 已核销总数，
 // 用 .count() 聚合查询而不是拉全量文档再数——集合会随铸造持续增长，
 // count() 不受文档条数影响
@@ -221,9 +237,13 @@ async function handleGetStats(event, OPENID) {
 
   await ensureActivationCodesCollection();
 
-  const countSafe = async (where) => {
+  const packageTypeOrLegacy = () => _.or([{ codeType: 'package' }, { codeType: _.exists(false) }]);
+
+  const countSafe = async (extraConditions) => {
     try {
-      const res = await db.collection(ACTIVATION_CODES_COLLECTION).where(where).count();
+      const res = await db.collection(ACTIVATION_CODES_COLLECTION)
+        .where(_.and([packageTypeOrLegacy(), ...extraConditions]))
+        .count();
       return res.total || 0;
     } catch (err) {
       if (!isCollectionNotExistError(err)) throw err;
@@ -232,9 +252,9 @@ async function handleGetStats(event, OPENID) {
   };
 
   const [unusedPro, unusedEnterprise, usedTotal] = await Promise.all([
-    countSafe({ status: 'UNUSED', codeType: 'package', planType: 'pro' }),
-    countSafe({ status: 'UNUSED', codeType: 'package', planType: 'enterprise' }),
-    countSafe({ status: 'USED', codeType: 'package' })
+    countSafe([{ planType: ciExact('pro') }, { status: ciExact('UNUSED') }]),
+    countSafe([{ planType: ciExact('enterprise') }, { status: ciExact('UNUSED') }]),
+    countSafe([{ status: ciExact('USED') }])
   ]);
 
   return { success: true, stats: { unusedPro, unusedEnterprise, usedTotal } };
@@ -251,14 +271,18 @@ async function handleList(event, OPENID) {
 
   await ensureActivationCodesCollection();
 
+  // 🐛 与 handleGetStats 同一个根因：早期手工导入的存量记录大小写不一定
+  // 严格遵循写入约定，精确字符串匹配会漏掉这些记录——筛选值本身
+  // （event.status/event.planType）来自我们自己的前端固定枚举，不存在大小写
+  // 问题，需要不区分大小写匹配的是数据库里已经存在的历史数据
   const where = {};
   if (event.status === 'UNUSED' || event.status === 'USED' || event.status === 'REVOKED') {
-    where.status = event.status;
+    where.status = ciExact(event.status);
   }
   // 🆕（可视化制卡台账）按套餐类型筛选——不传/其余值时不过滤，与 status
   // 筛选是两个独立维度，可以同时生效
   if (event.planType === 'pro' || event.planType === 'enterprise') {
-    where.planType = event.planType;
+    where.planType = ciExact(event.planType);
   }
 
   // 📄 分页：台账会随着一批批铸造持续增长，不能无限期一次性拉全量。skip 由
