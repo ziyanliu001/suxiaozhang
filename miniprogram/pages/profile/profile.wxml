@@ -412,15 +412,32 @@
       <text class="ccc-arrow">❯</text>
     </view>
 
-    <!-- 🛒（方向 B）我的工坊订单——买家自查入口，任何账号只要下过工坊订单
-         就会露出，与上面的"产销工坊反哺"是两个不同视角（反哺卡是"我作为
-         公益厨房管理者收到的转捐"，这张是"我作为买家自己下过的单"） -->
-    <view class="my-orders-entry-card" wx:if="{{myProductionOrdersCount > 0}}" bindtap="onGoToMyProductionOrders">
+    <!-- 🐛 根因修复（"工坊订单"在不同门店下显示同一份数据的体验歧义）：此前
+         这个核心卡片位置固定展示"我的工坊订单"——但那查的是当前账号自己的
+         【买家个人消费订单】（getMyProductionOrders，以 buyerOpenId 过滤），
+         与当前正在管理哪家门店完全无关，切换门店/切到全国总览时这张卡片
+         的数据自然纹丝不动，被管理者误读成"不同门店订单数据混淆串流"。
+         现按角色分流：
+         ① 管理员视角（店长/大家长/超管）且账号本人持有工坊主理人身份
+            （hasProductionSpaceAccess，与"排单与发货管理"入口同一个判定，
+            见 fetchProductionSpaces 注释）时，核心位置改展示管理向的
+            「工坊生产与履约」统计——工坊（live_factory 租户）与门店
+            （stores）在数据模型上完全独立，不存在"当前选中门店关联了某个
+            工坊"这种字段级关系，因此判定依据只能是"账号本人是否持有工坊
+            主理人身份"，与当前正在管理哪家门店无关，这是既有数据模型的
+            限制，不是本次遗漏；
+         ② 管理员视角但账号本人不是任何工坊主理人时，整张卡片隐藏——与
+            下方"产销工坊"分组同一个既有取舍（见该分组注释），不额外展示
+            "开通入口"打扰绝大多数与工坊无关的雨花斋/通用记账账号；
+         ③ 非管理员角色（义工/财务/家人）在这个核心位置不展示任何工坊相关
+            卡片——原来的"我的工坊订单"买家自查入口已下移到「日常记录」，
+            所有角色都能在那里看到，见下方 my-orders-entry-card -->
+    <view class="my-orders-entry-card" wx:if="{{(isManager || isPatriarch || isSuperAdmin) && hasProductionSpaceAccess}}" bindtap="onGoToProductionFulfillment">
       <view class="ccc-left">
-        <text class="ccc-icon">🛒</text>
+        <text class="ccc-icon">📦</text>
         <view class="ccc-text-col">
-          <text class="myoc-title">我的工坊订单</text>
-          <text class="ccc-sub">共 {{myProductionOrdersCount}} 笔 · {{myProductionOrdersLatestSummary}}</text>
+          <text class="myoc-title">工坊生产与履约</text>
+          <text class="ccc-sub">待排产 {{workshopPendingCount}} 单 · 制作中 {{workshopInProgressCount}} 单</text>
         </view>
       </view>
       <text class="ccc-arrow">❯</text>
@@ -876,6 +893,24 @@
          wx:if="{{!isFamily}}"，只有「我的提交与数据」保持无条件展示）。
          🔀 排在「核心荣誉」前面：日常操作类入口优先于荣誉展示 -->
     <view class="list-group-label">日常记录</view>
+
+    <!-- 🛒（方向 B，2026-09-08 从核心卡片位置下移归位）我的工坊购买（个人
+         消费）——买家自查入口，任何账号只要下过工坊订单就会露出，与上方
+         "产销工坊反哺"（作为公益厨房管理者收到的转捐）、核心区"工坊生产与
+         履约"（作为工坊主理人管理的排产/履约）是三个不同视角，互不相关。
+         标题与副标题均明确标注"个人消费/订购记录"，避免继续与门店/工坊
+         业务数据混淆——这正是本次要修复的体验歧义 -->
+    <view class="my-orders-entry-card" wx:if="{{myProductionOrdersCount > 0}}" bindtap="onGoToMyProductionOrders">
+      <view class="ccc-left">
+        <text class="ccc-icon">🛒</text>
+        <view class="ccc-text-col">
+          <text class="myoc-title">我的工坊购买（个人消费）</text>
+          <text class="ccc-sub">个人订购记录 · 共 {{myProductionOrdersCount}} 笔 · {{myProductionOrdersLatestSummary}}</text>
+        </view>
+      </view>
+      <text class="ccc-arrow">❯</text>
+    </view>
+
     <view class="ui-card-wrapper action-list-container">
       <!-- 🐛 双重图标修复：此前左侧 .item-icon-svg（SVG 矢量图标）与文案里手打的
            emoji（📜/📝）同时存在，等于同一个入口画了两枚图标，且 emoji 字形的行高

@@ -403,6 +403,13 @@ Page({
     // 与跳转目标，见 fetchProductionSpaces/onGoToProductionFulfillment
     hasProductionSpaceAccess: false,
     productionSpaces: [] as Array<{ tenantId: string; tenantName: string; role: string }>,
+    // 🆕（工坊订单卡片归位重构）管理员视角"工坊生产与履约"统计：仅当账号本人
+    // 是工坊 space_owner/space_admin/producer 时才有意义，见
+    // fetchWorkshopFulfillmentSummary 注释——工坊与门店在数据模型上完全独立，
+    // 不存在"当前选中门店关联了某个工坊"这种字段级关系，判定依据只能是账号
+    // 本人的工坊身份，与当前门店管理视角无关
+    workshopPendingCount: 0,
+    workshopInProgressCount: 0,
     // 🏪 门店运营状态：见 utils/storeManager.ts fetchAndSyncStoreStatus/getCachedStoreStatus，
     // 全局态与 Storage 双写同步，"查看店铺状态"菜单标题据此动态渲染
     currentStoreStatus: '',
@@ -1507,7 +1514,7 @@ Page({
     // 所有账号都无条件查一次——绝大多数账号没有产销工坊成员身份，云函数
     // 直接返回空数组，整张卡片（含「输入工坊邀请码加入」）保持隐藏，
     // 入口卡片保持隐藏，不额外增加权限判断分支
-    pendingFetches.push(this.fetchProductionSpaces());
+    pendingFetches.push(this.fetchProductionSpaces(isManager || isPatriarch || overridden.isSuperAdmin));
 
     // 🛒（方向 B）我的工坊订单：同样无条件查一次——任何账号都可能是买家
     // （getMyProductionOrders 以 buyerOpenId 为唯一过滤维度，与角色/tenant_members
@@ -2433,6 +2440,12 @@ Page({
   },
 
   // 昵称编辑（官方 <input type="nickname"> 能力）：失焦后保存
+  // 🐛 容错修复：此前 AuthService.updateProfile() 调用没有 try/catch 包裹——
+  // 用户尚未同意隐私授权时，微信侧 <input type="nickname"> 的内容安全校验会
+  // 以 errno:104 之类的形式抛出异常（与 onChooseAvatar/chooseMedia 等隐私
+  // 接口被拦截是同一类平台合规限制），未捕获的异常会变成一次未处理的 Promise
+  // rejection。补齐与 onChooseAvatar 完全同款的 try/catch 兜底，任何异常都
+  // 转成一次友好 Toast + 回退显示，不让这条路径向上抛出阻断后续渲染/交互
   async onNicknameBlur(e: any) {
     const nickName = ((e.detail && e.detail.value) || '').trim();
     if (!nickName || nickName === this.data.userNickName) {
@@ -2442,13 +2455,19 @@ Page({
     const previous = this.data.userNickName;
     this.setData({ userNickName: nickName });
 
-    const result = await AuthService.updateProfile({ nickName });
-    if (result.success) {
-      wx.showToast({ title: '昵称已更新', icon: 'success' });
-    } else {
-      // 保存失败则回退显示，避免界面与云端数据不一致
+    try {
+      const result = await AuthService.updateProfile({ nickName });
+      if (result.success) {
+        wx.showToast({ title: '昵称已更新', icon: 'success' });
+      } else {
+        // 保存失败则回退显示，避免界面与云端数据不一致
+        this.setData({ userNickName: previous });
+        wx.showToast({ title: result.error || '昵称保存失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.warn('[profile] onNicknameBlur 异常（可能是隐私授权未同意/内容安全校验失败）:', err);
       this.setData({ userNickName: previous });
-      wx.showToast({ title: result.error || '昵称保存失败', icon: 'none' });
+      wx.showToast({ title: '昵称保存失败，请重试', icon: 'none' });
     }
   },
 
@@ -5754,15 +5773,53 @@ Page({
   // 📦 产销工坊工作空间列表：getMyProductionSpaces 查的是与 user_roles 物理
   // 隔离的 tenant_members 集合（见该云函数头部注释），与雨花角色查询完全
   // 独立、互不影响，失败时静默隐藏入口即可，不需要 toast 打扰
-  async fetchProductionSpaces() {
+  // 🆕 isAdminRole：管理员视角（店长/大家长/超管）才需要顺带算一次
+  // 「工坊生产与履约」统计——普通义工/财务/家人即便自己也是工坊主理人，
+  // 中心卡片仍然是买家/义工视角的内容，管理向大卡片不对这些角色展示
+  async fetchProductionSpaces(isAdminRole?: boolean) {
     try {
       const res = await callFunctionWithTimeout({ name: 'getMyProductionSpaces', data: {} });
       const result = res.result as any;
       const spaces = (result && result.success && result.spaces) || [];
       this.setData({ hasProductionSpaceAccess: spaces.length > 0, productionSpaces: spaces });
+      if (isAdminRole && spaces.length > 0) {
+        await this.fetchWorkshopFulfillmentSummary(spaces);
+      }
     } catch (err) {
       console.warn('[fetchProductionSpaces] 查询失败:', err);
       this.setData({ hasProductionSpaceAccess: false, productionSpaces: [] });
+    }
+  },
+
+  // 🆕（工坊订单卡片归位重构）管理员视角「工坊生产与履约」统计：与买家自查
+  // 的「我的工坊订单」（getMyProductionOrders，以 buyerOpenId 过滤）是完全
+  // 不同的数据源——这里按账号本人持有 space_owner/space_admin/producer 身份
+  // 的每个工坊空间，各查一次 getProductionBoard 取"待排产（paid）/制作中
+  // （in_production）"订单，跨空间累加。取近 3 天~未来 30 天作为统计窗口，
+  // 覆盖典型的排产可见范围；最多查前 5 个空间，避免账号同时持有大量工坊
+  // 身份时并发打出过多云调用（正常场景下一个账号极少同时管理超过几个工坊）
+  async fetchWorkshopFulfillmentSummary(spaces: Array<{ tenantId: string }>) {
+    const startDate = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const endDate = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    try {
+      const results = await Promise.all(
+        spaces.slice(0, 5).map((s) =>
+          callFunctionWithTimeout({ name: 'getProductionBoard', data: { tenantId: s.tenantId, startDate, endDate } }).catch(() => null)
+        )
+      );
+      let pending = 0;
+      let inProgress = 0;
+      results.forEach((res: any) => {
+        const orders = (res && res.result && res.result.success && res.result.orders) || [];
+        orders.forEach((o: any) => {
+          if (o.orderStatus === 'paid') pending += 1;
+          else if (o.orderStatus === 'in_production') inProgress += 1;
+        });
+      });
+      this.setData({ workshopPendingCount: pending, workshopInProgressCount: inProgress });
+    } catch (err) {
+      console.warn('[fetchWorkshopFulfillmentSummary] 查询失败:', err);
+      this.setData({ workshopPendingCount: 0, workshopInProgressCount: 0 });
     }
   },
 
