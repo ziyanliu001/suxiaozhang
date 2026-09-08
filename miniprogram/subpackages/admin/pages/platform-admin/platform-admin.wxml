@@ -187,22 +187,52 @@
         <button class="pa-btn-create" hover-class="btn-hover" bindtap="onOpenCreateTenantSheet">+ 新建机构</button>
       </view>
 
+      <!-- 🆕 机构搜索：走服务端 keyword 过滤（listTenants 有分页，本地过滤会
+           漏掉还没翻到的机构），回车/键盘"搜索"键触发，不做输入即触发的
+           防抖搜索 -->
+      <input
+        class="pa-input pa-tenant-search-input"
+        placeholder="按机构名称/ID搜索"
+        confirm-type="search"
+        value="{{tenantSearchKeyword}}"
+        bindinput="onTenantSearchInput"
+        bindconfirm="onTenantSearchConfirm"
+      />
+
+      <!-- 🆕 状态筛选：纯本地快筛，基于 decorateTenants() 算出的 displayStatus -->
+      <view class="pa-tenant-filter-row">
+        <view class="pa-codes-filter-tab {{tenantStatusFilter === 'all' ? 'active' : ''}}" data-value="all" bindtap="onSwitchTenantStatusFilter">全部</view>
+        <view class="pa-codes-filter-tab {{tenantStatusFilter === 'active' ? 'active' : ''}}" data-value="active" bindtap="onSwitchTenantStatusFilter">生效中</view>
+        <view class="pa-codes-filter-tab {{tenantStatusFilter === 'inactive' ? 'active' : ''}}" data-value="inactive" bindtap="onSwitchTenantStatusFilter">已到期/未开通</view>
+      </view>
+
       <view class="pa-tenant-card pa-skel-card" wx:if="{{tenantsLoading && tenants.length === 0}}">
         <view class="pa-skel-bar pa-skel-bar-lg"></view>
         <view class="pa-skel-bar pa-skel-bar-sm"></view>
       </view>
 
-      <view class="pa-empty-state" wx:elif="{{!tenantsLoading && tenants.length === 0}}">
+      <!-- 🆕 空状态区分"真的一家都没有"与"搜索没搜到"，后者不该提示"新建机构" -->
+      <view class="pa-empty-state" wx:elif="{{!tenantsLoading && tenants.length === 0 && !tenantSearchKeyword}}">
         <text class="pa-empty-icon">🏢</text>
         <text class="pa-empty-title">暂无机构</text>
         <text class="pa-empty-sub">点击上方"+ 新建机构"创建第一个</text>
       </view>
+      <view class="pa-empty-state" wx:elif="{{!tenantsLoading && tenants.length === 0 && tenantSearchKeyword}}">
+        <text class="pa-empty-icon">🔍</text>
+        <text class="pa-empty-title">未找到匹配的机构</text>
+        <text class="pa-empty-sub">换个关键词试试</text>
+      </view>
 
       <block wx:else>
-        <view class="pa-tenant-card" wx:for="{{tenants}}" wx:key="_id">
+        <view
+          class="pa-tenant-card"
+          wx:for="{{tenants}}"
+          wx:key="_id"
+          wx:if="{{tenantStatusFilter === 'all' || (tenantStatusFilter === 'active' ? item.displayStatus === 'active' : item.displayStatus !== 'active')}}"
+        >
           <view class="pa-tenant-header">
             <text class="pa-tenant-name">{{item.name}}</text>
-            <text class="pa-tenant-status pa-status-{{item.status}}">{{item.status}}</text>
+            <text class="pa-tenant-status pa-status-{{item.displayStatus}}">{{item.displayStatusLabel}}</text>
           </view>
           <view class="pa-tenant-body">
             <view class="pa-tenant-plan-row" wx:if="{{item.subscription}}">
@@ -211,7 +241,11 @@
               <text class="pa-tenant-row pa-expire-text">到期：{{item.subscription.serviceExpireDate}}</text>
             </view>
             <text class="pa-tenant-row" wx:else>尚未开通订阅</text>
-            <text class="pa-tenant-row pa-tenant-id">机构 ID：{{item._id}}</text>
+            <!-- 🆕 机构 ID 加深对比度 + 一键复制 -->
+            <view class="pa-tenant-id-row">
+              <text class="pa-tenant-id">机构 ID：{{item._id}}</text>
+              <text class="pa-tenant-id-copy" catchtap="onCopyTenantId" data-id="{{item._id}}">复制</text>
+            </view>
             <!-- 🏪 门店容量进度：门店本身不会在这张机构列表里单独占一行（门店是挂在
                  tenantId 下的子资源），这里直接把"已用/配额"亮出来，避免管理员误以为
                  某个门店"丢了"——点"查看门店"即可展开该机构下的具体门店清单。
@@ -223,25 +257,14 @@
               </view>
             </view>
           </view>
+          <!-- 🆕（操作栏紧凑化）2 个描边胶囊主操作 + 1 个"更多"入口——暂停/恢复
+               服务、终止订阅收进 onOpenTenantMoreActions 的原生 ActionSheet，
+               未开通订阅的机构（item.subscription 为空）没有这两个动作，
+               "更多"入口本身也不出现 -->
           <view class="pa-tenant-actions">
-            <button class="pa-btn-small" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenTenantStores">查看门店</button>
-            <button class="pa-btn-small" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">开通/续费</button>
-            <!-- 🛑 终止订阅：仅在机构当前持有生效中的付费套餐（非免费版且未到期）
-                 时才展示，与云函数 terminateTenantSubscription 的校验口径对齐 -->
-            <button
-              wx:if="{{item.isActivePaidPlan}}"
-              class="pa-btn-small pa-btn-danger"
-              hover-class="btn-hover"
-              loading="{{terminatingTenantId === item._id}}"
-              disabled="{{!!terminatingTenantId}}"
-              data-tenantid="{{item._id}}"
-              data-tenantname="{{item.name}}"
-              data-plantype="{{item.subscription.planType}}"
-              bindtap="onTerminateSubscription"
-            >终止订阅</button>
-            <button class="pa-btn-small pa-btn-warn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-currentstatus="{{item.status}}" bindtap="onToggleTenantStatus">
-              {{item.status === 'suspended' ? '恢复服务' : '暂停服务'}}
-            </button>
+            <view class="pa-tenant-action-btn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenTenantStores">查看门店</view>
+            <view class="pa-tenant-action-btn pa-tenant-action-btn-primary" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">{{item.subscription ? '续费' : '开通订阅'}}</view>
+            <view class="pa-tenant-more-btn" hover-class="btn-hover" wx:if="{{item.subscription}}" data-item="{{item}}" bindtap="onOpenTenantMoreActions">⋯</view>
           </view>
         </view>
 

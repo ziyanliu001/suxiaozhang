@@ -175,6 +175,14 @@ Page({
     // 🔒 终止订阅防抖锁：值为正在处理中的 tenantId，空字符串表示当前无操作在途
     terminatingTenantId: '',
 
+    // 🆕 机构搜索：走服务端 keyword 过滤（不是本地过滤已加载的这一页）——
+    // 机构总数会分页，搜索必须能搜到还没翻到的那些机构
+    tenantSearchKeyword: '',
+    // 🆕 状态筛选：走本地快筛（与授权码台账的套餐类型筛选同一种权衡，机构
+    // 数量级不大，不为筛选单独发云调用），基于 decorateTenants() 算出的
+    // displayStatus 派生字段
+    tenantStatusFilter: 'all' as 'all' | 'active' | 'inactive',
+
     // 🏪 机构下挂门店抽屉：点击机构卡片"查看门店"时唤起，见 onOpenTenantStores——
     // 这是"机构列表看不到测试1"这类问题的排查入口：门店本身不会在机构列表里
     // 单独占一行（门店是挂在 tenantId 下的子资源），要看某个具体门店在不在，
@@ -350,7 +358,7 @@ Page({
     try {
       const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
-        data: { action: 'listTenants', skip: 0 }
+        data: { action: 'listTenants', skip: 0, keyword: this.data.tenantSearchKeyword }
       });
       const result = res.result as any;
       if (result && result.success) {
@@ -381,7 +389,7 @@ Page({
     try {
       const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
-        data: { action: 'listTenants', skip: this.data.tenantsSkip }
+        data: { action: 'listTenants', skip: this.data.tenantsSkip, keyword: this.data.tenantSearchKeyword }
       });
       const result = res.result as any;
       if (result && result.success) {
@@ -425,13 +433,38 @@ Page({
       const storeCount = t.storeCount || 0;
       const storeQuotaPercent = storeLimit > 0 ? Math.min(100, Math.round((storeCount / storeLimit) * 100)) : 100;
 
+      // 🐛 根因修复（状态徽章矛盾）：t.status 是 tenants 文档自己的
+      // active/suspended 字段（机构记录本身有没有被管理员停用），与是否
+      // 开通过付费套餐（sub 是否存在）是两个完全独立的维度——从未开通订阅
+      // 的机构 t.status 依然是 'active'，此前 WXML 直接展示这个原始字段，
+      // 卡片上因此显示绿色"active"，让人误以为它有生效中的套餐。这里按
+      // "机构被停用 > 从未开通订阅 > 套餐已到期 > 生效中"优先级算出一个
+      // 展示专用的状态，与 t.status 本身（仍用于暂停/恢复的业务判断）分开
+      let displayStatus: 'suspended' | 'none' | 'expired' | 'active';
+      let displayStatusLabel: string;
+      if (t.status === 'suspended') {
+        displayStatus = 'suspended';
+        displayStatusLabel = '已暂停';
+      } else if (!sub) {
+        displayStatus = 'none';
+        displayStatusLabel = '未开通';
+      } else if (isExpired) {
+        displayStatus = 'expired';
+        displayStatusLabel = '已到期';
+      } else {
+        displayStatus = 'active';
+        displayStatusLabel = '生效中';
+      }
+
       return {
         ...t,
         isExpiringSoon,
         isActivePaidPlan,
         storeLimit,
         storeQuotaPercent,
-        isStoreQuotaFull: storeCount >= storeLimit
+        isStoreQuotaFull: storeCount >= storeLimit,
+        displayStatus,
+        displayStatusLabel
       };
     });
   },
@@ -1204,6 +1237,65 @@ Page({
         }
       }
     });
+  },
+
+  // 🆕（操作栏紧凑化）"更多"入口——用微信原生 ActionSheet 收纳暂停/恢复服务
+  // + 终止订阅这两个低频/危险操作，不新建自定义弹窗组件。选中后直接调用
+  // 已有的 onToggleTenantStatus/onTerminateSubscription（构造一个只含
+  // currentTarget.dataset 的最小事件对象——这两个方法本来就只读这个字段），
+  // 两者各自已有的 wx.showModal 二次确认原样保留，这里不重复做一次确认
+  onOpenTenantMoreActions(e: any) {
+    const item = e.currentTarget.dataset.item;
+    if (!item) return;
+    const itemList: string[] = [item.status === 'suspended' ? '恢复服务' : '暂停服务'];
+    const isTerminate: boolean[] = [false];
+    if (item.isActivePaidPlan) {
+      itemList.push('终止订阅');
+      isTerminate.push(true);
+    }
+    wx.showActionSheet({
+      itemList,
+      itemColor: '#C62828',
+      success: (res) => {
+        if (isTerminate[res.tapIndex]) {
+          this.onTerminateSubscription({
+            currentTarget: { dataset: { tenantid: item._id, tenantname: item.name, plantype: item.subscription && item.subscription.planType } }
+          });
+        } else {
+          this.onToggleTenantStatus({
+            currentTarget: { dataset: { tenantid: item._id, currentstatus: item.status } }
+          });
+        }
+      }
+    });
+  },
+
+  // 🆕 机构 ID 复制——与本页 onCopyActivationCode 同一套写法
+  onCopyTenantId(e: any) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    wx.setClipboardData({
+      data: id,
+      success: () => wx.showToast({ title: '已复制机构ID', icon: 'success' })
+    });
+  },
+
+  // 🆕 机构搜索：仅同步本地输入值，实际发起查询在 onTenantSearchConfirm——
+  // 不做输入即触发的防抖搜索，避免每敲一个字就打一次云函数请求
+  onTenantSearchInput(e: any) {
+    this.setData({ tenantSearchKeyword: e.detail.value });
+  },
+
+  onTenantSearchConfirm() {
+    this.loadTenants(true);
+  },
+
+  // 🆕 状态筛选：纯本地 wx:if 快筛，不重新发云调用——与授权码台账的套餐
+  // 类型筛选同一种权衡
+  onSwitchTenantStatusFilter(e: any) {
+    const value = e.currentTarget.dataset.value;
+    if (!value || value === this.data.tenantStatusFilter) return;
+    this.setData({ tenantStatusFilter: value });
   },
 
   // 🛑 终止订阅：误操作/退款/提前解约场景下，收回机构当前生效的付费套餐，

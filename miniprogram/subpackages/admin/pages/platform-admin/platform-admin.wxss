@@ -289,6 +289,11 @@
   background: #999999;
 }
 
+/* 🐛 根因修复（状态徽章矛盾）：此前 .pa-status-active 与
+   .pa-status-expired/.pa-status-suspended 共用同一份"机构记录状态"绑定，
+   现在改绑 item.displayStatus（decorateTenants() 算出的展示专用状态），
+   四态视觉上明确分开：生效中=绿，已到期=橙（自然到期，不是管理员主动
+   处置，比"已暂停"轻一档），已暂停=红（管理员主动处置），未开通=中性灰 */
 .pa-status-active {
   background: #2E7D32;
 }
@@ -297,9 +302,16 @@
   background: #F9A825;
 }
 
-.pa-status-suspended,
 .pa-status-expired {
+  background: #F9A825;
+}
+
+.pa-status-suspended {
   background: #C62828;
+}
+
+.pa-status-none {
+  background: #9CA3AF;
 }
 
 .pa-tenant-row {
@@ -309,9 +321,27 @@
   margin-bottom: 6rpx;
 }
 
+/* 🐛 机构 ID 对比度修复：#BBBBBB 在浅色卡片背景上过淡，加深到 #8E8E93，
+   仍是弱化的次要信息，但达到基本可读对比度 */
+.pa-tenant-id-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 6rpx;
+}
+
 .pa-tenant-id {
-  color: #BBBBBB;
+  color: #8E8E93;
   font-size: 20rpx;
+  margin-bottom: 0;
+}
+
+.pa-tenant-id-copy {
+  font-size: 20rpx;
+  color: #495057;
+  background: #F1F3F5;
+  border-radius: 10rpx;
+  padding: 2rpx 12rpx;
 }
 
 .pa-tenant-store-count {
@@ -433,19 +463,51 @@
   margin-bottom: 0;
 }
 
+/* 🐛（操作栏紧凑化）此前是 4 个 .pa-btn-small 换行铺开，经常挤成两行拉高
+   卡片高度。改为 2 个描边胶囊主操作（.pa-tenant-action-btn）+ 1 个圆形
+   "更多"入口（.pa-tenant-more-btn），单行放得下，暂停/恢复服务与终止订阅
+   收进 onOpenTenantMoreActions 的原生 ActionSheet */
 .pa-tenant-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
+  align-items: center;
+  gap: 12rpx;
   margin-top: 16rpx;
 }
 
-/* 最多四个按钮同时出现（查看门店/开通续费/终止订阅/暂停服务）时允许换行，
-   避免四个 flex:1 挤在一行导致文字被压得太窄，与 .pa-tenant-store-actions
-   同一套处理方式 */
-.pa-tenant-actions .pa-btn-small {
-  flex: 1 1 auto;
-  min-width: 160rpx;
+.pa-tenant-action-btn {
+  flex: 1;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  border-radius: 28rpx;
+  font-size: 24rpx;
+  color: #495057;
+  border: 1.5rpx solid #DEE2E6;
+  background: #FFFFFF;
+}
+
+.pa-tenant-action-btn-primary {
+  color: #1C2530;
+  border-color: #1C2530;
+  font-weight: 600;
+}
+
+.pa-tenant-more-btn {
+  flex-shrink: 0;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #495057;
+  font-size: 28rpx;
+  font-weight: 700;
+  box-sizing: border-box;
 }
 
 .pa-btn-small {
@@ -563,6 +625,20 @@
 .pa-generated-meta {
   font-size: 20rpx;
   color: #999999;
+}
+
+/* 🆕 机构搜索框：复用 .pa-input 的高度/圆角/底色，margin-bottom 加大到
+   16rpx 与下方筛选 Tag 行拉开距离（表单里的 .pa-input 默认 margin-bottom
+   只有 8rpx，是给紧跟着的 field-error 文案留的，这里没有 error 文案） */
+.pa-tenant-search-input {
+  margin-bottom: 16rpx;
+}
+
+/* 🆕 机构状态筛选 Tag：与授权码台账的 .pa-codes-filter-row 同一套视觉语言 */
+.pa-tenant-filter-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
 }
 
 .pa-codes-filter-row {

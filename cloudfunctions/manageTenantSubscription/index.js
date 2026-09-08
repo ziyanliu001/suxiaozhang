@@ -120,6 +120,13 @@ function isCollectionNotExistError(err) {
   return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
 }
 
+// 🆕（机构管理搜索）转义关键词里的正则特殊字符——listTenants 的 keyword
+// 搜索走 db.RegExp 模糊匹配机构名称，用户输入 "."/"("这类字符时如果不转义
+// 会被当成正则语法解释，匹配行为和用户预期不符
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // 只读查询自愈：命中集合不存在时返回 null（语义等价于"这家机构还没有任何订阅
 // 记录"），其余错误原样抛出给调用方处理
 async function safeGetLatestSubscription(tenantId) {
@@ -206,6 +213,14 @@ exports.main = async (event) => {
           await ensureNationalTenant();
         }
 
+        // 🆕（机构管理搜索）keyword 非空时按机构名称模糊匹配或机构 ID 精确
+        // 匹配——机构总数会分页，搜索必须能搜到"当前还没翻到的那一页"，不能
+        // 只在前端已加载的这几条里本地过滤，否则会漏掉大部分机构
+        const keyword = String(event.keyword || '').trim();
+        const where = keyword
+          ? _.or([{ name: db.RegExp({ regexp: escapeRegExp(keyword), options: 'i' }) }, { _id: keyword }])
+          : {};
+
         // 🐛 根因修复：全新环境（从未创建过任何机构）里 tenants 集合可能从未
         // 存在过，直接 .get() 会抛 -502005。"一家机构都还没有"是完全正常、
         // 该展示空状态的场景，不是错误——这里单独 try/catch 命中时直接返回
@@ -214,6 +229,7 @@ exports.main = async (event) => {
         let rows = [];
         try {
           const tenantsRes = await db.collection('tenants')
+            .where(where)
             .orderBy('createdAt', 'desc')
             .skip(skip)
             .limit(PAGE_SIZE + 1)
