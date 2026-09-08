@@ -227,10 +227,22 @@
   padding: 8rpx 0;
 }
 
-.wj-role-guide-icon {
-  font-size: 40rpx;
-  line-height: 1.4;
+/* 🆕 与 pages/index 「选择工作空间」三张卡片同一套"低饱和浅色圆形衬底"
+   语言（.platform-card-icon-badge），替代原先裸露直出的 emoji */
+.wj-role-guide-icon-badge {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(140, 29, 24, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+}
+
+.wj-role-guide-icon {
+  font-size: 32rpx;
+  line-height: 1;
 }
 
 .wj-role-guide-text {
@@ -263,13 +275,25 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10rpx;
   margin-top: 24rpx;
   padding: 0 24rpx;
 }
 
+.wj-tips-icon-badge {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: rgba(230, 162, 60, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .wj-tips-icon {
-  font-size: 24rpx;
-  margin-right: 8rpx;
+  font-size: 18rpx;
+  line-height: 1;
 }
 
 .wj-tips-text {

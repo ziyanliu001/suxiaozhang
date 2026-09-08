@@ -1,7 +1,7 @@
 <view class="wj-page">
 
   <navigation-bar
-    title="加入产销工坊"
+    title="加入工坊"
     background="#8C1D18"
     color="#FFFFFF"
     dark="{{true}}"
@@ -56,7 +56,9 @@
            才能看到关键信息），帮助还没决定的用户提前了解两种身份分别能做什么 -->
       <view class="wj-role-guide" wx:if="{{!peekResult}}">
         <view class="wj-role-guide-item">
-          <text class="wj-role-guide-icon">👩‍🍳</text>
+          <view class="wj-role-guide-icon-badge">
+            <text class="wj-role-guide-icon">👩‍🍳</text>
+          </view>
           <view class="wj-role-guide-text">
             <text class="wj-role-guide-title">制作合伙人</text>
             <text class="wj-role-guide-desc">接收工坊排单、打卡制作履约、按单结算工时分账</text>
@@ -64,7 +66,9 @@
         </view>
         <view class="wj-role-guide-divider"></view>
         <view class="wj-role-guide-item">
-          <text class="wj-role-guide-icon">📱</text>
+          <view class="wj-role-guide-icon-badge">
+            <text class="wj-role-guide-icon">📱</text>
+          </view>
           <view class="wj-role-guide-text">
             <text class="wj-role-guide-title">推广达人</text>
             <text class="wj-role-guide-desc">生成专属带货码、实时查看成单明细与分账收益</text>
@@ -73,7 +77,9 @@
       </view>
 
       <view class="wj-tips" wx:if="{{!peekResult}}">
-        <text class="wj-tips-icon">💡</text>
+        <view class="wj-tips-icon-badge">
+          <text class="wj-tips-icon">💡</text>
+        </view>
         <text class="wj-tips-text">找不到邀请码？请联系工坊负责人获取</text>
       </view>
 
