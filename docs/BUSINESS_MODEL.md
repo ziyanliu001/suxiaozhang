@@ -8,6 +8,7 @@
 - **⚠️（2026-09-05 战略扩展·续）雨花公益专区门店数量配额豁免**：支柱 1 里"多门店连锁管理需付费"这条对雨花斋门店同样开例外——**新建雨花斋门店（`orgType === 'yuhuazhai'`）完全不占用、也不检查机构的门店数量配额**（`tenants.currentStoreCount` 现在的语义收窄为"仅统计非雨花斋门店"），商业门店满 2 家（基础版）仍需升级/购买扩容包的规则不变。代码落点：`cloudfunctions/createStore`、`cloudfunctions/processRoleAudit`、`cloudfunctions/manageTenantSubscription`（`assignStoreToTenant`/`removeStoreFromTenant`）里各自的配额占用/归还逻辑，均已按 `orgType` 分流。
   - **已知遗留风险，如实记录**：`orgType` 是门店级字段，由超管在建店/编辑门店档案时自行填写，**未经任何资质核验**——理论上任何人都可以把商业门店标成 `yuhuazhai` 来绕开门店数量配额，这是本次扩展主动接受的一个信任假设（依赖超管诚信自律），不是技术上无法绕过的硬边界，后续如需收紧需要引入雨花斋资质审核机制。
   - **已知数据口径缺口**：本次改动只影响"从今往后新建/迁移的门店"如何计数，**存量已经计入 `currentStoreCount` 的历史雨花斋门店不会自动扣减**，会让个别老机构的"已用门店数"展示值偏高于真实商业门店数，需要时走人工核对/一次性校正脚本，本次未做批量数据迁移。
+- **⚠️（2026-09-08 战略扩展·续）「会员开通/续费管理」套餐弹窗雨花斋公益文案分支**：`pages/profile/enterprise/saasSubscriptionModal.wxml` 此前对所有 `super_admin`/`store_patriarch` 一视同仁展示真实定价（¥1,688/¥3,688/¥200）与微信支付下单入口，与"雨花斋应始终免费、去商业化"的原则脱节——即便雨花斋门店的核心免费权益（门店配额豁免、审计导出免拦截）本就不经过这个弹窗生效，用户点开这个入口仍会看到与自己无关的商业推销话术。现按页面既有的 `isYuhuazhai` 信号（与隐藏「专业版服务状态/立即开通」售卖卡片同一个字段）分流：雨花斋租户看到的是纯公益文案（如实陈述已享的门店配额/导出豁免，不用"开通/购买"这类动作词），如需处理门店数量展示异常，提供"输入公益扩容授权码"入口——文案换了，但底层仍是同一条 `activateTenantSubscription` 的 `redeem` 通道，只是不再暗示这是一笔付费购买；非雨花斋/雨花斋与商业门店混合的租户不受影响，仍是原有真实定价与在线支付流程。**这条分支只改文案展示，不改变任何 `tenant_subscriptions`/`checkTenantPermission` 的鉴权矩阵**——多店汇总看板等真正的付费功能对雨花斋依旧没有免费旁路，不要把"看到的文案是公益版"误当成"所有付费功能都对雨花斋开放"。代码落点：`pages/profile/enterprise/saasSubscriptionModal.wxml`（`wx:if="{{isYuhuazhai}}"` 分支）、`saasSubscriptionHandler.ts`（`showRedeemSection` 默认展开逻辑同步纳入 `isYuhuazhai`）。
 
 ---
 
