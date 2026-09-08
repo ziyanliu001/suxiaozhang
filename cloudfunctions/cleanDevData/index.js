@@ -1,6 +1,8 @@
 // 云函数：cleanDevData
-// 平台管理员专用运维工具：按 tenantId + reportDate 精准批量删除测试/脏
-// 日报数据（report_logs），并同步清理这些日报里引用的云存储照片文件。
+// 平台管理员专用运维工具：按 tenantId + 目标日期精准批量删除测试/脏数据，
+// 覆盖三张会带图片的业务表（report_logs 日报 / daily_menus 每日食谱 /
+// activity_logs 门店日志——爱心墙"温情图册"的三个真实图片来源，见
+// getPhotoArchive 头部注释），并同步清理这些记录引用的云存储照片文件。
 //
 // 🛡️ 权限：仅 platform_admin 可调用，与本仓库其余"数据管理/清理"类高危
 // 工具（activateTenantSubscription/manageTenantSubscription）同一条鉴权
@@ -11,19 +13,25 @@
 // 与"清理某一天的测试数据"这个具体场景对齐即可，如需批量清理需要另开
 // 专项方案（如加二次确认+预览命中条数）。
 //
-// 🖼️ 照片清理口径：report_logs 唯一的图片字段是 receiptImages（纯字符串
-// 数组，存的是 wx.cloud.uploadFile 返回的 fileID，见 utils/dataService.ts
-// saveReport() 头部注释——report_logs 唯一写入入口），没有其他图片字段需要
-// 一并处理。先删数据库文档、再删云存储文件，避免"文件删了但文档还在、
-// 前端渲染出裂图"这种中间态比"文档删了但文件还占空间"更糟。
+// 🖼️ 三张表各自的图片字段结构不同，核实自各自的云函数写入路径：
+//   - report_logs.receiptImages：纯字符串数组，元素本身就是 fileID
+//     （见 utils/dataService.ts saveReport() 头部注释——唯一写入入口）。
+//   - daily_menus.images / activity_logs.images：`{url, thumbUrl, name?}[]`
+//     对象数组——核实过 manageDailyMenu/manageActivityLog 两个写入云函数
+//     对应的前端页面（daily-menu.ts/activity-log.ts），thumbUrl 恒等于
+//     url（没有单独生成缩略图上传），url 本身就是云存储 fileID，只取
+//     url 一份即可，不用把 thumbUrl 也当成另一个文件重复删一次。
+//   - 三张表用的"日期"字段名不同（reportDate/dateString/eventTime），但
+//     格式都是同一种 YYYY-MM-DD 字符串，可以直接复用同一个 event.reportDate
+//     入参精确匹配三张表各自的日期字段，不需要让调用方分别传三个日期。
+// 先删数据库文档、再删云存储文件，避免"文件删了但文档还在、前端渲染出
+// 裂图"这种中间态比"文档删了但文件还占空间"更糟。
 'use strict';
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
-
-const REPORT_LOGS_COLLECTION = 'report_logs';
 
 function isCollectionNotExistError(err) {
   return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
@@ -35,7 +43,53 @@ async function resolveCaller(openid) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
-// 🗑️ 按 tenantId + reportDate 精确匹配删除日报 + 同步清理云存储照片
+// 🗑️ 查询命中记录 + 收集其图片 fileID，不在这里做删除——三张表各自查完、
+// 汇总出完整的待删 id/fileId 清单后，再统一批量删，避免"查一张删一张"中途
+// 某一张表异常导致前面已经删掉、后面还没处理，数据处于不上不下的中间态
+async function collectMatchedRows(collectionName, whereClause, extractFileIds) {
+  let rows = [];
+  try {
+    const res = await db.collection(collectionName).where(whereClause).get();
+    rows = res.data || [];
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) throw err;
+    return { ids: [], fileIds: [] };
+  }
+  const ids = rows.map((r) => r._id);
+  const fileIds = [];
+  rows.forEach((r) => {
+    extractFileIds(r).forEach((fileId) => {
+      if (fileId) fileIds.push(fileId);
+    });
+  });
+  return { ids, fileIds };
+}
+
+async function removeByIds(collectionName, ids) {
+  if (ids.length === 0) return;
+  await db.collection(collectionName).where({ _id: _.in(ids) }).remove();
+}
+
+// 🖼️ 云存储单次 deleteFile 最多 50 个 fileID，分批处理；单批失败不影响
+// 其余批次（如某个 fileID 早已被手动删过），累计成功计数，不中断整体流程
+async function deleteCloudFiles(fileIds) {
+  let deletedFileCount = 0;
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < fileIds.length; i += BATCH_SIZE) {
+    const batch = fileIds.slice(i, i + BATCH_SIZE);
+    try {
+      const deleteRes = await cloud.deleteFile({ fileList: batch });
+      const results = (deleteRes && deleteRes.fileList) || [];
+      deletedFileCount += results.filter((r) => r.status === 0).length;
+    } catch (err) {
+      console.error('[cleanDevData] deleteFile 批次异常:', err);
+    }
+  }
+  return deletedFileCount;
+}
+
+// 🗑️ 按 tenantId + 目标日期精确匹配，清理 report_logs/daily_menus/
+// activity_logs 三张表的测试数据 + 同步清理引用的云存储照片
 async function handleDeleteByTenantAndDate(event, openId) {
   const caller = await resolveCaller(openId);
   if (!caller || caller.role !== 'platform_admin') {
@@ -48,52 +102,26 @@ async function handleDeleteByTenantAndDate(event, openId) {
     return { success: false, error: '参数缺失: tenantId/reportDate' };
   }
 
-  let rows = [];
-  try {
-    const res = await db.collection(REPORT_LOGS_COLLECTION)
-      .where({ tenantId, reportDate })
-      .field({ _id: true, receiptImages: true })
-      .get();
-    rows = res.data || [];
-  } catch (err) {
-    if (!isCollectionNotExistError(err)) throw err;
-    return { success: true, deletedReportCount: 0, deletedFileCount: 0 };
-  }
+  const [reportLogs, dailyMenus, activityLogs] = await Promise.all([
+    collectMatchedRows('report_logs', { tenantId, reportDate }, (r) => r.receiptImages || []),
+    collectMatchedRows('daily_menus', { tenantId, dateString: reportDate }, (r) => (r.images || []).map((img) => img && img.url)),
+    collectMatchedRows('activity_logs', { tenantId, eventTime: reportDate }, (r) => (r.images || []).map((img) => img && img.url))
+  ]);
 
-  if (rows.length === 0) {
-    return { success: true, deletedReportCount: 0, deletedFileCount: 0 };
-  }
+  await Promise.all([
+    removeByIds('report_logs', reportLogs.ids),
+    removeByIds('daily_menus', dailyMenus.ids),
+    removeByIds('activity_logs', activityLogs.ids)
+  ]);
 
-  const reportIds = rows.map((r) => r._id);
-  const fileIds = [];
-  rows.forEach((r) => {
-    (r.receiptImages || []).forEach((fileId) => {
-      if (fileId) fileIds.push(fileId);
-    });
-  });
-
-  await db.collection(REPORT_LOGS_COLLECTION).where({ _id: _.in(reportIds) }).remove();
-
-  let deletedFileCount = 0;
-  if (fileIds.length > 0) {
-    // 🛡️ 云存储单次 deleteFile 最多 50 个 fileID，分批处理；单批失败不影响
-    // 其余批次（如某个 fileID 早已被手动删过），累计成功计数，不中断整体流程
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < fileIds.length; i += BATCH_SIZE) {
-      const batch = fileIds.slice(i, i + BATCH_SIZE);
-      try {
-        const deleteRes = await cloud.deleteFile({ fileList: batch });
-        const results = (deleteRes && deleteRes.fileList) || [];
-        deletedFileCount += results.filter((r) => r.status === 0).length;
-      } catch (err) {
-        console.error('[cleanDevData] deleteFile 批次异常:', err);
-      }
-    }
-  }
+  const allFileIds = [...reportLogs.fileIds, ...dailyMenus.fileIds, ...activityLogs.fileIds];
+  const deletedFileCount = allFileIds.length > 0 ? await deleteCloudFiles(allFileIds) : 0;
 
   return {
     success: true,
-    deletedReportCount: reportIds.length,
+    deletedReportCount: reportLogs.ids.length,
+    deletedDailyMenuCount: dailyMenus.ids.length,
+    deletedActivityLogCount: activityLogs.ids.length,
     deletedFileCount
   };
 }
