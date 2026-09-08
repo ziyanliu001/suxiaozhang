@@ -1,5 +1,4 @@
 import { AuthService } from '../../utils/authService';
-import { safeNavigateTo } from '../../utils/navHelper';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
 import { setCurrentActiveStore, getCurrentActiveStore } from '../../utils/storeManager';
@@ -611,25 +610,16 @@ Component({
       }
 
       // 已授权：顺畅切换——本地存储 + _applyRoleSwitch 内部触发的 storechange
-      // 事件负责通知宿主页面刷新数据，本方法自身绝不发起任何页面跳转
+      // 事件负责通知宿主页面刷新数据，本方法自身绝不发起任何页面跳转。
+      // 🐛 根因修复（2026-09-09）：此前唯独 PATRIARCH（大家长）角色会在这里
+      // 额外触发 safeNavigateTo/wx.switchTab 跳转个人中心（理由是"家长切身份
+      // 不只是切视角，是家长角色的主入口"），导致用户在首页选择大家长角色时
+      // 被意外踢出当前页面——与其余角色（店长/财务/义工/家人/全国总览-管理员）
+      // 纯粹"切视角、留在当前页"的行为不一致，体验上是一次未预期的强制跳转。
+      // 现统一为所有角色都只更新全局门店/角色上下文并留在当前页，不再对
+      // PATRIARCH 做特殊跳转；家长管理/资源兜底卡片仍可从个人中心正常访问，
+      // 只是不再被这次角色切换强制带过去
       this._applyRoleSwitch(storeId, storeName, role);
-
-      // 🛡️ 显式白名单，而不是"其余角色隐式地什么都不做"：只有家长（PATRIARCH）
-      // 才需要导向个人中心的【家长管理/资源兜底】卡片（原独立页面
-      // pages/patriarch-dashboard 已废弃并入个人中心，家长切身份不只是"切视角"，
-      // 这是家长角色的主入口）——店长/财务/义工/家人/全国总览-管理员这几个纯粹
-      // "切视角"的身份，严禁触发 wx.switchTab/wx.navigateTo 跳去个人页，
-      // 只留在当前页（首页/历史记录页等）即时刷新数据。若当前就已经在个人中心
-      // （例如从该页自己内嵌的 store-picker 发起切换），也不重复跳转
-      if (role !== 'PATRIARCH') {
-        return;
-      }
-      const pages = getCurrentPages();
-      const currentPage = pages[pages.length - 1];
-      const currentRoute = currentPage ? '/' + currentPage.route : '';
-      if (currentRoute !== '/pages/profile/profile') {
-        safeNavigateTo({ url: '/pages/profile/profile' });
-      }
     },
 
     // 大家长任命申请弹窗：输入框
