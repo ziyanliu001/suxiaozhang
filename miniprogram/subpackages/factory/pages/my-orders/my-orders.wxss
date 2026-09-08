@@ -44,10 +44,41 @@
   border-radius: 36rpx;
 }
 
+/* 🆕 页面本地 hover 效果——WXSS 是页面级作用域，不能假设别的页面定义过
+   的 .btn-hover 在这里也生效 */
+.btn-hover {
+  opacity: 0.7;
+}
+
+/* 🆕 状态筛选 Tab：固定在滚动区之上，不随列表滚动 */
+.mo-tab-row {
+  display: flex;
+  gap: 12rpx;
+  padding-bottom: 20rpx;
+}
+
+.mo-tab-item {
+  flex: 1;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28rpx;
+  font-size: 24rpx;
+  background: #FFFFFF;
+  color: #666666;
+}
+
+.mo-tab-item.active {
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
 .mo-order-card {
   background: #FFFFFF;
   border-radius: 16rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
   overflow: hidden;
 }
@@ -56,7 +87,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx;
+  padding: 26rpx;
 }
 
 .mo-order-info {
@@ -76,6 +107,14 @@
   display: block;
   font-size: 22rpx;
   color: #8E8E93;
+}
+
+/* 🆕 订单号 + 下单时间：折叠态就可见的核对信息 */
+.mo-order-meta {
+  display: block;
+  font-size: 20rpx;
+  color: #ADADB2;
+  margin-top: 4rpx;
 }
 
 .mo-order-right {
@@ -127,6 +166,38 @@
   color: #1C1C1E;
 }
 
+/* 🆕 下单失败提示条：浅橙色调，与项目里其余"锁定/需处理"提示同一套克制
+   配色语言（不用红色告警色，失败订单不是安全事故），折叠态就常驻可见 */
+.mo-fail-box {
+  margin: 0 26rpx 20rpx;
+  padding: 16rpx 20rpx;
+  background: rgba(217, 72, 14, 0.06);
+  border: 1rpx solid rgba(217, 72, 14, 0.18);
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.mo-fail-reason {
+  flex: 1;
+  min-width: 0;
+  font-size: 22rpx;
+  color: #7C2D12;
+  line-height: 1.5;
+}
+
+.mo-fail-retry-btn {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: #C2410C;
+  border-radius: 20rpx;
+  padding: 8rpx 20rpx;
+}
+
 .mo-order-detail {
   padding: 0 24rpx 24rpx;
   border-top: 1rpx solid #F0EBE3;
@@ -145,6 +216,28 @@
 
 .mo-detail-value {
   color: #1C1C1E;
+}
+
+/* 🆕 物流单号行：值 + 复制按钮同一行右对齐，与其余 .mo-detail-row 保持
+   左右两端对齐的整体节奏 */
+.mo-detail-row-tracking {
+  align-items: center;
+}
+
+.mo-tracking-value-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.mo-copy-btn {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #8C1D18;
+  background: rgba(140, 29, 24, 0.08);
+  border-radius: 16rpx;
+  padding: 4rpx 16rpx;
 }
 
 .mo-charity-card {

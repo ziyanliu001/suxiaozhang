@@ -235,7 +235,11 @@ async function handleCreateOrder(event) {
     });
   } catch (err) {
     console.error('[createProductionOrder] 调用 wxPayCore 异常:', err);
-    await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { orderStatus: 'failed' } }).catch(() => {});
+    // 🆕（我的工坊订单页失败原因展示）此前只写 orderStatus:'failed'，原始
+    // 报错文案只在这次请求的响应里一次性返回，从未落库——买家事后在订单
+    // 列表里看到的只有一个"下单失败"状态，不知道具体原因。同步把返回给
+    // 调用方的同一段文案写进 failReason，getMyProductionOrders 据此透传
+    await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { orderStatus: 'failed', failReason: '支付服务暂时不可用，请重试' } }).catch(() => {});
     await releaseCapacity(tenantId, productId, assign.batchDate, quantity);
     await releaseGroupBuyIfNeeded(groupBuyBatch, tenantId, productId, assign.batchDate, quantity);
     return { success: false, error: '支付服务暂时不可用，请重试' };
@@ -243,10 +247,11 @@ async function handleCreateOrder(event) {
 
   const payResult = payRes.result || {};
   if (!payResult.success) {
-    await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { orderStatus: 'failed' } }).catch(() => {});
+    const failReason = payResult.error || '支付下单失败，请重试';
+    await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { orderStatus: 'failed', failReason } }).catch(() => {});
     await releaseCapacity(tenantId, productId, assign.batchDate, quantity);
     await releaseGroupBuyIfNeeded(groupBuyBatch, tenantId, productId, assign.batchDate, quantity);
-    return { success: false, error: payResult.error || '支付下单失败，请重试', paymentNotConfigured: payResult.paymentNotConfigured };
+    return { success: false, error: failReason, paymentNotConfigured: payResult.paymentNotConfigured };
   }
 
   await db.collection(ORDERS_COLLECTION).doc(orderId).update({ data: { outTradeNo: payResult.outTradeNo } }).catch(() => {});

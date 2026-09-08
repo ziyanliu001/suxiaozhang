@@ -25,6 +25,18 @@ const STATUS_LABEL = {
   failed: '下单失败'
 };
 
+// 🆕（我的工坊订单页：下单时间展示）服务端格式化成固定的 YYYY-MM-DD HH:mm，
+// 避免前端再处理 db.serverDate() 序列化后的时区/格式问题。createdAt 是
+// createProductionOrder 用 db.serverDate() 写入的，经 .get() 取出后已经是
+// 可以直接 new Date() 的值
+function formatOrderTime(dateVal) {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   if (!OPENID) return { success: false, error: '无法获取用户身份' };
@@ -73,12 +85,22 @@ exports.main = async (event) => {
       const contribution = contributionByOrderId[o._id];
       return {
         orderId: o._id,
+        // 🆕（重新下单）productId/tenantId 原样透传——此前只返回派生出的
+        // 展示用 productName/workshopName，买家点"重新下单"时需要这两个
+        // 原始 ID 才能跳回对应商品的 storefront 页
+        productId: o.productId || '',
+        tenantId: o.tenantId || '',
         productName: productNameMap[o.productId] || '',
         workshopName: tenantNameMap[o.tenantId] || '未命名工坊',
         quantity: o.quantity || 0,
         payAmountYuan: ((o.payAmount || 0) / 100).toFixed(2),
         orderStatus: o.orderStatus,
         statusLabel: STATUS_LABEL[o.orderStatus] || o.orderStatus,
+        // 🆕（订单号/下单时间核对）
+        createdAtLabel: formatOrderTime(o.createdAt),
+        // 🆕（失败原因）本次修复之前产生的历史失败订单没有这个字段，前端
+        // 对空字符串做兜底文案，不编造具体原因
+        failReason: o.failReason || '',
         batchDate: o.batchDate || '',
         estimatedShippingDate: o.estimatedShippingDate || '',
         expressCompany: o.expressCompany || '',

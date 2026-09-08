@@ -20,12 +20,16 @@ interface CharityContribution {
 
 interface MyOrder {
   orderId: string;
+  productId: string;
+  tenantId: string;
   productName: string;
   workshopName: string;
   quantity: number;
   payAmountYuan: string;
   orderStatus: string;
   statusLabel: string;
+  createdAtLabel: string;
+  failReason: string;
   batchDate: string;
   estimatedShippingDate: string;
   expressCompany: string;
@@ -35,6 +39,7 @@ interface MyOrder {
   // 展示用派生字段
   statusClass?: string;
   expanded?: boolean;
+  tabBucket?: TabValue;
 }
 
 const CHARITY_PLEDGE_STATUS_LABEL: Record<string, string> = {
@@ -42,12 +47,35 @@ const CHARITY_PLEDGE_STATUS_LABEL: Record<string, string> = {
   redeemed: '已核销'
 };
 
+type TabValue = 'all' | 'pending_shipment' | 'shipped' | 'exception';
+
+const TAB_OPTIONS: { value: TabValue; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'pending_shipment', label: '待发货' },
+  { value: 'shipped', label: '已发货' },
+  { value: 'exception', label: '异常/失败' }
+];
+
+// 🆕（Tab 分组）真实 orderStatus 枚举（pending_payment/paid/in_production/
+// shipped/refunded/failed）与用户要的四个 Tab 不是一一对应，需要自己定义
+// 映射：pending_payment（待支付）归进"待发货"这个广义"还没收到货"大类；
+// refunded（已退款）与 failed 一起归进"异常/失败"——从买家视角看两者都是
+// "这笔订单没有正常走完"的结果
+function computeTabBucket(orderStatus: string): TabValue {
+  if (orderStatus === 'shipped') return 'shipped';
+  if (orderStatus === 'failed' || orderStatus === 'refunded') return 'exception';
+  return 'pending_shipment';
+}
+
 Page({
   data: {
     contentTop: 0,
     loading: true,
     loadError: '',
-    orders: [] as MyOrder[]
+    orders: [] as MyOrder[],
+    activeTab: 'all' as TabValue,
+    tabOptions: TAB_OPTIONS,
+    visibleCount: 0
   },
 
   onLoad() {
@@ -72,12 +100,13 @@ Page({
           ...o,
           statusClass: ORDER_STATUS_CLASS[o.orderStatus] || '',
           expanded: false,
+          tabBucket: computeTabBucket(o.orderStatus),
           charityContribution: o.charityContribution ? {
             ...o.charityContribution,
             pledgeStatusLabel: CHARITY_PLEDGE_STATUS_LABEL[o.charityContribution.pledgeStatus] || o.charityContribution.pledgeStatus
           } : null
         }));
-        this.setData({ orders });
+        this.setData({ orders, visibleCount: this.countVisible(orders, this.data.activeTab) });
       } else {
         this.setData({ loadError: (result && result.error) || '加载失败' });
       }
@@ -97,5 +126,45 @@ Page({
     if (index === undefined) return;
     const nowExpanded = !this.data.orders[index].expanded;
     this.setData({ [`orders[${index}].expanded`]: nowExpanded });
+  },
+
+  countVisible(orders: MyOrder[], tab: TabValue): number {
+    if (tab === 'all') return orders.length;
+    return orders.filter((o) => o.tabBucket === tab).length;
+  },
+
+  // 🆕 Tab 切换：纯本地过滤，orders 已经一次性拉回（getMyProductionOrders
+  // 单次最多 100 条），不为每个 Tab 单独发云调用——与
+  // nationalDashboardService.ts 的 onSwitchMatrixFilter 同一种"一键快筛"模式
+  onSwitchTab(e: any) {
+    const tab = e.currentTarget.dataset.tab as TabValue;
+    if (!tab || tab === this.data.activeTab) return;
+    this.setData({ activeTab: tab, visibleCount: this.countVisible(this.data.orders, tab) });
+  },
+
+  // 🆕 物流单号快捷复制——与 platform-admin.ts 的 onCopyActivationCode 同一
+  // 套写法。catchtap 绑定，避免冒泡触发外层 onToggleExpand 收起展开区
+  onCopyTrackingNumber(e: any) {
+    const trackingNumber = e.currentTarget.dataset.tracking;
+    if (!trackingNumber) return;
+    wx.setClipboardData({
+      data: trackingNumber,
+      success: () => wx.showToast({ title: '已复制物流单号', icon: 'success' })
+    });
+  },
+
+  // 🆕「重新下单」：不新建一个"一键重试"的服务端接口——价格/产能/拼团状态
+  // 都可能已经变化，真正安全的重试是带着 tenantId/productId 跳回商品页，
+  // 走一遍正常下单流程，复用 storefront.ts 已有的 onLoad(options) 定位商品
+  onRetryOrder(e: any) {
+    const tenantId = e.currentTarget.dataset.tenantid;
+    const productId = e.currentTarget.dataset.productid;
+    if (!tenantId || !productId) {
+      wx.showToast({ title: '商品信息缺失，无法重新下单', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({
+      url: `/subpackages/factory/pages/storefront/storefront?tenantId=${encodeURIComponent(tenantId)}&productId=${encodeURIComponent(productId)}`
+    });
   }
 });
