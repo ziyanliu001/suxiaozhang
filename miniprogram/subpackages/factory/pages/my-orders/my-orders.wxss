@@ -166,6 +166,38 @@
   color: #1C1C1E;
 }
 
+/* 🆕 已发货物流信息条：常驻展示，不藏进展开区。配色用中性浅绿灰调
+   （呼应已发货状态徽章 .mo-status-shipped 的绿色系），与"需要处理"的橙色
+   失败提示条区分开——物流信息是正向/中性状态，不是待办事项 */
+.mo-shipping-box {
+  margin: 0 26rpx 20rpx;
+  padding: 16rpx 20rpx;
+  background: rgba(46, 125, 50, 0.06);
+  border: 1rpx solid rgba(46, 125, 50, 0.16);
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.mo-shipping-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #1C1C1E;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 淡灰兜底文案：单号为空/商家自主配送——与 .mo-shipping-text 同一行高，
+   保持有无单号两种情况下卡片布局一致，不会因为少了复制按钮而高度跳动 */
+.mo-shipping-empty {
+  font-size: 24rpx;
+  color: #ADADB2;
+}
+
 /* 🆕 下单失败提示条：浅橙色调，与项目里其余"锁定/需处理"提示同一套克制
    配色语言（不用红色告警色，失败订单不是安全事故），折叠态就常驻可见 */
 .mo-fail-box {

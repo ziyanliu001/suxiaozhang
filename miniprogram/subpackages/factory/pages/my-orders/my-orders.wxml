@@ -68,6 +68,18 @@
             </view>
           </view>
 
+          <!-- 🆕 已发货：物流信息常驻展示在订单号下方，不藏进展开区——此前
+               单号+复制按钮只在展开区才看得到，用户第一眼看不出有这个功能。
+               有单号展示"快递公司 单号"+复制按钮；没有单号（商家自主配送/
+               尚未录入）淡灰兜底文案，保持两种情况下卡片布局一致 -->
+          <view class="mo-shipping-box" wx:if="{{item.orderStatus === 'shipped'}}">
+            <block wx:if="{{item.trackingNumber}}">
+              <text class="mo-shipping-text">{{item.expressCompany}} {{item.trackingNumber}}</text>
+              <view class="mo-copy-btn" hover-class="btn-hover" catchtap="onCopyTrackingNumber" data-tracking="{{item.trackingNumber}}">复制单号</view>
+            </block>
+            <text class="mo-shipping-empty" wx:else>暂无运单号 / 商家自主配送</text>
+          </view>
+
           <!-- 🆕 下单失败：折叠态直接可见，不藏进展开区——核心诉求是立刻
                引导重新下单，不该增加多一次点击才能看到 -->
           <view class="mo-fail-box" wx:if="{{item.orderStatus === 'failed'}}">
@@ -90,7 +102,10 @@
               <text class="mo-detail-label">预计发货</text>
               <text class="mo-detail-value">{{item.estimatedShippingDate}}</text>
             </view>
-            <view class="mo-detail-row mo-detail-row-tracking" wx:if="{{item.trackingNumber}}">
+            <!-- 已发货订单的物流信息已经改为常驻展示在卡片顶部
+                 （.mo-shipping-box），这里不再重复展示一遍；非 shipped 状态
+                 理论上不会有 trackingNumber，保留这行只作兜底 -->
+            <view class="mo-detail-row mo-detail-row-tracking" wx:if="{{item.trackingNumber && item.orderStatus !== 'shipped'}}">
               <text class="mo-detail-label">物流单号</text>
               <view class="mo-tracking-value-row">
                 <text class="mo-detail-value">{{item.expressCompany}} {{item.trackingNumber}}</text>
