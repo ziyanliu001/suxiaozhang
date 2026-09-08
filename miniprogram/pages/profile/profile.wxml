@@ -3000,15 +3000,27 @@
             </view>
             <text class="org-type-field-hint">进入首页时已选定，决定首页与个人中心的文化文案风格</text>
           </view>
+          <!-- 🆕（2026-09-09）原生滚轮选择器（picker mode="selector"）交互生硬、
+               看不清各档位区别，改为 2x2 卡片单选网格：逐张卡片展示类型名 + 低饱和
+               短标签（badge），选中后网格下方展示一行说明提示（hint），与卡片
+               文案同源（ORG_CONFIG_TYPE_OPTIONS，见 profile.ts 注释），不是凭空
+               写的展示文案 -->
           <view class="onb-field-group" wx:else>
             <text class="org-type-field-label">机构类型</text>
-            <picker mode="selector" range="{{orgConfigTypeOptions}}" range-key="label" value="{{orgConfigOrgTypeIndex}}" bindchange="onOrgConfigOrgTypeChange">
-              <view class="org-type-tag org-type-tag-editable">
-                <text class="org-type-tag-text">{{orgConfigOrgType ? orgConfigTypeOptions[orgConfigOrgTypeIndex] && orgConfigTypeOptions[orgConfigOrgTypeIndex].label : '请选择机构类型'}}</text>
-                <text class="org-type-tag-arrow">›</text>
+            <view class="org-type-card-grid">
+              <view
+                class="org-type-card {{orgConfigOrgType === item.value ? 'org-type-card-selected' : ''}}"
+                wx:for="{{orgConfigTypeOptions}}"
+                wx:key="value"
+                data-value="{{item.value}}"
+                bindtap="onOrgConfigOrgTypeSelect"
+              >
+                <text class="org-type-card-label">{{item.label}}</text>
+                <view class="org-type-card-badge">{{item.badge}}</view>
               </view>
-            </picker>
-            <text class="org-type-field-hint">该门店尚未设置机构类型，点击选择后将决定首页与个人中心的文化文案风格</text>
+            </view>
+            <text class="org-type-field-hint" wx:if="{{orgConfigOrgType}}">{{orgConfigOrgTypeHint}}</text>
+            <text class="org-type-field-hint" wx:else>该门店尚未设置机构类型，点击上方卡片选择后将决定首页与个人中心的文化文案风格</text>
           </view>
 
           <!-- 🆕 文化寄语纵向上下分布，每句独立占满一行，避免文字被裁剪截断 -->
@@ -3023,7 +3035,7 @@
                 <input
                   class="onb-field-input org-form-input culture-slogan-input"
                   style="width: 100% !important; box-sizing: border-box !important; background: #F8F9FA !important; padding: 16rpx 20rpx !important; border-radius: 12rpx !important; font-size: 28rpx !important; height: auto !important; min-height: 70rpx !important;"
-                  placeholder="{{orgConfigOrgType === 'yuhuazhai' ? '如：长者先饭，幼者后饭' : '如：节约粮食，温暖同行'}}"
+                  placeholder="{{orgConfigOrgType === 'yuhuazhai' ? '如：买菜的敬畏、做菜的热爱、行堂的恭敬' : '如：节约粮食，温暖同行'}}"
                   value="{{orgConfigSlogan1}}"
                   bindinput="onOrgConfigSlogan1Input"
                   maxlength="30"

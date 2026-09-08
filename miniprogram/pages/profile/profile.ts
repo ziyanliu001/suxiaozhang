@@ -292,7 +292,7 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
 }
 
 // 🎨 组织信息配置弹窗·机构类型选项：面向"已有门店"的大家长/店长/超管做日常
-// 编辑，只展示最常见的三种自助业态，'rescue_team'/'tongxin_children'/
+// 编辑，只展示最常见的四种自助业态，'rescue_team'/'tongxin_children'/
 // 'tongxin_cancer_care' 这类特定合作机构专属类型不在这个自助编辑入口开放
 // 选择（避免普通用户误选成需要平台侧另行核实的合作方身份）。
 // 🏛️（2026-09-04 orgType 枚举体系统一）此前这里与 onboarding「新建组织」
@@ -300,10 +300,29 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
 // ——本次统一改为两处都从 utils/constants.ts 的 ORG_TYPES（与
 // manageStoreProfile 云函数 VALID_ORG_TYPES 同源）筛选/引用，不再各自手写
 // 一份容易再次分叉的取值表。选中后立即持久化写回 stores.orgType，全局品牌/
-// 文化文案（computeOrgDisplayCopy）随之自动切换
-const ORG_CONFIG_CURATED_VALUES = ['elderly_canteen', 'yuhuazhai', 'volunteer_station'];
-const ORG_CONFIG_TYPE_OPTIONS: Array<{ value: string; label: string }> =
-  ORG_TYPES.filter(item => ORG_CONFIG_CURATED_VALUES.includes(item.value));
+// 文化文案（computeOrgDisplayCopy）随之自动切换。
+// 🆕（2026-09-09 滚轮选择器改 2x2 卡片网格）新增 'other'（其他互助组织）
+// 凑满 4 个选项——ORG_TYPES 里其余三个值（rescue_team/tongxin_children/
+// tongxin_cancer_care）不纳入本次网格，仍按上面的既定理由保留在自助编辑
+// 入口之外
+const ORG_CONFIG_CURATED_VALUES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'other'];
+// 🆕 卡片网格的展示态文案（badge 短标签 + 选中后的说明提示）：纯展示层
+// 数据，不是 orgType 的权威定义（那仍是 utils/constants.ts 的
+// ORG_TYPES）。措辞严格对照真实已落地的能力边界——雨花斋的"无配额上限/
+// 永久免费"是 docs/BUSINESS_MODEL.md 记录的真实既有事实（createStore.js
+// 配额豁免 + statistics.ts 导出免拦截），其余三个值目前没有挂钩任何特殊
+// 商业/功能差异化（多店进销存、SaaS 席位等是 tenant_subscriptions.planType
+// 维度的能力，与 orgType 是两个独立维度，不能在这里替 orgType 代言），
+// 因此措辞只描述这三类组织的真实使用场景，不编造专属功能
+const ORG_CONFIG_TYPE_META: Record<string, { badge: string; hint: string }> = {
+  yuhuazhai: { badge: '纯公益免费', hint: '🌸 遵从雨花家训，全功能永久免费，无配额上限，堂内绝无交易' },
+  elderly_canteen: { badge: '基层互助', hint: '🏡 面向长者与爱心驿站，支持民政助餐台账与义工打卡' },
+  volunteer_station: { badge: '义工协同', hint: '🤝 面向义工服务站与互助团队，支持志愿打卡与爱心公示' },
+  other: { badge: '其他互助', hint: '📋 适用于其他类型的爱心互助组织，记账与基础功能开箱即用' }
+};
+const ORG_CONFIG_TYPE_OPTIONS: Array<{ value: string; label: string; badge: string; hint: string }> =
+  ORG_TYPES.filter(item => ORG_CONFIG_CURATED_VALUES.includes(item.value))
+    .map(item => ({ ...item, ...(ORG_CONFIG_TYPE_META[item.value] || { badge: '', hint: '' }) }));
 
 Page({
   // 🏛️（2026-08-31 Open-Core 架构拆分·终局阶段）Enterprise 扩展包：SaaS 订阅
@@ -375,6 +394,9 @@ Page({
     orgConfigTypeOptions:  ORG_CONFIG_TYPE_OPTIONS,
     orgConfigOrgTypeIndex: 0,
     orgConfigOrgType:      'elderly_canteen',
+    // 🆕 2x2 卡片网格选中项的说明提示文案，随 onOrgConfigOrgTypeSelect 同步
+    // 更新，见 ORG_CONFIG_TYPE_META 注释
+    orgConfigOrgTypeHint:  '',
     // ── ✏️ 快捷修改门店名称 Mini-Modal ───────────────────────────────────
     showEditStoreNameModal: false,
     tempStoreName:          '',   // 编辑中的临时名称
@@ -6015,14 +6037,22 @@ Page({
     this.setData({ orgConfigSlogan2: e.detail.value || '' });
   },
 
-  // 🆕 机构类型选择：仅在门店尚未设置过 orgType（打开弹窗时 orgConfigOrgTypeIndex
-  // 为 -1，见 onOpenOrgConfigModal/WXML 的 wx:else 分支）时才会渲染出这个可点击
-  // picker——已设置过的门店固定走只读展示，避免误触二次改动引发文化文案风格漂移
-  onOrgConfigOrgTypeChange(e: any) {
-    const idx = Number(e.detail.value);
+  // 🆕（2026-09-09 滚轮选择器改 2x2 卡片网格）机构类型选择：仅在门店尚未设置过
+  // orgType（打开弹窗时 orgConfigOrgTypeIndex 为 -1，见 onOpenOrgConfigModal/
+  // WXML 的 wx:else 分支）时才会渲染出这个可点击卡片网格——已设置过的门店固定
+  // 走只读展示，避免误触二次改动引发文化文案风格漂移。data-value 直接取卡片
+  // 的 orgType 字符串值（与此前 picker 按数组下标取值不同，卡片网格用 wx:for
+  // 渲染，tap 事件天然带着 data-value，不需要再去猜下标）
+  onOrgConfigOrgTypeSelect(e: any) {
+    const value = e.currentTarget.dataset.value;
+    const idx = ORG_CONFIG_TYPE_OPTIONS.findIndex(o => o.value === value);
     const option = ORG_CONFIG_TYPE_OPTIONS[idx];
     if (!option) return;
-    this.setData({ orgConfigOrgTypeIndex: idx, orgConfigOrgType: option.value });
+    this.setData({
+      orgConfigOrgTypeIndex: idx,
+      orgConfigOrgType: option.value,
+      orgConfigOrgTypeHint: option.hint
+    });
   },
 
   async onUploadOrgLogo() {
