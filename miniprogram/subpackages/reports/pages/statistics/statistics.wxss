@@ -268,9 +268,8 @@ page {
   font-size: 26rpx;
   font-weight: bold;
   color: #1A56DB;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .national-banner-title-col {
@@ -1106,7 +1105,37 @@ page {
   padding: 24rpx;
   background-color: #FFFEF7;
   border: 2rpx solid #FFE4B5;
-  border-radius: 16rpx;
+  border-radius: 20rpx;
+}
+
+/* 🆕 物资消耗看板：素雅浅色药丸标签，替代原来"• 文字"的裸露列表写法。
+   独立于共享的 .materials-list/.materials-item（那两个 class 同时被"物资
+   赞助明细汇总"复用，直接改会连带影响那个不相关的动态列表），只用在
+   本卡片的固定四项（大米/面粉/食用油/蔬菜） */
+.materials-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.materials-pill {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #F8F9FA;
+  border-radius: 999rpx;
+  padding: 10rpx 20rpx;
+}
+
+.materials-pill-name {
+  font-size: 24rpx;
+  color: #646566;
+}
+
+.materials-pill-qty {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #B8860B;
 }
 
 .materials-title {
@@ -1456,47 +1485,53 @@ page {
 /* 🆕 空状态防呆优化：顶部补一条暖金渐变强调条 + 图标改成柔和底色圆形徽标，
    与新增的"一键切换至全国总览"金色 CTA 按钮呼应，弱化"数据不存在=出错了"的
    焦虑感，强调这只是一个可以立刻被引导走出去的中间态 */
+/* 🆕 紧凑型提示条：从大留白卡片收拢为窄条，避免大面积截断用户视线——
+   padding 大幅收窄，去掉整行居中的顶部大圆形图标，改用图标+标题同行 */
 .smart-empty-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 72rpx 40rpx 56rpx;
+  padding: 24rpx 28rpx;
   margin: 32rpx 24rpx;
   background: #FFFFFF;
-  border-radius: 24rpx;
-  border-top: 6rpx solid;
+  border-radius: 20rpx;
+  border-top: 4rpx solid;
   border-image: linear-gradient(90deg, #B8860B 0%, #DAA520 50%, #F1C40F 100%) 1;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+.empty-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
 .empty-icon {
-  display: block;
-  width: 128rpx;
-  height: 128rpx;
-  line-height: 128rpx;
-  font-size: 64rpx;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  flex-shrink: 0;
+  font-size: 28rpx;
   background: #FFF8E8;
   border-radius: 50%;
-  margin-bottom: 24rpx;
 }
 
 .empty-title {
-  font-size: 28rpx;
+  flex: 1;
+  font-size: 26rpx;
   color: #495057;
   font-weight: 500;
-  text-align: center;
-  margin-bottom: 32rpx;
+  line-height: 1.4;
 }
 
 /* 🌟 精简空状态文案与按钮：不再用黄色卡片框包裹建议文本，扁平直陈即可 */
 .empty-suggest-text {
   display: block;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #868E96;
-  text-align: center;
-  margin-bottom: 20rpx;
+  margin-bottom: 12rpx;
 }
 
 .empty-action-group {
@@ -1885,7 +1920,11 @@ page {
   left: 0;
   right: 0;
   width: 100%;
-  background: #FFFFFF;
+  /* 🆕 磨砂悬浮质感：不透明兜底色打底，backdrop-filter 在不支持的安卓 WebView
+     上会被忽略，仍然是一张正常的纯白栏，不会露底穿帮 */
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   padding: 20rpx 32rpx;
   padding-bottom: calc(32rpx + constant(safe-area-inset-bottom));
   padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
@@ -1898,20 +1937,31 @@ page {
   gap: 16rpx;
 }
 
+/* 🐛 根因修复（安卓真机重叠压扁）：此前这里是 width:100% !important 的单按钮
+   写法，与后补的 flex:1 覆盖规则分散在文件两处、靠层叠顺序生效，容易在
+   编辑时被误改乱序；现在合并成一处。同时补 white-space:nowrap + 溢出省略号，
+   避免动态文案（按角色三选一）在半屏宽度的按钮里换行撑破固定高度的盒子，
+   line-height 改回 1 交给 flex 居中（与下方 .btn-export-shortcut 同一套修法，
+   不再用行高假设单行文本） */
 .btn-primary-poster {
-  width: 100% !important;
-  height: 88rpx;
-  line-height: 88rpx;
+  flex: 1;
+  width: auto !important;
+  height: 84rpx;
+  line-height: 1;
   background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%) !important;
   color: #FFFFFF !important;
-  font-size: 30rpx;
+  font-size: 28rpx;
   font-weight: bold;
-  border-radius: 44rpx;
+  border-radius: 42rpx;
   border: none;
   opacity: 1 !important;
   display: flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
   box-shadow: 0 6rpx 16rpx rgba(198, 40, 40, 0.3) !important;
   transition: opacity 0.2s ease;
 }
@@ -5707,33 +5757,17 @@ page {
   background: #FFE9A0;
 }
 
-/* 主操作按钮：快捷补报餐报（全宽红色主 CTA，置于胶囊组下方） */
-.btn-empty-primary {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 84rpx;
-  line-height: 1;
+/* 🆕 主操作变体：快捷补报餐报——原来独占一整行的全宽红色主 CTA，
+   收拢进紧凑提示条后改用与其余胶囊同高的小尺寸红色胶囊，不再抢一整行 */
+.btn-quick-pill-primary {
   background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%);
   color: #FFFFFF;
-  font-size: 28rpx;
-  font-weight: bold;
-  border-radius: 42rpx;
-  padding: 0;
   border: none;
-  box-sizing: border-box;
-  margin: 8rpx 0 0;
-  box-shadow: 0 6rpx 16rpx rgba(198, 40, 40, 0.25);
+  box-shadow: 0 4rpx 12rpx rgba(198, 40, 40, 0.25);
 }
 
-.btn-empty-primary::after {
-  border: none;
-}
-
-.btn-empty-primary:active {
+.btn-quick-pill-primary:active {
   opacity: 0.88;
-  transform: scale(0.98);
 }
 
 /* ===== 🆕 2x2 核心经营指标骨架卡：与 statistics 是否有数据解耦，固定渲染 ===== */
@@ -5793,7 +5827,7 @@ page {
 
 .core-metrics-cell {
   background: #F8F9FA;
-  border-radius: 12rpx;
+  border-radius: 16rpx;
   padding: 16rpx 12rpx;
   display: flex;
   flex-direction: column;
@@ -6368,11 +6402,6 @@ page {
   color: #868E96;
 }
 
-
-.btn-primary-poster {
-  flex: 1;
-  width: auto !important;
-}
 
 /* 🐛 按钮 Flex 强制居中："导出当前周期 Excel 账本"——此前 line-height:88rpx 是
    旧版靠行高撑开文字垂直居中的写法，与后来补上的 flex 居中叠加在一起纯属冗余

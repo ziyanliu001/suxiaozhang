@@ -11,10 +11,6 @@
   <view class="custom-nav" style="padding-top: {{navTop}}px; padding-right: {{windowWidth - capsuleLeft + 10}}px;">
     <view class="nav-back-arrow" hover-class="nav-back-arrow-hover" bindtap="goBackHome">←</view>
     <text class="nav-title">统计分析</text>
-    <view class="nav-refresh-btn" hover-class="ui-hover" bindtap="onRefreshData">
-      <text class="refresh-icon">🔄</text>
-      <text class="refresh-text">刷新数据</text>
-    </view>
   </view>
 
   <view class="admin-switch" wx:if="{{canViewAllStoresDropdown}}">
@@ -1163,22 +1159,22 @@
              "物资赞助明细汇总"（report_logs 里记录的捐赠物资）是两套不同数据源 -->
         <view class="materials-summary-card" wx:if="{{statsData.riceTotal > 0 || statsData.flourTotal > 0 || statsData.oilTotal > 0 || statsData.vegetableTotal > 0}}">
           <text class="materials-title">🌾 核心物资消耗总量</text>
-          <view class="materials-list">
-            <view class="materials-item" wx:if="{{statsData.riceTotal > 0}}">
-              <text class="materials-name">• 大米</text>
-              <text class="materials-qty">共 {{statsData.riceTotal}} 斤</text>
+          <view class="materials-pill-list">
+            <view class="materials-pill" wx:if="{{statsData.riceTotal > 0}}">
+              <text class="materials-pill-name">大米</text>
+              <text class="materials-pill-qty">{{statsData.riceTotal}} 斤</text>
             </view>
-            <view class="materials-item" wx:if="{{statsData.flourTotal > 0}}">
-              <text class="materials-name">• 面粉</text>
-              <text class="materials-qty">共 {{statsData.flourTotal}} 斤</text>
+            <view class="materials-pill" wx:if="{{statsData.flourTotal > 0}}">
+              <text class="materials-pill-name">面粉</text>
+              <text class="materials-pill-qty">{{statsData.flourTotal}} 斤</text>
             </view>
-            <view class="materials-item" wx:if="{{statsData.oilTotal > 0}}">
-              <text class="materials-name">• 食用油</text>
-              <text class="materials-qty">共 {{statsData.oilTotal}} 斤</text>
+            <view class="materials-pill" wx:if="{{statsData.oilTotal > 0}}">
+              <text class="materials-pill-name">食用油</text>
+              <text class="materials-pill-qty">{{statsData.oilTotal}} 斤</text>
             </view>
-            <view class="materials-item" wx:if="{{statsData.vegetableTotal > 0}}">
-              <text class="materials-name">• 蔬菜</text>
-              <text class="materials-qty">共 {{statsData.vegetableTotal}} 斤</text>
+            <view class="materials-pill" wx:if="{{statsData.vegetableTotal > 0}}">
+              <text class="materials-pill-name">蔬菜</text>
+              <text class="materials-pill-qty">{{statsData.vegetableTotal}} 斤</text>
             </view>
           </view>
         </view>
@@ -1446,12 +1442,21 @@
            statsData.pendingReportCount 注释）。这种情况下继续显示"暂无统计数据"
            会让刚提交完凭证的义工/店长误以为提交失败或系统坏了，改成明确点出
            "有 N 笔待审核"，把原因说清楚，而不是让用户自己去猜 -->
-      <text class="empty-icon">{{statsData.pendingReportCount > 0 ? '⏳' : '📊'}}</text>
-      <text class="empty-title" wx:if="{{statsData.pendingReportCount > 0}}">选定周期内有 {{statsData.pendingReportCount}} 笔餐报待审核，审核通过后正式纳入公开账本</text>
-      <text class="empty-title" wx:else>暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
+      <!-- 🆕 收拢为紧凑提示条：图标与标题同行，不再独占一整行的大圆形图标 -->
+      <view class="empty-header-row">
+        <text class="empty-icon">{{statsData.pendingReportCount > 0 ? '⏳' : '📊'}}</text>
+        <text class="empty-title" wx:if="{{statsData.pendingReportCount > 0}}">选定周期内有 {{statsData.pendingReportCount}} 笔餐报待审核，审核通过后正式纳入公开账本</text>
+        <text class="empty-title" wx:else>暂无【{{currentUserStoreName || shopName}}】在选定周期的统计数据</text>
+      </view>
 
-      <!-- 🏷️ 快捷操作胶囊组：所有次要引导操作并排展示，取代原先垂直堆叠的大按钮 -->
+      <!-- 条件说明文字 -->
+      <text class="empty-suggest-text" wx:if="{{currentStoreTotalCount > 0}}">该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
+      <text class="empty-suggest-text" wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">该周期内其他门店存在餐报记录</text>
+
+      <!-- 🏷️ 快捷操作胶囊组：所有引导操作（含原先独占一整行的主 CTA）并排
+           展示在同一个可换行的紧凑行内 -->
       <view class="empty-quick-pill-row">
+        <button class="btn-quick-pill btn-quick-pill-primary" hover-class="btn-hover" bindtap="goBackHome">📝 快捷补报餐报</button>
         <button class="btn-quick-pill btn-quick-pill-gold" wx:if="{{canViewAllStoresDropdown}}" bindtap="onGoToNationalDashboard">🌐 切换全国总览</button>
 
         <block wx:if="{{currentStoreTotalCount > 0}}">
@@ -1466,13 +1471,6 @@
 
         <button class="btn-quick-pill" wx:if="{{latestDataLabel}}" bindtap="onJumpToLatestDataPeriod">📅 {{latestDataLabel}}</button>
       </view>
-
-      <!-- 条件说明文字 -->
-      <text class="empty-suggest-text" wx:if="{{currentStoreTotalCount > 0}}">该门店下共有 {{currentStoreTotalCount}} 条历史记录</text>
-      <text class="empty-suggest-text" wx:elif="{{!isAllStoresMode && hasOtherStoreData}}">该周期内其他门店存在餐报记录</text>
-
-      <!-- 主操作：快捷补报（保持全宽红色主按钮） -->
-      <button class="btn-empty-primary" hover-class="btn-hover" bindtap="goBackHome">📝 快捷补报餐报</button>
     </view>
 
     <view class="compliance-disclaimer" wx:if="{{statistics && statistics.recordCount > 0}}">
@@ -1488,7 +1486,7 @@
        下载"全流程 -->
   <view class="bottom-sticky-bar" wx:if="{{!showNationalDashboard && !showPersonalView}}">
     <button class="btn-primary-poster" hover-class="ui-hover" wx:if="{{statistics && statistics.recordCount > 0}}" bindtap="onGeneratePoster">
-      🖼️ {{isFinance ? '生成门店财务月报海报' : (isPatriarch ? '生成门店续航/爱心公示海报' : '生成本店营运月报海报')}}
+      🖼️ {{isFinance ? '生成财务月报' : (isPatriarch ? '生成公示海报' : '生成营运月报')}}
     </button>
     <button class="btn-export-shortcut" hover-class="ui-hover" bindtap="onOpenExportConfigModal">
       📊 导出当前周期 Excel 账本
