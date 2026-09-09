@@ -13,10 +13,34 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-async function resolveCaller(OPENID) {
+// 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
+// docs/architecture/02_user_roles_single_document_invariant.md）与
+// manageReportApproval/manageStoreProfile 同一份拷贝——resolveCaller 严格
+// 保持"每个 _openid 只查这一条 user_roles 文档"的不变式不变，opts 可选，
+// 不传（或命中不了任何授权）时返回值与改造前逐字节一致。命中授权时返回的
+// "有效身份"把 tenantId/role/storeId 替换成授权值，下游 resolveTarget 的
+// store_patriarch/finance 分支不用改，直接复用 caller.storeId
+async function resolveCaller(OPENID, opts) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
-  return (roleRes.data && roleRes.data[0]) || null;
+  const own = (roleRes.data && roleRes.data[0]) || null;
+  if (!own) return null;
+
+  const targetStoreId = opts && (opts.targetStoreId || opts.storeId);
+  let targetTenantId = opts && opts.targetTenantId;
+  if (!targetTenantId && targetStoreId) {
+    const storeRes = await db.collection('stores').doc(targetStoreId).field({ tenantId: true }).get().catch(() => null);
+    targetTenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
+  }
+
+  if (!targetTenantId || targetTenantId === own.tenantId) return own;
+
+  const grants = Array.isArray(own.authorizedTenants) ? own.authorizedTenants : [];
+  const grant = grants.find((g) => g && g.tenantId === targetTenantId
+    && (!Array.isArray(g.stores) || g.stores.length === 0 || !targetStoreId || g.stores.includes(targetStoreId)));
+  if (!grant) return own;
+
+  return { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
 }
 
 // 🐛 云函数容器时区固定为 UTC，new Date(...).toLocaleDateString('zh-CN') 不传
@@ -62,7 +86,7 @@ exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
 
   try {
-    const caller = await resolveCaller(OPENID);
+    const caller = await resolveCaller(OPENID, { targetStoreId: storeId });
     const target = await resolveTarget(caller, storeId);
     if (!target.allowed) return { success: false, error: target.error };
 

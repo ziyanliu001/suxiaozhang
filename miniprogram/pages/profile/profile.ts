@@ -1775,10 +1775,29 @@ Page({
       const result = await AuthService.fetchUserRole();
       roleInfo = result.roleInfo || null;
     }
-    const store = getSelectedStore();
-    const storeId = (roleInfo && roleInfo.role === 'store_patriarch' && roleInfo.storeId) || store.storeId || '';
+    // 🐛 根因修复（与 fetchMeritStats 同一处根因，见该方法注释）：getSelectedStore()
+    // 读的是 app.globalData.currentStore，不保证与 store-picker.ts 的 canonical
+    // Storage key（setCurrentActiveStore）同步——超管在首页切店/跨租户漫游后，这里
+    // 仍可能读到切换前的旧 storeId，传给 getPatriarchDashboard 后被服务端按
+    // caller.tenantId 误判为跨机构，把这个误判错误直接 wx.showToast 弹到屏幕正中
+    // （不该如此：本卡片是锦上添花的展示组件，与 fetchMeritStats 同级，查询失败
+    // 不该阻塞用户）。改用 getCurrentActiveStore()，并过滤 NATIONAL_STORE_ID_SENTINELS
+    // （超管选中"全国总览"时不是真实门店 id，不该传给要求精确门店的云函数）
+    const activeStore = getCurrentActiveStore();
+    const rawStoreId = (roleInfo && roleInfo.role === 'store_patriarch' && roleInfo.storeId)
+      || activeStore.storeId
+      || (roleInfo && roleInfo.storeId)
+      || '';
+    const storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
 
     this.setData({ 'patriarchData.currentStoreId': storeId, 'patriarchData.loading': true });
+
+    if (!storeId) {
+      // 超管处于"全国总览"虚拟上下文，没有具体门店可聚合，静默跳过，不发起
+      // 注定查不到门店的云函数调用
+      this.setData({ 'patriarchData.loading': false });
+      return;
+    }
 
     try {
       const res: any = await callFunctionWithTimeout({
@@ -1787,7 +1806,9 @@ Page({
       });
       const result = res.result;
       if (!result || !result.success) {
-        wx.showToast({ title: (result && result.error) || '加载大盘失败', icon: 'none' });
+        // 🐛 静默降级：与 fetchMeritStats 同一惯例，本卡片查询失败不影响本页任何
+        // 核心功能，不弹窗打扰用户
+        console.warn('[fetchPatriarchDashboardData] 加载大盘失败，静默跳过:', result && result.error);
         return;
       }
 
@@ -1830,9 +1851,8 @@ Page({
         }
       });
     } catch (err) {
-      console.error('[fetchPatriarchDashboardData] 加载家长大盘异常:', err);
+      console.warn('[fetchPatriarchDashboardData] 加载家长大盘异常，静默跳过:', err);
       reportCloudSdkErrorIfCorrupted(err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ 'patriarchData.loading': false });
     }
@@ -2607,14 +2627,18 @@ Page({
   loadVolunteerStats() {
     try {
       // 🐛 与 fetchMeritStats 同一处根因修复：getSelectedStore() 读的是
-      // app.globalData.currentStore，只有真正调用过 switchStoreTarget 才会被
-      // 写入非空值，取不到时兜底到 AuthService.getCachedRoleInfo()（服务端
-      // 下发、更可靠的角色缓存），否则这里现算出来的 0 会先于 fetchMeritStats
-      // 落地展示，给用户"看板显示 0"的第一印象——哪怕 fetchMeritStats 之后能
-      // 修正，中间也有一段误导性的空窗期
-      const activeStore = getSelectedStore();
+      // app.globalData.currentStore，不保证与 store-picker.ts 的 canonical
+      // Storage key（setCurrentActiveStore）同步，取不到/过期时兜底到
+      // AuthService.getCachedRoleInfo()（服务端下发、更可靠的角色缓存），否则
+      // 这里现算出来的 0 会先于 fetchMeritStats 落地展示，给用户"看板显示 0"
+      // 的第一印象——哪怕 fetchMeritStats 之后能修正，中间也有一段误导性的
+      // 空窗期。改用 getCurrentActiveStore()（canonical），并同样过滤
+      // NATIONAL_STORE_ID_SENTINELS——否则超管处于"全国总览"时，这里会把字面量
+      // 哨兵值当成 storeId 去过滤 my_checkin_logs，注定匹配不到任何本地记录
+      const activeStore = getCurrentActiveStore();
       const cachedRoleInfo = AuthService.getCachedRoleInfo();
-      const resolvedStoreId = (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '';
+      const rawStoreId = (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '';
+      const resolvedStoreId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
       const rawStoreName = (activeStore && activeStore.storeName) || (cachedRoleInfo && cachedRoleInfo.storeName) || '';
       const resolvedStoreName = isVirtualStoreName(rawStoreName) ? '' : rawStoreName;
       // 🐛 门店上下文漂移兜底：见 computeMyCheckInStatsWithTodayFallback 头部
