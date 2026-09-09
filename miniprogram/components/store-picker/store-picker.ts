@@ -297,6 +297,14 @@ Component({
           city: s.city || '',
           latitude: typeof s.latitude === 'number' ? s.latitude : undefined,
           longitude: typeof s.longitude === 'number' ? s.longitude : undefined,
+          // 🛡️（前端越权假象修复，2026-09-09）getStoreList 云函数显式标出的
+          // "这条结果是不是调用者自己机构的门店"——见该云函数
+          // handleDiscoverByOrgType 头部注释。getStoreList 在"调用者自己机构
+          // 名下没有任何门店匹配当前专区 orgType"时会自动降级为跨机构发现
+          // 查询（不需要显式传 crossTenantDiscover），这批发现结果会跟同机构
+          // 门店混在同一个 allStores 数组里，不能再假设"allStores 整批都是
+          // 同机构"。缺失时按 false（保守）处理，而不是默认当作"是自己机构"
+          isOwnTenant: s.isOwnTenant === true,
           roles: [
             { role: 'FAMILY', label: '家人', isAuthorized: true },
             { role: 'VOLUNTEER', label: '义工', isAuthorized: true },
@@ -349,6 +357,18 @@ Component({
     // isSuperAdmin 为 true 时，店长/财务两个胶囊直接解锁；allStores 本身已经是
     // getStoreList 云函数按 tenantId 过滤后的结果，不会解锁到其他机构的门店
     //
+    // 🛡️（前端越权假象修复，2026-09-09）上面这条"allStores 全是自己机构门店"的
+    // 假设被 getStoreList 的跨机构发现自动降级打破了——调用者自己机构名下没有
+    // 任何门店匹配当前专区 orgType 时（如雨花斋总部名下没有 elderly_canteen
+    // 门店），getStoreList 会自动混入其他机构的同 orgType 门店（如"嵩屿街道
+    // 敬老中心助餐点"，真实归属 songyu_elderly_care），这批门店的角色胶囊此前
+    // 会被下面这条 isSuperAdmin 分支无差别标记成"已授权"，点开就能直接编辑
+    // 一家根本不属于自己机构的门店资料——这不是"越权的假象"，是会真正触发
+    // manageStoreProfile/manageReportApproval 等云函数跨租户拒绝的真实越权
+    // 尝试，只是服务端那层硬边界兜住了，前端却在用户点击前就已经展示了错误的
+    // "可管理"状态。现在额外要求 store.isOwnTenant 为真才放行，跨机构发现出来
+    // 的门店即便账号是超管，也走下面与普通账号相同的未授权分支（弹"申请加入"/
+    // 激活码流程，而不是假装已经有权限）
     // 🏛️ 家长胶囊鉴权走另一套口径：不查 my_authorized_roles（那是店长/财务的本地
     // 演示态邀请码缓存，客户端可自行写入，不能用来判定"仅超管可批"的家长任命）——
     // 而是直接读服务端下发、经 processRoleAudit 审批落地的真实角色缓存
@@ -376,7 +396,7 @@ Component({
         const roles = store.roles.map((r: any) => {
           // ❤️ 家人（服务对象）与义工同级：自我声明式身份，无需邀请码/审批
           if (r.role === 'VOLUNTEER' || r.role === 'FAMILY') return { ...r, isAuthorized: true, isPending: false };
-          if (isSuperAdmin && (r.role === 'MANAGER' || r.role === 'FINANCE' || r.role === 'PATRIARCH')) {
+          if (isSuperAdmin && store.isOwnTenant && (r.role === 'MANAGER' || r.role === 'FINANCE' || r.role === 'PATRIARCH')) {
             return { ...r, isAuthorized: true, isPending: false };
           }
 

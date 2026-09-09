@@ -118,7 +118,15 @@ function buildOrgTypeCondition(orgType) {
 // 天然需要跨机构可见性，与"已归属机构后必须严格按 tenantId 隔离"是两条独立
 // 边界，互不冲突（见下方主流程注释）。只返回基础展示字段（不含 tenantId/
 // 经纬度等），门店名称/地址本就是招募海报上会公开分发的信息，不算敏感数据
-async function handleDiscoverByOrgType(orgType) {
+// 🛡️（前端越权假象修复，2026-09-09）callerTenantId：跨机构发现查询不按
+// tenantId 过滤，结果可能混入调用者自己机构的门店（其余机构确实也有同
+// orgType 门店时）与真正的其他机构门店。每条结果显式标出 isOwnTenant，
+// 供客户端（store-picker.ts refreshRolePermissions）区分"这是我自己机构
+// 的门店，超管管理权限天然覆盖"还是"这是发现到的别的机构门店，即便角色
+// 胶囊长得一样，也不能假装已授权"——不这样标记的话，客户端只能假设
+// allStores 整批都是同机构（历史上这个假设大多数时候成立，但
+// handleDiscoverByOrgType 恰恰是会打破这个假设的那条路径）
+async function handleDiscoverByOrgType(orgType, callerTenantId) {
   const _ = db.command;
   const where = { orgType: buildOrgTypeCondition(orgType), status: _.neq('inactive') };
 
@@ -129,7 +137,13 @@ async function handleDiscoverByOrgType(orgType) {
     .get()
     .catch(() => ({ data: [] }));
 
-  return { success: true, list: (storesRes.data || []).map(toStoreListItem) };
+  return {
+    success: true,
+    list: (storesRes.data || []).map((s) => ({
+      ...toStoreListItem(s),
+      isOwnTenant: !!callerTenantId && s.tenantId === callerTenantId
+    }))
+  };
 }
 
 // 🆕 门店名称反查模式：notice.ts【待处理提醒】列表专用——report_logs.shopName
@@ -197,7 +211,7 @@ exports.main = async (event) => {
     // 没有 tenantId】时才触发——已归属机构的账号（含超管）默认仍然严格按自己
     // 的 tenantId 过滤，不会意外看到跨机构门店
     if (requestedOrgType && (crossTenantDiscover || !tenantId)) {
-      return await handleDiscoverByOrgType(requestedOrgType);
+      return await handleDiscoverByOrgType(requestedOrgType, tenantId);
     }
 
     if (!tenantId) {
@@ -234,10 +248,13 @@ exports.main = async (event) => {
     // 都没有时，自动降级为跨机构发现查询；本机构名下只要有哪怕一条匹配，就不会
     // 触发这个兜底，不影响任何已有的租户隔离边界
     if (requestedOrgType && (storesRes.data || []).length === 0) {
-      return await handleDiscoverByOrgType(requestedOrgType);
+      return await handleDiscoverByOrgType(requestedOrgType, tenantId);
     }
 
-    return { success: true, list: (storesRes.data || []).map(toStoreListItem) };
+    // 🛡️ 这条路径的 where 条件本身就带 tenantId，结果天然全部是调用者自己机构
+    // 的门店，isOwnTenant 恒为 true——与 handleDiscoverByOrgType 的同名字段
+    // 含义一致，客户端不需要区分"走的是哪条查询路径"，只认这一个字段
+    return { success: true, list: (storesRes.data || []).map((s) => ({ ...toStoreListItem(s), isOwnTenant: true })) };
   } catch (err) {
     console.error('[getStoreList] 异常:', err);
     return { success: false, error: err.message || '门店列表查询失败', list: [] };
