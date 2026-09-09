@@ -7,17 +7,39 @@ export interface StoreInfo {
   role?: 'MANAGER' | 'FINANCE' | 'VOLUNTEER';
 }
 
+// 🐛 根因修复（全局兜底收敛，2026-09-09）：getSelectedStore() 此前无条件优先
+// 读 app.globalData.currentStore——但 setCurrentActiveStore() 不传 role 时
+// （"只更新门店信息，不动当前生效身份"这一既定设计，见该函数注释）只会同步
+// app.globalData.selectedStore，不会触达 currentStore（见 setSelectedStore()
+// 内部 `if (storeInfo.role)` 判断）。这意味着任何一次"只切门店、不切角色"的
+// canonical 写入之后，只要 app.globalData.currentStore 还残留着更早之前某次
+// 带 role 的旧写入，getSelectedStore() 就会一直返回那份陈旧数据——这正是
+// "组织信息配置在首页切店后误报跨机构"的系统性根因，全仓库 30+ 处调用点
+// 都共享同一个风险面，不是某一处业务代码各自的失误。
+// 修复：canonical Storage key（setCurrentActiveStore() 唯一写入口）优先；
+// 只有 current_store_id/current_store_name 这两个 key 都有值时才直接采信，
+// 确保只要发生过一次完整的 canonical 切店，所有调用方立刻看到最新门店，
+// 不必再逐个排查/改造调用点。两者有一个为空（罕见中间态，见
+// getCurrentActiveStore() 同一处注释）时退回原有的 legacy 链路，向后兼容——
+// 全仓库没有任何调用点读取本函数返回值的 role 字段（已逐一核对），下面的
+// 'VOLUNTEER' 占位值与原有行为一致，不影响任何实际逻辑
 export function getSelectedStore(): StoreInfo {
+  const canonicalStoreId = wx.getStorageSync('current_store_id') || wx.getStorageSync('active_store_id') || '';
+  const canonicalStoreName = wx.getStorageSync('current_store_name') || '';
+  if (canonicalStoreId && canonicalStoreName) {
+    return { storeId: canonicalStoreId, storeName: canonicalStoreName, role: 'VOLUNTEER' };
+  }
+
   const app = getApp() as any;
-  
+
   if (app && app.globalData && app.globalData.currentStore) {
     return app.globalData.currentStore;
   }
-  
+
   if (app && app.globalData && app.globalData.selectedStore) {
     return { ...app.globalData.selectedStore, role: 'VOLUNTEER' };
   }
-  
+
   const cached = wx.getStorageSync(STORE_STORAGE_KEY);
   if (cached) {
     if (app && app.globalData) {
@@ -25,8 +47,8 @@ export function getSelectedStore(): StoreInfo {
     }
     return { ...cached, role: 'VOLUNTEER' };
   }
-  
-  return { storeId: '', storeName: '', role: 'VOLUNTEER' };
+
+  return { storeId: canonicalStoreId, storeName: '', role: 'VOLUNTEER' };
 }
 
 export function setSelectedStore(storeInfo: StoreInfo): void {
