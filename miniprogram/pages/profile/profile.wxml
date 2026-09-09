@@ -135,6 +135,149 @@
       </view>
     </view>
 
+    <!-- 🏛️（2026-09-09 超管个人中心 IA 重构）原"超管工具箱"折叠卡片（摘要条 +
+         sa-command-card + admin-dashboard-card，此前深埋在第 9-11 段区块，要先
+         看完义工/家人/店长/大家长/财务各自的功能区才会出现）整段移除，核心管理
+         能力上提到紧跟头像信息卡片之后的这张「全域管控面板」2x2 金刚区——不再
+         需要先划到页面底部、再点开一个折叠条，才能看到任何管理入口。原 8 项工具
+         全部保留，只是换了位置：全国数据看板/撤销违规管理权限/重置门店申请密钥/
+         管理视角切换/清理缓存/一键加速系统/DEV 体验开通专业版收进下方"更多系统
+         工具"弹窗，安全操作日志升级为金刚区第 4 格的主入口，不再需要先展开
+         工具箱才找得到 -->
+    <view class="sa-global-control-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}">
+      <view class="sa-command-header">
+        <view class="sa-command-badge-row">
+          <text class="sa-command-crown">👑</text>
+          <view class="sa-command-title-col">
+            <text class="sa-command-title">超级管理员</text>
+            <text class="sa-command-sub">全域管控面板</text>
+          </view>
+        </view>
+        <view class="sa-command-store-tag">
+          <text class="sa-command-store-name">{{currentStoreName || '全国总览'}}</text>
+        </view>
+      </view>
+
+      <!-- 风控与安全：顶部风险预警条复用 patriarchData（fetchPatriarchDashboardData
+           已按当前选中门店加载，超管与家长共用同一份数据），不新增云函数调用；
+           仅当有待确认的作废/画像变更时才显示 -->
+      <view class="sa-risk-banner" wx:if="{{patriarchData.pendingVoidList.length > 0 || patriarchData.pendingProfileUpdate}}">
+        <text class="sa-risk-banner-dot"></text>
+        <text class="sa-risk-banner-text">{{currentStoreName || '当前门店'}} 有 {{patriarchData.pendingVoidList.length + (patriarchData.pendingProfileUpdate ? 1 : 0)}} 项待确认的高风险操作</text>
+      </view>
+
+      <view class="sa-control-grid">
+        <view class="sa-control-cell" bindtap="onGoToStoreManagementHub" hover-class="ui-hover">
+          <text class="sa-control-icon">🏬</text>
+          <text class="sa-control-label">门店档案/管理</text>
+          <!-- 🏛️（2026-09-09）currentInspectStoreId 是本页已有的"超管巡检门店选择"
+               专用字段（见 fetchPendingApplications 头部注释），留空即代表当前处于
+               "全国总览"——用它而不是新引入一个字段来判断是否追加跨店切换提示 -->
+          <text class="sa-control-desc">{{!currentInspectStoreId ? '门店档案（支持跨店切换）' : '可穿透修改全国门店资料与地址'}}</text>
+        </view>
+        <!-- 🐛 根因修复（2026-09-09）：onOpenMemberApplicationModal 对应的"待审批
+             申请"半屏弹窗此前只挂在 patriarch-panel-card（isPatriarch && !isSuperAdmin）
+             /isManager 专属的同名卡片里——两处 wx:if 都显式排除了 isSuperAdmin，
+             导致这个入口对真实超管账号完全不可达，尽管 fetchPendingApplications()
+             自身早就写好了"超管未选巡检门店时走 elevated 全域队列，选中门店后穿透
+             该店全角色队列"的完整逻辑（见该方法头部注释）——这里复用同一个 handler，
+             是这个既有能力第一次对超管账号可达，不是重复入口 -->
+        <view class="sa-control-cell" bindtap="onOpenMemberApplicationModal" hover-class="ui-hover">
+          <text class="sa-control-icon">📝</text>
+          <text class="sa-control-label">权限与审核</text>
+          <text class="sa-control-desc">全域角色审批 · 加入申请流转</text>
+        </view>
+        <view class="sa-control-cell" bindtap="onOpenProSubscriptionModal" hover-class="ui-hover">
+          <text class="sa-control-icon">🏢</text>
+          <text class="sa-control-label">租户与SaaS</text>
+          <text class="sa-control-desc">机构席位 · 工作空间套餐</text>
+        </view>
+        <view class="sa-control-cell" bindtap="onOpenSecurityLogModal" hover-class="ui-hover">
+          <text class="sa-control-icon">🛡️</text>
+          <text class="sa-control-label">全网风控/日志</text>
+          <text class="sa-control-desc">安全拦截 · 审计日志查看</text>
+        </view>
+      </view>
+
+      <view class="sa-more-tools-link" bindtap="onOpenMoreToolsModal" hover-class="ui-hover">
+        <text>更多系统工具</text>
+        <text class="sa-more-tools-arrow">❯</text>
+      </view>
+    </view>
+
+    <!-- 🏛️（2026-09-09 超管个人中心 IA 重构）"更多系统工具"紧凑弹窗——原折叠卡片
+         里除上面 4 个主入口之外的其余能力，原样搬运（handler 一个不改），只是
+         从"展开才看得到的折叠大卡片"换成"点一下才弹出的紧凑列表" -->
+    <view class="sa-more-tools-modal-mask" wx:if="{{showMoreToolsModal}}" catchtouchmove="stopPropagation" bindtap="onCloseMoreToolsModal">
+      <view class="sa-more-tools-sheet" catchtap="stopPropagation">
+        <view class="sa-more-tools-header">
+          <text class="sa-more-tools-title">更多系统工具</text>
+          <text class="sa-more-tools-close" bindtap="onCloseMoreToolsModal">✕</text>
+        </view>
+
+        <view class="sa-light-action-row" bindtap="onGoToStatistics" hover-class="ui-hover">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">🚀</text>
+            <text class="sa-light-action-title">全国数据看板</text>
+          </view>
+          <view class="sa-light-action-arrow">❯</view>
+        </view>
+        <view class="sa-light-action-row" bindtap="onOpenForceUnbindModal" hover-class="ui-hover">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">🛡️</text>
+            <text class="sa-light-action-title">撤销违规管理权限</text>
+          </view>
+          <view class="sa-light-action-arrow">❯</view>
+        </view>
+        <view class="sa-light-action-row" bindtap="onOpenResetStoreKeyModal" hover-class="ui-hover">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">🔑</text>
+            <text class="sa-light-action-title">重置门店申请密钥</text>
+          </view>
+          <view class="sa-light-action-arrow">❯</view>
+        </view>
+        <view class="sa-light-action-row" bindtap="onOpenViewModeModal" hover-class="ui-hover">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">🎭</text>
+            <view class="sa-action-text-col">
+              <text class="sa-light-action-title">管理视角切换</text>
+              <text class="sa-action-desc sa-light-desc">当前：{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
+            </view>
+          </view>
+          <view class="sa-light-action-arrow">❯</view>
+        </view>
+        <view class="sa-light-action-row" bindtap="onTriggerClearCache" hover-class="ui-hover">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">🧹</text>
+            <view class="sa-action-text-col">
+              <text class="sa-light-action-title">清理缓存</text>
+              <text class="sa-action-desc sa-light-desc" wx:if="{{cacheSizeText}}">当前已用 {{cacheSizeText}}</text>
+            </view>
+          </view>
+          <view class="sa-light-action-arrow">❯</view>
+        </view>
+        <view class="sa-light-action-row {{createIndexesRunning ? 'sa-light-action-disabled' : ''}}"
+              hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
+              bindtap="onTriggerCreateIndexes">
+          <view class="sa-action-left">
+            <text class="sa-action-icon">⚡</text>
+            <text class="sa-light-action-title">{{createIndexesRunning ? '系统加速中，请稍候…' : '一键加速系统'}}</text>
+          </view>
+          <view class="sa-light-action-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
+        </view>
+
+        <!-- 🧪 Dev/Debug 专用：模拟开通专业版，仅供功能自测，不接入真实支付/计费流程。
+             🛡️ 根因修复：见 profile.ts data.isDevEnvironment 声明处注释——此前只挂
+             enterpriseBuildEnabled（区分完整版/开源核心版代码，跟"是否正式上线"
+             无关），正式生产包里真实用户也能看到这个标 DEV 字样的入口，叠加
+             isDevEnvironment（envVersion !== 'release'）后正式版直接隐藏 -->
+        <view class="sa-dev-tool-row" wx:if="{{isDevEnvironment && enterpriseBuildEnabled && !subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
+          <text class="sa-dev-tool-tag">DEV</text>
+          <text class="sa-dev-tool-text">体验 / 模拟开通专业版（测试用）</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 🐛（去重）原"阳善纵向冒出轮播"（.sunshine-marquee-bar）已删除：与下方
          【善行功德专区】（.merit-hall-card）里的 <yangshan-wall> 组件展示的是
          同一份 getSunshineLedger 数据（同店、同近30天窗口），紧邻身份 Banner
@@ -160,16 +303,20 @@
     </view>
 
     <!-- 🐛 UI/UX 去重：此前顶部通用区常驻一张独立的"管理视角切换"卡片
-         （view-mode-switch-card，wx:if="{{isRealSuperAdmin}}"），与下方
+         （view-mode-switch-card，wx:if="{{isRealSuperAdmin}}"），与当时的
          admin-dashboard-card「🎭 视角与租户管理」分组里的同名入口（同样绑定
-         onOpenViewModeModal，展示同一个 viewModeOptionIndex）在默认态（未预览
-         任何角色时 isSuperAdmin 同时为 true）会同屏出现两次，只是位置不同——
-         纯粹的重复入口，已移除这张顶部卡片，只保留卡片内的单一入口。
-         🛡️ 不影响"预览中如何切回"：预览态下 admin-dashboard-card 因 isSuperAdmin
+         onOpenViewModeModal）在默认态会同屏出现两次，只是位置不同——纯粹的
+         重复入口，已移除这张顶部卡片，只保留单一入口。
+         🏛️（2026-09-09 超管个人中心 IA 重构）admin-dashboard-card 整段已被
+         sa-global-control-card「全域管控面板」取代，onOpenViewModeModal 现收在
+         该卡片"更多系统工具"弹窗（showMoreToolsModal）里，下一段"不影响预览中
+         如何切回"的结论依然成立——只是载体从 admin-dashboard-card 换成了
+         sa-global-control-card（同一条 isSuperAdmin 降级判断）。
+         🛡️ 不影响"预览中如何切回"：预览态下 sa-global-control-card 因 isSuperAdmin
          降级而隐藏，但顶部 sa-status-bar（wx:if 用的是不受预览影响的
          isRealSuperAdmin）仍会展示"还原超管视角"按钮（onResetSuperAdminTempViews），
-         点击即可退出预览、admin-dashboard-card 随之重新出现，再从卡片内入口切换
-         到另一个角色——不会出现"卡在预览态里出不来"的死路 -->
+         点击即可退出预览、sa-global-control-card 随之重新出现，再从"更多系统
+         工具"里切换到另一个角色——不会出现"卡在预览态里出不来"的死路 -->
 
     <!-- 📸 阳光温情图册与爱心故事入口已并入下方【🌸 善行功德专区】统一卡片
          （merit-hall-card，与「发心分布/阳善善缘墙」合并展示，见该卡片处
@@ -440,7 +587,15 @@
          ③ 非管理员角色（义工/财务/家人）在这个核心位置不展示任何工坊相关
             卡片——原来的"我的工坊订单"买家自查入口已下移到「日常记录」，
             所有角色都能在那里看到，见下方 my-orders-entry-card -->
-    <view class="my-orders-entry-card" wx:if="{{(isManager || isPatriarch || isSuperAdmin) && hasProductionSpaceAccess}}" bindtap="onGoToProductionFulfillment">
+    <!-- 🏛️（2026-09-09 超管个人中心 IA 重构·业务域收敛）追加 && !orgType——
+         hasProductionSpaceAccess 本身是账号级 tenant_members 成员关系，与当前
+         绑定哪家门店无关（见上方大段说明），这意味着一个同时绑定了雨花斋门店
+         又拥有工坊主理人身份的账号，即便正在查看自己纯公益门店的个人中心也会
+         看到这张商业发货入口。orgType 非空代表"当前绑定了一家真实慈善门店"，
+         是本页唯一可用的"当前是否偏向慈善语境"信号（本页没有真正的"当前工作
+         空间"概念，见 plan 文档）——用它额外收窄，只在未绑定慈善门店时展示，
+         这是一次明确的行为变更，已与用户确认 -->
+    <view class="my-orders-entry-card" wx:if="{{(isManager || isPatriarch || isSuperAdmin) && hasProductionSpaceAccess && !orgType}}" bindtap="onGoToProductionFulfillment">
       <view class="ccc-left">
         <text class="ccc-icon">📦</text>
         <view class="ccc-text-col">
@@ -472,7 +627,10 @@
          shouldShowProCards，本次同样未动——按同一份唯一真源精神理应一并
          梳理，但不在本次改动范围内，需要用户确认后再处理，避免未经确认
          扩大改动面 -->
-    <view class="saas-entitlement-banner" wx:if="{{enterpriseBuildEnabled && (isPatriarch || isSuperAdmin)}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
+    <!-- 🏛️（2026-09-09 避免双重入口）超管已有本页顶部 sa-global-control-card 的
+         "租户与SaaS"格子（同一个 onOpenProSubscriptionModal），这里改为对超管
+         隐藏；大家长一侧的可见性/文案判定（见上方大段说明性注释）本次完全不动 -->
+    <view class="saas-entitlement-banner" wx:if="{{enterpriseBuildEnabled && isPatriarch && !isSuperAdmin}}" hover-class="ui-hover" bindtap="onOpenProSubscriptionModal">
       <view class="aws-left">
         <text class="aws-icon">🏢</text>
         <view class="aws-text-col">
@@ -908,24 +1066,24 @@
          🔀 排在「核心荣誉」前面：日常操作类入口优先于荣誉展示 -->
     <view class="list-group-label">日常记录</view>
 
-    <!-- 🛒（方向 B，2026-09-08 从核心卡片位置下移归位）我的工坊购买（个人
-         消费）——买家自查入口，任何账号只要下过工坊订单就会露出，与上方
-         "产销工坊反哺"（作为公益厨房管理者收到的转捐）、核心区"工坊生产与
-         履约"（作为工坊主理人管理的排产/履约）是三个不同视角，互不相关。
-         标题与副标题均明确标注"个人消费/订购记录"，避免继续与门店/工坊
-         业务数据混淆——这正是本次要修复的体验歧义 -->
-    <view class="my-orders-entry-card" wx:if="{{myProductionOrdersCount > 0}}" bindtap="onGoToMyProductionOrders">
-      <view class="ccc-left">
-        <text class="ccc-icon">🛒</text>
-        <view class="ccc-text-col">
-          <text class="myoc-title">我的工坊购买（个人消费）</text>
-          <text class="ccc-sub">个人订购记录 · 共 {{myProductionOrdersCount}} 笔 · {{myProductionOrdersLatestSummary}}</text>
+    <!-- 🏛️（2026-09-09 超管个人中心 IA 重构·个人业务档案收敛）"我的工坊购买"
+         原是核心卡片位置下移后的独立大卡（.my-orders-entry-card，图标+双行
+         文案+统计摘要），与下方"我的志愿历程"/"我的提交与数据"各自占一整张
+         卡片，纵向堆叠偏长。三者业务含义不变（买家自查个人消费/个人打卡参与
+         日志/餐报物资提交历史，互不相关，只是物理相邻），现合并进同一张紧凑
+         列表卡片——"我的工坊购买"改用与另外两行一致的单图标+单行文案样式，
+         订单笔数/最新摘要收进小徽标（与 rejectedCount 未读徽标同一视觉语言），
+         减少三张卡片各自的 padding/margin/shadow 重复占用的纵向空间 -->
+    <view class="ui-card-wrapper action-list-container personal-archive-card">
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{myProductionOrdersCount > 0}}" bindtap="onGoToMyProductionOrders">
+        <view class="item-left">
+          <text class="manager-only-emoji">🛒</text>
+          <text class="item-text">我的工坊购买（个人消费）</text>
+          <text class="unread-badge archive-count-badge">{{myProductionOrdersCount}}</text>
         </view>
+        <view class="item-arrow">❯</view>
       </view>
-      <text class="ccc-arrow">❯</text>
-    </view>
 
-    <view class="ui-card-wrapper action-list-container">
       <!-- 🐛 双重图标修复：此前左侧 .item-icon-svg（SVG 矢量图标）与文案里手打的
            emoji（📜/📝）同时存在，等于同一个入口画了两枚图标，且 emoji 字形的行高
            与相邻纯文字菜单项不一致，会导致这两行看起来比其他行更高/字体更跳。
@@ -960,7 +1118,11 @@
            清单本应包含"门店档案"的设计意图不符——这里改为按 !isFamily 展示（本区块
            外层不再整体屏蔽家人后，门店档案对家人无意义，逐项补上 !isFamily）。
            🆕 图标统一：与本组其余入口一样改用 item-icon-svg 图标库，不再用手打 emoji -->
-      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{!isFamily}}" bindtap="onGoToStoreProfile">
+      <!-- 🏛️（2026-09-09 避免双重入口）超管已有本页顶部 sa-global-control-card
+           的"门店档案/管理"格子（跳转全量门店列表，能力更强），这里改为对超管
+           隐藏，避免同一账号在同一页看到两个指向不同能力的"门店档案"入口；
+           店长/大家长/财务仍按原逻辑使用这个单店版入口 -->
+      <view class="action-item-cell" hover-class="ui-hover" wx:if="{{!isFamily && !isSuperAdmin}}" bindtap="onGoToStoreProfile">
         <view class="item-left">
           <view class="item-icon-svg icon-svg-home"></view>
           <text class="item-text">门店档案</text>
@@ -1006,7 +1168,10 @@
          （loadRecentPhotos()/fetchStoreLoveWallSummary()）完全不变，只是渲染
          的视觉容器合并了。子区块内部原有的数据源/角色可见性说明见下方各自
          注释，均从原位置原样迁移，未改动业务逻辑 -->
-    <view class="merit-hall-card" wx:if="{{recentPhotosLoaded || storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
+    <!-- 🏛️（2026-09-09）追加 isSuperAdmin && orgType 作为第 4 个可单独触发整卡渲染
+         的条件——否则超管绑定的门店刚好还没有照片/发心比例数据时，下方新增的
+         "阳光账本/每日家训"聚合行会因为外层卡片本身不渲染而一起消失 -->
+    <view class="merit-hall-card" wx:if="{{recentPhotosLoaded || storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0 || (isSuperAdmin && orgType)}}">
       <view class="merit-hall-header">
         <text class="merit-hall-icon">🌸</text>
         <text class="merit-hall-title">善行功德专区</text>
@@ -1072,6 +1237,37 @@
 
       <view class="no-yangshan-wall-slot" wx:if="{{storeLoveWallMeritRatio.yangRatioPct > 0 || storeLoveWallMeritRatio.yinRatioPct > 0}}">
         <yangshan-wall storeId="{{myStoreId}}" />
+      </view>
+
+      <!-- 🏛️（2026-09-09 超管个人中心 IA 重构·业务域收敛）超管在当前绑定了一家
+           慈善门店时（orgType 非空，近似代表"当前处于雨花/互助空间"——本页没有
+           真正的"当前工作空间"概念，见 plan 文档"范围与取舍"第 5 条），把阳光
+           账本/每日家训这两个同样属于"文化与透明度"语境的入口一并聚合进本卡片，
+           不用再去页面下方的"文化与平台监督"找（那张卡片对超管在这个场景下
+           同步隐藏，见该处注释，避免双重入口）。两个 handler 都是页面已有的
+           真实入口，不是新建功能：onGoToSunshineLedger 与家人视角「我的爱心」
+           列表用的是同一个方法；onGoToCultureFull 的标题绑定 cultureTitle，与
+           页面底部"文化与平台监督"卡片用的是同一个字段 -->
+      <view class="merit-hall-divider" wx:if="{{isSuperAdmin && orgType}}"></view>
+      <view class="merit-hall-row" wx:if="{{isSuperAdmin && orgType}}" hover-class="ui-hover" bindtap="onGoToSunshineLedger">
+        <view class="pame-icon-wrap">
+          <text class="pame-icon">📖</text>
+        </view>
+        <view class="pame-text">
+          <text class="pame-title">阳光账本</text>
+          <text class="pame-subtitle">公开透明 · 护持不记名，汇入公开账本</text>
+        </view>
+        <view class="pame-arrow">›</view>
+      </view>
+      <view class="merit-hall-row" wx:if="{{isSuperAdmin && orgType}}" hover-class="ui-hover" bindtap="onGoToCultureFull">
+        <view class="pame-icon-wrap">
+          <text class="pame-icon">🌸</text>
+        </view>
+        <view class="pame-text">
+          <text class="pame-title">{{cultureTitle}}</text>
+          <text class="pame-subtitle">机构文化与每日寄语</text>
+        </view>
+        <view class="pame-arrow">›</view>
       </view>
     </view>
 
@@ -1205,182 +1401,11 @@
       <text class="pd-honor-collapsed-arrow">∧</text>
     </view>
 
-    <!-- 👑 超级管理员工具箱：两张外层卡片——① 全局控制台（深色，全网数据与决策）
-         ② 系统管理面板（浅色，内部再分风控与安全 / 视角与租户管理 / 系统运维与
-         性能三个分组，原先是三张各自独立的卡片，已合并瘦身，见下方 admin-dashboard-card）。
-         🆕 挪位：整组从"角色差异化功能区"之前移到之后——先看完家人/义工/店长-
-         大家长/财务各自的功能区，再是纯超管本人视角才会命中的工具箱，符合
-         "顶部通用区 → 角色差异化功能区 → 超管工具箱 → 文化与平台监督底座 →
-         底部账号操作"的整体信息架构顺序。
-         整组统一挂 isSuperAdmin：处于"模拟视角"预览时 isSuperAdmin 会降级为 false，
-         两张卡片随之一起隐藏，改由顶部 sa-status-bar 接管展示——避免深色
-         指挥卡与浅色列表在预览态下同时刷屏、语义打架。真正的"超管专属操作"权限
-         仍由各 on* 处理函数内部用 isRealSuperAdmin 二次校验，与卡片显隐是两回事。 -->
-
-    <!-- 🏛️（彻底独立外露）机构席位与 SaaS 套餐已合并为页面顶部与"我的工坊
-         订单"同级的唯一一张常驻卡片（isPatriarch/isSuperAdmin 共用），不再
-         在超管这里单独维护一份副本，见页面顶部该卡片处注释 -->
-
-    <!-- 🆕（信息架构瘦身）管理"工作台"摘要卡：默认折叠收起下方两张超管专属
-         卡片（全局控制台 + 风控/视角/运维工具箱，合计 9 行纯列表平铺），与
-         大家长/店长分支同一套折叠开关。风控待办直接复用 patriarchData 已加载
-         的字段判断（超管本就与 patriarch 共用 fetchPatriarchDashboardData()
-         取数，见该函数注释），不新增请求 -->
-    <view class="admin-workbench-summary" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance}}" bindtap="onToggleAdminWorkbench">
-      <view class="aws-left">
-        <text class="aws-icon">🛡️</text>
-        <view class="aws-text-col">
-          <text class="aws-title">超管工具箱</text>
-          <text class="aws-sub" wx:if="{{patriarchData.pendingVoidList.length > 0 || patriarchData.pendingProfileUpdate}}">存在待处理风控事项</text>
-          <text class="aws-sub" wx:else>全网数据 · 风控与安全 · 系统运维</text>
-        </view>
-      </view>
-      <text class="aws-toggle">{{showAdminWorkbench ? '收起 ▲' : '展开 ▼'}}</text>
-    </view>
-
-    <!-- 模块一：全局控制台（深色，全网数据与决策入口）
-         🛡️ 加固：显式排除 isVolunteer/isFamily/isManager/isPatriarch/isFinance，
-         多重兜底——即便未来角色计算逻辑出现回归导致 isSuperAdmin 与其他角色标志
-         同时为 true，店长/义工/家人/大家长/财务视角也绝不会渲染这张超管专属卡片。
-         isSuperAdmin 本身已与其余角色互斥，这里是防御性冗余，不是当前已知的漏洞修复。
-         🆕 追加 showAdminWorkbench 折叠开关，见上方 admin-workbench-summary 摘要卡 -->
-    <view class="sa-command-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance && showAdminWorkbench}}">
-      <view class="sa-command-header">
-        <view class="sa-command-badge-row">
-          <text class="sa-command-crown">👑</text>
-          <view class="sa-command-title-col">
-            <text class="sa-command-title">超级管理员</text>
-            <text class="sa-command-sub">全局控制台</text>
-          </view>
-        </view>
-        <view class="sa-command-store-tag">
-          <text class="sa-command-store-name">{{currentStoreName || '全国总览'}}</text>
-        </view>
-      </view>
-
-      <view class="sa-action-row" bindtap="onGoToStatistics" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">🚀</text>
-          <view class="sa-action-text-col">
-            <text class="sa-action-title">全国数据看板</text>
-            <text class="sa-action-desc">全网餐次 · 义工工时 · 财务健康度</text>
-          </view>
-        </view>
-        <view class="sa-action-arrow">❯</view>
-      </view>
-      <!-- 🏛️（常驻外露化）机构席位管理行已迁出本折叠卡片，改为 admin-workbench-
-           summary 摘要条之前的常驻条目 .saas-entitlement-banner，见该处注释，
-           不在折叠卡片内重复展示。platform_admin 的会员开通/续费管理入口仍在
-           下方 admin-developer-section，与本卡片（仅 super_admin 可见）互不
-           影响 -->
-    </view>
-
-    <!-- 🆕 结构瘦身：风控与安全 / 视角与租户管理 / 系统运维与性能，原先是三张
-         各自独立的 .sa-light-card 外层卡片，现合并进同一张 .admin-dashboard-card，
-         内部按 .admin-dashboard-section-title 分组、.admin-dashboard-divider 分隔——
-         页面外层卡片数量减少 2 张，各分组内部的 action-row 绑定与交互逻辑完全不变 -->
-    <!-- 🛡️ 加固：同 sa-command-card，显式排除 isVolunteer/isFamily/isManager/isPatriarch/
-         isFinance 作防御性冗余——"撤销违规管理权限"/"重置门店申请密钥"/"系统运维与性能"
-         这类平台全局工具收在这张卡片内，大家长/财务（放权自治后）绝不应该看到。
-         🆕 追加 showAdminWorkbench 折叠开关，见上方 admin-workbench-summary 摘要卡 -->
-    <view class="admin-dashboard-card" wx:if="{{isSuperAdmin && !isVolunteer && !isFamily && !isManager && !isPatriarch && !isFinance && showAdminWorkbench}}">
-      <view class="admin-dashboard-header">
-        <text class="admin-dashboard-title">🛡️ 系统管理面板</text>
-      </view>
-
-      <!-- 风控与安全：顶部风险预警条复用 patriarchData（fetchPatriarchDashboardData
-           已按当前选中门店加载，超管与家长共用同一份数据），不新增云函数调用；
-           仅当有待确认的作废/画像变更时才显示 -->
-      <text class="admin-dashboard-section-title">🛡️ 风控与安全</text>
-      <view class="sa-risk-banner" wx:if="{{patriarchData.pendingVoidList.length > 0 || patriarchData.pendingProfileUpdate}}">
-        <text class="sa-risk-banner-dot"></text>
-        <text class="sa-risk-banner-text">{{currentStoreName || '当前门店'}} 有 {{patriarchData.pendingVoidList.length + (patriarchData.pendingProfileUpdate ? 1 : 0)}} 项待确认的高风险操作</text>
-      </view>
-      <view class="sa-light-action-row" bindtap="onOpenForceUnbindModal" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">🛡️</text>
-          <text class="sa-light-action-title">撤销违规管理权限</text>
-        </view>
-        <view class="sa-light-action-arrow">❯</view>
-      </view>
-      <view class="sa-light-action-row" bindtap="onOpenResetStoreKeyModal" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">🔑</text>
-          <text class="sa-light-action-title">重置门店申请密钥</text>
-        </view>
-        <view class="sa-light-action-arrow">❯</view>
-      </view>
-      <view class="sa-light-action-row" bindtap="onOpenSecurityLogModal" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">📋</text>
-          <text class="sa-light-action-title">安全操作日志</text>
-        </view>
-        <view class="sa-light-action-arrow">❯</view>
-      </view>
-
-      <view class="admin-dashboard-divider"></view>
-
-      <!-- 视角与租户管理：门店/家长管理下钻见下方 patriarch-panel-card 管理中心，
-           isSuperAdmin 同样命中该卡片，不重复建入口 -->
-      <text class="admin-dashboard-section-title">🎭 视角与租户管理</text>
-      <view class="sa-light-action-row" bindtap="onOpenViewModeModal" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">🎭</text>
-          <view class="sa-action-text-col">
-            <text class="sa-light-action-title">管理视角切换</text>
-            <text class="sa-action-desc sa-light-desc">当前：{{viewModeOptionLabels[viewModeOptionIndex]}}</text>
-          </view>
-        </view>
-        <view class="sa-light-action-arrow">❯</view>
-      </view>
-
-      <view class="admin-dashboard-divider"></view>
-
-      <!-- 系统运维与性能：清理缓存是高频操作，直接展示；一键加速系统/DEV 模拟开通
-           是低频运维项，折叠进"更多系统工具"，点击展开，避免零散提示块常驻占地方 -->
-      <text class="admin-dashboard-section-title">⚙️ 系统运维与性能</text>
-      <view class="sa-light-action-row" bindtap="onTriggerClearCache" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">🧹</text>
-          <view class="sa-action-text-col">
-            <text class="sa-light-action-title">清理缓存</text>
-            <text class="sa-action-desc sa-light-desc" wx:if="{{cacheSizeText}}">当前已用 {{cacheSizeText}}</text>
-          </view>
-        </view>
-        <view class="sa-light-action-arrow">❯</view>
-      </view>
-
-      <view class="sa-light-action-row" bindtap="onToggleAdminMoreTools" hover-class="ui-hover">
-        <view class="sa-action-left">
-          <text class="sa-action-icon">⋯</text>
-          <text class="sa-light-action-title">更多系统工具</text>
-        </view>
-        <view class="sa-light-action-arrow">{{showAdminMoreTools ? '︿' : '﹀'}}</view>
-      </view>
-
-      <block wx:if="{{showAdminMoreTools}}">
-        <view class="sa-light-action-row {{createIndexesRunning ? 'sa-light-action-disabled' : ''}}"
-              hover-class="{{createIndexesRunning ? '' : 'ui-hover'}}"
-              bindtap="onTriggerCreateIndexes">
-          <view class="sa-action-left">
-            <text class="sa-action-icon">⚡</text>
-            <text class="sa-light-action-title">{{createIndexesRunning ? '系统加速中，请稍候…' : '一键加速系统'}}</text>
-          </view>
-          <view class="sa-light-action-arrow">{{createIndexesRunning ? '⏳' : '❯'}}</view>
-        </view>
-
-        <!-- 🧪 Dev/Debug 专用：模拟开通专业版，仅供功能自测，不接入真实支付/计费流程。
-             🛡️ 根因修复：见 profile.ts data.isDevEnvironment 声明处注释——此前只挂
-             enterpriseBuildEnabled（区分完整版/开源核心版代码，跟"是否正式上线"
-             无关），正式生产包里真实用户也能看到这个标 DEV 字样的入口，叠加
-             isDevEnvironment（envVersion !== 'release'）后正式版直接隐藏 -->
-        <view class="sa-dev-tool-row" wx:if="{{isDevEnvironment && enterpriseBuildEnabled && !subscriptionInfo.isActive}}" bindtap="onOpenProSubscriptionModal">
-          <text class="sa-dev-tool-tag">DEV</text>
-          <text class="sa-dev-tool-text">体验 / 模拟开通专业版（测试用）</text>
-        </view>
-      </block>
-    </view>
-
+    <!-- 🏛️（2026-09-09 超管个人中心 IA 重构）超管专属的"超管工具箱"
+         （全局控制台 + 系统管理面板）已整段移除，核心管理能力上移到本页顶部、
+         头像信息卡片之后的 sa-global-control-card「全域管控面板」，见该卡片
+         处注释；"机构席位与 SaaS 套餐"也已并入该卡片第 3 格（onOpenProSubscriptionModal），
+         不再在这里单独维护 -->
     <!-- 🌸☀️ 文化与平台监督底座：全角色统一入口，替代此前分散在家人/店长/大家长
          各自卡片里的重复文化入口，与"关于本站/阳光账本"合并成同一组列表行——
          复用现有 .list-group-label/.ui-card-wrapper.action-list-container/
@@ -1413,6 +1438,11 @@
       </view>
     </view>
 
+    <!-- 🏛️（2026-09-09 避免双重入口）超管当前绑定慈善门店时（orgType 非空），
+         这两个入口（每日家训/阳光账本）已聚合进本页顶部 merit-hall-card
+         「善行功德专区」，这里整组隐藏，避免留下一个空壳卡片标题；超管处于
+         全国总览（orgType 为空）或其余全部角色不受影响，不让入口彻底消失 -->
+    <block wx:if="{{!(isSuperAdmin && orgType)}}">
     <view class="list-group-label">文化与平台监督</view>
     <view class="ui-card-wrapper action-list-container">
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToCultureFull">
@@ -1423,6 +1453,10 @@
         <view class="item-arrow">❯</view>
       </view>
 
+      <!-- 🏛️ onGoToAbout 与上面新增进 merit-hall-card 的"阳光账本"行是同一个
+           动作（onGoToSunshineLedger 内部直接调用 onGoToAbout，见 profile.ts
+           注释——两者本就是完全同一份"switchTab 首页 + 打开阳光账本"逻辑，
+           只是文案不同），随整组一起隐藏，避免点两个位置触发同一件事 -->
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToAbout">
         <view class="item-left">
           <text class="manager-only-emoji">☀️</text>
@@ -1431,6 +1465,7 @@
         <view class="item-arrow">❯</view>
       </view>
     </view>
+    </block>
 
     <!-- 🏛️ 底部账号操作：全角色可见，去掉原 hasPrivilege 限制——家人/纯义工
          之前完全看不到这个入口，现在也能点开；processRoleAudit 云函数
@@ -1463,9 +1498,8 @@
          超管自己的管理工具，不是"正在预览的内容"，不该因为切换视角/切换过
          门店角色就消失 -->
     <!-- ╔══════════════════════════════════════════════════════════════╗
-         ║  工具箱（大家长：仅会员管理 / 超管专属操作见上方的                ║
-         ║  sa-command-card + admin-dashboard-card「超级管理员工具箱」，    ║
-         ║  不在此重复）                                                   ║
+         ║  工具箱（大家长：仅会员管理 / 超管专属操作见本页顶部的            ║
+         ║  sa-global-control-card「全域管控面板」，不在此重复）            ║
          ╚══════════════════════════════════════════════════════════════╝ -->
 
     <!-- ▸ 平台管理员精简版（大家长的同类入口已合并至 patriarch-panel-card 管理中心末尾） -->
@@ -1481,8 +1515,14 @@
       </view>
     </view>
 
-    <!-- ▸ 素食直播产销协同：与雨花公益角色体系完全独立，不受上面任何雨花角色
-         wx:if 条件影响，也不影响雨花角色卡片的展示逻辑。
+    <!-- ▸ 素食直播产销协同：原注释曾称"与雨花公益角色体系完全独立，不受上面
+         任何雨花角色 wx:if 条件影响"——2026-09-09 超管个人中心 IA 重构按用户
+         明确诉求（"避免在纯慈善/互助空间下透出商业工坊发货入口"）反转了这条
+         独立性原则，追加 && !orgType：账号当前绑定了一家真实慈善门店时
+         （orgType 非空），这张卡片不再展示，即便该账号同时拥有工坊主理人
+         身份——这是一次明确确认过的行为变更，不是疏漏，下面几段"为什么整卡
+         收进 hasProductionSpaceAccess"的历史权衡依然成立，只是新增这一层
+         叠加条件。
          🐛（2026-08-31 精简个人中心追加修复）整张卡片改为
          wx:if="{{hasProductionSpaceAccess}}"——此前「输入工坊邀请码加入」
          一行是常驻显示的（不看 hasProductionSpaceAccess），本意是让刚拿到
@@ -1495,7 +1535,7 @@
          onGoToWorkspaceJoin 页面等替代入口，而不是在个人中心常驻暴露卡片。
          「排单与发货管理」在卡片内继续按 space_owner/space_admin/producer
          角色（getMyProductionSpaces 判定）二次收窄 -->
-    <view class="ui-card-wrapper admin-developer-section" wx:if="{{hasProductionSpaceAccess}}">
+    <view class="ui-card-wrapper admin-developer-section" wx:if="{{hasProductionSpaceAccess && !orgType}}">
       <view class="admin-divider">产销工坊</view>
       <view class="action-item-cell" hover-class="ui-hover" wx:if="{{hasProductionSpaceAccess}}" bindtap="onGoToProductionFulfillment">
         <view class="item-left">

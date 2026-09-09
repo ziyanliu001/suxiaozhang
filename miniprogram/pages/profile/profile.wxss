@@ -568,14 +568,17 @@
   margin-top: 0;
 }
 
-/* ─── 👑 超级管理员·全网指挥中心卡片 ───────────────────────────────── */
-/* 🆕 卡片瘦身：margin-bottom 统一收窄为 16rpx，与下方合并后的 .admin-dashboard-card
-   （原三张 .sa-light-card）保持一致的堆叠节奏，缓解拥挤感，不改变信息密度本身 */
-.sa-command-card {
+/* ─── 👑 超级管理员·全域管控面板卡片 ───────────────────────────────── */
+/* 🏛️（2026-09-09 超管个人中心 IA 重构）原 .sa-command-card 改名为
+   .sa-global-control-card——原卡片只是"全局控制台"入口（一行"全国数据看板"），
+   现在是头像卡片下方紧跟着的主管控面板（2x2 金刚区 + 风控提示条），视觉基调
+   延用原深色渐变+金色点缀，margin-bottom 对齐本次新建卡片统一用的 20rpx
+   （与页面其余既有 135 处间距声明互不干扰，见 plan 文档"范围与取舍"） */
+.sa-global-control-card {
   background: linear-gradient(150deg, #0f2744 0%, #1e3a5f 60%, #0c3060 100%);
   border-radius: 28rpx;
-  padding: 0 0 6rpx;
-  margin-bottom: 16rpx;
+  padding: 0 0 20rpx;
+  margin-bottom: 20rpx;
   overflow: hidden;
   box-shadow: 0 8rpx 32rpx rgba(15, 39, 68, 0.28);
 }
@@ -694,42 +697,107 @@
 
 /* ─── end 超管指挥中心卡片 ──────────────────────────────────────────── */
 
-/* ─── 🛡️/🎭/⚙️ 系统管理面板（风控与安全 / 视角与租户管理 / 系统运维三个分组合并
-   进同一张卡片，见 profile.wxml admin-dashboard-card）───────────────────── */
-.admin-dashboard-card {
+/* ─── 🏛️（2026-09-09 超管个人中心 IA 重构）「全域管控面板」2x2 金刚区 +
+   "更多系统工具"紧凑弹窗——取代原"系统管理面板"（.admin-dashboard-*，三个
+   分组纯列表平铺）。金刚区网格沿用页面深色卡片基调，每格图标/标题/一行
+   说明，四宫格点哪一个都是一跳直达，不需要先展开折叠卡片 ───────────────── */
+.sa-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  padding: 16rpx 24rpx 8rpx;
+}
+
+.sa-control-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6rpx;
+  padding: 20rpx 18rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.10);
+  border-radius: 16rpx;
+}
+
+.sa-control-cell:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sa-control-icon {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.sa-control-label {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.sa-control-desc {
+  font-size: 20rpx;
+  color: rgba(148, 163, 184, 0.85);
+  line-height: 1.4;
+}
+
+.sa-more-tools-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 18rpx 0 6rpx;
+  font-size: 22rpx;
+  color: rgba(226, 232, 240, 0.70);
+}
+
+.sa-more-tools-arrow {
+  font-size: 20rpx;
+  color: rgba(226, 232, 240, 0.50);
+}
+
+/* 「更多系统工具」弹窗：与本页 role-switch-modal-mask/switch-identity-modal-mask
+   同一套"遮罩 + 居中卡片"视觉语言，浅色卡片（不延用金刚区的深色基调，弹窗内是
+   纯列表项，浅色背景更易读） */
+.sa-more-tools-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.sa-more-tools-sheet {
+  width: 600rpx;
+  max-height: 80vh;
+  overflow-y: auto;
   background: #FFFFFF;
   border-radius: 24rpx;
-  border: 1rpx solid #F1F3F5;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
   padding: 8rpx 0 16rpx;
-  margin-bottom: 16rpx;
   box-sizing: border-box;
 }
 
-.admin-dashboard-header {
+.sa-more-tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 16rpx 28rpx 10rpx;
 }
 
-.admin-dashboard-title {
+.sa-more-tools-title {
   font-size: 26rpx;
   font-weight: 700;
   color: #212529;
 }
 
-/* 分组小标题：比原先独立卡片的 header 更轻量，仅作组内区隔，不再是一张独立卡片
-   的视觉重量级标题 */
-.admin-dashboard-section-title {
-  display: block;
-  padding: 12rpx 28rpx 6rpx;
-  font-size: 22rpx;
-  font-weight: 600;
+.sa-more-tools-close {
+  font-size: 28rpx;
   color: #868E96;
-}
-
-.admin-dashboard-divider {
-  height: 1rpx;
-  margin: 8rpx 28rpx;
-  background: #F1F3F5;
+  padding: 4rpx 10rpx;
 }
 
 .sa-risk-banner {
@@ -2531,6 +2599,19 @@
   box-sizing: border-box;
   vertical-align: middle;
   margin-right: 8rpx;
+}
+
+/* 🏛️（2026-09-09 个人业务档案收敛）中性计数徽标——与 .unread-badge 共用尺寸/
+   形状，但改用灰底，区别于"未读/待处理"的红色告警语义，单纯展示一个数量 */
+.archive-count-badge {
+  background: #E9ECEF;
+  color: #495057;
+}
+
+/* 🏛️（2026-09-09）本次新合并的卡片按 plan 文档"范围与取舍"统一用 20rpx，
+   不改 .action-list-container 基类的 16rpx（影响页面其余既有卡片） */
+.personal-archive-card {
+  margin-bottom: 20rpx;
 }
 
 .action-list-container {

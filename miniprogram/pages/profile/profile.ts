@@ -964,9 +964,11 @@ Page({
     resetStoreKeySearchText: '',              // 搜索框输入
     resetStoreKeyFilteredList: [] as Array<{ storeId: string; storeName: string }>,
     createIndexesRunning: false,      // 🗂️ 刷新数据库索引运行态锁
-    // 🆕 系统管理面板「更多系统工具」折叠区展开态：一键加速系统/DEV 模拟开通是
-    // 低频运维项，默认折叠收起，减少常驻占地方的零散提示块
-    showAdminMoreTools: false,
+    // 🏛️（2026-09-09 超管个人中心 IA 重构）showAdminMoreTools/onToggleAdminMoreTools
+    // 已随"超管工具箱"整段移除一并删除——原"更多系统工具"展开区改为独立的
+    // showMoreToolsModal 弹窗（见下方），仅 isSuperAdmin 使用，isPatriarch/
+    // isManager 的折叠工作台（showAdminWorkbench）与此无关，不受影响
+    showMoreToolsModal: false,
     // 🆕（信息架构瘦身）大家长/店长/超管的管理类卡片（经营健康大盘、门店管理
     // 中心宫格/列表、超管两张工具卡）统一收纳进一张"工作台"摘要卡，默认折叠，
     // 让个人志愿档案/阳善荣誉等个人属性内容优先出现在首屏——四组角色各自
@@ -4645,6 +4647,22 @@ Page({
     });
   },
 
+  // 🏛️（2026-09-09 超管个人中心 IA 重构）「全域管控面板」第 1 格"门店档案/管理"：
+  // 与上面 onGoToStoreProfile()（单店档案页）不同，这里跳转本租户全量门店列表
+  // （store-management.ts，commit d011dd1 已加好每行"📋 门店档案"直达按钮），
+  // 不传 orgTypeFilter——"全国所有门店"不应该被任何业态筛选收窄
+  onGoToStoreManagementHub() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+
+    safeNavigateTo({
+      url: '/subpackages/admin/pages/store-management/store-management',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
   // 🏪 门店状态静默刷新：onShow 每次切回个人页都调用，先用缓存秒显，再后台悄悄
   // 刷新最新值，失败不打扰用户（见 utils/storeManager.ts fetchAndSyncStoreStatus）
   refreshStoreStatus() {
@@ -5101,10 +5119,16 @@ Page({
     }
   },
 
-  // 🆕 系统管理面板「更多系统工具」展开/收起：折叠一键加速系统/DEV 模拟开通
-  // 这类低频运维项，默认不占地方
-  onToggleAdminMoreTools() {
-    this.setData({ showAdminMoreTools: !this.data.showAdminMoreTools });
+  // 🏛️（2026-09-09 超管个人中心 IA 重构）「更多系统工具」紧凑弹窗开关——取代
+  // 原折叠卡片里的展开/收起区（onToggleAdminMoreTools），装下原"超管工具箱"里
+  // 不属于「全域管控面板」4 个主入口的其余能力，handler 一个不改，只是换了
+  // 呈现方式
+  onOpenMoreToolsModal() {
+    this.setData({ showMoreToolsModal: true });
+  },
+
+  onCloseMoreToolsModal() {
+    this.setData({ showMoreToolsModal: false });
   },
 
   // 🆕 管理"工作台"摘要卡展开/收起：大家长/店长/超管四组互斥的管理类卡片
