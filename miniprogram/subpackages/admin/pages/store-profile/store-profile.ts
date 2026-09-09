@@ -1,5 +1,5 @@
 import { AuthService } from '../../../../utils/authService';
-import { getSelectedStore } from '../../../../utils/storeManager';
+import { getCurrentActiveStore } from '../../../../utils/storeManager';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
@@ -30,6 +30,10 @@ const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredN
 type TextProfileField = typeof TEXT_PROFILE_FIELDS[number];
 
 // 🏢 平台类型：与 store-picker、getNationalDashboard 大屏筛选共用同一套 value 字面量
+// 🐛（2026-09-09 补漏）utils/constants.ts ORG_TYPES 扩展 temple_canteen/
+// commercial_vegetarian 时漏掉了这份独立拷贝——本文件是第 6 处维护同一份
+// orgType 取值域的地方，此前排查 4 个云函数 + constants.ts 时没找到它，导致
+// 这两类机构的门店档案页"机构类型"展示会落到空字符串兜底。补齐
 const ORG_TYPE_OPTIONS = [
   { name: '🌸 雨花斋', value: 'yuhuazhai' },
   { name: '👵👴 社区助老食堂/敬老家园', value: 'elderly_canteen' },
@@ -37,6 +41,8 @@ const ORG_TYPE_OPTIONS = [
   { name: '🛟 应急救援队', value: 'rescue_team' },
   { name: '🧒 同心儿童院/青少年关爱', value: 'tongxin_children' },
   { name: '🎗️ 同心癌友关怀会', value: 'tongxin_cancer_care' },
+  { name: '🙏 寺院斋堂/十方过斋', value: 'temple_canteen' },
+  { name: '🍱 商业素餐/结缘供斋', value: 'commercial_vegetarian' },
   { name: '💫 其他爱心组织', value: 'other' }
 ];
 
@@ -121,6 +127,12 @@ const PHOTO_FIELD_LABELS: Record<PhotoField, string> = {
 const STOCK_STATUS_RANK: Record<string, number> = { sufficient: 0, normal: 1, urgent: 2 };
 const STOCK_STATUS_LABEL: Record<string, string> = { sufficient: '充裕', normal: '一般', urgent: '告急' };
 
+// 🏛️（2026-09-09 超管跨店穿透）与 profile.ts/index.ts 等页面同一份定义（本仓库
+// 没有跨文件共享模块机制，各页面各自维护一份同源拷贝）——超管在全局门店选择器里
+// 选中"全国总览"时，getCurrentActiveStore() 返回的 storeId 是这批字面量哨兵值，
+// 不是任何真实门店，不能直接传给要求精确门店的云函数
+const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL', 'yuhuazhai_national'];
+
 Page({
   _navGuard: null as NavGuardInstance | null,
 
@@ -132,6 +144,12 @@ Page({
     canManage: false,
     // 🔐 仅大家长/超管可设置密钥（店长只读，不能修改）
     canSetAdminKey: false,
+    // 🏛️（2026-09-09 超管跨店穿透）超管专属"切换门店"快捷选择器——仅本租户内
+    // 门店列表（getStoreList 按 tenantId 过滤，不跨租户，见该云函数），不受当前
+    // orgType 专区限制，方便超管在本机构内任意门店之间快速切换编辑档案
+    isSuperAdmin: false,
+    storeSwitcherOptions: [] as Array<{ storeId: string; storeName: string }>,
+    storeSwitcherLoading: false,
     loading: true,
 
     // 📊 门店动态健康看板：今日开餐 / 物资健康度 / 今日护持 / 今日服务，见
@@ -323,9 +341,19 @@ Page({
       roleInfo = result.roleInfo || null;
     }
 
-    const store = getSelectedStore();
-    const storeId = (roleInfo && roleInfo.storeId) || store.storeId || '';
-    const storeName = (roleInfo && roleInfo.storeName) || store.storeName || '';
+    // 🐛 根因修复（超管在"全国总览"下打开门店档案页无法编辑）：getSelectedStore()
+    // 读的是 app.globalData.currentStore（legacy），不保证与 store-picker.ts 的
+    // canonical Storage key（setCurrentActiveStore）同步，且此前完全没有过滤
+    // NATIONAL_STORE_ID_SENTINELS——超管处于"全国总览"虚拟上下文时，会把字面量
+    // 哨兵值（如 'national_overview'）当成真实 storeId 传给 manageStoreProfile，
+    // 服务端 .doc(storeId).get() 查无此店，直接拒绝写入。改用 getCurrentActiveStore()
+    // 并过滤哨兵值；哨兵值被过滤成空后，下面会展示"切换门店"选择器让超管自己选
+    // 一家本租户内的真实门店，而不是直接对一个不存在的门店发起注定失败的请求
+    const store = getCurrentActiveStore();
+    const rawStoreId = (roleInfo && roleInfo.storeId) || store.storeId || '';
+    const storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
+    const rawStoreName = (roleInfo && roleInfo.storeName) || store.storeName || '';
+    const storeName = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreName;
 
     // 🛡️ 强制优先读取切换后的生效角色：本页此前只认 AuthService.getCachedRoleInfo()
     // 下发的服务端真实角色，完全没读过 store-picker 切身份时写入的 current_user_role
@@ -350,15 +378,58 @@ Page({
     // 真正的写操作授权仍然完全由服务端独立校验，这里只决定按钮是否渲染
     const canManage = effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin';
     const canSetAdminKey = effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin';
+    const isSuperAdmin = effectiveRole === 'super_admin';
 
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey });
+    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey, isSuperAdmin });
     console.log('[verify] store-profile rendered, canManage:', canManage);
+
+    // 🏛️（2026-09-09 超管跨店穿透）超管专属"切换门店"快捷选择器，惰性拉取
+    // （只在确实是超管时才发起，避免给其余角色账号增加无意义的云函数调用）
+    if (isSuperAdmin) {
+      this.fetchStoreSwitcherOptions();
+    }
+  },
+
+  // 🏛️（2026-09-09 超管跨店穿透）拉取本租户内完整门店列表（不按 orgType 收窄，
+  // 超管应该能在自己机构下任意业态的门店之间切换编辑档案）。getStoreList 本身
+  // 按调用者 tenantId 过滤，不传 orgType 时就是"本租户全部门店"，不构成新的
+  // 越权面——与 manageStoreProfile.resolveWriteTarget 的 super_admin 分支
+  // （要求 caller.tenantId === store.tenantId）完全同一条安全边界
+  async fetchStoreSwitcherOptions() {
+    this.setData({ storeSwitcherLoading: true });
+    try {
+      const res: any = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
+      const list = (res && res.result && res.result.list) || [];
+      const options = list.map((s: any) => ({ storeId: s.storeId || s._id, storeName: s.storeName || '' }));
+      this.setData({ storeSwitcherOptions: options });
+    } catch (err) {
+      console.warn('[fetchStoreSwitcherOptions] 拉取门店列表失败:', err);
+    } finally {
+      this.setData({ storeSwitcherLoading: false });
+    }
+  },
+
+  // 🏛️（2026-09-09 超管跨店穿透）<picker mode="selector"> 选中某一项后触发——
+  // 切换当前编辑目标门店并重新拉取档案/健康看板，不需要离开本页
+  onStoreSwitcherChange(e: { detail: { value: string } }) {
+    const idx = Number(e.detail.value);
+    const target = this.data.storeSwitcherOptions[idx];
+    if (!target) return;
+    this.setData({ currentStoreId: target.storeId, currentStoreName: target.storeName });
+    this.fetchProfile();
+    this.fetchHealthDashboard();
   },
 
   async fetchProfile() {
     if (!this.data.currentStoreId) {
       this.setData({ loading: false });
-      wx.showToast({ title: '未找到所属门店，无法查看画像', icon: 'none' });
+      // 🐛 根因修复（2026-09-09 超管跨店穿透）：超管处于"全国总览"尚未选店时，
+      // currentStoreId 本就预期为空——上方新增的 .sp-super-switcher-card 已经
+      // 用文案提示"请先选择门店"，不需要再叠加一个弹窗打断；非超管账号走到这个
+      // 分支才是真正异常（理应天然绑定一家门店），保留弹窗提醒
+      if (!this.data.isSuperAdmin) {
+        wx.showToast({ title: '未找到所属门店，无法查看画像', icon: 'none' });
+      }
       return;
     }
 

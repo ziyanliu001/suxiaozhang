@@ -15,7 +15,22 @@
        占用空间"的正确用法，不属于重复计算，继续保留不动 -->
   <scroll-view scroll-y class="sp-scroll" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);">
 
-    <view class="sp-store-card">
+    <!-- 🏛️（2026-09-09 超管跨店穿透）超管专属"切换门店"快捷选择器——本机构内
+         任意门店均可快速切换编辑，不受当前 orgType 专区限制；处于"全国总览"
+         虚拟上下文、尚未选定具体门店时（currentStoreId 为空）额外提示必须先选店
+         才能查看/编辑档案，不展示一个注定查无此店的空白表单 -->
+    <view class="sp-super-switcher-card" wx:if="{{isSuperAdmin}}">
+      <picker mode="selector" range="{{storeSwitcherOptions}}" range-key="storeName" bindchange="onStoreSwitcherChange">
+        <view class="sp-super-switcher-trigger">
+          <text class="sp-super-switcher-icon">🔀</text>
+          <text class="sp-super-switcher-text">{{currentStoreName || '选择要编辑的门店'}}</text>
+          <text class="sp-super-switcher-arrow">切换门店 ›</text>
+        </view>
+      </picker>
+      <text class="sp-super-switcher-hint" wx:if="{{!currentStoreId}}">当前处于"全国总览"，请先选择一家本机构门店再查看/编辑档案</text>
+    </view>
+
+    <view class="sp-store-card" wx:if="{{currentStoreId}}">
       <view class="sp-store-name-row">
         <text class="sp-store-name">{{currentStoreName || '未命名门店'}}</text>
         <text class="sp-operating-badge {{operatingStatus}}">{{operatingStatusLabel}}</text>

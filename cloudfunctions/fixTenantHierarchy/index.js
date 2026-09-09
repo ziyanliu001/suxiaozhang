@@ -3,6 +3,12 @@
 // "嵩屿街道敬老中心助餐点"误挂在雨花斋总部机构下的归属错误，并回填受影响
 // 机构的 tenants.currentStoreCount 配额计数器。
 //
+// 🆕（2026-09-09 追加）"漳州白礁保生雨花斋"此前只在步骤 3 做只读核对、不修改
+// （见当时注释"本次任务只明确要求修正厦门海沧三泓愿，另外两家只做一致性核对"）——
+// 现已收到明确指令，新增步骤 1.5 把它纳入与"厦门海沧三泓愿"同一套幂等修正逻辑
+// （stores.tenantId/orgType 对齐到 yuhuazhai_national/yuhuazhai）。"测试1"
+// 仍未收到明确指令，继续保留在步骤 3 的只读核对名单里，不擅自修改。
+//
 // 🛡️ 安全设计（这是一次不可逆的数据迁移，务必先 dryRun 再 apply）：
 // - 仅 platform_admin 可调用。
 // - 默认 dryRun（event.apply 不为 true 时），只读、不写库，返回"计划要做什么"的
@@ -29,6 +35,7 @@ const SONGYU_TENANT_ID = 'songyu_elderly_care';
 const SONGYU_TENANT_NAME = '嵩屿街道敬老助餐机构';
 
 const SANQUANYUAN_STORE_NAME = '厦门海沧三泓愿';
+const ZHANGZHOU_STORE_NAME = '漳州白礁保生雨花斋';
 const SONGYU_STORE_NAME = '嵩屿街道敬老中心助餐点';
 
 // 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——与 checkTenantPermission/
@@ -36,10 +43,10 @@ const SONGYU_STORE_NAME = '嵩屿街道敬老中心助餐点';
 // 五处完全同一份拷贝（本仓库一贯做法：各云函数独立部署，没有跨函数共享模块机制）
 const PLAN_STORE_LIMITS = { basic: 2, pro: 10, enterprise: 30 };
 
-// 📋 仅核对、不修改：厦门海沧三泓愿/漳州白礁保生雨花斋/测试1 三家门店理应全部归属
-// 雨花斋总部机构——本次任务只明确要求修正"厦门海沧三泓愿"，另外两家只做一致性
-// 核对并如实报告，不在没有明确指令的情况下擅自改动它们的数据
-const YUHUA_STORE_NAMES_TO_VERIFY = ['厦门海沧三泓愿', '漳州白礁保生雨花斋', '测试1'];
+// 📋 仅核对、不修改："测试1"理应归属雨花斋总部机构，但尚未收到明确修正指令，
+// 只做一致性核对并如实报告，不在没有明确指令的情况下擅自改动它的数据
+// （厦门海沧三泓愿已在步骤 1 修正，漳州白礁保生雨花斋已在步骤 1.5 修正）
+const YUHUA_STORE_NAMES_TO_VERIFY = ['测试1'];
 
 function isCollectionNotExistError(err) {
   return !!err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')));
@@ -166,6 +173,52 @@ exports.main = async (event) => {
       steps.push({ step: 'sanquanyuan', success: false, error: err.message || String(err) });
     }
 
+    // ── 步骤 1.5：漳州白礁保生雨花斋 —— 对齐 stores.tenantId/orgType 到雨花斋总部 ──
+    // 🆕（2026-09-09）与步骤 1 的门店修正逻辑同款（没有发现过独立误建的一级机构，
+    // 不需要步骤 1 那段 tenants.status 停用逻辑，只需要修正 stores 文档本身）
+    try {
+      const stores = await findStoresByName(ZHANGZHOU_STORE_NAME);
+      const storeActions = [];
+      if (stores.length === 0) {
+        storeActions.push({ action: 'not_found', note: '未找到门店文档「漳州白礁保生雨花斋」，需要人工核实是否要新建' });
+      } else {
+        for (const s of stores) {
+          const needsTenantFix = s.tenantId !== YUHUA_TENANT_ID;
+          const needsOrgTypeFix = s.orgType !== 'yuhuazhai';
+          if (!needsTenantFix && !needsOrgTypeFix) {
+            storeActions.push({ storeId: s._id, action: 'already_correct' });
+            continue;
+          }
+          if (apply) {
+            await db.collection('stores').doc(s._id).update({
+              data: {
+                tenantId: YUHUA_TENANT_ID,
+                orgType: 'yuhuazhai',
+                operationLog: _.push({
+                  action: 'fix_tenant_hierarchy',
+                  operatorId: OPENID,
+                  operateTime: db.serverDate(),
+                  before: { tenantId: s.tenantId || '', orgType: s.orgType || '' },
+                  after: { tenantId: YUHUA_TENANT_ID, orgType: 'yuhuazhai' }
+                })
+              }
+            });
+          }
+          if (s.tenantId) touchedTenantIds.add(s.tenantId);
+          storeActions.push({
+            storeId: s._id,
+            action: apply ? 'fixed' : 'will_fix',
+            before: { tenantId: s.tenantId || '', orgType: s.orgType || '' },
+            after: { tenantId: YUHUA_TENANT_ID, orgType: 'yuhuazhai' }
+          });
+        }
+      }
+
+      steps.push({ step: 'zhangzhou', success: true, storeActions });
+    } catch (err) {
+      steps.push({ step: 'zhangzhou', success: false, error: err.message || String(err) });
+    }
+
     // ── 步骤 2：嵩屿街道敬老中心助餐点 —— 确保长者食堂机构存在，门店移出雨花斋总部 ──
     try {
       const songyuTenantRes = await db.collection('tenants').doc(SONGYU_TENANT_ID).get().catch(() => null);
@@ -253,11 +306,10 @@ exports.main = async (event) => {
       steps.push({ step: 'songyu', success: false, error: err.message || String(err) });
     }
 
-    // ── 步骤 3：只读核对——雨花斋旗下另外两家门店（本次不修改，仅报告是否一致） ──
+    // ── 步骤 3：只读核对——雨花斋旗下尚未收到明确修正指令的门店（本次不修改，仅报告是否一致） ──
     try {
       const verifyResults = [];
       for (const name of YUHUA_STORE_NAMES_TO_VERIFY) {
-        if (name === SANQUANYUAN_STORE_NAME) continue; // 已在步骤 1 处理
         const stores = await findStoresByName(name);
         if (stores.length === 0) {
           verifyResults.push({ storeName: name, status: 'not_found' });

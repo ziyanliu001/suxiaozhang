@@ -35,6 +35,52 @@
   flex: 1;
 }
 
+/* 🏛️（2026-09-09 超管跨店穿透）超管专属"切换门店"快捷选择器，视觉上与
+   .sp-store-card 同一套卡片基线（16rpx 圆角 + 同款阴影），暖色描边区分于
+   常规信息卡，提示这是一个可交互的操作入口而不是纯展示 */
+.sp-super-switcher-card {
+  background: #FFF8F0;
+  border: 2rpx solid #F0A500;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.sp-super-switcher-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.sp-super-switcher-icon {
+  font-size: 28rpx;
+}
+
+.sp-super-switcher-text {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #212529;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-super-switcher-arrow {
+  font-size: 24rpx;
+  color: #F0A500;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.sp-super-switcher-hint {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #D48806;
+}
+
 .sp-store-card {
   background: #FFFFFF;
   border-radius: 16rpx;
