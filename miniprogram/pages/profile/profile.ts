@@ -2722,7 +2722,18 @@ Page({
       // 统计现算成 0。cachedRoleInfo（服务端下发、经 AuthService 落地的角色缓存，
       // 见下方 tenantId 同一份来源）在这类场景下始终是非空的，作为兜底更可靠，
       // 与 resolveCertificateProfile() 保持同一套解析优先级
-      const activeStore = getSelectedStore();
+      // 🐛 根因修复（跨空间切店后 getMeritStats 误报"不属于您所在的机构"）：
+      // getSelectedStore() 读的是 app.globalData.currentStore，只在本页/本次
+      // 会话曾经调用过 switchStoreTarget/app.switchStore 时才会被写入，不保证
+      // 与 store-picker.ts 在首页发起的门店切换（_applyRoleSwitch →
+      // setCurrentActiveStore()，canonical Storage key）同步——超管在首页
+      // store-picker/"全部门店"下拉切换到另一家真实归属同租户的门店后，这里
+      // 仍可能读到切换前的旧值（甚至是更早之前跨租户发现流程残留的 storeId），
+      // 把这个"查无此店"的陈旧 storeId 传给 getMeritStats，被服务端按
+      // caller.tenantId 与该陈旧门店的 tenantId 比对后误判为跨机构。改用
+      // getCurrentActiveStore()（canonical，与 store-picker.ts 写入的同一套
+      // Storage key），确保这里用的永远是用户最近一次真正选中的门店
+      const activeStore = getCurrentActiveStore();
       const rawStoreId = (activeStore && activeStore.storeId) || (cachedRoleInfo && cachedRoleInfo.storeId) || '';
       const storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
       const rawStoreName = (activeStore && activeStore.storeName) || (cachedRoleInfo && cachedRoleInfo.storeName) || '';
@@ -5975,6 +5986,25 @@ Page({
     this.onOpenOrgConfigModal();
   },
 
+  // 🐛 根因修复（首页切店后"组织信息配置"误报跨机构/展示错误门店资料）：原来
+  // 打开弹窗（GET）与保存（UPDATE）两处各自手写一套 storeId 兜底链，GET 那份
+  // 压根没有解析 storeId（只信 caller.storeId，super_admin 通常没有自己绑定的
+  // 门店，等于白传），UPDATE 那份又漏了 getCurrentActiveStore()（canonical，
+  // 与首页 store-picker 切店写入的同一套 Storage key）——两处都只在各自的
+  // profile.ts 局部巡检状态（patriarchData/currentInspectStoreId）与遗留的
+  // getSelectedStore() 之间兜底，感知不到用户刚刚在首页 store-picker/"全部
+  // 门店"下拉做过的切换，导致沿用陈旧 storeId 被服务端按跨机构拒绝。现抽成
+  // 一个共用方法，两处统一走同一条优先级链，且补上 getCurrentActiveStore()
+  resolveOrgConfigStoreId(): string {
+    const activeStoreId = getCurrentActiveStore().storeId;
+    return ((this.data.patriarchData as any)?.currentStoreId as string)
+      || this.data.currentInspectStoreId
+      || (NATIONAL_STORE_ID_SENTINELS.includes(activeStoreId) ? '' : activeStoreId)
+      || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
+      || (getSelectedStore() && getSelectedStore().storeId)
+      || '';
+  },
+
   async onOpenOrgConfigModal() {
     // 立即用本地缓存名称预填，避免用户看到空白输入框等待网络
     const cachedName = this.data.currentStoreName || '';
@@ -5993,11 +6023,15 @@ Page({
       orgConfigOrgTypeIndex: seedIdx,
       orgConfigOrgType: seedOrgType
     });
-    // 后台拉取最新配置覆盖（slogan / logo 等本地缓存没有的字段）
+    // 后台拉取最新配置覆盖（slogan / logo 等本地缓存没有的字段）。
+    // 🛡️ 非超管（店长/大家长）传 storeId 无害：resolveReadTarget 只对
+    // CROSS_STORE_VIEW_ROLES（super_admin 等）才会采信客户端传入的 storeId，
+    // 其余角色仍强制收敛到 caller.storeId，不构成新的越权面
+    const orgCfgStoreId = this.resolveOrgConfigStoreId();
     try {
       const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
-        data: { action: 'get' }
+        data: orgCfgStoreId ? { action: 'get', storeId: orgCfgStoreId } : { action: 'get' }
       });
       const d = res && res.result && res.result.data;
       if (d) {
@@ -6103,12 +6137,10 @@ Page({
     // super_admin 没有自己绑定的门店（云函数 resolveWriteTarget 对 super_admin
     // 强制要求显式 storeId，见 manageStoreProfile 里"请指定目标门店"报错），必须
     // 先选定巡检门店才能保存——与 onOpenStoreStatsModal 同一套超管选店前置校验，
-    // 不再对云函数发起注定失败的请求
-    const orgCfgStoreId = ((this.data.patriarchData as any)?.currentStoreId as string)
-      || this.data.currentInspectStoreId
-      || (AuthService.getCachedRoleInfo() && (AuthService.getCachedRoleInfo() as any).storeId as string)
-      || (getSelectedStore() && getSelectedStore().storeId)
-      || '';
+    // 不再对云函数发起注定失败的请求。storeId 解析统一走 resolveOrgConfigStoreId()
+    // （与打开弹窗时的 GET 调用同一条优先级链，含 getCurrentActiveStore()，见该
+    // 方法头部注释），不再各自维护一份容易漏更新的兜底链
+    const orgCfgStoreId = this.resolveOrgConfigStoreId();
     if (this.data.isSuperAdmin && !orgCfgStoreId) {
       wx.showToast({ title: '请先选择巡检门店', icon: 'none' });
       return;
