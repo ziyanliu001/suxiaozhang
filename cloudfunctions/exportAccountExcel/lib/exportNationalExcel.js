@@ -132,8 +132,19 @@ function addSummarySheet(workbook, storeTotalsList, grandTotal, meta) {
 // 各建一个 Sheet（复用 Core 的 addRecordsSheet），外加一张总览 Sheet + 存证
 // 核验码，完成上传并返回最终响应体
 async function buildNationalExport(cloud, db, { tenantId, records, periodLabel, startDateStr, endDateStr }) {
-  const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true }).get().catch(() => null);
-  const tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '本机构';
+  // 🐛 根因修复（2026-09-09，与 checkTenantPermission/getNationalDashboard 同一处
+  // 同款 bug 修复）：tenants 集合存在两条历史创建路径，`_id`/机构名字段写法都不
+  // 统一，详见 checkTenantPermission/index.js 同一处修复的注释。两段式查 + 双字段兜底
+  let tenantData = null;
+  const byIdRes = await db.collection('tenants').doc(tenantId)
+    .field({ name: true, tenantName: true }).get().catch(() => null);
+  tenantData = byIdRes && byIdRes.data;
+  if (!tenantData) {
+    const byTenantIdRes = await db.collection('tenants').where({ tenantId }).limit(1)
+      .field({ name: true, tenantName: true }).get().catch(() => ({ data: [] }));
+    tenantData = (byTenantIdRes.data && byTenantIdRes.data[0]) || null;
+  }
+  const tenantName = (tenantData && (tenantData.name || tenantData.tenantName)) || '本机构';
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '雨花斋爱心账本';

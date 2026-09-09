@@ -6200,7 +6200,12 @@ Page({
         return;
       }
       wx.showToast({ title: '组织信息已更新', icon: 'success' });
-      this.setData({ showOrgConfigModal: false });
+      // 🐛 根因修复（保存成功后个人中心未同步更新）：此前这里只关弹窗，
+      // currentStoreName 没有跟着立即刷新——与同页 onConfirmEditStoreName（另一个
+      // 改门店名入口，5985 行）立即 setData currentStoreName 的写法不一致，导致
+      // 用户点保存后本页"当前门店"那一行要等 600ms 后的 fetchAndSyncStoreStatus/
+      // 下次 onShow 才会变成新名字，中间有一段视觉上"保存了但没生效"的空窗期
+      this.setData({ showOrgConfigModal: false, currentStoreName: newName });
 
       // 🔄 同步本地缓存：更新 auth_user_role 中的 storeName 与 current_store_name，
       // 确保返回首页后 store-picker 胶囊与导航栏名称立即生效，无需重新登录
@@ -6224,6 +6229,17 @@ Page({
       // 🆕 机构类型可能刚被首次设置，立即重新拉取覆盖 orgType/isYuhuazhai/文化文案，
       // 不必等下次 onShow/initMinePage 才刷新——否则用户点保存后还得手动切页才看到生效
       this.fetchStoreOrgType();
+      // 🐛 根因修复（"归属机构"仍显示未绑定机构）：本弹窗写的是 stores 集合
+      // （storeName/orgType 等门店级字段），从不触碰 tenants 集合，所以这里重新拉取
+      // fetchCurrentTenantName() 本身不会让保存内容"变成"归属机构名——真正让
+      // "未绑定机构"长期显示的根因是 checkTenantPermission 等云函数按 tenants
+      // 文档 `_id`/`name` 字段查机构名，而自助"新建组织"流程建出来的机构用的是
+      // 另一套 `tenantId` 业务字段 + `tenantName` 字段（已在对应云函数修复，见
+      // commit 说明）。这里仍然补上这次刷新调用，避免"归属机构"栏位停留在本次
+      // 进页时的旧缓存值，直到下次 onShow 才被动更新
+      if (!this.data.isSuperAdmin && !this.data.isPlatformAdmin) {
+        this.fetchCurrentTenantName();
+      }
     } catch (err: any) {
       console.error('[onSaveOrgConfig]', err);
       wx.showToast({ title: err.message || '网络异常，请重试', icon: 'none' });

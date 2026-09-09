@@ -357,15 +357,25 @@ exports.main = async (event, context) => {
       return await buildPublicAggregateSummary();
     }
 
-    // 🆕 机构名称：供前端全国大屏顶部横幅"📊 爱心网络总览 · [机构名称]"展示，
-    // 与 checkTenantPermission 云函数同款只读 name 字段查法（不新增权限面，
-    // tenantId 本就只从调用者自己的 user_roles 反查，与上面的隔离判断同一条
-    // 安全边界）
-    const tenantRes = await db.collection('tenants').doc(tenantId).field({ name: true, currentStoreCount: true }).get().catch(() => null);
-    const tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
+    // 🆕 机构名称：供前端全国大屏顶部横幅"📊 爱心网络总览 · [机构名称]"展示。
+    // 🐛 根因修复（2026-09-09，与 checkTenantPermission 同一处同款 bug 修复）：
+    // tenants 集合存在两条历史创建路径，`_id`/机构名字段写法都不统一——见
+    // checkTenantPermission/index.js 同一处修复的详细注释与 fixTenantHierarchy.
+    // findTenantsByName 的历史记录。改为两段式查（先按 `_id`，查不到再按
+    // `tenantId` 业务字段查一次）+ name/tenantName 双字段兜底
+    let tenantData = null;
+    const byIdRes = await db.collection('tenants').doc(tenantId)
+      .field({ name: true, tenantName: true, currentStoreCount: true }).get().catch(() => null);
+    tenantData = byIdRes && byIdRes.data;
+    if (!tenantData) {
+      const byTenantIdRes = await db.collection('tenants').where({ tenantId }).limit(1)
+        .field({ name: true, tenantName: true, currentStoreCount: true }).get().catch(() => ({ data: [] }));
+      tenantData = (byTenantIdRes.data && byTenantIdRes.data[0]) || null;
+    }
+    const tenantName = (tenantData && (tenantData.name || tenantData.tenantName)) || '';
     // 🆕 已接入门店数：与 checkTenantPermission/profile.ts 同一个 tenants.currentStoreCount
     // 字段（createStore/manageTenantSubscription 原子自增写入的唯一真源）
-    const usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
+    const usedStoreCount = (tenantData && tenantData.currentStoreCount) || 0;
 
     // 🆕（2026-08-31 商业化权益中心）机构套餐配额感知升级：默认兜底为
     // basic/free/永久有效——与 tenant_subscriptions 从未有过记录（该机构还

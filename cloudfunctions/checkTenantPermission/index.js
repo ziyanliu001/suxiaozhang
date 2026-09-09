@@ -240,9 +240,32 @@ exports.main = async (event) => {
     let tenantName = '';
     let usedStoreCount = 0;
     if (effectiveTenantId) {
-      const tenantRes = await db.collection('tenants').doc(effectiveTenantId).field({ name: true, currentStoreCount: true }).get().catch(() => null);
-      tenantName = (tenantRes && tenantRes.data && tenantRes.data.name) || '';
-      usedStoreCount = (tenantRes && tenantRes.data && tenantRes.data.currentStoreCount) || 0;
+      // 🐛 根因修复（"归属机构"栏位长期显示为空/未绑定机构）：本仓库 tenants
+      // 集合存在两条历史创建路径，`_id` 与机构名字段两者的写法都不统一——
+      // manageTenantSubscription 的 createTenant 动作（平台管理员手工建档）
+      // 把返回给调用方的 tenantId 直接设为文档 `_id` 本身，且机构名字段写
+      // `name`；独立的 createTenant 云函数（用户自助"新建组织"）则是另起一个
+      // `tenantId` 业务字段存在文档里、`_id` 由数据库自动生成与之不同，且机构
+      // 名字段写的是 `tenantName`（与 fixTenantHierarchy.findTenantsByName 头部
+      // 注释记录的是同一处历史分叉）。此前只按 `.doc(effectiveTenantId)` +
+      // 只读 `name` 字段查，对第二条路径创建的机构来说两个假设都不成立——
+      // `.doc()` 查不到文档（走进 catch 返回 null），哪怕查到了 `name` 字段也
+      // 不存在，`tenantName` 永远兜底成空字符串，profile.ts 的"归属机构"栏位
+      // 因此永久显示"未绑定机构"，与用户是否在"组织信息配置"弹窗里保存过
+      // 任何内容完全无关（该弹窗写的是 stores 集合，本就不触碰 tenants 文档）。
+      // 改为两段式：先按 `_id` 查，查不到再按 `tenantId` 业务字段查一次；
+      // 名称同时兜底 `name`/`tenantName` 两个字段，覆盖两条历史创建路径
+      let tenantData = null;
+      const byIdRes = await db.collection('tenants').doc(effectiveTenantId)
+        .field({ name: true, tenantName: true, currentStoreCount: true }).get().catch(() => null);
+      tenantData = byIdRes && byIdRes.data;
+      if (!tenantData) {
+        const byTenantIdRes = await db.collection('tenants').where({ tenantId: effectiveTenantId }).limit(1)
+          .field({ name: true, tenantName: true, currentStoreCount: true }).get().catch(() => ({ data: [] }));
+        tenantData = (byTenantIdRes.data && byTenantIdRes.data[0]) || null;
+      }
+      tenantName = (tenantData && (tenantData.name || tenantData.tenantName)) || '';
+      usedStoreCount = (tenantData && tenantData.currentStoreCount) || 0;
     }
 
     // 🆕（2026-08-31 商业化权益中心）与 getNationalDashboard 的 subscriptionQuota
