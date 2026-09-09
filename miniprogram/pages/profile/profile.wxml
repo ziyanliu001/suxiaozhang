@@ -167,7 +167,17 @@
       </view>
 
       <view class="sa-control-grid">
-        <view class="sa-control-cell" bindtap="onGoToStoreManagementHub" hover-class="ui-hover">
+        <!-- 🐛 根因修复（紧急，2026-09-09）：这 4 个格子此前全部用
+             hover-class="ui-hover"——那是本页其余浅色卡片专用的按压态
+             （background:#FAF8F5，近白/奶油色），套在这张深色渐变卡片
+             （sa-global-control-card，#0f2744→#1e3a5f→#0c3060）上的格子里，
+             点按时背景会瞬间变成一块近白色，与周围深色背景形成强烈反差，且
+             文字颜色本身也是浅色（#e2e8f0），近白底 + 浅色字几乎不可辨读——
+             表现正是用户反馈的"淡灰色、看起来像置灰"。真实点击事件本身一直
+             是正常绑定、正常触发的，没有任何拦截逻辑或 disabled 态，问题
+             完全在按压视觉反馈的配色上。改用专门适配深色卡片的
+             sa-control-cell-hover（半透明白，不反差），4 个格子一并修正 -->
+        <view class="sa-control-cell" bindtap="onGoToStoreManagementHub" hover-class="sa-control-cell-hover">
           <text class="sa-control-icon">🏬</text>
           <text class="sa-control-label">门店档案/管理</text>
           <!-- 🏛️（2026-09-09）currentInspectStoreId 是本页已有的"超管巡检门店选择"
@@ -182,24 +192,24 @@
              自身早就写好了"超管未选巡检门店时走 elevated 全域队列，选中门店后穿透
              该店全角色队列"的完整逻辑（见该方法头部注释）——这里复用同一个 handler，
              是这个既有能力第一次对超管账号可达，不是重复入口 -->
-        <view class="sa-control-cell" bindtap="onOpenMemberApplicationModal" hover-class="ui-hover">
+        <view class="sa-control-cell" bindtap="onOpenMemberApplicationModal" hover-class="sa-control-cell-hover">
           <text class="sa-control-icon">📝</text>
           <text class="sa-control-label">权限与审核</text>
           <text class="sa-control-desc">全域角色审批 · 加入申请流转</text>
         </view>
-        <view class="sa-control-cell" bindtap="onOpenProSubscriptionModal" hover-class="ui-hover">
+        <view class="sa-control-cell" bindtap="onOpenProSubscriptionModal" hover-class="sa-control-cell-hover">
           <text class="sa-control-icon">🏢</text>
           <text class="sa-control-label">租户与SaaS</text>
           <text class="sa-control-desc">机构席位 · 工作空间套餐</text>
         </view>
-        <view class="sa-control-cell" bindtap="onOpenSecurityLogModal" hover-class="ui-hover">
+        <view class="sa-control-cell" bindtap="onOpenSecurityLogModal" hover-class="sa-control-cell-hover">
           <text class="sa-control-icon">🛡️</text>
           <text class="sa-control-label">全网风控/日志</text>
           <text class="sa-control-desc">安全拦截 · 审计日志查看</text>
         </view>
       </view>
 
-      <view class="sa-more-tools-link" bindtap="onOpenMoreToolsModal" hover-class="ui-hover">
+      <view class="sa-more-tools-link" bindtap="onOpenMoreToolsModal" hover-class="sa-control-cell-hover">
         <text>更多系统工具</text>
         <text class="sa-more-tools-arrow">❯</text>
       </view>

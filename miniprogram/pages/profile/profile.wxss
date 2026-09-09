@@ -723,6 +723,15 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* 🐛 根因修复（紧急，2026-09-09）：见 profile.wxml 该格子处注释——全局
+   .ui-hover（近白/奶油色，给浅色卡片用的）此前被错误用在这张深色渐变卡片
+   的按压反馈上，按下瞬间背景变成一块近白色，与深色背景和浅色文字（#e2e8f0）
+   形成强烈对比，看起来像整块被置灰/失效。改用这个半透明白的深色主题专用
+   hover-class，不再混用浅色主题的 .ui-hover */
+.sa-control-cell-hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
 .sa-control-icon {
   font-size: 32rpx;
   line-height: 1;
