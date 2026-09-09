@@ -1518,8 +1518,8 @@
       <view class="admin-divider">平台工具</view>
       <view class="action-item-cell" hover-class="ui-hover" bindtap="onGoToPlatformAdminTenants">
         <view class="item-left">
-          <text class="manager-only-emoji">💳</text>
-          <text class="item-text">会员开通 / 续费管理</text>
+          <text class="manager-only-emoji">🌐</text>
+          <text class="item-text">平台全网总控</text>
         </view>
         <view class="item-arrow">❯</view>
       </view>

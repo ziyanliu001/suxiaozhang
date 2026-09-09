@@ -15,6 +15,15 @@ const CODE_STATUS_LABELS: Record<string, string> = {
   REVOKED: '已作废'
 };
 
+// 🔍（2026-09-10 巡检免输 ID）grantTenantAuthorization 的 GRANTABLE_ROLES 白名单
+// 展示文案，用于"当前生效中的巡检"列表把 role 原始值渲成人类可读文案
+const INSPECT_ROLE_LABELS: Record<string, string> = {
+  store_patriarch: '大家长',
+  store_manager: '店长',
+  finance: '财务',
+  volunteer: '义工'
+};
+
 // 🌟 与云函数 PAGE_SIZE 保持一致（activateTenantSubscription/manageTenantSubscription
 // 的 listTenants 都是 20），仅用于客户端判断"这一页拿到的条数是否等于整页"这类
 // 展示逻辑，不参与任何鉴权/查询条件
@@ -210,16 +219,27 @@ Page({
     renewSubmitting: false,
 
     // ─────────────────────────────────────────────────────────────────
-    // 🔍（2026-09-09 平台巡检自助授权）平台巡检 Tab——platform_admin 本人
-    // 默认"不碰业务数据"（见 getStoreList 云函数头部注释），需要临时排障某
-    // 一家具体门店时，在这里给自己的账号授权方案三 authorizedTenants（仅限
-    // 这一家店、仅限选定角色），授权成功后直接跳转 store-profile.ts 编辑。
-    // 这不是新开一条"超管万能穿透"通道——店铺范围必须逐一显式列出，角色
-    // 白名单与 grantTenantAuthorization 云函数完全一致（不含 super_admin/
-    // platform_admin 本身），每次授权都在 authorizedTenants 数组里留痕
-    // （grantedBy/grantedAt），这份痕迹本身就是审计记录
+    // 🔍（2026-09-09 平台巡检自助授权，2026-09-10 改为两级选择器）平台巡检
+    // Tab——platform_admin 本人默认"不碰业务数据"（见 getStoreList 云函数
+    // 头部注释），需要临时排障某一家具体门店时，走"选机构 → 选门店 → 授权"
+    // 两级选择器（复用 manageTenantSubscription 的 listTenants/getTenantDetail，
+    // 不新增云函数），取代此前要求去云开发控制台复制门店 _id 的做法，授权成功
+    // 后直接跳转 store-profile.ts 编辑。这不是新开一条"超管万能穿透"通道——
+    // 店铺范围必须逐一显式列出，角色白名单与 grantTenantAuthorization 云函数
+    // 完全一致（不含 super_admin/platform_admin 本身），每次授权都在
+    // authorizedTenants 数组里留痕（grantedBy/grantedAt），这份痕迹本身就是
+    // 审计记录
     // ─────────────────────────────────────────────────────────────────
-    inspectStoreIdInput: '',
+    inspectStage: 'tenant' as 'tenant' | 'store',
+    inspectTenantKeyword: '',
+    inspectTenantsLoading: false,
+    inspectTenantResults: [] as any[],
+    inspectSelectedTenantId: '',
+    inspectSelectedTenantName: '',
+    inspectStoresLoading: false,
+    inspectStores: [] as any[],
+    inspectSelectedStoreId: '',
+    inspectSelectedStoreName: '',
     inspectRole: 'store_patriarch' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer',
     inspectRoleOptions: [
       { value: 'store_patriarch', label: '大家长（完整档案编辑 + 管理员密钥）' },
@@ -228,7 +248,13 @@ Page({
       { value: 'volunteer', label: '义工（只读查看，不可编辑）' }
     ],
     inspectSubmitting: false,
-    inspectError: ''
+    inspectError: '',
+    // 🆕（2026-09-10 一键回收临时凭证）当前生效中的临时巡检：只读展示
+    // platform_admin 自己账号 authorizedTenants 数组（grantTenantAuthorization
+    // 的 list action），配一键撤销，避免该数组无限膨胀
+    activeGrants: [] as any[],
+    activeGrantsLoading: false,
+    revokingGrantTenantId: ''
   },
 
   onLoad() {
@@ -317,6 +343,7 @@ Page({
         this.loadTenants();
         this.loadActivationCodes();
         this.loadCodeStats();
+        this.loadActiveGrants();
       }
     } catch (err) {
       console.error('[platform-admin] checkAccess 异常:', err);
@@ -346,25 +373,111 @@ Page({
     if (tab === 'tenants' && this.data.tenants.length === 0 && !this.data.tenantsLoading) {
       this.loadTenants();
     }
-  },
-
-  onInspectStoreIdInput(e: any) {
-    this.setData({ inspectStoreIdInput: e.detail.value, inspectError: '' });
+    if (tab === 'inspect' && this.data.inspectTenantResults.length === 0 && !this.data.inspectTenantsLoading) {
+      this.loadInspectTenants();
+    }
   },
 
   onSelectInspectRole(e: any) {
     this.setData({ inspectRole: e.currentTarget.dataset.value });
   },
 
-  // 🔍（2026-09-09 平台巡检自助授权）给自己的账号授权一家具体门店，成功后
-  // 直接跳转 store-profile.ts——grantTenantAuthorization 的 grant action
-  // 本身会做全部真正的安全校验（role 白名单/stores 非空/目标文档必须已
-  // 存在），这里不重复校验逻辑，只做"输入框非空"这一层 UX 层面的前置拦截
+  onInspectTenantKeywordInput(e: any) {
+    this.setData({ inspectTenantKeyword: e.detail.value });
+  },
+
+  onInspectTenantSearchConfirm() {
+    this.loadInspectTenants();
+  },
+
+  // 🔍（2026-09-10 巡检免输 ID）第一级：机构搜索选择——复用
+  // manageTenantSubscription 的 listTenants（与"机构管理" Tab 同一个
+  // action），独立一份 keyword/结果状态，不与机构管理 Tab 的分页/筛选状态
+  // 互相干扰。留空关键词直接展示最近创建的一页机构，不强制先输入才能看到列表
+  async loadInspectTenants() {
+    if (this.data.inspectTenantsLoading) return;
+    this.setData({ inspectTenantsLoading: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageTenantSubscription',
+        data: { action: 'listTenants', skip: 0, keyword: this.data.inspectTenantKeyword }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({ inspectTenantResults: result.tenants || [] });
+      } else {
+        wx.showToast({ title: (result && result.error) || '机构列表加载失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[platform-admin] loadInspectTenants 异常:', err);
+      wx.showToast({ title: '机构列表加载异常', icon: 'none' });
+    } finally {
+      this.setData({ inspectTenantsLoading: false });
+    }
+  },
+
+  // 🔍 选中机构后进入第二级门店选择，复用 getTenantDetail 的 storeList——
+  // 与"机构管理" Tab 的"查看门店"抽屉同一个云调用，这里不新增查询逻辑
+  async onInspectSelectTenant(e: any) {
+    const { tenantid, tenantname } = e.currentTarget.dataset;
+    if (!tenantid) return;
+    this.setData({
+      inspectStage: 'store',
+      inspectSelectedTenantId: tenantid,
+      inspectSelectedTenantName: tenantname,
+      inspectSelectedStoreId: '',
+      inspectSelectedStoreName: '',
+      inspectError: ''
+    });
+    await this.loadInspectStores(tenantid);
+  },
+
+  async loadInspectStores(tenantId: string) {
+    this.setData({ inspectStoresLoading: true, inspectStores: [] });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'manageTenantSubscription',
+        data: { action: 'getTenantDetail', tenantId }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({ inspectStores: result.storeList || [] });
+      } else {
+        wx.showToast({ title: (result && result.error) || '门店列表加载失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('[platform-admin] loadInspectStores 异常:', err);
+      wx.showToast({ title: '门店列表加载异常', icon: 'none' });
+    } finally {
+      this.setData({ inspectStoresLoading: false });
+    }
+  },
+
+  onInspectSelectStore(e: any) {
+    const { storeid, storename } = e.currentTarget.dataset;
+    this.setData({ inspectSelectedStoreId: storeid, inspectSelectedStoreName: storename, inspectError: '' });
+  },
+
+  // ⬅️ 返回机构选择：不清空已加载的 inspectTenantResults，避免回退后又要
+  // 重新搜/翻一遍
+  onInspectBackToTenant() {
+    this.setData({
+      inspectStage: 'tenant',
+      inspectSelectedStoreId: '',
+      inspectSelectedStoreName: '',
+      inspectError: ''
+    });
+  },
+
+  // 🔍（2026-09-09 平台巡检自助授权，2026-09-10 改为选择器驱动）给自己的
+  // 账号授权一家具体门店，成功后直接跳转 store-profile.ts——
+  // grantTenantAuthorization 的 grant action 本身会做全部真正的安全校验
+  // （role 白名单/stores 非空/目标文档必须已存在），这里不重复校验逻辑
   async onSubmitInspectGrant() {
     if (this.data.inspectSubmitting) return;
-    const storeId = this.data.inspectStoreIdInput.trim();
+    const storeId = this.data.inspectSelectedStoreId;
     if (!storeId) {
-      this.setData({ inspectError: '请输入要巡检的门店 ID' });
+      this.setData({ inspectError: '请先选择要巡检的门店' });
       return;
     }
     const openid = AuthService.getOpenid();
@@ -381,7 +494,7 @@ Page({
       });
       const result = res && res.result;
       if (!result || !result.success) {
-        this.setData({ inspectError: (result && result.error) || '授权失败，请确认门店 ID 是否正确' });
+        this.setData({ inspectError: (result && result.error) || '授权失败，请重试' });
         return;
       }
       // 🛡️ 授权只追加进 authorizedTenants 数组，不改动任何本地缓存的角色/
@@ -389,6 +502,7 @@ Page({
       // 才会带上这条新授权，这里强制刷新一次缓存，确保紧接着跳转的
       // store-profile.ts 初次渲染就能读到，不用等一次自然刷新
       await AuthService.fetchUserRole();
+      this.loadActiveGrants();
       wx.showToast({ title: '授权成功，正在进入门店档案', icon: 'success', duration: 1500 });
       setTimeout(() => {
         safeNavigateTo({ url: `/subpackages/admin/pages/store-profile/store-profile?storeId=${storeId}` });
@@ -399,6 +513,75 @@ Page({
     } finally {
       this.setData({ inspectSubmitting: false });
     }
+  },
+
+  // 🗑️（2026-09-10 一键回收临时凭证）只读查看 platform_admin 自己账号的
+  // authorizedTenants 数组（grantTenantAuthorization 的 list action），
+  // 配一键撤销，避免该数组随巡检次数增多无限膨胀
+  async loadActiveGrants() {
+    const openid = AuthService.getOpenid();
+    if (!openid || this.data.activeGrantsLoading) return;
+    this.setData({ activeGrantsLoading: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'grantTenantAuthorization',
+        data: { action: 'list', targetOpenId: openid }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        const grants = (result.authorizedTenants || []).map((g: any) => ({
+          ...g,
+          roleLabel: INSPECT_ROLE_LABELS[g.role] || g.role,
+          grantedAtLabel: this.formatDateLabel(g.grantedAt)
+        }));
+        this.setData({ activeGrants: grants });
+      }
+    } catch (err) {
+      console.error('[platform-admin] loadActiveGrants 异常:', err);
+    } finally {
+      this.setData({ activeGrantsLoading: false });
+    }
+  },
+
+  onRevokeActiveGrant(e: any) {
+    const { tenantid } = e.currentTarget.dataset;
+    if (!tenantid || this.data.revokingGrantTenantId) return;
+    const openid = AuthService.getOpenid();
+    if (!openid) return;
+
+    wx.showModal({
+      title: '确认撤销该巡检授权？',
+      content: '撤销后立即失去这家机构对应门店的临时访问权限，可随时重新授权。',
+      confirmText: '确认撤销',
+      confirmColor: '#E03131',
+      success: async (res) => {
+        if (!res.confirm) return;
+        this.setData({ revokingGrantTenantId: tenantid });
+        wx.showLoading({ title: '处理中...', mask: true });
+        try {
+          const cloudRes = await callFunctionWithTimeout({
+            name: 'grantTenantAuthorization',
+            data: { action: 'revoke', targetOpenId: openid, tenantId: tenantid }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '已撤销', icon: 'success' });
+            safeVibrate();
+            await AuthService.fetchUserRole();
+            this.loadActiveGrants();
+          } else {
+            wx.showToast({ title: (result && result.error) || '撤销失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onRevokeActiveGrant 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 grantTenantAuthorization 云函数已部署', showCancel: false });
+        } finally {
+          this.setData({ revokingGrantTenantId: '' });
+        }
+      }
+    });
   },
 
   async loadOverview() {

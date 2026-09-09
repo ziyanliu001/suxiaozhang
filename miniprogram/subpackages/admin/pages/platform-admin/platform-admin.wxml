@@ -232,7 +232,9 @@
           wx:if="{{tenantStatusFilter === 'all' || (tenantStatusFilter === 'active' ? item.displayStatus === 'active' : item.displayStatus !== 'active')}}"
         >
           <view class="pa-tenant-header">
-            <text class="pa-tenant-name">{{item.name}}</text>
+            <!-- 🐛 根因修复（2026-09-10）：机构名称为空时此前直接渲染空白，容易被
+                 误认成渲染失败；兜底展示"未命名机构"，纯展示层改动，不影响真实数据 -->
+            <text class="pa-tenant-name">{{item.name || '未命名机构'}}</text>
             <text class="pa-tenant-status pa-status-{{item.displayStatus}}">{{item.displayStatusLabel}}</text>
           </view>
           <view class="pa-tenant-body">
@@ -259,13 +261,18 @@
             </view>
           </view>
           <!-- 🆕（操作栏紧凑化）2 个描边胶囊主操作 + 1 个"更多"入口——暂停/恢复
-               服务、终止订阅收进 onOpenTenantMoreActions 的原生 ActionSheet，
-               未开通订阅的机构（item.subscription 为空）没有这两个动作，
-               "更多"入口本身也不出现 -->
+               服务、终止订阅收进 onOpenTenantMoreActions 的原生 ActionSheet。
+               🐛 根因修复（2026-09-10）：此前"更多"入口挂了 wx:if="{{item.subscription}}"，
+               导致从未开通订阅的空/测试机构（图二那类"尚未开通订阅"脏数据）
+               反而没有暂停服务入口，清理不掉。updateTenantStatus 本身只依赖
+               tenants 文档、与是否有订阅无关，onOpenTenantMoreActions 内部
+               也已经按 isActivePaidPlan 单独判断是否展示"终止订阅"——这里
+               去掉该条件，让所有机构（含无订阅机构）都能走"暂停服务"这条
+               已有、留痕、可逆的路径 -->
           <view class="pa-tenant-actions">
             <view class="pa-tenant-action-btn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenTenantStores">查看门店</view>
             <view class="pa-tenant-action-btn pa-tenant-action-btn-primary" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">{{item.subscription ? '续费' : '开通订阅'}}</view>
-            <view class="pa-tenant-more-btn" hover-class="btn-hover" wx:if="{{item.subscription}}" data-item="{{item}}" bindtap="onOpenTenantMoreActions">⋯</view>
+            <view class="pa-tenant-more-btn" hover-class="btn-hover" data-item="{{item}}" bindtap="onOpenTenantMoreActions">⋯</view>
           </view>
         </view>
 
@@ -279,38 +286,143 @@
 
     </block>
 
-    <!-- ═══════════════════════ 🔍 平台巡检（2026-09-09 平台巡检自助授权） ═══════════════════════ -->
+    <!-- ═══════════════════════ 🔍 平台巡检（2026-09-09 平台巡检自助授权，2026-09-10 改为两级选择器） ═══════════════════════ -->
     <block wx:elif="{{activeTab === 'inspect'}}">
       <view class="pa-inspect-card">
         <text class="pa-inspect-title">🔍 平台巡检 · 自助授权</text>
         <text class="pa-inspect-desc">
           平台管理员默认不接触任何机构的业务数据（档案/经营数据）。需要临时排障某一家具体门店时，
-          在这里给自己的账号授权这一家店，授权后直接进入门店档案编辑——授权范围严格限定到这一家店，
-          不会授予整个机构，也不会授予 super_admin/platform_admin 角色本身。每次授权都会留痕，
-          可在机构管理 Tab 对应机构里核对。
+          先选机构、再选门店即可完成授权并进入档案编辑，不用再去云开发控制台翻门店 _id——授权范围
+          严格限定到这一家店，不会授予整个机构，也不会授予 super_admin/platform_admin 角色本身。
+          每次授权/撤销都会留痕，见下方"当前生效中的巡检"。
         </text>
 
-        <view class="pa-inspect-field">
-          <text class="pa-inspect-label">门店 ID（storeId）</text>
-          <input class="pa-inspect-input" value="{{inspectStoreIdInput}}" bindinput="onInspectStoreIdInput" placeholder="从云开发控制台 stores 集合复制门店文档 _id" />
-        </view>
-
-        <view class="pa-inspect-field">
-          <text class="pa-inspect-label">授权角色</text>
-          <view class="pa-inspect-role-options">
-            <view
-              class="pa-inspect-role-option {{inspectRole === item.value ? 'active' : ''}}"
-              wx:for="{{inspectRoleOptions}}"
-              wx:key="value"
-              data-value="{{item.value}}"
-              bindtap="onSelectInspectRole"
-            >{{item.label}}</view>
+        <!-- 第一级：搜索并选择机构 -->
+        <block wx:if="{{inspectStage === 'tenant'}}">
+          <view class="pa-inspect-field">
+            <text class="pa-inspect-label">搜索机构（名称/ID）</text>
+            <input
+              class="pa-inspect-input"
+              value="{{inspectTenantKeyword}}"
+              placeholder="留空展示最近创建的机构"
+              confirm-type="search"
+              bindinput="onInspectTenantKeywordInput"
+              bindconfirm="onInspectTenantSearchConfirm"
+            />
           </view>
+
+          <view class="pa-inspect-picker-loading" wx:if="{{inspectTenantsLoading}}"><text>加载中...</text></view>
+
+          <view class="pa-empty-state" wx:elif="{{inspectTenantResults.length === 0}}">
+            <text class="pa-empty-icon">🔍</text>
+            <text class="pa-empty-title">未找到机构</text>
+            <text class="pa-empty-sub">换个关键词试试，或留空搜索查看最近创建的机构</text>
+          </view>
+
+          <view class="pa-inspect-picker-list" wx:else>
+            <view
+              class="pa-inspect-picker-row"
+              wx:for="{{inspectTenantResults}}"
+              wx:key="_id"
+              data-tenantid="{{item._id}}"
+              data-tenantname="{{item.name}}"
+              hover-class="btn-hover"
+              bindtap="onInspectSelectTenant"
+            >
+              <view class="pa-inspect-picker-main">
+                <text class="pa-inspect-picker-name">{{item.name || '未命名机构'}}</text>
+                <text class="pa-inspect-picker-meta">🏪 {{item.storeCount || 0}} 家门店</text>
+              </view>
+              <text class="pa-inspect-picker-arrow">❯</text>
+            </view>
+          </view>
+        </block>
+
+        <!-- 第二级：选择该机构下的门店 -->
+        <block wx:if="{{inspectStage === 'store'}}">
+          <view class="pa-inspect-breadcrumb" hover-class="btn-hover" bindtap="onInspectBackToTenant">
+            <text>❮ 重新选择机构</text>
+          </view>
+          <text class="pa-inspect-selected-tenant">🏢 {{inspectSelectedTenantName || '未命名机构'}}</text>
+
+          <view class="pa-inspect-picker-loading" wx:if="{{inspectStoresLoading}}"><text>门店加载中...</text></view>
+
+          <view class="pa-empty-state" wx:elif="{{inspectStores.length === 0}}">
+            <text class="pa-empty-icon">🏪</text>
+            <text class="pa-empty-title">该机构下暂无门店</text>
+          </view>
+
+          <view class="pa-inspect-picker-list" wx:else>
+            <view
+              class="pa-inspect-picker-row {{inspectSelectedStoreId === item._id ? 'active' : ''}}"
+              wx:for="{{inspectStores}}"
+              wx:key="_id"
+              data-storeid="{{item._id}}"
+              data-storename="{{item.storeName}}"
+              hover-class="btn-hover"
+              bindtap="onInspectSelectStore"
+            >
+              <view class="pa-inspect-picker-main">
+                <text class="pa-inspect-picker-name">{{item.storeName}}</text>
+                <text class="pa-inspect-picker-meta">{{item.status === 'inactive' ? '已停用' : '正常'}}</text>
+              </view>
+              <text class="pa-inspect-picker-check" wx:if="{{inspectSelectedStoreId === item._id}}">✓</text>
+            </view>
+          </view>
+
+          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId}}">
+            <text class="pa-inspect-label">授权角色</text>
+            <view class="pa-inspect-role-options">
+              <view
+                class="pa-inspect-role-option {{inspectRole === item.value ? 'active' : ''}}"
+                wx:for="{{inspectRoleOptions}}"
+                wx:key="value"
+                data-value="{{item.value}}"
+                bindtap="onSelectInspectRole"
+              >{{item.label}}</view>
+            </view>
+          </view>
+
+          <text class="pa-inspect-error" wx:if="{{inspectError}}">{{inspectError}}</text>
+
+          <button
+            class="pa-inspect-submit"
+            wx:if="{{inspectSelectedStoreId}}"
+            hover-class="btn-hover"
+            bindtap="onSubmitInspectGrant"
+            loading="{{inspectSubmitting}}"
+            disabled="{{inspectSubmitting}}"
+          >获取巡检权限并进入「{{inspectSelectedStoreName}}」档案</button>
+        </block>
+      </view>
+
+      <!-- 🆕（2026-09-10 一键回收临时凭证）当前生效中的巡检——避免 authorizedTenants
+           无限膨胀，排障完成后随手撤销 -->
+      <view class="pa-inspect-card pa-inspect-grants-card">
+        <view class="pa-section-header">
+          <text class="pa-section-title">🕐 当前生效中的巡检</text>
         </view>
 
-        <text class="pa-inspect-error" wx:if="{{inspectError}}">{{inspectError}}</text>
+        <view class="pa-empty-state" wx:if="{{!activeGrantsLoading && activeGrants.length === 0}}">
+          <text class="pa-empty-icon">✅</text>
+          <text class="pa-empty-title">暂无生效中的临时巡检</text>
+        </view>
 
-        <button class="pa-inspect-submit" hover-class="btn-hover" bindtap="onSubmitInspectGrant" loading="{{inspectSubmitting}}" disabled="{{inspectSubmitting}}">获取巡检权限并进入门店档案</button>
+        <view class="pa-inspect-grant-row" wx:for="{{activeGrants}}" wx:key="tenantId">
+          <view class="pa-inspect-grant-info">
+            <text class="pa-inspect-grant-role">{{item.roleLabel}} · {{item.stores.length}} 家门店</text>
+            <text class="pa-inspect-grant-tenant">机构 ID：{{item.tenantId}}</text>
+            <text class="pa-inspect-grant-time" wx:if="{{item.grantedAtLabel}}">🕐 授权于 {{item.grantedAtLabel}}</text>
+          </view>
+          <button
+            class="pa-btn-small pa-btn-danger"
+            hover-class="btn-hover"
+            loading="{{revokingGrantTenantId === item.tenantId}}"
+            disabled="{{!!revokingGrantTenantId}}"
+            data-tenantid="{{item.tenantId}}"
+            bindtap="onRevokeActiveGrant"
+          >撤销</button>
+        </view>
       </view>
     </block>
 
