@@ -42,7 +42,8 @@ const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).lim
 
 **实际改造范围（刻意收窄，不是"全仓库统一升级"）**：
 
-- 只升级了 `manageReportApproval`（`getMeritStats` 调用点）、`manageStoreProfile`（`get`/`update` 共用的顶层调用点）与 `getPatriarchDashboard`（2026-09-09 追加，见下）这三个云函数的 `resolveCaller()`——都是真实触发过跨租户拒绝的函数，不是"顺手把全部 30+ 处都改了"。**其余几十处 `resolveCaller` 拷贝（`getStoreList`/`checkUserRole`/`processRoleAudit` 等）仍是升级前的纯 `.where({_openid}).limit(1)` 写法，不认识 `authorizedTenants` 字段，也不支持任何漫游**——如果后续某个新场景需要在其他云函数里支持跨租户访问，要照着这几个文件的改法单独升级那个函数，不能假设"方案三已经覆盖全仓库"。
+- 只升级了 `manageReportApproval`（`getMeritStats` 调用点）、`manageStoreProfile`（`get`/`update` 共用的顶层调用点）与 `getPatriarchDashboard`（2026-09-09 追加，见下）这三个云函数的 `resolveCaller()`——都是真实触发过跨租户拒绝的函数，不是"顺手把全部 30+ 处都改了"。**其余几十处 `resolveCaller` 拷贝（`checkUserRole`/`processRoleAudit` 等）仍是升级前的纯 `.where({_openid}).limit(1)` 写法，不认识 `authorizedTenants` 字段，也不支持任何漫游**——如果后续某个新场景需要在其他云函数里支持跨租户访问，要照着这几个文件的改法单独升级那个函数，不能假设"方案三已经覆盖全仓库"。
+  - **`getStoreList` 是例外中的例外**（2026-09-09 平台巡检能力，见第八节）：它**没有**升级成通用的 `resolveCaller(opts)` 漫游模式（它本来就不是身份解析函数，是门店列表查询函数），而是单独加了一条窄口径判断——仅当 `role === 'platform_admin'` 时，读取调用者自己的 `authorizedTenants`，把 `stores` 字段里列出的 storeId 收集起来，只返回这些明确授权过的门店。这是和上面三个函数平行、但形态不同的第四处 `authorizedTenants` 消费点，列举"谁认识这个字段"时别漏掉它。
   - **`getPatriarchDashboard` 追加记录**：部署方案三后实测发现，超管漫游到 `songyu_elderly_care` 管理嵩屿助餐点时，个人中心页面加载会弹出"无权限：目标门店不属于您所在的机构"——根因是 `pages/profile/profile.ts` 的 `fetchPatriarchDashboardData()`（家长大盘卡片，`pendingFetches` 后台预取项之一）调用的 `getPatriarchDashboard` 有它自己独立的一份未升级 `resolveCaller`/`resolveTarget`，且失败时用 `wx.showToast` 弹窗（不同于 `fetchMeritStats` 这类背景预取只 `console.warn` 的惯例）。一并修复：① `getPatriarchDashboard` 的 `resolveCaller()` 按同一套 `opts.targetStoreId` 反查 `authorizedTenants` 的写法升级，`exports.main` 改传 `{ targetStoreId: storeId }`；② `fetchPatriarchDashboardData()`/`loadVolunteerStats()` 都从 legacy `getSelectedStore()` 改为 canonical `getCurrentActiveStore()`，并补上 `NATIONAL_STORE_ID_SENTINELS` 过滤（此前 `loadVolunteerStats` 完全没做这层过滤，超管处于"全国总览"时会把哨兵字面量当 storeId 去过滤本地打卡记录，注定查不到任何匹配）；③ `fetchPatriarchDashboardData()` 失败路径的 `wx.showToast` 改为 `console.warn`，改成与 `fetchMeritStats` 同一套"背景预取失败静默降级"惯例——这张卡片查询失败不影响本页任何核心功能。
 - 新增 `cloudfunctions/grantTenantAuthorization`：方案三唯一的授权写入入口，仅 `platform_admin` 可调用（`grant`/`revoke`/`list` 三个 action）。`grant` 时强制：目标 `openId` 必须已有 `user_roles` 文档（绝不新建，这是本不变式在代码层的强制落实）、必须显式列出 `stores`（不支持留空即整租户授权，最小权限原则）、按 `tenantId` 去重覆盖、角色白名单排除 `super_admin`/`platform_admin`（这两个角色代表租户/平台最高权威，不该通过一条轻量数组条目批量授予）。
 - 前端**无需任何改动**——`fetchMeritStats()`/组织信息配置弹窗此前已经在传 `storeId`（见 commit `9ea7e4b`），`resolveCaller` 新增的 `opts` 逻辑直接复用这个已有参数反查目标 `tenantId`，不需要新增传参路径。
@@ -53,8 +54,83 @@ const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).lim
 
 需要一人管理两个独立机构、又不想/不需要引入 `authorizedTenants` 这层复杂度时，使用**两个独立的微信账号**分别绑定到各自机构——每个账号在 `user_roles` 里仍然只有一条记录，不触碰上述不变式，也不依赖任何云函数是否升级过。方案三适用于"同一个自然人希望用同一个微信账号跨机构操作"这个更具体的体验需求；如果这个需求不存在，独立账号仍然是更简单、攻击面更小的默认选择。
 
-## 七、相关文档
+## 七、平台巡检能力：`platform_admin` 的自助、窄口径业务数据访问（2026-09-09）
+
+### 8.1 背景：一次被否决的"上帝模式"提案，与最终落地的安全替代方案
+
+2026-09-09 当天曾收到一份更激进的提案，核心是三件事：① `isSuperAdmin` 自动蕴含
+`isPlatformAdmin`（两个角色合并）；② `manageStoreProfile`/`getStoreList` 等核心云函数对
+"系统上帝账号"整体跳过 `caller.tenantId === store.tenantId` 校验；③ 新增一个
+`emergencyClaimMaster` 云函数，凭一个存在云环境变量里的静态密钥（`EMERGENCY_RESCUE_SECRET`）
+就能让任意调用者把自己的 openid 写进一张"平台根账号"名单、借此自举拿到平台最高权限，用作
+"微信号被封禁后的紧急接管通道"。
+
+**这份提案被否决**，原因不是"不该关心防封号容灾"（这个诉求本身合理），而是提案的三个具体
+落地手段各自都会打破本文档反复强调的安全边界：
+
+- ①会让任何通过 `createTenant`（无需审批的自助建组织流程）成为自己机构 `super_admin` 的人，
+  自动获得 `platform_admin` 的全平台权限（跨租户计费/数据迁移/授权发放）——`super_admin`
+  是**按租户分散**的角色，每个机构都有自己的一个，合并等于把"全平台根权限"下放给任何一个
+  自助注册的机构主理人。
+- ②会让 `getStoreList`/`getNationalDashboard` 等云函数里多处独立、明确写着"`platform_admin`
+  不碰业务数据"的既有设计原则（见本文件第八节下方引用）整体失效。
+- ③是一个没有轮换、没有撤销、没有速率限制、没有任何使用留痕的**静态密钥后门**——密钥只要
+  泄露一次（云函数源码对任何有控制台权限的人可见，密钥本身又是一个长期不变的环境变量），
+  就是永久性的、无法察觉的全平台沦陷，风险等级与"紧急恢复工具"完全不对等。
+
+**最终双方对齐的安全底座**（供后续参考，避免同一个提案换个说法再被重新提出一次）：
+
+1. `super_admin` 严格保持租户隔离，不与 `platform_admin` 合并，不获得任何跨租户默认权限。
+2. 防封号容灾走**纯 `user_roles` 物理冷备**——不新建任何云函数，平台管理员直接在云开发控制台
+   为一个备用微信账号的 `_openid` 手动写入一条 `role: 'platform_admin'` 的 `user_roles`
+   文档（与 `setupSuperAdmin` 云函数当前已有的"系统里一个 platform_admin 都没有时允许自举"
+   逻辑同一个安全等级——都要求操作者本来就拥有控制台/数据库直接写入权限，不存在新的攻击面）。
+3. `platform_admin` 默认"不碰业务数据"这条既有边界**不推翻**，只在此基础上新增一条**窄口径、
+   留痕、可撤销**的例外通道——见下节。
+
+### 8.2 平台巡检能力的实际实现：复用方案三，不新开旁路
+
+不新增"platform_admin 专属 bypass"分支，而是让 `platform_admin` 成为方案三
+`authorizedTenants` 机制的又一个使用者——`grantTenantAuthorization` 本来就只限
+`platform_admin` 调用，这次只是补上**自助授权自己**这条路径此前缺失的前端入口：
+
+- **`cloudfunctions/grantTenantAuthorization`**：`handleGrant` 新增 `tenantId` 可选——
+  不传时自动从 `event.stores[0]` 反查门店的真实 `tenantId`（与 `resolveCaller()` 反查
+  `targetTenantId` 同一个手法），自助授权页只需要知道 storeId，不需要先查一遍这家店挂在
+  哪个租户下。`GRANTABLE_ROLES` 白名单（`store_manager`/`store_patriarch`/`finance`/
+  `volunteer`，不含 `super_admin`/`platform_admin`）完全不变——`platform_admin` 给自己
+  授权时，也只能授予这四个角色里的一个，授权后的"有效身份"能力上限就是这个角色原本的上限，
+  不存在"借巡检之名拿到更高权限"的空子。
+- **`cloudfunctions/getStoreList`**：见第五节新增的说明——`platform_admin` 默认仍返回空
+  列表，有 `authorizedTenants` 记录时只返回这些记录里明确列出的 storeId，不是"放开 tenantId
+  过滤"，是一条新增的、范围严格等于授权记录本身的查询分支。
+- **`pages/subpackages/admin/pages/platform-admin/platform-admin.ts`/`.wxml`**：新增
+  "🔍 平台巡检"Tab——输入 storeId + 选择角色 → 调 `grantTenantAuthorization` 的 `grant`
+  action 给自己授权 → 成功后直接跳转 `store-profile.ts?storeId=xxx`。这是
+  `grantTenantAuthorization` 自 2026-09-09 早些时候创建以来第一次有前端 UI，此前只能靠
+  手动调用云函数。
+- **`subpackages/admin/pages/store-profile/store-profile.ts`**：`initRoleAndStore()`
+  的 `canManage`/`canSetAdminKey` 判定新增一条 `authorizedTenants` 匹配分支——字面角色
+  （`effectiveRole`）不在白名单里，但 `roleInfo.authorizedTenants` 里有一条
+  `stores` 包含当前 `storeId` 的记录时，按该记录的 `role` 换算出同等能力（`store_manager`/
+  `store_patriarch` 级别可编辑，`store_patriarch` 级别才能设管理员密钥）。真正的写操作授权
+  仍然完全由服务端 `resolveCaller()`/`resolveWriteTarget` 独立校验，这里只是让前端按钮不再
+  对着一个实际会被服务端放行的操作显示"置灰"。
+
+**审计留痕怎么来的**：没有新建一张"审计日志"表——`authorizedTenants` 数组本身就是留痕
+（`grantedBy`/`grantedAt` 字段，`grantedBy` 就是 `platform_admin` 自己的 openid），在机构
+管理 Tab 对应机构的 `user_roles` 文档里随时可查，不需要再维护一套平行的日志系统。
+
+**与 8.1 节提案的本质区别**：8.1 的 bypass 是"调用时临时放行，不留下任何可追溯的状态"；本节
+的实现是"先在数据库里写一条可查、可撤销、范围明确的授权记录，再凭这条记录通过现有、已经
+反复验证过的漫游逻辑放行"——多了一步，但这一步就是安全边界本身。
+
+## 八、相关文档
 
 - 本次发现这条不变式的完整排查过程与 `store-picker.ts`/`getStoreList` 的配套代码加固：见 commit `42c73b9`（`fix(store-picker): 跨机构发现门店不再被超管身份误标为已授权`）。
 - 方案三的完整实现：见 commit `673c99e`（`feat(auth): 实施方案三——authorizedTenants 轻量租户漫游`）。
 - 租户隔离的整体模型与雨花斋专区的商业策略例外：`docs/architecture/01_sustainable_charity_and_tenant_isolation.md`。
+- 平台巡检能力（第七节）：被否决的"上帝模式"提案与最终方案同一次会话内先后提出，代码落地见
+  `cloudfunctions/grantTenantAuthorization`/`getStoreList`、
+  `subpackages/admin/pages/platform-admin`、`subpackages/admin/pages/store-profile`
+  四处改动（2026-09-09）。

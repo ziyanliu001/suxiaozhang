@@ -1008,3 +1008,98 @@
 .pa-btn-submit::after {
   border: none;
 }
+
+/* ═══════════════════════ 🔍 平台巡检（2026-09-09 平台巡检自助授权） ═══════════════════════ */
+.pa-inspect-card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
+}
+
+.pa-inspect-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1C2530;
+  margin-bottom: 12rpx;
+}
+
+.pa-inspect-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #868E96;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+
+.pa-inspect-field {
+  margin-bottom: 20rpx;
+}
+
+.pa-inspect-label {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 10rpx;
+}
+
+.pa-inspect-input {
+  width: 100%;
+  height: 76rpx;
+  box-sizing: border-box;
+  padding: 0 20rpx;
+  background: #F8F9FA;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+}
+
+.pa-inspect-role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.pa-inspect-role-option {
+  padding: 18rpx 20rpx;
+  background: #F8F9FA;
+  border: 2rpx solid transparent;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: #495057;
+}
+
+.pa-inspect-role-option.active {
+  background: #FFF8E1;
+  border-color: #FFD700;
+  color: #1C2530;
+  font-weight: 600;
+}
+
+.pa-inspect-error {
+  display: block;
+  font-size: 22rpx;
+  color: #E03131;
+  margin-bottom: 16rpx;
+}
+
+.pa-inspect-submit {
+  width: 100%;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  border-radius: 44rpx;
+  background: #1C2530;
+  color: #FFFFFF;
+  font-size: 28rpx;
+}
+
+.pa-inspect-submit::after {
+  border: none;
+}

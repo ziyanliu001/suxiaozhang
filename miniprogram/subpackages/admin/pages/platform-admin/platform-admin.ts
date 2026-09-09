@@ -1,6 +1,7 @@
 import { AuthService } from '../../../../utils/authService';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { safeNavigateTo } from '../../../../utils/navHelper';
 
 const PLAN_LABELS: Record<string, string> = {
   basic: '基础版',
@@ -80,9 +81,9 @@ Page({
     // 失败都会落地到 true，失败时改用这个字段展示可重试的错误态，不再无限转圈
     accessError: '',
     isPlatformAdmin: false,
-    // 🗂️ 顶层 Tab 分流：授权码管理 / 机构管理，取代此前所有模块纵向堆叠在
-    // 单屏里的混乱体验
-    activeTab: 'codes' as 'codes' | 'tenants',
+    // 🗂️ 顶层 Tab 分流：授权码管理 / 机构管理 / 平台巡检，取代此前所有模块纵向
+    // 堆叠在单屏里的混乱体验
+    activeTab: 'codes' as 'codes' | 'tenants' | 'inspect',
     planLabels: PLAN_LABELS,
     codeStatusLabels: CODE_STATUS_LABELS,
 
@@ -206,7 +207,28 @@ Page({
       reason: ''
     },
     renewFormErrors: { serviceStartDate: '', serviceExpireDate: '', reason: '' },
-    renewSubmitting: false
+    renewSubmitting: false,
+
+    // ─────────────────────────────────────────────────────────────────
+    // 🔍（2026-09-09 平台巡检自助授权）平台巡检 Tab——platform_admin 本人
+    // 默认"不碰业务数据"（见 getStoreList 云函数头部注释），需要临时排障某
+    // 一家具体门店时，在这里给自己的账号授权方案三 authorizedTenants（仅限
+    // 这一家店、仅限选定角色），授权成功后直接跳转 store-profile.ts 编辑。
+    // 这不是新开一条"超管万能穿透"通道——店铺范围必须逐一显式列出，角色
+    // 白名单与 grantTenantAuthorization 云函数完全一致（不含 super_admin/
+    // platform_admin 本身），每次授权都在 authorizedTenants 数组里留痕
+    // （grantedBy/grantedAt），这份痕迹本身就是审计记录
+    // ─────────────────────────────────────────────────────────────────
+    inspectStoreIdInput: '',
+    inspectRole: 'store_patriarch' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer',
+    inspectRoleOptions: [
+      { value: 'store_patriarch', label: '大家长（完整档案编辑 + 管理员密钥）' },
+      { value: 'store_manager', label: '店长（档案编辑，不含管理员密钥）' },
+      { value: 'finance', label: '财务（只读查看，不可编辑）' },
+      { value: 'volunteer', label: '义工（只读查看，不可编辑）' }
+    ],
+    inspectSubmitting: false,
+    inspectError: ''
   },
 
   onLoad() {
@@ -323,6 +345,59 @@ Page({
     }
     if (tab === 'tenants' && this.data.tenants.length === 0 && !this.data.tenantsLoading) {
       this.loadTenants();
+    }
+  },
+
+  onInspectStoreIdInput(e: any) {
+    this.setData({ inspectStoreIdInput: e.detail.value, inspectError: '' });
+  },
+
+  onSelectInspectRole(e: any) {
+    this.setData({ inspectRole: e.currentTarget.dataset.value });
+  },
+
+  // 🔍（2026-09-09 平台巡检自助授权）给自己的账号授权一家具体门店，成功后
+  // 直接跳转 store-profile.ts——grantTenantAuthorization 的 grant action
+  // 本身会做全部真正的安全校验（role 白名单/stores 非空/目标文档必须已
+  // 存在），这里不重复校验逻辑，只做"输入框非空"这一层 UX 层面的前置拦截
+  async onSubmitInspectGrant() {
+    if (this.data.inspectSubmitting) return;
+    const storeId = this.data.inspectStoreIdInput.trim();
+    if (!storeId) {
+      this.setData({ inspectError: '请输入要巡检的门店 ID' });
+      return;
+    }
+    const openid = AuthService.getOpenid();
+    if (!openid) {
+      this.setData({ inspectError: '未获取到当前账号身份，请重新进入本页后再试' });
+      return;
+    }
+
+    this.setData({ inspectSubmitting: true, inspectError: '' });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'grantTenantAuthorization',
+        data: { action: 'grant', targetOpenId: openid, stores: [storeId], role: this.data.inspectRole }
+      });
+      const result = res && res.result;
+      if (!result || !result.success) {
+        this.setData({ inspectError: (result && result.error) || '授权失败，请确认门店 ID 是否正确' });
+        return;
+      }
+      // 🛡️ 授权只追加进 authorizedTenants 数组，不改动任何本地缓存的角色/
+      // 门店字段——下次调用 checkUserRole/AuthService.fetchUserRole() 时
+      // 才会带上这条新授权，这里强制刷新一次缓存，确保紧接着跳转的
+      // store-profile.ts 初次渲染就能读到，不用等一次自然刷新
+      await AuthService.fetchUserRole();
+      wx.showToast({ title: '授权成功，正在进入门店档案', icon: 'success', duration: 1500 });
+      setTimeout(() => {
+        safeNavigateTo({ url: `/subpackages/admin/pages/store-profile/store-profile?storeId=${storeId}` });
+      }, 400);
+    } catch (err) {
+      console.error('[onSubmitInspectGrant] 授权异常:', err);
+      this.setData({ inspectError: '网络异常，请重试' });
+    } finally {
+      this.setData({ inspectSubmitting: false });
     }
   },
 

@@ -45,12 +45,21 @@ async function findTargetDoc(targetOpenId) {
 
 async function handleGrant(event, OPENID) {
   const targetOpenId = String(event.targetOpenId || '').trim();
-  const tenantId = String(event.tenantId || '').trim();
+  let tenantId = String(event.tenantId || '').trim();
   const role = String(event.role || '').trim();
   const stores = Array.isArray(event.stores) ? event.stores.filter((s) => typeof s === 'string' && s) : [];
 
+  // 🏛️（2026-09-09 平台巡检自助授权入口）tenantId 可选——调用方（平台巡检
+  // 自助授权页）只知道要巡检的 storeId，不一定知道/关心这家店具体挂在哪个
+  // tenantId 下，这里按 resolveCaller() 反查 targetStoreId 租户的同一套手法
+  // 自动从 stores[0] 反查，省去前端自己再查一遍门店详情的往返
+  if (!tenantId && stores.length > 0) {
+    const storeRes = await db.collection('stores').doc(stores[0]).field({ tenantId: true }).get().catch(() => null);
+    tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
+  }
+
   if (!targetOpenId) return { success: false, error: '缺少 targetOpenId 参数' };
-  if (!tenantId) return { success: false, error: '缺少 tenantId 参数' };
+  if (!tenantId) return { success: false, error: '缺少 tenantId 参数（且未能从 stores[0] 反查到）' };
   if (!GRANTABLE_ROLES.includes(role)) {
     return { success: false, error: `role 必须是以下之一: ${GRANTABLE_ROLES.join('/')}` };
   }

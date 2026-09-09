@@ -400,8 +400,22 @@ Page({
     // 请求一回来又把按钮重新点亮。权限向下继承：大家长天然拥有店长的全套门店档案
     // 管理权限，与云函数 manageStoreProfile 的 resolveWriteTarget 写权限口径对齐——
     // 真正的写操作授权仍然完全由服务端独立校验，这里只决定按钮是否渲染
-    const canManage = effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin';
-    const canSetAdminKey = effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin';
+    // 🏛️（2026-09-09 平台巡检能力）除了字面角色白名单，再叠加一条
+    // authorizedTenants 授权判定——platform_admin 通过平台巡检自助授权入口
+    // 给自己授权了这家店之后，effectiveRole 仍然字面是 'platform_admin'
+    // （不在上面任何一个 literal 角色里），不加这一层判定的话会看到档案
+    // 但按钮全部置灰。授权角色对应的能力口径与 manageStoreProfile.
+    // resolveWriteTarget 完全一致：只有 store_manager/store_patriarch 级别
+    // 的授权才能编辑，只有 store_patriarch 级别才能设置管理员密钥——真正的
+    // 写操作授权仍然完全由服务端 resolveCaller()/resolveWriteTarget 独立
+    // 校验，这里同上面的字面角色判定一样，只决定按钮是否渲染
+    const grantedEntry = (roleInfo && Array.isArray(roleInfo.authorizedTenants))
+      ? roleInfo.authorizedTenants.find((g) => g && Array.isArray(g.stores) && g.stores.includes(storeId))
+      : undefined;
+    const canManage = effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin'
+      || (!!grantedEntry && (grantedEntry.role === 'store_manager' || grantedEntry.role === 'store_patriarch'));
+    const canSetAdminKey = effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin'
+      || (!!grantedEntry && grantedEntry.role === 'store_patriarch');
     const isSuperAdmin = effectiveRole === 'super_admin';
 
     this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey, isSuperAdmin });

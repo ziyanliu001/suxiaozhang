@@ -3,7 +3,13 @@
 //
 // 🏢 多租户边界：门店列表（哪怕只是门店名称）也是机构的商业信息，不应被其他机构
 // 或平台管理员看到。本函数按调用者所属 tenantId 过滤：
-// - platform_admin 显式拒绝（不返回任何门店信息，符合其"不碰业务数据"的边界）；
+// - platform_admin 默认拒绝（不返回任何门店信息，符合其"不碰业务数据"的边界）；
+//   🏛️（2026-09-09 平台巡检能力）唯一例外：platform_admin 通过
+//   grantTenantAuthorization 给自己显式授权过的具体门店（authorizedTenants[].
+//   stores，强制非空列出，不支持整租户通配）会被返回——这不是放开"不碰业务
+//   数据"的边界，是在这条边界之上叠加一个必须先经过 platform_admin 自己
+//   显式操作 grantTenantAuthorization 留痕、且严格限定到具体门店的例外通道，
+//   见下方 exports.main 里的 platform_admin 分支；
 // - 已分配 tenantId 的账号按 tenantId 过滤；
 // - 尚未回填 tenantId 的账号（游客/未审批）直接返回空列表，不再退回"不过滤"的全表
 //   兜底行为——backfillTenantId 已可用于回填存量数据，不应再以数据泄露为代价兼容旧账号。
@@ -191,16 +197,40 @@ exports.main = async (event) => {
   try {
     let tenantId = '';
     let role = '';
+    let authorizedTenants = [];
     if (OPENID) {
       const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
       if (roleRes.data && roleRes.data.length > 0) {
         tenantId = roleRes.data[0].tenantId || '';
         role = roleRes.data[0].role || '';
+        authorizedTenants = Array.isArray(roleRes.data[0].authorizedTenants) ? roleRes.data[0].authorizedTenants : [];
       }
     }
 
+    // 🏛️（2026-09-09 平台巡检能力）platform_admin 默认仍然"不碰业务数据"
+    // （见本文件头部注释），这条边界本身不变——这里只新增一个显式、受限的
+    // 例外：如果 platform_admin 通过 grantTenantAuthorization（方案三，见
+    // docs/architecture/02_user_roles_single_document_invariant.md）给自己
+    // 授权了具体门店（authorizedTenants[].stores，非空数组，强制显式列出，
+    // 不支持整租户/全量通配），这里只把这些明确授权过的门店（而不是任意
+    // 租户的任意门店）返回给门店选择器，让 store-picker.ts 已有的
+    // hasTenantGrant() 漫游解锁逻辑能找到这些店。没有任何授权记录时，
+    // 行为与改动前完全一致——原样返回空列表
     if (role === 'platform_admin') {
-      return { success: true, list: [] };
+      const grantedStoreIds = Array.from(new Set(
+        authorizedTenants.flatMap((g) => (g && Array.isArray(g.stores)) ? g.stores : [])
+      )).slice(0, 100);
+      if (grantedStoreIds.length === 0) {
+        return { success: true, list: [] };
+      }
+      const where = { _id: db.command.in(grantedStoreIds) };
+      if (!includeInactive) where.status = db.command.neq('inactive');
+      const storesRes = await db.collection('stores').where(where).get().catch(() => ({ data: [] }));
+      // isOwnTenant 恒为 false——这些店从定义上就不属于 platform_admin
+      // 自己的租户（platform_admin 本就不归属任何租户），店长/财务/大家长
+      // 胶囊的解锁完全靠 store-picker.ts 的 hasTenantGrant() 读
+      // authorizedTenants 判定，不依赖 isOwnTenant
+      return { success: true, list: (storesRes.data || []).map((s) => ({ ...toStoreListItem(s), isOwnTenant: false })) };
     }
 
     if (resolveStoreIds) {

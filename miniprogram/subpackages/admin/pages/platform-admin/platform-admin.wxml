@@ -61,6 +61,7 @@
     <view class="pa-tab-switcher" style="top: {{contentTop}}px;">
       <view class="pa-tab-item {{activeTab === 'codes' ? 'active' : ''}}" data-tab="codes" bindtap="onSwitchTab">🔑 授权码管理</view>
       <view class="pa-tab-item {{activeTab === 'tenants' ? 'active' : ''}}" data-tab="tenants" bindtap="onSwitchTab">🏢 机构管理</view>
+      <view class="pa-tab-item {{activeTab === 'inspect' ? 'active' : ''}}" data-tab="inspect" bindtap="onSwitchTab">🔍 平台巡检</view>
     </view>
 
     <!-- ═══════════════════════ 🔑 授权码管理 ═══════════════════════ -->
@@ -173,7 +174,7 @@
     </block>
 
     <!-- ═══════════════════════ 🏢 机构管理 ═══════════════════════ -->
-    <block wx:else>
+    <block wx:elif="{{activeTab === 'tenants'}}">
 
       <view class="pa-soon-expire-box" wx:if="{{overview.soonExpiringTenants.length > 0}}">
         <text class="pa-soon-title">⚠️ 7 天内到期机构</text>
@@ -276,6 +277,41 @@
         </view>
       </block>
 
+    </block>
+
+    <!-- ═══════════════════════ 🔍 平台巡检（2026-09-09 平台巡检自助授权） ═══════════════════════ -->
+    <block wx:elif="{{activeTab === 'inspect'}}">
+      <view class="pa-inspect-card">
+        <text class="pa-inspect-title">🔍 平台巡检 · 自助授权</text>
+        <text class="pa-inspect-desc">
+          平台管理员默认不接触任何机构的业务数据（档案/经营数据）。需要临时排障某一家具体门店时，
+          在这里给自己的账号授权这一家店，授权后直接进入门店档案编辑——授权范围严格限定到这一家店，
+          不会授予整个机构，也不会授予 super_admin/platform_admin 角色本身。每次授权都会留痕，
+          可在机构管理 Tab 对应机构里核对。
+        </text>
+
+        <view class="pa-inspect-field">
+          <text class="pa-inspect-label">门店 ID（storeId）</text>
+          <input class="pa-inspect-input" value="{{inspectStoreIdInput}}" bindinput="onInspectStoreIdInput" placeholder="从云开发控制台 stores 集合复制门店文档 _id" />
+        </view>
+
+        <view class="pa-inspect-field">
+          <text class="pa-inspect-label">授权角色</text>
+          <view class="pa-inspect-role-options">
+            <view
+              class="pa-inspect-role-option {{inspectRole === item.value ? 'active' : ''}}"
+              wx:for="{{inspectRoleOptions}}"
+              wx:key="value"
+              data-value="{{item.value}}"
+              bindtap="onSelectInspectRole"
+            >{{item.label}}</view>
+          </view>
+        </view>
+
+        <text class="pa-inspect-error" wx:if="{{inspectError}}">{{inspectError}}</text>
+
+        <button class="pa-inspect-submit" hover-class="btn-hover" bindtap="onSubmitInspectGrant" loading="{{inspectSubmitting}}" disabled="{{inspectSubmitting}}">获取巡检权限并进入门店档案</button>
+      </view>
     </block>
 
     <view class="fa-safe-area-spacer"></view>
