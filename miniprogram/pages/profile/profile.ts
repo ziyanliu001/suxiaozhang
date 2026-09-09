@@ -135,7 +135,13 @@ function normalizeStoreStats(raw: any) {
 function getNoticeMgmtTemplate(type: string, orgType: string, storeName: string): { tag: string; title: string; content: string } {
   const isYuhuazhai = orgType === 'yuhuazhai';
   const isElderlyCanteen = orgType === 'elderly_canteen';
-  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本互助服务站';
+  // 🏛️（2026-09-09 机构类型扩展·文风适配）寺院斋堂专属措辞仅用于"义工招募"
+  // 这一条（用户明确要求适配"志愿者/义工"→"护法义工/居士"），其余 6 条预设
+  // 沿用下方已有的通用互助措辞分支（fallbackName 改为"本斋堂"即可自然带出），
+  // 不为每条都现造一套寺院专属长文案——避免措辞超出克制范围，也避免触碰
+  // CLAUDE.md 7.2 节列出的一律不使用词汇
+  const isTempleCanteen = orgType === 'temple_canteen';
+  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : isTempleCanteen ? '本斋堂' : '本互助服务站';
   const name = storeName || fallbackName;
 
   switch (type) {
@@ -151,6 +157,9 @@ function getNoticeMgmtTemplate(type: string, orgType: string, storeName: string)
     case 'volunteer':
       if (isYuhuazhai) {
         return { tag: '义工招募', title: '爱心义工招募', content: `【爱心义工招募】${name}的运转离不开义工家人的倾情护持！现急需择菜、洗碗、传菜义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️` };
+      }
+      if (isTempleCanteen) {
+        return { tag: '护法义工招募', title: '护法义工招募', content: `【护法义工招募】${name}的日常运转离不开护法义工、居士的悉心护持！现急需择菜、洗碗、传斋护法义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起护持道场！🙏` };
       }
       if (isElderlyCanteen) {
         return { tag: '义工招募', title: '爱心义工招募', content: `【爱心义工招募】${name}的运转离不开爱心义工的无私奉献！急需择菜、洗碗、分餐义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️` };
@@ -275,6 +284,15 @@ function parseIndexSummary(summary: string): { created: number; skipped: number;
 // 猜测店名文本、也不靠 tenantId 前缀。orgType 为空（历史门店未补录）时落到
 // isSuperAdminView 决定的通用兜底文案，与 index.ts computeConceptCopy 同一套
 // 三档（雨花斋/助老食堂-社区助餐/其余机构通用）区分口径，只是措辞按本页语境调整
+// 🐛 根因修复（"归属机构"显示未绑定机构的降级兜底）：查 utils/constants.ts
+// 的 ORG_TYPES 权威字典，返回门店自身 orgType 对应的中文标签；orgType 为空
+// 或不在字典里时返回空字符串，调用方再决定是否继续落到"未绑定机构"
+function getOrgTypeLabel(orgType: string): string {
+  if (!orgType) return '';
+  const matched = ORG_TYPES.find(item => item.value === orgType);
+  return matched ? matched.label : '';
+}
+
 function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
   orgTypeBadge: string; cultureTitle: string; aboutTitle: string;
 } {
@@ -284,6 +302,17 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
   if (orgType === 'elderly_canteen') {
     return { orgTypeBadge: '社区助餐', cultureTitle: '敬老助餐文化与每日家训', aboutTitle: '关于社区互助平台与阳光账本' };
   }
+  // 🏛️（2026-09-09 机构类型扩展·文风适配）寺院斋堂专属措辞——与
+  // index.ts computeConceptCopy/computeCultureModalTitle 同一批新增分支保持
+  // 用词一致，见 7.2 节去宗教化合规基线：这里用的"过斋"/"仪轨"是佛教寺院
+  // 场所的中性日常用语，不是 CLAUDE.md 7.2 节列出的一律不使用词（愿心/发心/
+  // 随喜/供养/同修/因果/轮回/功德主/功过格），不违反既有合规基线
+  if (orgType === 'temple_canteen') {
+    return { orgTypeBadge: '寺院斋堂', cultureTitle: '过斋清规与每日仪轨', aboutTitle: '关于寺院斋堂与阳光账本' };
+  }
+  if (orgType === 'commercial_vegetarian') {
+    return { orgTypeBadge: '商业素餐', cultureTitle: '结缘供斋文化与每日寄语', aboutTitle: '关于商业素餐结缘与阳光账本' };
+  }
   return {
     orgTypeBadge: '',
     cultureTitle: '机构文化与每日家训',
@@ -292,7 +321,7 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
 }
 
 // 🎨 组织信息配置弹窗·机构类型选项：面向"已有门店"的大家长/店长/超管做日常
-// 编辑，只展示最常见的四种自助业态，'rescue_team'/'tongxin_children'/
+// 编辑，只展示最常见的自助业态，'rescue_team'/'tongxin_children'/
 // 'tongxin_cancer_care' 这类特定合作机构专属类型不在这个自助编辑入口开放
 // 选择（避免普通用户误选成需要平台侧另行核实的合作方身份）。
 // 🏛️（2026-09-04 orgType 枚举体系统一）此前这里与 onboarding「新建组织」
@@ -305,19 +334,26 @@ function computeOrgDisplayCopy(orgType: string, isSuperAdminView: boolean): {
 // 凑满 4 个选项——ORG_TYPES 里其余三个值（rescue_team/tongxin_children/
 // tongxin_cancer_care）不纳入本次网格，仍按上面的既定理由保留在自助编辑
 // 入口之外
-const ORG_CONFIG_CURATED_VALUES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'other'];
+// 🏛️（2026-09-09 机构类型扩展）"社区普惠与社会互助专区"新增
+// temple_canteen（寺院斋堂/十方过斋）、commercial_vegetarian（商业素餐/
+// 结缘供斋）两类机构，纳入自助编辑网格——这两类与 elderly_canteen/
+// volunteer_station/other 一样，不需要平台侧另行核实合作方身份，门店自己
+// 选择即可生效
+const ORG_CONFIG_CURATED_VALUES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'temple_canteen', 'commercial_vegetarian', 'other'];
 // 🆕 卡片网格的展示态文案（badge 短标签 + 选中后的说明提示）：纯展示层
 // 数据，不是 orgType 的权威定义（那仍是 utils/constants.ts 的
 // ORG_TYPES）。措辞严格对照真实已落地的能力边界——雨花斋的"无配额上限/
 // 永久免费"是 docs/BUSINESS_MODEL.md 记录的真实既有事实（createStore.js
-// 配额豁免 + statistics.ts 导出免拦截），其余三个值目前没有挂钩任何特殊
+// 配额豁免 + statistics.ts 导出免拦截），其余各值目前没有挂钩任何特殊
 // 商业/功能差异化（多店进销存、SaaS 席位等是 tenant_subscriptions.planType
 // 维度的能力，与 orgType 是两个独立维度，不能在这里替 orgType 代言），
-// 因此措辞只描述这三类组织的真实使用场景，不编造专属功能
+// 因此措辞只描述这些组织的真实使用场景，不编造专属功能
 const ORG_CONFIG_TYPE_META: Record<string, { badge: string; hint: string }> = {
   yuhuazhai: { badge: '纯公益免费', hint: '🌸 遵从雨花家训，全功能永久免费，无配额上限，堂内绝无交易' },
   elderly_canteen: { badge: '基层互助', hint: '🏡 面向长者与爱心驿站，支持民政助餐台账与义工打卡' },
   volunteer_station: { badge: '义工协同', hint: '🤝 面向义工服务站与互助团队，支持志愿打卡与爱心公示' },
+  temple_canteen: { badge: '寺院斋堂', hint: '🙏 面向寺院斋堂与十方过斋场所，记账与护法义工打卡开箱即用' },
+  commercial_vegetarian: { badge: '商业素餐', hint: '🍱 面向商业素食门店，支持初一十五供斋结缘人次登记与义工帮厨打卡' },
   other: { badge: '其他互助', hint: '📋 适用于其他类型的爱心互助组织，记账与基础功能开箱即用' }
 };
 const ORG_CONFIG_TYPE_OPTIONS: Array<{ value: string; label: string; badge: string; hint: string }> =
@@ -475,6 +511,9 @@ Page({
     // getNoticeMgmtTemplate）等需要区分 elderly_canteen 的场景使用——isYuhuazhai
     // 只是个二值信号，不够精确
     orgType: '' as string,
+    // 🐛 根因修复（"归属机构"显示未绑定机构）：currentTenantName（tenants 主档）
+    // 查不到时的降级展示文案，见 getOrgTypeLabel()/fetchStoreOrgType()
+    orgTypeFallbackLabel: '' as string,
     // 🆕 "关于与帮助"条目标题：initMinePage 里先给中性默认，fetchStoreOrgType() 拿到
     // 真实 orgType 后用 computeOrgDisplayCopy 覆盖，绝不在真实类型确认前展示任何
     // 具体机构品牌（雨花斋/社区助餐等），避免"社区助餐点被短暂/永久标成雨花斋"
@@ -1611,7 +1650,13 @@ Page({
       this.setData({
         isYuhuazhai,
         shouldShowProCards: !isYuhuazhai,
-        ...(orgType ? { orgType, ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin) } : {})
+        ...(orgType ? { orgType, ...computeOrgDisplayCopy(orgType, this.data.isSuperAdmin) } : {}),
+        // 🐛 根因修复（"归属机构"显示未绑定机构）：currentTenantName 来自
+        // tenants 文档（见 fetchCurrentTenantName），与本门店自己的 orgType
+        // 是两个独立字段——tenants 主档缺失/查不到时，不该让"归属机构"栏位
+        // 停留在灰色兜底文案，改为降级展示门店自己已配置的 orgType 中文名称
+        // （如"社区助餐 / 敬老家园"），只有两者都查不到时才回落"未绑定机构"
+        orgTypeFallbackLabel: getOrgTypeLabel(orgType)
       });
     } catch (err) {
       // 静默失败：已有中性兜底文案在展示，不会误显示任何机构品牌标签；

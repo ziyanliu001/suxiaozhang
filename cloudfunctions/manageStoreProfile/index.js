@@ -65,7 +65,9 @@ const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
 // createStore/index.js VALID_ORG_TYPES、miniprogram/utils/constants.ts
 // ORG_TYPE_VALUES 四处保持同一份拷贝，改动这里务必同步改另外三处，否则
 // 又会退回"新建门店的 orgType 与编辑门店的 orgType 是两套不同取值"的老问题
-const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
+// 🏛️（2026-09-09 机构类型扩展）新增 temple_canteen（寺院斋堂/十方过斋）、
+// commercial_vegetarian（商业素餐/结缘供斋），归属"社区普惠与社会互助专区"
+const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'temple_canteen', 'commercial_vegetarian', 'other'];
 
 // 🏮 品牌矩阵归属：一个机构可同时拥有多种 orgType 的站点，通过 platformFamily 将其
 // 归并到同一品牌矩阵，用于全国大屏的"同心慈善会矩阵 / 雨花矩阵"聚合筛选

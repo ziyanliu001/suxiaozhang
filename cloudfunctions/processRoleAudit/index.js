@@ -364,7 +364,9 @@ async function submitRoleApply(event, OPENID) {
     // tongxin_cancer_care 两个机构类型，导致这两类机构通过"申请加入/新建门店"
     // 这条路径提交时被静默降级成 'other'，与 SCHEMA.md 1.2 节的七值权威枚举
     // 不一致
-    const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
+    // 🏛️（2026-09-09 机构类型扩展）新增 temple_canteen/commercial_vegetarian，
+    // 与 createTenant/createStore/manageStoreProfile/utils/constants.ts 同步
+    const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'temple_canteen', 'commercial_vegetarian', 'other'];
     docData.orgType = VALID_ORG_TYPES.includes(orgType) ? orgType : 'other';
     // 🆕 所属地区：优先用申请人在 <picker mode="region"> 里手动选择的省市区；
     // 客户端未传（如老版本小程序）时，尝试从门店名称/地址文本里轻量提取兜底

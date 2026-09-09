@@ -1825,12 +1825,12 @@
           <view class="fsh-hero-row">
             <view class="fsh-hero-cell">
               <text class="fsh-hero-num">{{sunshineLedgerData.totalDiners || 0}}</text>
-              <text class="fsh-hero-label">累计就餐人次</text>
+              <text class="fsh-hero-label">{{heroDinersLabel || '累计就餐人次'}}</text>
             </view>
             <view class="fsh-hero-divider"></view>
             <view class="fsh-hero-cell">
               <text class="fsh-hero-num">{{sunshineLedgerData.volunteerCount || 0}}</text>
-              <text class="fsh-hero-label">参与护持总人次</text>
+              <text class="fsh-hero-label">{{heroVolunteerLabel || '参与护持总人次'}}</text>
             </view>
             <view class="fsh-hero-divider"></view>
             <view class="fsh-hero-cell">
@@ -3478,12 +3478,17 @@
         <view class="platform-card-arrow">进入 ›</view>
       </view>
 
-      <!-- 🏛️（2026-09-06 业务定位校准）本卡片服务于雨花斋体系之外的各类民间爱心
-           素食食堂、寺庙斋堂、免费互助餐厅——记账/进销存/阳光日结等核心功能对
-           单店全面开放，不是商业收银入口，文案统一改为"爱心互助"调性，不再用
-           "普通商户"这类商业措辞。
+      <!-- 🏛️（2026-09-06 业务定位校准）本卡片服务于雨花斋体系之外的各类社区普惠与
+           社会互助主体——记账/进销存/阳光日结等核心功能对单店全面开放，不是商业收银
+           入口，文案统一改为"爱心互助"调性，不再用"普通商户"这类商业措辞。
            🐛（2026-09-08 图标校准）原西式刀叉盘子图标 🍽️ 与中式素食/爱心斋堂
-           语境不符，改为温热饭碗 🥣，配暖橙色圆形衬底，呼应"温热"意象 -->
+           语境不符，改为温热饭碗 🥣，配暖橙色圆形衬底，呼应"温热"意象
+           🏷️（2026-09-09 工作空间正名）原"民间爱心素食食堂 / 独立斋堂"正名为
+           "社区普惠与社会互助专区"——覆盖范围不变（elderly_canteen/volunteer_station/
+           temple_canteen/commercial_vegetarian/other 五类 orgType），只是名字更准确地
+           覆盖了新增的寺院斋堂与商业素餐两类机构，不涉及任何字段/数据结构变化（见
+           docs/architecture/01_.../03_...md：顶层工作空间从来不落库，选择态完全由
+           orgType 派生，这里只是改一处展示字符串） -->
       <view class="platform-card platform-card-general" bindtap="onSelectGeneralPlatform" hover-class="platform-card-hover">
         <view class="platform-card-badge">爱心互助 · 独立记账</view>
         <view class="platform-card-body">
@@ -3491,8 +3496,8 @@
             <text class="platform-card-icon">🥣</text>
           </view>
           <view class="platform-card-text">
-            <text class="platform-card-title">民间爱心素食食堂 / 独立斋堂</text>
-            <text class="platform-card-desc">面向雨花斋体系之外的民间爱心素食食堂、寺庙斋堂与互助餐厅的日常记账</text>
+            <text class="platform-card-title">社区普惠与社会互助专区</text>
+            <text class="platform-card-desc">面向雨花斋体系之外的社区助餐、义工服务站、寺院斋堂与商业素餐结缘机构的日常记账</text>
           </view>
         </view>
         <view class="platform-card-arrow">进入 ›</view>

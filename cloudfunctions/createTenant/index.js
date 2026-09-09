@@ -29,7 +29,10 @@ const MAX_LEN = 100;
 // VALID_ORG_TYPES、miniprogram/utils/constants.ts ORG_TYPES_VALUES
 // 四处保持同一份取值——云函数之间没有跨文件共享模块的机制，只能各自维护
 // 同源拷贝，改动这里务必同步改另外三处
-const ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
+// 🏛️（2026-09-09 机构类型扩展）新增 temple_canteen/commercial_vegetarian，
+// 归属"社区普惠与社会互助专区"（原"民间爱心食堂"），同步改动见
+// miniprogram/utils/constants.ts ORG_TYPES 头部注释
+const ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'temple_canteen', 'commercial_vegetarian', 'other'];
 
 function sanitize(v, maxLen) {
   return String(v || '').trim().slice(0, maxLen || MAX_LEN);

@@ -243,7 +243,8 @@ exports.main = async (event) => {
   // 与 manageStoreProfile/index.js VALID_ORG_TYPES、createTenant/index.js
   // ORG_TYPES、miniprogram/utils/constants.ts ORG_TYPE_VALUES 四处保持
   // 同一份取值，改动这里务必同步改另外三处
-  const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'other'];
+  // 🏛️（2026-09-09 机构类型扩展）新增 temple_canteen/commercial_vegetarian
+  const VALID_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'rescue_team', 'tongxin_children', 'tongxin_cancer_care', 'temple_canteen', 'commercial_vegetarian', 'other'];
   const finalOrgType = VALID_ORG_TYPES.includes(orgType) ? orgType : '';
   const finalOperatingStatus = VALID_OPERATING_STATUSES.includes(operatingStatus) ? operatingStatus : 'operating';
   // 🍚 供餐餐次配置：绝大多数雨花斋只供午餐，默认单餐次——与 manageStoreProfile

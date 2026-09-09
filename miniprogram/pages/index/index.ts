@@ -193,9 +193,14 @@ type NoticePresetType = 'opening' | 'volunteer' | 'supplies' | 'weather_closure'
 function getNoticeTemplate(type: NoticePresetType, orgType: string, storeName: string): { tag: string; title: string; content: string } {
   const isYuhuazhai = orgType === 'yuhuazhai';
   const isElderlyCanteen = orgType === 'elderly_canteen';
+  // 🏛️（2026-09-09 机构类型扩展·文风适配）与 profile.ts getNoticeMgmtTemplate
+  // 同一批新增分支保持同步——同样只在"义工招募"这一条给寺院斋堂真分支，
+  // 其余预设沿用通用互助措辞分支，理由见该文件头部注释
+  const isTempleCanteen = orgType === 'temple_canteen';
   // 三档兜底称谓：yuhuazhai 沿用"雨花斋"，elderly_canteen 用"社区助餐点"，
-  // 其余通用公益机构用"本公益服务站"——storeName 有值时优先用真实门店名
-  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : '本互助服务站';
+  // temple_canteen 用"本斋堂"，其余通用公益机构用"本公益服务站"——storeName
+  // 有值时优先用真实门店名
+  const fallbackName = isYuhuazhai ? '雨花斋' : isElderlyCanteen ? '社区助餐点' : isTempleCanteen ? '本斋堂' : '本互助服务站';
   const name = storeName || fallbackName;
 
   switch (type) {
@@ -233,6 +238,13 @@ function getNoticeTemplate(type: NoticePresetType, orgType: string, storeName: s
           tag: '义工招募',
           title: '爱心义工招募',
           content: `【爱心义工招募】${name}的运转离不开爱心义工的无私奉献！急需择菜、洗碗、分餐义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起传递温暖！❤️`
+        };
+      }
+      if (isTempleCanteen) {
+        return {
+          tag: '护法义工招募',
+          title: '护法义工招募',
+          content: `【护法义工招募】${name}的日常运转离不开护法义工、居士的悉心护持！现急需择菜、洗碗、传斋护法义工数名，服务时间：每天上午 8:30 - 12:30。期待您的加入，一起护持道场！🙏`
         };
       }
       return {
@@ -461,6 +473,16 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
       content: '爱心助餐，敬老护生。致力于为社区长者提供公开透明、温暖放心的助餐服务。'
     };
   }
+  // 🏛️（2026-09-09 机构类型扩展·文风适配）寺院斋堂专属措辞，与
+  // profile.ts computeOrgDisplayCopy 同一批新增分支用词一致；"过斋"/"结缘"
+  // 是中性的寺院日常用语，不在 CLAUDE.md 7.2 节的一律不使用词清单内
+  if (orgType === 'temple_canteen') {
+    return {
+      title: '☀️ 阳光账本与过斋理念',
+      label: '过斋理念',
+      content: `十方供养，结缘大众。${displayStoreName}坚持公开透明记账，护持每一份过斋结缘的心意。`
+    };
+  }
   return {
     title: '☀️ 阳光账本与爱心宣言',
     label: '互助宗旨',
@@ -479,6 +501,8 @@ function computeConceptCopy(orgType: string, storeName: string): { title: string
 function computeCultureModalTitle(orgType: string): string {
   if (orgType === 'yuhuazhai') return '机构文化和每日诵读';
   if (orgType === 'elderly_canteen') return '社区敬老文化与每日家训';
+  // 🏛️（2026-09-09 机构类型扩展·文风适配）用户明确要求"家训寄语"→"过斋清规/仪轨"
+  if (orgType === 'temple_canteen') return '过斋清规与每日仪轨';
   return '互助文化与团队公约';
 }
 
@@ -644,6 +668,11 @@ Page({
     sunshineLedgerLoading: false,
     selectedYearMonth: '',
     isSunshineLedgerAtCurrentMonth: true,
+    // 🏛️（2026-09-09 机构类型扩展·文风适配）首页阳光账本 hero 卡两个标签的
+    // orgType 自适应文案，由 fetchSunshineLedgerData() 按真实 orgType 算出，
+    // 默认值与改动前的硬编码字符串一致，未拉到数据前不影响现状展示
+    heroDinersLabel: '累计就餐人次' as string,
+    heroVolunteerLabel: '参与护持总人次' as string,
     sunshineLedgerData: {
       storeName: '',
       periodLabel: '',
@@ -10314,23 +10343,36 @@ Page({
           maskedName: '', verificationCode: ''
         }
       };
-      const isYuhuazhai = this.data.orgType === 'yuhuazhai';
       // 🆕 理念弹窗文案：result.orgType 是这次调用刚拿到的门店真实业态类型，
       // 优先于 this.data.orgType（那个字段只区分"是否雨花斋"，颗粒度不够）
-      const conceptCopy = computeConceptCopy(result.orgType || '', ledgerData.storeName || this.data.currentStoreName);
+      const ledgerOrgType = result.orgType || '';
+      const isYuhuazhai = ledgerOrgType === 'yuhuazhai';
+      // 🏛️（2026-09-09 机构类型扩展·文风适配）寺院斋堂→"过斋人次"/"护法义工"，
+      // 商业素餐→突出"供斋结缘人次"（用户明确要求），其余 orgType 保持原文案不变
+      const isTempleCanteen = ledgerOrgType === 'temple_canteen';
+      const isCommercialVegetarian = ledgerOrgType === 'commercial_vegetarian';
+      const dinersLabel = isTempleCanteen ? '累计过斋人次' : isCommercialVegetarian ? '累计供斋结缘人次' : '累计就餐人次';
+      const monthlyDinersLabel = isTempleCanteen ? '当月过斋人次' : isCommercialVegetarian ? '当月供斋结缘人次' : '当月就餐人次';
+      const volunteerLabel = isYuhuazhai ? '参与护持总人次' : isTempleCanteen ? '参与护法义工总人次' : '参与志愿总人次';
+      const conceptCopy = computeConceptCopy(ledgerOrgType, ledgerData.storeName || this.data.currentStoreName);
       this.setData({
         sunshineLedgerData: ledgerData,
         conceptTitle: conceptCopy.title,
         conceptLabel: conceptCopy.label,
         conceptContent: conceptCopy.content,
+        // 🏛️（2026-09-09 机构类型扩展·文风适配）首页阳光账本 hero 卡
+        // （family-sunshine-hero-card，wxml 里这两个标签原来是硬编码字符串）
+        // 复用上面算好的同一套标签，与详情弹窗的 8 项网格保持文案一致
+        heroDinersLabel: dinersLabel,
+        heroVolunteerLabel: volunteerLabel,
         // 📊 完美 4x2 网格：固定 8 项，缺数据时展示"暂无数据"而不是编造出的百分比；
         // 工时/志愿人次标签随 orgType 动态切换：雨花斋用"护持"，其他组织用"服务/志愿"
         sunshineStatCards: [
-          { label: '累计就餐人次', value: String(ledgerData.totalDiners) },
-          { label: '当月就餐人次', value: String(ledgerData.monthlyDiners) },
+          { label: dinersLabel, value: String(ledgerData.totalDiners) },
+          { label: monthlyDinersLabel, value: String(ledgerData.monthlyDiners) },
           { label: '爱心送餐份数', value: String(ledgerData.takeawayMeals) },
           { label: isYuhuazhai ? '累计护持工时' : '累计服务工时', value: String(ledgerData.totalHours) },
-          { label: isYuhuazhai ? '参与护持总人次' : '参与志愿总人次', value: String(ledgerData.volunteerCount) },
+          { label: volunteerLabel, value: String(ledgerData.volunteerCount) },
           { label: '已核销餐报篇数', value: String(ledgerData.auditedReportsCount) },
           { label: '安全营运天数', value: String(ledgerData.operatingDays) },
           { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }

@@ -24,8 +24,15 @@ export const APP_NAME = '素小账';
  *
  * 🛡️ 云函数之间没有跨文件共享模块的机制（本仓库一贯做法），
  * cloudfunctions/createTenant/index.js、cloudfunctions/createStore/index.js、
- * cloudfunctions/manageStoreProfile/index.js 三处各自维护一份同源拷贝——
- * 修改这里的取值域时，务必同步改这三个文件，否则又会退回"两套体系"的老问题
+ * cloudfunctions/manageStoreProfile/index.js、cloudfunctions/processRoleAudit/index.js
+ * 四处各自维护一份同源拷贝——修改这里的取值域时，务必同步改这四个文件，否则又会退回
+ * "两套体系"的老问题
+ *
+ * 🏛️（2026-09-09 工作空间正名 + 机构类型扩展）"社区普惠与社会互助专区"（原"民间爱心
+ * 食堂"，纯前端展示名，不对应任何落库字段，见 docs/architecture/01_.../03_...md）下
+ * 新增 temple_canteen/commercial_vegetarian 两类机构类型，同步补齐
+ * cloudfunctions/getNationalDashboard/index.js 的 SUPPORTED_ORG_TYPES 与
+ * pages/profile/profile.ts 的 ORG_CONFIG_CURATED_VALUES/ORG_CONFIG_TYPE_META
  */
 export const ORG_TYPES: Array<{ value: string; label: string }> = [
   { value: 'yuhuazhai', label: '雨花斋' },
@@ -34,6 +41,8 @@ export const ORG_TYPES: Array<{ value: string; label: string }> = [
   { value: 'rescue_team', label: '应急救援队' },
   { value: 'tongxin_children', label: '同心 · 儿童关爱' },
   { value: 'tongxin_cancer_care', label: '同心 · 抗癌关爱' },
+  { value: 'temple_canteen', label: '寺院斋堂 / 十方过斋' },
+  { value: 'commercial_vegetarian', label: '商业素餐 / 结缘供斋' },
   { value: 'other', label: '其他互助组织' }
 ];
 

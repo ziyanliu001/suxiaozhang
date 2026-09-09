@@ -526,10 +526,13 @@ exports.main = async (event, context) => {
     // （救援队/同心儿童院/其他组织等，来自早期跨业态探索、并未真正落地成
     // createStore 表单可选项），选中后台无法归属任何真实门店的筛选值直接
     // 产生一个空数据大屏，界面表现为"点了这个分类什么都没有"。服务端现在
-    // 只认食堂专区实际合规的三个业态分类，客户端传入的其余任何值一律静默
+    // 只认食堂专区实际合规的分类，客户端传入的其余任何值一律静默
     // 退回"全部平台"（不筛选），不是报错拒绝——与本文件一贯的防御性降级
     // 风格一致（宁可退回安全默认值也不中断请求）
-    const SUPPORTED_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station'];
+    // 🏛️（2026-09-09 机构类型扩展）新增 temple_canteen/commercial_vegetarian
+    // 两个 Tab 筛选值——与 utils/constants.ts ORG_TYPES 同步，纯筛选白名单，
+    // 不影响本文件任何金额聚合逻辑
+    const SUPPORTED_ORG_TYPES = ['yuhuazhai', 'elderly_canteen', 'volunteer_station', 'temple_canteen', 'commercial_vegetarian'];
     const requestedOrgType = (event && event.orgType && SUPPORTED_ORG_TYPES.includes(event.orgType))
       ? String(event.orgType) : null;
     if (requestedOrgType) {

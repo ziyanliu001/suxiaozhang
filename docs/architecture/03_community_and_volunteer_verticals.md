@@ -1,6 +1,6 @@
 # 长者助餐（elderly_canteen）与义工协同（volunteer_station）垂直深化设计
 
-> **文档定位**：与 `01_sustainable_charity_and_tenant_isolation.md` 同一套阅读规则——**第一部分是尚未实现的目标设计**，**第二部分是已验证的当前真实实现**，**第三部分是差距清单**。本文档只覆盖 `utils/constants.ts` `ORG_TYPES` 里两个真实存在的取值：`elderly_canteen`（社区助餐 / 敬老家园）与 `volunteer_station`（义工服务站 / 互助团队）。
+> **文档定位**：与 `01_sustainable_charity_and_tenant_isolation.md` 同一套阅读规则——**第一部分是尚未实现的目标设计**，**第二部分是已验证的当前真实实现**，**第三部分是差距清单**。本文档最初只覆盖 `elderly_canteen`/`volunteer_station` 两个取值，2026-09-09 追加第四部分覆盖同一专区新增的 `temple_canteen`（寺院斋堂 / 十方过斋）与 `commercial_vegetarian`（商业素餐 / 结缘供斋）。
 >
 > ⚠️ 不使用 `community`/`workshop` 等术语——`community` 不是真实 `orgType` 取值，其业务含义与本文档讨论的 `elderly_canteen` 是同一件事；`workshop` 对应的是 `tenants.businessType==='live_factory'` 租户，架构上不创建 `stores` 文档，不存在"门店 orgType"这个维度，与本文档讨论的"门店业态垂直深化"是两个不同范畴，不在此处讨论（工坊相关的目标设计见 `01_sustainable_charity_and_tenant_isolation.md`）。
 
@@ -65,3 +65,40 @@
 | 开餐前留样拍照/温控登记前置拦截 | 不存在任何"开餐前任务流"概念，当前记账是开餐后补录为主 | 需要新增开餐前置任务节点，且要设计"未留样是否硬拦截记账"这类产品规则 |
 | volunteer_station 去堂口化表单分流 | 建店/记账表单对所有 orgType 一套模板，未按业态分流 | 需要在建店与日常记账表单里新增按 orgType 的字段显隐分支，工作量集中在前端表单重构，不涉及新建集合 |
 | 义工跨租户工时互认 | volunteer_duty_logs 严格按 {tenantId, storeId} 隔离查询，无合并视图 | 需要新增"个人工时汇总"查询维度，且要明确这层放宽只用于荣誉聚合展示，不能连带放宽财务/业务数据的租户隔离边界 |
+
+---
+
+## 四、2026-09-09 机构类型扩展：temple_canteen / commercial_vegetarian
+
+### 4.1 已落地范围（与 elderly_canteen/volunteer_station 同等起点）
+
+- `utils/constants.ts` `ORG_TYPES` + 4 个云函数（`createTenant`/`createStore`/`manageStoreProfile`/
+  `processRoleAudit`）的白名单同步新增 `temple_canteen`（寺院斋堂 / 十方过斋）、
+  `commercial_vegetarian`（商业素餐 / 结缘供斋）；`getNationalDashboard` 的
+  `SUPPORTED_ORG_TYPES`（大屏 Tab 筛选白名单，不涉及金额聚合）同步。
+- `profile.ts` 组织信息配置弹窗自助编辑枚举（`ORG_CONFIG_CURATED_VALUES`/
+  `ORG_CONFIG_TYPE_META`）纳入这两个新值，措辞如实描述使用场景、不编造专属功能——与
+  elderly_canteen/volunteer_station 当前"只驱动展示文案，没有专属业务逻辑"完全同一个
+  起点（见 2.1/2.2 节），这两个新值目前**同样没有任何专属表单字段/校验逻辑**。
+- 文风适配：`computeOrgDisplayCopy`（profile.ts）、`computeConceptCopy`/
+  `computeCultureModalTitle`/`getNoticeTemplate`（index.ts）新增 `temple_canteen` 真分支
+  （过斋人次/结缘大众、护法义工/居士、过斋清规/仪轨——用词对照 CLAUDE.md 7.2 节"去宗教化
+  合规基线"核实过不在一律禁用词清单内）；首页阳光账本 hero 卡与详情弹窗的"就餐人次"
+  标签同时支持 `commercial_vegetarian` 的"供斋结缘人次"替换。
+- 顶层工作空间"民间爱心食堂"正名为"社区普惠与社会互助专区"——纯前端展示字符串改动
+  （`index.wxml` `platform-card-general`），不涉及任何落库字段，因为顶层工作空间从来
+  就不落库（选择态完全由 `orgType==='yuhuazhai'` 与否派生，见 01 节文档）。
+
+### 4.2 本轮明确收窄、未落地的部分（如实记录，避免被后续误认为"已支持"）
+
+这一轮改动的范围判断标准，与第三节"elderly_canteen/volunteer_station 目标设计 vs 现状"
+差距清单同一套克制原则——**文案/枚举层面的扩展可以做，但"全新业务概念/全新金融聚合逻辑/
+针对不存在代码路径的防御性校验"不能在同一批顺手做掉**：
+
+| 诉求 | 为什么本轮没做 |
+|---|---|
+| "义工"/"志愿者"全仓库文风替换为"护法义工/居士" | 实测 392 处/22 文件，深度嵌入海报绘制/报表格式化等工具函数，不止 wxml 标签；全局替换的风险量级远超本轮改动，只在上面 4.1 列出的既有"文案适配器"函数里新增真分支 |
+| `statistics.ts`/`statistics.wxml` 层"就餐统计区分子项" | 该文件 4900+ 行/1700+ 行，是独立的大文件，"突出供斋结缘人次"已在首页阳光账本卡片实现同等语义，不在这个大文件上二次改动 |
+| "定向托斋履约登记"（commercial_vegetarian） | 全新业务概念（赞助人↔具体斋期履约关系追踪），现有 schema 没有可复用字段，需要专项设计新集合，不是文案/枚举层面的改动 |
+| commercial_vegetarian 收支"不纳入公共爱心收支审计链" | `getNationalDashboard` 是 1800+ 行、多维度交织聚合的金融计算云函数，服务真实付费租户，安全地把某个 orgType 的收支从"总额"里摘出是独立的金融逻辑改动，需要单独"提审"，不与本轮文案/枚举改动混在一起 |
+| 寺院"禁止调用商业链路"后端断言 | 逐一核实 `liveFactoryCore`/`createProductionOrder`/`completeProductionOrder`/`processProductionRefund`/`wxPayCore` 后发现零个 orgType/businessType 引用——产销工坊是完全独立的租户类型（`businessType==='live_factory'`，且这类租户从不创建 `stores` 文档），今天没有任何代码路径能让一个 temple_canteen 门店的上下文触达这些云函数，前端"产销工坊"入口也统一挂 `hasProductionSpaceAccess`（基于独立的 `tenant_members` 成员关系，与 orgType 无关）对所有 orgType 一视同仁默认隐藏。未新增针对不存在代码路径的防御性断言（避免死代码）。真正的潜在缺口——寺院身份自然人理论上仍可单独兑换产销工坊邀请码加入 `tenant_members`——是桥接两个"物理隔离"设计的独立系统，属于更大的设计决策，留作后续专项 |
