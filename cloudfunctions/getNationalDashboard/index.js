@@ -1740,6 +1740,13 @@ exports.main = async (event, context) => {
       nationalOpenDays,
       nationalTotalVolunteers,
       nationalTotalVolunteerHours: Math.round(nationalTotalVolunteerHours * 10) / 10,
+      // 🆕（2026-09-09 超管全国总览工作台重构）首页 manager-home-card"本月
+      // 餐报篇数"指标此前是从未赋值的假数字兜底——这里复用上面已经算好的
+      // totalReportsInScope（本次聚合范围内全部生效报表数），不新增查询。
+      // 调用方传 rangeType:'month' 时即对应"近 30 天"，与单店视角
+      // getPatriarchDashboard 的"当月 1 号起"略有语义差异（30 天滚动窗口
+      // vs 自然月），如实标注，不强行对齐成一模一样的窗口定义
+      reportCountInScope: totalReportsInScope,
       // 👵 长者关怀细分维度
       nationalDineInSeniors,
       nationalDeliverySeniors,

@@ -7079,6 +7079,20 @@ page {
   background: #1B5E20;
 }
 
+/* 🏛️（2026-09-09 超管全国总览工作台重构）全国总览虚拟节点下的弱化态：
+   与品牌红/绿的实际可操作态区分，灰色调表明"当前不可用"，不与其余状态
+   共用颜色语义 */
+.omni-checkin-btn.state-national-disabled {
+  background: #E9ECEF;
+  color: #868E96;
+  box-shadow: none;
+}
+
+.omni-checkin-btn.state-national-disabled:active {
+  background: #E9ECEF;
+  transform: none;
+}
+
 /* 次级跳转入口：店长/财务身份可能同时具备（超管），两条链接可以同时出现，
    用弱化的胶囊样式呈现，不与上方的打卡主按钮抢视觉焦点 */
 .omni-checkin-manage-links {
@@ -7111,26 +7125,23 @@ page {
   color: #C97B3D;
 }
 
-.omni-checkin-store-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 16rpx;
-  padding: 14rpx;
-  background: #F8F9FA;
-  border: 1rpx dashed #DEE2E6;
-  border-radius: 12rpx;
-  font-size: 22rpx;
-  color: #868E96;
-}
+/* 🏛️（2026-09-09 超管全国总览工作台重构）.omni-checkin-store-hint 已随
+   wxml 改动一并删除——manager-home-card/finance-home-card 现已自适应全国
+   总览场景，"进入店务管理/财务稽核台"链接不再需要被这条阻断性提示拦住 */
 
+/* 🏛️（2026-09-09 超管全国总览工作台重构·视觉降噪）对齐本页主流卡片基线
+   .ui-card-wrapper（24rpx 圆角 + 0 4rpx 16rpx rgba(0,0,0,0.03) 阴影 + 1rpx
+   描边）——此前这两张卡片各自独立维护一套更重的阴影（20rpx/0.06），与页面
+   其余卡片视觉不一致。只改这一处规则块，不触碰页面其余 30 余张独立卡片样式
+   （规模超出本次改动范围，见 plan 文档"范围与取舍"） */
 .manager-home-card,
 .finance-home-card {
   background: #FFFFFF;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   padding: 28rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
+  border: 1rpx solid #F1F3F5;
 }
 
 .manager-home-card .card-header-welcome,

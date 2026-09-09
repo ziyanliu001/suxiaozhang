@@ -6,6 +6,7 @@ import { isCloudAvailable } from '../../../../utils/cloudGuard';
 import { drawStoreInvitationPoster, SponsorInfo } from '../../../../utils/drawStorePoster';
 import { requestOpenSubscription } from '../../../../utils/subscriptionHandoff';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
+import { safeNavigateTo } from '../../../../utils/navHelper';
 
 Page({
   _navGuard: null as NavGuardInstance | null,
@@ -670,6 +671,18 @@ Page({
   },
 
   // 生成邀请码：不在本页复制一套邀请码 UI，跳回首页触发已有的 onOpenGenCodeModal 并预选中该门店
+  // 🏛️（2026-09-09 超管全国总览工作台重构）直达指定门店的档案/资质公示/组织
+  // 配置编辑——store-profile.ts 已支持通过显式 query 参数覆盖当前切店上下文
+  // （见该文件 onLoad 改动），这里带上本行 storeId/storeName 跳转，进页即是
+  // 这家店，不需要再用 store-profile 自己的切店选择器选一次
+  onGoToStoreProfile(e: any) {
+    const { storeid, storename } = e.currentTarget.dataset;
+    if (!storeid) return;
+    safeNavigateTo({
+      url: `/subpackages/admin/pages/store-profile/store-profile?storeId=${storeid}&storeName=${encodeURIComponent(storename || '')}`
+    });
+  },
+
   onGoToGenerateCode(e: any) {
     const { storeid, storename } = e.currentTarget.dataset;
     setGenCodeHandoff({ storeId: storeid, storeName: storename });

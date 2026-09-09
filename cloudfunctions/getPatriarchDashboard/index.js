@@ -114,10 +114,18 @@ exports.main = async (event) => {
     let totalIncome = 0;
     let totalExpense = 0;
     let auditedCount = 0;
+    // 🆕（2026-09-09 超管全国总览工作台重构）本月志愿团队人次：首页
+    // manager-home-card"志愿团队/人"指标此前是从未赋值的假数字兜底
+    // （wxml `{{activeVolunteersCount || 28}}`），这里补一个真实字段——
+    // 对 report_logs.volunteerCount（当日到岗义工人数）按月求和，与
+    // getNationalDashboard 自己算 nationalTotalVolunteers 的手法完全
+    // 一致（同一份"本月人次汇总"口径，不是发明一个新统计定义）
+    let monthVolunteerCount = 0;
     monthReports.forEach((r) => {
       totalDiners += parseFloat(r.totalDineCount || r.diningCount || 0) || 0;
       totalIncome += (parseFloat(r.listDonationTotal || 0) || 0) + (parseFloat(r.otherDonation || 0) || 0);
       totalExpense += parseFloat(r.expenseAmount || 0) || 0;
+      monthVolunteerCount += parseFloat(r.volunteerCount || 0) || 0;
       if (r.approvalStatus === 'AUDITED_LOCKED') auditedCount += 1;
     });
 
@@ -151,6 +159,7 @@ exports.main = async (event) => {
         monthNet: totalIncome - totalExpense,
         auditedCount,
         totalCount: monthReports.length,
+        monthVolunteerCount,
         pendingVoidList,
         pendingProfileUpdate: store.pendingProfileUpdate || null
       }

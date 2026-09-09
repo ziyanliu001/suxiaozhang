@@ -1181,6 +1181,12 @@ Page({
     // report_logs/user_roles，不落库任何导出历史），暂无真实调用统计可读，
     // 如实展示为 0，不再编造数字
     excelExportCount: 0,
+    // 🐛 根因修复（2026-09-09 超管全国总览工作台重构）：manager-home-card
+    // "本月餐报篇数"/"志愿团队/人"此前从未被赋值，wxml 靠 `|| 14`/`|| 28`
+    // 兜底字面量顶着、永远显示假数字。见 fetchManagerFinanceStats()，真实值
+    // 回来前展示 0，不再展示编造的占位数字
+    monthlyReportCount: 0,
+    activeVolunteersCount: 0,
     // 🐛 财务首页瘦身：默认收起"请填写当日明细"整条录入表单流水线（含爱心支持/
     // 物资明细、义工与用餐统计、生成结果预览、底部吸底生成按钮），首屏聚焦
     // 【财务稽核台】。财务仍保留亲自代填当日餐报的能力（见 onScrollToFinanceConsole
@@ -8575,6 +8581,14 @@ Page({
       this.fetchFinanceLedgerStatus();
     }
 
+    // 🏛️（2026-09-09 超管全国总览工作台重构）manager-home-card/finance-home-card
+    // 的"本月餐报篇数"/"志愿团队/人"指标——与上面两个函数不同，这两个指标在
+    // isAllStoresView 下也要展示（全域聚合），所以不加 !isNationalOverviewSelected()
+    // 这层限制，由 fetchManagerFinanceStats() 自己按场景二选一调用云函数
+    if ((this.data.isManager || this.data.isFinance || this.data.isSuperAdmin) && this.data.currentStoreId) {
+      this.fetchManagerFinanceStats();
+    }
+
     const activeStore = getSelectedStore();
     if (activeStore && activeStore.storeName !== this.data.shopName) {
       this.setData({
@@ -11191,7 +11205,20 @@ Page({
     });
   },
 
+  // 🐛 根因修复（2026-09-09 超管全国总览工作台重构）：此前这里没有任何
+  // national_overview 哨兵值防护——超管在"全国总览"虚拟节点下点这个按钮，
+  // 会照常弹出打卡弹窗，提交后 onConfirmShiftCheckIn 把哨兵字面量原样当
+  // storeId 写进 manageVolunteerCheckIn 云函数与本地待同步队列，产生一条
+  // 归属不存在门店的脏打卡记录。到岗打卡的本质是"人正在这家店"，不适合像
+  // ensureStoreBoundForTool/ensureSpecificStoreSelected 那样弹出门店选择器
+  // 让用户"选一个店再继续"——那样反而会造出一条看起来真实、实际是选出来
+  // 而非真正到岗的打卡记录，与本次要解决的"脏数据"诉求背道而驰。这里只做
+  // 纯拦截，不提供门店穿透续跑
   onVolunteerCheckIn() {
+    if (this.isNationalOverviewSelected()) {
+      wx.showToast({ title: '全国总览模式下无法打卡，请先切换到具体门店', icon: 'none', duration: 2500 });
+      return;
+    }
     this.refreshTodayShiftStatus();
     this.setData({ showShiftSelectModal: true });
   },
@@ -12256,15 +12283,14 @@ Page({
     }, 200);
   },
 
+  // 🐛 根因修复（2026-09-09 超管全国总览工作台重构）：此前这里只弹一个
+  // wx.showModal 提示框，「查看列表」按钮没有任何 success 回调——点了确实
+  // "查看列表"按钮没有任何反应，是个死胡同。审核九宫格格子走的
+  // onOpenAuditModal()（已经支持全国总览/单店两种视角，见
+  // auditIsNationalView）才是真正能打开列表的入口，这里改为直接复用同一个
+  // 入口，统一两条路径
   onOpenVolunteerAudit() {
-    const count = this.data.pendingAuditCount || 0;
-    wx.showModal({
-      title: '👥 审核',
-      content: count > 0 ? `当前有 ${count} 位提交了到岗打卡请求，是否进入审核？` : '当前暂无待审核的打卡记录，门店护持秩序良好！',
-      confirmText: '查看列表',
-      confirmColor: '#8C1D18',
-      showCancel: false
-    });
+    this.onOpenAuditModal();
   },
 
   // 🐛 财务首页瘦身：「请填写当日明细」整条录入表单流水线默认对纯财务角色收起
@@ -12320,6 +12346,50 @@ Page({
     }
   },
 
+  // 🐛 根因修复（2026-09-09 超管全国总览工作台重构）：manager-home-card 的
+  // "本月餐报篇数"/"志愿团队/人"两个指标此前在 .ts 里从未被赋值过，wxml 靠
+  // `{{xxx || 14}}`/`{{xxx || 28}}` 兜底字面量顶着——无论谁在哪家店哪个时间点
+  // 打开，这两个数字永远是编造的 14/28，与本次"全域聚合口径"诉求无关，是一个
+  // 更底层的数据造假问题，必须先换成真实查询。isAllStoresView 时复用
+  // getNationalDashboard（本机构全域聚合，rangeType:'month' 对应近 30 天
+  // 滚动窗口，与单店视角的"当月 1 号起"略有语义差异，如实标注不强行对齐）；
+  // 单店时复用已有的 getPatriarchDashboard（新增 monthVolunteerCount 字段，
+  // 见该云函数改动）
+  async fetchManagerFinanceStats() {
+    if (!isCloudAvailable()) return;
+    try {
+      if (this.isNationalOverviewSelected()) {
+        const res: any = await callFunctionWithTimeout({
+          name: 'getNationalDashboard',
+          data: { rangeType: 'month' }
+        });
+        const summary = res && res.result && res.result.success && res.result.nationalSummary;
+        if (!summary) return;
+        this.setData({
+          monthlyReportCount: summary.reportCountInScope || 0,
+          activeVolunteersCount: Math.round(summary.nationalTotalVolunteers || 0)
+        });
+      } else {
+        const storeId = this.data.currentStoreId;
+        if (!storeId) return;
+        const res: any = await callFunctionWithTimeout({
+          name: 'getPatriarchDashboard',
+          data: { storeId }
+        });
+        const data = res && res.result && res.result.success && res.result.data;
+        if (!data) return;
+        this.setData({
+          monthlyReportCount: data.totalCount || 0,
+          activeVolunteersCount: Math.round(data.monthVolunteerCount || 0)
+        });
+      }
+    } catch (err) {
+      // 🛡️ 与 fetchFinanceLedgerStatus 同一惯例：本卡片指标是锦上添花的首页
+      // 展示，查询失败（含超管跨机构预览门店的正常多租户拒绝）静默降级即可
+      console.warn('[fetchManagerFinanceStats] 查询失败:', err);
+    }
+  },
+
   // 🐛 修复"假导出"：此前无论选哪个选项都只弹一个"导出指令已发送"的成功提示，
   // 没有调用任何真实导出逻辑（其中"区块链存证日志"更是纯虚构文案，项目里从未有过相关实现）。
   // 统计分析页（pages/statistics）已有基于 exportAccountExcel 云函数的完整可用导出流程
@@ -12351,15 +12421,16 @@ Page({
   // fetchFinanceLedgerStatus() 完全不受影响（首页 loadHomeDynamicData() 每次
   // onShow 都会重新拉取这两个数字，从新页面操作完导航返回后会自然刷新，不需要
   // 跨页面手动同步）
+  // 🏛️（2026-09-09 超管全国总览工作台重构）全国总览下改用
+  // ensureSpecificStoreSelected(resumeAction)——复用已有的"门店穿透选择器"
+  // （弹 #storePicker 选择面板，选定门店后自动续跑），不再只是 toast 拦截完
+  // 就结束，用户不需要手动再点一次同一个入口
   onOpenFinanceLockModal() {
     if (!this.data.isFinance && !this.data.isSuperAdmin && !this.data.isPatriarch) {
       wx.showToast({ title: '仅财务、大家长与超管可执行稽核封账', icon: 'none' });
       return;
     }
-    if (this.isNationalOverviewSelected()) {
-      wx.showToast({ title: '请先选择具体的门店再执行封账', icon: 'none', duration: 2500 });
-      return;
-    }
+    if (!this.ensureSpecificStoreSelected(() => this.onOpenFinanceLockModal())) return;
     safeNavigateTo({ url: '/subpackages/admin/pages/finance-audit/finance-audit' });
   },
 
@@ -12369,10 +12440,7 @@ Page({
       wx.showToast({ title: '仅财务与超管可查看风控预警', icon: 'none' });
       return;
     }
-    if (this.isNationalOverviewSelected()) {
-      wx.showToast({ title: '请先选择具体的门店再查看风控预警', icon: 'none', duration: 2500 });
-      return;
-    }
+    if (!this.ensureSpecificStoreSelected(() => this.onOpenRiskAlertsModal())) return;
     safeNavigateTo({ url: '/subpackages/admin/pages/finance-audit/finance-audit' });
   },
 

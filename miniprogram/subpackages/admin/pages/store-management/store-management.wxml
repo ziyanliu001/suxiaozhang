@@ -87,6 +87,10 @@
         </view>
 
         <view class="sm-store-actions">
+          <!-- 🏛️（2026-09-09 超管全国总览工作台重构）直达门店档案/资质公示/组织配置——
+               store-profile.ts 已支持超管跨店切换（commit 8f3dec9），这里直接带上
+               本行 storeId/storeName 跳转，免去进页后再手动切一次店 -->
+          <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onGoToStoreProfile">📋 门店档案</button>
           <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onGoToGenerateCode">🔑 生成邀请码</button>
           <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onOpenRename">✏️ 编辑名称</button>
           <button class="sm-btn-action" data-storeid="{{item.storeId}}" data-storename="{{item.storeName}}" bindtap="onViewStoreStaff">👥 查看门店人员</button>

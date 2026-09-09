@@ -135,6 +135,9 @@ const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', '
 
 Page({
   _navGuard: null as NavGuardInstance | null,
+  // 🏛️（2026-09-09 超管全国总览工作台重构）见 onLoad/initRoleAndStore 注释
+  _queryOverrideStoreId: '' as string,
+  _queryOverrideStoreName: '' as string,
 
   data: {
     contentTop: 0,
@@ -295,8 +298,18 @@ Page({
     adminKeyInput: ''
   },
 
-  async onLoad() {
+  async onLoad(options: { storeId?: string; storeName?: string }) {
     recordRecentVisit('/subpackages/admin/pages/store-profile/store-profile', '门店档案');
+
+    // 🏛️（2026-09-09 超管全国总览工作台重构）store-management.ts 门店列表
+    // "门店档案"按钮带着明确的 storeId/storeName 跳转过来——挂在实例属性上
+    // （不进 data，纯一次性导航入参，不需要参与渲染），initRoleAndStore() 每次
+    // onShow 都会优先采用，直到用户通过页面内"切换门店"选择器手动换了一家店
+    // 为止（见 onStoreSwitcherChange 清空这两个属性）
+    if (options && options.storeId) {
+      this._queryOverrideStoreId = options.storeId;
+      this._queryOverrideStoreName = options.storeName ? decodeURIComponent(options.storeName) : '';
+    }
 
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',
@@ -349,11 +362,22 @@ Page({
     // 服务端 .doc(storeId).get() 查无此店，直接拒绝写入。改用 getCurrentActiveStore()
     // 并过滤哨兵值；哨兵值被过滤成空后，下面会展示"切换门店"选择器让超管自己选
     // 一家本租户内的真实门店，而不是直接对一个不存在的门店发起注定失败的请求
-    const store = getCurrentActiveStore();
-    const rawStoreId = (roleInfo && roleInfo.storeId) || store.storeId || '';
-    const storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
-    const rawStoreName = (roleInfo && roleInfo.storeName) || store.storeName || '';
-    const storeName = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreName;
+    // 🏛️（2026-09-09 超管全国总览工作台重构）store-management.ts 带着明确
+    // storeId 跳转过来时优先采用，跳过下面整条"猜当前门店"的解析链——直到
+    // 用户通过页面内切换门店选择器手动换店（见 onStoreSwitcherChange 清空这
+    // 两个属性）为止，每次 onShow 都继续沿用这份导航入参
+    let storeId: string;
+    let storeName: string;
+    if (this._queryOverrideStoreId) {
+      storeId = this._queryOverrideStoreId;
+      storeName = this._queryOverrideStoreName;
+    } else {
+      const store = getCurrentActiveStore();
+      const rawStoreId = (roleInfo && roleInfo.storeId) || store.storeId || '';
+      storeId = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreId;
+      const rawStoreName = (roleInfo && roleInfo.storeName) || store.storeName || '';
+      storeName = NATIONAL_STORE_ID_SENTINELS.includes(rawStoreId) ? '' : rawStoreName;
+    }
 
     // 🛡️ 强制优先读取切换后的生效角色：本页此前只认 AuthService.getCachedRoleInfo()
     // 下发的服务端真实角色，完全没读过 store-picker 切身份时写入的 current_user_role
@@ -415,6 +439,11 @@ Page({
     const idx = Number(e.detail.value);
     const target = this.data.storeSwitcherOptions[idx];
     if (!target) return;
+    // 🏛️（2026-09-09 超管全国总览工作台重构）用户手动选了另一家店，清空
+    // store-management.ts 带进来的导航入参覆盖——否则下次 onShow 重跑
+    // initRoleAndStore() 会用这份旧入参把刚选的店又覆盖回去
+    this._queryOverrideStoreId = '';
+    this._queryOverrideStoreName = '';
     this.setData({ currentStoreId: target.storeId, currentStoreName: target.storeName });
     this.fetchProfile();
     this.fetchHealthDashboard();
