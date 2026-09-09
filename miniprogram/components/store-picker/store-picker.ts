@@ -382,6 +382,33 @@ Component({
       const isVerifiedPatriarch = !!(cachedRole && cachedRole.role === 'store_patriarch' && cachedRole.status === 'approved');
       const patriarchStoreId = isVerifiedPatriarch && cachedRole ? cachedRole.storeId : '';
 
+      // 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
+      // docs/architecture/02_user_roles_single_document_invariant.md）
+      // cachedRole.authorizedTenants 由 checkUserRole 随身份一并下发（本次
+      // 新增，此前这份数据只存在于数据库文档里，从未传到客户端）。胶囊
+      // token（MANAGER/FINANCE/PATRIARCH/VOLUNTEER）与授权记录里的 role
+      // 字面量（store_manager/finance/store_patriarch/volunteer）不是同一套
+      // 大小写/命名，这里做一次映射；FAMILY 没有对应的授权角色，本就是
+      // 自我声明式身份，不需要映射
+      const authorizedTenantGrants: Array<{ tenantId: string; role: string; stores?: string[] }> =
+        (cachedRole && Array.isArray(cachedRole.authorizedTenants)) ? cachedRole.authorizedTenants : [];
+      const PILL_ROLE_TO_GRANT_ROLE: Record<string, string> = {
+        MANAGER: 'store_manager',
+        FINANCE: 'finance',
+        PATRIARCH: 'store_patriarch',
+        VOLUNTEER: 'volunteer'
+      };
+      // 🛡️ 只按 storeId 是否落在授权的 stores 数组里匹配，不需要额外比对
+      // tenantId——storeId 本身是全局唯一的 Mongo ObjectId，不会跨租户重复，
+      // grantTenantAuthorization 授权时也强制要求显式列出 stores（不支持
+      // 留空即整租户），"命中这个 storeId" 已经隐含了"命中这个 tenantId"
+      const hasTenantGrant = (storeId: string, pillRole: string): boolean => {
+        const grantRole = PILL_ROLE_TO_GRANT_ROLE[pillRole];
+        if (!grantRole) return false;
+        return authorizedTenantGrants.some((g) => g && g.role === grantRole
+          && Array.isArray(g.stores) && g.stores.includes(storeId));
+      };
+
       // 🔒 待审核锁定：只有"申请成为已有门店的店长/家长/财务"这种绑定了 storeId 的
       // pending 申请才对应到某个具体胶囊；新建门店的 pending（storeId 为空）不落在
       // 任何门店卡片上，只影响"新建门店"表单本身（见 onSubmitNewStoreApply 里的拦截）
@@ -396,6 +423,12 @@ Component({
         const roles = store.roles.map((r: any) => {
           // ❤️ 家人（服务对象）与义工同级：自我声明式身份，无需邀请码/审批
           if (r.role === 'VOLUNTEER' || r.role === 'FAMILY') return { ...r, isAuthorized: true, isPending: false };
+          // 🛡️ 跨租户漫游授权：与下面 isSuperAdmin+isOwnTenant 分支完全独立
+          // 的一条判定路径——漫游授权的场景恰恰是 store.isOwnTenant 为 false
+          // （这家店本就不是调用者自己机构的），不能要求它也满足 isOwnTenant
+          if (hasTenantGrant(store.storeId, r.role)) {
+            return { ...r, isAuthorized: true, isPending: false };
+          }
           if (isSuperAdmin && store.isOwnTenant && (r.role === 'MANAGER' || r.role === 'FINANCE' || r.role === 'PATRIARCH')) {
             return { ...r, isAuthorized: true, isPending: false };
           }

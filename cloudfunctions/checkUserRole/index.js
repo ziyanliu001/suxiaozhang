@@ -55,7 +55,15 @@ exports.main = async (event, context) => {
         // 已核销的邀请码身份（如 ['STORE_MANAGER','FINANCE']）；此前从未随
         // checkUserRole 下发过，客户端完全看不到，profile.ts 的"切换身份"面板
         // 需要靠它判断当前账号是否兼任了多个身份
-        roles: Array.isArray(user.roles) ? user.roles : []
+        roles: Array.isArray(user.roles) ? user.roles : [],
+        // 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
+        // docs/architecture/02_user_roles_single_document_invariant.md）
+        // 随身份一并下发——grantTenantAuthorization 写入的跨租户授权数组，
+        // 此前只存在于数据库文档里，从未随 checkUserRole 下发过，客户端
+        // （store-picker.ts 计算角色胶囊可选态）完全看不到这份数据，是
+        // "数据库已写入授权、但前端仍无法选择对应角色"的根因——不是
+        // store-picker 的计算逻辑本身有缺陷，是它压根拿不到输入
+        authorizedTenants: Array.isArray(user.authorizedTenants) ? user.authorizedTenants : []
       };
     }
 

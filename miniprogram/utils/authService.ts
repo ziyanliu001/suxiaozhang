@@ -42,6 +42,12 @@ interface RoleInfo {
   // "还持有哪些身份"的清单，供 profile.ts 的"切换身份"面板判断是否需要展示
   // 多身份切换列表
   roles?: string[];
+  // 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
+  // docs/architecture/02_user_roles_single_document_invariant.md）跨租户
+  // 授权数组，由平台管理员通过 grantTenantAuthorization 云函数写入同一条
+  // user_roles 文档（不是新增文档）。store-picker.ts 的角色胶囊可选态计算
+  // 需要用它判断"这家门店我是不是通过漫游授权被授予了某个角色"
+  authorizedTenants?: Array<{ tenantId: string; role: string; stores: string[] }>;
 }
 
 function generateTempOpenid(): string {
@@ -318,7 +324,8 @@ export const AuthService = {
           orgType: r.orgType || '',
           avatarUrl: r.avatarUrl || '',
           nickName: r.nickName || '',
-          roles: Array.isArray(r.roles) ? r.roles : []
+          roles: Array.isArray(r.roles) ? r.roles : [],
+          authorizedTenants: Array.isArray(r.authorizedTenants) ? r.authorizedTenants : []
         };
         wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(roleInfo));
         return { success: true, roleInfo };
