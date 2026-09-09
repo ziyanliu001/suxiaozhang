@@ -34,20 +34,26 @@ const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).lim
 
 本仓库确实支持"一个账号兼任多个身份"（个人中心"切换身份"面板，`switchableRoleOptions`），但这是通过**同一条 `user_roles` 文档内的 `roles` 数组字段**（如 `['VOLUNTEER', 'STORE_PATRIARCH']`）实现的——这些角色 token 共享**同一个 `tenantId`/`storeId` 绑定**，是"在同一家门店，身兼数职"，不是"同时隶属两个不同机构"。`tenantId`/`storeId` 在这条文档里仍然是单一值，不是数组，`resolveCaller()` 读到的仍然只有一个明确的租户归属，`.limit(1)` 的前提（每个 openid 只有一条文档）完全没有被这个机制打破。
 
-## 五、如果未来真的需要支持跨租户任职，需要先做什么
+## 五、方案三：authorizedTenants 轻量租户漫游（2026-09-09 已实施，见下）
 
-**不是**"新增一条文档就够了"。正确的改造路径至少包括：
+本节原先是"如果未来需要支持跨租户任职，要先做什么"的前瞻分析；当天晚些时候该需求真实出现（songyu_elderly_care 确需要雨花斋超管跨租户管理），业务侧与本文档第四节的分析达成一致后，按**不新增第二条文档**的方向落地了一版范围明确收窄的实现，记录如下，供后续类似场景参考。
 
-1. **`resolveCaller()` 必须引入"当前激活租户"的显式选择机制**——客户端需要在请求里带上一个明确的 `tenantId` 意图（类似 `checkTenantPermission` 云函数里"超管跨机构预览"已经有的 `storeId` 覆盖逻辑，但那是单向的"超管查看其他门店"，不是"切换自己的租户身份"），服务端查询改为 `.where({_openid, tenantId})`（显式收窄，不再是裸的 `.where({_openid})`），而不是继续依赖"反正只有一条"的隐式假设。
-2. **这个改造不是改一个函数就行，是全仓库几十处 `resolveCaller` 拷贝都要同步改**——本仓库"各云函数独立部署、无共享模块机制"的既有做法意味着这不是一次重构就能完成的小改动，需要专项排期，逐一审查每个拷贝点在"可能存在多条记录"前提下是否还安全。
-3. 需要决定多条记录之间的**优先级/默认值规则**（比如用户没有显式声明 `tenantId` 意图时，默认选哪一条？）与**前端身份切换 UI**（参照"切换身份"面板的思路，但要扩展到"切换租户"，而不只是"切换同租户内的角色 token"）。
-4. 在完成以上改造并充分测试之前，**严禁为任何 `_openid` 在 `user_roles` 里新增第二条记录**，不论业务诉求看起来多合理——这条约束不是"建议"，是在当前代码状态下会真实触发不确定性故障的硬限制。
+**核心思路**：不新增文档，只在调用者自己那**唯一一条** `user_roles` 文档上新增 `authorizedTenants` 数组字段（形如 `[{ tenantId, role, stores, grantedBy, grantedAt }]`）。`resolveCaller()` 升级为可选接受 `opts.targetStoreId`/`opts.targetTenantId`：命中 `authorizedTenants` 里的一条授权时，返回一个"有效身份"对象（`tenantId`/`role`/`storeId` 被替换成授权里的值），不传 `opts`（或命中不了任何授权）时返回值与升级前逐字节一致。`.limit(1)` 查询的对象始终只有这一条文档，不变式没有被打破——漫游是"读同一条文档里的新字段"，不是"新增文档后靠运气选中哪条"。
 
-## 六、当前的安全替代方案
+**实际改造范围（刻意收窄，不是"全仓库统一升级"）**：
 
-需要一人管理两个独立机构时，使用**两个独立的微信账号**分别绑定到各自机构——每个账号在 `user_roles` 里仍然只有一条记录，不触碰上述不变式。这是本次排查（雨花斋超管 vs 嵩屿助餐点/`songyu_elderly_care`）采纳的方案：嵩屿助餐点改用独立微信号管理，不对雨花斋超管账号做跨租户授权。
+- 只升级了 `manageReportApproval`（`getMeritStats` 调用点）与 `manageStoreProfile`（`get`/`update` 共用的顶层调用点）这两个云函数的 `resolveCaller()`——这是当次真实触发跨租户拒绝的两个函数，不是"顺手把全部 30+ 处都改了"。**其余几十处 `resolveCaller` 拷贝（`getStoreList`/`checkUserRole`/`processRoleAudit` 等）仍是升级前的纯 `.where({_openid}).limit(1)` 写法，不认识 `authorizedTenants` 字段，也不支持任何漫游**——如果后续某个新场景需要在其他云函数里支持跨租户访问，要照着这两个文件的改法单独升级那个函数，不能假设"方案三已经覆盖全仓库"。
+- 新增 `cloudfunctions/grantTenantAuthorization`：方案三唯一的授权写入入口，仅 `platform_admin` 可调用（`grant`/`revoke`/`list` 三个 action）。`grant` 时强制：目标 `openId` 必须已有 `user_roles` 文档（绝不新建，这是本不变式在代码层的强制落实）、必须显式列出 `stores`（不支持留空即整租户授权，最小权限原则）、按 `tenantId` 去重覆盖、角色白名单排除 `super_admin`/`platform_admin`（这两个角色代表租户/平台最高权威，不该通过一条轻量数组条目批量授予）。
+- 前端**无需任何改动**——`fetchMeritStats()`/组织信息配置弹窗此前已经在传 `storeId`（见 commit `9ea7e4b`），`resolveCaller` 新增的 `opts` 逻辑直接复用这个已有参数反查目标 `tenantId`，不需要新增传参路径。
+
+**与第四节"如果未来真的需要支持跨租户任职"当时设想的差异**：当时设想的是"引入显式 `tenantId` 意图 + 全仓库同步改造 resolveCaller"——实际落地时发现不需要"全仓库"，只需要改**真正会被跨租户访问到的那几个函数**，且"显式意图"不需要前端新增参数，服务端可以从已有的 `storeId` 反查出来。这是一个比最初设想更小、更精确的改动面，但第四节列出的风险分析（尤其是"不能只改一个函数就假设全仓库都安全"）依然成立——只是换成了反过来的提醒：**不要假设"方案三"让所有云函数都具备了漫游能力，它只覆盖明确升级过的那几个**。
+
+## 六、当前的安全替代方案（仍然有效，两者并不互斥）
+
+需要一人管理两个独立机构、又不想/不需要引入 `authorizedTenants` 这层复杂度时，使用**两个独立的微信账号**分别绑定到各自机构——每个账号在 `user_roles` 里仍然只有一条记录，不触碰上述不变式，也不依赖任何云函数是否升级过。方案三适用于"同一个自然人希望用同一个微信账号跨机构操作"这个更具体的体验需求；如果这个需求不存在，独立账号仍然是更简单、攻击面更小的默认选择。
 
 ## 七、相关文档
 
 - 本次发现这条不变式的完整排查过程与 `store-picker.ts`/`getStoreList` 的配套代码加固：见 commit `42c73b9`（`fix(store-picker): 跨机构发现门店不再被超管身份误标为已授权`）。
+- 方案三的完整实现：见 commit `673c99e`（`feat(auth): 实施方案三——authorizedTenants 轻量租户漫游`）。
 - 租户隔离的整体模型与雨花斋专区的商业策略例外：`docs/architecture/01_sustainable_charity_and_tenant_isolation.md`。
