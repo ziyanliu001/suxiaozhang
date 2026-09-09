@@ -1,0 +1,9 @@
+{
+  "name": "grantTenantAuthorization",
+  "version": "1.0.0",
+  "description": "方案三「authorizedTenants 轻量租户漫游」唯一授权入口：仅平台管理员可用，只 update 已存在的 user_roles 文档的 authorizedTenants 数组字段，绝不为任何 openId 新增第二条 user_roles 文档",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

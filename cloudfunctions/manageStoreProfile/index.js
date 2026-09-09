@@ -180,10 +180,40 @@ function extractRegionFromText(text) {
 // 里"总部级只读汇总"的角色口径一致，仅用于本函数的 get（只读），不影响 update 权限
 const CROSS_STORE_VIEW_ROLES = ['super_admin', 'hq_finance', 'regional_finance'];
 
-async function resolveCaller(OPENID) {
+// 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
+// docs/architecture/02_user_roles_single_document_invariant.md）
+// resolveCaller 严格保持"每个 _openid 只查这一条 user_roles 文档"的不变式
+// 不变——漫游不靠新增第二条文档，只读同一条文档上新增的 authorizedTenants
+// 数组字段。opts 完全可选，不传（或命中不了任何授权）时返回值与改造前
+// 逐字节一致。opts.targetStoreId 命中某条 authorizedTenants 授权时，返回
+// 的"有效身份"把 tenantId/role/storeId 原地替换成该条授权里的值——下游的
+// resolveReadTarget/resolveWriteTarget 不需要感知"这是不是漫游身份"，只要
+// 把替换后的 caller 当成一个真实绑定了该门店的对应角色来用即可
+async function resolveCaller(OPENID, opts) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
-  return (roleRes.data && roleRes.data[0]) || null;
+  const own = (roleRes.data && roleRes.data[0]) || null;
+  if (!own) return null;
+
+  const targetStoreId = opts && (opts.targetStoreId || opts.storeId);
+  let targetTenantId = opts && opts.targetTenantId;
+  if (!targetTenantId && targetStoreId) {
+    const storeRes = await db.collection('stores').doc(targetStoreId).field({ tenantId: true }).get().catch(() => null);
+    targetTenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
+  }
+
+  // 目标租户就是自己本来的租户：不需要漫游，原样返回——这也覆盖了"调用方
+  // 没传任何 target* 参数"的默认情形
+  if (!targetTenantId || targetTenantId === own.tenantId) return own;
+
+  const grants = Array.isArray(own.authorizedTenants) ? own.authorizedTenants : [];
+  const grant = grants.find((g) => g && g.tenantId === targetTenantId
+    && (!Array.isArray(g.stores) || g.stores.length === 0 || !targetStoreId || g.stores.includes(targetStoreId)));
+  // 命中不了就不冒充身份——原样返回调用者本来的身份，该拒绝的下游逻辑
+  // 照常拒绝，绝不在这里静默放行
+  if (!grant) return own;
+
+  return { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
 }
 
 // 读权限：本店任意角色只读；总部级角色可传 storeId 或 storeName 查看机构内任意门店
@@ -265,7 +295,11 @@ exports.main = async (event, context) => {
   const { OPENID } = cloud.getWXContext();
 
   try {
-    const caller = await resolveCaller(OPENID);
+    // 🛡️ 传 targetStoreId：命中 authorizedTenants 授权时，resolveCaller 会把
+    // 下面这个 caller 对象原地换成"对这家门店而言的有效身份"（见该函数头部
+    // 注释）。get/update 两个动作共用同一个顶层 storeId 变量，这里统一传一次
+    // 即可覆盖两条分支，不需要在各自分支内分别改造
+    const caller = await resolveCaller(OPENID, { targetStoreId: storeId });
 
     if (action === 'get') {
       if (storeId && NATIONAL_STORE_ID_SENTINELS.includes(storeId)) {
