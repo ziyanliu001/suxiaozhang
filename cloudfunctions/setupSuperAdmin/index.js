@@ -60,13 +60,26 @@ exports.main = async (event, context) => {
 
     if (existingRes.data && existingRes.data.length > 0) {
       const existingDoc = existingRes.data[0];
+      // 🐛 根因修复（2026-09-10，平台巡检"目标账号本来就归属这个租户"误拦截
+      // 的真正源头）：升级一个已有记录为 platform_admin 时，此前写
+      // `targetTenantId || existingDoc.tenantId || ''`——targetTenantId 对
+      // platform_admin 恒为 ''（假值），会直接落到 existingDoc.tenantId 兜底，
+      // 把"这个账号升级前所属的旧机构"残留写回去，与上面第 56 行"platform_admin
+      // 不归属任何机构"的既定设计矛盾。典型触发场景：把一个原本是某机构
+      // super_admin 的账号提权为 platform_admin，旧 tenantId 没被清空——后续
+      // 该 platform_admin 在「平台巡检」Tab 里给自己授权那个旧机构下的门店时，
+      // grantTenantAuthorization 会命中"目标账号本来就归属这个租户"的拦截
+      // （见该云函数同一处注释），因为它比较的正是这个残留字段。
+      // 只有 super_admin 才允许沿用"未显式传 tenantId 时兜底旧值"这条迁移期
+      // 兼容逻辑；platform_admin 强制清空，不受 existingDoc residual 影响
+      const nextTenantId = targetRole === 'platform_admin' ? '' : (targetTenantId || existingDoc.tenantId || '');
       await db.collection('user_roles').doc(existingDoc._id).update({
         data: {
           role: targetRole,
           status: 'approved',
           storeId: '',
           storeName: targetStoreName,
-          tenantId: targetTenantId || existingDoc.tenantId || '',
+          tenantId: nextTenantId,
           realName: event.realName || existingDoc.realName || targetLabel,
           phone: event.phone || existingDoc.phone || '',
           setupTime: db.serverDate()

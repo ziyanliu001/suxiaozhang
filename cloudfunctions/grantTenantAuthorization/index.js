@@ -98,8 +98,19 @@ async function handleGrant(event, OPENID) {
   }
 
   // 🛡️ 严禁授权给自己已经归属的那个租户——那不叫"漫游"，是数据错乱的信号，
-  // 这种情况下应该去核实 targetDoc.tenantId 本身是否正确，不是加一条授权掩盖过去
-  if (tenantId === targetDoc.tenantId) {
+  // 这种情况下应该去核实 targetDoc.tenantId 本身是否正确，不是加一条授权掩盖过去。
+  // 🐛 根因修复（2026-09-10）：这条检查只对 targetDoc.role !== 'platform_admin'
+  // 的账号有意义——platform_admin 按设计不归属任何机构（见 setupSuperAdmin.js
+  // 同一处注释），它的 tenantId 字段本该恒为空；如果某个 platform_admin 账号
+  // 因历史数据（如从 super_admin 提权时残留旧 tenantId，已在 setupSuperAdmin
+  // 修复）而 tenantId 恰好等于本次要巡检的目标租户，这只是一个无意义的字段
+  // 巧合，不代表这个 platform_admin 真的对这家机构有任何操作权限（它的角色
+  // 从头到尾都是 platform_admin，不是该机构的 super_admin/store_patriarch），
+  // 继续拦截只会让「平台巡检」自助授权在这种历史数据下永久失效，且导航目标
+  // store-profile.ts 的 canManage 也不会认这个残留 tenantId——用户真正需要的
+  // 就是走下面正常的 authorizedTenants 漫游授权，不应该被这条本该只防
+  // "真正归属某机构的角色" 的检查误伤
+  if (targetDoc.role !== 'platform_admin' && tenantId === targetDoc.tenantId) {
     return { success: false, error: '目标账号本来就归属这个租户，不需要（也不应该）再加一条授权' };
   }
 

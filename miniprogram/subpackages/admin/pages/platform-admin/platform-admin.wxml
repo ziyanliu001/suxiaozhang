@@ -409,7 +409,10 @@
             </view>
           </view>
 
-          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId}}">
+          <!-- 🐛（2026-09-10 根除"目标账号本来就归属这个租户"阻断体验）
+               inspectAlreadyHasAccess 为 true 时说明这个账号对选中机构已有
+               常态身份，不需要再选临时授权角色，收起角色选择区 -->
+          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId && !inspectAlreadyHasAccess}}">
             <text class="pa-inspect-label">授权角色</text>
             <view class="pa-inspect-role-options">
               <view
@@ -422,6 +425,8 @@
             </view>
           </view>
 
+          <text class="pa-inspect-hint" wx:if="{{inspectSelectedStoreId && inspectAlreadyHasAccess}}">✅ 当前账号对这家机构已有常态身份，无需临时授权，可直接进入档案</text>
+
           <text class="pa-inspect-error" wx:if="{{inspectError}}">{{inspectError}}</text>
 
           <button
@@ -431,7 +436,7 @@
             bindtap="onSubmitInspectGrant"
             loading="{{inspectSubmitting}}"
             disabled="{{inspectSubmitting}}"
-          >获取巡检权限并进入「{{inspectSelectedStoreName}}」档案</button>
+          >{{inspectAlreadyHasAccess ? '以当前身份直达「' + inspectSelectedStoreName + '」档案' : '获取巡检权限并进入「' + inspectSelectedStoreName + '」档案'}}</button>
         </block>
       </view>
 
