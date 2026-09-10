@@ -155,3 +155,58 @@
 ### 7.5 验证命令
 
 同第 4 节，本模块未引入新的终端命令：`npm run typecheck`、`npm test`。
+
+---
+
+## 8. Autonomous Engineering Rules（自主工程闭环，2026-09-10）
+
+以下四条规则来自同一天连续几轮真实排查/返工（platform-admin 巡检面板与
+store-profile 门店档案），每条都对应一次具体故障，不是泛泛的最佳实践清单。
+Agent 接手这两块相关代码前必须先读这一节。
+
+1. **单字段修改严禁把 `editing` 置为 `true`，事件绑定必须用 `catchtap` 而不是 `bindtap`。**
+   `store-profile.ts` 的行级/单字段轻量编辑入口只允许弹出半屏卡片弹窗
+   （`sp-modal-card`），绝不能连带触发整页长表单编辑态——`bindtap` 会向上
+   冒泡，如果父级容器上还挂着别的 `bindtap`（哪怕当时看起来"没有关联"），
+   点击单字段编辑图标就可能被外层监听器一并捕获、连带切到 `editing:true`。
+   `catchtap` 阻止冒泡，是本页"点击单字段图标只弹半屏卡片、绝不触发整页
+   编辑"这条交互契约的唯一保障，不能图省事换回 `bindtap`。`editing:true`
+   目前全仓库只允许由页面顶部"✏️ 修改档案"这一个入口触发（`onEditProfile`），
+   其余任何行级/图标级点击事件都不允许写这行 `setData`。
+
+2. **巡检漫游（`authorizedTenants`）签发必须按 `storeId` 覆盖历史记录，
+   消费端命中多条有效记录时必须取 `grantedAt` 最新的一条，不能取数组第
+   一条。** 根因：`grantTenantAuthorization/lib/grantAuthorizationRules.js`
+   的 `mergeGrant()` 曾经只按 `tenantId` 去重——如果同一家门店因历史数据
+   问题（机构被重建等）在数组里残留一条 `tenantId` 不同但 `storeId` 命中
+   同一家店的旧授权，再次对这家店授权新角色时旧记录不会被替换，导致数组
+   里同时存在两条"生效中"的授权。`resolveCaller.js` 的
+   `resolveEffectiveCaller()` 与 `store-profile.ts` 的 `grantedEntry` 计算
+   如果只取"第一条匹配的记录"，会稳定复现"选了大家长，权限却按义工生效"
+   这类离奇 bug。正确写法：签发端按 `stores` 数组是否与新授权重叠判定"应
+   被取代"（而不是只比 `tenantId`）；消费端过滤 `isGrantStillValid()` 后，
+   在全部有效匹配里取 `grantedAt` 最大的一条。两端必须保持同一套挑选逻辑，
+   否则会出现"服务端已经认可新授权、客户端却按旧数据把编辑按钮全部隐藏"
+   的双重标准。
+
+3. **自定义导航栏（`<navigation-bar>` 组件）的总高度严格等于
+   `statusBarHeight + navBarHeight`（组件内部 `_layout()` 按
+   `wx.getMenuButtonBoundingClientRect()` 实测胶囊坐标算出），禁止在此基础
+   上叠加任何额外的纯色 padding/margin 去"撑高"或"留白"顶栏本身。** 需要
+   首屏呼吸感时，去调整顶栏**之下**的内容区（如 `pa-content` 自己的
+   `padding-top`），不要通过放大顶栏色块面积或叠加 `margin-top` 实现——那
+   会造成"色块过厚/胶囊漂浮"的视觉压迫感（2026-09-10 platform-admin 巡检
+   面板两轮视觉迭代都踩过这个坑：先是误以为需要改高度，后来定位到真正问题
+   其实是背景色饱和度太高，纯色越深越大越显得"压"，与高度本身无关）。改
+   顶栏视觉时优先调背景色/描边这类"轻"手段，不要动高度计算。
+
+4. **每次改动后必须自主执行 `npm run agent:check` 跑通全流程，不要等人类
+   手动切到微信开发者工具按 Ctrl+B 确认编译。** 该脚本（`scripts/agent-check.js`）
+   顺序执行 `typecheck` → `test` → 通知开发者工具重新加载编译，任一环节
+   失败都会以非零退出码终止并打印可诊断的原始输出。⚠️ 如实说明其边界：
+   微信开发者工具官方 HTTP/CLI 接口没有"编译并返回语法错误列表"这种能力，
+   第三步只是触发 IDE 重新加载/编译（`/v2/open`），编译是否有 WXML/WXSS
+   语法错误仍然只会体现在 IDE 图形界面里，看不到就默认信任 `typecheck`/
+   `test` 两道真正的结构化校验；开发者工具未启动/端口未开时可用
+   `AGENT_CHECK_SKIP_DEVTOOLS=1` 豁免第三步，但 `typecheck`/`test` 永远是
+   不可跳过的硬性门禁。

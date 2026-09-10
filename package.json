@@ -6,6 +6,7 @@
     "test": "node --test cloudfunctions/*/lib/*.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "security-audit": "node scripts/security-audit.js",
+    "agent:check": "node scripts/agent-check.js",
     "build:core": "node scripts/build-open-core.js"
   },
   "keywords": [],
