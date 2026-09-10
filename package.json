@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "security-audit": "node scripts/security-audit.js",
     "agent:check": "node scripts/agent-check.js",
+    "visual:check": "node scripts/visual-check.js",
     "build:core": "node scripts/build-open-core.js"
   },
   "keywords": [],
@@ -14,6 +15,7 @@
   "license": "",
   "devDependencies": {
     "miniprogram-api-typings": "^2.8.3-1",
+    "miniprogram-automator": "^0.12.1",
     "typescript": "^5.9.3"
   }
 }

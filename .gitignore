@@ -21,3 +21,7 @@ dist/
 # scripts/seedActivationCodes.ts 生成的真实激活码 JSON——等价于可直接兑换出
 # 付费套餐权益的凭证，绝不能进入版本库（即便是私有仓库）
 scripts/output/
+
+# scripts/visual-check.js（miniprogram-automator 视觉快照）产出的截图——
+# 每次运行都会覆盖重生成，纯本地调试用途，不进入版本库
+.agent/

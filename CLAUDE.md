@@ -74,6 +74,8 @@
 - 单元测试：`npm test`（即 `node --test cloudfunctions/*/lib/*.test.js miniprogram/subpackages/admin/pages/store-profile/lib/*.test.js`），只覆盖各 `lib/*.test.js` 下的纯函数单测，不是端到端/集成测试，且只有部分云函数/页面有对应测试文件。⚠️ 2026-09-10 起不再是"只测云函数"——`miniprogram/` 页面如果按同款"纯逻辑拆 `lib/*.js` + 配套 `*.test.js`"的写法（见 `store-profile/lib/qualificationPhotoActions.js` 首个先例）新增测试，需要手动把对应 glob 加进这行 script，`node --test` 不做递归通配，新增一个页面的 `lib/` 目录就要在这里显式追加一段路径。
 - Open-Core 安全审计：`npm run security-audit`（`scripts/security-audit.js`，配合 [`OPEN_CORE_ARCHITECTURE.md`](docs/OPEN_CORE_ARCHITECTURE.md) 的敏感信息审计标准使用）
 - Open-Core 拆分构建：`npm run build:core`（`scripts/build-open-core.js`，生成开源 Core 代码产物）
+- 本地自闭环校验：`npm run agent:check`（`scripts/agent-check.js`，typecheck→test→通知开发者工具重新编译三步，见 CLAUDE.md 第 8 节 Autonomous Engineering Rules 第 4 条）
+- 视觉快照：`npm run visual:check`（`scripts/visual-check.js`，需要 `miniprogram-automator`，见第 8 节第 5 条——用真实开发者工具渲染截图，不是靠读代码猜视觉效果；默认截 `platform-admin` 页面首屏+上滑 400px 两张图存到 `.agent/snapshots/`，可传参数指定其它页面路径）
 - 云函数本地调试/部署：在对应云函数目录下执行 `npm install`
 - Obsidian 知识库链接检查：`ls -l ./docs`
 
@@ -160,7 +162,7 @@
 
 ## 8. Autonomous Engineering Rules（自主工程闭环，2026-09-10）
 
-以下四条规则来自同一天连续几轮真实排查/返工（platform-admin 巡检面板与
+以下五条规则来自同一天连续几轮真实排查/返工（platform-admin 巡检面板与
 store-profile 门店档案），每条都对应一次具体故障，不是泛泛的最佳实践清单。
 Agent 接手这两块相关代码前必须先读这一节。
 
@@ -210,3 +212,19 @@ Agent 接手这两块相关代码前必须先读这一节。
    `test` 两道真正的结构化校验；开发者工具未启动/端口未开时可用
    `AGENT_CHECK_SKIP_DEVTOOLS=1` 豁免第三步，但 `typecheck`/`test` 永远是
    不可跳过的硬性门禁。
+
+5. **对"视觉表现"类问题（布局错位、遮挡、层级、居中）不要只凭代码审计下结论——`npm run visual:check` 能拉起真实开发者工具截图，用得上就用。**
+   根因：2026-09-10 同一个导航栏问题被现场反馈"代码明明已经是标准结构、
+   模拟器里还是错位"，逐行审计代码（WXML 结构、WXSS 属性、JSON 配置、TS
+   数据注入）确认完全正确后，用 `scripts/visual-check.js`（`miniprogram-automator`
+   拉起独立自动化开发者工具实例，实测截图）证实渲染结果和代码审计的结论
+   一致——问题出在别处（编译缓存/查看的实例不一致），不是代码错。**教训不是
+   "代码审计不可靠"，而是"当事人已经明确表示不接受纯代码审计的结论时，
+   有能截图的工具就应该截图，不要重复用同一种方法论去说服对方"**。
+   `automator.connect({wsEndpoint})` 需要专门用 `--auto-port` 启动的
+   WebSocket 端口，与 `agent-check.js` 用的服务端口（HTTP 调用）是两个不
+   同机制，手动打开的开发者工具窗口连不上；`automator.launch()` 会另开
+   一个独立的自动化专用实例，`cliPath` 在 Linux 下必须显式指定（SDK 的
+   `resolveCliPath()` 只认 macOS/Windows 默认路径）。冷启动的自动化实例
+   第一次 `reLaunch` 到子包页面会被 app 自身的登录/角色拉取流程静默改写
+   回首页，需要重试几次等冷启动跑完（脚本内已处理，不是环境不稳定）。
