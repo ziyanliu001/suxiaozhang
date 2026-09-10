@@ -1377,24 +1377,29 @@
       <view class="expense-field-box">
         <view class="box-header">
           <view class="lbl"><view class="idx-icon-sm idx-icon-bowl"></view> 食材与杂购</view>
-          <view class="header-action-row">
-            <text class="tag">计入成本</text>
-            <view class="btn-expense-template-pill" hover-class="btn-expense-template-hover" bindtap="onOpenExpenseTemplateModal" data-category="daily">
-              <text class="lbl">🧾 常用项目</text>
-            </view>
-            <view class="btn-scan-receipt-pill" hover-class="btn-scan-receipt-hover" bindtap="onScanReceiptPhoto">
-              <view class="icon idx-icon-sm idx-icon-camera"></view>
-              <text class="lbl">拍照识别</text>
-            </view>
-            <!-- 📸（2026-09-10 发票/小票 OCR 智能记账·第一阶段前端接入）与上面
-                 「拍照识别」是两条彻底独立的入口——本按钮调 action:'parseReceipt'，
-                 多了品类归集与疑点标记，见 index.ts onTapSmartReceiptScan 头部
-                 注释。用 catchtap 阻止冒泡，避免被外层任何潜在的 bindtap 一并
-                 捕获（与 CLAUDE.md 第 8 节第 1 条同一处防御原则） -->
-            <view class="btn-smart-receipt-pill" hover-class="btn-smart-receipt-hover" catchtap="onTapSmartReceiptScan">
-              <text class="icon">📸</text>
-              <text class="lbl">拍照智能识票</text>
-            </view>
+          <text class="tag">计入成本</text>
+        </view>
+        <!-- 🔧（2026-09-11 按钮挤压裁切修复）三颗操作按钮独立成一行工具栏，
+             与上面 box-header（标题+计入成本标签）分行展示，不再和标题挤在
+             同一行里"越挤越小"硬撑——375px 标准屏宽下排不下三颗按钮时，
+             header-action-row 自身 flex-wrap 允许自动换到第二行，不会再有
+             任何一颗按钮的文字被右侧屏幕边缘裁掉 -->
+        <view class="header-action-row">
+          <view class="btn-expense-template-pill" hover-class="btn-expense-template-hover" bindtap="onOpenExpenseTemplateModal" data-category="daily">
+            <text class="lbl">🧾 常用项目</text>
+          </view>
+          <view class="btn-scan-receipt-pill" hover-class="btn-scan-receipt-hover" bindtap="onScanReceiptPhoto">
+            <view class="icon idx-icon-sm idx-icon-camera"></view>
+            <text class="lbl">拍照识别</text>
+          </view>
+          <!-- 📸（2026-09-10 发票/小票 OCR 智能记账·第一阶段前端接入）与上面
+               「拍照识别」是两条彻底独立的入口——本按钮调 action:'parseReceipt'，
+               多了品类归集与疑点标记，见 index.ts onTapSmartReceiptScan 头部
+               注释。用 catchtap 阻止冒泡，避免被外层任何潜在的 bindtap 一并
+               捕获（与 CLAUDE.md 第 8 节第 1 条同一处防御原则） -->
+          <view class="btn-smart-receipt-pill" hover-class="btn-smart-receipt-hover" catchtap="onTapSmartReceiptScan">
+            <text class="icon">📸</text>
+            <text class="lbl">拍照智能识票</text>
           </view>
         </view>
 

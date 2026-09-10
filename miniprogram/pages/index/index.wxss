@@ -1759,13 +1759,10 @@ page {
   flex-shrink: 0;
 }
 
-/* 🌟 三颗按钮（计入成本标签 / 常用项目 / 拍照识别）统一视觉规范：同高、同 padding、
-   同圆角（8-12rpx，不再是胶囊形）、同图标文字间距，让它们在 header-action-row 里
-   看起来是同一组按钮，而不是三种各自不同的样式拼凑在一起 */
-.box-header .tag,
-.btn-expense-template-pill,
-.btn-scan-receipt-pill,
-.btn-smart-receipt-pill {
+/* 🏷️「计入成本」标签：纯展示态徽标，不可点击，独立一份尺寸——不再和下面
+   三颗真正可点击的操作按钮共用同一条touch-target 尺寸规则（那三颗按钮
+   2026-09-11 起改成了 40px 高的舒适点击区，标签本身不需要跟着变大） */
+.box-header .tag {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1775,11 +1772,7 @@ page {
   border-radius: 10rpx;
   box-sizing: border-box;
   white-space: nowrap;
-  /* 细微上方内阴影（模拟轻微凹陷高光）+ 下方投影，提升按钮的实体感 */
-  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.5), 0 2rpx 4rpx rgba(0, 0, 0, 0.04);
-}
-
-.box-header .tag {
+  flex-shrink: 0;
   font-size: 20rpx;
   font-weight: 500;
   color: #1C7ED6;
@@ -1791,10 +1784,34 @@ page {
   background: #FFF3BF;
 }
 
+/* 🌟🔧（2026-09-11 按钮挤压裁切修复）三颗操作按钮（常用项目/拍照识别/拍照
+   智能识票）统一视觉规范：同 min-height（80rpx≈40px，满足舒适点击区）、
+   同 padding、同圆角，让它们在 header-action-row 里看起来是同一组按钮。
+   header-action-row 本身现在允许 flex-wrap——375px 标准屏宽（iPhone
+   SE/12/13）下三颗按钮排不下时自动换到第二行，不再依赖"挤压到裁切"硬塞
+   进一行；row-gap 与 column-gap 统一用 gap 简写，换行后上下间距同样舒适 */
 .header-action-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  margin-bottom: 12rpx;
+}
+
+.btn-expense-template-pill,
+.btn-scan-receipt-pill,
+.btn-smart-receipt-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  min-height: 80rpx;
+  padding: 12rpx 24rpx;
+  border-radius: 14rpx;
+  box-sizing: border-box;
+  white-space: nowrap;
+  /* 细微上方内阴影（模拟轻微凹陷高光）+ 下方投影，提升按钮的实体感 */
+  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.5), 0 2rpx 4rpx rgba(0, 0, 0, 0.04);
 }
 
 /* 拍照识别：浅红底 + 红色相机图标，与「计入成本/常用项目」的蓝/黄区分开，
@@ -1812,12 +1829,12 @@ page {
 }
 
 .btn-scan-receipt-pill .icon {
-  width: 22rpx;
-  height: 22rpx;
+  width: 26rpx;
+  height: 26rpx;
 }
 
 .btn-scan-receipt-pill .lbl {
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: bold;
   line-height: 1;
 }
@@ -1837,12 +1854,12 @@ page {
 }
 
 .btn-smart-receipt-pill .icon {
-  font-size: 20rpx;
+  font-size: 24rpx;
   line-height: 1;
 }
 
 .btn-smart-receipt-pill .lbl {
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: bold;
   line-height: 1;
 }
@@ -2011,14 +2028,9 @@ page {
 }
 
 .btn-expense-template-pill .lbl {
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: bold;
   line-height: 1;
-}
-
-.btn-expense-template-pill .lbl {
-  font-size: 20rpx;
-  font-weight: bold;
 }
 
 .expense-textarea {
@@ -9510,37 +9522,40 @@ page {
   border: 3rpx solid #000000 !important;
 }
 
-/* 🦻 拍照识票是紧凑小胶囊，跟"常用项目"胶囊并排在同一行——不能直接套用
-   上面大按钮的 112rpx 高度，否则会撑破横向排布，按约 1.4x 温和放大 */
+/* 🦻（2026-09-11 随按钮挤压裁切修复同步调整）header-action-row 现在允许
+   flex-wrap，"撑破横向排布"这个约束已经不存在——排不下会自动换行，不再
+   需要为了不换行而故意压缩关怀模式下的按钮尺寸。这里改为在新的基础尺寸
+   （min-height:80rpx）之上再放大一档，保持"关怀模式比普通模式更大"的
+   语义，而不是像此前那样反而比新基础尺寸更小 */
 .care-mode .btn-scan-receipt-pill {
-  height: 64rpx !important;
-  padding: 0 22rpx !important;
+  min-height: 100rpx !important;
+  padding: 14rpx 28rpx !important;
   border-width: 2rpx !important;
 }
 
 .care-mode .btn-scan-receipt-pill .lbl {
-  font-size: 24rpx !important;
+  font-size: 26rpx !important;
 }
 
 .care-mode .btn-scan-receipt-pill .icon {
-  width: 30rpx !important;
-  height: 30rpx !important;
+  width: 32rpx !important;
+  height: 32rpx !important;
 }
 
 /* 🦻 拍照智能识票：与上面 .care-mode .btn-scan-receipt-pill 同一套放大幅度，
-   两颗胶囊并排同行，尺寸必须一致，否则关怀模式下会一高一矮 */
+   两颗胶囊尺寸必须一致，换行后无论排在哪一行都不会一高一矮 */
 .care-mode .btn-smart-receipt-pill {
-  height: 64rpx !important;
-  padding: 0 22rpx !important;
+  min-height: 100rpx !important;
+  padding: 14rpx 28rpx !important;
   border-width: 2rpx !important;
 }
 
 .care-mode .btn-smart-receipt-pill .lbl {
-  font-size: 24rpx !important;
+  font-size: 26rpx !important;
 }
 
 .care-mode .btn-smart-receipt-pill .icon {
-  font-size: 30rpx !important;
+  font-size: 32rpx !important;
 }
 
 .care-mode .home-vt-item {
