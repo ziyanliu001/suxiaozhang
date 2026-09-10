@@ -288,8 +288,13 @@ exports.main = async (event) => {
             // 🛡️ 只投影 patriarch（家长真实姓名，供展示"是否已绑定家长"），不
             // 投影 patriarchOpenId——平台管理员不属于机构内部人员，没必要把
             // 用户 openid 这类可用于精确定位账号的标识符透传到前端，unbind
-            // 动作本身只需要 storeId，openid 由服务端自己从 store 文档反查
-            .field({ storeName: true, status: true, city: true, province: true, createdAt: true, patriarch: true })
+            // 动作本身只需要 storeId，openid 由服务端自己从 store 文档反查。
+            // 🆕（2026-09-10）补投影 tenantId：本查询本身按 tenantId 过滤，
+            // 理论上每一行都等于当前查询的 tenantId，但前端"移出机构"成功后
+            // 会在本地把这一行的 tenantId 就地清空（不立即重新拉取整份列表，
+            // 让该行原地切换成"加入机构"按钮，方便连续操作），需要这个字段
+            // 做前端 wx:if 判断依据
+            .field({ storeName: true, status: true, city: true, province: true, createdAt: true, patriarch: true, tenantId: true })
             .get()
             .catch(() => ({ data: [] }))
         ]);

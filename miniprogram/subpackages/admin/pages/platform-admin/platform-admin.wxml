@@ -305,8 +305,12 @@
                去掉该条件，让所有机构（含无订阅机构）都能走"暂停服务"这条
                已有、留痕、可逆的路径 -->
           <view class="pa-tenant-actions">
-            <view class="pa-tenant-action-btn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenTenantStores">查看门店</view>
-            <view class="pa-tenant-action-btn pa-tenant-action-btn-primary" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name}}" bindtap="onOpenRenewForm">{{item.subscription ? '续费' : '开通订阅'}}</view>
+            <!-- 🐛 根因修复（2026-09-10 控制台警告）：item.name 为空的"未命名机构"
+                 此前把 undefined 原样透传进 data-tenantname，setData 收到
+                 undefined 字段会报 "Setting data field 'xxx' to undefined is
+                 invalid"——与卡片标题展示同一套兜底 -->
+            <view class="pa-tenant-action-btn" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name || '未命名机构'}}" bindtap="onOpenTenantStores">查看门店</view>
+            <view class="pa-tenant-action-btn pa-tenant-action-btn-primary" hover-class="btn-hover" data-tenantid="{{item._id}}" data-tenantname="{{item.name || '未命名机构'}}" bindtap="onOpenRenewForm">{{item.subscription ? '续费' : '开通订阅'}}</view>
             <view class="pa-tenant-more-btn" hover-class="btn-hover" data-item="{{item}}" bindtap="onOpenTenantMoreActions">⋯</view>
           </view>
         </view>
@@ -360,7 +364,7 @@
               wx:for="{{inspectTenantResults}}"
               wx:key="_id"
               data-tenantid="{{item._id}}"
-              data-tenantname="{{item.name}}"
+              data-tenantname="{{item.name || '未命名机构'}}"
               hover-class="btn-hover"
               bindtap="onInspectSelectTenant"
             >
@@ -571,6 +575,13 @@
           <text class="pa-tenant-row" wx:if="{{item.createdAtLabel}}">🕐 创建于 {{item.createdAtLabel}}</text>
           <!-- 👪 家长绑定信息：有绑定才展示这一行，未绑定不显示"解除家长"按钮 -->
           <text class="pa-tenant-row" wx:if="{{item.patriarch}}">👪 家长：{{item.patriarch}}</text>
+          <!-- 🐛 根因修复（2026-09-10 按钮状态互斥）：此前"移出机构"和"加入
+               机构"无条件同时展示，对一家明明已经挂在当前机构下的门店毫无
+               意义地同时提供两个语义相反的动作。改为按 item.tenantId 互斥：
+               有归属只给"停用/启用 + 移出机构"；无归属（点了"移出机构"之后，
+               见 onRemoveStoreFromTenant 就地把这一行的 tenantId 清空，不
+               立即整份刷新列表让这一行消失）才切到"加入机构"，方便连续操作
+               完成"移出 A → 加入 B"而不用退出抽屉重新找这家门店 -->
           <view class="pa-tenant-store-actions">
             <button
               class="pa-btn-small pa-btn-warn"
@@ -582,6 +593,8 @@
               data-status="{{item.status}}"
               bindtap="onSetStoreStatus"
             >{{item.status === 'inactive' ? '启用门店' : '停用门店'}}</button>
+            <!-- 解除家长与"是否挂靠机构"是两个独立维度（孤儿门店理论上也
+                 可能仍绑着家长），独立于下面的移出/加入互斥判断之外 -->
             <button
               wx:if="{{item.patriarch}}"
               class="pa-btn-small pa-btn-warn"
@@ -594,6 +607,7 @@
               bindtap="onUnbindStorePatriarch"
             >解除家长</button>
             <button
+              wx:if="{{item.tenantId}}"
               class="pa-btn-small pa-btn-danger"
               hover-class="btn-hover"
               loading="{{storeActionInFlightId === item._id}}"
@@ -602,11 +616,8 @@
               data-storename="{{item.storeName}}"
               bindtap="onRemoveStoreFromTenant"
             >移出机构</button>
-            <!-- 🚪 加入机构：与"移出机构"对称，供孤儿门店（tenantId 已清空）或需要
-                 改挂到别的机构的门店重新关联使用。手动输入目标机构 ID——机构卡片上
-                 的"机构 ID：{{item._id}}"（见机构列表）本就是可复制查看的，v1 先不做
-                 搜索选择器，保持轻量 -->
             <button
+              wx:if="{{!item.tenantId}}"
               class="pa-btn-small"
               hover-class="btn-hover"
               loading="{{storeActionInFlightId === item._id}}"

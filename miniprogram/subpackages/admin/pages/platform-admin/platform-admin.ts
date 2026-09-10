@@ -1276,7 +1276,11 @@ Page({
     this.setData({
       showTenantStoresSheet: true,
       tenantStoresTenantId: tenantid,
-      tenantStoresTenantName: tenantname
+      // 🐛 根因修复（2026-09-10 控制台警告）：wxml 侧已经在 data-tenantname
+      // 兜底了"未命名机构"，这里再兜底一层——防止未来有别的调用点（如果有）
+      // 忘了在 wxml 侧兜底，setData 收到 undefined 会报
+      // "Setting data field 'tenantStoresTenantName' to undefined is invalid"
+      tenantStoresTenantName: tenantname || '未命名机构'
     });
     await this.loadTenantStores(tenantid);
   },
@@ -1342,7 +1346,18 @@ Page({
           if (result && result.success) {
             wx.showToast({ title: '已移出机构', icon: 'success' });
             safeVibrate();
-            await this.afterTenantStoreMutation();
+            // 🆕（2026-09-10 按钮状态互斥收尾）不再整份重新拉取门店列表——
+            // 那样会因为这一行不再匹配 tenantId 查询条件而直接从列表消失，
+            // 管理员想"移出 A 机构、马上加入 B 机构"就得先关抽屉、重新在
+            // 机构列表里找回这家门店。这里改为就地把这一行的 tenantId 清空，
+            // 行内按钮立刻切换成"加入机构"，可以无缝接着操作；机构卡片上的
+            // storeCount 数字仍需要一次真实数据刷新，走 loadTenants(true)
+            // 后台完成，不阻塞这次操作的视觉反馈
+            const updatedStores = this.data.tenantStores.map((s: any) =>
+              s._id === storeid ? { ...s, tenantId: '' } : s
+            );
+            this.setData({ tenantStores: updatedStores });
+            this.loadTenants(true);
           } else {
             wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none' });
           }
@@ -1357,53 +1372,68 @@ Page({
     });
   },
 
-  // 🚪 加入机构：与 onRemoveStoreFromTenant 对称，把一家孤儿门店（或需要改挂
-  // 归属的门店）关联到指定机构——对接 manageTenantSubscription 的
+  // 🚪（2026-09-10 废除手动输入机构ID，改为点选）与 onRemoveStoreFromTenant
+  // 对称，把一家孤儿门店（tenantId 已清空，通常就是刚在本抽屉里"移出机构"
+  // 的那一行）关联到指定机构——对接 manageTenantSubscription 的
   // assignStoreToTenant action（platform_admin 专属，服务端会做目标机构配额
   // CAS 校验，配额已满时返回 STORE_LIMIT_REACHED，这里直接把 error 文案吐司
-  // 出来，不需要额外分支处理）。v1 用 wx.showModal 的可编辑输入框收目标机构 ID，
-  // 暂不做搜索选择器，保持轻量
+  // 出来，不需要额外分支处理）。
+  // 🐛 根因修复：v1 用 wx.showModal 的可编辑输入框收目标机构 ID，要求管理员
+  // 去机构列表卡片上复制一长串 Mongo ObjectId 再粘贴回来，体验极差且容易
+  // 抄错。改为 wx.showActionSheet 直接列机构名称点选——复用「机构管理」Tab
+  // 已加载的 this.data.tenants（本抽屉本来就只能从这个 Tab 打开），不额外
+  // 发云调用；只列出第一页已加载的机构，如果目标机构还没被搜/翻到，需要先
+  // 在「机构管理」Tab 搜索栏搜出来再回来操作——这是当前的已知限制，不是 bug
   onAssignStoreToTenant(e: any) {
     const { storeid, storename } = e.currentTarget.dataset;
     if (!storeid || this.data.storeActionInFlightId) return;
 
-    wx.showModal({
-      title: `将「${storename}」加入机构`,
-      editable: true,
-      placeholderText: '请输入目标机构 ID（见机构卡片"机构 ID"）',
-      confirmText: '确认加入',
-      success: async (res) => {
-        if (!res.confirm) return;
-        const targetTenantId = (res.content || '').trim();
-        if (!targetTenantId) {
-          wx.showToast({ title: '请输入目标机构 ID', icon: 'none' });
-          return;
-        }
-        this.setData({ storeActionInFlightId: storeid });
-        wx.showLoading({ title: '处理中...', mask: true });
-        try {
-          const cloudRes = await callFunctionWithTimeout({
-            name: 'manageTenantSubscription',
-            data: { action: 'assignStoreToTenant', storeId: storeid, targetTenantId }
-          });
-          const result = cloudRes.result as any;
-          wx.hideLoading();
-          if (result && result.success) {
-            wx.showToast({ title: '已加入机构', icon: 'success' });
-            safeVibrate();
-            await this.afterTenantStoreMutation();
-          } else {
-            wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none', duration: 2500 });
-          }
-        } catch (err) {
-          wx.hideLoading();
-          console.error('[platform-admin] onAssignStoreToTenant 异常:', err);
-          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
-        } finally {
-          this.setData({ storeActionInFlightId: '' });
-        }
+    const candidates = (this.data.tenants || []).filter((t: any) => t._id !== this.data.tenantStoresTenantId);
+    if (candidates.length === 0) {
+      wx.showToast({ title: '暂无其他可选机构，请先在"机构管理"里加载/搜出目标机构', icon: 'none', duration: 2500 });
+      return;
+    }
+
+    wx.showActionSheet({
+      itemList: candidates.map((t: any) => t.name || '未命名机构'),
+      success: (res) => {
+        const target = candidates[res.tapIndex];
+        if (!target) return;
+        this.confirmAssignStoreToTenant(storeid, storename, target._id, target.name || '未命名机构');
       }
     });
+  },
+
+  // 抽出来供 onAssignStoreToTenant 选中目标机构后调用，保持 wx.showActionSheet
+  // 的 success 回调本身简短
+  async confirmAssignStoreToTenant(storeId: string, storeName: string, targetTenantId: string, targetTenantName: string) {
+    this.setData({ storeActionInFlightId: storeId });
+    wx.showLoading({ title: '处理中...', mask: true });
+    try {
+      const cloudRes = await callFunctionWithTimeout({
+        name: 'manageTenantSubscription',
+        data: { action: 'assignStoreToTenant', storeId, targetTenantId }
+      });
+      const result = cloudRes.result as any;
+      wx.hideLoading();
+      if (result && result.success) {
+        wx.showToast({ title: `已加入「${targetTenantName}」`, icon: 'success' });
+        safeVibrate();
+        // 已经加入了别的机构，不再属于本抽屉正在查看的这家，直接从列表移除
+        this.setData({
+          tenantStores: this.data.tenantStores.filter((s: any) => s._id !== storeId)
+        });
+        this.loadTenants(true);
+      } else {
+        wx.showToast({ title: (result && result.error) || '操作失败', icon: 'none', duration: 2500 });
+      }
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[platform-admin] confirmAssignStoreToTenant 异常:', err);
+      wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+    } finally {
+      this.setData({ storeActionInFlightId: '' });
+    }
   },
 
   // 🛑 停用/启用门店：与 store-management.ts 里超管本人操作走的是同一份业务
