@@ -11,6 +11,17 @@ import { clearTenantPermissionCache } from '../../../../utils/tenantPermission';
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
 
+// 🐛（2026-09-10 保存超时 -504003 Invoking task timed out after 3 seconds）
+// manageStoreProfile 云函数的 update action 要对本次提交的每个文本字段做一次
+// 内容安全检测（见该云函数同一处注释，现已改并行发起），云函数自身
+// config.json 的 timeout 同步调到 20 秒——客户端这层的等待时间必须不小于
+// 服务端超时，否则服务端明明还在合理时间内跑完，客户端却先一步判定超时、
+// 提示"网络异常"，白白丢掉一次实际已经成功的保存结果。默认的
+// DEFAULT_CALL_FUNCTION_TIMEOUT_MS（8 秒）只够 get 这类轻量读取，四个会
+// 触发 update action 的保存入口（整页保存/人员画像/资质公示/管理员密钥）
+// 统一用这个更长的超时
+const SAVE_PROFILE_TIMEOUT_MS = 20000;
+
 // 门店人员与服务人群画像：7 项人数指标，字段名与 manageStoreProfile 云函数一致
 const PROFILE_FIELDS = [
   'partyMembers',
@@ -27,7 +38,11 @@ type ProfileField = typeof PROFILE_FIELDS[number];
 // 门店档案信息：文本/日期类字段，字段名与 manageStoreProfile 云函数的 TEXT_PROFILE_FIELDS 一致。
 // contactPhone（门店对外公示联系电话）是 processRoleAudit 申请高阶角色/新建门店档案补全校验
 // 依赖的字段之一，此前门店档案页从未提供编辑入口，只能通过建店/申请流程写入，这里补齐
-const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'] as const;
+// 🆕（2026-09-10）patriarchName：独立的自由文本"大家长/负责人"展示字段，与
+// stores.patriarch/patriarchOpenId 那套通过"认领家长"正式绑定账号、驱动
+// 家长风控锁/platform-admin"解除家长"的机制是两回事——编辑这个字段不会
+// 绑定/解绑任何账号，纯展示层面的名字标注
+const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'patriarchName', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'] as const;
 type TextProfileField = typeof TEXT_PROFILE_FIELDS[number];
 
 // 🏢 平台类型：与 store-picker、getNationalDashboard 大屏筛选共用同一套 value 字面量
@@ -76,6 +91,7 @@ const ORG_TYPE_LABEL_MAP: Record<string, string> = Object.fromEntries(ORG_TYPE_O
 const TEXT_PROFILE_FIELD_LABELS: Record<TextProfileField, string> = {
   address: '详细地址',
   contactPhone: '联系电话',
+  patriarchName: '大家长 / 负责人',
   openDate: '开业日期',
   registeredName: '民政登记名称',
   background: '发起背景',
@@ -178,6 +194,11 @@ Page({
     // 展示态：门店档案信息（文本/日期）+ 运营状态 + 坐标
     address: '',
     contactPhone: '',
+    // 🆕（2026-09-10）patriarchName 可编辑；patriarch/manager 只读，分别来自
+    // 正式的"认领家长"绑定与店长绑定，供展示回退链使用，见 wxml 同一处注释
+    patriarchName: '',
+    patriarch: '',
+    manager: '',
     openDate: '',
     registeredName: '',
     background: '',
@@ -230,6 +251,9 @@ Page({
     // 运营状态/坐标走各自专属控件（胶囊单选 / "设置门店位置"按钮），不提供手工经纬度输入框
     editing: false,
     saving: false,
+    // 🆕（2026-09-10）单字段轻量编辑（大家长/负责人、联系电话、详细地址）
+    // 的防抖锁，与整页保存的 saving 是两把独立的锁
+    quickEditSubmitting: false,
     editForm: {
       partyMembers: '0',
       socialWorkers: '0',
@@ -240,6 +264,7 @@ Page({
       otherCount: '0',
       address: '',
       contactPhone: '',
+      patriarchName: '',
       openDate: '',
       registeredName: '',
       background: '',
@@ -309,6 +334,10 @@ Page({
   },
 
   async onLoad(options: { storeId?: string; id?: string; storeName?: string }) {
+    // 🩺（2026-09-10 排查"未命名门店"数据全空问题）确认页面到底有没有收到、
+    // 收到了什么样的导航入参——如果这条日志都没打出来，说明问题出在导航本身
+    // （页面根本没被正常打开/options 传参失败），不用再往下排查本函数内部逻辑
+    console.log('[debug] store-profile onLoad options:', options);
     recordRecentVisit('/subpackages/admin/pages/store-profile/store-profile', '门店档案');
 
     // 🏛️（2026-09-09 超管全国总览工作台重构）store-management.ts 门店列表
@@ -341,8 +370,21 @@ Page({
   // initRoleAndStore()），与 profile.ts initMinePage() 的"强制优先读取生效角色"
   // 保持同一套刷新时机口径；onShow 在首次打开时本就会紧跟 onLoad 触发一次，
   // 不需要在 onLoad 里再重复调用一遍
+  // 🐛 根因加固（2026-09-10 排查"fetchProfile 完全没执行"问题）：此前
+  // initRoleAndStore() 一旦在中途抛异常（同步或异步），await 直接向外抛出
+  // 未捕获的 rejection，本方法后面的 fetchProfile()/fetchHealthDashboard()
+  // 一整行都不会执行——控制台看到的可能只是一条容易被忽略的 unhandled
+  // promise rejection，而不是一条"抓不到问题"的沉默失败。用 try/catch 兜底，
+  // 确保无论 initRoleAndStore() 是否内部出错，fetchProfile() 都一定会被调用
+  // 一次——本页对"是否有权限查看"的判断，交给 fetchProfile() 内部与云函数
+  // 各自的校验去处理，不应该因为角色同步这一步的异常就连带让画像请求也
+  // 发不出去
   async onShow() {
-    await this.initRoleAndStore();
+    try {
+      await this.initRoleAndStore();
+    } catch (err) {
+      console.error('[debug] initRoleAndStore 异常，仍将继续尝试 fetchProfile:', err);
+    }
     this.fetchProfile();
     this.fetchHealthDashboard();
   },
@@ -479,7 +521,19 @@ Page({
   },
 
   async fetchProfile() {
-    if (!this.data.currentStoreId) {
+    // 🛡️（2026-09-10 强制支持外部透传 storeId）导航入参（options.storeId）
+    // 优先级最高——不管 initRoleAndStore() 那一轮算出的 this.data.currentStoreId
+    // 是否正确落地，这里在真正发起请求前再兜底取一次 this._queryOverrideStoreId，
+    // 确保只要页面是带着 storeId 被打开的，就一定用这个 storeId 去查，不会因为
+    // 角色同步链路中间任何一步的疏漏而丢失掉这个最明确的导航意图
+    const targetStoreId = this._queryOverrideStoreId || this.data.currentStoreId;
+    // 🩺（2026-09-10 排查"fetchProfile 完全没执行"问题）确认本函数确实被调用到、
+    // 以及最终决定用哪个 storeId 发起请求——如果连这条日志都没出现，说明问题
+    // 出在 onShow() 没有走到这一步（见该方法新增的 try/catch 兜底），不是本
+    // 函数内部的问题
+    console.log('[debug] entering fetchProfile, storeId:', targetStoreId);
+
+    if (!targetStoreId) {
       this.setData({ loading: false });
       // 🐛 根因修复（2026-09-09 超管跨店穿透）：超管处于"全国总览"尚未选店时，
       // currentStoreId 本就预期为空——上方新增的 .sp-super-switcher-card 已经
@@ -491,20 +545,31 @@ Page({
       return;
     }
 
-    this.setData({ loading: true });
+    this.setData({ loading: true, currentStoreId: targetStoreId });
     try {
       const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
-        data: { action: 'get', storeId: this.data.currentStoreId }
+        data: { action: 'get', storeId: targetStoreId }
       });
 
       const result = res.result;
       if (!result || !result.success) {
+        // 🩺（2026-09-10）此前这个分支只弹 Toast，控制台完全看不到具体是哪次
+        // 请求失败、失败原因是什么——补上明确的 console.error，方便直接对照
+        // manageStoreProfile 云函数返回的 error 文案定位问题，不用只靠一闪而过
+        // 的 Toast 猜
+        console.error('[debug] fetchProfile 云函数返回失败:', result && result.error, '完整返回:', result);
         wx.showToast({ title: (result && result.error) || '加载门店画像失败', icon: 'none' });
         return;
       }
 
       const data = result.data || {};
+      // 🩺（2026-09-10 排查"未命名门店"+字段全空问题）打印云函数原始返回，
+      // 直接在真机/模拟器控制台确认这次请求到底有没有拿到真实数据——如果
+      // 这里打出来就是空对象/缺字段，说明问题出在 manageStoreProfile 服务端
+      // 或更上游的 storeId 传递；如果这里已经是完整数据，问题在下面的字段
+      // 映射或 setData 之后的渲染
+      console.log('[debug] store profile fetched:', data);
       // 🛡️ 严格权限收紧：canManage 只能来自 initRoleAndStore() 里基于 effectiveRole
       // （优先读 store-picker 本地预览覆盖）算出的值，绝不能再被这里的服务端 canEdit
       // 覆盖——canEdit 只反映调用者的真实服务端角色，不知道客户端正在本地预览哪个
@@ -514,7 +579,12 @@ Page({
       // 完全违背预览模拟的初衷。canManage 只允许 store_manager/store_patriarch/
       // super_admin 三种生效角色为 true，这一条判定口径只在 initRoleAndStore() 一处
       const update: any = {
-        currentStoreName: data.storeName || this.data.currentStoreName,
+        // 🛡️（2026-09-10）字段名互为兜底：manageStoreProfile 的 get action
+        // 返回的门店名字段一直叫 storeName（见该云函数同一处返回结构），这里
+        // 补一个 data.name 的备用键名兜底——正常情况下这层不会生效，纯粹是
+        // 防御性加固，避免万一云函数返回结构调整过、字段改了名字却没同步
+        // 更新这里，导致明明有数据却因为读错字段名而展示成"未命名门店"
+        currentStoreName: data.storeName || data.name || this.data.currentStoreName,
         pendingProfileUpdate: data.pendingProfileUpdate || null,
         operatingStatus: data.operatingStatus || 'operating',
         operatingStatusLabel: OPERATING_STATUS_LABELS[data.operatingStatus] || '运营中',
@@ -526,6 +596,16 @@ Page({
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
+      // 🆕（2026-09-10）patriarch/manager：只读展示字段，云函数一直有返回
+      // （见 manageStoreProfile get 分支），此前本页从未消费过——补上纯粹是
+      // 为了给"大家长/负责人"那行的展示回退链（patriarchName || patriarch ||
+      // manager）提供数据来源，不加入任何可编辑字段列表
+      update.patriarch = data.patriarch || '';
+      update.manager = data.manager || '';
+      // 🛡️（2026-09-10）同上 currentStoreName 处注释：address/contactPhone 的
+      // 备用键名兜底（detailedAddress/phone），正常情况下不生效，纯防御性加固
+      if (!update.address) update.address = data.detailedAddress || '';
+      if (!update.contactPhone) update.contactPhone = data.phone || '';
       PHOTO_FIELDS.forEach((f) => { update[f] = sanitizePhotoUrls(data[f]); });
       const loadedOrgType = data.orgType || '';
       update.orgType = loadedOrgType;
@@ -551,7 +631,11 @@ Page({
       // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
       console.log('[verify] store-profile fetchProfile 完成, canManage 保持:', this.data.canManage, 'data.canEdit(服务端真实角色判定, 仅供参考不采用):', data.canEdit);
     } catch (err: any) {
-      console.error('[fetchProfile] 加载门店画像异常:', err);
+      // 🩺（2026-09-10）打印完整 error 对象（含 errMsg/errCode，callFunctionWithTimeout
+      // 超时/callFunction 失败都会走这里），而不是只留一句笼统的"网络异常"——
+      // 云函数没部署、超时阈值不够、网络真的断开，这三种情况的 err 内容完全不同，
+      // 光看 Toast 分辨不出来，必须看这条日志
+      console.error('[debug] fetchProfile failed:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ loading: false });
@@ -621,6 +705,65 @@ Page({
   onRowTapToEdit() {
     if (!this.data.canManage || this.data.editing) return;
     this.onEditProfile();
+  },
+
+  // 🆕（2026-09-10 单字段轻量编辑）大家长/负责人、联系电话、详细地址这三行
+  // 是最常被单独修改的字段，不需要为了改一个字段跳出整页的长表单——点这
+  // 三行直接弹 wx.showModal 单字段输入框，只把这一个字段打包提交给
+  // manageStoreProfile 的 update action。该云函数的 TEXT_PROFILE_FIELDS
+  // 处理逻辑本就是"只更新事件里出现过的字段"（见云函数同一处注释），天然
+  // 支持这种单字段局部提交，不需要任何服务端改动。其余字段（供餐餐次/
+  // 品牌矩阵/标签等组合较复杂，人员画像/资质照片已经各自有独立的轻量弹窗）
+  // 仍走整页编辑，不在这次改造范围内
+  onQuickEditField(e: any) {
+    if (!this.data.canManage || this.data.quickEditSubmitting) return;
+    const { field, label, placeholder } = e.currentTarget.dataset;
+    if (!field) return;
+    const currentValue = (this.data as any)[field] || '';
+    wx.showModal({
+      title: `修改${label}`,
+      content: currentValue,
+      editable: true,
+      placeholderText: placeholder || `请输入${label}`,
+      confirmText: '保存',
+      success: (res) => {
+        if (!res.confirm) return;
+        const newValue = (res.content || '').trim();
+        if (newValue === currentValue) return;
+        this.submitQuickEditField(field, label, newValue);
+      }
+    });
+  },
+
+  async submitQuickEditField(field: string, label: string, newValue: string) {
+    this.setData({ quickEditSubmitting: true });
+    wx.showLoading({ title: '保存中...', mask: true });
+    try {
+      const cloudRes: any = await callFunctionWithTimeout({
+        name: 'manageStoreProfile',
+        data: { action: 'update', storeId: this.data.currentStoreId, [field]: newValue }
+      }, SAVE_PROFILE_TIMEOUT_MS);
+      const result = cloudRes.result;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
+        return;
+      }
+      if (result.pending) {
+        // 🏛️ 家长风控锁：与整页保存同一套规则，店长发起且本店已绑定家长时
+        // 不直接生效，展示态保持不变
+        wx.showModal({ title: '已提交审批', content: result.message || '已提交家长/超管审批，确认后生效', showCancel: false });
+        return;
+      }
+      this.setData({ [field]: newValue });
+      wx.showToast({ title: `${label}已更新`, icon: 'success' });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[submitQuickEditField] 保存异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ quickEditSubmitting: false });
+    }
   },
 
   onEditProfile() {
@@ -856,7 +999,7 @@ Page({
         payload.longitude = this.data.editForm.longitude;
       }
 
-      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload });
+      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload }, SAVE_PROFILE_TIMEOUT_MS);
       const result = res.result;
 
       if (!result || !result.success) {
@@ -930,7 +1073,7 @@ Page({
       const payload: any = { action: 'update', storeId: this.data.currentStoreId };
       PROFILE_FIELDS.forEach((f) => { payload[f] = parseInt(this.data.profileCountForm[f], 10) || 0; });
 
-      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload });
+      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload }, SAVE_PROFILE_TIMEOUT_MS);
       const result = res.result;
 
       if (!result || !result.success) {
@@ -1003,7 +1146,7 @@ Page({
         foodSafetyPledgePhotos: this.data.qualificationForm.foodSafetyPledgePhotos
       };
 
-      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload });
+      const res: any = await callFunctionWithTimeout({ name: 'manageStoreProfile', data: payload }, SAVE_PROFILE_TIMEOUT_MS);
       const result = res.result;
 
       if (!result || !result.success) {
@@ -1068,7 +1211,7 @@ Page({
       const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
         data: { action: 'update', storeId: this.data.currentStoreId, adminKey: newKey }
-      });
+      }, SAVE_PROFILE_TIMEOUT_MS);
       const result = res.result;
       if (!result || !result.success) {
         wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });

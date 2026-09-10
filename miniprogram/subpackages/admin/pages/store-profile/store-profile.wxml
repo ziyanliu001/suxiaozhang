@@ -80,7 +80,25 @@
     </view>
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
+      <!-- 🆕（2026-09-10）大家长/负责人：独立的自由文本展示字段，与
+           stores.patriarch/patriarchOpenId 那套通过"认领家长"正式绑定账号的
+           机制是两回事——那套决定"家长风控锁"是否生效、能不能在门店清单
+           里"解除家长"；这里只是一行可自由编辑的展示文案，回显时优先用这个
+           字段，其次退回正式绑定的家长姓名，再退回店长姓名，都没有才显示
+           "未填写" -->
+      <!-- 🐛 根因修复（2026-09-10 单字段轻量编辑）：此前这一行的 ✏️ 图标看起来
+           像"点它单独改这一个字段"，实际上和点整行一样，都会跳出整页长表单——
+           图标本身是假的、不体现自己的动作。改为 onQuickEditField，点这一行
+           只弹一个单字段 wx.showModal，保存也只提交这一个字段，不再需要打开
+           整页编辑 -->
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onQuickEditField" data-field="patriarchName" data-label="大家长/负责人" data-placeholder="请输入大家长姓名">
+        <text class="sp-archive-lbl">大家长 / 负责人</text>
+        <view class="sp-archive-val-with-action">
+          <text class="sp-archive-val {{!(patriarchName || patriarch || manager) ? 'empty' : ''}}">{{patriarchName || patriarch || manager || '未填写'}}</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage && !(patriarchName || patriarch || manager)}}">✏️</text>
+        </view>
+      </view>
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onQuickEditField" data-field="contactPhone" data-label="联系电话" data-placeholder="请输入门店联系电话">
         <text class="sp-archive-lbl">联系电话</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!contactPhone ? 'empty' : ''}}">{{contactPhone || '未填写'}}</text>
@@ -127,7 +145,7 @@
           <text class="sp-row-edit-icon" wx:if="{{canManage && !(province || city)}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onQuickEditField" data-field="address" data-label="详细地址" data-placeholder="请输入门店详细地址">
         <text class="sp-archive-lbl">详细地址</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!address ? 'empty' : ''}}">{{address || '未填写'}}</text>
@@ -273,6 +291,10 @@
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">详细地址</text>
         <input class="sp-edit-input full" value="{{editForm.address}}" bindinput="onEditInput" data-field="address" placeholder="请输入门店详细地址" />
+      </view>
+      <view class="sp-edit-item">
+        <text class="sp-edit-lbl">大家长 / 负责人</text>
+        <input class="sp-edit-input full" value="{{editForm.patriarchName}}" bindinput="onEditInput" data-field="patriarchName" placeholder="请输入大家长姓名" />
       </view>
       <view class="sp-edit-item">
         <text class="sp-edit-lbl">联系电话</text>
