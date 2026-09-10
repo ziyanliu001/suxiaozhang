@@ -363,6 +363,21 @@
       </view>
     </view>
 
+    <!-- 🎫（2026-09-10 双轨兼容：门店档案快捷核销入口）雨花斋去中心化单店
+         自治场景——大家长不用跳去个人中心，直接在这里就地兑换授权码续费/
+         升级；与"机构管理台核销入口"是同一个后端 action，仅入口不同 -->
+    <view class="sp-section-title sp-profile-title-row" wx:if="{{canSetAdminKey && !editing}}">
+      <text class="sp-section-icon">🎫</text>
+      <text class="sp-section-txt">空间续费激活</text>
+      <text class="sp-btn-edit-profile-count" bindtap="onOpenActivationModal">激活授权码</text>
+    </view>
+
+    <view class="sp-archive-card" wx:if="{{canSetAdminKey && !editing}}">
+      <view class="sp-archive-row vertical">
+        <text class="sp-archive-val-block sp-admin-key-desc">输入平台发放的授权码即可为本空间所属机构续费/升级套餐，立即生效，核销记录会关联到本空间。</text>
+      </view>
+    </view>
+
     <view class="sp-section-title sp-profile-title-row">
       <text class="sp-section-icon">👥</text>
       <text class="sp-section-txt">门店人员与服务人群画像</text>
@@ -602,6 +617,37 @@
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseAdminKeyModal">取消</button>
         <button class="sp-btn-save" bindtap="onSaveAdminKey" loading="{{adminKeySaving}}" disabled="{{adminKeySaving}}">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🎫 空间续费激活弹窗：仅大家长/超管可触发，与管理员密钥弹窗同一套结构 -->
+  <view class="sp-modal-backdrop" wx:if="{{showActivationModal}}" bindtap="onCloseActivationModal">
+    <view class="sp-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">空间续费激活</text>
+        <text class="sp-modal-close" bindtap="onCloseActivationModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">授权码</text>
+          <input
+            class="sp-edit-input full"
+            type="text"
+            value="{{activationCodeInput}}"
+            bindinput="onActivationCodeInput"
+            placeholder="请输入 12 位授权码"
+            maxlength="14"
+          />
+        </view>
+        <view class="sp-admin-key-modal-hint">
+          <text>兑换成功后立即为本空间所属机构续费/升级套餐生效，一次性口令不可重复使用。</text>
+        </view>
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseActivationModal" disabled="{{activationSubmitting}}">取消</button>
+        <button class="sp-btn-save" bindtap="onSubmitStoreActivation" loading="{{activationSubmitting}}" disabled="{{activationSubmitting}}">激活</button>
       </view>
     </view>
   </view>

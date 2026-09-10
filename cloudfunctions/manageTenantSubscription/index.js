@@ -7,9 +7,11 @@
 // 例外：getTenantDetail（只读）、removeStoreFromTenant / setStoreStatus /
 // unbindStorePatriarch（只写 tenantId / status / patriarch 相关字段 +
 // 对应 user_roles 记录的角色归属）会碰 stores（及 unbindStorePatriarch
-// 额外碰 user_roles）集合——门店名/状态/归属机构/家长绑定都是基础档案与
-// 角色归属，不属于上述"业务财务数据"范畴，且这几个 action 都只服务于
-// 【机构管理】页面本身，不对外暴露任何账目/收支读写能力
+// 额外碰 user_roles）集合；deleteTenant（2026-09-10 新增，只读）额外读
+// stores（门店数）与 user_roles（有没有账号绑定这家机构）两个集合做删除
+// 前置校验，不写不改——门店名/状态/归属机构/家长绑定/账号绑定情况都是
+// 基础档案与角色归属，不属于上述"业务财务数据"范畴，且这几个 action 都
+// 只服务于【机构管理】页面本身，不对外暴露任何账目/收支读写能力
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -774,6 +776,73 @@ exports.main = async (event) => {
           tenant: updatedTenantRes.data,
           prevPlanType
         };
+      }
+
+      // ✏️（2026-09-10 新增）修改机构名称——单字段更新，与 createTenant 走
+      // 同一份"名称必填"校验，不新增独立的校验函数
+      case 'updateTenantName': {
+        const { tenantId, name } = event;
+        const trimmedName = String(name || '').trim();
+        if (!tenantId) return { success: false, error: '缺少 tenantId 参数' };
+        if (!trimmedName) return { success: false, error: '机构名称不能为空' };
+
+        await db.collection('tenants').doc(tenantId).update({
+          data: { name: trimmedName }
+        });
+
+        return { success: true, name: trimmedName };
+      }
+
+      // 🗑️（2026-09-10 新增，危险操作）彻底注销空机构：物理删除 tenants 文档 +
+      // 关联的 tenant_subscriptions 记录。门店是唯一承载业务/财务数据
+      // （report_logs 等，见文件头"合规防腐边界"）的实体，storeCount === 0
+      // 等价于"这家机构名下从未产生过任何真实业务数据"，删除不会波及任何账目。
+      //
+      // 🛡️ 三层服务端强校验，均不信任前端传入值（前端只是提前拦一道，避免
+      // 用户点了却被拒绝的落差体验）：
+      //   1) 默认全国机构（DEFAULT_TENANT_ID）任何情况下不可注销——大量自愈
+      //      逻辑（ensureNationalTenant 及各云函数的同名兜底）依赖它必然存在；
+      //   2) 重新查一次真实门店数，非 0 直接拒绝；
+      //   3) 存在生效中的付费套餐（非 basic 且未过期）直接拒绝，引导先走
+      //      「终止订阅」——不能让一次"清理空壳"操作顺带吞掉一笔仍在生效的
+      //      付费权益；
+      //   4) 存在任何 user_roles 记录的 tenantId 指向这家机构直接拒绝——
+      //      storeCount === 0 不代表一定没有绑定账号（如自愈逻辑曾建过一个
+      //      空壳机构 + 一个 super_admin，但从未创建门店），删了会让该账号的
+      //      tenantId 变成悬空引用，之后所有身份解析都会静默异常
+      // 通过以上校验后才物理删除，一并清掉该机构的 tenant_subscriptions
+      // 记录（若存在，此时只可能是 basic/已过期，非货币敏感），避免留下
+      // 指向已不存在机构的孤儿订阅记录
+      case 'deleteTenant': {
+        const { tenantId } = event;
+        if (!tenantId) return { success: false, error: '缺少 tenantId 参数' };
+        if (tenantId === DEFAULT_TENANT_ID) {
+          return { success: false, error: '默认全国机构不可注销' };
+        }
+
+        const storeCountRes = await db.collection('stores').where({ tenantId }).count().catch(() => ({ total: 0 }));
+        if (storeCountRes.total > 0) {
+          return { success: false, error: `该机构下仍有 ${storeCountRes.total} 家门店，请先解绑或迁移门店后再注销` };
+        }
+
+        const existingSub = await safeGetLatestSubscription(tenantId);
+        if (existingSub && existingSub.planType && existingSub.planType !== 'basic') {
+          const expireTime = existingSub.serviceExpireDate ? new Date(existingSub.serviceExpireDate).getTime() : NaN;
+          const isExpired = !Number.isNaN(expireTime) && expireTime < Date.now();
+          if (!isExpired) {
+            return { success: false, error: '该机构名下仍有生效中的付费套餐，请先终止订阅后再注销' };
+          }
+        }
+
+        const boundUserRes = await db.collection('user_roles').where({ tenantId }).limit(1).get().catch(() => ({ data: [] }));
+        if (boundUserRes.data && boundUserRes.data.length > 0) {
+          return { success: false, error: '该机构下仍有绑定账号，请先处理这些账号的归属后再注销' };
+        }
+
+        await db.collection('tenants').doc(tenantId).remove();
+        await db.collection(TENANT_SUB_COLLECTION).where({ tenantId }).remove().catch(() => {});
+
+        return { success: true };
       }
 
       default:

@@ -149,6 +149,25 @@ async function handleGenerate(event, OPENID) {
 
   await ensureActivationCodesCollection();
 
+  // 🎯（2026-09-10 双轨兼容：定向空间专用码）铸造时可选传入 targetStoreId，
+  // 把整批码"焊死"给一家具体门店/空间——雨花斋去中心化单店自治场景下，平台
+  // 管理员想把码直接定向发给某个大家长，而不是发一张任何机构都能兑的通用码。
+  // 只需要传门店 ID，门店名称由服务端反查快照，不需要平台管理员自己再抄一遍
+  // 名称、也不会因为门店后续改名导致这里的快照失真式地"看起来传错了"——
+  // 快照的语义就是"铸造这一刻门店叫这个名字"，与展示历史台账的场景一致。
+  // 不传则是原有的"通用兑换码"语义，完全不受影响
+  const targetStoreIdInput = String(event.targetStoreId || '').trim();
+  let targetStoreId = null;
+  let targetStoreName = '';
+  if (targetStoreIdInput) {
+    const targetStoreRes = await db.collection('stores').doc(targetStoreIdInput).field({ storeName: true }).get().catch(() => null);
+    if (!targetStoreRes || !targetStoreRes.data) {
+      return { success: false, error: '定向门店ID不存在，请检查后重新输入（留空则铸造通用兑换码）' };
+    }
+    targetStoreId = targetStoreIdInput;
+    targetStoreName = targetStoreRes.data.storeName || '';
+  }
+
   const codes = [];
 
   if (codeType === 'add_on') {
@@ -165,12 +184,18 @@ async function handleGenerate(event, OPENID) {
         codeNormalized: normalized,
         codeType: 'add_on',
         extraStores,
+        targetStoreId,
+        targetStoreName,
         status: 'UNUSED',
         createdBy: OPENID,
         createdAt: db.serverDate(),
         redeemedBy: null,
         redeemedByTenantId: null,
-        redeemedAt: null
+        redeemedAt: null,
+        usedByOpenId: null,
+        usedStoreId: null,
+        usedStoreName: '',
+        usedAt: null
       };
       await db.collection(ACTIVATION_CODES_COLLECTION).add({ data: codeData });
       codes.push({ code: display, codeType: 'add_on', extraStores });
@@ -196,12 +221,18 @@ async function handleGenerate(event, OPENID) {
       planType,
       durationDays,
       note,
+      targetStoreId,
+      targetStoreName,
       status: 'UNUSED',
       createdBy: OPENID,
       createdAt: db.serverDate(),
       redeemedBy: null,
       redeemedByTenantId: null,
-      redeemedAt: null
+      redeemedAt: null,
+      usedByOpenId: null,
+      usedStoreId: null,
+      usedStoreName: '',
+      usedAt: null
     };
     await db.collection(ACTIVATION_CODES_COLLECTION).add({ data: codeData });
     codes.push({ code: display, codeType: 'package', planType, durationDays, note });
@@ -328,9 +359,9 @@ async function handleList(event, OPENID) {
   if (tenantIds.length > 0) {
     try {
       const tenantsRes = await db.collection('tenants').where({ _id: _.in(tenantIds) }).field({ name: true }).get();
-      (tenantsRes.data || []).forEach((t) => { tenantNameMap[t._id] = t.name || t._id; });
+      (tenantsRes.data || []).forEach((t) => { tenantNameMap[t._id] = t.name || ''; });
     } catch (err) {
-      // 机构名查询失败不影响主列表展示，静默降级为展示原始 tenantId
+      // 机构名查询失败不影响主列表展示，前端按 tenantName||tenantId 兜底展示原始 ID
     }
   }
 
@@ -349,7 +380,24 @@ async function handleList(event, OPENID) {
       status: c.status,
       createdAt: c.createdAt,
       redeemedAt: c.redeemedAt,
-      redeemedByTenantName: c.redeemedByTenantId ? (tenantNameMap[c.redeemedByTenantId] || c.redeemedByTenantId) : '',
+      // 🏢 所属机构/容器：redeemedByTenantId 是唯一真源引用，tenantName 是
+      // list 时反查 tenants 集合得到的实时名称（机构改名/被注销后自动跟着变，
+      // 与「机构管理」Tab 的机构名称展示同一套活联口径）
+      tenantId: c.redeemedByTenantId || '',
+      tenantName: c.redeemedByTenantId ? (tenantNameMap[c.redeemedByTenantId] || '') : '',
+      // 📍（2026-09-10 双轨兼容：空间核销落地追踪）usedStoreId/usedStoreName
+      // 是核销那一刻的快照（见 handleRedeem），历史上（本次改造前）核销的码
+      // 没有这两个字段，前端按"未指定具体空间"兜底展示，代表当时走的是机构
+      // 级（连锁/HQ）核销，没有归属到某一具体空间，不是数据丢失
+      usedByOpenId: c.usedByOpenId || '',
+      usedStoreId: c.usedStoreId || '',
+      usedStoreName: c.usedStoreName || '',
+      usedAt: c.usedAt || null,
+      // 🎯 定向空间专用码标记：铸造时可选绑定的目标门店（见 handleGenerate），
+      // 只在 status === 'UNUSED' 时对前端有展示意义（已核销的码看 usedStoreId
+      // 更准确——定向码理论上只能被目标门店核销，见 handleRedeem 校验）
+      targetStoreId: c.targetStoreId || '',
+      targetStoreName: c.targetStoreName || '',
       revokedAt: c.revokedAt,
       revokeReason: c.revokeReason || ''
     }))
@@ -381,12 +429,33 @@ async function handleRedeem(event, OPENID) {
     return { success: false, error: '无法确认您所属的机构，暂不支持兑换激活码' };
   }
 
+  // 📍（2026-09-10 双轨兼容：空间核销落地追踪）store_patriarch 兑换时天然
+  // 绑定到自己名下的单一空间（caller.storeId 来自其 user_roles 记录，服务端
+  // 自己查出来的，不接受/不信任客户端传参，无法伪造）；super_admin（连锁/
+  // 寺庙街道办等多店机构的最高管理者）兑换是机构级操作，不天然对应某一具体
+  // 空间，故留空——这正是"机构管理台核销"与"门店档案快捷核销"两条入口在
+  // 数据落地上的唯一区别，服务端凭 caller.role 自动判定，不需要客户端显式
+  // 声明"我是从哪个入口进来的"
+  const storeId = caller.role === 'store_patriarch' ? (caller.storeId || '') : '';
+  let storeName = '';
+  if (storeId) {
+    const storeRes = await db.collection('stores').doc(storeId).field({ storeName: true }).get().catch(() => null);
+    storeName = (storeRes && storeRes.data && storeRes.data.storeName) || '';
+  }
+
   const codeDoc = await findCodeByNormalized(codeNormalized);
   if (!codeDoc) {
     return { success: false, error: '激活码不存在或输入有误' };
   }
   if (codeDoc.status !== 'UNUSED') {
     return { success: false, error: '该激活码已被使用，一次性口令不可重复兑换' };
+  }
+  // 🎯 定向空间专用码：铸造时绑定了 targetStoreId 的码只能被那一家具体空间
+  // 核销——不满足时明确拒绝，不静默放行，否则"专用"就只是台账上的一句摆设。
+  // 机构级（super_admin，storeId 为空）核销一张定向码同样不满足，会被这条
+  // 拦下，符合"专用"应有的排他语义
+  if (codeDoc.targetStoreId && codeDoc.targetStoreId !== storeId) {
+    return { success: false, error: '该激活码为定向空间专用码，仅能在指定的门店/空间核销' };
   }
 
   let existing = null;
@@ -461,7 +530,15 @@ async function handleRedeem(event, OPENID) {
         status: 'USED',
         redeemedBy: OPENID,
         redeemedByTenantId: tenantId,
-        redeemedAt: db.serverDate()
+        redeemedAt: db.serverDate(),
+        // 📍（2026-09-10 双轨兼容：空间核销落地追踪）usedStoreId/usedStoreName
+        // 是"这一次核销具体发生在哪个空间"的快照——store_patriarch 从门店档案
+        // 快捷核销时有值，super_admin 从机构管理台核销时为空（机构级操作，
+        // 不对应单一空间），与上面 storeId/storeName 的判定逻辑保持一致
+        usedByOpenId: OPENID,
+        usedStoreId: storeId || null,
+        usedStoreName: storeName,
+        usedAt: db.serverDate()
       }
     });
 
@@ -559,7 +636,12 @@ async function handleRedeem(event, OPENID) {
       status: 'USED',
       redeemedBy: OPENID,
       redeemedByTenantId: tenantId,
-      redeemedAt: db.serverDate()
+      redeemedAt: db.serverDate(),
+      // 📍（2026-09-10 双轨兼容：空间核销落地追踪）见上方 add_on 分支同一处注释
+      usedByOpenId: OPENID,
+      usedStoreId: storeId || null,
+      usedStoreName: storeName,
+      usedAt: db.serverDate()
     }
   });
 

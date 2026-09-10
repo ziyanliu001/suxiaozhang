@@ -6,6 +6,7 @@ import { compressAndUploadImages } from '../../../../utils/imageCompress';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync } from '../../../../utils/util';
 import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
+import { clearTenantPermissionCache } from '../../../../utils/tenantPermission';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -295,7 +296,16 @@ Page({
     adminKeyCurrentVal: '',   // 仅大家长/超管可见的当前值（get 时服务端按权限返回）
     showAdminKeyModal: false,
     adminKeySaving: false,
-    adminKeyInput: ''
+    adminKeyInput: '',
+
+    // 🎫（2026-09-10 双轨兼容：门店档案快捷核销入口）雨花斋去中心化单店自治
+    // 场景——大家长不用跳去个人中心，直接在自己空间档案页兑换授权码续费/
+    // 升级。对接与个人中心完全同一个 activateTenantSubscription redeem
+    // action，服务端凭 caller.role（store_patriarch）自动把 usedStoreId 打上
+    // 当前这家空间的归属标记，本页不需要、也不传任何 storeId 参数
+    showActivationModal: false,
+    activationCodeInput: '',
+    activationSubmitting: false
   },
 
   async onLoad(options: { storeId?: string; storeName?: string }) {
@@ -1071,6 +1081,77 @@ Page({
     } finally {
       wx.hideLoading();
       this.setData({ adminKeySaving: false });
+    }
+  },
+
+  // ============ 🎫（2026-09-10 双轨兼容）空间续费激活：门店档案快捷核销入口 ============
+  // 与个人中心【开通/续费套餐】卡片走完全同一个 activateTenantSubscription
+  // redeem action（见 pages/profile/enterprise/saasSubscriptionHandler.ts
+  // onRedeemActivationCode），本页只是给雨花斋大家长/单体素食店多开一个
+  // 就地入口，不重复实现任何鉴权/校验逻辑——门店归属由服务端按调用者自己的
+  // user_roles 记录判定，本页不传、也无法伪造 storeId
+
+  onOpenActivationModal() {
+    if (!this.data.canSetAdminKey) {
+      wx.showToast({ title: '仅大家长/超管可操作空间续费激活', icon: 'none' });
+      return;
+    }
+    this.setData({ showActivationModal: true, activationCodeInput: '' });
+  },
+
+  onCloseActivationModal() {
+    if (this.data.activationSubmitting) return;
+    this.setData({ showActivationModal: false });
+  },
+
+  onActivationCodeInput(e: any) {
+    // 🆕 与个人中心同款：自动去除前后空格，授权码通常是从聊天记录/短信里
+    // 复制来的，前后经常带着换行/空格
+    this.setData({ activationCodeInput: (e.detail.value || '').trim() });
+  },
+
+  async onSubmitStoreActivation() {
+    if (this.data.activationSubmitting) return;
+    const code = (this.data.activationCodeInput || '').trim();
+    if (!code) {
+      wx.showToast({ title: '请输入激活码', icon: 'none' });
+      return;
+    }
+    // 🆕 前端轻量格式校验：激活码固定 12 位字符（见 activateTenantSubscription
+    // 云函数 generateRandomCode），去掉分隔符/空白后长度不对基本就是抄漏/
+    // 抄错，不必真的发起一次网络请求才告知用户，真正的存在性/状态/定向空间
+    // 校验仍完全交给服务端
+    const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (normalized.length !== 12) {
+      wx.showToast({ title: '激活码格式不正确，请核对后重新输入', icon: 'none' });
+      return;
+    }
+
+    this.setData({ activationSubmitting: true });
+    wx.showLoading({ title: '正在兑换...', mask: true });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'activateTenantSubscription',
+        data: { action: 'redeem', activationCode: code }
+      });
+      const result = res.result;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '兑换失败，请重试', icon: 'none', duration: 2500 });
+        return;
+      }
+      // 🆕 兑换成功：清空 tenantPermission.ts 的 60s 内存缓存——本页不展示
+      // 套餐/到期日信息，不需要像个人中心那样重新拉取订阅详情，但功能锁定
+      // 判断（如 EXCEL_EXPORT）依赖这份缓存，不清掉的话要再等 60s 才会解锁
+      clearTenantPermissionCache();
+      this.setData({ showActivationModal: false, activationCodeInput: '' });
+      wx.showToast({ title: '空间续费激活成功', icon: 'success', duration: 2000 });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onSubmitStoreActivation] 兑换异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ activationSubmitting: false });
     }
   },
 

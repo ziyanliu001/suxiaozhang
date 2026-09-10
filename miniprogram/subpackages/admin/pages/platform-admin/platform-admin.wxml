@@ -1,6 +1,22 @@
-<view class="pa-page">
+<!-- 🐛 根因修复（2026-09-10，KPI 卡片被胶囊/状态栏遮挡）：本页是 admin 分包
+     里唯一同时开启 navigationStyle:custom + enablePullDownRefresh 的页面（见
+     platform-admin.json），此前完全依赖 <navigation-bar> 自身在文档流里占据的
+     隐式高度（style="height:{{totalHeight}}px"）把内容顶下去——一旦这个隐式
+     高度在某次渲染时机上落空（下拉刷新原生层与自定义导航栏叠加的已知边界
+     情况），后面紧跟的 pa-loading-state/pa-content 就会直接贴到屏幕物理顶部，
+     KPI 卡片被状态栏/胶囊盖住一半。改为显式方案：<navigation-bar> 通过
+     extClass 固定为 position:fixed（不再占用文档流高度，视觉上始终贴顶，
+     不会被下拉刷新原生层影响），pa-page 本身用 onNavLayout 拿到的真实测量值
+     contentTop 显式 padding-top 撑开——内容起始位置从"依赖隐式流式布局"变成
+     "用同一份真实测量数据显式计算"，两者不会同时生效造成双重叠加。
+     🐛 2026-09-06 的历史修复记录（margin-top/padding-top 不再叠加
+     navigation-bar 已占用的 totalHeight）已随此次改造失效——当时的前提是
+     "navigation-bar 占文档流"，现在这个前提已经不成立，特此说明避免后来者
+     误以为这里"没修好、又叠加了一次" -->
+<view class="pa-page" style="padding-top: {{contentTop}}px;">
 
   <navigation-bar
+    extClass="pa-nav-bar-fixed"
     title="平台管理"
     background="#1C2530"
     color="#FFFFFF"
@@ -10,10 +26,8 @@
     bind:layout="onNavLayout"
   ></navigation-bar>
 
-  <!-- 🐛 2026-09-06 修复：margin-top/padding-top 不再叠加 navigation-bar
-       已占用的 totalHeight，只留 24rpx 呼吸边距。下方 .pa-tab-switcher 的
-       position:sticky; top:{{contentTop}}px 是吸顶阈值，语义与这里的外边距
-       完全不同，本次不动 -->
+  <!-- 呼吸边距：与导航栏净空（已由 pa-page 的 padding-top 保证）是两回事，
+       这里只负责视觉留白，不参与"避免遮挡"的计算 -->
   <view class="pa-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: 24rpx;">
     <text>校验身份中...</text>
   </view>
@@ -95,7 +109,7 @@
           <text class="pa-generated-title">✅ 刚生成 {{lastGeneratedCodes.length}} 张授权码</text>
           <view class="pa-generated-copy-all" hover-class="btn-hover" bindtap="onCopyAllGeneratedCodes">复制全部</view>
         </view>
-        <view class="pa-generated-row" wx:for="{{lastGeneratedCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
+        <view class="pa-generated-row" wx:for="{{lastGeneratedCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-item="{{item}}">
           <text class="pa-generated-code">{{item.code}}</text>
           <text class="pa-generated-meta" wx:if="{{item.codeType === 'add_on'}}">扩容门店包 · +{{item.extraStores}}家</text>
           <text class="pa-generated-meta" wx:else>{{planLabels[item.planType] || item.planType}} · {{item.durationDays}}天</text>
@@ -131,9 +145,15 @@
       </view>
 
       <block wx:else>
-        <view class="pa-code-card" wx:for="{{activationCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-code="{{item.code}}">
+        <view class="pa-code-card" wx:for="{{activationCodes}}" wx:key="code" hover-class="btn-hover" bindtap="onCopyActivationCode" data-item="{{item}}">
           <view class="pa-code-row-top">
-            <text class="pa-code-text">{{item.code}}</text>
+            <view class="pa-code-row-top-left">
+              <text class="pa-code-text">{{item.code}}</text>
+              <!-- 🆕（2026-09-10）显式复制按钮：catchtap 阻止冒泡到卡片本身的
+                   复制 bindtap，避免触发两次 Toast；复制内容与点整张卡片一致
+                   （格式化文本，非裸码），只是给一个更明确可见的点击入口 -->
+              <view class="pa-code-copy-btn" hover-class="btn-hover" catchtap="onCopyActivationCode" data-item="{{item}}">📋 复制</view>
+            </view>
             <text class="pa-code-status pa-code-status-{{item.status}}">{{codeStatusLabels[item.status] || item.status}}</text>
           </view>
           <view class="pa-code-row-bottom">
@@ -145,14 +165,29 @@
               <text class="pa-plan-badge pa-plan-badge-{{item.planType}}">{{planLabels[item.planType] || item.planType}}</text>
               <text class="pa-duration-badge">{{item.durationDays}}天</text>
             </block>
+            <!-- 🎯（2026-09-10 双轨兼容）未核销时标注这张码是"定向空间专用"
+                 （铸造时绑定了 targetStoreId）还是"通用兑换码"（任意机构/
+                 空间都能核销）——核销后看 usedStoreId 更准确，这个标注只在
+                 UNUSED 时展示 -->
+            <text class="pa-target-badge pa-target-badge-dedicated" wx:if="{{item.status === 'UNUSED' && item.targetStoreName}}">🎯 定向空间专用：{{item.targetStoreName}}</text>
+            <text class="pa-target-badge pa-target-badge-generic" wx:if="{{item.status === 'UNUSED' && !item.targetStoreName}}">🌐 通用兑换码</text>
             <!-- 🗑️ 仅未使用的码可作废：catchtap 阻止冒泡到卡片本身的复制 bindtap，
                  避免点"作废"顺带又触发一次复制 Toast -->
             <view class="pa-code-revoke-btn" wx:if="{{item.status === 'UNUSED'}}" hover-class="btn-hover" catchtap="onRevokeActivationCode" data-codeid="{{item._id}}" data-code="{{item.code}}" data-status="{{item.status}}">作废</view>
           </view>
-          <!-- 已核销：明确展示核销机构名称 + 核销时间，不是只有一个状态 Tag -->
+          <!-- 已核销：明确展示所属机构/容器 + 生效空间/门店 + 核销时间，不是
+               只有一个状态 Tag。🆕（2026-09-10 双轨兼容：空间核销落地追踪）
+               三行都固定展示，字段缺失时兜底，不再让某一行在缺失时整行消失、
+               与其余行的展示逻辑不一致：
+               - 所属机构：tenantName（活联反查，机构改名/注销后自动跟着变）
+                 兜底原始 tenantId，再兜底 "-"
+               - 生效空间：usedStoreName（核销时快照）兜底"未指定具体空间"
+                 ——这不是数据丢失，代表当时走的是机构级（连锁/HQ）核销，
+                 没有归属到某一具体空间 -->
           <view class="pa-code-redeemed-box" wx:if="{{item.status === 'USED'}}">
-            <text class="pa-code-redeemed-row">🏢 {{item.redeemedByTenantName || '未知机构'}}</text>
-            <text class="pa-code-redeemed-row" wx:if="{{item.redeemedAtLabel}}">🕐 {{item.redeemedAtLabel}}</text>
+            <text class="pa-code-redeemed-row">🏢 {{item.tenantName || item.tenantId || '-'}}</text>
+            <text class="pa-code-redeemed-row">📍 {{item.usedStoreName || '未指定具体空间'}}</text>
+            <text class="pa-code-redeemed-row">🕐 {{item.usedAtLabel || item.redeemedAtLabel || '-'}}</text>
           </view>
           <!-- 已作废：展示作废时间 + 原因，与已核销的信息盒子同一视觉语言 -->
           <view class="pa-code-redeemed-box pa-code-revoked-box" wx:if="{{item.status === 'REVOKED'}}">
@@ -403,9 +438,11 @@
           <text class="pa-section-title">🕐 当前生效中的巡检</text>
         </view>
 
-        <view class="pa-empty-state" wx:if="{{!activeGrantsLoading && activeGrants.length === 0}}">
-          <text class="pa-empty-icon">✅</text>
-          <text class="pa-empty-title">暂无生效中的临时巡检</text>
+        <!-- 🆕（2026-09-10）撤销后不再留突兀空白：改用一行居中浅灰字提示，
+             不用 pa-empty-state 那套带图标的大空状态（本区块本身就很轻量，
+             大空状态视觉上过重） -->
+        <view class="pa-inspect-grants-empty" wx:if="{{!activeGrantsLoading && activeGrants.length === 0}}">
+          <text>当前无生效中的临时巡检凭证（沙盒隔离状态）</text>
         </view>
 
         <view class="pa-inspect-grant-row" wx:for="{{activeGrants}}" wx:key="tenantId">
@@ -468,6 +505,14 @@
         <text class="pa-field-label">备注（选填，如"卖给XX机构"）</text>
         <input class="pa-input" placeholder="不填则留空" value="{{generateCodesForm.note}}" bindinput="onGenerateCodesFormInput" data-field="note" />
       </block>
+
+      <!-- 🎯（2026-09-10 双轨兼容：定向空间专用码）选填，铸造这批码时直接
+           焊死给一家具体门店/空间——雨花斋去中心化单店自治场景下把码定向发给
+           某个大家长，而不是发一张任何机构都能兑的通用码。留空即原有的
+           "通用兑换码"语义，完全不受影响；门店 ID 可在【机构管理】Tab 的
+           "查看门店"抽屉里核对复制 -->
+      <text class="pa-field-label">定向门店ID（选填，留空为通用兑换码）</text>
+      <input class="pa-input" placeholder="留空则任意机构/空间均可核销" value="{{generateCodesForm.targetStoreId}}" bindinput="onGenerateCodesFormInput" data-field="targetStoreId" />
 
       <view class="pa-sheet-actions">
         <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseGenerateCodesSheet" disabled="{{generatingCodes}}">取消</button>

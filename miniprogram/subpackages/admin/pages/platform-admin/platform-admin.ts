@@ -69,6 +69,23 @@ function getPlanQuotaDefaults(planType: string, serviceStartDate: string): { sto
   };
 }
 
+// 🆕（2026-09-10 一键复制格式化文本）复制内容包含授权码本身 + 套餐/扩容
+// 类型 + 一句兑换说明，粘贴给机构联系人时不用再自己手打说明文字。
+// PLAN_LABELS 与「刚生成授权码」/「授权码台账」两处展示同一套文案口径，
+// 两个调用点（pa-generated-row/pa-code-card）传入的 item 形状略有差异
+// （前者来自 generate 云调用结果，没有 status/_id；后者来自 list 台账），
+// 但都具备这里需要的 code/codeType/planType/durationDays/extraStores 字段
+function buildActivationCodeCopyText(item: any): string {
+  const typeLine = item.codeType === 'add_on'
+    ? `类型：扩容门店包（+${item.extraStores || 0} 家门店）`
+    : `类型：${PLAN_LABELS[item.planType] || item.planType}（${item.durationDays || 0} 天）`;
+  return [
+    `授权码：${item.code}`,
+    typeLine,
+    '使用说明：小程序【个人中心】→【开通/续费套餐】页面输入此授权码即可自助兑换，兑换后立即生效，请勿转发给无关人员。'
+  ].join('\n');
+}
+
 function safeVibrate() {
   // 🛡️ 部分机型/开发者工具不支持震动反馈，wx.vibrateShort 会抛错——纯"锦上添花"
   // 的触觉反馈，失败静默吞掉即可，绝不能因为它把复制成功的主流程打断
@@ -116,7 +133,10 @@ Page({
     // （扩容门店包码，走 extraStores）——与 activateTenantSubscription 云函数
     // generate action 的 codeType 分支一一对应
     // 🆕 note：铸造用途备注（如"卖给XX机构"），非必填，纯留痕，不参与校验
-    generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1', note: '' },
+    // 🎯（2026-09-10 双轨兼容：定向空间专用码）targetStoreId 选填，留空即
+    // 铸造原有的"通用兑换码"语义；填了则整批码只能被这一家门店/空间核销
+    // （见 activateTenantSubscription 云函数 handleGenerate/handleRedeem）
+    generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1', note: '', targetStoreId: '' },
     // 🆕 前端基础校验：输入框失焦/提交时填充，非空即代表校验不通过，wxml 据此
     // 显示红色错误提示，不用等点了提交按钮才用 Toast 告知
     generateCodesErrors: { durationDays: '', quantity: '', extraStores: '' },
@@ -151,11 +171,22 @@ Page({
       status: string;
       createdAt: string;
       redeemedAt: string;
-      redeemedByTenantName: string;
+      tenantId: string;
+      tenantName: string;
+      // 📍（2026-09-10 双轨兼容：空间核销落地追踪）见 activateTenantSubscription
+      // 云函数 handleList 同名字段注释
+      usedByOpenId: string;
+      usedStoreId: string;
+      usedStoreName: string;
+      usedAt: string;
+      // 🎯 定向空间专用码：铸造时可选绑定，只在 UNUSED 时对展示有意义
+      targetStoreId: string;
+      targetStoreName: string;
       revokedAt: string;
       revokeReason: string;
       createdAtLabel: string;
       redeemedAtLabel: string;
+      usedAtLabel: string;
       revokedAtLabel: string;
     }>,
     // 📄 分页游标：下一页从这个 skip 开始拉，hasMore=false 时列表尾部不再展示
@@ -503,10 +534,16 @@ Page({
       // store-profile.ts 初次渲染就能读到，不用等一次自然刷新
       await AuthService.fetchUserRole();
       this.loadActiveGrants();
-      wx.showToast({ title: '授权成功，正在进入门店档案', icon: 'success', duration: 1500 });
+      // 🆕（2026-09-10 一键穿透直达）授权成功后 600ms 内自动跳转门店档案，
+      // 平台管理员不需要再手动去找入口。跳转仍走 safeNavigateTo（而非直接
+      // wx.navigateTo）——它是本仓库 200+ 调用点共用的防抖/页面栈深度兜底
+      // 封装（见 utils/navHelper.ts），手快连点两次这里不会因为重复触发
+      // navigateTo 而报错或叠出两级门店档案页，替换成裸 wx.navigateTo 会
+      // 丢掉这层保护，收益为零、风险不为零，因此保留
+      wx.showToast({ title: '巡检授权成功', icon: 'success', duration: 1500 });
       setTimeout(() => {
         safeNavigateTo({ url: `/subpackages/admin/pages/store-profile/store-profile?storeId=${storeId}` });
-      }, 400);
+      }, 600);
     } catch (err) {
       console.error('[onSubmitInspectGrant] 授权异常:', err);
       this.setData({ inspectError: '网络异常，请重试' });
@@ -820,15 +857,16 @@ Page({
     if (this.data.generatingCodes) return;
     if (!this.validateGenerateCodesForm()) return;
 
-    const { codeType, planType, durationDays, quantity, extraStores, note } = this.data.generateCodesForm;
+    const { codeType, planType, durationDays, quantity, extraStores, note, targetStoreId } = this.data.generateCodesForm;
+    const trimmedTargetStoreId = (targetStoreId || '').trim();
     this.setData({ generatingCodes: true });
     wx.showLoading({ title: '铸造中...', mask: true });
     try {
       const res = await callFunctionWithTimeout({
         name: 'activateTenantSubscription',
         data: codeType === 'add_on'
-          ? { action: 'generate', codeType: 'add_on', extraStores: parseInt(extraStores, 10), quantity: parseInt(quantity, 10) }
-          : { action: 'generate', codeType: 'package', planType, durationDays: parseInt(durationDays, 10), quantity: parseInt(quantity, 10), note }
+          ? { action: 'generate', codeType: 'add_on', extraStores: parseInt(extraStores, 10), quantity: parseInt(quantity, 10), targetStoreId: trimmedTargetStoreId }
+          : { action: 'generate', codeType: 'package', planType, durationDays: parseInt(durationDays, 10), quantity: parseInt(quantity, 10), note, targetStoreId: trimmedTargetStoreId }
       });
       wx.hideLoading();
       const result = res.result as any;
@@ -839,7 +877,7 @@ Page({
           lastGeneratedCodes: result.codes,
           showGenerateCodesSheet: false,
           // 🌟 成功后清空表单残留，下次打开是干净的默认值，不会看到上一批填的数量
-          generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1', note: '' }
+          generateCodesForm: { codeType: 'package', planType: 'pro', durationDays: '365', quantity: '1', extraStores: '1', note: '', targetStoreId: '' }
         });
         this.loadActivationCodes(true);
         this.loadOverview();
@@ -856,13 +894,17 @@ Page({
     }
   },
 
+  // 🆕（2026-09-10）卡片整体仍可点击复制（hover-class 已提示可点击），旁边
+  // 另有一个明确的「📋 复制」小按钮（catchtap，不会冒泡到卡片重复触发）—
+  // 两处都传入完整 item 对象（wxml data-item="{{item}}"），复制的是格式化
+  // 文本（授权码 + 类型 + 兑换说明），不是裸码，方便直接转发给机构联系人
   onCopyActivationCode(e: any) {
-    const code = e.currentTarget.dataset.code;
-    if (!code) return;
+    const item = e.currentTarget.dataset.item;
+    if (!item || !item.code) return;
     safeVibrate();
     wx.setClipboardData({
-      data: code,
-      success: () => wx.showToast({ title: '已复制授权码', icon: 'success' })
+      data: buildActivationCodeCopyText(item),
+      success: () => wx.showToast({ title: '授权码已复制', icon: 'success' })
     });
   },
 
@@ -931,6 +973,9 @@ Page({
       ...c,
       createdAtLabel: this.formatDateLabel(c.createdAt),
       redeemedAtLabel: this.formatDateLabel(c.redeemedAt),
+      // 📍（2026-09-10 双轨兼容）usedAtLabel 优先；历史上（本次改造前）核销的
+      // 码没有 usedAt，wxml 按 usedAtLabel || redeemedAtLabel 兜底
+      usedAtLabel: this.formatDateLabel(c.usedAt),
       revokedAtLabel: this.formatDateLabel(c.revokedAt)
     }));
   },
@@ -1497,32 +1542,146 @@ Page({
     });
   },
 
-  // 🆕（操作栏紧凑化）"更多"入口——用微信原生 ActionSheet 收纳暂停/恢复服务
-  // + 终止订阅这两个低频/危险操作，不新建自定义弹窗组件。选中后直接调用
-  // 已有的 onToggleTenantStatus/onTerminateSubscription（构造一个只含
-  // currentTarget.dataset 的最小事件对象——这两个方法本来就只读这个字段），
-  // 两者各自已有的 wx.showModal 二次确认原样保留，这里不重复做一次确认
+  // 🆕（操作栏紧凑化，2026-09-10 扩充修改名称/彻底注销）"更多"入口——用
+  // 微信原生 ActionSheet 收纳暂停/恢复服务、终止订阅、修改机构名称、彻底
+  // 注销这几个低频/危险操作，不新建自定义弹窗组件。选中后直接调用对应的
+  // on* 方法（构造一个只含 currentTarget.dataset 的最小事件对象——这几个
+  // 方法本来就只读这个字段），各自已有的 wx.showModal 二次确认原样保留，
+  // 这里不重复做一次确认。
+  // ⚠️ wx.showActionSheet 的 itemColor 是整份作用于全部选项的单一颜色，
+  // 原生 API 不支持逐项配色——"彻底注销"用文案前缀 ⚠️ 标出危险，真正的
+  // "警示色"体现在 onDeleteTenant 二次确认弹窗的 confirmColor
   onOpenTenantMoreActions(e: any) {
     const item = e.currentTarget.dataset.item;
     if (!item) return;
     const itemList: string[] = [item.status === 'suspended' ? '恢复服务' : '暂停服务'];
-    const isTerminate: boolean[] = [false];
+    const actionTypes: Array<'toggleStatus' | 'terminate' | 'editName' | 'delete'> = ['toggleStatus'];
     if (item.isActivePaidPlan) {
       itemList.push('终止订阅');
-      isTerminate.push(true);
+      actionTypes.push('terminate');
     }
+    itemList.push('修改机构名称');
+    actionTypes.push('editName');
+    itemList.push('⚠️ 彻底注销此机构');
+    actionTypes.push('delete');
+
     wx.showActionSheet({
       itemList,
       itemColor: '#C62828',
       success: (res) => {
-        if (isTerminate[res.tapIndex]) {
+        const type = actionTypes[res.tapIndex];
+        if (type === 'terminate') {
           this.onTerminateSubscription({
             currentTarget: { dataset: { tenantid: item._id, tenantname: item.name, plantype: item.subscription && item.subscription.planType } }
+          });
+        } else if (type === 'editName') {
+          this.onEditTenantName({
+            currentTarget: { dataset: { tenantid: item._id, tenantname: item.name } }
+          });
+        } else if (type === 'delete') {
+          this.onDeleteTenant({
+            currentTarget: { dataset: { tenantid: item._id, tenantname: item.name, storecount: item.storeCount || 0 } }
           });
         } else {
           this.onToggleTenantStatus({
             currentTarget: { dataset: { tenantid: item._id, currentstatus: item.status } }
           });
+        }
+      }
+    });
+  },
+
+  // ✏️（2026-09-10 新增）修改机构名称——单字段更新，走新增的
+  // manageTenantSubscription updateTenantName action。非空/未变化校验在
+  // 前端先拦一道 UX 层面的空跑，服务端仍会自己再校验一遍非空，不信任客户端
+  onEditTenantName(e: any) {
+    const { tenantid, tenantname } = e.currentTarget.dataset;
+    if (!tenantid) return;
+    wx.showModal({
+      title: '修改机构名称',
+      content: tenantname || '',
+      editable: true,
+      placeholderText: '请输入新的机构名称',
+      confirmText: '保存',
+      success: async (res) => {
+        if (!res.confirm) return;
+        const newName = String(res.content || '').trim();
+        if (!newName) {
+          wx.showToast({ title: '机构名称不能为空', icon: 'none' });
+          return;
+        }
+        if (newName === tenantname) return;
+        wx.showLoading({ title: '保存中...', mask: true });
+        try {
+          const cloudRes = await callFunctionWithTimeout({
+            name: 'manageTenantSubscription',
+            data: { action: 'updateTenantName', tenantId: tenantid, name: newName }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '机构名称已更新', icon: 'success' });
+            safeVibrate();
+            this.loadTenants(true);
+          } else {
+            wx.showToast({ title: (result && result.error) || '修改失败', icon: 'none' });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onEditTenantName 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
+        }
+      }
+    });
+  },
+
+  // 🗑️（2026-09-10 新增，危险操作）彻底注销空机构——前端只做两层拦截：
+  // storeCount > 0 直接拒绝；storeCount === 0 才弹不可逆二次确认。服务端
+  // deleteTenant action 会重新查一遍真实门店数 + 有没有生效付费套餐 + 有
+  // 没有账号绑定这个 tenantId，不信任这里传入的 storecount（卡片上的
+  // storeCount 是上一次 loadTenants 时的快照，可能已经过时）
+  onDeleteTenant(e: any) {
+    const { tenantid, tenantname, storecount } = e.currentTarget.dataset;
+    if (!tenantid) return;
+
+    if (Number(storecount) > 0) {
+      wx.showModal({
+        title: '禁止注销',
+        content: '该机构下存在关联门店，请先解绑或迁移门店后再注销。',
+        showCancel: false
+      });
+      return;
+    }
+
+    wx.showModal({
+      title: '危险：彻底注销机构',
+      content: `确定要注销「${tenantname}」吗？此操作不可逆，将物理清除该机构记录。`,
+      confirmText: '确认注销',
+      confirmColor: '#FA5151',
+      success: async (res) => {
+        if (!res.confirm) return;
+        wx.showLoading({ title: '注销中...', mask: true });
+        try {
+          const cloudRes = await callFunctionWithTimeout({
+            name: 'manageTenantSubscription',
+            data: { action: 'deleteTenant', tenantId: tenantid }
+          });
+          const result = cloudRes.result as any;
+          wx.hideLoading();
+          if (result && result.success) {
+            wx.showToast({ title: '机构已注销', icon: 'success' });
+            safeVibrate();
+            // 🌟 直接从本地列表移除，不等一次 loadTenants(true) 往返——"从
+            // 列表消失"本身就是最直观的反馈，省一次不必要的云调用
+            this.setData({ tenants: this.data.tenants.filter((t: any) => t._id !== tenantid) });
+            this.loadOverview();
+          } else {
+            wx.showModal({ title: '注销失败', content: (result && result.error) || '未知错误', showCancel: false });
+          }
+        } catch (err) {
+          wx.hideLoading();
+          console.error('[platform-admin] onDeleteTenant 异常:', err);
+          wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
         }
       }
     });

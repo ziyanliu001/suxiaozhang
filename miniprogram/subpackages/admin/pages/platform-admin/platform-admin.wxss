@@ -6,6 +6,19 @@
   background: #F4F5F7;
 }
 
+/* 🐛 根因修复（2026-09-10）：见 platform-admin.wxml 顶部同处注释——
+   navigation-bar 通过 extClass 注入这个类，脱离文档流固定贴顶，不再依赖
+   隐式流式布局高度撑开下方内容；下方内容改用 pa-page 的 padding-top（真实
+   测量值 contentTop）显式补位。z-index 高于 .pa-tab-switcher（60）但低于
+   底部抽屉遮罩 .pa-sheet-mask（200），弹窗仍能正常盖住导航栏 */
+.pa-nav-bar-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
 /* 🌟 通用点击反馈：本页此前大部分按钮完全没有 hover-class，点击手感生硬——
    统一补上这一条"轻微变暗"语言 */
 .btn-hover {
@@ -721,6 +734,25 @@
   letter-spacing: 1rpx;
 }
 
+/* 🆕（2026-09-10）左侧分组：授权码文本 + 显式复制按钮，与右侧状态徽章
+   保持 .pa-code-row-top 原有的 space-between 两端对齐关系不变 */
+.pa-code-row-top-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.pa-code-copy-btn {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #495057;
+  background: #F1F3F5;
+  border-radius: 20rpx;
+  padding: 4rpx 16rpx;
+}
+
 .pa-code-status {
   font-size: 20rpx;
   font-weight: 600;
@@ -745,7 +777,26 @@
 .pa-code-row-bottom {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10rpx;
+}
+
+/* 🎯（2026-09-10 双轨兼容）定向/通用码标注——flex-basis:100% 让它无论长短
+   都独占一行，排在套餐/有效期徽章下方、不与它们抢同一行空间，也不会因为
+   门店名称长度不定挤压到旁边的"作废"按钮 */
+.pa-target-badge {
+  flex-basis: 100%;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+}
+
+.pa-target-badge-dedicated {
+  color: #E8590C;
+  font-weight: 600;
+}
+
+.pa-target-badge-generic {
+  color: #868E96;
 }
 
 /* 🗑️ 作废按钮：与门店管理页停用按钮同一套警示红色系，靠 margin-left: auto
@@ -1216,4 +1267,14 @@
 .pa-inspect-grant-time {
   font-size: 22rpx;
   color: #868E96;
+}
+
+.pa-inspect-grants-empty {
+  padding: 32rpx 0;
+  text-align: center;
+}
+
+.pa-inspect-grants-empty text {
+  font-size: 24rpx;
+  color: #ADB5BD;
 }
