@@ -34,12 +34,10 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
-
-// 🛡️ 可通过本机制漫游授予的角色白名单——故意不包含 super_admin/platform_admin：
-// 这两个角色代表"某个租户/平台的最高权威"，不该通过一条轻量数组条目就批量
-// 授予，真要让某人成为另一个租户的 super_admin，应该走该租户自己的正常任命
-// 流程（如 processRoleAudit 的家长任命申请），不是本函数的适用场景
-const GRANTABLE_ROLES = ['store_manager', 'store_patriarch', 'finance', 'volunteer'];
+// 🐛（2026-09-10）授权签发的校验规则与数组合并逻辑拆到
+// lib/grantAuthorizationRules.js（纯函数、不依赖 wx-server-sdk，配套单测见
+// 同目录 *.test.js）——见该文件头部注释，这里只保留数据库 I/O
+const { GRANTABLE_ROLES, validateGrantRequest, mergeGrant } = require('./lib/grantAuthorizationRules');
 
 async function requirePlatformAdmin(OPENID) {
   if (!OPENID) return false;
@@ -80,44 +78,16 @@ async function handleGrant(event, OPENID) {
     tenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
   }
 
-  if (!targetOpenId) return { success: false, error: '缺少 targetOpenId 参数' };
-  if (!tenantId) return { success: false, error: '缺少 tenantId 参数（且未能从 stores[0] 反查到）' };
-  if (!GRANTABLE_ROLES.includes(role)) {
-    return { success: false, error: `role 必须是以下之一: ${GRANTABLE_ROLES.join('/')}` };
-  }
-  if (stores.length === 0) {
-    // 🛡️ 最小权限原则：不提供"留空即授权该租户全部门店"的隐式默认值——
-    // 漫游授权本就是一次精确、罕见的人工操作，要求调用方明确列出门店范围，
-    // 而不是图省事留空换来一份比预期宽得多的授权
-    return { success: false, error: '必须显式列出 stores（至少一个 storeId），不支持留空授予整租户' };
-  }
+  const targetDoc = targetOpenId ? await findTargetDoc(targetOpenId) : null;
 
-  const targetDoc = await findTargetDoc(targetOpenId);
-  if (!targetDoc) {
-    return { success: false, error: '目标 openId 没有任何 user_roles 记录，本函数不会为其新建文档——请先确认该账号已完成正常登录/建档流程' };
-  }
+  // 校验规则（含 2026-09-10 platform_admin 豁免修复）全部在
+  // lib/grantAuthorizationRules.js，配套单测 lib/grantAuthorizationRules.test.js
+  // ——这里只负责把数据库查出来的 targetDoc 喂给它，不重复维护判断逻辑
+  const validation = validateGrantRequest({ targetOpenId, tenantId, role, stores, targetDoc });
+  if (!validation.ok) return { success: false, error: validation.error };
 
-  // 🛡️ 严禁授权给自己已经归属的那个租户——那不叫"漫游"，是数据错乱的信号，
-  // 这种情况下应该去核实 targetDoc.tenantId 本身是否正确，不是加一条授权掩盖过去。
-  // 🐛 根因修复（2026-09-10）：这条检查只对 targetDoc.role !== 'platform_admin'
-  // 的账号有意义——platform_admin 按设计不归属任何机构（见 setupSuperAdmin.js
-  // 同一处注释），它的 tenantId 字段本该恒为空；如果某个 platform_admin 账号
-  // 因历史数据（如从 super_admin 提权时残留旧 tenantId，已在 setupSuperAdmin
-  // 修复）而 tenantId 恰好等于本次要巡检的目标租户，这只是一个无意义的字段
-  // 巧合，不代表这个 platform_admin 真的对这家机构有任何操作权限（它的角色
-  // 从头到尾都是 platform_admin，不是该机构的 super_admin/store_patriarch），
-  // 继续拦截只会让「平台巡检」自助授权在这种历史数据下永久失效，且导航目标
-  // store-profile.ts 的 canManage 也不会认这个残留 tenantId——用户真正需要的
-  // 就是走下面正常的 authorizedTenants 漫游授权，不应该被这条本该只防
-  // "真正归属某机构的角色" 的检查误伤
-  if (targetDoc.role !== 'platform_admin' && tenantId === targetDoc.tenantId) {
-    return { success: false, error: '目标账号本来就归属这个租户，不需要（也不应该）再加一条授权' };
-  }
-
-  const existingGrants = Array.isArray(targetDoc.authorizedTenants) ? targetDoc.authorizedTenants : [];
   const newGrant = { tenantId, role, stores, grantedBy: OPENID, grantedAt: db.serverDate() };
-  // 按 tenantId 去重覆盖，不重复追加同一租户的多条授权
-  const nextGrants = [...existingGrants.filter((g) => g && g.tenantId !== tenantId), newGrant];
+  const nextGrants = mergeGrant(targetDoc.authorizedTenants, newGrant);
 
   await db.collection('user_roles').doc(targetDoc._id).update({
     data: { authorizedTenants: nextGrants }

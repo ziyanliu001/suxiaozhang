@@ -13,6 +13,10 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+// 🐛（2026-09-10）方案三漫游身份的核心决策逻辑拆到 lib/resolveCaller.js
+// （纯函数、不依赖 wx-server-sdk，配套单测见同目录 *.test.js）——见该文件
+// 头部注释，这里只保留"按 OPENID 查 user_roles"这一步数据库 I/O
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
 
 // 🛡️ 全国总览/全部门店哨兵值：前端 index.ts 已经在 loadStoreTargetConfig 里
 // 挡了这两个值不再发起调用（见该方法注释），这里作为纵深防御同样识别、快速
@@ -53,7 +57,12 @@ const PROFILE_FIELDS = [
 // address 此前只在 createStore 时写一次，这里补上编辑入口。contactPhone 是
 // 申请高阶角色/新建门店前的档案补全校验（processRoleAudit）新增依赖的字段之一，
 // 之前门店层级完全没有这个字段
-const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'];
+// 🆕（2026-09-10）patriarchName：独立的自由文本"大家长/负责人"展示字段，与
+// 本文件另一套 patriarch/patriarchOpenId 字段（通过"认领家长"正式绑定账号，
+// 驱动下方"家长风控锁"hasBoundPatriarch() 与 platform-admin 的"解除家长"）
+// 是两回事——这个字段只是走通用画像编辑入口的一行自由文本，不绑定/解绑
+// 任何账号，也不影响风控锁判断
+const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'patriarchName', 'openDate', 'registeredName', 'background', 'characteristics', 'province', 'city'];
 const MAX_TEXT_FIELD_LENGTH = 500;
 const MAX_STORE_PHOTOS = 9;
 const VALID_OPERATING_STATUSES = ['operating', 'preparing', 'paused'];
@@ -182,6 +191,22 @@ function extractRegionFromText(text) {
 // 里"总部级只读汇总"的角色口径一致，仅用于本函数的 get（只读），不影响 update 权限
 const CROSS_STORE_VIEW_ROLES = ['super_admin', 'hq_finance', 'regional_finance'];
 
+// 🛡️（2026-09-10）门店主键兼容读取：本仓库 stores 文档的既定写入惯例是
+// "以 Mongo 原生 _id 作为唯一标识，从不在文档自身另写一份 storeId 字段"——
+// 审计 createStore.js 确认：新建门店时只写 storeName，其余集合（user_roles
+// 等）引用门店时才会用 storeId 这个字段名指向这个 _id，stores 文档自己没有
+// 这个字段。这里仍然加一道 where({ storeId: id }) 兜底查询，纯粹防御性：
+// 万一未来出现遗留导入/脚本写入过带独立 storeId 字段的历史数据，也能查到，
+// 不会因为"主键假设过于绝对"而把真实存在的门店查成空。本函数所有"按门店 ID
+// 读取门店文档"的地方统一改用这个，只读，不改变任何写入路径的语义
+async function fetchStoreByAnyKey(id) {
+  if (!id) return null;
+  const byId = await db.collection('stores').doc(id).get().catch(() => null);
+  if (byId && byId.data) return byId.data;
+  const byField = await db.collection('stores').where({ storeId: id }).limit(1).get().catch(() => null);
+  return (byField && byField.data && byField.data[0]) || null;
+}
+
 // 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
 // docs/architecture/02_user_roles_single_document_invariant.md）
 // resolveCaller 严格保持"每个 _openid 只查这一条 user_roles 文档"的不变式
@@ -195,27 +220,11 @@ async function resolveCaller(OPENID, opts) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
   const own = (roleRes.data && roleRes.data[0]) || null;
-  if (!own) return null;
-
   const targetStoreId = opts && (opts.targetStoreId || opts.storeId);
-  let targetTenantId = opts && opts.targetTenantId;
-  if (!targetTenantId && targetStoreId) {
-    const storeRes = await db.collection('stores').doc(targetStoreId).field({ tenantId: true }).get().catch(() => null);
-    targetTenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
-  }
-
-  // 目标租户就是自己本来的租户：不需要漫游，原样返回——这也覆盖了"调用方
-  // 没传任何 target* 参数"的默认情形
-  if (!targetTenantId || targetTenantId === own.tenantId) return own;
-
-  const grants = Array.isArray(own.authorizedTenants) ? own.authorizedTenants : [];
-  const grant = grants.find((g) => g && g.tenantId === targetTenantId
-    && (!Array.isArray(g.stores) || g.stores.length === 0 || !targetStoreId || g.stores.includes(targetStoreId)));
-  // 命中不了就不冒充身份——原样返回调用者本来的身份，该拒绝的下游逻辑
-  // 照常拒绝，绝不在这里静默放行
-  if (!grant) return own;
-
-  return { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
+  // 决策逻辑（含 2026-09-10 那几轮真实故障修复）全部在 lib/resolveCaller.js，
+  // 配套单测 lib/resolveCaller.test.js——这里只负责把数据库查出来的 own
+  // 文档喂给它，不重复维护判断逻辑
+  return resolveEffectiveCaller(own, targetStoreId);
 }
 
 // 读权限：本店任意角色只读；总部级角色可传 storeId 或 storeName 查看机构内任意门店
@@ -225,8 +234,7 @@ async function resolveReadTarget(caller, requestedStoreId, requestedStoreName) {
   if (CROSS_STORE_VIEW_ROLES.includes(caller.role) && (requestedStoreId || requestedStoreName)) {
     let store = null;
     if (requestedStoreId) {
-      const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
-      store = storeRes && storeRes.data;
+      store = await fetchStoreByAnyKey(requestedStoreId);
     } else {
       const where = { storeName: requestedStoreName };
       if (caller.tenantId) where.tenantId = caller.tenantId;
@@ -266,8 +274,7 @@ async function resolveWriteTarget(caller, requestedStoreId) {
 
   if (caller.role === 'super_admin') {
     if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
-    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
-    const store = storeRes && storeRes.data;
+    const store = await fetchStoreByAnyKey(requestedStoreId);
     if (!store) return { allowed: false, error: '目标门店不存在' };
     // 🛡️ 多租户越权修复：同上 resolveReadTarget 处的修复说明，两侧 tenantId 都
     // 必须存在且相等才放行编辑，不因任一侧缺失就跳过比对。
@@ -323,8 +330,7 @@ exports.main = async (event, context) => {
       // 按 _id 查一次。
       let store = target.store;
       if (!store) {
-        const storeRes = await db.collection('stores').doc(target.storeId).get().catch(() => null);
-        store = storeRes && storeRes.data;
+        store = await fetchStoreByAnyKey(target.storeId);
       }
       if (!store) return { success: false, error: '门店不存在' };
 
@@ -443,55 +449,61 @@ exports.main = async (event, context) => {
         updateFields.adminKey = sanitizeText(event.adminKey).slice(0, 50);
       }
 
-      // 🛡️ 服务端内容安全检测：对本次实际会写入的公开展示类文本字段做一次统一
-      // 检查（人员数字/坐标/密钥等非公开自由文本字段不需要过审）
+      // 🐛 根因优化（2026-09-10，保存超时 -504003 Invoking task timed out after
+      // 3 seconds）：此前这里对每个要写入的文本字段串行 await checkContentSafe()
+      // ——一次完整的整页编辑提交往往同时带着 storeName/address/background/
+      // characteristics/registeredName/宣传标语等 8~10 个文本字段，每个都要单独
+      // 跨云函数调一次 msgSecCheck，串行累加起来轻松超过原来 3 秒的默认超时。
+      // 这些检查互相独立、互不依赖对方结果，改成 Promise.all 并行发起，总耗时
+      // 从"逐个相加"降到"最慢的那一个"，通过/拒绝的判断逻辑不变
       const textFieldsToCheck = [...TEXT_PROFILE_FIELDS, ...TEMPLATE_FIELDS, 'storeName']
         .map((f) => updateFields[f])
         .filter((v) => typeof v === 'string' && v);
-      for (const text of textFieldsToCheck) {
-        if (!(await checkContentSafe(text))) {
-          return { success: false, error: '内容包含违规信息，请修改后重新提交' };
-        }
+      const safetyResults = await Promise.all(textFieldsToCheck.map((text) => checkContentSafe(text)));
+      if (safetyResults.some((safe) => !safe)) {
+        return { success: false, error: '内容包含违规信息，请修改后重新提交' };
+      }
+
+      // 🐛 根因优化（2026-09-10）：省市智能回填 与 家长风控锁 这两块逻辑此前
+      // 各自独立调用 fetchStoreByAnyKey 查一次同一份门店文档——两个条件都命中
+      // 时会对同一份文档发起两次串行数据库读取。合并成"最多查一次，两处共用"，
+      // 少一次不必要的数据库往返，判断逻辑与顺序保持不变
+      const needsProvinceCityGuess = updateFields.province === undefined && updateFields.city === undefined;
+      let storeSnapshot = null;
+      if (needsProvinceCityGuess || caller.role === 'store_manager') {
+        storeSnapshot = await fetchStoreByAnyKey(target.storeId);
       }
 
       // 🆕 保存时省市智能回填：调用方这次没有主动修改 province/city（未传这两个
       // 字段），且门店档案里目前这两项都还是空的，才尝试从门店名称/地址文本里
       // 轻量提取兜底——调用方明确改动这两个字段时（哪怕改成空值）不做任何猜测
       // 覆盖，只补"确实还没填过"的历史/新建门店
-      if (updateFields.province === undefined && updateFields.city === undefined) {
-        const storeRes = await db.collection('stores').doc(target.storeId).get().catch(() => null);
-        const store = storeRes && storeRes.data;
-        if (store && !store.province && !store.city) {
-          const addressForGuess = updateFields.address !== undefined ? updateFields.address : (store.address || '');
-          const guessed = extractRegionFromText(`${store.storeName || ''} ${addressForGuess}`);
-          if (guessed.province || guessed.city) {
-            updateFields.province = guessed.province;
-            updateFields.city = guessed.city;
-          }
+      if (needsProvinceCityGuess && storeSnapshot && !storeSnapshot.province && !storeSnapshot.city) {
+        const addressForGuess = updateFields.address !== undefined ? updateFields.address : (storeSnapshot.address || '');
+        const guessed = extractRegionFromText(`${storeSnapshot.storeName || ''} ${addressForGuess}`);
+        if (guessed.province || guessed.city) {
+          updateFields.province = guessed.province;
+          updateFields.city = guessed.city;
         }
       }
 
       // 🏛️ 家长风控锁：店长发起且本店已绑定家长/督导时，不直接生效，改为存入
       // pendingProfileUpdate 挂起对象等待确认；超管发起或门店未绑定家长时，
       // 行为与升级前完全一致（直接生效）
-      if (caller.role === 'store_manager') {
-        const storeRes = await db.collection('stores').doc(target.storeId).get().catch(() => null);
-        const store = storeRes && storeRes.data;
-        if (hasBoundPatriarch(store)) {
-          if (store.pendingProfileUpdate) {
-            return { success: false, error: '已有一份画像更新正在等待家长/超管审批，请勿重复提交' };
-          }
-          await db.collection('stores').doc(target.storeId).update({
-            data: {
-              pendingProfileUpdate: {
-                ...updateFields,
-                requestedBy: OPENID,
-                requestedAt: db.serverDate()
-              }
-            }
-          });
-          return { success: true, pending: true, message: '已提交家长/超管审批，确认后生效' };
+      if (caller.role === 'store_manager' && hasBoundPatriarch(storeSnapshot)) {
+        if (storeSnapshot.pendingProfileUpdate) {
+          return { success: false, error: '已有一份画像更新正在等待家长/超管审批，请勿重复提交' };
         }
+        await db.collection('stores').doc(target.storeId).update({
+          data: {
+            pendingProfileUpdate: {
+              ...updateFields,
+              requestedBy: OPENID,
+              requestedAt: db.serverDate()
+            }
+          }
+        });
+        return { success: true, pending: true, message: '已提交家长/超管审批，确认后生效' };
       }
 
       const updateData = { ...updateFields };
@@ -509,8 +521,7 @@ exports.main = async (event, context) => {
       }
       if (!storeId) return { success: false, error: '缺少 storeId 参数' };
 
-      const storeRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-      const store = storeRes && storeRes.data;
+      const store = await fetchStoreByAnyKey(storeId);
       if (!store) return { success: false, error: '门店不存在' };
       // 🛡️ 多租户越权修复：同上 resolveReadTarget/resolveWriteTarget 处的修复
       // 说明，两侧 tenantId 都必须存在且相等才放行审批。
