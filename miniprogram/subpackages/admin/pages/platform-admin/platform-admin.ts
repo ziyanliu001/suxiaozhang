@@ -500,10 +500,20 @@ Page({
     });
   },
 
-  // 🔍（2026-09-09 平台巡检自助授权，2026-09-10 改为选择器驱动）给自己的
-  // 账号授权一家具体门店，成功后直接跳转 store-profile.ts——
-  // grantTenantAuthorization 的 grant action 本身会做全部真正的安全校验
-  // （role 白名单/stores 非空/目标文档必须已存在），这里不重复校验逻辑
+  // 🔍（2026-09-09 平台巡检自助授权，2026-09-10 改为选择器驱动，2026-09-10
+  // 修复"未获取到当前账号身份"拦截）给自己的账号授权一家具体门店，成功后
+  // 直接跳转 store-profile.ts——grantTenantAuthorization 的 grant action
+  // 本身会做全部真正的安全校验（role 白名单/stores 非空/目标文档必须已
+  // 存在），这里不重复校验逻辑。
+  // 🐛 根因修复：此前这里要求先拿到 AuthService.getOpenid()（一个只在
+  // ensureLogin() 调用过 login 云函数后才会写入的本地缓存，与 checkAccess()
+  // 判定 platform_admin 身份走的是完全独立的 checkUserRole 链路）才允许提交，
+  // 缓存没命中时——即便服务端早已确认当前账号就是 platform_admin——也会被
+  // 这层纯客户端的空值拦截挡住，提示"未获取到当前账号身份"。本巡检 Tab 的
+  // 三个调用（grant/list/revoke）都只是"操作自己账号"，不需要客户端知道
+  // 自己的 openid：grantTenantAuthorization 云函数已改为不传 targetOpenId
+  // 时默认取调用者自己（cloud.getWXContext() 反查，100% 可靠、无法伪造），
+  // 这里直接不传，不再依赖任何本地缓存
   async onSubmitInspectGrant() {
     if (this.data.inspectSubmitting) return;
     const storeId = this.data.inspectSelectedStoreId;
@@ -511,17 +521,12 @@ Page({
       this.setData({ inspectError: '请先选择要巡检的门店' });
       return;
     }
-    const openid = AuthService.getOpenid();
-    if (!openid) {
-      this.setData({ inspectError: '未获取到当前账号身份，请重新进入本页后再试' });
-      return;
-    }
 
     this.setData({ inspectSubmitting: true, inspectError: '' });
     try {
       const res: any = await callFunctionWithTimeout({
         name: 'grantTenantAuthorization',
-        data: { action: 'grant', targetOpenId: openid, stores: [storeId], role: this.data.inspectRole }
+        data: { action: 'grant', stores: [storeId], role: this.data.inspectRole }
       });
       const result = res && res.result;
       if (!result || !result.success) {
@@ -552,17 +557,18 @@ Page({
     }
   },
 
-  // 🗑️（2026-09-10 一键回收临时凭证）只读查看 platform_admin 自己账号的
-  // authorizedTenants 数组（grantTenantAuthorization 的 list action），
-  // 配一键撤销，避免该数组随巡检次数增多无限膨胀
+  // 🗑️（2026-09-10 一键回收临时凭证，2026-09-10 修复"未获取到当前账号身份"
+  // 拦截）只读查看 platform_admin 自己账号的 authorizedTenants 数组
+  // （grantTenantAuthorization 的 list action，不传 targetOpenId 时默认取
+  // 调用者自己——见 onSubmitInspectGrant 同一处根因修复注释），配一键撤销，
+  // 避免该数组随巡检次数增多无限膨胀
   async loadActiveGrants() {
-    const openid = AuthService.getOpenid();
-    if (!openid || this.data.activeGrantsLoading) return;
+    if (this.data.activeGrantsLoading) return;
     this.setData({ activeGrantsLoading: true });
     try {
       const res = await callFunctionWithTimeout({
         name: 'grantTenantAuthorization',
-        data: { action: 'list', targetOpenId: openid }
+        data: { action: 'list' }
       });
       const result = res.result as any;
       if (result && result.success) {
@@ -583,8 +589,6 @@ Page({
   onRevokeActiveGrant(e: any) {
     const { tenantid } = e.currentTarget.dataset;
     if (!tenantid || this.data.revokingGrantTenantId) return;
-    const openid = AuthService.getOpenid();
-    if (!openid) return;
 
     wx.showModal({
       title: '确认撤销该巡检授权？',
@@ -598,7 +602,7 @@ Page({
         try {
           const cloudRes = await callFunctionWithTimeout({
             name: 'grantTenantAuthorization',
-            data: { action: 'revoke', targetOpenId: openid, tenantId: tenantid }
+            data: { action: 'revoke', tenantId: tenantid }
           });
           const result = cloudRes.result as any;
           wx.hideLoading();

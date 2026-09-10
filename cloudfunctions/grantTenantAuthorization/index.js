@@ -21,6 +21,15 @@
 // 三个 action 均仅限 platform_admin 调用——跨租户授权是平台级运营决策，不应
 // 由任何机构自己的 super_admin 自助操作（这会让租户隔离的豁免权掌握在被隔离
 // 的一方手里，等于没有隔离）
+//
+// 🐛（2026-09-10 根因修复）targetOpenId 参数可选：不传时默认取调用者自己的
+// OPENID（cloud.getWXContext() 反查，100% 可靠、无法伪造）。platform-admin
+// 的「平台巡检」Tab 三个调用点（自助授权/一键回收/查看生效巡检）全部都是
+// "操作自己账号"，此前要求客户端显式传入 targetOpenId（取自 AuthService.
+// getOpenid() 这个只在 ensureLogin() 调用过 login 云函数后才会写入的本地
+// 缓存），缓存没命中时——即便调用者早已通过本函数的 platform_admin 鉴权——
+// 也会被客户端那层纯本地的空值拦截挡住。显式传参仍然优先生效，不影响未来
+// 真的需要指定别的 targetOpenId 的场景
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -44,7 +53,20 @@ async function findTargetDoc(targetOpenId) {
 }
 
 async function handleGrant(event, OPENID) {
-  const targetOpenId = String(event.targetOpenId || '').trim();
+  // 🐛 根因修复（2026-09-10，"未获取到当前账号身份"拦截）：本函数目前全部
+  // 三个调用点（platform-admin.ts 的巡检自助授权/一键回收）都是"给自己
+  // 授权/查看/撤销"，从未真的给别的 openId 授权过。此前要求客户端显式传入
+  // targetOpenId（取自 AuthService.getOpenid()，一个只在 ensureLogin() 调用
+  // 过 login 云函数后才会写入的本地缓存，与 checkUserRole 判定
+  // platform_admin 身份是两条完全独立的链路）——缓存没命中时客户端拿不到
+  // 自己的 openid，即便服务端早已确认调用者就是 platform_admin，也会被这层
+  // 纯客户端的空值拦截挡住，提示"未获取到当前账号身份"。
+  // 服务端在 exports.main 里已经用 cloud.getWXContext() 拿到了 100% 可靠、
+  // 无法伪造的调用者 OPENID——不需要客户端自己再传一遍"我是谁"。这里改为
+  // "不传 targetOpenId 时默认就是调用者自己"，既修掉了这个 bug 的根因（自助
+  // 授权场景不再依赖任何客户端本地缓存），也完全不影响未来如果真的需要显式
+  // 指定别的 targetOpenId 的场景（显式传参仍然优先生效）
+  const targetOpenId = String(event.targetOpenId || OPENID || '').trim();
   let tenantId = String(event.tenantId || '').trim();
   const role = String(event.role || '').trim();
   const stores = Array.isArray(event.stores) ? event.stores.filter((s) => typeof s === 'string' && s) : [];
@@ -93,8 +115,9 @@ async function handleGrant(event, OPENID) {
   return { success: true, authorizedTenants: nextGrants };
 }
 
-async function handleRevoke(event) {
-  const targetOpenId = String(event.targetOpenId || '').trim();
+async function handleRevoke(event, OPENID) {
+  // 见 handleGrant 同一处根因修复注释：不传 targetOpenId 时默认就是调用者自己
+  const targetOpenId = String(event.targetOpenId || OPENID || '').trim();
   const tenantId = String(event.tenantId || '').trim();
   if (!targetOpenId) return { success: false, error: '缺少 targetOpenId 参数' };
   if (!tenantId) return { success: false, error: '缺少 tenantId 参数' };
@@ -115,8 +138,9 @@ async function handleRevoke(event) {
   return { success: true, authorizedTenants: nextGrants };
 }
 
-async function handleList(event) {
-  const targetOpenId = String(event.targetOpenId || '').trim();
+async function handleList(event, OPENID) {
+  // 见 handleGrant 同一处根因修复注释：不传 targetOpenId 时默认就是调用者自己
+  const targetOpenId = String(event.targetOpenId || OPENID || '').trim();
   if (!targetOpenId) return { success: false, error: '缺少 targetOpenId 参数' };
 
   const targetDoc = await findTargetDoc(targetOpenId);
@@ -140,8 +164,8 @@ exports.main = async (event) => {
 
   try {
     if (action === 'grant') return await handleGrant(event, OPENID);
-    if (action === 'revoke') return await handleRevoke(event);
-    if (action === 'list') return await handleList(event);
+    if (action === 'revoke') return await handleRevoke(event, OPENID);
+    if (action === 'list') return await handleList(event, OPENID);
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {
     console.error('[grantTenantAuthorization] 异常:', err);
