@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveEffectiveCaller } = require('./resolveCaller');
+const { resolveEffectiveCaller, isGrantStillValid } = require('./resolveCaller');
 
 // 🛡️（2026-09-10）多租户巡检与权限隔离回归矩阵——这份测试是照着当天连续
 // 三轮真实故障排查写的，每条用例都能对应到一次实际复现过的 bug 或一次刻意
@@ -107,11 +107,10 @@ test('(f) 回归用例——grant.tenantId 恰好等于 own.tenantId（历史遗
 });
 
 test('(g) 巡检凭据已被撤销：authorizedTenants 数组里已经没有这条记录（撤销后的状态），原样返回 own，等同于从未授权过', () => {
-  // 本仓库 authorizedTenants 目前没有基于时间的过期字段（grantedAt 只用于
-  // 审计留痕展示），"过期/撤销"在数据层面就是"这条记录已经从数组里被移除"，
-  // 与场景 (d) 是完全相同的决策路径——这里单独列一条用例只是为了显式覆盖
-  // "曾经有过、后来被撤销"这个语义，防止未来真的引入过期字段时，有人误以为
-  // 这里已经测过期逻辑
+  // "撤销"在数据层面就是"这条记录已经从数组里被移除"，与场景 (d) 是完全
+  // 相同的决策路径——这里单独列一条用例只是为了显式覆盖"曾经有过、后来被
+  // 撤销"这个语义。2026-09-10 之后新增了基于时间的 expiresAt 过期机制
+  // （见下方 (g.1)~(g.4)），"撤销"与"过期"是两条独立的失效路径，不要混淆
   const own = {
     role: 'platform_admin',
     tenantId: '',
@@ -123,6 +122,121 @@ test('(g) 巡检凭据已被撤销：authorizedTenants 数组里已经没有这�
   const result = resolveEffectiveCaller(own, 'store_X');
   assert.deepEqual(result, own);
   assert.equal(result.storeId, '');
+});
+
+test('(g.1) ⏱️ 授权已过期：expiresAt 早于 now，即便 storeId 命中也按未命中处理，原样返回 own', () => {
+  const now = Date.parse('2026-09-10T12:00:00Z');
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [{
+      tenantId: 'tenant_X',
+      role: 'store_patriarch',
+      stores: ['store_X'],
+      expiresAt: '2026-09-10T11:59:59Z' // 早于 now 1 秒——刚好过期
+    }]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X', now);
+  assert.deepEqual(result, own);
+  assert.equal(result.storeId, '');
+});
+
+test('(g.2) ⏱️ 授权仍在有效期内：expiresAt 晚于 now，正常漫游生效', () => {
+  const now = Date.parse('2026-09-10T12:00:00Z');
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [{
+      tenantId: 'tenant_X',
+      role: 'store_patriarch',
+      stores: ['store_X'],
+      expiresAt: '2026-09-10T13:59:59Z' // 还剩近 2 小时
+    }]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X', now);
+  assert.equal(result.storeId, 'store_X');
+  assert.equal(result.role, 'store_patriarch');
+});
+
+test('(g.3) ⏱️ 向后兼容：历史授权记录没有 expiresAt 字段，按不过期处理', () => {
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [{ tenantId: 'tenant_X', role: 'store_manager', stores: ['store_X'] }]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X', Date.now());
+  assert.equal(result.storeId, 'store_X');
+});
+
+test('(g.4) ⏱️ 有两条授权覆盖同一 storeId（正常不会发生，mergeGrant 按 tenantId 去重），其中一条已过期、另一条未过期时，仍能命中未过期的那一条', () => {
+  const now = Date.parse('2026-09-10T12:00:00Z');
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [
+      { tenantId: 'tenant_old', role: 'volunteer', stores: ['store_X'], expiresAt: '2026-09-10T11:00:00Z' },
+      { tenantId: 'tenant_new', role: 'store_patriarch', stores: ['store_X'], expiresAt: '2026-09-10T14:00:00Z' }
+    ]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X', now);
+  assert.equal(result.tenantId, 'tenant_new');
+  assert.equal(result.role, 'store_patriarch');
+});
+
+test('(h) ⚠️ 根因回归——"选大家长却拿到义工权限"：同一 storeId 在数组里有两条都仍然有效的授权（历史脏数据，正常情况下 mergeGrant 已从签发端根治，这里覆盖"数据库里已经存在脏数据"这一残留场景），取 grantedAt 更新的那一条，不是数组里排在前面的那一条', () => {
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [
+      { tenantId: 'tenant_stale', role: 'volunteer', stores: ['store_X'], grantedAt: '2026-09-10T10:00:00Z' },
+      { tenantId: 'tenant_fresh', role: 'store_patriarch', stores: ['store_X'], grantedAt: '2026-09-10T11:00:00Z' }
+    ]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X');
+  assert.equal(result.role, 'store_patriarch');
+  assert.equal(result.tenantId, 'tenant_fresh');
+});
+
+test('(h.1) 同上，但两条记录在数组里的先后顺序反过来（新的排前面）——结果不应受数组顺序影响，只认 grantedAt', () => {
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [
+      { tenantId: 'tenant_fresh', role: 'store_patriarch', stores: ['store_X'], grantedAt: '2026-09-10T11:00:00Z' },
+      { tenantId: 'tenant_stale', role: 'volunteer', stores: ['store_X'], grantedAt: '2026-09-10T10:00:00Z' }
+    ]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X');
+  assert.equal(result.role, 'store_patriarch');
+});
+
+test('(h.2) 两条记录都缺 grantedAt 字段（更早期的历史数据，比 grantedAt 字段本身还老）时不抛异常，按数组里最后一条兜底，不影响可用性', () => {
+  const own = {
+    role: 'platform_admin',
+    tenantId: '',
+    storeId: '',
+    authorizedTenants: [
+      { tenantId: 'tenant_a', role: 'volunteer', stores: ['store_X'] },
+      { tenantId: 'tenant_b', role: 'finance', stores: ['store_X'] }
+    ]
+  };
+  const result = resolveEffectiveCaller(own, 'store_X');
+  assert.ok(result.role === 'volunteer' || result.role === 'finance');
+});
+
+test('isGrantStillValid：expiresAt 是非法日期字符串时兜底按不过期处理（写入侧异常不应该让读取侧连带炸掉）', () => {
+  assert.equal(isGrantStillValid({ expiresAt: 'not-a-date' }, Date.now()), true);
+});
+
+test('isGrantStillValid：expiresAt 恰好等于 now 时判定为已过期（边界值，> 而不是 >=）', () => {
+  const now = Date.parse('2026-09-10T12:00:00Z');
+  assert.equal(isGrantStillValid({ expiresAt: '2026-09-10T12:00:00Z' }, now), false);
 });
 
 test('容错：authorizedTenants 数组里混入 null/畸形条目（缺 stores 字段）不抛异常，正常跳过', () => {

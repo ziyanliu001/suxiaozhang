@@ -37,7 +37,7 @@ const db = cloud.database();
 // 🐛（2026-09-10）授权签发的校验规则与数组合并逻辑拆到
 // lib/grantAuthorizationRules.js（纯函数、不依赖 wx-server-sdk，配套单测见
 // 同目录 *.test.js）——见该文件头部注释，这里只保留数据库 I/O
-const { GRANTABLE_ROLES, validateGrantRequest, mergeGrant } = require('./lib/grantAuthorizationRules');
+const { GRANTABLE_ROLES, GRANT_TTL_MS, validateGrantRequest, mergeGrant } = require('./lib/grantAuthorizationRules');
 
 async function requirePlatformAdmin(OPENID) {
   if (!OPENID) return false;
@@ -86,7 +86,27 @@ async function handleGrant(event, OPENID) {
   const validation = validateGrantRequest({ targetOpenId, tenantId, role, stores, targetDoc });
   if (!validation.ok) return { success: false, error: validation.error };
 
-  const newGrant = { tenantId, role, stores, grantedBy: OPENID, grantedAt: db.serverDate() };
+  // ⏱️（2026-09-10）expiresAt 用 db.serverDate({ offset }) 而不是本地
+  // Date.now() + TTL——避免云函数容器时钟与数据库服务器时钟之间的微小
+  // 漂移，读回来的 expiresAt 就是数据库自己认可的"到期那一刻"
+  // 🆕（2026-09-10 巡检面板体验升级）storeName/tenantName 是纯展示型快照，
+  // 供 platform-admin.ts 的"当前生效中的巡检"列表直接渲染门店/机构名称，
+  // 不参与任何鉴权判断——即便这两个值被篡改或缺失，resolveEffectiveCaller()
+  // 仍然只认 tenantId/role/stores 三个字段，因此这里只做长度截断兜底，
+  // 不做白名单校验
+  const storeName = String(event.storeName || '').trim().slice(0, 60);
+  const tenantName = String(event.tenantName || '').trim().slice(0, 60);
+
+  const newGrant = {
+    tenantId,
+    role,
+    stores,
+    storeName,
+    tenantName,
+    grantedBy: OPENID,
+    grantedAt: db.serverDate(),
+    expiresAt: db.serverDate({ offset: GRANT_TTL_MS })
+  };
   const nextGrants = mergeGrant(targetDoc.authorizedTenants, newGrant);
 
   await db.collection('user_roles').doc(targetDoc._id).update({

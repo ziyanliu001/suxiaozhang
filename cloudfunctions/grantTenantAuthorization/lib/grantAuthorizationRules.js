@@ -16,6 +16,17 @@
 // 流程（如 processRoleAudit 的家长任命申请），不是本函数的适用场景
 const GRANTABLE_ROLES = ['store_manager', 'store_patriarch', 'finance', 'volunteer'];
 
+// ⏱️（2026-09-10 巡检面板体验升级）临时授权固定 2 小时有效期——早在本轮
+// 「平台巡检」自助授权功能最初设计时就提过"支持设定 2 小时后自动失效"，
+// 一直没有落地（此前只有手动"一键撤销"，没有基于时间的过期）。这次配合
+// 巡检面板 UI 升级（展示"剩余有效时间"倒计时）一并实现：grantedAt 之外
+// 再写一份 expiresAt = grantedAt + GRANT_TTL_MS，manageStoreProfile 的
+// resolveEffectiveCaller() 命中一条已过期的授权时按"未命中"处理（等同于
+// 已撤销），不需要任何定时任务主动清理——过期的授权记录会一直留在数组里
+// 直到管理员再次巡检同一家机构时被 mergeGrant 按 tenantId 覆盖，或被显式
+// revoke，纯粹是"读取时判定是否还生效"，不影响其余用法
+const GRANT_TTL_MS = 2 * 60 * 60 * 1000;
+
 // 校验一次授权请求是否应该被批准。所有入参都是已经从数据库/事件里取出来的
 // 原始值，本函数不发起任何 I/O。返回 { ok: true } 或 { ok: false, error }。
 function validateGrantRequest({ targetOpenId, tenantId, role, stores, targetDoc }) {
@@ -48,11 +59,27 @@ function validateGrantRequest({ targetOpenId, tenantId, role, stores, targetDoc 
   return { ok: true };
 }
 
-// 按 tenantId 去重覆盖，把新授权合并进已有的 authorizedTenants 数组——
-// 同一租户再次 grant 会覆盖旧的 role/stores，不会重复追加
+// 🐛 根因修复（2026-09-10 "选大家长却拿到义工权限"）：此前只按 tenantId 去重，
+// 同一家门店如果因历史数据问题（如该店曾经挂在一个后来被删除/重建的机构下）
+// 在数组里遗留了一条 tenantId 不同、但 stores 命中同一个 storeId 的旧授权
+// （例如更早巡检时随手选的 volunteer），再次对这家门店授权 store_patriarch
+// 时——新旧两条 tenantId 不同，旧版 mergeGrant 认为互不相关，直接追加，旧的
+// volunteer 授权继续留在数组里。resolveEffectiveCaller()/store-profile.ts
+// 后续按 storeId 匹配时可能先命中这条更早、权限更低的旧记录，导致"明明选的
+// 大家长，门店档案却还是只读"。storeId 本身全局唯一（见 resolveCaller.js
+// 同类注释），"覆盖同一家店的旧授权"这件事不应该以 tenantId 是否相同为
+// 前提——只要新旧两条授权的 stores 有重叠，旧的那条就应该被这次新授权替换掉，
+// 不能让一家店同时存在两条"生效中"的授权记录
 function mergeGrant(existingGrants, newGrant) {
   const list = Array.isArray(existingGrants) ? existingGrants : [];
-  return [...list.filter((g) => g && g.tenantId !== newGrant.tenantId), newGrant];
+  const newStores = new Set(Array.isArray(newGrant.stores) ? newGrant.stores : []);
+  const superseded = (g) => {
+    if (!g) return true; // 畸形条目一律视为"应被清理"，不保留
+    if (g.tenantId === newGrant.tenantId) return true;
+    if (Array.isArray(g.stores) && g.stores.some((s) => newStores.has(s))) return true;
+    return false;
+  };
+  return [...list.filter((g) => !superseded(g)), newGrant];
 }
 
-module.exports = { GRANTABLE_ROLES, validateGrantRequest, mergeGrant };
+module.exports = { GRANTABLE_ROLES, GRANT_TTL_MS, validateGrantRequest, mergeGrant };

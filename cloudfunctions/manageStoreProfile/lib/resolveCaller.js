@@ -17,7 +17,34 @@
 // 绑定门店"。这个函数往后任何改动都必须先跑一遍这份测试。
 'use strict';
 
-function resolveEffectiveCaller(own, targetStoreId) {
+// ⏱️（2026-09-10 巡检面板体验升级）now 作为显式参数传入（默认 Date.now()），
+// 不在函数内部直接调用 Date.now()——保持本函数纯粹、可测试：单测里可以传
+// 任意固定的 now 值来验证"刚好过期前一刻/刚好过期那一刻/过期后"这几个边界，
+// 不需要真的等 2 小时或者 mock 全局时钟
+function isGrantStillValid(grant, now) {
+  // 没有 expiresAt 字段——本次升级之前签发的历史授权记录，视为不过期
+  // （向后兼容，不能让存量数据因为缺一个新字段就集体失效）
+  if (!grant.expiresAt) return true;
+  const expiresAtMs = new Date(grant.expiresAt).getTime();
+  // 时间格式解析失败（脏数据）时同样按"不过期"兜底，不能让一条格式异常的
+  // 记录直接把整个漫游身份判定成"已过期"——这类数据异常应该在写入侧
+  // （handleGrant）被拦住，读取侧只做保守降级
+  if (Number.isNaN(expiresAtMs)) return true;
+  return expiresAtMs > now;
+}
+
+// 🐛（2026-09-10）grantedAt 缺失/非法时按最旧（0）兜底，不能让 new Date(undefined)
+// 产生的 NaN 参与比较——NaN 在任何比较运算里都是 false，会让 reduce 的
+// "谁更新就留谁"逻辑在缺字段时直接失效
+function grantedAtMs(grant) {
+  if (!grant || !grant.grantedAt) return 0;
+  const ms = new Date(grant.grantedAt).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function resolveEffectiveCaller(own, targetStoreId, now) {
+  const effectiveNow = typeof now === 'number' ? now : Date.now();
+
   // (a) 调用者自己都没有 user_roles 记录——上游 exports.main 通常会在更早
   // 的地方直接判定"无权限"，这里原样透传 null，不冒充任何身份
   if (!own) return null;
@@ -30,18 +57,31 @@ function resolveEffectiveCaller(own, targetStoreId) {
   // 记录的 stores 数组里匹配——storeId 本身是全局唯一的 Mongo _id，不会
   // 跨租户重复，"命中这个 storeId"已经是充分且必要的匹配条件，不需要再
   // 绕一层 tenantId 比对（此前的两步匹配法——先查一次门店当前 tenantId、
-  // 再拿这个值去比对 grant.tenantId——曾经因为两次独立读数不一致而漏判）
+  // 再拿这个值去比对 grant.tenantId——曾经因为两次独立读数不一致而漏判）。
+  // ⏱️ 同时要求这条授权尚未过期（见 isGrantStillValid）——已过期的授权
+  // 记录可能还留在数组里（没人手动撤销），但读取时不再认可它
   const grants = Array.isArray(own.authorizedTenants) ? own.authorizedTenants : [];
-  const grant = grants.find((g) => g && Array.isArray(g.stores) && g.stores.includes(targetStoreId));
+  const matches = grants.filter((g) => g && Array.isArray(g.stores) && g.stores.includes(targetStoreId) && isGrantStillValid(g, effectiveNow));
 
-  // 命中不了任何一条覆盖这家门店的授权——不冒充身份，原样返回调用者本来的
-  // 身份。这一条同时覆盖三种表面上不同、但决策逻辑完全一样的场景：
+  // 命中不了任何一条覆盖这家门店的有效授权——不冒充身份，原样返回调用者
+  // 本来的身份。这一条同时覆盖四种表面上不同、但决策逻辑完全一样的场景：
   // - 普通单店角色越权访问别的门店（自始至终没有 authorizedTenants）
   // - platform_admin 从未巡检过这家门店（authorizedTenants 数组为空/不含它）
   // - 巡检凭据已被 platform-admin 后台的"一键回收"撤销（曾经存在过的那条
-  //   授权已经从数组里被移除，本仓库目前没有基于时间的过期字段，"撤销"
-  //   在数据层面就等价于"数组里已经没有这一条了"）
-  if (!grant) return own;
+  //   授权已经从数组里被移除）
+  // - 巡检凭据已超过 2 小时有效期（记录还在数组里，但 isGrantStillValid 判定过期）
+  if (matches.length === 0) return own;
+
+  // 🐛 根因修复（2026-09-10 "选大家长却拿到义工权限"）：命中多条有效授权时
+  // （正常情况下 grantAuthorizationRules.js 的 mergeGrant 会保证同一 storeId
+  // 只留一条，但已经写入数据库的历史脏数据不会因为改了签发端代码就自动清理），
+  // 此前直接取数组里第一条命中的，如果一条更早、权限更低的旧记录（如
+  // volunteer）排在新授权前面，会一直被优先选中，造成"刚选了大家长再进去
+  // 还是只读"的假象。改为在全部有效匹配里取 grantedAt 最新的一条——即便
+  // 底层数据还没清理干净，读取时也始终以"最近一次巡检授权"为准
+  const grant = matches.length === 1 ? matches[0] : matches.reduce((latest, g) => {
+    return grantedAtMs(g) >= grantedAtMs(latest) ? g : latest;
+  });
 
   // 🐛 根因修复（2026-09-10 "您尚未绑定门店"回归）：命中授权后不再额外
   // 检查 grant.tenantId 是否恰好等于 own.tenantId 就放弃漫游——历史上这条
@@ -53,4 +93,4 @@ function resolveEffectiveCaller(own, targetStoreId) {
   return { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId };
 }
 
-module.exports = { resolveEffectiveCaller };
+module.exports = { resolveEffectiveCaller, isGrantStillValid };

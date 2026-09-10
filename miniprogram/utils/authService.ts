@@ -47,7 +47,11 @@ interface RoleInfo {
   // 授权数组，由平台管理员通过 grantTenantAuthorization 云函数写入同一条
   // user_roles 文档（不是新增文档）。store-picker.ts 的角色胶囊可选态计算
   // 需要用它判断"这家门店我是不是通过漫游授权被授予了某个角色"
-  authorizedTenants?: Array<{ tenantId: string; role: string; stores: string[] }>;
+  // 🆕（2026-09-10 巡检面板体验升级）grantedAt/expiresAt 由 grantTenantAuthorization
+  // 的 handleGrant 写入，供 store-profile.ts 判断"多条授权同时命中同一门店时
+  // 该采信哪一条"（取 grantedAt 最新的），以及展示"剩余有效时间"倒计时——
+  // 都是可选字段，本次升级之前签发的历史授权记录里可能没有
+  authorizedTenants?: Array<{ tenantId: string; role: string; stores: string[]; grantedAt?: string; expiresAt?: string }>;
 }
 
 function generateTempOpenid(): string {

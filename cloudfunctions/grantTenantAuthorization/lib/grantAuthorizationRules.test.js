@@ -126,6 +126,25 @@ test('mergeGrant：已有数组为 undefined/非数组时按空数组处理，�
   assert.deepEqual(merged, [{ tenantId: 'tenant_X', role: 'store_patriarch', stores: ['store_X'] }]);
 });
 
+test('(回归) mergeGrant：同一 storeId 出现在两条 tenantId 不同的授权里（历史脏数据，如门店曾挂在被删除重建的机构下）时，新授权应替换旧的那条，不能让同一家店同时存在两条生效授权', () => {
+  // 对应 2026-09-10 真实复现的 bug："选大家长却拿到义工权限"——目标门店在
+  // 数组里已经有一条 tenantId 不同的旧 volunteer 授权（旧 mergeGrant 只按
+  // tenantId 去重，误判为"不相关"直接追加），新授权 store_patriarch 因为
+  // tenantId 不同被当成另一条独立记录保留下来，resolveEffectiveCaller()/
+  // store-profile.ts 后续按 storeId 匹配时可能先命中数组里更靠前的旧记录
+  const existing = [{ tenantId: 'tenant_stale', role: 'volunteer', stores: ['store_X'] }];
+  const merged = mergeGrant(existing, { tenantId: 'tenant_fresh', role: 'store_patriarch', stores: ['store_X'] });
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0], { tenantId: 'tenant_fresh', role: 'store_patriarch', stores: ['store_X'] });
+});
+
+test('(回归) mergeGrant：storeId 重叠判定只看新旧 stores 数组是否有交集，一个 storeId 命中即视为整条旧记录被取代（即便旧记录还覆盖着其他未重叠的门店）', () => {
+  const existing = [{ tenantId: 'tenant_stale', role: 'volunteer', stores: ['store_X', 'store_Y'] }];
+  const merged = mergeGrant(existing, { tenantId: 'tenant_fresh', role: 'store_patriarch', stores: ['store_X'] });
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0], { tenantId: 'tenant_fresh', role: 'store_patriarch', stores: ['store_X'] });
+});
+
 test('mergeGrant：已有数组里混入 null/畸形条目不抛异常，正常跳过', () => {
   const existing = [null, { tenantId: 'tenant_A' }];
   const merged = mergeGrant(existing, { tenantId: 'tenant_X', role: 'store_patriarch', stores: ['store_X'] });
