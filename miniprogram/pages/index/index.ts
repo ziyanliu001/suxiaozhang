@@ -27,6 +27,7 @@ import { applyRoleViewOverride, getPreviewViewMode, resolveDisplayViewMode, Prev
 import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
+import { buildSmartReceiptDisplayItems, formatSmartReceiptTotalDisplay, buildSmartReceiptApplyText } from './lib/smartReceiptDraft';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {
@@ -963,6 +964,17 @@ Page({
     ocrPreviewExpense: '0.00',
     ocrPreviewBalance: '0.00',
     ocrPreviewFormula: '',
+    // 📸（2026-09-10 发票/小票 OCR 智能记账·第一阶段前端接入）「拍照智能识票」
+    // 与上面 showOcrConfirmModal 那一整套「拍照识别」是两条彻底独立的入口——
+    // 后者复用 ocrExpenseReceipt 的既有默认行为（无 action 字段），前者调用
+    // action:'parseReceipt' 拿到带品类归集/疑点标记的结构化台账草稿，互不干扰、
+    // 互不改动对方状态。smartReceiptDraft 就是云函数原样返回的草稿（供
+    // onApplySmartReceiptDraft 读 items/totalAmount 用），display 系列字段是
+    // 专门为 WXML 渲染预先格式化好的展示值（WXML 里不能调 toFixed）
+    smartReceiptCardVisible: false,
+    smartReceiptDraft: null as any,
+    smartReceiptDisplayItems: [] as Array<{ name: string; categoryLabel: string; amountDisplay: string }>,
+    smartReceiptTotalDisplay: '',
     showBalanceHistoryModal: false,
     recentBalanceHistoryList: [] as any[],
     // 🔗 跑马灯通知云端化：noticeList 是当前视角（总览级/具体门店，严格互斥）
@@ -6939,6 +6951,131 @@ Page({
     }
   },
 
+  // 📸（2026-09-10 发票/小票 OCR 智能记账·第一阶段前端接入）「拍照智能识票」：
+  // 单张拍照（与上面 onScanReceiptPhoto 的批量识别刻意保持独立、不复用同一套
+  // chooseRes/uploadedFileIds 批处理状态）→ 上传到云存储临时目录 → 调用
+  // ocrExpenseReceipt 的 action:'parseReceipt'，拿到带品类归集与疑点标记的
+  // 结构化台账草稿，展示确认卡片，用户点「确认填入」后才真正写入
+  // dailyExpenseText（见 onApplySmartReceiptDraft）——本函数本身不改动任何
+  // 既有表单字段，只负责识别与展示
+  async onTapSmartReceiptScan() {
+    try {
+      if (!isCloudAvailable()) {
+        wx.showToast({ title: '云服务暂不可用，无法使用智能识票', icon: 'none' });
+        return;
+      }
+      // 🛡️ 与 onScanReceiptPhoto 同一处理由：选图前先确保隐私授权已解决，
+      // 避免遮罩挡住授权弹窗
+      await ensurePrivacyAuthorized();
+
+      const chooseRes = await wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      });
+      if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
+
+      const tempFilePath = chooseRes.tempFiles[0].tempFilePath;
+      wx.showLoading({ title: '智能识票中...', mask: true });
+
+      // 🐛 与 onScanReceiptPhoto/onScanDonorScreenshot 同一处修复口径：
+      // wx.cloud.uploadFile 没有原生超时兜底，弱网/连接中断会一直挂起，
+      // 显式包一层 withTimeout 避免遮罩卡死
+      const fileName = 'tmp/receipts/' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.jpg';
+      const uploadRes = await withTimeout(
+        wx.cloud.uploadFile({ cloudPath: fileName, filePath: tempFilePath }),
+        20000,
+        '图片上传超时，请检查网络后重试'
+      );
+
+      // 云函数执行超时已在 ocrExpenseReceipt/config.json 配置为 20s，客户端
+      // 等待上限同步留 5s 网络往返余量，与 onScanReceiptPhoto 保持一致口径
+      const ocrRes = await callFunctionWithTimeout({
+        name: 'ocrExpenseReceipt',
+        data: { action: 'parseReceipt', fileID: uploadRes.fileID }
+      }, 25000);
+
+      wx.hideLoading();
+
+      const result = ocrRes.result as any;
+      if (!result || !result.success) {
+        this._cleanupReceiptImages([uploadRes.fileID]);
+        wx.showModal({
+          title: '智能识票失败',
+          content: (result && result.error) || '未能识别票据信息，请手动填写或重新拍摄更清晰的小票',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+        return;
+      }
+
+      this._smartReceiptFileId = uploadRes.fileID;
+
+      this.setData({
+        smartReceiptCardVisible: true,
+        smartReceiptDraft: result,
+        smartReceiptDisplayItems: buildSmartReceiptDisplayItems(result.items),
+        smartReceiptTotalDisplay: formatSmartReceiptTotalDisplay(result.totalAmount)
+      });
+    } catch (e: any) {
+      wx.hideLoading();
+      const errMsg = e.message || JSON.stringify(e);
+      if (errMsg && !errMsg.includes('cancel')) {
+        wx.showModal({ title: '智能识票异常', content: errMsg, showCancel: false, confirmText: '知道了' });
+      }
+    }
+  },
+
+  // 📸 确认填入：只把「品名：¥金额」明细行 + 「实付合计：¥总额」锚点行拼进
+  // dailyExpenseText——与既有 _applyOcrCategory 的拼接格式逐字一致（同一套
+  // calculateTodayExpenseFromText 靠 ANCHOR_REGEX 识别"实付合计"关键词，
+  // 锚点值整体覆盖前面逐条累加的商品行，不会重复计入）。
+  // 🛡️ 刻意不把商户名称/日期拼进这段自由文本：parseExpenseTextToItems 的
+  // 兜底分支（line 3557 附近）会把"这一行没匹配到任何 品名+数字 pattern"
+  // 的整行按 fallbackAmount（当天支出总额）单独计成一条虚假明细——商户名称
+  // 行通常不含数字，一旦写进 dailyExpenseText 会在提交时污染
+  // dailyIngredientItems[] 明细数组（多出一条金额等于当天总支出的假记录）。
+  // 商户/日期只作为只读信息展示在确认卡片里，不写入任何既有字段。
+  onApplySmartReceiptDraft() {
+    const draft = this.data.smartReceiptDraft as any;
+    if (!draft) return;
+
+    const detailText = buildSmartReceiptApplyText(draft);
+    const totalStr = formatSmartReceiptTotalDisplay(draft.totalAmount) || '0.00';
+
+    const current = this.data.dailyExpenseText || '';
+    this.setData({
+      dailyExpenseText: current ? (current + '\n\n' + detailText) : detailText,
+      smartReceiptCardVisible: false,
+      smartReceiptDraft: null,
+      smartReceiptDisplayItems: [],
+      smartReceiptTotalDisplay: ''
+    });
+
+    if (this._smartReceiptFileId) {
+      this._cleanupReceiptImages([this._smartReceiptFileId]);
+      this._smartReceiptFileId = null;
+    }
+
+    wx.showToast({ title: '已填入 ¥' + totalStr, icon: 'success', duration: 2000 });
+    this.updateRealTimeBalance();
+  },
+
+  // 📸 取消：丢弃这次识别结果，清理已上传的临时图片，不改动任何既有表单字段
+  onDismissSmartReceiptCard() {
+    if (this._smartReceiptFileId) {
+      this._cleanupReceiptImages([this._smartReceiptFileId]);
+      this._smartReceiptFileId = null;
+    }
+    this.setData({
+      smartReceiptCardVisible: false,
+      smartReceiptDraft: null,
+      smartReceiptDisplayItems: [],
+      smartReceiptTotalDisplay: ''
+    });
+  },
+
   // 🐛（2026-08-31 彻底移除超时竞速）根因翻案：此前认为 wx.chooseMedia 在部分
   // 环境下"既不 resolve 也不 reject"，据此套了一层 60s withTimeout 兜底。真机
   // 日志实测推翻了这个假设——控制台明确打出了"chooseMedia 超时未响应
@@ -7423,6 +7560,9 @@ Page({
   _pendingOcrFileIds: [],
   _ocrPendingResults: [],
   _ocrPendingFileIds: [],
+  // 📸「拍照智能识票」当前这一张已上传但尚未确认/取消的临时收据 fileID——
+  // 临时状态，与视图渲染无关，按 CLAUDE.md 铁律挂在 this 上而不是 data 里
+  _smartReceiptFileId: null as string | null,
   // 🌟 爱心支持明细·图片识别去重：本次页面会话内已上传过的截图 MD5，防止义工
   // 手滑重复选中/重复提交同一张截图导致支持数据加倍——只在当前页面实例存活期间
   // 有效（刷新/重进页面会清空），不做跨会话持久化，符合"当前会话去重"的定位

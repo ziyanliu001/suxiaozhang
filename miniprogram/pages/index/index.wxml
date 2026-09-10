@@ -1386,8 +1386,59 @@
               <view class="icon idx-icon-sm idx-icon-camera"></view>
               <text class="lbl">拍照识别</text>
             </view>
+            <!-- 📸（2026-09-10 发票/小票 OCR 智能记账·第一阶段前端接入）与上面
+                 「拍照识别」是两条彻底独立的入口——本按钮调 action:'parseReceipt'，
+                 多了品类归集与疑点标记，见 index.ts onTapSmartReceiptScan 头部
+                 注释。用 catchtap 阻止冒泡，避免被外层任何潜在的 bindtap 一并
+                 捕获（与 CLAUDE.md 第 8 节第 1 条同一处防御原则） -->
+            <view class="btn-smart-receipt-pill" hover-class="btn-smart-receipt-hover" catchtap="onTapSmartReceiptScan">
+              <text class="icon">📸</text>
+              <text class="lbl">拍照智能识票</text>
+            </view>
           </view>
         </view>
+
+        <!-- 📸 智能识票疑点提示：轻量黄色通知条，仅在 flagNeedsReview 为 true 时出现 -->
+        <view class="smart-receipt-review-banner" wx:if="{{smartReceiptCardVisible && smartReceiptDraft.flagNeedsReview}}">
+          <text class="banner-icon">⚠️</text>
+          <view class="banner-body">
+            <text class="banner-title">智能识票存在疑点，请人工核对后再确认填入：</text>
+            <text class="banner-reason" wx:for="{{smartReceiptDraft.reviewReasons}}" wx:key="*this">· {{item}}</text>
+          </view>
+        </view>
+
+        <!-- 📸 智能识票结果确认卡片：商户/日期只读展示，不写入任何既有字段；
+             点「确认填入」才把明细+实付合计拼进下面的 dailyExpenseText -->
+        <view class="smart-receipt-card" wx:if="{{smartReceiptCardVisible}}">
+          <view class="src-row">
+            <text class="src-label">商户</text>
+            <text class="src-value">{{smartReceiptDraft.merchant || '未识别，请人工补充'}}</text>
+          </view>
+          <view class="src-row">
+            <text class="src-label">日期</text>
+            <text class="src-value">{{smartReceiptDraft.reportDate || '未识别，请人工补充'}}</text>
+          </view>
+          <view class="src-row">
+            <text class="src-label">总金额</text>
+            <text class="src-value src-amount">{{smartReceiptTotalDisplay ? '¥' + smartReceiptTotalDisplay : '未识别'}}</text>
+          </view>
+          <view class="src-items" wx:if="{{smartReceiptDisplayItems.length > 0}}">
+            <view class="src-item" wx:for="{{smartReceiptDisplayItems}}" wx:key="index">
+              <text class="src-item-name">{{item.name}}</text>
+              <text class="src-item-cat">{{item.categoryLabel}}</text>
+              <text class="src-item-amt">¥{{item.amountDisplay}}</text>
+            </view>
+          </view>
+          <view class="src-actions">
+            <view class="src-btn src-btn-cancel" hover-class="src-btn-hover" catchtap="onDismissSmartReceiptCard">
+              <text>取消</text>
+            </view>
+            <view class="src-btn src-btn-confirm" hover-class="src-btn-hover" catchtap="onApplySmartReceiptDraft">
+              <text>确认填入</text>
+            </view>
+          </view>
+        </view>
+
         <textarea
           class="expense-textarea"
           value="{{dailyExpenseText}}"

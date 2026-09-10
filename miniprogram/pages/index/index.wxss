@@ -1764,7 +1764,8 @@ page {
    看起来是同一组按钮，而不是三种各自不同的样式拼凑在一起 */
 .box-header .tag,
 .btn-expense-template-pill,
-.btn-scan-receipt-pill {
+.btn-scan-receipt-pill,
+.btn-smart-receipt-pill {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1819,6 +1820,182 @@ page {
   font-size: 20rpx;
   font-weight: bold;
   line-height: 1;
+}
+
+/* 📸 拍照智能识票：青绿色，与「拍照识别」的品牌红/「常用项目」的暖黄区分开，
+   呼应"AI/智能"这个新增能力的视觉语义，避免和既有两个按钮混淆 */
+.btn-smart-receipt-pill {
+  background: #E6FFFB;
+  border: 1rpx solid #87E8DE;
+  color: #08979C;
+  transition: all 0.2s ease;
+}
+
+.btn-smart-receipt-hover {
+  background: #87E8DE;
+  transform: scale(0.96);
+}
+
+.btn-smart-receipt-pill .icon {
+  font-size: 20rpx;
+  line-height: 1;
+}
+
+.btn-smart-receipt-pill .lbl {
+  font-size: 20rpx;
+  font-weight: bold;
+  line-height: 1;
+}
+
+/* 📸 智能识票疑点提示：轻量黄色通知条，与 .box-header .tag.warm 同一套暖黄色系，
+   保持全页"疑点/警示"语义色一致，不另起一套配色体系 */
+.smart-receipt-review-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+  margin: 16rpx 0;
+  padding: 16rpx 20rpx;
+  background: #FFF9DB;
+  border: 1rpx solid #FFE066;
+  border-radius: 12rpx;
+  box-sizing: border-box;
+}
+
+.smart-receipt-review-banner .banner-icon {
+  font-size: 26rpx;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.smart-receipt-review-banner .banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.smart-receipt-review-banner .banner-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #974F0C;
+  line-height: 1.4;
+}
+
+.smart-receipt-review-banner .banner-reason {
+  font-size: 22rpx;
+  color: #8A5D00;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+/* 📸 智能识票结果确认卡片 */
+.smart-receipt-card {
+  margin: 16rpx 0;
+  padding: 20rpx;
+  background: #FAFFFE;
+  border: 1rpx solid #B5F5EC;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.smart-receipt-card .src-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  padding: 6rpx 0;
+}
+
+.smart-receipt-card .src-label {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #94a3b8;
+  width: 100rpx;
+}
+
+.smart-receipt-card .src-value {
+  font-size: 26rpx;
+  color: #334155;
+  word-break: break-all;
+}
+
+.smart-receipt-card .src-amount {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #08979C;
+}
+
+.smart-receipt-card .src-items {
+  margin-top: 12rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx dashed #B5F5EC;
+}
+
+.smart-receipt-card .src-item {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 6rpx 0;
+  font-size: 24rpx;
+}
+
+.smart-receipt-card .src-item-name {
+  flex: 1;
+  min-width: 0;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-receipt-card .src-item-cat {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  color: #08979C;
+  background: #E6FFFB;
+  border-radius: 8rpx;
+  padding: 2rpx 10rpx;
+}
+
+.smart-receipt-card .src-item-amt {
+  flex-shrink: 0;
+  color: #334155;
+  font-weight: 600;
+}
+
+.smart-receipt-card .src-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.smart-receipt-card .src-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 68rpx;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.smart-receipt-card .src-btn-cancel {
+  background: #F7F8FA;
+  border: 1rpx solid #e2e8f0;
+  color: #64748b;
+}
+
+.smart-receipt-card .src-btn-confirm {
+  background: #08979C;
+  color: #ffffff;
+}
+
+.smart-receipt-card .src-btn-hover {
+  transform: scale(0.96);
+  opacity: 0.85;
 }
 
 .btn-expense-template-pill {
@@ -9348,6 +9525,22 @@ page {
 .care-mode .btn-scan-receipt-pill .icon {
   width: 30rpx !important;
   height: 30rpx !important;
+}
+
+/* 🦻 拍照智能识票：与上面 .care-mode .btn-scan-receipt-pill 同一套放大幅度，
+   两颗胶囊并排同行，尺寸必须一致，否则关怀模式下会一高一矮 */
+.care-mode .btn-smart-receipt-pill {
+  height: 64rpx !important;
+  padding: 0 22rpx !important;
+  border-width: 2rpx !important;
+}
+
+.care-mode .btn-smart-receipt-pill .lbl {
+  font-size: 24rpx !important;
+}
+
+.care-mode .btn-smart-receipt-pill .icon {
+  font-size: 30rpx !important;
 }
 
 .care-mode .home-vt-item {

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "node --test cloudfunctions/*/lib/*.test.js miniprogram/subpackages/admin/pages/store-profile/lib/*.test.js",
+    "test": "node --test cloudfunctions/*/lib/*.test.js cloudfunctions/ocrExpenseReceipt/lib/__tests__/*.test.js miniprogram/subpackages/admin/pages/store-profile/lib/*.test.js miniprogram/pages/index/lib/*.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "security-audit": "node scripts/security-audit.js",
     "agent:check": "node scripts/agent-check.js",

@@ -1,6 +1,11 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
+// 🧾（2026-09-10 发票/小票 OCR 智能记账·第一阶段）纯逻辑清洗器，不依赖
+// wx-server-sdk，见文件头部注释——与本文件下方的默认 OCR 行为职责边界
+// 完全独立，不互相改动对方逻辑
+const { parseReceiptPayload } = require('./lib/parseReceiptPayload');
+
 // 🛡️ 金额识别关键字：按优先级分两档。
 // 第一优先级——实际支付渠道/实付金额，这是顾客真正付出的钱，最贴近"今日支出"口径；
 // 第二优先级——实收/应付/合计/小计，多数小票会有但不一定是优惠后的最终支付额。
@@ -154,7 +159,63 @@ function normalizeWeightToKg(value, unit) {
   return value;
 }
 
+// 🧾（2026-09-10）action:'parseReceipt' 专用：拿到 OCR 原始文本行的方式与下面
+// 既有默认行为的取行逻辑刻意保持独立（宁可重复十几行 OCR 调用代码，也不去改
+// 动下面已经过大量真机小票验证的默认路径）。额外支持 event.rawTextList 直接
+// 喂入已有文本行——供离线测试/上游已经做过一次 OCR 的场景跳过重复调用付费
+// OCR 接口，也是本函数单测之外、云端联调时最省事的验证方式。
+async function resolveRawTextLinesForParseReceipt(event) {
+  if (Array.isArray(event.rawTextList) && event.rawTextList.length > 0) {
+    return event.rawTextList;
+  }
+
+  const actualFileId = event.fileID || event.fileId;
+  let ocrResult;
+  try {
+    if (actualFileId) {
+      const tempRes = await cloud.getTempFileURL({ fileList: [actualFileId] });
+      const imgUrl = (tempRes.fileList && tempRes.fileList[0]) ? tempRes.fileList[0].tempFileURL : null;
+      if (imgUrl) {
+        ocrResult = await cloud.openapi.ocr.printedText({ type: 'photo', imgUrl });
+      } else {
+        const fileRes = await cloud.downloadFile({ fileID: actualFileId });
+        ocrResult = await cloud.openapi.ocr.printedText({
+          type: 'photo',
+          img: { contentType: 'image/jpg', value: fileRes.fileContent }
+        });
+      }
+    } else if (event.imageBase64) {
+      ocrResult = await cloud.openapi.ocr.printedText({
+        type: 'photo',
+        img: { contentType: 'image/jpg', value: Buffer.from(event.imageBase64, 'base64') }
+      });
+    } else {
+      ocrResult = { items: [] };
+    }
+  } catch (ocrErr) {
+    console.warn('⚠️ [parseReceipt] OCR 接口调用异常:', ocrErr);
+    ocrResult = { items: [] };
+  }
+
+  const rawItems = ocrResult.items || ocrResult.textList || ocrResult.results || [];
+  return rawItems.map((item) => (item.text || item.words || item || '').trim()).filter(Boolean);
+}
+
 exports.main = async (event, context) => {
+  // 🧾（2026-09-10 发票/小票 OCR 智能记账·第一阶段）新增 action 入口，与下面
+  // 无 action 字段时的既有默认行为并存——不传 action 的既有调用方（
+  // material-usage-modal.ts/pages/index/index.ts/history.ts）行为完全不变
+  if (event && event.action === 'parseReceipt') {
+    try {
+      const lines = await resolveRawTextLinesForParseReceipt(event);
+      const draft = parseReceiptPayload(lines);
+      return { success: true, action: 'parseReceipt', ...draft };
+    } catch (err) {
+      console.error('💥 [parseReceipt] 解析异常:', err);
+      return { success: false, action: 'parseReceipt', error: err.message || '解析失败' };
+    }
+  }
+
   const { fileID, fileId, imageBase64 } = event;
   const actualFileId = fileID || fileId;
 
