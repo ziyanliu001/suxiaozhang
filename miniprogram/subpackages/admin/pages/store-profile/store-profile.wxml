@@ -88,17 +88,18 @@
            "未填写" -->
       <!-- 🐛 根因修复（2026-09-10 单字段轻量编辑）：此前这一行的 ✏️ 图标看起来
            像"点它单独改这一个字段"，实际上和点整行一样，都会跳出整页长表单——
-           图标本身是假的、不体现自己的动作。改为 onQuickEditField，点这一行
-           只弹一个单字段 wx.showModal，保存也只提交这一个字段，不再需要打开
-           整页编辑 -->
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onQuickEditField" data-field="patriarchName" data-label="大家长/负责人" data-placeholder="请输入大家长姓名">
+           图标本身是假的、不体现自己的动作。改为 onEditSingleField，点这一行
+           弹出与本页其余弹窗同款 sp-modal-card 半屏卡片样式的单字段弹窗（见
+           页面末尾 showQuickEditModal 那个弹窗定义），保存也只提交这一个
+           字段，不再需要打开整页编辑 -->
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onEditSingleField" data-field="patriarchName" data-label="大家长/负责人" data-placeholder="请输入大家长姓名">
         <text class="sp-archive-lbl">大家长 / 负责人</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!(patriarchName || patriarch || manager) ? 'empty' : ''}}">{{patriarchName || patriarch || manager || '未填写'}}</text>
           <text class="sp-row-edit-icon" wx:if="{{canManage && !(patriarchName || patriarch || manager)}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onQuickEditField" data-field="contactPhone" data-label="联系电话" data-placeholder="请输入门店联系电话">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onEditSingleField" data-field="contactPhone" data-label="联系电话" data-placeholder="请输入门店联系电话">
         <text class="sp-archive-lbl">联系电话</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!contactPhone ? 'empty' : ''}}">{{contactPhone || '未填写'}}</text>
@@ -145,7 +146,7 @@
           <text class="sp-row-edit-icon" wx:if="{{canManage && !(province || city)}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onQuickEditField" data-field="address" data-label="详细地址" data-placeholder="请输入门店详细地址">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onEditSingleField" data-field="address" data-label="详细地址" data-placeholder="请输入门店详细地址">
         <text class="sp-archive-lbl">详细地址</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!address ? 'empty' : ''}}">{{address || '未填写'}}</text>
@@ -670,6 +671,37 @@
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseActivationModal" disabled="{{activationSubmitting}}">取消</button>
         <button class="sp-btn-save" bindtap="onSubmitStoreActivation" loading="{{activationSubmitting}}" disabled="{{activationSubmitting}}">激活</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🆕（2026-09-10 单字段轻量编辑）大家长/负责人、联系电话、详细地址通用
+       弹窗——与本页其余弹窗同一套 sp-modal-card 半屏卡片结构，不用微信原生
+       wx.showModal（系统默认弹窗风格与本页其余弹窗不一致）。只有一个输入框，
+       label/placeholder/当前值都由 onEditSingleField 触发时动态写入，三行
+       共用同一个弹窗定义 -->
+  <view class="sp-modal-backdrop" wx:if="{{showQuickEditModal}}" bindtap="onCloseQuickEditModal">
+    <view class="sp-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">修改{{quickEditLabel}}</text>
+        <text class="sp-modal-close" bindtap="onCloseQuickEditModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <view class="sp-edit-item">
+          <text class="sp-edit-lbl">{{quickEditLabel}}</text>
+          <input
+            class="sp-edit-input full"
+            value="{{quickEditValue}}"
+            bindinput="onQuickEditValueInput"
+            placeholder="{{quickEditPlaceholder}}"
+            focus="{{showQuickEditModal}}"
+          />
+        </view>
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseQuickEditModal" disabled="{{quickEditSubmitting}}">取消</button>
+        <button class="sp-btn-save" bindtap="onConfirmQuickEditModal" loading="{{quickEditSubmitting}}" disabled="{{quickEditSubmitting}}">保存</button>
       </view>
     </view>
   </view>

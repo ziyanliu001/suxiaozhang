@@ -254,6 +254,15 @@ Page({
     // 🆕（2026-09-10）单字段轻量编辑（大家长/负责人、联系电话、详细地址）
     // 的防抖锁，与整页保存的 saving 是两把独立的锁
     quickEditSubmitting: false,
+    // 🐛（2026-09-10 改用页面自有半屏弹窗，替换微信原生 wx.showModal）：
+    // 原生弹窗的系统默认样式与本页其余四个弹窗（管理员密钥/空间续费激活/
+    // 资质公示/人员画像）用的 sp-modal-card 半屏卡片视觉完全不一致，改成
+    // 同一套弹窗组件保持体验统一
+    showQuickEditModal: false,
+    quickEditField: '',
+    quickEditLabel: '',
+    quickEditPlaceholder: '',
+    quickEditValue: '',
     editForm: {
       partyMembers: '0',
       socialWorkers: '0',
@@ -707,32 +716,50 @@ Page({
     this.onEditProfile();
   },
 
-  // 🆕（2026-09-10 单字段轻量编辑）大家长/负责人、联系电话、详细地址这三行
-  // 是最常被单独修改的字段，不需要为了改一个字段跳出整页的长表单——点这
-  // 三行直接弹 wx.showModal 单字段输入框，只把这一个字段打包提交给
-  // manageStoreProfile 的 update action。该云函数的 TEXT_PROFILE_FIELDS
-  // 处理逻辑本就是"只更新事件里出现过的字段"（见云函数同一处注释），天然
-  // 支持这种单字段局部提交，不需要任何服务端改动。其余字段（供餐餐次/
-  // 品牌矩阵/标签等组合较复杂，人员画像/资质照片已经各自有独立的轻量弹窗）
-  // 仍走整页编辑，不在这次改造范围内
-  onQuickEditField(e: any) {
+  // 🆕（2026-09-10 单字段轻量编辑，改用页面自有半屏弹窗）大家长/负责人、
+  // 联系电话、详细地址这三行是最常被单独修改的字段，不需要为了改一个字段
+  // 跳出整页的长表单——点这三行弹出与本页其余弹窗（管理员密钥/空间续费
+  // 激活/资质公示/人员画像）同一套 sp-modal-card 半屏卡片样式的轻量弹窗，
+  // 只把这一个字段打包提交给 manageStoreProfile 的 update action。该云函数
+  // 的 TEXT_PROFILE_FIELDS 处理逻辑本就是"只更新事件里出现过的字段"（见
+  // 云函数同一处注释），天然支持这种单字段局部提交，不需要任何服务端改动，
+  // 权限核验（resolveCaller 巡检态漫游身份/resolveWriteTarget 角色白名单）、
+  // 内容安全审核、stores 集合写入都和整页保存走的是完全同一条服务端代码
+  // 路径。其余字段（供餐餐次/品牌矩阵/标签等组合较复杂，人员画像/资质照片
+  // 已经各自有独立的轻量弹窗）仍走整页编辑，不在这次改造范围内
+  onEditSingleField(e: any) {
     if (!this.data.canManage || this.data.quickEditSubmitting) return;
     const { field, label, placeholder } = e.currentTarget.dataset;
     if (!field) return;
     const currentValue = (this.data as any)[field] || '';
-    wx.showModal({
-      title: `修改${label}`,
-      content: currentValue,
-      editable: true,
-      placeholderText: placeholder || `请输入${label}`,
-      confirmText: '保存',
-      success: (res) => {
-        if (!res.confirm) return;
-        const newValue = (res.content || '').trim();
-        if (newValue === currentValue) return;
-        this.submitQuickEditField(field, label, newValue);
-      }
+    this.setData({
+      showQuickEditModal: true,
+      quickEditField: field,
+      quickEditLabel: label,
+      quickEditPlaceholder: placeholder || `请输入${label}`,
+      quickEditValue: currentValue
     });
+  },
+
+  onCloseQuickEditModal() {
+    if (this.data.quickEditSubmitting) return;
+    this.setData({ showQuickEditModal: false });
+  },
+
+  onQuickEditValueInput(e: any) {
+    this.setData({ quickEditValue: e.detail.value });
+  },
+
+  onConfirmQuickEditModal() {
+    if (this.data.quickEditSubmitting) return;
+    const { quickEditField: field, quickEditLabel: label } = this.data;
+    const newValue = (this.data.quickEditValue || '').trim();
+    const currentValue = (this.data as any)[field] || '';
+    if (newValue === currentValue) {
+      this.setData({ showQuickEditModal: false });
+      return;
+    }
+    this.submitQuickEditField(field, label, newValue);
   },
 
   async submitQuickEditField(field: string, label: string, newValue: string) {
@@ -746,9 +773,12 @@ Page({
       const result = cloudRes.result;
       wx.hideLoading();
       if (!result || !result.success) {
+        // 保存失败时不关闭弹窗，让用户能直接看着已输入的内容重试/调整，
+        // 不用重新点一次行、重新打字
         wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
         return;
       }
+      this.setData({ showQuickEditModal: false });
       if (result.pending) {
         // 🏛️ 家长风控锁：与整页保存同一套规则，店长发起且本店已绑定家长时
         // 不直接生效，展示态保持不变
