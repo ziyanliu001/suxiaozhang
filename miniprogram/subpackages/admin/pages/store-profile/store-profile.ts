@@ -369,6 +369,12 @@ Page({
       alertMessage: '即将退出雨花爱心餐报助手，是否返回首页继续使用？'
     });
     this._navGuard.setupOnLoad();
+
+    // 🩺（2026-09-10 排查"打开就是编辑态"问题）确认页面实例刚创建时 editing
+    // 的初始值——data 声明处写的是 false，这里打印出来是为了排除"页面实例
+    // 被复用、上一次退出编辑态没清干净"这类跨实例残留的可能性（正常情况下
+    // 每次 onLoad 都是全新页面实例，这里应该始终打印 false）
+    console.log('[debug] onLoad 结束时 editing 状态:', this.data.editing);
   },
 
   // 🛡️ 本页此前把角色/数据拉取全放在 onLoad（只在页面实例首次创建时跑一次），
@@ -475,9 +481,31 @@ Page({
     // 的授权才能编辑，只有 store_patriarch 级别才能设置管理员密钥——真正的
     // 写操作授权仍然完全由服务端 resolveCaller()/resolveWriteTarget 独立
     // 校验，这里同上面的字面角色判定一样，只决定按钮是否渲染
-    const grantedEntry = (roleInfo && Array.isArray(roleInfo.authorizedTenants))
-      ? roleInfo.authorizedTenants.find((g) => g && Array.isArray(g.stores) && g.stores.includes(storeId))
-      : undefined;
+    // 🐛 根因修复（2026-09-10 "选大家长却拿到义工权限"）：此前用 .find() 取
+    // 数组里第一条 stores 包含 storeId 的记录——完全没考虑(a)这条记录是否已经
+    // 过期、(b)同一 storeId 是否因历史脏数据（如该店曾挂在被删除重建的机构下）
+    // 同时存在多条授权记录。签发端 grantAuthorizationRules.js 的 mergeGrant
+    // 已经从根上改成"同一 storeId 只保留一条"，但已经写入数据库的历史脏数据
+    // 不会因为改了签发端代码就自动清理——这里必须和云函数
+    // manageStoreProfile/lib/resolveCaller.js 的 resolveEffectiveCaller() 采用
+    // 完全同一套挑选逻辑（过滤未过期 + 取 grantedAt 最新），否则会出现"服务端
+    // 已经认可最新的漫游身份、客户端却按旧数据把编辑按钮全部隐藏"的双重标准
+    const now = Date.now();
+    const validGrantsForStore = (roleInfo && Array.isArray(roleInfo.authorizedTenants))
+      ? roleInfo.authorizedTenants.filter((g) => {
+          if (!g || !Array.isArray(g.stores) || !g.stores.includes(storeId)) return false;
+          if (!g.expiresAt) return true; // 历史授权记录没有过期字段，向后兼容按不过期处理
+          const expiresAtMs = new Date(g.expiresAt).getTime();
+          return Number.isNaN(expiresAtMs) || expiresAtMs > now;
+        })
+      : [];
+    const grantedEntry = validGrantsForStore.length <= 1
+      ? validGrantsForStore[0]
+      : validGrantsForStore.reduce((latest, g) => {
+          const gMs = g.grantedAt ? new Date(g.grantedAt).getTime() : 0;
+          const latestMs = latest.grantedAt ? new Date(latest.grantedAt).getTime() : 0;
+          return (Number.isNaN(gMs) ? 0 : gMs) >= (Number.isNaN(latestMs) ? 0 : latestMs) ? g : latest;
+        });
     const canManage = effectiveRole === 'store_manager' || effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin'
       || (!!grantedEntry && (grantedEntry.role === 'store_manager' || grantedEntry.role === 'store_patriarch'));
     const canSetAdminKey = effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin'
@@ -635,10 +663,19 @@ Page({
       update.platformFamily = loadedPlatformFamily;
       update.platformFamilyLabel = PLATFORM_FAMILY_LABEL_MAP[loadedPlatformFamily] || '';
       update.platformFamilyPickerIndex = Math.max(0, PLATFORM_FAMILY_OPTIONS.findIndex(o => o.value === loadedPlatformFamily));
+      // 🛡️ update 对象里从头到尾没有 editing 字段（通篇搜索确认过）——展示态/
+      // 编辑态的切换只能通过 onEditProfile()/onCancelEdit()/onSaveProfile()
+      // 成功回调这几个明确的用户操作触发，fetchProfile() 只负责把云端数据
+      // 灌进展示态字段，不应该、也没有能力影响 editing
       this.setData(update);
       // 🛡️ canManage 不在这份 update 里——它自始至终只由 initRoleAndStore() 的
       // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
       console.log('[verify] store-profile fetchProfile 完成, canManage 保持:', this.data.canManage, 'data.canEdit(服务端真实角色判定, 仅供参考不采用):', data.canEdit);
+      // 🩺（2026-09-10 排查"打开就是编辑态"问题）显式打印 editing——如果这里
+      // 打印出 true，就是实锤"确实被什么地方错误地置为了 true"；如果打印
+      // 出 false 但界面仍然表现成编辑态，说明问题根本不在这份 .ts 逻辑里
+      // （要么是 wx:if 渲染层面的问题，要么是开发者工具编译缓存没刷新干净）
+      console.log('[debug] fetchProfile 结束时 editing 状态:', this.data.editing);
     } catch (err: any) {
       // 🩺（2026-09-10）打印完整 error 对象（含 errMsg/errCode，callFunctionWithTimeout
       // 超时/callFunction 失败都会走这里），而不是只留一句笼统的"网络异常"——
@@ -707,15 +744,6 @@ Page({
     }
   },
 
-  // 🎨 档案信息卡片整行可点：与卡片标题栏的"✏️ 修改"按钮效果一致，只是把可点
-  // 触发面从一个小按钮扩大到整行。权限判断放在处理函数内部而不是 WXML 里按
-  // canManage 条件切换 bindtap 绑定的函数名——同一个 canManage 已经在按钮上
-  // 校验过一次，这里是防御性兜底，不依赖 WXML 条件绑定语法
-  onRowTapToEdit() {
-    if (!this.data.canManage || this.data.editing) return;
-    this.onEditProfile();
-  },
-
   // 🆕（2026-09-10 单字段轻量编辑，改用页面自有半屏弹窗）大家长/负责人、
   // 联系电话、详细地址这三行是最常被单独修改的字段，不需要为了改一个字段
   // 跳出整页的长表单——点这三行弹出与本页其余弹窗（管理员密钥/空间续费
@@ -782,7 +810,12 @@ Page({
         wx.showToast({ title: (result && result.error) || '保存失败', icon: 'none' });
         return;
       }
-      this.setData({ showQuickEditModal: false });
+      // 🛡️（2026-09-10 现场排查加固）显式、冗余地再断言一次 editing: false——
+      // 这条分支从设计上就不应该、也没有任何一行代码会把 editing 置为 true
+      // （唯一入口 onEditProfile() 全文件搜索确认过，这里不会调用它），加上
+      // 这一行纯粹是防御性兜底：即使未来有人在这个方法里不小心引入了会
+      // 影响 editing 的改动，这里也会把它显式纠正回来，不依赖"没人会犯错"
+      this.setData({ showQuickEditModal: false, editing: false });
       if (result.pending) {
         // 🏛️ 家长风控锁：与整页保存同一套规则，店长发起且本店已绑定家长时
         // 不直接生效，展示态保持不变
@@ -800,7 +833,20 @@ Page({
     }
   },
 
+  // 🛡️（2026-09-10 收拢 editing 触发入口）本方法是 editing 变成 true 的
+  // 唯一入口（全文件搜索确认），现在也只剩两个调用点：页面顶部店名旁的
+  // "✏️ 修改档案"按钮、"门店档案信息"卡片标题栏的"✏️ 修改"按钮——都是
+  // bindtap 直接绑在这个方法上的独立按钮，不再有 onRowTapToEdit 那种"点整行
+  // 也能进"的并行入口（已随开业日期/民政登记名称/所在省市三行一起移除）。
+  // 单字段快捷编辑（onEditSingleField/onConfirmQuickEditModal/
+  // submitQuickEditField）全部代码都确认过不会调用这个方法、也不会
+  // setData({ editing: true })。
+  // 🩺 保留下面这行调用栈日志：如果现场依然复现"点了某处却进了整页编辑态"，
+  // 这条日志会直接打出完整调用栈，一眼看出是从哪里触发的
   onEditProfile() {
+    // console.trace 在小程序 TS 类型定义里不存在，用 Error().stack 代替——
+    // 效果一样，能在控制台看到完整调用栈
+    console.log('[debug] onEditProfile 被调用，editing 即将变为 true，调用栈:', new Error().stack);
     const editForm: any = {};
     PROFILE_FIELDS.forEach((f) => { editForm[f] = String((this.data as any)[f] || 0); });
     TEXT_PROFILE_FIELDS.forEach((f) => { editForm[f] = (this.data as any)[f] || ''; });

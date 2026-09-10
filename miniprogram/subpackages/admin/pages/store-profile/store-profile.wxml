@@ -73,10 +73,12 @@
          （sp-profile-title-row + sp-btn-edit-profile-count，样式通用，非"画像"专属）——
          此前放在顶部导航栏的"编辑"文字反复出现不渲染/被遮挡的问题，根治方案是不再依赖
          导航栏这套单独的定位/层级逻辑，统一复用已验证稳定可见的卡片标题按钮模式 -->
+    <!-- 🛡️（2026-09-10 UI 入口精简）此前这里也有一个"✏️ 修改"按钮，和店名旁的
+         "✏️ 修改档案"按钮触发的是同一个 onEditProfile()——两个按钮功能完全
+         重复，只留一个全局入口，这里去掉 -->
     <view class="sp-section-title sp-profile-title-row">
       <text class="sp-section-icon">📖</text>
       <text class="sp-section-txt">门店档案信息</text>
-      <text class="sp-btn-edit-profile-count" wx:if="{{canManage && !editing}}" bindtap="onEditProfile">✏️ 修改</text>
     </view>
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
@@ -94,15 +96,19 @@
            字段，不再需要打开整页编辑。
            🛡️（2026-09-10 现场加固）这三行统一用 catchtap 而不是 bindtap——
            这三行本身不嵌套在任何绑了 onEditProfile 的父级容器里（onEditProfile
-           只挂在页面顶部"✏️ 修改档案"/卡片标题栏"✏️ 修改"这两个独立的叶子
-           节点上，没有包裹这三行），静态审计没有找到实际的事件冒泡路径，
-           但 catchtap 本身零副作用（没有更上层的祖先处理器需要接住这个事件），
-           作为纵深防御统一加上，不依赖"审计没找到"这个结论本身 100% 可靠 -->
+           只挂在页面顶部"✏️ 修改档案"这一个独立的叶子节点上，没有包裹这三行），
+           静态审计没有找到实际的事件冒泡路径，但 catchtap 本身零副作用（没有
+           更上层的祖先处理器需要接住这个事件），作为纵深防御统一加上，不依赖
+           "审计没找到"这个结论本身 100% 可靠。
+           🛡️（2026-09-10 UI 入口精简）这三行的"✏️"图标改为固定展示（不再是
+           "只在字段为空时才显示"）——作为这三个字段唯一的可视化编辑入口，不
+           管有没有值都应该让用户一眼看出"这里能改"，而不是有值了图标就消失、
+           显得像纯只读展示 -->
       <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" catchtap="onEditSingleField" data-field="patriarchName" data-label="大家长/负责人" data-placeholder="请输入大家长姓名">
         <text class="sp-archive-lbl">大家长 / 负责人</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!(patriarchName || patriarch || manager) ? 'empty' : ''}}">{{patriarchName || patriarch || manager || '未填写'}}</text>
-          <text class="sp-row-edit-icon" wx:if="{{canManage && !(patriarchName || patriarch || manager)}}">✏️</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage}}">✏️</text>
         </view>
       </view>
       <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" catchtap="onEditSingleField" data-field="contactPhone" data-label="联系电话" data-placeholder="请输入门店联系电话">
@@ -110,22 +116,22 @@
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!contactPhone ? 'empty' : ''}}">{{contactPhone || '未填写'}}</text>
           <text class="sp-btn-quick-action" wx:if="{{contactPhone}}" catchtap="onCallPhone">📞 一键拨打</text>
-          <text class="sp-row-edit-icon" wx:if="{{canManage && !contactPhone}}">✏️</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
+      <!-- 🛡️（2026-09-10 收拢 onEditProfile 触发入口）开业日期/民政登记名称/
+           所在省市这三行不再支持点整行进入整页编辑——editing（全页大表单）
+           的触发入口严格收拢到只剩页面右上角/店名旁的"✏️ 修改档案"大按钮
+           这一处，onRowTapToEdit 已随之移除，不再保留"点行也能进整页编辑"
+           这条并行入口。这三个字段仍然可以通过大按钮进入整页编辑来修改，
+           只是不再支持"点这一行直接进"的快捷方式 -->
+      <view class="sp-archive-row">
         <text class="sp-archive-lbl">开业日期</text>
-        <view class="sp-archive-val-with-action">
-          <text class="sp-archive-val {{!openDate ? 'empty' : ''}}">{{openDate || '未填写'}}</text>
-          <text class="sp-row-edit-icon" wx:if="{{canManage && !openDate}}">✏️</text>
-        </view>
+        <text class="sp-archive-val {{!openDate ? 'empty' : ''}}">{{openDate || '未填写'}}</text>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
+      <view class="sp-archive-row">
         <text class="sp-archive-lbl">民政登记名称</text>
-        <view class="sp-archive-val-with-action">
-          <text class="sp-archive-val {{!registeredName ? 'empty' : ''}}">{{registeredName || '未填写'}}</text>
-          <text class="sp-row-edit-icon" wx:if="{{canManage && !registeredName}}">✏️</text>
-        </view>
+        <text class="sp-archive-val {{!registeredName ? 'empty' : ''}}">{{registeredName || '未填写'}}</text>
       </view>
       <view class="sp-archive-row">
         <text class="sp-archive-lbl">所属平台类型</text>
@@ -145,19 +151,16 @@
           {{serviceTargetConfig.targetLabels.dineInLabel || '—'}} · {{serviceTargetConfig.targetLabels.deliveryLabel || '—'}} · {{serviceTargetConfig.targetLabels.listenLabel || '—'}} · {{serviceTargetConfig.targetLabels.takeoutLabel || '—'}}
         </text>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onRowTapToEdit">
+      <view class="sp-archive-row">
         <text class="sp-archive-lbl">所在省市</text>
-        <view class="sp-archive-val-with-action">
-          <text class="sp-archive-val {{!(province || city) ? 'empty' : ''}}">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
-          <text class="sp-row-edit-icon" wx:if="{{canManage && !(province || city)}}">✏️</text>
-        </view>
+        <text class="sp-archive-val {{!(province || city) ? 'empty' : ''}}">{{province || city ? (province + ' ' + city) : '未填写'}}</text>
       </view>
       <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" catchtap="onEditSingleField" data-field="address" data-label="详细地址" data-placeholder="请输入门店详细地址">
         <text class="sp-archive-lbl">详细地址</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!address ? 'empty' : ''}}">{{address || '未填写'}}</text>
           <text class="sp-btn-quick-action" wx:if="{{address}}" catchtap="onOpenNavigation">📍 一键导航</text>
-          <text class="sp-row-edit-icon" wx:if="{{canManage && !address}}">✏️</text>
+          <text class="sp-row-edit-icon" wx:if="{{canManage}}">✏️</text>
         </view>
       </view>
       <view class="sp-archive-row vertical" wx:if="{{background}}">
@@ -183,13 +186,18 @@
     </view>
 
     <!-- 🏅 门店资质与实景公示：门头照 / 民政备案复印件 / 食品安全承诺。卡片本身对所有角色
-         （义工/财务/家属/店长等）常驻可见，与是否已上传照片、是否有管理权限无关——只有
-         右上角【✏️ 修改】按钮与"暂未上传"占位的可点击态才受 canManage 约束。已上传的图片
-         点击大图预览 (onPreviewProfilePhoto) 对所有角色开放 -->
+         （义工/财务/家属/店长等）常驻可见，与是否已上传照片、是否有管理权限无关。
+         🛡️（2026-09-10 UI 入口精简）标题栏原有的"✏️ 修改"按钮已移除——三个照片位
+         "暂未上传"时的占位格（下方 sp-upload-slot，bindtap="onOpenQualificationModal"）
+         仍是入口；已上传的图片点击大图预览 (onPreviewProfilePhoto) 对所有角色开放。
+         ⚠️ 已知取舍：三个照片位都已上传过至少一张时，本卡片上暂时没有再打开
+         "修改门店资质与实景公示"半屏弹窗的入口了（此前是靠这个标题栏按钮兜底）——
+         如果需要保留"已全部上传后仍可替换/追加"的能力，需要另外设计一个不额外
+         增加"修改"字样的入口（比如让已上传的缩略图长按/再点一下弹出选择），
+         这次先不在这里补，等确认是否真的需要 -->
     <view class="sp-section-title sp-profile-title-row" wx:if="{{!editing}}">
       <text class="sp-section-icon">🏅</text>
       <text class="sp-section-txt">门店资质与实景公示</text>
-      <text class="sp-btn-edit-profile-count" wx:if="{{canManage}}" bindtap="onOpenQualificationModal">✏️ 修改</text>
     </view>
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
