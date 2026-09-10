@@ -308,16 +308,21 @@ Page({
     activationSubmitting: false
   },
 
-  async onLoad(options: { storeId?: string; storeName?: string }) {
+  async onLoad(options: { storeId?: string; id?: string; storeName?: string }) {
     recordRecentVisit('/subpackages/admin/pages/store-profile/store-profile', '门店档案');
 
     // 🏛️（2026-09-09 超管全国总览工作台重构）store-management.ts 门店列表
     // "门店档案"按钮带着明确的 storeId/storeName 跳转过来——挂在实例属性上
     // （不进 data，纯一次性导航入参，不需要参与渲染），initRoleAndStore() 每次
     // onShow 都会优先采用，直到用户通过页面内"切换门店"选择器手动换了一家店
-    // 为止（见 onStoreSwitcherChange 清空这两个属性）
-    if (options && options.storeId) {
-      this._queryOverrideStoreId = options.storeId;
+    // 为止（见 onStoreSwitcherChange 清空这两个属性）。
+    // 🛡️ 兼容 options.id：全仓库审计过，目前所有跳转本页的调用点
+    // （store-management.ts/platform-admin.ts）都用的是 storeId 参数名，
+    // 没有任何地方传 id——这里补一道兜底纯粹是防御性加固，不是已发现的
+    // 实际 bug，未来如果新增一个用 id 命名的跳转入口也不会漏接
+    const rawStoreId = (options && (options.storeId || options.id)) || '';
+    if (rawStoreId) {
+      this._queryOverrideStoreId = rawStoreId;
       this._queryOverrideStoreName = options.storeName ? decodeURIComponent(options.storeName) : '';
     }
 

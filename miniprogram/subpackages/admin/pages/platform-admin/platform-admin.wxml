@@ -409,10 +409,13 @@
             </view>
           </view>
 
-          <!-- 🐛（2026-09-10 根除"目标账号本来就归属这个租户"阻断体验）
-               inspectAlreadyHasAccess 为 true 时说明这个账号对选中机构已有
-               常态身份，不需要再选临时授权角色，收起角色选择区 -->
-          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId && !inspectAlreadyHasAccess}}">
+          <!-- 🐛 根因修复并回滚（2026-09-10）：上一版这里按"账号 tenantId 恰好
+               等于选中机构"收起角色选择区、直接跳过授权——结果导致 canManage
+               永远拿不到真实的 authorizedTenants 授权，跳转过去editing 区
+               全部置灰。platform_admin 对任何机构都必须显式选一个临时授权
+               角色，没有"已有常态身份可以跳过"这回事，见 onSubmitInspectGrant
+               同一处修复注释 -->
+          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId}}">
             <text class="pa-inspect-label">授权角色</text>
             <view class="pa-inspect-role-options">
               <view
@@ -425,8 +428,6 @@
             </view>
           </view>
 
-          <text class="pa-inspect-hint" wx:if="{{inspectSelectedStoreId && inspectAlreadyHasAccess}}">✅ 当前账号对这家机构已有常态身份，无需临时授权，可直接进入档案</text>
-
           <text class="pa-inspect-error" wx:if="{{inspectError}}">{{inspectError}}</text>
 
           <button
@@ -436,7 +437,7 @@
             bindtap="onSubmitInspectGrant"
             loading="{{inspectSubmitting}}"
             disabled="{{inspectSubmitting}}"
-          >{{inspectAlreadyHasAccess ? '以当前身份直达「' + inspectSelectedStoreName + '」档案' : '获取巡检权限并进入「' + inspectSelectedStoreName + '」档案'}}</button>
+          >获取巡检权限并进入「{{inspectSelectedStoreName}}」档案</button>
         </block>
       </view>
 

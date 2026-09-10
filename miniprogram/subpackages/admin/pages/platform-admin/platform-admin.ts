@@ -267,14 +267,6 @@ Page({
     inspectTenantResults: [] as any[],
     inspectSelectedTenantId: '',
     inspectSelectedTenantName: '',
-    // 🐛（2026-09-10 根除"目标账号本来就归属这个租户"阻断体验）选中机构后
-    // 就地判断：当前账号的常态 tenantId（AuthService 缓存，与
-    // grantTenantAuthorization 判断"是否已归属"用的是同一份 user_roles.tenantId
-    // 数据源）是否恰好等于选中的这家机构——是的话说明这个账号对这个空间
-    // 已有常态身份（或历史遗留的同款字段），不需要、也不应该再走一次临时
-    // authorizedTenants 授权，见 onSubmitInspectGrant/inspectRoleOptions
-    // 附近的 wx:if 联动
-    inspectAlreadyHasAccess: false,
     inspectStoresLoading: false,
     inspectStores: [] as any[],
     inspectSelectedStoreId: '',
@@ -460,18 +452,12 @@ Page({
   async onInspectSelectTenant(e: any) {
     const { tenantid, tenantname } = e.currentTarget.dataset;
     if (!tenantid) return;
-    // 🐛（2026-09-10 根除"目标账号本来就归属这个租户"阻断体验）与
-    // onSubmitInspectGrant 用同一份判断依据：当前账号缓存的 tenantId 是否
-    // 恰好等于选中的这家机构
-    const cachedRole = AuthService.getCachedRoleInfo();
-    const alreadyHasAccess = !!(cachedRole && cachedRole.tenantId && cachedRole.tenantId === tenantid);
     this.setData({
       inspectStage: 'store',
       inspectSelectedTenantId: tenantid,
       inspectSelectedTenantName: tenantname,
       inspectSelectedStoreId: '',
       inspectSelectedStoreName: '',
-      inspectAlreadyHasAccess: alreadyHasAccess,
       inspectError: ''
     });
     await this.loadInspectStores(tenantid);
@@ -528,27 +514,29 @@ Page({
   // 自己的 openid：grantTenantAuthorization 云函数已改为不传 targetOpenId
   // 时默认取调用者自己（cloud.getWXContext() 反查，100% 可靠、无法伪造），
   // 这里直接不传，不再依赖任何本地缓存
-  // 🐛（2026-09-10 根除"目标账号本来就归属这个租户"阻断体验）此前无论如何
-  // 都会先调 grantTenantAuthorization，账号 tenantId 恰好等于选中机构时
-  // 服务端会用这句话拒绝——"目标账号本来就归属这个租户，不需要（也不应该）
-  // 再加一条授权"，前端把它当普通失败原样展示成红字，用户点了没反应。
-  // 这句话本身描述的其实是"已经有常态身份，不需要临时授权"，不是失败——
-  // 服务端判断依据是 user_roles.tenantId，客户端在 AuthService 缓存里本来
-  // 就有同一份数据（见 checkAccess()），不需要真的发起一次云调用才知道
-  // 会不会撞上这条规则。选中机构时（onInspectSelectTenant）已经算出
-  // inspectAlreadyHasAccess，这里直接复用：命中就完全跳过
-  // grantTenantAuthorization 调用，直接跳转门店档案
+  // 🐛 根因修复并回滚（2026-09-10）：上一版在这里加过一个"账号 tenantId
+  // 恰好等于选中机构就跳过 grantTenantAuthorization、直接跳转"的快捷分支
+  // （inspectAlreadyHasAccess），结果导致跳转后 store-profile.ts 一片
+  // canManage:false——跳过 grant 意味着 authorizedTenants 数组里根本没有
+  // 新增这条临时授权，store-profile.ts 的 initRoleAndStore() 找不到
+  // grantedEntry，caller 在 manageStoreProfile 云函数那边的 resolveCaller()
+  // 也没有"漫游"身份，字面角色仍是 platform_admin——而 platform_admin 从来
+  // 不在 resolveWriteTarget/resolveReadTarget 认可的角色列表里，于是编辑区
+  // 全部置灰、画像接口还会报"您尚未绑定门店"。这正是这次要修的 bug，根因是
+  // 上一版那个"优化"本身，不是别的地方。
+  // platform_admin 的 tenantId 字段"恰好等于目标机构"从来不代表它对这家店
+  // 有任何真实操作权限（它的角色从头到尾都是 platform_admin，不是这家机构
+  // 的 store_patriarch/store_manager）——已经在 setupSuperAdmin/
+  // grantTenantAuthorization 修复过这个字段本不该被信任（见 2026-09-10 更早
+  // 的另一轮修复）。这里不再尝试"检测已有权限、跳过授权"这条路——每次巡检
+  // 都老老实实走 grantTenantAuthorization，在 authorizedTenants 数组里
+  // 留一条真实、可审计的临时授权记录，这才是 store-profile.ts 的
+  // canManage/manageStoreProfile 的 resolveCaller() 认可的唯一凭证
   async onSubmitInspectGrant() {
     if (this.data.inspectSubmitting) return;
     const storeId = this.data.inspectSelectedStoreId;
     if (!storeId) {
       this.setData({ inspectError: '请先选择要巡检的门店' });
-      return;
-    }
-
-    if (this.data.inspectAlreadyHasAccess) {
-      wx.showToast({ title: '正在进入门店档案...', icon: 'none', duration: 1000 });
-      safeNavigateTo({ url: `/subpackages/admin/pages/store-profile/store-profile?storeId=${storeId}` });
       return;
     }
 
