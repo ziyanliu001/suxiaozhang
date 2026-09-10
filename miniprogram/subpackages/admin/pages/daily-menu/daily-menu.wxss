@@ -6,13 +6,67 @@
   background: #F8F5F0;
 }
 
-/* 🐛 根因修复：见 store-management.wxss 同处修复记录，改用 <navigation-bar>
-   共享组件。这里只保留"编辑"按钮的浮层定位样式（独立于组件之外渲染，见
-   wxml 说明） */
-.dm-nav-action {
+/* 🐛 根因修复（2026-09-10 导航栏彻底重构）：见 daily-menu.wxml 顶部同处
+   注释——放弃共享 <navigation-bar> 组件，改成标准的"fixed 顶栏 + 等高占位
+   view"结构，与 platform-admin 已验证过的方案完全一致 */
+.custom-nav-bar {
   position: fixed;
+  top: 0;
+  left: 0;
   right: 0;
-  z-index: 101;
+  z-index: 999;
+  background: #8C1D18;
+  box-sizing: border-box;
+}
+
+.nav-status-bar {
+  width: 100%;
+}
+
+.nav-content {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-back-btn {
+  position: absolute;
+  left: 24rpx;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+}
+
+.nav-back-icon {
+  font-size: 44rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+  line-height: 1;
+}
+
+.nav-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右上角"编辑"入口——与 .nav-back-btn 对称，top:0;height:100% 撑满内容区，
+   垂直居中天然与胶囊对齐；right 用 navRightGap（胶囊实测宽度）动态避让，
+   不会被原生胶囊遮挡 */
+.nav-right-action {
+  position: absolute;
+  top: 0;
+  height: 100%;
   display: flex;
   align-items: center;
   color: #FFFFFF;
@@ -20,8 +74,16 @@
   padding: 0 8rpx;
 }
 
-.dm-nav-action.hidden {
+.nav-right-action.hidden {
   visibility: hidden;
+}
+
+.nav-placeholder {
+  width: 100%;
+}
+
+.btn-hover {
+  opacity: 0.7;
 }
 
 .dm-list-scroll {
@@ -271,6 +333,235 @@
   font-size: 24rpx;
   line-height: 1.8;
   color: #5C4326;
+}
+
+/* ============ 🤖 AI 备餐助手（2026-09-10 智能备餐与食材用量预测·一期原型） ============ */
+
+.dm-ai-card {
+  background: #FFFFFF;
+  border: 1.5rpx solid #F1E4D8;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.04);
+}
+
+.dm-ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dm-ai-header-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.dm-ai-header-arrow {
+  font-size: 22rpx;
+  color: #C2853D;
+  transition: transform 0.2s ease;
+}
+
+.dm-ai-header-arrow.rotate {
+  transform: rotate(180deg);
+}
+
+.dm-ai-body {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx dashed #F1E4D8;
+}
+
+.dm-ai-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.dm-ai-field-label {
+  font-size: 26rpx;
+  color: #5C4326;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+}
+
+.dm-ai-field-picker {
+  font-size: 26rpx;
+  color: #8C1D18;
+  font-weight: 600;
+  background: #FFF8F0;
+  border-radius: 10rpx;
+  padding: 10rpx 20rpx;
+}
+
+.dm-ai-weather-tags {
+  display: flex;
+  gap: 10rpx;
+}
+
+.dm-ai-weather-tag {
+  font-size: 24rpx;
+  color: #8A7660;
+  background: #F8F5F0;
+  border: 1.5rpx solid transparent;
+  border-radius: 20rpx;
+  padding: 8rpx 20rpx;
+}
+
+.dm-ai-weather-tag.active {
+  background: #FFF3E9;
+  border-color: #8C1D18;
+  color: #8C1D18;
+  font-weight: 600;
+}
+
+.dm-ai-run-btn {
+  width: 100%;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 4rpx 0 0;
+  line-height: 1;
+  border-radius: 38rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 27rpx;
+  font-weight: 600;
+}
+
+.dm-ai-run-btn::after {
+  border: none;
+}
+
+.dm-ai-error {
+  display: block;
+  font-size: 24rpx;
+  color: #E03131;
+  margin-top: 16rpx;
+}
+
+.dm-ai-empty-hint {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #F8F5F0;
+  border-radius: 12rpx;
+}
+
+.dm-ai-empty-hint text {
+  font-size: 24rpx;
+  color: #8A7660;
+  line-height: 1.6;
+}
+
+.dm-ai-result {
+  margin-top: 24rpx;
+}
+
+.dm-ai-headcount-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  background: linear-gradient(135deg, #FFF8F0 0%, #FFF3E9 100%);
+  border-radius: 14rpx;
+  padding: 20rpx;
+}
+
+.dm-ai-headcount-label {
+  font-size: 24rpx;
+  color: #8A7660;
+  flex-shrink: 0;
+}
+
+.dm-ai-headcount-num {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #8C1D18;
+}
+
+.dm-ai-headcount-unit {
+  font-size: 22rpx;
+  color: #8A7660;
+}
+
+.dm-ai-basis-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+
+.dm-ai-basis-tag {
+  font-size: 21rpx;
+  color: #8A7660;
+  background: #F8F5F0;
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+}
+
+.dm-ai-ingredient-table {
+  margin-top: 16rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  border: 1.5rpx solid #F1E4D8;
+}
+
+.dm-ai-ingredient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 20rpx;
+  background: #FFFFFF;
+}
+
+.dm-ai-ingredient-row:nth-child(even) {
+  background: #FFFBF6;
+}
+
+.dm-ai-ingredient-label {
+  font-size: 25rpx;
+  color: #5C4326;
+}
+
+.dm-ai-ingredient-value {
+  font-size: 25rpx;
+  font-weight: 600;
+  color: #8C1D18;
+}
+
+.dm-ai-apply-btn {
+  width: 100%;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 20rpx 0 0;
+  line-height: 1;
+  border-radius: 36rpx;
+  background: #FFF3E9;
+  border: 1.5rpx solid #8C1D18;
+  color: #8C1D18;
+  font-size: 25rpx;
+  font-weight: 600;
+}
+
+.dm-ai-apply-btn::after {
+  border: none;
+}
+
+.dm-ai-applied-hint {
+  display: block;
+  text-align: center;
+  font-size: 22rpx;
+  color: #2B8A3E;
+  margin-top: 12rpx;
 }
 
 .dm-menu-card {

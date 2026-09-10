@@ -2,27 +2,38 @@
   <!-- 🌟 微信用户隐私授权弹窗：本页会调用 chooseMedia（今日食谱图片上传）隐私接口 -->
   <privacy-popup />
 
-  <navigation-bar
-    title="食谱管理"
-    background="#8C1D18"
-    color="#FFFFFF"
-    dark="{{true}}"
-    back="{{true}}"
-    showHomeButton="auto"
-    bind:layout="onNavLayout"
-  ></navigation-bar>
-  <text
-    class="dm-nav-action {{canManage ? '' : 'hidden'}}"
-    style="top: {{navContentTop}}px; height: {{navContentHeight}}px; line-height: {{navContentHeight}}px; right: calc({{navRightGap}}px + 20rpx);"
-    bindtap="onOpenTodayEditForm"
-  >编辑</text>
+  <!-- 🐛 根因修复（2026-09-10 导航栏彻底重构）：与 platform-admin 同一处
+       问题同一套修复——放弃共享 <navigation-bar> 组件（曾出过标题脱标飘位/
+       内容穿透遮罩两次真实回归），改成标准的"fixed 顶栏 + 等高占位 view"
+       结构，不依赖任何子组件生命周期。背景色保留品牌深红 #8C1D18——与本
+       分包其余门店级页面（store-profile/store-management/finance-audit/
+       inventory-management/activity-log/settlement-summary/public-verify）
+       保持一致，这次"压迫感"反馈按 platform-admin 的教训核实过是高度/居中
+       问题，不是颜色问题（platform-admin 换成白底是因为它是唯一一个
+       SaaS 平台管理台，不在这组门店级页面的色系约定范围内） -->
+  <view class="custom-nav-bar" style="height: {{statusBarHeight + navBarHeight}}px;">
+    <view class="nav-status-bar" style="height: {{statusBarHeight}}px;"></view>
+    <view class="nav-content" style="height: {{navBarHeight}}px;">
+      <view class="nav-back-btn" hover-class="btn-hover" bindtap="onNavigateBack">
+        <text class="nav-back-icon">‹</text>
+      </view>
+      <text class="nav-title">食谱管理</text>
+      <text
+        class="nav-right-action {{canManage ? '' : 'hidden'}}"
+        style="right: calc({{navRightGap}}px + 20rpx);"
+        catchtap="onOpenTodayEditForm"
+      >编辑</text>
+    </view>
+  </view>
+  <!-- 页面顶部等高占位，防止内容被固定定位的顶栏遮挡 -->
+  <view class="nav-placeholder" style="height: {{statusBarHeight + navBarHeight}}px;"></view>
 
   <!-- 图片压缩用离屏画布，全页面共用一个即可 -->
   <canvas type="2d" id="imgCompressCanvas" style="position: fixed; left: -9999px; top: -9999px; width: 1920px; height: 1920px;"></canvas>
 
-  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加 navigation-bar 已占用的
-       totalHeight，只留 24rpx 呼吸边距；height calc、下方弹窗的 max-height
-       calc、上面 .dm-nav-action 用的 navContentTop 等对齐字段均不动 -->
+  <!-- 🐛 2026-09-06 修复：margin-top 不再叠加导航栏已占用的高度，只留
+       24rpx 呼吸边距；height calc、下方弹窗的 max-height calc 用的
+       contentTop 字段口径不变（= statusBarHeight + navBarHeight） -->
   <scroll-view scroll-y class="dm-list-scroll" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);" bindscrolltolower="onReachBottom">
 
     <view class="dm-store-tip-skeleton" wx:if="{{!roleReady}}"></view>
@@ -96,6 +107,83 @@
         </view>
         <view class="dm-gratitude-body" wx:if="{{gratitudeExpanded}}">
           <text class="dm-gratitude-line" wx:for="{{gratitudeLines}}" wx:key="*this">{{item}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 🐛 根因修复（2026-09-10 卡片全隐形）：此前按 canManage 门控整张卡片
+         可见性，但云函数 getMealPrediction 从一开始就只要求 caller.storeId
+         存在即可查看（预测是纯只读信息，不需要"能编辑菜单"这个更高权限），
+         前端比后端更严格，导致义工/财务等已绑定门店但不能编辑菜单的角色
+         完全看不到入口。改为按 currentStoreId 是否已绑定门店门控，与后端
+         真实权限边界对齐；默认折叠，不占首屏空间 -->
+    <view class="dm-ai-card" wx:if="{{currentStoreId}}">
+      <view class="dm-ai-header" bindtap="onToggleMealPrediction">
+        <text class="dm-ai-header-title">🤖 AI 备餐助手</text>
+        <text class="dm-ai-header-arrow {{mealPredictionExpanded ? 'rotate' : ''}}">▾</text>
+      </view>
+
+      <view class="dm-ai-body" wx:if="{{mealPredictionExpanded}}">
+        <view class="dm-ai-field-row">
+          <text class="dm-ai-field-label">预测日期</text>
+          <picker mode="date" value="{{mealPredictionForm.targetDate}}" bindchange="onMealPredictionDateChange">
+            <view class="dm-ai-field-picker">{{mealPredictionForm.targetDateDisplay}}</view>
+          </picker>
+        </view>
+
+        <view class="dm-ai-field-row">
+          <text class="dm-ai-field-label">当前天气</text>
+          <view class="dm-ai-weather-tags">
+            <view
+              class="dm-ai-weather-tag {{mealPredictionForm.weather === item.value ? 'active' : ''}}"
+              wx:for="{{mealPredictionWeatherOptions}}"
+              wx:key="value"
+              data-value="{{item.value}}"
+              catchtap="onSelectMealPredictionWeather"
+            >{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="dm-ai-field-row">
+          <text class="dm-ai-field-label">初一/十五 · 节假日</text>
+          <switch checked="{{mealPredictionForm.isHoliday}}" color="#8C1D18" catchtap="onToggleMealPredictionHoliday" />
+        </view>
+
+        <button
+          class="dm-ai-run-btn"
+          catchtap="onRunMealPrediction"
+          loading="{{mealPredictionLoading}}"
+          disabled="{{mealPredictionLoading}}"
+        >🔮 {{mealPredictionLoading ? '生成中...' : '生成备餐建议'}}</button>
+
+        <text class="dm-ai-error" wx:if="{{mealPredictionError}}">{{mealPredictionError}}</text>
+
+        <view class="dm-ai-empty-hint" wx:if="{{mealPredictionResult && mealPredictionResult.insufficientData}}">
+          <text>暂无足够历史记账数据，无法生成预测——正常记账积累一段时间后再来试试</text>
+        </view>
+
+        <view class="dm-ai-result" wx:if="{{mealPredictionResult && !mealPredictionResult.insufficientData}}">
+          <view class="dm-ai-headcount-row">
+            <text class="dm-ai-headcount-label">推荐备餐总人次</text>
+            <text class="dm-ai-headcount-num">{{mealPredictionResult.recommendedHeadcount}}</text>
+            <text class="dm-ai-headcount-unit">人 · 堂食+外送预估</text>
+          </view>
+
+          <view class="dm-ai-basis-tags">
+            <text class="dm-ai-basis-tag">近14天基准均值 {{mealPredictionResult.basis.baseAverage}} 人</text>
+            <text class="dm-ai-basis-tag" wx:if="{{mealPredictionResult.basis.weatherMultiplier !== 1}}">天气系数 ×{{mealPredictionResult.basis.weatherMultiplier}}</text>
+            <text class="dm-ai-basis-tag" wx:if="{{mealPredictionResult.basis.holidayMultiplier !== 1}}">节假日加权 ×{{mealPredictionResult.basis.holidayMultiplier}}</text>
+          </view>
+
+          <view class="dm-ai-ingredient-table">
+            <view class="dm-ai-ingredient-row" wx:for="{{mealPredictionIngredientRows}}" wx:key="label">
+              <text class="dm-ai-ingredient-label">{{item.label}}</text>
+              <text class="dm-ai-ingredient-value">{{item.value}} {{item.unit}}</text>
+            </view>
+          </view>
+
+          <button class="dm-ai-apply-btn" catchtap="onApplyMealPrediction">📋 一键复制备餐清单</button>
+          <text class="dm-ai-applied-hint" wx:if="{{mealPredictionApplied}}">✅ 已复制，可粘贴到后厨采购清单/备餐看板</text>
         </view>
       </view>
     </view>

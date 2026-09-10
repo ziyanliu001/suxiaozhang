@@ -7,7 +7,7 @@ import { drawDailyMenuPoster, calcDailyMenuPosterHeight } from '../../utils/draw
 import { GRATITUDE_TEXT } from '../../../../utils/cultureData';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
-import { getStorageAsync } from '../../../../utils/util';
+import { getStorageAsync, getSafeSystemInfo } from '../../../../utils/util';
 import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 
 const CANVAS_ID = 'imgCompressCanvas';
@@ -43,6 +43,34 @@ function mealTypeLabel(mealType: string): string {
 // 🛡️ "全国总览"/"全部门店" 的 storeId 哨兵值，与 statistics.ts 同一份定义
 // （见该文件 NATIONAL_STORE_ID_SENTINELS 头部注释），本地缓存兜底时同样要过滤
 const NATIONAL_STORE_ID_SENTINELS = ['national_overview', 'ALL_STORES', 'all', 'ALL'];
+
+// 🤖（2026-09-10 智能备餐与食材用量预测·一期原型）AI 备餐助手：天气取值
+// 必须与云函数 manageDailyMenu/lib/predictMealDemand.js 的 WEATHER_MULTIPLIER
+// 枚举 key 完全一致（rain/storm），"晴"不在枚举里、传什么都按 1 不折减，
+// 这里仍然单独给一个 value 只是为了在 UI 上有一个"未选雨天/暴雨"的默认态
+const MEAL_PREDICTION_WEATHER_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'sunny', label: '☀️ 晴' },
+  { value: 'rain', label: '🌧️ 雨' },
+  { value: 'storm', label: '⛈️ 暴雨' }
+];
+
+// 🍚 食材换算展示单位，与 predictMealDemand.js 的 INGREDIENT_RATIO_PER_PERSON
+// 字段一一对应，纯前端展示映射，不参与计算（换算比例的计算完全在服务端）
+const INGREDIENT_DISPLAY_ROWS: Array<{ key: string; label: string; unit: string }> = [
+  { key: 'riceJin', label: '🍚 大米', unit: '斤' },
+  { key: 'oilLiter', label: '🛢️ 食用油', unit: '升' },
+  { key: 'vegetableJin', label: '🥬 蔬菜', unit: '斤' },
+  { key: 'seasoningJin', label: '🧂 调味品', unit: '斤' }
+];
+
+function buildIngredientRows(ingredients: any): Array<{ label: string; unit: string; value: number }> {
+  if (!ingredients) return [];
+  return INGREDIENT_DISPLAY_ROWS.map((row) => ({
+    label: row.label,
+    unit: row.unit,
+    value: typeof ingredients[row.key] === 'number' ? ingredients[row.key] : 0
+  }));
+}
 
 function getTodayStr(): string {
   const now = new Date();
@@ -96,9 +124,18 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
+    // 🐛 根因修复（2026-09-10 导航栏彻底重构）：与 platform-admin 同一处
+    // 问题、同一套修复——放弃共享 <navigation-bar> 组件，改成页面自己维护
+    // 标准的"fixed 顶栏 + 等高占位 view"结构（custom-nav-bar/nav-placeholder，
+    // 见 wxml），statusBarHeight/navBarHeight 由 computeCustomNavLayout()
+    // 在 onLoad 里直接同步算好。navRightGap 保留（原来由组件 bind:layout
+    // 上报，现在由 computeCustomNavLayout() 自己测量），供右上角"编辑"按钮
+    // 避让胶囊定位；navContentTop/navContentHeight 不再需要——新结构里
+    // "编辑"按钮直接用 top:0;height:100% 撑满 .nav-content，不需要额外的
+    // 像素级绝对定位
     contentTop: 0,
-    navContentTop: 0,
-    navContentHeight: 0,
+    statusBarHeight: 0,
+    navBarHeight: 0,
     navRightGap: 0,
 
     currentStoreId: '',
@@ -167,11 +204,38 @@ Page({
 
     // 🙏 餐前感恩词：默认折叠，不占今日食谱卡片的视觉重量
     gratitudeLines: GRATITUDE_TEXT,
-    gratitudeExpanded: false
+    gratitudeExpanded: false,
+
+    // 🐛 根因修复（2026-09-10 卡片全隐形）：这里最初按 canManage 门控整张
+    // 卡片可见性，但云函数 manageDailyMenu 的 getMealPrediction action
+    // 从一开始就没有按 canManage 收窄——只要求 caller.storeId 存在即可
+    // 查看（预测是纯只读信息，不修改任何数据，不需要"能编辑菜单"这个更高
+    // 权限），前端按 canManage 隐藏整张卡片是比后端更严格的、多余的限制，
+    // 导致义工/财务等已绑定门店但不能编辑菜单的角色完全看不到这个功能。
+    // 现在改为按 currentStoreId 是否已绑定门店门控（与后端真实权限边界
+    // 对齐），canManage 不再影响这张卡片的可见性
+    mealPredictionExpanded: false,
+    mealPredictionForm: {
+      targetDate: getTodayStr(),
+      targetDateDisplay: formatDisplayDate(getTodayStr()),
+      weather: 'sunny',
+      isHoliday: false
+    },
+    mealPredictionWeatherOptions: MEAL_PREDICTION_WEATHER_OPTIONS,
+    mealPredictionLoading: false,
+    mealPredictionError: '',
+    // 🐛 结果与展示行分开存：mealPredictionResult 是云函数原样返回的结构
+    // （给"生效依据"标签行读 basis 字段），mealPredictionIngredientRows 是
+    // 专门为 wx:for 准备好的 {label,unit,value} 数组，WXML 不用为了遍历一个
+    // 固定 4 个 key 的对象再额外写一层转换逻辑
+    mealPredictionResult: null as any,
+    mealPredictionIngredientRows: [] as Array<{ label: string; unit: string; value: number }>,
+    mealPredictionApplied: false
   },
 
   async onLoad() {
     recordRecentVisit('/subpackages/admin/pages/daily-menu/daily-menu', '食谱管理中心');
+    this.computeCustomNavLayout();
     this.loadRecentRemarks();
     // 🔑 需先拿到 currentStoreId 再查今日食谱（getByDate 要求 storeId 必填），故此处 await 顺序执行
     await this.applyRolePermissions();
@@ -192,15 +256,50 @@ Page({
     }
   },
 
-  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
-  // 共享组件
-  onNavLayout(e: { detail: { totalHeight: number; contentTop: number; contentHeight: number; rightGap: number } }) {
+  // 🐛 根因修复（2026-09-10 导航栏彻底重构）：与 platform-admin 同一处问题
+  // 同一套修复方案——不再依赖共享 <navigation-bar> 组件的 attached()/
+  // _layout() + bind:layout 事件上报，页面自己在 onLoad 里同步测量。公式
+  // 与 navigation-bar.ts 的 _layout() 完全一致（胶囊 top/height 反推 gap，
+  // gap*2+胶囊高度），保证不用共享组件也能算出与其余用该组件的页面视觉对齐
+  // 的顶栏高度；rightGap 供右上角"编辑"按钮避让胶囊定位
+  computeCustomNavLayout() {
+    const sysInfo = getSafeSystemInfo();
+    const statusBarHeight = sysInfo.statusBarHeight || 20;
+    const isAndroid = sysInfo.platform === 'android';
+    let navBarHeight: number;
+    let rightGap: number;
+    try {
+      const menuButtonInfo = wx.getMenuButtonBoundingClientRect();
+      if (!menuButtonInfo || !menuButtonInfo.height) throw new Error('胶囊测量值为空');
+      const gap = menuButtonInfo.top - statusBarHeight;
+      navBarHeight = gap * 2 + menuButtonInfo.height;
+      rightGap = sysInfo.windowWidth - menuButtonInfo.left;
+    } catch (err) {
+      console.warn('[daily-menu] 胶囊测量异常，使用兜底导航栏高度:', err);
+      const fallbackContentHeight = isAndroid ? 48 : 44;
+      const fallbackGap = isAndroid ? 4 : 6;
+      navBarHeight = fallbackGap * 2 + fallbackContentHeight;
+      rightGap = 90;
+    }
     this.setData({
-      contentTop: e.detail.totalHeight + 8,
-      navContentTop: e.detail.contentTop,
-      navContentHeight: e.detail.contentHeight,
-      navRightGap: e.detail.rightGap
+      statusBarHeight,
+      navBarHeight,
+      contentTop: statusBarHeight + navBarHeight,
+      navRightGap: rightGap
     });
+  },
+
+  // 🆕（2026-09-10 导航栏彻底重构）自定义顶栏"‹"返回按钮——与 navGuard 处理
+  // 物理返回键是两条独立路径，这里是点击 UI 上的返回箭头：有上一页就
+  // navigateBack，没有就退回首页 Tab，与 platform-admin 的 onNavigateBack
+  // 同一套策略
+  onNavigateBack() {
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      wx.navigateBack({ delta: 1 });
+    } else {
+      wx.switchTab({ url: '/pages/index/index' });
+    }
   },
 
   // 🐛 去重合并：本地曾维护过一份手写的 resolveEffectiveRole（cachedRole/服务端
@@ -937,6 +1036,106 @@ Page({
 
   onToggleGratitude() {
     this.setData({ gratitudeExpanded: !this.data.gratitudeExpanded });
+  },
+
+  // ============ 🤖 AI 备餐助手（2026-09-10 智能备餐与食材用量预测·一期原型） ============
+
+  // 🐛 根因修复（2026-09-10 卡片全隐形）：不再判断 canManage——这张卡片的
+  // 可见性现在由 wxml 的 wx:if="{{currentStoreId}}" 门控，能展开这个卡片
+  // 就意味着已经满足了显示条件，这里不需要重复判断
+  onToggleMealPrediction() {
+    this.setData({ mealPredictionExpanded: !this.data.mealPredictionExpanded });
+  },
+
+  onMealPredictionDateChange(e: any) {
+    const dateStr = e.detail.value;
+    this.setData({
+      'mealPredictionForm.targetDate': dateStr,
+      'mealPredictionForm.targetDateDisplay': formatDisplayDate(dateStr),
+      // 换了目标日期后，上一次的预测结果不再对应当前表单，清空避免误导
+      mealPredictionResult: null,
+      mealPredictionIngredientRows: [],
+      mealPredictionApplied: false,
+      mealPredictionError: ''
+    });
+  },
+
+  onSelectMealPredictionWeather(e: any) {
+    this.setData({ 'mealPredictionForm.weather': e.currentTarget.dataset.value });
+  },
+
+  onToggleMealPredictionHoliday() {
+    this.setData({ 'mealPredictionForm.isHoliday': !this.data.mealPredictionForm.isHoliday });
+  },
+
+  // 🐛 权限收口：这里不重复判断 canManage——onToggleMealPrediction 已经拦过一次
+  // "整个卡片是否可见/可展开"，展开之后表单内的具体操作（选日期/选天气/点生成）
+  // 是同一个已经过权限校验的展开态里的子操作，不需要每个子操作各自再判一遍
+  async onRunMealPrediction() {
+    if (this.data.mealPredictionLoading) return;
+    if (!this.data.currentStoreId) {
+      this.setData({ mealPredictionError: '尚未确定门店，无法生成预测' });
+      return;
+    }
+
+    this.setData({ mealPredictionLoading: true, mealPredictionError: '', mealPredictionApplied: false });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageDailyMenu',
+        data: {
+          action: 'getMealPrediction',
+          storeId: this.data.currentStoreId,
+          targetDate: this.data.mealPredictionForm.targetDate,
+          weatherFactor: this.data.mealPredictionForm.weather,
+          isHoliday: this.data.mealPredictionForm.isHoliday
+        }
+      });
+      const result = res && res.result;
+      if (!result || !result.success) {
+        this.setData({ mealPredictionError: (result && result.error) || '预测失败，请重试' });
+        return;
+      }
+
+      this.setData({
+        mealPredictionResult: result,
+        mealPredictionIngredientRows: buildIngredientRows(result.ingredients)
+      });
+    } catch (err) {
+      console.error('[daily-menu] onRunMealPrediction 异常:', err);
+      this.setData({ mealPredictionError: '网络异常，请重试' });
+    } finally {
+      this.setData({ mealPredictionLoading: false });
+    }
+  },
+
+  // 📋（2026-09-10）"一键套用"一期原型如实做法：本仓库目前没有一个真实的
+  // "后厨采购清单/备餐看板"集合或页面可以写入——与其假装接了一个不存在的
+  // 模块，这里先落地成"一键复制格式化文本到剪贴板"，管理员可以直接粘贴进
+  // 微信群/采购台账/任何后续真正建起来的看板里。等后续真的建了采购清单
+  // 模块，这里再改成调用那个模块的写入接口，不是这一期的范围
+  onApplyMealPrediction() {
+    const result = this.data.mealPredictionResult;
+    if (!result || result.insufficientData) return;
+
+    const lines = [
+      `【AI 备餐建议】${this.data.mealPredictionForm.targetDateDisplay}`,
+      `推荐备餐总人次：${result.recommendedHeadcount} 人（堂食+外送预估）`,
+      '基础食材清单：'
+    ];
+    this.data.mealPredictionIngredientRows.forEach((row: any) => {
+      lines.push(`- ${row.label}：${row.value} ${row.unit}`);
+    });
+
+    wx.setClipboardData({
+      data: lines.join('\n'),
+      success: () => {
+        this.setData({ mealPredictionApplied: true });
+        wx.showToast({ title: '已复制备餐清单', icon: 'success' });
+      },
+      fail: () => {
+        wx.showToast({ title: '复制失败，请重试', icon: 'none' });
+      }
+    });
   },
 
   // 🔗 顶部原生"…"菜单的分享入口（与海报弹窗里 onShareMenuPoster 分享的是同一张
