@@ -727,6 +727,10 @@ Page({
   // 内容安全审核、stores 集合写入都和整页保存走的是完全同一条服务端代码
   // 路径。其余字段（供餐餐次/品牌矩阵/标签等组合较复杂，人员画像/资质照片
   // 已经各自有独立的轻量弹窗）仍走整页编辑，不在这次改造范围内
+  // 🛡️（2026-09-10 现场排查）本方法只允许出现 showQuickEditModal 相关字段，
+  // 绝不能在这里 setData({ editing: true, ... })——那是 onEditProfile() 的
+  // 职责，两者是互斥的两条独立编辑路径，混在一起会导致点单字段弹窗时把
+  // 整页长表单也一并铺开
   onEditSingleField(e: any) {
     if (!this.data.canManage || this.data.quickEditSubmitting) return;
     const { field, label, placeholder } = e.currentTarget.dataset;

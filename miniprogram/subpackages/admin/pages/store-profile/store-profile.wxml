@@ -91,15 +91,21 @@
            图标本身是假的、不体现自己的动作。改为 onEditSingleField，点这一行
            弹出与本页其余弹窗同款 sp-modal-card 半屏卡片样式的单字段弹窗（见
            页面末尾 showQuickEditModal 那个弹窗定义），保存也只提交这一个
-           字段，不再需要打开整页编辑 -->
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onEditSingleField" data-field="patriarchName" data-label="大家长/负责人" data-placeholder="请输入大家长姓名">
+           字段，不再需要打开整页编辑。
+           🛡️（2026-09-10 现场加固）这三行统一用 catchtap 而不是 bindtap——
+           这三行本身不嵌套在任何绑了 onEditProfile 的父级容器里（onEditProfile
+           只挂在页面顶部"✏️ 修改档案"/卡片标题栏"✏️ 修改"这两个独立的叶子
+           节点上，没有包裹这三行），静态审计没有找到实际的事件冒泡路径，
+           但 catchtap 本身零副作用（没有更上层的祖先处理器需要接住这个事件），
+           作为纵深防御统一加上，不依赖"审计没找到"这个结论本身 100% 可靠 -->
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" catchtap="onEditSingleField" data-field="patriarchName" data-label="大家长/负责人" data-placeholder="请输入大家长姓名">
         <text class="sp-archive-lbl">大家长 / 负责人</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!(patriarchName || patriarch || manager) ? 'empty' : ''}}">{{patriarchName || patriarch || manager || '未填写'}}</text>
           <text class="sp-row-edit-icon" wx:if="{{canManage && !(patriarchName || patriarch || manager)}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onEditSingleField" data-field="contactPhone" data-label="联系电话" data-placeholder="请输入门店联系电话">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" catchtap="onEditSingleField" data-field="contactPhone" data-label="联系电话" data-placeholder="请输入门店联系电话">
         <text class="sp-archive-lbl">联系电话</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!contactPhone ? 'empty' : ''}}">{{contactPhone || '未填写'}}</text>
@@ -146,7 +152,7 @@
           <text class="sp-row-edit-icon" wx:if="{{canManage && !(province || city)}}">✏️</text>
         </view>
       </view>
-      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" bindtap="onEditSingleField" data-field="address" data-label="详细地址" data-placeholder="请输入门店详细地址">
+      <view class="sp-archive-row {{canManage ? 'clickable' : ''}}" hover-class="{{canManage ? 'sp-archive-row-hover' : 'none'}}" catchtap="onEditSingleField" data-field="address" data-label="详细地址" data-placeholder="请输入门店详细地址">
         <text class="sp-archive-lbl">详细地址</text>
         <view class="sp-archive-val-with-action">
           <text class="sp-archive-val {{!address ? 'empty' : ''}}">{{address || '未填写'}}</text>
