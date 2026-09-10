@@ -2,7 +2,5 @@
   "navigationStyle": "custom",
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
-  "usingComponents": {
-    "navigation-bar": "/subpackages/admin/components/navigation-bar/navigation-bar"
-  }
+  "usingComponents": {}
 }

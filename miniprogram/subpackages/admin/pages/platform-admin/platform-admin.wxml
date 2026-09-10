@@ -1,45 +1,32 @@
-<!-- 🐛 根因修复（2026-09-10，KPI 卡片被胶囊/状态栏遮挡）：本页是 admin 分包
-     里唯一同时开启 navigationStyle:custom + enablePullDownRefresh 的页面（见
-     platform-admin.json），此前完全依赖 <navigation-bar> 自身在文档流里占据的
-     隐式高度（style="height:{{totalHeight}}px"）把内容顶下去——一旦这个隐式
-     高度在某次渲染时机上落空（下拉刷新原生层与自定义导航栏叠加的已知边界
-     情况），后面紧跟的 pa-loading-state/pa-content 就会直接贴到屏幕物理顶部，
-     KPI 卡片被状态栏/胶囊盖住一半。改为显式方案：<navigation-bar> 通过
-     extClass 固定为 position:fixed（不再占用文档流高度，视觉上始终贴顶，
-     不会被下拉刷新原生层影响），pa-page 本身用 onNavLayout 拿到的真实测量值
-     contentTop 显式 padding-top 撑开——内容起始位置从"依赖隐式流式布局"变成
-     "用同一份真实测量数据显式计算"，两者不会同时生效造成双重叠加。
-     🐛 2026-09-06 的历史修复记录（margin-top/padding-top 不再叠加
-     navigation-bar 已占用的 totalHeight）已随此次改造失效——当时的前提是
-     "navigation-bar 占文档流"，现在这个前提已经不成立，特此说明避免后来者
-     误以为这里"没修好、又叠加了一次" -->
-<view class="pa-page" style="padding-top: {{contentTop}}px;">
+<!-- 🐛 根因修复（2026-09-10 导航栏彻底重构）：此前借用共享 <navigation-bar>
+     组件 + slot="center" 自定义标题 + position:fixed 脱标来做"标题绝对垂直
+     居中"——脱标之后标题元素完全离开了 pa-page 的正常文档流定位上下文，
+     现场视觉验收实测标题飘到了胶囊右下方，且不再依赖共享组件自身占位后，
+     页面内容滚动时也失去了固定背景遮罩，卡片会从"标题"底下穿透而过。这两个
+     问题的根源是同一个：用 position:fixed 硬套一个本该在文档流里正常渲染
+     的标题元素，脱离了原有的层级/定位体系。彻底放弃共享组件 + slot 这条路，
+     改成本页自己维护一套标准的"fixed 顶栏（含状态栏占位 + 内容区）+ 页面内
+     等高占位 view"结构：custom-nav-bar 固定贴顶、内部 nav-status-bar/
+     nav-content 各自撑开状态栏高度与胶囊高度两段，nav-content 内部用相对
+     定位实现"返回按钮绝对定位在左侧、标题用 flex 居中"，不依赖任何子组件的
+     生命周期或事件上报——statusBarHeight/navBarHeight 由 computeCustomNavLayout()
+     在 onLoad 里直接同步算好 -->
+<view class="pa-page">
 
-  <!-- 🎨（2026-09-10 二次视觉减压）改用白底深色字——上一轮把这里改成与
-       分包其余页面一致的品牌深红 #8C1D18，用户反馈"色块过厚"的观感并没有
-       改善，反而饱和色比之前的深靛蓝更抢眼。这里改用与下方 .pa-content
-       同一色系的近白色（不用纯 #FFFFFF，避免与卡片完全同色导致"看不出
-       这是导航栏"），配合下方 .pa-nav-bar-fixed 的极淡描边/阴影维持一条
-       可感知的分界线，而不是靠色块面积去区分导航栏与页面内容。
-       高度/内边距：<navigation-bar> 组件本身按胶囊实测坐标算 barStyle，
-       .weui-navigation-bar__inner 是 height:100% 且无 padding，背景天然
-       严格贴合 (statusBarHeight + navBarHeight) 这一整块、不多不少，这里
-       不需要（也不应该）额外叠加高度/padding。
-       返回箭头与标题的垂直居中：同样由组件内部 _layout() 直接读取
-       wx.getMenuButtonBoundingClientRect() 的 top/height 赋给内容区
-       .weui-navigation-bar__content，与胶囊天然对齐，不依赖本页任何样式 -->
-  <navigation-bar
-    extClass="pa-nav-bar-fixed"
-    title="平台管理"
-    background="#FBFBFC"
-    color="#1C2530"
-    dark="{{false}}"
-    back="{{true}}"
-    showHomeButton="auto"
-    bind:layout="onNavLayout"
-  ></navigation-bar>
+  <view class="custom-nav-bar" style="height: {{statusBarHeight + navBarHeight}}px;">
+    <view class="nav-status-bar" style="height: {{statusBarHeight}}px;"></view>
+    <view class="nav-content" style="height: {{navBarHeight}}px;">
+      <view class="nav-back-btn" hover-class="btn-hover" bindtap="onNavigateBack">
+        <text class="nav-back-icon">‹</text>
+      </view>
+      <text class="nav-title">平台管理</text>
+    </view>
+  </view>
+  <!-- 页面顶部等高占位，防止内容被固定定位的顶栏遮挡——高度必须与
+       custom-nav-bar 完全一致，两者共用同一份 statusBarHeight+navBarHeight -->
+  <view class="nav-placeholder" style="height: {{statusBarHeight + navBarHeight}}px;"></view>
 
-  <!-- 呼吸边距：与导航栏净空（已由 pa-page 的 padding-top 保证）是两回事，
+  <!-- 呼吸边距：与导航栏净空（已由上面的 nav-placeholder 保证）是两回事，
        这里只负责视觉留白，不参与"避免遮挡"的计算 -->
   <view class="pa-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: 24rpx;">
     <text>校验身份中...</text>
@@ -142,11 +129,14 @@
       </view>
 
       <!-- 🆕（可视化制卡台账）套餐类型筛选：与上面的状态筛选是两个独立维度，
-           可以同时生效 -->
-      <view class="pa-codes-filter-row">
-        <view class="pa-codes-filter-tab {{activationCodesPlanFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesPlanFilter">全部套餐</view>
-        <view class="pa-codes-filter-tab {{activationCodesPlanFilter === 'pro' ? 'active' : ''}}" data-filter="pro" bindtap="onSwitchActivationCodesPlanFilter">专业版</view>
-        <view class="pa-codes-filter-tab {{activationCodesPlanFilter === 'enterprise' ? 'active' : ''}}" data-filter="enterprise" bindtap="onSwitchActivationCodesPlanFilter">旗舰版</view>
+           可以同时生效。🎨（2026-09-10 层级收尾）此前与状态筛选用完全同一套
+           实心胶囊样式，两排看起来是同等重要的并列筛选，容易让人误以为要
+           先看懂两排的关系才能操作。加 -secondary 修饰类改成更轻的线框
+           Tag + 更紧凑的间距，视觉上明确"这是状态筛选之下的第二层细分" -->
+      <view class="pa-codes-filter-row pa-codes-filter-row-secondary">
+        <view class="pa-codes-filter-tab pa-codes-filter-tab-secondary {{activationCodesPlanFilter === 'all' ? 'active' : ''}}" data-filter="all" bindtap="onSwitchActivationCodesPlanFilter">全部套餐</view>
+        <view class="pa-codes-filter-tab pa-codes-filter-tab-secondary {{activationCodesPlanFilter === 'pro' ? 'active' : ''}}" data-filter="pro" bindtap="onSwitchActivationCodesPlanFilter">专业版</view>
+        <view class="pa-codes-filter-tab pa-codes-filter-tab-secondary {{activationCodesPlanFilter === 'enterprise' ? 'active' : ''}}" data-filter="enterprise" bindtap="onSwitchActivationCodesPlanFilter">旗舰版</view>
       </view>
 
       <!-- 首屏骨架屏：区分"正在加载"与"确认加载完、真的没有数据"两种状态，
@@ -494,35 +484,40 @@
           <text>当前无生效中的临时巡检凭证（沙盒隔离状态）</text>
         </view>
 
-        <!-- 🆕（2026-09-10 排版重构）改为纵向三段式：标题行（门店名 + 小号短
-             ID）→ 标签行（角色/机构/倒计时横排 Tag，flex-wrap 不挤压竖排）→
-             操作行（右对齐成对按钮），替代此前"文字信息 + 按钮"左右两栏挤压
-             导致文字被压窄成竖排的问题 -->
-        <view class="pa-inspect-grant-row" wx:for="{{activeGrants}}" wx:key="tenantId">
-          <text class="pa-inspect-grant-store">🏪 {{item.storeNameLabel}}</text>
-          <text class="pa-inspect-grant-store-id">ID: {{item.storeIdShortLabel}}</text>
-
-          <view class="pa-inspect-grant-tags">
-            <text class="pa-inspect-grant-tag">{{item.roleLabel}}</text>
-            <text class="pa-inspect-grant-tag">{{item.tenantNameLabel}}</text>
-            <text class="pa-inspect-grant-tag {{item.remainingLabel === '已过期' ? 'expired' : 'countdown'}}">⏱ {{item.remainingLabel}}</text>
-          </view>
-
-          <view class="pa-inspect-grant-actions">
+        <!-- 🆕（2026-09-10 整卡点击闭环）整张卡片 catchtap 直达门店档案——
+             与吸底大按钮的"一键授权并进入档案"是同一份收尾体验诉求，已经在
+             生效中的巡检不需要再走一次授权流程，点卡片本身就该直接进入。
+             顶部小号"撤销"链接文字单独 catchtap（阻止冒泡到卡片本身，二者
+             不会互相误触），标签行末尾的">"箭头纯视觉提示"可点进入"，不
+             单独绑定事件——点箭头等同于点卡片其余任何区域 -->
+        <view
+          class="pa-inspect-grant-row"
+          wx:for="{{activeGrants}}"
+          wx:key="tenantId"
+          hover-class="btn-hover"
+          data-storeid="{{item.stores[0]}}"
+          catchtap="onEnterActiveGrant"
+        >
+          <view class="pa-inspect-grant-header">
+            <text class="pa-inspect-grant-store">🏪 {{item.storeNameLabel}}</text>
             <button
-              class="pa-inspect-grant-btn pa-inspect-grant-btn-enter"
-              hover-class="btn-hover"
-              data-storeid="{{item.stores[0]}}"
-              bindtap="onEnterActiveGrant"
-            >直接进入</button>
-            <button
-              class="pa-inspect-grant-btn pa-inspect-grant-btn-revoke"
+              class="pa-inspect-grant-revoke-link"
               hover-class="btn-hover"
               loading="{{revokingGrantTenantId === item.tenantId}}"
               disabled="{{!!revokingGrantTenantId}}"
               data-tenantid="{{item.tenantId}}"
-              bindtap="onRevokeActiveGrant"
+              catchtap="onRevokeActiveGrant"
             >撤销</button>
+          </view>
+          <text class="pa-inspect-grant-store-id">ID: {{item.storeIdShortLabel}}</text>
+
+          <view class="pa-inspect-grant-tags-row">
+            <view class="pa-inspect-grant-tags">
+              <text class="pa-inspect-grant-tag">{{item.roleLabel}}</text>
+              <text class="pa-inspect-grant-tag">{{item.tenantNameLabel}}</text>
+              <text class="pa-inspect-grant-tag {{item.remainingLabel === '已过期' ? 'expired' : 'countdown'}}">⏱ {{item.remainingLabel}}</text>
+            </view>
+            <text class="pa-inspect-grant-arrow">›</text>
           </view>
         </view>
       </view>

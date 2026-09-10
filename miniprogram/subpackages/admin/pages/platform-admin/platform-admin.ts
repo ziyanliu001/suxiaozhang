@@ -2,6 +2,7 @@ import { AuthService } from '../../../../utils/authService';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { safeNavigateTo } from '../../../../utils/navHelper';
+import { getSafeSystemInfo } from '../../../../utils/util';
 
 const PLAN_LABELS: Record<string, string> = {
   basic: '基础版',
@@ -100,7 +101,18 @@ Page({
   _navGuard: null as NavGuardInstance | null,
 
   data: {
+    // 🐛 根因修复（2026-09-10 导航栏彻底重构）：此前借用共享 <navigation-bar>
+    // 组件 + slot="center" 自定义标题 + position:fixed 脱标——脱标之后标题
+    // 元素完全离开了 pa-page 的正常文档流定位上下文，实测直接飘到了胶囊
+    // 右下方（而不是贴着屏幕顶部居中），同时因为不再依赖组件本身占位，
+    // 页面内容的滚动区域也失去了固定背景遮罩，上滑时卡片会从"标题"底下
+    // 穿透而过。本次彻底放弃共享组件 + slot 这条路，改成页面自己维护一套
+    // 标准的"fixed 顶栏 + 等高占位 view"结构（custom-nav-bar/nav-placeholder，
+    // 见 wxml），statusBarHeight/navBarHeight 两个测量值由 computeCustomNavLayout()
+    // 在 onLoad 里直接算好，不再依赖子组件的 attached() 生命周期 + 事件上报
     contentTop: 0,
+    statusBarHeight: 0,
+    navBarHeight: 0,
     checkedAccess: false,
     // 🐛 根因修复：checkAccess() 此前一旦抛异常（网络异常/云函数未部署等），
     // checkedAccess 永远停留在 false，页面卡死在"校验身份中..."。现在无论成功
@@ -310,6 +322,7 @@ Page({
     // 模块 require 阶段异常），不是本方法内部逻辑的问题，不用再往下排查
     // this.checkAccess()/navGuard 这些具体实现
     console.log('[platform-admin] onLoad 开始执行');
+    this.computeCustomNavLayout();
     this.checkAccess();
 
     this._navGuard = createNavGuard({
@@ -356,19 +369,36 @@ Page({
     }
   },
 
-  // 🐛 根因修复：见 store-management.ts 同处修复记录，改用 <navigation-bar>
-  // 共享组件
-  // 🩺（排查白屏用）navigation-bar 组件 attached() 里的 _layout() 算完自身
-  // 高度后会 triggerEvent('layout', ...) 上报到这里——这条日志能出现，说明
-  // 自定义导航栏组件本身已经正常渲染/挂载完成，胶囊高度计算没有卡死；如果
-  // onLoad 的日志出现了但这条没出现，说明问题出在 WXML 里
-  // <navigation-bar> 这个组件本身没有正常渲染，而不是页面 JS 逻辑的问题
-  onNavLayout(e: { detail: { totalHeight: number } }) {
-    console.log('[platform-admin] onNavLayout 收到导航栏布局上报:', e.detail);
-    // 🎨（2026-09-10 二次视觉减压）此前额外 +8px 呼吸间距——现在导航栏改成
-    // 浅色系，不再需要靠额外留白把深色块"推开"，直接贴合真实测量高度，
-    // 呼吸感改由下面 pa-content 自己的 padding-top 决定
-    this.setData({ contentTop: e.detail.totalHeight });
+  // 🐛 根因修复（2026-09-10 导航栏彻底重构）：不再依赖共享 <navigation-bar>
+  // 组件的 attached()/_layout() + bind:layout 事件上报这条链路——页面自己
+  // 在 onLoad 里同步算好 statusBarHeight/navBarHeight，直接 setData，不需要
+  // 等子组件生命周期。navBarHeight 的计算公式与 navigation-bar.ts 的
+  // _layout() 完全一致（胶囊 top/height 反推 gap，gap*2+胶囊高度），保证
+  // 即便不用共享组件，算出来的顶栏高度仍然和其余用该组件的页面视觉对齐；
+  // wx.getMenuButtonBoundingClientRect() 极少数机型异常时的兜底值也照抄
+  // 该组件的 computeFallbackLayout()，两个分支结果一致（均为 56px），不是
+  // 巧合而是同一份公式的必然结果
+  computeCustomNavLayout() {
+    const sysInfo = getSafeSystemInfo();
+    const statusBarHeight = sysInfo.statusBarHeight || 20;
+    const isAndroid = sysInfo.platform === 'android';
+    let navBarHeight: number;
+    try {
+      const menuButtonInfo = wx.getMenuButtonBoundingClientRect();
+      if (!menuButtonInfo || !menuButtonInfo.height) throw new Error('胶囊测量值为空');
+      const gap = menuButtonInfo.top - statusBarHeight;
+      navBarHeight = gap * 2 + menuButtonInfo.height;
+    } catch (err) {
+      console.warn('[platform-admin] 胶囊测量异常，使用兜底导航栏高度:', err);
+      const fallbackContentHeight = isAndroid ? 48 : 44;
+      const fallbackGap = isAndroid ? 4 : 6;
+      navBarHeight = fallbackGap * 2 + fallbackContentHeight;
+    }
+    this.setData({
+      statusBarHeight,
+      navBarHeight,
+      contentTop: statusBarHeight + navBarHeight
+    });
   },
 
   // 🐛 根因修复：此前任何一步抛异常（fetchUserRole 网络失败、云函数未部署等）
@@ -1947,5 +1977,12 @@ Page({
     } else {
       wx.switchTab({ url: '/pages/index/index' });
     }
+  },
+
+  // 🆕（2026-09-10 导航栏彻底重构）自定义顶栏"‹"返回按钮——与 onGoBack（拒绝
+  // 访问态"返回首页"按钮）同一套"有上一页就 navigateBack，没有就退回首页
+  // Tab"策略，不重复写一份几乎一样的逻辑
+  onNavigateBack() {
+    this.onGoBack();
   }
 });
