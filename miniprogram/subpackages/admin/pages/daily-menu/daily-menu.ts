@@ -9,6 +9,12 @@ import { isVirtualStoreName } from '../../../../utils/storeIdentity';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync, getSafeSystemInfo } from '../../../../utils/util';
 import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
+import {
+  buildPurchasePlan,
+  togglePurchaseTaskStatus,
+  updatePurchaseTaskWeight,
+  formatPurchasePlanText
+} from './lib/buildPurchasePlan';
 
 const CANVAS_ID = 'imgCompressCanvas';
 const POSTER_CANVAS_ID = 'dailyMenuPosterCanvas';
@@ -230,7 +236,17 @@ Page({
     // 固定 4 个 key 的对象再额外写一层转换逻辑
     mealPredictionResult: null as any,
     mealPredictionIngredientRows: [] as Array<{ label: string; unit: string; value: number }>,
-    mealPredictionApplied: false
+    mealPredictionApplied: false,
+
+    // 🛒（2026-09-11 AI 备餐预测一键流转后厨采买任务·方向2）与上面
+    // mealPrediction* 系列是同一张卡片的下一步动作——生成结构化、可勾选/
+    // 可微调的采买待办清单，落地到本机 storage（见 onGeneratePurchasePlan
+    // 头部注释的诚实能力边界说明），不是重新拉一次云函数
+    showPurchasePlanModal: false,
+    purchasePlanTasks: [] as Array<{
+      itemKey: string; itemName: string; estimatedWeight: number; unit: string;
+      status: 'pending' | 'completed'; remark: string;
+    }>
   },
 
   async onLoad() {
@@ -1136,6 +1152,92 @@ Page({
         wx.showToast({ title: '复制失败，请重试', icon: 'none' });
       }
     });
+  },
+
+  // 🛒（2026-09-11 AI 备餐预测一键流转后厨采买任务）本机 storage 键名——
+  // 按门店+日期隔离，同一天重新打开弹窗能看到上次的勾选/微调进度，换一天
+  // 或换一家店不会互相串数据。
+  _purchasePlanStorageKey(): string {
+    return `dm_purchase_plan_${this.data.currentStoreId}_${this.data.mealPredictionForm.targetDate}`;
+  },
+
+  // 📋 生成后厨采买清单：与 onApplyMealPrediction（纯文本复制）是并存的两条
+  // 独立能力——本方法产出结构化、可勾选/可微调重量的任务清单，在专门的
+  // 弹窗里展示，而不是直接扔进剪贴板。
+  // 🛡️ 权限收口：与 onRunMealPrediction 同一处校验口径——currentStoreId
+  // 是否已绑定门店是这张卡片能否使用的唯一门槛（预测结果本身只在已绑店
+  // 时才可能存在，这里再显式判一次是防御性收口，不是多此一举，避免未来
+  // UI 结构调整后这个按钮意外脱离预测结果区单独可点）
+  onGeneratePurchasePlan() {
+    if (!this.data.currentStoreId) {
+      wx.showToast({ title: '尚未确定门店，无法生成采买清单', icon: 'none' });
+      return;
+    }
+    const result = this.data.mealPredictionResult;
+    if (!result || result.insufficientData) return;
+
+    // 🛒 同一天/同一家店重新点「生成」时，优先恢复上次已经勾选/微调过的
+    // 进度，而不是每次都重置回全 pending——义工可能分几次采购，中途退出
+    // 弹窗后再进来应该看到自己刚才勾过的状态
+    let tasks: any[] = [];
+    try {
+      const cached = wx.getStorageSync(this._purchasePlanStorageKey());
+      if (Array.isArray(cached) && cached.length > 0) tasks = cached;
+    } catch (e) {
+      // 本地读取异常按"没有缓存"处理，不影响主流程
+    }
+    if (tasks.length === 0) {
+      tasks = buildPurchasePlan(result.ingredients);
+    }
+
+    if (tasks.length === 0) {
+      wx.showToast({ title: '暂无可生成的采买项', icon: 'none' });
+      return;
+    }
+
+    this.setData({ purchasePlanTasks: tasks, showPurchasePlanModal: true });
+  },
+
+  _persistPurchasePlan(tasks: any[]) {
+    try {
+      wx.setStorageSync(this._purchasePlanStorageKey(), tasks);
+    } catch (e) {
+      // 本机 storage 写入失败不阻断交互，弹窗内的状态仍然是当次会话里正确的
+    }
+  },
+
+  // 🛒 勾选/取消勾选某一项采买任务
+  onTogglePurchaseTask(e: any) {
+    const itemKey = e.currentTarget.dataset.key;
+    const next = togglePurchaseTaskStatus(this.data.purchasePlanTasks, itemKey);
+    this.setData({ purchasePlanTasks: next });
+    this._persistPurchasePlan(next);
+  },
+
+  // 🛒 义工弹窗微调预估重量——非法输入（空/0/负数/非数字）由
+  // updatePurchaseTaskWeight 自己兜底保留旧值，这里不重复校验
+  onInputPurchaseTaskWeight(e: any) {
+    const itemKey = e.currentTarget.dataset.key;
+    const next = updatePurchaseTaskWeight(this.data.purchasePlanTasks, itemKey, e.detail.value);
+    this.setData({ purchasePlanTasks: next });
+    this._persistPurchasePlan(next);
+  },
+
+  // 🛒 一键复制采买清单到剪贴板——与 onApplyMealPrediction 同一处诚实说明：
+  // 本仓库没有真实的后厨采购清单/备餐看板云端集合，复制到剪贴板是当前
+  // 能给到的、真正跨人协作可用的分发方式（粘贴进微信群/纸质台账）
+  onCopyPurchasePlan() {
+    const text = formatPurchasePlanText(this.data.purchasePlanTasks);
+    if (!text) return;
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: '已复制采买清单', icon: 'success' }),
+      fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' })
+    });
+  },
+
+  onClosePurchasePlanModal() {
+    this.setData({ showPurchasePlanModal: false });
   },
 
   // 🔗 顶部原生"…"菜单的分享入口（与海报弹窗里 onShareMenuPoster 分享的是同一张

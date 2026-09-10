@@ -184,7 +184,42 @@
 
           <button class="dm-ai-apply-btn" catchtap="onApplyMealPrediction">📋 一键复制备餐清单</button>
           <text class="dm-ai-applied-hint" wx:if="{{mealPredictionApplied}}">✅ 已复制，可粘贴到后厨采购清单/备餐看板</text>
+
+          <!-- 🛒（2026-09-11 AI 备餐预测一键流转后厨采买任务）与上面"一键复制
+               备餐清单"（纯文本复制）是并存的两条独立能力——本按钮生成结构化、
+               可勾选/可微调重量的采买待办清单，弹窗展示 -->
+          <button class="dm-purchase-plan-btn" catchtap="onGeneratePurchasePlan">🛒 生成后厨采买清单</button>
         </view>
+      </view>
+    </view>
+
+    <!-- 🛒 后厨采买清单弹窗：义工可勾选已购/微调预估重量，一键复制分享到微信群 -->
+    <view class="dm-modal-mask" wx:if="{{showPurchasePlanModal}}" bindtap="onClosePurchasePlanModal">
+      <view class="dm-purchase-plan-card" catchtap="stopPropagation">
+        <view class="dm-purchase-plan-header">
+          <text class="dm-purchase-plan-title">🛒 今日后厨采买清单</text>
+          <text class="dm-purchase-plan-close" catchtap="onClosePurchasePlanModal">✕</text>
+        </view>
+        <view class="dm-purchase-plan-list">
+          <view class="dm-purchase-plan-row" wx:for="{{purchasePlanTasks}}" wx:key="itemKey">
+            <view
+              class="dm-purchase-plan-checkbox {{item.status === 'completed' ? 'checked' : ''}}"
+              data-key="{{item.itemKey}}"
+              catchtap="onTogglePurchaseTask"
+            >{{item.status === 'completed' ? '✓' : ''}}</view>
+            <text class="dm-purchase-plan-name {{item.status === 'completed' ? 'done' : ''}}">{{item.itemName}}</text>
+            <input
+              class="dm-purchase-plan-weight-input"
+              type="digit"
+              value="{{item.estimatedWeight}}"
+              data-key="{{item.itemKey}}"
+              bindinput="onInputPurchaseTaskWeight"
+            />
+            <text class="dm-purchase-plan-unit">{{item.unit}}</text>
+          </view>
+        </view>
+        <text class="dm-purchase-plan-remark">备注：AI备餐生成，仅供参考，请结合实际库存核对</text>
+        <button class="dm-purchase-plan-copy-btn" catchtap="onCopyPurchasePlan">📋 一键复制清单</button>
       </view>
     </view>
 

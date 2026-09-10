@@ -564,6 +564,146 @@
   margin-top: 12rpx;
 }
 
+/* 🛒（2026-09-11 AI 备餐预测一键流转后厨采买任务）与上面 .dm-ai-apply-btn
+   同一套按钮规格，青绿色区分"生成结构化清单"与"纯文本复制"这两个不同动作 */
+.dm-purchase-plan-btn {
+  width: 100%;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 12rpx 0 0;
+  line-height: 1;
+  border-radius: 36rpx;
+  background: #E6FFFB;
+  border: 1.5rpx solid #08979C;
+  color: #08979C;
+  font-size: 25rpx;
+  font-weight: 600;
+}
+
+.dm-purchase-plan-btn::after {
+  border: none;
+}
+
+.dm-purchase-plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #EFE6D8;
+  margin-bottom: 16rpx;
+}
+
+.dm-purchase-plan-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #5C4326;
+}
+
+.dm-purchase-plan-close {
+  font-size: 32rpx;
+  color: #999999;
+  padding: 8rpx;
+}
+
+.dm-purchase-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.dm-purchase-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx 4rpx;
+  border-bottom: 1rpx solid #F5EFE4;
+}
+
+.dm-purchase-plan-checkbox {
+  flex-shrink: 0;
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 10rpx;
+  border: 2rpx solid #D8C9B0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  color: #FFFFFF;
+  box-sizing: border-box;
+}
+
+.dm-purchase-plan-checkbox.checked {
+  background: #08979C;
+  border-color: #08979C;
+}
+
+.dm-purchase-plan-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 27rpx;
+  color: #333333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-purchase-plan-name.done {
+  color: #999999;
+  text-decoration: line-through;
+}
+
+.dm-purchase-plan-weight-input {
+  flex-shrink: 0;
+  width: 100rpx;
+  height: 56rpx;
+  background: #F8F5F0;
+  border-radius: 10rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #333333;
+  box-sizing: border-box;
+}
+
+.dm-purchase-plan-unit {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #8A7660;
+  width: 40rpx;
+}
+
+.dm-purchase-plan-remark {
+  display: block;
+  font-size: 21rpx;
+  color: #999999;
+  margin-top: 16rpx;
+}
+
+.dm-purchase-plan-copy-btn {
+  width: 100%;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 20rpx 0 0;
+  line-height: 1;
+  border-radius: 38rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 27rpx;
+  font-weight: 600;
+}
+
+.dm-purchase-plan-copy-btn::after {
+  border: none;
+}
+
 .dm-menu-card {
   background: #FFFFFF;
   border-radius: 20rpx;
@@ -754,7 +894,8 @@
 }
 
 .dm-detail-box,
-.dm-edit-box {
+.dm-edit-box,
+.dm-purchase-plan-card {
   width: 100%;
   max-height: 85vh;
   background: #FFFFFF;
