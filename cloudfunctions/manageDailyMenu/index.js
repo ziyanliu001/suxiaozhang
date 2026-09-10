@@ -12,10 +12,18 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
+// 🍚（2026-09-10 智能备餐与食材用量预测·一期原型）纯计算逻辑拆到
+// lib/predictMealDemand.js（不依赖 wx-server-sdk，配套单测见同目录
+// *.test.js），这里只负责查 report_logs 拿历史开餐人次喂给它
+const { predictMealDemand } = require('./lib/predictMealDemand');
 
 const COLLECTION = 'daily_menus';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+// 🍚 预测查询历史数据时往前多看一段缓冲期（远大于 predictMealDemand 自己的
+// 14 天回溯窗口）——万一目标门店最近 14 天恰好有几天漏报，退化分支还能
+// 从更早的记录里凑出一个"好过没有"的简单平均，而不是直接判定 insufficientData
+const PREDICTION_HISTORY_LOOKUP_DAYS = 60;
 
 // 🛡️ 服务端内容安全兜底：菜谱文字对外公开展示，此前只在前端提交前查一次
 // msgSecCheck，绕过前端直接调云函数即可跳过审核。降级口径同 manageNotice。
@@ -88,6 +96,18 @@ async function resolveWriteTarget(caller, requestedStoreId) {
   }
 
   return { allowed: false, error: '无权限：仅店长或超级管理员可发布/编辑/删除菜单' };
+}
+
+// 🍚 从 'YYYY-MM-DD' 往前减 days 天，返回同格式字符串——用 Date.UTC 而不是
+// 本地时区的 Date 方法，与 predictMealDemand.js 的日期算法口径保持一致，
+// 避免云函数容器时区不是 UTC+8 时算出偏移一天的查询区间
+function subtractDays(dateString, days) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+  const [, y, mo, d] = m;
+  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d)) - days * 86400000;
+  const dt = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
 function normalizePage(page, pageSize) {
@@ -312,6 +332,53 @@ exports.main = async (event) => {
           total: countRes.total,
           hasMore: p * size < countRes.total
         };
+      }
+
+      // 🍚（2026-09-10 智能备餐与食材用量预测·一期原型）只读预测，不落库、
+      // 不改动任何 daily_menus/report_logs 记录——纯粹是"给我一个参考数字"。
+      // ⚠️ 如实说明：这里放在 manageDailyMenu 是按需求指定的位置，但历史
+      // 开餐人次实际查的是 report_logs 集合（daily_menus 本身不记录人次
+      // 字段），见 lib/predictMealDemand.js 文件头注释
+      case 'getMealPrediction': {
+        const { storeId: requestedStoreId, targetDate, weatherFactor, isHoliday } = event;
+        if (!targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+          return { success: false, error: '请提供合法的目标日期 (YYYY-MM-DD)' };
+        }
+        if (!caller) {
+          return { success: false, error: '无权限：未找到您的角色信息' };
+        }
+
+        let storeId;
+        if (caller.role === 'super_admin') {
+          // 🛡️ 超管可指定本机构任意门店；不传时退回自己绑定的门店（若有）
+          storeId = requestedStoreId || caller.storeId;
+          if (!storeId) return { success: false, error: '请指定要预测的门店' };
+        } else {
+          // 🛡️ 非超管一律只能查看自己绑定门店的预测，忽略/拒绝客户端传入的
+          // 其它 storeId——与 list/getByDate 既有的读权限收敛口径一致
+          if (!caller.storeId) return { success: false, error: '您尚未绑定门店，无法查看备餐预测' };
+          storeId = caller.storeId;
+        }
+
+        const lookupStart = subtractDays(targetDate, PREDICTION_HISTORY_LOOKUP_DAYS);
+        const historyRes = await db.collection('report_logs')
+          .where({
+            storeId,
+            dateString: _.gte(lookupStart).and(_.lt(targetDate))
+          })
+          .field({ dateString: true, dineInSeniors: true, deliverySeniors: true })
+          .orderBy('dateString', 'desc')
+          .limit(100)
+          .get();
+
+        const prediction = predictMealDemand({
+          historyRecords: historyRes.data || [],
+          targetDate,
+          weatherFactor,
+          isHoliday: !!isHoliday
+        });
+
+        return { success: true, storeId, ...prediction };
       }
 
       default:
