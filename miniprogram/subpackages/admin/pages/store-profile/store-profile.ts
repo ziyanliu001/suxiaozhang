@@ -7,6 +7,7 @@ import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getStorageAsync } from '../../../../utils/util';
 import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 import { clearTenantPermissionCache } from '../../../../utils/tenantPermission';
+import { decideQualificationPhotoTap, resolveQualificationActionSheetChoice } from './lib/qualificationPhotoActions';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -977,6 +978,40 @@ Page({
     const urls = e.currentTarget.dataset.urls;
     if (!url) return;
     wx.previewImage({ current: url, urls: Array.isArray(urls) && urls.length > 0 ? urls : [url] });
+  },
+
+  // 🐛 根因修复（2026-09-10 重新编辑与覆盖逻辑缺口）：门头照/民政备案复印件/
+  // 食品安全承诺三个分类，此前展示态点击已上传的照片只会直接全屏预览
+  // （onPreviewProfilePhoto），没有任何入口能就地更换/删除——三个分类都
+  // 上传过至少一张后，"暂未上传"占位格（唯一能打开管理弹窗的地方）不再
+  // 渲染，整张卡片彻底没有编辑入口。现在改为：只读角色（canManage=false）
+  // 维持原样直接预览；可管理角色改为先弹 ActionSheet 提供"预览大图"/
+  // "更换或删除该照片"两个选项，后者直接复用已验证过的 onOpenQualificationModal
+  // 批量管理弹窗（新增/删除/保存全套逻辑不重新实现一遍）。决策分支本身
+  // （该弹什么、每一项对应什么动作）拆进 lib/qualificationPhotoActions.js
+  // 纯函数，配 node --test 单测，不在这里裸写分支判断
+  onTapQualificationPhoto(e: any) {
+    const { category, url, urls } = e.currentTarget.dataset;
+    const decision = decideQualificationPhotoTap(this.data.canManage, category);
+
+    if (decision.mode === 'preview') {
+      if (!url) return;
+      wx.previewImage({ current: url, urls: Array.isArray(urls) && urls.length > 0 ? urls : [url] });
+      return;
+    }
+
+    wx.showActionSheet({
+      itemList: decision.itemList,
+      success: (res) => {
+        const choice = resolveQualificationActionSheetChoice(res.tapIndex);
+        if (choice === 'preview') {
+          if (!url) return;
+          wx.previewImage({ current: url, urls: Array.isArray(urls) && urls.length > 0 ? urls : [url] });
+        } else {
+          this.onOpenQualificationModal();
+        }
+      }
+    });
   },
 
   // 🐛 图片 500 报错兜底：URL 格式过滤（isValidPhotoUrl）拦不住"路径长得正常但

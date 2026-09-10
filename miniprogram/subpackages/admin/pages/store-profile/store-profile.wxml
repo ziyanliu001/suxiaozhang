@@ -187,17 +187,22 @@
 
     <!-- 🏅 门店资质与实景公示：门头照 / 民政备案复印件 / 食品安全承诺。卡片本身对所有角色
          （义工/财务/家属/店长等）常驻可见，与是否已上传照片、是否有管理权限无关。
-         🛡️（2026-09-10 UI 入口精简）标题栏原有的"✏️ 修改"按钮已移除——三个照片位
-         "暂未上传"时的占位格（下方 sp-upload-slot，bindtap="onOpenQualificationModal"）
-         仍是入口；已上传的图片点击大图预览 (onPreviewProfilePhoto) 对所有角色开放。
-         ⚠️ 已知取舍：三个照片位都已上传过至少一张时，本卡片上暂时没有再打开
-         "修改门店资质与实景公示"半屏弹窗的入口了（此前是靠这个标题栏按钮兜底）——
-         如果需要保留"已全部上传后仍可替换/追加"的能力，需要另外设计一个不额外
-         增加"修改"字样的入口（比如让已上传的缩略图长按/再点一下弹出选择），
-         这次先不在这里补，等确认是否真的需要 -->
+         🐛 根因修复（2026-09-10 重新编辑与覆盖逻辑缺口）：上一轮"UI 入口精简"把这里的
+         "✏️ 修改"按钮当成"门店档案信息"卡片那种真重复入口一并移除了——但那次判断
+         错了：门店档案信息卡片的"✏️ 修改"和页面顶部"✏️ 修改档案"触发的是同一个
+         onEditProfile()，是真重复；这里的按钮触发的是 onOpenQualificationModal()，
+         是完全独立的半屏弹窗，不存在重复。移除后一旦三个照片位都已上传过至少一张，
+         下方 sp-upload-slot（唯一入口）就不再渲染，整张卡片彻底没有入口可以重新
+         编辑/替换/删除已上传的照片。现在恢复这个按钮，与本页"管理员密钥"
+         （onOpenAdminKeyModal）/"人员画像"（onOpenProfileCountModal）两个同样常驻的
+         "✏️ 修改"标题栏按钮保持同一套视觉与事件绑定约定（bindtap，不用 catchtap——
+         这三个按钮都是标题行内的独立叶子节点，标题行本身没有绑 bindtap，不存在冒泡
+         风险，CLAUDE.md 的 catchtap 硬性要求针对的是"行级单字段编辑"这一类场景，
+         不适用于这种标题栏级别的独立按钮） -->
     <view class="sp-section-title sp-profile-title-row" wx:if="{{!editing}}">
       <text class="sp-section-icon">🏅</text>
       <text class="sp-section-txt">门店资质与实景公示</text>
+      <text class="sp-btn-edit-profile-count" wx:if="{{canManage}}" bindtap="onOpenQualificationModal">✏️ 修改</text>
     </view>
 
     <view class="sp-archive-card" wx:if="{{!editing}}">
@@ -205,8 +210,8 @@
         <text class="sp-archive-lbl">门头照</text>
         <view class="sp-photo-grid" wx:if="{{storefrontPhotos.length > 0}}">
           <view class="sp-photo-thumb-wrap" wx:for="{{storefrontPhotos}}" wx:key="*this">
-            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{storefrontPhotos}}" binderror="onImageLoadError" />
-            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">🔍</text>
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onTapQualificationPhoto" data-category="storefrontPhotos" data-url="{{item}}" data-urls="{{storefrontPhotos}}" binderror="onImageLoadError" />
+            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">{{canManage ? '✏️' : '🔍'}}</text>
             <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
               <text class="sp-photo-load-failed-icon">⚠️</text>
               <text class="sp-photo-load-failed-text">加载失败</text>
@@ -223,8 +228,8 @@
         <text class="sp-archive-lbl">民政备案复印件</text>
         <view class="sp-photo-grid" wx:if="{{civilAffairsPhotos.length > 0}}">
           <view class="sp-photo-thumb-wrap" wx:for="{{civilAffairsPhotos}}" wx:key="*this">
-            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" binderror="onImageLoadError" />
-            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">🔍</text>
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onTapQualificationPhoto" data-category="civilAffairsPhotos" data-url="{{item}}" data-urls="{{civilAffairsPhotos}}" binderror="onImageLoadError" />
+            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">{{canManage ? '✏️' : '🔍'}}</text>
             <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
               <text class="sp-photo-load-failed-icon">⚠️</text>
               <text class="sp-photo-load-failed-text">加载失败</text>
@@ -241,8 +246,8 @@
         <text class="sp-archive-lbl">食品安全承诺</text>
         <view class="sp-photo-grid" wx:if="{{foodSafetyPledgePhotos.length > 0}}">
           <view class="sp-photo-thumb-wrap" wx:for="{{foodSafetyPledgePhotos}}" wx:key="*this">
-            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onPreviewProfilePhoto" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" binderror="onImageLoadError" />
-            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">🔍</text>
+            <image wx:if="{{!imageFailedMap[item]}}" class="sp-photo-thumb" src="{{item}}" mode="aspectFill" bindtap="onTapQualificationPhoto" data-category="foodSafetyPledgePhotos" data-url="{{item}}" data-urls="{{foodSafetyPledgePhotos}}" binderror="onImageLoadError" />
+            <text class="sp-photo-zoom-badge" wx:if="{{!imageFailedMap[item]}}">{{canManage ? '✏️' : '🔍'}}</text>
             <view wx:else class="sp-photo-load-failed" catchtap="onRetryImage" data-url="{{item}}">
               <text class="sp-photo-load-failed-icon">⚠️</text>
               <text class="sp-photo-load-failed-text">加载失败</text>

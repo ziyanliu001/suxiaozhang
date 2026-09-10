@@ -71,7 +71,7 @@
 > ⚠️ 2026-09-05 核实修正：根目录 `package.json` 里并不存在 `lint` 这个 script（此前本节写的 `npm run lint` 会直接报 `Missing script: "lint"`），以下是 `package.json` 里真实存在的四个 script。
 
 - 类型校验：`npm run typecheck`（即 `tsc --noEmit -p tsconfig.json`，前端 TS 代码改动后必须跑一遍）
-- 云函数单元测试：`npm test`（即 `node --test cloudfunctions/*/lib/*.test.js`，只覆盖各云函数 `lib/*.test.js` 下的纯函数单测，不是端到端/集成测试，且只有部分云函数有对应测试文件）
+- 单元测试：`npm test`（即 `node --test cloudfunctions/*/lib/*.test.js miniprogram/subpackages/admin/pages/store-profile/lib/*.test.js`），只覆盖各 `lib/*.test.js` 下的纯函数单测，不是端到端/集成测试，且只有部分云函数/页面有对应测试文件。⚠️ 2026-09-10 起不再是"只测云函数"——`miniprogram/` 页面如果按同款"纯逻辑拆 `lib/*.js` + 配套 `*.test.js`"的写法（见 `store-profile/lib/qualificationPhotoActions.js` 首个先例）新增测试，需要手动把对应 glob 加进这行 script，`node --test` 不做递归通配，新增一个页面的 `lib/` 目录就要在这里显式追加一段路径。
 - Open-Core 安全审计：`npm run security-audit`（`scripts/security-audit.js`，配合 [`OPEN_CORE_ARCHITECTURE.md`](docs/OPEN_CORE_ARCHITECTURE.md) 的敏感信息审计标准使用）
 - Open-Core 拆分构建：`npm run build:core`（`scripts/build-open-core.js`，生成开源 Core 代码产物）
 - 云函数本地调试/部署：在对应云函数目录下执行 `npm install`
