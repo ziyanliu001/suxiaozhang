@@ -15,12 +15,25 @@
      误以为这里"没修好、又叠加了一次" -->
 <view class="pa-page" style="padding-top: {{contentTop}}px;">
 
+  <!-- 🎨（2026-09-10 二次视觉减压）改用白底深色字——上一轮把这里改成与
+       分包其余页面一致的品牌深红 #8C1D18，用户反馈"色块过厚"的观感并没有
+       改善，反而饱和色比之前的深靛蓝更抢眼。这里改用与下方 .pa-content
+       同一色系的近白色（不用纯 #FFFFFF，避免与卡片完全同色导致"看不出
+       这是导航栏"），配合下方 .pa-nav-bar-fixed 的极淡描边/阴影维持一条
+       可感知的分界线，而不是靠色块面积去区分导航栏与页面内容。
+       高度/内边距：<navigation-bar> 组件本身按胶囊实测坐标算 barStyle，
+       .weui-navigation-bar__inner 是 height:100% 且无 padding，背景天然
+       严格贴合 (statusBarHeight + navBarHeight) 这一整块、不多不少，这里
+       不需要（也不应该）额外叠加高度/padding。
+       返回箭头与标题的垂直居中：同样由组件内部 _layout() 直接读取
+       wx.getMenuButtonBoundingClientRect() 的 top/height 赋给内容区
+       .weui-navigation-bar__content，与胶囊天然对齐，不依赖本页任何样式 -->
   <navigation-bar
     extClass="pa-nav-bar-fixed"
     title="平台管理"
-    background="#1C2530"
-    color="#FFFFFF"
-    dark="{{true}}"
+    background="#FBFBFC"
+    color="#1C2530"
+    dark="{{false}}"
     back="{{true}}"
     showHomeButton="auto"
     bind:layout="onNavLayout"
@@ -49,25 +62,30 @@
     <button class="pa-denied-btn" hover-class="btn-hover" bindtap="onGoBack">返回首页</button>
   </view>
 
-  <view class="pa-content" wx:if="{{checkedAccess && !accessError && isPlatformAdmin}}" style="padding-top: 24rpx;">
+  <view class="pa-content" wx:if="{{checkedAccess && !accessError && isPlatformAdmin}}" style="padding-top: 16rpx;">
 
-    <!-- 📊 统计总览看板：三张轻量 KPI 卡片，横跨两个 Tab 共用，随时能看到
-         "有多少码等着卖出去 / 有多少机构在真实付费 / 有几家快到期该跟进续费" -->
-    <view class="pa-kpi-row">
-      <view class="pa-kpi-card">
-        <text class="pa-kpi-num" wx:if="{{!overviewLoading}}">{{overview.totals.unusedActivationCodeCount || 0}}</text>
-        <view class="pa-kpi-skel" wx:else></view>
-        <text class="pa-kpi-label">待核销码</text>
-      </view>
-      <view class="pa-kpi-card">
-        <text class="pa-kpi-num" wx:if="{{!overviewLoading}}">{{overview.totals.activeSubscriptionCount || 0}}</text>
-        <view class="pa-kpi-skel" wx:else></view>
-        <text class="pa-kpi-label">已激活机构</text>
-      </view>
-      <view class="pa-kpi-card">
-        <text class="pa-kpi-num {{overview.soonExpiringTenants.length > 0 ? 'pa-kpi-num-warn' : ''}}" wx:if="{{!overviewLoading}}">{{overview.soonExpiringTenants.length || 0}}</text>
-        <view class="pa-kpi-skel" wx:else></view>
-        <text class="pa-kpi-label">7天内到期</text>
+    <!-- 📊 统计总览看板：三张轻量磨砂白卡片，横跨两个 Tab 共用，随时能看到
+         "有多少码等着卖出去 / 有多少机构在真实付费 / 有几家快到期该跟进续费"。
+         🎨（2026-09-10）外层 .pa-kpi-panel 铺一层极淡暖色渐变，卡片自身用
+         半透明白 + backdrop-filter 模糊——磨砂质感需要底下有色彩变化才能
+         被看出来，纯色背景上加 backdrop-filter 视觉上和纯白卡片没有区别 -->
+    <view class="pa-kpi-panel">
+      <view class="pa-kpi-row">
+        <view class="pa-kpi-card">
+          <text class="pa-kpi-num" wx:if="{{!overviewLoading}}">{{overview.totals.unusedActivationCodeCount || 0}}</text>
+          <view class="pa-kpi-skel" wx:else></view>
+          <text class="pa-kpi-label">待核销码</text>
+        </view>
+        <view class="pa-kpi-card">
+          <text class="pa-kpi-num" wx:if="{{!overviewLoading}}">{{overview.totals.activeSubscriptionCount || 0}}</text>
+          <view class="pa-kpi-skel" wx:else></view>
+          <text class="pa-kpi-label">已激活机构</text>
+        </view>
+        <view class="pa-kpi-card">
+          <text class="pa-kpi-num {{overview.soonExpiringTenants.length > 0 ? 'pa-kpi-num-warn' : ''}}" wx:if="{{!overviewLoading}}">{{overview.soonExpiringTenants.length || 0}}</text>
+          <view class="pa-kpi-skel" wx:else></view>
+          <text class="pa-kpi-label">7天内到期</text>
+        </view>
       </view>
     </view>
 
@@ -325,25 +343,45 @@
 
     </block>
 
-    <!-- ═══════════════════════ 🔍 平台巡检（2026-09-09 平台巡检自助授权，2026-09-10 改为两级选择器） ═══════════════════════ -->
+    <!-- ═══════════════════════ 🔍 平台巡检（2026-09-09 平台巡检自助授权，2026-09-10 体验与交互全面升级） ═══════════════════════ -->
     <block wx:elif="{{activeTab === 'inspect'}}">
       <view class="pa-inspect-card">
         <text class="pa-inspect-title">🔍 平台巡检 · 自助授权</text>
-        <text class="pa-inspect-desc">
-          平台管理员默认不接触任何机构的业务数据（档案/经营数据）。需要临时排障某一家具体门店时，
-          先选机构、再选门店即可完成授权并进入档案编辑，不用再去云开发控制台翻门店 _id——授权范围
-          严格限定到这一家店，不会授予整个机构，也不会授予 super_admin/platform_admin 角色本身。
-          每次授权/撤销都会留痕，见下方"当前生效中的巡检"。
-        </text>
+
+        <!-- 🆕（2026-09-10）折叠式安全须知——默认只占一行，点击展开完整说明，
+             把原来长段文字腾出的空间让给下方三级选择器 -->
+        <view class="pa-inspect-notice {{inspectNoticeExpanded ? 'expanded' : ''}}" hover-class="btn-hover" bindtap="onToggleInspectNotice">
+          <text class="pa-inspect-notice-brief" wx:if="{{!inspectNoticeExpanded}}">💡 巡检安全须知（点击展开）</text>
+          <block wx:else>
+            <text class="pa-inspect-notice-full">
+              平台管理员默认不接触任何机构的业务数据。需要临时排障某一家具体门店时，先选机构、再选
+              门店即可完成授权并进入档案编辑，不用再去云开发控制台翻门店 _id——授权范围严格限定到
+              这一家店，2 小时后自动失效，也不会授予整个机构或 super_admin/platform_admin 角色本身。
+              每次授权/撤销都会留痕，见下方"当前生效中的巡检"。
+            </text>
+            <text class="pa-inspect-notice-collapse">点击收起 ▲</text>
+          </block>
+        </view>
+
+        <!-- 🆕（2026-09-10）选择路径——机构 > 门店，替代原来第二级顶部的
+             "❮ 重新选择机构" 纯文字返回按钮，同时承担面包屑展示作用 -->
+        <view class="pa-inspect-path">
+          <text
+            class="pa-inspect-path-item {{inspectStage === 'tenant' ? 'active' : 'done'}}"
+            hover-class="{{inspectStage === 'store' ? 'btn-hover' : ''}}"
+            bindtap="{{inspectStage === 'store' ? 'onInspectBackToTenant' : ''}}"
+          >{{inspectSelectedTenantName || '① 选机构'}}</text>
+          <text class="pa-inspect-path-sep" wx:if="{{inspectStage === 'store'}}">›</text>
+          <text class="pa-inspect-path-item {{inspectStage === 'store' ? 'active' : ''}}" wx:if="{{inspectStage === 'store'}}">{{inspectSelectedStoreName || '② 选门店'}}</text>
+        </view>
 
         <!-- 第一级：搜索并选择机构 -->
         <block wx:if="{{inspectStage === 'tenant'}}">
           <view class="pa-inspect-field">
-            <text class="pa-inspect-label">搜索机构（名称/ID）</text>
             <input
               class="pa-inspect-input"
               value="{{inspectTenantKeyword}}"
-              placeholder="留空展示最近创建的机构"
+              placeholder="搜索机构名称/ID，留空看最近创建"
               confirm-type="search"
               bindinput="onInspectTenantKeywordInput"
               bindconfirm="onInspectTenantSearchConfirm"
@@ -377,24 +415,28 @@
           </view>
         </block>
 
-        <!-- 第二级：选择该机构下的门店 -->
+        <!-- 第二级：搜索/过滤并选择该机构下的门店 + 角色 -->
         <block wx:if="{{inspectStage === 'store'}}">
-          <view class="pa-inspect-breadcrumb" hover-class="btn-hover" bindtap="onInspectBackToTenant">
-            <text>❮ 重新选择机构</text>
+          <view class="pa-inspect-field">
+            <input
+              class="pa-inspect-input"
+              value="{{inspectStoreKeyword}}"
+              placeholder="搜索/过滤门店名称"
+              bindinput="onInspectStoreKeywordInput"
+            />
           </view>
-          <text class="pa-inspect-selected-tenant">🏢 {{inspectSelectedTenantName || '未命名机构'}}</text>
 
           <view class="pa-inspect-picker-loading" wx:if="{{inspectStoresLoading}}"><text>门店加载中...</text></view>
 
-          <view class="pa-empty-state" wx:elif="{{inspectStores.length === 0}}">
+          <view class="pa-empty-state" wx:elif="{{inspectStoresFiltered.length === 0}}">
             <text class="pa-empty-icon">🏪</text>
-            <text class="pa-empty-title">该机构下暂无门店</text>
+            <text class="pa-empty-title">{{inspectStoreKeyword ? '没有匹配的门店' : '该机构下暂无门店'}}</text>
           </view>
 
           <view class="pa-inspect-picker-list" wx:else>
             <view
               class="pa-inspect-picker-row {{inspectSelectedStoreId === item._id ? 'active' : ''}}"
-              wx:for="{{inspectStores}}"
+              wx:for="{{inspectStoresFiltered}}"
               wx:key="_id"
               data-storeid="{{item._id}}"
               data-storename="{{item.storeName}}"
@@ -415,34 +457,31 @@
                全部置灰。platform_admin 对任何机构都必须显式选一个临时授权
                角色，没有"已有常态身份可以跳过"这回事，见 onSubmitInspectGrant
                同一处修复注释 -->
+          <!-- 🆕（2026-09-10）角色选择区改为紧凑 Radio Tag/Card，label 短标签 +
+               desc 副文本清晰标注权限范围，替代原来单行长文案的按钮组 -->
           <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId}}">
             <text class="pa-inspect-label">授权角色</text>
-            <view class="pa-inspect-role-options">
+            <view class="pa-inspect-role-tags">
               <view
-                class="pa-inspect-role-option {{inspectRole === item.value ? 'active' : ''}}"
+                class="pa-inspect-role-tag {{inspectRole === item.value ? 'active' : ''}}"
                 wx:for="{{inspectRoleOptions}}"
                 wx:key="value"
                 data-value="{{item.value}}"
                 bindtap="onSelectInspectRole"
-              >{{item.label}}</view>
+              >
+                <text class="pa-inspect-role-tag-label">{{item.label}}</text>
+                <text class="pa-inspect-role-tag-desc">{{item.desc}}</text>
+              </view>
             </view>
           </view>
 
           <text class="pa-inspect-error" wx:if="{{inspectError}}">{{inspectError}}</text>
-
-          <button
-            class="pa-inspect-submit"
-            wx:if="{{inspectSelectedStoreId}}"
-            hover-class="btn-hover"
-            bindtap="onSubmitInspectGrant"
-            loading="{{inspectSubmitting}}"
-            disabled="{{inspectSubmitting}}"
-          >获取巡检权限并进入「{{inspectSelectedStoreName}}」档案</button>
         </block>
       </view>
 
-      <!-- 🆕（2026-09-10 一键回收临时凭证）当前生效中的巡检——避免 authorizedTenants
-           无限膨胀，排障完成后随手撤销 -->
+      <!-- 🆕（2026-09-10 一键回收临时凭证，2026-09-10 卡片美化）当前生效中的
+           巡检——突出剩余有效时间倒计时与门店名称，撤销/直接进入做成成对的
+           轻量操作按钮 -->
       <view class="pa-inspect-card pa-inspect-grants-card">
         <view class="pa-section-header">
           <text class="pa-section-title">🕐 当前生效中的巡检</text>
@@ -455,25 +494,59 @@
           <text>当前无生效中的临时巡检凭证（沙盒隔离状态）</text>
         </view>
 
+        <!-- 🆕（2026-09-10 排版重构）改为纵向三段式：标题行（门店名 + 小号短
+             ID）→ 标签行（角色/机构/倒计时横排 Tag，flex-wrap 不挤压竖排）→
+             操作行（右对齐成对按钮），替代此前"文字信息 + 按钮"左右两栏挤压
+             导致文字被压窄成竖排的问题 -->
         <view class="pa-inspect-grant-row" wx:for="{{activeGrants}}" wx:key="tenantId">
-          <view class="pa-inspect-grant-info">
-            <text class="pa-inspect-grant-role">{{item.roleLabel}} · {{item.stores.length}} 家门店</text>
-            <text class="pa-inspect-grant-tenant">机构 ID：{{item.tenantId}}</text>
-            <text class="pa-inspect-grant-time" wx:if="{{item.grantedAtLabel}}">🕐 授权于 {{item.grantedAtLabel}}</text>
+          <text class="pa-inspect-grant-store">🏪 {{item.storeNameLabel}}</text>
+          <text class="pa-inspect-grant-store-id">ID: {{item.storeIdShortLabel}}</text>
+
+          <view class="pa-inspect-grant-tags">
+            <text class="pa-inspect-grant-tag">{{item.roleLabel}}</text>
+            <text class="pa-inspect-grant-tag">{{item.tenantNameLabel}}</text>
+            <text class="pa-inspect-grant-tag {{item.remainingLabel === '已过期' ? 'expired' : 'countdown'}}">⏱ {{item.remainingLabel}}</text>
           </view>
-          <button
-            class="pa-btn-small pa-btn-danger"
-            hover-class="btn-hover"
-            loading="{{revokingGrantTenantId === item.tenantId}}"
-            disabled="{{!!revokingGrantTenantId}}"
-            data-tenantid="{{item.tenantId}}"
-            bindtap="onRevokeActiveGrant"
-          >撤销</button>
+
+          <view class="pa-inspect-grant-actions">
+            <button
+              class="pa-inspect-grant-btn pa-inspect-grant-btn-enter"
+              hover-class="btn-hover"
+              data-storeid="{{item.stores[0]}}"
+              bindtap="onEnterActiveGrant"
+            >直接进入</button>
+            <button
+              class="pa-inspect-grant-btn pa-inspect-grant-btn-revoke"
+              hover-class="btn-hover"
+              loading="{{revokingGrantTenantId === item.tenantId}}"
+              disabled="{{!!revokingGrantTenantId}}"
+              data-tenantid="{{item.tenantId}}"
+              bindtap="onRevokeActiveGrant"
+            >撤销</button>
+          </view>
         </view>
       </view>
+
+      <!-- 🆕（2026-09-10）吸底浮动主操作按钮——选中门店后才出现，副标题提示
+           具体门店与角色权限，loading 态防重复点击 -->
+      <view class="fa-safe-area-spacer" style="height: 140rpx;" wx:if="{{inspectStage === 'store' && inspectSelectedStoreId}}"></view>
     </block>
 
-    <view class="fa-safe-area-spacer"></view>
+    <view class="fa-safe-area-spacer" wx:if="{{!(activeTab === 'inspect' && inspectStage === 'store' && inspectSelectedStoreId)}}"></view>
+  </view>
+
+  <!-- 🆕（2026-09-10）巡检吸底主按钮——独立于滚动容器之外，position:fixed 悬浮于底部 -->
+  <view class="pa-inspect-sticky-bar" wx:if="{{activeTab === 'inspect' && inspectStage === 'store' && inspectSelectedStoreId}}">
+    <button
+      class="pa-inspect-sticky-btn"
+      hover-class="btn-hover"
+      bindtap="onSubmitInspectGrant"
+      loading="{{inspectSubmitting}}"
+      disabled="{{inspectSubmitting}}"
+    >
+      <text class="pa-inspect-sticky-btn-main">一键授权并进入档案</text>
+      <text class="pa-inspect-sticky-btn-sub">{{inspectSelectedStoreName}} · {{inspectRoleLabel}}权限</text>
+    </button>
   </view>
 
   <!-- 🌸 底部抽屉：生成授权码 -->
@@ -559,7 +632,13 @@
   <view class="pa-sheet-mask" wx:if="{{showTenantStoresSheet}}" bindtap="onCloseTenantStores">
     <view class="pa-sheet-box" catchtap="noop">
       <view class="pa-sheet-handle"></view>
-      <text class="pa-sheet-title">【{{tenantStoresTenantName}}】门店清单</text>
+      <!-- 🆕（2026-09-10）顶部标准 × 关闭——去掉底部整条 .pa-sheet-actions
+           操作栏，把这部分高度还给滚动区，门店多时不用为了看到"关闭"按钮
+           而多划一屏 -->
+      <view class="pa-sheet-header-row">
+        <text class="pa-sheet-title pa-sheet-title-inline">【{{tenantStoresTenantName}}】门店清单</text>
+        <view class="pa-sheet-close-btn" hover-class="btn-hover" bindtap="onCloseTenantStores">✕</view>
+      </view>
 
       <view class="pa-code-card pa-skel-card" wx:if="{{tenantStoresLoading}}">
         <view class="pa-skel-bar pa-skel-bar-lg"></view>
@@ -573,72 +652,39 @@
 
       <scroll-view scroll-y class="pa-tenant-store-list" wx:else>
         <view class="pa-tenant-store-row" wx:for="{{tenantStores}}" wx:key="_id">
+          <!-- 🆕（2026-09-10 状态标签内联）改为紧贴门店名右侧的行内小胶囊
+               （用 gap 代替 space-between），不再被推到卡片最右边缘 -->
           <view class="pa-tenant-store-row-top">
             <text class="pa-tenant-store-name">{{item.storeName}}</text>
             <text class="pa-tenant-status pa-status-{{item.status === 'inactive' ? 'expired' : 'active'}}">{{item.status === 'inactive' ? '已停用' : '正常'}}</text>
           </view>
           <text class="pa-tenant-row" wx:if="{{item.city || item.province}}">📍 {{item.province}}{{item.city}}</text>
           <text class="pa-tenant-row" wx:if="{{item.createdAtLabel}}">🕐 创建于 {{item.createdAtLabel}}</text>
-          <!-- 👪 家长绑定信息：有绑定才展示这一行，未绑定不显示"解除家长"按钮 -->
+          <!-- 👪 家长绑定信息：有绑定才展示这一行 -->
           <text class="pa-tenant-row" wx:if="{{item.patriarch}}">👪 家长：{{item.patriarch}}</text>
-          <!-- 🐛 根因修复（2026-09-10 按钮状态互斥）：此前"移出机构"和"加入
-               机构"无条件同时展示，对一家明明已经挂在当前机构下的门店毫无
-               意义地同时提供两个语义相反的动作。改为按 item.tenantId 互斥：
-               有归属只给"停用/启用 + 移出机构"；无归属（点了"移出机构"之后，
-               见 onRemoveStoreFromTenant 就地把这一行的 tenantId 清空，不
-               立即整份刷新列表让这一行消失）才切到"加入机构"，方便连续操作
-               完成"移出 A → 加入 B"而不用退出抽屉重新找这家门店 -->
+
+          <!-- 🆕（2026-09-10 操作区收敛）此前最多同时铺开 3 个按钮，即便
+               单行放得下也会把卡片撑得很高，门店一多滚动体验差。改为与
+               上面机构卡片（.pa-tenant-actions）同一套模式：1 个高频主
+               操作（停用/启用）保持一键直达 + 其余低频操作（解除家长/
+               移出机构/加入机构）收进"⋯更多"原生 ActionSheet，
+               见 onOpenStoreMoreActions -->
           <view class="pa-tenant-store-actions">
-            <button
-              class="pa-btn-small pa-btn-warn"
+            <view
+              class="pa-tenant-action-btn"
               hover-class="btn-hover"
-              loading="{{storeActionInFlightId === item._id}}"
-              disabled="{{!!storeActionInFlightId}}"
               data-storeid="{{item._id}}"
               data-storename="{{item.storeName}}"
               data-status="{{item.status}}"
               bindtap="onSetStoreStatus"
-            >{{item.status === 'inactive' ? '启用门店' : '停用门店'}}</button>
-            <!-- 解除家长与"是否挂靠机构"是两个独立维度（孤儿门店理论上也
-                 可能仍绑着家长），独立于下面的移出/加入互斥判断之外 -->
-            <button
-              wx:if="{{item.patriarch}}"
-              class="pa-btn-small pa-btn-warn"
-              hover-class="btn-hover"
-              loading="{{storeActionInFlightId === item._id}}"
-              disabled="{{!!storeActionInFlightId}}"
-              data-storeid="{{item._id}}"
-              data-storename="{{item.storeName}}"
-              data-patriarch="{{item.patriarch}}"
-              bindtap="onUnbindStorePatriarch"
-            >解除家长</button>
-            <button
-              wx:if="{{item.tenantId}}"
-              class="pa-btn-small pa-btn-danger"
-              hover-class="btn-hover"
-              loading="{{storeActionInFlightId === item._id}}"
-              disabled="{{!!storeActionInFlightId}}"
-              data-storeid="{{item._id}}"
-              data-storename="{{item.storeName}}"
-              bindtap="onRemoveStoreFromTenant"
-            >移出机构</button>
-            <button
-              wx:if="{{!item.tenantId}}"
-              class="pa-btn-small"
-              hover-class="btn-hover"
-              loading="{{storeActionInFlightId === item._id}}"
-              disabled="{{!!storeActionInFlightId}}"
-              data-storeid="{{item._id}}"
-              data-storename="{{item.storeName}}"
-              bindtap="onAssignStoreToTenant"
-            >加入机构</button>
+            >{{item.status === 'inactive' ? '启用门店' : '停用门店'}}</view>
+            <view class="pa-tenant-more-btn" hover-class="btn-hover" data-item="{{item}}" bindtap="onOpenStoreMoreActions">⋯</view>
           </view>
         </view>
+        <!-- 🆕 移除底部整条操作栏后由这里补一份底部安全区留白，替代
+             .pa-sheet-actions 原来兼职的 env(safe-area-inset-bottom) -->
+        <view style="height: calc(16rpx + env(safe-area-inset-bottom));"></view>
       </scroll-view>
-
-      <view class="pa-sheet-actions">
-        <button class="pa-btn-cancel" hover-class="btn-hover" bindtap="onCloseTenantStores">关闭</button>
-      </view>
     </view>
   </view>
 

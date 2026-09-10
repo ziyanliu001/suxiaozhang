@@ -17,6 +17,11 @@
   left: 0;
   right: 0;
   z-index: 100;
+  /* 🎨（2026-09-10）浅色导航栏与下方页面背景色非常接近，光靠色块本身已经
+     不足以让用户分辨"这是导航栏"——用一条极淡的底部描边 + 微弱投影维持
+     可感知的分界线，取代此前"用大面积深色块压出边界"的做法 */
+  border-bottom: 1rpx solid rgba(28, 37, 48, 0.06);
+  box-shadow: 0 2rpx 6rpx rgba(28, 37, 48, 0.03);
 }
 
 /* 🌟 通用点击反馈：本页此前大部分按钮完全没有 hover-class，点击手感生硬——
@@ -91,28 +96,39 @@
 /* ═══════════════════════════════════════════════════════════════
    📊 KPI 总览卡片：两个 Tab 共用的顶部数据看板
    ═══════════════════════════════════════════════════════════════ */
+/* 🎨（2026-09-10）磨砂质感的"底色"——极淡暖灰渐变，给下面半透明卡片的
+   backdrop-filter 提供可辨识的色彩过渡，同时呼应品牌深红但不抢眼 */
+.pa-kpi-panel {
+  background: linear-gradient(135deg, #FBF3F2 0%, #F6F7F9 65%);
+  border-radius: 20rpx;
+  padding: 18rpx 14rpx;
+  margin-bottom: 20rpx;
+}
+
 .pa-kpi-row {
   display: flex;
-  gap: 16rpx;
-  margin-bottom: 20rpx;
+  gap: 14rpx;
 }
 
 .pa-kpi-card {
   flex: 1;
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16rpx);
+  -webkit-backdrop-filter: blur(16rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.8);
   border-radius: 16rpx;
-  padding: 20rpx 12rpx;
+  padding: 22rpx 12rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 16rpx rgba(140, 29, 24, 0.05);
 }
 
 .pa-kpi-num {
-  font-size: 40rpx;
+  font-size: 44rpx;
   font-weight: 800;
   color: #1C2530;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .pa-kpi-num-warn {
@@ -128,33 +144,37 @@
   animation: pa-skel-shimmer 1.6s ease-in-out infinite;
 }
 
+/* 🎨 数字与标签的层次感：字距拉开 + 弱化颜色，与上方大号加粗数字形成对比 */
 .pa-kpi-label {
-  font-size: 22rpx;
-  color: #999999;
-  margin-top: 6rpx;
+  font-size: 21rpx;
+  color: #9199A3;
+  letter-spacing: 1rpx;
+  margin-top: 8rpx;
 }
 
 /* ═══════════════════════════════════════════════════════════════
    🗂️ 顶层 Tab 分流：吸顶切换栏
    ═══════════════════════════════════════════════════════════════ */
+/* 🎨（2026-09-10 精简内外边距）吸顶栏本身不再需要大留白——它贴着上面
+   KPI 面板、下面紧跟内容，留白太多会在两块之间制造不必要的视觉断层 */
 .pa-tab-switcher {
   position: sticky;
   z-index: 60;
   display: flex;
-  gap: 12rpx;
+  gap: 10rpx;
   background: #F4F5F7;
-  padding: 12rpx 0;
-  margin-bottom: 8rpx;
+  padding: 6rpx 0;
+  margin-bottom: 4rpx;
 }
 
 .pa-tab-item {
   flex: 1;
-  height: 72rpx;
+  height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16rpx;
-  font-size: 26rpx;
+  border-radius: 14rpx;
+  font-size: 25rpx;
   font-weight: 600;
   background: #FFFFFF;
   color: #666666;
@@ -294,12 +314,18 @@
   color: #333333;
 }
 
+/* 🎨（2026-09-10 标签美化）小胶囊统一加一圈同色系描边——纯色底 + 白字在
+   浅色卡片上边缘略显生硬，一圈半透明白描边能让胶囊边界更清晰、质感更精致 */
 .pa-tenant-status {
+  flex-shrink: 0;
   font-size: 20rpx;
-  padding: 4rpx 16rpx;
+  font-weight: 600;
+  padding: 5rpx 18rpx;
   border-radius: 20rpx;
   color: #FFFFFF;
   background: #999999;
+  border: 1rpx solid rgba(255, 255, 255, 0.35);
+  letter-spacing: 1rpx;
 }
 
 /* 🐛 根因修复（状态徽章矛盾）：此前 .pa-status-active 与
@@ -399,10 +425,13 @@
   margin-bottom: 16rpx;
 }
 
+/* 🎨（2026-09-10 状态标签内联）改用 gap 而不是 space-between——状态胶囊
+   紧贴在门店名右侧，读起来是"门店名 [状态]"一个整体，而不是被推到卡片
+   最右边缘、跟名字之间隔着一大段空白 */
 .pa-tenant-store-row-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12rpx;
   margin-bottom: 8rpx;
 }
 
@@ -410,20 +439,20 @@
   font-size: 28rpx;
   font-weight: bold;
   color: #1C2530;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* 🎨（2026-09-10 操作区收敛）与机构卡片的 .pa-tenant-actions 同一套模式：
+   1 个高频主操作 + 1 个圆形"⋯更多"，永远单行、不会再因为按钮数量不定
+   （0~3 个）撑高卡片或换行堆叠 */
 .pa-tenant-store-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
+  align-items: center;
+  gap: 12rpx;
   margin-top: 12rpx;
-}
-
-/* 最多三个按钮同时出现（停用/启用 + 解除家长 + 移出机构）时，每个至少占约
-   半行宽度再换行，避免三个 flex:1 挤在一行导致文字被压得太窄 */
-.pa-tenant-store-actions .pa-btn-small {
-  flex: 1 1 auto;
-  min-width: 160rpx;
 }
 
 /* 🎨 套餐 Tag：免费版灰色/专业版金色/旗舰版深色，即将到期橙色警告——
@@ -440,10 +469,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4rpx 16rpx;
+  padding: 5rpx 18rpx;
   border-radius: 16rpx;
   font-size: 20rpx;
   font-weight: bold;
+  letter-spacing: 1rpx;
 }
 
 .pa-plan-badge-basic {
@@ -521,39 +551,6 @@
   font-size: 28rpx;
   font-weight: 700;
   box-sizing: border-box;
-}
-
-.pa-btn-small {
-  flex: 1;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  border-radius: 32rpx;
-  font-size: 24rpx;
-  background: #EDEFF2;
-  color: #333333;
-}
-
-.pa-btn-small::after {
-  border: none;
-}
-
-.pa-btn-warn {
-  background: #FBE9E7;
-  color: #C62828;
-}
-
-/* 🚪 移出机构：比 .pa-btn-warn（停用，尚可恢复）更强烈的警示色——清空
-   tenantId 意味着门店直接脱离机构归属，是这一排操作里最"重"的一个 */
-.pa-btn-danger {
-  background: #C92A2A;
-  color: #FFFFFF;
 }
 
 .pa-soon-expire-box {
@@ -968,6 +965,41 @@
   margin: 0 auto 24rpx;
 }
 
+/* 🆕（2026-09-10）顶部标准 × 关闭——替代底部整条 .pa-sheet-actions 操作栏，
+   把这部分高度还给内容滚动区 */
+.pa-sheet-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+/* 🐛 用 .pa-sheet-title.pa-sheet-title-inline 复合选择器而不是单独一个类——
+   两个类挂在同一元素上时，单独的 .pa-sheet-title-inline 与后面才定义的
+   .pa-sheet-title 选择器特异度相同，级联顺序会让后者的 margin-bottom 赢，
+   复合选择器把特异度提高一级，确保这里的覆盖始终生效 */
+.pa-sheet-title.pa-sheet-title-inline {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-sheet-close-btn {
+  flex-shrink: 0;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: #F1F3F5;
+  color: #495057;
+  font-size: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .pa-sheet-title {
   display: block;
   font-size: 32rpx;
@@ -1076,12 +1108,65 @@
   margin-bottom: 12rpx;
 }
 
-.pa-inspect-desc {
+/* 🆕（2026-09-10 巡检面板体验升级）折叠式安全须知——默认单行，点击展开，
+   把原来长段说明文字腾出的首屏空间让给下方三级选择器 */
+.pa-inspect-notice {
+  background: #FFF8E1;
+  border-radius: 12rpx;
+  padding: 14rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.pa-inspect-notice-brief {
   display: block;
   font-size: 24rpx;
-  color: #868E96;
-  line-height: 1.6;
-  margin-bottom: 24rpx;
+  color: #8C6D1F;
+  font-weight: 600;
+}
+
+.pa-inspect-notice-full {
+  display: block;
+  font-size: 23rpx;
+  color: #7A5C10;
+  line-height: 1.7;
+}
+
+.pa-inspect-notice-collapse {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #B08A2E;
+  text-align: right;
+}
+
+/* 🆕（2026-09-10）选择路径面包屑——机构 › 门店，同时承担"返回上一级"入口 */
+.pa-inspect-path {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 20rpx;
+  flex-wrap: wrap;
+}
+
+.pa-inspect-path-item {
+  font-size: 25rpx;
+  color: #ADB5BD;
+  padding: 6rpx 4rpx;
+}
+
+.pa-inspect-path-item.done {
+  color: #495057;
+  text-decoration: underline;
+}
+
+.pa-inspect-path-item.active {
+  color: #1C2530;
+  font-weight: 700;
+}
+
+.pa-inspect-path-sep {
+  font-size: 22rpx;
+  color: #CED4DA;
 }
 
 .pa-inspect-field {
@@ -1106,26 +1191,47 @@
   font-size: 26rpx;
 }
 
-.pa-inspect-role-options {
-  display: flex;
-  flex-direction: column;
+/* 🆕（2026-09-10）授权角色改为紧凑 Radio Tag/Card，label 短标签 + desc
+   副文本清晰标注权限范围，两列网格布局，比原来的单列长条按钮组更省空间 */
+.pa-inspect-role-tags {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12rpx;
 }
 
-.pa-inspect-role-option {
-  padding: 18rpx 20rpx;
+.pa-inspect-role-tag {
+  padding: 16rpx 18rpx;
   background: #F8F9FA;
   border: 2rpx solid transparent;
   border-radius: 12rpx;
-  font-size: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.pa-inspect-role-tag.active {
+  background: #FFF8E1;
+  border-color: #FFD700;
+}
+
+.pa-inspect-role-tag-label {
+  font-size: 25rpx;
+  font-weight: 700;
   color: #495057;
 }
 
-.pa-inspect-role-option.active {
-  background: #FFF8E1;
-  border-color: #FFD700;
+.pa-inspect-role-tag.active .pa-inspect-role-tag-label {
   color: #1C2530;
-  font-weight: 600;
+}
+
+.pa-inspect-role-tag-desc {
+  font-size: 20rpx;
+  color: #ADB5BD;
+  line-height: 1.4;
+}
+
+.pa-inspect-role-tag.active .pa-inspect-role-tag-desc {
+  color: #8C6D1F;
 }
 
 .pa-inspect-error {
@@ -1133,26 +1239,6 @@
   font-size: 22rpx;
   color: #E03131;
   margin-bottom: 16rpx;
-}
-
-.pa-inspect-submit {
-  width: 100%;
-  height: 88rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  border-radius: 44rpx;
-  background: #1C2530;
-  color: #FFFFFF;
-  font-size: 28rpx;
-}
-
-.pa-inspect-submit::after {
-  border: none;
 }
 
 /* 🔍（2026-09-10 巡检两级选择器 + 一键回收）*/
@@ -1213,60 +1299,106 @@
   color: #8C1D18;
 }
 
-.pa-inspect-breadcrumb {
-  display: inline-block;
-  margin-bottom: 16rpx;
-  font-size: 24rpx;
-  color: #495057;
-}
-
-.pa-inspect-selected-tenant {
-  display: block;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #1C2530;
-  margin-bottom: 20rpx;
-}
-
 .pa-inspect-grants-card {
   margin-top: 24rpx;
 }
 
+/* 🆕（2026-09-10 排版重构）纵向三段式：标题（门店名+短 ID）→ 横排标签
+   （角色/机构/倒计时）→ 右对齐操作按钮。此前用左右两栏 flex 挤压布局，
+   门店名/角色/机构/倒计时四段文字全部塞进左侧窄列，在真机上挤成竖排换行；
+   改为整行纵向堆叠后，标签行单独用 flex-wrap 横排，不再和按钮抢宽度 */
 .pa-inspect-grant-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 0;
+  flex-direction: column;
+  gap: 10rpx;
+  padding: 22rpx 0;
   border-bottom: 2rpx solid #F1F3F5;
-  gap: 16rpx;
 }
 
 .pa-inspect-grant-row:last-child {
   border-bottom: none;
 }
 
-.pa-inspect-grant-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-  min-width: 0;
-}
-
-.pa-inspect-grant-role {
-  font-size: 26rpx;
-  font-weight: 600;
+.pa-inspect-grant-store {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
   color: #1C2530;
 }
 
-.pa-inspect-grant-tenant {
-  font-size: 22rpx;
-  color: #868E96;
-  word-break: break-all;
+/* 🆕 短哈希 ID——仅供技术排障核对用，小号浅灰字，不再是标题行的主要信息 */
+.pa-inspect-grant-store-id {
+  display: block;
+  font-size: 20rpx;
+  color: #ADB5BD;
+  margin-top: -4rpx;
 }
 
-.pa-inspect-grant-time {
-  font-size: 22rpx;
-  color: #868E96;
+.pa-inspect-grant-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.pa-inspect-grant-tag {
+  font-size: 21rpx;
+  color: #495057;
+  background: #F1F3F5;
+  border-radius: 8rpx;
+  padding: 4rpx 16rpx;
+  line-height: 1.6;
+}
+
+/* 🆕（2026-09-10）剩余有效时间倒计时 Tag——正常态用品牌金色强调，已过期态
+   转灰，与"沙盒隔离/未生效"的视觉语义保持一致，不用红色制造不必要的紧张感 */
+.pa-inspect-grant-tag.countdown {
+  color: #B08A2E;
+  background: #FFF8E1;
+  font-weight: 600;
+}
+
+.pa-inspect-grant-tag.expired {
+  color: #ADB5BD;
+}
+
+.pa-inspect-grant-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12rpx;
+  margin-top: 2rpx;
+}
+
+/* 🆕 操作按钮不再复用通用 .pa-btn-small（flex:1 撑满整行宽度）——这里需要
+   紧凑、按内容宽度自适应、靠右对齐的一对按钮 */
+.pa-inspect-grant-btn {
+  flex: none;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 28rpx;
+  margin: 0;
+  line-height: 1;
+  border-radius: 30rpx;
+  font-size: 23rpx;
+}
+
+.pa-inspect-grant-btn::after {
+  border: none;
+}
+
+/* 🎨 与导航栏统一的品牌深红实心按钮——分包内"确认/进入"类主操作的既定配色 */
+.pa-inspect-grant-btn-enter {
+  background: #8C1D18;
+  color: #FFFFFF;
+}
+
+/* 🎨 浅灰底 + 浅红描边——次要操作，视觉权重明显低于左侧的"直接进入" */
+.pa-inspect-grant-btn-revoke {
+  background: #FFF5F5;
+  color: #C92A2A;
+  border: 2rpx solid #FFC9C9;
 }
 
 .pa-inspect-grants-empty {
@@ -1277,4 +1409,49 @@
 .pa-inspect-grants-empty text {
   font-size: 24rpx;
   color: #ADB5BD;
+}
+
+/* 🆕（2026-09-10）吸底浮动主操作按钮——选中门店后出现，独立于 pa-content
+   滚动容器之外，position:fixed 悬浮于安全区之上，副标题提示门店+角色权限，
+   loading 态防重复点击 */
+.pa-inspect-sticky-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #FFFFFF 70%, rgba(255, 255, 255, 0));
+}
+
+.pa-inspect-sticky-btn {
+  width: 100%;
+  height: 108rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  line-height: 1.3;
+  border-radius: 54rpx;
+  background: #1C2530;
+  box-shadow: 0 6rpx 20rpx rgba(28, 37, 48, 0.25);
+}
+
+.pa-inspect-sticky-btn::after {
+  border: none;
+}
+
+.pa-inspect-sticky-btn-main {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.pa-inspect-sticky-btn-sub {
+  font-size: 21rpx;
+  color: #C7CDD4;
+  margin-top: 4rpx;
 }

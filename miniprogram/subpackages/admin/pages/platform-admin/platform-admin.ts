@@ -261,6 +261,10 @@ Page({
     // authorizedTenants 数组里留痕（grantedBy/grantedAt），这份痕迹本身就是
     // 审计记录
     // ─────────────────────────────────────────────────────────────────
+    // 🆕（2026-09-10 巡检面板体验升级）顶部安全须知默认折叠成单行提示，
+    // 点击展开——原来的长段说明文字占用大量首屏空间，把三级选择器挤到
+    // 第二屏才能看到
+    inspectNoticeExpanded: false,
     inspectStage: 'tenant' as 'tenant' | 'store',
     inspectTenantKeyword: '',
     inspectTenantsLoading: false,
@@ -269,20 +273,32 @@ Page({
     inspectSelectedTenantName: '',
     inspectStoresLoading: false,
     inspectStores: [] as any[],
+    // 🆕（2026-09-10）门店本地关键词过滤——inspectStores 本身已经是一次性
+    // 全量拉取（getTenantDetail 最多返回 100 条），门店多的机构靠滚动查找
+    // 很低效，改成前端按 storeName 做实时过滤，不新增云调用
+    inspectStoreKeyword: '',
+    inspectStoresFiltered: [] as any[],
     inspectSelectedStoreId: '',
     inspectSelectedStoreName: '',
     inspectRole: 'store_patriarch' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer',
+    // 🆕（2026-09-10）label 改为短标签（配合 Tag/Card 紧凑布局），完整权限
+    // 范围说明挪到 desc 副文本里单独展示，不再挤在同一行长文案里
     inspectRoleOptions: [
-      { value: 'store_patriarch', label: '大家长（完整档案编辑 + 管理员密钥）' },
-      { value: 'store_manager', label: '店长（档案编辑，不含管理员密钥）' },
-      { value: 'finance', label: '财务（只读查看，不可编辑）' },
-      { value: 'volunteer', label: '义工（只读查看，不可编辑）' }
+      { value: 'store_patriarch', label: '大家长', desc: '完整档案编辑 + 管理员密钥' },
+      { value: 'store_manager', label: '店长', desc: '档案编辑，不含管理员密钥' },
+      { value: 'finance', label: '财务', desc: '只读查看，不可编辑' },
+      { value: 'volunteer', label: '义工', desc: '只读查看，不可编辑' }
     ],
+    // 🆕（2026-09-10）与 inspectRole 同步维护的短标签，供吸底按钮副标题
+    // 直接渲染，避免在 WXML 里做数组查找
+    inspectRoleLabel: '大家长',
     inspectSubmitting: false,
     inspectError: '',
     // 🆕（2026-09-10 一键回收临时凭证）当前生效中的临时巡检：只读展示
     // platform_admin 自己账号 authorizedTenants 数组（grantTenantAuthorization
-    // 的 list action），配一键撤销，避免该数组无限膨胀
+    // 的 list action），配一键撤销，避免该数组无限膨胀。2026-09-10 巡检面板
+    // 升级后额外展示"剩余有效时间"倒计时（数组已带 expiresAt）与门店名称
+    // （grant 时快照写入的 storeName，纯展示用途，不参与任何鉴权判断）
     activeGrants: [] as any[],
     activeGrantsLoading: false,
     revokingGrantTenantId: ''
@@ -349,7 +365,10 @@ Page({
   // <navigation-bar> 这个组件本身没有正常渲染，而不是页面 JS 逻辑的问题
   onNavLayout(e: { detail: { totalHeight: number } }) {
     console.log('[platform-admin] onNavLayout 收到导航栏布局上报:', e.detail);
-    this.setData({ contentTop: e.detail.totalHeight + 8 });
+    // 🎨（2026-09-10 二次视觉减压）此前额外 +8px 呼吸间距——现在导航栏改成
+    // 浅色系，不再需要靠额外留白把深色块"推开"，直接贴合真实测量高度，
+    // 呼吸感改由下面 pa-content 自己的 padding-top 决定
+    this.setData({ contentTop: e.detail.totalHeight });
   },
 
   // 🐛 根因修复：此前任何一步抛异常（fetchUserRole 网络失败、云函数未部署等）
@@ -409,8 +428,15 @@ Page({
     }
   },
 
+  // 🆕（2026-09-10 巡检面板体验升级）安全须知折叠/展开
+  onToggleInspectNotice() {
+    this.setData({ inspectNoticeExpanded: !this.data.inspectNoticeExpanded });
+  },
+
   onSelectInspectRole(e: any) {
-    this.setData({ inspectRole: e.currentTarget.dataset.value });
+    const value = e.currentTarget.dataset.value;
+    const option = this.data.inspectRoleOptions.find((o: any) => o.value === value);
+    this.setData({ inspectRole: value, inspectRoleLabel: (option && option.label) || value });
   },
 
   onInspectTenantKeywordInput(e: any) {
@@ -464,7 +490,7 @@ Page({
   },
 
   async loadInspectStores(tenantId: string) {
-    this.setData({ inspectStoresLoading: true, inspectStores: [] });
+    this.setData({ inspectStoresLoading: true, inspectStores: [], inspectStoresFiltered: [], inspectStoreKeyword: '' });
     try {
       const res = await callFunctionWithTimeout({
         name: 'manageTenantSubscription',
@@ -472,7 +498,8 @@ Page({
       });
       const result = res.result as any;
       if (result && result.success) {
-        this.setData({ inspectStores: result.storeList || [] });
+        const storeList = result.storeList || [];
+        this.setData({ inspectStores: storeList, inspectStoresFiltered: storeList });
       } else {
         wx.showToast({ title: (result && result.error) || '门店列表加载失败', icon: 'none' });
       }
@@ -482,6 +509,15 @@ Page({
     } finally {
       this.setData({ inspectStoresLoading: false });
     }
+  },
+
+  // 🆕（2026-09-10 巡检面板体验升级）门店快速过滤——纯本地过滤已加载的
+  // inspectStores，不重新发起云调用；多门店机构靠这个避免滚动查找
+  onInspectStoreKeywordInput(e: any) {
+    const keyword = String(e.detail.value || '').trim();
+    const list = this.data.inspectStores as any[];
+    const filtered = keyword ? list.filter((s) => String(s.storeName || '').includes(keyword)) : list;
+    this.setData({ inspectStoreKeyword: keyword, inspectStoresFiltered: filtered });
   },
 
   onInspectSelectStore(e: any) {
@@ -544,7 +580,16 @@ Page({
     try {
       const res: any = await callFunctionWithTimeout({
         name: 'grantTenantAuthorization',
-        data: { action: 'grant', stores: [storeId], role: this.data.inspectRole }
+        data: {
+          action: 'grant',
+          stores: [storeId],
+          role: this.data.inspectRole,
+          // 🆕（2026-09-10）随授权请求带上门店/机构名称快照，仅用于「当前
+          // 生效中的巡检」列表展示，不参与任何鉴权判断——服务端会做长度
+          // 截断兜底，这里不做额外校验
+          storeName: this.data.inspectSelectedStoreName,
+          tenantName: this.data.inspectSelectedTenantName
+        }
       });
       const result = res && res.result;
       if (!result || !result.success) {
@@ -590,11 +635,23 @@ Page({
       });
       const result = res.result as any;
       if (result && result.success) {
-        const grants = (result.authorizedTenants || []).map((g: any) => ({
-          ...g,
-          roleLabel: INSPECT_ROLE_LABELS[g.role] || g.role,
-          grantedAtLabel: this.formatDateLabel(g.grantedAt)
-        }));
+        const grants = (result.authorizedTenants || []).map((g: any) => {
+          const storeId = (Array.isArray(g.stores) && g.stores[0]) || '';
+          return {
+            ...g,
+            roleLabel: INSPECT_ROLE_LABELS[g.role] || g.role,
+            grantedAtLabel: this.formatDateLabel(g.grantedAt),
+            // 🆕（2026-09-10 排版重构）storeName/tenantName 是本轮升级才开始随
+            // grant 写入的展示字段，历史授权记录（升级前签发、尚未过期或尚未
+            // 撤销的）没有这两个字段——标题行不再拿原始 storeId 兜底（一串
+            // 生硬哈希会让标题行看起来像报错），改用通用占位文案，真实 ID
+            // 挪到下方小号灰字单独展示，供技术核对
+            storeNameLabel: g.storeName || '未命名门店（历史授权，缺快照）',
+            tenantNameLabel: g.tenantName || '未命名机构',
+            storeIdShortLabel: storeId.length > 8 ? `${storeId.slice(0, 4)}...${storeId.slice(-4)}` : (storeId || '—'),
+            remainingLabel: this.formatRemainingLabel(g.expiresAt)
+          };
+        });
         this.setData({ activeGrants: grants });
       }
     } catch (err) {
@@ -602,6 +659,33 @@ Page({
     } finally {
       this.setData({ activeGrantsLoading: false });
     }
+  },
+
+  // 🆕（2026-09-10）把 expiresAt 换算成"剩余 X 小时 Y 分"/"已过期"展示文案。
+  // 没有 expiresAt 字段（升级前签发的历史授权）时展示"长期有效"，与
+  // resolveEffectiveCaller 的 isGrantStillValid 向后兼容口径保持一致
+  formatRemainingLabel(expiresAt: string): string {
+    if (!expiresAt) return '长期有效';
+    const expiresAtMs = new Date(expiresAt).getTime();
+    if (Number.isNaN(expiresAtMs)) return '长期有效';
+    const diffMs = expiresAtMs - Date.now();
+    if (diffMs <= 0) return '已过期';
+    const totalMinutes = Math.ceil(diffMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) return `剩余 ${minutes} 分钟`;
+    return `剩余 ${hours} 小时 ${minutes} 分`;
+  },
+
+  // 🆕（2026-09-10）「直接进入」——授权早已生效（列表里能看到就说明还没过期/
+  // 撤销），不需要重新走一遍 grantTenantAuthorization，直接跳转 store-profile
+  onEnterActiveGrant(e: any) {
+    const { storeid } = e.currentTarget.dataset;
+    if (!storeid) {
+      wx.showToast({ title: '该授权记录缺少门店信息，无法直接进入', icon: 'none' });
+      return;
+    }
+    safeNavigateTo({ url: `/subpackages/admin/pages/store-profile/store-profile?storeId=${storeid}` });
   },
 
   onRevokeActiveGrant(e: any) {
@@ -1537,6 +1621,47 @@ Page({
           wx.showModal({ title: '调用失败', content: '请确认 manageTenantSubscription 云函数已部署', showCancel: false });
         } finally {
           this.setData({ storeActionInFlightId: '' });
+        }
+      }
+    });
+  },
+
+  // 🆕（2026-09-10 视觉轻量化）门店行操作收敛——解除家长/移出机构/加入机构
+  // 这三个低频操作原来无条件铺开成最多 3 个按钮，即便单行放得下也会把
+  // 卡片撑高。改成与机构卡片 onOpenTenantMoreActions 完全同一套模式：只保留
+  // "停用/启用门店"这一个高频操作常驻，其余收进原生 ActionSheet，按钮列表
+  // 动态拼装（与 WXML 里原来 wx:if 判断的互斥条件完全一致：有 patriarch 才有
+  // "解除家长"；有 tenantId 给"移出机构"，否则给"加入机构"）
+  onOpenStoreMoreActions(e: any) {
+    const item = e.currentTarget.dataset.item;
+    if (!item || this.data.storeActionInFlightId) return;
+
+    const itemList: string[] = [];
+    const actionTypes: Array<'unbindPatriarch' | 'removeFromTenant' | 'assignToTenant'> = [];
+    if (item.patriarch) {
+      itemList.push('解除家长');
+      actionTypes.push('unbindPatriarch');
+    }
+    if (item.tenantId) {
+      itemList.push('移出机构');
+      actionTypes.push('removeFromTenant');
+    } else {
+      itemList.push('加入机构');
+      actionTypes.push('assignToTenant');
+    }
+
+    wx.showActionSheet({
+      itemList,
+      itemColor: '#E03131',
+      success: (res) => {
+        const type = actionTypes[res.tapIndex];
+        const baseDataset = { storeid: item._id, storename: item.storeName };
+        if (type === 'unbindPatriarch') {
+          this.onUnbindStorePatriarch({ currentTarget: { dataset: { ...baseDataset, patriarch: item.patriarch } } });
+        } else if (type === 'removeFromTenant') {
+          this.onRemoveStoreFromTenant({ currentTarget: { dataset: baseDataset } });
+        } else {
+          this.onAssignStoreToTenant({ currentTarget: { dataset: baseDataset } });
         }
       }
     });
