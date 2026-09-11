@@ -16,12 +16,28 @@ const CANVAS_ID = 'storePickerImgCompressCanvas';
 
 // 🏢 平台类型选项：与 store-profile、statistics 大屏筛选器共用同一套 value 字面量，
 // 存入 stores.orgType 字段；name 是前端展示文案
+// 🐛（2026-09-11 orgType 枚举脱节修复）本数组此前只有 6 项，遗漏了
+// `utils/constants.ts` ORG_TYPES 权威枚举里已有的 tongxin_cancer_care/
+// temple_canteen/commercial_vegetarian 三个值——这三类机构在 createStore/
+// createTenant/manageStoreProfile 等云函数侧早就支持，但用户在这个"新建
+// 门店/选择平台类型"选择器里根本选不到，选择器沦为脱节的旧版清单。
+// ⚠️ 本数组是独立于 `utils/constants.ts` ORG_TYPES 的手写拷贝（value 集合
+// 应保持一致，但 name 文案/emoji 走本组件自己的风格，不能直接复用
+// `ORG_TYPES` 的 `label` 字段——两者是历史上刻意分开维护的两套选择器，
+// 见 profile.ts 的"组织信息配置"弹窗同样有一份独立的 `orgTypeOptions:
+// ORG_TYPES` 引用，互不混用）。新增/调整 orgType 取值域时，除了下面
+// `cloudfunctions/createStore`/`createTenant`/`manageStoreProfile`/
+// `processRoleAudit` 四处云函数同源拷贝，还要记得同步这里与
+// `store-profile.ts` 的同名数组，共 6 处
 const ORG_TYPE_OPTIONS = [
   { name: '🌸 雨花斋', value: 'yuhuazhai' },
   { name: '👵👴 社区助老食堂/敬老家园', value: 'elderly_canteen' },
   { name: '🤝 社区义工服务站', value: 'volunteer_station' },
   { name: '🛟 应急救援队', value: 'rescue_team' },
   { name: '🧒 同心儿童院/青少年关爱', value: 'tongxin_children' },
+  { name: '🎗️ 同心癌友关怀会', value: 'tongxin_cancer_care' },
+  { name: '🙏 寺院斋堂/十方过斋', value: 'temple_canteen' },
+  { name: '🍱 商业素餐/结缘供斋', value: 'commercial_vegetarian' },
   { name: '💫 其他爱心组织', value: 'other' }
 ];
 

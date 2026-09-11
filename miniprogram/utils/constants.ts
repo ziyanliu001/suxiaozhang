@@ -28,6 +28,19 @@ export const APP_NAME = '素小账';
  * 四处各自维护一份同源拷贝——修改这里的取值域时，务必同步改这四个文件，否则又会退回
  * "两套体系"的老问题
  *
+ * ⚠️（2026-09-11 补充审计发现）前端侧同样存在两处独立拷贝，此前的审计只覆盖了
+ * 云函数、遗漏了这两处，导致 `components/store-picker/store-picker.ts` 的
+ * `ORG_TYPE_OPTIONS` 一度脱节漏掉 3 个值（真机复现过用户选不到这三类机构）：
+ * - `components/store-picker/store-picker.ts` 的 `ORG_TYPE_OPTIONS`（新建门店/
+ *   选择平台类型场景，emoji 风格文案）
+ * - `subpackages/admin/pages/store-profile/store-profile.ts` 的 `ORG_TYPE_OPTIONS`
+ *   （门店档案编辑场景，同样是 emoji 风格）
+ * 这两处与本文件是历史上刻意分开维护的**两套**选择器（emoji 文案 vs 本文件的
+ * 纯文本 label，且服务的产品场景不同——见 profile.ts "组织信息配置"弹窗直接
+ * `import { ORG_TYPES } from '../../utils/constants'` 复用本文件），不能直接
+ * 合并成一份，但 value 取值集合必须与本文件保持一致。改动本文件取值域时，
+ * 除了上面四个云函数，还要检查这两处前端拷贝有没有跟上，一共 6 处
+ *
  * 🏛️（2026-09-09 工作空间正名 + 机构类型扩展）"社区普惠与社会互助专区"（原"民间爱心
  * 食堂"，纯前端展示名，不对应任何落库字段，见 docs/architecture/01_.../03_...md）下
  * 新增 temple_canteen/commercial_vegetarian 两类机构类型，同步补齐

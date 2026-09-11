@@ -40,6 +40,8 @@
 ### 三条业务线各自的关键技术护栏（2026-09-11 补充）
 轨道一内部按 `businessType`/共享的 `stores`+`user_roles` 体系实际运行着三条产品形态（见上方"⚠️ 术语澄清"，三者不是靠一个独立字段区分，而是各自散落在不同代码入口），各自有一条不可绕过的技术护栏：
 - **雨花公益食堂专区**：`report_logs` 流水的防篡改签名依赖 `LEDGER_HMAC_SECRET` 环境变量——`cloudfunctions/stampReportChecksum`/`cascadeRecalculator`/`updateAndRecalculateCascade` 三个云函数均已实现 **fail-closed**（环境变量缺失时直接抛错拒绝签名/重算，绝不回退到弱默认密钥）。新增任何涉及流水签名/级联重算的云函数必须延续这个口径，宁可拒绝执行也不能签一个不安全的假签名。
+  - **阳光账本四态审批流**（`cloudfunctions/manageReportApproval/index.js`，服务端集中管控，不允许小程序端直接 `wx.cloud.database()` 改 `approvalStatus`）：`PENDING`（待确认）→ `APPROVED`（店长/大家长 `confirm` 核对确认）→ `AUDITED_LOCKED`（财务 `financeAudit` 稽核封账，仅能通过 `unlock` 并填写理由退回 `APPROVED`）；`isVoid`/`voidPending` 是与上述状态机并行的作废（红字冲销）分支——店长发起作废需大家长/超管二次确认才真正生效，确认后触发 `cascadeRecalculator` 级联重算后续结余。
+  - **自审自批熔断（硬约束）**：`SELF_ACTION_BLOCKED_ACTIONS = ['confirm', 'financeAudit', 'unlock']`——提交人本人**禁止**对自己提交的记录执行这三个动作，必须由同店其他店长/财务/大家长处理，服务端强制校验、不是前端隐藏按钮那种软限制。新增任何审批类动作时，先问一句"这个动作要不要也加进自审自批熔断名单"，不要默认继承旧逻辑就以为已经覆盖。
 - **通用素食/门店记账（SaaS 订阅）**：配额门禁见上文"轨道一"小节；iOS 端因平台审核规则，购买/续费入口必须**物理隐藏**（`utils/util.ts` 的 `isIOSDevice()` 判断，代码入口 `pages/profile/enterprise/saasSubscriptionHandler.ts`），改为引导走企业授权码/兑换卡自助开通，不能让 iOS 用户看到任何应用内支付按钮。
 - **素食直播产销工坊**：`subpackages/factory`，产能占用/分账快照/退款红冲这类"改数据"操作全部收敛进 `cloudfunctions/liveFactoryCore`（纯基础设施层），与雨花斋记账体系无交叉引用。
 
