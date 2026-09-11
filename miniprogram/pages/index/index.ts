@@ -6959,6 +6959,14 @@ Page({
   // dailyExpenseText（见 onApplySmartReceiptDraft）——本函数本身不改动任何
   // 既有表单字段，只负责识别与展示
   async onTapSmartReceiptScan() {
+    // 🛡️（2026-09-11 真机压测发现的容错缺口）上传成功但后续任一环节
+    // （典型是 ocrExpenseReceipt 调用超时/网络中断）抛异常时，此前 catch
+    // 块只弹提示、从不清理已经传上去的临时图片——_smartReceiptFileId 只在
+    // OCR 成功之后才赋值，导致上传成功、识别失败/超时这条路径上的图片
+    // 永久滞留在云存储 tmp/receipts/ 目录，且没有任何定时清理任务兜底。
+    // 用这个函数作用域内的局部变量记录"当前这次调用里已经成功上传、但
+    // 所有权还没转移给 _smartReceiptFileId"的 fileID，catch 块统一按它清理。
+    let uploadedFileId: string | null = null;
     try {
       if (!isCloudAvailable()) {
         wx.showToast({ title: '云服务暂不可用，无法使用智能识票', icon: 'none' });
@@ -6988,6 +6996,7 @@ Page({
         20000,
         '图片上传超时，请检查网络后重试'
       );
+      uploadedFileId = uploadRes.fileID;
 
       // 云函数执行超时已在 ocrExpenseReceipt/config.json 配置为 20s，客户端
       // 等待上限同步留 5s 网络往返余量，与 onScanReceiptPhoto 保持一致口径
@@ -7001,6 +7010,7 @@ Page({
       const result = ocrRes.result as any;
       if (!result || !result.success) {
         this._cleanupReceiptImages([uploadRes.fileID]);
+        uploadedFileId = null; // 已清理，不需要 catch 块再兜底一次
         wx.showModal({
           title: '智能识票失败',
           content: (result && result.error) || '未能识别票据信息，请手动填写或重新拍摄更清晰的小票',
@@ -7011,6 +7021,10 @@ Page({
       }
 
       this._smartReceiptFileId = uploadRes.fileID;
+      // 所有权转移给 _smartReceiptFileId——后续由 onApplySmartReceiptDraft/
+      // onDismissSmartReceiptCard 负责清理，这里不再重复追踪，避免用户确认
+      // 填入后 catch 块（理论上不会再触发，但防御性地）误删已经在用的图片
+      uploadedFileId = null;
 
       this.setData({
         smartReceiptCardVisible: true,
@@ -7020,6 +7034,11 @@ Page({
       });
     } catch (e: any) {
       wx.hideLoading();
+      // 🛡️ 见函数头部注释：上传已成功但异常发生在 OCR 调用/其他后续环节时，
+      // 清理这次已上传的临时图片，避免云存储产生永久孤儿文件
+      if (uploadedFileId) {
+        this._cleanupReceiptImages([uploadedFileId]);
+      }
       const errMsg = e.message || JSON.stringify(e);
       if (errMsg && !errMsg.includes('cancel')) {
         wx.showModal({ title: '智能识票异常', content: errMsg, showCancel: false, confirmText: '知道了' });
