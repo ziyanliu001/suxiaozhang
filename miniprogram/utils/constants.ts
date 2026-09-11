@@ -28,18 +28,24 @@ export const APP_NAME = '素小账';
  * 四处各自维护一份同源拷贝——修改这里的取值域时，务必同步改这四个文件，否则又会退回
  * "两套体系"的老问题
  *
- * ⚠️（2026-09-11 补充审计发现）前端侧同样存在两处独立拷贝，此前的审计只覆盖了
- * 云函数、遗漏了这两处，导致 `components/store-picker/store-picker.ts` 的
- * `ORG_TYPE_OPTIONS` 一度脱节漏掉 3 个值（真机复现过用户选不到这三类机构）：
- * - `components/store-picker/store-picker.ts` 的 `ORG_TYPE_OPTIONS`（新建门店/
- *   选择平台类型场景，emoji 风格文案）
- * - `subpackages/admin/pages/store-profile/store-profile.ts` 的 `ORG_TYPE_OPTIONS`
- *   （门店档案编辑场景，同样是 emoji 风格）
- * 这两处与本文件是历史上刻意分开维护的**两套**选择器（emoji 文案 vs 本文件的
- * 纯文本 label，且服务的产品场景不同——见 profile.ts "组织信息配置"弹窗直接
- * `import { ORG_TYPES } from '../../utils/constants'` 复用本文件），不能直接
- * 合并成一份，但 value 取值集合必须与本文件保持一致。改动本文件取值域时，
- * 除了上面四个云函数，还要检查这两处前端拷贝有没有跟上，一共 6 处
+ * ✅（2026-09-11 DRY 收口）前端侧此前存在两处独立手写拷贝
+ * （`components/store-picker/store-picker.ts` 与
+ * `subpackages/admin/pages/store-profile/store-profile.ts` 各自的
+ * `ORG_TYPE_OPTIONS`，emoji 风格文案），一度脱节漏掉 3 个值（真机复现过
+ * 用户选不到这三类机构）。现已消灭这两处手写拷贝——两个文件改为直接
+ * `import { ORG_TYPE_EMOJI_OPTIONS } from '.../utils/constants'`（见下方），
+ * 全仓库前端侧收敛成本文件一处真源，不再需要"改这里要同步改另外 N 处"
+ * 的人工提醒，也不需要额外的比对单测。`pages/profile/profile.ts` 的
+ * "组织信息配置"弹窗场景文案风格不同（纯文本，不带 emoji），继续复用下方
+ * `ORG_TYPES` 本身，两个导出的 value 取值集合始终保持一致（`ORG_TYPE_EMOJI_OPTIONS`
+ * 由 `ORG_TYPES.map()` 派生，不是独立字面量，新增/删除枚举值只需要改
+ * `ORG_TYPES` 这一处，`ORG_TYPE_EMOJI_OPTIONS` 自动跟上）。
+ *
+ * 🛡️ 云函数之间没有跨文件共享模块的机制（本仓库一贯做法），
+ * cloudfunctions/createTenant/index.js、cloudfunctions/createStore/index.js、
+ * cloudfunctions/manageStoreProfile/index.js、cloudfunctions/processRoleAudit/index.js
+ * 四处仍然各自维护一份同源拷贝（TS 前端模块无法被云函数 `require()`）——
+ * 修改这里的取值域时，前端侧现在只需要改这一处，但云函数侧仍需同步改这四个文件。
  *
  * 🏛️（2026-09-09 工作空间正名 + 机构类型扩展）"社区普惠与社会互助专区"（原"民间爱心
  * 食堂"，纯前端展示名，不对应任何落库字段，见 docs/architecture/01_.../03_...md）下
@@ -60,6 +66,33 @@ export const ORG_TYPES: Array<{ value: string; label: string }> = [
 ];
 
 export const ORG_TYPE_VALUES: string[] = ORG_TYPES.map(item => item.value);
+
+/**
+ * 🌸 emoji 风格机构类型选项——供 store-picker（新建门店/选择平台类型）与
+ * store-profile（门店档案编辑）两个场景共用。文案与上面纯文本 `ORG_TYPES.label`
+ * 不同（这两个场景历史上就是 emoji 风格，问题不大，保留既有视觉习惯，不强行
+ * 统一成纯文本），但 **不是独立字面量**——从 `ORG_TYPES` `.map()` 派生，
+ * value 集合与 `ORG_TYPES`/`ORG_TYPE_VALUES` 天然保持一致，新增枚举值时
+ * 即使忘记在 `ORG_TYPE_EMOJI_LABELS` 里补一条 emoji 文案，也会用
+ * `ORG_TYPES` 的纯文本 `label` 兜底展示，不会像过去的手写拷贝那样直接
+ * 从下拉列表里彻底消失。
+ */
+const ORG_TYPE_EMOJI_LABELS: Record<string, string> = {
+  yuhuazhai: '🌸 雨花斋',
+  elderly_canteen: '👵👴 社区助老食堂/敬老家园',
+  volunteer_station: '🤝 社区义工服务站',
+  rescue_team: '🛟 应急救援队',
+  tongxin_children: '🧒 同心儿童院/青少年关爱',
+  tongxin_cancer_care: '🎗️ 同心癌友关怀会',
+  temple_canteen: '🙏 寺院斋堂/十方过斋',
+  commercial_vegetarian: '🍱 商业素餐/结缘供斋',
+  other: '💫 其他爱心组织'
+};
+
+export const ORG_TYPE_EMOJI_OPTIONS: Array<{ name: string; value: string }> = ORG_TYPES.map((item) => ({
+  name: ORG_TYPE_EMOJI_LABELS[item.value] || item.label,
+  value: item.value
+}));
 
 /**
  * 门店预设映射配置

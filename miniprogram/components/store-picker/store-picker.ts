@@ -5,6 +5,7 @@ import { setCurrentActiveStore, getCurrentActiveStore, fetchYuhuaZoneStoreList, 
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { requestOpenOnboardingCreate } from '../../utils/onboardingHandoff';
+import { ORG_TYPE_EMOJI_OPTIONS } from '../../utils/constants';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -14,32 +15,13 @@ const OPERATING_STATUS_LABELS: Record<string, string> = {
 
 const CANVAS_ID = 'storePickerImgCompressCanvas';
 
-// 🏢 平台类型选项：与 store-profile、statistics 大屏筛选器共用同一套 value 字面量，
-// 存入 stores.orgType 字段；name 是前端展示文案
-// 🐛（2026-09-11 orgType 枚举脱节修复）本数组此前只有 6 项，遗漏了
-// `utils/constants.ts` ORG_TYPES 权威枚举里已有的 tongxin_cancer_care/
-// temple_canteen/commercial_vegetarian 三个值——这三类机构在 createStore/
-// createTenant/manageStoreProfile 等云函数侧早就支持，但用户在这个"新建
-// 门店/选择平台类型"选择器里根本选不到，选择器沦为脱节的旧版清单。
-// ⚠️ 本数组是独立于 `utils/constants.ts` ORG_TYPES 的手写拷贝（value 集合
-// 应保持一致，但 name 文案/emoji 走本组件自己的风格，不能直接复用
-// `ORG_TYPES` 的 `label` 字段——两者是历史上刻意分开维护的两套选择器，
-// 见 profile.ts 的"组织信息配置"弹窗同样有一份独立的 `orgTypeOptions:
-// ORG_TYPES` 引用，互不混用）。新增/调整 orgType 取值域时，除了下面
-// `cloudfunctions/createStore`/`createTenant`/`manageStoreProfile`/
-// `processRoleAudit` 四处云函数同源拷贝，还要记得同步这里与
-// `store-profile.ts` 的同名数组，共 6 处
-const ORG_TYPE_OPTIONS = [
-  { name: '🌸 雨花斋', value: 'yuhuazhai' },
-  { name: '👵👴 社区助老食堂/敬老家园', value: 'elderly_canteen' },
-  { name: '🤝 社区义工服务站', value: 'volunteer_station' },
-  { name: '🛟 应急救援队', value: 'rescue_team' },
-  { name: '🧒 同心儿童院/青少年关爱', value: 'tongxin_children' },
-  { name: '🎗️ 同心癌友关怀会', value: 'tongxin_cancer_care' },
-  { name: '🙏 寺院斋堂/十方过斋', value: 'temple_canteen' },
-  { name: '🍱 商业素餐/结缘供斋', value: 'commercial_vegetarian' },
-  { name: '💫 其他爱心组织', value: 'other' }
-];
+// 🏢 平台类型选项：存入 stores.orgType 字段；name 是前端展示文案。
+// ✅（2026-09-11 DRY 收口）此前是本组件独立手写拷贝，一度脱节漏掉 3 个值
+// （真机复现过用户选不到 tongxin_cancer_care/temple_canteen/commercial_vegetarian
+// 这三类机构）。现改为直接复用 `utils/constants.ts` 的 `ORG_TYPE_EMOJI_OPTIONS`
+// 权威导出（与 `store-profile.ts` 共用同一份），value 取值集合与云函数侧的
+// `VALID_ORG_TYPES` 保持一致，不再需要手动同步维护
+const ORG_TYPE_OPTIONS = ORG_TYPE_EMOJI_OPTIONS;
 
 // 🛡️ 与 processRoleAudit approve() 的权限分级口径对齐：店长/财长任命 + 新建门店
 // 仅超管可批，义工/财务本店店长/家长即可批——用来决定"待审核"锁定文案该显示哪一档

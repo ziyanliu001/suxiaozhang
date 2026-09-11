@@ -8,6 +8,7 @@ import { getStorageAsync } from '../../../../utils/util';
 import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 import { clearTenantPermissionCache } from '../../../../utils/tenantPermission';
 import { decideQualificationPhotoTap, resolveQualificationActionSheetChoice } from './lib/qualificationPhotoActions';
+import { ORG_TYPE_EMOJI_OPTIONS } from '../../../../utils/constants';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -47,21 +48,10 @@ const TEXT_PROFILE_FIELDS = ['address', 'contactPhone', 'patriarchName', 'openDa
 type TextProfileField = typeof TEXT_PROFILE_FIELDS[number];
 
 // 🏢 平台类型：与 store-picker、getNationalDashboard 大屏筛选共用同一套 value 字面量
-// 🐛（2026-09-09 补漏）utils/constants.ts ORG_TYPES 扩展 temple_canteen/
-// commercial_vegetarian 时漏掉了这份独立拷贝——本文件是第 6 处维护同一份
-// orgType 取值域的地方，此前排查 4 个云函数 + constants.ts 时没找到它，导致
-// 这两类机构的门店档案页"机构类型"展示会落到空字符串兜底。补齐
-const ORG_TYPE_OPTIONS = [
-  { name: '🌸 雨花斋', value: 'yuhuazhai' },
-  { name: '👵👴 社区助老食堂/敬老家园', value: 'elderly_canteen' },
-  { name: '🤝 社区义工服务站', value: 'volunteer_station' },
-  { name: '🛟 应急救援队', value: 'rescue_team' },
-  { name: '🧒 同心儿童院/青少年关爱', value: 'tongxin_children' },
-  { name: '🎗️ 同心癌友关怀会', value: 'tongxin_cancer_care' },
-  { name: '🙏 寺院斋堂/十方过斋', value: 'temple_canteen' },
-  { name: '🍱 商业素餐/结缘供斋', value: 'commercial_vegetarian' },
-  { name: '💫 其他爱心组织', value: 'other' }
-];
+// ✅（2026-09-11 DRY 收口）此前是本文件独立手写拷贝，现改为直接复用
+// `utils/constants.ts` 的 `ORG_TYPE_EMOJI_OPTIONS` 权威导出（与 store-picker.ts
+// 共用同一份），不再需要手动同步维护
+const ORG_TYPE_OPTIONS = ORG_TYPE_EMOJI_OPTIONS;
 
 // 🏮 品牌矩阵归属：将多个 orgType 的站点归并到同一品牌，
 // 用于全国大屏"同心慈善会矩阵 / 雨花矩阵"聚合筛选
