@@ -155,6 +155,45 @@ async function handleList(event, OPENID) {
   };
 }
 
+// 🛡️（2026-09-11 巡检漫游审计日志·方向3）与上面 handleList（查看"我签发/
+// 持有哪些授权"）是完全不同的两件事——本 action 查的是"这些授权被实际
+// 消费过几次、谁在什么时候用它看/改了哪家门店"，数据来自
+// manageStoreProfile/getPatriarchDashboard/manageReportApproval 三个消费点
+// 各自 resolveCaller 里写入的 tenant_authorization_audit_logs 集合。
+// 只读聚合，不做任何写操作。
+async function handleListAuditLogs(event) {
+  const PAGE_SIZE = 20;
+  const skip = Math.max(parseInt(event.skip, 10) || 0, 0);
+  const targetStoreId = String(event.targetStoreId || '').trim();
+  const operatorOpenId = String(event.operatorOpenId || '').trim();
+
+  const where = {};
+  if (targetStoreId) where.targetStoreId = targetStoreId;
+  if (operatorOpenId) where.operatorOpenId = operatorOpenId;
+
+  let listRes;
+  try {
+    listRes = await db.collection('tenant_authorization_audit_logs')
+      .where(where)
+      .orderBy('createTime', 'desc')
+      .skip(skip)
+      .limit(PAGE_SIZE)
+      .get();
+  } catch (err) {
+    // 🛡️ 全新环境（从未发生过一次漫游消费）时集合可能从未被创建过，直接
+    // .get() 会抛 -502005——这是"一次巡检都还没发生过"的正常空状态，不是
+    // 错误，与本仓库 submitFeedback/manageNotice 等云函数已有的同款自愈
+    // 口径一致，不让裸的数据库报错抛给平台管理员控制台
+    if (err && (err.errCode === -502005 || /database collection not exists/i.test(String(err.errMsg || err.message || '')))) {
+      return { success: true, list: [], hasMore: false };
+    }
+    throw err;
+  }
+
+  const list = listRes.data || [];
+  return { success: true, list, hasMore: list.length === PAGE_SIZE };
+}
+
 exports.main = async (event) => {
   const { action } = event || {};
   const { OPENID } = cloud.getWXContext();
@@ -167,6 +206,7 @@ exports.main = async (event) => {
     if (action === 'grant') return await handleGrant(event, OPENID);
     if (action === 'revoke') return await handleRevoke(event, OPENID);
     if (action === 'list') return await handleList(event, OPENID);
+    if (action === 'listAuditLogs') return await handleListAuditLogs(event);
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {
     console.error('[grantTenantAuthorization] 异常:', err);

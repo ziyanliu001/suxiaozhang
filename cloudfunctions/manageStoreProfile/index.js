@@ -17,6 +17,10 @@ const db = cloud.database();
 // （纯函数、不依赖 wx-server-sdk，配套单测见同目录 *.test.js）——见该文件
 // 头部注释，这里只保留"按 OPENID 查 user_roles"这一步数据库 I/O
 const { resolveEffectiveCaller } = require('./lib/resolveCaller');
+// 🛡️（2026-09-11 巡检漫游审计日志·方向3）"该不该漫游"的判断在
+// resolveEffectiveCaller 里；"漫游了该记一条什么日志"拆到独立的纯函数，
+// 两者互不依赖，见该文件头部注释
+const { buildAuditLogEntry, isRoamingConsumed } = require('./lib/buildAuditLogEntry');
 
 // 🛡️ 全国总览/全部门店哨兵值：前端 index.ts 已经在 loadStoreTargetConfig 里
 // 挡了这两个值不再发起调用（见该方法注释），这里作为纵深防御同样识别、快速
@@ -224,7 +228,38 @@ async function resolveCaller(OPENID, opts) {
   // 决策逻辑（含 2026-09-10 那几轮真实故障修复）全部在 lib/resolveCaller.js，
   // 配套单测 lib/resolveCaller.test.js——这里只负责把数据库查出来的 own
   // 文档喂给它，不重复维护判断逻辑
-  return resolveEffectiveCaller(own, targetStoreId);
+  const effectiveCaller = resolveEffectiveCaller(own, targetStoreId);
+
+  // 🛡️（2026-09-11 巡检漫游审计日志）只在真的发生了漫游身份替换时才写一条
+  // 留痕；未漫游（own 未绑定/访问自己门店）时不产生任何额外查询/写库，
+  // 原路径零开销。写审计日志失败不应该阻断真正的业务读写——最大努力记录，
+  // 失败只 console.warn，不 throw
+  // 🐛（2026-09-11 根因修复）targetStoreName 不能从 effectiveCaller.storeName
+  // 读——漫游只替换 tenantId/role/storeId 三个字段，storeName 仍是调用者
+  // 自己的本来名称（platform_admin 是"全国总览"），实测真的产出过"漫游去
+  // 查了一家具体门店，日志却显示全国总览"这种误导人的记录，见
+  // lib/buildAuditLogEntry.js 头部注释与配套回归单测。这里额外查一次真实
+  // 门店名称，只在确认发生漫游时才查，不给未漫游的高频路径增加开销
+  if (isRoamingConsumed(own, effectiveCaller)) {
+    const storeRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
+    const targetStoreName = (storeRes && storeRes.data && storeRes.data.storeName) || '';
+    const logEntry = buildAuditLogEntry({
+      operatorOpenId: OPENID,
+      own,
+      effectiveCaller,
+      targetStoreId,
+      targetStoreName,
+      cloudFunctionName: 'manageStoreProfile',
+      action: opts && opts.action
+    });
+    if (logEntry) {
+      await db.collection('tenant_authorization_audit_logs').add({
+        data: { ...logEntry, createTime: db.serverDate() }
+      }).catch((err) => console.warn('[manageStoreProfile] 巡检审计日志写入失败:', err));
+    }
+  }
+
+  return effectiveCaller;
 }
 
 // 读权限：本店任意角色只读；总部级角色可传 storeId 或 storeName 查看机构内任意门店
@@ -308,7 +343,7 @@ exports.main = async (event, context) => {
     // 下面这个 caller 对象原地换成"对这家门店而言的有效身份"（见该函数头部
     // 注释）。get/update 两个动作共用同一个顶层 storeId 变量，这里统一传一次
     // 即可覆盖两条分支，不需要在各自分支内分别改造
-    const caller = await resolveCaller(OPENID, { targetStoreId: storeId });
+    const caller = await resolveCaller(OPENID, { targetStoreId: storeId, action });
 
     if (action === 'get') {
       if (storeId && NATIONAL_STORE_ID_SENTINELS.includes(storeId)) {

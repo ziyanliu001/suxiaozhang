@@ -12,6 +12,10 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
+// 🛡️（2026-09-11 巡检漫游审计日志·方向3）与 manageStoreProfile/lib/、
+// manageReportApproval/lib/ 下的同名文件是三处独立维护的镜像，见该文件
+// 头部注释
+const { buildAuditLogEntry } = require('./lib/buildAuditLogEntry');
 
 // 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
 // docs/architecture/02_user_roles_single_document_invariant.md）与
@@ -40,7 +44,34 @@ async function resolveCaller(OPENID, opts) {
     && (!Array.isArray(g.stores) || g.stores.length === 0 || !targetStoreId || g.stores.includes(targetStoreId)));
   if (!grant) return own;
 
-  return { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
+  const effectiveCaller = { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
+
+  // 🛡️（2026-09-11 巡检漫游审计日志）走到这里已经确认命中授权、发生了身份
+  // 替换，直接记录，不需要再判一次 isRoamingConsumed。写入失败不阻断真正
+  // 的只读查询，最大努力记录。
+  // 🐛（2026-09-11 根因修复）targetStoreName 不能从 effectiveCaller.storeName
+  // 读——它仍是调用者自己的本来名称（platform_admin 是"全国总览"），见
+  // lib/buildAuditLogEntry.js 头部注释与配套回归单测。这里额外查一次真实
+  // 门店名称（与上面查 tenantId 是两次独立的小查询，为保持改动最小化，不
+  // 合并成一次）
+  const targetStoreNameRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
+  const targetStoreName = (targetStoreNameRes && targetStoreNameRes.data && targetStoreNameRes.data.storeName) || '';
+  const logEntry = buildAuditLogEntry({
+    operatorOpenId: OPENID,
+    own,
+    effectiveCaller,
+    targetStoreId,
+    targetStoreName,
+    cloudFunctionName: 'getPatriarchDashboard',
+    action: opts && opts.action
+  });
+  if (logEntry) {
+    await db.collection('tenant_authorization_audit_logs').add({
+      data: { ...logEntry, createTime: db.serverDate() }
+    }).catch((err) => console.warn('[getPatriarchDashboard] 巡检审计日志写入失败:', err));
+  }
+
+  return effectiveCaller;
 }
 
 // 🐛 云函数容器时区固定为 UTC，new Date(...).toLocaleDateString('zh-CN') 不传
@@ -86,7 +117,9 @@ exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
 
   try {
-    const caller = await resolveCaller(OPENID, { targetStoreId: storeId });
+    // 🛡️ 本云函数没有多 action 分发（只做一件事：查大盘），审计日志的 action
+    // 字段固定填 'viewDashboard' 便于跨云函数聚合时一眼看出这是查看类操作
+    const caller = await resolveCaller(OPENID, { targetStoreId: storeId, action: 'viewDashboard' });
     const target = await resolveTarget(caller, storeId);
     if (!target.allowed) return { success: false, error: target.error };
 

@@ -19,6 +19,10 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+// 🛡️（2026-09-11 巡检漫游审计日志·方向3）与 manageStoreProfile/lib/、
+// getPatriarchDashboard/lib/ 下的同名文件是三处独立维护的镜像，见该文件
+// 头部注释
+const { buildAuditLogEntry } = require('./lib/buildAuditLogEntry');
 
 // 🐛 云函数容器时区固定为 UTC，new Date().toLocaleString() 不传 timeZone 会
 // 直接按 UTC 渲染，导致 approveTime/auditTime 等落库的审批时间字符串比北京
@@ -68,7 +72,32 @@ async function resolveCaller(OPENID, opts) {
   // 照常拒绝，绝不在这里静默放行
   if (!grant) return own;
 
-  return { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
+  const effectiveCaller = { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
+
+  // 🛡️（2026-09-11 巡检漫游审计日志）走到这里已经确认命中授权、发生了身份
+  // 替换，直接记录。写入失败不阻断真正的审批业务操作，最大努力记录。
+  // 🐛（2026-09-11 根因修复）targetStoreName 不能从 effectiveCaller.storeName
+  // 读——它仍是调用者自己的本来名称（platform_admin 是"全国总览"），见
+  // lib/buildAuditLogEntry.js 头部注释与配套回归单测。这里额外查一次真实
+  // 门店名称
+  const targetStoreNameRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
+  const targetStoreName = (targetStoreNameRes && targetStoreNameRes.data && targetStoreNameRes.data.storeName) || '';
+  const logEntry = buildAuditLogEntry({
+    operatorOpenId: OPENID,
+    own,
+    effectiveCaller,
+    targetStoreId,
+    targetStoreName,
+    cloudFunctionName: 'manageReportApproval',
+    action: opts && opts.action
+  });
+  if (logEntry) {
+    await db.collection('tenant_authorization_audit_logs').add({
+      data: { ...logEntry, createTime: db.serverDate() }
+    }).catch((err) => console.warn('[manageReportApproval] 巡检审计日志写入失败:', err));
+  }
+
+  return effectiveCaller;
 }
 
 // 🏛️ 家长风控锁：门店是否绑定了家长/督导——绑定了才需要走"店长发起、家长/超管确认"
@@ -322,7 +351,7 @@ exports.main = async (event) => {
       // 注释），下面的 super_admin/else 分支完全不用改——漫游后 caller.role
       // 变成被授权的角色（如 store_patriarch），caller.storeId 变成 storeId，
       // 自然落进 else 分支的 `caller.storeId === storeId` 判断里
-      const caller = await resolveCaller(OPENID, { targetStoreId: storeId });
+      const caller = await resolveCaller(OPENID, { targetStoreId: storeId, action: 'getMeritStats' });
       if (!caller) return { success: false, errMsg: '无法确认您的角色信息' };
 
       // 门店/机构边界：与 manageFinanceLock 的 checkRangeStatus 同一套校验口径——
