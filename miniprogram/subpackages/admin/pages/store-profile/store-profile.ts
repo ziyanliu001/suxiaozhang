@@ -107,15 +107,23 @@ const OPERATING_STATUS_LABELS: Record<string, string> = {
   paused: '暂停运营'
 };
 
-// 🐛 门店档案图片 500 报错修复：门店照片/资质图片理论上都应该是云存储 fileID
-// （cloud://...），但上传中断/历史脏数据等场景可能残留本地临时路径（wxfile://、
-// http(s)://127.0.0.1、localhost、__tmp__ 这类小程序沙箱内部临时文件标识）——
-// 这类路径离开当次上传会话就必然失效，直接塞给 <image src> 会在控制台抛网络
-// 错误。加载时统一过滤掉，不等到渲染报错才补救；binderror 兜底见 onImageLoadError，
-// 覆盖"路径格式看着正常但云端文件已被删除"这类过滤规则本身catch不住的场景
+// 🐛（2026-09-11 漫游巡检真机复现加固）门店照片/资质图片持久化后唯一合法的
+// 形态是云存储 fileID（cloud://...，见 compressAndUploadImages 的返回值恒为
+// mainRes.fileID）。此前这里是黑名单写法（只挡 wxfile://、127.0.0.1、
+// localhost、__tmp__ 几个已知模式），挡不住没预料到的新变体——真机巡检
+// 白礁店档案时就复现过一次：历史脏数据里残留的裸相对路径（形如 "tmp/xxx.jpg"，
+// 不带任何 scheme 前缀）和开发者工具模拟器自己的本地文件系统 scheme
+// （wx.env.USER_DATA_PATH 在模拟器里解析成 "http://usr/..."，临时文件同理
+// 可能是 "http://tmp/..."）都不匹配黑名单里任何一条正则，直接塞给 <image src>
+// 触发浏览器层面的 404/500 网络错误。改成白名单：只认 cloud:// 前缀，其余
+// 一律视为无效——不管未来又冒出什么新的本地临时路径变体，都天然被挡在外面，
+// 不需要每次踩坑后再补一条正则。binderror 兜底见 onImageLoadError，覆盖
+// "路径格式合法但云端文件已被删除"这类白名单本身拦不住的场景
 function isValidPhotoUrl(url: unknown): url is string {
-  if (typeof url !== 'string' || !url.trim()) return false;
-  return !/127\.0\.0\.1|localhost|__tmp__|^wxfile:\/\//i.test(url);
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  return /^cloud:\/\//i.test(trimmed);
 }
 function sanitizePhotoUrls(arr: unknown): string[] {
   return Array.isArray(arr) ? arr.filter(isValidPhotoUrl) : [];

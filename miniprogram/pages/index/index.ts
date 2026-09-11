@@ -10942,7 +10942,12 @@ Page({
       });
       this.measureNoticeMarquee();
     } catch (e) {
-      console.error('[fetchNotices] 查询失败:', e);
+      // 🐛（2026-09-11 漫游巡检真机复现加固）公告栏是首页装饰性内容，不是核心
+      // 业务数据——manageNotice 超时（默认 8000ms，弱网/云函数冷启动下并不罕见）
+      // 或调用异常时静默降级为空公告数组即可，不应该用 console.error 在控制台
+      // 抛红字，那会让人误以为是页面级故障。原本就已经 try/catch 兜底不阻断
+      // 页面生命周期，这里只改日志级别，不改任何降级行为本身
+      console.warn('[fetchNotices] 查询超时/失败，静默降级为空公告列表:', e);
       this.setData({
         noticeList: [],
         currentNoticeIndex: 0,
