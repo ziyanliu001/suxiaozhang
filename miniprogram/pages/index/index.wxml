@@ -3517,54 +3517,61 @@
        多平台门户入口，平铺展示各平台/工作台卡片，点击哪张卡片才会真正进入对应
        的工作空间（雨花卡片额外叠加声明校验，见 onSelectYuhuaPlatform）。
        与原有首页业务内容（上面 wx:if 分支）完全隔离，不共享任何状态判断 -->
-  <!-- 🔍（2026-09-11 上帝账号路由完善）platform_admin 专属落地面板：不与普通
-       用户共用下面"选择工作空间"三卡片（它们对应的雨花/通用/工坊都要求归属
-       具体门店/工坊，platform_admin 不归属任何一个），直接给到"全国总览"
-       主入口 + 巡检提示，不强制经过任何门店绑定流程 -->
-  <block wx:elif="{{isPlatformAdmin}}">
-    <view class="platform-select-page platform-admin-landing" style="padding-top: {{headerSafeTop}}px;">
-      <view class="platform-select-header">
-        <text class="platform-select-title">🔍 平台管理员控制台</text>
-        <text class="platform-select-subtitle">当前以平台管理员身份登录，不归属任何具体门店</text>
-      </view>
-
-      <view class="platform-card platform-card-dashboard" bindtap="onEnterNationalDashboard" hover-class="platform-card-hover">
-        <view class="platform-card-badge">全国总览 · 透视台</view>
-        <view class="platform-card-body">
-          <view class="platform-card-icon-badge platform-card-icon-badge-yuhua">
-            <text class="platform-card-icon">📊</text>
-          </view>
-          <view class="platform-card-text">
-            <text class="platform-card-title">全国总览 / Dashboard</text>
-            <text class="platform-card-desc">查看跨机构公开聚合数据（服务人次、义工工时等非财务指标，与匿名访客看到的完全一致）</text>
-          </view>
-        </view>
-        <view class="platform-card-arrow">进入 ›</view>
-      </view>
-
-      <!-- 🔍 store-picker 组件只在 currentPlatformMode 非空（已进入某个工作
-           空间）时才挂载，本落地页尚未进入任何工作空间，顶部没有它的"全国
-           总览（巡检漫游模式）"胶囊可点——这里直接给一个等价入口，跳转目标
-           与 store-picker 的 onTapPlatformInspect 完全一致（同一个已审计的
-           自助授权 Tab），不重复实现 -->
-      <view class="platform-card platform-card-inspect" bindtap="onGotoPlatformInspect" hover-class="platform-card-hover">
-        <view class="platform-card-body">
-          <view class="platform-card-icon-badge platform-card-icon-badge-general">
-            <text class="platform-card-icon">🔍</text>
-          </view>
-          <view class="platform-card-text">
-            <text class="platform-card-title">自由巡检门店</text>
-            <text class="platform-card-desc">选择机构 / 门店，发起一次带审计留痕的临时授权，查看该门店实际业务数据</text>
-          </view>
-        </view>
-        <view class="platform-card-arrow">进入 ›</view>
-      </view>
-    </view>
-  </block>
-
+  <!-- 🔍（2026-09-11 上帝账号路由完善，2026-09-11 修复：恢复工作空间入口）
+       platform_admin 与普通账号共用同一个"选择工作空间"三卡片区块——三张
+       卡片各自的点击处理函数（onSelectYuhuaPlatform/onSelectGeneralPlatform/
+       onSelectFactoryPlatform）内部已经用 isCurrentAccountSuperAdmin()
+       （包含 isPlatformAdmin，见该方法头部注释）放行，不会被"未绑定门店"
+       的申请加入流程拦截。之前一版误把 platform_admin 的落地页整个替换成
+       独立的"平台管理员控制台"面板，导致三大专区入口彻底消失——现在改为
+       "控制台卡片在上、工作空间卡片在下"叠加展示，两者都不缺 -->
   <block wx:else>
     <view class="platform-select-page" style="padding-top: {{headerSafeTop}}px;">
-      <view class="platform-select-header">
+
+      <block wx:if="{{isPlatformAdmin}}">
+        <view class="platform-select-header">
+          <text class="platform-select-title">🔍 平台管理员控制台</text>
+          <text class="platform-select-subtitle">当前以平台管理员身份登录，不归属任何具体门店</text>
+        </view>
+
+        <view class="platform-card platform-card-dashboard" bindtap="onEnterNationalDashboard" hover-class="platform-card-hover">
+          <view class="platform-card-badge">全国总览 · 透视台</view>
+          <view class="platform-card-body">
+            <view class="platform-card-icon-badge platform-card-icon-badge-yuhua">
+              <text class="platform-card-icon">📊</text>
+            </view>
+            <view class="platform-card-text">
+              <text class="platform-card-title">全国总览 / Dashboard</text>
+              <text class="platform-card-desc">查看跨机构公开聚合数据（服务人次、义工工时等非财务指标，与匿名访客看到的完全一致）</text>
+            </view>
+          </view>
+          <view class="platform-card-arrow">进入 ›</view>
+        </view>
+
+        <!-- 🔍 store-picker 组件只在 currentPlatformMode 非空（已进入某个工作
+             空间）时才挂载，本落地页尚未进入任何工作空间，顶部没有它的"全国
+             总览（巡检漫游模式）"胶囊可点——这里直接给一个等价入口，跳转目标
+             与 store-picker 的 onTapPlatformInspect 完全一致（同一个已审计的
+             自助授权 Tab），不重复实现 -->
+        <view class="platform-card platform-card-inspect" bindtap="onGotoPlatformInspect" hover-class="platform-card-hover">
+          <view class="platform-card-body">
+            <view class="platform-card-icon-badge platform-card-icon-badge-general">
+              <text class="platform-card-icon">🔍</text>
+            </view>
+            <view class="platform-card-text">
+              <text class="platform-card-title">自由巡检门店</text>
+              <text class="platform-card-desc">选择机构 / 门店，发起一次带审计留痕的临时授权，查看该门店实际业务数据</text>
+            </view>
+          </view>
+          <view class="platform-card-arrow">进入 ›</view>
+        </view>
+
+        <view class="platform-admin-section-divider">
+          <text class="platform-admin-section-divider-text">🔀 工作空间入口 · 专区切换</text>
+        </view>
+      </block>
+
+      <view class="platform-select-header" wx:if="{{!isPlatformAdmin}}">
         <text class="platform-select-title">选择工作空间</text>
         <text class="platform-select-subtitle">请选择您要进入的平台 / 记账工作台</text>
       </view>

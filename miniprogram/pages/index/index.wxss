@@ -8652,17 +8652,23 @@ page {
   color: #8C1D18;
 }
 
-/* 🔍（2026-09-11 上帝账号路由完善）platform_admin 专属落地面板提示文案——
-   与上面 .platform-card 卡片群共用同一套 .platform-select-page 容器，这里
-   只补一处card下方的辅助说明样式 */
-.platform-admin-landing-hint {
-  display: block;
-  margin-top: 24rpx;
-  padding: 0 8rpx;
+/* 🔍（2026-09-11 上帝账号路由完善，2026-09-11 修复：恢复工作空间入口）
+   platform_admin 落地页"控制台卡片"与"工作空间卡片"之间的分隔线——不是
+   纯装饰，文字本身承担"下面这些卡片是什么"的说明职责（工作空间三卡片
+   区块的标题在 platform_admin 视角下被隐藏，见 index.wxml 条件渲染），
+   不能省略这句话，否则两组卡片会毫无过渡地叠在一起 */
+.platform-admin-section-divider {
+  display: flex;
+  align-items: center;
+  margin: 32rpx 0 20rpx;
+  padding-top: 20rpx;
+  border-top: 2rpx dashed rgba(140, 29, 24, 0.2);
+}
+
+.platform-admin-section-divider-text {
   font-size: 24rpx;
+  font-weight: 600;
   color: #8A7660;
-  line-height: 1.6;
-  text-align: center;
 }
 
 /* 🌟 合规授权须知弹窗（组件一）：首次进入 / 首次切换到财务/店长视角强制阅读，
