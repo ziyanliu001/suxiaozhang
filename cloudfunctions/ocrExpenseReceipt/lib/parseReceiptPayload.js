@@ -1,6 +1,6 @@
 'use strict';
 
-// 🧾 发票/小票 OCR 智能记账 · 第一阶段（2026-09-10）
+// 🧾 发票/小票 OCR 智能记账 · 第一阶段（2026-09-10）+ 端到端压测容错加固（2026-09-11）
 //
 // 纯逻辑：不做 db I/O、不依赖 wx-server-sdk，便于单测；与本仓库
 // manageDailyMenu/manageVolunteerCheckIn 等云函数已有的既定写法一致——
@@ -17,6 +17,151 @@
 // 清洗，不是接入了付费的通用票据结构化 OCR 产品——识别不到/校验不上的
 // 地方一律用 flagNeedsReview + reviewReasons 如实标记，交给人工核对，
 // 绝不编造一个"看起来合理"的假数据。
+//
+// 🔧（2026-09-11 真实/高拟真小票端到端压测·容错加固）本轮新增能力边界
+// 同样如实标注：
+// - OCR 数字噪声纠偏只处理"数字/O/o/I/l 混排"与"逗号误当小数点"两类最
+//   常见、最能安全判定的场景，不做通用的模糊纠错（不猜测任意乱码）；
+// - 中文大写/小写金额解析覆盖到"万"这一级、常见的十/百/千位值读法，不
+//   处理"廿""卅"等更生僻的文言文数字表达；
+// - 无年份日期（MM-DD）兜底要求整行只有日期本身，不在长文本里挖字段，
+//   避免把无关数字片段误判成日期。
+
+// ---------------- OCR 数字噪声预清洗 ----------------
+//
+// 在所有金额/品名/日期提取之前，先对每一行做一次轻量数字纠偏——覆盖两类
+// 最常见的 OCR 误识别：(1) 数字 0/1 被误识别成形近字母 O/o/I/l；(2) 小数点
+// 被误识别成逗号（多见于印刷模糊/热敏纸褪色）。只在"看起来像数字"的片段
+// 内做替换，不触碰纯中文/纯英文文本——片段本身必须混有至少一个真实数字
+// 才会被处理，纯字母词（如商户名里的英文缩写）不受影响。
+
+// 数字噪声片段：由 数字/O/o/I/l 及小数点、逗号组成的连续片段
+const OCR_NUMERIC_TOKEN_REGEX = /[0-9OoIl]+(?:[.,，][0-9OoIl]+)*/g;
+
+function normalizeOcrDigits(line) {
+  return String(line || '').replace(OCR_NUMERIC_TOKEN_REGEX, (token) => {
+    if (!/\d/.test(token)) return token; // 片段里一个真实数字都没有，不当数字噪声处理，避免误伤纯字母词
+    return token.replace(/[Oo]/g, '0').replace(/[Il]/g, '1');
+  });
+}
+
+// 逗号到底是"千分位"还是"被误识别的小数点"，用后面跟的数字位数区分：
+// 跟 3 位及以上数字是典型千分位写法（1,234 保持不变，交给 AMOUNT_TOKEN_SRC
+// 自己的千分位分支处理——(?!\d) 负向先行断言确保后面确实没有第 3 位数字才
+// 会命中）；跟 1-2 位数字更像小数点误判（12,50 → 12.50）
+const OCR_DECIMAL_COMMA_REGEX = /(\d+)[,，](\d{1,2})(?!\d)/g;
+
+function normalizeDecimalComma(line) {
+  return String(line || '').replace(OCR_DECIMAL_COMMA_REGEX, '$1.$2');
+}
+
+function preprocessOcrLine(line) {
+  return normalizeDecimalComma(normalizeOcrDigits(line));
+}
+
+// ---------------- 中文数字（大写金额/汉字日期）解析 ----------------
+//
+// 农贸市场手写白条/收据常见"只写中文金额，没有任何阿拉伯数字"的情况（如
+// "肆拾伍元整"）。覆盖标准大写数字（零壹贰叁肆伍陆柒捌玖拾佰仟万）与常见
+// 小写数字（一二三四五六七八九十百千万）的位值读法，覆盖到"万"这一级。
+const CN_DIGIT_MAP = {
+  '零': 0, '〇': 0, '一': 1, '壹': 1, '二': 2, '贰': 2, '两': 2, '三': 3, '叁': 3,
+  '四': 4, '肆': 4, '五': 5, '伍': 5, '六': 6, '陆': 6, '七': 7, '柒': 7,
+  '八': 8, '捌': 8, '九': 9, '玖': 9
+};
+const CN_UNIT_MAP = { '十': 10, '拾': 10, '百': 100, '佰': 100, '千': 1000, '仟': 1000 };
+const CN_NUMERAL_CHAR_CLASS = '零〇一二三四五六七八九壹贰叁肆伍陆柒捌玖两十拾百佰千仟万';
+
+// 位值读数：把一个不含"万"的中文数字片段（如"壹佰贰拾叁"）读成整数。
+// 标准算法：碰到数字字符先记下来，碰到单位字符就"数字×单位"累加进小计，
+// "十/拾"单独出现（前面没有数字）按 1 十处理（"十五"="一十五"=15）；
+// "零"只起占位作用，不参与数值计算
+function parseChineseDigitSection(str) {
+  let section = 0;
+  let current = 0;
+  for (const ch of String(str || '')) {
+    if (ch === '零' || ch === '〇') continue;
+    if (ch in CN_DIGIT_MAP) {
+      current = CN_DIGIT_MAP[ch];
+    } else if (ch in CN_UNIT_MAP) {
+      section += (current || 1) * CN_UNIT_MAP[ch];
+      current = 0;
+    }
+  }
+  return section + current;
+}
+
+/**
+ * 把中文数字整数部分（可能带"万"）转成阿拉伯数字。非法/空输入返回 null，
+ * 不编造数据。
+ * @param {string} str
+ * @returns {number|null}
+ */
+function chineseNumeralToValue(str) {
+  if (!str) return null;
+  const wanIndex = str.indexOf('万');
+  let value;
+  if (wanIndex !== -1) {
+    const wanPart = parseChineseDigitSection(str.slice(0, wanIndex));
+    const restPart = str.slice(wanIndex + 1);
+    value = wanPart * 10000 + (restPart ? parseChineseDigitSection(restPart) : 0);
+  } else {
+    value = parseChineseDigitSection(str);
+  }
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+// 大写/小写中文金额：「壹拾伍元伍角」「肆拾伍元整」等。
+// 🛡️ 降噪：要求元前面的数字片段至少 2 个字符、且"整"或角/分子单位至少
+// 出现一个，排除"三元里"这类地名/商户名里偶然出现的"数字+元"片段被误
+// 当成金额——这类地名几乎不会再跟"整"或角分子单位
+const CN_AMOUNT_REGEX = new RegExp(
+  `([${CN_NUMERAL_CHAR_CLASS}]{2,})元(?:([${CN_NUMERAL_CHAR_CLASS}])角)?(?:([${CN_NUMERAL_CHAR_CLASS}])分)?(整)?`
+);
+
+/**
+ * 从一行文本里提取中文大写/小写金额（如"肆拾伍元整"→45），提取不到或
+ * 判定为噪声返回 null。
+ * @param {string} line
+ * @returns {number|null}
+ */
+function extractChineseWordAmount(line) {
+  const m = String(line || '').match(CN_AMOUNT_REGEX);
+  if (!m) return null;
+  if (!m[4] && !m[2] && !m[3]) return null; // 既无"整"也无角/分，判定为噪声匹配
+  const yuan = chineseNumeralToValue(m[1]);
+  if (yuan === null) return null;
+  const jiao = m[2] ? (CN_DIGIT_MAP[m[2]] || 0) : 0;
+  const fen = m[3] ? (CN_DIGIT_MAP[m[3]] || 0) : 0;
+  return round2(yuan + jiao * 0.1 + fen * 0.01);
+}
+
+// 汉字数字年份：如"二零二六年"——纯数字字符逐字读（不含十/百/千单位），
+// 与金额的位值读法是两套完全不同的读法，不能共用同一个函数
+function chineseYearToArabic(str) {
+  let out = '';
+  for (const ch of String(str || '')) {
+    if (!(ch in CN_DIGIT_MAP)) return null;
+    out += String(CN_DIGIT_MAP[ch]);
+  }
+  return out;
+}
+
+// 完整汉字日期：如"二零二六年九月十日"——年份逐字读，月/日用位值读法
+// （复用 parseChineseDigitSection，日常场景下足够覆盖 1-31 的月/日范围）
+const CN_FULL_DATE_REGEX = new RegExp(
+  `([零〇一二三四五六七八九]{4})年([${CN_NUMERAL_CHAR_CLASS}]+)月([${CN_NUMERAL_CHAR_CLASS}]+)日`
+);
+
+function extractChineseDate(line) {
+  const m = String(line || '').match(CN_FULL_DATE_REGEX);
+  if (!m) return null;
+  const yearStr = chineseYearToArabic(m[1]);
+  if (!yearStr) return null;
+  const month = parseChineseDigitSection(m[2]);
+  const day = parseChineseDigitSection(m[3]);
+  return toIsoDate(yearStr, month, day);
+}
 
 // ---------------- 金额解析基础工具 ----------------
 
@@ -39,7 +184,8 @@ function round2(num) {
 
 // 兼容三种入参形态：字符串（按换行拆行）、字符串数组、{text|words}[] 对象数组
 // （腾讯云 OCR printedText 的 items 就是这个形状）——任何非法输入一律兜底成
-// 空数组，绝不抛异常
+// 空数组，绝不抛异常。每一行在 trim 之后立即过一遍 preprocessOcrLine 数字
+// 噪声纠偏，下游所有提取函数自动获益，不需要各自重复处理
 function normalizeLines(rawPayload) {
   let raw = rawPayload;
   if (typeof raw === 'string') {
@@ -52,7 +198,7 @@ function normalizeLines(rawPayload) {
       if (item && typeof item === 'object') return item.text || item.words || item.Text || '';
       return '';
     })
-    .map((s) => String(s || '').trim())
+    .map((s) => preprocessOcrLine(String(s || '').trim()))
     .filter(Boolean);
 }
 
@@ -85,6 +231,7 @@ function extractTotalAmount(lines) {
   let tier1 = null;
   let tier2 = null;
   let invoiceTotal = null;
+  let chineseWordsAmount = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -119,12 +266,20 @@ function extractTotalAmount(lines) {
         if (amt !== null && amt > 0) tier2 = amt;
       }
     }
+    // 🔧（2026-09-11）中文大写/小写金额兜底——只在没有任何阿拉伯数字总金额
+    // 关键字命中时才有意义采用，优先级低于以上三档（手写白条场景下，往往
+    // 也是唯一能找到的总金额来源）
+    if (chineseWordsAmount === null) {
+      const cnAmt = extractChineseWordAmount(line);
+      if (cnAmt !== null && cnAmt > 0) chineseWordsAmount = cnAmt;
+    }
   }
 
   // 发票的「价税合计」是法定总额，比小票的实付/合计关键词更权威，优先采用
   if (invoiceTotal !== null) return { amount: invoiceTotal, source: 'invoice_total' };
   if (tier1 !== null) return { amount: tier1, source: 'tier1_actual_pay' };
   if (tier2 !== null) return { amount: tier2, source: 'tier2_subtotal' };
+  if (chineseWordsAmount !== null) return { amount: chineseWordsAmount, source: 'chinese_words_amount' };
   return { amount: null, source: null };
 }
 
@@ -187,6 +342,10 @@ function extractMerchant(lines) {
 
 const DATE_LABEL_REGEX = /(?:开票日期|交易时间|消费时间|下单时间|日期|时间)\s*[:：]?\s*(\d{4})[年\-\/.](\d{1,2})[月\-\/.](\d{1,2})日?/;
 const DATE_BARE_REGEX = /(\d{4})[年\-\/.](\d{1,2})[月\-\/.](\d{1,2})日?/;
+// 🔧（2026-09-11）无年份日期兜底：要求整行只有"MM-DD"/"MM/DD"本身（可选带
+// 时间后缀），不在长文本里挖字段——避免把"09-10元"这类无关数字片段、或
+// 电话号码/单号里恰好出现的短横线组合误判成日期
+const DATE_NO_YEAR_REGEX = /^(\d{1,2})[-\/](\d{1,2})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/;
 
 function toIsoDate(y, m, d) {
   const year = parseInt(y, 10);
@@ -200,7 +359,12 @@ function toIsoDate(y, m, d) {
   return `${year}-${mm}-${dd}`;
 }
 
-function extractReportDate(lines) {
+/**
+ * @param {string[]} lines
+ * @param {number} [assumedYear] 无年份日期兜底时假定的年份，默认取真实
+ *   当前年份；测试场景显式传入固定值，保持函数确定性可测
+ */
+function extractReportDate(lines, assumedYear) {
   for (const line of lines) {
     const m = line.match(DATE_LABEL_REGEX);
     if (m) {
@@ -212,6 +376,18 @@ function extractReportDate(lines) {
     const m = line.match(DATE_BARE_REGEX);
     if (m) {
       const iso = toIsoDate(m[1], m[2], m[3]);
+      if (iso) return iso;
+    }
+  }
+  for (const line of lines) {
+    const iso = extractChineseDate(line);
+    if (iso) return iso;
+  }
+  const effectiveYear = typeof assumedYear === 'number' ? assumedYear : new Date().getFullYear();
+  for (const line of lines) {
+    const m = line.trim().match(DATE_NO_YEAR_REGEX);
+    if (m) {
+      const iso = toIsoDate(effectiveYear, m[1], m[2]);
       if (iso) return iso;
     }
   }
@@ -227,21 +403,25 @@ function extractReportDate(lines) {
 // 两者业态边界相反，混用会把不该出现在雨花斋场景的商业进销存概念带进来。
 // key 也刻意避开重名（用 fresh_veggie 而不是 fresh_produce），防止未来
 // 有人望文生义地当成同一套体系互相 require。
+//
+// 🔧（2026-09-11 端到端压测）关键词表补齐常见方言/口语别名（洋芋=土豆、
+// 番薯/地瓜=红薯等），压测数据集里"农贸市场手写收据"品类命中率的提升
+// 主要来自这一批扩充
 const CATEGORY_RULES = [
   {
     key: 'staple_grain_oil',
     label: '主食粮油',
-    regex: /大米|香米|籼米|粳米|东北大米|面粉|富强粉|小麦粉|挂面|面条|米粉|食用油|大豆油|花生油|菜籽油|调和油|色拉油|玉米油|葵花籽油|橄榄油|食盐|白糖|酱油|食醋|调味/
+    regex: /大米|香米|籼米|粳米|东北大米|面粉|富强粉|小麦粉|挂面|面条|米粉|玉米面|小米|糯米|黑米|薏米|黄豆|绿豆|红豆|食用油|大豆油|花生油|菜籽油|调和油|色拉油|玉米油|葵花籽油|橄榄油|芝麻油|花椒油|食盐|白糖|酱油|食醋|味精|鸡精|蚝油|料酒|调味/
   },
   {
     key: 'fresh_veggie',
     label: '生鲜蔬菜',
-    regex: /蔬菜|青菜|白菜|土豆|萝卜|黄瓜|西红柿|番茄|生菜|包菜|花菜|茄子|豆角|辣椒|冬瓜|南瓜|芹菜|菠菜|韭菜|豆芽|豆腐|香菇|木耳|平菇|金针菇|水果|苹果|香蕉|橙子/
+    regex: /蔬菜|青菜|白菜|土豆|洋芋|萝卜|黄瓜|西红柿|番茄|生菜|包菜|花菜|菜花|茄子|豆角|辣椒|冬瓜|南瓜|芹菜|菠菜|韭菜|韭黄|豆芽|豆腐|香菇|木耳|平菇|金针菇|莴笋|芥菜|苦瓜|丝瓜|秋葵|西兰花|红薯|地瓜|番薯|大葱|小葱|香葱|生姜|大蒜|蒜头|水果|苹果|香蕉|橙子|梨|葡萄|西瓜|柚子/
   },
   {
     key: 'kitchen_supplies',
     label: '后厨耗材',
-    regex: /洗洁精|纸巾|抹布|垃圾袋|保鲜膜|保鲜袋|清洁球|钢丝球|消毒液|84消毒|一次性手套|厨房纸|购物袋|塑料袋|包装袋|餐盒/
+    regex: /洗洁精|纸巾|抹布|垃圾袋|垃圾桶|保鲜膜|保鲜袋|清洁球|钢丝球|消毒液|84消毒|漂白水|一次性手套|口罩|厨房纸|洗碗布|百洁布|购物袋|塑料袋|包装袋|餐盒/
   }
 ];
 const OTHER_CATEGORY = { key: 'other', label: '其他' };
@@ -259,6 +439,21 @@ function emptyCategorySummary() {
   CATEGORY_RULES.forEach((r) => { summary[r.key] = 0; });
   summary[OTHER_CATEGORY.key] = 0;
   return summary;
+}
+
+// ---------------- 品名净化 ----------------
+//
+// 🔧（2026-09-11）促销/活动标签净化：【特价】【春节特惠】等中/英文方括号
+// 包裹的营销文案常混进品名文本里，剥离后不影响品类判定（品类关键词大多
+// 仍留在剩余文本里），只是让展示出来的品名更干净。同时收敛掉品名里残留
+// 的空白字符（OCR 断行/断字经常在品名中间插入多余空格）
+const PROMO_TAG_REGEX = /[【\[［].*?[】\]］]/g;
+
+function cleanItemName(name) {
+  return String(name || '')
+    .replace(PROMO_TAG_REGEX, '')
+    .replace(/\s+/g, '')
+    .trim();
 }
 
 // ---------------- 商品明细行解析 ----------------
@@ -285,6 +480,11 @@ function isItemCandidateLine(line) {
   if (DATE_LABEL_REGEX.test(line)) return false;
   // 纯日期/纯条码/纯流水号行：不携带任何品名+价格信息
   if (/^\d{6,}$/.test(line.trim())) return false;
+  // 🔧（2026-09-11）中文大写金额行/中文日期行不含任何阿拉伯数字，如果不
+  // 显式排除会被模式 E（跨行品名+金额，见 isBareNameOnlyLine）误判成"纯
+  // 品名候选行"，与后续行意外配对出一条假商品
+  if (extractChineseWordAmount(line) !== null) return false;
+  if (extractChineseDate(line) !== null) return false;
   return true;
 }
 
@@ -308,6 +508,13 @@ const WEIGHT_PAIR_REGEX = new RegExp(`^(.+?)\\s+(\\d+(?:\\.\\d+)?)\\s*(斤|千�
 // 模式 D（兜底，仅品名+金额，数量记 1）：「品名 [xN]? 金额」
 const SIMPLE_PAIR_REGEX = new RegExp(`^(.+?)\\s*(?:[\\[\\(]\\s*[xX×]\\s*(\\d+)\\s*[\\]\\)])?\\s+${AMOUNT_TOKEN_SRC}$`);
 
+// 🔧（2026-09-11）模式 E：品名与金额被 OCR 拆成两行——本行不含任何数字，
+// 判定为"纯品名候选行"，下一行是孤立的金额数字。与总金额提取里"关键字
+// 单独一行、金额在下一行"同一处兼容思路，覆盖热敏纸小票折痕断行场景
+function isBareNameOnlyLine(line) {
+  return !/\d/.test(line) && /[一-龥]/.test(line) && line.length <= 20;
+}
+
 // 单价×数量 与识别到的行金额之间允许的合理误差：取「5分钱」与「2%」两者较大值，
 // 覆盖常见的四舍五入/秤重末位截断，超出才视为真正的识别错位
 function amountsReconcile(expected, actual) {
@@ -319,9 +526,9 @@ function amountsReconcile(expected, actual) {
 function parseItemLines(candidateLines) {
   const items = [];
 
-  candidateLines.forEach((rawLine) => {
-    const line = rawLine.trim();
-    if (!line) return;
+  for (let i = 0; i < candidateLines.length; i++) {
+    const line = candidateLines[i].trim();
+    if (!line) continue;
 
     let m = line.match(LABELED_TRIPLE_REGEX);
     if (m) {
@@ -330,7 +537,7 @@ function parseItemLines(candidateLines) {
       const unitPrice = parseAmountToken(m[3]);
       const amount = parseAmountToken(m[4]);
       pushItem(items, name, quantity, unitPrice, amount);
-      return;
+      continue;
     }
 
     m = line.match(CALC_TRIPLE_REGEX);
@@ -340,7 +547,7 @@ function parseItemLines(candidateLines) {
       const unitPrice = parseAmountToken(m[3]);
       const amount = parseAmountToken(m[4]);
       pushItem(items, name, quantity, unitPrice, amount);
-      return;
+      continue;
     }
 
     m = line.match(WEIGHT_PAIR_REGEX);
@@ -352,7 +559,7 @@ function parseItemLines(candidateLines) {
       // （没有第三个独立数字可供交叉核对）
       const unitPrice = quantity > 0 && amount !== null ? round2(amount / quantity) : null;
       pushItem(items, name, quantity, unitPrice, amount, { unitPriceIsDerived: true });
-      return;
+      continue;
     }
 
     m = line.match(SIMPLE_PAIR_REGEX);
@@ -372,14 +579,26 @@ function parseItemLines(candidateLines) {
       } else {
         pushItem(items, name, quantity, rawNumber, rawNumber);
       }
-      return;
+      continue;
     }
-  });
+
+    // 模式 E：跨行品名+金额（见 isBareNameOnlyLine 头部注释）
+    if (isBareNameOnlyLine(line)) {
+      const nextLine = candidateLines[i + 1];
+      const bareMatch = nextLine && nextLine.trim().match(BARE_AMOUNT_LINE_REGEX);
+      if (bareMatch) {
+        const amount = parseAmountToken(bareMatch[1]);
+        pushItem(items, line, 1, amount, amount);
+        i++; // 跳过已消费的金额行，避免被下一轮循环重复处理
+      }
+    }
+  }
 
   return items;
 }
 
-function pushItem(items, name, quantity, unitPrice, amount, opts) {
+function pushItem(items, rawName, quantity, unitPrice, amount, opts) {
+  const name = cleanItemName(rawName);
   if (!name || amount === null || !(amount >= 0)) return;
   const category = classifyItemCategory(name);
   const item = {
@@ -412,16 +631,19 @@ function pushItem(items, name, quantity, unitPrice, amount, opts) {
  * 将 OCR/多模态识别返回的原始文本块清洗为雨花斋标准支出台账草稿。
  * 永不抛异常——任何异常输入都归约为"识别不到、标记疑点"，不编造数据。
  * @param {string|string[]|{text?:string,words?:string}[]} rawPayload
+ * @param {{assumedYear?: number}} [options] assumedYear：无年份日期兜底
+ *   （见 extractReportDate）时假定的年份，默认真实当前年份
  * @returns {object} 支出台账草稿
  */
-function parseReceiptPayload(rawPayload) {
+function parseReceiptPayload(rawPayload, options) {
   const lines = normalizeLines(rawPayload);
   const reviewReasons = [];
+  const assumedYear = options && typeof options.assumedYear === 'number' ? options.assumedYear : undefined;
 
   const { amount: totalAmount, source: totalSource } = extractTotalAmount(lines);
   const discountAmount = extractDiscountAmount(lines);
   const merchant = extractMerchant(lines);
-  const reportDate = extractReportDate(lines);
+  const reportDate = extractReportDate(lines, assumedYear);
 
   const candidateLines = lines.filter(isItemCandidateLine);
   const items = parseItemLines(candidateLines);
@@ -494,5 +716,12 @@ module.exports = {
   extractReportDate,
   extractDiscountAmount,
   CATEGORY_RULES,
-  OTHER_CATEGORY
+  OTHER_CATEGORY,
+  // 🔧（2026-09-11 端到端压测容错加固）新增导出，供压测套件直接单测
+  normalizeOcrDigits,
+  normalizeDecimalComma,
+  chineseNumeralToValue,
+  extractChineseWordAmount,
+  extractChineseDate,
+  cleanItemName
 };

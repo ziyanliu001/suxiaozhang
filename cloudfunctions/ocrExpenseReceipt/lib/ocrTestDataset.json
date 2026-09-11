@@ -1,0 +1,182 @@
+{
+  "description": "真实/高拟真小票与发票 OCR 端到端压测数据集（2026-09-11 方向：真实小票端到端压测与解析容错加固）。每条 case 的 input 是模拟 OCR 逐行识别输出的原始文本数组（已包含真实场景常见的脏数据：方言别名、折痕断行、字母数字混淆、促销标签、无年份日期、纯中文金额与日期），expect 是 parseReceiptPayload() 输出草稿里需要满足的关键断言，供 parseReceiptPayload.stress.test.js 逐条驱动跑测并统计命中率。expect 字段均为可选，测试文件只校验数据集里实际给出的字段。",
+  "cases": [
+    {
+      "id": "market_handwritten_dialect",
+      "category": "农贸市场手写收据·方言别名+¥符号金额",
+      "note": "洋芋(土豆方言)、番薯(红薯方言)是否能命中生鲜蔬菜关键词；总金额带¥符号",
+      "input": [
+        "陈记菜摊",
+        "洋芋 3斤 x 2.00 = 6.00",
+        "番薯 2斤 x 3.50 = 7.00",
+        "合计 ¥13.00",
+        "2026-09-08"
+      ],
+      "expect": {
+        "merchant": "陈记菜摊",
+        "reportDate": "2026-09-08",
+        "totalAmount": 13,
+        "totalAmountSource": "tier2_subtotal",
+        "flagNeedsReview": false,
+        "itemNames": ["洋芋", "番薯"],
+        "itemCategories": { "洋芋": "fresh_veggie", "番薯": "fresh_veggie" }
+      }
+    },
+    {
+      "id": "market_handwritten_chinese_amount",
+      "category": "农贸市场手写白条·纯中文大写金额（无任何阿拉伯数字总金额）",
+      "note": "白条上完全没有印刷的阿拉伯数字总金额，只有手写的中文大写金额陈述",
+      "input": [
+        "老王蔬菜摊",
+        "今收款：肆拾伍元整",
+        "2026年09月08日"
+      ],
+      "expect": {
+        "merchant": "老王蔬菜摊",
+        "reportDate": "2026-09-08",
+        "totalAmount": 45,
+        "totalAmountSource": "chinese_words_amount"
+      }
+    },
+    {
+      "id": "supermarket_fold_linebreak",
+      "category": "超市热敏纸小票折痕断行·品名与金额分行断裂",
+      "note": "折痕导致同一件商品的品名与金额被识别成两行，验证跨行品名+金额兜底",
+      "input": [
+        "永辉超市",
+        "洗洁精",
+        "9.90",
+        "纸巾",
+        "15.50",
+        "实付：25.40",
+        "2026/09/09"
+      ],
+      "expect": {
+        "merchant": "永辉超市",
+        "reportDate": "2026-09-09",
+        "totalAmount": 25.4,
+        "totalAmountSource": "tier1_actual_pay",
+        "flagNeedsReview": false,
+        "itemNames": ["洗洁精", "纸巾"],
+        "itemCategories": { "洗洁精": "kitchen_supplies", "纸巾": "kitchen_supplies" }
+      }
+    },
+    {
+      "id": "supermarket_promo_tag",
+      "category": "超市小票·促销标签混入品名",
+      "note": "【特价】【满减】等方括号促销标签需要从品名里净化掉，但不影响品类判定",
+      "input": [
+        "好又多超市",
+        "【特价】优质东北大米 25kg 89.00",
+        "【满减】纯正菜籽油 5L 45.00",
+        "合计：134.00",
+        "2026.09.10"
+      ],
+      "expect": {
+        "merchant": "好又多超市",
+        "reportDate": "2026-09-10",
+        "totalAmount": 134,
+        "flagNeedsReview": false,
+        "itemNames": ["优质东北大米", "纯正菜籽油5L"],
+        "itemNamesExcludeSubstring": ["【", "】"],
+        "itemCategories": { "优质东北大米": "staple_grain_oil", "纯正菜籽油5L": "staple_grain_oil" }
+      }
+    },
+    {
+      "id": "ocr_digit_confusion",
+      "category": "OCR 误识别·数字 0/1 被认成字母 O/o/I/l",
+      "note": "3.2O→3.20、4.5o→4.50、l7.7O→17.70、2O26-09-l0→2026-09-10（本例总金额同步调整为货真价实的两项之和，验证纠偏后金额链路整体自洽）",
+      "input": [
+        "东兴便利店",
+        "青菜 3.2O",
+        "豆腐 4.5o",
+        "实付：7.7O",
+        "2O26-09-l0"
+      ],
+      "expect": {
+        "merchant": "东兴便利店",
+        "reportDate": "2026-09-10",
+        "totalAmount": 7.7,
+        "totalAmountSource": "tier1_actual_pay",
+        "flagNeedsReview": false,
+        "itemNames": ["青菜", "豆腐"]
+      }
+    },
+    {
+      "id": "ocr_decimal_comma",
+      "category": "OCR 误识别·小数点被认成逗号",
+      "note": "3,50→3.50、8,00→8.00、11,50→11.50（跟 1-2 位数字的逗号按小数点纠偏，跟 3 位数字的逗号仍按千分位保留，两条规则互不干扰）",
+      "input": [
+        "惠民商店",
+        "食盐 3,50",
+        "酱油 8,00",
+        "合计：11,50",
+        "2026-09-07"
+      ],
+      "expect": {
+        "merchant": "惠民商店",
+        "reportDate": "2026-09-07",
+        "totalAmount": 11.5,
+        "flagNeedsReview": false,
+        "itemNames": ["食盐", "酱油"],
+        "itemCategories": { "食盐": "staple_grain_oil", "酱油": "staple_grain_oil" }
+      }
+    },
+    {
+      "id": "mixed_condiment_daily_goods_with_noise",
+      "category": "调味品/日用杂购混合多行 + 非雨花斋常规收支干扰项",
+      "note": "味精/料酒属于主食粮油关键词；充值话费不属于任何预设品类，应归入other而不是被强行归类；'本店支持扫码支付'这类无金额的宣传行应被安全丢弃，不产生假商品",
+      "input": [
+        "好邻居生活超市",
+        "味精 5.00",
+        "料酒 6.50",
+        "充值话费 50.00",
+        "本店支持扫码支付",
+        "合计：61.50",
+        "2026-09-06"
+      ],
+      "expect": {
+        "merchant": "好邻居生活超市",
+        "reportDate": "2026-09-06",
+        "totalAmount": 61.5,
+        "flagNeedsReview": false,
+        "itemNames": ["味精", "料酒", "充值话费"],
+        "itemNamesExclude": ["本店支持扫码支付"],
+        "itemCategories": { "味精": "staple_grain_oil", "料酒": "staple_grain_oil", "充值话费": "other" }
+      }
+    },
+    {
+      "id": "date_no_year",
+      "category": "日期格式多态性·无年份（MM-DD）",
+      "note": "手写/部分小票只打印月-日，不带年份，需要用 assumedYear 兜底假定年份",
+      "input": [
+        "测试门店",
+        "青菜 10.00",
+        "实付：10.00",
+        "09-10"
+      ],
+      "options": { "assumedYear": 2026 },
+      "expect": {
+        "reportDate": "2026-09-10",
+        "totalAmount": 10,
+        "flagNeedsReview": false
+      }
+    },
+    {
+      "id": "date_chinese_full",
+      "category": "日期格式多态性·完整汉字数字日期",
+      "note": "年份逐字读（二零二六→2026），月/日用位值读法（九→9，十→10）",
+      "input": [
+        "测试门店",
+        "青菜 10.00",
+        "实付：10.00",
+        "二零二六年九月十日"
+      ],
+      "expect": {
+        "reportDate": "2026-09-10",
+        "totalAmount": 10,
+        "flagNeedsReview": false
+      }
+    }
+  ]
+}
