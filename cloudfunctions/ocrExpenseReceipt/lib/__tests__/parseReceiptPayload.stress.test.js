@@ -9,7 +9,8 @@ const {
   chineseNumeralToValue,
   extractChineseWordAmount,
   extractChineseDate,
-  cleanItemName
+  cleanItemName,
+  stripFreshProduceUnitSuffix
 } = require('../parseReceiptPayload');
 
 // 🔧（2026-09-11 真实/高拟真小票端到端压测·容错加固）本文件驱动
@@ -26,7 +27,12 @@ const {
 //   （验证"废弃行丢弃能力"——噪声行不应该被误判成商品）；
 // - itemNamesExcludeSubstring：任何 item 的 name 都不能包含这些子串
 //   （验证促销标签等噪声片段已被净化剥离）；
-// - itemCategories：{品名: 期望的 category key} 映射，逐条核对分类结果。
+// - itemCategories：{品名: 期望的 category key} 映射，逐条核对分类结果；
+// - itemAmounts：{品名: 期望的 amount} 映射，逐条核对金额精确到分（🚨
+//   2026-09-11 生鲜小票双行结构加固新增，此前数据集只校验品名有没有识别
+//   出来，没有校验金额有没有抓对——真实复现的 bug 正是"品名凑巧对了，
+//   金额却抓错了单价"这类场景，光靠 itemNames 断言不出来）；
+// - itemCount：期望的商品条数（精确匹配，用于验证没有多出/少掉候选行）。
 
 function assertCaseExpectations(result, expect, caseId) {
   if (expect.merchant !== undefined) {
@@ -68,6 +74,16 @@ function assertCaseExpectations(result, expect, caseId) {
       assert.ok(item, `[${caseId}] 未找到品名"${n}"，无法核对其分类`);
       assert.equal(item.category, expect.itemCategories[n], `[${caseId}] "${n}"的分类`);
     });
+  }
+  if (expect.itemAmounts) {
+    Object.keys(expect.itemAmounts).forEach((n) => {
+      const item = result.items.find((it) => it.name === n);
+      assert.ok(item, `[${caseId}] 未找到品名"${n}"，无法核对其金额`);
+      assert.equal(item.amount, expect.itemAmounts[n], `[${caseId}] "${n}"的金额`);
+    });
+  }
+  if (expect.itemCount !== undefined) {
+    assert.equal(result.items.length, expect.itemCount, `[${caseId}] 商品条数，实际品名列表: ${JSON.stringify(names)}`);
   }
 }
 
@@ -208,4 +224,59 @@ test('parseReceiptPayload：不传 assumedYear 时用真实当前年份兜底（
 test('parseReceiptPayload：无年份日期兜底要求整行只有日期本身，不在长文本里挖字段，避免误伤含短横线的无关文本', () => {
   const result = parseReceiptPayload(['测试店', '青菜 5.00', '实付：5.00', '客服热线：400-800-1234']);
   assert.equal(result.reportDate, ''); // 电话号码里的短横线不应被误判成日期
+});
+
+// ==================== 🚨（2026-09-11 生鲜小票双行结构紧急加固）====================
+// 真机实测复现的严重 bug：超市生鲜柜台小票"品名/计价单位"+"条码 数量 单价
+// 金额"两行结构，此前会把条码/数量/单价错误拼接成假品名，还抓错单价当
+// 成交金额。完整场景的回归见 ocrTestDataset.json 的
+// supermarket_fresh_produce_barcode_two_line 用例，这里补充针对具体
+// 函数/边界的独立单测。
+
+test('stripFreshProduceUnitSuffix：剥离常见计价单位后缀，不影响品名本身', () => {
+  assert.equal(stripFreshProduceUnitSuffix('一级茶树菇/斤'), '一级茶树菇');
+  assert.equal(stripFreshProduceUnitSuffix('进口车厘子/kg'), '进口车厘子');
+  assert.equal(stripFreshProduceUnitSuffix('散装鸡蛋/件'), '散装鸡蛋');
+});
+
+test('stripFreshProduceUnitSuffix：没有单位后缀的品名原样返回', () => {
+  assert.equal(stripFreshProduceUnitSuffix('西红柿'), '西红柿');
+});
+
+test('stripFreshProduceUnitSuffix：空/非法输入安全兜底，返回空字符串', () => {
+  assert.equal(stripFreshProduceUnitSuffix(''), '');
+  assert.equal(stripFreshProduceUnitSuffix(null), '');
+  assert.equal(stripFreshProduceUnitSuffix(undefined), '');
+});
+
+test('parseReceiptPayload：生鲜小票双行结构——品名取第一行剥离单位后缀后的文字，金额严格取第二行末尾真实成交金额，条码/数量/单价一律丢弃', () => {
+  const result = parseReceiptPayload([
+    '一级茶树菇/斤',
+    '2105019011004 0.22 49.90 11.00'
+  ]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, '一级茶树菇');
+  assert.equal(result.items[0].amount, 11);
+  // 条码/数量/单价不应该被当成 quantity/unitPrice 落库——quantity 固定为 1
+  // （模式 F 视为"一件"，不把秤重克重当成可信的数量字段），unitPrice 直接
+  // 等于 amount（quantity=1 时两者数值相同，不是巧合识别对了单价）
+  assert.equal(result.items[0].quantity, 1);
+  assert.equal(result.items[0].unitPrice, 11);
+  assert.equal(result.items[0].priceMismatch, false);
+});
+
+test('parseReceiptPayload：条码行本身绝不会被当成独立商品单独解析出来（即便模式 F 没命中）', () => {
+  // 故意不给合法的"品名候选行"作为前一行（用一个会被判定为商户名候选/
+  // 噪声的行占位），验证条码行不会被模式 D（SIMPLE_PAIR_REGEX）独立解析成
+  // 一条"品名=拼接数字乱码"的假商品——PURE_NUMERIC_NAME_REGEX 这道最后防线
+  // 在模式 F 未命中时依然兜底生效
+  const result = parseReceiptPayload(['2105019011004 0.22 49.90 11.00']);
+  assert.equal(result.items.length, 0);
+});
+
+test('parseReceiptPayload：纯数字/小数点品名（条码、称重克重等）一律不作为合法品名入选', () => {
+  // 直接构造一个会命中模式 D 的"品名+金额"行，但品名部分清洗后只剩数字——
+  // 模拟条码/克重被误判成品名的极端情况
+  const result = parseReceiptPayload(['0.22 49.90 11.00 6.20']);
+  assert.equal(result.items.length, 0);
 });

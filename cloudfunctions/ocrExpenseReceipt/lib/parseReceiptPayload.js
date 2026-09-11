@@ -515,6 +515,28 @@ function isBareNameOnlyLine(line) {
   return !/\d/.test(line) && /[一-龥]/.test(line) && line.length <= 20;
 }
 
+// 🚨（2026-09-11 生鲜小票双行结构紧急加固）模式 F：超市生鲜柜台小票常见的
+// "品名/计价单位"+"条码 数量 单价 金额"两行结构——第一行是纯品名（可能带
+// /斤、/kg、/件 等计价单位后缀，如"一级茶树菇/斤"），第二行以 8~14 位数字
+// 条码开头，紧跟数量、单价、金额三个数字（如"2105019011004 0.22 49.90
+// 11.00"）。此前这两行各自落进模式 D（SIMPLE_PAIR_REGEX）独立解析：条码行
+// 被当成"品名+金额"，cleanItemName 又把空格全部去掉，把条码/数量/单价拼成
+// 一串毫无意义的数字（如"21050190110040.2249.90"）当成品名；真正的中文
+// 品名所在行因为末尾没有金额，任何模式都匹配不上，直接被静默丢弃（有时还
+// 被 extractMerchant 的启发式误当成商户名）。
+// 修复：品名严格取第一行剥离计价单位后缀之后的纯文字，金额严格取第二行
+// 最后一项数字（真正的成交金额），条码/数量/单价三项一律丢弃，不落入
+// quantity/unitPrice 字段——这三个数字对台账记账没有意义，硬塞进去反而会
+// 触发错误的 priceMismatch 校验（如拿"数量×单价"去对"金额"反而对不上）
+const FRESH_PRODUCE_UNIT_SUFFIX_REGEX = /\/(斤|千克|公斤|kg|KG|Kg|克|g|件|袋|包|个|只|条|盒|箱)$/;
+const FRESH_PRODUCE_BARCODE_LINE_REGEX = new RegExp(
+  `^\\d{8,14}\\s+\\d+(?:\\.\\d+)?\\s+\\d+(?:\\.\\d+)?\\s+${AMOUNT_TOKEN_SRC}$`
+);
+
+function stripFreshProduceUnitSuffix(name) {
+  return String(name || '').replace(FRESH_PRODUCE_UNIT_SUFFIX_REGEX, '').trim();
+}
+
 // 单价×数量 与识别到的行金额之间允许的合理误差：取「5分钱」与「2%」两者较大值，
 // 覆盖常见的四舍五入/秤重末位截断，超出才视为真正的识别错位
 function amountsReconcile(expected, actual) {
@@ -582,9 +604,23 @@ function parseItemLines(candidateLines) {
       continue;
     }
 
-    // 模式 E：跨行品名+金额（见 isBareNameOnlyLine 头部注释）
+    // 品名单独一行时，先试模式 F（生鲜条码行，见头部注释），再试模式 E
+    // （纯金额行）——两者的"下一行"形状互斥（一个要求四段数字、一个要求
+    // 单个孤立数字），顺序不影响正确性，模式 F 更具体，放在前面
     if (isBareNameOnlyLine(line)) {
       const nextLine = candidateLines[i + 1];
+
+      // 模式 F：生鲜小票双行结构（品名/计价单位 + 条码 数量 单价 金额）
+      const barcodeMatch = nextLine && nextLine.trim().match(FRESH_PRODUCE_BARCODE_LINE_REGEX);
+      if (barcodeMatch) {
+        const amount = parseAmountToken(barcodeMatch[1]);
+        const name = stripFreshProduceUnitSuffix(line);
+        pushItem(items, name, 1, amount, amount);
+        i++; // 跳过已消费的条码行，避免被下一轮循环重复处理/误判成独立商品
+        continue;
+      }
+
+      // 模式 E：跨行品名+金额（见 isBareNameOnlyLine 头部注释）
       const bareMatch = nextLine && nextLine.trim().match(BARE_AMOUNT_LINE_REGEX);
       if (bareMatch) {
         const amount = parseAmountToken(bareMatch[1]);
@@ -597,9 +633,18 @@ function parseItemLines(candidateLines) {
   return items;
 }
 
+// 🚨（2026-09-11 生鲜小票双行结构紧急加固）纯数字/小数点品名一律禁止入选：
+// 条码、称重克重、单价等数字被误判/误拼接成"品名"时，清洗后必然是一串
+// 只含数字和小数点的字符串（如"21050190110040.2249.90"、"0.22"）——真实
+// 商品名不可能不含任何汉字/字母，这是最后一道防线，兜住模式 F 之外任何
+// 还会把条码行独立解析成"品名+金额"的场景（如条码行前面恰好没有紧邻
+// 一行合法的纯品名候选行）
+const PURE_NUMERIC_NAME_REGEX = /^[\d.]+$/;
+
 function pushItem(items, rawName, quantity, unitPrice, amount, opts) {
   const name = cleanItemName(rawName);
   if (!name || amount === null || !(amount >= 0)) return;
+  if (PURE_NUMERIC_NAME_REGEX.test(name)) return;
   const category = classifyItemCategory(name);
   const item = {
     name,
@@ -723,5 +768,7 @@ module.exports = {
   chineseNumeralToValue,
   extractChineseWordAmount,
   extractChineseDate,
-  cleanItemName
+  cleanItemName,
+  // 🚨（2026-09-11 生鲜小票双行结构紧急加固）新增导出，供单测直接覆盖
+  stripFreshProduceUnitSuffix
 };
