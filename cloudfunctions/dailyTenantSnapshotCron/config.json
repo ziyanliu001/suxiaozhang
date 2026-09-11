@@ -11,11 +11,26 @@
         "report_logs": {
           "read": true,
           "write": false
+        },
+        "material_logs": {
+          "read": true,
+          "write": false
+        },
+        "daily_tenant_snapshots": {
+          "read": true,
+          "write": true
         }
       }
     }
   },
+  "triggers": [
+    {
+      "name": "dailySnapshotScan",
+      "type": "timer",
+      "config": "0 0 2 * * * *"
+    }
+  ],
   "runtime": "Nodejs16",
-  "timeout": 20,
+  "timeout": 540,
   "envVariables": {}
 }

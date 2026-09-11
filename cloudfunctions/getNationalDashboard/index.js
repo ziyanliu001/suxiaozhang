@@ -1,4 +1,5 @@
 const cloud = require('wx-server-sdk');
+const { extractMaterialTotals, convertJinToKg, buildEstimatedMonthlySupplyNeedsText } = require('./lib/materialAggregateHelpers');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -652,6 +653,18 @@ exports.main = async (event, context) => {
       logsQueryConditions.push({ dateString: _.gte(rangeStartDate) });
     }
     const logsQueryWhere = _.and(logsQueryConditions);
+    // 🐛（2026-09-12 1000 条截断透明化）report_logs 这条主循环同时承担多个
+    // 用途——按门店分组的明细统计（matchedKey 逐条匹配）、最新凭证图片抽取、
+    // badge 判定——不是单纯的 sum，无法像 material_logs 那样直接换成一句
+    // $group 聚合管道（需要保留原始记录逐条参与门店归属判定/图片字段），
+    // 这里暂不做管道化重写（评估后判断这是一次高风险的深度重写，见
+    // docs/SCHEMA.md daily_tenant_snapshots 一节的后续规划）。作为过渡期的
+    // 诚实止损：不再让 1000 条截断"静默"发生——记录本次是否真的因为撞到
+    // 1000 条上限才停止（而不是数据本就不足 1000 条），连同已扫描条数一并
+    // 通过 nationalSummary.dataIntegrity 字段透出，前端可以据此提示"当前
+    // 数据范围内容超出单次统计上限，实际数值可能更高"，而不是让用户以为
+    // 这就是精确的全量数字
+    let isMainLogsTruncated = false;
     while (true) {
       const batch = await db.collection('report_logs')
         .where(logsQueryWhere)
@@ -663,7 +676,10 @@ exports.main = async (event, context) => {
       allLogs = allLogs.concat(batch.data);
       if (batch.data.length < batchLimit) break;
       skip += batchLimit;
-      if (skip >= 1000) break;
+      if (skip >= 1000) {
+        isMainLogsTruncated = true;
+        break;
+      }
     }
 
     // 🆕 核心 KPI 环比趋势：只在选择了具体时间粒度（非"全部时间"）时才有自然的
@@ -682,6 +698,7 @@ exports.main = async (event, context) => {
       try {
         let allPrevLogs = [];
         let prevSkip = 0;
+        let isPrevLogsTruncated = false;
         const prevLogsQueryWhere = _.and([
           makeTenantFilter(tenantId),
           { isVoid: _.neq(true) },
@@ -699,7 +716,10 @@ exports.main = async (event, context) => {
           allPrevLogs = allPrevLogs.concat(batch.data);
           if (batch.data.length < batchLimit) break;
           prevSkip += batchLimit;
-          if (prevSkip >= 1000) break;
+          if (prevSkip >= 1000) {
+            isPrevLogsTruncated = true;
+            break;
+          }
         }
         allPrevLogs.forEach((log) => {
           if (isScopedFilter) {
@@ -710,6 +730,7 @@ exports.main = async (event, context) => {
           prevTotalDiners += parseInt(log.diningCount || log.diners || 0, 10) || 0;
           prevTotalExpense += parseFloat(log.expense || log.todayExpense || log.expenseAmount || 0) || 0;
         });
+        if (isPrevLogsTruncated) isMainLogsTruncated = true;
       } catch (err) {
         // 环比查询失败不影响主统计，趋势字段按 0 基数处理，computePctChange 自动
         // 返回 null，前端隐藏徽标即可，不抛出影响整个大屏加载
@@ -737,26 +758,33 @@ exports.main = async (event, context) => {
       if (isScopedFilter) {
         materialConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
       }
-      let allMaterialLogs = [];
-      let materialSkip = 0;
-      while (true) {
-        const batch = await db.collection('material_logs')
-          .where(_.and(materialConditions))
-          .skip(materialSkip)
-          .limit(batchLimit)
-          .get();
-        if (!batch.data || batch.data.length === 0) break;
-        allMaterialLogs = allMaterialLogs.concat(batch.data);
-        if (batch.data.length < batchLimit) break;
-        materialSkip += batchLimit;
-        if (materialSkip >= 1000) break;
-      }
-      allMaterialLogs.forEach((m) => {
-        nationalRiceTotal += parseFloat(m.riceCount) || 0;
-        nationalFlourTotal += parseFloat(m.flourCount) || 0;
-        nationalOilTotal += parseFloat(m.oilCount) || 0;
-        nationalVegetableTotal += parseFloat(m.vegetableCount) || 0;
-      });
+      // 🐛（2026-09-12 1000 条截断修复）此前分页拉取全部 material_logs 原始
+      // 文档到内存里再 forEach 累加，受 skip>=1000 硬截断保护——大机构物资
+      // 提交记录一旦超过 1000 条，超出部分会被静默丢弃，全国大屏的物资总量
+      // 会比真实值偏小且不报错、不提示，是会误导供应链采购决策的正确性缺口，
+      // 不只是性能问题。改为数据库侧 $match+$group($sum) 聚合管道，只返回
+      // 一行汇总结果——1000 条上限约束的是 `.get()` 单次查询返回的文档条数，
+      // 不约束聚合管道内部处理的文档条数，无论底层有多少条原始记录，这里的
+      // 总量永远精确。riceCount 等字段在唯一写入口 manageVolunteerSubmission
+      // 已用 parseFloat() 强制转成 Number 落库（非字符串），$sum 累加不存在
+      // 类型不一致导致漏算的风险。写法与本文件 buildPublicAggregateSummary()
+      // 已有的 aggregate().match().group().end() 用法保持一致
+      const aggRes = await db.collection('material_logs')
+        .aggregate()
+        .match(_.and(materialConditions))
+        .group({
+          _id: null,
+          totalRice: _.aggregate.sum('riceCount'),
+          totalFlour: _.aggregate.sum('flourCount'),
+          totalOil: _.aggregate.sum('oilCount'),
+          totalVegetable: _.aggregate.sum('vegetableCount')
+        })
+        .end();
+      const materialTotals = extractMaterialTotals(aggRes);
+      nationalRiceTotal = materialTotals.riceTotal;
+      nationalFlourTotal = materialTotals.flourTotal;
+      nationalOilTotal = materialTotals.oilTotal;
+      nationalVegetableTotal = materialTotals.vegetableTotal;
     } catch (err) {
       // material_logs 集合可能尚未创建（该机构还没有任何一条物资消耗提交被采纳过），
       // 视为总量 0，不影响主统计
@@ -784,53 +812,35 @@ exports.main = async (event, context) => {
       if (isScopedFilter) {
         ingredient30dConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
       }
-      let ingredient30dLogs = [];
-      let ingredient30dSkip = 0;
-      while (true) {
-        const batch = await db.collection('material_logs')
-          .where(_.and(ingredient30dConditions))
-          .skip(ingredient30dSkip)
-          .limit(batchLimit)
-          .get();
-        if (!batch.data || batch.data.length === 0) break;
-        ingredient30dLogs = ingredient30dLogs.concat(batch.data);
-        if (batch.data.length < batchLimit) break;
-        ingredient30dSkip += batchLimit;
-        if (ingredient30dSkip >= 1000) break;
-      }
+      // 🐛（2026-09-12 1000 条截断修复）与上面 nationalRiceTotal 同一处根因——
+      // 近 30 天窗口对高流水机构同样可能超过 1000 条分页上限，改用数据库侧
+      // $sum 聚合管道，详见上方 nationalRiceTotal 处的完整注释，不再重复
+      const agg30dRes = await db.collection('material_logs')
+        .aggregate()
+        .match(_.and(ingredient30dConditions))
+        .group({
+          _id: null,
+          totalRice: _.aggregate.sum('riceCount'),
+          totalFlour: _.aggregate.sum('flourCount'),
+          totalOil: _.aggregate.sum('oilCount'),
+          totalVegetable: _.aggregate.sum('vegetableCount')
+        })
+        .end();
+      const totals30d = extractMaterialTotals(agg30dRes);
       // 🐛 material_logs 的 riceCount/flourCount/oilCount/vegetableCount 历史上
       // 一律按"斤"（0.5kg）记录（对照 pages/index/index.ts 的填写占位提示
       // "大米50斤"），而这里对外输出的接口字段名是 riceKg 等公斤单位，必须
       // 显式做一次 ×0.5 换算，不能直接把"斤"数值套上 Kg 的字段名
-      let rice30dJin = 0;
-      let flour30dJin = 0;
-      let oil30dJin = 0;
-      let veggie30dJin = 0;
-      ingredient30dLogs.forEach((m) => {
-        rice30dJin += parseFloat(m.riceCount) || 0;
-        flour30dJin += parseFloat(m.flourCount) || 0;
-        oil30dJin += parseFloat(m.oilCount) || 0;
-        veggie30dJin += parseFloat(m.vegetableCount) || 0;
-      });
-      const riceKg = Math.round(rice30dJin * 0.5 * 10) / 10;
-      const flourKg = Math.round(flour30dJin * 0.5 * 10) / 10;
-      const oilKg = Math.round(oil30dJin * 0.5 * 10) / 10;
-      const veggieKg = Math.round(veggie30dJin * 0.5 * 10) / 10;
+      const riceKg = convertJinToKg(totals30d.riceTotal);
+      const flourKg = convertJinToKg(totals30d.flourTotal);
+      const oilKg = convertJinToKg(totals30d.oilTotal);
+      const veggieKg = convertJinToKg(totals30d.vegetableTotal);
 
       // 🌟 月度集采预估：以近30天大米实际消耗量线性外推到"每月"口径（大米是
       // 雨花斋/助老食堂最核心、最需要提前备货的主食食材，故预估文案以大米为
       // 主角，其余品类仍在 riceKg/flourKg/oilKg/veggieKg 里原样暴露给前端自行
       // 展示），≥1000kg 时换算成"吨"展示更符合采购人员的直觉单位
-      const estimatedMonthlyRiceKg = riceKg;
-      let estimatedMonthlySupplyNeeds = '暂无近30天食材消耗数据';
-      if (estimatedMonthlyRiceKg > 0) {
-        if (estimatedMonthlyRiceKg >= 1000) {
-          const tons = Math.round((estimatedMonthlyRiceKg / 1000) * 10) / 10;
-          estimatedMonthlySupplyNeeds = `大米约需 ${tons} 吨/月`;
-        } else {
-          estimatedMonthlySupplyNeeds = `大米约需 ${Math.round(estimatedMonthlyRiceKg)} 公斤/月`;
-        }
-      }
+      const estimatedMonthlySupplyNeeds = buildEstimatedMonthlySupplyNeedsText(riceKg);
 
       ingredientStats30d = { riceKg, flourKg, oilKg, veggieKg, estimatedMonthlySupplyNeeds };
     } catch (err) {
@@ -1763,6 +1773,20 @@ exports.main = async (event, context) => {
       // getPatriarchDashboard 的"当月 1 号起"略有语义差异（30 天滚动窗口
       // vs 自然月），如实标注，不强行对齐成一模一样的窗口定义
       reportCountInScope: totalReportsInScope,
+      // 🐛（2026-09-12 1000 条截断透明化，见上方 isMainLogsTruncated 计算处
+      // 完整注释）report_logs 分页拉取仍有 1000 条硬上限（受限于该循环同时
+      // 承担的门店归属判定/图片抽取/badge 判定，暂未能像 material_logs 那样
+      // 完全管道化，见 docs/SCHEMA.md daily_tenant_snapshots 一节的后续规划）。
+      // isTruncated 为 true 时，上面 nationalTotalDiners/nationalTotalIncome/
+      // nationalTotalExpense 等汇总字段是"至少这么多"而不是精确全量，前端应
+      // 提示用户当前统计口径可能不完整，而不是当成绝对精确值展示
+      dataIntegrity: {
+        isTruncated: isMainLogsTruncated,
+        truncationCap: 1000,
+        note: isMainLogsTruncated
+          ? '本次统计范围内的记录数超过单次查询上限，以下汇总数值为下限估算，实际数值可能更高'
+          : ''
+      },
       // 👵 长者关怀细分维度
       nationalDineInSeniors,
       nationalDeliverySeniors,

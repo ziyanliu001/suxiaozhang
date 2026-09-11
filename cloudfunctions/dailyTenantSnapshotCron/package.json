@@ -1,0 +1,9 @@
+{
+  "name": "dailyTenantSnapshotCron",
+  "version": "1.0.0",
+  "description": "云函数：大数据量性能治理 Phase 1——每日凌晨为每家门店预聚合前一天的 report_logs/material_logs 核心指标，写入 daily_tenant_snapshots（仅写入，尚未接入 getNationalDashboard 读路径）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

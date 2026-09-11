@@ -182,6 +182,49 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 ---
 
+## 8. 门店级并发锁（`system_locks` 集合）与日度快照预聚合（`daily_tenant_snapshots` 集合，2026-09-12）
+
+本节记录"大数据量性能治理与级联重算并发安全加固"专项新增的两张集合，均为本次新引入，此前不存在。
+
+### 8.1 `system_locks`（`cascadeRecalculator` 门店级级联重算互斥锁）
+
+**不要与 `store_locks`（`manageDraftLock` 云函数使用）混淆**——两者语义完全不同：`store_locks` 是"人"维度的报表编辑锁（`lock_${storeId}_${reportDate}`，15 分钟 TTL，记录 `ownerOpenId`/`operatorName`，用于"义工 A 正在录入这天的餐报时，义工 B 只能只读"这类前台交互场景，需要向用户展示"谁占用了锁"）；`system_locks` 是"操作"维度的无归属短时互斥锁（30 秒 TTL，不记录任何用户身份），只用来防止 `cascadeRecalculator` 对同一家门店的两次级联重算并发执行、互相踩踏同一条流水链。两者不共用同一张集合，也不应该互相查询对方。
+
+字段：
+
+| 字段 | 含义 |
+|---|---|
+| `_id` | 确定性锁 ID，`cascade_recalc_${md5(tenantId + '\|' + storeFilter)}`（见 `cloudfunctions/cascadeRecalculator/lib/distributedLock.js` 的 `buildLockId()`），md5 哈希是为了规避 `storeFilter`（门店名，可能含 `/` 等特殊字符）不满足云数据库 `_id` 合法字符集的问题 |
+| `lockedAt` | 抢锁时刻的时间戳（`Date.now()`，毫秒） |
+| `expiresAt` | 锁到期时间戳，超过即视为可被"偷锁" |
+
+**抢锁机制**（`cloudfunctions/cascadeRecalculator/index.js` 的 `tryAcquireLockOnce`/`acquireCascadeLock`）：优先用 `db.collection('system_locks').add({data:{_id: lockId, ...}})` 抢锁——`add()` 对已存在的 `_id` 会因主键唯一性约束报错，这是数据库层面保证的原子性，不依赖应用层"先查后写"的竞态窗口（与本仓库 `liveFactoryCore` 的 `buildSettlement`/`reverseSettlement` 用确定性 `_id` + 主键唯一性防重复插入是同一种手法）。`add()` 失败后查一次现有锁，只有确认已过期（`expiresAt <= now`）才尝试 `where({_id, expiresAt: _.lte(now)}).update(...)` 这个条件更新（CAS）去"偷锁"，`stats.updated === 1` 才算真正抢到。抢锁失败最多退避重试 3 次（指数退避+随机抖动，见 `computeBackoffDelayMs()`），仍失败则整体拒绝本次请求（返回 `CASCADE_LOCK_BUSY` 错误码），不会无限期阻塞调用方。
+
+**释放时机**：`withCascadeLock()` 包裹整个"起始记录更新 + 级联重算"逻辑，`finally` 块保证正常返回/中途抛异常两种路径都会释放锁；若云函数进程本身异常终止（连 `finally` 都来不及跑），锁会在 `expiresAt` 到期（最长 30 秒）后自动可被下一个请求偷锁，不会死锁。
+
+### 8.2 `daily_tenant_snapshots`（餐报/物资日度预聚合快照，Phase 1：仅写入，尚未接入读路径）
+
+**背景**：`getNationalDashboard` 的核心 KPI 聚合此前是"实时分页拉取 `report_logs`/`material_logs` 原始文档到内存里累加"，`skip>=1000` 硬截断只能防止查询本身超时崩溃，无法防止大机构流水超过 1000 条时汇总数字静默失真（详见 [[踩坑记录与性能调优]] 相关记录）。本集合是"预聚合快照 + 当日实时增量"混合查询模式的**基础设施第一阶段**——只负责按天把每家门店的核心指标预先算好存起来，**尚未**让 `getNationalDashboard` 改读这张表（那是第二阶段，需要设计"如何合并历史快照与当天尚未产生快照的实时数据"，属于更大范围的改动，本次不做，如实标注）。
+
+写入方：新增的定时触发云函数 `cloudfunctions/dailyTenantSnapshotCron`（cron 表达式见该函数 `config.json`，默认每日凌晨 2 点触发一次），对前一天（`isoDateNDaysAgo(1)`）有过 `report_logs`/`material_logs` 记录的每一家门店各生成/覆写一条快照文档。使用确定性 `_id` + `set()`（而不是 `add()`），同一天重复触发（如手动补跑）天然幂等，不会产生重复快照。
+
+字段：
+
+| 字段 | 含义 |
+|---|---|
+| `_id` | `snapshot_${tenantId}_${storeId}_${dateString}` |
+| `tenantId` / `storeId` / `storeName` | 门店归属，`storeName` 是生成快照那一刻的名称快照（门店后续改名不回填历史快照，与 `report_logs.shopName` 惯例一致） |
+| `dateString` | 被统计的那一天（`YYYY-MM-DD`），不是生成时间 |
+| `totalDiners` / `totalIncome` / `totalExpense` / `dailyExpenseTotal` | 当日汇总，口径与 `getNationalDashboard` 现有的逐条累加字段一致（金额沿用"元"浮点存储口径，见第 4 节） |
+| `volunteerCount` / `volunteerHours` / `dineInSeniors` / `deliverySeniors` / `listeningSeniors` / `takeawayCount` / `deliveryVolunteers` | 长者关怀细分维度，与 `report_logs` 同名字段口径一致 |
+| `latestBalance` | 当日 `todayBalance`（若当天有多条记录，取 `dateString` 相同的最后一条——正常业务流程一天一店只应有一条，多条视为异常但不阻断快照生成） |
+| `hasAuditProof` | 当日记录是否已 `AUDITED_LOCKED` 且带 `_checksum` 签名 |
+| `riceKg` / `flourKg` / `oilKg` / `veggieKg` | 当日 `material_logs` 消耗量（已从"斤"换算成公斤，复用 `getNationalDashboard/lib/materialAggregateHelpers.js` 的 `convertJinToKg()`） |
+| `sourceReportCount` | 参与本次快照聚合的 `report_logs` 原始记录条数，供排查快照是否符合预期使用 |
+| `generatedAt` | 快照生成时间（`db.serverDate()`），区别于 `dateString`（被统计的业务日期） |
+
+**幂等与并发**：`dailyTenantSnapshotCron` 每次运行只处理"昨天"这一个固定日期窗口，同一天的门店快照用确定性 `_id` + `set()` 覆写，不会因为定时器偶发重复触发而产生脏数据；不同门店之间的快照生成互相独立，不需要额外加锁。
+
 ## 维护须知
 
 - 本文档的权威性来自"贴代码位置"，不是来自本身的表述。**任何字段/枚举一旦在代码中变更，必须同步更新本文档对应条目**（这是 CLAUDE.md 治理要求）——尤其是 `orgType`/`businessType` 这类被 3-4 个文件各自维护同源拷贝的取值域，改动时本文档也要算作需要同步的一处。

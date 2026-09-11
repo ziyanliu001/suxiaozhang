@@ -3,6 +3,94 @@ const crypto = require('crypto');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
+const {
+  buildLockId,
+  isLockExpired,
+  computeBackoffDelayMs,
+  DEFAULT_TTL_MS,
+  DEFAULT_MAX_RETRIES
+} = require('./lib/distributedLock');
+
+const LOCK_COLLECTION = 'system_locks';
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isCollectionNotExistError(err) {
+  return !!err && (
+    err.errCode === -502005 ||
+    /database collection not exists/i.test(String(err.errMsg || err.message || ''))
+  );
+}
+
+// 🔒（2026-09-12 门店级级联重算并发安全加固）单次抢锁尝试：优先用 add()
+// 显式指定 _id 抢锁（数据库主键唯一性保证原子性，见 lib/distributedLock.js
+// 头部注释）；add() 失败说明锁已被占用，查一次现有锁，只有确认已过期才
+// 尝试用条件更新（CAS）"偷锁"——两次数据库交互之间的窗口不影响正确性，
+// 因为真正决定"是否抢锁成功"的永远是最后那次原子写操作（add 的主键唯一性
+// 约束 / where 条件更新的 stats.updated 计数），不是中间这次读
+async function tryAcquireLockOnce(lockId, ttlMs) {
+  const now = Date.now();
+  try {
+    await db.collection(LOCK_COLLECTION).add({
+      data: { _id: lockId, lockedAt: now, expiresAt: now + ttlMs }
+    });
+    return true;
+  } catch (err) {
+    if (isCollectionNotExistError(err)) {
+      await db.createCollection(LOCK_COLLECTION).catch(() => {});
+      // 集合刚创建，必然不存在同名文档，重试一次 add() 即可，不需要走后面的偷锁分支
+      return tryAcquireLockOnce(lockId, ttlMs);
+    }
+    const existing = await db.collection(LOCK_COLLECTION).doc(lockId).get().catch(() => null);
+    const lockDoc = existing && existing.data;
+    if (!isLockExpired(lockDoc, now)) return false;
+    const stealRes = await db.collection(LOCK_COLLECTION)
+      .where({ _id: lockId, expiresAt: _.lte(now) })
+      .update({ data: { lockedAt: now, expiresAt: now + ttlMs } })
+      .catch(() => null);
+    return !!(stealRes && stealRes.stats && stealRes.stats.updated === 1);
+  }
+}
+
+// 抢锁 + 最多 3 次退避重试（见 lib/distributedLock.js computeBackoffDelayMs）。
+// 返回锁 _id（供释放时使用）或 null（重试耗尽仍未抢到）
+async function acquireCascadeLock(tenantId, storeFilter, ttlMs = DEFAULT_TTL_MS, maxRetries = DEFAULT_MAX_RETRIES) {
+  const lockId = buildLockId(tenantId, storeFilter);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const acquired = await tryAcquireLockOnce(lockId, ttlMs);
+    if (acquired) return lockId;
+    if (attempt < maxRetries) await sleep(computeBackoffDelayMs(attempt));
+  }
+  return null;
+}
+
+async function releaseCascadeLock(lockId) {
+  if (!lockId) return;
+  await db.collection(LOCK_COLLECTION).doc(lockId).remove().catch((err) => {
+    console.warn('[cascadeRecalculator] 释放并发锁失败（TTL 到期后会自动失效，不影响正确性，只是这段时间内该门店会被误判为仍在重算中）:', err);
+  });
+}
+
+// 🔒 门店级级联重算互斥：同一门店（同一 tenantId+storeFilter）同一时刻只允许
+// 一个级联重算任务执行，避免两笔并发操作互相踩踏同一条流水链（一个正在按
+// 旧数据重算余额链、另一个同时插入/修改了链上某条记录，会产生资金差错）。
+// finally 块确保正常返回/抛异常两种路径下锁都会被释放，不会因为 fn() 内部
+// 抛错就让锁一直占着到 TTL 到期才释放
+async function withCascadeLock(tenantId, storeFilter, fn) {
+  const lockId = await acquireCascadeLock(tenantId, storeFilter);
+  if (!lockId) {
+    const err = new Error('该门店当前有另一笔级联重算正在执行，请稍后重试（并发保护，避免资金流水链被同时改动）');
+    err.code = 'CASCADE_LOCK_BUSY';
+    throw err;
+  }
+  try {
+    return await fn();
+  } finally {
+    await releaseCascadeLock(lockId);
+  }
+}
 
 // 🛡️（2026-08-31 Open-Core 安全收口）fail-closed：与 cloudfunctions/wxPayCore 的
 // WXPAY_INTERNAL_TOKEN 同一条原则——未配置真实密钥时不再静默回退到一个源码里
@@ -237,32 +325,39 @@ exports.main = async (event, context) => {
           return { success: false, errMsg: '无权限：目标记录不属于您所在的机构' };
         }
 
-        let updatedTodayBal = null;
+        // 🔒 起始记录的更新与后续级联重算是同一个逻辑操作（改了链上第一环，
+        // 必须紧接着重算它之后的每一环），必须整体包在同一把锁里——只锁
+        // cascadeUpdateRecords() 本身、不锁这次起始更新的话，两个并发请求
+        // 仍可能一个刚写完起始记录、还没来得及重算，另一个已经拿着旧数据
+        // 抢跑完了整条链
+        const result = await withCascadeLock(callerTenantId, storeFilter, async () => {
+          let updatedTodayBal = null;
 
-        if (updateData) {
-          const numYesterdayBal = parseFloat(updateData.yesterdayBalance || 0);
-          const numIncome = parseFloat(updateData.listDonationTotal || 0) + parseFloat(updateData.otherDonation || 0);
-          const numExpense = parseFloat(updateData.dailyExpenseTotal || 0) + parseFloat(updateData.fixedExpenseTotal || 0);
-          updatedTodayBal = calculateTodayBalance(numYesterdayBal, numIncome, numExpense);
+          if (updateData) {
+            const numYesterdayBal = parseFloat(updateData.yesterdayBalance || 0);
+            const numIncome = parseFloat(updateData.listDonationTotal || 0) + parseFloat(updateData.otherDonation || 0);
+            const numExpense = parseFloat(updateData.dailyExpenseTotal || 0) + parseFloat(updateData.fixedExpenseTotal || 0);
+            updatedTodayBal = calculateTodayBalance(numYesterdayBal, numIncome, numExpense);
 
-          const updateFields = { ...updateData };
-          updateFields.todayBalance = updatedTodayBal;
-          updateFields.lastCascadeCalculatedAt = db.serverDate();
-          updateFields._checksum = computeChecksum({
-            ...updateData,
-            dateString: targetDate,
-            storeId: storeFilter,
-            todayBalance: updatedTodayBal
-          });
+            const updateFields = { ...updateData };
+            updateFields.todayBalance = updatedTodayBal;
+            updateFields.lastCascadeCalculatedAt = db.serverDate();
+            updateFields._checksum = computeChecksum({
+              ...updateData,
+              dateString: targetDate,
+              storeId: storeFilter,
+              todayBalance: updatedTodayBal
+            });
 
-          await db.collection('report_logs').doc(targetId).update({
-            data: updateFields
-          });
+            await db.collection('report_logs').doc(targetId).update({
+              data: updateFields
+            });
 
-          console.log(`✅ [update_and_recalculate] Step 1 - 已更新起始记录 ${targetDate}, 今日结余: ${updatedTodayBal}`);
-        }
+            console.log(`✅ [update_and_recalculate] Step 1 - 已更新起始记录 ${targetDate}, 今日结余: ${updatedTodayBal}`);
+          }
 
-        const result = await cascadeUpdateRecords(storeFilter, targetDate, updatedTodayBal, callerTenantId);
+          return cascadeUpdateRecords(storeFilter, targetDate, updatedTodayBal, callerTenantId);
+        });
 
         return {
           success: true,
@@ -273,7 +368,9 @@ exports.main = async (event, context) => {
       }
 
       case 'recalculate_only': {
-        const result = await cascadeUpdateRecords(storeFilter, targetDate, null, callerTenantId);
+        const result = await withCascadeLock(callerTenantId, storeFilter, () =>
+          cascadeUpdateRecords(storeFilter, targetDate, null, callerTenantId)
+        );
 
         return {
           success: true,
@@ -287,7 +384,9 @@ exports.main = async (event, context) => {
         const prevDate = getPrevDayIsoString(targetDate);
         console.log(`⚠️ [recalculate_after_delete] 删除日期 ${targetDate}，从 ${prevDate} 开始重算`);
 
-        const result = await cascadeUpdateRecords(storeFilter, prevDate, null, callerTenantId);
+        const result = await withCascadeLock(callerTenantId, storeFilter, () =>
+          cascadeUpdateRecords(storeFilter, prevDate, null, callerTenantId)
+        );
 
         return {
           success: true,
