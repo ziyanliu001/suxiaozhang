@@ -3603,6 +3603,33 @@ Page({
     });
   },
 
+  // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）排查结论：全文件
+  // 没有任何 wx.reLaunch/wx.redirectTo，也没有全局 App.onError/未处理
+  // rejection 兜底会做跳转（app.ts 只注册了 onLaunch/onShow，均不涉及页面
+  // 跳转），所有 wx.chooseMedia/wx.chooseImage 调用点（本文件 9 处，逐一
+  // 核对过）均已有 try/catch 包裹并给出 toast 反馈——不存在"未捕获异常触发
+  // 重新登录"这条路径。真正可能的诱因有两种，均属微信/Android 平台层面的
+  // 已知行为，不是本文件的逻辑 bug，这里做的是防御性缓解，不是"根治"：
+  // (1) 系统相机/相册这类重内存原生面板长时间占用前台时，平台可能回收当前
+  //     小程序页面以释放内存——回收后返回会整页重新 onLoad（不是简单的
+  //     onShow），此时能保住用户已输入内容的唯一手段是"回收前已经落盘"。
+  //     选图前立即同步调用 saveDraft()（不等 500ms 防抖），确保即使发生
+  //     整页回收，onLoad 里的 loadDraft() 也能完整恢复用户刚输入的内容。
+  // (2) 页面实例本身没有被回收，但部分设备上 onShow 被平台意外多触发了
+  //     一次——这种情况下 onShow 里那一整套面向"真正切页回来"设计的重量级
+  //     刷新（refreshUserRoleView 重新从 storage/缓存推导 currentStoreId/
+  //     角色）会白跑一次，表现为"看着像被重置了一下"。见 onShow() 内
+  //     _suppressNextShowRefresh 的消费处。
+  // 两处兜底刻意分工不重叠：(1) 应对"页面实例被换掉"，(2) 应对"同一页面
+  // 实例但 onShow 多余触发"——前者场景下 _suppressNextShowRefresh 这个
+  // 实例属性也会随页面一起被清零，不会误伤真正的冷启动流程。
+  beforeOpenImagePicker() {
+    if (typeof this.saveDraft === 'function') {
+      this.saveDraft();
+    }
+    this._suppressNextShowRefresh = true;
+  },
+
   saveDraft() {
     const { reportDate, reportDateValue, yesterdayBalance, allDonations, meritType, otherDonation, expenses, dailyExpenseText, fixedExpenseText, shopName, mpAccount, thankText, slogan1, slogan2, volunteerCount, volunteerHours, diningCount, materialsInput, dineInSeniors, deliverySeniors, dineInVolunteers, deliveryVolunteers, takeawayCount, listeningSeniors } = this.data;
 
@@ -4146,6 +4173,9 @@ Page({
     try {
       // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
       // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
@@ -6214,6 +6244,9 @@ Page({
     try {
       // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
       // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const res = await wx.chooseMedia({
         count: remainingCount,
@@ -6311,6 +6344,9 @@ Page({
     try {
       // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
       // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
@@ -6457,6 +6493,9 @@ Page({
     try {
       // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
       // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
@@ -6611,6 +6650,9 @@ Page({
     try {
       // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
       // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const chooseRes = await wx.chooseMedia({
         count: remaining,
@@ -6769,6 +6811,9 @@ Page({
       }
       // 🛡️ 选图前先确保隐私授权已解决，避免遮罩挡住授权弹窗（见
       // utils/privacyAuthHub.ts ensurePrivacyAuthorized）
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       // #10 支持多张图片批量识别（最多5张）
       const chooseRes = await wx.chooseMedia({
@@ -6998,6 +7043,9 @@ Page({
       }
       // 🛡️ 与 onScanReceiptPhoto 同一处理由：选图前先确保隐私授权已解决，
       // 避免遮罩挡住授权弹窗
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
 
       const chooseRes = await wx.chooseMedia({
@@ -7263,6 +7311,9 @@ Page({
       // loading——重入窗口已经改用 isScanningDonorList 标志位在函数入口处
       // 直接堵死（见上方注释），不再需要 loading 遮罩来防止连点拉起两个选图
       // 面板，两者互不依赖
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const tempFilePath = await this.chooseDonorScreenshotSafe();
       if (!tempFilePath) return;
@@ -7506,6 +7557,9 @@ Page({
       // 会先弹《隐私保护指引》，showLoading 的全屏遮罩会挡住"同意并继续"按钮，
       // 造成彻底死锁。改为先确保隐私授权已解决（全程不带任何遮罩），重入防护
       // 已经在函数入口处用 isScanningMaterialList 标志位堵死，不再依赖 loading
+      // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+      // beforeOpenImagePicker() 头部注释
+      this.beforeOpenImagePicker();
       await ensurePrivacyAuthorized();
       const tempFilePath = await this.chooseMaterialScreenshotSafe();
       if (!tempFilePath) return;
@@ -8708,6 +8762,15 @@ Page({
   },
 
   onShow() {
+    // 🐛（2026-09-11 拍照/选图返回后页面被"重置"排查加固）见
+    // beforeOpenImagePicker() 头部注释——只在"刚从拍照/选图返回"这一次
+    // onShow 里跳过下面 refreshUserRoleView() 这一步重量级刷新（它会重新从
+    // storage/角色缓存推导 currentStoreId/currentUserRole，本该只在真正
+    // "切页回来"时才需要），一次性消费即清零，不影响其余任何正常触发的
+    // onShow（切 Tab、navigateBack 等）
+    const suppressHeavyRefresh = !!this._suppressNextShowRefresh;
+    this._suppressNextShowRefresh = false;
+
     // 重置路由防重锁
     this.isNavigating = false;
 
@@ -8747,7 +8810,11 @@ Page({
       }
     }
 
-    this.refreshUserRoleView();
+    if (!suppressHeavyRefresh) {
+      this.refreshUserRoleView();
+    } else {
+      console.log('[onShow] 检测到刚从拍照/选图返回，跳过本次 refreshUserRoleView 重量级刷新，避免页面状态被意外重置');
+    }
 
     // 🐛 门店切换后公告栏/今日食谱/大事记不刷新的根因修复：这几个请求都依赖
     // this.data.currentStoreId，但它们此前排在 refreshUserRoleView() 之前调用——

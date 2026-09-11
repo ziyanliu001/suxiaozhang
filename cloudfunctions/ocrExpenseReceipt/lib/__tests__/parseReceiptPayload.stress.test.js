@@ -10,7 +10,9 @@ const {
   extractChineseWordAmount,
   extractChineseDate,
   cleanItemName,
-  stripFreshProduceUnitSuffix
+  stripFreshProduceUnitSuffix,
+  isLabeledProductNameLine,
+  extractLabeledProductName
 } = require('../parseReceiptPayload');
 
 // 🔧（2026-09-11 真实/高拟真小票端到端压测·容错加固）本文件驱动
@@ -279,4 +281,73 @@ test('parseReceiptPayload：纯数字/小数点品名（条码、称重克重等
   // 模拟条码/克重被误判成品名的极端情况
   const result = parseReceiptPayload(['0.22 49.90 11.00 6.20']);
   assert.equal(result.items.length, 0);
+});
+
+// ==================== 🚨（2026-09-11 连锁超市"编号.品名(规格)/单位"双行结构紧急加固）====================
+// 真机实测复现的严重 bug：中润华联小票"编号.品名(规格)/单位"一行 +
+// "数量*单价 金额"（无等号）另起一行，此前品名行因含编号/规格数字被挡在
+// 两行组合识别之外静默丢弃，价格行整体被当成"品名=计价算式"。完整场景的
+// 回归见 ocrTestDataset.json 的 supermarket_labeled_multi_unit_two_line
+// 用例，这里补充针对具体函数/边界的独立单测。
+
+test('isLabeledProductNameLine：编号.品名(规格)/单位 剥离后仍有≥2个汉字，判定为品名候选行', () => {
+  assert.equal(isLabeledProductNameLine('1.伊利心情原味酸牛奶(40支装)/箱'), true);
+  assert.equal(isLabeledProductNameLine('2.伊利苦咖啡摇摇乳(250ml)/瓶'), true);
+});
+
+test('isLabeledProductNameLine：品名本身含数字（如真实产品"雀巢8次方"）不受影响', () => {
+  assert.equal(isLabeledProductNameLine('4.雀巢8次方咖啡(200ml)/瓶'), true);
+});
+
+test('isLabeledProductNameLine：纯数字/计价算式/条码行剥离后没有汉字，判定为非品名候选行', () => {
+  assert.equal(isLabeledProductNameLine('5*2.90 14.50'), false);
+  assert.equal(isLabeledProductNameLine('2105019011004'), false);
+  assert.equal(isLabeledProductNameLine('14.50'), false);
+});
+
+test('isLabeledProductNameLine：空/非法输入安全兜底，不抛异常', () => {
+  assert.equal(isLabeledProductNameLine(''), false);
+  assert.equal(isLabeledProductNameLine(null), false);
+  assert.equal(isLabeledProductNameLine(undefined), false);
+});
+
+test('extractLabeledProductName：正确剥离编号前缀/规格括号/计量单位后缀，只保留品名本身', () => {
+  assert.equal(extractLabeledProductName('1.伊利心情原味酸牛奶(40支装)/箱'), '伊利心情原味酸牛奶');
+  assert.equal(extractLabeledProductName('3、伊利巧乐兹甜筒（5支装）/盒'), '伊利巧乐兹甜筒');
+});
+
+test('extractLabeledProductName：没有编号/规格/单位的纯品名原样返回', () => {
+  assert.equal(extractLabeledProductName('西红柿'), '西红柿');
+});
+
+test('parseReceiptPayload：编号.品名(规格)/单位 + 数量*单价 金额（无等号）两行结构，品名与金额均正确提取', () => {
+  const result = parseReceiptPayload([
+    '1.伊利心情原味酸牛奶(40支装)/箱',
+    '5*2.90 14.50'
+  ]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, '伊利心情原味酸牛奶');
+  assert.equal(result.items[0].quantity, 5);
+  assert.equal(result.items[0].unitPrice, 2.9);
+  assert.equal(result.items[0].amount, 14.5);
+  assert.equal(result.items[0].priceMismatch, false);
+});
+
+test('parseReceiptPayload：编号.品名(规格)/单位 + 纯金额（数量为1，无N*前缀）两行结构，不再被静默丢弃', () => {
+  const result = parseReceiptPayload([
+    '2.伊利苦咖啡摇摇乳(250ml)/瓶',
+    '4.50'
+  ]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, '伊利苦咖啡摇摇乳');
+  assert.equal(result.items[0].amount, 4.5);
+});
+
+test('parseReceiptPayload：品名 数量*单价 金额（无等号）同一行时也能正确拆分，不把计价算式吞进品名', () => {
+  const result = parseReceiptPayload(['伊利心情 5*2.90 14.50']);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, '伊利心情');
+  assert.equal(result.items[0].quantity, 5);
+  assert.equal(result.items[0].unitPrice, 2.9);
+  assert.equal(result.items[0].amount, 14.5);
 });

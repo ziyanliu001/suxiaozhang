@@ -502,6 +502,16 @@ const CALC_TRIPLE_REGEX = new RegExp(
   `^(.+?)\\s+(\\d+(?:\\.\\d+)?)\\s*${QTY_UNIT_SRC}?\\s*[×xX*]\\s*${AMOUNT_TOKEN_SRC}\\s*=\\s*${AMOUNT_TOKEN_SRC}$`
 );
 
+// 🚨（2026-09-11 超市"数量*单价 金额"无等号紧急加固）模式 B'：与模式 B 是
+// 同一种"数量×单价=金额"写法的印刷变体——连锁超市小票常见省略"="、单价
+// 与金额之间只留一个空格（如"伊利心情 5*2.90 14.50"），此前这类行会整体
+// 落进模式 D（SIMPLE_PAIR_REGEX），把"5*2.90"这段计价算式当成品名的一部分
+// 一并吞进 name 字段。与模式 B 共用同一份 QTY_UNIT_SRC/AMOUNT_TOKEN_SRC，
+// 唯一差异是用 `\s+` 代替 `=`
+const CALC_TRIPLE_NO_EQUALS_REGEX = new RegExp(
+  `^(.+?)\\s+(\\d+(?:\\.\\d+)?)\\s*${QTY_UNIT_SRC}?\\s*[×xX*]\\s*${AMOUNT_TOKEN_SRC}\\s+${AMOUNT_TOKEN_SRC}$`
+);
+
 // 模式 C（手写只给重量+小计，没有单独写单价）：「品名 数量+重量单位 金额」
 const WEIGHT_PAIR_REGEX = new RegExp(`^(.+?)\\s+(\\d+(?:\\.\\d+)?)\\s*(斤|千克|公斤|kg|KG|Kg)\\s+${AMOUNT_TOKEN_SRC}$`);
 
@@ -537,6 +547,54 @@ function stripFreshProduceUnitSuffix(name) {
   return String(name || '').replace(FRESH_PRODUCE_UNIT_SUFFIX_REGEX, '').trim();
 }
 
+// 🚨（2026-09-11 连锁超市"编号.品名(规格)/单位"双行结构紧急加固）模式 G：
+// 中润华联等连锁超市小票常见的"编号.品名(规格)/计量单位"一行 + "数量*单价
+// 金额"（无等号，空格分隔）另起一行——与模式 F（生鲜柜台条码行）是同一类
+// "品名与金额分行打印"问题的不同变体，差异在第二行的形状（模式 F 是"条码
+// 数量 单价 金额"四段纯数字，模式 G 是"数量*单价 金额"三段）。此前这两行
+// 各自独立解析：品名行因为带着"编号."（如"1."）、"(规格)"（如"(40支装)"）
+// 这类合法但含数字的修饰成分，被模式 E 的 isBareNameOnlyLine（要求整行不
+// 含任何数字）挡在两行组合识别之外，直接静默丢弃；价格行"5*2.90 14.50"
+// 整体落进模式 D（SIMPLE_PAIR_REGEX），被当成"品名=5*2.90，金额=14.50"——
+// 真正的商品名被计价算式顶替，同一张小票里数量=1（没有"N*"前缀、只有
+// 单个金额）的商品行（如"4.50"）则完全没有任何模式能匹配，直接漏算。
+//
+// 修复：新增 isLabeledProductNameLine 作为 isBareNameOnlyLine 的补充判定——
+// 剥离"编号."前缀/"(规格)"括号/"/单位"后缀后，只要剩余文本还有 ≥2 个汉字
+// 就认定是品名候选行（不再要求整行不含任何数字，因为编号/规格本身就含
+// 合法数字，甚至品名自身可能含数字，如真实产品"雀巢8次方"）；配合下一行
+// 是模式 G 的"数量*单价 金额"还是模式 E 的纯金额，分别取对应的数量/单价/
+// 金额组合，都不会重复计入 quantity/unitPrice 字段导致误判 priceMismatch
+const SEQ_NUMBER_PREFIX_REGEX = /^\d{1,3}[.、]\s*/;
+const SPEC_PAREN_REGEX = /[（(][^（）()]*[）)]/g;
+const NAME_UNIT_SUFFIX_REGEX = /\/[一-龥A-Za-z]{1,6}$/;
+
+function extractLabeledProductName(line) {
+  return String(line || '')
+    .replace(SEQ_NUMBER_PREFIX_REGEX, '')
+    .replace(SPEC_PAREN_REGEX, '')
+    .replace(NAME_UNIT_SUFFIX_REGEX, '')
+    .trim();
+}
+
+// PURE_NUMERIC_NAME_REGEX 定义在本文件下方 pushItem 附近，与本函数同一个
+// 模块作用域内，调用时机（parseItemLines 运行期）晚于模块整体求值完成，
+// 此处提前引用不会有时序问题——两处共用同一份"纯数字/小数点判定为非法
+// 品名"口径，不再各写一份
+function isLabeledProductNameLine(line) {
+  const stripped = extractLabeledProductName(line);
+  if (!stripped || PURE_NUMERIC_NAME_REGEX.test(stripped)) return false;
+  const chineseCount = (stripped.match(/[一-龥]/g) || []).length;
+  return chineseCount >= 2;
+}
+
+// 「数量*单价 金额」——数量与单价之间是乘号，单价与金额之间只有空格
+// （没有"="），与 CALC_TRIPLE_NO_EQUALS_REGEX 是同一种写法，这里单独复用
+// 一份不含品名捕获组的版本，专供模式 G 的"下一行"匹配使用
+const MULTI_UNIT_CALC_LINE_REGEX = new RegExp(
+  `^(\\d+(?:\\.\\d+)?)\\s*[×xX*]\\s*${AMOUNT_TOKEN_SRC}\\s+${AMOUNT_TOKEN_SRC}$`
+);
+
 // 单价×数量 与识别到的行金额之间允许的合理误差：取「5分钱」与「2%」两者较大值，
 // 覆盖常见的四舍五入/秤重末位截断，超出才视为真正的识别错位
 function amountsReconcile(expected, actual) {
@@ -563,6 +621,19 @@ function parseItemLines(candidateLines) {
     }
 
     m = line.match(CALC_TRIPLE_REGEX);
+    if (m) {
+      const name = m[1].trim();
+      const quantity = parseFloat(m[2]);
+      const unitPrice = parseAmountToken(m[3]);
+      const amount = parseAmountToken(m[4]);
+      pushItem(items, name, quantity, unitPrice, amount);
+      continue;
+    }
+
+    // 模式 B'：同一行「品名 数量*单价 金额」（无等号），见该正则头部注释。
+    // 必须排在模式 D（SIMPLE_PAIR_REGEX）之前——否则"5*2.90"这段计价算式
+    // 会被模式 D 的宽松匹配整体吞进品名字段
+    m = line.match(CALC_TRIPLE_NO_EQUALS_REGEX);
     if (m) {
       const name = m[1].trim();
       const quantity = parseFloat(m[2]);
@@ -604,14 +675,22 @@ function parseItemLines(candidateLines) {
       continue;
     }
 
-    // 品名单独一行时，先试模式 F（生鲜条码行，见头部注释），再试模式 E
-    // （纯金额行）——两者的"下一行"形状互斥（一个要求四段数字、一个要求
-    // 单个孤立数字），顺序不影响正确性，模式 F 更具体，放在前面
-    if (isBareNameOnlyLine(line)) {
+    // 品名单独一行时，依次尝试模式 F（生鲜条码行）、模式 G（编号.品名(规格)/
+    // 单位 + 数量*单价 金额）、模式 E（纯金额行）——三者的"下一行"形状互斥
+    // （分别要求四段数字/三段数字/单个孤立数字），顺序不影响正确性，越具体
+    // 的模式放越前面。isLabeledProductNameLine 是 isBareNameOnlyLine 的
+    // 补充判定（见该函数头部注释），任一个成立就进入本分支
+    const isLabeledName = isLabeledProductNameLine(line);
+    if (isBareNameOnlyLine(line) || isLabeledName) {
       const nextLine = candidateLines[i + 1];
+      const trimmedNext = nextLine ? nextLine.trim() : '';
+      // 品名统一走 extractLabeledProductName 剥离编号/规格/单位——纯品名行
+      // （isBareNameOnlyLine 命中、无需剥离任何修饰）剥离后结果与原文一致，
+      // 两个分支不需要分别维护一套取名逻辑
+      const cleanedLineName = extractLabeledProductName(line) || line;
 
       // 模式 F：生鲜小票双行结构（品名/计价单位 + 条码 数量 单价 金额）
-      const barcodeMatch = nextLine && nextLine.trim().match(FRESH_PRODUCE_BARCODE_LINE_REGEX);
+      const barcodeMatch = trimmedNext.match(FRESH_PRODUCE_BARCODE_LINE_REGEX);
       if (barcodeMatch) {
         const amount = parseAmountToken(barcodeMatch[1]);
         const name = stripFreshProduceUnitSuffix(line);
@@ -620,11 +699,22 @@ function parseItemLines(candidateLines) {
         continue;
       }
 
+      // 🚨 模式 G：编号.品名(规格)/单位 + 数量*单价 金额（无等号，见头部注释）
+      const multiUnitMatch = trimmedNext.match(MULTI_UNIT_CALC_LINE_REGEX);
+      if (multiUnitMatch) {
+        const quantity = parseFloat(multiUnitMatch[1]);
+        const unitPrice = parseAmountToken(multiUnitMatch[2]);
+        const amount = parseAmountToken(multiUnitMatch[3]);
+        pushItem(items, cleanedLineName, quantity, unitPrice, amount);
+        i++; // 跳过已消费的价格行
+        continue;
+      }
+
       // 模式 E：跨行品名+金额（见 isBareNameOnlyLine 头部注释）
-      const bareMatch = nextLine && nextLine.trim().match(BARE_AMOUNT_LINE_REGEX);
+      const bareMatch = trimmedNext.match(BARE_AMOUNT_LINE_REGEX);
       if (bareMatch) {
         const amount = parseAmountToken(bareMatch[1]);
-        pushItem(items, line, 1, amount, amount);
+        pushItem(items, cleanedLineName, 1, amount, amount);
         i++; // 跳过已消费的金额行，避免被下一轮循环重复处理
       }
     }
@@ -770,5 +860,9 @@ module.exports = {
   extractChineseDate,
   cleanItemName,
   // 🚨（2026-09-11 生鲜小票双行结构紧急加固）新增导出，供单测直接覆盖
-  stripFreshProduceUnitSuffix
+  stripFreshProduceUnitSuffix,
+  // 🚨（2026-09-11 连锁超市"编号.品名(规格)/单位"双行结构紧急加固）新增
+  // 导出，供单测直接覆盖
+  isLabeledProductNameLine,
+  extractLabeledProductName
 };
