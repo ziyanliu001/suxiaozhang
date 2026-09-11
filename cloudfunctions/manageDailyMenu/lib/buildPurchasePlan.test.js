@@ -6,6 +6,8 @@ const {
   togglePurchaseTaskStatus,
   updatePurchaseTaskWeight,
   formatPurchasePlanText,
+  sanitizePurchasePlanTasks,
+  buildPurchasePlanId,
   INGREDIENT_ITEM_DEFS,
   PURCHASE_TASK_REMARK
 } = require('./buildPurchasePlan');
@@ -122,4 +124,74 @@ test('formatPurchasePlanText：未完成打空框、已完成打勾选框，末�
 test('formatPurchasePlanText：空数组返回空字符串，不生成只有备注的无意义文本', () => {
   assert.equal(formatPurchasePlanText([]), '');
   assert.equal(formatPurchasePlanText(null), '');
+});
+
+// ==================== sanitizePurchasePlanTasks（服务端防线，2026-09-11 云端持久化） ====================
+
+test('sanitizePurchasePlanTasks：合法任务原样保留，字段与 buildPurchasePlan 产出的形状一致', () => {
+  const raw = [{ itemKey: 'riceJin', estimatedWeight: 25, status: 'completed' }];
+  const safe = sanitizePurchasePlanTasks(raw);
+  assert.deepEqual(safe, [{
+    itemKey: 'riceJin',
+    itemName: '大米',
+    estimatedWeight: 25,
+    unit: '斤',
+    status: 'completed',
+    remark: 'AI备餐生成'
+  }]);
+});
+
+test('sanitizePurchasePlanTasks：itemName/unit/remark 一律不信任客户端提交值，强制从 itemKey 重新派生', () => {
+  const raw = [{ itemKey: 'riceJin', itemName: '恶意注入的假名字', unit: '吨', remark: '伪造备注', estimatedWeight: 10, status: 'pending' }];
+  const safe = sanitizePurchasePlanTasks(raw);
+  assert.equal(safe[0].itemName, '大米');
+  assert.equal(safe[0].unit, '斤');
+  assert.equal(safe[0].remark, 'AI备餐生成');
+});
+
+test('sanitizePurchasePlanTasks：itemKey 不在白名单里的任务整条丢弃', () => {
+  const raw = [
+    { itemKey: 'riceJin', estimatedWeight: 25, status: 'pending' },
+    { itemKey: 'not_a_real_key', estimatedWeight: 10, status: 'pending' }
+  ];
+  const safe = sanitizePurchasePlanTasks(raw);
+  assert.equal(safe.length, 1);
+  assert.equal(safe[0].itemKey, 'riceJin');
+});
+
+test('sanitizePurchasePlanTasks：estimatedWeight 非法（0/负数/非数字/缺失）时整条丢弃，不编造一个默认重量', () => {
+  const raw = [
+    { itemKey: 'riceJin', estimatedWeight: 0, status: 'pending' },
+    { itemKey: 'oilLiter', estimatedWeight: -3, status: 'pending' },
+    { itemKey: 'vegetableJin', estimatedWeight: 'abc', status: 'pending' },
+    { itemKey: 'seasoningJin', status: 'pending' }
+  ];
+  assert.deepEqual(sanitizePurchasePlanTasks(raw), []);
+});
+
+test('sanitizePurchasePlanTasks：status 不在 pending/completed 白名单时兜底为 pending，不放行任意字符串', () => {
+  const raw = [{ itemKey: 'riceJin', estimatedWeight: 25, status: '恶意状态' }];
+  const safe = sanitizePurchasePlanTasks(raw);
+  assert.equal(safe[0].status, 'pending');
+});
+
+test('sanitizePurchasePlanTasks：非数组/畸形条目（null/非对象）安全兜底，不抛异常', () => {
+  assert.deepEqual(sanitizePurchasePlanTasks(null), []);
+  assert.deepEqual(sanitizePurchasePlanTasks(undefined), []);
+  assert.deepEqual(sanitizePurchasePlanTasks('not an array'), []);
+  assert.deepEqual(sanitizePurchasePlanTasks([null, 42, 'x', { itemKey: 'riceJin', estimatedWeight: 5 }]), [{
+    itemKey: 'riceJin', itemName: '大米', estimatedWeight: 5, unit: '斤', status: 'pending', remark: 'AI备餐生成'
+  }]);
+});
+
+// ==================== buildPurchasePlanId ====================
+
+test('buildPurchasePlanId：按 storeId+dateString 拼出确定性主键，同店同天恒等', () => {
+  assert.equal(buildPurchasePlanId('store_A', '2026-09-11'), 'purchase_plan_store_A_2026-09-11');
+  assert.equal(buildPurchasePlanId('store_A', '2026-09-11'), buildPurchasePlanId('store_A', '2026-09-11'));
+});
+
+test('buildPurchasePlanId：不同门店/不同日期得到不同主键，不会互相覆盖', () => {
+  assert.notEqual(buildPurchasePlanId('store_A', '2026-09-11'), buildPurchasePlanId('store_B', '2026-09-11'));
+  assert.notEqual(buildPurchasePlanId('store_A', '2026-09-11'), buildPurchasePlanId('store_A', '2026-09-12'));
 });

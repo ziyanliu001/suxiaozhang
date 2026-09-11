@@ -6,11 +6,17 @@
 // seasoningJin}）转成结构化的后厨采买待办清单。不做 db I/O、不依赖
 // wx-server-sdk，配套单测同目录 buildPurchasePlan.test.js。
 //
-// 🛡️ 诚实的能力边界：本仓库目前没有一个真实的"后厨采购清单/备餐看板"云端
-// 集合（见 daily-menu.ts onApplyMealPrediction 头部注释同一处如实说明）。
-// 这里产出的任务列表由前端落地到本机 storage（当前设备当天可查看/勾选，
-// 不是跨设备/跨班次共享的云端看板）+ 一键复制到剪贴板（供分享到微信群/
-// 纸质台账等真正的跨人协作渠道），不假装接了一个不存在的云端持久化模块。
+// 🛒（2026-09-11 云端持久化）本文件最初的"诚实能力边界"注释记录过"本仓库
+// 目前没有一个真实的后厨采购清单云端集合"——这一版已经不成立：见
+// index.js 新增的 daily_purchase_plans 集合 + getPurchasePlan/
+// createPurchasePlan/togglePurchaseTask/updatePurchaseTaskWeight 四个
+// action，支持同一门店的多个角色（义工/财务/店长/大家长）共享同一份
+// 采购清单、跨设备/跨班次协同勾选。前端 daily-menu.ts 的本机 storage
+// 缓存现在只是"进入弹窗前的乐观展示/离线兜底"，权威数据来源是云端。
+// sanitizePurchasePlanTasks 是这次新增的服务端防线：绝不信任客户端提交的
+// itemName/unit/remark 字段，一律按 itemKey 白名单重新从 INGREDIENT_ITEM_DEFS
+// 派生，只信任客户端提交的 estimatedWeight（校验为正数）与 status
+// （校验属于白名单）。
 
 // 品类 -> 采买品名/单位映射，与 predictMealDemand.js 的 INGREDIENT_RATIO_PER_PERSON
 // 字段一一对应，顺序即清单展示顺序（主食粮油优先，调味品收尾）
@@ -102,11 +108,59 @@ function formatPurchasePlanText(tasks) {
   return lines.join('\n');
 }
 
+/**
+ * 服务端防线：把客户端提交的 tasks 数组清洗成只包含白名单字段/取值的
+ * 安全版本，供 createPurchasePlan 落库前调用。itemName/unit/remark 一律
+ * 不信任客户端提交的文本，按 itemKey 从 INGREDIENT_ITEM_DEFS 重新派生——
+ * 防止恶意/异常客户端往这三个展示字段里注入任意字符串。itemKey 不在
+ * 白名单里、或 estimatedWeight 不是合法正数的任务整条丢弃，不做"尽量
+ * 保留"的宽松兜底——采购清单的准确性直接影响真实采买行为，宁可少一条
+ * 也不能有一条数据可疑的任务混进去。
+ * @param {Array} rawTasks
+ * @returns {Array<{itemKey:string, itemName:string, estimatedWeight:number, unit:string, status:'pending'|'completed', remark:string}>}
+ */
+function sanitizePurchasePlanTasks(rawTasks) {
+  if (!Array.isArray(rawTasks)) return [];
+  return rawTasks
+    .map((t) => {
+      if (!t || typeof t !== 'object') return null;
+      const def = INGREDIENT_ITEM_DEFS.find((d) => d.key === t.itemKey);
+      if (!def) return null;
+      const weight = Number(t.estimatedWeight);
+      if (!Number.isFinite(weight) || weight <= 0) return null;
+      const status = TASK_STATUSES.includes(t.status) ? t.status : 'pending';
+      return {
+        itemKey: def.key,
+        itemName: def.itemName,
+        estimatedWeight: weight,
+        unit: def.unit,
+        status,
+        remark: PURCHASE_TASK_REMARK
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * 采购清单文档的确定性 _id——同一家门店同一天只有一份清单，用
+ * `storeId+dateString` 直接拼出主键，天然具备"重复创建时数据库主键唯一性
+ * 兜底拒绝"的能力，与本仓库 liveFactoryCore 的 buildSettlement 确定性
+ * _id 手法一致，不需要额外的"先查是否存在再决定插入/更新"两次往返。
+ * @param {string} storeId
+ * @param {string} dateString
+ * @returns {string}
+ */
+function buildPurchasePlanId(storeId, dateString) {
+  return `purchase_plan_${storeId}_${dateString}`;
+}
+
 module.exports = {
   buildPurchasePlan,
   togglePurchaseTaskStatus,
   updatePurchaseTaskWeight,
   formatPurchasePlanText,
+  sanitizePurchasePlanTasks,
+  buildPurchasePlanId,
   INGREDIENT_ITEM_DEFS,
   PURCHASE_TASK_REMARK,
   TASK_STATUSES

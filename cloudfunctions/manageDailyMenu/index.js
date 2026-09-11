@@ -16,8 +16,22 @@ const _ = db.command;
 // lib/predictMealDemand.js（不依赖 wx-server-sdk，配套单测见同目录
 // *.test.js），这里只负责查 report_logs 拿历史开餐人次喂给它
 const { predictMealDemand } = require('./lib/predictMealDemand');
+// 🛒（2026-09-11 后厨采购清单云端持久化·方向2）与 predictMealDemand 同一处
+// 既定写法：纯逻辑（生成/勾选/微调/服务端字段白名单清洗）拆到
+// lib/buildPurchasePlan.js，这里只负责数据库读写与权限校验
+const {
+  togglePurchaseTaskStatus,
+  updatePurchaseTaskWeight,
+  sanitizePurchasePlanTasks,
+  buildPurchasePlanId
+} = require('./lib/buildPurchasePlan');
 
 const COLLECTION = 'daily_menus';
+// 🛒 后厨采购清单：一家门店一天一份，_id 用 buildPurchasePlanId 拼出的
+// 确定性主键，不是 daily_menus 的子字段——采购清单是"全天一份"的概念，
+// 与 daily_menus 按 mealType（早/午/晚）拆成多份文档的粒度不一致，硬塞
+// 进 daily_menus 会引入"这份清单到底属于哪一餐"的伪问题
+const PURCHASE_PLAN_COLLECTION = 'daily_purchase_plans';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 // 🍚 预测查询历史数据时往前多看一段缓冲期（远大于 predictMealDemand 自己的
@@ -96,6 +110,30 @@ async function resolveWriteTarget(caller, requestedStoreId) {
   }
 
   return { allowed: false, error: '无权限：仅店长或超级管理员可发布/编辑/删除菜单' };
+}
+
+// 🛒（2026-09-11 后厨采购清单）权限口径与 resolveWriteTarget（daily_menus
+// 内容编辑）刻意不同：采购清单是门店内部的协同待办事项，不是需要"能编辑
+// 菜单"这种更高权限才能碰的内容——任意已绑定本店的角色（义工/财务/店长/
+// 大家长）都应该能查看和勾选，与 getMealPrediction 的权限口径保持一致
+// （预测结果本身谁都能看，采购清单是它的下一步动作，理应延续同一条权限
+// 边界，不应该比查看预测结果本身更严格）
+async function resolvePurchasePlanTarget(caller, requestedStoreId) {
+  if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
+
+  if (caller.role === 'super_admin') {
+    if (!requestedStoreId) return { allowed: false, error: '请指定目标门店' };
+    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
+    const store = storeRes && storeRes.data;
+    if (!store) return { allowed: false, error: '目标门店不存在' };
+    if (!caller.tenantId || !store.tenantId || caller.tenantId !== store.tenantId) {
+      return { allowed: false, error: '无权限：目标门店不属于您所在的机构' };
+    }
+    return { allowed: true, storeId: requestedStoreId, storeName: store.storeName || '', tenantId: caller.tenantId };
+  }
+
+  if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店，无法使用采买清单' };
+  return { allowed: true, storeId: caller.storeId, storeName: caller.storeName || '', tenantId: caller.tenantId || '' };
 }
 
 // 🍚 从 'YYYY-MM-DD' 往前减 days 天，返回同格式字符串——用 Date.UTC 而不是
@@ -379,6 +417,120 @@ exports.main = async (event) => {
         });
 
         return { success: true, storeId, ...prediction };
+      }
+
+      // 🛒（2026-09-11 后厨采购清单云端持久化）只读查看当天的采购清单——
+      // 不存在（还没人生成过）不是错误，是正常的空状态，success:true +
+      // exists:false，前端据此决定是走"生成"还是"展示已有进度"分支
+      case 'getPurchasePlan': {
+        const { storeId: requestedStoreId, dateString } = event;
+        if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+          return { success: false, error: '请提供合法的日期 (YYYY-MM-DD)' };
+        }
+        const target = await resolvePurchasePlanTarget(caller, requestedStoreId);
+        if (!target.allowed) return { success: false, error: target.error };
+
+        const planId = buildPurchasePlanId(target.storeId, dateString);
+        const planRes = await db.collection(PURCHASE_PLAN_COLLECTION).doc(planId).get().catch(() => null);
+        const plan = planRes && planRes.data;
+        if (!plan) return { success: true, exists: false, tasks: [] };
+        return {
+          success: true,
+          exists: true,
+          tasks: plan.tasks || [],
+          updateTime: plan.updateTime,
+          updatedBy: plan.updatedBy || ''
+        };
+      }
+
+      // 🛒 首次生成采购清单——用确定性 _id（buildPurchasePlanId）+ 数据库
+      // 主键唯一性兜底防重复插入：与 liveFactoryCore 的 buildSettlement
+      // 同一套手法。两个人/两台设备同时点"生成"时，第二次 .add() 会因为
+      // 主键冲突失败，此时不覆盖已经创建成功的那份（可能已经被勾了几项），
+      // 直接把已存在的那份读回去——绝不允许"生成清单"这个动作意外抹掉
+      // 别人已经录入的进度
+      case 'createPurchasePlan': {
+        const { storeId: requestedStoreId, dateString, tasks } = event;
+        if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+          return { success: false, error: '请提供合法的日期 (YYYY-MM-DD)' };
+        }
+        const target = await resolvePurchasePlanTarget(caller, requestedStoreId);
+        if (!target.allowed) return { success: false, error: target.error };
+
+        const safeTasks = sanitizePurchasePlanTasks(tasks);
+        if (safeTasks.length === 0) {
+          return { success: false, error: '没有合法的采买任务可保存' };
+        }
+
+        const planId = buildPurchasePlanId(target.storeId, dateString);
+        try {
+          await db.collection(PURCHASE_PLAN_COLLECTION).add({
+            data: {
+              _id: planId,
+              tenantId: target.tenantId,
+              storeId: target.storeId,
+              storeName: target.storeName,
+              dateString,
+              tasks: safeTasks,
+              source: 'ai_meal_prediction',
+              createdBy: OPENID,
+              createdAt: db.serverDate(),
+              updatedBy: OPENID,
+              updateTime: db.serverDate()
+            }
+          });
+          return { success: true, exists: false, created: true, tasks: safeTasks };
+        } catch (err) {
+          const existingRes = await db.collection(PURCHASE_PLAN_COLLECTION).doc(planId).get().catch(() => null);
+          if (existingRes && existingRes.data) {
+            return { success: true, exists: true, created: false, tasks: existingRes.data.tasks || [] };
+          }
+          console.error('[manageDailyMenu] createPurchasePlan 异常:', err);
+          return { success: false, error: '创建采买清单失败，请重试' };
+        }
+      }
+
+      // 🛒 勾选/取消勾选一项采买任务——读改写非严格 CAS（没有加乐观锁版本号），
+      // 如实标注这个边界：几个人同时、在毫秒级窗口内勾选*不同*任务时存在
+      // 理论上的覆盖风险。这是给一份最多 4 条的门店采购清单设计的协同能力，
+      // 不是高并发交易系统，用完整事务/乐观锁版本号是这个场景下的过度设计；
+      // 真出现并发覆盖，后果也只是"某一次勾选状态被下一次读改写覆盖掉"，
+      // 补勾一次即可恢复，不构成数据损坏或资金风险
+      case 'togglePurchaseTask': {
+        const { storeId: requestedStoreId, dateString, itemKey } = event;
+        if (!dateString || !itemKey) return { success: false, error: '缺少 dateString 或 itemKey 参数' };
+        const target = await resolvePurchasePlanTarget(caller, requestedStoreId);
+        if (!target.allowed) return { success: false, error: target.error };
+
+        const planId = buildPurchasePlanId(target.storeId, dateString);
+        const planRes = await db.collection(PURCHASE_PLAN_COLLECTION).doc(planId).get().catch(() => null);
+        const plan = planRes && planRes.data;
+        if (!plan) return { success: false, error: '采买清单不存在，请先生成' };
+
+        const nextTasks = togglePurchaseTaskStatus(plan.tasks || [], itemKey);
+        await db.collection(PURCHASE_PLAN_COLLECTION).doc(planId).update({
+          data: { tasks: nextTasks, updatedBy: OPENID, updateTime: db.serverDate() }
+        });
+        return { success: true, tasks: nextTasks };
+      }
+
+      // 🛒 义工弹窗微调某一项的预估重量，同上一条同一套读改写口径
+      case 'updatePurchaseTaskWeight': {
+        const { storeId: requestedStoreId, dateString, itemKey, estimatedWeight } = event;
+        if (!dateString || !itemKey) return { success: false, error: '缺少 dateString 或 itemKey 参数' };
+        const target = await resolvePurchasePlanTarget(caller, requestedStoreId);
+        if (!target.allowed) return { success: false, error: target.error };
+
+        const planId = buildPurchasePlanId(target.storeId, dateString);
+        const planRes = await db.collection(PURCHASE_PLAN_COLLECTION).doc(planId).get().catch(() => null);
+        const plan = planRes && planRes.data;
+        if (!plan) return { success: false, error: '采买清单不存在，请先生成' };
+
+        const nextTasks = updatePurchaseTaskWeight(plan.tasks || [], itemKey, estimatedWeight);
+        await db.collection(PURCHASE_PLAN_COLLECTION).doc(planId).update({
+          data: { tasks: nextTasks, updatedBy: OPENID, updateTime: db.serverDate() }
+        });
+        return { success: true, tasks: nextTasks };
       }
 
       default:

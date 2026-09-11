@@ -1154,21 +1154,18 @@ Page({
     });
   },
 
-  // 🛒（2026-09-11 AI 备餐预测一键流转后厨采买任务）本机 storage 键名——
-  // 按门店+日期隔离，同一天重新打开弹窗能看到上次的勾选/微调进度，换一天
-  // 或换一家店不会互相串数据。
-  _purchasePlanStorageKey(): string {
-    return `dm_purchase_plan_${this.data.currentStoreId}_${this.data.mealPredictionForm.targetDate}`;
-  },
-
-  // 📋 生成后厨采买清单：与 onApplyMealPrediction（纯文本复制）是并存的两条
-  // 独立能力——本方法产出结构化、可勾选/可微调重量的任务清单，在专门的
-  // 弹窗里展示，而不是直接扔进剪贴板。
+  // 📋（2026-09-11 云端持久化）生成后厨采买清单：与 onApplyMealPrediction
+  // （纯文本复制）是并存的两条独立能力——本方法产出结构化、可勾选/可微调
+  // 重量的任务清单，在专门的弹窗里展示，而不是直接扔进剪贴板。
+  // 🛒 权威数据来源已经从"本机 storage"改成云端 daily_purchase_plans 集合
+  // （见 cloudfunctions/manageDailyMenu 新增的 getPurchasePlan/
+  // createPurchasePlan 两个 action）——同一门店的义工/财务/店长在不同设备
+  // 上打开，看到的是同一份进度，不再各自维护一份互不同步的本地缓存。
   // 🛡️ 权限收口：与 onRunMealPrediction 同一处校验口径——currentStoreId
   // 是否已绑定门店是这张卡片能否使用的唯一门槛（预测结果本身只在已绑店
   // 时才可能存在，这里再显式判一次是防御性收口，不是多此一举，避免未来
   // UI 结构调整后这个按钮意外脱离预测结果区单独可点）
-  onGeneratePurchasePlan() {
+  async onGeneratePurchasePlan() {
     if (!this.data.currentStoreId) {
       wx.showToast({ title: '尚未确定门店，无法生成采买清单', icon: 'none' });
       return;
@@ -1176,56 +1173,128 @@ Page({
     const result = this.data.mealPredictionResult;
     if (!result || result.insufficientData) return;
 
-    // 🛒 同一天/同一家店重新点「生成」时，优先恢复上次已经勾选/微调过的
-    // 进度，而不是每次都重置回全 pending——义工可能分几次采购，中途退出
-    // 弹窗后再进来应该看到自己刚才勾过的状态
-    let tasks: any[] = [];
+    wx.showLoading({ title: '加载采买清单...', mask: true });
     try {
-      const cached = wx.getStorageSync(this._purchasePlanStorageKey());
-      if (Array.isArray(cached) && cached.length > 0) tasks = cached;
-    } catch (e) {
-      // 本地读取异常按"没有缓存"处理，不影响主流程
-    }
-    if (tasks.length === 0) {
-      tasks = buildPurchasePlan(result.ingredients);
-    }
+      // 先查云端是否已经有人（可能是自己，也可能是同店其他角色）生成过
+      // 今天这份清单——有就直接展示已有进度，不重置回全 pending
+      const getRes: any = await callFunctionWithTimeout({
+        name: 'manageDailyMenu',
+        data: {
+          action: 'getPurchasePlan',
+          storeId: this.data.currentStoreId,
+          dateString: this.data.mealPredictionForm.targetDate
+        }
+      });
+      const getResult = getRes && getRes.result;
+      if (getResult && getResult.success && getResult.exists && Array.isArray(getResult.tasks) && getResult.tasks.length > 0) {
+        wx.hideLoading();
+        this.setData({ purchasePlanTasks: getResult.tasks, showPurchasePlanModal: true });
+        return;
+      }
 
-    if (tasks.length === 0) {
-      wx.showToast({ title: '暂无可生成的采买项', icon: 'none' });
-      return;
-    }
+      // 云端还没有：本地先算出一版初始清单，调用 createPurchasePlan 落库。
+      // 服务端用确定性 _id + 主键唯一性兜底防并发重复创建，返回的 tasks
+      // 才是权威版本（万一同一时刻另一台设备也在创建，会拿到那一份而不是
+      // 这里本地算的这份）
+      const freshTasks = buildPurchasePlan(result.ingredients);
+      if (freshTasks.length === 0) {
+        wx.hideLoading();
+        wx.showToast({ title: '暂无可生成的采买项', icon: 'none' });
+        return;
+      }
 
-    this.setData({ purchasePlanTasks: tasks, showPurchasePlanModal: true });
+      const createRes: any = await callFunctionWithTimeout({
+        name: 'manageDailyMenu',
+        data: {
+          action: 'createPurchasePlan',
+          storeId: this.data.currentStoreId,
+          dateString: this.data.mealPredictionForm.targetDate,
+          tasks: freshTasks
+        }
+      });
+      wx.hideLoading();
+      const createResult = createRes && createRes.result;
+      if (!createResult || !createResult.success) {
+        wx.showToast({ title: (createResult && createResult.error) || '生成采买清单失败', icon: 'none' });
+        return;
+      }
+      this.setData({ purchasePlanTasks: createResult.tasks || freshTasks, showPurchasePlanModal: true });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[daily-menu] onGeneratePurchasePlan 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    }
   },
 
-  _persistPurchasePlan(tasks: any[]) {
-    try {
-      wx.setStorageSync(this._purchasePlanStorageKey(), tasks);
-    } catch (e) {
-      // 本机 storage 写入失败不阻断交互，弹窗内的状态仍然是当次会话里正确的
-    }
-  },
-
-  // 🛒 勾选/取消勾选某一项采买任务
-  onTogglePurchaseTask(e: any) {
+  // 🛒 勾选/取消勾选某一项采买任务——先乐观更新本地展示（避免网络延迟让
+  // 用户以为点击没反应），云端确认失败时回滚到点击前的状态并提示重试。
+  // 🛡️ 读改写非严格 CAS（没有加乐观锁版本号），如实标注边界：几个人同时、
+  // 毫秒级窗口内勾选*不同*任务时存在理论上的覆盖风险——这是给一份最多
+  // 4 条的门店采购清单设计的协同能力，不是高并发交易系统，上事务/版本号
+  // 是过度设计；真出现并发覆盖，后果也只是"某一次勾选被下一次读改写覆盖
+  // 掉"，补勾一次即可恢复，不构成数据损坏或资金风险
+  async onTogglePurchaseTask(e: any) {
     const itemKey = e.currentTarget.dataset.key;
-    const next = togglePurchaseTaskStatus(this.data.purchasePlanTasks, itemKey);
-    this.setData({ purchasePlanTasks: next });
-    this._persistPurchasePlan(next);
+    const previous = this.data.purchasePlanTasks;
+    const optimistic = togglePurchaseTaskStatus(previous, itemKey);
+    this.setData({ purchasePlanTasks: optimistic });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageDailyMenu',
+        data: {
+          action: 'togglePurchaseTask',
+          storeId: this.data.currentStoreId,
+          dateString: this.data.mealPredictionForm.targetDate,
+          itemKey
+        }
+      });
+      const result = res && res.result;
+      if (result && result.success && Array.isArray(result.tasks)) {
+        this.setData({ purchasePlanTasks: result.tasks });
+      } else {
+        this.setData({ purchasePlanTasks: previous });
+        wx.showToast({ title: (result && result.error) || '同步失败，请重试', icon: 'none' });
+      }
+    } catch (err) {
+      this.setData({ purchasePlanTasks: previous });
+      console.error('[daily-menu] onTogglePurchaseTask 异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    }
   },
 
   // 🛒 义工弹窗微调预估重量——非法输入（空/0/负数/非数字）由
-  // updatePurchaseTaskWeight 自己兜底保留旧值，这里不重复校验
-  onInputPurchaseTaskWeight(e: any) {
+  // updatePurchaseTaskWeight 自己兜底保留旧值，这里不重复校验。
+  // 🛡️ 与 onTogglePurchaseTask 不同，这里不做失败回滚/弹 toast 打断——
+  // bindinput 随每次按键触发，用户可能还在连续输入，网络抖动时强行回滚
+  // 或弹提示会打断输入体验；本地乐观值本就是用户刚输入的内容，静默保留
+  // 即可，云端最终会在下一次输入/操作时重新尝试同步
+  async onInputPurchaseTaskWeight(e: any) {
     const itemKey = e.currentTarget.dataset.key;
-    const next = updatePurchaseTaskWeight(this.data.purchasePlanTasks, itemKey, e.detail.value);
-    this.setData({ purchasePlanTasks: next });
-    this._persistPurchasePlan(next);
+    const rawValue = e.detail.value;
+    this.setData({ purchasePlanTasks: updatePurchaseTaskWeight(this.data.purchasePlanTasks, itemKey, rawValue) });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'manageDailyMenu',
+        data: {
+          action: 'updatePurchaseTaskWeight',
+          storeId: this.data.currentStoreId,
+          dateString: this.data.mealPredictionForm.targetDate,
+          itemKey,
+          estimatedWeight: rawValue
+        }
+      });
+      const result = res && res.result;
+      if (result && result.success && Array.isArray(result.tasks)) {
+        this.setData({ purchasePlanTasks: result.tasks });
+      }
+    } catch (err) {
+      console.error('[daily-menu] onInputPurchaseTaskWeight 异常:', err);
+    }
   },
 
-  // 🛒 一键复制采买清单到剪贴板——与 onApplyMealPrediction 同一处诚实说明：
-  // 本仓库没有真实的后厨采购清单/备餐看板云端集合，复制到剪贴板是当前
-  // 能给到的、真正跨人协作可用的分发方式（粘贴进微信群/纸质台账）
+  // 🛒 一键复制采买清单到剪贴板——云端持久化落地后，这个按钮的定位从"唯一
+  // 的跨人协作手段"变成"额外的分发渠道"（分享到微信群/纸质台账），本店
+  // 内部协同已经靠云端清单本身完成，不再需要靠复制粘贴同步进度
   onCopyPurchasePlan() {
     const text = formatPurchasePlanText(this.data.purchasePlanTasks);
     if (!text) return;
