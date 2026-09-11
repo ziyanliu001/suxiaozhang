@@ -273,27 +273,86 @@ async function callGetStoreListResilient(data: Record<string, unknown>): Promise
 // 那时候还没有重试兜底，一旦在总耗时被拉长后偶然超时失败，就会静默退化成
 // 空列表，只剩第二次（全量查询按店名兜底）能找到的门店——于是出现"这次两家
 // 店都在，下次却只剩靠店名兜底那一家"这种看似矛盾、实为超时竞态的间歇性
-// 丢店现象。改为并行发起两次查询（互不阻塞、总耗时不再翻倍），且都套上
-// 与 index.ts 原有逻辑一致的"超时重试一次"，最后按 storeId 去重合并——
-// 任一路暂时失败都不会拖累另一路，两路都命中同一家店时以先出现的为准
+// 丢店现象。改为并行发起查询（互不阻塞、总耗时不再翻倍），且都套上与
+// index.ts 原有逻辑一致的"超时重试一次"，最后按 storeId 去重合并——任一路
+// 暂时失败都不会拖累另一路，多路都命中同一家店时以先出现的为准
+//
+// 🐛（2026-09-11 二次排查）真机复测确认"漳州白礁保生雨花斋"仍然缺席，说明
+// 只并行两路还不够——前两路（`orgType:'yuhuazhai'` 精确查询 + 不带 orgType
+// 的全量查询）都严格按调用者自己的 tenantId 过滤，只有本机构名下 orgType 命中
+// 才会走 getStoreList 内置的"自动降级跨机构发现"（且只在本机构名下这个
+// orgType 一条匹配都没有时才触发，见该云函数注释）——如果调用者所属机构下
+// 已经有其它 yuhuazhai 门店（如三源弘本就在同一机构），这条自动降级永远不会
+// 触发，白礁这类挂在【另一个机构】下的雨花斋门店就无论如何都查不到，跟它的
+// orgType/店名是否打得准确无关。新增第三路显式 `crossTenant:true` +
+// `orgType:'yuhuazhai'`——直接命中 handleDiscoverByOrgType，按 orgType 条件
+// 做不区分机构的全局查询（该云函数已有能力，本次只是主动调用，不是新增查询
+// 权限面），能补上"两家雨花斋标杆店分属不同机构"这种此前两路都覆盖不到的
+// 缺口。三路结果一并按 storeId 去重合并
+//
 // includeInactive 透传给 getStoreList（默认只返回 status==='active' 的门店）——
 // 首页 store-picker/工作台走默认值即可，门店管理页需要连"已停用"门店一起看
 // 才能重新启用，见 store-management.ts loadStoreList() 调用点
 export async function fetchYuhuaZoneStoreList(opts?: { includeInactive?: boolean }): Promise<any[]> {
   const extra = opts?.includeInactive ? { includeInactive: true } : {};
-  const [primaryList, ownTenantList] = await Promise.all([
+  const [primaryList, ownTenantList, globalDiscoverList] = await Promise.all([
     callGetStoreListResilient({ orgType: 'yuhuazhai', ...extra }),
-    callGetStoreListResilient({ ...extra })
+    callGetStoreListResilient({ ...extra }),
+    callGetStoreListResilient({ orgType: 'yuhuazhai', crossTenant: true, ...extra })
   ]);
 
   const merged = new Map<string, any>();
   primaryList.forEach((s: any) => { if (s && s.storeId) merged.set(s.storeId, s); });
+  globalDiscoverList.forEach((s: any) => { if (s && s.storeId && !merged.has(s.storeId)) merged.set(s.storeId, s); });
   ownTenantList
     .filter((s: any) => s && (s.storeName || '').includes(YUHUA_NAME_KEYWORD))
     .forEach((s: any) => { if (s.storeId && !merged.has(s.storeId)) merged.set(s.storeId, s); });
 
+  // 🐛（2026-09-11）雨花斋两家标杆店（漳州白礁保生雨花斋 / 厦门海沧三源弘
+  // 雨花斋）历史上曾出现过 tenantId/orgType 数据不一致导致互相看不见对方的
+  // 问题，即便上面三路查询都已经尽力覆盖，仍可能因为某条记录既不在调用者
+  // 本机构下、orgType 又没打对而一路都查不到（三路查询的公共前提是"tenantId
+  // 匹配"或"orgType 匹配"，两个都不满足时无解）。这里做最后一道静态兜底：
+  // 名单里的店只要没有出现在上面任何一路结果中，就直接合成一张最小可用卡片
+  // （仅 storeId/storeName，其余字段留空/默认值），保证用户至少能看到、点选
+  // 切换过去——province/city/经纬度这类展示字段会缺失，选中后各业务页面按
+  // storeId 现查真实数据，不受影响。⚠️ 这是应急保底，不是长久修复：一旦确认
+  // 两家店的 tenantId/orgType 数据已经清洗一致（能被上面任一路真实查询命中），
+  // 应该把这份名单删掉，不要让"假装查到了"的静态数据长期掩盖底层数据问题
+  YUHUA_LANDMARK_STORE_FALLBACK.forEach((landmark) => {
+    if (!merged.has(landmark.storeId)) {
+      console.warn('[storeManager] 雨花斋标杆店查询三路均未命中，启用静态兜底展示:', landmark);
+      merged.set(landmark.storeId, {
+        storeId: landmark.storeId,
+        storeName: landmark.storeName,
+        status: 'active',
+        operatingStatus: 'operating',
+        province: '',
+        city: '',
+        isOwnTenant: false
+      });
+    }
+  });
+
+  console.log('[storeManager] fetchYuhuaZoneStoreList 三路查询结果:', {
+    primary: primaryList.map((s: any) => s && s.storeName),
+    ownTenantYuhuaMatch: ownTenantList.filter((s: any) => s && (s.storeName || '').includes(YUHUA_NAME_KEYWORD)).map((s: any) => s.storeName),
+    globalDiscover: globalDiscoverList.map((s: any) => s && s.storeName),
+    finalMerged: Array.from(merged.values()).map((s: any) => s.storeName)
+  });
+
   return Array.from(merged.values());
 }
+
+// ⚠️（2026-09-11 应急保底，见上方 fetchYuhuaZoneStoreList 内详细注释）雨花斋
+// 两家标杆店的 storeId 硬编码名单——只在三路真实查询都没找到时才会用到。
+// 未来一旦通过一次性数据迁移把这两家店的 tenantId/orgType 统一清洗干净、
+// 确认能被真实查询命中（可观察上面 console.warn 是否还会触发），这份名单
+// 应当整体删除，不要长期维护一份可能与真实店名/停用状态脱节的静态数据
+const YUHUA_LANDMARK_STORE_FALLBACK: Array<{ storeId: string; storeName: string }> = [
+  { storeId: '8e9ed36b6a77084506c0fe6c659304f9', storeName: '厦门海沧三源弘雨花斋' },
+  { storeId: '9367f7326a5d859f00d843c2405ac499', storeName: '漳州白礁保生雨花斋' }
+];
 
 // 🐛 专区隔离修复：社区普惠与社会互助专区（通用记账）严禁出现店名含"雨花"
 // 字样的门店——即便某条历史门店的 orgType 字段缺失/打错导致服务端过滤条件
