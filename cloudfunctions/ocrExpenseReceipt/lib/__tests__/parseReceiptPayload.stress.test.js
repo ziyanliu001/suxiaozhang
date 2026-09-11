@@ -351,3 +351,49 @@ test('parseReceiptPayload：品名 数量*单价 金额（无等号）同一行�
   assert.equal(result.items[0].unitPrice, 2.9);
   assert.equal(result.items[0].amount, 14.5);
 });
+
+// ==================== 🚨（2026-09-11 第二轮真机复现：POS 元数据噪声 + 规格无括号双行结构）====================
+// 真机实测复现的两个严重 bug：①小票头部「机号:107」被误抓成商品名并匹配出
+// 虚假金额；②品名自带的重量规格没有括号包裹（如「70g/支」），此前的剥离
+// 逻辑遗漏了规格数字导致品名残留脏数据。完整场景的回归见 ocrTestDataset.json
+// 的 supermarket_labeled_multi_unit_pos_metadata_noise 用例，这里补充针对
+// 具体函数/边界的独立单测。
+
+test('extractLabeledProductName：规格重量无括号包裹（数字+计量单位+/计数单位）也能正确剥离，不残留规格数字', () => {
+  assert.equal(extractLabeledProductName('2. 伊利苦冰棍70g/支'), '伊利苦冰棍');
+  assert.equal(extractLabeledProductName('4. 雀巢8次方草莓味84g/盒'), '雀巢8次方草莓味');
+  assert.equal(extractLabeledProductName('1. 伊利心情140ml/瓶'), '伊利心情');
+});
+
+test('parseReceiptPayload："机号:107"这类 POS 元数据行绝不会被误判成商品，即便下一行恰好是孤立数字', () => {
+  const result = parseReceiptPayload(['机号:107', '30.00']);
+  assert.equal(result.items.length, 0);
+});
+
+test('parseReceiptPayload："收银员:李梅"这类 POS 元数据行同样被排除在商品候选行之外', () => {
+  const result = parseReceiptPayload(['收银员:李梅', '18.00']);
+  assert.equal(result.items.length, 0);
+});
+
+test('parseReceiptPayload：编号.品名+规格重量(无括号)/单位 + 数量*单价 金额，品名与金额均正确提取', () => {
+  const result = parseReceiptPayload([
+    '2. 伊利苦冰棍70g/支',
+    '5*0.90  4.50'
+  ]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, '伊利苦冰棍');
+  assert.equal(result.items[0].quantity, 5);
+  assert.equal(result.items[0].unitPrice, 0.9);
+  assert.equal(result.items[0].amount, 4.5);
+  assert.equal(result.items[0].priceMismatch, false);
+});
+
+test('parseReceiptPayload：品名本身含合法数字（"雀巢8次方"）不会被数字过滤误伤，规格数字正确剥离', () => {
+  const result = parseReceiptPayload([
+    '4. 雀巢8次方草莓味84g/盒',
+    '1*9.90  9.90'
+  ]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, '雀巢8次方草莓味');
+  assert.equal(result.items[0].amount, 9.9);
+});

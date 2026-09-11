@@ -227,6 +227,18 @@ const BARE_AMOUNT_LINE_REGEX = /^[¥￥]?\s*(\d[\d,，]*(?:\.\d{1,2})?)\s*$/;
 // 的钱"，混进总金额提取会直接得出错误结果
 const CHANGE_OR_NOISE_LINE_REGEX = /找零|找回|应找|流水号|订单号|会员卡|积分|电话|热线|条码|税号|纳税人识别号|开户行|账号/;
 
+// 🚨（2026-09-11 真机复现："机号:107"被误抓成商品名并匹配出虚假金额）
+// POS 收银小票元数据黑名单：机号/收银员/工号/单号/POS机/交易号/卡号 这类
+// 字段本身常常紧跟一个数字（机器编号/员工工号/流水单号等），此前的
+// isLabeledProductNameLine 只看"剥离编号/规格/单位后还有没有≥2个汉字"，
+// 对这类元数据行完全没有防御——"机号:107"剥离后是"机号"，2 个汉字，照样
+// 判定为合法品名候选行，一旦下一行恰好是任意孤立数字就会被模式 E/G 误配
+// 成一条假商品。与 CHANGE_OR_NOISE_LINE_REGEX 是同一类"绝不能被当成商品
+// 候选行来源"的黑名单，但覆盖的是收银小票元数据这个此前遗漏的子类别
+// （CHANGE_OR_NOISE_LINE_REGEX 已经覆盖了"流水号"，这里补齐"机号"等其余
+// 几个未覆盖的元数据关键词，两份黑名单不合并、保持各自的语义边界清晰）
+const POS_METADATA_LINE_REGEX = /机号|收银员|工号|单号|POS机|交易号|卡号|服务热线/;
+
 function extractTotalAmount(lines) {
   let tier1 = null;
   let tier2 = null;
@@ -475,6 +487,7 @@ const SECTION_NOISE_REGEX = new RegExp(
 
 function isItemCandidateLine(line) {
   if (CHANGE_OR_NOISE_LINE_REGEX.test(line)) return false;
+  if (POS_METADATA_LINE_REGEX.test(line)) return false;
   if (SECTION_NOISE_REGEX.test(line)) return false;
   if (MERCHANT_LABEL_REGEX.test(line) || MERCHANT_LABEL_BARE_REGEX.test(line)) return false;
   if (DATE_LABEL_REGEX.test(line)) return false;
@@ -567,12 +580,21 @@ function stripFreshProduceUnitSuffix(name) {
 // 金额组合，都不会重复计入 quantity/unitPrice 字段导致误判 priceMismatch
 const SEQ_NUMBER_PREFIX_REGEX = /^\d{1,3}[.、]\s*/;
 const SPEC_PAREN_REGEX = /[（(][^（）()]*[）)]/g;
+// 🚨（2026-09-11 真机复现："伊利苦冰棍70g/支"剥离不干净残留"70g"）连锁超市
+// 小票的规格重量不一定用括号包裹——"70g/支""84g/盒"这类"数字+计量单位+/
+// +计数单位"直接紧跟在品名后面（没有括号），此前只用 NAME_UNIT_SUFFIX_REGEX
+// 剥离末尾的"/计数单位"部分，遗漏了它前面的"数字+计量单位"，导致清洗后的
+// 品名残留"伊利苦冰棍70g"这类带规格数字的脏名字。必须先剥离这整段
+// "数字[计量单位]/计数单位"，再退回 NAME_UNIT_SUFFIX_REGEX 兜底处理"没有
+// 数字前缀、只有单纯 /计数单位"的情况（如模式 F 场景的"西红柿/斤"）
+const SPEC_WEIGHT_UNIT_SUFFIX_REGEX = /\d+(?:\.\d+)?\s*(?:g|G|ml|ML|kg|KG|Kg|L|l|cm|mm|克|升|毫升|公斤|千克)?\s*\/[一-龥A-Za-z]{1,6}$/;
 const NAME_UNIT_SUFFIX_REGEX = /\/[一-龥A-Za-z]{1,6}$/;
 
 function extractLabeledProductName(line) {
   return String(line || '')
     .replace(SEQ_NUMBER_PREFIX_REGEX, '')
     .replace(SPEC_PAREN_REGEX, '')
+    .replace(SPEC_WEIGHT_UNIT_SUFFIX_REGEX, '')
     .replace(NAME_UNIT_SUFFIX_REGEX, '')
     .trim();
 }
