@@ -277,6 +277,38 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 ---
 
+## 10. 紧急逃生舱（Break-Glass）应急接管相关集合（2026-09-13）
+
+设计与安全加固清单见 [`CLAUDE.md`](../CLAUDE.md) 第 9 节，本节只补充新增/新用到的集合字段。
+
+### 10.1 `emergency_claim_attempts`（新增集合）
+
+| 字段 | 含义 |
+|---|---|
+| `_id` | `emergency_claim_attempt_${md5(openid)}`，每个 openid 恒定一条记录 |
+| `failCount` | 连续失败次数，成功一次清零 |
+| `lastAttemptAt` | 最近一次尝试时间（ISO 字符串） |
+| `lockedUntil` | 锁定截止时间（ISO 字符串），达到 5 次失败后设置为 `now + 30分钟`；未锁定时为 `null` |
+
+### 10.2 `audit_logs` 新增取值：`action: 'EMERGENCY_SUPER_ADMIN_CLAIM'`
+
+`audit_logs` 是本仓库既有的"账号/权限级"高危操作审计集合（`processRoleAudit` 的 `superAdminForceUnbind`/`releaseSelf` 等已在用，与 `report_audit_logs` 这个"报表数据级"审计集合是两条不同的审计轨道）。本次新增字段：
+
+| 字段 | 含义 |
+|---|---|
+| `action` | `'EMERGENCY_SUPER_ADMIN_CLAIM'` |
+| `operator_id` | 发起接管的 openid |
+| `success` | 本次调用是否成功（密钥不匹配/参数不合法等失败也会记一条） |
+| `granted_real_name` / `granted_phone` / `granted_tenant_id` | 仅成功时填写：接管人姓名/手机号/归属机构 |
+| `write_mode` | 仅成功时填写：`'created_new_record'`（该 openid 此前无 `user_roles` 记录）\| `'updated_existing_record'`（原地升级既有记录） |
+| `fail_reason` | 仅失败时填写，脱敏后的原因文案（如"密钥不匹配"），**绝不包含调用方传入的原始密钥明文** |
+
+### 10.3 `user_roles`（`emergencyClaimSuperAdmin` 写入路径）
+
+字段口径与 `setupSuperAdmin` 生成的 `super_admin` 记录完全一致（`role='super_admin'`/`status='approved'`/`storeId=''`/`storeName='全国总览'`），新增 `emergencyClaimedAt`（`db.serverDate()`）标记这条记录是走应急密钥通道产生的，供审计时无需翻查 `audit_logs` 也能一眼分辨记录来路。
+
+---
+
 ## 维护须知
 
 - 本文档的权威性来自"贴代码位置"，不是来自本身的表述。**任何字段/枚举一旦在代码中变更，必须同步更新本文档对应条目**（这是 CLAUDE.md 治理要求）——尤其是 `orgType`/`businessType` 这类被 3-4 个文件各自维护同源拷贝的取值域，改动时本文档也要算作需要同步的一处。

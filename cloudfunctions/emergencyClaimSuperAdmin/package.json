@@ -1,0 +1,9 @@
+{
+  "name": "emergencyClaimSuperAdmin",
+  "version": "1.0.0",
+  "description": "云函数：紧急逃生舱（Break-Glass）——唯一超级管理员微信账号被封/丢失时，凭 EMERGENCY_RECOVERY_SECRET 环境变量密钥自助接管 super_admin 权限",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

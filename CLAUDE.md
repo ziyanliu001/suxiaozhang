@@ -105,6 +105,7 @@
 - **严禁**任何形式的对外公开发布——不得把本仓库代码/文档复制、粘贴或推送到任何公开可访问的位置（公开 Gist、公开 Pages、未加访问控制的分享链接、聊天工具的公开频道等），`scripts/build-open-core.js` 产出的开源 Core 构建物如需对外发布，须走独立评审流程，不等同于直接公开本仓库。
 - **严禁在代码、注释、commit message 或任何文档里明文记录私钥、access token、密码、云开发密钥等凭证**。本仓库已有的既定防线：`.gitignore` 里 `private.*.key`/`*.pem`/`project.private.config.json` 三类规则专门拦截小程序上传密钥与本地私有配置——新增任何凭证类文件时，必须先补齐对应的 `.gitignore` 规则再落盘，不能先写文件再补规则（存在"补规则前那个 commit 窗口"意外提交的风险，先加规则再建文件）。一旦发现已提交的明文凭证，视为需要立即撤销/轮换该凭证的安全事件处理，删除文件/改写内容不能让已泄露的凭证重新变安全（git 历史仍会留痕）。
   > ⚠️ **2026-09-05 发现的存量违规**：根目录 `project.private.config.json` 早于 `.gitignore` 规则落地前就已被 `git add`，规则只挡"未来新增"，不会retroactively 补挡已跟踪文件，目前该文件仍在版本库里（`git ls-files` 可见）。核实过内容本身不含真实凭证（只是 DevTools 本地调试场景配置 + 一个内部测试 `tenantId`），不构成本条"明文凭证"意义上的安全事件，但违反了本条防线的初衷，建议 `git rm --cached project.private.config.json`（只停止跟踪、不删本地文件）——因涉及改变已跟踪文件集，需用户确认后再执行。
+- **`EMERGENCY_RECOVERY_SECRET`**（2026-09-13 新增，见第 9 节"紧急逃生舱"）与 `WXPAY_INTERNAL_TOKEN`/`LIVE_FACTORY_INTERNAL_TOKEN` 一样，只存在于云开发控制台环境变量，绝不允许出现在代码/注释/commit message/文档里——且这一个比另外两个更敏感（另外两个只是"云函数之间的内部调用令牌"，泄露只能让人冒充内部服务调用；这个一旦泄露，任何人都能把自己的微信账号直接提权成 `super_admin`）。建议使用与其余任何令牌都不同的独立高强度随机值，且只告知极少数受信任的人。
 
 ---
 
@@ -245,3 +246,30 @@ Agent 接手这两块相关代码前必须先读这一节。
    `resolveCliPath()` 只认 macOS/Windows 默认路径）。冷启动的自动化实例
    第一次 `reLaunch` 到子包页面会被 app 自身的登录/角色拉取流程静默改写
    回首页，需要重试几次等冷启动跑完（脚本内已处理，不是环境不稳定）。
+
+---
+
+## 9. 紧急逃生舱（Break-Glass）应急接管机制（2026-09-13）
+
+### 9.1 定位与触发场景
+
+唯一超级管理员的微信账号被封禁/丢失/失联时的最后手段——`cloudfunctions/emergencyClaimSuperAdmin`。与本仓库其余管理类云函数（`setupSuperAdmin`/`processRoleAudit` 的 `superAdminForceUnbind` 等）根本不同的一点：那些函数都要求"调用者已经是 `super_admin`/`platform_admin`"才能继续操作，一旦唯一的超管账号失效，没有任何账号有资格调用它们来恢复权限，后台会永久锁死。本函数因此故意不做任何"调用者当前角色"层面的前置校验，**唯一的防线是 `EMERGENCY_RECOVERY_SECRET` 这个只存在于云开发控制台环境变量里的密钥**——必须持有物理访问云开发控制台权限的人才能配置/得知这个值，这是安全模型的信任根，日常绝不通过任何应用内 UI 暴露这个函数的存在或入口。
+
+### 9.2 安全加固清单
+
+1. **fail-closed**：`EMERGENCY_RECOVERY_SECRET` 未配置时拒绝一切调用，与 `cascadeRecalculator` 的 `LEDGER_HMAC_SECRET`、`wxPayCore` 的 `WXPAY_INTERNAL_TOKEN` 同一条既定原则。
+2. **常量时间密钥比较**（`lib/secretGuard.js` 的 `secretsMatch`）：用 `crypto.timingSafeEqual` 而不是普通 `===`——本函数的 `secret` 参数是小程序客户端可直接控制的输入，存在被暴力枚举/侧信道猜测的现实风险，比云函数间内部调用令牌（那些只在云函数之间传递，不会被公网客户端直接尝试）要更谨慎。
+3. **失败锁定**：同一 `openid` 连续失败达到 5 次后锁定 30 分钟（`lib/secretGuard.js` 的 `evaluateLockout`/`computeNextAttemptRecord`），记录在独立的 `emergency_claim_attempts` 集合（`_id` 由 `openid` 的 md5 确定性派生，`set()` 覆写天然幂等）。
+4. **高危审计日志**：无论成功/失败都写入 `audit_logs`（`action: 'EMERGENCY_SUPER_ADMIN_CLAIM'`）——这是本仓库已有的、专门给"账号/权限级"高危操作用的审计集合（`processRoleAudit` 的 `superAdminForceUnbind`/`releaseSelf` 等已在用，与 `report_audit_logs` 这个"报表数据级"审计集合是两条不同的审计轨道，不要混用）。**绝不记录密钥明文本身**（无论对错），只记录"是否匹配"这个布尔结果；成功时额外记录接管人姓名/手机号/归属机构，供事后人工核实。本仓库目前没有任何云函数会更新/删除 `audit_logs` 里的记录，天然只增不改，未引入额外的加密防篡改机制（如同类日志一贯的做法，见第 6 节体检记录的既定标准）。
+5. **多 `super_admin` 并行**：写入的 `user_roles` 文档与 `setupSuperAdmin` 生成的记录同一套字段口径（`role='super_admin'`/`status='approved'`/`storeId=''`/`storeName='全国总览'`）。**全仓库排查确认**：本项目所有 `super_admin` 判定永远是"按 `_openid` 查 `user_roles` 单文档的 `role` 字段"，不存在任何硬编码单 `openid` 白名单/环境变量（已 grep 全仓库确认零命中），`processRoleAudit` 的 `superAdminForceUnbind` 本身就显式处理"操作者是一个 `super_admin`、目标是另一个 `super_admin`"的场景——多超管并行是本项目一贯的既有设计，本次接管产生的新 `super_admin` 记录与其余账号（包括可能还能正常使用的旧超管账号）完全并行生效，互不冲突、互不覆盖。**这一条本次审计后确认已经满足，未做代码改动。**
+
+### 9.3 部署要求（务必在云开发控制台配置）
+
+- 环境变量 `EMERGENCY_RECOVERY_SECRET`：建议使用高强度随机字符串（≥32 位，含大小写字母/数字/符号），与 `WXPAY_INTERNAL_TOKEN`/`LIVE_FACTORY_INTERNAL_TOKEN` 等其它任何令牌都不复用，只告知极少数受信任的人（见第 5 节安全红线）。
+- 上线后建议把本函数的调用日志接入告警（短信/邮件通知机构负责人）——`index.js` 里已经用 🚨 标记打了最高优先级 `console.error`，云开发控制台的日志告警规则可以直接订阅这个关键字。
+- 定期（如每半年）核实这个密钥仍然只有受信任的人知道；一旦怀疑泄露，立即在控制台轮换。
+
+### 9.4 已知边界（如实标注）
+
+- `emergency_claim_attempts` 的失败锁定按 `openid` 维度计数，不是按 IP——云函数运行时拿不到公网客户端 IP 这类可靠信号；这个维度足以显著提高攻击成本（需要不同的微信账号，不是简单换个请求头就能绕过），但不是绝对防线，密钥强度本身仍是第一道、也是最重要的一道防线。
+- 归属机构（`tenantId`）解析：显式传入时校验存在性；未传入且系统内恰好只有一家机构时自动关联；系统内有多家机构且未显式指定时**拒绝**（不猜测，避免把新超管错误关联到无关机构）——多租户环境下发起应急接管，调用方必须显式知道自己要接管哪一家机构的 `tenantId`。
