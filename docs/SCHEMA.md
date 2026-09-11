@@ -43,6 +43,8 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 `getNationalDashboard` 另有一个"品牌矩阵"（`platformFamily`）维度，与 `orgType` 筛选互斥，例如"同心慈善会矩阵"覆盖 `tongxin_children` + `tongxin_cancer_care`（`cloudfunctions/getNationalDashboard/index.js:427-429`）。
 
+⚠️ **`getStoreList` 云函数不向客户端下发 `orgType` 字段**：其 `toStoreListItem()`（`cloudfunctions/getStoreList/index.js:70-91`）返回给前端的门店条目只有 `storeId`/`storeName`/`status`/`address`/`operatingStatus`/`province`/`city`/`latitude`/`longitude`，orgType 精确匹配只发生在服务端 `where` 查询条件里、结果不回传该字段本身。任何前端逻辑想按 `orgType` 做二次判断/兜底（例如"专区列表按门店业态归类"）都拿不到这个字段，只能改"要不要把 orgType 条件传给服务端"这一步，或者额外发一次不带 orgType 的全量查询自己做归类——见 [[踩坑记录与性能调优]] 第 36 条「雨花专区门店按店名兜底归类」的实际处理方式。
+
 ### 1.3 `stores` 集合（雨花公益 / 通用记账专属，产销工坊租户无此文档）
 
 核心字段（`cloudfunctions/createTenant/index.js:90-108`、`manageStoreProfile/index.js`）：`storeName`、`tenantId`、`status`、`patriarch`/`patriarchOpenId`（大家长姓名/openid）、`manager`/`managerOpenId`（店长姓名/openid）、`address`、`contactPhone`、`province`、`city`、`orgType`、`mealConfig: { supportedMeals: string[] }`（默认 `['lunch']`）、`createdBy`、`createdAt`。
@@ -224,6 +226,8 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 | `generatedAt` | 快照生成时间（`db.serverDate()`），区别于 `dateString`（被统计的业务日期） |
 
 **幂等与并发**：`dailyTenantSnapshotCron` 每次运行只处理"昨天"这一个固定日期窗口，同一天的门店快照用确定性 `_id` + `set()` 覆写，不会因为定时器偶发重复触发而产生脏数据；不同门店之间的快照生成互相独立，不需要额外加锁。
+
+---
 
 ## 维护须知
 
