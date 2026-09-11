@@ -270,6 +270,16 @@
   border-color: #FFE082;
 }
 
+/* 🔍（2026-09-11 身份徽标兜底修复）平台巡检员：platform_admin 与其余业务
+   角色是两个独立维度，不属于"雨花斋/通用记账"任何一个机构的实际角色，
+   故意选用冷色调（区别于其余角色统一的暖金/暖红色系），呼应它"平台运维
+   视角、不是业务身份"的定位 */
+.badge-tag.platform_admin {
+  background: #E3F2FD;
+  color: #1565C0;
+  border-color: #90CAF9;
+}
+
 .badge-tag.store_manager {
   background: #FFF3E0;
   color: #E65100;

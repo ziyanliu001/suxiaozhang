@@ -78,9 +78,15 @@
              伪造一个不存在的切换入口，只做视觉整合 -->
         <view class="identity-banner identity-banner-card">
           <view class="role-badge-row">
+            <!-- 🐛（2026-09-11 身份徽标兜底修复）此前这条三元链没有 platform_admin
+                 分支，落进最后的兜底 default，把平台管理员误显示成"义工"——
+                 platform_admin 与业务角色（店长/大家长/财务/义工/家人）是两个
+                 独立维度（见 authService.ts UserRole 注释），必须单独给一个
+                 不会被误认成业务角色的专属徽标文案，不能复用义工兜底 -->
             <view class="badge-tag {{isFamily ? 'family' : currentUserRole}}">
               <view class="badge-icon-svg icon-svg-flower"></view>
               <text>{{currentUserRole === 'super_admin' ? '超级管理员' :
+                currentUserRole === 'platform_admin' ? '🔍 平台巡检员' :
                 currentUserRole === 'store_manager' ? '👑 店长' :
                 currentUserRole === 'finance' ? '财务' :
                 currentUserRole === 'store_patriarch' ? '🏛️ 大家长' :

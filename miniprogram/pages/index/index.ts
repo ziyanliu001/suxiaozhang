@@ -1865,6 +1865,7 @@ Page({
       // "嵩屿街道敬老中心助餐点"挂在雨花斋默认全国机构下）一起被带出来
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
       const orgTypeFilter = zoneKey === 'yuhua' ? 'yuhuazhai' : (zoneKey === 'general' ? 'general' : '');
+      const isYuhuaZone = zoneKey === 'yuhua';
       const callArgs = orgTypeFilter ? { orgType: orgTypeFilter } : {};
       // 🐛 冷启动兜底：即使上面的并发去重已经消灭了"同一次 onLoad 打两枪"这个
       // 主要诱因，页面首次冷启动时云函数容器本身仍可能恰好处于冷启动状态、
@@ -1887,7 +1888,30 @@ Page({
       // 踩空索引崩溃，报错正是 "Cannot read property '0' of undefined"——与本文件
       // 上方缓存分支注释记录的历史崩溃是同一个根因、只是换了数据来源触发
       const rawList = (cloudResult && cloudResult.success) ? cloudResult.list : null;
-      const list = Array.isArray(rawList) ? rawList : [];
+      let list = Array.isArray(rawList) ? rawList : [];
+
+      // 🐛 归属修复（"厦门海沧三源弘雨花斋"等历史门店 orgType 打标不准导致
+      // 雨花专区查不到自己）：getStoreList 返回的门店条目本身不带 orgType
+      // 字段（见 toStoreListItem），前端拿不到它，没法在收到结果后再用
+      // orgType 做二次校验/补救——只能在"要不要把 orgType 条件带给服务端"
+      // 这一步做文章。这里额外发一次不带 orgType 的全量门店查询（仍受调用者
+      // 自己 tenantId 边界约束，不跨机构），用 storeName 是否包含"雨花"字样
+      // 做兜底：只要店名里有"雨花"，无论它的 orgType 字段被打成什么值/是否
+      // 缺失，都无条件并入雨花专区列表，不覆盖/不影响服务端已经按 orgType
+      // 精确匹配返回的正常结果
+      if (isYuhuaZone) {
+        try {
+          const fullRes = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
+          const fullResult = fullRes.result as any;
+          const fullList = Array.isArray(fullResult && fullResult.list) ? fullResult.list : [];
+          const existingIds = new Set(list.map((s: any) => s.storeId));
+          const extra = fullList.filter((s: any) => !existingIds.has(s.storeId) && (s.storeName || '').includes('雨花'));
+          if (extra.length) list = list.concat(extra);
+        } catch (extraErr) {
+          console.warn('[fetchAllStoresList] 雨花专区店名兜底补齐失败:', extraErr);
+        }
+      }
+
       this.setData({ allStoresList: list });
       this.maybeAutoSelectStore(list);
 
