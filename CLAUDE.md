@@ -17,6 +17,8 @@
 - [业务数据字典与接口契约](docs/SCHEMA.md) —— 租户字段、流水模型、大家长/财务/志工权限角色映射。
 - [微信小程序 GEO 与外网引流策略](docs/GEO_STRATEGY.md) —— 公开大屏与落地页的外网 AI 引用与搜一搜收录规则。
 
+> ⚠️ 本地 Obsidian 知识库的真实磁盘路径是 `/home/ziyan/文档/Obsidian Vault/01-Projects/素小账/`（入口 `00-素小账-MOC.md`），不是仓库内 `docs/`——`docs/*.md` 是从这个 vault 手动同步过来的快照副本，两边不会自动保持一致。查阅历史设计决策/排查过往故障时优先去 vault 原文（尤其是 `02-技术与契约/踩坑记录与性能调优.md` 这类持续追加的踩坑记录，`docs/` 快照通常没有同步这么细），改动完成后按第 0 节"落地与回写"提示用户同步回 vault，而不是想当然地认为 `docs/` 已经是最新的。
+
 ---
 
 ## 2. 多租户隔离与全国公信力大屏双轨制设计 (最高业务准则)
@@ -34,6 +36,14 @@
 - **定位**：社会公信力、透明公开账目与爱心公示，服务于“让所有人看见善意”这一目标。
 - **权限逻辑**：**查看权限完全不挂钩商业套餐**——角色卡口（`ALLOWED_ROLES`）+ 租户隔离仍然生效（不跨租户），但不因为租户是 `basic` 套餐就拒绝查看。财务类敏感字段（收支金额、结余）继续按角色脱敏展示（`sanitizeReportForVolunteer`、前端 `isManager` 判断），这是**角色**维度的隐私保护，不是**套餐**维度的功能锁，两者不要混为一谈。⚠️ `ALLOWED_ROLES` 中的 `hq_finance`/`regional_finance` 是历史死值，`checkUserRole` 永远不会下发这两个值，角色枚举以 [`SCHEMA.md`](docs/SCHEMA.md) 2.1 节的六值权威枚举（`super_admin`/`store_manager`/`store_patriarch`/`finance`/`volunteer`/`platform_admin`）为准。
 - **代码入口**：`cloudfunctions/getNationalDashboard`、`pages/statistics/statistics.ts` 的 `loadNationalDashboard()`/`_triggerPatriarchNationalView()`。
+
+### 三条业务线各自的关键技术护栏（2026-09-11 补充）
+轨道一内部按 `businessType`/共享的 `stores`+`user_roles` 体系实际运行着三条产品形态（见上方"⚠️ 术语澄清"，三者不是靠一个独立字段区分，而是各自散落在不同代码入口），各自有一条不可绕过的技术护栏：
+- **雨花公益食堂专区**：`report_logs` 流水的防篡改签名依赖 `LEDGER_HMAC_SECRET` 环境变量——`cloudfunctions/stampReportChecksum`/`cascadeRecalculator`/`updateAndRecalculateCascade` 三个云函数均已实现 **fail-closed**（环境变量缺失时直接抛错拒绝签名/重算，绝不回退到弱默认密钥）。新增任何涉及流水签名/级联重算的云函数必须延续这个口径，宁可拒绝执行也不能签一个不安全的假签名。
+- **通用素食/门店记账（SaaS 订阅）**：配额门禁见上文"轨道一"小节；iOS 端因平台审核规则，购买/续费入口必须**物理隐藏**（`utils/util.ts` 的 `isIOSDevice()` 判断，代码入口 `pages/profile/enterprise/saasSubscriptionHandler.ts`），改为引导走企业授权码/兑换卡自助开通，不能让 iOS 用户看到任何应用内支付按钮。
+- **素食直播产销工坊**：`subpackages/factory`，产能占用/分账快照/退款红冲这类"改数据"操作全部收敛进 `cloudfunctions/liveFactoryCore`（纯基础设施层），与雨花斋记账体系无交叉引用。
+
+⚠️ **善款支付红线**：`report_logs`（公益记账流水）**绝不接入任何在线支付**，捐赠/随喜均为线下录入。`cloudfunctions/wxPayCore` 本身是与具体业务解耦的通用支付基础设施（`bizType`/`bizId` 由调用方自定义，不是写死的枚举），当前只被 `createSubscriptionOrder`（SaaS 订阅）与 `createProductionOrder`/`processProductionRefund`/`completeProductionOrder`（工坊订单）四个云函数调用——这是"目前只有这两条业务线在用"的事实状态，不是 `wxPayCore` 内部有硬编码的白名单校验，新增业务线要接入支付时代码层面不会自动拦截，需要人工确认这笔钱是否属于"善款"范畴。
 
 ### 数据分类口径正交独立
 - **`businessType`**（原表述为 `workspaceType`，该术语已废止）：决定业务表单与流程流转的粗粒度租户类型，目前唯一有落地区分力的取值是 `'live_factory'`（产销工坊）；雨花公益食堂专区/通用素食记账无独立取值，共享同一套数据模型。
@@ -55,12 +65,16 @@
   - 与视图渲染无关的临时变量（防抖定时器、锁、临时请求缓存）必须挂载在页面实例 `this` 上，严禁写入 `data` 占用通讯通道。
 - **云函数与数据安全**：
   - 云函数查询数据库时，业务工作空间查询必须强校验 `tenantId`，严禁未经过滤直接执行全表 scan。
+  - **云函数超时配置**：涉及图像/OCR/批量导出这类真实网络往返较长的云函数，`config.json` 必须显式配置 `timeout: 20`（秒）以上——不写这个字段会静默走平台默认的 3 秒，历史上 `-504003 FUNCTIONS_TIME_LIMIT_EXCEEDED` 报错的真实根因几乎都是这个默认值太短，不是业务逻辑本身慢。配套前端调用等待上限（`callFunctionWithTimeout` 的超时参数）要显式提到 `25000`ms 左右（比云端 20s 上限再留 5s 网络往返余量），两端超时预算必须一起调，只改一边等于没修。
+  - **小程序码 `scene` 参数 32 字符硬顶**：`wxacode.getUnlimited` 的 `scene` 字段有官方 32 字符硬限制，拼任何业务标识（如 `storeId` 这类 32 位十六进制 Mongo `_id`）进 `scene` 前必须先做 Base36 压缩（`cloudfunctions/getStoreQRCode` 的 `hexToBase36()` 是现成实现，不要重新发明一套），并在拼接后显式校验 `scene.length <= 32`、超限时返回明确错误而不是让微信接口报一个不好排查的业务错误码。生成二维码时同时传 `check_path: false`（官方文档记录的必要参数，跳过路径存在性校验）。
   - **金额存储口径（⚠️ 按业务线区分，不是单一全局规则）**：
     - **支付类金额**（微信支付订单，如 `cloudfunctions/createSubscriptionOrder`）以“分”为单位整型存储（如 `totalFee: 168800` 即 1688.00 元），前端展示除以 100 并格式化——这条规则只在支付链路真正落地。
     - **公益记账流水**（`report_logs` 集合，唯一写入入口是 `dataService.ts` 的 `saveReport()`）历史上一直以“元”为单位的浮点数存储（`parseNumber = (v) => parseFloat(v) || 0`），展示层 `formatMoney()` 直接 `.toFixed(2)`，**没有除以 100 的动作**。新增/修改记账相关金额字段时延续现有“元”浮点口径，不要擅自改成“分”整型，否则会与存量数据混算出错；如确需推行统一分化改造，需要专项迁移方案，不能顺手改。
     - 两套口径的代码位置与字段清单详见 [`SCHEMA.md`](docs/SCHEMA.md) 第 4 节。
 - **样式与适配**：
   - 严格使用 `rpx` 布局，保障各机型无缝适配；核心卡片与文字遵守项目主视觉调性。
+  - **长者模式（`careMode`）**：`app.globalData.careMode` + 本地存储镜像（见 `pages/index/index.ts`）。适老化交互优先用大字号覆盖层/放大触控热区 + `wx.vibrateShort` 物理震动反馈（已有先例：`{type:'heavy'}` 用于强确认场景、`{type:'light'}` 用于轻量成功反馈），不要依赖 `wx.showToast`——它的字号/时长不受小程序自定义控制，对老花眼/弱视用户不够醒目可靠。
+- **Open-Core 单向依赖**：新增/改动任何可能落入 Core 候选范围的文件前，先确认依赖方向——**Enterprise 可以 `require`/`import` Core，Core 绝不能反向依赖 Enterprise**（这是 [`OPEN_CORE_ARCHITECTURE.md`](docs/OPEN_CORE_ARCHITECTURE.md) 验证"拆分是否干净"的核心判据）。视图层同理：Enterprise 专属的 WXML 区块用 `<include>` 物理拆出到独立文件，Core 构建下这些 `<include>` 目标需要一份"空 stub"文件顶替（而不是让 Core 包里出现一条指向不存在文件的死引用），具体手法见该文档第 9/10 节已经落地的真实案例（`pages/statistics`/`pages/profile`）。
 - **SEO/GEO 与搜一搜收录**：
   - 新增公开页面（如爱心公式页、公开大屏）必须同步检查并提醒更新根目录 `sitemap.json` 的爬虫放行规则；严禁在未登录页出现死锁阻断。
 
@@ -74,6 +88,7 @@
 - 单元测试：`npm test`（即 `node --test cloudfunctions/*/lib/*.test.js miniprogram/subpackages/admin/pages/store-profile/lib/*.test.js`），只覆盖各 `lib/*.test.js` 下的纯函数单测，不是端到端/集成测试，且只有部分云函数/页面有对应测试文件。⚠️ 2026-09-10 起不再是"只测云函数"——`miniprogram/` 页面如果按同款"纯逻辑拆 `lib/*.js` + 配套 `*.test.js`"的写法（见 `store-profile/lib/qualificationPhotoActions.js` 首个先例）新增测试，需要手动把对应 glob 加进这行 script，`node --test` 不做递归通配，新增一个页面的 `lib/` 目录就要在这里显式追加一段路径。
 - Open-Core 安全审计：`npm run security-audit`（`scripts/security-audit.js`，配合 [`OPEN_CORE_ARCHITECTURE.md`](docs/OPEN_CORE_ARCHITECTURE.md) 的敏感信息审计标准使用）
 - Open-Core 拆分构建：`npm run build:core`（`scripts/build-open-core.js`，生成开源 Core 代码产物）
+- Open-Core 产物独立编译校验（更硬的验证，CI 里同样跑）：先 `npm run build:core` 生成 `dist/suxiaozhang-core`，再 `cd dist/suxiaozhang-core && node ../../node_modules/typescript/bin/tsc --noEmit && cd ../..`——**不要用 `npx tsc`**，`dist/suxiaozhang-core` 是从 `git ls-files` 拷贝出的纯源码目录、不带自己的 `node_modules`，裸 `npx tsc` 会去 npm 现拉最新版 TypeScript，版本一旦更新引入了破坏性变更（如某版本移除了 `alwaysStrict` 选项）会被误判成"Core 包编译失败"，其实只是编译器版本对不上；显式指定仓库 `npm ci` 装好、`package.json` pin 住的那份编译器才是在验证"用实际会用的版本能不能编译"。完整 CI 门禁序列见 [`OPEN_CORE_ARCHITECTURE.md`](docs/OPEN_CORE_ARCHITECTURE.md) 与 `.github/workflows/open-core-ci.yml`。
 - 本地自闭环校验：`npm run agent:check`（`scripts/agent-check.js`，typecheck→test→通知开发者工具重新编译三步，见 CLAUDE.md 第 8 节 Autonomous Engineering Rules 第 4 条）
 - 视觉快照：`npm run visual:check`（`scripts/visual-check.js`，需要 `miniprogram-automator`，见第 8 节第 5 条——用真实开发者工具渲染截图，不是靠读代码猜视觉效果；默认截 `platform-admin` 页面首屏+上滑 400px 两张图存到 `.agent/snapshots/`，可传参数指定其它页面路径）
 - 云函数本地调试/部署：在对应云函数目录下执行 `npm install`
