@@ -8,7 +8,12 @@
 // - 监听 close 事件，自己把 visible 对应的 data 字段置回 false
 // - 打开前调用组件暴露的 resetForm()（全新登记）或 presetForm(item)（把一条已驳回
 //   记录的原始数据带回来重新修改），见 profile.ts onOpenDailyMenuModal / onTapMyVolunteerSubmissionItem
-import { getSelectedStore } from '../../utils/storeManager';
+// 🐛（2026-09-12）改用 canonical getCurrentActiveStore()，不用 legacy
+// getSelectedStore()——两者多数情况下读到的值相同，但 getCurrentActiveStore()
+// 是本仓库约定的"当前活跃店"唯一权威来源（store-picker.ts 切换门店身份后
+// 写入的正是它读取的这套 canonical storage key），legacy 版本在极少数
+// 中间态（如只写了 storeId 没同步写 storeName）下会退回更旧的 legacy 数据源
+import { getCurrentActiveStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
@@ -128,7 +133,7 @@ Component({
     async onQuickFillYesterdayMenu() {
       if (this.data.quickFilling) return;
 
-      const activeStore = getSelectedStore();
+      const activeStore = getCurrentActiveStore();
       const storeId = activeStore && activeStore.storeId;
       if (!storeId) {
         wx.showToast({ title: '暂未识别到您所在的门店', icon: 'none' });
@@ -245,7 +250,7 @@ Component({
       }
 
       try {
-        const activeStore = getSelectedStore();
+        const activeStore = getCurrentActiveStore();
         const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerSubmission',
           data: {

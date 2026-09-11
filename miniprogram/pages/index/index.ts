@@ -29,6 +29,7 @@ import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { buildSmartReceiptDisplayItems, formatSmartReceiptTotalDisplay, buildSmartReceiptApplyText } from './lib/smartReceiptDraft';
 import { isDefaultOcrResultEmpty, isParseReceiptResultEmpty, adaptParseReceiptDraftToLegacyResult, adaptLegacyOcrResultToParseReceiptDraft } from './lib/ocrEngineFallback';
+import { resolveActiveRoleGrant } from './lib/resolveActiveRoleGrant';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {
@@ -9212,10 +9213,33 @@ Page({
     let storeName: string;
     let storeId: string;
     if (cached && !isVerifiedSuperAdminAccount) {
-      // 🔒 真实非超管账号：强制锁定为服务端下发的真实绑定门店
-      role = cached.role;
-      storeName = cached.storeName || this.data.shopName || '';
-      storeId = cached.storeId || '';
+      // 🐛 权限计算漏洞修复（2026-09-12）：真实非超管账号原则上强制锁定为
+      // 服务端下发的真实绑定门店（cached.role/cached.storeId），但这条锁定
+      // 此前完全没有考虑 cached.authorizedTenants——账号通过【选择服务站点
+      // 与身份】弹窗（store-picker.ts）以"巡检漫游"轻量租户授权临时获得
+      // 目标门店的店长/大家长身份后，这里依然无条件用账号自己的真实（可能
+      // 是义工/无门店）身份覆盖回去，导致"登记今日菜单与人数"等店长专属
+      // 入口一直显示无权限。授权本身刻意设计成不改写 user_roles 本体（与
+      // 邀请码核销那种真正的角色晋升不同），只能通过 authorizedTenants 这个
+      // 服务端下发的数组识别，见 lib/resolveActiveRoleGrant.js 头部注释。
+      // 🛡️ 安全边界不变：这里只信任 cached.authorizedTenants（服务端数据），
+      // 不是重新信任 current_user_role/current_store_id 这两个客户端可写的
+      // storage key 本身——不会重新打开当年为修复"店长账号被残留 storage
+      // 顶成超管视角"这个真实越权展示 bug 而收紧的口子。
+      const activeStoreId = getCurrentActiveStore().storeId || '';
+      const grant = activeStoreId ? resolveActiveRoleGrant(cached.authorizedTenants, activeStoreId) : null;
+      if (grant) {
+        role = grant.role;
+        storeId = grant.storeId;
+        // 门店名不属于授权记录本身的字段，取 canonical 的 current_store_name
+        // （store-picker 切换时与 current_store_id 成对写入）
+        storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '';
+      } else {
+        // 未命中任何覆盖当前活跃店的有效授权：原样锁定为自己的真实绑定门店
+        role = cached.role;
+        storeName = cached.storeName || this.data.shopName || '';
+        storeId = cached.storeId || '';
+      }
     } else {
       role = wx.getStorageSync('current_user_role') || DEV_FALLBACK_ROLE;
       storeName = wx.getStorageSync('current_store_name') || this.data.shopName || '';

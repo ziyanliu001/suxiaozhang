@@ -9,7 +9,7 @@
 // deliverySeniors 并重新走 recalcDiningStats()，效果等同于人工在表单里手动
 // +1，不存在"后台异步字段与前端整份表单保存互相覆盖"的竞态（详见
 // ledgerIngestionAdapter/index.js 头部注释）。
-import { getSelectedStore } from '../../utils/storeManager';
+import { getCurrentActiveStore } from '../../utils/storeManager';
 import { elderCheckinManualAdapter } from '../../utils/inputPipeline';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 
@@ -94,7 +94,7 @@ Component({
 
       this.setData({ searching: true });
       try {
-        const activeStore = getSelectedStore();
+        const activeStore = getCurrentActiveStore();
         const res: any = await callFunctionWithTimeout({
           name: 'ledgerIngestionAdapter',
           data: {
@@ -164,7 +164,7 @@ Component({
 
       this.setData({ submitting: true });
       try {
-        const activeStore = getSelectedStore();
+        const activeStore = getCurrentActiveStore();
         // 阶段二接入语音/OCR 时，只需新增 voiceAdapter/ocrElderAdapter 产出同样
         // 形状的 ElderCheckinPayload，这里的云调用点完全不用改（见 inputPipeline.ts）
         const payload = elderCheckinManualAdapter.normalize({

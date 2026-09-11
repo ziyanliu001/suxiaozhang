@@ -1,7 +1,7 @@
 // 🌾 登记物资消耗与报损——弹窗表单唯一实现，供首页金刚区（index.wxml）与个人页
 // 【我的】义工现场服务工具（profile.wxml）共用。用法与 daily-menu-modal 完全对称，
 // 见该组件文件头部注释
-import { getSelectedStore } from '../../utils/storeManager';
+import { getCurrentActiveStore } from '../../utils/storeManager';
 import { checkContentSafety } from '../../utils/contentSafety';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { isCloudAvailable } from '../../utils/cloudGuard';
@@ -294,7 +294,7 @@ Component({
       }
 
       try {
-        const activeStore = getSelectedStore();
+        const activeStore = getCurrentActiveStore();
         // 🆕（2026-08-31 AI 拍照识票）本次填报若经过拍照识别自动回填过任意一项
         // （_ocrSourceFileId 非空），随提交一并记下 ocrMetadata 溯源信息；纯手工
         // 填写时这三个字段本就是空/0，不携带这个字段，与 dataService.ts

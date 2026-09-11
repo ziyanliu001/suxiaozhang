@@ -63,6 +63,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
+
 const COLLECTION = 'volunteer_submissions';
 const MAX_NOTE_LENGTH = 300;
 const MAX_LIST_LIMIT = 50;
@@ -146,18 +148,44 @@ async function handleSubmit(event, OPENID) {
     return { success: false, error: '提交类型不合法' };
   }
 
-  const caller = await resolveCaller(OPENID);
+  const own = await resolveCaller(OPENID);
+  if (!own) return { success: false, error: '无权限提交' };
+
+  // 🛡️（2026-09-12 权限计算漏洞修复）此前这里只认调用者自己 user_roles 里的
+  // 固定角色/门店，完全不考虑账号通过【选择服务站点与身份】以 authorizedTenants
+  // 轻量租户漫游授权临时获得的、对另一家门店的店长/大家长身份——与
+  // manageDailyMenu/getPatriarchDashboard/manageReportApproval/manageStoreProfile
+  // 四个云函数共用同一套 resolveEffectiveCaller 决策逻辑（见 lib/resolveCaller.js），
+  // 先按客户端指定的目标门店解析"有效身份"：命中授权时角色/门店/租户全部替换
+  // 成授权记录里的值；未命中时原样保留 own。
+  const requestedStoreId = event.storeId || own.storeId || '';
+  let caller = resolveEffectiveCaller(own, requestedStoreId);
+
+  // 授权未命中、且 super_admin 显式指定了一个与自己绑定门店不同的目标门店：
+  // 与 resolveReviewStoreId 同一套多租户越权校验——此前这里完全没有校验
+  // event.storeId 是否真的属于调用者所在机构，任何 super_admin 都能把提交
+  // 数据挂到任意门店（哪怕是别的机构的门店）名下，这里一并补齐
+  if (caller === own && caller.role === 'super_admin' && requestedStoreId && requestedStoreId !== own.storeId) {
+    const storeRes = await db.collection('stores').doc(requestedStoreId).get().catch(() => null);
+    const store = storeRes && storeRes.data;
+    if (!store) return { success: false, error: '目标门店不存在' };
+    if (!own.tenantId || !store.tenantId || own.tenantId !== store.tenantId) {
+      return { success: false, error: '无权限：目标门店不属于您所在的机构' };
+    }
+    caller = { ...own, storeId: requestedStoreId, tenantId: store.tenantId };
+  }
+
   // 🛡️ 曾经"仅义工可用"（caller.role !== 'volunteer' 直接拒绝）在真实场景里挡住了
   // 两类合法使用者：① 超管用"视角切换预览"看义工视图时，客户端 isVolunteer 显示
   // true 但服务端 caller.role 是真实的 super_admin，之前会被这里拒绝；② 店长/家长
   // 本人有时也需要用这套轻量表单临时登记（不想为一条菜单人数走完整的正式报告
   // 流程）。放宽为"任一合法门店角色"都能提交，仍然不放行家人/其他未识别角色。
   const ALLOWED_SUBMIT_ROLES = ['volunteer', 'store_manager', 'store_patriarch', 'super_admin'];
-  if (!caller || !ALLOWED_SUBMIT_ROLES.includes(caller.role)) {
+  if (!ALLOWED_SUBMIT_ROLES.includes(caller.role)) {
     return { success: false, error: '无权限提交' };
   }
 
-  const storeId = event.storeId || caller.storeId || '';
+  const storeId = caller.storeId || '';
   const storeName = event.storeName || caller.storeName || '';
   if (!storeId) return { success: false, error: '未识别到您所在的门店，请先在首页选择门店' };
 
@@ -307,7 +335,9 @@ async function handleMyList(event, OPENID) {
 }
 
 async function handleListPending(event, OPENID) {
-  const caller = await resolveCaller(OPENID);
+  const own = await resolveCaller(OPENID);
+  // 🛡️（2026-09-12）巡检漫游身份解析，见 handleSubmit 同处注释
+  const caller = resolveEffectiveCaller(own, event.storeId || (own && own.storeId) || '');
   const target = await resolveReviewStoreId(caller, event.storeId);
   if (!target.allowed) return { success: false, error: target.error };
 
@@ -463,12 +493,14 @@ async function handleApprove(event, OPENID) {
   const id = event.id;
   if (!id) return { success: false, error: '缺少 id 参数' };
 
-  const caller = await resolveCaller(OPENID);
+  const own = await resolveCaller(OPENID);
   const docRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
   const doc = docRes && docRes.data;
   if (!doc) return { success: false, error: '该条记录不存在' };
   if (doc.status !== 'pending') return { success: false, error: '该条记录已被处理，请勿重复操作' };
 
+  // 🛡️（2026-09-12）巡检漫游身份解析，见 handleSubmit 同处注释
+  const caller = resolveEffectiveCaller(own, doc.storeId);
   const target = await resolveReviewStoreId(caller, doc.storeId);
   if (!target.allowed || target.storeId !== doc.storeId) {
     return { success: false, error: '无权限：仅可处理本店的投稿' };
@@ -501,12 +533,14 @@ async function handleReject(event, OPENID) {
     return { success: false, error: `驳回原因过长，请控制在 ${MAX_NOTE_LENGTH} 字以内` };
   }
 
-  const caller = await resolveCaller(OPENID);
+  const own = await resolveCaller(OPENID);
   const docRes = await db.collection(COLLECTION).doc(id).get().catch(() => null);
   const doc = docRes && docRes.data;
   if (!doc) return { success: false, error: '该条记录不存在' };
   if (doc.status !== 'pending') return { success: false, error: '该条记录已被处理，请勿重复操作' };
 
+  // 🛡️（2026-09-12）巡检漫游身份解析，见 handleSubmit 同处注释
+  const caller = resolveEffectiveCaller(own, doc.storeId);
   const target = await resolveReviewStoreId(caller, doc.storeId);
   if (!target.allowed || target.storeId !== doc.storeId) {
     return { success: false, error: '无权限：仅可处理本店的投稿' };
@@ -664,7 +698,9 @@ function emptyMaterialTotals() {
 }
 
 async function handleStatsSummary(event, OPENID) {
-  const caller = await resolveCaller(OPENID);
+  const own = await resolveCaller(OPENID);
+  // 🛡️（2026-09-12）巡检漫游身份解析，见 handleSubmit 同处注释
+  const caller = resolveEffectiveCaller(own, event.storeId || (own && own.storeId) || '');
   const target = await resolveReadStoreId(caller, event.storeId);
   if (!target.allowed) return { success: false, error: target.error };
 
