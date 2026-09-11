@@ -338,9 +338,25 @@ exports.main = async (event, context) => {
       }
     }
 
+    // 🔍（2026-09-11 上帝账号路由完善）platform_admin 单独分流：不进入下面
+    // ALLOWED_ROLES 判断、也不受下面"本机构大屏"整条查询链路影响——直接
+    // 转去 buildPublicAggregateSummary()，与匿名访客看到的是完全同一份数据
+    // （只读机构数/门店数/服务人次/义工工时聚合计数，不返回任何机构可识别
+    // 信息、原始文档或财务字段）。不能让它走下面"tenantId 是否为空"的判断：
+    // platform_admin 的 user_roles.tenantId 是一个历史遗留的占位值
+    // （'yuhuazhai_national'，名下没有真实门店），若放任它按非空 tenantId
+    // 往下走，会被当成"这个占位机构的本机构大屏"来查，展示一个空洞、
+    // 误导人的"0 门店 0 人次"假大屏，而不是真正诚实的全网聚合视图。
+    // 🛡️ 与本文件其余分支保持同一条安全边界：platform_admin 依然完全看不到
+    // 任何机构内部的财务/门店明细——这里放行的只是"跨租户聚合计数"这一级，
+    // 与匿名公众能看到的信息完全等同，不构成新的越权面
+    if (userRole === 'platform_admin') {
+      return await buildPublicAggregateSummary();
+    }
+
     // 🛡️ 权限卡口：超管 / 大家长 / 总部财务 / 志工均可访问本机构大屏。
     // 大家长已是门店自治最高负责人，有权查看全机构汇总大盘（订阅套餐检查在下方）。
-    // 志工侧为只读脱敏视图；platform_admin 不在名单——大屏是机构内部财务数据，平台运维方无需访问。
+    // 志工侧为只读脱敏视图。
     const ALLOWED_ROLES = ['super_admin', 'store_patriarch', 'hq_finance', 'regional_finance', 'volunteer'];
     if (!ALLOWED_ROLES.includes(userRole)) {
       return { success: false, error: '无权限访问本机构数据大屏' };

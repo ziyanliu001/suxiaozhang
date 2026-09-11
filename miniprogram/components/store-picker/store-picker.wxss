@@ -350,6 +350,34 @@
   font-weight: bold;
 }
 
+/* ===== 🔍（2026-09-11 上帝账号路由完善）platform_admin 专属置顶卡片补充样式
+   ===== 复用 .superadmin-pinned-card 的卡片底色/边框，这里只补充与超管卡片
+   结构不同的两处：一句说明文案 + 一个跳转按钮（超管卡片是角色胶囊，platform_admin
+   没有"角色"可切，直接是一个动作入口） */
+.platform-admin-hint {
+  display: block;
+  font-size: 22rpx;
+  color: #8A7660;
+  line-height: 1.5;
+  margin-bottom: 16rpx;
+}
+
+.platform-inspect-entry-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72rpx;
+  border-radius: 14rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.platform-inspect-entry-btn:active {
+  opacity: 0.85;
+}
+
 /* ===== 滚动列表：flex: 1 + height: 0 强制占满面板剩余高度，使其在 flex 列中
    真正独立滚动，顶部固定区与底部按钮永不被内容撑出视口 ===== */
 .sheet-scroll-list {

@@ -9278,6 +9278,38 @@ Page({
     }
   },
 
+  // 🔍（2026-09-11 上帝账号路由完善）platform_admin 专属落地页的主入口：
+  // 全国总览 / 透视台——跳转到 statistics.ts 的公开聚合分支（?view=national
+  // 触发 _autoNationalIntent，该页面 applyRolePermissions 已识别
+  // role==='platform_admin' 时也走 loadPublicAggregateDashboard()，与匿名
+  // 访客看到的是同一份不含财务字段的跨机构聚合数据，见该文件与
+  // getNationalDashboard 云函数同一处修改的注释）
+  onEnterNationalDashboard() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+    safeNavigateTo({
+      url: '/subpackages/reports/pages/statistics/statistics?view=national',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
+  // 🔍（2026-09-11 上帝账号路由完善）与 components/store-picker/store-picker.ts
+  // 的 onTapPlatformInspect 跳转目标完全一致（同一个已审计的自助授权 Tab）——
+  // 这里单独复制一份跳转调用，是因为 store-picker 组件在 platform_admin 落地
+  // 页尚未挂载（见 index.wxml 注释），不是重新实现了一套巡检逻辑
+  onGotoPlatformInspect() {
+    if (this.isNavigating) return;
+    this.isNavigating = true;
+    safeNavigateTo({
+      url: '/subpackages/admin/pages/platform-admin/platform-admin?tab=inspect',
+      fail: () => {
+        this.isNavigating = false;
+      }
+    });
+  },
+
   // 🏢 工作空间选择首页：点击【通用素食/门店记账】卡片。不涉及雨花声明，orgType
   // 只要不是 'yuhuazhai' 就直接放行——elderly_canteen/volunteer_station/rescue_team/
   // tongxin_children/other 等其余机构类型统一归入这张"通用"卡片。

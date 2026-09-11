@@ -1,5 +1,6 @@
 import { isCloudAvailable } from './cloudGuard';
 import { callFunctionWithTimeout } from './withTimeout';
+import { resolveEffectiveRoleDecision } from './lib/resolveEffectiveRole';
 
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
@@ -416,18 +417,28 @@ export const AuthService = {
   // @returns 生效角色的原始 token：storageRole 存在则原样返回它（可能是
   //   'store_family' 这个仅用于展示分流的伪角色，调用方自行按需归一化展示），
   //   否则原样返回 persistedRole
+  // 🐛（2026-09-11 上帝账号路由完善）决策逻辑拆到 lib/resolveEffectiveRole.js，
+  // 配套单测同目录 lib/resolveEffectiveRole.test.js——这里只负责把决策结果
+  // 落到 wx.storage 副作用（清理残留 key / 回写缓存），不重复维护判断逻辑。
+  // 核心修复：platform_admin 账号绝不会被这个原本只为 super_admin"视角切换/
+  // 预览"设计的 storage key 悄悄降级，且残留的陈旧 key 会被主动清理，账号
+  // 自愈，见 lib/resolveEffectiveRole.js 头部注释还原的完整根因链路。
   resolveEffectiveRole(persistedRole: string): string {
     const storageRole = wx.getStorageSync('current_user_role');
-    if (!storageRole) return persistedRole;
+    const decision = resolveEffectiveRoleDecision(persistedRole, storageRole);
 
-    // store_family 是页面展示层用来区分"家人视角"的伪角色，不在 UserRole 枚举里，
-    // 它对应的真实底层角色就是 volunteer，写回缓存时要按真实角色归一化，
-    // 否则 overwriteCachedRole 会把一个非法的 role 值落进持久化缓存
-    const roleForCache = storageRole === 'store_family' ? 'volunteer' : storageRole;
-    if (persistedRole !== roleForCache) {
-      this.overwriteCachedRole(roleForCache as UserRole);
+    if (decision.shouldClearStaleStorage) {
+      try {
+        wx.removeStorageSync('current_user_role');
+        wx.removeStorageSync('active_role');
+      } catch (e) {
+        // 清理失败不影响本次返回值，下次调用会再次尝试清理
+      }
     }
-    return storageRole;
+    if (decision.shouldOverwriteCache && decision.roleForCache) {
+      this.overwriteCachedRole(decision.roleForCache as UserRole);
+    }
+    return decision.effectiveRole;
   },
 
   // 🐛 根因修复：cachedRole（本地持久化的服务端角色缓存）与 storageRole（手动

@@ -1287,7 +1287,16 @@ Page({
     // canViewNationalDashboard 上方注释"志工/无角色个人不再放行全国数据大屏"
     // 的既有决策完全不冲突：那条决策针对的是"已归属某机构"的志工，这里针对的是
     // "压根没有机构"的陌生公众，两者是不同的人群
-    const isAnonymousNationalIntent = isGuest && !!(this as any)._autoNationalIntent;
+    // 🔍（2026-09-11 上帝账号路由完善）platform_admin 与匿名 guest 走同一条
+    // 安全分支：两者都"没有归属任何真实机构"，都不该按 canViewNationalDashboard
+    // 那套业务角色权限判断（platform_admin 的业务权限已在 authService.ts
+    // getPermissionFlags 里被显式隔离，理由见该文件同名注释），但都应该能看到
+    // loadPublicAggregateDashboard() 这份不含任何财务字段的脱敏聚合数据——
+    // 与"platform_admin 权限彻底隔离，防止商业运营方借运维身份窥探财务明细"
+    // 这条既有安全边界完全不冲突，因为这里走的本来就是对匿名公众也放开的
+    // 同一个只读聚合分支，不是额外开的口子
+    const isPlatformAdminRole = String(role || '').toLowerCase() === 'platform_admin';
+    const isAnonymousNationalIntent = (isGuest || isPlatformAdminRole) && !!(this as any)._autoNationalIntent;
     if (isAnonymousNationalIntent) {
       (this as any)._autoNationalIntent = false;
       this.loadPublicAggregateDashboard();

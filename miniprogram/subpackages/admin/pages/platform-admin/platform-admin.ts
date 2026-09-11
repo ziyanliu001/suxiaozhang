@@ -316,14 +316,26 @@ Page({
     revokingGrantTenantId: ''
   },
 
-  onLoad() {
+  // 🔍（2026-09-11 上帝账号路由完善）options.tab==='inspect' 时直接落地到
+  // "平台巡检"Tab——供 store-picker 的"🔍 平台巡检 · 全国总览"入口跳转时
+  // 使用，让 platform_admin 不需要先落在默认的"授权码管理"Tab 再手动点一次
+  // 巡检 Tab。与 onSwitchTab 保持同一套"该 Tab 数据尚未加载过才兜底拉取"逻辑，
+  // 不重复维护判断条件
+  onLoad(options: { tab?: string }) {
     // 🩺（排查白屏用）确认 onLoad 是否真的被调用——如果模拟器控制台看不到
     // 这条日志，说明问题出在 onLoad 之前（编译模式指向的路径/WXML 编译失败/
     // 模块 require 阶段异常），不是本方法内部逻辑的问题，不用再往下排查
     // this.checkAccess()/navGuard 这些具体实现
-    console.log('[platform-admin] onLoad 开始执行');
+    console.log('[platform-admin] onLoad 开始执行, options:', options);
     this.computeCustomNavLayout();
     this.checkAccess();
+
+    if (options && options.tab === 'inspect') {
+      this.setData({ activeTab: 'inspect' });
+      if (this.data.inspectTenantResults.length === 0 && !this.data.inspectTenantsLoading) {
+        this.loadInspectTenants();
+      }
+    }
 
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',

@@ -37,6 +37,14 @@ function isVerifiedSuperAdmin(roleInfo: { role?: string; status?: string } | nul
   return !!(roleInfo && roleInfo.role === 'super_admin' && roleInfo.status === 'approved');
 }
 
+// 🔍（2026-09-11 上帝账号路由完善）与上面 isVerifiedSuperAdmin 同一口径的
+// platform_admin 版本——platform_admin 与 super_admin 是两个完全独立的维度
+// （见 authService.ts UserRole 注释），不能互相复用同一个判定函数，否则
+// 未来任一分支改动都可能悄悄影响到另一边
+function isVerifiedPlatformAdmin(roleInfo: { role?: string; status?: string } | null | undefined): boolean {
+  return !!(roleInfo && roleInfo.role === 'platform_admin' && roleInfo.status === 'approved');
+}
+
 Component({
   // 🐛 Bug 修复：超管进入"雨花公益食堂专区"后打开本组件的【选择服务站点与身份】
   // 弹窗，此前 fetchStoreListFromCloud() 调用 getStoreList 云函数时完全没有
@@ -138,6 +146,12 @@ Component({
     // getStoreList 云函数本身已按 tenantId 过滤，这里拿到的门店列表天然就是本机构范围
     isSuperAdmin: false,
 
+    // 🔍（2026-09-11 上帝账号路由完善）已核验的 platform_admin：与 isSuperAdmin
+    // 同一处获取时机（fetchStoreListFromCloud），供本弹窗展示"平台巡检·全国
+    // 总览"专属置顶卡片——platform_admin 没有归属任何门店，不适用下面按
+    // tenantId 过滤出的 allStores 列表，需要独立于普通门店列表之外的入口
+    isPlatformAdmin: false,
+
     // 🏛️ 大家长任命申请弹窗：与店长/财务共用的 showAuthModal 完全独立——家长任命
     // 走真实的 processRoleAudit(action:'apply') 服务端审批（仅超管可批），不提供
     // 任何客户端口令/邀请码通道，避免出现可被反编译绕过的自我提权入口
@@ -196,6 +210,18 @@ Component({
             storeName: activeStore.storeName,
             role: this._normalizeRole(role) as 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'ADMIN' | 'PATRIARCH' | 'FAMILY'
           }
+        });
+        return;
+      }
+
+      // 🔍（2026-09-11 上帝账号路由完善）platform_admin 没有绑定任何门店时，
+      // "全国总览（巡检漫游模式）"就是它的正常常态身份，不该跟普通未选店账号
+      // 共用"请选择站点"这句面向业务角色的占位文案——本判断只读本地已缓存的
+      // 角色信息（不发起云调用），与本方法"同步、轻量"的既有定位一致
+      const cachedRole = AuthService.getCachedRoleInfo();
+      if (cachedRole && cachedRole.role === 'platform_admin' && cachedRole.status === 'approved') {
+        this.setData({
+          currentStore: { storeId: '', storeName: '全国总览（巡检漫游模式）', role: 'ADMIN' }
         });
         return;
       }
@@ -269,6 +295,7 @@ Component({
           roleInfo = roleResult.roleInfo || null;
         }
         const isSuperAdmin = isVerifiedSuperAdmin(roleInfo);
+        const isPlatformAdmin = isVerifiedPlatformAdmin(roleInfo);
 
         // 🐛 Bug 修复：按宿主页面透传的当前专区（orgTypeFilter）收窄查询——
         // 在调用者自己 tenantId 过滤的基础上叠加 orgType 精确匹配，即使
@@ -339,7 +366,8 @@ Component({
           nationalOverviewEntry,
           provinceOptions,
           provinceOptionsWithAll: ['全部省份', ...provinceOptions],
-          isSuperAdmin
+          isSuperAdmin,
+          isPlatformAdmin
         });
         this.refreshRolePermissions();
       } catch (err) {
@@ -591,6 +619,18 @@ Component({
     // 关闭弹窗
     onCloseSheet() {
       this.setData({ showPickerSheet: false });
+    },
+
+    // 🔍（2026-09-11 上帝账号路由完善）"自由巡检门店"入口——跳转到已有的
+    // platform-admin.ts【平台巡检】Tab（manageTenantSubscription.listTenants→
+    // getTenantDetail 两级机构/门店选择 + grantTenantAuthorization 自助授权，
+    // 2 小时 TTL，全程留痕，见该页面 loadInspectTenants/onInspectSelectTenant/
+    // onSubmitInspectGrant 注释），不在本弹窗里重新实现一套门店搜索——避免
+    // 维护两份几乎一样的"跨机构门店发现"逻辑，也不给 getStoreList 之外再开
+    // 一个能查看全平台门店名称的入口
+    onTapPlatformInspect() {
+      this.setData({ showPickerSheet: false });
+      wx.navigateTo({ url: '/subpackages/admin/pages/platform-admin/platform-admin?tab=inspect' });
     },
 
     // 阻止冒泡与触摸穿透
