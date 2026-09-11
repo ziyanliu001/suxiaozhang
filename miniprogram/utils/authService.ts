@@ -1,6 +1,8 @@
 import { isCloudAvailable } from './cloudGuard';
 import { callFunctionWithTimeout } from './withTimeout';
 import { resolveEffectiveRoleDecision } from './lib/resolveEffectiveRole';
+import { resolveActiveRoleGrant } from './lib/resolveActiveRoleGrant';
+import { getCurrentActiveStore } from './storeManager';
 
 const OPENID_CACHE_KEY = 'auth_openid';
 const USER_CACHE_KEY = 'auth_user';
@@ -423,9 +425,21 @@ export const AuthService = {
   // 核心修复：platform_admin 账号绝不会被这个原本只为 super_admin"视角切换/
   // 预览"设计的 storage key 悄悄降级，且残留的陈旧 key 会被主动清理，账号
   // 自愈，见 lib/resolveEffectiveRole.js 头部注释还原的完整根因链路。
+  // 🐛（2026-09-12 二次修复）"platform_admin 绝不接受任何覆盖"这条规则把
+  // 合法的 authorizedTenants 巡检漫游也一并挡住了——profile.ts/index.ts 都
+  // 经由本方法决策生效角色，platform_admin/super_admin 显式漫游到某门店选择
+  // 店长/大家长/财务身份后，这两个页面会被强制打回 platform_admin。这里在
+  // 决策前先用 resolveActiveRoleGrant 针对【当前活跃店】（getCurrentActiveStore，
+  // 与 store-picker.ts 切换门店/角色时写入的是同一套 canonical storage key）
+  // 核对 authorizedTenants 里是否存在一条有效授权——只信任服务端下发的这份
+  // 数据，不是重新信任 current_user_role 这个客户端可写 storage key 本身，
+  // 不会重新打开 platform_admin 自我强化降级循环那个口子。
   resolveEffectiveRole(persistedRole: string): string {
     const storageRole = wx.getStorageSync('current_user_role');
-    const decision = resolveEffectiveRoleDecision(persistedRole, storageRole);
+    const cached = this.getCachedRoleInfo();
+    const activeStoreId = getCurrentActiveStore().storeId || '';
+    const grant = activeStoreId ? resolveActiveRoleGrant(cached && cached.authorizedTenants, activeStoreId) : null;
+    const decision = resolveEffectiveRoleDecision(persistedRole, storageRole, grant ? grant.role : '');
 
     if (decision.shouldClearStaleStorage) {
       try {

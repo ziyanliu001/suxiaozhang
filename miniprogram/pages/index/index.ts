@@ -29,7 +29,7 @@ import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { buildSmartReceiptDisplayItems, formatSmartReceiptTotalDisplay, buildSmartReceiptApplyText } from './lib/smartReceiptDraft';
 import { isDefaultOcrResultEmpty, isParseReceiptResultEmpty, adaptParseReceiptDraftToLegacyResult, adaptLegacyOcrResultToParseReceiptDraft } from './lib/ocrEngineFallback';
-import { resolveActiveRoleGrant } from './lib/resolveActiveRoleGrant';
+import { resolveActiveRoleGrant } from '../../utils/lib/resolveActiveRoleGrant';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {

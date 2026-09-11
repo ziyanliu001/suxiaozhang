@@ -65,3 +65,29 @@ test('普通角色路径下 shouldClearStaleStorage 恒为 false，不影响既�
   const d = resolveEffectiveRoleDecision('volunteer', 'finance');
   assert.equal(d.shouldClearStaleStorage, false);
 });
+
+// ==================== 2026-09-12 二次修复：grantedRole（巡检漫游授权）优先级最高 ====================
+
+test('grantedRole 命中时，即便 persistedRole 是 platform_admin，也不会被"不接受任何覆盖"这条豁免拦住', () => {
+  const d = resolveEffectiveRoleDecision('platform_admin', '', 'store_manager');
+  assert.equal(d.effectiveRole, 'store_manager');
+  assert.equal(d.shouldOverwriteCache, false);
+  assert.equal(d.shouldClearStaleStorage, false);
+});
+
+test('grantedRole 命中时不回写持久化缓存——巡检漫游是临时覆盖，不代表账号真实身份变化', () => {
+  const d = resolveEffectiveRoleDecision('platform_admin', 'store_manager', 'store_patriarch');
+  assert.equal(d.effectiveRole, 'store_patriarch');
+  assert.equal(d.shouldOverwriteCache, false);
+});
+
+test('grantedRole 为空字符串/未传时，行为与升级前完全一致（platform_admin 豁免规则正常生效）', () => {
+  assert.equal(resolveEffectiveRoleDecision('platform_admin', 'store_manager', '').effectiveRole, 'platform_admin');
+  assert.equal(resolveEffectiveRoleDecision('platform_admin', 'store_manager').effectiveRole, 'platform_admin');
+});
+
+test('grantedRole 命中时对非 platform_admin 的 persistedRole 同样生效（super_admin 巡检漫游同一套规则）', () => {
+  const d = resolveEffectiveRoleDecision('super_admin', '', 'finance');
+  assert.equal(d.effectiveRole, 'finance');
+  assert.equal(d.shouldOverwriteCache, false);
+});

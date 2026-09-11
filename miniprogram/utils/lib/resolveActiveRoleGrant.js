@@ -5,6 +5,17 @@
 // authorizedTenants 轻量租户漫游授权（"巡检漫游"，见 CLAUDE.md 8.2 节）临时
 // 获得店长/大家长身份的账号显示"无权限"。
 //
+// ⚠️（2026-09-12 二次修复）原本只放在 pages/index/lib/ 下、只给 index.ts
+// 的 refreshUserRoleView() 用——但同一个根因在 profile.ts initMinePage()/
+// index.ts initCurrentUserRole() 这两处共用的 utils/authService.ts
+// resolveEffectiveRole() 里也存在（那里的 resolveEffectiveRoleDecision 对
+// platform_admin 有一条"任何 storageRole 覆盖都视为陈旧残留、一律拦截"的
+// 硬编码豁免，见 lib/resolveEffectiveRole.js 头部注释——这条规则本身是对的
+// （防止 stale storage 把 platform_admin 顶成别的角色的自我强化降级循环），
+// 但完全没有考虑巡检漫游这种"服务端已核验、明确针对当前活跃店签发"的合法
+// 覆盖，把两者一并拦住了）。挪到 utils/lib/ 下，index.ts 与 authService.ts
+// 共用同一份决策逻辑，不再各自维护一份几乎一样的判断。
+//
 // 根因：refreshUserRoleView()（index.ts）此前的权限锁定逻辑只区分"是不是
 // super_admin"——非 super_admin 账号一律强制锁定为自己在 user_roles 里的
 // 真实绑定角色/门店（cached.role/cached.storeId），完全不检查

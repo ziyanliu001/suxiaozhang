@@ -2,6 +2,7 @@
 
 import { isCloudAvailable } from './utils/cloudGuard';
 import { initPrivacyAuthHub } from './utils/privacyAuthHub';
+import { setCurrentActiveStore } from './utils/storeManager';
 
 if (typeof App === 'undefined') {
   // 防御 Linux 环境下开发者工具打包器（wxmodule.patch.js）模块加载顺序错乱、
@@ -280,11 +281,23 @@ App({
     }
   },
 
-  switchStore(storeId: string, storeName: string, role: 'MANAGER' | 'FINANCE' | 'VOLUNTEER') {
+  // 🐛（2026-09-12 身份粘性修复）此前这里只手写了 active_store_id/selectedStore
+  // 两个 legacy key，唯独漏了 current_user_role/current_store_id/current_store_name
+  // 这几个 canonical key——store-picker.ts _persistStoreSelection 是本方法
+  // 唯一调用方，切完店/角色后 profile.ts initMinePage()（读 current_user_role
+  // 判断 storageRole）读到的永远是空值，被迫回退到账号自己在 user_roles 里的
+  // 真实身份（platform_admin 巡检漫游到店长视图会被这里打回原形，见
+  // utils/lib/resolveEffectiveRole.js 头部注释）。改为委托给 storeManager.ts
+  // 的 setCurrentActiveStore()（与 index.ts switchStoreTarget/onStoreChanged、
+  // store-picker.ts _persistStoreSelection 其余两处写法用的是同一个函数），
+  // 一次性写全 canonical key 集合，不再自己维护一份不完整的 key 清单。
+  // role 类型放宽到本组件全部合法胶囊角色（原来只声明了三个，PATRIARCH/ADMIN/
+  // FAMILY 靠 store-picker.ts 里的 `as any` 静默绕过了类型检查，不代表运行时
+  // 真的只会传这三种值）。
+  switchStore(storeId: string, storeName: string, role: 'MANAGER' | 'FINANCE' | 'VOLUNTEER' | 'PATRIARCH' | 'ADMIN' | 'FAMILY') {
     this.globalData.currentStore = { storeId, storeName, role };
     this.globalData.selectedStore = { storeId, storeName };
-    wx.setStorageSync('active_store_id', storeId);
-    wx.setStorageSync('selectedStore', { storeId, storeName });
+    setCurrentActiveStore(storeId, storeName, role);
     console.log('[App] 已切换门店:', storeName, '角色:', role);
   }
 })
