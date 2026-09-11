@@ -25,6 +25,13 @@ const {
   sanitizePurchasePlanTasks,
   buildPurchasePlanId
 } = require('./lib/buildPurchasePlan');
+// 🛡️（2026-09-11 巡检漫游补齐）与 manageStoreProfile/getPatriarchDashboard/
+// manageReportApproval 同一套 authorizedTenants 轻量租户漫游机制——原先本
+// 云函数的 resolveCaller 只是极简的按 OPENID 查 user_roles，不支持
+// platform_admin 巡检漫游，导致采购清单等新能力没有审计巡检通道可用。
+// 见 lib/resolveCaller.js、lib/buildAuditLogEntry.js 头部注释。
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
+const { buildAuditLogEntry, isRoamingConsumed } = require('./lib/buildAuditLogEntry');
 
 const COLLECTION = 'daily_menus';
 // 🛒 后厨采购清单：一家门店一天一份，_id 用 buildPurchasePlanId 拼出的
@@ -80,10 +87,38 @@ function buildMealTypeCondition(mealType) {
   return safe;
 }
 
-async function resolveCaller(OPENID) {
+// 🛡️（2026-09-11 巡检漫游补齐）与 manageStoreProfile 同款签名：opts.targetStoreId
+// 命中调用者 authorizedTenants 里某条有效授权时，返回的身份把
+// tenantId/role/storeId 替换成该条授权的值；未命中/未传时原样返回调用者
+// 本来的身份，行为与改造前逐字节一致。只在真的发生了漫游身份替换时才写
+// 一条审计日志，未漫游的高频路径（本店角色访问自己门店）零额外开销。
+async function resolveCaller(OPENID, opts) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
-  return (roleRes.data && roleRes.data[0]) || null;
+  const own = (roleRes.data && roleRes.data[0]) || null;
+  const targetStoreId = opts && (opts.targetStoreId || opts.storeId);
+  const effectiveCaller = resolveEffectiveCaller(own, targetStoreId);
+
+  if (isRoamingConsumed(own, effectiveCaller)) {
+    const storeRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
+    const targetStoreName = (storeRes && storeRes.data && storeRes.data.storeName) || '';
+    const logEntry = buildAuditLogEntry({
+      operatorOpenId: OPENID,
+      own,
+      effectiveCaller,
+      targetStoreId,
+      targetStoreName,
+      cloudFunctionName: 'manageDailyMenu',
+      action: opts && opts.action
+    });
+    if (logEntry) {
+      await db.collection('tenant_authorization_audit_logs').add({
+        data: { ...logEntry, createTime: db.serverDate() }
+      }).catch((err) => console.warn('[manageDailyMenu] 巡检审计日志写入失败:', err));
+    }
+  }
+
+  return effectiveCaller;
 }
 
 // 写权限校验：店长仅可管理本店；超管可管理本机构内任意门店
@@ -176,7 +211,7 @@ function resolvePublisherLabel(role) {
 }
 
 exports.main = async (event) => {
-  const { action } = event;
+  const { action, storeId: eventStoreId } = event;
   const { OPENID } = cloud.getWXContext();
 
   if (!action) {
@@ -184,7 +219,11 @@ exports.main = async (event) => {
   }
 
   try {
-    const caller = await resolveCaller(OPENID);
+    // 🛡️ targetStoreId 取自 event.storeId——本云函数除 'delete'（只传 id，
+    // 目标门店要先查文档才知道）外的其余 action 都以 storeId 作为目标门店
+    // 参数名，传给 resolveCaller 后，只有调用者持有覆盖这家门店的有效巡检
+    // 授权时才会触发漫游；未传/未命中时 caller 与改造前完全一致
+    const caller = await resolveCaller(OPENID, { targetStoreId: eventStoreId, action });
 
     switch (action) {
       case 'create':
