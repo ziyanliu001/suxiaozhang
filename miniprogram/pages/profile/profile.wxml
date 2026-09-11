@@ -116,6 +116,19 @@
             <text class="store-icon">🛡️</text>
             <text class="store-name">{{currentUserRole === 'super_admin' ? '全局总览' : '超级管理员 · 全局总览'}}</text>
           </view>
+          <!-- 🐛 根因修复（platform_admin 未选具体门店时显示"未绑定机构"）：
+               platform_admin 不隶属任何机构，这本是语义正确的空值（见
+               checkTenantPermission 云函数注释），但直接落进下面 else 分支的
+               "未绑定机构"兜底文案会让用户误以为账号配置有问题。platform_admin
+               且未选定具体巡检门店（currentStoreName 为空）时单独展示"平台统管 /
+               全国漫游"这个属于巡检身份本身、不暗示任何机构绑定异常的文案；一旦
+               选定了具体门店（currentStoreName 非空），落到下面 else 分支正常展示
+               该店真实机构名（fetchStoreOrgType 已改为按 storeId 触发
+               authorizedTenants 巡检漫游查询，orgTypeFallbackLabel 能查到值） -->
+          <view class="belong-store-tag super-admin-highlight" wx:elif="{{isPlatformAdmin && !currentStoreName}}">
+            <text class="store-icon">🔍</text>
+            <text class="store-name">平台统管 / 全国漫游</text>
+          </view>
           <block wx:else>
             <view class="belong-store-tag">
               <text class="store-icon">🏢</text>

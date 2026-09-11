@@ -1,6 +1,6 @@
 import { AuthService } from '../../../../utils/authService';
 import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
-import { setSelectedStore, clearAllStoresListCache } from '../../../../utils/storeManager';
+import { setSelectedStore, clearAllStoresListCache, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../../../utils/storeManager';
 import { setGenCodeHandoff } from '../../../../utils/genCodeHandoff';
 import { isCloudAvailable } from '../../../../utils/cloudGuard';
 import { drawStoreInvitationPoster, SponsorInfo } from '../../../../utils/drawStorePoster';
@@ -151,21 +151,28 @@ Page({
     try {
       // includeInactive:true —— 门店管理页需要连"已停用"门店一起看，才能重新启用；
       // 首页 store-picker / 邀请码弹窗走的是默认调用（不传），只看得到 active 门店。
-      // 🐛 根因修复：叠加 orgType 过滤（见 onLoad/data.orgTypeFilter 注释），
-      // 与首页 store-picker/getStoreList 其余调用方遵循同一条专区数据隔离边界，
-      // 超管也不例外——不能因为超管跨专区可见就全量返回
+      // 🐛 根因修复（专区隔离闭环，与首页 index.ts/store-picker.ts 共用同一套
+      // utils/storeManager.ts 实现）：雨花专区改为"orgType 精确查询 + 全量查询
+      // 按店名'雨花'兜底纳入，storeId 去重合并"，通用专区改为按店名'雨花'兜底
+      // 剔除——不再各自维护一份可能漏改、逐渐漂移的过滤逻辑，具体根因见
+      // storeManager.ts 内 fetchYuhuaZoneStoreList/fetchCommunityZoneStoreList
+      // 头部注释
       const orgTypeFilter = this.data.orgTypeFilter;
-      const res = await callFunctionWithTimeout({
-        name: 'getStoreList',
-        data: { includeInactive: true, ...(orgTypeFilter ? { orgType: orgTypeFilter } : {}) }
-      });
-      const result = res.result as any;
-      if (result && result.success) {
-        this.setData({ list: result.list || [] });
-        this.loadRiskBadges();
+      let list: any[];
+      if (orgTypeFilter === 'yuhuazhai') {
+        list = await fetchYuhuaZoneStoreList({ includeInactive: true });
+      } else if (orgTypeFilter === 'general') {
+        list = await fetchCommunityZoneStoreList({ includeInactive: true });
       } else {
-        wx.showToast({ title: (result && result.error) || '门店列表加载失败', icon: 'none' });
+        const res = await callFunctionWithTimeout({ name: 'getStoreList', data: { includeInactive: true } });
+        const result = res.result as any;
+        if (!(result && result.success)) {
+          wx.showToast({ title: (result && result.error) || '门店列表加载失败', icon: 'none' });
+        }
+        list = (result && result.success) ? (result.list || []) : [];
       }
+      this.setData({ list });
+      this.loadRiskBadges();
     } catch (err) {
       console.error('[store-management] loadStoreList 异常:', err);
       wx.showToast({ title: '门店列表加载异常', icon: 'none' });

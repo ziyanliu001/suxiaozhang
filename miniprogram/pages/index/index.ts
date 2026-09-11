@@ -15,7 +15,7 @@ import {
 import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
-import { getSelectedStore, getCurrentActiveStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache } from '../../utils/storeManager';
+import { getSelectedStore, getCurrentActiveStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../utils/storeManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -1860,56 +1860,34 @@ Page({
 
       // 🏢 多租户边界：门店列表通过云函数按调用者所属机构过滤后返回，
       // 不再由前端直接全表查询 stores 集合（避免跨机构看到彼此的门店名单）。
-      // 🐛 Bug 修复：按当前专区透传 orgType——在 tenantId 过滤基础上叠加
-      // orgType 精确匹配，防止 tenantId 名下混入的跨专区历史脏数据（如
-      // "嵩屿街道敬老中心助餐点"挂在雨花斋默认全国机构下）一起被带出来
       if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
-      const orgTypeFilter = zoneKey === 'yuhua' ? 'yuhuazhai' : (zoneKey === 'general' ? 'general' : '');
-      const isYuhuaZone = zoneKey === 'yuhua';
-      const callArgs = orgTypeFilter ? { orgType: orgTypeFilter } : {};
-      // 🐛 冷启动兜底：即使上面的并发去重已经消灭了"同一次 onLoad 打两枪"这个
-      // 主要诱因，页面首次冷启动时云函数容器本身仍可能恰好处于冷启动状态、
-      // 单次调用就逼近甚至超过 8s——冷启动几乎总是"一次性税"，紧接着的第二次
-      // 调用会打在已经预热好的容器上，通常几百毫秒内返回。超时后不直接放弃，
-      // 静默重试一次，仍失败才落到下面的 catch 分支
-      let cloudRes;
-      try {
-        cloudRes = await callFunctionWithTimeout({ name: 'getStoreList', data: callArgs });
-      } catch (timeoutErr) {
-        console.warn('[fetchAllStoresList] 首次调用超时/失败，重试一次:', timeoutErr);
-        cloudRes = await callFunctionWithTimeout({ name: 'getStoreList', data: callArgs });
-      }
-      const cloudResult = cloudRes.result as any;
-      // 🐛 与上面缓存读取路径同一处根因、对称补齐防护：这条云端查询路径此前只信
-      // `cloudResult.list || []`，只挡了 list 缺失/为 null 的情况，没校验它"是
-      // 数组"——一旦云函数在某些异常响应形状下把 list 返回成非数组的真值（例如
-      // 对象），这里会原样 setData 进 allStoresList，而它直接绑定
-      // `<picker range="{{allStoresList}}">`，原生渲染层拿到非数组 range 就会
-      // 踩空索引崩溃，报错正是 "Cannot read property '0' of undefined"——与本文件
-      // 上方缓存分支注释记录的历史崩溃是同一个根因、只是换了数据来源触发
-      const rawList = (cloudResult && cloudResult.success) ? cloudResult.list : null;
-      let list = Array.isArray(rawList) ? rawList : [];
-
-      // 🐛 归属修复（"厦门海沧三源弘雨花斋"等历史门店 orgType 打标不准导致
-      // 雨花专区查不到自己）：getStoreList 返回的门店条目本身不带 orgType
-      // 字段（见 toStoreListItem），前端拿不到它，没法在收到结果后再用
-      // orgType 做二次校验/补救——只能在"要不要把 orgType 条件带给服务端"
-      // 这一步做文章。这里额外发一次不带 orgType 的全量门店查询（仍受调用者
-      // 自己 tenantId 边界约束，不跨机构），用 storeName 是否包含"雨花"字样
-      // 做兜底：只要店名里有"雨花"，无论它的 orgType 字段被打成什么值/是否
-      // 缺失，都无条件并入雨花专区列表，不覆盖/不影响服务端已经按 orgType
-      // 精确匹配返回的正常结果
-      if (isYuhuaZone) {
+      // 🐛 归属修复 + 专区隔离：雨花/通用两个专区的查询与去重/剔除逻辑收敛进
+      // utils/storeManager.ts 的 fetchYuhuaZoneStoreList/fetchCommunityZoneStoreList
+      // 共享实现（与 store-picker.ts 同款调用，避免两处各写一份、日后改一处漏
+      // 另一处），具体根因见该文件内对应函数头部注释
+      let list: any[];
+      if (zoneKey === 'yuhua') {
+        list = await fetchYuhuaZoneStoreList();
+      } else if (zoneKey === 'general') {
+        list = await fetchCommunityZoneStoreList();
+      } else {
+        // 🐛 冷启动兜底：页面首次冷启动时云函数容器本身仍可能恰好处于冷启动
+        // 状态、单次调用就逼近甚至超过 8s——冷启动几乎总是"一次性税"，紧接着
+        // 的第二次调用会打在已经预热好的容器上，通常几百毫秒内返回。超时后
+        // 不直接放弃，静默重试一次，仍失败才落到下面的 catch 分支
+        let cloudRes;
         try {
-          const fullRes = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
-          const fullResult = fullRes.result as any;
-          const fullList = Array.isArray(fullResult && fullResult.list) ? fullResult.list : [];
-          const existingIds = new Set(list.map((s: any) => s.storeId));
-          const extra = fullList.filter((s: any) => !existingIds.has(s.storeId) && (s.storeName || '').includes('雨花'));
-          if (extra.length) list = list.concat(extra);
-        } catch (extraErr) {
-          console.warn('[fetchAllStoresList] 雨花专区店名兜底补齐失败:', extraErr);
+          cloudRes = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
+        } catch (timeoutErr) {
+          console.warn('[fetchAllStoresList] 首次调用超时/失败，重试一次:', timeoutErr);
+          cloudRes = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
         }
+        const cloudResult = cloudRes.result as any;
+        // 🐛 防御性校验：只信 `cloudResult.list || []` 挡不住"list 是非数组真值"
+        // 这种异常响应形状——allStoresList 直接绑定 `<picker range="{{allStoresList}}">`，
+        // 原生渲染层拿到非数组 range 会踩空索引崩溃（"Cannot read property '0' of undefined"）
+        const rawList = (cloudResult && cloudResult.success) ? cloudResult.list : null;
+        list = Array.isArray(rawList) ? rawList : [];
       }
 
       this.setData({ allStoresList: list });

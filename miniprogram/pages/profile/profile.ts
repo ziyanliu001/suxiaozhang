@@ -1642,10 +1642,22 @@ Page({
     // 不允许因为查询失败就放行售卖卡片
     if (!isCloudAvailable()) return;
     try {
-      const storeName = this.data.currentStoreName || '';
+      // 🐛 根因修复（platform_admin 巡检具体门店时"归属机构"查不到）：这里此前
+      // 只传 storeName，但 manageStoreProfile 的 authorizedTenants 巡检漫游
+      // （resolveCaller 的 targetStoreId）只认 storeId，不认 storeName——传
+      // storeName 时 platform_admin 的 caller 身份不会被替换成该店的授权角色，
+      // 又不在 CROSS_STORE_VIEW_ROLES（仅 super_admin）名单内、自己也没有绑定
+      // 门店，直接落进"您尚未绑定门店"拒绝分支，orgType 永远查不到，"归属机构"
+      // 栏位（orgTypeFallbackLabel 兜底）跟着永远空着。改用 getCurrentActiveStore()
+      // 取 storeId 优先传（与 fetchCurrentTenantName 同款取值方式），查不到
+      // storeId 时才退回 storeName，super_admin 的跨店查询不受影响
+      const activeStore = getCurrentActiveStore();
       const res: any = await callFunctionWithTimeout({
         name: 'manageStoreProfile',
-        data: { action: 'get', ...(storeName ? { storeName } : {}) }
+        data: {
+          action: 'get',
+          ...(activeStore.storeId ? { storeId: activeStore.storeId } : (activeStore.storeName ? { storeName: activeStore.storeName } : {}))
+        }
       });
       const orgType = (res && res.result && res.result.data && res.result.data.orgType) || '';
       const isYuhuazhai = orgType === 'yuhuazhai';

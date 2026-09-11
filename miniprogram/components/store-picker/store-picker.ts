@@ -1,7 +1,7 @@
 import { AuthService } from '../../utils/authService';
 import { haversineDistanceKm, formatDistance } from '../../utils/geoUtils';
 import { compressAndUploadImages, compressAndUploadScaledImage } from '../../utils/imageCompress';
-import { setCurrentActiveStore, getCurrentActiveStore } from '../../utils/storeManager';
+import { setCurrentActiveStore, getCurrentActiveStore, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../utils/storeManager';
 import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { requestOpenOnboardingCreate } from '../../utils/onboardingHandoff';
@@ -298,43 +298,27 @@ Component({
         const isPlatformAdmin = isVerifiedPlatformAdmin(roleInfo);
 
         // 🐛 Bug 修复：按宿主页面透传的当前专区（orgTypeFilter）收窄查询——
-        // 在调用者自己 tenantId 过滤的基础上叠加 orgType 精确匹配，即使
-        // tenantId 名下混入了跨专区的历史脏数据（如"嵩屿街道敬老中心助餐点"
-        // 挂在雨花斋默认全国机构 yuhuazhai_national 下）也不会显示出来。
-        // orgTypeFilter 为空（宿主未处于任何专区）时不传，行为与此前一致
+        // 与 index.ts fetchAllStoresList 共用 utils/storeManager.ts 的
+        // fetchYuhuaZoneStoreList/fetchCommunityZoneStoreList（并行查询+
+        // storeId 去重合并/店名兜底剔除，具体根因见该文件内对应函数头部注释），
+        // orgTypeFilter 为空（宿主未处于任何专区）时退回不带 orgType 的原始查询，
+        // 行为与此前一致
         const orgTypeFilter = this.properties.orgTypeFilter;
-        const isYuhuaZone = orgTypeFilter === 'yuhuazhai';
-        const res = await callFunctionWithTimeout({
-          name: 'getStoreList',
-          data: orgTypeFilter ? { orgType: orgTypeFilter } : {}
-        });
-        const result = res.result as any;
-        // 🐛 防御性校验：此前只信"result.list 非空即可用"，未校验它真的是数组——
-        // 一旦云函数在异常响应形状下返回非数组的 list，紧接着的 .map() 会直接
-        // 抛错中断整个 fetchStoreListFromCloud，allStores/groupedStoreList
-        // 停留在上一次的值，本组件正是宿主页面进入雨花/通用专区时新挂载的
-        // <store-picker>，这类未兜底的异常在"首次进入工作区"这个时间点最容易暴露
-        const rawList = (result && result.success) ? result.list : null;
-        let list = Array.isArray(rawList) ? rawList : [];
-
-        // 🐛 归属修复（"厦门海沧三源弘雨花斋"等历史门店 orgType 打标不准导致
-        // 雨花专区查不到自己）：getStoreList 返回的门店条目本身不带 orgType
-        // 字段（见云函数 toStoreListItem），拿到结果后已经没法再用 orgType
-        // 二次校验。这里额外发一次不带 orgType 的全量门店查询（仍受调用者
-        // 自己 tenantId 边界约束，不跨机构），只要 storeName 含"雨花"字样，
-        // 无论其 orgType 被打成什么值/是否缺失，都无条件并入雨花专区列表，
-        // 不影响服务端已按 orgType 精确匹配返回的正常结果
-        if (isYuhuaZone) {
-          try {
-            const fullRes = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
-            const fullResult = fullRes.result as any;
-            const fullList = Array.isArray(fullResult && fullResult.list) ? fullResult.list : [];
-            const existingIds = new Set(list.map((s: any) => s.storeId));
-            const extra = fullList.filter((s: any) => !existingIds.has(s.storeId) && (s.storeName || '').includes('雨花'));
-            if (extra.length) list = list.concat(extra);
-          } catch (extraErr) {
-            console.warn('[store-picker] 雨花专区店名兜底补齐失败:', extraErr);
-          }
+        let list: any[];
+        if (orgTypeFilter === 'yuhuazhai') {
+          list = await fetchYuhuaZoneStoreList();
+        } else if (orgTypeFilter === 'general') {
+          list = await fetchCommunityZoneStoreList();
+        } else {
+          const res = await callFunctionWithTimeout({ name: 'getStoreList', data: {} });
+          const result = res.result as any;
+          // 🐛 防御性校验：此前只信"result.list 非空即可用"，未校验它真的是数组——
+          // 一旦云函数在异常响应形状下返回非数组的 list，紧接着的 .map() 会直接
+          // 抛错中断整个 fetchStoreListFromCloud，allStores/groupedStoreList
+          // 停留在上一次的值，本组件正是宿主页面进入雨花/通用专区时新挂载的
+          // <store-picker>，这类未兜底的异常在"首次进入工作区"这个时间点最容易暴露
+          const rawList = (result && result.success) ? result.list : null;
+          list = Array.isArray(rawList) ? rawList : [];
         }
 
         const fetchedStores = list.map((s: any) => ({

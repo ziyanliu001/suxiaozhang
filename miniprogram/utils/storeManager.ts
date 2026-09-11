@@ -239,3 +239,68 @@ export async function fetchAndSyncStoreStatus(storeId: string): Promise<string> 
     return getCachedStoreStatus();
   }
 }
+
+// 🌸 雨花/通用两个专区共用的门店店名关键词——两处（雨花专区兜底纳入 +
+// 通用专区兜底剔除）必须用同一份判定口径，抽成常量避免两处拷贝各自维护、
+// 未来改关键词漏改一处（如同时想覆盖"雨花斋"以外的别名）
+const YUHUA_NAME_KEYWORD = '雨花';
+
+// getStoreList 调用 + 超时重试一次（与 index.ts fetchAllStoresList 原有的
+// "冷启动兜底"策略保持一致）+ 返回值数组防御性校验，index.ts / store-picker.ts
+// 两个调用方共用同一份实现，避免各自维护一份、行为逐渐漂移
+async function callGetStoreListResilient(data: Record<string, unknown>): Promise<any[]> {
+  try {
+    let res;
+    try {
+      res = await callFunctionWithTimeout({ name: 'getStoreList', data });
+    } catch (timeoutErr) {
+      res = await callFunctionWithTimeout({ name: 'getStoreList', data });
+    }
+    const result = res.result as any;
+    const rawList = (result && result.success) ? result.list : null;
+    return Array.isArray(rawList) ? rawList : [];
+  } catch (err) {
+    console.warn('[storeManager] getStoreList 调用失败:', data, err);
+    return [];
+  }
+}
+
+// 🐛 归属修复（"厦门海沧三源弘雨花斋"归属修复后，"漳州白礁保生雨花斋"反而
+// 从雨花专区消失）：此前雨花专区是【顺序 await】两次 getStoreList——先按
+// orgType 精确查询，成功后再发一次不带 orgType 的全量查询做店名兜底。两次
+// 调用首尾相接，总耗时接近翻倍；而本仓库其余多处调用点的注释早已反复确认
+// 云函数冷启动时单次调用就可能逼近 8s 超时阈值。第一次（orgType 精确查询）
+// 那时候还没有重试兜底，一旦在总耗时被拉长后偶然超时失败，就会静默退化成
+// 空列表，只剩第二次（全量查询按店名兜底）能找到的门店——于是出现"这次两家
+// 店都在，下次却只剩靠店名兜底那一家"这种看似矛盾、实为超时竞态的间歇性
+// 丢店现象。改为并行发起两次查询（互不阻塞、总耗时不再翻倍），且都套上
+// 与 index.ts 原有逻辑一致的"超时重试一次"，最后按 storeId 去重合并——
+// 任一路暂时失败都不会拖累另一路，两路都命中同一家店时以先出现的为准
+// includeInactive 透传给 getStoreList（默认只返回 status==='active' 的门店）——
+// 首页 store-picker/工作台走默认值即可，门店管理页需要连"已停用"门店一起看
+// 才能重新启用，见 store-management.ts loadStoreList() 调用点
+export async function fetchYuhuaZoneStoreList(opts?: { includeInactive?: boolean }): Promise<any[]> {
+  const extra = opts?.includeInactive ? { includeInactive: true } : {};
+  const [primaryList, ownTenantList] = await Promise.all([
+    callGetStoreListResilient({ orgType: 'yuhuazhai', ...extra }),
+    callGetStoreListResilient({ ...extra })
+  ]);
+
+  const merged = new Map<string, any>();
+  primaryList.forEach((s: any) => { if (s && s.storeId) merged.set(s.storeId, s); });
+  ownTenantList
+    .filter((s: any) => s && (s.storeName || '').includes(YUHUA_NAME_KEYWORD))
+    .forEach((s: any) => { if (s.storeId && !merged.has(s.storeId)) merged.set(s.storeId, s); });
+
+  return Array.from(merged.values());
+}
+
+// 🐛 专区隔离修复：社区普惠与社会互助专区（通用记账）严禁出现店名含"雨花"
+// 字样的门店——即便某条历史门店的 orgType 字段缺失/打错导致服务端过滤条件
+// 意外放行，这里在展示层再兜底剔除一次，确保"雨花斋门店只能出现在雨花专区"
+// 这条业务归属边界不会因为脏数据在两个专区各出现一次，造成用户混淆
+export async function fetchCommunityZoneStoreList(opts?: { includeInactive?: boolean }): Promise<any[]> {
+  const extra = opts?.includeInactive ? { includeInactive: true } : {};
+  const list = await callGetStoreListResilient({ orgType: 'general', ...extra });
+  return list.filter((s: any) => !(s && (s.storeName || '').includes(YUHUA_NAME_KEYWORD)));
+}
