@@ -623,8 +623,27 @@
   border-bottom: 1rpx solid #F5EFE4;
 }
 
+/* 🛒（2026-09-11 点击热区修复）与第 23 条"支出录入按钮行"同一处教训——
+   原本 44rpx（22px）的方形勾选框只是视觉大小，义工手指在 375px 屏宽下
+   经常点不中或误触相邻行。改用"内层视觉方块 44rpx（.dm-purchase-plan-
+   checkbox-inner）+ 外层实际点击热区 min-height/min-width 80rpx（40px，
+   与本仓库已确立的舒适点击区基线一致）"的结构，视觉上不放大勾选框本身，
+   实际可点击范围却撑满一整行高度，flex 居中让内层方块保持在热区正中央。
+   ⚠️ 本页面（daily-menu，店长/大家长专用的菜单管理页）不接入"关怀模式"
+   （care-mode 目前只在 pages/index/index 与 pages/profile/profile 两个
+   面向全角色的首屏页面生效，全仓库检索确认，见 CLAUDE.md 第 8 节同类
+   教训）——如实标注，不臆造一个本页不存在的模式分支。 */
 .dm-purchase-plan-checkbox {
   flex-shrink: 0;
+  min-width: 80rpx;
+  min-height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.dm-purchase-plan-checkbox-inner {
   width: 44rpx;
   height: 44rpx;
   border-radius: 10rpx;
@@ -637,7 +656,7 @@
   box-sizing: border-box;
 }
 
-.dm-purchase-plan-checkbox.checked {
+.dm-purchase-plan-checkbox-inner.checked {
   background: #08979C;
   border-color: #08979C;
 }

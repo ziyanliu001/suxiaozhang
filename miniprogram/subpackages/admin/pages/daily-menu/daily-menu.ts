@@ -128,6 +128,10 @@ function buildDishList(images: any): Array<{ url: string; thumbUrl: string; name
 
 Page({
   _navGuard: null as NavGuardInstance | null,
+  // 🛒 采购清单重量微调的防抖定时器，按 itemKey 独立——不进 data，遵循
+  // CLAUDE.md「临时变量（防抖定时器/锁）必须挂在页面实例上，不占用
+  // setData 通讯通道」的既定规范
+  _purchaseWeightSyncTimers: {} as Record<string, ReturnType<typeof setTimeout>>,
 
   data: {
     // 🐛 根因修复（2026-09-10 导航栏彻底重构）：与 platform-admin 同一处
@@ -270,6 +274,9 @@ Page({
       this._navGuard.teardown();
       this._navGuard = null;
     }
+    // 🛒 页面卸载前把所有还在防抖等待中的重量修改立即补发一次，避免用户
+    // 打完最后几个数字就退出页面，那次输入永远没同步到云端
+    this._flushPendingPurchaseWeightSync();
   },
 
   // 🐛 根因修复（2026-09-10 导航栏彻底重构）：与 platform-admin 同一处问题
@@ -1154,13 +1161,40 @@ Page({
     });
   },
 
+  // 🛒（2026-09-11 离线兜底缓存）本机 storage 键名——按门店+日期隔离，
+  // 权威数据来源始终是云端 daily_purchase_plans，这份缓存只在网络异常时
+  // 兜底展示、不参与正常路径下的展示决策，避免"云端已经有新进度，本地
+  // 缓存却更旧"这种双写不一致
+  _purchasePlanStorageKey(): string {
+    return `dm_purchase_plan_${this.data.currentStoreId}_${this.data.mealPredictionForm.targetDate}`;
+  },
+
+  _persistPurchasePlanCache(tasks: any[]) {
+    try {
+      wx.setStorageSync(this._purchasePlanStorageKey(), tasks);
+    } catch (e) {
+      // 本机 storage 写入失败不阻断交互，只是离线兜底缓存少了一份
+    }
+  },
+
+  _loadPurchasePlanCache(): any[] | null {
+    try {
+      const cached = wx.getStorageSync(this._purchasePlanStorageKey());
+      return Array.isArray(cached) && cached.length > 0 ? cached : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
   // 📋（2026-09-11 云端持久化）生成后厨采买清单：与 onApplyMealPrediction
   // （纯文本复制）是并存的两条独立能力——本方法产出结构化、可勾选/可微调
   // 重量的任务清单，在专门的弹窗里展示，而不是直接扔进剪贴板。
-  // 🛒 权威数据来源已经从"本机 storage"改成云端 daily_purchase_plans 集合
-  // （见 cloudfunctions/manageDailyMenu 新增的 getPurchasePlan/
-  // createPurchasePlan 两个 action）——同一门店的义工/财务/店长在不同设备
-  // 上打开，看到的是同一份进度，不再各自维护一份互不同步的本地缓存。
+  // 🛒 权威数据来源是云端 daily_purchase_plans 集合（见 cloudfunctions/
+  // manageDailyMenu 新增的 getPurchasePlan/createPurchasePlan 两个
+  // action）——同一门店的义工/财务/店长在不同设备上打开，看到的是同一份
+  // 进度。本机 storage 只在云端请求彻底失败（离线/网络异常）时才读取，
+  // 正常路径下每次都以云端返回为准并覆盖写入缓存，确保前端状态与云端
+  // 强一致，不会出现"缓存比云端新"的分叉。
   // 🛡️ 权限收口：与 onRunMealPrediction 同一处校验口径——currentStoreId
   // 是否已绑定门店是这张卡片能否使用的唯一门槛（预测结果本身只在已绑店
   // 时才可能存在，这里再显式判一次是防御性收口，不是多此一举，避免未来
@@ -1189,6 +1223,7 @@ Page({
       if (getResult && getResult.success && getResult.exists && Array.isArray(getResult.tasks) && getResult.tasks.length > 0) {
         wx.hideLoading();
         this.setData({ purchasePlanTasks: getResult.tasks, showPurchasePlanModal: true });
+        this._persistPurchasePlanCache(getResult.tasks);
         return;
       }
 
@@ -1218,16 +1253,29 @@ Page({
         wx.showToast({ title: (createResult && createResult.error) || '生成采买清单失败', icon: 'none' });
         return;
       }
-      this.setData({ purchasePlanTasks: createResult.tasks || freshTasks, showPurchasePlanModal: true });
+      const finalTasks = createResult.tasks || freshTasks;
+      this.setData({ purchasePlanTasks: finalTasks, showPurchasePlanModal: true });
+      this._persistPurchasePlanCache(finalTasks);
     } catch (err) {
       wx.hideLoading();
       console.error('[daily-menu] onGeneratePurchasePlan 异常:', err);
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      // 🛒 离线兜底：云端请求彻底失败（网络异常/超时）时退回本机缓存，
+      // 让义工至少能看到、继续勾选上次已同步过的进度，而不是完全无法使用；
+      // 缓存里没有任何数据时才提示"网络异常，请重试"这条最终兜底文案
+      const cached = this._loadPurchasePlanCache();
+      if (cached) {
+        this.setData({ purchasePlanTasks: cached, showPurchasePlanModal: true });
+        wx.showToast({ title: '网络异常，已展示离线缓存清单', icon: 'none' });
+      } else {
+        wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      }
     }
   },
 
   // 🛒 勾选/取消勾选某一项采买任务——先乐观更新本地展示（避免网络延迟让
   // 用户以为点击没反应），云端确认失败时回滚到点击前的状态并提示重试。
+  // 无论成败，最终展示的状态都会同步写入离线兜底缓存，保持"缓存=当前
+  // 展示内容"这条不变式。
   // 🛡️ 读改写非严格 CAS（没有加乐观锁版本号），如实标注边界：几个人同时、
   // 毫秒级窗口内勾选*不同*任务时存在理论上的覆盖风险——这是给一份最多
   // 4 条的门店采购清单设计的协同能力，不是高并发交易系统，上事务/版本号
@@ -1251,27 +1299,29 @@ Page({
       const result = res && res.result;
       if (result && result.success && Array.isArray(result.tasks)) {
         this.setData({ purchasePlanTasks: result.tasks });
+        this._persistPurchasePlanCache(result.tasks);
       } else {
         this.setData({ purchasePlanTasks: previous });
+        this._persistPurchasePlanCache(previous);
         wx.showToast({ title: (result && result.error) || '同步失败，请重试', icon: 'none' });
       }
     } catch (err) {
       this.setData({ purchasePlanTasks: previous });
+      this._persistPurchasePlanCache(previous);
       console.error('[daily-menu] onTogglePurchaseTask 异常:', err);
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     }
   },
 
-  // 🛒 义工弹窗微调预估重量——非法输入（空/0/负数/非数字）由
-  // updatePurchaseTaskWeight 自己兜底保留旧值，这里不重复校验。
+  // 🛒（2026-09-11 防抖持久化）把某一项预估重量的最新输入值真正同步到
+  // 云端——从 onInputPurchaseTaskWeight 的防抖定时器触发，也在弹窗关闭/
+  // 页面卸载时被 _flushPendingPurchaseWeightSync 立即调用一次，确保防抖
+  // 窗口内的最后一次输入不会因为用户随手关闭弹窗而丢失。
   // 🛡️ 与 onTogglePurchaseTask 不同，这里不做失败回滚/弹 toast 打断——
-  // bindinput 随每次按键触发，用户可能还在连续输入，网络抖动时强行回滚
-  // 或弹提示会打断输入体验；本地乐观值本就是用户刚输入的内容，静默保留
-  // 即可，云端最终会在下一次输入/操作时重新尝试同步
-  async onInputPurchaseTaskWeight(e: any) {
-    const itemKey = e.currentTarget.dataset.key;
-    const rawValue = e.detail.value;
-    this.setData({ purchasePlanTasks: updatePurchaseTaskWeight(this.data.purchasePlanTasks, itemKey, rawValue) });
+  // 用户可能还在连续输入下一项，网络抖动时强行回滚或弹提示会打断输入
+  // 体验；本地乐观值本就是用户刚输入的内容，静默保留即可，云端最终会在
+  // 下一次输入/操作时重新尝试同步
+  async _syncPurchaseTaskWeight(itemKey: string, rawValue: string) {
     try {
       const res: any = await callFunctionWithTimeout({
         name: 'manageDailyMenu',
@@ -1286,15 +1336,54 @@ Page({
       const result = res && res.result;
       if (result && result.success && Array.isArray(result.tasks)) {
         this.setData({ purchasePlanTasks: result.tasks });
+        this._persistPurchasePlanCache(result.tasks);
       }
     } catch (err) {
-      console.error('[daily-menu] onInputPurchaseTaskWeight 异常:', err);
+      console.error('[daily-menu] _syncPurchaseTaskWeight 异常:', err);
     }
+  },
+
+  // 🛒 义工弹窗微调预估重量——非法输入（空/0/负数/非数字）由
+  // updatePurchaseTaskWeight 自己兜底保留旧值，这里不重复校验。本地展示
+  // 与离线缓存随每次按键立即更新（乐观、免费），但真正打到云端的请求按
+  // 每个 itemKey 独立防抖 500ms——用户连续输入数字时（如从"3"改成"30"）
+  // 只在停顿后发一次请求，不会每敲一位数字就打一次云函数。定时器挂在页面
+  // 实例 this 上而不是 data，遵循本仓库"临时变量不占用 setData 通讯通道"
+  // 的既定规范。
+  onInputPurchaseTaskWeight(e: any) {
+    const itemKey = e.currentTarget.dataset.key;
+    const rawValue = e.detail.value;
+    const nextTasks = updatePurchaseTaskWeight(this.data.purchasePlanTasks, itemKey, rawValue);
+    this.setData({ purchasePlanTasks: nextTasks });
+    this._persistPurchasePlanCache(nextTasks);
+
+    if (this._purchaseWeightSyncTimers[itemKey]) {
+      clearTimeout(this._purchaseWeightSyncTimers[itemKey]);
+    }
+    this._purchaseWeightSyncTimers[itemKey] = setTimeout(() => {
+      delete this._purchaseWeightSyncTimers[itemKey];
+      this._syncPurchaseTaskWeight(itemKey, rawValue);
+    }, 500);
+  },
+
+  // 🛒 立即补发所有还在防抖等待中的重量修改，用于弹窗关闭/页面卸载这类
+  // "用户即将离开、防抖定时器可能再也不会自然触发"的时机，避免最后一次
+  // 输入悄悄丢失、云端永远停留在倒数第二次的值
+  _flushPendingPurchaseWeightSync() {
+    if (!this._purchaseWeightSyncTimers) return;
+    Object.keys(this._purchaseWeightSyncTimers).forEach((itemKey) => {
+      clearTimeout(this._purchaseWeightSyncTimers[itemKey]);
+      delete this._purchaseWeightSyncTimers[itemKey];
+      const task = (this.data.purchasePlanTasks || []).find((t: any) => t.itemKey === itemKey);
+      if (task) this._syncPurchaseTaskWeight(itemKey, String(task.estimatedWeight));
+    });
   },
 
   // 🛒 一键复制采买清单到剪贴板——云端持久化落地后，这个按钮的定位从"唯一
   // 的跨人协作手段"变成"额外的分发渠道"（分享到微信群/纸质台账），本店
-  // 内部协同已经靠云端清单本身完成，不再需要靠复制粘贴同步进度
+  // 内部协同已经靠云端清单本身完成，不再需要靠复制粘贴同步进度。文本永远
+  // 从当前内存里的 purchasePlanTasks 格式化，无论这份数据来自云端还是
+  // 离线兜底缓存，复制出来的都是"用户此刻在弹窗里实际看到的内容"。
   onCopyPurchasePlan() {
     const text = formatPurchasePlanText(this.data.purchasePlanTasks);
     if (!text) return;
@@ -1306,6 +1395,9 @@ Page({
   },
 
   onClosePurchasePlanModal() {
+    // 🛒 关闭前立即补发所有还在防抖等待中的重量修改，见
+    // _flushPendingPurchaseWeightSync 注释
+    this._flushPendingPurchaseWeightSync();
     this.setData({ showPurchasePlanModal: false });
   },
 

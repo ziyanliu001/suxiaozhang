@@ -203,10 +203,12 @@
         <view class="dm-purchase-plan-list">
           <view class="dm-purchase-plan-row" wx:for="{{purchasePlanTasks}}" wx:key="itemKey">
             <view
-              class="dm-purchase-plan-checkbox {{item.status === 'completed' ? 'checked' : ''}}"
+              class="dm-purchase-plan-checkbox"
               data-key="{{item.itemKey}}"
               catchtap="onTogglePurchaseTask"
-            >{{item.status === 'completed' ? '✓' : ''}}</view>
+            >
+              <view class="dm-purchase-plan-checkbox-inner {{item.status === 'completed' ? 'checked' : ''}}">{{item.status === 'completed' ? '✓' : ''}}</view>
+            </view>
             <text class="dm-purchase-plan-name {{item.status === 'completed' ? 'done' : ''}}">{{item.itemName}}</text>
             <input
               class="dm-purchase-plan-weight-input"
