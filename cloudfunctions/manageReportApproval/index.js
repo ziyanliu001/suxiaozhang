@@ -22,7 +22,15 @@ const db = cloud.database();
 // 🛡️（2026-09-11 巡检漫游审计日志·方向3）与 manageStoreProfile/lib/、
 // getPatriarchDashboard/lib/ 下的同名文件是三处独立维护的镜像，见该文件
 // 头部注释
-const { buildAuditLogEntry } = require('./lib/buildAuditLogEntry');
+const { buildAuditLogEntry, isRoamingConsumed } = require('./lib/buildAuditLogEntry');
+// 🐛🛡️（2026-09-11 过期校验 drift 修复）此前本文件的 resolveCaller 是
+// 2026-09-10 那轮真实故障修复"之前"的旧版本拷贝——完全没有 isGrantStillValid
+// 过期校验，一条已经超过 2 小时有效期的巡检授权在这里仍会被判定为有效，
+// 是一个真实存在过的越权窗口。现在改为直接复用 manageStoreProfile/lib/
+// resolveCaller.js 的同一份镜像（含过期校验 + storeId 直接匹配，不再需要
+// 反查 stores.tenantId 这一步），配套单测见 lib/resolveCaller.test.js——
+// 与 manageStoreProfile/lib/resolveCaller.test.js 逐条对应的同一份回归矩阵
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
 
 // 🐛 云函数容器时区固定为 UTC，new Date().toLocaleString() 不传 timeZone 会
 // 直接按 UTC 渲染，导致 approveTime/auditTime 等落库的审批时间字符串比北京
@@ -38,63 +46,44 @@ function formatBeijingTimeString(date) {
 
 // 🛡️（2026-09-09 方案三：authorizedTenants 轻量租户漫游，见
 // docs/architecture/02_user_roles_single_document_invariant.md）
-// resolveCaller 严格保持"每个 _openid 只查这一条 user_roles 文档"的不变式
-// 不变——漫游不靠新增第二条文档，只读同一条文档上新增的 authorizedTenants
-// 数组字段。opts 完全可选，不传（或命中不了任何授权）时返回值与改造前
-// 逐字节一致，全仓库其余调用点（未传 opts 的那些）100% 向后兼容。
-// opts.targetStoreId 命中某条 authorizedTenants 授权时，返回的"有效身份"
-// 把 tenantId/role/storeId 原地替换成该条授权里的值——下游代码（本文件的
-// getMeritStats 角色分支、manageStoreProfile 的 resolveReadTarget/
-// resolveWriteTarget）不需要感知"这是不是漫游身份"，只要把替换后的 caller
-// 当成一个真实绑定了该门店的 store_patriarch/对应角色来用即可，不必逐一
-// 改造下游的权限判断代码
+// opts 完全可选，不传（或命中不了任何授权）时返回值与改造前逐字节一致，
+// 全仓库其余调用点（未传 opts 的那些）100% 向后兼容。opts.targetStoreId
+// 命中某条 authorizedTenants 授权时，返回的"有效身份"把 tenantId/role/
+// storeId 原地替换成该条授权里的值——下游代码（本文件的 getMeritStats
+// 角色分支、manageStoreProfile 的 resolveReadTarget/resolveWriteTarget）
+// 不需要感知"这是不是漫游身份"，只要把替换后的 caller 当成一个真实绑定了
+// 该门店的对应角色来用即可，不必逐一改造下游的权限判断代码。决策逻辑
+// 全部在 lib/resolveCaller.js，这里只负责把数据库查出来的 own 文档喂给它
 async function resolveCaller(OPENID, opts) {
   if (!OPENID) return null;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
   const own = (roleRes.data && roleRes.data[0]) || null;
-  if (!own) return null;
-
   const targetStoreId = opts && (opts.targetStoreId || opts.storeId);
-  let targetTenantId = opts && opts.targetTenantId;
-  if (!targetTenantId && targetStoreId) {
-    const storeRes = await db.collection('stores').doc(targetStoreId).field({ tenantId: true }).get().catch(() => null);
-    targetTenantId = (storeRes && storeRes.data && storeRes.data.tenantId) || '';
-  }
+  const effectiveCaller = resolveEffectiveCaller(own, targetStoreId);
 
-  // 目标租户就是自己本来的租户：不需要漫游，原样返回，连 authorizedTenants
-  // 字段都不用看——这也覆盖了"调用方没传任何 target* 参数"的默认情形
-  if (!targetTenantId || targetTenantId === own.tenantId) return own;
-
-  const grants = Array.isArray(own.authorizedTenants) ? own.authorizedTenants : [];
-  const grant = grants.find((g) => g && g.tenantId === targetTenantId
-    && (!Array.isArray(g.stores) || g.stores.length === 0 || !targetStoreId || g.stores.includes(targetStoreId)));
-  // 命中不了就不冒充身份——原样返回调用者本来的身份，该拒绝的下游逻辑
-  // 照常拒绝，绝不在这里静默放行
-  if (!grant) return own;
-
-  const effectiveCaller = { ...own, tenantId: grant.tenantId, role: grant.role, storeId: targetStoreId || own.storeId };
-
-  // 🛡️（2026-09-11 巡检漫游审计日志）走到这里已经确认命中授权、发生了身份
-  // 替换，直接记录。写入失败不阻断真正的审批业务操作，最大努力记录。
-  // 🐛（2026-09-11 根因修复）targetStoreName 不能从 effectiveCaller.storeName
-  // 读——它仍是调用者自己的本来名称（platform_admin 是"全国总览"），见
-  // lib/buildAuditLogEntry.js 头部注释与配套回归单测。这里额外查一次真实
-  // 门店名称
-  const targetStoreNameRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
-  const targetStoreName = (targetStoreNameRes && targetStoreNameRes.data && targetStoreNameRes.data.storeName) || '';
-  const logEntry = buildAuditLogEntry({
-    operatorOpenId: OPENID,
-    own,
-    effectiveCaller,
-    targetStoreId,
-    targetStoreName,
-    cloudFunctionName: 'manageReportApproval',
-    action: opts && opts.action
-  });
-  if (logEntry) {
-    await db.collection('tenant_authorization_audit_logs').add({
-      data: { ...logEntry, createTime: db.serverDate() }
-    }).catch((err) => console.warn('[manageReportApproval] 巡检审计日志写入失败:', err));
+  // 🛡️（2026-09-11 巡检漫游审计日志）只在真的发生了漫游身份替换时才写一条
+  // 留痕；写入失败不阻断真正的审批业务操作，最大努力记录
+  if (isRoamingConsumed(own, effectiveCaller)) {
+    // 🐛（2026-09-11 根因修复）targetStoreName 不能从 effectiveCaller.storeName
+    // 读——它仍是调用者自己的本来名称（platform_admin 是"全国总览"），见
+    // lib/buildAuditLogEntry.js 头部注释与配套回归单测。这里额外查一次真实
+    // 门店名称
+    const targetStoreNameRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
+    const targetStoreName = (targetStoreNameRes && targetStoreNameRes.data && targetStoreNameRes.data.storeName) || '';
+    const logEntry = buildAuditLogEntry({
+      operatorOpenId: OPENID,
+      own,
+      effectiveCaller,
+      targetStoreId,
+      targetStoreName,
+      cloudFunctionName: 'manageReportApproval',
+      action: opts && opts.action
+    });
+    if (logEntry) {
+      await db.collection('tenant_authorization_audit_logs').add({
+        data: { ...logEntry, createTime: db.serverDate() }
+      }).catch((err) => console.warn('[manageReportApproval] 巡检审计日志写入失败:', err));
+    }
   }
 
   return effectiveCaller;
