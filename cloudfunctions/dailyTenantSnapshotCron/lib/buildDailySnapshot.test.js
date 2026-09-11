@@ -176,6 +176,90 @@ test('buildDailySnapshot：materialTotals 缺失字段时各自独立兜底为 0
   assert.equal(snapshot.veggieKg, 0);
 });
 
+// ==================== 2026-09-12 新增字段（Phase 2 混合聚合基础）====================
+
+test('buildDailySnapshot：凭证合规统计——有支出金额且带凭证的记录正确计入分子分母', () => {
+  const snapshot = buildDailySnapshot({
+    tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11',
+    reportRecords: [
+      { approvalStatus: 'APPROVED', expenseAmount: 100, receiptImages: ['a.jpg'] },
+      { approvalStatus: 'APPROVED', expenseAmount: 50, receiptImageList: [] },
+      { approvalStatus: 'APPROVED', expenseAmount: 0 }
+    ]
+  });
+  assert.equal(snapshot.expenseRecordCount, 2);
+  assert.equal(snapshot.receiptRecordCount, 1);
+});
+
+test('buildDailySnapshot：审计存证计数——AUDITED_LOCKED 与 _checksum 分别计数', () => {
+  const snapshot = buildDailySnapshot({
+    tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11',
+    reportRecords: [
+      { approvalStatus: 'AUDITED_LOCKED', _checksum: 'x' },
+      { approvalStatus: 'AUDITED_LOCKED' },
+      { approvalStatus: 'APPROVED' }
+    ]
+  });
+  assert.equal(snapshot.auditedLockedCount, 2);
+  assert.equal(snapshot.auditedWithProofCount, 1);
+});
+
+test('buildDailySnapshot：阳善/阴德按报告级 isAnonymous 分流，口径与 getNationalDashboard 全局累加器一致', () => {
+  const snapshot = buildDailySnapshot({
+    tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11',
+    reportRecords: [
+      { approvalStatus: 'APPROVED', isAnonymous: false, donationItems: [{ amount: 100 }, { amount: 50 }] },
+      { approvalStatus: 'APPROVED', isAnonymous: true, donationItems: [{ amount: 30 }] }
+    ]
+  });
+  assert.equal(snapshot.sponsorCount, 3);
+  assert.equal(snapshot.yangshanCount, 2);
+  assert.equal(snapshot.yangshanAmount, 150);
+  assert.equal(snapshot.yindeCount, 1);
+  assert.equal(snapshot.yindeAmount, 30);
+});
+
+test('buildDailySnapshot：hasDiners 仅在 diners>0 时置 1，hasActivity 在 diners>0 或 dailyExpenseTotal>0 时置 1', () => {
+  const onlyExpense = buildDailySnapshot({
+    tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11',
+    reportRecords: [{ approvalStatus: 'APPROVED', diningCount: 0, dailyExpenseTotal: 50 }]
+  });
+  assert.equal(onlyExpense.hasDiners, 0);
+  assert.equal(onlyExpense.hasActivity, 1);
+
+  const noActivity = buildDailySnapshot({
+    tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11',
+    reportRecords: [{ approvalStatus: 'APPROVED', diningCount: 0, dailyExpenseTotal: 0 }]
+  });
+  assert.equal(noActivity.hasDiners, 0);
+  assert.equal(noActivity.hasActivity, 0);
+});
+
+test('buildDailySnapshot：stapleUrgent 取最后一条记录的主料告急状态', () => {
+  const snapshot = buildDailySnapshot({
+    tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11',
+    reportRecords: [
+      { approvalStatus: 'APPROVED', stapleRiceStatus: 'urgent' },
+      { approvalStatus: 'APPROVED', stapleRiceStatus: 'normal', stapleOilStatus: 'normal' }
+    ]
+  });
+  assert.equal(snapshot.stapleUrgent, false);
+});
+
+test('buildDailySnapshot：无记录时新增字段全部安全兜底为 0/false', () => {
+  const snapshot = buildDailySnapshot({ tenantId: 't', storeId: 's', storeName: '店', dateString: '2026-09-11' });
+  assert.equal(snapshot.expenseRecordCount, 0);
+  assert.equal(snapshot.receiptRecordCount, 0);
+  assert.equal(snapshot.auditedLockedCount, 0);
+  assert.equal(snapshot.auditedWithProofCount, 0);
+  assert.equal(snapshot.sponsorCount, 0);
+  assert.equal(snapshot.yangshanCount, 0);
+  assert.equal(snapshot.yindeCount, 0);
+  assert.equal(snapshot.hasDiners, 0);
+  assert.equal(snapshot.hasActivity, 0);
+  assert.equal(snapshot.stapleUrgent, false);
+});
+
 test('buildDailySnapshot：整个 params 为 null/undefined 时安全兜底，不抛异常', () => {
   assert.doesNotThrow(() => buildDailySnapshot(null));
   assert.doesNotThrow(() => buildDailySnapshot(undefined));

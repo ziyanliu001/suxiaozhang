@@ -1,5 +1,13 @@
 const cloud = require('wx-server-sdk');
 const { extractMaterialTotals, convertJinToKg, buildEstimatedMonthlySupplyNeedsText } = require('./lib/materialAggregateHelpers');
+const {
+  splitHistoricalRange,
+  buildStoreAggregateMap,
+  computeTodayIncrementByStore,
+  mergeStoreTotals,
+  isFullyCoveredBySnapshots,
+  sumAcrossStores
+} = require('./lib/hybridDashboardAggregation');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -1200,6 +1208,139 @@ exports.main = async (event, context) => {
       }
     });
 
+    // 📊（2026-09-12 大数据量性能治理 Phase 2）全国大屏读端接入预聚合快照：
+    // "历史区间走 daily_tenant_snapshots 数据库侧 $sum 聚合 + 今天走实时增量"
+    // 混合查询——彻底消除 report_logs 分页 1000 条上限对核心 KPI 数字的截断
+    // 风险，同时对缺失快照的门店（新店/cron 尚未跑过）优雅回退到上面已经
+    // 算好的逐条累加结果，不中断整个大屏渲染。详见
+    // cloudfunctions/getNationalDashboard/lib/hybridDashboardAggregation.js
+    // 头部设计说明与 docs/SCHEMA.md 8.2 节。
+    let hybridFullyCovered = false;
+    try {
+      const { historicalStart, historicalEnd, hasHistoricalRange } = splitHistoricalRange(rangeStartDate, todayStr);
+      const targetStoreIds = targetStores.map((s) => s._id);
+      let storeAggregateMap = new Map();
+
+      if (hasHistoricalRange && targetStoreIds.length > 0) {
+        const snapshotConditions = [{ tenantId }, { dateString: _.lte(historicalEnd) }];
+        if (historicalStart) snapshotConditions.push({ dateString: _.gte(historicalStart) });
+        if (isScopedFilter) snapshotConditions.push({ storeId: _.in(targetStoreIds) });
+
+        const snapshotAggRes = await db.collection('daily_tenant_snapshots')
+          .aggregate()
+          .match(_.and(snapshotConditions))
+          .group({
+            _id: '$storeId',
+            totalDiners: _.aggregate.sum('totalDiners'),
+            totalIncome: _.aggregate.sum('totalIncome'),
+            totalExpense: _.aggregate.sum('totalExpense'),
+            dailyExpenseTotal: _.aggregate.sum('dailyExpenseTotal'),
+            volunteerCount: _.aggregate.sum('volunteerCount'),
+            volunteerHours: _.aggregate.sum('volunteerHours'),
+            dineInSeniors: _.aggregate.sum('dineInSeniors'),
+            deliverySeniors: _.aggregate.sum('deliverySeniors'),
+            listeningSeniors: _.aggregate.sum('listeningSeniors'),
+            takeawayCount: _.aggregate.sum('takeawayCount'),
+            deliveryVolunteers: _.aggregate.sum('deliveryVolunteers'),
+            expenseRecordCount: _.aggregate.sum('expenseRecordCount'),
+            receiptRecordCount: _.aggregate.sum('receiptRecordCount'),
+            auditedLockedCount: _.aggregate.sum('auditedLockedCount'),
+            auditedWithProofCount: _.aggregate.sum('auditedWithProofCount'),
+            sponsorCount: _.aggregate.sum('sponsorCount'),
+            yangshanCount: _.aggregate.sum('yangshanCount'),
+            yangshanAmount: _.aggregate.sum('yangshanAmount'),
+            yindeCount: _.aggregate.sum('yindeCount'),
+            yindeAmount: _.aggregate.sum('yindeAmount'),
+            hasDiners: _.aggregate.sum('hasDiners'),
+            hasActivity: _.aggregate.sum('hasActivity'),
+            sourceReportCount: _.aggregate.sum('sourceReportCount')
+          })
+          .end();
+        storeAggregateMap = buildStoreAggregateMap(snapshotAggRes);
+      }
+
+      // 今日实时增量：只扫描 dateString===今天 的 allLogs 子集（已在内存中，
+      // 数据量天然很小），门店归属判定复用上面主循环已经建好的
+      // storeStatsMap（含合并进去的 fallback 兜底门店 key）
+      const todayLogs = allLogs.filter((log) => log.dateString === todayStr);
+      const resolveStoreKey = (log) => {
+        if (log.storeId && storeStatsMap[log.storeId]) return log.storeId;
+        const logStoreName = log.shopName || '';
+        if (logStoreName) {
+          for (const key of Object.keys(storeStatsMap)) {
+            if (storeStatsMap[key].storeName === logStoreName) return key;
+          }
+        }
+        return null;
+      };
+      const todayIncrementByStore = computeTodayIncrementByStore(todayLogs, resolveStoreKey);
+
+      hybridFullyCovered = isFullyCoveredBySnapshots(targetStoreIds, storeAggregateMap);
+
+      // 逐店覆盖：totalDiners/totalIncome/totalExpense/ingredientExpense/openDays
+      // 这五个字段已经在 storeStatsMap 里逐店维护，可以做到"每店独立判断是否
+      // 有快照覆盖"的精细化优雅降级——被覆盖的门店用 hybrid 精确值覆盖，未
+      // 覆盖的门店保留上面循环已经算出的原值（可能仍受 1000 条截断影响，
+      // 但不影响其余已覆盖门店，也不会让大屏渲染中断）
+      targetStoreIds.forEach((storeId) => {
+        const entry = storeStatsMap[storeId];
+        if (!entry || !storeAggregateMap.has(storeId)) return;
+        const merged = mergeStoreTotals(storeAggregateMap.get(storeId), todayIncrementByStore.get(storeId));
+        entry.totalDiners = merged.totalDiners;
+        entry.totalIncome = merged.totalIncome;
+        entry.totalExpense = merged.totalExpense;
+        entry.ingredientExpense = merged.dailyExpenseTotal;
+        entry.openDays = merged.hasDiners;
+      });
+
+      // 三个核心 KPI（人次/收入/支出）在逐店覆盖之后直接按 storeStatsMap 重新
+      // 求和——无论是否全量覆盖，这样算出来的结果都严格等于"每店当前实际
+      // 采用的数字"之和，保证 storeMatrix 与 nationalSummary 内部永远一致，
+      // 不会出现"两条独立累加路径各自算出不同答案"的口径分裂
+      nationalTotalDiners = 0;
+      nationalTotalIncome = 0;
+      nationalTotalExpense = 0;
+      Object.values(storeStatsMap).forEach((s) => {
+        nationalTotalDiners += s.totalDiners;
+        nationalTotalIncome += s.totalIncome;
+        nationalTotalExpense += s.totalExpense;
+      });
+
+      // 其余"仅全局维度"的计数（义工工时/长者关怀细分/凭证合规/审计存证/
+      // 阳善阴德/开餐天数）此前只在主循环里累加成扁平全局变量，没有逐店
+      // 拆分存档，无法对"未覆盖门店"做精细化的单店级回退——只有当目标门店
+      // 集合被快照 100% 覆盖时才整体覆盖这批全局数字，否则保守地保留主循环
+      // 已经算出的原值（与升级前行为一致，仍受 1000 条截断影响，但不会更差）
+      if (hybridFullyCovered) {
+        const historicalGlobal = sumAcrossStores(storeAggregateMap.values());
+        const todayGlobal = sumAcrossStores(todayIncrementByStore.values());
+        nationalTotalVolunteers = historicalGlobal.volunteerCount + todayGlobal.volunteerCount;
+        nationalTotalVolunteerHours = historicalGlobal.volunteerHours + todayGlobal.volunteerHours;
+        nationalDineInSeniors = historicalGlobal.dineInSeniors + todayGlobal.dineInSeniors;
+        nationalDeliverySeniors = historicalGlobal.deliverySeniors + todayGlobal.deliverySeniors;
+        nationalListeningSeniors = historicalGlobal.listeningSeniors + todayGlobal.listeningSeniors;
+        nationalTakeawayCount = historicalGlobal.takeawayCount + todayGlobal.takeawayCount;
+        nationalDeliveryVolunteers = historicalGlobal.deliveryVolunteers + todayGlobal.deliveryVolunteers;
+        nationalExpenseRecordCount = historicalGlobal.expenseRecordCount + todayGlobal.expenseRecordCount;
+        nationalReceiptRecordCount = historicalGlobal.receiptRecordCount + todayGlobal.receiptRecordCount;
+        totalAuditedLocked = historicalGlobal.auditedLockedCount + todayGlobal.auditedLockedCount;
+        totalAuditedWithProof = historicalGlobal.auditedWithProofCount + todayGlobal.auditedWithProofCount;
+        totalReportsInScope = historicalGlobal.sourceReportCount + todayGlobal.sourceReportCount;
+        nationalSponsorCount = historicalGlobal.sponsorCount + todayGlobal.sponsorCount;
+        yangshanCount = historicalGlobal.yangshanCount + todayGlobal.yangshanCount;
+        yangshanAmount = historicalGlobal.yangshanAmount + todayGlobal.yangshanAmount;
+        yindeCount = historicalGlobal.yindeCount + todayGlobal.yindeCount;
+        yindeAmount = historicalGlobal.yindeAmount + todayGlobal.yindeAmount;
+        nationalOpenDays = historicalGlobal.hasActivity + todayGlobal.hasActivity;
+      }
+    } catch (err) {
+      // daily_tenant_snapshots 集合可能尚未创建（本次改造刚上线，cron 一次
+      // 都没跑过）、聚合查询本身异常等——一律安全降级为"完全不使用 hybrid
+      // 覆盖"，沿用上面主循环已经算好的原始累加结果，不影响大屏主流程渲染
+      console.warn('[getNationalDashboard] 预聚合快照混合查询失败，已降级为纯实时聚合:', err);
+      hybridFullyCovered = false;
+    }
+
     // 📸 全国影像卷宗：并行查询 daily_menus / activity_logs，统计图片总张数并汇聚最新 12 张图
     // 只有 isSuperAdmin 才需要构建 nationalMediaGallery，普通角色跳过额外 DB 查询
     let totalMenuPhotos = 0;
@@ -1773,18 +1914,19 @@ exports.main = async (event, context) => {
       // getPatriarchDashboard 的"当月 1 号起"略有语义差异（30 天滚动窗口
       // vs 自然月），如实标注，不强行对齐成一模一样的窗口定义
       reportCountInScope: totalReportsInScope,
-      // 🐛（2026-09-12 1000 条截断透明化，见上方 isMainLogsTruncated 计算处
-      // 完整注释）report_logs 分页拉取仍有 1000 条硬上限（受限于该循环同时
-      // 承担的门店归属判定/图片抽取/badge 判定，暂未能像 material_logs 那样
-      // 完全管道化，见 docs/SCHEMA.md daily_tenant_snapshots 一节的后续规划）。
-      // isTruncated 为 true 时，上面 nationalTotalDiners/nationalTotalIncome/
-      // nationalTotalExpense 等汇总字段是"至少这么多"而不是精确全量，前端应
-      // 提示用户当前统计口径可能不完整，而不是当成绝对精确值展示
+      // 🐛→✅（2026-09-12 Phase 2 读端接入预聚合快照后修订）report_logs 分页
+      // 拉取本身仍有 1000 条硬上限，但只要本次目标门店集合被
+      // daily_tenant_snapshots 完全覆盖（hybridFullyCovered），上面核心 KPI
+      // 与全局计数已经改用"历史快照 $sum 聚合 + 今天实时增量"精确合计
+      // 覆盖，不再受这个上限影响——isTruncated 因此改为
+      // `isMainLogsTruncated && !hybridFullyCovered`，只有在"确实撞了 1000
+      // 条上限，且至少有一家目标门店还没有快照覆盖（新店/cron 尚未跑过）"
+      // 时才继续提醒用户数据可能不完整，不再是一刀切的悲观提示
       dataIntegrity: {
-        isTruncated: isMainLogsTruncated,
+        isTruncated: isMainLogsTruncated && !hybridFullyCovered,
         truncationCap: 1000,
-        note: isMainLogsTruncated
-          ? '本次统计范围内的记录数超过单次查询上限，以下汇总数值为下限估算，实际数值可能更高'
+        note: (isMainLogsTruncated && !hybridFullyCovered)
+          ? '本次统计范围内存在尚未生成每日预聚合快照的门店（如新接入门店），以下汇总数值为下限估算，实际数值可能更高'
           : ''
       },
       // 👵 长者关怀细分维度

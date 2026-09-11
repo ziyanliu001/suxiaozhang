@@ -97,8 +97,11 @@ async function handleBuildSettlement(event) {
 }
 
 // ── action: reverseSettlement（退款红冲）────────────────────────────────────
+// 🏛️（2026-09-12 部分退款治理）新增可选 refundAmount（分）——未传时兜底为
+// 全额退款，行为与升级前完全一致；传入小于结算 payAmount 的值时按比例精确
+// 冲销，见 lib/settlement.js decideRefundReversal 头部注释
 async function handleReverseSettlement(event) {
-  const { tenantId, orderId } = event;
+  const { tenantId, orderId, refundAmount } = event;
   if (!tenantId || !orderId) {
     return { success: false, error: '参数缺失: tenantId/orderId' };
   }
@@ -113,9 +116,33 @@ async function handleReverseSettlement(event) {
     .where({ tenantId, orderId, originalSettlementId: settlement._id, isReversal: true }).limit(1).get();
   const reversalAlreadyExists = !!(reversalRes.data && reversalRes.data.length > 0);
 
-  const decision = decideRefundReversal(settlement, reversalAlreadyExists);
+  let decision = decideRefundReversal(settlement, reversalAlreadyExists, refundAmount);
   if (decision.action === 'noop') {
     return { success: true, action: 'noop' };
+  }
+  if (decision.action === 'adjust_unsettled') {
+    // 🛡️ 条件更新防重复：加 settlementStatus:'unsettled' 前置条件做 CAS——
+    // 与下面 mark_refunded 分支同一处竞态窗口（tryAutoProfitSharing 可能在
+    // 这次决策之后、这次写入之前抢先把它结算成了 settled）。若 CAS 未命中，
+    // 说明结算状态已经变化，重新拉取最新记录、按新状态重新决策一次再执行——
+    // 不能直接放弃，那会导致这笔部分退款既没有下修待分账快照、也没有生成
+    // 冲销分录，资金对不上账
+    const claimRes = await db.collection('order_settlements').where({
+      _id: settlement._id, settlementStatus: 'unsettled'
+    }).update({ data: decision.adjustment });
+    if (!claimRes.stats || claimRes.stats.updated !== 1) {
+      const freshRes = await db.collection('order_settlements').doc(settlement._id).get().catch(() => null);
+      const freshSettlement = freshRes && freshRes.data;
+      if (!freshSettlement) return { success: false, error: '结算记录在处理过程中丢失，请人工核对' };
+      // CAS 未命中意味着结算状态已经从 unsettled 前进到 settled（状态只会
+      // 单向前进，不会倒退），重新决策后必然落在 create_reversal 分支
+      // （decideRefundReversal 的 mark_refunded/adjust_unsettled 两个分支都
+      // 要求 settlementStatus==='unsettled'），下面统一走 create_reversal 逻辑
+      decision = decideRefundReversal(freshSettlement, reversalAlreadyExists, refundAmount);
+      if (decision.action === 'noop') return { success: true, action: 'noop' };
+    } else {
+      return { success: true, action: 'adjust_unsettled', adjustment: decision.adjustment };
+    }
   }
   if (decision.action === 'mark_refunded') {
     // 🛡️ 条件更新防重复：加 settlementStatus:'unsettled' 前置条件做 CAS，
@@ -140,7 +167,7 @@ async function handleReverseSettlement(event) {
   const reversalDocId = `settle_reversal_${settlement._id}`;
   try {
     await db.collection('order_settlements').add({ data: { _id: reversalDocId, ...decision.reversalDoc, createdAt: db.serverDate() } });
-    return { success: true, action: 'create_reversal' };
+    return { success: true, action: 'create_reversal', isPartial: !!decision.reversalDoc.isPartial, refundedAmount: -decision.reversalDoc.payAmount };
   } catch (err) {
     const raceRes = await db.collection('order_settlements').doc(reversalDocId).get().catch(() => null);
     if (raceRes && raceRes.data) {

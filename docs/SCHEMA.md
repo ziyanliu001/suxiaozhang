@@ -204,11 +204,11 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 **释放时机**：`withCascadeLock()` 包裹整个"起始记录更新 + 级联重算"逻辑，`finally` 块保证正常返回/中途抛异常两种路径都会释放锁；若云函数进程本身异常终止（连 `finally` 都来不及跑），锁会在 `expiresAt` 到期（最长 30 秒）后自动可被下一个请求偷锁，不会死锁。
 
-### 8.2 `daily_tenant_snapshots`（餐报/物资日度预聚合快照，Phase 1：仅写入，尚未接入读路径）
+### 8.2 `daily_tenant_snapshots`（餐报/物资日度预聚合快照，Phase 1 写入 + Phase 2 读端接入已完成）
 
-**背景**：`getNationalDashboard` 的核心 KPI 聚合此前是"实时分页拉取 `report_logs`/`material_logs` 原始文档到内存里累加"，`skip>=1000` 硬截断只能防止查询本身超时崩溃，无法防止大机构流水超过 1000 条时汇总数字静默失真（详见 [[踩坑记录与性能调优]] 相关记录）。本集合是"预聚合快照 + 当日实时增量"混合查询模式的**基础设施第一阶段**——只负责按天把每家门店的核心指标预先算好存起来，**尚未**让 `getNationalDashboard` 改读这张表（那是第二阶段，需要设计"如何合并历史快照与当天尚未产生快照的实时数据"，属于更大范围的改动，本次不做，如实标注）。
+**背景**：`getNationalDashboard` 的核心 KPI 聚合此前是"实时分页拉取 `report_logs`/`material_logs` 原始文档到内存里累加"，`skip>=1000` 硬截断只能防止查询本身超时崩溃，无法防止大机构流水超过 1000 条时汇总数字静默失真（详见 [[踩坑记录与性能调优]] 相关记录）。
 
-写入方：新增的定时触发云函数 `cloudfunctions/dailyTenantSnapshotCron`（cron 表达式见该函数 `config.json`，默认每日凌晨 2 点触发一次），对前一天（`isoDateNDaysAgo(1)`）有过 `report_logs`/`material_logs` 记录的每一家门店各生成/覆写一条快照文档。使用确定性 `_id` + `set()`（而不是 `add()`），同一天重复触发（如手动补跑）天然幂等，不会产生重复快照。
+写入方：定时触发云函数 `cloudfunctions/dailyTenantSnapshotCron`（cron 表达式见该函数 `config.json`，默认每日凌晨 2 点触发一次），对前一天（`isoDateNDaysAgo(1)`）有过 `report_logs`/`material_logs` 记录的每一家门店各生成/覆写一条快照文档。使用确定性 `_id` + `set()`（而不是 `add()`），同一天重复触发（如手动补跑）天然幂等，不会产生重复快照。
 
 字段：
 
@@ -222,10 +222,58 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 | `latestBalance` | 当日 `todayBalance`（若当天有多条记录，取 `dateString` 相同的最后一条——正常业务流程一天一店只应有一条，多条视为异常但不阻断快照生成） |
 | `hasAuditProof` | 当日记录是否已 `AUDITED_LOCKED` 且带 `_checksum` 签名 |
 | `riceKg` / `flourKg` / `oilKg` / `veggieKg` | 当日 `material_logs` 消耗量（已从"斤"换算成公斤，复用 `getNationalDashboard/lib/materialAggregateHelpers.js` 的 `convertJinToKg()`） |
-| `sourceReportCount` | 参与本次快照聚合的 `report_logs` 原始记录条数，供排查快照是否符合预期使用 |
+| `sourceReportCount` | 参与本次快照聚合的 `report_logs` 原始记录条数，供排查快照是否符合预期使用；同时也是 Phase 2 里"审计覆盖率分母"（`totalReportsInScope`）的历史区间来源 |
 | `generatedAt` | 快照生成时间（`db.serverDate()`），区别于 `dateString`（被统计的业务日期） |
+| `expenseRecordCount` / `receiptRecordCount` | 🆕（2026-09-12 Phase 2）当日"有支出金额"/"其中附带凭证图片"的记录数，凭证合规率分母/分子 |
+| `auditedLockedCount` / `auditedWithProofCount` | 🆕 当日 `approvalStatus==='AUDITED_LOCKED'` 的记录数 / 其中同时带 `_checksum` 签名的记录数，审计存证覆盖率来源 |
+| `sponsorCount` / `yangshanCount` / `yangshanAmount` / `yindeCount` / `yindeAmount` | 🆕 当日 `donationItems` 明细条目总数，按报告级 `isAnonymous` 分流出阳善（公开）/阴德（匿名）人次与金额——与 `getNationalDashboard` 全局累加器同一口径（不是逐条 `isAnonymous` 覆盖，那个只用于捐赠墙展示脱敏） |
+| `hasDiners` / `hasActivity` | 🆕 当日是否有 `diners>0` 的记录（0/1，供门店级 `openDays` 计数）/ 当日是否 `diners>0` 或 `dailyExpenseTotal>0`（0/1，供全局 `nationalOpenDays` 计数，两者口径故意不同，见 `getNationalDashboard/index.js` 原有实现的历史差异） |
+| `stapleUrgent` | 🆕 当日最后一条记录的主料（大米/食用油）告急状态，与 `getNationalDashboard` 门店矩阵同名字段口径一致 |
+
+上述 🆕 字段全部是**预先算好的纯数值/布尔计数**（不是需要在查询时做条件判断的原始明细），目的是让 Phase 2 的历史区间聚合可以对本集合直接做 `_.aggregate.sum(field)`，不需要在数据库聚合管道里写 `$cond` 条件表达式——那类写法在云开发环境里未经生产验证，风险高于在纯函数里预先算好再落库。
 
 **幂等与并发**：`dailyTenantSnapshotCron` 每次运行只处理"昨天"这一个固定日期窗口，同一天的门店快照用确定性 `_id` + `set()` 覆写，不会因为定时器偶发重复触发而产生脏数据；不同门店之间的快照生成互相独立，不需要额外加锁。
+
+**Phase 2（2026-09-12 已完成）：`getNationalDashboard` 混合查询读端接入**
+
+`cloudfunctions/getNationalDashboard/lib/hybridDashboardAggregation.js`（纯函数，配套单测）实现"历史快照 + 当日实时增量"混合聚合：
+- **历史区间**（大屏所选时间窗口的下界 ~ 昨天）：对本集合按 `storeId` 分组 `$sum` 聚合——聚合输出行数等于涉及门店数，不受 `report_logs` 原始文档"单次查询最多返回 1000 条"限制，无论底层原始记录有多少条，这部分汇总永远精确。
+- **今天**：`dailyTenantSnapshotCron` 每日凌晨才生成前一天的快照，当天数据必然还没有对应快照，改为对 `getNationalDashboard` 主循环已经拉取到内存里的 `allLogs` 按 `dateString===今天` 做一次轻量二次扫描——当天记录数天然很小，不存在截断风险。
+- **逐店优雅降级**：`totalDiners`/`totalIncome`/`totalExpense`/`ingredientExpense`/`openDays` 这五个核心字段在 `storeStatsMap` 里逐店维护，可以做到"每店独立判断是否有快照覆盖"——被覆盖的门店用 hybrid 精确值覆盖，未覆盖的门店（新接入门店、`dailyTenantSnapshotCron` 尚未来得及跑过）保留原有逐条累加的回退值，不中断整个大屏渲染。
+- **全局计数的粗粒度降级**：义工工时/长者关怀细分/凭证合规/审计存证/阳善阴德/开餐天数这批字段此前只在主循环里累加成扁平全局变量、没有逐店拆分存档，无法做到与上面同等精细的单店级回退——只有当本次目标门店集合被快照**完全覆盖**（`isFullyCoveredBySnapshots`）时才整体切换为 hybrid 精确值，否则保守保留原有累加结果，如实标注为已知局限，未来如需补齐可以把这批字段也下推到 `storeStatsMap` 逐店维护。
+- **`dataIntegrity.isTruncated`**：由 `isMainLogsTruncated && !hybridFullyCovered` 决定——只有"确实撞了 1000 条上限，且至少有一家目标门店还没有快照覆盖"时才继续提示数据可能不完整，不再是撞上限就一刀切报警。
+- **已知未覆盖字段**：`nationalOfflineIncome`（现场随喜 `otherDonation` 总额）未纳入本轮快照字段扩展，仍完全依赖原有逐条累加、仍可能受 1000 条截断影响——如实标注，未来需要时可以比照 `sponsorCount` 的做法补一个快照字段。
+
+---
+
+## 9. 产销工坊履约状态机双轨化与部分退款（2026-09-12）
+
+`production_orders`/`order_settlements` 两张集合此前"未逐字段核实结构"（见第 133 段），本节只补充本次新增/变更的字段，其余既有字段仍以源码为准。
+
+### 9.1 `production_orders` 新增字段
+
+| 字段 | 含义 |
+|---|---|
+| `deliveryMethod` | `'logistics'`（物流发货，默认值/老订单兜底）\| `'self_pickup'`（到店自提）——下单时（`createProductionOrder`）由买家选定，写入后不支持中途切换 |
+| `pickupCode` | 仅 `deliveryMethod==='self_pickup'` 订单在进入 `ready_for_pickup` 时生成，6 位数字，由 `orderId` 确定性派生（`completeProductionOrder/lib/pickupCode.js`），非访问控制凭证，只是核对辅助 |
+| `readyForPickupAt` / `verifiedAt` / `verifiedBy` | 到店自提路径的两个状态迁移时间戳与核销操作人 |
+| `refundedAmount` | 本次退款金额（分）——此前退款恒等于 `payAmount`，现在允许小于它（部分退款） |
+| `isPartiallyRefunded` | 本次退款是否为部分退款；全额退款时为 `false` 且 `orderStatus` 同时转入终态 `refunded`；部分退款时为 `true`，`orderStatus` **保持不变**（买家仍持有实物） |
+
+`orderStatus` 枚举新增两个与 `shipped` 并列的到店自提终态分支：`paid`/`in_production` → `ready_for_pickup`（已生成核销码，待自提）→ `verified`（已核销，终态）。详见 `cloudfunctions/completeProductionOrder/lib/orderStatusMachine.js` 头部注释。
+
+**部分退款范围说明（如实标注）**：`processProductionRefund` 的 `refundClaimedAt` 是"每笔订单仅一次真正退款动作"级别的锁——全额退款会清空该占位（订单已转终态 `refunded`，天然不会再被选中发起第二次退款）；部分退款**故意不清空**该占位，把它当作"本订单唯一一次退款机会已用掉"的永久标记。不支持对同一笔订单分多次逐步退到全额，那需要引入累计已退款字段与更大范围的状态机设计，本次不做。
+
+### 9.2 `order_settlements` 新增取值
+
+| 字段/取值 | 含义 |
+|---|---|
+| `settlementStatus: 'partially_refunded'` | 部分退款（`settled` 状态下）生成的冲销分录专属状态值，与全额退款冲销分录的 `'refunded'` 区分 |
+| `isPartial: true` | 标记该条冲销分录是部分退款产生的（与 `isReversal:true` 一起出现） |
+
+**部分退款的分账冲销算法**（`liveFactoryCore/lib/settlement.js` 的 `decideRefundReversal`）：
+- 结算状态为 `unsettled`（钱还没付给制作方/推广人）+ 部分退款：不生成冲销分录，直接把这条"待分账"快照本身的 `payAmount`/`producerAmount`/`promoterAmount`/`platformFee` 原地下修为"退款后净额"重新拆分的结果（`action: 'adjust_unsettled'`），保证订单后续真正触发分账时按净额计算，不会多分。
+- 结算状态为 `settled`（钱已经分出去）+ 部分退款：冲销金额**不是**按比例乘系数计算（那样会引入额外的取整误差分摊问题），而是直接对退款金额重新走一遍 `computeSettlementSplit`（与生成初始分账快照同一个函数、同一套"producer/promoter 向下取整、platformFee 吃余数"取整策略），保证"本次冲销三项金额相加恰好等于本次退款金额"这条不变式精确成立。
 
 ---
 

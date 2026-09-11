@@ -61,13 +61,24 @@ function computeYesterdayDateString(now) {
  * 组装成一条 daily_tenant_snapshots 文档。永不抛异常——非法/缺失输入一律
  * 归约成全 0 的合法快照，不编造数据。
  *
+ * 🆕（2026-09-12 大数据量性能治理 Phase 2：全国大屏读端接入）新增
+ * expenseRecordCount/receiptRecordCount/auditedLockedCount/auditedWithProofCount/
+ * sponsorCount/yangshanCount/yangshanAmount/yindeCount/yindeAmount/hasDiners/
+ * hasActivity/stapleUrgent 这批字段——全部是"当天"维度的计数/求和/布尔标记，
+ * 目的是让 getNationalDashboard 在按天聚合历史区间时，可以对
+ * daily_tenant_snapshots 直接做 `_.aggregate.sum(field)` 拿到精确总量，而不需要
+ * 在数据库聚合管道里写 $cond 条件表达式（未经生产环境验证的云开发聚合 DSL
+ * 写法风险更高，能在这层纯函数里用普通 if/三元预先算好就不留到查询时算）。
+ * 与 getNationalDashboard/index.js 里对应字段的判定口径逐一保持一致，见各
+ * 字段处注释。
+ *
  * @param {object} params
  * @param {string} params.tenantId
  * @param {string} params.storeId
  * @param {string} params.storeName
  * @param {string} params.dateString 被统计的业务日期（不是生成时间）
  * @param {Array<object>} [params.reportRecords] 该门店该日期的 report_logs 原始记录
- *   （通常 0~1 条，多条时取"最后一条"的 todayBalance 作为 latestBalance，
+ *   （通常 0~1 条，多条时取"最后一条"的 todayBalance/stapleUrgent 作为当前状态，
  *   其余数值型字段仍然全部累加——一天出现多条记录本身是异常但不阻断快照生成）
  * @param {{riceKg?:number, flourKg?:number, oilKg?:number, veggieKg?:number}} [params.materialTotals]
  *   已换算成公斤的当日物资消耗量（换算本身由调用方复用
@@ -103,12 +114,28 @@ function buildDailySnapshot(params) {
   let deliveryVolunteers = 0;
   let latestBalance = 0;
   let hasAuditProof = false;
+  // 🆕 见函数头部注释：以下全部是"当天"维度的计数/求和，供 getNationalDashboard
+  // 历史区间聚合时直接 $sum，口径逐一对应该文件同名判断
+  let expenseRecordCount = 0;   // 对应 expenseAmount > 0 的记录数（凭证合规率分母）
+  let receiptRecordCount = 0;   // 其中附带凭证图片的记录数（凭证合规率分子）
+  let auditedLockedCount = 0;   // approvalStatus === 'AUDITED_LOCKED' 的记录数
+  let auditedWithProofCount = 0; // 其中同时带 _checksum 签名的记录数
+  let sponsorCount = 0;         // donationItems 明细条目总数（阳善+阴德）
+  let yangshanCount = 0;
+  let yangshanAmount = 0;
+  let yindeCount = 0;
+  let yindeAmount = 0;
+  let hasDiners = 0;   // 当天是否有 diners>0 的记录（0/1），对应原 entry.openDays 判定口径
+  let hasActivity = 0; // 当天是否 diners>0 或 dailyExpense>0（0/1），对应原 nationalOpenDays 判定口径
+  let stapleUrgent = false;
 
   validRecords.forEach((r) => {
-    totalDiners += parseInt(r.diningCount || r.diners || 0, 10) || 0;
+    const diners = parseInt(r.diningCount || r.diners || 0, 10) || 0;
+    const dailyExpense = parseFloat(r.dailyExpenseTotal || 0) || 0;
+    totalDiners += diners;
     totalIncome += parseFloat(r.income || r.loveIncome || r.totalDonation || 0) || 0;
     totalExpense += parseFloat(r.expense || r.todayExpense || r.expenseAmount || 0) || 0;
-    dailyExpenseTotal += parseFloat(r.dailyExpenseTotal || 0) || 0;
+    dailyExpenseTotal += dailyExpense;
     volunteerCount += parseFloat(r.volunteerCount || 0) || 0;
     volunteerHours += parseFloat(r.volunteerHours || 0) || 0;
     dineInSeniors += parseInt(r.dineInSeniors || 0, 10) || 0;
@@ -116,10 +143,42 @@ function buildDailySnapshot(params) {
     listeningSeniors += parseInt(r.listeningSeniors || 0, 10) || 0;
     takeawayCount += parseInt(r.takeawayCount || 0, 10) || 0;
     deliveryVolunteers += parseInt(r.deliveryVolunteers || 0, 10) || 0;
-    // 一天多条记录属于异常场景，这里按数组原有顺序取"最后一条"的结余——
+    // 一天多条记录属于异常场景，这里按数组原有顺序取"最后一条"的当前状态——
     // 调用方负责按 createTime/updateTime 排好序再传入，本函数不做排序假设
     latestBalance = parseFloat(r.todayBalance || 0) || 0;
     if (r.approvalStatus === 'AUDITED_LOCKED' && r._checksum) hasAuditProof = true;
+
+    if (diners > 0) hasDiners = 1;
+    if (diners > 0 || dailyExpense > 0) hasActivity = 1;
+    stapleUrgent = r.stapleRiceStatus === 'urgent' || r.stapleOilStatus === 'urgent';
+
+    const expenseAmount = parseFloat(r.expenseAmount || 0) || 0;
+    const receiptImagesArr = Array.isArray(r.receiptImages) ? r.receiptImages : [];
+    const receiptImageListArr = Array.isArray(r.receiptImageList) ? r.receiptImageList : [];
+    const hasReceipt = receiptImagesArr.length > 0 || receiptImageListArr.length > 0;
+    if (expenseAmount > 0) {
+      expenseRecordCount++;
+      if (hasReceipt) receiptRecordCount++;
+    }
+
+    if (r.approvalStatus === 'AUDITED_LOCKED') {
+      auditedLockedCount++;
+      if (r._checksum) auditedWithProofCount++;
+    }
+
+    // 阳善/阴德分流：按报告级 isAnonymous 判定，与 getNationalDashboard 的
+    // yangshanCount/yindeCount 全局累加器同一口径（不是逐条 isAnonymous 覆盖，
+    // 那个只用于捐赠墙展示脱敏，见该文件 resolveItemAnonymous 头部注释）
+    const donationItems = Array.isArray(r.donationItems) ? r.donationItems : [];
+    sponsorCount += donationItems.length;
+    const donationAmount = donationItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    if (r.isAnonymous) {
+      yindeCount += donationItems.length;
+      yindeAmount += donationAmount;
+    } else {
+      yangshanCount += donationItems.length;
+      yangshanAmount += donationAmount;
+    }
   });
 
   return {
@@ -145,7 +204,19 @@ function buildDailySnapshot(params) {
     flourKg: parseFloat(materials.flourKg) || 0,
     oilKg: parseFloat(materials.oilKg) || 0,
     veggieKg: parseFloat(materials.veggieKg) || 0,
-    sourceReportCount: validRecords.length
+    sourceReportCount: validRecords.length,
+    expenseRecordCount,
+    receiptRecordCount,
+    auditedLockedCount,
+    auditedWithProofCount,
+    sponsorCount,
+    yangshanCount,
+    yangshanAmount: round2(yangshanAmount),
+    yindeCount,
+    yindeAmount: round2(yindeAmount),
+    hasDiners,
+    hasActivity,
+    stapleUrgent
   };
 }
 

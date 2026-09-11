@@ -131,6 +131,27 @@
       </view>
     </view>
 
+    <!-- 🏛️（2026-09-12 履约状态机双轨化）到店自提核销弹窗：店员输入买家出示
+         的核销码，与订单本身的 pickupCode 比对 -->
+    <view class="pf-modal-mask" wx:if="{{showVerifyModal}}" bindtap="onCloseVerifyModal">
+      <view class="pf-modal-card" catchtap="noop">
+        <text class="pf-modal-title">到店自提核销</text>
+
+        <text class="pf-field-label">请输入买家出示的核销码</text>
+        <input
+          class="pf-input"
+          type="number"
+          placeholder-class="pf-input-placeholder"
+          placeholder="6位数字核销码"
+          value="{{verifyPickupCodeInput}}"
+          bindinput="onVerifyPickupCodeInput"
+        />
+
+        <button class="pf-primary-btn" loading="{{verifySubmitting}}" disabled="{{verifySubmitting}}" bindtap="onConfirmVerifyPickup">确认核销</button>
+        <button class="pf-secondary-btn" bindtap="onCloseVerifyModal">取消</button>
+      </view>
+    </view>
+
     <view class="pf-loading-state" wx:if="{{loading && orderCount === 0}}">
       <text>加载中...</text>
     </view>
@@ -238,18 +259,42 @@
               <text class="pf-order-label">物流</text>
               <text class="pf-order-value">{{item.expressCompany}} {{item.trackingNumber}}</text>
             </view>
+            <!-- 🏛️（2026-09-12 履约状态机双轨化）到店自提：待自提/已核销两个
+                 状态都展示核销码，供店员核对买家出示的码 -->
+            <view class="pf-order-row" wx:if="{{(item.orderStatus === 'ready_for_pickup' || item.orderStatus === 'verified') && item.pickupCode}}">
+              <text class="pf-order-label">核销码</text>
+              <text class="pf-order-value pf-pickup-code">{{item.pickupCode}}</text>
+            </view>
             <view class="pf-order-row" wx:if="{{item.orderStatus === 'refunded'}}">
               <text class="pf-order-label">退款原因</text>
               <text class="pf-order-value">{{item.refundReason || '未填写'}}</text>
             </view>
             <button
               class="pf-ship-btn"
-              wx:if="{{item.orderStatus === 'paid' || item.orderStatus === 'in_production'}}"
+              wx:if="{{(item.orderStatus === 'paid' || item.orderStatus === 'in_production') && item.deliveryMethod !== 'self_pickup'}}"
               disabled="{{markingId === item._id}}"
               data-id="{{item._id}}"
               bindtap="onTapMarkShipped"
             >
               {{markingId === item._id ? '处理中...' : '去发货 / 录入单号'}}
+            </button>
+            <button
+              class="pf-ship-btn"
+              wx:if="{{(item.orderStatus === 'paid' || item.orderStatus === 'in_production') && item.deliveryMethod === 'self_pickup'}}"
+              disabled="{{markingId === item._id}}"
+              data-id="{{item._id}}"
+              bindtap="onTapMarkReadyForPickup"
+            >
+              {{markingId === item._id ? '处理中...' : '生成自提核销码'}}
+            </button>
+            <button
+              class="pf-ship-btn"
+              wx:if="{{item.orderStatus === 'ready_for_pickup'}}"
+              disabled="{{markingId === item._id}}"
+              data-id="{{item._id}}"
+              bindtap="onTapVerifyPickup"
+            >
+              核销自提
             </button>
           </view>
         </view>

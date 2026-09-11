@@ -103,6 +103,23 @@
       </view>
 
       <view class="sf-order-card">
+        <!-- 🏛️（2026-09-12 履约状态机双轨化）取货方式：下单时选定，下单后不
+             支持中途切换，见 completeProductionOrder/lib/orderStatusMachine.js
+             头部注释 -->
+        <text class="sf-section-title">取货方式</text>
+        <view class="sf-delivery-method-group">
+          <view
+            class="sf-delivery-method-option {{deliveryMethod === 'logistics' ? 'sf-delivery-method-active' : ''}}"
+            data-method="logistics"
+            bindtap="onSelectDeliveryMethod"
+          >快递配送</view>
+          <view
+            class="sf-delivery-method-option {{deliveryMethod === 'self_pickup' ? 'sf-delivery-method-active' : ''}}"
+            data-method="self_pickup"
+            bindtap="onSelectDeliveryMethod"
+          >到店自提</view>
+        </view>
+
         <text class="sf-section-title">数量</text>
         <view class="sf-qty-stepper">
           <view class="sf-qty-btn" bindtap="onDecreaseQty">－</view>

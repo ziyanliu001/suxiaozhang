@@ -80,6 +80,14 @@
             <text class="mo-shipping-empty" wx:else>暂无运单号 / 商家自主配送</text>
           </view>
 
+          <!-- 🏛️（2026-09-12 履约状态机双轨化）到店自提：待自提/已核销两个
+               状态都常驻展示核销码，与上面物流信息卡片同一展示原则 -->
+          <view class="mo-shipping-box" wx:if="{{item.orderStatus === 'ready_for_pickup' || item.orderStatus === 'verified'}}">
+            <text class="mo-shipping-text">核销码：{{item.pickupCode}}</text>
+            <text class="mo-shipping-empty" wx:if="{{item.orderStatus === 'ready_for_pickup'}}">请到店取货时向店员出示此码</text>
+            <text class="mo-shipping-empty" wx:else>已核销，感谢惠顾</text>
+          </view>
+
           <!-- 🆕 下单失败：折叠态直接可见，不藏进展开区——核心诉求是立刻
                引导重新下单，不该增加多一次点击才能看到 -->
           <view class="mo-fail-box" wx:if="{{item.orderStatus === 'failed'}}">

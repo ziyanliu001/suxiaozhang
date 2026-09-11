@@ -16,6 +16,15 @@ const db = cloud.database();
 const ORDERS_COLLECTION = 'production_orders';
 const PAYMENT_ORDERS_COLLECTION = 'payment_orders';
 
+// 🏛️（2026-09-12 履约状态机双轨化）deliveryMethod 与
+// completeProductionOrder/lib/orderStatusMachine.js 的 normalizeDeliveryMethod
+// 是同一份归一化逻辑的独立拷贝（云函数间无共享模块机制，见 CLAUDE.md 既定
+// 约束）——买家未传/传了非法值时一律按 'logistics'（物流发货）兜底，不因为
+// 前端一时没升级就拒绝下单
+function normalizeDeliveryMethod(raw) {
+  return raw === 'self_pickup' ? 'self_pickup' : 'logistics';
+}
+
 // 🏛️ 分成比例策略默认值：与 PLAN_STORE_LIMITS 同类性质——这是产品定价/分账
 // 政策的既定常量，不是替商家瞎编的具体业务数据，未在 tenants.settlementConfig
 // 显式配置时按此兜底，保证"没配置也能把全链路跑通"。
@@ -103,6 +112,11 @@ async function handleCreateOrder(event) {
   // "买家选的是哪天就该是哪天，不能悄悄改派"原则的反向应用：这里是不能让
   // 客户端把"拼团批次"和"实际下单日期"拆成两个互相矛盾的值）
   const groupBuyBatchId = event.groupBuyBatchId ? String(event.groupBuyBatchId) : '';
+  // 🏛️（2026-09-12 履约状态机双轨化）买家下单时选定的履约方式，决定后续
+  // completeProductionOrder 走"物流发货"还是"到店自提核销"两条终态路径中的
+  // 哪一条——下单后不支持中途切换，见 completeProductionOrder/lib/orderStatusMachine.js
+  // 头部注释
+  const deliveryMethod = normalizeDeliveryMethod(event.deliveryMethod);
   if (!tenantId || !productId || !(quantity > 0)) {
     return { success: false, error: '参数缺失: tenantId/productId/quantity' };
   }
@@ -194,6 +208,7 @@ async function handleCreateOrder(event) {
     estimatedShippingDate: assign.estimatedShippingDate,
     groupBuyBatchId: groupBuyBatch ? groupBuyBatch._id : '',
     appliedTierLevel,
+    deliveryMethod,
     orderStatus: 'pending_payment',
     createdBy: OPENID,
     createdAt: db.serverDate()

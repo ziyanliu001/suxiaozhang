@@ -73,10 +73,13 @@ exports.main = async (event, context) => {
   // 只查 paid/in_production——但下面 tasks/materials 的备料聚合仍然只应该
   // 统计"还需要真的去生产"的订单，shipped 已经做完、refunded 已经取消，都
   // 不该再算进备料清单，所以这里先取全量再在内存里筛出 activeOrders 分开用
+  // 🏛️（2026-09-12 履约状态机双轨化）ready_for_pickup/verified 是到店自提
+  // 路径与 shipped 并列的终态分支，同样需要出现在看板里（否则自提订单一旦
+  // 生成核销码就从看板"消失"，管理员看不到待自提/已核销明细）
   const ordersRes = await db.collection('production_orders').where({
     tenantId,
     batchDate: _.gte(startDate).and(_.lte(endDate)),
-    orderStatus: _.in(['paid', 'in_production', 'shipped', 'refunded'])
+    orderStatus: _.in(['paid', 'in_production', 'shipped', 'ready_for_pickup', 'verified', 'refunded'])
   }).limit(1000).get();
 
   const allOrders = ordersRes.data || [];
@@ -165,6 +168,8 @@ exports.main = async (event, context) => {
       batchDate: o.batchDate,
       estimatedShippingDate: o.estimatedShippingDate,
       orderStatus: o.orderStatus,
+      deliveryMethod: o.deliveryMethod || 'logistics',
+      pickupCode: o.pickupCode || '',
       expressCompany: o.expressCompany || '',
       trackingNumber: o.trackingNumber || '',
       refundReason: o.refundReason || '',

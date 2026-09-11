@@ -84,3 +84,68 @@ test('computeSettlementSplit 对非法 payAmount 抛出异常（负数/非整数
   assert.throws(() => computeSettlementSplit({ payAmount: -1, producerRate: 0.5, promoterRate: 0 }));
   assert.throws(() => computeSettlementSplit({ payAmount: 10.5, producerRate: 0.5, promoterRate: 0 }));
 });
+
+// ==================== 2026-09-12 部分退款治理 ====================
+
+test('部分退款 + unsettled：原地下修 payAmount 为净额，不生成冲销分录', () => {
+  const settlement = {
+    _id: 's1', tenantId: 't1', orderId: 'o1', payAmount: 10000,
+    producerRate: 0.75, promoterRate: 0.1, settlementStatus: 'unsettled', isReversal: false
+  };
+  const decision = decideRefundReversal(settlement, false, 4000);
+  assert.equal(decision.action, 'adjust_unsettled');
+  assert.equal(decision.adjustment.payAmount, 6000);
+  // 净额按原费率重新拆分，三项加总仍恒等于净额
+  assert.equal(
+    decision.adjustment.producerAmount + decision.adjustment.promoterAmount + decision.adjustment.platformFee,
+    6000
+  );
+});
+
+test('全额退款（refundAmount 等于 payAmount）+ unsettled：仍走 mark_refunded，不因传参而改变全额退款行为', () => {
+  const settlement = { _id: 's1', tenantId: 't1', orderId: 'o1', payAmount: 5000, settlementStatus: 'unsettled', isReversal: false };
+  const decision = decideRefundReversal(settlement, false, 5000);
+  assert.equal(decision.action, 'mark_refunded');
+});
+
+test('部分退款 + settled：冲销金额按退款额重新计算拆分，三项加总恰好等于本次退款额（不是简单按比例乘系数）', () => {
+  const settlement = {
+    _id: 's1', tenantId: 't1', orderId: 'o1',
+    payAmount: 10000, producerRate: 0.75, promoterRate: 0.1,
+    producerAmount: 7500, promoterAmount: 1000, platformFee: 1500,
+    settlementStatus: 'settled', isReversal: false
+  };
+  const decision = decideRefundReversal(settlement, false, 3000);
+  assert.equal(decision.action, 'create_reversal');
+  assert.equal(decision.reversalDoc.payAmount, -3000);
+  assert.equal(decision.reversalDoc.settlementStatus, 'partially_refunded');
+  assert.equal(decision.reversalDoc.isPartial, true);
+  assert.equal(
+    decision.reversalDoc.producerAmount + decision.reversalDoc.promoterAmount + decision.reversalDoc.platformFee,
+    -3000
+  );
+});
+
+test('refundAmount 超过 payAmount 时被 clamp 到 payAmount（防御性兜底，正常应由上层校验拦截）', () => {
+  const settlement = {
+    _id: 's1', tenantId: 't1', orderId: 'o1',
+    payAmount: 5000, producerRate: 0.75, promoterRate: 0.1,
+    producerAmount: 3000, promoterAmount: 500, platformFee: 1500,
+    settlementStatus: 'settled', isReversal: false
+  };
+  const decision = decideRefundReversal(settlement, false, 999999);
+  assert.equal(decision.reversalDoc.payAmount, -5000);
+  assert.equal(decision.reversalDoc.settlementStatus, 'refunded'); // clamp 后等于全额，走全额分支
+});
+
+test('refundAmount 未传时行为与升级前完全一致（兼容旧调用方）', () => {
+  const settlement = {
+    _id: 's1', tenantId: 't1', orderId: 'o1',
+    payAmount: 5000, producerRate: 0.75, promoterRate: 0.1,
+    producerAmount: 3000, promoterAmount: 500, platformFee: 1500,
+    settlementStatus: 'settled', isReversal: false
+  };
+  const decision = decideRefundReversal(settlement, false);
+  assert.equal(decision.reversalDoc.payAmount, -5000);
+  assert.equal(decision.reversalDoc.settlementStatus, 'refunded');
+});

@@ -44,7 +44,9 @@ function addDaysIso(isoDateStr: string, days: number): string {
 // production_orders.orderStatus 真实枚举一一对应（见 completeProductionOrder/
 // lib/orderStatusMachine.js、processProductionRefund/index.js）——不是 KB 文档
 // 早期草案里 PENDING/PRODUCING/PACKED/FULFILLED 那套理想化状态机
-const STATUS_ORDER = ['paid', 'in_production', 'shipped', 'refunded'];
+// 🏛️（2026-09-12 履约状态机双轨化）ready_for_pickup/verified 与 shipped
+// 并列，是到店自提路径专属的终态分支——见 orderStatusLabels.ts 头部注释
+const STATUS_ORDER = ['paid', 'in_production', 'shipped', 'ready_for_pickup', 'verified', 'refunded'];
 // ORDER_STATUS_LABEL/ORDER_STATUS_CLASS 现在从 utils/orderStatusLabels.ts 共享
 // 导入（与买家侧 my-orders.ts 同一份口径，见该文件头部注释）；本页 WXSS 用
 // .pf-status-header-{{class}} / .pf-order-status-{{class}} / .pf-chip-{{class}}
@@ -75,6 +77,9 @@ interface FulfillmentOrder {
   batchDate: string;
   estimatedShippingDate: string;
   orderStatus: string;
+  // 🏛️（2026-09-12 履约状态机双轨化）
+  deliveryMethod?: 'logistics' | 'self_pickup';
+  pickupCode?: string;
   expressCompany?: string;
   trackingNumber?: string;
   refundReason?: string;
@@ -204,6 +209,8 @@ const STATUS_FILTER_TABS: Array<{ value: string; label: string }> = [
   { value: 'paid', label: '待生产' },
   { value: 'in_production', label: '生产中' },
   { value: 'shipped', label: '已发货' },
+  { value: 'ready_for_pickup', label: '待自提' },
+  { value: 'verified', label: '已自提' },
   { value: 'refunded', label: '已退款' }
 ];
 
@@ -265,6 +272,12 @@ Page({
     shipExpressCompanyIndex: -1,
     shipTrackingNumber: '',
     shipSubmitting: false,
+
+    // 🏛️（2026-09-12 履约状态机双轨化）到店自提核销弹窗
+    showVerifyModal: false,
+    verifyOrderId: '',
+    verifyPickupCodeInput: '',
+    verifySubmitting: false,
 
     // 🧺 商品管理/邀请成员只对 space_owner/space_admin 开放，producer 能看
     // 发货看板但不能改商品/发邀请——loadMySpaces() 通过 getMyProductionSpaces
@@ -645,6 +658,101 @@ Page({
       wx.showToast({ title: '标记发货失败，请重试', icon: 'none' });
     } finally {
       this.setData({ shipSubmitting: false, markingId: '' });
+    }
+  },
+
+  // 🏛️（2026-09-12 履约状态机双轨化）到店自提：生成核销码——不弹窗，直接
+  // 调用（与物流路径不同，这一步不需要额外录入信息，完成后云函数直接返回
+  // 生成好的 pickupCode，刷新列表后即可在卡片上看到）
+  async onTapMarkReadyForPickup(e: any) {
+    const orderId = e.currentTarget.dataset.id;
+    if (!orderId || this.data.markingId) return;
+    this.setData({ markingId: orderId });
+    wx.showLoading({ title: '正在生成核销码...', mask: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'completeProductionOrder',
+        data: { tenantId: this.data.tenantId, orderId }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '生成核销码失败，请重试', icon: 'none' });
+        return;
+      }
+      wx.showModal({
+        title: '自提核销码已生成',
+        content: `核销码：${result.pickupCode}\n请告知买家凭此码到店自提，买家取货时向店员出示该码即可核销。`,
+        showCancel: false,
+        confirmText: '知道了'
+      });
+      this.loadOrders();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[production-fulfillment] onTapMarkReadyForPickup 异常:', err);
+      wx.showToast({ title: '生成核销码失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ markingId: '' });
+    }
+  },
+
+  onTapVerifyPickup(e: any) {
+    const orderId = e.currentTarget.dataset.id;
+    if (!orderId || this.data.markingId) return;
+    this.setData({ showVerifyModal: true, verifyOrderId: orderId, verifyPickupCodeInput: '' });
+  },
+
+  onCloseVerifyModal() {
+    if (this.data.verifySubmitting) return;
+    this.setData({ showVerifyModal: false });
+  },
+
+  onVerifyPickupCodeInput(e: any) {
+    this.setData({ verifyPickupCodeInput: e.detail.value });
+  },
+
+  async onConfirmVerifyPickup() {
+    if (this.data.verifySubmitting || this.data.markingId) return;
+    const orderId = this.data.verifyOrderId;
+    const pickupCode = (this.data.verifyPickupCodeInput || '').trim();
+    if (!pickupCode) {
+      wx.showToast({ title: '请输入核销码', icon: 'none' });
+      return;
+    }
+
+    this.setData({ verifySubmitting: true, markingId: orderId });
+    wx.showLoading({ title: '正在核销...', mask: true });
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'completeProductionOrder',
+        data: { action: 'verifyPickup', tenantId: this.data.tenantId, orderId, pickupCode }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '核销失败，请重试', icon: 'none' });
+        return;
+      }
+      this.setData({ showVerifyModal: false });
+
+      const profitSharing = result.profitSharing || {};
+      if (profitSharing.attempted && !profitSharing.success) {
+        wx.showModal({
+          title: '已核销，但分账未成功',
+          content: profitSharing.error || '分账失败，原因未知，请稍后在本页重试（重复核销是安全的）。',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      } else {
+        wx.showToast({ title: '核销成功', icon: 'success' });
+      }
+      this.loadOrders();
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[production-fulfillment] onConfirmVerifyPickup 异常:', err);
+      wx.showToast({ title: '核销失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ verifySubmitting: false, markingId: '' });
     }
   }
 });

@@ -16,11 +16,16 @@ const _ = db.command;
 
 const ORDER_LIMIT = 100;
 
+// 🏛️（2026-09-12 履约状态机双轨化）ready_for_pickup/verified 与 shipped
+// 并列，是到店自提路径专属的终态分支——见 completeProductionOrder/lib/
+// orderStatusMachine.js 头部注释
 const STATUS_LABEL = {
   pending_payment: '待支付',
   paid: '已付款 · 待生产',
   in_production: '生产中',
   shipped: '已发货',
+  ready_for_pickup: '待自提',
+  verified: '已自提',
   refunded: '已退款',
   failed: '下单失败'
 };
@@ -103,6 +108,8 @@ exports.main = async (event) => {
         failReason: o.failReason || '',
         batchDate: o.batchDate || '',
         estimatedShippingDate: o.estimatedShippingDate || '',
+        deliveryMethod: o.deliveryMethod || 'logistics',
+        pickupCode: o.pickupCode || '',
         expressCompany: o.expressCompany || '',
         trackingNumber: o.trackingNumber || '',
         appliedTierLevel: o.appliedTierLevel || 0,

@@ -27,9 +27,10 @@ const db = cloud.database();
 const _ = db.command;
 
 const { buildProfitSharingReceivers } = require('./lib/buildReceivers');
-const { canMarkShipped } = require('./lib/orderStatusMachine');
+const { canMarkShipped, canMarkReadyForPickup, canVerifyPickup, normalizeDeliveryMethod } = require('./lib/orderStatusMachine');
 const { validateShipment } = require('./lib/validateShipment');
 const { buildShippingNoticePayload } = require('./lib/buildSubscribeMessagePayload');
+const { generatePickupCode, verifyPickupCode } = require('./lib/pickupCode');
 
 function todayStr() {
   const d = new Date();
@@ -166,21 +167,9 @@ async function tryAutoProfitSharing({ tenantId, order }) {
   return { attempted: true, success: true, outOrderNo: share.outOrderNo, status: share.status };
 }
 
-exports.main = async (event, context) => {
-  const { OPENID } = cloud.getWXContext();
-  if (!OPENID) return { success: false, error: '无法获取用户身份' };
-
-  const tenantId = String(event.tenantId || '');
-  const orderId = String(event.orderId || '');
-  if (!tenantId || !orderId) return { success: false, error: '参数缺失: tenantId/orderId' };
-
-  const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
-  if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可标记发货完成' };
-
-  const orderRes = await db.collection('production_orders').doc(orderId).get().catch(() => null);
-  const order = orderRes && orderRes.data;
-  if (!order || order.tenantId !== tenantId) return { success: false, error: '订单不存在' };
-
+// 🏛️（2026-09-12 履约状态机双轨化）物流发货分支——与原有逻辑完全一致，
+// 只是从 exports.main 里拆出来，改由 deliveryMethod 分流调用
+async function handleMarkShipped({ OPENID, tenantId, orderId, order, event }) {
   const statusCheck = canMarkShipped(order.orderStatus);
   if (!statusCheck.allowed) return { success: false, error: statusCheck.error };
 
@@ -224,4 +213,91 @@ exports.main = async (event, context) => {
     trackingNumber: freshOrder.trackingNumber,
     profitSharing
   };
+}
+
+// 🏛️（2026-09-12 履约状态机双轨化）到店自提分支第一步——生成核销码，订单
+// 进入 ready_for_pickup（终态前的"待自提"态，尚未分账，分账要等买家真正
+// 到店核销后才触发，与物流路径"标记发货即分账"的时机保持同一个"钱已经
+// 交付实体/确认交付事实后才分账"的原则）
+async function handleMarkReadyForPickup({ orderId, order }) {
+  const statusCheck = canMarkReadyForPickup(order.orderStatus);
+  if (!statusCheck.allowed) return { success: false, error: statusCheck.error };
+
+  const pickupCode = order.pickupCode || generatePickupCode(orderId);
+  if (!statusCheck.alreadyReady) {
+    await db.collection('production_orders').doc(orderId).update({
+      data: { orderStatus: 'ready_for_pickup', readyForPickupAt: db.serverDate(), pickupCode }
+    });
+  }
+
+  return { success: true, orderStatus: 'ready_for_pickup', pickupCode };
+}
+
+// 🏛️（2026-09-12 履约状态机双轨化）到店自提分支第二步——店长/管理员/制作方
+// 核对买家出示的核销码，核验通过后订单进入 verified 终态，此时才真正触发
+// 分账（与物流路径"标记发货即分账"对齐同一个时机原则：确认实体已经交付
+// 给买家，才把钱分出去）
+async function handleVerifyPickup(event) {
+  const { OPENID } = cloud.getWXContext();
+  if (!OPENID) return { success: false, error: '无法获取用户身份' };
+
+  const tenantId = String(event.tenantId || '');
+  const orderId = String(event.orderId || '');
+  const inputCode = String(event.pickupCode || '').trim();
+  if (!tenantId || !orderId) return { success: false, error: '参数缺失: tenantId/orderId' };
+  if (!inputCode) return { success: false, error: '请输入自提核销码' };
+
+  const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
+  if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可核销自提订单' };
+
+  const orderRes = await db.collection('production_orders').doc(orderId).get().catch(() => null);
+  const order = orderRes && orderRes.data;
+  if (!order || order.tenantId !== tenantId) return { success: false, error: '订单不存在' };
+
+  const statusCheck = canVerifyPickup(order.orderStatus);
+  if (!statusCheck.allowed) return { success: false, error: statusCheck.error };
+
+  if (!statusCheck.alreadyVerified) {
+    if (!verifyPickupCode(inputCode, order.pickupCode)) {
+      return { success: false, error: '核销码不正确，请核对后重试' };
+    }
+    // 🛡️ 条件更新防重复核销：where 命中 orderStatus 仍是 ready_for_pickup
+    // 才允许更新，两次并发核销（如双击/重复扫码）只有一次能真正把状态从
+    // ready_for_pickup 撞成 verified——与本仓库其余状态迁移同一套 CAS 手法
+    const claimRes = await db.collection('production_orders').where({
+      _id: orderId, orderStatus: 'ready_for_pickup'
+    }).update({ data: { orderStatus: 'verified', verifiedAt: db.serverDate(), verifiedBy: OPENID } });
+    if (!claimRes.stats || claimRes.stats.updated !== 1) {
+      return { success: true, orderStatus: 'verified', alreadyVerified: true, profitSharing: { attempted: false, reason: '该订单已被另一次核销请求处理（幂等）' } };
+    }
+  }
+
+  const freshOrder = { ...order, orderStatus: 'verified' };
+  const profitSharing = await tryAutoProfitSharing({ tenantId, order: freshOrder });
+
+  return { success: true, orderStatus: 'verified', profitSharing };
+}
+
+exports.main = async (event, context) => {
+  if (event.action === 'verifyPickup') return handleVerifyPickup(event);
+
+  const { OPENID } = cloud.getWXContext();
+  if (!OPENID) return { success: false, error: '无法获取用户身份' };
+
+  const tenantId = String(event.tenantId || '');
+  const orderId = String(event.orderId || '');
+  if (!tenantId || !orderId) return { success: false, error: '参数缺失: tenantId/orderId' };
+
+  const caller = await verifyTenantAccess(OPENID, tenantId, ['space_owner', 'space_admin', 'producer']);
+  if (!caller) return { success: false, error: '无权限：仅空间负责人/管理员/制作方可标记发货完成' };
+
+  const orderRes = await db.collection('production_orders').doc(orderId).get().catch(() => null);
+  const order = orderRes && orderRes.data;
+  if (!order || order.tenantId !== tenantId) return { success: false, error: '订单不存在' };
+
+  const deliveryMethod = normalizeDeliveryMethod(order.deliveryMethod);
+  if (deliveryMethod === 'self_pickup') {
+    return handleMarkReadyForPickup({ orderId, order });
+  }
+  return handleMarkShipped({ OPENID, tenantId, orderId, order, event });
 };

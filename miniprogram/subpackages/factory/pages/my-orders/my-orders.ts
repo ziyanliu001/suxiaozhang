@@ -32,6 +32,9 @@ interface MyOrder {
   failReason: string;
   batchDate: string;
   estimatedShippingDate: string;
+  // 🏛️（2026-09-12 履约状态机双轨化）
+  deliveryMethod: 'logistics' | 'self_pickup';
+  pickupCode: string;
   expressCompany: string;
   trackingNumber: string;
   appliedTierLevel: number;
@@ -61,8 +64,12 @@ const TAB_OPTIONS: { value: TabValue; label: string }[] = [
 // 映射：pending_payment（待支付）归进"待发货"这个广义"还没收到货"大类；
 // refunded（已退款）与 failed 一起归进"异常/失败"——从买家视角看两者都是
 // "这笔订单没有正常走完"的结果
+// 🏛️（2026-09-12 履约状态机双轨化）verified（到店自提已核销）与 shipped
+// 是同一层级的"买家已经拿到货"终态，归进同一个 Tab；ready_for_pickup
+// （待自提，核销码已生成但买家还没到店）语义上更接近"还没收到货"，归进
+// pending_shipment，与 shipped 路径的 paid/in_production 是同一档
 function computeTabBucket(orderStatus: string): TabValue {
-  if (orderStatus === 'shipped') return 'shipped';
+  if (orderStatus === 'shipped' || orderStatus === 'verified') return 'shipped';
   if (orderStatus === 'failed' || orderStatus === 'refunded') return 'exception';
   return 'pending_shipment';
 }

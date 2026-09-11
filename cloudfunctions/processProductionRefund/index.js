@@ -25,6 +25,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
+const { validateRefundAmount } = require('./lib/partialRefund');
+
 // 🚨 查 tenant_members 而不是 user_roles：见 createProductionSpace/index.js
 // 头部注释——live_factory 成员记录绝不能混进雨花公益专区依赖的 user_roles。
 async function verifyTenantAccess(openid, tenantId, requiredRoles) {
@@ -39,6 +41,12 @@ async function releaseRefundClaim(orderId) {
     data: { refundClaimedAt: _.remove(), refundClaimedBy: _.remove() }
   }).catch((err) => console.error('[processProductionRefund] 释放退款占位失败（需人工核对是否卡死）:', orderId, err));
 }
+
+// 🏛️（2026-09-12 履约状态机双轨化）可退款起点状态：物流路径的 shipped 与
+// 到店自提路径的 ready_for_pickup/verified 并列——自提订单即便已经核销
+// 完成（verified，买家已取走实物），仍可能因质量问题等原因发起售后退款，
+// 与物流路径"已发货仍可退款"是同一条业务逻辑，不应该只放开 shipped 一个值
+const REFUNDABLE_STATUSES = ['paid', 'in_production', 'shipped', 'ready_for_pickup', 'verified'];
 
 exports.main = async (event, context) => {
   const { OPENID } = cloud.getWXContext();
@@ -55,10 +63,18 @@ exports.main = async (event, context) => {
   const orderRes = await db.collection('production_orders').doc(orderId).get().catch(() => null);
   const order = orderRes && orderRes.data;
   if (!order || order.tenantId !== tenantId) return { success: false, error: '订单不存在' };
-  if (!['paid', 'in_production', 'shipped'].includes(order.orderStatus)) {
+  if (!REFUNDABLE_STATUSES.includes(order.orderStatus)) {
     return { success: false, error: `订单当前状态为 ${order.orderStatus}，不可退款` };
   }
   if (!order.outTradeNo) return { success: false, error: '订单缺少支付流水号，无法发起退款' };
+
+  // 🏛️（2026-09-12 部分退款治理）此前 refundAmount 硬编码为 order.payAmount
+  // （只支持全额退款），现在允许调用方传入实际退款金额（分），服务端强校验
+  // 不超过订单实付金额——见 lib/partialRefund.js
+  const amountCheck = validateRefundAmount(order.payAmount, event.refundAmount);
+  if (!amountCheck.valid) return { success: false, error: amountCheck.error };
+  const refundAmount = amountCheck.amount;
+  const isFullRefund = amountCheck.isFullRefund;
 
   // 🛡️ 原子领单（claim）：上面这次读 orderStatus 判断"是否可退款"和下面真正
   // 发起退款之间存在窗口——双击提交、或网络超时后客户端自动重试，都可能让
@@ -67,9 +83,16 @@ exports.main = async (event, context) => {
   // 同一套 CAS（条件更新）手法：where 同时命中 orderStatus 仍在可退范围 +
   // refundClaimedAt 尚不存在，两个条件都满足才允许更新；并发调用只有一次能
   // 抢到 stats.updated===1，抢不到的直接拒绝，不再往下发起退款。
+  // 🛡️ 范围说明（如实标注）：本仓库当前架构里一笔订单只允许发起一次真正的
+  // 退款动作，无论这次是全额还是部分——refundClaimedAt 领单成功后，只有
+  // "全额退款"分支会在最终清空这个占位（订单同时转入终态 refunded，
+  // REFUNDABLE_STATUSES 天然排除它，不会再被选中发起第二次退款）；"部分
+  // 退款"分支故意不清空这个占位，把它当成"这笔订单已经用掉唯一一次退款
+  // 机会"的永久标记——不支持对同一笔订单分多次逐步退到全额，那需要引入
+  // 累计已退款金额字段与更大范围的状态机设计，本次不做。
   const claimRes = await db.collection('production_orders').where({
     _id: orderId,
-    orderStatus: _.in(['paid', 'in_production', 'shipped']),
+    orderStatus: _.in(REFUNDABLE_STATUSES),
     refundClaimedAt: _.exists(false)
   }).update({ data: { refundClaimedAt: db.serverDate(), refundClaimedBy: OPENID } });
   if (!claimRes.stats || claimRes.stats.updated !== 1) {
@@ -89,8 +112,8 @@ exports.main = async (event, context) => {
       action: 'refund',
       internalToken: process.env.WXPAY_INTERNAL_TOKEN || '',
       outTradeNo: order.outTradeNo,
-      refundAmount: order.payAmount,
-      reason: reason || '生产订单退款'
+      refundAmount,
+      reason: reason || (isFullRefund ? '生产订单退款' : '生产订单部分退款')
     }
   }).catch((err) => ({ result: { success: false, error: String(err.errMsg || err.message || '退款服务异常') } }));
 
@@ -105,11 +128,12 @@ exports.main = async (event, context) => {
     return { success: false, error: `微信支付拒绝了这笔退款（状态：${refund.status}），请核实后重试` };
   }
 
-  // 2. 分账红冲
+  // 2. 分账红冲——按 refundAmount 精确冲销（部分退款时按比例，见
+  // liveFactoryCore/lib/settlement.js decideRefundReversal 头部注释）
   const internalToken = process.env.LIVE_FACTORY_INTERNAL_TOKEN || '';
   const reverseRes = await cloud.callFunction({
     name: 'liveFactoryCore',
-    data: { action: 'reverseSettlement', internalToken, tenantId, orderId }
+    data: { action: 'reverseSettlement', internalToken, tenantId, orderId, refundAmount }
   }).catch((err) => ({ result: { success: false, error: String(err.errMsg || err.message || '分账冲销服务异常') } }));
   if (!(reverseRes.result || {}).success) {
     // 钱已经退了，账没冲成——记录下来供人工核对，不能再回滚已经发生的真实退款。
@@ -120,43 +144,59 @@ exports.main = async (event, context) => {
     return { success: false, error: '退款已受理，但账目冲销失败，请联系技术人员核对（不要重复退款）' };
   }
 
-  // 3. 释放已占用的生产产能
-  await cloud.callFunction({
-    name: 'liveFactoryCore',
-    data: {
-      action: 'releaseBatchCapacity', internalToken,
-      tenantId, productId: order.productId, batchDate: order.batchDate, quantity: order.quantity
-    }
-  }).catch((err) => console.error('[processProductionRefund] 释放产能失败（需人工核对）:', err));
-
-  // 3.5（护城河二）若该订单是通过拼团批次成交的，退款时同步释放已认购的
-  // 拼团份额——否则拼团进度条会一直算上这笔已经退掉的订单，显示虚高的
-  // "已认购 N 件"，也可能因此错误维持一个本不该解锁的阶梯价
-  if (order.groupBuyBatchId) {
+  // 🏛️（2026-09-12 部分退款治理）产能/拼团份额释放只在"全额退款"（订单
+  // 真正取消/退货，实体不再交付给买家）时执行——部分退款是价格调整/质量
+  // 补偿性质，买家仍然保留实物，释放产能会错误地把"已经真实用掉的产能"
+  // 重新标记为可用，制造超卖风险
+  if (isFullRefund) {
+    // 3. 释放已占用的生产产能
     await cloud.callFunction({
       name: 'liveFactoryCore',
       data: {
-        action: 'releaseGroupBuyProgress', internalToken,
+        action: 'releaseBatchCapacity', internalToken,
         tenantId, productId: order.productId, batchDate: order.batchDate, quantity: order.quantity
       }
-    }).catch((err) => console.error('[processProductionRefund] 释放拼团份额失败（需人工核对）:', err));
+    }).catch((err) => console.error('[processProductionRefund] 释放产能失败（需人工核对）:', err));
+
+    // 3.5（护城河二）若该订单是通过拼团批次成交的，退款时同步释放已认购的
+    // 拼团份额——否则拼团进度条会一直算上这笔已经退掉的订单，显示虚高的
+    // "已认购 N 件"，也可能因此错误维持一个本不该解锁的阶梯价
+    if (order.groupBuyBatchId) {
+      await cloud.callFunction({
+        name: 'liveFactoryCore',
+        data: {
+          action: 'releaseGroupBuyProgress', internalToken,
+          tenantId, productId: order.productId, batchDate: order.batchDate, quantity: order.quantity
+        }
+      }).catch((err) => console.error('[processProductionRefund] 释放拼团份额失败（需人工核对）:', err));
+    }
   }
 
-  await db.collection('production_orders').doc(orderId).update({
-    data: {
-      orderStatus: 'refunded', refundedAt: db.serverDate(), refundReason: reason, refundedBy: OPENID, refundStatus: refund.status,
-      refundClaimedAt: _.remove(), refundClaimedBy: _.remove()
-    }
-  });
+  const refundUpdateData = isFullRefund
+    ? {
+        orderStatus: 'refunded', refundedAt: db.serverDate(), refundReason: reason, refundedBy: OPENID, refundStatus: refund.status,
+        refundedAmount: refundAmount, isPartiallyRefunded: false,
+        refundClaimedAt: _.remove(), refundClaimedBy: _.remove()
+      }
+    : {
+        // 部分退款：订单状态保持不变（买家仍会/已收到实物），故意不清空
+        // refundClaimedAt/refundClaimedBy——见上方"范围说明"注释，这是本
+        // 订单唯一一次退款机会已用掉的永久标记
+        refundedAt: db.serverDate(), refundReason: reason, refundedBy: OPENID, refundStatus: refund.status,
+        refundedAmount: refundAmount, isPartiallyRefunded: true
+      };
+  await db.collection('production_orders').doc(orderId).update({ data: refundUpdateData });
 
   return {
     success: true,
     refundStatus: refund.status,
+    refundAmount,
+    isFullRefund,
     alreadyProfitShared,
     message:
       (refund.status === 'PROCESSING'
-        ? '退款已提交微信支付处理中，账目已同步冲销、产能已释放。'
-        : '退款成功，账目已冲销、产能已释放。') +
+        ? `退款已提交微信支付处理中，账目已同步冲销${isFullRefund ? '、产能已释放' : ''}。`
+        : `退款成功，账目已冲销${isFullRefund ? '、产能已释放' : ''}。`) +
       (alreadyProfitShared ? '（该订单分账已完成，如商户账户余额不足，微信支付可能拒绝或延迟本次退款，请留意结果）' : '')
   };
 };

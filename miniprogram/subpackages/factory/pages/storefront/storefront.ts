@@ -55,6 +55,13 @@ Page({
     selectedBatchDate: '',
     quantity: 1,
 
+    // 🏛️（2026-09-12 履约状态机双轨化）取货方式：下单时选定，透传给
+    // createProductionOrder 落库为 production_orders.deliveryMethod，决定
+    // 后续 completeProductionOrder 走"物流发货"还是"到店自提核销"哪条终态
+    // 路径，见 completeProductionOrder/lib/orderStatusMachine.js 头部注释。
+    // 默认 'logistics'，与升级前"只有物流发货一条路径"的行为保持一致
+    deliveryMethod: 'logistics' as 'logistics' | 'self_pickup',
+
     // 🏛️（护城河二）拼团预览：selectedBatchDate 命中的批次信息 + 按当前
     // quantity 预估的成交价文案，随 onSelectBatchDate/onIncreaseQty/
     // onDecreaseQty 联动刷新。tierRows 是方向 B 新增的完整阶梯梯度展示
@@ -283,6 +290,13 @@ Page({
     });
   },
 
+  onSelectDeliveryMethod(e: any) {
+    const method = e.currentTarget.dataset.method;
+    if (method === 'logistics' || method === 'self_pickup') {
+      this.setData({ deliveryMethod: method });
+    }
+  },
+
   // 🐛 没有直接用 createOrderAndPay 这个一站式封装：它内部下单成功后只往外
   // 抛 PayOutcome（{ok, cancelled, message}），createProductionOrder 返回的
   // batchDate/estimatedShippingDate 会被吞掉——买家支付成功后"指引查看预计
@@ -308,7 +322,8 @@ Page({
           quantity: this.data.quantity,
           promoterOpenId: this.data.effectivePromoterOpenId,
           preferredDate: this.data.selectedBatchDate,
-          groupBuyBatchId
+          groupBuyBatchId,
+          deliveryMethod: this.data.deliveryMethod
         }
       });
       orderResult = res.result;
