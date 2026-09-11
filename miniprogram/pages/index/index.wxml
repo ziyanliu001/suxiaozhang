@@ -1388,18 +1388,26 @@
           <view class="btn-expense-template-pill" hover-class="btn-expense-template-hover" bindtap="onOpenExpenseTemplateModal" data-category="daily">
             <text class="lbl">🧾 常用项目</text>
           </view>
+          <!-- 🦻（2026-09-11 适老化文案改造）原"拍照识别"改按生活场景明确
+               命名为"手写/转账识别"——按钮背后调用的仍是 ocrExpenseReceipt
+               默认 action（宽松金额提取，见 onScanReceiptPhoto 头部注释），
+               只是把技术实现口吻的文案换成长辈一看就懂的使用场景描述，
+               不改变任何既有交互/云函数调用 -->
           <view class="btn-scan-receipt-pill" hover-class="btn-scan-receipt-hover" bindtap="onScanReceiptPhoto">
-            <view class="icon idx-icon-sm idx-icon-camera"></view>
-            <text class="lbl">拍照识别</text>
+            <text class="icon">📝</text>
+            <text class="lbl">手写/转账识别</text>
           </view>
           <!-- 📸（2026-09-10 发票/小票 OCR 智能记账·第一阶段前端接入）与上面
-               「拍照识别」是两条彻底独立的入口——本按钮调 action:'parseReceipt'，
+               「手写/转账识别」是两条彻底独立的入口——本按钮调 action:'parseReceipt'，
                多了品类归集与疑点标记，见 index.ts onTapSmartReceiptScan 头部
                注释。用 catchtap 阻止冒泡，避免被外层任何潜在的 bindtap 一并
-               捕获（与 CLAUDE.md 第 8 节第 1 条同一处防御原则） -->
+               捕获（与 CLAUDE.md 第 8 节第 1 条同一处防御原则）。
+               🦻（2026-09-11 适老化文案改造）原"拍照智能识票"同理改为"超市
+               小票识票"，与上面按钮一起按"这张票长什么样"而不是"用了什么
+               技术"来命名，长辈选按钮时更容易对上号 -->
           <view class="btn-smart-receipt-pill" hover-class="btn-smart-receipt-hover" catchtap="onTapSmartReceiptScan">
-            <text class="icon">📸</text>
-            <text class="lbl">拍照智能识票</text>
+            <text class="icon">🧾</text>
+            <text class="lbl">超市小票识票</text>
           </view>
         </view>
 

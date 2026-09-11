@@ -28,6 +28,7 @@ import { takeResumeDraftHandoff } from '../../utils/draftHandoff';
 import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { buildSmartReceiptDisplayItems, formatSmartReceiptTotalDisplay, buildSmartReceiptApplyText } from './lib/smartReceiptDraft';
+import { isDefaultOcrResultEmpty, isParseReceiptResultEmpty, adaptParseReceiptDraftToLegacyResult, adaptLegacyOcrResultToParseReceiptDraft } from './lib/ocrEngineFallback';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
 import {
@@ -6862,9 +6863,30 @@ Page({
             const amount = parseFloat(result.amount || result.totalAmount || 0);
             results.push({ ...result, totalAmount: amount, fileID: uploadRes.fileID });
           } else {
-            const realErrMsg = (result && result.errMsg) || (result && result.message) || (result && result.error) || '云函数返回数据异常';
-            console.error('❌ [OCR] 单张识别失败:', realErrMsg);
-            results.push({ success: false, errMsg: realErrMsg, fileID: uploadRes.fileID });
+            // 🛡️（2026-09-11 适老化双轨互补）「手写/转账识别」默认引擎判定这张
+            // 图识别失败——很可能是长辈拍的其实是超市小票，误点了这颗按钮。
+            // 图片已经上传好了，用同一个 fileID 换「超市小票识票」引擎
+            // （action:'parseReceipt'）再试一次，不需要重新拍照/重新上传；
+            // 换引擎也识别不出来才最终判定这张图失败，两条引擎互为兜底
+            let fallbackApplied = false;
+            try {
+              const fallbackRes = await callFunctionWithTimeout({
+                name: 'ocrExpenseReceipt',
+                data: { action: 'parseReceipt', fileID: uploadRes.fileID }
+              }, 25000);
+              const fallbackResult = fallbackRes.result as any;
+              if (!isParseReceiptResultEmpty(fallbackResult)) {
+                results.push({ ...adaptParseReceiptDraftToLegacyResult(fallbackResult), fileID: uploadRes.fileID });
+                fallbackApplied = true;
+              }
+            } catch (fallbackErr) {
+              console.warn('[onScanReceiptPhoto] 换引擎兜底调用失败:', fallbackErr);
+            }
+            if (!fallbackApplied) {
+              const realErrMsg = (result && result.errMsg) || (result && result.message) || (result && result.error) || '云函数返回数据异常';
+              console.error('❌ [OCR] 单张识别失败（两条引擎均未识别出有效结果）:', realErrMsg);
+              results.push({ success: false, errMsg: realErrMsg, fileID: uploadRes.fileID });
+            }
           }
         } catch (e: any) {
           console.error('❌ [onScanReceiptPhoto] 单张识别捕获到异常:', e);
@@ -7009,17 +7031,38 @@ Page({
 
       wx.hideLoading();
 
-      const result = ocrRes.result as any;
-      if (!result || !result.success) {
-        this._cleanupReceiptImages([uploadRes.fileID]);
-        uploadedFileId = null; // 已清理，不需要 catch 块再兜底一次
-        wx.showModal({
-          title: '智能识票失败',
-          content: (result && result.error) || '未能识别票据信息，请手动填写或重新拍摄更清晰的小票',
-          showCancel: false,
-          confirmText: '知道了'
-        });
-        return;
+      let result = ocrRes.result as any;
+      if (isParseReceiptResultEmpty(result)) {
+        // 🛡️（2026-09-11 适老化双轨互补）「超市小票识票」结构化引擎没解析出
+        // 任何商品/总金额——很可能是长辈拍的其实是手写记账条/转账截图，误点了
+        // 这颗按钮。图片已经上传好了，用同一个 fileID 换「手写/转账识别」引擎
+        // （不带 action 的默认调用）再试一次，成功就把旧字段结果转成本函数
+        // 期望的 draft 形状继续走原有流程，换引擎也识别不出来才最终报失败
+        let fallbackDraft: any = null;
+        try {
+          const fallbackRes = await callFunctionWithTimeout({
+            name: 'ocrExpenseReceipt',
+            data: { fileID: uploadRes.fileID }
+          }, 25000);
+          const fallbackResult = fallbackRes.result as any;
+          if (!isDefaultOcrResultEmpty(fallbackResult)) {
+            fallbackDraft = adaptLegacyOcrResultToParseReceiptDraft(fallbackResult);
+          }
+        } catch (fallbackErr) {
+          console.warn('[onTapSmartReceiptScan] 换引擎兜底调用失败:', fallbackErr);
+        }
+        if (!fallbackDraft) {
+          this._cleanupReceiptImages([uploadRes.fileID]);
+          uploadedFileId = null; // 已清理，不需要 catch 块再兜底一次
+          wx.showModal({
+            title: '智能识票失败',
+            content: (result && result.error) || '未能识别票据信息，请手动填写或重新拍摄更清晰的小票',
+            showCancel: false,
+            confirmText: '知道了'
+          });
+          return;
+        }
+        result = fallbackDraft;
       }
 
       this._smartReceiptFileId = uploadRes.fileID;

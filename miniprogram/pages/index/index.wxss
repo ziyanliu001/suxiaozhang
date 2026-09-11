@@ -1828,13 +1828,16 @@ page {
   transform: scale(0.96);
 }
 
+/* 🦻（2026-09-11 适老化文案改造）icon 从 idx-icon-camera 图标组件改为与
+   下面「超市小票识票」一致的文字 emoji（📝），font-size 而非 width/height */
 .btn-scan-receipt-pill .icon {
-  width: 26rpx;
-  height: 26rpx;
+  font-size: 24rpx;
+  line-height: 1;
 }
 
 .btn-scan-receipt-pill .lbl {
-  font-size: 22rpx;
+  /* 🦻 22rpx→24rpx：适老化改造要求的"字体稍加醒目"，颜色/背景不变 */
+  font-size: 24rpx;
   font-weight: bold;
   line-height: 1;
 }
@@ -1859,7 +1862,8 @@ page {
 }
 
 .btn-smart-receipt-pill .lbl {
-  font-size: 22rpx;
+  /* 🦻 22rpx→24rpx：适老化改造要求的"字体稍加醒目"，颜色/背景不变 */
+  font-size: 24rpx;
   font-weight: bold;
   line-height: 1;
 }
@@ -9556,9 +9560,11 @@ page {
   font-size: 26rpx !important;
 }
 
+/* 🦻（2026-09-11 适老化文案改造同步调整）icon 已从 idx-icon-camera 图标
+   组件改为文字 emoji（📝），放大需要用 font-size，width/height 对纯文字
+   glyph 不生效，与下面 .care-mode .btn-smart-receipt-pill .icon 保持一致 */
 .care-mode .btn-scan-receipt-pill .icon {
-  width: 32rpx !important;
-  height: 32rpx !important;
+  font-size: 32rpx !important;
 }
 
 /* 🦻 拍照智能识票：与上面 .care-mode .btn-scan-receipt-pill 同一套放大幅度，
