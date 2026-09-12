@@ -16,6 +16,7 @@ import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, getCurrentActiveStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../utils/storeManager';
+import { WorkspaceMode, getLastAdminWorkspace, setLastAdminWorkspace, resolveWorkspaceForOrgType } from '../../utils/workspaceManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
 import { isCloudAvailable, reportCloudSdkErrorIfCorrupted } from '../../utils/cloudGuard';
@@ -9322,19 +9323,36 @@ Page({
   // 专区，后者若发现权威 orgType 与之前不一致会立即纠正，不会停留在错误专区。
   //
   // 🛡️ 超管/平台管理员：orgType 对他们没有确定性意义（不隶属单一门店/机构，
-  // 或需要自由预览两个专区），不做自动跳转，保留工作空间选择首页作为固定入口，
-  // 与 onSelectYuhuaPlatform/onSelectGeneralPlatform 里"超级管理员无条件放行"
-  // 的既有设计保持一致。
+  // 或需要自由预览两个专区），与 onSelectYuhuaPlatform/onSelectGeneralPlatform
+  // 里"超级管理员无条件放行"的既有设计保持一致，不按 orgType 做自动跳转。
+  // 🆕（2026-09-13 工作空间架构升级）但这不代表这两类账号永远只能停在选择
+  // 首页——补一份仅面向管理员角色的轻量记忆（见 utils/workspaceManager.ts
+  // getLastAdminWorkspace 头部注释：只记"这个管理员上次自己点了哪张专区
+  // 卡片"这个纯 UI 偏好，不是业务归属数据，不存在"缓存变旧"风险，与本方法
+  // 对普通账号坚持的"不引入持久化缓存"原则不冲突），有记忆就直达，没有
+  // （从未主动选过）依然留在选择首页，交给 onSelectYuhuaPlatform/
+  // onSelectGeneralPlatform 记录下第一次选择。
   //
   // 🛡️ 全新未绑定账号（orgType===''）：没有可依据的归属信息，同样留在选择首页，
   // 引导其通过下方 showNewUserGuide（进入某个专区后）创建/加入站点。
   autoResumeWorkspaceMode(orgType: string, isSuperAdminAccount: boolean, isPlatformAdminAccount: boolean) {
-    if (isSuperAdminAccount || isPlatformAdminAccount || !orgType) return;
+    if (isSuperAdminAccount || isPlatformAdminAccount) {
+      const lastAdminWorkspace = getLastAdminWorkspace();
+      if (!lastAdminWorkspace || this.data.currentPlatformMode === lastAdminWorkspace) return;
+      if (lastAdminWorkspace === WorkspaceMode.YUHUA) {
+        this.enterYuhuaWorkspaceFlow();
+      } else {
+        this.setData({ currentPlatformMode: 'general' });
+      }
+      return;
+    }
+    // 🆕（2026-09-13 工作空间架构升级）判断逻辑收敛到 workspaceManager.ts
+    // resolveWorkspaceForOrgType()（纯函数，配套单测），不在这里重复维护
+    // 一份一模一样的三元判断
+    const targetMode = resolveWorkspaceForOrgType(orgType);
+    if (!targetMode || this.data.currentPlatformMode === targetMode) return;
 
-    const targetMode = orgType === 'yuhuazhai' ? 'yuhua' : 'general';
-    if (this.data.currentPlatformMode === targetMode) return;
-
-    if (targetMode === 'yuhua') {
+    if (targetMode === WorkspaceMode.YUHUA) {
       // 内部含合规声明校验：未同意过声明时只会先弹声明弹窗，不会绕过
       this.enterYuhuaWorkspaceFlow();
     } else {
@@ -9358,6 +9376,12 @@ Page({
     console.log('[YuhuaPlatform] 权限检查结果，isSuperAdminAccount:', isSuperAdminAccount, 'orgType===yuhuazhai:', this.data.orgType === 'yuhuazhai');
     if (isSuperAdminAccount || this.data.orgType === 'yuhuazhai') {
       console.log('[YuhuaPlatform] 已绑定雨花门店/超管，进入 enterYuhuaWorkspaceFlow');
+      // 🆕（2026-09-13 工作空间架构升级）仅记录管理员账号主动选择——普通
+      // 绑定账号走的是 orgType 现算直达，不需要、也不应该写这份记忆
+      // （见 autoResumeWorkspaceMode 头部注释）
+      if (isSuperAdminAccount) {
+        setLastAdminWorkspace(WorkspaceMode.YUHUA);
+      }
       this.enterYuhuaWorkspaceFlow();
       return;
     }
@@ -9462,6 +9486,11 @@ Page({
         showCancel: false
       });
       return;
+    }
+    // 🆕（2026-09-13 工作空间架构升级）同上 onSelectYuhuaPlatform 注释，
+    // 仅记录管理员账号主动选择
+    if (isSuperAdminAccount) {
+      setLastAdminWorkspace(WorkspaceMode.COMMUNITY);
     }
     this.setData({ currentPlatformMode: 'general' });
     this.syncStoresForZoneEntry();
