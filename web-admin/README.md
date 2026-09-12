@@ -10,7 +10,9 @@
 3. **部署两个新云函数**：`cloudfunctions/adminWebAuth`、`cloudfunctions/adminWebConsole`（与本仓库其余云函数同样的方式上传部署）。
 4. **配置环境变量**：
    - `adminWebConsole` 需要 `ADMIN_CONSOLE_INTERNAL_TOKEN`，且必须与 `activateTenantSubscription` 侧配置的**同一个值**完全一致（两者互为调用方/被调用方，token 不一致会导致铸造授权码功能返回"铸造通道未启用"）。
-5. **初始化第一个 Web 管理员账号**：本地执行 `scripts/ops/init-web-admin.js`（见该目录 `README.md`），不能通过网页自助注册（那样等于任何人都能自建管理员账号）。
+5. **初始化第一个 Web 管理员账号**（二选一，不能通过网页自助注册——那样等于任何人都能自建管理员账号）：
+   - 本地执行 `scripts/ops/init-web-admin.js`（见该目录 `README.md`，需要配置腾讯云 API 密钥）；
+   - 或在微信开发者工具的云函数"云端测试"面板直接调用 `adminWebAuth` 的 `init_first_admin` 动作（`{ action: 'init_first_admin', username: 'admin', password: '...' }`），门槛更低，不需要本地配置任何密钥——**仅在 `platform_web_admins` 集合当前完全为空时可用**，一旦系统里已存在任意一条管理员记录，这条自举豁免会永久失效。
 
 ## 使用方式
 

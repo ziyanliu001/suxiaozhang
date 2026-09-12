@@ -63,6 +63,8 @@ node scripts/ops/init-web-admin.js --username admin
 
 密码要求：≥12 位，建议包含大小写字母/数字/符号。同一 `--username` 已存在时会重置密码（不会重复创建账号）。
 
+> 💡 不方便配置 `TENCENTCLOUD_SECRETID`/`SECRETKEY` 时，也可以在微信开发者工具的云函数"云端测试"面板直接调用 `adminWebAuth` 的 `init_first_admin` 动作（`{ action: 'init_first_admin', username: 'admin', password: '...' }`），门槛更低——**仅在 `platform_web_admins` 集合当前完全为空时可用**，一旦系统里已存在任意一条管理员记录，这条自举豁免会永久失效，此后只能走本脚本重置密码。两条路径产生的账号记录完全等价。
+
 ## 为什么不用 `wx-server-sdk`
 
 `wx-server-sdk` 的 `cloud.init()` 依赖云函数运行时环境隐式注入的凭据，本地脚本环境里用不了——本仓库 `scripts/seedActivationCodes.ts` 早就记录过这个结论。`@cloudbase/node-sdk` 是腾讯云 CloudBase 专门给"外部服务器/本地脚本"场景设计的另一个 SDK，走显式的 SecretId/SecretKey 鉴权，这正是本目录脚本存在的意义。

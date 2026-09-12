@@ -13,18 +13,26 @@
 // action:
 // - login：{username, password} → 校验通过后签发 8 小时有效期的会话令牌
 // - logout：{token} → 立即失效该令牌
+// - init_first_admin：{username, password} → 仅当 platform_web_admins 集合
+//   为空时可用，免密直接创建第一个账号（见下方 handleInitFirstAdmin 头部
+//   注释）。
 //
-// 🔧 部署要求：首个 Web 管理员账密不通过本函数创建（登录前提是"已经有一个
-// 账号"，鸡生蛋问题）——用 scripts/ops/init-web-admin.js 直连数据库写入。
+// 🔧 部署要求：首个 Web 管理员账密有两条创建路径——① 本地执行
+// scripts/ops/init-web-admin.js（需要配置 CLOUDBASE_ENV_ID/
+// TENCENTCLOUD_SECRETID/SECRETKEY 直连数据库）；② 在微信开发者工具的云函数
+// 云端测试面板直接调用本函数的 init_first_admin 动作（不需要本地配置任何
+// 腾讯云 API 密钥，门槛更低，适合快速自举/本地开发联调场景）。两条路径
+// 产生的账号记录完全等价，选哪条纯粹是"是否方便配置 API 密钥"的权衡。
 'use strict';
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
-const { verifyPassword } = require('./lib/passwordHash');
+const { generateSalt, hashPassword, verifyPassword } = require('./lib/passwordHash');
 const { evaluateLockout, computeNextAttemptRecord, buildLoginAttemptDocId } = require('./lib/loginLockout');
 const { generateSessionToken, buildSessionDoc, isSessionValid } = require('./lib/sessionToken');
+const { validateBootstrapInput, buildAdminDocId } = require('./lib/bootstrapAdmin');
 
 const ADMINS_COLLECTION = 'platform_web_admins';
 const SESSIONS_COLLECTION = 'platform_web_sessions';
@@ -131,6 +139,60 @@ async function handleLogin(event) {
   return { success: true, token, expiresAt: sessionDoc.expiresAt };
 }
 
+// 🛡️（2026-09-13）唯一一次不需要"已经有账号登录"就能创建账号的入口，
+// 与 cloudfunctions/setupSuperAdmin 的 hasAnyPlatformAdmin() 自举豁免同一条
+// 思路：只在 platform_web_admins 集合**当前完全为空**时放行——这是全局
+// 状态判定，不是按 username 判定"这个用户名之前存在过没有"，一旦系统里
+// 已经存在任意一条管理员记录（哪怕只有一条、哪怕是别的用户名），这条自举
+// 豁免立刻永久失效，往后只能走 login 或 scripts/ops/init-web-admin.js 重置，
+// 不会退化成一个可以随时反复调用的"创建管理员"后门。
+async function handleInitFirstAdmin(event) {
+  const check = validateBootstrapInput(event.username, event.password);
+  if (!check.valid) return { success: false, error: check.error };
+  const username = check.username;
+  const password = String(event.password || '');
+
+  const existingAnyRes = await db.collection(ADMINS_COLLECTION).limit(1).get().catch((err) => {
+    if (!isCollectionNotExistError(err)) throw err;
+    return { data: [] };
+  });
+  if (existingAnyRes.data && existingAnyRes.data.length > 0) {
+    console.error('[adminWebAuth] 🚨 init_first_admin 被拒绝：系统中已存在管理员账号，自举豁免已失效');
+    return {
+      success: false,
+      error: '系统中已存在管理员账号，禁止通过该入口创建。如需新增/重置账号，请联系已有管理员登录后台处理，或使用 scripts/ops/init-web-admin.js 直连数据库重置'
+    };
+  }
+
+  const salt = generateSalt();
+  const passwordHash = await hashPassword(password, salt);
+  const docId = buildAdminDocId(username);
+  const doc = { _id: docId, username, passwordHash, passwordSalt: salt, disabled: false, createdAt: db.serverDate(), lastLoginAt: null };
+
+  try {
+    await db.collection(ADMINS_COLLECTION).add({ data: doc });
+  } catch (err) {
+    if (isCollectionNotExistError(err)) {
+      await ensureCollection(ADMINS_COLLECTION);
+      await db.collection(ADMINS_COLLECTION).add({ data: doc });
+    } else {
+      // 🛡️ 确定性 _id 撞主键唯一性约束：极小概率的并发竞态（两个近乎同时
+      // 的自举请求都读到"集合为空"），回查一次确定性 ID 确认是否是被
+      // 另一次调用抢先创建，按幂等处理，不再重复报错
+      const raceRes = await db.collection(ADMINS_COLLECTION).doc(docId).get().catch(() => null);
+      if (raceRes && raceRes.data) {
+        return { success: false, error: '该用户名已被抢先注册（检测到并发的另一次自举请求），请重新确认账号状态' };
+      }
+      throw err;
+    }
+  }
+
+  await writeAuditLog({ action: 'ADMIN_WEB_INIT_FIRST_ADMIN', operator_id: username, success: true });
+  console.error('[adminWebAuth] 🚨 已通过 init_first_admin 创建首个 Web 管理员账号:', username, '—— 请立即核实这是否为授权操作');
+
+  return { success: true, message: '已创建首个 Web 管理员账号，请立即登录测试' };
+}
+
 async function handleLogout(event) {
   const token = String(event.token || '');
   if (!token) return { success: true };
@@ -155,6 +217,8 @@ exports.main = async (event) => {
     switch (event.action) {
       case 'login':
         return await handleLogin(event);
+      case 'init_first_admin':
+        return await handleInitFirstAdmin(event);
       case 'logout':
         return await handleLogout(event);
       case 'verifySession':
