@@ -348,6 +348,7 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 | 字段/取值 | 含义 |
 |---|---|
 | `action: 'ADMIN_WEB_LOGIN'` | Web 管理中台登录尝试（成功/失败均记），`operator_id` 为用户名 |
+| `action: 'ADMIN_WEB_INIT_FIRST_ADMIN'` | 通过 `init_first_admin` 自举动作创建首个 Web 管理员账号，`operator_id` 为新建的用户名 |
 | `action: 'ADMIN_WEB_GENERATE_ACTIVATION_CODE'` | Web 管理中台铸造授权码，`generated_count` 记录本次实际铸造张数 |
 | `action: 'EMERGENCY_SUPER_ADMIN_CLAIM'` 新增 `channel` 字段 | 三条 `super_admin` 授予通道共用同一个 action 值，靠 `channel` 区分来路：`'wechat_secret'`（`emergencyClaimSuperAdmin`，默认值）/ `'cli_script'`（`scripts/ops/grant-super-admin.js`）/ `'web_console'`（`adminWebConsole`） |
 
