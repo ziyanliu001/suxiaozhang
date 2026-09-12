@@ -334,6 +334,20 @@ export const AuthService = {
           roles: Array.isArray(r.roles) ? r.roles : [],
           authorizedTenants: Array.isArray(r.authorizedTenants) ? r.authorizedTenants : []
         };
+        // 🔍（2026-09-13 排查记录）全国总览入口闪烁复现追查：用户实测确认漫游
+        // 授权本身未过期/未撤销，第61条"授权正常过期/被回收"这个解释站不住脚，
+        // 需要抓一次现场——原样打印 checkUserRole 这一次网络请求【服务端实际
+        // 下发】的 role/authorizedTenants 原始值，与下面 resolveEffectiveRole()
+        // 里打印的【本地解析出的 activeStoreId + 命中结果】前后对照，才能确定
+        // 到底是服务端这次真的没有下发这条授权，还是服务端下发了但本地解析
+        // 逻辑因为某个字段不匹配（如 activeStoreId 恰好在这次调用时是空/
+        // 变了）而没有识别出来
+        console.log('[AuthService][flicker-debug] fetchUserRole 服务端响应落地:', JSON.stringify({
+          role: roleInfo.role,
+          storeId: roleInfo.storeId,
+          tenantId: roleInfo.tenantId,
+          authorizedTenants: roleInfo.authorizedTenants
+        }));
         wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(roleInfo));
         return { success: true, roleInfo };
       }
@@ -442,19 +456,34 @@ export const AuthService = {
   // 现查一次漫游授权，不存在"cached 分支算出来的漫游身份被网络分支的裸
   // persistedRole 覆盖"这类客户端竞态；resolveEffectiveRoleDecision 里
   // grantedRole 命中时优先级最高，两个分支给出的判断只会由当时真实的
-  // authorizedTenants 数据决定。已确认过的解释：cached 分支读到的是本地缓存
+  // authorizedTenants 数据决定。当时给出的解释：cached 分支读到的是本地缓存
   // 里一份已经过期/被平台巡检"一键回收"撤销的旧授权，网络分支落地的
-  // checkUserRole 权威响应正确反映了这份授权已经失效——这是设计如此的正确
-  // 行为，不是 bug。**刻意不做"身份粘性"改造**：如果客户端在服务端已经明确
-  // 表示"这份漫游授权不再有效"之后，仍然固执沿用本地缓存里的旧授权，等于让
-  // "一键回收"和 2 小时 TTL 这两道既有的撤销机制形同虚设——网络响应必须
-  // 始终是权威真源，本地缓存只是渲染优先的临时近似值。
+  // checkUserRole 权威响应正确反映了这份授权已经失效。
+  //
+  // ⚠️（2026-09-13 二次排查，上面那条解释被推翻）用户实测确认复现闪烁时授权
+  // 明确未过期/未撤销——说明真正的根因不是"authorizedTenants 内容前后不同"，
+  // 更可能出在本方法内部另一个每次调用都重新计算、同样可能前后不一致的输入：
+  // activeStoreId（getCurrentActiveStore() 读取的是 current_store_id/
+  // active_store_id 这两个 storage key，本方法自己不缓存它，两次调用之间只要
+  // 这两个 key 被别处的代码改写过，resolveActiveRoleGrant 就会用不同的
+  // activeStoreId 去匹配同一份未变的 authorizedTenants，得出不同结果）。下面
+  // 打印 activeStoreId/authorizedTenants/grant/decision 四个中间量，配合
+  // fetchUserRole() 里打印的服务端原始响应，才能确认到底是哪一环在闪烁瞬间
+  // 发生了变化——目前只是加打点，还没有据此改任何判断逻辑
   resolveEffectiveRole(persistedRole: string): string {
     const storageRole = wx.getStorageSync('current_user_role');
     const cached = this.getCachedRoleInfo();
     const activeStoreId = getCurrentActiveStore().storeId || '';
     const grant = activeStoreId ? resolveActiveRoleGrant(cached && cached.authorizedTenants, activeStoreId) : null;
     const decision = resolveEffectiveRoleDecision(persistedRole, storageRole, grant ? grant.role : '');
+    console.log('[AuthService][flicker-debug] resolveEffectiveRole 中间量:', JSON.stringify({
+      persistedRole,
+      storageRole,
+      activeStoreId,
+      cachedAuthorizedTenants: cached && cached.authorizedTenants,
+      grant,
+      effectiveRole: decision.effectiveRole
+    }));
 
     if (decision.shouldClearStaleStorage) {
       try {

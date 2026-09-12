@@ -96,6 +96,15 @@ const ROLE_STORAGE_NORMALIZE_MAP: Record<string, string> = {
 export function setCurrentActiveStore(storeId: string, storeName: string, role?: string): void {
   if (!storeId) return;
 
+  // 🔍（2026-09-13 排查记录）全国总览入口闪烁复现追查：怀疑 activeStoreId
+  // 在 initCurrentUserRole() 的 cached 分支与网络分支之间被某处代码悄悄改写，
+  // 导致同一份 authorizedTenants 在两次 resolveActiveRoleGrant 匹配里得到
+  // 不同结果。本函数是 current_store_id/active_store_id 这两个 canonical
+  // storage key 唯一的写入口——先在这里打点，配合 authService.ts
+  // resolveEffectiveRole() 里的打点，对照时间线就能确认闪烁瞬间是不是恰好
+  // 有一次 setCurrentActiveStore() 调用改写了活跃门店。诊断用，不改变行为
+  console.log('[StoreManager][flicker-debug] setCurrentActiveStore 写入:', JSON.stringify({ storeId, storeName, role: role || '(未传，不改角色)' }));
+
   wx.setStorageSync('current_store_id', storeId);
   wx.setStorageSync('current_store_name', storeName);
   wx.setStorageSync('active_store_id', storeId);
