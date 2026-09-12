@@ -14,11 +14,13 @@
   web-admin/README.md）：
   1. 目标环境已启用"未登录用户访问云资源权限"（微信云开发环境的控制台
      开关，与腾讯云独立版 CloudBase 的"匿名登录"身份源是两回事——本页面
-     不调用、也不依赖 auth.signInAnonymously()）。cloudbase.init() 之后会
-     先调用一次 auth.getSession()（纯查询，不要求任何身份源已配置，失败
-     也无所谓），只是为了绕开 @cloudbase/js-sdk 内部一个初始化顺序缺陷
-     （从未碰过 auth 模块时 callFunction() 会因为读取 null 的 loginState
-     而在浏览器端直接崩溃），随后才调用 app.callFunction()，真正的操作
+     不调用、也不依赖 auth.signInAnonymously()）。@cloudbase/js-sdk
+     (v2.28.6) 在完全没有登录凭证时，callFunction() 内部会反复调用
+     auth.getLoginState()，未登录场景下该方法本身返回 null，SDK 未做判空
+     直接读 loginState.scope，会在浏览器端崩溃、请求根本发不出去——这是
+     SDK 自身的缺陷，与"未登录用户访问云资源权限"这个环境配置无关，
+     ensureApp() 里给 auth.getLoginState() 打了一个轻量补丁，解析出
+     null/抛异常时统一兜底成 { scope: '' }，不产生任何登录态，真正的操作
      权限完全由 adminWebAuth 签发的会话令牌决定。
   2. 本页面实际部署后的域名已加入该环境的"安全域名"白名单。
   3. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
@@ -449,30 +451,44 @@
   // signInAnonymously() 会被直接拒绝："请联系开发者在身份源列表开启匿名
   // 登录"。
   //
-  // 🐛（2026-09-13 二）上一版把 signInAnonymously()/getSession() 一起整段
-  // 删除后，真机复现出另一个问题：@cloudbase/js-sdk (v2.28.6) 的
-  // callFunction() 内部请求拦截器会读取 auth 模块的 loginState.scope 来
-  // 判断要不要带登录态请求头，如果从来没有触碰过 auth 模块（既没有查过
-  // session、也没有登录过），这个 loginState 就一直是初始值 null，
-  // 读取 null.scope 直接在前端抛出 TypeError，请求根本没发出去。
+  // 🐛（2026-09-13 二/三）先后两版尝试通过"调用一次 auth.getSession() 预热
+  // SDK 内部状态"来规避 TypeError: Cannot read properties of null
+  // (reading 'scope')，真机复测（含无痕模式，排除本地缓存干扰）证实这个
+  // 崩溃依然稳定复现——说明 getSession() 并不会更新 callFunction() 内部
+  // 请求拦截器实际读取的那份登录态，"预热一次就够"这个假设不成立，
+  // @cloudbase/js-sdk (v2.28.6) 在没有任何登录凭证时，callFunction() 内部
+  // 每次都会重新调用一次 auth.getLoginState()，未登录场景下该方法本身就
+  // 返回 null，随后拦截器未做判空直接读 loginState.scope，请求根本没有
+  // 发出去。
   //
-  // 修复：只保留 auth.getSession()（纯粹的"读一下本地/云端有没有现成会话"，
-  // 不要求任何身份源已配置，失败也吞掉不抛出），用它把 SDK 内部的
-  // loginState 从 null "启动"成一个正常的默认值；彻底不再调用
-  // auth.signInAnonymously()——它才是真正触发"身份源列表"校验、在这个
-  // 环境类型下必然被拒绝的那一步。业务登录与权限依旧完全交给
-  // adminWebAuth/adminWebConsole 签发与校验的 sessionToken，这一步只是
-  // 绕开 SDK 自身的一个初始化顺序缺陷，不代表任何业务身份。
-  var authPrimed = null;
-
-  function primeAuth() {
-    if (authPrimed) return authPrimed;
-    authPrimed = ensureApp().auth.getSession().catch(function () {
-      // 未登录本就是这个环境下的预期状态，这里只是为了触发 SDK 内部状态
-      // 初始化，getSession 失败/无会话都无所谓，绝不能让这里的失败阻断
-      // 后续真正的 callFunction 调用。
-    });
-    return authPrimed;
+  // 修复：不再指望"提前调用一次什么方法"去改变 SDK 内部状态，而是直接给
+  // 会被反复调用的 auth.getLoginState() 打一个轻量兜底补丁——包一层，
+  // 原方法解析出 null 或直接抛异常时，统一兜底返回 { scope: '' }，让
+  // 拦截器永远读到一个非 null 的对象，从根上中和这个判空缺失的 SDK bug。
+  // 这个补丁只影响"要不要崩溃"这一件事，不冒充、也不产生任何登录态——
+  // 真正的操作权限依旧完全由 adminWebAuth/adminWebConsole 签发与校验的
+  // sessionToken 决定，与本仓库彻底不使用 auth.signInAnonymously() 这条
+  // 决定没有冲突。
+  function patchAuthLoginStateNullGuard(candidateApp) {
+    var auth;
+    try {
+      auth = typeof candidateApp.auth === 'function' ? candidateApp.auth() : candidateApp.auth;
+    } catch (e) {
+      auth = null;
+    }
+    if (!auth || typeof auth.getLoginState !== 'function' || auth.__nullScopeGuardApplied) {
+      return;
+    }
+    var originalGetLoginState = auth.getLoginState.bind(auth);
+    auth.getLoginState = async function () {
+      try {
+        var state = await originalGetLoginState();
+        return state || { scope: '' };
+      } catch (e) {
+        return { scope: '' };
+      }
+    };
+    auth.__nullScopeGuardApplied = true;
   }
 
   function ensureApp() {
@@ -483,11 +499,11 @@
     var initOptions = { env: settings.envId };
     if (settings.region) initOptions.region = settings.region;
     app = window.cloudbase.init(initOptions);
+    patchAuthLoginStateNullGuard(app);
     return app;
   }
 
   async function callFn(name, data) {
-    await primeAuth();
     var res = await ensureApp().callFunction({ name: name, data: data || {} });
     return res.result || {};
   }
@@ -520,7 +536,7 @@
   $('saveSettingsBtn').addEventListener('click', function () {
     settings = { envId: $('settingEnvId').value.trim(), region: $('settingRegion').value.trim() };
     saveSettings(settings);
-    app = null; authPrimed = null; // 环境变更后重新初始化
+    app = null; // 环境变更后重新初始化，下次 ensureApp() 会重新打上 null-scope 补丁
     showAlert($('loginAlert'), 'success', '连接设置已保存');
   });
 
