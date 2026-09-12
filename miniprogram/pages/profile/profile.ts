@@ -639,7 +639,14 @@ Page({
       // 🆕 门店配额进度："已接入 X / Y 家"，X 取 tenants.currentStoreCount，
       // Y 取 cloudQuota.storeLimit，均来自 checkTenantPermission 云函数
       storeLimit: 2,
-      usedStoreCount: 0
+      usedStoreCount: 0,
+      // 🐛（2026-09-13）见 saasSubscriptionHandler.ts fetchSubscriptionInfo()
+      // 头部注释：platform_admin 的门店配额豁免用 Number.MAX_SAFE_INTEGER
+      // 当"不限量"哨兵值，不能把这个天文数字裸露给用户，storeQuotaDisplayText
+      // 是已经处理过这个判断的最终展示文案，WXML 不应再自行拼接
+      // usedStoreCount/storeLimit
+      isUnlimitedStoreLimit: false,
+      storeQuotaDisplayText: '基础版 · 0/2 门店'
     },
     // 🍎 iOS 平台虚拟商品支付合规：微信小程序平台规则要求 iOS 客户端不得展示
     // 虚拟商品价格/拉起小程序内支付，只能引导线下/客服渠道购买——见

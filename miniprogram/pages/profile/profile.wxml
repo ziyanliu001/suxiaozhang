@@ -669,7 +669,12 @@
         <text class="aws-icon">🏢</text>
         <view class="aws-text-col">
           <text class="aws-title">机构席位与 SaaS 套餐</text>
-          <text class="aws-sub">{{subscriptionInfo.planLabel}} · {{subscriptionInfo.usedStoreCount}}/{{subscriptionInfo.storeLimit}} 门店</text>
+          <!-- 🐛（2026-09-13 根因修复）不再自行拼接 usedStoreCount/storeLimit——
+               platform_admin 通过漫游漫游到大家长视角时，storeLimit 可能是
+               Number.MAX_SAFE_INTEGER 这个不限量哨兵值，裸拼接会把
+               9007199254740991 直接展示给用户，改用已经处理过这个判断的
+               storeQuotaDisplayText，见 saasSubscriptionHandler.ts -->
+          <text class="aws-sub">{{subscriptionInfo.storeQuotaDisplayText}}</text>
         </view>
       </view>
       <text class="seb-cta">{{isIOSPlatform ? '🔑 兑换卡密/授权码' : '管理 / 升级 ❯'}}</text>

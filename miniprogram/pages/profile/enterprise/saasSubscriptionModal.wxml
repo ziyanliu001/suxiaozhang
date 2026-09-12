@@ -49,6 +49,11 @@
                  一个真实上限，改为只展示已接入门店数 + "公益支持无上限"
                  措辞；非雨花斋商业租户保留原有"已接入 X / Y 家"格式 -->
             <text class="sub-store-quota-line" wx:if="{{isYuhuazhai}}">📦 已接入 {{subscriptionInfo.usedStoreCount || 0}} 家门店 · 公益支持无上限</text>
+            <!-- 🐛（2026-09-13 根因修复）checkTenantPermission 对 platform_admin
+                 的付费墙豁免用 Number.MAX_SAFE_INTEGER 当"不限量"哨兵值，
+                 漫游到大家长视角时会命中这里——不能像下面 wx:else 分支那样
+                 裸拼接 storeLimit，否则会把 9007199254740991 展示给用户 -->
+            <text class="sub-store-quota-line" wx:elif="{{subscriptionInfo.isUnlimitedStoreLimit}}">📦 已接入 {{subscriptionInfo.usedStoreCount || 0}} 家门店 · 门店数不限</text>
             <text class="sub-store-quota-line" wx:else>📦 已接入 {{subscriptionInfo.usedStoreCount}} / {{subscriptionInfo.storeLimit}} 家</text>
           </view>
         </view>

@@ -143,6 +143,27 @@ export const saasSubscriptionHandlers = {
     // pro/enterprise 会被误判成"永久有效"）
     const isPerpetual = isPerpetualPlan(result.originalPlanType, result.isLifetimeGrant);
 
+    // 🐛（2026-09-13 根因修复：门店配额裸数字 9007199254740991）
+    // checkTenantPermission 对 platform_admin 的付费墙豁免用 Number.
+    // MAX_SAFE_INTEGER 当"不限量"哨兵值（platform_admin 不隶属任何机构，
+    // 没有真实门店上限这个概念）——真实复现：platform_admin 通过
+    // authorizedTenants 漫游到某家门店、被授予该店 store_patriarch 身份后
+    // （见 getStoreList/getNationalDashboard 同一批"漫游大家长"改造），
+    // checkTenantPermission 仍按调用者持久化的 platform_admin 角色反查，
+    // 命中这条豁免分支，storeLimit 就是这个天文数字，此前直接透传进
+    // WXML 的 usedStoreCount/storeLimit 拼接文案，原样展示给用户。
+    // 这里改为预先算好展示文案（与 expireDisplayText 同一套"复杂判断
+    // 收敛到 TS 层、WXML 只透传结果"的既定写法），阈值给 99999（本仓库
+    // 现存最大付费套餐 PLAN_STORE_LIMITS.enterprise=30，任何真实业务场景
+    // 都不可能达到这个数量级，用它判断"这必然是不限量哨兵值，不是真实
+    // 门店数"足够安全）
+    const UNLIMITED_STORE_LIMIT_THRESHOLD = 99999;
+    const isUnlimitedStoreLimit = (result.storeLimit || 0) >= UNLIMITED_STORE_LIMIT_THRESHOLD;
+    const planLabel = PLAN_LABELS[result.planType] || result.planType;
+    const storeQuotaDisplayText = isUnlimitedStoreLimit
+      ? `${planLabel} · 门店数不限（已接入 ${result.usedStoreCount || 0} 家）`
+      : `${planLabel} · ${result.usedStoreCount || 0}/${result.storeLimit || 2} 门店`;
+
     this.setData({
       // 🐛 根因修复（升级弹窗顶部机构名称错误/写死）：见 WXML
       // {{currentTenantName || currentStoreName || '我的机构'}} 绑定——此前
@@ -173,7 +194,9 @@ export const saasSubscriptionHandlers = {
         isPerpetual,
         expireDisplayText: formatTenantExpireText(expireDateStr, isPerpetual, result.isExpired),
         storeLimit: result.storeLimit || 2,
-        usedStoreCount: result.usedStoreCount || 0
+        usedStoreCount: result.usedStoreCount || 0,
+        isUnlimitedStoreLimit,
+        storeQuotaDisplayText
       },
       planActionLabels: this.computePlanActionLabels(result.planType, isActive, isPerpetual),
       iosPlanActionLabels: computeIOSPlanActionLabels(result.planType, isActive),
