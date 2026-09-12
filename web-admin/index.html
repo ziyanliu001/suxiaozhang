@@ -14,9 +14,12 @@
   web-admin/README.md）：
   1. 目标环境已启用"未登录用户访问云资源权限"（微信云开发环境的控制台
      开关，与腾讯云独立版 CloudBase 的"匿名登录"身份源是两回事——本页面
-     不调用、也不依赖 auth.signInAnonymously()，cloudbase.init() 之后直接
-     调用 app.callFunction()，真正的操作权限完全由 adminWebAuth 签发的
-     会话令牌决定）。
+     不调用、也不依赖 auth.signInAnonymously()）。cloudbase.init() 之后会
+     先调用一次 auth.getSession()（纯查询，不要求任何身份源已配置，失败
+     也无所谓），只是为了绕开 @cloudbase/js-sdk 内部一个初始化顺序缺陷
+     （从未碰过 auth 模块时 callFunction() 会因为读取 null 的 loginState
+     而在浏览器端直接崩溃），随后才调用 app.callFunction()，真正的操作
+     权限完全由 adminWebAuth 签发的会话令牌决定。
   2. 本页面实际部署后的域名已加入该环境的"安全域名"白名单。
   3. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
      且 adminWebConsole 已配置 ADMIN_CONSOLE_INTERNAL_TOKEN 环境变量
@@ -438,17 +441,40 @@
   }
 
   // ==================== CloudBase 初始化 ====================
-  // 🐛（2026-09-13 修复对 signInAnonymously 的不当依赖）微信云开发环境的
+  // 🐛（2026-09-13 一）修复对 signInAnonymously 的不当依赖：微信云开发环境的
   // 控制台开关是"未登录用户访问云资源权限"（未登录模式），与腾讯云独立版
   // CloudBase 的"匿名登录"身份源是两套不同机制——前者允许 callFunction()
   // 在完全没有登录态的情况下直接调用，后者才需要 auth.signInAnonymously()
   // 换取登录态。此前代码误把两者当同一回事，在只开启了前者的环境里调用
   // signInAnonymously() 会被直接拒绝："请联系开发者在身份源列表开启匿名
-  // 登录"，导致根本进不到 callFunction 阶段。
+  // 登录"。
   //
-  // 修复：彻底不调用 auth.signInAnonymously()/auth.getSession()，
-  // cloudbase.init() 之后直接 callFunction()，登录与业务权限完全交给
-  // adminWebAuth/adminWebConsole 签发与校验的 sessionToken。
+  // 🐛（2026-09-13 二）上一版把 signInAnonymously()/getSession() 一起整段
+  // 删除后，真机复现出另一个问题：@cloudbase/js-sdk (v2.28.6) 的
+  // callFunction() 内部请求拦截器会读取 auth 模块的 loginState.scope 来
+  // 判断要不要带登录态请求头，如果从来没有触碰过 auth 模块（既没有查过
+  // session、也没有登录过），这个 loginState 就一直是初始值 null，
+  // 读取 null.scope 直接在前端抛出 TypeError，请求根本没发出去。
+  //
+  // 修复：只保留 auth.getSession()（纯粹的"读一下本地/云端有没有现成会话"，
+  // 不要求任何身份源已配置，失败也吞掉不抛出），用它把 SDK 内部的
+  // loginState 从 null "启动"成一个正常的默认值；彻底不再调用
+  // auth.signInAnonymously()——它才是真正触发"身份源列表"校验、在这个
+  // 环境类型下必然被拒绝的那一步。业务登录与权限依旧完全交给
+  // adminWebAuth/adminWebConsole 签发与校验的 sessionToken，这一步只是
+  // 绕开 SDK 自身的一个初始化顺序缺陷，不代表任何业务身份。
+  var authPrimed = null;
+
+  function primeAuth() {
+    if (authPrimed) return authPrimed;
+    authPrimed = ensureApp().auth.getSession().catch(function () {
+      // 未登录本就是这个环境下的预期状态，这里只是为了触发 SDK 内部状态
+      // 初始化，getSession 失败/无会话都无所谓，绝不能让这里的失败阻断
+      // 后续真正的 callFunction 调用。
+    });
+    return authPrimed;
+  }
+
   function ensureApp() {
     if (app) return app;
     if (!settings.envId) {
@@ -461,6 +487,7 @@
   }
 
   async function callFn(name, data) {
+    await primeAuth();
     var res = await ensureApp().callFunction({ name: name, data: data || {} });
     return res.result || {};
   }
@@ -493,7 +520,7 @@
   $('saveSettingsBtn').addEventListener('click', function () {
     settings = { envId: $('settingEnvId').value.trim(), region: $('settingRegion').value.trim() };
     saveSettings(settings);
-    app = null; // 环境变更后重新初始化
+    app = null; authPrimed = null; // 环境变更后重新初始化
     showAlert($('loginAlert'), 'success', '连接设置已保存');
   });
 
