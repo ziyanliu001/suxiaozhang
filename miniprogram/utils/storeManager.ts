@@ -254,6 +254,16 @@ export async function fetchAndSyncStoreStatus(storeId: string): Promise<string> 
 // 未来改关键词漏改一处（如同时想覆盖"雨花斋"以外的别名）
 const YUHUA_NAME_KEYWORD = '雨花';
 
+// 🐛（2026-09-13 二次加固："嵩屿"跨专区渗透真机复测仍未消除）与
+// cloudfunctions/getStoreList/lib/excludeKnownNonYuhuaStores.js 同一份
+// 已知非雨花斋门店关键词清单——两处各自独立维护（前端/云函数运行时完全
+// 隔离，物理上无法共享同一个模块），改动其中一处务必同步改另一处。这里是
+// 前端第二道防线：即使服务端那道过滤因为云函数尚未重新部署、或未来出现
+// 服务端过滤覆盖不到的第四条查询路径而失效，展示层也不会把已知的非雨花斋
+// 门店渲染进雨花专区——与下方 fetchCommunityZoneStoreList 反方向的
+// "剔除含雨花字样门店"是完全对称的既有模式
+const KNOWN_NON_YUHUA_STORE_KEYWORDS = ['嵩屿'];
+
 // getStoreList 调用 + 超时重试一次（与 index.ts fetchAllStoresList 原有的
 // "冷启动兜底"策略保持一致）+ 返回值数组防御性校验，index.ts / store-picker.ts
 // 两个调用方共用同一份实现，避免各自维护一份、行为逐渐漂移
@@ -343,14 +353,24 @@ export async function fetchYuhuaZoneStoreList(opts?: { includeInactive?: boolean
     }
   });
 
+  // 🐛（2026-09-13 二次加固）前端第二道防线：无论上面三路查询结果或
+  // YUHUA_LANDMARK_STORE_FALLBACK 静态兜底是怎么把已知非雨花斋门店混进
+  // merged 的，这里在返回前统一按店名关键词剔除一次——见上方
+  // KNOWN_NON_YUHUA_STORE_KEYWORDS 声明处注释
+  const finalList = Array.from(merged.values()).filter((s: any) => {
+    const name = (s && s.storeName) || '';
+    return !KNOWN_NON_YUHUA_STORE_KEYWORDS.some((kw) => name.includes(kw));
+  });
+
   console.log('[storeManager] fetchYuhuaZoneStoreList 三路查询结果:', {
     primary: primaryList.map((s: any) => s && s.storeName),
     ownTenantYuhuaMatch: ownTenantList.filter((s: any) => s && (s.storeName || '').includes(YUHUA_NAME_KEYWORD)).map((s: any) => s.storeName),
     globalDiscover: globalDiscoverList.map((s: any) => s && s.storeName),
-    finalMerged: Array.from(merged.values()).map((s: any) => s.storeName)
+    finalMerged: Array.from(merged.values()).map((s: any) => s.storeName),
+    finalListAfterNonYuhuaExclusion: finalList.map((s: any) => s.storeName)
   });
 
-  return Array.from(merged.values());
+  return finalList;
 }
 
 // ⚠️（2026-09-11 应急保底，见上方 fetchYuhuaZoneStoreList 内详细注释）雨花斋

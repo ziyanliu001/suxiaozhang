@@ -42,3 +42,25 @@ test('列表里混入 null/畸形条目（缺 storeName）不抛异常，正常�
   assert.equal(result[2].storeName, '');
   assert.equal(result[3].storeName, '厦门海沧三泓愿');
 });
+
+test('orgType 命中已知非雨花斋分类时，即使店名完全不含关键词也会被剔除', () => {
+  const list = [
+    { storeName: '随便起的名字', orgType: 'elderly_canteen' },
+    { storeName: '另一家', orgType: 'elderly_care' },
+    { storeName: '厦门海沧三泓愿', orgType: '' }
+  ];
+  const result = excludeKnownNonYuhuaStores('yuhuazhai', list);
+  assert.deepEqual(result.map((s) => s.storeName), ['厦门海沧三泓愿']);
+});
+
+test('店名关键词与 orgType 两个信号任一命中即排除，不要求同时命中', () => {
+  // 店名含"嵩屿"但 orgType 缺失——应被店名信号拦下
+  const byName = excludeKnownNonYuhuaStores('yuhuazhai', [{ storeName: '嵩屿街道敬老中心助餐点' }]);
+  assert.deepEqual(byName, []);
+  // 店名不含关键词但 orgType 命中——应被 orgType 信号拦下
+  const byOrgType = excludeKnownNonYuhuaStores('yuhuazhai', [{ storeName: '完全不相关的名字', orgType: 'elderly_canteen' }]);
+  assert.deepEqual(byOrgType, []);
+  // 两者都不命中——正常保留
+  const kept = excludeKnownNonYuhuaStores('yuhuazhai', [{ storeName: '厦门海沧三泓愿', orgType: 'yuhuazhai' }]);
+  assert.equal(kept.length, 1);
+});
