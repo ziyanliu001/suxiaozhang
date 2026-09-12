@@ -36,7 +36,11 @@ const SONGYU_TENANT_NAME = '嵩屿街道敬老助餐机构';
 
 const SANQUANYUAN_STORE_NAME = '厦门海沧三泓愿';
 const ZHANGZHOU_STORE_NAME = '漳州白礁保生雨花斋';
-const SONGYU_STORE_NAME = '嵩屿街道敬老中心助餐点';
+// 🐛（2026-09-13）用户真实反馈里这家店被称为"嵩屿街道敬老中心"（不带"助餐点"
+// 后缀），与本文件此前精确匹配的全名不一致，改用关键词模糊匹配
+// （findStoresByNameKeyword，见其头部注释），此处只保留一个不会误伤其它
+// 门店的短关键词
+const SONGYU_STORE_KEYWORD = '嵩屿';
 
 // 🏛️ 「方案一：按机构维度统一授权与门店配额管理」——与 checkTenantPermission/
 // createStore/activateTenantSubscription/manageTenantSubscription/processRoleAudit
@@ -76,6 +80,25 @@ async function findTenantsByName(name) {
 
 async function findStoresByName(storeName) {
   const res = await db.collection('stores').where({ storeName }).get().catch(() => ({ data: [] }));
+  return res.data || [];
+}
+
+// 🐛（2026-09-13）"嵩屿街道敬老中心跨专区渗透"复现排查时发现：步骤 2 一直用
+// SONGYU_STORE_NAME（"嵩屿街道敬老中心助餐点"）做精确等值匹配，但本次真实
+// 反馈里这家店被称为"嵩屿街道敬老中心"（缺"助餐点"三个字）——如果门店文档
+// 实际存的就是不带后缀的短名（改过名，或本来就没起过带"助餐点"的全名），
+// 精确匹配会一条都查不到，走进 not_found 分支，migration 报告"未找到"，
+// 让人误以为这家店根本不存在，实际上是名字对不上。改用 db.RegExp 关键词
+// 包含匹配（与 fixLegacyStoreDataNormalization 同款写法），只要门店名包含
+// "嵩屿"这个具体到不会误伤别的门店的地名关键词就能命中，不再要求后缀完全
+// 一致——本函数只在 dryRun 阶段列出候选、apply 前仍需人工核对报告，即使
+// 匹配范围比精确等值宽一点，也不会绕过"先看报告再决定要不要 apply"这道
+// 既有安全闸门
+async function findStoresByNameKeyword(keyword) {
+  const res = await db.collection('stores')
+    .where({ storeName: db.RegExp({ regexp: keyword, options: 'i' }) })
+    .get()
+    .catch(() => ({ data: [] }));
   return res.data || [];
 }
 
@@ -264,10 +287,10 @@ exports.main = async (event) => {
         tenantAction = { tenantId: SONGYU_TENANT_ID, action: apply ? 'created' : 'will_create' };
       }
 
-      const stores = await findStoresByName(SONGYU_STORE_NAME);
+      const stores = await findStoresByNameKeyword(SONGYU_STORE_KEYWORD);
       const storeActions = [];
       if (stores.length === 0) {
-        storeActions.push({ action: 'not_found', note: '未找到门店文档「嵩屿街道敬老中心助餐点」，需要人工核实是否要新建' });
+        storeActions.push({ action: 'not_found', note: '未找到门店名包含「嵩屿」关键词的门店文档，需要人工核实是否要新建' });
       } else {
         for (const s of stores) {
           const needsTenantFix = s.tenantId !== SONGYU_TENANT_ID;

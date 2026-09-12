@@ -17,6 +17,7 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const { excludeKnownNonYuhuaStores } = require('./lib/excludeKnownNonYuhuaStores');
 
 const UNCLASSIFIED_REGION_LABEL = '未分类地区';
 
@@ -119,6 +120,15 @@ function buildOrgTypeCondition(orgType) {
     : _.neq('yuhuazhai');
 }
 
+// 🐛（2026-09-13 根因修复："嵩屿街道敬老中心"跨专区渗透）buildOrgTypeCondition
+// 对雨花专区的"orgType 缺失/空字符串"兼容分支本意是不丢失还没打标签的真实
+// 雨花斋历史门店（见该函数头部注释：收紧成严格相等会导致雨花专区查询整个
+// 返回空列表，这是更严重的问题），但这条宽松匹配同样会捞进任何其它专区、
+// 同样还没打标签的门店——真实复现："嵩屿街道敬老中心"（社区长者食堂）被
+// 误判成"疑似雨花斋"，混进了 handleDiscoverByOrgType 的跨机构发现结果
+// （这条路径没有 tenantId 过滤，是暴露面最大的一条）。排除逻辑拆到
+// lib/excludeKnownNonYuhuaStores.js（纯函数，配套单测），这里只 require 引入。
+
 // 🆕 跨机构发现模式：【选择工作空间】页新用户挑选要加入的具体站点场景专用
 // （Bug 1）——调用者尚未归属任何机构，或显式要求跨机构浏览（crossTenant:true），
 // 天然需要跨机构可见性，与"已归属机构后必须严格按 tenantId 隔离"是两条独立
@@ -145,7 +155,7 @@ async function handleDiscoverByOrgType(orgType, callerTenantId) {
 
   return {
     success: true,
-    list: (storesRes.data || []).map((s) => ({
+    list: excludeKnownNonYuhuaStores(orgType, storesRes.data).map((s) => ({
       ...toStoreListItem(s),
       isOwnTenant: !!callerTenantId && s.tenantId === callerTenantId
     }))
@@ -268,6 +278,14 @@ exports.main = async (event) => {
       .limit(100)
       .get();
 
+    // 🐛（2026-09-13）见 excludeKnownNonYuhuaStores 头部注释：本路径虽然叠加了
+    // tenantId + orgType 双重收窄，但 orgType 字段本身缺失（尚未跑
+    // fixTenantHierarchy 回填）时，buildOrgTypeCondition 的兼容分支依然会放行
+    // ——必须在这里也排除已知的跨专区脏数据，且要在下面"结果是否为空"的判断
+    // 之前过滤，否则"过滤前非空、过滤后其实该走跨机构发现兜底"这种情况会被
+    // 误判成"本机构下已经有匹配"，把混入的脏数据当真实结果直接返回
+    const filteredStores = excludeKnownNonYuhuaStores(requestedOrgType, storesRes.data);
+
     // 🐛 新建独立机构发现修复：调用者已归属某个机构（tenantId 非空），但该机构
     // 名下恰好没有任何门店匹配 requestedOrgType（例如新建了一个完全独立的社区
     // 长者食堂机构 songyu_elderly_care，而当前登录账号仍挂在雨花斋总部机构下）——
@@ -277,14 +295,14 @@ exports.main = async (event) => {
     // （见该函数头部注释），这里补一个自动兜底：本机构名下这个 orgType 确实一条
     // 都没有时，自动降级为跨机构发现查询；本机构名下只要有哪怕一条匹配，就不会
     // 触发这个兜底，不影响任何已有的租户隔离边界
-    if (requestedOrgType && (storesRes.data || []).length === 0) {
+    if (requestedOrgType && filteredStores.length === 0) {
       return await handleDiscoverByOrgType(requestedOrgType, tenantId);
     }
 
     // 🛡️ 这条路径的 where 条件本身就带 tenantId，结果天然全部是调用者自己机构
     // 的门店，isOwnTenant 恒为 true——与 handleDiscoverByOrgType 的同名字段
     // 含义一致，客户端不需要区分"走的是哪条查询路径"，只认这一个字段
-    return { success: true, list: (storesRes.data || []).map((s) => ({ ...toStoreListItem(s), isOwnTenant: true })) };
+    return { success: true, list: filteredStores.map((s) => ({ ...toStoreListItem(s), isOwnTenant: true })) };
   } catch (err) {
     console.error('[getStoreList] 异常:', err);
     return { success: false, error: err.message || '门店列表查询失败', list: [] };

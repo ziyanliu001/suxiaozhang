@@ -133,7 +133,12 @@
             <view class="belong-store-tag">
               <text class="store-icon">🏢</text>
               <text class="store-label">归属机构：</text>
-              <text class="store-name">{{currentTenantName || orgTypeFallbackLabel || '未绑定机构'}}</text>
+              <!-- 🐛（2026-09-13）"未绑定机构"读起来像账号配置出了问题，但这个
+                   分支覆盖的是"门店确实存在、只是 tenantId/orgType 还没有数据
+                   迁移回填"这种历史遗留状态（如 fixTenantHierarchy 尚未 apply
+                   的门店）——不是真的有异常。改用"独立自营门店"这个中性描述，
+                   不暗示需要用户排查账号问题 -->
+              <text class="store-name">{{currentTenantName || orgTypeFallbackLabel || '独立自营门店'}}</text>
               <text class="org-type-badge" wx:if="{{orgTypeBadge}}">{{orgTypeBadge}}</text>
             </view>
             <view class="belong-store-tag" wx:if="{{currentStoreName}}">
