@@ -1295,10 +1295,23 @@ Page({
     // 与"platform_admin 权限彻底隔离，防止商业运营方借运维身份窥探财务明细"
     // 这条既有安全边界完全不冲突，因为这里走的本来就是对匿名公众也放开的
     // 同一个只读聚合分支，不是额外开的口子
+    // 🐛 根因修复（platform_admin/匿名访客全国视图被第二次调用打回个人视角）：
+    // 与下方大家长分支同一个根因——initUserRole() 缓存命中 + 网络角色请求落地
+    // 各自独立触发一次本方法，_autoNationalIntent 在第一次调用（缓存命中，角色
+    // 已经是 platform_admin/guest）里就被消费清空；第二次调用（网络确认，角色
+    // 结果通常相同）完全没有任何信号能让 isAnonymousNationalIntent 判真，于是
+    // 落进下面 showPersonalView 分支触发 loadPersonalDashboard()——platform_admin/
+    // 匿名访客没有任何个人餐报/护持记录，界面表现正是本次报告的"数字全为0/
+    // 降级成游客卡片"。补一个与 isPatriarchStayingNational 完全同构的"粘性"信号：
+    // 只要上一次调用已经进入过公开聚合视图（this.data.isPublicAggregateView），
+    // 后续调用继续留在这个视图，不会被"意图信号已消费"误判打回个人视角
     const isPlatformAdminRole = String(role || '').toLowerCase() === 'platform_admin';
     const isAnonymousNationalIntent = (isGuest || isPlatformAdminRole) && !!(this as any)._autoNationalIntent;
-    if (isAnonymousNationalIntent) {
-      (this as any)._autoNationalIntent = false;
+    const isAnonymousStayingNational = (isGuest || isPlatformAdminRole) && this.data.isPublicAggregateView;
+    if (isAnonymousNationalIntent || isAnonymousStayingNational) {
+      if (isAnonymousNationalIntent) {
+        (this as any)._autoNationalIntent = false;
+      }
       this.loadPublicAggregateDashboard();
     } else if (showPersonalView) {
       // 个人视角：不触碰门店选择器/全国大屏那套状态，只加载属于自己的数据
