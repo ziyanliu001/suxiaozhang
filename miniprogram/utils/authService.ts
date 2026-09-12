@@ -434,6 +434,21 @@ export const AuthService = {
   // 核对 authorizedTenants 里是否存在一条有效授权——只信任服务端下发的这份
   // 数据，不是重新信任 current_user_role 这个客户端可写 storage key 本身，
   // 不会重新打开 platform_admin 自我强化降级循环那个口子。
+  //
+  // 🔍（2026-09-13 排查记录，非新增修复）曾排查首页"全国总览"入口卡片时有
+  // 时无的现象，怀疑是 index.ts initCurrentUserRole() 的 cached 分支与网络
+  // 角色分支之间存在竞态覆写。核实结论：本方法每次调用都会重新执行下面这行
+  // ——用【调用时刻】的 getCurrentActiveStore()/getCachedRoleInfo().authorizedTenants
+  // 现查一次漫游授权，不存在"cached 分支算出来的漫游身份被网络分支的裸
+  // persistedRole 覆盖"这类客户端竞态；resolveEffectiveRoleDecision 里
+  // grantedRole 命中时优先级最高，两个分支给出的判断只会由当时真实的
+  // authorizedTenants 数据决定。已确认过的解释：cached 分支读到的是本地缓存
+  // 里一份已经过期/被平台巡检"一键回收"撤销的旧授权，网络分支落地的
+  // checkUserRole 权威响应正确反映了这份授权已经失效——这是设计如此的正确
+  // 行为，不是 bug。**刻意不做"身份粘性"改造**：如果客户端在服务端已经明确
+  // 表示"这份漫游授权不再有效"之后，仍然固执沿用本地缓存里的旧授权，等于让
+  // "一键回收"和 2 小时 TTL 这两道既有的撤销机制形同虚设——网络响应必须
+  // 始终是权威真源，本地缓存只是渲染优先的临时近似值。
   resolveEffectiveRole(persistedRole: string): string {
     const storageRole = wx.getStorageSync('current_user_role');
     const cached = this.getCachedRoleInfo();
