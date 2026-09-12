@@ -285,6 +285,24 @@
       </view>
     </view>
 
+    <!-- 🙏（2026-09-13 数字功德碑）社区普惠专区（temple_canteen）专属：
+         现场立牌码生成入口——只对 canManage 为真的角色（店长/大家长/超管/
+         已巡检授权的漫游身份）展示，义工/家人视角不需要看到这个管委会
+         专属的物料制作入口 -->
+    <view class="sp-merit-stele-card" wx:if="{{orgType === 'temple_canteen' && canManage && !editing}}">
+      <view class="sp-merit-stele-icon">🪧</view>
+      <view class="sp-merit-stele-text">
+        <text class="sp-merit-stele-title">数字功德碑现场立牌</text>
+        <text class="sp-merit-stele-desc">生成专属查验码，制成亚克力/木质展牌立于大殿，香客扫码秒开历代法会与乐捐功德芳名录</text>
+      </view>
+      <button
+        class="sp-btn-merit-stele-qr"
+        bindtap="onGenerateMeritSteleQr"
+        loading="{{meritSteleQrGenerating}}"
+        disabled="{{meritSteleQrGenerating}}"
+      >生成现场数字功德碑立牌码</button>
+    </view>
+
     <view class="sp-archive-edit-card" wx:if="{{editing}}">
       <!-- 🏢 平台类型：已改为进入首页时的工作空间选择一次性确定，档案编辑页仅只读展示，
            不再提供二次修改入口 -->
@@ -578,6 +596,36 @@
       <view class="sp-modal-footer">
         <button class="sp-btn-cancel" bindtap="onCloseProfileCountModal">取消</button>
         <button class="sp-btn-save" bindtap="onSaveProfileCount" loading="{{profileCountSaving}}" disabled="{{profileCountSaving}}">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🙏（2026-09-13 数字功德碑）现场立牌码预览弹窗：展示原始高清小程序码
+       （getStoreQRCode 生成，430x430px，不经过任何 Canvas 二次合成/重新
+       编码），配文直接以 WXML 文本展示在图片下方——保存到相册的是未经压缩
+       的原图本身，管委会自行在设计稿里叠加立牌文案与门店信息 -->
+  <view class="sp-modal-backdrop" wx:if="{{showMeritSteleQrModal}}" bindtap="onCloseMeritSteleQrModal">
+    <view class="sp-modal-card sp-merit-stele-modal-card" catchtap="stopPropagation">
+      <view class="sp-modal-header">
+        <text class="sp-modal-title">🪧 数字功德碑立牌码</text>
+        <text class="sp-modal-close" bindtap="onCloseMeritSteleQrModal">✕</text>
+      </view>
+      <scroll-view scroll-y class="sp-modal-scroll">
+        <view class="sp-merit-stele-qr-preview">
+          <image
+            wx:if="{{meritSteleQrLocalPath}}"
+            class="sp-merit-stele-qr-image"
+            src="{{meritSteleQrLocalPath}}"
+            mode="widthFix"
+            show-menu-by-longpress="{{true}}"
+          />
+          <text class="sp-merit-stele-qr-caption">扫码查阅本庙历代法会与乐捐功德芳名录</text>
+        </view>
+        <view class="fa-safe-area-spacer"></view>
+      </scroll-view>
+      <view class="sp-modal-footer">
+        <button class="sp-btn-cancel" bindtap="onCloseMeritSteleQrModal">关闭</button>
+        <button class="sp-btn-save" bindtap="onSaveMeritSteleQrToAlbum">保存到相册</button>
       </view>
     </view>
   </view>

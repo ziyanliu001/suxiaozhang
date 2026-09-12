@@ -9,6 +9,7 @@ import { ensurePrivacyAuthorized } from '../../../../utils/privacyAuthHub';
 import { clearTenantPermissionCache } from '../../../../utils/tenantPermission';
 import { decideQualificationPhotoTap, resolveQualificationActionSheetChoice } from './lib/qualificationPhotoActions';
 import { ORG_TYPE_EMOJI_OPTIONS } from '../../../../utils/constants';
+import { isCloudAvailable } from '../../../../utils/cloudGuard';
 
 const CANVAS_ID = 'storeProfileImgCompressCanvas';
 const MAX_STORE_PHOTOS = 9;
@@ -239,6 +240,12 @@ Page({
     // 已改为进入首页时的工作空间选择一次性确定，本页只读展示，不再提供编辑 picker
     orgType: '',
     orgTypeLabel: '',
+    // 🙏（2026-09-13 数字功德碑）社区普惠专区（temple_canteen）专属：现场
+    // 立牌码生成态，与其余照片/资质弹窗各自独立维护一套 show*/*Loading 字段，
+    // 命名不复用，避免误关/误触发别的弹窗
+    showMeritSteleQrModal: false,
+    meritSteleQrLocalPath: '',
+    meritSteleQrGenerating: false,
     // 🏮 品牌矩阵归属：'tongxin'/'yuhuazhai'/''
     platformFamily: '',
     platformFamilyLabel: '',
@@ -1018,6 +1025,96 @@ Page({
   },
 
   stopPropagation() {},
+
+  // 🙏（2026-09-13 数字功德碑）现场数字功德碑立牌码——复用
+  // cloudfunctions/getStoreQRCode 新增的 purpose: 'merit_stele'（详见该云函数
+  // buildMeritSteleScene 头部注释：scene 前缀 'stele_'，与既有裸 storeId/
+  // 'verify' 编码格式互不冲突，pages/index/index.ts onLoad 已接入对应的扫码
+  // 识别分支，扫码直接打开阳光账本，不经过"申请加入门店"邀请码流程）。
+  // 🛡️ 权限口径：与其余"生成门店二维码"类动作（如整页编辑）同样只对
+  // canManage 为 true 的角色开放入口——这不是新的权限判断，getStoreQRCode
+  // 服务端本身已经把 purpose: 'merit_stele' 归入 isLowRiskPersonalQr 档位
+  // （只要求"调用者只能生成本人所属门店的码"），前端这里的 canManage 门槛
+  // 纯粹是"避免把管委会专属的立牌制作入口暴露给普通义工/家人视角"这层
+  // UI 收敛，不是安全边界本身。
+  // 🛡️ 保存"高清"小程序码：直接把云函数返回的原始文件（getStoreQRCode 生成
+  // 时用的是 430x430 px 尺寸，见该云函数 params.width）保存到相册，不经过
+  // 任何 Canvas 二次合成/重新编码——避免多一道有损转码环节，交给管委会打印
+  // 时自己在设计稿里叠加立牌文案与门店信息，比在手机小画布上合成一张成品图
+  // 更适合亚克力/木质展牌这种需要专业排版输出的物料
+  async onGenerateMeritSteleQr() {
+    if (this.data.meritSteleQrGenerating) return;
+    const storeId = this.data.currentStoreId;
+    if (!storeId) {
+      wx.showToast({ title: '请先选择门店', icon: 'none' });
+      return;
+    }
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+      return;
+    }
+
+    this.setData({ meritSteleQrGenerating: true });
+    wx.showLoading({ title: '正在生成立牌码...', mask: true });
+
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'getStoreQRCode',
+        data: { storeId, storeName: this.data.currentStoreName, purpose: 'merit_stele' }
+      });
+      const result = res && res.result;
+      if (!result || !result.success || !result.fileID) {
+        wx.hideLoading();
+        wx.showToast({ title: (result && result.error) || '生成失败，请重试', icon: 'none' });
+        return;
+      }
+
+      const downRes = await wx.cloud.downloadFile({ fileID: result.fileID });
+      wx.hideLoading();
+      this.setData({
+        meritSteleQrLocalPath: downRes.tempFilePath,
+        showMeritSteleQrModal: true
+      });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onGenerateMeritSteleQr] 生成现场立牌码失败:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ meritSteleQrGenerating: false });
+    }
+  },
+
+  onCloseMeritSteleQrModal() {
+    this.setData({ showMeritSteleQrModal: false });
+  },
+
+  // 「保存到相册」：与本仓库其余海报/证书保存流程同一套"授权失败时引导
+  // wx.openSetting()"处理，各自独立维护一份，不复用别处状态字段
+  onSaveMeritSteleQrToAlbum() {
+    const filePath = this.data.meritSteleQrLocalPath;
+    if (!filePath) return;
+    wx.saveImageToPhotosAlbum({
+      filePath,
+      success: () => {
+        wx.showToast({ title: '已保存到相册', icon: 'success' });
+      },
+      fail: (err: any) => {
+        const errMsg = String((err && err.errMsg) || '');
+        if (errMsg.includes('auth')) {
+          wx.showModal({
+            title: '需要相册权限',
+            content: '请在设置中开启"保存到相册"权限后重试',
+            confirmText: '去设置',
+            success: (modalRes) => {
+              if (modalRes.confirm) wx.openSetting();
+            }
+          });
+        } else {
+          wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+        }
+      }
+    });
+  },
 
   // 🏪 门店照片 / 门头照 / 民政备案复印件 / 食品安全承诺：四个分类共用同一套
   // chooseMedia + compressAndUploadImages 上传逻辑（与 store-picker.ts

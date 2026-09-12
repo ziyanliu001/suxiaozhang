@@ -410,6 +410,81 @@
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 🙏（2026-09-13 数字功德碑）现场立牌码入口卡片——与首页阳光账本弹窗的
+   temple_canteen 古典视觉（宣纸暖底色 + 赭红）同一组色值，让"生成立牌"这个
+   动作与"数字功德碑"这个产品概念在视觉上有明确关联，不是一张与其余灰白
+   档案卡片毫无区分度的普通功能入口 */
+.sp-merit-stele-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  background: #FFFBF3;
+  border: 2rpx solid #D8A868;
+  border-radius: 16rpx;
+  padding: 24rpx 20rpx;
+  margin-bottom: 20rpx;
+  text-align: center;
+}
+
+.sp-merit-stele-icon {
+  font-size: 48rpx;
+}
+
+.sp-merit-stele-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.sp-merit-stele-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+}
+
+.sp-merit-stele-desc {
+  font-size: 22rpx;
+  color: #9C8360;
+  line-height: 1.5;
+}
+
+.sp-btn-merit-stele-qr {
+  margin-top: 8rpx;
+  width: 100%;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+}
+
+.sp-merit-stele-modal-card {
+  background: #F7EEDD;
+}
+
+.sp-merit-stele-qr-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 0;
+}
+
+.sp-merit-stele-qr-image {
+  width: 480rpx;
+  border: 2rpx solid #D8A868;
+  border-radius: 12rpx;
+  background: #FFFFFF;
+}
+
+.sp-merit-stele-qr-caption {
+  margin-top: 20rpx;
+  font-size: 24rpx;
+  color: #8C1D18;
+  font-weight: bold;
+  text-align: center;
+}
+
 .sp-archive-row {
   display: flex;
   justify-content: space-between;
