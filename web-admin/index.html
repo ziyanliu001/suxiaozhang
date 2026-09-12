@@ -12,9 +12,11 @@
 
   部署前置条件（无法由代码自行验证，需在腾讯云开发控制台手动确认，详见
   web-admin/README.md）：
-  1. 目标环境已启用"匿名登录"（本页面用它换取调用云函数所需的登录态，
-     真正的操作权限完全由 adminWebAuth 签发的会话令牌决定，匿名登录本身
-     不代表任何业务身份）。
+  1. 目标环境已启用"未登录用户访问云资源权限"（微信云开发环境的控制台
+     开关，与腾讯云独立版 CloudBase 的"匿名登录"身份源是两回事——本页面
+     不调用、也不依赖 auth.signInAnonymously()，cloudbase.init() 之后直接
+     调用 app.callFunction()，真正的操作权限完全由 adminWebAuth 签发的
+     会话令牌决定）。
   2. 本页面实际部署后的域名已加入该环境的"安全域名"白名单。
   3. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
      且 adminWebConsole 已配置 ADMIN_CONSOLE_INTERNAL_TOKEN 环境变量
@@ -241,9 +243,9 @@
           <input type="text" id="settingEnvId" placeholder="cloudbase-xxxxxxxx" />
         </div>
         <div class="field">
-          <label>地域（region，选填，留空会自动探测）</label>
-          <input type="text" id="settingRegion" placeholder="留空自动尝试 ap-shanghai / ap-guangzhou / ap-singapore" />
-          <p class="muted-note" style="margin-top:6px;">留空即可——登录时会自动依次尝试三个地域并记住第一个连接成功的，探测成功后这里会自动回填。只有确定知道环境真实地域、想跳过探测直接命中时才需要手动填写。</p>
+          <label>地域（region，选填）</label>
+          <input type="text" id="settingRegion" placeholder="如 ap-shanghai，留空由 SDK 使用默认值" />
+          <p class="muted-note" style="margin-top:6px;">大多数环境留空即可。仅当云开发控制台明确显示了环境所在地域、且默认值连接不上时才需要手动填写。</p>
         </div>
         <button class="btn btn-secondary" id="saveSettingsBtn">保存</button>
       </details>
@@ -413,7 +415,6 @@
   var settings = loadSettings();
   var session = loadSession();
   var app = null;
-  var authReady = null;
 
   // ==================== 错误信息格式化 ====================
   // 🐛（2026-09-13 修复"网络异常或环境配置有误：[object Object]"）CloudBase
@@ -436,96 +437,30 @@
     return String(err);
   }
 
-  // ==================== CloudBase 初始化（地域自适应） ====================
-  // 🐛（2026-09-13 修复 ERR_CERT_COMMON_NAME_INVALID 证书报错）CloudBase Web
-  // SDK 的 region 参数缺省时按官方文档兜底为 'ap-shanghai'，但微信云开发
-  // 环境的真实地域并不总是上海——一旦传入/兜底成一个与环境真实地域不一致的
-  // region，SDK 会拼出一个该环境根本不存在对应证书的网关域名，浏览器发起
-  // 请求时在 TLS 握手阶段就会报 ERR_CERT_COMMON_NAME_INVALID（证书通用名与
-  // 请求域名不匹配），比"业务层报错"更早、更底层，signInAnonymously()/
-  // callFunction() 因此表现为裸的 "Failed to fetch"。
+  // ==================== CloudBase 初始化 ====================
+  // 🐛（2026-09-13 修复对 signInAnonymously 的不当依赖）微信云开发环境的
+  // 控制台开关是"未登录用户访问云资源权限"（未登录模式），与腾讯云独立版
+  // CloudBase 的"匿名登录"身份源是两套不同机制——前者允许 callFunction()
+  // 在完全没有登录态的情况下直接调用，后者才需要 auth.signInAnonymously()
+  // 换取登录态。此前代码误把两者当同一回事，在只开启了前者的环境里调用
+  // signInAnonymously() 会被直接拒绝："请联系开发者在身份源列表开启匿名
+  // 登录"，导致根本进不到 callFunction 阶段。
   //
-  // 修复思路：不要求用户必须知道自己环境的真实地域——已知合法取值只有三个
-  // （ap-shanghai/ap-guangzhou/ap-singapore，见 CloudBase 官方文档），逐个
-  // 尝试初始化 + 匿名登录，第一个成功的地域记下来存进本地设置，之后的调用
-  // 直接用这个已验证过的地域、不再重新探测。用户在"连接设置"里手动指定的
-  // 地域仍然优先尝试（通常最快命中），但不再是"一旦猜错就死"的唯一选择——
-  // 探测失败会自动继续尝试其余候选地域，而不是直接报错。
-  var REGION_CANDIDATES = ['ap-shanghai', 'ap-guangzhou', 'ap-singapore'];
-
-  function buildRegionProbeOrder() {
-    var preferred = (settings.region || '').trim();
-    if (!preferred) return REGION_CANDIDATES.slice();
-    var rest = REGION_CANDIDATES.filter(function (r) { return r !== preferred; });
-    return [preferred].concat(rest);
-  }
-
-  // 用给定地域尝试建立一个可用的登录态：先看有没有现成有效会话，没有则
-  // 匿名登录一次。任何一步失败（无论是 SDK 显式返回的 {error}，还是网络层
-  // fetch 直接抛异常）都统一抛出格式化好的错误，交给上层的探测循环换下一个
-  // 地域重试。
-  async function tryConnectWithRegion(region) {
-    var candidateApp = window.cloudbase.init({ env: settings.envId, region: region });
-    var sessionRes = await candidateApp.auth.getSession();
-    if (sessionRes && sessionRes.data && sessionRes.data.session) {
-      return candidateApp;
-    }
-    var signInRes = await candidateApp.auth.signInAnonymously();
-    if (signInRes && signInRes.error) {
-      throw new Error(formatError(signInRes.error));
-    }
-    return candidateApp;
-  }
-
-  // 匿名登录只是满足"必须先登录才能调用云函数"这个 SDK 层前提，不代表任何
-  // 业务身份——真正的操作权限完全由 adminWebAuth 签发的会话令牌决定
-  function ensureAuth() {
-    if (authReady) return authReady;
-    if (!settings.envId) {
-      return Promise.reject(new Error('请先在登录页展开"连接设置"填写云开发环境 ID'));
-    }
-
-    authReady = (async function () {
-      var probeOrder = buildRegionProbeOrder();
-      var lastError = null;
-      for (var i = 0; i < probeOrder.length; i++) {
-        var region = probeOrder[i];
-        try {
-          app = await tryConnectWithRegion(region);
-          if (settings.region !== region) {
-            settings.region = region;
-            saveSettings(settings);
-            if ($('settingRegion')) $('settingRegion').value = region; // 让用户看到实际生效的地域
-          }
-          return true;
-        } catch (err) {
-          lastError = err;
-          app = null;
-        }
-      }
-      throw new Error(
-        '已自动尝试 ' + probeOrder.length + ' 个云开发地域（' + probeOrder.join('/') + '）均连接失败，' +
-        '请核实环境 ID 是否正确、静态托管环境是否已开启"未登录用户访问云资源权限"，' +
-        '以及环境是否已启用匿名登录。最后一次错误：' + formatError(lastError)
-      );
-    })();
-
-    // 失败时清空缓存，允许下一次点击重新触发探测，不永久缓存一次失败结果
-    authReady = authReady.catch(function (err) {
-      authReady = null;
-      throw err;
-    });
-
-    return authReady;
-  }
-
+  // 修复：彻底不调用 auth.signInAnonymously()/auth.getSession()，
+  // cloudbase.init() 之后直接 callFunction()，登录与业务权限完全交给
+  // adminWebAuth/adminWebConsole 签发与校验的 sessionToken。
   function ensureApp() {
-    if (!app) throw new Error('尚未建立云开发连接，请先完成登录探测（点击登录按钮）');
+    if (app) return app;
+    if (!settings.envId) {
+      throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
+    }
+    var initOptions = { env: settings.envId };
+    if (settings.region) initOptions.region = settings.region;
+    app = window.cloudbase.init(initOptions);
     return app;
   }
 
   async function callFn(name, data) {
-    await ensureAuth();
     var res = await ensureApp().callFunction({ name: name, data: data || {} });
     return res.result || {};
   }
@@ -558,7 +493,7 @@
   $('saveSettingsBtn').addEventListener('click', function () {
     settings = { envId: $('settingEnvId').value.trim(), region: $('settingRegion').value.trim() };
     saveSettings(settings);
-    app = null; authReady = null; // 环境变更后重新初始化
+    app = null; // 环境变更后重新初始化
     showAlert($('loginAlert'), 'success', '连接设置已保存');
   });
 
