@@ -7,21 +7,22 @@
 <title>素小账 · 应急管理中台</title>
 <!--
   独立于微信生态的 Web 管理中台（紧急逃生舱第四道防线，见 CLAUDE.md 第 11 节）。
-  纯静态单文件，无构建步骤，直连云开发 Web SDK（@cloudbase/js-sdk），
-  会话认证走 cloudfunctions/adminWebAuth，业务动作走 cloudfunctions/adminWebConsole。
+  纯静态单文件，无构建步骤。⚠️ 不加载 @cloudbase/js-sdk——历经四轮真机排查
+  （详见 web-admin/README.md「已知边界」）确认该 SDK (v2.28.6) 的
+  callFunction() 无论如何都要求客户端本地先有一次成功的登录握手（哪怕是
+  匿名登录）才能拿到凭证，而这个环境只开启了"未登录用户访问云资源权限"、
+  没有开启"匿名登录"身份源，SDK 从架构上无法在这个组合下工作。改为用
+  浏览器原生 fetch() 直连 SDK 内部实际使用的云函数 HTTP 网关（协议细节
+  从 cloudbase.full.js 源码逐层反推确认，见下方脚本里的详细注释），彻底
+  跳过 SDK 自己的凭证状态机。会话认证走 cloudfunctions/adminWebAuth，
+  业务动作走 cloudfunctions/adminWebConsole。
 
   部署前置条件（无法由代码自行验证，需在腾讯云开发控制台手动确认，详见
   web-admin/README.md）：
   1. 目标环境已启用"未登录用户访问云资源权限"（微信云开发环境的控制台
-     开关，与腾讯云独立版 CloudBase 的"匿名登录"身份源是两回事——本页面
-     不调用、也不依赖 auth.signInAnonymously()）。@cloudbase/js-sdk
-     (v2.28.6) 在完全没有登录凭证时，callFunction() 内部会反复调用
-     auth.getLoginState()，未登录场景下该方法本身返回 null，SDK 未做判空
-     直接读 loginState.scope，会在浏览器端崩溃、请求根本发不出去——这是
-     SDK 自身的缺陷，与"未登录用户访问云资源权限"这个环境配置无关，
-     ensureApp() 里给 auth.getLoginState() 打了一个轻量补丁，解析出
-     null/抛异常时统一兜底成 { scope: '' }，不产生任何登录态，真正的操作
-     权限完全由 adminWebAuth 签发的会话令牌决定。
+     开关）。本页面直接向云函数 HTTP 网关发起不带 access_token 的请求，
+     赌的正是这个开关会让服务端放行——这个假设未经真实网络验证，如实
+     标注，需要下一轮真机测试确认。
   2. 本页面实际部署后的域名已加入该环境的"安全域名"白名单。
   3. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
      且 adminWebConsole 已配置 ADMIN_CONSOLE_INTERNAL_TOKEN 环境变量
@@ -251,8 +252,8 @@
         </div>
         <div class="field">
           <label>地域（region，选填）</label>
-          <input type="text" id="settingRegion" placeholder="如 ap-shanghai，留空由 SDK 使用默认值" />
-          <p class="muted-note" style="margin-top:6px;">大多数环境留空即可。仅当云开发控制台明确显示了环境所在地域、且默认值连接不上时才需要手动填写。</p>
+          <input type="text" id="settingRegion" placeholder="如 ap-shanghai，留空默认按 ap-shanghai 拼接网关地址" />
+          <p class="muted-note" style="margin-top:6px;">大多数环境留空即可。仅当云开发控制台明确显示了环境所在地域为其它值（如 ap-guangzhou）时才需要手动填写，否则网关地址会拼错，导致请求打不通。</p>
         </div>
         <button class="btn btn-secondary" id="saveSettingsBtn">保存</button>
       </details>
@@ -384,7 +385,6 @@
     </div>
   </div>
 
-<script src="https://static.cloudbase.net/cloudbase-js-sdk/2.28.6/cloudbase.full.js"></script>
 <script>
 (function () {
   'use strict';
@@ -421,7 +421,6 @@
 
   var settings = loadSettings();
   var session = loadSession();
-  var app = null;
 
   // ==================== 错误信息格式化 ====================
   // 🐛（2026-09-13 修复"网络异常或环境配置有误：[object Object]"）CloudBase
@@ -460,129 +459,100 @@
     return stackPreview ? msg + '\n' + stackPreview : msg;
   }
 
-  // ==================== CloudBase 初始化 ====================
-  // 🐛（2026-09-13 一）修复对 signInAnonymously 的不当依赖：微信云开发环境的
-  // 控制台开关是"未登录用户访问云资源权限"（未登录模式），与腾讯云独立版
-  // CloudBase 的"匿名登录"身份源是两套不同机制——前者允许 callFunction()
-  // 在完全没有登录态的情况下直接调用，后者才需要 auth.signInAnonymously()
-  // 换取登录态。此前代码误把两者当同一回事，在只开启了前者的环境里调用
-  // signInAnonymously() 会被直接拒绝："请联系开发者在身份源列表开启匿名
-  // 登录"。
+  // ==================== 直连云函数网关（彻底绕开 @cloudbase/js-sdk） ====================
+  // 🐛（2026-09-13 一~四，历时四轮排查）完整踩坑链路：
+  //   一）signInAnonymously() 被环境拒绝（"请联系开发者在身份源列表开启
+  //      匿名登录"），改为彻底不调用它；
+  //   二/三）改成"预热 auth.getSession()/打补丁 auth.getLoginState()"，
+  //      真机复测（含无痕模式）证实崩溃依旧，这两版补丁都打在了错误的
+  //      对象上；
+  //   四）下载 CDN 上真实的 cloudbase.full.js@2.28.6，用 Node 搭桩件直接
+  //      require 并调用 app.callFunction() 完整复现出一模一样的
+  //      TypeError: Cannot read properties of null (reading 'scope')，
+  //      字节偏移精确定位到 SDK 内部 _getCredentials() 的判空顺序颠倒
+  //      bug；给真正的崩溃点（挂在
+  //      app.authInstance.config.oauthInstance.oauth2client.localCredentials
+  //      上的 getCredentials()）打补丁后，崩溃确实消失了，但复现脚本显示
+  //      callFunction() 改为得到一个干净的
+  //      "unauthenticated / no refresh token found in credentials" 拒绝，
+  //      注入的 fetch 桩件全程未被调用——即请求根本没有发出去。继续读同一
+  //      段源码发现：这个 SDK 版本的凭证状态机只会在"已经持有一份
+  //      scope==='anonymous' 的旧凭证"时才会去刷新/续期，从完全零凭证的
+  //      状态出发没有任何"自动匿名登录一次"的兜底路径——也就是说这版
+  //      js-sdk 的 callFunction() 无论如何都要求客户端本地先有一次成功的
+  //      登录握手（哪怕是匿名登录）才能构造出第一份凭证，纯客户端补丁
+  //      无法绕过这一点。
   //
-  // 🐛（2026-09-13 二/三）先后两版尝试通过"调用一次 auth.getSession() 预热
-  // SDK 内部状态""给 auth.getLoginState() 打补丁"来规避 TypeError:
-  // Cannot read properties of null (reading 'scope')，真机复测（含无痕
-  // 模式，排除本地缓存干扰）证实崩溃依然稳定复现——这两版补丁全都打在了
-  // 错误的对象上，从未真正拦截到崩溃发生的那一行代码。
-  //
-  // 🐛（2026-09-13 四，本次）真正定位到崩溃源头：把 CDN 上引用的
-  // cloudbase.full.js@2.28.6 原始文件下载到本地，用 Node 搭最小 window/
-  // localStorage/fetch 桩件直接 require 并调用 app.callFunction()，
-  // 完整复现出一模一样的 TypeError，并且 Node 报出的文件字节偏移量精确
-  // 定位到这一行压缩后的源码（真实存在于官方发布的 SDK 里，不是猜测）：
-  //   _getCredentials(){var e=this;return x((function*(){
-  //     var t=yield e.localCredentials.getCredentials();
-  //     if(t.scope===p)return t;          // ← 崩溃点：t 为 null 时直接读 .scope
-  //     if(!t){ ...走"未登录"错误分支... }  // 判空写在了访问 .scope 之后，顺序反了
-  //     ...
-  //   }))()}
-  // 这个 localCredentials 实例（真实持有 getCredentials() 方法的对象）
-  // 挂在 app.authInstance.config.oauthInstance.oauth2client.localCredentials
-  // 这条路径上——用同一份 Node 复现脚本验证过，从未登录状态下
-  // localCredentials.getCredentials() 就是会 resolve 出 null（本地
-  // localStorage 里从未写入过任何凭证），这就是崩溃的直接触发条件。
-  //
-  // 补丁思路：不改 SDK 本身（做不到，是 CDN 引用的第三方文件），直接包一层
-  // localCredentials.getCredentials()——resolve 出 null/undefined 时兜底
-  // 替换成 {}，让 SDK 自己后面那句 if(!t){...} 走到它原本就写好的"未登录"
-  // 处理分支，而不是在到达这句判空之前就先崩溃。⚠️ 如实标注：这个补丁能
-  // 消除崩溃（已用同一份 Node 脚本验证——打补丁后不再抛 TypeError），但
-  // 补丁生效后 callFunction() 在这个 SDK 版本下会改为得到一个干净的
-  // "unauthenticated / no refresh token found in credentials" 拒绝，
-  // 而不是真正把请求发出去——说明这版 SDK 的 callFunction() 无论如何都
-  // 要求先有一次成功的登录（哪怕是匿名登录）才能拿到凭证，"未登录用户
-  // 访问云资源权限"这个环境开关看起来管的是"服务端要不要认可这个凭证"，
-  // 不能让客户端完全跳过"先拿到一个凭证"这一步。这意味着单靠客户端打
-  // 补丁无法让登录真正成功，需要用户决定下一步方向（见对话里的说明），
-  // 这里的补丁只负责把"崩溃"降级成"能看清楚、可诊断的拒绝"。
-  function patchLocalCredentialsNullGuard(candidateApp) {
-    var lc = null;
-    try {
-      lc = candidateApp.authInstance
-        && candidateApp.authInstance.config
-        && candidateApp.authInstance.config.oauthInstance
-        && candidateApp.authInstance.config.oauthInstance.oauth2client
-        && candidateApp.authInstance.config.oauthInstance.oauth2client.localCredentials;
-    } catch (e) {
-      lc = null;
-    }
-    if (!lc || typeof lc.getCredentials !== 'function' || lc.__nullScopeGuardApplied) {
-      return;
-    }
-    var originalGetCredentials = lc.getCredentials.bind(lc);
-    lc.getCredentials = async function () {
-      var result;
-      try {
-        result = await originalGetCredentials();
-      } catch (e) {
-        result = null;
-      }
-      return result || {};
-    };
-    lc.__nullScopeGuardApplied = true;
-  }
-
-  // 保留第（三）版对 auth.getLoginState() 的补丁作为额外防线——它没有命中
-  // 本次真正的崩溃点，但 getLoginState() 在其它调用路径（如
-  // hasLoginState()/onAuthStateChange）里同样可能读到 null，属于另一个
-  // 独立、廉价、无副作用的判空加固，不冲突所以一并保留。
-  function patchAuthLoginStateNullGuard(candidateApp) {
-    var auth;
-    try {
-      auth = typeof candidateApp.auth === 'function' ? candidateApp.auth() : candidateApp.auth;
-    } catch (e) {
-      auth = null;
-    }
-    if (!auth || typeof auth.getLoginState !== 'function' || auth.__nullScopeGuardApplied) {
-      return;
-    }
-    var originalGetLoginState = auth.getLoginState.bind(auth);
-    auth.getLoginState = async function () {
-      try {
-        var state = await originalGetLoginState();
-        return state || { scope: '' };
-      } catch (e) {
-        return { scope: '' };
-      }
-    };
-    auth.__nullScopeGuardApplied = true;
-  }
-
-  function ensureApp() {
-    if (app) return app;
-    try {
-      if (!settings.envId) {
-        throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
-      }
-      var initOptions = { env: settings.envId };
-      if (settings.region) initOptions.region = settings.region;
-      app = window.cloudbase.init(initOptions);
-      patchLocalCredentialsNullGuard(app);
-      patchAuthLoginStateNullGuard(app);
-      return app;
-    } catch (err) {
-      console.error('[WEB_ADMIN_ERROR_STACK]: ensureApp()', err && err.stack ? err.stack : err);
-      throw err;
-    }
+  // 本次（五）：既然问题出在 js-sdk 自己的凭证状态机上，不再试图迂回它，
+  // 而是直接绕开整个 js-sdk，用浏览器原生 fetch() 直连 js-sdk 内部实际
+  // 调用的那个 HTTP 网关——这不是凭空拼一个未文档化的接口，而是从同一份
+  // cloudbase.full.js 源码里逐层追出来的、SDK 自己也在用的真实协议：
+  //   URL：https://<envId>.<region||'ap-shanghai'>.tcb-api.tencentcloudapi.com/web?env=<envId>
+  //   Method：POST，Content-Type: application/json;charset=UTF-8
+  //   Body：{ action:'functions.invokeFunction', dataVersion:'2020-01-10',
+  //           env:<envId>, function_name:<云函数名>,
+  //           request_data: JSON.stringify(<data 参数>) }
+  //           —— request_data 是 JSON 字符串，不是原始对象，这一点是从
+  //              SDK 源码里 `I=p?JSON.stringify(p):""` 这行反推确认的。
+  //   响应：成功时 { requestId, data: { response_data: '<JSON 字符串>' } }，
+  //         失败时顶层带 code 字段（{code, message}）。
+  // 与 SDK 自身实现的唯一区别：SDK 会在请求体里再带一个 access_token 字段
+  // （因为 functions.invokeFunction 不在 SDK 内部"免鉴权动作白名单"里，
+  // 一定会先尝试拿 access_token，这正是上面（四）里"无论如何都要求先登录"
+  // 这条结论的直接来源）——这里刻意不带这个字段，赌的是服务端"未登录用户
+  // 访问云资源权限"这个开关本来就是为"完全没有 access_token 的请求"设计
+  // 的授权豁免，只是 js-sdk 客户端自己的实现从未开放过这条"不尝试拿 token
+  // 就直接发请求"的路径。⚠️ 如实标注：这个假设本身未经真实网络验证——
+  // Node 环境里没有真实的云开发网关可连，只验证到了"请求的 URL/Body 格式
+  // 与 SDK 源码逐行对应"这一层，服务端是否真的会放行一个完全不带
+  // access_token 的请求，需要用户下一轮真机测试确认。
+  function buildFunctionsInvokeUrl() {
+    var region = settings.region || 'ap-shanghai';
+    return 'https://' + settings.envId + '.' + region + '.tcb-api.tencentcloudapi.com/web?env=' + encodeURIComponent(settings.envId);
   }
 
   async function callFn(name, data) {
+    if (!settings.envId) {
+      throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
+    }
+    var url = buildFunctionsInvokeUrl();
+    var body = {
+      action: 'functions.invokeFunction',
+      dataVersion: '2020-01-10',
+      env: settings.envId,
+      function_name: name,
+      request_data: JSON.stringify(data || {})
+    };
+    var response;
     try {
-      var res = await ensureApp().callFunction({ name: name, data: data || {} });
-      return res.result || {};
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json;charset=UTF-8' },
+        body: JSON.stringify(body)
+      });
     } catch (err) {
-      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ')', err && err.stack ? err.stack : err);
+      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') fetch', err && err.stack ? err.stack : err);
       throw err;
+    }
+    var payload;
+    try {
+      payload = await response.json();
+    } catch (err) {
+      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') parse-response', err && err.stack ? err.stack : err, 'HTTP ' + response.status);
+      throw new Error('云函数网关返回了非 JSON 响应（HTTP ' + response.status + '），请核实环境 ID / region 是否正确');
+    }
+    if (payload && payload.code) {
+      throw new Error('[' + payload.code + '] ' + (payload.message || '云函数调用失败'));
+    }
+    var responseData = payload && payload.data && payload.data.response_data;
+    if (typeof responseData !== 'string') {
+      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') unexpected-shape', payload);
+      throw new Error('云函数网关返回了意料之外的结构：' + JSON.stringify(payload));
+    }
+    try {
+      return JSON.parse(responseData) || {};
+    } catch (err) {
+      throw new Error('云函数返回内容不是合法 JSON：' + responseData.slice(0, 200));
     }
   }
 
@@ -614,7 +584,6 @@
   $('saveSettingsBtn').addEventListener('click', function () {
     settings = { envId: $('settingEnvId').value.trim(), region: $('settingRegion').value.trim() };
     saveSettings(settings);
-    app = null; // 环境变更后重新初始化，下次 ensureApp() 会重新打上 null-scope 补丁
     showAlert($('loginAlert'), 'success', '连接设置已保存');
   });
 
