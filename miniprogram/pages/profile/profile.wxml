@@ -159,6 +159,44 @@
       </view>
     </view>
 
+    <!-- 🆕（2026-09-13 个人中心升级 任务二）顶部核心数据栏：用户资料卡下方新增
+         三列紧凑型个人数据概览，接入已有 stats 数据源（loadVolunteerStats/
+         fetchMeritStats 已经在做云端校准，见 computeBadgeList 头部注释），
+         不新增云函数调用，数据回填节奏与深处的"爱心护持榜"完全同步。
+         🐛（npm run visual:check 真机截图核实修正）可见范围原本写的是
+         !isSuperAdmin && !isPlatformAdmin，凭直觉以为这两类角色都没有个人
+         志愿身份；截图显示当前测试账号正是 platform_admin（漫游到"漳州白礁
+         保生雨花斋"大家长视角），下方 merit-board-card（同一份数据源的
+         详细版）对这个账号正常渲染（服务天数/累计工时均为 0，不是空白），
+         说明 platform_admin 漫游时确实需要看到这份个人数据——只有真正的
+         super_admin（全局视角，没有绑定任何具体门店的个人身份）才应该排除。
+         改为与 merit-board-card 完全一致的排除口径（!isFamily &&
+         !isSuperAdmin && !isFinance），不再自造一条不一致的新标准；不叠加
+         该卡片"大家长默认折叠"的额外判断，本栏定位是"随时可见的置顶概览"，
+         与深处那张可折叠的详情卡是两种不同的显示策略，故意不同步折叠状态。
+         三列均可点击跳转明细：服务天数/志愿工时统一跳个人打卡历程页
+         （journey.wxml），与下方"爱心护持榜"里的护持天数/累计工时是同一份
+         数据源、只是展示位置不同，不是两套独立统计口径；经手餐报复用已有的
+         onGoToMySubmissions()——该方法已经按角色分流好"义工看自己的
+         volunteer_submissions／其余角色看 report_logs 历史"，不需要新写
+         一套跳转逻辑 -->
+    <view class="profile-metrics-bar" wx:if="{{!isFamily && !isSuperAdmin && !isFinance}}">
+      <view class="pmb-cell" hover-class="ui-hover" bindtap="onTapServiceHistory">
+        <text class="pmb-num">{{stats.volunteerDays || 0}}</text>
+        <text class="pmb-label">{{isYuhuazhai ? '护持天数' : '服务天数'}}</text>
+      </view>
+      <view class="pmb-divider"></view>
+      <view class="pmb-cell" hover-class="ui-hover" bindtap="onTapServiceHistory">
+        <text class="pmb-num">{{stats.volunteerHours || 0}}</text>
+        <text class="pmb-label">志愿工时</text>
+      </view>
+      <view class="pmb-divider"></view>
+      <view class="pmb-cell" hover-class="ui-hover" bindtap="onGoToMySubmissions">
+        <text class="pmb-num">{{(stats.submittedReports || 0) + (stats.auditedReports || 0)}}</text>
+        <text class="pmb-label">经手餐报</text>
+      </view>
+    </view>
+
     <!-- 🏛️（2026-09-09 超管个人中心 IA 重构）原"超管工具箱"折叠卡片（摘要条 +
          sa-command-card + admin-dashboard-card，此前深埋在第 9-11 段区块，要先
          看完义工/家人/店长/大家长/财务各自的功能区才会出现）整段移除，核心管理
