@@ -52,7 +52,10 @@
        🛡️ 结构升级：标题栏固定在外层，其余内容（理念介绍/月份切换/数据大盘）
        包进 scroll-view，避免新增的理念卡片让弹窗在小屏设备上被撑出屏幕 -->
   <view class="sunshine-modal-mask" wx:if="{{showSunshineLedgerModal}}" bindtap="onCloseSunshineLedgerModal">
-    <view class="sunshine-modal-card" catchtap="stopPropagation">
+    <!-- 🙏（2026-09-13 数字功德碑）社区普惠专区（temple_canteen）专属古典
+         视觉：宣纸暖底色 + 赭红题头，仅追加一个修饰 class，不改变卡片本身
+         结构/既有 class，其余机构类型样式零影响 -->
+    <view class="sunshine-modal-card {{isTempleCanteenLedger ? 'merit-stele-theme' : ''}}" catchtap="stopPropagation">
       <view class="sunshine-modal-header">
         <text class="sunshine-modal-title">{{conceptTitle}}</text>
         <view class="sunshine-modal-close" bindtap="onCloseSunshineLedgerModal">✕</view>
@@ -122,6 +125,65 @@
           <view class="sunshine-transparency-tip">
             <text class="sunshine-tip-icon">🛡️</text>
             <text class="sunshine-tip-text">所有数据均经店长/财务双重核销后展示，实时公开、接受全民监督</text>
+          </view>
+
+          <!-- 🙏（2026-09-13 数字功德碑·历代芳名录检索）只在社区普惠专区门店
+               展示：年份 + 法会/事项标签 + 姓名模糊检索三个条件，任意组合，
+               全部留空即检索本店全部历史（受服务端 200 条上限约束，见
+               getSunshineLedger 头部注释） -->
+          <view class="merit-stele-search-card" wx:if="{{isTempleCanteenLedger}}">
+            <view class="merit-stele-search-title">
+              <text class="merit-stele-search-icon">📜</text>
+              <text>数字功德碑 · 历代芳名录检索</text>
+            </view>
+            <view class="merit-stele-search-row">
+              <input
+                class="merit-stele-input merit-stele-year-input"
+                type="number"
+                placeholder="年份，如 2026"
+                value="{{meritSteleYear}}"
+                bindinput="onMeritSteleYearInput"
+              />
+              <picker
+                mode="selector"
+                range="{{['全部事项'].concat(availableEventTags)}}"
+                bindchange="onMeritSteleEventTagChange"
+              >
+                <view class="merit-stele-picker-trigger">{{meritSteleEventTag || '全部事项'}} ›</view>
+              </picker>
+            </view>
+            <view class="merit-stele-search-row">
+              <input
+                class="merit-stele-input merit-stele-name-input"
+                placeholder="按姓名模糊检索本人/家人芳名"
+                value="{{meritSteleNameQuery}}"
+                bindinput="onMeritSteleNameInput"
+              />
+              <view class="merit-stele-search-btn" bindtap="onSearchMeritStele">🔍 检索</view>
+            </view>
+
+            <!-- 🛡️ 金石存证公信力徽标：只是提示"这份账目经过服务端防篡改签名"，
+                 不是逐位可核对的完整校验码展示（那需要专门的验真页比对，见
+                 subpackages/admin/pages/public-verify），checksumSample 只截取
+                 前 8 位供人工留痕/截图核对 -->
+            <view class="merit-stele-list">
+              <view class="merit-stele-empty" wx:if="{{meritSteleEntries.length === 0}}">
+                <text>暂未检索到符合条件的芳名记录</text>
+              </view>
+              <view class="merit-stele-entry" wx:for="{{meritSteleEntries}}" wx:key="index">
+                <view class="merit-stele-entry-main">
+                  <text class="merit-stele-entry-name">{{item.name}}</text>
+                  <text class="merit-stele-entry-detail" wx:if="{{item.amount > 0}}">乐捐 ¥{{item.amount}}</text>
+                  <text class="merit-stele-entry-detail" wx:elif="{{item.item}}">{{item.item}}</text>
+                </view>
+                <view class="merit-stele-entry-meta">
+                  <text class="merit-stele-entry-tag" wx:if="{{item.eventTag}}">{{item.eventTag}}</text>
+                  <text class="merit-stele-entry-date">{{item.dateString}}</text>
+                  <text class="merit-stele-entry-checksum" wx:if="{{item.hasChecksum}}">🛡️ 金石存证 {{item.checksumSample}}</text>
+                  <text class="merit-stele-entry-cert-btn" data-index="{{index}}" catchtap="onGenerateMeritCertificate">📜 生成长卷</text>
+                </view>
+              </view>
+            </view>
           </view>
         </view>
         <view class="fa-safe-area-spacer"></view>

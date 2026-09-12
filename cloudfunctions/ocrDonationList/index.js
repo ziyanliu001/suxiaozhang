@@ -1,5 +1,9 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+// 🙏（2026-09-13 数字功德碑·手写红榜识别）见 lib/parseTempleDonation.js 头部
+// 注释——与 miniprogram/utils/lib/parseTempleDonation.js 是同一份纯逻辑的
+// 独立镜像拷贝
+const { parseTempleStyleLine, parseTempleMaterialLine } = require('./lib/parseTempleDonation');
 
 // 🌟 AI/OCR 节点与业务计算彻底解耦：本云函数只负责"从截图里认字，把昵称和金额配成对"，
 // 绝不做求和/去重/合计等业务判断——那是前端 parseDonorText（唯一权威解析入口，经
@@ -114,12 +118,37 @@ exports.main = async (event, context) => {
     console.log('📝 [OCR 原始文本行]:', lines);
 
     const donorList = [];
+    // 🙏（2026-09-13 数字功德碑）宫庙实物供奉行（如"林某某 添植物油2桶"）
+    // 与善款行（donorList）是两条独立的展示/落库路径（分别对应记账表单的
+    // donationItems 文本框与 materials 文本框），单独收集、单独返回，不混入
+    // donorList——见文件头部/exports.main 返回值处的进一步说明
+    const materialList = [];
     let pendingName = '';
 
     for (const line of lines) {
       if (HEADER_NOISE_REGEX.test(line) || TRANSFER_NOISE_REGEX.test(line) || STATUS_BAR_NOISE_REGEX.test(line)) {
         // 顶部总额/收款成功/转账通知卡片/状态栏等界面提示文案，整行跳过，
         // 并清空待配对昵称，避免它被当成紧接着这行金额的付款人昵称
+        pendingName = '';
+        continue;
+      }
+
+      // ⓪ 宫庙红榜手写格式（如"李某某 添香油 500元""陈某某合家 乐捐建庙
+      // 2000""林某某 添植物油2桶"）：必须排在①②③之前判断——姓名与金额/
+      // 数量之间夹着的宫庙传统用语（"添香油"/"乐捐建庙"）会被③
+      // INLINE_NAME_AMOUNT_REGEX 的"贪婪捕获到行尾金额为止"逻辑误当成姓名
+      // 的一部分，必须在那之前用更精确的宫庙专用识别拦下来。只在命中已知
+      // 宫庙用语时才触发（见 lib/parseTempleDonation.js），不影响原有微信
+      // 截图场景的识别路径
+      const templeMoneyItem = parseTempleStyleLine(line);
+      if (templeMoneyItem) {
+        donorList.push({ name: templeMoneyItem.name, amount: templeMoneyItem.amount.toFixed(2) });
+        pendingName = '';
+        continue;
+      }
+      const templeMaterialItem = parseTempleMaterialLine(line);
+      if (templeMaterialItem) {
+        materialList.push(templeMaterialItem);
         pendingName = '';
         continue;
       }
@@ -178,7 +207,7 @@ exports.main = async (event, context) => {
       pendingName = line;
     }
 
-    if (donorList.length === 0) {
+    if (donorList.length === 0 && materialList.length === 0) {
       console.warn('⚠️ [OCR] 未能识别出任何有效的爱心支持明细');
       return {
         success: false,
@@ -186,6 +215,8 @@ exports.main = async (event, context) => {
         formattedText: '',
         totalCount: 0,
         totalAmount: '0.00',
+        materialList: [],
+        formattedMaterialText: '',
         errMsg: '未能从截图中识别出有效的"昵称+金额"明细，请手动录入或重新截取更清晰的图片'
       };
     }
@@ -195,14 +226,25 @@ exports.main = async (event, context) => {
     const formattedText = donorList.map(d => `${d.name} ${d.amount}`).join('\n');
     const totalAmount = donorList.reduce((sum, d) => sum + parseFloat(d.amount), 0).toFixed(2);
 
-    console.log('✅ [解析输出]:', { count: donorList.length, totalAmount });
+    // 🙏（2026-09-13）宫庙实物供奉行独立输出——与 formattedText 同样的"前端
+    // parser 是唯一权威解析入口"原则：这里只负责拼出 miniprogram/utils/parser.ts
+    // parseMaterials() 认识的标准格式（"捐赠人：物资数量单位"，分号分隔多条），
+    // 不在云函数这层重复维护一套物资统计逻辑
+    const formattedMaterialText = materialList.map(m => `${m.donor}：${m.item}${m.quantity}${m.unit}`).join('；');
+
+    console.log('✅ [解析输出]:', { count: donorList.length, totalAmount, materialCount: materialList.length });
 
     return {
       success: true,
       itemList: donorList,
       formattedText: formattedText,
       totalCount: donorList.length,
-      totalAmount: totalAmount
+      totalAmount: totalAmount,
+      // 🙏 新增字段，向下兼容：既有消费方（首页拍照识票/善款截图识别弹窗）
+      // 只读取 itemList/formattedText，不认识这两个新字段会被忽略，不影响
+      // 既有雨花斋场景任何行为
+      materialList: materialList,
+      formattedMaterialText: formattedMaterialText
     };
 
   } catch (err) {
@@ -213,6 +255,8 @@ exports.main = async (event, context) => {
       formattedText: '',
       totalCount: 0,
       totalAmount: '0.00',
+      materialList: [],
+      formattedMaterialText: '',
       errMsg: err.message || '识别解析异常'
     };
   }

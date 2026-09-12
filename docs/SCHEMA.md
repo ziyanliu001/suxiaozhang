@@ -122,9 +122,11 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 ### 4.1 `report_logs` 字段一览（`dataService.ts:196-278`）
 
-`dateString`、`reportDate`、`shopName`、`storeId`、`tenantId`、`mpAccount`、`yesterdayBalance`、`otherDonation`、`listDonationTotal`、`expenseAmount`、`expenses`、`dailyExpenseText`、`fixedExpenseText`、`dailyExpenseTotal`、`fixedExpenseTotal`、`fixedExpenseItems[]`、`majorExpenseItems[]`、`dailyIngredientItems[]`、`donationItems[]`、`todayBalance`、`reportText`、`receiptImages[]`、`isManualAdjust`、`systemBalance`、`adjustedBalance`、`balanceDiff`、`adjustReason`、`materials[]`、`volunteerCount`、`volunteerHours`、`diningCount`、`dineInSeniors`、`deliverySeniors`、`dineInVolunteers`、`deliveryVolunteers`、`takeawayCount`、`listeningSeniors`、`totalDineCount`、`totalVolunteers`、`stapleRiceStatus`、`stapleOilStatus`、`isAnonymous`、`ocrMetadata`（`{sourceImageUrl, parsedItemCount, isAutoFilled, ocrRawText}` 或 `null`，目前无前端入口真正填充）、`updateTime`、`isSynced`、`approvalStatus`。
+`dateString`、`reportDate`、`shopName`、`storeId`、`tenantId`、`mpAccount`、`yesterdayBalance`、`otherDonation`、`listDonationTotal`、`expenseAmount`、`expenses`、`dailyExpenseText`、`fixedExpenseText`、`dailyExpenseTotal`、`fixedExpenseTotal`、`fixedExpenseItems[]`、`majorExpenseItems[]`、`dailyIngredientItems[]`、`donationItems[]`、`todayBalance`、`reportText`、`receiptImages[]`、`isManualAdjust`、`systemBalance`、`adjustedBalance`、`balanceDiff`、`adjustReason`、`materials[]`、`volunteerCount`、`volunteerHours`、`diningCount`、`dineInSeniors`、`deliverySeniors`、`dineInVolunteers`、`deliveryVolunteers`、`takeawayCount`、`listeningSeniors`、`totalDineCount`、`totalVolunteers`、`stapleRiceStatus`、`stapleOilStatus`、`isAnonymous`、`eventTag`、`donationCategory`、`ocrMetadata`（`{sourceImageUrl, parsedItemCount, isAutoFilled, ocrRawText}` 或 `null`，目前无前端入口真正填充）、`updateTime`、`isSynced`、`approvalStatus`。
 
 `approvalStatus` 状态机：`'PENDING'`（新记录一律从此起步，无论提交者角色）→ `'APPROVED'` → `'AUDITED_LOCKED'`（终态，由 `manageReportApproval` 云函数由**非本人**执行审核/封账，不存在任何角色可自审自批的捷径）。
+
+🙏（2026-09-13 数字功德碑·社区普惠专区）`eventTag`（选填，自由文本，如"岁次保生大帝诞辰法会"/"大殿修缮重修乐捐"/"日常添油香"，截断至 60 字）与 `donationCategory`（选填，白名单 `'monetary'`/`'material_oil'`/`'general'`，白名单外或未提供一律归一化为 `'general'`）两个字段随 `dataService.ts saveReport()` 新增，供 `orgType: 'temple_canteen'` 场景的节庆法会批次归档与 `getSunshineLedger` 历代芳名录检索（`meritSteleEntries`/`availableEventTags`，按 `eventTag`/年份/姓名模糊检索）使用。两个字段对雨花公益食堂专区完全透明——该场景永远不传，落库值恒为空字符串/`'general'`，不影响任何既有查询/统计口径。`update` 覆盖路径（同店同日期二次提交）需要与新增路径同步维护这两个字段，否则编辑一份已有日报会静默清空当初录入的标签（`dataService.ts` 该处已同步）。
 
 ---
 

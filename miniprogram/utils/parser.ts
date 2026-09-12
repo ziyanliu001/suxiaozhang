@@ -1,3 +1,5 @@
+import { parseTempleStyleLine, MATERIAL_UNIT_PATTERN, stripDonationVerbPrefix } from './lib/parseTempleDonation';
+
 export interface DonorItem {
   name: string;
   amount: number;
@@ -53,6 +55,16 @@ function isTitleLine(line: string): boolean {
 // 这是刻意的简化（多人共享一行本就是批量粘贴场景，精细化区分需求较低）
 const LINE_ANONYMITY_MARKER_REGEX = /(?:^|\s)(匿名|匿|实名|阳善)\s*$/;
 
+// 🙏（2026-09-13 数字功德碑·宫庙添油/供灯识别）传统宫庙红榜常见"姓名 + 传统
+// 用语（+具体事项） + 金额"格式，如"李某某 添香油 500元""陈某某合家 乐捐
+// 建庙 2000"——姓名与金额之间夹着一段自由文本（用语本身，可能还带着"建庙"
+// 这类具体事项，事项文本本身无法穷举），上面 NAME_AMOUNT_REGEX 的"名字紧邻
+// 金额"假设在这类行上会把中间这段自由文本误当成姓名（"乐捐建庙"被当成姓名，
+// 真正的"陈某某合家"反而丢失，"添香油"同理吞掉"李某某"），经验证属实。
+// 识别逻辑（含关键词词库/姓名锚定/物资单位排除）拆到 lib/parseTempleDonation.js
+// （纯函数、不依赖任何 wx 全局，配套单测 lib/parseTempleDonation.test.js），
+// 与同目录 resolveEffectiveRole.js/resolveWorkspace.js 同一套既定写法。
+
 function parseLine(line: string): DonorItem[] {
   const trimmed = line.trim();
   if (!trimmed) return [];
@@ -63,6 +75,17 @@ function parseLine(line: string): DonorItem[] {
   if (markerMatch) {
     lineIsAnonymous = (markerMatch[1] === '匿名' || markerMatch[1] === '匿');
     scanTarget = trimmed.slice(0, markerMatch.index).trim();
+  }
+
+  // 🙏 宫庙传统用语优先识别：只在命中已知宫庙用语时启用（见函数头部注释），
+  // 命中即直接返回单条结果，不再落入下面的通用多人扫描——避免通用扫描把
+  // "添香油"/"乐捐建庙"这类夹在姓名与金额之间的自由文本误判成姓名本身
+  const templeItem = parseTempleStyleLine(scanTarget);
+  if (templeItem) {
+    if (lineIsAnonymous !== undefined) {
+      templeItem.isAnonymous = lineIsAnonymous;
+    }
+    return [templeItem];
   }
 
   const results: DonorItem[] = [];
@@ -140,6 +163,11 @@ export interface MaterialItem {
   unit: string;
 }
 
+// 🙏（2026-09-13 数字功德碑）宫庙实物供奉常见单位（灯盏/蜡烛/食用油体积）+
+// 供奉动词前缀剥离（"添植物油2桶"的"添"剥离后 item 为"植物油"）：与
+// parseTempleStyleLine（parseDonorText 侧识别的同一批用语）共用同一份
+// 常量/纯函数，拆到 lib/parseTempleDonation.js，见本文件顶部 import。
+
 /**
  * 解析「物资赞助明细」自由文本，例如：
  * "张三：大米50斤；李四：赞助食用油2箱"
@@ -161,11 +189,11 @@ export function parseMaterials(text: string): MaterialItem[] {
       const itemPart = match[2].trim();
 
       // 从物资描述中提取数量和单位
-      const qtyMatch = itemPart.match(/^(.+?)\s*(\d+(?:\.\d+)?)\s*(斤|公斤|kg|箱|袋|桶|瓶|份|个)?$/i);
+      const qtyMatch = itemPart.match(new RegExp(`^(.+?)\\s*(\\d+(?:\\.\\d+)?)\\s*(${MATERIAL_UNIT_PATTERN})?$`, 'i'));
       if (qtyMatch) {
         materials.push({
           donor,
-          item: qtyMatch[1].trim(),
+          item: stripDonationVerbPrefix(qtyMatch[1].trim()),
           quantity: qtyMatch[2],
           unit: qtyMatch[3] || '份'
         });
@@ -173,7 +201,7 @@ export function parseMaterials(text: string): MaterialItem[] {
         // 无法解析数量时，整段作为物资描述
         materials.push({
           donor,
-          item: itemPart,
+          item: stripDonationVerbPrefix(itemPart),
           quantity: '1',
           unit: '份'
         });
@@ -189,14 +217,14 @@ export function parseMaterials(text: string): MaterialItem[] {
       // 其余当物资描述；完全没有分隔符（如"大米50斤"或"王五苹果3箱"全部
       // 连写）时无法可靠区分姓名和物资，保留原有"匿名爱心人士"兜底，不做
       // 没有把握的猜测拼接（宁可保守，不臆造一个可能是错的姓名）
-      const simpleMatch = trimmed.match(/^(?:赞助\s*)?(.+?)\s*(\d+(?:\.\d+)?)\s*(斤|公斤|kg|箱|袋|桶|瓶|份|个)?$/i);
+      const simpleMatch = trimmed.match(new RegExp(`^(?:赞助\\s*)?(.+?)\\s*(\\d+(?:\\.\\d+)?)\\s*(${MATERIAL_UNIT_PATTERN})?$`, 'i'));
       if (simpleMatch) {
         const beforeQty = simpleMatch[1].trim();
         const spaceIdx = beforeQty.indexOf(' ');
         const hasNameSeparator = spaceIdx > 0 && spaceIdx < beforeQty.length - 1;
         materials.push({
           donor: hasNameSeparator ? beforeQty.slice(0, spaceIdx).trim() : '匿名爱心人士',
-          item: hasNameSeparator ? beforeQty.slice(spaceIdx + 1).trim() : beforeQty,
+          item: stripDonationVerbPrefix(hasNameSeparator ? beforeQty.slice(spaceIdx + 1).trim() : beforeQty),
           quantity: simpleMatch[2],
           unit: simpleMatch[3] || '份'
         });

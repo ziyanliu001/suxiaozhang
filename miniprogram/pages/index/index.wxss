@@ -8962,6 +8962,165 @@ page {
   color: #8D5B00;
 }
 
+/* 🙏（2026-09-13 数字功德碑）社区普惠专区（temple_canteen）古典视觉——
+   传统宣纸暖底色 + 沉稳赭红题头，只覆盖背景色/题头颜色两个变量，卡片本身
+   的布局/圆角/间距沿用 .sunshine-modal-card 不变，避免大范围重写既有结构 */
+.sunshine-modal-card.merit-stele-theme {
+  background: #F7EEDD;
+}
+
+.merit-stele-theme .sunshine-modal-title {
+  color: #8C1D18;
+}
+
+.merit-stele-search-card {
+  margin-top: 24rpx;
+  padding: 20rpx;
+  background: #FFFBF3;
+  border: 2rpx solid #E3C79A;
+  border-radius: 16rpx;
+}
+
+.merit-stele-search-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #8C1D18;
+  margin-bottom: 16rpx;
+}
+
+.merit-stele-search-icon {
+  font-size: 30rpx;
+}
+
+.merit-stele-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.merit-stele-input {
+  flex: 1;
+  height: 64rpx;
+  line-height: 64rpx;
+  padding: 0 16rpx;
+  font-size: 24rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #E3C79A;
+  border-radius: 10rpx;
+  box-sizing: border-box;
+}
+
+.merit-stele-year-input {
+  flex: 0 0 200rpx;
+}
+
+.merit-stele-picker-trigger {
+  flex: 1;
+  height: 64rpx;
+  line-height: 64rpx;
+  padding: 0 16rpx;
+  font-size: 24rpx;
+  color: #8C1D18;
+  background: #FFFFFF;
+  border: 1rpx solid #E3C79A;
+  border-radius: 10rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merit-stele-search-btn {
+  flex: 0 0 140rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #FFFFFF;
+  background: #8C1D18;
+  border-radius: 10rpx;
+}
+
+.merit-stele-list {
+  margin-top: 8rpx;
+  max-height: 480rpx;
+  overflow-y: auto;
+}
+
+.merit-stele-empty {
+  padding: 32rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: #ADB5BD;
+}
+
+.merit-stele-entry {
+  padding: 16rpx 0;
+  border-bottom: 1rpx dashed #E3C79A;
+}
+
+.merit-stele-entry:last-child {
+  border-bottom: none;
+}
+
+.merit-stele-entry-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
+.merit-stele-entry-name {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #5C3A21;
+}
+
+.merit-stele-entry-detail {
+  font-size: 24rpx;
+  color: #8C1D18;
+}
+
+.merit-stele-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 6rpx;
+  flex-wrap: wrap;
+}
+
+.merit-stele-entry-tag {
+  font-size: 20rpx;
+  color: #8C5A1E;
+  background: #F3E3C3;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+}
+
+.merit-stele-entry-date {
+  font-size: 20rpx;
+  color: #ADB5BD;
+}
+
+.merit-stele-entry-checksum {
+  font-size: 20rpx;
+  color: #2F9E44;
+}
+
+.merit-stele-entry-cert-btn {
+  font-size: 20rpx;
+  color: #8C1D18;
+  font-weight: bold;
+  padding: 2rpx 10rpx;
+  border: 1rpx solid #D8A868;
+  border-radius: 6rpx;
+  margin-left: auto;
+}
+
 .sunshine-modal-close {
   width: 48rpx;
   height: 48rpx;

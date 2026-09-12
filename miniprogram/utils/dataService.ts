@@ -250,6 +250,18 @@ export const DataService = {
       stapleOilStatus: reportData.stapleOilStatus || 'sufficient',
       // 🌿 了凡四训·积阴德：匿名护持标记，true 表示本条餐报所有捐款人姓名在公开展示时脱敏为"爱心善士"
       isAnonymous: !!(reportData.isAnonymous),
+      // 🙏（2026-09-13 数字功德碑·社区普惠专区）节庆法会批次标签，选填，如
+      // "岁次保生大帝诞辰法会"/"大殿修缮重修乐捐"/"日常添油香"——纯展示性
+      // 自由文本，不参与任何金额计算，未传时落空字符串，与既有字段"未提供
+      // 即默认值"口径一致，不影响任何现有雨花食堂功能（该场景永远不传这个字段）
+      eventTag: String(reportData.eventTag || '').trim().slice(0, 60),
+      // 🙏 善款/物资类型标签，选填，白名单外的值一律归一化为 'general'（通用），
+      // 不落一个未经校验的自由字符串进库——'monetary'（善款乐捐）/'material_oil'
+      // （添植物灯油等实物）/'general'（通用物资，与既有 materials 字段语义
+      // 一致）。同 eventTag，未传时对既有雨花食堂日报的语义零影响
+      donationCategory: ['monetary', 'material_oil', 'general'].includes(reportData.donationCategory)
+        ? reportData.donationCategory
+        : 'general',
       // 🆕（2026-08-31 OCR 智能记账数据结构规范）票据 OCR 元数据：目前没有任何
       // 前端入口会真正填充这个字段（尚未接入智能拍照识别），这里只是为"后续
       // 接入拍照记账自动识别小票/手写单据"预留底层协议——一旦有 OCR 解析结果，
@@ -410,6 +422,12 @@ export const DataService = {
             stapleRiceStatus: formattedData.stapleRiceStatus,
             stapleOilStatus: formattedData.stapleOilStatus,
             ocrMetadata: formattedData.ocrMetadata,
+            // 🙏（2026-09-13）同插入路径新增字段——覆盖更新（同店同日期二次提交）
+            // 时同样要带上，否则编辑一份已有日报会把当初录入的法会标签/善款类型
+            // 静默清空，这个 update() 是显式白名单、不会自动继承 formattedData 的
+            // 新字段（与本文件其余"新增字段必须两处同步"教训一致）
+            eventTag: formattedData.eventTag,
+            donationCategory: formattedData.donationCategory,
             updateTime: db.serverDate()
           }
         });

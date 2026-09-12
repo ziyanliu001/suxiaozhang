@@ -87,7 +87,12 @@ exports.main = async (event, context) => {
     // 永远卡在占位态。这枚二维码跟证书码同一个风险等级（都只是"扫码回到小程序"，
     // 不是对外招募注册管理身份），补一个 checkin_share 场景纳入同一档低风险豁免，
     // 同样限定"只能扫自己所在门店的码"
-    const isLowRiskPersonalQr = purpose === 'certificate' || purpose === 'checkin_share';
+    // 🙏（2026-09-13 数字功德碑）阳光功德碑查验码：与 certificate/checkin_share
+    // 同一档低风险豁免——它指向的数据（getSunshineLedger 已核准公示数据）本来
+    // 就对任何人无鉴权公开，这枚码只是把"扫码回到小程序自动打开阳光账本"这个
+    // 体验固化在一枚可长期展示的现场立牌上，不构成新的越权面。仍然保留"只能
+    // 生成本人所属门店"这条限制，不允许任何账号越权为其他门店印制立牌
+    const isLowRiskPersonalQr = purpose === 'certificate' || purpose === 'checkin_share' || purpose === 'merit_stele';
 
     if (isLowRiskPersonalQr) {
       if (userStoreId && userStoreId !== storeId) {
@@ -122,6 +127,19 @@ exports.main = async (event, context) => {
     // 朋友圈扫码引流识别"谁分享的"）还是裸 storeId（checkin_share 场景不需要
     // 这层引流归因，直接复用下面 else 分支的默认门店码格式即可）
     const isPersonalCertificate = purpose === 'certificate';
+    // 🙏（2026-09-13 数字功德碑）阳光功德碑查验码：复用 buildVerifyScene 已经
+    // 验证过的"32 位十六进制 _id 走 base36 压缩、其余短种子 ID 走原样"策略，
+    // 前缀改用 'stele_'——'s'/'t'/'l' 都不在十六进制字母表（0-9a-f）内，
+    // 保证不会与任何裸 32 位十六进制 storeId 邀请码（getStoreQRCode 默认分支，
+    // 见下方 else）混淆；已知的手工种子门店 ID（如 'store_haicang_001'）也不
+    // 以 'stele_' 开头，不存在与本仓库现有真实门店 ID 冲突的可能。
+    // pages/index/index.ts onLoad 侧按 'stele_' 前缀识别这类 scene，直接打开
+    // 阳光账本弹窗，不会误入 fetchStoreInfoAndPromptApply 的"申请加入门店"
+    // 邀请码解析分支（那条分支的裸 storeId/"s=storeId" 格式与这里互不相交）
+    const isMeritSteleQr = purpose === 'merit_stele';
+    function buildMeritSteleScene(id) {
+      return HEX32_PATTERN.test(id) ? `stele_${hexToBase36(id)}` : `stele_${id}`;
+    }
     const dateDigits = String(date || '').replace(/[^0-9]/g, '');
     // 🌟 证书二维码 scene 极简编码：证书场景不需要完整 storeId，只用于朋友圈扫码
     // 引流时让 app.ts 识别出"谁分享的、指向哪家门店"，两段各截取前 10 位足以
@@ -142,7 +160,9 @@ exports.main = async (event, context) => {
       ? { page: 'subpackages/admin/pages/public-verify/index', scene: buildVerifyScene(storeId, dateDigits) }
       : isPersonalCertificate
         ? { page: 'pages/index/index', scene: `u=${String(OPENID || '').substring(0, 10)}&s=${String(storeId).substring(0, 10)}` }
-        : { page: 'pages/index/index', scene: String(storeId) };
+        : isMeritSteleQr
+          ? { page: 'pages/index/index', scene: buildMeritSteleScene(storeId) }
+          : { page: 'pages/index/index', scene: String(storeId) };
 
     // 🛡️ scene 字段硬限制 32 字符（wxacode.getUnlimited API 限制）——storeId 是微信
     // 云数据库自动生成的 _id，不保证是短字符串，实际长度取决于云环境的 ID 生成规则，

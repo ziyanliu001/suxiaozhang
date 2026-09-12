@@ -2,6 +2,7 @@ import { maskName, formatDisplayName } from './core/privacy';
 import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 import { drawStaticWxacodeFallback } from './staticWxacode';
 import { computeHonorProgress, drawMedalBadge } from './honorLevels';
+import { formatMeritCertificateDetailText } from './lib/formatMeritCertificateDetail';
 
 export interface MaterialItem {
   donor: string;
@@ -132,6 +133,39 @@ export interface MeritTagPosterData {
   // 未选择任何标签时传空数组，海报仍可生成（只是标签区留白）
   tags: Array<{ label: string; emoji: string }>;
   totalDays: number;
+}
+
+// 🙏（2026-09-13 数字功德碑）《功德芳名状 · 祈福长卷》：社区普惠专区
+// （orgType: 'temple_canteen'）扫码/生成入口专属的电子凭证，与
+// SunshineFootprintPosterData（雨花斋"善行足迹卡"）同一档"存证指纹 + 验真
+// 二维码"设计，区别是内容对象是单笔具体的乐捐/供奉记录本身，而不是个人
+// 累计足迹统计。maskedDonorName/eventTag/itemDescription 均由调用方按
+// getSunshineLedger meritSteleEntries 单条记录拼好传入，本文件只负责渲染，
+// 不做任何脱敏/文案拼接决策（与本文件其余海报"调用方按真实数据拼好再
+// 传入"同一设计原则）。
+// 🛡️ 合规口径：CLAUDE.md 第7.2节"去宗教化合规基线"明确禁用"随喜"一词
+// （无论新旧功能），该基线原本是为"义工修心积善打卡"模块的自撰文案定的，
+// 但其"不确定时选更保守方向"的指导原则同样适用于本文件新增的固定模板
+// 文案——本函数自己的模板字符串统一用"乐捐"而不是"随喜"；itemDescription/
+// eventTag 是调用方从真实记账数据（用户自己录入的 eventTag/donor 原文）
+// 透传的内容，不是本文件"新增文化引用文案"，不在这条基线的清洗范围内，
+// 原样展示（如实反映用户自己的记录，不代为审查/篡改真实数据）
+export interface MeritCertificatePosterData {
+  storeName: string;
+  // 脱敏后的善信芳名，如"陈*强 合家"——调用方按 utils/privacy.ts maskName
+  // 同一套规则处理过，本文件不重复脱敏逻辑
+  maskedDonorName: string;
+  // 法会/事项标签，如"岁次保生大帝巡安法会"，可为空（未标注批次的日常记录）
+  eventTag: string;
+  // 善款金额，0 表示本条是实物供奉（此时展示 itemDescription 而不是金额）
+  amount: number;
+  // 实物供奉描述，如"添植物油2桶"；善款记录（amount>0）时可为空
+  itemDescription: string;
+  dateString: string;
+  // 16 位数字存证防伪指纹，与 getSunshineLedger generateFootprintCode/
+  // checksumSample 同一档"人工可核对但非加密学签名"的设计定位
+  verificationCode: string;
+  qrLocalPath?: string;
 }
 
 const BG_COLOR = '#FAF7F2';
@@ -1893,6 +1927,174 @@ export async function drawSunshineFootprintPoster(pageInstance: any, data: Sunsh
             await drawVerifyQRArea(ctx, canvas, qrX, qrY, FOOTPRINT_QR_SIZE, '公开透明 · 全民监督', width, data.qrLocalPath, '扫码查验阳光台账');
 
             ctx.restore(); // 对应开头的圆角裁剪 save/clip
+
+            wx.canvasToTempFilePath({
+              canvas,
+              x: 0,
+              y: 0,
+              width: width * dpr,
+              height: height * dpr,
+              destWidth: width * dpr,
+              destHeight: height * dpr,
+              fileType: 'png',
+              quality: 1,
+              success: (tempRes) => resolve(tempRes.tempFilePath),
+              fail: (err: any) => reject(new Error('Canvas 转图片失败: ' + err.errMsg))
+            });
+          } catch (drawErr) {
+            reject(drawErr);
+          }
+        })();
+      });
+  });
+}
+
+// 🙏（2026-09-13 数字功德碑）《功德芳名状 · 祈福长卷》Canvas 绘制——传统
+// 宣纸暖底色（#F7EEDD）+ 沉稳赭红题头（#8C1D18）+ 古风回纹边框，与
+// drawSunshineFootprintPoster 同一套"圆角裁剪 → 渐变底 → 文字/线条 →
+// 底部验真二维码 → canvasToTempFilePath"骨架，只是配色/内容对象不同
+const MERIT_CERT_CANVAS_WIDTH = 375;
+const MERIT_CERT_CANVAS_HEIGHT = 560;
+const MERIT_CERT_CARD_RADIUS = 20;
+const MERIT_CERT_BG_TOP = '#F7EEDD';
+const MERIT_CERT_BG_BOTTOM = '#EFE1C4';
+const MERIT_CERT_PRIMARY_COLOR = '#8C1D18';
+const MERIT_CERT_TEXT_COLOR = '#5C3A21';
+const MERIT_CERT_LIGHT_TEXT = '#9C8360';
+const MERIT_CERT_BORDER_COLOR = '#D8A868';
+const MERIT_CERT_QR_SIZE = 64;
+
+// 古风回纹边框：与 drawEleganceBookBorder（宋代功过格海报的双线+四角饰角）
+// 是同一档"古籍装帧"视觉语言的独立实现——这里改用连续的方形回纹片段
+// （传统"回"字纹样的简化版，用短横短竖折线拼接，不引入图片资源），沿卡片
+// 内侧四边循环铺开，呼应"祈福长卷"这个更强调"卷轴/织锦边饰"的产品定位，
+// 与功过格海报"书页边栏"的定位不同，因此不直接复用 drawEleganceBookBorder
+function drawMeritCertBorder(ctx: any, width: number, height: number, radius: number): void {
+  const inset = 12;
+  const unit = 10;
+
+  ctx.save();
+  ctx.strokeStyle = MERIT_CERT_BORDER_COLOR;
+  ctx.globalAlpha = 0.6;
+  ctx.lineWidth = 1.5;
+  drawRoundedRectPath(ctx, inset, inset, width - inset * 2, height - inset * 2, Math.max(radius - inset, 4));
+  ctx.stroke();
+
+  // 回纹片段：沿上下两条边各铺一排简化回字纹（左右边距过窄，只在上下边
+  // 铺设，四角另画一个小方框收口，视觉上仍是"四边有装饰"的完整边框）
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1;
+  const drawFretSegment = (cx: number, cy: number) => {
+    ctx.strokeRect(cx - unit / 2, cy - unit / 2, unit, unit);
+    ctx.strokeRect(cx - unit / 4, cy - unit / 4, unit / 2, unit / 2);
+  };
+  const topY = inset + 8;
+  const bottomY = height - inset - 8;
+  const segStart = inset + 28;
+  const segEnd = width - inset - 28;
+  for (let x = segStart; x <= segEnd; x += unit * 1.8) {
+    drawFretSegment(x, topY);
+    drawFretSegment(x, bottomY);
+  }
+  ctx.restore();
+}
+
+export async function drawMeritCertificatePoster(pageInstance: any, data: MeritCertificatePosterData): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const query = wx.createSelectorQuery().in(pageInstance);
+    query.select('#posterCanvas')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res || !res[0] || !res[0].node) {
+          return reject(new Error('未找到 id="posterCanvas" 节点，请检查 wxml 是否存在且非 wx:if 渲染'));
+        }
+
+        const canvas = res[0].node;
+        const ctx = canvas.getContext('2d');
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
+
+        const width = MERIT_CERT_CANVAS_WIDTH;
+        const height = MERIT_CERT_CANVAS_HEIGHT;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+
+        (async () => {
+          try {
+            ctx.save();
+            drawRoundedRectPath(ctx, 0, 0, width, height, MERIT_CERT_CARD_RADIUS);
+            ctx.clip();
+
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+            bgGradient.addColorStop(0, MERIT_CERT_BG_TOP);
+            bgGradient.addColorStop(1, MERIT_CERT_BG_BOTTOM);
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            drawMeritCertBorder(ctx, width, height, MERIT_CERT_CARD_RADIUS);
+
+            // 题头：固定文案"🌱 善德永流芳 · 功德芳名状"，不随门店/事项变化
+            ctx.fillStyle = MERIT_CERT_PRIMARY_COLOR;
+            ctx.font = 'bold 22px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🌱 善德永流芳', width / 2, 60);
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText('功德芳名状', width / 2, 90);
+
+            ctx.strokeStyle = MERIT_CERT_BORDER_COLOR;
+            ctx.globalAlpha = 0.6;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(width / 2 - 60, 104);
+            ctx.lineTo(width / 2 + 60, 104);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // 善信芳名：全篇视觉焦点，字号最大
+            ctx.fillStyle = MERIT_CERT_TEXT_COLOR;
+            ctx.font = 'bold 30px "Songti SC", "SimSun", serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(truncateText(ctx, data.maskedDonorName || '爱心善士', width - 60), width / 2, 150);
+
+            // 乐捐事项：法会标签 + 金额/物资描述拼成一行，拼接规则拆到
+            // lib/formatMeritCertificateDetail.js（纯函数，配套单测覆盖
+            // 金额/物资/标签留空等边界情况，同时锁定"不出现'随喜'"这条
+            // 合规底线——见该文件与 MeritCertificatePosterData 接口注释）
+            const detailText = formatMeritCertificateDetailText(data);
+            ctx.fillStyle = MERIT_CERT_PRIMARY_COLOR;
+            ctx.font = '16px sans-serif';
+            ctx.fillText(truncateText(ctx, detailText, width - 50), width / 2, 190);
+
+            // 宫庙/寺院名称 + 结缘日期
+            ctx.fillStyle = MERIT_CERT_LIGHT_TEXT;
+            ctx.font = '14px sans-serif';
+            ctx.fillText(truncateText(ctx, data.storeName || '', width - 60), width / 2, 222);
+            ctx.fillText(data.dateString || '', width / 2, 244);
+
+            // 祈福长卷金句衬底：与 drawQuoteScrollBackdrop 同款卷轴纸条视觉，
+            // 固定文案，手工断行
+            const scrollCenterY = 300;
+            drawQuoteScrollBackdrop(ctx, width / 2, scrollCenterY, width - 80, 60);
+            ctx.fillStyle = MERIT_CERT_TEXT_COLOR;
+            ctx.font = 'italic 13px "Songti SC", "SimSun", serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('「命由我作，福自己求」', width / 2, scrollCenterY - 6);
+            ctx.fillText('了凡四训 · 阳善积德', width / 2, scrollCenterY + 16);
+
+            // 存证信标：16 位数字存证防伪指纹
+            const provenanceY = scrollCenterY + 60;
+            ctx.fillStyle = MERIT_CERT_LIGHT_TEXT;
+            ctx.font = '11px monospace';
+            ctx.fillText(`存证指纹 ${data.verificationCode || '——'}`, width / 2, provenanceY);
+
+            // 底部验真二维码：复用与 drawSunshineFootprintPoster 完全同一个
+            // drawVerifyQRArea 辅助函数（真实二维码 → 静态小程序码兜底 →
+            // 占位菊花码三级降级，见该函数定义），不重复实现
+            const qrY = height - MERIT_CERT_QR_SIZE - 44 - 16;
+            const qrX = (width - MERIT_CERT_QR_SIZE) / 2;
+            await drawVerifyQRArea(ctx, canvas, qrX, qrY, MERIT_CERT_QR_SIZE, '金石存证 · 公开透明', width, data.qrLocalPath, '扫码查验数字功德碑');
+
+            ctx.restore();
 
             wx.canvasToTempFilePath({
               canvas,

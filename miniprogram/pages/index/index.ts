@@ -2,7 +2,7 @@ import { DataService, formatMoney, getLocalReports } from '../../utils/dataServi
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
-import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawSongDynastyMeritPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
+import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawSongDynastyMeritPoster, drawMeritCertificatePoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
@@ -457,6 +457,24 @@ function isNonRetryableSaveError(errorDetail: string | undefined): boolean {
   return !!errorDetail && NON_RETRYABLE_SAVE_ERROR_DETAILS.includes(errorDetail);
 }
 
+// 🙏（2026-09-13 数字功德碑·阳光功德碑查验码）与
+// subpackages/admin/pages/public-verify/index.ts 的同名私有函数是同一份纯
+// 逻辑的独立拷贝（云函数/小程序页面之间、以及不同页面之间都没有共享模块
+// 机制，本仓库已有多处同类镜像，如 resolveCaller.js），与
+// cloudfunctions/getStoreQRCode buildMeritSteleScene() 的 hexToBase36() 互为
+// 逆运算——BigInt 保证 128 位整数精度不丢失，纯字符串 parseInt 做不到
+// （Number 只有 53 位安全整数精度）
+function base36ToHexStoreId(b36Str: string): string {
+  let n = BigInt(0);
+  const base = BigInt(36);
+  for (const ch of b36Str) {
+    const digit = parseInt(ch, 36);
+    if (isNaN(digit)) return '';
+    n = n * base + BigInt(digit);
+  }
+  return n.toString(16).padStart(32, '0');
+}
+
 // ☀️ 阳光账本理念弹窗文案：按门店真实 orgType（getSunshineLedger 返回，来自
 // stores.orgType 字段本身，不是靠 tenantId 前缀猜的那套粗粒度信号）区分——
 // 雨花斋展示雨花精神，助老食堂展示助老理念，其余机构类型（义工服务站/救援队/
@@ -717,6 +735,16 @@ Page({
     // 渲染，避免 8 个统计格子手写重复结构；value 统一存字符串（账本公开率是
     // "100%"/"暂无数据"这类文本，与其余数字指标共用同一套渲染逻辑更简单）
     sunshineStatCards: [] as { label: string; value: string }[],
+    // 🙏（2026-09-13 数字功德碑）社区普惠专区（temple_canteen）专属：古典
+    // 视觉切换开关 + 历代芳名录三个可选检索条件（均为空字符串表示不筛选，
+    // 见 fetchSunshineLedgerData/getSunshineLedger 对应的透传与计算逻辑）+
+    // 检索结果与可选事项标签列表
+    isTempleCanteenLedger: false,
+    meritSteleYear: '' as string,
+    meritSteleEventTag: '' as string,
+    meritSteleNameQuery: '' as string,
+    meritSteleEntries: [] as Array<{ name: string; amount: number; item: string; eventTag: string; dateString: string; checksumSample: string; hasChecksum: boolean; verificationCode: string }>,
+    availableEventTags: [] as string[],
     // 🆕 理念弹窗文案：按 getSunshineLedger 返回的真实门店 orgType 计算（见
     // computeConceptCopy），不再是 WXML 里硬编码的雨花斋专属文案 + 兜底二选一
     conceptTitle: '☀️ 阳光账本与爱心宣言',
@@ -1452,6 +1480,26 @@ Page({
     // scene 解析保持同一种写法
     if (options && options.scene) {
       const sceneStr = decodeURIComponent(options.scene);
+
+      // 🙏（2026-09-13 数字功德碑·阳光功德碑查验码）'stele_' 前缀是
+      // cloudfunctions/getStoreQRCode buildMeritSteleScene() 专用的、不可能
+      // 与裸 32 位十六进制 storeId 邀请码混淆的标记（见该云函数头部注释）——
+      // 必须在下面"裸 storeId/s=storeId"两种邀请码格式判断之前拦截，否则会
+      // 被 indexOf('=')===-1 分支误当成一个（查无此店的）storeId 字面量，
+      // 走进"申请加入门店"弹窗而不是打开阳光账本。命中即直接 return，不再
+      // 往下走邀请码解析这条完全独立的路径
+      if (sceneStr.indexOf('stele_') === 0) {
+        const payload = sceneStr.slice('stele_'.length);
+        // base36 压缩格式只可能是 [0-9a-z] 且不含下划线；手工短种子门店 ID
+        // 原样透传时可能带下划线（如 'store_haicang_001'），按有没有下划线
+        // 区分两种编码，与 buildVerifyScene/resolveTarget 同一套判断口径
+        const decodedStoreId = (payload && !/_/.test(payload)) ? base36ToHexStoreId(payload) : payload;
+        if (decodedStoreId) {
+          this.openMeritSteleFromScene(decodedStoreId);
+        }
+        return;
+      }
+
       let storeId = '';
 
       if (sceneStr.indexOf('=') === -1) {
@@ -10621,7 +10669,17 @@ Page({
   // ☀️ 阳光账本：全角色/无登录门槛可查看，数据来自 getSunshineLedger 云函数
   // （不做任何 user_roles/OPENID 权限校验，与扫码验真 publicVerifyReport 同一套
   // 设计哲学——只接受调用方明确指定的当前门店 storeId，不支持跨店/全部门店聚合）
-  async onOpenSunshineLedger() {
+  // 🙏（2026-09-13 数字功德碑·阳光功德碑查验码）overrideStoreId：扫描
+  // "阳光功德碑查验码"（openMeritSteleFromScene）时显式传入目标门店，与
+  // 页面当前登录账号所在门店无关——不写进 this.data（挂载在页面实例 this
+  // 上，属于"与视图渲染无关的临时变量"，遵循 CLAUDE.md 第3节 setData 铁律），
+  // 直到用户主动关闭弹窗（onCloseSunshineLedgerModal）才清空，确保切月份
+  // （shiftSunshineLedgerMonth）等后续操作仍然指向同一家扫码进入的门店，
+  // 不会中途悄悄切回账号自己所在的门店
+  async onOpenSunshineLedger(overrideStoreId?: string) {
+    if (overrideStoreId) {
+      this._sunshineLedgerStoreIdOverride = overrideStoreId;
+    }
     const now = new Date();
     const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -10634,6 +10692,15 @@ Page({
     });
 
     await this.fetchSunshineLedgerData(currentYearMonth);
+  },
+
+  // 🙏（2026-09-13 数字功德碑）扫描"阳光功德碑查验码"落地首页时的入口——
+  // 与 fetchStoreInfoAndPromptApply（普通邀请码，弹"申请加入门店"）是两条
+  // 完全独立的路径，互不影响；这里直接打开阳光账本，不弹任何申请/登录门槛，
+  // 与该弹窗本身"全角色/无登录门槛可查看"的既有设计保持一致
+  async openMeritSteleFromScene(storeId: string) {
+    if (!storeId) return;
+    await this.onOpenSunshineLedger(storeId);
   },
 
   // ☀️ 阳光账本月份切换器：‹ 2026年07月 › 左右箭头，重新拉取 getSunshineLedger。
@@ -10675,7 +10742,7 @@ Page({
   async fetchSunshineLedgerData(yearMonth: string) {
     this.setData({ sunshineLedgerLoading: true });
 
-    const storeId = this.data.currentStoreId;
+    const storeId = this._sunshineLedgerStoreIdOverride || this.data.currentStoreId;
     if (!storeId) {
       wx.showToast({ title: '请先选择门店', icon: 'none' });
       this.setData({ showSunshineLedgerModal: false, sunshineLedgerLoading: false });
@@ -10686,9 +10753,21 @@ Page({
       // 🐛 getSunshineLedger 云函数已补上 timeout:20（此前没配置字段走平台
       // 默认 3s，是"调用超时"的真实根因），客户端等待上限同步提到 25000ms，
       // 两边超时预算对齐，与 yangshan-wall/sunshine-board 同一处修复
+      // 🙏（2026-09-13 数字功德碑·历代芳名录检索）meritSteleYear/EventTag/
+      // NameQuery 三个筛选字段随任何一次刷新一并带上——非社区普惠专区门店
+      // 这三个字段恒为空字符串，服务端 getSunshineLedger 只在
+      // orgType==='temple_canteen' 或至少一个字段非空时才计算
+      // meritSteleEntries（见该云函数头部注释），不会给雨花斋等场景增加
+      // 无意义的开销，也不需要为"温泉宫庙才传这三个参数"单独分叉一次调用
       const res: any = await callFunctionWithTimeout({
         name: 'getSunshineLedger',
-        data: { storeId, yearMonth }
+        data: {
+          storeId,
+          yearMonth,
+          donorYear: this.data.meritSteleYear || '',
+          eventTag: this.data.meritSteleEventTag || '',
+          donorNameQuery: this.data.meritSteleNameQuery || ''
+        }
       }, 25000);
       const result = res.result;
       if (!result || !result.success) {
@@ -10746,7 +10825,14 @@ Page({
           { label: '已核销餐报篇数', value: String(ledgerData.auditedReportsCount) },
           { label: '安全营运天数', value: String(ledgerData.operatingDays) },
           { label: '账本公开率', value: ledgerData.ledgerPublicRate || '暂无数据' }
-        ]
+        ],
+        // 🙏（2026-09-13 数字功德碑）社区普惠专区（temple_canteen）专属视觉与
+        // 历代芳名录检索——isTempleCanteenLedger 只驱动 wxml 的展示态/样式类，
+        // 不影响任何数据计算；meritSteleEntries/availableEventTags 是云函数
+        // 按当次筛选条件算好的结果，直接落地展示，不在客户端二次过滤
+        isTempleCanteenLedger: isTempleCanteen,
+        meritSteleEntries: result.meritSteleEntries || [],
+        availableEventTags: result.availableEventTags || []
       });
     } catch (err) {
       console.error('[fetchSunshineLedgerData] 加载阳光账本异常:', err);
@@ -10864,7 +10950,110 @@ Page({
   },
 
   onCloseSunshineLedgerModal() {
-    this.setData({ showSunshineLedgerModal: false });
+    // 🙏 清空扫码巡礼覆盖——避免下一次账号自己正常点开"阳光账本"入口时，
+    // 还残留着上一次扫别的门店立牌时设置的 override
+    this._sunshineLedgerStoreIdOverride = '';
+    // 🙏 同时清空历代芳名录检索条件——下次打开（无论是本店还是扫别的门店）
+    // 都应该从"未筛选"这个干净状态开始，不带着上一次的年份/事项/姓名残留
+    this.setData({
+      showSunshineLedgerModal: false,
+      meritSteleYear: '',
+      meritSteleEventTag: '',
+      meritSteleNameQuery: ''
+    });
+  },
+
+  // 🙏（2026-09-13 数字功德碑·历代芳名录检索）年份文本框输入——刻意用
+  // <input type="number"> 而不是年份 picker：宫庙历史记录可能横跨几十年，
+  // picker 选项列表要么硬编码一个武断的年份范围，要么额外发一次查询去算
+  // "本店最早一条记录是哪年"，两者都不如直接让用户手输更简单可靠
+  onMeritSteleYearInput(e: any) {
+    this.setData({ meritSteleYear: e.detail.value });
+  },
+
+  // 事项标签 picker：range 直接用服务端上一次返回的 availableEventTags
+  // （当次已加载数据里出现过的标签去重列表），索引 0 固定是"全部事项"
+  onMeritSteleEventTagChange(e: any) {
+    const idx = Number(e.detail.value);
+    const options = ['', ...this.data.availableEventTags];
+    this.setData({ meritSteleEventTag: options[idx] || '' });
+  },
+
+  onMeritSteleNameInput(e: any) {
+    this.setData({ meritSteleNameQuery: e.detail.value });
+  },
+
+  // 🔍 触发检索：复用 fetchSunshineLedgerData 整条既有链路（连带刷新聚合
+  // 统计数据），不单独另起一个只查 meritSteleEntries 的精简接口——一次
+  // 请求换取"筛选条件 + 统计大盘"两份都最新的数据，getSunshineLedger 本身
+  // 已经是同一次查询里的 records 数据源算出来的，没有额外开销
+  onSearchMeritStele() {
+    this.fetchSunshineLedgerData(this.data.selectedYearMonth);
+  },
+
+  // 🙏（2026-09-13 数字功德碑）《功德芳名状 · 祈福长卷》——为检索结果里
+  // 某一条具体的芳名记录生成电子凭证海报。完全复用既有"善行卡"
+  // （onGenerateFootprintCard）的预览/保存/分享基础设施（showMeritPosterModal/
+  // meritPosterTempPath/meritPosterModalTitle），不重新搭一套弹窗；验真
+  // 二维码复用新增的 merit_stele 巡礼查验码（见 cloudfunctions/getStoreQRCode
+  // buildMeritSteleScene 头部注释），比善行卡沿用的 checkin_share（指向裸
+  // 首页）更贴题——扫这张长卷底部的码能直接秒开这家门店的阳光账本
+  async onGenerateMeritCertificate(e: any) {
+    const idx = Number(e.currentTarget.dataset.index);
+    const entry = this.data.meritSteleEntries[idx];
+    if (!entry) return;
+    if (this.data.meritPosterLoading) return;
+
+    wx.showLoading({ title: '正在恭绘祈福长卷...', mask: true });
+    this.setData({ meritPosterLoading: true });
+
+    try {
+      const qrLocalPath = await this.resolveMeritSteleQrLocalPath();
+      const tempPath = await drawMeritCertificatePoster(this, {
+        storeName: this.data.sunshineLedgerData.storeName || this.data.currentStoreName || '本门店',
+        maskedDonorName: entry.name || '爱心善士',
+        eventTag: entry.eventTag || '',
+        amount: entry.amount || 0,
+        itemDescription: entry.item || '',
+        dateString: entry.dateString || '',
+        verificationCode: entry.verificationCode || '',
+        qrLocalPath
+      });
+      wx.hideLoading();
+      this.setData({ meritPosterTempPath: tempPath, meritPosterModalTitle: '🌱 功德芳名状', showMeritPosterModal: true });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onGenerateMeritCertificate] 功德芳名状生成失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
+      wx.showToast({ title: '生成失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ meritPosterLoading: false });
+    }
+  },
+
+  // 与 resolveFootprintQrLocalPath 同一套单次尝试、失败即返回空字符串的
+  // 降级策略（drawVerifyQRArea 内部会接力降级为静态小程序码/占位菊花码，
+  // 不阻断整张海报生成），唯一区别是 purpose 传 'merit_stele' 而不是
+  // 'checkin_share'
+  async resolveMeritSteleQrLocalPath(): Promise<string> {
+    if (!isCloudAvailable()) return '';
+    const storeId = this.data.currentStoreId || '';
+    const storeName = this.data.currentStoreName || this.data.shopName || '';
+    if (!storeId) return '';
+
+    try {
+      const qrRes = await callFunctionWithTimeout({
+        name: 'getStoreQRCode',
+        data: { storeId, storeName, purpose: 'merit_stele' }
+      });
+      const qrResult = qrRes.result as any;
+      if (!qrResult || !qrResult.success || !qrResult.fileID) return '';
+      const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+      return (downRes && downRes.tempFilePath) || '';
+    } catch (err) {
+      console.warn('[resolveMeritSteleQrLocalPath] 功德芳名状二维码生成失败，将降级为静态码:', err);
+      return '';
+    }
   },
 
   onThankTextInput(e: any) {

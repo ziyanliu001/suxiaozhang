@@ -19,6 +19,9 @@ const crypto = require('crypto');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
+// 🙏（2026-09-13 数字功德碑）历代芳名录检索的筛选谓词拆到 lib/meritSteleFilters.js
+// （纯函数，配套单测见同目录 *.test.js），这里只负责把参数喂给它
+const { matchesEventTagFilter, matchesYearFilter, matchesNameQuery, normalizeYearFilter } = require('./lib/meritSteleFilters');
 
 // 🛡️ 单次查询上限：本店按日累计的审核通过记录，理论上限是"运营天数"，2000 条约等于
 // 5.4 年的每日记录；超过这个规模的门店（存续更久）累计类指标会低估，但公开只读接口
@@ -138,7 +141,14 @@ function formatRelativeTime(createTime) {
 }
 
 exports.main = async (event) => {
-  const { storeId, yearMonth } = event;
+  // 🙏（2026-09-13 数字功德碑·历代芳名录检索）eventTag/donorYear 仅在社区
+  // 普惠专区（orgType: 'temple_canteen'）场景下由前端传入，用于"按年份/
+  // 法会事项筛选 + 按姓名模糊检索"——两者都是可选参数，不传时行为与升级前
+  // 完全一致（不影响雨花斋等其余场景现有调用）。donorYear 与 yearMonth 是
+  // 两个独立维度：yearMonth 控制上面既有的"当月/历史月聚合统计"这条既有
+  // 链路，donorYear 只控制下面新增的 meritSteleEntries 按年筛选，二者互不
+  // 影响，一次调用可以同时按当月看统计、按历史某一年检索芳名录
+  const { storeId, yearMonth, eventTag, donorNameQuery, donorYear } = event;
 
   if (!storeId || !String(storeId).trim()) {
     return { success: false, error: '缺少门店标识，无法查询' };
@@ -690,6 +700,94 @@ exports.main = async (event) => {
       console.warn('[getSunshineLedger] 个人爱心足迹计算失败（不影响主流程）:', err);
     }
 
+    // 🙏（2026-09-13 数字功德碑·历代芳名录检索）只在社区普惠专区
+    // （orgType==='temple_canteen'）或调用方明确传了检索参数时才计算——
+    // 避免给雨花斋等其余场景的默认调用增加无意义的开销。availableEventTags
+    // 供前端筛选器渲染选项列表（本店全部历史记录里出现过的法会/事项标签，
+    // 按最先出现于 records 数组的顺序去重，records 本身已按 dateString
+    // desc 排序，因此这份列表天然是"最近使用过的标签在前"）；
+    // meritSteleEntries 是按 donorYear/eventTag/donorNameQuery 三个可选
+    // 条件过滤后的具体芳名条目，均未提供时返回本店全部历史（仍受
+    // QUERY_LIMIT=2000 这条既有上限约束——与本函数其余聚合指标同一份
+    // records 数据源，只是重新过滤展示形态，不产生额外数据库查询）。
+    // 🛡️ checksumSample 只截取 _checksum 的前 8 位大写十六进制，作为"金石
+    // 存证"公信力徽标的展示锚点（证明这条记录确实由 stampReportChecksum
+    // 服务端签过名，不是给公众逐位核对用的完整校验码），与
+    // getSunshineLedger 个人足迹 generateFootprintCode 同一档"人工可核对
+    // 但不是加密学不可伪造签名"的设计定位
+    let meritSteleEntries = [];
+    let availableEventTags = [];
+    if (orgType === 'temple_canteen' || eventTag || donorNameQuery || donorYear) {
+      const eventTagOrder = [];
+      const eventTagSeen = new Set();
+      const nameQuery = String(donorNameQuery || '').trim();
+      const yearFilter = normalizeYearFilter(donorYear);
+      const tagFilter = String(eventTag || '').trim();
+      const MERIT_STELE_ENTRY_CAP = 200;
+
+      records.forEach((r) => {
+        const recordTag = String(r.eventTag || '').trim();
+        if (recordTag && !eventTagSeen.has(recordTag)) {
+          eventTagSeen.add(recordTag);
+          eventTagOrder.push(recordTag);
+        }
+
+        if (!matchesEventTagFilter(recordTag, tagFilter)) return;
+        if (!matchesYearFilter(r.dateString, yearFilter)) return;
+
+        const checksumSample = r._checksum ? String(r._checksum).slice(0, 8).toUpperCase() : '';
+        const donationItems = Array.isArray(r.donationItems) ? r.donationItems : [];
+        donationItems.forEach((item) => {
+          if (!item || !item.name) return;
+          if (!matchesNameQuery(item.name, nameQuery)) return;
+          if (meritSteleEntries.length >= MERIT_STELE_ENTRY_CAP) return;
+          const maskedName = formatDonorDisplayName(item.name, resolveItemAnonymous(item, r.isAnonymous));
+          const amount = parseFloat(item.amount) || 0;
+          meritSteleEntries.push({
+            name: maskedName,
+            amount,
+            item: '',
+            eventTag: recordTag,
+            dateString: r.dateString || '',
+            checksumSample,
+            hasChecksum: !!r._checksum,
+            // 🙏（2026-09-13 数字功德碑·功德芳名状凭证）与 personalFootprint
+            // 的 generateFootprintCode 同一份函数、同一档设计定位（人工可核对
+            // 但非加密学签名）——供前端"生成祈福长卷"海报时展示的 16 位存证
+            // 指纹，按这一条具体记录（而非个人累计足迹）算出，同一条记录
+            // 每次重新计算结果不变（不含随机量/时间戳）
+            verificationCode: generateFootprintCode({ storeId, maskedName, amount, item: '', dateString: r.dateString || '' })
+          });
+        });
+
+        // 🛡️ 实物供奉（如添植物油）没有金额概念，amount 展示为 0，item 携带
+        // 完整的"品名+数量+单位"文案（与 latestDonorsMonthly 的 deedText
+        // 拼接口径一致），前端据此区分善款条目 vs 实物条目（amount>0 或
+        // item 非空二选一，不会同时都有值）
+        const materials = Array.isArray(r.materials) ? r.materials : [];
+        materials.forEach((m) => {
+          if (!m || !m.donor || !m.item) return;
+          if (!matchesNameQuery(m.donor, nameQuery)) return;
+          if (meritSteleEntries.length >= MERIT_STELE_ENTRY_CAP) return;
+          const maskedName = formatDonorDisplayName(m.donor, !!r.isAnonymous);
+          const itemDesc = `${m.item}${m.quantity || ''}${m.unit || ''}`;
+          meritSteleEntries.push({
+            name: maskedName,
+            amount: 0,
+            item: itemDesc,
+            eventTag: recordTag,
+            dateString: r.dateString || '',
+            checksumSample,
+            hasChecksum: !!r._checksum,
+            verificationCode: generateFootprintCode({ storeId, maskedName, amount: 0, item: itemDesc, dateString: r.dateString || '' })
+          });
+        });
+      });
+
+      meritSteleEntries.sort((a, b) => (b.dateString || '').localeCompare(a.dateString || ''));
+      availableEventTags = eventTagOrder;
+    }
+
     return {
       success: true,
       storeId,
@@ -718,7 +816,12 @@ exports.main = async (event) => {
       latestDonorsWeekly,
       latestDonorsThreeDay,
       latestDonorsMonthly,
-      personalFootprint
+      personalFootprint,
+      // 🙏 数字功德碑·历代芳名录检索（详见上方计算处注释），未命中触发条件
+      // 时均为空数组，向下兼容——既有消费方（首页/统计页阳光账本弹窗）
+      // 不读取这两个新字段，忽略即可，不影响任何现有行为
+      meritSteleEntries,
+      availableEventTags
     };
   } catch (err) {
     console.error('[getSunshineLedger] 查询异常:', err);
