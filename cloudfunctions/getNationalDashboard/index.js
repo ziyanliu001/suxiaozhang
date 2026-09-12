@@ -8,6 +8,7 @@ const {
   isFullyCoveredBySnapshots,
   sumAcrossStores
 } = require('./lib/hybridDashboardAggregation');
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -23,11 +24,33 @@ const LEGACY_TENANT_ID = 'yuhuazhai_national';
 // 🛡️ 租户感知查询条件构建器：
 //   - 原始账套（yuhuazhai_national）：多租户改造前的历史记录可能无 tenantId 字段，
 //     查询时兼容"tenantId 存在且匹配"与"tenantId 字段不存在"两种情况，避免历史数据丢失。
-//   - 新机构账套：严格等值匹配，绝不返回其他机构（包括雨花斋历史遗留）数据，
-//     100% 隔离，防止跨租户数据污染。
-function makeTenantFilter(tenantId) {
+//   - 新机构账套：严格等值匹配 + storeId 兜底（见下方 tenantStoreIds 参数），
+//     不会像 yuhuazhai_national 那样无条件放行任何 tenantId 缺失的记录。
+//
+// 🐛 根因修复（2026-09-13 老门店历史流水零聚合）："缺 tenantId 的旧数据"
+// 不是只有 yuhuazhai_national 这一个历史账套才有的问题——任何在"report_logs
+// 补齐 tenantId 字段"这次迁移之前就已存在的合法门店，都可能留着一批没有
+// tenantId 的历史流水。真实复现：一个正常的旗舰版机构，7-8 月的餐报因为
+// 缺 tenantId 被严格等值匹配整批漏掉，覆盖门店数正常（来自 stores 集合，
+// 该字段一直可靠）但人次/支出全 0（来自 report_logs 严格过滤）。
+// 不能像 yuhuazhai_national 那样直接用"tenantId 不存在"兜底匹配所有机构——
+// 那样会把所有机构的历史无主记录一股脑塞进任何一个机构的大屏，是新的跨
+// 租户泄露。改为要求"tenantId 不存在"的同时 storeId 必须落在本机构自己的
+// 门店清单（tenantStoreIds，调用方传入，来自本次请求已经查过的 stores
+// 集合，与本机构 100% 对应）里，才认领这条历史记录——storeId 是全局唯一
+// 的 Mongo _id（本仓库多处 resolveCaller 类逻辑的一贯假设），只会属于一个
+// 机构，这个约束足以保证安全，不会误吞其他机构的历史数据。
+// tenantStoreIds 为可选参数——不传（如查询 stores 集合本身时，此时还没有
+// 现成的门店清单可用）时退回严格等值匹配，行为与升级前完全一致。
+function makeTenantFilter(tenantId, tenantStoreIds) {
   if (tenantId === LEGACY_TENANT_ID) {
     return _.or([{ tenantId }, { tenantId: _.exists(false) }]);
+  }
+  if (Array.isArray(tenantStoreIds) && tenantStoreIds.length > 0) {
+    return _.or([
+      { tenantId },
+      _.and([{ tenantId: _.exists(false) }, { storeId: _.in(tenantStoreIds) }])
+    ]);
   }
   return { tenantId };
 }
@@ -322,8 +345,23 @@ exports.main = async (event, context) => {
     let userRole = 'volunteer';
     let tenantId = '';
     if (roleRes.data && roleRes.data.length > 0) {
-      userRole = roleRes.data[0].role || 'volunteer';
-      tenantId = roleRes.data[0].tenantId || '';
+      // 🐛 根因修复（2026-09-13 漫游大家长访问全国大屏被拒）：此前直接采信
+      // roleRes.data[0] 的原始 role/tenantId，完全不认 authorizedTenants
+      // 漫游授权——与本仓库 getPatriarchDashboard/manageStoreProfile/
+      // manageReportApproval/manageDailyMenu/manageVolunteerSubmission 等
+      // 云函数早就接入的 resolveCaller 模式脱节，是全仓库里少数几个还没补齐
+      // 这层的云函数之一。真实复现：调用者自己持久化的角色是 store_manager/
+      // finance 等不在下方 ALLOWED_ROLES 白名单里的角色，但通过 authorizedTenants
+      // 被授予了目标门店的 store_patriarch 身份（个人中心据此正确显示"大家长"，
+      // 走的是客户端 resolveEffectiveRole() 那套同样识别 authorizedTenants 的
+      // 逻辑），本函数却只看原始持久化角色，直接拒绝，报"无权限访问本机构
+      // 数据大屏"——这与前端显示的身份完全脱节。resolveEffectiveCaller() 是
+      // 纯函数（见 lib/resolveCaller.js 头部注释），命中 event.storeId 对应的
+      // 有效漫游授权时才会覆盖 role/tenantId，未命中时原样返回 own，对所有
+      // 现有直接持有真实身份的调用者（绝大多数场景）行为完全不变
+      const effectiveCaller = resolveEffectiveCaller(roleRes.data[0], event && event.storeId, Date.now());
+      userRole = (effectiveCaller && effectiveCaller.role) || 'volunteer';
+      tenantId = (effectiveCaller && effectiveCaller.tenantId) || '';
     } else {
       const userRes = await db.collection('users')
         .where({ _openid: OPENID })
@@ -541,6 +579,11 @@ exports.main = async (event, context) => {
     const storesQuery = _.and([makeTenantFilter(tenantId), { status: _.neq('inactive') }]);
     const storesRes = await db.collection('stores').where(storesQuery).get();
     let allStores = storesRes.data || [];
+    // 🐛 见 makeTenantFilter() 头部注释：本机构真实门店清单，在下方 orgType/
+    // platformFamily 收窄 allStores 之前就固定下来——用于给 report_logs/
+    // materials/media 这几个"缺 tenantId 时按 storeId 归属"的历史兼容查询
+    // 兜底，与"当前筛选出哪些门店展示"这个完全不同的关注点无关
+    const tenantStoreIds = allStores.map((s) => s._id).filter(Boolean);
 
     // 🏢 平台类型筛选（orgType）：在 tenantId 隔离之后、filterMode 收窄之前做第一层过滤，
     // 两者可独立叠加——例如"雨花斋 + 按地区筛选"同时生效。
@@ -649,7 +692,7 @@ exports.main = async (event, context) => {
     const batchLimit = 100;
     let skip = 0;
     const logsQueryConditions = [
-      makeTenantFilter(tenantId),
+      makeTenantFilter(tenantId, tenantStoreIds),
       { isVoid: _.neq(true) },
       // 🐛 二级审核门槛缺失：本函数此前唯独没有套用 getReports(approvedOnly)/
       // getStatisticsData 全站统一的 approvalStatus 过滤，义工/店长刚提交、店长
@@ -708,7 +751,7 @@ exports.main = async (event, context) => {
         let prevSkip = 0;
         let isPrevLogsTruncated = false;
         const prevLogsQueryWhere = _.and([
-          makeTenantFilter(tenantId),
+          makeTenantFilter(tenantId, tenantStoreIds),
           { isVoid: _.neq(true) },
           { approvalStatus: _.in(['APPROVED', 'AUDITED_LOCKED']) },
           { dateString: _.gte(prevRangeStartDate) },
@@ -754,7 +797,7 @@ exports.main = async (event, context) => {
     let nationalOilTotal = 0;
     let nationalVegetableTotal = 0;
     try {
-      const materialConditions = [makeTenantFilter(tenantId)];
+      const materialConditions = [makeTenantFilter(tenantId, tenantStoreIds)];
       if (rangeStartDate) {
         materialConditions.push({ dateString: _.gte(rangeStartDate) });
       }
@@ -814,7 +857,7 @@ exports.main = async (event, context) => {
     try {
       const ingredient30dStart = isoDateNDaysAgo(30);
       const ingredient30dConditions = [
-        makeTenantFilter(tenantId),
+        makeTenantFilter(tenantId, tenantStoreIds),
         { dateString: _.gte(ingredient30dStart) }
       ];
       if (isScopedFilter) {
@@ -1353,7 +1396,7 @@ exports.main = async (event, context) => {
       // 切换后，全网影像卷宗的凭证/食谱/日志照片统计纹丝不动，与核心 KPI 已经
       // isScopedFilter 收窄的口径不一致。isScopedFilter 生效时直接把 storeId 下推
       // 进查询条件（而不是查回来再在内存里过滤），与 material_logs 的既有写法一致
-      const mediaQueryConditions = [makeTenantFilter(tenantId)];
+      const mediaQueryConditions = [makeTenantFilter(tenantId, tenantStoreIds)];
       if (isScopedFilter) {
         mediaQueryConditions.push({ storeId: _.in(targetStores.map(s => s._id)) });
       }
