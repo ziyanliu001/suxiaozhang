@@ -360,6 +360,46 @@
   font-size: 24rpx;
 }
 
+/* 🩺（2026-09-13 容错兜底）fetchProfile() 失败卡片——视觉基线沿用
+   .sp-super-switcher-card 同一套"暖色描边、16rpx 圆角、居中留白"的卡片
+   语言，区别在于用更醒目的警示色，提示这是一个需要用户处理的异常态而
+   不是一个可交互的常规操作入口 */
+.sp-load-failed-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  background: #FFF5F5;
+  border: 2rpx solid #FFA8A8;
+  border-radius: 16rpx;
+  padding: 48rpx 32rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.sp-load-failed-icon {
+  font-size: 48rpx;
+}
+
+.sp-load-failed-msg {
+  font-size: 26rpx;
+  color: #C92A2A;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.sp-btn-inspect-grant,
+.sp-btn-retry-load {
+  margin-top: 8rpx;
+  min-width: 320rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  padding: 0 32rpx;
+}
+
 /* 🏛️ 门店档案信息：展示态纵向标签+值列表，编辑态复用 .sp-edit-item/.sp-edit-lbl */
 .sp-archive-card,
 .sp-archive-edit-card {

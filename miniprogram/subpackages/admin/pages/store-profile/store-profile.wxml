@@ -41,6 +41,29 @@
       <text class="sp-store-address" wx:if="{{address}}">📍 {{address}}</text>
     </view>
 
+    <!-- 🩺（2026-09-13 容错兜底）fetchProfile() 失败时展示的持久失败卡片，
+         代替此前"只弹一闪而过的 Toast，下方字段静默展示成空/0/未填写、看起来
+         像页面本身坏了"这种沉默降级。loadFailedNeedsGrant 为 true 时（仅
+         platform_admin 命中服务端 NEEDS_INSPECTION_GRANT 错误码才会为 true，
+         见 fetchProfile()）额外提供"申请巡检授权并重新进入"自助恢复入口，
+         其余情况（真实数据问题/网络异常）只提供标准的"重新加载"，不暗示一个
+         当前账号本来就无权调用的操作。下方 sp-health-grid 起到 sp-edit-footer
+         为止的整段"真实内容"用 block 包起来，失败时整体隐藏，避免和这张
+         卡片同屏出现一堆空字段 -->
+    <view class="sp-load-failed-card" wx:if="{{loadFailed}}">
+      <text class="sp-load-failed-icon">⚠️</text>
+      <text class="sp-load-failed-msg">{{loadFailedMessage || '加载门店档案失败'}}</text>
+      <button
+        class="sp-btn-inspect-grant"
+        wx:if="{{loadFailedNeedsGrant}}"
+        bindtap="onRequestInspectionGrantAndRetry"
+        loading="{{grantingInspection}}"
+        disabled="{{grantingInspection}}"
+      >申请巡检授权并重新进入</button>
+      <button class="sp-btn-retry-load" wx:else bindtap="onRetryFetchProfile">重新加载</button>
+    </view>
+
+    <block wx:if="{{!loadFailed}}">
     <!-- 📊 门店动态健康看板：4 格矩形健康度指标，数据来自 fetchHealthDashboard()
          （manageVolunteerSubmission statsSummary，与首页"今日餐况"同一数据源） -->
     <view class="sp-health-grid">
@@ -502,6 +525,7 @@
       <button class="sp-btn-cancel" bindtap="onCancelEdit">取消</button>
       <button class="sp-btn-save" bindtap="onSaveProfile" loading="{{saving}}" disabled="{{saving}}">保存</button>
     </view>
+    </block>
 
     <view class="sp-loading-box" wx:if="{{loading}}">
       <text>加载中...</text>

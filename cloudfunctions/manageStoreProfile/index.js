@@ -291,7 +291,21 @@ async function resolveReadTarget(caller, requestedStoreId, requestedStoreName) {
     return { allowed: true, storeId: store._id, store };
   }
 
-  if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店' };
+  // 🆕（2026-09-13 巡检授权自助恢复）platform_admin 的字面角色从来不在本函数
+  // 认可的任何角色列表里（也不该在——见本文件头部"绝不允许任何形式的跨租户
+  // 万能穿透"的既定安全立场），它对某家具体门店的唯一合法访问路径就是先经
+  // grantTenantAuthorization 获得一条 authorizedTenants 临时授权（resolveCaller
+  // 命中后会把 caller.role/storeId 原地替换成授权记录里的值，走不到这里）。
+  // 这里补一个可区分的 errorCode，不改变拒绝本身，只是让客户端能分辨"这是一个
+  // 可以自助申请解决的情况"还是"账号本身就没绑定门店的真实数据问题"，前端据此
+  // 展示"申请巡检授权并重新进入"而不是让人对着一句"您尚未绑定门店"不知所措
+  if (!caller.storeId) {
+    return {
+      allowed: false,
+      error: caller.role === 'platform_admin' ? '当前账号尚未获得该门店的巡检授权' : '您尚未绑定门店',
+      errorCode: caller.role === 'platform_admin' ? 'NEEDS_INSPECTION_GRANT' : undefined
+    };
+  }
   return { allowed: true, storeId: caller.storeId };
 }
 
@@ -319,7 +333,15 @@ async function resolveWriteTarget(caller, requestedStoreId) {
     return { allowed: true, storeId: requestedStoreId };
   }
 
-  return { allowed: false, error: '无权限：仅店长或超级管理员可编辑门店人员与服务人群画像' };
+  // 🆕（2026-09-13 巡检授权自助恢复）同 resolveReadTarget 处的说明，同一个
+  // errorCode 供客户端识别"platform_admin 尚未对这家店发起过巡检授权"这个
+  // 可自助恢复的场景，其余角色（finance/volunteer/store_family 等）落到这里
+  // 是真实的权限边界，不应该展示任何"申请授权"的自助入口
+  return {
+    allowed: false,
+    error: '无权限：仅店长或超级管理员可编辑门店人员与服务人群画像',
+    errorCode: caller.role === 'platform_admin' ? 'NEEDS_INSPECTION_GRANT' : undefined
+  };
 }
 
 function clampCount(v) {
@@ -350,7 +372,10 @@ exports.main = async (event, context) => {
         return { success: false, error: 'storeId required' };
       }
       const target = await resolveReadTarget(caller, storeId, storeName);
-      if (!target.allowed) return { success: false, error: target.error };
+      // 🆕（2026-09-13）errorCode 透传给客户端：目前只有 NEEDS_INSPECTION_GRANT
+      // 一个取值（见 resolveReadTarget/resolveWriteTarget 头部注释），未命中时
+      // 是 undefined，JSON 序列化会自动丢弃这个字段，不影响任何现有消费方
+      if (!target.allowed) return { success: false, error: target.error, errorCode: target.errorCode };
 
       // 🐛 超时根因修复（statistics.ts fetchStoreProfile 报 >8000ms 超时）：
       // 总部级角色（super_admin/hq_finance/regional_finance）传 storeName 查询时，
@@ -412,7 +437,10 @@ exports.main = async (event, context) => {
 
     if (action === 'update') {
       const target = await resolveWriteTarget(caller, storeId);
-      if (!target.allowed) return { success: false, error: target.error };
+      // 🆕（2026-09-13）errorCode 透传给客户端：目前只有 NEEDS_INSPECTION_GRANT
+      // 一个取值（见 resolveReadTarget/resolveWriteTarget 头部注释），未命中时
+      // 是 undefined，JSON 序列化会自动丢弃这个字段，不影响任何现有消费方
+      if (!target.allowed) return { success: false, error: target.error, errorCode: target.errorCode };
 
       const updateFields = {};
       // 🐛 只在调用方真的传了这个字段时才写入——此前这里无条件对全部 7 项数字

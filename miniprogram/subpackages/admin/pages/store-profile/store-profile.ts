@@ -119,6 +119,22 @@ function sanitizePhotoUrls(arr: unknown): string[] {
   return Array.isArray(arr) ? arr.filter(isValidPhotoUrl) : [];
 }
 
+// 🆕（2026-09-13 表单字段校验）contactPhone 此前无论走整页编辑（onSaveProfile）
+// 还是单字段快捷编辑（submitQuickEditField）都是纯文本 <input>，没有任何格式
+// 校验——"一键拨打"（onCallPhone）依赖这个字段是一个真实可拨号码，录入错误
+// 只有等义工/家长点"一键拨打"失败才会被发现。校验口径刻意宽松：允许手机号
+// （1[3-9] 开头 11 位）、带区号座机（0 开头 3~4 位区号 + 7~8 位号码，中间的
+// 连字符可选）、不带区号的纯本地座机号（7~8 位）——门店联系电话现实中常见
+// 三种形态都要放过，不是只认手机号；空字符串本身不算格式错误（允许留空），
+// 只有"填了但填错"才拦截，这与其余 TEXT_PROFILE_FIELDS 字段"允许为空"的口径
+// 保持一致
+function isValidPhoneNumber(value: string): boolean {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return true;
+  const digitsOnly = trimmed.replace(/[\s-]/g, '');
+  return /^1[3-9]\d{9}$/.test(digitsOnly) || /^0\d{2,3}\d{7,8}$/.test(digitsOnly) || /^\d{7,8}$/.test(digitsOnly);
+}
+
 // 🏪 门店资质与实景公示：门头照/民政备案复印件/食品安全承诺，与原有的门店环境照
 // （storePhotos）是四个各自独立的照片分类，字段名与 manageStoreProfile 云函数一致；
 // 沿用同一套 onChoosePhoto/onDeletePhoto 通用逻辑（用 data-category 区分），不为
@@ -167,9 +183,24 @@ Page({
     // 门店列表（getStoreList 按 tenantId 过滤，不跨租户，见该云函数），不受当前
     // orgType 专区限制，方便超管在本机构内任意门店之间快速切换编辑档案
     isSuperAdmin: false,
+    // 🆕（2026-09-13）字面角色是否为 platform_admin——与 isSuperAdmin 分开维护，
+    // 因为两者在 resolveCaller() 里的权限口径完全不同：super_admin 对本机构任意
+    // 门店天然有跨店权限，platform_admin 没有任何门店的天然权限，只能通过巡检
+    // 授权临时获得，见下方 loadFailedNeedsGrant 与 onRequestInspectionGrantAndRetry
+    isPlatformAdmin: false,
     storeSwitcherOptions: [] as Array<{ storeId: string; storeName: string }>,
     storeSwitcherLoading: false,
     loading: true,
+    // 🆕（2026-09-13 容错兜底）fetchProfile() 失败时的展示态，与 loading 互斥。
+    // loadFailedNeedsGrant 为 true 时展示"申请巡检授权并重新进入"这个自助恢复
+    // 入口（仅当调用方是 platform_admin 且服务端返回 errorCode:
+    // 'NEEDS_INSPECTION_GRANT' 时才会为 true），其余任何失败原因只展示标准的
+    // "重新加载"按钮——不能让非 platform_admin 账号看到一个他们调用了也会被
+    // grantTenantAuthorization 拒绝（该云函数仅限 platform_admin 调用）的入口
+    loadFailed: false,
+    loadFailedNeedsGrant: false,
+    loadFailedMessage: '',
+    grantingInspection: false,
 
     // 📊 门店动态健康看板：今日开餐 / 物资健康度 / 今日护持 / 今日服务，见
     // fetchHealthDashboard()。数据来自 manageVolunteerSubmission 的 statsSummary，
@@ -510,8 +541,11 @@ Page({
     const canSetAdminKey = effectiveRole === 'store_patriarch' || effectiveRole === 'super_admin'
       || (!!grantedEntry && grantedEntry.role === 'store_patriarch');
     const isSuperAdmin = effectiveRole === 'super_admin';
+    // 🆕（2026-09-13）未命中任何有效授权时，字面角色仍是 platform_admin——用于
+    // 驱动 fetchProfile() 失败时是否展示"申请巡检授权"自助恢复入口
+    const isPlatformAdmin = effectiveRole === 'platform_admin';
 
-    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey, isSuperAdmin });
+    this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey, isSuperAdmin, isPlatformAdmin });
     console.log('[verify] store-profile rendered, canManage:', canManage);
 
     // 🏛️（2026-09-09 超管跨店穿透）超管专属"切换门店"快捷选择器，惰性拉取
@@ -595,6 +629,19 @@ Page({
         // manageStoreProfile 云函数返回的 error 文案定位问题，不用只靠一闪而过
         // 的 Toast 猜
         console.error('[debug] fetchProfile 云函数返回失败:', result && result.error, '完整返回:', result);
+        // 🆕（2026-09-13 容错兜底）除了一闪而过的 Toast，额外展示一张持久的
+        // 失败卡片（见 wxml sp-load-failed-card），避免下方一大堆字段静默展示
+        // 成空/0/"未填写"、看起来像页面本身坏了。NEEDS_INSPECTION_GRANT 这个
+        // errorCode 只会在调用方字面角色确实是 platform_admin 时由服务端返回
+        // （见 manageStoreProfile.resolveReadTarget），这里再叠加一次
+        // isPlatformAdmin 判断纯粹是防御性的——双重确认不会给非 platform_admin
+        // 账号展示一个他们调用了也会被 grantTenantAuthorization 拒绝的入口
+        const needsGrant = result && result.errorCode === 'NEEDS_INSPECTION_GRANT' && this.data.isPlatformAdmin;
+        this.setData({
+          loadFailed: true,
+          loadFailedNeedsGrant: needsGrant,
+          loadFailedMessage: (result && result.error) || '加载门店画像失败'
+        });
         wx.showToast({ title: (result && result.error) || '加载门店画像失败', icon: 'none' });
         return;
       }
@@ -628,7 +675,11 @@ Page({
         // 门店尚未设置坐标时 data.latitude/longitude 就是 undefined，这里兜底为 null
         latitude: typeof data.latitude === 'number' ? data.latitude : null,
         longitude: typeof data.longitude === 'number' ? data.longitude : null,
-        locationLabel: (typeof data.latitude === 'number' && typeof data.longitude === 'number') ? '已设置门店位置' : ''
+        locationLabel: (typeof data.latitude === 'number' && typeof data.longitude === 'number') ? '已设置门店位置' : '',
+        // 🆕（2026-09-13 容错兜底）本次请求成功，清掉可能残留的上一次失败态
+        loadFailed: false,
+        loadFailedNeedsGrant: false,
+        loadFailedMessage: ''
       };
       PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || 0; });
       TEXT_PROFILE_FIELDS.forEach((f) => { update[f] = data[f] || ''; });
@@ -681,9 +732,64 @@ Page({
       // 云函数没部署、超时阈值不够、网络真的断开，这三种情况的 err 内容完全不同，
       // 光看 Toast 分辨不出来，必须看这条日志
       console.error('[debug] fetchProfile failed:', err);
+      this.setData({ loadFailed: true, loadFailedNeedsGrant: false, loadFailedMessage: '网络异常，请重试' });
       wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     } finally {
       this.setData({ loading: false });
+    }
+  },
+
+  // 🆕（2026-09-13 容错兜底）失败卡片的"重新加载"按钮——不区分失败原因，
+  // 单纯重新走一遍 fetchProfile()，与 onShow() 里首次进入的调用完全一致
+  onRetryFetchProfile() {
+    this.fetchProfile();
+  },
+
+  // 🆕（2026-09-13 巡检授权自助恢复）失败卡片在 loadFailedNeedsGrant 为 true
+  // 时展示的"申请巡检授权并重新进入"按钮——完整复用 platform-admin.ts
+  // onSubmitInspectGrant() 同一套"grant → 强制刷新 AuthService 缓存 → 重新走
+  // 一遍角色同步 + 数据拉取"流程，不是新发明一条通道。角色固定传
+  // 'store_patriarch'（对应任务里"当前漫游的大家长"这个身份），与
+  // grantTenantAuthorization.GRANTABLE_ROLES 白名单里能力最完整的一档一致；
+  // 不提供角色选择器——本页只是"让人能进得来"的兜底入口，不是完整的巡检
+  // 管理台（那是 platform-admin.ts 的职责，真要精细控制角色应该去那里操作）。
+  // 🛡️ grantTenantAuthorization 云函数本身要求调用者字面角色必须是
+  // platform_admin（见该云函数 requirePlatformAdmin()），本方法只在
+  // loadFailedNeedsGrant 为 true（已经隐含 isPlatformAdmin 为 true，见
+  // fetchProfile() 里的判定）时才可能被触发，不构成任何新的越权面
+  async onRequestInspectionGrantAndRetry() {
+    if (this.data.grantingInspection) return;
+    const storeId = this.data.currentStoreId;
+    if (!storeId) return;
+    this.setData({ grantingInspection: true });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'grantTenantAuthorization',
+        data: {
+          action: 'grant',
+          stores: [storeId],
+          role: 'store_patriarch',
+          storeName: this.data.currentStoreName
+        }
+      });
+      const result = res && res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '申请巡检授权失败，请重试', icon: 'none' });
+        return;
+      }
+      // 授权只追加进 authorizedTenants 数组，不刷新本地缓存就不会被
+      // initRoleAndStore() 读到——与 platform-admin.ts onSubmitInspectGrant()
+      // 同一处根因说明
+      await AuthService.fetchUserRole();
+      await this.initRoleAndStore();
+      wx.showToast({ title: '巡检授权成功，正在重新进入', icon: 'success' });
+      this.fetchProfile();
+      this.fetchHealthDashboard();
+    } catch (err) {
+      console.error('[onRequestInspectionGrantAndRetry] 申请巡检授权异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ grantingInspection: false });
     }
   },
 
@@ -788,6 +894,13 @@ Page({
     const currentValue = (this.data as any)[field] || '';
     if (newValue === currentValue) {
       this.setData({ showQuickEditModal: false });
+      return;
+    }
+    // 🆕（2026-09-13 表单字段校验）联系电话单字段快捷编辑走这条路径提交，
+    // 格式明显不对时直接拦下，不发起云函数调用——不关闭弹窗，让用户能直接
+    // 看着已输入的内容修正，与保存失败时"不关闭弹窗"的既有交互习惯一致
+    if (field === 'contactPhone' && !isValidPhoneNumber(newValue)) {
+      wx.showToast({ title: '请输入正确的联系电话', icon: 'none' });
       return;
     }
     this.submitQuickEditField(field, label, newValue);
@@ -1080,6 +1193,13 @@ Page({
 
   async onSaveProfile() {
     if (this.data.saving) return;
+    // 🆕（2026-09-13 表单字段校验）与 onConfirmQuickEditModal 同一条校验规则——
+    // 整页编辑表单也能改联系电话，必须在这里同样拦一次，不能只在单字段快捷
+    // 编辑那一条路径校验，否则从整页表单改坏的号码照样能存进去
+    if (!isValidPhoneNumber(this.data.editForm.contactPhone)) {
+      wx.showToast({ title: '请输入正确的联系电话', icon: 'none' });
+      return;
+    }
     this.setData({ saving: true });
 
     try {
