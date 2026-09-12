@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "openapi": [],
+    "cloudbase": {
+      "env": "cloudbase-d8g7hg2bf851750ab",
+      "database": {
+        "platform_web_admins": {
+          "read": true,
+          "write": true
+        },
+        "platform_web_sessions": {
+          "read": true,
+          "write": true
+        },
+        "platform_web_login_attempts": {
+          "read": true,
+          "write": true
+        },
+        "audit_logs": {
+          "read": false,
+          "write": true
+        }
+      }
+    }
+  },
+  "runtime": "Nodejs16",
+  "timeout": 10,
+  "envVariables": {}
+}

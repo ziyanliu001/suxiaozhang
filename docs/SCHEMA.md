@@ -309,6 +309,48 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 
 ---
 
+## 11. 独立 Web 管理中台相关集合（2026-09-13，紧急逃生舱第四道防线）
+
+设计见 [`CLAUDE.md`](../CLAUDE.md) 第 9.6 节，本节只列字段。
+
+### 11.1 `platform_web_admins`（新增集合）
+
+| 字段 | 含义 |
+|---|---|
+| `_id` | 云数据库自动生成 |
+| `username` | 登录用户名，唯一 |
+| `passwordHash` / `passwordSalt` | `crypto.scrypt` 加盐哈希结果与盐值，均为十六进制字符串，从不存储明文密码 |
+| `disabled` | 是否禁用（禁用后即使密码正确也拒绝登录） |
+| `createdAt` / `lastLoginAt` / `passwordResetAt` | 时间戳，后两者可为 `null` |
+
+只能通过 `scripts/ops/init-web-admin.js` 直连数据库创建/重置密码，没有任何网页自助注册或云函数写入入口。
+
+### 11.2 `platform_web_sessions`（新增集合）
+
+| 字段 | 含义 |
+|---|---|
+| `_id` | 会话令牌本身（`crypto.randomBytes(32)` 十六进制），用作主键支持 O(1) 查找 |
+| `username` | 该会话所属的管理员用户名 |
+| `createdAtMs` | 签发时刻的时间戳（毫秒） |
+| `expiresAt` | 过期时间（ISO 字符串），签发时 `+8小时` |
+
+### 11.3 `platform_web_login_attempts`（新增集合）
+
+| 字段 | 含义 |
+|---|---|
+| `_id` | `admin_web_login_attempt_${md5(username小写)}`，每个用户名恒定一条记录 |
+| `failCount` | 连续失败次数，成功一次清零 |
+| `lastAttemptAt` | 最近一次尝试时间（ISO 字符串） |
+| `lockedUntil` | 锁定截止时间（ISO 字符串），达到 5 次失败后设为 `now + 30分钟`；未锁定为 `null` |
+
+### 11.4 `audit_logs` 新增取值
+
+| 字段/取值 | 含义 |
+|---|---|
+| `action: 'ADMIN_WEB_LOGIN'` | Web 管理中台登录尝试（成功/失败均记），`operator_id` 为用户名 |
+| `action: 'ADMIN_WEB_GENERATE_ACTIVATION_CODE'` | Web 管理中台铸造授权码，`generated_count` 记录本次实际铸造张数 |
+| `action: 'EMERGENCY_SUPER_ADMIN_CLAIM'` 新增 `channel` 字段 | 三条 `super_admin` 授予通道共用同一个 action 值，靠 `channel` 区分来路：`'wechat_secret'`（`emergencyClaimSuperAdmin`，默认值）/ `'cli_script'`（`scripts/ops/grant-super-admin.js`）/ `'web_console'`（`adminWebConsole`） |
+
 ## 维护须知
 
 - 本文档的权威性来自"贴代码位置"，不是来自本身的表述。**任何字段/枚举一旦在代码中变更，必须同步更新本文档对应条目**（这是 CLAUDE.md 治理要求）——尤其是 `orgType`/`businessType` 这类被 3-4 个文件各自维护同源拷贝的取值域，改动时本文档也要算作需要同步的一处。

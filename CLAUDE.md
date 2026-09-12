@@ -106,6 +106,8 @@
 - **严禁在代码、注释、commit message 或任何文档里明文记录私钥、access token、密码、云开发密钥等凭证**。本仓库已有的既定防线：`.gitignore` 里 `private.*.key`/`*.pem`/`project.private.config.json` 三类规则专门拦截小程序上传密钥与本地私有配置——新增任何凭证类文件时，必须先补齐对应的 `.gitignore` 规则再落盘，不能先写文件再补规则（存在"补规则前那个 commit 窗口"意外提交的风险，先加规则再建文件）。一旦发现已提交的明文凭证，视为需要立即撤销/轮换该凭证的安全事件处理，删除文件/改写内容不能让已泄露的凭证重新变安全（git 历史仍会留痕）。
   > ⚠️ **2026-09-05 发现的存量违规**：根目录 `project.private.config.json` 早于 `.gitignore` 规则落地前就已被 `git add`，规则只挡"未来新增"，不会retroactively 补挡已跟踪文件，目前该文件仍在版本库里（`git ls-files` 可见）。核实过内容本身不含真实凭证（只是 DevTools 本地调试场景配置 + 一个内部测试 `tenantId`），不构成本条"明文凭证"意义上的安全事件，但违反了本条防线的初衷，建议 `git rm --cached project.private.config.json`（只停止跟踪、不删本地文件）——因涉及改变已跟踪文件集，需用户确认后再执行。
 - **`EMERGENCY_RECOVERY_SECRET`**（2026-09-13 新增，见第 9 节"紧急逃生舱"）与 `WXPAY_INTERNAL_TOKEN`/`LIVE_FACTORY_INTERNAL_TOKEN` 一样，只存在于云开发控制台环境变量，绝不允许出现在代码/注释/commit message/文档里——且这一个比另外两个更敏感（另外两个只是"云函数之间的内部调用令牌"，泄露只能让人冒充内部服务调用；这个一旦泄露，任何人都能把自己的微信账号直接提权成 `super_admin`）。建议使用与其余任何令牌都不同的独立高强度随机值，且只告知极少数受信任的人。
+- **`ADMIN_CONSOLE_INTERNAL_TOKEN`**（2026-09-13 新增，见第 9.6 节）：`cloudfunctions/adminWebConsole` 转发调用 `activateTenantSubscription` 的内部令牌，必须两侧配置完全一致的同一个值，敏感级别与 `WXPAY_INTERNAL_TOKEN` 同档（云函数间内部调用令牌，不是直接的权限提升密钥）。
+- **`TENCENTCLOUD_SECRETID`/`TENCENTCLOUD_SECRETKEY`**（2026-09-13 新增，见第 9.5 节）：`scripts/ops/` 目录下应急脚本使用的腾讯云 API 密钥，**只通过环境变量传入本地终端，绝不作为命令行参数**（会留在 shell 历史记录里），也绝不提交进版本库/写进任何文档。这是本项目安全模型里权限最高的一把钥匙——建议专门申请一个权限收窄过的 CAM 子账号密钥，不要直接用主账号根密钥。
 
 ---
 
@@ -251,7 +253,13 @@ Agent 接手这两块相关代码前必须先读这一节。
 
 ## 9. 紧急逃生舱（Break-Glass）应急接管机制（2026-09-13）
 
-### 9.1 定位与触发场景
+**四道独立防线**，任意一道仍可用，运营方就不会被彻底锁死：
+- **第一道**（既有）：`setupSuperAdmin`——要求调用者已经是 `platform_admin`（或系统里一个都没有时自举）。
+- **第二道**：`cloudfunctions/emergencyClaimSuperAdmin`——微信小程序内，凭 `EMERGENCY_RECOVERY_SECRET` 密钥自助接管，见 9.1~9.4。
+- **第三道**：`scripts/ops/grant-super-admin.js`——完全脱离微信/云函数，本地或 CI 用 `@cloudbase/node-sdk` + 腾讯云 API 密钥直连数据库，见 9.5。
+- **第四道**：`web-admin/` + `cloudfunctions/adminWebAuth`/`adminWebConsole`——独立于微信生态的 Web 管理中台，普通浏览器 + 独立账密登录，见 9.6。
+
+### 9.1 定位与触发场景（第二道防线：微信内密钥自助接管）
 
 唯一超级管理员的微信账号被封禁/丢失/失联时的最后手段——`cloudfunctions/emergencyClaimSuperAdmin`。与本仓库其余管理类云函数（`setupSuperAdmin`/`processRoleAudit` 的 `superAdminForceUnbind` 等）根本不同的一点：那些函数都要求"调用者已经是 `super_admin`/`platform_admin`"才能继续操作，一旦唯一的超管账号失效，没有任何账号有资格调用它们来恢复权限，后台会永久锁死。本函数因此故意不做任何"调用者当前角色"层面的前置校验，**唯一的防线是 `EMERGENCY_RECOVERY_SECRET` 这个只存在于云开发控制台环境变量里的密钥**——必须持有物理访问云开发控制台权限的人才能配置/得知这个值，这是安全模型的信任根，日常绝不通过任何应用内 UI 暴露这个函数的存在或入口。
 
@@ -273,3 +281,22 @@ Agent 接手这两块相关代码前必须先读这一节。
 
 - `emergency_claim_attempts` 的失败锁定按 `openid` 维度计数，不是按 IP——云函数运行时拿不到公网客户端 IP 这类可靠信号；这个维度足以显著提高攻击成本（需要不同的微信账号，不是简单换个请求头就能绕过），但不是绝对防线，密钥强度本身仍是第一道、也是最重要的一道防线。
 - 归属机构（`tenantId`）解析：显式传入时校验存在性；未传入且系统内恰好只有一家机构时自动关联；系统内有多家机构且未显式指定时**拒绝**（不猜测，避免把新超管错误关联到无关机构）——多租户环境下发起应急接管，调用方必须显式知道自己要接管哪一家机构的 `tenantId`。
+
+### 9.5 第三道防线：`scripts/ops/grant-super-admin.js`（本地/CI 直连数据库）
+
+- **为什么不用 `wx-server-sdk`**：`wx-server-sdk` 的 `cloud.init()` 依赖云函数运行时环境隐式注入的凭据，本地脚本环境里用不了——本仓库 `scripts/seedActivationCodes.ts` 早就记录过这个结论。改用 `@cloudbase/node-sdk`，走显式的 `TENCENTCLOUD_SECRETID`/`TENCENTCLOUD_SECRETKEY` 鉴权，完全绕开应用层，只要还能访问腾讯云控制台就永远可用。
+- **依赖隔离**：`scripts/ops/` 有自己独立的 `package.json`（`@cloudbase/node-sdk`），不污染仓库根目录或任何云函数的依赖树，也不会被 Open-Core 构建流程扫描到。
+- **与第二道防线共用同一套数据字段口径**：直接 `require('../../cloudfunctions/emergencyClaimSuperAdmin/lib/validateClaim')`（纯函数，跨目录 require 在这里是安全的——"云函数间无共享模块机制"这条约束只针对**部署时各自独立打包的云函数**，普通本地 Node 脚本不受此限制），`user_roles`/`audit_logs` 写入的字段形状与前两道防线完全一致，`audit_logs` 的 `channel` 字段固定为 `'cli_script'`，事后审计能一眼分辨走的是哪条通道。
+- **信任模型更强，因此校验更松**：这条通道的真正身份验证是"是否持有腾讯云 API 密钥"（比密钥字符串/账密登录的强度都高——密钥泄露的后果也远不止"被授予 super_admin"，见 `scripts/ops/README.md` 安全须知），因此脚本不强制要求填写手机号（另外两道防线的校验器要求非空），默认二次交互确认（`--yes` 跳过，供 CI 用）。
+- **配套脚本** `scripts/ops/init-web-admin.js`：初始化/重置第四道防线（Web 管理中台）的账密，同样直连数据库，解决"没有账号就无法登录去创建账号"的鸡生蛋问题。
+
+### 9.6 第四道防线：`web-admin/` 独立 Web 管理中台
+
+- **架构**：纯静态单文件 `web-admin/index.html`（无构建步骤），加载 `@cloudbase/js-sdk`（CDN，固定 `2.28.6` 版本），匿名登录仅用于满足"调用云函数前必须先登录"这一 SDK 层技术前提，**不代表任何业务身份**——真正的操作权限完全由 `cloudfunctions/adminWebAuth` 登录后签发的会话令牌决定。
+- **认证**（`cloudfunctions/adminWebAuth`，新增 `platform_web_admins`/`platform_web_sessions`/`platform_web_login_attempts` 三个集合）：用户名 + 密码，密码用 Node 内置 `crypto.scrypt` 加盐哈希存储（CLAUDE.md"克制原则"不允许引入 bcrypt 等第三方包，`scrypt` 是同等强度、零依赖的替代），会话令牌 `crypto.randomBytes(32)`、8 小时有效期，同用户名连续登录失败 5 次锁定 30 分钟——与第二道防线 `emergencyClaimSuperAdmin` 同一套锁定算法的独立镜像（`lib/loginLockout.js`）。首个账号只能用 `scripts/ops/init-web-admin.js` 直连数据库创建，不提供任何网页自助注册入口。
+- **业务动作**（`cloudfunctions/adminWebConsole`，与 `adminWebAuth` 分开部署）：每个 action 第一步都校验 `sessionToken`（查 `platform_web_sessions`，`lib/verifySession.js` 是 `adminWebAuth` 侧同名判定逻辑的独立镜像）。
+  - `generateActivationCode`：**不重新实现铸造逻辑**，而是携带新增的 `ADMIN_CONSOLE_INTERNAL_TOKEN`（与 `WXPAY_INTERNAL_TOKEN` 同一条 fail-closed 原则）转发给 `activateTenantSubscription` 的 `generate` 动作——该函数原本要求调用者是携带真实微信身份的 `platform_admin`，`cloud.callFunction()` 服务端到服务端调用不会携带任何 OPENID，因此新增了这道内部令牌作为"平台管理员身份"的平替，只影响 `generate` 这一个动作，不影响 `redeem`/`list`/`revoke`/`getStats` 仍然要求真实微信身份的动作。
+  - `grantEmergencySuperAdmin`：与第二/三道防线共用同一套 `user_roles`/`audit_logs` 字段口径（`lib/validateClaim.js` 是又一处独立镜像），区别是接受调用方显式指定的 `targetOpenid`（Web 管理中台没有微信身份上下文，不能像 `emergencyClaimSuperAdmin` 那样"给当前调用者自己"授权），`audit_logs` 的 `channel` 固定为 `'web_console'`，`operator_id` 记录的是 Web 管理员的登录用户名（不是微信 openid）。
+  - `getSystemOverview`：全网活跃门店数、机构总数、`daily_tenant_snapshots` 昨日快照生成覆盖率——只读，风险最低，直接查询不经过内部令牌转发。
+- **本页面不直接读写数据库**：所有数据访问都通过 `app.callFunction()` 中转，云函数内部做真正的权限校验，浏览器端不持有任何数据库直接访问凭证，与本仓库其余云函数"服务端强校验、客户端不可信"的一贯架构保持一致，不因为是独立于微信生态的页面就降低这条标准。
+- **部署前置条件**（无法由代码验证，需在腾讯云开发控制台手动配置，详见 `web-admin/README.md`）：目标环境启用匿名登录、部署域名加入安全域名白名单、两个新云函数已部署且 `ADMIN_CONSOLE_INTERNAL_TOKEN` 与 `activateTenantSubscription` 侧配置的值完全一致。**未做真机/真实浏览器联调测试，如实标注**——本次交付止于代码与文档，`@cloudbase/js-sdk` 与实际云开发环境的兼容性需要你在控制台完成上述配置后自行验证一遍完整登录+三个页面的操作链路。

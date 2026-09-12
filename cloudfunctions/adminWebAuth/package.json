@@ -1,0 +1,9 @@
+{
+  "name": "adminWebAuth",
+  "version": "1.0.0",
+  "description": "云函数：独立于微信生态的 Web 管理中台认证服务（用户名+加盐哈希密码登录，签发会话令牌）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

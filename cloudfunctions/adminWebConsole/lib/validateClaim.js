@@ -1,5 +1,13 @@
-// 紧急逃生舱：入参校验、user_roles 写入文档、高危审计日志文档的纯构造逻辑。
-// 不做 db I/O、不依赖 wx-server-sdk，便于单测。
+// 紧急逃生舱（Web 管理中台通道）：入参校验、user_roles 写入文档、高危审计
+// 日志文档的纯构造逻辑。不做 db I/O、不依赖 wx-server-sdk，便于单测。
+//
+// ⚠️ 本文件是 cloudfunctions/emergencyClaimSuperAdmin/lib/validateClaim.js
+// 的独立镜像（第三处 super_admin 授予路径：微信内密钥自助接管 / 本地 CLI
+// 直连数据库 / 本 Web 管理中台，三者共用同一套 user_roles 字段口径与
+// audit_logs 记录格式，只是各自的调用入口不同），保持逻辑同步，改一处记得
+// 检查另外两处是否也需要同步改动。本仓库云函数间无共享模块机制，这是
+// 既定约束下的既定写法（参见 manageDailyMenu/getPatriarchDashboard 等四处
+// resolveCaller.js 镜像的先例）。
 'use strict';
 
 const MAX_NAME_LENGTH = 50;

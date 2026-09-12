@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>素小账 · 应急管理中台</title>
+<!--
+  独立于微信生态的 Web 管理中台（紧急逃生舱第四道防线，见 CLAUDE.md 第 11 节）。
+  纯静态单文件，无构建步骤，直连云开发 Web SDK（@cloudbase/js-sdk），
+  会话认证走 cloudfunctions/adminWebAuth，业务动作走 cloudfunctions/adminWebConsole。
+
+  部署前置条件（无法由代码自行验证，需在腾讯云开发控制台手动确认，详见
+  web-admin/README.md）：
+  1. 目标环境已启用"匿名登录"（本页面用它换取调用云函数所需的登录态，
+     真正的操作权限完全由 adminWebAuth 签发的会话令牌决定，匿名登录本身
+     不代表任何业务身份）。
+  2. 本页面实际部署后的域名已加入该环境的"安全域名"白名单。
+  3. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
+     且 adminWebConsole 已配置 ADMIN_CONSOLE_INTERNAL_TOKEN 环境变量
+     （与 activateTenantSubscription 侧配置的值完全一致）。
+-->
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #e2e5ea;
+    --text: #1c1c1e;
+    --text-muted: #6b6b72;
+    --primary: #8c1d18;
+    --primary-hover: #6f1712;
+    --danger: #b3261e;
+    --danger-bg: #fdecea;
+    --success: #1e7a34;
+    --success-bg: #e9f7ee;
+    --sidebar-bg: #1c1c1e;
+    --sidebar-text: #d7d7db;
+    --sidebar-active: #2c2c2e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181a;
+      --panel: #232426;
+      --border: #34353a;
+      --text: #eceef0;
+      --text-muted: #9a9ba1;
+      --danger-bg: #3a2422;
+      --success-bg: #1f3326;
+      --sidebar-bg: #0f1011;
+      --sidebar-active: #232426;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a;
+    --panel: #232426;
+    --border: #34353a;
+    --text: #eceef0;
+    --text-muted: #9a9ba1;
+    --danger-bg: #3a2422;
+    --success-bg: #1f3326;
+    --sidebar-bg: #0f1011;
+    --sidebar-active: #232426;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+  }
+  [hidden] { display: none !important; }
+
+  /* ---------- 登录视图 ---------- */
+  #loginView {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .login-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 28px;
+  }
+  .login-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .login-sub { color: var(--text-muted); font-size: 13px; margin: 0 0 24px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .field textarea { resize: vertical; min-height: 60px; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  .btn:hover { background: var(--primary-hover); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: var(--text-muted); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-inline { width: auto; padding: 8px 14px; }
+  .alert {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .alert-error { background: var(--danger-bg); color: var(--danger); }
+  .alert-success { background: var(--success-bg); color: var(--success); }
+
+  /* ---------- 控制台布局 ---------- */
+  #consoleView { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 220px;
+    flex: 0 0 220px;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    padding: 20px 12px;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-title { font-size: 15px; font-weight: 700; color: #fff; padding: 0 10px 20px; }
+  .sidebar-title small { display: block; font-weight: 400; color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .nav-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+  .nav-item:hover { background: var(--sidebar-active); }
+  .nav-item.active { background: var(--primary); color: #fff; }
+  .sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid #333; }
+  .sidebar-username { font-size: 12px; color: var(--text-muted); padding: 0 10px 8px; word-break: break-all; }
+
+  .content { flex: 1; min-width: 0; padding: 28px 32px; max-width: 900px; }
+  .page-title { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+  .page-sub { color: var(--text-muted); font-size: 13px; margin: 0 0 24px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .panel h3 { margin: 0 0 16px; font-size: 15px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row .field { flex: 1; min-width: 160px; }
+  .radio-group { display: flex; gap: 16px; margin-bottom: 4px; }
+  .radio-group label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .stat-label { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 700; }
+  .stat-value.warn { color: var(--danger); }
+
+  .code-list { margin-top: 16px; }
+  .code-item {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 15px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .code-copy { font-size: 12px; color: var(--primary); cursor: pointer; }
+
+  .confirm-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px;
+  }
+  .confirm-box { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 420px; width: 100%; }
+  .confirm-box h4 { margin: 0 0 12px; }
+  .confirm-box p { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin: 0 0 20px; }
+  .confirm-actions { display: flex; gap: 10px; }
+  .confirm-actions .btn { width: auto; flex: 1; }
+
+  .muted-note { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+  @media (max-width: 720px) {
+    #consoleView { flex-direction: column; }
+    .sidebar { width: 100%; flex: none; flex-direction: row; overflow-x: auto; align-items: center; }
+    .sidebar-title, .sidebar-footer { display: none; }
+    .nav-item { white-space: nowrap; }
+    .content { padding: 20px 16px; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ========================= 登录视图 ========================= -->
+  <div id="loginView">
+    <div class="login-card">
+      <p class="login-title">素小账 · 应急管理中台</p>
+      <p class="login-sub">独立于微信生态的第四道防线 · 仅供授权运维人员使用</p>
+
+      <div id="loginAlert" class="alert alert-error" hidden></div>
+
+      <div class="field">
+        <label>用户名</label>
+        <input type="text" id="loginUsername" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" />
+      </div>
+      <button class="btn" id="loginBtn">登录</button>
+
+      <details style="margin-top:20px;">
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">连接设置（云开发环境 ID）</summary>
+        <div class="field" style="margin-top:12px;">
+          <label>环境 ID（envId）</label>
+          <input type="text" id="settingEnvId" placeholder="cloudbase-xxxxxxxx" />
+        </div>
+        <div class="field">
+          <label>地域（region，选填，部分环境不需要）</label>
+          <input type="text" id="settingRegion" placeholder="ap-shanghai" />
+        </div>
+        <button class="btn btn-secondary" id="saveSettingsBtn">保存</button>
+      </details>
+    </div>
+  </div>
+
+  <!-- ========================= 控制台视图 ========================= -->
+  <div id="consoleView" hidden>
+    <div class="sidebar">
+      <div class="sidebar-title">素小账应急中台<small>Break-Glass Web Console</small></div>
+      <div class="nav-item active" data-page="codes">🎫 SaaS 授权码生成</div>
+      <div class="nav-item" data-page="grant">🚨 应急超管换绑</div>
+      <div class="nav-item" data-page="overview">📊 系统运行大盘</div>
+      <div class="sidebar-footer">
+        <div class="sidebar-username" id="sidebarUsername"></div>
+        <button class="btn btn-outline btn-inline" id="logoutBtn" style="width:100%;">退出登录</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- 页面一：SaaS 授权码生成 -->
+      <section id="pageCodes">
+        <p class="page-title">SaaS 授权码生成与管理</p>
+        <p class="page-sub">无需打开微信，直接铸造可供机构自助兑换的授权码</p>
+
+        <div class="panel">
+          <div id="codesAlert" class="alert" hidden></div>
+          <div class="row">
+            <div class="field">
+              <label>码类型</label>
+              <div class="radio-group">
+                <label><input type="radio" name="codeType" value="package" checked /> 常规套餐码</label>
+                <label><input type="radio" name="codeType" value="add_on" /> 扩容门店包码</label>
+              </div>
+            </div>
+          </div>
+          <div class="row" id="packageFields">
+            <div class="field">
+              <label>套餐类型</label>
+              <select id="codePlanType">
+                <option value="pro">专业版 (pro)</option>
+                <option value="enterprise">旗舰版 (enterprise)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>有效期天数</label>
+              <input type="number" id="codeDurationDays" value="365" min="1" />
+            </div>
+          </div>
+          <div class="row" id="addOnFields" hidden>
+            <div class="field">
+              <label>扩容门店数</label>
+              <input type="number" id="codeExtraStores" value="5" min="1" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>数量</label>
+              <input type="number" id="codeQuantity" value="1" min="1" max="50" />
+            </div>
+            <div class="field">
+              <label>定向门店 ID（选填，留空为通用码）</label>
+              <input type="text" id="codeTargetStoreId" placeholder="留空表示任何机构均可兑换" />
+            </div>
+          </div>
+          <div class="field">
+            <label>备注（选填，仅内部台账可见）</label>
+            <input type="text" id="codeNote" placeholder="如：卖给XX机构 / 线下渠道分发" />
+          </div>
+          <button class="btn" id="generateCodeBtn" style="width:auto;">铸造授权码</button>
+
+          <div class="code-list" id="codeResultList"></div>
+        </div>
+      </section>
+
+      <!-- 页面二：应急超管换绑 -->
+      <section id="pageGrant" hidden>
+        <p class="page-title">应急超管换绑中台</p>
+        <p class="page-sub">为指定的微信 openid 直接授予小程序端 super_admin 权限——高危操作，务必核实身份后再执行</p>
+
+        <div class="panel">
+          <div id="grantAlert" class="alert" hidden></div>
+          <div class="field">
+            <label>目标微信 openid</label>
+            <input type="text" id="grantOpenid" placeholder="让对方先打开一次小程序，从后台 users/user_roles 集合查到" />
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>接管人真实姓名</label>
+              <input type="text" id="grantRealName" />
+            </div>
+            <div class="field">
+              <label>接管人手机号</label>
+              <input type="text" id="grantPhone" />
+            </div>
+          </div>
+          <div class="field">
+            <label>归属机构 tenantId（系统内多家机构时必填）</label>
+            <input type="text" id="grantTenantId" placeholder="系统内只有一家机构时可留空自动关联" />
+          </div>
+          <button class="btn" id="grantSubmitBtn" style="width:auto; background:var(--danger);">授予超级管理员权限</button>
+          <p class="muted-note" style="margin-top:12px;">本操作会写入不可变审计日志（action: EMERGENCY_SUPER_ADMIN_CLAIM，channel: web_console），并在云函数日志打印最高优先级告警，请只在确认这是授权操作时执行。</p>
+        </div>
+      </section>
+
+      <!-- 页面三：系统运行大盘 -->
+      <section id="pageOverview" hidden>
+        <p class="page-title">系统运行大盘</p>
+        <p class="page-sub">全网门店与每日快照生成概览</p>
+
+        <div id="overviewAlert" class="alert alert-error" hidden></div>
+        <div class="stat-grid" id="overviewStats"></div>
+        <button class="btn btn-secondary btn-inline" id="refreshOverviewBtn" style="margin-top:16px;">刷新</button>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- 二次确认弹窗（应急超管换绑专用，其余操作直接执行） -->
+  <div class="confirm-mask" id="confirmMask" hidden>
+    <div class="confirm-box">
+      <h4>⚠️ 请再次确认</h4>
+      <p id="confirmText"></p>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary" id="confirmCancelBtn">取消</button>
+        <button class="btn" id="confirmOkBtn" style="background:var(--danger);">确认执行</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/2.28.6/cloudbase.full.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ==================== 配置与本地存储 ====================
+  var SETTINGS_KEY = 'sxz_admin_settings';
+  var SESSION_KEY = 'sxz_admin_session'; // sessionStorage：浏览器关闭即失效，符合管理工具的安全预期
+
+  function loadSettings() {
+    try {
+      return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveSettings(settings) {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) { /* 隐私模式下 localStorage 可能不可用，忽略 */ }
+  }
+  function loadSession() {
+    try {
+      return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+  function saveSession(session) {
+    try {
+      if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      else sessionStorage.removeItem(SESSION_KEY);
+    } catch (e) { /* 忽略 */ }
+  }
+
+  var settings = loadSettings();
+  var session = loadSession();
+  var app = null;
+  var authReady = null;
+
+  // ==================== CloudBase 初始化 ====================
+  function ensureApp() {
+    if (app) return app;
+    if (!settings.envId) throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
+    app = window.cloudbase.init({ env: settings.envId, region: settings.region || undefined });
+    return app;
+  }
+
+  // 匿名登录只是满足"必须先登录才能调用云函数"这个 SDK 层前提，不代表任何
+  // 业务身份——真正的操作权限完全由 adminWebAuth 签发的会话令牌决定
+  function ensureAuth() {
+    if (authReady) return authReady;
+    var a = ensureApp();
+    authReady = a.auth.getSession().then(function (res) {
+      if (res && res.data && res.data.session) return res;
+      return a.auth.signInAnonymously();
+    });
+    return authReady;
+  }
+
+  async function callFn(name, data) {
+    await ensureAuth();
+    var res = await ensureApp().callFunction({ name: name, data: data || {} });
+    return res.result || {};
+  }
+
+  async function callConsole(action, data) {
+    if (!session || !session.token) {
+      forceLogout('登录已失效，请重新登录');
+      throw new Error('未登录');
+    }
+    var payload = Object.assign({ action: action, sessionToken: session.token }, data || {});
+    var result = await callFn('adminWebConsole', payload);
+    if (!result.success && /登录|会话/.test(result.error || '')) {
+      forceLogout(result.error);
+    }
+    return result;
+  }
+
+  // ==================== DOM 工具 ====================
+  function $(id) { return document.getElementById(id); }
+  function showAlert(el, type, text) {
+    el.className = 'alert alert-' + type;
+    el.textContent = text;
+    el.hidden = false;
+  }
+  function hideAlert(el) { el.hidden = true; }
+
+  // ==================== 登录 ====================
+  $('settingEnvId').value = settings.envId || '';
+  $('settingRegion').value = settings.region || '';
+  $('saveSettingsBtn').addEventListener('click', function () {
+    settings = { envId: $('settingEnvId').value.trim(), region: $('settingRegion').value.trim() };
+    saveSettings(settings);
+    app = null; authReady = null; // 环境变更后重新初始化
+    showAlert($('loginAlert'), 'success', '连接设置已保存');
+  });
+
+  $('loginBtn').addEventListener('click', async function () {
+    var username = $('loginUsername').value.trim();
+    var password = $('loginPassword').value;
+    if (!username || !password) {
+      showAlert($('loginAlert'), 'error', '请输入用户名和密码');
+      return;
+    }
+    hideAlert($('loginAlert'));
+    $('loginBtn').disabled = true;
+    $('loginBtn').textContent = '登录中...';
+    try {
+      var result = await callFn('adminWebAuth', { action: 'login', username: username, password: password });
+      if (!result.success) {
+        showAlert($('loginAlert'), 'error', result.error || '登录失败');
+        return;
+      }
+      session = { token: result.token, username: username, expiresAt: result.expiresAt };
+      saveSession(session);
+      enterConsole();
+    } catch (err) {
+      showAlert($('loginAlert'), 'error', '网络异常或环境配置有误：' + (err && err.message ? err.message : err));
+    } finally {
+      $('loginBtn').disabled = false;
+      $('loginBtn').textContent = '登录';
+    }
+  });
+
+  $('logoutBtn').addEventListener('click', async function () {
+    try { await callFn('adminWebAuth', { action: 'logout', token: session && session.token }); } catch (e) { /* 忽略 */ }
+    forceLogout();
+  });
+
+  function forceLogout(message) {
+    session = null;
+    saveSession(null);
+    $('consoleView').hidden = true;
+    $('loginView').hidden = false;
+    if (message) showAlert($('loginAlert'), 'error', message);
+  }
+
+  function enterConsole() {
+    $('loginView').hidden = true;
+    $('consoleView').hidden = false;
+    $('sidebarUsername').textContent = '已登录：' + session.username;
+    loadOverview();
+  }
+
+  // ==================== 导航 ====================
+  var pages = { codes: $('pageCodes'), grant: $('pageGrant'), overview: $('pageOverview') };
+  document.querySelectorAll('.nav-item').forEach(function (item) {
+    item.addEventListener('click', function () {
+      document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+      item.classList.add('active');
+      Object.keys(pages).forEach(function (key) { pages[key].hidden = key !== item.dataset.page; });
+      if (item.dataset.page === 'overview') loadOverview();
+    });
+  });
+
+  // ==================== 页面一：授权码生成 ====================
+  document.querySelectorAll('input[name="codeType"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      var isAddOn = $('input[name="codeType"]:checked');
+      var checked = document.querySelector('input[name="codeType"]:checked').value;
+      $('packageFields').hidden = checked === 'add_on';
+      $('addOnFields').hidden = checked !== 'add_on';
+    });
+  });
+
+  $('generateCodeBtn').addEventListener('click', async function () {
+    var codeType = document.querySelector('input[name="codeType"]:checked').value;
+    var payload = {
+      codeType: codeType,
+      quantity: parseInt($('codeQuantity').value, 10) || 1,
+      targetStoreId: $('codeTargetStoreId').value.trim(),
+      note: $('codeNote').value.trim()
+    };
+    if (codeType === 'add_on') {
+      payload.extraStores = parseInt($('codeExtraStores').value, 10) || 5;
+    } else {
+      payload.planType = $('codePlanType').value;
+      payload.durationDays = parseInt($('codeDurationDays').value, 10) || 365;
+    }
+
+    hideAlert($('codesAlert'));
+    $('generateCodeBtn').disabled = true;
+    try {
+      var result = await callConsole('generateActivationCode', payload);
+      if (!result.success) {
+        showAlert($('codesAlert'), 'error', result.error || '铸造失败');
+        return;
+      }
+      showAlert($('codesAlert'), 'success', '铸造成功，共 ' + (result.codes || []).length + ' 张');
+      renderCodeList(result.codes || []);
+    } catch (err) {
+      showAlert($('codesAlert'), 'error', '请求异常：' + (err && err.message ? err.message : err));
+    } finally {
+      $('generateCodeBtn').disabled = false;
+    }
+  });
+
+  function renderCodeList(codes) {
+    var list = $('codeResultList');
+    list.innerHTML = '';
+    codes.forEach(function (c) {
+      var item = document.createElement('div');
+      item.className = 'code-item';
+      var label = document.createElement('span');
+      label.textContent = c.code + (c.planType ? '  ·  ' + c.planType : '') + (c.extraStores ? '  ·  +' + c.extraStores + '店' : '');
+      var copyBtn = document.createElement('span');
+      copyBtn.className = 'code-copy';
+      copyBtn.textContent = '复制';
+      copyBtn.addEventListener('click', function () {
+        navigator.clipboard && navigator.clipboard.writeText(c.code).then(function () {
+          copyBtn.textContent = '已复制';
+          setTimeout(function () { copyBtn.textContent = '复制'; }, 1500);
+        });
+      });
+      item.appendChild(label);
+      item.appendChild(copyBtn);
+      list.appendChild(item);
+    });
+  }
+
+  // ==================== 页面二：应急超管换绑 ====================
+  function showConfirm(text) {
+    return new Promise(function (resolve) {
+      $('confirmText').textContent = text;
+      $('confirmMask').hidden = false;
+      function cleanup(result) {
+        $('confirmMask').hidden = true;
+        $('confirmOkBtn').removeEventListener('click', onOk);
+        $('confirmCancelBtn').removeEventListener('click', onCancel);
+        resolve(result);
+      }
+      function onOk() { cleanup(true); }
+      function onCancel() { cleanup(false); }
+      $('confirmOkBtn').addEventListener('click', onOk);
+      $('confirmCancelBtn').addEventListener('click', onCancel);
+    });
+  }
+
+  $('grantSubmitBtn').addEventListener('click', async function () {
+    var openid = $('grantOpenid').value.trim();
+    var realName = $('grantRealName').value.trim();
+    var phone = $('grantPhone').value.trim();
+    var tenantId = $('grantTenantId').value.trim();
+    hideAlert($('grantAlert'));
+    if (!openid || !realName || !phone) {
+      showAlert($('grantAlert'), 'error', '请填写完整的 openid / 姓名 / 手机号');
+      return;
+    }
+    var ok = await showConfirm('即将为 openid：' + openid + ' 授予超级管理员权限，此操作会写入高危审计日志。确认这是一次经过核实的授权操作吗？');
+    if (!ok) return;
+
+    $('grantSubmitBtn').disabled = true;
+    try {
+      var result = await callConsole('grantEmergencySuperAdmin', { targetOpenid: openid, realName: realName, phone: phone, tenantId: tenantId });
+      if (!result.success) {
+        showAlert($('grantAlert'), 'error', result.error || '操作失败');
+        return;
+      }
+      showAlert($('grantAlert'), 'success', result.message || '已成功授权');
+    } catch (err) {
+      showAlert($('grantAlert'), 'error', '请求异常：' + (err && err.message ? err.message : err));
+    } finally {
+      $('grantSubmitBtn').disabled = false;
+    }
+  });
+
+  // ==================== 页面三：系统运行大盘 ====================
+  async function loadOverview() {
+    hideAlert($('overviewAlert'));
+    try {
+      var result = await callConsole('getSystemOverview', {});
+      if (!result.success) {
+        showAlert($('overviewAlert'), 'error', result.error || '加载失败');
+        return;
+      }
+      renderOverview(result.data);
+    } catch (err) {
+      showAlert($('overviewAlert'), 'error', '请求异常：' + (err && err.message ? err.message : err));
+    }
+  }
+  $('refreshOverviewBtn').addEventListener('click', loadOverview);
+
+  function renderOverview(data) {
+    var grid = $('overviewStats');
+    var coverage = data.snapshotCoverage || {};
+    var percentText = coverage.percent === null || coverage.percent === undefined ? '暂无数据' : coverage.percent + '%';
+    var isWarn = coverage.percent !== null && coverage.percent !== undefined && coverage.percent < 90;
+    grid.innerHTML =
+      '<div class="stat-card"><div class="stat-label">全网活跃门店</div><div class="stat-value">' + data.totalActiveStores + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">机构总数</div><div class="stat-value">' + data.totalTenants + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">昨日快照覆盖率（' + coverage.dateChecked + '）</div><div class="stat-value' + (isWarn ? ' warn' : '') + '">' + percentText + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">昨日已生成 / 应生成</div><div class="stat-value">' + coverage.generated + ' / ' + coverage.expected + '</div></div>';
+  }
+
+  // ==================== 启动 ====================
+  if (session && session.token && session.expiresAt && new Date(session.expiresAt).getTime() > Date.now()) {
+    enterConsole();
+  }
+})();
+</script>
+</body>
+</html>

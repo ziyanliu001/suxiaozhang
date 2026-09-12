@@ -115,6 +115,20 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
+// 🛡️（2026-09-13 Web 管理中台）内部调用令牌校验，与 wxPayCore 的
+// requireInternalCaller 同一条 fail-closed 原则——本函数原本假设"铸造激活码
+// 的调用方一定是携带真实微信身份的 platform_admin"，但 cloudfunctions/
+// adminWebConsole（脱离微信生态的独立 Web 管理中台，见 CLAUDE.md 第 11 节）
+// 是纯服务端到服务端调用，cloud.callFunction() 不会携带任何 OPENID 上下文，
+// resolveCaller(OPENID) 永远查不到调用者身份。新增这道独立令牌只作为
+// handleGenerate 一个动作的"平台管理员身份"平替，不影响 redeem/list/revoke/
+// getStats 这几个仍然要求真实微信身份的动作
+function isInternalConsoleCaller(event) {
+  const expected = process.env.ADMIN_CONSOLE_INTERNAL_TOKEN || '';
+  if (!expected) return false;
+  return event.internalToken === expected;
+}
+
 async function ensureActivationCodesCollection() {
   try {
     await db.collection(ACTIVATION_CODES_COLLECTION).limit(1).get();
@@ -140,9 +154,13 @@ async function findCodeByNormalized(codeNormalized) {
 // 环节本身不在本次自动化范围内（尚未接入支付网关，见文件头注释）
 async function handleGenerate(event, OPENID) {
   const caller = await resolveCaller(OPENID);
-  if (!caller || caller.role !== 'platform_admin') {
+  const isPlatformAdminCaller = !!caller && caller.role === 'platform_admin';
+  if (!isPlatformAdminCaller && !isInternalConsoleCaller(event)) {
     return { success: false, error: '无权限：仅平台管理员可铸造激活码' };
   }
+  // Web 管理中台内部调用时没有真实 OPENID，createdBy 落一个可识别的固定
+  // 标记，与真实微信用户的 openid 在格式上不会撞车，事后审计能一眼分辨来路
+  const createdByLabel = isPlatformAdminCaller ? OPENID : 'admin_web_console';
 
   const codeType = CODE_TYPES.includes(event.codeType) ? event.codeType : 'package';
   const quantity = Math.min(Math.max(parseInt(event.quantity, 10) || 1, 1), MAX_BATCH_QUANTITY);
@@ -187,7 +205,7 @@ async function handleGenerate(event, OPENID) {
         targetStoreId,
         targetStoreName,
         status: 'UNUSED',
-        createdBy: OPENID,
+        createdBy: createdByLabel,
         createdAt: db.serverDate(),
         redeemedBy: null,
         redeemedByTenantId: null,
@@ -224,7 +242,7 @@ async function handleGenerate(event, OPENID) {
       targetStoreId,
       targetStoreName,
       status: 'UNUSED',
-      createdBy: OPENID,
+      createdBy: createdByLabel,
       createdAt: db.serverDate(),
       redeemedBy: null,
       redeemedByTenantId: null,

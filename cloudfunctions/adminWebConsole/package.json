@@ -1,0 +1,9 @@
+{
+  "name": "adminWebConsole",
+  "version": "1.0.0",
+  "description": "云函数：独立于微信生态的 Web 管理中台业务动作（授权码生成/应急超管换绑/系统运行大盘），需配合 adminWebAuth 签发的会话令牌使用",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

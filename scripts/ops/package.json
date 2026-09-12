@@ -1,0 +1,13 @@
+{
+  "name": "suxiaozhang-ops-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地/CI 应急运维脚本——独立依赖树，不污染仓库根目录或云函数的依赖树",
+  "scripts": {
+    "grant-super-admin": "node grant-super-admin.js",
+    "init-web-admin": "node init-web-admin.js"
+  },
+  "dependencies": {
+    "@cloudbase/node-sdk": "^3.18.3"
+  }
+}

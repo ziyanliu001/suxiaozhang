@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "openapi": [],
+    "cloudbase": {
+      "env": "cloudbase-d8g7hg2bf851750ab",
+      "database": {
+        "platform_web_sessions": {
+          "read": true,
+          "write": false
+        },
+        "tenants": {
+          "read": true,
+          "write": false
+        },
+        "user_roles": {
+          "read": true,
+          "write": true
+        },
+        "stores": {
+          "read": true,
+          "write": false
+        },
+        "daily_tenant_snapshots": {
+          "read": true,
+          "write": false
+        },
+        "audit_logs": {
+          "read": false,
+          "write": true
+        }
+      }
+    }
+  },
+  "runtime": "Nodejs16",
+  "timeout": 15,
+  "envVariables": {}
+}
