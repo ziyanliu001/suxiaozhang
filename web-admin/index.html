@@ -7,24 +7,24 @@
 <title>素小账 · 应急管理中台</title>
 <!--
   独立于微信生态的 Web 管理中台（紧急逃生舱第四道防线，见 CLAUDE.md 第 11 节）。
-  纯静态单文件，无构建步骤。⚠️ 不加载 @cloudbase/js-sdk——历经四轮真机排查
-  （详见 web-admin/README.md「已知边界」）确认该 SDK (v2.28.6) 的
-  callFunction() 无论如何都要求客户端本地先有一次成功的登录握手（哪怕是
-  匿名登录）才能拿到凭证，而这个环境只开启了"未登录用户访问云资源权限"、
-  没有开启"匿名登录"身份源，SDK 从架构上无法在这个组合下工作。改为用
-  浏览器原生 fetch() 直连 SDK 内部实际使用的云函数 HTTP 网关（协议细节
-  从 cloudbase.full.js 源码逐层反推确认，见下方脚本里的详细注释），彻底
-  跳过 SDK 自己的凭证状态机。会话认证走 cloudfunctions/adminWebAuth，
-  业务动作走 cloudfunctions/adminWebConsole。
+  纯静态单文件，无构建步骤。⚠️ 不加载 @cloudbase/js-sdk——历经多轮真机排查
+  （完整链路见 web-admin/README.md「已知边界」）确认该 SDK (v2.28.6) 的
+  callFunction() 无论如何都要求客户端本地先有一次成功的登录握手才能拿到
+  凭证，与本环境的权限配置从架构上不兼容。最终方案：在腾讯云开发控制台为
+  adminWebAuth/adminWebConsole 各配置一条官方"HTTP 网关"路由（免鉴权、
+  已开启 CORS），本页面用浏览器原生 fetch() 直接 POST 到这个网关域名 +
+  云函数名作为路径，完全不经过 @cloudbase/js-sdk。会话认证走
+  cloudfunctions/adminWebAuth，业务动作走 cloudfunctions/adminWebConsole。
 
   部署前置条件（无法由代码自行验证，需在腾讯云开发控制台手动确认，详见
   web-admin/README.md）：
-  1. 目标环境已启用"未登录用户访问云资源权限"（微信云开发环境的控制台
-     开关）。本页面直接向云函数 HTTP 网关发起不带 access_token 的请求，
-     赌的正是这个开关会让服务端放行——这个假设未经真实网络验证，如实
-     标注，需要下一轮真机测试确认。
-  2. 本页面实际部署后的域名已加入该环境的"安全域名"白名单。
-  3. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
+  1. 目标环境已启用"未登录用户访问云资源权限"。
+  2. 已为 adminWebAuth、adminWebConsole 两个云函数各配置一条 HTTP 网关
+     路由（免鉴权 + 已开启 CORS），并把网关域名填入本页面登录页"连接设置"
+     里的 HTTP 网关域名字段。
+  3. 本页面实际部署后的域名已加入该环境的"安全域名"白名单（若网关本身
+     对 CORS 来源有限制，还需确认部署域名已被网关的 CORS 配置放行）。
+  4. cloudfunctions/adminWebAuth 与 cloudfunctions/adminWebConsole 已部署，
      且 adminWebConsole 已配置 ADMIN_CONSOLE_INTERNAL_TOKEN 环境变量
      （与 activateTenantSubscription 侧配置的值完全一致）。
 -->
@@ -245,15 +245,11 @@
       <button class="btn" id="loginBtn">登录</button>
 
       <details style="margin-top:20px;">
-        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">连接设置（云开发环境 ID）</summary>
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">连接设置（HTTP 网关域名）</summary>
         <div class="field" style="margin-top:12px;">
-          <label>环境 ID（envId）</label>
-          <input type="text" id="settingEnvId" placeholder="cloudbase-xxxxxxxx" />
-        </div>
-        <div class="field">
-          <label>地域（region，选填）</label>
-          <input type="text" id="settingRegion" placeholder="如 ap-shanghai，留空默认按 ap-shanghai 拼接网关地址" />
-          <p class="muted-note" style="margin-top:6px;">大多数环境留空即可。仅当云开发控制台明确显示了环境所在地域为其它值（如 ap-guangzhou）时才需要手动填写，否则网关地址会拼错，导致请求打不通。</p>
+          <label>HTTP 网关域名（不含协议前缀与路径）</label>
+          <input type="text" id="settingGatewayHost" placeholder="如 cloudbase-xxxxxxxx-nnnnnnnnnn.ap-shanghai.app.tcloudbase.com" />
+          <p class="muted-note" style="margin-top:6px;">在腾讯云开发控制台为 adminWebAuth / adminWebConsole 两个云函数各配置一条 HTTP 网关路由（免鉴权、已开启 CORS）后，把该网关的域名填在这里——只填域名本身，本页面会自动拼上 https:// 与云函数名作为路径。</p>
         </div>
         <button class="btn btn-secondary" id="saveSettingsBtn">保存</button>
       </details>
@@ -459,101 +455,61 @@
     return stackPreview ? msg + '\n' + stackPreview : msg;
   }
 
-  // ==================== 直连云函数网关（彻底绕开 @cloudbase/js-sdk） ====================
-  // 🐛（2026-09-13 一~四，历时四轮排查）完整踩坑链路：
-  //   一）signInAnonymously() 被环境拒绝（"请联系开发者在身份源列表开启
-  //      匿名登录"），改为彻底不调用它；
-  //   二/三）改成"预热 auth.getSession()/打补丁 auth.getLoginState()"，
-  //      真机复测（含无痕模式）证实崩溃依旧，这两版补丁都打在了错误的
-  //      对象上；
-  //   四）下载 CDN 上真实的 cloudbase.full.js@2.28.6，用 Node 搭桩件直接
-  //      require 并调用 app.callFunction() 完整复现出一模一样的
-  //      TypeError: Cannot read properties of null (reading 'scope')，
-  //      字节偏移精确定位到 SDK 内部 _getCredentials() 的判空顺序颠倒
-  //      bug；给真正的崩溃点（挂在
-  //      app.authInstance.config.oauthInstance.oauth2client.localCredentials
-  //      上的 getCredentials()）打补丁后，崩溃确实消失了，但复现脚本显示
-  //      callFunction() 改为得到一个干净的
-  //      "unauthenticated / no refresh token found in credentials" 拒绝，
-  //      注入的 fetch 桩件全程未被调用——即请求根本没有发出去。继续读同一
-  //      段源码发现：这个 SDK 版本的凭证状态机只会在"已经持有一份
-  //      scope==='anonymous' 的旧凭证"时才会去刷新/续期，从完全零凭证的
-  //      状态出发没有任何"自动匿名登录一次"的兜底路径——也就是说这版
-  //      js-sdk 的 callFunction() 无论如何都要求客户端本地先有一次成功的
-  //      登录握手（哪怕是匿名登录）才能构造出第一份凭证，纯客户端补丁
-  //      无法绕过这一点。
+  // ==================== 直连云函数 HTTP 网关（彻底绕开 @cloudbase/js-sdk） ====================
+  // 排查简史（完整链路见 web-admin/README.md「已知边界」，这里只记结论）：
+  //   一~四）signInAnonymously() 被环境拒绝 → 两版 SDK 内部状态补丁均无效
+  //      → Node 复现 + 源码级定位确认这版 js-sdk 的 callFunction() 无论如何
+  //      都要求先有一次成功的登录握手才能拿到凭证，客户端补丁无法绕过；
+  //   五）改用原生 fetch() 直连 js-sdk 内部实际使用的 tcb-api.tencentcloudapi.com
+  //      网关（协议从 SDK 源码逐层反推），真机确认协议格式完全正确（请求
+  //      真实打到网关），但被网关以 [PERMISSION_DENIED] 拒绝——根因是云
+  //      函数自身还有一层独立于环境级"未登录访问权限"开关之外的"安全规则"
+  //      (invoke 规则)，默认要求登录，且无法通过任何云函数的 config.json
+  //      配置，只能在控制台单独设置。
+  //   六（本次）：与其在控制台单独为这两个函数配置安全规则 invoke:true，
+  //      改为控制台层面配置官方支持的"HTTP 网关"路由（/adminWebAuth、
+  //      /adminWebConsole 两条路由，均已开启 CORS + 免鉴权）——这是腾讯云
+  //      开发官方文档化的标准能力（不是像第五轮那样反推 SDK 内部私有协议），
+  //      直接 fetch 这个网关域名 + 云函数名作为路径即可，不再需要
+  //      action/dataVersion/env/function_name/request_data 这套第五轮才需要
+  //      的包装字段，网关会把 HTTP body 直接转换成云函数的 event 参数。
   //
-  // 本次（五）：既然问题出在 js-sdk 自己的凭证状态机上，不再试图迂回它，
-  // 而是直接绕开整个 js-sdk，用浏览器原生 fetch() 直连 js-sdk 内部实际
-  // 调用的那个 HTTP 网关——这不是凭空拼一个未文档化的接口，而是从同一份
-  // cloudbase.full.js 源码里逐层追出来的、SDK 自己也在用的真实协议：
-  //   URL：https://<envId>.<region||'ap-shanghai'>.tcb-api.tencentcloudapi.com/web?env=<envId>
-  //   Method：POST，Content-Type: application/json;charset=UTF-8
-  //   Body：{ action:'functions.invokeFunction', dataVersion:'2020-01-10',
-  //           env:<envId>, function_name:<云函数名>,
-  //           request_data: JSON.stringify(<data 参数>) }
-  //           —— request_data 是 JSON 字符串，不是原始对象，这一点是从
-  //              SDK 源码里 `I=p?JSON.stringify(p):""` 这行反推确认的。
-  //   响应：成功时 { requestId, data: { response_data: '<JSON 字符串>' } }，
-  //         失败时顶层带 code 字段（{code, message}）。
-  // 与 SDK 自身实现的唯一区别：SDK 会在请求体里再带一个 access_token 字段
-  // （因为 functions.invokeFunction 不在 SDK 内部"免鉴权动作白名单"里，
-  // 一定会先尝试拿 access_token，这正是上面（四）里"无论如何都要求先登录"
-  // 这条结论的直接来源）——这里刻意不带这个字段，赌的是服务端"未登录用户
-  // 访问云资源权限"这个开关本来就是为"完全没有 access_token 的请求"设计
-  // 的授权豁免，只是 js-sdk 客户端自己的实现从未开放过这条"不尝试拿 token
-  // 就直接发请求"的路径。⚠️ 如实标注：这个假设本身未经真实网络验证——
-  // Node 环境里没有真实的云开发网关可连，只验证到了"请求的 URL/Body 格式
-  // 与 SDK 源码逐行对应"这一层，服务端是否真的会放行一个完全不带
-  // access_token 的请求，需要用户下一轮真机测试确认。
-  function buildFunctionsInvokeUrl() {
-    var region = settings.region || 'ap-shanghai';
-    return 'https://' + settings.envId + '.' + region + '.tcb-api.tencentcloudapi.com/web?env=' + encodeURIComponent(settings.envId);
-  }
-
+  // 与第五轮的另一个关键差异：通过 HTTP 网关触发时，云函数收到的 event 不再
+  // 是"业务字段直接平铺在 event 上"，而是 event.body 里放着请求体原始字符串
+  // （标准 API 网关约定）——因此 cloudfunctions/adminWebAuth 与
+  // cloudfunctions/adminWebConsole 都新增了 lib/normalizeGatewayEvent.js，
+  // 在 exports.main 入口统一识别并解包这两种触发方式，函数体内其余逻辑不用
+  // 关心自己是被网关调用还是被云端测试/cloud.callFunction() 直接调用。
   async function callFn(name, data) {
-    if (!settings.envId) {
-      throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
+    if (!settings.gatewayHost) {
+      throw new Error('请先在登录页展开"连接设置"填写 HTTP 网关域名');
     }
-    var url = buildFunctionsInvokeUrl();
-    var body = {
-      action: 'functions.invokeFunction',
-      dataVersion: '2020-01-10',
-      env: settings.envId,
-      function_name: name,
-      request_data: JSON.stringify(data || {})
-    };
+    var url = 'https://' + settings.gatewayHost + '/' + name;
     var response;
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json;charset=UTF-8' },
-        body: JSON.stringify(body)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {})
       });
     } catch (err) {
       console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') fetch', err && err.stack ? err.stack : err);
       throw err;
     }
+    var text = await response.text();
     var payload;
     try {
-      payload = await response.json();
+      payload = text ? JSON.parse(text) : {};
     } catch (err) {
-      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') parse-response', err && err.stack ? err.stack : err, 'HTTP ' + response.status);
-      throw new Error('云函数网关返回了非 JSON 响应（HTTP ' + response.status + '），请核实环境 ID / region 是否正确');
+      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') parse-response', err && err.stack ? err.stack : err, 'HTTP ' + response.status, text.slice(0, 300));
+      throw new Error('云函数网关返回了非 JSON 响应（HTTP ' + response.status + '）：' + text.slice(0, 200));
     }
-    if (payload && payload.code) {
-      throw new Error('[' + payload.code + '] ' + (payload.message || '云函数调用失败'));
+    if (!response.ok) {
+      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') http-error', 'HTTP ' + response.status, payload);
+      var detail = (payload && (payload.message || payload.error)) || JSON.stringify(payload);
+      throw new Error('云函数网关返回 HTTP ' + response.status + '：' + detail);
     }
-    var responseData = payload && payload.data && payload.data.response_data;
-    if (typeof responseData !== 'string') {
-      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ') unexpected-shape', payload);
-      throw new Error('云函数网关返回了意料之外的结构：' + JSON.stringify(payload));
-    }
-    try {
-      return JSON.parse(responseData) || {};
-    } catch (err) {
-      throw new Error('云函数返回内容不是合法 JSON：' + responseData.slice(0, 200));
-    }
+    return payload || {};
   }
 
   async function callConsole(action, data) {
@@ -579,10 +535,13 @@
   function hideAlert(el) { el.hidden = true; }
 
   // ==================== 登录 ====================
-  $('settingEnvId').value = settings.envId || '';
-  $('settingRegion').value = settings.region || '';
+  function normalizeGatewayHostInput(raw) {
+    // 容错：用户可能会连协议前缀/末尾斜杠一起粘贴过来，统一清洗成纯域名
+    return String(raw || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  }
+  $('settingGatewayHost').value = settings.gatewayHost || '';
   $('saveSettingsBtn').addEventListener('click', function () {
-    settings = { envId: $('settingEnvId').value.trim(), region: $('settingRegion').value.trim() };
+    settings = { gatewayHost: normalizeGatewayHostInput($('settingGatewayHost').value) };
     saveSettings(settings);
     showAlert($('loginAlert'), 'success', '连接设置已保存');
   });

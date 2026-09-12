@@ -32,6 +32,7 @@ const _ = db.command;
 const { isSessionValid } = require('./lib/verifySession');
 const { validateRealName, validatePhone, buildUserRoleDoc, buildAuditLogEntry } = require('./lib/validateClaim');
 const { buildSystemOverview } = require('./lib/buildSystemOverview');
+const { normalizeGatewayEvent } = require('./lib/normalizeGatewayEvent');
 
 const SESSIONS_COLLECTION = 'platform_web_sessions';
 const AUDIT_COLLECTION = 'audit_logs';
@@ -210,7 +211,8 @@ async function handleGetSystemOverview() {
   };
 }
 
-exports.main = async (event) => {
+exports.main = async (rawEvent) => {
+  const event = normalizeGatewayEvent(rawEvent);
   try {
     const session = await requireValidSession(event);
     if (!session.valid) {

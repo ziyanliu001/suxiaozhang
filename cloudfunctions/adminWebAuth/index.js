@@ -33,6 +33,7 @@ const { generateSalt, hashPassword, verifyPassword } = require('./lib/passwordHa
 const { evaluateLockout, computeNextAttemptRecord, buildLoginAttemptDocId } = require('./lib/loginLockout');
 const { generateSessionToken, buildSessionDoc, isSessionValid } = require('./lib/sessionToken');
 const { validateBootstrapInput, buildAdminDocId } = require('./lib/bootstrapAdmin');
+const { normalizeGatewayEvent } = require('./lib/normalizeGatewayEvent');
 
 const ADMINS_COLLECTION = 'platform_web_admins';
 const SESSIONS_COLLECTION = 'platform_web_sessions';
@@ -212,7 +213,8 @@ async function handleVerifySession(event) {
   return { success: true, username: result.username };
 }
 
-exports.main = async (event) => {
+exports.main = async (rawEvent) => {
+  const event = normalizeGatewayEvent(rawEvent);
   try {
     switch (event.action) {
       case 'login':
