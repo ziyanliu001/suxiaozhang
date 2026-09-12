@@ -135,6 +135,8 @@
     font-size: 13px;
     margin-bottom: 16px;
     line-height: 1.5;
+    white-space: pre-wrap; /* 允许显示错误堆栈前两行的换行，配合 logAndDescribeError() */
+    word-break: break-all;
   }
   .alert-error { background: var(--danger-bg); color: var(--danger); }
   .alert-success { background: var(--success-bg); color: var(--success); }
@@ -442,6 +444,22 @@
     return String(err);
   }
 
+  // 🐛（2026-09-13 四）排查 null.scope 崩溃的过程中新增：所有 catch 块统一
+  // 走这个函数，而不是各自裸调用 formatError()——除了格式化展示文案，
+  // 还会把完整 err.stack 打到控制台（前缀 [WEB_ADMIN_ERROR_STACK]，方便
+  // 真机复测时直接在浏览器 F12 控制台搜这个前缀定位），并把堆栈前两行拼进
+  // 界面红框文案里，不需要每次都口头转述"控制台里报了什么"。
+  function stackFirstLines(err, n) {
+    if (!err || !err.stack) return '';
+    return String(err.stack).split('\n').slice(0, n || 2).join('\n');
+  }
+  function logAndDescribeError(context, err) {
+    console.error('[WEB_ADMIN_ERROR_STACK]: ' + context, err && err.stack ? err.stack : err);
+    var msg = formatError(err);
+    var stackPreview = stackFirstLines(err, 2);
+    return stackPreview ? msg + '\n' + stackPreview : msg;
+  }
+
   // ==================== CloudBase 初始化 ====================
   // 🐛（2026-09-13 一）修复对 signInAnonymously 的不当依赖：微信云开发环境的
   // 控制台开关是"未登录用户访问云资源权限"（未登录模式），与腾讯云独立版
@@ -452,23 +470,72 @@
   // 登录"。
   //
   // 🐛（2026-09-13 二/三）先后两版尝试通过"调用一次 auth.getSession() 预热
-  // SDK 内部状态"来规避 TypeError: Cannot read properties of null
-  // (reading 'scope')，真机复测（含无痕模式，排除本地缓存干扰）证实这个
-  // 崩溃依然稳定复现——说明 getSession() 并不会更新 callFunction() 内部
-  // 请求拦截器实际读取的那份登录态，"预热一次就够"这个假设不成立，
-  // @cloudbase/js-sdk (v2.28.6) 在没有任何登录凭证时，callFunction() 内部
-  // 每次都会重新调用一次 auth.getLoginState()，未登录场景下该方法本身就
-  // 返回 null，随后拦截器未做判空直接读 loginState.scope，请求根本没有
-  // 发出去。
+  // SDK 内部状态""给 auth.getLoginState() 打补丁"来规避 TypeError:
+  // Cannot read properties of null (reading 'scope')，真机复测（含无痕
+  // 模式，排除本地缓存干扰）证实崩溃依然稳定复现——这两版补丁全都打在了
+  // 错误的对象上，从未真正拦截到崩溃发生的那一行代码。
   //
-  // 修复：不再指望"提前调用一次什么方法"去改变 SDK 内部状态，而是直接给
-  // 会被反复调用的 auth.getLoginState() 打一个轻量兜底补丁——包一层，
-  // 原方法解析出 null 或直接抛异常时，统一兜底返回 { scope: '' }，让
-  // 拦截器永远读到一个非 null 的对象，从根上中和这个判空缺失的 SDK bug。
-  // 这个补丁只影响"要不要崩溃"这一件事，不冒充、也不产生任何登录态——
-  // 真正的操作权限依旧完全由 adminWebAuth/adminWebConsole 签发与校验的
-  // sessionToken 决定，与本仓库彻底不使用 auth.signInAnonymously() 这条
-  // 决定没有冲突。
+  // 🐛（2026-09-13 四，本次）真正定位到崩溃源头：把 CDN 上引用的
+  // cloudbase.full.js@2.28.6 原始文件下载到本地，用 Node 搭最小 window/
+  // localStorage/fetch 桩件直接 require 并调用 app.callFunction()，
+  // 完整复现出一模一样的 TypeError，并且 Node 报出的文件字节偏移量精确
+  // 定位到这一行压缩后的源码（真实存在于官方发布的 SDK 里，不是猜测）：
+  //   _getCredentials(){var e=this;return x((function*(){
+  //     var t=yield e.localCredentials.getCredentials();
+  //     if(t.scope===p)return t;          // ← 崩溃点：t 为 null 时直接读 .scope
+  //     if(!t){ ...走"未登录"错误分支... }  // 判空写在了访问 .scope 之后，顺序反了
+  //     ...
+  //   }))()}
+  // 这个 localCredentials 实例（真实持有 getCredentials() 方法的对象）
+  // 挂在 app.authInstance.config.oauthInstance.oauth2client.localCredentials
+  // 这条路径上——用同一份 Node 复现脚本验证过，从未登录状态下
+  // localCredentials.getCredentials() 就是会 resolve 出 null（本地
+  // localStorage 里从未写入过任何凭证），这就是崩溃的直接触发条件。
+  //
+  // 补丁思路：不改 SDK 本身（做不到，是 CDN 引用的第三方文件），直接包一层
+  // localCredentials.getCredentials()——resolve 出 null/undefined 时兜底
+  // 替换成 {}，让 SDK 自己后面那句 if(!t){...} 走到它原本就写好的"未登录"
+  // 处理分支，而不是在到达这句判空之前就先崩溃。⚠️ 如实标注：这个补丁能
+  // 消除崩溃（已用同一份 Node 脚本验证——打补丁后不再抛 TypeError），但
+  // 补丁生效后 callFunction() 在这个 SDK 版本下会改为得到一个干净的
+  // "unauthenticated / no refresh token found in credentials" 拒绝，
+  // 而不是真正把请求发出去——说明这版 SDK 的 callFunction() 无论如何都
+  // 要求先有一次成功的登录（哪怕是匿名登录）才能拿到凭证，"未登录用户
+  // 访问云资源权限"这个环境开关看起来管的是"服务端要不要认可这个凭证"，
+  // 不能让客户端完全跳过"先拿到一个凭证"这一步。这意味着单靠客户端打
+  // 补丁无法让登录真正成功，需要用户决定下一步方向（见对话里的说明），
+  // 这里的补丁只负责把"崩溃"降级成"能看清楚、可诊断的拒绝"。
+  function patchLocalCredentialsNullGuard(candidateApp) {
+    var lc = null;
+    try {
+      lc = candidateApp.authInstance
+        && candidateApp.authInstance.config
+        && candidateApp.authInstance.config.oauthInstance
+        && candidateApp.authInstance.config.oauthInstance.oauth2client
+        && candidateApp.authInstance.config.oauthInstance.oauth2client.localCredentials;
+    } catch (e) {
+      lc = null;
+    }
+    if (!lc || typeof lc.getCredentials !== 'function' || lc.__nullScopeGuardApplied) {
+      return;
+    }
+    var originalGetCredentials = lc.getCredentials.bind(lc);
+    lc.getCredentials = async function () {
+      var result;
+      try {
+        result = await originalGetCredentials();
+      } catch (e) {
+        result = null;
+      }
+      return result || {};
+    };
+    lc.__nullScopeGuardApplied = true;
+  }
+
+  // 保留第（三）版对 auth.getLoginState() 的补丁作为额外防线——它没有命中
+  // 本次真正的崩溃点，但 getLoginState() 在其它调用路径（如
+  // hasLoginState()/onAuthStateChange）里同样可能读到 null，属于另一个
+  // 独立、廉价、无副作用的判空加固，不冲突所以一并保留。
   function patchAuthLoginStateNullGuard(candidateApp) {
     var auth;
     try {
@@ -493,19 +560,30 @@
 
   function ensureApp() {
     if (app) return app;
-    if (!settings.envId) {
-      throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
+    try {
+      if (!settings.envId) {
+        throw new Error('请先在登录页展开"连接设置"填写云开发环境 ID');
+      }
+      var initOptions = { env: settings.envId };
+      if (settings.region) initOptions.region = settings.region;
+      app = window.cloudbase.init(initOptions);
+      patchLocalCredentialsNullGuard(app);
+      patchAuthLoginStateNullGuard(app);
+      return app;
+    } catch (err) {
+      console.error('[WEB_ADMIN_ERROR_STACK]: ensureApp()', err && err.stack ? err.stack : err);
+      throw err;
     }
-    var initOptions = { env: settings.envId };
-    if (settings.region) initOptions.region = settings.region;
-    app = window.cloudbase.init(initOptions);
-    patchAuthLoginStateNullGuard(app);
-    return app;
   }
 
   async function callFn(name, data) {
-    var res = await ensureApp().callFunction({ name: name, data: data || {} });
-    return res.result || {};
+    try {
+      var res = await ensureApp().callFunction({ name: name, data: data || {} });
+      return res.result || {};
+    } catch (err) {
+      console.error('[WEB_ADMIN_ERROR_STACK]: callFn(' + name + ')', err && err.stack ? err.stack : err);
+      throw err;
+    }
   }
 
   async function callConsole(action, data) {
@@ -560,7 +638,7 @@
       saveSession(session);
       enterConsole();
     } catch (err) {
-      showAlert($('loginAlert'), 'error', '网络异常或环境配置有误：' + formatError(err));
+      showAlert($('loginAlert'), 'error', '网络异常或环境配置有误：' + logAndDescribeError('login', err));
     } finally {
       $('loginBtn').disabled = false;
       $('loginBtn').textContent = '登录';
@@ -568,7 +646,9 @@
   });
 
   $('logoutBtn').addEventListener('click', async function () {
-    try { await callFn('adminWebAuth', { action: 'logout', token: session && session.token }); } catch (e) { /* 忽略 */ }
+    try { await callFn('adminWebAuth', { action: 'logout', token: session && session.token }); } catch (e) {
+      console.error('[WEB_ADMIN_ERROR_STACK]: logout', e && e.stack ? e.stack : e); // 退出登录即使失败也放行，仅记录日志不阻断
+    }
     forceLogout();
   });
 
@@ -634,7 +714,7 @@
       showAlert($('codesAlert'), 'success', '铸造成功，共 ' + (result.codes || []).length + ' 张');
       renderCodeList(result.codes || []);
     } catch (err) {
-      showAlert($('codesAlert'), 'error', '请求异常：' + formatError(err));
+      showAlert($('codesAlert'), 'error', '请求异常：' + logAndDescribeError('generateActivationCode', err));
     } finally {
       $('generateCodeBtn').disabled = false;
     }
@@ -703,7 +783,7 @@
       }
       showAlert($('grantAlert'), 'success', result.message || '已成功授权');
     } catch (err) {
-      showAlert($('grantAlert'), 'error', '请求异常：' + formatError(err));
+      showAlert($('grantAlert'), 'error', '请求异常：' + logAndDescribeError('grantEmergencySuperAdmin', err));
     } finally {
       $('grantSubmitBtn').disabled = false;
     }
@@ -720,7 +800,7 @@
       }
       renderOverview(result.data);
     } catch (err) {
-      showAlert($('overviewAlert'), 'error', '请求异常：' + formatError(err));
+      showAlert($('overviewAlert'), 'error', '请求异常：' + logAndDescribeError('getSystemOverview', err));
     }
   }
   $('refreshOverviewBtn').addEventListener('click', loadOverview);
