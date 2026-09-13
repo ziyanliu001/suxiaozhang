@@ -3259,6 +3259,7 @@ page {
 }
 
 .qa-grid-cell {
+  position: relative;
   min-width: 0;
   min-height: 132rpx;
   box-sizing: border-box;
@@ -3271,12 +3272,36 @@ page {
   background: #FFFFFF;
   border-radius: 24rpx;
   box-shadow: 0 6rpx 18rpx rgba(0, 0, 0, 0.06);
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* 🐛（2026-09-13 按压态优化）此前只有 transform:scale 反馈，按下瞬间阴影
+   毫无变化，"浮起感"在按下时不会消失，手感偏平。叠加阴影收缩（既定的
+   "按下=贴近纸面"隐喻），与 scale 一起构成更完整的按压反馈 */
 .qa-grid-cell:active {
   transform: scale(0.96);
   background: #FAF8F5;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+}
+
+/* 🆕（2026-09-13）"待办审核"卡片右上角浮层徽标，与 .today-action-badge
+   同一套红色圆点手法，尺寸放大一档匹配卡片体量 */
+.qa-grid-badge {
+  position: absolute;
+  top: -12rpx;
+  right: -8rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 16rpx;
+  background: #E03131;
+  color: #FFFFFF;
+  font-size: 20rpx;
+  font-weight: bold;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 2rpx 6rpx rgba(224, 49, 49, 0.4);
 }
 
 .qa-grid-cell .icon {
@@ -7360,19 +7385,29 @@ page {
    wxml 改动一并删除——manager-home-card/finance-home-card 现已自适应全国
    总览场景，"进入店务管理/财务稽核台"链接不再需要被这条阻断性提示拦住 */
 
-/* 🏛️（2026-09-09 超管全国总览工作台重构·视觉降噪）对齐本页主流卡片基线
-   .ui-card-wrapper（24rpx 圆角 + 0 4rpx 16rpx rgba(0,0,0,0.03) 阴影 + 1rpx
-   描边）——此前这两张卡片各自独立维护一套更重的阴影（20rpx/0.06），与页面
-   其余卡片视觉不一致。只改这一处规则块，不触碰页面其余 30 余张独立卡片样式
-   （规模超出本次改动范围，见 plan 文档"范围与取舍"） */
-.manager-home-card,
-.finance-home-card {
+/* 🆕（2026-09-13 双工作台 Tab 聚合）workspace-console-card 是现在唯一的
+   外层卡片容器（今日闭环指示条 + Tab 切换器 + 下方 manager-home-card/
+   finance-home-card 内容都嵌在里面），沿用原来 manager-home-card/
+   finance-home-card 的卡片基线（24rpx 圆角 + 0 4rpx 16rpx rgba(0,0,0,0.03)
+   阴影 + 1rpx 描边），不重新设计视觉语言 */
+.workspace-console-card {
   background: #FFFFFF;
   border-radius: 24rpx;
   padding: 28rpx;
   margin-bottom: 24rpx;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
   border: 1rpx solid #F1F3F5;
+}
+
+/* 🏛️（2026-09-09 超管全国总览工作台重构·视觉降噪）对齐本页主流卡片基线
+   .ui-card-wrapper。
+   🆕（2026-09-13）manager-home-card/finance-home-card 不再是独立卡片——
+   现在嵌套在 workspace-console-card 内部，背景/圆角/阴影/描边全部收归外层
+   卡片统一负责，避免"卡中卡"双重描边；只保留一点顶部间距，让 Tab 切换器/
+   今日闭环指示条与下方内容之间留出呼吸感 */
+.manager-home-card,
+.finance-home-card {
+  margin-top: 4rpx;
 }
 
 .manager-home-card .card-header-welcome,
@@ -7499,6 +7534,249 @@ page {
 /* 🏛️（主包瘦身，2026-09-06）原"财务专属功能区：稽核封账/风控预警弹窗"
    一整套样式已随 WXML 节点搬迁至 subpackages/admin/pages/finance-audit
    自己的 wxss，此处不再需要 */
+
+/* 🆕（2026-09-13 今日闭环指示条）三枚等分 chip：开餐状态/餐报记账/待审核，
+   暖色渐变底与 manager-bg 呼应但更浅，与下方 Tab 切换器/内容区分层次 */
+.today-action-bar {
+  display: flex;
+  align-items: stretch;
+  background: linear-gradient(135deg, #FFFDF8 0%, #FFF3E0 100%);
+  border: 1rpx solid #FFE0B2;
+  border-radius: 20rpx;
+  padding: 20rpx 12rpx;
+  margin-bottom: 20rpx;
+  gap: 4rpx;
+}
+
+.today-action-item {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 4rpx 4rpx;
+  border-radius: 14rpx;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.today-action-item:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.today-action-icon {
+  font-size: 30rpx;
+  line-height: 1.2;
+}
+
+.today-action-label {
+  font-size: 18rpx;
+  color: #8D6E63;
+}
+
+.today-action-value {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #444444;
+  text-align: center;
+  word-break: break-word;
+}
+
+.today-action-value.ok {
+  color: #2E7D32;
+}
+
+.today-action-value.warn {
+  color: #D32F2F;
+}
+
+.today-action-value.locked {
+  color: #6B6B70;
+}
+
+.today-action-value.muted {
+  color: #999999;
+}
+
+.today-action-divider {
+  width: 1rpx;
+  background: rgba(140, 29, 24, 0.12);
+  margin: 4rpx 0;
+}
+
+/* 与 .qa-grid-badge / .platform-card-badge 同一套红色角标手法，缩小尺寸
+   适配这里更窄的 chip 宽度 */
+.today-action-badge {
+  position: absolute;
+  top: -8rpx;
+  right: 4rpx;
+  min-width: 28rpx;
+  height: 28rpx;
+  line-height: 28rpx;
+  padding: 0 6rpx;
+  border-radius: 14rpx;
+  background: #E03131;
+  color: #FFFFFF;
+  font-size: 18rpx;
+  font-weight: bold;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 2rpx 6rpx rgba(224, 49, 49, 0.4);
+}
+
+/* 🆕（2026-09-13）店务运营/财务稽核 Tab 切换器：仅 isManager && isFinance
+   同时为真时渲染，胶囊分段控件，选中态白底+主题色文字+浮起阴影 */
+.console-tab-switcher {
+  display: flex;
+  background: #F5F5F5;
+  border-radius: 16rpx;
+  padding: 6rpx;
+  margin-bottom: 16rpx;
+  gap: 6rpx;
+}
+
+.console-tab-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 14rpx 0;
+  border-radius: 12rpx;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.console-tab-icon {
+  font-size: 26rpx;
+  line-height: 1;
+}
+
+.console-tab-label {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #6B6B70;
+}
+
+.console-tab-item.active {
+  background: #FFFFFF;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+}
+
+.console-tab-item.active .console-tab-label {
+  color: #8C1D18;
+}
+
+/* 🆕（2026-09-13 激活进销存看板）此前"📦 进销存"只是 .qa-extra-row 空壳，
+   现改为独立的小卡片：4 枚储备胶囊 + 拍照记物资快捷入口 */
+.inventory-console-card {
+  margin-top: 16rpx;
+  padding: 24rpx;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.inventory-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.inventory-card-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #444444;
+}
+
+.inventory-manage-link {
+  font-size: 22rpx;
+  color: #8C1D18;
+}
+
+.inventory-pill-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.inventory-pill {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  padding: 14rpx 4rpx;
+  border-radius: 14rpx;
+  background: #F5F5F5;
+  transition: transform 0.15s ease;
+}
+
+.inventory-pill:active {
+  transform: scale(0.96);
+}
+
+.inventory-pill-name {
+  font-size: 20rpx;
+  color: #777777;
+}
+
+.inventory-pill-status {
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #999999;
+}
+
+.inventory-pill.status-green {
+  background: rgba(46, 125, 50, 0.1);
+}
+
+.inventory-pill.status-green .inventory-pill-status {
+  color: #2E7D32;
+}
+
+.inventory-pill.status-yellow {
+  background: rgba(245, 127, 23, 0.1);
+}
+
+.inventory-pill.status-yellow .inventory-pill-status {
+  color: #F57F17;
+}
+
+.inventory-pill.status-red {
+  background: rgba(211, 47, 47, 0.1);
+}
+
+.inventory-pill.status-red .inventory-pill-status {
+  color: #D32F2F;
+}
+
+.inventory-pill.status-neutral .inventory-pill-status {
+  color: #AAAAAA;
+}
+
+.btn-inventory-ocr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 72rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #8C1D18 0%, #B22222 100%);
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: bold;
+  box-sizing: border-box;
+  transition: transform 0.15s ease;
+}
+
+.btn-inventory-ocr:active {
+  transform: scale(0.97);
+}
 
 .shift-scroll-area {
   max-height: 55vh;

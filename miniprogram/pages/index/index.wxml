@@ -659,84 +659,139 @@
       <text class="slogan-tag" wx:if="{{currentSponsorInfo.brandSlogan}}">{{currentSponsorInfo.brandSlogan}}</text>
     </view>
 
-    <!-- 📊 数据概览卡片上移，充实上半屏视觉焦点 -->
-    <view class="manager-home-card" id="managerConsoleAnchor" wx:if="{{isManager || isSuperAdmin}}">
-      <view class="card-header-welcome">
-        <view class="welcome-icon idx-icon-svg idx-icon-crown"></view>
-        <view class="welcome-text-box">
-          <text class="welcome-title">{{isAllStoresView ? '全国总览' : (currentStoreName || '本门店')}} · 店长工作台</text>
-          <text class="welcome-sub">{{isAllStoresView ? '全域门店运营总览，点击指标可穿透至具体门店' : '掌管门店日常运营、小票记账与餐报发布'}}</text>
+    <!-- 📊（2026-09-13 双工作台 Tab 聚合工业化重构）manager-home-card/
+         finance-home-card 此前上下平铺堆叠，isSuperAdmin 账号一次要看两张
+         几乎同高的卡片，职责也容易混——合并进一张 workspace-console-card，
+         顶部"今日闭环指示条"两个 Tab 共享，下方按 consoleActiveTab 切换
+         展示店务/财务各自的健康指标。isManager/isFinance 都已经把
+         store_patriarch/super_admin 归并在内（见 initCurrentUserRole 的
+         数组定义），"|| isSuperAdmin"这层此前的兜底其实早已冗余，这里顺手
+         不再重复写 -->
+    <view class="workspace-console-card" id="workspaceConsoleAnchor" wx:if="{{isManager || isFinance}}">
+
+      <!-- 🆕 今日闭环指示条：开餐→记账→审核，三步走的今日运营状态一览，
+           两个 Tab 共享（财务同样关心"今日账本记了没"），不随 Tab 切换消失 -->
+      <view class="today-action-bar">
+        <view class="today-action-item" bindtap="onTapToolDailyMenu">
+          <text class="today-action-icon">🍳</text>
+          <text class="today-action-label">开餐状态</text>
+          <text class="today-action-value {{todayMealStatus === 'open' ? 'ok' : (todayMealStatus === 'closed' ? 'muted' : 'warn')}}">
+            {{todayMealStatus === 'open' ? ('已开餐 ' + todayMealCount + ' 人') : (todayMealStatus === 'closed' ? '今日休餐' : '未登记')}}
+          </text>
+        </view>
+        <view class="today-action-divider"></view>
+        <view class="today-action-item" bindtap="onScrollToReportForm">
+          <text class="today-action-icon">📝</text>
+          <text class="today-action-label">餐报记账</text>
+          <text class="today-action-value {{todayReportStatus === 'AUDITED_LOCKED' ? 'locked' : (todayReportStatus ? 'ok' : 'warn')}}">
+            {{todayReportStatus === 'AUDITED_LOCKED' ? '财务已封账' : (todayReportStatus ? '待确认' : '未录入')}}
+          </text>
+        </view>
+        <block wx:if="{{isManager}}">
+          <view class="today-action-divider"></view>
+          <view class="today-action-item" bindtap="onOpenVolunteerAudit">
+            <text class="today-action-icon">📋</text>
+            <text class="today-action-label">待审核事项</text>
+            <text class="today-action-value {{pendingAuditCount > 0 ? 'warn' : 'ok'}}">
+              {{pendingAuditCount > 0 ? (pendingAuditCount + ' 项待处理') : '全部已处理完毕 ✅'}}
+            </text>
+            <text class="today-action-badge" wx:if="{{pendingAuditCount > 0}}">{{pendingAuditCount > 99 ? '99+' : pendingAuditCount}}</text>
+          </view>
+        </block>
+      </view>
+
+      <!-- 🆕 Tab 切换：仅 isManager && isFinance 同时为真（store_patriarch/
+           super_admin）才展示——单一角色账号看到的还是原先那一张卡片，不
+           因为多了个切换器而多一步操作 -->
+      <view class="console-tab-switcher" wx:if="{{isManager && isFinance}}">
+        <view class="console-tab-item {{consoleActiveTab === 'ops' ? 'active' : ''}}" data-tab="ops" bindtap="onSwitchConsoleTab">
+          <text class="console-tab-icon">👑</text>
+          <text class="console-tab-label">店务运营</text>
+        </view>
+        <view class="console-tab-item {{consoleActiveTab === 'finance' ? 'active' : ''}}" data-tab="finance" bindtap="onSwitchConsoleTab">
+          <text class="console-tab-icon">🔒</text>
+          <text class="console-tab-label">财务稽核</text>
         </view>
       </view>
 
-      <view class="role-stats-banner manager-bg">
-        <view class="stat-item">
-          <text class="stat-num">{{monthlyReportCount || 0}}</text>
-          <text class="stat-label">本月餐报/篇</text>
+      <view class="manager-home-card" wx:if="{{isManager && (!isFinance || consoleActiveTab === 'ops')}}">
+        <view class="card-header-welcome">
+          <view class="welcome-icon idx-icon-svg idx-icon-crown"></view>
+          <view class="welcome-text-box">
+            <text class="welcome-title">{{isAllStoresView ? '全国总览' : (currentStoreName || '本门店')}}</text>
+            <text class="welcome-sub">{{isAllStoresView ? '全域门店运营总览，点击指标可穿透至具体门店' : '掌管门店日常运营、小票记账与餐报发布'}}</text>
+          </view>
         </view>
-        <view class="stat-divider"></view>
-        <view class="stat-item" bindtap="onOpenVolunteerAudit">
-          <text class="stat-num highlight">{{pendingAuditCount || 0}}</text>
-          <text class="stat-label">待审核/人</text>
-        </view>
-        <view class="stat-divider"></view>
-        <view class="stat-item">
-          <text class="stat-num">{{activeVolunteersCount || 0}}</text>
-          <text class="stat-label">志愿团队/人</text>
-        </view>
-      </view>
-    </view>
 
-    <view class="finance-home-card" id="financeConsoleAnchor" wx:if="{{isFinance || isSuperAdmin}}">
-      <view class="card-header-welcome">
-        <view class="welcome-icon idx-icon-svg idx-icon-lock"></view>
-        <view class="welcome-text-box">
-          <text class="welcome-title">{{isAllStoresView ? '全国总览' : (currentStoreName || '本门店')}} · 财务稽核台</text>
-          <text class="welcome-sub">{{isAllStoresView ? '全域账本健康总览，点击指标可穿透至具体门店' : '账本防篡改稽核、资金安全与数据导出'}}</text>
-        </view>
-      </view>
-
-      <!-- 🐛 「账本锁定状态」此前是写死的 "100%" 占位文案，未绑定任何数据源，
-           也没有点击事件。现改为真实口径（本店累计已稽核签核笔数占比，见
-           fetchFinanceLedgerStatus）+ 点击可直接唤起"稽核与封账"操作面板，
-           与另外两格保持一致的"指标可点击穿透"体验 -->
-      <view class="role-stats-banner finance-bg">
-        <view class="stat-item" bindtap="onOpenFinanceLockModal">
-          <text class="stat-num green-text" wx:if="{{!financeLedgerStatusLoading}}">{{financeLedgerAuditedRate === null ? '--' : financeLedgerAuditedRate + '%'}}</text>
-          <text class="stat-num green-text" wx:else>…</text>
-          <text class="stat-label">账本锁定状态</text>
-        </view>
-        <view class="stat-divider"></view>
-        <view class="stat-item" bindtap="onExportExcelHistory">
-          <text class="stat-num">{{excelExportCount || 0}}</text>
-          <text class="stat-label">月度导出/次</text>
-        </view>
-        <view class="stat-divider"></view>
-        <view class="stat-item" bindtap="onOpenRiskAlertsModal">
-          <text class="stat-num {{riskAlertCount > 0 ? 'highlight' : ''}}">{{riskAlertCount || 0}}</text>
-          <text class="stat-label">异常风控预警</text>
+        <view class="role-stats-banner manager-bg">
+          <view class="stat-item">
+            <text class="stat-num">{{monthlyReportCount || 0}}</text>
+            <text class="stat-label">本月餐报/篇</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-item" bindtap="onOpenVolunteerAudit">
+            <text class="stat-num highlight">{{pendingAuditCount || 0}}</text>
+            <text class="stat-label">待审核/人</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-item">
+            <text class="stat-num">{{activeVolunteersCount || 0}}</text>
+            <text class="stat-label">志愿团队/人</text>
+          </view>
         </view>
       </view>
 
-      <!-- 🌟（2026-09-06 消除多头堆叠）"稽核与封账"/"风控预警日志"已随上方
-           stat-item 一起指向 finance-audit 分包页面，原 2x2 宫格里的同名格子
-           是纯重复入口，删除；"Excel 账本导出"与上方"月度导出/次" stat-item
-           本就是同一个 onOpenFinanceExportMenu 调用，同样删除重复格；"店铺
-           模板自定义"迁回下方通栏横条统一入口（见 template-card），不再在
-           这里单独占一格。整个卡片改为"3 项健康指标 + 1 条直达财务稽核台"，
-           不再需要额外的功能宫格 -->
-      <view class="qa-extra-row finance-audit-entry-row" bindtap="onOpenFinanceLockModal">
-        <text class="qa-grid-emoji">🔍</text>
-        <text class="txt">进入财务稽核台</text>
-        <text class="qa-extra-arrow">›</text>
-      </view>
+      <view class="finance-home-card" wx:if="{{isFinance && (!isManager || consoleActiveTab === 'finance')}}">
+        <view class="card-header-welcome">
+          <view class="welcome-icon idx-icon-svg idx-icon-lock"></view>
+          <view class="welcome-text-box">
+            <text class="welcome-title">{{isAllStoresView ? '全国总览' : (currentStoreName || '本门店')}}</text>
+            <text class="welcome-sub">{{isAllStoresView ? '全域账本健康总览，点击指标可穿透至具体门店' : '账本防篡改稽核、资金安全与数据导出'}}</text>
+          </view>
+        </view>
 
-      <!-- 🐛 财务首页瘦身后的唯一展开口子：「请填写当日明细」整条录入表单流水线
-           默认对纯财务角色收起（见下方 form-main-card 前的 wx:if），这里给一个
-           不起眼但找得到的入口，财务确需亲自代填当日餐报时点击展开，不是彻底
-           砍掉这条能力 -->
-      <view class="finance-form-override-link" wx:if="{{currentUserRole === 'finance'}}" bindtap="onToggleFinanceFormOverride">
-        <text>{{showFinanceFormOverride ? '收起代填表单 ▲' : '临时代为填报当日明细 ▾'}}</text>
+        <!-- 🐛 「账本锁定状态」此前是写死的 "100%" 占位文案，未绑定任何数据源，
+             也没有点击事件。现改为真实口径（本店累计已稽核签核笔数占比，见
+             fetchFinanceLedgerStatus）+ 点击可直接唤起"稽核与封账"操作面板，
+             与另外两格保持一致的"指标可点击穿透"体验 -->
+        <view class="role-stats-banner finance-bg">
+          <view class="stat-item" bindtap="onOpenFinanceLockModal">
+            <text class="stat-num green-text" wx:if="{{!financeLedgerStatusLoading}}">{{financeLedgerAuditedRate === null ? '--' : financeLedgerAuditedRate + '%'}}</text>
+            <text class="stat-num green-text" wx:else>…</text>
+            <text class="stat-label">账本锁定状态</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-item" bindtap="onExportExcelHistory">
+            <text class="stat-num">{{excelExportCount || 0}}</text>
+            <text class="stat-label">月度导出/次</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-item" bindtap="onOpenRiskAlertsModal">
+            <text class="stat-num {{riskAlertCount > 0 ? 'highlight' : ''}}">{{riskAlertCount || 0}}</text>
+            <text class="stat-label">异常风控预警</text>
+          </view>
+        </view>
+
+        <!-- 🌟（2026-09-06 消除多头堆叠）"稽核与封账"/"风控预警日志"已随上方
+             stat-item 一起指向 finance-audit 分包页面，原 2x2 宫格里的同名格子
+             是纯重复入口，删除；"Excel 账本导出"与上方"月度导出/次" stat-item
+             本就是同一个 onOpenFinanceExportMenu 调用，同样删除重复格；"店铺
+             模板自定义"迁回下方通栏横条统一入口（见 template-card），不再在
+             这里单独占一格。整个卡片改为"3 项健康指标 + 1 条直达财务稽核台"，
+             不再需要额外的功能宫格 -->
+        <view class="qa-extra-row finance-audit-entry-row" bindtap="onOpenFinanceLockModal">
+          <text class="qa-grid-emoji">🔍</text>
+          <text class="txt">进入财务稽核台</text>
+          <text class="qa-extra-arrow">›</text>
+        </view>
+
+        <!-- 🐛 财务首页瘦身后的唯一展开口子：「请填写当日明细」整条录入表单流水线
+             默认对纯财务角色收起（见下方 form-main-card 前的 wx:if），这里给一个
+             不起眼但找得到的入口，财务确需亲自代填当日餐报时点击展开，不是彻底
+             砍掉这条能力 -->
+        <view class="finance-form-override-link" wx:if="{{currentUserRole === 'finance'}}" bindtap="onToggleFinanceFormOverride">
+          <text>{{showFinanceFormOverride ? '收起代填表单 ▲' : '临时代为填报当日明细 ▾'}}</text>
+        </view>
       </view>
     </view>
 
@@ -751,7 +806,11 @@
         </view>
         <view class="qa-grid-cell" bindtap="onOpenAuditModal">
           <view class="icon idx-icon-svg idx-icon-people"></view>
-          <text class="txt">审核 ({{pendingAuditCount || 0}})</text>
+          <text class="txt">待办审核</text>
+          <!-- 🆕（2026-09-13）此前数字只是拼在文字标签里的"(N)"，改成真正的
+               红色圆点角标——与本页 .platform-card-badge 同一套"卡片右上角
+               浮层徽标"定位手法 -->
+          <text class="qa-grid-badge" wx:if="{{pendingAuditCount > 0}}">{{pendingAuditCount > 99 ? '99+' : pendingAuditCount}}</text>
         </view>
         <view class="qa-grid-cell" bindtap="goToStatistics">
           <view class="icon idx-icon-svg idx-icon-chart"></view>
@@ -770,15 +829,55 @@
         <text class="qa-extra-arrow">›</text>
       </view>
 
-      <!-- 🌸 商业进销存 Phase 1：只在通用素食/商业门店专区展示，雨花公益专区
-           保持极简阳光账本，不引入进销存复杂度——与本次会话"雨花斋隐藏专业版
-           推销卡片"同一个 currentPlatformMode 判断字段，云函数侧同样会对
-           orgType==='yuhuazhai' 的门店硬性拒绝（见 manageInventoryItem 双层
-           拦截设计），这里不是唯一防线 -->
-      <view class="qa-extra-row" wx:if="{{(isManager || isSuperAdmin) && currentPlatformMode === 'general'}}" bindtap="onGotoInventoryManagement">
-        <text class="qa-grid-emoji">📦</text>
-        <text class="txt">进销存</text>
-        <text class="qa-extra-arrow">›</text>
+      <!-- 🌾（2026-09-13 激活进销存看板）此前这里只是一个纯标题+箭头的空壳
+           行——真正接入内容分两层，互不冲突：
+           ① 米/油真实库存健康度 + 面/菜用量记录 + 拍照记物资快捷入口，对
+              所有店长/超管恒定展示，不分专区（stapleRiceStatus/OilStatus
+              是雨花斋场景最核心的信息，不能被"只在 general 模式显示"这条
+              商业进销存的既有边界连带隐藏）；
+           ② "进销存管理"深链（跳转 inventory-management 分包页，真正的
+              商业进销存 Phase 1 功能）继续只在 currentPlatformMode==='general'
+              时展示——与本次会话前一版"雨花公益专区保持极简阳光账本，不引入
+              进销存复杂度"同一个判断字段，云函数侧 manageInventoryItem 对
+              orgType==='yuhuazhai' 的双层拦截依然是真正的防线，这里只是把
+              "进销存"这一个 UI 词此前误挂载的两种完全不同的东西（雨花斋
+              简单主料状态 vs 商业进销存）拆开各自展示 -->
+      <view class="inventory-console-card">
+        <view class="inventory-card-header">
+          <text class="inventory-card-title">📦 粮油物资库存</text>
+          <text class="inventory-manage-link" wx:if="{{currentPlatformMode === 'general'}}" bindtap="onGotoInventoryManagement">进销存管理 ›</text>
+        </view>
+        <view class="inventory-pill-row">
+          <view
+            class="inventory-pill {{stapleRiceStatus === 'sufficient' ? 'status-green' : (stapleRiceStatus === 'urgent' ? 'status-red' : 'status-yellow')}}"
+            bindtap="onTapMaterialStatus"
+            data-type="rice"
+          >
+            <text class="inventory-pill-name">🍚 大米</text>
+            <text class="inventory-pill-status">{{stapleRiceStatus === 'sufficient' ? '充足' : (stapleRiceStatus === 'urgent' ? '告急' : '一般')}}</text>
+          </view>
+          <view
+            class="inventory-pill {{stapleOilStatus === 'sufficient' ? 'status-green' : (stapleOilStatus === 'urgent' ? 'status-red' : 'status-yellow')}}"
+            bindtap="onTapMaterialStatus"
+            data-type="oil"
+          >
+            <text class="inventory-pill-name">🫗 食用油</text>
+            <text class="inventory-pill-status">{{stapleOilStatus === 'sufficient' ? '充足' : (stapleOilStatus === 'urgent' ? '告急' : '一般')}}</text>
+          </view>
+          <!-- 面粉/时蔬：只有用量记录（flourCount/vegetableCount），从未有过
+               充足/一般/告急这类健康度状态字段，如实展示为中性灰，不编造假状态 -->
+          <view class="inventory-pill status-neutral">
+            <text class="inventory-pill-name">🌾 面粉</text>
+            <text class="inventory-pill-status">用量已记录</text>
+          </view>
+          <view class="inventory-pill status-neutral">
+            <text class="inventory-pill-name">🥬 时蔬</text>
+            <text class="inventory-pill-status">用量已记录</text>
+          </view>
+        </view>
+        <view class="btn-inventory-ocr" hover-class="btn-hover" bindtap="onTapToolMaterialUsage">
+          <text>📸 拍照智能记物资</text>
+        </view>
       </view>
     </view>
 
@@ -902,7 +1001,7 @@
          只要 currentStoreId 恰好非空（如曾经绑定过门店/上次选店留下的值），
          这张记账表单就会误渲染给他们看 -->
     <block wx:if="{{currentStoreId && !isAllStoresView && !isFamily && (currentUserRole !== 'finance' || showFinanceFormOverride)}}">
-    <view class="ui-card-wrapper form-main-card">
+    <view class="ui-card-wrapper form-main-card" id="reportFormAnchor">
       <view class="form-card-header">
         <view class="title-group">
           <view class="sparkle-icon idx-icon-sm idx-icon-sparkle"></view>

@@ -887,6 +887,22 @@ Page({
     // 主食物资储备状态
     stapleRiceStatus: 'normal', // 大米/面粉: sufficient/normal/urgent
     stapleOilStatus: 'sufficient', // 食用油: sufficient/normal/urgent
+
+    // 🆕（2026-09-13 工作台工业化重构）"今日闭环指示条"三枚指示数据。
+    // todayMealStatus/todayMealCount 与 stapleRiceStatus 同源——
+    // manageVolunteerSubmission 的 statsSummary 早就在响应里算好了
+    // todayMealStatus/mealTotals.totalCount，此前 fetchLatestMaterialStatus()
+    // 只取了库存状态两个字段、把这两个字段直接丢弃，这次一并取用，不需要
+    // 新增云函数请求。todayReportStatus 是唯一真正新增的查询（见
+    // fetchTodayReportStatus()），与 onRevokeTodayCheckIn() 同一种客户端
+    // 直查 report_logs 的既有模式，不新开云函数
+    todayMealStatus: null as null | 'open' | 'closed',
+    todayMealCount: 0,
+    todayReportStatus: '' as '' | 'PENDING' | 'APPROVED' | 'AUDITED_LOCKED',
+    // 店务运营/财务稽核 Tab（仅 isManager && isFinance 同时为真——即
+    // store_patriarch/super_admin——才会展示切换器，见 wxml 判断）；默认
+    // 停在店务运营，产品要求"仅当兼任财务或需要稽核时才切换"
+    consoleActiveTab: 'ops' as 'ops' | 'finance',
     systemBalance: 0,
     isManualAdjust: false,
     balanceDiff: 0,
@@ -2228,12 +2244,45 @@ Page({
       if (result && result.success && result.data) {
         this.setData({
           stapleRiceStatus: result.data.latestRiceStatus || 'normal',
-          stapleOilStatus: result.data.latestOilStatus || 'sufficient'
+          stapleOilStatus: result.data.latestOilStatus || 'sufficient',
+          // 🆕（2026-09-13）同一份 statsSummary 响应里本来就有的今日开餐状态/
+          // 人次，此前一直被丢弃——不需要为"今日闭环指示条"额外发一次请求
+          todayMealStatus: result.data.todayMealStatus || null,
+          todayMealCount: (result.data.mealTotals && result.data.mealTotals.totalCount) || 0
         });
       }
     } catch (e) {
       console.warn('[fetchLatestMaterialStatus] 查询最新物资库存状态失败，保留上次已知状态:', e);
       reportCloudSdkErrorIfCorrupted(e);
+    }
+  },
+
+  // 🆕（2026-09-13 今日闭环指示条）今日餐报记账状态：直接客户端查询本店
+  // 当天 report_logs 的 approvalStatus，与 onRevokeTodayCheckIn() 同一种
+  // 既有的客户端直查模式（该文档的数据库安全规则本就允许本店角色只读查询），
+  // 不新开一个云函数。查无记录（今日尚未提交过餐报）时落空字符串，wxml
+  // 据此展示"未录入"
+  async fetchTodayReportStatus() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || this.isNationalOverviewSelected()) {
+      this.setData({ todayReportStatus: '' });
+      return;
+    }
+    if (!isCloudAvailable()) return;
+
+    try {
+      const db = wx.cloud.database();
+      const todayStr = getTodayIsoString();
+      const res = await db.collection('report_logs')
+        .where({ storeId, dateString: todayStr })
+        .orderBy('updateTime', 'desc')
+        .limit(1)
+        .field({ approvalStatus: true })
+        .get();
+      const report = res.data && res.data[0];
+      this.setData({ todayReportStatus: (report && report.approvalStatus) || '' });
+    } catch (e) {
+      console.warn('[fetchTodayReportStatus] 查询今日餐报状态失败:', e);
     }
   },
 
@@ -8905,7 +8954,8 @@ Page({
       this.fetchTodayMenu(),
       this.fetchTodayActivity(),
       this.fetchNotices(),
-      this.fetchLatestMaterialStatus()
+      this.fetchLatestMaterialStatus(),
+      this.fetchTodayReportStatus()
     ]).finally(() => {
       this._homeDataFetchInFlight = false;
     });
@@ -11881,14 +11931,48 @@ Page({
   },
 
   // 🌟 全角色打卡卡片（omni-checkin-card）的次级跳转：不是导航去另一个页面，
-  // 店务管理/财务稽核台本来就在同一页往下一点的位置（manager-home-card/finance-home-card），
-  // 用 wx.pageScrollTo 按 id 平滑滚动过去即可，比再开一个页面更轻量、也不会丢失打卡卡片的上下文
+  // 店务管理/财务稽核台本来就在同一页往下一点的位置，用 wx.pageScrollTo 按 id
+  // 平滑滚动过去即可，比再开一个页面更轻量、也不会丢失打卡卡片的上下文。
+  // 🆕（2026-09-13 双工作台 Tab 聚合）manager-home-card/finance-home-card
+  // 已经合并进同一张 workspace-console-card、靠 consoleActiveTab 切换内容，
+  // 两个入口现在共用同一个锚点 id，滚动前各自先切到对应 Tab，确保滚过去
+  // 看到的正是调用方想看的那一面（而不是恰好停在另一个 Tab 上）
   onScrollToManagerConsole() {
-    this._scrollToAnchor('#managerConsoleAnchor', '店务管理');
+    this.setData({ consoleActiveTab: 'ops' });
+    this._scrollToAnchor('#workspaceConsoleAnchor', '店务管理');
   },
 
   onScrollToFinanceConsole() {
-    this._scrollToAnchor('#financeConsoleAnchor', '财务稽核台');
+    this.setData({ consoleActiveTab: 'finance' });
+    this._scrollToAnchor('#workspaceConsoleAnchor', '财务稽核台');
+  },
+
+  // 🆕（2026-09-13）店务运营/财务稽核 Tab 切换——仅 isManager && isFinance
+  // 同时为真时 wxml 才会渲染这个切换器（见该处判断），单角色账号永远不会
+  // 触发这个方法
+  onSwitchConsoleTab(e: any) {
+    const tab = e.currentTarget.dataset.tab as 'ops' | 'finance';
+    if (tab !== 'ops' && tab !== 'finance') return;
+    if (tab === this.data.consoleActiveTab) return;
+    this.setData({ consoleActiveTab: tab });
+  },
+
+  // 🆕（2026-09-13 今日闭环指示条）"餐报记账"指示点击直达当日明细表单——
+  // 纯财务角色（currentUserRole==='finance' 且未手动展开代填表单）默认把
+  // 这段表单折叠隐藏（见 showFinanceFormOverride 头部注释），直接滚动过去
+  // 会因为找不到节点而弹"暂时无法定位"，体验上像是坏的；这里先展开一次
+  // 再滚动，其余角色本就不受这个折叠开关影响，行为不变
+  onScrollToReportForm() {
+    if (this.data.currentUserRole === 'finance' && !this.data.showFinanceFormOverride) {
+      // 表单本来就是 wx:if 折叠隐藏（未渲染进 DOM），必须等这次 setData 的
+      // 渲染真正落地（回调触发）后再查节点/滚动，否则会撞上"节点还不存在"
+      // 的竞态，复现"点了没反应"
+      this.setData({ showFinanceFormOverride: true }, () => {
+        this._scrollToAnchor('#reportFormAnchor', '今日明细登记');
+      });
+      return;
+    }
+    this._scrollToAnchor('#reportFormAnchor', '今日明细登记');
   },
 
   // 🐛 根因排查：此前 wx.pageScrollTo 直接传 selector，既没有 fail 回调也没有
