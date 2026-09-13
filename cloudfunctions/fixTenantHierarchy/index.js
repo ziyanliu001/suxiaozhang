@@ -10,7 +10,8 @@
 // 仍未收到明确指令，继续保留在步骤 3 的只读核对名单里，不擅自修改。
 //
 // 🛡️ 安全设计（这是一次不可逆的数据迁移，务必先 dryRun 再 apply）：
-// - 仅 platform_admin 可调用。
+// - 仅 platform_admin 可调用；云开发控制台"云端测试"场景见下方
+//   FIX_TENANT_HIERARCHY_CONSOLE_SECRET 说明。
 // - 默认 dryRun（event.apply 不为 true 时），只读、不写库，返回"计划要做什么"的
 //   报告；显式传 apply:true 才真正落库，报告结构与 dryRun 完全一致，便于对照。
 // - 幂等：可安全重复执行——已经修正过的记录第二次运行会被识别为 already_correct，
@@ -18,6 +19,22 @@
 // - 每个子任务独立 try/catch，单个子任务失败不影响其余子任务继续执行，最终返回
 //   一份完整报告（found/changed/skipped/error 四态）供人工核对，不中途抛异常
 //   导致后续任务完全不执行。
+//
+// 🛡️（2026-09-13）云端测试场景下调用者鉴权：控制台"云端测试"不带真实微信
+// 身份，cloud.getWXContext().OPENID 会是空字符串——但"OPENID 为空"本身绝不能
+// 当放行凭证：跨云函数调用（cloud.callFunction 未转发上下文）等其它场景同样
+// 会导致 OPENID 为空，把"缺少身份信息"直接等同于"这是受信任的管理员"会让
+// 这个改写租户归属/新建机构的高危迁移工具失去唯一的准入门槛。
+// 因此改为要求 OPENID 为空时必须显式携带一个只存在于云开发控制台环境变量里
+// 的密钥（event.consoleSecret === process.env.FIX_TENANT_HIERARCHY_CONSOLE_SECRET），
+// 与 EMERGENCY_RECOVERY_SECRET/WXPAY_INTERNAL_TOKEN 同一条 fail-closed 原则：
+// 环境变量未配置时无条件拒绝，绝不回退到"OPENID 为空就放行"这种弱哨兵；密钥
+// 比对使用常量时间比较（lib/secretsMatch.js），防止响应耗时差异侧信道逐字节
+// 猜出密钥。部署前请在云开发控制台为本云函数单独配置
+// FIX_TENANT_HIERARCHY_CONSOLE_SECRET（建议高强度随机值，且与 EMERGENCY_
+// RECOVERY_SECRET/WXPAY_INTERNAL_TOKEN 等其它任何令牌都不复用），云端测试时
+// 在 event 里传 { consoleSecret: '<该密钥>' }（可与 apply/dryRun 等业务参数
+// 一起传）。
 //
 // 🏛️ 业务背景（与 platform-admin 后台/checkTenantPermission 同一套多租户模型）：
 // - 雨花公益食堂专区：机构 = yuhuazhai_national（雨花斋·全国总览机构），旗下门店
@@ -29,6 +46,7 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
+const { secretsMatch } = require('./lib/secretsMatch');
 
 const YUHUA_TENANT_ID = 'yuhuazhai_national';
 const SONGYU_TENANT_ID = 'songyu_elderly_care';
@@ -60,6 +78,22 @@ async function requirePlatformAdmin(OPENID) {
   if (!OPENID) return false;
   const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
   return !!(roleRes.data && roleRes.data.length > 0 && roleRes.data[0].role === 'platform_admin');
+}
+
+// 🛡️（2026-09-13）见文件头部"云端测试场景下调用者鉴权"说明。真实微信身份
+// 存在时走既有的 requirePlatformAdmin 路径；OPENID 为空（控制台云端测试，或
+// 其它未转发身份上下文的调用）时，唯一的通行凭证是这个只存在于云开发控制台
+// 环境变量里的密钥——fail-closed：环境变量未配置时无条件拒绝，绝不因为
+// "OPENID 恰好是空的"就放行，这两件事没有因果关系。
+async function authorizeCaller(OPENID, event) {
+  if (OPENID) return requirePlatformAdmin(OPENID);
+
+  const expectedSecret = process.env.FIX_TENANT_HIERARCHY_CONSOLE_SECRET || '';
+  if (!expectedSecret) {
+    console.error('[fixTenantHierarchy] 🚨 OPENID 为空且 FIX_TENANT_HIERARCHY_CONSOLE_SECRET 未配置，拒绝本次调用（fail-closed）。云端测试请先在云开发控制台为本云函数配置该环境变量。');
+    return false;
+  }
+  return secretsMatch(event && event.consoleSecret, expectedSecret);
 }
 
 // 🛡️ 机构名字段在本仓库存在两种历史写法：manageTenantSubscription.createTenant
@@ -114,7 +148,7 @@ async function recalcStoreCount(tenantId, apply) {
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
-  const isAdmin = await requirePlatformAdmin(OPENID);
+  const isAdmin = await authorizeCaller(OPENID, event);
   if (!isAdmin) {
     return { success: false, error: '无权限：仅平台管理员可执行数据迁移' };
   }
