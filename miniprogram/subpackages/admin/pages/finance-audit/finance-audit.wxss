@@ -42,6 +42,19 @@ page {
   line-height: 1.6;
 }
 
+/* 🆕（2026-09-13 巡检授权自愈）与 store-profile.ts .sp-btn-inspect-grant
+   同一套配色/尺寸，本页顶栏主题色（#8C1D18）与之一致 */
+.btn-request-grant {
+  margin-top: 24rpx;
+  min-width: 320rpx;
+  background: #8C1D18;
+  color: #FFFFFF;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  padding: 0 32rpx;
+}
+
 .fa-body-scroll {
   box-sizing: border-box;
 }

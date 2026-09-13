@@ -26,6 +26,16 @@
       <text class="fa-denied-icon">🔒</text>
       <text class="fa-denied-title">无权限查看</text>
       <text class="fa-denied-sub">仅财务、大家长与超级管理员可查看稽核封账与风控预警</text>
+      <!-- 🆕（2026-09-13 巡检授权自愈）platform_admin 的巡检授权过期/从未
+           申请时会命中这里——只在已知具体门店时展示（全国总览下
+           currentStoreId 为空，见 applyRolePermissions），避免死胡同 -->
+      <button
+        class="btn-request-grant"
+        wx:if="{{isPlatformAdmin && currentStoreId}}"
+        bindtap="onRequestFinanceAuditGrantAndRetry"
+        loading="{{grantingInspection}}"
+        disabled="{{grantingInspection}}"
+      >申请/续期巡检授权并重新进入</button>
     </view>
   </block>
 

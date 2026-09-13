@@ -32,6 +32,13 @@ Page({
     isFinance: false,
     isSuperAdmin: false,
     isPatriarch: false,
+    // 🆕（2026-09-13 巡检授权自愈入口）字面持久化角色是否为 platform_admin——
+    // 与 store-profile.ts 同一处判断依据：resolveEffectiveRole() 命中有效的
+    // authorizedTenants 巡检漫游授权时会把角色替换成被授权的角色（如
+    // 'finance'），只有授权过期/从未申请过时才会落回字面的 'platform_admin'，
+    // 用于驱动无权限锁卡片下方的自助恢复按钮
+    isPlatformAdmin: false,
+    grantingInspection: false,
     currentStoreId: '',
     currentStoreName: '',
 
@@ -107,11 +114,15 @@ Page({
       roleInfo = result.roleInfo || null;
     }
 
-    const effectiveRole = AuthService.resolveEffectiveRole(roleInfo ? roleInfo.role : 'volunteer');
+    const rawRole = (roleInfo && roleInfo.role) || 'volunteer';
+    const effectiveRole = AuthService.resolveEffectiveRole(rawRole);
     const isSuperAdmin = effectiveRole === 'super_admin';
     const isFinance = effectiveRole === 'finance';
     const isPatriarch = effectiveRole === 'store_patriarch';
     const hasAccess = isFinance || isSuperAdmin || isPatriarch;
+    // 🆕（2026-09-13）取字面持久化角色（不经过巡检漫游替换），驱动无权限
+    // 锁卡片下方的自助恢复入口——与 store-profile.ts 同一处判断依据
+    const isPlatformAdmin = rawRole === 'platform_admin';
 
     let storeId = getCurrentActiveStore().storeId || (roleInfo && roleInfo.storeId) || '';
     let storeName = getCurrentActiveStore().storeName || (roleInfo && roleInfo.storeName) || '';
@@ -130,9 +141,57 @@ Page({
       isSuperAdmin,
       isFinance,
       isPatriarch,
+      isPlatformAdmin,
       currentStoreId: isNationalOverview ? '' : storeId,
       currentStoreName: isNationalOverview ? '全国总览' : storeName
     });
+  },
+
+  // 🆕（2026-09-13 巡检授权自愈）无权限锁卡片下方"申请/续期巡检授权并
+  // 重新进入"——完整复用 store-profile.ts onRequestInspectionGrantAndRetry()
+  // 同一套"grant → 强制刷新 AuthService 缓存 → 重新走一遍角色解析 + 数据
+  // 拉取"流程。角色固定传 'finance'（本页职责本身就是财务稽核，按最小权限
+  // 原则申请刚好够用的角色，不像 store-profile.ts 那样需要 'store_patriarch'
+  // 的完整店务管理能力）；只在 isPlatformAdmin 且已知具体门店（wxml
+  // wx:if="{{isPlatformAdmin && currentStoreId}}"）时才可能被触发——全国
+  // 总览下 currentStoreId 会被清空，此时按钮本就不会渲染，不构成新的越权面
+  async onRequestFinanceAuditGrantAndRetry() {
+    if (this.data.grantingInspection) return;
+    const storeId = this.data.currentStoreId;
+    if (!storeId) return;
+    this.setData({ grantingInspection: true });
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'grantTenantAuthorization',
+        data: {
+          action: 'grant',
+          stores: [storeId],
+          role: 'finance',
+          storeName: this.data.currentStoreName
+        }
+      });
+      const result = res && res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '申请巡检授权失败，请重试', icon: 'none' });
+        return;
+      }
+      // 授权只追加进 authorizedTenants 数组，不刷新本地缓存就不会被
+      // resolveEffectiveRole 读到——与 store-profile.ts 同一处根因说明
+      await AuthService.fetchUserRole();
+      await this.applyRolePermissions();
+      wx.showToast({ title: '巡检授权成功，正在重新进入', icon: 'success' });
+      if (this.data.hasAccess && !this.data.isNationalOverview) {
+        this.initFinanceLockDefaults();
+        this.checkRangeLockStatus();
+        this.setData({ riskAlertsLoading: true });
+        this.fetchRiskAlerts();
+      }
+    } catch (err) {
+      console.error('[onRequestFinanceAuditGrantAndRetry] 申请巡检授权异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this.setData({ grantingInspection: false });
+    }
   },
 
   // ───────────────────── 稽核与封账（原 onOpenFinanceLockModal 起） ─────────────────────
