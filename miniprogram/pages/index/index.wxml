@@ -751,13 +751,17 @@
         </view>
 
         <!-- 🐛 「账本锁定状态」此前是写死的 "100%" 占位文案，未绑定任何数据源，
-             也没有点击事件。现改为真实口径（本店累计已稽核签核笔数占比，见
-             fetchFinanceLedgerStatus）+ 点击可直接唤起"稽核与封账"操作面板，
-             与另外两格保持一致的"指标可点击穿透"体验 -->
+             也没有点击事件。现改为真实口径 + 点击可直接唤起"稽核与封账"操作
+             面板，与另外两格保持一致的"指标可点击穿透"体验。
+             🆕（2026-09-13 语义化改造）不再展示"已稽核占比"百分比（total>0
+             但一条都没封账时会显示成刺眼的"0%"）——直接采信 manageFinanceLock
+             返回的 isLocked 布尔值，渲染成"已加锁 🔒"/"未加锁 🔓"文字状态，
+             并用 green-text/highlight 对应主题色，与"异常风控预警"格同一套
+             "布尔/计数语义直接映射视觉"的处理口径 -->
         <view class="role-stats-banner finance-bg">
           <view class="stat-item" bindtap="onOpenFinanceLockModal">
-            <text class="stat-num green-text" wx:if="{{!financeLedgerStatusLoading}}">{{financeLedgerAuditedRate === null ? '--' : financeLedgerAuditedRate + '%'}}</text>
-            <text class="stat-num green-text" wx:else>…</text>
+            <text class="stat-num stat-num-state {{financeLedgerIsLocked ? 'green-text' : 'highlight'}}" wx:if="{{!financeLedgerStatusLoading}}">{{financeLedgerIsLocked === null ? '--' : (financeLedgerIsLocked ? '已加锁 🔒' : '未加锁 🔓')}}</text>
+            <text class="stat-num" wx:else>…</text>
             <text class="stat-label">账本锁定状态</text>
           </view>
           <view class="stat-divider"></view>
@@ -766,10 +770,21 @@
             <text class="stat-label">月度导出/次</text>
           </view>
           <view class="stat-divider"></view>
+          <!-- 🆕（2026-09-13）risk 为 0 时此前仍展示一个默认橙色的"0"数字，
+               容易被误读成"有 0 项待处理"这类中性但不够安心的展示；改为
+               绿色对勾"暂无风险"文案，>0 时才切回红色高亮数字，与"账本
+               锁定状态"格同一套处理思路 -->
           <view class="stat-item" bindtap="onOpenRiskAlertsModal">
-            <text class="stat-num {{riskAlertCount > 0 ? 'highlight' : ''}}">{{riskAlertCount || 0}}</text>
+            <text class="stat-num {{riskAlertCount > 0 ? 'highlight' : 'green-text stat-num-state'}}">{{riskAlertCount > 0 ? riskAlertCount : '✅ 暂无风险'}}</text>
             <text class="stat-label">异常风控预警</text>
           </view>
+        </view>
+
+        <!-- 🆕（2026-09-13 安全合规文案）轻量背书提示，紧贴在核心指标区下方
+             这个视觉焦点位置，不单独起一张卡片抢视觉重量 -->
+        <view class="finance-compliance-tip">
+          <text class="finance-compliance-icon">🛡️</text>
+          <text>所有账目已开启防篡改加密与日志追踪</text>
         </view>
 
         <!-- 🌟（2026-09-06 消除多头堆叠）"稽核与封账"/"风控预警日志"已随上方
@@ -816,7 +831,14 @@
           <view class="icon idx-icon-svg idx-icon-chart"></view>
           <text class="txt">数据统计/账本导出</text>
         </view>
-        <view class="qa-grid-cell" bindtap="onOpenPromoActionSheet">
+        <!-- 🆕（2026-09-13 财务模块职责解耦）本宫格挂在 workspace-console-card
+             之外，isManager||isSuperAdmin 即可见——ops/finance 两个 Tab 共用
+             同一份宫格，"门店推广与邀请"这类运营推广动作与财务合规场景不搭。
+             双角色账号（store_patriarch/super_admin）切到【财务稽核】Tab 时
+             隐藏这一格，切回【店务运营】或本就是纯店长/超管（不展示 Tab、
+             consoleActiveTab 保持默认 'ops'）时正常显示，不影响任何既有的
+             运营推广入口 -->
+        <view class="qa-grid-cell" wx:if="{{!(isManager && isFinance && consoleActiveTab === 'finance')}}" bindtap="onOpenPromoActionSheet">
           <text class="qa-grid-emoji">🖼️</text>
           <text class="txt">门店推广与邀请</text>
         </view>

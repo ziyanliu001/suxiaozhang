@@ -7501,6 +7501,15 @@ page {
   color: #2E7D32;
 }
 
+/* 🆕（2026-09-13 语义化改造）"已加锁 🔒"/"未加锁 🔓"/"✅ 暂无风险"这类文字
+   状态比原来的纯数字/百分比长，沿用 34rpx 容易在窄屏挤压/换行，单独收窄
+   到 24rpx，颜色仍继承 .highlight/.green-text */
+.manager-home-card .stat-num.stat-num-state,
+.finance-home-card .stat-num.stat-num-state {
+  font-size: 24rpx;
+  white-space: nowrap;
+}
+
 .manager-home-card .stat-label,
 .finance-home-card .stat-label {
   font-size: 20rpx;
@@ -7519,6 +7528,25 @@ page {
    （门店管理/进销存同款独立横条样式），与上方 3 项 stat-item 保持 20rpx 间隔 */
 .finance-audit-entry-row {
   margin-top: 20rpx;
+}
+
+/* 🆕（2026-09-13 安全合规文案）轻量背书提示条，不单独起卡片，弱化边框/
+   底色，避免与上方核心指标区抢视觉重量 */
+.finance-compliance-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  margin-top: 16rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 12rpx;
+  background: rgba(46, 125, 50, 0.06);
+  font-size: 20rpx;
+  color: #2E7D32;
+}
+
+.finance-compliance-icon {
+  font-size: 22rpx;
 }
 
 /* 🐛 财务首页瘦身：录入表单默认收起后的唯一展开口子，刻意做成不起眼的文字链接

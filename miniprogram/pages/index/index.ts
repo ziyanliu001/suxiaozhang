@@ -1253,9 +1253,17 @@ Page({
     // 超管（他们靠角色继承拿到 isFinance，但 currentUserRole 不等于 'finance'）
     showFinanceFormOverride: false,
     // 🌟 账本锁定状态：finance-home-card 顶部指标，真实数据见 fetchFinanceLedgerStatus
-    // （此前是写死的 "100%" 占位文案，未绑定任何数据源）
+    // （此前是写死的 "100%" 占位文案，未绑定任何数据源）。
+    // 🐛（2026-09-13 语义化改造）此前这里展示的是"已稽核占比"百分比
+    // （audited/total*100），total>0 但一条都还没封账时会显示成"0%"，读起来
+    // 像一个刺眼的报错数字，而不是"账本锁定状态"这个标题本身该回答的
+    // 是/否问题。manageFinanceLock 的 checkRangeStatus 早就算好了一个真正
+    // 的布尔值 isLocked（totalCount>0 && lockedCount===totalCount，见该
+    // 云函数注释），前端此前只取了 totalCount/lockedCount 自己再算一遍
+    // 百分比，isLocked 字段本身被直接丢弃——现在改为直接采信这个后端布尔值，
+    // 语义更准确也不需要前端重新推导
     financeLedgerStatusLoading: false,
-    financeLedgerAuditedRate: null as number | null,
+    financeLedgerIsLocked: null as boolean | null,
     currentStoreId: '' as string,
     // 🐛 根因修复（首页"最新善行"右侧空白）：<yangshan-wall> 此前直绑
     // currentStoreId——该字段在 refreshUserRoleView()/角色初始化时会被重置为
@@ -13085,10 +13093,15 @@ Page({
       const res = result.result as any;
       if (!res || !res.success) throw new Error((res && res.errMsg) || '查询失败');
 
+      // 🐛（2026-09-13）直接采信云函数算好的 isLocked 布尔值，不再自己拿
+      // totalCount/lockedCount 重新推导一遍百分比——totalCount 为 0（本店
+      // 还没有任何记录）时 isLocked 恒为 false，与"未加锁"文案在语义上其实
+      // 不完全贴切（更准确是"无记录可锁"），但对首页这张锦上添花的摘要卡片
+      // 而言，"未加锁"已经是比此前"0%"更不容易引起误解的展示，不需要为这
+      // 一种边界情况再新增第三种展示态
       const total = res.totalCount || 0;
-      const audited = res.lockedCount || 0;
       this.setData({
-        financeLedgerAuditedRate: total > 0 ? Math.round((audited / total) * 100) : null
+        financeLedgerIsLocked: total > 0 ? !!res.isLocked : null
       });
     } catch (err) {
       // 🐛 消除刺眼的红色误报：manageFinanceLock 对 super_admin 有意做了严格的
@@ -13099,6 +13112,9 @@ Page({
       // 程序错误，本函数也只是首页一个锦上添花的信息卡片，静默降级即可，
       // 不用 console.error 打红、也不打扰用户
       console.warn('[fetchFinanceLedgerStatus] 查询失败（可能是跨机构预览门店的正常拒绝）:', err);
+      // 🐛 不留旧值：失败时回退到 null（展示"--"），避免切店后仍定格在上一家
+      // 门店的锁定状态
+      this.setData({ financeLedgerIsLocked: null });
     } finally {
       this.setData({ financeLedgerStatusLoading: false });
     }
