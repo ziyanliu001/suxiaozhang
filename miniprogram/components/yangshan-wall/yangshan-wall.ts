@@ -65,6 +65,23 @@ Component({
     detailItem: null as null | { name: string; deedText: string; timeLabel: string; amount: number }
   },
 
+  // 🛡️（2026-09-13 storeId 抖动防护）_lastFetchedStoreId/_debounceTimer 是
+  // 与视图渲染无关的临时状态，不进 data（按项目 setData 铁律），而是运行时
+  // 挂在组件实例 this 上（`(this as any)._xxx` 写法，与 material-usage-
+  // modal.ts 的 `_ocrSourceFileId` 同一惯例）——Component() 的 TS 类型定义
+  // 比 Page() 更严格，data 之外的字段不允许直接声明在顶层 Options 对象里，
+  // 只能在方法体内按需读写：
+  // - _lastFetchedStoreId：已成功发起过请求的 storeId，用于跳过"值其实没
+  //   变"的重复触发——宿主页面 index.ts 的 yangshanWallStoreId 至少有 5 处
+  //   独立 setData 调用点（initCurrentUserRole 的 cached/服务端角色两个
+  //   分支、onStoreChanged、switchStoreTarget、refreshUserRoleView），角色
+  //   解析/切店过程中经常连续写入好几次，其中不少次落地的其实是同一个
+  //   storeId 字符串——每次都触发 observer 认为"变了"、都重新发起一次
+  //   getSunshineLedger 请求，是不必要的重复云函数调用。
+  // - _debounceTimer：短时间内的连续真实变化（如角色解析过程中先落到缓存
+  //   店、又很快被服务端结果覆盖成另一家店）合并成一次请求，只取最后落地
+  //   的那个 storeId。
+
   lifetimes: {
     attached() {
       // 🐛（排查"首页最新善行空白且控制台零日志"）组件是否真的挂载、挂载时
@@ -77,19 +94,49 @@ Component({
       if (this.properties.storeId) {
         this.fetchYangShanList();
       }
+    },
+    detached() {
+      // 🛡️ 组件卸载时清掉挂起的防抖定时器，避免它在组件销毁后仍然触发
+      // fetchYangShanList()（此时 this.setData 对一个已卸载的组件实例操作，
+      // 轻则是死代码式的无效调用，重则在某些基础库版本下打印警告）
+      const self = this as any;
+      if (self._debounceTimer) {
+        clearTimeout(self._debounceTimer);
+        self._debounceTimer = null;
+      }
     }
   },
 
   observers: {
     storeId(newStoreId: string) {
       console.log('[yangshan-wall] storeId 属性变化观察到:', newStoreId);
-      if (newStoreId) {
-        this.fetchYangShanList();
-      } else {
+      const self = this as any;
+
+      if (self._debounceTimer) {
+        clearTimeout(self._debounceTimer);
+        self._debounceTimer = null;
+      }
+
+      if (!newStoreId) {
         // storeId 被清空（如宿主页面尚未解析出门店）时，清空展示，
         // 避免继续挂着上一个门店的名单造成数据串店的错觉
+        self._lastFetchedStoreId = '';
         this.setData({ yangShanList: [], hasYangShanList: false });
+        return;
       }
+
+      if (newStoreId === self._lastFetchedStoreId) {
+        // 🛡️ 值没有真正变化（宿主页面重复写入了同一个 storeId），跳过，
+        // 不重新发起云函数请求
+        console.log('[yangshan-wall] storeId 与上次已拉取的值相同，跳过重复请求:', newStoreId);
+        return;
+      }
+
+      // 🛡️ 200ms 防抖：短时间内的连续真实变化只取最后一次落地的 storeId
+      self._debounceTimer = setTimeout(() => {
+        self._debounceTimer = null;
+        this.fetchYangShanList();
+      }, 200);
     }
   },
 
@@ -108,6 +155,7 @@ Component({
       }
       console.log('[yangshan-wall] 开始拉取阳善名单，storeId=', storeId);
 
+      (this as any)._lastFetchedStoreId = storeId;
       this.setData({ loading: true });
       try {
         // 🐛（首页红色超时报错根因修复）getSunshineLedger/config.json 此前没有
@@ -121,6 +169,16 @@ Component({
           name: 'getSunshineLedger',
           data: { storeId }
         }, 25000);
+
+        // 🛡️ 请求竞态防护：这次请求耗时期间，宿主页面可能已经把 storeId
+        // 又换成了另一家店（this.properties.storeId 不再等于发起请求时的
+        // storeId）——不能用这份已经过期的结果覆盖新门店的展示，直接丢弃，
+        // 新门店自己那次 observer 触发的请求会负责展示正确数据
+        if (this.properties.storeId !== storeId) {
+          console.log('[yangshan-wall] 请求返回时 storeId 已变化（当前:', this.properties.storeId, '请求时:', storeId, '），丢弃过期结果');
+          return;
+        }
+
         const result = res.result;
         if (!result || !result.success) {
           console.log('[yangshan-wall] getSunshineLedger 返回 success:false 或空结果:', result);
