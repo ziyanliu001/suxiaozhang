@@ -189,6 +189,13 @@
                备餐清单"（纯文本复制）是并存的两条独立能力——本按钮生成结构化、
                可勾选/可微调重量的采买待办清单，弹窗展示 -->
           <button class="dm-purchase-plan-btn" catchtap="onGeneratePurchasePlan">🛒 生成后厨采买清单</button>
+
+          <!-- 🆕（2026-09-13）"一键采纳为今日食谱"：预测本身只有人次+食材用量估算，
+               从未有过具体菜名建议能力（predictMealDemand.js 如实核实过），
+               这里回填的是格式化的预测摘要文本，不是编造的菜名——打开发布弹窗
+               后菜品名称仍需人工补充，与上面两个"复制清单/生成采买"是并列的
+               第三条转化路径，互不冲突 -->
+          <button class="dm-ai-adopt-btn" catchtap="onAdoptMealPredictionToMenu">✅ 一键采纳为{{isSelectedToday && mealPredictionForm.targetDate === selectedDateStr ? '今日' : '该日'}}食谱</button>
         </view>
       </view>
     </view>
@@ -315,6 +322,13 @@
         <text class="dm-detail-date">{{editForm.id ? '编辑食谱' : '发布' + (isSelectedToday ? '今日' : '该日') + '食谱'}}</text>
         <text class="dm-detail-close" bindtap="onCloseEditForm">✕</text>
       </view>
+
+      <!-- 🆕（2026-09-13 快捷引用）与页面下方"📖 引用历史食谱"（从整份 historyList
+           里挑一条）是互补的两条路径——这里一键直接取"该门店该餐别最近一次
+           发布"的那一条（historyList 已按 dateString desc 排好、且已排除当前
+           选中日期，historyList[0] 天然就是"最近一次"），省去先关弹窗、再点
+           外部按钮、再从列表里挑的来回操作 -->
+      <button class="dm-btn-quick-reuse-latest" wx:if="{{historyList.length > 0}}" bindtap="onQuickReuseLatestMenu">📋 快捷引用昨日/往期食谱</button>
 
       <scroll-view scroll-y class="dm-edit-scroll">
         <text class="dm-form-label">日期</text>

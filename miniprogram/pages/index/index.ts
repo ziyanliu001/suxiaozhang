@@ -2259,9 +2259,18 @@ Page({
 
   // 🆕（2026-09-13 今日闭环指示条）今日餐报记账状态：直接客户端查询本店
   // 当天 report_logs 的 approvalStatus，与 onRevokeTodayCheckIn() 同一种
-  // 既有的客户端直查模式（该文档的数据库安全规则本就允许本店角色只读查询），
-  // 不新开一个云函数。查无记录（今日尚未提交过餐报）时落空字符串，wxml
-  // 据此展示"未录入"
+  // 既有的客户端直查模式。查无记录（今日尚未提交过餐报）时落空字符串，wxml
+  // 据此展示"未录入"。
+  // 🐛（2026-09-13 优雅降级加固）根因与 history.ts fetchMeritStats() 头部
+  // 注释记录的 -502003 故障同源：report_logs 的数据库安全规则只认"是否是
+  // 文档所有者"，只要今天的记录是店内其他人（非当前查看者）提交的，这条
+  // 客户端直查就会确定性命中 -502003 database permission denied——不是
+  // "偶发网络异常"。此前 catch 块只 console.warn，没有回退 todayReportStatus，
+  // 失败时会定格在上一次成功查到的旧值（可能是很多天前、甚至是切店前另一家
+  // 门店的状态），比"未录入"更容易误导人。现在任何失败路径都统一回退成
+  // 空字符串（wxml 展示"未录入"，不是断言"确实没人交"，只是"本次没能读到
+  // 确切状态"的安全兜底），并按错误码区分日志级别，方便后续排查这条查询
+  // 到底是权限问题还是网络问题
   async fetchTodayReportStatus() {
     const storeId = this.data.currentStoreId;
     if (!storeId || this.isNationalOverviewSelected()) {
@@ -2281,8 +2290,16 @@ Page({
         .get();
       const report = res.data && res.data[0];
       this.setData({ todayReportStatus: (report && report.approvalStatus) || '' });
-    } catch (e) {
-      console.warn('[fetchTodayReportStatus] 查询今日餐报状态失败:', e);
+    } catch (e: any) {
+      const isPermissionDenied = e && (e.errCode === -502003 || String(e.errMsg || e.message || '').indexOf('502003') !== -1);
+      if (isPermissionDenied) {
+        console.warn('[fetchTodayReportStatus] 今日餐报由店内其他人提交，客户端直查命中数据库所有者权限规则（-502003），降级为"未录入"展示:', e);
+      } else {
+        console.warn('[fetchTodayReportStatus] 查询今日餐报状态失败（网络异常或其他原因），降级为"未录入"展示:', e);
+      }
+      // 🐛 不留旧值：失败时一律回退到空字符串，避免 UI 定格在上一次成功
+      // 查到的、此刻已经不确定是否仍然准确的旧状态
+      this.setData({ todayReportStatus: '' });
     }
   },
 

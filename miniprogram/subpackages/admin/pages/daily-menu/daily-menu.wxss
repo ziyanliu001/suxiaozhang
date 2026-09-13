@@ -283,6 +283,30 @@
   border: none;
 }
 
+/* 🆕（2026-09-13 发布弹窗快捷引用）与 .dm-btn-reuse-template 同一套"浅红弱底"
+   配色，放在弹窗头部下方、滚动区之上，滚动到表单再深处也不影响它常驻可点 */
+.dm-btn-quick-reuse-latest {
+  width: 100%;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0 0 16rpx;
+  line-height: 1;
+  border-radius: 12rpx;
+  background: #FFF5F0;
+  color: #8C1D18;
+  border: 1.5rpx solid #FFD3BE;
+  font-size: 25rpx;
+  font-weight: 600;
+}
+
+.dm-btn-quick-reuse-latest::after {
+  border: none;
+}
+
 /* 🌟 发布冲突提示：今日已存在食谱时，展示发布人与时间，弱化视觉不抢主标题 */
 .dm-publish-meta {
   display: block;
@@ -585,6 +609,31 @@
 }
 
 .dm-purchase-plan-btn::after {
+  border: none;
+}
+
+/* 🆕（2026-09-13）"一键采纳为今日食谱"：与上面两个按钮同一套规格，绿色
+   区分"转化为一条真实待发布记录"这个动作——不同于橙色的纯文本复制、青绿色
+   的结构化采买清单，这个按钮会直接打开发布弹窗 */
+.dm-ai-adopt-btn {
+  width: 100%;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 12rpx 0 0;
+  line-height: 1;
+  border-radius: 36rpx;
+  background: #EBFBEE;
+  border: 1.5rpx solid #2B8A3E;
+  color: #2B8A3E;
+  font-size: 25rpx;
+  font-weight: 600;
+}
+
+.dm-ai-adopt-btn::after {
   border: none;
 }
 

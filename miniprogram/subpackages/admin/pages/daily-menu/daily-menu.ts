@@ -859,6 +859,37 @@ Page({
     this.reuseItemToSelected(item);
   },
 
+  // 🆕（2026-09-13 发布弹窗快捷引用）与 onOpenReuseTemplatePicker（弹出整份
+  // historyList 供挑选）互补：这里不用再弹一层选择器，直接取"该门店该餐别
+  // 最近一次发布"的那一条——historyList 已经是服务端按 dateString desc
+  // 排好、且已排除当前选中日期的结果（见 recomputeHistoryList），[0] 就是
+  // "最近一次"，不需要额外发起云函数查询。表单里已经有未提交的内容（用户
+  // 刚打了字/传了图）时先确认一遍，避免一键引用把还没提交的手动输入静默冲掉；
+  // 表单是空的（最常见的"刚打开发布弹窗"场景）则直接带入，不多一次确认打断
+  onQuickReuseLatestMenu() {
+    if (this.data.historyList.length === 0) {
+      wx.showToast({ title: '暂无历史食谱可引用，请先发布一次', icon: 'none' });
+      return;
+    }
+    const latest = this.data.historyList[0];
+    const hasUnsavedInput = !!this.data.editForm.menuText.trim() || this.data.editForm.images.length > 0;
+
+    if (!hasUnsavedInput) {
+      this.reuseItemToSelected(latest);
+      return;
+    }
+
+    wx.showModal({
+      title: '快捷引用往期食谱',
+      content: `将用【${latest.dateDisplay || latest.dateString}】的菜品明细与配图覆盖当前已填写的内容，是否继续？`,
+      confirmText: '覆盖并引用',
+      success: (res) => {
+        if (!res.confirm) return;
+        this.reuseItemToSelected(latest);
+      }
+    });
+  },
+
   onPreviewImage(e: any) {
     const url = e.currentTarget.dataset.url;
     const rawUrls = e.currentTarget.dataset.urls || [];
@@ -1159,6 +1190,43 @@ Page({
         wx.showToast({ title: '复制失败，请重试', icon: 'none' });
       }
     });
+  },
+
+  // 🆕（2026-09-13）"一键采纳为今日食谱"：核实过 predictMealDemand.js 只
+  // 输出 recommendedHeadcount/ingredients 两类数字，从未有过"四菜一汤"这类
+  // 具体菜名建议能力——这里回填的是格式化好的预测摘要文本（人次+食材用量
+  // 估算），不是编造的菜名，打开发布弹窗后菜品名称仍需人工补充，与
+  // onApplyMealPrediction（复制到剪贴板）共用同一份文案拼装逻辑，只是落点
+  // 从剪贴板换成 editForm.menuText。目标日期取 mealPredictionForm.targetDate
+  // （可能与主页面当前选中日期不同），mealType 沿用当前选中餐别——
+  // mealPredictionForm 本身不区分餐别，与页面顶部"早/午/晚"筛选是同一个
+  // 概念。id 固定留空：manageDailyMenu 的 create 分支已经会按
+  // {storeId,dateString,mealType} 查重并自动覆盖更新已有记录，不会产生重复
+  onAdoptMealPredictionToMenu() {
+    const result = this.data.mealPredictionResult;
+    if (!result || result.insufficientData) return;
+
+    const lines = [
+      `【AI 备餐参考】${this.data.mealPredictionForm.targetDateDisplay}`,
+      `推荐备餐总人次：${result.recommendedHeadcount} 人（堂食+外送预估）`,
+      '基础食材用量估算：'
+    ];
+    this.data.mealPredictionIngredientRows.forEach((row: any) => {
+      lines.push(`- ${row.label}：${row.value} ${row.unit}`);
+    });
+    lines.push('（以上为 AI 预测参考人次与食材估算，具体菜品名称请在下方手动补充）');
+
+    this.setData({
+      showEditForm: true,
+      editForm: {
+        id: '',
+        dateString: this.data.mealPredictionForm.targetDate,
+        mealType: this.data.selectedMealType,
+        menuText: lines.join('\n'),
+        images: []
+      }
+    });
+    wx.showToast({ title: '已带入发布表单，可微调后提交', icon: 'none' });
   },
 
   // 🛒（2026-09-11 离线兜底缓存）本机 storage 键名——按门店+日期隔离，
