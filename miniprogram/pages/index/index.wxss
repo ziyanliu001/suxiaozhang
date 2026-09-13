@@ -313,12 +313,19 @@ page {
   background: #FFFFFF;
   border-radius: 32rpx;
   padding: 32rpx 28rpx;
+  /* 🐛（2026-09-13 视口防溢出）二维码生成成功后海报图片实际高度会超出
+     max-height:85vh 的弹窗——此前只有外层 overflow:hidden 做硬裁切，没有
+     任何一层能滚动，底部保存/分享按钮被直接顶出可视区域。真正的滚动容器
+     是下面新增的 .poster-preview-wrapper（flex:1+overflow-y:auto），这里
+     的 overflow:hidden 只负责裁出圆角，不再承担"防止内容撑高弹窗"的职责 */
   display: flex;
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
   overflow: hidden;
   margin-top: 160rpx;
+  padding-bottom: calc(32rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
 }
 .modal-header-row {
   width: 100%;
@@ -374,6 +381,21 @@ page {
 .poster-canvas {
   border-radius: 20rpx;
   display: block;
+}
+
+/* 🐛（2026-09-13 视口防溢出）此前 wxml 里 3199 行注释已经预告"能跟着
+   .poster-preview-wrapper 的 flex:1+滚动兜底正常收缩"，但这条规则其实
+   从未真正写进来过——.store-poster-box 是 flex column + max-height:85vh，
+   缺了这一层 flex:1/min-height:0/overflow-y:auto，预览区（图片+Loading
+   遮罩）只能顶着 max-height 硬撑，底部按钮跟着一起被推出弹窗可视区域。
+   min-height:0 是让 flex 子项真正能收缩滚动的关键，光有 flex:1 在部分
+   机型上仍会按内容自然高度撑开父容器 */
+.poster-preview-wrapper {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .poster-actions-bar {

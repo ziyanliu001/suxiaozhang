@@ -2842,7 +2842,16 @@ Page({
           if (result && result.success) {
             submittedCount = result.submittedCount || 0;
             auditedCount = result.auditedCount || 0;
-          } else {
+          } else if (!this.data.isPlatformAdmin) {
+            // 🐛（2026-09-13）platform_admin 漫游巡检视角查看非本店档案时，尚未
+            // 对这家门店发起过 report_logs 级别的巡检授权是预期内的常态（不是
+            // 每次巡检浏览都会顺带申请这类授权），manageReportApproval 会按
+            // "只能查看本店统计"拒绝——这不是需要开发关注的异常信号，静默按 0
+            // 兜底即可（submittedCount/auditedCount 本就初始化为 0），不再打印
+            // console.warn 制造控制台噪音。非 platform_admin 角色走到这个失败
+            // 分支通常意味着 storeId/tenantId 真的对不上（历史上这类噪音曾经
+            // 暴露过跨空间切店的真实 bug，见上方一系列根因修复注释），继续保留
+            // 告警
             console.warn('[fetchMeritStats] getMeritStats 返回失败，使用兜底数据:', result && result.errMsg);
           }
         }
