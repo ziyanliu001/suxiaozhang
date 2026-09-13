@@ -381,12 +381,14 @@ page {
   padding: 0 12rpx;
   box-sizing: border-box;
   flex-shrink: 0;
+  display: flex;
+  gap: 16rpx;
 }
 
-.btn-share-single-line {
-  width: 100% !important;
+.btn-share-single-line,
+.btn-save-single-line {
+  flex: 1;
   height: 84rpx;
-  background: linear-gradient(135deg, #E65100 0%, #D9480E 100%);
   color: #FFFFFF;
   font-size: 26rpx;
   font-weight: bold;
@@ -396,14 +398,28 @@ page {
   justify-content: center;
   white-space: nowrap !important;
   overflow: hidden;
-  box-shadow: 0 6rpx 18rpx rgba(217, 72, 14, 0.35);
-  padding: 0 20rpx;
+  padding: 0 12rpx;
   box-sizing: border-box;
   border: none;
   transition: all 0.2s ease;
 }
 
-.btn-share-single-line:active {
+.btn-share-single-line {
+  background: linear-gradient(135deg, #E65100 0%, #D9480E 100%);
+  box-shadow: 0 6rpx 18rpx rgba(217, 72, 14, 0.35);
+}
+
+/* 🆕（2026-09-13）门店邀请海报"保存到相册"按钮：与右侧分享按钮同一行、
+   同尺寸规范并列展示，金色区分"保存"这个动作语义（与 .btn-save 既有的
+   保存类配色口径一致），此前只能靠长按图片调出系统菜单保存，新增一个
+   显式可点击入口，两种方式并存 */
+.btn-save-single-line {
+  background: linear-gradient(135deg, #B8860B 0%, #DAA520 100%);
+  box-shadow: 0 6rpx 18rpx rgba(184, 134, 11, 0.35);
+}
+
+.btn-share-single-line:active,
+.btn-save-single-line:active {
   transform: scale(0.98);
   opacity: 0.9;
 }

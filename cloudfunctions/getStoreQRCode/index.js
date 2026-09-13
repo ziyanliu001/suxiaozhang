@@ -1,4 +1,6 @@
 const cloud = require('wx-server-sdk');
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
+const { buildAuditLogEntry, isRoamingConsumed } = require('./lib/buildAuditLogEntry');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -41,6 +43,61 @@ function buildVerifyScene(storeId, dateDigits) {
   return `t_${storeId}_d_${dateDigits}`;
 }
 
+// 🛡️（2026-09-13 门店邀请海报权限漫游）与 manageStoreProfile/manageReportApproval/
+// getPatriarchDashboard 同一套"authorizedTenants 轻量租户漫游"体系，独立镜像
+// 一份（云函数间无共享模块机制，见 CLAUDE.md）。resolveCaller(OPENID, opts) 负责
+// "按 OPENID 查 user_roles 拿到 own 文档"这一步数据库 I/O，决策逻辑委托给
+// lib/resolveCaller.js 的 resolveEffectiveCaller()——platform_admin 持有覆盖
+// 目标门店的有效巡检授权时，会把 role/tenantId/storeId 原地替换成授权记录里的值，
+// 下游权限判断因此不需要额外识别"这是不是漫游身份"，直接按替换后的角色走既有的
+// store_manager/store_patriarch/super_admin 判断即可。
+async function resolveCaller(db, OPENID, opts) {
+  if (!OPENID) return null;
+  const roleRes = await db.collection('user_roles').where({ _openid: OPENID }).limit(1).get();
+  let own = (roleRes.data && roleRes.data[0]) || null;
+
+  // 🐛 沿用改造前的既有兼容分支：极少数历史账号只在 `users` 集合里记录过
+  // role/storeId，从未在 user_roles 落过文档。构造一份形状一致的 own，
+  // 交给同一套 resolveEffectiveCaller 处理，不单独另写一套判断逻辑。
+  if (!own) {
+    const userRes = await db.collection('users').where({ _openid: OPENID }).limit(1).get().catch(() => null);
+    const legacyUser = userRes && userRes.data && userRes.data[0];
+    if (legacyUser) {
+      own = {
+        role: legacyUser.role === 'admin' ? 'super_admin' : 'volunteer',
+        storeId: legacyUser.storeId || '',
+        tenantId: ''
+      };
+    }
+  }
+
+  const targetStoreId = opts && (opts.targetStoreId || opts.storeId);
+  const effectiveCaller = resolveEffectiveCaller(own, targetStoreId);
+
+  // 🛡️ 只在真的发生了漫游身份替换时才写一条巡检审计留痕，与
+  // manageStoreProfile 的 resolveCaller 同一套口径
+  if (isRoamingConsumed(own, effectiveCaller)) {
+    const storeRes = await db.collection('stores').doc(targetStoreId).field({ storeName: true }).get().catch(() => null);
+    const targetStoreName = (storeRes && storeRes.data && storeRes.data.storeName) || '';
+    const logEntry = buildAuditLogEntry({
+      operatorOpenId: OPENID,
+      own,
+      effectiveCaller,
+      targetStoreId,
+      targetStoreName,
+      cloudFunctionName: 'getStoreQRCode',
+      action: opts && opts.action
+    });
+    if (logEntry) {
+      await db.collection('tenant_authorization_audit_logs').add({
+        data: { ...logEntry, createTime: db.serverDate() }
+      }).catch((err) => console.warn('[getStoreQRCode] 巡检审计日志写入失败:', err));
+    }
+  }
+
+  return effectiveCaller;
+}
+
 exports.main = async (event, context) => {
   const { OPENID } = cloud.getWXContext();
   const { storeId, storeName, purpose, date } = event;
@@ -52,29 +109,10 @@ exports.main = async (event, context) => {
   try {
     const db = cloud.database();
 
-    const roleRes = await db.collection('user_roles')
-      .where({ _openid: OPENID })
-      .limit(1)
-      .get();
-
-    let userRole = 'volunteer';
-    let userStoreId = '';
-    let userTenantId = '';
-
-    if (roleRes.data && roleRes.data.length > 0) {
-      userRole = roleRes.data[0].role || 'volunteer';
-      userStoreId = roleRes.data[0].storeId || '';
-      userTenantId = roleRes.data[0].tenantId || '';
-    } else {
-      const userRes = await db.collection('users')
-        .where({ _openid: OPENID })
-        .limit(1)
-        .get();
-      if (userRes.data && userRes.data.length > 0) {
-        userRole = userRes.data[0].role === 'admin' ? 'super_admin' : 'volunteer';
-        userStoreId = userRes.data[0].storeId || '';
-      }
-    }
+    const caller = await resolveCaller(db, OPENID, { targetStoreId: storeId, action: purpose || 'invite' });
+    const userRole = (caller && caller.role) || 'volunteer';
+    const userStoreId = (caller && caller.storeId) || '';
+    const userTenantId = (caller && caller.tenantId) || '';
 
     // 🌟 个人荣誉证书场景：任何已登录角色（含普通义工）都需要能拿到一个指向本小程序的
     // 二维码贴在自己的证书上，不应该被"仅店长/超管可生成门店推广二维码"这条规则挡住——
@@ -98,20 +136,42 @@ exports.main = async (event, context) => {
       if (userStoreId && userStoreId !== storeId) {
         return { success: false, error: '仅可生成本人所属门店的二维码' };
       }
-    } else if (userRole !== 'super_admin') {
-      if (userRole !== 'store_manager') {
-        return { success: false, error: '无权限生成二维码' };
+    } else if (userRole === 'super_admin') {
+      if (userTenantId) {
+        // 🏢 多租户边界：super_admin 的管辖范围收敛为本机构，禁止为他机构门店生成二维码
+        const targetStoreRes = await db.collection('stores').doc(storeId).get().catch(() => null);
+        const targetStore = targetStoreRes && targetStoreRes.data;
+        if (targetStore && targetStore.tenantId && targetStore.tenantId !== userTenantId) {
+          return { success: false, error: '无权生成其他机构门店二维码' };
+        }
       }
+    } else if (userRole === 'store_manager' || userRole === 'store_patriarch') {
+      // 🐛 根因修复（2026-09-13）：此前这里只放行 store_manager，大家长
+      // （store_patriarch）明明在首页 canAuditUser 权限位已经能看到"生成门店
+      // 邀请海报"入口，点击后却在这道陈旧的单店硬编码校验上被打回"无权限生成
+      // 二维码"——这是本次报告复现的真实故障。大家长对本机构辖下门店的管理
+      // 权限与店长同档（见 utils/authService.ts 的 canAuditUser 判定），这里
+      // 补齐即可；platform_admin 巡检漫游命中授权后 userRole 已经被
+      // resolveCaller 原地替换成这条授权记录里的 role（store_manager/
+      // store_patriarch），同样会走到这个分支，不需要再单独识别 platform_admin。
       if (userStoreId && userStoreId !== storeId) {
         return { success: false, error: '无权生成其他门店二维码' };
       }
-    } else if (userTenantId) {
-      // 🏢 多租户边界：super_admin 的管辖范围收敛为本机构，禁止为他机构门店生成二维码
-      const targetStoreRes = await db.collection('stores').doc(storeId).get().catch(() => null);
-      const targetStore = targetStoreRes && targetStoreRes.data;
-      if (targetStore && targetStore.tenantId && targetStore.tenantId !== userTenantId) {
-        return { success: false, error: '无权生成其他机构门店二维码' };
-      }
+    } else {
+      // 🛡️（2026-09-13）不把 platform_admin 直接纳入白名单——CLAUDE.md 明确
+      // 把"平台管理员对任何门店的业务数据一律不放行"列为最高业务准则（见
+      // utils/authService.ts platform_admin 分支注释：防止商业运营方借运维
+      // 身份窥探/操作公益机构内部数据），门店邀请海报同样是机构内部的人员
+      // 管理动作，不是"低风险个人码"，不属于可以豁免的范围。platform_admin
+      // 唯一合法路径是 grantTenantAuthorization 的巡检自助授权（与
+      // manageStoreProfile.resolveReadTarget 同一套 NEEDS_INSPECTION_GRANT
+      // 口径）——这里补上这个 errorCode，前端据此展示"申请巡检授权并重试"
+      // 而不是让用户对着一句"无权限"反复点重试却什么都不会变。
+      return {
+        success: false,
+        error: userRole === 'platform_admin' ? '当前账号尚未获得该门店的巡检授权' : '无权限生成二维码',
+        errorCode: userRole === 'platform_admin' ? 'NEEDS_INSPECTION_GRANT' : undefined
+      };
     }
 
     // 🌟 验真二维码场景：海报右下角"扫码验真"需要一个指向公开只读页面

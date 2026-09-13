@@ -1262,6 +1262,12 @@ Page({
     // 占位卡正常生成（不阻断），但此时应该让用户能一键只重新拉二维码，而不是
     // 教他们去读那张卡片上的"请稍后重试"小字——这个标记驱动预览区底部的重试提示条
     storePosterQrFailed: false,
+    // 🆕（2026-09-13 巡检授权自助恢复）storePosterQrFailed 的失败原因细分：
+    // 服务端返回 NEEDS_INSPECTION_GRANT（仅 platform_admin 会命中，见
+    // getStoreQRCode 云函数）时为 true，驱动预览区展示"申请巡检授权并重试"
+    // 而不是普通的"点击重新生成"——普通重试对权限类失败无意义，反复点也是
+    // 同一个结果，必须先走 grantTenantAuthorization 自助授权
+    storePosterQrNeedsGrant: false,
     // 🐛 长等待体感修复：callFunction 超时从 8s 提到 18s 后，第二次尝试最长可能
     // 要再等 18s——用户如果全程只看到一句不变的"正在合成精美海报..."，很容易
     // 以为卡死了。第一次尝试失败进入重试时置 true，切换文案告诉用户"确实在重试"
@@ -3100,10 +3106,17 @@ Page({
   // tempFilePath，文件还在（accessSync 不抛）直接秒开；文件被系统回收了但
   // fileID 还在，就跳过最贵的生成步骤，只用 fileID 重新 downloadFile 一次；
   // 两条捷径都走不通才落回完整生成流程
+  // 🆕（2026-09-13）挂在 this 上的临时诊断字段（非视图渲染用途，不入 data，
+  // 见 CLAUDE.md「与视图渲染无关的临时变量必须挂载在页面实例 this 上」）：
+  // 记录本次拉取失败的服务端 errorCode，供 onGenerateStorePoster 判断是否
+  // 展示"申请巡检授权并重试"而不是普通重试
+  _lastStoreQrErrorCode: '',
+
   async _fetchStoreQrLocalPath(storeId: string, storeName: string): Promise<string> {
     // 🐛 【海报调试】真机排查专用：确认传到这一层的 storeId/storeName 是否
     // 仍然是调用方（onGenerateStorePoster）已经强转、校验过的合法字符串
     console.log('【海报调试】当前 storeId:', storeId, 'storeName:', storeName);
+    this._lastStoreQrErrorCode = '';
 
     const MAX_ATTEMPTS = 2;
     const CALL_FUNCTION_TIMEOUT_MS = 15000;
@@ -3150,6 +3163,11 @@ Page({
         );
         const qrResult = qrRes && qrRes.result;
         if (!qrResult || !qrResult.success) {
+          // 🆕（2026-09-13）NEEDS_INSPECTION_GRANT 是权限类失败（调用者是
+          // platform_admin 但尚未对这家门店发起过巡检授权），不是网络抖动，
+          // 重试次数再多也不会变成功——记下 errorCode 供上层判断，同时跳出
+          // 循环，不浪费一次无意义的 600ms 退避等待
+          this._lastStoreQrErrorCode = (qrResult && qrResult.errorCode) || '';
           throw new Error((qrResult && qrResult.error) || 'getStoreQRCode 返回失败');
         }
 
@@ -3175,6 +3193,7 @@ Page({
       } catch (err) {
         const elapsedMs = Date.now() - attemptStartedAt;
         console.warn(`[onGenerateStorePoster] 二维码获取失败（第${attempt}/${MAX_ATTEMPTS}次，耗时${elapsedMs}ms）:`, err);
+        if (this._lastStoreQrErrorCode === 'NEEDS_INSPECTION_GRANT') break;
         if (attempt < MAX_ATTEMPTS) {
           this.setData({ storePosterQrRetrying: true });
           await new Promise(resolve => setTimeout(resolve, 600 * attempt));
@@ -3239,7 +3258,7 @@ Page({
     // 转圈看好几秒（叠加新增的重试逻辑，最长可能到十几秒），看不出到底在做什么。
     // 现在弹窗立即打开，isStorePosterDrawing 驱动的品牌色 Loading 遮罩（同时覆盖
     // 二维码拉取 + Canvas 绘制两个阶段）取代全局 loading
-    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '', storePosterQrFailed: false, storePosterQrRetrying: false });
+    this.setData({ isStorePosterDrawing: true, showStorePosterModal: true, storePosterTempFilePath: '', storePosterQrFailed: false, storePosterQrNeedsGrant: false, storePosterQrRetrying: false });
 
     // 🐛 根因修复：此前 loading/isStorePosterDrawing 复位分散写在四五个成功/失败
     // 分支里，只要漏掉一条新增的失败路径就会导致 loading 卡死。统一收口到这一个
@@ -3258,7 +3277,14 @@ Page({
       // 🐛 重试兜底 UI：拉取彻底失败（重试耗尽）时先标记出来，海报仍会正常生成
       // （drawStoreInvitationPoster 内部会画圆角占位卡兜底），标记只用于驱动预览
       // 区底部"重新生成二维码"提示条的显隐，不影响本次绘制流程
-      this.setData({ storePosterQrFailed: !qrCodeLocalPath });
+      // 🆕（2026-09-13）双重确认 this.data.isPlatformAdmin，与 store-profile.ts
+      // 的 needsGrant 判定同一个理由：不给非 platform_admin 账号展示一个他们
+      // 调用了也会被 grantTenantAuthorization 拒绝的入口（该云函数仅限
+      // platform_admin 自助授权，见其 requirePlatformAdmin() 校验）
+      this.setData({
+        storePosterQrFailed: !qrCodeLocalPath,
+        storePosterQrNeedsGrant: !qrCodeLocalPath && this._lastStoreQrErrorCode === 'NEEDS_INSPECTION_GRANT' && this.data.isPlatformAdmin
+      });
 
       setTimeout(() => {
         const query = wx.createSelectorQuery();
@@ -3348,6 +3374,42 @@ Page({
     this._lastSharePosterTapAt = now;
   },
 
+  // 🆕（2026-09-13）「保存到相册」显式入口：此前门店邀请海报只能靠图片自带的
+  // show-menu-by-longpress 长按调出系统菜单保存，新增一个可点击按钮，与
+  // onSaveMeritPosterToAlbum 同一套授权失败处理（errMsg 含 'auth' 时引导
+  // wx.openSetting()），各自独立维护一份状态字段，不跨海报类型共享
+  onSaveStorePoster() {
+    const { storePosterTempFilePath } = this.data;
+    if (!storePosterTempFilePath) {
+      wx.showToast({ title: '海报图片为空', icon: 'none' });
+      return;
+    }
+
+    wx.saveImageToPhotosAlbum({
+      filePath: storePosterTempFilePath,
+      success: () => {
+        wx.showToast({ title: '已保存到相册', icon: 'success' });
+      },
+      fail: (err: any) => {
+        console.error('[onSaveStorePoster] 保存失败:', err);
+        if (err && err.errMsg && err.errMsg.includes('auth')) {
+          wx.showModal({
+            title: '提示',
+            content: '请授权允许保存图片到相册',
+            confirmText: '去授权',
+            success: (res) => {
+              if (res.confirm) {
+                wx.openSetting();
+              }
+            }
+          });
+        } else {
+          wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+        }
+      }
+    });
+  },
+
   // 🐛 二维码重试兜底：_fetchStoreQrLocalPath 重试耗尽（storePosterQrFailed）后，
   // 预览区会露出一条"重新生成二维码"提示条——不单独实现只重画二维码的分支，
   // 直接整张海报重新走一遍 onGenerateStorePoster（本身就带门店/loading 状态判断，
@@ -3358,6 +3420,51 @@ Page({
     if (now - (this._lastRetryStoreQrAt || 0) < 800) return;
     this._lastRetryStoreQrAt = now;
     this.onGenerateStorePoster();
+  },
+
+  // 🆕（2026-09-13 巡检授权自助恢复）storePosterQrNeedsGrant 为 true 时预览区
+  // 展示的"申请巡检授权并重试"按钮——完整复用 store-profile.ts
+  // onRequestInspectionGrantAndRetry() 同一套"自助 grant → 刷新 AuthService
+  // 缓存 → 重新走一遍生成流程"闭环，不是新发明一条通道。角色固定传
+  // 'store_patriarch'（GRANTABLE_ROLES 里能力最完整的一档，与该页同名方法
+  // 选型一致），不提供角色选择器——这里只是"让人能生成邀请码"的兜底入口，
+  // 需要精细控制角色应该去 platform-admin.ts 的巡检管理台操作。
+  // 🛡️ grantTenantAuthorization 云函数本身要求调用者字面角色必须是
+  // platform_admin（见该云函数 requirePlatformAdmin()），本方法只在
+  // storePosterQrNeedsGrant 为 true（已经隐含 this.data.isPlatformAdmin 为
+  // true，见 onGenerateStorePoster 里的判定）时才可能被触发，不构成新的越权面
+  _grantingStoreQrInspection: false,
+  async onRequestStoreQrGrantAndRetry() {
+    if (this._grantingStoreQrInspection) return;
+    const storeId = this._coerceToStoreIdString(this.data.currentStoreId);
+    if (!storeId) return;
+    this._grantingStoreQrInspection = true;
+    try {
+      const res: any = await callFunctionWithTimeout({
+        name: 'grantTenantAuthorization',
+        data: {
+          action: 'grant',
+          stores: [storeId],
+          role: 'store_patriarch',
+          storeName: this._coerceToStoreNameString(this.data.currentStoreName) || this.data.shopName || ''
+        }
+      });
+      const result = res && res.result;
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '申请巡检授权失败，请重试', icon: 'none' });
+        return;
+      }
+      // 授权只追加进 authorizedTenants 数组，不刷新本地缓存就不会被下一次
+      // resolveCaller/前端权限判断读到——与 store-profile.ts 同一处根因说明
+      await AuthService.fetchUserRole();
+      wx.showToast({ title: '巡检授权成功，正在重新生成', icon: 'success' });
+      this.onGenerateStorePoster();
+    } catch (err) {
+      console.error('[onRequestStoreQrGrantAndRetry] 申请巡检授权异常:', err);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      this._grantingStoreQrInspection = false;
+    }
   },
 
   async loadLastBalance() {

@@ -3236,19 +3236,33 @@
       <!-- 🐛 二维码重试兜底：多次拉取失败后海报仍正常生成（画面里是圆角占位卡），
            这里给一条可点击的提示条，让用户不用读懂占位卡里的小字，一键重新只拉
            二维码这一步。🎨 放在预览区外的独立一行（而不是叠在海报图上），避免
-           跟海报底部"雨花斋餐报助手"标语在视觉上重叠遮挡 -->
+           跟海报底部"雨花斋餐报助手"标语在视觉上重叠遮挡。
+           🆕（2026-09-13）storePosterQrNeedsGrant 时是权限类失败（调用者是
+           platform_admin 但尚未对这家门店发起过巡检授权），普通重试无意义，
+           改展示"申请巡检授权并重试"、绑定专门的自助授权处理函数 -->
       <view
         class="poster-qr-retry-banner"
         hover-class="btn-hover"
-        wx:if="{{storePosterTempFilePath && storePosterQrFailed && !isStorePosterDrawing}}"
+        wx:if="{{storePosterTempFilePath && storePosterQrFailed && storePosterQrNeedsGrant && !isStorePosterDrawing}}"
+        catchtap="onRequestStoreQrGrantAndRetry"
+      >
+        ⚠️ 当前账号尚未获得该门店的巡检授权，点击申请授权并重试
+      </view>
+      <view
+        class="poster-qr-retry-banner"
+        hover-class="btn-hover"
+        wx:if="{{storePosterTempFilePath && storePosterQrFailed && !storePosterQrNeedsGrant && !isStorePosterDrawing}}"
         catchtap="onRetryStoreQr"
       >
         ⚠️ 二维码生成失败，点击重新生成
       </view>
 
       <view class="poster-actions-bar">
+        <button class="btn-save-single-line" hover-class="btn-hover" catchtap="onSaveStorePoster">
+          <view class="idx-icon-sm idx-icon-image" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>保存到相册
+        </button>
         <button class="btn-share-single-line" hover-class="btn-hover" open-type="share" bindtap="onSharePosterToFriends">
-          <view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>分享给微信群和朋友
+          <view class="idx-icon-sm idx-icon-chat" style="display:inline-block;vertical-align:middle;margin-right:6rpx;"></view>分享给好友
         </button>
       </view>
       <!-- 🌟 图片本身已带 show-menu-by-longpress（长按原生菜单可保存），此前
