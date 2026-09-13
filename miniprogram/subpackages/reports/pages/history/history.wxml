@@ -142,12 +142,25 @@
     <!-- 📸 图册模式：照片类型过滤 + 瀑布流网格，账本内容同时隐藏 -->
     <view class="photo-archive-container" wx:if="{{photoArchiveMode}}">
 
+      <!-- 🆕（2026-09-13 显式化门店归属上下文）图册顶部固定展示当前所属门店，
+           避免平台管理员/巡检漫游身份切换到不同门店时，用户误以为看到的还是
+           上一家门店的温情档案——selectedStoreName 是本页角色/门店解析的
+           canonical 来源（onLoad/onStoreChange 统一维护），巡检漫游到具体
+           门店时同样会被正确刷新，不是图册自己另起一套门店归属判断 -->
+      <view class="photo-archive-store-context">
+        <text class="photo-archive-store-icon">📍</text>
+        <text class="photo-archive-store-name">{{selectedStoreName || '本机构'}}</text>
+        <text class="photo-archive-store-suffix">· 温情档案</text>
+      </view>
+
       <!-- 照片类型过滤标签栏：横向滚动 + 胶囊选中态，与 status-tab-row 共用
-           #8C1D18 主题强调色，不再用与全站不一致的 #C2185B -->
+           #8C1D18 主题强调色，不再用与全站不一致的 #C2185B。四类文案与
+           history.ts PHOTO_TYPE_LABELS（网格标签/详情弹窗共用同一份）完全
+           对齐，不再各写各的措辞 -->
       <scroll-view scroll-x class="photo-type-tabs-scroll" enhanced show-scrollbar="{{false}}">
         <view class="photo-type-tabs">
           <view
-            wx:for="{{[{label:'全部照片',icon:'🖼️',value:'all'},{label:'报销凭证',icon:'🧾',value:'receipt'},{label:'每日食谱',icon:'🍱',value:'menu'},{label:'温情活动',icon:'📸',value:'log'}]}}"
+            wx:for="{{[{label:'全部',icon:'📷',value:'all'},{label:'报销凭证',icon:'🧾',value:'receipt'},{label:'每日食谱',icon:'🍱',value:'menu'},{label:'温馨瞬间',icon:'❤️',value:'log'}]}}"
             wx:key="value"
             class="photo-type-tab {{photoTypeFilter === item.value ? 'active' : ''}}"
             data-type="{{item.value}}"
@@ -171,7 +184,10 @@
         <text>加载中...</text>
       </view>
 
-      <!-- 瀑布流照片网格：点击预览大图，长按查看详情/关联记录 -->
+      <!-- 瀑布流照片网格：点击预览大图，长按查看详情/图单联动关联记录。
+           🆕（2026-09-13 骨架渐入）图片加载完成前用 .photo-grid-skeleton
+           占位（纯 CSS 呼吸动画），bindload 后 loaded 置 true 触发淡入，
+           避免网络图片首次加载时整块跳动 -->
       <view class="photo-waterfall-grid" wx:if="{{!photoArchiveLoading && photoArchiveList.length > 0}}">
         <view
           class="photo-grid-item"
@@ -181,17 +197,18 @@
           bindtap="onPreviewPhotoItem"
           bindlongpress="onLongPressPhotoItem"
         >
+          <view class="photo-grid-skeleton" wx:if="{{!item.loaded}}"></view>
           <image
-            class="photo-grid-img"
+            class="photo-grid-img {{item.loaded ? 'is-loaded' : ''}}"
             src="{{item.url}}"
             mode="aspectFill"
             lazy-load="{{true}}"
+            data-index="{{index}}"
+            bindload="onPhotoGridImgLoad"
           />
           <view class="photo-grid-tags">
-            <text class="photo-tag-date">{{item.date}}</text>
-            <text class="photo-tag-type {{item.type}}">
-              {{item.type === 'receipt' ? '🧾 爱心采购' : item.type === 'menu' ? '🍱 温情就餐' : '📸 温情活动'}}
-            </text>
+            <text class="photo-tag-date">{{item.shortDate || item.date}}</text>
+            <text class="photo-tag-type {{item.type}}">{{photoTypeLabels[item.type] || item.type}}</text>
           </view>
         </view>
       </view>
@@ -199,11 +216,13 @@
       <!-- 空状态：温情文案 + 与页面其余空态（.empty-icon 🍃）一致的图标语言，
            不再引用图册模式下从未真正被赋值过的 selectedMonthDisplay（那个
            picker 只在账本模式展示，此前这里的条件分支其实是死代码，见
-           history.ts loadPhotoArchive 同一处修复注释） -->
+           history.ts loadPhotoArchive 同一处修复注释）。🆕 补一键重置筛选，
+           分类/时间范围筛得太窄导致空态时不需要用户自己一个个试回去 -->
       <view class="photo-archive-empty" wx:if="{{!photoArchiveLoading && photoArchiveList.length === 0}}">
         <text class="photo-archive-empty-icon">🍃</text>
         <text class="photo-archive-empty-tip">用镜头记录温暖，每一份付出皆有印记</text>
         <text class="photo-archive-empty-sub">{{photoArchiveRangeLabels[photoArchiveRangeKey]}}内暂无照片，可切换分类或时间范围试试</text>
+        <view class="btn-reset-photo-filters" hover-class="btn-hover" wx:if="{{photoTypeFilter !== 'all' || photoArchiveRangeKey !== '3m'}}" bindtap="onResetPhotoArchiveFilters">🔄 重置筛选</view>
       </view>
 
     </view>
@@ -826,6 +845,59 @@
         <text class="photo-detail-info-lbl">门店</text>
         <text class="photo-detail-info-val">{{photoDetailItem.storeName || '未命名'}}</text>
       </view>
+
+      <!-- 🆕（2026-09-13 图单联动）关联台账信息：长按打开弹窗时异步拉取
+           （见 history.ts fetchPhotoLedgerDetail），与上面几行"点开即有"的
+           基础信息分区展示，避免整个弹窗因为等一次额外的云函数往返而延迟出现 -->
+      <view class="photo-ledger-divider">
+        <text class="photo-ledger-divider-txt">📑 图单联动 · 关联台账</text>
+      </view>
+
+      <view class="photo-ledger-loading" wx:if="{{photoLedgerDetailLoading}}">
+        <text>加载关联台账中...</text>
+      </view>
+
+      <block wx:if="{{!photoLedgerDetailLoading && photoLedgerDetail}}">
+        <block wx:if="{{photoDetailItem.type === 'receipt'}}">
+          <view class="photo-detail-info-row">
+            <text class="photo-detail-info-lbl">报销品类</text>
+            <text class="photo-detail-info-val">{{photoLedgerDetail.categoryLabel}}</text>
+          </view>
+          <view class="photo-detail-info-row">
+            <text class="photo-detail-info-lbl">报销金额</text>
+            <text class="photo-detail-info-val amount-highlight">¥{{photoLedgerDetail.amountStr || photoLedgerDetail.amount}}</text>
+          </view>
+          <view class="photo-detail-info-row">
+            <text class="photo-detail-info-lbl">经手义工</text>
+            <text class="photo-detail-info-val">{{photoLedgerDetail.submitterName}}</text>
+          </view>
+          <view class="photo-detail-info-row">
+            <text class="photo-detail-info-lbl">所属日报</text>
+            <text class="photo-detail-info-val">{{photoLedgerDetail.dateString}}</text>
+          </view>
+        </block>
+
+        <view class="photo-ledger-text-block" wx:if="{{photoDetailItem.type === 'menu'}}">
+          <text class="photo-ledger-text-lbl">🍱 今日菜品</text>
+          <text class="photo-ledger-text-val">{{photoLedgerDetail.menuText}}</text>
+        </view>
+
+        <block wx:if="{{photoDetailItem.type === 'log'}}">
+          <block wx:if="{{photoLedgerDetail.hasSameDayReport}}">
+            <view class="photo-detail-info-row">
+              <text class="photo-detail-info-lbl">今日就餐人次</text>
+              <text class="photo-detail-info-val">{{photoLedgerDetail.diningCount}} 人</text>
+            </view>
+            <view class="photo-detail-info-row">
+              <text class="photo-detail-info-lbl">服务义工人数</text>
+              <text class="photo-detail-info-val">{{photoLedgerDetail.volunteerCount}} 人</text>
+            </view>
+          </block>
+          <text class="photo-ledger-empty-tip" wx:else>当天暂无对应餐报台账数据</text>
+        </block>
+      </block>
+
+      <text class="photo-ledger-error-tip" wx:if="{{!photoLedgerDetailLoading && !photoLedgerDetail && photoLedgerError}}">⚠️ {{photoLedgerError}}</text>
 
       <view class="modal-footer-box">
         <button class="btn-cancel" bindtap="onClosePhotoDetailModal">关闭</button>

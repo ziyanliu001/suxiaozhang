@@ -29,14 +29,15 @@ const PHOTO_ARCHIVE_RANGE_LABELS: Record<string, string> = {
 };
 const PHOTO_ARCHIVE_RANGE_ORDER: Array<'1m' | '3m' | 'year' | 'all'> = ['1m', '3m', 'year', 'all'];
 
-// 🆕 图册照片分类标签：与 getPhotoArchive 返回的 type 枚举一一对应，文案换成
-// 更贴合素食公益语境的说法（报销凭证场景多为食材/物资采购 → 爱心采购；
-// 每日食谱场景是门店记录的当日餐食 → 温情就餐），瀑布流网格标签与长按详情
-// 弹窗共用同一份，不写两遍
+// 🆕（2026-09-13 工业化升级）图册照片分类标签：与 getPhotoArchive 返回的
+// type 枚举一一对应，对齐产品要求的四维分类文案（全部/报销凭证/每日食谱/
+// 温馨瞬间），瀑布流网格标签、筛选 Tab、长按详情弹窗三处共用同一份，不写
+// 三遍。此前用的是更宽泛的"爱心采购/温情就餐/温情活动"措辞，改为与筛选
+// Tab 完全一致的措辞，避免同一张照片在网格标签和筛选栏里叫法不一致
 const PHOTO_TYPE_LABELS: Record<string, string> = {
-  receipt: '🧾 爱心采购',
-  menu: '🍱 温情就餐',
-  log: '📸 温情活动'
+  receipt: '🧾 报销凭证',
+  menu: '🍱 每日食谱',
+  log: '❤️ 温馨瞬间'
 };
 
 // 🆕 状态 Tab 顺序：与 WXML status-tab-row 的渲染顺序一一对应，statusTabIndex
@@ -253,13 +254,22 @@ Page({
     photoArchiveMode: false,
     // 照片类型过滤：'all' | 'receipt' | 'menu' | 'log'
     photoTypeFilter: 'all' as string,
-    photoArchiveList: [] as Array<{ url: string; type: string; date: string; storeName: string; id?: string }>,
+    // 🆕 shortDate（MM-DD）与 loaded（骨架渐入用）在 loadPhotoArchive() 里
+    // 对云端返回的 photos 逐条补算，不需要云函数改动/不需要新写单测——纯
+    // 字符串裁剪（dateString.slice(5)），比再引入一个工具函数更省事
+    photoArchiveList: [] as Array<{ url: string; type: string; date: string; shortDate: string; storeName: string; storeId?: string; id?: string; loaded?: boolean }>,
     photoArchiveLoading: false,
     photoArchiveTotal: 0,
     // 🆕 长按照片查看详情：轻量弹窗，复用本页已有的 .modal-backdrop/.modal-card
     // 视觉语言，不新增一套弹窗样式
     showPhotoDetailModal: false,
-    photoDetailItem: null as null | { url: string; type: string; date: string; storeName: string; id?: string; typeLabel: string },
+    photoDetailItem: null as null | { url: string; type: string; date: string; storeName: string; storeId?: string; id?: string; typeLabel: string },
+    // 🆕（2026-09-13 图单联动）长按详情弹窗打开后异步拉取的关联台账数据——
+    // 与弹窗基础信息（photoDetailItem）分开维护，因为它需要一次额外的云函数
+    // 往返，不能和"点开弹窗立即可见"的基础信息混在一次 setData 里
+    photoLedgerDetailLoading: false,
+    photoLedgerDetail: null as any,
+    photoLedgerError: '',
     // 🆕 图册专属的快捷时间范围（与账本模式的单月 picker 互不相关——图册模式
     // 下 .filter-section 整块隐藏，selectedMonthStr 在图册模式里从未被
     // 真正赋过值，此前"统计行"右侧的时间文案其实是个只会显示"近 3 个月"的
@@ -267,6 +277,11 @@ Page({
     // getPhotoArchive 云函数新增的 range 参数一一对应）
     photoArchiveRangeKey: '3m' as '1m' | '3m' | 'year' | 'all',
     photoArchiveRangeLabels: PHOTO_ARCHIVE_RANGE_LABELS,
+    // 🆕 WXML 无法直接引用 TS 模块常量，与 photoArchiveRangeLabels 同样的
+    // 手法把 PHOTO_TYPE_LABELS 镜像进 data，供瀑布流网格标签读取——长按详情
+    // 弹窗的 typeLabel 字段（见 onLongPressPhotoItem）是另一条独立读取路径，
+    // 两处共用同一份常量、不会出现文案漂移
+    photoTypeLabels: PHOTO_TYPE_LABELS,
     // 页面标题随模式 + orgType 动态切换
     pageTitle: '🧾 凭证与账本',
     // 机构类型：从 tenantId 派生（与 index.ts 同款逻辑），驱动图册页面标题文案
@@ -3399,8 +3414,16 @@ Page({
       });
       const result = res.result as any;
       if (result && result.success) {
+        // 🆕（2026-09-13）shortDate（MM-DD）供卡片底部规范展示，date 本身
+        // （YYYY-MM-DD）继续保留给详情弹窗/查看当月账本跳转用；loaded 驱动
+        // 骨架渐入（见 onPhotoGridImgLoad），新一批图片一律从"未加载"起步
+        const photos = (result.photos || []).map((p: any) => ({
+          ...p,
+          shortDate: (p.date || '').slice(5) || p.date || '',
+          loaded: false
+        }));
         this.setData({
-          photoArchiveList: result.photos || [],
+          photoArchiveList: photos,
           photoArchiveTotal: result.total || 0
         });
       } else {
@@ -3426,7 +3449,9 @@ Page({
   },
 
   // 🆕 长按照片：打开详情弹窗（拍摄/上报日期、分类、所属门店 + 查看大图 /
-  // 报销凭证类型额外提供"查看当月账本"入口）
+  // 报销凭证类型额外提供"查看当月账本"入口）。基础信息立即可见（同步读
+  // 本地已有的 photoArchiveList），图单联动的关联台账数据需要一次额外的
+  // 云函数往返，异步补上，两者不合并成一次 setData
   onLongPressPhotoItem(e: any) {
     const index = e.currentTarget.dataset.index as number;
     const item = this.data.photoArchiveList[index];
@@ -3435,10 +3460,81 @@ Page({
       showPhotoDetailModal: true,
       photoDetailItem: { ...item, typeLabel: PHOTO_TYPE_LABELS[item.type] || item.type }
     });
+    this.fetchPhotoLedgerDetail(item);
   },
 
   onClosePhotoDetailModal() {
-    this.setData({ showPhotoDetailModal: false });
+    this.setData({
+      showPhotoDetailModal: false,
+      // 🐛 关闭时一并清空，避免下次长按另一张照片时，新弹窗在图单联动数据
+      // 真正回来前的短暂空窗期里，误闪一下上一张照片的旧数据
+      photoLedgerDetailLoading: false,
+      photoLedgerDetail: null,
+      photoLedgerError: ''
+    });
+  },
+
+  // 🆕（2026-09-13 图单联动）按长按打开的这张照片，反查其关联的原始台账
+  // 文档（报销凭证的品类/金额/经手人/日报日期；食谱的菜品说明；温馨瞬间的
+  // 当日就餐/义工人次），失败时静默展示提示文案，不打断已经打开的详情弹窗
+  async fetchPhotoLedgerDetail(item: { url: string; type: string; id?: string; storeId?: string }) {
+    if (!item.id || !item.storeId) {
+      this.setData({ photoLedgerDetailLoading: false, photoLedgerDetail: null, photoLedgerError: '' });
+      return;
+    }
+    if (!isCloudAvailable()) {
+      this.setData({ photoLedgerDetailLoading: false, photoLedgerDetail: null, photoLedgerError: '云服务暂不可用' });
+      return;
+    }
+
+    this.setData({ photoLedgerDetailLoading: true, photoLedgerDetail: null, photoLedgerError: '' });
+
+    try {
+      const res = await callFunctionWithTimeout({
+        name: 'getPhotoArchive',
+        data: { action: 'detail', type: item.type, id: item.id, photoUrl: item.url, storeId: item.storeId }
+      });
+      const result = res && (res as any).result;
+      if (result && result.success) {
+        const detail = { ...result.detail };
+        // 报销金额沿用 report_logs 既有的"元"浮点口径（见 CLAUDE.md 金额存储
+        // 军规），展示层统一走 formatMoney 补两位小数，与账本卡片同一套格式
+        if (item.type === 'receipt' && typeof detail.amount === 'number') {
+          detail.amountStr = formatMoney(detail.amount);
+        }
+        this.setData({ photoLedgerDetail: detail, photoLedgerDetailLoading: false });
+      } else {
+        this.setData({
+          photoLedgerDetailLoading: false,
+          photoLedgerError: (result && result.error) || '加载关联台账失败'
+        });
+      }
+    } catch (err) {
+      console.error('[fetchPhotoLedgerDetail] 异常:', err);
+      this.setData({ photoLedgerDetailLoading: false, photoLedgerError: '加载关联台账失败' });
+    }
+  },
+
+  // 🆕（2026-09-13 空状态优化）一键重置图册筛选：分类回到"全部"、时间范围
+  // 回到默认的近 3 个月，与首次进入图册模式的初始状态一致
+  onResetPhotoArchiveFilters() {
+    this.setData({
+      photoTypeFilter: 'all',
+      photoArchiveRangeKey: '3m',
+      photoArchiveList: [],
+      photoArchiveTotal: 0
+    }, () => {
+      this.loadPhotoArchive();
+    });
+  },
+
+  // 🆕（2026-09-13 骨架渐入）单张图片加载完成后，按下标路径精确更新
+  // loaded 标记，驱动 WXSS 里骨架 -> 淡入的过渡（与 CLAUDE.md「严禁全量
+  // 更新 data，必须走具体路径」的 setData 铁律一致，不整段替换数组）
+  onPhotoGridImgLoad(e: any) {
+    const index = e.currentTarget.dataset.index as number;
+    if (typeof index !== 'number' || !this.data.photoArchiveList[index]) return;
+    this.setData({ [`photoArchiveList[${index}].loaded`]: true });
   },
 
   onPreviewPhotoDetailImage() {

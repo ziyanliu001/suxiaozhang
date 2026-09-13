@@ -2900,6 +2900,33 @@
   padding: 0 0 40rpx;
 }
 
+/* 🆕（2026-09-13 显式化门店归属上下文）图册顶部固定门店行——独立成行，
+   不塞进顶部已经因为文案过长栽过跟头的 .page-title-txt（见 history.ts
+   computePhotoArchiveTitle 头部"标题截断"注释），门店名允许自然换行/
+   跑到多行也不影响上面的导航栏 */
+.photo-archive-store-context {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4rpx;
+  padding: 0 28rpx 12rpx;
+}
+
+.photo-archive-store-icon {
+  font-size: 24rpx;
+}
+
+.photo-archive-store-name {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
+.photo-archive-store-suffix {
+  font-size: 24rpx;
+  color: #999999;
+}
+
 /* 照片类型过滤标签栏：横向滚动 + 胶囊选中态，替换原先等宽分段控件的
    #C2185B 强调色——与全站其余页面（如上方 .status-tab-row）统一改用
    #8C1D18 主题红，视觉语言不再自成一派 */
@@ -3015,11 +3042,37 @@
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
+/* 🆕（2026-09-13 骨架渐入）图片真正 bindload 前的占位层：呼吸感灰底
+   动画，覆盖在 .photo-grid-img 之上（image 本身 opacity:0 起步，加载完成
+   后 .is-loaded 淡入），避免网络图片首次加载时的空白跳动 */
+.photo-grid-skeleton {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, #E8E8E8 25%, #F2F2F2 37%, #E8E8E8 63%);
+  background-size: 400% 100%;
+  animation: photoSkeletonBreathe 1.4s ease-in-out infinite;
+}
+
+@keyframes photoSkeletonBreathe {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
 .photo-grid-img {
   display: block;
   width: 100%;
   height: 200rpx;
   border-radius: 16rpx;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.photo-grid-img.is-loaded {
+  opacity: 1;
 }
 
 /* 日期 + 类型标签叠加在图片底部 */
@@ -3078,6 +3131,19 @@
   text-align: center;
 }
 
+/* 🆕（2026-09-13 空态优化）一键重置筛选：仅当分类/时间范围偏离默认值时
+   才展示（见 wxml wx:if），避免"本来就没有任何照片"时误导用户去点一个
+   点了也不会有变化的按钮 */
+.btn-reset-photo-filters {
+  margin-top: 8rpx;
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #F5F5F5;
+  color: #8C1D18;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
 /* ── 长按详情弹窗（复用 .modal-card 基础样式） ── */
 .photo-detail-thumb-wrap {
   position: relative;
@@ -3125,4 +3191,58 @@
 .photo-detail-info-val {
   color: #333333;
   font-weight: 600;
+}
+
+.photo-detail-info-val.amount-highlight {
+  color: #8C1D18;
+  font-size: 30rpx;
+}
+
+/* 🆕（2026-09-13 图单联动）关联台账区块 */
+.photo-ledger-divider {
+  display: flex;
+  align-items: center;
+  margin: 20rpx 0 8rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx dashed #E0D5C0;
+}
+
+.photo-ledger-divider-txt {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #8C1D18;
+}
+
+.photo-ledger-loading {
+  padding: 16rpx 0;
+  font-size: 24rpx;
+  color: #aaa;
+  text-align: center;
+}
+
+.photo-ledger-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 12rpx 0;
+}
+
+.photo-ledger-text-lbl {
+  font-size: 24rpx;
+  color: #777777;
+}
+
+.photo-ledger-text-val {
+  font-size: 26rpx;
+  color: #333333;
+  line-height: 1.5;
+}
+
+.photo-ledger-empty-tip,
+.photo-ledger-error-tip {
+  display: block;
+  padding: 12rpx 0;
+  font-size: 24rpx;
+  color: #aaa;
+  text-align: center;
 }
