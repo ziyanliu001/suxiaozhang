@@ -1,5 +1,5 @@
 import { AuthService } from '../../../../utils/authService';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { setSelectedStore, clearAllStoresListCache, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../../../utils/storeManager';
 import { setGenCodeHandoff } from '../../../../utils/genCodeHandoff';
 import { isCloudAvailable } from '../../../../utils/cloudGuard';

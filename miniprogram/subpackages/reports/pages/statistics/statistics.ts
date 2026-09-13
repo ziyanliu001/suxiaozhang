@@ -3,7 +3,7 @@ import { AuthService, ROLE_LABELS } from '../../../../utils/authService';
 import { getSelectedStore, setSelectedStore } from '../../../../utils/storeManager';
 import { formatGratitudeReportText, GratitudeReportData } from '../../utils/reportFormatter';
 import { calculateEmaRunway, RunwayResult } from '../../utils/calculateRunway';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { safeNavigateTo } from '../../../../utils/navHelper';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { drawVolunteerHonorCard, VolunteerHonorData } from '../../../../utils/posterGenerator';

@@ -2,7 +2,7 @@ import { AuthService } from '../../../../utils/authService';
 import { requestComplianceReview } from '../../../../utils/complianceHandoff';
 import { getSafeSystemInfo } from '../../../../utils/util';
 import { safeNavigateTo } from '../../../../utils/navHelper';
-import { requestDailyReportReminderSubscription } from '../../../../utils/subscribeMessage';
+import { requestDailyReportReminderSubscription } from '../../utils/subscribeMessage';
 import { STORAGE_KEY_DEFAULT_HOME_VIEW, STORAGE_KEY_PRIVACY_MASK } from '../../../../utils/userPreferences';
 import { getLocalReports } from '../../../../utils/dataService';
 

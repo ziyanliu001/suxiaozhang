@@ -15,7 +15,7 @@ import { getCurrentActiveStore, getSelectedStore } from '../../../../utils/store
 import { isCloudAvailable } from '../../../../utils/cloudGuard';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { safeNavigateTo } from '../../../../utils/navHelper';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { playReportSealed } from '../../../../utils/audioService';
 

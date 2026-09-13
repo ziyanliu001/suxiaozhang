@@ -1,7 +1,7 @@
 import { AuthService } from '../../../../utils/authService';
 import { getSelectedStore, setSelectedStore } from '../../../../utils/storeManager';
 import { compressAndUploadImages } from '../../../../utils/imageCompress';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { drawActivityPoster } from '../../utils/drawActivityPoster';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { isVirtualStoreName } from '../../../../utils/storeIdentity';

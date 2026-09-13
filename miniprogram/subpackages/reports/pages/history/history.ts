@@ -2,7 +2,7 @@ import { DataService, formatMoney } from '../../../../utils/dataService';
 import { AuthService } from '../../../../utils/authService';
 import { getSelectedStore } from '../../../../utils/storeManager';
 import { getSafeSystemInfo } from '../../../../utils/util';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../../../utils/parser';
 import { getTodayIsoString } from '../../../../utils/dateUtils';
 import { isCloudAvailable } from '../../../../utils/cloudGuard';

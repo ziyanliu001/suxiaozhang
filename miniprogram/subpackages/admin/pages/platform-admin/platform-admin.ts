@@ -1,5 +1,5 @@
 import { AuthService } from '../../../../utils/authService';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { safeNavigateTo } from '../../../../utils/navHelper';
 import { getSafeSystemInfo } from '../../../../utils/util';

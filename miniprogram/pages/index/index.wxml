@@ -372,7 +372,10 @@
              满足这个前提——这里改为弱化提示文案，引导去选具体门店，而不是让按钮
              看起来正常可用却在提交时写入一条哨兵值当 storeId 的脏数据 -->
         <text class="omni-checkin-title">🙋 服务打卡</text>
-        <text class="omni-checkin-sub">{{isAllStoresView ? '当前为全国总览视图，请选择具体门店进行到岗打卡' : '到岗服务，即刻记录爱心工时'}}</text>
+        <!-- 🌸（2026-09-13 雨花斋文案温情化）纯展示态三元表达式，不涉及任何状态
+             赋值/比对，仅雨花斋工作空间（currentPlatformMode==='yuhua'）下换成
+             温情表述，通用记账/产销工坊用户看到的措辞不变，避免跨业务线串品牌 -->
+        <text class="omni-checkin-sub">{{isAllStoresView ? (currentPlatformMode === 'yuhua' ? '当前为全网爱心同心圆视图，请选择具体护生站点进行到岗打卡' : '当前为全国总览视图，请选择具体门店进行到岗打卡') : '到岗服务，即刻记录爱心工时'}}</text>
       </view>
       <button
         class="btn-volunteer-checkin omni-checkin-btn {{isAllStoresView ? 'state-national-disabled' : (allShiftsCompleted ? 'state-done' : (todayLogs.length > 0 ? 'state-partial' : 'state-pending'))}}"
@@ -718,7 +721,12 @@
         <view class="card-header-welcome">
           <view class="welcome-icon idx-icon-svg idx-icon-crown"></view>
           <view class="welcome-text-box">
-            <text class="welcome-title">{{isAllStoresView ? '全国总览' : (currentStoreName || '本门店')}}</text>
+            <!-- 🌸（2026-09-13 雨花斋文案温情化）同上：纯展示层三元表达式，不
+                 写入/比对任何状态字段（真正的"全国总览"哨兵检测逻辑在 .ts 里
+                 走 isNationalOverviewSelected()/NATIONAL_STORE_IDS 等独立判断，
+                 与这里的展示文案完全解耦，改这行不影响那套判断）。仅雨花斋
+                 工作空间下换温情词，通用记账/产销工坊用户不受影响 -->
+            <text class="welcome-title">{{isAllStoresView ? (currentPlatformMode === 'yuhua' ? '全网爱心同心圆' : '全国总览') : (currentStoreName || (currentPlatformMode === 'yuhua' ? '爱心家园' : '本门店'))}}</text>
             <text class="welcome-sub">{{isAllStoresView ? '全域门店运营总览，点击指标可穿透至具体门店' : '掌管门店日常运营、小票记账与餐报发布'}}</text>
           </view>
         </view>
@@ -745,7 +753,12 @@
         <view class="card-header-welcome">
           <view class="welcome-icon idx-icon-svg idx-icon-lock"></view>
           <view class="welcome-text-box">
-            <text class="welcome-title">{{isAllStoresView ? '全国总览' : (currentStoreName || '本门店')}}</text>
+            <!-- 🌸（2026-09-13 雨花斋文案温情化）同上：纯展示层三元表达式，不
+                 写入/比对任何状态字段（真正的"全国总览"哨兵检测逻辑在 .ts 里
+                 走 isNationalOverviewSelected()/NATIONAL_STORE_IDS 等独立判断，
+                 与这里的展示文案完全解耦，改这行不影响那套判断）。仅雨花斋
+                 工作空间下换温情词，通用记账/产销工坊用户不受影响 -->
+            <text class="welcome-title">{{isAllStoresView ? (currentPlatformMode === 'yuhua' ? '全网爱心同心圆' : '全国总览') : (currentStoreName || (currentPlatformMode === 'yuhua' ? '爱心家园' : '本门店'))}}</text>
             <text class="welcome-sub">{{isAllStoresView ? '全域账本健康总览，点击指标可穿透至具体门店' : '账本防篡改稽核、资金安全与数据导出'}}</text>
           </view>
         </view>

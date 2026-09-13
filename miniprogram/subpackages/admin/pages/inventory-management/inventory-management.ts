@@ -10,7 +10,7 @@
 // 独立的多店切换器——那属于后续迭代范围，不在本次"数据模型与 UI Scaffold"
 // 交付里）。
 import { AuthService } from '../../../../utils/authService';
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { getCurrentActiveStore } from '../../../../utils/storeManager';
 

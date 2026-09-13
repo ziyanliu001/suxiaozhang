@@ -9,7 +9,7 @@
 // 无效则静默丢弃）——本页只负责"尽量把正确的 promoterOpenId 带上"，不代表
 // 传了就一定生效，也不需要在这里重复校验。
 import { payForOrder } from '../../../../utils/wxPayCore';
-import { requestShippingNoticeSubscription } from '../../../../utils/subscribeMessage';
+import { requestShippingNoticeSubscription } from '../../utils/subscribeMessage';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { GroupBuyTier, TierRow, resolveTierPreview, buildTierRows } from '../../utils/groupBuyPreview';
 

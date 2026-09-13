@@ -8,7 +8,7 @@
  *  - 从首页传递或本地存储读取打卡日志
  */
 
-import { createNavGuard, NavGuardInstance } from '../../../../utils/navGuard';
+import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { safeParseDate } from '../../../../utils/dateUtils';
 import { recordRecentVisit } from '../../utils/recentPages';
 import { AuthService } from '../../../../utils/authService';
