@@ -4032,28 +4032,33 @@
                基本的无障碍语义 -->
           <view style="display: flex; flex-direction: row; flex-wrap: wrap; justify-content: space-between;" role="radiogroup">
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'store_patriarch' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="store_patriarch" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'store_patriarch'}}">
-              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">👑</text>
-              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : '#333333'}};">大家长</text>
-              <!-- 🏛️（2026-09-14 称谓白话化）不区分场景的固定副标题——寺院/助老/
-                   义工站等不同机构对"大家长"这个岗位有各自的习惯称谓，一次性
-                   列全，帮申请人对上号，不随服务场景卡片联动切换 -->
-              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;">住持 / 庙董 / 理事长 / 机构最高负责人</text>
+              <!-- 🏛️（2026-09-14 称谓自适应）四张卡片的 emoji/称谓/副标题全部
+                   改绑 roleDisplayTitles（见 index.ts syncRoleDisplayTitles()），
+                   按已选服务场景（temple_canteen/elderly_canteen 有专属映射，
+                   其余场景/未选择时经典称谓）动态切换，不再是写死的字面量；
+                   底层提交的 requestedRole 枚举值（store_patriarch 等）完全
+                   不受影响 -->
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">{{roleDisplayTitles.store_patriarch.emoji}}</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : '#333333'}};">{{roleDisplayTitles.store_patriarch.title}}</text>
+              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;" wx:if="{{roleDisplayTitles.store_patriarch.subtitle}}">{{roleDisplayTitles.store_patriarch.subtitle}}</text>
               <view wx:if="{{applyForm.requestedRole === 'store_patriarch'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
             </view>
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'store_manager' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="store_manager" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'store_manager'}}">
-              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">🗂️</text>
-              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : '#333333'}};">店长</text>
-              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;">堂主 / 主理人 / 现场责任人</text>
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">{{roleDisplayTitles.store_manager.emoji}}</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : '#333333'}};">{{roleDisplayTitles.store_manager.title}}</text>
+              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;" wx:if="{{roleDisplayTitles.store_manager.subtitle}}">{{roleDisplayTitles.store_manager.subtitle}}</text>
               <view wx:if="{{applyForm.requestedRole === 'store_manager'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
             </view>
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'finance' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'finance' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="finance" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'finance'}}">
-              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">💰</text>
-              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'finance' ? '#C0392B' : '#333333'}};">财务义工</text>
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">{{roleDisplayTitles.finance.emoji}}</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'finance' ? '#C0392B' : '#333333'}};">{{roleDisplayTitles.finance.title}}</text>
+              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;" wx:if="{{roleDisplayTitles.finance.subtitle}}">{{roleDisplayTitles.finance.subtitle}}</text>
               <view wx:if="{{applyForm.requestedRole === 'finance'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
             </view>
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'volunteer' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'volunteer' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="volunteer" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'volunteer'}}">
-              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">🤝</text>
-              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'volunteer' ? '#C0392B' : '#333333'}};">现场义工</text>
+              <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">{{roleDisplayTitles.volunteer.emoji}}</text>
+              <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'volunteer' ? '#C0392B' : '#333333'}};">{{roleDisplayTitles.volunteer.title}}</text>
+              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;" wx:if="{{roleDisplayTitles.volunteer.subtitle}}">{{roleDisplayTitles.volunteer.subtitle}}</text>
               <view wx:if="{{applyForm.requestedRole === 'volunteer'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
             </view>
           </view>

@@ -17,6 +17,7 @@ import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, getCurrentActiveStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../utils/storeManager';
 import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
+import { resolveRoleTitles } from '../../utils/lib/roleTitleAdapter';
 import { WorkspaceMode, getLastAdminWorkspace, setLastAdminWorkspace, resolveWorkspaceForOrgType } from '../../utils/workspaceManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
@@ -1153,6 +1154,11 @@ Page({
       // onSubmitRoleApply 已加一条必填校验，不会再静默落到 'other'
       customOrgType: ''
     } as any,
+    // 🏛️（2026-09-14 称谓自适应）新建门店"申请身份"四张卡片的展示称谓——
+    // 按 applyForm.customOrgType 动态切换（见 syncRoleDisplayTitles()），
+    // 取代此前四张卡片各自写死的 emoji/文案/固定副标题。初始值对应"未选择
+    // 场景"，与 resolveRoleTitles('') 的兜底结果一致
+    roleDisplayTitles: resolveRoleTitles(''),
     applyStorePhotoUploading: false,
     isSubmittingApply: false,
     applyRoleTipText: '✅ 即刻生效，开始护持',
@@ -4253,6 +4259,7 @@ Page({
     // 🌸 扫码/邀请码这条路径走的是常规"申请加入门店"标题逻辑，清掉可能残留自
     // openStorePickerForJoin（雨花/通用专区选站点）的标题覆盖与 orgType 提示，避免串场
     this.setData({ applyModalTitleOverride: '', 'applyForm.customOrgType': '' });
+    this.syncRoleDisplayTitles();
     // 🐛 根因修复：本方法下面三个分支（全国总览哨兵值 / 查询成功 / 查询失败
     // 兜底）殊途同归都会把 showApplyModal 置为 true，统一在分支之前隐藏一次
     // 自定义 tabBar（见 utils/tabBarVisibility.ts 头部注释），不需要在每个
@@ -4390,12 +4397,31 @@ Page({
       'applyForm.contactPhone': '',
       'applyForm.storePhotos': []
     });
+    // 🏛️（2026-09-14 称谓自适应）切到"已有门店"Tab 时降级为经典称谓
+    // （该分支不采集 orgType，见 syncRoleDisplayTitles 头部注释）；切回
+    // "新建门店"Tab 时按 customOrgType 现有值（未被这里重置）重新算一次
+    this.syncRoleDisplayTitles();
   },
 
   // 🏛️（2026-09-14 机构分类卡片选择器）新建门店"服务场景"卡片点选
   onSelectNewStoreScene(e: any) {
     const scene = e.currentTarget.dataset.scene || '';
     this.setData({ 'applyForm.customOrgType': scene });
+    this.syncRoleDisplayTitles();
+  },
+
+  // 🏛️（2026-09-14 称谓自适应）按当前表单状态重算"申请身份"四张卡片的
+  // 展示称谓——只有 storeSelectionType==='custom'（新建门店）时才有"已选
+  // 服务场景"这个概念，'existing'（加入已有门店）分支不采集 orgType（该
+  // 门店的真实 orgType 是什么，本表单并不知道），统一按经典称谓展示，不去
+  // 猜测/复用上一次新建门店时选过的场景。调用方：onSelectNewStoreScene
+  // （卡片点选）、onSwitchApplyStoreMode（切换新建/已有 Tab）、
+  // openStorePickerForJoin/fetchStoreInfoAndPromptApply（弹窗重新打开，
+  // customOrgType 被重置/预填的同时一并同步）
+  syncRoleDisplayTitles() {
+    const { storeSelectionType, customOrgType } = this.data.applyForm;
+    const scene = storeSelectionType === 'custom' ? customOrgType : '';
+    this.setData({ roleDisplayTitles: resolveRoleTitles(scene) });
   },
 
   onSelectApplyStore(e: any) {
@@ -9705,6 +9731,11 @@ Page({
       allStoresList: [],
       showApplyModal: true
     });
+    // 🏛️（2026-09-14 称谓自适应）此处 storeSelectionType 被设为 'existing'
+    // （见上方 setData），syncRoleDisplayTitles() 会按经典称谓展示——用户若
+    // 手动切到"新建门店"Tab，onSwitchApplyStoreMode 会再按刚预填的
+    // customOrgType 重新计算一次，不会丢失这份预填
+    this.syncRoleDisplayTitles();
     // 🐛 根因修复：见 utils/tabBarVisibility.ts 头部注释——自定义 tabBar 是
     // 框架自动挂载的原生层组件，本弹窗的 z-index 再高也盖不住它，必须显式
     // 隐藏；onCloseApplyModal / 提交成功分支会负责恢复

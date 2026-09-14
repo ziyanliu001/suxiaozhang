@@ -836,19 +836,6 @@
   color: #C97B7B;
 }
 
-/* 🏛️（2026-09-14 称谓白话化）固定副标题——比 role-card-desc 再小一号，
-   不随场景卡片联动变化 */
-.role-card-hint {
-  font-size: 18rpx;
-  color: #B8A98F;
-  text-align: center;
-  line-height: 1.3;
-}
-
-.role-card-active .role-card-hint {
-  color: #C97B7B;
-}
-
 /* 🏛️（2026-09-14 机构分类卡片选择器）"所属平台类型"上方的 4 张常见场景
    快选卡片——视觉语言与上面 .role-card 系列保持一致（同款描边+浅底高亮），
    但独立命名一套 class，避免与"申请身份"卡片的选中态耦合在一起改动 */
@@ -909,6 +896,29 @@
   gap: 6rpx;
   font-size: 24rpx;
   color: #555555;
+}
+
+/* 🏛️（2026-09-14 称谓自适应）义工/财务两项在需要展示场景化副标题时
+   （temple_canteen 的"发心护持义工"/"功德香油核算"等）改用这套纵向布局，
+   与家人（.new-store-role-item，保持原有单行样式不变）区分开 */
+.new-store-role-item-stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.new-store-role-item-row {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 24rpx;
+  color: #555555;
+}
+
+.new-store-role-item-hint {
+  font-size: 18rpx;
+  color: #B8A98F;
+  margin-left: 30rpx;
 }
 
 /* 🏪 新建门店档案照片九宫格：与 pages/index/index.wxss 的 .receipt-grid-container

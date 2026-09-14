@@ -228,38 +228,49 @@
                    管理岗位，用对等卡片突出展示，选中态品牌红描边+浅红底+角标；
                    radio 本身隐藏，靠 label 包裹保持点击可用（radio-group 会
                    识别任意深度嵌套的 radio 后代，不要求直接子节点） -->
+              <!-- 🏛️（2026-09-14 称谓自适应）role-card-title/desc 改绑
+                   roleDisplayTitles（见 store-picker.ts syncRoleDisplayTitles()），
+                   按已选服务场景（orgTypeIndex 对应的 orgType）动态切换；
+                   role-card-desc 直接承载场景化副标题（默认场景下就是原来的
+                   "统筹发起 / 核心管理"/"日常运营 / 排班餐报"，见
+                   roleTitleAdapter.js 的 DEFAULT_TITLES），取代此前单独一行
+                   不随场景变化的固定 role-card-hint -->
               <view class="role-card-row">
                 <label class="role-card {{newStoreForm.applyRole === 'store_patriarch' ? 'role-card-active' : ''}}">
                   <radio class="role-card-radio" value="store_patriarch" checked="{{newStoreForm.applyRole === 'store_patriarch'}}"/>
                   <view class="role-card-badge" wx:if="{{newStoreForm.applyRole === 'store_patriarch'}}">已选</view>
-                  <text class="role-card-title">👑 大家长</text>
-                  <text class="role-card-desc">统筹发起 / 核心管理</text>
-                  <!-- 🏛️（2026-09-14 称谓白话化）固定副标题，不随场景卡片联动——
-                       一次性列全寺院/助老/义工站等机构对这个岗位的习惯称谓 -->
-                  <text class="role-card-hint">住持 / 庙董 / 理事长 / 机构最高负责人</text>
+                  <text class="role-card-title">{{roleDisplayTitles.store_patriarch.emoji}} {{roleDisplayTitles.store_patriarch.title}}</text>
+                  <text class="role-card-desc" wx:if="{{roleDisplayTitles.store_patriarch.subtitle}}">{{roleDisplayTitles.store_patriarch.subtitle}}</text>
                 </label>
                 <label class="role-card {{newStoreForm.applyRole === 'store_manager' ? 'role-card-active' : ''}}">
                   <radio class="role-card-radio" value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}"/>
                   <view class="role-card-badge" wx:if="{{newStoreForm.applyRole === 'store_manager'}}">已选</view>
-                  <text class="role-card-title">👑 店长</text>
-                  <text class="role-card-desc">日常运营 / 排班餐报</text>
-                  <text class="role-card-hint">堂主 / 主理人 / 现场责任人</text>
+                  <text class="role-card-title">{{roleDisplayTitles.store_manager.emoji}} {{roleDisplayTitles.store_manager.title}}</text>
+                  <text class="role-card-desc" wx:if="{{roleDisplayTitles.store_manager.subtitle}}">{{roleDisplayTitles.store_manager.subtitle}}</text>
                 </label>
               </view>
 
-              <!-- 其余身份（家人/义工/财务）保持原有简洁单选样式，不参与卡片化 -->
+              <!-- 其余身份（家人/义工/财务）保持原有简洁单选样式，不参与卡片化；
+                   义工/财务的称谓与副标题同样按 roleDisplayTitles 动态绑定，
+                   家人（store_family）不在本次称谓自适应范围内，保持不变 -->
               <view class="new-store-role-group">
                 <label class="new-store-role-item">
                   <radio value="store_family" checked="{{newStoreForm.applyRole === 'store_family'}}" color="#8C1D18"/>
                   <text>🏠 家人</text>
                 </label>
-                <label class="new-store-role-item">
-                  <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
-                  <text>🌸 义工</text>
+                <label class="new-store-role-item-stacked">
+                  <view class="new-store-role-item-row">
+                    <radio value="volunteer" checked="{{newStoreForm.applyRole === 'volunteer'}}" color="#8C1D18"/>
+                    <text>{{roleDisplayTitles.volunteer.emoji}} {{roleDisplayTitles.volunteer.title}}</text>
+                  </view>
+                  <text class="new-store-role-item-hint" wx:if="{{roleDisplayTitles.volunteer.subtitle}}">{{roleDisplayTitles.volunteer.subtitle}}</text>
                 </label>
-                <label class="new-store-role-item">
-                  <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
-                  <text>🔒 财务</text>
+                <label class="new-store-role-item-stacked">
+                  <view class="new-store-role-item-row">
+                    <radio value="finance" checked="{{newStoreForm.applyRole === 'finance'}}" color="#8C1D18"/>
+                    <text>{{roleDisplayTitles.finance.emoji}} {{roleDisplayTitles.finance.title}}</text>
+                  </view>
+                  <text class="new-store-role-item-hint" wx:if="{{roleDisplayTitles.finance.subtitle}}">{{roleDisplayTitles.finance.subtitle}}</text>
                 </label>
               </view>
             </radio-group>

@@ -6,6 +6,7 @@ import { callFunctionWithTimeout } from '../../utils/withTimeout';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { requestOpenOnboardingCreate } from '../../utils/onboardingHandoff';
 import { ORG_TYPE_EMOJI_OPTIONS } from '../../utils/constants';
+import { resolveRoleTitles } from '../../utils/lib/roleTitleAdapter';
 
 const OPERATING_STATUS_LABELS: Record<string, string> = {
   operating: '运营中',
@@ -71,6 +72,10 @@ Component({
     // 🏢 平台类型 picker 的绑定索引（与 orgTypeOptions 数组下标对应）
     orgTypeIndex: 0,
     orgTypeOptions: ORG_TYPE_OPTIONS,
+    // 🏛️（2026-09-14 称谓自适应）新建门店"申请身份"卡片/单选项的展示称谓——
+    // 按 orgTypeOptions[orgTypeIndex].value 动态切换，见 syncRoleDisplayTitles()。
+    // 初始值对应 orgTypeIndex===0（'yuhuazhai'）的经典称谓
+    roleDisplayTitles: resolveRoleTitles(ORG_TYPE_OPTIONS[0] && ORG_TYPE_OPTIONS[0].value),
     newStoreForm: {
       customStoreName: '',
       applyRole: 'volunteer' as 'store_patriarch' | 'store_manager' | 'finance' | 'volunteer' | 'store_family',
@@ -1132,6 +1137,7 @@ Component({
     // 🏢 平台类型下拉 picker 切换
     onOrgTypeChange(e: any) {
       this.setData({ orgTypeIndex: parseInt(e.detail.value, 10) || 0 });
+      this.syncRoleDisplayTitles();
     },
 
     // 🏛️（2026-09-14 机构分类卡片选择器）4 张常见场景快选卡片点击——直接把
@@ -1143,6 +1149,16 @@ Component({
       const idx = ORG_TYPE_OPTIONS.findIndex((o) => o.value === value);
       if (idx < 0) return;
       this.setData({ orgTypeIndex: idx });
+      this.syncRoleDisplayTitles();
+    },
+
+    // 🏛️（2026-09-14 称谓自适应）按当前 orgTypeIndex 对应的 orgType 重算
+    // "申请身份"四个角色的展示称谓——本表单不存在 index.ts 那种
+    // existing/custom 双模式，新建门店表单打开时永远有一个"已选平台类型"，
+    // 直接读 orgTypeOptions[orgTypeIndex].value 即可
+    syncRoleDisplayTitles() {
+      const option = this.data.orgTypeOptions[this.data.orgTypeIndex];
+      this.setData({ roleDisplayTitles: resolveRoleTitles(option && option.value) });
     },
 
     // 🏛️（2026-09-06）「切换其它工作空间」：修复进入雨花/通用某个专区工作台
@@ -1178,6 +1194,7 @@ Component({
           address: '', contactPhone: '', storePhotos: [], regionArray: [], province: '', city: '', district: ''
         }
       });
+      this.syncRoleDisplayTitles();
     },
 
     onNewStoreNameInput(e: any) {
