@@ -104,61 +104,77 @@
         <text>没有找到符合条件的门店，试试清空筛选条件</text>
         <text class="btn-clear-filters" bindtap="onClearFilters">清空筛选</text>
       </view>
-      <block wx:for="{{groupedStoreList}}" wx:key="storeId">
-
-        <!-- 🐛 高亮/选中态改用 storeId 精确匹配，不再用 storeName 比对——门店名
-             理论上可能重复，storeName 匹配会让"同名门店"互相错误共享高亮/选中态 -->
-        <view class="store-group-card {{item.storeId === currentStore.storeId ? 'active-store' : ''}}">
-
-          <!-- 🎨 当前站点微胶囊：柔和激活态的视觉锚点，只在真正选中的那张卡片上浮现 -->
-          <text class="active-store-badge" wx:if="{{item.storeId === currentStore.storeId}}">当前站点</text>
-
-          <!-- 门店名称栏 -->
-          <view class="store-card-header">
-            <text class="store-icon">🏪</text>
-            <view class="store-name-col">
-              <view class="store-name-row">
-                <text class="store-name-text">{{item.storeId === 'national_overview' ? '管理员' : item.storeName}}</text>
-                <text class="store-operating-badge {{item.operatingStatus}}" wx:if="{{item.operatingStatusLabel}}">{{item.operatingStatusLabel}}</text>
-              </view>
-              <view class="store-meta-row" wx:if="{{item.city || item.province || item.distanceLabel}}">
-                <text class="store-region-tag" wx:if="{{item.city || item.province}}">📍 {{item.city || item.province}}</text>
-                <text class="store-distance-label" wx:if="{{item.distanceLabel}}">{{item.distanceLabel}}</text>
-              </view>
-            </view>
-          </view>
-
-          <!-- 🌸 近7日阳善榜：每张门店卡片独立拉取，'national_overview' 是超管的
-               虚拟聚合项、不是真实门店，不传给这个组件——公开只读，无需鉴权 -->
-          <sunshine-board wx:if="{{item.storeId !== 'national_overview'}}" storeId="{{item.storeId}}" />
-
-          <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定) -->
-          <view class="role-selector-row">
-            <!-- 🐛 核心 Bug 修复：身份 tag 必须用 catchtap 阻止冒泡，严禁 bindtap——
-                 身份胶囊嵌套在 .store-group-card 卡片内，一旦卡片本身或更外层
-                 未来挂上点击处理（比如"整卡展开/收起"之类的交互），bindtap 会让
-                 点击事件继续向上冒泡触发外层逻辑，与这里的角色切换互相打架，
-                 导致"点了身份 tag 却没真正切换成功/又被外层重置"。
-                 高亮/选中态同步改用 storeId 精确匹配，不再用 storeName 比对 -->
-            <view wx:for="{{item.roles}}"
-                  wx:for-item="roleObj"
-                  wx:key="role"
-                  class="role-choice-pill {{roleObj.role}} {{item.storeId === currentStore.storeId && roleObj.role === currentStore.role ? 'selected' : ''}} {{!roleObj.isAuthorized ? 'locked' : ''}} {{roleObj.isPending ? 'pending' : ''}}"
-                  catchtap="onRolePillClick"
-                  data-store-id="{{item.storeId}}"
-                  data-store-name="{{item.storeName}}"
-                  data-role="{{roleObj.role}}"
-                  data-authorized="{{roleObj.isAuthorized}}"
-                  data-pending="{{roleObj.isPending}}">
-
-              <text class="role-icon" wx:if="{{!roleObj.isPending}}">{{!roleObj.isAuthorized ? '🔒' : (roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'PATRIARCH' ? '🙏' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🔒' : (roleObj.role === 'FAMILY' ? '❤️' : '🌸')))))}}</text>
-              <text class="role-label">{{roleObj.isPending ? roleObj.pendingLabel : roleObj.label}}</text>
-              <text class="check-mark" wx:if="{{item.storeId === currentStore.storeId && roleObj.role === currentStore.role}}">✔</text>
-            </view>
-          </view>
-
+      <!-- 🏢（机构-门店两级架构，2026-09-14）机构分组头 + 门店卡片两级结构。
+           单机构账号也会渲染这层（只会有 1 个分组），只是视觉上列表顶部多一行
+           "🏢 机构名 · 套餐标签"，不改变原有单机构使用体验；platform_admin
+           巡检授权了其它机构门店后才会出现 ≥2 个分组，此时展开/收起才有实际
+           取舍价值 -->
+      <block wx:for="{{groupedByTenant}}" wx:for-item="group" wx:key="tenantId">
+        <view class="tenant-group-header" catchtap="onToggleTenantGroup" data-tenant-id="{{group.tenantId}}">
+          <text class="tenant-group-icon">🏢</text>
+          <text class="tenant-group-name">{{group.tenantName}}</text>
+          <text class="tenant-group-plan-tag">{{group.planLabel}}</text>
+          <text class="tenant-group-arrow">{{group.isCollapsed ? '▸' : '▾'}}</text>
         </view>
 
+        <block wx:if="{{!group.isCollapsed}}">
+          <block wx:for="{{group.stores}}" wx:key="storeId">
+
+            <!-- 🐛 高亮/选中态改用 storeId 精确匹配，不再用 storeName 比对——门店名
+                 理论上可能重复，storeName 匹配会让"同名门店"互相错误共享高亮/选中态 -->
+            <view class="store-group-card {{item.storeId === currentStore.storeId ? 'active-store' : ''}}">
+
+              <!-- 🎨 当前站点微胶囊：柔和激活态的视觉锚点，只在真正选中的那张卡片上浮现 -->
+              <text class="active-store-badge" wx:if="{{item.storeId === currentStore.storeId}}">当前站点</text>
+
+              <!-- 门店名称栏 -->
+              <view class="store-card-header">
+                <text class="store-icon">🏪</text>
+                <view class="store-name-col">
+                  <view class="store-name-row">
+                    <text class="store-name-text">{{item.storeId === 'national_overview' ? '管理员' : item.storeName}}</text>
+                    <text class="store-operating-badge {{item.operatingStatus}}" wx:if="{{item.operatingStatusLabel}}">{{item.operatingStatusLabel}}</text>
+                  </view>
+                  <view class="store-meta-row" wx:if="{{item.city || item.province || item.distanceLabel}}">
+                    <text class="store-region-tag" wx:if="{{item.city || item.province}}">📍 {{item.city || item.province}}</text>
+                    <text class="store-distance-label" wx:if="{{item.distanceLabel}}">{{item.distanceLabel}}</text>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 🌸 近7日阳善榜：每张门店卡片独立拉取，'national_overview' 是超管的
+                   虚拟聚合项、不是真实门店，不传给这个组件——公开只读，无需鉴权 -->
+              <sunshine-board wx:if="{{item.storeId !== 'national_overview'}}" storeId="{{item.storeId}}" />
+
+              <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定) -->
+              <view class="role-selector-row">
+                <!-- 🐛 核心 Bug 修复：身份 tag 必须用 catchtap 阻止冒泡，严禁 bindtap——
+                     身份胶囊嵌套在 .store-group-card 卡片内，一旦卡片本身或更外层
+                     未来挂上点击处理（比如"整卡展开/收起"之类的交互），bindtap 会让
+                     点击事件继续向上冒泡触发外层逻辑，与这里的角色切换互相打架，
+                     导致"点了身份 tag 却没真正切换成功/又被外层重置"。
+                     高亮/选中态同步改用 storeId 精确匹配，不再用 storeName 比对 -->
+                <view wx:for="{{item.roles}}"
+                      wx:for-item="roleObj"
+                      wx:key="role"
+                      class="role-choice-pill {{roleObj.role}} {{item.storeId === currentStore.storeId && roleObj.role === currentStore.role ? 'selected' : ''}} {{!roleObj.isAuthorized ? 'locked' : ''}} {{roleObj.isPending ? 'pending' : ''}}"
+                      catchtap="onRolePillClick"
+                      data-store-id="{{item.storeId}}"
+                      data-store-name="{{item.storeName}}"
+                      data-role="{{roleObj.role}}"
+                      data-authorized="{{roleObj.isAuthorized}}"
+                      data-pending="{{roleObj.isPending}}">
+
+                  <text class="role-icon" wx:if="{{!roleObj.isPending}}">{{!roleObj.isAuthorized ? '🔒' : (roleObj.role === 'FINANCE' ? '🔒' : (roleObj.role === 'MANAGER' ? '👑' : (roleObj.role === 'PATRIARCH' ? '🙏' : (roleObj.role === 'ADMIN' || roleObj.role === 'SUPER_ADMIN' ? '🔒' : (roleObj.role === 'FAMILY' ? '❤️' : '🌸')))))}}</text>
+                  <text class="role-label">{{roleObj.isPending ? roleObj.pendingLabel : roleObj.label}}</text>
+                  <text class="check-mark" wx:if="{{item.storeId === currentStore.storeId && roleObj.role === currentStore.role}}">✔</text>
+                </view>
+              </view>
+
+            </view>
+
+          </block>
+        </block>
       </block>
       <view class="fa-safe-area-spacer"></view>
     </scroll-view>

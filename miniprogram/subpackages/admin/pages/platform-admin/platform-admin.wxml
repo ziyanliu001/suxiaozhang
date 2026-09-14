@@ -418,12 +418,29 @@
 
           <view class="pa-inspect-picker-loading" wx:if="{{inspectStoresLoading}}"><text>门店加载中...</text></view>
 
-          <view class="pa-empty-state" wx:elif="{{inspectStoresFiltered.length === 0}}">
-            <text class="pa-empty-icon">🏪</text>
-            <text class="pa-empty-title">{{inspectStoreKeyword ? '没有匹配的门店' : '该机构下暂无门店'}}</text>
-          </view>
+          <block wx:if="{{!inspectStoresLoading}}">
+            <!-- 🏢（机构-门店两级架构，2026-09-14）"巡检整个机构"：与下方逐店
+                 选择互斥，一次性对该机构全部门店发起大家长视角临时授权，见
+                 onToggleInspectWholeTenant/onSubmitInspectGrant -->
+            <view
+              wx:if="{{inspectStores.length > 0}}"
+              class="pa-inspect-picker-row pa-inspect-whole-tenant-row {{inspectWholeTenantSelected ? 'active' : ''}}"
+              hover-class="btn-hover"
+              bindtap="onToggleInspectWholeTenant"
+            >
+              <view class="pa-inspect-picker-main">
+                <text class="pa-inspect-picker-name">🏢 巡检整个机构（{{inspectStores.length}}家门店 · 大家长视角）</text>
+                <text class="pa-inspect-picker-meta">一键对该机构全部门店发起 2 小时临时大家长授权，直接进入完整工作台预览</text>
+              </view>
+              <text class="pa-inspect-picker-check" wx:if="{{inspectWholeTenantSelected}}">✓</text>
+            </view>
 
-          <view class="pa-inspect-picker-list" wx:else>
+            <view class="pa-empty-state" wx:if="{{inspectStoresFiltered.length === 0}}">
+              <text class="pa-empty-icon">🏪</text>
+              <text class="pa-empty-title">{{inspectStoreKeyword ? '没有匹配的门店' : '该机构下暂无门店'}}</text>
+            </view>
+
+            <view class="pa-inspect-picker-list" wx:elif="{{!inspectWholeTenantSelected}}">
             <view
               class="pa-inspect-picker-row {{inspectSelectedStoreId === item._id ? 'active' : ''}}"
               wx:for="{{inspectStoresFiltered}}"
@@ -440,6 +457,20 @@
               <text class="pa-inspect-picker-check" wx:if="{{inspectSelectedStoreId === item._id}}">✓</text>
             </view>
           </view>
+          </block>
+
+          <!-- 🏢（机构-门店两级架构，2026-09-14）"巡检整个机构"模式下角色固定
+               为大家长，不提供别的角色选项——义工/财务这类只读角色不适合用来
+               预览一整个机构的完整业务工作台 -->
+          <view class="pa-inspect-field" wx:if="{{inspectWholeTenantSelected}}">
+            <text class="pa-inspect-label">授权角色</text>
+            <view class="pa-inspect-role-tags">
+              <view class="pa-inspect-role-tag active">
+                <text class="pa-inspect-role-tag-label">大家长</text>
+                <text class="pa-inspect-role-tag-desc">整机构预览固定使用大家长视角</text>
+              </view>
+            </view>
+          </view>
 
           <!-- 🐛 根因修复并回滚（2026-09-10）：上一版这里按"账号 tenantId 恰好
                等于选中机构"收起角色选择区、直接跳过授权——结果导致 canManage
@@ -449,7 +480,7 @@
                同一处修复注释 -->
           <!-- 🆕（2026-09-10）角色选择区改为紧凑 Radio Tag/Card，label 短标签 +
                desc 副文本清晰标注权限范围，替代原来单行长文案的按钮组 -->
-          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId}}">
+          <view class="pa-inspect-field" wx:if="{{inspectSelectedStoreId && !inspectWholeTenantSelected}}">
             <text class="pa-inspect-label">授权角色</text>
             <view class="pa-inspect-role-tags">
               <view
@@ -522,16 +553,16 @@
         </view>
       </view>
 
-      <!-- 🆕（2026-09-10）吸底浮动主操作按钮——选中门店后才出现，副标题提示
-           具体门店与角色权限，loading 态防重复点击 -->
-      <view class="fa-safe-area-spacer" style="height: 140rpx;" wx:if="{{inspectStage === 'store' && inspectSelectedStoreId}}"></view>
+      <!-- 🆕（2026-09-10）吸底浮动主操作按钮——选中门店（或选中"巡检整个
+           机构"）后才出现，副标题提示具体门店与角色权限，loading 态防重复点击 -->
+      <view class="fa-safe-area-spacer" style="height: 140rpx;" wx:if="{{inspectStage === 'store' && (inspectSelectedStoreId || inspectWholeTenantSelected)}}"></view>
     </block>
 
-    <view class="fa-safe-area-spacer" wx:if="{{!(activeTab === 'inspect' && inspectStage === 'store' && inspectSelectedStoreId)}}"></view>
+    <view class="fa-safe-area-spacer" wx:if="{{!(activeTab === 'inspect' && inspectStage === 'store' && (inspectSelectedStoreId || inspectWholeTenantSelected))}}"></view>
   </view>
 
   <!-- 🆕（2026-09-10）巡检吸底主按钮——独立于滚动容器之外，position:fixed 悬浮于底部 -->
-  <view class="pa-inspect-sticky-bar" wx:if="{{activeTab === 'inspect' && inspectStage === 'store' && inspectSelectedStoreId}}">
+  <view class="pa-inspect-sticky-bar" wx:if="{{activeTab === 'inspect' && inspectStage === 'store' && (inspectSelectedStoreId || inspectWholeTenantSelected)}}">
     <button
       class="pa-inspect-sticky-btn"
       hover-class="btn-hover"
@@ -539,8 +570,8 @@
       loading="{{inspectSubmitting}}"
       disabled="{{inspectSubmitting}}"
     >
-      <text class="pa-inspect-sticky-btn-main">一键授权并进入档案</text>
-      <text class="pa-inspect-sticky-btn-sub">{{inspectSelectedStoreName}} · {{inspectRoleLabel}}权限</text>
+      <text class="pa-inspect-sticky-btn-main">{{inspectWholeTenantSelected ? '一键授权并进入工作台' : '一键授权并进入档案'}}</text>
+      <text class="pa-inspect-sticky-btn-sub">{{inspectWholeTenantSelected ? (inspectSelectedTenantName + ' · 整机构 · 大家长视角') : (inspectSelectedStoreName + ' · ' + inspectRoleLabel + '权限')}}</text>
     </button>
   </view>
 

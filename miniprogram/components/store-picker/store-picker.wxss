@@ -400,6 +400,45 @@
   color: #999999;
 }
 
+/* 🏢（机构-门店两级架构，2026-09-14）机构分组头——单机构账号只会渲染一条，
+   视觉上是列表顶部的一行说明；多机构（platform_admin 巡检场景）时才需要
+   靠这行区分/折叠不同机构 */
+.tenant-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 8rpx;
+  margin-top: 8rpx;
+}
+
+.tenant-group-icon {
+  font-size: 24rpx;
+}
+
+.tenant-group-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #5A4A3A;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-group-plan-tag {
+  font-size: 20rpx;
+  color: #8C1D18;
+  background: #FDF1EF;
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
+}
+
+.tenant-group-arrow {
+  font-size: 22rpx;
+  color: #B8A98F;
+  margin-left: 8rpx;
+}
+
 /* 门店分组卡片基础样式 */
 .store-group-card {
   position: relative;

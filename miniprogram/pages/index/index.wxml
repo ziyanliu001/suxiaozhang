@@ -217,6 +217,15 @@
       </view>
     </view>
 
+    <!-- 🏢（机构-门店两级架构，2026-09-14）机构-门店两级归属展示行：点击唤起
+         与下方胶囊同一个 store-picker 弹窗，不新建独立选择 UI。超管/平台管理员
+         的"全国总览/巡检漫游"视角没有单一机构名概念，展示固定文案而不是空字符串
+         （currentTenantName 此时不会被 fetchCurrentTenantName 填充，见 index.ts
+         refreshUserRoleView 尾部判断） -->
+    <view class="tenant-store-header-row" bindtap="onTapTenantStoreHeader" hover-class="capsule-hover" wx:if="{{currentStoreName || isSuperAdmin || isPlatformAdmin}}">
+      <text class="tenant-store-header-text">🏢 {{isSuperAdmin ? '全国总览' : (isPlatformAdmin ? '平台管理员 · 巡检漫游' : (currentTenantName || '未绑定机构'))}} ｜ 📍 {{currentStoreName || '未选择门店'}}</text>
+    </view>
+
     <!-- 🌟 当前业务上下文栏：门店切换 + 运营状态标签，两者统一高度、垂直居中，
          不再因为徽标只是一段纯文字而显得比胶囊矮一截、错位悬浮 -->
     <view class="capsule-bar-row">

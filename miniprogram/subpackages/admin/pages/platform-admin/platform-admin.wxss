@@ -1347,6 +1347,18 @@
   border-color: #FFD700;
 }
 
+/* 🏢（机构-门店两级架构，2026-09-14）"巡检整个机构"行——与逐店选择视觉区分，
+   加一条主题色左边框，未选中时也保留一点辨识度，不与普通门店行完全一样 */
+.pa-inspect-whole-tenant-row {
+  border-left: 6rpx solid #8C1D18;
+  margin-bottom: 16rpx;
+}
+
+.pa-inspect-whole-tenant-row.active {
+  background: #FDF1EF;
+  border-color: #8C1D18;
+}
+
 .pa-inspect-picker-main {
   display: flex;
   flex-direction: column;

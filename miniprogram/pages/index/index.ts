@@ -16,6 +16,7 @@ import { getSafeSystemInfo } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { getPrevDayIsoString, formatDateToCnShort, isValidIsoDate, getTodayIsoString } from '../../utils/dateUtils';
 import { getSelectedStore, getCurrentActiveStore, setCurrentActiveStore, clearSelectedStoreCache, getCachedStoreStatus, fetchAndSyncStoreStatus, clearAllStoresListCache, fetchYuhuaZoneStoreList, fetchCommunityZoneStoreList } from '../../utils/storeManager';
+import { checkTenantPermission, FEATURE_KEYS } from '../../utils/tenantPermission';
 import { WorkspaceMode, getLastAdminWorkspace, setLastAdminWorkspace, resolveWorkspaceForOrgType } from '../../utils/workspaceManager';
 import { validateReportGuardrails, GuardrailResult, recordSuccessfulSubmit, recordWarningConfirmed, canSubmitNow, cleanExpiredFrequencyRecords } from '../../utils/validateReportGuardrails';
 import { compressAndUploadImages } from '../../utils/imageCompress';
@@ -1226,6 +1227,11 @@ Page({
     pendingAuditCount: 0,
     roleLabelMap: ROLE_LABELS,
     currentStoreName: '' as string,
+    // 🏢（机构-门店两级架构，2026-09-14）顶部"🏢 机构 ｜ 📍 门店"展示用，
+    // 见 fetchCurrentTenantName()。超管/平台管理员的"全国总览/巡检漫游"
+    // 视角不适用机构名概念，展示层用 isSuperAdmin/isPlatformAdmin 兜底文案，
+    // 不依赖这个字段
+    currentTenantName: '' as string,
     // 🏪 门店运营状态徽标：见 utils/storeManager.ts fetchAndSyncStoreStatus/
     // getCachedStoreStatus，全局态与 Storage 双写同步，与 profile.ts 共用同一份数据
     currentStoreStatus: '' as string,
@@ -2348,6 +2354,15 @@ Page({
   // 题——用户要做的不是新建一家，而是从已有门店里挑一家。直接唤起 store-picker
   // 组件自带的选择弹窗，复用同一套"选择服务站点与身份"流程，不新增页面
   onOpenStorePickerFromEmptyState() {
+    const picker = this.selectComponent('#storePicker');
+    if (picker && typeof picker.onOpenSheet === 'function') {
+      picker.onOpenSheet();
+    }
+  },
+
+  // 🏢（机构-门店两级架构，2026-09-14）顶部"🏢 机构 ｜ 📍 门店"展示行点击——
+  // 复用同一套 store-picker 弹窗，不新建一套独立的机构选择 UI
+  onTapTenantStoreHeader() {
     const picker = this.selectComponent('#storePicker');
     if (picker && typeof picker.onOpenSheet === 'function') {
       picker.onOpenSheet();
@@ -9530,6 +9545,34 @@ Page({
       permissions: getPermissionFlags({ role })
     });
     console.log('[index][yangshanWallStoreId] refreshUserRoleView 写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
+
+    // 🏢（机构-门店两级架构，2026-09-14）顶部机构名展示——与 storeName/storeId
+    // 同一次刷新触发，不额外等待用户操作。超管/平台管理员的"全国总览"视角
+    // 没有单一机构名概念，跳过这次查询，展示层改用 isSuperAdmin/isPlatformAdmin
+    // 分支的固定文案（与 profile.wxml 已有的同类兜底一致）
+    if (!overridden.isSuperAdmin && !this.data.isPlatformAdmin) {
+      this.fetchCurrentTenantName(this.data.yangshanWallStoreId);
+    }
+  },
+
+  // 🏢 归属机构名称：顶部"🏢 机构 ｜ 📍 门店"展示用，与 profile.ts
+  // fetchCurrentTenantName 同一个 checkTenantPermission 云函数封装（该函数
+  // 已按调用者自己的 tenantId 反查 tenant_subscriptions，顺带把 tenants.name
+  // 也带出来，不新增云函数调用）。走 60s 内存缓存的 checkTenantPermission()
+  // 封装，refreshUserRoleView 每次 onShow 都会触发一次也不会真的每次都发
+  // 云请求。storeId 透传给服务端——命中巡检漫游授权时用于反查漫游目标机构的
+  // 真实 tenantId（见 checkTenantPermission 云函数 resolveEffectiveCaller），
+  // 而不是调用者账号本身的固定归属
+  async fetchCurrentTenantName(storeId: string) {
+    try {
+      const result = await checkTenantPermission(FEATURE_KEYS.MULTI_STORE_DASHBOARD, {
+        skipCache: true,
+        storeId: storeId || ''
+      });
+      this.setData({ currentTenantName: result.tenantName || '' });
+    } catch (err) {
+      console.warn('[fetchCurrentTenantName] 查询失败:', err);
+    }
   },
 
   // 🐛 根因排查记录：之前超管点【通用素食/门店记账】仍被拦"暂不支持"，真正原因不是

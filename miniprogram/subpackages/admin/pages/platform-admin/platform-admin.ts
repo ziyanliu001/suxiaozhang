@@ -3,6 +3,7 @@ import { createNavGuard, NavGuardInstance } from '../../utils/navGuard';
 import { callFunctionWithTimeout } from '../../../../utils/withTimeout';
 import { safeNavigateTo } from '../../../../utils/navHelper';
 import { getSafeSystemInfo } from '../../../../utils/util';
+import { setCurrentActiveStore } from '../../../../utils/storeManager';
 
 const PLAN_LABELS: Record<string, string> = {
   basic: '基础版',
@@ -285,6 +286,12 @@ Page({
     inspectSelectedTenantName: '',
     inspectStoresLoading: false,
     inspectStores: [] as any[],
+    // 🏢（机构-门店两级架构，2026-09-14）"巡检整个机构"模式：与逐个选门店
+    // （inspectSelectedStoreId）互斥。选中时对该机构全部门店一次性发起
+    // store_patriarch 授权（GRANTABLE_ROLES 已包含，未新增任何角色白名单
+    // 例外），成功后直接切到首页工作台预览该机构的完整业务状态，而不是
+    // 停在单一门店档案页——见 onSubmitInspectGrant/onToggleInspectWholeTenant
+    inspectWholeTenantSelected: false,
     // 🆕（2026-09-10）门店本地关键词过滤——inspectStores 本身已经是一次性
     // 全量拉取（getTenantDetail 最多返回 100 条），门店多的机构靠滚动查找
     // 很低效，改成前端按 storeName 做实时过滤，不新增云调用
@@ -526,6 +533,7 @@ Page({
       inspectSelectedTenantName: tenantname,
       inspectSelectedStoreId: '',
       inspectSelectedStoreName: '',
+      inspectWholeTenantSelected: false,
       inspectError: ''
     });
     await this.loadInspectStores(tenantid);
@@ -564,7 +572,24 @@ Page({
 
   onInspectSelectStore(e: any) {
     const { storeid, storename } = e.currentTarget.dataset;
-    this.setData({ inspectSelectedStoreId: storeid, inspectSelectedStoreName: storename, inspectError: '' });
+    // 单店选择与"巡检整个机构"互斥——选中某一家具体门店即退出整机构模式
+    this.setData({ inspectSelectedStoreId: storeid, inspectSelectedStoreName: storename, inspectWholeTenantSelected: false, inspectError: '' });
+  },
+
+  // 🏢（机构-门店两级架构，2026-09-14）"巡检整个机构"开关：与逐店选择互斥。
+  // 打开时角色固定为 store_patriarch（大家长视角）——GRANTABLE_ROLES 白名单
+  // 本就包含这个角色，这里只是不再让调用方为"整机构"模式选别的角色，避免
+  // 义工/财务这类只读角色被误用来预览一整个机构的完整业务工作台
+  onToggleInspectWholeTenant() {
+    const next = !this.data.inspectWholeTenantSelected;
+    this.setData({
+      inspectWholeTenantSelected: next,
+      inspectSelectedStoreId: next ? '' : this.data.inspectSelectedStoreId,
+      inspectSelectedStoreName: next ? '' : this.data.inspectSelectedStoreName,
+      inspectRole: next ? 'store_patriarch' : this.data.inspectRole,
+      inspectRoleLabel: next ? '大家长' : this.data.inspectRoleLabel,
+      inspectError: ''
+    });
   },
 
   // ⬅️ 返回机构选择：不清空已加载的 inspectTenantResults，避免回退后又要
@@ -574,6 +599,7 @@ Page({
       inspectStage: 'tenant',
       inspectSelectedStoreId: '',
       inspectSelectedStoreName: '',
+      inspectWholeTenantSelected: false,
       inspectError: ''
     });
   },
@@ -612,9 +638,23 @@ Page({
   // canManage/manageStoreProfile 的 resolveCaller() 认可的唯一凭证
   async onSubmitInspectGrant() {
     if (this.data.inspectSubmitting) return;
+
+    // 🏢（机构-门店两级架构，2026-09-14）"巡检整个机构"分支：stores 参数从
+    // 单个 [storeId] 换成该机构 getTenantDetail 已拉回的全部门店 _id 列表，
+    // role 固定 store_patriarch。grantTenantAuthorization/grantAuthorizationRules.js
+    // 的校验规则完全不变——stores 依然是显式非空数组、角色依然在
+    // GRANTABLE_ROLES 白名单内、TTL/审计规则原样生效，只是数组长度从 1 变成
+    // "该机构全部门店"，不是新开一条权限口子
+    const isWholeTenant = this.data.inspectWholeTenantSelected;
     const storeId = this.data.inspectSelectedStoreId;
-    if (!storeId) {
+    const wholeTenantStoreIds = (this.data.inspectStores as any[]).map((s) => s._id).filter(Boolean);
+
+    if (!isWholeTenant && !storeId) {
       this.setData({ inspectError: '请先选择要巡检的门店' });
+      return;
+    }
+    if (isWholeTenant && wholeTenantStoreIds.length === 0) {
+      this.setData({ inspectError: '该机构下暂无门店，无法整机构巡检' });
       return;
     }
 
@@ -624,12 +664,12 @@ Page({
         name: 'grantTenantAuthorization',
         data: {
           action: 'grant',
-          stores: [storeId],
-          role: this.data.inspectRole,
+          stores: isWholeTenant ? wholeTenantStoreIds : [storeId],
+          role: isWholeTenant ? 'store_patriarch' : this.data.inspectRole,
           // 🆕（2026-09-10）随授权请求带上门店/机构名称快照，仅用于「当前
           // 生效中的巡检」列表展示，不参与任何鉴权判断——服务端会做长度
           // 截断兜底，这里不做额外校验
-          storeName: this.data.inspectSelectedStoreName,
+          storeName: isWholeTenant ? `整个机构（${wholeTenantStoreIds.length}家门店）` : this.data.inspectSelectedStoreName,
           tenantName: this.data.inspectSelectedTenantName
         }
       });
@@ -641,9 +681,27 @@ Page({
       // 🛡️ 授权只追加进 authorizedTenants 数组，不改动任何本地缓存的角色/
       // 门店字段——下次调用 checkUserRole/AuthService.fetchUserRole() 时
       // 才会带上这条新授权，这里强制刷新一次缓存，确保紧接着跳转的
-      // store-profile.ts 初次渲染就能读到，不用等一次自然刷新
+      // store-profile.ts/首页初次渲染就能读到，不用等一次自然刷新
       await AuthService.fetchUserRole();
       this.loadActiveGrants();
+
+      if (isWholeTenant) {
+        // 🏢 整机构巡检模式：取该机构任意一家门店（第一条）作为初始激活门店，
+        // 直接把"当前活跃门店/角色"切到大家长视角——与 store-picker.ts 角色
+        // 切换同一套 canonical 持久化入口（setCurrentActiveStore），首页
+        // onShow()/refreshUserRoleView() 会照常读取这份状态，不需要额外发明
+        // 一套"整机构预览"专属传参机制。切到首页后，用户仍可通过顶部
+        // store-picker（现已按 tenantId 分组）在该机构其余已授权门店间切换
+        const firstStoreId = wholeTenantStoreIds[0];
+        const firstStore = (this.data.inspectStores as any[]).find((s) => s._id === firstStoreId);
+        setCurrentActiveStore(firstStoreId, (firstStore && firstStore.storeName) || '', 'PATRIARCH');
+        wx.showToast({ title: `已授权整个机构（${wholeTenantStoreIds.length}家门店），正在进入工作台`, icon: 'none', duration: 2000 });
+        setTimeout(() => {
+          wx.switchTab({ url: '/pages/index/index' });
+        }, 600);
+        return;
+      }
+
       // 🆕（2026-09-10 一键穿透直达）授权成功后 600ms 内自动跳转门店档案，
       // 平台管理员不需要再手动去找入口。跳转仍走 safeNavigateTo（而非直接
       // wx.navigateTo）——它是本仓库 200+ 调用点共用的防抖/页面栈深度兜底

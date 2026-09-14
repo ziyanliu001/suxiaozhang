@@ -124,6 +124,16 @@ Component({
     // groupedStoreList 是 allStores 按当前筛选/排序条件派生出的展示态，"全国总览"条目
     // 不参与筛选/排序，单独存着按需拼在展示列表最前面
     allStores: [] as any[],
+    // 🏢（机构-门店两级架构，2026-09-14）allStores 按 tenantId 分组后的展示态，
+    // 由 applyFilters() 在 groupedStoreList 之后再派生一层；绝大多数账号只归属
+    // 单一机构，这里始终只会有 1 个分组（分组头仍会渲染，但视觉上只是列表顶部
+    // 多一行"🏢 机构名 · 套餐标签"）。只有 platform_admin 巡检授权了其它机构的
+    // 门店后，allStores 才会同时出现 ≥2 个 tenantId，此时才真正体现多分组、
+    // 可展开/收起的价值
+    groupedByTenant: [] as any[],
+    // 折叠态的分组 tenantId 集合（数组，wx:for 判断用 indexOf，WXML 不支持 Set/includes 语法糖）；
+    // 默认展开当前 currentStore.tenantId 命中的分组，其余分组默认折叠——见 buildGroupedByTenant()
+    collapsedTenantIds: [] as string[],
     nationalOverviewEntry: null as any,
     searchKeyword: '',
     provinceOptions: [] as string[],
@@ -322,6 +332,12 @@ Component({
         const fetchedStores = list.map((s: any) => ({
           storeId: s.storeId,
           storeName: s.storeName,
+          // 🏢（机构-门店两级架构，2026-09-14）机构分组用字段——getStoreList
+          // 已按同一批门店透传，缺失时兜底为空字符串/默认套餐标签，不影响
+          // 门店卡片本身的展示与角色切换逻辑
+          tenantId: s.tenantId || '',
+          tenantName: s.tenantName || '',
+          planLabel: s.planLabel || '基础免费版',
           operatingStatus: s.operatingStatus || 'operating',
           operatingStatusLabel: OPERATING_STATUS_LABELS[s.operatingStatus] || '运营中',
           province: s.province || '',
@@ -365,13 +381,27 @@ Component({
         // 门店铺开到新省市时选项会自动出现，不需要额外维护数据文件
         const provinceOptions = Array.from(new Set(fetchedStores.map((s: any) => s.province).filter(Boolean))) as string[];
 
+        // 🏢（机构-门店两级架构，2026-09-14）每次重新拉取门店列表时重算一次
+        // 折叠态默认值——只在这里（面板打开/刷新时）算一次，而不是每次筛选
+        // 交互（搜索/省市切换）都重算，否则用户手动展开的分组会在筛选时被
+        // 意外重置。默认展开当前生效门店所在的分组，其余分组折叠；只有
+        // 1 个机构时不存在"折叠"的意义，数组留空
+        const distinctTenantIds = Array.from(new Set(fetchedStores.map((s: any) => s.tenantId).filter(Boolean))) as string[];
+        let collapsedTenantIds: string[] = [];
+        if (distinctTenantIds.length > 1) {
+          const activeStore = fetchedStores.find((s: any) => s.storeId === this.data.currentStore.storeId);
+          const activeTenantId = activeStore ? activeStore.tenantId : '';
+          collapsedTenantIds = distinctTenantIds.filter((id) => id !== activeTenantId);
+        }
+
         this.setData({
           allStores: fetchedStores,
           nationalOverviewEntry,
           provinceOptions,
           provinceOptionsWithAll: ['全部省份', ...provinceOptions],
           isSuperAdmin,
-          isPlatformAdmin
+          isPlatformAdmin,
+          collapsedTenantIds
         });
         this.refreshRolePermissions();
       } catch (err) {
@@ -520,7 +550,46 @@ Component({
       // 🛡️ "全国总览"虚拟条目不再混入滚动列表——改由置顶固定卡片（superadmin-pinned-card）
       // 专门承载超管身份切换，视觉上始终置顶且不随普通门店一起被搜索/筛选过滤
       const groupedStoreList = filtered;
-      this.setData({ groupedStoreList });
+      this.setData({ groupedStoreList, groupedByTenant: this._buildGroupedByTenant(filtered) });
+    },
+
+    // 🏢（机构-门店两级架构，2026-09-14）把筛选后的门店列表按 tenantId 分组，
+    // 供 WXML 渲染"机构分组头 + 门店卡片"两级结构。折叠态读 collapsedTenantIds
+    // （由 fetchStoreListFromCloud 首次算好、onToggleTenantGroup 手动切换），
+    // 这里只负责分组本身，不重新计算折叠默认值——避免搜索/省市筛选时把用户
+    // 手动展开的分组重置回去
+    _buildGroupedByTenant(filtered: any[]): any[] {
+      const collapsedTenantIds: string[] = this.data.collapsedTenantIds || [];
+      const groups: any[] = [];
+      const indexByTenantId = new Map<string, number>();
+      filtered.forEach((store: any) => {
+        const tenantId = store.tenantId || '';
+        if (!indexByTenantId.has(tenantId)) {
+          indexByTenantId.set(tenantId, groups.length);
+          groups.push({
+            tenantId,
+            tenantName: store.tenantName || '未命名机构',
+            planLabel: store.planLabel || '基础免费版',
+            isCollapsed: collapsedTenantIds.indexOf(tenantId) >= 0,
+            stores: [] as any[]
+          });
+        }
+        groups[indexByTenantId.get(tenantId)!].stores.push(store);
+      });
+      return groups;
+    },
+
+    // 分组头点击：展开/收起该机构分组。只在出现 ≥2 个机构分组时才有实际视觉
+    // 意义（单机构场景分组头始终只有一组、点击收起体验上没有必要，但不特殊
+    // 屏蔽这个交互——收起后再点一次同样能展开，不影响功能正确性）
+    onToggleTenantGroup(e: any) {
+      const tenantId = e.currentTarget.dataset.tenantId || '';
+      const collapsedTenantIds: string[] = this.data.collapsedTenantIds || [];
+      const idx = collapsedTenantIds.indexOf(tenantId);
+      const next = idx >= 0
+        ? collapsedTenantIds.filter((id) => id !== tenantId)
+        : [...collapsedTenantIds, tenantId];
+      this.setData({ collapsedTenantIds: next, groupedByTenant: this._buildGroupedByTenant(this.data.groupedStoreList) });
     },
 
     onSearchInput(e: any) {

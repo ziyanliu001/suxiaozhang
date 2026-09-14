@@ -18,6 +18,7 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const { excludeKnownNonYuhuaStores } = require('./lib/excludeKnownNonYuhuaStores');
+const { resolveTenantDisplayName, buildPlanLabel } = require('./lib/tenantInfoLabels');
 
 const UNCLASSIFIED_REGION_LABEL = '未分类地区';
 
@@ -74,6 +75,10 @@ function toStoreListItem(s) {
   const region = resolveStoreRegion(s);
   return {
     storeId: s._id,
+    // 🏢（机构-门店两级架构）门店归属的机构 ID——供 store-picker.ts 按 tenantId
+    // 分组展示用，非敏感字段（本就等价于"这条记录来自哪个机构的门店"，与已经
+    // 下发的 isOwnTenant 同一敏感级别），不新增任何越权面
+    tenantId: s.tenantId || '',
     storeName: s.storeName || '未命名门店',
     status: s.status || 'active',
     // 🌟 门店宣传/招募海报（drawStoreInvitationPoster）需要展示地址，
@@ -189,6 +194,65 @@ async function handleResolveStoreNames(storeIds, tenantId) {
   };
 }
 
+// 🏢（机构-门店两级架构，2026-09-14）批量补充 tenantName/planLabel：给定一批
+// 门店列表项（已含 toStoreListItem 输出的 tenantId 字段），去重查一次 tenants
+// + 最新一条 tenant_subscriptions，把机构名与套餐标签挂回每条记录。三条返回
+// 路径（本机构门店 / platform_admin 授权门店 / 跨机构发现）共用这一个 helper，
+// 不各写一份。查询失败/某个 tenantId 查不到时该条目的 tenantName/planLabel
+// 兜底为空字符串，不影响门店列表本身的返回——这是纯展示层的增量信息，不是
+// 硬校验的一部分
+async function enrichWithTenantInfo(list) {
+  const tenantIds = Array.from(new Set(list.map((item) => item.tenantId).filter(Boolean)));
+  if (tenantIds.length === 0) return list;
+
+  const infoMap = new Map();
+  try {
+    // tenants 集合存在两条历史创建路径：_id 即 tenantId，或 tenantId 是独立的
+    // 业务字段（见 checkTenantPermission/index.js 同一处兜底注释），两条路径
+    // 都要查一次才能覆盖全部历史数据
+    const [byIdRes, byFieldRes, subsRes] = await Promise.all([
+      db.collection('tenants').where({ _id: db.command.in(tenantIds) })
+        .field({ name: true, tenantName: true }).get().catch(() => ({ data: [] })),
+      db.collection('tenants').where({ tenantId: db.command.in(tenantIds) })
+        .field({ tenantId: true, name: true, tenantName: true }).get().catch(() => ({ data: [] })),
+      db.collection('tenant_subscriptions').where({ tenantId: db.command.in(tenantIds) })
+        .field({ tenantId: true, planType: true, lastRenewedAt: true }).get().catch(() => ({ data: [] }))
+    ]);
+
+    (byIdRes.data || []).forEach((t) => {
+      infoMap.set(t._id, { tenantName: resolveTenantDisplayName(t), planLabel: buildPlanLabel('basic') });
+    });
+    (byFieldRes.data || []).forEach((t) => {
+      if (t.tenantId && !infoMap.has(t.tenantId)) {
+        infoMap.set(t.tenantId, { tenantName: resolveTenantDisplayName(t), planLabel: buildPlanLabel('basic') });
+      }
+    });
+
+    // 同一 tenantId 可能有多条历史订阅记录，取 lastRenewedAt 最新的一条
+    // （db.command.in 不保证按此排序，这里在内存里按 tenantId 分组取最新）
+    const latestSubByTenant = new Map();
+    (subsRes.data || []).forEach((sub) => {
+      const prev = latestSubByTenant.get(sub.tenantId);
+      const prevTime = prev ? new Date(prev.lastRenewedAt || 0).getTime() : -Infinity;
+      const curTime = new Date(sub.lastRenewedAt || 0).getTime();
+      if (!prev || curTime >= prevTime) {
+        latestSubByTenant.set(sub.tenantId, sub);
+      }
+    });
+    latestSubByTenant.forEach((sub, tenantId) => {
+      const existing = infoMap.get(tenantId) || { tenantName: '', planLabel: '' };
+      infoMap.set(tenantId, { ...existing, planLabel: buildPlanLabel(sub.planType) });
+    });
+  } catch (err) {
+    console.warn('[getStoreList] enrichWithTenantInfo 查询异常，机构名/套餐标签留空:', err);
+  }
+
+  return list.map((item) => {
+    const info = infoMap.get(item.tenantId);
+    return { ...item, tenantName: (info && info.tenantName) || '', planLabel: (info && info.planLabel) || buildPlanLabel('basic') };
+  });
+}
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   // 🛡️ 默认只返回 status==='active' 的门店（切店/邀请码等场景不该选到已停用门店）；
@@ -240,7 +304,8 @@ exports.main = async (event) => {
       // 自己的租户（platform_admin 本就不归属任何租户），店长/财务/大家长
       // 胶囊的解锁完全靠 store-picker.ts 的 hasTenantGrant() 读
       // authorizedTenants 判定，不依赖 isOwnTenant
-      return { success: true, list: (storesRes.data || []).map((s) => ({ ...toStoreListItem(s), isOwnTenant: false })) };
+      const grantedList = (storesRes.data || []).map((s) => ({ ...toStoreListItem(s), isOwnTenant: false }));
+      return { success: true, list: await enrichWithTenantInfo(grantedList) };
     }
 
     if (resolveStoreIds) {
@@ -302,7 +367,8 @@ exports.main = async (event) => {
     // 🛡️ 这条路径的 where 条件本身就带 tenantId，结果天然全部是调用者自己机构
     // 的门店，isOwnTenant 恒为 true——与 handleDiscoverByOrgType 的同名字段
     // 含义一致，客户端不需要区分"走的是哪条查询路径"，只认这一个字段
-    return { success: true, list: filteredStores.map((s) => ({ ...toStoreListItem(s), isOwnTenant: true })) };
+    const ownTenantList = filteredStores.map((s) => ({ ...toStoreListItem(s), isOwnTenant: true }));
+    return { success: true, list: await enrichWithTenantInfo(ownTenantList) };
   } catch (err) {
     console.error('[getStoreList] 异常:', err);
     return { success: false, error: err.message || '门店列表查询失败', list: [] };

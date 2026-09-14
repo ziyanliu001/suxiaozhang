@@ -147,6 +147,25 @@ page {
   color: #495057;
 }
 
+/* 🏢（机构-门店两级架构，2026-09-14）机构-门店两级归属展示行——纯文字提示，
+   点击唤起与下方胶囊同一个 store-picker 弹窗，不占用太多首屏高度 */
+.tenant-store-header-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.tenant-store-header-text {
+  font-size: 22rpx;
+  color: #8A7A68;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .capsule-bar-row {
   display: flex;
   justify-content: center;

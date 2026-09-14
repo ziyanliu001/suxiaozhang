@@ -12,6 +12,7 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
+const { resolveEffectiveCaller } = require('./lib/resolveCaller');
 
 // 🔐 功能-套餐矩阵：新增付费功能时只需要在这里登记一行。未登记的 featureKey
 // 一律放行——宁可漏管制，也不要因为忘记登记而误伤既有的免费功能
@@ -176,8 +177,9 @@ exports.main = async (event) => {
       .where({ _openid: OPENID })
       .limit(1)
       .get();
-    const callerRole = (roleRes.data && roleRes.data[0] && roleRes.data[0].role) || '';
-    const tenantId = (roleRes.data && roleRes.data[0] && roleRes.data[0].tenantId) || '';
+    const ownDoc = (roleRes.data && roleRes.data[0]) || null;
+    const callerRole = (ownDoc && ownDoc.role) || '';
+    const tenantId = (ownDoc && ownDoc.tenantId) || '';
 
     // 🛡️ 超管跨机构预览：只有服务端重新反查确认调用者本人角色确实是 super_admin
     // （不是从客户端传的角色/租户参数直接采信）才信任这个 storeId——避免非超管
@@ -194,14 +196,31 @@ exports.main = async (event) => {
       }
     }
 
+    // 🏢（机构-门店两级架构，2026-09-14）platform_admin 巡检漫游感知——见
+    // lib/resolveCaller.js 头部注释。命中 event.storeId 对应的一条有效
+    // authorizedTenants 授权时，roamed.role 会被替换成被授权角色（永远不是
+    // platform_admin/super_admin，见 grantAuthorizationRules.js 的
+    // GRANTABLE_ROLES 白名单），此时不再套用下面的"企业版全放行"豁免，
+    // 而是像该被授权角色本身一样，改用漫游目标机构的 tenantId 走真实套餐
+    // 查询——这是让"整机构巡检"看到目标机构真实 basic/pro/enterprise 门禁
+    // 效果的关键一步。未命中任何有效授权时 roamed.role 仍是 'platform_admin'，
+    // 行为与升级前完全一致
+    const roamed = callerRole === 'platform_admin' ? resolveEffectiveCaller(ownDoc, event.storeId) : null;
+    const isRoamedIntoGrantedRole = !!(roamed && roamed.role !== 'platform_admin');
+    if (isRoamedIntoGrantedRole) {
+      effectiveTenantId = roamed.tenantId;
+    }
+
     // 🛡️ 平台管理员豁免：platform_admin（SaaS 平台运维方）与业务角色/租户套餐
     // 彻底隔离——这堵付费墙是针对"某个机构自己的 super_admin"设计的，防止免费版
     // 租户靠自己的超管账号绕过 pro/enterprise 专属功能（每个机构都有自己的
     // super_admin，若对它放行等于付费墙对所有租户失效）。platform_admin 不属于
     // 任何机构的付费主体，不该被这堵墙拦下——但这只解除这一层套餐拦截，
     // getNationalDashboard 云函数自身的 ALLOWED_ROLES 仍把 platform_admin 排除
-    // 在外，机构财务数据对平台运维方依旧不可见，是另一层独立的隐私边界
-    if (callerRole === 'platform_admin') {
+    // 在外，机构财务数据对平台运维方依旧不可见，是另一层独立的隐私边界。
+    // 🏢 巡检漫游进某个被授权角色时不再享受这条豁免（上面已经把 effectiveTenantId
+    // 换成目标机构），直接跳过本分支，走下面正常的 checkTenantPermission() 查询
+    if (callerRole === 'platform_admin' && !isRoamedIntoGrantedRole) {
       return {
         success: true,
         allowed: true,
