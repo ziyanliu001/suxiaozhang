@@ -3928,6 +3928,36 @@
             <view style="flex: 1; text-align: center; font-size: 24rpx; border-radius: 999rpx; padding: 14rpx 0; transition: all 0.2s ease; {{applyForm.storeSelectionType === 'custom' ? 'background: #C0392B; color: #FFFFFF; font-weight: bold; box-shadow: 0 4rpx 12rpx rgba(192, 57, 43, 0.28);' : 'color: #666666;'}}" data-mode="custom" bindtap="onSwitchApplyStoreMode">新建门店</view>
           </view>
 
+          <!-- 🏛️（2026-09-14 机构分类卡片选择器）"服务场景"卡片选择——真正补上
+               此前【申请加入门店】新建门店分支完全没有机构类型选择的缺口
+               （与 store-picker 内嵌的新建门店表单是两套独立实现，那边早就有
+               一个覆盖全部 9 个 orgType 的下拉选择器，这里此前只是按专区隐式
+               代入 orgType，用户没有任何显式选择权）。必须用内联样式——本弹窗
+               历史上因外部 WXSS 在部分客户端选择性失效，已改成内联样式止损
+               方案（见本文件头部 3899-3903 行注释），新增内容延续同一约束，
+               不新增 WXSS class -->
+          <view style="margin-bottom: 24rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">
+            <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 服务场景</text>
+            <view style="display: flex; flex-direction: row; flex-wrap: wrap; justify-content: space-between;" role="radiogroup">
+              <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18rpx 8rpx; border-radius: 12rpx; border: 2rpx solid {{applyForm.customOrgType === 'temple_canteen' ? '#C0392B' : 'transparent'}}; background: {{applyForm.customOrgType === 'temple_canteen' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onSelectNewStoreScene" data-scene="temple_canteen" aria-role="radio" aria-selected="{{applyForm.customOrgType === 'temple_canteen'}}">
+                <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 6rpx;">🛕</text>
+                <text style="font-size: 24rpx; font-weight: 500; text-align: center; color: {{applyForm.customOrgType === 'temple_canteen' ? '#C0392B' : '#333333'}};">寺院宫庙 / 宗祠功德堂</text>
+              </view>
+              <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18rpx 8rpx; border-radius: 12rpx; border: 2rpx solid {{applyForm.customOrgType === 'elderly_canteen' ? '#C0392B' : 'transparent'}}; background: {{applyForm.customOrgType === 'elderly_canteen' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onSelectNewStoreScene" data-scene="elderly_canteen" aria-role="radio" aria-selected="{{applyForm.customOrgType === 'elderly_canteen'}}">
+                <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 6rpx;">👵</text>
+                <text style="font-size: 24rpx; font-weight: 500; text-align: center; color: {{applyForm.customOrgType === 'elderly_canteen' ? '#C0392B' : '#333333'}};">社区助老 / 敬老中心</text>
+              </view>
+              <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18rpx 8rpx; border-radius: 12rpx; border: 2rpx solid {{applyForm.customOrgType === 'yuhuazhai' ? '#C0392B' : 'transparent'}}; background: {{applyForm.customOrgType === 'yuhuazhai' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onSelectNewStoreScene" data-scene="yuhuazhai" aria-role="radio" aria-selected="{{applyForm.customOrgType === 'yuhuazhai'}}">
+                <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 6rpx;">🌸</text>
+                <text style="font-size: 24rpx; font-weight: 500; text-align: center; color: {{applyForm.customOrgType === 'yuhuazhai' ? '#C0392B' : '#333333'}};">雨花爱心互助食堂</text>
+              </view>
+              <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18rpx 8rpx; border-radius: 12rpx; border: 2rpx solid {{applyForm.customOrgType === 'volunteer_station' ? '#C0392B' : 'transparent'}}; background: {{applyForm.customOrgType === 'volunteer_station' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onSelectNewStoreScene" data-scene="volunteer_station" aria-role="radio" aria-selected="{{applyForm.customOrgType === 'volunteer_station'}}">
+                <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 6rpx;">🤝</text>
+                <text style="font-size: 24rpx; font-weight: 500; text-align: center; color: {{applyForm.customOrgType === 'volunteer_station' ? '#C0392B' : '#333333'}};">公益机构 / 志愿服务站</text>
+              </view>
+            </view>
+          </view>
+
           <!-- 标签随模式切换：新建门店时显示必填红星 -->
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text style="color: #D32F2F;">*</text> 新门店名称</text>
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:else>门店</text>
@@ -3938,7 +3968,10 @@
               <text style="flex-shrink: 0; margin-left: 12rpx; font-size: 22rpx; color: #ADB5BD;">▾</text>
             </view>
           </picker>
-          <input wx:else class="form-input" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
+          <!-- 🏛️（2026-09-14）placeholder 按已选服务场景动态切换，未选择/其余
+               情况兜底沿用原有通用示例文案。与 store-picker.wxml 同名内联三元链
+               各自独立维护一份，两处文案保持一致（见该文件同处注释） -->
+          <input wx:else class="form-input" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="{{applyForm.customOrgType === 'temple_canteen' ? '例：厦门青礁慈济宫（或紫云寺净素堂）' : (applyForm.customOrgType === 'elderly_canteen' ? '例：嵩屿街道敬老中心助餐点' : (applyForm.customOrgType === 'yuhuazhai' ? '例：厦门海沧三愿弘雨花斋' : (applyForm.customOrgType === 'volunteer_station' ? '例：厦门思明区爱心志愿服务站' : '例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）')))}}" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
           <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
@@ -4001,11 +4034,16 @@
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'store_patriarch' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="store_patriarch" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'store_patriarch'}}">
               <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">👑</text>
               <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_patriarch' ? '#C0392B' : '#333333'}};">大家长</text>
+              <!-- 🏛️（2026-09-14 称谓白话化）不区分场景的固定副标题——寺院/助老/
+                   义工站等不同机构对"大家长"这个岗位有各自的习惯称谓，一次性
+                   列全，帮申请人对上号，不随服务场景卡片联动切换 -->
+              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;">住持 / 庙董 / 理事长 / 机构最高负责人</text>
               <view wx:if="{{applyForm.requestedRole === 'store_patriarch'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
             </view>
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'store_manager' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="store_manager" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'store_manager'}}">
               <text style="font-size: 38rpx; line-height: 1.2; margin-bottom: 8rpx;">🗂️</text>
               <text style="font-size: 26rpx; font-weight: 500; color: {{applyForm.requestedRole === 'store_manager' ? '#C0392B' : '#333333'}};">店长</text>
+              <text style="font-size: 18rpx; color: #999999; margin-top: 4rpx; text-align: center;">堂主 / 主理人 / 现场责任人</text>
               <view wx:if="{{applyForm.requestedRole === 'store_manager'}}" style="position: absolute; top: -1rpx; right: -1rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; font-size: 20rpx; font-weight: bold; color: #FFFFFF; background: #C0392B; border-radius: 0 18rpx 0 18rpx;">✓</view>
             </view>
             <view style="width: calc(50% - 8rpx); box-sizing: border-box; margin-bottom: 16rpx; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20rpx 0; border-radius: 12rpx; border: 2rpx solid {{applyForm.requestedRole === 'finance' ? '#C0392B' : 'transparent'}}; background: {{applyForm.requestedRole === 'finance' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onApplyRoleCardTap" data-role="finance" aria-role="radio" aria-selected="{{applyForm.requestedRole === 'finance'}}">

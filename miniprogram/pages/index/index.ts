@@ -1145,11 +1145,13 @@ Page({
       // 目标门店是否设了 key 决定——没设 key 的门店留空也能通过，这里不做
       // 客户端必填校验，只负责把用户填的值原样带上
       adminKeyInput: '',
-      // 🌸 新建门店时的机构类型提示：从 openStorePickerForJoin 唤起时按当前专区
-      // 预填（雨花专区='yuhuazhai'，通用专区留空退回服务端默认 'other'），确保
-      // Bug 1 里"新建雨花门店"真的会给新店打上 orgType:'yuhuazhai' 标签，而不是
-      // 静默落到 processRoleAudit 的 'other' 兜底值
-      orgTypeHint: ''
+      // 🏛️（2026-09-14 机构分类卡片选择器）新建门店的服务场景——原名 orgTypeHint，
+      // 此前只是"按当前专区隐式代入"的提示值（雨花专区='yuhuazhai'，通用专区
+      // 留空退回服务端默认 'other'），用户完全没有显式选择权。现改为真正由
+      // 用户在表单里点选 4 张场景卡片（见 onSelectNewStoreScene）产生的显式值，
+      // 提交时直接作为 orgType 传给 processRoleAudit，不再有隐式兜底——
+      // onSubmitRoleApply 已加一条必填校验，不会再静默落到 'other'
+      customOrgType: ''
     } as any,
     applyStorePhotoUploading: false,
     isSubmittingApply: false,
@@ -4250,7 +4252,7 @@ Page({
   async fetchStoreInfoAndPromptApply(storeId: string) {
     // 🌸 扫码/邀请码这条路径走的是常规"申请加入门店"标题逻辑，清掉可能残留自
     // openStorePickerForJoin（雨花/通用专区选站点）的标题覆盖与 orgType 提示，避免串场
-    this.setData({ applyModalTitleOverride: '', 'applyForm.orgTypeHint': '' });
+    this.setData({ applyModalTitleOverride: '', 'applyForm.customOrgType': '' });
     // 🐛 根因修复：本方法下面三个分支（全国总览哨兵值 / 查询成功 / 查询失败
     // 兜底）殊途同归都会把 showApplyModal 置为 true，统一在分支之前隐藏一次
     // 自定义 tabBar（见 utils/tabBarVisibility.ts 头部注释），不需要在每个
@@ -4373,6 +4375,12 @@ Page({
   onSwitchApplyStoreMode(e: any) {
     const mode = e.currentTarget.dataset.mode as 'existing' | 'custom';
     if (mode === this.data.applyForm.storeSelectionType) return;
+    // 🛡️（2026-09-14）customOrgType 不在这里重置——openStorePickerForJoin 唤起
+    // 本弹窗时会按当前专区预填（雨花专区='yuhuazhai'），若用户从"选择已有门店"
+    // Tab 切到"新建门店"Tab 时顺手清空，等于把这份有意义的预填擦掉，用户还得
+    // 重新点一次场景卡片。真正需要清空的时机是"重新打开一次弹窗"（见
+    // fetchStoreInfoAndPromptApply/openStorePickerForJoin 各自的入口重置），
+    // 不是"同一次弹窗内切换 Tab"
     this.setData({
       'applyForm.storeSelectionType': mode,
       'applyForm.storeId': '',
@@ -4382,6 +4390,12 @@ Page({
       'applyForm.contactPhone': '',
       'applyForm.storePhotos': []
     });
+  },
+
+  // 🏛️（2026-09-14 机构分类卡片选择器）新建门店"服务场景"卡片点选
+  onSelectNewStoreScene(e: any) {
+    const scene = e.currentTarget.dataset.scene || '';
+    this.setData({ 'applyForm.customOrgType': scene });
   },
 
   onSelectApplyStore(e: any) {
@@ -4471,10 +4485,14 @@ Page({
   async onSubmitRoleApply() {
     if (this.data.isSubmittingApply) return;
 
-    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos, orgTypeHint, adminKeyInput } = this.data.applyForm;
+    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos, customOrgType, adminKeyInput } = this.data.applyForm;
 
     // ——— 必填校验（按展示顺序逐项拦截）———
     if (storeSelectionType === 'custom') {
+      if (!customOrgType) {
+        wx.showToast({ title: '请选择服务场景', icon: 'none' });
+        return;
+      }
       if (!customStoreName || !customStoreName.trim()) {
         wx.showToast({ title: '请输入门店名称', icon: 'none' });
         return;
@@ -4533,7 +4551,7 @@ Page({
           // adminKeyInput 里填的值——目标门店若配置了安全密钥，服务端会据此
           // 校验；未配置则服务端直接跳过校验，空字符串也能通过
           adminKey: storeSelectionType === 'custom' ? adminKey : String(adminKeyInput || '').trim(),
-          orgType: storeSelectionType === 'custom' ? (orgTypeHint || '') : '',
+          orgType: storeSelectionType === 'custom' ? customOrgType : '',
           tenantId,
           requestedRole,
           realName: realName.trim(),
@@ -9678,9 +9696,10 @@ Page({
       'applyForm.storeId': '',
       'applyForm.storeName': '',
       'applyForm.requestedRole': 'volunteer',
-      // 🌸 仅雨花专区有明确的 orgType 取值可预填；通用专区涵盖多种机构类型，
-      // 留空退回 processRoleAudit 的 'other' 默认值，不能替用户瞎猜
-      'applyForm.orgTypeHint': orgTypeFilter === 'yuhuazhai' ? 'yuhuazhai' : '',
+      // 🏛️（2026-09-14）仅雨花专区有明确的场景可预选；通用专区涵盖多种机构
+      // 类型，留空强制用户在"新建门店"分支里显式点选服务场景卡片，不再像
+      // 升级前那样悄悄落到 processRoleAudit 的 'other' 兜底值
+      'applyForm.customOrgType': orgTypeFilter === 'yuhuazhai' ? 'yuhuazhai' : '',
       applyRoleTipText: volunteerTip.text,
       applyRoleTipVariant: volunteerTip.variant,
       allStoresList: [],

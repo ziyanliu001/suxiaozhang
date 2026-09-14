@@ -1134,6 +1134,17 @@ Component({
       this.setData({ orgTypeIndex: parseInt(e.detail.value, 10) || 0 });
     },
 
+    // 🏛️（2026-09-14 机构分类卡片选择器）4 张常见场景快选卡片点击——直接把
+    // orgTypeIndex 设成对应下标，与下方 <picker> 是同一份状态，不新增独立字段。
+    // findIndex 找不到时（理论上不会发生，4 个 value 都是 ORG_TYPE_OPTIONS 里
+    // 真实存在的值）兜底保持原有 orgTypeIndex 不变，不误跳回第 0 项
+    onSelectSceneCard(e: any) {
+      const value = e.currentTarget.dataset.value;
+      const idx = ORG_TYPE_OPTIONS.findIndex((o) => o.value === value);
+      if (idx < 0) return;
+      this.setData({ orgTypeIndex: idx });
+    },
+
     // 🏛️（2026-09-06）「切换其它工作空间」：修复进入雨花/通用某个专区工作台
     // 后，本弹窗里也没有任何入口能跳回工作空间选择页的问题。本组件不持有
     // currentPlatformMode（那是宿主页面 index.ts 的状态），只负责关闭自身

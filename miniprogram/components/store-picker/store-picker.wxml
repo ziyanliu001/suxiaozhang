@@ -208,9 +208,13 @@
           <view class="new-store-form-back" bindtap="onToggleNewStoreForm">‹ 返回门店列表</view>
 
           <text class="form-label">新门店名称</text>
+          <!-- 🏛️（2026-09-14 称谓白话化）placeholder 按下方"所属平台类型"已选值
+               动态切换，未落入这 4 个常见场景（或尚未选择）时兜底沿用原有
+               通用示例文案。与 index.wxml 同名内联三元链各自独立维护一份，
+               两处文案保持一致 -->
           <input class="new-store-input"
                  type="text"
-                 placeholder="例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）"
+                 placeholder="{{orgTypeOptions[orgTypeIndex].value === 'temple_canteen' ? '例：厦门青礁慈济宫（或紫云寺净素堂）' : (orgTypeOptions[orgTypeIndex].value === 'elderly_canteen' ? '例：嵩屿街道敬老中心助餐点' : (orgTypeOptions[orgTypeIndex].value === 'yuhuazhai' ? '例：厦门海沧三愿弘雨花斋' : (orgTypeOptions[orgTypeIndex].value === 'volunteer_station' ? '例：厦门思明区爱心志愿服务站' : '例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）')))}}"
                  value="{{newStoreForm.customStoreName}}"
                  bindinput="onNewStoreNameInput"
                  cursor-spacing="50"
@@ -230,12 +234,16 @@
                   <view class="role-card-badge" wx:if="{{newStoreForm.applyRole === 'store_patriarch'}}">已选</view>
                   <text class="role-card-title">👑 大家长</text>
                   <text class="role-card-desc">统筹发起 / 核心管理</text>
+                  <!-- 🏛️（2026-09-14 称谓白话化）固定副标题，不随场景卡片联动——
+                       一次性列全寺院/助老/义工站等机构对这个岗位的习惯称谓 -->
+                  <text class="role-card-hint">住持 / 庙董 / 理事长 / 机构最高负责人</text>
                 </label>
                 <label class="role-card {{newStoreForm.applyRole === 'store_manager' ? 'role-card-active' : ''}}">
                   <radio class="role-card-radio" value="store_manager" checked="{{newStoreForm.applyRole === 'store_manager'}}"/>
                   <view class="role-card-badge" wx:if="{{newStoreForm.applyRole === 'store_manager'}}">已选</view>
                   <text class="role-card-title">👑 店长</text>
                   <text class="role-card-desc">日常运营 / 排班餐报</text>
+                  <text class="role-card-hint">堂主 / 主理人 / 现场责任人</text>
                 </label>
               </view>
 
@@ -279,6 +287,32 @@
               <!-- 🏢 所属平台类型：必填，存入 stores.orgType 字段；全国大屏按此字段动态
                    聚合与筛选，解耦"雨花斋"等平台硬编码 -->
               <text class="form-label"><text class="form-label-required">*</text> 所属平台类型</text>
+
+              <!-- 🏛️（2026-09-14 机构分类卡片选择器）4 张常见场景快选卡片——
+                   不替换/移除下方 <picker>（那个下拉框覆盖全部 9 个真实 orgType
+                   值，其余 5 类仍需要它），点击卡片只是直接把 orgTypeIndex 设成
+                   对应下标，下拉框会同步显示选中项，onSubmitNewStoreApply/
+                   directCreateStoreAsSuperAdmin 读取 orgTypeIndex 的逻辑不用改 -->
+              <view class="scene-quick-pick-row">
+                <view class="scene-quick-pick-card {{orgTypeOptions[orgTypeIndex].value === 'temple_canteen' ? 'scene-quick-pick-active' : ''}}" bindtap="onSelectSceneCard" data-value="temple_canteen">
+                  <text class="scene-quick-pick-emoji">🛕</text>
+                  <text class="scene-quick-pick-title">寺院宫庙 / 宗祠功德堂</text>
+                </view>
+                <view class="scene-quick-pick-card {{orgTypeOptions[orgTypeIndex].value === 'elderly_canteen' ? 'scene-quick-pick-active' : ''}}" bindtap="onSelectSceneCard" data-value="elderly_canteen">
+                  <text class="scene-quick-pick-emoji">👵</text>
+                  <text class="scene-quick-pick-title">社区助老 / 敬老中心</text>
+                </view>
+                <view class="scene-quick-pick-card {{orgTypeOptions[orgTypeIndex].value === 'yuhuazhai' ? 'scene-quick-pick-active' : ''}}" bindtap="onSelectSceneCard" data-value="yuhuazhai">
+                  <text class="scene-quick-pick-emoji">🌸</text>
+                  <text class="scene-quick-pick-title">雨花爱心互助食堂</text>
+                </view>
+                <view class="scene-quick-pick-card {{orgTypeOptions[orgTypeIndex].value === 'volunteer_station' ? 'scene-quick-pick-active' : ''}}" bindtap="onSelectSceneCard" data-value="volunteer_station">
+                  <text class="scene-quick-pick-emoji">🤝</text>
+                  <text class="scene-quick-pick-title">公益机构 / 志愿服务站</text>
+                </view>
+              </view>
+              <text class="form-hint">💡 以上是常见场景快选；其余类型请在下方下拉框中选择</text>
+
               <picker bindchange="onOrgTypeChange" value="{{orgTypeIndex}}" range="{{orgTypeOptions}}" range-key="name">
                 <view class="new-store-input picker-selector" hover-class="picker-selector-hover">
                   <text>{{orgTypeOptions[orgTypeIndex].name}}</text>

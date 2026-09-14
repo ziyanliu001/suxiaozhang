@@ -836,6 +836,67 @@
   color: #C97B7B;
 }
 
+/* 🏛️（2026-09-14 称谓白话化）固定副标题——比 role-card-desc 再小一号，
+   不随场景卡片联动变化 */
+.role-card-hint {
+  font-size: 18rpx;
+  color: #B8A98F;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.role-card-active .role-card-hint {
+  color: #C97B7B;
+}
+
+/* 🏛️（2026-09-14 机构分类卡片选择器）"所属平台类型"上方的 4 张常见场景
+   快选卡片——视觉语言与上面 .role-card 系列保持一致（同款描边+浅底高亮），
+   但独立命名一套 class，避免与"申请身份"卡片的选中态耦合在一起改动 */
+.scene-quick-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 12rpx;
+}
+
+.scene-quick-pick-card {
+  width: calc(50% - 8rpx);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 18rpx 8rpx;
+  margin-bottom: 16rpx;
+  background: #F8F9FA;
+  border: 2rpx solid #EEEEEE;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.scene-quick-pick-active {
+  background: #FFF2F0;
+  border-color: #C43A3A;
+}
+
+.scene-quick-pick-emoji {
+  font-size: 38rpx;
+  line-height: 1.2;
+}
+
+.scene-quick-pick-title {
+  font-size: 22rpx;
+  font-weight: 500;
+  color: #333333;
+  text-align: center;
+}
+
+.scene-quick-pick-active .scene-quick-pick-title {
+  color: #C43A3A;
+}
+
 .new-store-role-group {
   display: flex;
   gap: 24rpx;
