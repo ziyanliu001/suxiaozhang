@@ -79,6 +79,17 @@ function toStoreListItem(s) {
     // 分组展示用，非敏感字段（本就等价于"这条记录来自哪个机构的门店"，与已经
     // 下发的 isOwnTenant 同一敏感级别），不新增任何越权面
     tenantId: s.tenantId || '',
+    // 🐛（2026-09-19 根因修复："爱心物资跨店调拨"弹窗门店列表恒为空）此前
+    // toStoreListItem() 的返回形状里一直没有 orgType 字段——buildOrgTypeCondition
+    // 只用于服务端查询过滤，从未把每条门店文档自己的 orgType 透传回前端。
+    // pages/index/index.ts 的 buildMaterialPartnerOptions() 按
+    // `s.orgType === 'yuhuazhai' || s.orgType === 'elderly_canteen'` 筛选
+    // 候选门店，拿到的每一项 orgType 永远是 undefined，过滤结果因此恒为空
+    // 数组——与查询/权限/多租户过滤逻辑本身无关，纯粹是字段透传遗漏。非敏感
+    // 字段（与上面 tenantId 同一敏感级别，只是"这家店属于哪个业态分类"），
+    // 补上即可，不影响本函数其余任何调用方（全仓库 grep 确认此前没有任何
+    // 前端代码读取过 allStoresList items 的 orgType 字段，这是唯一消费方）
+    orgType: s.orgType || '',
     storeName: s.storeName || '未命名门店',
     status: s.status || 'active',
     // 🌟 门店宣传/招募海报（drawStoreInvitationPoster）需要展示地址，

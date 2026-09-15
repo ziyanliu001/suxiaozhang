@@ -8127,6 +8127,34 @@ page {
   flex: 1;
 }
 
+/* ⚠️（2026-09-19 门店列表空态兜底）与上面 .material-restrict-hint 同一套
+   视觉手法（带图标的浅色警示条），用在候选门店 picker 下方——区分"正在
+   加载"与"加载完成后确实没有可选门店"两种状态，不让志工面对一个不知道
+   在等什么、还是本来就没有数据的空白 picker */
+.material-partner-empty-hint {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 14rpx 16rpx;
+  margin-top: 10rpx;
+  margin-bottom: 20rpx;
+  background: rgba(217, 72, 14, 0.08);
+  border: 1.5rpx solid rgba(217, 72, 14, 0.25);
+  border-radius: 10rpx;
+}
+
+.material-partner-empty-hint-icon {
+  font-size: 24rpx;
+  line-height: 1;
+}
+
+.material-partner-empty-hint-text {
+  font-size: 21rpx;
+  color: #D9480E;
+  flex: 1;
+  line-height: 1.5;
+}
+
 /* 📊（2026-09-18 智能库存余量联动）只在"调出支援"方向展示——本店该物资的
    预估结存，超过时切换到更醒目的警示配色（但不阻断提交，结存本身是估算值，
    见 computeMaterialStock.js 头部注释同一口径） */

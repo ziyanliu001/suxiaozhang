@@ -925,6 +925,9 @@ Page({
       handledBy: ''
     },
     materialPartnerStoreOptions: [] as Array<{ storeId: string; storeName: string }>,
+    // 🐛（2026-09-19 空态兜底）true 表示弹窗已打开但候选门店仍在拉取
+    // （allStoresList 冷启动时），picker 显示"正在加载门店…"而不是一片空白
+    materialPartnerLoading: false,
     materialTransferRecent: [] as any[],
     // 🏷️（2026-09-18 常用门店快捷标签）从 materialTransferRecent 派生，见
     // fetchMaterialTransferRecent()/buildRecentPartnerChips
@@ -2422,12 +2425,14 @@ Page({
     });
   },
 
+  // 🐛（2026-09-19 空态兜底）此前逻辑是"await fetchAllStoresList() 拉完
+  // 门店列表才 setData 打开弹窗"——弹窗从打开的第一帧起就已经带着最终的
+  // （之前恒为空，见 cloudfunctions/getStoreList 根因修复）门店选项，本身
+  // 没有一个"加载中"的中间态可展示。改成先立即打开弹窗（用当前已有的
+  // allStoresList 现算一次候选门店，可能为空），冷启动确实需要现拉时才
+  // 异步补一次并展示 materialPartnerLoading，弹窗内的 picker 能明确区分
+  // "正在加载"与"加载完成后确实没有可选门店"这两种此前混在一起的状态
   async onOpenMaterialTransferModal(e?: any) {
-    if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
-      await this.fetchAllStoresList();
-    }
-    const options = this.buildMaterialPartnerOptions();
-
     // 🌟 从"可向 XX 门店申请爱心平调"提示条点进来时预填对方门店与物资，
     // 并按"本店告急"推断方向应为"调入接收"
     const suggestStoreId = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.storeId;
@@ -2443,15 +2448,28 @@ Page({
       handledBy: ''
     };
     const stockJin = computeSelectedStockJin(nextForm.direction, nextForm.item, this.data.materialStockDisplay);
+    const needsFetch = !this.data.allStoresList || this.data.allStoresList.length === 0;
+
     this.setData({
       showMaterialTransferModal: true,
-      materialPartnerStoreOptions: options,
+      materialPartnerStoreOptions: this.buildMaterialPartnerOptions(),
+      materialPartnerLoading: needsFetch,
       materialTransferForm: nextForm,
       materialTransferFormValid: computeMaterialTransferFormValid(nextForm),
       materialTransferSelectedStockJin: stockJin,
       materialTransferOverStock: false
     });
     this.fetchMaterialTransferRecent();
+
+    if (needsFetch) {
+      await this.fetchAllStoresList();
+      // 拉取期间用户可能已经关闭弹窗/切换了方向，这里只安全地刷新门店选项
+      // 与加载态，不覆盖用户在等待期间可能改动过的其余表单字段
+      this.setData({
+        materialPartnerStoreOptions: this.buildMaterialPartnerOptions(),
+        materialPartnerLoading: false
+      });
+    }
   },
 
   onCloseMaterialTransferModal() {

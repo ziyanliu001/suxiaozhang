@@ -2382,9 +2382,25 @@
           >{{item.storeName}}</view>
         </view>
 
-        <picker mode="selector" range="{{materialPartnerStoreOptions}}" range-key="storeName" bindchange="onSelectMaterialTransferPartner">
-          <view class="apply-form-picker-selector">{{materialTransferForm.partnerStoreName || '请选择门店'}}</view>
+        <picker
+          mode="selector"
+          range="{{materialPartnerStoreOptions}}"
+          range-key="storeName"
+          bindchange="onSelectMaterialTransferPartner"
+          disabled="{{materialPartnerLoading || materialPartnerStoreOptions.length === 0}}"
+        >
+          <view class="apply-form-picker-selector">{{materialPartnerLoading ? '正在加载门店…' : (materialTransferForm.partnerStoreName || (materialPartnerStoreOptions.length === 0 ? '暂无可选门店' : '请选择门店'))}}</view>
         </picker>
+
+        <!-- 🐛（2026-09-19 空态兜底）此前门店筛选逻辑有 bug 导致这里恒为空
+             （见 cloudfunctions/getStoreList 的 toStoreListItem 根因修复），
+             即便 bug 已修好，机构下确实只有本店一家、暂无其他雨花斋/助老
+             食堂门店时也是真实可能发生的场景——如实提示，不留一片空白让
+             志工误以为是卡住了 -->
+        <view class="material-partner-empty-hint" wx:if="{{!materialPartnerLoading && materialPartnerStoreOptions.length === 0}}">
+          <text class="material-partner-empty-hint-icon">⚠️</text>
+          <text class="material-partner-empty-hint-text">暂无可选的合作门店，请确认本机构下还有其他雨花斋/助老食堂门店，或联系管理员补充门店信息</text>
+        </view>
 
         <text class="form-label" style="margin-top: 20rpx; display: block;">调配物资</text>
         <view class="material-item-grid">
