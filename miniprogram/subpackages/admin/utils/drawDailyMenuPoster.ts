@@ -1,4 +1,9 @@
 import { getSafeSystemInfo } from '../../../utils/util';
+// 🔧（2026-09-16 海报绘图逻辑解耦）wrapText/truncateText/drawRoundedRectPath/
+// drawImageCover 原先在本文件各自私有实现，与 posterGenerator.ts、
+// drawActivityPoster.ts 存在大量逐字节相同的重复代码——收敛到
+// canvasShapes.ts 共用一份，见该文件头部注释
+import { safeRoundRect, drawImageCover, truncateText, wrapTextLines } from '../../../utils/canvasShapes';
 
 /**
  * 绘制今日食谱宣传海报 (Canvas 2D)：3 列九宫格菜品卡片（实拍图 + 菜名）
@@ -38,70 +43,6 @@ const MENU_TEXT_LINE_HEIGHT = 20;
 const GRATITUDE_LINE_HEIGHT = 32;
 const QR_SIZE = 72;
 const QR_BLOCK_HEIGHT = QR_SIZE + 18 + 16;
-
-function wrapText(ctx: any, text: string, maxWidth: number, maxLines: number): string[] {
-  const lines: string[] = [];
-  let current = '';
-
-  for (const char of text) {
-    const test = current + char;
-    if (ctx.measureText(test).width > maxWidth && current) {
-      lines.push(current);
-      current = char;
-      if (lines.length >= maxLines) break;
-    } else {
-      current = test;
-    }
-  }
-  if (lines.length < maxLines && current) {
-    lines.push(current);
-  }
-  if (lines.length === maxLines && current && lines[lines.length - 1] !== current) {
-    let last = lines[maxLines - 1];
-    while (ctx.measureText(last + '...').width > maxWidth && last.length > 0) {
-      last = last.slice(0, -1);
-    }
-    lines[maxLines - 1] = last + '...';
-  }
-  return lines;
-}
-
-function truncateText(ctx: any, text: string, maxWidth: number): string {
-  if (!text) return '';
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let truncated = text;
-  while (truncated.length > 0 && ctx.measureText(truncated + '…').width > maxWidth) {
-    truncated = truncated.slice(0, -1);
-  }
-  return truncated + '…';
-}
-
-function drawRoundedRectPath(ctx: any, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-// 按 aspectFill 语义居中裁剪铺满目标矩形，避免非正方形实拍图被拉伸变形
-function drawImageCover(ctx: any, img: any, dx: number, dy: number, dw: number, dh: number): void {
-  const srcRatio = img.width / img.height;
-  const destRatio = dw / dh;
-  let sx = 0, sy = 0, sw = img.width, sh = img.height;
-
-  if (srcRatio > destRatio) {
-    sw = img.height * destRatio;
-    sx = (img.width - sw) / 2;
-  } else {
-    sh = img.width / destRatio;
-    sy = (img.height - sh) / 2;
-  }
-
-  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-}
 
 /**
  * 根据菜品数量/是否有菜谱文字备注/是否有感恩词/是否有二维码，计算海报画布应有的
@@ -164,7 +105,7 @@ export async function drawDailyMenuPoster(opts: DrawDailyMenuPosterOptions): Pro
     ctx.fillStyle = '#555555';
     ctx.font = '13px sans-serif';
     ctx.textAlign = 'left';
-    const lines = wrapText(ctx, menuText.trim(), width - CELL_MARGIN_X * 2, 2);
+    const lines = wrapTextLines(ctx, menuText.trim(), width - CELL_MARGIN_X * 2, 2);
     lines.forEach((line) => {
       ctx.fillText(line, CELL_MARGIN_X, cursorY);
       cursorY += MENU_TEXT_LINE_HEIGHT;
@@ -183,7 +124,7 @@ export async function drawDailyMenuPoster(opts: DrawDailyMenuPosterOptions): Pro
     const y = cursorY + row * (cellW + ROW_NAME_HEIGHT + ROW_GAP);
 
     ctx.save();
-    drawRoundedRectPath(ctx, x, y, cellW, cellW, 8);
+    safeRoundRect(ctx, x, y, cellW, cellW, 8);
     ctx.clip();
 
     if (dish.photoTempPath) {

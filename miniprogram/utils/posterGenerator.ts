@@ -3,6 +3,10 @@ import { FAMILY_STYLE, GRATITUDE_TEXT } from './cultureData';
 import { drawStaticWxacodeFallback } from './staticWxacode';
 import { computeHonorProgress, drawMedalBadge } from './honorLevels';
 import { formatMeritCertificateDetailText } from './lib/formatMeritCertificateDetail';
+// 🔧（2026-09-16 海报绘图逻辑解耦）圆角矩形/aspectFill 裁剪绘图/文字截断三个
+// 基础绘制操作原先各自在本文件内私有实现，现收敛到 canvasShapes.ts 与
+// drawDailyMenuPoster.ts 共用一份，见该文件头部注释
+import { safeRoundRect, drawImageCover, truncateText } from './canvasShapes';
 
 export interface MaterialItem {
   donor: string;
@@ -385,63 +389,11 @@ async function drawVerifyQRArea(ctx: any, canvas: any, x: number, y: number, siz
   }
 }
 
-// 🆕 圆角矩形路径：只画路径，不 fill/stroke/clip，由调用方决定怎么用这个路径
-// （drawStoryPoster 里同一个圆角矩形既要"先填充画阴影垫板"又要"再裁剪画图片"，
-// 分成路径函数 + 调用方自行 fill/clip 两步，避免复制一份圆角画法两次）
-function drawRoundedRectPath(ctx: any, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-// 🆕 按 aspectFill 语义把图片居中裁剪绘制进目标矩形，避免像 <image> 缺省行为
-// （直接拉伸铺满）那样把非目标宽高比的照片画变形——与 archive-modal.ts _drawAvatar
-// 修过的同一类问题保持同一套解法
-function drawImageCover(ctx: any, img: any, dx: number, dy: number, dw: number, dh: number): void {
-  const srcRatio = img.width / img.height;
-  const destRatio = dw / dh;
-  let sx = 0, sy = 0, sw = img.width, sh = img.height;
-
-  if (srcRatio > destRatio) {
-    sw = img.height * destRatio;
-    sx = (img.width - sw) / 2;
-  } else {
-    sh = img.width / destRatio;
-    sy = (img.height - sh) / 2;
-  }
-
-  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-}
-
-function truncateText(ctx: any, text: string, maxWidth: number): string {
-  if (!text) return '';
-  const measured = ctx.measureText(text);
-  if (measured.width <= maxWidth) return text;
-
-  const ellipsisWidth = ctx.measureText(ELLIPSIS).width;
-  const targetWidth = maxWidth - ellipsisWidth;
-  if (targetWidth <= 0) return ELLIPSIS;
-
-  let low = 0;
-  let high = text.length;
-  let result = '';
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const candidate = text.substring(0, mid);
-    const w = ctx.measureText(candidate).width;
-    if (w <= targetWidth) {
-      result = candidate;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return result + ELLIPSIS;
-}
+// 🔧 圆角矩形路径（safeRoundRect）/ aspectFill 裁剪绘图（drawImageCover）/
+// 文字截断（truncateText，本文件固定用 ELLIPSIS='...' 这个口径）均已收敛到
+// canvasShapes.ts，此处不再各自维护一份，直接用文件头部 import 进来的版本。
+// ⚠️ truncateText 在 canvasShapes.ts 里的 ellipsis 参数默认值与本文件原有的
+// ELLIPSIS 常量一致（都是 '...'），本文件内全部调用点无需改动、行为不变。
 
 function drawMultiLineText(ctx: any, text: string, x: number, y: number, maxWidth: number, lineHeight: number): number {
   if (!text) return y;
@@ -536,7 +488,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
           // canvas 导出的原始像素，四角其实是直角。这里在整张海报最外层先 clip 成
           // 圆角矩形，之后所有绘制都天然被裁在圆角范围内
           ctx.save();
-          drawRoundedRectPath(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
+          safeRoundRect(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
           ctx.clip();
 
           ctx.fillStyle = BG_COLOR;
@@ -975,7 +927,35 @@ function compressHeroImage(localPath: string): Promise<string> {
   });
 }
 
-async function resolveHeroImageLocalPath(url: string): Promise<string | null> {
+// 🛡️（2026-09-16 海报绘图逻辑解耦 · 临时文件清理）resolveHeroImageLocalPath
+// 返回的本地路径可能来自两种完全不同的归属：本函数自己下载/压缩产生的临时
+// 文件（画完就没用了，理应主动清理），或调用方原本就持有、还在走自己上传
+// 流程的本地路径（activityImages 压缩上传未完成时的 tempFilePath——见下方
+// !isRemote 分支）。后者绝不能被这里删掉，否则会连带破坏调用方自己的后续
+// 上传逻辑。ownedByThisModule 就是用来分清这两种情况的标记，只有为 true 时
+// 调用方（drawStoryPoster/drawVolunteerHonorCard）画完图后才允许清理 path。
+interface ResolvedHeroImage {
+  path: string;
+  ownedByThisModule: boolean;
+}
+
+// 🛡️ 临时文件清理：best-effort，异步、不阻塞主线程（与本次"防卡顿"优化目标
+// 一致，不用会阻塞 JS 线程的 unlinkSync）；删除失败（文件已被系统自动回收、
+// 路径已失效等）只打日志，不抛错——清理是资源卫生层面的锦上添花，不能反过来
+// 影响海报生成这条主流程
+function safeUnlinkTempFile(path: string): void {
+  if (!path) return;
+  try {
+    wx.getFileSystemManager().unlink({
+      filePath: path,
+      fail: (err) => console.warn('[posterGenerator] 临时文件清理失败（不影响海报生成）:', path, err)
+    });
+  } catch (err) {
+    console.warn('[posterGenerator] 临时文件清理异常（不影响海报生成）:', path, err);
+  }
+}
+
+async function resolveHeroImageLocalPath(url: string): Promise<ResolvedHeroImage | null> {
   if (!url) return null;
   try {
     // 🛡️ activityImages 现在是纯字符串数组，压缩上传还没跑完的这一小段时间里
@@ -984,12 +964,21 @@ async function resolveHeroImageLocalPath(url: string): Promise<string | null> {
     // wx.downloadFile 对着一个本地路径必然失败，白白多等一轮超时才降级
     const isRemote = url.indexOf('cloud://') === 0 || url.indexOf('http://') === 0 || url.indexOf('https://') === 0;
     if (!isRemote) {
-      return await compressHeroImage(url);
+      const compressedPath = await compressHeroImage(url);
+      // compressedPath === url 说明压缩不可用/失败，原样透传了调用方自己的
+      // 路径——本函数没有新建任何文件，ownedByThisModule 必须是 false
+      return { path: compressedPath, ownedByThisModule: compressedPath !== url };
     }
     const rawPath = url.indexOf('cloud://') === 0
       ? (await wx.cloud.downloadFile({ fileID: url })).tempFilePath
       : await downloadHttpFile(url);
-    return await compressHeroImage(rawPath);
+    const compressedPath = await compressHeroImage(rawPath);
+    // 🛡️ 压缩成功产生了一份不同的新文件时，原始下载文件已经被取代，立即清理，
+    // 不等到整张海报画完才处理——避免"下载一份+压缩又留一份"重复占用存储
+    if (compressedPath !== rawPath) {
+      safeUnlinkTempFile(rawPath);
+    }
+    return { path: compressedPath, ownedByThisModule: true };
   } catch (err) {
     console.warn('[drawStoryPoster] 门店日志配图下载失败，降级为无图版式:', err);
     return null;
@@ -1038,7 +1027,7 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
           try {
             // 🐛 圆角裁剪：与 drawMeritPoster/drawVolunteerHonorCard 同一处根因修复
             ctx.save();
-            drawRoundedRectPath(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
+            safeRoundRect(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
             ctx.clip();
 
             // 暖色渐变底：与财务公示版的米白纸感刻意区分开，突出"温馨故事"调性
@@ -1075,7 +1064,7 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
 
             if (heroLocalPath) {
               try {
-                const img = await loadImageOntoCanvasNode(canvas, heroLocalPath);
+                const img = await loadImageOntoCanvasNode(canvas, heroLocalPath.path);
 
                 // 阴影背板与图片本体分两步画：canvas 的 shadow* 属性和 clip() 叠加使用
                 // 在部分机型上表现不稳定，先画一个带阴影的圆角矩形垫底，再裁剪画真实图片，
@@ -1085,12 +1074,12 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
                 ctx.shadowBlur = 16;
                 ctx.shadowOffsetY = 8;
                 ctx.fillStyle = '#FFFFFF';
-                drawRoundedRectPath(ctx, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT, STORY_HERO_RADIUS);
+                safeRoundRect(ctx, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT, STORY_HERO_RADIUS);
                 ctx.fill();
                 ctx.restore();
 
                 ctx.save();
-                drawRoundedRectPath(ctx, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT, STORY_HERO_RADIUS);
+                safeRoundRect(ctx, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT, STORY_HERO_RADIUS);
                 ctx.clip();
                 drawImageCover(ctx, img, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT);
                 ctx.restore();
@@ -1098,6 +1087,14 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
                 heroImageDrawn = true;
               } catch (imgErr) {
                 console.warn('[drawStoryPoster] Hero 图绘制失败，降级为纯文字卡片版式:', imgErr);
+              } finally {
+                // 🛡️ 内存/存储泄漏兜底：图片像素此刻已经画进 canvas（或者已经确定
+                // 画不进去了），不管上面是成功还是失败都不再需要这个临时文件了。
+                // 只清理本模块自己下载/压缩产生的文件（ownedByThisModule），调用方
+                // 原本持有的本地路径不受影响，见 resolveHeroImageLocalPath 头部注释
+                if (heroLocalPath.ownedByThisModule) {
+                  safeUnlinkTempFile(heroLocalPath.path);
+                }
               }
             }
 
@@ -1115,7 +1112,7 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
               ctx.shadowBlur = 12;
               ctx.shadowOffsetY = 6;
               ctx.fillStyle = '#FFFFFF';
-              drawRoundedRectPath(ctx, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT, STORY_HERO_RADIUS);
+              safeRoundRect(ctx, heroX, contentTop, heroWidth, STORY_HERO_HEIGHT, STORY_HERO_RADIUS);
               ctx.fill();
               ctx.restore();
 
@@ -1156,7 +1153,7 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
             const pillY = qrY - 16 - pillHeight;
 
             ctx.fillStyle = '#FFFFFF';
-            drawRoundedRectPath(ctx, 25, pillY, width - 50, pillHeight, pillHeight / 2);
+            safeRoundRect(ctx, 25, pillY, width - 50, pillHeight, pillHeight / 2);
             ctx.fill();
 
             const diningPart = data.diningCount ? `今日服务餐次 ${data.diningCount} 人` : '';
@@ -1266,7 +1263,7 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             // 二维码）都天然被裁在圆角范围内，导出的 PNG 四角是真实透明镂空，
             // 不再依赖预览层的 CSS border-radius 假装圆角
             ctx.save();
-            drawRoundedRectPath(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
+            safeRoundRect(ctx, 0, 0, width, height, HONOR_CARD_RADIUS);
             ctx.clip();
 
             // 暖金渐变底：比故事版的橙粉调更庄重，呼应"荣誉证书"调性
@@ -1292,7 +1289,15 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             // Profile：圆形头像 + 描边 + 身份 + 荣誉标语
             const avatarCx = width / 2;
             const avatarCy = 132;
-            await drawCircularAvatar(ctx, canvas, avatarLocalPath, avatarCx, avatarCy, HONOR_AVATAR_RADIUS);
+            await drawCircularAvatar(ctx, canvas, avatarLocalPath ? avatarLocalPath.path : null, avatarCx, avatarCy, HONOR_AVATAR_RADIUS);
+            // 🛡️ 内存/存储泄漏兜底：drawCircularAvatar 内部已经吞掉了图片加载/绘制
+            // 失败的异常、永不 reject（无论成功还是降级为占位图标都会走到这里），
+            // 头像像素此刻已经画进 canvas，本模块自己下载/压缩产生的临时文件
+            // （ownedByThisModule）不再需要，立即清理；调用方原本持有的本地路径
+            // 不受影响，见 resolveHeroImageLocalPath 头部注释
+            if (avatarLocalPath && avatarLocalPath.ownedByThisModule) {
+              safeUnlinkTempFile(avatarLocalPath.path);
+            }
 
             ctx.beginPath();
             ctx.arc(avatarCx, avatarCy, HONOR_AVATAR_RADIUS + 3, 0, Math.PI * 2);
@@ -1329,7 +1334,7 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             ctx.shadowBlur = 14;
             ctx.shadowOffsetY = 6;
             ctx.fillStyle = '#FFFFFF';
-            drawRoundedRectPath(ctx, 25, statsTop, width - 50, statsHeight, 18);
+            safeRoundRect(ctx, 25, statsTop, width - 50, statsHeight, 18);
             ctx.fill();
             ctx.restore();
 
@@ -1432,11 +1437,11 @@ function drawEleganceBookBorder(ctx: any, width: number, height: number, radius:
   ctx.globalAlpha = 0.55;
 
   ctx.lineWidth = 1.5;
-  drawRoundedRectPath(ctx, outerInset, outerInset, width - outerInset * 2, height - outerInset * 2, Math.max(radius - outerInset, 4));
+  safeRoundRect(ctx, outerInset, outerInset, width - outerInset * 2, height - outerInset * 2, Math.max(radius - outerInset, 4));
   ctx.stroke();
 
   ctx.lineWidth = 1;
-  drawRoundedRectPath(ctx, innerInset, innerInset, width - innerInset * 2, height - innerInset * 2, Math.max(radius - innerInset, 4));
+  safeRoundRect(ctx, innerInset, innerInset, width - innerInset * 2, height - innerInset * 2, Math.max(radius - innerInset, 4));
   ctx.stroke();
 
   // 四角饰角：在双线边框的四个角外侧各画一对短直角折线，呼应古籍装帧的
@@ -1474,7 +1479,7 @@ function drawQuoteScrollBackdrop(ctx: any, centerX: number, centerY: number, scr
   ctx.fillStyle = '#F4EFE6';
   ctx.strokeStyle = MERIT_BORDER_COLOR;
   ctx.globalAlpha = 0.9;
-  drawRoundedRectPath(ctx, left, top, scrollWidth, scrollHeight, 6);
+  safeRoundRect(ctx, left, top, scrollWidth, scrollHeight, 6);
   ctx.fill();
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.6;
@@ -1528,7 +1533,7 @@ function drawSquareInkSeal(ctx: any, centerX: number, centerY: number, size: num
   sealGradient.addColorStop(0, MERIT_SEAL_COLOR_CENTER);
   sealGradient.addColorStop(1, MERIT_SEAL_COLOR_EDGE);
   ctx.fillStyle = sealGradient;
-  drawRoundedRectPath(ctx, -half, -half, size, size, cornerRadius);
+  safeRoundRect(ctx, -half, -half, size, size, cornerRadius);
   ctx.fill();
   ctx.restore();
 
@@ -1538,7 +1543,7 @@ function drawSquareInkSeal(ctx: any, centerX: number, centerY: number, size: num
   vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
   vignette.addColorStop(1, 'rgba(60, 10, 10, 0.35)');
   ctx.fillStyle = vignette;
-  drawRoundedRectPath(ctx, -half, -half, size, size, cornerRadius);
+  safeRoundRect(ctx, -half, -half, size, size, cornerRadius);
   ctx.fill();
 
   // 3. 内框双线描边：呼应真实方印常见的"边框 + 字腔"两层结构。🎨（第三轮
@@ -1547,10 +1552,10 @@ function drawSquareInkSeal(ctx: any, centerX: number, centerY: number, size: num
   ctx.strokeStyle = '#F8F3E9';
   ctx.lineWidth = 2;
   const innerInset = size * 0.12;
-  drawRoundedRectPath(ctx, -half + innerInset, -half + innerInset, size - innerInset * 2, size - innerInset * 2, cornerRadius * 0.6);
+  safeRoundRect(ctx, -half + innerInset, -half + innerInset, size - innerInset * 2, size - innerInset * 2, cornerRadius * 0.6);
   ctx.stroke();
   const innerInset2 = innerInset + 5;
-  drawRoundedRectPath(ctx, -half + innerInset2, -half + innerInset2, size - innerInset2 * 2, size - innerInset2 * 2, Math.max(cornerRadius * 0.6 - 3, 2));
+  safeRoundRect(ctx, -half + innerInset2, -half + innerInset2, size - innerInset2 * 2, size - innerInset2 * 2, Math.max(cornerRadius * 0.6 - 3, 2));
   ctx.stroke();
 
   // 4. 阴文白字：负片，不是红字
@@ -1589,7 +1594,7 @@ function drawMeritBadge(ctx: any, centerX: number, centerY: number, boxWidth: nu
   badgeGradient.addColorStop(0, MERIT_SEAL_COLOR_CENTER);
   badgeGradient.addColorStop(1, '#6B1D1E');
   ctx.fillStyle = badgeGradient;
-  drawRoundedRectPath(ctx, left, top, boxWidth, boxHeight, 8);
+  safeRoundRect(ctx, left, top, boxWidth, boxHeight, 8);
   ctx.fill();
   ctx.strokeStyle = 'rgba(184, 150, 90, 0.5)';
   ctx.lineWidth = 1;
@@ -1669,7 +1674,7 @@ export async function drawSongDynastyMeritPoster(pageInstance: any, data: MeritT
 
         try {
           ctx.save();
-          drawRoundedRectPath(ctx, 0, 0, width, height, MERIT_CARD_RADIUS);
+          safeRoundRect(ctx, 0, 0, width, height, MERIT_CARD_RADIUS);
           ctx.clip();
 
           // 宣纸温润底色：与 components/volunteer-merit-dialog 弹窗面板同一组
@@ -1729,7 +1734,7 @@ export async function drawSongDynastyMeritPoster(pageInstance: any, data: MeritT
           ctx.strokeStyle = MERIT_BORDER_COLOR;
           ctx.globalAlpha = 0.6;
           ctx.lineWidth = 1.5;
-          drawRoundedRectPath(ctx, ritualCardLeft, ritualCardTop, RITUAL_CARD_WIDTH, RITUAL_CARD_HEIGHT, 10);
+          safeRoundRect(ctx, ritualCardLeft, ritualCardTop, RITUAL_CARD_WIDTH, RITUAL_CARD_HEIGHT, 10);
           ctx.stroke();
           ctx.restore();
 
@@ -1836,7 +1841,7 @@ export async function drawSunshineFootprintPoster(pageInstance: any, data: Sunsh
           try {
             // 圆角裁剪：与荣誉卡同一处理，导出的 PNG 四角是真实透明镂空
             ctx.save();
-            drawRoundedRectPath(ctx, 0, 0, width, height, FOOTPRINT_CARD_RADIUS);
+            safeRoundRect(ctx, 0, 0, width, height, FOOTPRINT_CARD_RADIUS);
             ctx.clip();
 
             // 清新绿调底：与荣誉卡的暖金调区分开，呼应素食公益的"生长/自然"意象
@@ -1864,7 +1869,7 @@ export async function drawSunshineFootprintPoster(pageInstance: any, data: Sunsh
             ctx.shadowBlur = 14;
             ctx.shadowOffsetY = 6;
             ctx.fillStyle = '#FFFFFF';
-            drawRoundedRectPath(ctx, 25, statsTop, width - 50, statsHeight, 18);
+            safeRoundRect(ctx, 25, statsTop, width - 50, statsHeight, 18);
             ctx.fill();
             ctx.restore();
 
@@ -1900,7 +1905,7 @@ export async function drawSunshineFootprintPoster(pageInstance: any, data: Sunsh
             ctx.save();
             ctx.strokeStyle = '#CDE8CE';
             ctx.lineWidth = 1;
-            drawRoundedRectPath(ctx, 40, quoteTop, width - 80, 78, 14);
+            safeRoundRect(ctx, 40, quoteTop, width - 80, 78, 14);
             ctx.stroke();
             ctx.restore();
 
@@ -1977,7 +1982,7 @@ function drawMeritCertBorder(ctx: any, width: number, height: number, radius: nu
   ctx.strokeStyle = MERIT_CERT_BORDER_COLOR;
   ctx.globalAlpha = 0.6;
   ctx.lineWidth = 1.5;
-  drawRoundedRectPath(ctx, inset, inset, width - inset * 2, height - inset * 2, Math.max(radius - inset, 4));
+  safeRoundRect(ctx, inset, inset, width - inset * 2, height - inset * 2, Math.max(radius - inset, 4));
   ctx.stroke();
 
   // 回纹片段：沿上下两条边各铺一排简化回字纹（左右边距过窄，只在上下边
@@ -2022,7 +2027,7 @@ export async function drawMeritCertificatePoster(pageInstance: any, data: MeritC
         (async () => {
           try {
             ctx.save();
-            drawRoundedRectPath(ctx, 0, 0, width, height, MERIT_CERT_CARD_RADIUS);
+            safeRoundRect(ctx, 0, 0, width, height, MERIT_CERT_CARD_RADIUS);
             ctx.clip();
 
             const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -2173,7 +2178,7 @@ export async function drawMaterialTransferPoster(pageInstance: any, data: Materi
         (async () => {
           try {
             ctx.save();
-            drawRoundedRectPath(ctx, 0, 0, width, height, XFER_CARD_RADIUS);
+            safeRoundRect(ctx, 0, 0, width, height, XFER_CARD_RADIUS);
             ctx.clip();
 
             const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -2186,7 +2191,7 @@ export async function drawMaterialTransferPoster(pageInstance: any, data: Materi
             ctx.strokeStyle = XFER_BORDER_COLOR;
             ctx.globalAlpha = 0.6;
             ctx.lineWidth = 1.5;
-            drawRoundedRectPath(ctx, 12, 12, width - 24, height - 24, Math.max(XFER_CARD_RADIUS - 12, 4));
+            safeRoundRect(ctx, 12, 12, width - 24, height - 24, Math.max(XFER_CARD_RADIUS - 12, 4));
             ctx.stroke();
             ctx.restore();
 
@@ -2207,15 +2212,15 @@ export async function drawMaterialTransferPoster(pageInstance: any, data: Materi
             const toBoxX = width / 2 + 18;
 
             ctx.fillStyle = '#FFFFFF';
-            drawRoundedRectPath(ctx, fromBoxX, boxY, boxW, boxH, 12);
+            safeRoundRect(ctx, fromBoxX, boxY, boxW, boxH, 12);
             ctx.fill();
-            drawRoundedRectPath(ctx, toBoxX, boxY, boxW, boxH, 12);
+            safeRoundRect(ctx, toBoxX, boxY, boxW, boxH, 12);
             ctx.fill();
             ctx.strokeStyle = XFER_BORDER_COLOR;
             ctx.lineWidth = 1;
-            drawRoundedRectPath(ctx, fromBoxX, boxY, boxW, boxH, 12);
+            safeRoundRect(ctx, fromBoxX, boxY, boxW, boxH, 12);
             ctx.stroke();
-            drawRoundedRectPath(ctx, toBoxX, boxY, boxW, boxH, 12);
+            safeRoundRect(ctx, toBoxX, boxY, boxW, boxH, 12);
             ctx.stroke();
 
             ctx.fillStyle = XFER_LIGHT_TEXT;

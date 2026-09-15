@@ -1,5 +1,8 @@
 import { getSafeSystemInfo } from '../../../utils/util';
-import { safeRoundRect } from '../../../utils/canvasShapes';
+// 🔧（2026-09-16 海报绘图逻辑解耦）wrapText 原先在本文件与
+// drawDailyMenuPoster.ts 各自维护一份逐字节相同的实现，收敛为 canvasShapes.ts
+// 的 wrapTextLines，见该文件头部注释
+import { safeRoundRect, wrapTextLines } from '../../../utils/canvasShapes';
 
 /**
  * 绘制大事记活动海报 (Canvas 2D)
@@ -13,33 +16,6 @@ export interface DrawActivityPosterOptions {
   photoTempPath?: string;
   width: number;
   height: number;
-}
-
-function wrapText(ctx: any, text: string, maxWidth: number, maxLines: number): string[] {
-  const lines: string[] = [];
-  let current = '';
-
-  for (const char of text) {
-    const test = current + char;
-    if (ctx.measureText(test).width > maxWidth && current) {
-      lines.push(current);
-      current = char;
-      if (lines.length >= maxLines) break;
-    } else {
-      current = test;
-    }
-  }
-  if (lines.length < maxLines && current) {
-    lines.push(current);
-  }
-  if (lines.length === maxLines && current && lines[lines.length - 1] !== current) {
-    let last = lines[maxLines - 1];
-    while (ctx.measureText(last + '...').width > maxWidth && last.length > 0) {
-      last = last.slice(0, -1);
-    }
-    lines[maxLines - 1] = last + '...';
-  }
-  return lines;
 }
 
 export async function drawActivityPoster(opts: DrawActivityPosterOptions): Promise<void> {
@@ -75,7 +51,7 @@ export async function drawActivityPoster(opts: DrawActivityPosterOptions): Promi
   ctx.fillStyle = '#333333';
   ctx.font = 'bold 20px sans-serif';
   ctx.textAlign = 'left';
-  const titleLines = wrapText(ctx, title || '（未命名活动）', width - 48, 2);
+  const titleLines = wrapTextLines(ctx, title || '（未命名活动）', width - 48, 2);
   let cursorY = 138;
   titleLines.forEach((line) => {
     ctx.fillText(line, 24, cursorY);
@@ -127,7 +103,7 @@ export async function drawActivityPoster(opts: DrawActivityPosterOptions): Promi
     ctx.fillStyle = '#555555';
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'left';
-    const contentLines = wrapText(ctx, content, width - 48, photoTempPath ? 4 : 8);
+    const contentLines = wrapTextLines(ctx, content, width - 48, photoTempPath ? 4 : 8);
     contentLines.forEach((line) => {
       ctx.fillText(line, 24, cursorY);
       cursorY += 22;
