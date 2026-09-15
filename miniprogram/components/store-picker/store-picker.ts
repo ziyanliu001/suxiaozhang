@@ -739,6 +739,27 @@ Component({
       return r;
     },
 
+    // 🛡️（2026-09-16 超管切店默认保持最高身份）点击门店卡片本身（非角色胶囊）：
+    // 超管切换到任意一家门店都默认保持 super_admin/管理员身份，不再像此前那样
+    // 必须先挑一个具体角色胶囊（店长/财务/义工/家人）才能进入该门店，导致"点哪
+    // 家店都会被自动降级"——那其实是把"选择要看哪家店"和"要不要模拟成低权限
+    // 角色"这两件事混成了一件事。现在两者彻底分离：点卡片＝带着超管身份进入
+    // 这家店查看/管理；点下方角色胶囊（见 onRolePillClick）＝显式进入"体验角色"
+    // 模拟态，两者互不干扰（角色胶囊有自己的 catchtap，不会被这层再次触发）。
+    // 非超管账号点击是安全 no-op——他们本就没有"ADMIN"这个身份可进入，
+    // 维持"必须点角色胶囊才能切店"的原有行为不变
+    onSuperAdminEnterStore(e: any) {
+      if (!this.data.isSuperAdmin) return;
+      const { storeId, storeName } = e.currentTarget.dataset;
+      if (!storeId) return;
+      if (this.data.currentStore.storeId === storeId && this.data.currentStore.role === 'ADMIN') {
+        // 已经是当前生效的超管身份 + 这家店，直接收起面板，不重复触发切换/Toast
+        this.setData({ showPickerSheet: false });
+        return;
+      }
+      this._applyRoleSwitch(storeId, storeName, 'ADMIN');
+    },
+
     // 点击角色胶囊 (带鉴权拦截)
     onRolePillClick(e: any) {
       const { storeId, storeName, role, authorized, pending } = e.currentTarget.dataset;

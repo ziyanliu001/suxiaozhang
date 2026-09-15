@@ -121,8 +121,17 @@
           <block wx:for="{{group.stores}}" wx:key="storeId">
 
             <!-- 🐛 高亮/选中态改用 storeId 精确匹配，不再用 storeName 比对——门店名
-                 理论上可能重复，storeName 匹配会让"同名门店"互相错误共享高亮/选中态 -->
-            <view class="store-group-card {{item.storeId === currentStore.storeId ? 'active-store' : ''}}">
+                 理论上可能重复，storeName 匹配会让"同名门店"互相错误共享高亮/选中态
+                 🛡️（2026-09-16 超管切店默认保持最高身份）整卡挂 catchtap——只对
+                 isSuperAdmin 生效（非超管账号点击是安全 no-op，见 onSuperAdminEnterStore），
+                 默认点击行为是"以超管身份进入这家店查看/管理"，不需要先选某个具体
+                 角色胶囊才能切店；下方角色胶囊改为"体验此门店的其他身份视角"的
+                 显式次要操作，两者互不冲突（胶囊已有 catchtap，不会被这层再次触发） -->
+            <view class="store-group-card {{item.storeId === currentStore.storeId ? 'active-store' : ''}}"
+                  catchtap="onSuperAdminEnterStore"
+                  data-store-id="{{item.storeId}}"
+                  data-store-name="{{item.storeName}}"
+                  hover-class="{{isSuperAdmin ? 'store-card-admin-hover' : ''}}">
 
               <!-- 🎨 当前站点微胶囊：柔和激活态的视觉锚点，只在真正选中的那张卡片上浮现 -->
               <text class="active-store-badge" wx:if="{{item.storeId === currentStore.storeId}}">当前站点</text>
@@ -142,18 +151,29 @@
                 </view>
               </view>
 
+              <!-- 🛡️ 超管专属提示：独占一行，不与门店名/运营徽标/城市标签挤在同一行
+                   抢空间——点卡片本身＝保持管理员身份进入，不会被下方角色胶囊的
+                   "体验视角"点击拦截（已有各自 catchtap） -->
+              <text class="store-card-admin-hint" wx:if="{{isSuperAdmin}}">🛡️ 点击以管理员身份进入本店</text>
+
               <!-- 🌸 近7日阳善榜：每张门店卡片独立拉取，'national_overview' 是超管的
                    虚拟聚合项、不是真实门店，不传给这个组件——公开只读，无需鉴权 -->
               <sunshine-board wx:if="{{item.storeId !== 'national_overview'}}" storeId="{{item.storeId}}" />
 
-              <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定) -->
+              <!-- 该门店下的可选身份标签列表 (解耦自由选择 + 鉴权锁定)
+                   🛡️（2026-09-16）对超管而言，这些胶囊现在是"体验此门店的其他身份
+                   视角"——显式点击才会进入模拟态，默认点卡片本身保持超管身份，
+                   见上方 store-group-card 的 catchtap -->
+              <text class="role-selector-preview-hint" wx:if="{{isSuperAdmin && item.isOwnTenant}}">🎭 体验此门店的其他身份视角（可选）</text>
               <view class="role-selector-row">
                 <!-- 🐛 核心 Bug 修复：身份 tag 必须用 catchtap 阻止冒泡，严禁 bindtap——
                      身份胶囊嵌套在 .store-group-card 卡片内，一旦卡片本身或更外层
                      未来挂上点击处理（比如"整卡展开/收起"之类的交互），bindtap 会让
                      点击事件继续向上冒泡触发外层逻辑，与这里的角色切换互相打架，
                      导致"点了身份 tag 却没真正切换成功/又被外层重置"。
-                     高亮/选中态同步改用 storeId 精确匹配，不再用 storeName 比对 -->
+                     高亮/选中态同步改用 storeId 精确匹配，不再用 storeName 比对
+                     🛡️（2026-09-16）本节预言应验：store-group-card 现在确实挂了整卡
+                     catchtap（见上方），这里的 catchtap 依旧生效，两层互不干扰 -->
                 <view wx:for="{{item.roles}}"
                       wx:for-item="roleObj"
                       wx:key="role"

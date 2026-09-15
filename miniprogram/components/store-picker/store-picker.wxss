@@ -494,6 +494,30 @@
   line-height: 1;
 }
 
+/* 🛡️（2026-09-16 超管切店默认保持最高身份）整卡可点击态——只在 isSuperAdmin
+   时才挂了 hover-class（见 store-picker.wxml），非超管账号卡片本身没有点击
+   反馈，视觉上与升级前一致，不会误导用户以为整卡可点 */
+.store-card-admin-hover {
+  background: #FFF9F5 !important;
+  border-color: #F0C9A0 !important;
+}
+
+.store-card-admin-hint {
+  display: block;
+  font-size: 18rpx;
+  color: #C97B3D;
+  margin-bottom: 12rpx;
+}
+
+/* 🎭 角色胶囊行上方的"体验视角"说明——只在超管查看自己机构门店时出现，
+   强调下面这一排胶囊是可选的模拟态入口，不是切店的必经步骤 */
+.role-selector-preview-hint {
+  display: block;
+  font-size: 20rpx;
+  color: #ADB5BD;
+  margin-bottom: 8rpx;
+}
+
 /* 🎨 身份胶囊选择行：此前 flex-wrap 在 5 个身份（家人/义工/店长/财务/家长）
    排不满整行时，最后一个（通常是"家长"）会独自换到下一行、左对齐悬空，
    卡片底部因此一高一低、凹凸不平。改用规整的两列等宽网格——每个胶囊固定
