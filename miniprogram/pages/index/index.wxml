@@ -2353,9 +2353,9 @@
       </view>
 
       <view class="modal-body">
-        <view style="display: flex; gap: 12rpx; margin-bottom: 24rpx;">
-          <view style="flex: 1; text-align: center; padding: 16rpx 0; font-size: 26rpx; border-radius: 10rpx; {{materialTransferForm.direction === 'out' ? 'background: #8C1D18; color: #FFFFFF; font-weight: bold;' : 'background: #F5F5F5; color: #666666;'}}" bindtap="onSwitchMaterialTransferDirection" data-direction="out">调出支援</view>
-          <view style="flex: 1; text-align: center; padding: 16rpx 0; font-size: 26rpx; border-radius: 10rpx; {{materialTransferForm.direction === 'in' ? 'background: #8C1D18; color: #FFFFFF; font-weight: bold;' : 'background: #F5F5F5; color: #666666;'}}" bindtap="onSwitchMaterialTransferDirection" data-direction="in">调入接收</view>
+        <view class="xfer-direction-track">
+          <view class="xfer-direction-option {{materialTransferForm.direction === 'out' ? 'active' : ''}}" bindtap="onSwitchMaterialTransferDirection" data-direction="out">调出支援</view>
+          <view class="xfer-direction-option {{materialTransferForm.direction === 'in' ? 'active' : ''}}" bindtap="onSwitchMaterialTransferDirection" data-direction="in">调入接收</view>
         </view>
 
         <text class="form-label">{{materialTransferForm.direction === 'out' ? '受援门店' : '支援来源门店'}}</text>
@@ -2364,10 +2364,17 @@
         </picker>
 
         <text class="form-label" style="margin-top: 20rpx; display: block;">调配物资</text>
-        <view style="display: flex; gap: 10rpx; margin-bottom: 20rpx;">
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 24rpx; border-radius: 10rpx; {{materialTransferForm.item === 'rice' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialTransferItem" data-item="rice">🍚 大米</view>
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 24rpx; border-radius: 10rpx; {{materialTransferForm.item === 'oil' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialTransferItem" data-item="oil">🫗 食用油</view>
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 24rpx; border-radius: 10rpx; {{materialTransferForm.item === 'flour' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialTransferItem" data-item="flour">🌾 面粉</view>
+        <view class="material-item-grid">
+          <view
+            wx:for="{{materialTransferItemOptions}}"
+            wx:key="value"
+            class="material-item-card {{materialTransferForm.item === item.value ? 'active' : ''}}"
+            bindtap="onSelectMaterialTransferItem"
+            data-item="{{item.value}}"
+          >
+            <text class="material-item-emoji">{{item.emoji}}</text>
+            <text class="material-item-label">{{item.label}}</text>
+          </view>
         </view>
         <text class="form-hint" style="display: block; margin: -12rpx 0 20rpx; font-size: 20rpx; color: #999999;">时蔬保质期短，暂不支持跨店调配</text>
 
@@ -2389,7 +2396,7 @@
 
       <view class="modal-footer">
         <button class="btn-close" bindtap="onCloseMaterialTransferModal">取消</button>
-        <button class="btn-save" bindtap="onSubmitMaterialTransfer" loading="{{materialTransferSubmitting}}" disabled="{{materialTransferSubmitting}}">提交登记</button>
+        <button class="btn-save {{!materialTransferFormValid ? 'btn-save-disabled' : ''}}" bindtap="onSubmitMaterialTransfer" loading="{{materialTransferSubmitting}}" disabled="{{materialTransferSubmitting || !materialTransferFormValid}}">提交登记</button>
       </view>
     </view>
   </view>
@@ -2434,11 +2441,17 @@
       </view>
       <view class="modal-body">
         <text class="form-label">物资类目</text>
-        <view style="display: flex; gap: 10rpx; margin-bottom: 20rpx;">
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'rice' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="rice">🍚 大米</view>
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'oil' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="oil">🫗 食用油</view>
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'flour' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="flour">🌾 面粉</view>
-          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'vegetable' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="vegetable">🥬 时蔬</view>
+        <view class="material-item-grid">
+          <view
+            wx:for="{{materialPurchaseItemOptions}}"
+            wx:key="value"
+            class="material-item-card {{materialPurchaseForm.item === item.value ? 'active' : ''}}"
+            bindtap="onSelectMaterialPurchaseItem"
+            data-item="{{item.value}}"
+          >
+            <text class="material-item-emoji">{{item.emoji}}</text>
+            <text class="material-item-label">{{item.label}}</text>
+          </view>
         </view>
 
         <view class="btn-inventory-ocr" hover-class="btn-hover" bindtap="onScanMaterialPurchaseReceipt" style="margin-bottom: 20rpx;">
@@ -2453,7 +2466,7 @@
       </view>
       <view class="modal-footer">
         <button class="btn-close" bindtap="onCloseMaterialPurchaseModal">取消</button>
-        <button class="btn-save" bindtap="onSubmitMaterialPurchase" loading="{{materialPurchaseSubmitting}}" disabled="{{materialPurchaseSubmitting}}">提交登记</button>
+        <button class="btn-save {{!materialPurchaseFormValid ? 'btn-save-disabled' : ''}}" bindtap="onSubmitMaterialPurchase" loading="{{materialPurchaseSubmitting}}" disabled="{{materialPurchaseSubmitting || !materialPurchaseFormValid}}">提交登记</button>
       </view>
     </view>
   </view>

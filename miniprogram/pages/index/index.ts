@@ -900,8 +900,28 @@ Page({
     materialStockBaselineRaw: { rice: 0, oil: 0, flour: 0, vegetable: 0 } as Record<'rice' | 'oil' | 'flour' | 'vegetable', number>,
     materialTransferSuggestions: [] as Array<{ item: string; itemLabel: string; storeId: string; storeName: string; jin: number }>,
 
+    // 🎨（2026-09-17 视觉与交互精致化）物资选择改成数据驱动的卡片宫格——
+    // 新增一个物资类目只需加一行数据，不用再复制整段 WXML；调拨只放开三项
+    // （时蔬保质期短不支持跨店调配，见 cloudfunctions/manageMaterialTransfer
+    // 的 TRANSFERABLE_ITEMS 常量），采购入库四项全覆盖
+    materialTransferItemOptions: [
+      { value: 'rice', emoji: '🍚', label: '大米' },
+      { value: 'oil', emoji: '🫗', label: '食用油' },
+      { value: 'flour', emoji: '🌾', label: '面粉' }
+    ] as Array<{ value: string; emoji: string; label: string }>,
+    materialPurchaseItemOptions: [
+      { value: 'rice', emoji: '🍚', label: '大米' },
+      { value: 'oil', emoji: '🫗', label: '食用油' },
+      { value: 'flour', emoji: '🌾', label: '面粉' },
+      { value: 'vegetable', emoji: '🥬', label: '时蔬' }
+    ] as Array<{ value: string; emoji: string; label: string }>,
+
     showMaterialTransferModal: false,
     materialTransferSubmitting: false,
+    // 🛡️（2026-09-17 表单防错）门店/物资/重量/经手人任一未填齐时禁用提交
+    // 按钮，避免空数据/不完整表单提交——在每个字段的 input/选择处理函数里
+    // 随表单一起重算，见 computeMaterialTransferFormValid()
+    materialTransferFormValid: false,
     materialTransferForm: {
       direction: 'out' as 'out' | 'in',
       partnerStoreId: '',
@@ -920,6 +940,7 @@ Page({
     showMaterialPurchaseModal: false,
     materialPurchaseSubmitting: false,
     materialPurchaseScanning: false,
+    materialPurchaseFormValid: false,
     materialPurchaseForm: { item: 'rice' as 'rice' | 'oil' | 'flour' | 'vegetable', quantityJin: '', amount: '' },
 
     // 🆕（2026-09-13 工作台工业化重构）"今日闭环指示条"三枚指示数据。
@@ -1825,7 +1846,6 @@ Page({
         // getCurrentActiveStore() 优先，查不到时才退回这次角色解析出的 storeId
         yangshanWallStoreId: getCurrentActiveStore().storeId || storeId
       });
-      console.log('[index][yangshanWallStoreId] initCurrentUserRole·cached 分支写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
       // 🌐 自动续接工作空间：账号已有明确归属（真实门店 orgType）时，跳过"工作
       // 空间选择"首页，直接落地到对应专区——见 autoResumeWorkspaceMode 注释
       this.autoResumeWorkspaceMode(orgType, isSuperAdmin, isPlatformAdmin);
@@ -1887,7 +1907,6 @@ Page({
         currentStoreId: storeId,
         yangshanWallStoreId: getCurrentActiveStore().storeId || storeId
       });
-      console.log('[index][yangshanWallStoreId] initCurrentUserRole·服务端角色分支写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
       // 🌐 自动续接工作空间：服务端权威角色落地后再校正一次——万一上面 cached
       // 分支用的是过期的本地角色缓存（orgType 与服务端最新值不一致），这里用
       // 权威值重新判定/纠正，见 autoResumeWorkspaceMode 注释
@@ -2388,6 +2407,18 @@ Page({
       .map((s: any) => ({ storeId: s.storeId, storeName: s.storeName || '未命名门店' }));
   },
 
+  // 🛡️（2026-09-17 表单防错）门店已选、物资属于可调配三项、重量是大于 0
+  // 的合法数字、经手人非空——四项全部满足才允许点亮提交按钮。纯函数，不做
+  // db I/O，方便在每个字段变化处直接复用
+  computeMaterialTransferFormValid(form: { partnerStoreId: string; item: string; quantityJin: string; handledBy: string }): boolean {
+    if (!form.partnerStoreId) return false;
+    if (!['rice', 'oil', 'flour'].includes(form.item)) return false;
+    const qty = parseFloat(form.quantityJin);
+    if (!Number.isFinite(qty) || qty <= 0) return false;
+    if (!form.handledBy || !form.handledBy.trim()) return false;
+    return true;
+  },
+
   async onOpenMaterialTransferModal(e?: any) {
     if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
       await this.fetchAllStoresList();
@@ -2400,17 +2431,19 @@ Page({
     const suggestStoreName = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.storeName;
     const suggestItem = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.item;
 
+    const nextForm = {
+      direction: (suggestStoreId ? 'in' : 'out') as 'out' | 'in',
+      partnerStoreId: suggestStoreId || '',
+      partnerStoreName: suggestStoreName || '',
+      item: ((suggestItem === 'oil' || suggestItem === 'flour') ? suggestItem : 'rice') as 'rice' | 'oil' | 'flour',
+      quantityJin: '',
+      handledBy: ''
+    };
     this.setData({
       showMaterialTransferModal: true,
       materialPartnerStoreOptions: options,
-      materialTransferForm: {
-        direction: suggestStoreId ? 'in' : 'out',
-        partnerStoreId: suggestStoreId || '',
-        partnerStoreName: suggestStoreName || '',
-        item: (suggestItem === 'oil' || suggestItem === 'flour') ? suggestItem : 'rice',
-        quantityJin: '',
-        handledBy: ''
-      }
+      materialTransferForm: nextForm,
+      materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm)
     });
     this.fetchMaterialTransferRecent();
   },
@@ -2430,24 +2463,31 @@ Page({
     const index = parseInt(e.detail.value, 10);
     const option = this.data.materialPartnerStoreOptions[index];
     if (!option) return;
+    const nextForm = { ...this.data.materialTransferForm, partnerStoreId: option.storeId, partnerStoreName: option.storeName };
     this.setData({
       'materialTransferForm.partnerStoreId': option.storeId,
-      'materialTransferForm.partnerStoreName': option.storeName
+      'materialTransferForm.partnerStoreName': option.storeName,
+      materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm)
     });
   },
 
   onSelectMaterialTransferItem(e: any) {
     const item = e.currentTarget.dataset.item as 'rice' | 'oil' | 'flour';
     if (!item) return;
-    this.setData({ 'materialTransferForm.item': item });
+    const nextForm = { ...this.data.materialTransferForm, item };
+    this.setData({ 'materialTransferForm.item': item, materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm) });
   },
 
   onMaterialTransferQuantityInput(e: any) {
-    this.setData({ 'materialTransferForm.quantityJin': e.detail.value });
+    const quantityJin = e.detail.value;
+    const nextForm = { ...this.data.materialTransferForm, quantityJin };
+    this.setData({ 'materialTransferForm.quantityJin': quantityJin, materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm) });
   },
 
   onMaterialTransferHandledByInput(e: any) {
-    this.setData({ 'materialTransferForm.handledBy': e.detail.value });
+    const handledBy = e.detail.value;
+    const nextForm = { ...this.data.materialTransferForm, handledBy };
+    this.setData({ 'materialTransferForm.handledBy': handledBy, materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm) });
   },
 
   async fetchMaterialTransferRecent() {
@@ -2641,10 +2681,18 @@ Page({
     }
   },
 
+  // 🛡️（2026-09-17 表单防错）购入模态框只有"重量"是真正会留空的必填项
+  // （品类始终有默认选中值），单独判定即可，不需要像调拨表单那样综合四项
+  computeMaterialPurchaseFormValid(quantityJin: string): boolean {
+    const qty = parseFloat(quantityJin);
+    return Number.isFinite(qty) && qty > 0;
+  },
+
   onOpenMaterialPurchaseModal() {
     this.setData({
       showMaterialPurchaseModal: true,
-      materialPurchaseForm: { item: 'rice', quantityJin: '', amount: '' }
+      materialPurchaseForm: { item: 'rice', quantityJin: '', amount: '' },
+      materialPurchaseFormValid: false
     });
   },
 
@@ -2660,7 +2708,11 @@ Page({
   },
 
   onMaterialPurchaseQuantityInput(e: any) {
-    this.setData({ 'materialPurchaseForm.quantityJin': e.detail.value });
+    const quantityJin = e.detail.value;
+    this.setData({
+      'materialPurchaseForm.quantityJin': quantityJin,
+      materialPurchaseFormValid: this.computeMaterialPurchaseFormValid(quantityJin)
+    });
   },
 
   onMaterialPurchaseAmountInput(e: any) {
@@ -2709,7 +2761,7 @@ Page({
         return;
       }
       const jin = Math.round(kg * 2 * 10) / 10;
-      this.setData({ 'materialPurchaseForm.quantityJin': String(jin) });
+      this.setData({ 'materialPurchaseForm.quantityJin': String(jin), materialPurchaseFormValid: this.computeMaterialPurchaseFormValid(String(jin)) });
       wx.showToast({ title: `已自动填入${jin}斤，请核对`, icon: 'none', duration: 3000 });
     } catch (err) {
       console.error('[onScanMaterialPurchaseReceipt] 识别失败:', err);
@@ -3283,8 +3335,6 @@ Page({
       isFamily: overridden.isFamily,
       permissions: flags
     }, () => {
-      console.log('[index][yangshanWallStoreId] onStoreChanged 写入:', this.data.yangshanWallStoreId);
-
       // 🏪 门店选择器引导闭环：若此前有操作因"未选定具体门店"被拦截（如点击【发布今日食谱】），
       // 且刚选定的确实是具体门店（非全部门店/全国总览），自动续跑一次原操作，无需用户再点一次
       if (this._pendingStoreSelectAction && !this.isNationalOverviewSelected()) {
@@ -3353,7 +3403,6 @@ Page({
       // 必须跟随 currentStoreName 同步，否则会继续沿用切店前的门店名
       shopName: storeName
     });
-    console.log('[index][yangshanWallStoreId] switchStoreTarget 写入:', this.data.yangshanWallStoreId);
 
     // 🐛 根因修复："首页显示门店 A，切到个人中心却显示门店 B"：此前这里只调用
     // setSelectedStore()，只写了 legacy 的 selectedStore key，没写
@@ -3698,9 +3747,6 @@ Page({
   _lastStoreQrErrorCode: '',
 
   async _fetchStoreQrLocalPath(storeId: string, storeName: string): Promise<string> {
-    // 🐛 【海报调试】真机排查专用：确认传到这一层的 storeId/storeName 是否
-    // 仍然是调用方（onGenerateStorePoster）已经强转、校验过的合法字符串
-    console.log('【海报调试】当前 storeId:', storeId, 'storeName:', storeName);
     this._lastStoreQrErrorCode = '';
 
     const MAX_ATTEMPTS = 2;
@@ -3791,10 +3837,6 @@ Page({
   },
 
   async onGenerateStorePoster() {
-    // 🐛 【海报调试】真机排查专用：无条件打在最前面，不受任何早退分支影响，
-    // 方便对照 vConsole 里权限拦截/全国总览拦截到底是哪一步触发的
-    console.log('【海报调试】当前 storeId:', this.data.currentStoreId, 'storeName:', this.data.currentStoreName);
-
     if (!this.data.permissions.canAuditUser) {
       wx.showToast({ title: '仅店长/管理员可生成', icon: 'none' });
       return;
@@ -8146,11 +8188,6 @@ Page({
   // 结果统一交给前端唯一权威的 parseDonorText（经 updateParseResult 调用）解析汇总，
   // 与手动粘贴文本走的是完全相同的一条路径，不会另开一套计算逻辑。
   async onScanDonorScreenshot() {
-    // 🌟 诊断日志：如果点击按钮后连这一行都没打印出来，说明问题根本不在这个函数内部
-    // （大概率是小程序端跑的还不是最新编译产物，或点击事件被祖先节点拦截/未走到
-    // 这里），而不是这里的业务逻辑有 bug——之前这里只留了注释、漏了真正打印的
-    // 那一行，排查"点击无反应"时完全看不出函数到底有没有被调用，这次补上
-    console.log('[onScanDonorScreenshot] 点击触发，isScanningDonorList=', this.data.isScanningDonorList);
 
     if (this.data.isScanningDonorList) {
       // 🐛 卡死态兜底：正常流程下 isScanningDonorList 只会在下方 finally 里被
@@ -10191,7 +10228,6 @@ Page({
       isFamily: overridden.isFamily,
       permissions: getPermissionFlags({ role })
     });
-    console.log('[index][yangshanWallStoreId] refreshUserRoleView 写入:', this.data.yangshanWallStoreId, '(角色绑定店:', storeId, '/ 当前活跃店:', getCurrentActiveStore().storeId, ')');
 
     // 🏢（机构-门店两级架构，2026-09-14）顶部机构名展示——与 storeName/storeId
     // 同一次刷新触发，不额外等待用户操作。超管/平台管理员的"全国总览"视角
@@ -10291,11 +10327,8 @@ Page({
   // 🛡️ 超级管理员无条件放行：入口处优先判断，直接进入，绝不弹选站点弹窗。
   // 雨花声明仍照走（见 enterYuhuaWorkspaceFlow 内 isPrivilegedView 已含 isSuperAdmin）
   onSelectYuhuaPlatform() {
-    console.log('[YuhuaPlatform] onSelectYuhuaPlatform 点击雨花公益食堂专区，orgType:', this.data.orgType);
     const isSuperAdminAccount = this.isCurrentAccountSuperAdmin();
-    console.log('[YuhuaPlatform] 权限检查结果，isSuperAdminAccount:', isSuperAdminAccount, 'orgType===yuhuazhai:', this.data.orgType === 'yuhuazhai');
     if (isSuperAdminAccount || this.data.orgType === 'yuhuazhai') {
-      console.log('[YuhuaPlatform] 已绑定雨花门店/超管，进入 enterYuhuaWorkspaceFlow');
       // 🆕（2026-09-13 工作空间架构升级）仅记录管理员账号主动选择——普通
       // 绑定账号走的是 orgType 现算直达，不需要、也不应该写这份记忆
       // （见 autoResumeWorkspaceMode 头部注释）
@@ -10305,7 +10338,6 @@ Page({
       this.enterYuhuaWorkspaceFlow();
       return;
     }
-    console.log('[YuhuaPlatform] 尚未绑定雨花门店，唤起选择服务站点弹窗');
     this.openStorePickerForJoin('yuhuazhai', '选择雨花斋服务站点');
   },
 
@@ -10317,7 +10349,6 @@ Page({
   // 供 Bug 1（工作空间选择页点雨花专区未绑店时）与空状态"加入现有爱心站点"
   // 引导卡（onNewUserGoJoin）共用
   async openStorePickerForJoin(orgTypeFilter: string, title: string) {
-    console.log('[openStorePickerForJoin] 唤起站点选择弹窗，orgTypeFilter:', orgTypeFilter, 'title:', title);
     const volunteerTip = this.computeApplyRoleTip('volunteer');
     this.setData({
       applyModalTitleOverride: title,
@@ -10356,7 +10387,6 @@ Page({
       // 必须校验 result.list 真的是数组，不能只信"非空即可用"
       const rawList = (result && result.success) ? result.list : null;
       const list = Array.isArray(rawList) ? rawList : [];
-      console.log('[openStorePickerForJoin] 站点列表加载完成，success:', !!(result && result.success), '数量:', list.length);
       this.setData({ allStoresList: list });
     } catch (e) {
       console.error('[openStorePickerForJoin] 站点列表加载失败:', e);
@@ -10402,9 +10432,7 @@ Page({
   // 🛡️ 超级管理员无条件放行：同上，确保绑定了雨花斋门店的超管账号（或正预览雨花斋
   // 店内某角色的超管）不会被误判成"普通雨花门店用户"而拦在通用卡片外
   onSelectGeneralPlatform() {
-    console.log('[PlatformSelect] onSelectGeneralPlatform this.data:', this.data);
     const isSuperAdminAccount = this.isCurrentAccountSuperAdmin();
-    console.log('[PlatformSelect] onSelectGeneralPlatform isSuperAdminAccount:', isSuperAdminAccount, 'orgType:', this.data.orgType);
     if (!isSuperAdminAccount && this.data.orgType === 'yuhuazhai') {
       wx.showModal({
         title: '暂不支持',
@@ -10537,20 +10565,15 @@ Page({
   // 才跳过重复 setData（避免连点造成弹窗内容被自己打断重置），展示的若是无关
   // 场景（如 'review'）则不拿它当挡箭牌，照常继续走该走的分支
   enterYuhuaWorkspaceFlow() {
-    console.log('[YuhuaPlatform] enterYuhuaWorkspaceFlow 开始，showComplianceModal:', this.data.showComplianceModal, 'complianceModalScene:', this.data.complianceModalScene);
-
     const needsGeneralDisclaimer = !hasAgreedYuhuaGeneralDisclaimer();
-    console.log('[YuhuaPlatform] 合规缓存读取（general 档），needsGeneralDisclaimer:', needsGeneralDisclaimer);
 
     const isPrivilegedView = !!(this.data.isManager || this.data.isFinance || this.data.isSuperAdmin);
     const needsPrivilegedDisclaimer = isPrivilegedView && !hasAgreedYuhuaPrivilegedDisclaimer();
-    console.log('[YuhuaPlatform] 权限检查（privileged 档），isManager:', this.data.isManager, 'isFinance:', this.data.isFinance, 'isSuperAdmin:', this.data.isSuperAdmin, 'isPrivilegedView:', isPrivilegedView, 'needsPrivilegedDisclaimer:', needsPrivilegedDisclaimer);
 
     // ✅ 强制进入出口：两档均已同意（或本档不适用），无论 showComplianceModal
     // 此刻是什么历史值，都立即放行——同时顺手把它清成 false，避免脏值继续
     // 污染下一次判断
     if (!needsGeneralDisclaimer && !needsPrivilegedDisclaimer) {
-      console.log('[YuhuaPlatform] 声明均已确认（或不适用），立即 setData currentPlatformMode=yuhua 并触发工作区初始化');
       this.setData({ currentPlatformMode: 'yuhua', showComplianceModal: false });
       this.syncStoresForZoneEntry();
       return;
@@ -10562,26 +10585,21 @@ Page({
       (needsGeneralDisclaimer && this.data.complianceModalScene === 'general') ||
       (!needsGeneralDisclaimer && needsPrivilegedDisclaimer && this.data.complianceModalScene === 'privileged');
     if (this.data.showComplianceModal && currentSceneMatchesNeed) {
-      console.log('[YuhuaPlatform] 合规弹窗已在展示同一场景，跳过重复 setData:', this.data.complianceModalScene);
       return;
     }
 
     if (needsGeneralDisclaimer) {
-      console.log('[YuhuaPlatform] 尚未同意 general 档声明，setData 弹出 general 弹窗');
       this.setData({ showComplianceModal: true, complianceModalScene: 'general' });
       return;
     }
 
-    console.log('[YuhuaPlatform] 尚未同意 privileged 档声明，setData 弹出 privileged 弹窗');
     this.setData({ showComplianceModal: true, complianceModalScene: 'privileged' });
   },
 
   onAcknowledgeYuhuaDisclaimer() {
-    console.log('[YuhuaPlatform] onAcknowledgeYuhuaDisclaimer 确认声明，complianceModalScene:', this.data.complianceModalScene);
     if (this.data.complianceModalScene === 'general') {
       acknowledgeYuhuaGeneralDisclaimer();
       this.setData({ showComplianceModal: false });
-      console.log('[YuhuaPlatform] general 档已写入本地确认标记，续跑 enterYuhuaWorkspaceFlow');
       // general 确认后立即续跑一次入口校验，若当前视角还需要 privileged 档二次确认，
       // 会紧接着弹出该档弹窗；否则直接放行，无需用户再点一次卡片
       this.enterYuhuaWorkspaceFlow();
@@ -10589,7 +10607,6 @@ Page({
     }
     if (this.data.complianceModalScene === 'privileged') {
       acknowledgeYuhuaPrivilegedDisclaimer();
-      console.log('[YuhuaPlatform] privileged 档已写入本地确认标记，setData currentPlatformMode=yuhua 并触发工作区初始化');
       this.setData({ showComplianceModal: false, currentPlatformMode: 'yuhua' });
       this.syncStoresForZoneEntry();
     }
@@ -11397,14 +11414,11 @@ Page({
       // 传 purpose:'checkin_share' 命中该云函数里与证书码同档的低风险豁免，
       // 否则普通义工账号调用必然返回"无权限生成二维码"，点多少次重试都没用
       const requestData = { storeId, storeName, purpose: 'checkin_share' };
-      console.log('[PosterQR] 发起 getStoreQRCode 调用，入参=', requestData,
-        'currentUserRole=', this.data.currentUserRole);
       const qrRes = await callFunctionWithTimeout({
         name: 'getStoreQRCode',
         data: requestData
       });
       const qrResult = qrRes.result as any;
-      console.log('[PosterQR] getStoreQRCode 返回=', qrResult);
 
       if (!qrResult || !qrResult.success || !qrResult.fileID) {
         // 🐛 字段名修复：getStoreQRCode 云函数失败时返回的是 `{success:false,
@@ -12708,7 +12722,6 @@ Page({
   // 节点再计算 scrollTop 滚动，找不到节点或滚动失败都会打日志+弹 toast，
   // 把"静默无效"变成"看得见原因"
   _scrollToAnchor(selector: string, label: string) {
-    console.log('[Navigate] 触发滚动定位:', label, selector);
     const query = wx.createSelectorQuery();
     query.select(selector).boundingClientRect();
     query.selectViewport().scrollOffset();

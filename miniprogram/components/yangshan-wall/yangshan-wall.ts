@@ -84,10 +84,6 @@ Component({
 
   lifetimes: {
     attached() {
-      // 🐛（排查"首页最新善行空白且控制台零日志"）组件是否真的挂载、挂载时
-      // storeId 是不是空——这两件事此前完全没有任何输出，出问题时无从判断
-      // 是"组件没挂"还是"挂了但没数据"还是"挂了但 storeId 一直是空字符串"
-      console.log('[yangshan-wall] attached，初始 storeId=', this.properties.storeId, 'bare=', this.properties.bare);
       this.setData({
         emptyMessage: EMPTY_FALLBACK_MESSAGES[Math.floor(Math.random() * EMPTY_FALLBACK_MESSAGES.length)]
       });
@@ -109,7 +105,6 @@ Component({
 
   observers: {
     storeId(newStoreId: string) {
-      console.log('[yangshan-wall] storeId 属性变化观察到:', newStoreId);
       const self = this as any;
 
       if (self._debounceTimer) {
@@ -128,7 +123,6 @@ Component({
       if (newStoreId === self._lastFetchedStoreId) {
         // 🛡️ 值没有真正变化（宿主页面重复写入了同一个 storeId），跳过，
         // 不重新发起云函数请求
-        console.log('[yangshan-wall] storeId 与上次已拉取的值相同，跳过重复请求:', newStoreId);
         return;
       }
 
@@ -143,17 +137,8 @@ Component({
   methods: {
     async fetchYangShanList() {
       const storeId = this.properties.storeId;
-      // 🐛 排查用日志：storeId 为空 / isCloudAvailable() 为 false 这两条 return
-      // 此前完全静默，控制台看不出"根本没发起请求"和"发起了但没数据"的区别
-      if (!storeId) {
-        console.log('[yangshan-wall] fetchYangShanList 提前返回：storeId 为空');
-        return;
-      }
-      if (!isCloudAvailable()) {
-        console.log('[yangshan-wall] fetchYangShanList 提前返回：isCloudAvailable() 为 false');
-        return;
-      }
-      console.log('[yangshan-wall] 开始拉取阳善名单，storeId=', storeId);
+      if (!storeId) return;
+      if (!isCloudAvailable()) return;
 
       (this as any)._lastFetchedStoreId = storeId;
       this.setData({ loading: true });
@@ -186,7 +171,6 @@ Component({
         }
 
         const yangShanList = Array.isArray(result.latestDonorsMonthly) ? result.latestDonorsMonthly : [];
-        console.log('[yangshan-wall] 善行数据加载完成，storeId=', storeId, 'list=', yangShanList);
         this.setData({
           yangShanList,
           hasYangShanList: yangShanList.length > 0

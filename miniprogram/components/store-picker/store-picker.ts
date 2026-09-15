@@ -308,7 +308,29 @@ Component({
     // 🛡️ 权限隔离：是否插入"全国总览"虚拟条目，以服务端下发的角色信息为准（先用本地缓存，
     // 缓存缺失时现查一次 checkUserRole），绝不凭前端已有的 currentStore.role 展示态判断——
     // 那只是"当前正在预览的视角"，不代表账号真实身份，用它来决定入口可见性会被预览态污染。
+    // 🐛（2026-09-17 请求去重加固）onOpenSheet 打开面板与查询是一对一触发，
+    // 但胶囊在遮罩完全覆盖前仍可能被快速连点两次，导致两个并发的
+    // fetchStoreListFromCloud 同时在途——这里只做"同一时刻只发一次"的请求
+    // 去重（与 index.ts fetchAllStoresList 的 _fetchAllStoresListInFlight
+    // 同一手法），不引入任何时间窗口的结果缓存，每次面板打开仍然会发起一次
+    // 真实请求，不会复发"新建门店看不到"这个当初刻意不加缓存要规避的问题
     async fetchStoreListFromCloud() {
+      const self = this as any;
+      if (self._storeListFetchInFlight) {
+        return self._storeListFetchInFlight;
+      }
+      const promise = this._doFetchStoreListFromCloud();
+      self._storeListFetchInFlight = promise;
+      try {
+        await promise;
+      } finally {
+        if (self._storeListFetchInFlight === promise) {
+          self._storeListFetchInFlight = null;
+        }
+      }
+    },
+
+    async _doFetchStoreListFromCloud() {
       this.setData({ storeListLoading: true });
       try {
         let roleInfo = AuthService.getCachedRoleInfo();

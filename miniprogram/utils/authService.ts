@@ -334,20 +334,6 @@ export const AuthService = {
           roles: Array.isArray(r.roles) ? r.roles : [],
           authorizedTenants: Array.isArray(r.authorizedTenants) ? r.authorizedTenants : []
         };
-        // 🔍（2026-09-13 排查记录）全国总览入口闪烁复现追查：用户实测确认漫游
-        // 授权本身未过期/未撤销，第61条"授权正常过期/被回收"这个解释站不住脚，
-        // 需要抓一次现场——原样打印 checkUserRole 这一次网络请求【服务端实际
-        // 下发】的 role/authorizedTenants 原始值，与下面 resolveEffectiveRole()
-        // 里打印的【本地解析出的 activeStoreId + 命中结果】前后对照，才能确定
-        // 到底是服务端这次真的没有下发这条授权，还是服务端下发了但本地解析
-        // 逻辑因为某个字段不匹配（如 activeStoreId 恰好在这次调用时是空/
-        // 变了）而没有识别出来
-        console.log('[AuthService][flicker-debug] fetchUserRole 服务端响应落地:', JSON.stringify({
-          role: roleInfo.role,
-          storeId: roleInfo.storeId,
-          tenantId: roleInfo.tenantId,
-          authorizedTenants: roleInfo.authorizedTenants
-        }));
         wx.setStorageSync(USER_ROLE_CACHE_KEY, JSON.stringify(roleInfo));
         return { success: true, roleInfo };
       }
@@ -476,14 +462,6 @@ export const AuthService = {
     const activeStoreId = getCurrentActiveStore().storeId || '';
     const grant = activeStoreId ? resolveActiveRoleGrant(cached && cached.authorizedTenants, activeStoreId) : null;
     const decision = resolveEffectiveRoleDecision(persistedRole, storageRole, grant ? grant.role : '');
-    console.log('[AuthService][flicker-debug] resolveEffectiveRole 中间量:', JSON.stringify({
-      persistedRole,
-      storageRole,
-      activeStoreId,
-      cachedAuthorizedTenants: cached && cached.authorizedTenants,
-      grant,
-      effectiveRole: decision.effectiveRole
-    }));
 
     if (decision.shouldClearStaleStorage) {
       try {
