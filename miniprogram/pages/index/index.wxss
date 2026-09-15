@@ -8206,15 +8206,16 @@ page {
   box-shadow: 0 0 0 4rpx rgba(201, 123, 61, 0.15);
 }
 
-/* 底部操作栏：取消＝琥珀色描边次要按钮，提交/保存＝琥珀色实心主按钮——
-   与全站其余弹窗共用的金色渐变 .btn-save（#B8860B→#DAA520）区分开，统一
-   到这三个雨花斋公益物资场景专属的琥珀色调 #C97B3D。safe-area-inset-bottom
-   适配已经在共用的 .modal-footer 里做好，这里不重复处理 */
+/* 底部操作栏：取消＝浅灰幽灵按钮（视觉权重刻意压低，不与主按钮抢注意力），
+   提交/保存＝琥珀色实心主按钮——与全站其余弹窗共用的金色渐变 .btn-save
+   （#B8860B→#DAA520）区分开，统一到这三个雨花斋公益物资场景专属的琥珀色调
+   #C97B3D，让它成为弹窗内唯一的视觉焦点。safe-area-inset-bottom 适配已经
+   在共用的 .modal-footer 里做好，这里不重复处理 */
 .material-modal-content .btn-close {
-  background: #FFFFFF;
-  color: #C97B3D;
-  border: 2rpx solid #C97B3D;
-  font-weight: 600;
+  background: #F5F5F5;
+  color: #666666;
+  border: 2rpx solid #E0E0E0;
+  font-weight: 500;
   box-sizing: border-box;
 }
 
