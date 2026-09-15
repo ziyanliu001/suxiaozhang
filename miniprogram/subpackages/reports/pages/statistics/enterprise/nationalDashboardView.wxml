@@ -413,40 +413,21 @@
           </view>
         </view>
       </view>
-
-      <!-- 公开爱心支持滚动墙：仅阳善（公开姓名）条目，垂直 swiper -->
-      <view class="love-scroll-section" wx:if="{{nationalData.latestPublicDonors && nationalData.latestPublicDonors.length > 0}}">
-        <text class="love-scroll-title">✨ 最新爱心支持（阳善公开）</text>
-        <swiper class="love-scroll-swiper" vertical autoplay circular interval="2800" duration="400">
-          <!-- 🐛 latestPublicDonors 每一项是对象（{name, amount, storeName, timeLabel}），
-               wx:key="*this" 会把整个对象字面转成字符串当 key，多条记录会撞 key，
-               改用 wx:for-index 提供的下标作为 key -->
-          <swiper-item wx:for="{{nationalData.latestPublicDonors}}" wx:for-index="donorIdx" wx:key="donorIdx">
-            <view class="love-scroll-item">
-              <text class="love-scroll-store">[{{item.storeName}}]</text>
-              <text class="love-scroll-name">{{item.name}}</text>
-              <!-- 🆕 已存证微标：hasAuditProof===true 时点亮，反映这条记录所在
-                   报表已通过财务稽核封账（AUDITED_LOCKED），见
-                   getNationalDashboard formatDonorDisplayName 调用处附近的
-                   hasAuditProof 打标注释 -->
-              <text class="audit-proof-mini-tag" wx:if="{{item.hasAuditProof}}">✅已存证</text>
-              <text class="love-scroll-amount">支持 ¥{{item.amount}}</text>
-              <text class="love-scroll-time" wx:if="{{item.timeLabel}}">· {{item.timeLabel}}</text>
-            </view>
-          </swiper-item>
-        </swiper>
-      </view>
     </view>
 
-    <!-- 🌸 雨花全国大盘·跨店阳善轮播：与上面通用的"全网爱心支持与善缘墙"
+    <!-- 🌸（2026-09-19 去重整合）雨花全国大盘·跨店阳善轮播：此前这里与上面
+         "全网爱心支持与善缘墙"卡片内的"最新爱心支持（阳善公开）"局部滚动墙
          （latestPublicDonors，按时间倒序，可能被单个高频记账门店刷屏）是两张
-         独立卡片——这里服务端已按门店去重（一店一条，仅 orgType==='yuhuazhai'，
-         见 getNationalDashboard nationalYangshanCarousel 收集处注释）+ 前端
-         加载时 Shuffle 打散（见 nationalDashboardService.ts shuffleArray 调用
-         处），目的是"各站点爱心汇聚"的动态感，而不是单纯展示最新几条流水。
-         当前 orgType 筛选不是"雨花斋/全部平台"时数组为空，容器自动不渲染，
-         不需要额外的 orgType 判断。样式直接复用 love-wall-card/love-scroll-*
-         系列已有类名，不新增 WXSS -->
+         视觉上下堆叠、观感雷同的轮播，已移除上面那个局部滚动墙（其数据源
+         latestPublicDonors 云函数仍保留计算但前端不再消费，未做跨函数改动，
+         见该字段 cloudfunctions/getNationalDashboard 计算处注释），本卡片
+         现在是全盘唯一的阳善轮播窗口。⚠️ 覆盖范围如实标注：本卡片服务端
+         已按门店去重（一店一条，仅 orgType==='yuhuazhai'，见
+         getNationalDashboard nationalYangshanCarousel 收集处注释）+ 前端
+         加载时 Shuffle 打散（见 nationalDashboardService.ts shuffleArray
+         调用处）——只覆盖雨花斋业态门店，查看"助老食堂"等其它 orgType 筛选
+         Tab 时本卡片数组为空、不会渲染，这是延续原有的既定过滤口径，不是
+         本次去重引入的新缺口 -->
     <view class="love-wall-card" wx:if="{{nationalData.nationalYangshanCarousel && nationalData.nationalYangshanCarousel.length > 0}}">
       <view class="love-wall-header">
         <text class="love-wall-title">🌸 雨花全国大盘 · 阳善轮播</text>
