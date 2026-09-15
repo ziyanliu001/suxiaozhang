@@ -430,7 +430,12 @@
        不是重新设计配色，只是让"渲染出来的样子"和"CSS 里写的样子"重新对上，
        并顺手把 .home-vt-grid 从 flex 改成标准 4 列 Grid（见该 class 注释） -->
   <view class="ui-card-wrapper home-vt-card" wx:if="{{isVolunteer || isManager}}">
-    <view class="home-vt-title">🛠️ 义工现场服务工具</view>
+    <!-- 🏛️（2026-09-15 称谓自适应）大标题按账号真实所在门店的服务场景动态
+         切换（见 index.ts homeServiceToolsTitle 字段注释——故意不用
+         roleDisplayTitles，那个字段是【申请加入门店】弹窗专属的临时表单
+         状态，与账号真实所在门店场景是两回事，复用会导致弹窗操作串场
+         改写首页标题）；|| 兜底经典文案，防止字段异常缺失时闪出空标题 -->
+    <view class="home-vt-title">🛠️ {{homeServiceToolsTitle || '义工现场服务工具'}}</view>
     <view class="home-vt-grid">
 
       <!-- 1. 登记菜单人数 -->

@@ -17,26 +17,45 @@
 // 未选择/空字符串、以及本次 4 卡片快选之外的其余 5 个真实 orgType 值）一律
 // 落到 DEFAULT_TITLES 这套经典称谓——不是"遗漏"，是任务本身要求"其余默认
 // 场景保持经典称谓"，新增机构类型时不需要同步维护这份映射表。
+//
+// 🏷️（2026-09-15 补充）family（家人/服务对象）是纯展示层的伪角色 key，
+// 与 store_patriarch/store_manager/finance/volunteer 这四个真实落库枚举
+// 值不是同一件事——backend 从不写入 role='family'，store-picker 的
+// applyRole='store_family' 最终落库仍归一化为 volunteer（见 authService.ts
+// ROLE_TIER 注释）。这里给它一个展示 key 纯粹是为了让 store-picker.wxml/
+// index.wxml 能用同一套 {{roleDisplayTitles.xxx.title}} 语法动态绑定"家人"
+// 这个入口的文案，不代表底层多了一个新角色。
+//
+// 🛠️ serviceToolsTitle：首页"义工现场服务工具"金刚区大标题，与四个角色 key
+// 平级的字符串字段（不是 {emoji,title,subtitle} 形状），按场景切换措辞。
 
 const DEFAULT_TITLES = {
   store_patriarch: { emoji: '👑', title: '大家长', subtitle: '统筹发起 / 核心管理' },
   store_manager: { emoji: '👔', title: '店长', subtitle: '日常运营 / 排班餐报' },
   finance: { emoji: '💼', title: '财务', subtitle: '' },
-  volunteer: { emoji: '🌸', title: '义工', subtitle: '' }
+  volunteer: { emoji: '🌸', title: '义工', subtitle: '' },
+  family: { emoji: '🏠', title: '家人', subtitle: '' },
+  serviceToolsTitle: '义工现场服务工具'
 };
 
 const TEMPLE_CANTEEN_TITLES = {
   store_patriarch: { emoji: '👑', title: '庙董 / 住持', subtitle: '管委会/理事会负责人' },
   store_manager: { emoji: '👔', title: '堂主 / 执事', subtitle: '殿堂主理人' },
   finance: { emoji: '💼', title: '账房', subtitle: '功德香油核算' },
-  volunteer: { emoji: '🌸', title: '护法善信', subtitle: '发心护持义工' }
+  volunteer: { emoji: '🌸', title: '护法善信', subtitle: '发心护持居士' },
+  // 寺庙语境不用"家人"称呼普通食客/服务对象——改用"十方善信"（佛门对四方
+  // 信众的通用敬称），副标题用更贴近日常场景的"随喜香客/结缘信众"
+  family: { emoji: '❤️', title: '十方善信', subtitle: '随喜香客/结缘信众' },
+  serviceToolsTitle: '善信现场护持工具'
 };
 
 const ELDERLY_CANTEEN_TITLES = {
   store_patriarch: { emoji: '👑', title: '理事长 / 发起人', subtitle: '' },
   store_manager: { emoji: '👔', title: '站长 / 店长', subtitle: '' },
   finance: { emoji: '💼', title: '会计', subtitle: '助老专款核算' },
-  volunteer: { emoji: '🌸', title: '志愿者', subtitle: '爱心助老志愿' }
+  volunteer: { emoji: '🌸', title: '志愿者', subtitle: '爱心助老志愿' },
+  family: { emoji: '❤️', title: '社区长者', subtitle: '就餐老人及家属' },
+  serviceToolsTitle: '助老现场服务工具'
 };
 
 const TITLES_BY_ORG_TYPE = {
@@ -50,7 +69,9 @@ const TITLES_BY_ORG_TYPE = {
  *   store_patriarch: {emoji:string, title:string, subtitle:string},
  *   store_manager: {emoji:string, title:string, subtitle:string},
  *   finance: {emoji:string, title:string, subtitle:string},
- *   volunteer: {emoji:string, title:string, subtitle:string}
+ *   volunteer: {emoji:string, title:string, subtitle:string},
+ *   family: {emoji:string, title:string, subtitle:string},
+ *   serviceToolsTitle: string
  * }}
  */
 function resolveRoleTitles(orgType) {

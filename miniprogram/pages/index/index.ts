@@ -1212,6 +1212,15 @@ Page({
     // 🌟 机构类型短标签：与 profile.ts computeOrgDisplayCopy 同一套措辞口径
     // （雨花斋/社区助餐/其余机构留空），由 loadStoreTargetConfig() 按真实 orgType 计算
     orgTypeBadge: '' as string,
+    // 🏛️（2026-09-15 称谓自适应）首页"义工现场服务工具"金刚区大标题，按当前
+    // 账号真实所在门店的 orgType 计算（与 orgType/orgTypeBadge 同一批 setData
+    // 一起更新）。⚠️ 故意不复用 roleDisplayTitles——那个字段是【申请加入门店】
+    // 弹窗专属的、按表单里临时选择的 applyForm.customOrgType 计算（见
+    // syncRoleDisplayTitles()），与"当前账号实际所在门店是什么场景"是两件
+    // 独立的事：如果直接复用同一个字段，用户在弹窗里点选一个服务场景卡片
+    // 预览，会连带把首页大标题也临时改写成弹窗里选的那个场景，而不是账号
+    // 真实所在门店的场景——这是回写要不回真实状态的串场 bug，需要独立字段
+    homeServiceToolsTitle: resolveRoleTitles('').serviceToolsTitle as string,
     // 🆕【机构文化与每日家训】弹窗：标题按真实 orgType 三档计算（见
     // computeCultureModalTitle），非雨花斋分支展示门店自己配置的文化寄语——
     // 中性默认，不臆造具体机构品牌
@@ -1764,6 +1773,7 @@ Page({
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
         orgType: orgType,
+        homeServiceToolsTitle: resolveRoleTitles(orgType).serviceToolsTitle,
         currentViewMode,
         currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
         currentStoreName: storeName,
@@ -1828,6 +1838,7 @@ Page({
         isFamily: isFamily,
         showNewUserGuide: isFamily && !storeId,
         orgType: orgType,
+        homeServiceToolsTitle: resolveRoleTitles(orgType).serviceToolsTitle,
         currentViewMode,
         currentViewModeLabel: PREVIEW_VIEW_MODE_LABELS[currentViewMode],
         currentStoreName: storeName,
@@ -2198,7 +2209,8 @@ Page({
         this.setData({
           orgType: realOrgType,
           orgTypeBadge: realOrgType === 'yuhuazhai' ? '雨花斋' : realOrgType === 'elderly_canteen' ? '社区助餐' : '',
-          cultureModalTitle: computeCultureModalTitle(realOrgType)
+          cultureModalTitle: computeCultureModalTitle(realOrgType),
+          homeServiceToolsTitle: resolveRoleTitles(realOrgType).serviceToolsTitle
         });
       }
 
@@ -11531,7 +11543,7 @@ Page({
       const fresh = await AuthService.fetchUserRole();
       const freshOrgType = (fresh.success && fresh.roleInfo && (fresh.roleInfo as any).orgType) || '';
       if (freshOrgType && freshOrgType !== this.data.orgType && this.data.showFamilyMottoModal) {
-        this.setData({ orgType: freshOrgType });
+        this.setData({ orgType: freshOrgType, homeServiceToolsTitle: resolveRoleTitles(freshOrgType).serviceToolsTitle });
         this.onShowFamilyMottoModal();
       }
     } catch (err) {

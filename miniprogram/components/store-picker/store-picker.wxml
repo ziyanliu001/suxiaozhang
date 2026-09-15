@@ -251,12 +251,16 @@
               </view>
 
               <!-- 其余身份（家人/义工/财务）保持原有简洁单选样式，不参与卡片化；
-                   义工/财务的称谓与副标题同样按 roleDisplayTitles 动态绑定，
-                   家人（store_family）不在本次称谓自适应范围内，保持不变 -->
+                   义工/财务/家人的称谓与副标题统一按 roleDisplayTitles 动态绑定
+                   （2026-09-15 家人也纳入称谓自适应范围，见 roleTitleAdapter.js
+                   的 family 展示伪角色 key） -->
               <view class="new-store-role-group">
-                <label class="new-store-role-item">
-                  <radio value="store_family" checked="{{newStoreForm.applyRole === 'store_family'}}" color="#8C1D18"/>
-                  <text>🏠 家人</text>
+                <label class="new-store-role-item-stacked">
+                  <view class="new-store-role-item-row">
+                    <radio value="store_family" checked="{{newStoreForm.applyRole === 'store_family'}}" color="#8C1D18"/>
+                    <text>{{roleDisplayTitles.family.emoji}} {{roleDisplayTitles.family.title}}</text>
+                  </view>
+                  <text class="new-store-role-item-hint" wx:if="{{roleDisplayTitles.family.subtitle}}">{{roleDisplayTitles.family.subtitle}}</text>
                 </label>
                 <label class="new-store-role-item-stacked">
                   <view class="new-store-role-item-row">
