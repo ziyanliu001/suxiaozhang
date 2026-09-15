@@ -7,7 +7,7 @@ const cloud = require('wx-server-sdk');
 const db = cloud.database();
 const _ = db.command;
 const COLLECTION = 'refund_orders';
-const { validateRefundAmount } = require('./refundValidation');
+const { validateRefundAmount, validateReusableRefundAmount } = require('./refundValidation');
 const { ORDERS_COLLECTION } = require('./orderService');
 
 const STATUS = Object.freeze({
@@ -76,11 +76,27 @@ async function releaseRefundLock(outTradeNo) {
   }).catch((err) => console.error('[refundService] 释放退款锁失败（需人工核对是否卡死）:', outTradeNo, err));
 }
 
+// 🛡️ 金额不一致时拒绝复用（见 refundValidation.validateReusableRefundAmount
+// 头部注释）——统一抛出与 REFUND_IN_PROGRESS 同一档的业务错误，调用方
+// （index.js handleRefund）已有分支把 err.code 已知的这两种情况原样报给
+// 上层，不当作未预期异常处理
+function assertReusableRefundAmountMatches(reused, requestedAmount) {
+  const check = validateReusableRefundAmount({ reusedAmount: reused.refundAmount, requestedAmount });
+  if (!check.valid) {
+    const err = new Error(check.error);
+    err.code = 'REFUND_AMOUNT_CONFLICT';
+    throw err;
+  }
+}
+
 async function createPendingRefund({ outTradeNo, transactionId, tenantId, bizType, bizId, refundAmount, totalAmount, reason, mockMode, notifyFn }) {
   await ensureCollection();
 
   const reusable = await findReusablePendingRefund({ outTradeNo });
-  if (reusable) return reusable;
+  if (reusable) {
+    assertReusableRefundAmountMatches(reusable, refundAmount);
+    return reusable;
+  }
 
   const locked = await acquireRefundLock(outTradeNo);
   if (!locked) {
@@ -93,7 +109,10 @@ async function createPendingRefund({ outTradeNo, transactionId, tenantId, bizTyp
     // 抢到锁之后，不会再有并发者能同时插入，这次重新查一遍复用窗口是可信的，
     // 覆盖"两次调用几乎同时到达、都在抢锁前查到过一次'不存在'"的边界情况
     const reusableAfterLock = await findReusablePendingRefund({ outTradeNo });
-    if (reusableAfterLock) return reusableAfterLock;
+    if (reusableAfterLock) {
+      assertReusableRefundAmountMatches(reusableAfterLock, refundAmount);
+      return reusableAfterLock;
+    }
 
     const outRefundNo = genOutRefundNo();
     const data = {

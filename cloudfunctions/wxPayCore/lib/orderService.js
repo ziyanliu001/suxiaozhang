@@ -61,7 +61,16 @@ async function createPendingOrder({ openid, tenantId, bizType, bizId, amount, de
   await ensureCollection();
 
   const reusable = await findReusablePendingOrder({ openid, bizType, bizId });
-  if (reusable) return reusable;
+  // 🛡️（2026-09-16 金融级加固）金额必须完全一致才允许复用——这条复用逻辑
+  // 设计初衷是"网络抖动导致用户重试点击同一次购买意图"的去重（见上方函数
+  // 注释），不是"同一个 {openid,bizType,bizId} 无论金额是否一致都合并成
+  // 一张单"。如果金额对不上（典型场景：两次请求之间价格发生变化，或调用方
+  // 传参有误），继续复用会导致"本地 payment_orders.amount 记的是旧金额，
+  // 但下面即将传给微信统一下单接口的 totalFee 是新金额"这种本地记录与微信
+  // 侧真实订单金额不一致的危险分叉——用户实际支付的金额与业务方后续按
+  // order.amount 结算/发放的权益对不上。金额不一致时不复用，视为一次全新的
+  // 购买意图；旧的那张单不受影响，继续按自身生命周期自然过期/被关闭
+  if (reusable && reusable.amount === amount) return reusable;
 
   const outTradeNo = genOutTradeNo();
   const data = {

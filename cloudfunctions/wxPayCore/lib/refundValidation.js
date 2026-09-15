@@ -20,4 +20,25 @@ function validateRefundAmount({ refundAmount, totalAmount, alreadyRefundedAmount
   return { valid: true };
 }
 
-module.exports = { validateRefundAmount };
+/**
+ * 🛡️（2026-09-16 金融级加固）退款请求复用校验：createPendingRefund 在 10 分钟
+ * 窗口内命中同一 outTradeNo 下仍处于 PROCESSING 状态的退款记录时会直接复用它
+ * （用于防止网络抖动导致的重复提交产生两条退款记录）。但"复用"的前提必须是
+ * 这确实是同一次退款意图——如果本次请求的金额与被复用记录的金额不一致（如
+ * 调用方在短时间内先后发起了两笔金额不同的退款请求），继续复用会导致"本地
+ * refund_orders 记的是旧金额，但即将提交给微信退款接口的是新金额"这种本地
+ * 账本与微信侧真实退款金额不一致的危险分叉。金额不一致时拒绝复用，由调用方
+ * （wxPayCore/index.js handleRefund）把这个冲突原样报给上层，不静默用错误的
+ * 金额继续退款。
+ */
+function validateReusableRefundAmount({ reusedAmount, requestedAmount }) {
+  if (reusedAmount !== requestedAmount) {
+    return {
+      valid: false,
+      error: `该笔支付已有一笔金额为 ¥${(reusedAmount / 100).toFixed(2)} 的退款正在处理中，与本次请求金额（¥${(requestedAmount / 100).toFixed(2)}）不一致，请核实后重试`
+    };
+  }
+  return { valid: true };
+}
+
+module.exports = { validateRefundAmount, validateReusableRefundAmount };

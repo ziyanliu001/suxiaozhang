@@ -61,12 +61,17 @@ async function handleCreateOrder(event) {
   });
 
   try {
+    // 🛡️（2026-09-16 金融级加固）提交给微信统一下单接口的金额一律以
+    // order.amount（已持久化的账本记录）为准，不再直接用 event 传入的
+    // amount——createPendingOrder 复用已有订单时已经校验过两者必须相等，
+    // 这里改用账本值是双重防线：即使未来校验逻辑出现遗漏，实际提交给微信
+    // 网关的金额也始终与本地账本记录的金额保持一致
     const { prepayId, payment } = mockMode
       ? await mockClient.createUnifiedOrder({ outTradeNo: order.outTradeNo })
       : await wxPayClient.createUnifiedOrder({
           outTradeNo: order.outTradeNo,
           description,
-          totalFee: amount,
+          totalFee: order.amount,
           openid,
           realConfig: getRealPayConfig()
         });
@@ -175,18 +180,27 @@ async function handleRefund(event) {
       reason, mockMode, notifyFn: notifyFn || order.notifyFn
     });
   } catch (err) {
-    if (err.code === 'REFUND_IN_PROGRESS') {
+    // 🛡️（2026-09-16 金融级加固）REFUND_AMOUNT_CONFLICT 与 REFUND_IN_PROGRESS
+    // 同一档：都是"这次请求命中了一笔已存在的处理中退款，但不能直接沿用"的
+    // 预期业务信号，不是未预期异常，见 refundValidation.validateReusableRefundAmount
+    if (err.code === 'REFUND_IN_PROGRESS' || err.code === 'REFUND_AMOUNT_CONFLICT') {
       return { success: false, error: err.message };
     }
     throw err;
   }
 
   try {
+    // 🛡️（2026-09-16 金融级加固）提交给微信退款接口的金额一律以 refundRecord.
+    // refundAmount（已持久化的账本记录）为准，不再直接用 event 传入的
+    // refundAmount——createPendingRefund 复用已有记录时已经校验过两者必须
+    // 相等，这里改用账本值是双重防线：即使未来校验逻辑出现遗漏，实际提交给
+    // 微信网关的金额也始终与本地账本记录的金额保持一致，不会出现"账本记的是
+    // A、实际退给用户的是 B"这种分叉
     const result = mockMode
       ? await mockClient.createRefund({ outRefundNo: refundRecord.outRefundNo })
       : await wxPayClient.createRefund({
           outRefundNo: refundRecord.outRefundNo, outTradeNo, transactionId: order.transactionId,
-          totalAmount: order.amount, refundAmount, reason, realConfig: getRealPayConfig()
+          totalAmount: order.amount, refundAmount: refundRecord.refundAmount, reason, realConfig: getRealPayConfig()
         });
 
     const { transitioned, record } = await refundService.markRefundStatus(refundRecord.outRefundNo, result.status, { refundId: result.refundId || '' });
@@ -357,6 +371,21 @@ async function handleMockPaySuccess(event) {
 // 需要在云开发控制台 → 云函数 wxPayCore →「HTTP 访问服务」里开启并绑定路径，
 // 拿到的公网地址就是 WXPAY_NOTIFY_URL 环境变量的值。微信支付服务器会以
 // POST 方式把加密的支付结果推送到这个地址。
+//
+// ⚠️ 如实标注一个已知边界（2026-09-16 金融级加固审查发现，本轮未落地实现）：
+// wxPayClient.createRefund 把 realConfig.notifyUrl 同一个地址也注册成了退款
+// 结果的回调地址，但下面 wxPayClient.decryptNotify 目前只识别/解密
+// event_type==='TRANSACTION.SUCCESS'（支付成功），微信支付真实推送的
+// 'REFUND.SUCCESS'/'REFUND.ABNORMAL' 事件会在 decryptNotify 内部被当作
+// "非支付成功事件"直接忽略——退款状态目前完全依赖 handleQueryRefund 被业务方
+// 主动调用查询，收不到这个异步回调不影响资金安全（refund_orders 不会因此
+// 产生重复处理，markRefundStatus 本身是幂等 CAS），只是退款状态从
+// PROCESSING 迁移到终态的时效性完全取决于谁来调用查询、多久调用一次。要
+// 补上这个回调，需要新增 REFUND.SUCCESS/REFUND.ABNORMAL 分支解密后调用
+// refundService.markRefundStatus——本轮未新增这段代码，原因与本文件
+// wxPayClient.js 里"分账回退接口"的既定态度一致：字段名称/状态枚举需要
+// 对照当时最新官方文档逐字核对，没有真实商户号环境验证过之前，不应该把
+// 凭记忆写的解析逻辑当作已验证的成品接入资金流程。
 async function handleHttpNotify(event) {
   const okResponse = (code, message) => ({
     statusCode: code === 'SUCCESS' ? 200 : 400,
