@@ -7,6 +7,14 @@
 //   可用，其余角色一律退回查看自己所在门店，绝不放行未授权的跨店/跨机构宽查询。
 //
 // 分页：list 支持 page/pageSize（默认 20，上限 50），避免上百家门店规模下一次性拉全量。
+//
+// ⏱️（2026-09-16 性能调优）config.json 已显式配置 timeout: 10（秒）——
+// create/update 分支会串行触发一次 msgSecCheck 内容安全云函数间调用
+// （见 checkContentSafe），叠加 resolveCaller/resolveWriteTarget 各自的
+// db 查询与两个云函数各自的冷启动开销，实测偶发超过平台默认 3 秒，与
+// CLAUDE.md 记录的 -504003 历史根因同一个模式。前端 daily-menu.ts 已同步把
+// 本函数所有调用点的 callFunctionWithTimeout 显式调到 15000ms（10s+5s
+// 网络余量），两端超时预算是一起调的，不要只改其中一边。
 
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });

@@ -141,6 +141,13 @@ exports.main = async (event, context) => {
 
     // ─── daily_menus / activity_logs / expense_item_templates ──────────
     ['daily_menus',             { name: 'store_date',      keys: [{ storeId: 1 }, { dateString: -1 }],  unique: false }],
+    // 🔑（2026-09-16 性能调优）manageDailyMenu 的 list action 真实查询形状之一：
+    // super_admin 未选定具体门店时（storeId===''，对应"全国总览"），where 只
+    // 剩 {tenantId, [dateString range], [mealType]}，不带 storeId——上面的
+    // store_date 索引以 storeId 领头，完全命中不了这条查询前缀，机构门店规模
+    // 增长后会退化成全表扫描 + 内存排序。与 report_logs 的 tenantId_date
+    // 同一处理由，补一条 tenantId 领头的复合索引
+    ['daily_menus',             { name: 'tenantId_dateString', keys: [{ tenantId: 1 }, { dateString: -1 }], unique: false }],
     ['activity_logs',           { name: 'store_eventTime', keys: [{ storeId: 1 }, { eventTime: -1 }],   unique: false }],
     ['expense_item_templates',  { name: 'store_category',  keys: [{ storeId: 1 }, { category: 1 }],     unique: false }],
 

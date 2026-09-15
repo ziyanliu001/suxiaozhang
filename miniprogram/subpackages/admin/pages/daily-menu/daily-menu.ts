@@ -28,6 +28,27 @@ const PAGE_SIZE = 10;
 const CACHE_KEY_DAILY_MENU_REMARKS = 'daily_menu_recent_remarks';
 const MAX_RECENT_REMARKS = 8;
 
+// ⏱️ manageDailyMenu 云函数 config.json 已显式配置 timeout: 10（秒）——本函数
+// 除纯查询外，create/update 分支还会串行触发一次 msgSecCheck 内容安全的
+// 云函数间调用（见 checkContentSafe），冷启动叠加下 3 秒平台默认值不够用，
+// 与 manageInventoryItem/manageInventoryTransaction 同一档位。这里统一给本页
+// 所有 manageDailyMenu 调用点显式传比服务端 10s 上限再留 5s 网络余量的
+// 15000ms，两端超时预算必须一起调（CLAUDE.md 第 3 节），只改云函数端等于没修
+const DAILY_MENU_CALL_TIMEOUT_MS = 15000;
+
+// 🛡️ 离线兜底缓存键：今日食谱按 {storeId, dateStr, mealType} 三元组隔离
+// （与云函数 getByDate 的查重键完全一致），历史列表首页按 {storeId, mealType}
+// 隔离（列表本身不含日期维度过滤，見 fetchList）。与 onGeneratePurchasePlan
+// 的 _purchasePlanStorageKey 同一套"云端成功后覆盖写入、请求失败时读出展示"
+// 手法，权威数据源始终是云端，本地缓存只在网络异常/查询超时时兜底展示
+// 上一次成功的快照，不参与正常路径下的展示决策
+function buildTodayMenuCacheKey(storeId: string, dateStr: string, mealType: string): string {
+  return `dm_today_cache_${storeId}_${dateStr}_${mealType}`;
+}
+function buildHistoryListCacheKey(storeId: string, mealType: string): string {
+  return `dm_list_cache_${storeId}_${mealType}`;
+}
+
 // 🍱 早/午/晚餐可独立发布食谱，云函数 manageDailyMenu 按 {storeId, dateString,
 // mealType} 三元组区分记录（存量记录没有 mealType 字段，云函数兼容按 lunch 处理）
 type MealType = 'breakfast' | 'lunch' | 'dinner';
@@ -259,8 +280,17 @@ Page({
     this.loadRecentRemarks();
     // 🔑 需先拿到 currentStoreId 再查今日食谱（getByDate 要求 storeId 必填），故此处 await 顺序执行
     await this.applyRolePermissions();
-    this.loadSelectedMenu();
-    this.fetchList(true);
+
+    // ⚡ 今日食谱（getByDate）与历史列表首页（list）是两个相互独立的云函数
+    // 查询，彼此不依赖对方结果——显式 Promise.all 并发发起，外层加
+    // wx.showLoading/hideLoading 让并发等待过程对用户可见（此前 todayLoading/
+    // loading 这两个内部状态标记只驱动了空状态判断，见 wxml，数据到达前页面
+    // 没有任何加载中的视觉反馈）。不 await 这个 Promise.all 本身——后面的
+    // navGuard 挂载不依赖数据是否加载完成，不应该被网络耗时拖慢
+    wx.showLoading({ title: '加载食谱中...', mask: true });
+    Promise.all([this.loadSelectedMenu(), this.fetchList(true)])
+      .catch((err) => console.error('[daily-menu] 初始并发拉取异常:', err))
+      .finally(() => wx.hideLoading());
 
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',
@@ -374,13 +404,22 @@ Page({
     // 🐛 性能修复：改用异步 wx.getStorage——见 journey.ts/store-profile.ts
     // 同类修复记录，onLoad 里能异步化的同步 storage 读取都异步化，缩短跳转到
     // 本页后骨架屏可交互前的同步执行栈
-    if (!storeId) {
-      const storedId = await getStorageAsync('current_store_id');
-      storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
-    }
-    if (!storeName) {
-      const storedName = await getStorageAsync('current_store_name');
-      storeName = (!isSuperAdmin && isVirtualStoreName(storedName)) ? '' : storedName;
+    // ⚡ 两次读取彼此独立（不同的 storage key，互不依赖对方结果），此前挨个
+    // await 是一次不必要的串行等待，改为按需并发发起——谁不需要读就直接跳过，
+    // 不为了凑 Promise.all 而多发一次无意义的 storage 读取
+    const needStoredId = !storeId;
+    const needStoredName = !storeName;
+    if (needStoredId || needStoredName) {
+      const [storedId, storedName] = await Promise.all([
+        needStoredId ? getStorageAsync('current_store_id') : Promise.resolve(undefined),
+        needStoredName ? getStorageAsync('current_store_name') : Promise.resolve(undefined)
+      ]);
+      if (needStoredId) {
+        storeId = NATIONAL_STORE_ID_SENTINELS.includes(storedId) ? '' : storedId;
+      }
+      if (needStoredName) {
+        storeName = (!isSuperAdmin && isVirtualStoreName(storedName)) ? '' : storedName;
+      }
     }
 
     // 🛡️ 展示口径：超管在没有选定具体门店时才允许显示"全国总览"（这是其真实身份
@@ -413,6 +452,7 @@ Page({
     }
 
     this.setData({ todayLoading: true });
+    const cacheKey = buildTodayMenuCacheKey(this.data.currentStoreId, this.data.selectedDateStr, this.data.selectedMealType);
     try {
       const res = await callFunctionWithTimeout({
         name: 'manageDailyMenu',
@@ -422,16 +462,40 @@ Page({
           dateString: this.data.selectedDateStr,
           mealType: this.data.selectedMealType
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const result = res.result as any;
       const item = (result && result.success) ? result.data : null;
       if (item) {
         item.publishTimeStr = formatHHmm(item.updateTime);
       }
       this.setData({ todayItem: item, todayDishes: buildDishList(item && item.images) });
+      // 🛡️ 云端成功后覆盖写入离线兜底缓存——item 为 null（当日尚未发布）
+      // 同样如实缓存，避免下次查询超时时把"从未发布"误展示成更早一次网络
+      // 正常时的陈旧食谱
+      try {
+        wx.setStorageSync(cacheKey, { item });
+      } catch (e) {
+        // 本机 storage 写入失败不阻断主流程，只是离线兜底缓存少了一份
+      }
     } catch (err) {
       console.error('[daily-menu] loadSelectedMenu 异常:', err);
-      this.setData({ todayItem: null, todayDishes: [] });
+      // 🛡️ 查询超时/网络异常时优先展示上一次成功缓存的快照，而不是直接清空——
+      // 与 onGeneratePurchasePlan 同一条离线降级策略。用 {item} 包裹判断"缓存
+      // 是否存在"，避免 wx.getStorageSync 缺省返回的 '' 与合法缓存值 null
+      // （上次查询到的"当日尚未发布"）混淆
+      let cachedWrap: any = null;
+      try {
+        cachedWrap = wx.getStorageSync(cacheKey);
+      } catch (e) {
+        cachedWrap = null;
+      }
+      if (cachedWrap && typeof cachedWrap === 'object' && 'item' in cachedWrap) {
+        const cachedItem = cachedWrap.item;
+        this.setData({ todayItem: cachedItem, todayDishes: buildDishList(cachedItem && cachedItem.images) });
+        wx.showToast({ title: '网络异常，已展示上次缓存内容', icon: 'none' });
+      } else {
+        this.setData({ todayItem: null, todayDishes: [] });
+      }
     } finally {
       this.setData({ todayLoading: false });
     }
@@ -453,6 +517,7 @@ Page({
     }
 
     const targetPage = reset ? 1 : this.data.page + 1;
+    const cacheKey = buildHistoryListCacheKey(this.data.currentStoreId, this.data.selectedMealType);
 
     try {
       const res = await callFunctionWithTimeout({
@@ -464,7 +529,7 @@ Page({
           page: targetPage,
           pageSize: PAGE_SIZE
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const result = res.result as any;
 
       if (result && result.success) {
@@ -482,12 +547,45 @@ Page({
           hasMore: !!result.hasMore
         });
         this.recomputeHistoryList();
+        // 🛡️ 只缓存首页快照：离线兜底的目标是"至少展示点什么"，不是完整还原
+        // 分页状态——翻页加载的后续页不参与缓存，避免缓存无限增长
+        if (reset) {
+          try {
+            wx.setStorageSync(cacheKey, { list: rawList, total: result.total || 0 });
+          } catch (e) {
+            // 本机 storage 写入失败不阻断主流程
+          }
+        }
       } else {
         wx.showToast({ title: (result && result.error) || '加载失败', icon: 'none' });
       }
     } catch (err) {
       console.error('[daily-menu] fetchList 异常:', err);
-      wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+      // 🛡️ 只在首页加载失败时退回缓存——翻页失败（reset=false）时用户已经在看
+      // 真实数据，缓存里的陈旧首页反而会覆盖掉屏幕上更完整的真实列表，此时
+      // 只提示重试，不动用缓存
+      let cachedWrap: any = null;
+      if (reset) {
+        try {
+          const rawCached = wx.getStorageSync(cacheKey);
+          if (rawCached && typeof rawCached === 'object' && Array.isArray(rawCached.list)) {
+            cachedWrap = rawCached;
+          }
+        } catch (e) {
+          cachedWrap = null;
+        }
+      }
+      if (cachedWrap) {
+        cachedWrap.list.forEach((item: any) => {
+          item.dateDisplay = formatDisplayDate(item.dateString);
+          item.dishes = buildDishList(item.images);
+        });
+        this.setData({ list: cachedWrap.list, total: cachedWrap.total || 0, hasMore: false });
+        this.recomputeHistoryList();
+        wx.showToast({ title: '网络异常，已展示上次缓存内容', icon: 'none' });
+      } else {
+        wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+      }
     } finally {
       this.setData({ loading: false, loadingMore: false });
     }
@@ -741,7 +839,7 @@ Page({
           menuText: menuText.trim(),
           images: imagesForSubmit
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const result = res.result as any;
 
       wx.hideLoading();
@@ -781,7 +879,7 @@ Page({
           const cbRes = await callFunctionWithTimeout({
             name: 'manageDailyMenu',
             data: { action: 'delete', id }
-          });
+          }, DAILY_MENU_CALL_TIMEOUT_MS);
           wx.hideLoading();
           const result = cbRes.result as any;
           if (result && result.success) {
@@ -1143,7 +1241,7 @@ Page({
           weatherFactor: this.data.mealPredictionForm.weather,
           isHoliday: this.data.mealPredictionForm.isHoliday
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const result = res && res.result;
       if (!result || !result.success) {
         this.setData({ mealPredictionError: (result && result.error) || '预测失败，请重试' });
@@ -1286,7 +1384,7 @@ Page({
           storeId: this.data.currentStoreId,
           dateString: this.data.mealPredictionForm.targetDate
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const getResult = getRes && getRes.result;
       if (getResult && getResult.success && getResult.exists && Array.isArray(getResult.tasks) && getResult.tasks.length > 0) {
         wx.hideLoading();
@@ -1314,7 +1412,7 @@ Page({
           dateString: this.data.mealPredictionForm.targetDate,
           tasks: freshTasks
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       wx.hideLoading();
       const createResult = createRes && createRes.result;
       if (!createResult || !createResult.success) {
@@ -1363,7 +1461,7 @@ Page({
           dateString: this.data.mealPredictionForm.targetDate,
           itemKey
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const result = res && res.result;
       if (result && result.success && Array.isArray(result.tasks)) {
         this.setData({ purchasePlanTasks: result.tasks });
@@ -1400,7 +1498,7 @@ Page({
           itemKey,
           estimatedWeight: rawValue
         }
-      });
+      }, DAILY_MENU_CALL_TIMEOUT_MS);
       const result = res && res.result;
       if (result && result.success && Array.isArray(result.tasks)) {
         this.setData({ purchasePlanTasks: result.tasks });
