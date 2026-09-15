@@ -8155,16 +8155,78 @@ page {
 .material-quick-step-btn {
   flex: 1;
   text-align: center;
-  padding: 10rpx 0;
-  font-size: 22rpx;
+  min-height: 56rpx;
+  line-height: 56rpx;
+  padding: 8rpx 0;
+  font-size: 24rpx;
+  font-weight: 600;
   color: #C97B3D;
   background: rgba(201, 123, 61, 0.08);
-  border: 1.5rpx solid rgba(201, 123, 61, 0.3);
+  border: 1.5rpx solid rgba(201, 123, 61, 0.32);
   border-radius: 999rpx;
+  box-sizing: border-box;
+  transition: all 0.12s ease;
 }
 
 .material-quick-step-btn:active {
-  background: rgba(201, 123, 61, 0.18);
+  background: rgba(201, 123, 61, 0.22);
+  border-color: #C97B3D;
+  transform: scale(0.96);
+}
+
+/* 🎨（2026-09-19 三大物资弹窗视觉精细化）"登记采购入库"/"爱心物资跨店调拨"/
+   "设置初始库存"三个弹窗共用 .modal-mask/.modal-content/.modal-header/
+   .modal-body/.modal-footer 这套全站通用弹窗壳（还被赞助海报/义工微善海报
+   等其它弹窗共用）——不能直接改这套基础类，否则会连带改变一堆不相关的
+   弹窗。这里新增 .material-modal-content 作用域类（三处 WXML 已在
+   modal-content 上追加这个类名，不是替换），所有本轮视觉调整都限定在这个
+   作用域下，其余弹窗零影响 */
+
+/* 立体感 + 呼吸感：基础 .modal-content 只有一层黑色蒙层帮衬深度，这里叠加
+   一层柔和投影，弹窗本身从背景中"浮起来"；.modal-body 内边距从通用的
+   20rpx 放宽到 28rpx/30rpx，三个弹窗统一节奏 */
+.material-modal-content {
+  box-shadow: 0 28rpx 64rpx rgba(0, 0, 0, 0.22), 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
+}
+
+.material-modal-content .modal-body {
+  padding: 28rpx 30rpx;
+}
+
+/* 输入框聚焦态：与 material-usage-modal.wxss 的 .vt-count-input:focus 同一
+   套手法（背景转白 + 琥珀色描边 + 柔和光晕环），不改全局共用的 .form-input
+   本身（那是整个 pages/index 数十处表单在用的裸类，改了影响面太大） */
+.material-modal-content .form-input {
+  transition: all 0.2s ease;
+}
+
+.material-modal-content .form-input:focus {
+  background: #FFFFFF;
+  border-color: #C97B3D;
+  box-shadow: 0 0 0 4rpx rgba(201, 123, 61, 0.15);
+}
+
+/* 底部操作栏：取消＝琥珀色描边次要按钮，提交/保存＝琥珀色实心主按钮——
+   与全站其余弹窗共用的金色渐变 .btn-save（#B8860B→#DAA520）区分开，统一
+   到这三个雨花斋公益物资场景专属的琥珀色调 #C97B3D。safe-area-inset-bottom
+   适配已经在共用的 .modal-footer 里做好，这里不重复处理 */
+.material-modal-content .btn-close {
+  background: #FFFFFF;
+  color: #C97B3D;
+  border: 2rpx solid #C97B3D;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.material-modal-content .btn-save {
+  background: #C97B3D;
+  box-shadow: 0 8rpx 20rpx rgba(201, 123, 61, 0.32);
+}
+
+.material-modal-content .btn-save-disabled {
+  background: #D9D9D9;
+  color: #999999;
+  box-shadow: none;
 }
 
 .shift-scroll-area {

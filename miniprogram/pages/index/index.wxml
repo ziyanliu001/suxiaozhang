@@ -2349,7 +2349,7 @@
        （与上方 showMeritPosterModal 同一套，不新建壳层），内部自定义表单 -->
   <view class="poster-modal" wx:if="{{showMaterialTransferModal}}" bindtap="onCloseMaterialTransferModal">
     <view class="modal-mask"></view>
-    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+    <view class="modal-content material-modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
       <view class="modal-header">
         <text class="modal-title">🤝 爱心物资跨店调拨</text>
         <view class="modal-close" bindtap="onCloseMaterialTransferModal"><text class="close-icon">×</text></view>
@@ -2432,8 +2432,8 @@
       </view>
 
       <view class="modal-footer">
-        <button class="btn-close" bindtap="onCloseMaterialTransferModal">取消</button>
-        <button class="btn-save {{!materialTransferFormValid ? 'btn-save-disabled' : ''}}" bindtap="onSubmitMaterialTransfer" loading="{{materialTransferSubmitting}}" disabled="{{materialTransferSubmitting || !materialTransferFormValid}}">提交登记</button>
+        <button class="btn-close" hover-class="btn-hover" bindtap="onCloseMaterialTransferModal">取消</button>
+        <button class="btn-save {{!materialTransferFormValid ? 'btn-save-disabled' : ''}}" hover-class="btn-hover" bindtap="onSubmitMaterialTransfer" loading="{{materialTransferSubmitting}}" disabled="{{materialTransferSubmitting || !materialTransferFormValid}}">提交登记</button>
       </view>
     </view>
   </view>
@@ -2441,7 +2441,7 @@
   <!-- 🤝（2026-09-16）设置初始库存弹窗 -->
   <view class="poster-modal" wx:if="{{showMaterialBaselineModal}}" bindtap="onCloseMaterialBaselineModal">
     <view class="modal-mask"></view>
-    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+    <view class="modal-content material-modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
       <view class="modal-header">
         <text class="modal-title">⚙️ 设置初始库存</text>
         <view class="modal-close" bindtap="onCloseMaterialBaselineModal"><text class="close-icon">×</text></view>
@@ -2462,8 +2462,8 @@
         <input class="form-input" type="digit" placeholder="0" value="{{materialBaselineForm.vegetable}}" bindinput="onMaterialBaselineInput" data-item="vegetable" />
       </view>
       <view class="modal-footer">
-        <button class="btn-close" bindtap="onCloseMaterialBaselineModal">取消</button>
-        <button class="btn-save" bindtap="onSubmitMaterialBaseline" loading="{{materialBaselineSubmitting}}" disabled="{{materialBaselineSubmitting}}">保存</button>
+        <button class="btn-close" hover-class="btn-hover" bindtap="onCloseMaterialBaselineModal">取消</button>
+        <button class="btn-save" hover-class="btn-hover" bindtap="onSubmitMaterialBaseline" loading="{{materialBaselineSubmitting}}" disabled="{{materialBaselineSubmitting}}">保存</button>
       </view>
     </view>
   </view>
@@ -2471,7 +2471,7 @@
   <!-- 🤝（2026-09-16）登记采购入库弹窗 -->
   <view class="poster-modal" wx:if="{{showMaterialPurchaseModal}}" bindtap="onCloseMaterialPurchaseModal">
     <view class="modal-mask"></view>
-    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+    <view class="modal-content material-modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
       <view class="modal-header">
         <text class="modal-title">📥 登记采购入库</text>
         <view class="modal-close" bindtap="onCloseMaterialPurchaseModal"><text class="close-icon">×</text></view>
@@ -2507,8 +2507,8 @@
         <input class="form-input" type="digit" placeholder="请输入采购金额" value="{{materialPurchaseForm.amount}}" bindinput="onMaterialPurchaseAmountInput" />
       </view>
       <view class="modal-footer">
-        <button class="btn-close" bindtap="onCloseMaterialPurchaseModal">取消</button>
-        <button class="btn-save {{!materialPurchaseFormValid ? 'btn-save-disabled' : ''}}" bindtap="onSubmitMaterialPurchase" loading="{{materialPurchaseSubmitting}}" disabled="{{materialPurchaseSubmitting || !materialPurchaseFormValid}}">提交登记</button>
+        <button class="btn-close" hover-class="btn-hover" bindtap="onCloseMaterialPurchaseModal">取消</button>
+        <button class="btn-save {{!materialPurchaseFormValid ? 'btn-save-disabled' : ''}}" hover-class="btn-hover" bindtap="onSubmitMaterialPurchase" loading="{{materialPurchaseSubmitting}}" disabled="{{materialPurchaseSubmitting || !materialPurchaseFormValid}}">提交登记</button>
       </view>
     </view>
   </view>
