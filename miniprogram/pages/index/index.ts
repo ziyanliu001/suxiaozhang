@@ -32,6 +32,7 @@ import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { buildSmartReceiptDisplayItems, formatSmartReceiptTotalDisplay, buildSmartReceiptApplyText } from './lib/smartReceiptDraft';
 import { isDefaultOcrResultEmpty, isParseReceiptResultEmpty, adaptParseReceiptDraftToLegacyResult, adaptLegacyOcrResultToParseReceiptDraft } from './lib/ocrEngineFallback';
+import { MATERIAL_TRANSFER_ITEM_OPTIONS, MATERIAL_PURCHASE_ITEM_OPTIONS, computeMaterialTransferFormValid, computeMaterialPurchaseFormValid } from './lib/materialTransferForm';
 import { resolveActiveRoleGrant } from '../../utils/lib/resolveActiveRoleGrant';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
@@ -903,18 +904,11 @@ Page({
     // 🎨（2026-09-17 视觉与交互精致化）物资选择改成数据驱动的卡片宫格——
     // 新增一个物资类目只需加一行数据，不用再复制整段 WXML；调拨只放开三项
     // （时蔬保质期短不支持跨店调配，见 cloudfunctions/manageMaterialTransfer
-    // 的 TRANSFERABLE_ITEMS 常量），采购入库四项全覆盖
-    materialTransferItemOptions: [
-      { value: 'rice', emoji: '🍚', label: '大米' },
-      { value: 'oil', emoji: '🫗', label: '食用油' },
-      { value: 'flour', emoji: '🌾', label: '面粉' }
-    ] as Array<{ value: string; emoji: string; label: string }>,
-    materialPurchaseItemOptions: [
-      { value: 'rice', emoji: '🍚', label: '大米' },
-      { value: 'oil', emoji: '🫗', label: '食用油' },
-      { value: 'flour', emoji: '🌾', label: '面粉' },
-      { value: 'vegetable', emoji: '🥬', label: '时蔬' }
-    ] as Array<{ value: string; emoji: string; label: string }>,
+    // 的 TRANSFERABLE_ITEMS 常量），采购入库四项全覆盖。数据源与校验逻辑
+    // 唯一定义在 ./lib/materialTransferForm.js（配套单测覆盖纯素类目边界，
+    // 见该文件同目录 .test.js），这里只是把导入的常量塞进 data 供 WXML 绑定
+    materialTransferItemOptions: MATERIAL_TRANSFER_ITEM_OPTIONS as Array<{ value: string; emoji: string; label: string }>,
+    materialPurchaseItemOptions: MATERIAL_PURCHASE_ITEM_OPTIONS as Array<{ value: string; emoji: string; label: string }>,
 
     showMaterialTransferModal: false,
     materialTransferSubmitting: false,
@@ -2407,18 +2401,6 @@ Page({
       .map((s: any) => ({ storeId: s.storeId, storeName: s.storeName || '未命名门店' }));
   },
 
-  // 🛡️（2026-09-17 表单防错）门店已选、物资属于可调配三项、重量是大于 0
-  // 的合法数字、经手人非空——四项全部满足才允许点亮提交按钮。纯函数，不做
-  // db I/O，方便在每个字段变化处直接复用
-  computeMaterialTransferFormValid(form: { partnerStoreId: string; item: string; quantityJin: string; handledBy: string }): boolean {
-    if (!form.partnerStoreId) return false;
-    if (!['rice', 'oil', 'flour'].includes(form.item)) return false;
-    const qty = parseFloat(form.quantityJin);
-    if (!Number.isFinite(qty) || qty <= 0) return false;
-    if (!form.handledBy || !form.handledBy.trim()) return false;
-    return true;
-  },
-
   async onOpenMaterialTransferModal(e?: any) {
     if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
       await this.fetchAllStoresList();
@@ -2443,7 +2425,7 @@ Page({
       showMaterialTransferModal: true,
       materialPartnerStoreOptions: options,
       materialTransferForm: nextForm,
-      materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm)
+      materialTransferFormValid: computeMaterialTransferFormValid(nextForm)
     });
     this.fetchMaterialTransferRecent();
   },
@@ -2467,7 +2449,7 @@ Page({
     this.setData({
       'materialTransferForm.partnerStoreId': option.storeId,
       'materialTransferForm.partnerStoreName': option.storeName,
-      materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm)
+      materialTransferFormValid: computeMaterialTransferFormValid(nextForm)
     });
   },
 
@@ -2475,19 +2457,19 @@ Page({
     const item = e.currentTarget.dataset.item as 'rice' | 'oil' | 'flour';
     if (!item) return;
     const nextForm = { ...this.data.materialTransferForm, item };
-    this.setData({ 'materialTransferForm.item': item, materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm) });
+    this.setData({ 'materialTransferForm.item': item, materialTransferFormValid: computeMaterialTransferFormValid(nextForm) });
   },
 
   onMaterialTransferQuantityInput(e: any) {
     const quantityJin = e.detail.value;
     const nextForm = { ...this.data.materialTransferForm, quantityJin };
-    this.setData({ 'materialTransferForm.quantityJin': quantityJin, materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm) });
+    this.setData({ 'materialTransferForm.quantityJin': quantityJin, materialTransferFormValid: computeMaterialTransferFormValid(nextForm) });
   },
 
   onMaterialTransferHandledByInput(e: any) {
     const handledBy = e.detail.value;
     const nextForm = { ...this.data.materialTransferForm, handledBy };
-    this.setData({ 'materialTransferForm.handledBy': handledBy, materialTransferFormValid: this.computeMaterialTransferFormValid(nextForm) });
+    this.setData({ 'materialTransferForm.handledBy': handledBy, materialTransferFormValid: computeMaterialTransferFormValid(nextForm) });
   },
 
   async fetchMaterialTransferRecent() {
@@ -2681,13 +2663,6 @@ Page({
     }
   },
 
-  // 🛡️（2026-09-17 表单防错）购入模态框只有"重量"是真正会留空的必填项
-  // （品类始终有默认选中值），单独判定即可，不需要像调拨表单那样综合四项
-  computeMaterialPurchaseFormValid(quantityJin: string): boolean {
-    const qty = parseFloat(quantityJin);
-    return Number.isFinite(qty) && qty > 0;
-  },
-
   onOpenMaterialPurchaseModal() {
     this.setData({
       showMaterialPurchaseModal: true,
@@ -2711,7 +2686,7 @@ Page({
     const quantityJin = e.detail.value;
     this.setData({
       'materialPurchaseForm.quantityJin': quantityJin,
-      materialPurchaseFormValid: this.computeMaterialPurchaseFormValid(quantityJin)
+      materialPurchaseFormValid: computeMaterialPurchaseFormValid(quantityJin)
     });
   },
 
@@ -2761,7 +2736,7 @@ Page({
         return;
       }
       const jin = Math.round(kg * 2 * 10) / 10;
-      this.setData({ 'materialPurchaseForm.quantityJin': String(jin), materialPurchaseFormValid: this.computeMaterialPurchaseFormValid(String(jin)) });
+      this.setData({ 'materialPurchaseForm.quantityJin': String(jin), materialPurchaseFormValid: computeMaterialPurchaseFormValid(String(jin)) });
       wx.showToast({ title: `已自动填入${jin}斤，请核对`, icon: 'none', duration: 3000 });
     } catch (err) {
       console.error('[onScanMaterialPurchaseReceipt] 识别失败:', err);
