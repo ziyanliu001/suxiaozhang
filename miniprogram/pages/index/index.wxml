@@ -3963,8 +3963,52 @@
             </view>
           </view>
 
+          <!-- 🏛️（2026-09-15 自主立户）身份与开户模式联动展开：只有新建门店 +
+               申请身份为"大家长/庙董/住持/理事长"（requestedRole==='store_patriarch'，
+               展示称谓随场景变化，底层枚举值不变）时才有"这个机构是全新独立的、
+               还是既有机构的分支门店"这个选择，店长/财务/义工三档身份不涉及
+               机构主权问题，不展示。触发这个块的"申请身份"卡片在本表单更下方
+               （见下方 4027 行起 role-card 区块），WXML 靠 requestedRole 响应式
+               驱动显隐，不要求两处 DOM 顺序对应——把机构全称放在门店名称上方
+               是刻意的视觉顺序（先定机构，再定首店名） -->
+          <block wx:if="{{applyForm.storeSelectionType === 'custom' && applyForm.requestedRole === 'store_patriarch'}}">
+            <view style="margin-bottom: 24rpx;">
+              <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;">机构开户模式</text>
+              <view style="display: flex; flex-direction: column; gap: 12rpx;">
+                <view style="display: flex; flex-direction: row; align-items: center; padding: 20rpx 24rpx; border-radius: 12rpx; border: 2rpx solid {{applyForm.orgAccountMode === 'new' ? '#C0392B' : '#ECEEF0'}}; background: {{applyForm.orgAccountMode === 'new' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onSelectOrgAccountMode" data-mode="new" aria-role="radio" aria-selected="{{applyForm.orgAccountMode === 'new'}}">
+                  <view style="width: 32rpx; height: 32rpx; border-radius: 50%; border: 2rpx solid {{applyForm.orgAccountMode === 'new' ? '#C0392B' : '#ADB5BD'}}; display: flex; align-items: center; justify-content: center; margin-right: 16rpx; flex-shrink: 0; box-sizing: border-box;">
+                    <view wx:if="{{applyForm.orgAccountMode === 'new'}}" style="width: 18rpx; height: 18rpx; border-radius: 50%; background: #C0392B;"></view>
+                  </view>
+                  <view style="flex: 1;">
+                    <text style="font-size: 26rpx; font-weight: 500; color: #333333; display: block;">建立全新独立机构</text>
+                    <text style="font-size: 20rpx; color: #999999; display: block; margin-top: 2rpx;">自主立户 · 拥有独立数据主权与机构品牌</text>
+                  </view>
+                </view>
+                <view style="display: flex; flex-direction: row; align-items: center; padding: 20rpx 24rpx; border-radius: 12rpx; border: 2rpx solid {{applyForm.orgAccountMode === 'existing' ? '#C0392B' : '#ECEEF0'}}; background: {{applyForm.orgAccountMode === 'existing' ? '#FFF5F2' : '#F7F8FA'}};" bindtap="onSelectOrgAccountMode" data-mode="existing" aria-role="radio" aria-selected="{{applyForm.orgAccountMode === 'existing'}}">
+                  <view style="width: 32rpx; height: 32rpx; border-radius: 50%; border: 2rpx solid {{applyForm.orgAccountMode === 'existing' ? '#C0392B' : '#ADB5BD'}}; display: flex; align-items: center; justify-content: center; margin-right: 16rpx; flex-shrink: 0; box-sizing: border-box;">
+                    <view wx:if="{{applyForm.orgAccountMode === 'existing'}}" style="width: 18rpx; height: 18rpx; border-radius: 50%; background: #C0392B;"></view>
+                  </view>
+                  <view style="flex: 1;">
+                    <text style="font-size: 26rpx; font-weight: 500; color: #333333; display: block;">归属既有机构</text>
+                    <text style="font-size: 20rpx; color: #999999; display: block; margin-top: 2rpx;">作为既有机构名下的分支门店</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+
+            <!-- 🏛️ 机构/管委会全称：仅"建立全新独立机构"模式下必填，直接作为
+                 createTenant 云函数的 orgName 参数——解决寺院/助老等机构被误
+                 归属到调用者当前所属机构（常见是雨花斋默认全国机构）名下、
+                 无法拥有独立机构品牌与数据主权的痛点 -->
+            <view style="margin-bottom: 24rpx;" wx:if="{{applyForm.orgAccountMode === 'new'}}">
+              <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;"><text style="color: #D32F2F;">*</text> 机构/管委会全称</text>
+              <input class="form-input" style="width: 100%; height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="{{applyForm.customOrgType === 'temple_canteen' ? '例：漳州白礁慈济宫管委会（或紫云寺功德会）' : (applyForm.customOrgType === 'elderly_canteen' ? '例：嵩屿街道社区助老服务促进会' : (applyForm.customOrgType === 'volunteer_station' ? '例：同心慈善义工服务中心' : (applyForm.customOrgType === 'yuhuazhai' ? '例：雨花爱心互助食堂华东理事会' : '例：XX机构管委会/理事会')))}}" value="{{applyForm.tenantName}}" bindinput="onTenantNameInput" />
+              <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;">💡 将创建为与其他机构 100% 数据隔离的全新独立机构；门店联系电话/照片可在创建成功后于门店设置中完善</text>
+            </view>
+          </block>
+
           <!-- 标签随模式切换：新建门店时显示必填红星 -->
-          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text style="color: #D32F2F;">*</text> 新门店名称</text>
+          <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}"><text style="color: #D32F2F;">*</text> {{applyForm.requestedRole === 'store_patriarch' && applyForm.orgAccountMode === 'new' ? '首店名称' : '新门店名称'}}</text>
           <text style="font-size: 26rpx; color: #495057; font-weight: 500; display: block; margin-bottom: 10rpx;" wx:else>门店</text>
 
           <picker wx:if="{{applyForm.storeSelectionType === 'existing'}}" mode="selector" range="{{allStoresList}}" range-key="storeName" bindchange="onSelectApplyStore">
@@ -3977,7 +4021,7 @@
                情况兜底沿用原有通用示例文案。与 store-picker.wxml 同名内联三元链
                各自独立维护一份，两处文案保持一致（见该文件同处注释） -->
           <input wx:else class="form-input" style="width: 100%; height: 80rpx; min-height: 80rpx; line-height: 80rpx; background: #F7F8FA; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; border: 1.5rpx solid #ECEEF0; box-sizing: border-box; margin-bottom: 12rpx;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="{{applyForm.customOrgType === 'temple_canteen' ? '例：厦门青礁慈济宫（或紫云寺净素堂）' : (applyForm.customOrgType === 'elderly_canteen' ? '例：嵩屿街道敬老中心助餐点' : (applyForm.customOrgType === 'yuhuazhai' ? '例：厦门海沧三愿弘雨花斋' : (applyForm.customOrgType === 'volunteer_station' ? '例：厦门思明区爱心志愿服务站' : '例：嵩屿街道敬老中心助餐点（或 海沧雨花斋）')))}}" value="{{applyForm.customStoreName}}" bindinput="onCustomStoreNameInput" />
-          <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom'}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
+          <text style="display: block; font-size: 22rpx; color: #C97B3D; margin-top: 10rpx;" wx:if="{{applyForm.storeSelectionType === 'custom' && !(applyForm.requestedRole === 'store_patriarch' && applyForm.orgAccountMode === 'new')}}">💡 门店名称保持简短即可，系统会自动结合【所属地区】进行全国汇总</text>
         </view>
 
         <!-- 🏪 新建门店档案补全：门店此刻还不存在，地址/联系电话/门店照片先收进
@@ -3995,7 +4039,14 @@
              🐛（二次加固）内联样式优先级本已足够高，这里再给全部关键尺寸属性
              追加 !important，属于同一根因的纵深防御，排除任何潜在覆盖源；
              高度维持 80rpx（与本弹窗内 customStoreName/adminKeyInput/realName/
-             phone 等兄弟输入框统一口径，不单独改成其它数值制造新的不一致） -->
+             phone 等兄弟输入框统一口径，不单独改成其它数值制造新的不一致）
+             🏛️（2026-09-15 自主立户）"建立全新独立机构"模式下隐藏本区块——
+             createTenant 云函数只接受 address/province/city，不接受
+             联系电话/门店照片，见 index.ts submitCreateNewInstitution 注释；
+             为避免用户填了这两项却被静默丢弃，单独拆出这两项在新机构模式下
+             不展示；所属地区/门店地址 createTenant 是支持的（province/city/
+             address 参数），继续展示并随表单一并提交，不因为走了这条新路径
+             就丢失这两项已经很有价值的数据 -->
         <block wx:if="{{applyForm.storeSelectionType === 'custom'}}">
           <view class="apply-form-item">
             <text class="apply-form-label"><text class="form-required">*</text> 选择所属地区</text>
@@ -4007,26 +4058,28 @@
             <text class="apply-form-label">门店地址（可选）</text>
             <input class="form-input" style="width: 100% !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; background: #F7F8FA !important; border-radius: 16rpx !important; padding: 0 24rpx !important; font-size: 28rpx !important; border: 1.5rpx solid #ECEEF0 !important; box-sizing: border-box !important; margin-top: 10rpx !important; display: block !important;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店详细地址" value="{{applyForm.address}}" bindinput="onApplyAddressInput" />
           </view>
-          <view class="apply-form-item">
-            <text class="apply-form-label">联系电话（可选）</text>
-            <input class="form-input" type="number" style="width: 100% !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; background: #F7F8FA !important; border-radius: 16rpx !important; padding: 0 24rpx !important; font-size: 28rpx !important; border: 1.5rpx solid #ECEEF0 !important; box-sizing: border-box !important; margin-top: 10rpx !important; display: block !important;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
-          </view>
-          <view class="apply-form-item">
-            <text class="apply-form-label">门店照片（可选）</text>
-            <view class="receipt-grid-container">
-              <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
-                <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" binderror="onImageLoadError" />
-                <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
-                  <text class="thumb-load-failed-icon">⚠️</text>
+          <block wx:if="{{!(applyForm.requestedRole === 'store_patriarch' && applyForm.orgAccountMode === 'new')}}">
+            <view class="apply-form-item">
+              <text class="apply-form-label">联系电话（可选）</text>
+              <input class="form-input" type="number" style="width: 100% !important; height: 80rpx !important; min-height: 80rpx !important; line-height: 80rpx !important; background: #F7F8FA !important; border-radius: 16rpx !important; padding: 0 24rpx !important; font-size: 28rpx !important; border: 1.5rpx solid #ECEEF0 !important; box-sizing: border-box !important; margin-top: 10rpx !important; display: block !important;" placeholder-style="font-size: 26rpx; color: #999999;" placeholder="请输入门店联系电话" value="{{applyForm.contactPhone}}" bindinput="onApplyContactPhoneInput" />
+            </view>
+            <view class="apply-form-item">
+              <text class="apply-form-label">门店照片（可选）</text>
+              <view class="receipt-grid-container">
+                <view class="grid-image-item" wx:for="{{applyForm.storePhotos}}" wx:key="*this">
+                  <image wx:if="{{!imageLoadFailedMap[item]}}" class="grid-img" src="{{item}}" mode="aspectFill" bindtap="onPreviewImage" data-url="{{item}}" binderror="onImageLoadError" />
+                  <view wx:else class="thumb-load-failed" bindtap="onRetryImage" data-url="{{item}}">
+                    <text class="thumb-load-failed-icon">⚠️</text>
+                  </view>
+                  <view class="img-delete-badge" catchtap="onDeleteApplyStorePhoto" data-index="{{index}}">✕</view>
                 </view>
-                <view class="img-delete-badge" catchtap="onDeleteApplyStorePhoto" data-index="{{index}}">✕</view>
-              </view>
-              <view class="grid-add-btn" bindtap="onChooseApplyStorePhoto" wx:if="{{applyForm.storePhotos.length < 9}}">
-                <text class="add-icon">{{applyStorePhotoUploading ? '…' : '+'}}</text>
-                <text class="add-txt">{{applyStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
+                <view class="grid-add-btn" bindtap="onChooseApplyStorePhoto" wx:if="{{applyForm.storePhotos.length < 9}}">
+                  <text class="add-icon">{{applyStorePhotoUploading ? '…' : '+'}}</text>
+                  <text class="add-txt">{{applyStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
+                </view>
               </view>
             </view>
-          </view>
+          </block>
         </block>
 
         <view style="margin-bottom: 24rpx;">

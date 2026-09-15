@@ -207,7 +207,55 @@
         <view class="new-store-form">
           <view class="new-store-form-back" bindtap="onToggleNewStoreForm">‹ 返回门店列表</view>
 
-          <text class="form-label">新门店名称</text>
+          <!-- 🏛️（2026-09-15 自主立户）身份与开户模式联动展开：只有申请身份为
+               "大家长/庙董/住持/理事长"（applyRole==='store_patriarch'，展示
+               称谓随场景变化，底层枚举值不变）时才有"这个机构是全新独立的、
+               还是既有机构的分支门店"这个选择，店长/财务/义工/家人四档身份
+               不涉及机构主权问题，不展示。触发这个块的"申请身份"单选在本表单
+               更下方（见下方 role-card-row 区块），WXML 靠 applyRole 响应式
+               驱动显隐，不要求两处 DOM 顺序对应——把机构全称放在门店名称上方
+               是刻意的视觉顺序（先定机构，再定首店名） -->
+          <block wx:if="{{newStoreForm.applyRole === 'store_patriarch'}}">
+            <text class="form-label">机构开户模式</text>
+            <view class="org-mode-group">
+              <view class="org-mode-option {{newStoreForm.orgAccountMode === 'new' ? 'org-mode-option-active' : ''}}" bindtap="onSelectOrgAccountMode" data-mode="new" aria-role="radio" aria-selected="{{newStoreForm.orgAccountMode === 'new'}}">
+                <view class="org-mode-radio-dot">
+                  <view wx:if="{{newStoreForm.orgAccountMode === 'new'}}" class="org-mode-radio-dot-fill"></view>
+                </view>
+                <view>
+                  <text class="org-mode-title">建立全新独立机构</text>
+                  <text class="org-mode-desc">自主立户 · 拥有独立数据主权与机构品牌</text>
+                </view>
+              </view>
+              <view class="org-mode-option {{newStoreForm.orgAccountMode === 'existing' ? 'org-mode-option-active' : ''}}" bindtap="onSelectOrgAccountMode" data-mode="existing" aria-role="radio" aria-selected="{{newStoreForm.orgAccountMode === 'existing'}}">
+                <view class="org-mode-radio-dot">
+                  <view wx:if="{{newStoreForm.orgAccountMode === 'existing'}}" class="org-mode-radio-dot-fill"></view>
+                </view>
+                <view>
+                  <text class="org-mode-title">归属既有机构</text>
+                  <text class="org-mode-desc">作为既有机构名下的分支门店</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 🏛️ 机构/管委会全称：仅"建立全新独立机构"模式下必填，直接作为
+                 createTenant 云函数的 orgName 参数——解决寺院/助老等机构被误
+                 归属到调用者当前所属机构名下、无法拥有独立机构品牌与数据
+                 主权的痛点 -->
+            <block wx:if="{{newStoreForm.orgAccountMode === 'new'}}">
+              <text class="form-label"><text class="form-label-required">*</text> 机构/管委会全称</text>
+              <input class="new-store-input"
+                     type="text"
+                     placeholder="{{orgTypeOptions[orgTypeIndex].value === 'temple_canteen' ? '例：漳州白礁慈济宫管委会（或紫云寺功德会）' : (orgTypeOptions[orgTypeIndex].value === 'elderly_canteen' ? '例：嵩屿街道社区助老服务促进会' : (orgTypeOptions[orgTypeIndex].value === 'volunteer_station' ? '例：同心慈善义工服务中心' : (orgTypeOptions[orgTypeIndex].value === 'yuhuazhai' ? '例：雨花爱心互助食堂华东理事会' : '例：XX机构管委会/理事会')))}}"
+                     value="{{newStoreForm.tenantName}}"
+                     bindinput="onTenantNameInput"
+                     cursor-spacing="50"
+                     adjust-position="{{true}}"/>
+              <text class="form-hint">💡 将创建为与其他机构 100% 数据隔离的全新独立机构；门店联系电话/照片可在创建成功后于门店设置中完善</text>
+            </block>
+          </block>
+
+          <text class="form-label">{{newStoreForm.applyRole === 'store_patriarch' && newStoreForm.orgAccountMode === 'new' ? '首店名称' : '新门店名称'}}</text>
           <!-- 🏛️（2026-09-14 称谓白话化）placeholder 按下方"所属平台类型"已选值
                动态切换，未落入这 4 个常见场景（或尚未选择）时兜底沿用原有
                通用示例文案。与 index.wxml 同名内联三元链各自独立维护一份，
@@ -347,20 +395,27 @@
               <text class="form-label">门店地址<text class="form-label-optional">（可选）</text></text>
               <input class="new-store-input" type="text" placeholder="请输入门店详细地址" value="{{newStoreForm.address}}" bindinput="onNewStoreAddressInput" cursor-spacing="50" adjust-position="{{true}}"/>
 
-              <text class="form-label">联系电话<text class="form-label-optional">（可选）</text></text>
-              <input class="new-store-input" type="number" placeholder="请输入门店联系电话" value="{{newStoreForm.contactPhone}}" bindinput="onNewStoreContactPhoneInput" cursor-spacing="50" adjust-position="{{true}}"/>
+              <!-- 🏛️（2026-09-15 自主立户）"建立全新独立机构"模式下隐藏这两项——
+                   createTenant 云函数不接受 contactPhone/storePhotos 参数（只接受
+                   orgName/storeName/orgType/realName/phone/address/province/city，
+                   见 submitCreateNewInstitution 注释），为避免用户填了却被静默
+                   丢弃，索性不展示，引导创建成功后在门店设置中补充 -->
+              <block wx:if="{{!(newStoreForm.applyRole === 'store_patriarch' && newStoreForm.orgAccountMode === 'new')}}">
+                <text class="form-label">联系电话<text class="form-label-optional">（可选）</text></text>
+                <input class="new-store-input" type="number" placeholder="请输入门店联系电话" value="{{newStoreForm.contactPhone}}" bindinput="onNewStoreContactPhoneInput" cursor-spacing="50" adjust-position="{{true}}"/>
 
-              <text class="form-label">门店照片</text>
-              <view class="receipt-grid-container">
-                <view class="grid-image-item" wx:for="{{newStoreForm.storePhotos}}" wx:key="*this">
-                  <image class="grid-img" src="{{item}}" mode="aspectFill" />
-                  <view class="img-delete-badge" catchtap="onDeleteNewStorePhoto" data-index="{{index}}">✕</view>
+                <text class="form-label">门店照片</text>
+                <view class="receipt-grid-container">
+                  <view class="grid-image-item" wx:for="{{newStoreForm.storePhotos}}" wx:key="*this">
+                    <image class="grid-img" src="{{item}}" mode="aspectFill" />
+                    <view class="img-delete-badge" catchtap="onDeleteNewStorePhoto" data-index="{{index}}">✕</view>
+                  </view>
+                  <view class="grid-add-btn" bindtap="onChooseNewStorePhoto" wx:if="{{newStoreForm.storePhotos.length < 9}}">
+                    <text class="add-icon">{{newStorePhotoUploading ? '…' : '+'}}</text>
+                    <text class="add-txt">{{newStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
+                  </view>
                 </view>
-                <view class="grid-add-btn" bindtap="onChooseNewStorePhoto" wx:if="{{newStoreForm.storePhotos.length < 9}}">
-                  <text class="add-icon">{{newStorePhotoUploading ? '…' : '+'}}</text>
-                  <text class="add-txt">{{newStorePhotoUploading ? '压缩中' : '添加照片'}}</text>
-                </view>
-              </view>
+              </block>
             </block>
           </block>
           <view class="form-hint" wx:else>👑 您是超级管理员，提交后将直接建店并自动获得该店管理权限，无需审批</view>
@@ -371,7 +426,7 @@
       <!-- Footer：提交按钮固定置底，永不被键盘或内容遮挡 -->
       <view class="sheet-footer">
         <button class="new-store-submit-btn" bindtap="onSubmitNewStoreApply" loading="{{isSubmittingNewStore}}" disabled="{{isSubmittingNewStore}}">
-          {{currentStore.role === 'ADMIN' ? '立即创建门店' : (newStoreForm.applyRole === 'volunteer' || newStoreForm.applyRole === 'store_family' ? '提交申请，立即加入' : '提交申请，由店长审核')}}
+          {{currentStore.role === 'ADMIN' ? '立即创建门店' : (newStoreForm.applyRole === 'store_patriarch' && newStoreForm.orgAccountMode === 'new' ? '立即创建独立机构' : (newStoreForm.applyRole === 'volunteer' || newStoreForm.applyRole === 'store_family' ? '提交申请，立即加入' : '提交申请，由店长审核'))}}
         </button>
       </view>
     </block>

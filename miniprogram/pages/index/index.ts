@@ -1152,7 +1152,17 @@ Page({
       // 用户在表单里点选 4 张场景卡片（见 onSelectNewStoreScene）产生的显式值，
       // 提交时直接作为 orgType 传给 processRoleAudit，不再有隐式兜底——
       // onSubmitRoleApply 已加一条必填校验，不会再静默落到 'other'
-      customOrgType: ''
+      customOrgType: '',
+      // 🏛️（2026-09-15 自主立户）新建门店 + 申请身份为大家长时二选一：'new'=
+      // 建立全新独立机构（拥有独立 tenantId/数据主权，默认选中）、'existing'=
+      // 归属既有机构（作为既有机构名下的分支门店，即升级前的老流程）。解决
+      // 寺院/助老等机构被误归属到调用者当前所属机构（常见是雨花斋默认全国
+      // 机构 yuhuazhai_national）名下、无法拥有独立机构品牌的痛点，见
+      // onSubmitRoleApply/submitCreateNewInstitution 分流逻辑
+      orgAccountMode: 'new' as 'new' | 'existing',
+      // 🏛️ 机构/管委会全称——orgAccountMode==='new' 时必填，直接作为
+      // cloudfunctions/createTenant 的 orgName 参数（新建独立机构的正式名称）
+      tenantName: ''
     } as any,
     // 🏛️（2026-09-14 称谓自适应）新建门店"申请身份"四张卡片的展示称谓——
     // 按 applyForm.customOrgType 动态切换（见 syncRoleDisplayTitles()），
@@ -4422,6 +4432,19 @@ Page({
     this.syncRoleDisplayTitles();
   },
 
+  // 🏛️（2026-09-15 自主立户）机构开户模式二选一点选——只在
+  // requestedRole==='store_patriarch' 时的 WXML 区块里出现，见 index.wxml
+  // 同处注释
+  onSelectOrgAccountMode(e: any) {
+    const mode = e.currentTarget.dataset.mode as 'new' | 'existing';
+    if (!mode || mode === this.data.applyForm.orgAccountMode) return;
+    this.setData({ 'applyForm.orgAccountMode': mode });
+  },
+
+  onTenantNameInput(e: any) {
+    this.setData({ 'applyForm.tenantName': e.detail.value });
+  },
+
   // 🏛️（2026-09-14 称谓自适应）按当前表单状态重算"申请身份"四张卡片的
   // 展示称谓——只有 storeSelectionType==='custom'（新建门店）时才有"已选
   // 服务场景"这个概念，'existing'（加入已有门店）分支不采集 orgType（该
@@ -4523,7 +4546,18 @@ Page({
   async onSubmitRoleApply() {
     if (this.data.isSubmittingApply) return;
 
-    const { storeId, storeName, realName, phone, requestedRole, storeSelectionType, customStoreName, region, address, contactPhone, storePhotos, customOrgType, adminKeyInput } = this.data.applyForm;
+    const { requestedRole, storeSelectionType, orgAccountMode } = this.data.applyForm;
+
+    // 🏛️（2026-09-15 自主立户）分流：新建门店 + 申请身份为大家长 +"建立全新
+    // 独立机构"时，走完全独立的 createTenant 路径（见 submitCreateNewInstitution），
+    // 不复用下方 processRoleAudit 的必填校验/提交——两条路径必填字段与云函数
+    // 契约都不同（如 createTenant 不接受 storePhotos/contactPhone），混在
+    // 一起校验容易顾此失彼
+    if (storeSelectionType === 'custom' && requestedRole === 'store_patriarch' && orgAccountMode === 'new') {
+      return this.submitCreateNewInstitution();
+    }
+
+    const { storeId, storeName, realName, phone, customStoreName, region, address, contactPhone, storePhotos, customOrgType, adminKeyInput } = this.data.applyForm;
 
     // ——— 必填校验（按展示顺序逐项拦截）———
     if (storeSelectionType === 'custom') {
@@ -4641,6 +4675,96 @@ Page({
       wx.hideLoading();
       console.error('[onSubmitRoleApply] 提交失败:', e);
       wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ isSubmittingApply: false });
+    }
+  },
+
+  // 🏛️（2026-09-15 自主立户）"建立全新独立机构"分支：直接调用
+  // cloudfunctions/createTenant（不经过 processRoleAudit），事务内原子创建
+  // 全新机构 + 首店 + 授予调用者首任 store_patriarch/store_manager 双角色，
+  // 与其他机构 100% 数据物理隔离（见该云函数头部注释）。⚠️ 该云函数会拒绝
+  // "已有审核通过角色"的调用者（防止多租户污染，见其 existingRes 校验），
+  // 这类账号提交会收到服务端返回的明确错误文案（引导走邀请码扩店），不在
+  // 客户端重复这条校验——服务端才是唯一真源
+  async submitCreateNewInstitution() {
+    if (this.data.isSubmittingApply) return;
+
+    const { customOrgType, customStoreName, tenantName, realName, phone, region, address } = this.data.applyForm;
+
+    if (!customOrgType) {
+      wx.showToast({ title: '请选择服务场景', icon: 'none' });
+      return;
+    }
+    if (!tenantName || !tenantName.trim()) {
+      wx.showToast({ title: '请输入机构/管委会全称', icon: 'none' });
+      return;
+    }
+    if (!customStoreName || !customStoreName.trim()) {
+      wx.showToast({ title: '请输入首店名称', icon: 'none' });
+      return;
+    }
+    if (!region || !region.length) {
+      wx.showToast({ title: '请选择所属地区', icon: 'none' });
+      return;
+    }
+    if (!realName || !realName.trim()) {
+      wx.showToast({ title: '请输入真实姓名', icon: 'none' });
+      return;
+    }
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      wx.showToast({ title: '请输入正确的手机号', icon: 'none' });
+      return;
+    }
+
+    this.setData({ isSubmittingApply: true });
+    wx.showLoading({ title: '正在创建独立机构...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      // ⚠️ createTenant 的参数名是 orgName（不是 tenantName）——tenantName 只是
+      // 本表单 applyForm 字段的命名，与云函数入参名是两件事，提交时显式映射。
+      // region 是 <picker mode="region"> 的 [省,市,区] 数组，createTenant 只
+      // 接受拆开的 province/city（不接受区县，也不接受 contactPhone/
+      // storePhotos——上面表单已按此隐藏了这两项，见 index.wxml 同处注释）
+      const res = await callFunctionWithTimeout({
+        name: 'createTenant',
+        data: {
+          orgName: tenantName.trim(),
+          storeName: customStoreName.trim(),
+          orgType: customOrgType,
+          realName: realName.trim(),
+          phone: phone.trim(),
+          province: region[0] || '',
+          city: region[1] || '',
+          address: (address || '').trim()
+        }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '创建失败，请重试', icon: 'none', duration: 3000 });
+        return;
+      }
+
+      this.setData({ showApplyModal: false, applyModalTitleOverride: '' });
+      setTabBarHidden(this, false);
+
+      // 创建成功后调用者已直接是首任大家长+店长，刷新本地角色缓存/orgType
+      // 落地新专区，与上方 onSubmitRoleApply 义工免审分支同一处理手法
+      this.initCurrentUserRole();
+
+      wx.showModal({
+        title: '🎉 独立机构创建成功',
+        content: result.message || `「${tenantName.trim()}」创建成功！您已成为首任负责人。`,
+        showCancel: false,
+        confirmText: '我知道了'
+      });
+    } catch (e) {
+      wx.hideLoading();
+      console.error('[submitCreateNewInstitution] 创建失败:', e);
+      wx.showToast({ title: '创建失败，请重试', icon: 'none' });
     } finally {
       this.setData({ isSubmittingApply: false });
     }

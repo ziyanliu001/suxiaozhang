@@ -836,6 +836,76 @@
   color: #C97B7B;
 }
 
+/* 🏛️（2026-09-15 自主立户）"机构开户模式"二选一——纵向堆叠、左对齐单选点
+   + 标题/副标题，与上面 .role-card 系列（居中图标卡片）视觉语言呼应（同款
+   描边+浅底+品牌红高亮）但布局不同，独立命名一套 class */
+.org-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.org-mode-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid #EEEEEE;
+  background: #F8F9FA;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.org-mode-option-active {
+  background: #FFF2F0;
+  border-color: #C43A3A;
+}
+
+.org-mode-radio-dot {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  border: 2rpx solid #ADB5BD;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.org-mode-option-active .org-mode-radio-dot {
+  border-color: #C43A3A;
+}
+
+.org-mode-radio-dot-fill {
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  background: #C43A3A;
+}
+
+.org-mode-title {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #333333;
+  display: block;
+}
+
+.org-mode-option-active .org-mode-title {
+  color: #C43A3A;
+}
+
+.org-mode-desc {
+  font-size: 20rpx;
+  color: #999999;
+  display: block;
+  margin-top: 2rpx;
+}
+
 /* 🏛️（2026-09-14 机构分类卡片选择器）"所属平台类型"上方的 4 张常见场景
    快选卡片——视觉语言与上面 .role-card 系列保持一致（同款描边+浅底高亮），
    但独立命名一套 class，避免与"申请身份"卡片的选中态耦合在一起改动 */
