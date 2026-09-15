@@ -1,0 +1,9 @@
+{
+  "name": "manageMaterialTransfer",
+  "version": "1.0.0",
+  "description": "云函数：雨花斋/助老食堂爱心物资库存结存与跨店调配（不碰商业进销存，服务端硬性仅放行雨花斋/助老食堂专区）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

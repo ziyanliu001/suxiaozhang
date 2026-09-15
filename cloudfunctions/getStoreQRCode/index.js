@@ -130,7 +130,10 @@ exports.main = async (event, context) => {
     // 就对任何人无鉴权公开，这枚码只是把"扫码回到小程序自动打开阳光账本"这个
     // 体验固化在一枚可长期展示的现场立牌上，不构成新的越权面。仍然保留"只能
     // 生成本人所属门店"这条限制，不允许任何账号越权为其他门店印制立牌
-    const isLowRiskPersonalQr = purpose === 'certificate' || purpose === 'checkin_share' || purpose === 'merit_stele';
+    // 🤝（2026-09-16 爱心物资跨店调拨凭证）与 merit_stele 同一档低风险豁免——
+    // 只是把"扫码回到小程序"固化在调拨凭证海报上供对方核对，不构成对外招募/
+    // 管理身份变更这类高风险动作，仍然保留"只能生成本人所属门店"这条限制
+    const isLowRiskPersonalQr = purpose === 'certificate' || purpose === 'checkin_share' || purpose === 'merit_stele' || purpose === 'material_transfer';
 
     if (isLowRiskPersonalQr) {
       if (userStoreId && userStoreId !== storeId) {
@@ -200,6 +203,14 @@ exports.main = async (event, context) => {
     function buildMeritSteleScene(id) {
       return HEX32_PATTERN.test(id) ? `stele_${hexToBase36(id)}` : `stele_${id}`;
     }
+    // 🤝（2026-09-16）爱心物资调拨凭证二维码：与 merit_stele 同一套 base36
+    // 压缩策略，前缀改用 'xfer_'——字母 x/f/e/r 里只有 'e' 落在十六进制字母表
+    // 内，但前缀整体（'xfer_'）与已知的 'stele_'/裸十六进制 storeId/
+    // 't_..._d_...' 三种既有格式都不冲突，不会被误解析成其它场景
+    const isMaterialTransferQr = purpose === 'material_transfer';
+    function buildMaterialTransferScene(id) {
+      return HEX32_PATTERN.test(id) ? `xfer_${hexToBase36(id)}` : `xfer_${id}`;
+    }
     const dateDigits = String(date || '').replace(/[^0-9]/g, '');
     // 🌟 证书二维码 scene 极简编码：证书场景不需要完整 storeId，只用于朋友圈扫码
     // 引流时让 app.ts 识别出"谁分享的、指向哪家门店"，两段各截取前 10 位足以
@@ -222,7 +233,9 @@ exports.main = async (event, context) => {
         ? { page: 'pages/index/index', scene: `u=${String(OPENID || '').substring(0, 10)}&s=${String(storeId).substring(0, 10)}` }
         : isMeritSteleQr
           ? { page: 'pages/index/index', scene: buildMeritSteleScene(storeId) }
-          : { page: 'pages/index/index', scene: String(storeId) };
+          : isMaterialTransferQr
+            ? { page: 'pages/index/index', scene: buildMaterialTransferScene(storeId) }
+            : { page: 'pages/index/index', scene: String(storeId) };
 
     // 🛡️ scene 字段硬限制 32 字符（wxacode.getUnlimited API 限制）——storeId 是微信
     // 云数据库自动生成的 _id，不保证是短字符串，实际长度取决于云环境的 ID 生成规则，

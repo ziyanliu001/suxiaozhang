@@ -354,6 +354,76 @@ CLAUDE.md 记录的取值域（`all`/`yuhuazhai`/`elderly_canteen`/`rescue_team`
 | `action: 'ADMIN_WEB_GENERATE_ACTIVATION_CODE'` | Web 管理中台铸造授权码，`generated_count` 记录本次实际铸造张数 |
 | `action: 'EMERGENCY_SUPER_ADMIN_CLAIM'` 新增 `channel` 字段 | 三条 `super_admin` 授予通道共用同一个 action 值，靠 `channel` 区分来路：`'wechat_secret'`（`emergencyClaimSuperAdmin`，默认值）/ `'cli_script'`（`scripts/ops/grant-super-admin.js`）/ `'web_console'`（`adminWebConsole`） |
 
+## 12. 爱心物资库存与跨店调配（`manageMaterialTransfer`，2026-09-16）
+
+权威定义 `cloudfunctions/manageMaterialTransfer/index.js`。⚠️ 与第 6/7 节的商业进销存（`inventory_items`/`inventory_logs`）**是两套完全独立、互不调用的系统**：那套系统服务端硬拒绝 `orgType==='yuhuazhai'`（第 6 节），本套系统反过来只服务 `CHARITY_ORG_TYPES = ['yuhuazhai', 'elderly_canteen']`，两者合起来覆盖全部 `orgType`、互不重叠。设计取向也不同——那套是带成本核算/事务扣减的商业进销存，这套是"零可变余额字段、查询时现算"的公益捐赠估算结存，不适用第 7 节"库存不允许变为负数、事务回滚"那条硬约束（本套系统的负数直接钳制展示为 0，详见下文）。
+
+### 12.1 `stores.materialStockBaseline`（新增可选字段）
+
+`stores` 文档新增可选内嵌对象，由 `setBaseline` action 写入：
+
+| 字段 | 含义 |
+|---|---|
+| `rice` / `oil` / `flour` / `vegetable` | 大米/食用油/面粉/时蔬初始存量（斤），一次性设置，店长/大家长/超管可修改 |
+| `updatedAt` | `db.serverDate()` |
+| `updatedBy` | 操作人姓名快照 |
+
+### 12.2 结存公式（现算，不落库）
+
+`getStock` action 现场聚合四类数据源算出，不维护任何 `currentStock` 类可变字段：
+
+```
+预估结存 = 初始存量
+         + Σ report_logs.materials[]（捐赠，自由文本按品名关键词匹配四类目，
+           见 lib/parseMaterialDonation.js；单位限斤/公斤/kg 才计入）
+         + Σ material_purchase_logs（采购入库，结构化提交）
+         − Σ material_logs（后厨消耗：riceCount/oilCount/flourCount/vegetableCount）
+         + Σ material_transfer_logs.toStoreId 命中（调入）
+         − Σ material_transfer_logs.fromStoreId 命中（调出）
+```
+
+⚠️ **`report_logs.materials[]` 与 `material_logs` 的语义容易搞反**：前者（`utils/parser.ts parseMaterials()` 解析"张三：大米50斤"）是**捐赠**台账；后者（`manageVolunteerSubmission` 写入的 `riceCount` 等）是**后厨消耗**流水，不是捐赠。
+
+计算结果明确是**估算值**（捐赠依赖自由文本解析，天然不精确；采购/调拨两项是结构化数据，精确），负数钳制展示为 0（健康度判定用钳制前的真实值，负数天然满足"告急"）。健康度阈值 v1 为 `cloudfunctions/manageMaterialTransfer/lib/computeMaterialStock.js` 里的固定常量（`HEALTH_THRESHOLDS`），不支持门店级自定义。
+
+### 12.3 `material_purchase_logs`（采购入库，单店流水）
+
+`report_logs` 的支出字段只存金额、没有重量字段；`material_logs` 的 OCR 识别重量语义上是"消耗"不是"采购"——本仓库此前没有任何可靠的"买了多少斤"数据源，新增这个轻量集合承接，由 `recordPurchase` action 写入：
+
+| 字段 | 含义 |
+|---|---|
+| `tenantId` / `storeId` / `storeName` | 门店归属 |
+| `item` / `itemLabel` | `rice`/`oil`/`flour`/`vegetable`，四类目全覆盖 |
+| `quantityJin` | 采购重量（斤），结构化表单提交，可选拍照识别小票自动填（复用既有 `ocrExpenseReceipt` 默认 action，未改动该云函数） |
+| `amount` | 采购金额（元），可选 |
+| `receiptImage` | 小票云存储 fileID，可选 |
+| `operatorOpenId` / `operatorName` | 操作人 |
+| `createTime` | `db.serverDate()` |
+
+### 12.4 `material_transfer_logs`（跨店调拨，不可变流水）
+
+由 `create` action 写入，`fromStoreId`/`toStoreId` 须同 `tenantId`；调用者须为任一方门店的 `store_manager`/`store_patriarch`/超管。**只放开大米/食用油/面粉三项**（时蔬保质期短、跨店平调时效性差，`TRANSFERABLE_ITEMS` 常量不含 `vegetable`）：
+
+| 字段 | 含义 |
+|---|---|
+| `tenantId` | 双方共同所属机构 |
+| `fromStoreId` / `fromStoreName` | 调出方（写入时的门店名快照） |
+| `toStoreId` / `toStoreName` | 接收方（快照） |
+| `item` / `itemLabel` | `rice`/`oil`/`flour` |
+| `quantityJin` | 调配重量（斤） |
+| `handledBy` | 经手人姓名，落库前过 `msgSecCheck` |
+| `operatorOpenId` / `operatorName` | 提交操作的账号 |
+| `verificationCode` | 16 位防伪存证码，创建时算好存入（`sha256(payload按key排序JSON).slice(0,16).toUpperCase()`，与 `getSunshineLedger.generateFootprintCode` 同一档"人工可核对但非加密学签名"设计定位，不是每次现算） |
+| `createTime` | `db.serverDate()` |
+
+**跨店写入不用两阶段事务**：本仓库此前没有任何云函数原子写过两个不同 `storeId` 的数据（唯一的"双店"概念是 `getNationalDashboard` 的 `rebalanceSuggestions`，只读撮合建议，不落库，且是 Enterprise 闭源层）。本函数刻意采用"零可变余额字段"设计——调拨只 `add()` 一条不可变流水（单文档写入天然原子），双方结存永远由 `getStock` 现算得出，不需要、也不引入跨店多文档事务。
+
+`listTransfers` action 供首页"最近调拨"小列表使用；`getStock` 若发现某物资"告急"，顺带在同机构（同城优先）门店里查该项"富余"的候选，随响应一并返回 `suggestions`，不单独开 action。
+
+### 12.5 `getStoreQRCode` 新增 `purpose:'material_transfer'`
+
+《爱心物资协同调拨单》海报底部验真码，与 `merit_stele` 同一档低风险豁免（调用者只需属于该 storeId），`buildMaterialTransferScene()` 复用 `hexToBase36` 压缩策略，前缀 `xfer_`，落地页仍是 `pages/index/index`（与 `merit_stele`/`certificate` 一致，不新建可机读核验详情页——防伪码文本本身承担人工核对职责）。
+
 ## 维护须知
 
 - 本文档的权威性来自"贴代码位置"，不是来自本身的表述。**任何字段/枚举一旦在代码中变更，必须同步更新本文档对应条目**（这是 CLAUDE.md 治理要求）——尤其是 `orgType`/`businessType` 这类被 3-4 个文件各自维护同源拷贝的取值域，改动时本文档也要算作需要同步的一处。

@@ -7825,6 +7825,147 @@ page {
   transform: scale(0.97);
 }
 
+/* 🤝（2026-09-16 爱心物资库存与跨店调配）与上方 .inventory-pill-row（自报
+   三态、stapleRiceStatus/OilStatus）是两套完全独立的数据，视觉上刻意分成
+   独立小节 + 顶部细分割线，不合并进同一排 pill，避免用户误以为是同一份
+   数据的两种展示 */
+.material-stock-section {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #F0F0F0;
+}
+
+.material-stock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.material-stock-title {
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #444444;
+}
+
+.material-stock-baseline-link {
+  font-size: 22rpx;
+  color: #8C1D18;
+}
+
+.material-stock-row {
+  display: flex;
+  gap: 10rpx;
+  margin-bottom: 14rpx;
+}
+
+.material-stock-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rpx;
+  padding: 12rpx 4rpx;
+  border-radius: 14rpx;
+  background: #F5F5F5;
+}
+
+.material-stock-name {
+  font-size: 18rpx;
+  color: #777777;
+}
+
+.material-stock-jin {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #444444;
+}
+
+.material-stock-label {
+  font-size: 18rpx;
+  color: #999999;
+}
+
+.material-stock-item.status-green {
+  background: rgba(46, 125, 50, 0.1);
+}
+
+.material-stock-item.status-green .material-stock-jin,
+.material-stock-item.status-green .material-stock-label {
+  color: #2E7D32;
+}
+
+.material-stock-item.status-yellow {
+  background: rgba(245, 127, 23, 0.1);
+}
+
+.material-stock-item.status-red {
+  background: rgba(211, 47, 47, 0.1);
+}
+
+.material-stock-item.status-red .material-stock-jin,
+.material-stock-item.status-red .material-stock-label {
+  color: #D32F2F;
+}
+
+.material-stock-loading {
+  font-size: 22rpx;
+  color: #AAAAAA;
+  text-align: center;
+  padding: 20rpx 0;
+  margin-bottom: 14rpx;
+}
+
+.material-suggestion-banner {
+  margin-bottom: 14rpx;
+}
+
+.material-suggestion-item {
+  padding: 14rpx 16rpx;
+  border-radius: 12rpx;
+  background: rgba(245, 127, 23, 0.1);
+  margin-bottom: 8rpx;
+}
+
+.material-suggestion-item text {
+  font-size: 22rpx;
+  color: #C97B3D;
+  line-height: 1.5;
+}
+
+.material-action-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.btn-material-transfer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #2E7D32 0%, #43A047 100%);
+  color: #FFFFFF;
+  font-size: 24rpx;
+  font-weight: bold;
+  box-sizing: border-box;
+  transition: transform 0.15s ease;
+}
+
+.btn-material-transfer:active {
+  transform: scale(0.97);
+}
+
+.material-action-link {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  color: #8C1D18;
+  white-space: nowrap;
+}
+
 .shift-scroll-area {
   max-height: 55vh;
   margin: 20rpx 0;

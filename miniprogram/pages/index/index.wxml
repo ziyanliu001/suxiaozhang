@@ -927,6 +927,70 @@
         <view class="btn-inventory-ocr" hover-class="btn-hover" bindtap="onTapToolMaterialUsage">
           <text>📸 拍照智能记物资</text>
         </view>
+
+        <!-- 🤝（2026-09-16 爱心物资库存与跨店调配）只服务雨花斋/助老食堂，见
+             cloudfunctions/manageMaterialTransfer 的 CHARITY_ORG_TYPES。与上方
+             stapleRiceStatus/OilStatus 自报三态是两套独立数据，不合并展示，
+             详见 material-stock-section 头部 WXSS 注释 -->
+        <view class="material-stock-section" wx:if="{{orgType === 'yuhuazhai' || orgType === 'elderly_canteen'}}">
+          <view class="material-stock-header">
+            <text class="material-stock-title">🤝 爱心物资预估结存</text>
+            <text class="material-stock-baseline-link" bindtap="onOpenMaterialBaselineModal">⚙️ 设置初始库存</text>
+          </view>
+
+          <view class="material-stock-row" wx:if="{{materialStockDisplay}}">
+            <view class="material-stock-item {{materialStockDisplay.rice.status === 'urgent' ? 'status-red' : (materialStockDisplay.rice.status === 'surplus' ? 'status-green' : 'status-yellow')}}">
+              <text class="material-stock-name">🍚 大米</text>
+              <text class="material-stock-jin">{{materialStockDisplay.rice.jin}}斤</text>
+              <text class="material-stock-label">{{materialStockDisplay.rice.status === 'urgent' ? '告急' : (materialStockDisplay.rice.status === 'surplus' ? '富余' : '正常')}}</text>
+            </view>
+            <view class="material-stock-item {{materialStockDisplay.oil.status === 'urgent' ? 'status-red' : (materialStockDisplay.oil.status === 'surplus' ? 'status-green' : 'status-yellow')}}">
+              <text class="material-stock-name">🫗 食用油</text>
+              <text class="material-stock-jin">{{materialStockDisplay.oil.jin}}斤</text>
+              <text class="material-stock-label">{{materialStockDisplay.oil.status === 'urgent' ? '告急' : (materialStockDisplay.oil.status === 'surplus' ? '富余' : '正常')}}</text>
+            </view>
+            <view class="material-stock-item {{materialStockDisplay.flour.status === 'urgent' ? 'status-red' : (materialStockDisplay.flour.status === 'surplus' ? 'status-green' : 'status-yellow')}}">
+              <text class="material-stock-name">🌾 面粉</text>
+              <text class="material-stock-jin">{{materialStockDisplay.flour.jin}}斤</text>
+              <text class="material-stock-label">{{materialStockDisplay.flour.status === 'urgent' ? '告急' : (materialStockDisplay.flour.status === 'surplus' ? '富余' : '正常')}}</text>
+            </view>
+            <view class="material-stock-item {{materialStockDisplay.vegetable.status === 'urgent' ? 'status-red' : (materialStockDisplay.vegetable.status === 'surplus' ? 'status-green' : 'status-yellow')}}">
+              <text class="material-stock-name">🥬 时蔬</text>
+              <text class="material-stock-jin">{{materialStockDisplay.vegetable.jin}}斤</text>
+              <text class="material-stock-label">{{materialStockDisplay.vegetable.status === 'urgent' ? '告急' : (materialStockDisplay.vegetable.status === 'surplus' ? '富余' : '正常')}}</text>
+            </view>
+          </view>
+          <view class="material-stock-loading" wx:elif="{{materialStockLoading}}">
+            <text>正在核算结存...</text>
+          </view>
+          <view class="material-stock-loading" wx:else>
+            <text>结存数据暂不可用</text>
+          </view>
+
+          <!-- 💡 智能提醒：告急项 + 周边门店该项富余时，云端 getStock 已算好
+               建议，点击直接预填调拨弹窗的对方门店与物资（见
+               onOpenMaterialTransferModal 的 dataset 预填逻辑） -->
+          <view class="material-suggestion-banner" wx:if="{{materialTransferSuggestions.length > 0}}">
+            <view
+              class="material-suggestion-item"
+              wx:for="{{materialTransferSuggestions}}"
+              wx:key="item"
+              bindtap="onOpenMaterialTransferModal"
+              data-store-id="{{item.storeId}}"
+              data-store-name="{{item.storeName}}"
+              data-item="{{item.item}}"
+            >
+              <text>💡 {{item.itemLabel}}告急，可向【{{item.storeName}}】（富余{{item.jin}}斤）申请爱心平调 ›</text>
+            </view>
+          </view>
+
+          <view class="material-action-row">
+            <view class="btn-material-transfer" hover-class="btn-hover" bindtap="onOpenMaterialTransferModal">
+              <text>🤝 申请/发起爱心调配</text>
+            </view>
+            <text class="material-action-link" bindtap="onOpenMaterialPurchaseModal">📥 登记采购入库</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -2273,6 +2337,123 @@
       <view class="modal-footer">
         <button class="btn-close" bindtap="onCloseMeritPosterModal">关闭</button>
         <button class="btn-save" bindtap="onSaveMeritPosterToAlbum">保存到相册</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🤝（2026-09-16）爱心物资跨店调拨弹窗——复用 .poster-modal/.modal-mask/
+       .modal-content/.modal-header/.modal-body/.modal-footer 通用弹窗壳
+       （与上方 showMeritPosterModal 同一套，不新建壳层），内部自定义表单 -->
+  <view class="poster-modal" wx:if="{{showMaterialTransferModal}}" bindtap="onCloseMaterialTransferModal">
+    <view class="modal-mask"></view>
+    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">🤝 爱心物资跨店调拨</text>
+        <view class="modal-close" bindtap="onCloseMaterialTransferModal"><text class="close-icon">×</text></view>
+      </view>
+
+      <view class="modal-body">
+        <view style="display: flex; gap: 12rpx; margin-bottom: 24rpx;">
+          <view style="flex: 1; text-align: center; padding: 16rpx 0; font-size: 26rpx; border-radius: 10rpx; {{materialTransferForm.direction === 'out' ? 'background: #8C1D18; color: #FFFFFF; font-weight: bold;' : 'background: #F5F5F5; color: #666666;'}}" bindtap="onSwitchMaterialTransferDirection" data-direction="out">调出支援</view>
+          <view style="flex: 1; text-align: center; padding: 16rpx 0; font-size: 26rpx; border-radius: 10rpx; {{materialTransferForm.direction === 'in' ? 'background: #8C1D18; color: #FFFFFF; font-weight: bold;' : 'background: #F5F5F5; color: #666666;'}}" bindtap="onSwitchMaterialTransferDirection" data-direction="in">调入接收</view>
+        </view>
+
+        <text class="form-label">{{materialTransferForm.direction === 'out' ? '受援门店' : '支援来源门店'}}</text>
+        <picker mode="selector" range="{{materialPartnerStoreOptions}}" range-key="storeName" bindchange="onSelectMaterialTransferPartner">
+          <view class="apply-form-picker-selector">{{materialTransferForm.partnerStoreName || '请选择门店'}}</view>
+        </picker>
+
+        <text class="form-label" style="margin-top: 20rpx; display: block;">调配物资</text>
+        <view style="display: flex; gap: 10rpx; margin-bottom: 20rpx;">
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 24rpx; border-radius: 10rpx; {{materialTransferForm.item === 'rice' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialTransferItem" data-item="rice">🍚 大米</view>
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 24rpx; border-radius: 10rpx; {{materialTransferForm.item === 'oil' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialTransferItem" data-item="oil">🫗 食用油</view>
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 24rpx; border-radius: 10rpx; {{materialTransferForm.item === 'flour' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialTransferItem" data-item="flour">🌾 面粉</view>
+        </view>
+        <text class="form-hint" style="display: block; margin: -12rpx 0 20rpx; font-size: 20rpx; color: #999999;">时蔬保质期短，暂不支持跨店调配</text>
+
+        <text class="form-label">调配重量（斤）</text>
+        <input class="form-input" type="digit" placeholder="请输入重量" value="{{materialTransferForm.quantityJin}}" bindinput="onMaterialTransferQuantityInput" style="margin-bottom: 20rpx;" />
+
+        <text class="form-label">经手人</text>
+        <input class="form-input" type="text" placeholder="请输入经手人姓名" value="{{materialTransferForm.handledBy}}" bindinput="onMaterialTransferHandledByInput" />
+
+        <block wx:if="{{materialTransferRecent.length > 0}}">
+          <text class="form-label" style="margin-top: 24rpx; display: block;">最近调拨记录</text>
+          <view style="background: #FAFAFA; border-radius: 12rpx; padding: 16rpx;">
+            <view wx:for="{{materialTransferRecent}}" wx:key="_id" style="font-size: 22rpx; color: #777777; padding: 6rpx 0; {{index > 0 ? 'border-top: 1rpx solid #EEEEEE;' : ''}}">
+              {{item.fromStoreName}} ➜ {{item.toStoreName}}：{{item.itemLabel}} {{item.quantityJin}}斤
+            </view>
+          </view>
+        </block>
+      </view>
+
+      <view class="modal-footer">
+        <button class="btn-close" bindtap="onCloseMaterialTransferModal">取消</button>
+        <button class="btn-save" bindtap="onSubmitMaterialTransfer" loading="{{materialTransferSubmitting}}" disabled="{{materialTransferSubmitting}}">提交登记</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🤝（2026-09-16）设置初始库存弹窗 -->
+  <view class="poster-modal" wx:if="{{showMaterialBaselineModal}}" bindtap="onCloseMaterialBaselineModal">
+    <view class="modal-mask"></view>
+    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">⚙️ 设置初始库存</text>
+        <view class="modal-close" bindtap="onCloseMaterialBaselineModal"><text class="close-icon">×</text></view>
+      </view>
+      <view class="modal-body">
+        <text class="form-hint" style="display: block; margin-bottom: 20rpx; font-size: 22rpx; color: #C97B3D;">💡 仅需设置一次，作为结存计算的起点；此后系统会按捐赠/采购/消耗/调拨自动累计</text>
+
+        <text class="form-label">🍚 大米初始存量（斤）</text>
+        <input class="form-input" type="digit" placeholder="0" value="{{materialBaselineForm.rice}}" bindinput="onMaterialBaselineInput" data-item="rice" style="margin-bottom: 20rpx;" />
+
+        <text class="form-label">🫗 食用油初始存量（斤）</text>
+        <input class="form-input" type="digit" placeholder="0" value="{{materialBaselineForm.oil}}" bindinput="onMaterialBaselineInput" data-item="oil" style="margin-bottom: 20rpx;" />
+
+        <text class="form-label">🌾 面粉初始存量（斤）</text>
+        <input class="form-input" type="digit" placeholder="0" value="{{materialBaselineForm.flour}}" bindinput="onMaterialBaselineInput" data-item="flour" style="margin-bottom: 20rpx;" />
+
+        <text class="form-label">🥬 时蔬初始存量（斤）</text>
+        <input class="form-input" type="digit" placeholder="0" value="{{materialBaselineForm.vegetable}}" bindinput="onMaterialBaselineInput" data-item="vegetable" />
+      </view>
+      <view class="modal-footer">
+        <button class="btn-close" bindtap="onCloseMaterialBaselineModal">取消</button>
+        <button class="btn-save" bindtap="onSubmitMaterialBaseline" loading="{{materialBaselineSubmitting}}" disabled="{{materialBaselineSubmitting}}">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 🤝（2026-09-16）登记采购入库弹窗 -->
+  <view class="poster-modal" wx:if="{{showMaterialPurchaseModal}}" bindtap="onCloseMaterialPurchaseModal">
+    <view class="modal-mask"></view>
+    <view class="modal-content" style="padding-top: {{modalSafeTop}}px;" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">📥 登记采购入库</text>
+        <view class="modal-close" bindtap="onCloseMaterialPurchaseModal"><text class="close-icon">×</text></view>
+      </view>
+      <view class="modal-body">
+        <text class="form-label">物资类目</text>
+        <view style="display: flex; gap: 10rpx; margin-bottom: 20rpx;">
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'rice' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="rice">🍚 大米</view>
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'oil' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="oil">🫗 食用油</view>
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'flour' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="flour">🌾 面粉</view>
+          <view style="flex: 1; text-align: center; padding: 14rpx 0; font-size: 22rpx; border-radius: 10rpx; {{materialPurchaseForm.item === 'vegetable' ? 'background: rgba(140,29,24,0.1); color: #8C1D18; font-weight: bold; border: 1.5rpx solid #8C1D18;' : 'background: #F5F5F5; color: #666666; border: 1.5rpx solid transparent;'}}" bindtap="onSelectMaterialPurchaseItem" data-item="vegetable">🥬 时蔬</view>
+        </view>
+
+        <view class="btn-inventory-ocr" hover-class="btn-hover" bindtap="onScanMaterialPurchaseReceipt" style="margin-bottom: 20rpx;">
+          <text>{{materialPurchaseScanning ? '识别中...' : '📸 拍照识别小票重量'}}</text>
+        </view>
+
+        <text class="form-label">采购重量（斤）</text>
+        <input class="form-input" type="digit" placeholder="请输入重量，或拍照自动识别" value="{{materialPurchaseForm.quantityJin}}" bindinput="onMaterialPurchaseQuantityInput" style="margin-bottom: 20rpx;" />
+
+        <text class="form-label">金额（元，可选）</text>
+        <input class="form-input" type="digit" placeholder="请输入采购金额" value="{{materialPurchaseForm.amount}}" bindinput="onMaterialPurchaseAmountInput" />
+      </view>
+      <view class="modal-footer">
+        <button class="btn-close" bindtap="onCloseMaterialPurchaseModal">取消</button>
+        <button class="btn-save" bindtap="onSubmitMaterialPurchase" loading="{{materialPurchaseSubmitting}}" disabled="{{materialPurchaseSubmitting}}">提交登记</button>
       </view>
     </view>
   </view>

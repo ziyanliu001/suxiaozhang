@@ -2116,3 +2116,186 @@ export async function drawMeritCertificatePoster(pageInstance: any, data: MeritC
       });
   });
 }
+
+// 🤝（2026-09-16 爱心物资跨店调拨）本文件不查库、不算业务口径——调拨双方
+// 门店名/物资品名重量/经手人/防伪码等均由调用方（cloudfunctions/
+// manageMaterialTransfer 的 create action 返回值）拼好传入，这里只管画。
+// 布局克隆自 drawMeritCertificatePoster（共享 canvas 节点、圆角裁剪、
+// drawVerifyQRArea），但不导入 drawVolunteerCertificate.ts 的 drawSealStamp——
+// 沿用本文件上方 drawSunshineFootprintPoster 头部注释里定下的既有取舍
+// （"视觉语言不同，硬拉共享徒增耦合，两边都不好维护"），改用本函数自己的
+// 简单印记（圆形描边 + 文字），不额外产生跨文件耦合
+export interface MaterialTransferPosterData {
+  fromStoreName: string;
+  toStoreName: string;
+  itemLabel: string;
+  quantityJin: number;
+  handledBy: string;
+  dateString: string;
+  // 16 位数字存证防伪指纹，与 getSunshineLedger generateFootprintCode/
+  // MeritCertificatePosterData.verificationCode 同一档"人工可核对但非
+  // 加密学签名"设计定位——创建调拨记录时算好存入，这里原样展示，不重算
+  verificationCode: string;
+  qrLocalPath?: string;
+}
+
+const XFER_CANVAS_WIDTH = 375;
+const XFER_CANVAS_HEIGHT = 520;
+const XFER_CARD_RADIUS = 20;
+const XFER_BG_TOP = '#FFF7ED';
+const XFER_BG_BOTTOM = '#FDEEDD';
+const XFER_PRIMARY_COLOR = '#C0392B';
+const XFER_TEXT_COLOR = '#3D3D3D';
+const XFER_LIGHT_TEXT = '#9C8360';
+const XFER_BORDER_COLOR = '#E8CBA8';
+const XFER_QR_SIZE = 64;
+
+export async function drawMaterialTransferPoster(pageInstance: any, data: MaterialTransferPosterData): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const query = wx.createSelectorQuery().in(pageInstance);
+    query.select('#posterCanvas')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res || !res[0] || !res[0].node) {
+          return reject(new Error('未找到 id="posterCanvas" 节点，请检查 wxml 是否存在且非 wx:if 渲染'));
+        }
+
+        const canvas = res[0].node;
+        const ctx = canvas.getContext('2d');
+        const dpr = (wx as any).getWindowInfo ? (wx as any).getWindowInfo().pixelRatio : 2;
+
+        const width = XFER_CANVAS_WIDTH;
+        const height = XFER_CANVAS_HEIGHT;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+
+        (async () => {
+          try {
+            ctx.save();
+            drawRoundedRectPath(ctx, 0, 0, width, height, XFER_CARD_RADIUS);
+            ctx.clip();
+
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+            bgGradient.addColorStop(0, XFER_BG_TOP);
+            bgGradient.addColorStop(1, XFER_BG_BOTTOM);
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.save();
+            ctx.strokeStyle = XFER_BORDER_COLOR;
+            ctx.globalAlpha = 0.6;
+            ctx.lineWidth = 1.5;
+            drawRoundedRectPath(ctx, 12, 12, width - 24, height - 24, Math.max(XFER_CARD_RADIUS - 12, 4));
+            ctx.stroke();
+            ctx.restore();
+
+            // 题头
+            ctx.fillStyle = XFER_PRIMARY_COLOR;
+            ctx.font = 'bold 22px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🤝 爱心物资协同调拨单', width / 2, 58);
+            ctx.fillStyle = XFER_LIGHT_TEXT;
+            ctx.font = '13px sans-serif';
+            ctx.fillText('十方善信护持 · 兄弟门店互助', width / 2, 82);
+
+            // 调出方 ➔ 接收方：两个圆角方块 + 中间箭头
+            const boxY = 110;
+            const boxH = 68;
+            const boxW = 130;
+            const fromBoxX = width / 2 - boxW - 18;
+            const toBoxX = width / 2 + 18;
+
+            ctx.fillStyle = '#FFFFFF';
+            drawRoundedRectPath(ctx, fromBoxX, boxY, boxW, boxH, 12);
+            ctx.fill();
+            drawRoundedRectPath(ctx, toBoxX, boxY, boxW, boxH, 12);
+            ctx.fill();
+            ctx.strokeStyle = XFER_BORDER_COLOR;
+            ctx.lineWidth = 1;
+            drawRoundedRectPath(ctx, fromBoxX, boxY, boxW, boxH, 12);
+            ctx.stroke();
+            drawRoundedRectPath(ctx, toBoxX, boxY, boxW, boxH, 12);
+            ctx.stroke();
+
+            ctx.fillStyle = XFER_LIGHT_TEXT;
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('调出门店', fromBoxX + boxW / 2, boxY + 22);
+            ctx.fillText('接收门店', toBoxX + boxW / 2, boxY + 22);
+            ctx.fillStyle = XFER_TEXT_COLOR;
+            ctx.font = 'bold 15px sans-serif';
+            ctx.fillText(truncateText(ctx, data.fromStoreName || '', boxW - 16), fromBoxX + boxW / 2, boxY + 46);
+            ctx.fillText(truncateText(ctx, data.toStoreName || '', boxW - 16), toBoxX + boxW / 2, boxY + 46);
+
+            // 中间箭头
+            ctx.fillStyle = XFER_PRIMARY_COLOR;
+            ctx.font = 'bold 22px sans-serif';
+            ctx.fillText('➜', width / 2, boxY + boxH / 2 + 8);
+
+            // 物资明细
+            const detailY = boxY + boxH + 56;
+            ctx.fillStyle = XFER_PRIMARY_COLOR;
+            ctx.font = 'bold 26px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${data.itemLabel || ''} ${data.quantityJin ?? ''} 斤`, width / 2, detailY);
+
+            // 经手人 + 交接日期
+            ctx.fillStyle = XFER_LIGHT_TEXT;
+            ctx.font = '14px sans-serif';
+            ctx.fillText(`经手人：${data.handledBy || ''}`, width / 2, detailY + 34);
+            ctx.fillText(data.dateString || '', width / 2, detailY + 58);
+
+            // 简单印记：圆形描边 + "爱心调拨"文字，替代 drawSealStamp（不引入
+            // 跨文件耦合，见本函数头部注释）
+            const sealCenterX = width / 2;
+            const sealCenterY = detailY + 104;
+            const sealRadius = 30;
+            ctx.save();
+            ctx.strokeStyle = XFER_PRIMARY_COLOR;
+            ctx.globalAlpha = 0.75;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(sealCenterX, sealCenterY, sealRadius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = XFER_PRIMARY_COLOR;
+            ctx.font = 'bold 13px "Songti SC", "SimSun", serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('爱心', sealCenterX, sealCenterY - 2);
+            ctx.fillText('调拨', sealCenterX, sealCenterY + 14);
+            ctx.restore();
+
+            // 存证信标
+            const provenanceY = sealCenterY + sealRadius + 24;
+            ctx.fillStyle = XFER_LIGHT_TEXT;
+            ctx.font = '11px monospace';
+            ctx.fillText(`存证指纹 ${data.verificationCode || '——'}`, width / 2, provenanceY);
+
+            // 底部验真二维码：复用既有 drawVerifyQRArea（真实二维码 → 静态小程序码
+            // 兜底 → 占位菊花码三级降级）
+            const qrY = height - XFER_QR_SIZE - 44 - 16;
+            const qrX = (width - XFER_QR_SIZE) / 2;
+            await drawVerifyQRArea(ctx, canvas, qrX, qrY, XFER_QR_SIZE, '爱心互助 · 公开透明', width, data.qrLocalPath, '扫码回到小程序核对');
+
+            ctx.restore();
+
+            wx.canvasToTempFilePath({
+              canvas,
+              x: 0,
+              y: 0,
+              width: width * dpr,
+              height: height * dpr,
+              destWidth: width * dpr,
+              destHeight: height * dpr,
+              fileType: 'png',
+              quality: 1,
+              success: (tempRes) => resolve(tempRes.tempFilePath),
+              fail: (err: any) => reject(new Error('Canvas 转图片失败: ' + err.errMsg))
+            });
+          } catch (drawErr) {
+            reject(drawErr);
+          }
+        })();
+      });
+  });
+}

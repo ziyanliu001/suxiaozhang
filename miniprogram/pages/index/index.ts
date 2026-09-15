@@ -2,7 +2,7 @@ import { DataService, formatMoney, getLocalReports } from '../../utils/dataServi
 import { AuthService, ROLE_LABELS, getPermissionFlags, PermissionFlags } from '../../utils/authService';
 import { parseDonorText, parseMaterials, formatDonationItemsToText, formatMaterialsToText } from '../../utils/parser';
 import { generateReportText } from '../../utils/reportGenerator';
-import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawSongDynastyMeritPoster, drawMeritCertificatePoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
+import { drawMeritPoster, drawStoryPoster, drawSunshineFootprintPoster, drawSongDynastyMeritPoster, drawMeritCertificatePoster, drawMaterialTransferPoster, PosterData, StoryPosterData } from '../../utils/posterGenerator';
 import { drawPrintList } from '../../utils/printRenderer';
 import { drawStoreInvitationPoster } from '../../utils/drawStorePoster';
 import { saveToQueue, getQueue, removeFromQueue, getQueueCount } from '../../utils/offlineQueue';
@@ -889,6 +889,38 @@ Page({
     // 主食物资储备状态
     stapleRiceStatus: 'normal', // 大米/面粉: sufficient/normal/urgent
     stapleOilStatus: 'sufficient', // 食用油: sufficient/normal/urgent
+
+    // 🤝（2026-09-16 爱心物资库存与跨店调配）只服务雨花斋/助老食堂（见
+    // cloudfunctions/manageMaterialTransfer 的 CHARITY_ORG_TYPES），与上面
+    // 单轨制的 stapleRiceStatus/stapleOilStatus（自报三态）是两套完全独立
+    // 的数据——这里是"预估结存斤数"，由 fetchMaterialStock() 查询云端现算，
+    // 不替代、也不影响 stapleRiceStatus 这条既有轨道
+    materialStockLoading: false,
+    materialStockDisplay: null as null | Record<'rice' | 'oil' | 'flour' | 'vegetable', { jin: number; status: 'urgent' | 'normal' | 'surplus' }>,
+    materialStockBaselineRaw: { rice: 0, oil: 0, flour: 0, vegetable: 0 } as Record<'rice' | 'oil' | 'flour' | 'vegetable', number>,
+    materialTransferSuggestions: [] as Array<{ item: string; itemLabel: string; storeId: string; storeName: string; jin: number }>,
+
+    showMaterialTransferModal: false,
+    materialTransferSubmitting: false,
+    materialTransferForm: {
+      direction: 'out' as 'out' | 'in',
+      partnerStoreId: '',
+      partnerStoreName: '',
+      item: 'rice' as 'rice' | 'oil' | 'flour',
+      quantityJin: '',
+      handledBy: ''
+    },
+    materialPartnerStoreOptions: [] as Array<{ storeId: string; storeName: string }>,
+    materialTransferRecent: [] as any[],
+
+    showMaterialBaselineModal: false,
+    materialBaselineSubmitting: false,
+    materialBaselineForm: { rice: '', oil: '', flour: '', vegetable: '' },
+
+    showMaterialPurchaseModal: false,
+    materialPurchaseSubmitting: false,
+    materialPurchaseScanning: false,
+    materialPurchaseForm: { item: 'rice' as 'rice' | 'oil' | 'flour' | 'vegetable', quantityJin: '', amount: '' },
 
     // 🆕（2026-09-13 工作台工业化重构）"今日闭环指示条"三枚指示数据。
     // todayMealStatus/todayMealCount 与 stapleRiceStatus 同源——
@@ -2301,6 +2333,434 @@ Page({
     }
   },
 
+  // ============ 🤝（2026-09-16）爱心物资库存与跨店调配 ============
+  // 只服务雨花斋/助老食堂——orgType 不在 CHARITY_ORG_TYPES 里（如通用记账/
+  // 产销工坊）时不发起请求，卡片这部分内容在 wxml 侧也不会渲染，双保险。
+
+  isCharityMaterialOrgType(): boolean {
+    return this.data.orgType === 'yuhuazhai' || this.data.orgType === 'elderly_canteen';
+  },
+
+  async fetchMaterialStock() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId || this.isNationalOverviewSelected() || !this.isCharityMaterialOrgType()) return;
+    if (!(this.data.isManager || this.data.isSuperAdmin)) return;
+
+    this.setData({ materialStockLoading: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      // ⏱️ getStock 云端 timeout 配置为 15s（config.json）——告急项会触发
+      // findSurplusPartners 遍历同机构候选门店逐店现算结存，比普通 CRUD 慢，
+      // 客户端超时按"云端上限 + 5s 网络往返余量"同步调到 20s，两端一起调
+      const res = await callFunctionWithTimeout({
+        name: 'manageMaterialTransfer',
+        data: { action: 'getStock', storeId }
+      }, 20000);
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({
+          materialStockDisplay: result.stock,
+          materialStockBaselineRaw: {
+            rice: (result.baseline && result.baseline.rice) || 0,
+            oil: (result.baseline && result.baseline.oil) || 0,
+            flour: (result.baseline && result.baseline.flour) || 0,
+            vegetable: (result.baseline && result.baseline.vegetable) || 0
+          },
+          materialTransferSuggestions: result.suggestions || []
+        });
+      }
+    } catch (e) {
+      console.warn('[fetchMaterialStock] 查询爱心物资结存失败，保留上次已知状态:', e);
+      reportCloudSdkErrorIfCorrupted(e);
+    } finally {
+      this.setData({ materialStockLoading: false });
+    }
+  },
+
+  // 🏪 同机构候选门店：直接复用 allStoresList（store-picker 同一份数据源，
+  // 已按当前机构范围过滤），筛掉本店与非公益专区门店，不额外发云函数请求
+  buildMaterialPartnerOptions(): Array<{ storeId: string; storeName: string }> {
+    const currentStoreId = this.data.currentStoreId;
+    const list = this.data.allStoresList || [];
+    return list
+      .filter((s: any) => s && s.storeId && s.storeId !== currentStoreId
+        && (s.orgType === 'yuhuazhai' || s.orgType === 'elderly_canteen'))
+      .map((s: any) => ({ storeId: s.storeId, storeName: s.storeName || '未命名门店' }));
+  },
+
+  async onOpenMaterialTransferModal(e?: any) {
+    if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
+      await this.fetchAllStoresList();
+    }
+    const options = this.buildMaterialPartnerOptions();
+
+    // 🌟 从"可向 XX 门店申请爱心平调"提示条点进来时预填对方门店与物资，
+    // 并按"本店告急"推断方向应为"调入接收"
+    const suggestStoreId = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.storeId;
+    const suggestStoreName = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.storeName;
+    const suggestItem = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.item;
+
+    this.setData({
+      showMaterialTransferModal: true,
+      materialPartnerStoreOptions: options,
+      materialTransferForm: {
+        direction: suggestStoreId ? 'in' : 'out',
+        partnerStoreId: suggestStoreId || '',
+        partnerStoreName: suggestStoreName || '',
+        item: (suggestItem === 'oil' || suggestItem === 'flour') ? suggestItem : 'rice',
+        quantityJin: '',
+        handledBy: ''
+      }
+    });
+    this.fetchMaterialTransferRecent();
+  },
+
+  onCloseMaterialTransferModal() {
+    if (this.data.materialTransferSubmitting) return;
+    this.setData({ showMaterialTransferModal: false });
+  },
+
+  onSwitchMaterialTransferDirection(e: any) {
+    const direction = e.currentTarget.dataset.direction as 'out' | 'in';
+    if (!direction || direction === this.data.materialTransferForm.direction) return;
+    this.setData({ 'materialTransferForm.direction': direction });
+  },
+
+  onSelectMaterialTransferPartner(e: any) {
+    const index = parseInt(e.detail.value, 10);
+    const option = this.data.materialPartnerStoreOptions[index];
+    if (!option) return;
+    this.setData({
+      'materialTransferForm.partnerStoreId': option.storeId,
+      'materialTransferForm.partnerStoreName': option.storeName
+    });
+  },
+
+  onSelectMaterialTransferItem(e: any) {
+    const item = e.currentTarget.dataset.item as 'rice' | 'oil' | 'flour';
+    if (!item) return;
+    this.setData({ 'materialTransferForm.item': item });
+  },
+
+  onMaterialTransferQuantityInput(e: any) {
+    this.setData({ 'materialTransferForm.quantityJin': e.detail.value });
+  },
+
+  onMaterialTransferHandledByInput(e: any) {
+    this.setData({ 'materialTransferForm.handledBy': e.detail.value });
+  },
+
+  async fetchMaterialTransferRecent() {
+    const storeId = this.data.currentStoreId;
+    if (!storeId) return;
+    try {
+      if (!isCloudAvailable()) return;
+      const res = await callFunctionWithTimeout({
+        name: 'manageMaterialTransfer',
+        data: { action: 'listTransfers', storeId, limit: 3 }
+      });
+      const result = res.result as any;
+      if (result && result.success) {
+        this.setData({ materialTransferRecent: result.data || [] });
+      }
+    } catch (e) {
+      console.warn('[fetchMaterialTransferRecent] 查询最近调拨记录失败:', e);
+    }
+  },
+
+  async onSubmitMaterialTransfer() {
+    if (this.data.materialTransferSubmitting) return;
+    const { direction, partnerStoreId, partnerStoreName, item, quantityJin, handledBy } = this.data.materialTransferForm;
+
+    if (!partnerStoreId) {
+      wx.showToast({ title: `请选择${direction === 'out' ? '接收' : '支援来源'}门店`, icon: 'none' });
+      return;
+    }
+    const qty = parseFloat(quantityJin);
+    if (!qty || qty <= 0) {
+      wx.showToast({ title: '请输入大于 0 的调配重量（斤）', icon: 'none' });
+      return;
+    }
+    if (!handledBy || !handledBy.trim()) {
+      wx.showToast({ title: '请填写经手人姓名', icon: 'none' });
+      return;
+    }
+
+    const currentStoreId = this.data.currentStoreId;
+    const currentStoreName = this.data.currentStoreName;
+    const fromStoreId = direction === 'out' ? currentStoreId : partnerStoreId;
+    const fromStoreName = direction === 'out' ? currentStoreName : partnerStoreName;
+    const toStoreId = direction === 'out' ? partnerStoreId : currentStoreId;
+    const toStoreName = direction === 'out' ? partnerStoreName : currentStoreName;
+
+    this.setData({ materialTransferSubmitting: true });
+    wx.showLoading({ title: '正在登记调拨...', mask: true });
+
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await callFunctionWithTimeout({
+        name: 'manageMaterialTransfer',
+        data: {
+          action: 'create',
+          fromStoreId, toStoreId,
+          item, quantityJin: qty,
+          handledBy: handledBy.trim()
+        }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '登记失败，请重试', icon: 'none', duration: 2500 });
+        return;
+      }
+
+      this.setData({ showMaterialTransferModal: false });
+      wx.showToast({ title: '🎉 调拨登记成功', icon: 'success' });
+      this.fetchMaterialStock();
+
+      // 立即用刚创建的记录生成《爱心物资协同调拨单》凭证，不需要用户再点一次
+      this.onGenerateMaterialTransferPoster(result.record);
+    } catch (e) {
+      wx.hideLoading();
+      console.error('[onSubmitMaterialTransfer] 提交失败:', e);
+      reportCloudSdkErrorIfCorrupted(e);
+      wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ materialTransferSubmitting: false });
+    }
+  },
+
+  // 与 resolveMeritSteleQrLocalPath 同一套单次尝试、失败即返回空字符串的
+  // 降级策略（drawVerifyQRArea 内部会接力降级为静态小程序码/占位菊花码，
+  // 不阻断整张海报生成），purpose 传新增的 'material_transfer'
+  async resolveMaterialTransferQrLocalPath(storeId: string, storeName: string): Promise<string> {
+    if (!isCloudAvailable() || !storeId) return '';
+    try {
+      const qrRes = await callFunctionWithTimeout({
+        name: 'getStoreQRCode',
+        data: { storeId, storeName, purpose: 'material_transfer' }
+      });
+      const qrResult = qrRes.result as any;
+      if (!qrResult || !qrResult.success || !qrResult.fileID) return '';
+      const downRes = await wx.cloud.downloadFile({ fileID: qrResult.fileID });
+      return (downRes && downRes.tempFilePath) || '';
+    } catch (err) {
+      console.warn('[resolveMaterialTransferQrLocalPath] 调拨凭证二维码生成失败，将降级为静态码:', err);
+      return '';
+    }
+  },
+
+  // 🤝《爱心物资协同调拨单》：复用既有"善行卡"预览/保存基础设施
+  // （showMeritPosterModal/meritPosterTempPath/meritPosterModalTitle/
+  // onSaveMeritPosterToAlbum/onCloseMeritPosterModal），不新建弹窗
+  async onGenerateMaterialTransferPoster(record: any) {
+    if (!record) return;
+    wx.showLoading({ title: '正在生成调拨凭证...', mask: true });
+    this.setData({ meritPosterLoading: true });
+    try {
+      const qrLocalPath = await this.resolveMaterialTransferQrLocalPath(record.fromStoreId, record.fromStoreName);
+      const transferDate = new Date(record.createTime || Date.now());
+      const dateString = `${transferDate.getFullYear()}年${transferDate.getMonth() + 1}月${transferDate.getDate()}日`;
+      const tempPath = await drawMaterialTransferPoster(this, {
+        fromStoreName: record.fromStoreName || '',
+        toStoreName: record.toStoreName || '',
+        itemLabel: record.itemLabel || '',
+        quantityJin: record.quantityJin || 0,
+        handledBy: record.handledBy || '',
+        dateString,
+        verificationCode: record.verificationCode || '',
+        qrLocalPath
+      });
+      wx.hideLoading();
+      this.setData({ meritPosterTempPath: tempPath, meritPosterModalTitle: '🤝 爱心物资协同调拨单', showMeritPosterModal: true });
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[onGenerateMaterialTransferPoster] 调拨凭证生成失败:', err);
+      reportCloudSdkErrorIfCorrupted(err);
+      wx.showToast({ title: '凭证生成失败，可在最近调拨记录里重新生成', icon: 'none', duration: 3000 });
+    } finally {
+      this.setData({ meritPosterLoading: false });
+    }
+  },
+
+  onOpenMaterialBaselineModal() {
+    const b = this.data.materialStockBaselineRaw;
+    this.setData({
+      showMaterialBaselineModal: true,
+      materialBaselineForm: {
+        rice: b.rice ? String(b.rice) : '',
+        oil: b.oil ? String(b.oil) : '',
+        flour: b.flour ? String(b.flour) : '',
+        vegetable: b.vegetable ? String(b.vegetable) : ''
+      }
+    });
+  },
+
+  onCloseMaterialBaselineModal() {
+    if (this.data.materialBaselineSubmitting) return;
+    this.setData({ showMaterialBaselineModal: false });
+  },
+
+  onMaterialBaselineInput(e: any) {
+    const item = e.currentTarget.dataset.item as 'rice' | 'oil' | 'flour' | 'vegetable';
+    if (!item) return;
+    this.setData({ [`materialBaselineForm.${item}`]: e.detail.value });
+  },
+
+  async onSubmitMaterialBaseline() {
+    if (this.data.materialBaselineSubmitting) return;
+    const { rice, oil, flour, vegetable } = this.data.materialBaselineForm;
+    const storeId = this.data.currentStoreId;
+    if (!storeId) return;
+
+    this.setData({ materialBaselineSubmitting: true });
+    wx.showLoading({ title: '正在保存...', mask: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await callFunctionWithTimeout({
+        name: 'manageMaterialTransfer',
+        data: { action: 'setBaseline', storeId, rice, oil, flour, vegetable }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '保存失败，请重试', icon: 'none' });
+        return;
+      }
+      this.setData({ showMaterialBaselineModal: false });
+      wx.showToast({ title: '初始库存已保存', icon: 'success' });
+      this.fetchMaterialStock();
+    } catch (e) {
+      wx.hideLoading();
+      console.error('[onSubmitMaterialBaseline] 保存失败:', e);
+      reportCloudSdkErrorIfCorrupted(e);
+      wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ materialBaselineSubmitting: false });
+    }
+  },
+
+  onOpenMaterialPurchaseModal() {
+    this.setData({
+      showMaterialPurchaseModal: true,
+      materialPurchaseForm: { item: 'rice', quantityJin: '', amount: '' }
+    });
+  },
+
+  onCloseMaterialPurchaseModal() {
+    if (this.data.materialPurchaseSubmitting) return;
+    this.setData({ showMaterialPurchaseModal: false });
+  },
+
+  onSelectMaterialPurchaseItem(e: any) {
+    const item = e.currentTarget.dataset.item as 'rice' | 'oil' | 'flour' | 'vegetable';
+    if (!item) return;
+    this.setData({ 'materialPurchaseForm.item': item });
+  },
+
+  onMaterialPurchaseQuantityInput(e: any) {
+    this.setData({ 'materialPurchaseForm.quantityJin': e.detail.value });
+  },
+
+  onMaterialPurchaseAmountInput(e: any) {
+    this.setData({ 'materialPurchaseForm.amount': e.detail.value });
+  },
+
+  // 拍照识别小票自动填斤数——复用既有 ocrExpenseReceipt 默认 action（与
+  // material-usage-modal.ts onScanMaterialReceipt 同一套调用方式），只是
+  // 识别结果按当前选中的采购品类取对应字段自动填，不像消耗登记表单那样
+  // 一次性填四项；不改动 ocrExpenseReceipt 本身，也不碰消耗登记流程
+  async onScanMaterialPurchaseReceipt() {
+    if (this.data.materialPurchaseScanning || this.data.materialPurchaseSubmitting) return;
+    if (!isCloudAvailable()) {
+      wx.showToast({ title: '云服务暂不可用，无法使用拍照识别', icon: 'none' });
+      return;
+    }
+
+    let tempFilePath = '';
+    try {
+      await ensurePrivacyAuthorized();
+      const chooseRes = await wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'], sizeType: ['compressed'] });
+      if (!chooseRes.tempFiles || chooseRes.tempFiles.length === 0) return;
+      tempFilePath = chooseRes.tempFiles[0].tempFilePath;
+    } catch (err) {
+      return;
+    }
+
+    this.setData({ materialPurchaseScanning: true });
+    wx.showLoading({ title: 'AI 识别中...', mask: true });
+    try {
+      const uploadRes = await wx.cloud.uploadFile({
+        cloudPath: `receipts/material_purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`,
+        filePath: tempFilePath
+      });
+      const ocrRes = await callFunctionWithTimeout({ name: 'ocrExpenseReceipt', data: { fileID: uploadRes.fileID } });
+      const result = ocrRes.result as any;
+      wx.hideLoading();
+
+      const ingredients = result && result.ingredients;
+      const KG_FIELD_BY_ITEM: Record<string, string> = { rice: 'riceKg', oil: 'oilKg', flour: 'flourKg', vegetable: 'veggieKg' };
+      const ITEM_LABEL_BY_ITEM: Record<string, string> = { rice: '大米', oil: '食用油', flour: '面粉', vegetable: '时蔬' };
+      const currentItem = this.data.materialPurchaseForm.item;
+      const kg = ingredients ? ingredients[KG_FIELD_BY_ITEM[currentItem]] : 0;
+      if (!kg || kg <= 0) {
+        wx.showModal({ title: '未识别到重量', content: `照片里没有认出标注了斤/kg重量的${ITEM_LABEL_BY_ITEM[currentItem] || ''}，请手动填写，或换一张能同时看清品名与重量数字的照片重试。`, showCancel: false });
+        return;
+      }
+      const jin = Math.round(kg * 2 * 10) / 10;
+      this.setData({ 'materialPurchaseForm.quantityJin': String(jin) });
+      wx.showToast({ title: `已自动填入${jin}斤，请核对`, icon: 'none', duration: 3000 });
+    } catch (err) {
+      console.error('[onScanMaterialPurchaseReceipt] 识别失败:', err);
+      wx.showToast({ title: '识别失败，请手动填写', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ materialPurchaseScanning: false });
+    }
+  },
+
+  async onSubmitMaterialPurchase() {
+    if (this.data.materialPurchaseSubmitting) return;
+    const { item, quantityJin, amount } = this.data.materialPurchaseForm;
+    const storeId = this.data.currentStoreId;
+    if (!storeId) return;
+
+    const qty = parseFloat(quantityJin);
+    if (!qty || qty <= 0) {
+      wx.showToast({ title: '请输入大于 0 的采购重量（斤）', icon: 'none' });
+      return;
+    }
+
+    this.setData({ materialPurchaseSubmitting: true });
+    wx.showLoading({ title: '正在登记...', mask: true });
+    try {
+      if (!isCloudAvailable()) throw new Error('CLOUD_SDK_UNAVAILABLE: wx.cloud 不可用，跳过云端请求');
+      const res = await callFunctionWithTimeout({
+        name: 'manageMaterialTransfer',
+        data: { action: 'recordPurchase', storeId, item, quantityJin: qty, amount: amount || undefined }
+      });
+      const result = res.result as any;
+      wx.hideLoading();
+      if (!result || !result.success) {
+        wx.showToast({ title: (result && result.error) || '登记失败，请重试', icon: 'none' });
+        return;
+      }
+      this.setData({ showMaterialPurchaseModal: false });
+      wx.showToast({ title: '采购入库已登记', icon: 'success' });
+      this.fetchMaterialStock();
+    } catch (e) {
+      wx.hideLoading();
+      console.error('[onSubmitMaterialPurchase] 登记失败:', e);
+      reportCloudSdkErrorIfCorrupted(e);
+      wx.showToast({ title: '登记失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ materialPurchaseSubmitting: false });
+    }
+  },
+
+  // ============ 爱心物资库存与跨店调配 结束 ============
+
   // 🆕（2026-09-13 今日闭环指示条）今日餐报记账状态：直接客户端查询本店
   // 当天 report_logs 的 approvalStatus，与 onRevokeTodayCheckIn() 同一种
   // 既有的客户端直查模式。查无记录（今日尚未提交过餐报）时落空字符串，wxml
@@ -2874,6 +3334,9 @@ Page({
       self.loadPageData();
     } else {
     }
+
+    // 🤝（2026-09-16）切店后同步刷新爱心物资结存，见 switchStoreTarget 同处注释
+    this.fetchMaterialStock();
   },
 
   // 🐛 新增 silent 选项：maybeAutoSelectStore() 的自动选店不是用户主动点击的操作，
@@ -2916,6 +3379,9 @@ Page({
     this.fetchNotices();
     // 🌟 同步刷新该门店云端保存的模板自定义内容（致谢词/宣传标语/公众号名称）
     this.loadStoreTemplateFromCloud(storeId);
+    // 🤝（2026-09-16）切店后同步刷新爱心物资结存——不这样做会残留上一个门店的
+    // 斤数/健康度展示在新门店的卡片上
+    this.fetchMaterialStock();
 
     if (!options || !options.silent) {
       wx.showToast({
@@ -9175,7 +9641,8 @@ Page({
       this.fetchTodayActivity(),
       this.fetchNotices(),
       this.fetchLatestMaterialStatus(),
-      this.fetchTodayReportStatus()
+      this.fetchTodayReportStatus(),
+      this.fetchMaterialStock()
     ]).finally(() => {
       this._homeDataFetchInFlight = false;
     });
