@@ -27,6 +27,9 @@ const _ = db.command;
 // 与本仓库 wxPayCore/getSettlementSummary 等云函数已有的 index.js +
 // lib/*.js + lib/*.test.js 拆分写法保持一致，见 CLAUDE.md 第 7.3 节字典表
 const { sanitizeMeritTags } = require('./lib/sanitizeMeritTags');
+// 🛡️（2026-09-16 高并发打卡加固）确定性 _id 拼装：拆到纯逻辑 lib 文件，
+// 配单测，与 sanitizeMeritTags 同一套既定写法，见该文件头部注释
+const { buildCheckinLogId } = require('./lib/buildCheckinLogId');
 
 const COLLECTION = 'volunteer_duty_logs';
 const DAILY_HOURS_CAP = 12.0;
@@ -89,8 +92,13 @@ async function handleCheckin(event, OPENID) {
 
   const dateString = todayStr();
 
-  // 🛡️ 服务端重新核算当日累计工时与同工种去重：不信任客户端传入的"今日已录入工时"，
-  // 直接以 {tenantId, storeId, _openid, dateString, status:'active'} 为准现查一遍
+  // 🛡️ 轻量预校验：不信任客户端传入的"今日已录入工时"，直接以 {tenantId,
+  // storeId, _openid, dateString, status:'active'} 为准现查一遍，尽早给出
+  // 准确的报错文案（重复打卡/已达工时上限）。⚠️ 这一步存在 TOCTOU 竞态窗口
+  // ——两个几乎同时到达的相同班次打卡请求都可能在这一步的读时间点看到"尚未
+  // 打卡"，因此不是唯一防线：真正杜绝并发重复打卡的是下面基于确定性 _id 的
+  // 数据库主键唯一性冲突（见 lib/buildCheckinLogId.js 头部注释），这一步的
+  // 预读只影响报错文案的准确度，不影响数据一致性本身
   const existingRes = await db.collection(COLLECTION)
     .where({ tenantId, storeId, _openid: OPENID, dateString, status: 'active' })
     .get();
@@ -136,9 +144,56 @@ async function handleCheckin(event, OPENID) {
     createTime: db.serverDate()
   };
 
-  const addRes = await db.collection(COLLECTION).add({ data: doc });
+  // 🛡️（2026-09-16 高并发打卡加固）确定性主键：{tenantId, storeId, _openid,
+  // dateString, shiftKey} 五元组在业务语义上本就应该只有一条生效记录，用这
+  // 五元组拼出的确定性 _id 让数据库自身的主键唯一约束做真正的互斥——两个
+  // 并发请求即使都通过了上面的预读校验，也只有一个能在这里 add() 成功
+  const logId = buildCheckinLogId(tenantId, storeId, OPENID, dateString, shiftKey);
 
-  return { success: true, logId: addRes._id, hours: addHours, wasTruncated };
+  try {
+    await db.collection(COLLECTION).add({ data: { _id: logId, ...doc } });
+    return { success: true, logId, hours: addHours, wasTruncated };
+  } catch (err) {
+    // 🛡️ add() 失败：与 manageDailyMenu.createPurchasePlan 同一套"失败后按
+    // _id 重新读一次，按读到的真实状态分支处理"手法，不解析具体错误码——
+    // 这里失败只可能有两种真实原因：
+    //   1) 真的撞上并发重复打卡（上面的预读没拦住这次竞态）——记录仍是
+    //      active，按"重复打卡"报错，并把 logId 一并带回去（见下方），供
+    //      客户端离线重试队列（pendingMeritCheckinQueue）据此补挂标签，
+    //      不再是"无法恢复、静默丢弃"
+    //   2) 今天曾经打卡又撤销（handleRevoke 是 update 成 status:'revoked'，
+    //      文档本身不会被删除，这个确定性 _id 依然占着）后重新打卡——这种
+    //      情况理应允许，走下面的条件更新把记录原地复活成新的打卡内容
+    const conflictRes = await db.collection(COLLECTION).doc(logId).get().catch(() => null);
+    const conflict = conflictRes && conflictRes.data;
+    if (!conflict) {
+      console.error('[manageVolunteerCheckIn] handleCheckin add() 失败且未找到冲突记录:', err);
+      return { success: false, error: '打卡失败，请重试' };
+    }
+    if (conflict.status === 'active') {
+      // 🐛 根因修复（resync 无法补录标签）：此前这条错误不带 logId，客户端
+      // pendingMeritCheckinQueue 补录时即使明确知道"原始打卡其实已经在云端
+      // 成功"，也因为拿不到 _id 而只能静默丢弃这条待补录记录（连带丢失用户
+      // 已经选好的 meritTags）。确定性 _id 让这里可以直接把它带回去，见
+      // miniprogram/pages/index/index.ts resyncPendingMeritCheckins()
+      return { success: false, error: '您今日已完成该班次打卡，请勿重复提交', logId };
+    }
+
+    // conflict.status === 'revoked'：条件更新（CAS）把这条记录原地复活成新的
+    // 打卡内容——where 里带 status:'revoked' 这一条件，如果这条记录在读到
+    // 这里之后、真正 update 之前又被别的并发请求抢先复活，条件更新会 0 匹配
+    // 落空（stats.updated !== 1），此时按"仍然冲突"处理，不静默覆盖已经
+    // 生效的打卡结果
+    const reviveRes = await db.collection(COLLECTION).where({
+      _id: logId,
+      status: 'revoked'
+    }).update({ data: { ...doc, revokedAt: _.remove() } });
+
+    if (!reviveRes.stats || reviveRes.stats.updated !== 1) {
+      return { success: false, error: '您今日已完成该班次打卡，请勿重复提交' };
+    }
+    return { success: true, logId, hours: addHours, wasTruncated };
+  }
 }
 
 // 🌸 修心积善打卡·补写微善标签：打卡本身（handleCheckin）已经成功落地，标签

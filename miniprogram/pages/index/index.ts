@@ -10922,10 +10922,17 @@ Page({
           if (result && result.success) {
             logId = result.logId || '';
           } else if (result && result.error === '您今日已完成该班次打卡，请勿重复提交') {
-            // 原始打卡其实已经在云端成功，只是客户端当时没收到 logId——这条
-            // 拒绝不会带回原文档 _id，无法恢复，静默丢弃，不再重复重试
-            removePendingMeritCheckin(item.id);
-            continue;
+            // 🐛 根因修复（2026-09-16 打卡确定性主键化）：manageVolunteerCheckIn
+            // 现在把冲突记录的确定性 _id 一并带回这条"重复打卡"拒绝里（原始
+            // 打卡其实已经在云端成功，只是客户端当时没收到 logId）——不再是
+            // "无法恢复只能丢弃"，可以继续走下面的标签补挂逻辑，不会白白丢失
+            // 用户已经选好、还没来得及同步的 meritTags
+            if (result.logId) {
+              logId = result.logId;
+            } else {
+              removePendingMeritCheckin(item.id);
+              continue;
+            }
           } else {
             // 仍然失败（网络抖动/后端异常）：保留在队列里，交给下一轮重试
             continue;
@@ -13386,14 +13393,44 @@ Page({
     // 并记下 cloudLogId 供撤销时精确对应云端记录；云端不可用/失败时静默降级为
     // 纯本地打卡（与项目其余提交流程一致的离线兜底策略），不阻断打卡本身
     let cloudLogId = '';
-    // 🌸 云端打卡状态自愈：网络异常/超时（catch 分支）时把这次打卡挂到本地待
+    // 🌸 云端打卡状态自愈：网络异常/超时，或云能力当前压根不可用（wx.cloud.init
+    // 尚未完成/SDK 已知损坏，见 utils/cloudGuard.ts）时，把这次打卡挂到本地待
     // 补录队列，供 onShow()/网络恢复时静默重试（见 resyncPendingMeritCheckins）；
     // pendingMeritQueueItemId 供标签弹窗关闭时把用户选的标签补挂到这条记录上。
-    // 服务端明确业务拒绝（else if 分支，如已达单日上限）不入队——重试一个必然
-    // 复现的业务错误没有意义，只会让队列一直堆积
+    // 服务端明确业务拒绝（下方 else if 分支，如已达单日上限）不入队——重试一个
+    // 必然复现的业务错误没有意义，只会让队列一直堆积
     let pendingMeritQueueItemId = '';
-    try {
-      if (isCloudAvailable()) {
+    // 🐛 根因修复（2026-09-16 弱网离线队列加固）：此前只有"已经发起云端调用、
+    // 调用过程中抛异常"（下方 catch 分支）才会入队——如果 isCloudAvailable()
+    // 从一开始就是 false（连尝试都没尝试），整个 if 分支直接跳过，既不调用
+    // 也不入队，这笔打卡会变成永远无法自愈的纯本地记录，即便 SDK 之后恢复
+    // 正常也没有任何补录机会（resyncPendingMeritCheckins 只处理队列里已有的
+    // 条目）。抽成一个共享函数，两种"根本没有/没能完成云端同步"的场景统一
+    // 入队 + 给出"离线已记录"的友好提示，不再区别对待
+    const queueForOfflineMeritSync = (): void => {
+      pendingMeritQueueItemId = savePendingMeritCheckin({
+        localLogTimestamp: now,
+        storeId: currentStoreId,
+        storeName: currentStoreName,
+        shiftKey: selectedShift,
+        shiftName: shiftLabel,
+        shiftType,
+        hours: requestedHours,
+        willEatLunch: this.data.willEatLunch,
+        reservedMeals,
+        cloudLogId: '',
+        meritTags: []
+      }).id;
+      // 🌸 友好反馈：本地打卡已经落盘成功（下面 latestLogs 写入不受云端同步
+      // 结果影响），只是这一步没能同步到云端——如实告知"离线已记录"，而不是
+      // 让用户以为完全没反应，也不是假装已经完整同步。轻量 toast 而非
+      // wx.showModal，与 resyncPendingMeritCheckins 一贯的"自愈而非报错"
+      // 产品定位保持一致，不会打断后面即将弹出的微善标签弹窗
+      wx.showToast({ title: '打卡已离线记录，联网后自动同步 🌸', icon: 'none', duration: 2000 });
+    };
+
+    if (isCloudAvailable()) {
+      try {
         const res: any = await callFunctionWithTimeout({
           name: 'manageVolunteerCheckIn',
           data: {
@@ -13416,24 +13453,15 @@ Page({
         } else if (result && result.error) {
           console.warn('[onConfirmShiftCheckIn] 云端打卡同步失败，已降级为本地记录:', result.error);
         }
+      } catch (err) {
+        console.warn('[onConfirmShiftCheckIn] 云端打卡调用异常，已降级为本地记录:', err);
+        if (isCloudAvailable()) {
+          queueForOfflineMeritSync();
+        }
       }
-    } catch (err) {
-      console.warn('[onConfirmShiftCheckIn] 云端打卡调用异常，已降级为本地记录:', err);
-      if (isCloudAvailable()) {
-        pendingMeritQueueItemId = savePendingMeritCheckin({
-          localLogTimestamp: now,
-          storeId: currentStoreId,
-          storeName: currentStoreName,
-          shiftKey: selectedShift,
-          shiftName: shiftLabel,
-          shiftType,
-          hours: requestedHours,
-          willEatLunch: this.data.willEatLunch,
-          reservedMeals,
-          cloudLogId: '',
-          meritTags: []
-        }).id;
-      }
+    } else {
+      console.warn('[onConfirmShiftCheckIn] 云能力当前不可用，打卡已降级为离线队列，等待自愈同步');
+      queueForOfflineMeritSync();
     }
 
     const timestamp = now;
