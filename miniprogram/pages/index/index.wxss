@@ -8193,10 +8193,24 @@ page {
   padding: 28rpx 30rpx;
 }
 
-/* 输入框聚焦态：与 material-usage-modal.wxss 的 .vt-count-input:focus 同一
-   套手法（背景转白 + 琥珀色描边 + 柔和光晕环），不改全局共用的 .form-input
-   本身（那是整个 pages/index 数十处表单在用的裸类，改了影响面太大） */
+/* 🐛（2026-09-19 输入框文字被上下裁剪修复）基础 .form-input 只靠
+   padding:22rpx 24rpx 撑开盒高度、没有显式 height/line-height——WeChat
+   <input> 组件（尤其部分安卓机型）在这种"靠 padding 撑高"的写法下，文字
+   基线经常渲染偏移，实测会出现输入内容/placeholder 被上下边框裁掉一截的
+   问题。改用与本文件 .btn-close/.btn-save 同款"height 与 line-height 相等"
+   的既定手法（那两个按钮一直这样写、从未出过这类裁切问题），叠加
+   display:flex + align-items:center 做双重保险——两种居中技术同时命中，
+   不同 WeChat 基础库版本的渲染路径都能正确居中，不会再出现文字被裁切。
+   不改全局共用的 .form-input 本身（那是整个 pages/index 数十处表单在用
+   的裸类，直接改影响面太大），仅在这三个物资弹窗的作用域内生效 */
 .material-modal-content .form-input {
+  height: 88rpx;
+  min-height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
   transition: all 0.2s ease;
 }
 
