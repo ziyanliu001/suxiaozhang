@@ -935,7 +935,10 @@
         <view class="material-stock-section" wx:if="{{orgType === 'yuhuazhai' || orgType === 'elderly_canteen'}}">
           <view class="material-stock-header">
             <text class="material-stock-title">🤝 爱心物资预估结存</text>
-            <text class="material-stock-baseline-link" bindtap="onOpenMaterialBaselineModal">⚙️ 设置初始库存</text>
+            <view class="material-stock-header-links">
+              <text class="material-stock-history-link" bindtap="onGotoMaterialHistory">📋 流转记录</text>
+              <text class="material-stock-baseline-link" bindtap="onOpenMaterialBaselineModal">⚙️ 设置初始库存</text>
+            </view>
           </view>
 
           <view class="material-stock-row" wx:if="{{materialStockDisplay}}">

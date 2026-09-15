@@ -87,13 +87,25 @@ async function resolveCaller(OPENID) {
   return (roleRes.data && roleRes.data[0]) || null;
 }
 
-// 写权限校验：仿照 manageInventoryTransaction 的 resolveWriteTarget，但反过来
-// 只放行公益专区（CHARITY_ORG_TYPES），不是拒绝雨花斋
-async function resolveWriteTarget(caller, requestedStoreId) {
+// 权限校验：仿照 manageInventoryTransaction 的 resolveWriteTarget，但反过来
+// 只放行公益专区（CHARITY_ORG_TYPES），不是拒绝雨花斋。
+//
+// 🙋（2026-09-19 历史明细列表页）新增 opts.allowVolunteer——写操作（登记
+// 调拨/采购/设置初始库存）与结存现算维持店长/大家长/超管专属，不放开；
+// 但"查看历史明细"这个纯只读场景，任务需求明确是给志工用的（"方便志工
+// 快速盘点核对"），只做只读查询、不产生任何写副作用，放开给 volunteer
+// 角色是合理的权限收窄（读比写风险低得多），不代表全面放开这个云函数。
+// 调用方必须显式传 { allowVolunteer: true } 才会命中这条豁免，默认行为
+// （不传第三个参数）与此前完全一致
+async function resolveAccessTarget(caller, requestedStoreId, opts) {
+  const allowVolunteer = !!(opts && opts.allowVolunteer);
   if (!caller) return { allowed: false, error: '无权限：未找到您的角色信息' };
 
-  if (caller.role === 'store_manager' || caller.role === 'store_patriarch') {
-    if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店，无法管理物资' };
+  const isManagerRole = caller.role === 'store_manager' || caller.role === 'store_patriarch';
+  const isReadOnlyVolunteer = allowVolunteer && caller.role === 'volunteer';
+
+  if (isManagerRole || isReadOnlyVolunteer) {
+    if (!caller.storeId) return { allowed: false, error: '您尚未绑定门店，无法查看物资信息' };
     if (requestedStoreId && requestedStoreId !== caller.storeId) {
       return { allowed: false, error: '无权限：不能操作其他门店的物资' };
     }
@@ -120,7 +132,10 @@ async function resolveWriteTarget(caller, requestedStoreId) {
     return { allowed: true, storeId: requestedStoreId, tenantId: caller.tenantId, store };
   }
 
-  return { allowed: false, error: '无权限：仅店长、大家长或超级管理员可管理物资' };
+  return {
+    allowed: false,
+    error: allowVolunteer ? '无权限：仅店长、大家长、义工或超级管理员可查看物资信息' : '无权限：仅店长、大家长或超级管理员可管理物资'
+  };
 }
 
 // 查一家店的全部原始流水并现算结存——getStock 本店 + findSurplusPartners
@@ -198,7 +213,7 @@ async function findSurplusPartners(tenantId, excludeStoreId, city, urgentItems) 
 }
 
 async function handleGetStock(event, caller) {
-  const target = await resolveWriteTarget(caller, event.storeId);
+  const target = await resolveAccessTarget(caller, event.storeId);
   if (!target.allowed) return { success: false, error: target.error };
   const { storeId, tenantId, store } = target;
 
@@ -229,8 +244,8 @@ async function handleCreateTransfer(event, caller, OPENID) {
   }
 
   // 调用者必须归属调出或调入门店任意一方（店长/大家长/超管）
-  let target = await resolveWriteTarget(caller, fromStoreId);
-  if (!target.allowed) target = await resolveWriteTarget(caller, toStoreId);
+  let target = await resolveAccessTarget(caller, fromStoreId);
+  if (!target.allowed) target = await resolveAccessTarget(caller, toStoreId);
   if (!target.allowed) return { success: false, error: '无权限：您不属于调出或调入门店任意一方' };
 
   const [fromStoreRes, toStoreRes] = await Promise.all([
@@ -296,7 +311,7 @@ async function handleRecordPurchase(event, caller, OPENID) {
   const safeAmount = sanitizeNonNegativeNumber(amount);
   if (safeAmount === undefined) return { success: false, error: '金额格式不正确' };
 
-  const target = await resolveWriteTarget(caller, storeId);
+  const target = await resolveAccessTarget(caller, storeId);
   if (!target.allowed) return { success: false, error: target.error };
 
   const docData = {
@@ -320,7 +335,7 @@ async function handleRecordPurchase(event, caller, OPENID) {
 
 async function handleListTransfers(event, caller) {
   const { storeId, limit } = event;
-  const target = await resolveWriteTarget(caller, storeId);
+  const target = await resolveAccessTarget(caller, storeId);
   if (!target.allowed) return { success: false, error: target.error };
 
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50);
@@ -341,7 +356,7 @@ async function handleListTransfers(event, caller) {
 }
 
 async function handleSetBaseline(event, caller) {
-  const target = await resolveWriteTarget(caller, event.storeId);
+  const target = await resolveAccessTarget(caller, event.storeId);
   if (!target.allowed) return { success: false, error: target.error };
 
   const baseline = {};
@@ -355,6 +370,47 @@ async function handleSetBaseline(event, caller) {
 
   await db.collection('stores').doc(target.storeId).update({ data: { materialStockBaseline: baseline } });
   return { success: true, baseline };
+}
+
+// 🙋（2026-09-19 历史明细列表页）listTransfers 是调拨弹窗内嵌小列表专用
+// （小 limit、管理员专属），这两个 history action 是给独立的历史明细
+// 页用的：一次性返回上限较高的全量记录（HISTORY_MAX_LIMIT），日期范围/
+// 物资类目筛选交给客户端在这批数据上现算——列表本身的数据量级（单店几个月
+// 的调拨/采购流水）不需要服务端分页，见 pages 侧 lib/materialHistoryFilters.js
+// 头部注释。志工只读可见（allowVolunteer:true），不产生任何写副作用
+const HISTORY_MAX_LIMIT = 200;
+
+async function handleListTransferHistory(event, caller) {
+  const { storeId } = event;
+  const target = await resolveAccessTarget(caller, storeId, { allowVolunteer: true });
+  if (!target.allowed) return { success: false, error: target.error };
+
+  const [outRes, inRes] = await Promise.all([
+    db.collection(TRANSFER_COLLECTION)
+      .where({ tenantId: target.tenantId, fromStoreId: target.storeId })
+      .orderBy('createTime', 'desc').limit(HISTORY_MAX_LIMIT).get(),
+    db.collection(TRANSFER_COLLECTION)
+      .where({ tenantId: target.tenantId, toStoreId: target.storeId })
+      .orderBy('createTime', 'desc').limit(HISTORY_MAX_LIMIT).get()
+  ]);
+
+  const merged = [...(outRes.data || []), ...(inRes.data || [])]
+    .sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
+    .slice(0, HISTORY_MAX_LIMIT);
+
+  return { success: true, data: merged };
+}
+
+async function handleListPurchaseHistory(event, caller) {
+  const { storeId } = event;
+  const target = await resolveAccessTarget(caller, storeId, { allowVolunteer: true });
+  if (!target.allowed) return { success: false, error: target.error };
+
+  const res = await db.collection(PURCHASE_COLLECTION)
+    .where({ tenantId: target.tenantId, storeId: target.storeId })
+    .orderBy('createTime', 'desc').limit(HISTORY_MAX_LIMIT).get();
+
+  return { success: true, data: res.data || [] };
 }
 
 exports.main = async (event) => {
@@ -371,6 +427,8 @@ exports.main = async (event) => {
     if (action === 'recordPurchase') return await handleRecordPurchase(event, caller, OPENID);
     if (action === 'listTransfers') return await handleListTransfers(event, caller);
     if (action === 'setBaseline') return await handleSetBaseline(event, caller);
+    if (action === 'listTransferHistory') return await handleListTransferHistory(event, caller);
+    if (action === 'listPurchaseHistory') return await handleListPurchaseHistory(event, caller);
 
     return { success: false, error: `不支持的 action: ${action}` };
   } catch (err) {

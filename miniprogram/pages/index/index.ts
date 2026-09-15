@@ -2916,6 +2916,11 @@ Page({
     safeNavigateTo({ url: '/subpackages/admin/pages/inventory-management/inventory-management' });
   },
 
+  // 🤝（2026-09-19）爱心物资流转历史/明细列表页入口
+  onGotoMaterialHistory() {
+    safeNavigateTo({ url: '/subpackages/admin/pages/material-history/material-history' });
+  },
+
   // 🏢 空状态引导升级：机构其实已有门店（allStoresList.length > 0，只是当前
   // 账号自己还没绑定/选定其中一家）时，"创建首家门店"这个文案与操作都文不对
   // 题——用户要做的不是新建一家，而是从已有门店里挑一家。直接唤起 store-picker

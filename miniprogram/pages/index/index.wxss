@@ -7856,6 +7856,17 @@ page {
   color: #444444;
 }
 
+.material-stock-header-links {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.material-stock-history-link {
+  font-size: 22rpx;
+  color: #C97B3D;
+}
+
 .material-stock-baseline-link {
   font-size: 22rpx;
   color: #8C1D18;

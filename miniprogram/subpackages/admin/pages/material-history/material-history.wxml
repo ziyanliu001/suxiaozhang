@@ -1,0 +1,132 @@
+<view class="mh-page">
+
+  <navigation-bar
+    title="物资流转记录"
+    background="#C97B3D"
+    color="#FFFFFF"
+    dark="{{true}}"
+    back="{{true}}"
+    showHomeButton="auto"
+    bind:layout="onNavLayout"
+  ></navigation-bar>
+
+  <view class="mh-loading-state" wx:if="{{!checkedAccess}}" style="margin-top: 24rpx;">
+    <text>校验身份中...</text>
+  </view>
+
+  <view class="mh-denied-state" wx:if="{{checkedAccess && !hasAccess}}" style="margin-top: 24rpx;">
+    <text class="mh-denied-icon">🤝</text>
+    <text class="mh-denied-title">暂不可用</text>
+    <text class="mh-denied-sub">{{deniedReason}}</text>
+    <button class="mh-denied-btn" bindtap="goBack">返回</button>
+  </view>
+
+  <view class="mh-body" wx:if="{{checkedAccess && hasAccess}}" style="margin-top: 24rpx; height: calc(100vh - {{contentTop}}px);">
+
+    <view class="mh-store-banner">
+      <text class="mh-store-icon">🏪</text>
+      <text class="mh-store-name">{{storeName}}</text>
+    </view>
+
+    <!-- Tab：调拨记录 / 采购入库记录 -->
+    <view class="mh-tab-row">
+      <view class="mh-tab {{activeTab === 'transfer' ? 'active' : ''}}" data-tab="transfer" bindtap="onSwitchTab">🤝 跨店调拨</view>
+      <view class="mh-tab {{activeTab === 'purchase' ? 'active' : ''}}" data-tab="purchase" bindtap="onSwitchTab">📥 采购入库</view>
+    </view>
+
+    <!-- 快捷筛选：时间段 -->
+    <scroll-view scroll-x show-scrollbar="{{false}}" class="mh-filter-row">
+      <view
+        class="mh-filter-chip {{dateRangeFilter === opt.value ? 'active' : ''}}"
+        wx:for="{{dateRangeOptions}}"
+        wx:for-item="opt"
+        wx:key="value"
+        data-value="{{opt.value}}"
+        bindtap="onSwitchDateRange"
+      >{{opt.label}}</view>
+    </scroll-view>
+
+    <!-- 快捷筛选：物资类目（调拨/采购两个 Tab 的选项集不同） -->
+    <scroll-view scroll-x show-scrollbar="{{false}}" class="mh-filter-row">
+      <block wx:if="{{activeTab === 'transfer'}}">
+        <view
+          class="mh-filter-chip {{itemFilter === opt.value ? 'active' : ''}}"
+          wx:for="{{transferItemOptions}}"
+          wx:for-item="opt"
+          wx:key="value"
+          data-value="{{opt.value}}"
+          bindtap="onSwitchItemFilter"
+        >{{opt.label}}</view>
+      </block>
+      <block wx:else>
+        <view
+          class="mh-filter-chip {{itemFilter === opt.value ? 'active' : ''}}"
+          wx:for="{{purchaseItemOptions}}"
+          wx:for-item="opt"
+          wx:key="value"
+          data-value="{{opt.value}}"
+          bindtap="onSwitchItemFilter"
+        >{{opt.label}}</view>
+      </block>
+    </scroll-view>
+
+    <scroll-view scroll-y show-scrollbar="{{false}}" class="mh-content">
+      <view class="mh-loading-inline" wx:if="{{loading}}">
+        <text>加载中...</text>
+      </view>
+
+      <view class="mh-empty-state" wx:if="{{!loading && displayList.length === 0}}">
+        <text class="mh-empty-icon">🗂️</text>
+        <text class="mh-empty-text">该筛选条件下暂无记录</text>
+      </view>
+
+      <!-- 调拨记录卡片 -->
+      <block wx:if="{{activeTab === 'transfer'}}">
+        <view class="mh-card" wx:for="{{displayList}}" wx:key="_id">
+          <view class="mh-card-top">
+            <text class="mh-badge {{item.directionClass}}">{{item.directionText}}</text>
+            <text class="mh-card-time">{{item.createTimeText}}</text>
+          </view>
+          <view class="mh-card-route">
+            <text class="mh-route-store">{{item.fromStoreName}}</text>
+            <text class="mh-route-arrow">➜</text>
+            <text class="mh-route-store">{{item.toStoreName}}</text>
+          </view>
+          <view class="mh-card-main">
+            <text class="mh-card-item">{{item.itemLabel}}</text>
+            <text class="mh-card-qty">{{item.quantityJin}}斤</text>
+          </view>
+          <view class="mh-card-foot">
+            <text class="mh-card-sub">经手人：{{item.handledBy || '未填写'}}</text>
+            <text class="mh-card-sub">登记人：{{item.operatorName || '未知'}}</text>
+          </view>
+          <text class="mh-card-code" wx:if="{{item.verificationCode}}">凭证码：{{item.verificationCode}}</text>
+        </view>
+      </block>
+
+      <!-- 采购入库记录卡片 -->
+      <block wx:else>
+        <view class="mh-card" wx:for="{{displayList}}" wx:key="_id">
+          <view class="mh-card-top">
+            <text class="mh-badge {{item.directionClass}}">{{item.directionText}}</text>
+            <text class="mh-card-time">{{item.createTimeText}}</text>
+          </view>
+          <view class="mh-card-route">
+            <text class="mh-route-store">{{item.storeName}}</text>
+          </view>
+          <view class="mh-card-main">
+            <text class="mh-card-item">{{item.itemLabel}}</text>
+            <text class="mh-card-qty">{{item.quantityJin}}斤</text>
+          </view>
+          <view class="mh-card-foot">
+            <text class="mh-card-sub" wx:if="{{item.amount}}">金额：¥{{item.amount}}</text>
+            <text class="mh-card-sub">登记人：{{item.operatorName || '未知'}}</text>
+          </view>
+        </view>
+      </block>
+
+      <view class="mh-safe-area-spacer"></view>
+    </scroll-view>
+  </view>
+
+</view>
