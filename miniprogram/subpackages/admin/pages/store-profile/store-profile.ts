@@ -553,7 +553,6 @@ Page({
     const isPlatformAdmin = effectiveRole === 'platform_admin';
 
     this.setData({ currentStoreId: storeId, currentStoreName: storeName, canManage, canSetAdminKey, isSuperAdmin, isPlatformAdmin });
-    console.log('[verify] store-profile rendered, canManage:', canManage);
 
     // 🏛️（2026-09-09 超管跨店穿透）超管专属"切换门店"快捷选择器，惰性拉取
     // （只在确实是超管时才发起，避免给其余角色账号增加无意义的云函数调用）
@@ -725,9 +724,6 @@ Page({
       // 成功回调这几个明确的用户操作触发，fetchProfile() 只负责把云端数据
       // 灌进展示态字段，不应该、也没有能力影响 editing
       this.setData(update);
-      // 🛡️ canManage 不在这份 update 里——它自始至终只由 initRoleAndStore() 的
-      // effectiveRole 判定决定，这里只是确认 fetchProfile() 没有意外动过它
-      console.log('[verify] store-profile fetchProfile 完成, canManage 保持:', this.data.canManage, 'data.canEdit(服务端真实角色判定, 仅供参考不采用):', data.canEdit);
       // 🩺（2026-09-10 排查"打开就是编辑态"问题）显式打印 editing——如果这里
       // 打印出 true，就是实锤"确实被什么地方错误地置为了 true"；如果打印
       // 出 false 但界面仍然表现成编辑态，说明问题根本不在这份 .ts 逻辑里

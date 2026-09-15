@@ -32,7 +32,7 @@ import { writeLocalFileSafe } from '../../utils/localFileCache';
 import { withTimeout, callFunctionWithTimeout } from '../../utils/withTimeout';
 import { buildSmartReceiptDisplayItems, formatSmartReceiptTotalDisplay, buildSmartReceiptApplyText } from './lib/smartReceiptDraft';
 import { isDefaultOcrResultEmpty, isParseReceiptResultEmpty, adaptParseReceiptDraftToLegacyResult, adaptLegacyOcrResultToParseReceiptDraft } from './lib/ocrEngineFallback';
-import { MATERIAL_TRANSFER_ITEM_OPTIONS, MATERIAL_PURCHASE_ITEM_OPTIONS, computeMaterialTransferFormValid, computeMaterialPurchaseFormValid } from './lib/materialTransferForm';
+import { MATERIAL_TRANSFER_ITEM_OPTIONS, MATERIAL_PURCHASE_ITEM_OPTIONS, computeMaterialTransferFormValid, computeMaterialPurchaseFormValid, computeSelectedStockJin, isOverStock, applyQuickStep, buildRecentPartnerChips } from './lib/materialTransferForm';
 import { resolveActiveRoleGrant } from '../../utils/lib/resolveActiveRoleGrant';
 import { ensurePrivacyAuthorized } from '../../utils/privacyAuthHub';
 import { takeComplianceReviewRequest } from '../../utils/complianceHandoff';
@@ -926,6 +926,13 @@ Page({
     },
     materialPartnerStoreOptions: [] as Array<{ storeId: string; storeName: string }>,
     materialTransferRecent: [] as any[],
+    // 🏷️（2026-09-18 常用门店快捷标签）从 materialTransferRecent 派生，见
+    // fetchMaterialTransferRecent()/buildRecentPartnerChips
+    materialQuickPartnerChips: [] as Array<{ storeId: string; storeName: string }>,
+    // 🛡️（2026-09-18 智能库存余量联动）只在 direction==='out' 时非 null——
+    // 调入接收不存在"超量"概念，见 computeSelectedStockJin 头部注释
+    materialTransferSelectedStockJin: null as number | null,
+    materialTransferOverStock: false,
 
     showMaterialBaselineModal: false,
     materialBaselineSubmitting: false,
@@ -2401,6 +2408,20 @@ Page({
       .map((s: any) => ({ storeId: s.storeId, storeName: s.storeName || '未命名门店' }));
   },
 
+  // 🛡️（2026-09-18 智能库存余量联动）表单任一字段变化后统一走这里：合并出
+  // 新表单 → 重算是否可提交 + 是否需要展示本店余量提示/超量警示，一次 setData
+  // 搞定，避免每个 onXxx 处理函数各自重复拼三份派生字段、日后漏改一处。
+  _updateMaterialTransferForm(patch: Partial<{ direction: 'out' | 'in'; partnerStoreId: string; partnerStoreName: string; item: 'rice' | 'oil' | 'flour'; quantityJin: string; handledBy: string }>) {
+    const nextForm = { ...this.data.materialTransferForm, ...patch };
+    const stockJin = computeSelectedStockJin(nextForm.direction, nextForm.item, this.data.materialStockDisplay);
+    this.setData({
+      materialTransferForm: nextForm,
+      materialTransferFormValid: computeMaterialTransferFormValid(nextForm),
+      materialTransferSelectedStockJin: stockJin,
+      materialTransferOverStock: isOverStock(nextForm.quantityJin, stockJin)
+    });
+  },
+
   async onOpenMaterialTransferModal(e?: any) {
     if (!this.data.allStoresList || this.data.allStoresList.length === 0) {
       await this.fetchAllStoresList();
@@ -2421,11 +2442,14 @@ Page({
       quantityJin: '',
       handledBy: ''
     };
+    const stockJin = computeSelectedStockJin(nextForm.direction, nextForm.item, this.data.materialStockDisplay);
     this.setData({
       showMaterialTransferModal: true,
       materialPartnerStoreOptions: options,
       materialTransferForm: nextForm,
-      materialTransferFormValid: computeMaterialTransferFormValid(nextForm)
+      materialTransferFormValid: computeMaterialTransferFormValid(nextForm),
+      materialTransferSelectedStockJin: stockJin,
+      materialTransferOverStock: false
     });
     this.fetchMaterialTransferRecent();
   },
@@ -2438,40 +2462,51 @@ Page({
   onSwitchMaterialTransferDirection(e: any) {
     const direction = e.currentTarget.dataset.direction as 'out' | 'in';
     if (!direction || direction === this.data.materialTransferForm.direction) return;
-    this.setData({ 'materialTransferForm.direction': direction });
+    this._updateMaterialTransferForm({ direction });
   },
 
   onSelectMaterialTransferPartner(e: any) {
     const index = parseInt(e.detail.value, 10);
     const option = this.data.materialPartnerStoreOptions[index];
     if (!option) return;
-    const nextForm = { ...this.data.materialTransferForm, partnerStoreId: option.storeId, partnerStoreName: option.storeName };
-    this.setData({
-      'materialTransferForm.partnerStoreId': option.storeId,
-      'materialTransferForm.partnerStoreName': option.storeName,
-      materialTransferFormValid: computeMaterialTransferFormValid(nextForm)
-    });
+    this._updateMaterialTransferForm({ partnerStoreId: option.storeId, partnerStoreName: option.storeName });
+  },
+
+  // 🏷️（2026-09-18 常用门店快捷标签）点击一枚"最近常用"标签，等同于在
+  // picker 里手动选中同一家门店——复用同一套表单更新逻辑，不另起一套
+  onTapMaterialPartnerChip(e: any) {
+    const storeId = e.currentTarget.dataset.storeId;
+    const storeName = e.currentTarget.dataset.storeName;
+    if (!storeId) return;
+    this._updateMaterialTransferForm({ partnerStoreId: storeId, partnerStoreName: storeName });
   },
 
   onSelectMaterialTransferItem(e: any) {
     const item = e.currentTarget.dataset.item as 'rice' | 'oil' | 'flour';
     if (!item) return;
-    const nextForm = { ...this.data.materialTransferForm, item };
-    this.setData({ 'materialTransferForm.item': item, materialTransferFormValid: computeMaterialTransferFormValid(nextForm) });
+    this._updateMaterialTransferForm({ item });
   },
 
   onMaterialTransferQuantityInput(e: any) {
-    const quantityJin = e.detail.value;
-    const nextForm = { ...this.data.materialTransferForm, quantityJin };
-    this.setData({ 'materialTransferForm.quantityJin': quantityJin, materialTransferFormValid: computeMaterialTransferFormValid(nextForm) });
+    this._updateMaterialTransferForm({ quantityJin: e.detail.value });
+  },
+
+  // 🔢（2026-09-18 快捷步进输入）+1/+5/+10 斤——在当前已填写的重量基础上
+  // 累加，空/非法输入按 0 起步，见 applyQuickStep 头部注释
+  onTapMaterialTransferQuickStep(e: any) {
+    const step = parseFloat(e.currentTarget.dataset.step);
+    if (!Number.isFinite(step)) return;
+    const nextQuantityJin = applyQuickStep(this.data.materialTransferForm.quantityJin, step);
+    this._updateMaterialTransferForm({ quantityJin: nextQuantityJin });
   },
 
   onMaterialTransferHandledByInput(e: any) {
-    const handledBy = e.detail.value;
-    const nextForm = { ...this.data.materialTransferForm, handledBy };
-    this.setData({ 'materialTransferForm.handledBy': handledBy, materialTransferFormValid: computeMaterialTransferFormValid(nextForm) });
+    this._updateMaterialTransferForm({ handledBy: e.detail.value });
   },
 
+  // 🏷️（2026-09-18）limit 从 3 提到 8——同一份查询结果现在身兼两用：完整列表
+  // 展示"最近调拨记录"，同时喂给 buildRecentPartnerChips() 提炼出去重后的
+  // "常用门店"快捷标签（见下方 setData），不为快捷标签另开一次云函数请求
   async fetchMaterialTransferRecent() {
     const storeId = this.data.currentStoreId;
     if (!storeId) return;
@@ -2479,11 +2514,15 @@ Page({
       if (!isCloudAvailable()) return;
       const res = await callFunctionWithTimeout({
         name: 'manageMaterialTransfer',
-        data: { action: 'listTransfers', storeId, limit: 3 }
+        data: { action: 'listTransfers', storeId, limit: 8 }
       });
       const result = res.result as any;
       if (result && result.success) {
-        this.setData({ materialTransferRecent: result.data || [] });
+        const records = result.data || [];
+        this.setData({
+          materialTransferRecent: records,
+          materialQuickPartnerChips: buildRecentPartnerChips(records, storeId)
+        });
       }
     } catch (e) {
       console.warn('[fetchMaterialTransferRecent] 查询最近调拨记录失败:', e);
@@ -2684,6 +2723,17 @@ Page({
 
   onMaterialPurchaseQuantityInput(e: any) {
     const quantityJin = e.detail.value;
+    this.setData({
+      'materialPurchaseForm.quantityJin': quantityJin,
+      materialPurchaseFormValid: computeMaterialPurchaseFormValid(quantityJin)
+    });
+  },
+
+  // 🔢（2026-09-18 快捷步进输入）与调拨表单同一套 applyQuickStep 逻辑
+  onTapMaterialPurchaseQuickStep(e: any) {
+    const step = parseFloat(e.currentTarget.dataset.step);
+    if (!Number.isFinite(step)) return;
+    const quantityJin = applyQuickStep(this.data.materialPurchaseForm.quantityJin, step);
     this.setData({
       'materialPurchaseForm.quantityJin': quantityJin,
       materialPurchaseFormValid: computeMaterialPurchaseFormValid(quantityJin)

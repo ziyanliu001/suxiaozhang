@@ -2354,11 +2354,31 @@
 
       <view class="modal-body">
         <view class="xfer-direction-track">
-          <view class="xfer-direction-option {{materialTransferForm.direction === 'out' ? 'active' : ''}}" bindtap="onSwitchMaterialTransferDirection" data-direction="out">调出支援</view>
-          <view class="xfer-direction-option {{materialTransferForm.direction === 'in' ? 'active' : ''}}" bindtap="onSwitchMaterialTransferDirection" data-direction="in">调入接收</view>
+          <view class="xfer-direction-option {{materialTransferForm.direction === 'out' ? 'active' : ''}}" bindtap="onSwitchMaterialTransferDirection" data-direction="out">
+            <text class="xfer-direction-arrow">↗</text>
+            <text>调出支援</text>
+          </view>
+          <view class="xfer-direction-option {{materialTransferForm.direction === 'in' ? 'active' : ''}}" bindtap="onSwitchMaterialTransferDirection" data-direction="in">
+            <text class="xfer-direction-arrow">↙</text>
+            <text>调入接收</text>
+          </view>
         </view>
 
         <text class="form-label">{{materialTransferForm.direction === 'out' ? '受援门店' : '支援来源门店'}}</text>
+
+        <!-- 🏷️（2026-09-18 常用门店快捷标签）从最近调拨记录提炼，点击即选中，
+             减少多店频繁互通时反复打开 picker 翻找同一批门店的操作成本 -->
+        <view class="material-partner-chip-row" wx:if="{{materialQuickPartnerChips.length > 0}}">
+          <view
+            wx:for="{{materialQuickPartnerChips}}"
+            wx:key="storeId"
+            class="material-partner-chip {{materialTransferForm.partnerStoreId === item.storeId ? 'active' : ''}}"
+            bindtap="onTapMaterialPartnerChip"
+            data-store-id="{{item.storeId}}"
+            data-store-name="{{item.storeName}}"
+          >{{item.storeName}}</view>
+        </view>
+
         <picker mode="selector" range="{{materialPartnerStoreOptions}}" range-key="storeName" bindchange="onSelectMaterialTransferPartner">
           <view class="apply-form-picker-selector">{{materialTransferForm.partnerStoreName || '请选择门店'}}</view>
         </picker>
@@ -2376,10 +2396,24 @@
             <text class="material-item-label">{{item.label}}</text>
           </view>
         </view>
-        <text class="form-hint" style="display: block; margin: -12rpx 0 20rpx; font-size: 20rpx; color: #999999;">时蔬保质期短，暂不支持跨店调配</text>
+        <view class="material-restrict-hint">
+          <text class="material-restrict-hint-icon">⚠️</text>
+          <text class="material-restrict-hint-text">时蔬保质期短，暂不支持跨店调配</text>
+        </view>
+
+        <!-- 📊（2026-09-18 智能库存余量联动）只在"调出支援"且已选物资时展示，
+             超出本店预估结存时切换警示配色，但不阻断提交（结存是估算值） -->
+        <view class="material-stock-tip {{materialTransferOverStock ? 'over' : ''}}" wx:if="{{materialTransferSelectedStockJin !== null}}">
+          <text>📦 本店该物资预估结存约 {{materialTransferSelectedStockJin}} 斤{{materialTransferOverStock ? '，本次调配数量已超过结存，请确认无误后再提交' : ''}}</text>
+        </view>
 
         <text class="form-label">调配重量（斤）</text>
-        <input class="form-input" type="digit" placeholder="请输入重量" value="{{materialTransferForm.quantityJin}}" bindinput="onMaterialTransferQuantityInput" style="margin-bottom: 20rpx;" />
+        <input class="form-input" type="digit" placeholder="请输入重量" value="{{materialTransferForm.quantityJin}}" bindinput="onMaterialTransferQuantityInput" style="margin-bottom: 12rpx;" />
+        <view class="material-quick-step-row">
+          <view class="material-quick-step-btn" bindtap="onTapMaterialTransferQuickStep" data-step="1">+1斤</view>
+          <view class="material-quick-step-btn" bindtap="onTapMaterialTransferQuickStep" data-step="5">+5斤</view>
+          <view class="material-quick-step-btn" bindtap="onTapMaterialTransferQuickStep" data-step="10">+10斤</view>
+        </view>
 
         <text class="form-label">经手人</text>
         <input class="form-input" type="text" placeholder="请输入经手人姓名" value="{{materialTransferForm.handledBy}}" bindinput="onMaterialTransferHandledByInput" />
@@ -2459,7 +2493,12 @@
         </view>
 
         <text class="form-label">采购重量（斤）</text>
-        <input class="form-input" type="digit" placeholder="请输入重量，或拍照自动识别" value="{{materialPurchaseForm.quantityJin}}" bindinput="onMaterialPurchaseQuantityInput" style="margin-bottom: 20rpx;" />
+        <input class="form-input" type="digit" placeholder="请输入重量，或拍照自动识别" value="{{materialPurchaseForm.quantityJin}}" bindinput="onMaterialPurchaseQuantityInput" style="margin-bottom: 12rpx;" />
+        <view class="material-quick-step-row">
+          <view class="material-quick-step-btn" bindtap="onTapMaterialPurchaseQuickStep" data-step="1">+1斤</view>
+          <view class="material-quick-step-btn" bindtap="onTapMaterialPurchaseQuickStep" data-step="5">+5斤</view>
+          <view class="material-quick-step-btn" bindtap="onTapMaterialPurchaseQuickStep" data-step="10">+10斤</view>
+        </view>
 
         <text class="form-label">金额（元，可选）</text>
         <input class="form-input" type="digit" placeholder="请输入采购金额" value="{{materialPurchaseForm.amount}}" bindinput="onMaterialPurchaseAmountInput" />

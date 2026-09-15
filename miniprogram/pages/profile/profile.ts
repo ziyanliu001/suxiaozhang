@@ -1,7 +1,7 @@
 import { AuthService, hasStoreAdminPrivilege } from '../../utils/authService';
 import { DataService } from '../../utils/dataService';
 import { getSelectedStore, setSelectedStore, getCurrentActiveStore, getCachedStoreStatus, fetchAndSyncStoreStatus } from '../../utils/storeManager';
-import { computeMyCheckInStats, computeMyCheckInStatsWithTodayFallback, computeMyCheckInStreak, getMyCheckInLogs } from '../../utils/checkinStats';
+import { computeMyCheckInStats, computeMyCheckInStatsWithTodayFallback, computeMyCheckInStreak } from '../../utils/checkinStats';
 import { getSafeSystemInfo, isIOSDevice } from '../../utils/util';
 import { safeNavigateTo } from '../../utils/navHelper';
 import { compressAndUploadScaledImage } from '../../utils/imageCompress';
@@ -1093,7 +1093,6 @@ Page({
   },
 
   onShow() {
-    console.log('[verify] profile.onShow 已触发, 当前 userAvatarUrl=', this.data.userAvatarUrl);
     this.isNavigating = false;
 
     // 🐛 顶部安全区加固：profile 是 custom:true 的 tabBar 页面，实例常驻、
@@ -1325,7 +1324,6 @@ Page({
       // "默认家人视角"，需用 status !== 'approved' 再做一次精确区分
       isFamily = role === 'volunteer' && (!cachedRoleInfo || cachedRoleInfo.status !== 'approved');
     }
-    console.log('[verify] initMinePage 角色解析: cachedRole=', cachedRoleInfo && cachedRoleInfo.role, 'storageRole=', storageRole, 'globalRole=', globalRoleLower, '-> 生效role=', role);
 
     // 🐛 根因修复配套：统一改读 storeManager.ts 的 getCurrentActiveStore()——它
     // 内部已经把 current_store_name（canonical key）与 legacy 的 selectedStore
@@ -1440,7 +1438,6 @@ Page({
     // currentUserRole 都是 'volunteer'，靠 isFamily 区分展示哪一套版面
     isFamily = overridden.isFamily;
     const isVolunteer = overridden.isVolunteer;
-    console.log('[verify] initMinePage 计算结果: displayRole=', displayRole, 'isPatriarch=', isPatriarch, 'isFinance=', isFinance, 'isFamily=', isFamily, 'isVolunteer=', isVolunteer);
 
     // 🐛 根因修复："社区助餐点被标成雨花斋"：此前这里用 tenantId.startsWith('yuhuazhai')
     // 当"是否雨花斋"的信号——但 tenantId 只是历史租户/建店命名空间，同一个 tenantId
@@ -2366,9 +2363,7 @@ Page({
 
   // 🙋 头像昵称填写规范：优先用缓存的 RoleInfo 秒开显示，再静默刷新一次确保最新
   loadUserProfile() {
-    console.log('[verify] loadUserProfile 已触发, lastConfirmedAvatarFileId=', this.lastConfirmedAvatarFileId);
     const cached = AuthService.getCachedRoleInfo();
-    console.log('[verify] 本地缓存 cached.avatarUrl=', cached && cached.avatarUrl);
     if (cached) {
       this.applyAvatarUrl(cached.avatarUrl || '');
       this.setData({ userNickName: cached.nickName || '' });
@@ -2393,7 +2388,6 @@ Page({
     // 号的大小现在只取决于"这次 loadUserProfile 调用本身发生的时间"，与网络快慢无关。
     const fetchSeq = ++this.avatarApplySeq;
     AuthService.fetchUserRole().then(result => {
-      console.log('[verify] fetchUserRole resolve, success=', result.success, 'roleInfo.avatarUrl=', result.roleInfo && result.roleInfo.avatarUrl);
       if (result.success && result.roleInfo) {
         // 🐛 云数据库最终一致性兜底：见类定义处 lastConfirmedAvatarFileId 的注释——
         // 如果这次 checkUserRole 返回的 avatarUrl 跟"刚上传成功、已确认为真"的
@@ -2714,19 +2708,6 @@ Page({
       // 的打卡记录时，改用那条记录自己的门店重新算一次
       const scopedStats = computeMyCheckInStatsWithTodayFallback(resolvedStoreId, resolvedStoreName);
 
-      // 🔍 诊断日志：看板显示 0 但证书/榜单正确这类问题，根因几乎总是这里
-      // resolvedStoreId/resolvedStoreName 与 my_checkin_logs 里实际写入的
-      // storeId/storeName 对不上（例如多门店超管当前正在浏览的门店，跟
-      // AuthService 缓存里自己"主账号绑定"的门店是两个不同的门店）——打印出
-      // 每一步的中间值和本地流水总条数，下次复现时直接对照就能定位，不用
-      // 反复靠猜
-      console.log('[loadVolunteerStats] activeStore=', activeStore,
-        'cachedRoleInfo.storeId=', cachedRoleInfo && cachedRoleInfo.storeId,
-        'cachedRoleInfo.storeName=', cachedRoleInfo && cachedRoleInfo.storeName,
-        '-> resolvedStoreId=', resolvedStoreId, 'resolvedStoreName=', resolvedStoreName,
-        'my_checkin_logs 总条数=', getMyCheckInLogs().length,
-        '-> scopedStats=', scopedStats);
-
       // 🐛 统一改为整包合并更新（与 fetchMeritStats 保持同一种 setData 风格）：
       // 此前这里用字符串路径 'stats.volunteerDays' 局部更新，fetchMeritStats
       // 用 stats:{...} 整体替换——同一个嵌套字段被两种不同风格的 setData 调用
@@ -2743,12 +2724,6 @@ Page({
         }
       });
 
-      // 🔍 读回校验：setData 对简单字段是同步生效的（this.data 立即更新，
-      // 只是原生渲染层的提交是异步的）——这里紧跟着读一次 this.data.stats，
-      // 如果这行打印的也是正确值，就能 100% 排除"数据模型本身错误"这个可能性，
-      // 把范围彻底收窄到"数据是对的，但没有正确渲染到界面"（WXML 编译缓存/
-      // 未热更新等构建环境问题），而不是继续怀疑 TS 逻辑
-      console.log('[loadVolunteerStats] setData 后读回 this.data.stats=', this.data.stats);
       this.computeBadgeList();
     } catch (err) {
       console.warn('[mine] 读取护持统计数据失败:', err);
@@ -2865,11 +2840,6 @@ Page({
       // 门店上下文漂移兜底同上，见 computeMyCheckInStatsWithTodayFallback 注释
       const scopedStats = computeMyCheckInStatsWithTodayFallback(storeId, storeName);
 
-      // 🔍 诊断日志：与 loadVolunteerStats 同一处排查口径，见该方法注释
-      console.log('[fetchMeritStats] storeId=', storeId, 'storeName=', storeName,
-        'my_checkin_logs 总条数=', getMyCheckInLogs().length,
-        '-> scopedStats=', scopedStats);
-
       this.setData({
         stats: {
           volunteerDays: scopedStats.days,
@@ -2879,9 +2849,6 @@ Page({
           auditedReports: auditedCount
         }
       });
-
-      // 🔍 读回校验：与 loadVolunteerStats 同一处排查口径，见该方法注释
-      console.log('[fetchMeritStats] setData 后读回 this.data.stats=', this.data.stats);
 
       this.computeBadgeList();
     } catch (err) {
@@ -3949,17 +3916,11 @@ Page({
           || (getSelectedStore() && getSelectedStore().storeId)
           || (cachedRoleInfo && cachedRoleInfo.storeId)
           || '');
-      // 🩺 诊断日志：storeId 与云函数端 caller.storeId（或超管穿透时的
-      // scopeStoreId）是否一致，是"提交成功但列表看不到"这类问题最常见的
-      // 根因；云函数侧 submitRoleApply/listPendingApplications 也各打了一份，
-      // 两边日志一起看能直接定位到底哪个环节的 storeId 对不上
-      console.log('[fetchPendingApplications] 拉取待审批参数:', { storeId, cachedStoreId: cachedRoleInfo?.storeId });
       const res: any = await callFunctionWithTimeout({
         name: 'processRoleAudit',
         data: { action: 'listPendingApplications', storeId }
       });
       const result = res.result;
-      console.log('[fetchPendingApplications] 拉取结果:', result);
       if (!result || !result.success) return;
 
       const list = Array.isArray(result.data) ? result.data : [];
