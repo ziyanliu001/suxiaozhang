@@ -1426,21 +1426,64 @@ page {
   margin-bottom: 20rpx;
 }
 
+/* 🐛（2026-09-19 标题折行修复）此前 .label-with-tip 无 min-width:0/flex-shrink
+   约束，.lbl-bold 里"现场爱心随喜/其他结余（线下）"整段纯文本在空间不够时
+   走 CJK 默认逐字换行，末尾"（线下）"这种没有语义可断的短语会被拆成
+   "(线" / "下)" 两截，观感破碎。改为：① flex:1;min-width:0 让标签区正确
+   参与父级 .field-item-row 的空间分配；② 把"线下"拆成独立徽标（不参与
+   折行/省略，flex-shrink:0），主标题文本单独用 white-space:nowrap +
+   text-overflow:ellipsis，空间不够时优雅省略而不是断字 */
 .label-with-tip {
   display: flex;
   align-items: baseline;
+  flex: 1;
+  min-width: 0;
+  margin-right: 16rpx;
 }
 
 .label-with-tip .lbl-bold {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  min-width: 0;
+  flex-shrink: 1;
   font-size: 26rpx;
   font-weight: bold;
   color: #212529;
 }
 
-.label-with-tip .sub-tip {
+.label-with-tip .lbl-bold-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-with-tip .offline-tag {
+  flex-shrink: 0;
+  font-size: 18rpx;
+  font-weight: 600;
+  color: #C97B3D;
+  background: rgba(201, 123, 61, 0.1);
+  border: 1rpx solid rgba(201, 123, 61, 0.3);
+  border-radius: 6rpx;
+  padding: 2rpx 8rpx;
+  margin-left: 8rpx;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* 🐛（2026-09-19 标题省略号彻底修复）"(末尾固定加项)"从标题行移出，改在
+   行下方独立展示——此前与标题共挤一行时，即便标题已有省略号防裁剪兜底，
+   这 8 个字仍会挤占标题可用宽度，在多数手机屏幕上把本该完整展示的
+   "现场爱心随喜/其他结余"逼出省略号。原 .label-with-tip .sub-tip 规则
+   （连同 WXML 里唯一的引用点）已一并移除，不留死代码 */
+.field-item-caption {
+  display: block;
   font-size: 20rpx;
   color: #868E96;
-  margin-left: 8rpx;
+  margin-top: -12rpx;
+  margin-bottom: 20rpx;
 }
 
 .small-currency-input-box {
@@ -1451,6 +1494,7 @@ page {
   border-radius: 12rpx;
   padding: 8rpx 16rpx;
   width: 180rpx;
+  flex-shrink: 0;
 }
 
 .small-currency-input-box .symbol {
@@ -7963,6 +8007,12 @@ page {
    （同尺寸/同圆角/同 flex:1），只用实心/描边区分主次动作，不再是"大按钮 +
    小字链接"这种视觉权重悬殊的组合。配色收敛到雨花斋纯素公益食堂统一的
    琥珀色调 #C97B3D，替换掉此前突兀的饱和绿 */
+/* 🐛（2026-09-19 按钮文字被上下裁剪修复）此前 height:76rpx 只靠
+   display:flex;align-items:center 一种手法居中，emoji 图标在部分安卓机型
+   上行盒实际渲染高度会超出字号本身、把居中基线顶偏，紧凑的 76rpx 盒高
+   进一步放大这个问题，观感上像文字笔画被上下夹住裁切。改用与本文件
+   .form-input/.btn-close/.btn-save 同款"height 与 line-height 相等
+   （88rpx）"的既定手法，与 flex 居中叠加做双重保险 */
 .btn-material-action {
   flex: 1;
   min-width: 0;
@@ -7970,11 +8020,13 @@ page {
   align-items: center;
   justify-content: center;
   gap: 8rpx;
-  height: 76rpx;
-  padding: 0 12rpx;
+  height: 88rpx;
+  min-height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 16rpx;
   border-radius: 999rpx;
   box-sizing: border-box;
-  font-size: 24rpx;
+  font-size: 28rpx;
   font-weight: 600;
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
@@ -7985,7 +8037,7 @@ page {
 }
 
 .btn-material-action-icon {
-  font-size: 26rpx;
+  font-size: 28rpx;
   line-height: 1;
   flex-shrink: 0;
 }

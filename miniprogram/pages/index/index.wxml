@@ -1366,21 +1366,30 @@
     <view class="ui-card-wrapper math-preview-card">
       <view class="field-item-row">
         <view class="label-with-tip">
-          <view class="lbl-bold"><view class="idx-icon-sm idx-icon-wallet"></view> 现场爱心随喜/其他结余（线下）</view>
-          <text class="sub-tip">(末尾固定加项)</text>
+          <view class="lbl-bold">
+            <view class="idx-icon-sm idx-icon-wallet"></view>
+            <text class="lbl-bold-text">现场爱心随喜/其他结余</text>
+          </view>
+          <text class="offline-tag">线下</text>
         </view>
         <view class="small-currency-input-box">
           <text class="symbol">¥</text>
-          <input 
-            class="num-input" 
-            type="digit" 
-            value="{{otherDonation}}" 
-            placeholder="0" 
+          <input
+            class="num-input"
+            type="digit"
+            value="{{otherDonation}}"
+            placeholder="0"
             bindinput="onInput"
             data-field="otherDonation"
           />
         </view>
       </view>
+      <!-- 🐛（2026-09-19 标题省略号彻底修复）此前"(末尾固定加项)"与标题挤在
+           同一行，即便标题本身已做省略号防裁剪兜底，8 个字的 sub-tip 仍会
+           挤占标题可用宽度，在多数手机屏幕上把"现场爱心随喜/其他结余"这句
+           本该完整展示的话逼出省略号。移到行下方独立展示，标题行只保留
+           图标+主标题+"线下"徽标，宽度绰绰有余，不会再触发省略号 -->
+      <text class="field-item-caption">(末尾固定加项)</text>
 
       <!-- 🛡️（2026-08-31 结余算式看板化）此前是一整行 flex-wrap 的行内文本
            表达式"昨日 + 收入 - 支出 = 结果"，数字位数一多（如四位数结余）
