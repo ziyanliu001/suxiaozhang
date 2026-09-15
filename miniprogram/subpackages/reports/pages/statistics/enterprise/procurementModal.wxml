@@ -1,12 +1,15 @@
 
-  <!-- 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车·意向说明弹窗：
-       全网大屏「集采直通车」卡片「提报集采意向 / 基地合作」按钮的落地点，
-       这是产品原型阶段的轻量转化路径（复制对接联系方式），真正的意向表单/
-       CRM 对接系统是独立的后续项目，本次不做 -->
+  <!-- 🌾（2026-08-31 商业化生态延伸，2026-09-19 去商业化文案重构）爱心粮油
+       共采护持·意向说明弹窗：全网大屏「爱心粮油共采护持」卡片「提报共采
+       护持意向」按钮的落地点，这是产品原型阶段的轻量转化路径（复制对接
+       联系方式），真正的意向表单/CRM 对接系统是独立的后续项目，本次不做。
+       .procurement-modal-box 是新增的作用域类（加在共用的 .patch-modal-box
+       上，不替换）——那个基础类被本页十几处不相关弹窗共用，视觉调整只限定
+       在这个作用域内 -->
   <view class="patch-modal-mask" wx:if="{{showProcurementModal}}">
-    <view class="patch-modal-box">
+    <view class="patch-modal-box procurement-modal-box">
       <view class="modal-header">
-        <text class="modal-title">🌾 爱心粮油源头集采直通车</text>
+        <text class="modal-title">🌾 爱心粮油共采护持</text>
         <text class="btn-close" bindtap="onCloseProcurementModal">✕</text>
       </view>
 
@@ -16,8 +19,15 @@
       </view>
 
       <view class="procurement-modal-section">
-        <text class="procurement-modal-section-title">🤝 统谈统采流程</text>
-        <text class="procurement-modal-section-text">全网门店月度需求汇总 → 平台统一比价议价 → 签订直供协议 → 基地直发门店/区域仓 → 门店验收入账，全程留痕可查验。</text>
+        <text class="procurement-modal-section-title">🤝 全网协同共采流程</text>
+        <text class="procurement-modal-section-text">全网门店月度需求汇总 → 平台统一为门店争取优惠价格 → 达成源头直供护持约定 → 基地直发门店/区域仓 → 门店验收入库，全程留痕可查验。</text>
+      </view>
+
+      <!-- 🛡️ 坦诚说明：这是"帮全网门店聚合体量、争取更优惠源头价"的公益
+           共采机制，省下的钱回补善款，不是个人商业消费——不假装这是逐店
+           缺口的认捐系统 -->
+      <view class="procurement-modal-honesty-note">
+        <text>🙏 这是全网门店携手结缘、共同向源头基地争取优惠的公益共采机制——省下的每一分都回补进各门店的善款，不是个人消费或商业促销。</text>
       </view>
 
       <view class="procurement-modal-tip">
@@ -26,7 +36,7 @@
 
       <view class="modal-footer">
         <button class="btn-modal-cancel" bindtap="onCloseProcurementModal">关闭</button>
-        <button class="btn-modal-submit" bindtap="onRegisterProcurementIntent">登记合作意向</button>
+        <button class="btn-modal-submit" bindtap="onRegisterProcurementIntent">登记共采护持意向</button>
       </view>
     </view>
   </view>

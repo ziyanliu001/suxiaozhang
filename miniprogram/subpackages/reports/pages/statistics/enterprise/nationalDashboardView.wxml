@@ -140,7 +140,7 @@
       <view class="ingredient-trend-card" wx:if="{{nationalData.ingredientStats30d && (nationalData.ingredientStats30d.riceKg > 0 || nationalData.ingredientStats30d.flourKg > 0 || nationalData.ingredientStats30d.oilKg > 0 || nationalData.ingredientStats30d.veggieKg > 0)}}">
         <view class="itc-header">
           <text class="itc-title">📦 近30天食材消耗趋势</text>
-          <text class="itc-sub">供机构集采参考</text>
+          <text class="itc-sub">供门店共采护持参考</text>
         </view>
         <view class="itc-grid">
           <view class="itc-cell" wx:if="{{nationalData.ingredientStats30d.riceKg > 0}}">
@@ -643,11 +643,13 @@
          没有建议时不需要再占一屏版面 -->
     <include src="./rebalanceSuggestionCard.wxml"/>
 
-    <!-- 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车：全网大盘食材
-         消耗折算集采规模与预估节省善款，打通公益软件向供应链撮合延伸的商业
-         通道。刻意不挂钩订阅套餐（全角色可见）——集采意向汇聚的本质是"越多
-         门店参与、议价筹码越大"，与 rebalanceSuggestions/合并导出等"按套餐
-         分层的服务能力"不是同一类衍生能力，见 getNationalDashboard
+    <!-- 🌾（2026-08-31 商业化生态延伸，2026-09-19 去商业化文案重构）爱心
+         粮油共采护持：全网大盘食材消耗折算共采规模与预估节省善款，打通
+         公益软件向供应链撮合延伸的商业通道，但用户可见文案已全面替换为
+         公益共建语境（详见 procurementCard.wxml/procurementModal.wxml 头部
+         注释）。刻意不挂钩订阅套餐（全角色可见）——共采护持意向汇聚的本质
+         是"越多门店参与、议价筹码越大"，与 rebalanceSuggestions/合并导出等
+         "按套餐分层的服务能力"不是同一类衍生能力，见 getNationalDashboard
          procurementSummary 计算处注释 -->
     <include src="./procurementCard.wxml"/>
 

@@ -1,4 +1,6 @@
-// 🏛️ Open-Core 架构拆分 · 终局阶段：爱心粮油集采直通车（Enterprise）
+// 🏛️ Open-Core 架构拆分 · 终局阶段：爱心粮油共采护持（Enterprise，
+// 2026-09-19 去商业化文案重构，机制不变：全网门店聚合体量向源头基地
+// 议价，省下的钱回补善款）
 //
 // 见 ./nationalDashboardService.ts 头部注释——本文件同样是被 spread 进
 // statistics.ts Page({...}) 的方法集合，不是独立运行的模块。
@@ -37,7 +39,7 @@ const BASELINE_PRICE_PER_KG = { rice: 4.0, flour: 3.0, oil: 12.0 };
 export const procurementHandlers = {
   // 🌾（2026-08-31 集采进阶）按月度汇聚总量（大米/面粉/食用油，公斤）算出
   // 当前达成的拼单阶梯等级、距下一档的进度与差距、以及按当前折扣换算出的
-  // "预计单斤直降"金额，供全国大屏「爱心粮油源头集采直通车」卡片渲染动态
+  // "预计单斤直降"金额，供全国大屏「爱心粮油共采护持」卡片渲染动态
   // 进度条与阶梯徽章。纯函数（不读写 this.data），由 nationalDashboardService.ts
   // 的 loadNationalDashboard() 在拿到 procurementSummary 原始数据后调用
   computeProcurementPoolTiers(monthlyRiceEstimateKg: number, monthlyFlourEstimateKg: number, monthlyOilEstimateKg: number) {
@@ -96,10 +98,10 @@ export const procurementHandlers = {
     };
   },
 
-  // 🌾（2026-08-31 商业化生态延伸）爱心粮油源头集采直通车：卡片「提报集采
-  // 意向 / 基地合作」按钮，弹出说明弹窗——不挂 isAdmin/isPatriarch 权限
-  // 判断，任何能看到全国大屏的角色都能了解集采说明并登记意向，与
-  // procurementSummary 本身"全角色可见、不挂订阅套餐"的口径保持一致
+  // 🌾（2026-08-31 商业化生态延伸）爱心粮油共采护持：卡片「提报共采护持
+  // 意向」按钮，弹出说明弹窗——不挂 isAdmin/isPatriarch 权限判断，任何能
+  // 看到全国大屏的角色都能了解共采说明并登记意向，与 procurementSummary
+  // 本身"全角色可见、不挂订阅套餐"的口径保持一致
   onOpenProcurementModal() {
     if (!this.data.nationalData || !this.data.nationalData.procurementSummary) return;
     this.setData({ showProcurementModal: true });
@@ -109,15 +111,15 @@ export const procurementHandlers = {
     this.setData({ showProcurementModal: false });
   },
 
-  // 「登记合作意向」：产品原型阶段的轻量转化路径——复制集采对接联系方式，
+  // 「登记共采护持意向」：产品原型阶段的轻量转化路径——复制对接联系方式，
   // 真正的意向表单/CRM 对接系统是独立的后续项目，本次不做，与
   // onConsultUpgrade 复用同一个平台联系方式常量，但语义场景不同（那是
-  // "套餐升级咨询"，这是"供应链集采合作咨询"），不合并成同一个方法
+  // "套餐升级咨询"，这是"供应链共采护持合作咨询"），不合并成同一个方法
   onRegisterProcurementIntent() {
     this.setData({ showProcurementModal: false });
     wx.setClipboardData({
       data: PLATFORM_SUPPORT_CONTACT.wechat,
-      success: () => wx.showToast({ title: `已复制集采对接微信号：${PLATFORM_SUPPORT_CONTACT.wechat}，请添加好友沟通合作意向`, icon: 'none', duration: 3000 })
+      success: () => wx.showToast({ title: `已复制共采护持对接微信号：${PLATFORM_SUPPORT_CONTACT.wechat}，请添加好友沟通护持意向`, icon: 'none', duration: 3000 })
     });
   }
 };
