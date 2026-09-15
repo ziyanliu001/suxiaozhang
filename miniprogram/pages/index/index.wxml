@@ -987,11 +987,21 @@
             </view>
           </view>
 
+          <!-- 🎨（2026-09-19 双核心按钮重构）此前是"一大一小"布局：左侧饱和
+               绿色大按钮 + 右侧被挤压成 20rpx 小字的纯文字链接，两个动作的
+               视觉曝光度严重失衡（采购入库几乎不像个按钮）。改为结构对等的
+               并排双按钮——发起调配＝琥珀色实心主按钮，登记采购入库＝琥珀色
+               描边次要按钮，尺寸/高度/圆角完全一致，只用"实心 vs 描边"区分
+               主次，不再靠字号大小制造失衡 -->
           <view class="material-action-row">
-            <view class="btn-material-transfer" hover-class="btn-hover" bindtap="onOpenMaterialTransferModal">
-              <text>🤝 申请/发起爱心调配</text>
+            <view class="btn-material-action btn-material-primary" hover-class="btn-hover" bindtap="onOpenMaterialTransferModal">
+              <text class="btn-material-action-icon">🤝</text>
+              <text class="btn-material-action-text">发起爱心调配</text>
             </view>
-            <text class="material-action-link" bindtap="onOpenMaterialPurchaseModal">📥 登记采购入库</text>
+            <view class="btn-material-action btn-material-secondary" hover-class="btn-hover" bindtap="onOpenMaterialPurchaseModal">
+              <text class="btn-material-action-icon">📥</text>
+              <text class="btn-material-action-text">登记采购入库</text>
+            </view>
           </view>
         </view>
       </view>

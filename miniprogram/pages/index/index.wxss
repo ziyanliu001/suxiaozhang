@@ -7955,34 +7955,62 @@ page {
 
 .material-action-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 16rpx;
 }
 
-.btn-material-transfer {
+/* 🎨（2026-09-19 双核心按钮重构）"发起调配"/"登记采购入库"结构完全对等
+   （同尺寸/同圆角/同 flex:1），只用实心/描边区分主次动作，不再是"大按钮 +
+   小字链接"这种视觉权重悬殊的组合。配色收敛到雨花斋纯素公益食堂统一的
+   琥珀色调 #C97B3D，替换掉此前突兀的饱和绿 */
+.btn-material-action {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 72rpx;
+  gap: 8rpx;
+  height: 76rpx;
+  padding: 0 12rpx;
   border-radius: 999rpx;
-  background: linear-gradient(135deg, #2E7D32 0%, #43A047 100%);
-  color: #FFFFFF;
-  font-size: 24rpx;
-  font-weight: bold;
   box-sizing: border-box;
-  transition: transform 0.15s ease;
+  font-size: 24rpx;
+  font-weight: 600;
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
-.btn-material-transfer:active {
-  transform: scale(0.97);
+.btn-material-action:active {
+  transform: scale(0.96);
+  opacity: 0.9;
 }
 
-.material-action-link {
+.btn-material-action-icon {
+  font-size: 26rpx;
+  line-height: 1;
   flex-shrink: 0;
-  font-size: 20rpx;
-  color: #8C1D18;
+}
+
+/* min-width:0 + 单行省略号：极窄屏（如 iPhone SE）文案空间不够时优雅截断，
+   而不是被挤到换行错位、或撑破按钮边界 */
+.btn-material-action-text {
+  flex-shrink: 1;
+  min-width: 0;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.btn-material-primary {
+  background: #C97B3D;
+  color: #FFFFFF;
+  box-shadow: 0 6rpx 16rpx rgba(201, 123, 61, 0.32);
+}
+
+.btn-material-secondary {
+  background: rgba(201, 123, 61, 0.08);
+  color: #C97B3D;
+  border: 1.5rpx solid rgba(201, 123, 61, 0.4);
 }
 
 /* 🎨（2026-09-17 视觉精致化，2026-09-18 主色统一为纯素琥珀色）调出/调入 Tab——
