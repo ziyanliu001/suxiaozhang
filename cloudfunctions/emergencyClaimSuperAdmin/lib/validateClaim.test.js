@@ -112,8 +112,8 @@ test('buildAuditLogEntry：失败场景只记录脱敏后的原因，不含接�
 });
 
 test('buildAuditLogEntry：绝不会把调用方传入的原始 secret 字段写进日志（构造函数参数里本就没有 secret 这个入口）', () => {
-  const entry = buildAuditLogEntry({ openid: 'o', success: false, failReason: '密钥不匹配', secret: 'leaked-if-bug' });
-  assert.equal(JSON.stringify(entry).includes('leaked-if-bug'), false);
+  const entry = buildAuditLogEntry({ openid: 'o', success: false, failReason: '密钥不匹配', secret: 'mock_secret_leaked_if_bug' });
+  assert.equal(JSON.stringify(entry).includes('mock_secret_leaked_if_bug'), false);
 });
 
 test('buildAuditLogEntry：failReason 缺失时兜底为"未知原因"，超长时截断', () => {
