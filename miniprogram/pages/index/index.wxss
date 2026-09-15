@@ -8245,8 +8245,18 @@ page {
   box-shadow: 0 28rpx 64rpx rgba(0, 0, 0, 0.22), 0 6rpx 16rpx rgba(0, 0, 0, 0.08);
 }
 
+/* 🐛（2026-09-19 底部按钮遮挡表单最后一个输入框修复）基础 .modal-content
+   本身已经是 display:flex;flex-direction:column（header/body/footer 三段
+   纵向堆叠，footer flex-shrink:0 固定占位、不是 position:fixed 悬浮盖在
+   body 上），.modal-body 是 flex:1;overflow-y:auto 的滚动区——结构本身没
+   问题。真正的遮挡发生在聚焦最后一个输入框（如"经手人"）弹出系统键盘时：
+   键盘会把可视区域顶上去，但 .modal-body 内容底部此前只有 28rpx/30rpx
+   的收尾留白，不够容纳"键盘顶起后，最后一个输入框仍需完整露出在键盘上方"
+   这段额外空间，导致贴底的最后一个字段被系统键盘或悬浮的 .modal-footer
+   遮住一截。补足 150rpx 的滚动区底部留白，让最后一个字段滚动到顶部时，
+   下方仍有充足缓冲区，不会被键盘/底部操作栏咬住 */
 .material-modal-content .modal-body {
-  padding: 28rpx 30rpx;
+  padding: 28rpx 30rpx 150rpx;
 }
 
 /* 🐛（2026-09-19 输入框文字被上下裁剪修复）基础 .form-input 只靠
