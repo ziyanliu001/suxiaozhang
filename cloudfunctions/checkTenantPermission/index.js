@@ -163,11 +163,54 @@ async function checkTenantPermission(tenantId, featureKey) {
   };
 }
 
+// 🛡️ 越权探测审计：本函数从头到尾都不读取 event.tenantId / event._openid /
+// event.OPENID 这几个字段——tenantId 只从下方 cloud.getWXContext().OPENID
+// 反查出的 user_roles 记录取得（+ super_admin/platform_admin 两条受服务端
+// 角色校验约束的 storeId 漫游分支，见下方注释），本就不存在"传入的 tenantId
+// 被直接采信"这个口子。但抓包篡改请求体、往 event 里硬塞这几个字段试探服务
+// 端是否会误采信，是真实存在的探测行为——即便注定不会生效，也值得留痕，
+// 供事后排查是否有人在系统性尝试越权探测。不阻断请求本身（不影响正常
+// 参数缺失/格式错误的合法调用方），只是额外记一笔审计日志。
+async function auditSuspiciousIdentityOverrideAttempt(event) {
+  if (!event || !(event.tenantId || event._openid || event.OPENID)) return;
+  console.warn('[checkTenantPermission] 忽略客户端传入的租户/身份字段（疑似越权探测，服务端仍只按 OPENID 反查结果处理）:', {
+    tenantId: event.tenantId || null,
+    _openid: event._openid || null,
+    OPENID: event.OPENID || null
+  });
+  try {
+    await db.collection('audit_logs').add({
+      data: {
+        action: 'SUSPICIOUS_TENANT_ID_OVERRIDE_ATTEMPT',
+        cloudFunction: 'checkTenantPermission',
+        attemptedTenantId: event.tenantId || null,
+        operate_time: db.serverDate()
+      }
+    });
+  } catch (err) {
+    if (!isCollectionNotExistError(err)) {
+      console.warn('[checkTenantPermission] 越权探测审计日志写入失败（不阻断主流程）:', err);
+      return;
+    }
+    await db.createCollection('audit_logs').catch(() => {});
+    await db.collection('audit_logs').add({
+      data: {
+        action: 'SUSPICIOUS_TENANT_ID_OVERRIDE_ATTEMPT',
+        cloudFunction: 'checkTenantPermission',
+        attemptedTenantId: event.tenantId || null,
+        operate_time: db.serverDate()
+      }
+    }).catch((err2) => console.warn('[checkTenantPermission] 越权探测审计日志二次写入仍失败:', err2));
+  }
+}
+
 exports.main = async (event) => {
   const { featureKey } = event;
   if (!featureKey) {
     return { success: false, error: '缺少 featureKey 参数' };
   }
+
+  await auditSuspiciousIdentityOverrideAttempt(event);
 
   try {
     const { OPENID } = cloud.getWXContext();

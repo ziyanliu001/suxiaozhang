@@ -1,5 +1,18 @@
 // 云开发 SDK 可用性防护
 //
+// ⚠️ 与 utils/withTimeout.ts 的关系：本文件底部的 callCloudFunctionGuarded()
+// 是叠加在 callFunctionWithTimeout 之上的可选高阶封装（复用其超时逻辑，不
+// 重新实现一遍），不是替代品——withTimeout.ts 头部注释记录过真实教训：
+// authService.ts/pages/index/index.ts 曾各自独立维护一份功能相同的超时封装，
+// 长期漂移不一致，才统一收敛成 callFunctionWithTimeout 这一份全仓库共用的
+// 实现（目前 200+ 处调用点在用）。这里不重蹈覆辙、不新造第二套超时机制，
+// 只在其外层加"耗时监控 + 出错自动降级提示"这两件事——且默认不会自动接管
+// 已有调用点：多数既有调用点出错时走"静默降级本地缓存"路径、故意不弹提示
+// （尤其 careMode 长者模式下 wx.showToast 字号/时长不受控，CLAUDE.md 第 3
+// 节已经把它排除在适老化主要反馈手段之外），批量迁移属于另一项需要单独
+// 评审影响面的改动，不在这次改动范围内。新增调用点如果就是想要"失败即弹
+// 兜底提示"这种通用语义，可以直接用 callCloudFunctionGuarded。
+//
 // 背景：微信开发者工具偶发在 wx.cloud.init 阶段抛出内部致命错误
 // "Fatal: unexpected loadSdkSubPackage case"，此后 wx.cloud 可能残留为
 // 半初始化/损坏状态——对象本身依然存在，但内部方法表未正确挂载，导致
@@ -23,6 +36,8 @@
 // app.globalData.isCloudReady（由 app.ts _attemptCloudInit 在 init 真正成功后置位），
 // 让这段窗口期被正确识别为"不可用"，交给各调用点已有的本地兜底路径，而不是让请求
 // 真的打出去再报错。
+import { callFunctionWithTimeout, DEFAULT_CALL_FUNCTION_TIMEOUT_MS } from './withTimeout';
+
 export function isCloudAvailable(): boolean {
   try {
     if (
@@ -82,5 +97,62 @@ export function reportCloudSdkErrorIfCorrupted(err: any): void {
     }
   } catch (guardErr) {
     console.warn('[cloudGuard] 自愈标记 isCloudReady 时异常:', guardErr);
+  }
+}
+
+export interface CloudGuardOptions {
+  /** 超时毫秒数，透传给 callFunctionWithTimeout，默认沿用其既定 8000ms（DEFAULT_CALL_FUNCTION_TIMEOUT_MS） */
+  timeoutMs?: number;
+  /**
+   * 出错时是否自动 wx.showToast 兜底提示，默认 true。
+   * 已有"静默降级本地缓存"逻辑的调用点应显式传 false，避免用户被无谓打扰；
+   * careMode 长者模式页面同样建议传 false，改用物理震动反馈（见 CLAUDE.md 第 3 节）。
+   */
+  showErrorToast?: boolean;
+  /** 自定义降级提示文案，默认"网络繁忙，请稍后重试" */
+  errorToastTitle?: string;
+}
+
+/**
+ * 云函数调用统一高阶封装：在 callFunctionWithTimeout（已有的全仓库统一超时
+ * 实现，见本文件头部注释）外层叠加 try...catch、执行耗时监控、出错时的
+ * wx.cloud SDK 损坏自愈标记（复用 reportCloudSdkErrorIfCorrupted），以及
+ * 可选的原生 wx.showToast 降级提示。
+ *
+ * 调用前会先做一次 isCloudAvailable() 探测，命中"云能力不可用"时直接快速
+ * 失败（不真的发起会必然出错的网络请求），错误信息与 assertCloudAvailable()
+ * 抛出的一致，供调用方既有的 catch 分支识别。
+ *
+ * 本函数不吞掉错误——记录耗时与日志、按需弹出提示后仍会把原始错误 throw
+ * 出去，调用方原有的业务级错误处理（如本地兜底赋值）不受影响。
+ */
+export async function callCloudFunctionGuarded<T = any>(
+  options: ICloud.CallFunctionParam,
+  guardOptions: CloudGuardOptions = {}
+): Promise<T> {
+  const {
+    timeoutMs = DEFAULT_CALL_FUNCTION_TIMEOUT_MS,
+    showErrorToast = true,
+    errorToastTitle = '网络繁忙，请稍后重试'
+  } = guardOptions;
+  const name = (options && options.name) || '(未知云函数)';
+  const startTime = Date.now();
+
+  try {
+    assertCloudAvailable();
+    const result = await callFunctionWithTimeout<T>(options, timeoutMs);
+    console.log(`[cloudGuard] 云函数 "${name}" 调用成功，耗时 ${Date.now() - startTime}ms`);
+    return result;
+  } catch (err: any) {
+    console.error(`[cloudGuard] 云函数 "${name}" 调用失败，耗时 ${Date.now() - startTime}ms:`, err);
+    reportCloudSdkErrorIfCorrupted(err);
+    if (showErrorToast) {
+      try {
+        wx.showToast({ title: errorToastTitle, icon: 'none', duration: 2000 });
+      } catch (toastErr) {
+        console.warn('[cloudGuard] 降级提示 wx.showToast 触发异常:', toastErr);
+      }
+    }
+    throw err;
   }
 }
