@@ -1,4 +1,4 @@
-# 素小账应急管理中台（Web，独立于微信生态）
+# 十方明账应急管理中台（Web，独立于微信生态）
 
 紧急逃生舱四道防线的**第四道**：一个纯静态单文件页面（`index.html`），通过普通 Chrome/Edge 浏览器 + 独立账密登录，调用 `cloudfunctions/adminWebAuth`（认证）与 `cloudfunctions/adminWebConsole`（业务动作）。彻底不依赖微信登录态，即使唯一超级管理员的微信账号被封，只要这套账密还在，就能通过浏览器继续管理。
 

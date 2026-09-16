@@ -1,7 +1,7 @@
 /**
  * 应用产品名称（品牌中性，适用于所有入驻机构）
  */
-export const APP_NAME = '素小账';
+export const APP_NAME = '十方明账';
 
 /**
  * 🏛️ 机构类型（orgType）唯一权威枚举

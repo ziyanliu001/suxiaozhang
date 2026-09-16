@@ -813,7 +813,7 @@ export async function drawMeritPoster(pageInstance: any, data: PosterData): Prom
 
           ctx.fillStyle = COPYRIGHT_COLOR;
           ctx.font = '11px sans-serif';
-          ctx.fillText('素小账', width / 2, footerTop + FOOTER_LINE_HEIGHT * 4 + 20);
+          ctx.fillText('十方明账', width / 2, footerTop + FOOTER_LINE_HEIGHT * 4 + 20);
 
           // 🌸 可选落款：雨花家风「仁·中·和」+ 感恩词 + 护持家长/日常店长署名，
           // 未开启任何一项时版式与升级前完全一致
@@ -1041,7 +1041,7 @@ export async function drawStoryPoster(pageInstance: any, data: StoryPosterData):
             ctx.fillStyle = PRIMARY_COLOR;
             ctx.font = 'bold 20px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('素小账 · 今日爱心故事', width / 2, 46);
+            ctx.fillText('十方明账 · 今日爱心故事', width / 2, 46);
 
             ctx.fillStyle = SECONDARY_COLOR;
             ctx.font = '13px sans-serif';
@@ -1277,7 +1277,7 @@ export async function drawVolunteerHonorCard(pageInstance: any, data: VolunteerH
             ctx.fillStyle = PRIMARY_COLOR;
             ctx.font = 'bold 20px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('素小账 · 爱心志愿者荣誉卡', width / 2, 46);
+            ctx.fillText('十方明账 · 爱心志愿者荣誉卡', width / 2, 46);
 
             ctx.fillStyle = SECONDARY_COLOR;
             ctx.font = '13px sans-serif';

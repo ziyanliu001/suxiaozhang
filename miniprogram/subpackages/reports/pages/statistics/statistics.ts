@@ -4890,7 +4890,7 @@ Page({
     }
 
     return {
-      title: '素小账·统计分析——让爱心账目更透明',
+      title: '十方明账·统计分析——让爱心账目更透明',
       path: '/subpackages/reports/pages/statistics/statistics',
       imageUrl: ''
     };
@@ -4908,7 +4908,7 @@ Page({
     }
 
     return {
-      title: '素小账·统计分析——让爱心账目更透明',
+      title: '十方明账·统计分析——让爱心账目更透明',
       query: ''
     };
   }

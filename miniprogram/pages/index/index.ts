@@ -5595,7 +5595,7 @@ Page({
   onShareInviteResultCode() {
     const roleLabel = this.data.inviteResultRoleLabel;
     const storeName = this.data.inviteResultStoreName || this.data.currentStoreName || this.data.shopName || '本门店';
-    const copyText = `【素小账】爱心互助助手\n诚邀您加入【${storeName}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
+    const copyText = `【十方明账】爱心互助助手\n诚邀您加入【${storeName}】！您的专属【${roleLabel}】邀请码为：${this.data.inviteResultCode}（24 小时内有效，仅限一次核销）。请打开小程序输入此码激活身份。感恩您的加入！`;
     wx.setClipboardData({
       data: copyText,
       success: () => wx.showToast({ title: '邀请文案已复制，快发送给TA吧', icon: 'none', duration: 2500 })

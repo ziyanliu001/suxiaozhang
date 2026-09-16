@@ -306,7 +306,7 @@ export function generateReportText(data: ReportData): string {
     textArray.push('');
   }
 
-  textArray.push(`💡 本报告由微信小程序【素小账】一键生成`);
+  textArray.push(`💡 本报告由微信小程序【十方明账】一键生成`);
 
   return textArray.join('\n');
 }

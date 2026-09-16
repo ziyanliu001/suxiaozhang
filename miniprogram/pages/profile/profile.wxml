@@ -1604,7 +1604,7 @@
          wx:if="{{hasProductionSpaceAccess}}"——此前「输入工坊邀请码加入」
          一行是常驻显示的（不看 hasProductionSpaceAccess），本意是让刚拿到
          邀请码、还没加入任何工坊的新成员也能看到入口去输入。这次按需求
-         把整卡收进 hasProductionSpaceAccess 之后，纯公益食堂/素小账账号
+         把整卡收进 hasProductionSpaceAccess 之后，纯公益食堂/十方明账账号
          （绝大多数账号）不会再看到这张与自己业务无关的卡片，代价是「一个
          从未加入过任何工坊、但刚拿到邀请码的新成员」也会看不到这个入口——
          这是本次改动权衡后接受的已知副作用，不是遗漏；如果后续要恢复
@@ -3220,7 +3220,7 @@
       <block wx:if="{{onboardingStep === 'choice'}}">
         <!-- 头部 -->
         <view class="onb-head">
-          <text class="onb-title">欢迎使用素小账 👋</text>
+          <text class="onb-title">欢迎使用十方明账 👋</text>
           <view class="onb-close" bindtap="onDismissOnboarding">×</view>
         </view>
         <!-- 内容 -->

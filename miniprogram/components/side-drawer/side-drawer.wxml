@@ -8,7 +8,7 @@
     <view class="drawer-header" style="margin-top: {{sidebarTopMargin}}px;">
       <view class="drawer-brand-avatar">{{storeInitial}}</view>
       <view class="drawer-brand-text">
-        <text class="drawer-store-name">{{storeName || '素小账服务'}}</text>
+        <text class="drawer-store-name">{{storeName || '十方明账服务'}}</text>
         <text class="drawer-role-label">{{roleLabel}}</text>
       </view>
       <!-- 🌟 轻量快捷「切换门店」：与首页顶部 store-picker 胶囊复用同一套选店

@@ -1,6 +1,6 @@
 # Open-Core 架构拆分方案（2026-08-31，已推进至视图层精简阶段）
 
-> 本文档回答"如果要把「素小账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`；终局阶段（第 9 节）把 `pages/statistics`/`pages/profile` 的 Enterprise **逻辑层**（.ts）物理搬迁进各自的 `enterprise/` 子目录；视图层精简阶段（第 10 节）接着把两个页面体量最大的 Enterprise **视图层**（.wxml）也用 `<include>` 物理搬了出去。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布；两份主 WXSS 里对应的样式规则、profile.wxml 里三处更小的 SaaS 入口仍未拆分（见第 10.4 节）。
+> 本文档回答"如果要把「十方明账」拆成开源 Core + 商业 Enterprise 两部分，边界画在哪里、怎么落地"。第一阶段完成规划、SPI 契约定义、一处 Core 工具库的真实抽取（`utils/core/privacy.ts`）与一处前端能力判定层的解耦重构（`utils/enterpriseCapabilities.ts`）；第二阶段完成 HMAC 密钥 fail-closed 安全收口与 `exportAccountExcel` 的物理拆分；第三阶段交付了真正能跑的 `scripts/build-open-core.js`/`scripts/security-audit.js`；终局阶段（第 9 节）把 `pages/statistics`/`pages/profile` 的 Enterprise **逻辑层**（.ts）物理搬迁进各自的 `enterprise/` 子目录；视图层精简阶段（第 10 节）接着把两个页面体量最大的 Enterprise **视图层**（.wxml）也用 `<include>` 物理搬了出去。**仍然没有**把仓库拆成两个独立 Git 仓库/发布任何 npm 包——`dist/suxiaozhang-core` 是本地构建产物，尚未真正对外发布；两份主 WXSS 里对应的样式规则、profile.wxml 里三处更小的 SaaS 入口仍未拆分（见第 10.4 节）。
 
 ## 1. 边界定义原则
 
