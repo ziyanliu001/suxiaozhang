@@ -380,10 +380,6 @@ Page({
   },
 
   async onLoad(options: { storeId?: string; id?: string; storeName?: string }) {
-    // 🩺（2026-09-10 排查"未命名门店"数据全空问题）确认页面到底有没有收到、
-    // 收到了什么样的导航入参——如果这条日志都没打出来，说明问题出在导航本身
-    // （页面根本没被正常打开/options 传参失败），不用再往下排查本函数内部逻辑
-    console.log('[debug] store-profile onLoad options:', options);
     recordRecentVisit('/subpackages/admin/pages/store-profile/store-profile', '门店档案');
 
     // 🏛️（2026-09-09 超管全国总览工作台重构）store-management.ts 门店列表
@@ -407,11 +403,6 @@ Page({
     });
     this._navGuard.setupOnLoad();
 
-    // 🩺（2026-09-10 排查"打开就是编辑态"问题）确认页面实例刚创建时 editing
-    // 的初始值——data 声明处写的是 false，这里打印出来是为了排除"页面实例
-    // 被复用、上一次退出编辑态没清干净"这类跨实例残留的可能性（正常情况下
-    // 每次 onLoad 都是全新页面实例，这里应该始终打印 false）
-    console.log('[debug] onLoad 结束时 editing 状态:', this.data.editing);
   },
 
   // 🛡️ 本页此前把角色/数据拉取全放在 onLoad（只在页面实例首次创建时跑一次），
@@ -603,11 +594,6 @@ Page({
     // 确保只要页面是带着 storeId 被打开的，就一定用这个 storeId 去查，不会因为
     // 角色同步链路中间任何一步的疏漏而丢失掉这个最明确的导航意图
     const targetStoreId = this._queryOverrideStoreId || this.data.currentStoreId;
-    // 🩺（2026-09-10 排查"fetchProfile 完全没执行"问题）确认本函数确实被调用到、
-    // 以及最终决定用哪个 storeId 发起请求——如果连这条日志都没出现，说明问题
-    // 出在 onShow() 没有走到这一步（见该方法新增的 try/catch 兜底），不是本
-    // 函数内部的问题
-    console.log('[debug] entering fetchProfile, storeId:', targetStoreId);
 
     if (!targetStoreId) {
       this.setData({ loading: false });
@@ -653,12 +639,6 @@ Page({
       }
 
       const data = result.data || {};
-      // 🩺（2026-09-10 排查"未命名门店"+字段全空问题）打印云函数原始返回，
-      // 直接在真机/模拟器控制台确认这次请求到底有没有拿到真实数据——如果
-      // 这里打出来就是空对象/缺字段，说明问题出在 manageStoreProfile 服务端
-      // 或更上游的 storeId 传递；如果这里已经是完整数据，问题在下面的字段
-      // 映射或 setData 之后的渲染
-      console.log('[debug] store profile fetched:', data);
       // 🛡️ 严格权限收紧：canManage 只能来自 initRoleAndStore() 里基于 effectiveRole
       // （优先读 store-picker 本地预览覆盖）算出的值，绝不能再被这里的服务端 canEdit
       // 覆盖——canEdit 只反映调用者的真实服务端角色，不知道客户端正在本地预览哪个
@@ -724,11 +704,6 @@ Page({
       // 成功回调这几个明确的用户操作触发，fetchProfile() 只负责把云端数据
       // 灌进展示态字段，不应该、也没有能力影响 editing
       this.setData(update);
-      // 🩺（2026-09-10 排查"打开就是编辑态"问题）显式打印 editing——如果这里
-      // 打印出 true，就是实锤"确实被什么地方错误地置为了 true"；如果打印
-      // 出 false 但界面仍然表现成编辑态，说明问题根本不在这份 .ts 逻辑里
-      // （要么是 wx:if 渲染层面的问题，要么是开发者工具编译缓存没刷新干净）
-      console.log('[debug] fetchProfile 结束时 editing 状态:', this.data.editing);
     } catch (err: any) {
       // 🩺（2026-09-10）打印完整 error 对象（含 errMsg/errCode，callFunctionWithTimeout
       // 超时/callFunction 失败都会走这里），而不是只留一句笼统的"网络异常"——

@@ -954,13 +954,6 @@ Page({
     this._skipNextShowReload = true;
     this.initWatermarkIdentity();
 
-    // 🐛 DEBUG：initUserRole() 是异步的，onLoad 执行到这里时角色信息大概率还没解析
-    // 回来，这里打印的是【调用发起前】的初始态（currentUserRole 此时通常还是空
-    // 字符串，showNationalDashboard 还是默认 false）；真正解析完成后的值要看下面
-    // applyRolePermissions() 末尾的那条日志
-    console.log('[DEBUG] onLoad 时刻 currentUserRole（角色解析可能仍在进行中）：', this.data.currentUserRole);
-    console.log('[DEBUG] onLoad 时刻 showNationalDashboard 状态：', this.data.showNationalDashboard);
-
     // 注入物理返回键兜底拦截
     this._navGuard = createNavGuard({
       homePath: '/pages/index/index',
@@ -1412,12 +1405,6 @@ Page({
       this._pendingStatsReload = false;
       this.reloadShopListAndStats();
     }
-
-    // 🐛 DEBUG：本函数内的多次 setData 都是同步写入 this.data 的，这里读到的已经
-    // 是本轮角色解析结束后的最终值（不存在 userRole 这个字段，项目里的等价字段是
-    // currentUserRole，见上面 setData 里的 currentUserRole: role）
-    console.log('[DEBUG] applyRolePermissions 结束时 currentUserRole 权限数据：', this.data.currentUserRole);
-    console.log('[DEBUG] applyRolePermissions 结束时 showNationalDashboard 状态：', this.data.showNationalDashboard);
   },
 
   // ☀️ 阳光大盘：数据源与首页阳光账本弹窗同一个公开只读云函数 getSunshineLedger
@@ -2147,14 +2134,6 @@ Page({
       endDate: customEndDate
     };
 
-    // 🪵 Debug 日志：定位"门店匹配=0"类问题时，确认 getStatisticsData 云函数调用
-    // 前 effectiveRole/门店 id/名与实际传参是否一致（该云函数服务端会按
-    // userStoreId/userStoreName 自行收敛，这里的 shopName 仅供展示分组用）
-    console.log('[Statistics][fetchStatistics] effectiveRole=', this.data.currentUserRole,
-      'currentUserStoreId=', this.data.currentUserStoreId,
-      'currentUserStoreName=', this.data.currentUserStoreName,
-      'getStatisticsData调用参数=', statisticsCallData);
-
     this.setData({ statisticsFetchLoading: true });
     try {
       const res = await callFunctionWithTimeout({
@@ -2478,14 +2457,6 @@ Page({
     if (!isSuperAdmin && !shopStoreId) {
       console.warn('[Statistics][loadStatistics] 非超管账号 storeId 仍未解析出来，本次查询将退回服务端按 openid 兜底收敛，请检查该账号 user_roles.storeId 是否缺失');
     }
-
-    // 🪵 Debug 日志：定位"门店匹配=0"类问题时，直接从这行日志确认 effectiveRole
-    // 与门店 id/名是否已正确解析，以及最终传给 getReports 的过滤参数是什么
-    console.log('[Statistics][loadStatistics] effectiveRole=', this.data.currentUserRole,
-      'currentUserStoreId=', this.data.currentUserStoreId,
-      'currentUserStoreName=', this.data.currentUserStoreName,
-      'isSuperAdmin=', isSuperAdmin,
-      'getReports过滤参数=', { viewMode: reportsViewMode, storeId: shopStoreId || undefined, limit: 1000, approvedOnly: true });
 
     try {
       let allRecords: any[] = [];

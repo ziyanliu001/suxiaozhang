@@ -214,7 +214,6 @@ export const nationalDashboardHandlers = {
       } else if (filterMode === 'custom') {
         callParams.storeIds = this.data.customStoreSelection || [];
       }
-      console.log('[DEBUG] 准备调用 getNationalDashboard，传入参数：', callParams);
 
       // 见 NATIONAL_DASHBOARD_TIMEOUT_MS 声明处注释——只这一次调用放宽超时，
       // 不影响其余调用点仍使用 withTimeout.ts 的默认 8000ms
@@ -223,16 +222,12 @@ export const nationalDashboardHandlers = {
         data: callParams
       }, NATIONAL_DASHBOARD_TIMEOUT_MS);
 
-      console.log('[DEBUG] getNationalDashboard 返回原始结果：', result);
-
       const r = result.result as any;
-      // 🐛 DEBUG：本云函数的响应体没有 data/errMsg 字段（见 cloudfunctions/
+      // 本云函数的响应体没有 data/errMsg 字段（见 cloudfunctions/
       // getNationalDashboard/index.js 的 return 语句），成功时是 nationalSummary/
       // storeMatrix/superAdminInsights，失败时业务错误信息在 r.error（result.errMsg
       // 是 wx.cloud.callFunction 这层 SDK 调用失败才会有的字段，业务上的失败走的是
-      // success:false + error，这里按真实响应结构打印，不按不存在的字段名瞎打）
-      console.log('[DEBUG] getNationalDashboard 业务数据 result.nationalSummary/storeMatrix：', r && r.nationalSummary, r && r.storeMatrix);
-      console.log('[DEBUG] getNationalDashboard 业务报错信息 result.error：', r && r.error);
+      // success:false + error，这里按真实响应结构判断，不按不存在的字段名瞎判断）
 
       if (r && r.success) {
         // 🛡️ 客户端第二层脱敏防线：云函数出口已按角色做过服务端脱敏，

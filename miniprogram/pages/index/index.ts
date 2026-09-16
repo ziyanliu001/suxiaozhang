@@ -5422,18 +5422,6 @@ Page({
     const genRoleFamilyDisabled = !genAvailableRoles.includes('FAMILY');
     const genRoleVolunteerDisabled = !genAvailableRoles.includes('VOLUNTEER');
 
-    // 🐛 排查诊断日志：临时保留，用于确认"除大家长外全部禁用"这类异常究竟是
-    // isRealSuperAdmin/isPatriarch 本身取值有问题，还是 genAvailableRoles
-    // 计算/渲染环节的问题——复现问题时请把这几行日志一并截图反馈
-    console.log('[onOpenGenCodeModal] 权限诊断：', {
-      isRealSuperAdmin,
-      isPatriarch: this.data.isPatriarch,
-      isManager: this.data.isManager,
-      isSuperAdmin: this.data.isSuperAdmin,
-      currentViewMode: this.data.currentViewMode,
-      genAvailableRoles
-    });
-
     this.setData({
       showGenCodeModal: true,
       generatedCode: '',
