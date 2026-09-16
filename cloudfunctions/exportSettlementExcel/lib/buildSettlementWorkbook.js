@@ -98,6 +98,12 @@ async function buildSettlementWorkbook(cloud, { tenantId, rows, startDate, endDa
 
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
 
+  // 🛡️（2026-09-16 内存与性能加固）如实记录：writeBuffer() 把工作簿整体
+  // 序列化进内存 Buffer 后直接传给 cloud.uploadFile 的 fileContent，全程
+  // 未落过本地 /tmp 临时文件，"清理临时文件"这一条在当前实现里不适用。
+  // rows 规模由 index.js 的 fetchAllInBatches 上限（2000 条）约束，单 Sheet
+  // 无跨表重排需求，属于可评估后续切到 exceljs 流式写入的候选，但当前数据
+  // 规模下内存占用可控，本轮未改动。
   const buffer = await workbook.xlsx.writeBuffer();
   const timestamp = Date.now();
   const periodLabel = (startDate || endDate) ? `${startDate || '起始'}_${endDate || '至今'}` : '全部';

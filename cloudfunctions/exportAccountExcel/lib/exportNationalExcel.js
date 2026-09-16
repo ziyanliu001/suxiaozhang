@@ -131,7 +131,15 @@ function addSummarySheet(workbook, storeTotalsList, grandTotal, meta) {
 // Enterprise 多店合并导出主流程：给定已经查询好的全机构 records，按门店分组
 // 各建一个 Sheet（复用 Core 的 addRecordsSheet），外加一张总览 Sheet + 存证
 // 核验码，完成上传并返回最终响应体
-async function buildNationalExport(cloud, db, { tenantId, records, periodLabel, startDateStr, endDateStr }) {
+async function buildNationalExport(cloud, db, { tenantId, records, periodLabel, startDateStr, endDateStr, deadline }) {
+  // 🛡️ 执行超时阻断：index.js 分批拉取 records 阶段可能已经耗掉大半时间预算
+  // （尤其机构门店多、记录数接近 5000 上限时）；下面按店分组建 Sheet 是纯
+  // 同步 CPU 循环，理论上很快，但如果连拉数据都已经逼近截止时间，与其冒险
+  // 继续建表到一半被云函数强制杀死（用户只会收到一个无意义的网络错误），
+  // 不如现在就明确告知"数据量过大"，让用户主动缩小范围重试
+  if (typeof deadline === 'number' && Date.now() >= deadline) {
+    return { success: false, errMsg: `数据量过大（共 ${records.length} 条记录），请缩短日期范围后重试，或改为按门店分别导出` };
+  }
   // 🐛 根因修复（2026-09-09，与 checkTenantPermission/getNationalDashboard 同一处
   // 同款 bug 修复）：tenants 集合存在两条历史创建路径，`_id`/机构名字段写法都不
   // 统一，详见 checkTenantPermission/index.js 同一处修复的注释。两段式查 + 双字段兜底

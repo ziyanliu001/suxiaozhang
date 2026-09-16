@@ -21,6 +21,14 @@ const _ = db.command;
 const { buildDetailRows } = require('./lib/bucketSettlements');
 const { checkInvariant } = require('./lib/checkInvariant');
 const { buildSettlementWorkbook } = require('./lib/buildSettlementWorkbook');
+const { fetchAllInBatches } = require('./lib/batchQuery');
+
+// 🛡️（2026-09-16 内存与性能加固）config.json 已新增 timeout: 20（秒，此前
+// 本函数完全没有 config.json，会静默走平台默认的 3 秒）——FUNCTION_TIMEOUT_MS
+// 必须和它保持一致，两处一起改。SAFETY_MARGIN_MS 留给"停止拉取数据之后建表
+// +上传"这几步的余量
+const FUNCTION_TIMEOUT_MS = 20000;
+const SAFETY_MARGIN_MS = 5000;
 
 function yuan(fen) {
   return ((fen || 0) / 100).toFixed(2);
@@ -47,6 +55,7 @@ function withinDateRange(row, startDate, endDate) {
 }
 
 exports.main = async (event) => {
+  const deadline = Date.now() + FUNCTION_TIMEOUT_MS - SAFETY_MARGIN_MS;
   const { OPENID } = cloud.getWXContext();
   if (!OPENID) return { success: false, errMsg: '无法获取用户身份' };
 
@@ -68,14 +77,37 @@ exports.main = async (event) => {
       if (productIdFilter.length === 0) return { success: false, errMsg: '暂无可导出的分成记录' };
     }
 
+    // 🐛 根因修复（静默数据丢失）：微信云开发数据库单次 .get() 硬性上限是
+    // 1000 条，此前这里直接 .limit(2000).get() 单次查询——租户订单/分账记录
+    // 超过 1000 条时，超出部分被数据库静默截断，导出的对账表格里凭空少了
+    // 数据，没有任何报错提示。改用 fetchAllInBatches 分批拉取，见
+    // lib/batchFetchPlan.js 头部注释；分批拉取依赖稳定排序，统一按 _id 升序
+    // （production_orders/order_settlements 均未维护面向导出场景的时间索引，
+    // _id 是唯一确定存在、天然唯一的排序字段）
     const ordersWhere = productIdFilter ? { tenantId, productId: _.in(productIdFilter) } : { tenantId };
-    const ordersRes = await db.collection('production_orders').where(ordersWhere).limit(2000).get();
-    const orders = ordersRes.data || [];
+    const ordersResult = await fetchAllInBatches(
+      db.collection('production_orders').where(ordersWhere).orderBy('_id', 'asc'),
+      { maxTotal: 2000, deadline }
+    );
+    const orders = ordersResult.records;
     if (orders.length === 0) return { success: false, errMsg: '暂无可导出的分成记录' };
     const orderIds = orders.map((o) => o._id);
 
-    const settlementsRes = await db.collection('order_settlements').where({ tenantId, orderId: _.in(orderIds) }).limit(2000).get();
-    const docs = settlementsRes.data || [];
+    const settlementsResult = await fetchAllInBatches(
+      db.collection('order_settlements').where({ tenantId, orderId: _.in(orderIds) }).orderBy('_id', 'asc'),
+      { maxTotal: 2000, deadline }
+    );
+    const docs = settlementsResult.records;
+
+    // 🛡️ 执行超时阻断：任一阶段分批拉取已经耗尽安全时间预算时，不再继续往下
+    // 走归并/建表这些同样需要时间的步骤，明确告知用户原因，而不是任由云函数
+    // 在超时边缘被平台强制杀死、前端只收到一个无意义的网络错误
+    if (ordersResult.hitDeadline || settlementsResult.hitDeadline) {
+      return {
+        success: false,
+        errMsg: `数据量过大（已拉取 ${orders.length} 笔订单/${docs.length} 条结算记录仍未拉完），请缩短日期范围后重试`
+      };
+    }
 
     let rows = buildDetailRows(docs)
       .filter((r) => withinDateRange(r, startDate, endDate))

@@ -15,8 +15,20 @@ const _ = db.command;
 
 const { buildSingleStoreExport } = require('./lib/exportSingleStoreExcel');
 const { buildNationalExport, isAdvancedPlanActive } = require('./lib/exportNationalExcel');
+const { fetchAllInBatches } = require('./lib/batchQuery');
+
+// 🛡️（2026-09-16 内存与性能加固）本函数 config.json 已显式配置 timeout: 20
+// （秒）——FUNCTION_TIMEOUT_MS 必须和它保持一致，两处一起改，否则下面算出的
+// "安全截止时间"会与云函数真实的执行时间预算脱节。SAFETY_MARGIN_MS 是留给
+// "停止拉取数据之后，把已经拿到的部分数据组装成 Excel 并上传云存储"这几步
+// 的余量——这几步是同步/短促的 CPU 操作，不会像分批拉取那样按数据量线性
+// 增长，5 秒余量足够覆盖到目前观察到的最大工作簿（三工作表审计台账 + 多店
+// 合并）的构建耗时
+const FUNCTION_TIMEOUT_MS = 20000;
+const SAFETY_MARGIN_MS = 5000;
 
 exports.main = async (event, context) => {
+  const deadline = Date.now() + FUNCTION_TIMEOUT_MS - SAFETY_MARGIN_MS;
   const { shopName, storeId, tabType, selectedYear, selectedMonth, startDate, endDate, previewOnly, isNationalExport } = event;
   const { OPENID } = cloud.getWXContext();
 
@@ -155,15 +167,28 @@ exports.main = async (event, context) => {
       whereConditions.shopName = shopName;
     }
 
+    // 🐛 根因修复（静默数据丢失）：微信云开发数据库单次 .get() 硬性上限是
+    // 1000 条，此前这里直接 .limit(MAX_LIMIT).get() 单次查询——MAX_LIMIT 为
+    // 5000 的机构合并导出场景，超过 1000 条的部分会被数据库静默截断，不报错
+    // 也不提示，导出的"阳光台账"审计表格里凭空少了数据。改用 fetchAllInBatches
+    // 按 skip/limit 循环分批拉取，见 lib/batchFetchPlan.js 头部注释
     const MAX_LIMIT = isNationalExport ? 5000 : 1000;
-    const recordRes = await db.collection('report_logs')
-      .where(whereConditions)
-      .orderBy('dateString', 'asc')
-      .limit(MAX_LIMIT)
-      .get();
-
-    const records = recordRes.data || [];
+    const { records, hitDeadline } = await fetchAllInBatches(
+      db.collection('report_logs').where(whereConditions).orderBy('dateString', 'asc'),
+      { maxTotal: MAX_LIMIT, deadline }
+    );
     console.log(`📊 [exportAccountExcel] 查询到 ${records.length} 条记录`);
+
+    // 🛡️ 执行超时阻断：分批拉取已经耗尽了安全时间预算（通常是查询范围过大、
+    // 批次过多导致），此时不再继续往下走预览/建表这些同样需要时间的步骤——
+    // 明确告知用户原因并给出可执行的下一步，而不是任由云函数在超时边缘被
+    // 平台强制杀死、前端只收到一个无意义的网络错误
+    if (hitDeadline) {
+      return {
+        success: false,
+        errMsg: `数据量过大（已拉取 ${records.length} 条仍未拉完），请缩短日期范围后重试，或改为按门店/按月分批导出`
+      };
+    }
 
     if (records.length === 0) {
       return { success: false, errMsg: '该周期内无明细数据可导出' };
@@ -244,8 +269,12 @@ exports.main = async (event, context) => {
     }
 
     // 2. 路由分发：Core 单店导出 vs Enterprise 多店合并导出
+    // 🛡️ deadline 继续透传：buildNationalExport/buildSingleStoreExport 内部
+    // 各自还有二次查询（跨店 tenants 反查、user_roles 经办人昵称、
+    // material_logs/daily_menus 等），同样可能命中数据量过大的场景，需要用
+    // 同一条截止时间线做超时阻断，不能各自为政地重新起算 20 秒
     if (isNationalExport) {
-      return await buildNationalExport(cloud, db, { tenantId, records, periodLabel, startDateStr, endDateStr });
+      return await buildNationalExport(cloud, db, { tenantId, records, periodLabel, startDateStr, endDateStr, deadline });
     }
     // 🏛️（2026-09-03 审计级台账）单店审计级三工作表导出需要 db 做二次查询
     // （user_roles 经办人昵称、material_logs 物资消耗、daily_menus 当日菜谱），
@@ -254,7 +283,7 @@ exports.main = async (event, context) => {
     return await buildSingleStoreExport(cloud, {
       db, records, periodLabel, startDateStr, endDateStr, shopName,
       storeId: whereConditions.storeId || storeId || '',
-      tenantId
+      tenantId, deadline
     });
 
   } catch (err) {

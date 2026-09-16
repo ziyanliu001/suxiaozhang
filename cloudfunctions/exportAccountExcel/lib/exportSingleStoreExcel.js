@@ -154,6 +154,22 @@ async function uploadWorkbookAndRespond(cloud, workbook, opts) {
     isNationalExport, verificationCode
   } = opts;
 
+  // 🛡️（2026-09-16 内存与性能加固）如实记录一次评估结论：workbook.xlsx.
+  // writeBuffer() 会把整份工作簿一次性序列化进内存 Buffer，本文件/调用方
+  // 从未落过本地 /tmp 临时文件（下面直接把这个 Buffer 传给 cloud.uploadFile
+  // 的 fileContent，不经过磁盘），所以"清理 /tmp 临时文件"这一条在当前实现
+  // 里不适用——没有产生过临时文件。评估过是否改用 exceljs 的流式写入
+  // （ExcelJS.stream.xlsx.WorkbookWriter）以彻底避免这次内存峰值，结论是
+  // 暂不改动：exportNationalExcel.js 的"总览 Sheet 依赖逐店明细算完的合计数、
+  // 且必须排在第一个 Tab"这个设计（addSummarySheet 建在最后、再靠 orderNo
+  // 挪到最前）要求工作簿在内存中可以整体重排，与流式写入"边生成边落盘、
+  // 写完不能回头改"的模型直接冲突，贸然切换需要先把总览 Sheet 改成两遍
+  // 扫描（先轻量聚合算出总计，再流式写明细）的架构调整，风险与工作量都明显
+  // 超出本轮"修复超时/内存隐患"的范围。当前 MAX_LIMIT（单店 1000/机构合并
+  // 5000 条）对应的内存占用是可控的中等量级，真正的风险点（超过 1000 条被
+  // 数据库静默截断、大数据量下无超时保护）已经在 index.js/batchQuery.js 里
+  // 处理，如果未来数据规模继续增长到需要流式写入的地步，需要先重做总览
+  // Sheet 的两遍扫描架构，不是现在这次改动能顺手做的
   const buffer = await workbook.xlsx.writeBuffer();
 
   const timestamp = Date.now();
@@ -234,9 +250,9 @@ async function uploadWorkbookAndRespond(cloud, workbook, opts) {
 // 制度》底稿抽查规范——addRecordsSheet 本身不做任何改动，继续原样服务于下方
 // 的 Enterprise 多店合并导出（exportNationalExcel.js 每店一个 Sheet 仍是扁平
 // 流水表，不受本次调整影响）
-async function buildSingleStoreExport(cloud, { db, records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId }) {
+async function buildSingleStoreExport(cloud, { db, records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId, deadline }) {
   const { buildAuditGradeSingleStoreExport } = require('./auditLedgerExcel');
-  return buildAuditGradeSingleStoreExport(cloud, db, { records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId });
+  return buildAuditGradeSingleStoreExport(cloud, db, { records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId, deadline });
 }
 
 module.exports = { addRecordsSheet, uploadWorkbookAndRespond, buildSingleStoreExport };

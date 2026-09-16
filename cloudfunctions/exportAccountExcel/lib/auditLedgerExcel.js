@@ -23,6 +23,7 @@ const {
   AUDIT_CELL_STYLE, AUDIT_NUMBER_STYLE, AUDIT_DATE_STYLE, AUDIT_TOTAL_STYLE,
   AUDIT_SIGNATURE_STYLE, AUDIT_NOTE_STYLE
 } = require('./excelStyles');
+const { fetchAllInBatches } = require('./batchQuery');
 
 const COLS = 10; // 三张工作表统一 10 列（A~J），头部/尾部合并区按此宽度铺满
 const LAST_COL_LETTER = 'J';
@@ -416,7 +417,7 @@ function buildCashFlowSheet(workbook, { records, operatorNameMap, receiptUrlMap,
 }
 
 // ============ Sheet2: Material_Inventory ============
-async function buildMaterialInventorySheet(workbook, { db, storeId, tenantId, records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId }) {
+async function buildMaterialInventorySheet(workbook, { db, storeId, tenantId, records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId, deadline }) {
   const worksheet = workbook.addWorksheet('Material_Inventory', { properties: { defaultColWidth: 14 } });
   setAuditColumns(worksheet, [6, 20, 16, 12, 12, 12, 12, 12, 22, 16]);
 
@@ -435,17 +436,31 @@ async function buildMaterialInventorySheet(workbook, { db, storeId, tenantId, re
   let baselineLogs = [];
   let periodLogs = [];
   let baselineHitCap = false;
+  let baselineHitDeadline = false;
   // 🛡️ 与 CLAUDE.md 多租户隔离原则一致：storeId 主键本身已唯一定位到租户，
   // 这里额外叠加 tenantId 收敛是防御性纵深，防止任何未来重构让 storeId 变得
   // 可跨租户重复时查询静默退化成跨租户聚合
+  // 🐛 根因修复（静默数据丢失）：此前 .limit(3000)/.limit(2000) 单次查询，
+  // 微信云数据库单次 .get() 硬性上限是 1000 条，超过部分被静默截断——历史
+  // 记录较多的门店，期初结存推算会悄悄少算。改用 fetchAllInBatches 分批
+  // 拉取，见 batchFetchPlan.js 头部注释
   try {
-    const [baselineRes, periodRes] = await Promise.all([
-      db.collection('material_logs').where({ storeId, tenantId, dateString: _.lt(startDateStr) }).limit(3000).get(),
-      db.collection('material_logs').where({ storeId, tenantId, dateString: _.gte(startDateStr).and(_.lte(endDateStr)) }).limit(2000).get()
+    // 🛡️ 分批拉取依赖稳定排序才能保证跨批次不重复、不遗漏（skip/limit 在没有
+    // 显式排序时不保证顺序稳定），统一按 dateString 升序
+    const [baselineResult, periodResult] = await Promise.all([
+      fetchAllInBatches(
+        db.collection('material_logs').where({ storeId, tenantId, dateString: _.lt(startDateStr) }).orderBy('dateString', 'asc'),
+        { maxTotal: 3000, deadline }
+      ),
+      fetchAllInBatches(
+        db.collection('material_logs').where({ storeId, tenantId, dateString: _.gte(startDateStr).and(_.lte(endDateStr)) }).orderBy('dateString', 'asc'),
+        { maxTotal: 2000, deadline }
+      )
     ]);
-    baselineLogs = baselineRes.data || [];
-    periodLogs = periodRes.data || [];
-    baselineHitCap = baselineLogs.length >= 3000;
+    baselineLogs = baselineResult.records;
+    periodLogs = periodResult.records;
+    baselineHitCap = baselineResult.hitCap;
+    baselineHitDeadline = baselineResult.hitDeadline || periodResult.hitDeadline;
   } catch (err) {
     console.warn('[auditLedgerExcel] 查询 material_logs 消耗记录失败，本期消耗按 0 处理:', err);
   }
@@ -453,13 +468,13 @@ async function buildMaterialInventorySheet(workbook, { db, storeId, tenantId, re
   let baselineDonationRecords = [];
   let baselineDonationHitCap = false;
   try {
-    const baselineDonationRes = await db.collection('report_logs')
-      .where({ storeId, tenantId, dateString: _.lt(startDateStr), isVoid: _.neq(true) })
-      .field({ materials: true })
-      .limit(3000)
-      .get();
-    baselineDonationRecords = baselineDonationRes.data || [];
-    baselineDonationHitCap = baselineDonationRecords.length >= 3000;
+    const baselineDonationResult = await fetchAllInBatches(
+      db.collection('report_logs').where({ storeId, tenantId, dateString: _.lt(startDateStr), isVoid: _.neq(true) }).field({ materials: true }).orderBy('dateString', 'asc'),
+      { maxTotal: 3000, deadline }
+    );
+    baselineDonationRecords = baselineDonationResult.records;
+    baselineDonationHitCap = baselineDonationResult.hitCap;
+    baselineHitDeadline = baselineHitDeadline || baselineDonationResult.hitDeadline;
   } catch (err) {
     console.warn('[auditLedgerExcel] 查询历史物资捐赠基线失败，期初捐入按 0 处理:', err);
   }
@@ -561,6 +576,9 @@ async function buildMaterialInventorySheet(workbook, { db, storeId, tenantId, re
   if (baselineHitCap || baselineDonationHitCap) {
     notes.push('注：本店历史记录量较大，期初结存的历史基线查询已达系统上限（3000 条），期初数可能不完整，建议结合门店纸质台账核对。');
   }
+  if (baselineHitDeadline) {
+    notes.push('注：本次导出查询历史基线数据耗时较长、已提前中止拉取以避免导出超时，期初结存数可能不完整，建议缩短统计区间重新导出或结合门店纸质台账核对。');
+  }
   const lastRow = addSignatureBlock(worksheet, { afterRow: dataEndRow > 0 ? dataEndRow : dataStartRow, batchId, extraNoteLines: notes });
 
   worksheet.views = [{ state: 'frozen', ySplit: headerRowIndex }];
@@ -569,7 +587,7 @@ async function buildMaterialInventorySheet(workbook, { db, storeId, tenantId, re
 }
 
 // ============ Sheet3: Service_Proof ============
-async function buildServiceProofSheet(workbook, { db, storeId, records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId }) {
+async function buildServiceProofSheet(workbook, { db, storeId, records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId, deadline }) {
   const worksheet = workbook.addWorksheet('Service_Proof', { properties: { defaultColWidth: 14 } });
   setAuditColumns(worksheet, [14, 12, 10, 12, 10, 12, 10, 10, 14, 30]);
 
@@ -586,13 +604,18 @@ async function buildServiceProofSheet(workbook, { db, storeId, records, startDat
   const dataStartRow = headerRowIndex + 1;
   const _ = db.command;
   const menuByDate = {};
+  // 🐛 根因修复（静默数据丢失）：同 buildMaterialInventorySheet，此前
+  // .limit(2000) 单次查询会被微信云数据库的单次 1000 条硬上限截断，改用
+  // fetchAllInBatches 分批拉取
   try {
-    const menuRes = await db.collection('daily_menus')
-      .where({ storeId, dateString: _.gte(startDateStr).and(_.lte(endDateStr)) })
-      .field({ dateString: true, mealType: true, menuText: true })
-      .limit(2000)
-      .get();
-    (menuRes.data || []).forEach(m => {
+    const menuResult = await fetchAllInBatches(
+      db.collection('daily_menus')
+        .where({ storeId, dateString: _.gte(startDateStr).and(_.lte(endDateStr)) })
+        .field({ dateString: true, mealType: true, menuText: true })
+        .orderBy('dateString', 'asc'),
+      { maxTotal: 2000, deadline }
+    );
+    menuResult.records.forEach(m => {
       if (!menuByDate[m.dateString]) menuByDate[m.dateString] = [];
       menuByDate[m.dateString].push(m);
     });
@@ -657,7 +680,7 @@ async function buildServiceProofSheet(workbook, { db, storeId, records, startDat
   return { totalDiners: 0 /* 由调用方用 totalDine 求和另算，避免与 Sheet1 重复口径 */, lastRow };
 }
 
-async function buildAuditGradeSingleStoreExport(cloud, db, { records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId }) {
+async function buildAuditGradeSingleStoreExport(cloud, db, { records, periodLabel, startDateStr, endDateStr, shopName, storeId, tenantId, deadline }) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '雨花斋爱心账本';
   workbook.created = new Date();
@@ -677,11 +700,11 @@ async function buildAuditGradeSingleStoreExport(cloud, db, { records, periodLabe
   });
 
   await buildMaterialInventorySheet(workbook, {
-    db, storeId: storeId || '', tenantId: tenantId || '', records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId
+    db, storeId: storeId || '', tenantId: tenantId || '', records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId, deadline
   });
 
   await buildServiceProofSheet(workbook, {
-    db, storeId: storeId || '', records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId
+    db, storeId: storeId || '', records, startDateStr, endDateStr, storeName, periodLabel, exportTimeStr, batchId, deadline
   });
 
   let totalDiners = 0;
